@@ -549,6 +549,24 @@ public sealed class FloatingMenuViewModel : ViewModelBase
     }
     public string AdaptiveLabel => $"Adaptive: {Adaptive}";
 
+    private int _gamma;
+    /// <summary>Live image gamma in [-100, 100]; 0 = neutral. No theme default
+    /// (themes carry their own baked <c>PaletteGamma</c>), so there is no lock
+    /// checkbox — this is a pure viewing adjustment. Raises
+    /// <see cref="GammaSlide"/> for ShellViewModel to forward to MainViewModel.</summary>
+    public int Gamma
+    {
+        get => _gamma;
+        set
+        {
+            int v = Math.Clamp(value, -100, 100);
+            this.RaiseAndSetIfChanged(ref _gamma, v);
+            this.RaisePropertyChanged(nameof(GammaLabel));
+            GammaSlide?.Invoke(this, v);
+        }
+    }
+    public string GammaLabel => $"Gamma: {Gamma}";
+
     private bool _brightnessLocked;
     /// <summary>Lock brightness against theme-bundle overrides. Mirrors into
     /// MainViewModel.BrightnessLocked via <see cref="BrightnessLockedChanged"/>.
@@ -799,6 +817,15 @@ public sealed class FloatingMenuViewModel : ViewModelBase
         this.RaisePropertyChanged(nameof(AdaptiveLabel));
     }
 
+    public void SetGammaSilent(int value)
+    {
+        int v = Math.Clamp(value, -100, 100);
+        if (_gamma == v) return;
+        _gamma = v;
+        this.RaisePropertyChanged(nameof(Gamma));
+        this.RaisePropertyChanged(nameof(GammaLabel));
+    }
+
     // ── Toggles ──────────────────────────────────────────────────────────
 
     private bool _showStatusBar = true;
@@ -975,6 +1002,7 @@ public sealed class FloatingMenuViewModel : ViewModelBase
     public event EventHandler<int>? BrightnessSlide;
     public event EventHandler<int>? ContrastSlide;
     public event EventHandler<int>? AdaptiveSlide;
+    public event EventHandler<int>? GammaSlide;
 
     public event EventHandler<bool>? StatusBarToggled;
     public event EventHandler<bool>? GridToggled;

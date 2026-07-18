@@ -2450,7 +2450,8 @@ namespace FracturingFog.Rendering
 
             int brightness = ViewState.Brightness;
             int contrast = ViewState.Contrast;
-            bool needsProcess = brightness != 0 || contrast != 0;
+            int gamma = ViewState.Gamma;
+            bool needsProcess = brightness != 0 || contrast != 0 || gamma != 0;
 
             if (needsProcess)
             {
@@ -2458,6 +2459,14 @@ namespace FracturingFog.Rendering
                 // Operate in 0..255 space so we can stay in integer-friendly
                 // ranges and pack channels back without a final *255 multiply.
                 float brightnessOffset255 = (brightness / 100.0f) * 255f;
+
+                // F6 part 2 — live image gamma. Precompute a 256-entry byte LUT
+                // once (pow is too costly per pixel and has no Vector256
+                // intrinsic). When gamma is active we take the scalar path so
+                // the LUT applies cleanly; the SIMD fast path stays intact for
+                // the common brightness/contrast-only case.
+                byte[]? gammaLut = gamma != 0 ? BuildGammaLut(gamma) : null;
+                bool gammaActive = gammaLut != null;
 
                 // Parallelise the brightness/contrast pass. At 2M pixels the
                 // serial loop was the dominant cost of an adaptive repaint —
@@ -2475,12 +2484,15 @@ namespace FracturingFog.Rendering
                         int rowBase = y * w;
                         int end = rowBase + w;
                         int i = rowBase;
-                        if (Vector256.IsHardwareAccelerated)
+                        // SIMD fast path only when gamma is inactive (the LUT
+                        // lookup below is not vectorised).
+                        if (!gammaActive && Vector256.IsHardwareAccelerated)
                         {
                             i = ProcessRowSimd(src, dst, i, end,
                                                contrastFactor, brightnessOffset255);
                         }
-                        // Scalar tail (and full fallback when SIMD unavailable).
+                        // Scalar tail (and full fallback when SIMD unavailable
+                        // or gamma is active).
                         for (; i < end; i++)
                         {
                             uint p = src[i];
@@ -2495,6 +2507,12 @@ namespace FracturingFog.Rendering
                             byte R = (byte)Math.Clamp(r, 0f, 255f);
                             byte G = (byte)Math.Clamp(g, 0f, 255f);
                             byte B = (byte)Math.Clamp(b, 0f, 255f);
+                            if (gammaActive)
+                            {
+                                R = gammaLut![R];
+                                G = gammaLut![G];
+                                B = gammaLut![B];
+                            }
                             dst[i] = 0xFF000000u | ((uint)R << 16) | ((uint)G << 8) | B;
                         }
                     }
@@ -2699,6 +2717,24 @@ namespace FracturingFog.Rendering
         /// scalar processing from.
         /// </summary>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        /// <summary>Builds the 256-entry byte gamma LUT for the live image
+        /// gamma slider (F6 part 2). Slider maps to gamma = 2^(slider/100)
+        /// (+100→2 brightens, −100→0.5 darkens); the LUT stores
+        /// <c>round(pow(v/255, 1/gamma) * 255)</c>.</summary>
+        private static byte[] BuildGammaLut(int gammaSlider)
+        {
+            double gammaValue = Math.Pow(2.0, gammaSlider / 100.0);
+            double exp = 1.0 / gammaValue;
+            var lut = new byte[256];
+            for (int v = 0; v < 256; v++)
+            {
+                double outN = Math.Pow(v / 255.0, exp);
+                int o = (int)(outN * 255.0 + 0.5);
+                lut[v] = (byte)Math.Clamp(o, 0, 255);
+            }
+            return lut;
+        }
+
         private static int ProcessRowSimd(
             uint[] src, uint[] dst, int start, int end,
             float contrastFactor, float brightnessOffset255)

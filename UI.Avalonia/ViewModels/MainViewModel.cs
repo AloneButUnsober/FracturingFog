@@ -566,6 +566,24 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
         }
     }
 
+    private int _gamma;
+    /// <summary>Live image gamma in [-100,100]; 0 = neutral. Write-through to
+    /// ViewState + post-FX repaint, exactly like Brightness/Contrast. No lock:
+    /// gamma has no theme default (themes bake their own PaletteGamma).</summary>
+    public int Gamma
+    {
+        get => _gamma;
+        set
+        {
+            int v = Math.Clamp(value, -100, 100);
+            if (this.RaiseAndSetIfChangedReturnsChanged(ref _gamma, v))
+            {
+                ViewState.Gamma = v;
+                _renderHost.RepaintWithPostFx();
+            }
+        }
+    }
+
     private int _adaptive;
     public int Adaptive
     {
@@ -885,6 +903,7 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
         Brightness = 0;
         Contrast = 0;
         Adaptive = 0;
+        Gamma = 0;
         IterLocked = false;
         _renderHost.Trigger();
     }
