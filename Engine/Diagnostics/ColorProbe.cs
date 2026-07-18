@@ -58,6 +58,8 @@ namespace FracturingFog.Diagnostics
         {
             bool regen = args.Length > 1 && string.Equals(args[1], "regen", StringComparison.OrdinalIgnoreCase);
             bool verbose = args.Length > 1 && string.Equals(args[1], "verbose", StringComparison.OrdinalIgnoreCase);
+            if (args.Length > 1 && string.Equals(args[1], "dither", StringComparison.OrdinalIgnoreCase))
+                return RunDitherDemo();
 
             var report = new StringBuilder();
             report.AppendLine("colour pipeline golden probe — Phase A/B/C option matrix (F1-F9,F12)");
@@ -140,6 +142,64 @@ namespace FracturingFog.Diagnostics
             Console.WriteLine($"  expected {GoldenDigest}");
             Console.WriteLine($"  actual   {digest}");
             Console.WriteLine("  see colorprobe.out for the per-config table to localise the drift");
+            return 1;
+        }
+
+        // --colorprobe dither: diagnostic (NOT a gate) proving the F11a ordered
+        // dither is mean-preserving and actually spreads a sub-LSB gradient step
+        // across the 8×8 Bayer tile. Enables dither, walks one Bayer row for a
+        // shallow-gradient sample, and shows the per-pixel bytes vs the plain
+        // truncate. Restores DitherEnabled=false before returning.
+        private static int RunDitherDemo()
+        {
+            var map = DataDrivenColorThemes.Create(Grad(d => { }));
+            if (map is not GradientColorMap)
+            {
+                Console.WriteLine("RESULT: FAIL (baseline gradient did not create a GradientColorMap)");
+                return 1;
+            }
+
+            // Pick a smooth value whose LUT lerp lands on a fractional byte, so
+            // truncation alone bands but dither can split neighbours.
+            const float smooth = 123.4f;
+            int plain = map.Map(smooth, 0f, MaxIter);
+            int plainR = (plain >> 16) & 0xFF, plainG = (plain >> 8) & 0xFF, plainB = plain & 0xFF;
+
+            Console.WriteLine("F11a ordered-dither demo — baseline gradient, one Bayer row (y=0):");
+            Console.WriteLine($"  plain truncate           = {Rgb(plain)}");
+
+            GradientColorMap.DitherEnabled = true;
+            GradientColorMap.DitherStrength = 1f;
+            long sumR = 0, sumG = 0, sumB = 0;
+            var seen = new HashSet<int>();
+            var row = new StringBuilder("  dithered across x=0..7   = ");
+            for (int x = 0; x < 8; x++)
+            {
+                GradientColorMap.SetDitherForPixel(x, 0);
+                int d = map.Map(smooth, 0f, MaxIter);
+                seen.Add(d);
+                sumR += (d >> 16) & 0xFF; sumG += (d >> 8) & 0xFF; sumB += d & 0xFF;
+                row.Append(Rgb(d)).Append(' ');
+            }
+            GradientColorMap.DitherEnabled = false;
+
+            Console.WriteLine(row.ToString().TrimEnd());
+            Console.WriteLine($"  row mean                 = ({sumR / 8f:0.0},{sumG / 8f:0.0},{sumB / 8f:0.0})  plain=({plainR},{plainG},{plainB})");
+
+            // Sanity: dither must produce >1 distinct value (spreads the step)…
+            bool spread = seen.Count > 1;
+            // …and stay mean-preserving to within a byte of the plain truncate.
+            bool meanOk = Math.Abs(sumR / 8f - plainR) <= 1.0f
+                       && Math.Abs(sumG / 8f - plainG) <= 1.0f
+                       && Math.Abs(sumB / 8f - plainB) <= 1.0f;
+
+            Console.WriteLine();
+            if (spread && meanOk)
+            {
+                Console.WriteLine("RESULT: PASS (dither spreads the step and is mean-preserving)");
+                return 0;
+            }
+            Console.WriteLine($"RESULT: FAIL (spread={spread}, meanOk={meanOk})");
             return 1;
         }
 

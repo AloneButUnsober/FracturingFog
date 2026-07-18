@@ -286,6 +286,8 @@ public sealed class EscapeTimeCalculator : Interefaces.IFractalCalculator
             for (int x = 0; x < Width; x++)
             {
                 int idx = rb + x;
+                // F11a: seed the ordered-dither offset for this pixel.
+                if (GradientColorMap.DitherEnabled) GradientColorMap.SetDitherForPixel(x, y);
                 int iters = IterationBuffer[idx];
                 if (iters < maxIt)
                 {
@@ -914,6 +916,13 @@ public sealed class EscapeTimeCalculator : Interefaces.IFractalCalculator
         TMap colorMap)
         where TMap : IColorMap
     {
+        // F11a: seed the ordered-dither offset for this pixel (no-op when off).
+        // Callers pass a linear idx; recover x/y at the render stride (== Width).
+        if (GradientColorMap.DitherEnabled)
+        {
+            int dy = idx / Width;
+            GradientColorMap.SetDitherForPixel(idx - dy * Width, dy);
+        }
         if (iters < maxIter)
         {
             double mag = Math.Sqrt(zr * zr + zi * zi);
