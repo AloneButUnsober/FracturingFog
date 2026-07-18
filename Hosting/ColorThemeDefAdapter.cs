@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-FileCopyrightText: 2026 Bradley Brown
+
 // Hosting/ColorThemeDefAdapter.cs
 //
 // Translates between the UI-neutral ColorThemeDef hierarchy (lives in
@@ -31,7 +34,17 @@ namespace FracturingFog.Hosting
 
                 Stops = def.Stops.Select(ToData).ToList(),
 
+                InterpolationSpace = (GradientColorSpace)def.InterpolationSpace,
+                InterpolationCurve = (InterpolationCurve)def.InterpolationCurve,
+                TransferFunction = (TransferFunction)def.TransferFunction,
+                TransferStrength = def.TransferStrength,
+                PaletteGamma = def.PaletteGamma,
+
                 CycleSpeed = def.CycleSpeed,
+
+                ColorOffset = def.ColorOffset,
+                ColorDensity = def.ColorDensity,
+                WrapMode = (ColorWrapMode)def.WrapMode,
 
                 Steepness = def.Steepness,
                 Ambient = def.Ambient,
@@ -61,7 +74,8 @@ namespace FracturingFog.Hosting
         private static ColorStopData ToData(ColorStopDef s) => new ColorStopData
         {
             Position = s.Position,
-            R = s.R, G = s.G, B = s.B,
+            R = s.R, G = s.G, B = s.B, A = s.A,
+            Midpoint = s.Midpoint,
         };
 
         private static LightSourceData? ToData(LightSourceDef? d) => d == null ? null : new LightSourceData
@@ -79,7 +93,7 @@ namespace FracturingFog.Hosting
             Roughness = b.Roughness,
         };
 
-        private static InSetColorData? ToData(InSetColorDef? c) => c == null ? null : new InSetColorData(c.R, c.G, c.B);
+        private static InSetColorData? ToData(InSetColorDef? c) => c == null ? null : new InSetColorData(c.R, c.G, c.B) { A = c.A };
 
         private static ColorThemeKind ToKind(ColorThemeKindDef k) => k switch
         {
@@ -111,7 +125,17 @@ namespace FracturingFog.Hosting
 
                 Stops = (data.Stops ?? new List<ColorStopData>()).Select(ToDef).ToList(),
 
+                InterpolationSpace = (GradientColorSpaceDef)data.InterpolationSpace,
+                InterpolationCurve = (InterpolationCurveDef)data.InterpolationCurve,
+                TransferFunction = (TransferFunctionDef)data.TransferFunction,
+                TransferStrength = data.TransferStrength,
+                PaletteGamma = data.PaletteGamma,
+
                 CycleSpeed = data.CycleSpeed,
+
+                ColorOffset = data.ColorOffset,
+                ColorDensity = data.ColorDensity,
+                WrapMode = (ColorWrapModeDef)data.WrapMode,
 
                 Steepness = data.Steepness,
                 Ambient = data.Ambient,
@@ -141,7 +165,8 @@ namespace FracturingFog.Hosting
         private static ColorStopDef ToDef(ColorStopData s) => new ColorStopDef
         {
             Position = s.Position,
-            R = s.R, G = s.G, B = s.B,
+            R = s.R, G = s.G, B = s.B, A = s.A,
+            Midpoint = s.Midpoint <= 0f ? 0.5f : s.Midpoint,
         };
 
         private static LightSourceDef? ToDef(LightSourceData? d) => d == null ? null : new LightSourceDef
@@ -161,7 +186,7 @@ namespace FracturingFog.Hosting
 
         private static InSetColorDef? ToDef(InSetColorData? c) => c == null ? null : new InSetColorDef
         {
-            R = c.R, G = c.G, B = c.B,
+            R = c.R, G = c.G, B = c.B, A = c.A,
         };
 
         private static ColorThemeKindDef ToKindDef(ColorThemeKind k) => k switch

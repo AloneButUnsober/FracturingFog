@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-FileCopyrightText: 2026 Bradley Brown
+
 // ShadingPipeline.cs
 //
 // Shared shading kernel for 3D raymarchers. Bottom-up port of the

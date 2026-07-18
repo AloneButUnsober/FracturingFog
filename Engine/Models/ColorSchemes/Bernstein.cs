@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-FileCopyrightText: 2026 Bradley Brown
+
 // Models/ColorSchemes/Bernstein.cs
 // Uses the cubic Bernstein polynomial (Bézier basis) to evaluate smooth,
 // mathematically defined colour curves for each of the R, G and B channels

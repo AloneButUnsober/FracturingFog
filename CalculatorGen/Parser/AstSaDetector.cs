@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-FileCopyrightText: 2026 Bradley Brown
+
 // AstSaDetector.cs
 //
 // Detects whether the equation has the shape z^d + c (or c + z^d) for

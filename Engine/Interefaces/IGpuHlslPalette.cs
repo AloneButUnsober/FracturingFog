@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-FileCopyrightText: 2026 Bradley Brown
+
 // Interefaces/IGpuHlslPalette.cs  — T3.1 phase 2
 //
 // Opt-in capability for IColorMap implementations whose Map() pipeline can

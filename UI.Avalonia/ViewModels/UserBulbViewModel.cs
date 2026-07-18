@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-FileCopyrightText: 2026 Bradley Brown
+
 // ViewModels/UserBulbViewModel.cs
 //
 // Avalonia port of the legacy WinForms UserBulbDialog. Mirrors
@@ -62,6 +65,7 @@ public sealed class UserBulbViewModel : ViewModelBase
         _bailout      = _params.UserBulbBailout;
         _jacobianH    = _params.UserBulbJacobianH;
         _cullRadius   = _params.UserBulbCullRadius;
+        _kifsScale    = _params.UserBulbKifsScale;
         _deModeIndex  = (int)_params.UserBulbDEMode;
         _backendIndex = (int)_params.UserBulbBackend;
         _compilerIndex = (int)_params.UserBulbCompiler;
@@ -273,6 +277,11 @@ public sealed class UserBulbViewModel : ViewModelBase
 
     private double _cullRadius;
     public double CullRadius { get => _cullRadius; set => SetRender(ref _cullRadius, Math.Clamp(value, 0.1, 50.0), () => _params.UserBulbCullRadius = _cullRadius); }
+    private double _kifsScale;
+    /// <summary>Per-iteration linear scale for the scalar KIFS/Mandelbox DE.
+    /// 0 = off (use the DE Mode). Set to the map's scale (e.g. 3 for the
+    /// Kaleidoscopic-IFS preset) to render fold+rotation IFS correctly.</summary>
+    public double KifsScale { get => _kifsScale; set => SetRender(ref _kifsScale, Math.Clamp(value, 0.0, 20.0), () => _params.UserBulbKifsScale = _kifsScale); }
 
     private int _deModeIndex;
     public int DEModeIndex { get => _deModeIndex; set => SetRender(ref _deModeIndex, Math.Clamp(value, 0, 2), () => _params.UserBulbDEMode = (UserBulbDEModeKind)_deModeIndex); }
@@ -496,9 +505,17 @@ public sealed class UserBulbViewModel : ViewModelBase
             double L = _animLoopSeconds;
             next -= L * Math.Floor(next / L);
         }
+        // Update the bound t field without letting its setter fire a second
+        // (ungated) render — AnimationTick owns the single gated render below.
         _suppressRender = true;
         AnimTime = next;
         _suppressRender = false;
+        // The AnimTime setter skips the _params write under _suppressRender, so
+        // advance the render-facing time here — otherwise UserBulbTime stays at
+        // its initial value, `next` recomputes from a fixed base every tick (t
+        // jitters in a tiny range around one dt-step), and the render never sees
+        // the advancing time, so nothing animates.
+        _params.UserBulbTime = next;
         if (_renderInFlight) return;
         _renderInFlight = true;
         RenderRequested?.Invoke(this, EventArgs.Empty);
@@ -592,8 +609,19 @@ public sealed class UserBulbViewModel : ViewModelBase
                     Chain.Add(clone);
                 }
             }
+
+            // Restore the equation's own saved settings (axis/Julia/camera/
+            // render budget/params/Time). Legacy entries have no Settings —
+            // leave the current knobs untouched (old load behaviour).
+            if (entry.Settings != null)
+                ApplySnapshotToParams(entry.Settings);
         }
         finally { _loadingNamedEquation = false; }
+
+        // Push restored settings into the bound VM fields so the editor controls
+        // (MaxSteps, camera, Julia, …) reflect what just loaded.
+        if (entry.Settings != null)
+            SyncMirrorFromParams();
 
         if (!string.Equals(_selectedSavedName, entry.Name, StringComparison.Ordinal))
         {
@@ -668,7 +696,12 @@ public sealed class UserBulbViewModel : ViewModelBase
             if (!confirm.Result) return;
         }
 
-        var entry = UserBulbStore.Instance.SaveEquation(trimmed, _source, _params.UserBulbChain);
+        // Capture the current render/view/animation settings alongside the
+        // source + chain so loading this equation later restores its own knobs.
+        // Pass an empty Entry into the snapshot — the entry that owns it is the
+        // one being saved; nesting itself would self-reference.
+        var settings = BuildSnapshotFromParams(new UserBulbEntry());
+        var entry = UserBulbStore.Instance.SaveEquation(trimmed, _source, _params.UserBulbChain, settings);
         if (entry is null) return;
 
         _params.UserBulbName = entry.Name;
@@ -692,12 +725,17 @@ public sealed class UserBulbViewModel : ViewModelBase
         var args = new OpenFileEventArgs("Import .fbulb", "FracturingFog bulb|*.fbulb;*.json|All files|*.*");
         OpenFilePromptRequested?.Invoke(this, args);
         if (string.IsNullOrEmpty(args.Path)) return;
-        var snapshot = UserBulbStore.Instance.ImportSnapshot(args.Path!);
-        if (snapshot?.Entry is null)
+        var snapshots = UserBulbStore.Instance.ImportSnapshots(args.Path!);
+        if (snapshots.Count == 0)
         {
             MessageRequested?.Invoke(this, "Import failed (invalid file).");
             return;
         }
+
+        // A multi-entry file lands every equation in the store; the last one
+        // wins the editor so the user sees something rendered rather than an
+        // empty selection.
+        var snapshot = snapshots[snapshots.Count - 1];
 
         // Apply snapshot knobs to _params before loading the entry — the
         // load path triggers a recompile and we want the imported axis /
@@ -705,8 +743,11 @@ public sealed class UserBulbViewModel : ViewModelBase
         ApplySnapshotToParams(snapshot);
         SyncMirrorFromParams();
 
-        RefreshSavedList(snapshot.Entry.Name);
+        RefreshSavedList(snapshot.Entry!.Name);
         LoadEquationByName(snapshot.Entry.Name);
+
+        if (snapshots.Count > 1)
+            MessageRequested?.Invoke(this, $"{snapshots.Count} equations imported.");
     }
 
     private void OnExport()
@@ -765,10 +806,13 @@ public sealed class UserBulbViewModel : ViewModelBase
         Bailout          = _params.UserBulbBailout,
         JacobianH        = _params.UserBulbJacobianH,
         CullRadius       = _params.UserBulbCullRadius,
+        KifsScale        = _params.UserBulbKifsScale,
         FovDegrees       = _params.UserBulbFovDegrees,
         ClipPlaneEnabled = _params.UserBulbClipPlaneEnabled,
         SuperSample      = _params.UserBulbSuperSample,
         Time             = _params.UserBulbTime,
+        AnimSpeed        = _animSpeed,
+        AnimLoopSeconds  = _animLoopSeconds,
         Params           = _params.UserBulbParams.ConvertAll(p => p.Clone()),
     };
 
@@ -805,10 +849,16 @@ public sealed class UserBulbViewModel : ViewModelBase
         if (s.Bailout is { } bo)                 _params.UserBulbBailout = bo;
         if (s.JacobianH is { } jh)               _params.UserBulbJacobianH = jh;
         if (s.CullRadius is { } cr)              _params.UserBulbCullRadius = cr;
+        if (s.KifsScale is { } kifs)             _params.UserBulbKifsScale = kifs;
         if (s.FovDegrees is { } fov)             _params.UserBulbFovDegrees = fov;
         if (s.ClipPlaneEnabled is { } cpe)       _params.UserBulbClipPlaneEnabled = cpe;
         if (s.SuperSample is { } ss)             _params.UserBulbSuperSample = ss;
         if (s.Time is { } t)                     _params.UserBulbTime = t;
+        // AnimSpeed / AnimLoopSeconds are VM-only (not in FractalParameters).
+        // Set through the public setters so they clamp and raise change
+        // notifications for the bound Speed / Loop-s controls.
+        if (s.AnimSpeed is { } aspd)             AnimSpeed = aspd;
+        if (s.AnimLoopSeconds is { } aloop)      AnimLoopSeconds = aloop;
 
         if (s.Params is { Count: > 0 } srcParams)
         {
@@ -842,6 +892,7 @@ public sealed class UserBulbViewModel : ViewModelBase
             _bailout      = _params.UserBulbBailout;
             _jacobianH    = _params.UserBulbJacobianH;
             _cullRadius   = _params.UserBulbCullRadius;
+            _kifsScale    = _params.UserBulbKifsScale;
             _deModeIndex  = (int)_params.UserBulbDEMode;
             _backendIndex = (int)_params.UserBulbBackend;
             _compilerIndex = (int)_params.UserBulbCompiler;
@@ -888,6 +939,7 @@ public sealed class UserBulbViewModel : ViewModelBase
         this.RaisePropertyChanged(nameof(Bailout));
         this.RaisePropertyChanged(nameof(JacobianH));
         this.RaisePropertyChanged(nameof(CullRadius));
+        this.RaisePropertyChanged(nameof(KifsScale));
         this.RaisePropertyChanged(nameof(DEModeIndex));
         this.RaisePropertyChanged(nameof(BackendIndex));
         this.RaisePropertyChanged(nameof(CompilerIndex));

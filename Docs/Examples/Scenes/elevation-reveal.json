@@ -1,0 +1,26 @@
+[
+  {
+    "Name": "Example — Elevation Reveal",
+    "Category": "Example",
+    "Description": "The camera starts low, near the Mandelbulb's equator (phi 0.05), and rises up and over the top (phi 1.45) while orbiting a half-turn. Distance holds roughly constant. This is the elevation (phi) axis on its own, showing how vertical parallax makes a camera move read as flying around a solid object rather than the object spinning. Catmull-Rom keeps the rise smooth.",
+    "Tags": [ "example", "3D", "elevation" ],
+    "Shots": [
+      {
+        "Name": "Rise",
+        "RegionName": "",
+        "FractalType": "Mandelbulb",
+        "DurationSeconds": 14.0,
+        "Transition": "Cut",
+        "TransitionSeconds": 1.0,
+        "Camera": {
+          "Interpolation": "CatmullRom",
+          "Keys": [
+            { "Time": 0.0,  "State": { "Distance": 2.7, "Theta": 0.0,  "Phi": 0.05 }, "Ease": "EaseIn" },
+            { "Time": 7.0,  "State": { "Distance": 2.5, "Theta": 1.57, "Phi": 0.85 }, "Ease": "None" },
+            { "Time": 14.0, "State": { "Distance": 2.7, "Theta": 3.14, "Phi": 1.45 }, "Ease": "EaseOut" }
+          ]
+        }
+      }
+    ]
+  }
+]

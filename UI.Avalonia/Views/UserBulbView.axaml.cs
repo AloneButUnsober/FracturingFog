@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-FileCopyrightText: 2026 Bradley Brown
+
 using System;
 using Avalonia;
 using Avalonia.Controls;
@@ -21,7 +24,7 @@ namespace FracturingFog.UI.Avalonia.Views;
 /// finishes uploading. The view itself owns <see cref="ViewModels.UserBulbViewModel.HelpRequested"/>
 /// — opens HelpViewerView in-process.
 /// </summary>
-public sealed partial class UserBulbView : Window
+public sealed partial class UserBulbView : UserControl
 {
     private UserBulbViewModel? _vm;
     private TextBox? _sourceEditor;
@@ -33,7 +36,6 @@ public sealed partial class UserBulbView : Window
     public UserBulbView()
     {
         AvaloniaXamlLoader.Load(this);
-        EscapeCloseBehavior.Attach(this);
         DataContextChanged += OnDataContextChanged;
         AttachedToVisualTree += OnAttachedToVisualTree;
     }
@@ -60,13 +62,7 @@ public sealed partial class UserBulbView : Window
     }
 
     private void OnHelpRequested(object? sender, (string DocId, string? Anchor, string Title) args)
-    {
-        var view = new HelpViewerView
-        {
-            DataContext = new HelpViewerViewModel(args.DocId, args.Anchor, args.Title),
-        };
-        view.Show(this);
-    }
+        => HelpViewerLauncher.Show(TopLevel.GetTopLevel(this) as Window, args.DocId, args.Anchor, args.Title);
 
     private void OnErrorSpanChanged(object? sender, EventArgs e)
     {

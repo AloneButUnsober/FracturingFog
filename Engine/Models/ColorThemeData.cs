@@ -1,4 +1,7 @@
-﻿// Models/ColorThemeData.cs
+﻿// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-FileCopyrightText: 2026 Bradley Brown
+
+// Models/ColorThemeData.cs
 //
 // JSON-serializable data transfer objects describing a colour theme.
 //
@@ -32,6 +35,77 @@ namespace FracturingFog.Models
         Phong3D,
         /// <summary>Cycling gradient with Cook-Torrance PBR lighting.</summary>
         Pbr3D
+    }
+
+    /// <summary>
+    /// Colour space the gradient blends stops in (Phase A / F1). Only affects
+    /// how the 256-entry LUT is *built* — zero per-pixel cost. <c>Srgb</c> is
+    /// the historical byte-lerp; <c>OkLab</c> gives perceptually smooth
+    /// mid-tones between distant hues; <c>Hsv</c> sweeps hue along the shorter
+    /// arc for rainbow ramps.
+    /// </summary>
+    public enum GradientColorSpace
+    {
+        /// <summary>Linear byte lerp in sRGB (historical default — byte-identical).</summary>
+        Srgb,
+        /// <summary>Perceptually uniform OkLab blend (Björn Ottosson).</summary>
+        OkLab,
+        /// <summary>HSV with shorter-arc hue interpolation.</summary>
+        Hsv,
+    }
+
+    /// <summary>
+    /// How the cycling parameter wraps at the [0,1] boundary (Phase A / F5).
+    /// <c>Repeat</c> is the historical modulo wrap; <c>PingPong</c> mirrors so
+    /// there is no hard seam where the palette jumps 1→0; <c>Clamp</c> holds
+    /// the endpoints.
+    /// </summary>
+    public enum ColorWrapMode
+    {
+        /// <summary>Modulo wrap (historical default).</summary>
+        Repeat,
+        /// <summary>Triangle-wave mirror — seamless.</summary>
+        PingPong,
+        /// <summary>Clamp to [0,1].</summary>
+        Clamp,
+    }
+
+    /// <summary>
+    /// Shape of the blend within a gradient segment (Phase B / F2). Baked into
+    /// the LUT — zero per-pixel cost. <c>Linear</c> is the historical default.
+    /// <c>Cubic</c> is a Catmull-Rom spline through the stops (evaluated in
+    /// sRGB, independent of <see cref="GradientColorSpace"/>).
+    /// </summary>
+    public enum InterpolationCurve
+    {
+        /// <summary>Straight lerp (historical default).</summary>
+        Linear,
+        /// <summary>Cosine ease at both stops.</summary>
+        Cosine,
+        /// <summary>Catmull-Rom spline through neighbouring stops (sRGB).</summary>
+        Cubic,
+        /// <summary>Hard bands — hold the lower stop.</summary>
+        Step,
+    }
+
+    /// <summary>
+    /// Remaps the mapping scalar <c>t</c> before palette lookup (Phase B / F3;
+    /// Ultra Fractal "transfer function"). All curves fix <c>f(0)=0, f(1)=1</c>
+    /// so cycling seams stay continuous. Applied to Gradient + Cycling kinds
+    /// (3D albedo is left on the linear scalar so material bands stay put).
+    /// </summary>
+    public enum TransferFunction
+    {
+        /// <summary>Identity (historical default).</summary>
+        Linear,
+        /// <summary><c>t^0.5</c> — lifts shadow detail.</summary>
+        Sqrt,
+        /// <summary><c>t^3</c> — compresses shadows, expands highlights.</summary>
+        Cubic,
+        /// <summary>Logarithmic — spreads deep detail.</summary>
+        Log,
+        /// <summary>Raised cosine S-curve.</summary>
+        Sine,
     }
 
     // ColorStopData moved to Abstractions/Models/ColorStopData.cs so the
@@ -100,6 +174,10 @@ namespace FracturingFog.Models
         public byte G { get; set; }
         public byte B { get; set; }
 
+        /// <summary>Interior alpha (F10). 255 = opaque (default), so themes that
+        /// omit it keep the historical opaque interior byte-for-byte.</summary>
+        public byte A { get; set; } = 255;
+
         public InSetColorData() { }
 
         public InSetColorData(byte r, byte g, byte b)
@@ -107,9 +185,10 @@ namespace FracturingFog.Models
             R = r; G = g; B = b;
         }
 
-        /// <summary>Packs the colour as opaque 0xFFRRGGBB.</summary>
+        /// <summary>Packs the colour as AARRGGBB. A defaults to 255, so this is
+        /// the historical opaque 0xFFRRGGBB unless a theme sets a lower alpha.</summary>
         public uint ToPackedArgb()
-            => 0xFF000000u | ((uint)R << 16) | ((uint)G << 8) | B;
+            => ((uint)A << 24) | ((uint)R << 16) | ((uint)G << 8) | B;
     }
 
     /// <summary>
@@ -139,9 +218,59 @@ namespace FracturingFog.Models
 
         public List<ColorStopData> Stops { get; set; } = new();
 
+        /// <summary>
+        /// Colour space the gradient LUT is built in (Phase A / F1). Absent /
+        /// <see cref="GradientColorSpace.Srgb"/> ⇒ byte-identical to the
+        /// historical render.
+        /// </summary>
+        public GradientColorSpace InterpolationSpace { get; set; } = GradientColorSpace.Srgb;
+
+        /// <summary>Segment blend shape (Phase B / F2). Default Linear.</summary>
+        public InterpolationCurve InterpolationCurve { get; set; } = InterpolationCurve.Linear;
+
+        /// <summary>
+        /// Transfer curve applied to the mapping scalar (Phase B / F3). Default
+        /// Linear (identity).
+        /// </summary>
+        public TransferFunction TransferFunction { get; set; } = TransferFunction.Linear;
+
+        /// <summary>
+        /// Blend of identity↔transfer curve in [0,1] (Phase B / F3). 1 = full
+        /// curve (default), 0 = identity.
+        /// </summary>
+        public float TransferStrength { get; set; } = 1f;
+
+        /// <summary>
+        /// Per-theme palette gamma (Phase C / F6). Baked into the gradient LUT
+        /// (<c>out = pow(in, 1/gamma)</c> per channel) → free per pixel. 1.0 =
+        /// neutral (default). Independent of, and compounds with, the host's
+        /// live image-gamma slider.
+        /// </summary>
+        public float PaletteGamma { get; set; } = 1f;
+
         // ── Cycling / 3D ──────────────────────────────────────────────────────
 
         public float CycleSpeed { get; set; } = 0.02f;
+
+        /// <summary>
+        /// Additive phase applied to the cycling parameter (Phase A / F4),
+        /// rotating the palette along the iteration axis. Default 0.
+        /// </summary>
+        public float ColorOffset { get; set; } = 0f;
+
+        /// <summary>
+        /// Multiplies the cycling frequency (Phase A / F4) — how many palette
+        /// cycles fit per <c>1/CycleSpeed</c> smooth-units. Default 1
+        /// (unchanged). Distinct from <see cref="CycleSpeed"/> so density can
+        /// be tuned/animated without disturbing the base rhythm.
+        /// </summary>
+        public float ColorDensity { get; set; } = 1f;
+
+        /// <summary>
+        /// Boundary behaviour of the cycling parameter (Phase A / F5). Default
+        /// <see cref="ColorWrapMode.Repeat"/> (historical modulo wrap).
+        /// </summary>
+        public ColorWrapMode WrapMode { get; set; } = ColorWrapMode.Repeat;
 
         // ── 3D shared (Phong + PBR) ───────────────────────────────────────────
 

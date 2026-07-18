@@ -3,12 +3,25 @@
              x:Class="FracturingFog.UI.Avalonia.App"
              RequestedThemeVariant="Dark">
 
+    <Application.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <!-- Design tokens (colors, brushes, sizing) shared by every
+                     dialog. Single source of truth — see Themes/Tokens.axaml. -->
+                <ResourceInclude Source="avares://FracturingFog.UI.Avalonia/Themes/Tokens.axaml" />
+            </ResourceDictionary.MergedDictionaries>
+        </ResourceDictionary>
+    </Application.Resources>
+
     <Application.Styles>
         <FluentTheme />
         <!-- ColorPicker theme — required for the Avalonia.Controls.ColorPicker
              package to render. Without this StyleInclude the control appears
              as a blank box. -->
         <StyleInclude Source="avares://Avalonia.Controls.ColorPicker/Themes/Fluent/Fluent.xaml" />
+        <!-- Shared control styles (button/label/group/coord classes) hoisted
+             out of individual dialogs. See Themes/ControlThemes.axaml. -->
+        <StyleInclude Source="avares://FracturingFog.UI.Avalonia/Themes/ControlThemes.axaml" />
     </Application.Styles>
 
 </Application>

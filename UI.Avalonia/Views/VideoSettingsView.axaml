@@ -1,16 +1,9 @@
-<Window xmlns="https://github.com/avaloniaui"
-        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        xmlns:vm="using:FracturingFog.UI.Avalonia.ViewModels"
-        x:Class="FracturingFog.UI.Avalonia.Views.VideoSettingsView"
-        x:DataType="vm:VideoSettingsViewModel"
-        Title="Video Settings"
-        Width="460"
-        SizeToContent="Height"
-        MinWidth="380"
-        CanResize="False"
-        WindowStartupLocation="CenterOwner"
-        ShowInTaskbar="False"
-        Background="#1C1C1C">
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:FracturingFog.UI.Avalonia.ViewModels"
+             x:Class="FracturingFog.UI.Avalonia.Views.VideoSettingsView"
+             x:DataType="vm:VideoSettingsViewModel">
+    <!-- Window chrome (title/size/background) supplied by PanelHostWindow. -->
     <ScrollViewer VerticalScrollBarVisibility="Auto" MaxHeight="720">
         <StackPanel Margin="14" Spacing="8">
 
@@ -133,4 +126,4 @@
 
         </StackPanel>
     </ScrollViewer>
-</Window>
+</UserControl>

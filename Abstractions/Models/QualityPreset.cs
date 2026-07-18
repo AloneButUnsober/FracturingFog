@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-FileCopyrightText: 2026 Bradley Brown
+
 // Models/QualityPreset.cs
 //
 // Four rendering quality presets, each defining:
@@ -37,7 +40,7 @@ namespace FracturingFog.Models
         High = 2,
         /// <summary>Deep zoom with double-double precision (~5×10²⁷).</summary>
         Ultra = 3,
-        /// <summary>Quad-double precision — zoom up to ~5×10⁵⁸. Slow at extreme depth.</summary>
+        /// <summary>Octuple-double precision — zoom up to ~1×10¹⁰⁰. Slow at extreme depth.</summary>
         Extreme = 4,
     }
 
@@ -244,17 +247,28 @@ namespace FracturingFog.Models
         };
 
         /// <summary>
-        /// Quad-double precision — zoom up to ~5×10⁵⁸. The reference orbit uses
-        /// QD math (~62 digits) above 1e25; pixel deltas remain double-precision.
+        /// Octuple-double precision — zoom up to ~1×10¹⁰⁰. The reference orbit
+        /// uses QD math (~62 digits) above 1e25 and OD (~124 digits) above 1e50;
+        /// pixel deltas remain double-precision.
         /// Very slow at extreme depth due to QD orbit cost (~5–10× DD).
         /// </summary>
         public static readonly QualityPreset Extreme = new()
         {
             Tier = QualityTier.Extreme,
             Name = "Extreme",
-            Description = "Quad-double precision — zoom to 5×10⁵⁸, up to 131072 iterations. 4×4 anti-aliasing + 32-sample TAA. Slow.",
+            Description = "Octuple-double precision — zoom to 1×10¹⁰⁰, up to 131072 iterations. 4×4 anti-aliasing + 32-sample TAA. Slow.",
             ZoomMin = 1e-6,
-            ZoomMax = 5e58,
+            // Above 1e50 both the reference orbit and per-pixel coordinates use OD
+            // (octuple-double, ~124 digits — MandelbrotCalculator.ODZoomThreshold).
+            // --qdfloorsweep measures OD coordinate separation at 128/128 through
+            // 1e120 (once OD.FromCenterOffset was fixed to place the offset via the
+            // full-cascade OD+double add; the old OD+OD add lost it past ~1e64).
+            // Cap set at 1e100 — 20 decades under the measured-clean coordinate
+            // floor, leaving margin for OD reference-orbit accuracy at depth (the
+            // soft limit; beyond deep filaments, chaotic sensitivity dominates
+            // "correctness" as it already does on the QD path). Iter budget fits:
+            // 2048 + 100*1024 = 104448 < 131072 cap.
+            ZoomMax = 1e100,
             WheelZoomFactor = 1.06,     // very fine
             IterBase = 2048,
             IterMax = 131072,

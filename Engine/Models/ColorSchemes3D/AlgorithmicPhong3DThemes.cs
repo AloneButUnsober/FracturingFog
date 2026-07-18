@@ -1,4 +1,7 @@
-﻿// Models/ColorSchemes3D/AlgorithmicPhong3DThemes.cs
+﻿// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-FileCopyrightText: 2026 Bradley Brown
+
+// Models/ColorSchemes3D/AlgorithmicPhong3DThemes.cs
 //
 // Phong 3D variants of the 21 algorithmic flat themes (those that derive
 // colour from a formula rather than a gradient stop list).

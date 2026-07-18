@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-FileCopyrightText: 2026 Bradley Brown
+
 // Models/ColorStopDataExtensions.cs
 //
 // System.Drawing-flavoured helpers for the bare ColorStopData DTO that
@@ -22,7 +25,7 @@ namespace FracturingFog.Models
     {
         /// <summary>DTO → runtime <c>FracturingFog.ColorStop</c>.</summary>
         public static ColorStop ToColorStop(this ColorStopData data)
-            => new ColorStop(data.Position, Color.FromArgb(data.R, data.G, data.B));
+            => new ColorStop(data.Position, Color.FromArgb(data.A, data.R, data.G, data.B), data.Midpoint);
 
         /// <summary>
         /// Runtime <c>FracturingFog.ColorStop</c> → DTO. Replaces the old
@@ -35,6 +38,10 @@ namespace FracturingFog.Models
             R = stop.Color.R,
             G = stop.Color.G,
             B = stop.Color.B,
+            A = stop.Color.A,
+            // 0 (struct default) round-trips as 0.5 = linear; keeps built-in
+            // themes exporting a neutral midpoint.
+            Midpoint = stop.Midpoint <= 0f ? 0.5f : stop.Midpoint,
         };
     }
 }

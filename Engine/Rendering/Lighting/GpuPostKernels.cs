@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-FileCopyrightText: 2026 Bradley Brown
+
 // GpuPostKernels.cs
 //
 // Phase 12 — ILGPU compute kernels for the heavyweight CPU post-passes. The

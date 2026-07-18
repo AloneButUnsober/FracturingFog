@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-FileCopyrightText: 2026 Bradley Brown
+
 // ViewModels/AssetManagerViewModel.cs
 //
 // Asset Manager (Animation Roadmap Sub-goal A) — phase A1: read-only three-pane
@@ -207,7 +210,7 @@ public sealed class AssetManagerViewModel : ViewModelBase
         {
             // A malformed archive throws on open/read — report it as a bad bundle
             // rather than crashing the manager.
-            summary.BadArchive = true;
+            summary.Unreadable = true;
         }
 
         RefreshAssets();
@@ -271,7 +274,8 @@ public sealed class AssetManagerViewModel : ViewModelBase
     public event EventHandler? ImportRequested;
 }
 
-/// <summary>Tally of one bundle-import pass, shown back to the user (A3 import).</summary>
+/// <summary>Tally of one import pass, shown back to the user. Shared by the
+/// Asset Manager's zip bundle (A3) and the per-editor JSON import.</summary>
 public sealed class AssetImportSummary
 {
     public int Added { get; set; }
@@ -279,8 +283,10 @@ public sealed class AssetImportSummary
     public int Skipped { get; set; }
     public int Failed { get; set; }
 
-    /// <summary>The archive itself couldn't be opened/read (not a valid zip).</summary>
-    public bool BadArchive { get; set; }
+    /// <summary>The file itself couldn't be opened/parsed — not a valid zip
+    /// bundle, or not valid JSON. Distinct from a readable file that simply
+    /// held no assets.</summary>
+    public bool Unreadable { get; set; }
 
     public int Total => Added + Replaced + Skipped + Failed;
 
@@ -298,8 +304,8 @@ public sealed class AssetImportSummary
     /// <summary>One-line human summary for the host's confirmation dialog.</summary>
     public string Describe()
     {
-        if (BadArchive) return "Import failed: the file is not a valid asset bundle.";
-        if (Total == 0) return "Nothing to import — the bundle held no assets.";
+        if (Unreadable) return "Import failed: the file could not be read as assets.";
+        if (Total == 0) return "Nothing to import — the file held no assets.";
 
         var parts = new System.Collections.Generic.List<string>(4);
         if (Added > 0)    parts.Add($"{Added} added");
@@ -356,6 +362,24 @@ public sealed class AssetHostEditorEventArgs : EventArgs
     public string Name { get; }
 }
 
+/// <summary>Carries a per-editor JSON import request (one asset kind) from the
+/// shell to AvaloniaShellBootstrap, which owns the file picker. The host reads
+/// the chosen file and calls <c>ShellViewModel.ImportAssetsFromJson</c> back
+/// with its text.</summary>
+public sealed class AssetJsonImportEventArgs : EventArgs
+{
+    public AssetJsonImportEventArgs(AssetKind kind, string title)
+    {
+        Kind = kind;
+        Title = title;
+    }
+
+    public AssetKind Kind { get; }
+
+    /// <summary>Dialog caption, e.g. "Import Scenes".</summary>
+    public string Title { get; }
+}
+
 /// <summary>Left-pane type-tree node — a thin display wrapper over one source.</summary>
 public sealed class AssetTypeNode
 {
@@ -377,6 +401,45 @@ public sealed class AssetRowViewModel
     public string KindLabel => Descriptor.Kind.ToString();
     public string SizeText => FormatSize(Descriptor.SizeOnDisk);
     public string CreatedText => Descriptor.CreatedAt?.ToString("yyyy-MM-dd HH:mm") ?? "—";
+
+    /// <summary>True for app-shipped assets (e.g. built-in colour themes) that
+    /// aren't in the user's library — read-only, no size on disk.</summary>
+    public bool IsReadOnly => Descriptor.ReadOnly;
+
+    /// <summary>Detail-pane provenance line.</summary>
+    public string SourceText => Descriptor.ReadOnly ? "Built-in (read-only)" : "User asset";
+
+    // Decoded lazily. The source hands either eager bytes (Descriptor.ThumbnailBytes,
+    // e.g. data-driven gradient swatches) or a lazy factory (Descriptor.ThumbnailFactory,
+    // e.g. built-in colour maps sampled into a strip) — the factory only runs on
+    // first display, keeping ~250 built-ins off the enumerate path. Null for
+    // asset types with neither, which the view hides via HasThumbnail.
+    private global::Avalonia.Media.Imaging.Bitmap? _thumbnail;
+    private bool _thumbnailLoaded;
+    public global::Avalonia.Media.Imaging.Bitmap? Thumbnail
+    {
+        get
+        {
+            if (!_thumbnailLoaded)
+            {
+                _thumbnailLoaded = true;
+                var bytes = Descriptor.ThumbnailBytes;
+                if ((bytes == null || bytes.Length == 0) && Descriptor.ThumbnailFactory != null)
+                {
+                    try { bytes = Descriptor.ThumbnailFactory.Invoke(); }
+                    catch { bytes = null; }
+                }
+                if (bytes != null && bytes.Length > 0)
+                {
+                    try { using var ms = new MemoryStream(bytes); _thumbnail = new global::Avalonia.Media.Imaging.Bitmap(ms); }
+                    catch { _thumbnail = null; }
+                }
+            }
+            return _thumbnail;
+        }
+    }
+
+    public bool HasThumbnail => Thumbnail != null;
 
     private static string FormatSize(long bytes)
     {

@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-FileCopyrightText: 2026 Bradley Brown
+
 // MengerGpuCalculator.cs
 //
 // P7a — ILGPU-backed GPU raymarcher for the Menger-sponge KIFS (Knighty's

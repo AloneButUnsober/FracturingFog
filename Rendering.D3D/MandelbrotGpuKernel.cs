@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-FileCopyrightText: 2026 Bradley Brown
+
 // MandelbrotGpuKernel.cs — T3.1 phase 1+2+4
 //
 // HLSL compute shader for the SP (double-precision) Mandelbrot escape-time
@@ -103,12 +106,29 @@ public sealed class MandelbrotGpuKernel : IGpuKernel
             sb.AppendLine(@"
 RWStructuredBuffer<uint> gColor : register(u3);
 
-uint cg_pack_bgra(float3 c)
+// F11b: centred 8x8 Bayer thresholds ((raw+0.5)/64 - 0.5), the GPU twin of
+// GradientColorMap.Bayer8. Added to each channel before the round so a
+// shallow gradient dithers instead of banding. gDitherStrength == 0 → the
+// offset is 0 and the pack is byte-identical to the plain round.
+static const float cg_bayer8[64] =
+{
+    -0.4921875,  0.0078125, -0.3671875,  0.1328125, -0.4609375,  0.0390625, -0.3359375,  0.1640625,
+     0.2578125, -0.2421875,  0.3828125, -0.1171875,  0.2890625, -0.2109375,  0.4140625, -0.0859375,
+    -0.3046875,  0.1953125, -0.4296875,  0.0703125, -0.2734375,  0.2265625, -0.3984375,  0.1015625,
+     0.4453125, -0.0546875,  0.3203125, -0.1796875,  0.4765625, -0.0234375,  0.3515625, -0.1484375,
+    -0.4453125,  0.0546875, -0.3203125,  0.1796875, -0.4765625,  0.0234375, -0.3515625,  0.1484375,
+     0.3046875, -0.1953125,  0.4296875, -0.0703125,  0.2734375, -0.2265625,  0.3984375, -0.1015625,
+    -0.2578125,  0.2421875, -0.3828125,  0.1171875, -0.2890625,  0.2109375, -0.4140625,  0.0859375,
+     0.4921875, -0.0078125,  0.3671875, -0.1328125,  0.4609375, -0.0390625,  0.3359375, -0.1640625,
+};
+
+uint cg_pack_bgra(float3 c, uint px, uint py)
 {
     c = saturate(c);
-    uint r = (uint)(c.r * 255.0 + 0.5);
-    uint g = (uint)(c.g * 255.0 + 0.5);
-    uint b = (uint)(c.b * 255.0 + 0.5);
+    float o = gDitherStrength * cg_bayer8[(py & 7) * 8 + (px & 7)];
+    uint r = (uint)clamp(c.r * 255.0 + 0.5 + o, 0.0, 255.0);
+    uint g = (uint)clamp(c.g * 255.0 + 0.5 + o, 0.0, 255.0);
+    uint b = (uint)clamp(c.b * 255.0 + 0.5 + o, 0.0, 255.0);
     return 0xFF000000u | (r << 16) | (g << 8) | b;
 }
 
@@ -145,7 +165,7 @@ cbuffer Params : register(b0)
     int   gFractalKind;
     float gParam0;         // Julia c.re
     float gParam1;         // Julia c.im
-    int   _pad0;
+    float gDitherStrength; // F11b: 0 = off (plain round); else ±0.5-LSB amp.
     // 16 fields × 4 bytes = 64 (float4 multiple — same size as phase 1.b).
 }
 
@@ -189,7 +209,7 @@ bool InPeriod2Bulb(float cx, float cy)
         string inSetColor = emitColor ? @"
         gColor[idx] = cg_pack_bgra(EvalPalette(
             0.0, 0.0, (float)gMaxIter, (float)gMaxIter,
-            0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0));
+            0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0), x, y);
 " : "";
         string escapeColor = emitColor ? @"
         float t_iter = gMaxIter > 0 ? sm / (float)gMaxIter : 0.0;
@@ -197,12 +217,12 @@ bool InPeriod2Bulb(float cx, float cy)
         float in_mag = sqrt(zr * zr + zi * zi);
         gColor[idx] = cg_pack_bgra(EvalPalette(
             sm, 0.0, (float)it, (float)gMaxIter,
-            t_iter, 0.0, 0.0, zr, zi, dr, di, in_arg, in_mag, 0.0, 0.0));
+            t_iter, 0.0, 0.0, zr, zi, dr, di, in_arg, in_mag, 0.0, 0.0), x, y);
 " : "";
         string bulbSkipColor = emitColor ? @"
         gColor[idx] = cg_pack_bgra(EvalPalette(
             0.0, 0.0, (float)gMaxIter, (float)gMaxIter,
-            0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0, 0.0));
+            0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0, 0.0), x, y);
 " : "";
 
         return $@"
@@ -318,8 +338,9 @@ void CSMain(uint3 tid : SV_DispatchThreadID)
         public int FractalKind;
         public float Param0;
         public float Param1;
-        // 15 fields × 4 = 60 — pad to 64 (next float4 multiple).
-        private readonly int _pad0;
+        // F11b: GPU ordered-dither amp (0 = off). Was _pad0; keeps the 64-byte
+        // (float4-multiple) cbuffer layout.
+        public float DitherStrength;
     }
 
     /// <summary>Phase 3 fractal selector. Matches the shader's
@@ -676,6 +697,11 @@ void CSMain(uint3 tid : SV_DispatchThreadID)
                 FractalKind = (int)kind,
                 Param0 = param0,
                 Param1 = param1,
+                // F11b: same runtime knob as the CPU deband (F11a). Default-off
+                // statics → 0 → the shader packs the plain round, unchanged.
+                DitherStrength = FracturingFog.Models.GradientColorMap.DitherEnabled
+                    ? FracturingFog.Models.GradientColorMap.DitherStrength
+                    : 0f,
             };
             var mapped = _ctx.Map(_paramsBuf, 0, Vortice.Direct3D11.MapMode.WriteDiscard, MapFlags.None);
             unsafe

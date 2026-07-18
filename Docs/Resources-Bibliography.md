@@ -127,6 +127,31 @@ are flagged for fixing in [Documentation Plan → Citation maintenance](Document
 - **Smoothstep / quintic Hermite interpolation** — Ken Perlin. *Improving noise.* SIGGRAPH 2002.
   Used for the slideshow cross-fade and the video-zoom easing curve.
 
+### Scene Engine — camera splines, motion blur, cinematic moves
+
+<a id="catmull-rom"></a>
+
+- **Catmull-Rom splines** — Edwin Catmull, Raphael Rom. *A class of local interpolating splines.*
+  In *Computer Aided Geometric Design*, Academic Press, 1974. The C¹-continuous interpolating spline
+  the camera track uses by default — a curve that passes through every keyframe with tangents derived
+  from the neighbouring keys. Used in `CameraTrack.Evaluate` and `SceneGlobalTrack.Evaluate`.
+- **Cubic Hermite interpolation / smoothstep** — see the Perlin entry above. The Bezier interpolation
+  mode and the per-key `EaseInOut` reparametrisation both reduce to smoothstep
+  ($u^2(3-2u)$, a cubic Hermite with zero endpoint tangents).
+- **Accumulation motion blur & shutter angle** — Rob Cook, Loren Carpenter, Edwin Catmull.
+  *The Reyes image rendering architecture.* SIGGRAPH 1987. Distributes samples across the open-shutter
+  interval and averages them; the offline scene renderer's `--motion-blur` sub-frame averaging is the
+  same box-filter-over-the-shutter idea. Shutter *fraction* here is the film "shutter angle" expressed
+  as a fraction of the frame interval (0.5 ≈ a 180° shutter).
+- **Dolly zoom (the "Vertigo" / Hitchcock effect)** — coined in Alfred Hitchcock's *Vertigo* (1958),
+  achieved by dollying the camera while zooming the opposite way. The orbit camera exposes *distance*
+  (dolly) directly; a true field-of-view zoom track is future work (see the roadmap).
+- **Reinhard tone mapping** — Erik Reinhard, Michael Stark, Peter Shirley, James Ferwerda.
+  *Photographic tone reproduction for digital images.* SIGGRAPH 2002. The `Reinhard` /
+  `ReinhardExtended` per-shot tone-map operators.
+- **ACES filmic tone mapping** — Academy Color Encoding System, AMPAS. The `ACES` per-shot tone-map
+  operator's filmic curve.
+
 ---
 
 ## Sites, communities, and other long-form references

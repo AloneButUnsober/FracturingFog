@@ -1,4 +1,7 @@
-﻿using System;
+﻿// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-FileCopyrightText: 2026 Bradley Brown
+
+using System;
 using System.Collections.Generic;
 using System.Text;
 using System.Threading;

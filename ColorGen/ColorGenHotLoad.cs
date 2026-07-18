@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-FileCopyrightText: 2026 Bradley Brown
+
 // ColorGenHotLoad.cs
 //
 // Roslyn-compile a freshly-generated colour theme into an in-memory

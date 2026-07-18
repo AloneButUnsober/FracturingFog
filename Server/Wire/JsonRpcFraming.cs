@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-FileCopyrightText: 2026 Bradley Brown
+
 // Server/Wire/JsonRpcFraming.cs
 // Length-prefixed UTF-8 JSON over an arbitrary Stream (typically
 // SslStream). Frame = [4-byte little-endian length][UTF-8 JSON body].

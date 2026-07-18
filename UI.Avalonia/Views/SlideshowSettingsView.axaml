@@ -1,18 +1,12 @@
-<Window xmlns="https://github.com/avaloniaui"
+<UserControl xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:vm="using:FracturingFog.UI.Avalonia.ViewModels"
         x:Class="FracturingFog.UI.Avalonia.Views.SlideshowSettingsView"
-        x:DataType="vm:SlideshowSettingsViewModel"
-        Title="Slideshow Settings"
-        Width="520"
-        SizeToContent="Height"
-        MinWidth="460"
-        CanResize="False"
-        WindowStartupLocation="CenterOwner"
-        ShowInTaskbar="False"
-        Background="#1C1C1C">
+        x:DataType="vm:SlideshowSettingsViewModel">
 
     <!--
+      Window chrome (title/size/background) lives on the PanelHostWindow that
+      hosts this UserControl (see AvaloniaDialogs.ShowSlideshowSettingsAsync).
       DIP-only layout. Auto rows expand to fit fonts at any DPI; no Left/Top/
       Width arithmetic anywhere in the file. The width is the only fixed
       dimension and even that uses MinWidth so a larger system font (e.g. a
@@ -26,24 +20,28 @@
         <Grid Grid.Row="0" Grid.ColumnSpan="2"
               IsVisible="{Binding IsLibraryMode}"
               ColumnDefinitions="Auto,*,Auto,Auto"
-              Margin="0,0,0,8">
-            <TextBlock Grid.Column="0" Text="Name:" VerticalAlignment="Center" Margin="0,0,6,0" />
+              Margin="0,0,0,8"
+              RowDefinitions="Auto,Auto">
+            <TextBlock Grid.Column="0" Grid.Row="0" Text="Saved:" VerticalAlignment="Center" Margin="0,0,6,0" />
+            <TextBlock Grid.Column="0" Grid.Row="1" Text="Name:" VerticalAlignment="Center" Margin="0,0,6,0" />
             <!-- Editable name: free-text input + dropdown of saved names.
                  Combo is read-only (no IsEditable on Avalonia 11 ComboBox);
                  typed names go through the adjacent TextBox so the
                  user can either type a new name or pick an existing one. -->
-            <Grid Grid.Column="1" ColumnDefinitions="*,Auto">
-                <TextBox Grid.Column="0"
-                         Name="NameCombo"
-                         Text="{Binding ActiveName, Mode=TwoWay}"
-                         MinWidth="160"
-                         Watermark="preset name" />
-                <ComboBox Grid.Column="1"
+                 <Grid Grid.Column="1" Grid.Row="0" ColumnDefinitions="Auto,Auto">
+                <ComboBox Grid.Column="0"
                           ItemsSource="{Binding SavedConfigNames}"
                           SelectedItem="{Binding ActiveName, Mode=TwoWay}"
-                          MinWidth="40"
-                          Margin="4,0,0,0"
+                          MinWidth="140"
+                          Margin="0,0,4,6"
                           ToolTip.Tip="Pick an existing preset" />
+            </Grid>
+            <Grid Grid.Column="1" Grid.Row="1" ColumnDefinitions="Auto,Auto">
+                <TextBox Grid.Column="1"
+                         Name="NameCombo"
+                         Text="{Binding ActiveName, Mode=TwoWay}"
+                         MinWidth="240"
+                         Watermark="preset name" />
             </Grid>
             <TextBlock Grid.Column="2" Text="Type:" VerticalAlignment="Center" Margin="10,0,6,0" />
             <ComboBox Grid.Column="3"
@@ -111,7 +109,8 @@
                        Minimum="3" Maximum="600" Increment="1"
                        Value="{Binding TotalDisplaySec, Mode=TwoWay}"
                        IsEnabled="{Binding TimingEnabled}"
-                       Width="110" Margin="8,2" />
+                       Width="140" Margin="8,2"
+                       HorizontalContentAlignment="Right" />
 
         <TextBlock Grid.Row="6" Grid.Column="0" VerticalAlignment="Center"
                    Text="Color theme fade (ms):"
@@ -120,7 +119,8 @@
                        Minimum="100" Maximum="20000" Increment="100"
                        Value="{Binding ThemeFadeMs, Mode=TwoWay}"
                        IsEnabled="{Binding TimingEnabled}"
-                       Width="110" Margin="8,2" />
+                       Width="140" Margin="8,2"
+                       HorizontalContentAlignment="Right" />
 
         <TextBlock Grid.Row="7" Grid.Column="0" VerticalAlignment="Center"
                    Text="Region fade (ms):"
@@ -129,7 +129,8 @@
                        Minimum="100" Maximum="20000" Increment="100"
                        Value="{Binding RegionFadeMs, Mode=TwoWay}"
                        IsEnabled="{Binding TimingEnabled}"
-                       Width="110" Margin="8,2" />
+                       Width="140" Margin="8,2"
+                       HorizontalContentAlignment="Right" />
 
         <TextBlock Grid.Row="8" Grid.Column="0" VerticalAlignment="Center"
                    Text="Fade steps:"
@@ -138,7 +139,8 @@
                        Minimum="2" Maximum="200" Increment="1"
                        Value="{Binding FadeSteps, Mode=TwoWay}"
                        IsEnabled="{Binding TimingEnabled}"
-                       Width="110" Margin="8,2" />
+                       Width="140" Margin="8,2"
+                       HorizontalContentAlignment="Right" />
 
         <!-- Row 9: reproducibility seed. Not greyed by audio-reactive — it
              governs region/theme ordering, which runs in both modes. -->
@@ -148,7 +150,8 @@
         <NumericUpDown Grid.Row="9" Grid.Column="1"
                        Minimum="0" Maximum="2147483647" Increment="1"
                        Value="{Binding RandomSeed, Mode=TwoWay}"
-                       Width="110" Margin="8,2" />
+                       Width="140" Margin="8,2"
+                       HorizontalContentAlignment="Right"/>
 
         <!-- Row 10: timing note, visibility bound to AudioReactive -->
         <TextBlock Grid.Row="10" Grid.ColumnSpan="2"
@@ -429,4 +432,4 @@
     </Grid>
     </ScrollViewer>
 
-</Window>
+</UserControl>

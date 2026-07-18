@@ -1,26 +1,27 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-FileCopyrightText: 2026 Bradley Brown
+
 using System.Linq;
 
 using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Markup.Xaml;
 
-using FracturingFog.UI.Avalonia.Input;
 using FracturingFog.UI.Avalonia.ViewModels;
 
 namespace FracturingFog.UI.Avalonia.Views;
 
 /// <summary>
 /// Avalonia Asset Manager. Read-only three-pane browser over every saved asset
-/// type (Animation Roadmap Sub-goal A, phase A1). Host wires the VM's
-/// CloseRequested event; Esc closes. Edit routing to each type's own editor
-/// lands in A2.
+/// type (Animation Roadmap Sub-goal A, phase A1). Hybrid-shell: a UserControl
+/// hosted modeless by MainWindow.SyncAssetManager; the host + shell flag own
+/// chrome + close => hide, and ShellViewModel wires the VM's CloseRequested.
 /// </summary>
-public sealed partial class AssetManagerView : Window
+public sealed partial class AssetManagerView : UserControl
 {
     public AssetManagerView()
     {
         AvaloniaXamlLoader.Load(this);
-        EscapeCloseBehavior.Attach(this);
     }
 
     // Double-clicking a row routes it to its type's editor (A2), same as the

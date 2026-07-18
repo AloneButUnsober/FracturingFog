@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-FileCopyrightText: 2026 Bradley Brown
+
 // Server.Tests/Cluster/FramePlannerTests.cs
 // D-4a — FramePlanner produces a frame-range tile plan for a video
 // RenderRequestDto. Per-frame zoom math is verified against the same

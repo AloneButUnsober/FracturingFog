@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-FileCopyrightText: 2026 Bradley Brown
+
 // Models/UserBulbSnapshot.cs
 //
 // Versioned export envelope for a UserBulb equation. Wraps a UserBulbEntry
@@ -67,6 +70,7 @@ namespace FracturingFog.Models
         public double? Bailout { get; set; }
         public double? JacobianH { get; set; }
         public double? CullRadius { get; set; }
+        public double? KifsScale { get; set; }
 
         // ── View ───────────────────────────────────────────────────────
         public double? FovDegrees { get; set; }
@@ -75,6 +79,8 @@ namespace FracturingFog.Models
 
         // ── Animation ──────────────────────────────────────────────────
         public double? Time { get; set; }
+        public double? AnimSpeed { get; set; }
+        public double? AnimLoopSeconds { get; set; }
 
         // ── Named params (UserBulbParam.Value / Min / Max) ─────────────
         public List<UserBulbParam>? Params { get; set; }

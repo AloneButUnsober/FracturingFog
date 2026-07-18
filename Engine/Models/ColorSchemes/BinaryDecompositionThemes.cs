@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-FileCopyrightText: 2026 Bradley Brown
+
 // Models/ColorSchemes/BinaryDecompositionThemes.cs
 //
 // Binary decomposition — at escape, the sign of Im(z_n) splits the exterior
@@ -25,7 +28,7 @@ namespace FracturingFog.Models
     /// </summary>
     public sealed class BinaryDecompClassicMap : IColorMap
     {
-        public static string Name => "Binary Decomp — Classic";
+        public static string Name => "Binary Decomp - Classic";
         public static string Category => "Binary / Argument Decomposition";
         public static string Description =>
             "Pure two-tone binary decomposition by sign of Im(z) at escape.  " +
@@ -56,7 +59,7 @@ namespace FracturingFog.Models
     /// </summary>
     public sealed class BinaryDecompGoldMap : GradientColorMap
     {
-        public static string Name => "Binary Decomp — Gold / Navy";
+        public static string Name => "Binary Decomp - Gold / Navy";
         public static string Category => "Binary / Argument Decomposition";
         public static string Description =>
             "Binary decomp keyed gold (Im(z) ≥ 0) vs navy (Im(z) < 0), with " +
@@ -104,7 +107,7 @@ namespace FracturingFog.Models
     /// </summary>
     public sealed class BinaryDecompContourMap : IColorMap
     {
-        public static string Name => "Binary Decomp — Contour Grid";
+        public static string Name => "Binary Decomp - Contour Grid";
         public static string Category => "Binary / Argument Decomposition";
         public static string Description =>
             "Binary decomp × iteration rings.  Cell boundaries form the " +

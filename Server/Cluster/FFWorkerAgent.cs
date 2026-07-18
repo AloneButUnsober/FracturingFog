@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-FileCopyrightText: 2026 Bradley Brown
+
 // Server/Cluster/FFWorkerAgent.cs
 // Worker-side outbound connection to the master. Owns the lifetime of
 // one cluster session: connect → mTLS handshake → worker.register →

@@ -1,4 +1,7 @@
-﻿// Models/DataDrivenColorThemes.cs
+﻿// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-FileCopyrightText: 2026 Bradley Brown
+
+// Models/DataDrivenColorThemes.cs
 //
 // Concrete IColorMap implementations driven entirely by a ColorThemeData DTO.
 // These classes let a JSON-loaded theme actually render — they slot into the
@@ -81,6 +84,14 @@ namespace FracturingFog.Models
                             Description = description,
                             MaxRecommendedZoom = maxZoomField,
                             Kind = ColorThemeKind.Pbr3D,
+                            InterpolationSpace = pbr.ExportInterpolationSpace,
+                            InterpolationCurve = pbr.ExportInterpolationCurve,
+                            TransferFunction = pbr.ExportTransferFunction,
+                            TransferStrength = pbr.ExportTransferStrength,
+                            PaletteGamma = pbr.ExportPaletteGamma,
+                            ColorOffset = pbr.ExportColorOffset,
+                            ColorDensity = pbr.ExportColorDensity,
+                            WrapMode = pbr.ExportWrapMode,
                             Stops = StopsToData(pbr.ExportStops),
                             CycleSpeed = pbr.ExportCycleSpeed,
                             Steepness = pbr.ExportSteepness,
@@ -114,6 +125,14 @@ namespace FracturingFog.Models
                         Description = description,
                         MaxRecommendedZoom = maxZoomField,
                         Kind = ColorThemeKind.Phong3D,
+                        InterpolationSpace = phong.ExportInterpolationSpace,
+                        InterpolationCurve = phong.ExportInterpolationCurve,
+                        TransferFunction = phong.ExportTransferFunction,
+                        TransferStrength = phong.ExportTransferStrength,
+                        PaletteGamma = phong.ExportPaletteGamma,
+                        ColorOffset = phong.ExportColorOffset,
+                        ColorDensity = phong.ExportColorDensity,
+                        WrapMode = phong.ExportWrapMode,
                         Stops = StopsToData(phong.ExportStops),
                         CycleSpeed = phong.ExportCycleSpeed,
                         Steepness = phong.ExportSteepness,
@@ -139,6 +158,14 @@ namespace FracturingFog.Models
                         Description = description,
                         MaxRecommendedZoom = maxZoomField,
                         Kind = ColorThemeKind.Cycling,
+                        InterpolationSpace = cyc.ExportInterpolationSpace,
+                        InterpolationCurve = cyc.ExportInterpolationCurve,
+                        TransferFunction = cyc.ExportTransferFunction,
+                        TransferStrength = cyc.ExportTransferStrength,
+                        PaletteGamma = cyc.ExportPaletteGamma,
+                        ColorOffset = cyc.ExportColorOffset,
+                        ColorDensity = cyc.ExportColorDensity,
+                        WrapMode = cyc.ExportWrapMode,
                         Stops = StopsToData(cyc.ExportStops),
                         CycleSpeed = cyc.ExportCycleSpeed,
                         Brightness = bright,
@@ -154,6 +181,11 @@ namespace FracturingFog.Models
                         Description = description,
                         MaxRecommendedZoom = maxZoomField,
                         Kind = ColorThemeKind.Gradient,
+                        InterpolationSpace = grad.ExportInterpolationSpace,
+                        InterpolationCurve = grad.ExportInterpolationCurve,
+                        TransferFunction = grad.ExportTransferFunction,
+                        TransferStrength = grad.ExportTransferStrength,
+                        PaletteGamma = grad.ExportPaletteGamma,
                         Stops = StopsToData(grad.ExportStops),
                         Brightness = bright,
                         Contrast = contrast,
@@ -252,6 +284,11 @@ namespace FracturingFog.Models
             ThemeContrast = data.Contrast;
             ThemeAdaptive = data.Adaptive;
             _inSetColor = data.InSetColor?.ToPackedArgb() ?? 0xFF000000u;
+            InterpolationSpace = data.InterpolationSpace;
+            InterpCurve = data.InterpolationCurve;
+            Transfer = data.TransferFunction;
+            TransferStrength = data.TransferStrength;
+            PaletteGamma = data.PaletteGamma;
             foreach (var s in data.Stops)
                 Stops.Add(s.ToColorStop());
         }
@@ -289,6 +326,14 @@ namespace FracturingFog.Models
             ThemeAdaptive = data.Adaptive;
             _cycleSpeed = data.CycleSpeed;
             _inSetColor = data.InSetColor?.ToPackedArgb() ?? 0xFF000000u;
+            InterpolationSpace = data.InterpolationSpace;
+            InterpCurve = data.InterpolationCurve;
+            Transfer = data.TransferFunction;
+            TransferStrength = data.TransferStrength;
+            PaletteGamma = data.PaletteGamma;
+            ColorOffset = data.ColorOffset;
+            ColorDensity = data.ColorDensity;
+            CycleWrap = data.WrapMode;
             foreach (var s in data.Stops)
                 Stops.Add(s.ToColorStop());
         }
@@ -344,6 +389,14 @@ namespace FracturingFog.Models
             _rimSpecScale = data.RimSpecScale;
             _rimDiffScale = data.RimDiffScale;
             _inSetColor = data.InSetColor?.ToPackedArgb() ?? 0xFF000000u;
+            InterpolationSpace = data.InterpolationSpace;
+            InterpCurve = data.InterpolationCurve;
+            Transfer = data.TransferFunction;
+            TransferStrength = data.TransferStrength;
+            PaletteGamma = data.PaletteGamma;
+            ColorOffset = data.ColorOffset;
+            ColorDensity = data.ColorDensity;
+            CycleWrap = data.WrapMode;
 
             foreach (var s in data.Stops)
                 Stops.Add(s.ToColorStop());
@@ -431,6 +484,14 @@ namespace FracturingFog.Models
             _glowExp = data.GlowBoostExponent;
             _glowScale = data.GlowBoostScale;
             _inSetColor = data.InSetColor?.ToPackedArgb() ?? 0xFF000000u;
+            InterpolationSpace = data.InterpolationSpace;
+            InterpCurve = data.InterpolationCurve;
+            Transfer = data.TransferFunction;
+            TransferStrength = data.TransferStrength;
+            PaletteGamma = data.PaletteGamma;
+            ColorOffset = data.ColorOffset;
+            ColorDensity = data.ColorDensity;
+            CycleWrap = data.WrapMode;
             _bands = (data.MaterialBands?.Count ?? 0) > 0
                                 ? data.MaterialBands!.ToArray()
                                 : new[]

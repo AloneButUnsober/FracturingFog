@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-FileCopyrightText: 2026 Bradley Brown
+
 // Batch/RemoteBatchRunner.cs
 // Headless --batch --remote --connection NAME --render NAME --out PATH path.
 // Reuses the saved connection + render preset that the Avalonia FFClient

@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-FileCopyrightText: 2026 Bradley Brown
+
 // Server/Wire/MessageEnvelope.cs
 // Top-level JSON shape sent over the wire. Every frame is one envelope,
 // either Request (Method + Id + Params) or Response (Id + Result | Error).

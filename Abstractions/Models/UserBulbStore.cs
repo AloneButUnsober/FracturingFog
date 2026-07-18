@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-FileCopyrightText: 2026 Bradley Brown
+
 // Models/UserBulbStore.cs
 //
 // Singleton persistence for user-defined 3D bulb equations.  Each entry has a
@@ -13,6 +16,7 @@ using System.IO;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using FracturingFog.Abstractions;
+using FracturingFog.Abstractions.Assets;
 
 namespace FracturingFog.Models
 {
@@ -35,6 +39,18 @@ namespace FracturingFog.Models
         /// single-source entries.
         /// </summary>
         public List<UserBulbChainStep>? Chain { get; set; }
+
+        /// <summary>
+        /// Render/view/animation settings captured when the equation was saved
+        /// (axis mode, Julia, camera, lights, colour driver, render budget,
+        /// FOV, Time, named params). Applied on load so switching between saved
+        /// equations restores each one's own settings — not just its source.
+        /// Null on legacy entries saved before this field existed (load then
+        /// leaves the current settings untouched, matching old behaviour). The
+        /// nested snapshot's own <see cref="UserBulbSnapshot.Entry"/> is unused
+        /// here and left empty to avoid self-reference.
+        /// </summary>
+        public UserBulbSnapshot? Settings { get; set; }
     }
 
     public sealed class UserBulbStore
@@ -165,13 +181,21 @@ namespace FracturingFog.Models
             {
                 Name = "Kaleidoscopic IFS (fold + rot + scale)",
                 Source = "// Single-pass fallback — chain form below carries fold/rot/scale.\n" +
-                         "var v = z;\n" +
-                         "if (v.X + v.Y < 0) v = new Vec3(-v.Y, -v.X,  v.Z);\n" +
-                         "if (v.X + v.Z < 0) v = new Vec3(-v.Z,  v.Y, -v.X);\n" +
-                         "if (v.Y + v.Z < 0) v = new Vec3( v.X, -v.Z, -v.Y);\n" +
-                         "v = Vec3.Rot(v, new Vec3(0, 1, 0), 0.5);\n" +
-                         "return v * 2.0 - new Vec3(1, 1, 1);",
+                         "// Needs DE Mode = Scalar KIFS (scale 3): the per-iteration rotation\n" +
+                         "// defeats the numerical-Jacobian DE.\n" +
+                         "var v = Vec3.Abs(z);\n" +
+                         "if (v.X - v.Y < 0) v = new Vec3(v.Y, v.X, v.Z);\n" +
+                         "if (v.X - v.Z < 0) v = new Vec3(v.Z, v.Y, v.X);\n" +
+                         "if (v.Y - v.Z < 0) v = new Vec3(v.X, v.Z, v.Y);\n" +
+                         "v = Vec3.Rot(v, new Vec3(0, 1, 0), 0.3);\n" +
+                         "return v * 3.0 - new Vec3(2, 2, 0);",
                 Chain = UserBulbChainPrimitives.KaleidoscopicIfsChain(),
+                Settings = new UserBulbSnapshot
+                {
+                    KifsScale = UserBulbChainPrimitives.KaleidoscopicIfsScale,
+                    CameraDistance = 3.0,
+                    Iterations = 12,
+                },
             });
             Equations.Add(new UserBulbEntry
             {
@@ -236,13 +260,20 @@ namespace FracturingFog.Models
             Ensure("Kaleidoscopic IFS (fold + rot + scale)", () => new UserBulbEntry
             {
                 Name = "Kaleidoscopic IFS (fold + rot + scale)",
-                Source = "var v = z;\n" +
-                         "if (v.X + v.Y < 0) v = new Vec3(-v.Y, -v.X,  v.Z);\n" +
-                         "if (v.X + v.Z < 0) v = new Vec3(-v.Z,  v.Y, -v.X);\n" +
-                         "if (v.Y + v.Z < 0) v = new Vec3( v.X, -v.Z, -v.Y);\n" +
-                         "v = Vec3.Rot(v, new Vec3(0, 1, 0), 0.5);\n" +
-                         "return v * 2.0 - new Vec3(1, 1, 1);",
+                Source = "// Needs DE Mode = Scalar KIFS (scale 3) — see chain steps.\n" +
+                         "var v = Vec3.Abs(z);\n" +
+                         "if (v.X - v.Y < 0) v = new Vec3(v.Y, v.X, v.Z);\n" +
+                         "if (v.X - v.Z < 0) v = new Vec3(v.Z, v.Y, v.X);\n" +
+                         "if (v.Y - v.Z < 0) v = new Vec3(v.X, v.Z, v.Y);\n" +
+                         "v = Vec3.Rot(v, new Vec3(0, 1, 0), 0.3);\n" +
+                         "return v * 3.0 - new Vec3(2, 2, 0);",
                 Chain = UserBulbChainPrimitives.KaleidoscopicIfsChain(),
+                Settings = new UserBulbSnapshot
+                {
+                    KifsScale = UserBulbChainPrimitives.KaleidoscopicIfsScale,
+                    CameraDistance = 3.0,
+                    Iterations = 12,
+                },
             });
             Ensure("Quaternion Julia (Quat mode, set Julia c)", () => new UserBulbEntry
             {
@@ -271,6 +302,30 @@ namespace FracturingFog.Models
                     changed = true;
                 }
             }
+
+            // Kaleidoscopic-IFS repair: earlier builds shipped a Sierpinski-fold
+            // chain with per-iteration rotation, which is invisible under the
+            // numerical DE and carries no KIFS-scale setting → renders as a
+            // sparse speck. Re-seed to the Menger-fold chain and attach the
+            // Scalar-KIFS settings. Detect by a chain lacking the KIFS-scale
+            // setting or still using the old rotation-of-Sierpinski step.
+            {
+                var entry = GetByName("Kaleidoscopic IFS (fold + rot + scale)");
+                bool needsFix = entry?.Chain is { Count: > 0 }
+                    && (entry.Settings?.KifsScale is not > 0.0
+                        || (entry.Chain.Count > 1 && entry.Chain[1].Source.Contains(UserBulbChainPrimitives.IdSierpinski)));
+                if (needsFix)
+                {
+                    entry!.Chain = UserBulbChainPrimitives.KaleidoscopicIfsChain();
+                    entry.Settings = new UserBulbSnapshot
+                    {
+                        KifsScale = UserBulbChainPrimitives.KaleidoscopicIfsScale,
+                        CameraDistance = 3.0,
+                        Iterations = 12,
+                    };
+                    changed = true;
+                }
+            }
             return changed;
         }
 
@@ -294,7 +349,7 @@ namespace FracturingFog.Models
         /// so the caller can keep mutating its own list afterwards; null/empty
         /// chain clears any prior chain on a replaced entry.
         /// </summary>
-        public UserBulbEntry? SaveEquation(string name, string source, IReadOnlyList<UserBulbChainStep>? chain = null)
+        public UserBulbEntry? SaveEquation(string name, string source, IReadOnlyList<UserBulbChainStep>? chain = null, UserBulbSnapshot? settings = null)
         {
             if (string.IsNullOrWhiteSpace(name)) return null;
 
@@ -311,12 +366,13 @@ namespace FracturingFog.Models
                 {
                     Equations[i].Source = source ?? string.Empty;
                     Equations[i].Chain = chainCopy;
+                    Equations[i].Settings = settings;
                     Save();
                     return Equations[i];
                 }
             }
 
-            var entry = new UserBulbEntry { Name = name, Source = source ?? string.Empty, Chain = chainCopy };
+            var entry = new UserBulbEntry { Name = name, Source = source ?? string.Empty, Chain = chainCopy, Settings = settings };
             Equations.Add(entry);
             Save();
             return entry;
@@ -415,25 +471,44 @@ namespace FracturingFog.Models
         }
 
         /// <summary>
-        /// Read a .fbulb file. Recognises both the Wave 4.13 snapshot envelope
-        /// (Version + Entry + nullable knobs) and pre-4.13 bare-entry JSON
-        /// (legacy format produced by <see cref="ExportEntry"/>) — the latter
-        /// returns a snapshot with only Entry populated. Renames the entry on
-        /// name collision before adding to the store. Returns null on parse
-        /// failure or missing entry name.
+        /// Read a .fbulb file and import its first entry. Convenience wrapper
+        /// over <see cref="ImportSnapshots"/> for callers that only care about
+        /// one entry; note a multi-entry file still imports in full. Returns
+        /// null on parse failure or when no element carried an entry name.
         /// </summary>
         public UserBulbSnapshot? ImportSnapshot(string filePath)
+        {
+            var all = ImportSnapshots(filePath);
+            return all.Count > 0 ? all[0] : null;
+        }
+
+        /// <summary>
+        /// Read a .fbulb file and import every entry it holds. Recognises the
+        /// Wave 4.13 snapshot envelope (Version + Entry + nullable knobs),
+        /// pre-4.13 bare-entry JSON (legacy format produced by
+        /// <see cref="ExportEntry"/>) — the latter yields a snapshot with only
+        /// Entry populated — and a JSON array of either form. Each entry is
+        /// renamed on name collision before being added, and entries merge in
+        /// file order. Returns the imported snapshots, empty on parse failure
+        /// or when no element carried an entry name.
+        /// </summary>
+        public IReadOnlyList<UserBulbSnapshot> ImportSnapshots(string filePath)
         {
             try
             {
                 string json = File.ReadAllText(filePath);
-                var snapshot = TryParseSnapshot(json);
-                if (snapshot?.Entry is null || string.IsNullOrWhiteSpace(snapshot.Entry.Name))
-                    return null;
-                MergeImportedEntry(snapshot.Entry);
-                return snapshot;
+                var imported = new List<UserBulbSnapshot>();
+                foreach (var element in AssetJsonFile.SplitEntries(json))
+                {
+                    var snapshot = TryParseSnapshot(element);
+                    if (snapshot?.Entry is null || string.IsNullOrWhiteSpace(snapshot.Entry.Name))
+                        continue;
+                    MergeImportedEntry(snapshot.Entry);
+                    imported.Add(snapshot);
+                }
+                return imported;
             }
-            catch { return null; }
+            catch { return Array.Empty<UserBulbSnapshot>(); }
         }
 
         private static UserBulbSnapshot? TryParseSnapshot(string json)

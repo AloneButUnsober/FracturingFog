@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-FileCopyrightText: 2026 Bradley Brown
+
 // Interefaces/IVectorColorMap.cs
 //
 // Opt-in SIMD batched colour mapping. Themes implementing this interface

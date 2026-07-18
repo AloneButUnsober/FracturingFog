@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-FileCopyrightText: 2026 Bradley Brown
+
 // Models/ColorSchemes/EscapeTimeThemes.cs
 //
 // Raw escape-time / level-set colourings.  These themes deliberately AVOID the
@@ -24,7 +27,7 @@ namespace FracturingFog.Models
     /// </summary>
     public sealed class RawIterationBandsMap : IColorMap
     {
-        public static string Name => "Escape Time — Rainbow Bands";
+        public static string Name => "Escape Time - Rainbow Bands";
         public static string Category => "Escape Time / Level Sets";
         public static string Description =>
             "Discrete rainbow bands, one hue per integer iteration count modulo 12. " +
@@ -53,7 +56,7 @@ namespace FracturingFog.Models
     /// </summary>
     public sealed class BinaryDwellRingsMap : IColorMap
     {
-        public static string Name => "Escape Time — Binary Dwell Rings";
+        public static string Name => "Escape Time - Binary Dwell Rings";
         public static string Category => "Escape Time / Level Sets";
         public static string Description =>
             "Alternating black/white bands one iteration wide.  Topographic map " +
@@ -79,7 +82,7 @@ namespace FracturingFog.Models
     /// </summary>
     public sealed class LevelSetStaircaseMap : IColorMap
     {
-        public static string Name => "Escape Time — 16-Step Staircase";
+        public static string Name => "Escape Time - 16-Step Staircase";
         public static string Category => "Escape Time / Level Sets";
         public static string Description =>
             "16-step monochrome staircase across the full iteration range. " +

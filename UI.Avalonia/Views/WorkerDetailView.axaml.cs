@@ -1,34 +1,20 @@
-// Views/WorkerDetailView.axaml.cs
-// Code-behind mirrors JobDetailView: start the 5 s VM poll on Open, stop
-// on Closed, cancel OS-close so the shell's IsWorkerDetailVisible flag
-// stays authoritative.
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-FileCopyrightText: 2026 Bradley Brown
 
-using System;
+// Views/WorkerDetailView.axaml.cs
+// Hybrid-shell: UserControl hosted modeless by MainWindow.SyncWorkerDetail. Poll
+// lifecycle (host Opened/Closed) + close => hide (VM CloseRequested ->
+// IsWorkerDetailVisible=false in ShellViewModel) are owned by the host + shell
+// flag. Single-instance VM: the WorkerId setter clears state + immediate-polls.
+
 using Avalonia.Controls;
 using Avalonia.Markup.Xaml;
-using FracturingFog.UI.Avalonia.Input;
-using FracturingFog.UI.Avalonia.ViewModels;
 
 namespace FracturingFog.UI.Avalonia.Views;
 
-public partial class WorkerDetailView : Window
+public partial class WorkerDetailView : UserControl
 {
-    public WorkerDetailView()
-    {
-        InitializeComponent();
-        EscapeCloseBehavior.Attach(this);
-        DataContextChanged += OnDcChanged;
-    }
+    public WorkerDetailView() => InitializeComponent();
 
     private void InitializeComponent() => AvaloniaXamlLoader.Load(this);
-
-    private void OnDcChanged(object? sender, EventArgs e)
-    {
-        if (DataContext is WorkerDetailViewModel vm)
-        {
-            vm.CloseRequested += (_, _) => Close();
-            Opened += (_, _) => { _ = vm.PollOnceAsync(); vm.StartPolling(); };
-            Closed += (_, _) => vm.StopPolling();
-        }
-    }
 }

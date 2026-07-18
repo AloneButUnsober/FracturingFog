@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-FileCopyrightText: 2026 Bradley Brown
+
 // Models/ColorSchemes/AncientBronze.cs
 //
 // Three-point lighting on an aged bronze surface.  The base colour cycles

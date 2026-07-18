@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-FileCopyrightText: 2026 Bradley Brown
+
 // Batch/BatchOptions.cs
 // Parsed command-line options for headless --batch processing.
 // See BatchEntry.PrintUsage for the supported flag grammar.
@@ -8,7 +11,7 @@ using FracturingFog.Models;
 
 namespace FracturingFog.Batch
 {
-    public enum BatchMode { Image, Video, Slideshow }
+    public enum BatchMode { Image, Video, Slideshow, Scene }
 
     /// <summary>
     /// Mirrors VideoDialog.LosslessEncodeChoice so the CL batch path offers
@@ -77,6 +80,17 @@ namespace FracturingFog.Batch
         /// batch slideshow cadence only; interactive slideshow honours the
         /// shell-level FocusRegion toggle.</summary>
         public bool MoreColors { get; set; }
+
+        // ── Scene mode (Scene Engine Roadmap S7) ──────────────────────────
+        /// <summary>Name of a saved SceneData in scenes.json to render offline.
+        /// Required in scene mode.</summary>
+        public string? SceneName { get; set; }
+        /// <summary>Accumulation motion-blur sub-frames per output frame (1 = off).
+        /// Higher = smoother camera/param-motion blur at N× render cost.</summary>
+        public int MotionBlurSubframes { get; set; } = 1;
+        /// <summary>Open-shutter fraction of the frame interval for motion blur
+        /// (0.5 ≈ a 180° shutter). Clamped to (0,1].</summary>
+        public double ShutterFraction { get; set; } = 0.5;
         /// <summary>When true, paint the watermark + program-name sub-line into
         /// every emitted frame across image / video / slideshow batch modes.
         /// Image mode already watermarks unconditionally for parity with the
@@ -89,6 +103,17 @@ namespace FracturingFog.Batch
         public bool KeepFramesSpecified { get; set; }
 
         public bool Verbose { get; set; }
+
+        // ── Post-FX (parity with interactive ViewState post-processing) ───────
+        // Null = "not specified on the command line". Slideshow mode falls back
+        // to the named SlideshowConfig.PostFx block when a flag is null; the
+        // flag, when present, overrides the preset. Image/Video modes read the
+        // flags only (no preset). Brightness/Contrast are BGRA post-passes;
+        // Adaptive is histogram-equalization strength applied on the calculator
+        // before the colour buffer is read (Mandelbrot only).
+        public int? Brightness { get; set; }   // -100..100, 0 = none
+        public int? Contrast { get; set; }     // -100..100, 0 = none
+        public int? Adaptive { get; set; }     //    0..100, 0 = none (HistogramEq)
 
         // Optional fractal-parameter overrides plumbed into FractalParameters.
         // Default null means "leave the FractalParameters default in place".
@@ -133,13 +158,31 @@ namespace FracturingFog.Batch
                         if (string.Equals(mv, "image", StringComparison.OrdinalIgnoreCase)) opts.Mode = BatchMode.Image;
                         else if (string.Equals(mv, "video", StringComparison.OrdinalIgnoreCase)) opts.Mode = BatchMode.Video;
                         else if (string.Equals(mv, "slideshow", StringComparison.OrdinalIgnoreCase)) opts.Mode = BatchMode.Slideshow;
-                        else { error = $"Unknown --mode '{mv}'. Use image|video|slideshow."; return false; }
+                        else if (string.Equals(mv, "scene", StringComparison.OrdinalIgnoreCase)) opts.Mode = BatchMode.Scene;
+                        else { error = $"Unknown --mode '{mv}'. Use image|video|slideshow|scene."; return false; }
                         break;
 
                     case "--slideshow":
                         if (!Next(args, ref i, a, out string sname, out error)) return false;
                         opts.Mode = BatchMode.Slideshow;
                         opts.SlideshowConfigName = sname;
+                        break;
+
+                    case "--scene":
+                        if (!Next(args, ref i, a, out string scName, out error)) return false;
+                        opts.Mode = BatchMode.Scene;
+                        opts.SceneName = scName;
+                        break;
+
+                    case "--motion-blur":
+                    case "--subframes":
+                        if (!NextInt(args, ref i, a, out int mbv, out error)) return false;
+                        opts.MotionBlurSubframes = mbv;
+                        break;
+
+                    case "--shutter":
+                        if (!NextDouble(args, ref i, a, out double shv, out error)) return false;
+                        opts.ShutterFraction = shv;
                         break;
 
                     case "--encode":
@@ -306,6 +349,22 @@ namespace FracturingFog.Batch
                         opts.Verbose = true;
                         break;
 
+                    case "--brightness":
+                        if (!NextInt(args, ref i, a, out int brv, out error)) return false;
+                        opts.Brightness = brv;
+                        break;
+
+                    case "--contrast":
+                        if (!NextInt(args, ref i, a, out int ctv, out error)) return false;
+                        opts.Contrast = ctv;
+                        break;
+
+                    case "--adaptive":
+                    case "--histogram-eq":
+                        if (!NextInt(args, ref i, a, out int adv, out error)) return false;
+                        opts.Adaptive = adv;
+                        break;
+
                     case "--bulb-power":
                         if (!NextDouble(args, ref i, a, out double bpv, out error)) return false;
                         opts.BulbPower = bpv;
@@ -398,9 +457,10 @@ namespace FracturingFog.Batch
                 return true;
             }
 
-            // Slideshow mode pulls its region/theme set from the named config —
-            // no region/coord requirement.
-            if (opts.Mode != BatchMode.Slideshow && string.IsNullOrWhiteSpace(opts.RegionName))
+            // Slideshow + scene modes pull their region/theme set from the named
+            // config / scene shots — no region/coord requirement.
+            if (opts.Mode != BatchMode.Slideshow && opts.Mode != BatchMode.Scene
+                && string.IsNullOrWhiteSpace(opts.RegionName))
             {
                 if (opts.CenterX == null || opts.CenterY == null || opts.Zoom == null)
                 {
@@ -421,6 +481,14 @@ namespace FracturingFog.Batch
                 return false;
             }
 
+            // Post-FX range checks (parity with the interactive sliders).
+            if (opts.Brightness is < -100 or > 100)
+                { error = "--brightness must be -100..100."; return false; }
+            if (opts.Contrast is < -100 or > 100)
+                { error = "--contrast must be -100..100."; return false; }
+            if (opts.Adaptive is < 0 or > 100)
+                { error = "--adaptive must be 0..100."; return false; }
+
             if (opts.Mode == BatchMode.Slideshow)
             {
                 // VideoSeconds reuses --seconds parser; mirror into slideshow.
@@ -439,6 +507,18 @@ namespace FracturingFog.Batch
                     { error = "--fps must be 1..240."; return false; }
                 if (!opts.KeepFramesSpecified)
                     opts.KeepFrames = opts.Lossless == BatchLossless.None;
+            }
+
+            if (opts.Mode == BatchMode.Scene)
+            {
+                if (string.IsNullOrWhiteSpace(opts.SceneName))
+                    { error = "Scene mode requires --scene NAME."; return false; }
+                if (opts.VideoFps < 1 || opts.VideoFps > 240)
+                    { error = "--fps must be 1..240."; return false; }
+                if (opts.MotionBlurSubframes < 1 || opts.MotionBlurSubframes > 64)
+                    { error = "--motion-blur must be 1..64."; return false; }
+                if (opts.ShutterFraction <= 0.0 || opts.ShutterFraction > 1.0)
+                    { error = "--shutter must be in (0, 1]."; return false; }
             }
 
             return true;

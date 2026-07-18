@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-FileCopyrightText: 2026 Bradley Brown
+
 // GpuQD.cs
 //
 // Wave 2.12 (D-6.27) — ILGPU-friendly Quad-Double (QD) arithmetic. Mirror of

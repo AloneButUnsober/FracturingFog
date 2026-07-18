@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-FileCopyrightText: 2026 Bradley Brown
+
 ////using FracturingFog.Interefaces;
 ////using System;
 
@@ -342,8 +345,14 @@ namespace FracturingFog.Models
             var (exposure, rimBoost, glowMult, specBoost) = GetLightingParams();
 
             // 1. Sample gradient (sRGB), convert to linear for PBR math.
-            float t = (smooth * CycleSpeed) % 1f;
+            //    Density / offset / wrap honoured via the shared CyclicT helper.
+            float t = CyclicT(smooth, CycleSpeed);
             int albedoI = MapNormalized(t, distance);
+
+            // F10.4: carry the stop's alpha through as coverage. The PBR light
+            // math runs in linear HDR on the covered RGB; alpha is not a light
+            // term. Opaque stops (A=255) keep the historical 0xFF → byte-exact.
+            int albedoA = (albedoI >> 24) & 0xFF;
 
             float aR = PbrMath.SrgbToLinear(((albedoI >> 16) & 0xFF) / 255f);
             float aG = PbrMath.SrgbToLinear(((albedoI >> 8) & 0xFF) / 255f);
@@ -395,11 +404,14 @@ namespace FracturingFog.Models
             b = PbrMath.AcesFilmic(b);
 
             // 9. Linear → sRGB encode for display.
-            byte R = (byte)(Math.Clamp(PbrMath.LinearToSrgb(r), 0f, 1f) * 255f);
-            byte G = (byte)(Math.Clamp(PbrMath.LinearToSrgb(g), 0f, 1f) * 255f);
-            byte B = (byte)(Math.Clamp(PbrMath.LinearToSrgb(b), 0f, 1f) * 255f);
+            // F11a: shared ordered dither before the byte quantise. od is 0 when
+            // dither is off, so the clamp is an identity and output is unchanged.
+            float od = CurrentDitherOffset;
+            byte R = (byte)Math.Clamp(Math.Clamp(PbrMath.LinearToSrgb(r), 0f, 1f) * 255f + od, 0f, 255f);
+            byte G = (byte)Math.Clamp(Math.Clamp(PbrMath.LinearToSrgb(g), 0f, 1f) * 255f + od, 0f, 255f);
+            byte B = (byte)Math.Clamp(Math.Clamp(PbrMath.LinearToSrgb(b), 0f, 1f) * 255f + od, 0f, 255f);
 
-            return unchecked((int)0xFF000000 | (R << 16) | (G << 8) | B);
+            return unchecked((albedoA << 24) | (R << 16) | (G << 8) | B);
 
             // ── Local: Cook-Torrance contribution from one light ────────────
             void AddLight(LightSource src, float exp,

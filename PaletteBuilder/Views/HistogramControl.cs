@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-FileCopyrightText: 2026 Bradley Brown
+
 // Views/HistogramControl.cs
 //
 // Tiny custom-painted RGB + luminance histogram of the preview bitmap.

@@ -1,18 +1,11 @@
-<Window xmlns="https://github.com/avaloniaui"
-        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        xmlns:vm="using:FracturingFog.UI.Avalonia.ViewModels"
-        x:Class="FracturingFog.UI.Avalonia.Views.AudioSettingsView"
-        x:DataType="vm:AudioSettingsViewModel"
-        Title="Audio-Reactive Slideshow"
-        Width="520"
-        SizeToContent="Height"
-        MinWidth="420"
-        CanResize="False"
-        WindowStartupLocation="CenterOwner"
-        ShowInTaskbar="False"
-        Background="#1C1C1C"
-        Foreground="WhiteSmoke">
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:FracturingFog.UI.Avalonia.ViewModels"
+             x:Class="FracturingFog.UI.Avalonia.Views.AudioSettingsView"
+             x:DataType="vm:AudioSettingsViewModel"
+             Foreground="WhiteSmoke">
 
+    <!-- Window chrome (title/size/background) supplied by PanelHostWindow. -->
     <Grid Margin="12" RowDefinitions="*,Auto">
 
         <StackPanel Grid.Row="0" Spacing="6">
@@ -209,4 +202,4 @@
 
     </Grid>
 
-</Window>
+</UserControl>

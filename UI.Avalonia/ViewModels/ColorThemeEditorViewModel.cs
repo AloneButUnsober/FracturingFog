@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-FileCopyrightText: 2026 Bradley Brown
+
 // ViewModels/ColorThemeEditorViewModel.cs
 //
 // Avalonia port of the legacy WinForms ColorThemeEditor. UI.Avalonia stays
@@ -96,6 +99,7 @@ public sealed class ColorThemeEditorViewModel : ViewModelBase
         HelpCommand = ReactiveCommand.Create(() => HelpRequested?.Invoke(this, EventArgs.Empty));
         FromImageCommand = ReactiveCommand.CreateFromTask(FromImageAsync);
         AddStopCommand = ReactiveCommand.Create(AddStop);
+        RandomizeCommand = ReactiveCommand.Create(RandomizePalette);
         AddBandCommand = ReactiveCommand.Create(AddBand);
         RemoveStopCommand = ReactiveCommand.Create<ColorStopRowVm>(RemoveStop);
         RemoveBandCommand = ReactiveCommand.Create<MaterialBandRowVm>(RemoveBand);
@@ -339,6 +343,78 @@ public sealed class ColorThemeEditorViewModel : ViewModelBase
         ShowPbrExtras = Kind == ColorThemeKindDef.Pbr3D;
     }
 
+    // ── Gradient interpolation (Phase A F1 / Phase B F2, F3) ──────────────
+    //
+    // These bake into the 256-entry LUT (space + curve) or remap the mapping
+    // scalar (transfer), so they carry zero per-pixel cost. Combos bind to the
+    // *Options arrays; defaults reproduce the historical byte-lerp render.
+
+    public GradientColorSpaceDef[] ColorSpaceOptions { get; } = Enum.GetValues<GradientColorSpaceDef>();
+    public InterpolationCurveDef[] CurveOptions { get; } = Enum.GetValues<InterpolationCurveDef>();
+    public TransferFunctionDef[] TransferOptions { get; } = Enum.GetValues<TransferFunctionDef>();
+    public ColorWrapModeDef[] WrapModeOptions { get; } = Enum.GetValues<ColorWrapModeDef>();
+
+    private GradientColorSpaceDef _interpSpace = GradientColorSpaceDef.Srgb;
+    public GradientColorSpaceDef InterpSpace
+    {
+        get => _interpSpace;
+        set { this.RaiseAndSetIfChanged(ref _interpSpace, value); FieldChanged(); }
+    }
+
+    private InterpolationCurveDef _interpCurve = InterpolationCurveDef.Linear;
+    public InterpolationCurveDef InterpCurve
+    {
+        get => _interpCurve;
+        set { this.RaiseAndSetIfChanged(ref _interpCurve, value); FieldChanged(); }
+    }
+
+    private TransferFunctionDef _transferFn = TransferFunctionDef.Linear;
+    public TransferFunctionDef TransferFn
+    {
+        get => _transferFn;
+        set { this.RaiseAndSetIfChanged(ref _transferFn, value); FieldChanged(); }
+    }
+
+    private double _transferStrength = 1d;
+    public double TransferStrength
+    {
+        get => _transferStrength;
+        set { this.RaiseAndSetIfChanged(ref _transferStrength, Math.Clamp(value, 0d, 1d)); FieldChanged(); }
+    }
+
+    private double _paletteGamma = 1d;
+    /// <summary>Per-theme palette gamma baked into the LUT (F6),
+    /// out = in^(1/gamma). 1.0 = neutral; &gt;1 lifts shadows/brightens, &lt;1
+    /// darkens. Compounds with the host image gamma.</summary>
+    public double PaletteGamma
+    {
+        get => _paletteGamma;
+        set { this.RaiseAndSetIfChanged(ref _paletteGamma, Math.Clamp(value, 0.2d, 3d)); FieldChanged(); }
+    }
+
+    // ── Cycling phase / density / wrap (Phase A F4, F5) ───────────────────
+
+    private decimal _colorOffset;
+    public decimal ColorOffset
+    {
+        get => _colorOffset;
+        set { this.RaiseAndSetIfChanged(ref _colorOffset, value); FieldChanged(); }
+    }
+
+    private decimal _colorDensity = 1M;
+    public decimal ColorDensity
+    {
+        get => _colorDensity;
+        set { this.RaiseAndSetIfChanged(ref _colorDensity, value); FieldChanged(); }
+    }
+
+    private ColorWrapModeDef _wrapMode = ColorWrapModeDef.Repeat;
+    public ColorWrapModeDef WrapMode
+    {
+        get => _wrapMode;
+        set { this.RaiseAndSetIfChanged(ref _wrapMode, value); FieldChanged(); }
+    }
+
     // ── Stops ─────────────────────────────────────────────────────────────
 
     public ObservableCollection<ColorStopRowVm> Stops { get; } = new();
@@ -371,6 +447,44 @@ public sealed class ColorThemeEditorViewModel : ViewModelBase
         if (_selectedStop == row) _selectedStop = null;
         Stops.Remove(row);
         FieldChanged();
+    }
+
+    // ── Randomize (Phase C / F12) ─────────────────────────────────────────
+    //
+    // One-click random palette: a golden-ratio hue walk (maximally-spaced
+    // hues, no two stops close on the wheel) with jittered saturation/value.
+    // Reproducible — a fresh integer seed drives a local Random each click and
+    // is recorded in the Description so a palette the user likes can be traced
+    // back. Replaces the current stops; kind/lighting untouched.
+
+    private void RandomizePalette()
+    {
+        int seed = System.Random.Shared.Next(1, 1_000_000);
+        var rng = new Random(seed);
+        const double golden = 0.6180339887498949;
+        const int n = 5;
+        double hue = rng.NextDouble();
+
+        _suppressChange = true;
+        try
+        {
+            Stops.Clear();
+            for (int i = 0; i < n; i++)
+            {
+                hue = (hue + golden) % 1.0;
+                double sat = 0.55 + rng.NextDouble() * 0.40;  // 0.55..0.95
+                double val = 0.65 + rng.NextDouble() * 0.35;  // 0.65..1.00
+                var c = new HsvColor(1.0, hue * 360.0, sat, val).ToRgb();
+                float pos = i / (float)(n - 1);
+                Stops.Add(new ColorStopRowVm(
+                    new ColorStopDef { Position = pos, R = c.R, G = c.G, B = c.B }, this));
+            }
+        }
+        finally { _suppressChange = false; }
+
+        Description = $"Random palette (seed {seed})";
+        FieldChanged();
+        PushPreview();
     }
 
     // ── Inspect ───────────────────────────────────────────────────────────
@@ -923,6 +1037,7 @@ public sealed class ColorThemeEditorViewModel : ViewModelBase
     public ReactiveCommand<Unit, Unit> HelpCommand { get; }
     public ReactiveCommand<Unit, Unit> FromImageCommand { get; }
     public ReactiveCommand<Unit, Unit> AddStopCommand { get; }
+    public ReactiveCommand<Unit, Unit> RandomizeCommand { get; }
     public ReactiveCommand<Unit, Unit> AddBandCommand { get; }
     public ReactiveCommand<Unit, Unit> ImportPaletteCommand { get; }
     public ReactiveCommand<Unit, Unit> ExportPaletteCommand { get; }
@@ -1048,7 +1163,16 @@ public sealed class ColorThemeEditorViewModel : ViewModelBase
             foreach (var s in def.Stops.OrderBy(x => x.Position))
                 Stops.Add(new ColorStopRowVm(s, this));
 
+            InterpSpace = def.InterpolationSpace;
+            InterpCurve = def.InterpolationCurve;
+            TransferFn = def.TransferFunction;
+            TransferStrength = Math.Clamp((double)def.TransferStrength, 0d, 1d);
+            PaletteGamma = def.PaletteGamma <= 0f ? 1d : Math.Clamp((double)def.PaletteGamma, 0.2d, 3d);
+
             CycleSpeed = ClampDec((decimal)def.CycleSpeed, 0.0001M, 10M);
+            ColorOffset = ClampDec((decimal)def.ColorOffset, -10M, 10M);
+            ColorDensity = ClampDec((decimal)def.ColorDensity, 0M, 20M);
+            WrapMode = def.WrapMode;
             Steepness = ClampDec((decimal)def.Steepness, 0.1M, 10M);
             Ambient = ClampDec((decimal)def.Ambient, 0M, 1M);
 
@@ -1113,7 +1237,15 @@ public sealed class ColorThemeEditorViewModel : ViewModelBase
             MaxRecommendedZoom = MaxZoomEnabled ? MaxRecommendedZoom : (double?)null,
             Kind = Kind,
             Stops = Stops.Select(r => r.ToDef()).OrderBy(s => s.Position).ToList(),
+            InterpolationSpace = InterpSpace,
+            InterpolationCurve = InterpCurve,
+            TransferFunction = TransferFn,
+            TransferStrength = (float)TransferStrength,
+            PaletteGamma = (float)PaletteGamma,
             CycleSpeed = (float)CycleSpeed,
+            ColorOffset = (float)ColorOffset,
+            ColorDensity = (float)ColorDensity,
+            WrapMode = WrapMode,
             Steepness = (float)Steepness,
             Ambient = (float)Ambient,
             KeyLight = KeyLight.ToDef(),
@@ -1351,6 +1483,8 @@ public sealed class ColorStopRowVm : ReactiveObject
         _r = seed.R;
         _g = seed.G;
         _b = seed.B;
+        _a = seed.A;
+        _midpoint = seed.Midpoint <= 0f ? 0.5f : seed.Midpoint;
 
         SelectCommand = ReactiveCommand.Create(() => _parent.SelectRow(this));
         SampleCommand = ReactiveCommand.CreateFromTask(() => _parent.BeginSampleForRowAsync(this));
@@ -1450,16 +1584,45 @@ public sealed class ColorStopRowVm : ReactiveObject
         set { this.RaiseAndSetIfChanged(ref _b, value); this.RaisePropertyChanged(nameof(SwatchBrush)); _parent.NotifyRowChanged(); }
     }
 
-    public IBrush SwatchBrush => new ImmutableSolidColorBrush(Color.FromRgb(R, G, B));
-
-    /// <summary>Composite RGB binding target for the ColorPicker control.</summary>
-    public Color StopColor
+    private byte _a;
+    /// <summary>Per-stop alpha (F10). 255 = opaque (default). Authored here and
+    /// carried through the theme JSON + LUT; visible surfacing in the render /
+    /// export path is a later F10 phase.</summary>
+    public byte A
     {
-        get => Color.FromRgb(R, G, B);
-        set { R = value.R; G = value.G; B = value.B; this.RaisePropertyChanged(nameof(StopColor)); }
+        get => _a;
+        set { this.RaiseAndSetIfChanged(ref _a, value); this.RaisePropertyChanged(nameof(SwatchBrush)); this.RaisePropertyChanged(nameof(StopColor)); _parent.NotifyRowChanged(); }
     }
 
-    public ColorStopDef ToDef() => new() { Position = Position, R = R, G = G, B = B };
+    // Swatch reflects the authored alpha so a translucent stop reads as a
+    // partly-transparent chip over the row background (visual feedback the
+    // render path can't yet give).
+    public IBrush SwatchBrush => new ImmutableSolidColorBrush(Color.FromArgb(A, R, G, B));
+
+    private float _midpoint = 0.5f;
+    /// <summary>Segment blend bias in (0,1) for the segment starting at this
+    /// stop (Phase B / F7). 0.5 = linear.</summary>
+    public float Midpoint
+    {
+        get => _midpoint;
+        set
+        {
+            float clamped = value < 0.01f ? 0.01f : (value > 0.99f ? 0.99f : value);
+            this.RaiseAndSetIfChanged(ref _midpoint, clamped);
+            _parent.NotifyRowChanged();
+        }
+    }
+
+    /// <summary>Composite ARGB binding target for the ColorPicker control. Alpha
+    /// is carried so a ColorPicker with its alpha slider enabled edits per-stop
+    /// opacity too; the explicit A field remains the primary control.</summary>
+    public Color StopColor
+    {
+        get => Color.FromArgb(A, R, G, B);
+        set { R = value.R; G = value.G; B = value.B; A = value.A; this.RaisePropertyChanged(nameof(StopColor)); }
+    }
+
+    public ColorStopDef ToDef() => new() { Position = Position, R = R, G = G, B = B, A = A, Midpoint = Midpoint };
 }
 
 public sealed class MaterialBandRowVm : ReactiveObject

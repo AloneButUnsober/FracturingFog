@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-FileCopyrightText: 2026 Bradley Brown
+
 // Models/ColorSchemes/LavaLamp.cs
 // Warm lava-lamp cycling palette: dark maroon base → deep orange →
 // bright amber → pale yellow highlight, looping back continuously.

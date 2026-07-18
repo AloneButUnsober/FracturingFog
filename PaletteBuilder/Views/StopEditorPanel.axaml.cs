@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-FileCopyrightText: 2026 Bradley Brown
+
 // Views/StopEditorPanel.axaml.cs
 //
 // UserControl bound to PaletteResultViewModel — renders one row per stop

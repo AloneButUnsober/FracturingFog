@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-FileCopyrightText: 2026 Bradley Brown
+
 // Models/ColorSchemes/FieldLinesThemes.cs
 //
 // Field-line / Böttcher-angle colourings.  The Böttcher coordinate maps the
@@ -25,7 +28,7 @@ namespace FracturingFog.Models
     /// </summary>
     public sealed class FieldLinesDiscreteMap : IColorMap
     {
-        public static string Name => "Field Lines — 16 External Rays";
+        public static string Name => "Field Lines - 16 External Rays";
         public static string Category => "Field Lines / Böttcher";
         public static string Description =>
             "Sixteen external rays at rational angles {k/16, k = 0..15}.  Bright " +
@@ -64,7 +67,7 @@ namespace FracturingFog.Models
     /// </summary>
     public sealed class FieldLinesBinaryComboMap : IColorMap
     {
-        public static string Name => "Field Lines — Böttcher Grid";
+        public static string Name => "Field Lines - Bottcher Grid";
         public static string Category => "Field Lines / Böttcher";
         public static string Description =>
             "Full Böttcher coordinate grid: 8 external rays × binary decomposition. " +
@@ -107,7 +110,7 @@ namespace FracturingFog.Models
     /// </summary>
     public sealed class FieldLinesContinuousMap : IColorMap
     {
-        public static string Name => "Field Lines — Continuous Flow";
+        public static string Name => "Field Lines - Continuous Flow";
         public static string Category => "Field Lines / Böttcher";
         public static string Description =>
             "Continuous Böttcher-angle pinwheel with potential-driven brightness fade.  " +

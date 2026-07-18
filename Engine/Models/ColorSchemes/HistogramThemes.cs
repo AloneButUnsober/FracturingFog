@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-FileCopyrightText: 2026 Bradley Brown
+
 // Models/ColorSchemes/HistogramThemes.cs
 //
 // Themes designed to pair with the histogram-equalisation slider already wired
@@ -25,7 +28,7 @@ namespace FracturingFog.Models
     /// </summary>
     public sealed class HistogramViridisMap : GradientColorMap
     {
-        public static string Name => "Histogram — Viridis";
+        public static string Name => "Histogram - Viridis";
         public static string Category => "Histogram / Rank-Order";
         public static string Description =>
             "Matplotlib-style viridis gradient tuned for histogram equalisation. " +
@@ -51,7 +54,7 @@ namespace FracturingFog.Models
     /// </summary>
     public sealed class HistogramTwilightMap : GradientColorMap
     {
-        public static string Name => "Histogram — Twilight";
+        public static string Name => "Histogram - Twilight";
         public static string Category => "Histogram / Rank-Order";
         public static string Description =>
             "Cyclic twilight palette designed to flatten under histogram EQ.  At " +
@@ -78,7 +81,7 @@ namespace FracturingFog.Models
     /// </summary>
     public sealed class HistogramSpectralMap : GradientColorMap
     {
-        public static string Name => "Histogram — Spectral";
+        public static string Name => "Histogram - Spectral";
         public static string Category => "Histogram / Rank-Order";
         public static string Description =>
             "Wide spectral rainbow optimised for histogram pairing.  Each hue band " +

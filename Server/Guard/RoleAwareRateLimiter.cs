@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-FileCopyrightText: 2026 Bradley Brown
+
 // Server/Guard/RoleAwareRateLimiter.cs
 // Per-method, per-role rate limiter for dispatched JSON-RPC calls. Layered
 // on top of the existing per-IP TCP-accept limiter (EndpointRateLimiter):

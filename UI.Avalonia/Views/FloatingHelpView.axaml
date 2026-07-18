@@ -1,20 +1,15 @@
-<Window xmlns="https://github.com/avaloniaui"
+<UserControl xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:vm="using:FracturingFog.UI.Avalonia.ViewModels"
         xmlns:h="using:FracturingFog.Help"
         x:Class="FracturingFog.UI.Avalonia.Views.FloatingHelpView"
         x:DataType="vm:FloatingHelpViewModel"
-        Title="Help"
-        Width="720"
-        Height="780"
-        MinWidth="520"
-        MinHeight="420"
-        WindowStartupLocation="CenterScreen"
-        ShowInTaskbar="False"
-        Background="#161616"
         Foreground="#DCDCDC">
 
-    <Window.Styles>
+    <!-- Chrome (title/720x780/#161616 bg/CenterScreen) lives on the
+         PanelHostWindow built in MainWindow.SyncHelp. -->
+
+    <UserControl.Styles>
         <Style Selector="TextBox.helpBody">
             <Setter Property="Background" Value="#0F0F0F" />
             <Setter Property="Foreground" Value="#DCDCDC" />
@@ -42,7 +37,7 @@
             <Setter Property="FontWeight" Value="Bold" />
             <Setter Property="FontSize" Value="12" />
         </Style>
-    </Window.Styles>
+    </UserControl.Styles>
 
     <Grid RowDefinitions="Auto,*,Auto" Margin="10">
 
@@ -186,4 +181,4 @@
                 Margin="0,8,0,0"
                 Width="140" />
     </Grid>
-</Window>
+</UserControl>

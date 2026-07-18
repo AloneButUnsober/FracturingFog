@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-FileCopyrightText: 2026 Bradley Brown
+
 // NebulabrotCalculator.cs
 //
 // Nebulabrot — escape-orbit Monte Carlo identical to Buddhabrot. Distinct

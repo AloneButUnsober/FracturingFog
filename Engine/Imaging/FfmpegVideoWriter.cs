@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-FileCopyrightText: 2026 Bradley Brown
+
 // Engine/Imaging/FfmpegVideoWriter.cs
 //
 // Phase X.2 / Slice 2.1 — IVideoWriter adapter that funnels BGRA frames

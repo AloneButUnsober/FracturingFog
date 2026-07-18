@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-FileCopyrightText: 2026 Bradley Brown
+
 // Server/Cluster/Protocol/WorkerRegisterDto.cs
 // Worker → Master. First call on a freshly opened cluster session.
 // Announces capabilities and identity. Master pins the cert thumbprint at

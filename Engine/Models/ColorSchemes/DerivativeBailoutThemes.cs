@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-FileCopyrightText: 2026 Bradley Brown
+
 // Models/ColorSchemes/DerivativeBailoutThemes.cs
 //
 // Derivative-bailout colourings — read |dz/dc| or arg(dz/dc) at the escape
@@ -22,7 +25,7 @@ namespace FracturingFog.Models
     /// </summary>
     public sealed class DerivativeMagnitudeMap : GradientColorMap
     {
-        public static string Name => "Derivative — log|dz/dc|";
+        public static string Name => "Derivative - log|dz/dc|";
         public static string Category => "Derivative Bailout";
         public static string Description =>
             "log|dz/dc| at escape mapped through a blue-to-amber gradient.  " +
@@ -63,7 +66,7 @@ namespace FracturingFog.Models
     /// </summary>
     public sealed class DerivativeAngleMap : IColorMap
     {
-        public static string Name => "Derivative — arg(dz/dc)";
+        public static string Name => "Derivative - arg(dz/dc)";
         public static string Category => "Derivative Bailout";
         public static string Description =>
             "arg(dz/dc) at escape → HSV hue.  Reveals rotational structure of " +
@@ -94,7 +97,7 @@ namespace FracturingFog.Models
     /// </summary>
     public sealed class DerivativeFlowMap : IColorMap
     {
-        public static string Name => "Derivative — Flow Field";
+        public static string Name => "Derivative - Flow Field";
         public static string Category => "Derivative Bailout";
         public static string Description =>
             "Complex derivative flow visualisation: hue = arg(dz/dc), " +

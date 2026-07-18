@@ -1,0 +1,36 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             x:Class="FracturingFog.UI.Avalonia.Controls.LabeledSlider"
+             x:Name="Root">
+    <!--
+        Label + slider + numeric readout. Canonical control for bounded
+        continuous parameters (brightness, contrast, adaptive HE, blend, etc.)
+        so those params look and behave identically in every dialog instead of
+        being a slider in one and a numeric field in another.
+    -->
+    <Grid ColumnDefinitions="Auto,*,Auto"
+          VerticalAlignment="Center">
+        <TextBlock Grid.Column="0"
+                   Text="{Binding Label, ElementName=Root}"
+                   Width="{Binding LabelWidth, ElementName=Root}"
+                   Foreground="{StaticResource BrushTextLabelAlt}"
+                   FontWeight="Bold"
+                   VerticalAlignment="Center"
+                   HorizontalAlignment="Right"
+                   Margin="0,0,8,0" />
+        <Slider Grid.Column="1"
+                x:Name="Sld"
+                Value="{Binding Value, ElementName=Root, Mode=TwoWay}"
+                Minimum="{Binding Minimum, ElementName=Root}"
+                Maximum="{Binding Maximum, ElementName=Root}"
+                TickFrequency="{Binding TickFrequency, ElementName=Root}"
+                VerticalAlignment="Center" />
+        <TextBlock Grid.Column="2"
+                   Text="{Binding ValueText, ElementName=Root}"
+                   Width="46"
+                   Foreground="{StaticResource BrushTextLabelAlt}"
+                   TextAlignment="Right"
+                   VerticalAlignment="Center"
+                   Margin="6,0,0,0" />
+    </Grid>
+</UserControl>

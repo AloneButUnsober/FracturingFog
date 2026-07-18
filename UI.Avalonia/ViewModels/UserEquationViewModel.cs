@@ -1,11 +1,17 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-FileCopyrightText: 2026 Bradley Brown
+
 using System;
+using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.IO;
 using System.Linq;
 using System.Reactive;
 using System.Reactive.Linq;
 using System.Text;
+using System.Text.Json;
 using System.Text.RegularExpressions;
+using FracturingFog.Abstractions.Assets;
 using FracturingFog.CalculatorGen;
 using FracturingFog.CalculatorGen.Parser;
 using FracturingFog.Models;
@@ -74,6 +80,7 @@ public sealed class UserEquationViewModel : ViewModelBase
         SaveCommand = ReactiveCommand.Create(OnSave);
         DeleteCommand = ReactiveCommand.Create(OnDelete,
             this.WhenAnyValue(x => x.SelectedSavedName).Select(n => !string.IsNullOrEmpty(n)));
+        ImportCommand = ReactiveCommand.Create(OnImport);
         RotPlus90Command = ReactiveCommand.Create(() => BumpRotation(90.0));
         RotMinus90Command = ReactiveCommand.Create(() => BumpRotation(-90.0));
         RotResetCommand = ReactiveCommand.Create(() => SetRotation(0.0));
@@ -395,6 +402,7 @@ public sealed class UserEquationViewModel : ViewModelBase
 
     public ReactiveCommand<Unit, Unit> SaveCommand { get; }
     public ReactiveCommand<Unit, Unit> DeleteCommand { get; }
+    public ReactiveCommand<Unit, Unit> ImportCommand { get; }
     public ReactiveCommand<Unit, Unit> RotPlus90Command { get; }
     public ReactiveCommand<Unit, Unit> RotMinus90Command { get; }
     public ReactiveCommand<Unit, Unit> RotResetCommand { get; }
@@ -429,6 +437,12 @@ public sealed class UserEquationViewModel : ViewModelBase
     /// <summary>Host shows a yes/no overwrite confirm and returns true to proceed.
     /// Fired only when Save would replace an existing equation with the same name.</summary>
     public event Func<string, bool>? ConfirmOverwriteRequested;
+
+    /// <summary>Host shows OpenFile dialog; returns chosen path or null.</summary>
+    public event Func<string?>? OpenFilePromptRequested;
+
+    /// <summary>Host shows a simple info/error message box.</summary>
+    public event Action<string, string, bool>? MessageRequested;
 
     /// <summary>Host compiles + loads the equation via CalcGen and swaps
     /// the result onto the render pipeline. Args: (equation, className).
@@ -719,6 +733,62 @@ public sealed class UserEquationViewModel : ViewModelBase
 
         _params.UserEquationName = entry.Name;
         RefreshSavedList(entry.Name);
+    }
+
+    /// <summary>Import saved equations from a JSON file — one entry object, or
+    /// an array of them (what the Asset Manager's bundle holds per entry, and
+    /// what a hand-assembled share file looks like). Same-name entries are
+    /// skipped rather than replaced, mirroring the Sandbox importer. Entries are
+    /// added whole so Kind / Promoted round-trip.</summary>
+    private void OnImport()
+    {
+        string? path = OpenFilePromptRequested?.Invoke();
+        if (string.IsNullOrWhiteSpace(path)) return;
+
+        IReadOnlyList<string> entries;
+        try
+        {
+            entries = AssetJsonFile.SplitEntries(File.ReadAllText(path));
+        }
+        catch (Exception ex)
+        {
+            MessageRequested?.Invoke("Import Error",
+                $"Could not read the file:\n\n{ex.Message}", true);
+            return;
+        }
+
+        int added = 0, skipped = 0, failed = 0;
+        foreach (var entry in entries)
+        {
+            UserEquationEntry? parsed;
+            try { parsed = JsonSerializer.Deserialize<UserEquationEntry>(entry); }
+            catch { failed++; continue; }
+
+            if (parsed == null || string.IsNullOrWhiteSpace(parsed.Name)) { failed++; continue; }
+            if (UserEquationStore.Instance.GetByName(parsed.Name) != null) { skipped++; continue; }
+
+            UserEquationStore.Instance.Equations.Add(parsed);
+            added++;
+        }
+
+        if (added > 0)
+        {
+            UserEquationStore.Instance.Save();
+            RefreshSavedList(_selectedSavedName);
+            PromotionChanged?.Invoke();
+        }
+
+        if (added == 0 && skipped == 0 && failed == 0)
+        {
+            MessageRequested?.Invoke("Import User Equations",
+                "The file contains no equations.", false);
+            return;
+        }
+
+        string summary = added == 1 ? "1 equation imported" : $"{added} equations imported";
+        if (skipped > 0) summary += $" ({skipped} skipped — name exists)";
+        if (failed > 0)  summary += $" ({failed} unreadable)";
+        MessageRequested?.Invoke("Import User Equations", summary, false);
     }
 
     // ── Cookbook (Wave 2.8 / D-6.23) ─────────────────────────────────────

@@ -1,4 +1,14 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-FileCopyrightText: 2026 Bradley Brown
+
+// -----------------------------------------------------------------------------
+// Fracturing Fog
+// Program.cs
+//
 // FracturingFog.App entry point — cross-platform Avalonia shell launcher.
+//
+// Copyright (c) 2026 Bradley Brown(DanarDalin) - AloneButUnsober
+// -----------------------------------------------------------------------------
 //
 // S-X2 (2026-06-23) — replaces the Phase X.0 scaffold stub with the real
 // cross-platform entry. Targets the Avalonia shell directly (no WinForms

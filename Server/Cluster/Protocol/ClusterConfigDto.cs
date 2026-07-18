@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-FileCopyrightText: 2026 Bradley Brown
+
 // Server/Cluster/Protocol/ClusterConfigDto.cs
 // Admin → Master. Read / write live-tunable cluster knobs surfaced by the
 // MasterConfigView in UI.Avalonia.

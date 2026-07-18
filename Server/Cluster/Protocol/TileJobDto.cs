@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-FileCopyrightText: 2026 Bradley Brown
+
 // Server/Cluster/Protocol/TileJobDto.cs
 // Master → Worker, payload returned by tile.next when there's actually
 // work to do. Carries one tile of one job: the sub-rect to render and

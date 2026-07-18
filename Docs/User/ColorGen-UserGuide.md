@@ -181,12 +181,16 @@ sign floor ceil round fract saturate radians degrees`
 | `rgb(r, g, b)`        | Direct linear RGB (each in `[0,1]`)            |
 | `hsv(h, s, v)`        | Hue is cyclic (`fract` is applied for you)     |
 | `hsl(h, s, l)`        | Same hue convention                            |
+| `oklab(L, a, b)`      | Perceptual OkLab → sRGB. `L∈[0,1]`, `a`/`b`≈`[-0.4,0.4]` |
+| `oklch(L, C, h)`      | OkLCh → sRGB. `C` = chroma, `h` = hue in **radians** |
 
 #### Vec3 operations
 | Form                          | Description                                 |
 |-------------------------------|---------------------------------------------|
 | `mix(va, vb, t)`              | Polymorphic — picks Vec3 form when args are |
+| `mix_oklab(va, vb, t)`        | Blend two sRGB colours through OkLab — smooth mid-tones |
 | `palette(t, c0, c1, c2, …)`   | Cyclic n-stop palette evaluated at `t`      |
+| `cosine(t, a, b, c, d)`       | IQ cosine palette: `a + b·cos(τ·(c·t + d))`, a/b/c/d Vec3 |
 | `brightness(v, s)`            | Add `s` to each channel                     |
 | `contrast(v, s)`              | Around 0.5; `s` in `[-1, 1]`                |
 | `gamma(v, g)`                 | `pow(channel, 1/g)`                         |
@@ -548,9 +552,10 @@ ensure the JSON regenerates cleanly.
 ```
 Inputs    smooth dist iter maxIter t nx ny zr zi dzr dzi arg mag isInSet pxScale
 Const     pi tau e phi
-Ctors     rgb(r,g,b) hsv(h,s,v) hsl(h,s,l)
+Ctors     rgb(r,g,b) hsv(h,s,v) hsl(h,s,l) oklab(L,a,b) oklch(L,C,h)
 Palette   palette(t, c0, c1, …)                  // n cyclic stops
-Mix       mix(a,b,t)                             // scalar or vec3
+Cosine    cosine(t, a, b, c, d)                  // IQ: a + b*cos(tau*(c*t+d))
+Mix       mix(a,b,t) mix_oklab(a,b,t)            // scalar/vec3; oklab = perceptual
 Color FX  brightness(v,s) contrast(v,s) gamma(v,g)
 Math      sin cos tan asin acos atan sinh cosh tanh exp log log2 log10
           sqrt abs sign floor ceil round fract saturate radians degrees

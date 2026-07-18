@@ -103,7 +103,7 @@ audio-reactive dialog without crash.
 | 2.11 | D-4.17 — Octuple-double (OD) ref orbit — past 1e50 zoom | ✅ Shipped 2026-06-21; OD arithmetic fixed + re-enabled 2026-06-22 (op* rewrite + 23 xUnit OD parity tests in `Server.Tests/OctupleDoubleTests.cs`). UI navigation past 1e58 still pending — see status log |
 | 2.12 | D-6.27 — GPU reference orbit (QD on GPU) | 🟡 Scaffold shipped 2026-06-22 (Hi-only kernel works on CUDA). QD upgrade + perf-win analysis **deferred** as non-blocking follow-on — toggle off by default, no other wave depends on it |
 | 2.13 | D-7.29 — Roslyn source generator | ✅ Shipped 2026-06-22 |
-| 2.14 | D-4.19 — QD δ-chain precision floor — fix pixelation at zoom 1e40–1e58 | 🟡 Deferred 2026-06-22 — 3–5 d, no other wave depends on it; revisit after Wave 3 perf tail |
+| 2.14 | D-4.19 — QD δ-chain precision floor — fix pixelation at zoom 1e40–1e58 | ⚫ **Closed obsolete 2026-07-05** — premise disproven by `--qdfloorsweep` (QD separates 128/128 pixels through 1e64; no arithmetic floor in the 1e40–1e58 band). Original report predates the 2.11 OD-arith fix + SM-1 iter-cap finding. Intent folded into **SM-2** (rebasing). See status log. |
 | 2.15 | D-4.20 — OD-aware UI navigation — populate `CenterX4..X7` from pan/zoom | ✅ Shipped 2026-06-22 (`FractalInputController.cs` — 6 pan/zoom sites + OD pan-start cache + `StoreOD` helper) |
 
 ---
@@ -116,7 +116,7 @@ audio-reactive dialog without crash.
 | 3.2 | T2.2 — Suppress pre-overlay snapshot during video record | ✅ Already shipped — `FractalRenderHost.cs:2085` `if (!_recordingActive)` gate; pooled `_uploadPrePool` LOH |
 | 3.3 | T2.3 — `EscapeTimeCalculator` SIMD inner loop (Mandelbrot/Julia/BurningShip/Tricorn/Multibrot) | ✅ Shipped 2026-06-22 — Mandelbrot/Julia/BurningShip/Tricorn already SIMD; Multibrot d∈{3,4,5} added (direct complex-mul scalar + `StepSimd`); d≥6 keeps polar fallback. `SimdSupported` flag drives dispatch in `EscapeTimeCalculator.Calculate` |
 | 3.4 | T3.3 — non-temporal `Avx.Store*` writes | ✅ Shipped 2026-06-22 — `ProcessRowSimd` gains `StoreAlignedNonTemporal` fast-path when dst is 32-byte aligned; pre-loop alignment check splits two hot loops |
-| 3.5 | T3.2 — ref-orbit recycling across video frames | 🟡 Deferred 2026-06-22 — needs orbit-validity checkpoint infrastructure (re-eval cached orbit vs new dc, reuse when |δ_n| stays within BLA radius); ~1-2 d, revisit after Wave 4 |
+| 3.5 | T3.2 — ref-orbit recycling across video frames | 🟢 Shipped opt-in 2026-07-05 — `MandelbrotCalculator.AllowRefOrbitRecycle` (default OFF). `TryRecycleReferenceOrbit` keeps the cached orbit when the centre moved < 25% of the frame corner (same tier + maxIter-covered); Δc injected into the SIMD PT dc (`_refRecycleDx/Dy`), DD/QD/OD glitch fallbacks stay exact via `absoluteWorldCoord − storedRefCentre`; the cheap BLA/SA tables rebuild for the widened dc, the expensive orbit build is skipped. Default path bit-identical (`x + 0.0`). Headless gate `--reforbitrecycle` (fresh-vs-recycled parity) PASS: ≤3/16384 boundary-flip pixels, 0 large-area divergence. **Remaining before production-on:** wire into the video pipeline + deep-zoom visual flicker sign-off; QD/OD tiers use the identical code path but are probe-covered only at DD tier so far |
 | 3.6 | T3.1 ext — HLSL palette codegen for hand-written `IColorMap`; GPU `ColorBuffer` for orbit-aware themes | ✅ Shipped 2026-06-22 — `HsvPalette` + all 19 sibling hand-written themes now implement `IGpuHlslPalette`. Shared HLSL prelude in `Engine/Models/HlslPaletteHelpers.cs` (cg_mods + cg_hsv_to_rgb mirroring Fractals.HsvToRgb). Auto-picked by `EscapeTimeCalculator.TryDispatchGpu` |
 | 3.7 | Finding D — Adaptive HE crossfade lerp | ✅ Shipped 2026-06-22 — `RecolorActiveToBuffer` now bakes HE into the recolor target via `BuildHistogramCdf` + `ApplyHistogramEqualizationWithCdf` when `ViewState.HistogramEq > 0`; eliminates the post-fade snap |
 | 3.8 | Pan/keyboard input fails at zoom ≥ 1e24 — QD-limb update in pan-zoom command pipeline | ✅ Superseded by Wave 2.15 (2026-06-22) — `FractalInputController.cs` all 6 pan/zoom sites carry OD/QD/DD/SP branches with `StoreOD`/`StoreQD`/`StoreDD` writing all limbs |
@@ -230,8 +230,300 @@ Convergence after Wave 1:
 
 ---
 
+## Deferred follow-ups — deep-region smoke test (2026-07-05)
+
+| ID | Item | Status |
+|----|------|--------|
+| SM-1 | Deep regions render solid when saved/auto `MaxIterations` < escape band | 🟡 Deferred 2026-07-05 — root-caused via `--regionprobe`: not a precision bug, purely iter-count (regions need 379–3940 iters; rendered under band → 100% in-set → flat). Fix = trace region-load iteration path (where a loaded region sets `MaxIterations`) and either raise the saved values or add auto-iter that climbs until in-set fraction stabilises. Verify with `--regionprobe 20000` (all clean) vs `--regionprobe 300` (all SOLID). |
+| SM-3 | Status bar reports "done" while TAA refinement is still running | 🟡 Deferred 2026-07-05 — surfaced once rebasing went default-ON: only the first full-res sample (`TaaSampleIndex==0`) updates the status bar (S-X8, to avoid per-sample ms oscillation); pre-rebasing that sample was slow so status tracked the real work, now it finishes fast while ≤15 TAA continuations keep computing. Fix = keep "Calculating…" (or "Refining n/N") while continuations are pending and fire the authoritative `FrameCompleted` when TAA settles (`_taaSampleCount >= taaMax`). Touches the TAA/upload timing loop — needs the running GUI to verify. |
+| SM-4 | Right-click selection-box outline redraws slowly at deep zoom | 🟡 Deferred 2026-07-05 — also a rebasing-default side effect: the overlay repaint (`RepaintWithPostFx`) shares `_uploadGate` with `Calculate`; rebasing lets deep frames complete and spawn TAA continuations that hold the gate, so overlay repaints block behind them. Real fix = decouple the overlay repaint from the calc gate (or suppress TAA continuations while a box-select drag is active). |
+| SM-8 | Detail-warning bounced the status bar; render-context overlay; deep-zoom TAA no-op churn | 🟢 **2026-07-06.** (a) The SM-7 detail notice appended to the status bar wrapped and oscillated the panel height (image edge bounced) — **removed from the status bar**. (b) Added a **render-context block to the perf HUD** (`ShowPerfHud`): fractal type, centre, zoom, iter, reference-orbit escape/length, max-detail-zoom estimate, active toggles, and the detail-limit warning in yellow (#FFCC00). Host builds the lines (`FractalRenderHost.BuildRenderContextOverlay`), compositor draws them (`CompositePerfHud` gained `contextLines` + `warningLine`). Status bar stays simple. (c) **Deep-zoom TAA no-op guard**: `RunOneTaaSample` jitters only the DOUBLE `CenterX/CenterY` by ~scale, which rounds away once scale < centre ULP (~past zoom 1e10), so every continuation renders a byte-identical frame — 31 wasted passes that re-run the upload/HUD path (the "status flushing after render finished" at deep zoom). `TryScheduleNextTaaSample` now skips continuations there. Follow-ups: real deep-zoom TAA (SM-9); the E+64 status-flash was **confirmed fixed** by the user (SM-8c), and outline-zoom/pan-at-depth was **resolved** (SM-11 — navigation core proven sound). |
+| SM-11 | Deep-zoom nav "close but not exact" / pan jitter past ~1e63 | 🟢 **Resolved 2026-07-06 — navigation core is SOUND; residual is cosmetic.** Input is provably exact (9.5e-15px). Both candidate fixes tested and NOT needed: **SM-11a (DD reference/δ)** — forced across all pixels, focus-err byte-identical (`--navrepro scalar ddref`), so never a precision issue; **SM-11b (reference recycling during drag)** — `--panjitter` shows the FRESH per-frame render is already reference-consistent during a drag (inter-frame Δiter ≈0-6/px at 2-40px steps), recycle vs fresh identical. The `--navrepro` 16px focus-err was a **measurement artefact** (frame B centres on the clicked point = its reference pixel). Residual "jumping" = ¼-res progressive drag preview + fast rainbow palette amplifying ≤6-iter differences — both cosmetic. Levers if pursued: ½-res preview floor at deep zoom; smoother/less-sensitive palette. Recycle plumbing (`RecyclePreviewOrbit`, `AllowRecycleThisRender`) kept, default OFF. Full trail in `Docs/Deep-Zoom-Perturbation.md` §5-6. New gate: `--panjitter` (artefact-free). |
+| SM-9 | Deep-zoom TAA disabled (jitter below double ULP) — no sub-pixel AA past ~1e10 | 🟡 Deferred 2026-07-06 — TAA sub-pixel jitter is added to the double `CenterX/CenterY`; past ~1e10 it is lost, so the SM-8 guard now skips it (was silently producing identical samples). To restore anti-aliasing at depth, feed the Halton jitter through the OD centre limbs or the per-pixel `dc` offset (both carry precision below the double ULP) instead of the top double limb. |
+| SM-7 | "Controls break past ~1e63" — actually the POINT's detail-depth limit | 🟢 **Diagnosed + guarded 2026-07-06.** User reported double-click missing / pan overshooting just past 1e63. NOT an input bug: the new `--focusprobe` (end-to-end render + double-click focus + patch-match) shows focus is **pixel-perfect (0.00px) through 1e70** and `--inputprobe` extended to 1e70 shows **0.00px** anchor drift. The real cause: past ~1e60 the RENDER collapses to a flat frame (frameDistinct 163→3→1, inSet 0%), so navigation has no visible structure to land on and *reads* as broken. Root: perturbation resolves detail only while the pixel offset δ (∝1/zoom), amplified by ∏\|2·Zₙ\| over the reference orbit, reaches O(1). The user's centre's orbit **escapes at iter 4060** ⇒ only ~62 decades of amplification ⇒ intrinsic depth floor ~1e62 for THAT point (matched the collapse exactly). Property of the location, not precision — to go deeper you must recentre on a longer-orbit point. Guard: `MandelbrotCalculator.MaxUsefulZoomLog10` (Σlog₁₀\|2·Zₙ\| to the \|Z\|=2 crossing, +∞ if bounded) computed free during every ref-orbit build (OD/QD/DD), carried on `RenderFrameInfo`, and surfaced as a status-bar notice ("⚠ detail limit for this point (~1eNN) — recenter on visible structure to zoom deeper") when the live zoom passes it. Gate: `--focusprobe` (maxUseful≈1e62 vs collapse 1e62). |
+| SM-5 | Extreme-tier zoom wall (5e58 → 1e63 → 1e100) | 🟢 **Superseded by SM-6 — cap now 1e100 on 2026-07-05.** User hit a hard wall at exactly 5e58 (top-tier `QualityPreset.Extreme.ZoomMax`); wheel/outline zoom stopped. First raised to 1e63 assuming a QD floor — but the OD ref orbit + OD per-pixel coords already engage above 1e50 (`ODZoomThreshold`), so the true limiter was the OD path, not QD (see SM-6). Cap now 1e100. Comments in `MandelbrotCalculator` (135, 2040) corrected. |
+| SM-6 | Zoom beyond ~1e64 needs the OD coordinate path fixed | 🟢 **Fixed on 2026-07-05 — cap raised to 1e100.** The 1e64 wall was NOT the QD ref-orbit floor (OD ref orbit + OD per-pixel coords already run above 1e50). Real bug: `OD.FromCenterOffset` added the pixel offset via the **OD+OD sloppy operator**, whose 3-level carry cascade only propagates a residual ~3 limbs; a deep offset landing at limb X4+ (`\|off\|` ~1e-64, zoom > ~1e64) got parked against X3 and rounded away → every pixel collapsed to the centre (the `--qdfloorsweep` OD column's 37/128 at 1e66 — real, not a probe artifact). Fix = route through the **OD+double full-cascade** operator (`(center + offHi) + offLo`), which places the offset at its true limb through all 8 limbs. `--qdfloorsweep` now shows OD **128/128 through 1e120** (top of sweep). Raised `Extreme.ZoomMax = 1e100` (20 decades under the measured-clean coord floor; OD ref-orbit accuracy is the soft limit past there, chaos-dominated as on QD). Regression test `OctupleDoubleTests.FromCenterOffset_DeepOffset_SeparatesAdjacentPixels` (128 distinct + pixel-step recovered at zoom 1e70). **Remaining:** direct OD ref-orbit accuracy at 1e70+ over ~100k iters is unmeasured (no 16-double ground truth) — a future `--odorbitprobe` could cross-check OD-vs-QD at a shared depth. |
+| SM-2 | Deep-QD extreme-region render is slow (minutes at full window × AA16) | 🟢 **Rebasing shipped opt-in 2026-07-05 — `--rebaseprobe` PASS.** Root cause: SIMD PT δ-loop bails ~1e30 (glitch check `z==Z && δ!=0`), so deep frames ran per-pixel **direct-QD** `ComputePixelQD`. Fix: `ComputePixelPTRebased` (Zhuoran rebasing) — ref index `m` tracked separately, `z = Z[m] + δ` reconstructed, rebase `δ := z; m := 0` when `\|z\| < \|δ\|` or ref exhausted. Replaces the QD/OD/HP glitch fallback (all 6 sites) when `AllowPtRebasing` on. Stays in **double** — a DD δ/ref/dc variant gave byte-identical iteration counts (precision is not the limiter; the ~50 % divergence from a QD render is chaotic sensitivity the QD path shares with itself, `QDself ≈ reb-vs-QD`). Probe: **91–142× speedup, rebasing tracks QD within 0.05 % of QD's own SA-off/SA-on reproducibility.** **Default flipped ON 2026-07-05** after user confirmed the speed win; the debug toggle is now "Bypass Rebasing" (checked = off) to A/B against legacy QD/OD. Later mitigations: SIMD rebasing (reclaim vector throughput), lower AA for preview, adaptive iter cap (ties to SM-1). |
+
+## Remaining deferred work — research-complete handoff (2026-07-06)
+
+**Session intent (2026-07-05 → 07-06):** work through the deferred deep-zoom /
+navigation / render items in the Mandelbrot explorer. That thread is now largely
+closed — SM-2 (rebasing), SM-5/6 (zoom cap → 1e100), SM-7 (detail floor + guard),
+SM-8 (overlay + status/flash), SM-10 (nav tooling), SM-11 (nav proven sound) all
+🟢. **The single biggest takeaway for any future deep-zoom work:** the navigation
+input is *provably exact to 1e70* and the deep render is *reference-consistent* —
+do not re-investigate either. Start from **`Docs/Deep-Zoom-Perturbation.md`**
+(model, tools, rules) before touching the deep-zoom render or input path.
+
+Everything still OPEN, each with enough context to act without re-deriving:
+
+| ID | What & why | Files / symbols | Verify with | Concrete next step |
+|----|-----------|-----------------|-------------|--------------------|
+| **SM-1** | Loaded/auto deep regions render SOLID — pure iteration-count, not precision (region needs 379–3940 iters; rendered under band ⇒ 100 % in-set ⇒ flat). | Region-load path that assigns `MandelbrotCalculator.MaxIterations` / `ViewState.PreferredIterations` (see `FractalRenderHost.ApplyView` iter block); region store deserialize. | `--regionprobe 20000` (all clean) vs `--regionprobe 300` (all SOLID). | Trace where a loaded region sets MaxIterations; either raise saved values or add auto-iter that climbs until the in-set fraction stabilises. Ties to adaptive-iter (SM-2 tail). |
+| **SM-3** | Status bar shows "done" while TAA continuations still refine. Largely masked at deep zoom by SM-8c (continuations skipped past ~1e10), still visible at shallow/mid zoom. | `FractalRenderHost` FrameCompleted gate (`TaaSampleIndex==0`, ~line 1717), `TryScheduleNextTaaSample`, `_taaSampleCount`/`taaMax`; consumer `MainViewModel.OnFrameCompleted`. | Running GUI — watch status vs TAA settle at ~1e6 zoom (TAA active). | Keep "Calculating…/Refining n/N" while continuations pending; fire authoritative FrameCompleted when `_taaSampleCount >= taaMax`. GUI timing verify. |
+| **SM-4** | Right-click selection-box outline redraws slowly at deep zoom — overlay repaint shares `_uploadGate` with `Calculate`; TAA continuations hold the gate. | `RepaintWithPostFx`, `_uploadGate`, box-select drag path in `FractalRenderHost` + the input controller's `SelectionBoxChanged`. | Running GUI — draw an outline mid-deep-render. | Decouple overlay repaint from the calc gate, OR suppress TAA continuations while `_boxSelecting`. |
+| **SM-9** | No sub-pixel TAA anti-aliasing past ~1e10 — `RunOneTaaSample` jitters the DOUBLE `CenterX/CenterY`, lost below ULP; SM-8c now skips it (was byte-identical samples). | `RunOneTaaSample` (jitter `jx*scale` added to `calc.CenterX`), `TryScheduleNextTaaSample` guard. | New probe or GUI AA inspection at 1e20+. | Feed the Halton jitter through the OD centre limbs (`DeepComplex`/`FromCenterOffset`) or the per-pixel `dc`, not the top double limb. |
+| **SM-6 tail** | OD reference-orbit *accuracy* at 1e70+ over ~100k iters is unmeasured (coordinate separation is proven clean to 1e120; orbit accuracy is the soft cap under the 1e100 zoom limit). | `ComputeReferenceOrbitOD`; no 16-double ground truth exists. | Proposed `--odorbitprobe`: cross-check OD vs QD reference orbit at a depth both resolve (e.g. 1e40) over many iters; extrapolate. | Build the probe; if OD tracks QD long, the 1e100 cap is safe; else lower it. |
+| **SM-11 residual** (cosmetic) | Deep-zoom drag "jumping" = ¼-res progressive preview block edges + fast rainbow palette amplifying ≤6-iter frame-to-frame differences. NOT a navigation fault (proven). | `RenderHint.Fast`→`Trigger(progressive)`, `_previewCalcQuarter/_previewCalcHalf`; palette selection. | `--panjitter` (render already consistent); visual. | ½-res preview floor at deep zoom; smoother / less iteration-sensitive palette. Low priority. |
+| **HiDPI unify** | Render computes its OWN scale (`3.5/dim/zoom`); a constant-offset concern if input logical-DIP dims ever diverge from render device-px dims. NOT the drift bug (that was fixed). Native path currently consistent (device-px both sides). | `ViewCamera.Scale` vs `MandelbrotCalculator` `scale`; `GpuSurfaceControl.CurrentScaling`, `NativeMouseForwarder.GetClientSize`. | `--inputprobe` (0.00px), plus a dims-mismatch check if a fractional-DPI repro appears. | Only if a fractional-DPI (125/150 %) repro shows a constant few-px offset. Unify render onto `ViewCamera`. |
+| **SIMD rebasing** (perf) | Rebasing (SM-2) runs the scalar `ComputePixelPTRebased` for glitched lanes; a vectorised rebased loop would reclaim throughput at deep zoom. | `ComputeRowPT4/8`, `ComputePixelPTRebased`. | `--rebaseprobe` timing. | Vectorise the rebase branch. Perf-only; correctness already shipped. |
+| **6.1.f1** | Remaining perturbation tail item (pre-session backlog). | — | — | Re-scope when reached; likely subsumed by the SM-2..SM-11 work. |
+
+Cross-thread (NOT this session's deep-zoom line, tracked in memory): KIFS folds
+5.9.f1 (Octahedron/Dodecahedron/MandelboxRot broken, `--kifsprobe`); Animation
+roadmap D.1-D.6; Scene Engine IBL-rotation / rack-focus / audio-reactive.
+
 ## Status log
 
+- 2026-07-06 — **SM-11b (recycle-during-drag) tested → not needed; SM-11 RESOLVED
+  as sound.** Added per-render `MandelbrotCalculator.AllowRecycleThisRender` +
+  host `RecyclePreviewOrbit` so a drag's progressive PREVIEW sidecars reuse one
+  reference orbit. New `--panjitter` probe (artefact-free: consecutive OFF-centre
+  pan frames, compared beyond the pure translation) shows the FRESH render is
+  already reference-consistent during a drag — inter-frame Δiter ≈ 0/1/3/6 per px
+  at 2/8/20/40 px steps, and RECYCLE is identical to FRESH. So recycling doesn't
+  change the pixels; the earlier `--navrepro` 16px was the centre-on-reference
+  measurement artefact (frame B centres on the clicked point). Conclusion: the
+  deep-zoom navigation core is sound (input exact + render consistent); the
+  user-perceived "jumping" is the ¼-res progressive drag preview + palette
+  sensitivity (both cosmetic). `RecyclePreviewOrbit` left default OFF (plumbing
+  kept). `Docs/Deep-Zoom-Perturbation.md` §5-6 rewritten with the resolution.
+- 2026-07-06 — **SM-11a (DD reference) tested → DOES NOT fix it; comprehensive
+  doc written.** Implemented `ComputePixelPTRebasedDD` (DD reference orbit + DD
+  δ-chain, `UseDdRebaseReference`) and a `ForceScalarPtPath` toggle to route ALL
+  pixels through it. `--navrepro ... scalar ddref` on the broken 4.65e64 coord:
+  `rebasedPx=942079/942080`, focus-err still **exactly (-16,3) = 16 px**,
+  byte-identical to double. So the deep-zoom reference-dependence is NOT
+  double-rounding of the reference/δ in the 16→31-digit range (echoes the old
+  "DD δ byte-identical at 1e47" result). Open hypotheses recorded in the new
+  **`Docs/Deep-Zoom-Perturbation.md`** (the future-proofing deliverable — full
+  model, tools, findings, rules): (1) precision floor above DD → try a QD-δ
+  variant; (2) rebasing-decision divergence; (3) `--navrepro` centre-on-reference
+  measurement caveat (frame B centres on the clicked point = its reference pixel)
+  — tighten the test with an offset focus before investing. Practical UX fix
+  independent of all this = reference recycling during a drag (SM-11b). DD
+  variant + toggles kept behind flags (default off) for the QD follow-up.
+  `ViewCamera` header now points at the doc so the "input is exact" conclusion is
+  not re-derived. No default behaviour change.
+- 2026-07-06 — **Deep-zoom nav "close but not exact" ROOT-CAUSED via user repro
+  coords: reference-dependent perturbation render, NOT input (SM-11 filed).** User
+  supplied a working (1.32701e63) and a broken (4.65087e64) coordinate, both
+  detailed (below their 1e67 floor), both 5-limb centres. `--navrepro` on both:
+  the **input math is exact** — controller centre vs ideal-OD centre error is
+  9.5e-15 px at 4.65e64 (machine zero), path-independent. Yet the double-click
+  focus patch-matches ~16px off at 4.65e64 vs ~2px at 1.32e63. Cause: the two
+  frames (centre C_A vs C_B = C_A+offset) **genuinely differ for the same world
+  region** — best-alignment SAD ≈ 700–890 (≈18 iteration-counts/pixel), i.e. the
+  deep-zoom perturbation render is **reference-dependent**: recentring recomputes
+  the reference orbit and the region redraws with slightly different iteration
+  counts, which the rainbow palette amplifies into apparent position drift + the
+  live pan "jumping" (pan uses `Trigger(progressive)` = ¼-res FULL-iter, so it is
+  the same effect, not under-iteration). Divergence is **path-independent**
+  (rebase on/off, accel/SA on/off all ~16px) and **precision-limited** (scales
+  smoothly with zoom, 2→16px), so it is fixable, not fundamental chaos. Mechanism:
+  the rebased δ-loop (`ComputePixelPTRebased`) reads the reference orbit `Z_n` at
+  **double** (`_refZr[m]` = X0 only) even though the full 8-limb OD orbit is
+  stored (`_refZrLo`..`_refZrX7` sit unused) — two nearby centres' double-rounded
+  Z chains diverge over ~4200 iters of chaotic amplification. Filed **SM-11**.
+  `--navrepro` gained an input-math check, SAD(0,0) vs SAD(min), and path toggles
+  (`norebase|acceloff|saoff`).
+- 2026-07-06 — **Deep-zoom nav evidence tooling: `--navrepro` + overlay limb
+  counts (SM-10).** User still reports outline-zoom / pan / double-click "close
+  but not exact" past ~E+64, but words alone haven't pinned it and the synthetic
+  probes are self-referential (controller OD vs OD truth) or can't measure on a
+  flat frame. Added `--navrepro [file]`: reads a coordinate file the user fills
+  straight from the floating menu (full-limb `cx=`/`cy=`, `zoom=`, `dim=`,
+  `click=`), renders the frame, runs the real `FractalInputController`
+  double-click focus, re-renders, and patch-matches the clicked feature to report
+  focus error IN PIXELS (0 = perfect, >1 = the reported bug reproduced). Validated
+  on the user's own 3E47 coordinate: focus 0.00px at 5e58 (textured), and at 1e64
+  the frame is flat (distinctIters=1, maxUseful=1e62) — i.e. that coordinate's
+  reported "past-E+64 breakage" IS the SM-7 detail floor, not an input fault. To
+  catch a genuine error the user must supply a coordinate that still has DETAIL
+  past E+64. Also added centre limb-counts (`limbs X:n/8 Y:n/8`) + render px to
+  the perf-HUD render-context block — a truncated centre would show instantly.
+  `Docs/Nav-Repro-Template.txt` is the fill-in form. Awaiting a detailed-frame
+  repro coordinate.
+- 2026-07-06 — **"Controls break past 1e63" root-caused: it's the point's detail
+  floor, not input (SM-7).** New `--focusprobe` renders a deep frame, double-click
+  focuses via the real `FractalInputController`, re-renders, and patch-matches to
+  measure where the clicked feature lands. Result: focus is **0.00px through
+  1e70**; input is provably exact (also confirmed by `--inputprobe` extended to
+  1e70, 0.00px anchor drift). What breaks is the RENDER — past ~1e60 the frame
+  collapses to flat (frameDistinct 163→3→1, inSet 0%). Localised through
+  rebasing-on/off and accel-on/off (all identical) to the shared δ core, then to
+  the reference orbit: the user's centre **escapes at iteration 4060**, giving
+  only ~62 decades of ∏|2·Zₙ| δ-amplification, so its intrinsic perturbation
+  depth is ~1e62 — matched the collapse exactly. This is a property of the POINT
+  (must recentre on a longer-orbit location to go deeper), the same limit every
+  perturbation zoomer has. Shipped a guard: `MaxUsefulZoomLog10` computed free in
+  all three ref-orbit builds, carried on `RenderFrameInfo`, surfaced as a
+  status-bar notice when the live zoom exceeds it — so a flat deep frame reads as
+  a location depth limit, not broken navigation. Note the earlier `--qdfloorsweep`
+  (SM-6) validated OD.FromCenterOffset coordinate separation, but the live deep
+  render uses the double-δ path, so coordinate separation was necessary but the
+  amplification floor is the operative limit for a given point. 547/547 tests pass.
+- 2026-07-05 — **OD coordinate path fixed → Extreme cap 1e63 → 1e100 (SM-6).**
+  Follow-up to SM-5: the 5e58/1e64 walls were NOT a QD limit — OD ref orbit + OD
+  per-pixel coordinates already engage above `ODZoomThreshold` (1e50). The real
+  bug was `OD.FromCenterOffset` adding the pixel offset through the OD+OD sloppy
+  operator, whose 3-level carry cascade can't reach limb X4+; a deep offset
+  (zoom > ~1e64) was parked against X3 and rounded away, collapsing all pixels
+  to the centre. That is exactly the `--qdfloorsweep` OD column's 37/128 at 1e66
+  (real, not the probe's zeroed-limb artifact I'd assumed). Fix = route through
+  the OD+double full-cascade add (`(center + offHi) + offLo`). Sweep now: OD
+  **128/128 through 1e120**. Cap raised to **1e100** (20 decades of coordinate
+  margin; OD ref-orbit accuracy is the soft limit past there, chaos-dominated as
+  on QD). Regression `FromCenterOffset_DeepOffset_SeparatesAdjacentPixels` added;
+  all 24 OD tests pass. Note SM-5's 1e63 was a wrong-mechanism stopgap, now
+  superseded.
+- 2026-07-05 — **Extreme zoom wall raised 5e58 → 1e63 (SM-5).** User navigated
+  to exactly 5e58 and could zoom no further (neither wheel nor box). Root cause:
+  that value is `QualityPreset.Extreme.ZoomMax`, the top tier's hard cap — a
+  stale-conservative number ~5 decades below the real QD floor. Reran
+  `--qdfloorsweep`: QD coords stay 128/128 distinct through **1e64**, collapse to
+  3/128 at 1e66. Raised the cap to **1e63** (one-decade margin under the clean
+  1e64 for QD reference-orbit accuracy in deep filaments; coordinate separation
+  is necessary-not-sufficient). Iter budget fine (66 560 < 131 072 cap at 1e63).
+  Cap propagates automatically — the input promotion sites read
+  `Extreme.ZoomMax` directly. Going past 1e64 filed as **SM-6** (OD reference
+  orbit + new tier). Stale QD-ceiling comments corrected in `MandelbrotCalculator`.
+- 2026-07-05 — **Input rework CONFIRMED FIXED after a clean rebuild** (commit
+  168eedc). Smoke retest initially still failed — root cause was a **stale
+  binary**: `dotnet build` kept reporting success without relinking the exe, so
+  the tested build lacked the ViewCamera change (rebasing, a runtime static
+  flag, was present — hence its effects showed but the input fix did not). A
+  `--no-incremental -t:Rebuild` resolved it. Also fixed a real render bug found
+  in passing: `ApplyView` copied only the QD centre limbs (X0..X3) into the
+  render calculator, dropping OD (X4..X7) — past 1e50 the render sat at a
+  QD-truncated centre while the view state held full OD, so deep frames rendered
+  at a wrong centre and navigation compounded against the mis-placed image; now
+  copies all eight limbs (`MirrorMandelbrotState` already did). Rebasing default
+  flipped ON (see SM-2); two rebasing-default side effects filed as SM-3
+  (status-bar premature done) + SM-4 (outline redraw slow), deferred.
+- 2026-07-05 — **Deep-zoom input rework — ViewCamera + DeepComplex (commit
+  901b641).** User report: approaching ~9e49, keyboard/mouse lose precision
+  (double-click mis-focuses, drag pans the wrong amount, box-zoom lands wrong).
+  Recurring — the input layer had been rewritten per precision tier several
+  times. `--inputprobe` (new headless gate) root-caused it: single-op anchoring
+  is exact, but a cumulative wheel zoom-in DRIFTS — the centre was carried in
+  plain double until the HP threshold (1e12), where promotion froze a ~1e-16
+  world error that bloomed ∝ zoom (3000px off at 1e17, astronomically off by
+  1e49). Fix (chosen: full ViewCamera, OD-always): `DeepComplex` (OD-backed
+  complex, precision is an internal detail) + `ViewCamera` (single screen↔world
+  authority) in Abstractions; `FractalViewState.GetCenter/SetCenter` typed
+  accessor. All six `FractalInputController` sites now delegate to ViewCamera —
+  the per-tier cascades + DD/QD/OD pan-start caches + Store* deleted (~150
+  lines). New precision tiers extend `DeepComplex` only, never the input
+  handlers. Gate: anchor drift **0.00px through 1e6→8e49** (was 3000px@1e17);
+  546/546 tests pass. Follow-up: unify the render onto ViewCamera + reconcile
+  logical-vs-device pixel dims (HiDPI) — separate constant-offset concern.
+- 2026-07-05 — **SM-2 rebasing shipped opt-in — `--rebaseprobe` PASS.** New
+  `MandelbrotCalculator.ComputePixelPTRebased` (Zhuoran rebasing) resolves any
+  pixel in double precision from the single shared reference orbit at any depth,
+  replacing the per-pixel QD/OD/HP glitch fallback at all six sites (scalar row +
+  PT4/PT8 vector-extract + PT4/PT8 scalar tail) when `AllowPtRebasing` is set.
+  Default OFF ⇒ the render path is bit-identical to pre-SM-2 (`if (AllowPtRebasing)
+  … else <existing fallback>`). Probe A/Bs it against the per-pixel QD truth on
+  the deep smoke regions:
+  * **91–142× faster** (3E47: 12740 ms → 101 ms at 128²/20 k iters).
+  * **Accuracy = QD.** reb-vs-QD tracks QDself (QD SA-off vs SA-on) to within
+    0.05 pt (51.63/51.68, 58.98/58.97, 96.77/96.77, 100/100). The ~50 % "miss"
+    on the two deepest regions is chaotic sensitivity of deep filamentary
+    structure at high iter — the QD render disagrees with itself by the same
+    amount, so there is no tighter truth to hit.
+  * A DD δ-chain + DD reference + DD dc variant was tried and produced
+    **byte-identical iteration counts** to the double path (and 50× slower):
+    precision is not the limiter here, so the fix stays in double. This is why
+    2.14's "DD δ-chain" would have bought nothing.
+  Remaining: flip `AllowPtRebasing` on after a visual sign-off (3.5-style gate);
+  optional SIMD rebasing later to reclaim vector throughput at deep zoom.
+- 2026-07-05 — **Wave 2.14 investigated — premise not reproducible; recommend
+  reframe/close.** Two headless probes added to `Program.cs`:
+  * `--qdfloorprobe [maxIter]` — renders each QD-band smoke region twice (SA on
+    vs off) and reports a neighbour-collapse metric. Result: SA on/off is
+    near-identical (41.0/39.3 %, 24.4/24.7 %, 83.6/83.6 %) ⇒ the double SA seed
+    is **not** the pixelation floor. Also confirmed the SIMD PT δ-loop bails
+    ~1e30 (glitch check at `ComputePixelPT`), so deep frames run per-pixel
+    direct-QD — that is the SM-2 slowness, not a δ-chain the plan's "DD δ"
+    framing assumed.
+  * `--qdfloorsweep` — builds the 128 per-pixel X coords the QD/OD path uses
+    (`QD.FromCenterOffset`, |c|≈2 centre) across a zoom sweep and counts
+    bit-distinct values. **QD separates all 128/128 pixels through 1e64**,
+    cliffing only at 1e66. So there is **no QD arithmetic pixelation floor in
+    the stated 1e40–1e58 band** — QD headroom runs ~6 orders past the band and
+    ~37 orders past the video zoom cap (5e27).
+  Conclusion: the 2026-06-22 "pixelation 1e40–1e58" report predates the 2.11
+  OD-arithmetic fix and the SM-1 iteration-cap finding; it is not a live QD
+  precision bug. The real remaining deep-zoom lever is **SM-2** (PT δ-loop bails
+  ~1e30 → slow per-pixel direct-QD; fix = rebasing to keep cheap SIMD PT viable
+  at any depth). Recommend closing 2.14 as obsolete and folding its intent into
+  SM-2. Probes: commits `baade13` (qdfloorprobe) + this entry's sweep.
+- 2026-07-05 — Deep-region smoke-test triage + `--regionprobe` diagnostic.
+  New headless renderer (`Program.cs --regionprobe [maxIter]`) renders the
+  reported deep regions at 128² single-sample and reports tier / wall-clock /
+  in-set% / distinct-iter / distinct-colour. Dispositions of the smoke report:
+  * **"renders solid colour"** (Deeper and Deeper, Deep Lightning in Space) —
+    **iteration-count issue, NOT a precision bug.** At maxIter=8192 all four deep
+    regions render valid fractals (distColour 550–1527, 0% in-set); at maxIter=300
+    all collapse to 100% in-set / one colour. Escape bands are 328–3940 iters, so
+    any effective cap below a region's band paints it flat. The reported-solid
+    regions (need 379 / 808 iters) were rendered under their band. Fix path: the
+    region's saved MaxIterations (or the app's per-region auto-iter) is too low —
+    not the QD path.
+  * **"takes minutes"** (3E47, E45Test04) — inherent deep-QD-perturbation cost:
+    3E47 = 11.2 s at 128² single-sample → minutes at full window × AA16 (Extreme).
+    Not a defect.
+  * **Video zoom clamp at E+27** — by design (`VideoZoom.cs:241`, Ultra cap;
+    Extreme-regime pixelation). Not a bug.
+  * **Video Settings phantom modal (Windows)** — nested modal-of-a-modal failed
+    to front on Win32 (+ ShowInTaskbar=false → unreachable). Fixed 43168a9:
+    Activate-on-Opened for the Video + Audio dialogs. Needs Windows verification.
+  * Wave 3.5 confirmed inert in production (flag set only in the probe).
+- 2026-07-05 — Wave 3.5 shipped opt-in — reference-orbit recycling across
+  frames. `MandelbrotCalculator.AllowRefOrbitRecycle` (static, default **OFF**)
+  gates `TryRecycleReferenceOrbit`: when the view centre moved by less than
+  `RecycleMaxShiftFactor` (0.25) of the frame's corner-dc — same precision tier,
+  cached maxIter covers the frame — the cached reference orbit is reused instead
+  of rebuilt. The centre shift Δc = newCentre − cachedCentre (computed at the
+  tier's DD/QD/OD precision, rounded to double) is injected into the SIMD PT dc
+  via `_refRecycleDx/_refRecycleDy` in the scalar / PT4 / PT8 paths; the DD/QD/OD
+  glitch fallbacks need no change because they already derive
+  δc = absoluteWorldCoord − storedRefCentre. The expensive orbit build is
+  skipped; the cheap BLA/SA tables rebuild for the widened dc (the kept orbit is
+  a valid perturbation base well past the BLA linearisation radius). Default path
+  is bit-identical (`x + 0.0 == x`). New headless gate `--reforbitrecycle`
+  (Program.cs) renders each target centre twice — a fresh orbit vs a recycled one
+  — and PASSes: recycling engages every case, ≤ 3 / 16384 pixels differ (escape-
+  boundary flips, inherent to any reference change), **zero** large-area
+  divergence at DD-tier zooms 1e13–1e22. Public `RefRecycleHits`/`RefRecycleMisses`
+  diagnostics. **Not yet production-on** — needs the video pipeline to opt in +
+  a deep-zoom visual flicker sign-off; QD/OD tiers run the identical code path
+  but the probe only exercises DD tier (representable pan). See item 3.5.
+- 2026-07-05 — Wave 5.9.f1 attempted — KIFS fold fixes + headless probe.
+  Added `--kifsprobe` (Program.cs) + `KifsCalculator.ProbeDE` test hook: a
+  headless geometric self-test that sphere-traces the DE inward along a
+  Fibonacci direction set and reports hit-fraction + surface radii (axis /
+  face-diagonal / body-diagonal), detecting the two documented failure modes
+  (all-black = hitFrac≈0; cube = radius signature 1:√2:√3) without a GUI.
+  Faithful ports of all three broken folds were tried and **the probe
+  disproved each**:
+  * **Octahedron** — Mandelbulber2 apex-fold port → solid cube (hitFrac 1.0,
+    radii 1:√2:√3). Reverted to the shipped rotated-Menger approximation.
+  * **Dodecahedron** — exact Coxeter [5,3] icosahedral mirror fold → all-black
+    (hitFrac 0.0; scale-from-vertex diverges because the user offset isn't an
+    icosahedron vertex). Reverted to the shipped rotated-Sierpinski (which at
+    least renders a visible shape — the icosa port was a regression).
+  * **MandelboxRot** — the documented dr-accumulator fix (DE = length/dr) →
+    object spans to radius ~6, past this fold's camera setRadius (3.5), so the
+    camera sits inside the body. Reverted rather than ship an unverifiable
+    framing regression.
+  Net: all three fold bodies stay at their shipped state; the probe + hook +
+  honest per-fold NOTE doc-comments land so the eventual fix has a headless
+  gate. **5.9.f1 remains open** — a correct fix needs reference-sourced
+  formulas (Octahedron / IcosaFold) + a matched camera retune (MandelboxRot),
+  verified visually, which is not reliably doable headlessly.
 - 2026-06-23 — Wave 7.1 shipped — Top-level `Docs/_Index.md` landing page.
   Routes by audience (User → `User/_Index.md`, Technical → `Technical/
   _Index.md`) and surfaces the project-wide roadmap layer (Open-Work-Plan,

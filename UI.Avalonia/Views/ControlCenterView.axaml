@@ -1,0 +1,107 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:FracturingFog.UI.Avalonia.ViewModels"
+        xmlns:sections="using:FracturingFog.UI.Avalonia.Views.ControlCenterSections"
+        x:Class="FracturingFog.UI.Avalonia.Views.ControlCenterView"
+        x:DataType="vm:ControlCenterViewModel"
+        Foreground="#DCDCDC">
+
+    <!-- Phase S1 shell. SplitView nav-rail (6 groups) + sectioned content, all
+         bound through Menu (FloatingMenuViewModel) / Shell (ShellViewModel).
+         Chrome lives on the PanelHostWindow host. S2: each section is its own
+         UserControl (Views/ControlCenterSections) so it can also be detached
+         into a standalone floating window via Detach. -->
+
+    <UserControl.Styles>
+        <Style Selector="ListBox.navRail">
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderThickness" Value="0" />
+        </Style>
+        <Style Selector="ListBox.navRail ListBoxItem">
+            <Setter Property="Padding" Value="12,10" />
+            <Setter Property="FontSize" Value="13" />
+            <Setter Property="Foreground" Value="#B4B4B4" />
+        </Style>
+        <Style Selector="ListBox.navRail ListBoxItem:selected /template/ ContentPresenter">
+            <Setter Property="Background" Value="#282828" />
+        </Style>
+        <Style Selector="ListBox.navRail ListBoxItem:selected">
+            <Setter Property="Foreground" Value="#C8C864" />
+        </Style>
+        <Style Selector="TextBlock.navGlyph">
+            <Setter Property="FontSize" Value="15" />
+            <Setter Property="Width" Value="22" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+        </Style>
+    </UserControl.Styles>
+
+    <SplitView IsPaneOpen="True" DisplayMode="Inline" OpenPaneLength="180"
+               PaneBackground="#161616">
+
+        <!-- ── Nav rail ────────────────────────────────────────────────── -->
+        <SplitView.Pane>
+            <DockPanel LastChildFill="True">
+
+                <TextBlock DockPanel.Dock="Top"
+                           Text="Control Center"
+                           Foreground="#C8C864" FontWeight="Bold" FontSize="14"
+                           Margin="14,12,14,4" />
+
+                <!-- Detach the current section into its own floating window -->
+                <Button DockPanel.Dock="Top"
+                        Classes="action neutral"
+                        Content="⧉ Detach section"
+                        Command="{Binding DetachSectionCommand}"
+                        HorizontalAlignment="Stretch"
+                        HorizontalContentAlignment="Center"
+                        Margin="10,0,10,8" FontSize="11"
+                        ToolTip.Tip="Pop the selected section out into its own window (drag it to a second monitor). It stays in sync with the docked copy." />
+
+                <!-- Beginner / Power toggle (the guiding hand) -->
+                <Border DockPanel.Dock="Bottom" Margin="10,8,10,12">
+                    <StackPanel Spacing="4">
+                        <Button Classes="action neutral"
+                                Content="{Binding ModeButtonLabel}"
+                                Command="{Binding ToggleModeCommand}"
+                                HorizontalAlignment="Stretch"
+                                HorizontalContentAlignment="Center"
+                                ToolTip.Tip="Beginner mode hides advanced groups + diagnostics; Power mode shows everything." />
+                        <TextBlock Text="{Binding ModeHint}"
+                                   Foreground="#7E7E7E" FontSize="10"
+                                   TextWrapping="Wrap" HorizontalAlignment="Center" />
+                    </StackPanel>
+                </Border>
+
+                <ListBox Classes="navRail"
+                         ItemsSource="{Binding Nav}"
+                         SelectedValueBinding="{Binding Section}"
+                         SelectedValue="{Binding SelectedSection, Mode=TwoWay}">
+                    <ListBox.ItemTemplate>
+                        <DataTemplate x:DataType="vm:ControlCenterNavItem">
+                            <StackPanel Orientation="Horizontal" Spacing="6">
+                                <TextBlock Classes="navGlyph" Text="{Binding Glyph}" />
+                                <TextBlock Text="{Binding Label}" VerticalAlignment="Center" />
+                            </StackPanel>
+                        </DataTemplate>
+                    </ListBox.ItemTemplate>
+                </ListBox>
+            </DockPanel>
+        </SplitView.Pane>
+
+        <!-- ── Content ─────────────────────────────────────────────────── -->
+        <!-- Each section is an extracted UserControl; the same control types are
+             re-instantiated in a floating PanelHostWindow when detached. Child
+             DataContext is inherited (this ControlCenterViewModel), so bindings
+             resolve identically docked or detached. -->
+        <ScrollViewer Padding="14,12" VerticalScrollBarVisibility="Auto">
+            <Panel>
+                <sections:ViewSectionView       IsVisible="{Binding IsViewSection}" />
+                <sections:ExploreSectionView    IsVisible="{Binding IsExploreSection}" />
+                <sections:ColorLightSectionView IsVisible="{Binding IsColorLightSection}" />
+                <sections:CaptureSectionView    IsVisible="{Binding IsCaptureSection}" />
+                <sections:AssetsSectionView     IsVisible="{Binding IsAssetsSection}" />
+                <sections:AdvancedSectionView   IsVisible="{Binding IsAdvancedSection}" />
+            </Panel>
+        </ScrollViewer>
+    </SplitView>
+</UserControl>

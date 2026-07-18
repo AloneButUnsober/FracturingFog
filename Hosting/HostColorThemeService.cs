@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-FileCopyrightText: 2026 Bradley Brown
+
 // Hosting/HostColorThemeService.cs
 //
 // Concrete IColorThemeService for the Avalonia shell. Bridges:
@@ -498,6 +501,45 @@ namespace FracturingFog.Hosting
             return AnimationLibrary.Instance.ReplaceOrAdd(animation);
         }
 
+        // ── Scene Engine Roadmap Phase S5 — Scene persistence (SceneLibrary) ──
+
+        /// <inheritdoc/>
+        public IReadOnlyList<string> EnumerateSceneNames()
+        {
+            var lib = SceneLibrary.Instance;
+            var list = new List<string>(lib.Scenes.Count);
+            foreach (var s in lib.Scenes) list.Add(s.Name);
+            return list;
+        }
+
+        /// <inheritdoc/>
+        public FracturingFog.Abstractions.Animation.SceneData? GetScene(string sceneName)
+        {
+            if (string.IsNullOrWhiteSpace(sceneName)) return null;
+            return SceneLibrary.Instance.GetByName(sceneName);
+        }
+
+        /// <inheritdoc/>
+        public bool SceneExistsInLibrary(string sceneName)
+        {
+            if (string.IsNullOrWhiteSpace(sceneName)) return false;
+            return SceneLibrary.Instance.GetByName(sceneName) != null;
+        }
+
+        /// <inheritdoc/>
+        public bool SaveScene(FracturingFog.Abstractions.Animation.SceneData scene)
+        {
+            if (scene == null || string.IsNullOrWhiteSpace(scene.Name)) return false;
+            return SceneLibrary.Instance.ReplaceOrAdd(scene);
+        }
+
+        /// <inheritdoc/>
+        public bool DeleteScene(string sceneName)
+        {
+            if (string.IsNullOrWhiteSpace(sceneName)) return false;
+            return SceneLibrary.Instance.Remove(sceneName);
+        }
+
         public bool SaveCurrentAsRegion(string regionName, FractalViewState state, WatermarkDef? embeddedWatermark = null, string? animationName = null)
         {
             if (string.IsNullOrWhiteSpace(regionName) || state == null) return false;
@@ -874,8 +916,21 @@ namespace FracturingFog.Hosting
             try
             {
                 string text = File.ReadAllText(path);
-                imported = JsonSerializer.Deserialize<List<ColorThemeData>>(
-                    text, UserColorThemeLibrary.BuildJsonOptions());
+                // Root shape decides: '[' = the library form ExportUserThemesToFile
+                // writes, anything else = one bare theme object (what the Asset
+                // Manager's per-row export produces). Accepting both means a
+                // single-theme export round-trips through this importer.
+                if (text.TrimStart().StartsWith("["))
+                {
+                    imported = JsonSerializer.Deserialize<List<ColorThemeData>>(
+                        text, UserColorThemeLibrary.BuildJsonOptions());
+                }
+                else
+                {
+                    var one = JsonSerializer.Deserialize<ColorThemeData>(
+                        text, UserColorThemeLibrary.BuildJsonOptions());
+                    imported = one == null ? null : new List<ColorThemeData> { one };
+                }
             }
             catch (Exception ex)
             {

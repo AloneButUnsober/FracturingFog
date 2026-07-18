@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-FileCopyrightText: 2026 Bradley Brown
+
 // Views/MainWindow.axaml.cs
 //
 // Phase 2.3 F.2. Top-level Avalonia window. Binds to ShellViewModel.
@@ -20,10 +23,13 @@ using System.ComponentModel;
 using System.Runtime.InteropServices;
 using Avalonia.Controls;
 using Avalonia.Input;
+using Avalonia.Interactivity;
 using Avalonia.Markup.Xaml;
+using Avalonia.Media;
 using FracturingFog.Input;
 using FracturingFog.UI.Avalonia.Controls;
 using FracturingFog.UI.Avalonia.Input;
+using FracturingFog.UI.Avalonia.Services;
 using FracturingFog.UI.Avalonia.ViewModels;
 
 namespace FracturingFog.UI.Avalonia.Views;
@@ -36,23 +42,27 @@ public sealed partial class MainWindow : Window
     private bool _sortMenusAttached;
 
     private FloatingMenuView? _menuWin;
-    private ColorThemeEditorView? _editorWin;
-    private WatermarkEditorView? _watermarkEditorWin;
-    private AnimationEditorView? _animationEditorWin;
-    private RegionEditorView? _regionEditorWin;
-    private AssetManagerView? _assetManagerWin;
-    private FloatingHelpView? _helpWin;
-    private FFClientView? _ffClientWin;
-    private ServerAdminView? _serverAdminWin;
-    private ClusterDashboardView? _clusterDashboardWin;
-    private JobListView? _jobListWin;
-    private JobDetailView? _jobDetailWin;
-    private WorkerDetailView? _workerDetailWin;
-    private MasterConfigView? _masterConfigWin;
+    private PanelHostWindow? _controlCenterWin;
+    private PanelHostWindow? _editorWin;
+    private PanelHostWindow? _watermarkEditorWin;
+    private PanelHostWindow? _animationEditorWin;
+    private PanelHostWindow? _sceneEditorWin;
+    private PanelHostWindow? _regionEditorWin;
+    private PanelHostWindow? _assetManagerWin;
+    private PanelHostWindow? _helpWin;
+    private PanelHostWindow? _ffClientWin;
+    private PanelHostWindow? _serverAdminWin;
+    private PanelHostWindow? _clusterDashboardWin;
+    private PanelHostWindow? _jobListWin;
+    private PanelHostWindow? _jobDetailWin;
+    private PanelHostWindow? _workerDetailWin;
+    private PanelHostWindow? _masterConfigWin;
     private MiniMapWindow? _miniMapWin;
     private MiniDepthWindow? _miniDepthWin;
     private MiniWindowTether? _miniMapTether;
     private MiniWindowTether? _miniDepthTether;
+    private PostFxHudWindow? _postFxHudWin;
+    private MiniWindowTether? _postFxHudTether;
 
     // S-X8 (2026-06-27) — hold the delegates ConfigureMiniDepth subscribes
     // to RenderHost.ColorMapChanged / FrameCompleted so DetachShell can
@@ -128,6 +138,14 @@ public sealed partial class MainWindow : Window
         // bubble up unhandled and we route them to the shell. Mirrors the
         // universal shortcuts in WinForms MainForm.OnKeyDown.
         KeyDown += OnWindowKeyDown;
+
+        // Escape is handled on KeyUp, not KeyDown: Avalonia 12.0.4 swallows the
+        // Escape KeyDown before it is raised as a routed event (verified live —
+        // no window, focused-control, or class handler ever sees it), but the
+        // Escape KeyUp routes normally. Same workaround used for dialogs in
+        // EscapeCloseBehavior / FfmpegSetupDialog. All other command keys stay
+        // on KeyDown.
+        KeyUp += OnWindowKeyUp;
     }
 
     private void OnOpened(object? sender, EventArgs e)
@@ -220,53 +238,59 @@ public sealed partial class MainWindow : Window
     private (ContextMenu menu, Action sync) BuildContextMenu(ShellViewModel shell)
     {
         var menu = new ContextMenu();
+
+        // Escape closes the menu. The menu is hosted in its own popup
+        // top-level, so its keyboard events never reach OnWindowKeyUp; and
+        // Avalonia 12.0.4's built-in menu Escape-close runs on the swallowed
+        // KeyDown, so it no longer fires either. Handle Escape on the menu's
+        // own KeyUp (a focused MenuItem's KeyUp bubbles up to here).
+        menu.AddHandler(InputElement.KeyUpEvent, (_, e) =>
+        {
+            if (e.Key == Key.Escape && e.KeyModifiers == KeyModifiers.None && menu.IsOpen)
+            {
+                menu.Close();
+                e.Handled = true;
+            }
+        }, RoutingStrategies.Bubble, handledEventsToo: true);
+
+        // S2 reorg — the render-window right-click is now a SHORT quick-access
+        // menu: view toggles + capture essentials + the running-slideshow
+        // controls, with everything else (Params, editors, Asset Manager,
+        // ColorGen, Watermark, Mini*/Toy, Span) moved into the Control Center.
+        AddItem(menu, "Control Center…",    () => shell.ShowControlCenterCommand.Execute().Subscribe());
+        AddItem(menu, "Menu (legacy)",      () => shell.IsFloatingMenuVisible = !shell.IsFloatingMenuVisible);
+        menu.Items.Add(new Separator());
+
         var toolbarItem = new MenuItem { Header = "Toolbar" };
         toolbarItem.Click += (_, _) => shell.IsToolbarVisible = !shell.IsToolbarVisible;
         menu.Items.Add(toolbarItem);
-        AddItem(menu, "Menu",               () => shell.IsFloatingMenuVisible = !shell.IsFloatingMenuVisible);
         var statusItem = new MenuItem { Header = "Status" };
         statusItem.Click += (_, _) => shell.IsStatusBarVisible = !shell.IsStatusBarVisible;
         menu.Items.Add(statusItem);
+        AddItem(menu, "Grid",               () => shell.Main.ShowGrid = !shell.Main.ShowGrid);
         var onTopItem = new MenuItem { Header = "On Top" };
-        onTopItem.Click += (_, _) => Topmost = !Topmost;
+        onTopItem.Click += (_, _) => shell.IsRenderTopmost = !shell.IsRenderTopmost;
         menu.Items.Add(onTopItem);
         AddItem(menu, "Reset View",         () => shell.Main.ResetViewCommand.Execute().Subscribe());
-        AddItem(menu, "Grid",               () => shell.Main.ShowGrid      = !shell.Main.ShowGrid);
         menu.Items.Add(new Separator());
-        AddItem(menu, "Span Monitors",      () => shell.ToggleSpanCommand.Execute().Subscribe());
+
+        AddItem(menu, "Save Image…",        () => shell.ScreenshotCommand.Execute().Subscribe());
+        AddItem(menu, "Save Current Region",() => shell.SaveRegionCommand.Execute().Subscribe());
         menu.Items.Add(new Separator());
-        AddItem(menu, "Mini Map",           () => shell.ToggleMiniMapCommand.Execute().Subscribe());
-        AddItem(menu, "Mini Depth",         () => shell.ToggleMiniDepthCommand.Execute().Subscribe());
-        var miniModeItem = new MenuItem { Header = "Mini Mode" };
-        miniModeItem.Click += (_, _) => shell.ToggleMiniModeCommand.Execute().Subscribe();
-        menu.Items.Add(miniModeItem);
-        var toyModeItem = new MenuItem { Header = "Toy Mode" };
-        toyModeItem.Click += (_, _) => shell.ToggleToyModeCommand.Execute().Subscribe();
-        menu.Items.Add(toyModeItem);
+
         AddItem(menu, "Slideshow",          () => shell.ToggleSlideshowCommand.Execute().Subscribe());
-        // Slideshow-specific items. Header text + enable state updated each
-        // time the menu opens (see Opening handler in BuildContextMenu's
-        // caller path) to reflect current SlideshowEngine state.
+        // Slideshow-specific items. Header text + enable state updated each time
+        // the menu opens (sync closure below) to reflect current engine state.
         var lockRegionItem = new MenuItem { Header = "Slideshow: Lock Region" };
         lockRegionItem.Click += (_, _) => shell.ToggleSlideshowLockRegionCommand.Execute().Subscribe();
         menu.Items.Add(lockRegionItem);
         var focusItem = new MenuItem { Header = "Slideshow: More Colors" };
         focusItem.Click += (_, _) => shell.ToggleSlideshowFocusCommand.Execute().Subscribe();
         menu.Items.Add(focusItem);
-        AddItem(menu, "Watermark",          () => shell.Main.ShowWatermark = !shell.Main.ShowWatermark);
-        menu.Items.Add(new Separator());
         AddItem(menu, "Video",              () => shell.ToggleVideoCommand.Execute().Subscribe());
         menu.Items.Add(new Separator());
-        AddItem(menu, "Save Current Region",() => shell.SaveRegionCommand.Execute().Subscribe());
-        AddItem(menu, "Save Image…",        () => shell.ScreenshotCommand.Execute().Subscribe());
-        menu.Items.Add(new Separator());
-        AddItem(menu, "Params",             () => shell.ShowFractalParamsCommand.Execute().Subscribe());
-        AddItem(menu, "Edit Theme",         () => shell.ShowColorThemeEditorCommand.Execute().Subscribe());
-        AddItem(menu, "ColorGen Editor…",   () => shell.ShowColorGenEditorCommand.Execute().Subscribe());
-        AddItem(menu, "Asset Manager…",     () => shell.ShowAssetManagerCommand.Execute().Subscribe());
-        menu.Items.Add(new Separator());
+
         AddItem(menu, "Help…",              () => shell.ShowHelpCommand.Execute().Subscribe());
-        menu.Items.Add(new Separator());
         AddItem(menu, "Close Program",      () => shell.FloatingMenu.CloseProgramCommand.Execute().Subscribe());
 
         // Refresh slideshow item state every time the menu opens. Avalonia's
@@ -299,8 +323,6 @@ public sealed partial class MainWindow : Window
             // as a drag handle).
             toolbarItem.IsEnabled = !_toyModeActive && !_miniModeActive;
             statusItem.IsEnabled  = !_toyModeActive;
-            miniModeItem.Header = (_miniModeActive ? "✓ " : "") + "Mini Mode";
-            toyModeItem.Header  = (_toyModeActive  ? "✓ " : "") + "Toy Mode";
         };
         menu.Opening += (_, _) => sync();
         return (menu, sync);
@@ -321,16 +343,9 @@ public sealed partial class MainWindow : Window
     {
         if (_shell == null || e.Handled) return;
 
-        // Esc closes an open context menu before anything else looks at the
-        // key. Without this, OnWindowKeyDown routes Esc to HandleCommandKey
-        // (cancel-run) while the menu stays open, surprising the user.
-        if (e.Key == Key.Escape && e.KeyModifiers == KeyModifiers.None
-            && _contextMenu != null && _contextMenu.IsOpen)
-        {
-            _contextMenu.Close();
-            e.Handled = true;
-            return;
-        }
+        // NOTE: Escape is NOT handled here — Avalonia 12.0.4 never raises its
+        // KeyDown. Context-menu close + exit-span / stop-run live in
+        // OnWindowKeyUp instead.
 
         // Backspace = Back: pop the most recent nav snapshot off the shell's
         // history stack. Like Escape, allowed even when a non-text combo has
@@ -342,8 +357,8 @@ public sealed partial class MainWindow : Window
         }
 
         // Don't steal keys from an editable control (toolbar combos / dialog
-        // fields). Escape is always allowed so it can cancel span / a run.
-        if (e.Key != Key.Escape && IsEditableFocused()) return;
+        // fields).
+        if (IsEditableFocused()) return;
 
         // Shift+H = reset the perf HUD's rolling buffers so a new region /
         // video capture starts clean. Handled before the unmodified switch
@@ -390,8 +405,9 @@ public sealed partial class MainWindow : Window
             return;
         }
 
-        // Command keys (M/T/R/V/Escape) — unmodified only; Ctrl/Alt/Shift
-        // combos are reserved (diagnostic toggles, precise-pan).
+        // Command keys (M/T/R/V) — unmodified only; Ctrl/Alt/Shift combos are
+        // reserved (diagnostic toggles, precise-pan). Escape is handled in
+        // OnWindowKeyUp (its KeyDown is swallowed by Avalonia 12.0.4).
         if (e.KeyModifiers == KeyModifiers.None)
         {
             InputKey cmd = e.Key switch
@@ -400,7 +416,6 @@ public sealed partial class MainWindow : Window
                 Key.T => InputKey.T,
                 Key.R => InputKey.R,
                 Key.V => InputKey.V,
-                Key.Escape => InputKey.Escape,
                 _ => InputKey.None,
             };
             if (cmd != InputKey.None)
@@ -412,11 +427,15 @@ public sealed partial class MainWindow : Window
             // Overlay / dialog toggles. Active in every fractal type so the
             // shortcuts work consistently regardless of selected mode.
             //   G  = Grid           K  = Watermark    H = Perf HUD (Shift+H = reset)
-            //   P  = Params dialog  F1 = Help window
+            //   P  = Params dialog  F1 = Help window  X = Post-FX HUD overlay
             switch (e.Key)
             {
                 case Key.G:
                     _shell.Main.ShowGrid = !_shell.Main.ShowGrid;
+                    e.Handled = true;
+                    return;
+                case Key.X:
+                    _shell.TogglePostFxHudCommand.Execute().Subscribe();
                     e.Handled = true;
                     return;
                 case Key.K:
@@ -451,6 +470,29 @@ public sealed partial class MainWindow : Window
             e.Handled = true;
     }
 
+    // Escape-only handler. Avalonia 12.0.4 swallows the Escape KeyDown before
+    // it becomes a routed event (verified live), so the two Escape behaviours
+    // that used to live in OnWindowKeyDown run here on KeyUp instead.
+    private void OnWindowKeyUp(object? sender, KeyEventArgs e)
+    {
+        if (_shell == null || e.Handled) return;
+        if (e.Key != Key.Escape || e.KeyModifiers != KeyModifiers.None) return;
+
+        // Esc closes an open context menu first. Without this it would route to
+        // HandleCommandKey (cancel-run) while the menu stays open.
+        if (_contextMenu != null && _contextMenu.IsOpen)
+        {
+            _contextMenu.Close();
+            e.Handled = true;
+            return;
+        }
+
+        // Otherwise route to the shell (exit span / stop run). Allowed even
+        // when an editable control has focus so the user doesn't have to click
+        // the surface first.
+        if (_shell.HandleCommandKey(InputKey.Escape)) e.Handled = true;
+    }
+
     private bool IsEditableFocused()
     {
         var focused = FocusManager?.GetFocusedElement();
@@ -480,14 +522,20 @@ public sealed partial class MainWindow : Window
             AttachContextMenu(_sponge, shell);
         }
 
-        // Right-click sort menus on the toolbar Region / Theme combos. The
-        // build callbacks read the live _shell so they stay correct if the
+        // Right-click sort menus on the toolbar Type / Region / Theme combos.
+        // The build callbacks read the live _shell so they stay correct if the
         // DataContext is swapped; attach once so ContextRequested handlers
         // don't stack on re-attach.
         if (!_sortMenusAttached)
         {
+            ComboSortMenu.Attach(this.FindControl<ComboBox>("ToolbarTypeCombo"),
+                () => _shell?.Main.BuildFractalTypeSortMenu() ?? System.Array.Empty<ComboMenuItem>());
+            // Region combo: "Edit region…" (from the Edit-Region enhancement)
+            // sits above the restored filter-by-fractal-type entries so both
+            // live in one flyout. Prepending here (rather than in the VM) keeps
+            // the ShowRegionEditor command coupling in the view layer.
             ComboSortMenu.Attach(this.FindControl<ComboBox>("ToolbarRegionCombo"),
-                () => _shell?.FloatingMenu.BuildRegionSortMenu() ?? System.Array.Empty<ComboMenuItem>());
+                BuildRegionComboMenu);
             ComboSortMenu.Attach(this.FindControl<ComboBox>("ToolbarThemeCombo"),
                 () => _shell?.FloatingMenu.BuildThemeSortMenu() ?? System.Array.Empty<ComboMenuItem>());
             _sortMenusAttached = true;
@@ -502,6 +550,25 @@ public sealed partial class MainWindow : Window
         SyncMenu();
         SyncEditor();
         SyncHelp();
+    }
+
+    // Region combo right-click menu: "Edit region…" + separator, then the
+    // FloatingMenu's filter-by-fractal-type entries (RegionSortMode). Rebuilt
+    // on every open so the filter's checked state stays live. Returns just the
+    // Edit entry if the shell isn't attached yet.
+    private System.Collections.Generic.IReadOnlyList<ComboMenuItem> BuildRegionComboMenu()
+    {
+        var items = new System.Collections.Generic.List<ComboMenuItem>
+        {
+            ComboMenuItem.Item("Edit region…", false,
+                () => _shell?.ShowRegionEditorCommand.Execute().Subscribe()),
+        };
+        if (_shell != null)
+        {
+            items.Add(ComboMenuItem.Separator);
+            items.AddRange(_shell.FloatingMenu.BuildRegionSortMenu());
+        }
+        return items;
     }
 
     private void DetachShell()
@@ -549,6 +616,13 @@ public sealed partial class MainWindow : Window
             case nameof(ShellViewModel.IsFloatingMenuVisible):
                 SyncMenu();
                 break;
+            case nameof(ShellViewModel.IsControlCenterVisible):
+            case nameof(ShellViewModel.ControlCenter):
+                SyncControlCenter();
+                break;
+            case nameof(ShellViewModel.IsRenderTopmost):
+                Topmost = _shell.IsRenderTopmost;
+                break;
             case nameof(ShellViewModel.IsColorThemeEditorVisible):
             case nameof(ShellViewModel.ColorThemeEditor):
                 SyncEditor();
@@ -560,6 +634,10 @@ public sealed partial class MainWindow : Window
             case nameof(ShellViewModel.IsAnimationEditorVisible):
             case nameof(ShellViewModel.AnimationEditor):
                 SyncAnimationEditor();
+                break;
+            case nameof(ShellViewModel.IsSceneEditorVisible):
+            case nameof(ShellViewModel.SceneEditor):
+                SyncSceneEditor();
                 break;
             case nameof(ShellViewModel.IsRegionEditorVisible):
             case nameof(ShellViewModel.RegionEditor):
@@ -606,6 +684,9 @@ public sealed partial class MainWindow : Window
                 break;
             case nameof(ShellViewModel.IsMiniDepthVisible):
                 SyncMiniDepth();
+                break;
+            case nameof(ShellViewModel.IsPostFxHudVisible):
+                SyncPostFxHud();
                 break;
             case nameof(ShellViewModel.IsSlideshowVcrVisible):
                 // Slideshow start path flips this true unconditionally; in
@@ -918,6 +999,43 @@ public sealed partial class MainWindow : Window
     [DllImport("user32.dll", CharSet = CharSet.Auto)]
     private static extern IntPtr SendMessage(IntPtr hWnd, uint msg, IntPtr wParam, IntPtr lParam);
 
+    private void SyncPostFxHud()
+    {
+        if (_shell == null) return;
+        if (_shell.IsPostFxHudVisible)
+        {
+            if (_postFxHudWin == null)
+            {
+                _postFxHudWin = new PostFxHudWindow { DataContext = _shell.FloatingMenu };
+                _postFxHudWin.Closing += (_, ev) =>
+                {
+                    if (_shuttingDown) return;
+                    ev.Cancel = true;
+                    if (_shell != null) _shell.IsPostFxHudVisible = false;
+                };
+            }
+            if (!_postFxHudWin.IsVisible)
+            {
+                _postFxHudWin.Show(this);
+                if (_postFxHudTether == null)
+                {
+                    _postFxHudTether = new MiniWindowTether(
+                        this, _postFxHudWin, MiniWindowTether.AnchorCorner.TopLeft);
+                    _postFxHudWin.ResetAnchorRequested += (_, _) => _postFxHudTether?.ResetAnchor();
+                }
+                // Defer initial placement so Show's own PositionChanged settles
+                // before the tether takes ownership (else read as a user drag).
+                global::Avalonia.Threading.Dispatcher.UIThread.Post(
+                    () => _postFxHudTether?.Apply(),
+                    global::Avalonia.Threading.DispatcherPriority.Background);
+            }
+        }
+        else
+        {
+            _postFxHudWin?.Hide();
+        }
+    }
+
     private void SyncMiniMap()
     {
         if (_shell == null) return;
@@ -981,6 +1099,46 @@ public sealed partial class MainWindow : Window
         }
     }
 
+    // Phase S1 Control Center shell — modeless, close => hide (same family as
+    // the other Sync* windows). Wraps the ControlCenterView UserControl.
+    private void SyncControlCenter()
+    {
+        if (_shell == null) return;
+        if (_shell.IsControlCenterVisible && _shell.ControlCenter != null)
+        {
+            if (_controlCenterWin == null)
+            {
+                _controlCenterWin = new PanelHostWindow(
+                    new ControlCenterView(),
+                    new PanelHostOptions(
+                        "Fracturing Fog — Control Center",
+                        Width: 1000, Height: 760, MinWidth: 820, MinHeight: 560,
+                        SizeToContentHeight: false, CanResize: true, ShowInTaskbar: true,
+                        StartupLocation: WindowStartupLocation.CenterScreen,
+                        Background: new SolidColorBrush(Color.FromRgb(0x16, 0x16, 0x16))))
+                {
+                    DataContext = _shell.ControlCenter,
+                };
+                _controlCenterWin.Closing += (_, ev) =>
+                {
+                    if (_shuttingDown) return;
+                    ev.Cancel = true;
+                    if (_shell != null) _shell.IsControlCenterVisible = false;
+                };
+            }
+            else if (_controlCenterWin.DataContext != _shell.ControlCenter)
+            {
+                _controlCenterWin.DataContext = _shell.ControlCenter;
+            }
+            if (!_controlCenterWin.IsVisible) _controlCenterWin.Show(this);
+            else _controlCenterWin.Activate();
+        }
+        else
+        {
+            _controlCenterWin?.Hide();
+        }
+    }
+
     private void SyncEditor()
     {
         if (_shell == null) return;
@@ -988,7 +1146,17 @@ public sealed partial class MainWindow : Window
         {
             if (_editorWin == null)
             {
-                _editorWin = new ColorThemeEditorView { DataContext = _shell.ColorThemeEditor };
+                _editorWin = new PanelHostWindow(
+                    new ColorThemeEditorView(),
+                    new PanelHostOptions(
+                        "Color Theme Editor",
+                        Width: 980, Height: 900, MinWidth: 780, MinHeight: 600,
+                        SizeToContentHeight: false, CanResize: true, ShowInTaskbar: true,
+                        StartupLocation: WindowStartupLocation.CenterOwner,
+                        Background: new SolidColorBrush(Color.FromRgb(0x16, 0x16, 0x16))))
+                {
+                    DataContext = _shell.ColorThemeEditor,
+                };
                 _editorWin.Closing += async (_, ev) =>
                 {
                     if (_shuttingDown) return;
@@ -1033,7 +1201,17 @@ public sealed partial class MainWindow : Window
         {
             if (_watermarkEditorWin == null)
             {
-                _watermarkEditorWin = new WatermarkEditorView { DataContext = _shell.WatermarkEditor };
+                _watermarkEditorWin = new PanelHostWindow(
+                    new WatermarkEditorView(),
+                    new PanelHostOptions(
+                        "Watermark Editor",
+                        Width: 640, Height: 640, MinWidth: 520, MinHeight: 500,
+                        SizeToContentHeight: false, CanResize: true, ShowInTaskbar: true,
+                        StartupLocation: WindowStartupLocation.CenterOwner,
+                        Background: new SolidColorBrush(Color.FromRgb(0x16, 0x16, 0x16))))
+                {
+                    DataContext = _shell.WatermarkEditor,
+                };
                 _watermarkEditorWin.Closing += (_, ev) =>
                 {
                     if (_shuttingDown) return;
@@ -1060,7 +1238,17 @@ public sealed partial class MainWindow : Window
         {
             if (_animationEditorWin == null)
             {
-                _animationEditorWin = new AnimationEditorView { DataContext = _shell.AnimationEditor };
+                _animationEditorWin = new PanelHostWindow(
+                    new AnimationEditorView(),
+                    new PanelHostOptions(
+                        "Animation Editor",
+                        Width: 780, Height: 700, MinWidth: 640, MinHeight: 560,
+                        SizeToContentHeight: false, CanResize: true, ShowInTaskbar: true,
+                        StartupLocation: WindowStartupLocation.CenterOwner,
+                        Background: new SolidColorBrush(Color.FromRgb(0x16, 0x16, 0x16))))
+                {
+                    DataContext = _shell.AnimationEditor,
+                };
                 _animationEditorWin.Closing += (_, ev) =>
                 {
                     if (_shuttingDown) return;
@@ -1080,6 +1268,43 @@ public sealed partial class MainWindow : Window
         }
     }
 
+    private void SyncSceneEditor()
+    {
+        if (_shell == null) return;
+        if (_shell.IsSceneEditorVisible && _shell.SceneEditor != null)
+        {
+            if (_sceneEditorWin == null)
+            {
+                _sceneEditorWin = new PanelHostWindow(
+                    new SceneEditorView(),
+                    new PanelHostOptions(
+                        "Scene Editor",
+                        Width: 900, Height: 760, MinWidth: 720, MinHeight: 580,
+                        SizeToContentHeight: false, CanResize: true, ShowInTaskbar: true,
+                        StartupLocation: WindowStartupLocation.CenterOwner,
+                        Background: new SolidColorBrush(Color.FromRgb(0x16, 0x16, 0x16))))
+                {
+                    DataContext = _shell.SceneEditor,
+                };
+                _sceneEditorWin.Closing += (_, ev) =>
+                {
+                    if (_shuttingDown) return;
+                    ev.Cancel = true;
+                    if (_shell != null) _shell.IsSceneEditorVisible = false;
+                };
+            }
+            else if (_sceneEditorWin.DataContext != _shell.SceneEditor)
+            {
+                _sceneEditorWin.DataContext = _shell.SceneEditor;
+            }
+            if (!_sceneEditorWin.IsVisible) _sceneEditorWin.Show(this);
+        }
+        else
+        {
+            _sceneEditorWin?.Hide();
+        }
+    }
+
     private void SyncRegionEditor()
     {
         if (_shell == null) return;
@@ -1087,7 +1312,17 @@ public sealed partial class MainWindow : Window
         {
             if (_regionEditorWin == null)
             {
-                _regionEditorWin = new RegionEditorView { DataContext = _shell.RegionEditor };
+                _regionEditorWin = new PanelHostWindow(
+                    new RegionEditorView(),
+                    new PanelHostOptions(
+                        "Region Editor",
+                        Width: 560, Height: 520, MinWidth: 460, MinHeight: 420,
+                        SizeToContentHeight: false, CanResize: true, ShowInTaskbar: true,
+                        StartupLocation: WindowStartupLocation.CenterOwner,
+                        Background: new SolidColorBrush(Color.FromRgb(0x16, 0x16, 0x16))))
+                {
+                    DataContext = _shell.RegionEditor,
+                };
                 _regionEditorWin.Closing += (_, ev) =>
                 {
                     if (_shuttingDown) return;
@@ -1116,7 +1351,17 @@ public sealed partial class MainWindow : Window
         {
             if (_assetManagerWin == null)
             {
-                _assetManagerWin = new AssetManagerView { DataContext = _shell.AssetManager };
+                _assetManagerWin = new PanelHostWindow(
+                    new AssetManagerView(),
+                    new PanelHostOptions(
+                        "Asset Manager",
+                        Width: 820, Height: 540, MinWidth: 640, MinHeight: 380,
+                        SizeToContentHeight: false, CanResize: true, ShowInTaskbar: true,
+                        StartupLocation: WindowStartupLocation.CenterOwner,
+                        Background: new SolidColorBrush(Color.FromRgb(0x16, 0x16, 0x16))))
+                {
+                    DataContext = _shell.AssetManager,
+                };
                 _assetManagerWin.Closing += (_, ev) =>
                 {
                     if (_shuttingDown) return;
@@ -1143,7 +1388,17 @@ public sealed partial class MainWindow : Window
         {
             if (_helpWin == null)
             {
-                _helpWin = new FloatingHelpView { DataContext = _shell.Help };
+                _helpWin = new PanelHostWindow(
+                    new FloatingHelpView(),
+                    new PanelHostOptions(
+                        "Help",
+                        Width: 720, Height: 780, MinWidth: 520, MinHeight: 420,
+                        SizeToContentHeight: false, CanResize: true, ShowInTaskbar: true,
+                        StartupLocation: WindowStartupLocation.CenterScreen,
+                        Background: new SolidColorBrush(Color.FromRgb(0x16, 0x16, 0x16))))
+                {
+                    DataContext = _shell.Help,
+                };
                 _helpWin.Closing += (_, ev) =>
                 {
                     if (_shuttingDown) return;
@@ -1170,7 +1425,16 @@ public sealed partial class MainWindow : Window
         {
             if (_ffClientWin == null)
             {
-                _ffClientWin = new FFClientView { DataContext = _shell.FFClient };
+                _ffClientWin = new PanelHostWindow(
+                    new FFClientView(),
+                    new PanelHostOptions(
+                        "FracturingFog — Remote Client",
+                        Width: 720, Height: 780, MinWidth: 600, MinHeight: 600,
+                        SizeToContentHeight: false, CanResize: true, ShowInTaskbar: true,
+                        Background: new SolidColorBrush(Color.FromRgb(0x17, 0x17, 0x17))))
+                {
+                    DataContext = _shell.FFClient,
+                };
                 _ffClientWin.Closing += (_, ev) =>
                 {
                     if (_shuttingDown) return;
@@ -1197,7 +1461,19 @@ public sealed partial class MainWindow : Window
         {
             if (_serverAdminWin == null)
             {
-                _serverAdminWin = new ServerAdminView { DataContext = _shell.ServerAdmin };
+                var vm = _shell.ServerAdmin;
+                _serverAdminWin = new PanelHostWindow(
+                    new ServerAdminView(),
+                    new PanelHostOptions(
+                        "FracturingFog — Server Admin",
+                        Width: 560, Height: 680, MinWidth: 480, MinHeight: 480,
+                        SizeToContentHeight: false, CanResize: true, ShowInTaskbar: true,
+                        Background: new SolidColorBrush(Color.FromRgb(0x17, 0x17, 0x17))))
+                {
+                    DataContext = vm,
+                };
+                _serverAdminWin.Opened += (_, _) => { _ = vm.PollOnceAsync(); vm.StartPolling(); };
+                _serverAdminWin.Closed += (_, _) => vm.StopPolling();
                 _serverAdminWin.Closing += (_, ev) =>
                 {
                     if (_shuttingDown) return;
@@ -1224,7 +1500,19 @@ public sealed partial class MainWindow : Window
         {
             if (_clusterDashboardWin == null)
             {
-                _clusterDashboardWin = new ClusterDashboardView { DataContext = _shell.ClusterDashboard };
+                var vm = _shell.ClusterDashboard;
+                _clusterDashboardWin = new PanelHostWindow(
+                    new ClusterDashboardView(),
+                    new PanelHostOptions(
+                        "FracturingFog — Cluster Dashboard",
+                        Width: 980, Height: 640, MinWidth: 720, MinHeight: 420,
+                        SizeToContentHeight: false, CanResize: true, ShowInTaskbar: true,
+                        Background: new SolidColorBrush(Color.FromRgb(0x17, 0x17, 0x17))))
+                {
+                    DataContext = vm,
+                };
+                _clusterDashboardWin.Opened += (_, _) => { _ = vm.PollOnceAsync(); vm.StartPolling(); };
+                _clusterDashboardWin.Closed += (_, _) => vm.StopPolling();
                 _clusterDashboardWin.Closing += (_, ev) =>
                 {
                     if (_shuttingDown) return;
@@ -1251,7 +1539,19 @@ public sealed partial class MainWindow : Window
         {
             if (_jobListWin == null)
             {
-                _jobListWin = new JobListView { DataContext = _shell.JobList };
+                var vm = _shell.JobList;
+                _jobListWin = new PanelHostWindow(
+                    new JobListView(),
+                    new PanelHostOptions(
+                        "FracturingFog — Cluster Jobs",
+                        Width: 1040, Height: 640, MinWidth: 760, MinHeight: 420,
+                        SizeToContentHeight: false, CanResize: true, ShowInTaskbar: true,
+                        Background: new SolidColorBrush(Color.FromRgb(0x17, 0x17, 0x17))))
+                {
+                    DataContext = vm,
+                };
+                _jobListWin.Opened += (_, _) => { _ = vm.PollOnceAsync(); vm.StartPolling(); };
+                _jobListWin.Closed += (_, _) => vm.StopPolling();
                 _jobListWin.Closing += (_, ev) =>
                 {
                     if (_shuttingDown) return;
@@ -1278,7 +1578,19 @@ public sealed partial class MainWindow : Window
         {
             if (_jobDetailWin == null)
             {
-                _jobDetailWin = new JobDetailView { DataContext = _shell.JobDetail };
+                var vm = _shell.JobDetail;
+                _jobDetailWin = new PanelHostWindow(
+                    new JobDetailView(),
+                    new PanelHostOptions(
+                        "FracturingFog — Job Detail",
+                        Width: 780, Height: 780, MinWidth: 520, MinHeight: 540,
+                        SizeToContentHeight: false, CanResize: true, ShowInTaskbar: true,
+                        Background: new SolidColorBrush(Color.FromRgb(0x17, 0x17, 0x17))))
+                {
+                    DataContext = vm,
+                };
+                _jobDetailWin.Opened += (_, _) => { _ = vm.PollOnceAsync(); vm.StartPolling(); };
+                _jobDetailWin.Closed += (_, _) => vm.StopPolling();
                 _jobDetailWin.Closing += (_, ev) =>
                 {
                     if (_shuttingDown) return;
@@ -1309,7 +1621,19 @@ public sealed partial class MainWindow : Window
         {
             if (_workerDetailWin == null)
             {
-                _workerDetailWin = new WorkerDetailView { DataContext = _shell.WorkerDetail };
+                var vm = _shell.WorkerDetail;
+                _workerDetailWin = new PanelHostWindow(
+                    new WorkerDetailView(),
+                    new PanelHostOptions(
+                        "FracturingFog — Worker Detail",
+                        Width: 640, Height: 640, MinWidth: 480, MinHeight: 540,
+                        SizeToContentHeight: false, CanResize: true, ShowInTaskbar: true,
+                        Background: new SolidColorBrush(Color.FromRgb(0x17, 0x17, 0x17))))
+                {
+                    DataContext = vm,
+                };
+                _workerDetailWin.Opened += (_, _) => { _ = vm.PollOnceAsync(); vm.StartPolling(); };
+                _workerDetailWin.Closed += (_, _) => vm.StopPolling();
                 _workerDetailWin.Closing += (_, ev) =>
                 {
                     if (_shuttingDown) return;
@@ -1337,7 +1661,20 @@ public sealed partial class MainWindow : Window
         {
             if (_masterConfigWin == null)
             {
-                _masterConfigWin = new MasterConfigView { DataContext = _shell.MasterConfig };
+                // Hybrid-shell: view is a UserControl wrapped in a generic
+                // modeless host that carries the former Window chrome. Close =>
+                // hide is owned here (the VM's CloseRequested already flips
+                // IsMasterConfigVisible via ShellViewModel, routing to Hide).
+                _masterConfigWin = new PanelHostWindow(
+                    new MasterConfigView(),
+                    new PanelHostOptions(
+                        "FracturingFog — Master Config",
+                        Width: 540, Height: 600, MinWidth: 460, MinHeight: 420,
+                        SizeToContentHeight: false, CanResize: true, ShowInTaskbar: true,
+                        Background: new SolidColorBrush(Color.FromRgb(0x17, 0x17, 0x17))))
+                {
+                    DataContext = _shell.MasterConfig,
+                };
                 _masterConfigWin.Closing += (_, ev) =>
                 {
                     if (_shuttingDown) return;
@@ -1373,7 +1710,17 @@ public sealed partial class MainWindow : Window
         _miniDepthTether = null;
 
         _menuWin?.Close();
+        _controlCenterWin?.Close();
         _editorWin?.Close();
+        // Editors whose Closing handler cancels + hides (guarded by
+        // _shuttingDown) — must be force-closed here too, else they linger
+        // in Avalonia's window collection and OnLastWindowClose never fires,
+        // leaving the process alive after the main window is gone (notably
+        // after playing a Scene, which requires the Scene Editor open).
+        _watermarkEditorWin?.Close();
+        _animationEditorWin?.Close();
+        _sceneEditorWin?.Close();
+        _regionEditorWin?.Close();
         _helpWin?.Close();
         _ffClientWin?.Close();
         _serverAdminWin?.Close();
@@ -1384,6 +1731,7 @@ public sealed partial class MainWindow : Window
         _masterConfigWin?.Close();
         _miniMapWin?.Close();
         _miniDepthWin?.Close();
+        _postFxHudWin?.Close();
         _assetManagerWin?.Close();
 
         DetachShell();

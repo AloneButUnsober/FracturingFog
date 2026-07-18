@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-FileCopyrightText: 2026 Bradley Brown
+
 // Server/Logging/ClusterLogger.cs
 // Master-side NDJSON event log. One file per UTC day under
 // %APPDATA%\FracturingFog\master-logs\cluster-yyyyMMdd.log so an operator

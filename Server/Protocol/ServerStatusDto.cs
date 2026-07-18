@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-FileCopyrightText: 2026 Bradley Brown
+
 // Server/Protocol/ServerStatusDto.cs
 // Returned by the server.status RPC. Polled by the ServerAdmin dialog
 // every second while the dialog is visible.

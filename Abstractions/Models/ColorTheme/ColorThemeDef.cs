@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-FileCopyrightText: 2026 Bradley Brown
+
 // Abstractions/Models/ColorTheme/ColorThemeDef.cs
 //
 // UI-neutral mirror of the WinForms ColorThemeData hierarchy. Used by the
@@ -33,13 +36,59 @@ namespace FracturingFog.Models
         PBRBright,
     }
 
-    /// <summary>One gradient stop: position in [0,1] plus opaque RGB.</summary>
+    /// <summary>UI-neutral mirror of <c>GradientColorSpace</c> (Phase A / F1).
+    /// Member order must match the Engine enum so the adapter can cast.</summary>
+    public enum GradientColorSpaceDef
+    {
+        Srgb,
+        OkLab,
+        Hsv,
+    }
+
+    /// <summary>UI-neutral mirror of <c>ColorWrapMode</c> (Phase A / F5).</summary>
+    public enum ColorWrapModeDef
+    {
+        Repeat,
+        PingPong,
+        Clamp,
+    }
+
+    /// <summary>UI-neutral mirror of <c>InterpolationCurve</c> (Phase B / F2).</summary>
+    public enum InterpolationCurveDef
+    {
+        Linear,
+        Cosine,
+        Cubic,
+        Step,
+    }
+
+    /// <summary>UI-neutral mirror of <c>TransferFunction</c> (Phase B / F3).</summary>
+    public enum TransferFunctionDef
+    {
+        Linear,
+        Sqrt,
+        Cubic,
+        Log,
+        Sine,
+    }
+
+    /// <summary>One gradient stop: position in [0,1] plus opaque RGB. The
+    /// optional <see cref="Midpoint"/> biases the blend of the segment that
+    /// starts at this stop (Phase B / F7).</summary>
     public sealed class ColorStopDef
     {
         public float Position { get; set; }
         public byte R { get; set; }
         public byte G { get; set; }
         public byte B { get; set; }
+
+        /// <summary>Per-stop alpha (F10). 255 = opaque (default), so a def that
+        /// omits it round-trips to the historical opaque stop byte-for-byte.</summary>
+        public byte A { get; set; } = 255;
+
+        /// <summary>Segment midpoint bias in (0,1); 0.5 = linear (default).
+        /// 0 / out-of-range is treated as 0.5 by the runtime.</summary>
+        public float Midpoint { get; set; } = 0.5f;
     }
 
     /// <summary>
@@ -76,6 +125,9 @@ namespace FracturingFog.Models
         public byte R { get; set; }
         public byte G { get; set; }
         public byte B { get; set; }
+
+        /// <summary>Interior alpha (F10). 255 = opaque (default).</summary>
+        public byte A { get; set; } = 255;
     }
 
     /// <summary>
@@ -95,8 +147,28 @@ namespace FracturingFog.Models
         // ── Gradient ──────────────────────────────────────────────────────
         public List<ColorStopDef> Stops { get; set; } = new();
 
+        // ── Gradient interpolation (Phase A F1 / Phase B F2, F3) ──────────
+        /// <summary>Colour space the LUT blends stops in (F1). Default Srgb.</summary>
+        public GradientColorSpaceDef InterpolationSpace { get; set; } = GradientColorSpaceDef.Srgb;
+        /// <summary>Segment blend shape (F2). Default Linear.</summary>
+        public InterpolationCurveDef InterpolationCurve { get; set; } = InterpolationCurveDef.Linear;
+        /// <summary>Transfer curve on the mapping scalar (F3). Default Linear.</summary>
+        public TransferFunctionDef TransferFunction { get; set; } = TransferFunctionDef.Linear;
+        /// <summary>Identity↔transfer blend in [0,1] (F3). Default 1.</summary>
+        public float TransferStrength { get; set; } = 1f;
+        /// <summary>Per-theme palette gamma baked into the LUT (F6). Default 1 (neutral).</summary>
+        public float PaletteGamma { get; set; } = 1f;
+
         // ── Cycling / 3D ──────────────────────────────────────────────────
         public float CycleSpeed { get; set; } = 0.02f;
+
+        // ── Cycling phase / density / wrap (Phase A F4, F5) ───────────────
+        /// <summary>Additive phase applied to the cycling parameter (F4). Default 0.</summary>
+        public float ColorOffset { get; set; } = 0f;
+        /// <summary>Multiplies cycling frequency (F4). Default 1.</summary>
+        public float ColorDensity { get; set; } = 1f;
+        /// <summary>Boundary behaviour of the cycling parameter (F5). Default Repeat.</summary>
+        public ColorWrapModeDef WrapMode { get; set; } = ColorWrapModeDef.Repeat;
 
         // ── 3D shared (Phong + PBR) ──────────────────────────────────────
         public float Steepness { get; set; } = 1.6f;

@@ -1,0 +1,73 @@
+<Styles xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <!--
+        Shared control styles for the Fracturing Fog Avalonia shell.
+
+        These class-selector styles were previously duplicated inside
+        FloatingMenuView.axaml (and re-invented ad hoc in other dialogs). They
+        now live once, globally, merged via App.axaml. Any view can use the
+        classes below (section / label / fxLabel / group / action + fill
+        classes / coord) and get identical styling.
+
+        Token references (Brush*, ButtonMinWidth, ...) come from Tokens.axaml,
+        merged as a resource dictionary alongside these styles.
+    -->
+
+    <!-- Section header (yellow-ish accent, bold). -->
+    <Style Selector="TextBlock.section">
+        <Setter Property="Foreground" Value="{StaticResource BrushAccent}" />
+        <Setter Property="FontWeight" Value="Bold" />
+    </Style>
+
+    <!-- Right-aligned field label. -->
+    <Style Selector="TextBlock.label">
+        <Setter Property="Foreground" Value="{StaticResource BrushTextLabel}" />
+        <Setter Property="FontWeight" Value="Bold" />
+        <Setter Property="VerticalAlignment" Value="Center" />
+        <Setter Property="HorizontalAlignment" Value="Right" />
+    </Style>
+
+    <!-- Fixed-width right-aligned label used in FX rows. -->
+    <Style Selector="TextBlock.fxLabel">
+        <Setter Property="Foreground" Value="{StaticResource BrushTextLabelAlt}" />
+        <Setter Property="FontWeight" Value="Bold" />
+        <Setter Property="VerticalAlignment" Value="Center" />
+        <Setter Property="HorizontalAlignment" Value="Right" />
+        <Setter Property="Width" Value="84" />
+    </Style>
+
+    <!-- Grouping border around a labeled section. -->
+    <Style Selector="Border.group">
+        <Setter Property="BorderBrush" Value="{StaticResource BrushGroupBorder}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="CornerRadius" Value="3" />
+        <Setter Property="Padding" Value="8" />
+        <Setter Property="Margin" Value="0,0,0,8" />
+    </Style>
+
+    <!-- Action button base: uniform min width + padding so buttons no longer
+         vary dialog-to-dialog. -->
+    <Style Selector="Button.action">
+        <Setter Property="Foreground" Value="White" />
+        <Setter Property="FontWeight" Value="Bold" />
+        <Setter Property="MinWidth" Value="{StaticResource ButtonMinWidth}" />
+        <Setter Property="Padding" Value="10,4" />
+        <Setter Property="HorizontalContentAlignment" Value="Center" />
+    </Style>
+
+    <!-- Semantic fills. -->
+    <Style Selector="Button.neutral">   <Setter Property="Background" Value="{StaticResource BrushBtnNeutral}" /></Style>
+    <Style Selector="Button.go">        <Setter Property="Background" Value="{StaticResource BrushBtnGo}" /></Style>
+    <Style Selector="Button.danger">    <Setter Property="Background" Value="{StaticResource BrushBtnDanger}" /></Style>
+    <Style Selector="Button.slideshow"> <Setter Property="Background" Value="{StaticResource BrushBtnSlideshow}" /></Style>
+    <Style Selector="Button.video">     <Setter Property="Background" Value="{StaticResource BrushBtnVideo}" /></Style>
+    <Style Selector="Button.help">      <Setter Property="Background" Value="{StaticResource BrushBtnHelp}" /></Style>
+
+    <!-- Monospace right-aligned coordinate/value textbox. -->
+    <Style Selector="TextBox.coord">
+        <Setter Property="Background" Value="{StaticResource BrushInput}" />
+        <Setter Property="Foreground" Value="{StaticResource BrushTextPrimary}" />
+        <Setter Property="FontFamily" Value="Consolas, monospace" />
+        <Setter Property="TextAlignment" Value="Right" />
+    </Style>
+</Styles>

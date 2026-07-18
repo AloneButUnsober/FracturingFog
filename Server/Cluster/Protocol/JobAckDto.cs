@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-FileCopyrightText: 2026 Bradley Brown
+
 // Server/Cluster/Protocol/JobAckDto.cs
 // Master → Client, response to job.submit. Carries the assigned JobId
 // and the master's tile-plan summary so the caller knows up-front how

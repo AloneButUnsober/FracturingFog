@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-FileCopyrightText: 2026 Bradley Brown
+
 // Hosting/X11ColorSampleBridge.cs
 //
 // S-X8 (2026-06-27) — Linux X11 IColorSampleBridge. Cross-plat analogue of

@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-FileCopyrightText: 2026 Bradley Brown
+
 // Abstractions/ViewState/FractalViewState.cs
 //
 // Pure POCO holding everything the renderer needs to draw one frame of any
@@ -83,6 +86,29 @@ namespace FracturingFog.ViewState
         public const double DefaultCenterY = 0.0;
         public const double DefaultZoom = 0.13;
 
+        // ── High-precision centre accessor ────────────────────────────────────
+        // The 16 limb properties above are the storage + serialization + render
+        // contract; this pair is the typed view of them used by the interactive
+        // control path (ViewCamera). Reading gives all 8+8 limbs; writing sets
+        // all of them, so the centre is never partially updated (the historical
+        // "wrong tier branch left stale low limbs" bug class cannot occur here).
+
+        /// <summary>The view centre as a single octuple-double complex value.</summary>
+        public FFMath.DeepComplex GetCenter()
+            => FFMath.DeepComplex.FromLimbs(
+                CenterX, CenterXLo, CenterX2, CenterX3, CenterX4, CenterX5, CenterX6, CenterX7,
+                CenterY, CenterYLo, CenterY2, CenterY3, CenterY4, CenterY5, CenterY6, CenterY7);
+
+        /// <summary>Write the view centre, populating all 16 limbs from the OD
+        /// value (limbs above the current tier are the OD's own zero limbs).</summary>
+        public void SetCenter(FFMath.DeepComplex c)
+        {
+            CenterX = c.Re.X0; CenterXLo = c.Re.X1; CenterX2 = c.Re.X2; CenterX3 = c.Re.X3;
+            CenterX4 = c.Re.X4; CenterX5 = c.Re.X5; CenterX6 = c.Re.X6; CenterX7 = c.Re.X7;
+            CenterY = c.Im.X0; CenterYLo = c.Im.X1; CenterY2 = c.Im.X2; CenterY3 = c.Im.X3;
+            CenterY4 = c.Im.X4; CenterY5 = c.Im.X5; CenterY6 = c.Im.X6; CenterY7 = c.Im.X7;
+        }
+
         // ── Fractal type + per-engine parameters ──────────────────────────────
 
         public FractalType FractalType { get; set; } = FractalType.Mandelbrot;
@@ -118,8 +144,32 @@ namespace FracturingFog.ViewState
         /// <summary>Contrast adjustment in [-100, 100]; 0 = neutral.</summary>
         public int Contrast { get; set; }
 
+        /// <summary>Live image gamma in [-100, 100]; 0 = neutral. Maps to an
+        /// exponent of 2^(slider/100) (out = in^(1/gamma)), so +100 brightens
+        /// (gamma 2), -100 darkens (gamma 0.5). Applied in the post-FX upload
+        /// pass; compounds on top of any per-theme <c>PaletteGamma</c>.</summary>
+        public int Gamma { get; set; }
+
         /// <summary>Adaptive contrast (histogram eq) strength in [0, 100]; 0 = off.</summary>
         public int HistogramEq { get; set; }
+
+        /// <summary>F11: ordered-dither deband of the palette float→byte quantise
+        /// (CPU F11a + GPU F11b). Off = the plain truncate/round. Applied during
+        /// colorize, so toggling needs a fresh render, not a post-FX repaint.</summary>
+        public bool BandDither { get; set; }
+
+        /// <summary>Ordered-dither amplitude in [0, 100]; 100 = full ±0.5-LSB
+        /// spread. Only consulted when <see cref="BandDither"/> is on.</summary>
+        public int BandDitherStrength { get; set; } = 100;
+
+        /// <summary>F10.5: live per-stop alpha preview. The on-screen path is
+        /// opaque (present ignores the alpha channel; the post-FX pass forces
+        /// 0xFF), so authored translucent stops are otherwise invisible while
+        /// editing a theme. When on, the host composites the render over a
+        /// checkerboard using the authored coverage byte so A&lt;255 reads as
+        /// see-through. Display-only — saved frames + exports keep straight
+        /// alpha. Toggling needs only a post-FX repaint, not a fresh render.</summary>
+        public bool AlphaPreview { get; set; }
 
         // ── Helpers ───────────────────────────────────────────────────────────
 
@@ -222,13 +272,20 @@ namespace FracturingFog.ViewState
 
         /// <summary>True for fractal types that render in 3D camera space
         /// (camera dollies on zoom, right-drag rotates).</summary>
-        public bool Is3D => FractalType == FractalType.Mandelbulb
-                         || FractalType == FractalType.Mandelbox
-                         || FractalType == FractalType.Kifs
-                         || FractalType == FractalType.QuaternionJulia
-                         || FractalType == FractalType.QuaternionMandelbrot
-                         || FractalType == FractalType.Kleinian
-                         || FractalType == FractalType.BicomplexMandelbrot
-                         || FractalType == FractalType.UserBulb;
+        public bool Is3D => IsThreeD(FractalType);
+
+        /// <summary>Static 3D classifier — single source of truth for which
+        /// <see cref="FractalType"/> values render in 3D camera space. Used by
+        /// the instance <see cref="Is3D"/> and by UI filters (toolbar Type combo
+        /// 2D/3D sort menu) that need the classification without a view state.</summary>
+        public static bool IsThreeD(FractalType t) =>
+               t == FractalType.Mandelbulb
+            || t == FractalType.Mandelbox
+            || t == FractalType.Kifs
+            || t == FractalType.QuaternionJulia
+            || t == FractalType.QuaternionMandelbrot
+            || t == FractalType.Kleinian
+            || t == FractalType.BicomplexMandelbrot
+            || t == FractalType.UserBulb;
     }
 }

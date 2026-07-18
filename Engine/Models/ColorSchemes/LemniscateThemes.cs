@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-FileCopyrightText: 2026 Bradley Brown
+
 // Models/ColorSchemes/LemniscateThemes.cs
 //
 // Lemniscate / level-curve themes — edge detection at integer iteration
@@ -24,7 +27,7 @@ namespace FracturingFog.Models
     /// </summary>
     public sealed class LemniscateEdgeMap : IColorMap
     {
-        public static string Name => "Lemniscate — Bright Edges";
+        public static string Name => "Lemniscate - Bright Edges";
         public static string Category => "Lemniscates / Level Curves";
         public static string Description =>
             "Bright thin lines at every integer iteration boundary.  Edge-only " +
@@ -55,7 +58,7 @@ namespace FracturingFog.Models
     /// </summary>
     public sealed class LemniscateFilledMap : IColorMap
     {
-        public static string Name => "Lemniscate — Filled Bands";
+        public static string Name => "Lemniscate - Filled Bands";
         public static string Category => "Lemniscates / Level Curves";
         public static string Description =>
             "Alternating filled bands between consecutive lemniscates.  Each " +
@@ -82,7 +85,7 @@ namespace FracturingFog.Models
     /// </summary>
     public sealed class LemniscateContourMap : IColorMap
     {
-        public static string Name => "Lemniscate — Coloured Contours";
+        public static string Name => "Lemniscate - Coloured Contours";
         public static string Category => "Lemniscates / Level Curves";
         public static string Description =>
             "Coloured contour lines on dark ground.  Hue keys to iteration " +

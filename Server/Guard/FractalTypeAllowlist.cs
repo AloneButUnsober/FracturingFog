@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-FileCopyrightText: 2026 Bradley Brown
+
 // Server/Guard/FractalTypeAllowlist.cs
 // Refuses fractal types that execute user-authored code or step functions.
 // UserEquation runs C#-script-compiled expressions, Sandbox executes a

@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-FileCopyrightText: 2026 Bradley Brown
+
 using System;
 using Avalonia.Controls;
 using Avalonia.Markup.Xaml;
@@ -14,14 +17,13 @@ namespace FracturingFog.UI.Avalonia.Views;
 /// MessageRequested, CompileRequested, PromotionChanged. The view owns
 /// HelpRequested → opens HelpViewerView in-process.
 /// </summary>
-public sealed partial class SandboxView : Window
+public sealed partial class SandboxView : UserControl
 {
     private SandboxViewModel? _vm;
 
     public SandboxView()
     {
         AvaloniaXamlLoader.Load(this);
-        EscapeCloseBehavior.Attach(this);
         DataContextChanged += OnDataContextChanged;
     }
 
@@ -33,11 +35,5 @@ public sealed partial class SandboxView : Window
     }
 
     private void OnHelpRequested(string docId, string? anchor, string title)
-    {
-        var view = new HelpViewerView
-        {
-            DataContext = new HelpViewerViewModel(docId, anchor, title),
-        };
-        view.Show(this);
-    }
+        => HelpViewerLauncher.Show(TopLevel.GetTopLevel(this) as Window, docId, anchor, title);
 }

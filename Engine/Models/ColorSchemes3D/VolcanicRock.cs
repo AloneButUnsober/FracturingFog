@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-FileCopyrightText: 2026 Bradley Brown
+
 // Models/ColorSchemes/VolcanicRock.cs
 //
 // Two-light setup: a cool overhead key (simulating overcast sky) and a warm

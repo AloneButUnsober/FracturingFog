@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-FileCopyrightText: 2026 Bradley Brown
+
 // ColorGenAst.cs
 //
 // AST node types + symbol table for the ColorGen DSL. Nodes carry a CgType
@@ -189,8 +192,23 @@ public static class CgFunctions
         ["rgb"]   = new CgFnSig(3, false, CgType.Vec3, new[] { CgType.Scalar, CgType.Scalar, CgType.Scalar }),
         ["hsv"]   = new CgFnSig(3, false, CgType.Vec3, new[] { CgType.Scalar, CgType.Scalar, CgType.Scalar }),
         ["hsl"]   = new CgFnSig(3, false, CgType.Vec3, new[] { CgType.Scalar, CgType.Scalar, CgType.Scalar }),
+        // OkLab / OkLCh constructors (Phase C / F9) — perceptually uniform.
+        //   oklab(L, a, b): L in [0,1], a/b roughly [-0.4,0.4] → sRGB Vec3.
+        //   oklch(L, C, h): h in RADIANS (a = C·cos h, b = C·sin h).
+        // Both convert OkLab→linear sRGB→gamma-encoded sRGB (packer-ready).
+        ["oklab"] = new CgFnSig(3, false, CgType.Vec3, new[] { CgType.Scalar, CgType.Scalar, CgType.Scalar }),
+        ["oklch"] = new CgFnSig(3, false, CgType.Vec3, new[] { CgType.Scalar, CgType.Scalar, CgType.Scalar }),
+        // mix_oklab(va, vb, t): blend two sRGB Vec3s through OkLab — smooth
+        // mid-tones between distant hues (no muddy grey crossing).
+        ["mix_oklab"] = new CgFnSig(3, false, CgType.Vec3, new[] { CgType.Vec3, CgType.Vec3, CgType.Scalar }),
         // palette(t, c0, c1, …) — variadic vec3 stops, cyclic interpolation.
         ["palette"] = new CgFnSig(3, true, CgType.Vec3),
+        // cosine(t, a, b, c, d) — Inigo Quilez cosine palette:
+        //   colour = a + b * cos(tau * (c*t + d))
+        // a,b,c,d are Vec3 coefficient vectors; t is scalar. Standard in
+        // shader-fractal tools; produces smooth cyclic gradients with no stops.
+        ["cosine"] = new CgFnSig(5, false, CgType.Vec3,
+            new[] { CgType.Scalar, CgType.Vec3, CgType.Vec3, CgType.Vec3, CgType.Vec3 }),
         // Brightness / contrast / gamma — (Vec3, Scalar) → Vec3.
         ["brightness"] = new CgFnSig(2, false, CgType.Vec3, new[] { CgType.Vec3, CgType.Scalar }),
         ["contrast"]   = new CgFnSig(2, false, CgType.Vec3, new[] { CgType.Vec3, CgType.Scalar }),

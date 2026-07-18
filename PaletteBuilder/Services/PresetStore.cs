@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-FileCopyrightText: 2026 Bradley Brown
+
 // Services/PresetStore.cs
 //
 // File-backed persistence for ExtractionPreset and RecentFiles.

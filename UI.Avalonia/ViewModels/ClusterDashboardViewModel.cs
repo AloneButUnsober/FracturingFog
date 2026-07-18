@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-FileCopyrightText: 2026 Bradley Brown
+
 // ViewModels/ClusterDashboardViewModel.cs
 // D-5b. Polls cluster.status every 5 s through an FFAdminConnection
 // opened with the local %APPDATA%\FracturingFog\cluster-certs\admin.pfx

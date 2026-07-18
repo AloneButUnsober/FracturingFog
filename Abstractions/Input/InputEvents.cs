@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-FileCopyrightText: 2026 Bradley Brown
+
 // Abstractions/Input/InputEvents.cs
 //
 // Shell-neutral input events. Both the WinForms MainForm adapter (during

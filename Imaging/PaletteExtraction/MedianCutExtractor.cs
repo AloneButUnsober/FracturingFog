@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-FileCopyrightText: 2026 Bradley Brown
+
 // Imaging/PaletteExtraction/MedianCutExtractor.cs
 //
 // Classic Heckbert median cut. Build one big RGB box covering every

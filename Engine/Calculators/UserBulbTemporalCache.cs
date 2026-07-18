@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-FileCopyrightText: 2026 Bradley Brown
+
 // UserBulbTemporalCache.cs
 //
 // Frame-to-frame reuse for UserBulbCalculator. Two reuse modes:

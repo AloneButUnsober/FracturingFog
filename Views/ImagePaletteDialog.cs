@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-FileCopyrightText: 2026 Bradley Brown
+
 // Views/ImagePaletteDialog.cs
 //
 // Modal dialog: drag-and-drop (or browse-to-pick) an image, choose an

@@ -1,4 +1,7 @@
-﻿// Models/UserColorThemeLibrary.cs
+﻿// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-FileCopyrightText: 2026 Bradley Brown
+
+// Models/UserColorThemeLibrary.cs
 //
 // Singleton library of user-defined colour themes persisted to JSON in
 // %APPDATA%\FracturingFog\colorthemes.json.

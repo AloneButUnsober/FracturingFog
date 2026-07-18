@@ -27,6 +27,7 @@ Highlights (full menu on the index page):
 | [Regions Guide](User/Regions-Guide.md)                                               | Save, recall, and organise favourite views.                          |
 | [Capture Guide](User/Capture-Guide.md)                                               | Screenshots, posters, PNG sequences, MP4 video export.               |
 | [Slideshow + Audio-Reactive Guide](User/Slideshow-AudioReactive-Guide.md)            | Cycle regions + themes on the beat with live audio.                  |
+| [Scene Engine Guide](User/SceneEngine-UserGuide.md)                                  | Direct cinematic Scenes: timeline, flying camera, transitions, video.|
 | [Colour Theme Editor Guide](User/ColorThemeEditor-Guide.md)                          | Live palette editing with the floating editor.                       |
 | [ColorGen DSL Guide](User/ColorGen-UserGuide.md)                                     | One-line palettes in a tiny domain language.                         |
 | [CalcGen / User Equation Guide](User/CalcGen-UserGuide.md)                           | Author your own fractal formula in C# or DSL pseudo-code.            |
@@ -73,6 +74,7 @@ shipped, and where the project is going.
 | [Lighting + FX Roadmap](Lighting-FX-Roadmap.md)                            | HDR DoF, bloom, GGX importance sampling, HDRI environments.             |
 | [Fractal Expansion Roadmap](Fractal-Expansion-Roadmap.md)                  | New families (KIFS, L-systems, Apollonian, Flame, Bicomplex, …).        |
 | [Animation Roadmap](Animation-Roadmap.md)                                  | Animated `FractalParameters`, Animation asset, Animation Slideshow.     |
+| [Scene Engine Roadmap](Scene-Engine-Roadmap.md)                            | Cinematic Scenes: timeline + camera paths, resource governor, HW tiers. |
 | [CalculatorGen Roadmap](Technical/CalculatorGen-Roadmap.md)                | Perturbation + SA + DD/QD/OD + cluster-rebase pipeline.                 |
 | [Documentation Plan](Documentation-Plan.md)                                | What is still being written and how to contribute.                      |
 | [Resources & Bibliography](Resources-Bibliography.md)                      | Citations for every formula, algorithm, and paper referenced in code.   |

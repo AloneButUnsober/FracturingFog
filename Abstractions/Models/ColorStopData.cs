@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-FileCopyrightText: 2026 Bradley Brown
+
 // Abstractions/Models/ColorStopData.cs
 //
 // Tiny JSON-friendly DTO for a single gradient stop. Promoted to the
@@ -28,5 +31,20 @@ namespace FracturingFog.Models
         public byte R { get; set; }
         public byte G { get; set; }
         public byte B { get; set; }
+
+        /// <summary>Per-stop alpha (F10). 255 = opaque (default), so a theme that
+        /// omits it stays byte-identical to the pre-alpha behaviour. Carried
+        /// through the gradient LUT's 4th lane; the render/export compositing
+        /// consumers that actually honour sub-255 alpha land in later F10 phases.</summary>
+        public byte A { get; set; } = 255;
+
+        /// <summary>
+        /// Segment midpoint bias in (0,1) for the gradient segment that
+        /// <em>starts</em> at this stop (Phase B / F7). 0.5 = linear (default);
+        /// smaller pushes the halfway colour toward this stop, larger toward the
+        /// next. 0 or out-of-range is treated as 0.5 so legacy themes are
+        /// unaffected.
+        /// </summary>
+        public float Midpoint { get; set; } = 0.5f;
     }
 }

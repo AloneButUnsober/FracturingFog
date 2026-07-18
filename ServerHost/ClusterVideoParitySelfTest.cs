@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-FileCopyrightText: 2026 Bradley Brown
+
 // ServerHost/ClusterVideoParitySelfTest.cs
 // D-4 exit criterion: render a short zoom two ways, prove the cluster
 // path's frames are bit-identical to the single-server path AND the

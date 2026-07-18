@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-FileCopyrightText: 2026 Bradley Brown
+
 // Hosting/AvaloniaShellBootstrap.cs
 //
 // Replaces the proof-of-life AvaloniaBootstrap from Phase 2.1. Wires the
@@ -31,7 +34,10 @@ using Avalonia.Controls;
 using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Input;
 using Avalonia.Input.Platform;
+using Avalonia.Media;
 using Avalonia.Threading;
+
+using FracturingFog.UI.Avalonia.Services;
 
 using FracturingFog.Abstractions;
 using FracturingFog.Audio;
@@ -75,13 +81,24 @@ namespace FracturingFog.Hosting
         private static ShellViewModel? s_shell;
         private static IGpuSurface? s_surface;
         private static HostColorThemeService? s_themeService;
-        private static FractalParamsView? s_paramsWin;
+        // Hybrid-shell: the feature views are UserControls wrapped in a generic
+        // PanelHostWindow (chrome + close). These modeless editors are
+        // close-and-destroy (Closed => field null; reopen builds fresh), unlike
+        // the hide-on-close MainWindow Sync* windows.
+        private static PanelHostWindow? s_paramsWin;
+
+        // S2 — standalone Volumetric Lighting & FX panel. Independent of the
+        // Fractal Params window: its own FractalParamsViewModel over the shared
+        // ViewState, and because LightingFxData is type-independent it stays open
+        // across fractal-type changes (unlike s_paramsWin, which is retyped/
+        // reopened on type change). Toggle-close, close-and-destroy.
+        private static PanelHostWindow? s_lightingFxWin;
 
         // Dedicated source-compiled editors (one window each, modeless).
-        private static UserEquationView? s_userEqWin;
-        private static SandboxView? s_sandboxWin;
-        private static UserBulbView? s_userBulbWin;
-        private static ColorGenEditorView? s_colorGenWin;
+        private static PanelHostWindow? s_userEqWin;
+        private static PanelHostWindow? s_sandboxWin;
+        private static PanelHostWindow? s_userBulbWin;
+        private static PanelHostWindow? s_colorGenWin;
         private static DispatcherTimer? s_userBulbAnimTimer;
 
         // Audio-reactive backend — lazily created on first audio-reactive
@@ -429,6 +446,10 @@ namespace FracturingFog.Hosting
             // combo, and the Animation slideshow's picker all see zero
             // animations (built-in seed included).
             try { AnimationLibrary.Instance.Load(); }      catch { }
+            // Scene Engine Roadmap S5 — warm the scene library so the Asset
+            // Manager's Scenes node and the Scene Editor's Load combo see the
+            // built-in demos + any saved scenes on first open.
+            try { SceneLibrary.Instance.Load(); }          catch { }
 
             // ── View model tree ──────────────────────────────────────────
             s_shell = new ShellViewModel(s_renderHost, s_input, themeService, helpProvider, PaletteService,
@@ -692,6 +713,75 @@ namespace FracturingFog.Hosting
                     args.Saved = false;
                     args.ErrorMessage = ex.Message;
                     Console.Error.WriteLine($"[AvaloniaShellBootstrap] Save failed: {ex.Message}");
+                }
+                finally
+                {
+                    args.Completion.TrySetResult(true);
+                }
+            };
+
+            // ── Export Scene… (Scene Engine S8 polish) ───────────────────
+            //
+            // The Scene Editor can't touch the Engine's SceneVideoRenderer
+            // (UI.Avalonia stays Engine-free), so it hands the built SceneData +
+            // export knobs here. Pick an output path, run the frame-locked
+            // offline render on a background thread (one calculator live at a
+            // time -> inside the ~90% cap), then report the outcome. ffmpeg
+            // missing -> the render keeps a recoverable PNG sequence.
+            shell.ExportSceneRequested += async (_, args) =>
+            {
+                try
+                {
+                    var s = args.Settings;
+                    var preset = s.Encode switch
+                    {
+                        SceneExportEncode.LosslessH264 => FracturingFog.FfmpegEncoder.Preset.LosslessH264Mp4,
+                        SceneExportEncode.Ffv1         => FracturingFog.FfmpegEncoder.Preset.Ffv1Mkv,
+                        _                              => FracturingFog.FfmpegEncoder.Preset.HighQualityH264Mp4,
+                    };
+                    string ext = FracturingFog.FfmpegEncoder.DefaultExtensionFor(preset);
+                    string filter = ext == "mkv"
+                        ? "Matroska Video (*.mkv)|*.mkv"
+                        : "MP4 Video (*.mp4)|*.mp4";
+                    string suggested = SanitizeFileStem(args.Scene.Name) + "." + ext;
+
+                    string? path = await AvaloniaDialogs.PickSaveFileAsync("Export Scene", suggested, filter);
+                    if (string.IsNullOrEmpty(path)) return; // cancelled
+
+                    if (!FracturingFog.FfmpegEncoder.IsAvailable())
+                        await AvaloniaDialogs.ShowMessageAsync("Export Scene",
+                            "ffmpeg was not found, so the video can't be encoded. The rendered PNG frame " +
+                            "sequence will be kept instead — you can encode it later.", false);
+
+                    var opts = new FracturingFog.Export.SceneVideoOptions
+                    {
+                        Width = s.Width,
+                        Height = s.Height,
+                        Encode = preset,
+                        OutputPath = path,
+                        Settings = new FracturingFog.Abstractions.Animation.SceneRenderSettings
+                        {
+                            Fps = s.Fps,
+                            MotionBlurSubframes = s.MotionBlurSubframes,
+                            ShutterFraction = s.ShutterFraction,
+                        },
+                    };
+
+                    var result = await Task.Run(() =>
+                        FracturingFog.Export.SceneVideoRenderer.Render(args.Scene, opts));
+
+                    string msg = result.Ok
+                        ? (!string.IsNullOrEmpty(result.VideoPath)
+                            ? $"Scene exported ({result.FramesWritten} frames):\n{result.VideoPath}"
+                            : $"Frames rendered ({result.FramesWritten}):\n{result.FrameFolder}")
+                        : (result.Message ?? "Scene export failed.");
+                    await AvaloniaDialogs.ShowMessageAsync("Export Scene", msg, false);
+                }
+                catch (Exception ex)
+                {
+                    try { await AvaloniaDialogs.ShowMessageAsync("Export Scene", "Export failed: " + ex.Message, false); }
+                    catch { /* dialog itself failed — logged below */ }
+                    Console.Error.WriteLine($"[AvaloniaShellBootstrap] Scene export failed: {ex.Message}");
                 }
                 finally
                 {
@@ -1163,21 +1253,16 @@ namespace FracturingFog.Hosting
 
                     // Re-use the Poster watermark plumbing so wallpaper output
                     // honours the current region/theme watermark + the custom
-                    // override toggle, matching what Poster does.
-                    string watermark = !string.IsNullOrEmpty(s_renderHost.RegionName)
-                        ? s_renderHost.RegionName!
-                        : "Fracturing Fog";
-                    if (!string.IsNullOrEmpty(s_renderHost.ThemeName))
-                        watermark += " - " + s_renderHost.ThemeName;
-                    string subText = $"Fracturing Fog {DateTime.Now.Year}";
-
+                    // override toggle, matching what Poster does. The top-line
+                    // and program/version sub-line are composed by
+                    // CreatePosterRequest off the render host's own state — the
+                    // shell does not get to spell them out.
                     var customWm = shell.Main.UseCustomWatermark
                         ? UserWatermarkStore.Instance.GetByName(shell.Main.SelectedCustomWatermarkName)
                         : null;
 
                     var req = s_renderHost.CreatePosterRequest(
-                        wpW, wpH, rotate: false,
-                        path, format, watermark, subText, customWm);
+                        wpW, wpH, rotate: false, path, format, customWm);
 
                     try
                     {
@@ -1496,19 +1581,12 @@ namespace FracturingFog.Hosting
                         _ => FracturingFog.Imaging.ImageFileFormat.Png,
                     };
 
-                    string watermark = !string.IsNullOrEmpty(s_renderHost.RegionName)
-                        ? s_renderHost.RegionName!
-                        : "Fracturing Fog";
-                    if (!string.IsNullOrEmpty(s_renderHost.ThemeName))
-                        watermark += " - " + s_renderHost.ThemeName;
-                    string subText = $"Fracturing Fog {DateTime.Now.Year}";
-
                     var customWm = dims.Value.UseCustomWatermark
                         ? UserWatermarkStore.Instance.GetByName(dims.Value.WatermarkName)
                         : null;
                     var req = s_renderHost.CreatePosterRequest(
                         dims.Value.Width, dims.Value.Height, rotate: dims.Value.Portrait,
-                        path, format, watermark, subText, customWm);
+                        path, format, customWm);
 
                     try
                     {
@@ -1613,13 +1691,69 @@ namespace FracturingFog.Hosting
                     var host = s_renderHost!;
                     host.FrameCompleted += onFrame;
 
-                    var win = new FractalParamsView { DataContext = vm };
+                    var win = new PanelHostWindow(
+                        new FractalParamsView(),
+                        new PanelHostOptions(
+                            string.IsNullOrEmpty(vm.Title) ? "Fractal Params" : vm.Title,
+                            Width: 400, MinWidth: 320,
+                            SizeToContentHeight: true, CanResize: false, ShowInTaskbar: true,
+                            StartupLocation: WindowStartupLocation.CenterOwner,
+                            Background: new SolidColorBrush(Color.FromRgb(0x28, 0x28, 0x28))))
+                    {
+                        DataContext = vm,
+                    };
                     win.Closed += (_, _) =>
                     {
                         host.FrameCompleted -= onFrame;
                         s_paramsWin = null;
                     };
                     s_paramsWin = win;
+
+                    var owner = AvaloniaDialogs.ActiveMainWindow;
+                    if (owner != null) win.Show(owner);
+                    else win.Show();
+                });
+            };
+
+            // ── Standalone Volumetric Lighting & FX (S2) ─────────────────
+            //
+            // Surfaces the Lighting/FX block on its own so it isn't buried
+            // inside Fractal Params. Its own FractalParamsViewModel over the
+            // shared ViewState.FractalParameters — the LightingFxData partial
+            // reads/writes _p.Lighting, which every fractal type shares, so the
+            // panel is type-independent and needs no close/reopen on type
+            // change (the type-change handler above leaves s_lightingFxWin
+            // untouched). Toggle-close on repeated invocation.
+            shell.LightingFxRequested += (_, _) =>
+            {
+                Dispatcher.UIThread.Post(() =>
+                {
+                    if (s_renderHost == null) return;
+
+                    if (s_lightingFxWin != null)
+                    {
+                        try { s_lightingFxWin.Close(); } catch { }
+                        s_lightingFxWin = null;
+                        return;
+                    }
+
+                    var vs = s_renderHost.ViewState;
+                    var vm = new FractalParamsViewModel(vs.FractalType, vs.FractalParameters);
+                    vm.ParamChanged += () => s_renderHost?.Trigger();
+
+                    var win = new PanelHostWindow(
+                        new LightingFxDialog(),
+                        new PanelHostOptions(
+                            "Volumetric Lighting & FX",
+                            Width: 520, Height: 720, MinWidth: 440, MinHeight: 400,
+                            SizeToContentHeight: false, CanResize: true, ShowInTaskbar: true,
+                            StartupLocation: WindowStartupLocation.CenterOwner,
+                            Background: new SolidColorBrush(Color.FromRgb(0x28, 0x28, 0x28))))
+                    {
+                        DataContext = vm,
+                    };
+                    win.Closed += (_, _) => s_lightingFxWin = null;
+                    s_lightingFxWin = win;
 
                     var owner = AvaloniaDialogs.ActiveMainWindow;
                     if (owner != null) win.Show(owner);
@@ -1729,6 +1863,44 @@ namespace FracturingFog.Hosting
                 });
             };
 
+            // Per-editor JSON import (Scenes / Animations / Watermarks). Same
+            // shape as the bundle import above — picker, one up-front overwrite
+            // prompt, then the shell routes every entry through the kind's own
+            // asset source — but scoped to the editor's single kind.
+            shell.AssetJsonImportRequested += (_, args) =>
+            {
+                Dispatcher.UIThread.Post(async () =>
+                {
+                    try
+                    {
+                        string? path = await AvaloniaDialogs.PickOpenFileAsync(
+                            args.Title,
+                            "JSON File (*.json)|*.json|All files (*.*)|*");
+                        if (string.IsNullOrEmpty(path)) return;
+
+                        var choice = await AvaloniaDialogs.ShowMessageAsync(
+                            args.Title,
+                            "Overwrite assets that already exist?\n\n" +
+                            "Yes — replace matching saved assets with the file's.\n" +
+                            "No — keep your existing assets and skip those names.",
+                            expectsConfirmation: true);
+                        bool overwrite = choice == AvaloniaDialogs.MessageResult.Yes;
+
+                        string json = await System.IO.File.ReadAllTextAsync(path);
+                        var summary = shell.ImportAssetsFromJson(args.Kind, json, overwrite);
+
+                        await AvaloniaDialogs.ShowMessageAsync(
+                            args.Title, summary.Describe(), expectsConfirmation: false);
+                    }
+                    catch (Exception ex)
+                    {
+                        Console.Error.WriteLine($"[AvaloniaShellBootstrap] Asset JSON import failed: {ex.Message}");
+                        await AvaloniaDialogs.ShowMessageAsync(
+                            args.Title, "Import failed:\n" + ex.Message, expectsConfirmation: false);
+                    }
+                });
+            };
+
             // Recording finished — the engine has finalised the temp MP4 and/or
             // PNG sequence. On success, prompt for save destinations; on cancel
             // or fault, discard the temp artefacts. Fires on a background thread
@@ -1787,6 +1959,9 @@ namespace FracturingFog.Hosting
             vm.ConfirmOverwriteRequested += name => ConfirmYesNo(
                 $"A saved equation named \"{name}\" already exists.\n\nOverwrite it?",
                 "Overwrite Equation");
+            vm.OpenFilePromptRequested += () =>
+                PickOpenSync("Import User Equations", "JSON (*.json)|*.json|All files (*.*)|*.*");
+            vm.MessageRequested += (title, body, isErr) => ShowInfo(title, body, isErr);
             vm.HotLoadRequested += (eq, baseName) =>
             {
                 try
@@ -1816,7 +1991,18 @@ namespace FracturingFog.Hosting
             {
                 var cookbookVm = new CookbookViewModel();
                 cookbookVm.Accepted += entry => vm.ApplyCookbookEntry(entry);
-                var cookbookWin = new CookbookView { DataContext = cookbookVm };
+                var cookbookWin = new PanelHostWindow(
+                    new CookbookView(),
+                    new PanelHostOptions(
+                        "Equation Cookbook",
+                        Width: 720, Height: 520, MinWidth: 520, MinHeight: 380,
+                        SizeToContentHeight: false, CanResize: true, ShowInTaskbar: true,
+                        StartupLocation: WindowStartupLocation.CenterOwner,
+                        Background: new SolidColorBrush(Color.FromRgb(0x1C, 0x1C, 0x1C))))
+                {
+                    DataContext = cookbookVm,
+                };
+                cookbookVm.CloseRequested += () => cookbookWin.Close();
                 if (s_userEqWin != null) cookbookWin.Show(s_userEqWin);
                 else ShowEditor(cookbookWin);
             };
@@ -1904,7 +2090,18 @@ namespace FracturingFog.Hosting
                 // the process. Flush on close once we've cleared the alt slot.
                 FracturingFog.CalculatorGen.CalculatorGenHotLoad.KeepContexts = true;
 
-                var morphWin = new EquationMorphView { DataContext = morphVm };
+                var morphWin = new PanelHostWindow(
+                    new EquationMorphView(),
+                    new PanelHostOptions(
+                        "Equation Morph",
+                        Width: 760, Height: 600, MinWidth: 560, MinHeight: 460,
+                        SizeToContentHeight: false, CanResize: true, ShowInTaskbar: true,
+                        StartupLocation: WindowStartupLocation.CenterOwner,
+                        Background: new SolidColorBrush(Color.FromRgb(0x1C, 0x1C, 0x1C))))
+                {
+                    DataContext = morphVm,
+                };
+                morphVm.CloseRequested += () => morphWin.Close();
                 morphWin.Closed += (_, _) =>
                 {
                     try { s_renderHost?.SetDynamicAltCalculator(null); }
@@ -1945,7 +2142,17 @@ namespace FracturingFog.Hosting
                 }
             };
 
-            var win = new UserEquationView { DataContext = vm };
+            var win = new PanelHostWindow(
+                new UserEquationView(),
+                new PanelHostOptions(
+                    "User Equation",
+                    Width: 700, Height: 680, MinWidth: 460, MinHeight: 480,
+                    SizeToContentHeight: false, CanResize: true, ShowInTaskbar: true,
+                    StartupLocation: WindowStartupLocation.CenterOwner,
+                    Background: new SolidColorBrush(Color.FromRgb(0x28, 0x28, 0x28))))
+            {
+                DataContext = vm,
+            };
             win.Closed += (_, _) => s_userEqWin = null;
             s_userEqWin = win;
 
@@ -1976,7 +2183,17 @@ namespace FracturingFog.Hosting
                 PickOpenSync("Import Sandbox Equations", "JSON (*.json)|*.json|All files (*.*)|*.*");
             vm.MessageRequested += (title, body, isErr) => ShowInfo(title, body, isErr);
 
-            var win = new SandboxView { DataContext = vm };
+            var win = new PanelHostWindow(
+                new SandboxView(),
+                new PanelHostOptions(
+                    "Sandbox Equation",
+                    Width: 760, Height: 520, MinWidth: 520, MinHeight: 400,
+                    SizeToContentHeight: false, CanResize: true, ShowInTaskbar: true,
+                    StartupLocation: WindowStartupLocation.CenterOwner,
+                    Background: new SolidColorBrush(Color.FromRgb(0x28, 0x28, 0x28))))
+            {
+                DataContext = vm,
+            };
             win.Closed += (_, _) => s_sandboxWin = null;
             s_sandboxWin = win;
 
@@ -2054,7 +2271,17 @@ namespace FracturingFog.Hosting
             timer.Start();
             s_userBulbAnimTimer = timer;
 
-            var win = new UserBulbView { DataContext = vm };
+            var win = new PanelHostWindow(
+                new UserBulbView(),
+                new PanelHostOptions(
+                    "User Bulb (3D)",
+                    Width: 1280, Height: 940, MinWidth: 980, MinHeight: 700,
+                    SizeToContentHeight: false, CanResize: true, ShowInTaskbar: true,
+                    StartupLocation: WindowStartupLocation.CenterOwner,
+                    Background: new SolidColorBrush(Color.FromRgb(0x28, 0x28, 0x28))))
+            {
+                DataContext = vm,
+            };
             win.Closed += (_, _) =>
             {
                 timer.Stop();
@@ -2145,7 +2372,17 @@ namespace FracturingFog.Hosting
                 }
             };
 
-            var win = new ColorGenEditorView { DataContext = vm };
+            var win = new PanelHostWindow(
+                new ColorGenEditorView(),
+                new PanelHostOptions(
+                    "ColorGen Editor",
+                    Width: 720, Height: 600, MinWidth: 520, MinHeight: 420,
+                    SizeToContentHeight: false, CanResize: true, ShowInTaskbar: true,
+                    StartupLocation: WindowStartupLocation.CenterOwner,
+                    Background: new SolidColorBrush(Color.FromRgb(0x28, 0x28, 0x28))))
+            {
+                DataContext = vm,
+            };
             win.Closed += (_, _) => s_colorGenWin = null;
             s_colorGenWin = win;
 
@@ -2548,7 +2785,15 @@ namespace FracturingFog.Hosting
         private static void RenderMiniMapAsync(ShellViewModel shell)
         {
             if (shell == null) return;
-            var type = shell.Main.ViewState.FractalType;
+            // Read the committed combo selection, NOT ViewState.FractalType.
+            // This handler is invoked synchronously from the
+            // SelectedFractalType PropertyChanged, which RaiseAndSetIfChanged
+            // raises BEFORE the setter assigns ViewState.FractalType — so
+            // ViewState.FractalType is still the PREVIOUS type at this point
+            // (the "minimap lags fractal-type change by one" bug, issue #29).
+            // SelectedFractalType is already updated; the other call sites
+            // (visibility toggle, ColorMapChanged) have both in sync anyway.
+            var type = shell.Main.SelectedFractalType;
             if (!FracturingFog.Models.MiniMapDefaults.IsSupported(type)) return;
             if (s_renderHost == null) return;
 
@@ -2717,6 +2962,24 @@ namespace FracturingFog.Hosting
         //     _i{Iterations}_{W}x{H}[_wallpaper|_poster[_portrait]].{ext}
         // Spaces and characters invalid on Windows or Linux pathnames are
         // stripped. Region / theme tokens are omitted when empty.
+        /// <summary>Strip filesystem-invalid characters (and spaces) from a name
+        /// so it can seed a save-dialog filename. Falls back to a generic stem
+        /// when nothing usable remains.</summary>
+        private static string SanitizeFileStem(string? name)
+        {
+            if (string.IsNullOrWhiteSpace(name)) return "Scene";
+            var invalid = System.IO.Path.GetInvalidFileNameChars();
+            var sb = new System.Text.StringBuilder(name!.Length);
+            foreach (char c in name)
+            {
+                if (c == ' ') { sb.Append('_'); continue; }
+                if (Array.IndexOf(invalid, c) >= 0 || c < 0x20) continue;
+                sb.Append(c);
+            }
+            string s = sb.ToString().Trim('_');
+            return s.Length == 0 ? "Scene" : s;
+        }
+
         private static string BuildSuggestedFileName(
             string defaultExt,
             int? imageWidth = null,

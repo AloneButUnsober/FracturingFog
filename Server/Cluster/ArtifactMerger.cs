@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-FileCopyrightText: 2026 Bradley Brown
+
 // Server/Cluster/ArtifactMerger.cs
 // Owns the merge buffer for a single image job. Each tile delivery
 // decodes the tile (via injected IClusterImageCodec) into BGRA and

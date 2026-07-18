@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-FileCopyrightText: 2026 Bradley Brown
+
 // Server/Protocol/ErrorDto.cs
 // Error payload returned in MessageEnvelope.Error when a request fails.
 // Codes are short kebab-case strings the client can match on.

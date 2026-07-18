@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-FileCopyrightText: 2026 Bradley Brown
+
 // Batch/ConsoleProgress.cs
 // Single-line CR-overwrite progress bar with percent + ETA. Safe to call
 // many times per second; throttles redraws to ~20 Hz so we don't drown the

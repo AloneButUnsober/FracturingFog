@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-FileCopyrightText: 2026 Bradley Brown
+
 // ViewModels/FloatingMenuViewModel.cs
 //
 // Avalonia port of the legacy WinForms FloatingMenu — the main floating
@@ -70,6 +73,7 @@ public sealed class FloatingMenuViewModel : ViewModelBase
         ToggleAdaptiveSweepCommand = ReactiveCommand.Create(ToggleAdaptiveSweep);
         EditWatermarkCommand    = MakeCmd(() => EditWatermarkClick?.Invoke(this, EventArgs.Empty));
         EditAnimationCommand    = MakeCmd(() => EditAnimationClick?.Invoke(this, EventArgs.Empty));
+        EditSceneCommand        = MakeCmd(() => EditSceneClick?.Invoke(this, EventArgs.Empty));
         FfmpegSetupCommand      = MakeCmd(() => FfmpegSetupClick?.Invoke(this, EventArgs.Empty));
         AppDataLocationCommand  = MakeCmd(() => AppDataLocationClick?.Invoke(this, EventArgs.Empty));
     }
@@ -545,6 +549,66 @@ public sealed class FloatingMenuViewModel : ViewModelBase
     }
     public string AdaptiveLabel => $"Adaptive: {Adaptive}";
 
+    private int _gamma;
+    /// <summary>Live image gamma in [-100, 100]; 0 = neutral. No theme default
+    /// (themes carry their own baked <c>PaletteGamma</c>), so there is no lock
+    /// checkbox — this is a pure viewing adjustment. Raises
+    /// <see cref="GammaSlide"/> for ShellViewModel to forward to MainViewModel.</summary>
+    public int Gamma
+    {
+        get => _gamma;
+        set
+        {
+            int v = Math.Clamp(value, -100, 100);
+            this.RaiseAndSetIfChanged(ref _gamma, v);
+            this.RaisePropertyChanged(nameof(GammaLabel));
+            GammaSlide?.Invoke(this, v);
+        }
+    }
+    public string GammaLabel => $"Gamma: {Gamma}";
+
+    private bool _bandDither;
+    /// <summary>F11 deband toggle. Raises <see cref="BandDitherToggle"/> for
+    /// ShellViewModel to forward to MainViewModel (which flips the
+    /// GradientColorMap statics + re-renders).</summary>
+    public bool BandDither
+    {
+        get => _bandDither;
+        set
+        {
+            this.RaiseAndSetIfChanged(ref _bandDither, value);
+            BandDitherToggle?.Invoke(this, value);
+        }
+    }
+
+    private int _bandDitherStrength = 100;
+    /// <summary>Deband amplitude in [0,100]; 100 = full ±0.5-LSB. Raises
+    /// <see cref="BandDitherStrengthSlide"/>.</summary>
+    public int BandDitherStrength
+    {
+        get => _bandDitherStrength;
+        set
+        {
+            int v = Math.Clamp(value, 0, 100);
+            this.RaiseAndSetIfChanged(ref _bandDitherStrength, v);
+            BandDitherStrengthSlide?.Invoke(this, v);
+        }
+    }
+
+    private bool _alphaPreview;
+    /// <summary>F10.5 live alpha preview toggle. Raises
+    /// <see cref="AlphaPreviewToggle"/> for ShellViewModel to forward to
+    /// MainViewModel (checkerboard composite + post-FX repaint).</summary>
+    public bool AlphaPreview
+    {
+        get => _alphaPreview;
+        set
+        {
+            this.RaiseAndSetIfChanged(ref _alphaPreview, value);
+            AlphaPreviewToggle?.Invoke(this, value);
+        }
+    }
+
     private bool _brightnessLocked;
     /// <summary>Lock brightness against theme-bundle overrides. Mirrors into
     /// MainViewModel.BrightnessLocked via <see cref="BrightnessLockedChanged"/>.
@@ -795,6 +859,30 @@ public sealed class FloatingMenuViewModel : ViewModelBase
         this.RaisePropertyChanged(nameof(AdaptiveLabel));
     }
 
+    public void SetGammaSilent(int value)
+    {
+        int v = Math.Clamp(value, -100, 100);
+        if (_gamma == v) return;
+        _gamma = v;
+        this.RaisePropertyChanged(nameof(Gamma));
+        this.RaisePropertyChanged(nameof(GammaLabel));
+    }
+
+    public void SetBandDitherSilent(bool value)
+    {
+        if (_bandDither == value) return;
+        _bandDither = value;
+        this.RaisePropertyChanged(nameof(BandDither));
+    }
+
+    public void SetBandDitherStrengthSilent(int value)
+    {
+        int v = Math.Clamp(value, 0, 100);
+        if (_bandDitherStrength == v) return;
+        _bandDitherStrength = v;
+        this.RaisePropertyChanged(nameof(BandDitherStrength));
+    }
+
     // ── Toggles ──────────────────────────────────────────────────────────
 
     private bool _showStatusBar = true;
@@ -855,6 +943,21 @@ public sealed class FloatingMenuViewModel : ViewModelBase
         }
     }
 
+    // SM-2 — deep-zoom rebasing A/B toggle. Rebasing is ON by default (≈100×
+    // faster at extreme zoom, matching the QD render); this "Bypass Rebasing"
+    // toggle turns it OFF to fall back to the legacy per-pixel QD/OD path, so
+    // the checked = disabled convention matches the other Bypass toggles.
+    private bool _bypassRebasing;
+    public bool BypassRebasing
+    {
+        get => _bypassRebasing;
+        set
+        {
+            this.RaiseAndSetIfChanged(ref _bypassRebasing, value);
+            BypassRebasingToggled?.Invoke(this, value);
+        }
+    }
+
     // ── Commands ──────────────────────────────────────────────────────────
 
     public ReactiveCommand<Unit, Unit> ResetCommand { get; }
@@ -888,6 +991,8 @@ public sealed class FloatingMenuViewModel : ViewModelBase
     public ReactiveCommand<Unit, Unit> EditWatermarkCommand { get; }
     /// <summary>Animation Roadmap Phase 3c — opens the Animation Editor.</summary>
     public ReactiveCommand<Unit, Unit> EditAnimationCommand { get; }
+    /// <summary>Scene Engine Roadmap Phase S5 — opens the Scene Editor.</summary>
+    public ReactiveCommand<Unit, Unit> EditSceneCommand { get; }
     public ReactiveCommand<Unit, Unit> FfmpegSetupCommand { get; }
     public ReactiveCommand<Unit, Unit> AppDataLocationCommand { get; }
 
@@ -936,6 +1041,9 @@ public sealed class FloatingMenuViewModel : ViewModelBase
     /// <summary>Animation Roadmap Phase 3c — user clicked "Edit Animation…"
     /// in the menu. Shell opens the Animation Editor dialog.</summary>
     public event EventHandler? EditAnimationClick;
+    /// <summary>Scene Engine Roadmap Phase S5 — user clicked "Edit Scene…"
+    /// in the menu. Shell opens the Scene Editor dialog.</summary>
+    public event EventHandler? EditSceneClick;
     public event EventHandler? FfmpegSetupClick;
     public event EventHandler? AppDataLocationClick;
 
@@ -951,12 +1059,17 @@ public sealed class FloatingMenuViewModel : ViewModelBase
     public event EventHandler<int>? BrightnessSlide;
     public event EventHandler<int>? ContrastSlide;
     public event EventHandler<int>? AdaptiveSlide;
+    public event EventHandler<int>? GammaSlide;
+    public event EventHandler<bool>? BandDitherToggle;
+    public event EventHandler<int>? BandDitherStrengthSlide;
+    public event EventHandler<bool>? AlphaPreviewToggle;
 
     public event EventHandler<bool>? StatusBarToggled;
     public event EventHandler<bool>? GridToggled;
     public event EventHandler<bool>? BypassAccelerationToggled;
     public event EventHandler<bool>? BypassSeriesApproximationToggled;
     public event EventHandler<bool>? BypassDdBlaToggled;
+    public event EventHandler<bool>? BypassRebasingToggled;
 
     public event EventHandler<IterLockEventArgs>? IterLockChanged;
 }

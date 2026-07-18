@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-FileCopyrightText: 2026 Bradley Brown
+
 // Imaging/PaletteExtraction/BitmapSampler.cs
 //
 // Pull a flat byte[] of RGB pixels from an SKBitmap, optionally downsampled

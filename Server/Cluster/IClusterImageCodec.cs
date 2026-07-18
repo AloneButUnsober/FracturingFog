@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-FileCopyrightText: 2026 Bradley Brown
+
 // Server/Cluster/IClusterImageCodec.cs
 // Pixel codec boundary for the cluster merge path. The Server library
 // is UI-free and platform-free — it never references SkiaSharp directly.
