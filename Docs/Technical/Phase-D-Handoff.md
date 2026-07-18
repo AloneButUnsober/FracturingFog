@@ -16,7 +16,7 @@ and the live host gamma slider. Phase D is **planned + audited but only the
 prerequisite gate is built**. Remaining Phase D order:
 
 ```
-☑ --colorprobe gate  →  ☑ F11a (CPU deband)  →  ☐ F11b (GPU dither)  →  ☐ F10 (alpha)
+☑ --colorprobe gate  →  ☑ F11a (CPU deband)  →  ◐ F11b (GPU dither, code done / UNVERIFIED on-device)  →  ☐ F10 (alpha)
 ```
 
 ## Commit ledger (this arc, newest last)
@@ -26,7 +26,8 @@ prerequisite gate is built**. Remaining Phase D order:
 | `31c0070` | docs: re-plan Phase D after pipeline audit |
 | `82720b8` | feat: `--colorprobe` golden gate (`Engine/Diagnostics/ColorProbe.cs` + Program.cs dispatch) |
 | `b2dc48e` | docs: mark `--colorprobe` shipped in Phase D plan |
-| _(this)_ | feat: F11a CPU ordered dither (Bayer 8×8, pre-quantise, default-off) |
+| `8d5ce45` | feat: F11a CPU ordered dither (Bayer 8×8, pre-quantise, default-off) |
+| _(this)_ | feat: F11b GPU HLSL ordered dither in cg_pack_bgra (default-off, UNVERIFIED on-device) |
 
 ## Audit findings that changed the plan (do NOT re-derive)
 
@@ -98,12 +99,41 @@ per `feedback_tunable_params`) and have the render host set
 color maps (`IVectorColorMap`, the fixed HSV/Fire/etc. palettes) are procedural,
 not LUT-banded, so they are out of scope.
 
-## Next task: F11b — GPU HLSL dither
+## F11b — GPU HLSL dither (CODE DONE, UNVERIFIED on-device)
 
-Same idea on the GPU render path (`Rendering.Silk` / `Rendering.Skia` shaders),
-where deep-zoom banding is worst. Add the ordered offset before the shader's
-float→8-bit write. F11 is only "done" once F11b ships. F10 (alpha) is the last,
-widest unit — separate sign-off, behind a premultiply audit (~104 files).
+Landed in `Rendering.D3D/MandelbrotGpuKernel.cs` — the ONLY procedural GPU
+palette/quantise point. (`Rendering.Silk`'s `SilkGLRenderer` just blits the
+CPU-coloured BGRA buffer, so F11a already debands it; the D3D compute kernel is
+the only path that evaluates a palette and quantises on the GPU.)
+
+- `cg_pack_bgra(float3 c, uint px, uint py)`: adds a centred 8×8 Bayer offset
+  (`cg_bayer8`, the exact twin of `GradientColorMap.Bayer8`) to each channel
+  **before** the round, clamped to [0,255]. Gated by the cbuffer field
+  `gDitherStrength` (repurposed `_pad0`, layout unchanged at 64 B).
+- All three `cg_pack_bgra` call sites (in-set / escape / bulb-skip) now pass the
+  shader's `x`,`y`.
+- `Params.DitherStrength` is set in `Run` from the SAME statics as F11a
+  (`GradientColorMap.DitherEnabled ? .DitherStrength : 0`), so one runtime knob
+  drives CPU + GPU together. Default-off → `gDitherStrength=0` → plain round,
+  byte-identical to before.
+
+**MUST DO before sign-off:** the HLSL is compiled at *runtime* by D3DCompiler on
+a real GPU — the C# build does NOT exercise it. Nobody has run a GPU render with
+`DitherEnabled=true` yet. Verify: (1) the color-path shader still *compiles*
+(watch for a D3DCompile error on the `cg_bayer8` literal / `clamp` overloads),
+(2) default-off output is unchanged, (3) enabled output visibly debands a deep
+gradient without artefacts. This is Windows + D3D11 only.
+
+## Next task: wire the runtime toggle, then F10
+
+F11a + F11b are both **dormant** — nothing flips `GradientColorMap.DitherEnabled`
+at runtime. Next unit: an Avalonia toggle (+ optional strength slider, per
+`feedback_tunable_params`) that the render host lifts into
+`GradientColorMap.DitherEnabled` / `.DitherStrength`. That single knob lights up
+both the CPU and GPU deband and makes the on-device F11b verification possible.
+
+F10 (alpha) is the last, widest unit — separate sign-off, behind a premultiply
+audit (~104 files).
 
 ## Housekeeping / constraints
 
