@@ -293,7 +293,8 @@ That correctness work is F10.3.
   - **GPU `cg_pack_bgra` (D3D) — DEFERRED to F10.4b.** The GPU `EvalPalette`
     returns `float3` (no alpha lane); carrying stop alpha needs a ColorGen HLSL
     codegen change (float3→float4) plus buffer semantics, and only affects
-    GPU-rendered translucent-theme exports (niche). Filed as follow-up.
+    GPU-rendered translucent-theme exports (niche). Filed as
+    [issue #46](https://github.com/AloneButUnsober/MandelbrotExplorer/issues/46).
 
 ## Housekeeping / constraints
 
