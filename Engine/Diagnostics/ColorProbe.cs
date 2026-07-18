@@ -66,6 +66,8 @@ namespace FracturingFog.Diagnostics
                 return RunAlphaPngGate();
             if (args.Length > 1 && string.Equals(args[1], "pngseq", StringComparison.OrdinalIgnoreCase))
                 return RunPngSeqGate();
+            if (args.Length > 1 && string.Equals(args[1], "alphaimage", StringComparison.OrdinalIgnoreCase))
+                return RunAlphaImage(args);
 
             var report = new StringBuilder();
             report.AppendLine("colour pipeline golden probe — Phase A/B/C option matrix (F1-F9,F12)");
@@ -258,6 +260,88 @@ namespace FracturingFog.Diagnostics
                 ? "RESULT: PASS (per-stop alpha carried through the LUT)"
                 : $"RESULT: FAIL (a0={a0}, a1={a1}, monotone={monotone})");
             return ok ? 0 : 1;
+        }
+
+        // --colorprobe alphaimage [outdir]: diagnostic (NOT a gate). Produces
+        // two viewable PNGs so a human can eyeball F10 per-stop alpha end to end:
+        //   alpha_strip.png          — a translucent gradient saved through the
+        //                              real ImageExport straight-alpha path.
+        //   alpha_over_checker.png   — the same strip composited over a grey
+        //                              checkerboard (straight-alpha SrcOver) so
+        //                              the coverage ramp is visible to the eye.
+        // If alpha were being dropped or premultiplied wrongly, the checker
+        // composite would show a hard opaque band instead of a smooth fade.
+        private static int RunAlphaImage(string[] args)
+        {
+            string outDir = args.Length > 2 && !string.IsNullOrWhiteSpace(args[2])
+                ? args[2]
+                : System.IO.Path.Combine(System.IO.Path.GetTempPath(), "ff-alphaimage");
+            System.IO.Directory.CreateDirectory(outDir);
+
+            // Translucent gradient: alpha ramps 0 → 255 left→right while the hue
+            // sweeps, so both the colour and the coverage vary across the strip.
+            var data = new ColorThemeData
+            {
+                Name = "probe-alpha-image",
+                Kind = ColorThemeKind.Gradient,
+                Stops = new List<ColorStopData>
+                {
+                    new ColorStopData { Position = 0.00f, R = 250, G = 40,  B = 70,  A = 0   },
+                    new ColorStopData { Position = 0.50f, R = 60,  G = 200, B = 240, A = 128 },
+                    new ColorStopData { Position = 1.00f, R = 250, G = 230, B = 90,  A = 255 },
+                },
+            };
+            var map = DataDrivenColorThemes.Create(data);
+            if (map == null)
+            {
+                Console.WriteLine("RESULT: FAIL (alpha gradient did not create a map)");
+                return 1;
+            }
+
+            const int w = 512, h = 120;
+            var strip = new uint[w * h];
+            int minA = 255, maxA = 0;
+            for (int x = 0; x < w; x++)
+            {
+                float t = x / (float)(w - 1);
+                uint argb = unchecked((uint)map.Map(t * MaxIter, 0f, MaxIter)); // 0xAARRGGBB == BGRA in memory
+                int a = (int)((argb >> 24) & 0xFF);
+                if (a < minA) minA = a;
+                if (a > maxA) maxA = a;
+                for (int y = 0; y < h; y++) strip[y * w + x] = argb;
+            }
+
+            // Composite the strip over a grey checkerboard so translucency reads.
+            var checker = new uint[w * h];
+            const int cell = 12;
+            for (int y = 0; y < h; y++)
+                for (int x = 0; x < w; x++)
+                {
+                    uint p = strip[y * w + x];
+                    float a = ((p >> 24) & 0xFF) / 255f;
+                    int fr = (int)((p >> 16) & 0xFF), fg = (int)((p >> 8) & 0xFF), fb = (int)(p & 0xFF);
+                    bool light = (((x / cell) + (y / cell)) & 1) == 0;
+                    int bg = light ? 200 : 120;
+                    int rr = (int)(fr * a + bg * (1 - a));
+                    int gg = (int)(fg * a + bg * (1 - a));
+                    int bb = (int)(fb * a + bg * (1 - a));
+                    checker[y * w + x] = 0xFF000000u | ((uint)rr << 16) | ((uint)gg << 8) | (uint)bb;
+                }
+
+            string stripPath = System.IO.Path.Combine(outDir, "alpha_strip.png");
+            string checkPath = System.IO.Path.Combine(outDir, "alpha_over_checker.png");
+            FracturingFog.Imaging.ImageExport.SavePixelsToFile(
+                strip, w, h, stripPath, FracturingFog.Imaging.ImageFileFormat.Png,
+                (FracturingFog.Imaging.WatermarkRender?)null);
+            FracturingFog.Imaging.ImageExport.SavePixelsToFile(
+                checker, w, h, checkPath, FracturingFog.Imaging.ImageFileFormat.Png,
+                (FracturingFog.Imaging.WatermarkRender?)null);
+
+            Console.WriteLine("F10 per-stop alpha visual proof:");
+            Console.WriteLine($"  alpha range across strip = {minA}..{maxA}");
+            Console.WriteLine($"  strip  (straight alpha)  = {stripPath}");
+            Console.WriteLine($"  over checkerboard        = {checkPath}");
+            return 0;
         }
 
         // --colorprobe alphapng: TRUE gate for F10.3 straight-alpha PNG export.
