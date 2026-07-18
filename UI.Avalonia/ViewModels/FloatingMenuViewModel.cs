@@ -595,6 +595,20 @@ public sealed class FloatingMenuViewModel : ViewModelBase
         }
     }
 
+    private bool _alphaPreview;
+    /// <summary>F10.5 live alpha preview toggle. Raises
+    /// <see cref="AlphaPreviewToggle"/> for ShellViewModel to forward to
+    /// MainViewModel (checkerboard composite + post-FX repaint).</summary>
+    public bool AlphaPreview
+    {
+        get => _alphaPreview;
+        set
+        {
+            this.RaiseAndSetIfChanged(ref _alphaPreview, value);
+            AlphaPreviewToggle?.Invoke(this, value);
+        }
+    }
+
     private bool _brightnessLocked;
     /// <summary>Lock brightness against theme-bundle overrides. Mirrors into
     /// MainViewModel.BrightnessLocked via <see cref="BrightnessLockedChanged"/>.
@@ -1048,6 +1062,7 @@ public sealed class FloatingMenuViewModel : ViewModelBase
     public event EventHandler<int>? GammaSlide;
     public event EventHandler<bool>? BandDitherToggle;
     public event EventHandler<int>? BandDitherStrengthSlide;
+    public event EventHandler<bool>? AlphaPreviewToggle;
 
     public event EventHandler<bool>? StatusBarToggled;
     public event EventHandler<bool>? GridToggled;

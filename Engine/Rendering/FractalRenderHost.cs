@@ -2573,6 +2573,45 @@ namespace FracturingFog.Rendering
                 _lastPreOverlayBuffer = null;
             }
 
+            // F10.5 — live per-stop alpha preview. The on-screen present is
+            // opaque (the swap-chain ignores the alpha channel and the post-FX
+            // pass above forces 0xFF), so a theme's authored translucent stops
+            // are invisible while editing. When the toggle is on, composite the
+            // final RGB over a checkerboard using the ORIGINAL coverage byte
+            // from `src` (which still carries the authored alpha even after the
+            // post-FX force-opaque), so A<255 reads as see-through. Runs AFTER
+            // the pre-overlay snapshot above, so SaveLastFrameToPng and the
+            // export path keep straight alpha — this is a display-only aid.
+            // srcAlreadyProcessed frames (video record) are left untouched.
+            if (ViewState.AlphaPreview && !srcAlreadyProcessed)
+            {
+                int aChunk = h / (Environment.ProcessorCount * 4);
+                if (aChunk < 1) aChunk = 1;
+                Parallel.ForEach(Partitioner.Create(0, h, aChunk), range =>
+                {
+                    for (int y = range.Item1; y < range.Item2; y++)
+                    {
+                        int rowBase = y * w;
+                        for (int x = 0; x < w; x++)
+                        {
+                            int i = rowBase + x;
+                            int a = (int)((src[i] >> 24) & 0xFF);
+                            if (a >= 255) continue;   // opaque — dst already right
+                            uint pc = dst[i];
+                            int R = (int)((pc >> 16) & 0xFF);
+                            int G = (int)((pc >> 8) & 0xFF);
+                            int B = (int)(pc & 0xFF);
+                            int bg = ((((x >> 3) + (y >> 3)) & 1) == 0) ? 200 : 120;
+                            int inv = 255 - a;
+                            R = (R * a + bg * inv) / 255;
+                            G = (G * a + bg * inv) / 255;
+                            B = (B * a + bg * inv) / 255;
+                            dst[i] = 0xFF000000u | ((uint)R << 16) | ((uint)G << 8) | (uint)B;
+                        }
+                    }
+                });
+            }
+
             // Composite grid + watermark on top of the post-FX buffer so the
             // overlay survives every backend (Windows HWND swap-chain
             // included, where Avalonia.Media overlays are occluded). Only
