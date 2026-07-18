@@ -64,6 +64,8 @@ namespace FracturingFog.Diagnostics
                 return RunAlphaDemo();
             if (args.Length > 1 && string.Equals(args[1], "alphapng", StringComparison.OrdinalIgnoreCase))
                 return RunAlphaPngGate();
+            if (args.Length > 1 && string.Equals(args[1], "pngseq", StringComparison.OrdinalIgnoreCase))
+                return RunPngSeqGate();
 
             var report = new StringBuilder();
             report.AppendLine("colour pipeline golden probe — Phase A/B/C option matrix (F1-F9,F12)");
@@ -311,6 +313,62 @@ namespace FracturingFog.Diagnostics
             Console.WriteLine();
             Console.WriteLine(ok
                 ? "RESULT: PASS (PNG kept straight alpha; RGB intact)"
+                : "RESULT: FAIL (alpha dropped or RGB mangled — premultiply regression?)");
+            return ok ? 0 : 1;
+        }
+
+        // --colorprobe pngseq: TRUE gate for the F10.3b video/PNG-sequence path.
+        // PngSequenceWriter has its OWN SavePng (not ImageExport), so it needs its
+        // own round-trip check. Writes one translucent frame through the writer,
+        // decodes frame_000001.png, asserts the coverage byte survives and RGB is
+        // unmangled. A Premul mislabel here would blow out translucent-theme video
+        // frames while leaving opaque output byte-identical.
+        private static int RunPngSeqGate()
+        {
+            const byte A = 128, R = 200, G = 100, B = 50;
+            const int w = 4, h = 4;
+            var frame = new uint[w * h];
+            uint packed = ((uint)A << 24) | ((uint)R << 16) | ((uint)G << 8) | B; // BGRA
+            for (int i = 0; i < frame.Length; i++) frame[i] = packed;
+
+            string dir = System.IO.Path.Combine(
+                System.IO.Path.GetTempPath(), $"ff-pngseq-{Guid.NewGuid():N}");
+
+            byte da = 0, dr = 0, dg = 0, db = 0;
+            bool decoded = false;
+            try
+            {
+                using (var writer = new FracturingFog.PngSequenceWriter(dir, w, h))
+                {
+                    writer.WriteFrame(frame);
+                } // Dispose drains the write queue
+
+                string path = System.IO.Path.Combine(dir, "frame_000001.png");
+                using var bmp = SkiaSharp.SKBitmap.Decode(path);
+                if (bmp != null)
+                {
+                    var c = bmp.GetPixel(1, 1);
+                    da = c.Alpha; dr = c.Red; dg = c.Green; db = c.Blue;
+                    decoded = true;
+                }
+            }
+            finally
+            {
+                try { if (System.IO.Directory.Exists(dir)) System.IO.Directory.Delete(dir, true); } catch { }
+            }
+
+            Console.WriteLine("F10.3b PNG-sequence (video-frame) straight-alpha gate:");
+            Console.WriteLine($"  wrote  ARGB = ({A},{R},{G},{B})");
+            Console.WriteLine($"  read   ARGB = ({da},{dr},{dg},{db})");
+
+            bool ok = decoded
+                      && Math.Abs(da - A) <= 2
+                      && Math.Abs(dr - R) <= 3
+                      && Math.Abs(dg - G) <= 3
+                      && Math.Abs(db - B) <= 3;
+            Console.WriteLine();
+            Console.WriteLine(ok
+                ? "RESULT: PASS (PNG-sequence frame kept straight alpha; RGB intact)"
                 : "RESULT: FAIL (alpha dropped or RGB mangled — premultiply regression?)");
             return ok ? 0 : 1;
         }
