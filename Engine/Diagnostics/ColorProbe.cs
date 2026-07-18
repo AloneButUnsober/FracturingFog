@@ -62,6 +62,8 @@ namespace FracturingFog.Diagnostics
                 return RunDitherDemo();
             if (args.Length > 1 && string.Equals(args[1], "alpha", StringComparison.OrdinalIgnoreCase))
                 return RunAlphaDemo();
+            if (args.Length > 1 && string.Equals(args[1], "alphapng", StringComparison.OrdinalIgnoreCase))
+                return RunAlphaPngGate();
 
             var report = new StringBuilder();
             report.AppendLine("colour pipeline golden probe — Phase A/B/C option matrix (F1-F9,F12)");
@@ -253,6 +255,63 @@ namespace FracturingFog.Diagnostics
             Console.WriteLine(ok
                 ? "RESULT: PASS (per-stop alpha carried through the LUT)"
                 : $"RESULT: FAIL (a0={a0}, a1={a1}, monotone={monotone})");
+            return ok ? 0 : 1;
+        }
+
+        // --colorprobe alphapng: TRUE gate for F10.3 straight-alpha PNG export.
+        // Round-trips a hand-built translucent BGRA buffer through
+        // ImageExport.SavePixelsToFile → PNG on disk → SkiaSharp decode, and
+        // asserts the coverage byte survives AND the RGB is unmangled. If
+        // SaveBgraSkia still declared the (wrong) Premul alpha type, the encoder
+        // would divide RGB by alpha at save time — so a translucent pixel's RGB
+        // would come back roughly doubled. This gate catches that regression.
+        private static int RunAlphaPngGate()
+        {
+            const byte A = 128, R = 200, G = 100, B = 50;
+            const int w = 4, h = 4;
+            var pixels = new uint[w * h];
+            uint packed = ((uint)A << 24) | ((uint)R << 16) | ((uint)G << 8) | B; // BGRA in memory
+            for (int i = 0; i < pixels.Length; i++) pixels[i] = packed;
+
+            string path = System.IO.Path.Combine(
+                System.IO.Path.GetTempPath(), $"ff-alphapng-{Guid.NewGuid():N}.png");
+
+            byte da = 0, dr = 0, dg = 0, db = 0;
+            bool decoded = false;
+            try
+            {
+                FracturingFog.Imaging.ImageExport.SavePixelsToFile(
+                    pixels, w, h, path, FracturingFog.Imaging.ImageFileFormat.Png,
+                    (FracturingFog.Imaging.WatermarkRender?)null);
+
+                using var bmp = SkiaSharp.SKBitmap.Decode(path);
+                if (bmp != null)
+                {
+                    var c = bmp.GetPixel(1, 1);
+                    da = c.Alpha; dr = c.Red; dg = c.Green; db = c.Blue;
+                    decoded = true;
+                }
+            }
+            finally
+            {
+                try { if (System.IO.File.Exists(path)) System.IO.File.Delete(path); } catch { }
+            }
+
+            Console.WriteLine("F10.3 straight-alpha PNG export gate:");
+            Console.WriteLine($"  wrote  ARGB = ({A},{R},{G},{B})");
+            Console.WriteLine($"  read   ARGB = ({da},{dr},{dg},{db})");
+
+            // Alpha must survive; RGB must be unmangled (±3 for PNG round-trip).
+            // A Premul mislabel would roughly double RGB (÷0.5) → far outside ±3.
+            bool ok = decoded
+                      && Math.Abs(da - A) <= 2
+                      && Math.Abs(dr - R) <= 3
+                      && Math.Abs(dg - G) <= 3
+                      && Math.Abs(db - B) <= 3;
+            Console.WriteLine();
+            Console.WriteLine(ok
+                ? "RESULT: PASS (PNG kept straight alpha; RGB intact)"
+                : "RESULT: FAIL (alpha dropped or RGB mangled — premultiply regression?)");
             return ok ? 0 : 1;
         }
 

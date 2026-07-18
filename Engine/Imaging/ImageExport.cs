@@ -75,7 +75,14 @@ namespace FracturingFog.Imaging
         private static void SaveBgraSkia(uint[] pixels, int w, int h, string path,
             ImageFileFormat format, float dpi)
         {
-            var info = new SKImageInfo(w, h, SKColorType.Bgra8888, SKAlphaType.Premul);
+            // F10.3 — the render buffer carries STRAIGHT (non-premultiplied)
+            // alpha (GradientColorMap.MapNormalized packs the interpolated
+            // coverage byte directly), so the bitmap must be declared Unpremul.
+            // For opaque pixels (A=255, every built-in theme + all output before
+            // F10) premul == unpremul byte-for-byte, so existing PNGs are
+            // unchanged; only an authored translucent theme now encodes correctly
+            // instead of having its RGB divided by alpha at encode time.
+            var info = new SKImageInfo(w, h, SKColorType.Bgra8888, SKAlphaType.Unpremul);
             using var bmp = new SKBitmap(info);
             unsafe
             {
