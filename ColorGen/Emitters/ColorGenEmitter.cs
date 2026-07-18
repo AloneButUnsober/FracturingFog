@@ -211,6 +211,7 @@ public sealed class ColorGenEmitter
                 sb.Append(')');
                 return sb.ToString();
             }
+            case "cosine":     return $"Cg3.Cosine({A(0)}, {A(1)}, {A(2)}, {A(3)}, {A(4)})";
             case "brightness": return $"Cg3.Brightness({A(0)}, {A(1)})";
             case "contrast":   return $"Cg3.Contrast({A(0)}, {A(1)})";
             case "gamma":      return $"Cg3.Gamma({A(0)}, {A(1)})";
