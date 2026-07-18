@@ -200,6 +200,9 @@ public sealed class ColorGenEmitter
             case "rgb":      return $"new Cg3({A(0)}, {A(1)}, {A(2)})";
             case "hsv":      return $"Cg3.FromHsv({A(0)}, {A(1)}, {A(2)})";
             case "hsl":      return $"Cg3.FromHsl({A(0)}, {A(1)}, {A(2)})";
+            case "oklab":    return $"Cg3.FromOkLab({A(0)}, {A(1)}, {A(2)})";
+            case "oklch":    return $"Cg3.FromOkLch({A(0)}, {A(1)}, {A(2)})";
+            case "mix_oklab":return $"Cg3.MixOkLab({A(0)}, {A(1)}, {A(2)})";
             case "palette":
             {
                 var sb = new StringBuilder();

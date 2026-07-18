@@ -192,6 +192,15 @@ public static class CgFunctions
         ["rgb"]   = new CgFnSig(3, false, CgType.Vec3, new[] { CgType.Scalar, CgType.Scalar, CgType.Scalar }),
         ["hsv"]   = new CgFnSig(3, false, CgType.Vec3, new[] { CgType.Scalar, CgType.Scalar, CgType.Scalar }),
         ["hsl"]   = new CgFnSig(3, false, CgType.Vec3, new[] { CgType.Scalar, CgType.Scalar, CgType.Scalar }),
+        // OkLab / OkLCh constructors (Phase C / F9) — perceptually uniform.
+        //   oklab(L, a, b): L in [0,1], a/b roughly [-0.4,0.4] → sRGB Vec3.
+        //   oklch(L, C, h): h in RADIANS (a = C·cos h, b = C·sin h).
+        // Both convert OkLab→linear sRGB→gamma-encoded sRGB (packer-ready).
+        ["oklab"] = new CgFnSig(3, false, CgType.Vec3, new[] { CgType.Scalar, CgType.Scalar, CgType.Scalar }),
+        ["oklch"] = new CgFnSig(3, false, CgType.Vec3, new[] { CgType.Scalar, CgType.Scalar, CgType.Scalar }),
+        // mix_oklab(va, vb, t): blend two sRGB Vec3s through OkLab — smooth
+        // mid-tones between distant hues (no muddy grey crossing).
+        ["mix_oklab"] = new CgFnSig(3, false, CgType.Vec3, new[] { CgType.Vec3, CgType.Vec3, CgType.Scalar }),
         // palette(t, c0, c1, …) — variadic vec3 stops, cyclic interpolation.
         ["palette"] = new CgFnSig(3, true, CgType.Vec3),
         // cosine(t, a, b, c, d) — Inigo Quilez cosine palette:
