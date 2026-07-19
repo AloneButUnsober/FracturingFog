@@ -1,0 +1,46 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    V3 (issue #42) — cross-platform Vulkan compute backend, promoted out of the
+    standalone Rendering.Vulkan.Smoke de-risking gate into a real referenced
+    library. Implements FracturingFog.Rendering.IGpuKernel (the same boundary the
+    Windows-only Rendering.D3D MandelbrotGpuKernel plugs into), so the calculator
+    fleet can dispatch SP escape-time + colour onto Vulkan on Linux/macOS.
+
+    Cross-platform net10.0 (NOT net*-windows, no UseWindowsForms) — mirrors
+    Rendering.D3D's ProjectReferences (Engine + Abstractions) but with Silk.NET
+    Vulkan instead of Vortice D3D. The HLSL kernel source is the same portable
+    file both compilers consume (FXC on Windows, DXC here).
+  -->
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <LangVersion>latest</LangVersion>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <Platforms>AnyCPU;x64;arm64</Platforms>
+    <RootNamespace>FracturingFog.Rendering.Vulkan</RootNamespace>
+    <AssemblyName>FracturingFog.Rendering.Vulkan</AssemblyName>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Silk.NET.Core" Version="2.23.0" />
+    <PackageReference Include="Silk.NET.Vulkan" Version="2.23.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Abstractions\FracturingFog.Abstractions.csproj" />
+    <ProjectReference Include="..\Engine\FracturingFog.Engine.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!--
+      One HLSL source, two compilers (V1/#40). The dependency-free kernel-source
+      strings live physically in Rendering.D3D but carry no D3D/Windows deps, so
+      link them here for DXC just as the Smoke project does. This is the same
+      file FXC compiles on Windows.
+    -->
+    <Compile Include="..\Rendering.D3D\MandelbrotKernelSource.cs" Link="Shared\MandelbrotKernelSource.cs" />
+  </ItemGroup>
+
+</Project>

@@ -14,9 +14,9 @@ using System;
 using System.Diagnostics;
 using System.IO;
 
-namespace FracturingFog.Rendering.Vulkan.Smoke;
+namespace FracturingFog.Rendering.Vulkan;
 
-internal static class DxcCompiler
+public static class DxcCompiler
 {
     // Compile an HLSL source string to a SPIR-V module (raw bytes).
     // extraArgs passes through DXC flags verbatim (e.g. -fvk-*-shift binding
