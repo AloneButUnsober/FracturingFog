@@ -43,6 +43,14 @@ public enum RendererBackend
     /// <summary>Force the SkiaSharp CPU backend. Routes through
     /// <see cref="RendererFactory.SkiaBackend"/>.</summary>
     Skia,
+
+    /// <summary>V3 (#42) — Vulkan compute for the fractal maths, OpenGL for
+    /// present (Vulkan does compute only, no swapchain). Present routes through
+    /// <see cref="RendererFactory.NonWin32Backend"/> (the same Silk GL blit);
+    /// the Vulkan compute kernel is attached to the calculator by the host
+    /// bootstrap, not by this factory. The CLI <c>--renderer vulkan</c> parse +
+    /// bootstrap kernel-injection land in the V3 GUI follow-up.</summary>
+    Vulkan,
 }
 
 /// <summary>
@@ -111,6 +119,15 @@ public static class RendererFactory
     public static Func<IGpuSurface, IFractalRenderer?>? SkiaBackend { get; set; }
 
     /// <summary>
+    /// V3 (#42) — optional probe-description override for the Vulkan-compute
+    /// backend. The host bootstrap can set this to a live string (device name);
+    /// left null, <see cref="ProbeDescription"/> falls back to the static
+    /// "Vulkan (compute) + OpenGL (present)" label when
+    /// <see cref="PreferredBackend"/> is <see cref="RendererBackend.Vulkan"/>.
+    /// </summary>
+    public static Func<string>? VulkanProbeBackend { get; set; }
+
+    /// <summary>
     /// Surface-aware Create. Accepts an <see cref="IGpuSurface"/> from
     /// whichever shell hosts the renderer and subscribes the renderer to the
     /// surface's Resized / HandleLost events so the swap chain follows DPI and
@@ -141,6 +158,19 @@ public static class RendererFactory
                 throw new PlatformNotSupportedException(
                     "--renderer skia requested but no Skia backend is registered. " +
                     "Wire RendererFactory.SkiaBackend before requesting this backend.");
+            }
+            case RendererBackend.Vulkan:
+            {
+                // V3 (#42): Vulkan is compute-only (no swapchain); present is the
+                // same Silk GL blit. Route present through NonWin32Backend; the
+                // Vulkan compute kernel is attached to the calculator by the host
+                // bootstrap, independent of the present backend chosen here.
+                IFractalRenderer? gl = NonWin32Backend?.Invoke(surface);
+                if (gl is not null) return WireLifecycle(surface, gl);
+                throw new PlatformNotSupportedException(
+                    "--renderer vulkan requested but no GL present backend is registered. " +
+                    "AvaloniaShellBootstrap populates RendererFactory.NonWin32Backend; " +
+                    "Vulkan present rides the same Silk GL blit.");
             }
         }
 
@@ -191,7 +221,11 @@ public static class RendererFactory
     /// hosts. Used by the title bar + System Info dialog.
     /// </summary>
     public static string ProbeDescription()
-        => Win32ProbeBackend?.Invoke() ?? "Silk.NET OpenGL";
+    {
+        if (PreferredBackend == RendererBackend.Vulkan)
+            return VulkanProbeBackend?.Invoke() ?? "Vulkan (compute) + OpenGL (present)";
+        return Win32ProbeBackend?.Invoke() ?? "Silk.NET OpenGL";
+    }
 
     private static IFractalRenderer WireLifecycle(IGpuSurface surface, IFractalRenderer renderer)
     {
