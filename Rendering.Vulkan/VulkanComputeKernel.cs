@@ -478,7 +478,9 @@ public sealed unsafe class VulkanComputeKernel : IGpuKernel
             // guarantees the band finished reading the UBO before the next
             // WriteBytes overwrites it.
             int bandRows = MandelbrotKernelSource.PerturbBandRows(width, height, maxIter);
-            for (int rowBase = 0; rowBase < height; rowBase += bandRows)
+            int bandCount = (height + bandRows - 1) / bandRows;
+            int bandIndex = 0;
+            for (int rowBase = 0; rowBase < height; rowBase += bandRows, bandIndex++)
             {
                 int rows = Math.Min(bandRows, height - rowBase);
                 blob.RowBase = rowBase;
@@ -502,10 +504,27 @@ public sealed unsafe class VulkanComputeKernel : IGpuKernel
                     SType = StructureType.SubmitInfo,
                     CommandBufferCount = 1, PCommandBuffers = &cmdLocal,
                 };
+                long tBand = Stopwatch.GetTimestamp();
                 Check(_vk.QueueSubmit(_ctx.ComputeQueue, 1, &submit, default), "vkQueueSubmit");
                 Check(_vk.QueueWaitIdle(_ctx.ComputeQueue), "vkQueueWaitIdle");
                 _vk.FreeCommandBuffers(_device, _cmdPool, 1, in cmd);
                 cmd = default;
+
+                // Perf-fallback: after the FIRST band, extrapolate the whole-frame
+                // time. If the GPU is too slow at this depth (weak FP64), abort so
+                // the caller falls back to the CPU deep path instead of grinding
+                // for minutes. QueueWaitIdle above makes this band's time real.
+                if (bandIndex == 0 && bandCount > 1)
+                {
+                    double band0Ms = (Stopwatch.GetTimestamp() - tBand) * 1000.0 / Stopwatch.Frequency;
+                    if (MandelbrotKernelSource.PerturbTooSlow(band0Ms, bandCount))
+                    {
+                        if (pool.Handle != 0) { _vk.DestroyDescriptorPool(_device, pool, null); pool = default; }
+                        throw new TimeoutException(
+                            $"{MandelbrotKernelSource.PerturbTooSlowMarker}: band0={band0Ms:F1}ms × {bandCount} bands " +
+                            $"> {MandelbrotKernelSource.PerturbBudgetMs:F0}ms budget");
+                    }
+                }
             }
         }
         finally
