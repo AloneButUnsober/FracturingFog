@@ -39,13 +39,13 @@
 
   <ItemGroup>
     <!--
-      V1 (#40): one HLSL source, two compilers. Link the dependency-free
-      kernel-source strings straight from Rendering.D3D (no D3D/Windows deps in
-      that file) so DXC compiles the *same* HLSL that FXC compiles on Windows.
-      Keeps this project self-contained (no Rendering.D3D/Engine ProjectReference
-      closure — just the one portable source file).
+      V3 (#42): the plumbing (VulkanContext, DxcCompiler) and the real
+      IGpuKernel backend (VulkanComputeKernel) moved into the referenced
+      Rendering.Vulkan library. This project is now the headless GATE harness
+      over that library — V0/V1/V2 probes plus the V3 vulkanrenderprobe. The lib
+      already links MandelbrotKernelSource, so this project no longer does.
     -->
-    <Compile Include="..\Rendering.D3D\MandelbrotKernelSource.cs" Link="Shared\MandelbrotKernelSource.cs" />
+    <ProjectReference Include="..\Rendering.Vulkan\FracturingFog.Rendering.Vulkan.csproj" />
   </ItemGroup>
 
 </Project>

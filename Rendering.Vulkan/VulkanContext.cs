@@ -14,9 +14,9 @@ using System.Collections.Generic;
 using Silk.NET.Core.Native;
 using Silk.NET.Vulkan;
 
-namespace FracturingFog.Rendering.Vulkan.Smoke;
+namespace FracturingFog.Rendering.Vulkan;
 
-internal sealed unsafe class VulkanContext : IDisposable
+public sealed unsafe class VulkanContext : IDisposable
 {
     public readonly record struct DeviceInfo(string Name, PhysicalDeviceType Type, bool HasCompute);
 
