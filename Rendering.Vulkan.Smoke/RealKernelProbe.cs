@@ -359,10 +359,10 @@ internal static unsafe class RealKernelProbe
         }
     }
 
-    // ── small Vulkan buffer helpers ──────────────────────────────────────────
+    // ── small Vulkan buffer helpers (shared with RealKernelColorProbe) ───────
     public struct Allocated { public Buffer Buffer; public DeviceMemory Memory; }
 
-    private static DescriptorSetLayoutBinding LayoutBinding(uint binding, DescriptorType type) => new()
+    internal static DescriptorSetLayoutBinding LayoutBinding(uint binding, DescriptorType type) => new()
     {
         Binding = binding,
         DescriptorType = type,
@@ -370,7 +370,7 @@ internal static unsafe class RealKernelProbe
         StageFlags = ShaderStageFlags.ComputeBit,
     };
 
-    private static Allocated AllocBuffer(VulkanContext ctx, ulong size, BufferUsageFlags usage)
+    internal static Allocated AllocBuffer(VulkanContext ctx, ulong size, BufferUsageFlags usage)
     {
         var vk = ctx.Vk;
         var bci = new BufferCreateInfo
@@ -395,7 +395,7 @@ internal static unsafe class RealKernelProbe
         return new Allocated { Buffer = buffer, Memory = mem };
     }
 
-    private static void WriteBuffer(VulkanContext ctx, Allocated a, void* src, int bytes)
+    internal static void WriteBuffer(VulkanContext ctx, Allocated a, void* src, int bytes)
     {
         void* mapped;
         Check(ctx.Vk.MapMemory(ctx.Device, a.Memory, 0, (ulong)bytes, 0, &mapped), "vkMapMemory");
@@ -403,7 +403,7 @@ internal static unsafe class RealKernelProbe
         ctx.Vk.UnmapMemory(ctx.Device, a.Memory);
     }
 
-    private static void ZeroBuffer(VulkanContext ctx, Allocated a, int bytes)
+    internal static void ZeroBuffer(VulkanContext ctx, Allocated a, int bytes)
     {
         void* mapped;
         Check(ctx.Vk.MapMemory(ctx.Device, a.Memory, 0, (ulong)bytes, 0, &mapped), "vkMapMemory");
@@ -411,7 +411,7 @@ internal static unsafe class RealKernelProbe
         ctx.Vk.UnmapMemory(ctx.Device, a.Memory);
     }
 
-    private static T[] ReadBuffer<T>(VulkanContext ctx, Allocated a, int count) where T : unmanaged
+    internal static T[] ReadBuffer<T>(VulkanContext ctx, Allocated a, int count) where T : unmanaged
     {
         void* mapped;
         ulong bytes = (ulong)(count * sizeof(T));
@@ -422,13 +422,13 @@ internal static unsafe class RealKernelProbe
         return result;
     }
 
-    private static void FreeBuffer(VulkanContext ctx, Allocated a)
+    internal static void FreeBuffer(VulkanContext ctx, Allocated a)
     {
         if (a.Buffer.Handle != 0) ctx.Vk.DestroyBuffer(ctx.Device, a.Buffer, null);
         if (a.Memory.Handle != 0) ctx.Vk.FreeMemory(ctx.Device, a.Memory, null);
     }
 
-    private static uint FindMemoryType(VulkanContext ctx, uint typeBits, MemoryPropertyFlags required)
+    internal static uint FindMemoryType(VulkanContext ctx, uint typeBits, MemoryPropertyFlags required)
     {
         PhysicalDeviceMemoryProperties memProps;
         ctx.Vk.GetPhysicalDeviceMemoryProperties(ctx.PhysicalDevice, &memProps);
@@ -441,7 +441,7 @@ internal static unsafe class RealKernelProbe
         throw new InvalidOperationException($"no memory type with {required} for typeBits 0x{typeBits:X}");
     }
 
-    private static void Check(Result r, string what)
+    internal static void Check(Result r, string what)
     {
         if (r != Result.Success) throw new InvalidOperationException($"{what} failed: {r}");
     }
