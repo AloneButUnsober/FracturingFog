@@ -103,7 +103,7 @@ Each slice lands behind a smoke gate and is independently revertible. Checkbox =
 | V2 colour | [#41](https://github.com/AloneButUnsober/MandelbrotExplorer/issues/41) |
 | V3 backend/present | [#42](https://github.com/AloneButUnsober/MandelbrotExplorer/issues/42) |
 | V4 deep-zoom (parity — resolved trivially, §13) | [#43](https://github.com/AloneButUnsober/MandelbrotExplorer/issues/43) |
-| V6 GPU perturbation kernel (net-new; **spike CLEARED §14**, full build user-gated) | [#82](https://github.com/AloneButUnsober/MandelbrotExplorer/issues/82) |
+| V6 GPU perturbation kernel (net-new; **spike CLEARED §14; full build LANDED Vulkan §15**, D3D + GUI-enable fast-follow) | [#82](https://github.com/AloneButUnsober/MandelbrotExplorer/issues/82) |
 | V5 macOS (stretch) | [#44](https://github.com/AloneButUnsober/MandelbrotExplorer/issues/44) |
 
 ### V0 — Spike: HLSL→SPIR-V compute proof (headless, no UI)  ← [#39](https://github.com/AloneButUnsober/MandelbrotExplorer/issues/39)  ✅ **DONE — see §9**
@@ -494,3 +494,51 @@ base/colour variants, consumed by both FXC (D3D) and DXC (Vulkan). No in-shader 
 default path. Remaining full-build work is engineering + the deep-`dc` precision re-check (2), not a
 feasibility unknown. The full build stays a **separate, user-gated slice** (it touches production
 render paths and raises `MaxGpuZoom`) — the spike's job was to de-risk it, and it has.
+
+## 15. V6 full build (issue [#82](https://github.com/AloneButUnsober/MandelbrotExplorer/issues/82)) — **LANDED (Vulkan): shared kernel + backend + calculator wiring, gated; D3D backend + GUI-enable are the fast-follow**
+
+Built 2026-07-19 on the spike's findings, in two validated slices (commits `d4bae1c`, `db7274c`).
+
+**Shared kernel + interface + Vulkan backend (`d4bae1c`).**
+- `MandelbrotKernelSource.BuildPerturb()` — standalone `double` δ-rebased kernel (`CSPerturb`), the GPU
+  twin of `ComputePixelPTRebased`: reference orbit as two `double` SSBOs (Hi-limb, the CPU `_refZr/_refZi`),
+  Zhuoran rebasing, `dc = pixelOffset·scale`, outputs iter + smooth + finalZD(zr,zi,drv,div). No in-shader
+  limb math (spike §14). Same two-compiler rule — **FXC `cs_5_0` and DXC `cs_6_0` both compile it**
+  (verified; 3920-byte CSO under FXC).
+- `IGpuKernel` gains `SupportsPerturbation` (default **false**) + `RunPerturb` (default **throws**) as C#
+  default-interface members, so the D3D kernel compiles unchanged and opts in later; deep zoom stays CPU
+  wherever `SupportsPerturbation` is false.
+- `VulkanComputeKernel`: `SupportsPerturbation => ctx.SupportsFloat64`, and `RunPerturb` — dedicated
+  perturb pipeline (b0 + refZr/refZi SSBOs + iter/smooth/finalZD), reference-orbit + 48-byte double param
+  buffers. `BuildProgram` refactored to take an entry point + explicit binding numbers; base/colour paths
+  unchanged (`--vulkanprobe` / `--colorprobe` / `--vulkanrenderprobe` still green).
+- `--vulkanpturbprobe` now drives the **production** kernel object: GT710 GPU-vs-CPU **0.119%** at the CPU
+  precision noise floor (double-vs-DD 0.098%), non-degenerate, exit 0.
+
+**Calculator wiring (`db7274c`).**
+- `MandelbrotCalculator.CalculateHighPrecision`: after the reference orbit is built, if
+  `UseGpuPerturbation` **and** a perturbation-capable kernel is attached, dispatch the whole frame's
+  δ-rebased loop to the GPU (`TryRunGpuPerturbation`) and do colour/dist/normal writeback on the CPU via
+  the existing `FillAuxAndColorHP` — then skip the CPU SIMD/BLA/SA path. Runs the rebased loop for **every**
+  pixel (glitch-free, SM-2). Offsets mirror `ComputeRowPTScalar` exactly. Any kernel failure falls through
+  to the CPU path.
+- Gated to the plain rebased regime it mirrors: recycle off, no per-tile cap, `UseDdRebaseReference` /
+  `ForceScalarPtPath` off, `Zoom <= MaxGpuPerturbZoom`.
+- **`MaxGpuPerturbZoom` = `ODZoomThreshold` (1e50)** — conservative ceiling; the δ loop is depth-independent
+  (rebasing) but the deep-`dc` re-check (checkbox 2) gates lifting it. **`UseGpuPerturbation` — master
+  toggle, DEFAULT OFF**, independent of `UseGpuCompute`.
+- Gate `--vulkanpturbcalc` drives a real `MandelbrotCalculator` **both** ways at zoom 1e14: GPU-perturb
+  frame vs CPU deep frame **disagree 0/16384 (0.000%)**. CPU deep path unregressed — `--focusprobe` green
+  (0.00 px to 1e60, flat past `maxUseful=1e62`); the GPU path is gated off by default.
+
+**Remaining (cross-backend fast-follow, each needs a validation surface this repo can't exercise headlessly):**
+1. **D3D `MandelbrotGpuKernel.RunPerturb`** (Vortice: double cbuffer + reference-orbit SRVs + iter/smooth/
+   finalZD UAVs; gate `SupportsPerturbation` on `D3D11_FEATURE_DATA_DOUBLES`). The shared HLSL already
+   compiles under FXC; this is backend plumbing + a live-D3D-device parity test. Interface default keeps D3D
+   opt-out (CPU deep zoom) until it lands.
+2. **Enable in the GUI** — one line in `AvaloniaShellBootstrap` to set `UseGpuPerturbation=true` when the
+   Vulkan backend is active and `SupportsFloat64`. Held back because it changes user-facing deep-zoom
+   rendering — wants an interactive on-device sign-off first.
+3. **Deep-`dc` precision (checkbox 2)** — re-run the double-vs-DD `dc` comparison at 1e15/1e20 with a real
+   OD centre before raising `MaxGpuPerturbZoom` past 1e50.
+4. Later: SA/BLA on GPU (non-goal for now), per-tile-cap support in the perturbation kernel.
