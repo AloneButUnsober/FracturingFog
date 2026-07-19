@@ -231,6 +231,25 @@ float3 EvalPalette(
         return System.Math.Min(rows, height);
     }
 
+    /// <summary>Perf-fallback budget (ms). After the first row band completes,
+    /// each backend extrapolates band0·bandCount; if it exceeds this, the GPU is
+    /// too slow at this depth (weak FP64) and the dispatch aborts so the caller
+    /// falls back to the CPU deep path. Tunable via FF_GPU_PERTURB_BUDGET_MS;
+    /// default 3000 ms. 0 or negative disables the check (always finish on GPU).</summary>
+    public static double PerturbBudgetMs =
+        double.TryParse(System.Environment.GetEnvironmentVariable("FF_GPU_PERTURB_BUDGET_MS"),
+            System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture,
+            out double bms) && bms > 0 ? bms : 3000.0;
+
+    /// <summary>True when the extrapolated full-frame GPU time (first band ×
+    /// band count) exceeds <see cref="PerturbBudgetMs"/> — i.e. abort to CPU.</summary>
+    public static bool PerturbTooSlow(double band0Ms, int bandCount)
+        => PerturbBudgetMs > 0 && band0Ms * bandCount > PerturbBudgetMs;
+
+    /// <summary>Marker message for the perf-abort exception so the calculator can
+    /// tell "GPU too slow" apart from a genuine device-lost error.</summary>
+    public const string PerturbTooSlowMarker = "GPU-PERTURB-TOO-SLOW";
+
     /// <summary>Compose the double perturbation kernel. Standalone HLSL (its own
     /// cbuffer + reference-orbit SRVs + output UAVs); requires FP64 support on
     /// the device (Vulkan <c>shaderFloat64</c> / D3D double shader ops).</summary>

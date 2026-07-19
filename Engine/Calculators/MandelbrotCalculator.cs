@@ -1914,11 +1914,27 @@ public sealed class MandelbrotCalculator
             // is meant to prevent the TDR in the first place; this is the belt-
             // and-braces backstop if a band still overruns on very slow FP64.
             string m = ex.Message ?? "";
+            // Marker set by MandelbrotKernelSource.PerturbTooSlowMarker in the
+            // backend kernels (Engine can't reference Rendering.*, so match the
+            // literal — keep the two in sync).
+            bool tooSlow = m.Contains("GPU-PERTURB-TOO-SLOW", StringComparison.Ordinal);
             bool deviceLost = m.Contains("DEVICE_REMOVED", StringComparison.OrdinalIgnoreCase)
                            || m.Contains("DeviceRemoved", StringComparison.OrdinalIgnoreCase)
                            || m.Contains("DEVICE_HUNG", StringComparison.OrdinalIgnoreCase)
                            || m.Contains("device lost", StringComparison.OrdinalIgnoreCase);
-            if (deviceLost)
+            if (tooSlow)
+            {
+                // The GPU's FP64 is too slow at this depth to beat the CPU (weak
+                // consumer card). Disable for the session so every later frame
+                // goes straight to the multi-threaded CPU deep path.
+                UseGpuPerturbation = false;
+                Console.Error.WriteLine(
+                    "[GPU] deep-zoom perturbation DISABLED for this session — the GPU is slower than the " +
+                    "CPU here (weak FP64). Using the CPU deep path. Tune FF_GPU_PERTURB_BUDGET_MS to change " +
+                    "the threshold, or run on a stronger-FP64 GPU.");
+                Dbg86($"TOO-SLOW → UseGpuPerturbation disabled for session ({ex.Message})");
+            }
+            else if (deviceLost)
             {
                 UseGpuPerturbation = false;
                 Console.Error.WriteLine(

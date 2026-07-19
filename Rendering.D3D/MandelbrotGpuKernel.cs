@@ -712,7 +712,9 @@ public sealed class MandelbrotGpuKernel : IGpuKernel
             // device. Split into row bands and Flush each so no single packet
             // exceeds the ~2 s TDR budget. gRowBase offsets each band's rows.
             int bandRows = MandelbrotKernelSource.PerturbBandRows(width, height, maxIter);
-            for (int rowBase = 0; rowBase < height; rowBase += bandRows)
+            int bandCount = (height + bandRows - 1) / bandRows;
+            int bandIndex = 0;
+            for (int rowBase = 0; rowBase < height; rowBase += bandRows, bandIndex++)
             {
                 int rows = Math.Min(bandRows, height - rowBase);
                 p.RowBase = rowBase;
@@ -721,8 +723,40 @@ public sealed class MandelbrotGpuKernel : IGpuKernel
                 _ctx.Unmap(_perturbParamsBuf!, 0);
                 _ctx.CSSetConstantBuffer(0, _perturbParamsBuf);   // re-bind after WriteDiscard rename
 
+                long tBand = System.Diagnostics.Stopwatch.GetTimestamp();
                 _ctx.Dispatch((uint)((width + 7) / 8), (uint)((rows + 7) / 8), 1);
-                _ctx.Flush();   // submit this band as its own GPU packet (resets the TDR clock)
+
+                // Perf-fallback: sync + time the FIRST band, extrapolate the whole
+                // frame, and abort if the GPU is too slow at this depth (weak
+                // FP64) so the caller drops to the CPU deep path instead of
+                // grinding for minutes. A CopyResource + Map(Read) on the iter
+                // staging blocks until band 0's dispatch finishes → a real GPU
+                // time; the remaining bands just Flush (async).
+                if (bandIndex == 0 && bandCount > 1)
+                {
+                    _ctx.CopyResource(_iterStaging, _iterBuf);
+                    var sync = _ctx.Map(_iterStaging, 0, Vortice.Direct3D11.MapMode.Read, MapFlags.None);
+                    _ctx.Unmap(_iterStaging, 0);
+                    _ = sync;
+                    double band0Ms = (System.Diagnostics.Stopwatch.GetTimestamp() - tBand) * 1000.0
+                                     / System.Diagnostics.Stopwatch.Frequency;
+                    if (MandelbrotKernelSource.PerturbTooSlow(band0Ms, bandCount))
+                    {
+                        // Leave the context clean before bailing to the CPU path.
+                        _ctx.CSUnsetUnorderedAccessView(0);
+                        _ctx.CSUnsetUnorderedAccessView(1);
+                        _ctx.CSUnsetUnorderedAccessView(2);
+                        _ctx.CSSetShaderResource(0, null);
+                        _ctx.CSSetShaderResource(1, null);
+                        throw new TimeoutException(
+                            $"{MandelbrotKernelSource.PerturbTooSlowMarker}: band0={band0Ms:F1}ms × {bandCount} bands " +
+                            $"> {MandelbrotKernelSource.PerturbBudgetMs:F0}ms budget");
+                    }
+                }
+                else
+                {
+                    _ctx.Flush();   // submit this band as its own GPU packet (resets the TDR clock)
+                }
             }
 
             _ctx.CSUnsetUnorderedAccessView(0);
