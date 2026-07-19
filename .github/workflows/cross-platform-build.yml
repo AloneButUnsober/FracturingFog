@@ -318,3 +318,39 @@ jobs:
 
       - name: Run Compute smoke
         run: dotnet run --project Compute.Smoke/FracturingFog.Compute.Smoke.csproj -c Release -r ${{ matrix.rid }} --no-build
+
+      # ── Vulkan compute smoke (V0 spike, issue #39) ───────────────────────
+      # Headless HLSL->SPIR-V compute proof. Builds on every leg to catch RID
+      # / native-resolution issues; runs only on the linux-x64 xvfb leg, where
+      # Mesa lavapipe supplies a *software* Vulkan ICD so no GPU-in-CI is
+      # needed. DXC (runtime HLSL->SPIR-V JIT — the O2 answer) comes from the
+      # LunarG Vulkan SDK apt package. Wayland leg is skipped (it is a GL/EGL
+      # concern; Vulkan needs no display server).
+      - name: Build Vulkan smoke CLI
+        run: dotnet build Rendering.Vulkan.Smoke/FracturingFog.Rendering.Vulkan.Smoke.csproj -c Release -r ${{ matrix.rid }} --self-contained false
+
+      - name: Install Vulkan loader + lavapipe + DXC (Linux / xvfb leg)
+        if: matrix.os == 'ubuntu-latest' && matrix.display == 'xvfb'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libvulkan1 mesa-vulkan-drivers vulkan-tools
+          # DXC (HLSL->SPIR-V) from the LunarG Vulkan SDK apt repo. Installs
+          # `dxc` onto PATH (/usr/bin/dxc); DxcCompiler resolves it via PATH.
+          CODENAME=$(lsb_release -cs)
+          wget -qO- https://packages.lunarg.com/lunarg-signing-key-pub.asc \
+            | sudo tee /etc/apt/trusted.gpg.d/lunarg.asc >/dev/null
+          sudo wget -qO /etc/apt/sources.list.d/lunarg-vulkan-${CODENAME}.list \
+            https://packages.lunarg.com/vulkan/lunarg-vulkan-${CODENAME}.list
+          sudo apt-get update
+          sudo apt-get install -y vulkan-sdk
+
+      - name: Run Vulkan smoke (Linux / lavapipe)
+        if: matrix.os == 'ubuntu-latest' && matrix.display == 'xvfb'
+        env:
+          # Force the lavapipe (software) ICD so the leg never depends on a
+          # real GPU being present on the runner.
+          VK_ICD_FILENAMES: /usr/share/vulkan/icd.d/lvp_icd.x86_64.json
+        run: |
+          which dxc && dxc --version || true
+          vulkaninfo --summary || true
+          dotnet run --project Rendering.Vulkan.Smoke/FracturingFog.Rendering.Vulkan.Smoke.csproj -c Release -r ${{ matrix.rid }} --no-build
