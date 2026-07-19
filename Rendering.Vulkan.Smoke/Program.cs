@@ -18,6 +18,7 @@
 //   2 — exception during init / compile / dispatch.
 
 using System;
+using System.Collections.Generic;
 
 namespace FracturingFog.Rendering.Vulkan.Smoke;
 
@@ -49,9 +50,49 @@ internal static class Program
             ctx.CreateComputeDevice();
             Console.WriteLine($"vulkan-smoke picked: {ctx.PickedType,-14} {ctx.PickedName}");
 
-            // Phase 2 wires the DXC->SPIR-V dispatch + read-back + histogram
-            // here and returns 0/1 accordingly.
-            Console.WriteLine("vulkan-smoke OK: device + compute queue ready");
+            // DXC-compile the trivial kernel, dispatch 64x64, map back.
+            uint[] pixels = ComputeSmoke.Run(ctx);
+
+            // Sanity, mirroring Compute.Smoke's histogram check but for the
+            // colour path: a real gradient must have many distinct packed
+            // values, and the four corners (uv exactly 0/1 -> no rounding
+            // ambiguity) must be bit-exact against the CPU pack.
+            var distinctValues = new HashSet<uint>(pixels);
+            int distinct = distinctValues.Count;
+
+            (int x, int y)[] corners =
+            {
+                (0, 0),
+                (ComputeSmoke.Width - 1, 0),
+                (0, ComputeSmoke.Height - 1),
+                (ComputeSmoke.Width - 1, ComputeSmoke.Height - 1),
+            };
+
+            bool cornersOk = true;
+            foreach (var (cx, cy) in corners)
+            {
+                uint got = pixels[cy * ComputeSmoke.Width + cx];
+                uint want = ComputeSmoke.ExpectedAt(cx, cy);
+                if (got != want)
+                {
+                    Console.Error.WriteLine(
+                        $"  corner ({cx},{cy}) got 0x{got:X8} want 0x{want:X8}");
+                    cornersOk = false;
+                }
+            }
+
+            Console.WriteLine(
+                $"vulkan-smoke pixels: distinct={distinct} corners={(cornersOk ? "ok" : "MISMATCH")}");
+
+            if (distinct < 3 || !cornersOk)
+            {
+                Console.Error.WriteLine(
+                    "vulkan-smoke FAIL: degenerate read-back. Expected a diverse " +
+                    "gradient with bit-exact corners; kernel likely did not run correctly.");
+                return 1;
+            }
+
+            Console.WriteLine($"vulkan-smoke OK: {ctx.PickedType} {ctx.PickedName}");
             return 0;
         }
         catch (Exception ex)
