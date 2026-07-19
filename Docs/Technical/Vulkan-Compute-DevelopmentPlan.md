@@ -118,12 +118,14 @@ Each slice lands behind a smoke gate and is independently revertible. Checkbox =
 - **Gate:** `--vulkanprobe` in Program.cs; ULP-band parity vs the CPU reference (not a strict
   golden digest — set-boundary pixels are chaotic). Green on real GPU + lavapipe CI.
 
-### V2 — Colour pipeline (EvalPalette)
-- [ ] DXC-compile the `emitColor:true` variant with a real theme's `HlslPaletteBody` + prelude.
-- [ ] Per-theme SPIR-V compile-cache keyed on `PaletteId` (mirror the D3D `CompileShader` cache).
-- **Gate:** `--colorprobe` passes on the Vulkan backend against the **same embedded golden digest**
-  as CPU/HLSL. Colour parity is non-negotiable (see [user colourblindness constraint] — error UI
-  aside, palette fidelity is the product).
+### V2 — Colour pipeline (EvalPalette) — **DONE** (see §11)
+- [x] DXC-compile the `emitColor:true` variant with a real theme's `HlslPaletteBody` + prelude
+      (Greyscale; `gColor` u3 → binding 203).
+- [ ] Per-theme SPIR-V compile-cache keyed on `PaletteId` — **deferred to V3**: the probe compiles
+      one theme per run, so a cache has no consumer until the renderer switches themes at runtime.
+- **Gate:** `--colorprobe` passes on the Vulkan backend — embedded golden digest of a deterministic
+  CPU mirror (reference stability) **+** GPU-vs-mirror byte-disagreement band (cross-vendor). Colour
+  parity is non-negotiable (palette fidelity is the product). ✅ GT 710; lavapipe CI.
 
 ### V3 — Renderer backend + present wiring
 - [ ] `VulkanComputeRenderer : IFractalRenderer` — compute → map → hand buffer to `SilkGLRenderer` blit.
@@ -284,3 +286,50 @@ cross-vendor float without a false-fail.
   (still in `MandelbrotGpuKernel.BuildHlsl` — extract to the shared source when V2 needs it).
 - Per-theme SPIR-V compile-cache keyed on `PaletteId`, mirroring the D3D `_csByPaletteId` cache.
 - `--colorprobe` colour-golden reuse is the V2 gate (colour parity is non-negotiable).
+
+## 11. V2 findings (issue [#41](https://github.com/AloneButUnsober/MandelbrotExplorer/issues/41)) — **DONE**
+
+The colour-emitting kernel (`EvalPalette` → packed BGRA) now runs on Vulkan compute and matches a
+deterministic CPU mirror of the same HLSL palette + pack within a documented band.
+
+**Colour source extracted (the §10 carry-over, done).** The `gColor` UAV, ordered-dither
+`cg_pack_bgra`, `EvalPalette` signature, and the three CSMain colour-write splices moved out of
+`MandelbrotGpuKernel.BuildHlsl` into `MandelbrotKernelSource.{ColorPreludeHead/Tail, *ColorSplice,
+BuildColor}`. Same "one source, two compilers" rule as V1 — FXC (D3D, unchanged; `BuildHlsl` now
+delegates) and DXC (V2) consume the identical string. Still no `[[vk::binding]]`.
+
+**Binding, extended.** The colour variant adds register class `u3` (`gColor`). The same
+`-fvk-u-shift 200 0` puts it at binding 203; the probe wires a 6th descriptor (UBO@0,
+SSBO@100/200/201/202/**203**). No new flag — the shift covers every `u#`.
+
+**Gate — two parts, cross-vendor-robust (`--colorprobe`).** Colour parity is "non-negotiable" per
+the plan, but a strict GPU digest can't survive cross-vendor float any more than V1's iter could.
+So the gate splits the concern:
+1. an **embedded golden digest** of a *deterministic CPU mirror* (the Greyscale `EvalPalette` body +
+   `cg_pack_bgra`, dither off) — pins that the reference view/theme/pack itself did not drift; and
+2. a **byte-disagreement band** of the GPU colour vs that mirror (±1/channel to absorb
+   rounding-at-noise, ≤2% of pixels) — robust across GPUs. Boundary pixels flip black↔grey when the
+   GPU iter and mirror iter disagree on in-set membership, exactly the V1 chaos, now in colour.
+
+Plus a degenerate guard (<3 distinct colours ⇒ unbound `gColor`/collapsed pack) and an opaque-alpha
+guard (every pixel's top byte must be 0xFF). The Greyscale theme was chosen because its C# `Map`
+maps 1:1 to a short HLSL body using only `in_smooth`/`in_isInSet`, so the mirror is a faithful twin
+with **no Engine ProjectReference** dragged into the standalone smoke project.
+
+**Parity result.** `--colorprobe` on a fixed 128×128 view: **GeForce GT 710** distinct=132,
+alphaBad=0, disagree 14/16384 (**0.085%**), exit 0. **Mesa lavapipe** (CI, LLVM 20.1.2) distinct=130,
+alphaBad=0, disagree 24/16384 (**0.146%**), exit 0.
+
+**Note on the golden's determinism — held.** The pinned digest is over the *CPU* mirror, not the GPU,
+so it must be reproducible wherever the gate runs. `sqrt` is IEEE-correctly-rounded (safe cross-OS);
+`MathF.Log`/`MathF.Sin` are not *guaranteed* bit-identical Windows↔Linux, but in practice the
+lavapipe (Linux) CPU-mirror digest came back **byte-identical** to the Windows-regenerated golden
+(`4e725d…f111`) — so the exact-digest half is safe here. If a future runtime/libm change ever
+diverges across a rounding boundary, the band half stays green and `--colorprobe regen` on the
+gate's own platform re-pins it.
+
+### Notes carried into V3
+- The colour kernel is proven headless; V3 wires `VulkanComputeRenderer : IFractalRenderer` (compute
+  → map → hand buffer to the GL blit) and the `--renderer vulkan` selector.
+- Per-theme SPIR-V caching (keyed on `PaletteId`) is still a V2-scoped nicety not yet built — the
+  probe compiles one theme per run. Add the cache when the renderer switches themes at runtime.
