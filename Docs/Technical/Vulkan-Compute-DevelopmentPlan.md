@@ -99,14 +99,14 @@ Each slice lands behind a smoke gate and is independently revertible. Checkbox =
 | V4 deep-zoom | [#43](https://github.com/AloneButUnsober/MandelbrotExplorer/issues/43) |
 | V5 macOS (stretch) | [#44](https://github.com/AloneButUnsober/MandelbrotExplorer/issues/44) |
 
-### V0 — Spike: HLSL→SPIR-V compute proof (headless, no UI)  ← [#39](https://github.com/AloneButUnsober/MandelbrotExplorer/issues/39)
-- [ ] `dotnet` project `Rendering.Vulkan.Smoke` (mirrors `Compute.Smoke`): enumerate Vulkan
+### V0 — Spike: HLSL→SPIR-V compute proof (headless, no UI)  ← [#39](https://github.com/AloneButUnsober/MandelbrotExplorer/issues/39)  ✅ **DONE — see §9**
+- [x] `dotnet` project `Rendering.Vulkan.Smoke` (mirrors `Compute.Smoke`): enumerate Vulkan
       devices, create instance/device/compute queue, no swapchain.
-- [ ] DXC toolchain wired: compile a **trivial** HLSL CS (`gColor[i] = pack(uv.x, uv.y, 0)`) → SPIR-V,
+- [x] DXC toolchain wired: compile a **trivial** HLSL CS (`gColor[i] = pack(uv.x, uv.y, 0)`) → SPIR-V,
       load, dispatch 64×64, `vkMapMemory`, read back.
-- [ ] Histogram sanity like `Compute.Smoke` (≥3 distinct values, ≥1 in-set). Exit 0/1/2.
-- [ ] Runs on linux-x64 in CI under Mesa lavapipe (software Vulkan) so no GPU-in-CI needed.
-- **Gate:** `Rendering.Vulkan.Smoke` exit 0 on lavapipe. **Answers O1/O2 before any real kernel port.**
+- [x] Histogram sanity like `Compute.Smoke` (≥3 distinct values; corners bit-exact vs CPU pack). Exit 0/1/2.
+- [x] Runs on linux-x64 in CI under Mesa lavapipe (software Vulkan) so no GPU-in-CI needed.
+- **Gate:** `Rendering.Vulkan.Smoke` exit 0 on lavapipe. **Answered O1/O2 — see §9.**
 
 ### V1 — Port the real kernel
 - [ ] DXC-compile the full [`MandelbrotGpuKernel.BuildHlsl(null,null,emitColor:false)`](../../Rendering.D3D/MandelbrotGpuKernel.cs) base variant → SPIR-V.
@@ -189,3 +189,56 @@ Each slice lands behind a smoke gate and is independently revertible. Checkbox =
 
 See the session response / issue for the actionable list; folded into slices above where they gate
 work (lavapipe CI, `--vulkanprobe`, colour-golden reuse, ILGPU A/B in V0).
+
+---
+
+## 9. V0 spike findings (issue [#39](https://github.com/AloneButUnsober/MandelbrotExplorer/issues/39)) — **DONE**
+
+Landed on branch `feature/vulkan-compute`. New standalone project `Rendering.Vulkan.Smoke`
+(Silk.NET.Vulkan 2.23, mirrors `Compute.Smoke`, exit 0/1/2), in four commits: (1) instance +
+device enumeration (`--list`) + logical device + compute queue, no WSI; (2) DXC HLSL→SPIR-V + full
+compute pipeline, dispatch 64×64, `vkMapMemory` read-back + sanity; (3) lavapipe CI leg;
+(4) findings. Plus two CI fixups (see below).
+
+**Proven both ways.** Local (real GPU, GeForce GT 710): DXC-compiles the trivial uv-gradient kernel
+→ dispatch → read-back `distinct=4096`, all four corners bit-exact vs the CPU pack → exit 0. CI
+(software Vulkan, Mesa lavapipe on linux-x64): `Run Vulkan smoke` exits 0 —
+[run 29682409585](https://github.com/AloneButUnsober/MandelbrotExplorer/actions/runs/29682409585).
+
+The trivial kernel reuses the exact `cg_pack_bgra` convention from
+[`MandelbrotGpuKernel`](../../Rendering.D3D/MandelbrotGpuKernel.cs), so V1 swaps in the real body
+with no packing/endianness surprises.
+
+### O1 — ILGPU vs Vulkan → **Vulkan** ✅
+DXC→SPIR-V works end-to-end on the trivial kernel with **no dialect surprises**. That de-risks the
+decisive advantage: the tuned 856-line perturbation kernel + `ColorGenHlslEmitter` survive **intact**
+via DXC — zero re-port. The ILGPU alternative would re-express iter/smooth + `EvalPalette` as **C#**
+kernels (`ColorGenEmitter`), reusing the C# colour emitter but abandoning the tuned HLSL kernel and
+adding a second colour-parity surface. HLSL reuse is the higher-value asset; **proceed with Vulkan**.
+ILGPU stays the calculator-side path, unchanged (§2 note holds).
+
+### O2 — DXC delivery → **runtime JIT now, in-proc native later** ✅
+V0 invokes the `dxc -spirv` **CLI at runtime** (located `DXC_PATH` → `VULKAN_SDK/Bin` → PATH),
+mirroring D3D's runtime compile. Themes are dynamic, so a build-time SPIR-V bake **cannot** cover
+per-theme `EvalPalette` variants. Recommendation for V2+: ship the **`dxcompiler` native per-RID and
+call it in-proc** (matches in-proc D3DCompiler on Windows; drops the per-compile process spawn + the
+CLI dependency); NuGet `Microsoft.Direct3D.DXC` is a viable managed-resolved source. Keep the CLI as
+the dev/CI fallback. On CI, DXC ships fine from the LunarG `vulkan-sdk` apt package
+(`/usr/bin/dxc`, libdxcompiler 1.8).
+
+### Notes carried into V1
+- **Binding map:** DXC needs **explicit `[[vk::binding(set,binding)]]`** — do not rely on the default
+  u-register→binding mapping. V1 maps cbuffer `b0` → push-constants/UBO and `u0–u3` storage buffers
+  with explicit `vk::binding`.
+- **Memory:** V0 uses one `HOST_VISIBLE|HOST_COHERENT` storage buffer (direct map, no staging). A
+  `DEVICE_LOCAL` + staging copy is a later perf option.
+- **Parity band:** corners asserted bit-exact; interior pixels **not** (float ULP). V1's
+  `--vulkanprobe` should adopt the documented ULP band, not strict bit-exact, for iter/smooth.
+
+### CI caveat (not a Vulkan issue)
+The Linux/macOS legs already fail at `Build FracturingFog.App` — it multi-targets
+`net10.0;net10.0-windows`, and the CI step builds with no `-f`, so the `net10.0-windows` TFM pulls
+the Windows-only `FracturingFog.Win` (WinForms) and trips NETSDK1073. Pre-existing on `main`; the
+Vulkan steps are guarded `!cancelled()` so the gate still reports. Tracked in
+[#49](https://github.com/AloneButUnsober/MandelbrotExplorer/issues/49) (fix: build App `-f net10.0`
+on non-Windows legs).
