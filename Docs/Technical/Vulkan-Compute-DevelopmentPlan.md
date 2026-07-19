@@ -108,12 +108,15 @@ Each slice lands behind a smoke gate and is independently revertible. Checkbox =
 - [x] Runs on linux-x64 in CI under Mesa lavapipe (software Vulkan) so no GPU-in-CI needed.
 - **Gate:** `Rendering.Vulkan.Smoke` exit 0 on lavapipe. **Answered O1/O2 — see §9.**
 
-### V1 — Port the real kernel
-- [ ] DXC-compile the full [`MandelbrotGpuKernel.BuildHlsl(null,null,emitColor:false)`](../../Rendering.D3D/MandelbrotGpuKernel.cs) base variant → SPIR-V.
-- [ ] Wire cbuffer `Params` (b0) → Vulkan push-constants / UBO; `RWStructuredBuffer` u0–u3 →
-      `VkBuffer` storage buffers; `StructuredBuffer` t0 (per-row) → storage buffer.
-- [ ] iter/smooth output matches the D3D path for a fixed view (bit-exact or documented ULP band).
-- **Gate:** new `--vulkanprobe` in Program.cs; iter/smooth digest vs golden (mirror `--colorprobe`).
+### V1 — Port the real kernel  ✅ **DONE — see §10**
+- [x] DXC-compile the shared [`MandelbrotKernelSource.BuildBase()`](../../Rendering.D3D/MandelbrotKernelSource.cs) (the exact HLSL FXC compiles for the D3D base variant) → SPIR-V.
+- [x] Wire cbuffer `Params` (b0) → UBO; `RWStructuredBuffer` u0–u2 (iter/smooth/finalZD) →
+      storage buffers; `StructuredBuffer` t0 (per-row) → storage buffer. Bindings via DXC
+      `-fvk-*-shift` (b→0, t→+100, u→+200) so the shared source needs no `vk::binding` attributes.
+- [x] iter/smooth matches a C# float-mirror reference for a fixed view within a documented
+      boundary-chaos band (see §10). Bit-exact is impossible cross-vendor (FMA/transcendental).
+- **Gate:** `--vulkanprobe` in Program.cs; ULP-band parity vs the CPU reference (not a strict
+  golden digest — set-boundary pixels are chaotic). Green on real GPU + lavapipe CI.
 
 ### V2 — Colour pipeline (EvalPalette)
 - [ ] DXC-compile the `emitColor:true` variant with a real theme's `HlslPaletteBody` + prelude.
@@ -241,4 +244,43 @@ The Linux/macOS legs already fail at `Build FracturingFog.App` — it multi-targ
 the Windows-only `FracturingFog.Win` (WinForms) and trips NETSDK1073. Pre-existing on `main`; the
 Vulkan steps are guarded `!cancelled()` so the gate still reports. Tracked in
 [#49](https://github.com/AloneButUnsober/MandelbrotExplorer/issues/49) (fix: build App `-f net10.0`
-on non-Windows legs).
+on non-Windows legs). **Fixed in [#50](https://github.com/AloneButUnsober/MandelbrotExplorer/pull/50).**
+
+---
+
+## 10. V1 findings (issue [#40](https://github.com/AloneButUnsober/MandelbrotExplorer/issues/40)) — **DONE**
+
+The real SP Mandelbrot base kernel (iter/smooth, no colour) now runs on Vulkan compute and matches
+the D3D float math within a documented band.
+
+**One source, two compilers — realised.** [`MandelbrotKernelSource`](../../Rendering.D3D/MandelbrotKernelSource.cs)
+holds the cbuffer/IO header + `CSMain` body, extracted verbatim from `MandelbrotGpuKernel`. FXC
+compiles it on Windows (unchanged D3D path); DXC compiles the *same string* to SPIR-V. The Vulkan
+smoke `<Compile Include ... Link>`s that one dependency-free file — no Rendering.D3D/Engine
+ProjectReference closure.
+
+**Binding map (the O1/O2 §9 note, resolved).** The shared source carries **no `[[vk::binding]]`**
+(those break FXC). DXC assigns bindings from register class via shift flags — `-fvk-b-shift 0 0`,
+`-fvk-t-shift 100 0`, `-fvk-u-shift 200 0` — giving deterministic, collision-free bindings
+(`Params` UBO → set0/binding0; `gPerRow` t0 → 100; `gIter/gSmooth/gFinalZD` u0..u2 → 200/201/202).
+Without the shift, DXC starts each register class at binding 0 and `u0`/`t0` collide.
+
+**cbuffer → UBO packing.** `Params` is 15 consecutive scalars (60 B) padded to a float4 multiple
+(64 B). std140 packs scalars at 4-byte offsets with no interior padding, so the 64-byte C# blob maps
+1:1 onto the DXC-generated UBO — the same bytes the D3D constant buffer uses.
+
+**Parity result.** `--vulkanprobe` runs a fixed 128×128 shallow view and compares GPU iter/smooth
+against a C# reference that mirrors the exact float ops. A pixel "agrees" when iter is equal and
+(if escaped) smooth is within 0.05. Set-boundary pixels are chaotic — a 1-ULP FMA/transcendental
+spread explodes the escape iteration there — so the gate bounds the **disagreement fraction** (≤1%)
++ in-set drift (≤1%), robust to that noise while a broken kernel (wrong bindings/endianness/math)
+trips it at ~100%. Measured: **GeForce GT 710** in-set drift 0.012%, disagree 0.171% (4 iter + 24
+smooth); **Mesa lavapipe** (CI) green. A strict golden digest was rejected — it can't survive
+cross-vendor float without a false-fail.
+
+### Notes carried into V2
+- Colour splice points (`inSetColor`/`escapeColor`/`bulbSkipColor`) already parameterised in
+  `MandelbrotKernelSource.HlslEntry`; V2 supplies them + the `EvalPalette`/`cg_pack_bgra` prelude
+  (still in `MandelbrotGpuKernel.BuildHlsl` — extract to the shared source when V2 needs it).
+- Per-theme SPIR-V compile-cache keyed on `PaletteId`, mirroring the D3D `_csByPaletteId` cache.
+- `--colorprobe` colour-golden reuse is the V2 gate (colour parity is non-negotiable).
