@@ -29,6 +29,12 @@ public sealed unsafe class VulkanContext : IDisposable
     public string PickedName { get; private set; } = "<none>";
     public PhysicalDeviceType PickedType { get; private set; }
 
+    // V6 spike (#82): true if the picked device advertised shaderFloat64 and we
+    // enabled it on the logical device. The FP64 perturbation kernel needs it;
+    // the FP32 base/colour kernels ignore it. False on parts without hardware
+    // (or driver-exposed) doubles — the perturbation probe reports SKIP then.
+    public bool SupportsFloat64 { get; private set; }
+
     private VulkanContext(Vk vk) => Vk = vk;
 
     // Stand up instance only. Cheap enough that --list can run without ever
@@ -140,6 +146,14 @@ public sealed unsafe class VulkanContext : IDisposable
             PQueuePriorities = &priority,
         };
 
+        // V6 spike (#82): opt into shaderFloat64 when the device supports it so a
+        // `double` compute kernel (the perturbation δ loop) can run. Querying and
+        // enabling a single supported feature is inert for the FP32 kernels.
+        PhysicalDeviceFeatures supported;
+        Vk.GetPhysicalDeviceFeatures(best, &supported);
+        SupportsFloat64 = supported.ShaderFloat64;
+        var enabled = new PhysicalDeviceFeatures { ShaderFloat64 = SupportsFloat64 };
+
         var dci = new DeviceCreateInfo
         {
             SType = StructureType.DeviceCreateInfo,
@@ -147,6 +161,7 @@ public sealed unsafe class VulkanContext : IDisposable
             PQueueCreateInfos = &qci,
             EnabledExtensionCount = 0,
             EnabledLayerCount = 0,
+            PEnabledFeatures = &enabled,
         };
 
         Device device;

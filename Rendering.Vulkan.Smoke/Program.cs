@@ -31,6 +31,7 @@ internal static class Program
         bool colorProbe = Array.Exists(args, a => string.Equals(a, "--colorprobe", StringComparison.OrdinalIgnoreCase));
         bool colorRegen = Array.Exists(args, a => string.Equals(a, "regen", StringComparison.OrdinalIgnoreCase));
         bool renderProbe = Array.Exists(args, a => string.Equals(a, "--vulkanrenderprobe", StringComparison.OrdinalIgnoreCase));
+        bool pturbProbe = Array.Exists(args, a => string.Equals(a, "--vulkanpturbprobe", StringComparison.OrdinalIgnoreCase));
 
         try
         {
@@ -62,6 +63,9 @@ internal static class Program
 
             if (renderProbe)
                 return RealKernelRenderProbe.Run(ctx);
+
+            if (pturbProbe)
+                return PerturbSpikeProbe.Run(ctx);
 
             // DXC-compile the trivial kernel, dispatch 64x64, map back.
             uint[] pixels = ComputeSmoke.Run(ctx);
