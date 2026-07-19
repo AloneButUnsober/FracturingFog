@@ -96,81 +96,14 @@ public sealed class MandelbrotGpuKernel : IGpuKernel
     // ships the body.
     private static string BuildHlsl(string? paletteBody, string? paletteHelpers, bool emitColor)
     {
-        var sb = new System.Text.StringBuilder(8192);
-        sb.AppendLine(MandelbrotKernelSource.HlslBase);
-        if (emitColor)
-        {
-            // Helpers (cg_mods, cg_palette_N, etc.) declared at file scope so
-            // EvalPalette can reference them.
-            if (!string.IsNullOrEmpty(paletteHelpers)) sb.AppendLine(paletteHelpers);
-            sb.AppendLine(@"
-RWStructuredBuffer<uint> gColor : register(u3);
-
-// F11b: centred 8x8 Bayer thresholds ((raw+0.5)/64 - 0.5), the GPU twin of
-// GradientColorMap.Bayer8. Added to each channel before the round so a
-// shallow gradient dithers instead of banding. gDitherStrength == 0 → the
-// offset is 0 and the pack is byte-identical to the plain round.
-static const float cg_bayer8[64] =
-{
-    -0.4921875,  0.0078125, -0.3671875,  0.1328125, -0.4609375,  0.0390625, -0.3359375,  0.1640625,
-     0.2578125, -0.2421875,  0.3828125, -0.1171875,  0.2890625, -0.2109375,  0.4140625, -0.0859375,
-    -0.3046875,  0.1953125, -0.4296875,  0.0703125, -0.2734375,  0.2265625, -0.3984375,  0.1015625,
-     0.4453125, -0.0546875,  0.3203125, -0.1796875,  0.4765625, -0.0234375,  0.3515625, -0.1484375,
-    -0.4453125,  0.0546875, -0.3203125,  0.1796875, -0.4765625,  0.0234375, -0.3515625,  0.1484375,
-     0.3046875, -0.1953125,  0.4296875, -0.0703125,  0.2734375, -0.2265625,  0.3984375, -0.1015625,
-    -0.2578125,  0.2421875, -0.3828125,  0.1171875, -0.2890625,  0.2109375, -0.4140625,  0.0859375,
-     0.4921875, -0.0078125,  0.3671875, -0.1328125,  0.4609375, -0.0390625,  0.3359375, -0.1640625,
-};
-
-uint cg_pack_bgra(float3 c, uint px, uint py)
-{
-    c = saturate(c);
-    float o = gDitherStrength * cg_bayer8[(py & 7) * 8 + (px & 7)];
-    uint r = (uint)clamp(c.r * 255.0 + 0.5 + o, 0.0, 255.0);
-    uint g = (uint)clamp(c.g * 255.0 + 0.5 + o, 0.0, 255.0);
-    uint b = (uint)clamp(c.b * 255.0 + 0.5 + o, 0.0, 255.0);
-    return 0xFF000000u | (r << 16) | (g << 8) | b;
-}
-
-float3 EvalPalette(
-    float in_smooth, float in_dist, float in_iter, float in_maxIter,
-    float in_t, float in_nx, float in_ny, float in_zr, float in_zi,
-    float in_dzr, float in_dzi, float in_arg, float in_mag,
-    float in_isInSet, float in_pxScale)
-{");
-            sb.AppendLine(paletteBody ?? "    return float3(0.0, 0.0, 0.0);");
-            sb.AppendLine("}");
-        }
-
-        // Colour-write helper invocations spliced into the in-set / escape /
-        // bulb-skip branches of the shared CSMain. Empty in the base variant.
-        // Distance + normal aren't computed in-shader (phase 1 CPU-writes them
-        // from finalZD), so the GPU palette gets dist=0, nx=ny=0 for now.
-        string inSetColor = "", escapeColor = "", bulbSkipColor = "";
-        if (emitColor)
-        {
-            inSetColor = @"
-        gColor[idx] = cg_pack_bgra(EvalPalette(
-            0.0, 0.0, (float)gMaxIter, (float)gMaxIter,
-            0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0), x, y);
-";
-            escapeColor = @"
-        float t_iter = gMaxIter > 0 ? sm / (float)gMaxIter : 0.0;
-        float in_arg = atan2(zi, zr);
-        float in_mag = sqrt(zr * zr + zi * zi);
-        gColor[idx] = cg_pack_bgra(EvalPalette(
-            sm, 0.0, (float)it, (float)gMaxIter,
-            t_iter, 0.0, 0.0, zr, zi, dr, di, in_arg, in_mag, 0.0, 0.0), x, y);
-";
-            bulbSkipColor = @"
-        gColor[idx] = cg_pack_bgra(EvalPalette(
-            0.0, 0.0, (float)gMaxIter, (float)gMaxIter,
-            0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0, 0.0), x, y);
-";
-        }
-
-        sb.AppendLine(MandelbrotKernelSource.HlslEntry(emitColor, inSetColor, escapeColor, bulbSkipColor));
-        return sb.ToString();
+        // Both variants now come from the shared, dependency-free
+        // MandelbrotKernelSource so the exact same HLSL feeds FXC (here) and DXC
+        // (the V2 Vulkan colour probe). The gColor UAV + ordered-dither pack +
+        // EvalPalette signature + branch splices live there; this class only
+        // supplies the theme's IGpuHlslPalette body + helpers.
+        return emitColor
+            ? MandelbrotKernelSource.BuildColor(paletteHelpers, paletteBody)
+            : MandelbrotKernelSource.BuildBase();
     }
 
     [StructLayout(LayoutKind.Sequential)]
