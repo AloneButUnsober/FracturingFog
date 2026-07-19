@@ -185,6 +185,20 @@ namespace FracturingFog.Hosting
                 path => FracturingFog.Rendering.Lighting.HdriRegistry.TryLoadFromFile(path, out _);
         }
 
+        /// <summary>True when an env var is set to an affirmative value
+        /// (1/true/yes/on, case-insensitive). Used for opt-in feature gates
+        /// like FF_GPU_PERTURB (V6 #82 D3D deep-zoom perturbation).</summary>
+        private static bool IsTruthyEnv(string name)
+        {
+            string? v = Environment.GetEnvironmentVariable(name);
+            if (string.IsNullOrWhiteSpace(v)) return false;
+            v = v.Trim();
+            return v.Equals("1", StringComparison.Ordinal)
+                || v.Equals("true", StringComparison.OrdinalIgnoreCase)
+                || v.Equals("yes", StringComparison.OrdinalIgnoreCase)
+                || v.Equals("on", StringComparison.OrdinalIgnoreCase);
+        }
+
         private static string? ProbeIlgpuDevices()
         {
             try
@@ -364,6 +378,27 @@ namespace FracturingFog.Hosting
                         "[Vulkan] --renderer vulkan requested but no Vulkan device was found; " +
                         "falling back to CPU compute (OpenGL present unaffected).");
                 }
+            }
+            // V6 (#82) — deep-zoom GPU perturbation on the D3D (default Windows)
+            // backend. Held behind an explicit opt-in (env FF_GPU_PERTURB=1) —
+            // NOT default-on — because it changes user-facing deep-zoom
+            // rendering and wants on-device parity sign-off, the same posture as
+            // the Vulkan enable (which is gated behind explicit --renderer
+            // vulkan). When opted in AND a D3D kernel factory is present, force
+            // GPU compute on so the kernel attaches now, then flip the master
+            // perturbation toggle; the per-frame gate still checks the live
+            // kernel's SupportsPerturbation, so a device without
+            // DoublePrecisionFloatShaderOps self-disables and deep zoom stays
+            // CPU. Left off entirely when the env is unset.
+            else if (BootstrapHooks.GpuKernelFactoryHook != null
+                     && IsTruthyEnv("FF_GPU_PERTURB"))
+            {
+                s_renderHost.UseGpuCompute = true;   // attaches the D3D kernel via the factory
+                FracturingFog.MandelbrotCalculator.UseGpuPerturbation = true;
+                Console.Error.WriteLine(
+                    "[D3D] FF_GPU_PERTURB set — deep-zoom GPU perturbation opted in " +
+                    "(per-frame gate still checks DoublePrecisionFloatShaderOps; deep zoom " +
+                    "stays CPU if the device lacks FP64 shader ops).");
             }
             // Phase X.2 / Slice 2.6 — per-OS video-writer selection.
             //   * Windows: WindowsBootstrap supplies a Media Foundation Mp4Writer

@@ -124,6 +124,17 @@ public sealed class MandelbrotGpuKernel : IGpuKernel
         public float DitherStrength;
     }
 
+    // V6 (#82): deep-zoom perturbation params. Mirrors the HLSL PerturbParams
+    // cbuffer (register b0) in MandelbrotKernelSource.BuildPerturb and the
+    // Vulkan PerturbParamsBlob: 4 ints (16 B) then 4 doubles (32 B) = 48 B, a
+    // multiple of 16 with no scalar straddling a 16-byte cbuffer row.
+    [StructLayout(LayoutKind.Sequential)]
+    private struct PerturbParams
+    {
+        public int Width, Height, MaxIter, RefLen;
+        public double Scale, EscapeR2, OffX0, OffY0;
+    }
+
     /// <summary>Phase 3 fractal selector. Matches the shader's
     /// <c>gFractalKind</c> switch order. Mandelbrot is the default; other
     /// kinds pass appropriate per-pixel <c>cIter</c> + <c>z_0</c> init.</summary>
@@ -170,6 +181,21 @@ public sealed class MandelbrotGpuKernel : IGpuKernel
     // Phase 2: currently active palette state. When non-null, Run() with a
     // colorDst argument uses the color-emitting variant.
     private string? _activePaletteId;
+    // V6 (#82): deep-zoom perturbation shader + its dedicated buffers. The
+    // reference-orbit Hi-limb doubles (t0/t1) + 48-byte double param cbuffer
+    // (b0); iter/smooth/finalZD outputs reuse the shared EnsureOutputBuffers
+    // UAVs (u0/u1/u2). Compiled lazily on first RunPerturb so devices that
+    // never deep-zoom on GPU pay nothing. Null until then.
+    private ID3D11ComputeShader? _csPerturb;
+    private ID3D11Buffer? _perturbParamsBuf;
+    private ID3D11Buffer? _refZrBuf;
+    private ID3D11Buffer? _refZiBuf;
+    private ID3D11ShaderResourceView? _refZrSrv;
+    private ID3D11ShaderResourceView? _refZiSrv;
+    private int _refAllocLen;
+    // FeatureDataDoubles cached once — DoublePrecisionFloatShaderOps gates
+    // SupportsPerturbation. -1 = unqueried, 0 = no, 1 = yes.
+    private int _fp64 = -1;
     private bool _disposed;
 
     public MandelbrotGpuKernel(ID3D11Device device, ID3D11DeviceContext context, object d3dGate)
@@ -183,11 +209,11 @@ public sealed class MandelbrotGpuKernel : IGpuKernel
 
     /// <summary>Compile a CS variant from a fully composed HLSL string.
     /// Caller is responsible for caching the returned shader.</summary>
-    private ID3D11ComputeShader CompileShader(string hlsl, string label)
+    private ID3D11ComputeShader CompileShader(string hlsl, string label, string entryPoint = "CSMain")
     {
         var hr = Compiler.Compile(
             hlsl,
-            entryPoint: "CSMain",
+            entryPoint: entryPoint,
             sourceName: $"MandelbrotGpuKernel.{label}.hlsl",
             profile: "cs_5_0",
             out var blob,
@@ -608,10 +634,211 @@ public sealed class MandelbrotGpuKernel : IGpuKernel
         }
     }
 
+    // ── V6 (#82): deep-zoom GPU perturbation ─────────────────────────────────
+
+    /// <summary>Whether this D3D device can run the double perturbation kernel
+    /// — i.e. advertises <c>DoublePrecisionFloatShaderOps</c>. Queried once and
+    /// cached. The calculator gates its GPU-perturbation dispatch on this so a
+    /// device without FP64 shader ops falls back to the CPU deep path.</summary>
+    public bool SupportsPerturbation
+    {
+        get
+        {
+            if (_fp64 < 0)
+            {
+                try
+                {
+                    var d = _device.CheckFeatureSupport<FeatureDataDoubles>(Feature.Doubles);
+                    _fp64 = d.DoublePrecisionFloatShaderOps ? 1 : 0;
+                }
+                catch { _fp64 = 0; }
+            }
+            return _fp64 == 1;
+        }
+    }
+
+    /// <summary>Deep-zoom perturbation dispatch. Runs the double δ-rebased loop
+    /// (MandelbrotKernelSource.BuildPerturb, entry CSPerturb — the same HLSL the
+    /// Vulkan backend runs) over a CPU-built Hi-limb reference orbit, writing
+    /// back iter/smooth/finalZD exactly like <see cref="Run"/>. Colour stays on
+    /// the CPU (the calculator's FillAuxAndColorHP pass consumes finalZD).</summary>
+    public void RunPerturb(
+        int width, int height,
+        double scale, int maxIter, double escapeRadius2,
+        double offsetX0, double offsetY0,
+        double[] refZr, double[] refZi, int refLen,
+        int[] iterDst, float[] smoothDst,
+        float[] finalZrDst, float[] finalZiDst,
+        float[] finalDrDst, float[] finalDiDst)
+    {
+        if (_disposed) throw new ObjectDisposedException(nameof(MandelbrotGpuKernel));
+        if (!SupportsPerturbation)
+            throw new NotSupportedException("D3D device has no DoublePrecisionFloatShaderOps — cannot run the perturbation kernel.");
+        if (width <= 0 || height <= 0) return;
+        if (refLen < 1) throw new ArgumentException("reference orbit is empty", nameof(refLen));
+        if (refZr.Length < refLen || refZi.Length < refLen)
+            throw new ArgumentException("reference-orbit arrays shorter than refLen");
+
+        lock (_d3dGate)
+        {
+            long t0 = System.Diagnostics.Stopwatch.GetTimestamp();
+            EnsureOutputBuffers(width, height);      // shares iter/smooth/finalZD UAVs (u0/u1/u2)
+            EnsurePerturbParamsBuffer();
+            EnsureRefOrbitBuffers(refLen);
+            _csPerturb ??= CompileShader(MandelbrotKernelSource.BuildPerturb(), label: "perturb",
+                entryPoint: MandelbrotKernelSource.PerturbEntryPoint);
+
+            // Upload the reference orbit (Hi-limb doubles) into t0/t1.
+            UploadDoubles(_refZrBuf!, refZr, refLen);
+            UploadDoubles(_refZiBuf!, refZi, refLen);
+
+            // Upload params (48-byte cbuffer — 4 ints then 4 doubles).
+            var p = new PerturbParams
+            {
+                Width = width, Height = height, MaxIter = maxIter, RefLen = refLen,
+                Scale = scale, EscapeR2 = escapeRadius2, OffX0 = offsetX0, OffY0 = offsetY0,
+            };
+            var mapped = _ctx.Map(_perturbParamsBuf!, 0, Vortice.Direct3D11.MapMode.WriteDiscard, MapFlags.None);
+            unsafe { *(PerturbParams*)mapped.DataPointer = p; }
+            _ctx.Unmap(_perturbParamsBuf!, 0);
+
+            _ctx.CSSetShader(_csPerturb);
+            _ctx.CSSetConstantBuffer(0, _perturbParamsBuf);
+            _ctx.CSSetShaderResource(0, _refZrSrv);   // t0
+            _ctx.CSSetShaderResource(1, _refZiSrv);   // t1
+            _ctx.CSSetUnorderedAccessView(0, _iterUav);
+            _ctx.CSSetUnorderedAccessView(1, _smoothUav);
+            _ctx.CSSetUnorderedAccessView(2, _finalZDUav);
+
+            _ctx.Dispatch((uint)((width + 7) / 8), (uint)((height + 7) / 8), 1);
+
+            _ctx.CSUnsetUnorderedAccessView(0);
+            _ctx.CSUnsetUnorderedAccessView(1);
+            _ctx.CSUnsetUnorderedAccessView(2);
+            _ctx.CSSetShaderResource(0, null);
+            _ctx.CSSetShaderResource(1, null);
+
+            _ctx.CopyResource(_iterStaging, _iterBuf);
+            _ctx.CopyResource(_smoothStaging, _smoothBuf);
+            _ctx.CopyResource(_finalZDStaging, _finalZDBuf);
+
+            long tDispatch = System.Diagnostics.Stopwatch.GetTimestamp();
+            int n = width * height;
+
+            var iterMap = _ctx.Map(_iterStaging, 0, Vortice.Direct3D11.MapMode.Read, MapFlags.None);
+            try
+            {
+                unsafe
+                {
+                    uint* src = (uint*)iterMap.DataPointer;
+                    fixed (int* dst = iterDst) { for (int i = 0; i < n; i++) dst[i] = (int)src[i]; }
+                }
+            }
+            finally { _ctx.Unmap(_iterStaging, 0); }
+
+            var smoothMap = _ctx.Map(_smoothStaging, 0, Vortice.Direct3D11.MapMode.Read, MapFlags.None);
+            try
+            {
+                unsafe
+                {
+                    float* src = (float*)smoothMap.DataPointer;
+                    fixed (float* dst = smoothDst) { for (int i = 0; i < n; i++) dst[i] = src[i]; }
+                }
+            }
+            finally { _ctx.Unmap(_smoothStaging, 0); }
+
+            var fzdMap = _ctx.Map(_finalZDStaging, 0, Vortice.Direct3D11.MapMode.Read, MapFlags.None);
+            try
+            {
+                unsafe
+                {
+                    float* src = (float*)fzdMap.DataPointer;
+                    fixed (float* zr = finalZrDst)
+                    fixed (float* zi = finalZiDst)
+                    fixed (float* dr = finalDrDst)
+                    fixed (float* di = finalDiDst)
+                    {
+                        for (int i = 0; i < n; i++)
+                        {
+                            int b = i * 4;
+                            zr[i] = src[b + 0]; zi[i] = src[b + 1];
+                            dr[i] = src[b + 2]; di[i] = src[b + 3];
+                        }
+                    }
+                }
+            }
+            finally { _ctx.Unmap(_finalZDStaging, 0); }
+
+            long tEnd = System.Diagnostics.Stopwatch.GetTimestamp();
+            double freq = System.Diagnostics.Stopwatch.Frequency;
+            LastDispatchMs = (tDispatch - t0) * 1000.0 / freq;
+            LastReadbackMs = (tEnd - tDispatch) * 1000.0 / freq;
+        }
+    }
+
+    private void EnsurePerturbParamsBuffer()
+    {
+        if (_perturbParamsBuf != null) return;
+        var desc = new BufferDescription(
+            byteWidth: 48,      // multiple of 16, matches PerturbParams cbuffer
+            bindFlags: BindFlags.ConstantBuffer,
+            usage: ResourceUsage.Dynamic,
+            cpuAccessFlags: CpuAccessFlags.Write);
+        _perturbParamsBuf = _device.CreateBuffer(desc);
+    }
+
+    private void EnsureRefOrbitBuffers(int refLen)
+    {
+        if (_refZrBuf != null && _refAllocLen >= refLen) return;
+        _refZrSrv?.Dispose();
+        _refZiSrv?.Dispose();
+        _refZrBuf?.Dispose();
+        _refZiBuf?.Dispose();
+
+        var desc = new BufferDescription
+        {
+            ByteWidth = (uint)(refLen * sizeof(double)),
+            BindFlags = BindFlags.ShaderResource,
+            Usage = ResourceUsage.Dynamic,
+            CPUAccessFlags = CpuAccessFlags.Write,
+            MiscFlags = ResourceOptionFlags.BufferStructured,
+            StructureByteStride = sizeof(double),
+        };
+        _refZrBuf = _device.CreateBuffer(desc);
+        _refZiBuf = _device.CreateBuffer(desc);
+
+        var srvDesc = new ShaderResourceViewDescription
+        {
+            Format = Vortice.DXGI.Format.Unknown,
+            ViewDimension = Vortice.Direct3D.ShaderResourceViewDimension.Buffer,
+            Buffer = new BufferShaderResourceView { FirstElement = 0, NumElements = (uint)refLen },
+        };
+        _refZrSrv = _device.CreateShaderResourceView(_refZrBuf, srvDesc);
+        _refZiSrv = _device.CreateShaderResourceView(_refZiBuf, srvDesc);
+        _refAllocLen = refLen;
+    }
+
+    private void UploadDoubles(ID3D11Buffer buf, double[] src, int count)
+    {
+        var m = _ctx.Map(buf, 0, Vortice.Direct3D11.MapMode.WriteDiscard, MapFlags.None);
+        unsafe
+        {
+            double* dst = (double*)m.DataPointer;
+            fixed (double* s = src) { for (int i = 0; i < count; i++) dst[i] = s[i]; }
+        }
+        _ctx.Unmap(buf, 0);
+    }
+
     public void Dispose()
     {
         if (_disposed) return;
         _disposed = true;
+        try { _refZrSrv?.Dispose(); } catch { }
+        try { _refZiSrv?.Dispose(); } catch { }
+        try { _refZrBuf?.Dispose(); } catch { }
+        try { _refZiBuf?.Dispose(); } catch { }
+        try { _perturbParamsBuf?.Dispose(); } catch { }
+        try { _csPerturb?.Dispose(); } catch { }
         try { _iterUav?.Dispose(); } catch { }
         try { _smoothUav?.Dispose(); } catch { }
         try { _finalZDUav?.Dispose(); } catch { }
