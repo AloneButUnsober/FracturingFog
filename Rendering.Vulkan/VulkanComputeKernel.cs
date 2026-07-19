@@ -156,6 +156,25 @@ public sealed unsafe class VulkanComputeKernel : IGpuKernel
         finally { ctx?.Dispose(); }
     }
 
+    /// <summary>Probe whether the picked Vulkan device advertises shaderFloat64
+    /// — i.e. whether <see cref="RunPerturb"/> (the deep-zoom double perturbation
+    /// kernel) can run. Stands up and tears down a throwaway context; never
+    /// throws (false on any failure). Used by the host to decide whether to
+    /// enable <c>MandelbrotCalculator.UseGpuPerturbation</c>.</summary>
+    public static bool ProbeSupportsFloat64()
+    {
+        VulkanContext? ctx = null;
+        try
+        {
+            ctx = VulkanContext.CreateInstance();
+            if (ctx.EnumerateDevices().Count == 0) return false;
+            ctx.CreateComputeDevice();
+            return ctx.SupportsFloat64;
+        }
+        catch { return false; }
+        finally { ctx?.Dispose(); }
+    }
+
     /// <summary>Create a self-contained kernel that owns a fresh
     /// <see cref="VulkanContext"/> (instance + compute device), or null when no
     /// Vulkan device is available or init fails. The returned kernel disposes its

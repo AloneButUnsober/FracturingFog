@@ -344,6 +344,19 @@ namespace FracturingFog.Hosting
                     // off silently and the CPU path takes over.
                     s_renderHost.UseGpuCompute = true;
                     Console.Error.WriteLine($"[Vulkan] compute backend selected: {vkDev}");
+
+                    // V6 (#82) — deep-zoom GPU perturbation. Enable only when the
+                    // device advertises shaderFloat64 (the double δ kernel needs
+                    // it); otherwise deep zoom stays on the CPU. The per-frame
+                    // gate in MandelbrotCalculator also checks the live kernel's
+                    // SupportsPerturbation, so this is belt-and-braces. Off by
+                    // default everywhere else — only an explicit Vulkan session
+                    // opts in.
+                    bool fp64 = VulkanComputeKernel.ProbeSupportsFloat64();
+                    FracturingFog.MandelbrotCalculator.UseGpuPerturbation = fp64;
+                    Console.Error.WriteLine(fp64
+                        ? "[Vulkan] deep-zoom GPU perturbation ENABLED (shaderFloat64 present)."
+                        : "[Vulkan] deep-zoom GPU perturbation disabled (no shaderFloat64); deep zoom stays CPU.");
                 }
                 else
                 {
