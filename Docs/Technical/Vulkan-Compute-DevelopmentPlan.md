@@ -541,6 +541,18 @@ Built 2026-07-19 on the spike's findings, in two validated slices (commits `d4ba
    `MandelbrotCalculator.UseGpuPerturbation` accordingly (logs ENABLED / disabled). Off everywhere else.
    Visual deep-zoom smoke passed on **Windows (GT710)** and **Linux (Intel UHD 630 / CML GT2)** — the Linux
    session logged `deep-zoom GPU perturbation ENABLED (shaderFloat64 present)` on real integrated hardware.
-3. **Deep-`dc` precision (checkbox 2)** — re-run the double-vs-DD `dc` comparison at 1e15/1e20 with a real
-   OD centre before raising `MaxGpuPerturbZoom` past 1e50.
+3. **Deep-`dc` precision (checkbox 2)** — **DONE (2026-07-19)**. New gate `--vulkanpturbdc` builds the
+   PRODUCTION OD reference orbit (`ComputeReferenceOrbitODPublic`) at the canonical deep boundary centre and
+   sweeps 1e6 → 1e50, comparing the single-double `dc` mirror (`colOffsetX*scale`, exactly what the GPU
+   kernel + default CPU `ComputePixelPTRebased` run) against a DD-`dc` oracle (twin of the SM-11a
+   `ComputePixelPTRebasedDD` A/B), ref held Hi-only so only `dc`/δ precision varies. Result: **disagree
+   0/4096 (0.000%, maxΔiter 0) at 1e6, 1e15, 1e20, 1e30, 1e40** — single-double `dc` is *bit-for-bit* the DD
+   result across 34 orders of zoom, confirming perturbation is precision-**zoom-invariant** (`dc·amplification`
+   stays O(1), so `dc`'s ½-ULP rounding never reaches escape-time significance). 1e50 is INCONCLUSIVE — this
+   centre's orbit escapes at len 3744 so its amplification caps ≈1e40–45; the deepest frame is uniformly
+   interior and has nothing to resolve (a centre-depth limit, **not** a `dc` failure). Verdict: the flat
+   0-disagreement trend + the zoom-invariance argument support lifting `MaxGpuPerturbZoom` toward the
+   `scale`-denormal limit; kept at the conservative 1e50 pending an on-device deep-zoom sign-off (same posture
+   as the GUI enable). Pure CPU numeric — GPU runs the identical double `dc`, so the CPU verdict transfers; no
+   Vulkan device required, runs on any host.
 4. Later: SA/BLA on GPU (non-goal for now), per-tile-cap support in the perturbation kernel.
