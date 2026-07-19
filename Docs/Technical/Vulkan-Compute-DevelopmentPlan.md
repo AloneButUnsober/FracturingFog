@@ -103,7 +103,7 @@ Each slice lands behind a smoke gate and is independently revertible. Checkbox =
 | V2 colour | [#41](https://github.com/AloneButUnsober/MandelbrotExplorer/issues/41) |
 | V3 backend/present | [#42](https://github.com/AloneButUnsober/MandelbrotExplorer/issues/42) |
 | V4 deep-zoom (parity — resolved trivially, §13) | [#43](https://github.com/AloneButUnsober/MandelbrotExplorer/issues/43) |
-| V6 GPU perturbation kernel (net-new; spike-first) | [#82](https://github.com/AloneButUnsober/MandelbrotExplorer/issues/82) |
+| V6 GPU perturbation kernel (net-new; **spike CLEARED §14**, full build user-gated) | [#82](https://github.com/AloneButUnsober/MandelbrotExplorer/issues/82) |
 | V5 macOS (stretch) | [#44](https://github.com/AloneButUnsober/MandelbrotExplorer/issues/44) |
 
 ### V0 — Spike: HLSL→SPIR-V compute proof (headless, no UI)  ← [#39](https://github.com/AloneButUnsober/MandelbrotExplorer/issues/39)  ✅ **DONE — see §9**
@@ -186,7 +186,7 @@ Each slice lands behind a smoke gate and is independently revertible. Checkbox =
 
 | Risk | Mitigation |
 |---|---|
-| DXC HLSL→SPIR-V feature gaps in the ~~perturbation~~ *shallow* kernel | V0 spike de-risks with a trivial kernel first; V1 ports incrementally with per-variant gates. (A future GPU *perturbation* kernel carries a fresh DXC risk — QD/DD limb math in HLSL — spiked in [#82](https://github.com/AloneButUnsober/MandelbrotExplorer/issues/82).) |
+| DXC HLSL→SPIR-V feature gaps in the ~~perturbation~~ *shallow* kernel | V0 spike de-risks with a trivial kernel first; V1 ports incrementally with per-variant gates. (The GPU *perturbation* kernel's feared DXC risk — QD/DD limb math in HLSL — was **retired by the [#82](https://github.com/AloneButUnsober/MandelbrotExplorer/issues/82) spike, §14**: the default δ path is plain `double`, no limbs; DXC `cs_6_0` + FXC `cs_5_0` both compile it, GT710 runs it. Needs `shaderFloat64`.) |
 | Vulkan boilerplate cost (solo dev) | Compute-only headless removes ~60% of it (no WSI/swapchain/present). Silk.NET.Vulkan gives thin bindings. |
 | CI has no GPU | Mesa **lavapipe** (software Vulkan) runs the smoke gates headless; real-GPU validation is manual/local. |
 | Colour drift on a new backend | `--colorprobe` golden gate is the hard stop; V2 cannot merge without it green. |
@@ -446,3 +446,51 @@ capability, not a Vulkan port. Its headline risk is new: **QD/DD limb arithmetic
 reference orbit is up to OD/~124-digit; a float/double δ is fine but the on-GPU reference and the
 `dc` term need enough precision). That risk is unproven under DXC→SPIR-V *and* FXC, so #82 leads with
 a limb-math spike before any full build.
+
+## 14. V6 spike findings (issue [#82](https://github.com/AloneButUnsober/MandelbrotExplorer/issues/82)) — **SPIKE CLEARS: double perturbation loop ports to GPU; the feared QD/DD-limb-in-HLSL risk is avoidable**
+
+Spike gate (`--vulkanpturbprobe`, `Rendering.Vulkan.Smoke/PerturbSpikeProbe.cs`) run 2026-07-19 on
+**GT710** (Kepler, FP64 at 1/24 rate). It runs a self-contained `double` δ-rebased perturbation kernel
+— `δ_{n+1} = (2·Z[m] + δ)·δ + dc` with Zhuoran rebasing (SM-2), the line-for-line twin of
+`ComputePixelPTRebased` — as both a C# mirror and an HLSL kernel (DXC→SPIR-V), and compares.
+
+**The headline #82 risk (QD/DD limb math in HLSL) turned out to be a non-issue at the loop level, for a
+structural reason:** the production **default** deep-zoom path (`ComputePixelPTRebased`) already runs
+the **δ-chain in plain `double`** — it reads the reference orbit's *Hi limb only* (`_refZr[m]` /
+`_refZi[m]`, doubles) and a single-rounded `double` dc. The QD/OD precision is spent **building** the
+reference orbit accurately (and carrying the OD *centre*), not in the per-pixel loop. So a GPU port
+consumes a **double** reference-orbit SSBO and runs a **double** δ loop — no limb arithmetic in the
+shader. The DD variant (`ComputePixelPTRebasedDD`, `UseDdRebaseReference`) is off by default and was
+measured "insufficient" (§SM-11a); the spike confirms it is unnecessary at the tested depth.
+
+**Results (centre = seahorse boundary point `-0.743643887037151 + 0.13182590420533i`, zoom 1e6,
+96×96, maxIter 6000; ref orbit escapes at 3090, amplification ≈1e18.7 → non-degenerate frame,
+distinct=1045, in-set 3904/9216):**
+
+- **(1) Loop parity — PASS.** GPU vs CPU-`double`: **11/9216 (0.119%)** pixels disagree, all on
+  filament pixels at the escape-time knife-edge (maxΔiter 68 there — expected boundary chaos, doc §2).
+  The CPU-`double` vs a DD oracle (DD dc + DD δ, local TwoProduct/TwoSum, no FMA) disagrees by
+  **9/9216 (0.098%)** — the *same order*. The GPU divergence sits **at the CPU precision noise floor**,
+  i.e. no GPU/DXC dialect gap; it is the inherent chaotic sensitivity, not a port error. Gate is on the
+  disagreement **fraction vs the noise floor** (same ULP-band philosophy as `--vulkanprobe`), never
+  maxΔiter or a strict digest.
+- **(2) dc precision — single `double` SUFFICES** at 1e6 (double-vs-DD divergence is at the δ noise
+  floor). **Open for the full build:** re-run the same double-vs-DD comparison at 1e15/1e20 with a real
+  OD centre — dc shrinks to ~1e-22 there and may need a split hi/lo `dc` (δ still stays double, doc §2).
+- **(3) Both compilers accept the double math — PASS.** DXC `-spirv cs_6_0` emits the `Float64`
+  capability and GT710 runs it; **FXC `cs_5_0` compiles the identical HLSL clean** (exit 0, 2636-byte
+  CSO — verifies the D3D leg of the eventual shared `MandelbrotKernelSource` variant). No ICE on either
+  (the ILGPU-FMA-ICE precedent did not bite — the loop uses only +,−,× on doubles).
+- **(4) FP64 device gating — REQUIRED and wired.** `double` compute needs `shaderFloat64` enabled at
+  device creation; `VulkanContext` did not request any feature. Fixed: it now queries + enables
+  `shaderFloat64` when the device supports it and exposes `SupportsFloat64`; the probe prints **SKIP**
+  (exit 0) on parts without it. Inert for the FP32 base/colour kernels (`--vulkanrenderprobe`
+  unchanged: colour 0.085% / iter 0.171%). Perf is *not* gated here — GT710's 1/24-rate FP64 ran the
+  correctness spike fine, but consumer-GPU throughput is a full-build measurement.
+
+**Verdict — the full build is LOWER risk than #82 feared:** a plain-`double` kernel port
+(reference-orbit SSBO + double δ + rebasing), spliced into `MandelbrotKernelSource` like the existing
+base/colour variants, consumed by both FXC (D3D) and DXC (Vulkan). No in-shader limb math for the
+default path. Remaining full-build work is engineering + the deep-`dc` precision re-check (2), not a
+feasibility unknown. The full build stays a **separate, user-gated slice** (it touches production
+render paths and raises `MaxGpuZoom`) — the spike's job was to de-risk it, and it has.
