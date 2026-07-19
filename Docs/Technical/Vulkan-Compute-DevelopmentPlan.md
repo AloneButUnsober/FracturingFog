@@ -532,10 +532,21 @@ Built 2026-07-19 on the spike's findings, in two validated slices (commits `d4ba
   (0.00 px to 1e60, flat past `maxUseful=1e62`); the GPU path is gated off by default.
 
 **Remaining (cross-backend fast-follow, each needs a validation surface this repo can't exercise headlessly):**
-1. **D3D `MandelbrotGpuKernel.RunPerturb`** (Vortice: double cbuffer + reference-orbit SRVs + iter/smooth/
-   finalZD UAVs; gate `SupportsPerturbation` on `D3D11_FEATURE_DATA_DOUBLES`). The shared HLSL already
-   compiles under FXC; this is backend plumbing + a live-D3D-device parity test. Interface default keeps D3D
-   opt-out (CPU deep zoom) until it lands.
+1. **D3D `MandelbrotGpuKernel.RunPerturb`** — **CODE LANDED (2026-07-19), awaiting live-D3D parity smoke.**
+   `SupportsPerturbation` gates on `CheckFeatureSupport<FeatureDataDoubles>(Feature.Doubles)`
+   .`DoublePrecisionFloatShaderOps` (cached). `RunPerturb` compiles the shared `MandelbrotKernelSource`
+   `.BuildPerturb()` HLSL (entry `CSPerturb`) under FXC `cs_5_0` — the *same source* the Vulkan backend runs —
+   uploads the Hi-limb reference orbit into two `StructuredBuffer<double>` SRVs (t0/t1) + a 48-byte double
+   param cbuffer (b0), reuses the existing iter/smooth/finalZD UAVs (u0/u1/u2), dispatches 8×8 groups, reads
+   back exactly like `Run`. Colour stays CPU (calculator `FillAuxAndColorHP` consumes `finalZD`). Serialised
+   on the shared `_d3dGate`. **GUI enable held behind an explicit opt-in** (env `FF_GPU_PERTURB=1`) in
+   `AvaloniaShellBootstrap` — NOT default-on — mirroring the Vulkan posture: forces `UseGpuCompute` on so the
+   D3D kernel attaches, then flips `UseGpuPerturbation`; the per-frame gate still checks the live kernel's
+   `SupportsPerturbation`, so a device without FP64 shader ops self-disables and deep zoom stays CPU. Builds
+   clean (Rendering.D3D + WinExe + App); the Vulkan gates (`--vulkanpturbcalc` 0/16384) stay green — the
+   default-interface member the D3D class now overrides did not disturb the Vulkan path. **NEXT: user runs a
+   live D3D deep-zoom parity smoke (`FF_GPU_PERTURB=1`, D3D renderer) — this repo has no FP64-D3D headless
+   surface.** Interface default still keeps any *other* IGpuKernel opt-out.
 2. **Enable in the GUI** — **DONE + smoke-signed-off (2026-07-19)**: `AvaloniaShellBootstrap`, on an explicit
    `--renderer vulkan` session, probes `VulkanComputeKernel.ProbeSupportsFloat64()` and sets
    `MandelbrotCalculator.UseGpuPerturbation` accordingly (logs ENABLED / disabled). Off everywhere else.
