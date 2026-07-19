@@ -159,6 +159,26 @@ public sealed class MandelbrotCalculator
     /// FP32-broken band.</summary>
     public const double MaxGpuZoom = 1e4;
 
+    /// <summary>V6 (#82): upper zoom for the GPU deep-zoom PERTURBATION path
+    /// (<see cref="RunPerturb"/> on an FP64-capable kernel). Above
+    /// <see cref="MaxGpuZoom"/> the FP32 escape-time kernel is unusable, but the
+    /// double δ-rebased perturbation kernel is not: it consumes the same Hi-limb
+    /// double reference orbit + single-double dc the CPU <c>ComputePixelPTRebased</c>
+    /// uses, so it is bit-faithful to the CPU deep path wherever that path runs
+    /// (verified at the precision noise floor by --vulkanpturbprobe / dev-plan
+    /// §14). The δ loop is depth-independent (rebasing, SM-2); this ceiling
+    /// (= <see cref="ODZoomThreshold"/>, 1e50) is caution, not a math limit —
+    /// the deep-dc precision re-check (#82 checkbox 2) gates lifting it further.</summary>
+    public const double MaxGpuPerturbZoom = ODZoomThreshold;
+
+    /// <summary>V6 (#82): master toggle for the GPU deep-zoom perturbation path.
+    /// Off by default — the deep path stays CPU unless explicitly enabled AND a
+    /// perturbation-capable kernel (<c>IGpuKernel.SupportsPerturbation</c>) is
+    /// attached. Independent of <see cref="UseGpuCompute"/> (the shallow FP32
+    /// path); a session may run either, both, or neither. The <c>--vulkanpturbprobe</c>
+    /// gate exercises the kernel directly and does not need this flag.</summary>
+    public static bool UseGpuPerturbation { get; set; } = false;
+
     /// <summary>T3.1: when true and a GPU kernel is attached via
     /// <see cref="SetGpuKernel"/>, the SP path
     /// (<see cref="CalculateDoublePrecision{TMap}"/>) dispatches the
@@ -1708,6 +1728,27 @@ public sealed class MandelbrotCalculator
             }
         }
 
+        // V6 (#82) — GPU deep-zoom perturbation. With the reference orbit built,
+        // dispatch the whole frame's δ-rebased loop to an FP64 GPU kernel, then
+        // colour/aux writeback on the CPU exactly as the CPU PT path does. Gated
+        // to the plain rebased regime this mirrors: recycle off (dc measured from
+        // the live centre), no per-tile cap, diagnostic toggles off. Runs the
+        // rebased loop for EVERY pixel (glitch-free, SM-2) — the same maths
+        // --vulkanpturbprobe validated against ComputePixelPTRebased. Any kernel
+        // failure falls through to the CPU SIMD path below.
+        {
+            int[]? prCap = PerRowMaxIter;
+            bool tileCap = prCap != null && prCap.Length >= Height;
+            if (!recycled
+                && UseGpuPerturbation && GpuKernel != null && GpuKernel.SupportsPerturbation
+                && AllowPtRebasing && !UseDdRebaseReference && !ForceScalarPtPath
+                && !tileCap && Zoom <= MaxGpuPerturbZoom && _refOrbitLen >= 1
+                && TryRunGpuPerturbation(colorMap, scale, maxIt, effImgW, effImgH, ct))
+            {
+                return;
+            }
+        }
+
         // Build / refresh the BLA table now that the reference orbit is current.
         // dcMaxAbs is the worst-case pixel offset from view centre (corner
         // distance) measured across the FULL image — sub-rect tiles share
@@ -1798,6 +1839,57 @@ public sealed class MandelbrotCalculator
                 $"SA : {_saAppliedTotal:N0} applied, {_saIterSkippedTotal:N0} iter saved " +
                 $"(avg {(_saAppliedTotal == 0 ? 0 : _saIterSkippedTotal / (double)_saAppliedTotal):F1}/apply), " +
                 $"safeMax={_sa.SafeMax}");
+    }
+
+    /// <summary>
+    /// V6 (#82) — run the deep-zoom perturbation frame on the GPU. Dispatches the
+    /// δ-rebased loop over the just-built reference orbit (Hi-limb doubles) via
+    /// <see cref="IGpuKernel.RunPerturb"/>, then fills colour/distance/normal on
+    /// the CPU from the GPU's iter + final z/dz — the same
+    /// <see cref="FillAuxAndColorHP{TMap}"/> writeback the CPU PT path uses.
+    /// Offsets mirror <c>ComputeRowPTScalar</c>: pixel (x,y) sits at image-space
+    /// offset (SubRectOffsetX + x − effImgW/2, …) from the reference centre.
+    /// Returns false (and leaves the caller to run the CPU path) on any kernel
+    /// failure. Caller has already gated recycle / per-tile / diagnostic modes.
+    /// </summary>
+    private bool TryRunGpuPerturbation<TMap>(
+        TMap colorMap, double scale, int maxIt, int effImgW, int effImgH, CancellationToken ct)
+        where TMap : IColorMap
+    {
+        var kernel = GpuKernel;
+        if (kernel == null) return false;
+        try
+        {
+            double offX0 = SubRectOffsetX - effImgW * 0.5;
+            double offY0 = SubRectOffsetY - effImgH * 0.5;
+            kernel.RunPerturb(
+                Width, Height, scale, maxIt, EscapeRadius2,
+                offX0, offY0,
+                _refZr, _refZi, _refOrbitLen,
+                IterationBuffer, SmoothBuffer,
+                FinalZrBuffer, FinalZiBuffer, FinalDrBuffer, FinalDiBuffer);
+        }
+        catch (Exception ex)
+        {
+            Debug.WriteLine($"[MandelbrotCalculator] GPU perturbation dispatch failed; CPU fallback: {ex.Message}");
+            return false;
+        }
+
+        _po.CancellationToken = ct;
+        var po = _po;
+        ParallelForRows(0, Height, po, y =>
+        {
+            if (ct.IsCancellationRequested) return;
+            int rb = y * Width;
+            for (int x = 0; x < Width; x++)
+            {
+                int idx = rb + x;
+                FillAuxAndColorHP(idx, IterationBuffer[idx], maxIt,
+                    FinalZrBuffer[idx], FinalZiBuffer[idx],
+                    FinalDrBuffer[idx], FinalDiBuffer[idx], colorMap);
+            }
+        });
+        return true;
     }
 
     /// <summary>
