@@ -147,6 +147,17 @@ namespace FracturingFog.Rendering
         private uint[]? _lastPresentedBuffer;
         private int _lastPresentedWidth;
         private int _lastPresentedHeight;
+        // #86 — newest-wins present ordering. Progressive stages (¼→½→full) and
+        // TAA samples queue their uploads onto the threadpool, where _uploadGate
+        // serialises them but does NOT preserve submission order. A fast frame
+        // (deep zoom on the GPU finishes the final stage in a blink) can present
+        // before a lagging preview upload from the same trigger, so the stale
+        // preview then paints over the correct final — the deep-region "stale
+        // image, but Save is correct" bug. Fix: every FrameJob gets a monotonic
+        // Seq at construction (construction order == present priority); a present
+        // is dropped when a newer Seq already reached the screen.
+        private long _uploadSeq;
+        private long _lastPresentedUploadSeq = -1;
         // Pinned scratch for the progressive ¼/½ preview snapshot above.
         // Grown lazily — typical sizes are 480x270 (¼) and 960x540 (½) at
         // 1080p, so ~0.5 MB / 2 MB respectively. Pinned (POH) so the GPU
@@ -281,15 +292,21 @@ namespace FracturingFog.Rendering
             // When non-final the calc runs on a sidecar preview calc; the
             // upload tail schedules the next stage (4 → 2 → 0).
             public readonly int ProgressiveStage;
+            // #86 — monotonic present-priority id. Assigned at construction, so
+            // a job built later (a newer trigger, or a later progressive/TAA
+            // stage of the same trigger) always outranks an earlier one.
+            public readonly long Seq;
 
             public FrameJob(CancellationToken token, MandelbrotCalculator calc,
                 IFractalCalculator? altCalc, Stopwatch sw,
                 uint[]? staleBuf, int staleW, int staleH, int calcW, int calcH,
+                long seq,
                 int taaSampleIndex = 0, int progressiveStage = 0)
             {
                 Token = token; Calc = calc; AltCalc = altCalc; Sw = sw;
                 StaleBuf = staleBuf; StaleW = staleW; StaleH = staleH;
                 CalcW = calcW; CalcH = calcH;
+                Seq = seq;
                 TaaSampleIndex = taaSampleIndex;
                 ProgressiveStage = progressiveStage;
             }
@@ -306,6 +323,19 @@ namespace FracturingFog.Rendering
 
         private static readonly Action<UploadCtx> s_uploadCallback =
             static ctx => ctx.Host.RunFrameJobUpload(ctx.Job, ctx.Ms);
+
+        // #86 — newest-wins present gate. MUST be called while holding
+        // _uploadGate. Returns false when a frame with a higher Seq has already
+        // presented, meaning this upload is stale and must be dropped so it
+        // cannot paint over the newer frame. Equal Seq passes (the same job's
+        // stale-hold upload and its final upload share a Seq and should both
+        // present, in execution order).
+        private bool TryClaimPresent(long seq)
+        {
+            if (seq < _lastPresentedUploadSeq) return false;
+            _lastPresentedUploadSeq = seq;
+            return true;
+        }
 
         public FractalRenderHost(IFractalRenderer renderer, FractalViewState state, int width, int height, IColorMap initialColorMap)
         {
@@ -1077,6 +1107,7 @@ namespace FracturingFog.Rendering
             // the calc thread can pick a stale one up.
             var job = new FrameJob(token, calc, useAlt ? altCalc : null, sw,
                 staleBuf, staleW, staleH, calcW, calcH,
+                seq: System.Threading.Interlocked.Increment(ref _uploadSeq),
                 taaSampleIndex: 0, progressiveStage: progressiveStage);
             while (_calcQueue.TryTake(out _)) { }
             try { _calcQueue.Add(job); }
@@ -1223,6 +1254,9 @@ namespace FracturingFog.Rendering
             {
                 lock (_uploadGate)
                 {
+                    // #86 — drop the stale-hold present if a newer frame already
+                    // reached the screen, so this old buffer can't clobber it.
+                    if (TryClaimPresent(job.Seq))
                     lock (_d3dGate)
                     {
                         _renderer.UpdateTexture(job.StaleBuf, job.StaleW, job.StaleH);
@@ -1644,6 +1678,7 @@ namespace FracturingFog.Rendering
                 job.Token, calc, altCalc: null, sw: Stopwatch.StartNew(),
                 staleBuf: null, staleW: 0, staleH: 0,
                 calcW: calc.Width, calcH: calc.Height,
+                seq: System.Threading.Interlocked.Increment(ref _uploadSeq),
                 taaSampleIndex: _taaSampleCount);
             try { _calcQueue.Add(nextJob); }
             catch (InvalidOperationException) { /* CompleteAdding during Dispose */ }
@@ -1713,6 +1748,11 @@ namespace FracturingFog.Rendering
                     : _previewCalcHalf;
                 lock (_uploadGate)
                 {
+                    // #86 — a later stage / newer trigger that already presented
+                    // outranks this preview; drop it so it can't paint a stale,
+                    // lower-res image over the newer frame.
+                    if (TryClaimPresent(job.Seq))
+                    {
                     lock (_d3dGate)
                     {
                         _renderer.UpdateTexture(preview.ColorBuffer, preview.Width, preview.Height);
@@ -1736,6 +1776,7 @@ namespace FracturingFog.Rendering
                         _lastPresentedWidth = pw;
                         _lastPresentedHeight = ph;
                     }
+                    }
                 }
                 AnimationFrameUploaded?.Invoke(this, EventArgs.Empty);
 
@@ -1744,6 +1785,7 @@ namespace FracturingFog.Rendering
                     job.Token, calc, altCalc: null, sw: job.Sw,
                     staleBuf: null, staleW: 0, staleH: 0,
                     calcW: job.CalcW, calcH: job.CalcH,
+                    seq: System.Threading.Interlocked.Increment(ref _uploadSeq),
                     taaSampleIndex: 0, progressiveStage: nextStage);
                 try { _calcQueue.Add(nextJob); }
                 catch (InvalidOperationException) { /* shutdown */ }
@@ -1797,10 +1839,20 @@ namespace FracturingFog.Rendering
                     }
                 }
 
-                if (useAlt)
-                    UploadProcessedBuffer(altCalc!.ColorBuffer, altCalc.Width, altCalc.Height);
-                else
-                    UploadProcessedBuffer(calc.ColorBuffer, calc.Width, calc.Height);
+                // #86 — newest-wins: only present this final frame if no newer
+                // frame's upload has already reached the screen. A superseded
+                // final still runs its bookkeeping below (status label, events,
+                // TAA seed) so gates never stick — it just doesn't paint.
+                lock (_uploadGate)
+                {
+                    if (TryClaimPresent(job.Seq))
+                    {
+                        if (useAlt)
+                            UploadProcessedBuffer(altCalc!.ColorBuffer, altCalc.Width, altCalc.Height);
+                        else
+                            UploadProcessedBuffer(calc.ColorBuffer, calc.Width, calc.Height);
+                    }
+                }
 
                 // Pull the richer LastPrecisionLabel from the generated calcs
                 // (PT, QD-PT, DD-HP4, etc.) so the status bar can show what
