@@ -179,6 +179,26 @@ public sealed class MandelbrotCalculator
     /// gate exercises the kernel directly and does not need this flag.</summary>
     public static bool UseGpuPerturbation { get; set; } = false;
 
+    // #86 diagnostic — opt-in via FF_GPU_PERTURB_DEBUG=1, writes to the same
+    // %TEMP%/ff_gpu_perturb_86.log the render host uses (WinExe has no console).
+    // Explains why a deep frame did or did not take the GPU perturbation path.
+    private static readonly bool s_dbg86 =
+        Environment.GetEnvironmentVariable("FF_GPU_PERTURB_DEBUG") is "1" or "true" or "yes" or "on";
+    private static readonly string s_dbg86Path =
+        System.IO.Path.Combine(System.IO.Path.GetTempPath(), "ff_gpu_perturb_86.log");
+    private static readonly object s_dbg86Gate = new();
+    private static void Dbg86(string msg)
+    {
+        if (!s_dbg86) return;
+        try
+        {
+            lock (s_dbg86Gate)
+                System.IO.File.AppendAllText(s_dbg86Path,
+                    $"{DateTime.Now:HH:mm:ss.fff} [#86] {msg}{Environment.NewLine}");
+        }
+        catch { /* diagnostic must never break the calc path */ }
+    }
+
     /// <summary>T3.1: when true and a GPU kernel is attached via
     /// <see cref="SetGpuKernel"/>, the SP path
     /// (<see cref="CalculateDoublePrecision{TMap}"/>) dispatches the
@@ -1746,11 +1766,16 @@ public sealed class MandelbrotCalculator
         {
             int[]? prCap = PerRowMaxIter;
             bool tileCap = prCap != null && prCap.Length >= Height;
-            if (!recycled
+            bool gateOk = !recycled
                 && UseGpuPerturbation && GpuKernel != null && GpuKernel.SupportsPerturbation
                 && AllowPtRebasing && !UseDdRebaseReference && !ForceScalarPtPath
-                && !tileCap && Zoom <= MaxGpuPerturbZoom && _refOrbitLen >= 1
-                && TryRunGpuPerturbation(colorMap, scale, maxIt, effImgW, effImgH, ct))
+                && !tileCap && Zoom <= MaxGpuPerturbZoom && _refOrbitLen >= 1;
+            Dbg86($"GATE zoom={Zoom:0e+0} gateOk={gateOk} recycled={recycled} " +
+                  $"useGpuPerturb={UseGpuPerturbation} kernel={(GpuKernel != null)} " +
+                  $"supports={(GpuKernel?.SupportsPerturbation ?? false)} allowRebase={AllowPtRebasing} " +
+                  $"ddRebaseRef={UseDdRebaseReference} forceScalar={ForceScalarPtPath} tileCap={tileCap} " +
+                  $"zoomOk={Zoom <= MaxGpuPerturbZoom} refLen={_refOrbitLen}");
+            if (gateOk && TryRunGpuPerturbation(colorMap, scale, maxIt, effImgW, effImgH, ct))
             {
                 return;
             }
@@ -1879,6 +1904,7 @@ public sealed class MandelbrotCalculator
         catch (Exception ex)
         {
             Debug.WriteLine($"[MandelbrotCalculator] GPU perturbation dispatch failed; CPU fallback: {ex.Message}");
+            Dbg86($"RUNPERTURB-THREW {ex.GetType().Name}: {ex.Message} refLen={_refOrbitLen} zoom={Zoom:0e+0}");
             return false;
         }
 
