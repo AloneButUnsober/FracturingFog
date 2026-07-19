@@ -211,6 +211,12 @@ public sealed class MandelbrotCalculator
     /// <summary>True when the last Calculate() used double-double arithmetic.</summary>
     public bool IsHighPrecisionActive { get; private set; }
 
+    /// <summary>V6 (#82) — true when the last high-precision frame actually ran
+    /// the GPU perturbation kernel (not a CPU fallback). Read by the render host
+    /// to surface a "(GPU)" marker in the perf HUD so the user can see the deep-
+    /// zoom GPU path is engaged. Reset at the start of every HP frame.</summary>
+    public bool LastFrameUsedGpuPerturbation { get; private set; }
+
     /// <summary>Estimated deepest zoom (as log₁₀) at which the CURRENT view
     /// centre still resolves detail, set by the last reference-orbit build.
     ///
@@ -1676,6 +1682,7 @@ public sealed class MandelbrotCalculator
         int effImgH = EffectiveImageHeight;
         double scale = (3.5 / Math.Max(effImgW, effImgH)) / Zoom;
         int maxIt = MaxIterations;
+        LastFrameUsedGpuPerturbation = false;   // set true only on a successful GPU perturb dispatch below
 
         // One reference orbit at the view centre. Each pixel iterates only
         // the double-precision delta δ_n = z_n − Z_n.
@@ -1889,8 +1896,19 @@ public sealed class MandelbrotCalculator
                     FinalDrBuffer[idx], FinalDiBuffer[idx], colorMap);
             }
         });
+        LastFrameUsedGpuPerturbation = true;
+        if (!_loggedGpuPerturbEngaged)
+        {
+            _loggedGpuPerturbEngaged = true;
+            Console.Error.WriteLine(
+                $"[GPU] deep-zoom perturbation engaged — {GpuKernel?.GetType().Name ?? "GPU"} " +
+                $"(first frame at zoom {Zoom:0e+0}).");
+        }
         return true;
     }
+
+    // One-shot latch so the "engaged" line logs once per process, not per frame.
+    private bool _loggedGpuPerturbEngaged;
 
     /// <summary>
     /// Build / refresh the series approximation table for the current
