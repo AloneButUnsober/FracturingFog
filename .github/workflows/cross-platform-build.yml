@@ -326,11 +326,18 @@ jobs:
       # needed. DXC (runtime HLSL->SPIR-V JIT — the O2 answer) comes from the
       # LunarG Vulkan SDK apt package. Wayland leg is skipped (it is a GL/EGL
       # concern; Vulkan needs no display server).
+      # !cancelled() so the Vulkan gate still runs even though an earlier,
+      # unrelated matrix step (Build FracturingFog.App) currently fails on the
+      # Linux/macOS legs — App transitively pulls the Windows-only
+      # FracturingFog.Win (WinForms) and trips NETSDK1073. That is a
+      # pre-existing red on main, tracked separately; it must not mask this
+      # spike's own signal.
       - name: Build Vulkan smoke CLI
+        if: ${{ !cancelled() }}
         run: dotnet build Rendering.Vulkan.Smoke/FracturingFog.Rendering.Vulkan.Smoke.csproj -c Release -r ${{ matrix.rid }} --self-contained false
 
       - name: Install Vulkan loader + lavapipe + DXC (Linux / xvfb leg)
-        if: matrix.os == 'ubuntu-latest' && matrix.display == 'xvfb'
+        if: ${{ !cancelled() && matrix.os == 'ubuntu-latest' && matrix.display == 'xvfb' }}
         run: |
           sudo apt-get update
           sudo apt-get install -y libvulkan1 mesa-vulkan-drivers vulkan-tools
@@ -345,7 +352,7 @@ jobs:
           sudo apt-get install -y vulkan-sdk
 
       - name: Run Vulkan smoke (Linux / lavapipe)
-        if: matrix.os == 'ubuntu-latest' && matrix.display == 'xvfb'
+        if: ${{ !cancelled() && matrix.os == 'ubuntu-latest' && matrix.display == 'xvfb' }}
         env:
           # Force the lavapipe (software) ICD so the leg never depends on a
           # real GPU being present on the runner.
