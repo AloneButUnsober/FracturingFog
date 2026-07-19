@@ -76,5 +76,30 @@ namespace FracturingFog.Rendering
             FractalKind kind = FractalKind.Mandelbrot,
             float param0 = 0f, float param1 = 0f,
             uint[]? colorDst = null);
+
+        /// <summary>True when this backend can run the deep-zoom PERTURBATION
+        /// kernel (<see cref="RunPerturb"/>) — i.e. the device has FP64 support
+        /// and the double perturbation shader compiled. Backends that only carry
+        /// the shallow FP32 escape-time kernel return false, and the calculator
+        /// keeps deep zoom on the CPU. See issue #82 / dev-plan §14.</summary>
+        bool SupportsPerturbation => false;
+
+        /// <summary>Run the deep-zoom perturbation kernel over a precomputed
+        /// reference orbit (Hi-limb doubles, length <paramref name="refLen"/>),
+        /// the GPU twin of <c>MandelbrotCalculator.ComputePixelPTRebased</c>.
+        /// Fills <paramref name="iterDst"/> + smooth + finalZD (zr,zi,drv,div)
+        /// so the caller drives colour/dist/normal writeback itself. dc for
+        /// pixel (x,y) = (offsetX0 + x, offsetY0 + y) · scale. Only valid when
+        /// <see cref="SupportsPerturbation"/> is true.</summary>
+        void RunPerturb(
+            int width, int height,
+            double scale, int maxIter, double escapeRadius2,
+            double offsetX0, double offsetY0,
+            double[] refZr, double[] refZi, int refLen,
+            int[] iterDst, float[] smoothDst,
+            float[] finalZrDst, float[] finalZiDst,
+            float[] finalDrDst, float[] finalDiDst)
+            => throw new NotSupportedException(
+                "This GPU kernel has no perturbation path (SupportsPerturbation is false).");
     }
 }
