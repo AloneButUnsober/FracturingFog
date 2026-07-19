@@ -536,10 +536,11 @@ Built 2026-07-19 on the spike's findings, in two validated slices (commits `d4ba
    finalZD UAVs; gate `SupportsPerturbation` on `D3D11_FEATURE_DATA_DOUBLES`). The shared HLSL already
    compiles under FXC; this is backend plumbing + a live-D3D-device parity test. Interface default keeps D3D
    opt-out (CPU deep zoom) until it lands.
-2. **Enable in the GUI** — WIRED (pending interactive smoke): `AvaloniaShellBootstrap`, on an explicit
+2. **Enable in the GUI** — **DONE + smoke-signed-off (2026-07-19)**: `AvaloniaShellBootstrap`, on an explicit
    `--renderer vulkan` session, probes `VulkanComputeKernel.ProbeSupportsFloat64()` and sets
-   `MandelbrotCalculator.UseGpuPerturbation` accordingly (logs ENABLED / disabled). Off everywhere else. The
-   user drives a deep-zoom (> 1e4) Vulkan session and confirms the GPU path renders correctly on-device.
+   `MandelbrotCalculator.UseGpuPerturbation` accordingly (logs ENABLED / disabled). Off everywhere else.
+   Visual deep-zoom smoke passed on **Windows (GT710)** and **Linux (Intel UHD 630 / CML GT2)** — the Linux
+   session logged `deep-zoom GPU perturbation ENABLED (shaderFloat64 present)` on real integrated hardware.
 3. **Deep-`dc` precision (checkbox 2)** — re-run the double-vs-DD `dc` comparison at 1e15/1e20 with a real
    OD centre before raising `MaxGpuPerturbZoom` past 1e50.
 4. Later: SA/BLA on GPU (non-goal for now), per-tile-cap support in the perturbation kernel.
