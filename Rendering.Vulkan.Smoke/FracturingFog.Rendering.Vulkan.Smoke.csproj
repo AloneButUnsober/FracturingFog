@@ -37,4 +37,15 @@
     <PackageReference Include="Silk.NET.Vulkan" Version="2.23.0" />
   </ItemGroup>
 
+  <ItemGroup>
+    <!--
+      V1 (#40): one HLSL source, two compilers. Link the dependency-free
+      kernel-source strings straight from Rendering.D3D (no D3D/Windows deps in
+      that file) so DXC compiles the *same* HLSL that FXC compiles on Windows.
+      Keeps this project self-contained (no Rendering.D3D/Engine ProjectReference
+      closure — just the one portable source file).
+    -->
+    <Compile Include="..\Rendering.D3D\MandelbrotKernelSource.cs" Link="Shared\MandelbrotKernelSource.cs" />
+  </ItemGroup>
+
 </Project>

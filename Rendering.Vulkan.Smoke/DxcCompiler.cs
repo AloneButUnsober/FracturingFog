@@ -19,7 +19,10 @@ namespace FracturingFog.Rendering.Vulkan.Smoke;
 internal static class DxcCompiler
 {
     // Compile an HLSL source string to a SPIR-V module (raw bytes).
-    public static byte[] CompileToSpirv(string hlsl, string entry, string profile)
+    // extraArgs passes through DXC flags verbatim (e.g. -fvk-*-shift binding
+    // maps for the real kernel port). Kept before the -Fo/input so DXC parses
+    // them as options.
+    public static byte[] CompileToSpirv(string hlsl, string entry, string profile, params string[] extraArgs)
     {
         string dxc = LocateDxc();
         string stem = Path.Combine(Path.GetTempPath(), "ffvk-" + Guid.NewGuid().ToString("N"));
@@ -40,6 +43,7 @@ internal static class DxcCompiler
             psi.ArgumentList.Add("-T"); psi.ArgumentList.Add(profile);   // e.g. cs_6_0
             psi.ArgumentList.Add("-E"); psi.ArgumentList.Add(entry);     // e.g. main
             psi.ArgumentList.Add("-fspv-target-env=vulkan1.1");
+            foreach (var a in extraArgs) psi.ArgumentList.Add(a);
             psi.ArgumentList.Add("-Fo"); psi.ArgumentList.Add(outFile);
             psi.ArgumentList.Add(inFile);
 

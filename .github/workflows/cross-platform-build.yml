@@ -367,4 +367,9 @@ jobs:
           echo "lavapipe ICD: ${LVP:-<not found — using default discovery>}"
           if [ -n "$LVP" ]; then export VK_ICD_FILENAMES="$LVP"; fi
           vulkaninfo --summary || true
+          # V0 trivial-kernel smoke.
           dotnet run --project Rendering.Vulkan.Smoke/FracturingFog.Rendering.Vulkan.Smoke.csproj -c Release -r ${{ matrix.rid }} --no-build
+          # V1 (#40): real Mandelbrot base kernel — iter/smooth parity vs the C#
+          # reference within the documented ULP/boundary band (lavapipe here is
+          # the cross-impl check against the same source FXC compiles on Windows).
+          dotnet run --project Rendering.Vulkan.Smoke/FracturingFog.Rendering.Vulkan.Smoke.csproj -c Release -r ${{ matrix.rid }} --no-build -- --vulkanprobe
