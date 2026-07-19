@@ -1,0 +1,40 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    V0 spike (issue #39) — headless Vulkan compute proof for Linux GPU rendering.
+    Cross-platform CLI smoke that mirrors Compute.Smoke / Rendering.Silk.Smoke:
+      1. Vk.GetApi(), create instance (no WSI/surface extensions).
+      2. Enumerate physical devices, log every one (list flag, kind + name).
+      3. Create logical device + compute queue on the picked device.
+      4. DXC-compile a trivial HLSL CS (uv gradient to packed BGRA) to SPIR-V,
+         load, dispatch 64x64, vkMapMemory read-back.
+      5. Histogram sanity like Compute.Smoke: 3+ distinct values, corner
+         pixels bit-exact vs the CPU pack. Exit 0/1/2.
+
+    Runs on linux-x64 in CI under Mesa lavapipe (software Vulkan) so no
+    GPU-in-CI is required. No project references — this is a standalone,
+    self-contained de-risking gate that touches nothing in the shipped
+    renderer paths.
+  -->
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <LangVersion>latest</LangVersion>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <Platforms>AnyCPU;x64;arm64</Platforms>
+    <RootNamespace>FracturingFog.Rendering.Vulkan.Smoke</RootNamespace>
+    <AssemblyName>FracturingFog.Rendering.Vulkan.Smoke</AssemblyName>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!--
+      Silk.NET 2.23 — same line as the GL backend (Rendering.Silk). Vulkan
+      bindings only; no windowing/surface packages (headless compute-only).
+    -->
+    <PackageReference Include="Silk.NET.Core" Version="2.23.0" />
+    <PackageReference Include="Silk.NET.Vulkan" Version="2.23.0" />
+  </ItemGroup>
+
+</Project>
