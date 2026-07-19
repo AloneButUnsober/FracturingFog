@@ -373,3 +373,7 @@ jobs:
           # reference within the documented ULP/boundary band (lavapipe here is
           # the cross-impl check against the same source FXC compiles on Windows).
           dotnet run --project Rendering.Vulkan.Smoke/FracturingFog.Rendering.Vulkan.Smoke.csproj -c Release -r ${{ matrix.rid }} --no-build -- --vulkanprobe
+          # V2 (#41): colour-emitting kernel — EvalPalette + packed BGRA parity
+          # vs the deterministic CPU mirror (embedded golden digest + disagree
+          # band). Same cross-impl check on lavapipe, now over the colour path.
+          dotnet run --project Rendering.Vulkan.Smoke/FracturingFog.Rendering.Vulkan.Smoke.csproj -c Release -r ${{ matrix.rid }} --no-build -- --colorprobe
