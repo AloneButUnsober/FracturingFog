@@ -91,7 +91,17 @@ jobs:
       - name: Build FracturingFog.Audio
         run: dotnet build Audio/FracturingFog.Audio.csproj -c Release -r ${{ matrix.rid }} --self-contained false
 
-      - name: Build FracturingFog.App
+      # FracturingFog.App multi-targets net10.0;net10.0-windows. The Win TFM
+      # ProjectReferences the Windows-only FracturingFog.Win (WinForms); with no
+      # -f, MSBuild builds both TFMs and the Win inner-build trips NETSDK1073 on
+      # Linux/macOS. So restrict the non-Windows legs to the cross-plat TFM; the
+      # Windows leg still builds both. (#49)
+      - name: Build FracturingFog.App (cross-plat TFM)
+        if: ${{ !matrix.build_windows_only }}
+        run: dotnet build FracturingFog.App/FracturingFog.App.csproj -c Release -f net10.0 -r ${{ matrix.rid }} --self-contained false
+
+      - name: Build FracturingFog.App (all TFMs)
+        if: matrix.build_windows_only
         run: dotnet build FracturingFog.App/FracturingFog.App.csproj -c Release -r ${{ matrix.rid }} --self-contained false
 
       # ── Windows-only assemblies (Win leg only) ───────────────────────────
