@@ -127,13 +127,19 @@ Each slice lands behind a smoke gate and is independently revertible. Checkbox =
   CPU mirror (reference stability) **+** GPU-vs-mirror byte-disagreement band (cross-vendor). Colour
   parity is non-negotiable (palette fidelity is the product). ✅ GT 710; lavapipe CI.
 
-### V3 — Renderer backend + present wiring
-- [ ] `VulkanComputeRenderer : IFractalRenderer` — compute → map → hand buffer to `SilkGLRenderer` blit.
-- [ ] `RendererBackend.Vulkan` enum member + `--renderer vulkan`; register into
-      `RendererFactory.NonWin32Backend` from the Avalonia bootstrap on Linux.
-- [ ] `ProbeDescription()` returns "Vulkan (compute) + OpenGL (present)" for the System Info dialog.
-- **Gate:** interactive pan/zoom on a Linux host renders GPU-computed frames; falls back to Silk-CPU
-  or Skia when no Vulkan device (lavapipe counts as present-but-slow — log it).
+### V3 — Renderer backend + present wiring — **DONE (headless half; see §12)**
+- [x] Vulkan compute at the **`IGpuKernel`** boundary — `VulkanComputeKernel` (Rendering.Vulkan lib),
+      the same boundary the D3D kernel uses. (Design note: `IFractalRenderer` can't compute — it
+      receives a finished buffer — so "Vulkan compute" plugs in as an `IGpuKernel`, present stays
+      `SilkGLRenderer`. Chosen over a `VulkanComputeRenderer : IFractalRenderer` composite.)
+- [x] `RendererBackend.Vulkan` enum member + `ProbeDescription()` composite string + `Create()`
+      present-via-GL routing (scaffolding). — CLI `--renderer vulkan` parse + bootstrap
+      kernel-injection into the calculator **deferred to the V3 GUI follow-up**.
+- [x] `ProbeDescription()` returns "Vulkan (compute) + OpenGL (present)".
+- [ ] Live interactive pan/zoom on a Linux host + no-device fallback — **V3 GUI follow-up** (needs a
+      display; the headless `--vulkanrenderprobe` gate proves the kernel end-to-end first).
+- **Gate:** `--vulkanrenderprobe` (headless) drives the real kernel — colour + base parity, buffer
+  persistence, resize realloc. ✅ GT 710; lavapipe CI. Interactive gate is the follow-up.
 
 ### V4 — Deep-zoom perturbation parity
 - [ ] Reference-orbit + per-row `gPerRow` (t0) upload path validated deep (the 856-line kernel's
@@ -333,3 +339,53 @@ gate's own platform re-pins it.
   → map → hand buffer to the GL blit) and the `--renderer vulkan` selector.
 - Per-theme SPIR-V caching (keyed on `PaletteId`) is still a V2-scoped nicety not yet built — the
   probe compiles one theme per run. Add the cache when the renderer switches themes at runtime.
+
+## 12. V3 findings (issue [#42](https://github.com/AloneButUnsober/MandelbrotExplorer/issues/42)) — **DONE (headless half)**
+
+Vulkan compute is now a real, referenced backend at the `IGpuKernel` boundary, driven through the
+exact API the calculator uses, and gated headless. The interactive GL-present wiring is a follow-up.
+
+**Interface choice — `IGpuKernel`, not `IFractalRenderer`.** The issue framed a
+`VulkanComputeRenderer : IFractalRenderer` that *computes*, but `IFractalRenderer.UpdateTexture`
+receives an already-finished BGRA buffer and has no fractal params — a renderer can't compute the
+frame. The compute boundary is `IGpuKernel` (exactly where the D3D `MandelbrotGpuKernel` lives), so
+`VulkanComputeKernel : IGpuKernel` is the faithful fit; present stays `SilkGLRenderer`. The
+"renderer" is a thin selector: `RendererBackend.Vulkan` + a composite probe string, with present
+routed through the same `NonWin32Backend` GL blit (Vulkan is compute-only, no swapchain).
+
+**Library promote.** The plumbing (`VulkanContext`, `DxcCompiler`) moved out of the standalone
+`Rendering.Vulkan.Smoke` gate into a referenced cross-platform **`Rendering.Vulkan`** library
+(net10.0, refs Engine + Abstractions, Silk.NET.Vulkan) — mirroring how `Rendering.D3D` hosts the D3D
+kernel. The smoke project is now the gate harness *over* that library.
+
+**`VulkanComputeKernel` design.** Persistent device objects: a base (no-colour) pipeline + per-
+`PaletteId` colour pipelines (`SetPalette` compiles + caches via `BuildColor`, mirroring the D3D
+`_csByPaletteId` cache — so V2's deferred per-theme cache is delivered here); HOST_VISIBLE buffers
+re-allocated only on a dimension change; one command pool. **Per-Run** it creates and destroys a
+small descriptor pool + set + command buffer, so a mid-session resize can never leave a descriptor
+bound to a freed buffer. `Run()` fills iter/smooth/finalZD (+ optional packed BGRA) exactly like the
+D3D kernel, including the split hi/lo centre+scale and the `GradientColorMap` dither knob for byte
+parity. DXC `-fvk-*-shift` binding maps unchanged (`u3`/`gColor` → 203).
+
+**Gate — `--vulkanrenderprobe`.** Drives the production kernel object (not a hand-rolled dispatch)
+and checks four things the renderer relies on: (1) colour Run parity vs the CPU mirror; (2) base Run
+iter/smooth parity; (3) buffer **persistence** — a repeat identical Run is byte-for-byte identical;
+(4) **resize** — a Run at a different W×H re-allocates and still matches a CPU reference. Uses the
+real Engine `GrayscalePalette`, reached transitively through the `Rendering.Vulkan → Engine`
+reference. Measured **GeForce GT 710**: frameA colour 0.085% / iter 0.171%, persistence identical,
+resize 96×160 colour 0.052% / iter 0.156%, base 0.171%, exit 0. **Mesa lavapipe** (CI, LLVM 20.1.2):
+frameA colour 0.146% / iter 0.269%, persistence identical, resize 0.078% / 0.221%, base 0.269%,
+exit 0.
+
+**Build note.** The legacy WinExe (`FracturingFogCLD.csproj`) globs the repo root and `<Compile
+Remove>`s each sibling project; the new `Rendering.Vulkan\**` folder needed its own exclude (same
+class as the V2 `Rendering.Vulkan.Smoke` fix). Any new sibling net10 project needs one.
+
+### Notes carried into the V3 GUI follow-up
+- Parse `--renderer vulkan` in `Program.cs` → `RendererFactory.PreferredBackend = Vulkan`.
+- In the Avalonia/host bootstrap: construct one `VulkanContext` + `VulkanComputeKernel`, attach it to
+  the calculator (`calc.GpuKernel = kernel; calc.UseGpuCompute = true`) when Vulkan is selected, and
+  set `RendererFactory.VulkanProbeBackend` to the live device string.
+- No-Vulkan-device fallback to Silk-CPU / Skia + the interactive pan/zoom gate on the Linux host.
+- Zero-copy Vulkan→GL interop (external memory) is explicitly out of scope — V3 maps to CPU then
+  uploads via the existing GL texture path, same as the D3D readback.
