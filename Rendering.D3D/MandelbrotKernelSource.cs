@@ -85,6 +85,102 @@ bool InPeriod2Bulb(float cx, float cy)
     /// the exact source FXC compiles for the D3D base variant.</summary>
     public static string BuildBase() => HlslBase + HlslEntry(emitColor: false);
 
+    // ── Colour variant (V2 on Vulkan; long-standing on D3D) ──────────────────
+    //
+    // The colour-emitting kernel adds a packed-BGRA output buffer plus a
+    // spliced-in EvalPalette. Register class u3 = gColor UAV -> on Vulkan the
+    // DXC -fvk-u-shift maps it to binding 203 (UShift + 3). The prelude carries
+    // NO vk:: attributes (same two-compiler rule as HlslBase); FXC and DXC both
+    // consume it verbatim. See Docs/Technical/Vulkan-Compute-DevelopmentPlan.md
+    // §V2.
+
+    /// <summary>gColor UAV + ordered-dither pack + EvalPalette signature, up to
+    /// (and including) the opening brace. The IGpuHlslPalette body is spliced
+    /// after this, then <see cref="ColorPreludeTail"/> closes the function.</summary>
+    public const string ColorPreludeHead = @"
+RWStructuredBuffer<uint> gColor : register(u3);
+
+// F11b: centred 8x8 Bayer thresholds ((raw+0.5)/64 - 0.5), the GPU twin of
+// GradientColorMap.Bayer8. Added to each channel before the round so a
+// shallow gradient dithers instead of banding. gDitherStrength == 0 -> the
+// offset is 0 and the pack is byte-identical to the plain round.
+static const float cg_bayer8[64] =
+{
+    -0.4921875,  0.0078125, -0.3671875,  0.1328125, -0.4609375,  0.0390625, -0.3359375,  0.1640625,
+     0.2578125, -0.2421875,  0.3828125, -0.1171875,  0.2890625, -0.2109375,  0.4140625, -0.0859375,
+    -0.3046875,  0.1953125, -0.4296875,  0.0703125, -0.2734375,  0.2265625, -0.3984375,  0.1015625,
+     0.4453125, -0.0546875,  0.3203125, -0.1796875,  0.4765625, -0.0234375,  0.3515625, -0.1484375,
+    -0.4453125,  0.0546875, -0.3203125,  0.1796875, -0.4765625,  0.0234375, -0.3515625,  0.1484375,
+     0.3046875, -0.1953125,  0.4296875, -0.0703125,  0.2734375, -0.2265625,  0.3984375, -0.1015625,
+    -0.2578125,  0.2421875, -0.3828125,  0.1171875, -0.2890625,  0.2109375, -0.4140625,  0.0859375,
+     0.4921875, -0.0078125,  0.3671875, -0.1328125,  0.4609375, -0.0390625,  0.3359375, -0.1640625,
+};
+
+uint cg_pack_bgra(float3 c, uint px, uint py)
+{
+    c = saturate(c);
+    float o = gDitherStrength * cg_bayer8[(py & 7) * 8 + (px & 7)];
+    uint r = (uint)clamp(c.r * 255.0 + 0.5 + o, 0.0, 255.0);
+    uint g = (uint)clamp(c.g * 255.0 + 0.5 + o, 0.0, 255.0);
+    uint b = (uint)clamp(c.b * 255.0 + 0.5 + o, 0.0, 255.0);
+    return 0xFF000000u | (r << 16) | (g << 8) | b;
+}
+
+float3 EvalPalette(
+    float in_smooth, float in_dist, float in_iter, float in_maxIter,
+    float in_t, float in_nx, float in_ny, float in_zr, float in_zi,
+    float in_dzr, float in_dzi, float in_arg, float in_mag,
+    float in_isInSet, float in_pxScale)
+{";
+
+    /// <summary>Closes the EvalPalette function opened by
+    /// <see cref="ColorPreludeHead"/>.</summary>
+    public const string ColorPreludeTail = "}";
+
+    /// <summary>Colour-write splice for the in-set branch of CSMain. Distance +
+    /// normal aren't computed in-shader (dist=0, nx=ny=0); in_isInSet=1.</summary>
+    public const string InSetColorSplice = @"
+        gColor[idx] = cg_pack_bgra(EvalPalette(
+            0.0, 0.0, (float)gMaxIter, (float)gMaxIter,
+            0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0), x, y);
+";
+
+    /// <summary>Colour-write splice for the escape branch of CSMain.</summary>
+    public const string EscapeColorSplice = @"
+        float t_iter = gMaxIter > 0 ? sm / (float)gMaxIter : 0.0;
+        float in_arg = atan2(zi, zr);
+        float in_mag = sqrt(zr * zr + zi * zi);
+        gColor[idx] = cg_pack_bgra(EvalPalette(
+            sm, 0.0, (float)it, (float)gMaxIter,
+            t_iter, 0.0, 0.0, zr, zi, dr, di, in_arg, in_mag, 0.0, 0.0), x, y);
+";
+
+    /// <summary>Colour-write splice for the whole-cardioid / period-2 bulb-skip
+    /// branch. finalZD is (0,0,1,0) here, so in_dzr=1; in_isInSet=1.</summary>
+    public const string BulbSkipColorSplice = @"
+        gColor[idx] = cg_pack_bgra(EvalPalette(
+            0.0, 0.0, (float)gMaxIter, (float)gMaxIter,
+            0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0, 0.0), x, y);
+";
+
+    /// <summary>Compose the full colour-emitting kernel for a GPU palette:
+    /// header + palette helpers + colour prelude + EvalPalette body + CSMain
+    /// with the colour splices filled. Shared by D3D (FXC) and V2 Vulkan
+    /// (DXC). <paramref name="paletteBody"/> is the IGpuHlslPalette body (a
+    /// let-bindings + <c>return float3</c>); <paramref name="paletteHelpers"/>
+    /// its prelude (cg_hsv_to_rgb, etc.), empty when none.</summary>
+    public static string BuildColor(string? paletteHelpers, string? paletteBody)
+    {
+        string helpers = string.IsNullOrEmpty(paletteHelpers) ? "" : paletteHelpers + "\n";
+        string body = string.IsNullOrEmpty(paletteBody) ? "    return float3(0.0, 0.0, 0.0);" : paletteBody;
+        return HlslBase
+            + helpers
+            + ColorPreludeHead
+            + body + "\n"
+            + ColorPreludeTail + "\n"
+            + HlslEntry(emitColor: true, InSetColorSplice, EscapeColorSplice, BulbSkipColorSplice);
+    }
+
     /// <summary>Per-emit CSMain. The three colour splice points are empty in
     /// the base variant and filled by <c>MandelbrotGpuKernel</c> (D3D, V2 on
     /// Vulkan) for the colour-emitting variant.</summary>
