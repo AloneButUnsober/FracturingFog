@@ -142,16 +142,17 @@ internal static class Program
             string val = args[i + 1];
             RendererBackend? backend = val.ToLowerInvariant() switch
             {
-                "auto" => RendererBackend.Auto,
-                "dx"   => RendererBackend.Dx,
-                "silk" => RendererBackend.Silk,
-                "skia" => RendererBackend.Skia,
-                _      => null,
+                "auto"   => RendererBackend.Auto,
+                "dx"     => RendererBackend.Dx,
+                "silk"   => RendererBackend.Silk,
+                "skia"   => RendererBackend.Skia,
+                "vulkan" => RendererBackend.Vulkan,
+                _        => null,
             };
             if (backend == null)
             {
                 Console.Error.WriteLine(
-                    $"--renderer expects one of: auto | dx | silk | skia (got '{val}').");
+                    $"--renderer expects one of: auto | dx | silk | skia | vulkan (got '{val}').");
                 return 2;
             }
             RendererFactory.PreferredBackend = backend.Value;

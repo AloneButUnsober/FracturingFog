@@ -75,6 +75,24 @@ internal static class RealKernelRenderProbe
         var basef = RunBaseFrame(kernel, viewA);
         ok &= ReportBase("base(frameA)", viewA, basef.iter, basef.smooth);
 
+        // ── 5: host-attach path (V3-GUI #57) — a self-owned-context kernel, the
+        // exact object the Avalonia bootstrap hands the calculator. Proves
+        // ProbeDeviceName + TryCreateWithOwnContext + owns-context dispose. ────
+        string? devName = VulkanComputeKernel.ProbeDeviceName();
+        bool okOwn;
+        using (var owned = VulkanComputeKernel.TryCreateWithOwnContext())
+        {
+            okOwn = owned != null;
+            if (owned != null)
+            {
+                owned.SetPalette(new GrayscalePalette());
+                var f = RunColorFrame(owned, viewA);
+                okOwn = ReportColor("selfOwned", viewA, f.color, f.iter, f.smooth);
+            }
+        }
+        Console.WriteLine($"vulkanrenderprobe self-owned-context: dev={devName ?? "<none>"} {(okOwn ? "ok" : "FAIL")}");
+        ok &= okOwn;
+
         Console.WriteLine(ok
             ? $"vulkanrenderprobe OK: {ctx.PickedType} {ctx.PickedName}"
             : "vulkanrenderprobe FAIL: one or more checks outside band.");

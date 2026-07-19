@@ -49,6 +49,7 @@ using FracturingFog.Models;
 using FracturingFog.Render;
 using FracturingFog.Rendering;
 using FracturingFog.Rendering.Silk;
+using FracturingFog.Rendering.Vulkan;   // V3-GUI (#57): VulkanComputeKernel
 using FracturingFog.Rendering.Silk.Platform;
 using FracturingFog.UI.Avalonia.ViewModels;
 using FracturingFog.UI.Avalonia.Views;
@@ -321,6 +322,36 @@ namespace FracturingFog.Hosting
             // On Linux/macOS the hook is null so UseGpuCompute stays off.
             if (BootstrapHooks.GpuKernelFactoryHook != null)
                 s_renderHost.GpuKernelFactory = BootstrapHooks.GpuKernelFactoryHook;
+
+            // V3-GUI (#57): --renderer vulkan attaches the cross-platform Vulkan
+            // compute kernel. It is independent of the present renderer (the Silk
+            // GL blit) — the kernel owns its own VulkanContext — so we install it
+            // here rather than downcasting the renderer like the D3D hook does.
+            // Only when Vulkan is explicitly selected AND a device exists; with no
+            // device we log and leave the factory unset, so UseGpuCompute stays
+            // off and the CPU path handles compute while GL still presents.
+            if (RendererFactory.PreferredBackend == RendererBackend.Vulkan
+                && s_renderHost.GpuKernelFactory == null)
+            {
+                string? vkDev = VulkanComputeKernel.ProbeDeviceName();
+                if (vkDev != null)
+                {
+                    s_renderHost.GpuKernelFactory = (_, _) => VulkanComputeKernel.TryCreateWithOwnContext();
+                    RendererFactory.VulkanProbeBackend = () => $"Vulkan compute ({vkDev}) + OpenGL (present)";
+                    // Default GPU compute ON for an explicit --renderer vulkan
+                    // session — the setter constructs the kernel now via the
+                    // factory. If construction returns null the host leaves it
+                    // off silently and the CPU path takes over.
+                    s_renderHost.UseGpuCompute = true;
+                    Console.Error.WriteLine($"[Vulkan] compute backend selected: {vkDev}");
+                }
+                else
+                {
+                    Console.Error.WriteLine(
+                        "[Vulkan] --renderer vulkan requested but no Vulkan device was found; " +
+                        "falling back to CPU compute (OpenGL present unaffected).");
+                }
+            }
             // Phase X.2 / Slice 2.6 — per-OS video-writer selection.
             //   * Windows: WindowsBootstrap supplies a Media Foundation Mp4Writer
             //     via BootstrapHooks.NativeVideoWriterFactoryHook. Returns null when MF init
