@@ -341,11 +341,37 @@ namespace FracturingFog.Rendering
         // path (trigger → stale-hold → progressive preview → final) so a single
         // A/B run on a live D3D box reveals whether the deep GPU final frame is
         // computed, queued, presented, or dropped by the newest-wins gate.
+        //
+        // Writes to a FILE, not Console.Error: the Windows shell (WinExe) has no
+        // attached console, so stderr is swallowed there. Path is reported once
+        // at startup (also to the debugger's Debug output, which IS visible).
         private static readonly bool s_dbg86 =
             Environment.GetEnvironmentVariable("FF_GPU_PERTURB_DEBUG") is "1" or "true" or "yes" or "on";
+        private static readonly string s_dbg86Path =
+            System.IO.Path.Combine(System.IO.Path.GetTempPath(), "ff_gpu_perturb_86.log");
+        private static readonly object s_dbg86Gate = new();
+        private static bool s_dbg86Announced;
         private static void Dbg86(string msg)
         {
-            if (s_dbg86) Console.Error.WriteLine("[#86] " + msg);
+            if (!s_dbg86) return;
+            try
+            {
+                lock (s_dbg86Gate)
+                {
+                    if (!s_dbg86Announced)
+                    {
+                        s_dbg86Announced = true;
+                        string banner = $"[#86] log opened {DateTime.Now:HH:mm:ss} -> {s_dbg86Path}";
+                        Console.Error.WriteLine(banner);
+                        System.Diagnostics.Debug.WriteLine(banner);
+                        System.IO.File.AppendAllText(s_dbg86Path,
+                            $"==== #86 trace {DateTime.Now:yyyy-MM-dd HH:mm:ss} ===={Environment.NewLine}");
+                    }
+                    System.IO.File.AppendAllText(s_dbg86Path,
+                        $"{DateTime.Now:HH:mm:ss.fff} [#86] {msg}{Environment.NewLine}");
+                }
+            }
+            catch { /* diagnostic must never break the render path */ }
         }
 
         public FractalRenderHost(IFractalRenderer renderer, FractalViewState state, int width, int height, IColorMap initialColorMap)
