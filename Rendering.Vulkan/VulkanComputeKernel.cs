@@ -62,15 +62,19 @@ public sealed unsafe class VulkanComputeKernel : IGpuKernel
         public float _pad; // -> 64 bytes
     }
 
-    // V6 perturbation params (48 bytes): 4 ints then 4 doubles. Doubles land at
-    // 8-byte-aligned offsets 16/24/32/40 — matches the HLSL PerturbParams
-    // cbuffer with no 16-byte-row straddle.
+    // V6 perturbation params (64 bytes): 4 doubles FIRST (offsets 0/8/16/24, all
+    // 8-byte-aligned, no 16-byte-row straddle) then 8 ints. Matches the HLSL
+    // PerturbParams cbuffer (doubles-first layout) byte-for-byte. RowBase is the
+    // TDR row-band offset; Pad0..2 round the block to 64 bytes.
     [StructLayout(LayoutKind.Sequential)]
     private struct PerturbParamsBlob
     {
-        public int Width, Height, MaxIter, RefLen;
         public double Scale, EscapeR2, OffX0, OffY0;
+        public int Width, Height, MaxIter, RefLen, RowBase, Pad0, Pad1, Pad2;
     }
+
+    // TDR row-band tiling helper lives in MandelbrotKernelSource (shared with the
+    // D3D backend). See MandelbrotKernelSource.PerturbBandRows.
 
     private struct Allocated { public Buffer Buffer; public DeviceMemory Memory; public ulong Size; }
 
@@ -398,13 +402,14 @@ public sealed unsafe class VulkanComputeKernel : IGpuKernel
         _perturb ??= BuildProgram(MandelbrotKernelSource.BuildPerturb(), MandelbrotKernelSource.PerturbEntryPoint,
             0u, (uint)TShift, (uint)TShift + 1, (uint)UShift, (uint)UShift + 1, (uint)UShift + 2);
 
-        // Upload params + reference orbit (Hi-limb doubles).
+        // Upload the reference orbit once (Hi-limb doubles). Params (with the
+        // per-band RowBase) are re-written inside the band loop below.
         var blob = new PerturbParamsBlob
         {
             Width = width, Height = height, MaxIter = maxIter, RefLen = refLen,
             Scale = scale, EscapeR2 = escapeRadius2, OffX0 = offsetX0, OffY0 = offsetY0,
+            RowBase = 0,
         };
-        WriteBytes(_perturbParams, &blob, sizeof(PerturbParamsBlob));
         fixed (double* pr = refZr) WriteBytes(_refZrBuf, pr, refLen * sizeof(double));
         fixed (double* pi = refZi) WriteBytes(_refZiBuf, pi, refLen * sizeof(double));
 
@@ -465,27 +470,43 @@ public sealed unsafe class VulkanComputeKernel : IGpuKernel
                 SType = StructureType.CommandBufferAllocateInfo,
                 CommandPool = _cmdPool, Level = CommandBufferLevel.Primary, CommandBufferCount = 1,
             };
-            Check(_vk.AllocateCommandBuffers(_device, in cbai, out cmd), "vkAllocateCommandBuffers");
 
-            var begin = new CommandBufferBeginInfo
+            // TDR tiling — dispatch the frame in row bands, each a separate
+            // submit, so no single GPU packet runs long enough to trip the
+            // watchdog. The descriptor set (bindings) is fixed; only the UBO's
+            // RowBase changes per band, and QueueWaitIdle after each submit
+            // guarantees the band finished reading the UBO before the next
+            // WriteBytes overwrites it.
+            int bandRows = MandelbrotKernelSource.PerturbBandRows(width, height, maxIter);
+            for (int rowBase = 0; rowBase < height; rowBase += bandRows)
             {
-                SType = StructureType.CommandBufferBeginInfo,
-                Flags = CommandBufferUsageFlags.OneTimeSubmitBit,
-            };
-            Check(_vk.BeginCommandBuffer(cmd, in begin), "vkBeginCommandBuffer");
-            _vk.CmdBindPipeline(cmd, PipelineBindPoint.Compute, _perturb.Pipeline);
-            _vk.CmdBindDescriptorSets(cmd, PipelineBindPoint.Compute, _perturb.Layout, 0, 1, &set, 0, null);
-            _vk.CmdDispatch(cmd, (uint)((width + 7) / 8), (uint)((height + 7) / 8), 1);
-            Check(_vk.EndCommandBuffer(cmd), "vkEndCommandBuffer");
+                int rows = Math.Min(bandRows, height - rowBase);
+                blob.RowBase = rowBase;
+                WriteBytes(_perturbParams, &blob, sizeof(PerturbParamsBlob));
 
-            var cmdLocal = cmd;
-            var submit = new SubmitInfo
-            {
-                SType = StructureType.SubmitInfo,
-                CommandBufferCount = 1, PCommandBuffers = &cmdLocal,
-            };
-            Check(_vk.QueueSubmit(_ctx.ComputeQueue, 1, &submit, default), "vkQueueSubmit");
-            Check(_vk.QueueWaitIdle(_ctx.ComputeQueue), "vkQueueWaitIdle");
+                Check(_vk.AllocateCommandBuffers(_device, in cbai, out cmd), "vkAllocateCommandBuffers");
+                var begin = new CommandBufferBeginInfo
+                {
+                    SType = StructureType.CommandBufferBeginInfo,
+                    Flags = CommandBufferUsageFlags.OneTimeSubmitBit,
+                };
+                Check(_vk.BeginCommandBuffer(cmd, in begin), "vkBeginCommandBuffer");
+                _vk.CmdBindPipeline(cmd, PipelineBindPoint.Compute, _perturb.Pipeline);
+                _vk.CmdBindDescriptorSets(cmd, PipelineBindPoint.Compute, _perturb.Layout, 0, 1, &set, 0, null);
+                _vk.CmdDispatch(cmd, (uint)((width + 7) / 8), (uint)((rows + 7) / 8), 1);
+                Check(_vk.EndCommandBuffer(cmd), "vkEndCommandBuffer");
+
+                var cmdLocal = cmd;
+                var submit = new SubmitInfo
+                {
+                    SType = StructureType.SubmitInfo,
+                    CommandBufferCount = 1, PCommandBuffers = &cmdLocal,
+                };
+                Check(_vk.QueueSubmit(_ctx.ComputeQueue, 1, &submit, default), "vkQueueSubmit");
+                Check(_vk.QueueWaitIdle(_ctx.ComputeQueue), "vkQueueWaitIdle");
+                _vk.FreeCommandBuffers(_device, _cmdPool, 1, in cmd);
+                cmd = default;
+            }
         }
         finally
         {

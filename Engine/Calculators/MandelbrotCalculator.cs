@@ -1905,6 +1905,28 @@ public sealed class MandelbrotCalculator
         {
             Debug.WriteLine($"[MandelbrotCalculator] GPU perturbation dispatch failed; CPU fallback: {ex.Message}");
             Dbg86($"RUNPERTURB-THREW {ex.GetType().Name}: {ex.Message} refLen={_refOrbitLen} zoom={Zoom:0e+0}");
+
+            // A lost/removed/hung GPU device (TDR) does not recover on its own and
+            // — because the D3D kernel shares the renderer's device — also kills
+            // presentation. Disable GPU perturbation for the rest of the session
+            // so we (a) stop hammering a dead device with retries and (b) fall
+            // straight through to the CPU deep path from here on. Row-band tiling
+            // is meant to prevent the TDR in the first place; this is the belt-
+            // and-braces backstop if a band still overruns on very slow FP64.
+            string m = ex.Message ?? "";
+            bool deviceLost = m.Contains("DEVICE_REMOVED", StringComparison.OrdinalIgnoreCase)
+                           || m.Contains("DeviceRemoved", StringComparison.OrdinalIgnoreCase)
+                           || m.Contains("DEVICE_HUNG", StringComparison.OrdinalIgnoreCase)
+                           || m.Contains("device lost", StringComparison.OrdinalIgnoreCase);
+            if (deviceLost)
+            {
+                UseGpuPerturbation = false;
+                Console.Error.WriteLine(
+                    "[GPU] deep-zoom perturbation DISABLED for this session — the GPU device was " +
+                    "lost/removed during a dispatch (TDR). Falling back to the CPU deep path. " +
+                    "Restart with a higher OS TdrDelay or a stronger-FP64 GPU to re-enable.");
+                Dbg86("DEVICE-LOST → UseGpuPerturbation disabled for session");
+            }
             return false;
         }
 

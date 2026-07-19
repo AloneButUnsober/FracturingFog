@@ -207,20 +207,51 @@ float3 EvalPalette(
     /// <summary>Compute-shader entry point for the perturbation variant.</summary>
     public const string PerturbEntryPoint = "CSPerturb";
 
+    /// <summary>TDR tiling budget — max iter-pixels (rows·width·maxIter) per
+    /// perturbation dispatch. A deep-zoom full-image dispatch can run tens of
+    /// seconds on a weak-FP64 GPU and trip the OS GPU watchdog (device lost),
+    /// which on D3D also kills the shared present device. Splitting the frame
+    /// into row bands keeps each dispatch short. Shared by both backends.</summary>
+    public const long PerturbDispatchIterBudget = 40_000_000;
+
+    /// <summary>Test/override hook — force a specific band height (&gt;0) so a
+    /// smoke run can exercise the multi-band path deterministically. Seeded from
+    /// FF_PERTURB_BANDROWS; 0 = auto (budget-derived).</summary>
+    public static int PerturbBandRowsOverride =
+        int.TryParse(System.Environment.GetEnvironmentVariable("FF_PERTURB_BANDROWS"), out int pbr) && pbr > 0 ? pbr : 0;
+
+    /// <summary>Rows per perturbation dispatch band for the given frame, derived
+    /// from <see cref="PerturbDispatchIterBudget"/> and the frame's width +
+    /// maxIter (or the override). Always ≥ 1 and ≤ height.</summary>
+    public static int PerturbBandRows(int width, int height, int maxIter)
+    {
+        if (PerturbBandRowsOverride > 0) return System.Math.Min(PerturbBandRowsOverride, height);
+        long denom = (long)System.Math.Max(1, width) * System.Math.Max(1, maxIter);
+        int rows = (int)System.Math.Max(1, PerturbDispatchIterBudget / denom);
+        return System.Math.Min(rows, height);
+    }
+
     /// <summary>Compose the double perturbation kernel. Standalone HLSL (its own
     /// cbuffer + reference-orbit SRVs + output UAVs); requires FP64 support on
     /// the device (Vulkan <c>shaderFloat64</c> / D3D double shader ops).</summary>
     public static string BuildPerturb() => @"
+// Layout note: doubles FIRST so every double lands 8-byte-aligned at a fixed
+// offset (0/8/16/24) with no 16-byte-row straddle, then the ints. Matches the
+// C# PerturbParams / PerturbParamsBlob (both backends) byte-for-byte. 64 bytes.
 cbuffer PerturbParams : register(b0)
 {
-    int    gWidth;
-    int    gHeight;
-    int    gMaxIter;
-    int    gRefLen;
     double gScale;      // world units per pixel
     double gEscapeR2;   // escape radius squared (matches CPU EscapeRadius2)
     double gOffX0;      // column offset of pixel x=0 (pixels; add x)
     double gOffY0;      // row offset of pixel y=0 (pixels; add y)
+    int    gWidth;
+    int    gHeight;
+    int    gMaxIter;
+    int    gRefLen;
+    int    gRowBase;    // TDR tiling: this dispatch covers rows [gRowBase, gRowBase+groupsY*8)
+    int    gPad0;
+    int    gPad1;
+    int    gPad2;
 }
 
 // Reference orbit Z_n, Hi-limb doubles (the CPU _refZr/_refZi). Length gRefLen.
@@ -234,12 +265,19 @@ RWStructuredBuffer<float4> gFinalZD : register(u2);   // .xy = zr,zi  .zw = drv,
 [numthreads(8, 8, 1)]
 void CSPerturb(uint3 tid : SV_DispatchThreadID)
 {
-    if ((int)tid.x >= gWidth || (int)tid.y >= gHeight) return;
-    int idx = (int)tid.y * gWidth + (int)tid.x;
+    // TDR tiling — a deep-zoom full-image dispatch can run tens of seconds on a
+    // weak-FP64 GPU and trip the OS watchdog (DXGI_ERROR_DEVICE_REMOVED), which
+    // also kills the shared present device. The host splits the frame into row
+    // bands and offsets each dispatch by gRowBase; the actual pixel row is
+    // gRowBase + tid.y.
+    int px = (int)tid.x;
+    int py = gRowBase + (int)tid.y;
+    if (px >= gWidth || py >= gHeight) return;
+    int idx = py * gWidth + px;
 
     // dc = pixelOffset · scale (double).
-    double dcR = (gOffX0 + (double)tid.x) * gScale;
-    double dcI = (gOffY0 + (double)tid.y) * gScale;
+    double dcR = (gOffX0 + (double)px) * gScale;
+    double dcI = (gOffY0 + (double)py) * gScale;
 
     double dr = 0.0, di = 0.0;      // δ_0 = 0
     double drv = 1.0, div = 0.0;    // dz/dc (IQ convention) for distance + normals

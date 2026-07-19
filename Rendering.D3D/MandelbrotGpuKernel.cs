@@ -131,8 +131,8 @@ public sealed class MandelbrotGpuKernel : IGpuKernel
     [StructLayout(LayoutKind.Sequential)]
     private struct PerturbParams
     {
-        public int Width, Height, MaxIter, RefLen;
         public double Scale, EscapeR2, OffX0, OffY0;
+        public int Width, Height, MaxIter, RefLen, RowBase, Pad0, Pad1, Pad2;
     }
 
     /// <summary>Phase 3 fractal selector. Matches the shader's
@@ -692,25 +692,38 @@ public sealed class MandelbrotGpuKernel : IGpuKernel
             UploadDoubles(_refZrBuf!, refZr, refLen);
             UploadDoubles(_refZiBuf!, refZi, refLen);
 
-            // Upload params (48-byte cbuffer — 4 ints then 4 doubles).
             var p = new PerturbParams
             {
                 Width = width, Height = height, MaxIter = maxIter, RefLen = refLen,
                 Scale = scale, EscapeR2 = escapeRadius2, OffX0 = offsetX0, OffY0 = offsetY0,
+                RowBase = 0,
             };
-            var mapped = _ctx.Map(_perturbParamsBuf!, 0, Vortice.Direct3D11.MapMode.WriteDiscard, MapFlags.None);
-            unsafe { *(PerturbParams*)mapped.DataPointer = p; }
-            _ctx.Unmap(_perturbParamsBuf!, 0);
 
             _ctx.CSSetShader(_csPerturb);
-            _ctx.CSSetConstantBuffer(0, _perturbParamsBuf);
             _ctx.CSSetShaderResource(0, _refZrSrv);   // t0
             _ctx.CSSetShaderResource(1, _refZiSrv);   // t1
             _ctx.CSSetUnorderedAccessView(0, _iterUav);
             _ctx.CSSetUnorderedAccessView(1, _smoothUav);
             _ctx.CSSetUnorderedAccessView(2, _finalZDUav);
 
-            _ctx.Dispatch((uint)((width + 7) / 8), (uint)((height + 7) / 8), 1);
+            // TDR row-band tiling — a deep-zoom full-image dispatch runs long
+            // enough on a weak-FP64 GPU to trip the OS watchdog
+            // (DXGI_ERROR_DEVICE_REMOVED), which also kills the shared present
+            // device. Split into row bands and Flush each so no single packet
+            // exceeds the ~2 s TDR budget. gRowBase offsets each band's rows.
+            int bandRows = MandelbrotKernelSource.PerturbBandRows(width, height, maxIter);
+            for (int rowBase = 0; rowBase < height; rowBase += bandRows)
+            {
+                int rows = Math.Min(bandRows, height - rowBase);
+                p.RowBase = rowBase;
+                var mapped = _ctx.Map(_perturbParamsBuf!, 0, Vortice.Direct3D11.MapMode.WriteDiscard, MapFlags.None);
+                unsafe { *(PerturbParams*)mapped.DataPointer = p; }
+                _ctx.Unmap(_perturbParamsBuf!, 0);
+                _ctx.CSSetConstantBuffer(0, _perturbParamsBuf);   // re-bind after WriteDiscard rename
+
+                _ctx.Dispatch((uint)((width + 7) / 8), (uint)((rows + 7) / 8), 1);
+                _ctx.Flush();   // submit this band as its own GPU packet (resets the TDR clock)
+            }
 
             _ctx.CSUnsetUnorderedAccessView(0);
             _ctx.CSUnsetUnorderedAccessView(1);
@@ -780,7 +793,7 @@ public sealed class MandelbrotGpuKernel : IGpuKernel
     {
         if (_perturbParamsBuf != null) return;
         var desc = new BufferDescription(
-            byteWidth: 48,      // multiple of 16, matches PerturbParams cbuffer
+            byteWidth: 64,      // multiple of 16, matches PerturbParams cbuffer
             bindFlags: BindFlags.ConstantBuffer,
             usage: ResourceUsage.Dynamic,
             cpuAccessFlags: CpuAccessFlags.Write);
