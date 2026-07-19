@@ -97,7 +97,7 @@ public sealed class MandelbrotGpuKernel : IGpuKernel
     private static string BuildHlsl(string? paletteBody, string? paletteHelpers, bool emitColor)
     {
         var sb = new System.Text.StringBuilder(8192);
-        sb.AppendLine(HlslBase);
+        sb.AppendLine(MandelbrotKernelSource.HlslBase);
         if (emitColor)
         {
             // Helpers (cg_mods, cg_palette_N, etc.) declared at file scope so
@@ -141,188 +141,36 @@ float3 EvalPalette(
             sb.AppendLine(paletteBody ?? "    return float3(0.0, 0.0, 0.0);");
             sb.AppendLine("}");
         }
-        sb.AppendLine(HlslEntry(emitColor));
-        return sb.ToString();
-    }
 
-    // ── HLSL header (cbuffer + IO bindings + shared helpers) ──────────────
-    private const string HlslBase = @"
-cbuffer Params : register(b0)
-{
-    int   gWidth;
-    int   gHeight;
-    int   gMaxIter;
-    float gBailout2;       // typically 4.0
-    float gCXHi;
-    float gCXLo;
-    float gCYHi;
-    float gCYLo;
-    float gScaleHi;
-    float gScaleLo;
-    int   gUsePerRow;      // 0 = use gMaxIter for every row, 1 = use gPerRow
-    // Phase 3: alt-fractal selector. 0=Mandelbrot, 1=Julia, 2=BurningShip,
-    // 3=Tricorn. Cardioid + period-2 bulb skip only applies to kind 0.
-    int   gFractalKind;
-    float gParam0;         // Julia c.re
-    float gParam1;         // Julia c.im
-    float gDitherStrength; // F11b: 0 = off (plain round); else ±0.5-LSB amp.
-    // 16 fields × 4 bytes = 64 (float4 multiple — same size as phase 1.b).
-}
-
-RWStructuredBuffer<uint>   gIter    : register(u0);
-RWStructuredBuffer<float>  gSmooth  : register(u1);
-// Phase 1.b: final z + dz/dc per pixel. .xy = zr, zi; .zw = dr, di.
-// Lets the CPU writeback path drive distance-estimate + normal
-// themes that need the final orbit state. Aux buffers stay CPU.
-RWStructuredBuffer<float4> gFinalZD : register(u2);
-// Phase 1.b: per-row maxIter cap. Bound only when gUsePerRow != 0;
-// otherwise the shader uses gMaxIter for every row.
-StructuredBuffer<uint>     gPerRow  : register(t0);
-
-bool InCardioid(float cx, float cy)
-{
-    // |1 - sqrt(1 - 4c)| <= 1  →  expanded form (no sqrt) per the standard
-    // Wikipedia early-out. q = (x - 1/4)^2 + y^2.
-    float xm = cx - 0.25;
-    float q = xm * xm + cy * cy;
-    return q * (q + xm) <= 0.25 * cy * cy;
-}
-
-bool InPeriod2Bulb(float cx, float cy)
-{
-    // Disk of radius 1/4 centred at (-1, 0).
-    float dx = cx + 1.0;
-    return dx * dx + cy * cy <= 0.0625;
-}
-";
-
-    // Per-emit CSMain. Distinguishes color vs non-color path by inserting
-    // EvalPalette + gColor writes after the iter/smooth/finalZD computation.
-    private static string HlslEntry(bool emitColor)
-    {
-        // Color-write helper invocations spliced into the in-set and escape
-        // branches. Distance + normal aren't computed in-shader (phase 1
-        // CPU-writes them from finalZD), so the GPU palette gets dist=0,
-        // nx=ny=0 for now — themes that depend on those degrade gracefully
-        // (same fallback as the CPU path uses when the calc-thread path
-        // hasn't filled aux buffers).
-        string inSetColor = emitColor ? @"
+        // Colour-write helper invocations spliced into the in-set / escape /
+        // bulb-skip branches of the shared CSMain. Empty in the base variant.
+        // Distance + normal aren't computed in-shader (phase 1 CPU-writes them
+        // from finalZD), so the GPU palette gets dist=0, nx=ny=0 for now.
+        string inSetColor = "", escapeColor = "", bulbSkipColor = "";
+        if (emitColor)
+        {
+            inSetColor = @"
         gColor[idx] = cg_pack_bgra(EvalPalette(
             0.0, 0.0, (float)gMaxIter, (float)gMaxIter,
             0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0), x, y);
-" : "";
-        string escapeColor = emitColor ? @"
+";
+            escapeColor = @"
         float t_iter = gMaxIter > 0 ? sm / (float)gMaxIter : 0.0;
         float in_arg = atan2(zi, zr);
         float in_mag = sqrt(zr * zr + zi * zi);
         gColor[idx] = cg_pack_bgra(EvalPalette(
             sm, 0.0, (float)it, (float)gMaxIter,
             t_iter, 0.0, 0.0, zr, zi, dr, di, in_arg, in_mag, 0.0, 0.0), x, y);
-" : "";
-        string bulbSkipColor = emitColor ? @"
+";
+            bulbSkipColor = @"
         gColor[idx] = cg_pack_bgra(EvalPalette(
             0.0, 0.0, (float)gMaxIter, (float)gMaxIter,
             0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0, 0.0), x, y);
-" : "";
-
-        return $@"
-[numthreads(8, 8, 1)]
-void CSMain(uint3 tid : SV_DispatchThreadID)
-{{
-    uint x = tid.x;
-    uint y = tid.y;
-    if ((int)x >= gWidth || (int)y >= gHeight) return;
-
-    int idx = (int)y * gWidth + (int)x;
-
-    // Reconstruct cx / cy using the split centre.
-    float fx = (float)x - 0.5 * gWidth;
-    float fy = (float)y - 0.5 * gHeight;
-    float cx = gCXHi + fx * gScaleHi + gCXLo + fx * gScaleLo;
-    float cy = gCYHi + fy * gScaleHi + gCYLo + fy * gScaleLo;
-
-    // Per-row cap lookup. Falls back to gMaxIter when disabled or when
-    // the buffer holds 0 for this row (defensive).
-    int rowMaxIt = gMaxIter;
-    if (gUsePerRow != 0)
-    {{
-        uint rc = gPerRow[y];
-        if (rc > 0) rowMaxIt = (int)rc;
-    }}
-
-    // Whole-cardioid + period-2 bulb early-out. Mandelbrot-only — Julia /
-    // BurningShip / Tricorn have different in-set shapes. Always writes
-    // gMaxIter so the in-set gate is consistent across bands regardless of
-    // per-row cap. Final z+dz are (0,0,1,0) — matches the CPU bulb-skip
-    // writeback.
-    if (gFractalKind == 0 && (InCardioid(cx, cy) || InPeriod2Bulb(cx, cy)))
-    {{
-        gIter[idx]    = (uint)gMaxIter;
-        gSmooth[idx]  = 0.0;
-        gFinalZD[idx] = float4(0.0, 0.0, 1.0, 0.0);
-        {bulbSkipColor}
-        return;
-    }}
-
-    // Per-fractal init. Mandelbrot/BurningShip/Tricorn: z_0 = 0, c =
-    // pixel coord. Julia: z_0 = pixel coord, c = (gParam0, gParam1) const.
-    float zr, zi;
-    float cIterR, cIterI;
-    if (gFractalKind == 1)
-    {{
-        zr = cx;     zi = cy;
-        cIterR = gParam0; cIterI = gParam1;
-    }}
-    else
-    {{
-        zr = 0.0;    zi = 0.0;
-        cIterR = cx; cIterI = cy;
-    }}
-    float dr = 1.0;
-    float di = 0.0;
-    int   it = 0;
-    [loop]
-    for (; it < rowMaxIt; it++)
-    {{
-        float fzr = zr;
-        float fzi = zi;
-        if (gFractalKind == 2)      {{ fzr = abs(zr); fzi = abs(zi); }}
-        else if (gFractalKind == 3) {{ fzi = -zi; }}
-
-        float zr2 = fzr * fzr;
-        float zi2 = fzi * fzi;
-        float mag2 = zr2 + zi2;
-        if (mag2 >= gBailout2) break;
-
-        float newDr = 2.0 * (fzr * dr - fzi * di) + 1.0;
-        float newDi = 2.0 * (fzr * di + fzi * dr);
-        dr = newDr;
-        di = newDi;
-
-        float zrNew = zr2 - zi2 + cIterR;
-        float zi_new_unscaled = fzr * fzi;
-        zi = zi_new_unscaled + zi_new_unscaled + cIterI;
-        zr = zrNew;
-    }}
-
-    gFinalZD[idx] = float4(zr, zi, dr, di);
-    if (it >= rowMaxIt)
-    {{
-        gIter[idx]   = (uint)gMaxIter;
-        gSmooth[idx] = 0.0;
-        {inSetColor}
-    }}
-    else
-    {{
-        gIter[idx] = (uint)it;
-        float mag = sqrt(zr * zr + zi * zi);
-        float nu = log(log(max(mag, 1.001))) / log(2.0);
-        float sm = (float)it + 1.0 - nu;
-        gSmooth[idx] = sm;
-        {escapeColor}
-    }}
-}}
 ";
+        }
+
+        sb.AppendLine(MandelbrotKernelSource.HlslEntry(emitColor, inSetColor, escapeColor, bulbSkipColor));
+        return sb.ToString();
     }
 
     [StructLayout(LayoutKind.Sequential)]
