@@ -24,8 +24,14 @@ Decided across the 2026-07-18 design session. Summary of the reasoning:
   Windows (D3D11 HLSL compute) computes the fractal + colour on GPU; Silk GL and Skia are
   CPU-compute. Linux GPU rendering means **adding GPU compute**, not a new display path.
 - **Shader reuse decides the API.** Vulkan consumes **SPIR-V**; **DXC compiles the existing HLSL
-  kernel → SPIR-V**. The 856-line perturbation kernel + [`ColorGenHlslEmitter`](../../ColorGen/Emitters/ColorGenHlslEmitter.cs)
-  survive largely intact. **This retires the previously-scoped GLSL-emitter twin.**
+  kernel → SPIR-V**. The shallow escape-time kernel (`MandelbrotKernelSource`) + colour emitter
+  ([`ColorGenHlslEmitter`](../../ColorGen/Emitters/ColorGenHlslEmitter.cs)) survive largely intact.
+  **This retires the previously-scoped GLSL-emitter twin.**
+  > **Correction (2026-07-19, V4):** this bullet originally read "the 856-line perturbation kernel
+  > … survive largely intact." **There is no HLSL perturbation kernel** — the HLSL path is a ~290-line
+  > FP32 escape-time kernel used only at `Zoom ≤ MaxGpuZoom (1e4)`; deep-zoom perturbation lives on
+  > the CPU. The reuse argument holds for the *shallow* kernel + colour pipeline (what V1–V3 shipped);
+  > a GPU perturbation kernel is net-new, tracked in [#82](https://github.com/AloneButUnsober/MandelbrotExplorer/issues/82). See §13.
 - **Compute-only skips Vulkan's worst boilerplate.** The current D3D kernel already round-trips
   through CPU (writes `gColor` structured buffer → `Map` → `UpdateTexture`). Mirror that:
   **Vulkan headless compute → map → existing Silk GL blit for present.** No swapchain, no WSI
@@ -96,7 +102,8 @@ Each slice lands behind a smoke gate and is independently revertible. Checkbox =
 | V1 kernel | [#40](https://github.com/AloneButUnsober/MandelbrotExplorer/issues/40) |
 | V2 colour | [#41](https://github.com/AloneButUnsober/MandelbrotExplorer/issues/41) |
 | V3 backend/present | [#42](https://github.com/AloneButUnsober/MandelbrotExplorer/issues/42) |
-| V4 deep-zoom | [#43](https://github.com/AloneButUnsober/MandelbrotExplorer/issues/43) |
+| V4 deep-zoom (parity — resolved trivially, §13) | [#43](https://github.com/AloneButUnsober/MandelbrotExplorer/issues/43) |
+| V6 GPU perturbation kernel (net-new; spike-first) | [#82](https://github.com/AloneButUnsober/MandelbrotExplorer/issues/82) |
 | V5 macOS (stretch) | [#44](https://github.com/AloneButUnsober/MandelbrotExplorer/issues/44) |
 
 ### V0 — Spike: HLSL→SPIR-V compute proof (headless, no UI)  ← [#39](https://github.com/AloneButUnsober/MandelbrotExplorer/issues/39)  ✅ **DONE — see §9**
@@ -141,11 +148,21 @@ Each slice lands behind a smoke gate and is independently revertible. Checkbox =
 - **Gate:** `--vulkanrenderprobe` (headless) drives the real kernel — colour + base parity, buffer
   persistence, resize realloc. ✅ GT 710; lavapipe CI. Interactive gate is the follow-up.
 
-### V4 — Deep-zoom perturbation parity
-- [ ] Reference-orbit + per-row `gPerRow` (t0) upload path validated deep (the 856-line kernel's
-      real reason to exist). Re-run the deep-zoom gates: `--navrepro`, `--focusprobe`.
-- **Gate:** deep-zoom golden views match D3D within the documented perturbation tolerance
-      (read [Deep-Zoom-Perturbation.md](../Deep-Zoom-Perturbation.md) FIRST — do not re-derive).
+### V4 — Deep-zoom perturbation parity — **RESOLVED: parity holds trivially (see §13)**
+- [x] Confirmed the deep-zoom render path is **backend-independent**, so Vulkan selection cannot
+      regress it, and the `--focusprobe` gate is green on HEAD (0.00 px focus error to 1e60).
+- **Correction (2026-07-19):** the premise below was wrong — **no HLSL perturbation kernel exists.**
+  The HLSL compute kernel (`MandelbrotKernelSource`) is a shallow FP32 split-centre escape-time
+  kernel gated at `MandelbrotCalculator.MaxGpuZoom = 1e4`; above that the calculator never dispatches
+  a `GpuKernel` at all — deep zoom is **all-CPU** (SIMD perturbation + DD/QD/OD reference orbit;
+  `MandelbrotRefOrbitGpu` is an ILGPU *reference-orbit* helper, per-pixel δ stays on CPU). D3D and
+  Vulkan therefore compute identical deep-zoom frames because neither touches the GPU past 1e4.
+  `--focusprobe`/`--navrepro` are headless **calculator** self-tests that run before any `--renderer`
+  parse, so "re-run them on the Vulkan backend" was never meaningful. A **real** GPU perturbation
+  kernel (ref-orbit SSBO + per-pixel δ + rebasing in-shader) is genuine net-new work that *no* backend
+  has today — re-filed as its own spike-gated slice, [#82](https://github.com/AloneButUnsober/MandelbrotExplorer/issues/82).
+- **Gate (as-shipped):** `--focusprobe` green on HEAD; deep-zoom output invariant under `--renderer`
+  selection by construction (`Zoom > MaxGpuZoom` ⇒ no GPU dispatch).
 
 ### V5 (stretch) — macOS via MoltenVK
 - [ ] Same SPIR-V through MoltenVK; validate the Vulkan-subset quirks. Gated `osx-arm64` CI leg.
@@ -169,11 +186,11 @@ Each slice lands behind a smoke gate and is independently revertible. Checkbox =
 
 | Risk | Mitigation |
 |---|---|
-| DXC HLSL→SPIR-V feature gaps in the perturbation kernel | V0 spike de-risks with a trivial kernel first; V1 ports incrementally with per-variant gates. |
+| DXC HLSL→SPIR-V feature gaps in the ~~perturbation~~ *shallow* kernel | V0 spike de-risks with a trivial kernel first; V1 ports incrementally with per-variant gates. (A future GPU *perturbation* kernel carries a fresh DXC risk — QD/DD limb math in HLSL — spiked in [#82](https://github.com/AloneButUnsober/MandelbrotExplorer/issues/82).) |
 | Vulkan boilerplate cost (solo dev) | Compute-only headless removes ~60% of it (no WSI/swapchain/present). Silk.NET.Vulkan gives thin bindings. |
 | CI has no GPU | Mesa **lavapipe** (software Vulkan) runs the smoke gates headless; real-GPU validation is manual/local. |
 | Colour drift on a new backend | `--colorprobe` golden gate is the hard stop; V2 cannot merge without it green. |
-| Deep-zoom precision regression | V4 gated by existing `--navrepro`/`--focusprobe`; perturbation math is float/double same as HLSL. |
+| Deep-zoom precision regression | **N/A for V1–V5** — deep zoom is all-CPU (`Zoom > MaxGpuZoom 1e4` ⇒ no GPU dispatch), so no backend can regress it; `--focusprobe` green on HEAD confirms. Becomes a live risk only once [#82](https://github.com/AloneButUnsober/MandelbrotExplorer/issues/82) puts perturbation on the GPU. |
 | Scope creep into Vulkan present | Explicit non-goal. Present stays GL. Zero-copy interop is a *later* optimisation, not v1. |
 
 ---
@@ -222,8 +239,10 @@ with no packing/endianness surprises.
 
 ### O1 — ILGPU vs Vulkan → **Vulkan** ✅
 DXC→SPIR-V works end-to-end on the trivial kernel with **no dialect surprises**. That de-risks the
-decisive advantage: the tuned 856-line perturbation kernel + `ColorGenHlslEmitter` survive **intact**
-via DXC — zero re-port. The ILGPU alternative would re-express iter/smooth + `EvalPalette` as **C#**
+decisive advantage: the tuned HLSL escape-time kernel + `ColorGenHlslEmitter` survive **intact**
+via DXC — zero re-port. _(2026-07-19 correction: this originally said "856-line perturbation kernel";
+that kernel does not exist — the reused HLSL is the ~290-line shallow escape-time + colour kernel. See
+§13 / [#82](https://github.com/AloneButUnsober/MandelbrotExplorer/issues/82).)_ The ILGPU alternative would re-express iter/smooth + `EvalPalette` as **C#**
 kernels (`ColorGenEmitter`), reusing the C# colour emitter but abandoning the tuned HLSL kernel and
 adding a second colour-parity surface. HLSL reuse is the higher-value asset; **proceed with Vulkan**.
 ILGPU stays the calculator-side path, unchanged (§2 note holds).
@@ -389,3 +408,41 @@ class as the V2 `Rendering.Vulkan.Smoke` fix). Any new sibling net10 project nee
 - No-Vulkan-device fallback to Silk-CPU / Skia + the interactive pan/zoom gate on the Linux host.
 - Zero-copy Vulkan→GL interop (external memory) is explicitly out of scope — V3 maps to CPU then
   uploads via the existing GL texture path, same as the D3D readback.
+
+---
+
+## 13. V4 findings (issue [#43](https://github.com/AloneButUnsober/MandelbrotExplorer/issues/43)) — **RESOLVED: deep-zoom parity holds by construction; GPU perturbation re-filed as [#82](https://github.com/AloneButUnsober/MandelbrotExplorer/issues/82)**
+
+V4 was scoped as "validate the reference-orbit upload path deep on Vulkan and re-run the deep-zoom
+gates." Investigation showed the scope rested on a **false premise inherited from §1**: that an HLSL
+perturbation kernel exists and merely needed a Vulkan backend. It does not.
+
+**What the code actually does (verified 2026-07-19, HEAD e3ebc23):**
+- The only HLSL compute kernel is `Rendering.D3D/MandelbrotKernelSource.cs` (~290 lines): a plain
+  FP32, split-hi/lo-centre, z²+c escape-time kernel. **No reference orbit, no δ-iteration, no
+  rebasing** — nothing perturbation-related.
+- `MandelbrotCalculator` dispatches a `GpuKernel` (D3D `MandelbrotGpuKernel` **or** Vulkan
+  `VulkanComputeKernel`) **only** under `UseGpuCompute && GpuKernel != null && Zoom <= MaxGpuZoom`,
+  and **`MaxGpuZoom = 1e4`**. Past 1e4 there is *no* GPU dispatch on any backend.
+- Deep zoom is therefore **all-CPU**: SIMD perturbation (`ComputeRowPT`/`ComputePixelPTRebased`) over a
+  DD/QD/OD reference orbit. `MandelbrotRefOrbitGpu` (ILGPU) can compute the *reference orbit* on a
+  CUDA/OpenCL-FP64 device, but it is a single sequential orbit — the per-pixel δ loop never leaves the
+  CPU. None of this is HLSL/SPIR-V; the Vulkan backend has no involvement.
+- `--focusprobe` / `--navrepro` are headless **calculator** self-tests. In `Program.cs` they are
+  dispatched *before* the `--renderer` parse and never construct a renderer — "run them on the Vulkan
+  backend" is a no-op distinction.
+
+**Conclusion — parity holds trivially.** Because `Zoom > MaxGpuZoom` short-circuits every GPU path,
+`--renderer vulkan` and `--renderer dx` compute **bit-identical** deep-zoom frames (same CPU code).
+There is nothing to port and nothing to gate beyond confirming the CPU path is healthy on HEAD:
+`--focusprobe 96` → focus-err **0.00 px through 1e60**, then the expected flat dead-zone past
+`maxUseful = 1e62` (a location property, see [Deep-Zoom-Perturbation.md](../Deep-Zoom-Perturbation.md)
+§3 — not a bug, not a regression).
+
+**The genuine feature — a GPU perturbation kernel — is net-new and re-filed as [#82](https://github.com/AloneButUnsober/MandelbrotExplorer/issues/82).**
+It would upload the reference orbit as an SSBO and run per-pixel δ + Zhuoran rebasing in-shader,
+raising `MaxGpuZoom` far past 1e4. It does **not** exist on D3D either, so it is a cross-backend
+capability, not a Vulkan port. Its headline risk is new: **QD/DD limb arithmetic in HLSL** (the CPU
+reference orbit is up to OD/~124-digit; a float/double δ is fine but the on-GPU reference and the
+`dc` term need enough precision). That risk is unproven under DXC→SPIR-V *and* FXC, so #82 leads with
+a limb-math spike before any full build.
