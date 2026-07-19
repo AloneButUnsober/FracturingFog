@@ -350,14 +350,21 @@ jobs:
             https://packages.lunarg.com/vulkan/lunarg-vulkan-${CODENAME}.list
           sudo apt-get update
           sudo apt-get install -y vulkan-sdk
+          # Diagnostics: show where the lavapipe ICD manifest actually landed.
+          echo "=== installed Vulkan ICD manifests ==="
+          ls -la /usr/share/vulkan/icd.d/ 2>/dev/null || true
+          dpkg -L mesa-vulkan-drivers 2>/dev/null | grep -iE 'icd|json' || true
 
       - name: Run Vulkan smoke (Linux / lavapipe)
         if: ${{ !cancelled() && matrix.os == 'ubuntu-latest' && matrix.display == 'xvfb' }}
-        env:
-          # Force the lavapipe (software) ICD so the leg never depends on a
-          # real GPU being present on the runner.
-          VK_ICD_FILENAMES: /usr/share/vulkan/icd.d/lvp_icd.x86_64.json
         run: |
           which dxc && dxc --version || true
+          # Point the loader at the lavapipe (software) ICD so the leg never
+          # depends on a real GPU. Detect the manifest wherever mesa installed
+          # it; if not found, fall back to default ICD discovery — CI has no
+          # real GPU, so lavapipe is the only driver anyway.
+          LVP=$(find /usr/share/vulkan/icd.d /etc/vulkan/icd.d -name 'lvp_icd*.json' 2>/dev/null | head -1)
+          echo "lavapipe ICD: ${LVP:-<not found — using default discovery>}"
+          if [ -n "$LVP" ]; then export VK_ICD_FILENAMES="$LVP"; fi
           vulkaninfo --summary || true
           dotnet run --project Rendering.Vulkan.Smoke/FracturingFog.Rendering.Vulkan.Smoke.csproj -c Release -r ${{ matrix.rid }} --no-build
