@@ -393,12 +393,25 @@ namespace FracturingFog.Hosting
             else if (BootstrapHooks.GpuKernelFactoryHook != null
                      && IsTruthyEnv("FF_GPU_PERTURB"))
             {
-                s_renderHost.UseGpuCompute = true;   // attaches the D3D kernel via the factory
+                // DEEP-ONLY opt-in. Toggle UseGpuCompute on then off: the `true`
+                // assignment lazily constructs + attaches the D3D kernel via the
+                // factory; the `false` leaves the kernel attached but disables
+                // the SHALLOW (zoom ≤ 1e4) GPU dispatch. We deliberately do NOT
+                // leave the shallow path on — it is a separate, user-toggled
+                // feature, and forcing it from startup put a GPU dispatch on the
+                // very first (shallow) frames, which raced window resize. Deep
+                // perturbation gates only on UseGpuPerturbation + GpuKernel +
+                // SupportsPerturbation (not UseGpuCompute), so this is all it
+                // needs. Per-frame gate still checks the device's FP64 support,
+                // so a non-FP64 D3D device self-disables and deep zoom stays CPU.
+                s_renderHost.UseGpuCompute = true;    // constructs + attaches the kernel
+                s_renderHost.UseGpuCompute = false;   // ...then disable the shallow GPU path
                 FracturingFog.MandelbrotCalculator.UseGpuPerturbation = true;
                 Console.Error.WriteLine(
                     "[D3D] FF_GPU_PERTURB set — deep-zoom GPU perturbation opted in " +
-                    "(per-frame gate still checks DoublePrecisionFloatShaderOps; deep zoom " +
-                    "stays CPU if the device lacks FP64 shader ops).");
+                    "(deep-only; shallow stays CPU). The per-frame gate checks " +
+                    "DoublePrecisionFloatShaderOps, so deep zoom stays CPU if the " +
+                    "device lacks FP64 shader ops.");
             }
             // Phase X.2 / Slice 2.6 — per-OS video-writer selection.
             //   * Windows: WindowsBootstrap supplies a Media Foundation Mp4Writer

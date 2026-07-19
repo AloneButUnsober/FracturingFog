@@ -1898,6 +1898,14 @@ namespace FracturingFog.Rendering
                 // visible immediately even before the next calc finishes.
                 _renderer.Render();
             }
+            // Cancel any in-flight calc BEFORE reallocating its buffers below —
+            // _calculator.Resize swaps IterationBuffer/aux arrays, and a calc
+            // thread mid-write (CPU rows OR the GPU-perturbation readback +
+            // FillAuxAndColorHP pass) would tear against the new arrays. The old
+            // frame is for the old dims and about to be superseded anyway, so
+            // cancelling it is strictly correct. Cooperative cancellation only
+            // narrows the window — see the follow-up issue for a full drain.
+            lock (_calcLock) _calcCts?.Cancel();
             _calculator.Resize(w, h);
             // Wave 2.5 — keep progressive sidecars in sync with main surface.
             int qw = Math.Max(64, w / 4); int qh = Math.Max(64, h / 4);
@@ -2653,6 +2661,14 @@ namespace FracturingFog.Rendering
                         && _calculator.GpuKernel != null
                         && !_calculator.IsHighPrecisionActive
                         && _calculator.Zoom <= MandelbrotCalculator.MaxGpuZoom)
+                    {
+                        lbl += " (GPU)";
+                    }
+                    // V6 (#82): deep-zoom GPU perturbation marker. Uses the
+                    // calculator's own per-frame latch (set only when the kernel
+                    // dispatch actually succeeded, cleared on CPU fallback) so
+                    // "DD (GPU)" appears iff the deep frame really ran on the GPU.
+                    else if (_calculator.LastFrameUsedGpuPerturbation)
                     {
                         lbl += " (GPU)";
                     }
