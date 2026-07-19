@@ -337,6 +337,17 @@ namespace FracturingFog.Rendering
             return true;
         }
 
+        // #86 diagnostic — opt-in via FF_GPU_PERTURB_DEBUG=1. Traces the present
+        // path (trigger → stale-hold → progressive preview → final) so a single
+        // A/B run on a live D3D box reveals whether the deep GPU final frame is
+        // computed, queued, presented, or dropped by the newest-wins gate.
+        private static readonly bool s_dbg86 =
+            Environment.GetEnvironmentVariable("FF_GPU_PERTURB_DEBUG") is "1" or "true" or "yes" or "on";
+        private static void Dbg86(string msg)
+        {
+            if (s_dbg86) Console.Error.WriteLine("[#86] " + msg);
+        }
+
         public FractalRenderHost(IFractalRenderer renderer, FractalViewState state, int width, int height, IColorMap initialColorMap)
         {
             _renderer = renderer ?? throw new ArgumentNullException(nameof(renderer));
@@ -1105,10 +1116,13 @@ namespace FracturingFog.Rendering
             // Drain any queued-but-unstarted job first so a burst of Triggers
             // (wheel zoom, key-repeat) collapses to the freshest job before
             // the calc thread can pick a stale one up.
+            long seq0 = System.Threading.Interlocked.Increment(ref _uploadSeq);
             var job = new FrameJob(token, calc, useAlt ? altCalc : null, sw,
                 staleBuf, staleW, staleH, calcW, calcH,
-                seq: System.Threading.Interlocked.Increment(ref _uploadSeq),
+                seq: seq0,
                 taaSampleIndex: 0, progressiveStage: progressiveStage);
+            Dbg86($"TRIGGER seq={seq0} progressive={progressive} stage={progressiveStage} " +
+                  $"zoom={ViewState.Zoom:0e+0} staleBuf={(staleBuf != null ? $"{staleW}x{staleH}" : "none")}");
             while (_calcQueue.TryTake(out _)) { }
             try { _calcQueue.Add(job); }
             catch (InvalidOperationException) { /* CompleteAdding during Dispose */ }
@@ -1256,7 +1270,9 @@ namespace FracturingFog.Rendering
                 {
                     // #86 — drop the stale-hold present if a newer frame already
                     // reached the screen, so this old buffer can't clobber it.
-                    if (TryClaimPresent(job.Seq))
+                    bool claimed = TryClaimPresent(job.Seq);
+                    Dbg86($"STALE-HOLD seq={job.Seq} claimed={claimed} lastSeq={_lastPresentedUploadSeq} {job.StaleW}x{job.StaleH}");
+                    if (claimed)
                     lock (_d3dGate)
                     {
                         _renderer.UpdateTexture(job.StaleBuf, job.StaleW, job.StaleH);
@@ -1751,7 +1767,9 @@ namespace FracturingFog.Rendering
                     // #86 — a later stage / newer trigger that already presented
                     // outranks this preview; drop it so it can't paint a stale,
                     // lower-res image over the newer frame.
-                    if (TryClaimPresent(job.Seq))
+                    bool claimedP = TryClaimPresent(job.Seq);
+                    Dbg86($"PREVIEW  seq={job.Seq} stage={job.ProgressiveStage} claimed={claimedP} lastSeq={_lastPresentedUploadSeq} {preview.Width}x{preview.Height}");
+                    if (claimedP)
                     {
                     lock (_d3dGate)
                     {
@@ -1807,6 +1825,7 @@ namespace FracturingFog.Rendering
                     // bar consumer drops the "Calculating…" set at Trigger
                     // entry. Without this, a cancelled deep-Extreme frame
                     // leaves the status string stuck indefinitely.
+                    Dbg86($"FINAL-CANCELLED seq={job.Seq} (token cancelled before present)");
                     AnimationFrameUploaded?.Invoke(this, EventArgs.Empty);
                     RenderCancelled?.Invoke(this, EventArgs.Empty);
                     return;
@@ -1845,7 +1864,10 @@ namespace FracturingFog.Rendering
                 // TAA seed) so gates never stick — it just doesn't paint.
                 lock (_uploadGate)
                 {
-                    if (TryClaimPresent(job.Seq))
+                    bool claimedF = TryClaimPresent(job.Seq);
+                    Dbg86($"FINAL    seq={job.Seq} claimed={claimedF} lastSeq={_lastPresentedUploadSeq} " +
+                          $"hp={calc.IsHighPrecisionActive} gpu={calc.LastFrameUsedGpuPerturbation} {calc.Width}x{calc.Height}");
+                    if (claimedF)
                     {
                         if (useAlt)
                             UploadProcessedBuffer(altCalc!.ColorBuffer, altCalc.Width, altCalc.Height);
