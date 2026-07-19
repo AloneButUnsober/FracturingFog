@@ -75,6 +75,7 @@ public sealed unsafe class VulkanComputeKernel : IGpuKernel
     }
 
     private readonly VulkanContext _ctx;
+    private readonly bool _ownsContext;
     private readonly Vk _vk;
     private readonly Device _device;
 
@@ -92,11 +93,16 @@ public sealed unsafe class VulkanComputeKernel : IGpuKernel
     public double LastReadbackMs { get; private set; }
     public bool HasGpuPalette => _activePaletteId != null && _colorById.ContainsKey(_activePaletteId);
 
-    public VulkanComputeKernel(VulkanContext ctx)
+    /// <param name="ctx">A context whose logical device is already created.</param>
+    /// <param name="ownsContext">When true, <see cref="Dispose"/> also disposes
+    /// <paramref name="ctx"/> — used by <see cref="TryCreateWithOwnContext"/> so
+    /// the host can hand the calculator a self-contained kernel.</param>
+    public VulkanComputeKernel(VulkanContext ctx, bool ownsContext = false)
     {
         _ctx = ctx ?? throw new ArgumentNullException(nameof(ctx));
         if (ctx.Device.Handle == 0)
             throw new ArgumentException("VulkanContext has no logical device — call CreateComputeDevice() first.", nameof(ctx));
+        _ownsContext = ownsContext;
         _vk = ctx.Vk;
         _device = ctx.Device;
 
@@ -111,6 +117,48 @@ public sealed unsafe class VulkanComputeKernel : IGpuKernel
 
     /// <summary>Human-readable backend label for the System Info dialog.</summary>
     public string Description => $"Vulkan compute ({_ctx.PickedType}: {_ctx.PickedName})";
+
+    // ── host helpers (V3-GUI #57) ─────────────────────────────────────────────
+
+    /// <summary>Probe the picked Vulkan device's name without keeping any state,
+    /// or null when no compute-capable device exists. Used by the host bootstrap
+    /// to decide whether to select the Vulkan backend and to build the System
+    /// Info probe string. Never throws.</summary>
+    public static string? ProbeDeviceName()
+    {
+        VulkanContext? ctx = null;
+        try
+        {
+            ctx = VulkanContext.CreateInstance();
+            if (ctx.EnumerateDevices().Count == 0) return null;
+            ctx.CreateComputeDevice();
+            return $"{ctx.PickedType}: {ctx.PickedName}";
+        }
+        catch { return null; }
+        finally { ctx?.Dispose(); }
+    }
+
+    /// <summary>Create a self-contained kernel that owns a fresh
+    /// <see cref="VulkanContext"/> (instance + compute device), or null when no
+    /// Vulkan device is available or init fails. The returned kernel disposes its
+    /// context on <see cref="Dispose"/>. Suitable as a
+    /// <c>FractalRenderHost.GpuKernelFactory</c>. Never throws.</summary>
+    public static VulkanComputeKernel? TryCreateWithOwnContext()
+    {
+        VulkanContext? ctx = null;
+        try
+        {
+            ctx = VulkanContext.CreateInstance();
+            if (ctx.EnumerateDevices().Count == 0) { ctx.Dispose(); return null; }
+            ctx.CreateComputeDevice();
+            return new VulkanComputeKernel(ctx, ownsContext: true);
+        }
+        catch
+        {
+            ctx?.Dispose();
+            return null;
+        }
+    }
 
     public void SetPalette(IGpuHlslPalette? palette)
     {
@@ -485,5 +533,6 @@ public sealed unsafe class VulkanComputeKernel : IGpuKernel
         _colorById.Clear();
         for (int i = 0; i < _buf.Length; i++) FreeBuffer(ref _buf[i]);
         if (_cmdPool.Handle != 0) { _vk.DestroyCommandPool(_device, _cmdPool, null); _cmdPool = default; }
+        if (_ownsContext) { try { _ctx.Dispose(); } catch { } }
     }
 }
