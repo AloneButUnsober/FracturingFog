@@ -377,3 +377,7 @@ jobs:
           # vs the deterministic CPU mirror (embedded golden digest + disagree
           # band). Same cross-impl check on lavapipe, now over the colour path.
           dotnet run --project Rendering.Vulkan.Smoke/FracturingFog.Rendering.Vulkan.Smoke.csproj -c Release -r ${{ matrix.rid }} --no-build -- --colorprobe
+          # V3 (#42): drive the REAL VulkanComputeKernel (IGpuKernel) the way the
+          # calculator does — SetPalette + Run — and check colour/base parity,
+          # buffer persistence (repeat Run byte-identical), and a resize realloc.
+          dotnet run --project Rendering.Vulkan.Smoke/FracturingFog.Rendering.Vulkan.Smoke.csproj -c Release -r ${{ matrix.rid }} --no-build -- --vulkanrenderprobe
