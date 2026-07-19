@@ -62,6 +62,16 @@ public sealed unsafe class VulkanComputeKernel : IGpuKernel
         public float _pad; // -> 64 bytes
     }
 
+    // V6 perturbation params (48 bytes): 4 ints then 4 doubles. Doubles land at
+    // 8-byte-aligned offsets 16/24/32/40 — matches the HLSL PerturbParams
+    // cbuffer with no 16-byte-row straddle.
+    [StructLayout(LayoutKind.Sequential)]
+    private struct PerturbParamsBlob
+    {
+        public int Width, Height, MaxIter, RefLen;
+        public double Scale, EscapeR2, OffX0, OffY0;
+    }
+
     private struct Allocated { public Buffer Buffer; public DeviceMemory Memory; public ulong Size; }
 
     // A compiled compute program: shader module + pipeline + its layout objects.
@@ -82,6 +92,14 @@ public sealed unsafe class VulkanComputeKernel : IGpuKernel
     private Program? _base;                                   // no-colour variant
     private readonly Dictionary<string, Program> _colorById = new(StringComparer.Ordinal);
     private string? _activePaletteId;
+
+    // V6 (#82): deep-zoom perturbation program + its dedicated buffers (the
+    // reference-orbit SSBOs + the 48-byte double param UBO). Output iter/smooth/
+    // finalZD reuse the shared _buf[2..4].
+    private Program? _perturb;
+    private Allocated _perturbParams;
+    private Allocated _refZrBuf, _refZiBuf;
+    private int _refAlloc;
 
     // Persistent buffers, indexed: 0=params,1=perRow,2=iter,3=smooth,4=finalZD,5=color.
     private readonly Allocated[] _buf = new Allocated[6];
@@ -170,7 +188,8 @@ public sealed unsafe class VulkanComputeKernel : IGpuKernel
         try
         {
             string hlsl = MandelbrotKernelSource.BuildColor(palette.HlslPrelude, palette.HlslPaletteBody);
-            _colorById[id] = BuildProgram(hlsl, bindingCount: 6);
+            _colorById[id] = BuildProgram(hlsl, MandelbrotKernelSource.EntryPoint,
+                0u, (uint)TShift, (uint)UShift, (uint)UShift + 1, (uint)UShift + 2, (uint)ColorBinding);
             _activePaletteId = id;
         }
         catch (Exception ex)
@@ -198,7 +217,9 @@ public sealed unsafe class VulkanComputeKernel : IGpuKernel
         if (width <= 0 || height <= 0) return;
 
         bool useColor = colorDst != null && HasGpuPalette;
-        Program prog = useColor ? _colorById[_activePaletteId!] : (_base ??= BuildProgram(MandelbrotKernelSource.BuildBase(), bindingCount: 5));
+        Program prog = useColor ? _colorById[_activePaletteId!]
+            : (_base ??= BuildProgram(MandelbrotKernelSource.BuildBase(), MandelbrotKernelSource.EntryPoint,
+                0u, (uint)TShift, (uint)UShift, (uint)UShift + 1, (uint)UShift + 2));
 
         long t0 = Stopwatch.GetTimestamp();
         int n = width * height;
@@ -330,16 +351,168 @@ public sealed unsafe class VulkanComputeKernel : IGpuKernel
         LastReadbackMs = (tEnd - tDispatch) * 1000.0 / freq;
     }
 
+    // ── V6 (#82) deep-zoom perturbation ────────────────────────────────────────
+
+    public bool SupportsPerturbation => _ctx.SupportsFloat64;
+
+    public void RunPerturb(
+        int width, int height,
+        double scale, int maxIter, double escapeRadius2,
+        double offsetX0, double offsetY0,
+        double[] refZr, double[] refZi, int refLen,
+        int[] iterDst, float[] smoothDst,
+        float[] finalZrDst, float[] finalZiDst,
+        float[] finalDrDst, float[] finalDiDst)
+    {
+        if (_disposed) throw new ObjectDisposedException(nameof(VulkanComputeKernel));
+        if (!_ctx.SupportsFloat64)
+            throw new NotSupportedException("Vulkan device has no shaderFloat64 — cannot run the perturbation kernel.");
+        if (width <= 0 || height <= 0) return;
+        if (refLen < 1) throw new ArgumentException("reference orbit is empty", nameof(refLen));
+        if (refZr.Length < refLen || refZi.Length < refLen)
+            throw new ArgumentException("reference-orbit arrays shorter than refLen");
+
+        long t0 = Stopwatch.GetTimestamp();
+        int n = width * height;
+        EnsureBuffers(width, height);          // shares iter/smooth/finalZD at _buf[2..4]
+        EnsurePerturbBuffers(refLen);
+        _perturb ??= BuildProgram(MandelbrotKernelSource.BuildPerturb(), MandelbrotKernelSource.PerturbEntryPoint,
+            0u, (uint)TShift, (uint)TShift + 1, (uint)UShift, (uint)UShift + 1, (uint)UShift + 2);
+
+        // Upload params + reference orbit (Hi-limb doubles).
+        var blob = new PerturbParamsBlob
+        {
+            Width = width, Height = height, MaxIter = maxIter, RefLen = refLen,
+            Scale = scale, EscapeR2 = escapeRadius2, OffX0 = offsetX0, OffY0 = offsetY0,
+        };
+        WriteBytes(_perturbParams, &blob, sizeof(PerturbParamsBlob));
+        fixed (double* pr = refZr) WriteBytes(_refZrBuf, pr, refLen * sizeof(double));
+        fixed (double* pi = refZi) WriteBytes(_refZiBuf, pi, refLen * sizeof(double));
+
+        // Binding order matches BuildProgram's bindingNums above:
+        //   b0=params, t0=refZr(100), t1=refZi(101), u0=iter(200), u1=smooth(201), u2=finalZD(202).
+        Buffer* srcBufs = stackalloc Buffer[6]
+        {
+            _perturbParams.Buffer, _refZrBuf.Buffer, _refZiBuf.Buffer,
+            _buf[2].Buffer, _buf[3].Buffer, _buf[4].Buffer,
+        };
+        uint* bindNums = stackalloc uint[6] { 0, (uint)TShift, (uint)TShift + 1, (uint)UShift, (uint)UShift + 1, (uint)UShift + 2 };
+        var types = stackalloc DescriptorType[6]
+        {
+            DescriptorType.UniformBuffer, DescriptorType.StorageBuffer, DescriptorType.StorageBuffer,
+            DescriptorType.StorageBuffer, DescriptorType.StorageBuffer, DescriptorType.StorageBuffer,
+        };
+
+        DescriptorPool pool = default;
+        CommandBuffer cmd = default;
+        try
+        {
+            var poolSizes = stackalloc DescriptorPoolSize[2]
+            {
+                new DescriptorPoolSize { Type = DescriptorType.UniformBuffer, DescriptorCount = 1 },
+                new DescriptorPoolSize { Type = DescriptorType.StorageBuffer, DescriptorCount = 5 },
+            };
+            var dpci = new DescriptorPoolCreateInfo
+            {
+                SType = StructureType.DescriptorPoolCreateInfo,
+                MaxSets = 1, PoolSizeCount = 2, PPoolSizes = poolSizes,
+            };
+            Check(_vk.CreateDescriptorPool(_device, in dpci, null, out pool), "vkCreateDescriptorPool");
+
+            var dslLocal = _perturb.Dsl;
+            var dsai = new DescriptorSetAllocateInfo
+            {
+                SType = StructureType.DescriptorSetAllocateInfo,
+                DescriptorPool = pool, DescriptorSetCount = 1, PSetLayouts = &dslLocal,
+            };
+            Check(_vk.AllocateDescriptorSets(_device, in dsai, out DescriptorSet set), "vkAllocateDescriptorSets");
+
+            var infos = stackalloc DescriptorBufferInfo[6];
+            var writes = stackalloc WriteDescriptorSet[6];
+            for (int i = 0; i < 6; i++)
+            {
+                infos[i] = new DescriptorBufferInfo { Buffer = srcBufs[i], Offset = 0, Range = Vk.WholeSize };
+                writes[i] = new WriteDescriptorSet
+                {
+                    SType = StructureType.WriteDescriptorSet,
+                    DstSet = set, DstBinding = bindNums[i], DescriptorCount = 1,
+                    DescriptorType = types[i], PBufferInfo = &infos[i],
+                };
+            }
+            _vk.UpdateDescriptorSets(_device, 6, writes, 0, null);
+
+            var cbai = new CommandBufferAllocateInfo
+            {
+                SType = StructureType.CommandBufferAllocateInfo,
+                CommandPool = _cmdPool, Level = CommandBufferLevel.Primary, CommandBufferCount = 1,
+            };
+            Check(_vk.AllocateCommandBuffers(_device, in cbai, out cmd), "vkAllocateCommandBuffers");
+
+            var begin = new CommandBufferBeginInfo
+            {
+                SType = StructureType.CommandBufferBeginInfo,
+                Flags = CommandBufferUsageFlags.OneTimeSubmitBit,
+            };
+            Check(_vk.BeginCommandBuffer(cmd, in begin), "vkBeginCommandBuffer");
+            _vk.CmdBindPipeline(cmd, PipelineBindPoint.Compute, _perturb.Pipeline);
+            _vk.CmdBindDescriptorSets(cmd, PipelineBindPoint.Compute, _perturb.Layout, 0, 1, &set, 0, null);
+            _vk.CmdDispatch(cmd, (uint)((width + 7) / 8), (uint)((height + 7) / 8), 1);
+            Check(_vk.EndCommandBuffer(cmd), "vkEndCommandBuffer");
+
+            var cmdLocal = cmd;
+            var submit = new SubmitInfo
+            {
+                SType = StructureType.SubmitInfo,
+                CommandBufferCount = 1, PCommandBuffers = &cmdLocal,
+            };
+            Check(_vk.QueueSubmit(_ctx.ComputeQueue, 1, &submit, default), "vkQueueSubmit");
+            Check(_vk.QueueWaitIdle(_ctx.ComputeQueue), "vkQueueWaitIdle");
+        }
+        finally
+        {
+            if (cmd.Handle != 0) _vk.FreeCommandBuffers(_device, _cmdPool, 1, in cmd);
+            if (pool.Handle != 0) _vk.DestroyDescriptorPool(_device, pool, null);
+        }
+
+        long tDispatch = Stopwatch.GetTimestamp();
+        ReadIter(_buf[2], iterDst, n);
+        ReadFloats(_buf[3], smoothDst, n);
+        ReadFinalZD(_buf[4], finalZrDst, finalZiDst, finalDrDst, finalDiDst, n);
+        long tEnd = Stopwatch.GetTimestamp();
+        double freq = Stopwatch.Frequency;
+        LastDispatchMs = (tDispatch - t0) * 1000.0 / freq;
+        LastReadbackMs = (tEnd - tDispatch) * 1000.0 / freq;
+    }
+
+    private void EnsurePerturbBuffers(int refLen)
+    {
+        if (_perturbParams.Buffer.Handle == 0)
+            _perturbParams = AllocBuffer((ulong)sizeof(PerturbParamsBlob), BufferUsageFlags.UniformBufferBit);
+        if (_refZrBuf.Buffer.Handle == 0 || _refAlloc < refLen)
+        {
+            FreeBuffer(ref _refZrBuf);
+            FreeBuffer(ref _refZiBuf);
+            ulong sz = (ulong)(refLen * sizeof(double));
+            _refZrBuf = AllocBuffer(sz, BufferUsageFlags.StorageBufferBit);
+            _refZiBuf = AllocBuffer(sz, BufferUsageFlags.StorageBufferBit);
+            _refAlloc = refLen;
+        }
+    }
+
     // ── pipeline build ────────────────────────────────────────────────────────
-    private Program BuildProgram(string hlsl, int bindingCount)
+    // Compile + stand up a compute program. bindingNums[0] is the UBO (b0); the
+    // rest are SSBOs, in the order the caller's descriptor writes use. entry
+    // selects the HLSL entry point (CSMain for base/colour, CSPerturb for the
+    // perturbation variant).
+    private Program BuildProgram(string hlsl, string entry, params uint[] bindingNums)
     {
         byte[] spirv = DxcCompiler.CompileToSpirv(
-            hlsl, MandelbrotKernelSource.EntryPoint, "cs_6_0",
+            hlsl, entry, "cs_6_0",
             "-fvk-b-shift", BShift.ToString(), "0",
             "-fvk-t-shift", TShift.ToString(), "0",
             "-fvk-u-shift", UShift.ToString(), "0");
 
-        var prog = new Program { BindingCount = bindingCount };
+        var prog = new Program { BindingCount = bindingNums.Length };
         fixed (byte* code = spirv)
         {
             var smci = new ShaderModuleCreateInfo
@@ -350,19 +523,14 @@ public sealed unsafe class VulkanComputeKernel : IGpuKernel
             Check(_vk.CreateShaderModule(_device, in smci, null, out prog.Module), "vkCreateShaderModule");
         }
 
-        var bindings = stackalloc DescriptorSetLayoutBinding[6]
-        {
-            LayoutBinding(0,               DescriptorType.UniformBuffer),
-            LayoutBinding((uint)TShift,    DescriptorType.StorageBuffer),
-            LayoutBinding((uint)UShift,    DescriptorType.StorageBuffer),
-            LayoutBinding((uint)UShift + 1,DescriptorType.StorageBuffer),
-            LayoutBinding((uint)UShift + 2,DescriptorType.StorageBuffer),
-            LayoutBinding((uint)ColorBinding, DescriptorType.StorageBuffer),
-        };
+        var bindings = stackalloc DescriptorSetLayoutBinding[bindingNums.Length];
+        for (int i = 0; i < bindingNums.Length; i++)
+            bindings[i] = LayoutBinding(bindingNums[i],
+                i == 0 ? DescriptorType.UniformBuffer : DescriptorType.StorageBuffer);
         var dslci = new DescriptorSetLayoutCreateInfo
         {
             SType = StructureType.DescriptorSetLayoutCreateInfo,
-            BindingCount = (uint)bindingCount, PBindings = bindings,
+            BindingCount = (uint)bindingNums.Length, PBindings = bindings,
         };
         Check(_vk.CreateDescriptorSetLayout(_device, in dslci, null, out prog.Dsl), "vkCreateDescriptorSetLayout");
 
@@ -374,7 +542,7 @@ public sealed unsafe class VulkanComputeKernel : IGpuKernel
         };
         Check(_vk.CreatePipelineLayout(_device, in plci, null, out prog.Layout), "vkCreatePipelineLayout");
 
-        nint entryPtr = SilkMarshal.StringToPtr(MandelbrotKernelSource.EntryPoint);
+        nint entryPtr = SilkMarshal.StringToPtr(entry);
         try
         {
             var cpci = new ComputePipelineCreateInfo
@@ -529,9 +697,13 @@ public sealed unsafe class VulkanComputeKernel : IGpuKernel
         _disposed = true;
         try { if (_device.Handle != 0) _vk.DeviceWaitIdle(_device); } catch { }
         if (_base != null) { DestroyProgram(_base); _base = null; }
+        if (_perturb != null) { DestroyProgram(_perturb); _perturb = null; }
         foreach (var p in _colorById.Values) DestroyProgram(p);
         _colorById.Clear();
         for (int i = 0; i < _buf.Length; i++) FreeBuffer(ref _buf[i]);
+        FreeBuffer(ref _perturbParams);
+        FreeBuffer(ref _refZrBuf);
+        FreeBuffer(ref _refZiBuf);
         if (_cmdPool.Handle != 0) { _vk.DestroyCommandPool(_device, _cmdPool, null); _cmdPool = default; }
         if (_ownsContext) { try { _ctx.Dispose(); } catch { } }
     }

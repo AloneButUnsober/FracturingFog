@@ -181,6 +181,122 @@ float3 EvalPalette(
             + HlslEntry(emitColor: true, InSetColorSplice, EscapeColorSplice, BulbSkipColorSplice);
     }
 
+    // ── Perturbation variant (V6, issue #82) ─────────────────────────────────
+    //
+    // Deep-zoom (Zoom ≫ MaxGpuZoom) escape-time by PERTURBATION over a
+    // precomputed reference orbit, run on the GPU in `double`. This is the exact
+    // twin of MandelbrotCalculator.ComputePixelPTRebased (the default, non-DD
+    // path): the δ-chain and dc are plain `double`, the reference orbit is the
+    // Hi-limb double sequence the CPU already computes, and Zhuoran rebasing
+    // (SM-2) keeps the chain glitch-free. NO in-shader limb (DD/QD) math — the
+    // spike (dev-plan §14) proved that unnecessary for this path. δ stays double
+    // at any depth (Docs/Deep-Zoom-Perturbation.md §2); only the reference orbit
+    // + centre need precision, and those are built CPU-side.
+    //
+    // Self-contained (own cbuffer + bindings, NOT HlslBase) so it can be a
+    // separate compiled module. Same two-compiler rule: no vk:: attributes; DXC
+    // pins bindings with -fvk-*-shift (b0→0, t0/t1→100/101, u0..u2→200..202),
+    // FXC uses the registers directly. Outputs iter + smooth + finalZD(zr,zi,
+    // drv,div) so the calculator's FillAuxAndColorHP drives colour/dist/normal
+    // on the CPU exactly as it does for the CPU PT path.
+    //
+    // dc for pixel (x,y) = (gOffX0 + x, gOffY0 + y) · gScale — the caller passes
+    // the pixel-(0,0) offset so the calculator's image-space column/row offsets
+    // (sub-rect, effective-image centre) map through unchanged.
+
+    /// <summary>Compute-shader entry point for the perturbation variant.</summary>
+    public const string PerturbEntryPoint = "CSPerturb";
+
+    /// <summary>Compose the double perturbation kernel. Standalone HLSL (its own
+    /// cbuffer + reference-orbit SRVs + output UAVs); requires FP64 support on
+    /// the device (Vulkan <c>shaderFloat64</c> / D3D double shader ops).</summary>
+    public static string BuildPerturb() => @"
+cbuffer PerturbParams : register(b0)
+{
+    int    gWidth;
+    int    gHeight;
+    int    gMaxIter;
+    int    gRefLen;
+    double gScale;      // world units per pixel
+    double gEscapeR2;   // escape radius squared (matches CPU EscapeRadius2)
+    double gOffX0;      // column offset of pixel x=0 (pixels; add x)
+    double gOffY0;      // row offset of pixel y=0 (pixels; add y)
+}
+
+// Reference orbit Z_n, Hi-limb doubles (the CPU _refZr/_refZi). Length gRefLen.
+StructuredBuffer<double> gRefZr : register(t0);
+StructuredBuffer<double> gRefZi : register(t1);
+
+RWStructuredBuffer<uint>   gIter    : register(u0);
+RWStructuredBuffer<float>  gSmooth  : register(u1);
+RWStructuredBuffer<float4> gFinalZD : register(u2);   // .xy = zr,zi  .zw = drv,div
+
+[numthreads(8, 8, 1)]
+void CSPerturb(uint3 tid : SV_DispatchThreadID)
+{
+    if ((int)tid.x >= gWidth || (int)tid.y >= gHeight) return;
+    int idx = (int)tid.y * gWidth + (int)tid.x;
+
+    // dc = pixelOffset · scale (double).
+    double dcR = (gOffX0 + (double)tid.x) * gScale;
+    double dcI = (gOffY0 + (double)tid.y) * gScale;
+
+    double dr = 0.0, di = 0.0;      // δ_0 = 0
+    double drv = 1.0, div = 0.0;    // dz/dc (IQ convention) for distance + normals
+    int m = 0;                      // reference-orbit index
+    double zr = 0.0, zi = 0.0;      // full value z = Z[m] + δ (last = escape z)
+
+    int iter;
+    [loop]
+    for (iter = 0; iter < gMaxIter; iter++)
+    {
+        double Zr = gRefZr[m];
+        double Zi = gRefZi[m];
+        zr = Zr + dr;
+        zi = Zi + di;
+
+        double zmag2 = zr * zr + zi * zi;
+        if (zmag2 >= gEscapeR2) break;
+
+        // Derivative of the FULL orbit — independent of rebasing, before it.
+        double ndrv = 2.0 * (zr * drv - zi * div) + 1.0;
+        double ndiv = 2.0 * (zr * div + zi * drv);
+        drv = ndrv; div = ndiv;
+
+        // Rebase when the reference no longer anchors this pixel or is exhausted.
+        double dmag2 = dr * dr + di * di;
+        if (zmag2 < dmag2 || m + 1 >= gRefLen)
+        {
+            dr = zr; di = zi;
+            Zr = 0.0; Zi = 0.0;
+            m = 0;
+        }
+
+        // δ_{n+1} = (2·Z[m] + δ)·δ + dc   (Z[m]=0 right after a rebase).
+        double a = 2.0 * Zr + dr;
+        double b = 2.0 * Zi + di;
+        double ndr = a * dr - b * di + dcR;
+        double ndi = a * di + b * dr + dcI;
+        dr = ndr; di = ndi;
+        m++;
+    }
+
+    gFinalZD[idx] = float4((float)zr, (float)zi, (float)drv, (float)div);
+    if (iter >= gMaxIter)
+    {
+        gIter[idx]   = (uint)gMaxIter;
+        gSmooth[idx] = 0.0;
+    }
+    else
+    {
+        gIter[idx] = (uint)iter;
+        // Match FillAuxAndColorHP: iters + 1 - log2(log2(mag)), mag = |z|.
+        float magf = sqrt((float)(zr * zr + zi * zi));
+        gSmooth[idx] = (float)iter + 1.0 - log2(log2(magf));
+    }
+}
+";
+
     /// <summary>Per-emit CSMain. The three colour splice points are empty in
     /// the base variant and filled by <c>MandelbrotGpuKernel</c> (D3D, V2 on
     /// Vulkan) for the colour-emitting variant.</summary>
