@@ -99,6 +99,14 @@ namespace FracturingFog.Rendering
         private CancellationTokenSource? _calcCts;
         private readonly object _calcLock = new();
 
+        // #85 — drain latch. Signaled (idle) whenever the calc thread is NOT
+        // inside a job's write region; reset (busy) for the duration of
+        // RunFrameJobCalc. Resize cancels the in-flight calc's token then
+        // waits on this before swapping the calculator's buffer arrays, so an
+        // in-flight Calculate can never index a freshly-swapped smaller array
+        // out of range. Only the single dedicated calc thread touches it.
+        private readonly ManualResetEventSlim _calcIdle = new(initialState: true);
+
         // Serialises every call into the D3D11 ImmediateContext. The
         // immediate context is NOT thread-safe; before this lock landed,
         // resize on the UI thread could overlap with UpdateTexture from a
@@ -1165,11 +1173,15 @@ namespace FracturingFog.Rendering
             {
                 foreach (var job in _calcQueue.GetConsumingEnumerable())
                 {
+                    // #85 — mark busy for the whole write region so a
+                    // concurrent Resize drains (waits) before swapping arrays.
+                    _calcIdle.Reset();
                     try { RunFrameJobCalc(in job); }
                     catch (OperationCanceledException) { }
                     catch { /* swallow — token-driven cancellation is the only
                               expected failure mode; surface anything else via
                               the calc's own error path if it has one. */ }
+                    finally { _calcIdle.Set(); }
                 }
             }
             catch (OperationCanceledException) { }
@@ -1964,6 +1976,18 @@ namespace FracturingFog.Rendering
 
         // ── Resize ────────────────────────────────────────────────────────────
 
+        // #85 — wait for the calc thread to leave its current job's write
+        // region so a caller can safely swap the calculator's buffer arrays.
+        // The caller must cancel the in-flight token FIRST; the calc then exits
+        // at its next row/stage boundary and sets _calcIdle. Bounded wait keeps
+        // a wedged calc from hanging the UI thread — on timeout we fall back to
+        // the old cancel-only (racy) behaviour, no worse than before. Runs on
+        // the UI thread holding no locks, so it cannot deadlock the calc.
+        private void DrainCalc()
+        {
+            try { _calcIdle.Wait(2000); } catch { }
+        }
+
         public void Resize(int width, int height)
         {
             if (_disposed) return;
@@ -2003,9 +2027,11 @@ namespace FracturingFog.Rendering
             // thread mid-write (CPU rows OR the GPU-perturbation readback +
             // FillAuxAndColorHP pass) would tear against the new arrays. The old
             // frame is for the old dims and about to be superseded anyway, so
-            // cancelling it is strictly correct. Cooperative cancellation only
-            // narrows the window — see the follow-up issue for a full drain.
+            // cancelling it is strictly correct. Cooperative cancellation
+            // narrows the window; DrainCalc then closes it by waiting for the
+            // calc thread to actually leave its write region before the swap.
             lock (_calcLock) _calcCts?.Cancel();
+            DrainCalc();
             _calculator.Resize(w, h);
             // Wave 2.5 — keep progressive sidecars in sync with main surface.
             int qw = Math.Max(64, w / 4); int qh = Math.Max(64, h / 4);
@@ -3215,6 +3241,8 @@ namespace FracturingFog.Rendering
             try { _calcQueue.CompleteAdding(); } catch { }
             try { _calcThread?.Join(2000); } catch { }
             try { _calcQueue.Dispose(); } catch { }
+            // #85 — safe now that the calc thread has joined (no more Reset/Set).
+            try { _calcIdle.Dispose(); } catch { }
 
             // T3.1: dispose the GPU compute kernel before the renderer so its
             // UAV / staging / cbuffer / CS releases hit the device first.
