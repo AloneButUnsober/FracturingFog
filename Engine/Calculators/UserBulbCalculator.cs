@@ -901,7 +901,12 @@ namespace FracturingFogDyn
                           FractalParameters.UserBulbSource ?? string.Empty,
                           _compiledParamNames,
                           quatMode: quatMode);
-                if (compiled && _sandboxGpu.Render(ColorBuffer, pArr, gp)) return;
+                if (compiled && _sandboxGpu.Render(ColorBuffer, pArr, gp))
+                {
+                    // #84 — GPU path skips the CPU post stack; draw the debug HUD.
+                    ScreenSpacePost.ApplyDebugHud(ColorBuffer, fullW, fullH, in fx);
+                    return;
+                }
                 LastError = _sandboxGpu.LastError;
                 // Fall through to legacy GPU (vec only) + then CPU.
             }
@@ -913,7 +918,12 @@ namespace FracturingFogDyn
                 if (trans.Ok)
                 {
                     _gpu ??= new UserBulbGpuCalculator();
-                    if (_gpu.Render(ColorBuffer, gp)) return;
+                    if (_gpu.Render(ColorBuffer, gp))
+                    {
+                        // #84 — GPU path skips the CPU post stack; draw the HUD.
+                        ScreenSpacePost.ApplyDebugHud(ColorBuffer, fullW, fullH, in fx);
+                        return;
+                    }
                     LastError = _gpu.LastError;
                 }
             }
@@ -928,6 +938,8 @@ namespace FracturingFogDyn
             if (decision == ReuseDecision.Identity && _cache.Buffer != null)
             {
                 Array.Copy(_cache.Buffer, ColorBuffer, ColorBuffer.Length);
+                // #84 — cache stores a HUD-free frame; redraw the HUD on replay.
+                ScreenSpacePost.ApplyDebugHud(ColorBuffer, fullW, fullH, in fx);
                 return;
             }
         }
@@ -1203,6 +1215,11 @@ namespace FracturingFogDyn
                 up.X, up.Y, up.Z,
                 fovScale, aspect);
         }
+
+        // #84 — light-direction compass etc. Drawn last on the final full-res
+        // buffer, AFTER the temporal-cache save above so the cached frame stays
+        // HUD-free (the identity-blit path redraws the HUD on replay). Self-guards.
+        ScreenSpacePost.ApplyDebugHud(ColorBuffer, fullW, fullH, in fx);
     }
 
     private string BuildSceneKey()

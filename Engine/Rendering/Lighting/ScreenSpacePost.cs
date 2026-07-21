@@ -320,19 +320,23 @@ public static class ScreenSpacePost
                      || fx.Vignette > 0 || fx.LensTangentialX != 0
                      || fx.LensTangentialY != 0
                      || (fx.AnamorphicSqueeze != 0 && fx.AnamorphicSqueeze != 1.0);
-        bool wantHud = fx.DebugHudFlags != 0;
-        if (!wantBloom && !wantTonemap && !wantLens && !wantHud) return;
+        // #84 — the debug HUD (light compass / bars / clock) is NOT drawn here
+        // anymore. It moved to a standalone ApplyDebugHud pass the calculators
+        // run last on the final full-res buffer, so it survives both the GPU
+        // raymarch early-out (which skips this whole method) and the low-res
+        // upscale. Drawing it here also double-composited its alpha backdrop
+        // when tonemap/bloom were active.
+        if (!wantBloom && !wantTonemap && !wantLens) return;
 
         int n = width * height;
         if (colorBuffer.Length < n) return;
         if ((wantBloom || wantTonemap) && hdrBuffer.Length < 3 * n) return;
 
-        // Phase 15 / Phase 19 short-circuit: skip the HDR pipeline entirely if
-        // only post-byte stages (lens, HUD) are active.
+        // Phase 15 short-circuit: skip the HDR pipeline entirely if only the
+        // post-byte lens stage is active.
         if (!wantBloom && !wantTonemap)
         {
             if (wantLens) ApplyLensPost(colorBuffer, width, height, fx);
-            if (wantHud)  ApplyDebugHud(colorBuffer, width, height, fx);
             return;
         }
         using var __stage = StagePerf.Begin(PostStage.Bloom);
@@ -349,10 +353,10 @@ public static class ScreenSpacePost
                     wantBloom, wantTonemap, (int)fx.ToneMap,
                     fx.Exposure, threshByteScaleGpu, fx.BloomStrength))
             {
-                // GPU path handled tonemap + bloom. Still run lens + HUD on CPU
-                // (cheap byte-buffer passes; not worth a GPU port).
+                // GPU path handled tonemap + bloom. Still run lens on CPU
+                // (cheap byte-buffer pass; not worth a GPU port). HUD is a
+                // separate final pass owned by the calculator (#84).
                 if (wantLens) ApplyLensPost(colorBuffer, width, height, fx);
-                if (wantHud)  ApplyDebugHud(colorBuffer, width, height, fx);
                 return;
             }
         }
@@ -479,14 +483,6 @@ public static class ScreenSpacePost
         if (wantLens)
         {
             ApplyLensPost(colorBuffer, width, height, fx);
-        }
-
-        // Phase 19 — debug HUD overlay. Drawn last so HUD pixels survive the
-        // lens warp + tonemap stages above (HUD lives in screen space, not
-        // scene space).
-        if (wantHud)
-        {
-            ApplyDebugHud(colorBuffer, width, height, fx);
         }
     }
 

@@ -188,7 +188,13 @@ public sealed class KifsCalculator : IFractalCalculator
                     DEIter = deIter, SceneRadius = sceneRadius,
                 };
                 _gpuSierp ??= new SierpinskiGpuCalculator();
-                if (_gpuSierp.Render(renderBuffer, rp, sp, sip)) return;
+                if (_gpuSierp.Render(renderBuffer, rp, sp, sip))
+                {
+                    // #84 — GPU raymarch skips the CPU post stack; draw the debug
+                    // HUD directly so the light compass still shows on GPU frames.
+                    ScreenSpacePost.ApplyDebugHud(renderBuffer, width, height, in fx);
+                    return;
+                }
             }
             else
             {
@@ -198,7 +204,13 @@ public sealed class KifsCalculator : IFractalCalculator
                     DEIter = deIter, SceneRadius = sceneRadius,
                 };
                 _gpuMenger ??= new MengerGpuCalculator();
-                if (_gpuMenger.Render(renderBuffer, rp, sp, mp)) return;
+                if (_gpuMenger.Render(renderBuffer, rp, sp, mp))
+                {
+                    // #84 — GPU raymarch skips the CPU post stack; draw the debug
+                    // HUD directly so the light compass still shows on GPU frames.
+                    ScreenSpacePost.ApplyDebugHud(renderBuffer, width, height, in fx);
+                    return;
+                }
             }
         }
 
@@ -295,6 +307,11 @@ public sealed class KifsCalculator : IFractalCalculator
         if (lowRes)
             FracturingFog.Rendering.LowResPreview.UpscaleNearest(
                 renderBuffer, width, height, ColorBuffer, fullW, fullH);
+
+        // #84 — light-direction compass / param bars / scene clock. Standalone
+        // final pass on the composited full-res buffer so it survives both the
+        // low-res upscale and the GPU-raymarch early-out. Self-guards on flags.
+        ScreenSpacePost.ApplyDebugHud(ColorBuffer, fullW, fullH, in fx);
     }
 
     /// <summary>

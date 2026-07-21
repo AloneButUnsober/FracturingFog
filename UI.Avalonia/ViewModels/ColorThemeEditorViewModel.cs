@@ -861,6 +861,7 @@ public sealed class ColorThemeEditorViewModel : ViewModelBase
             this.RaisePropertyChanged(nameof(RimSpec));
             this.RaisePropertyChanged(nameof(RimDiff));
             FieldChanged();
+            RaiseLightsChanged();
         }
     }
 
@@ -1101,10 +1102,19 @@ public sealed class ColorThemeEditorViewModel : ViewModelBase
 
     // ── Internal: row-change notification ─────────────────────────────────
 
+    /// <summary>Raised whenever the Key/Fill/Rim light rig changes (field edit,
+    /// rim toggle, or theme load) so the in-editor <c>LightCompassControl</c>
+    /// can repaint. Display-only — carries no payload.</summary>
+    public event EventHandler? LightsChanged;
+
+    /// <summary>Fire <see cref="LightsChanged"/> for the compass overlay. Safe
+    /// to over-call — the handler just invalidates a tiny control.</summary>
+    internal void RaiseLightsChanged() => LightsChanged?.Invoke(this, EventArgs.Empty);
+
     /// <summary>Called by Stops / Bands / Light rows when any of their fields
     /// change. Surfaces a debounced preview push the same way as VM-level
     /// property setters do via <see cref="FieldChanged"/>.</summary>
-    internal void NotifyRowChanged() => FieldChanged();
+    internal void NotifyRowChanged() { FieldChanged(); RaiseLightsChanged(); }
 
     private void FieldChanged()
     {
@@ -1181,6 +1191,7 @@ public sealed class ColorThemeEditorViewModel : ViewModelBase
             UseRim = def.RimLight != null;
             RimLight.Load(def.RimLight ?? DefaultRim());
             RimLight.IsEnabled = UseRim;
+            RaiseLightsChanged(); // repaint the in-editor light compass on load
 
             KeySpec = ClampDec((decimal)def.KeySpecScale, 0M, 10M);
             FillSpec = ClampDec((decimal)def.FillSpecScale, 0M, 10M);
