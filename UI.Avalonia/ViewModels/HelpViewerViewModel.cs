@@ -3,11 +3,13 @@
 
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.IO;
 using System.Reactive;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.Documents;
+using Avalonia.Input;
 using Avalonia.Layout;
 using Avalonia.Media;
 using Avalonia.Media.Imaging;
@@ -32,9 +34,20 @@ public sealed class HelpViewerViewModel : ViewModelBase
 {
     public HelpViewerViewModel(string docId, string? anchor, string title)
     {
-        _docId = docId;
         _title = title;
         CloseCommand = ReactiveCommand.Create(() => CloseRequested?.Invoke());
+        Blocks = new();
+        Load(docId, anchor);
+    }
+
+    /// <summary>
+    /// (Re)loads a doc into the viewer. Rebuilds <see cref="Blocks"/> and the
+    /// anchor map. Used both by the ctor and by in-viewer cross-doc navigation
+    /// when the reader clicks a `[…](Other-Guide.md)` link.
+    /// </summary>
+    public void Load(string docId, string? anchor)
+    {
+        _docId = docId;
 
         string raw = LoadDocResource(docId);
         string? sliceTitle;
@@ -42,7 +55,6 @@ public sealed class HelpViewerViewModel : ViewModelBase
             ? SliceToSection(raw, anchor, out sliceTitle)
             : (sliceTitle = null, raw).raw;
 
-        Blocks = new();
         // Image refs in markdown resolve against the doc's folder so a User/
         // guide can `![](../Images/foo.png)` the shared image bin.
         Bitmap? Resolver(string href)
@@ -56,12 +68,101 @@ public sealed class HelpViewerViewModel : ViewModelBase
             }
             catch { return null; }
         }
-        foreach (var ctl in HelpMarkdownRenderer.Render(sliced, Resolver))
+
+        Blocks.Clear();
+        _anchors.Clear();
+        foreach (var ctl in HelpMarkdownRenderer.Render(sliced, Resolver, OnLinkActivated))
+        {
             Blocks.Add(ctl);
+            // Heading controls carry their GitHub-style slug in Tag so `#anchor`
+            // (TOC) links can scroll to them.
+            if (ctl.Tag is string slug && slug.Length > 0)
+                _anchors[slug] = ctl;
+        }
 
         HeadingPath = string.IsNullOrEmpty(sliceTitle)
             ? docId
             : $"{docId}  →  {sliceTitle}";
+    }
+
+    // Slug → heading control, for in-doc `#anchor` (TOC) link scrolling.
+    private readonly Dictionary<string, Control> _anchors = new(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>Raised when a `#anchor` (TOC) link resolves to a heading the
+    /// view should scroll into view.</summary>
+    public event Action<Control>? ScrollToRequested;
+
+    /// <summary>
+    /// Routes a clicked markdown link. Three kinds:
+    ///   • `#slug`        → in-doc TOC anchor: scroll to the heading (#30).
+    ///   • http/https/mailto → external: hand to the OS default browser,
+    ///                         which opens it in a new tab (#32).
+    ///   • `Other.md[#frag]` → cross-doc: reload the viewer on that guide.
+    /// </summary>
+    private void OnLinkActivated(string href)
+    {
+        if (string.IsNullOrWhiteSpace(href)) return;
+        href = href.Trim();
+
+        if (href.StartsWith("#", StringComparison.Ordinal))
+        {
+            var slug = href[1..].Trim();
+            if (_anchors.TryGetValue(slug, out var ctl))
+                ScrollToRequested?.Invoke(ctl);
+            return;
+        }
+
+        if (href.StartsWith("http://", StringComparison.OrdinalIgnoreCase) ||
+            href.StartsWith("https://", StringComparison.OrdinalIgnoreCase) ||
+            href.StartsWith("mailto:", StringComparison.OrdinalIgnoreCase))
+        {
+            OpenExternal(href);
+            return;
+        }
+
+        // Relative doc link, optionally with a `#fragment`.
+        string path = href;
+        string? frag = null;
+        int hash = href.IndexOf('#');
+        if (hash >= 0) { frag = href[(hash + 1)..].Trim(); path = href[..hash]; }
+        if (path.EndsWith(".md", StringComparison.OrdinalIgnoreCase))
+        {
+            var newDocId = ResolveDocId(_docId, path);
+            Load(newDocId, null);
+            if (!string.IsNullOrEmpty(frag) && _anchors.TryGetValue(frag, out var ctl))
+                ScrollToRequested?.Invoke(ctl);
+        }
+    }
+
+    private static void OpenExternal(string url)
+    {
+        try
+        {
+            Process.Start(new ProcessStartInfo { FileName = url, UseShellExecute = true });
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"[HelpViewer] Failed to open URL '{url}': {ex.Message}");
+        }
+    }
+
+    /// <summary>Resolves a relative `.md` link against the current doc's folder
+    /// (e.g. current <c>User/Avalonia-UserGuide.md</c> + <c>Capture-Guide.md</c>
+    /// → <c>User/Capture-Guide.md</c>). Mirrors <see cref="TryResolveImage"/>'s
+    /// segment walk but returns the bare doc-relative path.</summary>
+    internal static string ResolveDocId(string currentDocId, string relPath)
+    {
+        var dir = currentDocId.Replace('\\', '/');
+        int slash = dir.LastIndexOf('/');
+        dir = slash >= 0 ? dir[..slash] : "";
+        var parts = new List<string>(dir.Length > 0 ? dir.Split('/') : Array.Empty<string>());
+        foreach (var seg in relPath.Replace('\\', '/').Split('/'))
+        {
+            if (seg.Length == 0 || seg == ".") continue;
+            if (seg == "..") { if (parts.Count > 0) parts.RemoveAt(parts.Count - 1); continue; }
+            parts.Add(seg);
+        }
+        return string.Join('/', parts);
     }
 
     private string _title;
@@ -129,7 +230,7 @@ public sealed class HelpViewerViewModel : ViewModelBase
         return new Uri($"avares://FracturingFog.UI.Avalonia/Docs/{rel}");
     }
 
-    private readonly string _docId;
+    private string _docId = string.Empty;
 
     // Find the first heading line whose text contains `anchor` (case-insensitive)
     // and return the substring from that heading forward, plus the next sibling
@@ -194,7 +295,7 @@ internal static class HelpMarkdownRenderer
 {
     public delegate Bitmap? ImageResolver(string href);
 
-    public static IEnumerable<Control> Render(string md, ImageResolver? imageResolver = null)
+    public static IEnumerable<Control> Render(string md, ImageResolver? imageResolver = null, Action<string>? onLink = null)
     {
         var rawLines = md.Replace("\r\n", "\n").Split('\n');
         // Materialise to a list so the table-detection lookahead can peek.
@@ -211,7 +312,7 @@ internal static class HelpMarkdownRenderer
             if (paragraph.Length == 0) return null;
             string text = paragraph.ToString().Trim();
             paragraph.Clear();
-            return BuildInlineText(text, FontWeight.Normal, 14, "#E0E0E0", imageResolver);
+            return BuildInlineText(text, FontWeight.Normal, 14, "#E0E0E0", imageResolver, onLink);
         }
 
         for (int idx = 0; idx < lines.Count; idx++)
@@ -329,14 +430,14 @@ internal static class HelpMarkdownRenderer
             if (line.StartsWith("> "))
             {
                 var p = FlushParagraph(); if (p != null) yield return p;
-                yield return BuildQuote(line[2..], imageResolver);
+                yield return BuildQuote(line[2..], imageResolver, onLink);
                 continue;
             }
 
             if (line.StartsWith("- ") || line.StartsWith("* "))
             {
                 var p = FlushParagraph(); if (p != null) yield return p;
-                yield return BuildBullet(line[2..], imageResolver);
+                yield return BuildBullet(line[2..], imageResolver, onLink);
                 continue;
             }
             // Ordered list (limited: numeric prefix `N. `). Rendered as bullet
@@ -348,7 +449,7 @@ internal static class HelpMarkdownRenderer
                 if (i < line.Length - 1 && line[i] == '.' && line[i + 1] == ' ')
                 {
                     var p = FlushParagraph(); if (p != null) yield return p;
-                    yield return BuildOrdered(line[..i], line[(i + 2)..], imageResolver);
+                    yield return BuildOrdered(line[..i], line[(i + 2)..], imageResolver, onLink);
                     continue;
                 }
             }
@@ -360,7 +461,7 @@ internal static class HelpMarkdownRenderer
             if (LooksLikeTable(lines, idx, out int tableEnd, out var tableRows))
             {
                 var p = FlushParagraph(); if (p != null) yield return p;
-                yield return BuildTable(tableRows);
+                yield return BuildTable(tableRows, onLink);
                 idx = tableEnd;
                 continue;
             }
@@ -438,7 +539,7 @@ internal static class HelpMarkdownRenderer
         };
     }
 
-    private static Control BuildQuote(string text, ImageResolver? imgs)
+    private static Control BuildQuote(string text, ImageResolver? imgs, Action<string>? onLink)
     {
         // Detect callout tag: `> [!NOTE]` / `[!TIP]` / `[!WARNING]` / `[!IMPORTANT]`.
         string tag = "Note";
@@ -472,7 +573,7 @@ internal static class HelpMarkdownRenderer
             Foreground = new SolidColorBrush(Color.Parse(accent)),
             Margin = new Thickness(0, 0, 0, 2),
         });
-        var body = BuildInlineText(text, FontWeight.Normal, 13, "#DCDCDC", imgs);
+        var body = BuildInlineText(text, FontWeight.Normal, 13, "#DCDCDC", imgs, onLink);
         stack.Children.Add(body);
         return new Border
         {
@@ -485,7 +586,7 @@ internal static class HelpMarkdownRenderer
         };
     }
 
-    private static Control BuildOrdered(string number, string text, ImageResolver? imgs)
+    private static Control BuildOrdered(string number, string text, ImageResolver? imgs, Action<string>? onLink)
     {
         var grid = new Grid { ColumnDefinitions = new ColumnDefinitions("Auto,*") };
         var num = new SelectableTextBlock
@@ -498,7 +599,7 @@ internal static class HelpMarkdownRenderer
         };
         Grid.SetColumn(num, 0);
         grid.Children.Add(num);
-        var inline = BuildInlineText(text.Trim(), FontWeight.Normal, 14, "#E0E0E0", imgs);
+        var inline = BuildInlineText(text.Trim(), FontWeight.Normal, 14, "#E0E0E0", imgs, onLink);
         Grid.SetColumn(inline, 1);
         grid.Children.Add(inline);
         return grid;
@@ -604,7 +705,7 @@ internal static class HelpMarkdownRenderer
         return parts.ToArray();
     }
 
-    private static Control BuildTable(List<string[]> rows)
+    private static Control BuildTable(List<string[]> rows, Action<string>? onLink)
     {
         int cols = 0;
         foreach (var r in rows) if (r.Length > cols) cols = r.Length;
@@ -638,7 +739,8 @@ internal static class HelpMarkdownRenderer
                         isHeader ? FontWeight.SemiBold : FontWeight.Normal,
                         13,
                         isHeader ? "#FFFFFF" : "#E0E0E0",
-                        null),
+                        null,
+                        onLink),
                 };
                 Grid.SetRow(border, r);
                 Grid.SetColumn(border, c);
@@ -665,7 +767,27 @@ internal static class HelpMarkdownRenderer
             Foreground = new SolidColorBrush(Color.Parse(colorHex)),
             Margin = new Thickness(0, topPad, 0, 2),
             TextWrapping = TextWrapping.Wrap,
+            // GitHub-style anchor slug so `[…](#slug)` TOC links can scroll here.
+            Tag = Slugify(text),
         };
+    }
+
+    /// <summary>
+    /// GitHub-flavoured heading slug: lower-case, drop punctuation, spaces →
+    /// hyphens, and — critically — do NOT collapse runs of hyphens (so
+    /// `10. Slideshow + Video` → `10-slideshow--video`, matching the anchors
+    /// the docs' own tables of contents were authored against).
+    /// </summary>
+    internal static string Slugify(string headingText)
+    {
+        var sb = new System.Text.StringBuilder();
+        foreach (char c in headingText.Trim().ToLowerInvariant())
+        {
+            if (char.IsLetterOrDigit(c)) sb.Append(c);
+            else if (c == ' ' || c == '-') sb.Append('-');
+            // everything else (., +, /, etc.) is dropped
+        }
+        return sb.ToString();
     }
 
     private static Control BuildCodeBlock(string code, string language)
@@ -701,7 +823,7 @@ internal static class HelpMarkdownRenderer
         };
     }
 
-    private static Control BuildBullet(string text, ImageResolver? imgs)
+    private static Control BuildBullet(string text, ImageResolver? imgs, Action<string>? onLink)
     {
         var grid = new Grid { ColumnDefinitions = new ColumnDefinitions("Auto,*") };
         var dot = new SelectableTextBlock
@@ -713,7 +835,7 @@ internal static class HelpMarkdownRenderer
         };
         Grid.SetColumn(dot, 0);
         grid.Children.Add(dot);
-        var inline = BuildInlineText(text.Trim(), FontWeight.Normal, 14, "#E0E0E0", imgs);
+        var inline = BuildInlineText(text.Trim(), FontWeight.Normal, 14, "#E0E0E0", imgs, onLink);
         Grid.SetColumn(inline, 1);
         grid.Children.Add(inline);
         return grid;
@@ -723,7 +845,7 @@ internal static class HelpMarkdownRenderer
     // paragraph. Bold (**foo**), italic (*foo* / _foo_), inline LaTeX ($..$),
     // and links ([label](url)) are all parsed inline. Block-level constructs
     // are picked up earlier in Render().
-    private static Control BuildInlineText(string text, FontWeight weight, double size, string colorHex, ImageResolver? imgs)
+    private static Control BuildInlineText(string text, FontWeight weight, double size, string colorHex, ImageResolver? imgs, Action<string>? onLink = null)
     {
         var tb = new SelectableTextBlock
         {
@@ -733,11 +855,35 @@ internal static class HelpMarkdownRenderer
             TextWrapping = TextWrapping.Wrap,
             Margin = new Thickness(0, 1, 0, 1),
         };
-        AppendInlines(tb.Inlines!, text, weight, colorHex);
+        AppendInlines(tb.Inlines!, text, weight, colorHex, onLink);
         return tb;
     }
 
-    private static void AppendInlines(InlineCollection inlines, string text, FontWeight baseWeight, string colorHex)
+    /// <summary>
+    /// Builds a clickable inline link. Hosts a bare <see cref="TextBlock"/> (not
+    /// selectable — so a click activates rather than starts a text selection)
+    /// inside an <see cref="InlineUIContainer"/> so it flows with the paragraph.
+    /// </summary>
+    private static Inline BuildLinkInline(string label, string href, Action<string> onLink)
+    {
+        var link = new TextBlock
+        {
+            Text = label,
+            Foreground = new SolidColorBrush(Color.Parse("#9CBDFF")),
+            TextDecorations = TextDecorations.Underline,
+            Cursor = new Cursor(StandardCursorType.Hand),
+            VerticalAlignment = VerticalAlignment.Center,
+        };
+        ToolTip.SetTip(link, href);
+        link.PointerPressed += (_, e) =>
+        {
+            onLink(href);
+            e.Handled = true;
+        };
+        return new InlineUIContainer(link);
+    }
+
+    private static void AppendInlines(InlineCollection inlines, string text, FontWeight baseWeight, string colorHex, Action<string>? onLink = null)
     {
         int i = 0;
         var buf = new System.Text.StringBuilder();
@@ -846,18 +992,27 @@ internal static class HelpMarkdownRenderer
                         FlushBuf();
                         string label = text.Substring(i + 1, closeLabel - i - 1);
                         string href = text.Substring(closeLabel + 2, closeHref - closeLabel - 2);
-                        inlines.Add(new Run(label)
+                        if (onLink != null)
                         {
-                            Foreground = new SolidColorBrush(Color.Parse("#9CBDFF")),
-                            TextDecorations = TextDecorations.Underline,
-                        });
-                        // Trailing href hint in dim grey so the destination is
-                        // visible without HTML-style hover affordance.
-                        inlines.Add(new Run($" ({href})")
+                            // Clickable link: TOC anchors scroll, `.md` links
+                            // navigate, external URLs open in the browser.
+                            inlines.Add(BuildLinkInline(label, href, onLink));
+                        }
+                        else
                         {
-                            FontSize = 11,
-                            Foreground = new SolidColorBrush(Color.Parse("#6A6A6A")),
-                        });
+                            inlines.Add(new Run(label)
+                            {
+                                Foreground = new SolidColorBrush(Color.Parse("#9CBDFF")),
+                                TextDecorations = TextDecorations.Underline,
+                            });
+                            // Trailing href hint in dim grey so the destination is
+                            // visible without HTML-style hover affordance.
+                            inlines.Add(new Run($" ({href})")
+                            {
+                                FontSize = 11,
+                                Foreground = new SolidColorBrush(Color.Parse("#6A6A6A")),
+                            });
+                        }
                         i = closeHref + 1;
                         continue;
                     }
