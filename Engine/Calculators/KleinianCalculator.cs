@@ -185,7 +185,13 @@ public sealed class KleinianCalculator : IFractalCalculator
             };
             var sp = GpuShadingParams.Build(in fx);
             _gpu ??= new KleinianGpuCalculator();
-            if (_gpu.Render(renderBuffer, rp, sp, kp)) return;
+            if (_gpu.Render(renderBuffer, rp, sp, kp))
+            {
+                // #84 — GPU raymarch skips the CPU post stack; draw the debug
+                // HUD directly so the light compass still appears on GPU frames.
+                ScreenSpacePost.ApplyDebugHud(renderBuffer, width, height, in fx);
+                return;
+            }
         }
 
         // Phase 4 — G-buffer for SSAO post-pass.
@@ -281,6 +287,11 @@ public sealed class KleinianCalculator : IFractalCalculator
         if (lowRes)
             FracturingFog.Rendering.LowResPreview.UpscaleNearest(
                 renderBuffer, width, height, ColorBuffer, fullW, fullH);
+
+        // #84 — light-direction compass / param bars / scene clock. Standalone
+        // final pass on the composited full-res buffer so it survives both the
+        // low-res upscale and the GPU-raymarch early-out. Self-guards on flags.
+        ScreenSpacePost.ApplyDebugHud(ColorBuffer, fullW, fullH, in fx);
     }
 
     /// <summary>
