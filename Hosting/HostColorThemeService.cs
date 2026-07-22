@@ -364,6 +364,13 @@ namespace FracturingFog.Hosting
                 if (!string.IsNullOrWhiteSpace(source))
                     host?.CompileUserBulb(source);
             }
+
+            // Multi-type video roadmap P1 (#91): overlay the snapshotted core
+            // per-family params (Julia constant, Newton exponent, Apollonian
+            // knobs, …) captured at save time. No-op for legacy regions (null
+            // Params) and for Mandelbrot. Applied last so it wins over defaults
+            // but sits alongside the source-compiled types above.
+            region.Params?.ApplyTo(p);
         }
 
         /// <inheritdoc/>
@@ -610,6 +617,12 @@ namespace FracturingFog.Hosting
                 UserBulbCameraPhi      = state.FractalType == FractalType.UserBulb ? p?.UserBulbCameraPhi      ?? 0 : 0,
                 UserBulbLightTheta     = state.FractalType == FractalType.UserBulb ? p?.UserBulbLightTheta     ?? 0 : 0,
                 UserBulbLightPhi       = state.FractalType == FractalType.UserBulb ? p?.UserBulbLightPhi       ?? 0 : 0,
+                // Multi-type video roadmap P1 (#91): snapshot the core per-family
+                // params for zoomable-2D non-Mandelbrot regions so an unattended
+                // video-slideshow leg reconstructs the exact look (Julia constant,
+                // Newton exponent, etc.). Null for Mandelbrot + default-suffices
+                // families. Recall applies it in LoadRegionFractalParams.
+                Params = RegionFractalParams.Snapshot(state.FractalType, p),
             };
         }
 

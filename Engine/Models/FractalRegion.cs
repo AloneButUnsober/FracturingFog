@@ -17,6 +17,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Numerics;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 
@@ -227,6 +228,20 @@ namespace FracturingFog.Models
         public string? AnimationName { get; set; }
 
         /// <summary>
+        /// Video-slideshow multi-type roadmap P1 (#91) — optional snapshot of the
+        /// core per-family parameters needed to faithfully reconstruct a
+        /// zoomable-2D non-Mandelbrot region (Julia constant, Multibrot power,
+        /// Phoenix/Glynn constants, Spider decay, Newton exponent/relaxation,
+        /// Secant offset, Apollonian knobs). Null for Mandelbrot and for families
+        /// whose default parameters already render correctly (Tricorn, BurningShip,
+        /// Magnet, TearDrop, generated). Omitted from JSON when null so legacy
+        /// regions stay clean. 3D-camera + non-spatial params are deferred to
+        /// P3 (#93) / P4 (#94).
+        /// </summary>
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public RegionFractalParams? Params { get; set; }
+
+        /// <summary>
         /// Apply this region's lighting override (if any) to the given params.
         /// No-op when the override is null. Pair with a host-side
         /// "Lock lighting on recall" toggle to let the user opt out of the
@@ -247,6 +262,134 @@ namespace FracturingFog.Models
         /// </summary>
         [JsonIgnore]
         public bool IsBuiltIn => RegionType == RegionType.BuiltIn;
+    }
+
+    // ── Per-family parameter snapshot (multi-type video roadmap P1, #91) ───────
+
+    /// <summary>
+    /// Minimal, JSON-lean snapshot of the core per-family parameters a
+    /// zoomable-2D region needs to reconstruct its exact look for an unattended
+    /// video-slideshow zoom leg. Only the fields relevant to the region's
+    /// <see cref="FractalRegion.FractalType"/> are populated; the rest stay null
+    /// and are omitted from JSON. <see cref="ApplyTo"/> overlays the captured
+    /// fields onto a live <see cref="FractalParameters"/> at recall time.
+    ///
+    /// Deliberately does NOT snapshot user-code source (UserEquation / Sandbox /
+    /// UserBulb — round-tripped by name/embed elsewhere), 3D camera state
+    /// (P3, #93), or non-spatial knobs (P4, #94).
+    /// </summary>
+    public sealed class RegionFractalParams
+    {
+        // Every field is nullable and omitted from JSON when null so a snapshot
+        // for one family (e.g. Julia) writes only its two constant fields — the
+        // rest never bloat regions.json.
+        private const JsonIgnoreCondition OmitNull = JsonIgnoreCondition.WhenWritingNull;
+
+        [JsonIgnore(Condition = OmitNull)] public double? JuliaCRe { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public double? JuliaCIm { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public int? MultibrotExponent { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public double? PhoenixPRe { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public double? PhoenixPIm { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public double? GlynnCRe { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public double? GlynnCIm { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public double? SpiderCDecay { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public int? NewtonExponent { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public double? NewtonRelaxation { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public double? SecantOffsetRe { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public double? SecantOffsetIm { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public int? ApollonianDepth { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public double? ApollonianMinPixelRadius { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public bool? ApollonianColorByDepth { get; set; }
+
+        /// <summary>
+        /// Capture the P1-relevant parameters for <paramref name="type"/> from a
+        /// live <paramref name="p"/>. Returns null when the family needs nothing
+        /// (its defaults already reproduce the look) or when <paramref name="p"/>
+        /// is null — so a Mandelbrot region never carries an empty block.
+        /// </summary>
+        public static RegionFractalParams? Snapshot(FractalType type, FractalParameters? p)
+        {
+            if (p == null) return null;
+            return type switch
+            {
+                FractalType.Julia => new RegionFractalParams
+                {
+                    JuliaCRe = p.JuliaC.Real,
+                    JuliaCIm = p.JuliaC.Imaginary,
+                },
+                FractalType.Multibrot => new RegionFractalParams
+                {
+                    MultibrotExponent = p.MultibrotExponent,
+                },
+                FractalType.Phoenix => new RegionFractalParams
+                {
+                    PhoenixPRe = p.PhoenixP.Real,
+                    PhoenixPIm = p.PhoenixP.Imaginary,
+                },
+                FractalType.Glynn => new RegionFractalParams
+                {
+                    GlynnCRe = p.GlynnC.Real,
+                    GlynnCIm = p.GlynnC.Imaginary,
+                },
+                FractalType.Spider => new RegionFractalParams
+                {
+                    SpiderCDecay = p.SpiderCDecay,
+                },
+                // Newton-family basins share NewtonExponent + NewtonRelaxation.
+                FractalType.Newton or FractalType.Nova or FractalType.Halley => new RegionFractalParams
+                {
+                    NewtonExponent = p.NewtonExponent,
+                    NewtonRelaxation = p.NewtonRelaxation,
+                },
+                FractalType.Secant => new RegionFractalParams
+                {
+                    NewtonExponent = p.NewtonExponent,
+                    SecantOffsetRe = p.SecantInitialOffset.Real,
+                    SecantOffsetIm = p.SecantInitialOffset.Imaginary,
+                },
+                FractalType.Apollonian => new RegionFractalParams
+                {
+                    ApollonianDepth = p.ApollonianDepth,
+                    ApollonianMinPixelRadius = p.ApollonianMinPixelRadius,
+                    ApollonianColorByDepth = p.ApollonianColorByDepth,
+                },
+                // Mandelbrot, Tricorn, BurningShip, Magnet1/2, TearDrop and the
+                // generated families need no extra params — defaults suffice.
+                _ => null,
+            };
+        }
+
+        /// <summary>
+        /// Overlay every captured (non-null) field onto <paramref name="p"/>.
+        /// No-op for fields left null, so applying a Julia snapshot never
+        /// disturbs unrelated parameters.
+        /// </summary>
+        public void ApplyTo(FractalParameters p)
+        {
+            if (p == null) return;
+            if (JuliaCRe.HasValue && JuliaCIm.HasValue)
+                p.JuliaC = new Complex(JuliaCRe.Value, JuliaCIm.Value);
+            if (MultibrotExponent.HasValue)
+                p.MultibrotExponent = MultibrotExponent.Value;
+            if (PhoenixPRe.HasValue && PhoenixPIm.HasValue)
+                p.PhoenixP = new Complex(PhoenixPRe.Value, PhoenixPIm.Value);
+            if (GlynnCRe.HasValue && GlynnCIm.HasValue)
+                p.GlynnC = new Complex(GlynnCRe.Value, GlynnCIm.Value);
+            if (SpiderCDecay.HasValue)
+                p.SpiderCDecay = SpiderCDecay.Value;
+            if (NewtonExponent.HasValue)
+                p.NewtonExponent = NewtonExponent.Value;
+            if (NewtonRelaxation.HasValue)
+                p.NewtonRelaxation = NewtonRelaxation.Value;
+            if (SecantOffsetRe.HasValue && SecantOffsetIm.HasValue)
+                p.SecantInitialOffset = new Complex(SecantOffsetRe.Value, SecantOffsetIm.Value);
+            if (ApollonianDepth.HasValue)
+                p.ApollonianDepth = ApollonianDepth.Value;
+            if (ApollonianMinPixelRadius.HasValue)
+                p.ApollonianMinPixelRadius = ApollonianMinPixelRadius.Value;
+            if (ApollonianColorByDepth.HasValue)
+                p.ApollonianColorByDepth = ApollonianColorByDepth.Value;
+        }
     }
 
     // ── Library ───────────────────────────────────────────────────────────────
