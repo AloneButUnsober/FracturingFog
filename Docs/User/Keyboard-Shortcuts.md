@@ -16,6 +16,52 @@ Every keyboard binding in the Fracturing Fog Avalonia shell.
 
 ---
 
+## Overlays & Toggles (any fractal, any mode)
+
+These single keys flip an on-screen overlay or open a companion window. They are
+ignored while a text box has focus (see [Focus Behavior](#focus-behavior)).
+
+| Key | Action |
+|---|---|
+| `G` | Toggle the coordinate **grid** overlay |
+| `K` | Toggle the **watermark** overlay |
+| `H` | Toggle the **performance HUD** (frame time, iteration budget, precision tier) |
+| `Shift + H` | **Reset** the performance HUD's rolling averages — do this before timing a fresh region or video capture |
+| `X` | Toggle the **Post-FX HUD** overlay (live brightness / contrast / adaptive readout) |
+| `P` | Open the **Fractal Parameters** dialog |
+| `F1` | Open the **Help** window |
+
+---
+
+## Performance & Deep-Zoom Diagnostics
+
+Advanced switches for tuning the Mandelbrot render path. The GPU toggle is an
+everyday speed control; the `Ctrl + Shift` combos are diagnostic — they turn off
+one accelerator at a time so you can tell which math stage is responsible for a
+visual artifact deep in a zoom. While a diagnostic is off, the window title gains
+a suffix such as `[ACCEL OFF]` or `[SA OFF]` so you never forget it is engaged.
+
+| Combo | Action |
+|---|---|
+| `Ctrl + G` | Toggle **GPU compute** for the single-precision Mandelbrot path. Falls back to CPU automatically on backends that cannot engage it; the Control Center checkbox stays in sync. |
+| `Ctrl + Shift + A` | Toggle Mandelbrot **acceleration** (perturbation / BLA fast path). Off = plain per-pixel iteration. |
+| `Ctrl + Shift + S` | Toggle **Series Approximation** — the polynomial skip that fast-forwards the first thousands of iterations near the reference orbit. |
+| `Ctrl + Shift + D` | Toggle **double-double (DD) BLA** precision on the bilinear-approximation step. |
+
+> [!TIP]
+> Chasing pixelation or smearing that only appears past a very deep zoom? Turn
+> the accelerators off one at a time with the `Ctrl + Shift` combos and watch
+> whether the artifact disappears. Whichever toggle "fixes" the image names the
+> stage that needs attention. For the theory behind these stages see
+> [Deep-Zoom & Perturbation](../Deep-Zoom-Perturbation.md).
+
+> [!NOTE]
+> Bare `A` and `S` are the WASD pan / zoom keys during 2-D and 3-D navigation, so
+> the diagnostic toggles deliberately live on the `Ctrl + Shift` layer to stay
+> out of their way.
+
+---
+
 ## 2-D Navigation (Mandelbrot, Julia, Burning Ship, …)
 
 | Key | Action |

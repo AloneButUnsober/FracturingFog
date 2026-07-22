@@ -2470,7 +2470,12 @@ public sealed class {{CLASS_NAME}} : IFractalCalculator, IDisposable
                 // derivative chain through c≈0 inside the rebase path —
                 // for polynomial-derivative-of-c-independent equations
                 // this is exact (the references aren't emitted at all).
+                // CS0219: Cr/Ci go unused whenever the derivative body is
+                // c-independent (the common case), so silence the generated
+                // "assigned but never used" for this pair only.
+#pragma warning disable CS0219
                 double Cr = 0.0, Ci = 0.0;
+#pragma warning restore CS0219
 {{PERTURB_DERIV_BODY}}
                 drv = drv_new; div = div_new;
             }

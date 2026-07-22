@@ -96,233 +96,14 @@ public sealed class MandelbrotGpuKernel : IGpuKernel
     // ships the body.
     private static string BuildHlsl(string? paletteBody, string? paletteHelpers, bool emitColor)
     {
-        var sb = new System.Text.StringBuilder(8192);
-        sb.AppendLine(HlslBase);
-        if (emitColor)
-        {
-            // Helpers (cg_mods, cg_palette_N, etc.) declared at file scope so
-            // EvalPalette can reference them.
-            if (!string.IsNullOrEmpty(paletteHelpers)) sb.AppendLine(paletteHelpers);
-            sb.AppendLine(@"
-RWStructuredBuffer<uint> gColor : register(u3);
-
-// F11b: centred 8x8 Bayer thresholds ((raw+0.5)/64 - 0.5), the GPU twin of
-// GradientColorMap.Bayer8. Added to each channel before the round so a
-// shallow gradient dithers instead of banding. gDitherStrength == 0 → the
-// offset is 0 and the pack is byte-identical to the plain round.
-static const float cg_bayer8[64] =
-{
-    -0.4921875,  0.0078125, -0.3671875,  0.1328125, -0.4609375,  0.0390625, -0.3359375,  0.1640625,
-     0.2578125, -0.2421875,  0.3828125, -0.1171875,  0.2890625, -0.2109375,  0.4140625, -0.0859375,
-    -0.3046875,  0.1953125, -0.4296875,  0.0703125, -0.2734375,  0.2265625, -0.3984375,  0.1015625,
-     0.4453125, -0.0546875,  0.3203125, -0.1796875,  0.4765625, -0.0234375,  0.3515625, -0.1484375,
-    -0.4453125,  0.0546875, -0.3203125,  0.1796875, -0.4765625,  0.0234375, -0.3515625,  0.1484375,
-     0.3046875, -0.1953125,  0.4296875, -0.0703125,  0.2734375, -0.2265625,  0.3984375, -0.1015625,
-    -0.2578125,  0.2421875, -0.3828125,  0.1171875, -0.2890625,  0.2109375, -0.4140625,  0.0859375,
-     0.4921875, -0.0078125,  0.3671875, -0.1328125,  0.4609375, -0.0390625,  0.3359375, -0.1640625,
-};
-
-uint cg_pack_bgra(float3 c, uint px, uint py)
-{
-    c = saturate(c);
-    float o = gDitherStrength * cg_bayer8[(py & 7) * 8 + (px & 7)];
-    uint r = (uint)clamp(c.r * 255.0 + 0.5 + o, 0.0, 255.0);
-    uint g = (uint)clamp(c.g * 255.0 + 0.5 + o, 0.0, 255.0);
-    uint b = (uint)clamp(c.b * 255.0 + 0.5 + o, 0.0, 255.0);
-    return 0xFF000000u | (r << 16) | (g << 8) | b;
-}
-
-float3 EvalPalette(
-    float in_smooth, float in_dist, float in_iter, float in_maxIter,
-    float in_t, float in_nx, float in_ny, float in_zr, float in_zi,
-    float in_dzr, float in_dzi, float in_arg, float in_mag,
-    float in_isInSet, float in_pxScale)
-{");
-            sb.AppendLine(paletteBody ?? "    return float3(0.0, 0.0, 0.0);");
-            sb.AppendLine("}");
-        }
-        sb.AppendLine(HlslEntry(emitColor));
-        return sb.ToString();
-    }
-
-    // ── HLSL header (cbuffer + IO bindings + shared helpers) ──────────────
-    private const string HlslBase = @"
-cbuffer Params : register(b0)
-{
-    int   gWidth;
-    int   gHeight;
-    int   gMaxIter;
-    float gBailout2;       // typically 4.0
-    float gCXHi;
-    float gCXLo;
-    float gCYHi;
-    float gCYLo;
-    float gScaleHi;
-    float gScaleLo;
-    int   gUsePerRow;      // 0 = use gMaxIter for every row, 1 = use gPerRow
-    // Phase 3: alt-fractal selector. 0=Mandelbrot, 1=Julia, 2=BurningShip,
-    // 3=Tricorn. Cardioid + period-2 bulb skip only applies to kind 0.
-    int   gFractalKind;
-    float gParam0;         // Julia c.re
-    float gParam1;         // Julia c.im
-    float gDitherStrength; // F11b: 0 = off (plain round); else ±0.5-LSB amp.
-    // 16 fields × 4 bytes = 64 (float4 multiple — same size as phase 1.b).
-}
-
-RWStructuredBuffer<uint>   gIter    : register(u0);
-RWStructuredBuffer<float>  gSmooth  : register(u1);
-// Phase 1.b: final z + dz/dc per pixel. .xy = zr, zi; .zw = dr, di.
-// Lets the CPU writeback path drive distance-estimate + normal
-// themes that need the final orbit state. Aux buffers stay CPU.
-RWStructuredBuffer<float4> gFinalZD : register(u2);
-// Phase 1.b: per-row maxIter cap. Bound only when gUsePerRow != 0;
-// otherwise the shader uses gMaxIter for every row.
-StructuredBuffer<uint>     gPerRow  : register(t0);
-
-bool InCardioid(float cx, float cy)
-{
-    // |1 - sqrt(1 - 4c)| <= 1  →  expanded form (no sqrt) per the standard
-    // Wikipedia early-out. q = (x - 1/4)^2 + y^2.
-    float xm = cx - 0.25;
-    float q = xm * xm + cy * cy;
-    return q * (q + xm) <= 0.25 * cy * cy;
-}
-
-bool InPeriod2Bulb(float cx, float cy)
-{
-    // Disk of radius 1/4 centred at (-1, 0).
-    float dx = cx + 1.0;
-    return dx * dx + cy * cy <= 0.0625;
-}
-";
-
-    // Per-emit CSMain. Distinguishes color vs non-color path by inserting
-    // EvalPalette + gColor writes after the iter/smooth/finalZD computation.
-    private static string HlslEntry(bool emitColor)
-    {
-        // Color-write helper invocations spliced into the in-set and escape
-        // branches. Distance + normal aren't computed in-shader (phase 1
-        // CPU-writes them from finalZD), so the GPU palette gets dist=0,
-        // nx=ny=0 for now — themes that depend on those degrade gracefully
-        // (same fallback as the CPU path uses when the calc-thread path
-        // hasn't filled aux buffers).
-        string inSetColor = emitColor ? @"
-        gColor[idx] = cg_pack_bgra(EvalPalette(
-            0.0, 0.0, (float)gMaxIter, (float)gMaxIter,
-            0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0), x, y);
-" : "";
-        string escapeColor = emitColor ? @"
-        float t_iter = gMaxIter > 0 ? sm / (float)gMaxIter : 0.0;
-        float in_arg = atan2(zi, zr);
-        float in_mag = sqrt(zr * zr + zi * zi);
-        gColor[idx] = cg_pack_bgra(EvalPalette(
-            sm, 0.0, (float)it, (float)gMaxIter,
-            t_iter, 0.0, 0.0, zr, zi, dr, di, in_arg, in_mag, 0.0, 0.0), x, y);
-" : "";
-        string bulbSkipColor = emitColor ? @"
-        gColor[idx] = cg_pack_bgra(EvalPalette(
-            0.0, 0.0, (float)gMaxIter, (float)gMaxIter,
-            0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0, 0.0), x, y);
-" : "";
-
-        return $@"
-[numthreads(8, 8, 1)]
-void CSMain(uint3 tid : SV_DispatchThreadID)
-{{
-    uint x = tid.x;
-    uint y = tid.y;
-    if ((int)x >= gWidth || (int)y >= gHeight) return;
-
-    int idx = (int)y * gWidth + (int)x;
-
-    // Reconstruct cx / cy using the split centre.
-    float fx = (float)x - 0.5 * gWidth;
-    float fy = (float)y - 0.5 * gHeight;
-    float cx = gCXHi + fx * gScaleHi + gCXLo + fx * gScaleLo;
-    float cy = gCYHi + fy * gScaleHi + gCYLo + fy * gScaleLo;
-
-    // Per-row cap lookup. Falls back to gMaxIter when disabled or when
-    // the buffer holds 0 for this row (defensive).
-    int rowMaxIt = gMaxIter;
-    if (gUsePerRow != 0)
-    {{
-        uint rc = gPerRow[y];
-        if (rc > 0) rowMaxIt = (int)rc;
-    }}
-
-    // Whole-cardioid + period-2 bulb early-out. Mandelbrot-only — Julia /
-    // BurningShip / Tricorn have different in-set shapes. Always writes
-    // gMaxIter so the in-set gate is consistent across bands regardless of
-    // per-row cap. Final z+dz are (0,0,1,0) — matches the CPU bulb-skip
-    // writeback.
-    if (gFractalKind == 0 && (InCardioid(cx, cy) || InPeriod2Bulb(cx, cy)))
-    {{
-        gIter[idx]    = (uint)gMaxIter;
-        gSmooth[idx]  = 0.0;
-        gFinalZD[idx] = float4(0.0, 0.0, 1.0, 0.0);
-        {bulbSkipColor}
-        return;
-    }}
-
-    // Per-fractal init. Mandelbrot/BurningShip/Tricorn: z_0 = 0, c =
-    // pixel coord. Julia: z_0 = pixel coord, c = (gParam0, gParam1) const.
-    float zr, zi;
-    float cIterR, cIterI;
-    if (gFractalKind == 1)
-    {{
-        zr = cx;     zi = cy;
-        cIterR = gParam0; cIterI = gParam1;
-    }}
-    else
-    {{
-        zr = 0.0;    zi = 0.0;
-        cIterR = cx; cIterI = cy;
-    }}
-    float dr = 1.0;
-    float di = 0.0;
-    int   it = 0;
-    [loop]
-    for (; it < rowMaxIt; it++)
-    {{
-        float fzr = zr;
-        float fzi = zi;
-        if (gFractalKind == 2)      {{ fzr = abs(zr); fzi = abs(zi); }}
-        else if (gFractalKind == 3) {{ fzi = -zi; }}
-
-        float zr2 = fzr * fzr;
-        float zi2 = fzi * fzi;
-        float mag2 = zr2 + zi2;
-        if (mag2 >= gBailout2) break;
-
-        float newDr = 2.0 * (fzr * dr - fzi * di) + 1.0;
-        float newDi = 2.0 * (fzr * di + fzi * dr);
-        dr = newDr;
-        di = newDi;
-
-        float zrNew = zr2 - zi2 + cIterR;
-        float zi_new_unscaled = fzr * fzi;
-        zi = zi_new_unscaled + zi_new_unscaled + cIterI;
-        zr = zrNew;
-    }}
-
-    gFinalZD[idx] = float4(zr, zi, dr, di);
-    if (it >= rowMaxIt)
-    {{
-        gIter[idx]   = (uint)gMaxIter;
-        gSmooth[idx] = 0.0;
-        {inSetColor}
-    }}
-    else
-    {{
-        gIter[idx] = (uint)it;
-        float mag = sqrt(zr * zr + zi * zi);
-        float nu = log(log(max(mag, 1.001))) / log(2.0);
-        float sm = (float)it + 1.0 - nu;
-        gSmooth[idx] = sm;
-        {escapeColor}
-    }}
-}}
-";
+        // Both variants now come from the shared, dependency-free
+        // MandelbrotKernelSource so the exact same HLSL feeds FXC (here) and DXC
+        // (the V2 Vulkan colour probe). The gColor UAV + ordered-dither pack +
+        // EvalPalette signature + branch splices live there; this class only
+        // supplies the theme's IGpuHlslPalette body + helpers.
+        return emitColor
+            ? MandelbrotKernelSource.BuildColor(paletteHelpers, paletteBody)
+            : MandelbrotKernelSource.BuildBase();
     }
 
     [StructLayout(LayoutKind.Sequential)]
@@ -341,6 +122,17 @@ void CSMain(uint3 tid : SV_DispatchThreadID)
         // F11b: GPU ordered-dither amp (0 = off). Was _pad0; keeps the 64-byte
         // (float4-multiple) cbuffer layout.
         public float DitherStrength;
+    }
+
+    // V6 (#82): deep-zoom perturbation params. Mirrors the HLSL PerturbParams
+    // cbuffer (register b0) in MandelbrotKernelSource.BuildPerturb and the
+    // Vulkan PerturbParamsBlob: 4 ints (16 B) then 4 doubles (32 B) = 48 B, a
+    // multiple of 16 with no scalar straddling a 16-byte cbuffer row.
+    [StructLayout(LayoutKind.Sequential)]
+    private struct PerturbParams
+    {
+        public double Scale, EscapeR2, OffX0, OffY0;
+        public int Width, Height, MaxIter, RefLen, RowBase, Pad0, Pad1, Pad2;
     }
 
     /// <summary>Phase 3 fractal selector. Matches the shader's
@@ -389,6 +181,21 @@ void CSMain(uint3 tid : SV_DispatchThreadID)
     // Phase 2: currently active palette state. When non-null, Run() with a
     // colorDst argument uses the color-emitting variant.
     private string? _activePaletteId;
+    // V6 (#82): deep-zoom perturbation shader + its dedicated buffers. The
+    // reference-orbit Hi-limb doubles (t0/t1) + 48-byte double param cbuffer
+    // (b0); iter/smooth/finalZD outputs reuse the shared EnsureOutputBuffers
+    // UAVs (u0/u1/u2). Compiled lazily on first RunPerturb so devices that
+    // never deep-zoom on GPU pay nothing. Null until then.
+    private ID3D11ComputeShader? _csPerturb;
+    private ID3D11Buffer? _perturbParamsBuf;
+    private ID3D11Buffer? _refZrBuf;
+    private ID3D11Buffer? _refZiBuf;
+    private ID3D11ShaderResourceView? _refZrSrv;
+    private ID3D11ShaderResourceView? _refZiSrv;
+    private int _refAllocLen;
+    // FeatureDataDoubles cached once — DoublePrecisionFloatShaderOps gates
+    // SupportsPerturbation. -1 = unqueried, 0 = no, 1 = yes.
+    private int _fp64 = -1;
     private bool _disposed;
 
     public MandelbrotGpuKernel(ID3D11Device device, ID3D11DeviceContext context, object d3dGate)
@@ -402,11 +209,11 @@ void CSMain(uint3 tid : SV_DispatchThreadID)
 
     /// <summary>Compile a CS variant from a fully composed HLSL string.
     /// Caller is responsible for caching the returned shader.</summary>
-    private ID3D11ComputeShader CompileShader(string hlsl, string label)
+    private ID3D11ComputeShader CompileShader(string hlsl, string label, string entryPoint = "CSMain")
     {
         var hr = Compiler.Compile(
             hlsl,
-            entryPoint: "CSMain",
+            entryPoint: entryPoint,
             sourceName: $"MandelbrotGpuKernel.{label}.hlsl",
             profile: "cs_5_0",
             out var blob,
@@ -827,10 +634,258 @@ void CSMain(uint3 tid : SV_DispatchThreadID)
         }
     }
 
+    // ── V6 (#82): deep-zoom GPU perturbation ─────────────────────────────────
+
+    /// <summary>Whether this D3D device can run the double perturbation kernel
+    /// — i.e. advertises <c>DoublePrecisionFloatShaderOps</c>. Queried once and
+    /// cached. The calculator gates its GPU-perturbation dispatch on this so a
+    /// device without FP64 shader ops falls back to the CPU deep path.</summary>
+    public bool SupportsPerturbation
+    {
+        get
+        {
+            if (_fp64 < 0)
+            {
+                try
+                {
+                    var d = _device.CheckFeatureSupport<FeatureDataDoubles>(Feature.Doubles);
+                    _fp64 = d.DoublePrecisionFloatShaderOps ? 1 : 0;
+                }
+                catch { _fp64 = 0; }
+            }
+            return _fp64 == 1;
+        }
+    }
+
+    /// <summary>Deep-zoom perturbation dispatch. Runs the double δ-rebased loop
+    /// (MandelbrotKernelSource.BuildPerturb, entry CSPerturb — the same HLSL the
+    /// Vulkan backend runs) over a CPU-built Hi-limb reference orbit, writing
+    /// back iter/smooth/finalZD exactly like <see cref="Run"/>. Colour stays on
+    /// the CPU (the calculator's FillAuxAndColorHP pass consumes finalZD).</summary>
+    public void RunPerturb(
+        int width, int height,
+        double scale, int maxIter, double escapeRadius2,
+        double offsetX0, double offsetY0,
+        double[] refZr, double[] refZi, int refLen,
+        int[] iterDst, float[] smoothDst,
+        float[] finalZrDst, float[] finalZiDst,
+        float[] finalDrDst, float[] finalDiDst)
+    {
+        if (_disposed) throw new ObjectDisposedException(nameof(MandelbrotGpuKernel));
+        if (!SupportsPerturbation)
+            throw new NotSupportedException("D3D device has no DoublePrecisionFloatShaderOps — cannot run the perturbation kernel.");
+        if (width <= 0 || height <= 0) return;
+        if (refLen < 1) throw new ArgumentException("reference orbit is empty", nameof(refLen));
+        if (refZr.Length < refLen || refZi.Length < refLen)
+            throw new ArgumentException("reference-orbit arrays shorter than refLen");
+
+        lock (_d3dGate)
+        {
+            long t0 = System.Diagnostics.Stopwatch.GetTimestamp();
+            EnsureOutputBuffers(width, height);      // shares iter/smooth/finalZD UAVs (u0/u1/u2)
+            EnsurePerturbParamsBuffer();
+            EnsureRefOrbitBuffers(refLen);
+            _csPerturb ??= CompileShader(MandelbrotKernelSource.BuildPerturb(), label: "perturb",
+                entryPoint: MandelbrotKernelSource.PerturbEntryPoint);
+
+            // Upload the reference orbit (Hi-limb doubles) into t0/t1.
+            UploadDoubles(_refZrBuf!, refZr, refLen);
+            UploadDoubles(_refZiBuf!, refZi, refLen);
+
+            var p = new PerturbParams
+            {
+                Width = width, Height = height, MaxIter = maxIter, RefLen = refLen,
+                Scale = scale, EscapeR2 = escapeRadius2, OffX0 = offsetX0, OffY0 = offsetY0,
+                RowBase = 0,
+            };
+
+            _ctx.CSSetShader(_csPerturb);
+            _ctx.CSSetShaderResource(0, _refZrSrv);   // t0
+            _ctx.CSSetShaderResource(1, _refZiSrv);   // t1
+            _ctx.CSSetUnorderedAccessView(0, _iterUav);
+            _ctx.CSSetUnorderedAccessView(1, _smoothUav);
+            _ctx.CSSetUnorderedAccessView(2, _finalZDUav);
+
+            // TDR row-band tiling — a deep-zoom full-image dispatch runs long
+            // enough on a weak-FP64 GPU to trip the OS watchdog
+            // (DXGI_ERROR_DEVICE_REMOVED), which also kills the shared present
+            // device. Split into row bands and Flush each so no single packet
+            // exceeds the ~2 s TDR budget. gRowBase offsets each band's rows.
+            int bandRows = MandelbrotKernelSource.PerturbBandRows(width, height, maxIter);
+            int bandCount = (height + bandRows - 1) / bandRows;
+            int bandIndex = 0;
+            for (int rowBase = 0; rowBase < height; rowBase += bandRows, bandIndex++)
+            {
+                int rows = Math.Min(bandRows, height - rowBase);
+                p.RowBase = rowBase;
+                var mapped = _ctx.Map(_perturbParamsBuf!, 0, Vortice.Direct3D11.MapMode.WriteDiscard, MapFlags.None);
+                unsafe { *(PerturbParams*)mapped.DataPointer = p; }
+                _ctx.Unmap(_perturbParamsBuf!, 0);
+                _ctx.CSSetConstantBuffer(0, _perturbParamsBuf);   // re-bind after WriteDiscard rename
+
+                long tBand = System.Diagnostics.Stopwatch.GetTimestamp();
+                _ctx.Dispatch((uint)((width + 7) / 8), (uint)((rows + 7) / 8), 1);
+
+                // Perf-fallback: sync + time the FIRST band, extrapolate the whole
+                // frame, and abort if the GPU is too slow at this depth (weak
+                // FP64) so the caller drops to the CPU deep path instead of
+                // grinding for minutes. A CopyResource + Map(Read) on the iter
+                // staging blocks until band 0's dispatch finishes → a real GPU
+                // time; the remaining bands just Flush (async).
+                if (bandIndex == 0 && bandCount > 1)
+                {
+                    _ctx.CopyResource(_iterStaging, _iterBuf);
+                    var sync = _ctx.Map(_iterStaging, 0, Vortice.Direct3D11.MapMode.Read, MapFlags.None);
+                    _ctx.Unmap(_iterStaging, 0);
+                    _ = sync;
+                    double band0Ms = (System.Diagnostics.Stopwatch.GetTimestamp() - tBand) * 1000.0
+                                     / System.Diagnostics.Stopwatch.Frequency;
+                    if (MandelbrotKernelSource.PerturbTooSlow(band0Ms, bandCount))
+                    {
+                        // Leave the context clean before bailing to the CPU path.
+                        _ctx.CSUnsetUnorderedAccessView(0);
+                        _ctx.CSUnsetUnorderedAccessView(1);
+                        _ctx.CSUnsetUnorderedAccessView(2);
+                        _ctx.CSSetShaderResource(0, null);
+                        _ctx.CSSetShaderResource(1, null);
+                        throw new TimeoutException(
+                            $"{MandelbrotKernelSource.PerturbTooSlowMarker}: band0={band0Ms:F1}ms × {bandCount} bands " +
+                            $"> {MandelbrotKernelSource.PerturbBudgetMs:F0}ms budget");
+                    }
+                }
+                else
+                {
+                    _ctx.Flush();   // submit this band as its own GPU packet (resets the TDR clock)
+                }
+            }
+
+            _ctx.CSUnsetUnorderedAccessView(0);
+            _ctx.CSUnsetUnorderedAccessView(1);
+            _ctx.CSUnsetUnorderedAccessView(2);
+            _ctx.CSSetShaderResource(0, null);
+            _ctx.CSSetShaderResource(1, null);
+
+            _ctx.CopyResource(_iterStaging, _iterBuf);
+            _ctx.CopyResource(_smoothStaging, _smoothBuf);
+            _ctx.CopyResource(_finalZDStaging, _finalZDBuf);
+
+            long tDispatch = System.Diagnostics.Stopwatch.GetTimestamp();
+            int n = width * height;
+
+            var iterMap = _ctx.Map(_iterStaging, 0, Vortice.Direct3D11.MapMode.Read, MapFlags.None);
+            try
+            {
+                unsafe
+                {
+                    uint* src = (uint*)iterMap.DataPointer;
+                    fixed (int* dst = iterDst) { for (int i = 0; i < n; i++) dst[i] = (int)src[i]; }
+                }
+            }
+            finally { _ctx.Unmap(_iterStaging, 0); }
+
+            var smoothMap = _ctx.Map(_smoothStaging, 0, Vortice.Direct3D11.MapMode.Read, MapFlags.None);
+            try
+            {
+                unsafe
+                {
+                    float* src = (float*)smoothMap.DataPointer;
+                    fixed (float* dst = smoothDst) { for (int i = 0; i < n; i++) dst[i] = src[i]; }
+                }
+            }
+            finally { _ctx.Unmap(_smoothStaging, 0); }
+
+            var fzdMap = _ctx.Map(_finalZDStaging, 0, Vortice.Direct3D11.MapMode.Read, MapFlags.None);
+            try
+            {
+                unsafe
+                {
+                    float* src = (float*)fzdMap.DataPointer;
+                    fixed (float* zr = finalZrDst)
+                    fixed (float* zi = finalZiDst)
+                    fixed (float* dr = finalDrDst)
+                    fixed (float* di = finalDiDst)
+                    {
+                        for (int i = 0; i < n; i++)
+                        {
+                            int b = i * 4;
+                            zr[i] = src[b + 0]; zi[i] = src[b + 1];
+                            dr[i] = src[b + 2]; di[i] = src[b + 3];
+                        }
+                    }
+                }
+            }
+            finally { _ctx.Unmap(_finalZDStaging, 0); }
+
+            long tEnd = System.Diagnostics.Stopwatch.GetTimestamp();
+            double freq = System.Diagnostics.Stopwatch.Frequency;
+            LastDispatchMs = (tDispatch - t0) * 1000.0 / freq;
+            LastReadbackMs = (tEnd - tDispatch) * 1000.0 / freq;
+        }
+    }
+
+    private void EnsurePerturbParamsBuffer()
+    {
+        if (_perturbParamsBuf != null) return;
+        var desc = new BufferDescription(
+            byteWidth: 64,      // multiple of 16, matches PerturbParams cbuffer
+            bindFlags: BindFlags.ConstantBuffer,
+            usage: ResourceUsage.Dynamic,
+            cpuAccessFlags: CpuAccessFlags.Write);
+        _perturbParamsBuf = _device.CreateBuffer(desc);
+    }
+
+    private void EnsureRefOrbitBuffers(int refLen)
+    {
+        if (_refZrBuf != null && _refAllocLen >= refLen) return;
+        _refZrSrv?.Dispose();
+        _refZiSrv?.Dispose();
+        _refZrBuf?.Dispose();
+        _refZiBuf?.Dispose();
+
+        var desc = new BufferDescription
+        {
+            ByteWidth = (uint)(refLen * sizeof(double)),
+            BindFlags = BindFlags.ShaderResource,
+            Usage = ResourceUsage.Dynamic,
+            CPUAccessFlags = CpuAccessFlags.Write,
+            MiscFlags = ResourceOptionFlags.BufferStructured,
+            StructureByteStride = sizeof(double),
+        };
+        _refZrBuf = _device.CreateBuffer(desc);
+        _refZiBuf = _device.CreateBuffer(desc);
+
+        var srvDesc = new ShaderResourceViewDescription
+        {
+            Format = Vortice.DXGI.Format.Unknown,
+            ViewDimension = Vortice.Direct3D.ShaderResourceViewDimension.Buffer,
+            Buffer = new BufferShaderResourceView { FirstElement = 0, NumElements = (uint)refLen },
+        };
+        _refZrSrv = _device.CreateShaderResourceView(_refZrBuf, srvDesc);
+        _refZiSrv = _device.CreateShaderResourceView(_refZiBuf, srvDesc);
+        _refAllocLen = refLen;
+    }
+
+    private void UploadDoubles(ID3D11Buffer buf, double[] src, int count)
+    {
+        var m = _ctx.Map(buf, 0, Vortice.Direct3D11.MapMode.WriteDiscard, MapFlags.None);
+        unsafe
+        {
+            double* dst = (double*)m.DataPointer;
+            fixed (double* s = src) { for (int i = 0; i < count; i++) dst[i] = s[i]; }
+        }
+        _ctx.Unmap(buf, 0);
+    }
+
     public void Dispose()
     {
         if (_disposed) return;
         _disposed = true;
+        try { _refZrSrv?.Dispose(); } catch { }
+        try { _refZiSrv?.Dispose(); } catch { }
+        try { _refZrBuf?.Dispose(); } catch { }
+        try { _refZiBuf?.Dispose(); } catch { }
+        try { _perturbParamsBuf?.Dispose(); } catch { }
+        try { _csPerturb?.Dispose(); } catch { }
         try { _iterUav?.Dispose(); } catch { }
         try { _smoothUav?.Dispose(); } catch { }
         try { _finalZDUav?.Dispose(); } catch { }

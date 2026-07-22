@@ -120,7 +120,7 @@ z_{n+1} = <expression>
 | Subtraction      | `z - c`                  | Complex                          |
 | Multiplication   | `z*z`, `2*c`             | Complex                          |
 | Division         | `z / (z + 1)`            | Complex; gates BLA / SA off      |
-| Integer power    | `z^2`, `z^3`             | Exponent 0..16                   |
+| Integer power    | `z^2`, `z^3`             | Exponent 0..64 (`z*z…` for higher) |
 | Parentheses      | `(z + c) * (z - c)`      | Standard precedence              |
 | Unary minus      | `-z`, `-(z*z + c)`       | Complex negation                 |
 | Conjugate        | `conj(z)`                | (zr, -zi) — anti-holomorphic     |
@@ -504,7 +504,116 @@ Flags:
   added automatically).
 * `--out <dir>` — output directory (default cwd).
 * `--selftest` — emit `{Name}CalculatorSelfTest.cs`.
-* `--bailout <R>` — bailout radius; default 512.
+* `--bailout <R>` — bailout radius; default 512. The generator squares it, so
+  `--bailout 512` means "escape when `|z|² ≥ 262144`". Raise it for smooth
+  transcendental gradients; lower it (e.g. `--bailout 2`) to reproduce the
+  classic Mandelbrot escape contract.
+
+---
+
+## Cookbook — end-to-end recipes
+
+Short, complete walk-throughs that string the pieces above into a finished
+result. Each one starts from a blank editor and ends with something on disk.
+
+### Recipe 1 — Preview an idea, then keep it
+
+Goal: audition a new equation and, if you like it, make it a permanent entry in
+the *Type* dropdown.
+
+1. Toolbar **Type** → **User Equation**, then **Params** to open the editor.
+2. Type the equation and click **Compile & Load**. The render swaps in under a
+   second; the status line shows `✓ Compiled` or a red `line, col` error.
+3. Nudge coefficients and re-load until you like the shape. (Live re-compile
+   also fires ~500 ms after you stop typing.)
+4. **Save…** and give it a name — it persists to
+   `%APPDATA%\FracturingFog\userequations.json`.
+5. **Promote to fractal list** so it appears in the *Type* dropdown next launch,
+   alongside the built-ins.
+
+> [!TIP]
+> Steps 1–4 never touch disk beyond the JSON library, so this loop is safe to
+> repeat as fast as you can type. Save the *why* in the name — `phoenix-0p57`
+> beats `test3`.
+
+### Recipe 2 — Freeze a keeper into a compiled calculator
+
+Goal: turn a saved equation into a first-class C# calculator that builds into the
+app (faster than the Roslyn hot-load path, and it survives a clean rebuild).
+
+From the editor, click **Generate via CalcGen**, or from a shell:
+
+```pwsh
+dotnet build CalculatorGen\CalculatorGen.csproj -c Release
+dotnet run --project CalculatorGen -c Release -- `
+    --equation "z*z*z - 0.5*z + c" `
+    --name TwistedCubic `
+    --out Calculators\Generated `
+    --selftest
+```
+
+This writes `Calculators/Generated/TwistedCubicCalculator.cs` plus a sibling
+self-test. The next `dotnet build` of the app compiles it in, and it shows up
+under **Type → "TwistedCubic (Generated)"**.
+
+### Recipe 3 — Render a generated family headlessly
+
+Goal: batch-render an image or zoom video with no UI.
+
+Headless `--batch` addresses fractals by their **built-in** `FractalType` name,
+so the generated families that ship pre-wired are the ones you can drive from the
+CLI: `GeneratedMandelbrotZ2`, `GeneratedMandelbrotZ3`, `GeneratedMandelbrotZ4`,
+`GeneratedMandelbrotZ5`, `GeneratedTricorn`, and `GeneratedBurningShip`.
+
+```pwsh
+FracturingFog.exe --batch --mode image ^
+    --fractal GeneratedMandelbrotZ3 ^
+    --x -0.5 --y 0 --zoom 1.0 ^
+    --theme HSV --width 3840 --height 2160 ^
+    --out C:\out\multibrot-cubic.png
+```
+
+The watermark is composited **on by default** for parity with the interactive
+**Save** button; add `--no-watermark` for a clean plate. See
+[Capture-Guide → Batch CLI](Capture-Guide.md#8-batch-cli).
+
+> [!IMPORTANT]
+> A calculator you author with a *custom* name (Recipe 1 / Recipe 2) is not
+> reachable through `--batch --fractal` — that switch only accepts the fixed
+> `FractalType` names above. To batch-render your own equation, either express it
+> as one of the generated families, or render it interactively and use the
+> **Image** / **Video** buttons.
+
+### Recipe 4 — Slow the escape for smoother transcendental gradients
+
+Goal: an `exp` / `sin` equation whose boundary bands look coarse.
+
+Transcendentals blow up fast, so the default bailout clips the gradient. Generate
+the calculator with a larger bailout radius so orbits are allowed to travel
+further before they count as escaped:
+
+```pwsh
+dotnet run --project CalculatorGen -c Release -- `
+    --equation "sin(z) + c" `
+    --name SineField `
+    --bailout 4096 `
+    --out Calculators\Generated --selftest
+```
+
+Pair the wider bailout with the app's smooth-iter colouring (automatic) for a
+continuous ramp instead of visible iso-iter steps.
+
+### Recipe 5 — Keep an equation deep-zoomable
+
+Goal: a custom fractal you can still dive into past 10¹⁵.
+
+Stay **polynomial in `z` (+ `c`)**. Perturbation, BLA, and Series Approximation
+all stay on for `z^d + c` and its coupled/Multibrot/Phoenix-free variants; the
+moment you add `conj`, `fold`, `/`, a transcendental, `if`, `prev`, or `iter`
+you drop to scalar / DD-QD past the perturbation threshold (see the gating table
+in [§3](#3-five-execution-paths-and-what-gates-them)). The design-side reasoning
+and a per-family deep-zoom table live in
+[Fractal Equation Design Guide → §13](../Technical/FractalEquation-DesignGuide.md#13-equation-modification-cookbook).
 
 ---
 
@@ -514,7 +623,7 @@ Flags:
 |-------------------------------------------|------------------------------------------------------|
 | `Unknown identifier 'X'`                  | Typo. Allowed: z, c, conj, fold, sqr, sin, cos, tan, sinh, cosh, tanh, sqrt, exp, log, arg, atan2, min, max, mod, pi, e, i, if/then/else, re, im, abs, prev, iter/n. |
 | `Unexpected character …`                  | Stray punctuation. `=` alone is not allowed; use `==`.|
-| `Exponent must be 0..16`                  | Use `z*z*z…` or break into factored form.            |
+| `Exponent … must be a non-negative integer ≤ 64` | Power `^` caps at 64. Use `z*z*z…` or factor for higher. |
 | `Equation is empty`                       | Editor text is blank after preprocessor strip.       |
 | Deep-zoom drops to scalar                 | Construct disables perturbation; see table §3.       |
 | Black output past 1e13                    | DD/QD HpDirect off (Conj/Fold/Prev gated). Use polynomial form. |

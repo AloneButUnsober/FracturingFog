@@ -192,9 +192,10 @@ namespace FracturingFog.Batch
             Console.WriteLine("  --no-keep-frames            Delete PNG frame folder after encode");
             Console.WriteLine();
             Console.WriteLine("Common options:");
-            Console.WriteLine("  --watermark                 Composite region/theme + program watermark into every");
-            Console.WriteLine("                              emitted frame across image / video / slideshow modes");
-            Console.WriteLine("                              (image mode already watermarks unconditionally).");
+            Console.WriteLine("  --watermark, --no-watermark Turn the watermark OFF. The region/theme + program");
+            Console.WriteLine("                              watermark is composited into every emitted frame by");
+            Console.WriteLine("                              default across image / video / slideshow modes; pass");
+            Console.WriteLine("                              this flag to suppress it.");
             Console.WriteLine();
             Console.WriteLine("Post-FX (parity with the interactive sliders; image, video + slideshow modes):");
             Console.WriteLine("  --brightness N              Brightness -100..100 (0 = none).");

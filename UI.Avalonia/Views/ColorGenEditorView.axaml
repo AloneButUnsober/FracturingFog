@@ -45,7 +45,7 @@
         <!-- Row 3: compile/generate -->
         <Grid Grid.Row="3" ColumnDefinitions="*,Auto,Auto,Auto" Margin="0,0,0,8">
             <TextBox Grid.Column="0"
-                     Watermark="Description (optional)"
+                     PlaceholderText="Description (optional)"
                      Text="{Binding Description, Mode=TwoWay}" />
             <Button Grid.Column="1"
                     Content="Compile &amp; Load"

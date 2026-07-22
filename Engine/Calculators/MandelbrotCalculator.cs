@@ -159,6 +159,46 @@ public sealed class MandelbrotCalculator
     /// FP32-broken band.</summary>
     public const double MaxGpuZoom = 1e4;
 
+    /// <summary>V6 (#82): upper zoom for the GPU deep-zoom PERTURBATION path
+    /// (<see cref="RunPerturb"/> on an FP64-capable kernel). Above
+    /// <see cref="MaxGpuZoom"/> the FP32 escape-time kernel is unusable, but the
+    /// double δ-rebased perturbation kernel is not: it consumes the same Hi-limb
+    /// double reference orbit + single-double dc the CPU <c>ComputePixelPTRebased</c>
+    /// uses, so it is bit-faithful to the CPU deep path wherever that path runs
+    /// (verified at the precision noise floor by --vulkanpturbprobe / dev-plan
+    /// §14). The δ loop is depth-independent (rebasing, SM-2); this ceiling
+    /// (= <see cref="ODZoomThreshold"/>, 1e50) is caution, not a math limit —
+    /// the deep-dc precision re-check (#82 checkbox 2) gates lifting it further.</summary>
+    public const double MaxGpuPerturbZoom = ODZoomThreshold;
+
+    /// <summary>V6 (#82): master toggle for the GPU deep-zoom perturbation path.
+    /// Off by default — the deep path stays CPU unless explicitly enabled AND a
+    /// perturbation-capable kernel (<c>IGpuKernel.SupportsPerturbation</c>) is
+    /// attached. Independent of <see cref="UseGpuCompute"/> (the shallow FP32
+    /// path); a session may run either, both, or neither. The <c>--vulkanpturbprobe</c>
+    /// gate exercises the kernel directly and does not need this flag.</summary>
+    public static bool UseGpuPerturbation { get; set; } = false;
+
+    // #86 diagnostic — opt-in via FF_GPU_PERTURB_DEBUG=1, writes to the same
+    // %TEMP%/ff_gpu_perturb_86.log the render host uses (WinExe has no console).
+    // Explains why a deep frame did or did not take the GPU perturbation path.
+    private static readonly bool s_dbg86 =
+        Environment.GetEnvironmentVariable("FF_GPU_PERTURB_DEBUG") is "1" or "true" or "yes" or "on";
+    private static readonly string s_dbg86Path =
+        System.IO.Path.Combine(System.IO.Path.GetTempPath(), "ff_gpu_perturb_86.log");
+    private static readonly object s_dbg86Gate = new();
+    private static void Dbg86(string msg)
+    {
+        if (!s_dbg86) return;
+        try
+        {
+            lock (s_dbg86Gate)
+                System.IO.File.AppendAllText(s_dbg86Path,
+                    $"{DateTime.Now:HH:mm:ss.fff} [#86] {msg}{Environment.NewLine}");
+        }
+        catch { /* diagnostic must never break the calc path */ }
+    }
+
     /// <summary>T3.1: when true and a GPU kernel is attached via
     /// <see cref="SetGpuKernel"/>, the SP path
     /// (<see cref="CalculateDoublePrecision{TMap}"/>) dispatches the
@@ -190,6 +230,12 @@ public sealed class MandelbrotCalculator
 
     /// <summary>True when the last Calculate() used double-double arithmetic.</summary>
     public bool IsHighPrecisionActive { get; private set; }
+
+    /// <summary>V6 (#82) — true when the last high-precision frame actually ran
+    /// the GPU perturbation kernel (not a CPU fallback). Read by the render host
+    /// to surface a "(GPU)" marker in the perf HUD so the user can see the deep-
+    /// zoom GPU path is engaged. Reset at the start of every HP frame.</summary>
+    public bool LastFrameUsedGpuPerturbation { get; private set; }
 
     /// <summary>Estimated deepest zoom (as log₁₀) at which the CURRENT view
     /// centre still resolves detail, set by the last reference-orbit build.
@@ -1656,6 +1702,7 @@ public sealed class MandelbrotCalculator
         int effImgH = EffectiveImageHeight;
         double scale = (3.5 / Math.Max(effImgW, effImgH)) / Zoom;
         int maxIt = MaxIterations;
+        LastFrameUsedGpuPerturbation = false;   // set true only on a successful GPU perturb dispatch below
 
         // One reference orbit at the view centre. Each pixel iterates only
         // the double-precision delta δ_n = z_n − Z_n.
@@ -1705,6 +1752,32 @@ public sealed class MandelbrotCalculator
             else
             {
                 ComputeReferenceOrbit(new DD(CenterX, CenterXLo), new DD(CenterY, CenterYLo), maxIt);
+            }
+        }
+
+        // V6 (#82) — GPU deep-zoom perturbation. With the reference orbit built,
+        // dispatch the whole frame's δ-rebased loop to an FP64 GPU kernel, then
+        // colour/aux writeback on the CPU exactly as the CPU PT path does. Gated
+        // to the plain rebased regime this mirrors: recycle off (dc measured from
+        // the live centre), no per-tile cap, diagnostic toggles off. Runs the
+        // rebased loop for EVERY pixel (glitch-free, SM-2) — the same maths
+        // --vulkanpturbprobe validated against ComputePixelPTRebased. Any kernel
+        // failure falls through to the CPU SIMD path below.
+        {
+            int[]? prCap = PerRowMaxIter;
+            bool tileCap = prCap != null && prCap.Length >= Height;
+            bool gateOk = !recycled
+                && UseGpuPerturbation && GpuKernel != null && GpuKernel.SupportsPerturbation
+                && AllowPtRebasing && !UseDdRebaseReference && !ForceScalarPtPath
+                && !tileCap && Zoom <= MaxGpuPerturbZoom && _refOrbitLen >= 1;
+            Dbg86($"GATE zoom={Zoom:0e+0} gateOk={gateOk} recycled={recycled} " +
+                  $"useGpuPerturb={UseGpuPerturbation} kernel={(GpuKernel != null)} " +
+                  $"supports={(GpuKernel?.SupportsPerturbation ?? false)} allowRebase={AllowPtRebasing} " +
+                  $"ddRebaseRef={UseDdRebaseReference} forceScalar={ForceScalarPtPath} tileCap={tileCap} " +
+                  $"zoomOk={Zoom <= MaxGpuPerturbZoom} refLen={_refOrbitLen}");
+            if (gateOk && TryRunGpuPerturbation(colorMap, scale, maxIt, effImgW, effImgH, ct))
+            {
+                return;
             }
         }
 
@@ -1799,6 +1872,107 @@ public sealed class MandelbrotCalculator
                 $"(avg {(_saAppliedTotal == 0 ? 0 : _saIterSkippedTotal / (double)_saAppliedTotal):F1}/apply), " +
                 $"safeMax={_sa.SafeMax}");
     }
+
+    /// <summary>
+    /// V6 (#82) — run the deep-zoom perturbation frame on the GPU. Dispatches the
+    /// δ-rebased loop over the just-built reference orbit (Hi-limb doubles) via
+    /// <see cref="IGpuKernel.RunPerturb"/>, then fills colour/distance/normal on
+    /// the CPU from the GPU's iter + final z/dz — the same
+    /// <see cref="FillAuxAndColorHP{TMap}"/> writeback the CPU PT path uses.
+    /// Offsets mirror <c>ComputeRowPTScalar</c>: pixel (x,y) sits at image-space
+    /// offset (SubRectOffsetX + x − effImgW/2, …) from the reference centre.
+    /// Returns false (and leaves the caller to run the CPU path) on any kernel
+    /// failure. Caller has already gated recycle / per-tile / diagnostic modes.
+    /// </summary>
+    private bool TryRunGpuPerturbation<TMap>(
+        TMap colorMap, double scale, int maxIt, int effImgW, int effImgH, CancellationToken ct)
+        where TMap : IColorMap
+    {
+        var kernel = GpuKernel;
+        if (kernel == null) return false;
+        try
+        {
+            double offX0 = SubRectOffsetX - effImgW * 0.5;
+            double offY0 = SubRectOffsetY - effImgH * 0.5;
+            kernel.RunPerturb(
+                Width, Height, scale, maxIt, EscapeRadius2,
+                offX0, offY0,
+                _refZr, _refZi, _refOrbitLen,
+                IterationBuffer, SmoothBuffer,
+                FinalZrBuffer, FinalZiBuffer, FinalDrBuffer, FinalDiBuffer);
+        }
+        catch (Exception ex)
+        {
+            Debug.WriteLine($"[MandelbrotCalculator] GPU perturbation dispatch failed; CPU fallback: {ex.Message}");
+            Dbg86($"RUNPERTURB-THREW {ex.GetType().Name}: {ex.Message} refLen={_refOrbitLen} zoom={Zoom:0e+0}");
+
+            // A lost/removed/hung GPU device (TDR) does not recover on its own and
+            // — because the D3D kernel shares the renderer's device — also kills
+            // presentation. Disable GPU perturbation for the rest of the session
+            // so we (a) stop hammering a dead device with retries and (b) fall
+            // straight through to the CPU deep path from here on. Row-band tiling
+            // is meant to prevent the TDR in the first place; this is the belt-
+            // and-braces backstop if a band still overruns on very slow FP64.
+            string m = ex.Message ?? "";
+            // Marker set by MandelbrotKernelSource.PerturbTooSlowMarker in the
+            // backend kernels (Engine can't reference Rendering.*, so match the
+            // literal — keep the two in sync).
+            bool tooSlow = m.Contains("GPU-PERTURB-TOO-SLOW", StringComparison.Ordinal);
+            bool deviceLost = m.Contains("DEVICE_REMOVED", StringComparison.OrdinalIgnoreCase)
+                           || m.Contains("DeviceRemoved", StringComparison.OrdinalIgnoreCase)
+                           || m.Contains("DEVICE_HUNG", StringComparison.OrdinalIgnoreCase)
+                           || m.Contains("device lost", StringComparison.OrdinalIgnoreCase);
+            if (tooSlow)
+            {
+                // The GPU's FP64 is too slow at this depth to beat the CPU (weak
+                // consumer card). Disable for the session so every later frame
+                // goes straight to the multi-threaded CPU deep path.
+                UseGpuPerturbation = false;
+                Console.Error.WriteLine(
+                    "[GPU] deep-zoom perturbation DISABLED for this session — the GPU is slower than the " +
+                    "CPU here (weak FP64). Using the CPU deep path. Tune FF_GPU_PERTURB_BUDGET_MS to change " +
+                    "the threshold, or run on a stronger-FP64 GPU.");
+                Dbg86($"TOO-SLOW → UseGpuPerturbation disabled for session ({ex.Message})");
+            }
+            else if (deviceLost)
+            {
+                UseGpuPerturbation = false;
+                Console.Error.WriteLine(
+                    "[GPU] deep-zoom perturbation DISABLED for this session — the GPU device was " +
+                    "lost/removed during a dispatch (TDR). Falling back to the CPU deep path. " +
+                    "Restart with a higher OS TdrDelay or a stronger-FP64 GPU to re-enable.");
+                Dbg86("DEVICE-LOST → UseGpuPerturbation disabled for session");
+            }
+            return false;
+        }
+
+        _po.CancellationToken = ct;
+        var po = _po;
+        ParallelForRows(0, Height, po, y =>
+        {
+            if (ct.IsCancellationRequested) return;
+            int rb = y * Width;
+            for (int x = 0; x < Width; x++)
+            {
+                int idx = rb + x;
+                FillAuxAndColorHP(idx, IterationBuffer[idx], maxIt,
+                    FinalZrBuffer[idx], FinalZiBuffer[idx],
+                    FinalDrBuffer[idx], FinalDiBuffer[idx], colorMap);
+            }
+        });
+        LastFrameUsedGpuPerturbation = true;
+        if (!_loggedGpuPerturbEngaged)
+        {
+            _loggedGpuPerturbEngaged = true;
+            Console.Error.WriteLine(
+                $"[GPU] deep-zoom perturbation engaged — {GpuKernel?.GetType().Name ?? "GPU"} " +
+                $"(first frame at zoom {Zoom:0e+0}).");
+        }
+        return true;
+    }
+
+    // One-shot latch so the "engaged" line logs once per process, not per frame.
+    private bool _loggedGpuPerturbEngaged;
 
     /// <summary>
     /// Build / refresh the series approximation table for the current

@@ -63,7 +63,7 @@
             <Grid Grid.Column="1" RowDefinitions="Auto,*" RowSpacing="6">
                 <TextBox Grid.Row="0"
                          Text="{Binding FilterText}"
-                         Watermark="Filter by name…"
+                         PlaceholderText="Filter by name…"
                          Background="#1E1E1E" />
                 <Border Grid.Row="1" Classes="pane">
                     <Grid>

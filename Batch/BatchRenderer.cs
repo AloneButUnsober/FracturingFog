@@ -90,8 +90,11 @@ namespace FracturingFog.Batch
                 // over the mandatory program/version line. Batch printed its
                 // own "batch render" label here before, which is the kind of
                 // per-surface special-casing this consolidation removes.
-                Watermark = WatermarkResolver.ComposeDefaultTopText(regionDispName, opts.ThemeName),
-                SubText = WatermarkResolver.BuildDefaultSubText(),
+                // #54: watermark is on by default; --watermark/--no-watermark
+                // suppresses it. Empty strings paint nothing.
+                Watermark = opts.Watermark
+                    ? WatermarkResolver.ComposeDefaultTopText(regionDispName, opts.ThemeName) : "",
+                SubText = opts.Watermark ? WatermarkResolver.BuildDefaultSubText() : "",
                 Brightness = pfBrightness,
                 Contrast = pfContrast,
                 HistogramEq = pfAdaptive,

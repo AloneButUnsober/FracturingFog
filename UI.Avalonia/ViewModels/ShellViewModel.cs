@@ -262,6 +262,16 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
             RebuildWindowTitle();
             Main.RenderHost.Trigger();
         };
+        // GPU compute checkbox → the same host toggle Ctrl+G drives. Main's
+        // setter re-reads the host, so read it back to reflect "didn't engage".
+        FloatingMenu.UseGpuComputeToggled += (_, v) =>
+        {
+            Main.UseGpuCompute = v;
+            FloatingMenu.SetGpuComputeState(Main.UseGpuCompute);
+            RebuildWindowTitle();
+        };
+        // Initial sync so the checkbox reflects the host default at startup.
+        FloatingMenu.SetGpuComputeState(Main.UseGpuCompute);
 
         // Status-bar visibility flag the MainWindow status row binds to.
         FloatingMenu.StatusBarToggled  += (_, v) => IsStatusBarVisible = v;
@@ -682,6 +692,15 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
             return;
         }
 
+        // A Video-type preset runs on the zoom engine, so the context-menu
+        // "Slideshow" toggle must also be able to STOP a running video
+        // slideshow — otherwise the button is a no-op mid-run.
+        if (IsVideoRunning)
+        {
+            StopVideo();
+            return;
+        }
+
         // Context-menu + Floating Menu "Slideshow" buttons honour the user's
         // active saved preset — RecordSlideshow, AdaptiveSweep, AudioReactive,
         // filters etc. were unreachable when this path constructed a fresh
@@ -690,7 +709,16 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
         SlideshowConfig active;
         try { active = SlideshowConfigLibrary.GetActive(SlideshowConfigLibrary.Load()); }
         catch { active = new SlideshowConfig(); }
-        StartSlideshowWithConfig(active);
+
+        // Honour the preset's Type. Video routes to the zoom engine; Image and
+        // Animation both run on the CPU cross-fade cycler. Without this branch
+        // the context-menu / Floating Menu Slideshow buttons always ran the
+        // image cycler, so a saved Video preset (e.g. "Deep Forrest Path Video")
+        // rendered as a static fractal image instead of a video zoom (#45).
+        if (active.Type == SlideshowType.Video)
+            StartVideoSlideshowFromConfig(active);
+        else
+            StartSlideshowWithConfig(active);
     }
 
     /// <summary>Start the image slideshow from an explicit in-memory
@@ -701,6 +729,13 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
     {
         if (config == null) return;
         if (_slideshow is { IsRunning: true }) return;
+        // Route by type so a Video preset never falls through to the image
+        // cycler (which would render it as a static frame — #45).
+        if (config.Type == SlideshowType.Video)
+        {
+            StartVideoSlideshowFromConfig(config);
+            return;
+        }
         StartSlideshowWithConfig(config);
     }
 
@@ -2679,6 +2714,13 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
             IncludedAnimations = config.IncludedAnimations,
             FilterAnimations = config.FilterAnimations,
             RandomizeAnimationsByFractalType = config.RandomizeAnimationsByFractalType,
+            // Region / theme restrictions — without these the video slideshow
+            // cycled the whole library, ignoring a preset that pinned one
+            // region + one theme (#45).
+            IncludedRegions = config.IncludedRegions,
+            IncludedColorThemes = config.IncludedColorThemes,
+            FilterFractalTypes = config.FilterFractalTypes,
+            FilterQualityPresets = config.FilterQualityPresets,
         };
 
         _video.VideoSweepConfig = config.AdaptiveSweep;

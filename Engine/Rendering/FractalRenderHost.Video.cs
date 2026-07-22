@@ -77,6 +77,14 @@ namespace FracturingFog.Rendering
         private IReadOnlyList<string>? _videoAnimIncluded;
         private IReadOnlyList<string>? _videoAnimFilter;
         private bool _videoAnimRandomize;
+
+        // ── Region / theme restrictions (video slideshow) ─────────────────
+        // Set per-run from VideoZoomRequest so a saved Video preset that pins
+        // regions / themes / quality is honoured (#45). Null/empty = full pool.
+        private IReadOnlyList<string>? _videoIncludedRegions;
+        private IReadOnlyList<string>? _videoIncludedThemes;
+        private IReadOnlyList<string>? _videoFilterFractalTypes;
+        private IReadOnlyList<string>? _videoFilterQualityPresets;
         private readonly List<IParameterAnimator> _videoLegAnimators = new();
         private long _videoAnimLastTicks;
 
@@ -349,7 +357,9 @@ namespace FracturingFog.Rendering
             // at full MaxIterations.
             IterCapMode = request.IterCapMode;
             _bandStatsValid = false;
-            _calculator.PerRowMaxIter = null;
+            // _calculator is set during render setup; the earlier ?. guards in
+            // this method are defensive, so assert non-null here for the write.
+            _calculator!.PerRowMaxIter = null;
             RaiseStatus(request.IsReverse
                 ? $"Video reverse zoom → classic from zoom={startZoom:G4} over {request.Seconds:F1}s"
                 : $"Video zoom → zoom={targetZoom:G4} over {request.Seconds:F1}s");
@@ -434,6 +444,12 @@ namespace FracturingFog.Rendering
             _videoAnimFilter = request.FilterAnimations;
             _videoAnimRandomize = request.RandomizeAnimationsByFractalType;
             _videoLegAnimators.Clear();
+
+            // Region / theme restrictions for this run (#45).
+            _videoIncludedRegions = request.IncludedRegions;
+            _videoIncludedThemes = request.IncludedColorThemes;
+            _videoFilterFractalTypes = request.FilterFractalTypes;
+            _videoFilterQualityPresets = request.FilterQualityPresets;
 
             _videoSlideshowRunning = true;
             string mode = reverse ? "reverse " : "";
@@ -1511,6 +1527,20 @@ namespace FracturingFog.Rendering
         // Video slideshow (Mandelbrot-only legs, cross-faded)
         // ──────────────────────────────────────────────────────────────────
 
+        // Intersect a theme list with the preset's IncludedColorThemes set.
+        // Null set = no restriction (return input unchanged). An active set
+        // that matches nothing returns an empty list (caller falls back to the
+        // run pool); the run pool itself going empty stops the slideshow.
+        private static IReadOnlyList<string>? ApplyVideoThemeFilter(
+            IReadOnlyList<string>? input, HashSet<string>? included)
+        {
+            if (input == null || included == null) return input;
+            var filtered = new List<string>(input.Count);
+            foreach (var n in input)
+                if (included.Contains(n)) filtered.Add(n);
+            return filtered;
+        }
+
         private void VideoSlideshowLoop(double seconds, bool constantRate, bool reverse, bool useRegionWatermark, bool themeFadeEnabled, int themesPerLegRequested, CancellationToken ct)
         {
             var svc = _videoThemeService;
@@ -1521,15 +1551,38 @@ namespace FracturingFog.Rendering
             // root, equation source) can't be faithfully reconstructed for an
             // unattended zoom. Excluding Extreme tier + near-classic zoom too.
             const double SlideshowMinRegionZoom = 5.0;
+
+            // Preset restrictions (#45). A restriction that is present but
+            // matches nothing is authoritative — the leg pool goes empty and
+            // the loop stops rather than cycling regions the user excluded.
+            var incRegions = (_videoIncludedRegions is { Count: > 0 })
+                ? new HashSet<string>(_videoIncludedRegions, StringComparer.OrdinalIgnoreCase) : null;
+            var incFractal = (_videoFilterFractalTypes is { Count: > 0 })
+                ? new HashSet<string>(_videoFilterFractalTypes, StringComparer.OrdinalIgnoreCase) : null;
+            var incQuality = (_videoFilterQualityPresets is { Count: > 0 })
+                ? new HashSet<string>(_videoFilterQualityPresets, StringComparer.OrdinalIgnoreCase) : null;
+            var incThemes = (_videoIncludedThemes is { Count: > 0 })
+                ? new HashSet<string>(_videoIncludedThemes, StringComparer.OrdinalIgnoreCase) : null;
+
             var regions = new List<FractalRegion>();
             foreach (var r in FractalRegionLibrary.Instance.AllSlideshowRegions)
-                if (r.FractalType == FractalType.Mandelbrot
-                    && r.QualityPreset.Tier != QualityTier.Extreme
-                    && r.Zoom > SlideshowMinRegionZoom)
-                    regions.Add(r);
+            {
+                if (r.FractalType != FractalType.Mandelbrot
+                    || r.QualityPreset?.Tier == QualityTier.Extreme
+                    || r.Zoom <= SlideshowMinRegionZoom)
+                    continue;
+                if (incRegions != null && !incRegions.Contains(r.Name)) continue;
+                if (incFractal != null && !incFractal.Contains(r.FractalType.ToString())) continue;
+                if (incQuality != null && !incQuality.Contains(r.QualityPreset?.Name ?? string.Empty)) continue;
+                regions.Add(r);
+            }
 
-            var themes = svc.EnumerateThemeNames();
-            if (regions.Count == 0 || themes == null || themes.Count == 0) return;
+            var themes = ApplyVideoThemeFilter(svc.EnumerateThemeNames(), incThemes);
+            if (regions.Count == 0 || themes == null || themes.Count == 0)
+            {
+                RaiseStatus("Video slideshow: no regions/themes match the active filter.");
+                return;
+            }
 
             int lastRegion = -1, lastTheme = -1;
             double ultraMax = QualityPreset.Ultra.ZoomMax;
@@ -1578,8 +1631,10 @@ namespace FracturingFog.Rendering
 
                 double tz = Math.Clamp(region.Zoom, draftMin, ultraMax);
 
-                // Per-leg palette pool capped at the leg's deep endpoint.
-                var legThemes = svc.EnumerateThemeNamesForZoom(tz);
+                // Per-leg palette pool capped at the leg's deep endpoint, then
+                // narrowed to the preset's included themes (#45). Empty after
+                // filtering ⇒ fall back to the run's full (already-filtered) pool.
+                var legThemes = ApplyVideoThemeFilter(svc.EnumerateThemeNamesForZoom(tz), incThemes);
                 if (legThemes == null || legThemes.Count == 0) legThemes = themes;
                 if (legThemes.Count != themes.Count) lastTheme = -1;
                 int ti;

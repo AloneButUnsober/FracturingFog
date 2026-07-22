@@ -105,6 +105,12 @@
     -->
     <Compile Remove="Engine\**" />
     <Compile Remove="Rendering.D3D\**" />
+    <!-- Rendering.Vulkan (V3 lib) + Rendering.Vulkan.Smoke (gate harness) are
+         their own net10.0 projects (Silk.NET.Vulkan); keep their sources out of
+         this WinExe glob or they fail CS0234 for the Silk.NET.Vulkan types this
+         project doesn't reference. -->
+    <Compile Remove="Rendering.Vulkan\**" />
+    <Compile Remove="Rendering.Vulkan.Smoke\**" />
     <Compile Remove="FracturingFog.Win\**" />
     <Compile Remove="Audio.Win\**" />
     <Compile Remove="FracturingFog.App\**" />

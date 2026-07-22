@@ -53,7 +53,7 @@ public sealed class TileDispatcherTests
         var d = new TileDispatcher();
         var claimTask = d.ClaimNextAsync("w1", TimeSpan.FromSeconds(5), CancellationToken.None);
 
-        await Task.Delay(50);
+        await Task.Delay(50, TestContext.Current.CancellationToken);
         d.EnqueueJob("J1", ThreeTiles("J1"));
 
         var t = await claimTask;
@@ -127,7 +127,7 @@ public sealed class TileDispatcherTests
         var d = new TileDispatcher();
         var cts = new CancellationTokenSource();
         var task = d.ClaimNextAsync("w1", TimeSpan.FromSeconds(10), cts.Token);
-        await Task.Delay(30);
+        await Task.Delay(30, TestContext.Current.CancellationToken);
         cts.Cancel();
         var t = await task;
         Assert.Null(t);
@@ -318,7 +318,7 @@ public sealed class TileDispatcherTests
 
         // Worker B is waiting on tile.next — should wake when we ReturnPending.
         var waitTask = d.ClaimNextAsync("wB", TimeSpan.FromSeconds(5), CancellationToken.None);
-        await Task.Delay(50);
+        await Task.Delay(50, TestContext.Current.CancellationToken);
         Assert.True(d.ReturnPending("J1", first!));
 
         var got = await waitTask;

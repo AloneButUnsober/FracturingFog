@@ -233,9 +233,9 @@ public sealed class ClusterAdminRpcTests : IDisposable
     {
         SeedJob("image", "ready",     4, 4);
         // Slight delay so CreatedUnixMs distinguishes the rows ordering.
-        await Task.Delay(5);
+        await Task.Delay(5, TestContext.Current.CancellationToken);
         SeedJob("video", "rendering", 3, 1);
-        await Task.Delay(5);
+        await Task.Delay(5, TestContext.Current.CancellationToken);
         SeedJob("image", "failed",    2, 0);
 
         var outcome = await _coord.HandleAsync("cluster.listJobs",

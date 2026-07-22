@@ -626,6 +626,30 @@ Auto-promotion is transparent — status bar shows the live label (SP / DD / QD 
 
 Perturbation theory + Series Approximation + BLA make zooms past 10²⁵ interactive on consumer hardware.
 
+### GPU compute
+
+At shallow zooms the single-precision Mandelbrot pass can run on your graphics
+card instead of the CPU. Turn it on with the **GPU compute** checkbox in the
+Control Center, or toggle it any time with `Ctrl + G`. The two stay in sync, so
+whichever you use, the other reflects the change.
+
+- **When it engages.** GPU compute covers the fast, single-precision zoom band.
+  Once a zoom crosses into double-double / quad-double territory the renderer
+  transparently returns to the CPU high-precision path — the checkbox can be on
+  without slowing deep dives down.
+- **Automatic fallback.** On a machine whose graphics backend can't run the
+  compute path, the toggle simply reports that it didn't engage and rendering
+  continues on the CPU. Nothing breaks; you just don't get the speed-up.
+- **Series Approximation on the GPU.** The polynomial skip that fast-forwards the
+  early iterations can run in-shader as well, so the acceleration follows the
+  render onto the card. The diagnostic toggles for these stages are listed under
+  [Keyboard Shortcuts → Performance & Deep-Zoom Diagnostics](Keyboard-Shortcuts.md#performance--deep-zoom-diagnostics).
+
+> [!TIP]
+> If you are comparing GPU vs CPU output, open the performance HUD with `H` first
+> and press `Shift + H` to reset its averages after each toggle — you get a clean
+> before/after frame-time read that way.
+
 ---
 
 ## 17. Persistence

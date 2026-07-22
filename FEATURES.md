@@ -424,6 +424,8 @@ Cartesian complex-plane grid with major/minor divisions and labeled coordinates.
 
 Region + theme + program label, CPU-composited into the BGRA buffer. Position / opacity / color configurable from Slideshow Settings → Watermark. Contrast-aware text color picks white on dark, near-black on light.
 
+Headless `--batch` renders (image / video / slideshow) carry the watermark **on by default** for parity with the interactive Save flow; pass `--watermark` (alias `--no-watermark`) to suppress it. See [Docs/User/Capture-Guide.md](Docs/User/Capture-Guide.md#watermark-on-by-default).
+
 ### 12.3 Mini-Map
 
 Inset top-level window showing the **whole Mandelbrot set** with a marker for your current view position. Click anywhere on the mini-map to jump there.

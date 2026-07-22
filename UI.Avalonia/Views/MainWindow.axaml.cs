@@ -376,6 +376,9 @@ public sealed partial class MainWindow : Window
         if (e.Key == Key.G && e.KeyModifiers == KeyModifiers.Control)
         {
             _shell.Main.UseGpuCompute = !_shell.Main.UseGpuCompute;
+            // Keep the Control Center checkbox in lock-step with the hotkey
+            // (read-back reflects "didn't engage" on non-D3D11 backends).
+            _shell.FloatingMenu.SetGpuComputeState(_shell.Main.UseGpuCompute);
             e.Handled = true;
             return;
         }
@@ -611,6 +614,7 @@ public sealed partial class MainWindow : Window
 
     private void OnShellPropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
+        if (_shell == null) return;
         switch (e.PropertyName)
         {
             case nameof(ShellViewModel.IsFloatingMenuVisible):
