@@ -262,6 +262,16 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
             RebuildWindowTitle();
             Main.RenderHost.Trigger();
         };
+        // GPU compute checkbox → the same host toggle Ctrl+G drives. Main's
+        // setter re-reads the host, so read it back to reflect "didn't engage".
+        FloatingMenu.UseGpuComputeToggled += (_, v) =>
+        {
+            Main.UseGpuCompute = v;
+            FloatingMenu.SetGpuComputeState(Main.UseGpuCompute);
+            RebuildWindowTitle();
+        };
+        // Initial sync so the checkbox reflects the host default at startup.
+        FloatingMenu.SetGpuComputeState(Main.UseGpuCompute);
 
         // Status-bar visibility flag the MainWindow status row binds to.
         FloatingMenu.StatusBarToggled  += (_, v) => IsStatusBarVisible = v;
