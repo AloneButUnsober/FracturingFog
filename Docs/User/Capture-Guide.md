@@ -367,6 +367,31 @@ Notes:
 - v1 headless slideshow renders Mandelbrot regions only; non-Mandelbrot regions in the preset's filter set are skipped with a warning.
 - `--keep-frames` keeps the PNG sequence at its temp path after ffmpeg succeeds. Default behaviour deletes it.
 
+### Watermark (on by default)
+
+Every batch render — image, video, and image/video slideshow — paints the
+watermark (region + theme name over the program label) into each frame by
+default. This matches what the interactive **Save** button does, so a poster you
+render headless looks the same as one you export from the app.
+
+To render **without** the watermark, pass `--watermark` (or its clearer alias
+`--no-watermark`). The flag is a switch that turns the watermark *off*:
+
+```
+FracturingFog.exe --batch --region ""Seahorse Valley"" --theme Fire ^
+                  --width 3840 --height 2160 ^
+                  --no-watermark --out C:\out\seahorse-clean.png
+```
+
+> [!NOTE]
+> The flag reads backwards on purpose. Because the watermark is now the default,
+> the only thing left for a flag to do is remove it — so both `--watermark` and
+> `--no-watermark` mean "suppress the watermark". There is no flag to *add* one;
+> it is already there.
+
+Scene mode (`--mode scene`) is the exception: it carries its own watermark
+setting inside the saved scene, so this flag does not affect it.
+
 ### Remote render
 
 ```
@@ -408,6 +433,11 @@ Watermark composition:
 The watermark is **CPU-composited into the BGRA buffer** before swap-chain upload, which is why it survives into screenshots, posters, and videos — the GPU never sees an unwatermarked frame when the toggle is on.
 
 For non-watermarked exports, disable the toggle before triggering the capture.
+
+Headless renders follow the same rule but the other way round: the watermark is
+**on by default** for every `--batch` mode, and you pass `--no-watermark` to drop
+it. See [Watermark (on by default)](#watermark-on-by-default) under the Batch CLI
+section.
 
 ---
 
