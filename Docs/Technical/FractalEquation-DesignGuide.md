@@ -762,6 +762,49 @@ chain rule still produces correct values via `Mul` (e.g.
 
 ---
 
+## Author's pre-flight checklist — seeds, guards, and degeneracies
+
+Most "my equation renders as one solid colour" reports trace to the seed. The
+engine starts every orbit at `z₀ = 0`, so the very first step evaluates
+`f(0, c)`. If that produces `Inf` / `NaN`, or a trivially bounded cycle, the
+whole plane collapses to a single colour and there is no fractal to see. Run
+through this table before blaming the renderer.
+
+| Construct                     | What happens at `z₀ = 0`                        | Guard / fix                                             |
+|-------------------------------|-------------------------------------------------|---------------------------------------------------------|
+| `1/z`, `(1/z + c)^2`          | `1/0 = Inf` → `NaN` next step; NaN never bails → everything "in set" | Guard the denominator so it is non-zero at 0: `1/(z*z + c)`, `1/(z + 2)` |
+| `log(z) + c`                  | `log(0) = −∞` → `NaN`; uniform solid            | Offset the argument off the branch point: `log(1 + z) + c` |
+| `sqrt(z)` at a pole chain     | Fine at 0 (`sqrt(0)=0`) but watch downstream `/` | Keep any following division guarded as above            |
+| `i*z + c` (linear in `z`)     | Period-4 cycle `0 → c → (1+i)c → ic → 0` — bounded for *every* `c`, so nothing escapes | Add a genuine quadratic: `i*z*z + c` |
+| `(z^2 + c)/(z + a)`           | `z₁ = c/a`, then instant fixed point `f(c/a)=c/a` | Keep polynomial feedback separate from the rational term: `z*z + c/(z + a)` |
+| `conj(fold(z))` vs `fold(conj(z))` | Not equal — `conj` negates `im`, `fold` re-positives it, so `fold(conj(z))` cancels back to plain Burning Ship | Pick the order deliberately; `conj(fold(z))` is the mirrored hybrid |
+
+> [!TIP]
+> Quick test for a suspected seed problem: temporarily prepend a tiny non-zero
+> shift, e.g. change `f(z,c)` to reference `z + 0.0001` in the offending term. If
+> the solid colour breaks up, the culprit was a singularity at the seed and the
+> real fix is one of the guards above.
+
+### Keeping the distance estimate alive
+
+The DE (surface-normal / "3-D relief" shading) needs the equation to stay
+**holomorphic** so the chain rule that tracks `dz/dc` has a closed form. Use this
+as a helper when you want the relief look:
+
+| Keeps DE on (holomorphic)                              | Turns DE off (non-holomorphic)          |
+|--------------------------------------------------------|-----------------------------------------|
+| `+ - *`, integer power `^`, `sqr`, division `/`        | `conj`, `fold`                          |
+| `sin cos tan sinh cosh tanh exp log sqrt`              | `arg`, `atan2`                          |
+| constants `i`, `pi`, `e`                               | `min`, `max`, `mod`                     |
+|                                                        | `prev`, `iter` / `n`                    |
+
+Division and transcendentals keep DE but still cost you perturbation / BLA / SA
+(see [§14](#14-gating-quick-reference)); only pure polynomial-in-`z` equations
+keep *everything*. So the recipe for "custom fractal with relief shading **and**
+deep zoom" is: stay polynomial.
+
+---
+
 ## 13. Equation modification cookbook
 
 Practical recipes for changing a working equation to push the result
