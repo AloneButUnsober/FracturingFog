@@ -2115,7 +2115,7 @@ public sealed class ClusterCoordinator : IClusterCoordinator
         if (remaining.Count > 0)
             Dispatcher!.EnqueueJob(rec.JobId, remaining);
 
-        Jobs.UpdateStatus(rec.JobId, s =>
+        Jobs!.UpdateStatus(rec.JobId, s =>
         {
             s.TilesDone     = done.Count;
             s.TilesInFlight = 0;

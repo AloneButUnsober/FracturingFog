@@ -614,6 +614,7 @@ public sealed partial class MainWindow : Window
 
     private void OnShellPropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
+        if (_shell == null) return;
         switch (e.PropertyName)
         {
             case nameof(ShellViewModel.IsFloatingMenuVisible):

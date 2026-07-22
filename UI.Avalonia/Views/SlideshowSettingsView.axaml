@@ -41,7 +41,7 @@
                          Name="NameCombo"
                          Text="{Binding ActiveName, Mode=TwoWay}"
                          MinWidth="240"
-                         Watermark="preset name" />
+                         PlaceholderText="preset name" />
             </Grid>
             <TextBlock Grid.Column="2" Text="Type:" VerticalAlignment="Center" Margin="10,0,6,0" />
             <ComboBox Grid.Column="3"

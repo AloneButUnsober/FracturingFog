@@ -95,12 +95,12 @@ public sealed class VideoFramePipelineTests
         {
             byte[] png = TinyPng.Make(seed: i, width: 8, height: 8);
             string path = Path.Combine(framesDir, $"frame_{i:D6}.png");
-            await File.WriteAllBytesAsync(path, png);
+            await File.WriteAllBytesAsync(path, png, TestContext.Current.CancellationToken);
             pipe!.NotifyFramesDelivered(1);
-            await Task.Delay(15);
+            await Task.Delay(15, TestContext.Current.CancellationToken);
         }
 
-        var (ok, log) = await pipe!.Completion.WaitAsync(TimeSpan.FromSeconds(30));
+        var (ok, log) = await pipe!.Completion.WaitAsync(TimeSpan.FromSeconds(30), TestContext.Current.CancellationToken);
         Assert.True(ok, $"ffmpeg failed: {log}");
         Assert.True(File.Exists(pipe.ArtifactPath), $"artifact missing: {pipe.ArtifactPath}");
         Assert.True(new FileInfo(pipe.ArtifactPath).Length > 0);

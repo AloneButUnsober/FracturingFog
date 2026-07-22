@@ -91,11 +91,13 @@ namespace FracturingFog.Batch
         /// <summary>Open-shutter fraction of the frame interval for motion blur
         /// (0.5 ≈ a 180° shutter). Clamped to (0,1].</summary>
         public double ShutterFraction { get; set; } = 0.5;
-        /// <summary>When true, paint the watermark + program-name sub-line into
-        /// every emitted frame across image / video / slideshow batch modes.
-        /// Image mode already watermarks unconditionally for parity with the
-        /// interactive Save flow; the flag also gates Video + Slideshow.</summary>
-        public bool Watermark { get; set; }
+        /// <summary>When true (the default), paint the watermark + program-name
+        /// sub-line into every emitted frame across image / video / slideshow
+        /// batch modes. The CLI flag inverts this: <c>--watermark</c> (alias
+        /// <c>--no-watermark</c>) turns the watermark OFF. Batch parity with the
+        /// interactive Save flow, which always watermarks. (Scene mode governs
+        /// its own watermark through SceneRenderSettings, not this flag.)</summary>
+        public bool Watermark { get; set; } = true;
 
         // Keep PNG frame folder after successful video encode. Defaults to false
         // when --lossless is used (frames are intermediate), true otherwise.
@@ -335,8 +337,12 @@ namespace FracturingFog.Batch
                         opts.MoreColors = true;
                         break;
 
+                    // #54: watermark is ON by default for every mode; the flag
+                    // inverts to mean "turn it off". --no-watermark is a clearer
+                    // alias for the same action.
                     case "--watermark":
-                        opts.Watermark = true;
+                    case "--no-watermark":
+                        opts.Watermark = false;
                         break;
 
                     case "--no-keep-frames":
