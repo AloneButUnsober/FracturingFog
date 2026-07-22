@@ -140,6 +140,32 @@ Closed this arc: #86 (stale deep frame → was TDR device-removed, fixed by tili
 
 ## 6. START HERE next session — SA/BLA-on-GPU spike (#88)
 
+> **SA spike CORRECTNESS: GREEN (2026-07-22).** In-shader Series Approximation
+> landed and validated on the GT710. Kernel `MandelbrotKernelSource.BuildPerturbSA()`
+> (entry `CSPerturbSA`) + `VulkanComputeKernel.RunPerturbSA` (8 coefficient SSBOs
+> t2..t9, 80-byte SA UBO) + gate `--vulkanpturbsa` (`PerturbSaProbe`). In-shader
+> `FindSkip` uses **squared magnitudes** (HLSL has no double `sqrt`); coefficients
+> come from the production `Engine/Math/SeriesApproximation`. Results at zoom 1e6,
+> tol 1e-3, refLen 3090:
+> - **(1) GPU-SA vs CPU-SA = 0.141 %** (13/9216) — at the #82 GPU-vs-CPU dialect
+>   floor (0.119 %). The in-shader FindSkip/EvalDelta + SA-seeded rebased loop
+>   reproduces the CPU SA path. **This is the correctness proof.**
+> - SA engaged: avg skip k = 32, max 3090, 100 % of pixels skipped ≥16.
+> - **SA effect** (SA vs no-SA) = 8.76 % at tol 1e-3 — expected boundary chaos, NOT
+>   a bug: a tolerance sweep (`FF_SA_TOL`) collapses it to the 0.011 % precision
+>   floor at tol 1e-6/1e-9 (tighter tol → smaller skip → less truncation), proving
+>   the divergence is genuine SA truncation, correctly controlled. GPU adds **0 %**
+>   beyond the CPU SA path.
+>
+> **What is DONE:** the SA-spike correctness (step 1–3 below). **What remains:**
+> (a) wire into `TryRunGpuPerturbation` behind a sub-toggle (step 4) + the D3D FXC
+> compile of `BuildPerturbSA` (Vulkan/DXC proven; FXC unverified); (b) **perf
+> sign-off on strong-FP64 HW** — GT710 cannot; (c) **BLA** (heavier, DD coeffs +
+> table, deferred until SA lands — now it has).
+>
+> Gate: `dotnet run --project Rendering.Vulkan.Smoke/... -- --vulkanpturbsa`
+
+
 **Goal:** add iteration-skipping (SA first, BLA later) to the GPU perturbation kernel so it stops repeating work the
 CPU elides. **Spike-first**, exactly like #82: prove bit-exact parity headless before a full build.
 
@@ -186,5 +212,6 @@ CPU elides. **Spike-first**, exactly like #82: prove bit-exact parity headless b
 ## 7. One-line status for the next session
 
 > V6 deep-GPU perturbation done + correctness-proven on both backends; no fast-FP64 HW here for perf sign-off
-> (GT710 + UHD 630 both fall back to CPU by design). Pick up at the **SA-on-GPU spike (#88)** — correctness is
-> validatable on the GT710; start with a `--vulkanpturbsa` parity probe.
+> (GT710 + UHD 630 both fall back to CPU by design). **SA-on-GPU spike (#88) correctness now GREEN too**
+> (`--vulkanpturbsa`, GPU-vs-CPU-SA 0.141 % on GT710). Next: wire SA into `TryRunGpuPerturbation` + D3D FXC
+> compile; perf sign-off still needs strong-FP64 HW; then BLA.

@@ -34,6 +34,7 @@ internal static class Program
         bool pturbProbe = Array.Exists(args, a => string.Equals(a, "--vulkanpturbprobe", StringComparison.OrdinalIgnoreCase));
         bool pturbCalc = Array.Exists(args, a => string.Equals(a, "--vulkanpturbcalc", StringComparison.OrdinalIgnoreCase));
         bool pturbDc = Array.Exists(args, a => string.Equals(a, "--vulkanpturbdc", StringComparison.OrdinalIgnoreCase));
+        bool pturbSa = Array.Exists(args, a => string.Equals(a, "--vulkanpturbsa", StringComparison.OrdinalIgnoreCase));
 
         // Deep-dc recheck is pure CPU numeric (GPU runs the identical double dc) —
         // no Vulkan device required, so dispatch before instance creation.
@@ -76,6 +77,9 @@ internal static class Program
 
             if (pturbCalc)
                 return PerturbCalcProbe.Run(ctx);
+
+            if (pturbSa)
+                return PerturbSaProbe.Run(ctx);
 
             // DXC-compile the trivial kernel, dispatch 64x64, map back.
             uint[] pixels = ComputeSmoke.Run(ctx);
