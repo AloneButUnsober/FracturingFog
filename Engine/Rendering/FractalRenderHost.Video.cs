@@ -1546,10 +1546,12 @@ namespace FracturingFog.Rendering
             var svc = _videoThemeService;
             if (svc == null) return;
 
-            // Mandelbrot-only pool: FractalRegion carries no per-engine
-            // parameters, so non-Mandelbrot regions (Julia constant, Newton
-            // root, equation source) can't be faithfully reconstructed for an
-            // unattended zoom. Excluding Extreme tier + near-classic zoom too.
+            // Multi-type pool (#91): admit every zoomable-2D, non-user-code
+            // family — the region now snapshots its per-family params
+            // (RegionFractalParams), so Julia/Newton/Glynn/Apollonian/… legs
+            // reconstruct the exact look. Raymarch3D (P3/#93) and NonSpatial
+            // (P4/#94) families still fall out here until their leg motion
+            // models land. Excluding Extreme tier + near-classic zoom too.
             const double SlideshowMinRegionZoom = 5.0;
 
             // Preset restrictions (#45). A restriction that is present but
@@ -1567,7 +1569,7 @@ namespace FracturingFog.Rendering
             var regions = new List<FractalRegion>();
             foreach (var r in FractalRegionLibrary.Instance.AllSlideshowRegions)
             {
-                if (r.FractalType != FractalType.Mandelbrot
+                if (!FractalMotionCapabilities.SupportsVideoZoomLeg(r.FractalType)
                     || r.QualityPreset?.Tier == QualityTier.Extreme
                     || r.Zoom <= SlideshowMinRegionZoom)
                     continue;
@@ -1654,9 +1656,16 @@ namespace FracturingFog.Rendering
                 // Snapshot the on-screen frame to cross-fade into the new leg.
                 var oldLegBuf = SnapshotFrame(out int snapW, out int snapH);
 
-                // Set up the leg's starting view, force Mandelbrot, apply theme
-                // silently (no present — we cross-fade explicitly).
-                ViewState.FractalType = FractalType.Mandelbrot;
+                // Set up the leg's starting view. Multi-type (#91): honour the
+                // region's own fractal type and overlay its snapshotted
+                // per-family params so zoomable-2D non-Mandelbrot legs
+                // reconstruct the exact look (Julia constant, Newton exponent,
+                // Apollonian knobs, …). The pool filter above guarantees the
+                // type is zoomable-2D and not user-code. Params is null for
+                // Mandelbrot + default-suffices families (no-op). Theme is
+                // applied silently below (no present — we cross-fade explicitly).
+                ViewState.FractalType = region.FractalType;
+                region.Params?.ApplyTo(ViewState.FractalParameters);
                 _videoTargetIterations = region.Iterations;
 
                 if (reverse)
@@ -1753,19 +1762,35 @@ namespace FracturingFog.Rendering
                 if (ct.IsCancellationRequested) break;
                 if (legCt.IsCancellationRequested) continue;
 
-                // Pre-render the leg's starting frame (Mandelbrot path: eq +
-                // dither applied so the fade target matches the live look).
+                // Pre-render the leg's starting frame. Mandelbrot path applies
+                // eq + dither so the fade target matches the live look. Multi-
+                // type (#91): a non-Mandelbrot leg renders through its alt
+                // calculator instead (eq / dither read the Mandelbrot buffer and
+                // have no equivalent there, so they're skipped — matches the
+                // per-frame alt path in RenderVideoFrame).
                 int eqSnapshot = ViewState.HistogramEq;
                 double ditherStr = _videoBandDitherEnabled ? _videoBandDitherStrength : 0.0;
                 uint[] newLegBuf;
                 try
                 {
-                    _calculator.Calculate(legCt);
-                    if (eqSnapshot > 0) _calculator.ApplyHistogramEqualization(eqSnapshot / 100.0);
-                    if (ditherStr > 0.0) _calculator.ApplyBandDitherRecolor(ditherStr);
-                    var cb = _calculator.ColorBuffer;
-                    newLegBuf = new uint[cb.Length];
-                    Array.Copy(cb, newLegBuf, cb.Length);
+                    IFractalCalculator? altPre = SelectAltCalculator(ViewState.FractalType);
+                    if (altPre != null)
+                    {
+                        SyncAltCalculatorForVideoFrame(altPre);
+                        altPre.Calculate(legCt);
+                        var cb = altPre.ColorBuffer;
+                        newLegBuf = new uint[cb.Length];
+                        Array.Copy(cb, newLegBuf, cb.Length);
+                    }
+                    else
+                    {
+                        _calculator.Calculate(legCt);
+                        if (eqSnapshot > 0) _calculator.ApplyHistogramEqualization(eqSnapshot / 100.0);
+                        if (ditherStr > 0.0) _calculator.ApplyBandDitherRecolor(ditherStr);
+                        var cb = _calculator.ColorBuffer;
+                        newLegBuf = new uint[cb.Length];
+                        Array.Copy(cb, newLegBuf, cb.Length);
+                    }
                 }
                 catch (OperationCanceledException)
                 {
