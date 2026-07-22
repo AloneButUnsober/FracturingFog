@@ -170,7 +170,7 @@
                                             <!-- Shot header -->
                                             <Grid ColumnDefinitions="*,Auto">
                                                 <TextBox Grid.Column="0" Text="{Binding Name}"
-                                                         Watermark="shot label"
+                                                         PlaceholderText="shot label"
                                                          Margin="0,0,8,0" />
                                                 <StackPanel Grid.Column="1" Orientation="Horizontal">
                                                     <Button Classes="mini" Content="▲"  Command="{Binding MoveUpCommand}"   ToolTip.Tip="Move up" />

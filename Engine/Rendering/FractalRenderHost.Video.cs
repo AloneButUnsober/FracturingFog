@@ -357,7 +357,9 @@ namespace FracturingFog.Rendering
             // at full MaxIterations.
             IterCapMode = request.IterCapMode;
             _bandStatsValid = false;
-            _calculator.PerRowMaxIter = null;
+            // _calculator is set during render setup; the earlier ?. guards in
+            // this method are defensive, so assert non-null here for the write.
+            _calculator!.PerRowMaxIter = null;
             RaiseStatus(request.IsReverse
                 ? $"Video reverse zoom → classic from zoom={startZoom:G4} over {request.Seconds:F1}s"
                 : $"Video zoom → zoom={targetZoom:G4} over {request.Seconds:F1}s");
@@ -1566,7 +1568,7 @@ namespace FracturingFog.Rendering
             foreach (var r in FractalRegionLibrary.Instance.AllSlideshowRegions)
             {
                 if (r.FractalType != FractalType.Mandelbrot
-                    || r.QualityPreset.Tier == QualityTier.Extreme
+                    || r.QualityPreset?.Tier == QualityTier.Extreme
                     || r.Zoom <= SlideshowMinRegionZoom)
                     continue;
                 if (incRegions != null && !incRegions.Contains(r.Name)) continue;

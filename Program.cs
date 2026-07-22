@@ -1551,7 +1551,7 @@ static class Program
                         ColorMap = new FracturingFog.Models.HsvPalette(),
                     } : null;
 
-                    int[]? prev = null; long sum = 0, worst = 0; int cnt = 0; int misses = 0;
+                    int[]? prev = null; long sum = 0, worst = 0; int cnt = 0;
                     for (int k = 0; k < frames; k++)
                     {
                         var c = MakeAt(k, step, recycle, reuseCalc);

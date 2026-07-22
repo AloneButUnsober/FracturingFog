@@ -142,7 +142,7 @@ public sealed class ClusterEndToEndImageTests : IDisposable
                 CertRole.Client, "", CancellationToken.None);
             status = Assert.IsType<JobStatusDto>(sOut.Result);
             if (status.JobState is "ready" or "failed" or "cancelled") break;
-            await Task.Delay(20);
+            await Task.Delay(20, TestContext.Current.CancellationToken);
         }
         Assert.NotNull(status);
         Assert.Equal("ready", status!.JobState);
@@ -244,7 +244,7 @@ public sealed class ClusterEndToEndImageTests : IDisposable
                 CertRole.Client, "", CancellationToken.None);
             status = Assert.IsType<JobStatusDto>(sOut.Result);
             if (status.JobState is "ready" or "failed" or "cancelled") break;
-            await Task.Delay(20);
+            await Task.Delay(20, TestContext.Current.CancellationToken);
         }
         Assert.Equal("ready", status!.JobState);
         Assert.True(status.ArtifactReady);
