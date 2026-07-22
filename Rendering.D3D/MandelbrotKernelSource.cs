@@ -207,6 +207,10 @@ float3 EvalPalette(
     /// <summary>Compute-shader entry point for the perturbation variant.</summary>
     public const string PerturbEntryPoint = "CSPerturb";
 
+    /// <summary>Compute-shader entry point for the SA (Series-Approximation)
+    /// iteration-skipping perturbation variant (#88 spike).</summary>
+    public const string PerturbSaEntryPoint = "CSPerturbSA";
+
     /// <summary>TDR tiling budget — max iter-pixels (rows·width·maxIter) per
     /// perturbation dispatch. A deep-zoom full-image dispatch can run tens of
     /// seconds on a weak-FP64 GPU and trip the OS GPU watchdog (device lost),
@@ -348,6 +352,181 @@ void CSPerturb(uint3 tid : SV_DispatchThreadID)
     {
         gIter[idx] = (uint)iter;
         // Match FillAuxAndColorHP: iters + 1 - log2(log2(mag)), mag = |z|.
+        float magf = sqrt((float)(zr * zr + zi * zi));
+        gSmooth[idx] = (float)iter + 1.0 - log2(log2(magf));
+    }
+}
+";
+
+    // ── #88 SA (Series-Approximation) iteration-skipping perturbation ──────────
+    //
+    // Extends BuildPerturb with an SA prelude: skip the first k iterations
+    // analytically by evaluating the 3rd-order δ-polynomial in dc, then run the
+    // identical rebased δ loop from iter=k, m=k. Mirrors the CPU SA prelude
+    // (Engine/Math/SeriesApproximation.cs + the FindSkip/EvalDelta call sites in
+    // MandelbrotCalculator) but seeds the REBASED perturbation loop rather than
+    // the DD/QD full-value loop.
+    //
+    // FindSkip runs in-shader with SQUARED magnitudes (HLSL has no double sqrt
+    // intrinsic; squaring both sides of |C|·|dc| ≤ τ·|B| is exact enough — SA
+    // correctness is robust to a ±1 difference in k because both k and k±1 are
+    // below-tolerance skip points). Coefficients A_n,B_n,C_n,D_n arrive as eight
+    // double SSBOs (t2..t9), length gRefLen+1. Correctness is speed-independent,
+    // so this validates on weak-FP64 hardware (GT710/lavapipe); the perf payoff
+    // is deferred to strong-FP64 HW (see Docs/Technical/GPU-DeepZoom-Handoff.md).
+    public static string BuildPerturbSA() => @"
+// cbuffer: 5 doubles FIRST (offsets 0/8/16/24/32) then 10 ints. 80 bytes.
+// Matches the C# PerturbSaParamsBlob byte-for-byte.
+cbuffer PerturbParams : register(b0)
+{
+    double gScale;
+    double gEscapeR2;
+    double gOffX0;
+    double gOffY0;
+    double gSaTol;      // SA truncation tolerance (CPU SaTolerance = 1e-3)
+    int    gWidth;
+    int    gHeight;
+    int    gMaxIter;
+    int    gRefLen;
+    int    gRowBase;
+    int    gSafeMax;    // SeriesApproximation.SafeMax — max valid coeff index
+    int    gPad0;
+    int    gPad1;
+    int    gPad2;
+    int    gPad3;
+}
+
+StructuredBuffer<double> gRefZr : register(t0);
+StructuredBuffer<double> gRefZi : register(t1);
+// SA coefficients (complex): A linear, B quadratic, C cubic, D quartic-bound.
+StructuredBuffer<double> gAR : register(t2);
+StructuredBuffer<double> gAI : register(t3);
+StructuredBuffer<double> gBR : register(t4);
+StructuredBuffer<double> gBI : register(t5);
+StructuredBuffer<double> gCR : register(t6);
+StructuredBuffer<double> gCI : register(t7);
+StructuredBuffer<double> gDR : register(t8);
+StructuredBuffer<double> gDI : register(t9);
+
+RWStructuredBuffer<uint>   gIter    : register(u0);
+RWStructuredBuffer<float>  gSmooth  : register(u1);
+RWStructuredBuffer<float4> gFinalZD : register(u2);
+
+[numthreads(8, 8, 1)]
+void CSPerturbSA(uint3 tid : SV_DispatchThreadID)
+{
+    int px = (int)tid.x;
+    int py = gRowBase + (int)tid.y;
+    if (px >= gWidth || py >= gHeight) return;
+    int idx = py * gWidth + px;
+
+    double dcR = (gOffX0 + (double)px) * gScale;
+    double dcI = (gOffY0 + (double)py) * gScale;
+
+    double dr = 0.0, di = 0.0;      // δ_0 = 0
+    double drv = 1.0, div = 0.0;    // dz/dc (IQ convention)
+    int m = 0;                      // reference-orbit index
+    int iterStart = 0;              // SA skip target
+    double zr = 0.0, zi = 0.0;
+
+    // ── SA FindSkip (squared-magnitude binary search, mirrors CPU FindSkip) ──
+    double dcMag2 = dcR * dcR + dcI * dcI;
+    int hi = min(gSafeMax, gMaxIter - 1);
+    int k = 0;
+    if (dcMag2 == 0.0)
+    {
+        k = hi;                     // centre pixel — full skip is safe
+    }
+    else if (hi > 0)
+    {
+        double tol2 = gSaTol * gSaTol;
+        int lo = 0, best = 0;
+        [loop]
+        while (lo <= hi)
+        {
+            int mid = (lo + hi) >> 1;
+            double Bm2 = gBR[mid] * gBR[mid] + gBI[mid] * gBI[mid];
+            double Cm2 = gCR[mid] * gCR[mid] + gCI[mid] * gCI[mid];
+            double Dm2 = gDR[mid] * gDR[mid] + gDI[mid] * gDI[mid];
+            bool cubicOk  = Cm2 * dcMag2 <= tol2 * Bm2;   // (|C|·|dc|)² ≤ (τ·|B|)²
+            bool quarticOk = Dm2 * dcMag2 <= tol2 * Cm2;  // (|D|·|dc|)² ≤ (τ·|C|)²
+            if (cubicOk && quarticOk) { best = mid; lo = mid + 1; }
+            else                      { hi = mid - 1; }
+        }
+        k = best;
+    }
+
+    // Apply the skip only when it clears the CPU guard (k ≥ 16, k ≤ refLen).
+    if (k >= 16 && k <= gRefLen)
+    {
+        // EvalDelta(k): δ_k = A_k·dc + B_k·dc² + C_k·dc³.
+        double dc2R = dcR * dcR - dcI * dcI;
+        double dc2I = 2.0 * dcR * dcI;
+        double dc3R = dc2R * dcR - dc2I * dcI;
+        double dc3I = dc2R * dcI + dc2I * dcR;
+        double aR = gAR[k] * dcR - gAI[k] * dcI;
+        double aI = gAR[k] * dcI + gAI[k] * dcR;
+        double bR = gBR[k] * dc2R - gBI[k] * dc2I;
+        double bI = gBR[k] * dc2I + gBI[k] * dc2R;
+        double cR = gCR[k] * dc3R - gCI[k] * dc3I;
+        double cI = gCR[k] * dc3I + gCI[k] * dc3R;
+        dr = aR + bR + cR;
+        di = aI + bI + cI;
+
+        // EvalDDelta(k): dδ_k/dc = A_k + 2·B_k·dc + 3·C_k·dc² — derivative seed.
+        double twoBR = 2.0 * (gBR[k] * dcR - gBI[k] * dcI);
+        double twoBI = 2.0 * (gBR[k] * dcI + gBI[k] * dcR);
+        double threeCR = 3.0 * (gCR[k] * dc2R - gCI[k] * dc2I);
+        double threeCI = 3.0 * (gCR[k] * dc2I + gCI[k] * dc2R);
+        drv = gAR[k] + twoBR + threeCR;
+        div = gAI[k] + twoBI + threeCI;
+
+        m = k;
+        iterStart = k;
+    }
+
+    // ── Identical rebased δ loop as BuildPerturb, resumed from iterStart/m=k ──
+    int iter;
+    [loop]
+    for (iter = iterStart; iter < gMaxIter; iter++)
+    {
+        double Zr = gRefZr[m];
+        double Zi = gRefZi[m];
+        zr = Zr + dr;
+        zi = Zi + di;
+
+        double zmag2 = zr * zr + zi * zi;
+        if (zmag2 >= gEscapeR2) break;
+
+        double ndrv = 2.0 * (zr * drv - zi * div) + 1.0;
+        double ndiv = 2.0 * (zr * div + zi * drv);
+        drv = ndrv; div = ndiv;
+
+        double dmag2 = dr * dr + di * di;
+        if (zmag2 < dmag2 || m + 1 >= gRefLen)
+        {
+            dr = zr; di = zi;
+            Zr = 0.0; Zi = 0.0;
+            m = 0;
+        }
+
+        double a = 2.0 * Zr + dr;
+        double b = 2.0 * Zi + di;
+        double ndr = a * dr - b * di + dcR;
+        double ndi = a * di + b * dr + dcI;
+        dr = ndr; di = ndi;
+        m++;
+    }
+
+    gFinalZD[idx] = float4((float)zr, (float)zi, (float)drv, (float)div);
+    if (iter >= gMaxIter)
+    {
+        gIter[idx]   = (uint)gMaxIter;
+        gSmooth[idx] = 0.0;
+    }
+    else
+    {
+        gIter[idx] = (uint)iter;
         float magf = sqrt((float)(zr * zr + zi * zi));
         gSmooth[idx] = (float)iter + 1.0 - log2(log2(magf));
     }
