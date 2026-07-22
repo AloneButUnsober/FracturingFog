@@ -326,7 +326,15 @@ namespace FracturingFog.Rendering
             // opened. Empty/null = leave the current label alone (manual-coord
             // zoom or reverse from a free-form view).
             if (!string.IsNullOrEmpty(request.TargetRegionName))
+            {
                 RegionName = request.TargetRegionName;
+                // Load the target region's fractal type + per-engine params +
+                // equation so a single-shot zoom renders that region's fractal,
+                // not whatever happened to be live. Without this, picking (say)
+                // a Sandbox region zoomed the current fractal into the region's
+                // coordinates and the region's equation was never loaded.
+                LoadTargetRegionForVideo(request.TargetRegionName);
+            }
 
             // Capture recorder intent here (UI thread) but defer the actual
             // Media Foundation / PNG writer creation to the background loop
@@ -1379,6 +1387,81 @@ namespace FracturingFog.Rendering
                 _perRowMaxIterPool[y] = bandCap[b];
             }
             return _perRowMaxIterPool;
+        }
+
+        // Resolve a single-shot video target region by name and load its
+        // fractal type, source-compiled equation (Sandbox / UserEquation /
+        // UserBulb), per-family 2D params, and 3D camera baseline onto the
+        // shared ViewState so the zoom renders the region's fractal. Mirrors
+        // the equation half of HostColorThemeService.LoadRegionFractalParams
+        // and SceneVideoRenderer.LoadRegionParams; compiles into the same alt
+        // calculators the video loop dispatches to (SelectAltCalculator). No-op
+        // when the name doesn't resolve. Runs on the UI thread before the loop.
+        private void LoadTargetRegionForVideo(string regionName)
+        {
+            var region = FractalRegionLibrary.Instance.FindByName(regionName);
+            if (region == null) return;
+
+            ViewState.FractalType = region.FractalType;
+            var p = ViewState.FractalParameters;
+            if (p == null) return;
+
+            if (region.FractalType == FractalType.UserEquation
+                && !string.IsNullOrWhiteSpace(region.UserEquationName))
+            {
+                var entry = UserEquationStore.Instance.GetByName(region.UserEquationName);
+                if (entry != null)
+                {
+                    p.UserEquationSource = entry.Source;
+                    p.UserEquationName = entry.Name;
+                    CompileUserEquation(entry.Source);
+                }
+            }
+            else if (region.FractalType == FractalType.Sandbox
+                && !string.IsNullOrWhiteSpace(region.SandboxName))
+            {
+                var entry = SandboxEquationStore.Instance.GetByName(region.SandboxName);
+                if (entry != null)
+                {
+                    p.SandboxSource = entry.Source;
+                    p.SandboxName = entry.Name;
+                    CompileSandbox(entry.Source);
+                }
+            }
+            else if (region.FractalType == FractalType.UserBulb)
+            {
+                string? source = null;
+                var entry = !string.IsNullOrWhiteSpace(region.UserBulbName)
+                    ? UserBulbStore.Instance.GetByName(region.UserBulbName)
+                    : null;
+                if (entry != null)
+                {
+                    source = entry.Source;
+                    p.UserBulbSource = entry.Source;
+                    p.UserBulbName = entry.Name;
+                }
+                else if (!string.IsNullOrWhiteSpace(region.UserBulbSource))
+                {
+                    source = region.UserBulbSource;
+                    p.UserBulbSource = region.UserBulbSource;
+                    p.UserBulbName = region.UserBulbName;
+                }
+                if (region.UserBulbCameraDistance > 0)
+                {
+                    p.UserBulbCameraDistance = region.UserBulbCameraDistance;
+                    p.UserBulbCameraTheta = region.UserBulbCameraTheta;
+                    p.UserBulbCameraPhi = region.UserBulbCameraPhi;
+                    p.UserBulbLightTheta = region.UserBulbLightTheta;
+                    p.UserBulbLightPhi = region.UserBulbLightPhi;
+                }
+                if (!string.IsNullOrWhiteSpace(source))
+                    CompileUserBulb(source);
+            }
+
+            // P1 (#91) — overlay the snapshotted 2D per-family params (Julia
+            // constant, Newton exponent, Apollonian knobs, …). No-op for
+            // Mandelbrot + legacy regions (null Params).
+            region.Params?.ApplyTo(p);
         }
 
         private void ApplyVideoFrameState(QDCoord cx, QDCoord cy, double zoom)
