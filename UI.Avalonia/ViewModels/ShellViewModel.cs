@@ -2704,6 +2704,13 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
             IncludedAnimations = config.IncludedAnimations,
             FilterAnimations = config.FilterAnimations,
             RandomizeAnimationsByFractalType = config.RandomizeAnimationsByFractalType,
+            // Region / theme restrictions — without these the video slideshow
+            // cycled the whole library, ignoring a preset that pinned one
+            // region + one theme (#45).
+            IncludedRegions = config.IncludedRegions,
+            IncludedColorThemes = config.IncludedColorThemes,
+            FilterFractalTypes = config.FilterFractalTypes,
+            FilterQualityPresets = config.FilterQualityPresets,
         };
 
         _video.VideoSweepConfig = config.AdaptiveSweep;

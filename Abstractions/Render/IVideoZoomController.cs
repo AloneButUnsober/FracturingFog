@@ -153,6 +153,28 @@ namespace FracturingFog.Render
         /// <summary>Ignore each region's attached animation and draw a random
         /// type-compatible library animation instead.</summary>
         public bool RandomizeAnimationsByFractalType { get; set; }
+
+        // ── Region / theme restrictions (video slideshow) ─────────────────
+        // Mirror the image slideshow's include/filter sets so a saved Video
+        // preset that pins one region + one theme actually plays just that,
+        // instead of the engine cycling the whole library (#45). Null/empty =
+        // no restriction (full pool). A restriction that matches zero regions
+        // is authoritative — the slideshow reports empty rather than falling
+        // back to the unfiltered universe.
+
+        /// <summary>Whitelist of region names (null/empty = all eligible).</summary>
+        public System.Collections.Generic.IReadOnlyList<string>? IncludedRegions { get; set; }
+
+        /// <summary>Whitelist of colour-theme names (null/empty = all).</summary>
+        public System.Collections.Generic.IReadOnlyList<string>? IncludedColorThemes { get; set; }
+
+        /// <summary>Fractal-type filter by enum name (null/empty = no filter).
+        /// The video pool is Mandelbrot-only, so this only ever narrows to
+        /// nothing when Mandelbrot is excluded.</summary>
+        public System.Collections.Generic.IReadOnlyList<string>? FilterFractalTypes { get; set; }
+
+        /// <summary>Quality-preset filter by name (null/empty = no filter).</summary>
+        public System.Collections.Generic.IReadOnlyList<string>? FilterQualityPresets { get; set; }
     }
 
     /// <summary>Outcome of a single-shot recording, raised once the zoom ends
