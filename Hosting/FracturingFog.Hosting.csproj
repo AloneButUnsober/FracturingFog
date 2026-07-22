@@ -57,6 +57,10 @@
       Silk.NET OpenGL backend it wires into RendererFactory.NonWin32Backend.
     -->
     <ProjectReference Include="..\Rendering.Silk\FracturingFog.Rendering.Silk.csproj" />
+    <!-- V3-GUI (#57): cross-platform Vulkan compute backend. Present stays Silk
+         GL; this ref lets the bootstrap attach VulkanComputeKernel to the
+         calculator when the Vulkan renderer is selected. -->
+    <ProjectReference Include="..\Rendering.Vulkan\FracturingFog.Rendering.Vulkan.csproj" />
   </ItemGroup>
 
   <!--

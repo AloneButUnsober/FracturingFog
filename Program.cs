@@ -1551,7 +1551,7 @@ static class Program
                         ColorMap = new FracturingFog.Models.HsvPalette(),
                     } : null;
 
-                    int[]? prev = null; long sum = 0, worst = 0; int cnt = 0; int misses = 0;
+                    int[]? prev = null; long sum = 0, worst = 0; int cnt = 0;
                     for (int k = 0; k < frames; k++)
                     {
                         var c = MakeAt(k, step, recycle, reuseCalc);
@@ -1698,16 +1698,17 @@ static class Program
             string val = args[i + 1];
             RendererBackend? backend = val.ToLowerInvariant() switch
             {
-                "auto" => RendererBackend.Auto,
-                "dx"   => RendererBackend.Dx,
-                "silk" => RendererBackend.Silk,
-                "skia" => RendererBackend.Skia,
-                _      => null,
+                "auto"   => RendererBackend.Auto,
+                "dx"     => RendererBackend.Dx,
+                "silk"   => RendererBackend.Silk,
+                "skia"   => RendererBackend.Skia,
+                "vulkan" => RendererBackend.Vulkan,
+                _        => null,
             };
             if (backend == null)
             {
                 Console.Error.WriteLine(
-                    $"--renderer expects one of: auto | dx | silk | skia (got '{val}').");
+                    $"--renderer expects one of: auto | dx | silk | skia | vulkan (got '{val}').");
                 return 2;
             }
             RendererFactory.PreferredBackend = backend.Value;

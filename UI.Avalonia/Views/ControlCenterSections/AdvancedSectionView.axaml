@@ -18,6 +18,15 @@
 
         <Border Classes="group">
             <StackPanel Spacing="6">
+                <TextBlock Classes="section" Text="GPU / Performance" />
+                <CheckBox Content="GPU compute"
+                          IsChecked="{Binding Menu.UseGpuCompute, Mode=TwoWay}"
+                          ToolTip.Tip="Ctrl+G — run the shallow Mandelbrot pass on the GPU (D3D11). Clears itself if the backend can't engage. Deep-zoom stays on the CPU." />
+            </StackPanel>
+        </Border>
+
+        <Border Classes="group">
+            <StackPanel Spacing="6">
                 <TextBlock Classes="section" Text="System" />
                 <Button Classes="action slideshow" Content="App Settings…"     Command="{Binding Menu.AppSettingsCommand}"     HorizontalAlignment="Stretch" ToolTip.Tip="Application settings" />
                 <Button Classes="action video"     Content="FFmpeg…"           Command="{Binding Menu.FfmpegSetupCommand}"     HorizontalAlignment="Stretch" ToolTip.Tip="Install, update, or skip the FFmpeg video encoder" />

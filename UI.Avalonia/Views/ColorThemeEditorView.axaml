@@ -3,6 +3,7 @@
         xmlns:vm="using:FracturingFog.UI.Avalonia.ViewModels"
         xmlns:m="using:FracturingFog.Models"
         xmlns:cp="using:Avalonia.Controls"
+        xmlns:views="using:FracturingFog.UI.Avalonia.Views"
         x:Class="FracturingFog.UI.Avalonia.Views.ColorThemeEditorView"
         x:DataType="vm:ColorThemeEditorViewModel"
         Foreground="#DCDCDC">
@@ -361,6 +362,13 @@
                                           Margin="0,4,0,0"
                                           ToolTip.Tip="Single-click the rendered fractal to highlight the light whose diffuse color best matches the sampled pixel." />
                             </Grid>
+
+                            <!-- Directional light compass (issue #84 companion):
+                                 live top-down view of the Key/Fill/Rim rig. -->
+                            <views:LightCompassControl Source="{Binding}"
+                                    Width="150" Height="150"
+                                    HorizontalAlignment="Left" Margin="0,8,0,0"
+                                    ToolTip.Tip="Top-down light compass. Each line points to where a light sits — K=key, F=fill, R=rim, coloured by its diffuse. Screen up = +Z, right = +X; a near-vertical light collapses toward the centre." />
 
                             <!-- Key Light -->
                             <Border DataContext="{Binding KeyLight}"

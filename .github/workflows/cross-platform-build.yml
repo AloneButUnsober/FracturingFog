@@ -328,3 +328,66 @@ jobs:
 
       - name: Run Compute smoke
         run: dotnet run --project Compute.Smoke/FracturingFog.Compute.Smoke.csproj -c Release -r ${{ matrix.rid }} --no-build
+
+      # ── Vulkan compute smoke (V0 spike, issue #39) ───────────────────────
+      # Headless HLSL->SPIR-V compute proof. Builds on every leg to catch RID
+      # / native-resolution issues; runs only on the linux-x64 xvfb leg, where
+      # Mesa lavapipe supplies a *software* Vulkan ICD so no GPU-in-CI is
+      # needed. DXC (runtime HLSL->SPIR-V JIT — the O2 answer) comes from the
+      # LunarG Vulkan SDK apt package. Wayland leg is skipped (it is a GL/EGL
+      # concern; Vulkan needs no display server).
+      # !cancelled() so the Vulkan gate still runs even though an earlier,
+      # unrelated matrix step (Build FracturingFog.App) currently fails on the
+      # Linux/macOS legs — App transitively pulls the Windows-only
+      # FracturingFog.Win (WinForms) and trips NETSDK1073. That is a
+      # pre-existing red on main, tracked separately; it must not mask this
+      # spike's own signal.
+      - name: Build Vulkan smoke CLI
+        if: ${{ !cancelled() }}
+        run: dotnet build Rendering.Vulkan.Smoke/FracturingFog.Rendering.Vulkan.Smoke.csproj -c Release -r ${{ matrix.rid }} --self-contained false
+
+      - name: Install Vulkan loader + lavapipe + DXC (Linux / xvfb leg)
+        if: ${{ !cancelled() && matrix.os == 'ubuntu-latest' && matrix.display == 'xvfb' }}
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libvulkan1 mesa-vulkan-drivers vulkan-tools
+          # DXC (HLSL->SPIR-V) from the LunarG Vulkan SDK apt repo. Installs
+          # `dxc` onto PATH (/usr/bin/dxc); DxcCompiler resolves it via PATH.
+          CODENAME=$(lsb_release -cs)
+          wget -qO- https://packages.lunarg.com/lunarg-signing-key-pub.asc \
+            | sudo tee /etc/apt/trusted.gpg.d/lunarg.asc >/dev/null
+          sudo wget -qO /etc/apt/sources.list.d/lunarg-vulkan-${CODENAME}.list \
+            https://packages.lunarg.com/vulkan/lunarg-vulkan-${CODENAME}.list
+          sudo apt-get update
+          sudo apt-get install -y vulkan-sdk
+          # Diagnostics: show where the lavapipe ICD manifest actually landed.
+          echo "=== installed Vulkan ICD manifests ==="
+          ls -la /usr/share/vulkan/icd.d/ 2>/dev/null || true
+          dpkg -L mesa-vulkan-drivers 2>/dev/null | grep -iE 'icd|json' || true
+
+      - name: Run Vulkan smoke (Linux / lavapipe)
+        if: ${{ !cancelled() && matrix.os == 'ubuntu-latest' && matrix.display == 'xvfb' }}
+        run: |
+          which dxc && dxc --version || true
+          # Point the loader at the lavapipe (software) ICD so the leg never
+          # depends on a real GPU. Detect the manifest wherever mesa installed
+          # it; if not found, fall back to default ICD discovery — CI has no
+          # real GPU, so lavapipe is the only driver anyway.
+          LVP=$(find /usr/share/vulkan/icd.d /etc/vulkan/icd.d -name 'lvp_icd*.json' 2>/dev/null | head -1)
+          echo "lavapipe ICD: ${LVP:-<not found — using default discovery>}"
+          if [ -n "$LVP" ]; then export VK_ICD_FILENAMES="$LVP"; fi
+          vulkaninfo --summary || true
+          # V0 trivial-kernel smoke.
+          dotnet run --project Rendering.Vulkan.Smoke/FracturingFog.Rendering.Vulkan.Smoke.csproj -c Release -r ${{ matrix.rid }} --no-build
+          # V1 (#40): real Mandelbrot base kernel — iter/smooth parity vs the C#
+          # reference within the documented ULP/boundary band (lavapipe here is
+          # the cross-impl check against the same source FXC compiles on Windows).
+          dotnet run --project Rendering.Vulkan.Smoke/FracturingFog.Rendering.Vulkan.Smoke.csproj -c Release -r ${{ matrix.rid }} --no-build -- --vulkanprobe
+          # V2 (#41): colour-emitting kernel — EvalPalette + packed BGRA parity
+          # vs the deterministic CPU mirror (embedded golden digest + disagree
+          # band). Same cross-impl check on lavapipe, now over the colour path.
+          dotnet run --project Rendering.Vulkan.Smoke/FracturingFog.Rendering.Vulkan.Smoke.csproj -c Release -r ${{ matrix.rid }} --no-build -- --colorprobe
+          # V3 (#42): drive the REAL VulkanComputeKernel (IGpuKernel) the way the
+          # calculator does — SetPalette + Run — and check colour/base parity,
+          # buffer persistence (repeat Run byte-identical), and a resize realloc.
+          dotnet run --project Rendering.Vulkan.Smoke/FracturingFog.Rendering.Vulkan.Smoke.csproj -c Release -r ${{ matrix.rid }} --no-build -- --vulkanrenderprobe

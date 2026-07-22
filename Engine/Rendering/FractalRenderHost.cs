@@ -99,6 +99,14 @@ namespace FracturingFog.Rendering
         private CancellationTokenSource? _calcCts;
         private readonly object _calcLock = new();
 
+        // #85 — drain latch. Signaled (idle) whenever the calc thread is NOT
+        // inside a job's write region; reset (busy) for the duration of
+        // RunFrameJobCalc. Resize cancels the in-flight calc's token then
+        // waits on this before swapping the calculator's buffer arrays, so an
+        // in-flight Calculate can never index a freshly-swapped smaller array
+        // out of range. Only the single dedicated calc thread touches it.
+        private readonly ManualResetEventSlim _calcIdle = new(initialState: true);
+
         // Serialises every call into the D3D11 ImmediateContext. The
         // immediate context is NOT thread-safe; before this lock landed,
         // resize on the UI thread could overlap with UpdateTexture from a
@@ -147,6 +155,17 @@ namespace FracturingFog.Rendering
         private uint[]? _lastPresentedBuffer;
         private int _lastPresentedWidth;
         private int _lastPresentedHeight;
+        // #86 — newest-wins present ordering. Progressive stages (¼→½→full) and
+        // TAA samples queue their uploads onto the threadpool, where _uploadGate
+        // serialises them but does NOT preserve submission order. A fast frame
+        // (deep zoom on the GPU finishes the final stage in a blink) can present
+        // before a lagging preview upload from the same trigger, so the stale
+        // preview then paints over the correct final — the deep-region "stale
+        // image, but Save is correct" bug. Fix: every FrameJob gets a monotonic
+        // Seq at construction (construction order == present priority); a present
+        // is dropped when a newer Seq already reached the screen.
+        private long _uploadSeq;
+        private long _lastPresentedUploadSeq = -1;
         // Pinned scratch for the progressive ¼/½ preview snapshot above.
         // Grown lazily — typical sizes are 480x270 (¼) and 960x540 (½) at
         // 1080p, so ~0.5 MB / 2 MB respectively. Pinned (POH) so the GPU
@@ -281,15 +300,21 @@ namespace FracturingFog.Rendering
             // When non-final the calc runs on a sidecar preview calc; the
             // upload tail schedules the next stage (4 → 2 → 0).
             public readonly int ProgressiveStage;
+            // #86 — monotonic present-priority id. Assigned at construction, so
+            // a job built later (a newer trigger, or a later progressive/TAA
+            // stage of the same trigger) always outranks an earlier one.
+            public readonly long Seq;
 
             public FrameJob(CancellationToken token, MandelbrotCalculator calc,
                 IFractalCalculator? altCalc, Stopwatch sw,
                 uint[]? staleBuf, int staleW, int staleH, int calcW, int calcH,
+                long seq,
                 int taaSampleIndex = 0, int progressiveStage = 0)
             {
                 Token = token; Calc = calc; AltCalc = altCalc; Sw = sw;
                 StaleBuf = staleBuf; StaleW = staleW; StaleH = staleH;
                 CalcW = calcW; CalcH = calcH;
+                Seq = seq;
                 TaaSampleIndex = taaSampleIndex;
                 ProgressiveStage = progressiveStage;
             }
@@ -306,6 +331,56 @@ namespace FracturingFog.Rendering
 
         private static readonly Action<UploadCtx> s_uploadCallback =
             static ctx => ctx.Host.RunFrameJobUpload(ctx.Job, ctx.Ms);
+
+        // #86 — newest-wins present gate. MUST be called while holding
+        // _uploadGate. Returns false when a frame with a higher Seq has already
+        // presented, meaning this upload is stale and must be dropped so it
+        // cannot paint over the newer frame. Equal Seq passes (the same job's
+        // stale-hold upload and its final upload share a Seq and should both
+        // present, in execution order).
+        private bool TryClaimPresent(long seq)
+        {
+            if (seq < _lastPresentedUploadSeq) return false;
+            _lastPresentedUploadSeq = seq;
+            return true;
+        }
+
+        // #86 diagnostic — opt-in via FF_GPU_PERTURB_DEBUG=1. Traces the present
+        // path (trigger → stale-hold → progressive preview → final) so a single
+        // A/B run on a live D3D box reveals whether the deep GPU final frame is
+        // computed, queued, presented, or dropped by the newest-wins gate.
+        //
+        // Writes to a FILE, not Console.Error: the Windows shell (WinExe) has no
+        // attached console, so stderr is swallowed there. Path is reported once
+        // at startup (also to the debugger's Debug output, which IS visible).
+        private static readonly bool s_dbg86 =
+            Environment.GetEnvironmentVariable("FF_GPU_PERTURB_DEBUG") is "1" or "true" or "yes" or "on";
+        private static readonly string s_dbg86Path =
+            System.IO.Path.Combine(System.IO.Path.GetTempPath(), "ff_gpu_perturb_86.log");
+        private static readonly object s_dbg86Gate = new();
+        private static bool s_dbg86Announced;
+        private static void Dbg86(string msg)
+        {
+            if (!s_dbg86) return;
+            try
+            {
+                lock (s_dbg86Gate)
+                {
+                    if (!s_dbg86Announced)
+                    {
+                        s_dbg86Announced = true;
+                        string banner = $"[#86] log opened {DateTime.Now:HH:mm:ss} -> {s_dbg86Path}";
+                        Console.Error.WriteLine(banner);
+                        System.Diagnostics.Debug.WriteLine(banner);
+                        System.IO.File.AppendAllText(s_dbg86Path,
+                            $"==== #86 trace {DateTime.Now:yyyy-MM-dd HH:mm:ss} ===={Environment.NewLine}");
+                    }
+                    System.IO.File.AppendAllText(s_dbg86Path,
+                        $"{DateTime.Now:HH:mm:ss.fff} [#86] {msg}{Environment.NewLine}");
+                }
+            }
+            catch { /* diagnostic must never break the render path */ }
+        }
 
         public FractalRenderHost(IFractalRenderer renderer, FractalViewState state, int width, int height, IColorMap initialColorMap)
         {
@@ -1075,9 +1150,13 @@ namespace FracturingFog.Rendering
             // Drain any queued-but-unstarted job first so a burst of Triggers
             // (wheel zoom, key-repeat) collapses to the freshest job before
             // the calc thread can pick a stale one up.
+            long seq0 = System.Threading.Interlocked.Increment(ref _uploadSeq);
             var job = new FrameJob(token, calc, useAlt ? altCalc : null, sw,
                 staleBuf, staleW, staleH, calcW, calcH,
+                seq: seq0,
                 taaSampleIndex: 0, progressiveStage: progressiveStage);
+            Dbg86($"TRIGGER seq={seq0} progressive={progressive} stage={progressiveStage} " +
+                  $"zoom={ViewState.Zoom:0e+0} staleBuf={(staleBuf != null ? $"{staleW}x{staleH}" : "none")}");
             while (_calcQueue.TryTake(out _)) { }
             try { _calcQueue.Add(job); }
             catch (InvalidOperationException) { /* CompleteAdding during Dispose */ }
@@ -1094,11 +1173,15 @@ namespace FracturingFog.Rendering
             {
                 foreach (var job in _calcQueue.GetConsumingEnumerable())
                 {
+                    // #85 — mark busy for the whole write region so a
+                    // concurrent Resize drains (waits) before swapping arrays.
+                    _calcIdle.Reset();
                     try { RunFrameJobCalc(in job); }
                     catch (OperationCanceledException) { }
                     catch { /* swallow — token-driven cancellation is the only
                               expected failure mode; surface anything else via
                               the calc's own error path if it has one. */ }
+                    finally { _calcIdle.Set(); }
                 }
             }
             catch (OperationCanceledException) { }
@@ -1223,6 +1306,11 @@ namespace FracturingFog.Rendering
             {
                 lock (_uploadGate)
                 {
+                    // #86 — drop the stale-hold present if a newer frame already
+                    // reached the screen, so this old buffer can't clobber it.
+                    bool claimed = TryClaimPresent(job.Seq);
+                    Dbg86($"STALE-HOLD seq={job.Seq} claimed={claimed} lastSeq={_lastPresentedUploadSeq} {job.StaleW}x{job.StaleH}");
+                    if (claimed)
                     lock (_d3dGate)
                     {
                         _renderer.UpdateTexture(job.StaleBuf, job.StaleW, job.StaleH);
@@ -1644,6 +1732,7 @@ namespace FracturingFog.Rendering
                 job.Token, calc, altCalc: null, sw: Stopwatch.StartNew(),
                 staleBuf: null, staleW: 0, staleH: 0,
                 calcW: calc.Width, calcH: calc.Height,
+                seq: System.Threading.Interlocked.Increment(ref _uploadSeq),
                 taaSampleIndex: _taaSampleCount);
             try { _calcQueue.Add(nextJob); }
             catch (InvalidOperationException) { /* CompleteAdding during Dispose */ }
@@ -1713,6 +1802,13 @@ namespace FracturingFog.Rendering
                     : _previewCalcHalf;
                 lock (_uploadGate)
                 {
+                    // #86 — a later stage / newer trigger that already presented
+                    // outranks this preview; drop it so it can't paint a stale,
+                    // lower-res image over the newer frame.
+                    bool claimedP = TryClaimPresent(job.Seq);
+                    Dbg86($"PREVIEW  seq={job.Seq} stage={job.ProgressiveStage} claimed={claimedP} lastSeq={_lastPresentedUploadSeq} {preview.Width}x{preview.Height}");
+                    if (claimedP)
+                    {
                     lock (_d3dGate)
                     {
                         _renderer.UpdateTexture(preview.ColorBuffer, preview.Width, preview.Height);
@@ -1736,6 +1832,7 @@ namespace FracturingFog.Rendering
                         _lastPresentedWidth = pw;
                         _lastPresentedHeight = ph;
                     }
+                    }
                 }
                 AnimationFrameUploaded?.Invoke(this, EventArgs.Empty);
 
@@ -1744,6 +1841,7 @@ namespace FracturingFog.Rendering
                     job.Token, calc, altCalc: null, sw: job.Sw,
                     staleBuf: null, staleW: 0, staleH: 0,
                     calcW: job.CalcW, calcH: job.CalcH,
+                    seq: System.Threading.Interlocked.Increment(ref _uploadSeq),
                     taaSampleIndex: 0, progressiveStage: nextStage);
                 try { _calcQueue.Add(nextJob); }
                 catch (InvalidOperationException) { /* shutdown */ }
@@ -1765,6 +1863,7 @@ namespace FracturingFog.Rendering
                     // bar consumer drops the "Calculating…" set at Trigger
                     // entry. Without this, a cancelled deep-Extreme frame
                     // leaves the status string stuck indefinitely.
+                    Dbg86($"FINAL-CANCELLED seq={job.Seq} (token cancelled before present)");
                     AnimationFrameUploaded?.Invoke(this, EventArgs.Empty);
                     RenderCancelled?.Invoke(this, EventArgs.Empty);
                     return;
@@ -1797,10 +1896,23 @@ namespace FracturingFog.Rendering
                     }
                 }
 
-                if (useAlt)
-                    UploadProcessedBuffer(altCalc!.ColorBuffer, altCalc.Width, altCalc.Height);
-                else
-                    UploadProcessedBuffer(calc.ColorBuffer, calc.Width, calc.Height);
+                // #86 — newest-wins: only present this final frame if no newer
+                // frame's upload has already reached the screen. A superseded
+                // final still runs its bookkeeping below (status label, events,
+                // TAA seed) so gates never stick — it just doesn't paint.
+                lock (_uploadGate)
+                {
+                    bool claimedF = TryClaimPresent(job.Seq);
+                    Dbg86($"FINAL    seq={job.Seq} claimed={claimedF} lastSeq={_lastPresentedUploadSeq} " +
+                          $"hp={calc.IsHighPrecisionActive} gpu={calc.LastFrameUsedGpuPerturbation} {calc.Width}x{calc.Height}");
+                    if (claimedF)
+                    {
+                        if (useAlt)
+                            UploadProcessedBuffer(altCalc!.ColorBuffer, altCalc.Width, altCalc.Height);
+                        else
+                            UploadProcessedBuffer(calc.ColorBuffer, calc.Width, calc.Height);
+                    }
+                }
 
                 // Pull the richer LastPrecisionLabel from the generated calcs
                 // (PT, QD-PT, DD-HP4, etc.) so the status bar can show what
@@ -1864,6 +1976,18 @@ namespace FracturingFog.Rendering
 
         // ── Resize ────────────────────────────────────────────────────────────
 
+        // #85 — wait for the calc thread to leave its current job's write
+        // region so a caller can safely swap the calculator's buffer arrays.
+        // The caller must cancel the in-flight token FIRST; the calc then exits
+        // at its next row/stage boundary and sets _calcIdle. Bounded wait keeps
+        // a wedged calc from hanging the UI thread — on timeout we fall back to
+        // the old cancel-only (racy) behaviour, no worse than before. Runs on
+        // the UI thread holding no locks, so it cannot deadlock the calc.
+        private void DrainCalc()
+        {
+            try { _calcIdle.Wait(2000); } catch { }
+        }
+
         public void Resize(int width, int height)
         {
             if (_disposed) return;
@@ -1898,6 +2022,16 @@ namespace FracturingFog.Rendering
                 // visible immediately even before the next calc finishes.
                 _renderer.Render();
             }
+            // Cancel any in-flight calc BEFORE reallocating its buffers below —
+            // _calculator.Resize swaps IterationBuffer/aux arrays, and a calc
+            // thread mid-write (CPU rows OR the GPU-perturbation readback +
+            // FillAuxAndColorHP pass) would tear against the new arrays. The old
+            // frame is for the old dims and about to be superseded anyway, so
+            // cancelling it is strictly correct. Cooperative cancellation
+            // narrows the window; DrainCalc then closes it by waiting for the
+            // calc thread to actually leave its write region before the swap.
+            lock (_calcLock) _calcCts?.Cancel();
+            DrainCalc();
             _calculator.Resize(w, h);
             // Wave 2.5 — keep progressive sidecars in sync with main surface.
             int qw = Math.Max(64, w / 4); int qh = Math.Max(64, h / 4);
@@ -2656,6 +2790,14 @@ namespace FracturingFog.Rendering
                     {
                         lbl += " (GPU)";
                     }
+                    // V6 (#82): deep-zoom GPU perturbation marker. Uses the
+                    // calculator's own per-frame latch (set only when the kernel
+                    // dispatch actually succeeded, cleared on CPU fallback) so
+                    // "DD (GPU)" appears iff the deep frame really ran on the GPU.
+                    else if (_calculator.LastFrameUsedGpuPerturbation)
+                    {
+                        lbl += " (GPU)";
+                    }
                     var (ctxLines, warnLine) = BuildRenderContextOverlay();
                     _overlay.CompositePerfHud(dst, w, h,
                         snap, HardwareProbe.Summary,
@@ -3099,6 +3241,8 @@ namespace FracturingFog.Rendering
             try { _calcQueue.CompleteAdding(); } catch { }
             try { _calcThread?.Join(2000); } catch { }
             try { _calcQueue.Dispose(); } catch { }
+            // #85 — safe now that the calc thread has joined (no more Reset/Set).
+            try { _calcIdle.Dispose(); } catch { }
 
             // T3.1: dispose the GPU compute kernel before the renderer so its
             // UAV / staging / cbuffer / CS releases hit the device first.

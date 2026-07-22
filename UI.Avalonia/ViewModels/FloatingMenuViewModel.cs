@@ -958,6 +958,33 @@ public sealed class FloatingMenuViewModel : ViewModelBase
         }
     }
 
+    // GPU compute (shallow FP32 Mandelbrot path) on/off. Mirrors Ctrl+G.
+    // Checked = attempt GPU compute; the shell writes the host's *actual*
+    // state back via SetGpuComputeState so the box clears when the backend
+    // can't engage (non-D3D11 present, no GPU kernel) — matching the
+    // "didn't engage" reflection MainViewModel.UseGpuCompute already does.
+    private bool _useGpuCompute;
+    public bool UseGpuCompute
+    {
+        get => _useGpuCompute;
+        set
+        {
+            this.RaiseAndSetIfChanged(ref _useGpuCompute, value);
+            UseGpuComputeToggled?.Invoke(this, value);
+        }
+    }
+
+    /// <summary>Push the host's actual GPU-compute state onto the checkbox
+    /// without re-firing <see cref="UseGpuComputeToggled"/>. Called by the
+    /// shell after a toggle (read-back), on startup (initial sync), and from
+    /// the Ctrl+G key path so the box and the hotkey stay in lock-step.</summary>
+    public void SetGpuComputeState(bool actual)
+    {
+        if (_useGpuCompute == actual) return;
+        _useGpuCompute = actual;
+        this.RaisePropertyChanged(nameof(UseGpuCompute));
+    }
+
     // ── Commands ──────────────────────────────────────────────────────────
 
     public ReactiveCommand<Unit, Unit> ResetCommand { get; }
@@ -1070,6 +1097,7 @@ public sealed class FloatingMenuViewModel : ViewModelBase
     public event EventHandler<bool>? BypassSeriesApproximationToggled;
     public event EventHandler<bool>? BypassDdBlaToggled;
     public event EventHandler<bool>? BypassRebasingToggled;
+    public event EventHandler<bool>? UseGpuComputeToggled;
 
     public event EventHandler<IterLockEventArgs>? IterLockChanged;
 }

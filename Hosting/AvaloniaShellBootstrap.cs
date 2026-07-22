@@ -49,6 +49,7 @@ using FracturingFog.Models;
 using FracturingFog.Render;
 using FracturingFog.Rendering;
 using FracturingFog.Rendering.Silk;
+using FracturingFog.Rendering.Vulkan;   // V3-GUI (#57): VulkanComputeKernel
 using FracturingFog.Rendering.Silk.Platform;
 using FracturingFog.UI.Avalonia.ViewModels;
 using FracturingFog.UI.Avalonia.Views;
@@ -182,6 +183,20 @@ namespace FracturingFog.Hosting
             // caches the image internally.
             FracturingFog.Rendering.Lighting.HdriProbe.TryLoad =
                 path => FracturingFog.Rendering.Lighting.HdriRegistry.TryLoadFromFile(path, out _);
+        }
+
+        /// <summary>True when an env var is set to an affirmative value
+        /// (1/true/yes/on, case-insensitive). Used for opt-in feature gates
+        /// like FF_GPU_PERTURB (V6 #82 D3D deep-zoom perturbation).</summary>
+        private static bool IsTruthyEnv(string name)
+        {
+            string? v = Environment.GetEnvironmentVariable(name);
+            if (string.IsNullOrWhiteSpace(v)) return false;
+            v = v.Trim();
+            return v.Equals("1", StringComparison.Ordinal)
+                || v.Equals("true", StringComparison.OrdinalIgnoreCase)
+                || v.Equals("yes", StringComparison.OrdinalIgnoreCase)
+                || v.Equals("on", StringComparison.OrdinalIgnoreCase);
         }
 
         private static string? ProbeIlgpuDevices()
@@ -321,6 +336,83 @@ namespace FracturingFog.Hosting
             // On Linux/macOS the hook is null so UseGpuCompute stays off.
             if (BootstrapHooks.GpuKernelFactoryHook != null)
                 s_renderHost.GpuKernelFactory = BootstrapHooks.GpuKernelFactoryHook;
+
+            // V3-GUI (#57): --renderer vulkan attaches the cross-platform Vulkan
+            // compute kernel. It is independent of the present renderer (the Silk
+            // GL blit) — the kernel owns its own VulkanContext — so we install it
+            // here rather than downcasting the renderer like the D3D hook does.
+            // Only when Vulkan is explicitly selected AND a device exists; with no
+            // device we log and leave the factory unset, so UseGpuCompute stays
+            // off and the CPU path handles compute while GL still presents.
+            if (RendererFactory.PreferredBackend == RendererBackend.Vulkan
+                && s_renderHost.GpuKernelFactory == null)
+            {
+                string? vkDev = VulkanComputeKernel.ProbeDeviceName();
+                if (vkDev != null)
+                {
+                    s_renderHost.GpuKernelFactory = (_, _) => VulkanComputeKernel.TryCreateWithOwnContext();
+                    RendererFactory.VulkanProbeBackend = () => $"Vulkan compute ({vkDev}) + OpenGL (present)";
+                    // Default GPU compute ON for an explicit --renderer vulkan
+                    // session — the setter constructs the kernel now via the
+                    // factory. If construction returns null the host leaves it
+                    // off silently and the CPU path takes over.
+                    s_renderHost.UseGpuCompute = true;
+                    Console.Error.WriteLine($"[Vulkan] compute backend selected: {vkDev}");
+
+                    // V6 (#82) — deep-zoom GPU perturbation. Enable only when the
+                    // device advertises shaderFloat64 (the double δ kernel needs
+                    // it); otherwise deep zoom stays on the CPU. The per-frame
+                    // gate in MandelbrotCalculator also checks the live kernel's
+                    // SupportsPerturbation, so this is belt-and-braces. Off by
+                    // default everywhere else — only an explicit Vulkan session
+                    // opts in.
+                    bool fp64 = VulkanComputeKernel.ProbeSupportsFloat64();
+                    FracturingFog.MandelbrotCalculator.UseGpuPerturbation = fp64;
+                    Console.Error.WriteLine(fp64
+                        ? "[Vulkan] deep-zoom GPU perturbation ENABLED (shaderFloat64 present)."
+                        : "[Vulkan] deep-zoom GPU perturbation disabled (no shaderFloat64); deep zoom stays CPU.");
+                }
+                else
+                {
+                    Console.Error.WriteLine(
+                        "[Vulkan] --renderer vulkan requested but no Vulkan device was found; " +
+                        "falling back to CPU compute (OpenGL present unaffected).");
+                }
+            }
+            // V6 (#82) — deep-zoom GPU perturbation on the D3D (default Windows)
+            // backend. Held behind an explicit opt-in (env FF_GPU_PERTURB=1) —
+            // NOT default-on — because it changes user-facing deep-zoom
+            // rendering and wants on-device parity sign-off, the same posture as
+            // the Vulkan enable (which is gated behind explicit --renderer
+            // vulkan). When opted in AND a D3D kernel factory is present, force
+            // GPU compute on so the kernel attaches now, then flip the master
+            // perturbation toggle; the per-frame gate still checks the live
+            // kernel's SupportsPerturbation, so a device without
+            // DoublePrecisionFloatShaderOps self-disables and deep zoom stays
+            // CPU. Left off entirely when the env is unset.
+            else if (BootstrapHooks.GpuKernelFactoryHook != null
+                     && IsTruthyEnv("FF_GPU_PERTURB"))
+            {
+                // DEEP-ONLY opt-in. Toggle UseGpuCompute on then off: the `true`
+                // assignment lazily constructs + attaches the D3D kernel via the
+                // factory; the `false` leaves the kernel attached but disables
+                // the SHALLOW (zoom ≤ 1e4) GPU dispatch. We deliberately do NOT
+                // leave the shallow path on — it is a separate, user-toggled
+                // feature, and forcing it from startup put a GPU dispatch on the
+                // very first (shallow) frames, which raced window resize. Deep
+                // perturbation gates only on UseGpuPerturbation + GpuKernel +
+                // SupportsPerturbation (not UseGpuCompute), so this is all it
+                // needs. Per-frame gate still checks the device's FP64 support,
+                // so a non-FP64 D3D device self-disables and deep zoom stays CPU.
+                s_renderHost.UseGpuCompute = true;    // constructs + attaches the kernel
+                s_renderHost.UseGpuCompute = false;   // ...then disable the shallow GPU path
+                FracturingFog.MandelbrotCalculator.UseGpuPerturbation = true;
+                Console.Error.WriteLine(
+                    "[D3D] FF_GPU_PERTURB set — deep-zoom GPU perturbation opted in " +
+                    "(deep-only; shallow stays CPU). The per-frame gate checks " +
+                    "DoublePrecisionFloatShaderOps, so deep zoom stays CPU if the " +
+                    "device lacks FP64 shader ops.");
+            }
             // Phase X.2 / Slice 2.6 — per-OS video-writer selection.
             //   * Windows: WindowsBootstrap supplies a Media Foundation Mp4Writer
             //     via BootstrapHooks.NativeVideoWriterFactoryHook. Returns null when MF init
