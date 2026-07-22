@@ -433,7 +433,7 @@ namespace FracturingFog.Models
         /// <summary>Algebra mode: Vec3 (3D triplex) or Quat (4D Hamilton). Affects step signature.</summary>
         public UserBulbAxisModeKind UserBulbAxisMode { get; set; } = UserBulbAxisModeKind.Vec3;
         /// <summary>Step-function compiler. Roslyn = full C# body (default).
-        /// Sandbox = restricted DSL (no BCL, shareable, Vec3-only).</summary>
+        /// Sandbox = restricted DSL (no BCL, shareable; Vec3 + Quat, CPU + GPU).</summary>
         public UserBulbCompilerKind UserBulbCompiler { get; set; } = UserBulbCompilerKind.Roslyn;
         /// <summary>W component of 4D slice plane (Quat mode only). c.W = this value.</summary>
         public double UserBulbQuatSliceW { get; set; } = 0.0;
