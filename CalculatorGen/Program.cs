@@ -161,7 +161,7 @@ Usage:
 
 Equation grammar
   Tokens:    z   c   real-literal   + - *   ^Int   ( )
-  Notes:     '^' takes an integer exponent (0..16). Division and
+  Notes:     '^' takes an integer exponent (0..64). Division and
              transcendentals are reserved for later phases.
 
 Phase B (default)
