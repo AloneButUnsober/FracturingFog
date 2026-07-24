@@ -1815,7 +1815,8 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
         {
             var vm = new ColorThemeEditorViewModel(_themeService,
                 initialThemeName: Main.SelectedTheme,
-                initialRegionName: Main.SelectedRegion);
+                initialRegionName: Main.SelectedRegion,
+                viewParams: Main.ViewState.FractalParameters);
             // Wire editor events that affect the main view.
             // Region pick must actually move the view (mutate ViewState +
             // render), not just relabel the watermark — share the same jump
@@ -1823,6 +1824,9 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
             // the menu combo so the toolbar reflects it.
             vm.RegionRequested        += (_, name) => { JumpToRegion(name); FloatingMenu.SetRegionSilent(name); };
             vm.EditorThemeSelected    += (_, name) => Main.SetThemeName(name);
+            // Global 2D interior-alpha background edits (mode / colours / image)
+            // mutate the shared FractalParameters in place — just repaint.
+            vm.InteriorBackgroundChanged += (_, _) => Main.RenderHost.Trigger();
             vm.ThemeSavedToLibrary    += (_, _)    => { RefreshThemeListsFromService(); RefreshAssetManagerIfVisible(); };
             vm.HelpRequested          += (_, _)    => ShowHelp();
             // Preview pipe-through: ColorThemeEditor produces a ColorThemeDef,

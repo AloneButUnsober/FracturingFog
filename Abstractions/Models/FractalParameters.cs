@@ -501,6 +501,40 @@ namespace FracturingFog.Models
         /// </summary>
         public LightingFxData Lighting { get; set; } = LightingFxData.CreateDefault();
 
+        // ── Interior alpha (2D) — issue #96 ──────────────────────────────────
+        // Global opacity of the in-set (interior) region for 2D escape-time
+        // fractals. Applies to the whole in-set region regardless of theme; a
+        // per-theme interior alpha (color theme editor) is a planned follow-up.
+
+        /// <summary>Global opacity of the in-set (interior) region, 0..255.
+        /// 255 = opaque (legacy, pixel-identical). Below 255 the interior turns
+        /// translucent and composites over <see cref="Interior2DBackground"/>.
+        /// Scales any alpha a theme already authored (interior-aware maps emit
+        /// opaque today, so this sets it). Currently honoured on the canonical
+        /// Mandelbrot path only.</summary>
+        public int InteriorAlpha { get; set; } = 255;
+
+        /// <summary>Background composited behind translucent 2D pixels.
+        /// Checkerboard (default) preserves the F10.5 see-through look; Solid /
+        /// Gradient paint a colour backdrop; Transparent keeps straight alpha
+        /// for export.</summary>
+        public Interior2DBackgroundMode Interior2DBackground { get; set; }
+            = Interior2DBackgroundMode.Checkerboard;
+
+        /// <summary>Top colour of the Gradient background and the fill of the
+        /// Solid background (packed 0xAARRGGBB).</summary>
+        public uint Interior2DBgTop { get; set; } = 0xFF202040u;
+
+        /// <summary>Bottom (horizon) colour of the Gradient background
+        /// (packed 0xAARRGGBB).</summary>
+        public uint Interior2DBgBottom { get; set; } = 0xFF101020u;
+
+        /// <summary>Path to the image used when
+        /// <see cref="Interior2DBackground"/> is <c>Image</c>. Stretched to fill
+        /// the viewport; shows through translucent interior AND colour-stop
+        /// pixels. Null/empty falls back to a flat fill.</summary>
+        public string? Interior2DBgImagePath { get; set; }
+
         public FractalParameters Clone()
         {
             return new FractalParameters
@@ -693,7 +727,12 @@ namespace FracturingFog.Models
                 UserBulbSuperSample = UserBulbSuperSample,
                 LowResPreviewScale = LowResPreviewScale,
                 UserBulbChain = UserBulbChain.ConvertAll(s => s.Clone()),
-                Lighting = Lighting // struct value-copy; EnvironmentName is string (immutable)
+                Lighting = Lighting, // struct value-copy; EnvironmentName is string (immutable)
+                InteriorAlpha = InteriorAlpha,
+                Interior2DBackground = Interior2DBackground,
+                Interior2DBgTop = Interior2DBgTop,
+                Interior2DBgBottom = Interior2DBgBottom,
+                Interior2DBgImagePath = Interior2DBgImagePath
             };
         }
     }

@@ -311,6 +311,13 @@ public sealed class MandelbrotCalculator
 
     public IColorMap ColorMap { get; set; } = new HsvPalette();
 
+    /// <summary>Global opacity of the in-set (interior) region, 0..255 (issue
+    /// #96). 255 = opaque (legacy, no-op). Below 255, a post-colour pass scales
+    /// the alpha byte of every in-set pixel so the present path can composite
+    /// the interior over a chosen 2D background. Set from
+    /// <c>FractalParameters.InteriorAlpha</c> by the render host.</summary>
+    public int InteriorAlpha { get; set; } = 255;
+
     // ── Output buffers ────────────────────────────────────────────────────────
 
     public int[] IterationBuffer { get; private set; } = Array.Empty<int>();
@@ -854,6 +861,49 @@ public sealed class MandelbrotCalculator
             pp.PostProcess(ColorBuffer, SmoothBuffer,
                            NormalXBuffer, NormalYBuffer,
                            Width, Height, MaxIterations);
+
+        // ── Global interior alpha (issue #96) ────────────────────────────────
+        // Make the in-set region translucent so the present pass can composite
+        // it over the selected 2D background. Runs last so it scales whatever
+        // alpha the exterior/interior/post passes produced. No-op at 255.
+        if (InteriorAlpha < 255)
+            StampInteriorAlpha(ct);
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // Global interior alpha stamp (issue #96)
+    //
+    // In-set pixels are those that never escaped: IterationBuffer[idx] >=
+    // MaxIterations (the same invariant RunInteriorPass relies on to skip the
+    // exterior). We multiply the existing alpha byte by InteriorAlpha/255 so a
+    // future per-theme authored interior alpha would compose multiplicatively
+    // rather than be clobbered. RGB is left untouched.
+    // ─────────────────────────────────────────────────────────────────────────
+
+    private void StampInteriorAlpha(CancellationToken ct)
+    {
+        int maxIt = MaxIterations;
+        if (maxIt <= 0) return;
+
+        uint ia = (uint)Math.Clamp(InteriorAlpha, 0, 255);
+        int w = Width, h = Height;
+
+        _po.CancellationToken = ct;
+        var po = _po;
+        ParallelForRows(0, h, po, y =>
+        {
+            if (ct.IsCancellationRequested) return;
+            int rowBase = y * w;
+            for (int x = 0; x < w; x++)
+            {
+                int idx = rowBase + x;
+                if (IterationBuffer[idx] < maxIt) continue;   // exterior pixel
+                uint c = ColorBuffer[idx];
+                uint a = (c >> 24) & 0xFFu;
+                uint na = (a * ia) / 255u;                     // scale authored alpha
+                ColorBuffer[idx] = (c & 0x00FFFFFFu) | (na << 24);
+            }
+        });
     }
 
     // ─────────────────────────────────────────────────────────────────────────
@@ -3958,6 +4008,12 @@ public sealed class MandelbrotCalculator
                     FinalDrBuffer[idx], FinalDiBuffer[idx]);
             }
         });
+
+        // Issue #96 — the recolor rewrote every in-set pixel opaque, so the
+        // interior alpha stamp (applied at the end of Calculate) is gone. Re-run
+        // it here or the interior turns opaque on a theme switch until the next
+        // pan/zoom triggers a full Calculate.
+        if (InteriorAlpha < 255) StampInteriorAlpha(CancellationToken.None);
     }
 
     // Stable spatial hash → [-0.5, 0.5). Pure function of (x, y), so the
@@ -4014,6 +4070,10 @@ public sealed class MandelbrotCalculator
                 }
             }
         });
+
+        // Issue #96 — re-apply interior alpha after the recolor rewrote in-set
+        // pixels opaque (see note in ApplyBandDitherRecolor).
+        if (InteriorAlpha < 255) StampInteriorAlpha(CancellationToken.None);
     }
 
     // ─────────────────────────────────────────────────────────────────────────

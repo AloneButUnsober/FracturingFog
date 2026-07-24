@@ -1,12 +1,12 @@
 <UserControl xmlns="https://github.com/avaloniaui"
-        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        xmlns:vm="using:FracturingFog.UI.Avalonia.ViewModels"
-        xmlns:m="using:FracturingFog.Models"
-        xmlns:cp="using:Avalonia.Controls"
-        xmlns:views="using:FracturingFog.UI.Avalonia.Views"
-        x:Class="FracturingFog.UI.Avalonia.Views.ColorThemeEditorView"
-        x:DataType="vm:ColorThemeEditorViewModel"
-        Foreground="#DCDCDC">
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:FracturingFog.UI.Avalonia.ViewModels"
+             xmlns:m="using:FracturingFog.Models"
+             xmlns:cp="using:Avalonia.Controls"
+             xmlns:views="using:FracturingFog.UI.Avalonia.Views"
+             x:Class="FracturingFog.UI.Avalonia.Views.ColorThemeEditorView"
+             x:DataType="vm:ColorThemeEditorViewModel"
+             Foreground="#DCDCDC">
 
     <UserControl.Styles>
         <Style Selector="TextBlock.section">
@@ -39,6 +39,9 @@
         <Style Selector="Button.danger">  <Setter Property="Background" Value="#502323" /> </Style>
         <Style Selector="Button.add">     <Setter Property="Background" Value="#283C28" /> </Style>
         <Style Selector="Button.help">    <Setter Property="Background" Value="#283C64" /> </Style>
+        <Style Selector="GridSplitter.splitter">
+            <Setter Property="Background" Value="#C8C864"/>
+        </Style>
     </UserControl.Styles>
 
     <Grid RowDefinitions="Auto,Auto,*,Auto" Margin="10">
@@ -52,7 +55,7 @@
                        FontWeight="Bold"
                        VerticalAlignment="Center" />
             <!-- Phase D: scoped markdown help. HelpCommand still raises HelpRequested
-                 for legacy host hooks (ShellViewModel listens), so VM contract unchanged. -->
+            for legacy host hooks (ShellViewModel listens), so VM contract unchanged. -->
             <Button Grid.Column="1"
                     Classes="action help"
                     Content="?"
@@ -151,16 +154,19 @@
                     <!-- Stops -->
                     <Border Classes="group">
                         <StackPanel Spacing="6">
-                            <Grid ColumnDefinitions="*,Auto,Auto,Auto,Auto,Auto">
-                                <TextBlock Grid.Column="0" Classes="section" Text="Color stops" VerticalAlignment="Center" />
-                                <Button Grid.Column="1" Classes="action add"    Content="Add"   Command="{Binding AddStopCommand}" />
-                                <Button Grid.Column="2" Classes="action new"    Content="🎲 Random"
-                                        Command="{Binding RandomizeCommand}"
-                                        ToolTip.Tip="Generate a random 5-stop palette (golden-ratio hue walk; seed recorded in Description)." />
-                                <Button Grid.Column="3" Classes="action export" Content="From image…" Command="{Binding FromImageCommand}" />
-                                <Button Grid.Column="4" Classes="action save"   Content="Import…"     Command="{Binding ImportPaletteCommand}" />
-                                <Button Grid.Column="5" Classes="action export" Content="Export…"     Command="{Binding ExportPaletteCommand}" />
-                            </Grid>
+                            <Border BorderBrush="#2A2A2A" BorderThickness="0" Background="Transparent">
+                                <Grid ColumnDefinitions="*,Auto,Auto,Auto,Auto,Auto">
+                                    <TextBlock Grid.Column="0" Classes="section" Text="Color stops" VerticalAlignment="Center" />
+                                    <Button Grid.Column="1" Classes="action add"    Content="Add"   Command="{Binding AddStopCommand}" />
+                                    <Button Grid.Column="2" Classes="action new"    Content="🎲 Random"
+                                            Command="{Binding RandomizeCommand}"
+                                            ToolTip.Tip="Generate a random 5-stop palette (golden-ratio hue walk; seed recorded in Description)." />
+                                    <Button Grid.Column="3" Classes="action export" Content="From image…" Command="{Binding FromImageCommand}" />
+                                    <Button Grid.Column="4" Classes="action save"   Content="Import…"     Command="{Binding ImportPaletteCommand}" />
+                                    <Button Grid.Column="5" Classes="action export" Content="Export…"     Command="{Binding ExportPaletteCommand}" />
+                                </Grid>
+                            </Border>
+                            <Border BorderBrush="#2A2A2A" BorderThickness="0" Background="Transparent">
                             <Grid ColumnDefinitions="Auto,Auto,*">
                                 <CheckBox  Grid.Column="0" Content="Inspect"  IsChecked="{Binding InspectActive}"
                                            IsEnabled="{Binding InspectStopEnabled}"
@@ -171,20 +177,21 @@
                                            Command="{Binding SampleSelectedCommand}"
                                            Content="◎"
                                            ToolTip.Tip="Eyedropper: click a stop row first, then sample any pixel on the desktop to replace its color." />
-                                    <!--<Image Source="avares://FracturingFog.UI.Avalonia/Assets/Sampler.png"
-                                           Width="20" Height="20"/>-->
-                                    <!--</Button>-->
+                                <!--<Image Source="avares://FracturingFog.UI.Avalonia/Assets/Sampler.png"
+                                Width="20" Height="20"/>-->
+                                <!--</Button>-->
                                 <TextBlock Grid.Column="2" Text="(click a stop to select it)"
                                            Foreground="#808080" FontStyle="Italic"
                                            VerticalAlignment="Center" Margin="12,0,0,0" />
-                            </Grid>
+                            </Grid>    
+                            </Border>                            
                             <Border BorderBrush="#2A2A2A" BorderThickness="1" Background="#1A1A1A" MaxHeight="260">
                                 <ScrollViewer VerticalScrollBarVisibility="Auto">
                                     <ItemsControl x:Name="StopsItems" ItemsSource="{Binding Stops}">
                                         <ItemsControl.ItemTemplate>
                                             <DataTemplate DataType="vm:ColorStopRowVm">
                                                 <Border Background="{Binding RowBackground}" CornerRadius="2" Margin="2,1" Padding="2">
-                                                    <Grid ColumnDefinitions="132,Auto,Auto,Auto,Auto,Auto" Margin="2,1">
+                                                    <Grid ColumnDefinitions="132,Auto,32,Auto,Auto,12" Margin="1,1">
                                                         <Grid.Styles>
                                                             <Style Selector="Grid">
                                                                 <Setter Property="Background" Value="Transparent" />
@@ -194,25 +201,31 @@
                                                                        Value="{Binding Position}"
                                                                        Minimum="0" Maximum="1"
                                                                        Increment="0.05"
-                                                                       FormatString="0.###" Width="130" />
+                                                                       FormatString="0.###" MaxWidth="130" MinWidth="80"/>
                                                         <!--<Border Grid.Column="1" Width="32" Height="22" Margin="6,0"
-                                                                Background="{Binding SwatchBrush}"
-                                                                BorderBrush="#444" BorderThickness="1" />-->
+                                                        Background="{Binding SwatchBrush}"
+                                                        BorderBrush="#444" BorderThickness="1" />-->
                                                         <ColorPicker Grid.Column="1" Color="{Binding StopColor, Mode=TwoWay}"
-                                                                     Margin="4,0" HorizontalAlignment="Left" Width="120" />
-                                                        <Button Grid.Column="2" Content="◎" Width="32" Margin="2,0,12,0"
+                                                                     Margin="1,0" HorizontalAlignment="Left" MaxWidth="80" MinWidth="25"/>
+                                                        <Button Grid.Column="2" Content="◎" Width="32" Margin="0.5,0,12,0"
                                                                 Background="#325A6E" Foreground="White" FontWeight="Bold"
                                                                 Command="{Binding SampleCommand}"
                                                                 ToolTip.Tip="Sample a color from anywhere on the desktop and apply to this stop." />
                                                         <NumericUpDown Grid.Column="3" Value="{Binding A}"
                                                                        Minimum="0" Maximum="255" Increment="5"
-                                                                       FormatString="0" Width="78" Margin="0,0,10,0"
-                                                                       ToolTip.Tip="Per-stop alpha (0 = transparent, 255 = opaque). Authored + saved now; visible in the render/export path in a later F10 update." />
+                                                                       FormatString="0" Margin="0,0,4,0"
+                                                                       ToolTip.Tip="Per-stop alpha (0 = transparent, 255 = opaque). Authored + saved now; visible in the render/export path in a later F10 update."
+                                                                       MaxWidth="120" MinWidth="80"/>
                                                         <NumericUpDown Grid.Column="4" Value="{Binding Midpoint}"
                                                                        Minimum="0.01" Maximum="0.99" Increment="0.05"
-                                                                       FormatString="0.00" Width="82" Margin="0,0,10,0"
-                                                                       ToolTip.Tip="Segment midpoint bias for the blend starting at this stop (0.5 = linear)." />
-                                                        <Button Grid.Column="5" Classes="action danger" Content="X" Width="28"
+                                                                       FormatString="0.00" Margin="0,0,4,0"
+                                                                       ToolTip.Tip="Segment midpoint bias for the blend starting at this stop (0.5 = linear)."
+                                                                       MaxWidth="120" MinWidth="80" />
+                                                        <Button Grid.Column="5"  Background="#502323"
+                                                                Foreground="White"
+                                                                FontWeight="Bold"
+                                                                Content="X" Width="20"
+                                                                Padding="1,0,1,0" Margin="0,0,1,0"
                                                                 Command="{Binding $parent[ItemsControl].((vm:ColorThemeEditorViewModel)DataContext).RemoveStopCommand}"
                                                                 CommandParameter="{Binding}" />
                                                     </Grid>
@@ -268,48 +281,90 @@
                     <!-- Cycle -->
                     <Border Classes="group">
                         <StackPanel Spacing="4" Orientation="Horizontal">
-                                <StackPanel Spacing="6" IsEnabled="{Binding ShowCycle}">
-                                    <TextBlock Classes="section" Text="Cycle" />
-                                    <StackPanel Orientation="Horizontal" Spacing="8">
-                                        <TextBlock Classes="label" Text="Speed:" Width="56" />
-                                        <NumericUpDown Value="{Binding CycleSpeed}"
-                                                       Minimum="0.0001" Maximum="10" Increment="0.001"
-                                                       FormatString="0.0000" Width="135" />
-                                    </StackPanel>
-                                    <StackPanel Orientation="Horizontal" Spacing="8">
-                                        <TextBlock Classes="label" Text="Offset:" Width="56" />
-                                        <NumericUpDown Value="{Binding ColorOffset}"
-                                                       Minimum="-10" Maximum="10" Increment="0.01"
-                                                       FormatString="0.000" Width="135"
-                                                       ToolTip.Tip="Additive phase — rotates the palette along the iteration axis (F4)." />
-                                    </StackPanel>
-                                    <StackPanel Orientation="Horizontal" Spacing="8">
-                                        <TextBlock Classes="label" Text="Density:" Width="56" />
-                                        <NumericUpDown Value="{Binding ColorDensity}"
-                                                       Minimum="0" Maximum="20" Increment="0.05"
-                                                       FormatString="0.000" Width="135"
-                                                       ToolTip.Tip="Multiplies cycling frequency — palette cycles per rhythm unit (F4)." />
-                                    </StackPanel>
-                                    <StackPanel Orientation="Horizontal" Spacing="8">
-                                        <TextBlock Classes="label" Text="Wrap:" Width="56" />
-                                        <ComboBox ItemsSource="{Binding WrapModeOptions}" SelectedItem="{Binding WrapMode}"
-                                                  Width="135" HorizontalAlignment="Left"
-                                                  ToolTip.Tip="Boundary behaviour: Repeat (modulo), PingPong (seamless mirror), Clamp (F5)." />
-                                    </StackPanel>
+                            <StackPanel Spacing="6" IsEnabled="{Binding ShowCycle}">
+                                <TextBlock Classes="section" Text="Cycle" />
+                                <StackPanel Orientation="Horizontal" Spacing="8">
+                                    <TextBlock Classes="label" Text="Speed:" Width="56" />
+                                    <NumericUpDown Value="{Binding CycleSpeed}"
+                                                   Minimum="0.0001" Maximum="10" Increment="0.001"
+                                                   FormatString="0.0000" Width="135" />
                                 </StackPanel>
+                                <StackPanel Orientation="Horizontal" Spacing="8">
+                                    <TextBlock Classes="label" Text="Offset:" Width="56" />
+                                    <NumericUpDown Value="{Binding ColorOffset}"
+                                                   Minimum="-10" Maximum="10" Increment="0.01"
+                                                   FormatString="0.000" Width="135"
+                                                   ToolTip.Tip="Additive phase — rotates the palette along the iteration axis (F4)." />
+                                </StackPanel>
+                                <StackPanel Orientation="Horizontal" Spacing="8">
+                                    <TextBlock Classes="label" Text="Density:" Width="56" />
+                                    <NumericUpDown Value="{Binding ColorDensity}"
+                                                   Minimum="0" Maximum="20" Increment="0.05"
+                                                   FormatString="0.000" Width="135"
+                                                   ToolTip.Tip="Multiplies cycling frequency — palette cycles per rhythm unit (F4)." />
+                                </StackPanel>
+                                <StackPanel Orientation="Horizontal" Spacing="8">
+                                    <TextBlock Classes="label" Text="Wrap:" Width="56" />
+                                    <ComboBox ItemsSource="{Binding WrapModeOptions}" SelectedItem="{Binding WrapMode}"
+                                              Width="135" HorizontalAlignment="Left"
+                                              ToolTip.Tip="Boundary behaviour: Repeat (modulo), PingPong (seamless mirror), Clamp (F5)." />
+                                </StackPanel>
+                            </StackPanel>
 
                             <!-- In-set -->
-                                <StackPanel Spacing="6" Margin="8,0,0,0">
-                                    <TextBlock Classes="section" Text="In-set (interior)" />
+                            <StackPanel Spacing="6" Margin="8,0,0,0">
+                                <TextBlock Classes="section" Text="In-set (interior)" />
+                                <StackPanel Orientation="Horizontal" Spacing="6">
+                                    <CheckBox Content="Override" IsChecked="{Binding UseInSet}" Foreground="#B4B4B4" VerticalAlignment="Center" />
+                                    <!--<Border Width="40" Height="22"
+                                    Background="{Binding InSetSwatchBrush}"
+                                    BorderBrush="#444" BorderThickness="1" />-->
+                                    <ColorPicker Color="{Binding InSetColor, Mode=TwoWay}"
+                                                 IsEnabled="{Binding UseInSet}" Width="130"/>
+                                </StackPanel>
+                                <!-- Per-theme interior alpha (#96). Composites the in-set
+                                     region over the 2D background; the global InteriorAlpha
+                                     knob (Params) multiplies this. -->
+                                <StackPanel Orientation="Horizontal" Spacing="6">
+                                    <TextBlock Text="Alpha" Foreground="#B4B4B4" VerticalAlignment="Center" Width="44" />
+                                    <Slider Minimum="0" Maximum="255" Width="130"
+                                            Value="{Binding InSetA, Mode=TwoWay}"
+                                            IsEnabled="{Binding UseInSet}"
+                                            VerticalAlignment="Center"
+                                            ToolTip.Tip="Interior opacity. 255 = opaque. Below 255 the in-set region shows the 2D background through it." />
+                                    <TextBlock Text="{Binding InSetA}" Foreground="#B4B4B4"
+                                               VerticalAlignment="Center" Width="30" TextAlignment="Right" />
+                                </StackPanel>
+
+                                <!-- Global 2D background (mirrors Params ▸ Interior; edits the
+                                     shared view params, applies to interior + colour-stop alpha). -->
+                                <StackPanel Spacing="4" IsVisible="{Binding HasViewParams}">
+                                    <TextBlock Text="Background (2D)" Foreground="#B4B4B4" Margin="0,4,0,0" />
+                                    <ComboBox HorizontalAlignment="Stretch"
+                                              ItemsSource="{Binding Interior2DBackgroundModes}"
+                                              SelectedItem="{Binding Interior2DBackground, Mode=TwoWay}"
+                                              ToolTip.Tip="What shows through translucent interior AND colour stops. Checkerboard is the default see-through aid; Solid/Gradient/Image paint a backdrop; Transparent keeps straight alpha for export." />
                                     <StackPanel Orientation="Horizontal" Spacing="6">
-                                        <CheckBox Content="Override" IsChecked="{Binding UseInSet}" Foreground="#B4B4B4" VerticalAlignment="Center" />
-                                        <!--<Border Width="40" Height="22"
-                                        Background="{Binding InSetSwatchBrush}"
-                                        BorderBrush="#444" BorderThickness="1" />-->
-                                        <ColorPicker Color="{Binding InSetColor, Mode=TwoWay}"
-                                                     IsEnabled="{Binding UseInSet}" Width="130"/>
+                                        <TextBlock Text="Top/solid" Foreground="#B4B4B4" VerticalAlignment="Center" Width="64" />
+                                        <TextBox Width="112"
+                                                 Text="{Binding Interior2DBgTopHex, Mode=TwoWay, UpdateSourceTrigger=LostFocus}"
+                                                 ToolTip.Tip="AARRGGBB. Top colour for Gradient, fill for Solid." />
+                                    </StackPanel>
+                                    <StackPanel Orientation="Horizontal" Spacing="6">
+                                        <TextBlock Text="Bottom" Foreground="#B4B4B4" VerticalAlignment="Center" Width="64" />
+                                        <TextBox Width="112"
+                                                 Text="{Binding Interior2DBgBottomHex, Mode=TwoWay, UpdateSourceTrigger=LostFocus}"
+                                                 ToolTip.Tip="AARRGGBB. Bottom (horizon) colour for Gradient." />
+                                    </StackPanel>
+                                    <StackPanel Orientation="Horizontal" Spacing="6">
+                                        <TextBlock Text="Image" Foreground="#B4B4B4" VerticalAlignment="Center" Width="64" />
+                                        <TextBox Width="112"
+                                                 Text="{Binding Interior2DBgImagePath, Mode=TwoWay, UpdateSourceTrigger=LostFocus}"
+                                                 Watermark="path\to\image.png"
+                                                 ToolTip.Tip="Used when Background = Image. Stretched to fill the viewport." />
                                     </StackPanel>
                                 </StackPanel>
+                            </StackPanel>
                         </StackPanel>
                     </Border>
 
@@ -318,18 +373,18 @@
                         <StackPanel Spacing="4">
                             <TextBlock Classes="section" Text="Post-FX defaults" />
                             <Grid ColumnDefinitions="Auto,*,Auto" RowDefinitions="Auto,Auto,Auto" Margin="0,4,0,0">
-                                <CheckBox Grid.Row="0" Grid.Column="0" Content="Brightness" IsChecked="{Binding UseBrightness}" 
+                                <CheckBox Grid.Row="0" Grid.Column="0" Content="Brightness" IsChecked="{Binding UseBrightness}"
                                           Foreground="#B4B4B4" Margin="0,0,12,4" VerticalAlignment="Center" />
-                                <Slider Grid.Row="0" Grid.Column="1" Value="{Binding Brightness}" Minimum="-100" Maximum="100" 
-                                        TickFrequency="10" IsSnapToTickEnabled="False" IsEnabled="{Binding UseBrightness}" 
+                                <Slider Grid.Row="0" Grid.Column="1" Value="{Binding Brightness}" Minimum="-100" Maximum="100"
+                                        TickFrequency="10" IsSnapToTickEnabled="False" IsEnabled="{Binding UseBrightness}"
                                         Margin="0,0,0,4" VerticalAlignment="Center" />
-                                <TextBlock Grid.Row="0" Grid.Column="2" Text="{Binding Brightness}" Foreground="#9B9B9B" 
+                                <TextBlock Grid.Row="0" Grid.Column="2" Text="{Binding Brightness}" Foreground="#9B9B9B"
                                            Width="32" TextAlignment="Right" VerticalAlignment="Center" Margin="6,0,0,4" />
-                                
+
                                 <CheckBox Grid.Row="1" Grid.Column="0" Content="Contrast" IsChecked="{Binding UseContrast}" Foreground="#B4B4B4" Margin="0,0,12,4" VerticalAlignment="Center" />
                                 <Slider Grid.Row="1" Grid.Column="1" Value="{Binding Contrast}" Minimum="-100" Maximum="100" TickFrequency="10" IsSnapToTickEnabled="False" IsEnabled="{Binding UseContrast}" Margin="0,0,0,4" VerticalAlignment="Center" />
                                 <TextBlock Grid.Row="1" Grid.Column="2" Text="{Binding Contrast}" Foreground="#9B9B9B" Width="32" TextAlignment="Right" VerticalAlignment="Center" Margin="6,0,0,4" />
-                                
+
                                 <CheckBox Grid.Row="2" Grid.Column="0" Content="Adaptive" IsChecked="{Binding UseAdaptive}" Foreground="#B4B4B4" Margin="0,0,12,0" VerticalAlignment="Center" />
                                 <Slider Grid.Row="2" Grid.Column="1" Value="{Binding Adaptive}" Minimum="0" Maximum="100" TickFrequency="10" IsSnapToTickEnabled="False" IsEnabled="{Binding UseAdaptive}" VerticalAlignment="Center" />
                                 <TextBlock Grid.Row="2" Grid.Column="2" Text="{Binding Adaptive}" Foreground="#9B9B9B" Width="32" TextAlignment="Right" VerticalAlignment="Center" Margin="6,0,0,0" />
@@ -337,7 +392,12 @@
                         </StackPanel>
                     </Border>
                 </StackPanel>
-
+                <GridSplitter Grid.Column="1"
+                              ResizeDirection="Columns"
+                              Classes="splitter"
+                              HorizontalAlignment="Center"
+                              Margin="4,0,4,0"
+                              Width="4"/>
                 <!-- RIGHT COLUMN -->
                 <StackPanel Grid.Column="2" Orientation="Vertical">
 
@@ -364,11 +424,11 @@
                             </Grid>
 
                             <!-- Directional light compass (issue #84 companion):
-                                 live top-down view of the Key/Fill/Rim rig. -->
+                            live top-down view of the Key/Fill/Rim rig. -->
                             <views:LightCompassControl Source="{Binding}"
-                                    Width="150" Height="150"
-                                    HorizontalAlignment="Left" Margin="0,8,0,0"
-                                    ToolTip.Tip="Top-down light compass. Each line points to where a light sits — K=key, F=fill, R=rim, coloured by its diffuse. Screen up = +Z, right = +X; a near-vertical light collapses toward the centre." />
+                                                       Width="150" Height="150"
+                                                       HorizontalAlignment="Left" Margin="0,8,0,0"
+                                                       ToolTip.Tip="Top-down light compass. Each line points to where a light sits — K=key, F=fill, R=rim, coloured by its diffuse. Screen up = +Z, right = +X; a near-vertical light collapses toward the centre." />
 
                             <!-- Key Light -->
                             <Border DataContext="{Binding KeyLight}"
@@ -586,10 +646,10 @@
                                 <TextBlock Classes="label" Grid.Row="0" Grid.Column="0" Text="Lighting:" Margin="0,0,8,4" />
                                 <ComboBox Grid.Row="0" Grid.Column="1" ItemsSource="{Binding PbrLightingModes}" SelectedItem="{Binding PbrLightingMode}" Width="220" HorizontalAlignment="Left" Margin="0,0,0,4" />
                                 <TextBlock Classes="label" Grid.Row="1" Grid.Column="0" Text="Glow exp:" Margin="0,0,8,4" />
-                                <NumericUpDown Grid.Row="1" Grid.Column="1" Value="{Binding GlowExponent}" Minimum="0" Maximum="50" 
+                                <NumericUpDown Grid.Row="1" Grid.Column="1" Value="{Binding GlowExponent}" Minimum="0" Maximum="50"
                                                Increment="0.5" FormatString="0.00" Width="130" HorizontalAlignment="Left" Margin="0,0,0,4" />
                                 <TextBlock Classes="label" Grid.Row="2" Grid.Column="0" Text="Glow scale:" Margin="0,0,8,0" />
-                                <NumericUpDown Grid.Row="2" Grid.Column="1" Value="{Binding GlowScale}" Minimum="0" Maximum="10" 
+                                <NumericUpDown Grid.Row="2" Grid.Column="1" Value="{Binding GlowScale}" Minimum="0" Maximum="10"
                                                Increment="0.05" FormatString="0.000" Width="130" HorizontalAlignment="Left" />
                             </Grid>
 
