@@ -178,27 +178,87 @@ Construct with `new Vec3(x, y, z)`.
 
 ## 4. Quat API (4D mode)
 
+`FracturingFog.Models.Quat` — readonly record struct, 4 components `(W, X, Y, Z)`, double precision. `W` is the real part; `X, Y, Z` are the `i, j, k` imaginary axes. In Quat mode the compiled body is `Quat Step(Quat z, Quat c, int n, double[] p)` and every helper below is in scope under Roslyn (the assembly imports `FracturingFog.Models`).
+
+> [!IMPORTANT]
+> Everything in this API is **quaternion algebra**, not component-wise arithmetic. `Quat.Sin(q)` is the true quaternion sine (it treats `q` as a rotation-carrying number), **not** `sin` applied to each of the four fields. That is the whole point of Quat mode — the maps behave like a genuine 4-D analogue of the complex plane. If you want per-axis math, use the `Vec3` helpers on `q.ToVec3()` instead.
+
 ```csharp
 // Fields
 double W, X, Y, Z
 
 // Properties
-double Length, LengthSquared
+double Length          // sqrt(W² + X² + Y² + Z²)
+double LengthSquared   // W² + X² + Y² + Z²
 
 // Operators
-+ - (unary -)  ·s (scalar)  Q · Q (Hamilton product)
++  -  (unary -)         // component-wise
+q * s   s * q           // scalar scale
+a * b                   // Hamilton product (quaternion multiply — NOT commutative)
 
 // Constants
-Quat.Zero, Quat.Identity = (1, 0, 0, 0)
+Quat.Zero               // (0, 0, 0, 0)
+Quat.Identity, Quat.One // (1, 0, 0, 0)
+Quat.Pi                 // (π, 0, 0, 0)
+Quat.HalfPi             // (π/2, 0, 0, 0)
 
-// Methods + static
-q.Conjugate() → Quat        // (W, -X, -Y, -Z)
+// Structure / conversion
+q.Conjugate() → Quat            // (W, -X, -Y, -Z)
 Quat.Dot(a, b) → double
-Quat.FromVec3(v, w = 0) → Quat
-q.ToVec3() → Vec3           // drops W
+Quat.FromVec3(v, w = 0) → Quat  // lifts a Vec3 into the imaginary axes
+q.ToVec3() → Vec3               // drops W, keeps (X, Y, Z)
+Quat.QuatAxis(q) → Quat         // unit "imaginary axis" of q (see note below)
+
+// Algebra
+Quat.Pow(q, exp) → Quat         // real exponent — see semantics below
+Quat.Sqrt(q) → Quat             // = Pow(q, 0.5)
+Quat.Exp(q), Quat.Log(q) → Quat // principal-axis exp / log
+Quat.Inverse(q) → Quat          // q⁻¹ = conj(q) / |q|²
+Quat.Scale(q, s) → Quat         // same as q * s, static form
+
+// Trig (quaternion-valued)
+Quat.Sin, Quat.Cos, Quat.Tan
+Quat.Csc, Quat.Sec, Quat.Cot            // reciprocals: 1/Sin, 1/Cos, Cos/Sin
+
+// Hyperbolic
+Quat.Sinh, Quat.Cosh, Quat.Tanh
+Quat.Csch, Quat.Sech, Quat.Coth
+
+// Inverse trig / inverse hyperbolic
+Quat.Asin, Quat.Acos, Quat.Atan
+Quat.Asinh, Quat.Acosh, Quat.Atanh
 ```
 
-In Quat mode the raymarched 3-space slice comes from the camera ray's (x, y, z) plus the user-chosen Slice W coordinate. Changing Slice W explores different 3D slices of the same 4D set.
+Construct with `new Quat(w, x, y, z)`.
+
+### 4.1 `Pow` semantics
+
+`Quat.Pow(q, exp)` picks its algorithm from the exponent:
+
+- **Non-negative integer** exponent → exact repeated Hamilton self-multiply. `Pow(q, 0) = Identity`, `Pow(0, n) = 0` for `n > 0`. This is the fast, exact path — prefer integer powers when you can.
+- **Fractional or negative** exponent → the analytic form `q^exp = exp(exp · log q)`, evaluated on `q`'s principal axis. This is what makes `Sqrt`, `Asin`, `Acos`, `Asinh`, and `Acosh` work (they all route through `Sqrt`).
+
+### 4.2 The escape contract — these ops never throw
+
+The quaternion DE hot loop has **no** `try`/`catch` by design (it compiles once, smoke-tests the delegate with finite inputs, then trusts it). A throw whose trigger depended on a runtime value the smoke test never hit would crash the whole render. So every op here returns a **non-finite quaternion** for undefined inputs (`Pow(0, -1)`, `Log(0)`, a divide by a zero-norm quat, …) instead of throwing. The loop's `!double.IsFinite` guard turns that non-finite result into a cleanly *escaped* pixel. You therefore never need to guard denominators inside a Quat-mode body the way you do in Vec3 mode — a bad value just paints as "outside the set."
+
+> [!NOTE]
+> `Quat.QuatAxis(q)` returns the unit imaginary axis that makes `Asin`/`Acos`/`Atan` well-defined — it is the direction `q` "points" in the 3-space of `{i, j, k}`. When `q` is (numerically) a pure real number there is no natural axis, so the helper falls back to the `x`-axis by convention. If an inverse-trig map shows a hard seam along the x-axis, that fallback is the cause; rotate your input or add a small imaginary bias to avoid the pure-real degeneracy.
+
+In Quat mode the raymarched 3-space slice comes from the camera ray's `(x, y, z)` plus the user-chosen **Slice W** coordinate. Changing Slice W explores different 3-D slices of the same 4-D set.
+
+### 4.3 Worked snippets
+
+```csharp
+// Quaternion Julia with a transcendental twist — sine of the square, plus c.
+return Quat.Sin(z * z) + c;
+
+// Fractional-power bulb (analytic Pow path). Non-integer exponent → exp(exp·log q).
+return Quat.Pow(z, 2.5) + c;
+
+// Exponential map — bounded, so read it with Color driver = FinalMagnitude.
+return Quat.Exp(z) * 0.5 + c;
+```
 
 ---
 
@@ -240,12 +300,23 @@ Numerical formula: 4 lockstep trajectories at `(c, c+h·êx, c+h·êy, c+h·êz)
 
 | Backend | Coverage | Speed |
 |---|---|---|
-| CPU | Every map. Roslyn-compiled delegate via `Parallel.For` over rows. | Baseline |
-| GPU | Pre-baked triplex spherical power-N kernel only. | 5–20× faster when matched |
+| CPU | Every map, both compilers, both algebra modes, chains, KIFS. | Baseline |
+| GPU | Depends on the **Compiler** (see below). Falls back to CPU for anything it can't translate. | 5–20× faster when matched |
 
-The GPU backend silently falls back to CPU for any body it can't translate. Currently the only GPU-translatable body is `Vec3.Pow(z, N) + c` with literal integer N.
+What the GPU can render now depends on which compiler is active (§19). There are three GPU routes; the engine picks the widest one that fits and **silently falls back to CPU** on any miss:
 
-To check whether GPU translation succeeded: render at a known-fast resolution; if frame time matches CPU at the same resolution, you fell back.
+| Route | Compiler | What it covers |
+|---|---|---|
+| **Sandbox — Quat mode** | Sandbox | Full quaternion bodies. Runs the analytic power-DE when an analytic pattern is detected and Julia is off; otherwise a 5-trajectory numerical-Jacobian DE. **Julia mode is supported** (holds `c` at the Julia constant). |
+| **Sandbox — Vec mode** | Sandbox | Analytic-power bodies (`triplex(z, K) + c` and the square map). Vec Julia / vec numerical on GPU is out of scope for now — those stay on CPU. |
+| **Legacy Roslyn** | Roslyn | The pre-baked triplex spherical power-N kernel only: `Vec3.Pow(z, N) + c` with literal integer `N`, vec-only, non-Julia. |
+
+Chains compile on the GPU too under the Sandbox compiler (each step body is emitted and inlined). Scalar-KIFS distance fields are **CPU-only** — a body whose DE needs the KIFS scale falls back regardless of compiler.
+
+> [!TIP]
+> The big change from earlier builds: **quaternion fractals now render on the GPU**, but only through the **Sandbox** compiler. If you wrote a quat body in Roslyn and it feels CPU-slow, retype it in the Sandbox DSL (§19) — the `q*` functions map straight onto device-safe `Quat.*` kernels.
+
+To check whether GPU translation succeeded: render at a known-fast resolution; if the frame time matches CPU at the same resolution, you fell back. The error label also surfaces the last GPU compile/JIT error when a fallback happens.
 
 ---
 
@@ -493,6 +564,8 @@ return z * z + c;
 
 Algebra Quat / Slice W 0.3 / Julia ON / c=(-0.2, 0.4, -0.4, 0.0).
 
+Swap `z * z` for any quaternion-algebra call from §4 to explore relatives: `Quat.Pow(z, 3)` (cubic), `Quat.Sin(z * z)` (transcendental), `Quat.Exp(z) * 0.5` (exponential map). For the same maps on the GPU, retype the body in the Sandbox DSL (§19.10) — that is the quat-capable GPU path.
+
 ### 9. Vec3 Julia (3D triplex with fixed c)
 
 ```csharp
@@ -598,10 +671,14 @@ The **Compiler** combobox (Render group) toggles between two source compilers:
 
 | Mode | Source language | Algebra | Backend | Speed | Safety |
 |---|---|---|---|---|---|
-| Roslyn (default) | full C# | Vec3 + Quat | CPU + GPU | fastest | trusts source |
-| Sandbox | small DSL | Vec3 only | CPU | ~10–15× slower than Roslyn | parse-only, no BCL |
+| Roslyn (default) | full C# | Vec3 + Quat | CPU + GPU (vec triplex-power only) | fastest per-iter | trusts source |
+| Sandbox | small DSL | Vec3 + Quat | CPU + GPU (vec **and** quat) | ~10–15× slower per-iter on CPU | parse-only, no BCL |
 
-Pick **Roslyn** for performance, GPU rendering, or when you want the BCL (`Math.Atan2`, `Math.Truncate`, etc.). Pick **Sandbox** when the source comes from untrusted input, when you want the editor to detect closed-form DE patterns on the AST, or when you want a tighter grammar that fails fast on typos.
+> [!IMPORTANT]
+> Two things changed since earlier builds and you may still see them described the old way elsewhere:
+> **(1)** the Sandbox DSL is **no longer Vec3-only** — it has a full quaternion surface (§19.5), and the algebra combobox no longer forces back to Vec3 when Sandbox is selected. **(2)** Sandbox **now has a GPU backend**, and it is in fact the *only* path that renders quaternion fractals on the GPU (§7).
+
+Pick **Roslyn** for the fastest per-iteration CPU speed or when you want the full BCL (`Math.Atan2`, `Math.Truncate`, etc.). Pick **Sandbox** when the source comes from untrusted input, when you want the editor to detect closed-form DE patterns on the AST, when you want a tighter grammar that fails fast on typos, or when you want **quaternion fractals on the GPU**.
 
 ### 19.1 Source signature (Sandbox)
 
@@ -637,7 +714,16 @@ There is no `return` keyword and no semicolon. The whole source is one expressio
 | `<param-name>` | Real | Each Params row adds an identifier. |
 | `pi`, `e` | Real | Constants. |
 
-Member access on a Vec3: `.x`, `.y`, `.z`. Member access on a scalar broadcasts (e.g. `n.x == n`).
+In **Quat mode** the same `z` and `c` identifiers carry all four components, and `.w` reads the real part.
+
+Member access:
+
+- On a **Vec3**: `.x`, `.y`, `.z`.
+- On a **Quat**: `.x`, `.y`, `.z`, and `.w` (the real part).
+- On a **scalar**: `.x`/`.y`/`.z` broadcast (e.g. `n.x == n`); `.w` on a non-quat is `0`.
+
+> [!NOTE]
+> A DSL value is one of three kinds at runtime — **Real**, **Vec** (3-vector), or **Quat**. You never declare the kind; it flows from what you build. `vec(...)` produces a Vec, `qvec(...)` and every `q*` function produce a Quat, arithmetic promotes to the widest operand, and the final result is projected to Vec3 (Vec3 mode) or Quat (Quat mode) automatically.
 
 ### 19.3 Grammar
 
@@ -654,22 +740,25 @@ mul      := pow (('*'|'/') pow)*
 pow      := unary ('^' pow)?           ; right-assoc
 unary    := '-' unary | primary
 primary  := NUMBER | IDENT (member|call)* | '(' expr ')' member*
-member   := '.' ('x'|'y'|'z')
+member   := '.' ('x'|'y'|'z'|'w')      ; '.w' reads a Quat's real part
 call     := '(' (expr (',' expr)*)? ')'
 ```
 
 ### 19.4 Operators
 
-| Op | Vec / Vec | Vec / Real | Real / Real |
-|---|---|---|---|
-| `+`, `-` | componentwise | broadcast | scalar |
-| `*` | Hadamard (componentwise) | broadcast | scalar |
-| `/` | componentwise | broadcast | scalar |
-| `^` | **triplex** Mandelbulb power | scalar Math.Pow | scalar Math.Pow |
-| unary `-` | componentwise | – | scalar |
-| `&&`, `\|\|`, `!`, comparisons | reduce to real (1.0 / 0.0) | – | scalar |
+| Op | Vec / Vec | Vec / Real | Real / Real | Quat operand |
+|---|---|---|---|---|
+| `+`, `-` | componentwise | broadcast | scalar | componentwise (result is Quat) |
+| `*` | Hadamard (componentwise) | broadcast | scalar | Quat × Quat = **Hamilton product**; Quat × Real = broadcast scale |
+| `/` | componentwise | broadcast | scalar | Quat / Real = broadcast scale |
+| `^` | **triplex** Mandelbulb power | scalar Math.Pow | scalar Math.Pow | Quat ^ Real = `Quat.Pow` (§4.1) |
+| unary `-` | componentwise | – | scalar | componentwise |
+| `&&`, `\|\|`, `!`, comparisons | reduce to real (1.0 / 0.0) | – | scalar | operands reduced by magnitude |
 
-Note `^` is **triplex** power when the LHS is a Vec — `z ^ 8` is shorthand for `triplex(z, 8)`.
+Two operator rules worth memorising:
+
+- `^` is **triplex** power when the LHS is a Vec — `z ^ 8` is shorthand for `triplex(z, 8)`. When the LHS is a Quat it is `Quat.Pow`, and when it is a Real it is `Math.Pow`.
+- `*` between two **Quat** values is the non-commutative **Hamilton product** (same as `qmul(a, b)`), *not* a component-wise multiply. `a * b ≠ b * a` in general — this is exactly the behaviour that makes `z * z + c` a real quaternion Julia set.
 
 ### 19.5 Functions
 
@@ -689,6 +778,20 @@ Vec3 specific:
 
 Scalar-only:
 - `pow(a, b)`, `floor(s)`, `sign(s)`, `min(a, b)`, `max(a, b)`, `clamp(x, lo, hi)`, `smin(a, b, k)`.
+
+Quaternion-algebra (produce and consume `Quat` values — see §4):
+- `qvec(x, y, z, w)` — construct a quaternion from four reals (note the order: imaginary `x, y, z` first, real `w` last).
+- `qmul(a, b)` — Hamilton product (same as `a * b` on two quats).
+- `qconj(q)` — conjugate `(w, -x, -y, -z)`.
+- `qinv(q)` — inverse `q⁻¹`.
+- `qpow(q, s)` — `Quat.Pow`: exact self-multiply for non-negative integer `s`, analytic `exp(s·log q)` otherwise.
+- `qexp(q)`, `qlog(q)`, `qsqrt(q)` — quaternion exp / log / square-root.
+- `qsin qcos qtan`, `qsinh qcosh qtanh` — quaternion trig + hyperbolic.
+- `qasin qacos qatan`, `qasinh qacosh qatanh` — inverse trig + inverse hyperbolic.
+- `qcsc qsec qcot`, `qcsch qsech qcoth` — the six reciprocals.
+
+> [!IMPORTANT]
+> The `q*` functions treat their argument as a **quaternion** (a rotation-carrying algebra element), which is different from applying the plain `sin`/`cos`/… element-wise to four numbers. Applying a *plain* transcendental such as `sin`, `cos`, `exp`, `log`, or `sqrt` to a Quat is **rejected at eval time** ("not defined componentwise on Quat") — project to a component first (`sin(q.x)`) or use the quaternion version (`qsin(q)`). The one exception is `abs`, which is a legitimate per-axis fold and *is* allowed on a Quat.
 
 ### 19.6 Chains in Sandbox
 
@@ -719,10 +822,13 @@ Chains never engage analytic DE — they always run numerical.
 
 ### 19.8 Limitations
 
-- **No Quat (4D) mode** — Sandbox is Vec3-only. The algebra combobox disables Quat when Sandbox is selected; switching to Sandbox while Quat is active forces back to Vec3.
-- **No GPU backend** — Sandbox always runs on CPU. Backend combobox selection is honoured only for Roslyn sources.
-- **No BCL** — `Math.Atan2`, `Math.Round`, `Quaternion.*`, etc. are not in scope. Use the built-in functions table above.
-- **Performance hit** — interpreter dispatch is roughly 10–15× slower than Roslyn-compiled per-iter. Mitigated when an analytic-DE pattern is detected.
+- **No BCL** — `Math.Atan2`, `Math.Round`, `Quaternion.*`, etc. are not in scope. Use the built-in functions table above (including the `q*` quaternion family for 4-D work).
+- **No plain transcendentals on a Quat** — `sin`/`cos`/`exp`/`log`/`sqrt` are rejected on a quaternion value (they are only defined component-wise, which is geometrically meaningless for a quaternion). Use `qsin`/`qcos`/… instead, or project to a component first. `abs` is the lone exception.
+- **CPU interpreter is slower per-iter** — interpreter dispatch is roughly 10–15× slower than Roslyn-compiled. Mitigated when an analytic-DE pattern is detected, and side-stepped entirely on the GPU route (the DSL is emitted to a compiled device kernel).
+- **GPU coverage is not total** — the Sandbox GPU path renders quat bodies (analytic or numerical, Julia included) and vec analytic-power bodies, but **not** vec-Julia, vec-numerical, or scalar-KIFS DE — those fall back to CPU (see §7).
+
+> [!NOTE]
+> Earlier editions of this guide listed "No Quat mode" and "No GPU backend" here. Both are obsolete: the Sandbox DSL gained the full quaternion surface and a GPU emitter. The **Compiler** combobox item may still read "Vec3 only, CPU" in some builds — that label is stale; the algebra and backend comboboxes are the source of truth.
 
 ### 19.9 When to use Sandbox vs Roslyn
 
@@ -733,7 +839,50 @@ Chains never engage analytic DE — they always run numerical.
 | Untrusted source / shared presets | **Sandbox** |
 | Want compile-time error spans | **Sandbox** (parser positions are surfaced) |
 | Pre-recognised Mandelbulb N=K | either (Roslyn faster on iter, Sandbox detects pattern too) |
-| 4D / quaternion fractals | **Roslyn** until Sandbox-Quat support lands |
+| 4-D / quaternion fractals on CPU | either — Roslyn (`Quat.*`) or Sandbox (`q*`) |
+| 4-D / quaternion fractals **on GPU** | **Sandbox** (the only quat-capable GPU path) |
+
+### 19.10 Quaternion cookbook (Sandbox DSL)
+
+Set **Algebra → Quat (4D)** and **Compiler → Sandbox**, then paste any of these into the editor. Tick **Backend → GPU** for the speed-up; all of them are GPU-translatable. Use **Slice W** to slide through the 4-D set and **Julia → Enable (fix c)** where noted.
+
+```dsl
+// 1. Classic quaternion Julia — the "hello world" of 4-D fractals.
+//    z * z is the Hamilton product; z^2 would mean the same thing here.
+//    Julia ON, c = (-0.2, 0.4, -0.4, 0.0), Slice W ≈ 0.3.
+z * z + c
+```
+
+```dsl
+// 2. Cubic quaternion Mandelbrot — integer power uses the exact fast path.
+qpow(z, 3) + c
+```
+
+```dsl
+// 3. Transcendental quaternion — sine of the square. qsin is true quaternion
+//    sine, NOT sin applied to four numbers. Read bounded maps like this with
+//    Color driver = FinalMagnitude or OrbitTrap.
+qsin(z * z) + c
+```
+
+```dsl
+// 4. Fractional power — analytic exp(s·log q) branch. Non-integer exponent.
+qpow(z, 2.5) + c
+```
+
+```dsl
+// 5. Build a quaternion by hand and fold it. qvec order is (x, y, z, w).
+let q = qvec(z.x, z.y, z.z, z.w * 0.5) in
+qmul(q, q) + c
+```
+
+```dsl
+// 6. Exponential map, damped so it stays in frame.
+qexp(z) * 0.5 + c
+```
+
+> [!TIP]
+> `z * z` and `qmul(z, z)` compile to the same kernel — pick whichever reads better. When you mix reals and quaternions (`qpow(z, 3)`, `qexp(z) * 0.5`) the real operands broadcast automatically, so you rarely need `qvec` unless you are assembling a quaternion from separate scalar parts.
 
 ---
 
