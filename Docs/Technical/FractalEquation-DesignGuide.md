@@ -109,6 +109,17 @@ combo's *analytic* setting.
 
 Both are first-class authoring modes in the User Bulb editor; the *Algebra* combo flips between them.
 
+> [!NOTE]
+> Quaternion mode is not limited to `q² + c`. The `Quat` type exposes a full analytic transcendental
+> library — `Pow` (integer self-multiply and fractional `exp(exp·log q)` branches), `Exp`/`Log`/`Sqrt`/`Inverse`,
+> and the complete trig, hyperbolic, and inverse families evaluated on the quaternion's principal axis — so
+> `Quat.Sin(z² ) + c` or `Quat.Pow(z, 2.5) + c` are valid maps. Every op obeys an **escape contract**: undefined
+> inputs return a non-finite quaternion (which the DE loop escapes as a pixel) rather than throwing, because the
+> hot loop has no `try`/`catch`. The same surface is reachable from the Sandbox DSL via the `q*` functions, and
+> the Sandbox path is what renders quaternion sets on the GPU. See
+> [UserBulb-Guide §4](../User/UserBulb-Guide.md#4-quat-api-4d-mode) and
+> [§19.5](../User/UserBulb-Guide.md#195-functions) for the full API and worked examples.
+
 ![PLACEHOLDER — Side-by-side: triplex Mandelbulb (p = 8) vs quaternion Mandelbrot slice (d = 0)](../Images/_placeholders/placeholder.svg)
 
 ---
