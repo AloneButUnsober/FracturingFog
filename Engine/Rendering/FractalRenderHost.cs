@@ -246,6 +246,16 @@ namespace FracturingFog.Rendering
         // renders stay bit-identical.
         private System.Threading.Timer? _animTimer;
         private long _animStartTicks;
+
+        // #96 follow-up — color-theme "settle" debounce. Live editor edits take
+        // the cheap Mandelbrot recolor path in ApplyColorMap (fast, but skips
+        // MSAA / TAA / SSAO / histogram-eq, so band edges show un-anti-aliased
+        // speckle). Each cheap recolor (re)arms this timer; when edits stop for
+        // ColorSettleDelayMs the callback fires a full Trigger() so the final
+        // frame carries the same quality passes a pan/zoom would — without the
+        // user having to navigate to "settle" the image.
+        private System.Threading.Timer? _colorSettleTimer;
+        private const int ColorSettleDelayMs = 300;
         // Re-entry guard: a frame can outrun the tick period at high res, so
         // skip enqueueing another Trigger while one is still in flight.
         private int _animTickBusy;
@@ -488,6 +498,14 @@ namespace FracturingFog.Rendering
             // per frame on an idle scene.
             _animTimer = new System.Threading.Timer(
                 AnimationTick, state: null, dueTime: 33, period: 33);
+
+            // #96 follow-up — color-settle debounce timer, created disabled
+            // (Infinite due). ApplyColorMap's cheap recolor path arms it; the
+            // callback fires one full-quality Trigger() once edits go quiet.
+            _colorSettleTimer = new System.Threading.Timer(
+                ColorSettleTick, state: null,
+                dueTime: System.Threading.Timeout.Infinite,
+                period: System.Threading.Timeout.Infinite);
 
             // Phase 18b fix — clear the frame-in-flight gate when each
             // upload completes (success or cancellation, both fire this
@@ -2246,15 +2264,62 @@ namespace FracturingFog.Rendering
 
             if (!needsFullRender && SelectAltCalculator(ViewState.FractalType) == null)
             {
-                // Mandelbrot fast path — recolour from cached buffers.
+                // Mandelbrot fast path — recolour from cached buffers. This is
+                // cheap (keeps a slider drag responsive) but skips the MSAA /
+                // TAA / SSAO / histogram-eq passes a full render runs, so band
+                // edges show un-anti-aliased speckle. Arm the settle debounce:
+                // when edits stop, ColorSettleTick fires a full Trigger() so the
+                // final frame matches post-navigate quality (#96 follow-up).
                 _calculator.ApplyBandDitherRecolor(0.0);
                 UploadProcessedBuffer(_calculator.ColorBuffer, _calculator.Width, _calculator.Height);
+                ArmColorSettle();
             }
             else
             {
-                // Alt calculator OR theme needs data not in the cached buffers.
+                // Alt calculator OR theme needs data not in the cached buffers:
+                // this already IS the full render, so cancel any pending settle.
+                DisarmColorSettle();
                 Trigger();
             }
+        }
+
+        /// <summary>
+        /// (Re)start the color-settle debounce. Each cheap recolor pushes the
+        /// full-render fire-time out by <see cref="ColorSettleDelayMs"/>, so a
+        /// burst of live editor edits collapses into one full Trigger() after
+        /// the user goes quiet.
+        /// </summary>
+        private void ArmColorSettle()
+        {
+            if (_disposed) return;
+            try
+            {
+                _colorSettleTimer?.Change(
+                    ColorSettleDelayMs, System.Threading.Timeout.Infinite);
+            }
+            catch (ObjectDisposedException) { /* racing Dispose — ignore. */ }
+        }
+
+        /// <summary>Cancel a pending color-settle full render (edits took the
+        /// full-render branch, or the host is tearing down).</summary>
+        private void DisarmColorSettle()
+        {
+            try
+            {
+                _colorSettleTimer?.Change(
+                    System.Threading.Timeout.Infinite,
+                    System.Threading.Timeout.Infinite);
+            }
+            catch (ObjectDisposedException) { /* racing Dispose — ignore. */ }
+        }
+
+        private void ColorSettleTick(object? _)
+        {
+            if (_disposed) return;
+            // Edits have gone quiet — promote the cheap recolor to a full,
+            // quality-complete render (MSAA / TAA / SSAO / histogram-eq).
+            try { Trigger(); }
+            catch (ObjectDisposedException) { /* racing Dispose — ignore. */ }
         }
 
         /// <summary>
@@ -3315,6 +3380,8 @@ namespace FracturingFog.Rendering
             // fire while the rest of the pipeline is being torn down.
             try { _animTimer?.Dispose(); } catch { }
             _animTimer = null;
+            try { _colorSettleTimer?.Dispose(); } catch { }
+            _colorSettleTimer = null;
             // Tear down any running video / slideshow first so its background
             // loop stops touching the calculator + renderer before disposal.
             lock (_videoLock) _videoCts?.Cancel();
