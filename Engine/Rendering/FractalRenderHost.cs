@@ -950,6 +950,8 @@ namespace FracturingFog.Rendering
             _calculator.CenterY7 = ViewState.CenterY7;
             _calculator.Zoom = ViewState.Zoom;
             _calculator.Quality = ViewState.Quality;
+            // Issue #96 — global interior alpha (Mandelbrot canonical path).
+            _calculator.InteriorAlpha = ViewState.FractalParameters?.InteriorAlpha ?? 255;
 
             if (ViewState.IterLocked)
                 _calculator.MaxIterations = ViewState.LockedIterations;
@@ -2707,18 +2709,65 @@ namespace FracturingFog.Rendering
                 _lastPreOverlayBuffer = null;
             }
 
-            // F10.5 — live per-stop alpha preview. The on-screen present is
-            // opaque (the swap-chain ignores the alpha channel and the post-FX
-            // pass above forces 0xFF), so a theme's authored translucent stops
-            // are invisible while editing. When the toggle is on, composite the
-            // final RGB over a checkerboard using the ORIGINAL coverage byte
-            // from `src` (which still carries the authored alpha even after the
-            // post-FX force-opaque), so A<255 reads as see-through. Runs AFTER
+            // F10.5 / issue #96 — composite translucent 2D pixels over a
+            // background. The on-screen present is opaque (the swap-chain ignores
+            // the alpha channel and the post-FX pass above forces 0xFF), so any
+            // authored interior/exterior alpha only shows if we composite it here
+            // using the ORIGINAL coverage byte from `src` (which still carries
+            // the authored alpha even after the post-FX force-opaque). Runs AFTER
             // the pre-overlay snapshot above, so SaveLastFrameToPng and the
-            // export path keep straight alpha — this is a display-only aid.
-            // srcAlreadyProcessed frames (video record) are left untouched.
-            if (ViewState.AlphaPreview && !srcAlreadyProcessed)
+            // export path keep straight alpha. srcAlreadyProcessed frames (video
+            // record) are left untouched.
+            //
+            // Triggers:
+            //   • AlphaPreview toggle — the theme-editor see-through aid; always
+            //     forces the Checkerboard backdrop regardless of the saved mode
+            //     so editing alpha reads as see-through.
+            //   • interior translucency (global knob < 255 OR theme in-set alpha
+            //     < 255) — the #96 interior-alpha feature.
+            //   • an explicit backdrop (Solid / Gradient / Image) — composite
+            //     unconditionally so translucent EXTERIOR colour stops show over
+            //     it too (opaque pixels skip via the a>=255 continue).
+            // Transparent mode is a no-op here (straight alpha kept for export).
+            var ip96 = ViewState.FractalParameters;
+            var bgMode96 = ip96?.Interior2DBackground ?? Interior2DBackgroundMode.Checkerboard;
+            uint inSetArgb = _calculator?.ColorMap?.InSetColor ?? 0xFF000000u;
+            bool themeInteriorTranslucent = ((inSetArgb >> 24) & 0xFF) < 255;
+            bool interiorTranslucent =
+                (ip96 != null && ip96.InteriorAlpha < 255) || themeInteriorTranslucent;
+            bool explicitBackdrop =
+                bgMode96 == Interior2DBackgroundMode.SolidColor
+                || bgMode96 == Interior2DBackgroundMode.Gradient
+                || bgMode96 == Interior2DBackgroundMode.Image;
+            bool wantAlphaComposite =
+                !srcAlreadyProcessed
+                && (ViewState.AlphaPreview
+                    || (bgMode96 != Interior2DBackgroundMode.Transparent
+                        && (interiorTranslucent || explicitBackdrop)));
+            if (wantAlphaComposite)
             {
+                // AlphaPreview always wins with the checkerboard aid.
+                var mode = ViewState.AlphaPreview
+                    ? Interior2DBackgroundMode.Checkerboard
+                    : bgMode96;
+                uint bgTop = ip96?.Interior2DBgTop ?? 0xFF202040u;
+                uint bgBot = ip96?.Interior2DBgBottom ?? 0xFF101020u;
+                int topR = (int)((bgTop >> 16) & 0xFF), topG = (int)((bgTop >> 8) & 0xFF), topB = (int)(bgTop & 0xFF);
+                int botR = (int)((bgBot >> 16) & 0xFF), botG = (int)((bgBot >> 8) & 0xFF), botB = (int)(bgBot & 0xFF);
+                int denom = h > 1 ? h - 1 : 1;
+
+                // Image backdrop: decode (cached) up front. On any failure fall
+                // back to a flat fill (bgTop) so a bad path never blanks the frame.
+                uint[]? imgPx = null;
+                int imgW = 0, imgH = 0;
+                if (mode == Interior2DBackgroundMode.Image)
+                {
+                    if (BackgroundImageCache.TryGet(ip96?.Interior2DBgImagePath, out var px, out imgW, out imgH))
+                        imgPx = px;
+                    else
+                        mode = Interior2DBackgroundMode.SolidColor;
+                }
+
                 int aChunk = h / (Environment.ProcessorCount * 4);
                 if (aChunk < 1) aChunk = 1;
                 Parallel.ForEach(Partitioner.Create(0, h, aChunk), range =>
@@ -2726,6 +2775,29 @@ namespace FracturingFog.Rendering
                     for (int y = range.Item1; y < range.Item2; y++)
                     {
                         int rowBase = y * w;
+                        // Per-row background base for Solid / Gradient / Image
+                        // (checker varies per pixel, computed inline below).
+                        int rowBgR = 0, rowBgG = 0, rowBgB = 0;
+                        int imgRowBase = 0;
+                        if (mode == Interior2DBackgroundMode.SolidColor)
+                        {
+                            rowBgR = topR; rowBgG = topG; rowBgB = topB;
+                        }
+                        else if (mode == Interior2DBackgroundMode.Gradient)
+                        {
+                            // t = 0 at top row (bgTop), 1 at bottom row (bgBot).
+                            int t = (y * 256) / denom;   // 0..256 fixed-point
+                            rowBgR = (topR * (256 - t) + botR * t) >> 8;
+                            rowBgG = (topG * (256 - t) + botG * t) >> 8;
+                            rowBgB = (topB * (256 - t) + botB * t) >> 8;
+                        }
+                        else if (mode == Interior2DBackgroundMode.Image)
+                        {
+                            // Nearest-neighbour stretch to fill the viewport.
+                            int iy = imgH > 0 ? (int)((long)y * imgH / h) : 0;
+                            if (iy >= imgH) iy = imgH - 1;
+                            imgRowBase = iy * imgW;
+                        }
                         for (int x = 0; x < w; x++)
                         {
                             int i = rowBase + x;
@@ -2735,11 +2807,29 @@ namespace FracturingFog.Rendering
                             int R = (int)((pc >> 16) & 0xFF);
                             int G = (int)((pc >> 8) & 0xFF);
                             int B = (int)(pc & 0xFF);
-                            int bg = ((((x >> 3) + (y >> 3)) & 1) == 0) ? 200 : 120;
+                            int bgR, bgG, bgB;
+                            if (mode == Interior2DBackgroundMode.Checkerboard)
+                            {
+                                int bg = ((((x >> 3) + (y >> 3)) & 1) == 0) ? 200 : 120;
+                                bgR = bgG = bgB = bg;
+                            }
+                            else if (mode == Interior2DBackgroundMode.Image)
+                            {
+                                int ix = imgW > 0 ? (int)((long)x * imgW / w) : 0;
+                                if (ix >= imgW) ix = imgW - 1;
+                                uint ipx = imgPx![imgRowBase + ix];
+                                bgR = (int)((ipx >> 16) & 0xFF);
+                                bgG = (int)((ipx >> 8) & 0xFF);
+                                bgB = (int)(ipx & 0xFF);
+                            }
+                            else
+                            {
+                                bgR = rowBgR; bgG = rowBgG; bgB = rowBgB;
+                            }
                             int inv = 255 - a;
-                            R = (R * a + bg * inv) / 255;
-                            G = (G * a + bg * inv) / 255;
-                            B = (B * a + bg * inv) / 255;
+                            R = (R * a + bgR * inv) / 255;
+                            G = (G * a + bgG * inv) / 255;
+                            B = (B * a + bgB * inv) / 255;
                             dst[i] = 0xFF000000u | ((uint)R << 16) | ((uint)G << 8) | (uint)B;
                         }
                     }

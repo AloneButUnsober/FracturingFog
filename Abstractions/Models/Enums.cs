@@ -7,6 +7,32 @@ namespace FracturingFog
 {
     public enum QualityLevel { Fast, Normal, High, Ultra }
 
+    /// <summary>
+    /// Background composited behind translucent 2D pixels when the interior
+    /// (in-set) region carries alpha &lt; 255 (issue #96). Only consulted by the
+    /// 2D present path; 3D raymarchers use <c>LightingFxData.SkyMode</c> instead.
+    /// </summary>
+    public enum Interior2DBackgroundMode
+    {
+        /// <summary>Grey checkerboard — the F10.5 see-through editing aid.
+        /// Default so the on-screen look is unchanged from the alpha-preview
+        /// behaviour and translucency always reads as "see-through".</summary>
+        Checkerboard,
+        /// <summary>Flat fill from <c>Interior2DBgTop</c>.</summary>
+        SolidColor,
+        /// <summary>Vertical two-colour gradient, top = <c>Interior2DBgTop</c>,
+        /// bottom = <c>Interior2DBgBottom</c>.</summary>
+        Gradient,
+        /// <summary>Image backdrop sampled from <c>Interior2DBgImagePath</c>,
+        /// stretched to fill the viewport. Shows through both translucent
+        /// interior pixels and translucent exterior colour stops.</summary>
+        Image,
+        /// <summary>No composite — keep straight alpha. The on-screen present is
+        /// forced opaque, so this reads as opaque interior on screen and is only
+        /// meaningful for PNG export (which preserves the authored alpha).</summary>
+        Transparent,
+    }
+
     public enum FractalType
     {
         Mandelbrot,

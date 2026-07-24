@@ -505,15 +505,34 @@ namespace FracturingFog.Models
         /// </summary>
         public static IColorMap GetPaletteByName(string name)
         {
-            foreach (var p in Palettes)
+            // Lookup order prefers OVERRIDES: a hot-loaded or user theme with the
+            // same Name as a built-in must win, otherwise saving an edited built-
+            // in under its original name silently resolves back to the unedited
+            // built-in (bug: edited interior/stops "revert" on toolbar select).
+            // Display order (see Palettes) still lists built-ins first.
+            foreach (var p in LookupOrder)
                 if (GetStaticName(p) == name) return p;
             // Back-compat: saved data may reference the pre-ASCII (Unicode)
             // theme name. Resolve the alias and retry once before HSV fallback.
             var aliased = LegacyNameAliases.Resolve(name);
             if (aliased != null)
-                foreach (var p in Palettes)
+                foreach (var p in LookupOrder)
                     if (GetStaticName(p) == aliased) return p;
             return new HsvPalette();
+        }
+
+        /// <summary>Palette enumeration for NAME LOOKUP — hot-loaded, then user,
+        /// then built-in — so a user/hot-loaded theme overrides a same-named
+        /// built-in. Distinct from <see cref="Palettes"/>, which is display order
+        /// (built-ins first).</summary>
+        private static IEnumerable<IColorMap> LookupOrder
+        {
+            get
+            {
+                foreach (var p in HotLoadedPalettes) yield return p;
+                foreach (var p in UserPalettes) yield return p;
+                foreach (var p in BuiltIns) yield return p;
+            }
         }
 
         /// <summary>Returns the display names of all registered palettes, in list order.</summary>

@@ -164,6 +164,7 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
     public string Title => $"{FractalType} Parameters";
     public string EmptyStateText => $"{FractalType} has no tunable parameters.";
 
+    public bool IsMandelbrot => FractalType == FractalType.Mandelbrot;
     public bool IsJulia => FractalType == FractalType.Julia;
     public bool IsMultibrot => FractalType == FractalType.Multibrot;
     public bool IsPhoenix => FractalType == FractalType.Phoenix;
@@ -202,11 +203,97 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
         || IsQuatJulia || IsQuatMandelbrot
         || IsBicomplexMandelbrot || IsKleinian
         || FractalType == FractalType.UserBulb;
+    /// <summary>Visibility flag for the 2D interior-alpha section (issue #96).
+    /// True only for the canonical Mandelbrot path — the only 2D family whose
+    /// interior alpha the render pipeline currently honours.</summary>
+    public bool IsInteriorAlphaApplicable => IsMandelbrot;
+
     public bool HasNoParams =>
         !(IsJulia || IsMultibrot || IsPhoenix || IsGlynn || IsLogistic || IsSpider || IsNewtonOrNova || IsIFS
           || IsLSystem || IsStrangeAttractor || IsBuddhaBrot || IsMandelbulb || IsMandelbox || IsKifs
           || IsQuatJulia || IsQuatMandelbrot || IsPlasma || IsFlame || IsApollonian || IsKleinian
-          || IsBicomplexMandelbrot || IsDla);
+          || IsBicomplexMandelbrot || IsDla || IsInteriorAlphaApplicable);
+
+    // ── Interior alpha (2D) — issue #96 ──────────────────────────────────────
+    // Reads/writes FractalParameters directly (no cached backing field), same as
+    // the Lighting* colour accessors. Each setter mutates _p in place then Fire()s
+    // so the host re-renders; ApplyView copies InteriorAlpha onto the calculator.
+
+    public int InteriorAlpha
+    {
+        get => _p.InteriorAlpha;
+        set
+        {
+            int v = (int)Clamp(value, 0, 255);
+            if (_p.InteriorAlpha == v) return;
+            _p.InteriorAlpha = v;
+            this.RaisePropertyChanged();
+            Fire();
+        }
+    }
+
+    public Interior2DBackgroundMode Interior2DBackground
+    {
+        get => _p.Interior2DBackground;
+        set
+        {
+            if (_p.Interior2DBackground == value) return;
+            _p.Interior2DBackground = value;
+            this.RaisePropertyChanged();
+            Fire();
+        }
+    }
+    public Array Interior2DBackgroundModes => Enum.GetValues(typeof(Interior2DBackgroundMode));
+
+    /// <summary>Hex 0xAARRGGBB accessor for the Solid/Gradient top colour.
+    /// TextBox binding, LostFocus — mirrors the Lighting colour hex accessors.</summary>
+    public string Interior2DBgTopHex
+    {
+        get => _p.Interior2DBgTop.ToString("X8", System.Globalization.CultureInfo.InvariantCulture);
+        set
+        {
+            if (!TryParseHexColor(value, out uint u) || _p.Interior2DBgTop == u) return;
+            _p.Interior2DBgTop = u;
+            this.RaisePropertyChanged();
+            Fire();
+        }
+    }
+
+    /// <summary>Hex 0xAARRGGBB accessor for the Gradient bottom (horizon) colour.</summary>
+    public string Interior2DBgBottomHex
+    {
+        get => _p.Interior2DBgBottom.ToString("X8", System.Globalization.CultureInfo.InvariantCulture);
+        set
+        {
+            if (!TryParseHexColor(value, out uint u) || _p.Interior2DBgBottom == u) return;
+            _p.Interior2DBgBottom = u;
+            this.RaisePropertyChanged();
+            Fire();
+        }
+    }
+
+    /// <summary>Path to the image used by the Image background mode.</summary>
+    public string Interior2DBgImagePath
+    {
+        get => _p.Interior2DBgImagePath ?? string.Empty;
+        set
+        {
+            var v = string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+            if (string.Equals(_p.Interior2DBgImagePath, v, StringComparison.Ordinal)) return;
+            _p.Interior2DBgImagePath = v;
+            this.RaisePropertyChanged();
+            Fire();
+        }
+    }
+
+    private static bool TryParseHexColor(string? value, out uint result)
+    {
+        var s = (value ?? string.Empty).Trim();
+        if (s.StartsWith("#")) s = s.Substring(1);
+        if (s.StartsWith("0x", StringComparison.OrdinalIgnoreCase)) s = s.Substring(2);
+        return uint.TryParse(s, System.Globalization.NumberStyles.HexNumber,
+            System.Globalization.CultureInfo.InvariantCulture, out result);
+    }
 
     // ── Julia ──
     private double _juliaR;
