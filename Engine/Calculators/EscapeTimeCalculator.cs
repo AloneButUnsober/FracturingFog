@@ -24,7 +24,7 @@ using FracturingFog.Models.FractalKernels;
 
 namespace FracturingFog;
 
-public sealed class EscapeTimeCalculator : Interefaces.IFractalCalculator
+public sealed class EscapeTimeCalculator : Interefaces.IFractalCalculator, Interefaces.IHeightFieldSource
 {
     public bool SupportsZoomPan => true;
 

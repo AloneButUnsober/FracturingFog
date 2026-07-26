@@ -220,7 +220,13 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
         || FractalType == FractalType.BurningShip
         || FractalType == FractalType.Tricorn
         || FractalType == FractalType.Magnet1
-        || FractalType == FractalType.Magnet2;
+        || FractalType == FractalType.Magnet2
+        || FractalType == FractalType.GeneratedTricorn
+        || FractalType == FractalType.GeneratedBurningShip
+        || FractalType == FractalType.GeneratedMandelbrotZ2
+        || FractalType == FractalType.GeneratedMandelbrotZ3
+        || FractalType == FractalType.GeneratedMandelbrotZ4
+        || FractalType == FractalType.GeneratedMandelbrotZ5;
 
     public bool HasNoParams =>
         !(IsJulia || IsMultibrot || IsPhoenix || IsGlynn || IsLogistic || IsSpider || IsNewtonOrNova || IsIFS

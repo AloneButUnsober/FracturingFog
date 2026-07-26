@@ -74,7 +74,7 @@ using FracturingFog.Models;
 
 namespace FracturingFog.Calculators.Generated;
 
-public sealed class {{CLASS_NAME}} : IFractalCalculator, IDisposable
+public sealed class {{CLASS_NAME}} : IFractalCalculator, IHeightFieldSource, IDisposable
 {
     public int Width  { get; private set; }
     public int Height { get; private set; }

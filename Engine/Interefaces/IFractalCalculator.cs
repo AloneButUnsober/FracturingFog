@@ -32,4 +32,20 @@ namespace FracturingFog.Interefaces
         void Resize(int width, int height);
         void Calculate(CancellationToken ct);
     }
+
+    /// <summary>
+    /// Implemented by escape-time 2D calculators that expose a per-pixel smooth
+    /// iteration count usable as a height field (#102 heightfield relief). The
+    /// render host reads <see cref="SmoothBuffer"/> off the active calculator to
+    /// drive <c>HeightfieldRelief2D</c>. Auto-satisfied by any calculator that
+    /// already has a public <c>float[] SmoothBuffer</c> (Mandelbrot, the
+    /// EscapeTimeCalculator family, and every CalcGen-generated escape-time
+    /// calculator).
+    /// </summary>
+    public interface IHeightFieldSource
+    {
+        /// <summary>Per-pixel smooth (continuous) iteration count; in-set pixels
+        /// read 0. Same length/layout as <c>ColorBuffer</c>.</summary>
+        float[] SmoothBuffer { get; }
+    }
 }

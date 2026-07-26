@@ -1932,15 +1932,21 @@ namespace FracturingFog.Rendering
                 // accumulates underneath — no jitter, same settled result.
                 if (job.ProgressiveStage <= 1)
                 {
+                    // Any escape-time 2D calculator exposes its height field via
+                    // IHeightFieldSource — Mandelbrot, the EscapeTimeCalculator
+                    // family, AND the CalcGen-generated calculators (generated
+                    // Tricorn / Burning Ship / MandelbrotZ*). Raymarchers, IFS,
+                    // Apollonian etc. don't implement it → relief skipped.
                     float[]? srcH; int hw, hh;
                     if (useAlt)
                     {
-                        var ec = altCalc as EscapeTimeCalculator;
-                        srcH = ec?.SmoothBuffer; hw = altCalc!.Width; hh = altCalc.Height;
+                        srcH = (altCalc as Interefaces.IHeightFieldSource)?.SmoothBuffer;
+                        hw = altCalc!.Width; hh = altCalc.Height;
                     }
                     else
                     {
-                        srcH = calc.SmoothBuffer; hw = calc.Width; hh = calc.Height;
+                        srcH = (calc as Interefaces.IHeightFieldSource)?.SmoothBuffer;
+                        hw = calc.Width; hh = calc.Height;
                     }
 
                     if (srcH == null)
