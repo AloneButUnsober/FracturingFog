@@ -143,6 +143,10 @@ public sealed class EscapeTimeCalculator : Interefaces.IFractalCalculator
     {
         ColorMap.MaxIterations = MaxIterations;
         LastPixelScale = (3.5 / Math.Max(Width, Height)) / Zoom;
+        // Push the per-frame pixel span to distance-estimation themes so they
+        // normalise by *this* fractal's scale, not a stale MandelbrotCalculator
+        // static (matches MandelbrotCalculator.Calculate).
+        if (ColorMap is IColorMapWithPixelScale pxs) pxs.PixelScale = LastPixelScale;
 
         // T3.1 phase 3: GPU dispatch for the SIMD-capable kinds. Skipped
         // when the kernel isn't attached, when the toggle is off, when
