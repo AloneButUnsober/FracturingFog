@@ -117,6 +117,7 @@ public sealed class LightingFxPresetData
     public uint   EdgeColor           { get; set; } = 0xFF000000u;
     public double EdgeThreshold       { get; set; } = 0.4;
     public EdgeKernelMode EdgeKernel  { get; set; } = EdgeKernelMode.Sobel;
+    public StereoMode StereoMode      { get; set; } = StereoMode.Off;
     public double StereoEyeSeparation { get; set; } = 0.0;
     public double StereoFovDegrees    { get; set; } = 60.0;
     public double StereoConvergence   { get; set; } = 0.0;
@@ -174,6 +175,7 @@ public sealed class LightingFxPresetData
         CausticsScale = fx.CausticsScale, CausticsColor = fx.CausticsColor,
         EdgeStrength = fx.EdgeStrength, EdgeColor = fx.EdgeColor,
         EdgeThreshold = fx.EdgeThreshold, EdgeKernel = fx.EdgeKernel,
+        StereoMode = fx.StereoMode,
         StereoEyeSeparation = fx.StereoEyeSeparation, StereoFovDegrees = fx.StereoFovDegrees,
         StereoConvergence = fx.StereoConvergence, StereoMaxDisparity = fx.StereoMaxDisparity,
         DofAperture = fx.DofAperture, DofFocusDistance = fx.DofFocusDistance, DofSamples = fx.DofSamples,
@@ -221,6 +223,7 @@ public sealed class LightingFxPresetData
         CausticsScale = CausticsScale, CausticsColor = CausticsColor,
         EdgeStrength = EdgeStrength, EdgeColor = EdgeColor,
         EdgeThreshold = EdgeThreshold, EdgeKernel = EdgeKernel,
+        StereoMode = StereoMode,
         StereoEyeSeparation = StereoEyeSeparation, StereoFovDegrees = StereoFovDegrees,
         StereoConvergence = StereoConvergence, StereoMaxDisparity = StereoMaxDisparity,
         DofAperture = DofAperture, DofFocusDistance = DofFocusDistance, DofSamples = DofSamples,
