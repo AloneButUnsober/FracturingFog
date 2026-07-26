@@ -209,7 +209,7 @@
         <!-- Apollonian -->
         <Grid IsVisible="{Binding IsApollonian}"
               ColumnDefinitions="160,*"
-              RowDefinitions="Auto,Auto,Auto">
+              RowDefinitions="Auto,Auto,Auto,Auto">
             <TextBlock Grid.Row="0" Grid.Column="0" Text="Depth:" VerticalAlignment="Center" />
             <NumericUpDown Grid.Row="0" Grid.Column="1"
                            Minimum="0" Maximum="40" Increment="1" FormatString="F0"
@@ -224,6 +224,11 @@
             <CheckBox Grid.Row="2" Grid.Column="1"
                       IsChecked="{Binding ApollonianColorByDepth, Mode=TwoWay}" Margin="0,2"
                       ToolTip.Tip="On = palette indexed by recursion depth (banded). Off = log(radius) gradient (smooth)." />
+            <TextBlock Grid.Row="3" Grid.Column="0" Text="3D relief:" VerticalAlignment="Center" />
+            <NumericUpDown Grid.Row="3" Grid.Column="1"
+                           Minimum="0.0" Maximum="4.0" Increment="0.1" FormatString="F1"
+                           Value="{Binding ApollonianRelief, Mode=TwoWay}" Margin="0,2"
+                           ToolTip.Tip="Dome curvature for 3D (normal-mapped) themes: each circle is lit as a sphere. 0 = flat discs; 1 = full hemisphere. Ignored by flat 2D themes." />
         </Grid>
 
     </StackPanel>

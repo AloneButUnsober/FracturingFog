@@ -1773,6 +1773,45 @@ namespace FracturingFog.Hosting
                         flamePresets: new List<string>(FlamePresets.All.Keys));
                     vm.ParamChanged += () => s_renderHost?.Trigger();
 
+                    // #101 — mesh export for the current DE raymarcher. Sampler
+                    // builds straight off the live FractalType + params via the
+                    // shared factory; marching cubes runs off-thread so the pick
+                    // dialog + UI stay responsive.
+                    vm.ExportMeshRequested += () =>
+                    {
+                        var vsx = s_renderHost?.ViewState;
+                        if (vsx == null) return;
+                        var de = global::FracturingFog.Export.RaymarchMeshSampler.For(
+                            vsx.FractalType, vsx.FractalParameters);
+                        if (de == null)
+                        {
+                            ShowInfo("Mesh export",
+                                "This fractal has no distance-estimated surface to export.", true);
+                            return;
+                        }
+                        string? path = PickSaveSync("Export Mesh",
+                            "OBJ (*.obj)|*.obj|STL (*.stl)|*.stl|All files (*.*)|*.*",
+                            vsx.FractalType.ToString());
+                        if (string.IsNullOrEmpty(path)) return;
+                        double range = global::FracturingFog.Export.RaymarchMeshSampler.SuggestedRange(
+                            vsx.FractalType, vsx.FractalParameters);
+                        System.Threading.Tasks.Task.Run(() =>
+                        {
+                            try
+                            {
+                                int tris = global::FracturingFog.Export.UserBulbMeshExporter.ExportMarchingCubes(
+                                    path, de, 0, 0, 0, range, 96);
+                                Dispatcher.UIThread.Post(() =>
+                                    ShowInfo("Mesh export", $"Exported {tris} triangles to {path}", false));
+                            }
+                            catch (Exception ex)
+                            {
+                                Dispatcher.UIThread.Post(() =>
+                                    ShowInfo("Mesh export error", $"Export failed: {ex.Message}", true));
+                            }
+                        });
+                    };
+
                     // Render-completion gate for the Julia animation. Without
                     // this the timer-driven c-orbit fires Trigger every tick
                     // and floods the render pipe — the UI thread loses ground

@@ -287,7 +287,14 @@ namespace FracturingFog
                  | FractalCapabilities.SuppliesDerivative
                  | FractalCapabilities.SuppliesHistogram,
 
-            // Antiholomorphic / non-holomorphic 2D — no DE, no derivative.
+            // Antiholomorphic / non-holomorphic 2D. conj(z)² (and |z| in Burning
+            // Ship) is not complex-differentiable, so there is no exact analytic
+            // dz/dc. The kernels still track an *approximate* derivative (see
+            // TricornKernel: "track as if Mandelbrot"), and the escape-time /
+            // generated / TearDrop calculators already fill DistanceBuffer from
+            // it — so SuppliesDE exposes the DistanceField theme family with a
+            // plausible (not metrically exact) estimate. SuppliesDerivative is
+            // withheld: derivative-bailout themes assume an analytic dz/dc.
             FractalType.BurningShip
                 or FractalType.Tricorn
                 or FractalType.GeneratedBurningShip
@@ -295,6 +302,7 @@ namespace FracturingFog
                 or FractalType.Glynn
                 or FractalType.TearDrop
                 => FractalCapabilities.SuppliesNormals
+                 | FractalCapabilities.SuppliesDE
                  | FractalCapabilities.SuppliesOrbit
                  | FractalCapabilities.SuppliesFinalZ
                  | FractalCapabilities.SuppliesHistogram,
@@ -329,6 +337,14 @@ namespace FracturingFog
                  | FractalCapabilities.SuppliesOrbit
                  | FractalCapabilities.SuppliesHistogram,
 
+            // Apollonian gasket — direct-color circle packing. Not escape-time,
+            // but each disk is painted as a lit sphere-imposter that supplies a
+            // per-pixel surface normal (nx, ny) to the 3D Phong/Relief themes
+            // (ApollonianCalculator.PaintDisk). No orbit / DE / final-z data.
+            FractalType.Apollonian
+                => FractalCapabilities.SuppliesNormals
+                 | FractalCapabilities.SuppliesHistogram,
+
             // Histogram / chaos-game families — no normals, no orbit data
             // surfaced to per-pixel themes (each calculator paints through the
             // 3-param Map overload only).
@@ -340,7 +356,6 @@ namespace FracturingFog
                 or FractalType.AntiBuddhabrot
                 or FractalType.AntiNebulabrot
                 or FractalType.Dla
-                or FractalType.Apollonian
                 or FractalType.Flame
                 or FractalType.Plasma
                 or FractalType.Logistic
