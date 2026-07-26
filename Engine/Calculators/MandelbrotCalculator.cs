@@ -62,7 +62,7 @@ using System.Diagnostics;
 
 namespace FracturingFog;
 
-public sealed class MandelbrotCalculator
+public sealed class MandelbrotCalculator : Interefaces.IHeightFieldSource
 {
     // ── Public state ──────────────────────────────────────────────────────────
 
