@@ -49,11 +49,14 @@ public sealed class ApollonianCalculator : IFractalCalculator
 
     public FractalParameters FractalParameters { get; set; } = new();
 
-    // Set once per Calculate() from the active ColorMap's required capabilities.
-    // When the theme reads (nx, ny), each disk is painted through the 5-param
-    // Map overload as a lit sphere-imposter (per-pixel normal); otherwise the
-    // cheap single-colour fast path runs (bit-identical to the pre-3D behaviour).
-    private bool _normalAware;
+    // Dome relief for the sphere-imposter paint path, read once per Calculate().
+    // > 0 (default): every disk is painted through the 5-param Map overload with
+    // a per-pixel surface normal, so ANY theme that reads (nx, ny) shows relief —
+    // matching how the escape-time calculators pass normals unconditionally
+    // (a 3D theme that forgot to self-declare UsesNormals still lit up on
+    // Mandelbrot but rendered flat here when this was capability-gated). Flat 2D
+    // themes ignore the normal (default interface method) so they're unchanged.
+    // == 0: single-colour-per-disk fast path (user explicitly flattened relief).
     private double _relief = 1.0;
 
     public ApollonianCalculator(int width, int height) => Resize(width, height);
@@ -90,10 +93,6 @@ public sealed class ApollonianCalculator : IFractalCalculator
 
         ColorMap.MaxIterations = Math.Max(8, maxDepth + 4);
 
-        // Decide the paint path once: normal-aware 3D themes get lit domes,
-        // flat themes keep the single-colour-per-disk fast path.
-        _normalAware = (ColorPalette.GetRequiredCapabilities(ColorMap)
-                        & FractalCapabilities.SuppliesNormals) != 0;
         _relief = Math.Clamp(FractalParameters.ApollonianRelief, 0.0, 4.0);
 
         // Seed: integral (−1, 2, 2, 3) gasket — outer unit disk, two half-radius
@@ -210,10 +209,10 @@ public sealed class ApollonianCalculator : IFractalCalculator
 
         double r2 = sr * sr;
 
-        if (!_normalAware)
+        if (_relief <= 0.0)
         {
-            // Flat fast path — one colour for the whole disk (bit-identical to
-            // the pre-3D behaviour).
+            // Flat fast path — one colour for the whole disk (user flattened
+            // relief; bit-identical to the pre-3D behaviour).
             uint col = (uint)ColorMap.Map(t, 0f, ColorMap.MaxIterations);
             for (int py = y0; py <= y1; py++)
             {
