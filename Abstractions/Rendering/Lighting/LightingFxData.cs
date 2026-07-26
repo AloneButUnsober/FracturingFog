@@ -451,6 +451,25 @@ public struct LightingFxData
     /// parallax at the same eye separation.</summary>
     public double StereoFovDegrees;
 
+    /// <summary>Convergence via horizontal image translation (HIT), expressed
+    /// as a fraction of image width. 0 = parallel cameras (whole scene sits
+    /// behind the screen; comfortable but nothing pops). Positive = cross /
+    /// pull the zero-parallax plane toward the viewer so the subject sits at
+    /// the screen plane and closer detail floats in front. The SBS compositor
+    /// shifts the left eye by <c>+conv·width/2</c> and the right eye by
+    /// <c>-conv·width/2</c> (edge-clamped). Applies to both Fake and True
+    /// paths. Typical range ±0.05. Default 0 = legacy behaviour.</summary>
+    public double StereoConvergence;
+
+    /// <summary>Parallax comfort guard — the maximum on-screen horizontal
+    /// disparity allowed between the two eyes, as a fraction of image width.
+    /// The Fake depth-parallax warp clamps its per-pixel shift to this so a
+    /// very near hit cannot produce a disparity the eyes can't fuse
+    /// (divergence → eye strain). Also drives
+    /// <see cref="StereoRender.SuggestEyeSeparation"/>. Default 0.03 ≈ the
+    /// "1/30 rule". 0 disables the clamp.</summary>
+    public double StereoMaxDisparity;
+
     // ── DoF (Phase 21) ────────────────────────────────────────────────
 
     /// <summary>Aperture radius in world units. 0 = pinhole (no DoF).</summary>
@@ -594,6 +613,8 @@ public struct LightingFxData
         StereoFovDegrees    = 60.0,
         StereoMode          = StereoMode.Off,
         StereoEyeOffset     = 0.0,
+        StereoConvergence   = 0.0,
+        StereoMaxDisparity  = 0.03,
 
         DofAperture        = 0.0,
         DofFocusDistance   = 3.0,
