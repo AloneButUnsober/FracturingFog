@@ -145,6 +145,7 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
         });
         ToggleJuliaAnimateCommand   = ReactiveCommand.Create(ToggleJuliaAnimate);
         ToggleLSystemSweepCommand   = ReactiveCommand.Create(ToggleLSystemSweep);
+        ExportMeshCommand           = ReactiveCommand.Create(() => ExportMeshRequested?.Invoke());
     }
 
     /// <summary>Stop any running parameter animation. Host calls this when the
@@ -890,6 +891,20 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
 
     /// <summary>Raised when the Close button is clicked.</summary>
     public event EventHandler? CloseRequested;
+
+    /// <summary>Raised when "Export Mesh…" is clicked for a mesh-exportable 3D
+    /// raymarcher (#101). The host picks a path + runs the marching-cubes export
+    /// off <see cref="FractalType"/> + <see cref="FractalParameters"/>.</summary>
+    public event Action? ExportMeshRequested;
+
+    /// <summary>True for the DE raymarchers the shared mesh exporter can build a
+    /// sampler for (UserBulb has its own editor export path, so it's excluded).</summary>
+    public bool CanExportMesh =>
+        IsMandelbulb || IsMandelbox || IsKifs
+        || IsQuatJulia || IsQuatMandelbrot
+        || IsKleinian || IsBicomplexMandelbrot;
+
+    public ReactiveCommand<Unit, Unit> ExportMeshCommand { get; }
 
     private void Fire()
     {
