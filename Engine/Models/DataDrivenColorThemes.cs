@@ -84,6 +84,7 @@ namespace FracturingFog.Models
                             Description = description,
                             MaxRecommendedZoom = maxZoomField,
                             Kind = ColorThemeKind.Pbr3D,
+                            InSetColor = InSetFromMap(map),
                             InterpolationSpace = pbr.ExportInterpolationSpace,
                             InterpolationCurve = pbr.ExportInterpolationCurve,
                             TransferFunction = pbr.ExportTransferFunction,
@@ -125,6 +126,7 @@ namespace FracturingFog.Models
                         Description = description,
                         MaxRecommendedZoom = maxZoomField,
                         Kind = ColorThemeKind.Phong3D,
+                        InSetColor = InSetFromMap(map),
                         InterpolationSpace = phong.ExportInterpolationSpace,
                         InterpolationCurve = phong.ExportInterpolationCurve,
                         TransferFunction = phong.ExportTransferFunction,
@@ -158,6 +160,7 @@ namespace FracturingFog.Models
                         Description = description,
                         MaxRecommendedZoom = maxZoomField,
                         Kind = ColorThemeKind.Cycling,
+                        InSetColor = InSetFromMap(map),
                         InterpolationSpace = cyc.ExportInterpolationSpace,
                         InterpolationCurve = cyc.ExportInterpolationCurve,
                         TransferFunction = cyc.ExportTransferFunction,
@@ -181,6 +184,7 @@ namespace FracturingFog.Models
                         Description = description,
                         MaxRecommendedZoom = maxZoomField,
                         Kind = ColorThemeKind.Gradient,
+                        InSetColor = InSetFromMap(map),
                         InterpolationSpace = grad.ExportInterpolationSpace,
                         InterpolationCurve = grad.ExportInterpolationCurve,
                         TransferFunction = grad.ExportTransferFunction,
@@ -201,6 +205,24 @@ namespace FracturingFog.Models
         }
 
         // ── Helpers ───────────────────────────────────────────────────────────
+
+        /// <summary>Snapshots a runtime map's in-set colour back into an
+        /// <see cref="InSetColorData"/> so an edited interior (colour + alpha, F10
+        /// / #96) round-trips through Export. Returns null for the default opaque
+        /// black so themes without an override serialise byte-for-byte as before
+        /// (an opaque-black override collapses to the identical default).</summary>
+        private static InSetColorData? InSetFromMap(IColorMap map)
+        {
+            uint c = map.InSetColor;
+            if (c == 0xFF000000u) return null;   // default → no override
+            return new InSetColorData(
+                (byte)((c >> 16) & 0xFF),
+                (byte)((c >> 8) & 0xFF),
+                (byte)(c & 0xFF))
+            {
+                A = (byte)((c >> 24) & 0xFF),
+            };
+        }
 
         private static List<ColorStopData> StopsToData(IReadOnlyList<ColorStop> stops)
         {

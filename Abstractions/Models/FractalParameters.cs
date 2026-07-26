@@ -310,6 +310,56 @@ namespace FracturingFog.Models
         public int QMandelMaxSteps { get; set; } = 160;
         public double QMandelEpsilon { get; set; } = 0.0012;
 
+        // 2D heightfield relief (#102 Phase 1). Opt-in post-pass that treats the
+        // escape-potential (smooth iteration count) as a height field and adds
+        // real raised relief + horizon cast shadows on top of the active theme —
+        // unlike the per-pixel Phong "3D" themes, which only emboss the slope.
+        // Applies to escape-time 2D fractals (Mandelbrot, Tricorn, Burning Ship,
+        // Julia, Multibrot, …). Ignored by 3D raymarchers and direct-colour
+        // families (Apollonian etc.).
+        /// <summary>Master toggle for the 2D heightfield relief post-pass.
+        /// Default off (bit-identical to the flat/emboss render).</summary>
+        public bool Relief2DEnabled { get; set; } = false;
+        /// <summary>Vertical exaggeration of the height field (world height per
+        /// normalised smooth-count unit). Larger = deeper carving + longer
+        /// shadows. Default 1.0.</summary>
+        public double Relief2DHeightScale { get; set; } = 1.0;
+        /// <summary>Light compass direction in degrees (0 = +x/right, 90 = up).
+        /// Default 135 (upper-left key light).</summary>
+        public double Relief2DLightAzimuthDeg { get; set; } = 135.0;
+        /// <summary>Light elevation above the plane in degrees. Lower = longer,
+        /// more dramatic cast shadows. Default 30.</summary>
+        public double Relief2DLightElevationDeg { get; set; } = 30.0;
+        /// <summary>Cast-shadow darkness [0,1]. 0 = shadows computed but not
+        /// applied; 1 = fully black shadows. Default 0.6.</summary>
+        public double Relief2DShadowStrength { get; set; } = 0.6;
+        /// <summary>Overall blend of the relief lighting against the flat themed
+        /// colour [0,1]. 0 = flat (bypass); 1 = full relief. Default 1.0.</summary>
+        public double Relief2DStrength { get; set; } = 1.0;
+
+        // #102 Phase 2 — oblique heightfield RAYMARCH. Instead of the screen-
+        // space hillshade post-pass (Phase 1, above), extrude the smooth-count
+        // height field into a true 3D surface z = h(x,y) and raymarch it from an
+        // oblique camera, routing through the full ShadingPipeline. Gives real
+        // perspective relief, a silhouette, and — because it is now a 3D scene —
+        // volumetric fog / god-rays via the shared LightingFxData (the FX dialog
+        // FogDensity / VolumeSteps knobs). Terrain height still comes from
+        // Relief2DHeightScale; the sun + fog come from the Lighting struct.
+        /// <summary>When true (and <see cref="Relief2DEnabled"/>), replace the
+        /// flat 2D image with an oblique 3D raymarch of the height field. Default
+        /// off — the Phase 1 hillshade post-pass runs instead.</summary>
+        public bool Relief2DRaymarch { get; set; } = false;
+        /// <summary>Oblique camera azimuth in degrees, orbiting the terrain around
+        /// the up axis. 0 = looking along −Z toward the scene. Default 0.</summary>
+        public double Relief2DCameraAzimuthDeg { get; set; } = 0.0;
+        /// <summary>Oblique camera elevation above the ground plane in degrees.
+        /// 90 = top-down (flat-looking); low = raking, dramatic silhouette.
+        /// Default 45.</summary>
+        public double Relief2DCameraElevationDeg { get; set; } = 45.0;
+        /// <summary>Vertical field of view of the oblique camera in degrees.
+        /// Default 50.</summary>
+        public double Relief2DCameraFovDeg { get; set; } = 50.0;
+
         // Apollonian gasket (Descartes Circle Theorem recursive packing).
         /// <summary>Maximum recursion depth for the Vieta-jump tree. The
         /// inside-R sub-gaskets sit several levels deeper than the cusp circles
@@ -327,6 +377,12 @@ namespace FracturingFog.Models
         /// — a smoother gradient that emphasises scale instead of generation.
         /// Default true.</summary>
         public bool ApollonianColorByDepth { get; set; } = true;
+        /// <summary>Dome relief for 3D (normal-mapped) themes. Each gasket circle
+        /// is shaded as a lit sphere-imposter; this scales how fast the surface
+        /// normal tilts from the disk centre (flat, facing the viewer) to the
+        /// rim (grazing). 0 = flat discs (no relief); 1 = full hemisphere.
+        /// Ignored by flat 2D themes. Default 1.0.</summary>
+        public double ApollonianRelief { get; set; } = 1.0;
 
         // Diffusion-Limited Aggregation (Witten–Sander 1981).
         /// <summary>Number of random-walk particles launched into the
@@ -433,7 +489,7 @@ namespace FracturingFog.Models
         /// <summary>Algebra mode: Vec3 (3D triplex) or Quat (4D Hamilton). Affects step signature.</summary>
         public UserBulbAxisModeKind UserBulbAxisMode { get; set; } = UserBulbAxisModeKind.Vec3;
         /// <summary>Step-function compiler. Roslyn = full C# body (default).
-        /// Sandbox = restricted DSL (no BCL, shareable, Vec3-only).</summary>
+        /// Sandbox = restricted DSL (no BCL, shareable; Vec3 + Quat, CPU + GPU).</summary>
         public UserBulbCompilerKind UserBulbCompiler { get; set; } = UserBulbCompilerKind.Roslyn;
         /// <summary>W component of 4D slice plane (Quat mode only). c.W = this value.</summary>
         public double UserBulbQuatSliceW { get; set; } = 0.0;
@@ -500,6 +556,40 @@ namespace FracturingFog.Models
         /// so renders are pixel-identical until a calculator opts in.
         /// </summary>
         public LightingFxData Lighting { get; set; } = LightingFxData.CreateDefault();
+
+        // ── Interior alpha (2D) — issue #96 ──────────────────────────────────
+        // Global opacity of the in-set (interior) region for 2D escape-time
+        // fractals. Applies to the whole in-set region regardless of theme; a
+        // per-theme interior alpha (color theme editor) is a planned follow-up.
+
+        /// <summary>Global opacity of the in-set (interior) region, 0..255.
+        /// 255 = opaque (legacy, pixel-identical). Below 255 the interior turns
+        /// translucent and composites over <see cref="Interior2DBackground"/>.
+        /// Scales any alpha a theme already authored (interior-aware maps emit
+        /// opaque today, so this sets it). Currently honoured on the canonical
+        /// Mandelbrot path only.</summary>
+        public int InteriorAlpha { get; set; } = 255;
+
+        /// <summary>Background composited behind translucent 2D pixels.
+        /// Checkerboard (default) preserves the F10.5 see-through look; Solid /
+        /// Gradient paint a colour backdrop; Transparent keeps straight alpha
+        /// for export.</summary>
+        public Interior2DBackgroundMode Interior2DBackground { get; set; }
+            = Interior2DBackgroundMode.Checkerboard;
+
+        /// <summary>Top colour of the Gradient background and the fill of the
+        /// Solid background (packed 0xAARRGGBB).</summary>
+        public uint Interior2DBgTop { get; set; } = 0xFF202040u;
+
+        /// <summary>Bottom (horizon) colour of the Gradient background
+        /// (packed 0xAARRGGBB).</summary>
+        public uint Interior2DBgBottom { get; set; } = 0xFF101020u;
+
+        /// <summary>Path to the image used when
+        /// <see cref="Interior2DBackground"/> is <c>Image</c>. Stretched to fill
+        /// the viewport; shows through translucent interior AND colour-stop
+        /// pixels. Null/empty falls back to a flat fill.</summary>
+        public string? Interior2DBgImagePath { get; set; }
 
         public FractalParameters Clone()
         {
@@ -599,9 +689,20 @@ namespace FracturingFog.Models
                 QMandelLightPhi = QMandelLightPhi,
                 QMandelMaxSteps = QMandelMaxSteps,
                 QMandelEpsilon = QMandelEpsilon,
+                Relief2DEnabled = Relief2DEnabled,
+                Relief2DHeightScale = Relief2DHeightScale,
+                Relief2DLightAzimuthDeg = Relief2DLightAzimuthDeg,
+                Relief2DLightElevationDeg = Relief2DLightElevationDeg,
+                Relief2DShadowStrength = Relief2DShadowStrength,
+                Relief2DStrength = Relief2DStrength,
+                Relief2DRaymarch = Relief2DRaymarch,
+                Relief2DCameraAzimuthDeg = Relief2DCameraAzimuthDeg,
+                Relief2DCameraElevationDeg = Relief2DCameraElevationDeg,
+                Relief2DCameraFovDeg = Relief2DCameraFovDeg,
                 ApollonianDepth = ApollonianDepth,
                 ApollonianMinPixelRadius = ApollonianMinPixelRadius,
                 ApollonianColorByDepth = ApollonianColorByDepth,
+                ApollonianRelief = ApollonianRelief,
                 DlaParticles = DlaParticles,
                 DlaSeed = DlaSeed,
                 KleinianIterations = KleinianIterations,
@@ -693,7 +794,12 @@ namespace FracturingFog.Models
                 UserBulbSuperSample = UserBulbSuperSample,
                 LowResPreviewScale = LowResPreviewScale,
                 UserBulbChain = UserBulbChain.ConvertAll(s => s.Clone()),
-                Lighting = Lighting // struct value-copy; EnvironmentName is string (immutable)
+                Lighting = Lighting, // struct value-copy; EnvironmentName is string (immutable)
+                InteriorAlpha = InteriorAlpha,
+                Interior2DBackground = Interior2DBackground,
+                Interior2DBgTop = Interior2DBgTop,
+                Interior2DBgBottom = Interior2DBgBottom,
+                Interior2DBgImagePath = Interior2DBgImagePath
             };
         }
     }

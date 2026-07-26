@@ -42,6 +42,7 @@ using System.Reactive.Linq;
 using System.Threading.Tasks;
 using Avalonia.Media;
 using Avalonia.Media.Immutable;
+using FracturingFog;
 using FracturingFog.Models;
 using ReactiveUI;
 
@@ -50,6 +51,12 @@ namespace FracturingFog.UI.Avalonia.ViewModels;
 public sealed class ColorThemeEditorViewModel : ViewModelBase
 {
     private readonly IColorThemeService _service;
+    // Live global view params (issue #96). Optional — when supplied the editor's
+    // In-set section exposes the same 2D interior-alpha BACKGROUND controls as
+    // the Params view (background mode / colours / image), editing the same
+    // global FractalParameters so the two dialogs stay in sync. The interior
+    // ALPHA itself stays per-theme (InSetA). Null in headless / preview-less use.
+    private readonly FractalParameters? _viewParams;
     private readonly SerialDisposable _previewDebounce = new();
     private bool _suppressChange;
     private string? _loadedSourceName;
@@ -64,9 +71,11 @@ public sealed class ColorThemeEditorViewModel : ViewModelBase
 
     public ColorThemeEditorViewModel(IColorThemeService service,
                                      string? initialThemeName,
-                                     string? initialRegionName)
+                                     string? initialRegionName,
+                                     FractalParameters? viewParams = null)
     {
         _service = service ?? throw new ArgumentNullException(nameof(service));
+        _viewParams = viewParams;
 
         ThemeNames = new ObservableCollection<string>(
             service.EnumerateThemeNames(_themeSort, _themeKind, _themeEditableOnly));
@@ -949,9 +958,20 @@ public sealed class ColorThemeEditorViewModel : ViewModelBase
         set { this.RaiseAndSetIfChanged(ref _inSetB, value); this.RaisePropertyChanged(nameof(InSetSwatchBrush)); FieldChanged(); }
     }
 
-    /// <summary>Solid swatch brush for the in-set colour preview.</summary>
+    private byte _inSetA = 255;
+    /// <summary>Per-theme interior alpha (F10 / #96). 255 = opaque (default).
+    /// Below 255 the in-set region composites over the 2D background; the global
+    /// <c>FractalParameters.InteriorAlpha</c> knob multiplies this value.</summary>
+    public byte InSetA
+    {
+        get => _inSetA;
+        set { this.RaiseAndSetIfChanged(ref _inSetA, value); this.RaisePropertyChanged(nameof(InSetSwatchBrush)); FieldChanged(); }
+    }
+
+    /// <summary>Solid swatch brush for the in-set colour preview. Carries the
+    /// authored alpha so a translucent interior reads as faded in the swatch.</summary>
     public IBrush InSetSwatchBrush => UseInSet
-        ? new ImmutableSolidColorBrush(Color.FromRgb(InSetR, InSetG, InSetB))
+        ? new ImmutableSolidColorBrush(Color.FromArgb(InSetA, InSetR, InSetG, InSetB))
         : new ImmutableSolidColorBrush(Colors.Black);
 
     /// <summary>Composite RGB binding target for the ColorPicker control.</summary>
@@ -959,6 +979,81 @@ public sealed class ColorThemeEditorViewModel : ViewModelBase
     {
         get => Color.FromRgb(InSetR, InSetG, InSetB);
         set { InSetR = value.R; InSetG = value.G; InSetB = value.B; this.RaisePropertyChanged(nameof(InSetColor)); }
+    }
+
+    // ── 2D interior-alpha background (global — mirrors Params view, #96) ──────
+    // These edit the shared FractalParameters (not the theme), so the backdrop
+    // choice is consistent with the Params view. Only visible when the editor
+    // was given a live params instance. Raising InteriorBackgroundChanged lets
+    // the host retrigger a repaint.
+
+    /// <summary>True when the editor has a live params instance and can show the
+    /// global background controls (hides them in headless / preview-less use).</summary>
+    public bool HasViewParams => _viewParams != null;
+
+    /// <summary>Raised when a global 2D background field changes so the host can
+    /// repaint. Distinct from PreviewRequested (which carries the theme def).</summary>
+    public event EventHandler? InteriorBackgroundChanged;
+
+    public Array Interior2DBackgroundModes => Enum.GetValues(typeof(Interior2DBackgroundMode));
+
+    public Interior2DBackgroundMode Interior2DBackground
+    {
+        get => _viewParams?.Interior2DBackground ?? Interior2DBackgroundMode.Checkerboard;
+        set
+        {
+            if (_viewParams == null || _viewParams.Interior2DBackground == value) return;
+            _viewParams.Interior2DBackground = value;
+            this.RaisePropertyChanged();
+            InteriorBackgroundChanged?.Invoke(this, EventArgs.Empty);
+        }
+    }
+
+    public string Interior2DBgTopHex
+    {
+        get => (_viewParams?.Interior2DBgTop ?? 0xFF202040u).ToString("X8", System.Globalization.CultureInfo.InvariantCulture);
+        set
+        {
+            if (_viewParams == null || !TryParseHexColor(value, out uint u) || _viewParams.Interior2DBgTop == u) return;
+            _viewParams.Interior2DBgTop = u;
+            this.RaisePropertyChanged();
+            InteriorBackgroundChanged?.Invoke(this, EventArgs.Empty);
+        }
+    }
+
+    public string Interior2DBgBottomHex
+    {
+        get => (_viewParams?.Interior2DBgBottom ?? 0xFF101020u).ToString("X8", System.Globalization.CultureInfo.InvariantCulture);
+        set
+        {
+            if (_viewParams == null || !TryParseHexColor(value, out uint u) || _viewParams.Interior2DBgBottom == u) return;
+            _viewParams.Interior2DBgBottom = u;
+            this.RaisePropertyChanged();
+            InteriorBackgroundChanged?.Invoke(this, EventArgs.Empty);
+        }
+    }
+
+    public string Interior2DBgImagePath
+    {
+        get => _viewParams?.Interior2DBgImagePath ?? string.Empty;
+        set
+        {
+            if (_viewParams == null) return;
+            var v = string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+            if (string.Equals(_viewParams.Interior2DBgImagePath, v, StringComparison.Ordinal)) return;
+            _viewParams.Interior2DBgImagePath = v;
+            this.RaisePropertyChanged();
+            InteriorBackgroundChanged?.Invoke(this, EventArgs.Empty);
+        }
+    }
+
+    private static bool TryParseHexColor(string? value, out uint result)
+    {
+        var s = (value ?? string.Empty).Trim();
+        if (s.StartsWith("#")) s = s.Substring(1);
+        if (s.StartsWith("0x", StringComparison.OrdinalIgnoreCase)) s = s.Substring(2);
+        return uint.TryParse(s, System.Globalization.NumberStyles.HexNumber,
+            System.Globalization.CultureInfo.InvariantCulture, out result);
     }
 
     // ── Post-FX defaults ──────────────────────────────────────────────────
@@ -1213,11 +1308,13 @@ public sealed class ColorThemeEditorViewModel : ViewModelBase
                 InSetR = def.InSetColor.R;
                 InSetG = def.InSetColor.G;
                 InSetB = def.InSetColor.B;
+                InSetA = def.InSetColor.A;
             }
             else
             {
                 UseInSet = false;
                 InSetR = InSetG = InSetB = 0;
+                InSetA = 255;
             }
 
             UseBrightness = def.Brightness.HasValue;
@@ -1271,7 +1368,7 @@ public sealed class ColorThemeEditorViewModel : ViewModelBase
             GlowBoostExponent = (float)GlowExponent,
             GlowBoostScale = (float)GlowScale,
             MaterialBands = MaterialBands.Select(r => r.ToDef()).ToList(),
-            InSetColor = UseInSet ? new InSetColorDef { R = InSetR, G = InSetG, B = InSetB } : null,
+            InSetColor = UseInSet ? new InSetColorDef { R = InSetR, G = InSetG, B = InSetB, A = InSetA } : null,
             Brightness = UseBrightness ? Brightness : (int?)null,
             Contrast = UseContrast ? Contrast : (int?)null,
             Adaptive = UseAdaptive ? Adaptive : (int?)null,

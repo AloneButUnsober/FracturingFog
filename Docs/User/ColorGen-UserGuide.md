@@ -507,7 +507,179 @@ return gamma(warm, 1.4);
 
 ---
 
-## 4. Compile & Load vs Generate via ColorGen
+## 4. Advanced gallery
+
+The §3 gallery covers the everyday palette. This section pushes the DSL
+harder — the tools that a fixed list of colour stops simply cannot express:
+**perceptually-uniform colour** (`oklab`/`oklch`/`mix_oklab`), the
+**cosine palette** (`cosine`), **derivative** and **orbit-geometry**
+inputs (`dzr`/`dzi`, `zr`/`zi`), **channel recombination** (`.r/.g/.b`),
+**boolean decision logic**, and **hash-built noise**. Every program below
+is complete — paste verbatim and Compile & Load.
+
+### 4.1 Perceptual spectral cycler — `oklch`
+
+```cg
+let hue = smooth * 0.15;                 // radians; ~1 full loop / 42 iters
+let L   = isInSet > 0.5 ? 0.30 : 0.72;   // constant lightness = no hot/dark bands
+return oklch(L, 0.13, hue);
+```
+
+Only the hue rotates; lightness and chroma are pinned. The result steps
+through the spectrum in **equal visual increments**, without the dark-blue /
+blown-out-yellow banding that plagues a raw `hsv` hue sweep.
+
+### 4.2 Inigo Quilez cosine gradient — `cosine`
+
+```cg
+let a = rgb(0.5, 0.5, 0.5);
+let b = rgb(0.5, 0.5, 0.5);
+let c = rgb(1.0, 1.0, 1.0);
+let d = rgb(0.00, 0.33, 0.67);
+return cosine(smooth * 0.02, a, b, c, d);
+```
+
+`a + b·cos(τ·(c·t + d))` per channel. Stop-free, infinitely cyclic, and
+tuned entirely by four coefficient vectors — the standard palette form in
+shader-fractal tools. Shift `d` to move where each channel peaks.
+
+### 4.3 Distant-hue blend through OkLab — `mix_oklab`
+
+```cg
+let w    = 0.5 + 0.5 * sin(smooth * 0.06);
+let cold = rgb(0.05, 0.25, 0.95);
+let warm = rgb(1.00, 0.80, 0.10);
+return mix_oklab(cold, warm, w);
+```
+
+A plain `mix` of blue and gold passes through a muddy grey at the midpoint
+(the two colours cancel in sRGB). Blending through OkLab keeps the
+mid-tones vivid the whole way across.
+
+### 4.4 Value noise from the hash lattice
+
+```cg
+let x = smooth * 0.35;
+let i = floor(x);
+let f = fract(x);
+let u = smoothstep(0.0, 1.0, f);         // fade curve between lattice points
+let n = mix(hash(i), hash(i + 1.0), u);  // interpolated 1-D noise
+return hsv(fract(t * 2.0 + 0.3 * n), 0.8, 0.95);
+```
+
+Raw `hash` flickers. Sampling it at integer lattice points and
+smoothstep-interpolating between them yields continuous **value noise** — an
+organic hue drift instead of static.
+
+### 4.5 Cross orbit trap
+
+```cg
+let trap = min(abs(zr), abs(zi));        // distance to nearest coordinate axis
+let glow = exp(-trap * 6.0);             // tight, bright filaments
+let bg   = oklch(0.35, 0.10, smooth * 0.05);
+let ink  = rgb(1.0, 0.95, 0.7);
+return mix_oklab(bg, ink, saturate(glow));
+```
+
+Uses the escape point `(zr, zi)` directly. Distance to the nearest axis,
+run through `exp`, lights up bright filaments that trace the fractal's
+internal structure — a classic orbit-trap look.
+
+### 4.6 Anti-aliased iso-contours
+
+```cg
+let band = fract(smooth * 0.25);
+let line = smoothstep(0.0, 0.08, band) * smoothstep(0.0, 0.08, 1.0 - band);
+let fill = oklch(0.65, 0.12, smooth * 0.03);
+return brightness(fill, -0.5 * (1.0 - line));
+```
+
+Two back-to-back `smoothstep`s carve a thin dark line at every integer
+crossing of the band coordinate. Because the edges are smoothstepped (not
+hard `step`s), the contours stay clean at any zoom.
+
+### 4.7 Boolean plaid material
+
+```cg
+let u    = floor(zr * 4.0);
+let v    = floor(zi * 4.0);
+let cell = mod(u + v, 2.0);                              // checker parity
+let edge = (fract(mag * 3.0) < 0.15) || (fract(arg * 2.0) < 0.15);
+let base = cell > 0.5 ? rgb(0.15, 0.20, 0.45) : rgb(0.85, 0.75, 0.35);
+return edge ? brightness(base, 0.35) : base;
+```
+
+A checker parity from the orbit geometry, plus an `||` of two thin-stripe
+tests overlaid as a glowing grid. Shows `&&`/`||`/`?:` composing into a
+real material.
+
+### 4.8 Derivative field direction — `dzr`/`dzi`
+
+```cg
+let ang = atan2(dzi, dzr);
+let hue = fract(ang / tau + 0.5);
+let m   = log(1.0 + hypot(dzr, dzi));
+let v   = saturate(m * 0.15);
+return isInSet > 0.5 ? rgb(0, 0, 0) : hsv(hue, 0.85, 0.3 + 0.7 * v);
+```
+
+Colours by the analytic derivative `dz/dc`: hue tracks the **angle** the
+field points, brightness tracks its **log-magnitude** (how fast the field
+stretches). Pure exterior structure, invisible to iteration-count colouring.
+
+### 4.9 Multi-octave fBm
+
+```cg
+let x   = smooth * 0.4 + arg;
+let o1  = hash(floor(x));
+let o2  = hash(floor(x * 2.0)) * 0.5;
+let o3  = hash(floor(x * 4.0)) * 0.25;
+let fbm = (o1 + o2 + o3) / 1.75;         // normalise back toward [0,1]
+return cosine(t + 0.4 * fbm,
+  rgb(0.5, 0.5, 0.5), rgb(0.5, 0.5, 0.5),
+  rgb(1.0, 1.0, 1.0), rgb(0.00, 0.10, 0.20));
+```
+
+Three octaves of hash noise at doubling frequency and halving weight stack
+into a cloudy / marble field, which then modulates the phase of a cosine
+palette. fBm — fractal noise colouring a fractal.
+
+### 4.10 Nested-ternary elevation map
+
+```cg
+let h = saturate(smooth * 0.006);
+let c =
+  h < 0.30 ? rgb(0.02, 0.10, 0.35) :     // deep water
+  h < 0.40 ? rgb(0.10, 0.35, 0.65) :     // shallows
+  h < 0.50 ? rgb(0.85, 0.80, 0.55) :     // sand
+  h < 0.72 ? rgb(0.15, 0.45, 0.15) :     // forest
+  h < 0.88 ? rgb(0.45, 0.35, 0.25) :     // rock
+             rgb(0.98, 0.98, 1.00);      // snow
+return c;
+```
+
+A chain of thresholds paints biome bands from deep water up to snow — a
+colour lookup table expressed as data-flow, with **hard steps** no
+blended stop-list can reproduce.
+
+### 4.11 Chromatic aberration — channel access
+
+```cg
+let k  = smooth * 0.02;
+let ca = 0.015;
+let rr = cosine(k - ca, rgb(0.5,0.5,0.5), rgb(0.5,0.5,0.5), rgb(1,1,1), rgb(0.0,0.33,0.67)).r;
+let gg = cosine(k,      rgb(0.5,0.5,0.5), rgb(0.5,0.5,0.5), rgb(1,1,1), rgb(0.0,0.33,0.67)).g;
+let bb = cosine(k + ca, rgb(0.5,0.5,0.5), rgb(0.5,0.5,0.5), rgb(1,1,1), rgb(0.0,0.33,0.67)).b;
+return rgb(rr, gg, bb);
+```
+
+Samples the same palette at three slightly-offset positions and keeps only
+`.r` / `.g` / `.b` from each, then recombines. The split fringes distant
+colour edges the way a real lens does.
+
+---
+
+## 5. Compile & Load vs Generate via ColorGen
 
 | Path                       | When to use                                                |
 |----------------------------|------------------------------------------------------------|
@@ -522,7 +694,7 @@ in every theme combo under its **Algorithmic** kind.
 
 ---
 
-## 5. Persistence
+## 6. Persistence
 
 `%APPDATA%\FracturingFog\colorgen.json` stores `Name + Source +
 Description` tuples. Edit the file with any text editor — invalid
@@ -531,7 +703,7 @@ ensure the JSON regenerates cleanly.
 
 ---
 
-## 6. Troubleshooting
+## 7. Troubleshooting
 
 | Message                                            | Cause                                                    |
 |----------------------------------------------------|----------------------------------------------------------|
@@ -547,7 +719,7 @@ ensure the JSON regenerates cleanly.
 
 ---
 
-## 7. Reference card
+## 8. Reference card
 
 ```
 Inputs    smooth dist iter maxIter t nx ny zr zi dzr dzi arg mag isInSet pxScale
@@ -567,12 +739,12 @@ Stmts     let name = expr;     return vec3-expr;
 ```
 
 The DSL grammar is small enough to memorise; this card plus the example
-gallery in §3 covers virtually every "I want a theme that does X"
-scenario.
+galleries in §3 (everyday) and §4 (advanced) covers virtually every
+"I want a theme that does X" scenario.
 
 ---
 
-## 8. See Also
+## 9. See Also
 
 - [ColorThemeEditor-Guide.md](ColorThemeEditor-Guide.md) — Stops / Phong / PBR3D editor for non-DSL theme authoring
 - [Avalonia-UserGuide.md](Avalonia-UserGuide.md) — UI walkthrough including the ColorGen editor

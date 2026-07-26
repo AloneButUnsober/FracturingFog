@@ -247,5 +247,18 @@
                            Value="{Binding KleinianCameraDistance, Mode=TwoWay}" Margin="0,2" />
         </Grid>
 
+        <!-- Mesh export (#101). Any DE raymarcher → marching-cubes OBJ/STL. -->
+        <Border IsVisible="{Binding CanExportMesh}"
+                BorderBrush="#404040" BorderThickness="0,1,0,0"
+                Padding="0,8,0,0" Margin="0,4,0,0">
+            <StackPanel Spacing="4">
+                <TextBlock Text="Mesh export" FontWeight="Bold" Foreground="#FFCC00" />
+                <Button Content="Export Mesh (OBJ / STL)…"
+                        Command="{Binding ExportMeshCommand}"
+                        HorizontalAlignment="Stretch"
+                        ToolTip.Tip="Marching-cubes surface from the current fractal's distance field at its default parameters. Choose .obj (smooth normals) or .stl (binary)." />
+            </StackPanel>
+        </Border>
+
     </StackPanel>
 </UserControl>
