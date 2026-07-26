@@ -329,6 +329,14 @@ namespace FracturingFog
                  | FractalCapabilities.SuppliesOrbit
                  | FractalCapabilities.SuppliesHistogram,
 
+            // Apollonian gasket — direct-color circle packing. Not escape-time,
+            // but each disk is painted as a lit sphere-imposter that supplies a
+            // per-pixel surface normal (nx, ny) to the 3D Phong/Relief themes
+            // (ApollonianCalculator.PaintDisk). No orbit / DE / final-z data.
+            FractalType.Apollonian
+                => FractalCapabilities.SuppliesNormals
+                 | FractalCapabilities.SuppliesHistogram,
+
             // Histogram / chaos-game families — no normals, no orbit data
             // surfaced to per-pixel themes (each calculator paints through the
             // 3-param Map overload only).
@@ -340,7 +348,6 @@ namespace FracturingFog
                 or FractalType.AntiBuddhabrot
                 or FractalType.AntiNebulabrot
                 or FractalType.Dla
-                or FractalType.Apollonian
                 or FractalType.Flame
                 or FractalType.Plasma
                 or FractalType.Logistic
