@@ -161,10 +161,10 @@
                     </ComboBox>
                         <TextBlock Grid.Column="2" Classes="label" Text="Compiler:" Margin="8,0,4,0"/>
                     <ComboBox    Grid.Column="3" Grid.ColumnSpan="4" SelectedIndex="{Binding CompilerIndex}"
-                                 ToolTip.Tip="Roslyn — full C# step body, all BCL helpers, GPU-translatable. Use for performance and unrestricted math. Sandbox — small DSL (vec, triplex, fold ops, let, ternary, and for Quat: qmul/qpow/qconj/qvec plus quaternion-algebra transcendentals qexp/qlog/qsqrt/qsin/qcos/qtan/qasin/qacos/qatan...). Safer for untrusted source and supports compile-time analytic DE detection. CPU-only."
+                                 ToolTip.Tip="Roslyn — full C# step body, all BCL helpers, GPU-translatable. Use for performance and unrestricted math. Sandbox — small DSL (vec, triplex, fold ops, let, ternary, and for Quat: qmul/qpow/qconj/qvec plus quaternion-algebra transcendentals qexp/qlog/qsqrt/qsin/qcos/qtan/qasin/qacos/qatan...). Safer for untrusted source and supports compile-time analytic DE detection. Renders on CPU or GPU (the Sandbox path is the only GPU route for quaternion bodies)."
                                   MinWidth="120">
                         <ComboBoxItem Content="Roslyn (full C#, BCL, GPU-translatable)" />
-                        <ComboBoxItem Content="Sandbox (safe DSL, Vec3 only, CPU)" />
+                        <ComboBoxItem Content="Sandbox (safe DSL, Vec3 + Quat, CPU/GPU)" />
                     </ComboBox>
                     <TextBlock Grid.Row="1" Grid.Column="0" Classes="label" Text="DE mode:" Margin="10,0,4,0"/>
                     <ComboBox Grid.Row="1" Grid.Column="1" SelectedIndex="{Binding DEModeIndex}" MinWidth="120">

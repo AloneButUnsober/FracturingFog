@@ -7,6 +7,32 @@ namespace FracturingFog
 {
     public enum QualityLevel { Fast, Normal, High, Ultra }
 
+    /// <summary>
+    /// Background composited behind translucent 2D pixels when the interior
+    /// (in-set) region carries alpha &lt; 255 (issue #96). Only consulted by the
+    /// 2D present path; 3D raymarchers use <c>LightingFxData.SkyMode</c> instead.
+    /// </summary>
+    public enum Interior2DBackgroundMode
+    {
+        /// <summary>Grey checkerboard — the F10.5 see-through editing aid.
+        /// Default so the on-screen look is unchanged from the alpha-preview
+        /// behaviour and translucency always reads as "see-through".</summary>
+        Checkerboard,
+        /// <summary>Flat fill from <c>Interior2DBgTop</c>.</summary>
+        SolidColor,
+        /// <summary>Vertical two-colour gradient, top = <c>Interior2DBgTop</c>,
+        /// bottom = <c>Interior2DBgBottom</c>.</summary>
+        Gradient,
+        /// <summary>Image backdrop sampled from <c>Interior2DBgImagePath</c>,
+        /// stretched to fill the viewport. Shows through both translucent
+        /// interior pixels and translucent exterior colour stops.</summary>
+        Image,
+        /// <summary>No composite — keep straight alpha. The on-screen present is
+        /// forced opaque, so this reads as opaque interior on screen and is only
+        /// meaningful for PNG export (which preserves the authored alpha).</summary>
+        Transparent,
+    }
+
     public enum FractalType
     {
         Mandelbrot,
@@ -261,7 +287,14 @@ namespace FracturingFog
                  | FractalCapabilities.SuppliesDerivative
                  | FractalCapabilities.SuppliesHistogram,
 
-            // Antiholomorphic / non-holomorphic 2D — no DE, no derivative.
+            // Antiholomorphic / non-holomorphic 2D. conj(z)² (and |z| in Burning
+            // Ship) is not complex-differentiable, so there is no exact analytic
+            // dz/dc. The kernels still track an *approximate* derivative (see
+            // TricornKernel: "track as if Mandelbrot"), and the escape-time /
+            // generated / TearDrop calculators already fill DistanceBuffer from
+            // it — so SuppliesDE exposes the DistanceField theme family with a
+            // plausible (not metrically exact) estimate. SuppliesDerivative is
+            // withheld: derivative-bailout themes assume an analytic dz/dc.
             FractalType.BurningShip
                 or FractalType.Tricorn
                 or FractalType.GeneratedBurningShip
@@ -269,6 +302,7 @@ namespace FracturingFog
                 or FractalType.Glynn
                 or FractalType.TearDrop
                 => FractalCapabilities.SuppliesNormals
+                 | FractalCapabilities.SuppliesDE
                  | FractalCapabilities.SuppliesOrbit
                  | FractalCapabilities.SuppliesFinalZ
                  | FractalCapabilities.SuppliesHistogram,
@@ -303,6 +337,14 @@ namespace FracturingFog
                  | FractalCapabilities.SuppliesOrbit
                  | FractalCapabilities.SuppliesHistogram,
 
+            // Apollonian gasket — direct-color circle packing. Not escape-time,
+            // but each disk is painted as a lit sphere-imposter that supplies a
+            // per-pixel surface normal (nx, ny) to the 3D Phong/Relief themes
+            // (ApollonianCalculator.PaintDisk). No orbit / DE / final-z data.
+            FractalType.Apollonian
+                => FractalCapabilities.SuppliesNormals
+                 | FractalCapabilities.SuppliesHistogram,
+
             // Histogram / chaos-game families — no normals, no orbit data
             // surfaced to per-pixel themes (each calculator paints through the
             // 3-param Map overload only).
@@ -314,7 +356,6 @@ namespace FracturingFog
                 or FractalType.AntiBuddhabrot
                 or FractalType.AntiNebulabrot
                 or FractalType.Dla
-                or FractalType.Apollonian
                 or FractalType.Flame
                 or FractalType.Plasma
                 or FractalType.Logistic

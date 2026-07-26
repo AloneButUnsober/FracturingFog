@@ -246,6 +246,16 @@ namespace FracturingFog.Rendering
         // renders stay bit-identical.
         private System.Threading.Timer? _animTimer;
         private long _animStartTicks;
+
+        // #96 follow-up — color-theme "settle" debounce. Live editor edits take
+        // the cheap Mandelbrot recolor path in ApplyColorMap (fast, but skips
+        // MSAA / TAA / SSAO / histogram-eq, so band edges show un-anti-aliased
+        // speckle). Each cheap recolor (re)arms this timer; when edits stop for
+        // ColorSettleDelayMs the callback fires a full Trigger() so the final
+        // frame carries the same quality passes a pan/zoom would — without the
+        // user having to navigate to "settle" the image.
+        private System.Threading.Timer? _colorSettleTimer;
+        private const int ColorSettleDelayMs = 300;
         // Re-entry guard: a frame can outrun the tick period at high res, so
         // skip enqueueing another Trigger while one is still in flight.
         private int _animTickBusy;
@@ -488,6 +498,14 @@ namespace FracturingFog.Rendering
             // per frame on an idle scene.
             _animTimer = new System.Threading.Timer(
                 AnimationTick, state: null, dueTime: 33, period: 33);
+
+            // #96 follow-up — color-settle debounce timer, created disabled
+            // (Infinite due). ApplyColorMap's cheap recolor path arms it; the
+            // callback fires one full-quality Trigger() once edits go quiet.
+            _colorSettleTimer = new System.Threading.Timer(
+                ColorSettleTick, state: null,
+                dueTime: System.Threading.Timeout.Infinite,
+                period: System.Threading.Timeout.Infinite);
 
             // Phase 18b fix — clear the frame-in-flight gate when each
             // upload completes (success or cancellation, both fire this
@@ -950,6 +968,8 @@ namespace FracturingFog.Rendering
             _calculator.CenterY7 = ViewState.CenterY7;
             _calculator.Zoom = ViewState.Zoom;
             _calculator.Quality = ViewState.Quality;
+            // Issue #96 — global interior alpha (Mandelbrot canonical path).
+            _calculator.InteriorAlpha = ViewState.FractalParameters?.InteriorAlpha ?? 255;
 
             if (ViewState.IterLocked)
                 _calculator.MaxIterations = ViewState.LockedIterations;
@@ -1896,6 +1916,54 @@ namespace FracturingFog.Rendering
                     }
                 }
 
+                // #102 — stash the active 2D height field (smooth iteration
+                // count) so UploadProcessedBuffer can add heightfield relief on
+                // top of the themed colour. Only escape-time 2D calculators
+                // expose one; raymarchers / IFS / Apollonian / etc. leave it
+                // invalid so relief is skipped for them.
+                //
+                // Capture a STABLE COPY on the base frame only (TaaSampleIndex 0,
+                // final full-res progressive stage). TAA continuation samples
+                // jitter the camera sub-pixel and overwrite the calc's
+                // SmoothBuffer each pass; without a locked base height the relief
+                // gradient + specular recompute on every jittered height and the
+                // detail areas visibly sparkle for several seconds. Locking the
+                // height keeps the relief pattern fixed while the colour
+                // accumulates underneath — no jitter, same settled result.
+                if (job.ProgressiveStage <= 1)
+                {
+                    // Any escape-time 2D calculator exposes its height field via
+                    // IHeightFieldSource — Mandelbrot, the EscapeTimeCalculator
+                    // family, AND the CalcGen-generated calculators (generated
+                    // Tricorn / Burning Ship / MandelbrotZ*). Raymarchers, IFS,
+                    // Apollonian etc. don't implement it → relief skipped.
+                    float[]? srcH; int hw, hh;
+                    if (useAlt)
+                    {
+                        srcH = (altCalc as Interefaces.IHeightFieldSource)?.SmoothBuffer;
+                        hw = altCalc!.Width; hh = altCalc.Height;
+                    }
+                    else
+                    {
+                        srcH = (calc as Interefaces.IHeightFieldSource)?.SmoothBuffer;
+                        hw = calc.Width; hh = calc.Height;
+                    }
+
+                    if (srcH == null)
+                    {
+                        _reliefValid = false;
+                    }
+                    else if (job.TaaSampleIndex == 0)
+                    {
+                        int hn = hw * hh;
+                        if (_reliefHeight == null || _reliefHeight.Length < hn)
+                            _reliefHeight = new float[hn];
+                        Array.Copy(srcH, _reliefHeight, Math.Min(srcH.Length, hn));
+                        _reliefW = hw; _reliefH = hh; _reliefValid = true;
+                    }
+                    // TaaSampleIndex > 0: keep the locked base height.
+                }
+
                 // #86 — newest-wins: only present this final frame if no newer
                 // frame's upload has already reached the screen. A superseded
                 // final still runs its bookkeeping below (status label, events,
@@ -2244,15 +2312,62 @@ namespace FracturingFog.Rendering
 
             if (!needsFullRender && SelectAltCalculator(ViewState.FractalType) == null)
             {
-                // Mandelbrot fast path — recolour from cached buffers.
+                // Mandelbrot fast path — recolour from cached buffers. This is
+                // cheap (keeps a slider drag responsive) but skips the MSAA /
+                // TAA / SSAO / histogram-eq passes a full render runs, so band
+                // edges show un-anti-aliased speckle. Arm the settle debounce:
+                // when edits stop, ColorSettleTick fires a full Trigger() so the
+                // final frame matches post-navigate quality (#96 follow-up).
                 _calculator.ApplyBandDitherRecolor(0.0);
                 UploadProcessedBuffer(_calculator.ColorBuffer, _calculator.Width, _calculator.Height);
+                ArmColorSettle();
             }
             else
             {
-                // Alt calculator OR theme needs data not in the cached buffers.
+                // Alt calculator OR theme needs data not in the cached buffers:
+                // this already IS the full render, so cancel any pending settle.
+                DisarmColorSettle();
                 Trigger();
             }
+        }
+
+        /// <summary>
+        /// (Re)start the color-settle debounce. Each cheap recolor pushes the
+        /// full-render fire-time out by <see cref="ColorSettleDelayMs"/>, so a
+        /// burst of live editor edits collapses into one full Trigger() after
+        /// the user goes quiet.
+        /// </summary>
+        private void ArmColorSettle()
+        {
+            if (_disposed) return;
+            try
+            {
+                _colorSettleTimer?.Change(
+                    ColorSettleDelayMs, System.Threading.Timeout.Infinite);
+            }
+            catch (ObjectDisposedException) { /* racing Dispose — ignore. */ }
+        }
+
+        /// <summary>Cancel a pending color-settle full render (edits took the
+        /// full-render branch, or the host is tearing down).</summary>
+        private void DisarmColorSettle()
+        {
+            try
+            {
+                _colorSettleTimer?.Change(
+                    System.Threading.Timeout.Infinite,
+                    System.Threading.Timeout.Infinite);
+            }
+            catch (ObjectDisposedException) { /* racing Dispose — ignore. */ }
+        }
+
+        private void ColorSettleTick(object? _)
+        {
+            if (_disposed) return;
+            // Edits have gone quiet — promote the cheap recolor to a full,
+            // quality-complete render (MSAA / TAA / SSAO / histogram-eq).
+            try { Trigger(); }
+            catch (ObjectDisposedException) { /* racing Dispose — ignore. */ }
         }
 
         /// <summary>
@@ -2595,6 +2710,16 @@ namespace FracturingFog.Rendering
         // fires two selection-box repaints (set + clear), each re-uploading the
         // already-processed snapshot, and each re-darkening it because we then
         // write the result back into that same snapshot below.
+        // #102 — locked 2D height field (smooth iteration count) for the
+        // heightfield-relief post-pass. A STABLE COPY captured on the base frame
+        // (see the stash at calc completion), reused across TAA continuation
+        // uploads so relief doesn't sparkle. _reliefValid is false when the
+        // active fractal isn't an escape-time 2D type.
+        private float[]? _reliefHeight;
+        private bool _reliefValid;
+        private int _reliefW, _reliefH;
+        private uint[]? _reliefColorScratch;
+
         private void UploadProcessedBuffer(uint[] src, int w, int h, bool srcAlreadyProcessed = false)
         {
             int n = w * h;
@@ -2611,6 +2736,33 @@ namespace FracturingFog.Rendering
             if (_uploadDstPool == null || _uploadDstPool.Length < n)
                 _uploadDstPool = GC.AllocateUninitializedArray<uint>(n, pinned: true);
             var dst = _uploadDstPool;
+
+            // #102 — heightfield relief: modulate the themed colour with real
+            // raised relief + cast shadows before the brightness/contrast pass.
+            // Gated to fresh (unprocessed) escape-time 2D frames whose height
+            // buffer matches these dims; snapshots (srcAlreadyProcessed) already
+            // carry relief. Writes to a scratch so the calculator's ColorBuffer
+            // stays flat (idempotent across re-uploads).
+            {
+                var reliefParams = ViewState.FractalParameters;
+                if (reliefParams.Relief2DEnabled && !srcAlreadyProcessed
+                    && _reliefValid && _reliefHeight != null && _reliefW == w && _reliefH == h
+                    && _reliefHeight.Length >= n && src.Length >= n)
+                {
+                    if (_reliefColorScratch == null || _reliefColorScratch.Length < n)
+                        _reliefColorScratch = new uint[n];
+                    if (reliefParams.Relief2DRaymarch)
+                        // Phase 2 — oblique 3D raymarch of the height field
+                        // (perspective relief, silhouette, volumetric fog).
+                        FracturingFog.Rendering.Lighting.HeightfieldRaymarch2D.Render(
+                            src, _reliefHeight, w, h, reliefParams, _reliefColorScratch);
+                    else
+                        // Phase 1 — screen-space hillshade + cast-shadow post-pass.
+                        FracturingFog.Rendering.Lighting.HeightfieldRelief2D.Apply(
+                            src, _reliefColorScratch, _reliefHeight, w, h, reliefParams);
+                    src = _reliefColorScratch;
+                }
+            }
 
             int brightness = ViewState.Brightness;
             int contrast = ViewState.Contrast;
@@ -2707,18 +2859,65 @@ namespace FracturingFog.Rendering
                 _lastPreOverlayBuffer = null;
             }
 
-            // F10.5 — live per-stop alpha preview. The on-screen present is
-            // opaque (the swap-chain ignores the alpha channel and the post-FX
-            // pass above forces 0xFF), so a theme's authored translucent stops
-            // are invisible while editing. When the toggle is on, composite the
-            // final RGB over a checkerboard using the ORIGINAL coverage byte
-            // from `src` (which still carries the authored alpha even after the
-            // post-FX force-opaque), so A<255 reads as see-through. Runs AFTER
+            // F10.5 / issue #96 — composite translucent 2D pixels over a
+            // background. The on-screen present is opaque (the swap-chain ignores
+            // the alpha channel and the post-FX pass above forces 0xFF), so any
+            // authored interior/exterior alpha only shows if we composite it here
+            // using the ORIGINAL coverage byte from `src` (which still carries
+            // the authored alpha even after the post-FX force-opaque). Runs AFTER
             // the pre-overlay snapshot above, so SaveLastFrameToPng and the
-            // export path keep straight alpha — this is a display-only aid.
-            // srcAlreadyProcessed frames (video record) are left untouched.
-            if (ViewState.AlphaPreview && !srcAlreadyProcessed)
+            // export path keep straight alpha. srcAlreadyProcessed frames (video
+            // record) are left untouched.
+            //
+            // Triggers:
+            //   • AlphaPreview toggle — the theme-editor see-through aid; always
+            //     forces the Checkerboard backdrop regardless of the saved mode
+            //     so editing alpha reads as see-through.
+            //   • interior translucency (global knob < 255 OR theme in-set alpha
+            //     < 255) — the #96 interior-alpha feature.
+            //   • an explicit backdrop (Solid / Gradient / Image) — composite
+            //     unconditionally so translucent EXTERIOR colour stops show over
+            //     it too (opaque pixels skip via the a>=255 continue).
+            // Transparent mode is a no-op here (straight alpha kept for export).
+            var ip96 = ViewState.FractalParameters;
+            var bgMode96 = ip96?.Interior2DBackground ?? Interior2DBackgroundMode.Checkerboard;
+            uint inSetArgb = _calculator?.ColorMap?.InSetColor ?? 0xFF000000u;
+            bool themeInteriorTranslucent = ((inSetArgb >> 24) & 0xFF) < 255;
+            bool interiorTranslucent =
+                (ip96 != null && ip96.InteriorAlpha < 255) || themeInteriorTranslucent;
+            bool explicitBackdrop =
+                bgMode96 == Interior2DBackgroundMode.SolidColor
+                || bgMode96 == Interior2DBackgroundMode.Gradient
+                || bgMode96 == Interior2DBackgroundMode.Image;
+            bool wantAlphaComposite =
+                !srcAlreadyProcessed
+                && (ViewState.AlphaPreview
+                    || (bgMode96 != Interior2DBackgroundMode.Transparent
+                        && (interiorTranslucent || explicitBackdrop)));
+            if (wantAlphaComposite)
             {
+                // AlphaPreview always wins with the checkerboard aid.
+                var mode = ViewState.AlphaPreview
+                    ? Interior2DBackgroundMode.Checkerboard
+                    : bgMode96;
+                uint bgTop = ip96?.Interior2DBgTop ?? 0xFF202040u;
+                uint bgBot = ip96?.Interior2DBgBottom ?? 0xFF101020u;
+                int topR = (int)((bgTop >> 16) & 0xFF), topG = (int)((bgTop >> 8) & 0xFF), topB = (int)(bgTop & 0xFF);
+                int botR = (int)((bgBot >> 16) & 0xFF), botG = (int)((bgBot >> 8) & 0xFF), botB = (int)(bgBot & 0xFF);
+                int denom = h > 1 ? h - 1 : 1;
+
+                // Image backdrop: decode (cached) up front. On any failure fall
+                // back to a flat fill (bgTop) so a bad path never blanks the frame.
+                uint[]? imgPx = null;
+                int imgW = 0, imgH = 0;
+                if (mode == Interior2DBackgroundMode.Image)
+                {
+                    if (BackgroundImageCache.TryGet(ip96?.Interior2DBgImagePath, out var px, out imgW, out imgH))
+                        imgPx = px;
+                    else
+                        mode = Interior2DBackgroundMode.SolidColor;
+                }
+
                 int aChunk = h / (Environment.ProcessorCount * 4);
                 if (aChunk < 1) aChunk = 1;
                 Parallel.ForEach(Partitioner.Create(0, h, aChunk), range =>
@@ -2726,6 +2925,29 @@ namespace FracturingFog.Rendering
                     for (int y = range.Item1; y < range.Item2; y++)
                     {
                         int rowBase = y * w;
+                        // Per-row background base for Solid / Gradient / Image
+                        // (checker varies per pixel, computed inline below).
+                        int rowBgR = 0, rowBgG = 0, rowBgB = 0;
+                        int imgRowBase = 0;
+                        if (mode == Interior2DBackgroundMode.SolidColor)
+                        {
+                            rowBgR = topR; rowBgG = topG; rowBgB = topB;
+                        }
+                        else if (mode == Interior2DBackgroundMode.Gradient)
+                        {
+                            // t = 0 at top row (bgTop), 1 at bottom row (bgBot).
+                            int t = (y * 256) / denom;   // 0..256 fixed-point
+                            rowBgR = (topR * (256 - t) + botR * t) >> 8;
+                            rowBgG = (topG * (256 - t) + botG * t) >> 8;
+                            rowBgB = (topB * (256 - t) + botB * t) >> 8;
+                        }
+                        else if (mode == Interior2DBackgroundMode.Image)
+                        {
+                            // Nearest-neighbour stretch to fill the viewport.
+                            int iy = imgH > 0 ? (int)((long)y * imgH / h) : 0;
+                            if (iy >= imgH) iy = imgH - 1;
+                            imgRowBase = iy * imgW;
+                        }
                         for (int x = 0; x < w; x++)
                         {
                             int i = rowBase + x;
@@ -2735,11 +2957,29 @@ namespace FracturingFog.Rendering
                             int R = (int)((pc >> 16) & 0xFF);
                             int G = (int)((pc >> 8) & 0xFF);
                             int B = (int)(pc & 0xFF);
-                            int bg = ((((x >> 3) + (y >> 3)) & 1) == 0) ? 200 : 120;
+                            int bgR, bgG, bgB;
+                            if (mode == Interior2DBackgroundMode.Checkerboard)
+                            {
+                                int bg = ((((x >> 3) + (y >> 3)) & 1) == 0) ? 200 : 120;
+                                bgR = bgG = bgB = bg;
+                            }
+                            else if (mode == Interior2DBackgroundMode.Image)
+                            {
+                                int ix = imgW > 0 ? (int)((long)x * imgW / w) : 0;
+                                if (ix >= imgW) ix = imgW - 1;
+                                uint ipx = imgPx![imgRowBase + ix];
+                                bgR = (int)((ipx >> 16) & 0xFF);
+                                bgG = (int)((ipx >> 8) & 0xFF);
+                                bgB = (int)(ipx & 0xFF);
+                            }
+                            else
+                            {
+                                bgR = rowBgR; bgG = rowBgG; bgB = rowBgB;
+                            }
                             int inv = 255 - a;
-                            R = (R * a + bg * inv) / 255;
-                            G = (G * a + bg * inv) / 255;
-                            B = (B * a + bg * inv) / 255;
+                            R = (R * a + bgR * inv) / 255;
+                            G = (G * a + bgG * inv) / 255;
+                            B = (B * a + bgB * inv) / 255;
                             dst[i] = 0xFF000000u | ((uint)R << 16) | ((uint)G << 8) | (uint)B;
                         }
                     }
@@ -3225,6 +3465,8 @@ namespace FracturingFog.Rendering
             // fire while the rest of the pipeline is being torn down.
             try { _animTimer?.Dispose(); } catch { }
             _animTimer = null;
+            try { _colorSettleTimer?.Dispose(); } catch { }
+            _colorSettleTimer = null;
             // Tear down any running video / slideshow first so its background
             // loop stops touching the calculator + renderer before disposal.
             lock (_videoLock) _videoCts?.Cancel();

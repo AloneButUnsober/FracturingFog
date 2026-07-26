@@ -118,6 +118,7 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
         _apolloDepth = _p.ApollonianDepth;
         _apolloMinPx = _p.ApollonianMinPixelRadius;
         _apolloColorByDepth = _p.ApollonianColorByDepth;
+        _apolloRelief = _p.ApollonianRelief;
         _kleinIter = _p.KleinianIterations;
         _kleinScale = _p.KleinianSphereScale;
         _kleinCameraTheta = _p.KleinianCameraTheta;
@@ -144,6 +145,7 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
         });
         ToggleJuliaAnimateCommand   = ReactiveCommand.Create(ToggleJuliaAnimate);
         ToggleLSystemSweepCommand   = ReactiveCommand.Create(ToggleLSystemSweep);
+        ExportMeshCommand           = ReactiveCommand.Create(() => ExportMeshRequested?.Invoke());
     }
 
     /// <summary>Stop any running parameter animation. Host calls this when the
@@ -164,6 +166,7 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
     public string Title => $"{FractalType} Parameters";
     public string EmptyStateText => $"{FractalType} has no tunable parameters.";
 
+    public bool IsMandelbrot => FractalType == FractalType.Mandelbrot;
     public bool IsJulia => FractalType == FractalType.Julia;
     public bool IsMultibrot => FractalType == FractalType.Multibrot;
     public bool IsPhoenix => FractalType == FractalType.Phoenix;
@@ -202,11 +205,173 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
         || IsQuatJulia || IsQuatMandelbrot
         || IsBicomplexMandelbrot || IsKleinian
         || FractalType == FractalType.UserBulb;
+    /// <summary>Visibility flag for the 2D interior-alpha section (issue #96).
+    /// True only for the canonical Mandelbrot path — the only 2D family whose
+    /// interior alpha the render pipeline currently honours.</summary>
+    public bool IsInteriorAlphaApplicable => IsMandelbrot;
+
+    /// <summary>Visibility flag for the 2D heightfield-relief section (#102).
+    /// True for the escape-time 2D families whose smooth-iteration height field
+    /// the render host feeds to <c>HeightfieldRelief2D</c> (Mandelbrot +
+    /// EscapeTimeCalculator kin). 3D raymarchers, direct-colour (Apollonian) and
+    /// histogram families are excluded.</summary>
+    public bool IsRelief2DApplicable =>
+        IsMandelbrot || IsJulia || IsMultibrot || IsPhoenix
+        || IsGlynn || IsSpider
+        || FractalType == FractalType.BurningShip
+        || FractalType == FractalType.Tricorn
+        || FractalType == FractalType.Magnet1
+        || FractalType == FractalType.Magnet2
+        || FractalType == FractalType.GeneratedTricorn
+        || FractalType == FractalType.GeneratedBurningShip
+        || FractalType == FractalType.GeneratedMandelbrotZ2
+        || FractalType == FractalType.GeneratedMandelbrotZ3
+        || FractalType == FractalType.GeneratedMandelbrotZ4
+        || FractalType == FractalType.GeneratedMandelbrotZ5;
+
     public bool HasNoParams =>
         !(IsJulia || IsMultibrot || IsPhoenix || IsGlynn || IsLogistic || IsSpider || IsNewtonOrNova || IsIFS
           || IsLSystem || IsStrangeAttractor || IsBuddhaBrot || IsMandelbulb || IsMandelbox || IsKifs
           || IsQuatJulia || IsQuatMandelbrot || IsPlasma || IsFlame || IsApollonian || IsKleinian
-          || IsBicomplexMandelbrot || IsDla);
+          || IsBicomplexMandelbrot || IsDla || IsInteriorAlphaApplicable || IsRelief2DApplicable);
+
+    // ── Interior alpha (2D) — issue #96 ──────────────────────────────────────
+    // Reads/writes FractalParameters directly (no cached backing field), same as
+    // the Lighting* colour accessors. Each setter mutates _p in place then Fire()s
+    // so the host re-renders; ApplyView copies InteriorAlpha onto the calculator.
+
+    public int InteriorAlpha
+    {
+        get => _p.InteriorAlpha;
+        set
+        {
+            int v = (int)Clamp(value, 0, 255);
+            if (_p.InteriorAlpha == v) return;
+            _p.InteriorAlpha = v;
+            this.RaisePropertyChanged();
+            Fire();
+        }
+    }
+
+    // ── 2D heightfield relief (#102) ─────────────────────────────────────────
+    // Direct-write to _p (same pattern as interior alpha); the render host reads
+    // these off ViewState.FractalParameters in UploadProcessedBuffer.
+
+    public bool Relief2DEnabled
+    {
+        get => _p.Relief2DEnabled;
+        set { if (_p.Relief2DEnabled == value) return; _p.Relief2DEnabled = value; this.RaisePropertyChanged(); Fire(); }
+    }
+    public double Relief2DHeightScale
+    {
+        get => _p.Relief2DHeightScale;
+        set { double v = Clamp(value, 0.0, 6.0); if (_p.Relief2DHeightScale == v) return; _p.Relief2DHeightScale = v; this.RaisePropertyChanged(); Fire(); }
+    }
+    public double Relief2DLightAzimuthDeg
+    {
+        get => _p.Relief2DLightAzimuthDeg;
+        set { double v = Clamp(value, 0.0, 360.0); if (_p.Relief2DLightAzimuthDeg == v) return; _p.Relief2DLightAzimuthDeg = v; this.RaisePropertyChanged(); Fire(); }
+    }
+    public double Relief2DLightElevationDeg
+    {
+        get => _p.Relief2DLightElevationDeg;
+        set { double v = Clamp(value, 1.0, 89.0); if (_p.Relief2DLightElevationDeg == v) return; _p.Relief2DLightElevationDeg = v; this.RaisePropertyChanged(); Fire(); }
+    }
+    public double Relief2DShadowStrength
+    {
+        get => _p.Relief2DShadowStrength;
+        set { double v = Clamp(value, 0.0, 1.0); if (_p.Relief2DShadowStrength == v) return; _p.Relief2DShadowStrength = v; this.RaisePropertyChanged(); Fire(); }
+    }
+    public double Relief2DStrength
+    {
+        get => _p.Relief2DStrength;
+        set { double v = Clamp(value, 0.0, 1.0); if (_p.Relief2DStrength == v) return; _p.Relief2DStrength = v; this.RaisePropertyChanged(); Fire(); }
+    }
+
+    // #102 Phase 2 — oblique heightfield raymarch (perspective relief + volumetric).
+    public bool Relief2DRaymarch
+    {
+        get => _p.Relief2DRaymarch;
+        set { if (_p.Relief2DRaymarch == value) return; _p.Relief2DRaymarch = value; this.RaisePropertyChanged(); Fire(); }
+    }
+    public double Relief2DCameraAzimuthDeg
+    {
+        get => _p.Relief2DCameraAzimuthDeg;
+        set { double v = Clamp(value, -180.0, 180.0); if (_p.Relief2DCameraAzimuthDeg == v) return; _p.Relief2DCameraAzimuthDeg = v; this.RaisePropertyChanged(); Fire(); }
+    }
+    public double Relief2DCameraElevationDeg
+    {
+        get => _p.Relief2DCameraElevationDeg;
+        set { double v = Clamp(value, 5.0, 89.0); if (_p.Relief2DCameraElevationDeg == v) return; _p.Relief2DCameraElevationDeg = v; this.RaisePropertyChanged(); Fire(); }
+    }
+    public double Relief2DCameraFovDeg
+    {
+        get => _p.Relief2DCameraFovDeg;
+        set { double v = Clamp(value, 15.0, 100.0); if (_p.Relief2DCameraFovDeg == v) return; _p.Relief2DCameraFovDeg = v; this.RaisePropertyChanged(); Fire(); }
+    }
+
+    public Interior2DBackgroundMode Interior2DBackground
+    {
+        get => _p.Interior2DBackground;
+        set
+        {
+            if (_p.Interior2DBackground == value) return;
+            _p.Interior2DBackground = value;
+            this.RaisePropertyChanged();
+            Fire();
+        }
+    }
+    public Array Interior2DBackgroundModes => Enum.GetValues(typeof(Interior2DBackgroundMode));
+
+    /// <summary>Hex 0xAARRGGBB accessor for the Solid/Gradient top colour.
+    /// TextBox binding, LostFocus — mirrors the Lighting colour hex accessors.</summary>
+    public string Interior2DBgTopHex
+    {
+        get => _p.Interior2DBgTop.ToString("X8", System.Globalization.CultureInfo.InvariantCulture);
+        set
+        {
+            if (!TryParseHexColor(value, out uint u) || _p.Interior2DBgTop == u) return;
+            _p.Interior2DBgTop = u;
+            this.RaisePropertyChanged();
+            Fire();
+        }
+    }
+
+    /// <summary>Hex 0xAARRGGBB accessor for the Gradient bottom (horizon) colour.</summary>
+    public string Interior2DBgBottomHex
+    {
+        get => _p.Interior2DBgBottom.ToString("X8", System.Globalization.CultureInfo.InvariantCulture);
+        set
+        {
+            if (!TryParseHexColor(value, out uint u) || _p.Interior2DBgBottom == u) return;
+            _p.Interior2DBgBottom = u;
+            this.RaisePropertyChanged();
+            Fire();
+        }
+    }
+
+    /// <summary>Path to the image used by the Image background mode.</summary>
+    public string Interior2DBgImagePath
+    {
+        get => _p.Interior2DBgImagePath ?? string.Empty;
+        set
+        {
+            var v = string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+            if (string.Equals(_p.Interior2DBgImagePath, v, StringComparison.Ordinal)) return;
+            _p.Interior2DBgImagePath = v;
+            this.RaisePropertyChanged();
+            Fire();
+        }
+    }
+
+    private static bool TryParseHexColor(string? value, out uint result)
+    {
+        var s = (value ?? string.Empty).Trim();
+        if (s.StartsWith("#")) s = s.Substring(1);
+        if (s.StartsWith("0x", StringComparison.OrdinalIgnoreCase)) s = s.Substring(2);
+        return uint.TryParse(s, System.Globalization.NumberStyles.HexNumber,
+            System.Globalization.CultureInfo.InvariantCulture, out result);
+    }
 
     // ── Julia ──
     private double _juliaR;
@@ -691,6 +856,8 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
     public double ApollonianMinPixelRadius { get => _apolloMinPx; set { Set(ref _apolloMinPx, Clamp(value, 0.25, 16.0)); _p.ApollonianMinPixelRadius = _apolloMinPx; Fire(); } }
     private bool _apolloColorByDepth;
     public bool ApollonianColorByDepth { get => _apolloColorByDepth; set { Set(ref _apolloColorByDepth, value); _p.ApollonianColorByDepth = _apolloColorByDepth; Fire(); } }
+    private double _apolloRelief;
+    public double ApollonianRelief { get => _apolloRelief; set { Set(ref _apolloRelief, Clamp(value, 0.0, 4.0)); _p.ApollonianRelief = _apolloRelief; Fire(); } }
 
     // ── DLA ──
     private int _dlaParticles;
@@ -746,6 +913,20 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
 
     /// <summary>Raised when the Close button is clicked.</summary>
     public event EventHandler? CloseRequested;
+
+    /// <summary>Raised when "Export Mesh…" is clicked for a mesh-exportable 3D
+    /// raymarcher (#101). The host picks a path + runs the marching-cubes export
+    /// off <see cref="FractalType"/> + <see cref="FractalParameters"/>.</summary>
+    public event Action? ExportMeshRequested;
+
+    /// <summary>True for the DE raymarchers the shared mesh exporter can build a
+    /// sampler for (UserBulb has its own editor export path, so it's excluded).</summary>
+    public bool CanExportMesh =>
+        IsMandelbulb || IsMandelbox || IsKifs
+        || IsQuatJulia || IsQuatMandelbrot
+        || IsKleinian || IsBicomplexMandelbrot;
+
+    public ReactiveCommand<Unit, Unit> ExportMeshCommand { get; }
 
     private void Fire()
     {
