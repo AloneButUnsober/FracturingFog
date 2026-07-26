@@ -2,7 +2,9 @@
 // SPDX-FileCopyrightText: 2026 Bradley Brown
 
 using System;
+using System.Threading;
 using Xunit;
+using FracturingFog.Models;
 using FracturingFog.Rendering.Lighting;
 
 namespace FracturingFog.Server.Tests;
@@ -131,5 +133,52 @@ public class StereoRenderTests
         var depth = new float[w * h];
         Array.Fill(depth, ScreenSpacePost.DepthMiss);
         Assert.Equal(0.0, StereoRender.SuggestEyeSeparation(depth, w, h, Fx(0, 0, 0.03)));
+    }
+
+    // Contract the #107 host wiring depends on: RenderTrueStereo drives two
+    // renders at eye offsets -IPD/2 then +IPD/2, composites left|right into a
+    // 2·W × H buffer, and restores Lighting afterwards (EyeOffset back to 0).
+    [Fact]
+    public void RenderTrueStereo_OffsetsEyes_Composites_And_Restores()
+    {
+        const int w = 6, h = 3;
+        const uint leftColor = 0xFF111111u, rightColor = 0xFF222222u;
+
+        var fp = new FractalParameters();
+        var lf = LightingFxData.CreateDefault();
+        lf.StereoMode = StereoMode.True;
+        lf.StereoEyeSeparation = 0.1;
+        fp.Lighting = lf;
+
+        var buf = new uint[w * h];
+        // Each "render" paints per the sign of the transient eye offset that
+        // RenderTrueStereo set for this pass.
+        void RenderOnce(CancellationToken _)
+        {
+            double off = fp.Lighting.StereoEyeOffset;
+            Array.Fill(buf, off < 0 ? leftColor : rightColor);
+        }
+
+        var sbs = StereoRender.RenderTrueStereo(
+            fp, RenderOnce, () => buf, w, h, CancellationToken.None);
+
+        Assert.NotNull(sbs);
+        Assert.Equal(w * 2 * h, sbs!.Length);
+        for (int y = 0; y < h; y++)
+        {
+            Assert.Equal(leftColor, sbs[y * (w * 2) + 0]);      // left half = -IPD/2 pass
+            Assert.Equal(rightColor, sbs[y * (w * 2) + w]);     // right half = +IPD/2 pass
+        }
+        // Lighting restored — no leaked stereo offset.
+        Assert.Equal(0.0, fp.Lighting.StereoEyeOffset);
+        Assert.Equal(StereoMode.True, fp.Lighting.StereoMode);
+    }
+
+    [Fact]
+    public void RenderTrueStereo_StereoOff_ReturnsNull()
+    {
+        var fp = new FractalParameters(); // default Lighting = StereoMode.Off
+        Assert.Null(StereoRender.RenderTrueStereo(
+            fp, _ => { }, () => new uint[4], 2, 2, CancellationToken.None));
     }
 }
