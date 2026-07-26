@@ -575,10 +575,31 @@ namespace FracturingFog.Rendering
         // Recorder lifecycle
         // ──────────────────────────────────────────────────────────────────
 
+        // #110 — true stereo is active for the video run when the target fractal
+        // is a 3D raymarcher (the only family that honours StereoEyeOffset) and
+        // StereoMode.True is set with a positive eye separation. Reports the
+        // packing so callers can size writers / buffers.
+        private bool VideoStereoActive(out FracturingFog.Rendering.Lighting.StereoLayout layout)
+        {
+            layout = FracturingFog.Rendering.Lighting.StereoLayout.FullSbs;
+            var fx = ViewState?.FractalParameters?.Lighting;
+            if (fx.HasValue
+                && (ViewState?.Is3D ?? false)
+                && fx.Value.StereoMode == FracturingFog.Rendering.Lighting.StereoMode.True
+                && fx.Value.StereoEyeSeparation > 0.0)
+            {
+                layout = fx.Value.StereoLayout;
+                return true;
+            }
+            return false;
+        }
+
         private void TryStartVideoRecording()
         {
             int w = _calculator.Width, h = _calculator.Height;
             if (w < 16 || h < 16) return;
+            if (VideoStereoActive(out var stLayout))
+                (w, h) = FracturingFog.Rendering.Lighting.StereoRender.OutputDims(w, h, stLayout);
             try
             {
                 string tempPath = Path.Combine(Path.GetTempPath(), $"fracturingfog_{Guid.NewGuid():N}.mp4");
@@ -602,6 +623,8 @@ namespace FracturingFog.Rendering
         {
             int w = _calculator.Width, h = _calculator.Height;
             if (w < 16 || h < 16) return;
+            if (VideoStereoActive(out var stLayout))
+                (w, h) = FracturingFog.Rendering.Lighting.StereoRender.OutputDims(w, h, stLayout);
             try
             {
                 string folder = Path.Combine(Path.GetTempPath(), $"fracturingfog_pngseq_{Guid.NewGuid():N}");
@@ -928,6 +951,42 @@ namespace FracturingFog.Rendering
             {
                 SyncAltCalculatorForVideoFrame(alt);
                 long calcStartA = ShowPerfHud ? Stopwatch.GetTimestamp() : 0;
+
+                // #110 — stereo video. 3D raymarchers render via this alt path;
+                // when stereo is on, render both eyes and feed the composited
+                // side-by-side buffer to the recorders (the writers were sized
+                // to the stereo output dims in TryStart*Recording).
+                if (VideoStereoActive(out var stLayout))
+                {
+                    uint[]? sbs = null;
+                    try
+                    {
+                        sbs = FracturingFog.Rendering.Lighting.StereoRender.RenderTrueStereo(
+                            ViewState.FractalParameters,
+                            t => alt.Calculate(t),
+                            () => alt.ColorBuffer,
+                            alt.Width, alt.Height, ct);
+                    }
+                    catch (OperationCanceledException) { }
+                    if (ShowPerfHud)
+                        _perfStats.RecordCalc((Stopwatch.GetTimestamp() - calcStartA) * 1000.0 / Stopwatch.Frequency);
+                    if (ct.IsCancellationRequested) return;
+
+                    if (sbs != null)
+                    {
+                        var (ow, oh) = FracturingFog.Rendering.Lighting.StereoRender
+                            .OutputDims(alt.Width, alt.Height, stLayout);
+                        UploadProcessedBuffer(sbs, ow, oh, srcAlreadyProcessed: true);
+                    }
+                    else
+                    {
+                        UploadProcessedBuffer(alt.ColorBuffer, alt.Width, alt.Height);
+                    }
+                    CaptureVideoFrame();
+                    if (ShowPerfHud) _perfStats.RecordFrame(frameSw.Elapsed.TotalMilliseconds);
+                    return;
+                }
+
                 alt.Calculate(ct);
                 if (ShowPerfHud)
                     _perfStats.RecordCalc((Stopwatch.GetTimestamp() - calcStartA) * 1000.0 / Stopwatch.Frequency);
