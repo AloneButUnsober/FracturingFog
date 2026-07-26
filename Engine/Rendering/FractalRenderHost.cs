@@ -1919,18 +1919,43 @@ namespace FracturingFog.Rendering
                 // #102 — stash the active 2D height field (smooth iteration
                 // count) so UploadProcessedBuffer can add heightfield relief on
                 // top of the themed colour. Only escape-time 2D calculators
-                // expose one; null for raymarchers / IFS / Apollonian / etc. so
-                // relief is skipped for them.
-                if (useAlt)
+                // expose one; raymarchers / IFS / Apollonian / etc. leave it
+                // invalid so relief is skipped for them.
+                //
+                // Capture a STABLE COPY on the base frame only (TaaSampleIndex 0,
+                // final full-res progressive stage). TAA continuation samples
+                // jitter the camera sub-pixel and overwrite the calc's
+                // SmoothBuffer each pass; without a locked base height the relief
+                // gradient + specular recompute on every jittered height and the
+                // detail areas visibly sparkle for several seconds. Locking the
+                // height keeps the relief pattern fixed while the colour
+                // accumulates underneath — no jitter, same settled result.
+                if (job.ProgressiveStage <= 1)
                 {
-                    var ec = altCalc as EscapeTimeCalculator;
-                    _reliefHeight = ec?.SmoothBuffer;
-                    _reliefW = altCalc!.Width; _reliefH = altCalc.Height;
-                }
-                else
-                {
-                    _reliefHeight = calc.SmoothBuffer;
-                    _reliefW = calc.Width; _reliefH = calc.Height;
+                    float[]? srcH; int hw, hh;
+                    if (useAlt)
+                    {
+                        var ec = altCalc as EscapeTimeCalculator;
+                        srcH = ec?.SmoothBuffer; hw = altCalc!.Width; hh = altCalc.Height;
+                    }
+                    else
+                    {
+                        srcH = calc.SmoothBuffer; hw = calc.Width; hh = calc.Height;
+                    }
+
+                    if (srcH == null)
+                    {
+                        _reliefValid = false;
+                    }
+                    else if (job.TaaSampleIndex == 0)
+                    {
+                        int hn = hw * hh;
+                        if (_reliefHeight == null || _reliefHeight.Length < hn)
+                            _reliefHeight = new float[hn];
+                        Array.Copy(srcH, _reliefHeight, Math.Min(srcH.Length, hn));
+                        _reliefW = hw; _reliefH = hh; _reliefValid = true;
+                    }
+                    // TaaSampleIndex > 0: keep the locked base height.
                 }
 
                 // #86 — newest-wins: only present this final frame if no newer
@@ -2679,10 +2704,13 @@ namespace FracturingFog.Rendering
         // fires two selection-box repaints (set + clear), each re-uploading the
         // already-processed snapshot, and each re-darkening it because we then
         // write the result back into that same snapshot below.
-        // #102 — active 2D height field (smooth iteration count) for the
-        // heightfield-relief post-pass, stashed at calc completion. Null when the
+        // #102 — locked 2D height field (smooth iteration count) for the
+        // heightfield-relief post-pass. A STABLE COPY captured on the base frame
+        // (see the stash at calc completion), reused across TAA continuation
+        // uploads so relief doesn't sparkle. _reliefValid is false when the
         // active fractal isn't an escape-time 2D type.
         private float[]? _reliefHeight;
+        private bool _reliefValid;
         private int _reliefW, _reliefH;
         private uint[]? _reliefColorScratch;
 
@@ -2712,7 +2740,7 @@ namespace FracturingFog.Rendering
             {
                 var reliefParams = ViewState.FractalParameters;
                 if (reliefParams.Relief2DEnabled && !srcAlreadyProcessed
-                    && _reliefHeight != null && _reliefW == w && _reliefH == h
+                    && _reliefValid && _reliefHeight != null && _reliefW == w && _reliefH == h
                     && _reliefHeight.Length >= n && src.Length >= n)
                 {
                     if (_reliefColorScratch == null || _reliefColorScratch.Length < n)
