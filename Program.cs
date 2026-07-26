@@ -190,6 +190,14 @@ static class Program
         if (args.Length > 0 && args[0] == "--heightfieldspike")
             return FracturingFog.Diagnostics.HeightfieldReliefProbe.RunGate();
 
+        // --heightfieldraymarch: #102 Phase 2 gate — oblique 3D raymarch of the
+        // heightfield through the full ShadingPipeline, incl. volumetric fog.
+        // Asserts a real 3D view (silhouette against sky) + that the volumetric
+        // path changes the image. Writes heightfield-raymarch{,-fog}.ppm +
+        // heightfieldraymarch.out. See Docs/Technical/Heightfield-Relief-Spike.md.
+        if (args.Length > 0 && args[0] == "--heightfieldraymarch")
+            return FracturingFog.Diagnostics.HeightfieldRaymarchProbe.RunGate();
+
         // --meshexport: #101 gate — prove marching-cubes mesh export works for
         // every DE raymarcher (not just the User Bulb) via the shared
         // RaymarchMeshSampler factory. For each exportable type: build the
