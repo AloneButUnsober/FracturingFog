@@ -182,6 +182,14 @@ static class Program
             return okIlg ? 0 : 1;
         }
 
+        // --heightfieldspike: #102 spike — prove 2.5D heightfield relief +
+        // cast shadows for a 2D fractal (Mandelbrot). Real self-shadowing the
+        // current normal-only Phong themes can't do. Writes heightfield-relief.ppm
+        // + heightfieldspike.out next to the exe. See
+        // Docs/Technical/Heightfield-Relief-Spike.md.
+        if (args.Length > 0 && args[0] == "--heightfieldspike")
+            return FracturingFog.Diagnostics.HeightfieldReliefProbe.RunGate();
+
         // CalculatorGen-emitted self-tests: validates that the scalar and
         // AVX2 paths of a generated calculator agree on a fixed sample grid.
         // Pass the calculator name (sans "Calculator" suffix) as arg[1].
