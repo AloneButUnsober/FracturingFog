@@ -190,6 +190,58 @@ static class Program
         if (args.Length > 0 && args[0] == "--heightfieldspike")
             return FracturingFog.Diagnostics.HeightfieldReliefProbe.RunGate();
 
+        // --meshexport: #101 gate — prove marching-cubes mesh export works for
+        // every DE raymarcher (not just the User Bulb) via the shared
+        // RaymarchMeshSampler factory. For each exportable type: build the
+        // object-space DE, export a small OBJ, assert triangle count > 0.
+        // Emits meshexport.out next to the exe.
+        if (args.Length > 0 && args[0] == "--meshexport")
+        {
+            var sb = new System.Text.StringBuilder();
+            sb.AppendLine("Mesh-export gate (#101) — marching cubes over all DE raymarchers");
+            var types = new[]
+            {
+                FracturingFog.FractalType.Mandelbulb,
+                FracturingFog.FractalType.Mandelbox,
+                FracturingFog.FractalType.Kifs,
+                FracturingFog.FractalType.QuaternionJulia,
+                FracturingFog.FractalType.QuaternionMandelbrot,
+                FracturingFog.FractalType.Kleinian,
+                FracturingFog.FractalType.BicomplexMandelbrot,
+            };
+            string dir = System.IO.Path.Combine(AppContext.BaseDirectory, "meshexport");
+            System.IO.Directory.CreateDirectory(dir);
+            bool allOk = true;
+            foreach (var t in types)
+            {
+                var p = new FracturingFog.Models.FractalParameters();
+                var de = FracturingFog.Export.RaymarchMeshSampler.For(t, p);
+                if (de == null) { sb.AppendLine($"  {t,-22} SKIP (no sampler)"); allOk = false; continue; }
+                double range = FracturingFog.Export.RaymarchMeshSampler.SuggestedRange(t, p);
+                string objPath = System.IO.Path.Combine(dir, $"{t}.obj");
+                int tris;
+                try
+                {
+                    tris = FracturingFog.Export.UserBulbMeshExporter.ExportMarchingCubes(
+                        objPath, de, 0, 0, 0, range, 96);
+                }
+                catch (Exception ex)
+                {
+                    sb.AppendLine($"  {t,-22} FAIL (threw: {ex.Message})");
+                    allOk = false;
+                    continue;
+                }
+                bool ok = tris > 0;
+                allOk &= ok;
+                sb.AppendLine($"  {t,-22} {(ok ? "PASS" : "FAIL")}  tris={tris,-8} range={range:0.###}");
+            }
+            sb.AppendLine(allOk ? "RESULT: PASS" : "RESULT: FAIL");
+            string mePath = System.IO.Path.Combine(AppContext.BaseDirectory, "meshexport.out");
+            try { System.IO.File.WriteAllText(mePath, sb.ToString()); } catch { }
+            Console.Write(sb.ToString());
+            return allOk ? 0 : 1;
+        }
+
         // CalculatorGen-emitted self-tests: validates that the scalar and
         // AVX2 paths of a generated calculator agree on a fixed sample grid.
         // Pass the calculator name (sans "Calculator" suffix) as arg[1].

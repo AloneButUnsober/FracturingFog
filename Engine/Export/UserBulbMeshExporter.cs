@@ -39,6 +39,15 @@ public static class UserBulbMeshExporter
 {
     // ── Public API ──────────────────────────────────────────────────────────
 
+    /// <summary>Marching Cubes export from any <see cref="FracturingFog.Rendering.Lighting.IDistanceEstimator"/>
+    /// (#101 — the whole raymarcher family, not just the User Bulb). Thin
+    /// adapter over the <see cref="SampleDistance"/> overload.</summary>
+    public static int ExportMarchingCubes(
+        string filePath, FracturingFog.Rendering.Lighting.IDistanceEstimator de,
+        double cx, double cy, double cz, double range, int n,
+        CancellationToken ct = default)
+        => ExportMarchingCubes(filePath, de.Evaluate, cx, cy, cz, range, n, ct);
+
     /// <summary>Marching Cubes export. Dispatches on file extension:
     /// `.stl` → binary STL (face normals); anything else → OBJ with
     /// smooth per-vertex normals.</summary>
