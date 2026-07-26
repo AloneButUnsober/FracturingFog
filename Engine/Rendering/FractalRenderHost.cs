@@ -1340,6 +1340,62 @@ namespace FracturingFog.Rendering
             }
 
             long calcStart = Stopwatch.GetTimestamp();
+
+            // #107 — True per-eye side-by-side stereo. Only the 3D raymarcher
+            // family honours StereoEyeOffset (ViewState.Is3D). The two eye
+            // renders must run here on the calc thread: RenderTrueStereo drives
+            // calc.Calculate twice, and letting the upload threadpool re-enter
+            // the shared calc while this thread loops to the next job would
+            // corrupt both. Opt-in (StereoMode.True + eye-sep > 0); the default
+            // Off path below is byte-identical to pre-#107. The composited
+            // 2·W × H buffer is display-ready (each eye ran the full per-calc
+            // tonemap/bloom), so it uploads with srcAlreadyProcessed:true and
+            // presents straight to screen + the screenshot/export snapshot.
+            {
+                var stFx = ViewState?.FractalParameters?.Lighting;
+                bool trueStereo = !useAlt
+                    && (ViewState?.Is3D ?? false)
+                    && stFx.HasValue
+                    && stFx.Value.StereoMode == FracturingFog.Rendering.Lighting.StereoMode.True
+                    && stFx.Value.StereoEyeSeparation > 0.0;
+                if (trueStereo)
+                {
+                    uint[]? sbs = null;
+                    try
+                    {
+                        sbs = FracturingFog.Rendering.Lighting.StereoRender.RenderTrueStereo(
+                            ViewState!.FractalParameters,
+                            t => calc.Calculate(t),
+                            () => calc.ColorBuffer,
+                            calc.Width, calc.Height, token);
+                    }
+                    catch (OperationCanceledException) { }
+                    long stEnd = Stopwatch.GetTimestamp();
+                    if (ShowPerfHud)
+                        _perfStats.RecordCalc((stEnd - calcStart) * 1000.0 / Stopwatch.Frequency);
+
+                    // Each eye is a single sample — no TAA/MSAA accumulation.
+                    InvalidateTaa();
+
+                    if (sbs != null && !token.IsCancellationRequested)
+                    {
+                        lock (_uploadGate)
+                        {
+                            if (TryClaimPresent(job.Seq))
+                                UploadProcessedBuffer(sbs, calc.Width * 2, calc.Height,
+                                                      srcAlreadyProcessed: true);
+                        }
+                        FrameCompleted?.Invoke(this, new RenderFrameInfo(
+                            calc.CenterX, calc.CenterY, calc.Zoom, calc.MaxIterations,
+                            job.Sw.ElapsedMilliseconds, calc.Width, calc.Height,
+                            false, ViewState.IterLocked, ViewState.FractalType,
+                            "3D-SBS", double.PositiveInfinity));
+                    }
+                    AnimationFrameUploaded?.Invoke(this, EventArgs.Empty);
+                    return;
+                }
+            }
+
             try
             {
                 if (useAlt) altCalc!.Calculate(token);
