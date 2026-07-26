@@ -327,6 +327,12 @@ namespace FracturingFog.Models
         /// — a smoother gradient that emphasises scale instead of generation.
         /// Default true.</summary>
         public bool ApollonianColorByDepth { get; set; } = true;
+        /// <summary>Dome relief for 3D (normal-mapped) themes. Each gasket circle
+        /// is shaded as a lit sphere-imposter; this scales how fast the surface
+        /// normal tilts from the disk centre (flat, facing the viewer) to the
+        /// rim (grazing). 0 = flat discs (no relief); 1 = full hemisphere.
+        /// Ignored by flat 2D themes. Default 1.0.</summary>
+        public double ApollonianRelief { get; set; } = 1.0;
 
         // Diffusion-Limited Aggregation (Witten–Sander 1981).
         /// <summary>Number of random-walk particles launched into the
@@ -636,6 +642,7 @@ namespace FracturingFog.Models
                 ApollonianDepth = ApollonianDepth,
                 ApollonianMinPixelRadius = ApollonianMinPixelRadius,
                 ApollonianColorByDepth = ApollonianColorByDepth,
+                ApollonianRelief = ApollonianRelief,
                 DlaParticles = DlaParticles,
                 DlaSeed = DlaSeed,
                 KleinianIterations = KleinianIterations,

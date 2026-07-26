@@ -49,6 +49,13 @@ public sealed class ApollonianCalculator : IFractalCalculator
 
     public FractalParameters FractalParameters { get; set; } = new();
 
+    // Set once per Calculate() from the active ColorMap's required capabilities.
+    // When the theme reads (nx, ny), each disk is painted through the 5-param
+    // Map overload as a lit sphere-imposter (per-pixel normal); otherwise the
+    // cheap single-colour fast path runs (bit-identical to the pre-3D behaviour).
+    private bool _normalAware;
+    private double _relief = 1.0;
+
     public ApollonianCalculator(int width, int height) => Resize(width, height);
 
     public void Resize(int width, int height)
@@ -82,6 +89,12 @@ public sealed class ApollonianCalculator : IFractalCalculator
         double minWorldR  = minPx * pixelPitch;
 
         ColorMap.MaxIterations = Math.Max(8, maxDepth + 4);
+
+        // Decide the paint path once: normal-aware 3D themes get lit domes,
+        // flat themes keep the single-colour-per-disk fast path.
+        _normalAware = (ColorPalette.GetRequiredCapabilities(ColorMap)
+                        & FractalCapabilities.SuppliesNormals) != 0;
+        _relief = Math.Clamp(FractalParameters.ApollonianRelief, 0.0, 4.0);
 
         // Seed: integral (−1, 2, 2, 3) gasket — outer unit disk, two half-radius
         // circles tangent on the diameter, plus the upper third-radius circle
@@ -194,9 +207,34 @@ public sealed class ApollonianCalculator : IFractalCalculator
         float t = byDepth
             ? c.Depth % Math.Max(1, ColorMap.MaxIterations)
             : (float)(Math.Log(Math.Max(1e-12, c.R)) * -16.0); // log-radius fallback
-        uint col = (uint)ColorMap.Map(t, 0f, ColorMap.MaxIterations);
 
         double r2 = sr * sr;
+
+        if (!_normalAware)
+        {
+            // Flat fast path — one colour for the whole disk (bit-identical to
+            // the pre-3D behaviour).
+            uint col = (uint)ColorMap.Map(t, 0f, ColorMap.MaxIterations);
+            for (int py = y0; py <= y1; py++)
+            {
+                double dy = py - sy;
+                int row = py * Width;
+                for (int px = x0; px <= x1; px++)
+                {
+                    double dx = px - sx;
+                    if (dx * dx + dy * dy <= r2)
+                        ColorBuffer[row + px] = col;
+                }
+            }
+            return;
+        }
+
+        // Lit sphere-imposter path — each disk is a dome. The in-plane surface
+        // normal grows from the centre (flat, facing the viewer) to the rim
+        // (grazing): (u, v) = (dx, dy) / sr, scaled by the relief knob. ny is
+        // negated to convert screen-space y-down to the complex-plane y-up
+        // convention the 3D themes expect (NormalFromRaw negates it back).
+        double invSr = sr > 1e-9 ? 1.0 / sr : 0.0;
         for (int py = y0; py <= y1; py++)
         {
             double dy = py - sy;
@@ -204,8 +242,11 @@ public sealed class ApollonianCalculator : IFractalCalculator
             for (int px = x0; px <= x1; px++)
             {
                 double dx = px - sx;
-                if (dx * dx + dy * dy <= r2)
-                    ColorBuffer[row + px] = col;
+                if (dx * dx + dy * dy > r2) continue;
+                float nx = (float)(_relief * dx * invSr);
+                float ny = (float)(-_relief * dy * invSr);
+                ColorBuffer[row + px] =
+                    (uint)ColorMap.Map(t, 0f, ColorMap.MaxIterations, nx, ny);
             }
         }
     }
