@@ -102,6 +102,19 @@ public enum StereoMode
     True,
 }
 
+/// <summary>Side-by-side packing for stereo output. <see cref="FullSbs"/> keeps
+/// each eye at full width (output 2·W × H); <see cref="HalfSbs"/> squeezes each
+/// eye horizontally to W/2 (output W × H, anamorphic). Half-SBS keeps the frame
+/// at mono dimensions (smaller files, no encoder resize) and is the layout many
+/// 3D TVs / VR players expect; the player un-squeezes it per eye.</summary>
+public enum StereoLayout
+{
+    /// <summary>Each eye full width. Output 2·W × H.</summary>
+    FullSbs,
+    /// <summary>Each eye squeezed to W/2. Output W × H (anamorphic).</summary>
+    HalfSbs,
+}
+
 /// <summary>Edge-ink kernel selector (Phase 23b).</summary>
 public enum EdgeKernelMode
 {
@@ -470,6 +483,12 @@ public struct LightingFxData
     /// "1/30 rule". 0 disables the clamp.</summary>
     public double StereoMaxDisparity;
 
+    /// <summary>Side-by-side packing — <see cref="StereoLayout.FullSbs"/>
+    /// (default, 2·W × H) or <see cref="StereoLayout.HalfSbs"/> (W × H,
+    /// each eye squeezed to half width). Applied by the SBS compositor after
+    /// convergence.</summary>
+    public StereoLayout StereoLayout;
+
     // ── DoF (Phase 21) ────────────────────────────────────────────────
 
     /// <summary>Aperture radius in world units. 0 = pinhole (no DoF).</summary>
@@ -615,6 +634,7 @@ public struct LightingFxData
         StereoEyeOffset     = 0.0,
         StereoConvergence   = 0.0,
         StereoMaxDisparity  = 0.03,
+        StereoLayout        = StereoLayout.FullSbs,
 
         DofAperture        = 0.0,
         DofFocusDistance   = 3.0,

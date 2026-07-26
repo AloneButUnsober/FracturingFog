@@ -415,6 +415,12 @@ public sealed partial class FractalParamsViewModel
         get => _p.Lighting.StereoMaxDisparity;
         set { MutateLighting(r => r.Fx.StereoMaxDisparity = Clamp(value, 0, 0.15)); this.RaisePropertyChanged(); Fire(); }
     }
+    public StereoLayout StereoLayout
+    {
+        get => _p.Lighting.StereoLayout;
+        set { MutateLighting(r => r.Fx.StereoLayout = value); this.RaisePropertyChanged(); Fire(); }
+    }
+    public Array StereoLayouts => Enum.GetValues(typeof(StereoLayout));
     public double DofAperture
     {
         get => _p.Lighting.DofAperture;

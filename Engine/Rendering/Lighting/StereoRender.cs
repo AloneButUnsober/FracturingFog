@@ -142,8 +142,53 @@ public static class StereoRender
             _ => { });
 
         ApplyConvergence(outBuf, outW, width, height, fx.StereoConvergence);
+        return fx.StereoLayout == StereoLayout.HalfSbs
+            ? ToHalfSbs(outBuf, width, height)
+            : outBuf;
+    }
+
+    /// <summary>Squeeze a Full-SBS buffer (2·<paramref name="eyeW"/> × height)
+    /// into anamorphic Half-SBS (<paramref name="eyeW"/> × height): each eye is
+    /// downscaled 2:1 horizontally so both fit the original mono width. A 3D TV
+    /// / VR player un-squeezes each half back to full width per eye. Assumes an
+    /// even <paramref name="eyeW"/> (render surfaces are even); an odd width
+    /// drops its last source column.</summary>
+    public static uint[] ToHalfSbs(uint[] fullSbs, int eyeW, int height)
+    {
+        int fullW = eyeW * 2;
+        int halfEye = eyeW / 2;   // each squeezed eye
+        int outW = halfEye * 2;   // == eyeW for even widths
+        var outBuf = new uint[outW * height];
+
+        Parallel.For(0, height, y =>
+        {
+            int fRow = y * fullW;
+            int oRow = y * outW;
+            for (int j = 0; j < halfEye; j++)
+            {
+                // Left eye: full cols [0, eyeW) → out [0, halfEye).
+                outBuf[oRow + j] = Avg2(fullSbs[fRow + 2 * j], fullSbs[fRow + 2 * j + 1]);
+                // Right eye: full cols [eyeW, 2·eyeW) → out [halfEye, 2·halfEye).
+                outBuf[oRow + halfEye + j] =
+                    Avg2(fullSbs[fRow + eyeW + 2 * j], fullSbs[fRow + eyeW + 2 * j + 1]);
+            }
+        });
         return outBuf;
     }
+
+    /// <summary>Average two packed BGRA pixels channel-wise (for the Half-SBS
+    /// 2:1 horizontal downscale). Alpha averaged alongside the colour.</summary>
+    private static uint Avg2(uint a, uint b)
+    {
+        // (a + b - ((a ^ b) & 0x01010101)) >> 1 per byte lane, no overflow.
+        return (a & b) + (((a ^ b) & 0xFEFEFEFEu) >> 1);
+    }
+
+    /// <summary>Output dimensions for a stereo render at mono size
+    /// (<paramref name="w"/> × <paramref name="h"/>) under the given layout.
+    /// Full-SBS doubles the width; Half-SBS keeps mono dims.</summary>
+    public static (int W, int H) OutputDims(int w, int h, StereoLayout layout) =>
+        layout == StereoLayout.HalfSbs ? (w, h) : (w * 2, h);
 
     /// <summary>Convergence via horizontal image translation (HIT). Shifts the
     /// two eye halves of an already-composited side-by-side buffer in opposite
@@ -312,7 +357,9 @@ public static class StereoRender
                 Array.Copy(rightSrc, srcRow, outBuf, dstRowR, width);
             }
             ApplyConvergence(outBuf, outW, width, height, orig.StereoConvergence);
-            return outBuf;
+            return orig.StereoLayout == StereoLayout.HalfSbs
+                ? ToHalfSbs(outBuf, width, height)
+                : outBuf;
         }
         finally
         {

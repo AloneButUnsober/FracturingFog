@@ -467,7 +467,7 @@
 
                 <!-- Reflection / Edge / Stereo / DoF -->
                 <Expander Header="Reflection / Edge / Stereo / DoF">
-                    <Grid ColumnDefinitions="160,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto">
+                    <Grid ColumnDefinitions="160,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto">
                         <TextBlock Grid.Row="0" Grid.Column="0" Text="Reflection:" VerticalAlignment="Center"
                                    ToolTip.Tip="N-bounce DE-march along reflect(V,N). 0 = off." />
                         <Grid Grid.Row="0" Grid.Column="1" ColumnDefinitions="*,Auto" Margin="0,2">
@@ -590,6 +590,13 @@
                             <TextBlock Classes="knobValue" Grid.Column="1"
                                        Text="{Binding DofSamples}" />
                         </Grid>
+
+                        <TextBlock Grid.Row="15" Grid.Column="0" Text="Stereo layout:" VerticalAlignment="Center"
+                                   ToolTip.Tip="FullSbs = each eye full width (2W x H). HalfSbs = each eye squeezed to W/2 (W x H, anamorphic) — mono dimensions, smaller files; the 3D TV / VR player un-squeezes per eye. Used only when Stereo mode is on." />
+                        <ComboBox Grid.Row="15" Grid.Column="1"
+                                  ItemsSource="{Binding StereoLayouts}"
+                                  SelectedItem="{Binding StereoLayout, Mode=TwoWay}"
+                                  Margin="0,2" />
                     </Grid>
                 </Expander>
 
