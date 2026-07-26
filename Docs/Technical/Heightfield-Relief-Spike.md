@@ -1,7 +1,13 @@
 # Heightfield Relief & Volumetric FX for 2D Fractals — Spike (#102)
 
-Status: **spike / recommendation**. Prototype landed behind `--heightfieldspike`
-(`Engine/Diagnostics/HeightfieldReliefProbe.cs`). No production wiring yet.
+Status: **Phase 1 SHIPPED** (approach A productionised). Prototype behind
+`--heightfieldspike` (`Engine/Diagnostics/HeightfieldReliefProbe.cs`); production
+post-pass in `Engine/Rendering/Lighting/HeightfieldRelief2D.cs`, applied in
+`FractalRenderHost.UploadProcessedBuffer`, driven by `FractalParameters.Relief2D*`
++ the "Relief 3D (2D heightfield)" section in `EscapeTimeParamsView`. Opt-in;
+covers Mandelbrot + the EscapeTimeCalculator family (Tricorn, Burning Ship,
+Julia, Multibrot, Phoenix, Magnet, Glynn, Spider). Phase 2 (full raymarch +
+volumetric) still open.
 
 ## Problem
 

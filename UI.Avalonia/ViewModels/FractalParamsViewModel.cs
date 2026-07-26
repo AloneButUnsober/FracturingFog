@@ -208,11 +208,24 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
     /// interior alpha the render pipeline currently honours.</summary>
     public bool IsInteriorAlphaApplicable => IsMandelbrot;
 
+    /// <summary>Visibility flag for the 2D heightfield-relief section (#102).
+    /// True for the escape-time 2D families whose smooth-iteration height field
+    /// the render host feeds to <c>HeightfieldRelief2D</c> (Mandelbrot +
+    /// EscapeTimeCalculator kin). 3D raymarchers, direct-colour (Apollonian) and
+    /// histogram families are excluded.</summary>
+    public bool IsRelief2DApplicable =>
+        IsMandelbrot || IsJulia || IsMultibrot || IsPhoenix
+        || IsGlynn || IsSpider
+        || FractalType == FractalType.BurningShip
+        || FractalType == FractalType.Tricorn
+        || FractalType == FractalType.Magnet1
+        || FractalType == FractalType.Magnet2;
+
     public bool HasNoParams =>
         !(IsJulia || IsMultibrot || IsPhoenix || IsGlynn || IsLogistic || IsSpider || IsNewtonOrNova || IsIFS
           || IsLSystem || IsStrangeAttractor || IsBuddhaBrot || IsMandelbulb || IsMandelbox || IsKifs
           || IsQuatJulia || IsQuatMandelbrot || IsPlasma || IsFlame || IsApollonian || IsKleinian
-          || IsBicomplexMandelbrot || IsDla || IsInteriorAlphaApplicable);
+          || IsBicomplexMandelbrot || IsDla || IsInteriorAlphaApplicable || IsRelief2DApplicable);
 
     // ── Interior alpha (2D) — issue #96 ──────────────────────────────────────
     // Reads/writes FractalParameters directly (no cached backing field), same as
@@ -230,6 +243,41 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
             this.RaisePropertyChanged();
             Fire();
         }
+    }
+
+    // ── 2D heightfield relief (#102) ─────────────────────────────────────────
+    // Direct-write to _p (same pattern as interior alpha); the render host reads
+    // these off ViewState.FractalParameters in UploadProcessedBuffer.
+
+    public bool Relief2DEnabled
+    {
+        get => _p.Relief2DEnabled;
+        set { if (_p.Relief2DEnabled == value) return; _p.Relief2DEnabled = value; this.RaisePropertyChanged(); Fire(); }
+    }
+    public double Relief2DHeightScale
+    {
+        get => _p.Relief2DHeightScale;
+        set { double v = Clamp(value, 0.0, 6.0); if (_p.Relief2DHeightScale == v) return; _p.Relief2DHeightScale = v; this.RaisePropertyChanged(); Fire(); }
+    }
+    public double Relief2DLightAzimuthDeg
+    {
+        get => _p.Relief2DLightAzimuthDeg;
+        set { double v = Clamp(value, 0.0, 360.0); if (_p.Relief2DLightAzimuthDeg == v) return; _p.Relief2DLightAzimuthDeg = v; this.RaisePropertyChanged(); Fire(); }
+    }
+    public double Relief2DLightElevationDeg
+    {
+        get => _p.Relief2DLightElevationDeg;
+        set { double v = Clamp(value, 1.0, 89.0); if (_p.Relief2DLightElevationDeg == v) return; _p.Relief2DLightElevationDeg = v; this.RaisePropertyChanged(); Fire(); }
+    }
+    public double Relief2DShadowStrength
+    {
+        get => _p.Relief2DShadowStrength;
+        set { double v = Clamp(value, 0.0, 1.0); if (_p.Relief2DShadowStrength == v) return; _p.Relief2DShadowStrength = v; this.RaisePropertyChanged(); Fire(); }
+    }
+    public double Relief2DStrength
+    {
+        get => _p.Relief2DStrength;
+        set { double v = Clamp(value, 0.0, 1.0); if (_p.Relief2DStrength == v) return; _p.Relief2DStrength = v; this.RaisePropertyChanged(); Fire(); }
     }
 
     public Interior2DBackgroundMode Interior2DBackground

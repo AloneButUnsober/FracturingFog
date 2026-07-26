@@ -310,6 +310,33 @@ namespace FracturingFog.Models
         public int QMandelMaxSteps { get; set; } = 160;
         public double QMandelEpsilon { get; set; } = 0.0012;
 
+        // 2D heightfield relief (#102 Phase 1). Opt-in post-pass that treats the
+        // escape-potential (smooth iteration count) as a height field and adds
+        // real raised relief + horizon cast shadows on top of the active theme —
+        // unlike the per-pixel Phong "3D" themes, which only emboss the slope.
+        // Applies to escape-time 2D fractals (Mandelbrot, Tricorn, Burning Ship,
+        // Julia, Multibrot, …). Ignored by 3D raymarchers and direct-colour
+        // families (Apollonian etc.).
+        /// <summary>Master toggle for the 2D heightfield relief post-pass.
+        /// Default off (bit-identical to the flat/emboss render).</summary>
+        public bool Relief2DEnabled { get; set; } = false;
+        /// <summary>Vertical exaggeration of the height field (world height per
+        /// normalised smooth-count unit). Larger = deeper carving + longer
+        /// shadows. Default 1.0.</summary>
+        public double Relief2DHeightScale { get; set; } = 1.0;
+        /// <summary>Light compass direction in degrees (0 = +x/right, 90 = up).
+        /// Default 135 (upper-left key light).</summary>
+        public double Relief2DLightAzimuthDeg { get; set; } = 135.0;
+        /// <summary>Light elevation above the plane in degrees. Lower = longer,
+        /// more dramatic cast shadows. Default 30.</summary>
+        public double Relief2DLightElevationDeg { get; set; } = 30.0;
+        /// <summary>Cast-shadow darkness [0,1]. 0 = shadows computed but not
+        /// applied; 1 = fully black shadows. Default 0.6.</summary>
+        public double Relief2DShadowStrength { get; set; } = 0.6;
+        /// <summary>Overall blend of the relief lighting against the flat themed
+        /// colour [0,1]. 0 = flat (bypass); 1 = full relief. Default 1.0.</summary>
+        public double Relief2DStrength { get; set; } = 1.0;
+
         // Apollonian gasket (Descartes Circle Theorem recursive packing).
         /// <summary>Maximum recursion depth for the Vieta-jump tree. The
         /// inside-R sub-gaskets sit several levels deeper than the cusp circles
@@ -633,6 +660,12 @@ namespace FracturingFog.Models
                 QMandelLightPhi = QMandelLightPhi,
                 QMandelMaxSteps = QMandelMaxSteps,
                 QMandelEpsilon = QMandelEpsilon,
+                Relief2DEnabled = Relief2DEnabled,
+                Relief2DHeightScale = Relief2DHeightScale,
+                Relief2DLightAzimuthDeg = Relief2DLightAzimuthDeg,
+                Relief2DLightElevationDeg = Relief2DLightElevationDeg,
+                Relief2DShadowStrength = Relief2DShadowStrength,
+                Relief2DStrength = Relief2DStrength,
                 ApollonianDepth = ApollonianDepth,
                 ApollonianMinPixelRadius = ApollonianMinPixelRadius,
                 ApollonianColorByDepth = ApollonianColorByDepth,
