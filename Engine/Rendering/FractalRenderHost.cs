@@ -1916,6 +1916,54 @@ namespace FracturingFog.Rendering
                     }
                 }
 
+                // #102 — stash the active 2D height field (smooth iteration
+                // count) so UploadProcessedBuffer can add heightfield relief on
+                // top of the themed colour. Only escape-time 2D calculators
+                // expose one; raymarchers / IFS / Apollonian / etc. leave it
+                // invalid so relief is skipped for them.
+                //
+                // Capture a STABLE COPY on the base frame only (TaaSampleIndex 0,
+                // final full-res progressive stage). TAA continuation samples
+                // jitter the camera sub-pixel and overwrite the calc's
+                // SmoothBuffer each pass; without a locked base height the relief
+                // gradient + specular recompute on every jittered height and the
+                // detail areas visibly sparkle for several seconds. Locking the
+                // height keeps the relief pattern fixed while the colour
+                // accumulates underneath — no jitter, same settled result.
+                if (job.ProgressiveStage <= 1)
+                {
+                    // Any escape-time 2D calculator exposes its height field via
+                    // IHeightFieldSource — Mandelbrot, the EscapeTimeCalculator
+                    // family, AND the CalcGen-generated calculators (generated
+                    // Tricorn / Burning Ship / MandelbrotZ*). Raymarchers, IFS,
+                    // Apollonian etc. don't implement it → relief skipped.
+                    float[]? srcH; int hw, hh;
+                    if (useAlt)
+                    {
+                        srcH = (altCalc as Interefaces.IHeightFieldSource)?.SmoothBuffer;
+                        hw = altCalc!.Width; hh = altCalc.Height;
+                    }
+                    else
+                    {
+                        srcH = (calc as Interefaces.IHeightFieldSource)?.SmoothBuffer;
+                        hw = calc.Width; hh = calc.Height;
+                    }
+
+                    if (srcH == null)
+                    {
+                        _reliefValid = false;
+                    }
+                    else if (job.TaaSampleIndex == 0)
+                    {
+                        int hn = hw * hh;
+                        if (_reliefHeight == null || _reliefHeight.Length < hn)
+                            _reliefHeight = new float[hn];
+                        Array.Copy(srcH, _reliefHeight, Math.Min(srcH.Length, hn));
+                        _reliefW = hw; _reliefH = hh; _reliefValid = true;
+                    }
+                    // TaaSampleIndex > 0: keep the locked base height.
+                }
+
                 // #86 — newest-wins: only present this final frame if no newer
                 // frame's upload has already reached the screen. A superseded
                 // final still runs its bookkeeping below (status label, events,
@@ -2662,6 +2710,16 @@ namespace FracturingFog.Rendering
         // fires two selection-box repaints (set + clear), each re-uploading the
         // already-processed snapshot, and each re-darkening it because we then
         // write the result back into that same snapshot below.
+        // #102 — locked 2D height field (smooth iteration count) for the
+        // heightfield-relief post-pass. A STABLE COPY captured on the base frame
+        // (see the stash at calc completion), reused across TAA continuation
+        // uploads so relief doesn't sparkle. _reliefValid is false when the
+        // active fractal isn't an escape-time 2D type.
+        private float[]? _reliefHeight;
+        private bool _reliefValid;
+        private int _reliefW, _reliefH;
+        private uint[]? _reliefColorScratch;
+
         private void UploadProcessedBuffer(uint[] src, int w, int h, bool srcAlreadyProcessed = false)
         {
             int n = w * h;
@@ -2678,6 +2736,33 @@ namespace FracturingFog.Rendering
             if (_uploadDstPool == null || _uploadDstPool.Length < n)
                 _uploadDstPool = GC.AllocateUninitializedArray<uint>(n, pinned: true);
             var dst = _uploadDstPool;
+
+            // #102 — heightfield relief: modulate the themed colour with real
+            // raised relief + cast shadows before the brightness/contrast pass.
+            // Gated to fresh (unprocessed) escape-time 2D frames whose height
+            // buffer matches these dims; snapshots (srcAlreadyProcessed) already
+            // carry relief. Writes to a scratch so the calculator's ColorBuffer
+            // stays flat (idempotent across re-uploads).
+            {
+                var reliefParams = ViewState.FractalParameters;
+                if (reliefParams.Relief2DEnabled && !srcAlreadyProcessed
+                    && _reliefValid && _reliefHeight != null && _reliefW == w && _reliefH == h
+                    && _reliefHeight.Length >= n && src.Length >= n)
+                {
+                    if (_reliefColorScratch == null || _reliefColorScratch.Length < n)
+                        _reliefColorScratch = new uint[n];
+                    if (reliefParams.Relief2DRaymarch)
+                        // Phase 2 — oblique 3D raymarch of the height field
+                        // (perspective relief, silhouette, volumetric fog).
+                        FracturingFog.Rendering.Lighting.HeightfieldRaymarch2D.Render(
+                            src, _reliefHeight, w, h, reliefParams, _reliefColorScratch);
+                    else
+                        // Phase 1 — screen-space hillshade + cast-shadow post-pass.
+                        FracturingFog.Rendering.Lighting.HeightfieldRelief2D.Apply(
+                            src, _reliefColorScratch, _reliefHeight, w, h, reliefParams);
+                    src = _reliefColorScratch;
+                }
+            }
 
             int brightness = ViewState.Brightness;
             int contrast = ViewState.Contrast;
