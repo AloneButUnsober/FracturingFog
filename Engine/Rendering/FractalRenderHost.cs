@@ -1379,10 +1379,12 @@ namespace FracturingFog.Rendering
 
                     if (sbs != null && !token.IsCancellationRequested)
                     {
+                        var (outW, outH) = FracturingFog.Rendering.Lighting.StereoRender
+                            .OutputDims(calc.Width, calc.Height, stFx.Value.StereoLayout);
                         lock (_uploadGate)
                         {
                             if (TryClaimPresent(job.Seq))
-                                UploadProcessedBuffer(sbs, calc.Width * 2, calc.Height,
+                                UploadProcessedBuffer(sbs, outW, outH,
                                                       srcAlreadyProcessed: true);
                         }
                         FrameCompleted?.Invoke(this, new RenderFrameInfo(

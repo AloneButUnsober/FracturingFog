@@ -135,6 +135,32 @@ public class StereoRenderTests
         Assert.Equal(0.0, StereoRender.SuggestEyeSeparation(depth, w, h, Fx(0, 0, 0.03)));
     }
 
+    [Fact]
+    public void OutputDims_MatchLayout()
+    {
+        Assert.Equal((200, 100), StereoRender.OutputDims(100, 100, StereoLayout.FullSbs));
+        Assert.Equal((100, 100), StereoRender.OutputDims(100, 100, StereoLayout.HalfSbs));
+    }
+
+    [Fact]
+    public void ToHalfSbs_SqueezesEachEye_ToHalfWidth()
+    {
+        // Full-SBS row: left eye 4 px solid A, right eye 4 px solid B → Half-SBS
+        // row is 4 px: [A,A | B,B]. Solid eyes make the 2:1 average exact.
+        const int eyeW = 4, h = 1;
+        const uint A = 0xFF204060u, B = 0xFF80A0C0u;
+        var full = new uint[eyeW * 2 * h];
+        for (int x = 0; x < eyeW; x++) { full[x] = A; full[eyeW + x] = B; }
+
+        var half = StereoRender.ToHalfSbs(full, eyeW, h);
+
+        Assert.Equal(eyeW, half.Length);        // W × H, not 2W × H
+        Assert.Equal(A, half[0]);
+        Assert.Equal(A, half[1]);               // left eye squeezed to [0,2)
+        Assert.Equal(B, half[2]);
+        Assert.Equal(B, half[3]);               // right eye squeezed to [2,4)
+    }
+
     // Contract the #107 host wiring depends on: RenderTrueStereo drives two
     // renders at eye offsets -IPD/2 then +IPD/2, composites left|right into a
     // 2·W × H buffer, and restores Lighting afterwards (EyeOffset back to 0).
@@ -193,6 +219,7 @@ public class StereoRenderTests
         fx.StereoFovDegrees = 75.0;
         fx.StereoConvergence = 0.04;
         fx.StereoMaxDisparity = 0.05;
+        fx.StereoLayout = StereoLayout.HalfSbs;
 
         var round = LightingFxPresetData.FromFx(fx).ToFx();
 
@@ -201,5 +228,6 @@ public class StereoRenderTests
         Assert.Equal(75.0, round.StereoFovDegrees);
         Assert.Equal(0.04, round.StereoConvergence);
         Assert.Equal(0.05, round.StereoMaxDisparity);
+        Assert.Equal(StereoLayout.HalfSbs, round.StereoLayout);
     }
 }
