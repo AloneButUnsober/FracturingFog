@@ -181,4 +181,25 @@ public class StereoRenderTests
         Assert.Null(StereoRender.RenderTrueStereo(
             fp, _ => { }, () => new uint[4], 2, 2, CancellationToken.None));
     }
+
+    // #107 — stereo settings must survive a scene/preset save-load so a saved
+    // scene reopens in stereo, not mono.
+    [Fact]
+    public void PresetRoundTrip_PreservesStereoFields()
+    {
+        var fx = LightingFxData.CreateDefault();
+        fx.StereoMode = StereoMode.True;
+        fx.StereoEyeSeparation = 0.08;
+        fx.StereoFovDegrees = 75.0;
+        fx.StereoConvergence = 0.04;
+        fx.StereoMaxDisparity = 0.05;
+
+        var round = LightingFxPresetData.FromFx(fx).ToFx();
+
+        Assert.Equal(StereoMode.True, round.StereoMode);
+        Assert.Equal(0.08, round.StereoEyeSeparation);
+        Assert.Equal(75.0, round.StereoFovDegrees);
+        Assert.Equal(0.04, round.StereoConvergence);
+        Assert.Equal(0.05, round.StereoMaxDisparity);
+    }
 }
