@@ -288,6 +288,28 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
         set { double v = Clamp(value, 0.0, 1.0); if (_p.Relief2DStrength == v) return; _p.Relief2DStrength = v; this.RaisePropertyChanged(); Fire(); }
     }
 
+    // #102 Phase 2 — oblique heightfield raymarch (perspective relief + volumetric).
+    public bool Relief2DRaymarch
+    {
+        get => _p.Relief2DRaymarch;
+        set { if (_p.Relief2DRaymarch == value) return; _p.Relief2DRaymarch = value; this.RaisePropertyChanged(); Fire(); }
+    }
+    public double Relief2DCameraAzimuthDeg
+    {
+        get => _p.Relief2DCameraAzimuthDeg;
+        set { double v = Clamp(value, -180.0, 180.0); if (_p.Relief2DCameraAzimuthDeg == v) return; _p.Relief2DCameraAzimuthDeg = v; this.RaisePropertyChanged(); Fire(); }
+    }
+    public double Relief2DCameraElevationDeg
+    {
+        get => _p.Relief2DCameraElevationDeg;
+        set { double v = Clamp(value, 5.0, 89.0); if (_p.Relief2DCameraElevationDeg == v) return; _p.Relief2DCameraElevationDeg = v; this.RaisePropertyChanged(); Fire(); }
+    }
+    public double Relief2DCameraFovDeg
+    {
+        get => _p.Relief2DCameraFovDeg;
+        set { double v = Clamp(value, 15.0, 100.0); if (_p.Relief2DCameraFovDeg == v) return; _p.Relief2DCameraFovDeg = v; this.RaisePropertyChanged(); Fire(); }
+    }
+
     public Interior2DBackgroundMode Interior2DBackground
     {
         get => _p.Interior2DBackground;

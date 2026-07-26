@@ -1,13 +1,25 @@
 # Heightfield Relief & Volumetric FX for 2D Fractals — Spike (#102)
 
-Status: **Phase 1 SHIPPED** (approach A productionised). Prototype behind
-`--heightfieldspike` (`Engine/Diagnostics/HeightfieldReliefProbe.cs`); production
-post-pass in `Engine/Rendering/Lighting/HeightfieldRelief2D.cs`, applied in
-`FractalRenderHost.UploadProcessedBuffer`, driven by `FractalParameters.Relief2D*`
-+ the "Relief 3D (2D heightfield)" section in `EscapeTimeParamsView`. Opt-in;
-covers Mandelbrot + the EscapeTimeCalculator family (Tricorn, Burning Ship,
-Julia, Multibrot, Phoenix, Magnet, Glynn, Spider). Phase 2 (full raymarch +
-volumetric) still open.
+Status: **Phase 1 + Phase 2 SHIPPED** (approaches A and B productionised).
+
+- **Phase 1 (approach A — screen-space hillshade + cast shadows):** prototype
+  behind `--heightfieldspike` (`Engine/Diagnostics/HeightfieldReliefProbe.cs`);
+  production post-pass in `Engine/Rendering/Lighting/HeightfieldRelief2D.cs`,
+  applied in `FractalRenderHost.UploadProcessedBuffer`, driven by
+  `FractalParameters.Relief2D*` + the "Relief 3D (2D heightfield)" section in
+  `EscapeTimeParamsView`.
+- **Phase 2 (approach B — oblique 3D raymarch + volumetric):** production
+  renderer in `Engine/Rendering/Lighting/HeightfieldRaymarch2D.cs`, selected in
+  the same host block when `FractalParameters.Relief2DRaymarch` is set. Extrudes
+  the smooth-count field into a true surface `y = h(x,z)`, raymarches it from an
+  oblique camera (`Relief2DCamera{Azimuth,Elevation,Fov}Deg`), and routes every
+  hit through `ShadingPipeline.Shade<TDe>` — so the shared `LightingFxData`
+  stack (soft shadow, AO, PBR spec, **Beer–Lambert fog + volumetric in-scatter
+  god-rays**) lights the 2D fractal. Gate: `--heightfieldraymarch`
+  (`Engine/Diagnostics/HeightfieldRaymarchProbe.cs`). Q5 (volumetric) answered.
+
+Both opt-in; cover Mandelbrot + the EscapeTimeCalculator family + the CalcGen
+generated escape-time types (all `IHeightFieldSource`).
 
 ## Problem
 
@@ -74,6 +86,13 @@ lower-bound estimate). Higher effort; overlaps the mesh work (#101) since a
 marching-**squares** extrusion of the same field yields an exportable mesh.
 
 **Verdict:** the honest path to Q5 (volumetric) and oblique-angle relief. Phase 2.
+**SHIPPED** in `HeightfieldRaymarch2D` — see the status header. The heightfield
+DE is `f(p) = (p.y − h(p.x,p.z)) · invLip`, Lipschitz-normalised by the field's
+measured max world-space slope so the sphere trace can't overshoot ridges; the
+primary ray is clipped to the terrain AABB (ray-slab) before marching, so
+ray-miss = sky and the silhouette is exact. Volumetric fog comes for free: the
+same DE struct is handed to `Shade<TDe>`, whose in-scatter walk already samples
+it for god-ray shadowing.
 
 ### C. Cheap fakes (fallback / complementary)
 

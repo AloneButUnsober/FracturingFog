@@ -2751,8 +2751,15 @@ namespace FracturingFog.Rendering
                 {
                     if (_reliefColorScratch == null || _reliefColorScratch.Length < n)
                         _reliefColorScratch = new uint[n];
-                    FracturingFog.Rendering.Lighting.HeightfieldRelief2D.Apply(
-                        src, _reliefColorScratch, _reliefHeight, w, h, reliefParams);
+                    if (reliefParams.Relief2DRaymarch)
+                        // Phase 2 — oblique 3D raymarch of the height field
+                        // (perspective relief, silhouette, volumetric fog).
+                        FracturingFog.Rendering.Lighting.HeightfieldRaymarch2D.Render(
+                            src, _reliefHeight, w, h, reliefParams, _reliefColorScratch);
+                    else
+                        // Phase 1 — screen-space hillshade + cast-shadow post-pass.
+                        FracturingFog.Rendering.Lighting.HeightfieldRelief2D.Apply(
+                            src, _reliefColorScratch, _reliefHeight, w, h, reliefParams);
                     src = _reliefColorScratch;
                 }
             }

@@ -337,6 +337,29 @@ namespace FracturingFog.Models
         /// colour [0,1]. 0 = flat (bypass); 1 = full relief. Default 1.0.</summary>
         public double Relief2DStrength { get; set; } = 1.0;
 
+        // #102 Phase 2 — oblique heightfield RAYMARCH. Instead of the screen-
+        // space hillshade post-pass (Phase 1, above), extrude the smooth-count
+        // height field into a true 3D surface z = h(x,y) and raymarch it from an
+        // oblique camera, routing through the full ShadingPipeline. Gives real
+        // perspective relief, a silhouette, and — because it is now a 3D scene —
+        // volumetric fog / god-rays via the shared LightingFxData (the FX dialog
+        // FogDensity / VolumeSteps knobs). Terrain height still comes from
+        // Relief2DHeightScale; the sun + fog come from the Lighting struct.
+        /// <summary>When true (and <see cref="Relief2DEnabled"/>), replace the
+        /// flat 2D image with an oblique 3D raymarch of the height field. Default
+        /// off — the Phase 1 hillshade post-pass runs instead.</summary>
+        public bool Relief2DRaymarch { get; set; } = false;
+        /// <summary>Oblique camera azimuth in degrees, orbiting the terrain around
+        /// the up axis. 0 = looking along −Z toward the scene. Default 0.</summary>
+        public double Relief2DCameraAzimuthDeg { get; set; } = 0.0;
+        /// <summary>Oblique camera elevation above the ground plane in degrees.
+        /// 90 = top-down (flat-looking); low = raking, dramatic silhouette.
+        /// Default 45.</summary>
+        public double Relief2DCameraElevationDeg { get; set; } = 45.0;
+        /// <summary>Vertical field of view of the oblique camera in degrees.
+        /// Default 50.</summary>
+        public double Relief2DCameraFovDeg { get; set; } = 50.0;
+
         // Apollonian gasket (Descartes Circle Theorem recursive packing).
         /// <summary>Maximum recursion depth for the Vieta-jump tree. The
         /// inside-R sub-gaskets sit several levels deeper than the cusp circles
@@ -672,6 +695,10 @@ namespace FracturingFog.Models
                 Relief2DLightElevationDeg = Relief2DLightElevationDeg,
                 Relief2DShadowStrength = Relief2DShadowStrength,
                 Relief2DStrength = Relief2DStrength,
+                Relief2DRaymarch = Relief2DRaymarch,
+                Relief2DCameraAzimuthDeg = Relief2DCameraAzimuthDeg,
+                Relief2DCameraElevationDeg = Relief2DCameraElevationDeg,
+                Relief2DCameraFovDeg = Relief2DCameraFovDeg,
                 ApollonianDepth = ApollonianDepth,
                 ApollonianMinPixelRadius = ApollonianMinPixelRadius,
                 ApollonianColorByDepth = ApollonianColorByDepth,
