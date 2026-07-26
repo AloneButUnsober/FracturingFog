@@ -1916,6 +1916,23 @@ namespace FracturingFog.Rendering
                     }
                 }
 
+                // #102 — stash the active 2D height field (smooth iteration
+                // count) so UploadProcessedBuffer can add heightfield relief on
+                // top of the themed colour. Only escape-time 2D calculators
+                // expose one; null for raymarchers / IFS / Apollonian / etc. so
+                // relief is skipped for them.
+                if (useAlt)
+                {
+                    var ec = altCalc as EscapeTimeCalculator;
+                    _reliefHeight = ec?.SmoothBuffer;
+                    _reliefW = altCalc!.Width; _reliefH = altCalc.Height;
+                }
+                else
+                {
+                    _reliefHeight = calc.SmoothBuffer;
+                    _reliefW = calc.Width; _reliefH = calc.Height;
+                }
+
                 // #86 — newest-wins: only present this final frame if no newer
                 // frame's upload has already reached the screen. A superseded
                 // final still runs its bookkeeping below (status label, events,
@@ -2662,6 +2679,13 @@ namespace FracturingFog.Rendering
         // fires two selection-box repaints (set + clear), each re-uploading the
         // already-processed snapshot, and each re-darkening it because we then
         // write the result back into that same snapshot below.
+        // #102 — active 2D height field (smooth iteration count) for the
+        // heightfield-relief post-pass, stashed at calc completion. Null when the
+        // active fractal isn't an escape-time 2D type.
+        private float[]? _reliefHeight;
+        private int _reliefW, _reliefH;
+        private uint[]? _reliefColorScratch;
+
         private void UploadProcessedBuffer(uint[] src, int w, int h, bool srcAlreadyProcessed = false)
         {
             int n = w * h;
@@ -2678,6 +2702,26 @@ namespace FracturingFog.Rendering
             if (_uploadDstPool == null || _uploadDstPool.Length < n)
                 _uploadDstPool = GC.AllocateUninitializedArray<uint>(n, pinned: true);
             var dst = _uploadDstPool;
+
+            // #102 — heightfield relief: modulate the themed colour with real
+            // raised relief + cast shadows before the brightness/contrast pass.
+            // Gated to fresh (unprocessed) escape-time 2D frames whose height
+            // buffer matches these dims; snapshots (srcAlreadyProcessed) already
+            // carry relief. Writes to a scratch so the calculator's ColorBuffer
+            // stays flat (idempotent across re-uploads).
+            {
+                var reliefParams = ViewState.FractalParameters;
+                if (reliefParams.Relief2DEnabled && !srcAlreadyProcessed
+                    && _reliefHeight != null && _reliefW == w && _reliefH == h
+                    && _reliefHeight.Length >= n && src.Length >= n)
+                {
+                    if (_reliefColorScratch == null || _reliefColorScratch.Length < n)
+                        _reliefColorScratch = new uint[n];
+                    FracturingFog.Rendering.Lighting.HeightfieldRelief2D.Apply(
+                        src, _reliefColorScratch, _reliefHeight, w, h, reliefParams);
+                    src = _reliefColorScratch;
+                }
+            }
 
             int brightness = ViewState.Brightness;
             int contrast = ViewState.Contrast;

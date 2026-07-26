@@ -172,6 +172,49 @@
             </StackPanel>
         </Border>
 
+        <!-- 2D heightfield relief (#102). Escape-time 2D families. -->
+        <Border IsVisible="{Binding IsRelief2DApplicable}"
+                BorderBrush="#404040" BorderThickness="0,1,0,0"
+                Padding="0,8,0,0" Margin="0,4,0,0">
+            <StackPanel Spacing="6">
+                <TextBlock Text="Relief 3D (2D heightfield)" FontWeight="Bold" Foreground="#FFCC00" />
+                <CheckBox Content="Enable raised relief + cast shadows"
+                          IsChecked="{Binding Relief2DEnabled, Mode=TwoWay}"
+                          ToolTip.Tip="Treats the escape potential as a height field and adds real raised relief + horizon cast shadows on top of the active theme. Reads best on smooth (non-noisy) themes and when zoomed into filament structure." />
+
+                <Grid ColumnDefinitions="160,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto"
+                      IsEnabled="{Binding Relief2DEnabled}">
+                    <TextBlock Grid.Row="0" Grid.Column="0" Text="Height scale:" VerticalAlignment="Center"
+                               ToolTip.Tip="Vertical exaggeration. Higher = deeper carving and longer shadows." />
+                    <NumericUpDown Grid.Row="0" Grid.Column="1"
+                                   Minimum="0" Maximum="6" Increment="0.1" FormatString="F1"
+                                   Value="{Binding Relief2DHeightScale, Mode=TwoWay}" Margin="0,2" />
+
+                    <TextBlock Grid.Row="1" Grid.Column="0" Text="Light azimuth (°):" VerticalAlignment="Center"
+                               ToolTip.Tip="Compass direction of the light. 0 = right, 90 = up." />
+                    <NumericUpDown Grid.Row="1" Grid.Column="1"
+                                   Minimum="0" Maximum="360" Increment="5" FormatString="F0"
+                                   Value="{Binding Relief2DLightAzimuthDeg, Mode=TwoWay}" Margin="0,2" />
+
+                    <TextBlock Grid.Row="2" Grid.Column="0" Text="Light elevation (°):" VerticalAlignment="Center"
+                               ToolTip.Tip="Light height above the plane. Lower = longer, more dramatic cast shadows." />
+                    <NumericUpDown Grid.Row="2" Grid.Column="1"
+                                   Minimum="1" Maximum="89" Increment="1" FormatString="F0"
+                                   Value="{Binding Relief2DLightElevationDeg, Mode=TwoWay}" Margin="0,2" />
+
+                    <TextBlock Grid.Row="3" Grid.Column="0" Text="Shadow strength:" VerticalAlignment="Center"
+                               ToolTip.Tip="How dark cast shadows go. 0 = no shadows; 1 = fully black." />
+                    <Slider Grid.Row="3" Grid.Column="1" Minimum="0" Maximum="1"
+                            Value="{Binding Relief2DShadowStrength, Mode=TwoWay}" Margin="0,2" />
+
+                    <TextBlock Grid.Row="4" Grid.Column="0" Text="Relief strength:" VerticalAlignment="Center"
+                               ToolTip.Tip="Blend of relief lighting vs the flat themed colour. 1 = full relief." />
+                    <Slider Grid.Row="4" Grid.Column="1" Minimum="0" Maximum="1"
+                            Value="{Binding Relief2DStrength, Mode=TwoWay}" Margin="0,2" />
+                </Grid>
+            </StackPanel>
+        </Border>
+
         <!-- Secant initial-offset add-on -->
         <Grid IsVisible="{Binding IsSecant}"
               ColumnDefinitions="160,*" RowDefinitions="Auto,Auto">
