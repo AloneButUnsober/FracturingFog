@@ -118,6 +118,7 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
         _apolloDepth = _p.ApollonianDepth;
         _apolloMinPx = _p.ApollonianMinPixelRadius;
         _apolloColorByDepth = _p.ApollonianColorByDepth;
+        _apolloRelief = _p.ApollonianRelief;
         _kleinIter = _p.KleinianIterations;
         _kleinScale = _p.KleinianSphereScale;
         _kleinCameraTheta = _p.KleinianCameraTheta;
@@ -826,6 +827,8 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
     public double ApollonianMinPixelRadius { get => _apolloMinPx; set { Set(ref _apolloMinPx, Clamp(value, 0.25, 16.0)); _p.ApollonianMinPixelRadius = _apolloMinPx; Fire(); } }
     private bool _apolloColorByDepth;
     public bool ApollonianColorByDepth { get => _apolloColorByDepth; set { Set(ref _apolloColorByDepth, value); _p.ApollonianColorByDepth = _apolloColorByDepth; Fire(); } }
+    private double _apolloRelief;
+    public double ApollonianRelief { get => _apolloRelief; set { Set(ref _apolloRelief, Clamp(value, 0.0, 4.0)); _p.ApollonianRelief = _apolloRelief; Fire(); } }
 
     // ── DLA ──
     private int _dlaParticles;
