@@ -31,8 +31,18 @@ namespace FracturingFog.Models
     /// then maps through an exponential saturation curve.  At t=0 the pixel lies
     /// on the boundary; t→1 deep in the exterior.
     /// </summary>
-    public abstract class DistanceEstimationBaseMap : GradientColorMap
+    public abstract class DistanceEstimationBaseMap : GradientColorMap, IColorMapWithPixelScale
     {
+        // Per-frame complex-plane pixel span, pushed by the calculator before
+        // the render loop (IColorMapWithPixelScale). Preferred over the
+        // MandelbrotCalculator static so non-Mandelbrot escape-time renders
+        // (Tricorn, Burning Ship, Glynn, TearDrop, generated) normalise the DE
+        // by their *own* scale. <= 0 = "not set this frame" → fall back to the
+        // static (first render before any Calculate(), or a calculator that
+        // doesn't push).
+        private double _pixelScale = 0.0;
+        public double PixelScale { set => _pixelScale = value; }
+
         /// <summary>
         /// Falloff steepness.  Higher = more pixels near the boundary fall on
         /// the dark end of the gradient (sharper filaments).  Lower = broader
@@ -51,7 +61,8 @@ namespace FracturingFog.Models
             // Convert complex-plane distance to pixel units.  Guarded against
             // degenerate scale values during the very first render before
             // Calculate() has run.
-            double pxScale = MandelbrotCalculator.LastPixelScale;
+            double pxScale = _pixelScale > 0.0 ? _pixelScale
+                                               : MandelbrotCalculator.LastPixelScale;
             if (pxScale <= 0.0 || double.IsNaN(pxScale) || double.IsInfinity(pxScale))
                 pxScale = 1.0;
 
