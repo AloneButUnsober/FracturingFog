@@ -2371,9 +2371,16 @@ namespace FracturingFog.Hosting
                 if (s_renderHost == null) return;
                 try
                 {
+                    // #112 — snapshot sampler with export-specific iter + Jacobian
+                    // step so the numerical DE resolves geometry; falls back to
+                    // the live-param sampler if no kernel override is available.
+                    var sampler = s_renderHost.MakeUserBulbExportSampler(e.Iterations, e.JacobianH);
+                    global::FracturingFog.Export.SampleDistance de = sampler != null
+                        ? (x, y, z) => sampler(x, y, z)
+                        : (x, y, z) => s_renderHost!.SampleUserBulbDE(x, y, z);
                     int tris = global::FracturingFog.Export.UserBulbMeshExporter.ExportMarchingCubes(
                         e.Path,
-                        (x, y, z) => s_renderHost!.SampleUserBulbDE(x, y, z),
+                        de,
                         s_renderHost.UserBulbCenterX, -s_renderHost.UserBulbCenterY, 0,
                         e.Range, e.GridN);
                     ShowInfo("Mesh export", $"Exported {tris} triangles to {e.Path}", false);

@@ -109,6 +109,50 @@ public sealed class UserBulbCalculator : IFractalCalculator
             FractalParameters.UserBulbKifsScale);
     }
 
+    /// <summary>Build a mesh-export distance sampler that SNAPSHOTS the current
+    /// compiled kernel + params, with caller-supplied iteration count and
+    /// Jacobian step so an export can resolve more geometric detail than the
+    /// live render (native raymarchers use analytic DEs; UserBulb's numerical
+    /// Jacobian DE is smoother, so higher iterations + a smaller step close the
+    /// gap — #112). The returned delegate is independent of later
+    /// <see cref="FractalParameters"/> mutation, so it is safe to run on the
+    /// off-thread export while the render keeps going. Returns <c>null</c> when
+    /// no kernel is compiled.</summary>
+    public Func<double, double, double, double>? MakeExportSampler(int iterations, double jacobianH)
+    {
+        if (_compiled == null && _compiledQuat == null) return null;
+
+        double[] pArr = new double[_compiledParamNames.Length + 1];
+        var ps = FractalParameters.UserBulbParams;
+        if (ps != null)
+            for (int i = 0; i < _compiledParamNames.Length; i++)
+                pArr[i] = ps.Find(q => q.Name == _compiledParamNames[i])?.Value ?? 0.0;
+        pArr[_compiledParamNames.Length] = FractalParameters.UserBulbTime;
+
+        int iter = Math.Max(2, iterations);
+        double jacH = Math.Max(1e-8, jacobianH);
+        double bailout = Math.Max(1, FractalParameters.UserBulbBailout);
+        bool jul = FractalParameters.UserBulbJuliaMode;
+
+        if (_compiledQuat != null)
+        {
+            var fn = _compiledQuat;
+            double sliceW = FractalParameters.UserBulbQuatSliceW;
+            double jcW = FractalParameters.UserBulbJuliaCW, jcX = FractalParameters.UserBulbJuliaCX;
+            double jcY = FractalParameters.UserBulbJuliaCY, jcZ = FractalParameters.UserBulbJuliaCZ;
+            return (x, y, z) => UserBulbQuatDE(fn, sliceW, x, y, z, iter, bailout, jacH, pArr,
+                jul, jcW, jcX, jcY, jcZ);
+        }
+        else
+        {
+            var fn = _compiled!;
+            double jcX = FractalParameters.UserBulbJuliaCX, jcY = FractalParameters.UserBulbJuliaCY, jcZ = FractalParameters.UserBulbJuliaCZ;
+            double kifsScale = FractalParameters.UserBulbKifsScale;
+            return (x, y, z) => UserBulbDE(fn, x, y, z, iter, bailout, jacH, pArr,
+                jul, jcX, jcY, jcZ, kifsScale);
+        }
+    }
+
     /// <summary>When true, render at half resolution and nearest-upscale into
     /// ColorBuffer. Used by MainForm during camera drag for interactive frame
     /// rate; full-res render fires after drag ends.</summary>

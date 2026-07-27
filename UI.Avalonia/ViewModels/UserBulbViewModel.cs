@@ -1085,9 +1085,51 @@ public sealed class UserBulbViewModel : ViewModelBase
         SaveFilePromptRequested?.Invoke(this, pathArgs);
         if (string.IsNullOrEmpty(pathArgs.Path)) return;
 
-        // Host shows the N+range modal; defaults match the legacy dialog.
-        var meshArgs = new MeshExportEventArgs(64, 2.0, pathArgs.Path!);
+        // #112 — carry the export-detail knobs set in the panel. Defaults raise
+        // grid 64→96 (native parity) and iterations 8→12 with a tighter Jacobian
+        // step so the numerical DE resolves fractal geometry, not a blob.
+        var meshArgs = new MeshExportEventArgs(
+            ExportGridN, ExportRange, pathArgs.Path!, ExportIterations, ExportJacobianH);
         ExportMeshRequested?.Invoke(this, meshArgs);
+    }
+
+    // ── Mesh-export detail knobs (#112) ─────────────────────────────────────
+    private int _exportGridN = 96;
+    /// <summary>Marching-cubes grid resolution per axis. Higher = finer mesh,
+    /// cost ~N³. 96 matches the native raymarcher exporter.</summary>
+    public int ExportGridN
+    {
+        get => _exportGridN;
+        set => this.RaiseAndSetIfChanged(ref _exportGridN, Math.Clamp(value, 16, 512));
+    }
+
+    private double _exportRange = 2.0;
+    /// <summary>Object-space half-extent of the sampled cube about the fractal.
+    /// Must enclose the set; too small clips, too large wastes resolution.</summary>
+    public double ExportRange
+    {
+        get => _exportRange;
+        set => this.RaiseAndSetIfChanged(ref _exportRange, Math.Clamp(value, 0.25, 64.0));
+    }
+
+    private int _exportIterations = 12;
+    /// <summary>DE iteration count for export only (render uses its own). Native
+    /// quaternion types run 11–14; UserBulb's render default is 8, too low for
+    /// crisp geometry. Raise for detail.</summary>
+    public int ExportIterations
+    {
+        get => _exportIterations;
+        set => this.RaiseAndSetIfChanged(ref _exportIterations, Math.Clamp(value, 2, 64));
+    }
+
+    private double _exportJacobianH = 1e-5;
+    /// <summary>Finite-difference step for the numerical Jacobian DE. Smaller =
+    /// sharper distance estimate (more detail) but more prone to numeric noise;
+    /// 1e-5 is a good export default vs the 1e-4 render default.</summary>
+    public double ExportJacobianH
+    {
+        get => _exportJacobianH;
+        set => this.RaiseAndSetIfChanged(ref _exportJacobianH, Math.Clamp(value, 1e-8, 1e-2));
     }
 
     private string NextFreeName()
@@ -1155,10 +1197,16 @@ public sealed class SaveFileEventArgs : EventArgs
 
 public sealed class MeshExportEventArgs : EventArgs
 {
-    public MeshExportEventArgs(int gridN, double range, string path) { GridN = gridN; Range = range; Path = path; }
+    public MeshExportEventArgs(int gridN, double range, string path, int iterations, double jacobianH)
+    { GridN = gridN; Range = range; Path = path; Iterations = iterations; JacobianH = jacobianH; }
     public int GridN { get; }
     public double Range { get; }
     public string Path { get; }
+    // #112 — export-specific DE quality (independent of the render's live iter/
+    // jacH) so mesh geometry can resolve detail the numerical DE otherwise
+    // smooths away.
+    public int Iterations { get; }
+    public double JacobianH { get; }
 }
 
 internal static class ReactiveObjectExtensions
