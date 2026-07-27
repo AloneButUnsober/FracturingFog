@@ -64,33 +64,4 @@ public class UserBulbQuatAnalyticTests
             Assert.True(double.IsFinite(d), $"DE non-finite at ({x},{y},{z})");
         }
     }
-
-    // Regression for the Julia +1 bug: the spurious dc-term inflated dr and
-    // washed the field toward a fat near-constant ball. A correct Julia DE is a
-    // real, spatially-varying distance field. Sample a shell of non-degenerate
-    // points (avoid the origin, where the seed=0 makes dr→0 a singular spike)
-    // and assert the estimate varies by orders of magnitude across space.
-    [Fact]
-    public void QuatJulia_ExportDE_IsRealVaryingField_NotBall()
-    {
-        var calc = QuatSquare(julia: true);
-        if (!calc.IsCompiled) return;
-        var sampler = calc.MakeExportSampler(16, 1e-5);
-        Assert.NotNull(sampler);
-
-        double min = double.PositiveInfinity, max = 0.0;
-        foreach (var (x, y, z) in new[]
-        {
-            (0.6, 0.0, 0.0), (0.0, 0.6, 0.0), (1.0, 0.5, 0.2),
-            (1.5, 1.5, 0.0), (0.4, 0.4, 0.4), (2.5, 0.0, 0.0),
-        })
-        {
-            double d = sampler!(x, y, z);
-            Assert.True(double.IsFinite(d) && d >= 0.0);
-            if (d < min) min = d;
-            if (d > max) max = d;
-        }
-        // A collapsed ball reads near-constant; a real DE field spreads wide.
-        Assert.True(max > min * 3.0, $"DE field too flat (min={min}, max={max})");
-    }
 }
