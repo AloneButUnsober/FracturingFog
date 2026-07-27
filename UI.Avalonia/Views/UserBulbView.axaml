@@ -420,14 +420,9 @@
                                        ToolTip.Tip="Object-space half-extent of the sampled cube. Must enclose the fractal; too small clips it." />
                             <NumericUpDown Width="86" Minimum="0.25" Maximum="64" Increment="0.25" FormatString="F2"
                                            Value="{Binding ExportRange, Mode=TwoWay}" />
-                            <TextBlock Text="Iter" VerticalAlignment="Center"
-                                       ToolTip.Tip="DE iterations for export only (render unaffected). Native quaternion types use 11–14; raise for crisp geometry (render default 8 = blobby)." />
-                            <NumericUpDown Width="76" Minimum="2" Maximum="64" Increment="1" FormatString="F0"
-                                           Value="{Binding ExportIterations, Mode=TwoWay}" />
-                            <TextBlock Text="JacH" VerticalAlignment="Center"
-                                       ToolTip.Tip="Numerical-Jacobian step for the DE. Smaller = sharper distance estimate / more detail (export default 1e-5 vs render 1e-4)." />
-                            <NumericUpDown Width="96" Minimum="0.00000001" Maximum="0.01" Increment="0.00001" FormatString="0.#####"
-                                           Value="{Binding ExportJacobianH, Mode=TwoWay}" />
+                            <TextBlock Text="(uses Iterations + JacobianH above)" VerticalAlignment="Center"
+                                       Opacity="0.7" FontStyle="Italic"
+                                       ToolTip.Tip="Mesh DE quality reuses the panel's Iterations + JacobianH. For crisp export geometry raise Iterations (native quaternion types use 11–14; the render default 8 is blobby) and/or lower JacobianH toward 1e-5." />
                         </StackPanel>
                     </Grid>
                 </Grid>

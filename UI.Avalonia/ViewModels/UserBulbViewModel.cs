@@ -1085,15 +1085,17 @@ public sealed class UserBulbViewModel : ViewModelBase
         SaveFilePromptRequested?.Invoke(this, pathArgs);
         if (string.IsNullOrEmpty(pathArgs.Path)) return;
 
-        // #112 — carry the export-detail knobs set in the panel. Defaults raise
-        // grid 64→96 (native parity) and iterations 8→12 with a tighter Jacobian
-        // step so the numerical DE resolves fractal geometry, not a blob.
+        // #112 — export geometry knobs (grid + range) are export-only; DE
+        // quality reuses the panel's existing Iterations + JacobianH (the single
+        // source of truth — the render DE and the export DE are the same kernel).
+        // For crisp export geometry raise Iterations (native quaternion types use
+        // 11–14; render default 8 is blobby) and/or drop JacobianH toward 1e-5.
         var meshArgs = new MeshExportEventArgs(
-            ExportGridN, ExportRange, pathArgs.Path!, ExportIterations, ExportJacobianH);
+            ExportGridN, ExportRange, pathArgs.Path!, Iterations, JacobianH);
         ExportMeshRequested?.Invoke(this, meshArgs);
     }
 
-    // ── Mesh-export detail knobs (#112) ─────────────────────────────────────
+    // ── Mesh-export geometry knobs (#112) — export-only; no render equivalent.
     private int _exportGridN = 96;
     /// <summary>Marching-cubes grid resolution per axis. Higher = finer mesh,
     /// cost ~N³. 96 matches the native raymarcher exporter.</summary>
@@ -1110,26 +1112,6 @@ public sealed class UserBulbViewModel : ViewModelBase
     {
         get => _exportRange;
         set => this.RaiseAndSetIfChanged(ref _exportRange, Math.Clamp(value, 0.25, 64.0));
-    }
-
-    private int _exportIterations = 12;
-    /// <summary>DE iteration count for export only (render uses its own). Native
-    /// quaternion types run 11–14; UserBulb's render default is 8, too low for
-    /// crisp geometry. Raise for detail.</summary>
-    public int ExportIterations
-    {
-        get => _exportIterations;
-        set => this.RaiseAndSetIfChanged(ref _exportIterations, Math.Clamp(value, 2, 64));
-    }
-
-    private double _exportJacobianH = 1e-5;
-    /// <summary>Finite-difference step for the numerical Jacobian DE. Smaller =
-    /// sharper distance estimate (more detail) but more prone to numeric noise;
-    /// 1e-5 is a good export default vs the 1e-4 render default.</summary>
-    public double ExportJacobianH
-    {
-        get => _exportJacobianH;
-        set => this.RaiseAndSetIfChanged(ref _exportJacobianH, Math.Clamp(value, 1e-8, 1e-2));
     }
 
     private string NextFreeName()
