@@ -1452,32 +1452,23 @@ namespace FracturingFogDyn
         return 0.5 * Math.Log(Math.Max(r, 1.0)) * r / dr;
     }
 
-    /// <summary>#114 — Auto-mode gate for the analytic quaternion DE. Unlike the
-    /// vec path, the scalar Hubbard–Douady recurrence is EXACT in magnitude for a
-    /// quaternion power map — quaternion norm is multiplicative, so
-    /// <c>|q·dq| = |q|·|dq|</c> and <c>dr = N·r^(N-1)·dr</c> holds exactly. The
-    /// analytic DE is therefore the ground truth, NOT something to validate
-    /// against the numerical Jacobian (which over-smooths a quaternion Julia into
-    /// a featureless ball — the reported bug). So accept it whenever it yields a
-    /// finite, non-negative field over a few probe points; only a genuinely
-    /// broken (blown-up / negative) analytic falls back to numerical. DE Mode =
-    /// Analytic bypasses this entirely.</summary>
+    /// <summary>#114 — Auto-mode gate for the analytic quaternion DE: accept it
+    /// only when it tracks the numerical Jacobian at a probe point (mirrors
+    /// <see cref="UserBulbAnalyticDE.AcceptAuto"/>). Loose tolerance because the
+    /// log-form and Lipschitz-form DEs differ in magnitude while tracking the
+    /// same surface. DE Mode = Analytic bypasses this and forces the analytic
+    /// path.</summary>
     private static bool AcceptQuatAnalytic(
         Func<Quat, Quat, int, double[], Quat> fn,
         double sliceW, int iter, double bailout, double power, double jacH, double[] pArr,
         bool juliaMode, double jcW, double jcX, double jcY, double jcZ)
     {
-        Span<(double, double, double)> probes = stackalloc (double, double, double)[]
-        {
-            (0.4, 0.3, 0.2), (0.9, 0.0, 0.0), (0.2, 0.6, 0.4),
-        };
-        foreach (var (px, py, pz) in probes)
-        {
-            double d = UserBulbQuatPowerDE(fn, sliceW, px, py, pz, iter, bailout, power, pArr,
-                juliaMode, jcW, jcX, jcY, jcZ);
-            if (!double.IsFinite(d) || d < 0.0) return false;
-        }
-        return true;
+        const double cx = 0.4, cy = 0.3, cz = 0.2;
+        double analytic = UserBulbQuatPowerDE(fn, sliceW, cx, cy, cz, iter, bailout, power, pArr, juliaMode, jcW, jcX, jcY, jcZ);
+        double numerical = UserBulbQuatDE(fn, sliceW, cx, cy, cz, iter, bailout, jacH, pArr, juliaMode, jcW, jcX, jcY, jcZ);
+        if (analytic <= 0 || numerical <= 0) return false;
+        double rel = Math.Abs(analytic - numerical) / Math.Max(Math.Abs(numerical), 1e-9);
+        return rel < 0.30;
     }
 
     /// <summary>Quaternion numerical-Jacobian DE. Perturb c.W/X/Y/Z (5
