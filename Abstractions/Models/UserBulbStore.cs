@@ -279,8 +279,7 @@ namespace FracturingFog.Models
             {
                 Name = "Quaternion Julia (Quat mode, set Julia c)",
                 Source = "// Quaternion Julia: z*z is the Hamilton square; c held\n" +
-                         "// constant by Julia mode. Set DE Mode = Analytic for a crisp\n" +
-                         "// render + mesh export.\n" +
+                         "// constant by Julia mode.\n" +
                          "return z*z + c;",
                 // Settings actually select Quat + Julia mode so the preset renders
                 // a quaternion Julia on load — no manual axis-mode switch needed.
@@ -288,7 +287,7 @@ namespace FracturingFog.Models
                 {
                     AxisMode = UserBulbAxisModeKind.Quat,
                     Compiler = UserBulbCompilerKind.Roslyn,
-                    DEMode = UserBulbDEModeKind.Analytic,
+                    DEMode = UserBulbDEModeKind.Numerical,
                     JuliaMode = true,
                     JuliaCW = -0.4, JuliaCX = 0.6, JuliaCY = 0.0, JuliaCZ = 0.0,
                     QuatSliceW = 0.0,
@@ -351,18 +350,21 @@ namespace FracturingFog.Models
             // absence of a Quat-mode Settings snapshot.
             {
                 var entry = GetByName("Quaternion Julia (Quat mode, set Julia c)");
-                if (entry != null && entry.Settings?.AxisMode != UserBulbAxisModeKind.Quat)
+                // Re-fire when the entry predates the Quat-mode Settings snapshot,
+                // OR when it still carries the reverted analytic-quat DE mode (that
+                // DE path collapsed the render to a ball and was removed — #114).
+                if (entry != null && (entry.Settings?.AxisMode != UserBulbAxisModeKind.Quat
+                                      || entry.Settings?.DEMode == UserBulbDEModeKind.Analytic))
                 {
                     entry.Source = "// Quaternion Julia: z*z is the Hamilton square; c held\n" +
-                                   "// constant by Julia mode. Set DE Mode = Analytic for a crisp\n" +
-                                   "// render + mesh export.\n" +
+                                   "// constant by Julia mode.\n" +
                                    "return z*z + c;";
                     entry.Chain = null;
                     entry.Settings = new UserBulbSnapshot
                     {
                         AxisMode = UserBulbAxisModeKind.Quat,
                         Compiler = UserBulbCompilerKind.Roslyn,
-                        DEMode = UserBulbDEModeKind.Analytic,
+                        DEMode = UserBulbDEModeKind.Numerical,
                         JuliaMode = true,
                         JuliaCW = -0.4, JuliaCX = 0.6, JuliaCY = 0.0, JuliaCZ = 0.0,
                         QuatSliceW = 0.0,
