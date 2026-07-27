@@ -1432,14 +1432,19 @@ namespace FracturingFogDyn
             q = Quat.Zero;
         }
 
+        // Julia: differentiate wrt the seed (c constant) → dr = N·r^(N-1)·dr,
+        // NO +1 term (matches the concrete QuatJuliaCalculator's dq = 2·q·dq).
+        // Mandelbrot: differentiate wrt c → the +1 (dc/dc = 1) applies. Using the
+        // +1 in Julia mode inflates dr, underestimates the DE, and collapses the
+        // set to a fat smooth ball with washed-out structure.
+        double dcTerm = juliaMode ? 0.0 : 1.0;
         double dr = 1.0;
         double r = 0.0;
         for (int i = 0; i < iter; i++)
         {
             r = q.Length;
             if (!double.IsFinite(r) || r > bailout) break;
-            // dr_{n+1} = N · r^(N-1) · dr_n + 1  (|q^N| = |q|^N drives growth).
-            dr = power * Math.Pow(r, power - 1) * dr + 1.0;
+            dr = power * Math.Pow(r, power - 1) * dr + dcTerm;
             q = fn(q, c, i, pArr);
         }
 
