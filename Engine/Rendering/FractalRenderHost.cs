@@ -790,6 +790,13 @@ namespace FracturingFog.Rendering
         /// <summary>Distance-estimator sampler for UserBulb mesh export.</summary>
         public double SampleUserBulbDE(double x, double y, double z) => _userBulbCalculator.SampleDE(x, y, z);
 
+        /// <summary>#112 — snapshot mesh-export sampler with export-specific
+        /// iteration count + Jacobian step (see
+        /// <see cref="UserBulbCalculator.MakeExportSampler"/>). Independent of
+        /// later param mutation, so the off-thread export is race-free.</summary>
+        public Func<double, double, double, double>? MakeUserBulbExportSampler(int iterations, double jacobianH)
+            => _userBulbCalculator.MakeExportSampler(iterations, jacobianH);
+
         /// <summary>UserBulb sampling-space centre (mesh export origin).</summary>
         public double UserBulbCenterX => _userBulbCalculator.CenterX;
         public double UserBulbCenterY => _userBulbCalculator.CenterY;
