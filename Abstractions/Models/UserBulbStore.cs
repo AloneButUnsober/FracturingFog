@@ -278,22 +278,8 @@ namespace FracturingFog.Models
             Ensure("Quaternion Julia (Quat mode, set Julia c)", () => new UserBulbEntry
             {
                 Name = "Quaternion Julia (Quat mode, set Julia c)",
-                Source = "// Quaternion Julia: z*z is the Hamilton square; c held\n" +
-                         "// constant by Julia mode.\n" +
-                         "return z*z + c;",
-                // Settings actually select Quat + Julia mode so the preset renders
-                // a quaternion Julia on load — no manual axis-mode switch needed.
-                Settings = new UserBulbSnapshot
-                {
-                    AxisMode = UserBulbAxisModeKind.Quat,
-                    Compiler = UserBulbCompilerKind.Roslyn,
-                    DEMode = UserBulbDEModeKind.Numerical,
-                    JuliaMode = true,
-                    JuliaCW = -0.4, JuliaCX = 0.6, JuliaCY = 0.0, JuliaCZ = 0.0,
-                    QuatSliceW = 0.0,
-                    Iterations = 12,
-                    Bailout = 16.0,
-                },
+                Source = "// Switch Axis Mode → Quat + Julia Mode on in the editor.\n" +
+                         "return new Vec3(\n    z.X*z.X - z.Y*z.Y - z.Z*z.Z,\n    2*z.X*z.Y,\n    2*z.X*z.Z) + c;",
             });
             Repair("Hybrid: Mandelbox + Mandelbulb",
                    UserBulbChainPrimitives.IdMandelbox,
@@ -341,36 +327,23 @@ namespace FracturingFog.Models
                 }
             }
 
-            // Quaternion Julia repair: the original preset shipped a Vec3
-            // triplex source + a "switch Axis Mode → Quat + Julia in the editor"
-            // comment and NO Settings snapshot — so loading it left the editor in
-            // Vec3 mode and rendered the wrong (non-quaternion) fractal, which
-            // also meshed as a blob. Re-seed with a real quaternion square source
-            // and Settings that actually select Quat + Julia mode. Detect by the
-            // absence of a Quat-mode Settings snapshot.
+            // Un-corruption pass: a prior build overwrote this built-in with a
+            // Hamilton `z*z + c` square plus a forced Julia-c / Quat Settings
+            // snapshot that raymarched to a solid ball, and persisted it into
+            // userbulbs.json — so the damage survived rebuilds. Restore the
+            // original Vec3-triplex source with no forced Settings (the user
+            // drives Axis Mode = Quat + Julia c in the editor, as before).
+            // Self-limiting: after the reset the source no longer matches and
+            // Settings is null, so it never fires again. Scoped to the built-in
+            // name only, so user-authored equations are never touched.
             {
-                var entry = GetByName("Quaternion Julia (Quat mode, set Julia c)");
-                // Re-fire when the entry predates the Quat-mode Settings snapshot,
-                // OR when it still carries the reverted analytic-quat DE mode (that
-                // DE path collapsed the render to a ball and was removed — #114).
-                if (entry != null && (entry.Settings?.AxisMode != UserBulbAxisModeKind.Quat
-                                      || entry.Settings?.DEMode == UserBulbDEModeKind.Analytic))
+                var q = GetByName("Quaternion Julia (Quat mode, set Julia c)");
+                if (q != null && (q.Settings != null || q.Source.Contains("z*z + c")))
                 {
-                    entry.Source = "// Quaternion Julia: z*z is the Hamilton square; c held\n" +
-                                   "// constant by Julia mode.\n" +
-                                   "return z*z + c;";
-                    entry.Chain = null;
-                    entry.Settings = new UserBulbSnapshot
-                    {
-                        AxisMode = UserBulbAxisModeKind.Quat,
-                        Compiler = UserBulbCompilerKind.Roslyn,
-                        DEMode = UserBulbDEModeKind.Numerical,
-                        JuliaMode = true,
-                        JuliaCW = -0.4, JuliaCX = 0.6, JuliaCY = 0.0, JuliaCZ = 0.0,
-                        QuatSliceW = 0.0,
-                        Iterations = 12,
-                        Bailout = 16.0,
-                    };
+                    q.Source = "// Switch Axis Mode → Quat + Julia Mode on in the editor.\n" +
+                               "return new Vec3(\n    z.X*z.X - z.Y*z.Y - z.Z*z.Z,\n    2*z.X*z.Y,\n    2*z.X*z.Z) + c;";
+                    q.Chain = null;
+                    q.Settings = null;
                     changed = true;
                 }
             }
