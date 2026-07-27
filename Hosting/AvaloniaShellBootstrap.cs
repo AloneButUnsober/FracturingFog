@@ -2383,7 +2383,16 @@ namespace FracturingFog.Hosting
                         de,
                         s_renderHost.UserBulbCenterX, -s_renderHost.UserBulbCenterY, 0,
                         e.Range, e.GridN);
-                    ShowInfo("Mesh export", $"Exported {tris} triangles to {e.Path}", false);
+                    if (tris == 0)
+                        // #113 — a fold/IFS map under the numerical DE crosses no
+                        // iso surface. Point the user at the scalar-KIFS knob.
+                        ShowInfo("Mesh export",
+                            "Exported 0 triangles — the distance field never crossed the surface. " +
+                            "For fold / IFS maps (Menger, Sierpinski, Mandelbox, kaleidoscopic) set " +
+                            "KIFS Scale to the fold's per-iteration scale (e.g. 3 for Menger), then re-export. " +
+                            "Also check Range encloses the fractal.", true);
+                    else
+                        ShowInfo("Mesh export", $"Exported {tris} triangles to {e.Path}", false);
                 }
                 catch (Exception ex)
                 {
