@@ -813,6 +813,8 @@ public sealed class UserBulbViewModel : ViewModelBase
         Time             = _params.UserBulbTime,
         AnimSpeed        = _animSpeed,
         AnimLoopSeconds  = _animLoopSeconds,
+        ExportGridN      = _exportGridN,
+        ExportRange      = _exportRange,
         Params           = _params.UserBulbParams.ConvertAll(p => p.Clone()),
     };
 
@@ -859,6 +861,10 @@ public sealed class UserBulbViewModel : ViewModelBase
         // notifications for the bound Speed / Loop-s controls.
         if (s.AnimSpeed is { } aspd)             AnimSpeed = aspd;
         if (s.AnimLoopSeconds is { } aloop)      AnimLoopSeconds = aloop;
+        // Export knobs are VM-only (no FractalParameters mirror) — set via the
+        // public setters so they clamp + notify the bound controls.
+        if (s.ExportGridN is { } egn)            ExportGridN = egn;
+        if (s.ExportRange is { } erg)            ExportRange = erg;
 
         if (s.Params is { Count: > 0 } srcParams)
         {
