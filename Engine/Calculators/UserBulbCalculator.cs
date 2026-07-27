@@ -134,12 +134,27 @@ public sealed class UserBulbCalculator : IFractalCalculator
         double bailout = Math.Max(1, FractalParameters.UserBulbBailout);
         bool jul = FractalParameters.UserBulbJuliaMode;
 
+        // #114 — prefer the analytic DE for export when a power-map pattern was
+        // detected. A mesh wants the smooth field (crisp geometry), not the
+        // noisy numerical Jacobian; DE Mode Analytic forces it, Auto uses it
+        // when it tracks the numerical probe, matching the render.
+        bool wantAnalytic =
+            _analyticPattern.Kind != AnalyticDEKind.None
+            && FractalParameters.UserBulbDEMode != UserBulbDEModeKind.Numerical;
+        double power = _analyticPattern.Power;
+
         if (_compiledQuat != null)
         {
             var fn = _compiledQuat;
             double sliceW = FractalParameters.UserBulbQuatSliceW;
             double jcW = FractalParameters.UserBulbJuliaCW, jcX = FractalParameters.UserBulbJuliaCX;
             double jcY = FractalParameters.UserBulbJuliaCY, jcZ = FractalParameters.UserBulbJuliaCZ;
+            bool analytic = wantAnalytic &&
+                (FractalParameters.UserBulbDEMode == UserBulbDEModeKind.Analytic
+                 || AcceptQuatAnalytic(fn, sliceW, iter, bailout, power, jacH, pArr, jul, jcW, jcX, jcY, jcZ));
+            if (analytic)
+                return (x, y, z) => UserBulbQuatPowerDE(fn, sliceW, x, y, z, iter, bailout, power, pArr,
+                    jul, jcW, jcX, jcY, jcZ);
             return (x, y, z) => UserBulbQuatDE(fn, sliceW, x, y, z, iter, bailout, jacH, pArr,
                 jul, jcW, jcX, jcY, jcZ);
         }
@@ -148,6 +163,11 @@ public sealed class UserBulbCalculator : IFractalCalculator
             var fn = _compiled!;
             double jcX = FractalParameters.UserBulbJuliaCX, jcY = FractalParameters.UserBulbJuliaCY, jcZ = FractalParameters.UserBulbJuliaCZ;
             double kifsScale = FractalParameters.UserBulbKifsScale;
+            bool analytic = wantAnalytic && kifsScale <= 0.0 && !jul &&
+                (FractalParameters.UserBulbDEMode == UserBulbDEModeKind.Analytic
+                 || UserBulbAnalyticDE.AcceptAuto(fn, _analyticPattern, iter, bailout, jacH, pArr));
+            if (analytic)
+                return (x, y, z) => UserBulbAnalyticDE.PowerDE(fn, x, y, z, iter, bailout, power, pArr);
             return (x, y, z) => UserBulbDE(fn, x, y, z, iter, bailout, jacH, pArr,
                 jul, jcX, jcY, jcZ, kifsScale);
         }
@@ -371,9 +391,11 @@ public sealed class UserBulbCalculator : IFractalCalculator
             _compiledAxisMode = axisMode;
             _compiledCompiler = UserBulbCompilerKind.Roslyn;
             _compiledParamNames = paramNames;
-            _analyticPattern = axisMode == UserBulbAxisModeKind.Vec3
-                ? UserBulbAnalyticDE.Detect(source)
-                : new AnalyticDEPattern(AnalyticDEKind.None, 0);
+            // #114 — Detect() matches `z*z + c` / `Vec3.Pow(z, N) + c`; the
+            // `z*z + c` form is also the quaternion square (Hamilton product),
+            // so run it for Quat mode too and let the analytic quaternion DE
+            // replace the noisy numerical Jacobian.
+            _analyticPattern = UserBulbAnalyticDE.Detect(source);
             LastError = string.Empty;
         }
         catch (Exception ex)
@@ -457,7 +479,9 @@ public sealed class UserBulbCalculator : IFractalCalculator
             _compiledAxisMode = UserBulbAxisModeKind.Quat;
             _compiledCompiler = UserBulbCompilerKind.Sandbox;
             _compiledParamNames = paramNames;
-            _analyticPattern = new AnalyticDEPattern(AnalyticDEKind.None, 0);
+            // #114 — detect quaternion power maps (q^K + c / q*q + c) so Quat
+            // mode can run the analytic DE instead of the numerical Jacobian.
+            _analyticPattern = UserBulbAnalyticDE.DetectSandbox(expr.Root);
             LastError = string.Empty;
         }
         catch (Exception ex)
@@ -791,6 +815,17 @@ namespace FracturingFogDyn
                     && UserBulbAnalyticDE.AcceptAuto(fn!, _analyticPattern, deIter, bailout, jacH, pArr)));
         double analyticPower = _analyticPattern.Power;
 
+        // #114 — quaternion analytic DE. Enabled (incl. Julia mode) when a
+        // power-map pattern is detected and either the user forced Analytic or
+        // Auto's probe agrees with the numerical Jacobian. Replaces the noisy
+        // finite-difference DE with a smooth single-trajectory one.
+        bool useQuatAnalytic =
+            quatMode && _analyticPattern.Kind != AnalyticDEKind.None && (
+                deMode == UserBulbDEModeKind.Analytic
+                || (deMode == UserBulbDEModeKind.Auto
+                    && AcceptQuatAnalytic(fnQ!, sliceW, deIter, bailout, analyticPower, jacH, pArr,
+                                          juliaMode, jcW, jcX, jcY, jcZ)));
+
         double camDist = FractalParameters.UserBulbCameraDistance / Math.Max(0.05, Zoom);
         double camTheta = FractalParameters.UserBulbCameraTheta;
         double camPhi = FractalParameters.UserBulbCameraPhi;
@@ -859,8 +894,15 @@ namespace FracturingFogDyn
         // DE delegate captured once for ShadingPipeline AO / shadow / volume
         // walks. Mode dispatch matches the primary raymarch above so AO walks
         // sample the same surface (quat / analytic-power / numeric Jacobian).
+        // #114 — quaternion DE picker: analytic power-DE when detected+accepted,
+        // else the numerical Jacobian. Shared by the primary raymarch, normal
+        // estimation, and the AO/shadow/volume walks so they sample one surface.
+        double QuatDe(double x, double y, double z) => useQuatAnalytic
+            ? UserBulbQuatPowerDE(fnQ!, sliceW, x, y, z, deIter, bailout, analyticPower, pArr, juliaMode, jcW, jcX, jcY, jcZ)
+            : UserBulbQuatDE(fnQ!, sliceW, x, y, z, deIter, bailout, jacH, pArr, juliaMode, jcW, jcX, jcY, jcZ);
+
         DistanceEstimator deDelegate = (x, y, z) => quatMode
-            ? UserBulbQuatDE(fnQ!, sliceW, x, y, z, deIter, bailout, jacH, pArr, juliaMode, jcW, jcX, jcY, jcZ)
+            ? QuatDe(x, y, z)
             : useAnalytic
                 ? UserBulbAnalyticDE.PowerDE(fn!, x, y, z, deIter, bailout, analyticPower, pArr)
                 : UserBulbDE(fn!, x, y, z, deIter, bailout, jacH, pArr, juliaMode, jcX, jcY, jcZ, kifsScale);
@@ -1033,7 +1075,7 @@ namespace FracturingFogDyn
                 {
                     if (ct.IsCancellationRequested) return;
                     double d = quatMode
-                        ? UserBulbQuatDE(fnQ!, sliceW, px, py, pz, deIter, bailout, jacH, pArr, juliaMode, jcW, jcX, jcY, jcZ)
+                        ? QuatDe(px, py, pz)
                         : useAnalytic
                             ? UserBulbAnalyticDE.PowerDE(fn!, px, py, pz, deIter, bailout, analyticPower, pArr)
                             : UserBulbDE(fn!, px, py, pz, deIter, bailout, jacH, pArr, juliaMode, jcX, jcY, jcZ, kifsScale);
@@ -1104,7 +1146,7 @@ namespace FracturingFogDyn
                 {
                     if (ct.IsCancellationRequested) return;
                     double dist = quatMode
-                        ? UserBulbQuatDE(fnQ!, sliceW, px, py, pz, deIter, bailout, jacH, pArr, juliaMode, jcW, jcX, jcY, jcZ)
+                        ? QuatDe(px, py, pz)
                         : useAnalytic
                             ? UserBulbAnalyticDE.PowerDE(fn!, px, py, pz, deIter, bailout, analyticPower, pArr)
                             : UserBulbDE(fn!, px, py, pz, deIter, bailout, jacH, pArr, juliaMode, jcX, jcY, jcZ, kifsScale);
@@ -1144,17 +1186,17 @@ namespace FracturingFogDyn
                 double h = eps * 2;
                 double invH = 1.0 / h;
                 double dxp = quatMode
-                    ? UserBulbQuatDE(fnQ!, sliceW, px + h, py, pz, deIter, bailout, jacH, pArr, juliaMode, jcW, jcX, jcY, jcZ)
+                    ? QuatDe(px + h, py, pz)
                     : useAnalytic
                         ? UserBulbAnalyticDE.PowerDE(fn!, px + h, py, pz, deIter, bailout, analyticPower, pArr)
                         : UserBulbDE(fn!, px + h, py, pz, deIter, bailout, jacH, pArr, juliaMode, jcX, jcY, jcZ, kifsScale);
                 double dyp = quatMode
-                    ? UserBulbQuatDE(fnQ!, sliceW, px, py + h, pz, deIter, bailout, jacH, pArr, juliaMode, jcW, jcX, jcY, jcZ)
+                    ? QuatDe(px, py + h, pz)
                     : useAnalytic
                         ? UserBulbAnalyticDE.PowerDE(fn!, px, py + h, pz, deIter, bailout, analyticPower, pArr)
                         : UserBulbDE(fn!, px, py + h, pz, deIter, bailout, jacH, pArr, juliaMode, jcX, jcY, jcZ, kifsScale);
                 double dzp = quatMode
-                    ? UserBulbQuatDE(fnQ!, sliceW, px, py, pz + h, deIter, bailout, jacH, pArr, juliaMode, jcW, jcX, jcY, jcZ)
+                    ? QuatDe(px, py, pz + h)
                     : useAnalytic
                         ? UserBulbAnalyticDE.PowerDE(fn!, px, py, pz + h, deIter, bailout, analyticPower, pArr)
                         : UserBulbDE(fn!, px, py, pz + h, deIter, bailout, jacH, pArr, juliaMode, jcX, jcY, jcZ, kifsScale);
@@ -1362,6 +1404,68 @@ namespace FracturingFogDyn
     /// Caller (Compile) smoke-tests the delegate for throw/non-finite so this
     /// hot loop omits try/catch; non-finite r breaks early.
     /// </summary>
+    /// <summary>#114 — analytic quaternion power-map DE (single trajectory,
+    /// scalar Hubbard–Douady running-derivative), the quaternion twin of
+    /// <see cref="UserBulbAnalyticDE.PowerDE"/>. One user-step call per iteration
+    /// (vs 5 for the numerical Jacobian) and — crucially — a SMOOTH distance
+    /// field, so the quaternion Julia render loses the finite-difference
+    /// interference/mottling and the mesh export resolves detail instead of a
+    /// blob. Works in Julia mode (z = sample point, c = the Julia constant),
+    /// which the concrete <c>QuatJuliaCalculator</c> also does and the old vec
+    /// analytic path refused.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static double UserBulbQuatPowerDE(
+        Func<Quat, Quat, int, double[], Quat> fn,
+        double sliceW, double cx, double cy, double cz,
+        int iter, double bailout, double power, double[] pArr,
+        bool juliaMode, double jcW, double jcX, double jcY, double jcZ)
+    {
+        Quat q, c;
+        if (juliaMode)
+        {
+            c = new Quat(jcW, jcX, jcY, jcZ);
+            q = new Quat(sliceW, cx, cy, cz);
+        }
+        else
+        {
+            c = new Quat(sliceW, cx, cy, cz);
+            q = Quat.Zero;
+        }
+
+        double dr = 1.0;
+        double r = 0.0;
+        for (int i = 0; i < iter; i++)
+        {
+            r = q.Length;
+            if (!double.IsFinite(r) || r > bailout) break;
+            // dr_{n+1} = N · r^(N-1) · dr_n + 1  (|q^N| = |q|^N drives growth).
+            dr = power * Math.Pow(r, power - 1) * dr + 1.0;
+            q = fn(q, c, i, pArr);
+        }
+
+        if (r < 1e-12 || dr < 1e-12) return 0.5 * r / Math.Max(dr, 1e-10);
+        return 0.5 * Math.Log(Math.Max(r, 1.0)) * r / dr;
+    }
+
+    /// <summary>#114 — Auto-mode gate for the analytic quaternion DE: accept it
+    /// only when it tracks the numerical Jacobian at a probe point (mirrors
+    /// <see cref="UserBulbAnalyticDE.AcceptAuto"/>). Loose tolerance because the
+    /// log-form and Lipschitz-form DEs differ in magnitude while tracking the
+    /// same surface. DE Mode = Analytic bypasses this and forces the analytic
+    /// path.</summary>
+    private static bool AcceptQuatAnalytic(
+        Func<Quat, Quat, int, double[], Quat> fn,
+        double sliceW, int iter, double bailout, double power, double jacH, double[] pArr,
+        bool juliaMode, double jcW, double jcX, double jcY, double jcZ)
+    {
+        const double cx = 0.4, cy = 0.3, cz = 0.2;
+        double analytic = UserBulbQuatPowerDE(fn, sliceW, cx, cy, cz, iter, bailout, power, pArr, juliaMode, jcW, jcX, jcY, jcZ);
+        double numerical = UserBulbQuatDE(fn, sliceW, cx, cy, cz, iter, bailout, jacH, pArr, juliaMode, jcW, jcX, jcY, jcZ);
+        if (analytic <= 0 || numerical <= 0) return false;
+        double rel = Math.Abs(analytic - numerical) / Math.Max(Math.Abs(numerical), 1e-9);
+        return rel < 0.30;
+    }
+
     /// <summary>Quaternion numerical-Jacobian DE. Perturb c.W/X/Y/Z (5
     /// trajectories total). Project z to Vec3 (X/Y/Z) for raymarch position.</summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
