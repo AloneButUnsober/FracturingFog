@@ -479,16 +479,31 @@ Saved bulbs persist to `%APPDATA%\FracturingFog\userbulbs.json`.
 
 ## 16. Mesh Export (OBJ)
 
-Click **Export mesh (OBJ)…** to sample the DE field on a uniform N³ grid inside a cube of side `2·Range` centred at origin. Each cell with a surface crossing emits a voxel cube of triangles. ASCII OBJ output.
+Click **Export mesh (OBJ)…** to sample the DE field on a uniform N³ grid inside a cube of side `2·Range` centred at origin and extract the surface with **marching cubes** (interpolated triangles, not blocky voxels). ASCII OBJ output.
 
-| Field | Range | Default |
-|---|---:|---:|
-| Grid N | 8 – 256 | 64 |
-| Range | 0.5 – 10 | 2.0 |
+Export knobs sit next to the button:
 
-N=64 ≈ 32k voxels, fast. N=128 ≈ 256k voxels, slow (10s+). The result is **blocky** (voxel cubes, not interpolated triangles). Adequate for 3D printing or external smoothing.
+| Field | Range | Default | Notes |
+|---|---:|---:|---|
+| Grid | 16 – 512 | 96 | Marching-cubes resolution per axis; cost ~N³. 128 for fine detail. |
+| Range | 0.25 – 64 | 2.0 | Object-space half-extent. Must **enclose** the fractal — too small clips it. |
 
-Marching-cubes with the 256-entry triangulation table is a future enhancement.
+DE quality (Iterations, Jac h, DE mode) comes from the **Render** knobs above — the export DE is the same kernel as the render.
+
+### Getting a detailed mesh (not a blob)
+
+The exported mesh is only as good as the distance estimate:
+
+- **DE mode → Analytic** (or Auto). The analytic running-derivative DE is exact and meshes crisply. The **numerical** Jacobian is an approximation — it renders acceptably but marching-cubes turns it into a soft blob. Analytic engages for recognised power maps (`z*z + c`, `Vec3.Pow(z, N) + c`, and the quaternion square in Quat mode).
+- **Quaternion fractals → Axis Mode = Quat + Julia mode.** The *Quaternion Julia* saved preset sets these automatically; a `z*z + c` in Quat mode meshes like the built-in Quaternion Julia fractal type.
+- **KIFS folds (Menger / Sierpinski / Mandelbox / kaleidoscopic) → set KIFS Scale** (3 for Menger, 2 for Sierpinski/Mandelbox). Inserting a fold primitive or loading a fold hybrid now sets this for you. Without it the numerical DE cannot cross the fold discontinuities and export yields **zero triangles**.
+- **Raise Iterations** for geometry — the render default (8) is low; try 14–16 for export.
+
+A **0-triangle** export almost always means Range doesn't enclose the fractal, or a fold needs KIFS Scale.
+
+Grid, Range, and the Render Iterations / Jac h all **persist** with a saved bulb.
+
+> **Reality check.** User Bulb is a general interpreter — for an *arbitrary* equation it can only estimate the DE numerically, so its mesh is inherently softer than a hand-written analytic calculator. For a faithful mesh of a *known* fractal (Quaternion Julia/Mandelbrot, Mandelbulb, Mandelbox, KIFS), prefer that concrete **Fractal Type**, whose exact DE meshes at full detail.
 
 ---
 

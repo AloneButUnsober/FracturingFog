@@ -1995,6 +1995,50 @@ The ""Jac h"" slider sets the finite-difference perturbation:
 1e-4 default.  Too small → cancellation noise; too large →
 soft-edged surface.
 
+=== Getting a crisp render AND a detailed mesh export ===
+
+The DE quality drives BOTH the on-screen render and the exported
+mesh.  The numerical Jacobian DE is smooth enough to raymarch but
+is an APPROXIMATION — it reads as ""rough"", mottled, or shows faint
+interference rings on screen, and marching-cubes export turns that
+into a soft blob.  The analytic DE is exact and gives a crisp
+surface + a faithful mesh.  To get the best result:
+
+  1. DE mode → Analytic (or Auto).  For recognised power maps
+     (z*z + c, Vec3.Pow(z, N) + c, and the quaternion square in
+     Quat mode) this uses the exact running-derivative DE.  Numerical
+     mode always meshes softer — use it only for maps with no
+     closed form.
+
+  2. Quaternion fractals → Axis Mode = Quat + Julia mode on.  The
+     ""Quaternion Julia"" saved preset now sets these for you.  A
+     quaternion square (z*z + c) in Quat mode meshes as cleanly as
+     the built-in Quaternion Julia fractal type.
+
+  3. KIFS folds (Menger, Sierpinski, Mandelbox, kaleidoscopic) →
+     set KIFS Scale to the fold's per-iteration scale (3 for Menger,
+     2 for Sierpinski / Mandelbox).  Inserting a fold primitive or
+     loading a fold hybrid now sets this automatically.  Without it
+     the numerical DE cannot cross the fold discontinuities and the
+     export produces ZERO triangles.
+
+  4. Raise Iterations for geometry.  The render default (8) is low;
+     native quaternion types use 11–14.  For export try 14–16.
+
+  5. Export knobs (by the Export button): Grid = marching-cubes
+     resolution (96 = native parity, 128 for fine detail, cost ~N³);
+     Range = object-space half-extent, must ENCLOSE the fractal (too
+     small clips it; a 0-triangle export usually means Range is off
+     or a fold needs KIFS Scale).  Grid + Range + the panel's
+     Iterations / Jac h all persist with a saved bulb.
+
+  Reality check: User Bulb is a general interpreter — for an
+  ARBITRARY novel equation it can only estimate the DE numerically,
+  so its mesh is inherently softer than a hand-written analytic
+  calculator.  For a faithful mesh of a KNOWN fractal (Quaternion
+  Julia / Mandelbrot, Mandelbulb, Mandelbox, KIFS) prefer that
+  concrete Fractal Type, whose exact DE meshes at full detail.
+
 === Backend (CPU vs GPU) ===
 
   CPU                   Roslyn-compiled delegate via Parallel.For

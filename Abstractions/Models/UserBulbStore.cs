@@ -278,8 +278,23 @@ namespace FracturingFog.Models
             Ensure("Quaternion Julia (Quat mode, set Julia c)", () => new UserBulbEntry
             {
                 Name = "Quaternion Julia (Quat mode, set Julia c)",
-                Source = "// Switch Axis Mode → Quat + Julia Mode on in the editor.\n" +
-                         "return new Vec3(\n    z.X*z.X - z.Y*z.Y - z.Z*z.Z,\n    2*z.X*z.Y,\n    2*z.X*z.Z) + c;",
+                Source = "// Quaternion Julia: z*z is the Hamilton square; c held\n" +
+                         "// constant by Julia mode. Set DE Mode = Analytic for a crisp\n" +
+                         "// render + mesh export.\n" +
+                         "return z*z + c;",
+                // Settings actually select Quat + Julia mode so the preset renders
+                // a quaternion Julia on load — no manual axis-mode switch needed.
+                Settings = new UserBulbSnapshot
+                {
+                    AxisMode = UserBulbAxisModeKind.Quat,
+                    Compiler = UserBulbCompilerKind.Roslyn,
+                    DEMode = UserBulbDEModeKind.Analytic,
+                    JuliaMode = true,
+                    JuliaCW = -0.4, JuliaCX = 0.6, JuliaCY = 0.0, JuliaCZ = 0.0,
+                    QuatSliceW = 0.0,
+                    Iterations = 12,
+                    Bailout = 16.0,
+                },
             });
             Repair("Hybrid: Mandelbox + Mandelbulb",
                    UserBulbChainPrimitives.IdMandelbox,
@@ -322,6 +337,37 @@ namespace FracturingFog.Models
                         KifsScale = UserBulbChainPrimitives.KaleidoscopicIfsScale,
                         CameraDistance = 3.0,
                         Iterations = 12,
+                    };
+                    changed = true;
+                }
+            }
+
+            // Quaternion Julia repair: the original preset shipped a Vec3
+            // triplex source + a "switch Axis Mode → Quat + Julia in the editor"
+            // comment and NO Settings snapshot — so loading it left the editor in
+            // Vec3 mode and rendered the wrong (non-quaternion) fractal, which
+            // also meshed as a blob. Re-seed with a real quaternion square source
+            // and Settings that actually select Quat + Julia mode. Detect by the
+            // absence of a Quat-mode Settings snapshot.
+            {
+                var entry = GetByName("Quaternion Julia (Quat mode, set Julia c)");
+                if (entry != null && entry.Settings?.AxisMode != UserBulbAxisModeKind.Quat)
+                {
+                    entry.Source = "// Quaternion Julia: z*z is the Hamilton square; c held\n" +
+                                   "// constant by Julia mode. Set DE Mode = Analytic for a crisp\n" +
+                                   "// render + mesh export.\n" +
+                                   "return z*z + c;";
+                    entry.Chain = null;
+                    entry.Settings = new UserBulbSnapshot
+                    {
+                        AxisMode = UserBulbAxisModeKind.Quat,
+                        Compiler = UserBulbCompilerKind.Roslyn,
+                        DEMode = UserBulbDEModeKind.Analytic,
+                        JuliaMode = true,
+                        JuliaCW = -0.4, JuliaCX = 0.6, JuliaCY = 0.0, JuliaCZ = 0.0,
+                        QuatSliceW = 0.0,
+                        Iterations = 12,
+                        Bailout = 16.0,
                     };
                     changed = true;
                 }
