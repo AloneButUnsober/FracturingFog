@@ -1041,6 +1041,18 @@ public sealed class UserBulbViewModel : ViewModelBase
         step.OutputName = UniqueChainName(step.OutputName);
         _params.UserBulbChain.Add(step);
         Chain.Add(step);
+
+        // #113 — a KIFS fold needs the scalar-KIFS DE (its folds are
+        // discontinuous; the numerical Jacobian yields a blank / blobby /
+        // zero-triangle export). Auto-engage it on the first fold primitive if
+        // the user hasn't already dialed a scale in.
+        if (p.KifsScale > 0.0 && KifsScale <= 0.0)
+        {
+            KifsScale = p.KifsScale;
+            StatusMessage = $"KIFS Scale set to {p.KifsScale:0.###} — required so the fold DE renders/exports.";
+            StatusIsError = false;
+        }
+
         CompileRequested?.Invoke(this, EventArgs.Empty);
     }
 
@@ -1061,6 +1073,19 @@ public sealed class UserBulbViewModel : ViewModelBase
             _params.UserBulbChain.Add(s);
             Chain.Add(s);
         }
+
+        // #113 — engage the scalar-KIFS DE for fold-led chains. The numerical
+        // Jacobian can't estimate distance across the fold discontinuities
+        // (blank / blobby / zero-triangle export); the fold's declared scale
+        // drives the running-derivative DE instead.
+        double sug = UserBulbChainPrimitives.SuggestedKifsScaleForChain(_params.UserBulbChain);
+        if (sug > 0.0)
+        {
+            KifsScale = sug;
+            StatusMessage = $"KIFS Scale set to {sug:0.###} for the fold DE (needed for fold export).";
+            StatusIsError = false;
+        }
+
         CompileRequested?.Invoke(this, EventArgs.Empty);
     }
 
