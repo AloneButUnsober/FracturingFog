@@ -1777,7 +1777,7 @@ namespace FracturingFog.Hosting
                     // builds straight off the live FractalType + params via the
                     // shared factory; marching cubes runs off-thread so the pick
                     // dialog + UI stay responsive.
-                    vm.ExportMeshRequested += () =>
+                    vm.ExportMeshRequested += async () =>
                     {
                         var vsx = s_renderHost?.ViewState;
                         if (vsx == null) return;
@@ -1789,7 +1789,7 @@ namespace FracturingFog.Hosting
                                 "This fractal has no distance-estimated surface to export.", true);
                             return;
                         }
-                        string? path = PickSaveSync("Export Mesh",
+                        string? path = await PickSaveAsync("Export Mesh",
                             "OBJ (*.obj)|*.obj|STL (*.stl)|*.stl|All files (*.*)|*.*",
                             vsx.FractalType.ToString());
                         if (string.IsNullOrEmpty(path)) return;
@@ -2085,13 +2085,13 @@ namespace FracturingFog.Hosting
                 if (ok) s_renderHost.Trigger();
             };
             vm.RenderRequested += () => s_renderHost!.Trigger();
-            vm.NamePromptRequested += def => PromptName("Save Equation", "Enter a name:", def);
-            vm.ConfirmDeleteRequested += name => ConfirmYesNo($"Delete saved equation \"{name}\"?", "Delete Equation");
-            vm.ConfirmOverwriteRequested += name => ConfirmYesNo(
+            vm.NamePromptRequested += def => PromptNameAsync("Save Equation", "Enter a name:", def);
+            vm.ConfirmDeleteRequested += name => ConfirmYesNoAsync($"Delete saved equation \"{name}\"?", "Delete Equation");
+            vm.ConfirmOverwriteRequested += name => ConfirmYesNoAsync(
                 $"A saved equation named \"{name}\" already exists.\n\nOverwrite it?",
                 "Overwrite Equation");
             vm.OpenFilePromptRequested += () =>
-                PickOpenSync("Import User Equations", "JSON (*.json)|*.json|All files (*.*)|*.*");
+                PickOpenAsync("Import User Equations", "JSON (*.json)|*.json|All files (*.*)|*.*");
             vm.MessageRequested += (title, body, isErr) => ShowInfo(title, body, isErr);
             vm.HotLoadRequested += (eq, baseName) =>
             {
@@ -2303,15 +2303,15 @@ namespace FracturingFog.Hosting
                 vm.ShowError(error);
                 if (ok) s_renderHost.Trigger();
             };
-            vm.NamePromptRequested += def => PromptName("Save Sandbox Equation", "Enter a name:", def);
-            vm.ConfirmDeleteRequested += name => ConfirmYesNo($"Delete saved sandbox equation \"{name}\"?", "Delete");
-            vm.ConfirmOverwriteRequested += name => ConfirmYesNo(
+            vm.NamePromptRequested += def => PromptNameAsync("Save Sandbox Equation", "Enter a name:", def);
+            vm.ConfirmDeleteRequested += name => ConfirmYesNoAsync($"Delete saved sandbox equation \"{name}\"?", "Delete");
+            vm.ConfirmOverwriteRequested += name => ConfirmYesNoAsync(
                 $"A saved sandbox equation named \"{name}\" already exists.\n\nOverwrite it?",
                 "Overwrite Sandbox Equation");
             vm.SaveFilePromptRequested += defName =>
-                PickSaveSync("Export Sandbox Equations", "JSON (*.json)|*.json|All files (*.*)|*.*", defName);
+                PickSaveAsync("Export Sandbox Equations", "JSON (*.json)|*.json|All files (*.*)|*.*", defName);
             vm.OpenFilePromptRequested += () =>
-                PickOpenSync("Import Sandbox Equations", "JSON (*.json)|*.json|All files (*.*)|*.*");
+                PickOpenAsync("Import Sandbox Equations", "JSON (*.json)|*.json|All files (*.*)|*.*");
             vm.MessageRequested += (title, body, isErr) => ShowInfo(title, body, isErr);
 
             var win = new PanelHostWindow(
@@ -2360,11 +2360,11 @@ namespace FracturingFog.Hosting
                 if (ok) s_renderHost.Trigger();
             };
             vm.RenderRequested += (_, _) => s_renderHost!.Trigger();
-            vm.NamePromptRequested += (_, e) => e.Result = PromptName(e.Caption, "Enter a name:", e.DefaultValue);
-            vm.ConfirmDeleteRequested += (_, e) => e.Result = ConfirmYesNo(e.Message, "Confirm");
-            vm.ConfirmOverwriteRequested += (_, e) => e.Result = ConfirmYesNo(e.Message, "Overwrite Bulb Equation");
-            vm.OpenFilePromptRequested += (_, e) => e.Path = PickOpenSync(e.Title, e.Filter);
-            vm.SaveFilePromptRequested += (_, e) => e.Path = PickSaveSync(e.Title, e.Filter, e.DefaultName);
+            vm.NamePromptRequested += async e => e.Result = await PromptNameAsync(e.Caption, "Enter a name:", e.DefaultValue);
+            vm.ConfirmDeleteRequested += async e => e.Result = await ConfirmYesNoAsync(e.Message, "Confirm");
+            vm.ConfirmOverwriteRequested += async e => e.Result = await ConfirmYesNoAsync(e.Message, "Overwrite Bulb Equation");
+            vm.OpenFilePromptRequested += async e => e.Path = await PickOpenAsync(e.Title, e.Filter);
+            vm.SaveFilePromptRequested += async e => e.Path = await PickSaveAsync(e.Title, e.Filter, e.DefaultName);
             vm.MessageRequested += (_, msg) => ShowInfo("UserBulb", msg, false);
             vm.ExportMeshRequested += (_, e) =>
             {
@@ -2458,8 +2458,8 @@ namespace FracturingFog.Hosting
             if (s_colorGenWin != null) { s_colorGenWin.Activate(); return; }
 
             var vm = new ColorGenEditorViewModel();
-            vm.NamePromptRequested += def => PromptName("Save ColorGen Theme", "Enter a name:", def);
-            vm.ConfirmDeleteRequested += name => ConfirmYesNo($"Delete saved theme \"{name}\"?", "Delete Theme");
+            vm.NamePromptRequested += def => PromptNameAsync("Save ColorGen Theme", "Enter a name:", def);
+            vm.ConfirmDeleteRequested += name => ConfirmYesNoAsync($"Delete saved theme \"{name}\"?", "Delete Theme");
             vm.MessageRequested += (title, body, isErr) => ShowInfo(title, body, isErr);
 
             vm.HotLoadRequested += (source, className, themeName, description) =>
@@ -2574,36 +2574,31 @@ namespace FracturingFog.Hosting
                 : $"{typeLabel} - ";
         }
 
-        // ── Synchronous host prompts ─────────────────────────────────────────
+        // ── Async host prompts (#118) ────────────────────────────────────────
         //
-        // The source-editor VMs expect synchronous-return prompt callbacks
-        // (Func<…>/EventArgs.Result), but Avalonia's dialog stack is async-only.
-        // Rather than pump a nested dispatcher frame, lean on the Win32 common
-        // dialogs already available here (this is a WinExe with UseWindowsForms):
-        // they run their own modal message loop and return synchronously.
+        // The source-editor VMs now raise async prompt callbacks
+        // (Func<…,Task<…>> / Func<Args,Task>), so the host satisfies them with
+        // Avalonia's own async dialog stack — no WinForms, no nested dispatcher
+        // frame. These work on every platform (Windows / Linux / macOS); the
+        // former WinForms-backed BootstrapHooks.SyncDialogs bridge is retired.
 
-        // S-X1b — sync dialog helpers delegate to BootstrapHooks.SyncDialogs.
-        // Windows installs a WinForms-backed implementation (runs its own
-        // modal message loop synchronously, no Avalonia dispatcher recursion).
-        // Cross-platform: hook stays null and the helpers no-op (return
-        // null/false) so the editors don't deadlock the dispatcher. Async
-        // dialog parity for cross-plat editors lands in a later slice when
-        // the VM events themselves move to async patterns.
+        private static Task<string?> PromptNameAsync(string title, string prompt, string defaultValue)
+            => AvaloniaDialogs.ShowPromptAsync(title, prompt, defaultValue);
 
-        private static string? PromptName(string title, string prompt, string defaultValue)
-            => BootstrapHooks.SyncDialogs?.PromptName(title, prompt, defaultValue);
-
-        private static bool ConfirmYesNo(string message, string title)
-            => BootstrapHooks.SyncDialogs?.ConfirmYesNo(message, title) ?? false;
+        private static Task<bool> ConfirmYesNoAsync(string message, string title)
+            => AvaloniaDialogs.ConfirmAsync(title, message);
 
         private static void ShowInfo(string title, string body, bool isError)
-            => BootstrapHooks.SyncDialogs?.ShowInfo(title, body, isError);
+        {
+            // Fire-and-forget info/error toast — callers don't await it.
+            _ = AvaloniaDialogs.ShowMessageAsync(title, body, expectsConfirmation: false);
+        }
 
-        private static string? PickOpenSync(string title, string filter)
-            => BootstrapHooks.SyncDialogs?.PickOpenSync(title, filter);
+        private static Task<string?> PickOpenAsync(string title, string filter)
+            => AvaloniaDialogs.PickOpenFileAsync(title, filter);
 
-        private static string? PickSaveSync(string title, string filter, string defaultName)
-            => BootstrapHooks.SyncDialogs?.PickSaveSync(title, filter, defaultName);
+        private static Task<string?> PickSaveAsync(string title, string filter, string defaultName)
+            => AvaloniaDialogs.PickSaveFileAsync(title, defaultName, filter);
 
         // ── FFmpeg startup prompt ────────────────────────────────────────────
         //

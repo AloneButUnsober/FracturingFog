@@ -55,15 +55,6 @@ public static class BootstrapHooks
     /// <summary>Desktop colour eyedropper. Windows installs the WinForms
     /// global-hook implementation; null elsewhere.</summary>
     public static IColorSampleBridge? ColorSampleBridge { get; set; }
-
-    /// <summary>Synchronous host dialog bridge for the source-editor VMs
-    /// (PromptName / ConfirmYesNo / ShowInfo / PickOpenSync / PickSaveSync).
-    /// Windows installs a WinForms-backed implementation that runs its own
-    /// message loop synchronously. On Linux/macOS this stays null in S-X1b
-    /// — the bootstrap helpers fall through to no-op (return null/false) so
-    /// the editors do not deadlock the Avalonia dispatcher. Async Avalonia
-    /// dialog parity for the cross-plat editors lands in a later slice.</summary>
-    public static IHostSyncDialogs? SyncDialogs { get; set; }
 }
 
 /// <summary>
@@ -98,26 +89,4 @@ public interface IColorSampleBridge
 {
     bool IsActive { get; }
     void Begin(Action<(byte R, byte G, byte B)> onPicked, Action onCancelled);
-}
-
-/// <summary>
-/// Synchronous dialog bridge for the source-editor VMs (UserEquation,
-/// UserBulb, ColorGen). The VMs raise sync Func/EventArgs.Result events that
-/// must return on the same call stack — Avalonia's async dialog stack can't
-/// satisfy that without pumping a nested dispatcher frame (which crashed on
-/// Cancel/X in prior attempts), so on Windows the bootstrap delegates to a
-/// WinForms-backed implementation that runs its own modal message loop.
-///
-/// On Linux/macOS this stays null in S-X1b and the bootstrap helpers fall
-/// through to a no-op (null/false) so the editors do not deadlock the
-/// Avalonia dispatcher. Async dialog parity for those editors lands in a
-/// later slice when the events themselves are refactored to async patterns.
-/// </summary>
-public interface IHostSyncDialogs
-{
-    string? PromptName(string title, string prompt, string defaultValue);
-    bool ConfirmYesNo(string message, string title);
-    void ShowInfo(string title, string body, bool isError);
-    string? PickOpenSync(string title, string filter);
-    string? PickSaveSync(string title, string filter, string defaultName);
 }

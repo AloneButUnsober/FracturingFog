@@ -14,118 +14,6 @@ using FracturingFog.ServerHost;
 
 namespace FracturingFog;
 
-/// <summary>
-/// S-X1b carve (2026-06-23) — Windows-only IHostSyncDialogs implementation
-/// over the System.Windows.Forms common dialogs. Lives in the WinExe because
-/// the WinExe is the only assembly with UseWindowsForms=true on its csproj.
-/// The source-editor VMs (UserEquation, UserBulb, ColorGen) raise sync
-/// Func/EventArgs.Result events the bootstrap satisfies by calling this
-/// bridge; Avalonia's async dialog stack can't satisfy synchronous event
-/// returns without re-entering the dispatcher (which crashed on Cancel/X).
-/// Cross-plat hosts leave BootstrapHooks.SyncDialogs null and the bootstrap
-/// helpers fall through to no-op until the VM events themselves move to
-/// async patterns.
-/// </summary>
-[SupportedOSPlatform("windows")]
-internal sealed class WinFormsSyncDialogs : IHostSyncDialogs
-{
-    public string? PromptName(string title, string prompt, string defaultValue)
-    {
-        using var dlg = new System.Windows.Forms.Form
-        {
-            Text = string.IsNullOrEmpty(title) ? "Enter Name" : title,
-            FormBorderStyle = System.Windows.Forms.FormBorderStyle.FixedDialog,
-            StartPosition = System.Windows.Forms.FormStartPosition.CenterParent,
-            MaximizeBox = false,
-            MinimizeBox = false,
-            ShowInTaskbar = false,
-            ClientSize = new System.Drawing.Size(420, 124),
-            AutoScaleMode = System.Windows.Forms.AutoScaleMode.Dpi,
-        };
-
-        var lbl = new System.Windows.Forms.Label
-        {
-            Text = prompt ?? "Enter a name:",
-            Location = new System.Drawing.Point(12, 12),
-            Size = new System.Drawing.Size(396, 24),
-            AutoEllipsis = true,
-        };
-        var box = new System.Windows.Forms.TextBox
-        {
-            Text = defaultValue ?? string.Empty,
-            Location = new System.Drawing.Point(12, 40),
-            Size = new System.Drawing.Size(396, 24),
-            Anchor = System.Windows.Forms.AnchorStyles.Left
-                   | System.Windows.Forms.AnchorStyles.Right
-                   | System.Windows.Forms.AnchorStyles.Top,
-        };
-        var ok = new System.Windows.Forms.Button
-        {
-            Text = "OK",
-            DialogResult = System.Windows.Forms.DialogResult.OK,
-            Location = new System.Drawing.Point(252, 80),
-            Size = new System.Drawing.Size(76, 28),
-        };
-        var cancel = new System.Windows.Forms.Button
-        {
-            Text = "Cancel",
-            DialogResult = System.Windows.Forms.DialogResult.Cancel,
-            Location = new System.Drawing.Point(332, 80),
-            Size = new System.Drawing.Size(76, 28),
-        };
-
-        dlg.Controls.Add(lbl);
-        dlg.Controls.Add(box);
-        dlg.Controls.Add(ok);
-        dlg.Controls.Add(cancel);
-        dlg.AcceptButton = ok;
-        dlg.CancelButton = cancel;
-        dlg.Shown += (_, _) => { box.SelectAll(); box.Focus(); };
-
-        var result = dlg.ShowDialog();
-        if (result != System.Windows.Forms.DialogResult.OK) return null;
-        string r = box.Text;
-        return string.IsNullOrWhiteSpace(r) ? null : r;
-    }
-
-    public bool ConfirmYesNo(string message, string title)
-        => System.Windows.Forms.MessageBox.Show(
-               message, title,
-               System.Windows.Forms.MessageBoxButtons.YesNo,
-               System.Windows.Forms.MessageBoxIcon.Question)
-           == System.Windows.Forms.DialogResult.Yes;
-
-    public void ShowInfo(string title, string body, bool isError)
-        => System.Windows.Forms.MessageBox.Show(
-               body, title,
-               System.Windows.Forms.MessageBoxButtons.OK,
-               isError ? System.Windows.Forms.MessageBoxIcon.Error
-                       : System.Windows.Forms.MessageBoxIcon.Information);
-
-    public string? PickOpenSync(string title, string filter)
-    {
-        using var d = new System.Windows.Forms.OpenFileDialog
-        {
-            Title = string.IsNullOrEmpty(title) ? "Open" : title,
-            Filter = string.IsNullOrEmpty(filter) ? "All files (*.*)|*.*" : filter,
-            CheckFileExists = true,
-        };
-        return d.ShowDialog() == System.Windows.Forms.DialogResult.OK ? d.FileName : null;
-    }
-
-    public string? PickSaveSync(string title, string filter, string defaultName)
-    {
-        using var d = new System.Windows.Forms.SaveFileDialog
-        {
-            Title = string.IsNullOrEmpty(title) ? "Save" : title,
-            Filter = string.IsNullOrEmpty(filter) ? "All files (*.*)|*.*" : filter,
-            FileName = defaultName ?? string.Empty,
-            OverwritePrompt = true,
-        };
-        return d.ShowDialog() == System.Windows.Forms.DialogResult.OK ? d.FileName : null;
-    }
-}
-
 static class Program
 {
     // Avalonia XAML previewer (Accelerate / OSS designer) scans the WinExe's
@@ -1783,8 +1671,10 @@ static class Program
             // WinForms-bound WinExeColorSampleBridge — that severs the last
             // Avalonia-path dependency on Views/Editors/DesktopEyedropper (the
             // WinForms shell still uses it directly). See issue #116.
-            FracturingFog.Hosting.BootstrapHooks.SyncDialogs =
-                new WinFormsSyncDialogs();
+            //
+            // Source-editor prompts (#118): the VMs now raise async callbacks
+            // satisfied by AvaloniaDialogs in AvaloniaShellBootstrap — no
+            // WinForms sync-dialog bridge is installed on any platform.
             return FracturingFog.UI.Avalonia.AvaloniaShell.Run(
                 args,
                 FracturingFog.Hosting.AvaloniaShellBootstrap.OnSurfaceReady);

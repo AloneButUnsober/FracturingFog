@@ -13,6 +13,7 @@ using System;
 using System.Collections.ObjectModel;
 using System.Reactive;
 using System.Reactive.Linq;
+using System.Threading.Tasks;
 using System.Text.RegularExpressions;
 using FracturingFog.ColorGen;
 using FracturingFog.Models;
@@ -33,8 +34,8 @@ public sealed class ColorGenEditorViewModel : ViewModelBase
         SavedNames = new ObservableCollection<string>();
         RefreshSavedList(null);
 
-        SaveCommand = ReactiveCommand.Create(OnSave);
-        DeleteCommand = ReactiveCommand.Create(OnDelete,
+        SaveCommand = ReactiveCommand.CreateFromTask(OnSaveAsync);
+        DeleteCommand = ReactiveCommand.CreateFromTask(OnDeleteAsync,
             this.WhenAnyValue(x => x.SelectedSavedName).Select(n => !string.IsNullOrEmpty(n)));
         HotLoadCommand = ReactiveCommand.Create(OnHotLoad);
         GenerateCommand = ReactiveCommand.Create(OnGenerate);
@@ -100,10 +101,10 @@ public sealed class ColorGenEditorViewModel : ViewModelBase
     public ReactiveCommand<Unit, Unit> GenerateCommand { get; }
 
     /// <summary>Host shows a name-entry dialog. Returns null on cancel.</summary>
-    public event Func<string, string?>? NamePromptRequested;
+    public event Func<string, Task<string?>>? NamePromptRequested;
 
     /// <summary>Host shows a yes/no confirmation. Returns true to proceed.</summary>
-    public event Func<string, bool>? ConfirmDeleteRequested;
+    public event Func<string, Task<bool>>? ConfirmDeleteRequested;
 
     /// <summary>Host compiles + loads the theme via ColorGenHotLoad and swaps
     /// the result onto the active palette. Args: (source, className, themeName,
@@ -153,10 +154,10 @@ public sealed class ColorGenEditorViewModel : ViewModelBase
         else ShowError(err);
     }
 
-    private void OnSave()
+    private async Task OnSaveAsync()
     {
         string defaultName = _selectedSavedName ?? _themeName;
-        string? name = NamePromptRequested?.Invoke(defaultName);
+        string? name = NamePromptRequested is { } prompt ? await prompt(defaultName) : null;
         if (string.IsNullOrWhiteSpace(name)) return;
         var entry = UserColorGenStore.Instance.SaveEntry(name.Trim(), _source, _description);
         if (entry == null) return;
@@ -166,10 +167,10 @@ public sealed class ColorGenEditorViewModel : ViewModelBase
         MessageRequested?.Invoke("ColorGen", $"Saved \"{entry.Name}\".", false);
     }
 
-    private void OnDelete()
+    private async Task OnDeleteAsync()
     {
         if (_selectedSavedName == null) return;
-        if (ConfirmDeleteRequested?.Invoke(_selectedSavedName) != true) return;
+        if (ConfirmDeleteRequested is not { } confirm || !await confirm(_selectedSavedName)) return;
         UserColorGenStore.Instance.Remove(_selectedSavedName);
         RefreshSavedList(null);
     }
