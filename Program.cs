@@ -4,8 +4,6 @@
 // Fracturing Fog - MandelbrotExplorer — .NET 10 / C# 14 / DirectX 11 via Vortice.DirectX 3.8.3
 
 using System;
-using System.Runtime.Versioning;
-using System.Windows.Forms;
 
 using FracturingFog.Benchmarks;
 using FracturingFog.Batch;
@@ -1650,41 +1648,19 @@ static class Program
             break;
         }
 
-        // --winforms forces the legacy WinForms shell. Default path is the
-        // Avalonia shell. WinForms is DEPRECATED — see CLAUDE.md. New UI
-        // work must land in UI.Avalonia/, not MainForm.cs.
-        bool forceWinForms = false;
-        foreach (var a in args)
-            if (string.Equals(a, "--winforms", StringComparison.OrdinalIgnoreCase))
-                { forceWinForms = true; break; }
-
-        if (!forceWinForms)
-        {
-            // S-X1 carve (2026-06-23) — wire Windows-only services onto the
-            // cross-platform AvaloniaShellBootstrap before the shell boots.
-            // FracturingFog.App skips this install on Linux/macOS so the hooks
-            // stay null and the bootstrap takes its cross-plat code paths.
-            FracturingFog.Win.WindowsBootstrap.Install();
-            // Eyedropper: WindowsBootstrap.Install already registered the
-            // WinForms-free WindowsColorSampleBridge (Win32 LL-mouse-hook +
-            // BitBlt/CAPTUREBLT screen read). We no longer override it with the
-            // WinForms-bound WinExeColorSampleBridge — that severs the last
-            // Avalonia-path dependency on Views/Editors/DesktopEyedropper (the
-            // WinForms shell still uses it directly). See issue #116.
-            //
-            // Source-editor prompts (#118): the VMs now raise async callbacks
-            // satisfied by AvaloniaDialogs in AvaloniaShellBootstrap — no
-            // WinForms sync-dialog bridge is installed on any platform.
-            return FracturingFog.UI.Avalonia.AvaloniaShell.Run(
-                args,
-                FracturingFog.Hosting.AvaloniaShellBootstrap.OnSurfaceReady);
-        }
-
-        Application.SetHighDpiMode(HighDpiMode.PerMonitorV2);
-        Application.EnableVisualStyles();
-        Application.SetCompatibleTextRenderingDefault(false);
-        Application.Run(new MainForm());
-        return 0;
+        // The Avalonia shell is the only UI shell (#116 retired the legacy
+        // WinForms MainForm and its --winforms launch flag). WindowsBootstrap
+        // installs the Windows-only Win32 services (eyedropper colour bridge)
+        // onto the cross-platform AvaloniaShellBootstrap before the shell boots;
+        // FracturingFog.App skips this install on Linux/macOS so the hooks stay
+        // null and the bootstrap takes its cross-plat code paths.
+        //
+        // Source-editor prompts (#118): the VMs raise async callbacks satisfied
+        // by AvaloniaDialogs in AvaloniaShellBootstrap — no WinForms anywhere.
+        FracturingFog.Win.WindowsBootstrap.Install();
+        return FracturingFog.UI.Avalonia.AvaloniaShell.Run(
+            args,
+            FracturingFog.Hosting.AvaloniaShellBootstrap.OnSurfaceReady);
     }
 
     private static int BenchmarkEquation(string[] args)
