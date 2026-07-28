@@ -165,7 +165,22 @@ namespace FracturingFog.Hosting
             // install WindowsColorSampleBridge ahead of this in
             // WindowsBootstrap.Install.
             if (OperatingSystem.IsLinux() && BootstrapHooks.ColorSampleBridge == null)
+            {
+                // One-time notice: if the first out-of-FF sample fails (Wayland /
+                // portal-less session where the X11 global grab is rejected), tell
+                // the user once that desktop sampling won't work this session. The
+                // bridge raises this at most once per process; do not message again.
+                // Full Wayland support is the S-X11 xdg-desktop-portal follow-up.
+                X11ColorSampleBridge.ExternalSampleUnavailable += () =>
+                    _ = AvaloniaDialogs.ShowMessageAsync(
+                        "Colour sampler",
+                        "Screen colour sampling outside Fracturing Fog isn't available in "
+                        + "this session (a Wayland/portal limitation). Colour sampling will "
+                        + "only work within the Fracturing Fog window for the rest of this "
+                        + "session.\n\nThis notice won't appear again.",
+                        expectsConfirmation: false);
                 BootstrapHooks.ColorSampleBridge = new X11ColorSampleBridge();
+            }
 
             // Phase X.5 / Slice 5.2 — register Help → Hardware tab probes.
             // The callables read live state each time the user opens the
