@@ -2,15 +2,22 @@
 
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
+    <!--
+      #116 — the legacy WinForms shell is gone (no UseWindowsForms), but this
+      remains the WINDOWS build: it ProjectReferences the Windows-only backends
+      Rendering.D3D / FracturingFog.Win / Audio.Win (all net10.0-windows), which
+      a plain net10.0 assembly cannot reference. Cross-platform hosting is
+      FracturingFog.App's job (net10.0 leg, Silk/Skia). So the TFM stays
+      net10.0-windows; dropping WinForms just removes the UseWindowsForms
+      closure, not the Windows target.
+    -->
     <TargetFramework>net10.0-windows</TargetFramework>
-    <UseWindowsForms>true</UseWindowsForms>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <Nullable>enable</Nullable>
     <LangVersion>latest</LangVersion>
     <Platforms>x64;AnyCPU</Platforms>
     <PlatformTarget>AnyCPU</PlatformTarget>
     <Optimize>true</Optimize>
-    <ApplicationHighDpiMode>PerMonitorV2</ApplicationHighDpiMode>
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <AssemblyName>FracturingFog</AssemblyName>
     <RootNamespace>FracturingFog</RootNamespace>
@@ -84,6 +91,11 @@
     <Compile Remove="Rendering.Silk.Smoke\**" />
     <Compile Remove="Rendering.Skia\**" />
     <Compile Remove="Compute.Smoke\**" />
+    <!-- FR beta harnesses — own net10.0 projects; keep their sources (incl.
+         generated AssemblyInfo) out of this WinExe's glob or CS0579 duplicate
+         assembly attributes result. -->
+    <Compile Remove="FR.Smoke\**" />
+    <Compile Remove="FR.Bench\**" />
     <Compile Remove="Server\**" />
     <Compile Remove="Server.Tests\**" />
     <Compile Remove="Client\**" />

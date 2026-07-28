@@ -4,8 +4,6 @@
 // Fracturing Fog - MandelbrotExplorer — .NET 10 / C# 14 / DirectX 11 via Vortice.DirectX 3.8.3
 
 using System;
-using System.Runtime.Versioning;
-using System.Windows.Forms;
 
 using FracturingFog.Benchmarks;
 using FracturingFog.Batch;
@@ -13,118 +11,6 @@ using FracturingFog.Hosting;
 using FracturingFog.ServerHost;
 
 namespace FracturingFog;
-
-/// <summary>
-/// S-X1b carve (2026-06-23) — Windows-only IHostSyncDialogs implementation
-/// over the System.Windows.Forms common dialogs. Lives in the WinExe because
-/// the WinExe is the only assembly with UseWindowsForms=true on its csproj.
-/// The source-editor VMs (UserEquation, UserBulb, ColorGen) raise sync
-/// Func/EventArgs.Result events the bootstrap satisfies by calling this
-/// bridge; Avalonia's async dialog stack can't satisfy synchronous event
-/// returns without re-entering the dispatcher (which crashed on Cancel/X).
-/// Cross-plat hosts leave BootstrapHooks.SyncDialogs null and the bootstrap
-/// helpers fall through to no-op until the VM events themselves move to
-/// async patterns.
-/// </summary>
-[SupportedOSPlatform("windows")]
-internal sealed class WinFormsSyncDialogs : IHostSyncDialogs
-{
-    public string? PromptName(string title, string prompt, string defaultValue)
-    {
-        using var dlg = new System.Windows.Forms.Form
-        {
-            Text = string.IsNullOrEmpty(title) ? "Enter Name" : title,
-            FormBorderStyle = System.Windows.Forms.FormBorderStyle.FixedDialog,
-            StartPosition = System.Windows.Forms.FormStartPosition.CenterParent,
-            MaximizeBox = false,
-            MinimizeBox = false,
-            ShowInTaskbar = false,
-            ClientSize = new System.Drawing.Size(420, 124),
-            AutoScaleMode = System.Windows.Forms.AutoScaleMode.Dpi,
-        };
-
-        var lbl = new System.Windows.Forms.Label
-        {
-            Text = prompt ?? "Enter a name:",
-            Location = new System.Drawing.Point(12, 12),
-            Size = new System.Drawing.Size(396, 24),
-            AutoEllipsis = true,
-        };
-        var box = new System.Windows.Forms.TextBox
-        {
-            Text = defaultValue ?? string.Empty,
-            Location = new System.Drawing.Point(12, 40),
-            Size = new System.Drawing.Size(396, 24),
-            Anchor = System.Windows.Forms.AnchorStyles.Left
-                   | System.Windows.Forms.AnchorStyles.Right
-                   | System.Windows.Forms.AnchorStyles.Top,
-        };
-        var ok = new System.Windows.Forms.Button
-        {
-            Text = "OK",
-            DialogResult = System.Windows.Forms.DialogResult.OK,
-            Location = new System.Drawing.Point(252, 80),
-            Size = new System.Drawing.Size(76, 28),
-        };
-        var cancel = new System.Windows.Forms.Button
-        {
-            Text = "Cancel",
-            DialogResult = System.Windows.Forms.DialogResult.Cancel,
-            Location = new System.Drawing.Point(332, 80),
-            Size = new System.Drawing.Size(76, 28),
-        };
-
-        dlg.Controls.Add(lbl);
-        dlg.Controls.Add(box);
-        dlg.Controls.Add(ok);
-        dlg.Controls.Add(cancel);
-        dlg.AcceptButton = ok;
-        dlg.CancelButton = cancel;
-        dlg.Shown += (_, _) => { box.SelectAll(); box.Focus(); };
-
-        var result = dlg.ShowDialog();
-        if (result != System.Windows.Forms.DialogResult.OK) return null;
-        string r = box.Text;
-        return string.IsNullOrWhiteSpace(r) ? null : r;
-    }
-
-    public bool ConfirmYesNo(string message, string title)
-        => System.Windows.Forms.MessageBox.Show(
-               message, title,
-               System.Windows.Forms.MessageBoxButtons.YesNo,
-               System.Windows.Forms.MessageBoxIcon.Question)
-           == System.Windows.Forms.DialogResult.Yes;
-
-    public void ShowInfo(string title, string body, bool isError)
-        => System.Windows.Forms.MessageBox.Show(
-               body, title,
-               System.Windows.Forms.MessageBoxButtons.OK,
-               isError ? System.Windows.Forms.MessageBoxIcon.Error
-                       : System.Windows.Forms.MessageBoxIcon.Information);
-
-    public string? PickOpenSync(string title, string filter)
-    {
-        using var d = new System.Windows.Forms.OpenFileDialog
-        {
-            Title = string.IsNullOrEmpty(title) ? "Open" : title,
-            Filter = string.IsNullOrEmpty(filter) ? "All files (*.*)|*.*" : filter,
-            CheckFileExists = true,
-        };
-        return d.ShowDialog() == System.Windows.Forms.DialogResult.OK ? d.FileName : null;
-    }
-
-    public string? PickSaveSync(string title, string filter, string defaultName)
-    {
-        using var d = new System.Windows.Forms.SaveFileDialog
-        {
-            Title = string.IsNullOrEmpty(title) ? "Save" : title,
-            Filter = string.IsNullOrEmpty(filter) ? "All files (*.*)|*.*" : filter,
-            FileName = defaultName ?? string.Empty,
-            OverwritePrompt = true,
-        };
-        return d.ShowDialog() == System.Windows.Forms.DialogResult.OK ? d.FileName : null;
-    }
-}
 
 static class Program
 {
@@ -1762,39 +1648,19 @@ static class Program
             break;
         }
 
-        // --winforms forces the legacy WinForms shell. Default path is the
-        // Avalonia shell. WinForms is DEPRECATED — see CLAUDE.md. New UI
-        // work must land in UI.Avalonia/, not MainForm.cs.
-        bool forceWinForms = false;
-        foreach (var a in args)
-            if (string.Equals(a, "--winforms", StringComparison.OrdinalIgnoreCase))
-                { forceWinForms = true; break; }
-
-        if (!forceWinForms)
-        {
-            // S-X1 carve (2026-06-23) — wire Windows-only services onto the
-            // cross-platform AvaloniaShellBootstrap before the shell boots.
-            // FracturingFog.App skips this install on Linux/macOS so the hooks
-            // stay null and the bootstrap takes its cross-plat code paths.
-            FracturingFog.Win.WindowsBootstrap.Install();
-            // Eyedropper: WindowsBootstrap.Install already registered the
-            // WinForms-free WindowsColorSampleBridge (Win32 LL-mouse-hook +
-            // BitBlt/CAPTUREBLT screen read). We no longer override it with the
-            // WinForms-bound WinExeColorSampleBridge — that severs the last
-            // Avalonia-path dependency on Views/Editors/DesktopEyedropper (the
-            // WinForms shell still uses it directly). See issue #116.
-            FracturingFog.Hosting.BootstrapHooks.SyncDialogs =
-                new WinFormsSyncDialogs();
-            return FracturingFog.UI.Avalonia.AvaloniaShell.Run(
-                args,
-                FracturingFog.Hosting.AvaloniaShellBootstrap.OnSurfaceReady);
-        }
-
-        Application.SetHighDpiMode(HighDpiMode.PerMonitorV2);
-        Application.EnableVisualStyles();
-        Application.SetCompatibleTextRenderingDefault(false);
-        Application.Run(new MainForm());
-        return 0;
+        // The Avalonia shell is the only UI shell (#116 retired the legacy
+        // WinForms MainForm and its --winforms launch flag). WindowsBootstrap
+        // installs the Windows-only Win32 services (eyedropper colour bridge)
+        // onto the cross-platform AvaloniaShellBootstrap before the shell boots;
+        // FracturingFog.App skips this install on Linux/macOS so the hooks stay
+        // null and the bootstrap takes its cross-plat code paths.
+        //
+        // Source-editor prompts (#118): the VMs raise async callbacks satisfied
+        // by AvaloniaDialogs in AvaloniaShellBootstrap — no WinForms anywhere.
+        FracturingFog.Win.WindowsBootstrap.Install();
+        return FracturingFog.UI.Avalonia.AvaloniaShell.Run(
+            args,
+            FracturingFog.Hosting.AvaloniaShellBootstrap.OnSurfaceReady);
     }
 
     private static int BenchmarkEquation(string[] args)
