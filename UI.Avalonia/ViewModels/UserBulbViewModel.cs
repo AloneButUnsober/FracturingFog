@@ -31,6 +31,7 @@ using System.Collections.ObjectModel;
 using System.Linq;
 using System.Reactive;
 using System.Reactive.Linq;
+using System.Threading.Tasks;
 using FracturingFog.Models;
 using ReactiveUI;
 
@@ -103,11 +104,11 @@ public sealed class UserBulbViewModel : ViewModelBase
         UserBulbStore.Instance.Load();
         RefreshSavedList(_params.UserBulbName);
 
-        SaveCommand = ReactiveCommand.Create(OnSave);
-        DeleteCommand = ReactiveCommand.Create(OnDelete,
+        SaveCommand = ReactiveCommand.CreateFromTask(OnSaveAsync);
+        DeleteCommand = ReactiveCommand.CreateFromTask(OnDeleteAsync,
             this.WhenAnyValue(x => x.SelectedSavedName).Select(n => !string.IsNullOrEmpty(n)));
-        ImportCommand = ReactiveCommand.Create(OnImport);
-        ExportCommand = ReactiveCommand.Create(OnExport,
+        ImportCommand = ReactiveCommand.CreateFromTask(OnImportAsync);
+        ExportCommand = ReactiveCommand.CreateFromTask(OnExportAsync,
             this.WhenAnyValue(x => x.SelectedSavedName).Select(n => !string.IsNullOrEmpty(n)));
         ResetCameraCommand = ReactiveCommand.Create(OnResetCamera);
         AddParamCommand = ReactiveCommand.Create(OnAddParam);
@@ -117,7 +118,7 @@ public sealed class UserBulbViewModel : ViewModelBase
         RemoveParamCommand = ReactiveCommand.Create<UserBulbParam>(OnRemoveParam);
         RemoveChainCommand = ReactiveCommand.Create<UserBulbChainStep>(OnRemoveChain);
         TogglePlayCommand = ReactiveCommand.Create(OnTogglePlay);
-        ExportMeshCommand = ReactiveCommand.Create(OnExportMesh);
+        ExportMeshCommand = ReactiveCommand.CreateFromTask(OnExportMeshAsync);
         OpenHelpCommand = ReactiveCommand.Create(() =>
         {
             // Jump directly to the Sandbox DSL chapter when the Sandbox
@@ -557,16 +558,20 @@ public sealed class UserBulbViewModel : ViewModelBase
     public event EventHandler? RenderRequested;
     public event EventHandler? PromotionChanged;
 
-    public event EventHandler<NamePromptEventArgs>? NamePromptRequested;
-    public event EventHandler<ConfirmEventArgs>? ConfirmDeleteRequested;
+    // #118 — async host prompts. The host handler fills the EventArgs
+    // Result/Path and the awaited Task completes when the dialog closes, so the
+    // OnXAsync raiser can read the result on the next line. Replaces the former
+    // synchronous EventHandler pattern that required a WinForms modal loop.
+    public event Func<NamePromptEventArgs, Task>? NamePromptRequested;
+    public event Func<ConfirmEventArgs, Task>? ConfirmDeleteRequested;
     /// <summary>
     /// Fires when Save is about to replace an existing entry with the same
     /// name. Host shows a yes/no overwrite confirm and sets
     /// <see cref="ConfirmEventArgs.Result"/> true to proceed.
     /// </summary>
-    public event EventHandler<ConfirmEventArgs>? ConfirmOverwriteRequested;
-    public event EventHandler<OpenFileEventArgs>? OpenFilePromptRequested;
-    public event EventHandler<SaveFileEventArgs>? SaveFilePromptRequested;
+    public event Func<ConfirmEventArgs, Task>? ConfirmOverwriteRequested;
+    public event Func<OpenFileEventArgs, Task>? OpenFilePromptRequested;
+    public event Func<SaveFileEventArgs, Task>? SaveFilePromptRequested;
     public event EventHandler<string>? MessageRequested;
 
     /// <summary>Args: gridN, range, path.</summary>
@@ -682,17 +687,17 @@ public sealed class UserBulbViewModel : ViewModelBase
         }
     }
 
-    private void OnSave()
+    private async Task OnSaveAsync()
     {
         var args = new NamePromptEventArgs("Save bulb equation as:", _selectedSavedName ?? string.Empty);
-        NamePromptRequested?.Invoke(this, args);
+        if (NamePromptRequested is { } prompt) await prompt(args);
         if (string.IsNullOrWhiteSpace(args.Result)) return;
 
         string trimmed = args.Result!.Trim();
         if (UserBulbStore.Instance.GetByName(trimmed) is not null)
         {
             var confirm = new ConfirmEventArgs($"A saved bulb equation named '{trimmed}' already exists. Overwrite?");
-            ConfirmOverwriteRequested?.Invoke(this, confirm);
+            if (ConfirmOverwriteRequested is { } ov) await ov(confirm);
             if (!confirm.Result) return;
         }
 
@@ -708,11 +713,11 @@ public sealed class UserBulbViewModel : ViewModelBase
         RefreshSavedList(entry.Name);
     }
 
-    private void OnDelete()
+    private async Task OnDeleteAsync()
     {
         if (string.IsNullOrEmpty(_selectedSavedName)) return;
         var args = new ConfirmEventArgs($"Delete saved bulb equation '{_selectedSavedName}'?");
-        ConfirmDeleteRequested?.Invoke(this, args);
+        if (ConfirmDeleteRequested is { } confirm) await confirm(args);
         if (!args.Result) return;
         UserBulbStore.Instance.Remove(_selectedSavedName!);
         _selectedSavedName = null;
@@ -720,10 +725,10 @@ public sealed class UserBulbViewModel : ViewModelBase
         RefreshSavedList();
     }
 
-    private void OnImport()
+    private async Task OnImportAsync()
     {
         var args = new OpenFileEventArgs("Import .fbulb", "FracturingFog bulb|*.fbulb;*.json|All files|*.*");
-        OpenFilePromptRequested?.Invoke(this, args);
+        if (OpenFilePromptRequested is { } pick) await pick(args);
         if (string.IsNullOrEmpty(args.Path)) return;
         var snapshots = UserBulbStore.Instance.ImportSnapshots(args.Path!);
         if (snapshots.Count == 0)
@@ -750,7 +755,7 @@ public sealed class UserBulbViewModel : ViewModelBase
             MessageRequested?.Invoke(this, $"{snapshots.Count} equations imported.");
     }
 
-    private void OnExport()
+    private async Task OnExportAsync()
     {
         if (string.IsNullOrEmpty(_selectedSavedName))
         {
@@ -764,7 +769,7 @@ public sealed class UserBulbViewModel : ViewModelBase
             return;
         }
         var args = new SaveFileEventArgs("Export .fbulb", "FracturingFog bulb|*.fbulb", $"{_selectedSavedName}.fbulb");
-        SaveFilePromptRequested?.Invoke(this, args);
+        if (SaveFilePromptRequested is { } pick) await pick(args);
         if (string.IsNullOrEmpty(args.Path)) return;
         var snapshot = BuildSnapshotFromParams(entry);
         if (!UserBulbStore.Instance.ExportSnapshot(snapshot, args.Path!))
@@ -1110,10 +1115,10 @@ public sealed class UserBulbViewModel : ViewModelBase
 
     private void OnTogglePlay() => IsPlaying = !_isPlaying;
 
-    private void OnExportMesh()
+    private async Task OnExportMeshAsync()
     {
         var pathArgs = new SaveFileEventArgs("Export bulb mesh", "OBJ (smooth)|*.obj|STL (binary)|*.stl", "bulb.obj");
-        SaveFilePromptRequested?.Invoke(this, pathArgs);
+        if (SaveFilePromptRequested is { } pick) await pick(pathArgs);
         if (string.IsNullOrEmpty(pathArgs.Path)) return;
 
         // #112 — export geometry knobs (grid + range) are export-only; DE
