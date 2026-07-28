@@ -31,6 +31,15 @@ namespace FracturingFog.Models
         public string Source { get; init; } = "return z;";
         public string Description { get; init; } = string.Empty;
 
+        /// <summary>Per-iteration linear scale of this fold, for the scalar-KIFS
+        /// distance estimator (<c>|z| / scale^iter</c>). KIFS folds are
+        /// discontinuous — the numerical Jacobian DE can't estimate distance
+        /// across them (blank / blobby / zero-triangle export), so a fold
+        /// primitive declares its scale here and the editor sets
+        /// <c>UserBulbKifsScale</c> to it. 0 = not a pure-scale fold (power maps
+        /// etc. use the numerical DE). See #113.</summary>
+        public double KifsScale { get; init; } = 0.0;
+
         public UserBulbChainStep ToStep() => new()
         {
             OutputName = DefaultOutputName,
@@ -61,6 +70,7 @@ namespace FracturingFog.Models
             {
                 DisplayName = "Mandelbox fold (boxFold + sphereFold + scale)",
                 DefaultOutputName = IdMandelbox,
+                KifsScale = 2.0,
                 Source =
                     "// Classic Mandelbox fold step. scale ≈ 2, fixedRadius 1, minRadius 0.5.\n" +
                     "var v = Vec3.SphereFold(Vec3.BoxFold(z, 1.0), 0.5, 1.0);\n" +
@@ -71,6 +81,7 @@ namespace FracturingFog.Models
             {
                 DisplayName = "KIFS Menger fold",
                 DefaultOutputName = IdMenger,
+                KifsScale = 3.0,
                 Source =
                     "// Menger-sponge fold: |x|,|y|,|z| then scale-3 from (1,1,1).\n" +
                     "var v = Vec3.Abs(z);\n" +
@@ -84,6 +95,7 @@ namespace FracturingFog.Models
             {
                 DisplayName = "KIFS Sierpinski tetra fold",
                 DefaultOutputName = IdSierpinski,
+                KifsScale = 2.0,
                 Source =
                     "// Sierpinski tetrahedron fold: 3 vertex reflections, scale-2 from (1,1,1).\n" +
                     "var v = z;\n" +
@@ -207,5 +219,32 @@ namespace FracturingFog.Models
         /// to be declared as FractalParameters.UserBulbKifsScale so the scalar
         /// KIFS distance estimator is exact.</summary>
         public const double KaleidoscopicIfsScale = 3.0;
+
+        /// <summary>Leading fold scale of <see cref="MandelboxBulbHybrid"/> — the
+        /// scalar-KIFS DE the editor engages so the fold export isn't degenerate
+        /// (#113). Approximate for the trailing bulb-power, but far better than
+        /// the numerical Jacobian's blob on the discontinuous fold.</summary>
+        public const double MandelboxBulbHybridScale = 2.0;
+
+        /// <summary>Leading fold scale of <see cref="MengerBulbHybrid"/>. See
+        /// <see cref="MandelboxBulbHybridScale"/>.</summary>
+        public const double MengerBulbHybridScale = 3.0;
+
+        /// <summary>Suggested <c>UserBulbKifsScale</c> for a chain, or 0 when it
+        /// has no leading fold (leave the numerical DE). Returns the first fold
+        /// primitive's declared scale — the fold dominates the running-derivative
+        /// DE, so this makes a pure-fold chain exact and a fold+power hybrid at
+        /// least non-degenerate (#113).</summary>
+        public static double SuggestedKifsScaleForChain(
+            IReadOnlyList<UserBulbChainStep>? chain)
+        {
+            if (chain == null) return 0.0;
+            foreach (var step in chain)
+            {
+                var prim = GetById(step.OutputName);
+                if (prim != null && prim.KifsScale > 0.0) return prim.KifsScale;
+            }
+            return 0.0;
+        }
     }
 }

@@ -467,7 +467,7 @@
 
                 <!-- Reflection / Edge / Stereo / DoF -->
                 <Expander Header="Reflection / Edge / Stereo / DoF">
-                    <Grid ColumnDefinitions="160,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto">
+                    <Grid ColumnDefinitions="160,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto">
                         <TextBlock Grid.Row="0" Grid.Column="0" Text="Reflection:" VerticalAlignment="Center"
                                    ToolTip.Tip="N-bounce DE-march along reflect(V,N). 0 = off." />
                         <Grid Grid.Row="0" Grid.Column="1" ColumnDefinitions="*,Auto" Margin="0,2">
@@ -550,28 +550,53 @@
                                        Text="{Binding StereoFovDegrees, StringFormat='F1'}" />
                         </Grid>
 
-                        <TextBlock Grid.Row="10" Grid.Column="0" Text="DoF aperture:" VerticalAlignment="Center"
-                                   ToolTip.Tip="Hex bokeh radius (world units). 0 = pinhole." />
+                        <TextBlock Grid.Row="10" Grid.Column="0" Text="Stereo convergence:" VerticalAlignment="Center"
+                                   ToolTip.Tip="Zero-parallax plane via horizontal image translation, as a fraction of eye width. 0 = parallel (whole scene behind the screen). Positive = pull the subject toward the screen plane so nearer detail floats in front. Typical +/-0.05." />
                         <Grid Grid.Row="10" Grid.Column="1" ColumnDefinitions="*,Auto" Margin="0,2">
+                            <Slider Classes="knob" Grid.Column="0" Minimum="-0.2" Maximum="0.2"
+                                    Value="{Binding StereoConvergence, Mode=TwoWay}" />
+                            <TextBlock Classes="knobValue" Grid.Column="1"
+                                       Text="{Binding StereoConvergence, StringFormat='F3'}" />
+                        </Grid>
+
+                        <TextBlock Grid.Row="11" Grid.Column="0" Text="Max disparity:" VerticalAlignment="Center"
+                                   ToolTip.Tip="Parallax comfort guard — largest on-screen eye-to-eye disparity, as a fraction of width. Caps the Fake-warp shift so near hits stay fusable (no divergence / eye strain). Default 0.03 (1/30 rule). 0 = off." />
+                        <Grid Grid.Row="11" Grid.Column="1" ColumnDefinitions="*,Auto" Margin="0,2">
+                            <Slider Classes="knob" Grid.Column="0" Minimum="0" Maximum="0.15"
+                                    Value="{Binding StereoMaxDisparity, Mode=TwoWay}" />
+                            <TextBlock Classes="knobValue" Grid.Column="1"
+                                       Text="{Binding StereoMaxDisparity, StringFormat='F3'}" />
+                        </Grid>
+
+                        <TextBlock Grid.Row="12" Grid.Column="0" Text="DoF aperture:" VerticalAlignment="Center"
+                                   ToolTip.Tip="Hex bokeh radius (world units). 0 = pinhole." />
+                        <Grid Grid.Row="12" Grid.Column="1" ColumnDefinitions="*,Auto" Margin="0,2">
                             <Slider Classes="knob" Grid.Column="0" Minimum="0" Maximum="0.5"
                                     Value="{Binding DofAperture, Mode=TwoWay}" />
                             <TextBlock Classes="knobValue" Grid.Column="1"
                                        Text="{Binding DofAperture, StringFormat='F3'}" />
                         </Grid>
 
-                        <TextBlock Grid.Row="11" Grid.Column="0" Text="DoF focus dist:" VerticalAlignment="Center" />
-                        <NumericUpDown Grid.Row="11" Grid.Column="1"
+                        <TextBlock Grid.Row="13" Grid.Column="0" Text="DoF focus dist:" VerticalAlignment="Center" />
+                        <NumericUpDown Grid.Row="13" Grid.Column="1"
                                        Minimum="0.1" Maximum="100" Increment="0.1" FormatString="F2"
                                        Value="{Binding DofFocusDistance, Mode=TwoWay}" Margin="0,2" />
 
-                        <TextBlock Grid.Row="12" Grid.Column="0" Text="DoF samples:" VerticalAlignment="Center" />
-                        <Grid Grid.Row="12" Grid.Column="1" ColumnDefinitions="*,Auto" Margin="0,2">
+                        <TextBlock Grid.Row="14" Grid.Column="0" Text="DoF samples:" VerticalAlignment="Center" />
+                        <Grid Grid.Row="14" Grid.Column="1" ColumnDefinitions="*,Auto" Margin="0,2">
                             <Slider Classes="knob" Grid.Column="0" Minimum="1" Maximum="32"
                                     IsSnapToTickEnabled="True" TickFrequency="1"
                                     Value="{Binding DofSamples, Mode=TwoWay}" />
                             <TextBlock Classes="knobValue" Grid.Column="1"
                                        Text="{Binding DofSamples}" />
                         </Grid>
+
+                        <TextBlock Grid.Row="15" Grid.Column="0" Text="Stereo layout:" VerticalAlignment="Center"
+                                   ToolTip.Tip="FullSbs = each eye full width (2W x H). HalfSbs = each eye squeezed to W/2 (W x H, anamorphic) — mono dimensions, smaller files; the 3D TV / VR player un-squeezes per eye. Used only when Stereo mode is on." />
+                        <ComboBox Grid.Row="15" Grid.Column="1"
+                                  ItemsSource="{Binding StereoLayouts}"
+                                  SelectedItem="{Binding StereoLayout, Mode=TwoWay}"
+                                  Margin="0,2" />
                     </Grid>
                 </Expander>
 

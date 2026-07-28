@@ -129,32 +129,54 @@ internal sealed class WindowsColorSampleBridge : IColorSampleBridge
         s_proc = null;
     }
 
-    // S-X10 deferred (2026-06-27) — DWM-aware desktop-wide sampling.
-    // GetDC(NULL) + GdiGetPixel only returns this app's pixels under DWM
-    // on Win 8+; cross-app sampling needs BitBlt(SRCCOPY|CAPTUREBLT) to a
-    // 1×1 compatible bitmap (mirrors legacy DesktopEyedropper.SamplePixel
-    // via Graphics.CopyFromScreen). Lands together with the Linux portal
-    // path as S-X11. See Docs/Technical/S-X10-Session-Notes.md.
+    // S-X10 (2026-07-28) — DWM-aware desktop-wide sampling. GetDC(NULL) +
+    // GetPixel returns only THIS app's pixels under DWM on Win 8+, so a bare
+    // GetPixel regressed cross-app sampling vs the legacy WinForms
+    // DesktopEyedropper (which used Graphics.CopyFromScreen == BitBlt). We
+    // BitBlt(SRCCOPY|CAPTUREBLT) the target screen pixel into a 1×1 compatible
+    // bitmap, then GetPixel from that memory DC. CAPTUREBLT includes layered /
+    // DWM-composited windows so any app's pixel is captured. See issue #116.
     private static (byte R, byte G, byte B, bool Ok) SamplePixel(int x, int y)
     {
-        IntPtr dc = GetDC(IntPtr.Zero);
-        if (dc == IntPtr.Zero) return (0, 0, 0, false);
+        IntPtr screenDc = GetDC(IntPtr.Zero);
+        if (screenDc == IntPtr.Zero) return (0, 0, 0, false);
+
+        IntPtr memDc = IntPtr.Zero, bmp = IntPtr.Zero, oldBmp = IntPtr.Zero;
         try
         {
-            uint colorRef = GetPixel(dc, x, y);
+            memDc = CreateCompatibleDC(screenDc);
+            if (memDc == IntPtr.Zero) return (0, 0, 0, false);
+            bmp = CreateCompatibleBitmap(screenDc, 1, 1);
+            if (bmp == IntPtr.Zero) return (0, 0, 0, false);
+            oldBmp = SelectObject(memDc, bmp);
+
+            if (!BitBlt(memDc, 0, 0, 1, 1, screenDc, x, y, SRCCOPY | CAPTUREBLT))
+                return (0, 0, 0, false);
+
+            uint colorRef = GetPixel(memDc, 0, 0);
             if (colorRef == CLR_INVALID) return (0, 0, 0, false);
             byte r = (byte)(colorRef & 0xFF);
             byte g = (byte)((colorRef >> 8) & 0xFF);
             byte b = (byte)((colorRef >> 16) & 0xFF);
             return (r, g, b, true);
         }
-        finally { ReleaseDC(IntPtr.Zero, dc); }
+        finally
+        {
+            if (oldBmp != IntPtr.Zero) SelectObject(memDc, oldBmp);
+            if (bmp != IntPtr.Zero) DeleteObject(bmp);
+            if (memDc != IntPtr.Zero) DeleteDC(memDc);
+            ReleaseDC(IntPtr.Zero, screenDc);
+        }
     }
 
     // ── P/Invoke ──────────────────────────────────────────────────────
 
     private const uint CLR_INVALID = 0xFFFFFFFF;
     private static readonly IntPtr IDC_CROSS = (IntPtr)32515;
+
+    // BitBlt raster-op codes (wingdi.h).
+    private const uint SRCCOPY   = 0x00CC0020;
+    private const uint CAPTUREBLT = 0x40000000; // include layered/DWM windows
 
     [StructLayout(LayoutKind.Sequential)]
     private struct POINT { public int X; public int Y; }
@@ -186,6 +208,29 @@ internal sealed class WindowsColorSampleBridge : IColorSampleBridge
 
     [DllImport("gdi32.dll")]
     private static extern uint GetPixel(IntPtr hdc, int nXPos, int nYPos);
+
+    [DllImport("gdi32.dll")]
+    private static extern IntPtr CreateCompatibleDC(IntPtr hdc);
+
+    [DllImport("gdi32.dll")]
+    private static extern IntPtr CreateCompatibleBitmap(IntPtr hdc, int width, int height);
+
+    [DllImport("gdi32.dll")]
+    private static extern IntPtr SelectObject(IntPtr hdc, IntPtr hgdiobj);
+
+    [DllImport("gdi32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool DeleteObject(IntPtr hObject);
+
+    [DllImport("gdi32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool DeleteDC(IntPtr hdc);
+
+    [DllImport("gdi32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool BitBlt(
+        IntPtr hdcDest, int xDest, int yDest, int width, int height,
+        IntPtr hdcSrc, int xSrc, int ySrc, uint rop);
 
     [DllImport("user32.dll")]
     private static extern IntPtr LoadCursor(IntPtr hInstance, IntPtr lpCursorName);

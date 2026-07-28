@@ -15,27 +15,6 @@ using FracturingFog.ServerHost;
 namespace FracturingFog;
 
 /// <summary>
-/// S-X1 carve (2026-06-23) — Windows-only IColorSampleBridge wrapper over
-/// the WinForms-bound DesktopEyedropper. Installed onto
-/// AvaloniaShellBootstrap from Program.Main before AvaloniaShell.Run so the
-/// Color Theme Editor's eyedropper continues to work on Windows. Cross-plat
-/// hosts (FracturingFog.App on Linux/macOS) leave the bridge null and the
-/// SampleColorRequested handler completes without picking.
-/// </summary>
-[SupportedOSPlatform("windows")]
-internal sealed class WinExeColorSampleBridge : IColorSampleBridge
-{
-    public bool IsActive => FracturingFog.Views.Editors.DesktopEyedropper.IsActive;
-
-    public void Begin(Action<(byte R, byte G, byte B)> onPicked, Action onCancelled)
-    {
-        FracturingFog.Views.Editors.DesktopEyedropper.Begin(
-            c => onPicked((c.R, c.G, c.B)),
-            onCancelled);
-    }
-}
-
-/// <summary>
 /// S-X1b carve (2026-06-23) — Windows-only IHostSyncDialogs implementation
 /// over the System.Windows.Forms common dialogs. Lives in the WinExe because
 /// the WinExe is the only assembly with UseWindowsForms=true on its csproj.
@@ -1798,8 +1777,12 @@ static class Program
             // FracturingFog.App skips this install on Linux/macOS so the hooks
             // stay null and the bootstrap takes its cross-plat code paths.
             FracturingFog.Win.WindowsBootstrap.Install();
-            FracturingFog.Hosting.BootstrapHooks.ColorSampleBridge =
-                new WinExeColorSampleBridge();
+            // Eyedropper: WindowsBootstrap.Install already registered the
+            // WinForms-free WindowsColorSampleBridge (Win32 LL-mouse-hook +
+            // BitBlt/CAPTUREBLT screen read). We no longer override it with the
+            // WinForms-bound WinExeColorSampleBridge — that severs the last
+            // Avalonia-path dependency on Views/Editors/DesktopEyedropper (the
+            // WinForms shell still uses it directly). See issue #116.
             FracturingFog.Hosting.BootstrapHooks.SyncDialogs =
                 new WinFormsSyncDialogs();
             return FracturingFog.UI.Avalonia.AvaloniaShell.Run(

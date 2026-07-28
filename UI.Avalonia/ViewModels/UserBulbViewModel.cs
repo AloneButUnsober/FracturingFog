@@ -813,6 +813,8 @@ public sealed class UserBulbViewModel : ViewModelBase
         Time             = _params.UserBulbTime,
         AnimSpeed        = _animSpeed,
         AnimLoopSeconds  = _animLoopSeconds,
+        ExportGridN      = _exportGridN,
+        ExportRange      = _exportRange,
         Params           = _params.UserBulbParams.ConvertAll(p => p.Clone()),
     };
 
@@ -859,6 +861,10 @@ public sealed class UserBulbViewModel : ViewModelBase
         // notifications for the bound Speed / Loop-s controls.
         if (s.AnimSpeed is { } aspd)             AnimSpeed = aspd;
         if (s.AnimLoopSeconds is { } aloop)      AnimLoopSeconds = aloop;
+        // Export knobs are VM-only (no FractalParameters mirror) — set via the
+        // public setters so they clamp + notify the bound controls.
+        if (s.ExportGridN is { } egn)            ExportGridN = egn;
+        if (s.ExportRange is { } erg)            ExportRange = erg;
 
         if (s.Params is { Count: > 0 } srcParams)
         {
@@ -1041,6 +1047,18 @@ public sealed class UserBulbViewModel : ViewModelBase
         step.OutputName = UniqueChainName(step.OutputName);
         _params.UserBulbChain.Add(step);
         Chain.Add(step);
+
+        // #113 — a KIFS fold needs the scalar-KIFS DE (its folds are
+        // discontinuous; the numerical Jacobian yields a blank / blobby /
+        // zero-triangle export). Auto-engage it on the first fold primitive if
+        // the user hasn't already dialed a scale in.
+        if (p.KifsScale > 0.0 && KifsScale <= 0.0)
+        {
+            KifsScale = p.KifsScale;
+            StatusMessage = $"KIFS Scale set to {p.KifsScale:0.###} — required so the fold DE renders/exports.";
+            StatusIsError = false;
+        }
+
         CompileRequested?.Invoke(this, EventArgs.Empty);
     }
 
@@ -1061,6 +1079,19 @@ public sealed class UserBulbViewModel : ViewModelBase
             _params.UserBulbChain.Add(s);
             Chain.Add(s);
         }
+
+        // #113 — engage the scalar-KIFS DE for fold-led chains. The numerical
+        // Jacobian can't estimate distance across the fold discontinuities
+        // (blank / blobby / zero-triangle export); the fold's declared scale
+        // drives the running-derivative DE instead.
+        double sug = UserBulbChainPrimitives.SuggestedKifsScaleForChain(_params.UserBulbChain);
+        if (sug > 0.0)
+        {
+            KifsScale = sug;
+            StatusMessage = $"KIFS Scale set to {sug:0.###} for the fold DE (needed for fold export).";
+            StatusIsError = false;
+        }
+
         CompileRequested?.Invoke(this, EventArgs.Empty);
     }
 
@@ -1085,9 +1116,33 @@ public sealed class UserBulbViewModel : ViewModelBase
         SaveFilePromptRequested?.Invoke(this, pathArgs);
         if (string.IsNullOrEmpty(pathArgs.Path)) return;
 
-        // Host shows the N+range modal; defaults match the legacy dialog.
-        var meshArgs = new MeshExportEventArgs(64, 2.0, pathArgs.Path!);
+        // #112 — export geometry knobs (grid + range) are export-only; DE
+        // quality reuses the panel's existing Iterations + JacobianH (the single
+        // source of truth — the render DE and the export DE are the same kernel).
+        // For crisp export geometry raise Iterations (native quaternion types use
+        // 11–14; render default 8 is blobby) and/or drop JacobianH toward 1e-5.
+        var meshArgs = new MeshExportEventArgs(
+            ExportGridN, ExportRange, pathArgs.Path!, Iterations, JacobianH);
         ExportMeshRequested?.Invoke(this, meshArgs);
+    }
+
+    // ── Mesh-export geometry knobs (#112) — export-only; no render equivalent.
+    private int _exportGridN = 96;
+    /// <summary>Marching-cubes grid resolution per axis. Higher = finer mesh,
+    /// cost ~N³. 96 matches the native raymarcher exporter.</summary>
+    public int ExportGridN
+    {
+        get => _exportGridN;
+        set => this.RaiseAndSetIfChanged(ref _exportGridN, Math.Clamp(value, 16, 512));
+    }
+
+    private double _exportRange = 2.0;
+    /// <summary>Object-space half-extent of the sampled cube about the fractal.
+    /// Must enclose the set; too small clips, too large wastes resolution.</summary>
+    public double ExportRange
+    {
+        get => _exportRange;
+        set => this.RaiseAndSetIfChanged(ref _exportRange, Math.Clamp(value, 0.25, 64.0));
     }
 
     private string NextFreeName()
@@ -1155,10 +1210,16 @@ public sealed class SaveFileEventArgs : EventArgs
 
 public sealed class MeshExportEventArgs : EventArgs
 {
-    public MeshExportEventArgs(int gridN, double range, string path) { GridN = gridN; Range = range; Path = path; }
+    public MeshExportEventArgs(int gridN, double range, string path, int iterations, double jacobianH)
+    { GridN = gridN; Range = range; Path = path; Iterations = iterations; JacobianH = jacobianH; }
     public int GridN { get; }
     public double Range { get; }
     public string Path { get; }
+    // #112 — export-specific DE quality (independent of the render's live iter/
+    // jacH) so mesh geometry can resolve detail the numerical DE otherwise
+    // smooths away.
+    public int Iterations { get; }
+    public double JacobianH { get; }
 }
 
 internal static class ReactiveObjectExtensions
