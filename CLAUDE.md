@@ -12,43 +12,43 @@ rather than tracked only in scratch notes or ad-hoc TODOs.
   issues are the canonical task list — link doc ↔ issues both ways.
 - Repo: `AloneButUnsober/MandelbrotExplorer`. `gh` is authenticated with admin.
 
-## UI status: Avalonia is canonical. WinForms is deprecated.
+## UI status: Avalonia is the only shell. WinForms was removed (#116).
 
-**All new UI work goes into `UI.Avalonia/`.** Do not add features, fix
-non-critical bugs, or refactor inside `MainForm.cs`, `Views/` (the WinForms
-`Views/`), or other Windows Forms code paths. WinForms is kept buildable
-only as a fallback and for historical parity during the migration tail.
+**All UI work goes into `UI.Avalonia/`.** The legacy WinForms shell —
+`MainForm.cs` + partials (`VideoZoom.cs`, `Slideshow.cs`, `SlideshowConfig.cs`,
+`AudioReactive.cs`, `ImageCapture.cs`), `MainForm.resx`, the in-root `Views/**`
+tree, and the `--winforms` launch flag — was deleted in #116. The root
+`FracturingFogCLD.csproj` no longer sets `UseWindowsForms`; there is no
+`System.Windows.Forms` reference anywhere in the codebase.
 
-### What is the WinForms shell?
+### What is the Avalonia shell? (the only path)
 
-- Entry point: `Program.cs` → `--winforms` CLI flag → `Application.Run(new MainForm())`.
-- Form code: `MainForm.cs`, `MainForm.resx`, `Views/**` (the in-root `Views`
-  folder; the Avalonia view tree lives under `UI.Avalonia/Views/`).
-- Hosting glue with `System.Windows.Forms` references: parts of `Hosting/`,
-  `Imaging/` (`ImageCapture.cs`), some dialogs.
-
-### What is the Avalonia shell? (active path)
-
-- Default entry: `Program.cs` falls through to
-  `FracturingFog.UI.Avalonia.AvaloniaShell.Run(...)` when no CLI flag matches.
+- Entry: `Program.cs` → `FracturingFog.UI.Avalonia.AvaloniaShell.Run(...)`
+  (after the headless/self-test CLI flags). There is no UI fallback.
 - Code: everything under `UI.Avalonia/` (Views, ViewModels, Services).
 - Cross-platform hosting glue: `Hosting/AvaloniaShellBootstrap.cs`,
   `Hosting/AvaloniaDialogs.cs`.
+
+### About the TFM (why the WinExe is still net10.0-windows)
+
+Removing WinForms did **not** move `FracturingFogCLD.csproj` off
+`net10.0-windows`. This exe is the **Windows build**: it ProjectReferences the
+Windows-only backends `Rendering.D3D` / `FracturingFog.Win` / `Audio.Win` (all
+`net10.0-windows`), which a plain `net10.0` assembly cannot reference.
+Cross-platform hosting is `FracturingFog.App`'s job (`net10.0` leg, Silk/Skia).
+So `net*-windows` on the WinExe is expected — it is the Windows target, not a
+WinForms artifact.
 
 ### Rules of thumb
 
 1. **New feature?** Add it to `UI.Avalonia/` only. If it needs host services,
    wire them through `AvaloniaShellBootstrap` / `IPlatformHost`.
-2. **Bug in both shells?** Fix the Avalonia side. WinForms gets the fix only
-   if the bug is a crash/data-loss class issue.
-3. **Touching `MainForm.cs` / WinForms `Views/`?** Stop and ask. Default
-   answer is "don't."
-4. **New project reference?** Should not require `UseWindowsForms` or
-   `net*-windows`. Prefer adding the dependency to `UI.Avalonia.csproj`,
-   not `FracturingFogCLD.csproj`.
-5. **Removal of WinForms code is out of scope** for the deprecate branch —
-   the goal is to *prevent new work* landing there. A future branch will
-   rip the WinForms shell out once the Avalonia shell has full parity.
+2. **Never reintroduce `System.Windows.Forms`** or `UseWindowsForms` on the
+   WinExe / Avalonia path. Host dialogs go through `AvaloniaDialogs`; screen /
+   Win32 needs live in `FracturingFog.Win` (net10.0-windows, no WinForms).
+3. **New project reference?** Prefer adding the dependency to
+   `UI.Avalonia.csproj`. Windows-only backends belong behind the
+   `FracturingFog.Win` / `Rendering.D3D` boundary, loaded via bootstrap.
 
 ### Non-UI projects (no deprecation, work normally)
 
@@ -62,5 +62,4 @@ only as a fallback and for historical parity during the migration tail.
 
 - Solution: `FracturingFogCLD.sln` (root).
 - Default run: `dotnet run --project FracturingFogCLD.csproj` → Avalonia shell.
-- Legacy run: `dotnet run --project FracturingFogCLD.csproj -- --winforms`.
 - Headless: `--server`, `--batch`, plus self-test flags in `Program.cs`.
