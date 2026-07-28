@@ -55,6 +55,16 @@ internal sealed class X11ColorSampleBridge : IColorSampleBridge
     private volatile bool _active;
     private readonly object _lock = new();
 
+    // One-shot per process: raised the first time a sample attempt fails for a
+    // reason OTHER than the user cancelling (right/middle-click) — e.g. a
+    // Wayland / portal-less session where the global pointer grab is rejected or
+    // the root read yields nothing. Lets the host tell the user once that
+    // desktop-wide sampling won't work this session (see the S-X11 portal
+    // follow-up). Never raised again after the first failure. Interlocked guards
+    // the one-shot since the pump runs on a background thread.
+    public static event Action? ExternalSampleUnavailable;
+    private static int s_externalFailureNotified;
+
     public bool IsActive => _active;
 
     public void Begin(Action<(byte R, byte G, byte B)> onPicked, Action onCancelled)
@@ -82,6 +92,9 @@ internal sealed class X11ColorSampleBridge : IColorSampleBridge
         nuint cursor = 0;
         bool grabbed = false;
         bool fired = false;
+        // True only when the user deliberately cancelled (right/middle-click);
+        // stays false for genuine failures so the finally can fire the one-shot.
+        bool userCancelled = false;
         Console.Error.WriteLine("[X11ColorSampleBridge] Pump thread started.");
         Console.Error.Flush();
         try
@@ -166,6 +179,7 @@ internal sealed class X11ColorSampleBridge : IColorSampleBridge
                 }
                 Console.Error.WriteLine($"[X11ColorSampleBridge] Cancel: non-primary button={button} at root=({rx},{ry}).");
                 Console.Error.Flush();
+                userCancelled = true;
                 break;
             }
             if (!sawAnyEvent)
@@ -198,6 +212,16 @@ internal sealed class X11ColorSampleBridge : IColorSampleBridge
             if (!fired)
             {
                 try { onCancelled(); } catch { }
+
+                // First genuine failure this session (grab rejected, no events,
+                // or no drawable yielded a pixel — i.e. not a user cancel):
+                // notify the host exactly once so it can tell the user desktop
+                // sampling is unavailable this session. Interlocked one-shot.
+                if (!userCancelled
+                    && Interlocked.Exchange(ref s_externalFailureNotified, 1) == 0)
+                {
+                    try { ExternalSampleUnavailable?.Invoke(); } catch { }
+                }
             }
         }
     }
