@@ -82,6 +82,12 @@ namespace FracturingFog.Models
         public double? AnimSpeed { get; set; }
         public double? AnimLoopSeconds { get; set; }
 
+        // Mesh-export knobs (#112) — export-only grid resolution + object-space
+        // half-extent. Persisted so a saved bulb reopens with the export detail
+        // the user dialled in, not the defaults.
+        public int? ExportGridN { get; set; }
+        public double? ExportRange { get; set; }
+
         // ── Named params (UserBulbParam.Value / Min / Max) ─────────────
         public List<UserBulbParam>? Params { get; set; }
     }

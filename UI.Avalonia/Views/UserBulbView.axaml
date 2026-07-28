@@ -406,12 +406,24 @@
                                 </MenuFlyout>
                             </Button.Flyout>
                         </Button>
-                        <Button Grid.Column="4" Grid.Row="1"
-                                Classes="tool"
-                                Content="Export mesh (OBJ)…"
-                                Command="{Binding ExportMeshCommand}"
-                                HorizontalAlignment="Left"
-                                Margin="6,0,0,0"/>
+                        <StackPanel Grid.Column="4" Grid.Row="1" Orientation="Horizontal" Margin="6,0,0,0"
+                                    VerticalAlignment="Center" Spacing="6">
+                            <Button Classes="tool"
+                                    Content="Export mesh (OBJ)…"
+                                    Command="{Binding ExportMeshCommand}"
+                                    HorizontalAlignment="Left" />
+                            <TextBlock Text="Grid" VerticalAlignment="Center"
+                                       ToolTip.Tip="Marching-cubes resolution per axis. Higher = finer mesh (cost ~N³). 96 = native-exporter parity." />
+                            <NumericUpDown Width="86" Minimum="16" Maximum="512" Increment="16" FormatString="F0"
+                                           Value="{Binding ExportGridN, Mode=TwoWay}" />
+                            <TextBlock Text="Range" VerticalAlignment="Center"
+                                       ToolTip.Tip="Object-space half-extent of the sampled cube. Must enclose the fractal; too small clips it." />
+                            <NumericUpDown Width="86" Minimum="0.25" Maximum="64" Increment="0.25" FormatString="F2"
+                                           Value="{Binding ExportRange, Mode=TwoWay}" />
+                            <TextBlock Text="(uses Iterations + JacobianH above)" VerticalAlignment="Center"
+                                       Opacity="0.7" FontStyle="Italic"
+                                       ToolTip.Tip="Mesh DE quality reuses the panel's Iterations + JacobianH. For crisp export geometry raise Iterations (native quaternion types use 11–14; the render default 8 is blobby) and/or lower JacobianH toward 1e-5." />
+                        </StackPanel>
                     </Grid>
                 </Grid>
             <Border Grid.Row="7" BorderBrush="#5A5A5A" BorderThickness="1" Background="#232323" >

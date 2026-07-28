@@ -326,6 +326,27 @@ namespace FracturingFog.Models
                     changed = true;
                 }
             }
+
+            // Un-corruption pass: a prior build overwrote this built-in with a
+            // Hamilton `z*z + c` square plus a forced Julia-c / Quat Settings
+            // snapshot that raymarched to a solid ball, and persisted it into
+            // userbulbs.json — so the damage survived rebuilds. Restore the
+            // original Vec3-triplex source with no forced Settings (the user
+            // drives Axis Mode = Quat + Julia c in the editor, as before).
+            // Self-limiting: after the reset the source no longer matches and
+            // Settings is null, so it never fires again. Scoped to the built-in
+            // name only, so user-authored equations are never touched.
+            {
+                var q = GetByName("Quaternion Julia (Quat mode, set Julia c)");
+                if (q != null && (q.Settings != null || q.Source.Contains("z*z + c")))
+                {
+                    q.Source = "// Switch Axis Mode → Quat + Julia Mode on in the editor.\n" +
+                               "return new Vec3(\n    z.X*z.X - z.Y*z.Y - z.Z*z.Z,\n    2*z.X*z.Y,\n    2*z.X*z.Z) + c;";
+                    q.Chain = null;
+                    q.Settings = null;
+                    changed = true;
+                }
+            }
             return changed;
         }
 

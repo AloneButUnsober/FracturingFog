@@ -69,6 +69,13 @@ public static class StereoRender
         double fovRad = fx.StereoFovDegrees * Math.PI / 180.0;
         double focalPx = (width * 0.5) / Math.Tan(fovRad * 0.5);
 
+        // Parallax comfort guard: cap the per-pixel warp shift so a very near
+        // hit can't produce an un-fusable disparity (divergence → eye strain).
+        // 0 disables the clamp.
+        double maxShiftPx = fx.StereoMaxDisparity > 0
+            ? fx.StereoMaxDisparity * width
+            : double.PositiveInfinity;
+
         int outW = width * 2;
         uint[] outBuf = new uint[outW * height];
 
@@ -102,6 +109,7 @@ public static class StereoRender
                         shift = 0.0;
                     else
                         shift = eyeSep * focalPx / d;
+                    if (shift > maxShiftPx) shift = maxShiftPx;
                     int rx = x - (int)Math.Round(shift);
                     if ((uint)rx < (uint)width)
                     {
@@ -133,7 +141,133 @@ public static class StereoRender
             },
             _ => { });
 
+        ApplyConvergence(outBuf, outW, width, height, fx.StereoConvergence);
+        return fx.StereoLayout == StereoLayout.HalfSbs
+            ? ToHalfSbs(outBuf, width, height)
+            : outBuf;
+    }
+
+    /// <summary>Squeeze a Full-SBS buffer (2·<paramref name="eyeW"/> × height)
+    /// into anamorphic Half-SBS (<paramref name="eyeW"/> × height): each eye is
+    /// downscaled 2:1 horizontally so both fit the original mono width. A 3D TV
+    /// / VR player un-squeezes each half back to full width per eye. Assumes an
+    /// even <paramref name="eyeW"/> (render surfaces are even); an odd width
+    /// drops its last source column.</summary>
+    public static uint[] ToHalfSbs(uint[] fullSbs, int eyeW, int height)
+    {
+        int fullW = eyeW * 2;
+        int halfEye = eyeW / 2;   // each squeezed eye
+        int outW = halfEye * 2;   // == eyeW for even widths
+        var outBuf = new uint[outW * height];
+
+        Parallel.For(0, height, y =>
+        {
+            int fRow = y * fullW;
+            int oRow = y * outW;
+            for (int j = 0; j < halfEye; j++)
+            {
+                // Left eye: full cols [0, eyeW) → out [0, halfEye).
+                outBuf[oRow + j] = Avg2(fullSbs[fRow + 2 * j], fullSbs[fRow + 2 * j + 1]);
+                // Right eye: full cols [eyeW, 2·eyeW) → out [halfEye, 2·halfEye).
+                outBuf[oRow + halfEye + j] =
+                    Avg2(fullSbs[fRow + eyeW + 2 * j], fullSbs[fRow + eyeW + 2 * j + 1]);
+            }
+        });
         return outBuf;
+    }
+
+    /// <summary>Average two packed BGRA pixels channel-wise (for the Half-SBS
+    /// 2:1 horizontal downscale). Alpha averaged alongside the colour.</summary>
+    private static uint Avg2(uint a, uint b)
+    {
+        // (a + b - ((a ^ b) & 0x01010101)) >> 1 per byte lane, no overflow.
+        return (a & b) + (((a ^ b) & 0xFEFEFEFEu) >> 1);
+    }
+
+    /// <summary>Output dimensions for a stereo render at mono size
+    /// (<paramref name="w"/> × <paramref name="h"/>) under the given layout.
+    /// Full-SBS doubles the width; Half-SBS keeps mono dims.</summary>
+    public static (int W, int H) OutputDims(int w, int h, StereoLayout layout) =>
+        layout == StereoLayout.HalfSbs ? (w, h) : (w * 2, h);
+
+    /// <summary>Convergence via horizontal image translation (HIT). Shifts the
+    /// two eye halves of an already-composited side-by-side buffer in opposite
+    /// directions to move the zero-parallax plane. Positive
+    /// <paramref name="convergenceFraction"/> (fraction of eye width) crosses
+    /// the eyes — the left half moves right, the right half moves left — so the
+    /// subject settles at the screen plane and nearer detail floats in front.
+    /// Exposed columns are edge-clamped (replicate the border pixel) so no black
+    /// border appears. No-op when the fraction rounds to a zero-pixel shift.
+    /// </summary>
+    /// <param name="sbs">Doubled-width SBS buffer (<paramref name="outW"/> = 2·width).</param>
+    /// <param name="outW">Buffer stride (2·width).</param>
+    /// <param name="width">Single-eye width.</param>
+    /// <param name="height">Image height.</param>
+    /// <param name="convergenceFraction">HIT amount as a fraction of eye width.</param>
+    public static void ApplyConvergence(
+        uint[] sbs, int outW, int width, int height, double convergenceFraction)
+    {
+        if (convergenceFraction == 0.0) return;
+        int half = (int)Math.Round(Math.Abs(convergenceFraction) * width * 0.5);
+        if (half == 0) return;
+        int signed = Math.Sign(convergenceFraction) * half;
+
+        Parallel.For<uint[]>(
+            0, height,
+            () => new uint[width], // thread-local row scratch
+            (y, _, tmp) =>
+            {
+                int lRow = y * outW;
+                int rRow = lRow + width;
+                ShiftRowClamped(sbs, lRow, width, +signed, tmp); // left eye → right
+                ShiftRowClamped(sbs, rRow, width, -signed, tmp); // right eye → left
+                return tmp;
+            },
+            _ => { });
+    }
+
+    /// <summary>Shift one eye's row horizontally by <paramref name="shift"/>
+    /// columns (positive = content moves toward larger x), replicating the edge
+    /// pixel into exposed columns. <paramref name="tmp"/> is a reusable
+    /// width-length scratch buffer.</summary>
+    private static void ShiftRowClamped(uint[] buf, int rowStart, int width, int shift, uint[] tmp)
+    {
+        if (shift == 0) return;
+        Array.Copy(buf, rowStart, tmp, 0, width);
+        for (int x = 0; x < width; x++)
+        {
+            int src = x - shift;
+            if (src < 0) src = 0;
+            else if (src >= width) src = width - 1;
+            buf[rowStart + x] = tmp[src];
+        }
+    }
+
+    /// <summary>Suggest a comfortable eye separation (world-unit IPD) for the
+    /// Fake depth-parallax warp from the scene depth range. Picks the IPD at
+    /// which the nearest surface hit produces exactly
+    /// <see cref="LightingFxData.StereoMaxDisparity"/> of on-screen disparity,
+    /// so nothing in the frame exceeds the fusion budget. Returns 0 when the
+    /// depth buffer is all sky / invalid.</summary>
+    public static double SuggestEyeSeparation(
+        float[] depth, int width, int height, in LightingFxData fx)
+    {
+        int n = width * height;
+        if (depth == null || depth.Length < n) return 0.0;
+        double dMin = double.PositiveInfinity;
+        for (int i = 0; i < n; i++)
+        {
+            float d = depth[i];
+            if (d > 0f && !float.IsPositiveInfinity(d) && d < dMin) dMin = d;
+        }
+        if (double.IsPositiveInfinity(dMin)) return 0.0;
+
+        double fovRad = fx.StereoFovDegrees * Math.PI / 180.0;
+        double focalPx = (width * 0.5) / Math.Tan(fovRad * 0.5);
+        double maxDisp = fx.StereoMaxDisparity > 0 ? fx.StereoMaxDisparity : 0.03;
+        double maxPx = maxDisp * width;
+        // disparity(dMin) = eyeSep · focalPx / dMin == maxPx  ⇒  solve eyeSep.
+        return maxPx * dMin / focalPx;
     }
 
     /// <summary>Phase 20b — true per-eye stereo orchestration.
@@ -222,7 +356,10 @@ public static class StereoRender
                 Array.Copy(leftSnapshot, srcRow, outBuf, dstRowL, width);
                 Array.Copy(rightSrc, srcRow, outBuf, dstRowR, width);
             }
-            return outBuf;
+            ApplyConvergence(outBuf, outW, width, height, orig.StereoConvergence);
+            return orig.StereoLayout == StereoLayout.HalfSbs
+                ? ToHalfSbs(outBuf, width, height)
+                : outBuf;
         }
         finally
         {
