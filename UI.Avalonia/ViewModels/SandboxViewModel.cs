@@ -7,6 +7,7 @@ using System.Collections.ObjectModel;
 using System.IO;
 using System.Linq;
 using System.Reactive;
+using System.Threading.Tasks;
 using System.Reactive.Linq;
 using System.Text.Json;
 using FracturingFog.Models;
@@ -44,11 +45,11 @@ public sealed class SandboxViewModel : ViewModelBase
         SandboxEquationStore.Instance.Load();
         RefreshSavedList(parameters.SandboxName);
 
-        SaveCommand = ReactiveCommand.Create(OnSave);
-        DeleteCommand = ReactiveCommand.Create(OnDelete,
+        SaveCommand = ReactiveCommand.CreateFromTask(OnSaveAsync);
+        DeleteCommand = ReactiveCommand.CreateFromTask(OnDeleteAsync,
             this.WhenAnyValue(x => x.SelectedSavedName).Select(n => !string.IsNullOrEmpty(n)));
-        ExportCommand = ReactiveCommand.Create(OnExport);
-        ImportCommand = ReactiveCommand.Create(OnImport);
+        ExportCommand = ReactiveCommand.CreateFromTask(OnExportAsync);
+        ImportCommand = ReactiveCommand.CreateFromTask(OnImportAsync);
         OpenHelpCommand = ReactiveCommand.Create(() =>
             HelpRequested?.Invoke("User/Avalonia-UserGuide.md", "Sandbox", "Sandbox — Help"));
 
@@ -115,20 +116,20 @@ public sealed class SandboxViewModel : ViewModelBase
     public event Action? PromotionChanged;
 
     /// <summary>Host shows a name-entry dialog and returns the entered name (or null).</summary>
-    public event Func<string, string?>? NamePromptRequested;
+    public event Func<string, Task<string?>>? NamePromptRequested;
 
     /// <summary>Host shows a yes/no confirm and returns true to proceed.</summary>
-    public event Func<string, bool>? ConfirmDeleteRequested;
+    public event Func<string, Task<bool>>? ConfirmDeleteRequested;
 
     /// <summary>Host shows a yes/no overwrite confirm and returns true to proceed.
     /// Fired only when Save would replace an existing equation with the same name.</summary>
-    public event Func<string, bool>? ConfirmOverwriteRequested;
+    public event Func<string, Task<bool>>? ConfirmOverwriteRequested;
 
     /// <summary>Host shows SaveFile dialog; returns chosen path or null.</summary>
-    public event Func<string, string?>? SaveFilePromptRequested;
+    public event Func<string, Task<string?>>? SaveFilePromptRequested;
 
     /// <summary>Host shows OpenFile dialog; returns chosen path or null.</summary>
-    public event Func<string?>? OpenFilePromptRequested;
+    public event Func<Task<string?>>? OpenFilePromptRequested;
 
     /// <summary>Host shows a simple info/error message box.</summary>
     public event Action<string, string, bool>? MessageRequested;
@@ -192,15 +193,16 @@ public sealed class SandboxViewModel : ViewModelBase
         CompileRequested?.Invoke();
     }
 
-    private void OnSave()
+    private async Task OnSaveAsync()
     {
         string defaultName = _selectedSavedName ?? string.Empty;
-        string? name = NamePromptRequested?.Invoke(defaultName);
+        string? name = NamePromptRequested is { } prompt ? await prompt(defaultName) : null;
         if (string.IsNullOrWhiteSpace(name)) return;
 
         string trimmed = name.Trim();
         if (SandboxEquationStore.Instance.GetByName(trimmed) is not null
-            && ConfirmOverwriteRequested?.Invoke(trimmed) == false)
+            && ConfirmOverwriteRequested is { } confirm
+            && !await confirm(trimmed))
             return;
 
         var entry = SandboxEquationStore.Instance.SaveEquation(trimmed, _source);
@@ -210,16 +212,16 @@ public sealed class SandboxViewModel : ViewModelBase
         RefreshSavedList(entry.Name);
     }
 
-    private void OnDelete()
+    private async Task OnDeleteAsync()
     {
         if (_selectedSavedName is null) return;
-        if (ConfirmDeleteRequested?.Invoke(_selectedSavedName) != true) return;
+        if (ConfirmDeleteRequested is not { } confirm || !await confirm(_selectedSavedName)) return;
 
         SandboxEquationStore.Instance.Remove(_selectedSavedName);
         RefreshSavedList(null);
     }
 
-    private void OnExport()
+    private async Task OnExportAsync()
     {
         var equations = SandboxEquationStore.Instance.Equations;
         if (equations.Count == 0)
@@ -230,7 +232,7 @@ public sealed class SandboxViewModel : ViewModelBase
         }
 
         string defaultName = (_selectedSavedName ?? "sandbox-equations") + ".json";
-        string? path = SaveFilePromptRequested?.Invoke(defaultName);
+        string? path = SaveFilePromptRequested is { } pick ? await pick(defaultName) : null;
         if (string.IsNullOrWhiteSpace(path)) return;
 
         try
@@ -252,9 +254,9 @@ public sealed class SandboxViewModel : ViewModelBase
         }
     }
 
-    private void OnImport()
+    private async Task OnImportAsync()
     {
-        string? path = OpenFilePromptRequested?.Invoke();
+        string? path = OpenFilePromptRequested is { } pick ? await pick() : null;
         if (string.IsNullOrWhiteSpace(path)) return;
 
         List<SandboxEquationEntry>? imported;

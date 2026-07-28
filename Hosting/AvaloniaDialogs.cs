@@ -1592,6 +1592,106 @@ namespace FracturingFog.Hosting
             return win;
         }
 
+        // ── Text-name prompt ────────────────────────────────────────────────
+
+        /// <summary>Async replacement for the retired WinForms PromptName. Opens
+        /// a small modal Window with a single text box (OK / Cancel). Returns the
+        /// trimmed text, or null when cancelled / left blank. Used by the
+        /// source-editor VMs' Save-As flow (see #118).</summary>
+        public static Task<string?> ShowPromptAsync(string title, string prompt, string defaultValue)
+        {
+            var owner = ActiveMainWindow;
+            var tcs = new TaskCompletionSource<string?>();
+
+            void Run()
+            {
+                string? pending = null;
+
+                var win = new Window
+                {
+                    Title = string.IsNullOrEmpty(title) ? "Enter Name" : title,
+                    Width = 420,
+                    MinWidth = 320,
+                    SizeToContent = SizeToContent.Height,
+                    WindowStartupLocation = WindowStartupLocation.CenterOwner,
+                    CanResize = false,
+                    ShowInTaskbar = false,
+                    Background = Brushes.Black,
+                };
+
+                var label = new TextBlock
+                {
+                    Text = string.IsNullOrEmpty(prompt) ? "Enter a name:" : prompt,
+                    Foreground = Brushes.White,
+                    TextWrapping = TextWrapping.Wrap,
+                    Margin = new Thickness(16, 16, 16, 4),
+                };
+
+                var box = new TextBox
+                {
+                    Text = defaultValue ?? string.Empty,
+                    Margin = new Thickness(16, 4, 16, 8),
+                };
+
+                var buttonRow = new StackPanel
+                {
+                    Orientation = Orientation.Horizontal,
+                    HorizontalAlignment = HorizontalAlignment.Right,
+                    Margin = new Thickness(16, 8, 16, 16),
+                    Spacing = 8,
+                };
+
+                void Accept()
+                {
+                    var t = box.Text?.Trim();
+                    pending = string.IsNullOrWhiteSpace(t) ? null : t;
+                    win.Close();
+                }
+
+                var ok = new Button { Content = "OK", MinWidth = 80, IsDefault = true };
+                ok.Click += (_, _) => Accept();
+                var cancel = new Button { Content = "Cancel", MinWidth = 80, IsCancel = true };
+                cancel.Click += (_, _) => { pending = null; win.Close(); };
+                buttonRow.Children.Add(ok);
+                buttonRow.Children.Add(cancel);
+
+                // Enter in the text box accepts, Escape cancels (KeyUp — Avalonia
+                // 12.0.4 swallows Escape KeyDown app-wide, see EscapeCloseBehavior).
+                box.KeyUp += (_, e) =>
+                {
+                    if (e.Key == global::Avalonia.Input.Key.Enter) Accept();
+                    else if (e.Key == global::Avalonia.Input.Key.Escape) { pending = null; win.Close(); }
+                };
+
+                win.Closed += (_, _) =>
+                {
+                    if (!tcs.Task.IsCompleted) tcs.TrySetResult(pending);
+                };
+                win.Opened += (_, _) => { box.SelectAll(); box.Focus(); };
+
+                var grid = new Grid { RowDefinitions = new RowDefinitions("Auto,Auto,Auto") };
+                Grid.SetRow(label, 0);
+                Grid.SetRow(box, 1);
+                Grid.SetRow(buttonRow, 2);
+                grid.Children.Add(label);
+                grid.Children.Add(box);
+                grid.Children.Add(buttonRow);
+
+                win.Content = grid;
+                _ = WindowService.ShowDialogAsync(win, owner);
+            }
+
+            if (Dispatcher.UIThread.CheckAccess()) Run();
+            else Dispatcher.UIThread.Post(Run);
+
+            return tcs.Task;
+        }
+
+        /// <summary>Convenience yes/no confirm over <see cref="ShowMessageAsync"/>.
+        /// Returns true only when the user picks Yes.</summary>
+        public static async Task<bool> ConfirmAsync(string title, string message)
+            => await ShowMessageAsync(title, message, expectsConfirmation: true) == MessageResult.Yes;
+
         // ── Save / Discard / Cancel prompt ──────────────────────────────────
 
         /// <summary>Three-button modal: Save / Discard / Cancel. Returns the

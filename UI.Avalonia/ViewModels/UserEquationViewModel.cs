@@ -7,6 +7,7 @@ using System.Collections.ObjectModel;
 using System.IO;
 using System.Linq;
 using System.Reactive;
+using System.Threading.Tasks;
 using System.Reactive.Linq;
 using System.Text;
 using System.Text.Json;
@@ -77,10 +78,10 @@ public sealed class UserEquationViewModel : ViewModelBase
         UserEquationStore.Instance.Load();
         RefreshSavedList(parameters.UserEquationName);
 
-        SaveCommand = ReactiveCommand.Create(OnSave);
-        DeleteCommand = ReactiveCommand.Create(OnDelete,
+        SaveCommand = ReactiveCommand.CreateFromTask(OnSaveAsync);
+        DeleteCommand = ReactiveCommand.CreateFromTask(OnDeleteAsync,
             this.WhenAnyValue(x => x.SelectedSavedName).Select(n => !string.IsNullOrEmpty(n)));
-        ImportCommand = ReactiveCommand.Create(OnImport);
+        ImportCommand = ReactiveCommand.CreateFromTask(OnImportAsync);
         RotPlus90Command = ReactiveCommand.Create(() => BumpRotation(90.0));
         RotMinus90Command = ReactiveCommand.Create(() => BumpRotation(-90.0));
         RotResetCommand = ReactiveCommand.Create(() => SetRotation(0.0));
@@ -429,17 +430,17 @@ public sealed class UserEquationViewModel : ViewModelBase
     public event Action? PromotionChanged;
 
     /// <summary>Host shows a name-entry dialog and returns the entered name (or null).</summary>
-    public event Func<string, string?>? NamePromptRequested;
+    public event Func<string, Task<string?>>? NamePromptRequested;
 
     /// <summary>Host shows a yes/no confirm and returns true to proceed.</summary>
-    public event Func<string, bool>? ConfirmDeleteRequested;
+    public event Func<string, Task<bool>>? ConfirmDeleteRequested;
 
     /// <summary>Host shows a yes/no overwrite confirm and returns true to proceed.
     /// Fired only when Save would replace an existing equation with the same name.</summary>
-    public event Func<string, bool>? ConfirmOverwriteRequested;
+    public event Func<string, Task<bool>>? ConfirmOverwriteRequested;
 
     /// <summary>Host shows OpenFile dialog; returns chosen path or null.</summary>
-    public event Func<string?>? OpenFilePromptRequested;
+    public event Func<Task<string?>>? OpenFilePromptRequested;
 
     /// <summary>Host shows a simple info/error message box.</summary>
     public event Action<string, string, bool>? MessageRequested;
@@ -714,17 +715,18 @@ public sealed class UserEquationViewModel : ViewModelBase
         else CompileRequested?.Invoke();
     }
 
-    private void OnSave()
+    private async Task OnSaveAsync()
     {
         string defaultName = _selectedSavedName ?? string.Empty;
-        string? name = NamePromptRequested?.Invoke(defaultName);
+        string? name = NamePromptRequested is { } prompt ? await prompt(defaultName) : null;
         if (string.IsNullOrWhiteSpace(name)) return;
 
         string trimmed = name.Trim();
         // Confirm before silently replacing an existing entry. Store match
         // is case-insensitive — mirror that here.
         if (UserEquationStore.Instance.GetByName(trimmed) is not null
-            && ConfirmOverwriteRequested?.Invoke(trimmed) == false)
+            && ConfirmOverwriteRequested is { } confirm
+            && !await confirm(trimmed))
             return;
 
         var (kind, source) = ActiveSource();
@@ -740,9 +742,9 @@ public sealed class UserEquationViewModel : ViewModelBase
     /// what a hand-assembled share file looks like). Same-name entries are
     /// skipped rather than replaced, mirroring the Sandbox importer. Entries are
     /// added whole so Kind / Promoted round-trip.</summary>
-    private void OnImport()
+    private async Task OnImportAsync()
     {
-        string? path = OpenFilePromptRequested?.Invoke();
+        string? path = OpenFilePromptRequested is { } pick ? await pick() : null;
         if (string.IsNullOrWhiteSpace(path)) return;
 
         IReadOnlyList<string> entries;
@@ -947,10 +949,10 @@ public sealed class UserEquationViewModel : ViewModelBase
             ? (UserEquationKind.Dsl, _dslSource ?? string.Empty)
             : (UserEquationKind.UserEquation, _source ?? string.Empty);
 
-    private void OnDelete()
+    private async Task OnDeleteAsync()
     {
         if (_selectedSavedName is null) return;
-        if (ConfirmDeleteRequested?.Invoke(_selectedSavedName) != true) return;
+        if (ConfirmDeleteRequested is not { } confirm || !await confirm(_selectedSavedName)) return;
 
         UserEquationStore.Instance.Remove(_selectedSavedName);
         RefreshSavedList(null);
