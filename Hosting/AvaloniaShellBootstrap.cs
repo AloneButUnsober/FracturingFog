@@ -157,21 +157,30 @@ namespace FracturingFog.Hosting
             if (OperatingSystem.IsLinux() && BootstrapHooks.NativeInputBridge == null)
                 BootstrapHooks.NativeInputBridge = new X11InputBridge();
 
-            // S-X8 (2026-06-27) — Linux desktop pixel sampler. Was unwired
-            // (BootstrapHooks.ColorSampleBridge null on Linux) so the Color
-            // Theme Editor's per-stop Sample button silently no-op'd.
-            // X11ColorSampleBridge XGrabPointers root with a crosshair cursor
-            // and samples the next button-press via XGetImage. Windows hosts
-            // install WindowsColorSampleBridge ahead of this in
-            // WindowsBootstrap.Install.
+            // S-X8 (2026-06-27) / S-X11 (2026-07-28, #123) — Linux desktop pixel
+            // sampler. Was unwired (BootstrapHooks.ColorSampleBridge null on
+            // Linux) so the Color Theme Editor's per-stop Sample button silently
+            // no-op'd. Windows hosts install WindowsColorSampleBridge ahead of
+            // this in WindowsBootstrap.Install.
+            //
+            // Selector, gated on session type (the two bridges are mutually
+            // exclusive — never run together):
+            //   * Wayland (incl. XWayland-hosted FF) → PortalColorSampleBridge:
+            //     org.freedesktop.portal.Screenshot.PickColor, the only sanctioned
+            //     desktop-wide read there. Raw XGrabPointer + XGetImage cannot work
+            //     under Wayland by design, so routing a Wayland session to X11 (the
+            //     pre-#123 behaviour when WAYLAND_DISPLAY was set) just fails.
+            //   * Xorg → X11ColorSampleBridge: XGrabPointer root with a crosshair
+            //     cursor, sample the next button-press via XGetImage.
             if (OperatingSystem.IsLinux() && BootstrapHooks.ColorSampleBridge == null)
             {
-                // One-time notice: if the first out-of-FF sample fails (Wayland /
-                // portal-less session where the X11 global grab is rejected), tell
-                // the user once that desktop sampling won't work this session. The
-                // bridge raises this at most once per process; do not message again.
-                // Full Wayland support is the S-X11 xdg-desktop-portal follow-up.
-                X11ColorSampleBridge.ExternalSampleUnavailable += () =>
+                // One-time notice, shared by both bridges: the first out-of-FF
+                // sample that fails for a reason other than the user cancelling
+                // (X11 grab rejected; or a portal-less compositor like wlroots/sway
+                // with no PickColor) tells the user once that desktop sampling
+                // won't work this session. Each bridge raises its event at most
+                // once per process; do not message again.
+                Action showUnavailableNotice = () =>
                     _ = AvaloniaDialogs.ShowMessageAsync(
                         "Colour sampler",
                         "Screen colour sampling outside Fracturing Fog isn't available in "
@@ -179,7 +188,19 @@ namespace FracturingFog.Hosting
                         + "only work within the Fracturing Fog window for the rest of this "
                         + "session.\n\nThis notice won't appear again.",
                         expectsConfirmation: false);
-                BootstrapHooks.ColorSampleBridge = new X11ColorSampleBridge();
+                X11ColorSampleBridge.ExternalSampleUnavailable += showUnavailableNotice;
+                PortalColorSampleBridge.ExternalSampleUnavailable += showUnavailableNotice;
+
+                bool wayland =
+                    string.Equals(
+                        Environment.GetEnvironmentVariable("XDG_SESSION_TYPE"),
+                        "wayland", StringComparison.OrdinalIgnoreCase)
+                    || !string.IsNullOrEmpty(
+                        Environment.GetEnvironmentVariable("WAYLAND_DISPLAY"));
+
+                BootstrapHooks.ColorSampleBridge = wayland
+                    ? new PortalColorSampleBridge()
+                    : new X11ColorSampleBridge();
             }
 
             // Phase X.5 / Slice 5.2 — register Help → Hardware tab probes.
