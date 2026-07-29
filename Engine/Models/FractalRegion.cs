@@ -242,6 +242,18 @@ namespace FracturingFog.Models
         public RegionFractalParams? Params { get; set; }
 
         /// <summary>
+        /// Optional snapshot of the Relief 3D (2D heightfield / Oblique raymarch)
+        /// settings active when the region was saved. Null = the region captured
+        /// no relief view (either relief was off, or it predates relief-aware
+        /// bookmarks); recall then leaves the user's current relief state alone.
+        /// Non-null = recall restores the full relief look — camera, tone curve,
+        /// isolation cull, and mesh-export knobs — so a saved 3D relief view
+        /// comes back exactly as captured. Omitted from JSON when null.
+        /// </summary>
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public Relief3DSettings? Relief3D { get; set; }
+
+        /// <summary>
         /// Apply this region's lighting override (if any) to the given params.
         /// No-op when the override is null. Pair with a host-side
         /// "Lock lighting on recall" toggle to let the user opt out of the
@@ -249,6 +261,11 @@ namespace FracturingFog.Models
         /// </summary>
         public void ApplyLightingTo(FractalParameters parameters)
             => LightingOverride?.ApplyTo(parameters);
+
+        /// <summary>Apply this region's Relief 3D snapshot (if any) to the given
+        /// params. No-op when null.</summary>
+        public void ApplyRelief3DTo(FractalParameters parameters)
+            => Relief3D?.ApplyTo(parameters);
 
         /// <summary>
         /// Region type (built-in or user-defined).  This is not serialized to JSON; instead, all loaded regions are
@@ -389,6 +406,133 @@ namespace FracturingFog.Models
                 p.ApollonianMinPixelRadius = ApollonianMinPixelRadius.Value;
             if (ApollonianColorByDepth.HasValue)
                 p.ApollonianColorByDepth = ApollonianColorByDepth.Value;
+        }
+    }
+
+    // ── Relief 3D (2D heightfield / Oblique raymarch) snapshot ─────────────────
+
+    /// <summary>
+    /// Full snapshot of the <c>FractalParameters.Relief2D*</c> family — the
+    /// Relief 3D (2D heightfield hillshade + Oblique 3D raymarch) settings.
+    /// Unlike <see cref="RegionFractalParams"/> (per-family spatial params), the
+    /// whole block is captured as one unit so a saved 3D relief view round-trips
+    /// exactly: camera, tone curve, edge fade, isolation cull, and the mesh-export
+    /// knobs. Only recorded when relief is enabled, so plain 2D bookmarks carry
+    /// nothing (the property is omitted from JSON when null).
+    /// </summary>
+    public sealed class Relief3DSettings
+    {
+        // Relief master + hillshade (Phase 1)
+        public bool Enabled { get; set; } = true;
+        public double HeightScale { get; set; } = 1.0;
+        public double LightAzimuthDeg { get; set; } = 135.0;
+        public double LightElevationDeg { get; set; } = 30.0;
+        public double ShadowStrength { get; set; } = 0.6;
+        public double Strength { get; set; } = 1.0;
+
+        // Oblique 3D raymarch (Phase 2)
+        public bool Raymarch { get; set; } = false;
+        public double CameraAzimuthDeg { get; set; } = 0.0;
+        public double CameraElevationDeg { get; set; } = 45.0;
+        public double CameraFovDeg { get; set; } = 50.0;
+        public double CameraZoom { get; set; } = 1.0;
+        public bool CameraOrthographic { get; set; } = false;
+        public int Supersample { get; set; } = 2;
+
+        [JsonConverter(typeof(JsonStringEnumConverter))]
+        public HeightCurve2D HeightCurve { get; set; } = HeightCurve2D.Log;
+        public bool BicubicHeight { get; set; } = false;
+        public bool GroundPlane { get; set; } = true;
+        public bool AutoShade { get; set; } = true;
+        public double EdgeFade { get; set; } = 0.04;
+
+        // Isolation cull (#135)
+        public bool Isolate { get; set; } = false;
+        public bool IsolateByDetail { get; set; } = true;
+        public double DetailThreshold { get; set; } = 0.6;
+        public bool IsolateByColor { get; set; } = false;
+        public string DropColorsCsv { get; set; } = "";
+        public double ColorTolerance { get; set; } = 0.12;
+
+        // Mesh export knobs (#138)
+        public double MeshHeight { get; set; } = 0.15;
+        public double MeshSmoothing { get; set; } = 0.5;
+        public int MeshGrid { get; set; } = 512;
+        public double MeshMaxMB { get; set; } = 0.0;
+        public double MeshUnderside { get; set; } = 0.6;
+
+        /// <summary>Capture the relief block from a live params, or null when
+        /// relief is off (so plain regions stay clean).</summary>
+        public static Relief3DSettings? Snapshot(FractalParameters? p)
+        {
+            if (p == null || !p.Relief2DEnabled) return null;
+            return new Relief3DSettings
+            {
+                Enabled            = p.Relief2DEnabled,
+                HeightScale        = p.Relief2DHeightScale,
+                LightAzimuthDeg    = p.Relief2DLightAzimuthDeg,
+                LightElevationDeg  = p.Relief2DLightElevationDeg,
+                ShadowStrength     = p.Relief2DShadowStrength,
+                Strength           = p.Relief2DStrength,
+                Raymarch           = p.Relief2DRaymarch,
+                CameraAzimuthDeg   = p.Relief2DCameraAzimuthDeg,
+                CameraElevationDeg = p.Relief2DCameraElevationDeg,
+                CameraFovDeg       = p.Relief2DCameraFovDeg,
+                CameraZoom         = p.Relief2DCameraZoom,
+                CameraOrthographic = p.Relief2DCameraOrthographic,
+                Supersample        = p.Relief2DSupersample,
+                HeightCurve        = p.Relief2DHeightCurve,
+                BicubicHeight      = p.Relief2DBicubicHeight,
+                GroundPlane        = p.Relief2DGroundPlane,
+                AutoShade          = p.Relief2DAutoShade,
+                EdgeFade           = p.Relief2DEdgeFade,
+                Isolate            = p.Relief2DIsolate,
+                IsolateByDetail    = p.Relief2DIsolateByDetail,
+                DetailThreshold    = p.Relief2DDetailThreshold,
+                IsolateByColor     = p.Relief2DIsolateByColor,
+                DropColorsCsv      = p.Relief2DDropColorsCsv,
+                ColorTolerance     = p.Relief2DColorTolerance,
+                MeshHeight         = p.Relief2DMeshHeight,
+                MeshSmoothing      = p.Relief2DMeshSmoothing,
+                MeshGrid           = p.Relief2DMeshGrid,
+                MeshMaxMB          = p.Relief2DMeshMaxMB,
+                MeshUnderside      = p.Relief2DMeshUnderside,
+            };
+        }
+
+        /// <summary>Restore every captured field onto a live params.</summary>
+        public void ApplyTo(FractalParameters p)
+        {
+            if (p == null) return;
+            p.Relief2DEnabled            = Enabled;
+            p.Relief2DHeightScale        = HeightScale;
+            p.Relief2DLightAzimuthDeg    = LightAzimuthDeg;
+            p.Relief2DLightElevationDeg  = LightElevationDeg;
+            p.Relief2DShadowStrength     = ShadowStrength;
+            p.Relief2DStrength           = Strength;
+            p.Relief2DRaymarch           = Raymarch;
+            p.Relief2DCameraAzimuthDeg   = CameraAzimuthDeg;
+            p.Relief2DCameraElevationDeg = CameraElevationDeg;
+            p.Relief2DCameraFovDeg       = CameraFovDeg;
+            p.Relief2DCameraZoom         = CameraZoom;
+            p.Relief2DCameraOrthographic = CameraOrthographic;
+            p.Relief2DSupersample        = Supersample;
+            p.Relief2DHeightCurve        = HeightCurve;
+            p.Relief2DBicubicHeight      = BicubicHeight;
+            p.Relief2DGroundPlane        = GroundPlane;
+            p.Relief2DAutoShade          = AutoShade;
+            p.Relief2DEdgeFade           = EdgeFade;
+            p.Relief2DIsolate            = Isolate;
+            p.Relief2DIsolateByDetail    = IsolateByDetail;
+            p.Relief2DDetailThreshold    = DetailThreshold;
+            p.Relief2DIsolateByColor     = IsolateByColor;
+            p.Relief2DDropColorsCsv      = DropColorsCsv ?? "";
+            p.Relief2DColorTolerance     = ColorTolerance;
+            p.Relief2DMeshHeight         = MeshHeight;
+            p.Relief2DMeshSmoothing      = MeshSmoothing;
+            p.Relief2DMeshGrid           = MeshGrid;
+            p.Relief2DMeshMaxMB          = MeshMaxMB;
+            p.Relief2DMeshUnderside      = MeshUnderside;
         }
     }
 

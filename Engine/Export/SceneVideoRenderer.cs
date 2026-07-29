@@ -478,6 +478,8 @@ namespace FracturingFog.Export
             }
             // Region lighting override snapshot (Phase 10) — no-op when null.
             region.ApplyLightingTo(p);
+            // Region Relief 3D snapshot — no-op when null.
+            region.ApplyRelief3DTo(p);
         }
 
         private static AnimationData? ResolveAnimation(SceneShot shot, FractalRegion? region)
