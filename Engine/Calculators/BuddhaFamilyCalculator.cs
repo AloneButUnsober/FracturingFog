@@ -48,7 +48,7 @@ using FracturingFog.Models;
 
 namespace FracturingFog;
 
-public abstract class BuddhaFamilyCalculator : IFractalCalculator
+public abstract class BuddhaFamilyCalculator : IFractalCalculator, IHeightFieldSource
 {
     // Per-thread orbit buffer size limit. At 200K × 8 bytes × 2 arrays × 32
     // threads ≈ 100 MB — high but manageable; without the cap a 1M iteration
@@ -63,6 +63,11 @@ public abstract class BuddhaFamilyCalculator : IFractalCalculator
     public int Width { get; private set; }
     public int Height { get; private set; }
     public uint[] ColorBuffer { get; private set; } = Array.Empty<uint>();
+
+    // #139 — Relief 3D height field. The orbit-density histogram IS the natural
+    // relief: dense orbit-traced regions rise, empty background is the base
+    // plane. Log-normalised so the height reads as terrain, not spikes.
+    public float[] SmoothBuffer { get; private set; } = Array.Empty<float>();
 
     public double CenterX { get; set; } = -0.5;
     public double CenterY { get; set; } = 0.0;
@@ -92,6 +97,7 @@ public abstract class BuddhaFamilyCalculator : IFractalCalculator
         Height = height;
         int n = width * height;
         ColorBuffer = new uint[n];
+        SmoothBuffer = new float[n];
         _hitsR = new uint[n];
         _hitsG = new uint[n];
         _hitsB = new uint[n];
@@ -219,6 +225,29 @@ public abstract class BuddhaFamilyCalculator : IFractalCalculator
                 RenderColorMap();
             else
                 RenderBands();
+
+            UpdateHeightField();   // #139 — density → relief height
+        }
+    }
+
+    /// <summary>#139 — build the Relief 3D height field from the orbit-density
+    /// histogram: log-normalised total hits (0 on empty pixels = base plane).</summary>
+    private void UpdateHeightField()
+    {
+        int n = _hitsR.Length;
+        if (SmoothBuffer.Length < n) SmoothBuffer = new float[n];
+        uint maxAll = 0;
+        for (int i = 0; i < n; i++)
+        {
+            uint sum = _hitsR[i] + _hitsG[i] + _hitsB[i];
+            if (sum > maxAll) maxAll = sum;
+        }
+        if (maxAll == 0) { Array.Clear(SmoothBuffer, 0, n); return; }
+        double inv = 1.0 / Math.Log(maxAll + 1.0);
+        for (int i = 0; i < n; i++)
+        {
+            uint sum = _hitsR[i] + _hitsG[i] + _hitsB[i];
+            SmoothBuffer[i] = sum == 0 ? 0f : (float)(Math.Log(sum + 1.0) * inv);
         }
     }
 
