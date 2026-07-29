@@ -62,19 +62,33 @@ public static class HeightfieldMeshExporter
                 HeightCurve2D.Sqrt   => (float)Math.Sqrt(raw),
                 _                    => (float)Math.Log(1.0 + raw),
             };
-            if (edgeFade > 0.0)
-            {
-                double dxE = Math.Min(gx, gw - 1 - gx), dyE = Math.Min(gy, gh - 1 - gy);
-                double wx = dxE >= mxF ? 1.0 : Smoothstep(dxE / mxF);
-                double wy = dyE >= myF ? 1.0 : Smoothstep(dyE / myF);
-                hv = (float)(hv * wx * wy);
-            }
             int gi = gy * gw + gx;
             hh[gi] = hv;
             alb[gi] = (uint)si < (uint)albedo.Length ? albedo[si] : 0xFF808080u;
             if (hv > maxH) maxH = hv;
         }
         if (maxH <= 1e-9f) return 0;
+
+        // Edge cap (#140) — pull tall edge structure down to the base plane
+        // without lifting the flat exterior (no rectangular lip). Matches
+        // HeightfieldRaymarch2D.
+        if (edgeFade > 0.0)
+        {
+            for (int gy = 0; gy < gh; gy++)
+            for (int gx = 0; gx < gw; gx++)
+            {
+                double dxE = Math.Min(gx, gw - 1 - gx), dyE = Math.Min(gy, gh - 1 - gy);
+                double wx = dxE >= mxF ? 1.0 : Smoothstep(dxE / mxF);
+                double wy = dyE >= myF ? 1.0 : Smoothstep(dyE / myF);
+                double f = wx * wy;
+                if (f < 1.0)
+                {
+                    float cap = (float)(f * maxH);
+                    int gi = gy * gw + gx;
+                    if (hh[gi] > cap) hh[gi] = cap;
+                }
+            }
+        }
 
         double aspect = (double)w / h;
         double sy2 = 0.35 * Math.Max(0.0, p.Relief2DHeightScale) / maxH;

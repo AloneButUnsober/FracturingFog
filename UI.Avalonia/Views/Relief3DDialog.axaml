@@ -24,7 +24,7 @@
                           ToolTip.Tip="Treats the escape potential as a height field and adds real raised relief + horizon cast shadows on top of the active theme. Reads best on smooth (non-noisy) themes and when zoomed into filament structure." />
 
                 <Expander Header="Relief lighting" HorizontalAlignment="Stretch"
-                          IsExpanded="{Binding Relief2DEnabled}"
+                          IsExpanded="{Binding Relief2DEnabled, Mode=OneWay}"
                           IsEnabled="{Binding Relief2DEnabled}">
                 <Grid ColumnDefinitions="160,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto">
                     <TextBlock Grid.Row="0" Grid.Column="0" Text="Height scale:" VerticalAlignment="Center"
@@ -63,7 +63,7 @@
                           IsEnabled="{Binding Relief2DEnabled}"
                           ToolTip.Tip="Replaces the flat image with a true 3D raymarch of the height field from an oblique camera: real perspective relief, a silhouette, and volumetric fog / god-rays (set Fog density + Volume steps in the Lighting FX dialog). Heavier than the screen-space relief above." />
                 <Expander Header="Camera &amp; quality" HorizontalAlignment="Stretch"
-                          IsExpanded="{Binding Relief2DRaymarch}"
+                          IsExpanded="{Binding Relief2DRaymarch, Mode=OneWay}"
                           IsEnabled="{Binding Relief2DRaymarch}">
                 <StackPanel Spacing="6">
                 <Grid ColumnDefinitions="160,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto">
@@ -134,7 +134,7 @@
                           IsEnabled="{Binding Relief2DRaymarch}"
                           ToolTip.Tip="Keep only the selected fractal structure as a standalone 3D object over a transparent background (exports as a cutout). Best paired with Show-sky-backdrop OFF (Lighting FX) and the base ground plane OFF." />
                 <Expander Header="Isolation cull" HorizontalAlignment="Stretch"
-                          IsExpanded="{Binding Relief2DIsolate}"
+                          IsExpanded="{Binding Relief2DIsolate, Mode=OneWay}"
                           IsEnabled="{Binding Relief2DIsolate}">
                 <StackPanel Spacing="6">
                 <Grid ColumnDefinitions="160,*" RowDefinitions="Auto,Auto,Auto">
@@ -175,6 +175,16 @@
                 </Grid>
                 </StackPanel>
                 </Expander>
+
+                <!-- #140 — Lighting & FX launcher (copied from the params panel)
+                     so the shading knobs are reachable while editing Relief 3D. -->
+                <Button Content="Open Lighting &amp; FX…"
+                        Click="OnOpenLightingFxClick"
+                        IsEnabled="{Binding Relief2DRaymarch}"
+                        HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"
+                        Padding="0,8" Margin="0,8,0,0"
+                        Background="#283C50" Foreground="White"
+                        ToolTip.Tip="Open the full Lighting / Shading / Post-process dialog (soft shadows, AO, PBR, IBL/HDRI, reflections, volumetric fog, sky backdrop)." />
 
                 <!-- #138 — export the 3D object as a mesh -->
                 <Button Content="Export mesh (OBJ / STL)…"
