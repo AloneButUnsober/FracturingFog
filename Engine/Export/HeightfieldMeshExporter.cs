@@ -47,12 +47,30 @@ public static class HeightfieldMeshExporter
     /// <summary>Export the heightfield object to <paramref name="path"/> (.stl =
     /// binary STL, else OBJ with vertex colour + smooth normals). Returns the
     /// triangle count. <paramref name="targetGrid"/> caps the longer grid axis
-    /// (downsample) so the file stays manageable. No-op (returns 0) on an
-    /// all-flat field.</summary>
+    /// (downsample); pass -1 to take it from <see cref="FractalParameters.Relief2DMeshGrid"/>.
+    /// No-op (returns 0) on an all-flat field.</summary>
     public static int Export(uint[] albedo, float[] height, int w, int h,
-                             FractalParameters p, string path, int targetGrid = 512)
+                             FractalParameters p, string path, int targetGrid = -1)
     {
         if (w < 2 || h < 2 || height.Length < w * h) return 0;
+
+        // Detail = grid resolution (from the knob unless the caller overrides).
+        if (targetGrid <= 0) targetGrid = p.Relief2DMeshGrid > 0 ? p.Relief2DMeshGrid : 512;
+        targetGrid = Math.Clamp(targetGrid, 16, 4096);
+
+        // File-size budget: clamp the grid down so the estimated output stays
+        // under the requested megabytes (rough: ~0.55 KB per grid cell for the
+        // top+base+wall tessellation with per-vertex colour+normal).
+        if (p.Relief2DMeshMaxMB > 0.0)
+        {
+            double aspectR = (double)w / h;
+            double budgetCells = p.Relief2DMeshMaxMB * 1024.0 * 1024.0 / 560.0;
+            if (budgetCells > 16)
+            {
+                int budgetGrid = (int)Math.Sqrt(budgetCells * aspectR);
+                if (budgetGrid < targetGrid) targetGrid = Math.Max(16, budgetGrid);
+            }
+        }
 
         // Downsample stride so the longer axis is ~targetGrid cells.
         int stride = Math.Max(1, (int)Math.Ceiling(Math.Max(w, h) / (double)Math.Max(16, targetGrid)));
@@ -110,29 +128,32 @@ public static class HeightfieldMeshExporter
         // too, or the solid keeps that plateau as its whole rough base.
         SubtractExteriorBaseline(hh);
 
+        // SMOOTHING knob [0,1] drives the despike/merge strength. 0 = raw (max
+        // detail, spiky); 0.5 (default) = the tuned clean look (close 6 / blur 2);
+        // 1 = heavy.
+        double smooth = Math.Clamp(p.Relief2DMeshSmoothing, 0.0, 1.0);
+        int closeIters = (int)Math.Round(smooth * 12.0);
+        int blurPasses = (int)Math.Round(smooth * 4.0);
+
         // DESPIKE — 3x3 median. A lone cell near the boundary can be far taller
         // than its neighbours (the smooth count is chaotic there); tessellated
         // that becomes a radial spike. Median removes the lone outliers while
-        // keeping real ridges. Runs before normals so the normals are smooth too.
-        MedianFilter3x3(hh, gw, gh);
+        // keeping real ridges. Skipped at smoothing 0 (raw = max detail).
+        if (smooth > 0.0) MedianFilter3x3(hh, gw, gh);
 
         // FILL THIN VALLEYS — grayscale morphological close (dilate then erode).
         // The fractal boundary is a comb of tall dendrites separated by thin
-        // deep valleys down to the flat interior; tessellated, each dendrite is
-        // an isolated tooth => the "forest of spikes / fingers". Closing raises
-        // the thin valleys to the surrounding height so the dendrites MERGE into
-        // one solid relief ridge (what the sphere-tracing DE does implicitly by
-        // skipping sub-cone gaps), instead of a hedgehog of separate spikes.
-        const int CloseIters = 6;
-        for (int i = 0; i < CloseIters; i++) GrayDilate3x3(hh, gw, gh);
-        for (int i = 0; i < CloseIters; i++) GrayErode3x3(hh, gw, gh);
+        // deep valleys; tessellated, each dendrite is an isolated tooth => the
+        // "forest of spikes". Closing raises the thin valleys to the surrounding
+        // height so the dendrites MERGE into one solid ridge (what the sphere-
+        // tracing DE does implicitly by skipping sub-cone gaps).
+        for (int i = 0; i < closeIters; i++) GrayDilate3x3(hh, gw, gh);
+        for (int i = 0; i < closeIters; i++) GrayErode3x3(hh, gw, gh);
 
-        // LOW-PASS — the raymarch's sphere-tracing DE skips features thinner than
-        // its cone, so the on-screen relief reads as a smooth boundary RIDGE. A
-        // couple of light box passes spread each remaining cliff into a slope so
-        // the mesh top surface is continuous, matching the render.
-        const int BlurPasses = 2;
-        for (int i = 0; i < BlurPasses; i++) BoxBlur3x3(hh, gw, gh);
+        // LOW-PASS — the raymarch's DE skips features thinner than its cone, so
+        // the on-screen relief reads as a smooth ridge. Box passes spread each
+        // remaining cliff into a slope so the mesh top surface is continuous.
+        for (int i = 0; i < blurPasses; i++) BoxBlur3x3(hh, gw, gh);
 
         float maxH = 0f;
         for (int i = 0; i < hh.Length; i++) if (hh[i] > maxH) maxH = hh[i];
@@ -167,12 +188,14 @@ public static class HeightfieldMeshExporter
         }
 
         double aspect = (double)w / h;
-        // Mesh relief height. Deliberately gentler than the raymarch's 0.35: a
-        // faithful mesh of the full-height relief is a forest of tall thin
-        // dendrites (spikes) when seen from the side in Blender — the render only
-        // hides that with top-down framing + shadow. A low-relief embossing reads
-        // as a clean Mandelbrot from every angle. Scaled by the height knob.
-        double sy2 = 0.15 * Math.Max(0.0, p.Relief2DHeightScale) / maxH;
+        // Mesh relief height (world units) from the HEIGHT knob. Deliberately
+        // gentler than the raymarch's 0.35: a faithful mesh of the full-height
+        // relief is a forest of tall thin dendrites (spikes) when seen from the
+        // side in Blender — the render only hides that with top-down framing +
+        // shadow. A low-relief embossing reads as a clean Mandelbrot from every
+        // angle. Independent of the on-screen Relief2DHeightScale.
+        double meshHeight = Math.Max(0.0, p.Relief2DMeshHeight);
+        double sy2 = meshHeight / maxH;
         // Solid slab: drop the base to a small negative Y so the flat plain has
         // real thickness and the top surface never coincides with the base (no
         // z-fighting on the flat regions).

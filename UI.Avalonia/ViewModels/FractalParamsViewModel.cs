@@ -422,6 +422,52 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
         set { double v = Clamp(value, 0.0, 1.0); if (_p.Relief2DColorTolerance == v) return; _p.Relief2DColorTolerance = v; this.RaisePropertyChanged(); Fire(); }
     }
 
+    // #138 mesh export knobs. These affect only the exported mesh (not the live
+    // render), so they don't Fire() a re-render — just notify the export path +
+    // the size estimate.
+    /// <summary>Exported mesh relief height (world units).</summary>
+    public double Relief2DMeshHeight
+    {
+        get => _p.Relief2DMeshHeight;
+        set { double v = Clamp(value, 0.0, 1.0); if (_p.Relief2DMeshHeight == v) return; _p.Relief2DMeshHeight = v; this.RaisePropertyChanged(); }
+    }
+    /// <summary>Exported mesh smoothing [0,1] (despike/merge strength).</summary>
+    public double Relief2DMeshSmoothing
+    {
+        get => _p.Relief2DMeshSmoothing;
+        set { double v = Clamp(value, 0.0, 1.0); if (_p.Relief2DMeshSmoothing == v) return; _p.Relief2DMeshSmoothing = v; this.RaisePropertyChanged(); }
+    }
+    /// <summary>Exported mesh detail = grid resolution (longer axis, cells).</summary>
+    public int Relief2DMeshGrid
+    {
+        get => _p.Relief2DMeshGrid;
+        set { int v = (int)Clamp(value, 64, 2048); if (_p.Relief2DMeshGrid == v) return; _p.Relief2DMeshGrid = v; this.RaisePropertyChanged(); this.RaisePropertyChanged(nameof(Relief2DMeshSizeEstimate)); }
+    }
+    /// <summary>Exported mesh file-size budget (MB); 0 = unlimited.</summary>
+    public double Relief2DMeshMaxMB
+    {
+        get => _p.Relief2DMeshMaxMB;
+        set { double v = Clamp(value, 0.0, 500.0); if (_p.Relief2DMeshMaxMB == v) return; _p.Relief2DMeshMaxMB = v; this.RaisePropertyChanged(); this.RaisePropertyChanged(nameof(Relief2DMeshSizeEstimate)); }
+    }
+    /// <summary>Rough estimate of the exported OBJ size for the current detail /
+    /// budget, shown next to the sliders so the detail↔size trade-off is visible.</summary>
+    public string Relief2DMeshSizeEstimate
+    {
+        get
+        {
+            int grid = _p.Relief2DMeshGrid > 0 ? _p.Relief2DMeshGrid : 512;
+            if (_p.Relief2DMeshMaxMB > 0.0)
+            {
+                double budgetGrid = Math.Sqrt(_p.Relief2DMeshMaxMB * 1024.0 * 1024.0 / 560.0 * 1.6);
+                if (budgetGrid < grid) grid = (int)budgetGrid;
+            }
+            // ~ grid*(grid/1.6) cells worst-case, ~560 bytes/cell.
+            double cells = grid * (grid / 1.6);
+            double mb = cells * 560.0 / (1024.0 * 1024.0);
+            return mb >= 1.0 ? $"~{mb:0.#} MB" : $"~{mb * 1024.0:0} KB";
+        }
+    }
+
     public Interior2DBackgroundMode Interior2DBackground
     {
         get => _p.Interior2DBackground;

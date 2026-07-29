@@ -423,6 +423,26 @@ namespace FracturingFog.Models
         /// (fraction of the max RGB distance). Default 0.12.</summary>
         public double Relief2DColorTolerance { get; set; } = 0.12;
 
+        // #138 mesh export knobs — control the exported heightfield mesh
+        // (HeightfieldMeshExporter) independently of the on-screen raymarch.
+        /// <summary>Mesh relief height in world units (the exported emboss depth).
+        /// The raymarch uses ~0.35; the mesh defaults gentler (0.15) because a
+        /// full-height relief of a fractal boundary is a forest of spikes when
+        /// seen from the side in Blender. Higher = more dramatic + spikier.
+        /// Default 0.15.</summary>
+        public double Relief2DMeshHeight { get; set; } = 0.15;
+        /// <summary>Mesh smoothing [0,1]: 0 = raw (max detail, spiky), 1 = heavy
+        /// (despike median + grayscale close + blur). Trades fractal detail for a
+        /// clean continuous surface. Default 0.5.</summary>
+        public double Relief2DMeshSmoothing { get; set; } = 0.5;
+        /// <summary>Mesh detail = grid resolution (cells on the longer axis).
+        /// Higher = finer fractal detail AND a bigger file. Default 512.</summary>
+        public int Relief2DMeshGrid { get; set; } = 512;
+        /// <summary>Mesh file-size budget in megabytes. When &gt; 0, the effective
+        /// grid is clamped down so the estimated output stays under this size
+        /// (caps <see cref="Relief2DMeshGrid"/>). 0 = unlimited. Default 0.</summary>
+        public double Relief2DMeshMaxMB { get; set; } = 0.0;
+
         // Apollonian gasket (Descartes Circle Theorem recursive packing).
         /// <summary>Maximum recursion depth for the Vieta-jump tree. The
         /// inside-R sub-gaskets sit several levels deeper than the cusp circles
@@ -776,6 +796,10 @@ namespace FracturingFog.Models
                 Relief2DIsolateByColor = Relief2DIsolateByColor,
                 Relief2DDropColorsCsv = Relief2DDropColorsCsv,
                 Relief2DColorTolerance = Relief2DColorTolerance,
+                Relief2DMeshHeight = Relief2DMeshHeight,
+                Relief2DMeshSmoothing = Relief2DMeshSmoothing,
+                Relief2DMeshGrid = Relief2DMeshGrid,
+                Relief2DMeshMaxMB = Relief2DMeshMaxMB,
                 ApollonianDepth = ApollonianDepth,
                 ApollonianMinPixelRadius = ApollonianMinPixelRadius,
                 ApollonianColorByDepth = ApollonianColorByDepth,
