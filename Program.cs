@@ -63,6 +63,14 @@ static class Program
         if (args.Length > 0 && args[0] == "--heightfieldraymarch")
             return FracturingFog.Diagnostics.HeightfieldRaymarchProbe.RunGate();
 
+        // --heightfieldisolate: #135 gate — isolate filaments as a standalone 3D
+        // object (detail-cull + colour-drop) over a transparent background.
+        // Asserts the cull removes background yet keeps surface, and that dropped
+        // pixels are written transparent. Writes heightfield-isolate.ppm (composited
+        // over a checkerboard so the cutout is visible) + heightfieldisolate.out.
+        if (args.Length > 0 && args[0] == "--heightfieldisolate")
+            return FracturingFog.Diagnostics.HeightfieldRaymarchProbe.RunIsolateGate();
+
         // --meshexport: #101 gate — prove marching-cubes mesh export works for
         // every DE raymarcher (not just the User Bulb) via the shared
         // RaymarchMeshSampler factory. For each exportable type: build the

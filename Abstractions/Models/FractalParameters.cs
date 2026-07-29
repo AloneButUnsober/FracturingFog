@@ -390,6 +390,33 @@ namespace FracturingFog.Models
         /// non-zero user values always win. Default true.</summary>
         public bool Relief2DAutoShade { get; set; } = true;
 
+        // #135 — isolate filaments as a standalone 3D object. When on, dropped
+        // cells produce no surface (rays pass through) and ray-miss pixels are
+        // written transparent (alpha 0) so the kept fractal floats alone and
+        // exports as a cutout. Two cull selectors (combinable): local detail and
+        // colour-drop. Best paired with ShowSkyBackdrop off + ground plane off.
+        /// <summary>Master toggle: isolate the kept fractal as a standalone 3D
+        /// object over a transparent background. Default false.</summary>
+        public bool Relief2DIsolate { get; set; } = false;
+        /// <summary>Drop cells whose local surface detail (normalised height
+        /// gradient) is below <see cref="Relief2DDetailThreshold"/> — removes the
+        /// flat background + smooth plateau, keeping fine filaments. Default true.</summary>
+        public bool Relief2DIsolateByDetail { get; set; } = true;
+        /// <summary>Detail cull DROP FRACTION, [0,1]: cull the flattest share of
+        /// cells by local gradient (a quantile, robust to boundary spikes).
+        /// Higher = drop more, keeping only the sharpest filaments. Default 0.6.</summary>
+        public double Relief2DDetailThreshold { get; set; } = 0.6;
+        /// <summary>Drop cells whose themed colour matches one of
+        /// <see cref="Relief2DDropColorsCsv"/> within
+        /// <see cref="Relief2DColorTolerance"/>. Default false.</summary>
+        public bool Relief2DIsolateByColor { get; set; } = false;
+        /// <summary>Comma-separated ARGB/RGB hex colours to drop (e.g.
+        /// "FF102030, 405060"). Empty = none.</summary>
+        public string Relief2DDropColorsCsv { get; set; } = "";
+        /// <summary>Colour-match tolerance for the colour-drop cull, [0,1]
+        /// (fraction of the max RGB distance). Default 0.12.</summary>
+        public double Relief2DColorTolerance { get; set; } = 0.12;
+
         // Apollonian gasket (Descartes Circle Theorem recursive packing).
         /// <summary>Maximum recursion depth for the Vieta-jump tree. The
         /// inside-R sub-gaskets sit several levels deeper than the cusp circles
@@ -736,6 +763,12 @@ namespace FracturingFog.Models
                 Relief2DBicubicHeight = Relief2DBicubicHeight,
                 Relief2DGroundPlane = Relief2DGroundPlane,
                 Relief2DAutoShade = Relief2DAutoShade,
+                Relief2DIsolate = Relief2DIsolate,
+                Relief2DIsolateByDetail = Relief2DIsolateByDetail,
+                Relief2DDetailThreshold = Relief2DDetailThreshold,
+                Relief2DIsolateByColor = Relief2DIsolateByColor,
+                Relief2DDropColorsCsv = Relief2DDropColorsCsv,
+                Relief2DColorTolerance = Relief2DColorTolerance,
                 ApollonianDepth = ApollonianDepth,
                 ApollonianMinPixelRadius = ApollonianMinPixelRadius,
                 ApollonianColorByDepth = ApollonianColorByDepth,

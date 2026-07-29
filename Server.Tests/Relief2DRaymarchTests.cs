@@ -79,6 +79,40 @@ public class Relief2DRaymarchTests
     }
 
     [Fact]
+    public void Isolate_Culls_Background_And_Writes_Transparent()
+    {
+        int w = 320, h = 240;
+        var (albedo, height) = Mandelbrot(w, h);
+
+        var baseP = new FractalParameters
+        {
+            Relief2DEnabled = true,
+            Relief2DRaymarch = true,
+            Relief2DHeightScale = 1.4,
+            Relief2DCameraElevationDeg = 50,
+            Relief2DGroundPlane = false,
+        };
+        var full = new uint[w * h];
+        HeightfieldRaymarch2D.Render(albedo, height, w, h, baseP, full, out double fullFrac);
+
+        var iso = baseP.Clone();
+        iso.Relief2DIsolate = true;
+        iso.Relief2DIsolateByDetail = true;
+        iso.Relief2DDetailThreshold = 0.6;
+        var cut = new uint[w * h];
+        HeightfieldRaymarch2D.Render(albedo, height, w, h, iso, cut, out double isoFrac);
+
+        int transparent = 0;
+        for (int i = 0; i < w * h; i++) if (((cut[i] >> 24) & 0xFF) == 0) transparent++;
+
+        // Isolation removes background (fewer surface hits), keeps some object,
+        // and drops the background to transparent alpha.
+        Assert.True(isoFrac < fullFrac, $"isolate did not cull: {isoFrac} vs {fullFrac}");
+        Assert.True(isoFrac > 0.02, $"isolate culled everything: {isoFrac}");
+        Assert.True(transparent > w * h / 10, $"too few transparent px: {transparent}");
+    }
+
+    [Fact]
     public void Dead_Flat_Field_Is_Passthrough()
     {
         int w = 64, h = 64;
