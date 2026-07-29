@@ -196,30 +196,57 @@ public static class HeightfieldMeshExporter
         // angle. Independent of the on-screen Relief2DHeightScale.
         double meshHeight = Math.Max(0.0, p.Relief2DMeshHeight);
         double sy2 = meshHeight / maxH;
-        // Solid slab: drop the base to a small negative Y so the flat plain has
-        // real thickness and the top surface never coincides with the base (no
-        // z-fighting on the flat regions).
+        // Solid slab: the base sits a slab-thickness below the flat plain so the
+        // top surface never coincides with the base (no z-fighting on the flat
+        // regions). baseThick is that minimum thickness under the plain.
         double reliefTop = sy2 * maxH;
-        double baseY = -0.30 * reliefTop;
+        double baseThick = 0.30 * reliefTop;
+        // Contoured underside: mirror a fraction of the (already smoothed) top
+        // relief down onto the base, so the back carries the fractal contour too
+        // instead of being dead flat. Because it reuses the SAME smoothed height
+        // field, the underside is smooth — no spikes reintroduced. 0 = flat back
+        // (old behaviour), 1 = the back bulges as deep as the top rises.
+        double underScale = Math.Clamp(p.Relief2DMeshUnderside, 0.0, 1.0);
+
+        // Base Y under grid vertex (gx,gy): always >= baseThick below the top, so
+        // the wall is never degenerate (thickness = baseThick + (1+underScale)*topY).
+        double BaseYAt(int gx, int gy) => -baseThick - underScale * hh[gy * gw + gx] * sy2;
 
         // #135 isolation cull mask on the downsampled grid, then morphological
         // cleanup so isolated kept cells (spike pillars) and lone holes vanish.
         bool[] keep = BuildKeepMask(hh, alb, gw, gh, p);
         if (p.Relief2DIsolate) CleanMask(keep, gw, gh);
 
-        // Per-vertex analytic normals from the height field (central diffs in
-        // world space). Smooth shading => the top surface reads continuous, not
-        // faceted, exactly like the raymarch's analytic-normal shading.
+        // World-space top-surface slope at (gx,gy) via central differences —
+        // the basis for both the top and the (mirrored) base analytic normals.
         double dxw = aspect / gw, dzw = 1.0 / gh;
-        (float nx, float ny, float nz) N(int gx, int gy)
+        (double sx, double sz) Slope(int gx, int gy)
         {
             int xl = Math.Max(0, gx - 1), xr = Math.Min(gw - 1, gx + 1);
             int yu = Math.Max(0, gy - 1), yd = Math.Min(gh - 1, gy + 1);
             double dYdX = (hh[gy * gw + xr] - hh[gy * gw + xl]) * sy2 / ((xr - xl) * dxw);
             double dYdZ = (hh[yd * gw + gx] - hh[yu * gw + gx]) * sy2 / ((yd - yu) * dzw);
-            double nx = -dYdX, ny = 1.0, nz = -dYdZ;
+            return (dYdX, dYdZ);
+        }
+        // Top-surface outward (up) normal — smooth shading, faceting gone.
+        (float nx, float ny, float nz) N(int gx, int gy)
+        {
+            var (sx, sz) = Slope(gx, gy);
+            double nx = -sx, ny = 1.0, nz = -sz;
             double nl = Math.Sqrt(nx * nx + ny * ny + nz * nz);
             if (nl < 1e-12) return (0f, 1f, 0f);
+            return ((float)(nx / nl), (float)(ny / nl), (float)(nz / nl));
+        }
+        // Base-surface outward (down) normal. baseY = -baseThick - underScale*topY,
+        // so its slope is -underScale * topSlope; the outward (downward) normal is
+        // (-underScale*sx, -1, -underScale*sz). At underScale 0 this is (0,-1,0),
+        // i.e. the old flat back.
+        (float nx, float ny, float nz) NB(int gx, int gy)
+        {
+            var (sx, sz) = Slope(gx, gy);
+            double nx = -underScale * sx, ny = -1.0, nz = -underScale * sz;
+            double nl = Math.Sqrt(nx * nx + ny * ny + nz * nz);
+            if (nl < 1e-12) return (0f, -1f, 0f);
             return ((float)(nx / nl), (float)(ny / nl), (float)(nz / nl));
         }
 
@@ -264,20 +291,26 @@ public static class HeightfieldMeshExporter
             tris.Add((t00, t11, t10));
             tris.Add((t00, t01, t11));
 
-            // Base at y=baseY (reversed winding, faces down).
-            int b00 = AddV(p00.x, baseY, p00.z, c00, 0f, -1f, 0f);
-            int b10 = AddV(p10.x, baseY, p10.z, c10, 0f, -1f, 0f);
-            int b01 = AddV(p01.x, baseY, p01.z, c01, 0f, -1f, 0f);
-            int b11 = AddV(p11.x, baseY, p11.z, c11, 0f, -1f, 0f);
+            // Base — contoured underside (mirrors the smoothed relief). Reversed
+            // winding, smooth down-facing normals.
+            double y00 = BaseYAt(gx, gy),     y10 = BaseYAt(gx + 1, gy);
+            double y01 = BaseYAt(gx, gy + 1), y11 = BaseYAt(gx + 1, gy + 1);
+            var m00 = NB(gx, gy);     var m10 = NB(gx + 1, gy);
+            var m01 = NB(gx, gy + 1); var m11 = NB(gx + 1, gy + 1);
+            int b00 = AddV(p00.x, y00, p00.z, c00, m00.nx, m00.ny, m00.nz);
+            int b10 = AddV(p10.x, y10, p10.z, c10, m10.nx, m10.ny, m10.nz);
+            int b01 = AddV(p01.x, y01, p01.z, c01, m01.nx, m01.ny, m01.nz);
+            int b11 = AddV(p11.x, y11, p11.z, c11, m11.nx, m11.ny, m11.nz);
             tris.Add((b00, b10, b11));
             tris.Add((b00, b11, b01));
 
             // Skirt walls where a neighbour cell is not part of the object (or
-            // outside the grid) — closes the solid at the object boundary.
-            if (gx == 0 || !CellKept(gx - 1, gy)) AddWall(tris, verts, p00, p01, c00, c01, baseY);
-            if (gx == gw - 2 || !CellKept(gx + 1, gy)) AddWall(tris, verts, p11, p10, c11, c10, baseY);
-            if (gy == 0 || !CellKept(gx, gy - 1)) AddWall(tris, verts, p10, p00, c10, c00, baseY);
-            if (gy == gh - 2 || !CellKept(gx, gy + 1)) AddWall(tris, verts, p01, p11, c01, c11, baseY);
+            // outside the grid) — close the solid from top edge down to the
+            // (contoured) base at each end.
+            if (gx == 0 || !CellKept(gx - 1, gy)) AddWall(tris, verts, p00, p01, c00, c01, y00, y01);
+            if (gx == gw - 2 || !CellKept(gx + 1, gy)) AddWall(tris, verts, p11, p10, c11, c10, y11, y10);
+            if (gy == 0 || !CellKept(gx, gy - 1)) AddWall(tris, verts, p10, p00, c10, c00, y10, y00);
+            if (gy == gh - 2 || !CellKept(gx, gy + 1)) AddWall(tris, verts, p01, p11, c01, c11, y01, y11);
         }
 
         if (tris.Count == 0) return 0;
@@ -289,12 +322,13 @@ public static class HeightfieldMeshExporter
         return tris.Count;
     }
 
-    // A vertical wall quad from the top edge (t0->t1) down to baseY, wound so it
-    // faces outward. Two triangles, flat wall normal.
+    // A vertical wall quad from the top edge (t0->t1) down to the base at each
+    // end (baseY0 under t0, baseY1 under t1), wound so it faces outward. Two
+    // triangles, flat wall normal.
     private static void AddWall(
         List<(int, int, int)> tris, List<Vert> verts,
         (double x, double y, double z) t0, (double x, double y, double z) t1,
-        uint c0, uint c1, double baseY)
+        uint c0, uint c1, double baseY0, double baseY1)
     {
         // Outward horizontal normal of the wall: perpendicular to the top edge,
         // in the XZ plane. Edge dir e = t1 - t0; normal = (e.z, 0, -e.x).
@@ -306,8 +340,8 @@ public static class HeightfieldMeshExporter
 
         int a = verts.Count; verts.Add(new Vert(t0.x, t0.y, t0.z, c0, wnx, 0f, wnz));
         int b = verts.Count; verts.Add(new Vert(t1.x, t1.y, t1.z, c1, wnx, 0f, wnz));
-        int c = verts.Count; verts.Add(new Vert(t1.x, baseY, t1.z, c1, wnx, 0f, wnz));
-        int d = verts.Count; verts.Add(new Vert(t0.x, baseY, t0.z, c0, wnx, 0f, wnz));
+        int c = verts.Count; verts.Add(new Vert(t1.x, baseY1, t1.z, c1, wnx, 0f, wnz));
+        int d = verts.Count; verts.Add(new Vert(t0.x, baseY0, t0.z, c0, wnx, 0f, wnz));
         tris.Add((a, b, c));
         tris.Add((a, c, d));
     }

@@ -190,7 +190,7 @@
                 <Expander Header="Mesh export" HorizontalAlignment="Stretch"
                           IsExpanded="False" Margin="0,8,0,0">
                 <StackPanel Spacing="6">
-                <Grid ColumnDefinitions="150,*,54" RowDefinitions="Auto,Auto,Auto,Auto">
+                <Grid ColumnDefinitions="150,*,54" RowDefinitions="Auto,Auto,Auto,Auto,Auto">
                     <TextBlock Grid.Row="0" Grid.Column="0" Text="Height:" VerticalAlignment="Center"
                                ToolTip.Tip="Relief (emboss) height of the exported mesh. Lower reads as a clean bas-relief from any angle; higher is more dramatic but spikier when viewed from the side. Independent of the on-screen 3D height." />
                     <Slider Grid.Row="0" Grid.Column="1" Minimum="0.02" Maximum="0.6" Margin="0,2"
@@ -224,6 +224,14 @@
                             IsEnabled="{Binding Relief2DRaymarch}" />
                     <TextBlock Grid.Row="3" Grid.Column="2" VerticalAlignment="Center"
                                Text="{Binding Relief2DMeshMaxMB, StringFormat={}{0:F0}}" />
+
+                    <TextBlock Grid.Row="4" Grid.Column="0" Text="Underside:" VerticalAlignment="Center"
+                               ToolTip.Tip="Contour the back of the mesh with the same (smoothed) relief instead of a flat base. 0 = flat back, 1 = the back bulges as deep as the top rises. No spikiness — it reuses the smoothed height field." />
+                    <Slider Grid.Row="4" Grid.Column="1" Minimum="0" Maximum="1" Margin="0,2"
+                            Value="{Binding Relief2DMeshUnderside, Mode=TwoWay}"
+                            IsEnabled="{Binding Relief2DRaymarch}" />
+                    <TextBlock Grid.Row="4" Grid.Column="2" VerticalAlignment="Center"
+                               Text="{Binding Relief2DMeshUnderside, StringFormat={}{0:F2}}" />
                 </Grid>
                 <TextBlock HorizontalAlignment="Right" Opacity="0.75"
                            Text="{Binding Relief2DMeshSizeEstimate, StringFormat=Estimated size: {0}}" />

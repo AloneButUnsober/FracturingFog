@@ -449,6 +449,12 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
         get => _p.Relief2DMeshMaxMB;
         set { double v = Clamp(value, 0.0, 500.0); if (_p.Relief2DMeshMaxMB == v) return; _p.Relief2DMeshMaxMB = v; this.RaisePropertyChanged(); this.RaisePropertyChanged(nameof(Relief2DMeshSizeEstimate)); }
     }
+    /// <summary>Contoured underside [0,1]: 0 = flat back, 1 = full mirrored contour.</summary>
+    public double Relief2DMeshUnderside
+    {
+        get => _p.Relief2DMeshUnderside;
+        set { double v = Clamp(value, 0.0, 1.0); if (_p.Relief2DMeshUnderside == v) return; _p.Relief2DMeshUnderside = v; this.RaisePropertyChanged(); }
+    }
     /// <summary>Rough estimate of the exported OBJ size for the current detail /
     /// budget, shown next to the sliders so the detail↔size trade-off is visible.</summary>
     public string Relief2DMeshSizeEstimate
