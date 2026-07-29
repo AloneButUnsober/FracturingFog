@@ -395,6 +395,12 @@ namespace FracturingFog.Models
         // written transparent (alpha 0) so the kept fractal floats alone and
         // exports as a cutout. Two cull selectors (combinable): local detail and
         // colour-drop. Best paired with ShowSkyBackdrop off + ground plane off.
+        /// <summary>Edge fade for the oblique raymarch: ramp the height field to
+        /// the base plane over this fraction of each image edge, so fractal
+        /// structure that runs off the frame tapers out instead of extruding into
+        /// streaky "arms" at the border. 0 = off. Default 0.04.</summary>
+        public double Relief2DEdgeFade { get; set; } = 0.04;
+
         /// <summary>Master toggle: isolate the kept fractal as a standalone 3D
         /// object over a transparent background. Default false.</summary>
         public bool Relief2DIsolate { get; set; } = false;
@@ -763,6 +769,7 @@ namespace FracturingFog.Models
                 Relief2DBicubicHeight = Relief2DBicubicHeight,
                 Relief2DGroundPlane = Relief2DGroundPlane,
                 Relief2DAutoShade = Relief2DAutoShade,
+                Relief2DEdgeFade = Relief2DEdgeFade,
                 Relief2DIsolate = Relief2DIsolate,
                 Relief2DIsolateByDetail = Relief2DIsolateByDetail,
                 Relief2DDetailThreshold = Relief2DDetailThreshold,

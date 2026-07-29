@@ -42,6 +42,30 @@
               stays compact. The button below opens it; both windows share
               the same FractalParamsViewModel so edits propagate live.
             -->
+            <!-- Relief 3D launcher (#137): the 2D heightfield relief / Oblique
+                 3D raymarch / isolation controls live in their own dialog so
+                 this panel stays compact. Reused for every IsRelief2DApplicable
+                 fractal type. -->
+            <Border IsVisible="{Binding IsRelief2DApplicable}"
+                    BorderBrush="#3C3C3C"
+                    BorderThickness="0,1,0,0"
+                    Margin="0,10,0,0"
+                    Padding="0,8,0,0">
+                <StackPanel Spacing="6">
+                    <TextBlock Text="Relief 3D (2D heightfield)"
+                               FontWeight="Bold"
+                               Foreground="#FFCC00" />
+                    <Button Content="Open Relief 3D…"
+                            Click="OnOpenRelief3DClick"
+                            HorizontalAlignment="Stretch"
+                            HorizontalContentAlignment="Center"
+                            Padding="0,8"
+                            Background="#284C3C"
+                            Foreground="White"
+                            ToolTip.Tip="Open the Relief 3D dialog: raised relief + cast shadows, Oblique 3D raymarch (camera, quality, height curve, edge fade), and isolate-as-object." />
+                </StackPanel>
+            </Border>
+
             <Border IsVisible="{Binding ShowLightingFxLauncher}"
                     BorderBrush="#3C3C3C"
                     BorderThickness="0,1,0,0"
