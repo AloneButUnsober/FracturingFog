@@ -31,7 +31,7 @@ public static class HeightfieldMeshExporter
     /// <paramref name="targetGrid"/> caps the longer grid axis (downsample) so
     /// the file stays manageable. No-op (returns 0) on an all-flat field.</summary>
     public static int Export(uint[] albedo, float[] height, int w, int h,
-                             FractalParameters p, string path, int targetGrid = 300)
+                             FractalParameters p, string path, int targetGrid = 512)
     {
         if (w < 2 || h < 2 || height.Length < w * h) return 0;
 
@@ -42,31 +42,59 @@ public static class HeightfieldMeshExporter
         if (gw < 2 || gh < 2) return 0;
 
         // Compressed + edge-faded height on the downsampled grid (mirror
-        // HeightfieldRaymarch2D). Point-sample the raw field at cell centres.
+        // HeightfieldRaymarch2D). BOX-AVERAGE the raw field over each stride
+        // block instead of point-sampling one pixel: the smooth-count field has
+        // sub-cell filaments, and picking a single pixel per cell aliases them
+        // into isolated radial SPIKES (the "rough hedgehog" mesh). Averaging the
+        // block antialiases the height into the coarse grid so filaments read as
+        // continuous ridges, matching the full-res bicubic raymarch. Albedo is
+        // box-averaged the same way so vertex colour tracks the averaged height.
         var curve = p.Relief2DHeightCurve;
         double edgeFade = Math.Clamp(p.Relief2DEdgeFade, 0.0, 0.5);
         double mxF = Math.Max(1.0, edgeFade * gw), myF = Math.Max(1.0, edgeFade * gh);
         float[] hh = new float[gw * gh];
         uint[] alb = new uint[gw * gh];
-        float maxH = 0f;
         for (int gy = 0; gy < gh; gy++)
         for (int gx = 0; gx < gw; gx++)
         {
-            int sx = Math.Min(w - 1, gx * stride);
-            int sy = Math.Min(h - 1, gy * stride);
-            int si = sy * w + sx;
-            float raw = height[si];
-            float hv = raw <= 0f ? 0f : curve switch
+            int x0 = gx * stride, y0 = gy * stride;
+            int x1 = Math.Min(w, x0 + stride), y1 = Math.Min(h, y0 + stride);
+            double sumRaw = 0.0, aA = 0.0, aR = 0.0, aG = 0.0, aB = 0.0;
+            long cnt = 0;
+            for (int sy = y0; sy < y1; sy++)
+            for (int sx = x0; sx < x1; sx++)
             {
-                HeightCurve2D.Linear => raw,
+                int si = sy * w + sx;
+                float rv = height[si];
+                sumRaw += rv > 0f ? rv : 0f;
+                uint c = (uint)si < (uint)albedo.Length ? albedo[si] : 0xFF808080u;
+                aA += (c >> 24) & 0xFF; aR += (c >> 16) & 0xFF; aG += (c >> 8) & 0xFF; aB += c & 0xFF;
+                cnt++;
+            }
+            double raw = cnt > 0 ? sumRaw / cnt : 0.0;
+            float hv = raw <= 0.0 ? 0f : curve switch
+            {
+                HeightCurve2D.Linear => (float)raw,
                 HeightCurve2D.Sqrt   => (float)Math.Sqrt(raw),
                 _                    => (float)Math.Log(1.0 + raw),
             };
             int gi = gy * gw + gx;
             hh[gi] = hv;
-            alb[gi] = (uint)si < (uint)albedo.Length ? albedo[si] : 0xFF808080u;
-            if (hv > maxH) maxH = hv;
+            alb[gi] = cnt > 0
+                ? ((uint)Math.Round(aA / cnt) << 24) | ((uint)Math.Round(aR / cnt) << 16)
+                  | ((uint)Math.Round(aG / cnt) << 8) | (uint)Math.Round(aB / cnt)
+                : 0xFF808080u;
         }
+
+        // #141 exterior baseline subtraction — the tone curve (esp. Log) lifts
+        // the low far-from-set smooth counts into a raised rectangular PLATEAU
+        // (a tabletop). The raymarch strips it so only boundary structure rises;
+        // the mesh must too, or the exported solid keeps that plateau as its
+        // whole rough base. Same 60th-percentile histogram flatten as the render.
+        SubtractExteriorBaseline(hh);
+
+        float maxH = 0f;
+        for (int i = 0; i < hh.Length; i++) if (hh[i] > maxH) maxH = hh[i];
         if (maxH <= 1e-9f) return 0;
 
         // Edge cap (#140) — pull tall edge structure down to the base plane
@@ -255,6 +283,33 @@ public static class HeightfieldMeshExporter
             keep[i] = !drop;
         }
         return keep;
+    }
+
+    // #141 exterior baseline subtraction, mirroring HeightfieldRaymarch2D.
+    // Subtract a low percentile (60th) of the nonzero heights so the flat
+    // far-from-set plateau drops back to the base plane; only structure rises.
+    private static void SubtractExteriorBaseline(float[] hh)
+    {
+        float hmax = 0f;
+        for (int i = 0; i < hh.Length; i++) { float hv = hh[i]; if (hv > hmax) hmax = hv; }
+        if (hmax <= 1e-9f) return;
+
+        const int B = 512;
+        int[] hist = new int[B];
+        int nz = 0;
+        for (int i = 0; i < hh.Length; i++)
+        {
+            float hv = hh[i];
+            if (hv > 0f) { hist[Math.Clamp((int)(hv / hmax * (B - 1)), 0, B - 1)]++; nz++; }
+        }
+        if (nz == 0) return;
+
+        int target = (int)(0.60 * nz), cum = 0;
+        float baseline = 0f;
+        for (int b = 0; b < B; b++) { cum += hist[b]; if (cum >= target) { baseline = (b + 0.5f) / B * hmax; break; } }
+        if (baseline <= 0f) return;
+        for (int i = 0; i < hh.Length; i++)
+            hh[i] = hh[i] > baseline ? hh[i] - baseline : 0f;
     }
 
     private static double Smoothstep(double t)
