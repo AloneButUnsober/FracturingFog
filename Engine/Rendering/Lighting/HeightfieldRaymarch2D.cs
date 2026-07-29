@@ -203,13 +203,18 @@ public static class HeightfieldRaymarch2D
             };
         }
 
-        // Edge fade (#137) — ramp the height to the base plane over a margin at
-        // each image edge so structure running off the frame tapers out instead
-        // of extruding into streaky border "arms" (visible when panned/zoomed so
-        // the fractal touches an edge). 0 = off.
+        // Edge fade (#137, #140) — pull tall structure near each image edge down
+        // to the base plane so filaments running off the frame taper out instead
+        // of extruding into streaky border "arms". Implemented as a height CAP,
+        // not a multiply: cap = window·maxRaw ramps from 0 at the very edge to
+        // the field max inside the margin, and only heights ABOVE the cap are
+        // lowered. The near-flat exterior stays flat, so the fade no longer lifts
+        // the border into a rectangular lip/ridge (#140). 0 = off.
         double edgeFade = Math.Clamp(p.Relief2DEdgeFade, 0.0, 0.5);
         if (edgeFade > 0.0)
         {
+            float maxRaw = 0f;
+            for (int i = 0; i < n; i++) { float hv = hbuf[i]; if (hv > maxRaw) maxRaw = hv; }
             double mx = Math.Max(1.0, edgeFade * w);
             double my = Math.Max(1.0, edgeFade * h);
             for (int y = 0; y < h; y++)
@@ -222,7 +227,11 @@ public static class HeightfieldRaymarch2D
                     double dx = Math.Min(x, w - 1 - x);
                     double wx = dx >= mx ? 1.0 : Smoothstep(dx / mx);
                     double f = wx * wy;
-                    if (f < 1.0) hbuf[row + x] = (float)(hbuf[row + x] * f);
+                    if (f < 1.0)
+                    {
+                        float cap = (float)(f * maxRaw);
+                        if (hbuf[row + x] > cap) hbuf[row + x] = cap;
+                    }
                 }
             }
         }
