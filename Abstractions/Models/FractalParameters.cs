@@ -359,6 +359,36 @@ namespace FracturingFog.Models
         /// <summary>Vertical field of view of the oblique camera in degrees.
         /// Default 50.</summary>
         public double Relief2DCameraFovDeg { get; set; } = 50.0;
+        /// <summary>Frame-fill zoom for the oblique camera. 1.0 = the auto-framing
+        /// that fills the window with the terrain; &gt;1 pulls the camera in (terrain
+        /// larger, edges may clip); &lt;1 pulls back (more margin). Default 1.0.</summary>
+        public double Relief2DCameraZoom { get; set; } = 1.0;
+
+        // #132 Oblique 3D raymarch fidelity wave.
+        /// <summary>Orthographic (parallel) projection instead of perspective.
+        /// Removes the perspective stretch that grows with frame-fill/FOV — a
+        /// clean "relief-map" look. Default false (perspective).</summary>
+        public bool Relief2DCameraOrthographic { get; set; } = false;
+        /// <summary>Anti-alias supersampling factor: N×N rays per pixel, averaged.
+        /// 1 = off, 2–4 = progressively smoother silhouette/edges at N² cost.
+        /// Default 2.</summary>
+        public int Relief2DSupersample { get; set; } = 2;
+        /// <summary>Tone curve applied to the smooth-count height field before
+        /// raymarching. Default <see cref="HeightCurve2D.Log"/> (tames boundary
+        /// spikes into terrain).</summary>
+        public HeightCurve2D Relief2DHeightCurve { get; set; } = HeightCurve2D.Log;
+        /// <summary>Bicubic (Catmull-Rom) height sampling instead of bilinear —
+        /// smoother terrain on deep zoom, at extra sample cost. Default false.</summary>
+        public bool Relief2DBicubicHeight { get; set; } = false;
+        /// <summary>Render a base ground plane at y=0 around the terrain so the
+        /// silhouette sits on the ground and cast shadows land on it (instead of
+        /// a floating slab against sky). Default true.</summary>
+        public bool Relief2DGroundPlane { get; set; } = true;
+        /// <summary>Auto-fill sensible AO / soft-shadow / specular / ambient
+        /// defaults for the raymarch when the corresponding Lighting FX knobs are
+        /// still at zero, so Oblique 3D looks good out of the box. Explicit
+        /// non-zero user values always win. Default true.</summary>
+        public bool Relief2DAutoShade { get; set; } = true;
 
         // Apollonian gasket (Descartes Circle Theorem recursive packing).
         /// <summary>Maximum recursion depth for the Vieta-jump tree. The
@@ -699,6 +729,13 @@ namespace FracturingFog.Models
                 Relief2DCameraAzimuthDeg = Relief2DCameraAzimuthDeg,
                 Relief2DCameraElevationDeg = Relief2DCameraElevationDeg,
                 Relief2DCameraFovDeg = Relief2DCameraFovDeg,
+                Relief2DCameraZoom = Relief2DCameraZoom,
+                Relief2DCameraOrthographic = Relief2DCameraOrthographic,
+                Relief2DSupersample = Relief2DSupersample,
+                Relief2DHeightCurve = Relief2DHeightCurve,
+                Relief2DBicubicHeight = Relief2DBicubicHeight,
+                Relief2DGroundPlane = Relief2DGroundPlane,
+                Relief2DAutoShade = Relief2DAutoShade,
                 ApollonianDepth = ApollonianDepth,
                 ApollonianMinPixelRadius = ApollonianMinPixelRadius,
                 ApollonianColorByDepth = ApollonianColorByDepth,
