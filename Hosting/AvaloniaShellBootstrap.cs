@@ -1809,6 +1809,35 @@ namespace FracturingFog.Hosting
                         flamePresets: new List<string>(FlamePresets.All.Keys));
                     vm.ParamChanged += () => s_renderHost?.Trigger();
 
+                    // #135 — drop-colour eyedropper: route the params VM's sample
+                    // request through the same platform colour-sample bridge the
+                    // colour-theme editor uses.
+                    vm.SampleColorRequested += (_, args) =>
+                    {
+                        var bridge = BootstrapHooks.ColorSampleBridge;
+                        if (bridge == null || bridge.IsActive)
+                        {
+                            args.Completion.TrySetResult(true);
+                            return;
+                        }
+                        try
+                        {
+                            bridge.Begin(
+                                picked =>
+                                {
+                                    args.PickedR = picked.R;
+                                    args.PickedG = picked.G;
+                                    args.PickedB = picked.B;
+                                    args.Completion.TrySetResult(true);
+                                },
+                                () => args.Completion.TrySetResult(true));
+                        }
+                        catch
+                        {
+                            args.Completion.TrySetResult(true);
+                        }
+                    };
+
                     // #101 — mesh export for the current DE raymarcher. Sampler
                     // builds straight off the live FractalType + params via the
                     // shared factory; marching cubes runs off-thread so the pick
