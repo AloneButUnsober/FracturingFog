@@ -205,6 +205,15 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
         || IsQuatJulia || IsQuatMandelbrot
         || IsBicomplexMandelbrot || IsKleinian
         || FractalType == FractalType.UserBulb;
+
+    /// <summary>Show the "Open Lighting &amp; FX" launcher when the full shading
+    /// stack applies: any 3D raymarcher, OR the Oblique 3D heightfield raymarch
+    /// on a 2D fractal (#133) — the latter routes hits through the same
+    /// <c>ShadingPipeline</c>, so soft shadow / AO / PBR / IBL / volumetric all
+    /// reach it. Notified from the Relief2D toggles below.</summary>
+    public bool ShowLightingFxLauncher =>
+        IsAny3DRaymarcher || (IsRelief2DApplicable && Relief2DEnabled && Relief2DRaymarch);
+
     /// <summary>Visibility flag for the 2D interior-alpha section (issue #96).
     /// True only for the canonical Mandelbrot path — the only 2D family whose
     /// interior alpha the render pipeline currently honours.</summary>
@@ -260,7 +269,7 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
     public bool Relief2DEnabled
     {
         get => _p.Relief2DEnabled;
-        set { if (_p.Relief2DEnabled == value) return; _p.Relief2DEnabled = value; this.RaisePropertyChanged(); Fire(); }
+        set { if (_p.Relief2DEnabled == value) return; _p.Relief2DEnabled = value; this.RaisePropertyChanged(); this.RaisePropertyChanged(nameof(ShowLightingFxLauncher)); Fire(); }
     }
     public double Relief2DHeightScale
     {
@@ -292,7 +301,7 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
     public bool Relief2DRaymarch
     {
         get => _p.Relief2DRaymarch;
-        set { if (_p.Relief2DRaymarch == value) return; _p.Relief2DRaymarch = value; this.RaisePropertyChanged(); Fire(); }
+        set { if (_p.Relief2DRaymarch == value) return; _p.Relief2DRaymarch = value; this.RaisePropertyChanged(); this.RaisePropertyChanged(nameof(ShowLightingFxLauncher)); Fire(); }
     }
     public double Relief2DCameraAzimuthDeg
     {

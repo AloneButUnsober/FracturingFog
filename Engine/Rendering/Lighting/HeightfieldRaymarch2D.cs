@@ -41,6 +41,12 @@ public static class HeightfieldRaymarch2D
     /// and AO read clearly on the ground without smearing fractal colour outward.</summary>
     private const uint FloorAlbedo = 0xFF4C4C58u;
 
+    /// <summary>Flat fill for ray-miss pixels when the sky backdrop is off
+    /// (<c>LightingFxData.ShowSkyBackdrop == false</c>) — a near-black drop so
+    /// the lit 3D object stands alone instead of an HDRI/gradient competing
+    /// behind it. Mirrors the 3D calculators' "InSetColor when off" behaviour.</summary>
+    private const uint DropColor = 0xFF0A0A0Eu;
+
     /// <summary>
     /// Height-field distance estimator over the (compressed) smooth-count buffer.
     /// <c>f(p) = (p.y - h(p.x, p.z)) · invLip</c> — a Lipschitz-normalised lower
@@ -284,6 +290,7 @@ public static class HeightfieldRaymarch2D
         double pixelAngle = ortho ? 0.0 : tanHalf / h;
         int maxSteps = 320;
         bool groundPlane = p.Relief2DGroundPlane;
+        bool showSky = fx.ShowSkyBackdrop;               // #133 — honour the toggle
         double floorBx = bx * 3.0, floorBz = bz * 3.0;   // bounded floor → horizon keeps sky
 
         // One primary sample. Returns the shaded colour + whether it hit the
@@ -379,7 +386,9 @@ public static class HeightfieldRaymarch2D
                     }
                 }
             }
-            return (ShadingPipeline.SkyColorHdri(rdx, rdy, rdz, in fx), false);
+            // #133 — respect Show-sky-backdrop: HDRI/gradient only when on,
+            // else a flat drop so the 3D object stands alone.
+            return (showSky ? ShadingPipeline.SkyColorHdri(rdx, rdy, rdz, in fx) : DropColor, false);
         }
 
         int ss = Math.Clamp(p.Relief2DSupersample, 1, 4);
