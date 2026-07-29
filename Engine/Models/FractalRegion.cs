@@ -263,9 +263,17 @@ namespace FracturingFog.Models
             => LightingOverride?.ApplyTo(parameters);
 
         /// <summary>Apply this region's Relief 3D snapshot (if any) to the given
-        /// params. No-op when null.</summary>
+        /// params. No-op when null (leaves the current relief state alone).</summary>
         public void ApplyRelief3DTo(FractalParameters parameters)
             => Relief3D?.ApplyTo(parameters);
+
+        /// <summary>Authoritatively set the relief state from this region: restore
+        /// the saved relief when present, or turn relief OFF when the region has
+        /// none. Use on region-to-region recall so relief toggles with the
+        /// selection (a plain region clears a relief view). Contrast with
+        /// <see cref="ApplyRelief3DTo"/> which leaves relief untouched on null.</summary>
+        public void ApplyRelief3DAuthoritative(FractalParameters parameters)
+            => Relief3DSettings.ApplyOrDisable(Relief3D, parameters);
 
         /// <summary>
         /// Region type (built-in or user-defined).  This is not serialized to JSON; instead, all loaded regions are
@@ -460,6 +468,17 @@ namespace FracturingFog.Models
         public int MeshGrid { get; set; } = 512;
         public double MeshMaxMB { get; set; } = 0.0;
         public double MeshUnderside { get; set; } = 0.6;
+
+        /// <summary>Apply <paramref name="s"/> when non-null, otherwise turn
+        /// relief OFF on <paramref name="p"/>. The authoritative recall path so a
+        /// plain (no-relief) region clears a relief view instead of leaving it on.</summary>
+        public static void ApplyOrDisable(Relief3DSettings? s, FractalParameters p)
+        {
+            if (p == null) return;
+            if (s != null) { s.ApplyTo(p); return; }
+            p.Relief2DEnabled = false;
+            p.Relief2DRaymarch = false;
+        }
 
         /// <summary>Capture the relief block from a live params, or null when
         /// relief is off (so plain regions stay clean).</summary>

@@ -52,6 +52,11 @@
                                ToolTip.Tip="Deband strength (0–100, default 100 = full ±0.5-LSB spread)." />
                     <CheckBox  Grid.Row="4" Grid.Column="0" Grid.ColumnSpan="2" Content="Alpha preview" IsChecked="{Binding Menu.AlphaPreview}" Margin="0,4,6,0"
                                ToolTip.Tip="Preview per-stop alpha over a checkerboard so translucent theme stops read as see-through on screen. Display-only — saved PNGs keep straight alpha. Off by default." />
+                    <!-- Lock Relief 3D — right of Alpha preview. Off: relief follows
+                         the region (on for relief regions, off for plain). On: relief
+                         stays as the user has it regardless of the region. -->
+                    <CheckBox  Grid.Row="4" Grid.Column="2" IsChecked="{Binding Menu.ReliefLocked}" Margin="0,4,0,0"
+                               ToolTip.Tip="Lock Relief 3D. Off = Relief 3D turns on/off with the selected region. On = Relief 3D stays as-is regardless of the region's saved setting." />
 
                     <!-- Not fxLabel: that style fixes Width=84, which clipped
                          "Lock Lighting & FX". Inline the bold/alt-foreground and
