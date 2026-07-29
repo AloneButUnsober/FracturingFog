@@ -182,8 +182,10 @@
                           IsChecked="{Binding Relief2DEnabled, Mode=TwoWay}"
                           ToolTip.Tip="Treats the escape potential as a height field and adds real raised relief + horizon cast shadows on top of the active theme. Reads best on smooth (non-noisy) themes and when zoomed into filament structure." />
 
-                <Grid ColumnDefinitions="160,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto"
-                      IsEnabled="{Binding Relief2DEnabled}">
+                <Expander Header="Relief lighting" HorizontalAlignment="Stretch"
+                          IsExpanded="{Binding Relief2DEnabled}"
+                          IsEnabled="{Binding Relief2DEnabled}">
+                <Grid ColumnDefinitions="160,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto">
                     <TextBlock Grid.Row="0" Grid.Column="0" Text="Height scale:" VerticalAlignment="Center"
                                ToolTip.Tip="Vertical exaggeration. Higher = deeper carving and longer shadows." />
                     <NumericUpDown Grid.Row="0" Grid.Column="1"
@@ -212,14 +214,18 @@
                     <Slider Grid.Row="4" Grid.Column="1" Minimum="0" Maximum="1"
                             Value="{Binding Relief2DStrength, Mode=TwoWay}" Margin="0,2" />
                 </Grid>
+                </Expander>
 
                 <!-- Phase 2 — oblique 3D raymarch -->
                 <CheckBox Content="Oblique 3D raymarch (perspective + volumetric)"
                           IsChecked="{Binding Relief2DRaymarch, Mode=TwoWay}"
                           IsEnabled="{Binding Relief2DEnabled}"
                           ToolTip.Tip="Replaces the flat image with a true 3D raymarch of the height field from an oblique camera: real perspective relief, a silhouette, and volumetric fog / god-rays (set Fog density + Volume steps in the Lighting FX dialog). Heavier than the screen-space relief above." />
-                <Grid ColumnDefinitions="160,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto"
-                      IsEnabled="{Binding Relief2DRaymarch}">
+                <Expander Header="Camera &amp; quality" HorizontalAlignment="Stretch"
+                          IsExpanded="{Binding Relief2DRaymarch}"
+                          IsEnabled="{Binding Relief2DRaymarch}">
+                <StackPanel Spacing="6">
+                <Grid ColumnDefinitions="160,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto">
                     <TextBlock Grid.Row="0" Grid.Column="0" Text="Camera azimuth (°):" VerticalAlignment="Center"
                                ToolTip.Tip="Orbit the terrain around the up axis. 0 = looking straight at the scene." />
                     <NumericUpDown Grid.Row="0" Grid.Column="1"
@@ -273,14 +279,20 @@
                           IsChecked="{Binding Relief2DAutoShade, Mode=TwoWay}"
                           IsEnabled="{Binding Relief2DRaymarch}"
                           ToolTip.Tip="Fills sensible ambient-occlusion, soft-shadow and specular defaults for the 3D view whenever those Lighting FX knobs are still at zero. Any value you set explicitly in the Lighting FX dialog always wins." />
+                </StackPanel>
+                </Expander>
 
                 <!-- #135 — isolate filaments as a standalone 3D object -->
                 <CheckBox Content="Isolate object (drop background → transparent)"
                           IsChecked="{Binding Relief2DIsolate, Mode=TwoWay}"
                           IsEnabled="{Binding Relief2DRaymarch}"
                           ToolTip.Tip="Keep only the selected fractal structure as a standalone 3D object over a transparent background (exports as a cutout). Best paired with Show-sky-backdrop OFF (Lighting FX) and the base ground plane OFF." />
+                <Expander Header="Isolation cull" HorizontalAlignment="Stretch"
+                          IsExpanded="{Binding Relief2DIsolate}"
+                          IsEnabled="{Binding Relief2DIsolate}">
+                <StackPanel Spacing="6">
                 <Grid ColumnDefinitions="160,*" RowDefinitions="Auto,Auto,Auto"
-                      IsEnabled="{Binding Relief2DIsolate}" Margin="16,0,0,0">
+                      Margin="0,0,0,0">
                     <CheckBox Grid.Row="0" Grid.Column="0" Grid.ColumnSpan="2"
                               Content="Drop low-detail (keep filaments)"
                               IsChecked="{Binding Relief2DIsolateByDetail, Mode=TwoWay}"
@@ -301,16 +313,24 @@
                               IsChecked="{Binding Relief2DIsolateByColor, Mode=TwoWay}"
                               ToolTip.Tip="Also cull cells whose themed colour matches the listed colours within the tolerance." />
                     <TextBlock Grid.Row="1" Grid.Column="0" Text="Drop colours (hex):" VerticalAlignment="Center"
-                               ToolTip.Tip="Comma-separated RGB or ARGB hex, e.g. FF102030, 405060. These colours are removed." />
-                    <TextBox Grid.Row="1" Grid.Column="1" Margin="0,2" Watermark="FF102030, 405060"
-                             Text="{Binding Relief2DDropColorsCsv, Mode=TwoWay}"
-                             IsEnabled="{Binding Relief2DIsolateByColor}" />
+                               ToolTip.Tip="Comma-separated RGB or ARGB hex, e.g. FF102030, 405060. These colours are removed. Use Pick to eyedrop a colour from the screen." />
+                    <Grid Grid.Row="1" Grid.Column="1" ColumnDefinitions="*,Auto" Margin="0,2">
+                        <TextBox Grid.Column="0" Watermark="FF102030, 405060"
+                                 Text="{Binding Relief2DDropColorsCsv, Mode=TwoWay}"
+                                 IsEnabled="{Binding Relief2DIsolateByColor}" />
+                        <Button Grid.Column="1" Content="Pick" Margin="6,0,0,0"
+                                Command="{Binding PickDropColorCommand}"
+                                IsEnabled="{Binding Relief2DIsolate}"
+                                ToolTip.Tip="Eyedrop a colour from anywhere on screen and add it to the drop list." />
+                    </Grid>
                     <TextBlock Grid.Row="2" Grid.Column="0" Text="Colour tolerance:" VerticalAlignment="Center"
                                ToolTip.Tip="How close a cell colour must be to a drop colour to be removed. Higher = drops a wider range." />
                     <Slider Grid.Row="2" Grid.Column="1" Minimum="0" Maximum="1" Margin="0,2"
                             Value="{Binding Relief2DColorTolerance, Mode=TwoWay}"
                             IsEnabled="{Binding Relief2DIsolateByColor}" />
                 </Grid>
+                </StackPanel>
+                </Expander>
             </StackPanel>
         </Border>
 

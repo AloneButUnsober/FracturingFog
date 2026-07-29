@@ -146,6 +146,28 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
         ToggleJuliaAnimateCommand   = ReactiveCommand.Create(ToggleJuliaAnimate);
         ToggleLSystemSweepCommand   = ReactiveCommand.Create(ToggleLSystemSweep);
         ExportMeshCommand           = ReactiveCommand.Create(() => ExportMeshRequested?.Invoke());
+        PickDropColorCommand        = ReactiveCommand.CreateFromTask(PickDropColorAsync);
+    }
+
+    /// <summary>#135 — raised when the user asks to eyedrop a drop-colour. The
+    /// host (AvaloniaShellBootstrap) drives the platform colour sampler and fills
+    /// the args, mirroring the colour-theme editor's eyedropper.</summary>
+    public event EventHandler<ThemeSampleColorEventArgs>? SampleColorRequested;
+
+    /// <summary>Eyedrop a screen colour and append it to the isolate drop-colour
+    /// list, enabling the colour cull on the first pick.</summary>
+    private async System.Threading.Tasks.Task PickDropColorAsync()
+    {
+        var args = new ThemeSampleColorEventArgs();
+        var handler = SampleColorRequested;
+        handler?.Invoke(this, args);
+        if (handler == null) { args.Completion.TrySetResult(true); return; }
+        await args.Completion.Task;
+        if (args.PickedR == null) return;
+        string hex = $"FF{args.PickedR.Value:X2}{args.PickedG!.Value:X2}{args.PickedB!.Value:X2}";
+        string cur = _p.Relief2DDropColorsCsv ?? "";
+        Relief2DDropColorsCsv = string.IsNullOrWhiteSpace(cur) ? hex : cur.TrimEnd() + ", " + hex;
+        Relief2DIsolateByColor = true;
     }
 
     /// <summary>Stop any running parameter animation. Host calls this when the
@@ -1002,6 +1024,7 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
         || IsKleinian || IsBicomplexMandelbrot;
 
     public ReactiveCommand<Unit, Unit> ExportMeshCommand { get; }
+    public ReactiveCommand<Unit, Unit> PickDropColorCommand { get; }
 
     private void Fire()
     {
