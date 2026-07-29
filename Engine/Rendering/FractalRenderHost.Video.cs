@@ -1521,6 +1521,8 @@ namespace FracturingFog.Rendering
             // constant, Newton exponent, Apollonian knobs, …). No-op for
             // Mandelbrot + legacy regions (null Params).
             region.Params?.ApplyTo(p);
+            // Relief 3D snapshot (null = leave current relief alone).
+            region.Relief3D?.ApplyTo(p);
         }
 
         private void ApplyVideoFrameState(QDCoord cx, QDCoord cy, double zoom)
@@ -1808,6 +1810,7 @@ namespace FracturingFog.Rendering
                 // applied silently below (no present — we cross-fade explicitly).
                 ViewState.FractalType = region.FractalType;
                 region.Params?.ApplyTo(ViewState.FractalParameters);
+                region.Relief3D?.ApplyTo(ViewState.FractalParameters);
                 _videoTargetIterations = region.Iterations;
 
                 if (reverse)
