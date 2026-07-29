@@ -64,6 +64,19 @@
   </ItemGroup>
 
   <!--
+    S-X11 (2026-07-28, issue #123) — managed D-Bus for the Linux Wayland
+    eyedropper (PortalColorSampleBridge → xdg-desktop-portal PickColor). NOT a
+    genuinely new dependency: Avalonia already drags Tmds.DBus.Protocol in
+    transitively on Linux; this promotes it to an explicit ref so the portal
+    bridge binds a known API surface instead of an incidental transitive. Pinned
+    to Avalonia's current 0.92.0 — NuGet takes max(explicit, transitive), so a
+    later Avalonia bump still wins and this never forces a downgrade.
+  -->
+  <ItemGroup>
+    <PackageReference Include="Tmds.DBus.Protocol" Version="0.92.0" />
+  </ItemGroup>
+
+  <!--
     Strip the Avalonia analyzer chain transitively imported via the
     UI.Avalonia project reference. Same workaround as FracturingFogCLD.csproj.
   -->
