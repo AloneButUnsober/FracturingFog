@@ -203,6 +203,30 @@ public static class HeightfieldRaymarch2D
             };
         }
 
+        // Edge fade (#137) — ramp the height to the base plane over a margin at
+        // each image edge so structure running off the frame tapers out instead
+        // of extruding into streaky border "arms" (visible when panned/zoomed so
+        // the fractal touches an edge). 0 = off.
+        double edgeFade = Math.Clamp(p.Relief2DEdgeFade, 0.0, 0.5);
+        if (edgeFade > 0.0)
+        {
+            double mx = Math.Max(1.0, edgeFade * w);
+            double my = Math.Max(1.0, edgeFade * h);
+            for (int y = 0; y < h; y++)
+            {
+                double dy = Math.Min(y, h - 1 - y);
+                double wy = dy >= my ? 1.0 : Smoothstep(dy / my);
+                int row = y * w;
+                for (int x = 0; x < w; x++)
+                {
+                    double dx = Math.Min(x, w - 1 - x);
+                    double wx = dx >= mx ? 1.0 : Smoothstep(dx / mx);
+                    double f = wx * wy;
+                    if (f < 1.0) hbuf[row + x] = (float)(hbuf[row + x] * f);
+                }
+            }
+        }
+
         // Compressed height field → world scale. Normalise to [0,1], then
         // exaggerate by the height-scale knob. 0.35 keeps peaks well inside the
         // unit domain so the oblique camera frames the whole terrain.
@@ -473,6 +497,14 @@ public static class HeightfieldRaymarch2D
     // Parallel.For only reads it via the HeightDe.
     private static float[]? s_compressed;
     private static byte[]? s_keep;   // #135 isolation cull mask scratch
+
+    /// <summary>Smoothstep on [0,1] (3t²−2t³).</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static double Smoothstep(double t)
+    {
+        t = Math.Clamp(t, 0.0, 1.0);
+        return t * t * (3.0 - 2.0 * t);
+    }
 
     /// <summary>#135 — build the per-cell keep mask (0 = culled). Returns null
     /// when isolation is off or no cull selector is active (keep everything; the

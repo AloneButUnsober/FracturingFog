@@ -25,6 +25,7 @@ namespace FracturingFog.UI.Avalonia.Views;
 public sealed partial class FractalParamsView : UserControl
 {
     private PanelHostWindow? _lightingFxWin;
+    private PanelHostWindow? _relief3DWin;
 
     public FractalParamsView()
     {
@@ -47,7 +48,37 @@ public sealed partial class FractalParamsView : UserControl
             (DataContext as FractalParamsViewModel)?.StopAnimations();
             _lightingFxWin?.Close();
             _lightingFxWin = null;
+            _relief3DWin?.Close();
+            _relief3DWin = null;
         };
+    }
+
+    /// <summary>Open or re-focus the Relief 3D dialog (#137). Shares this view's
+    /// FractalParamsViewModel so every Relief2D* edit fires ParamChanged through
+    /// the same path as the other params.</summary>
+    private void OnOpenRelief3DClick(object? sender, RoutedEventArgs e)
+    {
+        if (_relief3DWin is { IsVisible: true })
+        {
+            _relief3DWin.Activate();
+            return;
+        }
+
+        _relief3DWin = new PanelHostWindow(
+            new Relief3DDialog(),
+            new PanelHostOptions(
+                "Relief 3D",
+                Width: 480, Height: 720, MinWidth: 420, MinHeight: 400,
+                SizeToContentHeight: false, CanResize: true, ShowInTaskbar: true,
+                StartupLocation: WindowStartupLocation.CenterOwner,
+                Background: new SolidColorBrush(Color.FromRgb(0x28, 0x28, 0x28))))
+        {
+            DataContext = DataContext,
+        };
+        _relief3DWin.Closed += (_, _) => _relief3DWin = null;
+        var owner = TopLevel.GetTopLevel(this) as Window;
+        if (owner != null) _relief3DWin.Show(owner);
+        else _relief3DWin.Show();
     }
 
     // The VM's Close button routes to the host window (a UserControl can't
