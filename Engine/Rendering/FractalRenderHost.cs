@@ -1894,9 +1894,39 @@ namespace FracturingFog.Rendering
                     Dbg86($"PREVIEW  seq={job.Seq} stage={job.ProgressiveStage} claimed={claimedP} lastSeq={_lastPresentedUploadSeq} {preview.Width}x{preview.Height}");
                     if (claimedP)
                     {
+                    // #131 — apply the heightfield relief to the PREVIEW buffer at
+                    // preview dims too. Without this a pan flashes between the flat
+                    // low-res 2D preview (uploaded here) and the 3D relief final
+                    // frame. The preview is a MandelbrotCalculator, so it exposes
+                    // its own SmoothBuffer at preview resolution; the raymarch is
+                    // cheap at quarter/half and frames identically (aspect-based),
+                    // so the 3D preview lines up with the final — no flash, no jump.
+                    uint[] previewSrc = preview.ColorBuffer;
+                    int pw = preview.Width, ph = preview.Height, pn = pw * ph;
+                    {
+                        var rp = ViewState.FractalParameters;
+                        var phs = (preview as Interefaces.IHeightFieldSource)?.SmoothBuffer;
+                        if (rp.Relief2DEnabled && phs != null && pn > 0
+                            && phs.Length >= pn && previewSrc != null && previewSrc.Length >= pn)
+                        {
+                            // Force supersample off for the preview (speed); the
+                            // final frame keeps the user's AA setting.
+                            var prp = rp.Relief2DSupersample > 1 ? rp.Clone() : rp;
+                            if (!ReferenceEquals(prp, rp)) prp.Relief2DSupersample = 1;
+                            if (_reliefPreviewScratch == null || _reliefPreviewScratch.Length < pn)
+                                _reliefPreviewScratch = new uint[pn];
+                            if (prp.Relief2DRaymarch)
+                                FracturingFog.Rendering.Lighting.HeightfieldRaymarch2D.Render(
+                                    previewSrc, phs, pw, ph, prp, _reliefPreviewScratch);
+                            else
+                                FracturingFog.Rendering.Lighting.HeightfieldRelief2D.Apply(
+                                    previewSrc, _reliefPreviewScratch, phs, pw, ph, prp);
+                            previewSrc = _reliefPreviewScratch;
+                        }
+                    }
                     lock (_d3dGate)
                     {
-                        _renderer.UpdateTexture(preview.ColorBuffer, preview.Width, preview.Height);
+                        _renderer.UpdateTexture(previewSrc, pw, ph);
                         _renderer.Render();
                     }
 
@@ -1904,15 +1934,13 @@ namespace FracturingFog.Rendering
                     // _lastPresentedBuffer so the next stale-upload (e.g.
                     // pan-stop debounce Trigger) re-paints the panned preview
                     // instead of the pre-pan full-res frame held in
-                    // _lastUploadedBuffer. Pinned scratch pool grows lazily.
-                    int pw = preview.Width;
-                    int ph = preview.Height;
-                    int pn = pw * ph;
-                    if (pn > 0 && preview.ColorBuffer != null && preview.ColorBuffer.Length >= pn)
+                    // _lastUploadedBuffer. Snapshot the RELIEF-applied buffer so
+                    // the debounce repaint stays 3D too. Pinned pool grows lazily.
+                    if (pn > 0 && previewSrc != null && previewSrc.Length >= pn)
                     {
                         if (_uploadPreviewPool == null || _uploadPreviewPool.Length < pn)
                             _uploadPreviewPool = GC.AllocateUninitializedArray<uint>(pn, pinned: true);
-                        Array.Copy(preview.ColorBuffer, _uploadPreviewPool, pn);
+                        Array.Copy(previewSrc, _uploadPreviewPool, pn);
                         _lastPresentedBuffer = _uploadPreviewPool;
                         _lastPresentedWidth = pw;
                         _lastPresentedHeight = ph;
@@ -2814,6 +2842,7 @@ namespace FracturingFog.Rendering
         private bool _reliefValid;
         private int _reliefW, _reliefH;
         private uint[]? _reliefColorScratch;
+        private uint[]? _reliefPreviewScratch;   // #131 — relief applied to the pan preview
 
         private void UploadProcessedBuffer(uint[] src, int w, int h, bool srcAlreadyProcessed = false)
         {

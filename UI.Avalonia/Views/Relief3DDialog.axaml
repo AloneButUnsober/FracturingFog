@@ -186,6 +186,50 @@
                         Background="#283C50" Foreground="White"
                         ToolTip.Tip="Open the full Lighting / Shading / Post-process dialog (soft shadows, AO, PBR, IBL/HDRI, reflections, volumetric fog, sky backdrop)." />
 
+                <!-- #138 — mesh export knobs -->
+                <Expander Header="Mesh export" HorizontalAlignment="Stretch"
+                          IsExpanded="False" Margin="0,8,0,0">
+                <StackPanel Spacing="6">
+                <Grid ColumnDefinitions="150,*,54" RowDefinitions="Auto,Auto,Auto,Auto">
+                    <TextBlock Grid.Row="0" Grid.Column="0" Text="Height:" VerticalAlignment="Center"
+                               ToolTip.Tip="Relief (emboss) height of the exported mesh. Lower reads as a clean bas-relief from any angle; higher is more dramatic but spikier when viewed from the side. Independent of the on-screen 3D height." />
+                    <Slider Grid.Row="0" Grid.Column="1" Minimum="0.02" Maximum="0.6" Margin="0,2"
+                            Value="{Binding Relief2DMeshHeight, Mode=TwoWay}"
+                            IsEnabled="{Binding Relief2DRaymarch}" />
+                    <TextBlock Grid.Row="0" Grid.Column="2" VerticalAlignment="Center"
+                               Text="{Binding Relief2DMeshHeight, StringFormat={}{0:F2}}" />
+
+                    <TextBlock Grid.Row="1" Grid.Column="0" Text="Smoothing:" VerticalAlignment="Center"
+                               ToolTip.Tip="0 = raw detail (spiky), 1 = heavy smoothing (despike + merge dendrites into a clean ridge). 0.5 is the tuned default." />
+                    <Slider Grid.Row="1" Grid.Column="1" Minimum="0" Maximum="1" Margin="0,2"
+                            Value="{Binding Relief2DMeshSmoothing, Mode=TwoWay}"
+                            IsEnabled="{Binding Relief2DRaymarch}" />
+                    <TextBlock Grid.Row="1" Grid.Column="2" VerticalAlignment="Center"
+                               Text="{Binding Relief2DMeshSmoothing, StringFormat={}{0:F2}}" />
+
+                    <TextBlock Grid.Row="2" Grid.Column="0" Text="Detail (grid):" VerticalAlignment="Center"
+                               ToolTip.Tip="Grid resolution on the longer axis. Higher = finer fractal detail AND a bigger file." />
+                    <Slider Grid.Row="2" Grid.Column="1" Minimum="128" Maximum="1536" Margin="0,2"
+                            TickFrequency="64" IsSnapToTickEnabled="True"
+                            Value="{Binding Relief2DMeshGrid, Mode=TwoWay}"
+                            IsEnabled="{Binding Relief2DRaymarch}" />
+                    <TextBlock Grid.Row="2" Grid.Column="2" VerticalAlignment="Center"
+                               Text="{Binding Relief2DMeshGrid}" />
+
+                    <TextBlock Grid.Row="3" Grid.Column="0" Text="File size cap (MB):" VerticalAlignment="Center"
+                               ToolTip.Tip="Upper bound on the exported file. When above 0, the grid is clamped down so the estimate stays under this size. 0 = unlimited." />
+                    <Slider Grid.Row="3" Grid.Column="1" Minimum="0" Maximum="50" Margin="0,2"
+                            TickFrequency="1" IsSnapToTickEnabled="True"
+                            Value="{Binding Relief2DMeshMaxMB, Mode=TwoWay}"
+                            IsEnabled="{Binding Relief2DRaymarch}" />
+                    <TextBlock Grid.Row="3" Grid.Column="2" VerticalAlignment="Center"
+                               Text="{Binding Relief2DMeshMaxMB, StringFormat={}{0:F0}}" />
+                </Grid>
+                <TextBlock HorizontalAlignment="Right" Opacity="0.75"
+                           Text="{Binding Relief2DMeshSizeEstimate, StringFormat=Estimated size: {0}}" />
+                </StackPanel>
+                </Expander>
+
                 <!-- #138 — export the 3D object as a mesh -->
                 <Button Content="Export mesh (OBJ / STL)…"
                         Command="{Binding ExportReliefMeshCommand}"
@@ -193,7 +237,7 @@
                         HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"
                         Padding="0,8" Margin="0,4,0,0"
                         Background="#284C3C" Foreground="White"
-                        ToolTip.Tip="Export the current Oblique 3D object as a watertight mesh (OBJ with vertex colour, or binary STL). Honours the height curve, edge fade and isolation cull so the mesh matches the on-screen cutout." />
+                        ToolTip.Tip="Export the current Oblique 3D object as a watertight mesh (OBJ with vertex colour + smooth normals, or binary STL). Honours the mesh height / smoothing / detail knobs and the isolation cull." />
             </StackPanel>
         </ScrollViewer>
 
