@@ -203,6 +203,38 @@ public static class HeightfieldRaymarch2D
             };
         }
 
+        // Exterior baseline subtraction (#141) — the tone curve (esp. Log) lifts
+        // the low far-from-set smooth counts into a raised rectangular PLATEAU
+        // (a tabletop) whose clipped domain boundary reads as a persistent
+        // rectangle at the fractal plane. Subtract a low percentile of the
+        // nonzero heights so the far exterior sits back on the base plane and
+        // only the boundary structure rises; the plateau — and its rectangle —
+        // disappears, the same way it does when the user zooms in.
+        {
+            float hmax = 0f;
+            for (int i = 0; i < n; i++) { float hv = hbuf[i]; if (hv > hmax) hmax = hv; }
+            if (hmax > 1e-9f)
+            {
+                const int B = 512;
+                Span<int> hist = stackalloc int[B];
+                int nz = 0;
+                for (int i = 0; i < n; i++)
+                {
+                    float hv = hbuf[i];
+                    if (hv > 0f) { hist[Math.Clamp((int)(hv / hmax * (B - 1)), 0, B - 1)]++; nz++; }
+                }
+                if (nz > 0)
+                {
+                    int target = (int)(0.60 * nz), cum = 0;
+                    float baseline = 0f;
+                    for (int b = 0; b < B; b++) { cum += hist[b]; if (cum >= target) { baseline = (b + 0.5f) / B * hmax; break; } }
+                    if (baseline > 0f)
+                        for (int i = 0; i < n; i++)
+                            hbuf[i] = hbuf[i] > baseline ? hbuf[i] - baseline : 0f;
+                }
+            }
+        }
+
         // Edge fade (#137, #140) — pull tall structure near each image edge down
         // to the base plane so filaments running off the frame taper out instead
         // of extruding into streaky border "arms". Implemented as a height CAP,
@@ -213,8 +245,6 @@ public static class HeightfieldRaymarch2D
         double edgeFade = Math.Clamp(p.Relief2DEdgeFade, 0.0, 0.5);
         if (edgeFade > 0.0)
         {
-            float maxRaw = 0f;
-            for (int i = 0; i < n; i++) { float hv = hbuf[i]; if (hv > maxRaw) maxRaw = hv; }
             double mx = Math.Max(1.0, edgeFade * w);
             double my = Math.Max(1.0, edgeFade * h);
             for (int y = 0; y < h; y++)
@@ -227,11 +257,7 @@ public static class HeightfieldRaymarch2D
                     double dx = Math.Min(x, w - 1 - x);
                     double wx = dx >= mx ? 1.0 : Smoothstep(dx / mx);
                     double f = wx * wy;
-                    if (f < 1.0)
-                    {
-                        float cap = (float)(f * maxRaw);
-                        if (hbuf[row + x] > cap) hbuf[row + x] = cap;
-                    }
+                    if (f < 1.0) hbuf[row + x] = (float)(hbuf[row + x] * f);
                 }
             }
         }
@@ -417,7 +443,37 @@ public static class HeightfieldRaymarch2D
                     var si = new ShadingInputs(
                         hx, hy, hz, nx, ny, nz, rdx, rdy, rdz,
                         totalT: tf, hitDist: d, hitStep: 0, epsilon: eps0);
-                    return (ShadingPipeline.Shade<HeightDe>(in si, alb, in fx, in de, true), true);
+                    uint tcol = ShadingPipeline.Shade<HeightDe>(in si, alb, in fx, in de, true);
+
+                    // #141 — dissolve the terrain FOOTPRINT edge into whatever is
+                    // behind it. The height field has a rectangular extent
+                    // ([-bx,bx]×[-bz,bz] = the image); its flat exterior sits at a
+                    // level and is clipped to that rectangle, so the footprint
+                    // reads as a persistent rectangle at the fractal plane. Blend
+                    // the terrain colour toward the behind-surface over the outer
+                    // margin — the floor directly below when the ground plane is
+                    // on (seamless, they are coplanar), else the sky/drop — so the
+                    // boundary dissolves rather than drawing a rectangle.
+                    double edgeT = Math.Max(Math.Abs(hx) / bx, Math.Abs(hz) / bz);
+                    if (edgeT > 0.72)
+                    {
+                        double fade = Smoothstep((edgeT - 0.72) / 0.28);
+                        uint behind;
+                        if (groundPlane)
+                        {
+                            var fgi = new ShadingInputs(
+                                hx, 0.0, hz, 0.0, 1.0, 0.0, rdx, rdy, rdz,
+                                totalT: tf, hitDist: 0.0, hitStep: 0, epsilon: eps0);
+                            behind = ShadingPipeline.Shade<HeightDe>(in fgi, FloorAlbedo, in fx, in de, true);
+                        }
+                        else
+                        {
+                            behind = showSky ? ShadingPipeline.SkyColorHdri(rdx, rdy, rdz, in fx) : DropColor;
+                            if (isolate) behind &= 0x00FFFFFFu;
+                        }
+                        tcol = BlendArgb(tcol, behind, fade);
+                    }
+                    return (tcol, true);
                 }
             }
 
@@ -513,6 +569,19 @@ public static class HeightfieldRaymarch2D
     {
         t = Math.Clamp(t, 0.0, 1.0);
         return t * t * (3.0 - 2.0 * t);
+    }
+
+    /// <summary>Per-channel lerp of two packed ARGB colours by t (0 = a, 1 = b),
+    /// alpha included so the terrain can dissolve toward a transparent background.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static uint BlendArgb(uint a, uint b, double t)
+    {
+        double it = 1.0 - t;
+        uint A = (uint)(((a >> 24) & 0xFF) * it + ((b >> 24) & 0xFF) * t + 0.5);
+        uint R = (uint)(((a >> 16) & 0xFF) * it + ((b >> 16) & 0xFF) * t + 0.5);
+        uint G = (uint)(((a >> 8) & 0xFF) * it + ((b >> 8) & 0xFF) * t + 0.5);
+        uint B = (uint)((a & 0xFF) * it + (b & 0xFF) * t + 0.5);
+        return (A << 24) | (R << 16) | (G << 8) | B;
     }
 
     /// <summary>#135 — build the per-cell keep mask (0 = culled). Returns null
