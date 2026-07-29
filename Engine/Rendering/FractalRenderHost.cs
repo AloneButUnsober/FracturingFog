@@ -2670,6 +2670,36 @@ namespace FracturingFog.Rendering
             }
         }
 
+        /// <summary>#138 — expose the active 2D calculator's height field + flat
+        /// albedo for heightfield mesh export. Returns false when the active
+        /// fractal doesn't provide an <see cref="Interefaces.IHeightFieldSource"/>
+        /// (3D raymarchers, IFS, etc.). Buffers are the calculator's live arrays;
+        /// the caller must copy/consume on the same frame.</summary>
+        public bool TryGetHeightFieldExport(out uint[] albedo, out float[] height,
+                                            out int w, out int h)
+        {
+            albedo = Array.Empty<uint>(); height = Array.Empty<float>(); w = 0; h = 0;
+            Interefaces.IHeightFieldSource? hs;
+            uint[] colBuf; int aw, ah;
+            var alt = SelectAltCalculator(ViewState.FractalType);
+            if (alt != null)
+            {
+                hs = alt as Interefaces.IHeightFieldSource;
+                colBuf = alt.ColorBuffer; aw = alt.Width; ah = alt.Height;
+            }
+            else
+            {
+                hs = _calculator as Interefaces.IHeightFieldSource;
+                colBuf = _calculator.ColorBuffer; aw = _calculator.Width; ah = _calculator.Height;
+            }
+            if (hs == null) return false;
+            var sm = hs.SmoothBuffer;
+            int n = aw * ah;
+            if (n <= 0 || sm.Length < n || colBuf.Length < n) return false;
+            albedo = colBuf; height = sm; w = aw; h = ah;
+            return true;
+        }
+
         private IFractalCalculator? SelectAltCalculator(FractalType type)
         {
             // Dynamic hot-load slot is bound to UserEquation semantically — the

@@ -146,6 +146,7 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
         ToggleJuliaAnimateCommand   = ReactiveCommand.Create(ToggleJuliaAnimate);
         ToggleLSystemSweepCommand   = ReactiveCommand.Create(ToggleLSystemSweep);
         ExportMeshCommand           = ReactiveCommand.Create(() => ExportMeshRequested?.Invoke());
+        ExportReliefMeshCommand     = ReactiveCommand.Create(() => ExportReliefMeshRequested?.Invoke());
         PickDropColorCommand        = ReactiveCommand.CreateFromTask(PickDropColorAsync);
     }
 
@@ -1039,6 +1040,11 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
 
     public ReactiveCommand<Unit, Unit> ExportMeshCommand { get; }
     public ReactiveCommand<Unit, Unit> PickDropColorCommand { get; }
+
+    /// <summary>#138 — export the Oblique 3D heightfield object as a mesh. Host
+    /// pulls the active calculator's height + albedo and writes OBJ/STL.</summary>
+    public event Action? ExportReliefMeshRequested;
+    public ReactiveCommand<Unit, Unit> ExportReliefMeshCommand { get; }
 
     private void Fire()
     {
