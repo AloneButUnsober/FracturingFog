@@ -241,11 +241,13 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
     /// interior alpha the render pipeline currently honours.</summary>
     public bool IsInteriorAlphaApplicable => IsMandelbrot;
 
-    /// <summary>Visibility flag for the 2D heightfield-relief section (#102).
-    /// True for the escape-time 2D families whose smooth-iteration height field
-    /// the render host feeds to <c>HeightfieldRelief2D</c> (Mandelbrot +
-    /// EscapeTimeCalculator kin). 3D raymarchers, direct-colour (Apollonian) and
-    /// histogram families are excluded.</summary>
+    /// <summary>Visibility flag for the 2D heightfield-relief section (#102, #139).
+    /// True for every 2D family that exposes an <c>IHeightFieldSource</c> the
+    /// render host can feed to <c>HeightfieldRelief2D</c> / the Oblique 3D
+    /// raymarch: the escape-time kin (smooth iteration count), the root-finding
+    /// families (iteration-to-convergence height, #139), the Buddhabrot family
+    /// (orbit-density height, #139), and Apollonian (synthesised sphere-cap
+    /// height, #139). 3D raymarchers are excluded (already true 3D).</summary>
     public bool IsRelief2DApplicable =>
         IsMandelbrot || IsJulia || IsMultibrot || IsPhoenix
         || IsGlynn || IsSpider
@@ -258,7 +260,14 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
         || FractalType == FractalType.GeneratedMandelbrotZ2
         || FractalType == FractalType.GeneratedMandelbrotZ3
         || FractalType == FractalType.GeneratedMandelbrotZ4
-        || FractalType == FractalType.GeneratedMandelbrotZ5;
+        || FractalType == FractalType.GeneratedMandelbrotZ5
+        // #139 — root-finding (iteration height), Buddhabrot family (density
+        // height), Apollonian (synthesised dome height).
+        || FractalType == FractalType.Newton
+        || FractalType == FractalType.Nova
+        || FractalType == FractalType.Halley
+        || IsBuddhaBrot
+        || IsApollonian;
 
     public bool HasNoParams =>
         !(IsJulia || IsMultibrot || IsPhoenix || IsGlynn || IsLogistic || IsSpider || IsNewtonOrNova || IsIFS

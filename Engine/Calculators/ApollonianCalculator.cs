@@ -31,11 +31,18 @@ using FracturingFog.Models;
 
 namespace FracturingFog;
 
-public sealed class ApollonianCalculator : IFractalCalculator
+public sealed class ApollonianCalculator : IFractalCalculator, IHeightFieldSource
 {
     public int Width { get; private set; }
     public int Height { get; private set; }
     public uint[] ColorBuffer { get; private set; } = Array.Empty<uint>();
+
+    // #139 — Relief 3D height field. Apollonian has no escape/iteration count, so
+    // the relief is synthesised geometrically: each circle is a raised dome
+    // (sphere-cap profile, unit amplitude), matching the existing sphere-imposter
+    // shading. The gasket reads as nested bubbles. Written during rasterisation
+    // (single-threaded recursion), last (smallest) circle wins per pixel.
+    public float[] SmoothBuffer { get; private set; } = Array.Empty<float>();
 
     public double CenterX { get; set; } = 0.0;
     public double CenterY { get; set; } = 0.0;
@@ -66,6 +73,7 @@ public sealed class ApollonianCalculator : IFractalCalculator
         Width = width;
         Height = height;
         ColorBuffer = new uint[width * height];
+        SmoothBuffer = new float[width * height];
     }
 
     private readonly struct Circle
@@ -81,6 +89,7 @@ public sealed class ApollonianCalculator : IFractalCalculator
     {
         // Clear to background.
         Array.Clear(ColorBuffer, 0, ColorBuffer.Length);
+        Array.Clear(SmoothBuffer, 0, SmoothBuffer.Length);   // #139 relief base plane
 
         int maxDepth = Math.Max(0, FractalParameters.ApollonianDepth);
         double minPx  = Math.Max(0.25, FractalParameters.ApollonianMinPixelRadius);
@@ -221,8 +230,12 @@ public sealed class ApollonianCalculator : IFractalCalculator
                 for (int px = x0; px <= x1; px++)
                 {
                     double dx = px - sx;
-                    if (dx * dx + dy * dy <= r2)
+                    double dd = dx * dx + dy * dy;
+                    if (dd <= r2)
+                    {
                         ColorBuffer[row + px] = col;
+                        SmoothBuffer[row + px] = (float)Math.Sqrt(1.0 - dd / r2); // dome
+                    }
                 }
             }
             return;
@@ -241,11 +254,13 @@ public sealed class ApollonianCalculator : IFractalCalculator
             for (int px = x0; px <= x1; px++)
             {
                 double dx = px - sx;
-                if (dx * dx + dy * dy > r2) continue;
+                double dd = dx * dx + dy * dy;
+                if (dd > r2) continue;
                 float nx = (float)(_relief * dx * invSr);
                 float ny = (float)(-_relief * dy * invSr);
                 ColorBuffer[row + px] =
                     (uint)ColorMap.Map(t, 0f, ColorMap.MaxIterations, nx, ny);
+                SmoothBuffer[row + px] = (float)Math.Sqrt(1.0 - dd / r2); // #139 dome
             }
         }
     }
