@@ -442,6 +442,12 @@ namespace FracturingFog.Models
         /// grid is clamped down so the estimated output stays under this size
         /// (caps <see cref="Relief2DMeshGrid"/>). 0 = unlimited. Default 0.</summary>
         public double Relief2DMeshMaxMB { get; set; } = 0.0;
+        /// <summary>Contoured underside [0,1]: mirror this fraction of the
+        /// (smoothed) top relief onto the exported mesh's base, so the back
+        /// carries the fractal contour instead of being dead flat. Reuses the
+        /// same smoothed height field, so no spikes are reintroduced. 0 = flat
+        /// back, 1 = the back bulges as deep as the top rises. Default 0.6.</summary>
+        public double Relief2DMeshUnderside { get; set; } = 0.6;
 
         // Apollonian gasket (Descartes Circle Theorem recursive packing).
         /// <summary>Maximum recursion depth for the Vieta-jump tree. The
@@ -800,6 +806,7 @@ namespace FracturingFog.Models
                 Relief2DMeshSmoothing = Relief2DMeshSmoothing,
                 Relief2DMeshGrid = Relief2DMeshGrid,
                 Relief2DMeshMaxMB = Relief2DMeshMaxMB,
+                Relief2DMeshUnderside = Relief2DMeshUnderside,
                 ApollonianDepth = ApollonianDepth,
                 ApollonianMinPixelRadius = ApollonianMinPixelRadius,
                 ApollonianColorByDepth = ApollonianColorByDepth,
