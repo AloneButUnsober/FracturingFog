@@ -354,6 +354,36 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
         get => _p.Relief2DAutoShade;
         set { if (_p.Relief2DAutoShade == value) return; _p.Relief2DAutoShade = value; this.RaisePropertyChanged(); Fire(); }
     }
+    public bool Relief2DIsolate
+    {
+        get => _p.Relief2DIsolate;
+        set { if (_p.Relief2DIsolate == value) return; _p.Relief2DIsolate = value; this.RaisePropertyChanged(); Fire(); }
+    }
+    public bool Relief2DIsolateByDetail
+    {
+        get => _p.Relief2DIsolateByDetail;
+        set { if (_p.Relief2DIsolateByDetail == value) return; _p.Relief2DIsolateByDetail = value; this.RaisePropertyChanged(); Fire(); }
+    }
+    public double Relief2DDetailThreshold
+    {
+        get => _p.Relief2DDetailThreshold;
+        set { double v = Clamp(value, 0.0, 1.0); if (_p.Relief2DDetailThreshold == v) return; _p.Relief2DDetailThreshold = v; this.RaisePropertyChanged(); Fire(); }
+    }
+    public bool Relief2DIsolateByColor
+    {
+        get => _p.Relief2DIsolateByColor;
+        set { if (_p.Relief2DIsolateByColor == value) return; _p.Relief2DIsolateByColor = value; this.RaisePropertyChanged(); Fire(); }
+    }
+    public string Relief2DDropColorsCsv
+    {
+        get => _p.Relief2DDropColorsCsv;
+        set { string v = value ?? ""; if (_p.Relief2DDropColorsCsv == v) return; _p.Relief2DDropColorsCsv = v; this.RaisePropertyChanged(); Fire(); }
+    }
+    public double Relief2DColorTolerance
+    {
+        get => _p.Relief2DColorTolerance;
+        set { double v = Clamp(value, 0.0, 1.0); if (_p.Relief2DColorTolerance == v) return; _p.Relief2DColorTolerance = v; this.RaisePropertyChanged(); Fire(); }
+    }
 
     public Interior2DBackgroundMode Interior2DBackground
     {

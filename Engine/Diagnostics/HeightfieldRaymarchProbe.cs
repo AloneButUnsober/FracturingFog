@@ -174,4 +174,85 @@ public static class HeightfieldRaymarchProbe
         Console.Write(sb.ToString());
         return ok ? 0 : 1;
     }
+
+    /// <summary>CLI entry (`--heightfieldisolate`). #135 — isolate filaments as a
+    /// standalone object and prove the background is dropped transparent.</summary>
+    public static int RunIsolateGate()
+    {
+        const int w = 480, h = 360;
+        var sb = new StringBuilder();
+        sb.AppendLine("Heightfield-isolate gate (#135) — standalone 3D object + transparent bg");
+
+        var (height, albedo) = BuildField(w, h, -0.75, 0.0, 3.0, 400);
+
+        var baseP = new FractalParameters
+        {
+            Relief2DEnabled = true,
+            Relief2DRaymarch = true,
+            Relief2DHeightScale = 1.4,
+            Relief2DCameraAzimuthDeg = 25.0,
+            Relief2DCameraElevationDeg = 50.0,
+            Relief2DCameraFovDeg = 55.0,
+            Relief2DGroundPlane = false,      // float the object
+        };
+        var lit = LightingFxData.CreateDefault();
+        lit.ShowSkyBackdrop = false;          // no sky behind the cutout
+        baseP.Lighting = lit;
+
+        // Baseline: no isolation.
+        uint[] full = new uint[w * h];
+        HeightfieldRaymarch2D.Render(albedo, height, w, h, baseP, full, out double fullFrac);
+
+        // Isolated: detail-cull keeps only the sharp filaments.
+        var iso = baseP.Clone();
+        iso.Relief2DIsolate = true;
+        iso.Relief2DIsolateByDetail = true;
+        iso.Relief2DDetailThreshold = 0.6;   // drop the flattest 60%
+        uint[] cut = new uint[w * h];
+        HeightfieldRaymarch2D.Render(albedo, height, w, h, iso, cut, out double isoFrac);
+
+        long transparent = 0, opaque = 0;
+        for (int i = 0; i < w * h; i++)
+        {
+            byte a = (byte)((cut[i] >> 24) & 0xFF);
+            if (a == 0) transparent++;
+            else if (a == 255) opaque++;
+        }
+
+        // Composite the cutout over a checkerboard so the transparency is visible.
+        uint[] comp = new uint[w * h];
+        for (int y = 0; y < h; y++)
+        for (int x = 0; x < w; x++)
+        {
+            int i = y * w + x;
+            uint c = cut[i];
+            double a = ((c >> 24) & 0xFF) / 255.0;
+            bool chk = (((x >> 4) + (y >> 4)) & 1) == 0;
+            double bg = chk ? 90 : 140;
+            double r = ((c >> 16) & 0xFF) * a + bg * (1 - a);
+            double g = ((c >> 8) & 0xFF) * a + bg * (1 - a);
+            double b = (c & 0xFF) * a + bg * (1 - a);
+            comp[i] = 0xFF000000u | ((uint)r << 16) | ((uint)g << 8) | (uint)b;
+        }
+
+        string pc = Path.Combine(AppContext.BaseDirectory, "heightfield-isolate.ppm");
+        WritePpm(pc, comp, w, h);
+
+        sb.AppendLine(string.Create(CultureInfo.InvariantCulture, $"  full surface frac  {fullFrac:0.000}"));
+        sb.AppendLine(string.Create(CultureInfo.InvariantCulture, $"  isolated surf frac {isoFrac:0.000}"));
+        sb.AppendLine(string.Create(CultureInfo.InvariantCulture, $"  transparent frac   {(double)transparent / (w * h):0.000}"));
+        sb.AppendLine(string.Create(CultureInfo.InvariantCulture, $"  opaque frac        {(double)opaque / (w * h):0.000}"));
+        sb.AppendLine($"  wrote              {pc}");
+
+        // Isolation must remove background (fewer surface hits than the full
+        // render), keep some object, and produce transparent background pixels.
+        bool ok = isoFrac < fullFrac && isoFrac > 0.02 && transparent > (w * h) / 10;
+        sb.AppendLine(ok ? "RESULT: PASS" : "RESULT: FAIL");
+
+        try { File.WriteAllText(
+            Path.Combine(AppContext.BaseDirectory, "heightfieldisolate.out"), sb.ToString()); }
+        catch { }
+        Console.Write(sb.ToString());
+        return ok ? 0 : 1;
+    }
 }

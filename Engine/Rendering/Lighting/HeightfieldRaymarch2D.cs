@@ -62,12 +62,25 @@ public static class HeightfieldRaymarch2D
         private readonly double _aspect;  // w / h
         private readonly double _invLip;
         private readonly bool _bicubic;
+        private readonly byte[]? _keep;   // #135 — 0 = culled (no surface), else 1
 
         public HeightDe(float[] h, int w, int hgt, double sy, double aspect,
-                        double invLip, bool bicubic)
+                        double invLip, bool bicubic, byte[]? keep = null)
         {
             _h = h; _w = w; _h2 = hgt; _sy = sy; _aspect = aspect;
-            _invLip = invLip; _bicubic = bicubic;
+            _invLip = invLip; _bicubic = bicubic; _keep = keep;
+        }
+
+        /// <summary>#135 — true when the cell nearest world (x,z) is culled, so the
+        /// surface should be treated as absent there (ray passes through).</summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private bool Culled(double x, double z)
+        {
+            if (_keep is null) return false;
+            int px = (int)Math.Round((x / _aspect + 0.5) * _w - 0.5);
+            int pz = (int)Math.Round((z + 0.5) * _h2 - 0.5);
+            px = Math.Clamp(px, 0, _w - 1); pz = Math.Clamp(pz, 0, _h2 - 1);
+            return _keep[pz * _w + px] == 0;
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -144,7 +157,7 @@ public static class HeightfieldRaymarch2D
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public double Evaluate(double x, double y, double z)
-            => (y - SampleHeight(x, z)) * _invLip;
+            => Culled(x, z) ? 1e9 : (y - SampleHeight(x, z)) * _invLip;
     }
 
     /// <summary>
@@ -227,7 +240,11 @@ public static class HeightfieldRaymarch2D
         double lip = Math.Sqrt(1.0 + maxSlope * maxSlope);
         double invLip = 1.0 / lip;
 
-        var de = new HeightDe(hbuf, w, h, sy, aspect, invLip, p.Relief2DBicubicHeight);
+        // #135 — isolation cull mask. Drop cells by low local detail and/or
+        // matched colour so the kept filaments read as a standalone 3D object.
+        byte[]? keep = BuildKeepMask(hbuf, albedo, w, h, n, p);
+
+        var de = new HeightDe(hbuf, w, h, sy, aspect, invLip, p.Relief2DBicubicHeight, keep);
 
         // Lighting FX (#132 defaults). Copy the struct, then — when auto-shade is
         // on — fill sensible AO / soft-shadow / specular / ambient values wherever
@@ -291,6 +308,7 @@ public static class HeightfieldRaymarch2D
         int maxSteps = 320;
         bool groundPlane = p.Relief2DGroundPlane;
         bool showSky = fx.ShowSkyBackdrop;               // #133 — honour the toggle
+        bool isolate = p.Relief2DIsolate;                // #135 — transparent bg
         double floorBx = bx * 3.0, floorBz = bz * 3.0;   // bounded floor → horizon keeps sky
 
         // One primary sample. Returns the shaded colour + whether it hit the
@@ -387,8 +405,11 @@ public static class HeightfieldRaymarch2D
                 }
             }
             // #133 — respect Show-sky-backdrop: HDRI/gradient only when on,
-            // else a flat drop so the 3D object stands alone.
-            return (showSky ? ShadingPipeline.SkyColorHdri(rdx, rdy, rdz, in fx) : DropColor, false);
+            // else a flat drop. #135 — in isolate mode the background is written
+            // transparent (alpha 0) so the kept object exports as a cutout.
+            uint bg = showSky ? ShadingPipeline.SkyColorHdri(rdx, rdy, rdz, in fx) : DropColor;
+            if (isolate) bg &= 0x00FFFFFFu;
+            return (bg, false);
         }
 
         int ss = Math.Clamp(p.Relief2DSupersample, 1, 4);
@@ -399,7 +420,7 @@ public static class HeightfieldRaymarch2D
         {
             for (int px = 0; px < w; px++)
             {
-                double aR = 0, aG = 0, aB = 0;
+                double aR = 0, aG = 0, aB = 0, aA = 0;
                 int subHits = 0;
                 for (int sj = 0; sj < ss; sj++)
                 for (int si = 0; si < ss; si++)
@@ -408,12 +429,14 @@ public static class HeightfieldRaymarch2D
                     aR += (col >> 16) & 0xFF;
                     aG += (col >> 8) & 0xFF;
                     aB += col & 0xFF;
+                    aA += (col >> 24) & 0xFF;   // #135 — average alpha → soft cutout edges
                     if (hit) subHits++;
                 }
                 byte R = (byte)Math.Clamp(aR * invSS + 0.5, 0, 255);
                 byte G = (byte)Math.Clamp(aG * invSS + 0.5, 0, 255);
                 byte B = (byte)Math.Clamp(aB * invSS + 0.5, 0, 255);
-                dst[py * w + px] = 0xFF000000u | ((uint)R << 16) | ((uint)G << 8) | B;
+                byte A = (byte)Math.Clamp(aA * invSS + 0.5, 0, 255);
+                dst[py * w + px] = ((uint)A << 24) | ((uint)R << 16) | ((uint)G << 8) | B;
                 if (subHits * 2 >= ss * ss) localHits++;
             }
             return localHits;
@@ -449,6 +472,106 @@ public static class HeightfieldRaymarch2D
     // render thread that calls Render (serialised by the host upload gate); the
     // Parallel.For only reads it via the HeightDe.
     private static float[]? s_compressed;
+    private static byte[]? s_keep;   // #135 isolation cull mask scratch
+
+    /// <summary>#135 — build the per-cell keep mask (0 = culled). Returns null
+    /// when isolation is off or no cull selector is active (keep everything; the
+    /// transparent background is applied at the miss site regardless).</summary>
+    private static byte[]? BuildKeepMask(float[] hbuf, uint[] albedo,
+                                         int w, int h, int n, FractalParameters p)
+    {
+        if (!p.Relief2DIsolate) return null;
+        bool byDetail = p.Relief2DIsolateByDetail;
+        uint[] drops = ParseDropColors(p.Relief2DDropColorsCsv);
+        bool byColor = p.Relief2DIsolateByColor && drops.Length > 0;
+        if (!byDetail && !byColor) return null;   // isolate bg only, keep all surface
+
+        byte[] keep = s_keep is { } sk && sk.Length >= n ? sk : (s_keep = new byte[n]);
+        // Detail threshold is a DROP FRACTION: cull the flattest `thr` share of
+        // cells (by local gradient). A quantile — not a fraction of the max — so
+        // a single sharp boundary spike can't skew it. Higher = keep only the
+        // sharpest filaments.
+        double thr = Math.Clamp(p.Relief2DDetailThreshold, 0.0, 1.0);
+        double tol = Math.Clamp(p.Relief2DColorTolerance, 0.0, 1.0) * 441.6729; // √(3·255²)
+
+        double keepDetail = 0.0;
+        if (byDetail)
+        {
+            const int BINS = 512;
+            Span<int> hist = stackalloc int[BINS];
+            double maxDetail = 1e-9;
+            for (int y = 0; y < h; y++)
+            for (int x = 0; x < w; x++)
+            {
+                int i = y * w + x;
+                float c = hbuf[i];
+                double dx = hbuf[y * w + Math.Min(x + 1, w - 1)] - c;
+                double dz = hbuf[Math.Min(y + 1, h - 1) * w + x] - c;
+                double d = Math.Sqrt(dx * dx + dz * dz);
+                if (d > maxDetail) maxDetail = d;
+            }
+            for (int y = 0; y < h; y++)
+            for (int x = 0; x < w; x++)
+            {
+                int i = y * w + x;
+                float c = hbuf[i];
+                double dx = hbuf[y * w + Math.Min(x + 1, w - 1)] - c;
+                double dz = hbuf[Math.Min(y + 1, h - 1) * w + x] - c;
+                double d = Math.Sqrt(dx * dx + dz * dz);
+                int b = (int)(d / maxDetail * (BINS - 1));
+                hist[Math.Clamp(b, 0, BINS - 1)]++;
+            }
+            int target = (int)(thr * n), cum = 0, tb = 0;
+            for (int b = 0; b < BINS; b++) { cum += hist[b]; if (cum >= target) { tb = b; break; } }
+            keepDetail = (tb + 1) / (double)BINS * maxDetail;
+        }
+
+        for (int y = 0; y < h; y++)
+        for (int x = 0; x < w; x++)
+        {
+            int i = y * w + x;
+            bool drop = false;
+            if (byDetail)
+            {
+                float c = hbuf[i];
+                double dx = hbuf[y * w + Math.Min(x + 1, w - 1)] - c;
+                double dz = hbuf[Math.Min(y + 1, h - 1) * w + x] - c;
+                if (Math.Sqrt(dx * dx + dz * dz) < keepDetail) drop = true;
+            }
+            if (!drop && byColor)
+            {
+                uint a = albedo[i];
+                double ar = (a >> 16) & 0xFF, ag = (a >> 8) & 0xFF, ab = a & 0xFF;
+                foreach (uint dc in drops)
+                {
+                    double dr = ar - ((dc >> 16) & 0xFF);
+                    double dg = ag - ((dc >> 8) & 0xFF);
+                    double db = ab - (dc & 0xFF);
+                    if (Math.Sqrt(dr * dr + dg * dg + db * db) <= tol) { drop = true; break; }
+                }
+            }
+            keep[i] = (byte)(drop ? 0 : 1);
+        }
+        return keep;
+    }
+
+    /// <summary>Parse a comma-separated list of 6- or 8-hex-digit colours into
+    /// packed 0xAARRGGBB (alpha ignored for matching). Bad tokens are skipped.</summary>
+    private static uint[] ParseDropColors(string? csv)
+    {
+        if (string.IsNullOrWhiteSpace(csv)) return Array.Empty<uint>();
+        string[] toks = csv.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        var list = new System.Collections.Generic.List<uint>(toks.Length);
+        foreach (string t in toks)
+        {
+            string s = t.StartsWith("#", StringComparison.Ordinal) ? t[1..] : t;
+            if ((s.Length == 6 || s.Length == 8) &&
+                uint.TryParse(s, System.Globalization.NumberStyles.HexNumber,
+                              System.Globalization.CultureInfo.InvariantCulture, out uint v))
+                list.Add(v);
+        }
+        return list.ToArray();
+    }
 
     /// <summary>1-axis ray-slab clip. Narrows [t0,t1] to the segment inside
     /// [lo,hi] along one axis. Returns false when the ray misses the slab.</summary>
