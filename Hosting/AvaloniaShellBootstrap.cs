@@ -1877,6 +1877,47 @@ namespace FracturingFog.Hosting
                         });
                     };
 
+                    // #138 — export the Oblique 3D heightfield object as a mesh.
+                    // Pulls the active 2D calculator's height + flat albedo and
+                    // tessellates a watertight solid matching the on-screen cutout.
+                    vm.ExportReliefMeshRequested += async () =>
+                    {
+                        var host2 = s_renderHost;
+                        if (host2 == null) return;
+                        if (!host2.TryGetHeightFieldExport(out var alb, out var hgt, out int hw, out int hh))
+                        {
+                            ShowInfo("Relief mesh export",
+                                "This fractal has no height field to export. Enable Relief 3D on a supported 2D type first.", true);
+                            return;
+                        }
+                        var pex = host2.ViewState.FractalParameters;
+                        string? path = await PickSaveAsync("Export Relief Mesh",
+                            "OBJ (*.obj)|*.obj|STL (*.stl)|*.stl|All files (*.*)|*.*",
+                            host2.ViewState.FractalType + "-relief");
+                        if (string.IsNullOrEmpty(path)) return;
+                        // Copy the live buffers before handing to the worker (the
+                        // render thread may overwrite them on the next frame).
+                        var albCopy = (uint[])alb.Clone();
+                        var hgtCopy = (float[])hgt.Clone();
+                        System.Threading.Tasks.Task.Run(() =>
+                        {
+                            try
+                            {
+                                int tris = global::FracturingFog.Export.HeightfieldMeshExporter.Export(
+                                    albCopy, hgtCopy, hw, hh, pex, path);
+                                Dispatcher.UIThread.Post(() => ShowInfo("Relief mesh export",
+                                    tris > 0 ? $"Exported {tris} triangles to {path}"
+                                             : "Nothing to export (height field is flat or fully culled).",
+                                    tris == 0));
+                            }
+                            catch (Exception ex)
+                            {
+                                Dispatcher.UIThread.Post(() =>
+                                    ShowInfo("Relief mesh export error", $"Export failed: {ex.Message}", true));
+                            }
+                        });
+                    };
+
                     // Render-completion gate for the Julia animation. Without
                     // this the timer-driven c-orbit fires Trigger every tick
                     // and floods the render pipe — the UI thread loses ground

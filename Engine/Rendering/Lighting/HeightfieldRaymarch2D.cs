@@ -589,7 +589,7 @@ public static class HeightfieldRaymarch2D
 
     /// <summary>Parse a comma-separated list of 6- or 8-hex-digit colours into
     /// packed 0xAARRGGBB (alpha ignored for matching). Bad tokens are skipped.</summary>
-    private static uint[] ParseDropColors(string? csv)
+    internal static uint[] ParseDropColors(string? csv)
     {
         if (string.IsNullOrWhiteSpace(csv)) return Array.Empty<uint>();
         string[] toks = csv.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
