@@ -670,6 +670,22 @@ public sealed class FloatingMenuViewModel : ViewModelBase
     /// Phase 24.</summary>
     public event System.EventHandler<bool>? LightingLockedChanged;
 
+    private bool _reliefLocked;
+    /// <summary>Lock Relief 3D against region changes. When false (default),
+    /// selecting a region turns Relief 3D on/off per that region's saved setting.
+    /// When true, relief stays as the user has it regardless of the region.</summary>
+    public bool ReliefLocked
+    {
+        get => _reliefLocked;
+        set
+        {
+            if (this.RaiseAndSetIfChangedReturnsChanged(ref _reliefLocked, value))
+                ReliefLockedChanged?.Invoke(this, value);
+        }
+    }
+    /// <summary>Raised when the user flips the Lock Relief 3D checkbox.</summary>
+    public event System.EventHandler<bool>? ReliefLockedChanged;
+
     private bool _adaptiveEnabled = true;
     public bool AdaptiveEnabled { get => _adaptiveEnabled; set => this.RaiseAndSetIfChanged(ref _adaptiveEnabled, value); }
 

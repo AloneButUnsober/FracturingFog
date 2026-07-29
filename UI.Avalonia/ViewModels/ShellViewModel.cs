@@ -202,6 +202,13 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
         // the FloatingMenu state never reached Main and the checkboxes were
         // dead UI.
         FloatingMenu.LightingLockedChanged += (_, v) => Main.LightingLocked = v;
+        // Lock Relief 3D — mirror into Main and push to the host service so
+        // region recall (ApplyRegion) knows whether to toggle relief per region.
+        FloatingMenu.ReliefLockedChanged += (_, v) =>
+        {
+            Main.ReliefLocked = v;
+            _themeService.RegionReliefLocked = v;
+        };
         FloatingMenu.BrightnessLockedChanged += (_, v) => Main.BrightnessLocked = v;
         FloatingMenu.ContrastLockedChanged += (_, v) => Main.ContrastLocked = v;
         FloatingMenu.AdaptiveLockedChanged += (_, v) => Main.AdaptiveLocked = v;

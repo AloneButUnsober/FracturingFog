@@ -116,6 +116,53 @@ public sealed class RegionRelief3DTests
     }
 
     [Fact]
+    public void Authoritative_PlainRegion_TurnsReliefOff()
+    {
+        // A region with no relief snapshot must CLEAR relief on recall so
+        // selecting a plain region after a relief one turns the effect off.
+        var plain = new FractalRegion { Name = "Plain", FractalType = FractalType.Mandelbrot };
+        Assert.Null(plain.Relief3D);
+
+        var live = new FractalParameters { Relief2DEnabled = true, Relief2DRaymarch = true };
+        plain.ApplyRelief3DAuthoritative(live);
+        Assert.False(live.Relief2DEnabled);
+        Assert.False(live.Relief2DRaymarch);
+    }
+
+    [Fact]
+    public void Authoritative_ReliefRegion_TurnsReliefOn()
+    {
+        var relief = new FractalRegion
+        {
+            Name = "Relief", FractalType = FractalType.Mandelbrot,
+            Relief3D = Relief3DSettings.Snapshot(new FractalParameters
+            {
+                Relief2DEnabled = true, Relief2DRaymarch = true,
+                Relief2DCameraElevationDeg = 60.0,
+            }),
+        };
+        var live = new FractalParameters();   // relief off by default
+        relief.ApplyRelief3DAuthoritative(live);
+        Assert.True(live.Relief2DEnabled);
+        Assert.True(live.Relief2DRaymarch);
+        Assert.Equal(60.0, live.Relief2DCameraElevationDeg, 12);
+    }
+
+    [Fact]
+    public void ApplyOrDisable_NullDisables_NonNullApplies()
+    {
+        var on = new FractalParameters { Relief2DEnabled = true, Relief2DRaymarch = true };
+        Relief3DSettings.ApplyOrDisable(null, on);
+        Assert.False(on.Relief2DEnabled);
+        Assert.False(on.Relief2DRaymarch);
+
+        var off = new FractalParameters();
+        Relief3DSettings.ApplyOrDisable(
+            Relief3DSettings.Snapshot(new FractalParameters { Relief2DEnabled = true }), off);
+        Assert.True(off.Relief2DEnabled);
+    }
+
+    [Fact]
     public void LegacyRegion_WithoutRelief3D_DeserializesToNull_AndApplyIsNoOp()
     {
         const string legacy =

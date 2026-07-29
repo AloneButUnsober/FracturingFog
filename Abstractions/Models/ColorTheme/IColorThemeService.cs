@@ -147,6 +147,15 @@ namespace FracturingFog.Models
         bool ApplyRegion(string regionName, FractalViewState state);
 
         /// <summary>
+        /// When true, region recall does NOT change the Relief 3D state — the
+        /// user's current relief stays on/off regardless of the region's saved
+        /// setting ("Lock Relief 3D"). When false (default), region recall
+        /// applies the region's Relief 3D authoritatively: on (with saved knobs)
+        /// for a relief region, off for a plain region. Mirrors the UI checkbox.
+        /// </summary>
+        bool RegionReliefLocked { get; set; }
+
+        /// <summary>
         /// Build the colour map named <paramref name="themeName"/> and push it
         /// onto the host's active render host. Returns true on success.
         /// Implementations need a concrete reference to the render host —

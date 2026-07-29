@@ -37,6 +37,9 @@ namespace FracturingFog.Hosting
     {
         private readonly FractalRenderHost? _renderHost;
 
+        /// <inheritdoc/>
+        public bool RegionReliefLocked { get; set; }
+
         /// <summary>
         /// Construct a host theme service. Pass the active render host so the
         /// service can push freshly-built IColorMap instances onto it when
@@ -372,10 +375,12 @@ namespace FracturingFog.Hosting
             // but sits alongside the source-compiled types above.
             region.Params?.ApplyTo(p);
 
-            // Relief 3D (2D heightfield / Oblique raymarch) snapshot. No-op for
-            // regions saved without relief (null) so the user's current relief
-            // state is left alone; otherwise restores the saved relief view.
-            region.Relief3D?.ApplyTo(p);
+            // Relief 3D (2D heightfield / Oblique raymarch). Authoritative on
+            // recall so relief toggles WITH the region: a relief region restores
+            // its saved view, a plain region turns relief off. Unless the user
+            // locked relief ("Lock Relief 3D") — then leave the current state.
+            if (!RegionReliefLocked)
+                region.ApplyRelief3DAuthoritative(p);
         }
 
         /// <inheritdoc/>

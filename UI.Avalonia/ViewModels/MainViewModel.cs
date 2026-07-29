@@ -675,6 +675,12 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
     /// Phase 24.</summary>
     public bool LightingLocked { get => _lightingLocked; set => this.RaiseAndSetIfChanged(ref _lightingLocked, value); }
 
+    private bool _reliefLocked;
+    /// <summary>When true, region recall does NOT change the Relief 3D state —
+    /// relief stays on/off as the user has it regardless of the region's saved
+    /// setting ("Lock Relief 3D"). Default false = relief toggles with region.</summary>
+    public bool ReliefLocked { get => _reliefLocked; set => this.RaiseAndSetIfChanged(ref _reliefLocked, value); }
+
     // ── Overlay toggles ───────────────────────────────────────────────────
 
     private bool _showGrid;
