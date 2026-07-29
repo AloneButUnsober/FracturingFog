@@ -309,6 +309,42 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
         get => _p.Relief2DCameraFovDeg;
         set { double v = Clamp(value, 15.0, 100.0); if (_p.Relief2DCameraFovDeg == v) return; _p.Relief2DCameraFovDeg = v; this.RaisePropertyChanged(); Fire(); }
     }
+    public double Relief2DCameraZoom
+    {
+        get => _p.Relief2DCameraZoom;
+        set { double v = Clamp(value, 0.2, 5.0); if (_p.Relief2DCameraZoom == v) return; _p.Relief2DCameraZoom = v; this.RaisePropertyChanged(); Fire(); }
+    }
+    public bool Relief2DCameraOrthographic
+    {
+        get => _p.Relief2DCameraOrthographic;
+        set { if (_p.Relief2DCameraOrthographic == value) return; _p.Relief2DCameraOrthographic = value; this.RaisePropertyChanged(); Fire(); }
+    }
+    public int Relief2DSupersample
+    {
+        get => _p.Relief2DSupersample;
+        set { int v = (int)Clamp(value, 1, 4); if (_p.Relief2DSupersample == v) return; _p.Relief2DSupersample = v; this.RaisePropertyChanged(); Fire(); }
+    }
+    public FracturingFog.HeightCurve2D Relief2DHeightCurve
+    {
+        get => _p.Relief2DHeightCurve;
+        set { if (_p.Relief2DHeightCurve == value) return; _p.Relief2DHeightCurve = value; this.RaisePropertyChanged(); Fire(); }
+    }
+    public Array Relief2DHeightCurves => Enum.GetValues(typeof(FracturingFog.HeightCurve2D));
+    public bool Relief2DBicubicHeight
+    {
+        get => _p.Relief2DBicubicHeight;
+        set { if (_p.Relief2DBicubicHeight == value) return; _p.Relief2DBicubicHeight = value; this.RaisePropertyChanged(); Fire(); }
+    }
+    public bool Relief2DGroundPlane
+    {
+        get => _p.Relief2DGroundPlane;
+        set { if (_p.Relief2DGroundPlane == value) return; _p.Relief2DGroundPlane = value; this.RaisePropertyChanged(); Fire(); }
+    }
+    public bool Relief2DAutoShade
+    {
+        get => _p.Relief2DAutoShade;
+        set { if (_p.Relief2DAutoShade == value) return; _p.Relief2DAutoShade = value; this.RaisePropertyChanged(); Fire(); }
+    }
 
     public Interior2DBackgroundMode Interior2DBackground
     {

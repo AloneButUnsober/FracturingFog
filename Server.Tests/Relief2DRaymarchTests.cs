@@ -36,12 +36,16 @@ public class Relief2DRaymarchTests
             Relief2DCameraAzimuthDeg = 25,
             Relief2DCameraElevationDeg = 45,
             Relief2DCameraFovDeg = 55,
+            // Isolate the terrain-vs-sky silhouette: the #132 ground plane would
+            // otherwise fill the ray-miss region with floor. Frame-fill (#128)
+            // legitimately raises terrain coverage, so the upper bound is generous.
+            Relief2DGroundPlane = false,
         };
         var dst = new uint[w * h];
         HeightfieldRaymarch2D.Render(albedo, height, w, h, p, dst, out double hitFrac);
 
         // A genuine 3D view has BOTH a lit surface and ray-miss sky.
-        Assert.InRange(hitFrac, 0.10, 0.90);
+        Assert.InRange(hitFrac, 0.10, 0.97);
     }
 
     [Fact]

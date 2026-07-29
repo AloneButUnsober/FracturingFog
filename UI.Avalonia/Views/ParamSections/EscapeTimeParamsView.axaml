@@ -218,7 +218,7 @@
                           IsChecked="{Binding Relief2DRaymarch, Mode=TwoWay}"
                           IsEnabled="{Binding Relief2DEnabled}"
                           ToolTip.Tip="Replaces the flat image with a true 3D raymarch of the height field from an oblique camera: real perspective relief, a silhouette, and volumetric fog / god-rays (set Fog density + Volume steps in the Lighting FX dialog). Heavier than the screen-space relief above." />
-                <Grid ColumnDefinitions="160,*" RowDefinitions="Auto,Auto,Auto"
+                <Grid ColumnDefinitions="160,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto"
                       IsEnabled="{Binding Relief2DRaymarch}">
                     <TextBlock Grid.Row="0" Grid.Column="0" Text="Camera azimuth (°):" VerticalAlignment="Center"
                                ToolTip.Tip="Orbit the terrain around the up axis. 0 = looking straight at the scene." />
@@ -237,7 +237,42 @@
                     <NumericUpDown Grid.Row="2" Grid.Column="1"
                                    Minimum="15" Maximum="100" Increment="1" FormatString="F0"
                                    Value="{Binding Relief2DCameraFovDeg, Mode=TwoWay}" Margin="0,2" />
+
+                    <TextBlock Grid.Row="3" Grid.Column="0" Text="Frame-fill zoom:" VerticalAlignment="Center"
+                               ToolTip.Tip="How much of the window the terrain fills. 1.0 = auto-fit that fills the frame; &gt;1 pulls the camera in (terrain larger, edges may clip); &lt;1 pulls back for more margin." />
+                    <NumericUpDown Grid.Row="3" Grid.Column="1"
+                                   Minimum="0.2" Maximum="5" Increment="0.1" FormatString="F2"
+                                   Value="{Binding Relief2DCameraZoom, Mode=TwoWay}" Margin="0,2" />
+
+                    <TextBlock Grid.Row="4" Grid.Column="0" Text="Anti-alias (N×N):" VerticalAlignment="Center"
+                               ToolTip.Tip="Supersampling: N×N rays per pixel, averaged. 1 = off (fastest), 2–4 = progressively smoother edges/silhouette at N² render cost." />
+                    <NumericUpDown Grid.Row="4" Grid.Column="1"
+                                   Minimum="1" Maximum="4" Increment="1" FormatString="F0"
+                                   Value="{Binding Relief2DSupersample, Mode=TwoWay}" Margin="0,2" />
+
+                    <TextBlock Grid.Row="5" Grid.Column="0" Text="Height curve:" VerticalAlignment="Center"
+                               ToolTip.Tip="Tone curve on the height field. Log (default) tames boundary spikes into terrain; Sqrt is gentler; Linear is the un-tamed raw smooth-count (spiky)." />
+                    <ComboBox Grid.Row="5" Grid.Column="1" Margin="0,2" HorizontalAlignment="Stretch"
+                              ItemsSource="{Binding Relief2DHeightCurves}"
+                              SelectedItem="{Binding Relief2DHeightCurve, Mode=TwoWay}" />
                 </Grid>
+
+                <CheckBox Content="Orthographic camera (no perspective stretch)"
+                          IsChecked="{Binding Relief2DCameraOrthographic, Mode=TwoWay}"
+                          IsEnabled="{Binding Relief2DRaymarch}"
+                          ToolTip.Tip="Parallel projection instead of perspective — a clean relief-map look with no perspective distortion (which grows with frame-fill / FOV)." />
+                <CheckBox Content="Base ground plane (grounds silhouette + catches shadows)"
+                          IsChecked="{Binding Relief2DGroundPlane, Mode=TwoWay}"
+                          IsEnabled="{Binding Relief2DRaymarch}"
+                          ToolTip.Tip="Render a floor around the terrain so the fractal sits on the ground and cast shadows land on it, instead of a slab floating against the sky." />
+                <CheckBox Content="Bicubic height sampling (smoother, slower)"
+                          IsChecked="{Binding Relief2DBicubicHeight, Mode=TwoWay}"
+                          IsEnabled="{Binding Relief2DRaymarch}"
+                          ToolTip.Tip="Catmull-Rom height interpolation instead of bilinear — smoother terrain when zoomed in, at extra sample cost." />
+                <CheckBox Content="Auto lighting defaults (AO / shadow / spec)"
+                          IsChecked="{Binding Relief2DAutoShade, Mode=TwoWay}"
+                          IsEnabled="{Binding Relief2DRaymarch}"
+                          ToolTip.Tip="Fills sensible ambient-occlusion, soft-shadow and specular defaults for the 3D view whenever those Lighting FX knobs are still at zero. Any value you set explicitly in the Lighting FX dialog always wins." />
             </StackPanel>
         </Border>
 
