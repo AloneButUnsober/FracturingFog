@@ -261,9 +261,10 @@ namespace FracturingFog.Imaging
             int quality = skFmt == SKEncodedImageFormat.Jpeg ? 95 : 100;
 
             using var image = SKImage.FromBitmap(bmp);
-            using var data = image.Encode(skFmt, quality);
-            using var fs = File.OpenWrite(path);
-            data.SaveTo(fs);
+            // Shared BMP-safe encode: SkiaSharp cannot encode BMP (Encode returns
+            // null → NRE at SaveTo), so route through ImageExport which writes BMP
+            // by hand and PNG-fallbacks any other decode-only format.
+            FracturingFog.Imaging.ImageExport.EncodeImageToFile(image, skFmt, quality, path);
 
             if (unsupportedTiff)
                 Debug.WriteLine($"ImageExportGdi.SaveBgraSkia: TIFF unsupported by SkiaSharp; saved {path} as PNG.");

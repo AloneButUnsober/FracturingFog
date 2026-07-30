@@ -260,6 +260,15 @@ namespace FracturingFog.Imaging
                 buffer = calc.ColorBuffer;
                 w = calc.Width;
                 h = calc.Height;
+
+                // #102 heightfield relief — modulate the flat themed colour with
+                // real raised 3D relief so a poster / wallpaper matches the
+                // on-screen Relief 3D frame (UploadProcessedBuffer does the same
+                // for the interactive path). Mandelbrot-only, mirroring the
+                // !useAlt gate in FractalRenderHost. Field == output dims here:
+                // a poster is already high-res, so the display-size undersampling
+                // the hi-res field works around does not apply.
+                buffer = ApplyReliefIfEnabled(buffer, calc, w, h, req.FractalParameters);
             }
 
             }
@@ -301,6 +310,30 @@ namespace FracturingFog.Imaging
                     wm, poster: true, dpi: req.Dpi);
                 return new PosterResult(w, h, sw.ElapsedMilliseconds);
             }
+        }
+
+        // #102 — apply heightfield relief to a freshly rendered Mandelbrot
+        // colour buffer, matching FractalRenderHost.UploadProcessedBuffer so a
+        // poster / wallpaper carries the same raised 3D relief as the screen.
+        // Returns the input buffer unchanged when relief is off or the calc
+        // exposes no height field. Field dims == output dims (poster is hi-res).
+        private static uint[] ApplyReliefIfEnabled(
+            uint[] buffer, IHeightFieldSource? heightSource, int w, int h, FractalParameters p)
+        {
+            if (p == null || !p.Relief2DEnabled) return buffer;
+            var field = heightSource?.SmoothBuffer;
+            int n = w * h;
+            if (field == null || n <= 0 || field.Length < n || buffer.Length < n)
+                return buffer;
+
+            var dst = new uint[n];
+            if (p.Relief2DRaymarch)
+                FracturingFog.Rendering.Lighting.HeightfieldRaymarch2D.Render(
+                    buffer, field, w, h, p, dst);
+            else
+                FracturingFog.Rendering.Lighting.HeightfieldRelief2D.Apply(
+                    buffer, dst, field, w, h, p);
+            return dst;
         }
 
         // In-place brightness/contrast BGRA post-pass. Same math as
