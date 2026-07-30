@@ -24,7 +24,9 @@
         <Border Classes="group">
             <StackPanel Spacing="6">
                 <TextBlock Classes="section" Text="Lighting &amp; FX" />
-                <Button Classes="action help" Content="Volumetric Lighting &amp; FX…" Command="{Binding Shell.ShowLightingFxCommand}" HorizontalAlignment="Stretch"
+                <Button Classes="action help" Content="Relief 3D…" Command="{Binding Shell.ShowRelief3DCommand}" HorizontalAlignment="Stretch"
+                        ToolTip.Tip="Opens the standalone Relief 3D panel (2D heightfield → raised relief / oblique 3D raymarch, mesh export). Independent of Fractal Params — stays open when you close Params." />
+                <Button Classes="action help" Content="Volumetric Lighting &amp; FX…" Command="{Binding Shell.ShowLightingFxCommand}" HorizontalAlignment="Stretch" Margin="0,4,0,0"
                         ToolTip.Tip="Opens the standalone Lighting &amp; FX panel (lights, ambient occlusion, fog, tonemap, HDRI/IBL) — no longer buried inside Fractal Params. Stays open across fractal-type changes." />
             </StackPanel>
         </Border>

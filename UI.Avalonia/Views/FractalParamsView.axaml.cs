@@ -1,7 +1,11 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // SPDX-FileCopyrightText: 2026 Bradley Brown
 
+using System;
+
+using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Interactivity;
 using Avalonia.Markup.Xaml;
 using Avalonia.Media;
@@ -25,7 +29,6 @@ namespace FracturingFog.UI.Avalonia.Views;
 public sealed partial class FractalParamsView : UserControl
 {
     private PanelHostWindow? _lightingFxWin;
-    private PanelHostWindow? _relief3DWin;
 
     public FractalParamsView()
     {
@@ -48,37 +51,21 @@ public sealed partial class FractalParamsView : UserControl
             (DataContext as FractalParamsViewModel)?.StopAnimations();
             _lightingFxWin?.Close();
             _lightingFxWin = null;
-            _relief3DWin?.Close();
-            _relief3DWin = null;
         };
     }
 
-    /// <summary>Open or re-focus the Relief 3D dialog (#137). Shares this view's
-    /// FractalParamsViewModel so every Relief2D* edit fires ParamChanged through
-    /// the same path as the other params.</summary>
+    /// <summary>Open (or re-focus) the standalone Relief 3D dialog (#147).
+    /// Routed through the shell's <see cref="ShellViewModel.ShowRelief3DCommand"/>
+    /// so the panel is owned by the shell, not this Params view — closing Params
+    /// no longer closes Relief 3D, and it is the same single window the Control
+    /// Center launcher opens. The shell path binds its own FractalParamsViewModel
+    /// over the shared ViewState, so edits still re-render through ParamChanged.</summary>
     private void OnOpenRelief3DClick(object? sender, RoutedEventArgs e)
     {
-        if (_relief3DWin is { IsVisible: true })
-        {
-            _relief3DWin.Activate();
-            return;
-        }
-
-        _relief3DWin = new PanelHostWindow(
-            new Relief3DDialog(),
-            new PanelHostOptions(
-                "Relief 3D",
-                Width: 480, Height: 720, MinWidth: 420, MinHeight: 400,
-                SizeToContentHeight: false, CanResize: true, ShowInTaskbar: true,
-                StartupLocation: WindowStartupLocation.CenterOwner,
-                Background: new SolidColorBrush(Color.FromRgb(0x28, 0x28, 0x28))))
-        {
-            DataContext = DataContext,
-        };
-        _relief3DWin.Closed += (_, _) => _relief3DWin = null;
-        var owner = TopLevel.GetTopLevel(this) as Window;
-        if (owner != null) _relief3DWin.Show(owner);
-        else _relief3DWin.Show();
+        var main = (Application.Current?.ApplicationLifetime
+            as IClassicDesktopStyleApplicationLifetime)?.MainWindow;
+        if (main?.DataContext is ShellViewModel shell)
+            shell.ShowRelief3DCommand.Execute().Subscribe();
     }
 
     // The VM's Close button routes to the host window (a UserControl can't
