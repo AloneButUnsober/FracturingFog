@@ -167,17 +167,38 @@ public static class HeightfieldRaymarch2D
     /// </summary>
     public static void Render(uint[] albedo, float[] height, int w, int h,
                               FractalParameters p, uint[] dst)
-        => Render(albedo, height, w, h, p, dst, out _);
+        => Render(albedo, height, w, h, w, h, p, dst, out _);
 
     /// <summary>As <see cref="Render(uint[],float[],int,int,FractalParameters,uint[])"/>,
     /// also reporting the fraction of pixels that hit the terrain (vs ray-miss
     /// sky / ground). Used by the headless gate to prove a real 3D silhouette.</summary>
     public static void Render(uint[] albedo, float[] height, int w, int h,
                               FractalParameters p, uint[] dst, out double hitFraction)
+        => Render(albedo, height, w, h, w, h, p, dst, out hitFraction);
+
+    /// <summary>#143 — decoupled-resolution overload. The height field
+    /// (<paramref name="height"/>, dims <paramref name="hw"/>×<paramref name="hh"/>)
+    /// may be a HIGHER resolution than the output / albedo grid
+    /// (<paramref name="w"/>×<paramref name="h"/>). Relief quality is
+    /// window-size dependent because the field is undersampled at small windows
+    /// (the fractal boundary collapses into isolated needles); feeding a field
+    /// computed at a resolution floor — independent of the display size — makes
+    /// every window match the maximized look. HeightDe samples the field by
+    /// normalised world coords, so it already works at any field resolution; the
+    /// resolution-adaptive spike filters + amplitude pull-down key off the FIELD
+    /// dims (hw,hh), so a hi-res field runs them at identity — exactly the
+    /// signed-off large-window path. The camera, ray generation, albedo sampling
+    /// and output all stay on the OUTPUT grid (w,h). Both grids cover the same
+    /// view, so a single output aspect (w/h) drives the world domain.</summary>
+    public static void Render(uint[] albedo, float[] height, int w, int h,
+                              int hw, int hh,
+                              FractalParameters p, uint[] dst, out double hitFraction)
     {
         hitFraction = 0.0;
-        int n = w * h;
-        if (w <= 2 || h <= 2 || albedo.Length < n || dst.Length < n || height.Length < n)
+        int n = w * h;            // OUTPUT / albedo pixel count
+        int hn = hw * hh;         // FIELD (height) cell count
+        if (w <= 2 || h <= 2 || hw <= 2 || hh <= 2
+            || albedo.Length < n || dst.Length < n || height.Length < hn)
         {
             if (!ReferenceEquals(albedo, dst)) Array.Copy(albedo, dst, n);
             return;
@@ -189,10 +210,10 @@ public static class HeightfieldRaymarch2D
         // normalisation flattens everything else into thin tall spires — a
         // "hedgehog" that a close camera stretches into distorted streaks.
         // Compress into a scratch first so boundary dwell reads as terrain relief.
-        float[] hbuf = s_compressed is { } sc && sc.Length >= n
-            ? sc : (s_compressed = new float[n]);
+        float[] hbuf = s_compressed is { } sc && sc.Length >= hn
+            ? sc : (s_compressed = new float[hn]);
         HeightCurve2D curve = p.Relief2DHeightCurve;
-        for (int i = 0; i < n; i++)
+        for (int i = 0; i < hn; i++)
         {
             float hv = height[i];
             hbuf[i] = hv <= 0f ? 0f : curve switch
@@ -212,13 +233,13 @@ public static class HeightfieldRaymarch2D
         // disappears, the same way it does when the user zooms in.
         {
             float hmax = 0f;
-            for (int i = 0; i < n; i++) { float hv = hbuf[i]; if (hv > hmax) hmax = hv; }
+            for (int i = 0; i < hn; i++) { float hv = hbuf[i]; if (hv > hmax) hmax = hv; }
             if (hmax > 1e-9f)
             {
                 const int B = 512;
                 Span<int> hist = stackalloc int[B];
                 int nz = 0;
-                for (int i = 0; i < n; i++)
+                for (int i = 0; i < hn; i++)
                 {
                     float hv = hbuf[i];
                     if (hv > 0f) { hist[Math.Clamp((int)(hv / hmax * (B - 1)), 0, B - 1)]++; nz++; }
@@ -229,7 +250,7 @@ public static class HeightfieldRaymarch2D
                     float baseline = 0f;
                     for (int b = 0; b < B; b++) { cum += hist[b]; if (cum >= target) { baseline = (b + 0.5f) / B * hmax; break; } }
                     if (baseline > 0f)
-                        for (int i = 0; i < n; i++)
+                        for (int i = 0; i < hn; i++)
                             hbuf[i] = hbuf[i] > baseline ? hbuf[i] - baseline : 0f;
                 }
             }
@@ -244,7 +265,7 @@ public static class HeightfieldRaymarch2D
         // isolated single-cell peaks are pulled down. Self-gating — at maximized
         // / Span resolution the boundary is connected so nothing clamps and the
         // signed-off view is unchanged.
-        DespikeNeighborMax(hbuf, w, h);
+        DespikeNeighborMax(hbuf, hw, hh);
 
         // Resolution-adaptive low-pass (#145b). The despike above only removes
         // ISOLATED needles; along the fractal boundary every cell is high but the
@@ -255,7 +276,7 @@ public static class HeightfieldRaymarch2D
         // tall; a low-pass can. Blur strength ramps from 0 at ≥480 px (maximized /
         // Span untouched — signed-off view unchanged) up to ~3 box passes at Toy
         // size, blended continuously so a window resize never snaps the look.
-        LowPassAdaptive(hbuf, w, h);
+        LowPassAdaptive(hbuf, hw, hh);
 
         // Edge fade (#137, #140) — pull tall structure near each image edge down
         // to the base plane so filaments running off the frame taper out instead
@@ -267,16 +288,16 @@ public static class HeightfieldRaymarch2D
         double edgeFade = Math.Clamp(p.Relief2DEdgeFade, 0.0, 0.5);
         if (edgeFade > 0.0)
         {
-            double mx = Math.Max(1.0, edgeFade * w);
-            double my = Math.Max(1.0, edgeFade * h);
-            for (int y = 0; y < h; y++)
+            double mx = Math.Max(1.0, edgeFade * hw);
+            double my = Math.Max(1.0, edgeFade * hh);
+            for (int y = 0; y < hh; y++)
             {
-                double dy = Math.Min(y, h - 1 - y);
+                double dy = Math.Min(y, hh - 1 - y);
                 double wy = dy >= my ? 1.0 : Smoothstep(dy / my);
-                int row = y * w;
-                for (int x = 0; x < w; x++)
+                int row = y * hw;
+                for (int x = 0; x < hw; x++)
                 {
-                    double dx = Math.Min(x, w - 1 - x);
+                    double dx = Math.Min(x, hw - 1 - x);
                     double wx = dx >= mx ? 1.0 : Smoothstep(dx / mx);
                     double f = wx * wy;
                     if (f < 1.0) hbuf[row + x] = (float)(hbuf[row + x] * f);
@@ -288,13 +309,13 @@ public static class HeightfieldRaymarch2D
         // exaggerate by the height-scale knob. 0.35 keeps peaks well inside the
         // unit domain so the oblique camera frames the whole terrain.
         float maxH = 0f;
-        for (int i = 0; i < n; i++) { float hv = hbuf[i]; if (hv > maxH) maxH = hv; }
+        for (int i = 0; i < hn; i++) { float hv = hbuf[i]; if (hv > maxH) maxH = hv; }
         if (maxH <= 1e-9f)   // dead-flat field (all interior) — nothing to raymarch
         {
             if (!ReferenceEquals(albedo, dst)) Array.Copy(albedo, dst, n);
             return;
         }
-        double aspect = (double)w / h;
+        double aspect = (double)w / h;   // OUTPUT aspect (field covers the same view)
         // Resolution-adaptive relief amplitude (#145c). The undersampled boundary
         // is a rough MULTI-cell high-dwell band towering over the zero interior;
         // median / blur widen but can't flatten it, so at Mini / Toy sizes it
@@ -302,26 +323,26 @@ public static class HeightfieldRaymarch2D
         // low resolution turns that band into a gentle mound — matching the
         // (high-res) maximized look, which is itself low relief at this framing.
         // Identity at ≥480 px (maximized / Span unchanged); down to 0.45× at Toy.
-        double resT = ResolutionRamp(w, h);
+        double resT = ResolutionRamp(hw, hh);
         double reliefAmp = 1.0 - 0.72 * resT;
         double sy = 0.35 * reliefAmp * Math.Max(0.0, p.Relief2DHeightScale) / maxH;
 
         // Lipschitz bound from the actual max world-space slope of the field.
-        double worldDx = aspect / w, worldDz = 1.0 / h;
+        double worldDx = aspect / hw, worldDz = 1.0 / hh;
         double maxSlope = 0.0;
-        for (int y = 0; y < h; y++)
+        for (int y = 0; y < hh; y++)
         {
-            int row = y * w;
-            for (int x = 1; x < w; x++)
+            int row = y * hw;
+            for (int x = 1; x < hw; x++)
             {
                 double s = Math.Abs(hbuf[row + x] - hbuf[row + x - 1]) * sy / worldDx;
                 if (s > maxSlope) maxSlope = s;
             }
         }
-        for (int y = 1; y < h; y++)
+        for (int y = 1; y < hh; y++)
         {
-            int row = y * w, prev = row - w;
-            for (int x = 0; x < w; x++)
+            int row = y * hw, prev = row - hw;
+            for (int x = 0; x < hw; x++)
             {
                 double s = Math.Abs(hbuf[row + x] - hbuf[prev + x]) * sy / worldDz;
                 if (s > maxSlope) maxSlope = s;
@@ -332,9 +353,11 @@ public static class HeightfieldRaymarch2D
 
         // #135 — isolation cull mask. Drop cells by low local detail and/or
         // matched colour so the kept filaments read as a standalone 3D object.
-        byte[]? keep = BuildKeepMask(hbuf, albedo, w, h, n, p);
+        // Mask lives on the FIELD grid (hw,hh); colour drop samples the albedo
+        // (output grid) by normalised coords.
+        byte[]? keep = BuildKeepMask(hbuf, hw, hh, albedo, w, h, p);
 
-        var de = new HeightDe(hbuf, w, h, sy, aspect, invLip, p.Relief2DBicubicHeight, keep);
+        var de = new HeightDe(hbuf, hw, hh, sy, aspect, invLip, p.Relief2DBicubicHeight, keep);
 
         // Lighting FX (#132 defaults). Copy the struct, then — when auto-shade is
         // on — fill sensible AO / soft-shadow / specular / ambient values wherever
@@ -785,8 +808,8 @@ public static class HeightfieldRaymarch2D
     /// <summary>#135 — build the per-cell keep mask (0 = culled). Returns null
     /// when isolation is off or no cull selector is active (keep everything; the
     /// transparent background is applied at the miss site regardless).</summary>
-    private static byte[]? BuildKeepMask(float[] hbuf, uint[] albedo,
-                                         int w, int h, int n, FractalParameters p)
+    private static byte[]? BuildKeepMask(float[] hbuf, int w, int h,
+                                         uint[] albedo, int aw, int ah, FractalParameters p)
     {
         if (!p.Relief2DIsolate) return null;
         bool byDetail = p.Relief2DIsolateByDetail;
@@ -794,6 +817,7 @@ public static class HeightfieldRaymarch2D
         bool byColor = p.Relief2DIsolateByColor && drops.Length > 0;
         if (!byDetail && !byColor) return null;   // isolate bg only, keep all surface
 
+        int n = w * h;   // FIELD cell count (mask grid)
         byte[] keep = s_keep is { } sk && sk.Length >= n ? sk : (s_keep = new byte[n]);
         // Detail threshold is a DROP FRACTION: cull the flattest `thr` share of
         // cells (by local gradient). A quantile — not a fraction of the max — so
@@ -848,7 +872,11 @@ public static class HeightfieldRaymarch2D
             }
             if (!drop && byColor)
             {
-                uint a = albedo[i];
+                // Map the field cell to the albedo (output-grid) pixel by
+                // normalised coords — the two grids may differ in resolution (#143).
+                int ax = Math.Clamp((int)((x + 0.5) / w * aw), 0, aw - 1);
+                int ay = Math.Clamp((int)((y + 0.5) / h * ah), 0, ah - 1);
+                uint a = albedo[ay * aw + ax];
                 double ar = (a >> 16) & 0xFF, ag = (a >> 8) & 0xFF, ab = a & 0xFF;
                 foreach (uint dc in drops)
                 {

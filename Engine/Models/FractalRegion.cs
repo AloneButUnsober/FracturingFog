@@ -453,6 +453,8 @@ namespace FracturingFog.Models
         public bool GroundPlane { get; set; } = true;
         public bool AutoShade { get; set; } = true;
         public double EdgeFade { get; set; } = 0.04;
+        public bool HiResField { get; set; } = true;   // #143
+        public int FieldFloor { get; set; } = 1080;     // #143
 
         // Isolation cull (#135)
         public bool Isolate { get; set; } = false;
@@ -505,6 +507,8 @@ namespace FracturingFog.Models
                 GroundPlane        = p.Relief2DGroundPlane,
                 AutoShade          = p.Relief2DAutoShade,
                 EdgeFade           = p.Relief2DEdgeFade,
+                HiResField         = p.Relief2DHiResField,
+                FieldFloor         = p.Relief2DFieldFloor,
                 Isolate            = p.Relief2DIsolate,
                 IsolateByDetail    = p.Relief2DIsolateByDetail,
                 DetailThreshold    = p.Relief2DDetailThreshold,
@@ -541,6 +545,8 @@ namespace FracturingFog.Models
             p.Relief2DGroundPlane        = GroundPlane;
             p.Relief2DAutoShade          = AutoShade;
             p.Relief2DEdgeFade           = EdgeFade;
+            p.Relief2DHiResField         = HiResField;
+            p.Relief2DFieldFloor         = FieldFloor;
             p.Relief2DIsolate            = Isolate;
             p.Relief2DIsolateByDetail    = IsolateByDetail;
             p.Relief2DDetailThreshold    = DetailThreshold;

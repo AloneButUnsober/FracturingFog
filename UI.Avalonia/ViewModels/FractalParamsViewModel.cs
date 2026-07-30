@@ -391,6 +391,16 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
         get => _p.Relief2DEdgeFade;
         set { double v = Clamp(value, 0.0, 0.5); if (_p.Relief2DEdgeFade == v) return; _p.Relief2DEdgeFade = v; this.RaisePropertyChanged(); Fire(); }
     }
+    public bool Relief2DHiResField        // #143
+    {
+        get => _p.Relief2DHiResField;
+        set { if (_p.Relief2DHiResField == value) return; _p.Relief2DHiResField = value; this.RaisePropertyChanged(); Fire(); }
+    }
+    public int Relief2DFieldFloor         // #143
+    {
+        get => _p.Relief2DFieldFloor;
+        set { int v = (int)Clamp(value, 480, 2160); if (_p.Relief2DFieldFloor == v) return; _p.Relief2DFieldFloor = v; this.RaisePropertyChanged(); Fire(); }
+    }
     public bool Relief2DIsolate
     {
         get => _p.Relief2DIsolate;

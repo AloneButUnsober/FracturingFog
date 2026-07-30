@@ -401,6 +401,23 @@ namespace FracturingFog.Models
         /// streaky "arms" at the border. 0 = off. Default 0.04.</summary>
         public double Relief2DEdgeFade { get; set; } = 0.04;
 
+        /// <summary>#143 — compute the relief HEIGHT FIELD at a resolution floor
+        /// (see <see cref="Relief2DFieldFloor"/>) independent of the display size,
+        /// instead of reusing the display-resolution smooth-count buffer. At small
+        /// windows the display-res field undersamples the fractal boundary and each
+        /// filament collapses into an isolated tall needle ("hedgehog"); a floor-res
+        /// field makes every window match the maximized look. Only affects the
+        /// oblique raymarch (Relief2DRaymarch) on escape-time 2D types; no effect
+        /// when the window is already at or above the floor. Default true.</summary>
+        public bool Relief2DHiResField { get; set; } = true;
+        /// <summary>#143 — short-axis pixel floor for the hi-res relief field
+        /// (see <see cref="Relief2DHiResField"/>). The field is computed at this
+        /// many pixels on its shorter side (aspect preserved) whenever the display
+        /// is smaller, so relief quality is decoupled from window size. Higher =
+        /// smoother terrain at small windows but more escape-time compute on the
+        /// base frame. Clamped to [480, 2160]. Default 1080.</summary>
+        public int Relief2DFieldFloor { get; set; } = 1080;
+
         /// <summary>Master toggle: isolate the kept fractal as a standalone 3D
         /// object over a transparent background. Default false.</summary>
         public bool Relief2DIsolate { get; set; } = false;
@@ -796,6 +813,8 @@ namespace FracturingFog.Models
                 Relief2DGroundPlane = Relief2DGroundPlane,
                 Relief2DAutoShade = Relief2DAutoShade,
                 Relief2DEdgeFade = Relief2DEdgeFade,
+                Relief2DHiResField = Relief2DHiResField,
+                Relief2DFieldFloor = Relief2DFieldFloor,
                 Relief2DIsolate = Relief2DIsolate,
                 Relief2DIsolateByDetail = Relief2DIsolateByDetail,
                 Relief2DDetailThreshold = Relief2DDetailThreshold,
