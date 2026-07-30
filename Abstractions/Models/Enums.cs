@@ -7,6 +7,13 @@ namespace FracturingFog
 {
     public enum QualityLevel { Fast, Normal, High, Ultra }
 
+    /// <summary>Tone curve applied to the raw smooth-iteration count before it
+    /// is used as a 3D height field by the Oblique 3D raymarch (#130). The raw
+    /// count is unbounded at the fractal boundary; the curve tames boundary
+    /// dwell into terrain-like relief. <see cref="Log"/> is the default
+    /// (heaviest compression); <see cref="Linear"/> is the un-tamed original.</summary>
+    public enum HeightCurve2D { Linear, Sqrt, Log }
+
     /// <summary>
     /// Background composited behind translucent 2D pixels when the interior
     /// (in-set) region carries alpha &lt; 255 (issue #96). Only consulted by the

@@ -30,11 +30,14 @@ using FracturingFog.Models;
 
 namespace FracturingFog;
 
-public sealed class HalleyCalculator : IFractalCalculator
+public sealed class HalleyCalculator : IFractalCalculator, IHeightFieldSource
 {
     public int Width { get; private set; }
     public int Height { get; private set; }
     public uint[] ColorBuffer { get; private set; } = Array.Empty<uint>();
+
+    // #139 — Relief 3D height = iterations to convergence (see NewtonCalculator).
+    public float[] SmoothBuffer { get; private set; } = Array.Empty<float>();
 
     public double CenterX { get; set; } = 0.0;
     public double CenterY { get; set; } = 0.0;
@@ -55,6 +58,7 @@ public sealed class HalleyCalculator : IFractalCalculator
         Width = width;
         Height = height;
         ColorBuffer = new uint[width * height];
+        SmoothBuffer = new float[width * height];
     }
 
     public void Calculate(CancellationToken ct = default)
@@ -154,6 +158,7 @@ public sealed class HalleyCalculator : IFractalCalculator
                 }
             converged:
                 int idx = rowBase + x;
+                SmoothBuffer[idx] = iter;   // #139 relief height
                 if (newtonMap != null)
                 {
                     int rgb = newtonMap.MapNewton(basin, d, iter, maxIter, zr, zi);

@@ -1,0 +1,270 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:FracturingFog.UI.Avalonia.ViewModels"
+        x:Class="FracturingFog.UI.Avalonia.Views.Relief3DDialog"
+        x:DataType="vm:FractalParamsViewModel"
+        Foreground="White">
+
+    <!--
+      Standalone Relief 3D (2D heightfield) panel (#137). Extracted from the
+      inline block in EscapeTimeParamsView so the compact Params dialog stays
+      short. Bound to the SAME FractalParamsViewModel as FractalParamsView, so
+      every knob still routes through the existing Relief2D* bindings. Reusable:
+      shown for any fractal type where IsRelief2DApplicable is true, so extending
+      relief to more 2D families reuses this dialog unchanged.
+    -->
+
+    <Grid Margin="14" RowDefinitions="*,Auto">
+        <ScrollViewer Grid.Row="0" HorizontalScrollBarVisibility="Disabled"
+                      VerticalScrollBarVisibility="Auto">
+            <StackPanel Spacing="6">
+                <TextBlock Text="Relief 3D (2D heightfield)" FontWeight="Bold" Foreground="#FFCC00" />
+                <CheckBox Content="Enable raised relief + cast shadows"
+                          IsChecked="{Binding Relief2DEnabled, Mode=TwoWay}"
+                          ToolTip.Tip="Treats the escape potential as a height field and adds real raised relief + horizon cast shadows on top of the active theme. Reads best on smooth (non-noisy) themes and when zoomed into filament structure." />
+
+                <Expander Header="Relief lighting" HorizontalAlignment="Stretch"
+                          IsExpanded="{Binding Relief2DEnabled, Mode=OneWay}"
+                          IsEnabled="{Binding Relief2DEnabled}">
+                <Grid ColumnDefinitions="160,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto">
+                    <TextBlock Grid.Row="0" Grid.Column="0" Text="Height scale:" VerticalAlignment="Center"
+                               ToolTip.Tip="Vertical exaggeration. Higher = deeper carving and longer shadows." />
+                    <NumericUpDown Grid.Row="0" Grid.Column="1"
+                                   Minimum="0" Maximum="6" Increment="0.1" FormatString="F1"
+                                   Value="{Binding Relief2DHeightScale, Mode=TwoWay}" Margin="0,2" />
+
+                    <TextBlock Grid.Row="1" Grid.Column="0" Text="Light azimuth (°):" VerticalAlignment="Center"
+                               ToolTip.Tip="Compass direction of the light. 0 = right, 90 = up." />
+                    <NumericUpDown Grid.Row="1" Grid.Column="1"
+                                   Minimum="0" Maximum="360" Increment="5" FormatString="F0"
+                                   Value="{Binding Relief2DLightAzimuthDeg, Mode=TwoWay}" Margin="0,2" />
+
+                    <TextBlock Grid.Row="2" Grid.Column="0" Text="Light elevation (°):" VerticalAlignment="Center"
+                               ToolTip.Tip="Light height above the plane. Lower = longer, more dramatic cast shadows." />
+                    <NumericUpDown Grid.Row="2" Grid.Column="1"
+                                   Minimum="1" Maximum="89" Increment="1" FormatString="F0"
+                                   Value="{Binding Relief2DLightElevationDeg, Mode=TwoWay}" Margin="0,2" />
+
+                    <TextBlock Grid.Row="3" Grid.Column="0" Text="Shadow strength:" VerticalAlignment="Center"
+                               ToolTip.Tip="How dark cast shadows go. 0 = no shadows; 1 = fully black." />
+                    <Slider Grid.Row="3" Grid.Column="1" Minimum="0" Maximum="1"
+                            Value="{Binding Relief2DShadowStrength, Mode=TwoWay}" Margin="0,2" />
+
+                    <TextBlock Grid.Row="4" Grid.Column="0" Text="Relief strength:" VerticalAlignment="Center"
+                               ToolTip.Tip="Blend of relief lighting vs the flat themed colour. 1 = full relief." />
+                    <Slider Grid.Row="4" Grid.Column="1" Minimum="0" Maximum="1"
+                            Value="{Binding Relief2DStrength, Mode=TwoWay}" Margin="0,2" />
+                </Grid>
+                </Expander>
+
+                <!-- Phase 2 — oblique 3D raymarch -->
+                <CheckBox Content="Oblique 3D raymarch (perspective + volumetric)"
+                          IsChecked="{Binding Relief2DRaymarch, Mode=TwoWay}"
+                          IsEnabled="{Binding Relief2DEnabled}"
+                          ToolTip.Tip="Replaces the flat image with a true 3D raymarch of the height field from an oblique camera: real perspective relief, a silhouette, and volumetric fog / god-rays (set Fog density + Volume steps in the Lighting FX dialog). Heavier than the screen-space relief above." />
+                <Expander Header="Camera &amp; quality" HorizontalAlignment="Stretch"
+                          IsExpanded="{Binding Relief2DRaymarch, Mode=OneWay}"
+                          IsEnabled="{Binding Relief2DRaymarch}">
+                <StackPanel Spacing="6">
+                <Grid ColumnDefinitions="160,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto">
+                    <TextBlock Grid.Row="0" Grid.Column="0" Text="Camera azimuth (°):" VerticalAlignment="Center"
+                               ToolTip.Tip="Orbit the terrain around the up axis. 0 = looking straight at the scene." />
+                    <NumericUpDown Grid.Row="0" Grid.Column="1"
+                                   Minimum="-180" Maximum="180" Increment="5" FormatString="F0"
+                                   Value="{Binding Relief2DCameraAzimuthDeg, Mode=TwoWay}" Margin="0,2" />
+
+                    <TextBlock Grid.Row="1" Grid.Column="0" Text="Camera elevation (°):" VerticalAlignment="Center"
+                               ToolTip.Tip="Camera height above the ground plane. 90 = top-down (flat-looking); low = raking, dramatic silhouette." />
+                    <NumericUpDown Grid.Row="1" Grid.Column="1"
+                                   Minimum="5" Maximum="89" Increment="1" FormatString="F0"
+                                   Value="{Binding Relief2DCameraElevationDeg, Mode=TwoWay}" Margin="0,2" />
+
+                    <TextBlock Grid.Row="2" Grid.Column="0" Text="Camera FOV (°):" VerticalAlignment="Center"
+                               ToolTip.Tip="Vertical field of view. Wider = more perspective distortion." />
+                    <NumericUpDown Grid.Row="2" Grid.Column="1"
+                                   Minimum="15" Maximum="100" Increment="1" FormatString="F0"
+                                   Value="{Binding Relief2DCameraFovDeg, Mode=TwoWay}" Margin="0,2" />
+
+                    <TextBlock Grid.Row="3" Grid.Column="0" Text="Frame-fill zoom:" VerticalAlignment="Center"
+                               ToolTip.Tip="How much of the window the terrain fills. 1.0 = auto-fit that fills the frame; &gt;1 pulls the camera in (terrain larger, edges may clip); &lt;1 pulls back for more margin." />
+                    <NumericUpDown Grid.Row="3" Grid.Column="1"
+                                   Minimum="0.2" Maximum="5" Increment="0.1" FormatString="F2"
+                                   Value="{Binding Relief2DCameraZoom, Mode=TwoWay}" Margin="0,2" />
+
+                    <TextBlock Grid.Row="4" Grid.Column="0" Text="Anti-alias (N×N):" VerticalAlignment="Center"
+                               ToolTip.Tip="Supersampling: N×N rays per pixel, averaged. 1 = off (fastest), 2–4 = progressively smoother edges/silhouette at N² render cost." />
+                    <NumericUpDown Grid.Row="4" Grid.Column="1"
+                                   Minimum="1" Maximum="4" Increment="1" FormatString="F0"
+                                   Value="{Binding Relief2DSupersample, Mode=TwoWay}" Margin="0,2" />
+
+                    <TextBlock Grid.Row="5" Grid.Column="0" Text="Height curve:" VerticalAlignment="Center"
+                               ToolTip.Tip="Tone curve on the height field. Log (default) tames boundary spikes into terrain; Sqrt is gentler; Linear is the un-tamed raw smooth-count (spiky)." />
+                    <ComboBox Grid.Row="5" Grid.Column="1" Margin="0,2" HorizontalAlignment="Stretch"
+                              ItemsSource="{Binding Relief2DHeightCurves}"
+                              SelectedItem="{Binding Relief2DHeightCurve, Mode=TwoWay}" />
+
+                    <TextBlock Grid.Row="6" Grid.Column="0" Text="Edge fade:" VerticalAlignment="Center"
+                               ToolTip.Tip="Ramp the height field to the base plane near each image edge so fractal structure that runs off the frame tapers out instead of forming streaky 'arms' at the border (seen when panned/zoomed). 0 = off." />
+                    <Slider Grid.Row="6" Grid.Column="1" Minimum="0" Maximum="0.5" Margin="0,2"
+                            Value="{Binding Relief2DEdgeFade, Mode=TwoWay}" />
+
+                    <TextBlock Grid.Row="7" Grid.Column="0" Text="Field floor (px):" VerticalAlignment="Center"
+                               IsEnabled="{Binding Relief2DHiResField}"
+                               ToolTip.Tip="Short-axis pixel resolution the height field is computed at, independent of the window size (#143). At small windows the display-resolution field undersamples the fractal boundary into spiky needles; a higher floor makes every window match the maximized look, at extra escape-time compute on the base frame. Only applies when 'Hi-res height field' is on and the window is smaller than this." />
+                    <NumericUpDown Grid.Row="7" Grid.Column="1"
+                                   Minimum="480" Maximum="2160" Increment="120" FormatString="F0"
+                                   IsEnabled="{Binding Relief2DHiResField}"
+                                   Value="{Binding Relief2DFieldFloor, Mode=TwoWay}" Margin="0,2" />
+                </Grid>
+
+                <CheckBox Content="Hi-res height field (window-independent quality)"
+                          IsChecked="{Binding Relief2DHiResField, Mode=TwoWay}"
+                          IsEnabled="{Binding Relief2DRaymarch}"
+                          ToolTip.Tip="Compute the relief height field at the 'Field floor' resolution instead of the display size (#143), so shrinking the window no longer turns the terrain into a spiky needle-forest — every size matches the maximized look. Costs an extra escape-time field render on the base frame when the window is below the floor. No effect at or above the floor (e.g. maximized / Span)." />
+
+                <CheckBox Content="Orthographic camera (no perspective stretch)"
+                          IsChecked="{Binding Relief2DCameraOrthographic, Mode=TwoWay}"
+                          IsEnabled="{Binding Relief2DRaymarch}"
+                          ToolTip.Tip="Parallel projection instead of perspective — a clean relief-map look with no perspective distortion (which grows with frame-fill / FOV)." />
+                <CheckBox Content="Base ground plane (grounds silhouette + catches shadows)"
+                          IsChecked="{Binding Relief2DGroundPlane, Mode=TwoWay}"
+                          IsEnabled="{Binding Relief2DRaymarch}"
+                          ToolTip.Tip="Render a floor around the terrain so the fractal sits on the ground and cast shadows land on it, instead of a slab floating against the sky." />
+                <CheckBox Content="Bicubic height sampling (smoother, slower)"
+                          IsChecked="{Binding Relief2DBicubicHeight, Mode=TwoWay}"
+                          IsEnabled="{Binding Relief2DRaymarch}"
+                          ToolTip.Tip="Catmull-Rom height interpolation instead of bilinear — smoother terrain when zoomed in, at extra sample cost." />
+                <CheckBox Content="Auto lighting defaults (AO / shadow / spec)"
+                          IsChecked="{Binding Relief2DAutoShade, Mode=TwoWay}"
+                          IsEnabled="{Binding Relief2DRaymarch}"
+                          ToolTip.Tip="Fills sensible ambient-occlusion, soft-shadow and specular defaults for the 3D view whenever those Lighting FX knobs are still at zero. Any value you set explicitly in the Lighting FX dialog always wins." />
+                </StackPanel>
+                </Expander>
+
+                <!-- #135 — isolate filaments as a standalone 3D object -->
+                <CheckBox Content="Isolate object (drop background → transparent)"
+                          IsChecked="{Binding Relief2DIsolate, Mode=TwoWay}"
+                          IsEnabled="{Binding Relief2DRaymarch}"
+                          ToolTip.Tip="Keep only the selected fractal structure as a standalone 3D object over a transparent background (exports as a cutout). Best paired with Show-sky-backdrop OFF (Lighting FX) and the base ground plane OFF." />
+                <Expander Header="Isolation cull" HorizontalAlignment="Stretch"
+                          IsExpanded="{Binding Relief2DIsolate, Mode=OneWay}"
+                          IsEnabled="{Binding Relief2DIsolate}">
+                <StackPanel Spacing="6">
+                <Grid ColumnDefinitions="160,*" RowDefinitions="Auto,Auto,Auto">
+                    <CheckBox Grid.Row="0" Grid.Column="0" Grid.ColumnSpan="2"
+                              Content="Drop low-detail (keep filaments)"
+                              IsChecked="{Binding Relief2DIsolateByDetail, Mode=TwoWay}"
+                              ToolTip.Tip="Cull cells whose local surface detail (height gradient) is below the threshold — removes the flat background and smooth plateau, leaving the fine filaments." />
+                    <TextBlock Grid.Row="1" Grid.Column="0" Text="Drop amount:" VerticalAlignment="Center"
+                               ToolTip.Tip="Fraction of the flattest cells to remove (a quantile). Higher = drop more background, keeping only the sharpest filaments." />
+                    <Slider Grid.Row="1" Grid.Column="1" Minimum="0" Maximum="1" Margin="0,2"
+                            Value="{Binding Relief2DDetailThreshold, Mode=TwoWay}"
+                            IsEnabled="{Binding Relief2DIsolateByDetail}" />
+                    <TextBlock Grid.Row="2" Grid.Column="0" Text="Detail level:" VerticalAlignment="Center" />
+                    <TextBlock Grid.Row="2" Grid.Column="1" VerticalAlignment="Center"
+                               Text="{Binding Relief2DDetailThreshold, StringFormat={}{0:F2}}" />
+                </Grid>
+                <Grid ColumnDefinitions="160,*" RowDefinitions="Auto,Auto,Auto">
+                    <CheckBox Grid.Row="0" Grid.Column="0" Grid.ColumnSpan="2"
+                              Content="Drop colours"
+                              IsChecked="{Binding Relief2DIsolateByColor, Mode=TwoWay}"
+                              ToolTip.Tip="Also cull cells whose themed colour matches the listed colours within the tolerance." />
+                    <TextBlock Grid.Row="1" Grid.Column="0" Text="Drop colours (hex):" VerticalAlignment="Center"
+                               ToolTip.Tip="Comma-separated RGB or ARGB hex, e.g. FF102030, 405060. These colours are removed. Use Pick to eyedrop a colour from the screen." />
+                    <Grid Grid.Row="1" Grid.Column="1" ColumnDefinitions="*,Auto" Margin="0,2">
+                        <TextBox Grid.Column="0" Watermark="FF102030, 405060"
+                                 Text="{Binding Relief2DDropColorsCsv, Mode=TwoWay}"
+                                 IsEnabled="{Binding Relief2DIsolateByColor}" />
+                        <Button Grid.Column="1" Content="Pick" Margin="6,0,0,0"
+                                Command="{Binding PickDropColorCommand}"
+                                IsEnabled="{Binding Relief2DIsolate}"
+                                ToolTip.Tip="Eyedrop a colour from anywhere on screen and add it to the drop list." />
+                    </Grid>
+                    <TextBlock Grid.Row="2" Grid.Column="0" Text="Colour tolerance:" VerticalAlignment="Center"
+                               ToolTip.Tip="How close a cell colour must be to a drop colour to be removed. Higher = drops a wider range." />
+                    <Slider Grid.Row="2" Grid.Column="1" Minimum="0" Maximum="1" Margin="0,2"
+                            Value="{Binding Relief2DColorTolerance, Mode=TwoWay}"
+                            IsEnabled="{Binding Relief2DIsolateByColor}" />
+                </Grid>
+                </StackPanel>
+                </Expander>
+
+                <!-- #140 — Lighting & FX launcher (copied from the params panel)
+                     so the shading knobs are reachable while editing Relief 3D. -->
+                <Button Content="Open Lighting &amp; FX…"
+                        Click="OnOpenLightingFxClick"
+                        IsEnabled="{Binding Relief2DRaymarch}"
+                        HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"
+                        Padding="0,8" Margin="0,8,0,0"
+                        Background="#283C50" Foreground="White"
+                        ToolTip.Tip="Open the full Lighting / Shading / Post-process dialog (soft shadows, AO, PBR, IBL/HDRI, reflections, volumetric fog, sky backdrop)." />
+
+                <!-- #138 — mesh export knobs -->
+                <Expander Header="Mesh export" HorizontalAlignment="Stretch"
+                          IsExpanded="False" Margin="0,8,0,0">
+                <StackPanel Spacing="6">
+                <Grid ColumnDefinitions="150,*,54" RowDefinitions="Auto,Auto,Auto,Auto,Auto">
+                    <TextBlock Grid.Row="0" Grid.Column="0" Text="Height:" VerticalAlignment="Center"
+                               ToolTip.Tip="Relief (emboss) height of the exported mesh. Lower reads as a clean bas-relief from any angle; higher is more dramatic but spikier when viewed from the side. Independent of the on-screen 3D height." />
+                    <Slider Grid.Row="0" Grid.Column="1" Minimum="0.02" Maximum="0.6" Margin="0,2"
+                            Value="{Binding Relief2DMeshHeight, Mode=TwoWay}"
+                            IsEnabled="{Binding Relief2DRaymarch}" />
+                    <TextBlock Grid.Row="0" Grid.Column="2" VerticalAlignment="Center"
+                               Text="{Binding Relief2DMeshHeight, StringFormat={}{0:F2}}" />
+
+                    <TextBlock Grid.Row="1" Grid.Column="0" Text="Smoothing:" VerticalAlignment="Center"
+                               ToolTip.Tip="0 = raw detail (spiky), 1 = heavy smoothing (despike + merge dendrites into a clean ridge). 0.5 is the tuned default." />
+                    <Slider Grid.Row="1" Grid.Column="1" Minimum="0" Maximum="1" Margin="0,2"
+                            Value="{Binding Relief2DMeshSmoothing, Mode=TwoWay}"
+                            IsEnabled="{Binding Relief2DRaymarch}" />
+                    <TextBlock Grid.Row="1" Grid.Column="2" VerticalAlignment="Center"
+                               Text="{Binding Relief2DMeshSmoothing, StringFormat={}{0:F2}}" />
+
+                    <TextBlock Grid.Row="2" Grid.Column="0" Text="Detail (grid):" VerticalAlignment="Center"
+                               ToolTip.Tip="Grid resolution on the longer axis. Higher = finer fractal detail AND a bigger file." />
+                    <Slider Grid.Row="2" Grid.Column="1" Minimum="128" Maximum="1536" Margin="0,2"
+                            TickFrequency="64" IsSnapToTickEnabled="True"
+                            Value="{Binding Relief2DMeshGrid, Mode=TwoWay}"
+                            IsEnabled="{Binding Relief2DRaymarch}" />
+                    <TextBlock Grid.Row="2" Grid.Column="2" VerticalAlignment="Center"
+                               Text="{Binding Relief2DMeshGrid}" />
+
+                    <TextBlock Grid.Row="3" Grid.Column="0" Text="File size cap (MB):" VerticalAlignment="Center"
+                               ToolTip.Tip="Upper bound on the exported file. When above 0, the grid is clamped down so the estimate stays under this size. 0 = unlimited." />
+                    <Slider Grid.Row="3" Grid.Column="1" Minimum="0" Maximum="50" Margin="0,2"
+                            TickFrequency="1" IsSnapToTickEnabled="True"
+                            Value="{Binding Relief2DMeshMaxMB, Mode=TwoWay}"
+                            IsEnabled="{Binding Relief2DRaymarch}" />
+                    <TextBlock Grid.Row="3" Grid.Column="2" VerticalAlignment="Center"
+                               Text="{Binding Relief2DMeshMaxMB, StringFormat={}{0:F0}}" />
+
+                    <TextBlock Grid.Row="4" Grid.Column="0" Text="Underside:" VerticalAlignment="Center"
+                               ToolTip.Tip="Contour the back of the mesh with the same (smoothed) relief instead of a flat base. 0 = flat back, 1 = the back bulges as deep as the top rises. No spikiness — it reuses the smoothed height field." />
+                    <Slider Grid.Row="4" Grid.Column="1" Minimum="0" Maximum="1" Margin="0,2"
+                            Value="{Binding Relief2DMeshUnderside, Mode=TwoWay}"
+                            IsEnabled="{Binding Relief2DRaymarch}" />
+                    <TextBlock Grid.Row="4" Grid.Column="2" VerticalAlignment="Center"
+                               Text="{Binding Relief2DMeshUnderside, StringFormat={}{0:F2}}" />
+                </Grid>
+                <TextBlock HorizontalAlignment="Right" Opacity="0.75"
+                           Text="{Binding Relief2DMeshSizeEstimate, StringFormat=Estimated size: {0}}" />
+                </StackPanel>
+                </Expander>
+
+                <!-- #138 — export the 3D object as a mesh -->
+                <Button Content="Export mesh (OBJ / STL)…"
+                        Command="{Binding ExportReliefMeshCommand}"
+                        IsEnabled="{Binding Relief2DRaymarch}"
+                        HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"
+                        Padding="0,8" Margin="0,4,0,0"
+                        Background="#284C3C" Foreground="White"
+                        ToolTip.Tip="Export the current Oblique 3D object as a watertight mesh (OBJ with vertex colour + smooth normals, or binary STL). Honours the mesh height / smoothing / detail knobs and the isolation cull." />
+            </StackPanel>
+        </ScrollViewer>
+
+        <StackPanel Grid.Row="1" Orientation="Horizontal" HorizontalAlignment="Right"
+                    Spacing="8" Margin="0,12,0,0">
+            <Button Content="Close" Click="OnCloseClick" Padding="16,6" />
+        </StackPanel>
+    </Grid>
+</UserControl>

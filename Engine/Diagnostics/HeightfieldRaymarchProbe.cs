@@ -174,4 +174,185 @@ public static class HeightfieldRaymarchProbe
         Console.Write(sb.ToString());
         return ok ? 0 : 1;
     }
+
+    /// <summary>Mean absolute luminance gradient (vertical + horizontal). A
+    /// small-window needle forest — many isolated tall spikes — produces a high
+    /// value; smooth terrain a low one. Used to prove the hi-res field removes
+    /// the undersampling spikes.</summary>
+    private static double Roughness(uint[] img, int w, int h)
+    {
+        static double Lum(uint c) => ((c >> 16) & 0xFF) * 0.3 + ((c >> 8) & 0xFF) * 0.59 + (c & 0xFF) * 0.11;
+        double sum = 0; long cnt = 0;
+        for (int y = 0; y < h - 1; y++)
+        for (int x = 0; x < w - 1; x++)
+        {
+            int i = y * w + x;
+            double l = Lum(img[i]);
+            sum += Math.Abs(Lum(img[i + 1]) - l) + Math.Abs(Lum(img[i + w]) - l);
+            cnt++;
+        }
+        return cnt > 0 ? sum / cnt : 0.0;
+    }
+
+    /// <summary>CLI entry (`--heightfieldhires`). #143 — prove the
+    /// decoupled-resolution relief path: the same small output rendered from a
+    /// height field computed at a resolution FLOOR (independent of the output
+    /// size) is markedly smoother than from a display-resolution field, while
+    /// still producing a valid 3D silhouette. Uses a zoomed seahorse-valley view
+    /// where small-window undersampling turns terrain into a needle forest.</summary>
+    public static int RunHiResGate()
+    {
+        // The framing from the smoke-test probe: small window (640×384) renders a
+        // needle forest from its own display-res field but smooth terrain from a
+        // 1080-short-axis floor field of the same view.
+        const double cx = -0.745428, cy = 0.113009, span = 0.012;
+        const int maxIter = 1200;
+        const int ow = 640, oh = 384;      // shrunk-window output
+        const int hw = 1800, hh = 1080;    // floor-res field (short axis 1080, same 5:3 view)
+
+        var sb = new StringBuilder();
+        sb.AppendLine("Heightfield hi-res field gate (#143) — window-independent relief quality");
+
+        var (fieldLo, albedoLo) = BuildField(ow, oh, cx, cy, span, maxIter);
+        var (fieldHi, _)        = BuildField(hw, hh, cx, cy, span, maxIter);
+
+        var p = new FractalParameters
+        {
+            Relief2DEnabled = true,
+            Relief2DRaymarch = true,
+            Relief2DHeightScale = 1.4,
+            Relief2DCameraAzimuthDeg = 0.0,
+            Relief2DCameraElevationDeg = 45.0,
+            Relief2DCameraFovDeg = 50.0,
+            Relief2DGroundPlane = true,
+        };
+        var lit = LightingFxData.CreateDefault();
+        lit.BgTopColor = 0xFF335588u;
+        lit.BgBottomColor = 0xFF0A0C14u;
+        p.Lighting = lit;
+
+        // Display-res field: field dims == output dims (the old coupled path).
+        uint[] dstLo = new uint[ow * oh];
+        HeightfieldRaymarch2D.Render(albedoLo, fieldLo, ow, oh, ow, oh, p, dstLo, out double surfLo);
+        // Floor-res field: field dims (1800×1080) decoupled from output (640×384).
+        uint[] dstHi = new uint[ow * oh];
+        HeightfieldRaymarch2D.Render(albedoLo, fieldHi, ow, oh, hw, hh, p, dstHi, out double surfHi);
+
+        double roughLo = Roughness(dstLo, ow, oh);
+        double roughHi = Roughness(dstHi, ow, oh);
+        double ratio = roughLo > 1e-9 ? roughHi / roughLo : 1.0;
+
+        string pLo = Path.Combine(AppContext.BaseDirectory, "heightfield-hires-displayres.ppm");
+        string pHi = Path.Combine(AppContext.BaseDirectory, "heightfield-hires-floorres.ppm");
+        WritePpm(pLo, dstLo, ow, oh);
+        WritePpm(pHi, dstHi, ow, oh);
+
+        sb.AppendLine(string.Create(CultureInfo.InvariantCulture, $"  output size        {ow}x{oh}"));
+        sb.AppendLine(string.Create(CultureInfo.InvariantCulture, $"  field (display)    {ow}x{oh}"));
+        sb.AppendLine(string.Create(CultureInfo.InvariantCulture, $"  field (floor)      {hw}x{hh}"));
+        sb.AppendLine(string.Create(CultureInfo.InvariantCulture, $"  surf frac display  {surfLo:0.000}"));
+        sb.AppendLine(string.Create(CultureInfo.InvariantCulture, $"  surf frac floor    {surfHi:0.000}"));
+        sb.AppendLine(string.Create(CultureInfo.InvariantCulture, $"  roughness display  {roughLo:0.000}"));
+        sb.AppendLine(string.Create(CultureInfo.InvariantCulture, $"  roughness floor    {roughHi:0.000}"));
+        sb.AppendLine(string.Create(CultureInfo.InvariantCulture, $"  roughness ratio    {ratio:0.000}  (floor/display; <1 = smoother)"));
+        sb.AppendLine($"  wrote              {pLo}");
+        sb.AppendLine($"  wrote              {pHi}");
+
+        // Both must render a valid silhouette; the floor field must be markedly
+        // smoother (lower roughness) AND cover more of the frame — the display-res
+        // needles are thin isolated spikes that leave sky gaps between them, so
+        // the connected floor-res terrain fills a visibly larger surface fraction.
+        // Both conditions are deterministic (no RNG in the field or the raymarch),
+        // so the thresholds carry headroom without run-to-run flake.
+        bool ok = surfLo > 0.10 && surfHi > 0.10
+                  && ratio < 0.82 && surfHi > surfLo + 0.05;
+        sb.AppendLine(ok ? "RESULT: PASS" : "RESULT: FAIL");
+
+        try { File.WriteAllText(
+            Path.Combine(AppContext.BaseDirectory, "heightfieldhires.out"), sb.ToString()); }
+        catch { }
+        Console.Write(sb.ToString());
+        return ok ? 0 : 1;
+    }
+
+    /// <summary>CLI entry (`--heightfieldisolate`). #135 — isolate filaments as a
+    /// standalone object and prove the background is dropped transparent.</summary>
+    public static int RunIsolateGate()
+    {
+        const int w = 480, h = 360;
+        var sb = new StringBuilder();
+        sb.AppendLine("Heightfield-isolate gate (#135) — standalone 3D object + transparent bg");
+
+        var (height, albedo) = BuildField(w, h, -0.75, 0.0, 3.0, 400);
+
+        var baseP = new FractalParameters
+        {
+            Relief2DEnabled = true,
+            Relief2DRaymarch = true,
+            Relief2DHeightScale = 1.4,
+            Relief2DCameraAzimuthDeg = 25.0,
+            Relief2DCameraElevationDeg = 50.0,
+            Relief2DCameraFovDeg = 55.0,
+            Relief2DGroundPlane = false,      // float the object
+        };
+        var lit = LightingFxData.CreateDefault();
+        lit.ShowSkyBackdrop = false;          // no sky behind the cutout
+        baseP.Lighting = lit;
+
+        // Baseline: no isolation.
+        uint[] full = new uint[w * h];
+        HeightfieldRaymarch2D.Render(albedo, height, w, h, baseP, full, out double fullFrac);
+
+        // Isolated: detail-cull keeps only the sharp filaments.
+        var iso = baseP.Clone();
+        iso.Relief2DIsolate = true;
+        iso.Relief2DIsolateByDetail = true;
+        iso.Relief2DDetailThreshold = 0.6;   // drop the flattest 60%
+        uint[] cut = new uint[w * h];
+        HeightfieldRaymarch2D.Render(albedo, height, w, h, iso, cut, out double isoFrac);
+
+        long transparent = 0, opaque = 0;
+        for (int i = 0; i < w * h; i++)
+        {
+            byte a = (byte)((cut[i] >> 24) & 0xFF);
+            if (a == 0) transparent++;
+            else if (a == 255) opaque++;
+        }
+
+        // Composite the cutout over a checkerboard so the transparency is visible.
+        uint[] comp = new uint[w * h];
+        for (int y = 0; y < h; y++)
+        for (int x = 0; x < w; x++)
+        {
+            int i = y * w + x;
+            uint c = cut[i];
+            double a = ((c >> 24) & 0xFF) / 255.0;
+            bool chk = (((x >> 4) + (y >> 4)) & 1) == 0;
+            double bg = chk ? 90 : 140;
+            double r = ((c >> 16) & 0xFF) * a + bg * (1 - a);
+            double g = ((c >> 8) & 0xFF) * a + bg * (1 - a);
+            double b = (c & 0xFF) * a + bg * (1 - a);
+            comp[i] = 0xFF000000u | ((uint)r << 16) | ((uint)g << 8) | (uint)b;
+        }
+
+        string pc = Path.Combine(AppContext.BaseDirectory, "heightfield-isolate.ppm");
+        WritePpm(pc, comp, w, h);
+
+        sb.AppendLine(string.Create(CultureInfo.InvariantCulture, $"  full surface frac  {fullFrac:0.000}"));
+        sb.AppendLine(string.Create(CultureInfo.InvariantCulture, $"  isolated surf frac {isoFrac:0.000}"));
+        sb.AppendLine(string.Create(CultureInfo.InvariantCulture, $"  transparent frac   {(double)transparent / (w * h):0.000}"));
+        sb.AppendLine(string.Create(CultureInfo.InvariantCulture, $"  opaque frac        {(double)opaque / (w * h):0.000}"));
+        sb.AppendLine($"  wrote              {pc}");
+
+        // Isolation must remove background (fewer surface hits than the full
+        // render), keep some object, and produce transparent background pixels.
+        bool ok = isoFrac < fullFrac && isoFrac > 0.02 && transparent > (w * h) / 10;
+        sb.AppendLine(ok ? "RESULT: PASS" : "RESULT: FAIL");
+
+        try { File.WriteAllText(
+            Path.Combine(AppContext.BaseDirectory, "heightfieldisolate.out"), sb.ToString()); }
+        catch { }
+        Console.Write(sb.ToString());
+        return ok ? 0 : 1;
+    }
 }

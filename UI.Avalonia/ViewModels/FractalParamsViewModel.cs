@@ -146,6 +146,29 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
         ToggleJuliaAnimateCommand   = ReactiveCommand.Create(ToggleJuliaAnimate);
         ToggleLSystemSweepCommand   = ReactiveCommand.Create(ToggleLSystemSweep);
         ExportMeshCommand           = ReactiveCommand.Create(() => ExportMeshRequested?.Invoke());
+        ExportReliefMeshCommand     = ReactiveCommand.Create(() => ExportReliefMeshRequested?.Invoke());
+        PickDropColorCommand        = ReactiveCommand.CreateFromTask(PickDropColorAsync);
+    }
+
+    /// <summary>#135 — raised when the user asks to eyedrop a drop-colour. The
+    /// host (AvaloniaShellBootstrap) drives the platform colour sampler and fills
+    /// the args, mirroring the colour-theme editor's eyedropper.</summary>
+    public event EventHandler<ThemeSampleColorEventArgs>? SampleColorRequested;
+
+    /// <summary>Eyedrop a screen colour and append it to the isolate drop-colour
+    /// list, enabling the colour cull on the first pick.</summary>
+    private async System.Threading.Tasks.Task PickDropColorAsync()
+    {
+        var args = new ThemeSampleColorEventArgs();
+        var handler = SampleColorRequested;
+        handler?.Invoke(this, args);
+        if (handler == null) { args.Completion.TrySetResult(true); return; }
+        await args.Completion.Task;
+        if (args.PickedR == null) return;
+        string hex = $"FF{args.PickedR.Value:X2}{args.PickedG!.Value:X2}{args.PickedB!.Value:X2}";
+        string cur = _p.Relief2DDropColorsCsv ?? "";
+        Relief2DDropColorsCsv = string.IsNullOrWhiteSpace(cur) ? hex : cur.TrimEnd() + ", " + hex;
+        Relief2DIsolateByColor = true;
     }
 
     /// <summary>Stop any running parameter animation. Host calls this when the
@@ -205,16 +228,27 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
         || IsQuatJulia || IsQuatMandelbrot
         || IsBicomplexMandelbrot || IsKleinian
         || FractalType == FractalType.UserBulb;
+
+    /// <summary>Show the "Open Lighting &amp; FX" launcher when the full shading
+    /// stack applies: any 3D raymarcher, OR the Oblique 3D heightfield raymarch
+    /// on a 2D fractal (#133) — the latter routes hits through the same
+    /// <c>ShadingPipeline</c>, so soft shadow / AO / PBR / IBL / volumetric all
+    /// reach it. Notified from the Relief2D toggles below.</summary>
+    public bool ShowLightingFxLauncher =>
+        IsAny3DRaymarcher || (IsRelief2DApplicable && Relief2DEnabled && Relief2DRaymarch);
+
     /// <summary>Visibility flag for the 2D interior-alpha section (issue #96).
     /// True only for the canonical Mandelbrot path — the only 2D family whose
     /// interior alpha the render pipeline currently honours.</summary>
     public bool IsInteriorAlphaApplicable => IsMandelbrot;
 
-    /// <summary>Visibility flag for the 2D heightfield-relief section (#102).
-    /// True for the escape-time 2D families whose smooth-iteration height field
-    /// the render host feeds to <c>HeightfieldRelief2D</c> (Mandelbrot +
-    /// EscapeTimeCalculator kin). 3D raymarchers, direct-colour (Apollonian) and
-    /// histogram families are excluded.</summary>
+    /// <summary>Visibility flag for the 2D heightfield-relief section (#102, #139).
+    /// True for every 2D family that exposes an <c>IHeightFieldSource</c> the
+    /// render host can feed to <c>HeightfieldRelief2D</c> / the Oblique 3D
+    /// raymarch: the escape-time kin (smooth iteration count), the root-finding
+    /// families (iteration-to-convergence height, #139), the Buddhabrot family
+    /// (orbit-density height, #139), and Apollonian (synthesised sphere-cap
+    /// height, #139). 3D raymarchers are excluded (already true 3D).</summary>
     public bool IsRelief2DApplicable =>
         IsMandelbrot || IsJulia || IsMultibrot || IsPhoenix
         || IsGlynn || IsSpider
@@ -227,7 +261,14 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
         || FractalType == FractalType.GeneratedMandelbrotZ2
         || FractalType == FractalType.GeneratedMandelbrotZ3
         || FractalType == FractalType.GeneratedMandelbrotZ4
-        || FractalType == FractalType.GeneratedMandelbrotZ5;
+        || FractalType == FractalType.GeneratedMandelbrotZ5
+        // #139 — root-finding (iteration height), Buddhabrot family (density
+        // height), Apollonian (synthesised dome height).
+        || FractalType == FractalType.Newton
+        || FractalType == FractalType.Nova
+        || FractalType == FractalType.Halley
+        || IsBuddhaBrot
+        || IsApollonian;
 
     public bool HasNoParams =>
         !(IsJulia || IsMultibrot || IsPhoenix || IsGlynn || IsLogistic || IsSpider || IsNewtonOrNova || IsIFS
@@ -260,7 +301,7 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
     public bool Relief2DEnabled
     {
         get => _p.Relief2DEnabled;
-        set { if (_p.Relief2DEnabled == value) return; _p.Relief2DEnabled = value; this.RaisePropertyChanged(); Fire(); }
+        set { if (_p.Relief2DEnabled == value) return; _p.Relief2DEnabled = value; this.RaisePropertyChanged(); this.RaisePropertyChanged(nameof(ShowLightingFxLauncher)); Fire(); }
     }
     public double Relief2DHeightScale
     {
@@ -292,7 +333,7 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
     public bool Relief2DRaymarch
     {
         get => _p.Relief2DRaymarch;
-        set { if (_p.Relief2DRaymarch == value) return; _p.Relief2DRaymarch = value; this.RaisePropertyChanged(); Fire(); }
+        set { if (_p.Relief2DRaymarch == value) return; _p.Relief2DRaymarch = value; this.RaisePropertyChanged(); this.RaisePropertyChanged(nameof(ShowLightingFxLauncher)); Fire(); }
     }
     public double Relief2DCameraAzimuthDeg
     {
@@ -308,6 +349,139 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
     {
         get => _p.Relief2DCameraFovDeg;
         set { double v = Clamp(value, 15.0, 100.0); if (_p.Relief2DCameraFovDeg == v) return; _p.Relief2DCameraFovDeg = v; this.RaisePropertyChanged(); Fire(); }
+    }
+    public double Relief2DCameraZoom
+    {
+        get => _p.Relief2DCameraZoom;
+        set { double v = Clamp(value, 0.2, 5.0); if (_p.Relief2DCameraZoom == v) return; _p.Relief2DCameraZoom = v; this.RaisePropertyChanged(); Fire(); }
+    }
+    public bool Relief2DCameraOrthographic
+    {
+        get => _p.Relief2DCameraOrthographic;
+        set { if (_p.Relief2DCameraOrthographic == value) return; _p.Relief2DCameraOrthographic = value; this.RaisePropertyChanged(); Fire(); }
+    }
+    public int Relief2DSupersample
+    {
+        get => _p.Relief2DSupersample;
+        set { int v = (int)Clamp(value, 1, 4); if (_p.Relief2DSupersample == v) return; _p.Relief2DSupersample = v; this.RaisePropertyChanged(); Fire(); }
+    }
+    public FracturingFog.HeightCurve2D Relief2DHeightCurve
+    {
+        get => _p.Relief2DHeightCurve;
+        set { if (_p.Relief2DHeightCurve == value) return; _p.Relief2DHeightCurve = value; this.RaisePropertyChanged(); Fire(); }
+    }
+    public Array Relief2DHeightCurves => Enum.GetValues(typeof(FracturingFog.HeightCurve2D));
+    public bool Relief2DBicubicHeight
+    {
+        get => _p.Relief2DBicubicHeight;
+        set { if (_p.Relief2DBicubicHeight == value) return; _p.Relief2DBicubicHeight = value; this.RaisePropertyChanged(); Fire(); }
+    }
+    public bool Relief2DGroundPlane
+    {
+        get => _p.Relief2DGroundPlane;
+        set { if (_p.Relief2DGroundPlane == value) return; _p.Relief2DGroundPlane = value; this.RaisePropertyChanged(); Fire(); }
+    }
+    public bool Relief2DAutoShade
+    {
+        get => _p.Relief2DAutoShade;
+        set { if (_p.Relief2DAutoShade == value) return; _p.Relief2DAutoShade = value; this.RaisePropertyChanged(); Fire(); }
+    }
+    public double Relief2DEdgeFade
+    {
+        get => _p.Relief2DEdgeFade;
+        set { double v = Clamp(value, 0.0, 0.5); if (_p.Relief2DEdgeFade == v) return; _p.Relief2DEdgeFade = v; this.RaisePropertyChanged(); Fire(); }
+    }
+    public bool Relief2DHiResField        // #143
+    {
+        get => _p.Relief2DHiResField;
+        set { if (_p.Relief2DHiResField == value) return; _p.Relief2DHiResField = value; this.RaisePropertyChanged(); Fire(); }
+    }
+    public int Relief2DFieldFloor         // #143
+    {
+        get => _p.Relief2DFieldFloor;
+        set { int v = (int)Clamp(value, 480, 2160); if (_p.Relief2DFieldFloor == v) return; _p.Relief2DFieldFloor = v; this.RaisePropertyChanged(); Fire(); }
+    }
+    public bool Relief2DIsolate
+    {
+        get => _p.Relief2DIsolate;
+        set { if (_p.Relief2DIsolate == value) return; _p.Relief2DIsolate = value; this.RaisePropertyChanged(); Fire(); }
+    }
+    public bool Relief2DIsolateByDetail
+    {
+        get => _p.Relief2DIsolateByDetail;
+        set { if (_p.Relief2DIsolateByDetail == value) return; _p.Relief2DIsolateByDetail = value; this.RaisePropertyChanged(); Fire(); }
+    }
+    public double Relief2DDetailThreshold
+    {
+        get => _p.Relief2DDetailThreshold;
+        set { double v = Clamp(value, 0.0, 1.0); if (_p.Relief2DDetailThreshold == v) return; _p.Relief2DDetailThreshold = v; this.RaisePropertyChanged(); Fire(); }
+    }
+    public bool Relief2DIsolateByColor
+    {
+        get => _p.Relief2DIsolateByColor;
+        set { if (_p.Relief2DIsolateByColor == value) return; _p.Relief2DIsolateByColor = value; this.RaisePropertyChanged(); Fire(); }
+    }
+    public string Relief2DDropColorsCsv
+    {
+        get => _p.Relief2DDropColorsCsv;
+        set { string v = value ?? ""; if (_p.Relief2DDropColorsCsv == v) return; _p.Relief2DDropColorsCsv = v; this.RaisePropertyChanged(); Fire(); }
+    }
+    public double Relief2DColorTolerance
+    {
+        get => _p.Relief2DColorTolerance;
+        set { double v = Clamp(value, 0.0, 1.0); if (_p.Relief2DColorTolerance == v) return; _p.Relief2DColorTolerance = v; this.RaisePropertyChanged(); Fire(); }
+    }
+
+    // #138 mesh export knobs. These affect only the exported mesh (not the live
+    // render), so they don't Fire() a re-render — just notify the export path +
+    // the size estimate.
+    /// <summary>Exported mesh relief height (world units).</summary>
+    public double Relief2DMeshHeight
+    {
+        get => _p.Relief2DMeshHeight;
+        set { double v = Clamp(value, 0.0, 1.0); if (_p.Relief2DMeshHeight == v) return; _p.Relief2DMeshHeight = v; this.RaisePropertyChanged(); }
+    }
+    /// <summary>Exported mesh smoothing [0,1] (despike/merge strength).</summary>
+    public double Relief2DMeshSmoothing
+    {
+        get => _p.Relief2DMeshSmoothing;
+        set { double v = Clamp(value, 0.0, 1.0); if (_p.Relief2DMeshSmoothing == v) return; _p.Relief2DMeshSmoothing = v; this.RaisePropertyChanged(); }
+    }
+    /// <summary>Exported mesh detail = grid resolution (longer axis, cells).</summary>
+    public int Relief2DMeshGrid
+    {
+        get => _p.Relief2DMeshGrid;
+        set { int v = (int)Clamp(value, 64, 2048); if (_p.Relief2DMeshGrid == v) return; _p.Relief2DMeshGrid = v; this.RaisePropertyChanged(); this.RaisePropertyChanged(nameof(Relief2DMeshSizeEstimate)); }
+    }
+    /// <summary>Exported mesh file-size budget (MB); 0 = unlimited.</summary>
+    public double Relief2DMeshMaxMB
+    {
+        get => _p.Relief2DMeshMaxMB;
+        set { double v = Clamp(value, 0.0, 500.0); if (_p.Relief2DMeshMaxMB == v) return; _p.Relief2DMeshMaxMB = v; this.RaisePropertyChanged(); this.RaisePropertyChanged(nameof(Relief2DMeshSizeEstimate)); }
+    }
+    /// <summary>Contoured underside [0,1]: 0 = flat back, 1 = full mirrored contour.</summary>
+    public double Relief2DMeshUnderside
+    {
+        get => _p.Relief2DMeshUnderside;
+        set { double v = Clamp(value, 0.0, 1.0); if (_p.Relief2DMeshUnderside == v) return; _p.Relief2DMeshUnderside = v; this.RaisePropertyChanged(); }
+    }
+    /// <summary>Rough estimate of the exported OBJ size for the current detail /
+    /// budget, shown next to the sliders so the detail↔size trade-off is visible.</summary>
+    public string Relief2DMeshSizeEstimate
+    {
+        get
+        {
+            int grid = _p.Relief2DMeshGrid > 0 ? _p.Relief2DMeshGrid : 512;
+            if (_p.Relief2DMeshMaxMB > 0.0)
+            {
+                double budgetGrid = Math.Sqrt(_p.Relief2DMeshMaxMB * 1024.0 * 1024.0 / 560.0 * 1.6);
+                if (budgetGrid < grid) grid = (int)budgetGrid;
+            }
+            // ~ grid*(grid/1.6) cells worst-case, ~560 bytes/cell.
+            double cells = grid * (grid / 1.6);
+            double mb = cells * 560.0 / (1024.0 * 1024.0);
+            return mb >= 1.0 ? $"~{mb:0.#} MB" : $"~{mb * 1024.0:0} KB";
+        }
     }
 
     public Interior2DBackgroundMode Interior2DBackground
@@ -927,6 +1101,12 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
         || IsKleinian || IsBicomplexMandelbrot;
 
     public ReactiveCommand<Unit, Unit> ExportMeshCommand { get; }
+    public ReactiveCommand<Unit, Unit> PickDropColorCommand { get; }
+
+    /// <summary>#138 — export the Oblique 3D heightfield object as a mesh. Host
+    /// pulls the active calculator's height + albedo and writes OBJ/STL.</summary>
+    public event Action? ExportReliefMeshRequested;
+    public ReactiveCommand<Unit, Unit> ExportReliefMeshCommand { get; }
 
     private void Fire()
     {

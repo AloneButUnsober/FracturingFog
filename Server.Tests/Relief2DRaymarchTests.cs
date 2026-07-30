@@ -36,12 +36,16 @@ public class Relief2DRaymarchTests
             Relief2DCameraAzimuthDeg = 25,
             Relief2DCameraElevationDeg = 45,
             Relief2DCameraFovDeg = 55,
+            // Isolate the terrain-vs-sky silhouette: the #132 ground plane would
+            // otherwise fill the ray-miss region with floor. Frame-fill (#128)
+            // legitimately raises terrain coverage, so the upper bound is generous.
+            Relief2DGroundPlane = false,
         };
         var dst = new uint[w * h];
         HeightfieldRaymarch2D.Render(albedo, height, w, h, p, dst, out double hitFrac);
 
         // A genuine 3D view has BOTH a lit surface and ray-miss sky.
-        Assert.InRange(hitFrac, 0.10, 0.90);
+        Assert.InRange(hitFrac, 0.10, 0.97);
     }
 
     [Fact]
@@ -72,6 +76,90 @@ public class Relief2DRaymarchTests
         for (int i = 0; i < w * h; i++) if (fog[i] != noFog[i]) changed++;
         Assert.True(changed > w * h / 20,
             $"volumetric fog changed too few pixels: {changed} of {w * h}");
+    }
+
+    [Fact]
+    public void Isolate_Culls_Background_And_Writes_Transparent()
+    {
+        int w = 320, h = 240;
+        var (albedo, height) = Mandelbrot(w, h);
+
+        var baseP = new FractalParameters
+        {
+            Relief2DEnabled = true,
+            Relief2DRaymarch = true,
+            Relief2DHeightScale = 1.4,
+            Relief2DCameraElevationDeg = 50,
+            Relief2DGroundPlane = false,
+        };
+        var full = new uint[w * h];
+        HeightfieldRaymarch2D.Render(albedo, height, w, h, baseP, full, out double fullFrac);
+
+        var iso = baseP.Clone();
+        iso.Relief2DIsolate = true;
+        iso.Relief2DIsolateByDetail = true;
+        iso.Relief2DDetailThreshold = 0.6;
+        var cut = new uint[w * h];
+        HeightfieldRaymarch2D.Render(albedo, height, w, h, iso, cut, out double isoFrac);
+
+        int transparent = 0;
+        for (int i = 0; i < w * h; i++) if (((cut[i] >> 24) & 0xFF) == 0) transparent++;
+
+        // Isolation removes background (fewer surface hits), keeps some object,
+        // and drops the background to transparent alpha.
+        Assert.True(isoFrac < fullFrac, $"isolate did not cull: {isoFrac} vs {fullFrac}");
+        Assert.True(isoFrac > 0.02, $"isolate culled everything: {isoFrac}");
+        Assert.True(transparent > w * h / 10, $"too few transparent px: {transparent}");
+    }
+
+    // #143 — the decoupled-resolution overload with field dims equal to the
+    // output dims must be byte-identical to the coupled overload (no behaviour
+    // change for the common case).
+    [Fact]
+    public void Decoupled_Overload_Equal_Dims_Is_Identical()
+    {
+        int w = 320, h = 240;
+        var (albedo, height) = Mandelbrot(w, h);
+        var p = new FractalParameters
+        {
+            Relief2DEnabled = true,
+            Relief2DRaymarch = true,
+            Relief2DHeightScale = 1.4,
+            Relief2DCameraAzimuthDeg = 25,
+            Relief2DCameraElevationDeg = 45,
+            Relief2DCameraFovDeg = 55,
+        };
+        var coupled = new uint[w * h];
+        HeightfieldRaymarch2D.Render(albedo, height, w, h, p, coupled, out double fA);
+        var decoupled = new uint[w * h];
+        HeightfieldRaymarch2D.Render(albedo, height, w, h, w, h, p, decoupled, out double fB);
+
+        Assert.Equal(fA, fB);
+        Assert.Equal(coupled, decoupled);
+    }
+
+    // #143 — a hi-res field (larger than the output) drives the raymarch through
+    // the same view and still produces a valid 3D silhouette at the small output.
+    [Fact]
+    public void HiRes_Field_Renders_Valid_Silhouette_At_Small_Output()
+    {
+        int ow = 200, oh = 150;          // shrunk-window output
+        int hw = 800, hh = 600;          // floor-res field, same view
+        var (albedoLo, _)  = Mandelbrot(ow, oh);
+        var (_, heightHi)  = Mandelbrot(hw, hh);
+
+        var p = new FractalParameters
+        {
+            Relief2DEnabled = true,
+            Relief2DRaymarch = true,
+            Relief2DHeightScale = 1.4,
+            Relief2DCameraElevationDeg = 45,
+            Relief2DGroundPlane = false,   // isolate terrain-vs-sky silhouette
+        };
+        var dst = new uint[ow * oh];
+        HeightfieldRaymarch2D.Render(albedoLo, heightHi, ow, oh, hw, hh, p, dst, out double hitFrac);
+
+        Assert.InRange(hitFrac, 0.10, 0.97);
     }
 
     [Fact]

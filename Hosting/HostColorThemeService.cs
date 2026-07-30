@@ -37,6 +37,9 @@ namespace FracturingFog.Hosting
     {
         private readonly FractalRenderHost? _renderHost;
 
+        /// <inheritdoc/>
+        public bool RegionReliefLocked { get; set; }
+
         /// <summary>
         /// Construct a host theme service. Pass the active render host so the
         /// service can push freshly-built IColorMap instances onto it when
@@ -371,6 +374,13 @@ namespace FracturingFog.Hosting
             // Params) and for Mandelbrot. Applied last so it wins over defaults
             // but sits alongside the source-compiled types above.
             region.Params?.ApplyTo(p);
+
+            // Relief 3D (2D heightfield / Oblique raymarch). Authoritative on
+            // recall so relief toggles WITH the region: a relief region restores
+            // its saved view, a plain region turns relief off. Unless the user
+            // locked relief ("Lock Relief 3D") — then leave the current state.
+            if (!RegionReliefLocked)
+                region.ApplyRelief3DAuthoritative(p);
         }
 
         /// <inheritdoc/>
@@ -623,6 +633,10 @@ namespace FracturingFog.Hosting
                 // Newton exponent, etc.). Null for Mandelbrot + default-suffices
                 // families. Recall applies it in LoadRegionFractalParams.
                 Params = RegionFractalParams.Snapshot(state.FractalType, p),
+                // Relief 3D (2D heightfield / Oblique raymarch) snapshot — restores
+                // the full relief look on recall (camera, tone curve, isolation,
+                // mesh knobs). Null when relief is off, so plain 2D regions stay clean.
+                Relief3D = Relief3DSettings.Snapshot(p),
             };
         }
 
@@ -762,6 +776,11 @@ namespace FracturingFog.Hosting
             UserBulbCameraPhi      = src.UserBulbCameraPhi,
             UserBulbLightTheta     = src.UserBulbLightTheta,
             UserBulbLightPhi       = src.UserBulbLightPhi,
+            // Preserve the captured snapshots on a metadata-only edit (no
+            // recapture) — otherwise renaming/retagging a region silently drops
+            // its per-family params and Relief 3D view.
+            Params   = src.Params,
+            Relief3D = src.Relief3D,
         };
 
         /// <inheritdoc/>
