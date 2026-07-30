@@ -112,6 +112,56 @@ public class Relief2DRaymarchTests
         Assert.True(transparent > w * h / 10, $"too few transparent px: {transparent}");
     }
 
+    // #143 — the decoupled-resolution overload with field dims equal to the
+    // output dims must be byte-identical to the coupled overload (no behaviour
+    // change for the common case).
+    [Fact]
+    public void Decoupled_Overload_Equal_Dims_Is_Identical()
+    {
+        int w = 320, h = 240;
+        var (albedo, height) = Mandelbrot(w, h);
+        var p = new FractalParameters
+        {
+            Relief2DEnabled = true,
+            Relief2DRaymarch = true,
+            Relief2DHeightScale = 1.4,
+            Relief2DCameraAzimuthDeg = 25,
+            Relief2DCameraElevationDeg = 45,
+            Relief2DCameraFovDeg = 55,
+        };
+        var coupled = new uint[w * h];
+        HeightfieldRaymarch2D.Render(albedo, height, w, h, p, coupled, out double fA);
+        var decoupled = new uint[w * h];
+        HeightfieldRaymarch2D.Render(albedo, height, w, h, w, h, p, decoupled, out double fB);
+
+        Assert.Equal(fA, fB);
+        Assert.Equal(coupled, decoupled);
+    }
+
+    // #143 — a hi-res field (larger than the output) drives the raymarch through
+    // the same view and still produces a valid 3D silhouette at the small output.
+    [Fact]
+    public void HiRes_Field_Renders_Valid_Silhouette_At_Small_Output()
+    {
+        int ow = 200, oh = 150;          // shrunk-window output
+        int hw = 800, hh = 600;          // floor-res field, same view
+        var (albedoLo, _)  = Mandelbrot(ow, oh);
+        var (_, heightHi)  = Mandelbrot(hw, hh);
+
+        var p = new FractalParameters
+        {
+            Relief2DEnabled = true,
+            Relief2DRaymarch = true,
+            Relief2DHeightScale = 1.4,
+            Relief2DCameraElevationDeg = 45,
+            Relief2DGroundPlane = false,   // isolate terrain-vs-sky silhouette
+        };
+        var dst = new uint[ow * oh];
+        HeightfieldRaymarch2D.Render(albedoLo, heightHi, ow, oh, hw, hh, p, dst, out double hitFrac);
+
+        Assert.InRange(hitFrac, 0.10, 0.97);
+    }
+
     [Fact]
     public void Dead_Flat_Field_Is_Passthrough()
     {

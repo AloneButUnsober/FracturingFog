@@ -71,6 +71,15 @@ static class Program
         if (args.Length > 0 && args[0] == "--heightfieldisolate")
             return FracturingFog.Diagnostics.HeightfieldRaymarchProbe.RunIsolateGate();
 
+        // --heightfieldhires: #143 gate — prove the decoupled-resolution relief
+        // path. The same small output rendered from a FLOOR-resolution height
+        // field (independent of the window size) is markedly smoother (lower
+        // high-frequency roughness = the small-window needle forest gone) than
+        // from a display-resolution field, while still a valid 3D silhouette.
+        // Writes heightfield-hires-displayres.ppm / -floorres.ppm + .out.
+        if (args.Length > 0 && args[0] == "--heightfieldhires")
+            return FracturingFog.Diagnostics.HeightfieldRaymarchProbe.RunHiResGate();
+
         // --meshexport: #101 gate — prove marching-cubes mesh export works for
         // every DE raymarcher (not just the User Bulb) via the shared
         // RaymarchMeshSampler factory. For each exportable type: build the

@@ -66,7 +66,7 @@
                           IsExpanded="{Binding Relief2DRaymarch, Mode=OneWay}"
                           IsEnabled="{Binding Relief2DRaymarch}">
                 <StackPanel Spacing="6">
-                <Grid ColumnDefinitions="160,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto">
+                <Grid ColumnDefinitions="160,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto">
                     <TextBlock Grid.Row="0" Grid.Column="0" Text="Camera azimuth (°):" VerticalAlignment="Center"
                                ToolTip.Tip="Orbit the terrain around the up axis. 0 = looking straight at the scene." />
                     <NumericUpDown Grid.Row="0" Grid.Column="1"
@@ -107,7 +107,20 @@
                                ToolTip.Tip="Ramp the height field to the base plane near each image edge so fractal structure that runs off the frame tapers out instead of forming streaky 'arms' at the border (seen when panned/zoomed). 0 = off." />
                     <Slider Grid.Row="6" Grid.Column="1" Minimum="0" Maximum="0.5" Margin="0,2"
                             Value="{Binding Relief2DEdgeFade, Mode=TwoWay}" />
+
+                    <TextBlock Grid.Row="7" Grid.Column="0" Text="Field floor (px):" VerticalAlignment="Center"
+                               IsEnabled="{Binding Relief2DHiResField}"
+                               ToolTip.Tip="Short-axis pixel resolution the height field is computed at, independent of the window size (#143). At small windows the display-resolution field undersamples the fractal boundary into spiky needles; a higher floor makes every window match the maximized look, at extra escape-time compute on the base frame. Only applies when 'Hi-res height field' is on and the window is smaller than this." />
+                    <NumericUpDown Grid.Row="7" Grid.Column="1"
+                                   Minimum="480" Maximum="2160" Increment="120" FormatString="F0"
+                                   IsEnabled="{Binding Relief2DHiResField}"
+                                   Value="{Binding Relief2DFieldFloor, Mode=TwoWay}" Margin="0,2" />
                 </Grid>
+
+                <CheckBox Content="Hi-res height field (window-independent quality)"
+                          IsChecked="{Binding Relief2DHiResField, Mode=TwoWay}"
+                          IsEnabled="{Binding Relief2DRaymarch}"
+                          ToolTip.Tip="Compute the relief height field at the 'Field floor' resolution instead of the display size (#143), so shrinking the window no longer turns the terrain into a spiky needle-forest — every size matches the maximized look. Costs an extra escape-time field render on the base frame when the window is below the floor. No effect at or above the floor (e.g. maximized / Span)." />
 
                 <CheckBox Content="Orthographic camera (no perspective stretch)"
                           IsChecked="{Binding Relief2DCameraOrthographic, Mode=TwoWay}"
