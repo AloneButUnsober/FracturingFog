@@ -991,6 +991,36 @@ namespace FracturingFog.Rendering
                 if (ShowPerfHud)
                     _perfStats.RecordCalc((Stopwatch.GetTimestamp() - calcStartA) * 1000.0 / Stopwatch.Frequency);
                 if (ct.IsCancellationRequested) return;
+
+                // #145 — Adaptive HE on escape-time alt zoom legs (Julia,
+                // BurningShip, Tricorn, Multibrot, Phoenix, Magnet1/2, Glynn,
+                // Spider), through the same leg-locked CDF machinery so the
+                // mapping stays flicker-free across the leg. 3D raymarch alts
+                // (the stereo path above) don't implement the capability.
+                int eqA = ViewState.HistogramEq;
+                if (eqA > 0 && alt is FracturingFog.Interefaces.ISupportsHistogramEq heAlt)
+                {
+                    double strengthA = eqA / 100.0;
+                    double ditherA = _videoBandDitherEnabled ? _videoBandDitherStrength : 0.0;
+                    if (_videoLegAnimators.Count > 0) _videoLegCdfStale = true;
+                    EnsureVideoLegCdf(heAlt, alt.MaxIterations);
+                    if (_videoLegCdf != null)
+                    {
+                        heAlt.ApplyHistogramEqualizationWithCdf(
+                            _videoLegCdf, _videoLegCdfBins, _videoLegCdfMaxIter,
+                            strengthA, ditherA,
+                            out long escA, out long satA);
+                        if (escA > 0
+                            && satA > escA * VideoCdfSaturationRebuildFraction)
+                        {
+                            _videoLegCdfStale = true;
+                        }
+                    }
+                    else
+                    {
+                        heAlt.ApplyHistogramEqualization(strengthA);
+                    }
+                }
                 UploadProcessedBuffer(alt.ColorBuffer, alt.Width, alt.Height);
                 CaptureVideoFrame();
                 if (ShowPerfHud) _perfStats.RecordFrame(frameSw.Elapsed.TotalMilliseconds);
@@ -1031,7 +1061,7 @@ namespace FracturingFog.Rendering
                 // Animated legs mutate params every frame → the histogram
                 // shifts, so the leg-locked CDF must rebuild each frame.
                 if (_videoLegAnimators.Count > 0) _videoLegCdfStale = true;
-                EnsureVideoLegCdf();
+                EnsureVideoLegCdf(_calculator, _calculator.MaxIterations);
                 if (_videoLegCdf != null)
                 {
                     _calculator.ApplyHistogramEqualizationWithCdf(
@@ -1074,16 +1104,19 @@ namespace FracturingFog.Rendering
 
         // Builds the per-leg CDF on the first frame; refreshes after a >5%
         // MaxIterations shift (tier auto-promote) or a saturation stale flag.
-        private void EnsureVideoLegCdf()
+        // #145 — parameterized on the HE source so escape-time alt calculators
+        // share the same leg-locked CDF machinery (flicker-free across a zoom
+        // leg) as the Mandelbrot path. The Mandelbrot caller passes _calculator.
+        private void EnsureVideoLegCdf(
+            FracturingFog.Interefaces.ISupportsHistogramEq source, int curMax)
         {
-            int curMax = _calculator.MaxIterations;
             bool needRebuild = _videoLegCdf == null
                 || _videoLegCdfMaxIter <= 0
                 || _videoLegCdfStale
                 || Math.Abs(curMax - _videoLegCdfMaxIter) > _videoLegCdfMaxIter * 0.05;
             if (!needRebuild) return;
 
-            if (_calculator.BuildHistogramCdf(out double[]? cdf, out int bins, out int srcMax))
+            if (source.BuildHistogramCdf(out double[]? cdf, out int bins, out int srcMax))
             {
                 _videoLegCdf = cdf;
                 _videoLegCdfBins = bins;
@@ -1923,6 +1956,12 @@ namespace FracturingFog.Rendering
                     {
                         SyncAltCalculatorForVideoFrame(altPre);
                         altPre.Calculate(legCt);
+                        // #145 — escape-time alt leg-start fade target gets HE so
+                        // it matches the live look (per-frame build; the leg-
+                        // locked CDF establishes on the first RenderVideoFrame).
+                        if (eqSnapshot > 0
+                            && altPre is FracturingFog.Interefaces.ISupportsHistogramEq hePre)
+                            hePre.ApplyHistogramEqualization(eqSnapshot / 100.0);
                         var cb = altPre.ColorBuffer;
                         newLegBuf = new uint[cb.Length];
                         Array.Copy(cb, newLegBuf, cb.Length);

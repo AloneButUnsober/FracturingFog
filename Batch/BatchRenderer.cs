@@ -428,11 +428,13 @@ namespace FracturingFog.Batch
 
             if (alt != null)
             {
-                // Adaptive HE is Mandelbrot-only and Mandelbrot never routes
-                // through BuildCaptureCalculator (it returns null for it), so
-                // the alt path carries no HE — brightness/contrast still apply
-                // downstream on the returned buffer.
+                // #145: escape-time alt calculators equalize through the shared
+                // HistogramEqualizer core just like Mandelbrot; non-escape-time
+                // families don't implement the capability and carry no HE.
+                // Brightness/contrast still apply downstream on the buffer.
                 alt.Calculate(CancellationToken.None);
+                if (adaptive > 0 && alt is FracturingFog.Interefaces.ISupportsHistogramEq heAlt)
+                    heAlt.ApplyHistogramEqualization(adaptive / 100.0);
                 return CopyBuffer(alt.ColorBuffer, w, h);
             }
 
