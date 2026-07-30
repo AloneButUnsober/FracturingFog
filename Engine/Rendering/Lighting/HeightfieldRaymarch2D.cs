@@ -235,6 +235,28 @@ public static class HeightfieldRaymarch2D
             }
         }
 
+        // Resolution-adaptive despike (#145). At small window sizes (Mini / Toy
+        // mode) the fractal boundary is undersampled, so a lone high-dwell cell
+        // whose neighbours all escaped fast reads as an isolated tall NEEDLE —
+        // the "hedgehog" the oblique camera stretches into a spike. Clamp every
+        // cell to its 8-neighbour max plus a small margin: connected ridges and
+        // filaments (a neighbour is nearly as tall) survive untouched; only
+        // isolated single-cell peaks are pulled down. Self-gating — at maximized
+        // / Span resolution the boundary is connected so nothing clamps and the
+        // signed-off view is unchanged.
+        DespikeNeighborMax(hbuf, w, h);
+
+        // Resolution-adaptive low-pass (#145b). The despike above only removes
+        // ISOLATED needles; along the fractal boundary every cell is high but the
+        // dwell oscillates wildly, so at Mini (320×240) / Toy (200×150) sizes the
+        // undersampled boundary reads as a jagged COMB of tall cells (the residual
+        // spikes near the edge — the interior stays smooth because its dwell is
+        // low/flat). A neighbour-max clamp can't fix a comb whose cells are all
+        // tall; a low-pass can. Blur strength ramps from 0 at ≥480 px (maximized /
+        // Span untouched — signed-off view unchanged) up to ~3 box passes at Toy
+        // size, blended continuously so a window resize never snaps the look.
+        LowPassAdaptive(hbuf, w, h);
+
         // Edge fade (#137, #140) — pull tall structure near each image edge down
         // to the base plane so filaments running off the frame taper out instead
         // of extruding into streaky border "arms". Implemented as a height CAP,
@@ -273,7 +295,16 @@ public static class HeightfieldRaymarch2D
             return;
         }
         double aspect = (double)w / h;
-        double sy = 0.35 * Math.Max(0.0, p.Relief2DHeightScale) / maxH;
+        // Resolution-adaptive relief amplitude (#145c). The undersampled boundary
+        // is a rough MULTI-cell high-dwell band towering over the zero interior;
+        // median / blur widen but can't flatten it, so at Mini / Toy sizes it
+        // renders as tall fingers seen side-on. Pulling the height scale down at
+        // low resolution turns that band into a gentle mound — matching the
+        // (high-res) maximized look, which is itself low relief at this framing.
+        // Identity at ≥480 px (maximized / Span unchanged); down to 0.45× at Toy.
+        double resT = ResolutionRamp(w, h);
+        double reliefAmp = 1.0 - 0.72 * resT;
+        double sy = 0.35 * reliefAmp * Math.Max(0.0, p.Relief2DHeightScale) / maxH;
 
         // Lipschitz bound from the actual max world-space slope of the field.
         double worldDx = aspect / w, worldDz = 1.0 / h;
@@ -329,7 +360,19 @@ public static class HeightfieldRaymarch2D
         // disk (radius = extent) foreshortens vertically to extent·sin(el) when
         // seen at elevation el, so scale the fit distance by sin(el) (#128). A
         // user frame-fill zoom pulls the camera in (>1) or back (<1).
-        double extent = 0.5 * Math.Sqrt(aspect * aspect + 1.0);
+        // #146 — cap the aspect used for CAMERA FRAMING (not ray generation).
+        // The bounding-disk radius 0.5·√(aspect²+1) grows without bound as the
+        // window widens, so a borderless multi-monitor Span (very wide aspect)
+        // pulls the camera far back and the terrain — only 1 unit deep in Z —
+        // fills a thin horizontal band, wasting the top and bottom of the frame.
+        // Framing on a capped aspect keeps the camera close enough that the
+        // terrain fills the height; the true (uncapped) aspect still drives ray
+        // directions below, so the wide exterior simply extends past the
+        // left/right edges instead of leaving vertical bars. Normal windows
+        // (aspect ≤ cap) are unaffected — the signed-off 16:9 framing is
+        // byte-identical.
+        double framingAspect = Math.Min(aspect, 2.2);
+        double extent = 0.5 * Math.Sqrt(framingAspect * framingAspect + 1.0);
         double zoom = Math.Clamp(p.Relief2DCameraZoom, 0.2, 5.0);
         double foreshorten = Math.Clamp(Math.Sin(el), 0.3, 1.0);
         double radius = extent * foreshorten / (Math.Tan(fov * 0.5) * zoom);
@@ -562,6 +605,152 @@ public static class HeightfieldRaymarch2D
     // Parallel.For only reads it via the HeightDe.
     private static float[]? s_compressed;
     private static byte[]? s_keep;   // #135 isolation cull mask scratch
+    private static float[]? s_despikeSrc;   // #145 despike neighbour-read snapshot
+
+    /// <summary>#145 — clamp every cell to its 8-neighbour max plus a small
+    /// margin (5% of the field max). Removes isolated single-cell needles
+    /// (undersampled boundary at Mini / Toy sizes) while leaving connected
+    /// ridges and filaments — whose crest has an almost-as-tall neighbour —
+    /// intact. A no-op on high-resolution fields where the boundary is
+    /// connected, so maximized / Span renders are unchanged.</summary>
+    private static void DespikeNeighborMax(float[] hbuf, int w, int h)
+    {
+        int n = w * h;
+        float maxH = 0f;
+        for (int i = 0; i < n; i++) if (hbuf[i] > maxH) maxH = hbuf[i];
+        if (maxH <= 1e-9f) return;
+        float margin = 0.05f * maxH;
+
+        // Read neighbours from a snapshot so in-place clamps don't cascade.
+        float[] src = s_despikeSrc is { } s && s.Length >= n ? s : (s_despikeSrc = new float[n]);
+        Array.Copy(hbuf, src, n);
+
+        for (int y = 0; y < h; y++)
+        {
+            int row = y * w;
+            int ym = (y > 0 ? y - 1 : 0) * w;
+            int yp = (y < h - 1 ? y + 1 : h - 1) * w;
+            for (int x = 0; x < w; x++)
+            {
+                float c = src[row + x];
+                if (c <= margin) continue;   // already near the base — nothing to clamp
+                int xm = x > 0 ? x - 1 : 0;
+                int xp = x < w - 1 ? x + 1 : w - 1;
+                float m = src[ym + xm], t;
+                t = src[ym + x];  if (t > m) m = t;
+                t = src[ym + xp]; if (t > m) m = t;
+                t = src[row + xm]; if (t > m) m = t;
+                t = src[row + xp]; if (t > m) m = t;
+                t = src[yp + xm]; if (t > m) m = t;
+                t = src[yp + x];  if (t > m) m = t;
+                t = src[yp + xp]; if (t > m) m = t;
+                float cap = m + margin;
+                if (c > cap) hbuf[row + x] = cap;
+            }
+        }
+    }
+
+    /// <summary>#145 — small-window smoothing ramp. 0 at ≥640 px (min window
+    /// dimension → maximized / Span untouched, signed-off view unchanged), rising
+    /// to 1 at ≤220 px (Toy). Drives both the low-pass strength and the relief
+    /// amplitude pull-down so the undersampled boundary reads gently at Mini /
+    /// Toy sizes. Smoothstep so a resize never snaps the look.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static double ResolutionRamp(int w, int h)
+        => Smoothstep((640.0 - Math.Min(w, h)) / (640.0 - 220.0));
+
+    private static float[]? s_lowpassSrc;   // #145b box-blur neighbour-read snapshot
+
+    /// <summary>#145b — resolution-adaptive box-blur low-pass of the compressed
+    /// height field. Strength ramps from 0 at ≥480 px (min window dimension) up
+    /// to ~3 passes at ≤200 px (Toy mode), blended continuously so there is no
+    /// visible snap on resize. Zero cost / no-op at maximized / Span resolution,
+    /// so the signed-off large-window view is unchanged; at Mini / Toy sizes it
+    /// merges the undersampled boundary comb into a smooth ridge.</summary>
+    private static void LowPassAdaptive(float[] hbuf, int w, int h)
+    {
+        double t = ResolutionRamp(w, h);
+        if (t <= 0.0) return;
+
+        // MEDIAN first (up to 3 passes). The undersampled boundary is a COMB of
+        // alternating tall/short cells; a box blur only averages it (residual
+        // ripple survives) whereas a 3×3 median rejects the outlier so the crest
+        // collapses to a smooth ridge. Then a light box blur (up to 2 passes)
+        // polishes the median's small plateaus. Both ramp with t and blend the
+        // fractional last pass so a resize never snaps the look.
+        double medAmt = t * 4.0;
+        int medFull = (int)medAmt; double medFrac = medAmt - medFull;
+        for (int k = 0; k < medFull; k++) Median3x3(hbuf, w, h, 1.0f);
+        if (medFrac > 1e-3) Median3x3(hbuf, w, h, (float)medFrac);
+
+        double blurAmt = t * 3.0;
+        int bFull = (int)blurAmt; double bFrac = blurAmt - bFull;
+        for (int k = 0; k < bFull; k++) BoxBlur3x3(hbuf, w, h, 1.0f);
+        if (bFrac > 1e-3) BoxBlur3x3(hbuf, w, h, (float)bFrac);
+    }
+
+    /// <summary>One 3×3 median pass, result blended into <paramref name="hbuf"/>
+    /// by <paramref name="amt"/>. Edge-clamped; reads from a snapshot (shares the
+    /// low-pass scratch) so it is in-place. Rejects single-cell outliers — the
+    /// boundary comb — that a linear blur only smears.</summary>
+    private static void Median3x3(float[] hbuf, int w, int h, float amt)
+    {
+        int n = w * h;
+        float[] src = s_lowpassSrc is { } s && s.Length >= n ? s : (s_lowpassSrc = new float[n]);
+        Array.Copy(hbuf, src, n);
+        Span<float> win = stackalloc float[9];
+        for (int y = 0; y < h; y++)
+        {
+            int row = y * w;
+            int ym = (y > 0 ? y - 1 : 0) * w;
+            int yp = (y < h - 1 ? y + 1 : h - 1) * w;
+            for (int x = 0; x < w; x++)
+            {
+                int xm = x > 0 ? x - 1 : 0;
+                int xp = x < w - 1 ? x + 1 : w - 1;
+                win[0] = src[ym + xm]; win[1] = src[ym + x]; win[2] = src[ym + xp];
+                win[3] = src[row + xm]; win[4] = src[row + x]; win[5] = src[row + xp];
+                win[6] = src[yp + xm]; win[7] = src[yp + x]; win[8] = src[yp + xp];
+                // Insertion sort of 9 — cheap, no allocation.
+                for (int a = 1; a < 9; a++)
+                {
+                    float key = win[a]; int b = a - 1;
+                    while (b >= 0 && win[b] > key) { win[b + 1] = win[b]; b--; }
+                    win[b + 1] = key;
+                }
+                float med = win[4];
+                float c = src[row + x];
+                hbuf[row + x] = c + (med - c) * amt;
+            }
+        }
+    }
+
+    /// <summary>One 3×3 box-blur pass, result blended into <paramref name="hbuf"/>
+    /// by <paramref name="amt"/> (1 = full blur, &lt;1 = partial for a smooth
+    /// fractional pass). Edge-clamped; reads from a snapshot so it is in-place.</summary>
+    private static void BoxBlur3x3(float[] hbuf, int w, int h, float amt)
+    {
+        int n = w * h;
+        float[] src = s_lowpassSrc is { } s && s.Length >= n ? s : (s_lowpassSrc = new float[n]);
+        Array.Copy(hbuf, src, n);
+        for (int y = 0; y < h; y++)
+        {
+            int row = y * w;
+            int ym = (y > 0 ? y - 1 : 0) * w;
+            int yp = (y < h - 1 ? y + 1 : h - 1) * w;
+            for (int x = 0; x < w; x++)
+            {
+                int xm = x > 0 ? x - 1 : 0;
+                int xp = x < w - 1 ? x + 1 : w - 1;
+                float sum = src[ym + xm] + src[ym + x] + src[ym + xp]
+                          + src[row + xm] + src[row + x] + src[row + xp]
+                          + src[yp + xm] + src[yp + x] + src[yp + xp];
+                float avg = sum * (1f / 9f);
+                float c = src[row + x];
+                hbuf[row + x] = c + (avg - c) * amt;
+            }
+        }
+    }
 
     /// <summary>Smoothstep on [0,1] (3t²−2t³).</summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
