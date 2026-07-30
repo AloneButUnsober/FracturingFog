@@ -534,6 +534,8 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
             () => FractalParamsRequested?.Invoke(this, EventArgs.Empty));
         ShowLightingFxCommand     = ReactiveCommand.Create(
             () => LightingFxRequested?.Invoke(this, EventArgs.Empty));
+        ShowRelief3DCommand       = ReactiveCommand.Create(
+            () => Relief3DRequested?.Invoke(this, EventArgs.Empty));
 
         // Context-menu commands. Toolbar / status / grid / watermark are
         // simple flag flips; the rest delegate to the existing private
@@ -1601,6 +1603,11 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
     /// (the Lighting/FX block on its own, not buried inside Fractal Params).</summary>
     public ReactiveCommand<Unit, Unit> ShowLightingFxCommand { get; }
 
+    /// <summary>#147 — opens the standalone Relief 3D panel from the shell
+    /// (Control Center), independent of the Fractal Params dialog so closing
+    /// Params leaves Relief 3D open.</summary>
+    public ReactiveCommand<Unit, Unit> ShowRelief3DCommand { get; }
+
     // Context-menu commands (right-click on render surface).
     public ReactiveCommand<Unit, bool> ToggleToolbarCommand { get; }
     public ReactiveCommand<Unit, bool> ToggleStatusBarCommand { get; }
@@ -2667,6 +2674,12 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
     /// over the shared ViewState — the Lighting/FX block is type-independent, so
     /// this stays open across fractal-type changes (unlike Fractal Params).</summary>
     public event EventHandler? LightingFxRequested;
+
+    /// <summary>User asked for the standalone Relief 3D panel (#147). Host pops
+    /// <c>Relief3DDialog</c> bound to a <c>FractalParamsViewModel</c> over the
+    /// shared ViewState. Independent of Fractal Params — launchable from the
+    /// Control Center and stays open when Params closes.</summary>
+    public event EventHandler? Relief3DRequested;
 
     /// <summary>Begin a video zoom / slideshow from a request the host
     /// collected via the dialog. Sets the button label + (slideshow) shows the

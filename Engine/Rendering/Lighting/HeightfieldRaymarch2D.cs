@@ -650,14 +650,23 @@ public static class HeightfieldRaymarch2D
         }
     }
 
-    /// <summary>#145 — small-window smoothing ramp. 0 at ≥640 px (min window
+    /// <summary>#145 — small-window smoothing ramp. 0 at ≥920 px (min window
     /// dimension → maximized / Span untouched, signed-off view unchanged), rising
-    /// to 1 at ≤220 px (Toy). Drives both the low-pass strength and the relief
+    /// to 1 at ≤200 px (Toy). Drives both the low-pass strength and the relief
     /// amplitude pull-down so the undersampled boundary reads gently at Mini /
-    /// Toy sizes. Smoothstep so a resize never snaps the look.</summary>
+    /// Toy sizes. Smoothstep so a resize never snaps the look.
+    ///
+    /// #147 — start raised 640 → 920 px: smoke-testing showed the boundary
+    /// spikes actually onset around a ~980×580 window (min dim ≈ 580), well
+    /// above the old 640 threshold, where the ramp was still ≈0 (untreated). At
+    /// 920 the onset band sits at t ≈ 0.45 so the median + amplitude pull-down
+    /// engage right where the comb first appears, while a maximized window (min
+    /// dim ≳ 1000, even ~864 on a 125 %-scaled 1080p panel → t &lt; 0.02) stays
+    /// visually identical to the signed-off large view. Mini / Toy (t ≈ 0.99 / 1)
+    /// are unchanged vs. the 640 ramp.</summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static double ResolutionRamp(int w, int h)
-        => Smoothstep((640.0 - Math.Min(w, h)) / (640.0 - 220.0));
+        => Smoothstep((920.0 - Math.Min(w, h)) / (920.0 - 200.0));
 
     private static float[]? s_lowpassSrc;   // #145b box-blur neighbour-read snapshot
 

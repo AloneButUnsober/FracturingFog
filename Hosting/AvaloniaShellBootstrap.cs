@@ -95,6 +95,12 @@ namespace FracturingFog.Hosting
         // reopened on type change). Toggle-close, close-and-destroy.
         private static PanelHostWindow? s_lightingFxWin;
 
+        // #147 — standalone Relief 3D panel. Like s_lightingFxWin: its own
+        // FractalParamsViewModel over the shared ViewState, independent of the
+        // Fractal Params window so closing Params leaves Relief 3D open, and
+        // launchable straight from the Control Center. Re-focus if already open.
+        private static PanelHostWindow? s_relief3DWin;
+
         // Dedicated source-compiled editors (one window each, modeless).
         private static PanelHostWindow? s_userEqWin;
         private static PanelHostWindow? s_sandboxWin;
@@ -1994,6 +2000,60 @@ namespace FracturingFog.Hosting
 
                     var owner = AvaloniaDialogs.ActiveMainWindow;
                     if (owner != null) win.Show(owner);
+                    else win.Show();
+                });
+            };
+
+            // ── Standalone Relief 3D (#147) ──────────────────────────────────
+            //
+            // Mirrors the Lighting & FX launcher above but for the Relief 3D
+            // (2D heightfield) panel: its own FractalParamsViewModel over the
+            // shared ViewState.FractalParameters, so every Relief2D* edit fires
+            // ParamChanged → re-render. Independent of the Fractal Params window
+            // (closing Params no longer closes Relief 3D) and reachable from the
+            // Control Center. Re-focus if already open rather than toggle-close,
+            // since it is launched from persistent buttons in two panels.
+            //
+            // Topmost is matched to the owner at show time so the panel is not
+            // hidden behind the render window in Span mode (borderless Topmost).
+            shell.Relief3DRequested += (_, _) =>
+            {
+                Dispatcher.UIThread.Post(() =>
+                {
+                    if (s_renderHost == null) return;
+
+                    if (s_relief3DWin is { IsVisible: true })
+                    {
+                        s_relief3DWin.Activate();
+                        return;
+                    }
+
+                    var vs = s_renderHost.ViewState;
+                    var vm = new FractalParamsViewModel(vs.FractalType, vs.FractalParameters);
+                    vm.ParamChanged += () => s_renderHost?.Trigger();
+
+                    var win = new PanelHostWindow(
+                        new Relief3DDialog(),
+                        new PanelHostOptions(
+                            "Relief 3D",
+                            Width: 480, Height: 720, MinWidth: 420, MinHeight: 400,
+                            SizeToContentHeight: false, CanResize: true, ShowInTaskbar: true,
+                            StartupLocation: WindowStartupLocation.CenterOwner,
+                            Background: new SolidColorBrush(Color.FromRgb(0x28, 0x28, 0x28))))
+                    {
+                        DataContext = vm,
+                    };
+                    win.Closed += (_, _) => s_relief3DWin = null;
+                    s_relief3DWin = win;
+
+                    var owner = AvaloniaDialogs.ActiveMainWindow;
+                    if (owner != null)
+                    {
+                        // Match Span-mode Topmost so the panel floats above the
+                        // borderless fullscreen render window instead of behind it.
+                        win.Topmost = owner.Topmost;
+                        win.Show(owner);
+                    }
                     else win.Show();
                 });
             };

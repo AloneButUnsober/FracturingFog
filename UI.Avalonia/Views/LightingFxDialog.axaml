@@ -46,7 +46,7 @@
                            Margin="0,0,0,4" />
 
                 <!-- Lights -->
-                <Expander Header="Lights" IsExpanded="True">
+                <Expander Header="Lights" IsExpanded="True" HorizontalAlignment="Stretch">
                     <Grid ColumnDefinitions="160,*"
                           RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto">
 
@@ -151,7 +151,7 @@
                 </Expander>
 
                 <!-- Ambient Occlusion -->
-                <Expander Header="Ambient Occlusion">
+                <Expander Header="Ambient Occlusion" HorizontalAlignment="Stretch">
                     <Grid ColumnDefinitions="160,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto">
                         <TextBlock Grid.Row="0" Grid.Column="0" Text="DE-AO samples:" VerticalAlignment="Center"
                                    ToolTip.Tip="DE-cone AO (micro-crease detail). 0 = off. 4–8 typical; each sample = one DE eval." />
@@ -201,7 +201,7 @@
                 </Expander>
 
                 <!-- Shadow -->
-                <Expander Header="Shadow">
+                <Expander Header="Shadow" HorizontalAlignment="Stretch">
                     <Grid ColumnDefinitions="160,*" RowDefinitions="Auto,Auto">
                         <TextBlock Grid.Row="0" Grid.Column="0" Text="Shadow steps:" VerticalAlignment="Center"
                                    ToolTip.Tip="Soft-shadow DE-march count per light. 0 = no shadows. 24–32 typical." />
@@ -225,7 +225,7 @@
                 </Expander>
 
                 <!-- Fog / Volumetric -->
-                <Expander Header="Fog / Volumetric">
+                <Expander Header="Fog / Volumetric" HorizontalAlignment="Stretch">
                     <Grid ColumnDefinitions="160,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto">
                         <TextBlock Grid.Row="0" Grid.Column="0" Text="Fog density:" VerticalAlignment="Center"
                                    ToolTip.Tip="Beer–Lambert exponential. 0 = no fog. Scales by ray distance." />
@@ -311,7 +311,7 @@
                 </Expander>
 
                 <!-- Material -->
-                <Expander Header="Material">
+                <Expander Header="Material" HorizontalAlignment="Stretch">
                     <Grid ColumnDefinitions="160,*" RowDefinitions="Auto,Auto,Auto,Auto">
                         <TextBlock Grid.Row="0" Grid.Column="0" Text="Roughness:" VerticalAlignment="Center"
                                    ToolTip.Tip="GGX roughness. 0 = mirror, 1 = lambert." />
@@ -351,10 +351,10 @@
                 </Expander>
 
                 <!-- Sky / Environment -->
-                <Expander Header="Sky / Environment">
+                <Expander Header="Sky / Environment" HorizontalAlignment="Stretch">
                     <Grid ColumnDefinitions="160,*" RowDefinitions="Auto,Auto,Auto,Auto">
                         <TextBlock Grid.Row="0" Grid.Column="0" Text="Sky mode:" VerticalAlignment="Center" />
-                        <ComboBox  Grid.Row="0" Grid.Column="1"
+                        <ComboBox  Grid.Row="0" Grid.Column="1" HorizontalAlignment="Stretch"
                                    ItemsSource="{Binding SkyModes}"
                                    SelectedItem="{Binding SkyMode, Mode=TwoWay}" Margin="0,2" />
 
@@ -387,10 +387,10 @@
                 </Expander>
 
                 <!-- Tone Map / Bloom / Lens -->
-                <Expander Header="Tone Map / Bloom / Lens">
+                <Expander Header="Tone Map / Bloom / Lens" HorizontalAlignment="Stretch">
                     <Grid ColumnDefinitions="160,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto">
                         <TextBlock Grid.Row="0" Grid.Column="0" Text="Tone map:" VerticalAlignment="Center" />
-                        <ComboBox  Grid.Row="0" Grid.Column="1"
+                        <ComboBox  Grid.Row="0" Grid.Column="1" HorizontalAlignment="Stretch"
                                    ItemsSource="{Binding ToneMapOperators}"
                                    SelectedItem="{Binding ToneMap, Mode=TwoWay}" Margin="0,2" />
 
@@ -466,7 +466,7 @@
                 </Expander>
 
                 <!-- Reflection / Edge / Stereo / DoF -->
-                <Expander Header="Reflection / Edge / Stereo / DoF">
+                <Expander Header="Reflection / Edge / Stereo / DoF" HorizontalAlignment="Stretch">
                     <Grid ColumnDefinitions="160,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto">
                         <TextBlock Grid.Row="0" Grid.Column="0" Text="Reflection:" VerticalAlignment="Center"
                                    ToolTip.Tip="N-bounce DE-march along reflect(V,N). 0 = off." />
@@ -516,7 +516,7 @@
 
                         <TextBlock Grid.Row="5" Grid.Column="0" Text="Edge kernel:" VerticalAlignment="Center"
                                    ToolTip.Tip="Sobel = fast, isotropic-ish. FreiChen = 9-tap edge subspace, more uniform on diagonals." />
-                        <ComboBox Grid.Row="5" Grid.Column="1"
+                        <ComboBox Grid.Row="5" Grid.Column="1" HorizontalAlignment="Stretch"
                                   ItemsSource="{Binding EdgeKernels}"
                                   SelectedItem="{Binding EdgeKernel, Mode=TwoWay}"
                                   Margin="0,2" />
@@ -529,7 +529,7 @@
 
                         <TextBlock Grid.Row="7" Grid.Column="0" Text="Stereo mode:" VerticalAlignment="Center"
                                    ToolTip.Tip="Off = mono. Fake = single render + depth-parallax warp (cheap). True = two real per-eye renders (Phase 20b — 2x cost, real parallax on close objects)." />
-                        <ComboBox Grid.Row="7" Grid.Column="1"
+                        <ComboBox Grid.Row="7" Grid.Column="1" HorizontalAlignment="Stretch"
                                   ItemsSource="{Binding StereoModes}"
                                   SelectedItem="{Binding StereoMode, Mode=TwoWay}"
                                   Margin="0,2" />
@@ -593,7 +593,7 @@
 
                         <TextBlock Grid.Row="15" Grid.Column="0" Text="Stereo layout:" VerticalAlignment="Center"
                                    ToolTip.Tip="FullSbs = each eye full width (2W x H). HalfSbs = each eye squeezed to W/2 (W x H, anamorphic) — mono dimensions, smaller files; the 3D TV / VR player un-squeezes per eye. Used only when Stereo mode is on." />
-                        <ComboBox Grid.Row="15" Grid.Column="1"
+                        <ComboBox Grid.Row="15" Grid.Column="1" HorizontalAlignment="Stretch"
                                   ItemsSource="{Binding StereoLayouts}"
                                   SelectedItem="{Binding StereoLayout, Mode=TwoWay}"
                                   Margin="0,2" />
@@ -601,11 +601,11 @@
                 </Expander>
 
                 <!-- Triplanar Material -->
-                <Expander Header="Triplanar Material">
+                <Expander Header="Triplanar Material" HorizontalAlignment="Stretch">
                     <Grid ColumnDefinitions="160,*" RowDefinitions="Auto,Auto,Auto,Auto">
                         <TextBlock Grid.Row="0" Grid.Column="0" Text="Pattern:" VerticalAlignment="Center"
                                    ToolTip.Tip="World-space projected pattern blended with the calculator's albedo. None = off." />
-                        <ComboBox Grid.Row="0" Grid.Column="1"
+                        <ComboBox Grid.Row="0" Grid.Column="1" HorizontalAlignment="Stretch"
                                   ItemsSource="{Binding TriplanarKinds}"
                                   SelectedItem="{Binding TriplanarKind, Mode=TwoWay}"
                                   Margin="0,2" />
@@ -634,7 +634,7 @@
                 </Expander>
 
                 <!-- Debug HUD -->
-                <Expander Header="Debug HUD">
+                <Expander Header="Debug HUD" HorizontalAlignment="Stretch">
                     <StackPanel Spacing="4" Margin="6,4,0,4">
                         <CheckBox Content="Light-direction compass"
                                   IsChecked="{Binding DebugHudCompass, Mode=TwoWay}"
