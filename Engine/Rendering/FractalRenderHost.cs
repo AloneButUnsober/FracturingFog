@@ -2059,6 +2059,18 @@ namespace FracturingFog.Rendering
                         // ColorBuffer alone; Calculate already coloured it.
                     }
                 }
+                // #145 — escape-time alt calculators (Julia, BurningShip,
+                // Tricorn, Multibrot, Phoenix, Magnet1/2, Glynn, Spider) equalize
+                // through the same shared core. Builds + applies inline (no
+                // per-calc CDF cache on the alt path; the live slider rebuilds in
+                // RepaintWithAdaptive). Non-escape-time alts skip HE entirely.
+                else if (ViewState.HistogramEq > 0
+                    && altCalc is FracturingFog.Interefaces.ISupportsHistogramEq heAltCalc
+                    && heAltCalc.BuildHistogramCdf(out double[]? altCdf, out int altBins, out int altSrc))
+                {
+                    heAltCalc.ApplyHistogramEqualizationWithCdf(
+                        altCdf!, altBins, altSrc, ViewState.HistogramEq / 100.0);
+                }
 
                 // #102 — stash the active 2D height field (smooth iteration
                 // count) so UploadProcessedBuffer can add heightfield relief on
@@ -2383,7 +2395,25 @@ namespace FracturingFog.Rendering
         {
             if (_disposed) return;
             IFractalCalculator? alt = SelectAltCalculator(ViewState.FractalType);
-            if (alt != null) { RepaintWithPostFx(); return; }
+            if (alt != null)
+            {
+                // #145 — escape-time alt calculators recolor live from their
+                // cached smooth buffers at the new strength (strength 0 recolors
+                // to the plain linear mapping). No recompute; builds the CDF each
+                // tick (no per-calc CDF cache on the alt path). Non-escape-time
+                // alts have no HE — just re-upload.
+                if (alt is FracturingFog.Interefaces.ISupportsHistogramEq heAlt)
+                {
+                    heAlt.ApplyHistogramEqualization(
+                        Math.Clamp(ViewState.HistogramEq / 100.0, 0.0, 1.0));
+                    UploadProcessedBuffer(alt.ColorBuffer, alt.Width, alt.Height);
+                }
+                else
+                {
+                    RepaintWithPostFx();
+                }
+                return;
+            }
 
             double strength = Math.Clamp(ViewState.HistogramEq / 100.0, 0.0, 1.0);
             if (strength > 0.0)
@@ -2588,6 +2618,13 @@ namespace FracturingFog.Rendering
 
                 SyncAltStateFromMandel(alt);
                 alt.Calculate(System.Threading.CancellationToken.None);
+                // #145 — bake Adaptive HE into the alt cross-fade target too, so
+                // an escape-time fractal's slideshow theme fade interpolates
+                // between two HE-applied buffers (mirrors the Mandelbrot bake
+                // below). Non-escape-time alts skip it.
+                if (ViewState.HistogramEq > 0
+                    && alt is FracturingFog.Interefaces.ISupportsHistogramEq heAlt)
+                    heAlt.ApplyHistogramEqualization(ViewState.HistogramEq / 100.0);
                 var altSrc = alt.ColorBuffer;
                 int n = w * h;
                 var altCopy = new uint[n];

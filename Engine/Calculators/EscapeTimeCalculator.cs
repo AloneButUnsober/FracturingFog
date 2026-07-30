@@ -24,7 +24,7 @@ using FracturingFog.Models.FractalKernels;
 
 namespace FracturingFog;
 
-public sealed class EscapeTimeCalculator : Interefaces.IFractalCalculator, Interefaces.IHeightFieldSource
+public sealed class EscapeTimeCalculator : Interefaces.IFractalCalculator, Interefaces.IHeightFieldSource, Interefaces.ISupportsHistogramEq
 {
     public bool SupportsZoomPan => true;
 
@@ -981,12 +981,49 @@ public sealed class EscapeTimeCalculator : Interefaces.IFractalCalculator, Inter
         }
     }
 
-    // ── Histogram equalization (stub for MainForm compatibility) ────────────
+    // ── Histogram equalization (#145 — shared core in HistogramEqualizer) ────
+    //
+    // Same rank-order equalization as MandelbrotCalculator: this family carries
+    // the identical IterationBuffer / SmoothBuffer / aux-buffer set, so it
+    // delegates to the shared HistogramEqualizer. Covers Julia, BurningShip,
+    // Tricorn, Multibrot, Phoenix, Magnet1/2, Glynn, Spider.
 
+    private EscapeTimeColorState ColorState() => new(
+        Width, Height, MaxIterations, LastPixelScale, ColorMap,
+        IterationBuffer, SmoothBuffer, DistanceBuffer, NormalXBuffer, NormalYBuffer,
+        FinalZrBuffer, FinalZiBuffer, FinalDrBuffer, FinalDiBuffer, ColorBuffer, _po);
+
+    /// <inheritdoc/>
+    public bool BuildHistogramCdf(out double[]? cdf, out int bins, out int sourceMaxIter)
+    {
+        sourceMaxIter = MaxIterations;
+        return HistogramEqualizer.BuildCdf(
+            Width, Height, MaxIterations, IterationBuffer, SmoothBuffer, out cdf, out bins);
+    }
+
+    /// <inheritdoc/>
     public void ApplyHistogramEqualization(double strength)
     {
-        // No-op for Phase 1. MainForm should gate histogram EQ to the
-        // Mandelbrot engine until this path is implemented.
-        _ = strength;
+        // No escaped pixels → leave the Calculate-coloured buffer untouched
+        // (unlike MandelbrotCalculator there is no interior-alpha recolor to
+        // re-run here).
+        if (!BuildHistogramCdf(out double[]? cdf, out int bins, out int sourceMaxIter))
+            return;
+        ApplyHistogramEqualizationWithCdf(cdf!, bins, sourceMaxIter, strength);
+    }
+
+    /// <inheritdoc/>
+    public void ApplyHistogramEqualizationWithCdf(double[] cdf, int bins, int sourceMaxIter, double strength)
+        => ApplyHistogramEqualizationWithCdf(cdf, bins, sourceMaxIter, strength, 0.0, out _, out _);
+
+    /// <inheritdoc/>
+    public void ApplyHistogramEqualizationWithCdf(
+        double[] cdf, int bins, int sourceMaxIter, double strength, double ditherIterStrength,
+        out long escapedCount, out long saturatedCount)
+    {
+        var st = ColorState();
+        HistogramEqualizer.ApplyWithCdf(
+            in st, cdf, bins, sourceMaxIter, strength, ditherIterStrength,
+            out escapedCount, out saturatedCount);
     }
 }
