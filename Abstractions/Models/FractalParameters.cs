@@ -359,6 +359,112 @@ namespace FracturingFog.Models
         /// <summary>Vertical field of view of the oblique camera in degrees.
         /// Default 50.</summary>
         public double Relief2DCameraFovDeg { get; set; } = 50.0;
+        /// <summary>Frame-fill zoom for the oblique camera. 1.0 = the auto-framing
+        /// that fills the window with the terrain; &gt;1 pulls the camera in (terrain
+        /// larger, edges may clip); &lt;1 pulls back (more margin). Default 1.0.</summary>
+        public double Relief2DCameraZoom { get; set; } = 1.0;
+
+        // #132 Oblique 3D raymarch fidelity wave.
+        /// <summary>Orthographic (parallel) projection instead of perspective.
+        /// Removes the perspective stretch that grows with frame-fill/FOV — a
+        /// clean "relief-map" look. Default false (perspective).</summary>
+        public bool Relief2DCameraOrthographic { get; set; } = false;
+        /// <summary>Anti-alias supersampling factor: N×N rays per pixel, averaged.
+        /// 1 = off, 2–4 = progressively smoother silhouette/edges at N² cost.
+        /// Default 2.</summary>
+        public int Relief2DSupersample { get; set; } = 2;
+        /// <summary>Tone curve applied to the smooth-count height field before
+        /// raymarching. Default <see cref="HeightCurve2D.Log"/> (tames boundary
+        /// spikes into terrain).</summary>
+        public HeightCurve2D Relief2DHeightCurve { get; set; } = HeightCurve2D.Log;
+        /// <summary>Bicubic (Catmull-Rom) height sampling instead of bilinear —
+        /// smoother terrain on deep zoom, at extra sample cost. Default false.</summary>
+        public bool Relief2DBicubicHeight { get; set; } = false;
+        /// <summary>Render a base ground plane at y=0 around the terrain so the
+        /// silhouette sits on the ground and cast shadows land on it (instead of
+        /// a floating slab against sky). Default true.</summary>
+        public bool Relief2DGroundPlane { get; set; } = true;
+        /// <summary>Auto-fill sensible AO / soft-shadow / specular / ambient
+        /// defaults for the raymarch when the corresponding Lighting FX knobs are
+        /// still at zero, so Oblique 3D looks good out of the box. Explicit
+        /// non-zero user values always win. Default true.</summary>
+        public bool Relief2DAutoShade { get; set; } = true;
+
+        // #135 — isolate filaments as a standalone 3D object. When on, dropped
+        // cells produce no surface (rays pass through) and ray-miss pixels are
+        // written transparent (alpha 0) so the kept fractal floats alone and
+        // exports as a cutout. Two cull selectors (combinable): local detail and
+        // colour-drop. Best paired with ShowSkyBackdrop off + ground plane off.
+        /// <summary>Edge fade for the oblique raymarch: ramp the height field to
+        /// the base plane over this fraction of each image edge, so fractal
+        /// structure that runs off the frame tapers out instead of extruding into
+        /// streaky "arms" at the border. 0 = off. Default 0.04.</summary>
+        public double Relief2DEdgeFade { get; set; } = 0.04;
+
+        /// <summary>#143 — compute the relief HEIGHT FIELD at a resolution floor
+        /// (see <see cref="Relief2DFieldFloor"/>) independent of the display size,
+        /// instead of reusing the display-resolution smooth-count buffer. At small
+        /// windows the display-res field undersamples the fractal boundary and each
+        /// filament collapses into an isolated tall needle ("hedgehog"); a floor-res
+        /// field makes every window match the maximized look. Only affects the
+        /// oblique raymarch (Relief2DRaymarch) on escape-time 2D types; no effect
+        /// when the window is already at or above the floor. Default true.</summary>
+        public bool Relief2DHiResField { get; set; } = true;
+        /// <summary>#143 — short-axis pixel floor for the hi-res relief field
+        /// (see <see cref="Relief2DHiResField"/>). The field is computed at this
+        /// many pixels on its shorter side (aspect preserved) whenever the display
+        /// is smaller, so relief quality is decoupled from window size. Higher =
+        /// smoother terrain at small windows but more escape-time compute on the
+        /// base frame. Clamped to [480, 2160]. Default 1080.</summary>
+        public int Relief2DFieldFloor { get; set; } = 1080;
+
+        /// <summary>Master toggle: isolate the kept fractal as a standalone 3D
+        /// object over a transparent background. Default false.</summary>
+        public bool Relief2DIsolate { get; set; } = false;
+        /// <summary>Drop cells whose local surface detail (normalised height
+        /// gradient) is below <see cref="Relief2DDetailThreshold"/> — removes the
+        /// flat background + smooth plateau, keeping fine filaments. Default true.</summary>
+        public bool Relief2DIsolateByDetail { get; set; } = true;
+        /// <summary>Detail cull DROP FRACTION, [0,1]: cull the flattest share of
+        /// cells by local gradient (a quantile, robust to boundary spikes).
+        /// Higher = drop more, keeping only the sharpest filaments. Default 0.6.</summary>
+        public double Relief2DDetailThreshold { get; set; } = 0.6;
+        /// <summary>Drop cells whose themed colour matches one of
+        /// <see cref="Relief2DDropColorsCsv"/> within
+        /// <see cref="Relief2DColorTolerance"/>. Default false.</summary>
+        public bool Relief2DIsolateByColor { get; set; } = false;
+        /// <summary>Comma-separated ARGB/RGB hex colours to drop (e.g.
+        /// "FF102030, 405060"). Empty = none.</summary>
+        public string Relief2DDropColorsCsv { get; set; } = "";
+        /// <summary>Colour-match tolerance for the colour-drop cull, [0,1]
+        /// (fraction of the max RGB distance). Default 0.12.</summary>
+        public double Relief2DColorTolerance { get; set; } = 0.12;
+
+        // #138 mesh export knobs — control the exported heightfield mesh
+        // (HeightfieldMeshExporter) independently of the on-screen raymarch.
+        /// <summary>Mesh relief height in world units (the exported emboss depth).
+        /// The raymarch uses ~0.35; the mesh defaults gentler (0.15) because a
+        /// full-height relief of a fractal boundary is a forest of spikes when
+        /// seen from the side in Blender. Higher = more dramatic + spikier.
+        /// Default 0.15.</summary>
+        public double Relief2DMeshHeight { get; set; } = 0.15;
+        /// <summary>Mesh smoothing [0,1]: 0 = raw (max detail, spiky), 1 = heavy
+        /// (despike median + grayscale close + blur). Trades fractal detail for a
+        /// clean continuous surface. Default 0.5.</summary>
+        public double Relief2DMeshSmoothing { get; set; } = 0.5;
+        /// <summary>Mesh detail = grid resolution (cells on the longer axis).
+        /// Higher = finer fractal detail AND a bigger file. Default 512.</summary>
+        public int Relief2DMeshGrid { get; set; } = 512;
+        /// <summary>Mesh file-size budget in megabytes. When &gt; 0, the effective
+        /// grid is clamped down so the estimated output stays under this size
+        /// (caps <see cref="Relief2DMeshGrid"/>). 0 = unlimited. Default 0.</summary>
+        public double Relief2DMeshMaxMB { get; set; } = 0.0;
+        /// <summary>Contoured underside [0,1]: mirror this fraction of the
+        /// (smoothed) top relief onto the exported mesh's base, so the back
+        /// carries the fractal contour instead of being dead flat. Reuses the
+        /// same smoothed height field, so no spikes are reintroduced. 0 = flat
+        /// back, 1 = the back bulges as deep as the top rises. Default 0.6.</summary>
+        public double Relief2DMeshUnderside { get; set; } = 0.6;
 
         // Apollonian gasket (Descartes Circle Theorem recursive packing).
         /// <summary>Maximum recursion depth for the Vieta-jump tree. The
@@ -699,6 +805,27 @@ namespace FracturingFog.Models
                 Relief2DCameraAzimuthDeg = Relief2DCameraAzimuthDeg,
                 Relief2DCameraElevationDeg = Relief2DCameraElevationDeg,
                 Relief2DCameraFovDeg = Relief2DCameraFovDeg,
+                Relief2DCameraZoom = Relief2DCameraZoom,
+                Relief2DCameraOrthographic = Relief2DCameraOrthographic,
+                Relief2DSupersample = Relief2DSupersample,
+                Relief2DHeightCurve = Relief2DHeightCurve,
+                Relief2DBicubicHeight = Relief2DBicubicHeight,
+                Relief2DGroundPlane = Relief2DGroundPlane,
+                Relief2DAutoShade = Relief2DAutoShade,
+                Relief2DEdgeFade = Relief2DEdgeFade,
+                Relief2DHiResField = Relief2DHiResField,
+                Relief2DFieldFloor = Relief2DFieldFloor,
+                Relief2DIsolate = Relief2DIsolate,
+                Relief2DIsolateByDetail = Relief2DIsolateByDetail,
+                Relief2DDetailThreshold = Relief2DDetailThreshold,
+                Relief2DIsolateByColor = Relief2DIsolateByColor,
+                Relief2DDropColorsCsv = Relief2DDropColorsCsv,
+                Relief2DColorTolerance = Relief2DColorTolerance,
+                Relief2DMeshHeight = Relief2DMeshHeight,
+                Relief2DMeshSmoothing = Relief2DMeshSmoothing,
+                Relief2DMeshGrid = Relief2DMeshGrid,
+                Relief2DMeshMaxMB = Relief2DMeshMaxMB,
+                Relief2DMeshUnderside = Relief2DMeshUnderside,
                 ApollonianDepth = ApollonianDepth,
                 ApollonianMinPixelRadius = ApollonianMinPixelRadius,
                 ApollonianColorByDepth = ApollonianColorByDepth,

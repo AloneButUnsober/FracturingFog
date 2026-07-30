@@ -1856,6 +1856,57 @@ namespace FracturingFog.Rendering
             dst.DisableDdBla = src.DisableDdBla;
         }
 
+        /// <summary>#143 — render the smooth-count height field at a resolution
+        /// floor (short axis <see cref="FractalParameters.Relief2DFieldFloor"/>,
+        /// aspect preserved) into <see cref="_reliefHeight"/>, decoupling relief
+        /// quality from the display size. Returns false — leaving the relief state
+        /// untouched so the caller falls back to the display-res field — when the
+        /// window is already at/above the floor or the field render is cancelled.
+        /// Runs on the calc thread after the main Calculate; the dedicated
+        /// <see cref="_reliefFieldCalc"/> mirrors the main calc's view + precision
+        /// so deep-zoom perturbation is reproduced at the higher resolution.</summary>
+        private bool TryCaptureHiResReliefField(MandelbrotCalculator calc,
+            FractalParameters p, int dispW, int dispH, CancellationToken token)
+        {
+            if (dispW <= 2 || dispH <= 2) return false;
+            int floor = Math.Clamp(p.Relief2DFieldFloor, 480, 2160);
+            int shortAxis = Math.Min(dispW, dispH);
+            if (shortAxis >= floor) return false;   // display already ≥ floor — no gain
+
+            // Scale so the short axis hits the floor; cap the long axis so a very
+            // wide Span doesn't blow the field render up.
+            double s = floor / (double)shortAxis;
+            int fw = (int)Math.Round(dispW * s);
+            int fh = (int)Math.Round(dispH * s);
+            const int MaxLong = 3840;
+            if (Math.Max(fw, fh) > MaxLong)
+            {
+                double s2 = MaxLong / (double)Math.Max(fw, fh);
+                fw = (int)Math.Round(fw * s2);
+                fh = (int)Math.Round(fh * s2);
+            }
+            fw = Math.Max(4, fw); fh = Math.Max(4, fh);
+
+            try
+            {
+                var rc = _reliefFieldCalc ??= new MandelbrotCalculator(fw, fh);
+                if (rc.Width != fw || rc.Height != fh) rc.Resize(fw, fh);
+                MirrorMandelbrotState(calc, rc);
+                rc.Calculate(token);
+                if (token.IsCancellationRequested) return false;
+
+                var field = (rc as Interefaces.IHeightFieldSource)?.SmoothBuffer;
+                int hn = fw * fh;
+                if (field == null || field.Length < hn) return false;
+                if (_reliefHeight == null || _reliefHeight.Length < hn)
+                    _reliefHeight = new float[hn];
+                Array.Copy(field, _reliefHeight, hn);
+                _reliefW = fw; _reliefH = fh; _reliefValid = true;
+                return true;
+            }
+            catch (OperationCanceledException) { return false; }
+        }
+
         private void RunFrameJobUpload(FrameJob job, long ms)
         {
             var token = job.Token;
@@ -1894,9 +1945,39 @@ namespace FracturingFog.Rendering
                     Dbg86($"PREVIEW  seq={job.Seq} stage={job.ProgressiveStage} claimed={claimedP} lastSeq={_lastPresentedUploadSeq} {preview.Width}x{preview.Height}");
                     if (claimedP)
                     {
+                    // #131 — apply the heightfield relief to the PREVIEW buffer at
+                    // preview dims too. Without this a pan flashes between the flat
+                    // low-res 2D preview (uploaded here) and the 3D relief final
+                    // frame. The preview is a MandelbrotCalculator, so it exposes
+                    // its own SmoothBuffer at preview resolution; the raymarch is
+                    // cheap at quarter/half and frames identically (aspect-based),
+                    // so the 3D preview lines up with the final — no flash, no jump.
+                    uint[] previewSrc = preview.ColorBuffer;
+                    int pw = preview.Width, ph = preview.Height, pn = pw * ph;
+                    {
+                        var rp = ViewState.FractalParameters;
+                        var phs = (preview as Interefaces.IHeightFieldSource)?.SmoothBuffer;
+                        if (rp.Relief2DEnabled && phs != null && pn > 0
+                            && phs.Length >= pn && previewSrc != null && previewSrc.Length >= pn)
+                        {
+                            // Force supersample off for the preview (speed); the
+                            // final frame keeps the user's AA setting.
+                            var prp = rp.Relief2DSupersample > 1 ? rp.Clone() : rp;
+                            if (!ReferenceEquals(prp, rp)) prp.Relief2DSupersample = 1;
+                            if (_reliefPreviewScratch == null || _reliefPreviewScratch.Length < pn)
+                                _reliefPreviewScratch = new uint[pn];
+                            if (prp.Relief2DRaymarch)
+                                FracturingFog.Rendering.Lighting.HeightfieldRaymarch2D.Render(
+                                    previewSrc, phs, pw, ph, prp, _reliefPreviewScratch);
+                            else
+                                FracturingFog.Rendering.Lighting.HeightfieldRelief2D.Apply(
+                                    previewSrc, _reliefPreviewScratch, phs, pw, ph, prp);
+                            previewSrc = _reliefPreviewScratch;
+                        }
+                    }
                     lock (_d3dGate)
                     {
-                        _renderer.UpdateTexture(preview.ColorBuffer, preview.Width, preview.Height);
+                        _renderer.UpdateTexture(previewSrc, pw, ph);
                         _renderer.Render();
                     }
 
@@ -1904,15 +1985,13 @@ namespace FracturingFog.Rendering
                     // _lastPresentedBuffer so the next stale-upload (e.g.
                     // pan-stop debounce Trigger) re-paints the panned preview
                     // instead of the pre-pan full-res frame held in
-                    // _lastUploadedBuffer. Pinned scratch pool grows lazily.
-                    int pw = preview.Width;
-                    int ph = preview.Height;
-                    int pn = pw * ph;
-                    if (pn > 0 && preview.ColorBuffer != null && preview.ColorBuffer.Length >= pn)
+                    // _lastUploadedBuffer. Snapshot the RELIEF-applied buffer so
+                    // the debounce repaint stays 3D too. Pinned pool grows lazily.
+                    if (pn > 0 && previewSrc != null && previewSrc.Length >= pn)
                     {
                         if (_uploadPreviewPool == null || _uploadPreviewPool.Length < pn)
                             _uploadPreviewPool = GC.AllocateUninitializedArray<uint>(pn, pinned: true);
-                        Array.Copy(preview.ColorBuffer, _uploadPreviewPool, pn);
+                        Array.Copy(previewSrc, _uploadPreviewPool, pn);
                         _lastPresentedBuffer = _uploadPreviewPool;
                         _lastPresentedWidth = pw;
                         _lastPresentedHeight = ph;
@@ -2020,11 +2099,29 @@ namespace FracturingFog.Rendering
                     }
                     else if (job.TaaSampleIndex == 0)
                     {
-                        int hn = hw * hh;
-                        if (_reliefHeight == null || _reliefHeight.Length < hn)
-                            _reliefHeight = new float[hn];
-                        Array.Copy(srcH, _reliefHeight, Math.Min(srcH.Length, hn));
-                        _reliefW = hw; _reliefH = hh; _reliefValid = true;
+                        // #143 — for the canonical Mandelbrot path, compute the
+                        // height field at a resolution floor (independent of the
+                        // window size) so a small window renders the same smooth
+                        // terrain as a maximized one. Falls back to the display-res
+                        // SmoothBuffer when the hi-res knob is off, the window is
+                        // already at/above the floor, or the field render is
+                        // cancelled. Alt calcs keep the display-res field.
+                        var rp = ViewState.FractalParameters;
+                        if (!useAlt && rp.Relief2DEnabled && rp.Relief2DRaymarch
+                            && rp.Relief2DHiResField
+                            && TryCaptureHiResReliefField(calc, rp, hw, hh, token))
+                        {
+                            // _reliefHeight / _reliefW / _reliefH / _reliefValid
+                            // set inside on success.
+                        }
+                        else
+                        {
+                            int hn = hw * hh;
+                            if (_reliefHeight == null || _reliefHeight.Length < hn)
+                                _reliefHeight = new float[hn];
+                            Array.Copy(srcH, _reliefHeight, Math.Min(srcH.Length, hn));
+                            _reliefW = hw; _reliefH = hh; _reliefValid = true;
+                        }
                     }
                     // TaaSampleIndex > 0: keep the locked base height.
                 }
@@ -2670,6 +2767,36 @@ namespace FracturingFog.Rendering
             }
         }
 
+        /// <summary>#138 — expose the active 2D calculator's height field + flat
+        /// albedo for heightfield mesh export. Returns false when the active
+        /// fractal doesn't provide an <see cref="Interefaces.IHeightFieldSource"/>
+        /// (3D raymarchers, IFS, etc.). Buffers are the calculator's live arrays;
+        /// the caller must copy/consume on the same frame.</summary>
+        public bool TryGetHeightFieldExport(out uint[] albedo, out float[] height,
+                                            out int w, out int h)
+        {
+            albedo = Array.Empty<uint>(); height = Array.Empty<float>(); w = 0; h = 0;
+            Interefaces.IHeightFieldSource? hs;
+            uint[] colBuf; int aw, ah;
+            var alt = SelectAltCalculator(ViewState.FractalType);
+            if (alt != null)
+            {
+                hs = alt as Interefaces.IHeightFieldSource;
+                colBuf = alt.ColorBuffer; aw = alt.Width; ah = alt.Height;
+            }
+            else
+            {
+                hs = _calculator as Interefaces.IHeightFieldSource;
+                colBuf = _calculator.ColorBuffer; aw = _calculator.Width; ah = _calculator.Height;
+            }
+            if (hs == null) return false;
+            var sm = hs.SmoothBuffer;
+            int n = aw * ah;
+            if (n <= 0 || sm.Length < n || colBuf.Length < n) return false;
+            albedo = colBuf; height = sm; w = aw; h = ah;
+            return true;
+        }
+
         private IFractalCalculator? SelectAltCalculator(FractalType type)
         {
             // Dynamic hot-load slot is bound to UserEquation semantically — the
@@ -2784,6 +2911,15 @@ namespace FracturingFog.Rendering
         private bool _reliefValid;
         private int _reliefW, _reliefH;
         private uint[]? _reliefColorScratch;
+        private uint[]? _reliefPreviewScratch;   // #131 — relief applied to the pan preview
+        // #143 — dedicated hi-res relief FIELD calculator. When the oblique
+        // raymarch is active and the display is smaller than the field floor, the
+        // smooth-count height field is computed here at a resolution floor
+        // (short axis Relief2DFieldFloor, aspect preserved) instead of reusing the
+        // display-resolution SmoothBuffer, so relief quality is decoupled from
+        // window size (small windows no longer collapse the boundary into spiky
+        // needles). Mandelbrot path only; lazily sized on the calc thread.
+        private MandelbrotCalculator? _reliefFieldCalc;
 
         private void UploadProcessedBuffer(uint[] src, int w, int h, bool srcAlreadyProcessed = false)
         {
@@ -2810,21 +2946,32 @@ namespace FracturingFog.Rendering
             // stays flat (idempotent across re-uploads).
             {
                 var reliefParams = ViewState.FractalParameters;
-                if (reliefParams.Relief2DEnabled && !srcAlreadyProcessed
-                    && _reliefValid && _reliefHeight != null && _reliefW == w && _reliefH == h
-                    && _reliefHeight.Length >= n && src.Length >= n)
+                bool raymarch = reliefParams.Relief2DRaymarch;
+                // #143 — the Phase 2 raymarch samples the field by normalised
+                // coords, so the height field may be a HIGHER resolution than the
+                // output/albedo grid (hi-res field decoupled from window size).
+                // The Phase 1 hillshade is screen-space and needs the field at the
+                // exact output dims. The hi-res field is only ever captured while
+                // raymarch is on, so Phase 1 always sees a display-res field here.
+                bool fieldOk = reliefParams.Relief2DEnabled && !srcAlreadyProcessed
+                    && _reliefValid && _reliefHeight != null && src.Length >= n
+                    && (raymarch
+                        ? (_reliefW > 0 && _reliefH > 0 && _reliefHeight.Length >= _reliefW * _reliefH)
+                        : (_reliefW == w && _reliefH == h && _reliefHeight.Length >= n));
+                if (fieldOk)
                 {
                     if (_reliefColorScratch == null || _reliefColorScratch.Length < n)
                         _reliefColorScratch = new uint[n];
-                    if (reliefParams.Relief2DRaymarch)
-                        // Phase 2 — oblique 3D raymarch of the height field
-                        // (perspective relief, silhouette, volumetric fog).
+                    if (raymarch)
+                        // Phase 2 — oblique 3D raymarch of the (possibly hi-res)
+                        // height field (perspective relief, silhouette, fog).
                         FracturingFog.Rendering.Lighting.HeightfieldRaymarch2D.Render(
-                            src, _reliefHeight, w, h, reliefParams, _reliefColorScratch);
+                            src, _reliefHeight!, w, h, _reliefW, _reliefH,
+                            reliefParams, _reliefColorScratch, out _);
                     else
                         // Phase 1 — screen-space hillshade + cast-shadow post-pass.
                         FracturingFog.Rendering.Lighting.HeightfieldRelief2D.Apply(
-                            src, _reliefColorScratch, _reliefHeight, w, h, reliefParams);
+                            src, _reliefColorScratch, _reliefHeight!, w, h, reliefParams);
                     src = _reliefColorScratch;
                 }
             }

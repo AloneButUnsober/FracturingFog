@@ -1,7 +1,11 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // SPDX-FileCopyrightText: 2026 Bradley Brown
 
+using System;
+
+using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Interactivity;
 using Avalonia.Markup.Xaml;
 using Avalonia.Media;
@@ -48,6 +52,20 @@ public sealed partial class FractalParamsView : UserControl
             _lightingFxWin?.Close();
             _lightingFxWin = null;
         };
+    }
+
+    /// <summary>Open (or re-focus) the standalone Relief 3D dialog (#147).
+    /// Routed through the shell's <see cref="ShellViewModel.ShowRelief3DCommand"/>
+    /// so the panel is owned by the shell, not this Params view — closing Params
+    /// no longer closes Relief 3D, and it is the same single window the Control
+    /// Center launcher opens. The shell path binds its own FractalParamsViewModel
+    /// over the shared ViewState, so edits still re-render through ParamChanged.</summary>
+    private void OnOpenRelief3DClick(object? sender, RoutedEventArgs e)
+    {
+        var main = (Application.Current?.ApplicationLifetime
+            as IClassicDesktopStyleApplicationLifetime)?.MainWindow;
+        if (main?.DataContext is ShellViewModel shell)
+            shell.ShowRelief3DCommand.Execute().Subscribe();
     }
 
     // The VM's Close button routes to the host window (a UserControl can't

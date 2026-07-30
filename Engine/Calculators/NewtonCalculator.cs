@@ -17,11 +17,17 @@ using FracturingFog.Models;
 
 namespace FracturingFog;
 
-public sealed class NewtonCalculator : IFractalCalculator
+public sealed class NewtonCalculator : IFractalCalculator, IHeightFieldSource
 {
     public int Width { get; private set; }
     public int Height { get; private set; }
     public uint[] ColorBuffer { get; private set; } = Array.Empty<uint>();
+
+    // #139 — height field for Relief 3D. Newton has no escape potential, so the
+    // relief height is the iteration count to convergence: fast-converging basin
+    // interiors are low, the fractal boundaries (slow/non-converging) rise into
+    // ridges. Fed to HeightfieldRelief2D / HeightfieldRaymarch2D via the host.
+    public float[] SmoothBuffer { get; private set; } = Array.Empty<float>();
 
     public double CenterX { get; set; } = 0.0;
     public double CenterY { get; set; } = 0.0;
@@ -42,6 +48,7 @@ public sealed class NewtonCalculator : IFractalCalculator
         Width = width;
         Height = height;
         ColorBuffer = new uint[width * height];
+        SmoothBuffer = new float[width * height];
     }
 
     public void Calculate(CancellationToken ct = default)
@@ -122,6 +129,8 @@ public sealed class NewtonCalculator : IFractalCalculator
                 }
             converged:
                 int idx = rowBase + x;
+                // Relief height = iterations to convergence (boundaries rise).
+                SmoothBuffer[idx] = iter;
                 if (newtonMap != null)
                 {
                     int rgb = newtonMap.MapNewton(basin, d, iter, maxIter, zr, zi);

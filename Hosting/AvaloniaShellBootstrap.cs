@@ -95,6 +95,12 @@ namespace FracturingFog.Hosting
         // reopened on type change). Toggle-close, close-and-destroy.
         private static PanelHostWindow? s_lightingFxWin;
 
+        // #147 — standalone Relief 3D panel. Like s_lightingFxWin: its own
+        // FractalParamsViewModel over the shared ViewState, independent of the
+        // Fractal Params window so closing Params leaves Relief 3D open, and
+        // launchable straight from the Control Center. Re-focus if already open.
+        private static PanelHostWindow? s_relief3DWin;
+
         // Dedicated source-compiled editors (one window each, modeless).
         private static PanelHostWindow? s_userEqWin;
         private static PanelHostWindow? s_sandboxWin;
@@ -1809,6 +1815,35 @@ namespace FracturingFog.Hosting
                         flamePresets: new List<string>(FlamePresets.All.Keys));
                     vm.ParamChanged += () => s_renderHost?.Trigger();
 
+                    // #135 — drop-colour eyedropper: route the params VM's sample
+                    // request through the same platform colour-sample bridge the
+                    // colour-theme editor uses.
+                    vm.SampleColorRequested += (_, args) =>
+                    {
+                        var bridge = BootstrapHooks.ColorSampleBridge;
+                        if (bridge == null || bridge.IsActive)
+                        {
+                            args.Completion.TrySetResult(true);
+                            return;
+                        }
+                        try
+                        {
+                            bridge.Begin(
+                                picked =>
+                                {
+                                    args.PickedR = picked.R;
+                                    args.PickedG = picked.G;
+                                    args.PickedB = picked.B;
+                                    args.Completion.TrySetResult(true);
+                                },
+                                () => args.Completion.TrySetResult(true));
+                        }
+                        catch
+                        {
+                            args.Completion.TrySetResult(true);
+                        }
+                    };
+
                     // #101 — mesh export for the current DE raymarcher. Sampler
                     // builds straight off the live FractalType + params via the
                     // shared factory; marching cubes runs off-thread so the pick
@@ -1844,6 +1879,47 @@ namespace FracturingFog.Hosting
                             {
                                 Dispatcher.UIThread.Post(() =>
                                     ShowInfo("Mesh export error", $"Export failed: {ex.Message}", true));
+                            }
+                        });
+                    };
+
+                    // #138 — export the Oblique 3D heightfield object as a mesh.
+                    // Pulls the active 2D calculator's height + flat albedo and
+                    // tessellates a watertight solid matching the on-screen cutout.
+                    vm.ExportReliefMeshRequested += async () =>
+                    {
+                        var host2 = s_renderHost;
+                        if (host2 == null) return;
+                        if (!host2.TryGetHeightFieldExport(out var alb, out var hgt, out int hw, out int hh))
+                        {
+                            ShowInfo("Relief mesh export",
+                                "This fractal has no height field to export. Enable Relief 3D on a supported 2D type first.", true);
+                            return;
+                        }
+                        var pex = host2.ViewState.FractalParameters;
+                        string? path = await PickSaveAsync("Export Relief Mesh",
+                            "OBJ (*.obj)|*.obj|STL (*.stl)|*.stl|All files (*.*)|*.*",
+                            host2.ViewState.FractalType + "-relief");
+                        if (string.IsNullOrEmpty(path)) return;
+                        // Copy the live buffers before handing to the worker (the
+                        // render thread may overwrite them on the next frame).
+                        var albCopy = (uint[])alb.Clone();
+                        var hgtCopy = (float[])hgt.Clone();
+                        System.Threading.Tasks.Task.Run(() =>
+                        {
+                            try
+                            {
+                                int tris = global::FracturingFog.Export.HeightfieldMeshExporter.Export(
+                                    albCopy, hgtCopy, hw, hh, pex, path);
+                                Dispatcher.UIThread.Post(() => ShowInfo("Relief mesh export",
+                                    tris > 0 ? $"Exported {tris} triangles to {path}"
+                                             : "Nothing to export (height field is flat or fully culled).",
+                                    tris == 0));
+                            }
+                            catch (Exception ex)
+                            {
+                                Dispatcher.UIThread.Post(() =>
+                                    ShowInfo("Relief mesh export error", $"Export failed: {ex.Message}", true));
                             }
                         });
                     };
@@ -1924,6 +2000,60 @@ namespace FracturingFog.Hosting
 
                     var owner = AvaloniaDialogs.ActiveMainWindow;
                     if (owner != null) win.Show(owner);
+                    else win.Show();
+                });
+            };
+
+            // ── Standalone Relief 3D (#147) ──────────────────────────────────
+            //
+            // Mirrors the Lighting & FX launcher above but for the Relief 3D
+            // (2D heightfield) panel: its own FractalParamsViewModel over the
+            // shared ViewState.FractalParameters, so every Relief2D* edit fires
+            // ParamChanged → re-render. Independent of the Fractal Params window
+            // (closing Params no longer closes Relief 3D) and reachable from the
+            // Control Center. Re-focus if already open rather than toggle-close,
+            // since it is launched from persistent buttons in two panels.
+            //
+            // Topmost is matched to the owner at show time so the panel is not
+            // hidden behind the render window in Span mode (borderless Topmost).
+            shell.Relief3DRequested += (_, _) =>
+            {
+                Dispatcher.UIThread.Post(() =>
+                {
+                    if (s_renderHost == null) return;
+
+                    if (s_relief3DWin is { IsVisible: true })
+                    {
+                        s_relief3DWin.Activate();
+                        return;
+                    }
+
+                    var vs = s_renderHost.ViewState;
+                    var vm = new FractalParamsViewModel(vs.FractalType, vs.FractalParameters);
+                    vm.ParamChanged += () => s_renderHost?.Trigger();
+
+                    var win = new PanelHostWindow(
+                        new Relief3DDialog(),
+                        new PanelHostOptions(
+                            "Relief 3D",
+                            Width: 480, Height: 720, MinWidth: 420, MinHeight: 400,
+                            SizeToContentHeight: false, CanResize: true, ShowInTaskbar: true,
+                            StartupLocation: WindowStartupLocation.CenterOwner,
+                            Background: new SolidColorBrush(Color.FromRgb(0x28, 0x28, 0x28))))
+                    {
+                        DataContext = vm,
+                    };
+                    win.Closed += (_, _) => s_relief3DWin = null;
+                    s_relief3DWin = win;
+
+                    var owner = AvaloniaDialogs.ActiveMainWindow;
+                    if (owner != null)
+                    {
+                        // Match Span-mode Topmost so the panel floats above the
+                        // borderless fullscreen render window instead of behind it.
+                        win.Topmost = owner.Topmost;
+                        win.Show(owner);
+                    }
                     else win.Show();
                 });
             };
