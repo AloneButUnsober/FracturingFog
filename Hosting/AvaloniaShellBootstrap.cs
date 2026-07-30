@@ -1884,45 +1884,10 @@ namespace FracturingFog.Hosting
                     };
 
                     // #138 — export the Oblique 3D heightfield object as a mesh.
-                    // Pulls the active 2D calculator's height + flat albedo and
-                    // tessellates a watertight solid matching the on-screen cutout.
-                    vm.ExportReliefMeshRequested += async () =>
-                    {
-                        var host2 = s_renderHost;
-                        if (host2 == null) return;
-                        if (!host2.TryGetHeightFieldExport(out var alb, out var hgt, out int hw, out int hh))
-                        {
-                            ShowInfo("Relief mesh export",
-                                "This fractal has no height field to export. Enable Relief 3D on a supported 2D type first.", true);
-                            return;
-                        }
-                        var pex = host2.ViewState.FractalParameters;
-                        string? path = await PickSaveAsync("Export Relief Mesh",
-                            "OBJ (*.obj)|*.obj|STL (*.stl)|*.stl|All files (*.*)|*.*",
-                            host2.ViewState.FractalType + "-relief");
-                        if (string.IsNullOrEmpty(path)) return;
-                        // Copy the live buffers before handing to the worker (the
-                        // render thread may overwrite them on the next frame).
-                        var albCopy = (uint[])alb.Clone();
-                        var hgtCopy = (float[])hgt.Clone();
-                        System.Threading.Tasks.Task.Run(() =>
-                        {
-                            try
-                            {
-                                int tris = global::FracturingFog.Export.HeightfieldMeshExporter.Export(
-                                    albCopy, hgtCopy, hw, hh, pex, path);
-                                Dispatcher.UIThread.Post(() => ShowInfo("Relief mesh export",
-                                    tris > 0 ? $"Exported {tris} triangles to {path}"
-                                             : "Nothing to export (height field is flat or fully culled).",
-                                    tris == 0));
-                            }
-                            catch (Exception ex)
-                            {
-                                Dispatcher.UIThread.Post(() =>
-                                    ShowInfo("Relief mesh export error", $"Export failed: {ex.Message}", true));
-                            }
-                        });
-                    };
+                    // #147 fix — shared with the standalone Relief 3D window
+                    // (Relief3DRequested) so the button works from either host;
+                    // the standalone launcher forgot to wire this event.
+                    AttachReliefMeshExport(vm);
 
                     // Render-completion gate for the Julia animation. Without
                     // this the timer-driven c-orbit fires Trigger every tick
@@ -2031,6 +1996,11 @@ namespace FracturingFog.Hosting
                     var vs = s_renderHost.ViewState;
                     var vm = new FractalParamsViewModel(vs.FractalType, vs.FractalParameters);
                     vm.ParamChanged += () => s_renderHost?.Trigger();
+                    // #147 fix — the mesh-export button lives in this standalone
+                    // dialog; wire its handler here too (it was only wired on the
+                    // Fractal Params window's VM, so export was a dead no-op when
+                    // launched from the independent Relief 3D window).
+                    AttachReliefMeshExport(vm);
 
                     var win = new PanelHostWindow(
                         new Relief3DDialog(),
@@ -2758,6 +2728,55 @@ namespace FracturingFog.Hosting
         {
             // Fire-and-forget info/error toast — callers don't await it.
             _ = AvaloniaDialogs.ShowMessageAsync(title, body, expectsConfirmation: false);
+        }
+
+        // #138 / #147 — export the active Oblique 3D heightfield object as a
+        // watertight mesh (OBJ with vertex colour + smooth normals, or binary
+        // STL). Pulls the active 2D calculator's height + flat albedo and
+        // tessellates a solid matching the on-screen cutout. Shared by the
+        // Fractal Params window and the standalone Relief 3D window so the
+        // export button works from either host (the standalone launcher used to
+        // omit this wiring, leaving the button a dead no-op).
+        private static void AttachReliefMeshExport(
+            FracturingFog.UI.Avalonia.ViewModels.FractalParamsViewModel vm)
+        {
+            vm.ExportReliefMeshRequested += async () =>
+            {
+                var host2 = s_renderHost;
+                if (host2 == null) return;
+                if (!host2.TryGetHeightFieldExport(out var alb, out var hgt, out int hw, out int hh))
+                {
+                    ShowInfo("Relief mesh export",
+                        "This fractal has no height field to export. Enable Relief 3D on a supported 2D type first.", true);
+                    return;
+                }
+                var pex = host2.ViewState.FractalParameters;
+                string? path = await PickSaveAsync("Export Relief Mesh",
+                    "OBJ (*.obj)|*.obj|STL (*.stl)|*.stl|All files (*.*)|*.*",
+                    host2.ViewState.FractalType + "-relief");
+                if (string.IsNullOrEmpty(path)) return;
+                // Copy the live buffers before handing to the worker (the render
+                // thread may overwrite them on the next frame).
+                var albCopy = (uint[])alb.Clone();
+                var hgtCopy = (float[])hgt.Clone();
+                System.Threading.Tasks.Task.Run(() =>
+                {
+                    try
+                    {
+                        int tris = global::FracturingFog.Export.HeightfieldMeshExporter.Export(
+                            albCopy, hgtCopy, hw, hh, pex, path);
+                        Dispatcher.UIThread.Post(() => ShowInfo("Relief mesh export",
+                            tris > 0 ? $"Exported {tris} triangles to {path}"
+                                     : "Nothing to export (height field is flat or fully culled).",
+                            tris == 0));
+                    }
+                    catch (Exception ex)
+                    {
+                        Dispatcher.UIThread.Post(() =>
+                            ShowInfo("Relief mesh export error", $"Export failed: {ex.Message}", true));
+                    }
+                });
+            };
         }
 
         private static Task<string?> PickOpenAsync(string title, string filter)
