@@ -187,6 +187,13 @@ namespace FracturingFog.Imaging
             {
                 alt.Calculate(token);
                 token.ThrowIfCancellationRequested();
+                // Adaptive HE — #145: escape-time alt calculators (Julia,
+                // BurningShip, Tricorn, Multibrot, Phoenix, Magnet1/2, Glynn,
+                // Spider) equalize through the shared core just like Mandelbrot.
+                // Non-escape-time families don't implement the capability and
+                // fall through unchanged.
+                if (req.HistogramEq > 0 && alt is ISupportsHistogramEq heAlt)
+                    heAlt.ApplyHistogramEqualization(req.HistogramEq / 100.0);
                 buffer = alt.ColorBuffer;
                 w = alt.Width;
                 h = alt.Height;

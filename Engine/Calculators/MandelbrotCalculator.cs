@@ -62,7 +62,7 @@ using System.Diagnostics;
 
 namespace FracturingFog;
 
-public sealed class MandelbrotCalculator : Interefaces.IHeightFieldSource
+public sealed class MandelbrotCalculator : Interefaces.IHeightFieldSource, Interefaces.ISupportsHistogramEq
 {
     // ── Public state ──────────────────────────────────────────────────────────
 
@@ -3803,42 +3803,9 @@ public sealed class MandelbrotCalculator : Interefaces.IHeightFieldSource
     /// </summary>
     public bool BuildHistogramCdf(out double[]? cdf, out int bins, out int sourceMaxIter)
     {
-        cdf = null;
-        bins = 0;
         sourceMaxIter = MaxIterations;
-
-        int w = Width, h = Height;
-        int n = w * h;
-        int maxIter = MaxIterations;
-        if (n == 0 || maxIter <= 0) return false;
-
-        bins = Math.Min(2048, Math.Max(256, maxIter));
-        int[] hist = new int[bins];
-        int totalEscaped = 0;
-        float invMax = 1.0f / maxIter;
-
-        for (int i = 0; i < n; i++)
-        {
-            if (IterationBuffer[i] >= maxIter) continue;
-            float s = SmoothBuffer[i];
-            float t = s * invMax;
-            if (t < 0f) t = 0f; else if (t > 0.9999999f) t = 0.9999999f;
-            int b = (int)(t * bins);
-            hist[b]++;
-            totalEscaped++;
-        }
-
-        if (totalEscaped == 0) return false;
-
-        cdf = new double[bins];
-        long cum = 0;
-        double invTotal = 1.0 / totalEscaped;
-        for (int i = 0; i < bins; i++)
-        {
-            cum += hist[i];
-            cdf[i] = cum * invTotal;
-        }
-        return true;
+        return HistogramEqualizer.BuildCdf(
+            Width, Height, MaxIterations, IterationBuffer, SmoothBuffer, out cdf, out bins);
     }
 
     /// <summary>
@@ -3868,93 +3835,13 @@ public sealed class MandelbrotCalculator : Interefaces.IHeightFieldSource
     /// </summary>
     public void ApplyHistogramEqualizationWithCdf(double[] cdf, int bins, int sourceMaxIter, double strength, double ditherIterStrength, out long escapedCount, out long saturatedCount)
     {
-        escapedCount = 0;
-        saturatedCount = 0;
-        if (cdf == null || bins <= 0 || sourceMaxIter <= 0) return;
-        if (strength < 0.0) strength = 0.0;
-        if (strength > 1.0) strength = 1.0;
-        if (ditherIterStrength < 0.0) ditherIterStrength = 0.0;
-
-        int w = Width, h = Height;
-        int maxIter = MaxIterations;
-        if (w == 0 || h == 0 || maxIter <= 0) return;
-
-        ColorMap.MaxIterations = maxIter;
-        if (ColorMap is IColorMapWithPixelScale pxsEq) pxsEq.PixelScale = LastPixelScale;
-        bool handlesInSet = ColorMap is IColorMapHandlesInSet;
-
-        float invMax = 1.0f / maxIter;             // for current-frame coloring
-        float invMaxSrc = 1.0f / sourceMaxIter;    // for CDF bin lookup
-        int lastBin = bins - 1;
-        float ditherIter = (float)ditherIterStrength;
-
-        // Per-row counters then summed at the end to avoid contended atomics
-        // in the hot loop.
-        long[] rowEscaped = new long[h];
-        long[] rowSaturated = new long[h];
-
-        _po.CancellationToken = CancellationToken.None;
-        var po = _po;
-        ParallelForRows(0, h, po, y =>
-        {
-            int rowBase = y * w;
-            long esc = 0;
-            long sat = 0;
-            for (int x = 0; x < w; x++)
-            {
-                int idx = rowBase + x;
-                int iters = IterationBuffer[idx];
-                if (iters >= maxIter)
-                {
-                    if (handlesInSet)
-                    {
-                        ColorBuffer[idx] = (uint)ColorMap.Map(
-                            0f, 0f, maxIter,
-                            0f, 0f, 0f, 0f, 0f, 0f);
-                    }
-                    else
-                    {
-                        ColorBuffer[idx] = ColorMap.InSetColor;
-                    }
-                    continue;
-                }
-                esc++;
-                float s = SmoothBuffer[idx];
-                float tLin = s * invMax;
-                float tLinC = tLin < 0f ? 0f : (tLin > 0.9999999f ? 0.9999999f : tLin);
-
-                float tLookupRaw = s * invMaxSrc;
-                float tLookup = tLookupRaw;
-                if (tLookup < 0f) tLookup = 0f;
-                else if (tLookup > 0.9999999f) tLookup = 0.9999999f;
-                int b = (int)(tLookup * bins);
-                if (b > lastBin) b = lastBin;
-                // A raw lookup at or above 1.0 means s exceeded the locked
-                // sourceMaxIter — the pixel is being forced into the last bin
-                // rather than mapped by its real distribution position.
-                if (tLookupRaw >= 0.9999999f) sat++;
-
-                double tEq = cdf[b];
-                double tBlend = tLinC + (tEq - tLinC) * strength;
-                float smoothEq = (float)(tBlend * maxIter);
-                if (ditherIter > 0f)
-                    smoothEq += SpatialDither(x, y) * ditherIter;
-                int iterArgEq = handlesInSet ? iters : maxIter;
-                ColorBuffer[idx] = (uint)ColorMap.Map(
-                    smoothEq, DistanceBuffer[idx], iterArgEq,
-                    NormalXBuffer[idx], NormalYBuffer[idx],
-                    FinalZrBuffer[idx], FinalZiBuffer[idx],
-                    FinalDrBuffer[idx], FinalDiBuffer[idx]);
-            }
-            rowEscaped[y] = esc;
-            rowSaturated[y] = sat;
-        });
-
-        long totalEsc = 0;
-        long totalSat = 0;
-        for (int i = 0; i < h; i++) { totalEsc += rowEscaped[i]; totalSat += rowSaturated[i]; }
-        escapedCount = totalEsc;
-        saturatedCount = totalSat;
+        var st = new EscapeTimeColorState(
+            Width, Height, MaxIterations, LastPixelScale, ColorMap,
+            IterationBuffer, SmoothBuffer, DistanceBuffer, NormalXBuffer, NormalYBuffer,
+            FinalZrBuffer, FinalZiBuffer, FinalDrBuffer, FinalDiBuffer, ColorBuffer, _po);
+        HistogramEqualizer.ApplyWithCdf(
+            in st, cdf, bins, sourceMaxIter, strength, ditherIterStrength,
+            out escapedCount, out saturatedCount);
     }
 
     /// <summary>
