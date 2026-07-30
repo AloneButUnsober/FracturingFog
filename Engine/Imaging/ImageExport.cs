@@ -97,9 +97,7 @@ namespace FracturingFog.Imaging
             int quality = skFmt == SKEncodedImageFormat.Jpeg ? 95 : 100;
 
             using var image = SKImage.FromBitmap(bmp);
-            using var data = image.Encode(skFmt, quality);
-            using var fs = File.OpenWrite(path);
-            data.SaveTo(fs);
+            EncodeImageToFile(image, skFmt, quality, path);
 
             if (unsupportedTiff)
                 Debug.WriteLine($"SaveBgraSkia: TIFF unsupported by SkiaSharp; saved {path} as PNG.");
@@ -183,9 +181,81 @@ namespace FracturingFog.Imaging
 
             using var snap = surface.Snapshot();
             SKEncodedImageFormat skFmt = MapToSkiaFormat(format, path, out _);
-            using var data = snap.Encode(skFmt, 100);
-            using var fs = File.OpenWrite(path);
-            data.SaveTo(fs);
+            EncodeImageToFile(snap, skFmt, 100, path);
+        }
+
+        // ── Encode dispatch ───────────────────────────────────────────────
+        //
+        // Skia's built-in encoders cover PNG / JPEG / WEBP only. BMP and GIF
+        // are DECODE-ONLY: SKImage.Encode returns a null SKData for them, which
+        // NRE'd at data.SaveTo (the "object reference not set" crash on Save-as-
+        // BMP). BMP has a trivial uncompressed layout so we write it by hand;
+        // any other unsupported format falls back to a PNG encode so the save
+        // still succeeds instead of throwing.
+        public static void EncodeImageToFile(
+            SKImage image, SKEncodedImageFormat skFmt, int quality, string path)
+        {
+            if (skFmt == SKEncodedImageFormat.Bmp)
+            {
+                WriteBmp32(image, path);
+                return;
+            }
+
+            using (var data = image.Encode(skFmt, quality))
+            {
+                if (data != null)
+                {
+                    using var fs = File.Create(path);
+                    data.SaveTo(fs);
+                    return;
+                }
+            }
+
+            // Decode-only format (e.g. GIF) — Skia handed back null. Save PNG.
+            using (var png = image.Encode(SKEncodedImageFormat.Png, 100))
+            using (var fs = File.Create(path))
+                png.SaveTo(fs);
+            Debug.WriteLine($"EncodeImageToFile: {skFmt} unsupported by SkiaSharp encode; saved {path} as PNG.");
+        }
+
+        // Hand-rolled 32-bpp bottom-up BI_RGB BMP writer. SkiaSharp cannot
+        // encode BMP; the pixel layout is Bgra8888 (matches BMP's native BGRA
+        // byte order) so the rows copy straight through, emitted bottom-up.
+        private static void WriteBmp32(SKImage image, string path)
+        {
+            int w = image.Width, h = image.Height;
+            var info = new SKImageInfo(w, h, SKColorType.Bgra8888, SKAlphaType.Unpremul);
+            using var bmp = new SKBitmap(info);
+            image.ReadPixels(info, bmp.GetPixels(), info.RowBytes, 0, 0);
+            ReadOnlySpan<byte> px = bmp.GetPixelSpan();
+
+            int rowBytes = w * 4;           // 32-bpp rows are already 4-byte aligned
+            long pixelBytes = (long)rowBytes * h;
+            const int headerBytes = 14 + 40;
+
+            using var fs = File.Create(path);
+            using var bw = new BinaryWriter(fs);
+            // BITMAPFILEHEADER
+            bw.Write((ushort)0x4D42);                       // 'BM'
+            bw.Write((uint)(headerBytes + pixelBytes));     // bfSize
+            bw.Write((ushort)0);                            // bfReserved1
+            bw.Write((ushort)0);                            // bfReserved2
+            bw.Write((uint)headerBytes);                    // bfOffBits
+            // BITMAPINFOHEADER
+            bw.Write((uint)40);                             // biSize
+            bw.Write(w);                                    // biWidth
+            bw.Write(h);                                    // biHeight (+ = bottom-up)
+            bw.Write((ushort)1);                            // biPlanes
+            bw.Write((ushort)32);                           // biBitCount
+            bw.Write((uint)0);                              // biCompression = BI_RGB
+            bw.Write((uint)pixelBytes);                     // biSizeImage
+            bw.Write(2835);                                 // biXPelsPerMeter (~72 dpi)
+            bw.Write(2835);                                 // biYPelsPerMeter
+            bw.Write((uint)0);                              // biClrUsed
+            bw.Write((uint)0);                              // biClrImportant
+            // Pixel data — source is top-down, BMP bottom-up: emit last row first.
+            for (int y = h - 1; y >= 0; y--)
+                bw.Write(px.Slice(y * rowBytes, rowBytes));
         }
 
         // ── Contrast picker ───────────────────────────────────────────────
