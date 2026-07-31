@@ -70,9 +70,11 @@ public sealed unsafe class ReliefRaymarchVulkanKernel : IDisposable, IReliefRaym
         public float SpecStrength, Roughness, Metallic, PadS;   // 4a
         public int ShadowSteps; public float ShadowSoftK; public int ShadowMask; public float PadSh;   // 4b
         public int AoSamples; public float AoStrength; public float PadA0, PadA1;   // 4c
+        public float IblStrength; public int SkyMode; public float TriplanarStrength, TriplanarScale;   // 4d
+        public int TriplanarKind; public uint TriplanarTint; public float PadT0, PadT1;   // 4d
     }
 
-    private const int ParamBytes = 304;
+    private const int ParamBytes = 336;
 
     private struct Allocated { public Buffer Buffer; public DeviceMemory Memory; public ulong Size; }
 
@@ -283,6 +285,9 @@ public sealed unsafe class ReliefRaymarchVulkanKernel : IDisposable, IReliefRaym
             SpecStrength = (float)u.SpecStrength, Roughness = (float)u.Roughness, Metallic = (float)u.Metallic, PadS = 0f,
             ShadowSteps = u.ShadowSteps, ShadowSoftK = (float)u.ShadowSoftK, ShadowMask = u.ShadowLightMask, PadSh = 0f,
             AoSamples = u.AoSamples, AoStrength = (float)u.AoStrength, PadA0 = 0f, PadA1 = 0f,
+            IblStrength = (float)u.IblStrength, SkyMode = u.SkyMode,
+            TriplanarStrength = (float)u.TriplanarStrength, TriplanarScale = (float)u.TriplanarScale,
+            TriplanarKind = u.TriplanarKind, TriplanarTint = u.TriplanarTint, PadT0 = 0f, PadT1 = 0f,
         };
     }
 

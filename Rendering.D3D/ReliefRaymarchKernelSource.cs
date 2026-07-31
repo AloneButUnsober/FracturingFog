@@ -98,6 +98,16 @@ cbuffer ReliefParams : register(b0)
     float  gAoStrength;   // occlusion darkening amount
     float  gPadA0;
     float  gPadA1;
+
+    float  gIblStrength;      // 4d — IBL-modulated ambient; 0 = scalar ambient
+    int    gSkyMode;          // 0 Gradient, 1 Solid, 2 Hdri (→ gradient fallback)
+    float  gTriplanarStrength;// 4d — procedural texture blend; 0 = off
+    float  gTriplanarScale;
+
+    int    gTriplanarKind;    // 0 None, 1 Wood, 2 Marble, 3 Rock, 4 Checker
+    uint   gTriplanarTint;    // packed ARGB tint
+    float  gPadT0;
+    float  gPadT1;
 };
 
 static const float RELIEF_PI = 3.14159265358979;
@@ -198,6 +208,68 @@ uint SampleAlbedo(float u, float v)
     return 0xFF000000u | (r << 16) | (g << 8) | b;
 }
 
+// 4d — procedural 2D texture sampler (greyscale [0,1]). Line-for-line twin of
+// ShadingPipeline.SampleProc2D. kind: 1 Wood, 2 Marble, 3 Rock, 4 Checker.
+float SampleProc2D(int kind, float u, float v)
+{
+    if (kind == 1) // Wood — concentric rings + angular wobble.
+    {
+        float r = sqrt(u * u + v * v);
+        float wobble = 0.1 * sin(u * 0.3) * cos(v * 0.3);
+        return 0.5 + 0.5 * sin((r + wobble) * 6.0);
+    }
+    if (kind == 2) // Marble — turbulent veins via nested sines.
+    {
+        float turb = sin(v * 2.0 + sin(u * 4.0) * 1.5);
+        return 0.5 + 0.5 * sin(u * 3.0 + turb * 2.0);
+    }
+    if (kind == 3) // Rock — hash noise.
+    {
+        float a = sin(u * 12.9898 + v * 78.233) * 43758.5453;
+        float n = a - floor(a);
+        return clamp(0.3 + 0.7 * n, 0.0, 1.0);
+    }
+    if (kind == 4) // Checker.
+    {
+        int cu = ((int)floor(u)) & 1;
+        int cv = ((int)floor(v)) & 1;
+        return (cu ^ cv) == 0 ? 0.2 : 1.0;
+    }
+    return 1.0;
+}
+
+// 4d — triplanar procedural texture. Project P onto YZ/XZ/XY, sample the 2D fn
+// per plane, blend by squared-normal weights, modulate albedo by grey × tint ×
+// strength. Twin of ShadingPipeline.ApplyTriplanar; preserves albedo alpha (the
+// relief cutout) instead of forcing 0xFF (ShadeFlat re-reads it downstream).
+uint ApplyTriplanar(uint albedo, float3 P, float3 N)
+{
+    float wx = N.x * N.x, wy = N.y * N.y, wz = N.z * N.z;
+    float sum = wx + wy + wz;
+    if (sum < 1e-8) return albedo;
+    float inv = 1.0 / sum; wx *= inv; wy *= inv; wz *= inv;
+    float s = gTriplanarScale;
+    int kind = gTriplanarKind;
+    float txY = SampleProc2D(kind, P.y * s, P.z * s);
+    float txX = SampleProc2D(kind, P.x * s, P.z * s);
+    float txZ = SampleProc2D(kind, P.x * s, P.y * s);
+    float v = clamp(wx * txY + wy * txX + wz * txZ, 0.0, 1.0);
+    float Tr = ((gTriplanarTint >> 16) & 0xFF) / 255.0;
+    float Tg = ((gTriplanarTint >>  8) & 0xFF) / 255.0;
+    float Tb = ( gTriplanarTint        & 0xFF) / 255.0;
+    float Ar = (albedo >> 16) & 0xFF;
+    float Ag = (albedo >>  8) & 0xFF;
+    float Ab =  albedo        & 0xFF;
+    float mix = gTriplanarStrength;
+    float R = Ar * (1.0 - mix) + Ar * Tr * v * mix;
+    float G = Ag * (1.0 - mix) + Ag * Tg * v * mix;
+    float B = Ab * (1.0 - mix) + Ab * Tb * v * mix;
+    uint Rb = (uint)clamp(R, 0.0, 255.0);
+    uint Gb = (uint)clamp(G, 0.0, 255.0);
+    uint Bb = (uint)clamp(B, 0.0, 255.0);
+    return (albedo & 0xFF000000u) | (Rb << 16) | (Gb << 8) | Bb;
+}
+
 void Accum(float intensity, float3 col, float3 L, float3 N, inout float3 s)
 {
     if (intensity <= 0.0) return;
@@ -257,7 +329,9 @@ float SoftShadow(float3 o, float3 L, float tMin, float tMax, float k, int steps)
 // max(0,N.Li)*Coli/255)*(1-amb)*diffSuppress, then s *= ao. Spec (gSpecStrength>0):
 // metallic F0 = lerp(0.04,albedo,gMetallic), diffuse suppressed by (1-gMetallic).
 // Shadow (gShadowSteps>0) gates direct light only. AO (gAoSamples>0) darkens the
-// diffuse+ambient term (not spec). All knobs 0 → flat-Lambert (byte-identical).
+// diffuse+ambient term (not spec). 4d IBL (gIblStrength>0) blends env into the
+// per-channel ambient (triplanar is applied to the albedo at the call site). All
+// knobs 0 → flat-Lambert (byte-identical).
 uint ShadeFlat(float3 N, float3 V, float3 P, uint albedo)
 {
     float sh0 = 1.0, sh1 = 1.0, sh2 = 1.0;
@@ -313,7 +387,25 @@ uint ShadeFlat(float3 N, float3 V, float3 P, uint albedo)
         ao = clamp(1.0 - gAoStrength * (occl / max(wsum, 1.0)), 0.0, 1.0);
     }
 
-    float amb = gAmbient;
+    // 4d — IBL-modulated ambient. gIblStrength>0 blends the env colour (sampled
+    // at the surface normal) into the scalar ambient per channel. Non-HDRI env:
+    // Solid → gBgTop, else → BgBottom→BgTop gradient by N.y (twin of
+    // ShadingPipeline.SampleEnvAmbient). gIblStrength==0 → flat gAmbient (no-op).
+    float3 amb = float3(gAmbient, gAmbient, gAmbient);
+    if (gIblStrength > 0.0)
+    {
+        float3 env;
+        if (gSkyMode == 1) // Solid
+            env = float3((gBgTop >> 16) & 0xFF, (gBgTop >> 8) & 0xFF, gBgTop & 0xFF) / 255.0;
+        else               // Gradient / Hdri-fallback
+        {
+            float t = clamp(0.5 * (N.y + 1.0), 0.0, 1.0);
+            float3 bb = float3((gBgBottom >> 16) & 0xFF, (gBgBottom >> 8) & 0xFF, gBgBottom & 0xFF);
+            float3 bt = float3((gBgTop >> 16) & 0xFF, (gBgTop >> 8) & 0xFF, gBgTop & 0xFF);
+            env = lerp(bb, bt, t) / 255.0;
+        }
+        amb = amb * (1.0 - gIblStrength) + env * gIblStrength;
+    }
     s = amb + (s / 255.0) * (1.0 - amb) * diffSuppress;
     s = s * ao;
     float3 o = clamp(alb * s + spec + 0.5, 0.0, 255.0);
@@ -397,6 +489,8 @@ void CSRelief(uint3 tid : SV_DispatchThreadID)
 
             float uu = hp.x / gAspect + 0.5, vv = hp.z + 0.5;
             uint alb = SampleAlbedo(uu, vv);
+            if (gTriplanarStrength > 0.0 && gTriplanarKind != 0)
+                alb = ApplyTriplanar(alb, hp, N);
             outCol = ShadeFlat(N, -rd, hp, alb);
             wrote = true;
         }
