@@ -1892,6 +1892,18 @@ namespace FracturingFog.Rendering
                 var rc = _reliefFieldCalc ??= new MandelbrotCalculator(fw, fh);
                 if (rc.Width != fw || rc.Height != fh) rc.Resize(fw, fh);
                 MirrorMandelbrotState(calc, rc);
+                // #156 — run the hi-res relief field on the GPU whenever the main
+                // calc does. MirrorMandelbrotState copies view + precision but not
+                // the GPU config, so without this the dedicated field calc always
+                // fell back to CPU — the single biggest relief cost at depth. The
+                // kernel is thread-affine to the calc thread; this capture runs on
+                // that thread AFTER the main Calculate, so the two calcs share the
+                // one kernel sequentially (no concurrent dispatch). Shallow uses the
+                // FP32 escape-time kernel; deep uses the perturbation kernel
+                // (static UseGpuPerturbation + IGpuKernel.SupportsPerturbation),
+                // exactly as the main calc chooses.
+                rc.UseGpuCompute = calc.UseGpuCompute;
+                rc.GpuKernel = calc.GpuKernel;
                 rc.Calculate(token);
                 if (token.IsCancellationRequested) return false;
 
