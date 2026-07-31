@@ -108,6 +108,11 @@ cbuffer ReliefParams : register(b0)
     uint   gTriplanarTint;    // packed ARGB tint
     float  gPadT0;
     float  gPadT1;
+
+    float  gFogDensity;       // 4e — Beer-Lambert fog; 0 = no fog
+    float  gFogHeightFalloff; // density *= exp(-falloff * y)
+    int    gVolumeSteps;      // >0 = single-scatter in-scatter walk; 0 = legacy exp fog
+    float  gVolumeStepsFalloff;// adaptive volumetric LOD; 0 = fixed step count
 };
 
 static const float RELIEF_PI = 3.14159265358979;
@@ -422,6 +427,67 @@ uint GradientSky(float rdy)
     return 0xFF000000u | ((uint)c.r << 16) | ((uint)c.g << 8) | (uint)c.b;
 }
 
+// 4e — Padé(2,2) approx of exp(-x) on [0,1]. Twin of ShadingPipeline.ExpNegSmall.
+float ExpNegSmall(float x)
+{
+    return (12.0 - 6.0 * x + x * x) / (12.0 + 6.0 * x + x * x);
+}
+
+// 4e — Beer-Lambert fog + single-scatter volumetric in-scatter over a shaded
+// terrain/floor pixel. Twin of ShadingPipeline's fog block: gVolumeSteps>0 (with
+// gFogDensity>0, key light gI0>0) runs the in-scatter walk — per-step density
+// (ground-hugging via gFogHeightFalloff) × key-light SoftShadow, Beer-Lambert
+// transmittance via the Padé exp; else gFogDensity>0 blends toward the gradient
+// sky by 1-exp(-tHit*gFogDensity). gFogDensity==0 → no-op (byte-identical). FBM
+// cloud-noise + cloud self-shadow + reflections are deferred (4e-ii); density mul
+// is 1 here. o is the primary ray origin (== camera for perspective).
+uint ApplyFogVolume(uint shaded, float3 o, float3 rd, float tHit)
+{
+    if (gFogDensity <= 0.0) return shaded;
+    float br = (shaded >> 16) & 0xFF, bg = (shaded >> 8) & 0xFF, bb = shaded & 0xFF;
+
+    if (gVolumeSteps > 0 && gI0 > 0.0)
+    {
+        int vs = gVolumeSteps;
+        if (gVolumeStepsFalloff > 0.0 && tHit > 4.0)
+            vs = max(4, (int)(vs / (1.0 + (tHit - 4.0) * gVolumeStepsFalloff)));
+        float stepSize = tHit / vs;
+        bool shadowOn = gShadowSteps > 0 && (gShadowMask & 0x1) != 0;
+        float T = 1.0; float3 inSc = float3(0, 0, 0);
+        [loop]
+        for (int s = 0; s < vs; s++)
+        {
+            float t = (s + 0.5) * stepSize;
+            float3 sp = o + rd * t;
+            float density = gFogDensity;
+            if (gFogHeightFalloff > 0.0)
+                density *= exp(-gFogHeightFalloff * sp.y);
+            float sh = 1.0;
+            if (shadowOn)
+                sh = SoftShadow(sp, gL0, gEps0, 12.0, gShadowSoftK, gShadowSteps);
+            float scatter = density * sh * gI0 * stepSize;
+            inSc += T * scatter * gC0;
+            float aT = density * stepSize;
+            T *= aT < 1.0 ? ExpNegSmall(aT) : exp(-aT);
+        }
+        br = br * T + inSc.r; bg = bg * T + inSc.g; bb = bb * T + inSc.b;
+    }
+    else
+    {
+        float fogF = 1.0 - exp(-tHit * gFogDensity);
+        uint sky = GradientSky(rd.y);
+        br = br * (1.0 - fogF) + ((sky >> 16) & 0xFF) * fogF;
+        bg = bg * (1.0 - fogF) + ((sky >>  8) & 0xFF) * fogF;
+        bb = bb * (1.0 - fogF) + ( sky        & 0xFF) * fogF;
+    }
+
+    uint A = (shaded >> 24) & 0xFFu;
+    uint Rb = (uint)clamp(br + 0.5, 0.0, 255.0);
+    uint Gb = (uint)clamp(bg + 0.5, 0.0, 255.0);
+    uint Bb = (uint)clamp(bb + 0.5, 0.0, 255.0);
+    return (A << 24) | (Rb << 16) | (Gb << 8) | Bb;
+}
+
 [numthreads(8, 8, 1)]
 void CSRelief(uint3 tid : SV_DispatchThreadID)
 {
@@ -492,6 +558,7 @@ void CSRelief(uint3 tid : SV_DispatchThreadID)
             if (gTriplanarStrength > 0.0 && gTriplanarKind != 0)
                 alb = ApplyTriplanar(alb, hp, N);
             outCol = ShadeFlat(N, -rd, hp, alb);
+            outCol = ApplyFogVolume(outCol, o, rd, tf);
             wrote = true;
         }
     }
@@ -508,6 +575,7 @@ void CSRelief(uint3 tid : SV_DispatchThreadID)
                 if (abs(gx) <= gFloorBx && abs(gz) <= gFloorBz)
                 {
                     outCol = ShadeFlat(float3(0, 1, 0), -rd, float3(gx, 0.0, gz), gFloorAlbedo);
+                    outCol = ApplyFogVolume(outCol, o, rd, tp);
                     floored = true;
                 }
             }

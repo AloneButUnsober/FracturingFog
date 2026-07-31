@@ -58,9 +58,10 @@ public sealed class ReliefRaymarchGpuKernel : IDisposable, FracturingFog.Renderi
         public int AoSamples; public float AoStrength; public float PadA0, PadA1;   // 4c
         public float IblStrength; public int SkyMode; public float TriplanarStrength, TriplanarScale;   // 4d
         public int TriplanarKind; public uint TriplanarTint; public float PadT0, PadT1;   // 4d
+        public float FogDensity, FogHeightFalloff; public int VolumeSteps; public float VolumeStepsFalloff;   // 4e
     }
 
-    private const int ParamBytes = 336;
+    private const int ParamBytes = 352;
 
     private readonly ID3D11Device _device;
     private readonly ID3D11DeviceContext _ctx;
@@ -281,6 +282,8 @@ public sealed class ReliefRaymarchGpuKernel : IDisposable, FracturingFog.Renderi
             IblStrength = (float)u.IblStrength, SkyMode = u.SkyMode,
             TriplanarStrength = (float)u.TriplanarStrength, TriplanarScale = (float)u.TriplanarScale,
             TriplanarKind = u.TriplanarKind, TriplanarTint = u.TriplanarTint, PadT0 = 0f, PadT1 = 0f,
+            FogDensity = (float)u.FogDensity, FogHeightFalloff = (float)u.FogHeightFalloff,
+            VolumeSteps = u.VolumeSteps, VolumeStepsFalloff = (float)u.VolumeStepsFalloff,
         };
     }
 

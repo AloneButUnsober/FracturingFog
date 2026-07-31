@@ -786,6 +786,90 @@ public class ReliefRaymarchGpuTests
         for (int i = 0; i < w * h; i++) if (on[i] != off[i]) changed++;
         Assert.True(changed > 100, $"IBL ambient shifted too few px ({changed})");
     }
+
+    // 4e — FogDensity == 0 must be byte-identical regardless of VolumeSteps /
+    // FogHeightFalloff. The whole fog+volumetric block is gated on FogDensity>0.
+    [Fact]
+    public void CpuMirror_FogOff_ByteIdentical_Regardless_Of_VolumeKnobs()
+    {
+        int w = 320, h = 240, hw = 320, hh = 240;
+        var p = ReliefParams();
+        var (hbuf, albedo, maxH) = BumpField(hw, hh, w, h);
+
+        var fxA = LightingFxData.CreateDefault();
+        fxA.FogDensity = 0.0; fxA.VolumeSteps = 24; fxA.FogHeightFalloff = 0.7; fxA.VolumeStepsFalloff = 0.5;
+        var uA = BuildUniforms(w, h, hw, hh, hbuf, maxH, p, fxA);
+        var a = new uint[w * h];
+        ReliefRaymarchGpu.RenderCpuMirror(in uA, hbuf, null, albedo, a, out _);
+
+        var fxB = LightingFxData.CreateDefault();
+        fxB.FogDensity = 0.0; fxB.VolumeSteps = 0;
+        var uB = BuildUniforms(w, h, hw, hh, hbuf, maxH, p, fxB);
+        var b = new uint[w * h];
+        ReliefRaymarchGpu.RenderCpuMirror(in uB, hbuf, null, albedo, b, out _);
+
+        Assert.Equal(a, b);
+    }
+
+    // Legacy exponential fog (VolumeSteps == 0, FogDensity > 0) blends the shaded
+    // terrain toward the gradient sky by 1-exp(-tHit·density). Surface pixels
+    // shift; the silhouette (hit fraction) never moves — fog is a post-shade
+    // colour blend, not geometry. Sky pixels stay untouched (fog runs on hits).
+    [Fact]
+    public void CpuMirror_LegacyFog_Blends_Toward_Sky_Without_Moving_Silhouette()
+    {
+        int w = 320, h = 240, hw = 320, hh = 240;
+        var p = ReliefParams();
+        var (hbuf, albedo, maxH) = BumpField(hw, hh, w, h);
+
+        var fxOff = LightingFxData.CreateDefault();
+        fxOff.FogDensity = 0.0;
+        var uOff = BuildUniforms(w, h, hw, hh, hbuf, maxH, p, fxOff);
+        var off = new uint[w * h];
+        ReliefRaymarchGpu.RenderCpuMirror(in uOff, hbuf, null, albedo, off, out double hitOff);
+
+        var fxOn = LightingFxData.CreateDefault();
+        fxOn.FogDensity = 1.5; fxOn.VolumeSteps = 0;   // legacy exp-fog path
+        var uOn = BuildUniforms(w, h, hw, hh, hbuf, maxH, p, fxOn);
+        var on = new uint[w * h];
+        ReliefRaymarchGpu.RenderCpuMirror(in uOn, hbuf, null, albedo, on, out double hitOn);
+
+        Assert.Equal(hitOff, hitOn);
+
+        int changed = 0;
+        for (int i = 0; i < w * h; i++) if (on[i] != off[i]) changed++;
+        Assert.True(changed > 100, $"legacy fog blended too few px ({changed})");
+    }
+
+    // Volumetric in-scatter (VolumeSteps > 0, FogDensity > 0, key light on) walks
+    // the primary ray adding single-scatter light and attenuating the surface by
+    // Beer-Lambert transmittance — a different result from legacy exp fog and from
+    // no fog, still without moving the silhouette.
+    [Fact]
+    public void CpuMirror_VolumetricInScatter_Changes_Shade_Without_Moving_Silhouette()
+    {
+        int w = 320, h = 240, hw = 320, hh = 240;
+        var p = ReliefParams();
+        var (hbuf, albedo, maxH) = BumpField(hw, hh, w, h);
+
+        var fxOff = LightingFxData.CreateDefault();
+        fxOff.FogDensity = 0.0;
+        var uOff = BuildUniforms(w, h, hw, hh, hbuf, maxH, p, fxOff);
+        var off = new uint[w * h];
+        ReliefRaymarchGpu.RenderCpuMirror(in uOff, hbuf, null, albedo, off, out double hitOff);
+
+        var fxVol = LightingFxData.CreateDefault();
+        fxVol.FogDensity = 0.5; fxVol.FogHeightFalloff = 0.3; fxVol.VolumeSteps = 16;
+        var uVol = BuildUniforms(w, h, hw, hh, hbuf, maxH, p, fxVol);
+        var vol = new uint[w * h];
+        ReliefRaymarchGpu.RenderCpuMirror(in uVol, hbuf, null, albedo, vol, out double hitVol);
+
+        Assert.Equal(hitOff, hitVol);
+
+        int changed = 0;
+        for (int i = 0; i < w * h; i++) if (vol[i] != off[i]) changed++;
+        Assert.True(changed > 100, $"volumetric in-scatter changed too few px ({changed})");
+    }
 }
 
 // #162 (Slice 3d) — host-wiring seam. HeightfieldRaymarch2D.Render dispatches
