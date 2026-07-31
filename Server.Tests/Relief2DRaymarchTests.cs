@@ -301,3 +301,177 @@ public class Relief2DRaymarchTests
         Assert.Equal(0.0, hitFrac);
     }
 }
+
+// #159 (Relief 3D Slice 3a) — the GPU relief-raymarch foundation: the extracted
+// shared camera must reproduce the render's original inline math bit-for-bit,
+// and the CPU parity twin (the oracle the device gate diffs GPU output against)
+// must render a valid, deterministic 3D silhouette.
+public class ReliefRaymarchGpuTests
+{
+    // Smooth radial cosine bump — a well-sampled height field (no needles), so
+    // the sphere trace converges cleanly and the twin is a clean oracle.
+    private static (float[] hbuf, uint[] albedo, float maxH) BumpField(int hw, int hh, int aw, int ah)
+    {
+        var hbuf = new float[hw * hh];
+        float maxH = 0f;
+        for (int y = 0; y < hh; y++)
+        for (int x = 0; x < hw; x++)
+        {
+            double u = (x + 0.5) / hw - 0.5, v = (y + 0.5) / hh - 0.5;
+            double r = Math.Sqrt(u * u + v * v) / 0.5;
+            float hv = r >= 1.0 ? 0f : (float)(0.5 * (1.0 + Math.Cos(Math.PI * r)));
+            hbuf[y * hw + x] = hv;
+            if (hv > maxH) maxH = hv;
+        }
+        var albedo = new uint[aw * ah];
+        for (int i = 0; i < aw * ah; i++) albedo[i] = 0xFFB06030u;   // warm terrain
+        return (hbuf, albedo, maxH);
+    }
+
+    private static ReliefUniforms BuildUniforms(int w, int h, int hw, int hh,
+        float[] hbuf, float maxH, FractalParameters p, LightingFxData fx)
+    {
+        double aspect = (double)w / h;
+        double sy = 0.35 * Math.Max(0.0, p.Relief2DHeightScale) / maxH;
+        // Grid-slope maxima → world Lipschitz bound (mirrors Render's per-call math).
+        float gx = 0f, gz = 0f;
+        for (int y = 0; y < hh; y++)
+        for (int x = 0; x < hw; x++)
+        {
+            if (x > 0) gx = Math.Max(gx, Math.Abs(hbuf[y * hw + x] - hbuf[y * hw + x - 1]));
+            if (y > 0) gz = Math.Max(gz, Math.Abs(hbuf[y * hw + x] - hbuf[(y - 1) * hw + x]));
+        }
+        double worldDx = aspect / hw, worldDz = 1.0 / hh;
+        double maxSlope = Math.Max(gx * sy / worldDx, gz * sy / worldDz);
+        double invLip = 1.0 / Math.Sqrt(1.0 + maxSlope * maxSlope);
+        return ReliefUniforms.Build(w, h, hw, hh, sy, aspect, invLip, maxH, p, in fx);
+    }
+
+    private static FractalParameters ReliefParams() => new()
+    {
+        Relief2DEnabled = true,
+        Relief2DRaymarch = true,
+        Relief2DHeightScale = 1.4,
+        Relief2DCameraAzimuthDeg = 25,
+        Relief2DCameraElevationDeg = 45,
+        Relief2DCameraFovDeg = 55,
+        Relief2DGroundPlane = false,   // isolate terrain-vs-sky silhouette
+    };
+
+    // The extracted BuildObliqueCamera must equal the ORIGINAL inline block that
+    // lived in Render (pasted verbatim here as the authoritative reference), so
+    // the extraction is provably byte-identical.
+    [Fact]
+    public void BuildObliqueCamera_Matches_Original_Inline_Math()
+    {
+        int w = 480, h = 360;
+        double aspect = (double)w / h, sy = 0.21, maxH = 1.0;
+        var p = ReliefParams();
+        p.Relief2DCameraZoom = 1.3;
+
+        var cam = HeightfieldRaymarch2D.BuildObliqueCamera(w, h, aspect, sy, maxH, p);
+
+        // ── verbatim original block ──
+        double az = p.Relief2DCameraAzimuthDeg * Math.PI / 180.0;
+        double el = Math.Clamp(p.Relief2DCameraElevationDeg, 5.0, 89.0) * Math.PI / 180.0;
+        double fov = Math.Clamp(p.Relief2DCameraFovDeg, 15.0, 100.0) * Math.PI / 180.0;
+        double framingAspect = Math.Min(aspect, 2.2);
+        double extent = 0.5 * Math.Sqrt(framingAspect * framingAspect + 1.0);
+        double zoom = Math.Clamp(p.Relief2DCameraZoom, 0.2, 5.0);
+        double foreshorten = Math.Clamp(Math.Sin(el), 0.3, 1.0);
+        double radius = extent * foreshorten / (Math.Tan(fov * 0.5) * zoom);
+        double tgtY = 0.35 * sy * maxH;
+        double camX = radius * Math.Cos(el) * Math.Sin(az);
+        double camY = radius * Math.Sin(el);
+        double camZ = radius * Math.Cos(el) * Math.Cos(az);
+        double fX = -camX, fY = (tgtY - camY), fZ = -camZ;
+        double fl = Math.Sqrt(fX * fX + fY * fY + fZ * fZ); fX /= fl; fY /= fl; fZ /= fl;
+        double rX = -fZ, rY = 0.0, rZ = fX;
+        double rl = Math.Sqrt(rX * rX + rZ * rZ); if (rl < 1e-9) rl = 1; rX /= rl; rZ /= rl;
+        double uX = rY * fZ - rZ * fY;
+        double uY = rZ * fX - rX * fZ;
+        double uZ = rX * fY - rY * fX;
+        double tanHalf = Math.Tan(fov * 0.5);
+        double orthoHalfV = extent * foreshorten / zoom;
+        double bx = aspect * 0.5, bz = 0.5, by = sy * maxH * 1.05 + 1e-3;
+        double eps0 = p.Relief2DCameraOrthographic
+            ? Math.Max(0.0009 * radius, orthoHalfV / h)
+            : 0.0009 * radius;
+        double pixelAngle = p.Relief2DCameraOrthographic ? 0.0 : tanHalf / h;
+        // ── end verbatim ──
+
+        Assert.Equal(camX, cam.CamX); Assert.Equal(camY, cam.CamY); Assert.Equal(camZ, cam.CamZ);
+        Assert.Equal(fX, cam.FX); Assert.Equal(fY, cam.FY); Assert.Equal(fZ, cam.FZ);
+        Assert.Equal(rX, cam.RX); Assert.Equal(rZ, cam.RZ);
+        Assert.Equal(uX, cam.UX); Assert.Equal(uY, cam.UY); Assert.Equal(uZ, cam.UZ);
+        Assert.Equal(tanHalf, cam.TanHalf);
+        Assert.Equal(orthoHalfV, cam.OrthoHalfV);
+        Assert.Equal(bx, cam.Bx); Assert.Equal(by, cam.By); Assert.Equal(bz, cam.Bz);
+        Assert.Equal(eps0, cam.Eps0); Assert.Equal(pixelAngle, cam.PixelAngle);
+        Assert.Equal(320, cam.MaxSteps);
+        Assert.Equal(bx * 3.0, cam.FloorBx); Assert.Equal(bz * 3.0, cam.FloorBz);
+    }
+
+    // ReliefUniforms.Build must route the camera through the shared builder, so
+    // the twin, the GPU kernel and the CPU render all frame identically.
+    [Fact]
+    public void ReliefUniforms_Build_Uses_Shared_Camera()
+    {
+        int w = 320, h = 240, hw = 320, hh = 240;
+        var p = ReliefParams();
+        var (hbuf, _, maxH) = BumpField(hw, hh, w, h);
+        double aspect = (double)w / h;
+        double sy = 0.35 * p.Relief2DHeightScale / maxH;
+        var fx = LightingFxData.CreateDefault();
+
+        var u = ReliefUniforms.Build(w, h, hw, hh, sy, aspect, 0.5, maxH, p, in fx);
+        var cam = HeightfieldRaymarch2D.BuildObliqueCamera(w, h, aspect, sy, maxH, p);
+        Assert.Equal(cam.CamX, u.Cam.CamX);
+        Assert.Equal(cam.FY, u.Cam.FY);
+        Assert.Equal(cam.Eps0, u.Cam.Eps0);
+        Assert.Equal(0.5, u.InvLip);
+    }
+
+    // The CPU twin (the parity oracle) renders a real 3D view — surface hits AND
+    // ray-miss sky — and is fully deterministic (a re-run is bit-identical).
+    [Fact]
+    public void CpuMirror_Deterministic_And_Valid_Silhouette()
+    {
+        int w = 320, h = 240, hw = 320, hh = 240;
+        var p = ReliefParams();
+        var fx = LightingFxData.CreateDefault();
+        var (hbuf, albedo, maxH) = BumpField(hw, hh, w, h);
+        var u = BuildUniforms(w, h, hw, hh, hbuf, maxH, p, fx);
+
+        var a = new uint[w * h];
+        ReliefRaymarchGpu.RenderCpuMirror(in u, hbuf, null, albedo, a, out double hitA);
+        var b = new uint[w * h];
+        ReliefRaymarchGpu.RenderCpuMirror(in u, hbuf, null, albedo, b, out double hitB);
+
+        Assert.Equal(a, b);                 // deterministic
+        Assert.Equal(hitA, hitB);
+        Assert.InRange(hitA, 0.10, 0.90);   // a genuine silhouette: surface + sky
+    }
+
+    // Isolate mode writes a transparent background (alpha 0) on ray-miss so the
+    // relief exports as a cutout — mirrors the CPU render's #135 behaviour.
+    [Fact]
+    public void CpuMirror_Isolate_Writes_Transparent_Background()
+    {
+        int w = 256, h = 192, hw = 256, hh = 192;
+        var p = ReliefParams();
+        p.Relief2DIsolate = true;
+        var fx = LightingFxData.CreateDefault();
+        fx.ShowSkyBackdrop = false;
+        var (hbuf, albedo, maxH) = BumpField(hw, hh, w, h);
+        var u = BuildUniforms(w, h, hw, hh, hbuf, maxH, p, fx);
+
+        var dst = new uint[w * h];
+        ReliefRaymarchGpu.RenderCpuMirror(in u, hbuf, null, albedo, dst, out double hit);
+
+        int transparent = 0;
+        for (int i = 0; i < w * h; i++) if (((dst[i] >> 24) & 0xFF) == 0) transparent++;
+        Assert.True(transparent > w * h / 10, $"too few transparent px: {transparent}");
+        Assert.True(hit > 0.05, "isolate culled the whole surface");
+    }
+}
