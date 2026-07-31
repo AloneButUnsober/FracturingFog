@@ -172,15 +172,17 @@ public static class HeightfieldRaymarch2D
     /// hit's source pixel for surface colour). No-op copy when disabled / mis-sized.
     /// </summary>
     public static void Render(uint[] albedo, float[] height, int w, int h,
-                              FractalParameters p, uint[] dst)
-        => Render(albedo, height, w, h, w, h, p, dst, out _);
+                              FractalParameters p, uint[] dst,
+                              IReliefRaymarchKernel? gpuKernel = null)
+        => Render(albedo, height, w, h, w, h, p, dst, out _, gpuKernel);
 
-    /// <summary>As <see cref="Render(uint[],float[],int,int,FractalParameters,uint[])"/>,
+    /// <summary>As <see cref="Render(uint[],float[],int,int,FractalParameters,uint[],IReliefRaymarchKernel)"/>,
     /// also reporting the fraction of pixels that hit the terrain (vs ray-miss
     /// sky / ground). Used by the headless gate to prove a real 3D silhouette.</summary>
     public static void Render(uint[] albedo, float[] height, int w, int h,
-                              FractalParameters p, uint[] dst, out double hitFraction)
-        => Render(albedo, height, w, h, w, h, p, dst, out hitFraction);
+                              FractalParameters p, uint[] dst, out double hitFraction,
+                              IReliefRaymarchKernel? gpuKernel = null)
+        => Render(albedo, height, w, h, w, h, p, dst, out hitFraction, gpuKernel);
 
     /// <summary>#143 — decoupled-resolution overload. The height field
     /// (<paramref name="height"/>, dims <paramref name="hw"/>×<paramref name="hh"/>)
@@ -198,7 +200,8 @@ public static class HeightfieldRaymarch2D
     /// view, so a single output aspect (w/h) drives the world domain.</summary>
     public static void Render(uint[] albedo, float[] height, int w, int h,
                               int hw, int hh,
-                              FractalParameters p, uint[] dst, out double hitFraction)
+                              FractalParameters p, uint[] dst, out double hitFraction,
+                              IReliefRaymarchKernel? gpuKernel = null)
     {
         hitFraction = 0.0;
         int n = w * h;            // OUTPUT / albedo pixel count
@@ -392,6 +395,23 @@ public static class HeightfieldRaymarch2D
         // (ReliefRaymarchGpu) drive rays from byte-identical numbers. The math is
         // unchanged — moved verbatim — so this render is bit-for-bit as before.
         ReliefCamera cam = BuildObliqueCamera(w, h, aspect, sy, maxH, p);
+
+        // #162 (Slice 3d) — GPU dispatch seam. When the opt-in flag is set and the
+        // host has attached a relief kernel, raymarch on the GPU from the SAME
+        // cached field + camera and return. ReliefUniforms.Build packs exactly the
+        // numbers the CPU trace below uses (it rebuilds the identical camera), so
+        // the two paths frame the same scene. The kernel renders the Slice-3 shader
+        // subset (flat Lambert + ambient + gradient sky); the CPU path below stays
+        // the full-FX fallback + parity oracle. hitFraction is not reported for the
+        // GPU path — the 3b/3c device gates own hit-silhouette validation via the
+        // CPU twin, and the host callers discard it.
+        if (gpuKernel != null && p.Relief2DGpuRaymarch)
+        {
+            var u = ReliefUniforms.Build(w, h, hw, hh, sy, aspect, invLip, maxH, p, in fx);
+            gpuKernel.Run(in u, hbuf, keep, albedo, dst);
+            return;
+        }
+
         double camX = cam.CamX, camY = cam.CamY, camZ = cam.CamZ;
         double fX = cam.FX, fY = cam.FY, fZ = cam.FZ;
         double rX = cam.RX, rY = 0.0, rZ = cam.RZ;       // right vector has rY == 0

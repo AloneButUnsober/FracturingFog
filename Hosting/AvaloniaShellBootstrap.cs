@@ -379,6 +379,15 @@ namespace FracturingFog.Hosting
             if (BootstrapHooks.GpuKernelFactoryHook != null)
                 s_renderHost.GpuKernelFactory = BootstrapHooks.GpuKernelFactoryHook;
 
+            // #162 (Slice 3d): install the D3D11 relief-raymarch kernel factory the
+            // same way — WindowsBootstrap populates the hook with the DirectXRenderer
+            // downcast + ReliefRaymarchGpuKernel construct. Null on Linux/macOS, where
+            // the Vulkan branch below wires its own relief factory. The GPU relief
+            // path stays opt-in (FractalParameters.Relief2DGpuRaymarch); the CPU
+            // raymarch runs whenever no kernel is attached or the flag is off.
+            if (BootstrapHooks.ReliefKernelFactoryHook != null)
+                s_renderHost.ReliefKernelFactory = BootstrapHooks.ReliefKernelFactoryHook;
+
             // V3-GUI (#57): --renderer vulkan attaches the cross-platform Vulkan
             // compute kernel. It is independent of the present renderer (the Silk
             // GL blit) — the kernel owns its own VulkanContext — so we install it
@@ -393,6 +402,10 @@ namespace FracturingFog.Hosting
                 if (vkDev != null)
                 {
                     s_renderHost.GpuKernelFactory = (_, _) => VulkanComputeKernel.TryCreateWithOwnContext();
+                    // #162 (Slice 3d): the relief raymarch kernel also owns its own
+                    // VulkanContext, so wire it independently of the present renderer
+                    // just like the compute kernel above. Opt-in per frame.
+                    s_renderHost.ReliefKernelFactory = (_, _) => ReliefRaymarchVulkanKernel.TryCreateWithOwnContext();
                     RendererFactory.VulkanProbeBackend = () => $"Vulkan compute ({vkDev}) + OpenGL (present)";
                     // Default GPU compute ON for an explicit --renderer vulkan
                     // session — the setter constructs the kernel now via the
