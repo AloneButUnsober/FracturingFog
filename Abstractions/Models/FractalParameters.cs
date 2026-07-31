@@ -430,6 +430,16 @@ namespace FracturingFog.Models
         /// stays the fidelity fallback and the parity oracle.</summary>
         public bool Relief2DGpuRaymarch { get; set; } = false;
 
+        /// <summary>Slice 4f (#170) — empty-space-skip acceleration. Builds a
+        /// coarse max-height grid over the compressed field and lets the sphere
+        /// trace leap the empty air above flat interior (where the slope-limited
+        /// point DE crawls) straight down to the block-max plane. Purely a step-
+        /// count optimisation on the SAME surface — a conservative skip that never
+        /// overshoots the first hit. OPT-IN and default OFF so the byte-identical
+        /// slow path stays the reference; the CPU twin and both GPU kernels build
+        /// and consume the same grid. Only affects the raymarch path.</summary>
+        public bool Relief2DEmptySkip { get; set; } = false;
+
         /// <summary>Master toggle: isolate the kept fractal as a standalone 3D
         /// object over a transparent background. Default false.</summary>
         public bool Relief2DIsolate { get; set; } = false;
@@ -828,6 +838,7 @@ namespace FracturingFog.Models
                 Relief2DHiResField = Relief2DHiResField,
                 Relief2DFieldFloor = Relief2DFieldFloor,
                 Relief2DGpuRaymarch = Relief2DGpuRaymarch,
+                Relief2DEmptySkip = Relief2DEmptySkip,
                 Relief2DIsolate = Relief2DIsolate,
                 Relief2DIsolateByDetail = Relief2DIsolateByDetail,
                 Relief2DDetailThreshold = Relief2DDetailThreshold,

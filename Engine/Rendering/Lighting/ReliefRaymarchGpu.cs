@@ -85,6 +85,11 @@ public readonly struct ReliefUniforms
     public readonly int VolumeSteps;
     public readonly double VolumeStepsFalloff;
 
+    // 4f — empty-space-skip max-height grid. EmptySkip == 0 → no skip (the
+    // byte-identical slow march). MipW/MipH/MipBlk describe the coarse grid the
+    // twin and both kernels build from hbuf via ReliefHeightMip.
+    public readonly int EmptySkip, MipW, MipH, MipBlk;
+
     public readonly bool ShowSky, Isolate;
     public readonly uint BgTop, BgBottom, FloorAlbedo, DropColor;
 
@@ -100,7 +105,8 @@ public readonly struct ReliefUniforms
         int aoSamples, double aoStrength,
         double iblStrength, int skyMode,
         int triplanarKind, double triplanarStrength, double triplanarScale, uint triplanarTint,
-        double fogDensity, double fogHeightFalloff, int volumeSteps, double volumeStepsFalloff)
+        double fogDensity, double fogHeightFalloff, int volumeSteps, double volumeStepsFalloff,
+        int emptySkip, int mipW, int mipH, int mipBlk)
     {
         W = w; H = h; Hw = hw; Hh = hh; Sy = sy; Aspect = aspect;
         InvLip = invLip; Bicubic = bicubic; Cam = cam;
@@ -117,6 +123,7 @@ public readonly struct ReliefUniforms
         TriplanarScale = triplanarScale; TriplanarTint = triplanarTint;
         FogDensity = fogDensity; FogHeightFalloff = fogHeightFalloff;
         VolumeSteps = volumeSteps; VolumeStepsFalloff = volumeStepsFalloff;
+        EmptySkip = emptySkip; MipW = mipW; MipH = mipH; MipBlk = mipBlk;
     }
 
     /// <summary>World-space direction of a directional light, matching
@@ -156,7 +163,10 @@ public readonly struct ReliefUniforms
             fx.AoSamples, fx.AoStrength,
             fx.IblStrength, (int)fx.SkyMode,
             (int)fx.TriplanarKind, fx.TriplanarStrength, fx.TriplanarScale, fx.TriplanarTint,
-            fx.FogDensity, fx.FogHeightFalloff, fx.VolumeSteps, fx.VolumeStepsFalloff);
+            fx.FogDensity, fx.FogHeightFalloff, fx.VolumeSteps, fx.VolumeStepsFalloff,
+            p.Relief2DEmptySkip ? 1 : 0,
+            ReliefHeightMip.GridDim(hw, ReliefHeightMip.Blk),
+            ReliefHeightMip.GridDim(hh, ReliefHeightMip.Blk), ReliefHeightMip.Blk);
     }
 }
 
@@ -171,8 +181,17 @@ public static class ReliefRaymarchGpu
     /// the shader entry point: one primary ray per pixel, flat Lambert shading.</summary>
     public static void RenderCpuMirror(in ReliefUniforms u, float[] hbuf, byte[]? keep,
                                        uint[] albedo, uint[] dst, out double hitFraction)
+        => RenderCpuMirror(in u, hbuf, keep, albedo, dst, out hitFraction, out _);
+
+    /// <summary>As <see cref="RenderCpuMirror(in ReliefUniforms,float[],byte[],uint[],uint[],out double)"/>,
+    /// also reporting the total primary sphere-trace step count (one DE evaluation
+    /// per march iteration) so the 4f empty-space-skip win is measurable headlessly:
+    /// render with EmptySkip off and on and compare <paramref name="marchSteps"/>.</summary>
+    public static void RenderCpuMirror(in ReliefUniforms u, float[] hbuf, byte[]? keep,
+                                       uint[] albedo, uint[] dst, out double hitFraction, out long marchSteps)
     {
         hitFraction = 0.0;
+        marchSteps = 0;
         int w = u.W, h = u.H;
         int n = w * h;
         if (w <= 2 || h <= 2 || u.Hw <= 2 || u.Hh <= 2
@@ -187,15 +206,22 @@ public static class ReliefRaymarchGpu
         var cam = u.Cam;
         double aspect = u.Aspect;
 
-        long hitCount = 0;
+        // 4f — build the coarse max-height grid once (only when the skip is on).
+        // Same pure function the GPU kernels upload as the t3 SRV.
+        float[]? mip = u.EmptySkip != 0
+            ? ReliefHeightMip.BuildMaxGrid(hbuf, u.Hw, u.Hh, u.MipBlk, out _, out _)
+            : null;
+
+        long hitCount = 0, steps = 0;
         for (int py = 0; py < h; py++)
         for (int px = 0; px < w; px++)
         {
-            var (col, hit) = SamplePixel(px + 0.5, py + 0.5, in u, in cam, in de, albedo);
+            var (col, hit) = SamplePixel(px + 0.5, py + 0.5, in u, in cam, in de, albedo, mip, ref steps);
             dst[py * w + px] = col;
             if (hit) hitCount++;
         }
         hitFraction = (double)hitCount / n;
+        marchSteps = steps;
     }
 
     /// <summary>One primary ray → shaded colour + terrain-hit flag. Line-for-line
@@ -203,7 +229,8 @@ public static class ReliefRaymarchGpu
     private static (uint col, bool terrainHit) SamplePixel(
         double sxpix, double sypix, in ReliefUniforms u,
         in HeightfieldRaymarch2D.ReliefCamera cam,
-        in HeightfieldRaymarch2D.HeightDe de, uint[] albedo)
+        in HeightfieldRaymarch2D.HeightDe de, uint[] albedo,
+        float[]? mip, ref long marchSteps)
     {
         int w = u.W, h = u.H;
         double aspect = u.Aspect;
@@ -242,11 +269,23 @@ public static class ReliefRaymarchGpu
             bool hit = false;
             for (int s = 0; s < cam.MaxSteps && t < t1 + cam.By; s++)
             {
+                marchSteps++;
                 d = de.Evaluate(ox + rdx * t, oy + rdy * t, oz + rdz * t);
                 double epsT = cam.Eps0 + cam.PixelAngle * t;
                 if (d < epsT) { hit = true; break; }
                 tPrev = t;
-                t += Math.Max(d, epsT * 0.5);
+                double adv = Math.Max(d, epsT * 0.5);
+                // 4f — empty-space skip. When the ray point is safely above the
+                // coarse block max, leap to the block-max plane / cell exit instead
+                // of the slope-limited point DE. Conservative (never overshoots the
+                // first hit); only ever enlarges the advance.
+                if (mip is not null)
+                {
+                    double skip = EmptySkipDist(ox + rdx * t, oy + rdy * t, oz + rdz * t,
+                                                rdx, rdy, rdz, epsT, in u, mip);
+                    if (skip > adv) adv = skip;
+                }
+                t += adv;
             }
 
             if (hit)
@@ -598,5 +637,42 @@ public static class ReliefRaymarchGpu
         uint G = (uint)((((a >> 8) & 0xFF) * (1 - t) + ((b >> 8) & 0xFF) * t) + 0.5);
         uint B = (uint)(((a & 0xFF) * (1 - t) + (b & 0xFF) * t) + 0.5);
         return 0xFF000000u | (R << 16) | (G << 8) | B;
+    }
+
+    /// <summary>4f — conservative empty-space-skip distance. Looks up the coarse
+    /// block max height at (px,pz); if the ray point is above it by more than the
+    /// hit epsilon, returns the min of the distance to descend to the block-max
+    /// plane and the distance to exit the block's XZ cell — no terrain can be hit
+    /// within that span. Returns 0 (fall back to the point DE) otherwise. Twin of
+    /// the HLSL <c>EmptySkipDist</c>.</summary>
+    private static double EmptySkipDist(double px, double py, double pz,
+        double rdx, double rdy, double rdz, double epsT, in ReliefUniforms u, float[] mip)
+    {
+        double uu = px / u.Aspect + 0.5, vv = pz + 0.5;
+        int cx = (int)Math.Floor(uu * u.MipW);
+        int cz = (int)Math.Floor(vv * u.MipH);
+        if (cx < 0) cx = 0; else if (cx > u.MipW - 1) cx = u.MipW - 1;
+        if (cz < 0) cz = 0; else if (cz > u.MipH - 1) cz = u.MipH - 1;
+        double hmax = mip[cz * u.MipW + cx] * u.Sy;
+        if (py <= hmax + epsT) return 0.0;
+
+        // Descend to epsT ABOVE the block max (not the plane itself) so the normal
+        // march resumes with a tight hit-refine bracket instead of one spanning the
+        // whole leap. Still conservative (y stays ≥ hmax over the span).
+        double tPlane = rdy < -1e-9 ? (py - (hmax + epsT)) / (-rdy) : double.MaxValue;
+
+        // Lateral exit of this coarse cell's world XZ AABB.
+        double xLo = (cx / (double)u.MipW - 0.5) * u.Aspect;
+        double xHi = ((cx + 1) / (double)u.MipW - 0.5) * u.Aspect;
+        double zLo = cz / (double)u.MipH - 0.5;
+        double zHi = (cz + 1) / (double)u.MipH - 0.5;
+        double tExit = double.MaxValue;
+        if (rdx > 1e-12) tExit = Math.Min(tExit, (xHi - px) / rdx);
+        else if (rdx < -1e-12) tExit = Math.Min(tExit, (xLo - px) / rdx);
+        if (rdz > 1e-12) tExit = Math.Min(tExit, (zHi - pz) / rdz);
+        else if (rdz < -1e-12) tExit = Math.Min(tExit, (zLo - pz) / rdz);
+
+        double skip = Math.Min(tPlane, tExit);
+        return skip > 0.0 ? skip : 0.0;
     }
 }

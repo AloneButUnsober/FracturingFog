@@ -59,9 +59,10 @@ public sealed class ReliefRaymarchGpuKernel : IDisposable, FracturingFog.Renderi
         public float IblStrength; public int SkyMode; public float TriplanarStrength, TriplanarScale;   // 4d
         public int TriplanarKind; public uint TriplanarTint; public float PadT0, PadT1;   // 4d
         public float FogDensity, FogHeightFalloff; public int VolumeSteps; public float VolumeStepsFalloff;   // 4e
+        public int EmptySkip, MipW, MipH, MipBlk;   // 4f
     }
 
-    private const int ParamBytes = 352;
+    private const int ParamBytes = 368;
 
     private readonly ID3D11Device _device;
     private readonly ID3D11DeviceContext _ctx;
@@ -73,6 +74,10 @@ public sealed class ReliefRaymarchGpuKernel : IDisposable, FracturingFog.Renderi
     private ID3D11Buffer? _heightBuf, _keepBuf;   // t0, t2 — field-sized (hn)
     private ID3D11ShaderResourceView? _heightSrv, _keepSrv;
     private int _fieldCells;
+
+    private ID3D11Buffer? _mipBuf;                // t3 — 4f coarse max-height grid
+    private ID3D11ShaderResourceView? _mipSrv;
+    private int _mipCells;
 
     private ID3D11Buffer? _albedoBuf;             // t1 — output-sized (n)
     private ID3D11ShaderResourceView? _albedoSrv;
@@ -139,6 +144,29 @@ public sealed class ReliefRaymarchGpuKernel : IDisposable, FracturingFog.Renderi
         _heightSrv = _device.CreateShaderResourceView(_heightBuf, srv);
         _keepSrv = _device.CreateShaderResourceView(_keepBuf, srv);
         _fieldCells = cells;
+    }
+
+    // 4f — (re)allocate the coarse max-height grid SRV (t3) to hold `cells` floats.
+    private void EnsureMipBuffer(int cells)
+    {
+        if (_mipBuf != null && _mipCells == cells) return;
+        _mipSrv?.Dispose(); _mipBuf?.Dispose();
+        _mipBuf = _device.CreateBuffer(new BufferDescription
+        {
+            ByteWidth = (uint)(cells * sizeof(float)),
+            BindFlags = BindFlags.ShaderResource,
+            Usage = ResourceUsage.Dynamic,
+            CPUAccessFlags = CpuAccessFlags.Write,
+            MiscFlags = ResourceOptionFlags.BufferStructured,
+            StructureByteStride = sizeof(float),
+        });
+        _mipSrv = _device.CreateShaderResourceView(_mipBuf, new ShaderResourceViewDescription
+        {
+            Format = Vortice.DXGI.Format.Unknown,
+            ViewDimension = Vortice.Direct3D.ShaderResourceViewDimension.Buffer,
+            Buffer = new BufferShaderResourceView { FirstElement = 0, NumElements = (uint)cells },
+        });
+        _mipCells = cells;
     }
 
     private void EnsureOutputBuffers(int n)
@@ -212,6 +240,14 @@ public sealed class ReliefRaymarchGpuKernel : IDisposable, FracturingFog.Renderi
             UploadColors(_albedoBuf!, albedo, n);
             UploadKeep(_keepBuf!, keep, hn);
 
+            // 4f — build + upload the coarse max-height grid when the skip is on.
+            if (u.EmptySkip != 0)
+            {
+                var mip = ReliefHeightMip.BuildMaxGrid(hbuf, u.Hw, u.Hh, u.MipBlk, out _, out _);
+                EnsureMipBuffer(mip.Length);
+                UploadFloats(_mipBuf!, mip, mip.Length);
+            }
+
             var p = BuildBlob(in u, keep != null);
             var mapped = _ctx.Map(_paramsBuf, 0, Vortice.Direct3D11.MapMode.WriteDiscard, MapFlags.None);
             unsafe { *(ReliefParamsBlob*)mapped.DataPointer = p; }
@@ -222,6 +258,7 @@ public sealed class ReliefRaymarchGpuKernel : IDisposable, FracturingFog.Renderi
             _ctx.CSSetShaderResource(0, _heightSrv);
             _ctx.CSSetShaderResource(1, _albedoSrv);
             _ctx.CSSetShaderResource(2, _keepSrv);
+            _ctx.CSSetShaderResource(3, u.EmptySkip != 0 ? _mipSrv : null);
             _ctx.CSSetUnorderedAccessView(0, _colorUav);
 
             _ctx.Dispatch((uint)((w + 7) / 8), (uint)((h + 7) / 8), 1);
@@ -230,6 +267,7 @@ public sealed class ReliefRaymarchGpuKernel : IDisposable, FracturingFog.Renderi
             _ctx.CSSetShaderResource(0, null);
             _ctx.CSSetShaderResource(1, null);
             _ctx.CSSetShaderResource(2, null);
+            _ctx.CSSetShaderResource(3, null);
 
             _ctx.CopyResource(_colorStaging!, _colorBuf!);
             long tDispatch = System.Diagnostics.Stopwatch.GetTimestamp();
@@ -284,6 +322,7 @@ public sealed class ReliefRaymarchGpuKernel : IDisposable, FracturingFog.Renderi
             TriplanarKind = u.TriplanarKind, TriplanarTint = u.TriplanarTint, PadT0 = 0f, PadT1 = 0f,
             FogDensity = (float)u.FogDensity, FogHeightFalloff = (float)u.FogHeightFalloff,
             VolumeSteps = u.VolumeSteps, VolumeStepsFalloff = (float)u.VolumeStepsFalloff,
+            EmptySkip = u.EmptySkip, MipW = u.MipW, MipH = u.MipH, MipBlk = u.MipBlk,
         };
     }
 
@@ -329,10 +368,12 @@ public sealed class ReliefRaymarchGpuKernel : IDisposable, FracturingFog.Renderi
         _disposed = true;
         try { _heightSrv?.Dispose(); } catch { }
         try { _keepSrv?.Dispose(); } catch { }
+        try { _mipSrv?.Dispose(); } catch { }
         try { _albedoSrv?.Dispose(); } catch { }
         try { _colorUav?.Dispose(); } catch { }
         try { _heightBuf?.Dispose(); } catch { }
         try { _keepBuf?.Dispose(); } catch { }
+        try { _mipBuf?.Dispose(); } catch { }
         try { _albedoBuf?.Dispose(); } catch { }
         try { _colorBuf?.Dispose(); } catch { }
         try { _colorStaging?.Dispose(); } catch { }
