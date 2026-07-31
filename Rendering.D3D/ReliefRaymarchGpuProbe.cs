@@ -106,6 +106,12 @@ public static class ReliefRaymarchGpuProbe
         var fx = LightingFxData.CreateDefault();
         fx.BgTopColor = 0xFF335588u;
         fx.BgBottomColor = 0xFF0A0C14u;
+        // 4a (#165) — exercise the Cook-Torrance GGX spec path. Non-metallic so
+        // diffuse stays full; roughness 0.5 spreads the highlight so the
+        // float-vs-double lobe fringe stays inside the gate thresholds.
+        fx.SpecularStrength = 0.5;
+        fx.Roughness = 0.5;
+        fx.Metallic = 0.0;
 
         var (hbuf, albedo, maxH) = BumpField(hw, hh, w, h);
         var u = BuildUniforms(w, h, hw, hh, hbuf, maxH, p, fx);

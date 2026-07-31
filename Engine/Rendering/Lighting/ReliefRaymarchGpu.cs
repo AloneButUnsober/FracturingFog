@@ -58,6 +58,9 @@ public readonly struct ReliefUniforms
     public readonly double L2x, L2y, L2z, I2; public readonly double C2r, C2g, C2b;
     public readonly double Ambient;
 
+    // 4a — Cook-Torrance GGX material. SpecStrength == 0 → flat Lambert.
+    public readonly double SpecStrength, Roughness, Metallic;
+
     public readonly bool ShowSky, Isolate;
     public readonly uint BgTop, BgBottom, FloorAlbedo, DropColor;
 
@@ -67,7 +70,8 @@ public readonly struct ReliefUniforms
         double l1x, double l1y, double l1z, double i1, double c1r, double c1g, double c1b,
         double l2x, double l2y, double l2z, double i2, double c2r, double c2g, double c2b,
         double ambient, bool showSky, bool isolate,
-        uint bgTop, uint bgBottom, uint floorAlbedo, uint dropColor)
+        uint bgTop, uint bgBottom, uint floorAlbedo, uint dropColor,
+        double specStrength, double roughness, double metallic)
     {
         W = w; H = h; Hw = hw; Hh = hh; Sy = sy; Aspect = aspect;
         InvLip = invLip; Bicubic = bicubic; Cam = cam;
@@ -76,6 +80,7 @@ public readonly struct ReliefUniforms
         L2x = l2x; L2y = l2y; L2z = l2z; I2 = i2; C2r = c2r; C2g = c2g; C2b = c2b;
         Ambient = ambient; ShowSky = showSky; Isolate = isolate;
         BgTop = bgTop; BgBottom = bgBottom; FloorAlbedo = floorAlbedo; DropColor = dropColor;
+        SpecStrength = specStrength; Roughness = roughness; Metallic = metallic;
     }
 
     /// <summary>World-space direction of a directional light, matching
@@ -109,7 +114,8 @@ public readonly struct ReliefUniforms
             d1.x, d1.y, d1.z, fx.Light2.Intensity, (fx.Light2.Color >> 16) & 0xFF, (fx.Light2.Color >> 8) & 0xFF, fx.Light2.Color & 0xFF,
             d2.x, d2.y, d2.z, fx.Light3.Intensity, (fx.Light3.Color >> 16) & 0xFF, (fx.Light3.Color >> 8) & 0xFF, fx.Light3.Color & 0xFF,
             fx.AmbientStrength, fx.ShowSkyBackdrop, p.Relief2DIsolate,
-            fx.BgTopColor, fx.BgBottomColor, HeightfieldRaymarch2D.FloorAlbedoArgb, HeightfieldRaymarch2D.DropColorArgb);
+            fx.BgTopColor, fx.BgBottomColor, HeightfieldRaymarch2D.FloorAlbedoArgb, HeightfieldRaymarch2D.DropColorArgb,
+            fx.SpecularStrength, fx.Roughness, fx.Metallic);
     }
 }
 
@@ -221,7 +227,7 @@ public static class ReliefRaymarchGpu
 
                 double uu = hx / aspect + 0.5, vv = hz + 0.5;
                 uint alb = HeightfieldRaymarch2D.SampleAlbedoBilinear(albedo, w, h, uu, vv);
-                return (ShadeFlat(nx, ny, nz, alb, in u), true);
+                return (ShadeFlat(nx, ny, nz, -rdx, -rdy, -rdz, alb, in u), true);
             }
         }
 
@@ -233,7 +239,7 @@ public static class ReliefRaymarchGpu
             {
                 double gx = ox + rdx * tp, gz = oz + rdz * tp;
                 if (Math.Abs(gx) <= cam.FloorBx && Math.Abs(gz) <= cam.FloorBz)
-                    return (ShadeFlat(0.0, 1.0, 0.0, u.FloorAlbedo, in u), false);
+                    return (ShadeFlat(0.0, 1.0, 0.0, -rdx, -rdy, -rdz, u.FloorAlbedo, in u), false);
             }
         }
         uint bg = u.ShowSky ? GradientSky(rdy, in u) : u.DropColor;
@@ -245,24 +251,78 @@ public static class ReliefRaymarchGpu
     /// albedo. The diffuse-only subset of ShadingPipeline's lit combine
     /// (spec/AO/IBL off): <c>s = amb + (Σ Iᵢ·max(0,N·Lᵢ)·Colᵢ / 255)·(1−amb)</c>,
     /// then <c>out = albedo · s</c>. Preserves the albedo's alpha.</summary>
-    private static uint ShadeFlat(double nx, double ny, double nz, uint albedo, in ReliefUniforms u)
+    private static uint ShadeFlat(double nx, double ny, double nz,
+                                  double vx, double vy, double vz, uint albedo, in ReliefUniforms u)
     {
         double sR = 0, sG = 0, sB = 0;
         Accum(u.I0, u.C0r, u.C0g, u.C0b, u.L0x, u.L0y, u.L0z, nx, ny, nz, ref sR, ref sG, ref sB);
         Accum(u.I1, u.C1r, u.C1g, u.C1b, u.L1x, u.L1y, u.L1z, nx, ny, nz, ref sR, ref sG, ref sB);
         Accum(u.I2, u.C2r, u.C2g, u.C2b, u.L2x, u.L2y, u.L2z, nx, ny, nz, ref sR, ref sG, ref sB);
+
+        double aR = (albedo >> 16) & 0xFF, aG = (albedo >> 8) & 0xFF, aB = albedo & 0xFF;
+
+        // 4a — Cook-Torrance GGX spec + metallic diffuse suppression. Diffuse-only
+        // (byte-identical to the flat-Lambert twin) when SpecStrength == 0.
+        double specR = 0, specG = 0, specB = 0, diffSuppress = 1.0;
+        if (u.SpecStrength > 0)
+        {
+            double rough = Math.Max(0.05, u.Roughness);
+            double a = rough * rough, a2 = a * a;
+            double kg = (rough + 1.0) * (rough + 1.0) / 8.0;
+            double F0r = 0.04 + (aR / 255.0 - 0.04) * u.Metallic;
+            double F0g = 0.04 + (aG / 255.0 - 0.04) * u.Metallic;
+            double F0b = 0.04 + (aB / 255.0 - 0.04) * u.Metallic;
+            double NdotV = Math.Max(0.0, nx * vx + ny * vy + nz * vz);
+            SpecAccum(u.I0, u.C0r, u.C0g, u.C0b, u.L0x, u.L0y, u.L0z, nx, ny, nz, vx, vy, vz, NdotV, a2, kg, F0r, F0g, F0b, u.SpecStrength, ref specR, ref specG, ref specB);
+            SpecAccum(u.I1, u.C1r, u.C1g, u.C1b, u.L1x, u.L1y, u.L1z, nx, ny, nz, vx, vy, vz, NdotV, a2, kg, F0r, F0g, F0b, u.SpecStrength, ref specR, ref specG, ref specB);
+            SpecAccum(u.I2, u.C2r, u.C2g, u.C2b, u.L2x, u.L2y, u.L2z, nx, ny, nz, vx, vy, vz, NdotV, a2, kg, F0r, F0g, F0b, u.SpecStrength, ref specR, ref specG, ref specB);
+            diffSuppress = 1.0 - u.Metallic;
+        }
+
         double amb = u.Ambient;
-        sR = amb + (sR / 255.0) * (1.0 - amb);
-        sG = amb + (sG / 255.0) * (1.0 - amb);
-        sB = amb + (sB / 255.0) * (1.0 - amb);
-        double r = ((albedo >> 16) & 0xFF) * sR;
-        double g = ((albedo >> 8) & 0xFF) * sG;
-        double b = (albedo & 0xFF) * sB;
+        sR = amb + (sR / 255.0) * (1.0 - amb) * diffSuppress;
+        sG = amb + (sG / 255.0) * (1.0 - amb) * diffSuppress;
+        sB = amb + (sB / 255.0) * (1.0 - amb) * diffSuppress;
+        double r = aR * sR + specR;
+        double g = aG * sG + specG;
+        double b = aB * sB + specB;
         uint A = (albedo >> 24) & 0xFFu;
         return (A << 24)
              | ((uint)Math.Clamp(r + 0.5, 0, 255) << 16)
              | ((uint)Math.Clamp(g + 0.5, 0, 255) << 8)
              | (uint)Math.Clamp(b + 0.5, 0, 255);
+    }
+
+    /// <summary>One directional light's Cook-Torrance GGX specular — scalar twin
+    /// of the HLSL <c>SpecAccum</c> and of <see cref="ShadingPipeline.AccumulateSpec"/>
+    /// (Schlick F per channel, Smith joint G, GGX D). Accumulates in 0–255 space.</summary>
+    private static void SpecAccum(double intensity, double cr, double cg, double cb,
+        double lx, double ly, double lz, double nx, double ny, double nz,
+        double vx, double vy, double vz, double NdotV, double a2, double kg,
+        double F0r, double F0g, double F0b, double specStrength,
+        ref double specR, ref double specG, ref double specB)
+    {
+        if (intensity <= 0) return;
+        double NdotL = nx * lx + ny * ly + nz * lz;
+        if (NdotL <= 0) return;
+        double hx = lx + vx, hy = ly + vy, hz = lz + vz;
+        double hl2 = hx * hx + hy * hy + hz * hz;
+        if (hl2 < 1e-12) return;
+        double invH = 1.0 / Math.Sqrt(hl2);
+        hx *= invH; hy *= invH; hz *= invH;
+        double NdotH = Math.Max(0.0, nx * hx + ny * hy + nz * hz);
+        double VdotH = Math.Max(0.0, vx * hx + vy * hy + vz * hz);
+        double denom = NdotH * NdotH * (a2 - 1.0) + 1.0;
+        double D = a2 / (Math.PI * denom * denom);
+        double G1V = NdotV / (NdotV * (1.0 - kg) + kg);
+        double G1L = NdotL / (NdotL * (1.0 - kg) + kg);
+        double G = G1V * G1L;
+        double omv = 1.0 - VdotH;
+        double Fc = omv * omv * omv * omv * omv;
+        double specBase = (D * G / Math.Max(4.0 * NdotV, 1e-4)) * specStrength * intensity;
+        specR += specBase * (F0r + (1.0 - F0r) * Fc) * cr;
+        specG += specBase * (F0g + (1.0 - F0g) * Fc) * cg;
+        specB += specBase * (F0b + (1.0 - F0b) * Fc) * cb;
     }
 
     private static void Accum(double intensity, double cr, double cg, double cb,

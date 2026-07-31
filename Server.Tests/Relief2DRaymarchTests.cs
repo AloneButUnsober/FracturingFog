@@ -474,6 +474,91 @@ public class ReliefRaymarchGpuTests
         Assert.True(transparent > w * h / 10, $"too few transparent px: {transparent}");
         Assert.True(hit > 0.05, "isolate culled the whole surface");
     }
+
+    // ── 4a (#165): Cook-Torrance GGX specular ─────────────────────────────
+
+    private static int Luma(uint c)
+        => (int)((c >> 16) & 0xFF) + (int)((c >> 8) & 0xFF) + (int)(c & 0xFF);
+
+    // SpecularStrength == 0 must be byte-identical regardless of Roughness /
+    // Metallic — the material knobs are fully gated, so 4a can't regress the
+    // Slice-3 flat-Lambert path.
+    [Fact]
+    public void CpuMirror_SpecOff_ByteIdentical_Regardless_Of_Material()
+    {
+        int w = 320, h = 240, hw = 320, hh = 240;
+        var p = ReliefParams();
+        var (hbuf, albedo, maxH) = BumpField(hw, hh, w, h);
+
+        var fxA = LightingFxData.CreateDefault();
+        fxA.SpecularStrength = 0.0; fxA.Metallic = 1.0; fxA.Roughness = 0.1;
+        var uA = BuildUniforms(w, h, hw, hh, hbuf, maxH, p, fxA);
+        var a = new uint[w * h];
+        ReliefRaymarchGpu.RenderCpuMirror(in uA, hbuf, null, albedo, a, out _);
+
+        var fxB = LightingFxData.CreateDefault();
+        fxB.SpecularStrength = 0.0; fxB.Metallic = 0.0; fxB.Roughness = 1.0;
+        var uB = BuildUniforms(w, h, hw, hh, hbuf, maxH, p, fxB);
+        var b = new uint[w * h];
+        ReliefRaymarchGpu.RenderCpuMirror(in uB, hbuf, null, albedo, b, out _);
+
+        Assert.Equal(a, b);
+    }
+
+    // Turning spec on adds an additive GGX highlight — some lit-slope pixels get
+    // strictly brighter — while the terrain silhouette (hit fraction) is
+    // untouched (spec never moves geometry).
+    [Fact]
+    public void CpuMirror_SpecOn_Brightens_Without_Moving_Silhouette()
+    {
+        int w = 320, h = 240, hw = 320, hh = 240;
+        var p = ReliefParams();
+        var (hbuf, albedo, maxH) = BumpField(hw, hh, w, h);
+
+        var fxOff = LightingFxData.CreateDefault();
+        fxOff.SpecularStrength = 0.0;
+        var uOff = BuildUniforms(w, h, hw, hh, hbuf, maxH, p, fxOff);
+        var off = new uint[w * h];
+        ReliefRaymarchGpu.RenderCpuMirror(in uOff, hbuf, null, albedo, off, out double hitOff);
+
+        var fxOn = LightingFxData.CreateDefault();
+        fxOn.SpecularStrength = 0.8; fxOn.Roughness = 0.4; fxOn.Metallic = 0.0;
+        var uOn = BuildUniforms(w, h, hw, hh, hbuf, maxH, p, fxOn);
+        var on = new uint[w * h];
+        ReliefRaymarchGpu.RenderCpuMirror(in uOn, hbuf, null, albedo, on, out double hitOn);
+
+        Assert.Equal(hitOff, hitOn);
+
+        int brighter = 0;
+        for (int i = 0; i < w * h; i++) if (Luma(on[i]) > Luma(off[i])) brighter++;
+        Assert.True(brighter > 50, $"GGX spec added no visible highlight ({brighter} px)");
+    }
+
+    // Metallic = 1 with spec on suppresses diffuse (diffSuppress = 1 − metallic),
+    // so away from the highlight the metal render is darker than the dielectric.
+    [Fact]
+    public void CpuMirror_Metallic_Suppresses_Diffuse()
+    {
+        int w = 320, h = 240, hw = 320, hh = 240;
+        var p = ReliefParams();
+        var (hbuf, albedo, maxH) = BumpField(hw, hh, w, h);
+
+        var fxDiel = LightingFxData.CreateDefault();
+        fxDiel.SpecularStrength = 0.6; fxDiel.Roughness = 0.5; fxDiel.Metallic = 0.0;
+        var uDiel = BuildUniforms(w, h, hw, hh, hbuf, maxH, p, fxDiel);
+        var diel = new uint[w * h];
+        ReliefRaymarchGpu.RenderCpuMirror(in uDiel, hbuf, null, albedo, diel, out _);
+
+        var fxMetal = LightingFxData.CreateDefault();
+        fxMetal.SpecularStrength = 0.6; fxMetal.Roughness = 0.5; fxMetal.Metallic = 1.0;
+        var uMetal = BuildUniforms(w, h, hw, hh, hbuf, maxH, p, fxMetal);
+        var metal = new uint[w * h];
+        ReliefRaymarchGpu.RenderCpuMirror(in uMetal, hbuf, null, albedo, metal, out _);
+
+        int darker = 0;
+        for (int i = 0; i < w * h; i++) if (Luma(metal[i]) < Luma(diel[i])) darker++;
+        Assert.True(darker > 100, $"metallic did not suppress diffuse ({darker} px)");
+    }
 }
 
 // #162 (Slice 3d) — host-wiring seam. HeightfieldRaymarch2D.Render dispatches
