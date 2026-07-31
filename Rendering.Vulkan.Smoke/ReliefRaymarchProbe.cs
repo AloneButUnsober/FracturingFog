@@ -108,6 +108,11 @@ internal static class ReliefRaymarchProbe
         fx.SpecularStrength = 0.5;
         fx.Roughness = 0.5;
         fx.Metallic = 0.0;
+        // 4b (#166) — exercise the IQ soft-shadow march (key light only), matches
+        // the D3D gate. DXC-SPIR-V penumbra stays inside the parity thresholds.
+        fx.ShadowSteps = 24;
+        fx.ShadowSoftK = 8.0;
+        fx.ShadowLightMask = 0x1;
 
         var (hbuf, albedo, maxH) = BumpField(hw, hh, w, h);
         var u = BuildUniforms(w, h, hw, hh, hbuf, maxH, p, fx);

@@ -559,6 +559,62 @@ public class ReliefRaymarchGpuTests
         for (int i = 0; i < w * h; i++) if (Luma(metal[i]) < Luma(diel[i])) darker++;
         Assert.True(darker > 100, $"metallic did not suppress diffuse ({darker} px)");
     }
+
+    // ── 4b (#166): IQ soft shadow ─────────────────────────────────────────
+
+    // ShadowSteps == 0 must be byte-identical regardless of ShadowSoftK /
+    // ShadowLightMask — soft shadow is fully gated, no regression to 4a.
+    [Fact]
+    public void CpuMirror_ShadowOff_ByteIdentical_Regardless_Of_ShadowKnobs()
+    {
+        int w = 320, h = 240, hw = 320, hh = 240;
+        var p = ReliefParams();
+        var (hbuf, albedo, maxH) = BumpField(hw, hh, w, h);
+
+        var fxA = LightingFxData.CreateDefault();
+        fxA.ShadowSteps = 0; fxA.ShadowSoftK = 8.0; fxA.ShadowLightMask = 0x7;
+        var uA = BuildUniforms(w, h, hw, hh, hbuf, maxH, p, fxA);
+        var a = new uint[w * h];
+        ReliefRaymarchGpu.RenderCpuMirror(in uA, hbuf, null, albedo, a, out _);
+
+        var fxB = LightingFxData.CreateDefault();
+        fxB.ShadowSteps = 0; fxB.ShadowSoftK = 0.0; fxB.ShadowLightMask = 0x0;
+        var uB = BuildUniforms(w, h, hw, hh, hbuf, maxH, p, fxB);
+        var b = new uint[w * h];
+        ReliefRaymarchGpu.RenderCpuMirror(in uB, hbuf, null, albedo, b, out _);
+
+        Assert.Equal(a, b);
+    }
+
+    // Soft shadow on casts the dome's shadow across the ground plane, darkening a
+    // swath of floor pixels. The grazing default key light (phi ≈ 81°) throws a
+    // long shadow; the terrain silhouette (hit fraction) is untouched.
+    [Fact]
+    public void CpuMirror_ShadowOn_Casts_On_Ground()
+    {
+        int w = 320, h = 240, hw = 320, hh = 240;
+        var p = ReliefParams();
+        p.Relief2DGroundPlane = true;   // give the dome a floor to cast onto
+        var (hbuf, albedo, maxH) = BumpField(hw, hh, w, h);
+
+        var fxOff = LightingFxData.CreateDefault();
+        fxOff.ShadowSteps = 0;
+        var uOff = BuildUniforms(w, h, hw, hh, hbuf, maxH, p, fxOff);
+        var off = new uint[w * h];
+        ReliefRaymarchGpu.RenderCpuMirror(in uOff, hbuf, null, albedo, off, out double hitOff);
+
+        var fxOn = LightingFxData.CreateDefault();
+        fxOn.ShadowSteps = 32; fxOn.ShadowSoftK = 8.0; fxOn.ShadowLightMask = 0x1;
+        var uOn = BuildUniforms(w, h, hw, hh, hbuf, maxH, p, fxOn);
+        var on = new uint[w * h];
+        ReliefRaymarchGpu.RenderCpuMirror(in uOn, hbuf, null, albedo, on, out double hitOn);
+
+        Assert.Equal(hitOff, hitOn);
+
+        int darker = 0;
+        for (int i = 0; i < w * h; i++) if (Luma(on[i]) < Luma(off[i])) darker++;
+        Assert.True(darker > 200, $"soft shadow darkened too few px ({darker})");
+    }
 }
 
 // #162 (Slice 3d) — host-wiring seam. HeightfieldRaymarch2D.Render dispatches
