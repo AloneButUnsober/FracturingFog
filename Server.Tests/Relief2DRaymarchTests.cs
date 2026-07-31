@@ -162,6 +162,51 @@ public class Relief2DRaymarchTests
         Assert.InRange(hitFrac, 0.10, 0.97);
     }
 
+    // Lighting-FX debug HUD must draw on a Relief-3D raymarch frame (it used to
+    // only run inside the 3D raymarcher calculators; the oblique-relief path
+    // renders through HeightfieldRaymarch2D, so the host applies the HUD to the
+    // relief buffer). Compass flag (0x1) draws in the top-right corner.
+    [Fact]
+    public void DebugHud_Draws_On_Relief_Raymarch_Buffer()
+    {
+        int w = 256, h = 192;   // both ≥ 128 so the HUD is not size-skipped
+        var (albedo, height) = Mandelbrot(w, h);
+        var p = new FractalParameters
+        {
+            Relief2DEnabled = true,
+            Relief2DRaymarch = true,
+            Relief2DHeightScale = 1.4,
+            Relief2DCameraElevationDeg = 45,
+        };
+        var relief = new uint[w * h];
+        HeightfieldRaymarch2D.Render(albedo, height, w, h, p, relief);
+
+        // Flags == 0 is a strict no-op (no HUD requested).
+        var noHud = (uint[])relief.Clone();
+        var fxOff = p.Lighting;
+        fxOff.DebugHudFlags = 0;
+        ScreenSpacePost.ApplyDebugHud(noHud, w, h, in fxOff);
+        Assert.Equal(relief, noHud);
+
+        // Compass on → the top-right 80×80 box gets a 50% black backdrop + ticks.
+        var withHud = (uint[])relief.Clone();
+        var fxOn = p.Lighting;
+        fxOn.DebugHudFlags = 0x1;
+        ScreenSpacePost.ApplyDebugHud(withHud, w, h, in fxOn);
+
+        int changed = 0;
+        for (int i = 0; i < w * h; i++) if (withHud[i] != relief[i]) changed++;
+        Assert.True(changed > 0, "compass HUD drew nothing on the relief buffer");
+
+        // The change is localised to the top-right compass region, not global.
+        int cornerChanged = 0;
+        for (int y = 0; y < 96; y++)
+            for (int x = w - 96; x < w; x++)
+                if (withHud[y * w + x] != relief[y * w + x]) cornerChanged++;
+        Assert.True(cornerChanged > 0, "compass HUD missed the top-right corner");
+        Assert.Equal(changed, cornerChanged);
+    }
+
     [Fact]
     public void Dead_Flat_Field_Is_Passthrough()
     {
