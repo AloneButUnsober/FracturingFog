@@ -1960,10 +1960,10 @@ namespace FracturingFog.Rendering
                         if (rp.Relief2DEnabled && phs != null && pn > 0
                             && phs.Length >= pn && previewSrc != null && previewSrc.Length >= pn)
                         {
-                            // Force supersample off for the preview (speed); the
-                            // final frame keeps the user's AA setting.
-                            var prp = rp.Relief2DSupersample > 1 ? rp.Clone() : rp;
-                            if (!ReferenceEquals(prp, rp)) prp.Relief2DSupersample = 1;
+                            // #155 — preview budget: supersample off + heavy
+                            // per-hit FX (AO/SSAO/reflections/volumetric) dropped,
+                            // cheap depth cues kept identical to the final frame.
+                            var prp = FracturingFog.Rendering.Lighting.HeightfieldRaymarch2D.MakePreviewParams(rp);
                             if (_reliefPreviewScratch == null || _reliefPreviewScratch.Length < pn)
                                 _reliefPreviewScratch = new uint[pn];
                             if (prp.Relief2DRaymarch)

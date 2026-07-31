@@ -207,6 +207,86 @@ public class Relief2DRaymarchTests
         Assert.Equal(changed, cornerChanged);
     }
 
+    // #155 — pre-pass cache. Re-rendering the SAME field+params must be
+    // deterministic (a cache hit reproduces the recompute exactly); a changed
+    // height SCALE reuses the cached field yet re-derives the correct, stable
+    // image; and a changed FIELD must invalidate the cache (no stale bleed).
+    [Fact]
+    public void PrepassCache_Is_Deterministic_And_Invalidates()
+    {
+        int w = 320, h = 240;
+        var (albedoA, heightA) = Mandelbrot(w, h);
+        var p = new FractalParameters
+        {
+            Relief2DEnabled = true,
+            Relief2DRaymarch = true,
+            Relief2DHeightScale = 1.4,
+            Relief2DCameraElevationDeg = 45,
+        };
+
+        var a1 = new uint[w * h];
+        HeightfieldRaymarch2D.Render(albedoA, heightA, w, h, p, a1);
+        var a2 = new uint[w * h];   // cache HIT — identical inputs, identical out
+        HeightfieldRaymarch2D.Render(albedoA, heightA, w, h, p, a2);
+        Assert.Equal(a1, a2);
+
+        // Same field, different height SCALE: cached pre-pass reused, sy/invLip
+        // per-call, so the image legitimately differs but stays stable.
+        var pScale = p.Clone();
+        pScale.Relief2DHeightScale = 3.0;
+        var s1 = new uint[w * h];
+        HeightfieldRaymarch2D.Render(albedoA, heightA, w, h, pScale, s1);
+        var s2 = new uint[w * h];
+        HeightfieldRaymarch2D.Render(albedoA, heightA, w, h, pScale, s2);
+        Assert.Equal(s1, s2);
+        Assert.NotEqual(a1, s1);
+
+        // Different FIELD must invalidate the cache.
+        var calcB = new MandelbrotCalculator(w, h)
+        {
+            CenterX = -0.5, CenterY = 0.6, Zoom = 8.0, MaxIterations = 400,
+            ColorMap = new MonoBandMap(),
+        };
+        calcB.Calculate(default);
+        var albedoB = (uint[])calcB.ColorBuffer.Clone();
+        var heightB = (float[])calcB.SmoothBuffer.Clone();
+        var b1 = new uint[w * h];
+        HeightfieldRaymarch2D.Render(albedoB, heightB, w, h, p, b1);
+        Assert.NotEqual(a1, b1);
+
+        // Re-render field A — must match the ORIGINAL A render (correct re-key).
+        var a3 = new uint[w * h];
+        HeightfieldRaymarch2D.Render(albedoA, heightA, w, h, p, a3);
+        Assert.Equal(a1, a3);
+    }
+
+    // #155 — the preview parameter builder drops the heavy per-hit FX (AO, SSAO,
+    // reflections, volumetric) and supersample while keeping the cheap dominant
+    // depth cues (soft shadow + specular, from auto-shade) so the preview frames
+    // like the final.
+    [Fact]
+    public void PreviewParams_Drop_Heavy_Fx_Keep_Shadow()
+    {
+        var p = new FractalParameters
+        {
+            Relief2DEnabled = true,
+            Relief2DRaymarch = true,
+            Relief2DAutoShade = true,
+            Relief2DSupersample = 4,
+        };
+        var pv = HeightfieldRaymarch2D.MakePreviewParams(p);
+
+        Assert.Equal(1, pv.Relief2DSupersample);
+        Assert.False(pv.Relief2DAutoShade);
+        var fx = pv.Lighting;
+        Assert.Equal(0, fx.AoSamples);
+        Assert.Equal(0, fx.SsaoSamples);
+        Assert.Equal(0.0, fx.ReflectionStrength);
+        Assert.Equal(0, fx.VolumeSteps);
+        Assert.True(fx.ShadowSteps > 0, "preview dropped the soft-shadow cue");
+        Assert.True(fx.SpecularStrength > 0, "preview dropped the specular cue");
+    }
+
     [Fact]
     public void Dead_Flat_Field_Is_Passthrough()
     {
