@@ -64,6 +64,18 @@ public static class WindowsBootstrap
             return null;
         };
 
+        // #162 (Slice 3d): relief-raymarch kernel over the SAME D3D11 device/context
+        // the escape-time kernel uses (shared gate serialises with renderer.Render).
+        BootstrapHooks.ReliefKernelFactoryHook = (renderer, gate) =>
+        {
+            if (renderer is FracturingFog.DirectXRenderer dx
+                && dx.TryGetD3D11(out var dev, out var ctx))
+            {
+                return new FracturingFog.Rendering.ReliefRaymarchGpuKernel(dev, ctx, gate);
+            }
+            return null;
+        };
+
         BootstrapHooks.NativeVideoWriterFactoryHook = (path, w, h) =>
         {
             try { return new FracturingFog.Mp4Writer(path, w, h); }

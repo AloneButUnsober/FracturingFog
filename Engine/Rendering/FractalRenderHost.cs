@@ -683,6 +683,51 @@ namespace FracturingFog.Rendering
         /// </summary>
         public Func<IFractalRenderer, object, IGpuKernel?>? GpuKernelFactory { get; set; }
 
+        // #162 (Slice 3d) — GPU relief raymarch kernel, constructed lazily the
+        // first time a frame requests the GPU relief path (opt-in
+        // FractalParameters.Relief2DGpuRaymarch). Separate from _gpuKernel: the
+        // escape-time IGpuKernel and the relief sphere-trace kernel are distinct
+        // compute programs. _reliefKernelTried latches a null/failed construct so
+        // a missing factory or a non-D3D/Vulkan backend is not retried per frame.
+        private FracturingFog.Rendering.Lighting.IReliefRaymarchKernel? _reliefKernel;
+        private bool _reliefKernelTried;
+
+        /// <summary>
+        /// Backend-specific relief-raymarch kernel factory installed by the host
+        /// bootstrap, mirroring <see cref="GpuKernelFactory"/> for the Relief 3D
+        /// sphere trace (#162). Receives the active renderer + the host's
+        /// D3D-serialisation gate so the D3D installer can downcast + pull native
+        /// handles; the Vulkan installer ignores both and builds a self-owned
+        /// context. Null on backends without a relief kernel — the CPU raymarch
+        /// runs regardless.
+        /// </summary>
+        public Func<IFractalRenderer, object, FracturingFog.Rendering.Lighting.IReliefRaymarchKernel?>? ReliefKernelFactory { get; set; }
+
+        /// <summary>Lazily construct (once) and return the GPU relief kernel, or
+        /// null when no factory is installed or construction fails / returns null.
+        /// Called on the calc/upload path only when the opt-in flag is set.</summary>
+        private FracturingFog.Rendering.Lighting.IReliefRaymarchKernel? EnsureReliefKernel()
+        {
+            if (_reliefKernel != null) return _reliefKernel;
+            if (_reliefKernelTried) return null;
+            _reliefKernelTried = true;
+            if (ReliefKernelFactory == null) return null;
+            try
+            {
+                // Share _d3dGate so a D3D relief dispatch serialises with
+                // renderer.Render on the non-thread-safe immediate context, exactly
+                // as the escape-time kernel does.
+                _reliefKernel = ReliefKernelFactory(_renderer, _d3dGate);
+            }
+            catch (Exception ex)
+            {
+                Console.Error.WriteLine(
+                    $"[FractalRenderHost] GPU relief kernel init failed: {ex.Message}");
+                _reliefKernel = null;
+            }
+            return _reliefKernel;
+        }
+
         /// <summary>
         /// Backend-specific video-encoder factory installed by the host
         /// bootstrap. Receives the temp file path + source width/height,
@@ -3016,9 +3061,15 @@ namespace FracturingFog.Rendering
                     {
                         // Phase 2 — oblique 3D raymarch of the (possibly hi-res)
                         // height field (perspective relief, silhouette, fog).
+                        // #162 — dispatch on the GPU when the opt-in flag is set and
+                        // a relief kernel is attached; Render falls back to the CPU
+                        // sphere trace (full-FX oracle) otherwise. The kernel is
+                        // built lazily only when the flag is on, so a non-relief GPU
+                        // session never constructs it.
                         FracturingFog.Rendering.Lighting.HeightfieldRaymarch2D.Render(
                             src, _reliefHeight!, w, h, _reliefW, _reliefH,
-                            reliefParams, _reliefColorScratch, out _);
+                            reliefParams, _reliefColorScratch, out _,
+                            reliefParams.Relief2DGpuRaymarch ? EnsureReliefKernel() : null);
                         reliefRaymarchApplied = true;
                     }
                     else
@@ -3775,6 +3826,10 @@ namespace FracturingFog.Rendering
                 _escapeCalculator.GpuKernel = null;
                 _gpuKernel?.Dispose();
                 _gpuKernel = null;
+                // #162 — release the relief kernel's device objects before the
+                // renderer too (D3D buffers/UAV/CS, or the Vulkan device it owns).
+                _reliefKernel?.Dispose();
+                _reliefKernel = null;
             }
             catch { }
 

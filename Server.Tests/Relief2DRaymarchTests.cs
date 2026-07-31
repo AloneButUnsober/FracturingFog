@@ -475,3 +475,110 @@ public class ReliefRaymarchGpuTests
         Assert.True(hit > 0.05, "isolate culled the whole surface");
     }
 }
+
+// #162 (Slice 3d) — host-wiring seam. HeightfieldRaymarch2D.Render dispatches
+// the injected IReliefRaymarchKernel instead of the CPU sphere trace when (and
+// only when) the opt-in flag FractalParameters.Relief2DGpuRaymarch is set and a
+// kernel is supplied. Uses a stub kernel so no GPU is required; the real GPU
+// kernels are proven correct by the #160 (D3D/WARP) and #161 (Vulkan/lavapipe)
+// device gates.
+public class ReliefGpuSeamTests
+{
+    private sealed class StubReliefKernel : IReliefRaymarchKernel
+    {
+        public const uint Sentinel = 0xFF123456u;
+        public int Calls;
+        public int SeenW, SeenH, SeenHw, SeenHh;
+
+        public void Run(in ReliefUniforms u, float[] hbuf, byte[]? keep, uint[] albedo, uint[] dst)
+        {
+            Calls++;
+            SeenW = u.W; SeenH = u.H; SeenHw = u.Hw; SeenHh = u.Hh;
+            for (int i = 0; i < dst.Length; i++) dst[i] = Sentinel;
+        }
+
+        public void Dispose() { }
+    }
+
+    private static (uint[] albedo, float[] height) Field(int w, int h)
+    {
+        var calc = new MandelbrotCalculator(w, h)
+        {
+            CenterX = -0.75, CenterY = 0.0, Zoom = 1.0, MaxIterations = 400,
+            ColorMap = new MonoBandMap(),
+        };
+        calc.Calculate(default);
+        return ((uint[])calc.ColorBuffer.Clone(), (float[])calc.SmoothBuffer.Clone());
+    }
+
+    private static FractalParameters ReliefParams(bool gpu) => new()
+    {
+        Relief2DEnabled = true,
+        Relief2DRaymarch = true,
+        Relief2DHeightScale = 1.4,
+        Relief2DCameraAzimuthDeg = 25,
+        Relief2DCameraElevationDeg = 45,
+        Relief2DCameraFovDeg = 55,
+        Relief2DGroundPlane = false,
+        Relief2DGpuRaymarch = gpu,
+    };
+
+    private static bool AllSentinel(uint[] dst)
+    {
+        for (int i = 0; i < dst.Length; i++) if (dst[i] != StubReliefKernel.Sentinel) return false;
+        return true;
+    }
+
+    [Fact]
+    public void GpuSeam_FlagOff_RunsCpu_KernelUntouched()
+    {
+        int w = 320, h = 240;
+        var (albedo, height) = Field(w, h);
+        var stub = new StubReliefKernel();
+        var dst = new uint[w * h];
+
+        // Flag OFF but a kernel is supplied: the CPU trace must run, not the stub.
+        HeightfieldRaymarch2D.Render(albedo, height, w, h, ReliefParams(gpu: false), dst, stub);
+
+        Assert.Equal(0, stub.Calls);
+        Assert.False(AllSentinel(dst));
+    }
+
+    [Fact]
+    public void GpuSeam_FlagOn_DispatchesKernel_WithMatchingUniforms()
+    {
+        int w = 320, h = 240;
+        var (albedo, height) = Field(w, h);
+        var stub = new StubReliefKernel();
+        var dst = new uint[w * h];
+
+        HeightfieldRaymarch2D.Render(albedo, height, w, h, ReliefParams(gpu: true), dst, stub);
+
+        Assert.Equal(1, stub.Calls);
+        // The 6-arg overload maps the field grid to the output grid (hw=w, hh=h).
+        Assert.Equal(w, stub.SeenW);
+        Assert.Equal(h, stub.SeenH);
+        Assert.Equal(w, stub.SeenHw);
+        Assert.Equal(h, stub.SeenHh);
+        Assert.True(AllSentinel(dst), "kernel output was not written to dst");
+    }
+
+    [Fact]
+    public void GpuSeam_FlagOn_NullKernel_FallsBackToCpu()
+    {
+        int w = 320, h = 240;
+        var (albedo, height) = Field(w, h);
+        var dst = new uint[w * h];
+
+        // Opt-in flag on but no kernel attached: the CPU raymarch must run — never
+        // a no-op or a throw (the GPU path is opt-in AND kernel-gated).
+        HeightfieldRaymarch2D.Render(albedo, height, w, h, ReliefParams(gpu: true), dst,
+            (IReliefRaymarchKernel?)null);
+
+        Assert.False(AllSentinel(dst));
+        // A real 3D silhouette (some lit surface, not a flat copy of the albedo).
+        bool differsFromAlbedo = false;
+        for (int i = 0; i < dst.Length; i++) if (dst[i] != albedo[i]) { differsFromAlbedo = true; break; }
+        Assert.True(differsFromAlbedo);
+    }
+}

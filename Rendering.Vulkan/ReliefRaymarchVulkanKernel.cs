@@ -39,7 +39,7 @@ namespace FracturingFog.Rendering.Vulkan;
 
 /// <summary>Vulkan compute dispatch of the Relief 3D raymarch kernel (#161).
 /// See the file header for the buffer bindings and the parity contract.</summary>
-public sealed unsafe class ReliefRaymarchVulkanKernel : IDisposable
+public sealed unsafe class ReliefRaymarchVulkanKernel : IDisposable, IReliefRaymarchKernel
 {
     // DXC register-class → binding shifts (same maps as VulkanComputeKernel).
     private const int BShift = 0;
