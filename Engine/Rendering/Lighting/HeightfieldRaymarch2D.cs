@@ -47,6 +47,12 @@ public static class HeightfieldRaymarch2D
     /// behind it. Mirrors the 3D calculators' "InSetColor when off" behaviour.</summary>
     private const uint DropColor = 0xFF0A0A0Eu;
 
+    /// <summary>#159 — the two fixed background/floor colours exposed to the GPU
+    /// relief parity twin (<see cref="ReliefUniforms"/>) so it packs the exact
+    /// same constants this render uses.</summary>
+    internal const uint FloorAlbedoArgb = FloorAlbedo;
+    internal const uint DropColorArgb = DropColor;
+
     /// <summary>
     /// Height-field distance estimator over the (compressed) smooth-count buffer.
     /// <c>f(p) = (p.y - h(p.x, p.z)) · invLip</c> — a Lipschitz-normalised lower
@@ -381,66 +387,26 @@ public static class HeightfieldRaymarch2D
         var fx = p.Lighting;
         if (p.Relief2DAutoShade) FillAutoShadeDefaults(ref fx);
 
-        // Oblique camera. Orbit the terrain centre; frame the whole domain.
-        double az = p.Relief2DCameraAzimuthDeg * Math.PI / 180.0;
-        double el = Math.Clamp(p.Relief2DCameraElevationDeg, 5.0, 89.0) * Math.PI / 180.0;
-        double fov = Math.Clamp(p.Relief2DCameraFovDeg, 15.0, 100.0) * Math.PI / 180.0;
-        // Frame the terrain so it FILLS the window. The ground-plane bounding
-        // disk (radius = extent) foreshortens vertically to extent·sin(el) when
-        // seen at elevation el, so scale the fit distance by sin(el) (#128). A
-        // user frame-fill zoom pulls the camera in (>1) or back (<1).
-        // #146 — cap the aspect used for CAMERA FRAMING (not ray generation).
-        // The bounding-disk radius 0.5·√(aspect²+1) grows without bound as the
-        // window widens, so a borderless multi-monitor Span (very wide aspect)
-        // pulls the camera far back and the terrain — only 1 unit deep in Z —
-        // fills a thin horizontal band, wasting the top and bottom of the frame.
-        // Framing on a capped aspect keeps the camera close enough that the
-        // terrain fills the height; the true (uncapped) aspect still drives ray
-        // directions below, so the wide exterior simply extends past the
-        // left/right edges instead of leaving vertical bars. Normal windows
-        // (aspect ≤ cap) are unaffected — the signed-off 16:9 framing is
-        // byte-identical.
-        double framingAspect = Math.Min(aspect, 2.2);
-        double extent = 0.5 * Math.Sqrt(framingAspect * framingAspect + 1.0);
-        double zoom = Math.Clamp(p.Relief2DCameraZoom, 0.2, 5.0);
-        double foreshorten = Math.Clamp(Math.Sin(el), 0.3, 1.0);
-        double radius = extent * foreshorten / (Math.Tan(fov * 0.5) * zoom);
-        double tgtY = 0.35 * sy * maxH;         // aim just above the mean surface
-        double camX = radius * Math.Cos(el) * Math.Sin(az);
-        double camY = radius * Math.Sin(el);
-        double camZ = radius * Math.Cos(el) * Math.Cos(az);
-        // forward = normalize(target - cam)
-        double fX = -camX, fY = (tgtY - camY), fZ = -camZ;
-        double fl = Math.Sqrt(fX * fX + fY * fY + fZ * fZ); fX /= fl; fY /= fl; fZ /= fl;
-        // right = normalize(cross(forward, up=(0,1,0))) = (-fZ, 0, fX). (#129 —
-        // the old (fZ,0,-fX) was left-handed, mirroring both screen axes.)
-        double rX = -fZ, rY = 0.0, rZ = fX;
-        double rl = Math.Sqrt(rX * rX + rZ * rZ); if (rl < 1e-9) rl = 1; rX /= rl; rZ /= rl;
-        // up = cross(right, forward)
-        double uX = rY * fZ - rZ * fY;
-        double uY = rZ * fX - rX * fZ;
-        double uZ = rX * fY - rY * fX;
-        double tanHalf = Math.Tan(fov * 0.5);
-
-        // Orthographic (#132 #2): parallel rays, no perspective stretch. The
-        // vertical half-extent of the view is framed the same way (fill window).
-        bool ortho = p.Relief2DCameraOrthographic;
-        double orthoHalfV = extent * foreshorten / zoom;
-
-        // Domain AABB (with height headroom) for ray-slab entry/exit.
-        double bx = aspect * 0.5, bz = 0.5, by = sy * maxH * 1.05 + 1e-3;
-        // Base epsilon + cone growth (#132 #5). Near pixels use a tight
-        // tolerance for a crisp silhouette; far pixels loosen with distance so
-        // the march doesn't stall (banding). Ortho has no perspective divergence.
-        double eps0 = ortho
-            ? Math.Max(0.0009 * radius, orthoHalfV / h)
-            : 0.0009 * radius;
-        double pixelAngle = ortho ? 0.0 : tanHalf / h;
-        int maxSteps = 320;
-        bool groundPlane = p.Relief2DGroundPlane;
+        // Oblique camera + AABB + cone-epsilon. Extracted (#159 / Slice 3a) into
+        // BuildObliqueCamera so the GPU relief kernel and its CPU parity twin
+        // (ReliefRaymarchGpu) drive rays from byte-identical numbers. The math is
+        // unchanged — moved verbatim — so this render is bit-for-bit as before.
+        ReliefCamera cam = BuildObliqueCamera(w, h, aspect, sy, maxH, p);
+        double camX = cam.CamX, camY = cam.CamY, camZ = cam.CamZ;
+        double fX = cam.FX, fY = cam.FY, fZ = cam.FZ;
+        double rX = cam.RX, rY = 0.0, rZ = cam.RZ;       // right vector has rY == 0
+        double uX = cam.UX, uY = cam.UY, uZ = cam.UZ;
+        double tanHalf = cam.TanHalf;
+        bool ortho = cam.Ortho;
+        double orthoHalfV = cam.OrthoHalfV;
+        double bx = cam.Bx, bz = cam.Bz, by = cam.By;
+        double eps0 = cam.Eps0;
+        double pixelAngle = cam.PixelAngle;
+        int maxSteps = cam.MaxSteps;
+        bool groundPlane = cam.GroundPlane;
+        double floorBx = cam.FloorBx, floorBz = cam.FloorBz;
         bool showSky = fx.ShowSkyBackdrop;               // #133 — honour the toggle
         bool isolate = p.Relief2DIsolate;                // #135 — transparent bg
-        double floorBx = bx * 3.0, floorBz = bz * 3.0;   // bounded floor → horizon keeps sky
 
         // One primary sample. Returns the shaded colour + whether it hit the
         // terrain (ground / sky return false so the silhouette metric stays the
@@ -606,10 +572,119 @@ public static class HeightfieldRaymarch2D
         hitFraction = (double)hitCount / n;
     }
 
+    /// <summary>#159 (Slice 3a) — the oblique-camera basis, domain AABB and
+    /// cone-epsilon that <see cref="Render(uint[],float[],int,int,int,int,FractalParameters,uint[],out double)"/>
+    /// marches with. A pure function of the output size, world scale (<paramref name="sy"/>),
+    /// field max height and the FractalParameters camera knobs — no lighting,
+    /// albedo or field content. Extracted so the GPU relief kernel and its CPU
+    /// parity twin (<see cref="ReliefRaymarchGpu"/>) generate rays from the exact
+    /// same numbers as the CPU render. rY of the camera right vector is always 0.</summary>
+    public readonly struct ReliefCamera
+    {
+        public readonly double CamX, CamY, CamZ;
+        public readonly double FX, FY, FZ;
+        public readonly double RX, RZ;
+        public readonly double UX, UY, UZ;
+        public readonly double TanHalf;
+        public readonly bool Ortho;
+        public readonly double OrthoHalfV;
+        public readonly double Bx, By, Bz;
+        public readonly double Eps0, PixelAngle;
+        public readonly int MaxSteps;
+        public readonly bool GroundPlane;
+        public readonly double FloorBx, FloorBz;
+
+        public ReliefCamera(double camX, double camY, double camZ,
+            double fX, double fY, double fZ, double rX, double rZ,
+            double uX, double uY, double uZ, double tanHalf,
+            bool ortho, double orthoHalfV, double bx, double by, double bz,
+            double eps0, double pixelAngle, int maxSteps, bool groundPlane,
+            double floorBx, double floorBz)
+        {
+            CamX = camX; CamY = camY; CamZ = camZ;
+            FX = fX; FY = fY; FZ = fZ; RX = rX; RZ = rZ;
+            UX = uX; UY = uY; UZ = uZ; TanHalf = tanHalf;
+            Ortho = ortho; OrthoHalfV = orthoHalfV;
+            Bx = bx; By = by; Bz = bz;
+            Eps0 = eps0; PixelAngle = pixelAngle; MaxSteps = maxSteps;
+            GroundPlane = groundPlane; FloorBx = floorBx; FloorBz = floorBz;
+        }
+    }
+
+    /// <summary>Build the oblique camera / AABB / epsilon for a relief render.
+    /// The body is moved verbatim from <c>Render</c> (see #159) — same
+    /// expressions, same order — so both paths stay bit-identical.</summary>
+    public static ReliefCamera BuildObliqueCamera(int w, int h, double aspect,
+                                                  double sy, double maxH, FractalParameters p)
+    {
+        // Orbit the terrain centre; frame the whole domain.
+        double az = p.Relief2DCameraAzimuthDeg * Math.PI / 180.0;
+        double el = Math.Clamp(p.Relief2DCameraElevationDeg, 5.0, 89.0) * Math.PI / 180.0;
+        double fov = Math.Clamp(p.Relief2DCameraFovDeg, 15.0, 100.0) * Math.PI / 180.0;
+        // Frame the terrain so it FILLS the window. The ground-plane bounding
+        // disk (radius = extent) foreshortens vertically to extent·sin(el) when
+        // seen at elevation el, so scale the fit distance by sin(el) (#128). A
+        // user frame-fill zoom pulls the camera in (>1) or back (<1).
+        // #146 — cap the aspect used for CAMERA FRAMING (not ray generation).
+        // The bounding-disk radius 0.5·√(aspect²+1) grows without bound as the
+        // window widens, so a borderless multi-monitor Span (very wide aspect)
+        // pulls the camera far back and the terrain — only 1 unit deep in Z —
+        // fills a thin horizontal band, wasting the top and bottom of the frame.
+        // Framing on a capped aspect keeps the camera close enough that the
+        // terrain fills the height; the true (uncapped) aspect still drives ray
+        // directions below, so the wide exterior simply extends past the
+        // left/right edges instead of leaving vertical bars. Normal windows
+        // (aspect ≤ cap) are unaffected — the signed-off 16:9 framing is
+        // byte-identical.
+        double framingAspect = Math.Min(aspect, 2.2);
+        double extent = 0.5 * Math.Sqrt(framingAspect * framingAspect + 1.0);
+        double zoom = Math.Clamp(p.Relief2DCameraZoom, 0.2, 5.0);
+        double foreshorten = Math.Clamp(Math.Sin(el), 0.3, 1.0);
+        double radius = extent * foreshorten / (Math.Tan(fov * 0.5) * zoom);
+        double tgtY = 0.35 * sy * maxH;         // aim just above the mean surface
+        double camX = radius * Math.Cos(el) * Math.Sin(az);
+        double camY = radius * Math.Sin(el);
+        double camZ = radius * Math.Cos(el) * Math.Cos(az);
+        // forward = normalize(target - cam)
+        double fX = -camX, fY = (tgtY - camY), fZ = -camZ;
+        double fl = Math.Sqrt(fX * fX + fY * fY + fZ * fZ); fX /= fl; fY /= fl; fZ /= fl;
+        // right = normalize(cross(forward, up=(0,1,0))) = (-fZ, 0, fX). (#129 —
+        // the old (fZ,0,-fX) was left-handed, mirroring both screen axes.)
+        double rX = -fZ, rY = 0.0, rZ = fX;
+        double rl = Math.Sqrt(rX * rX + rZ * rZ); if (rl < 1e-9) rl = 1; rX /= rl; rZ /= rl;
+        // up = cross(right, forward)
+        double uX = rY * fZ - rZ * fY;
+        double uY = rZ * fX - rX * fZ;
+        double uZ = rX * fY - rY * fX;
+        double tanHalf = Math.Tan(fov * 0.5);
+
+        // Orthographic (#132 #2): parallel rays, no perspective stretch. The
+        // vertical half-extent of the view is framed the same way (fill window).
+        bool ortho = p.Relief2DCameraOrthographic;
+        double orthoHalfV = extent * foreshorten / zoom;
+
+        // Domain AABB (with height headroom) for ray-slab entry/exit.
+        double bx = aspect * 0.5, bz = 0.5, by = sy * maxH * 1.05 + 1e-3;
+        // Base epsilon + cone growth (#132 #5). Near pixels use a tight
+        // tolerance for a crisp silhouette; far pixels loosen with distance so
+        // the march doesn't stall (banding). Ortho has no perspective divergence.
+        double eps0 = ortho
+            ? Math.Max(0.0009 * radius, orthoHalfV / h)
+            : 0.0009 * radius;
+        double pixelAngle = ortho ? 0.0 : tanHalf / h;
+        int maxSteps = 320;
+        bool groundPlane = p.Relief2DGroundPlane;
+        double floorBx = bx * 3.0, floorBz = bz * 3.0;   // bounded floor → horizon keeps sky
+
+        return new ReliefCamera(camX, camY, camZ, fX, fY, fZ, rX, rZ,
+            uX, uY, uZ, tanHalf, ortho, orthoHalfV, bx, by, bz,
+            eps0, pixelAngle, maxSteps, groundPlane, floorBx, floorBz);
+    }
+
     /// <summary>Bilinear sample of the ARGB albedo buffer at UV in [0,1]
     /// (edge-clamped). Keeps the alpha of the nearest texel.</summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private static uint SampleAlbedoBilinear(uint[] a, int w, int h, double u, double v)
+    internal static uint SampleAlbedoBilinear(uint[] a, int w, int h, double u, double v)
     {
         double fx = u * w - 0.5, fy = v * h - 0.5;
         int x0 = (int)Math.Floor(fx), y0 = (int)Math.Floor(fy);
@@ -1030,7 +1105,7 @@ public static class HeightfieldRaymarch2D
     /// <summary>1-axis ray-slab clip. Narrows [t0,t1] to the segment inside
     /// [lo,hi] along one axis. Returns false when the ray misses the slab.</summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private static bool SlabHit(double o, double dcomp, double lo, double hi,
+    internal static bool SlabHit(double o, double dcomp, double lo, double hi,
                                 ref double t0, ref double t1)
     {
         if (Math.Abs(dcomp) < 1e-12)
