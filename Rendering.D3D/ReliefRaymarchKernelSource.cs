@@ -83,7 +83,14 @@ cbuffer ReliefParams : register(b0)
     uint   gBgBottom;
     uint   gFloorAlbedo;
     uint   gDropColor;
+
+    float  gSpecStrength; // 4a — Cook-Torrance GGX; 0 = no spec (flat Lambert)
+    float  gRoughness;    // GGX roughness [0.05,1]
+    float  gMetallic;     // dielectric(0) .. metal(1)
+    float  gPadS;
 };
+
+static const float RELIEF_PI = 3.14159265358979;
 
 StructuredBuffer<float> gHeight : register(t0);   // one float per field cell
 StructuredBuffer<uint>  gAlbedo : register(t1);   // packed ARGB per output pixel
@@ -188,18 +195,65 @@ void Accum(float intensity, float3 col, float3 L, float3 N, inout float3 s)
     s += col * diffuse;
 }
 
-// Flat three-light Lambert + scalar ambient. Subset of ShadingPipeline's lit
-// combine (spec/AO/IBL off): s = amb + (Sum Ii*max(0,N.Li)*Coli/255)*(1-amb).
-uint ShadeFlat(float3 N, uint albedo)
+// 4a — one directional light's Cook-Torrance GGX specular. Line-for-line twin
+// of ShadingPipeline.AccumulateSpec: Schlick F (per-channel F0), Smith joint G
+// (Schlick-GGX), GGX D. col is the light colour in 0-255, spec accumulates in
+// the same 0-255 byte space the diffuse combine uses.
+void SpecAccum(float intensity, float3 col, float3 L, float3 N, float3 V,
+               float NdotV, float a2, float kg, float3 F0, inout float3 spec)
+{
+    if (intensity <= 0.0) return;
+    float NdotL = dot(N, L);
+    if (NdotL <= 0.0) return;
+    float3 H = L + V;
+    float hl2 = dot(H, H);
+    if (hl2 < 1e-12) return;
+    H = H * (1.0 / sqrt(hl2));
+    float NdotH = max(0.0, dot(N, H));
+    float VdotH = max(0.0, dot(V, H));
+    float denom = NdotH * NdotH * (a2 - 1.0) + 1.0;
+    float D = a2 / (RELIEF_PI * denom * denom);
+    float G1V = NdotV / (NdotV * (1.0 - kg) + kg);
+    float G1L = NdotL / (NdotL * (1.0 - kg) + kg);
+    float G = G1V * G1L;
+    float omv = 1.0 - VdotH;
+    float Fc = omv * omv * omv * omv * omv;
+    float3 F = F0 + (1.0 - F0) * Fc;
+    float specBase = (D * G / max(4.0 * NdotV, 1e-4)) * gSpecStrength * intensity;
+    spec += specBase * F * col;
+}
+
+// Flat three-light Lambert + scalar ambient, plus 4a Cook-Torrance GGX spec.
+// Diffuse: s = amb + (Sum Ii*max(0,N.Li)*Coli/255)*(1-amb)*diffSuppress.
+// Spec (gSpecStrength>0): metallic F0 = lerp(0.04, albedo, gMetallic), diffuse
+// suppressed by (1-gMetallic). gSpecStrength==0 → flat-Lambert (byte-identical).
+uint ShadeFlat(float3 N, float3 V, uint albedo)
 {
     float3 s = float3(0, 0, 0);
     Accum(gI0, gC0, gL0, N, s);
     Accum(gI1, gC1, gL1, N, s);
     Accum(gI2, gC2, gL2, N, s);
-    float amb = gAmbient;
-    s = amb + (s / 255.0) * (1.0 - amb);
+
     float3 alb = float3((albedo >> 16) & 0xFF, (albedo >> 8) & 0xFF, albedo & 0xFF);
-    float3 o = clamp(alb * s + 0.5, 0.0, 255.0);
+    float3 spec = float3(0, 0, 0);
+    float diffSuppress = 1.0;
+    if (gSpecStrength > 0.0)
+    {
+        float rough = max(0.05, gRoughness);
+        float a = rough * rough;
+        float a2 = a * a;
+        float kg = (rough + 1.0) * (rough + 1.0) / 8.0;
+        float3 F0 = 0.04 + (alb / 255.0 - 0.04) * gMetallic;
+        float NdotV = max(0.0, dot(N, V));
+        SpecAccum(gI0, gC0, gL0, N, V, NdotV, a2, kg, F0, spec);
+        SpecAccum(gI1, gC1, gL1, N, V, NdotV, a2, kg, F0, spec);
+        SpecAccum(gI2, gC2, gL2, N, V, NdotV, a2, kg, F0, spec);
+        diffSuppress = 1.0 - gMetallic;
+    }
+
+    float amb = gAmbient;
+    s = amb + (s / 255.0) * (1.0 - amb) * diffSuppress;
+    float3 o = clamp(alb * s + spec + 0.5, 0.0, 255.0);
     uint A = (albedo >> 24) & 0xFFu;
     return (A << 24) | ((uint)o.r << 16) | ((uint)o.g << 8) | (uint)o.b;
 }
@@ -280,7 +334,7 @@ void CSRelief(uint3 tid : SV_DispatchThreadID)
 
             float uu = hp.x / gAspect + 0.5, vv = hp.z + 0.5;
             uint alb = SampleAlbedo(uu, vv);
-            outCol = ShadeFlat(N, alb);
+            outCol = ShadeFlat(N, -rd, alb);
             wrote = true;
         }
     }
@@ -296,7 +350,7 @@ void CSRelief(uint3 tid : SV_DispatchThreadID)
                 float gx = o.x + rd.x * tp, gz = o.z + rd.z * tp;
                 if (abs(gx) <= gFloorBx && abs(gz) <= gFloorBz)
                 {
-                    outCol = ShadeFlat(float3(0, 1, 0), gFloorAlbedo);
+                    outCol = ShadeFlat(float3(0, 1, 0), -rd, gFloorAlbedo);
                     floored = true;
                 }
             }
