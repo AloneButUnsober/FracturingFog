@@ -47,6 +47,12 @@ public static class HeightfieldRaymarch2D
     /// behind it. Mirrors the 3D calculators' "InSetColor when off" behaviour.</summary>
     private const uint DropColor = 0xFF0A0A0Eu;
 
+    /// <summary>#159 — the two fixed background/floor colours exposed to the GPU
+    /// relief parity twin (<see cref="ReliefUniforms"/>) so it packs the exact
+    /// same constants this render uses.</summary>
+    internal const uint FloorAlbedoArgb = FloorAlbedo;
+    internal const uint DropColorArgb = DropColor;
+
     /// <summary>
     /// Height-field distance estimator over the (compressed) smooth-count buffer.
     /// <c>f(p) = (p.y - h(p.x, p.z)) · invLip</c> — a Lipschitz-normalised lower
@@ -204,112 +210,143 @@ public static class HeightfieldRaymarch2D
             return;
         }
 
-        // Height tone-curve (#132 #7 / #130). The raw smooth-iteration count is
-        // unbounded near the fractal boundary (high dwell) while the interior is
-        // 0, so a single boundary needle sets the global max and linear
-        // normalisation flattens everything else into thin tall spires — a
-        // "hedgehog" that a close camera stretches into distorted streaks.
-        // Compress into a scratch first so boundary dwell reads as terrain relief.
-        float[] hbuf = s_compressed is { } sc && sc.Length >= hn
-            ? sc : (s_compressed = new float[hn]);
+        // ── #155 pre-pass cache ───────────────────────────────────────────
+        // Everything from the tone-curve through the grid-slope reduction is a
+        // deterministic function of the raw field content plus (hw, hh, height
+        // curve, edge-fade). It is INDEPENDENT of the camera, lighting, albedo
+        // and the height SCALE (which enters only as `sy` afterwards). Camera
+        // orbit, progressive-preview restages and re-theme all re-enter Render
+        // with the identical field, so re-running the ~8-pass filter chain every
+        // frame is wasted work. Hash the inputs; on a match reuse the cached
+        // compressed field (`s_compressed`), its max, and the unitless
+        // grid-slope maxima. sy / invLip stay per-call (cheap, scale-dependent).
         HeightCurve2D curve = p.Relief2DHeightCurve;
-        for (int i = 0; i < hn; i++)
-        {
-            float hv = height[i];
-            hbuf[i] = hv <= 0f ? 0f : curve switch
-            {
-                HeightCurve2D.Linear => hv,
-                HeightCurve2D.Sqrt   => (float)Math.Sqrt(hv),
-                _                    => (float)Math.Log(1.0 + hv),   // Log (default)
-            };
-        }
-
-        // Exterior baseline subtraction (#141) — the tone curve (esp. Log) lifts
-        // the low far-from-set smooth counts into a raised rectangular PLATEAU
-        // (a tabletop) whose clipped domain boundary reads as a persistent
-        // rectangle at the fractal plane. Subtract a low percentile of the
-        // nonzero heights so the far exterior sits back on the base plane and
-        // only the boundary structure rises; the plateau — and its rectangle —
-        // disappears, the same way it does when the user zooms in.
-        {
-            float hmax = 0f;
-            for (int i = 0; i < hn; i++) { float hv = hbuf[i]; if (hv > hmax) hmax = hv; }
-            if (hmax > 1e-9f)
-            {
-                const int B = 512;
-                Span<int> hist = stackalloc int[B];
-                int nz = 0;
-                for (int i = 0; i < hn; i++)
-                {
-                    float hv = hbuf[i];
-                    if (hv > 0f) { hist[Math.Clamp((int)(hv / hmax * (B - 1)), 0, B - 1)]++; nz++; }
-                }
-                if (nz > 0)
-                {
-                    int target = (int)(0.60 * nz), cum = 0;
-                    float baseline = 0f;
-                    for (int b = 0; b < B; b++) { cum += hist[b]; if (cum >= target) { baseline = (b + 0.5f) / B * hmax; break; } }
-                    if (baseline > 0f)
-                        for (int i = 0; i < hn; i++)
-                            hbuf[i] = hbuf[i] > baseline ? hbuf[i] - baseline : 0f;
-                }
-            }
-        }
-
-        // Resolution-adaptive despike (#145). At small window sizes (Mini / Toy
-        // mode) the fractal boundary is undersampled, so a lone high-dwell cell
-        // whose neighbours all escaped fast reads as an isolated tall NEEDLE —
-        // the "hedgehog" the oblique camera stretches into a spike. Clamp every
-        // cell to its 8-neighbour max plus a small margin: connected ridges and
-        // filaments (a neighbour is nearly as tall) survive untouched; only
-        // isolated single-cell peaks are pulled down. Self-gating — at maximized
-        // / Span resolution the boundary is connected so nothing clamps and the
-        // signed-off view is unchanged.
-        DespikeNeighborMax(hbuf, hw, hh);
-
-        // Resolution-adaptive low-pass (#145b). The despike above only removes
-        // ISOLATED needles; along the fractal boundary every cell is high but the
-        // dwell oscillates wildly, so at Mini (320×240) / Toy (200×150) sizes the
-        // undersampled boundary reads as a jagged COMB of tall cells (the residual
-        // spikes near the edge — the interior stays smooth because its dwell is
-        // low/flat). A neighbour-max clamp can't fix a comb whose cells are all
-        // tall; a low-pass can. Blur strength ramps from 0 at ≥480 px (maximized /
-        // Span untouched — signed-off view unchanged) up to ~3 box passes at Toy
-        // size, blended continuously so a window resize never snaps the look.
-        LowPassAdaptive(hbuf, hw, hh);
-
-        // Edge fade (#137, #140) — pull tall structure near each image edge down
-        // to the base plane so filaments running off the frame taper out instead
-        // of extruding into streaky border "arms". Implemented as a height CAP,
-        // not a multiply: cap = window·maxRaw ramps from 0 at the very edge to
-        // the field max inside the margin, and only heights ABOVE the cap are
-        // lowered. The near-flat exterior stays flat, so the fade no longer lifts
-        // the border into a rectangular lip/ridge (#140). 0 = off.
         double edgeFade = Math.Clamp(p.Relief2DEdgeFade, 0.0, 0.5);
-        if (edgeFade > 0.0)
+        ulong key = PrepassKey(height, hn, hw, hh, curve, edgeFade);
+
+        float[] hbuf;
+        float maxH, gMaxX, gMaxZ;
+        if (s_prepassValid && key == s_prepassKey
+            && s_compressed is { } cached && cached.Length >= hn)
         {
-            double mx = Math.Max(1.0, edgeFade * hw);
-            double my = Math.Max(1.0, edgeFade * hh);
-            for (int y = 0; y < hh; y++)
+            hbuf = cached;
+            maxH = s_prepassMaxH; gMaxX = s_prepassGMaxX; gMaxZ = s_prepassGMaxZ;
+        }
+        else
+        {
+            s_prepassValid = false;   // invalid until the recompute below finishes
+            hbuf = s_compressed is { } sc && sc.Length >= hn
+                ? sc : (s_compressed = new float[hn]);
+
+            // Height tone-curve (#132 #7 / #130). The raw smooth-iteration count
+            // is unbounded near the fractal boundary (high dwell) while the
+            // interior is 0, so a single boundary needle sets the global max and
+            // linear normalisation flattens everything else into thin tall
+            // spires — a "hedgehog" that a close camera stretches into distorted
+            // streaks. Compress so boundary dwell reads as terrain relief.
+            for (int i = 0; i < hn; i++)
             {
-                double dy = Math.Min(y, hh - 1 - y);
-                double wy = dy >= my ? 1.0 : Smoothstep(dy / my);
-                int row = y * hw;
-                for (int x = 0; x < hw; x++)
+                float hv = height[i];
+                hbuf[i] = hv <= 0f ? 0f : curve switch
                 {
-                    double dx = Math.Min(x, hw - 1 - x);
-                    double wx = dx >= mx ? 1.0 : Smoothstep(dx / mx);
-                    double f = wx * wy;
-                    if (f < 1.0) hbuf[row + x] = (float)(hbuf[row + x] * f);
+                    HeightCurve2D.Linear => hv,
+                    HeightCurve2D.Sqrt   => (float)Math.Sqrt(hv),
+                    _                    => (float)Math.Log(1.0 + hv),   // Log (default)
+                };
+            }
+
+            // Exterior baseline subtraction (#141) — the tone curve (esp. Log)
+            // lifts the low far-from-set smooth counts into a raised rectangular
+            // PLATEAU (a tabletop) whose clipped domain boundary reads as a
+            // persistent rectangle at the fractal plane. Subtract a low
+            // percentile of the nonzero heights so the far exterior sits back on
+            // the base plane and only the boundary structure rises; the plateau
+            // — and its rectangle — disappears, as it does when the user zooms in.
+            {
+                float hmax = 0f;
+                for (int i = 0; i < hn; i++) { float hv = hbuf[i]; if (hv > hmax) hmax = hv; }
+                if (hmax > 1e-9f)
+                {
+                    const int B = 512;
+                    Span<int> hist = stackalloc int[B];
+                    int nz = 0;
+                    for (int i = 0; i < hn; i++)
+                    {
+                        float hv = hbuf[i];
+                        if (hv > 0f) { hist[Math.Clamp((int)(hv / hmax * (B - 1)), 0, B - 1)]++; nz++; }
+                    }
+                    if (nz > 0)
+                    {
+                        int target = (int)(0.60 * nz), cum = 0;
+                        float baseline = 0f;
+                        for (int b = 0; b < B; b++) { cum += hist[b]; if (cum >= target) { baseline = (b + 0.5f) / B * hmax; break; } }
+                        if (baseline > 0f)
+                            for (int i = 0; i < hn; i++)
+                                hbuf[i] = hbuf[i] > baseline ? hbuf[i] - baseline : 0f;
+                    }
                 }
             }
+
+            // Resolution-adaptive despike (#145). At small window sizes (Mini /
+            // Toy mode) the fractal boundary is undersampled, so a lone
+            // high-dwell cell whose neighbours all escaped fast reads as an
+            // isolated tall NEEDLE — the "hedgehog" the oblique camera stretches
+            // into a spike. Clamp every cell to its 8-neighbour max plus a small
+            // margin: connected ridges and filaments (a neighbour is nearly as
+            // tall) survive; only isolated single-cell peaks are pulled down.
+            // Self-gating — at maximized / Span resolution the boundary is
+            // connected so nothing clamps and the signed-off view is unchanged.
+            DespikeNeighborMax(hbuf, hw, hh);
+
+            // Resolution-adaptive low-pass (#145b). The despike above only
+            // removes ISOLATED needles; along the fractal boundary every cell is
+            // high but the dwell oscillates wildly, so at Mini (320×240) / Toy
+            // (200×150) sizes the undersampled boundary reads as a jagged COMB of
+            // tall cells. A neighbour-max clamp can't fix a comb whose cells are
+            // all tall; a low-pass can. Blur strength ramps from 0 at ≥480 px
+            // (maximized / Span untouched) up to ~3 box passes at Toy size,
+            // blended continuously so a window resize never snaps the look.
+            LowPassAdaptive(hbuf, hw, hh);
+
+            // Edge fade (#137, #140) — pull tall structure near each image edge
+            // down to the base plane so filaments running off the frame taper
+            // out instead of extruding into streaky border "arms". A height CAP,
+            // not a multiply: cap = window·maxRaw ramps from 0 at the very edge
+            // to the field max inside the margin, and only heights ABOVE the cap
+            // are lowered. The near-flat exterior stays flat, so the fade no
+            // longer lifts the border into a rectangular lip/ridge (#140). 0 = off.
+            if (edgeFade > 0.0)
+            {
+                double mx = Math.Max(1.0, edgeFade * hw);
+                double my = Math.Max(1.0, edgeFade * hh);
+                for (int y = 0; y < hh; y++)
+                {
+                    double dy = Math.Min(y, hh - 1 - y);
+                    double wy = dy >= my ? 1.0 : Smoothstep(dy / my);
+                    int row = y * hw;
+                    for (int x = 0; x < hw; x++)
+                    {
+                        double dx = Math.Min(x, hw - 1 - x);
+                        double wx = dx >= mx ? 1.0 : Smoothstep(dx / mx);
+                        double f = wx * wy;
+                        if (f < 1.0) hbuf[row + x] = (float)(hbuf[row + x] * f);
+                    }
+                }
+            }
+
+            maxH = 0f;
+            for (int i = 0; i < hn; i++) { float hv = hbuf[i]; if (hv > maxH) maxH = hv; }
+
+            // Unitless per-cell grid-slope maxima (parallel reduction, #155).
+            // Independent of sy / world scale so the cache survives an aspect or
+            // height-scale change; the world-space Lipschitz slope is
+            // reconstructed per call below.
+            (gMaxX, gMaxZ) = GridSlopeMaxima(hbuf, hw, hh);
+
+            s_prepassMaxH = maxH; s_prepassGMaxX = gMaxX; s_prepassGMaxZ = gMaxZ;
+            s_prepassKey = key; s_prepassValid = true;
         }
 
-        // Compressed height field → world scale. Normalise to [0,1], then
-        // exaggerate by the height-scale knob. 0.35 keeps peaks well inside the
-        // unit domain so the oblique camera frames the whole terrain.
-        float maxH = 0f;
-        for (int i = 0; i < hn; i++) { float hv = hbuf[i]; if (hv > maxH) maxH = hv; }
         if (maxH <= 1e-9f)   // dead-flat field (all interior) — nothing to raymarch
         {
             if (!ReferenceEquals(albedo, dst)) Array.Copy(albedo, dst, n);
@@ -327,27 +364,11 @@ public static class HeightfieldRaymarch2D
         double reliefAmp = 1.0 - 0.72 * resT;
         double sy = 0.35 * reliefAmp * Math.Max(0.0, p.Relief2DHeightScale) / maxH;
 
-        // Lipschitz bound from the actual max world-space slope of the field.
+        // Lipschitz bound from the max world-space slope, reconstructed from the
+        // cached unitless grid maxima × sy / world-cell size (#155). Exactly the
+        // old two-pass scan's result: max over both axes.
         double worldDx = aspect / hw, worldDz = 1.0 / hh;
-        double maxSlope = 0.0;
-        for (int y = 0; y < hh; y++)
-        {
-            int row = y * hw;
-            for (int x = 1; x < hw; x++)
-            {
-                double s = Math.Abs(hbuf[row + x] - hbuf[row + x - 1]) * sy / worldDx;
-                if (s > maxSlope) maxSlope = s;
-            }
-        }
-        for (int y = 1; y < hh; y++)
-        {
-            int row = y * hw, prev = row - hw;
-            for (int x = 0; x < hw; x++)
-            {
-                double s = Math.Abs(hbuf[row + x] - hbuf[prev + x]) * sy / worldDz;
-                if (s > maxSlope) maxSlope = s;
-            }
-        }
+        double maxSlope = Math.Max(gMaxX * sy / worldDx, gMaxZ * sy / worldDz);
         double lip = Math.Sqrt(1.0 + maxSlope * maxSlope);
         double invLip = 1.0 / lip;
 
@@ -364,77 +385,28 @@ public static class HeightfieldRaymarch2D
         // the knob is still at zero so Oblique 3D looks good out of the box.
         // Explicit non-zero user values always survive.
         var fx = p.Lighting;
-        if (p.Relief2DAutoShade)
-        {
-            if (fx.AoSamples <= 0)        fx.AoSamples = 5;
-            if (fx.AoStrength <= 0)       fx.AoStrength = 0.5;
-            if (fx.ShadowSteps <= 0)      fx.ShadowSteps = 24;
-            if (fx.ShadowLightMask == 0)  fx.ShadowLightMask = 0x1;
-            if (fx.ShadowSoftK <= 0)      fx.ShadowSoftK = 8.0;
-            if (fx.AmbientStrength <= 0)  fx.AmbientStrength = 0.3;
-            if (fx.SpecularStrength <= 0) { fx.SpecularStrength = 0.25; if (fx.Roughness <= 0) fx.Roughness = 0.55; }
-        }
+        if (p.Relief2DAutoShade) FillAutoShadeDefaults(ref fx);
 
-        // Oblique camera. Orbit the terrain centre; frame the whole domain.
-        double az = p.Relief2DCameraAzimuthDeg * Math.PI / 180.0;
-        double el = Math.Clamp(p.Relief2DCameraElevationDeg, 5.0, 89.0) * Math.PI / 180.0;
-        double fov = Math.Clamp(p.Relief2DCameraFovDeg, 15.0, 100.0) * Math.PI / 180.0;
-        // Frame the terrain so it FILLS the window. The ground-plane bounding
-        // disk (radius = extent) foreshortens vertically to extent·sin(el) when
-        // seen at elevation el, so scale the fit distance by sin(el) (#128). A
-        // user frame-fill zoom pulls the camera in (>1) or back (<1).
-        // #146 — cap the aspect used for CAMERA FRAMING (not ray generation).
-        // The bounding-disk radius 0.5·√(aspect²+1) grows without bound as the
-        // window widens, so a borderless multi-monitor Span (very wide aspect)
-        // pulls the camera far back and the terrain — only 1 unit deep in Z —
-        // fills a thin horizontal band, wasting the top and bottom of the frame.
-        // Framing on a capped aspect keeps the camera close enough that the
-        // terrain fills the height; the true (uncapped) aspect still drives ray
-        // directions below, so the wide exterior simply extends past the
-        // left/right edges instead of leaving vertical bars. Normal windows
-        // (aspect ≤ cap) are unaffected — the signed-off 16:9 framing is
-        // byte-identical.
-        double framingAspect = Math.Min(aspect, 2.2);
-        double extent = 0.5 * Math.Sqrt(framingAspect * framingAspect + 1.0);
-        double zoom = Math.Clamp(p.Relief2DCameraZoom, 0.2, 5.0);
-        double foreshorten = Math.Clamp(Math.Sin(el), 0.3, 1.0);
-        double radius = extent * foreshorten / (Math.Tan(fov * 0.5) * zoom);
-        double tgtY = 0.35 * sy * maxH;         // aim just above the mean surface
-        double camX = radius * Math.Cos(el) * Math.Sin(az);
-        double camY = radius * Math.Sin(el);
-        double camZ = radius * Math.Cos(el) * Math.Cos(az);
-        // forward = normalize(target - cam)
-        double fX = -camX, fY = (tgtY - camY), fZ = -camZ;
-        double fl = Math.Sqrt(fX * fX + fY * fY + fZ * fZ); fX /= fl; fY /= fl; fZ /= fl;
-        // right = normalize(cross(forward, up=(0,1,0))) = (-fZ, 0, fX). (#129 —
-        // the old (fZ,0,-fX) was left-handed, mirroring both screen axes.)
-        double rX = -fZ, rY = 0.0, rZ = fX;
-        double rl = Math.Sqrt(rX * rX + rZ * rZ); if (rl < 1e-9) rl = 1; rX /= rl; rZ /= rl;
-        // up = cross(right, forward)
-        double uX = rY * fZ - rZ * fY;
-        double uY = rZ * fX - rX * fZ;
-        double uZ = rX * fY - rY * fX;
-        double tanHalf = Math.Tan(fov * 0.5);
-
-        // Orthographic (#132 #2): parallel rays, no perspective stretch. The
-        // vertical half-extent of the view is framed the same way (fill window).
-        bool ortho = p.Relief2DCameraOrthographic;
-        double orthoHalfV = extent * foreshorten / zoom;
-
-        // Domain AABB (with height headroom) for ray-slab entry/exit.
-        double bx = aspect * 0.5, bz = 0.5, by = sy * maxH * 1.05 + 1e-3;
-        // Base epsilon + cone growth (#132 #5). Near pixels use a tight
-        // tolerance for a crisp silhouette; far pixels loosen with distance so
-        // the march doesn't stall (banding). Ortho has no perspective divergence.
-        double eps0 = ortho
-            ? Math.Max(0.0009 * radius, orthoHalfV / h)
-            : 0.0009 * radius;
-        double pixelAngle = ortho ? 0.0 : tanHalf / h;
-        int maxSteps = 320;
-        bool groundPlane = p.Relief2DGroundPlane;
+        // Oblique camera + AABB + cone-epsilon. Extracted (#159 / Slice 3a) into
+        // BuildObliqueCamera so the GPU relief kernel and its CPU parity twin
+        // (ReliefRaymarchGpu) drive rays from byte-identical numbers. The math is
+        // unchanged — moved verbatim — so this render is bit-for-bit as before.
+        ReliefCamera cam = BuildObliqueCamera(w, h, aspect, sy, maxH, p);
+        double camX = cam.CamX, camY = cam.CamY, camZ = cam.CamZ;
+        double fX = cam.FX, fY = cam.FY, fZ = cam.FZ;
+        double rX = cam.RX, rY = 0.0, rZ = cam.RZ;       // right vector has rY == 0
+        double uX = cam.UX, uY = cam.UY, uZ = cam.UZ;
+        double tanHalf = cam.TanHalf;
+        bool ortho = cam.Ortho;
+        double orthoHalfV = cam.OrthoHalfV;
+        double bx = cam.Bx, bz = cam.Bz, by = cam.By;
+        double eps0 = cam.Eps0;
+        double pixelAngle = cam.PixelAngle;
+        int maxSteps = cam.MaxSteps;
+        bool groundPlane = cam.GroundPlane;
+        double floorBx = cam.FloorBx, floorBz = cam.FloorBz;
         bool showSky = fx.ShowSkyBackdrop;               // #133 — honour the toggle
         bool isolate = p.Relief2DIsolate;                // #135 — transparent bg
-        double floorBx = bx * 3.0, floorBz = bz * 3.0;   // bounded floor → horizon keeps sky
 
         // One primary sample. Returns the shaded colour + whether it hit the
         // terrain (ground / sky return false so the silhouette metric stays the
@@ -600,10 +572,119 @@ public static class HeightfieldRaymarch2D
         hitFraction = (double)hitCount / n;
     }
 
+    /// <summary>#159 (Slice 3a) — the oblique-camera basis, domain AABB and
+    /// cone-epsilon that <see cref="Render(uint[],float[],int,int,int,int,FractalParameters,uint[],out double)"/>
+    /// marches with. A pure function of the output size, world scale (<paramref name="sy"/>),
+    /// field max height and the FractalParameters camera knobs — no lighting,
+    /// albedo or field content. Extracted so the GPU relief kernel and its CPU
+    /// parity twin (<see cref="ReliefRaymarchGpu"/>) generate rays from the exact
+    /// same numbers as the CPU render. rY of the camera right vector is always 0.</summary>
+    public readonly struct ReliefCamera
+    {
+        public readonly double CamX, CamY, CamZ;
+        public readonly double FX, FY, FZ;
+        public readonly double RX, RZ;
+        public readonly double UX, UY, UZ;
+        public readonly double TanHalf;
+        public readonly bool Ortho;
+        public readonly double OrthoHalfV;
+        public readonly double Bx, By, Bz;
+        public readonly double Eps0, PixelAngle;
+        public readonly int MaxSteps;
+        public readonly bool GroundPlane;
+        public readonly double FloorBx, FloorBz;
+
+        public ReliefCamera(double camX, double camY, double camZ,
+            double fX, double fY, double fZ, double rX, double rZ,
+            double uX, double uY, double uZ, double tanHalf,
+            bool ortho, double orthoHalfV, double bx, double by, double bz,
+            double eps0, double pixelAngle, int maxSteps, bool groundPlane,
+            double floorBx, double floorBz)
+        {
+            CamX = camX; CamY = camY; CamZ = camZ;
+            FX = fX; FY = fY; FZ = fZ; RX = rX; RZ = rZ;
+            UX = uX; UY = uY; UZ = uZ; TanHalf = tanHalf;
+            Ortho = ortho; OrthoHalfV = orthoHalfV;
+            Bx = bx; By = by; Bz = bz;
+            Eps0 = eps0; PixelAngle = pixelAngle; MaxSteps = maxSteps;
+            GroundPlane = groundPlane; FloorBx = floorBx; FloorBz = floorBz;
+        }
+    }
+
+    /// <summary>Build the oblique camera / AABB / epsilon for a relief render.
+    /// The body is moved verbatim from <c>Render</c> (see #159) — same
+    /// expressions, same order — so both paths stay bit-identical.</summary>
+    public static ReliefCamera BuildObliqueCamera(int w, int h, double aspect,
+                                                  double sy, double maxH, FractalParameters p)
+    {
+        // Orbit the terrain centre; frame the whole domain.
+        double az = p.Relief2DCameraAzimuthDeg * Math.PI / 180.0;
+        double el = Math.Clamp(p.Relief2DCameraElevationDeg, 5.0, 89.0) * Math.PI / 180.0;
+        double fov = Math.Clamp(p.Relief2DCameraFovDeg, 15.0, 100.0) * Math.PI / 180.0;
+        // Frame the terrain so it FILLS the window. The ground-plane bounding
+        // disk (radius = extent) foreshortens vertically to extent·sin(el) when
+        // seen at elevation el, so scale the fit distance by sin(el) (#128). A
+        // user frame-fill zoom pulls the camera in (>1) or back (<1).
+        // #146 — cap the aspect used for CAMERA FRAMING (not ray generation).
+        // The bounding-disk radius 0.5·√(aspect²+1) grows without bound as the
+        // window widens, so a borderless multi-monitor Span (very wide aspect)
+        // pulls the camera far back and the terrain — only 1 unit deep in Z —
+        // fills a thin horizontal band, wasting the top and bottom of the frame.
+        // Framing on a capped aspect keeps the camera close enough that the
+        // terrain fills the height; the true (uncapped) aspect still drives ray
+        // directions below, so the wide exterior simply extends past the
+        // left/right edges instead of leaving vertical bars. Normal windows
+        // (aspect ≤ cap) are unaffected — the signed-off 16:9 framing is
+        // byte-identical.
+        double framingAspect = Math.Min(aspect, 2.2);
+        double extent = 0.5 * Math.Sqrt(framingAspect * framingAspect + 1.0);
+        double zoom = Math.Clamp(p.Relief2DCameraZoom, 0.2, 5.0);
+        double foreshorten = Math.Clamp(Math.Sin(el), 0.3, 1.0);
+        double radius = extent * foreshorten / (Math.Tan(fov * 0.5) * zoom);
+        double tgtY = 0.35 * sy * maxH;         // aim just above the mean surface
+        double camX = radius * Math.Cos(el) * Math.Sin(az);
+        double camY = radius * Math.Sin(el);
+        double camZ = radius * Math.Cos(el) * Math.Cos(az);
+        // forward = normalize(target - cam)
+        double fX = -camX, fY = (tgtY - camY), fZ = -camZ;
+        double fl = Math.Sqrt(fX * fX + fY * fY + fZ * fZ); fX /= fl; fY /= fl; fZ /= fl;
+        // right = normalize(cross(forward, up=(0,1,0))) = (-fZ, 0, fX). (#129 —
+        // the old (fZ,0,-fX) was left-handed, mirroring both screen axes.)
+        double rX = -fZ, rY = 0.0, rZ = fX;
+        double rl = Math.Sqrt(rX * rX + rZ * rZ); if (rl < 1e-9) rl = 1; rX /= rl; rZ /= rl;
+        // up = cross(right, forward)
+        double uX = rY * fZ - rZ * fY;
+        double uY = rZ * fX - rX * fZ;
+        double uZ = rX * fY - rY * fX;
+        double tanHalf = Math.Tan(fov * 0.5);
+
+        // Orthographic (#132 #2): parallel rays, no perspective stretch. The
+        // vertical half-extent of the view is framed the same way (fill window).
+        bool ortho = p.Relief2DCameraOrthographic;
+        double orthoHalfV = extent * foreshorten / zoom;
+
+        // Domain AABB (with height headroom) for ray-slab entry/exit.
+        double bx = aspect * 0.5, bz = 0.5, by = sy * maxH * 1.05 + 1e-3;
+        // Base epsilon + cone growth (#132 #5). Near pixels use a tight
+        // tolerance for a crisp silhouette; far pixels loosen with distance so
+        // the march doesn't stall (banding). Ortho has no perspective divergence.
+        double eps0 = ortho
+            ? Math.Max(0.0009 * radius, orthoHalfV / h)
+            : 0.0009 * radius;
+        double pixelAngle = ortho ? 0.0 : tanHalf / h;
+        int maxSteps = 320;
+        bool groundPlane = p.Relief2DGroundPlane;
+        double floorBx = bx * 3.0, floorBz = bz * 3.0;   // bounded floor → horizon keeps sky
+
+        return new ReliefCamera(camX, camY, camZ, fX, fY, fZ, rX, rZ,
+            uX, uY, uZ, tanHalf, ortho, orthoHalfV, bx, by, bz,
+            eps0, pixelAngle, maxSteps, groundPlane, floorBx, floorBz);
+    }
+
     /// <summary>Bilinear sample of the ARGB albedo buffer at UV in [0,1]
     /// (edge-clamped). Keeps the alpha of the nearest texel.</summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private static uint SampleAlbedoBilinear(uint[] a, int w, int h, double u, double v)
+    internal static uint SampleAlbedoBilinear(uint[] a, int w, int h, double u, double v)
     {
         double fx = u * w - 0.5, fy = v * h - 0.5;
         int x0 = (int)Math.Floor(fx), y0 = (int)Math.Floor(fy);
@@ -629,6 +710,118 @@ public static class HeightfieldRaymarch2D
     private static float[]? s_compressed;
     private static byte[]? s_keep;   // #135 isolation cull mask scratch
     private static float[]? s_despikeSrc;   // #145 despike neighbour-read snapshot
+
+    // #155 pre-pass cache. `s_compressed` holds the last computed compressed +
+    // filtered field; these describe which inputs produced it and the scalars
+    // the (scale-dependent) per-call math needs. Guarded by the same single-
+    // entry assumption as the scratch buffers above (host upload gate serialises
+    // Render); the Parallel.For inside only reads the field.
+    private static ulong s_prepassKey;
+    private static bool  s_prepassValid;
+    private static float s_prepassMaxH, s_prepassGMaxX, s_prepassGMaxZ;
+
+    /// <summary>#132 — fill sensible AO / soft-shadow / specular / ambient
+    /// defaults wherever the knob is still at zero so Oblique 3D looks good out
+    /// of the box. Explicit non-zero user values always survive. Shared by
+    /// <see cref="Render(uint[],float[],int,int,int,int,FractalParameters,uint[],out double)"/>
+    /// (auto-shade path) and <see cref="MakePreviewParams"/> so the two paths
+    /// can never drift.</summary>
+    internal static void FillAutoShadeDefaults(ref LightingFxData fx)
+    {
+        if (fx.AoSamples <= 0)        fx.AoSamples = 5;
+        if (fx.AoStrength <= 0)       fx.AoStrength = 0.5;
+        if (fx.ShadowSteps <= 0)      fx.ShadowSteps = 24;
+        if (fx.ShadowLightMask == 0)  fx.ShadowLightMask = 0x1;
+        if (fx.ShadowSoftK <= 0)      fx.ShadowSoftK = 8.0;
+        if (fx.AmbientStrength <= 0)  fx.AmbientStrength = 0.3;
+        if (fx.SpecularStrength <= 0) { fx.SpecularStrength = 0.25; if (fx.Roughness <= 0) fx.Roughness = 0.55; }
+    }
+
+    /// <summary>#155 — build a reduced-cost parameter set for the progressive
+    /// PREVIEW raymarch. Forces supersample off and drops the heavy per-hit FX
+    /// (DE-cone AO, SSAO, reflections, volumetric in-scatter) while keeping the
+    /// cheap dominant depth cues (soft shadow + specular + ambient) IDENTICAL to
+    /// the final frame — so the 3D preview frames the same as the final (no
+    /// flat↔3D flash, #131), it just skips the expensive lighting the eye can't
+    /// resolve on a transient preview. Auto-shade is baked in here and then
+    /// switched off so <see cref="Render(uint[],float[],int,int,int,int,FractalParameters,uint[],out double)"/>
+    /// won't refill the AO we just dropped.</summary>
+    public static FractalParameters MakePreviewParams(FractalParameters p)
+    {
+        var pp = p.Clone();
+        pp.Relief2DSupersample = 1;
+        var fx = pp.Lighting;
+        if (pp.Relief2DAutoShade) FillAutoShadeDefaults(ref fx);
+        pp.Relief2DAutoShade = false;   // defaults baked → Render won't refill AO
+        fx.AoSamples = 0;               // drop DE-cone AO (5 evals / hit)
+        fx.SsaoSamples = 0;             // drop SSAO post-pass
+        fx.ReflectionStrength = 0.0;    // drop reflection bounces (~24 evals / hit)
+        fx.VolumeSteps = 0;             // drop volumetric in-scatter walk
+        pp.Lighting = fx;
+        return pp;
+    }
+
+    /// <summary>#155 — content + params signature that keys the pre-pass cache.
+    /// FNV-1a over the raw field (one O(n) pass — cheap vs the ~8-pass filter
+    /// chain it guards) folded with the dims and the two params that change the
+    /// filter output (height curve, edge fade). The height SCALE is excluded on
+    /// purpose: it enters only as sy afterwards, so a scale tweak reuses the
+    /// cache.</summary>
+    private static ulong PrepassKey(float[] height, int hn, int hw, int hh,
+                                    HeightCurve2D curve, double edgeFade)
+    {
+        unchecked
+        {
+            const ulong FnvPrime = 1099511628211UL;
+            ulong hash = 14695981039346656037UL;
+            for (int i = 0; i < hn; i++)
+            {
+                uint bits = (uint)BitConverter.SingleToInt32Bits(height[i]);
+                hash = (hash ^ bits) * FnvPrime;
+            }
+            hash = (hash ^ (uint)hw) * FnvPrime;
+            hash = (hash ^ (uint)hh) * FnvPrime;
+            hash = (hash ^ (uint)(int)curve) * FnvPrime;
+            ulong ef = (ulong)BitConverter.DoubleToInt64Bits(edgeFade);
+            hash = (hash ^ (ef & 0xFFFFFFFFUL)) * FnvPrime;
+            hash = (hash ^ (ef >> 32)) * FnvPrime;
+            return hash;
+        }
+    }
+
+    /// <summary>#155 — max absolute per-cell height delta along X (horizontal
+    /// neighbour) and Z (vertical neighbour), unitless. Parallel row reduction
+    /// replacing the old two serial full-field scans. Multiplying by sy / world-
+    /// cell-size reconstructs the world-space Lipschitz slope per call.</summary>
+    private static (float gx, float gz) GridSlopeMaxima(float[] hbuf, int w, int h)
+    {
+        float gx = 0f, gz = 0f;
+        object gate = new();
+        Parallel.For(0, h, () => (0f, 0f), (y, _, local) =>
+        {
+            float lx = local.Item1, lz = local.Item2;
+            int row = y * w;
+            for (int x = 1; x < w; x++)
+            {
+                float d = Math.Abs(hbuf[row + x] - hbuf[row + x - 1]);
+                if (d > lx) lx = d;
+            }
+            if (y > 0)
+            {
+                int prev = row - w;
+                for (int x = 0; x < w; x++)
+                {
+                    float d = Math.Abs(hbuf[row + x] - hbuf[prev + x]);
+                    if (d > lz) lz = d;
+                }
+            }
+            return (lx, lz);
+        }, local =>
+        {
+            lock (gate) { if (local.Item1 > gx) gx = local.Item1; if (local.Item2 > gz) gz = local.Item2; }
+        });
+        return (gx, gz);
+    }
 
     /// <summary>#145 — clamp every cell to its 8-neighbour max plus a small
     /// margin (5% of the field max). Removes isolated single-cell needles
@@ -912,7 +1105,7 @@ public static class HeightfieldRaymarch2D
     /// <summary>1-axis ray-slab clip. Narrows [t0,t1] to the segment inside
     /// [lo,hi] along one axis. Returns false when the ray misses the slab.</summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private static bool SlabHit(double o, double dcomp, double lo, double hi,
+    internal static bool SlabHit(double o, double dcomp, double lo, double hi,
                                 ref double t0, ref double t1)
     {
         if (Math.Abs(dcomp) < 1e-12)

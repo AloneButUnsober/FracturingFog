@@ -1892,6 +1892,18 @@ namespace FracturingFog.Rendering
                 var rc = _reliefFieldCalc ??= new MandelbrotCalculator(fw, fh);
                 if (rc.Width != fw || rc.Height != fh) rc.Resize(fw, fh);
                 MirrorMandelbrotState(calc, rc);
+                // #156 — run the hi-res relief field on the GPU whenever the main
+                // calc does. MirrorMandelbrotState copies view + precision but not
+                // the GPU config, so without this the dedicated field calc always
+                // fell back to CPU — the single biggest relief cost at depth. The
+                // kernel is thread-affine to the calc thread; this capture runs on
+                // that thread AFTER the main Calculate, so the two calcs share the
+                // one kernel sequentially (no concurrent dispatch). Shallow uses the
+                // FP32 escape-time kernel; deep uses the perturbation kernel
+                // (static UseGpuPerturbation + IGpuKernel.SupportsPerturbation),
+                // exactly as the main calc chooses.
+                rc.UseGpuCompute = calc.UseGpuCompute;
+                rc.GpuKernel = calc.GpuKernel;
                 rc.Calculate(token);
                 if (token.IsCancellationRequested) return false;
 
@@ -1960,10 +1972,10 @@ namespace FracturingFog.Rendering
                         if (rp.Relief2DEnabled && phs != null && pn > 0
                             && phs.Length >= pn && previewSrc != null && previewSrc.Length >= pn)
                         {
-                            // Force supersample off for the preview (speed); the
-                            // final frame keeps the user's AA setting.
-                            var prp = rp.Relief2DSupersample > 1 ? rp.Clone() : rp;
-                            if (!ReferenceEquals(prp, rp)) prp.Relief2DSupersample = 1;
+                            // #155 — preview budget: supersample off + heavy
+                            // per-hit FX (AO/SSAO/reflections/volumetric) dropped,
+                            // cheap depth cues kept identical to the final frame.
+                            var prp = FracturingFog.Rendering.Lighting.HeightfieldRaymarch2D.MakePreviewParams(rp);
                             if (_reliefPreviewScratch == null || _reliefPreviewScratch.Length < pn)
                                 _reliefPreviewScratch = new uint[pn];
                             if (prp.Relief2DRaymarch)
