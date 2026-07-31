@@ -615,6 +615,67 @@ public class ReliefRaymarchGpuTests
         for (int i = 0; i < w * h; i++) if (Luma(on[i]) < Luma(off[i])) darker++;
         Assert.True(darker > 200, $"soft shadow darkened too few px ({darker})");
     }
+
+    // ── 4c (#167): DE-cone ambient occlusion ──────────────────────────────
+
+    // AoSamples == 0 must be byte-identical regardless of AoStrength — AO is
+    // fully gated, so 4c can't regress the 4a/4b path.
+    [Fact]
+    public void CpuMirror_AoOff_ByteIdentical_Regardless_Of_AoStrength()
+    {
+        int w = 320, h = 240, hw = 320, hh = 240;
+        var p = ReliefParams();
+        var (hbuf, albedo, maxH) = BumpField(hw, hh, w, h);
+
+        var fxA = LightingFxData.CreateDefault();
+        fxA.AoSamples = 0; fxA.AoStrength = 2.0;
+        var uA = BuildUniforms(w, h, hw, hh, hbuf, maxH, p, fxA);
+        var a = new uint[w * h];
+        ReliefRaymarchGpu.RenderCpuMirror(in uA, hbuf, null, albedo, a, out _);
+
+        var fxB = LightingFxData.CreateDefault();
+        fxB.AoSamples = 0; fxB.AoStrength = 0.0;
+        var uB = BuildUniforms(w, h, hw, hh, hbuf, maxH, p, fxB);
+        var b = new uint[w * h];
+        ReliefRaymarchGpu.RenderCpuMirror(in uB, hbuf, null, albedo, b, out _);
+
+        Assert.Equal(a, b);
+    }
+
+    // AO on darkens occluded terrain (the dome's foot near the ground plane,
+    // where the cone-march sees nearby surface) without moving the silhouette.
+    // Spec is left untouched by AO, so no pixel gets brighter.
+    [Fact]
+    public void CpuMirror_AoOn_Darkens_Without_Moving_Silhouette()
+    {
+        int w = 320, h = 240, hw = 320, hh = 240;
+        var p = ReliefParams();
+        p.Relief2DGroundPlane = true;   // creases at the dome foot for AO to bite
+        var (hbuf, albedo, maxH) = BumpField(hw, hh, w, h);
+
+        var fxOff = LightingFxData.CreateDefault();
+        fxOff.AoSamples = 0;
+        var uOff = BuildUniforms(w, h, hw, hh, hbuf, maxH, p, fxOff);
+        var off = new uint[w * h];
+        ReliefRaymarchGpu.RenderCpuMirror(in uOff, hbuf, null, albedo, off, out double hitOff);
+
+        var fxOn = LightingFxData.CreateDefault();
+        fxOn.AoSamples = 5; fxOn.AoStrength = 1.0;
+        var uOn = BuildUniforms(w, h, hw, hh, hbuf, maxH, p, fxOn);
+        var on = new uint[w * h];
+        ReliefRaymarchGpu.RenderCpuMirror(in uOn, hbuf, null, albedo, on, out double hitOn);
+
+        Assert.Equal(hitOff, hitOn);
+
+        int darker = 0, brighter = 0;
+        for (int i = 0; i < w * h; i++)
+        {
+            int d = Luma(on[i]) - Luma(off[i]);
+            if (d < 0) darker++; else if (d > 0) brighter++;
+        }
+        Assert.True(darker > 200, $"AO darkened too few px ({darker})");
+        Assert.Equal(0, brighter);
+    }
 }
 
 // #162 (Slice 3d) — host-wiring seam. HeightfieldRaymarch2D.Render dispatches

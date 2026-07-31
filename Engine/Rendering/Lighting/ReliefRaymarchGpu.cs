@@ -65,6 +65,10 @@ public readonly struct ReliefUniforms
     public readonly int ShadowSteps, ShadowLightMask;
     public readonly double ShadowSoftK;
 
+    // 4c — DE-cone ambient occlusion. AoSamples == 0 → off.
+    public readonly int AoSamples;
+    public readonly double AoStrength;
+
     public readonly bool ShowSky, Isolate;
     public readonly uint BgTop, BgBottom, FloorAlbedo, DropColor;
 
@@ -76,7 +80,8 @@ public readonly struct ReliefUniforms
         double ambient, bool showSky, bool isolate,
         uint bgTop, uint bgBottom, uint floorAlbedo, uint dropColor,
         double specStrength, double roughness, double metallic,
-        int shadowSteps, double shadowSoftK, int shadowLightMask)
+        int shadowSteps, double shadowSoftK, int shadowLightMask,
+        int aoSamples, double aoStrength)
     {
         W = w; H = h; Hw = hw; Hh = hh; Sy = sy; Aspect = aspect;
         InvLip = invLip; Bicubic = bicubic; Cam = cam;
@@ -87,6 +92,7 @@ public readonly struct ReliefUniforms
         BgTop = bgTop; BgBottom = bgBottom; FloorAlbedo = floorAlbedo; DropColor = dropColor;
         SpecStrength = specStrength; Roughness = roughness; Metallic = metallic;
         ShadowSteps = shadowSteps; ShadowSoftK = shadowSoftK; ShadowLightMask = shadowLightMask;
+        AoSamples = aoSamples; AoStrength = aoStrength;
     }
 
     /// <summary>World-space direction of a directional light, matching
@@ -122,7 +128,8 @@ public readonly struct ReliefUniforms
             fx.AmbientStrength, fx.ShowSkyBackdrop, p.Relief2DIsolate,
             fx.BgTopColor, fx.BgBottomColor, HeightfieldRaymarch2D.FloorAlbedoArgb, HeightfieldRaymarch2D.DropColorArgb,
             fx.SpecularStrength, fx.Roughness, fx.Metallic,
-            fx.ShadowSteps, fx.ShadowSoftK, fx.ShadowLightMask);
+            fx.ShadowSteps, fx.ShadowSoftK, fx.ShadowLightMask,
+            fx.AoSamples, fx.AoStrength);
     }
 }
 
@@ -308,10 +315,30 @@ public static class ReliefRaymarchGpu
             diffSuppress = 1.0 - u.Metallic;
         }
 
+        // 4c — DE-cone AO. Cone-march the height DE along the normal; each ring's
+        // occlusion is max(0, d - de(P + N*d)) / d. Darkens the diffuse+ambient
+        // term only (spec left alone), a line-for-line twin of ShadingPipeline's
+        // AO. AoSamples == 0 → ao = 1 (byte-identical to the no-AO twin).
+        double ao = 1.0;
+        if (u.AoSamples > 0)
+        {
+            double eps = u.Cam.Eps0;
+            double occl = 0.0, wsum = 0.0;
+            for (int k = 1; k <= u.AoSamples; k++)
+            {
+                double d = eps * (double)(1L << k);
+                double sampleD = de.Evaluate(px + nx * d, py + ny * d, pz + nz * d);
+                occl += Math.Max(0.0, d - sampleD) / d;
+                wsum += 1.0;
+            }
+            ao = Math.Clamp(1.0 - u.AoStrength * (occl / Math.Max(wsum, 1.0)), 0, 1);
+        }
+
         double amb = u.Ambient;
         sR = amb + (sR / 255.0) * (1.0 - amb) * diffSuppress;
         sG = amb + (sG / 255.0) * (1.0 - amb) * diffSuppress;
         sB = amb + (sB / 255.0) * (1.0 - amb) * diffSuppress;
+        sR *= ao; sG *= ao; sB *= ao;
         double r = aR * sR + specR;
         double g = aG * sG + specG;
         double b = aB * sB + specB;

@@ -93,6 +93,11 @@ cbuffer ReliefParams : register(b0)
     float  gShadowSoftK;  // penumbra hardness
     int    gShadowMask;   // bit n enables shadow for light n
     float  gPadSh;
+
+    int    gAoSamples;    // 4c — DE-cone AO; 0 = off
+    float  gAoStrength;   // occlusion darkening amount
+    float  gPadA0;
+    float  gPadA1;
 };
 
 static const float RELIEF_PI = 3.14159265358979;
@@ -247,11 +252,12 @@ float SoftShadow(float3 o, float3 L, float tMin, float tMax, float k, int steps)
     return clamp(res, 0.0, 1.0);
 }
 
-// Flat three-light Lambert + scalar ambient, plus 4a Cook-Torrance GGX spec and
-// 4b per-light soft shadow. Diffuse: s = amb + (Sum Ii*shi*max(0,N.Li)*Coli/255)
-// *(1-amb)*diffSuppress. Spec (gSpecStrength>0): metallic F0 = lerp(0.04,albedo,
-// gMetallic), diffuse suppressed by (1-gMetallic). Shadow (gShadowSteps>0) gates
-// direct light only. All knobs 0 → flat-Lambert (byte-identical).
+// Flat three-light Lambert + scalar ambient, plus 4a Cook-Torrance GGX spec,
+// 4b per-light soft shadow and 4c DE-cone AO. Diffuse: s = amb + (Sum Ii*shi*
+// max(0,N.Li)*Coli/255)*(1-amb)*diffSuppress, then s *= ao. Spec (gSpecStrength>0):
+// metallic F0 = lerp(0.04,albedo,gMetallic), diffuse suppressed by (1-gMetallic).
+// Shadow (gShadowSteps>0) gates direct light only. AO (gAoSamples>0) darkens the
+// diffuse+ambient term (not spec). All knobs 0 → flat-Lambert (byte-identical).
 uint ShadeFlat(float3 N, float3 V, float3 P, uint albedo)
 {
     float sh0 = 1.0, sh1 = 1.0, sh2 = 1.0;
@@ -289,8 +295,27 @@ uint ShadeFlat(float3 N, float3 V, float3 P, uint albedo)
         diffSuppress = 1.0 - gMetallic;
     }
 
+    // 4c — DE-cone AO. Cone-march the height DE along N; each ring's occlusion is
+    // max(0, d - de(P + N*d)) / d. ao darkens the diffuse+ambient term only (spec
+    // untouched), matching ShadingPipeline. gAoSamples == 0 → ao = 1 (no-op).
+    float ao = 1.0;
+    if (gAoSamples > 0)
+    {
+        float occl = 0.0, wsum = 0.0;
+        [loop]
+        for (int k = 1; k <= gAoSamples; k++)
+        {
+            float d = gEps0 * (float)(1 << k);
+            float sampleD = Evaluate(P.x + N.x * d, P.y + N.y * d, P.z + N.z * d);
+            occl += max(0.0, d - sampleD) / d;
+            wsum += 1.0;
+        }
+        ao = clamp(1.0 - gAoStrength * (occl / max(wsum, 1.0)), 0.0, 1.0);
+    }
+
     float amb = gAmbient;
     s = amb + (s / 255.0) * (1.0 - amb) * diffSuppress;
+    s = s * ao;
     float3 o = clamp(alb * s + spec + 0.5, 0.0, 255.0);
     uint A = (albedo >> 24) & 0xFFu;
     return (A << 24) | ((uint)o.r << 16) | ((uint)o.g << 8) | (uint)o.b;

@@ -113,6 +113,10 @@ internal static class ReliefRaymarchProbe
         fx.ShadowSteps = 24;
         fx.ShadowSoftK = 8.0;
         fx.ShadowLightMask = 0x1;
+        // 4c (#167) — exercise the DE-cone AO (matches the D3D gate). DXC-SPIR-V
+        // occlusion accumulation stays inside the parity thresholds.
+        fx.AoSamples = 5;
+        fx.AoStrength = 1.0;
 
         var (hbuf, albedo, maxH) = BumpField(hw, hh, w, h);
         var u = BuildUniforms(w, h, hw, hh, hbuf, maxH, p, fx);
