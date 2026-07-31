@@ -55,9 +55,10 @@ public sealed class ReliefRaymarchGpuKernel : IDisposable, FracturingFog.Renderi
         public uint BgTop, BgBottom, FloorAlbedo, DropColor;
         public float SpecStrength, Roughness, Metallic, PadS;   // 4a
         public int ShadowSteps; public float ShadowSoftK; public int ShadowMask; public float PadSh;   // 4b
+        public int AoSamples; public float AoStrength; public float PadA0, PadA1;   // 4c
     }
 
-    private const int ParamBytes = 288;
+    private const int ParamBytes = 304;
 
     private readonly ID3D11Device _device;
     private readonly ID3D11DeviceContext _ctx;
@@ -274,6 +275,7 @@ public sealed class ReliefRaymarchGpuKernel : IDisposable, FracturingFog.Renderi
             BgTop = u.BgTop, BgBottom = u.BgBottom, FloorAlbedo = u.FloorAlbedo, DropColor = u.DropColor,
             SpecStrength = (float)u.SpecStrength, Roughness = (float)u.Roughness, Metallic = (float)u.Metallic, PadS = 0f,
             ShadowSteps = u.ShadowSteps, ShadowSoftK = (float)u.ShadowSoftK, ShadowMask = u.ShadowLightMask, PadSh = 0f,
+            AoSamples = u.AoSamples, AoStrength = (float)u.AoStrength, PadA0 = 0f, PadA1 = 0f,
         };
     }
 
