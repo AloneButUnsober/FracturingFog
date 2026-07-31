@@ -77,6 +77,14 @@ public readonly struct ReliefUniforms
     public readonly double TriplanarStrength, TriplanarScale;
     public readonly uint TriplanarTint;
 
+    // 4e — Beer-Lambert fog + single-scatter volumetric in-scatter. FogDensity
+    // == 0 → no fog. VolumeSteps == 0 (with FogDensity > 0) → legacy exp fog;
+    // VolumeSteps > 0 → in-scatter walk (key light only). FBM cloud-noise +
+    // cloud self-shadow + reflections are deferred to 4e-ii.
+    public readonly double FogDensity, FogHeightFalloff;
+    public readonly int VolumeSteps;
+    public readonly double VolumeStepsFalloff;
+
     public readonly bool ShowSky, Isolate;
     public readonly uint BgTop, BgBottom, FloorAlbedo, DropColor;
 
@@ -91,7 +99,8 @@ public readonly struct ReliefUniforms
         int shadowSteps, double shadowSoftK, int shadowLightMask,
         int aoSamples, double aoStrength,
         double iblStrength, int skyMode,
-        int triplanarKind, double triplanarStrength, double triplanarScale, uint triplanarTint)
+        int triplanarKind, double triplanarStrength, double triplanarScale, uint triplanarTint,
+        double fogDensity, double fogHeightFalloff, int volumeSteps, double volumeStepsFalloff)
     {
         W = w; H = h; Hw = hw; Hh = hh; Sy = sy; Aspect = aspect;
         InvLip = invLip; Bicubic = bicubic; Cam = cam;
@@ -106,6 +115,8 @@ public readonly struct ReliefUniforms
         IblStrength = iblStrength; SkyMode = skyMode;
         TriplanarKind = triplanarKind; TriplanarStrength = triplanarStrength;
         TriplanarScale = triplanarScale; TriplanarTint = triplanarTint;
+        FogDensity = fogDensity; FogHeightFalloff = fogHeightFalloff;
+        VolumeSteps = volumeSteps; VolumeStepsFalloff = volumeStepsFalloff;
     }
 
     /// <summary>World-space direction of a directional light, matching
@@ -144,7 +155,8 @@ public readonly struct ReliefUniforms
             fx.ShadowSteps, fx.ShadowSoftK, fx.ShadowLightMask,
             fx.AoSamples, fx.AoStrength,
             fx.IblStrength, (int)fx.SkyMode,
-            (int)fx.TriplanarKind, fx.TriplanarStrength, fx.TriplanarScale, fx.TriplanarTint);
+            (int)fx.TriplanarKind, fx.TriplanarStrength, fx.TriplanarScale, fx.TriplanarTint,
+            fx.FogDensity, fx.FogHeightFalloff, fx.VolumeSteps, fx.VolumeStepsFalloff);
     }
 }
 
@@ -258,7 +270,9 @@ public static class ReliefRaymarchGpu
                 uint alb = HeightfieldRaymarch2D.SampleAlbedoBilinear(albedo, w, h, uu, vv);
                 if (u.TriplanarStrength > 0 && u.TriplanarKind != 0)
                     alb = ApplyTriplanar(alb, hx, hy, hz, nx, ny, nz, in u);
-                return (ShadeFlat(nx, ny, nz, -rdx, -rdy, -rdz, hx, hy, hz, alb, in de, in u), true);
+                uint shaded = ShadeFlat(nx, ny, nz, -rdx, -rdy, -rdz, hx, hy, hz, alb, in de, in u);
+                shaded = ApplyFogVolume(shaded, ox, oy, oz, rdx, rdy, rdz, tf, in de, in u);
+                return (shaded, true);
             }
         }
 
@@ -270,7 +284,11 @@ public static class ReliefRaymarchGpu
             {
                 double gx = ox + rdx * tp, gz = oz + rdz * tp;
                 if (Math.Abs(gx) <= cam.FloorBx && Math.Abs(gz) <= cam.FloorBz)
-                    return (ShadeFlat(0.0, 1.0, 0.0, -rdx, -rdy, -rdz, gx, 0.0, gz, u.FloorAlbedo, in de, in u), false);
+                {
+                    uint fShaded = ShadeFlat(0.0, 1.0, 0.0, -rdx, -rdy, -rdz, gx, 0.0, gz, u.FloorAlbedo, in de, in u);
+                    fShaded = ApplyFogVolume(fShaded, ox, oy, oz, rdx, rdy, rdz, tp, in de, in u);
+                    return (fShaded, false);
+                }
             }
         }
         uint bg = u.ShowSky ? GradientSky(rdy, in u) : u.DropColor;
@@ -496,6 +514,77 @@ public static class ReliefRaymarchGpu
         if (intensity <= 0) return;
         double diffuse = Math.Max(0.0, nx * lx + ny * ly + nz * lz) * intensity;
         sR += cr * diffuse; sG += cg * diffuse; sB += cb * diffuse;
+    }
+
+    /// <summary>4e — Beer-Lambert fog + single-scatter volumetric in-scatter,
+    /// applied to a shaded terrain/floor pixel. Twin of ShadingPipeline's fog
+    /// block: VolumeSteps &gt; 0 (with FogDensity &gt; 0 and key light I0 &gt; 0)
+    /// runs the in-scatter walk — per-step density (optionally ground-hugging
+    /// via FogHeightFalloff) × key-light SoftShadow, Beer-Lambert transmittance
+    /// via the Padé exp; else FogDensity &gt; 0 blends toward the gradient sky by
+    /// 1 − exp(−tHit·FogDensity). FogDensity == 0 → no-op (byte-identical). FBM
+    /// cloud-noise (VolumeNoiseAmount) + cloud self-shadow are deferred to 4e-ii,
+    /// so the density multiplier is 1 here. <paramref name="ox"/> is the primary
+    /// ray origin (== camera for perspective); the walk samples o + rd·t.</summary>
+    private static uint ApplyFogVolume(uint shaded, double ox, double oy, double oz,
+        double rdx, double rdy, double rdz, double tHit,
+        in HeightfieldRaymarch2D.HeightDe de, in ReliefUniforms u)
+    {
+        if (u.FogDensity <= 0) return shaded;
+        double br = (shaded >> 16) & 0xFF, bg = (shaded >> 8) & 0xFF, bb = shaded & 0xFF;
+
+        if (u.VolumeSteps > 0 && u.I0 > 0)
+        {
+            int vs = u.VolumeSteps;
+            // Adaptive volumetric LOD (VolumeStepsFalloff > 0). Off in the gate →
+            // no float-vs-double step-count divergence.
+            if (u.VolumeStepsFalloff > 0 && tHit > 4.0)
+                vs = Math.Max(4, (int)(vs / (1.0 + (tHit - 4.0) * u.VolumeStepsFalloff)));
+            double stepSize = tHit / vs;
+            double Lr = u.C0r, Lg = u.C0g, Lb = u.C0b, Li = u.I0;
+            bool shadowOn = u.ShadowSteps > 0 && (u.ShadowLightMask & 0x1) != 0;
+            double T = 1.0, inR = 0, inG = 0, inB = 0;
+            for (int s = 0; s < vs; s++)
+            {
+                double t = (s + 0.5) * stepSize;
+                double sx = ox + rdx * t, sy = oy + rdy * t, sz = oz + rdz * t;
+                double density = u.FogDensity;
+                if (u.FogHeightFalloff > 0)
+                    density *= Math.Exp(-u.FogHeightFalloff * sy);
+                double sh = 1.0;
+                if (shadowOn)
+                    sh = ShadingPipeline.SoftShadow(in de, sx, sy, sz, u.L0x, u.L0y, u.L0z,
+                                                    u.Cam.Eps0, 12.0, u.ShadowSoftK, u.ShadowSteps);
+                double scatter = density * sh * Li * stepSize;
+                inR += T * scatter * Lr; inG += T * scatter * Lg; inB += T * scatter * Lb;
+                double aT = density * stepSize;
+                T *= aT < 1.0 ? ExpNegSmall(aT) : Math.Exp(-aT);
+            }
+            br = br * T + inR; bg = bg * T + inG; bb = bb * T + inB;
+        }
+        else
+        {
+            double fogF = 1.0 - Math.Exp(-tHit * u.FogDensity);
+            uint sky = GradientSky(rdy, in u);
+            br = br * (1 - fogF) + ((sky >> 16) & 0xFF) * fogF;
+            bg = bg * (1 - fogF) + ((sky >> 8) & 0xFF) * fogF;
+            bb = bb * (1 - fogF) + (sky & 0xFF) * fogF;
+        }
+
+        uint A = (shaded >> 24) & 0xFFu;
+        return (A << 24)
+             | ((uint)Math.Clamp(br + 0.5, 0, 255) << 16)
+             | ((uint)Math.Clamp(bg + 0.5, 0, 255) << 8)
+             | (uint)Math.Clamp(bb + 0.5, 0, 255);
+    }
+
+    /// <summary>Padé(2,2) approximation of exp(−x) on [0,1] — twin of
+    /// ShadingPipeline.ExpNegSmall (the volumetric transmittance step).</summary>
+    private static double ExpNegSmall(double x)
+    {
+        double num = 12.0 - 6.0 * x + x * x;
+        double den = 12.0 + 6.0 * x + x * x;
+        return num / den;
     }
 
     /// <summary>Two-colour vertical gradient sky (BgBottom at the horizon, BgTop

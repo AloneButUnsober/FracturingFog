@@ -124,6 +124,12 @@ internal static class ReliefRaymarchProbe
         fx.TriplanarStrength = 0.5;
         fx.TriplanarScale = 4.0;
         fx.TriplanarTint = 0xFFFFFFFFu;
+        // 4e (#169) — single-scatter volumetric in-scatter (key light) + ground-
+        // hugging fog, matching the D3D gate. VolumeStepsFalloff stays 0 so twin
+        // and DXC-SPIR-V march the same fixed step count.
+        fx.FogDensity = 0.5;
+        fx.FogHeightFalloff = 0.3;
+        fx.VolumeSteps = 16;
 
         var (hbuf, albedo, maxH) = BumpField(hw, hh, w, h);
         var u = BuildUniforms(w, h, hw, hh, hbuf, maxH, p, fx);

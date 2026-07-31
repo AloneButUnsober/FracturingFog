@@ -131,6 +131,14 @@ public static class ReliefRaymarchGpuProbe
         fx.TriplanarStrength = 0.5;
         fx.TriplanarScale = 4.0;
         fx.TriplanarTint = 0xFFFFFFFFu;
+        // 4e (#169) — single-scatter volumetric in-scatter (key light) + ground-
+        // hugging fog. VolumeSteps>0 drives the in-scatter walk; the per-step key-
+        // light SoftShadow reuses the 4b shadow settings. FBM cloud-noise +
+        // reflections are deferred (4e-ii). VolumeStepsFalloff stays 0 so the twin
+        // and shader march the same fixed step count (no float-vs-double LOD flip).
+        fx.FogDensity = 0.5;
+        fx.FogHeightFalloff = 0.3;
+        fx.VolumeSteps = 16;
 
         var (hbuf, albedo, maxH) = BumpField(hw, hh, w, h);
         var u = BuildUniforms(w, h, hw, hh, hbuf, maxH, p, fx);
