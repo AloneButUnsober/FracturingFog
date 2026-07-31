@@ -80,6 +80,14 @@ static class Program
         if (args.Length > 0 && args[0] == "--heightfieldhires")
             return FracturingFog.Diagnostics.HeightfieldRaymarchProbe.RunHiResGate();
 
+        // --reliefgpuraymarch: #160 (Relief 3D Slice 3b) gate — the D3D relief
+        // compute kernel (CSRelief) vs the CPU parity twin over identical
+        // ReliefUniforms, on a WARP device (no GPU needed). Asserts a real 3D
+        // silhouette and that the GPU tracks the twin (small mean/edge diff).
+        // Writes relief-gpu-{cpu,gpu}.ppm + reliefgpuraymarch.out.
+        if (args.Length > 0 && args[0] == "--reliefgpuraymarch")
+            return FracturingFog.Rendering.ReliefRaymarchGpuProbe.RunGate();
+
         // --meshexport: #101 gate — prove marching-cubes mesh export works for
         // every DE raymarcher (not just the User Bulb) via the shared
         // RaymarchMeshSampler factory. For each exportable type: build the
