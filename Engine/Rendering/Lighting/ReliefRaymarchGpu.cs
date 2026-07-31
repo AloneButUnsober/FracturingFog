@@ -69,6 +69,14 @@ public readonly struct ReliefUniforms
     public readonly int AoSamples;
     public readonly double AoStrength;
 
+    // 4d — IBL-modulated ambient (gradient/solid env) + triplanar procedural
+    // texture. IblStrength == 0 → scalar ambient; TriplanarStrength == 0 → off.
+    public readonly double IblStrength;
+    public readonly int SkyMode;
+    public readonly int TriplanarKind;
+    public readonly double TriplanarStrength, TriplanarScale;
+    public readonly uint TriplanarTint;
+
     public readonly bool ShowSky, Isolate;
     public readonly uint BgTop, BgBottom, FloorAlbedo, DropColor;
 
@@ -81,7 +89,9 @@ public readonly struct ReliefUniforms
         uint bgTop, uint bgBottom, uint floorAlbedo, uint dropColor,
         double specStrength, double roughness, double metallic,
         int shadowSteps, double shadowSoftK, int shadowLightMask,
-        int aoSamples, double aoStrength)
+        int aoSamples, double aoStrength,
+        double iblStrength, int skyMode,
+        int triplanarKind, double triplanarStrength, double triplanarScale, uint triplanarTint)
     {
         W = w; H = h; Hw = hw; Hh = hh; Sy = sy; Aspect = aspect;
         InvLip = invLip; Bicubic = bicubic; Cam = cam;
@@ -93,6 +103,9 @@ public readonly struct ReliefUniforms
         SpecStrength = specStrength; Roughness = roughness; Metallic = metallic;
         ShadowSteps = shadowSteps; ShadowSoftK = shadowSoftK; ShadowLightMask = shadowLightMask;
         AoSamples = aoSamples; AoStrength = aoStrength;
+        IblStrength = iblStrength; SkyMode = skyMode;
+        TriplanarKind = triplanarKind; TriplanarStrength = triplanarStrength;
+        TriplanarScale = triplanarScale; TriplanarTint = triplanarTint;
     }
 
     /// <summary>World-space direction of a directional light, matching
@@ -129,7 +142,9 @@ public readonly struct ReliefUniforms
             fx.BgTopColor, fx.BgBottomColor, HeightfieldRaymarch2D.FloorAlbedoArgb, HeightfieldRaymarch2D.DropColorArgb,
             fx.SpecularStrength, fx.Roughness, fx.Metallic,
             fx.ShadowSteps, fx.ShadowSoftK, fx.ShadowLightMask,
-            fx.AoSamples, fx.AoStrength);
+            fx.AoSamples, fx.AoStrength,
+            fx.IblStrength, (int)fx.SkyMode,
+            (int)fx.TriplanarKind, fx.TriplanarStrength, fx.TriplanarScale, fx.TriplanarTint);
     }
 }
 
@@ -241,6 +256,8 @@ public static class ReliefRaymarchGpu
 
                 double uu = hx / aspect + 0.5, vv = hz + 0.5;
                 uint alb = HeightfieldRaymarch2D.SampleAlbedoBilinear(albedo, w, h, uu, vv);
+                if (u.TriplanarStrength > 0 && u.TriplanarKind != 0)
+                    alb = ApplyTriplanar(alb, hx, hy, hz, nx, ny, nz, in u);
                 return (ShadeFlat(nx, ny, nz, -rdx, -rdy, -rdz, hx, hy, hz, alb, in de, in u), true);
             }
         }
@@ -334,10 +351,35 @@ public static class ReliefRaymarchGpu
             ao = Math.Clamp(1.0 - u.AoStrength * (occl / Math.Max(wsum, 1.0)), 0, 1);
         }
 
-        double amb = u.Ambient;
-        sR = amb + (sR / 255.0) * (1.0 - amb) * diffSuppress;
-        sG = amb + (sG / 255.0) * (1.0 - amb) * diffSuppress;
-        sB = amb + (sB / 255.0) * (1.0 - amb) * diffSuppress;
+        // 4d — IBL-modulated ambient. IblStrength>0 blends the env colour sampled
+        // at the surface normal into the scalar ambient per channel; twin of
+        // ShadingPipeline.SampleEnvAmbient (non-HDRI: Solid → BgTop, else
+        // BgBottom→BgTop gradient by ny). IblStrength==0 → flat ambient (no-op).
+        double ambR = u.Ambient, ambG = u.Ambient, ambB = u.Ambient;
+        if (u.IblStrength > 0)
+        {
+            double eR, eG, eB;
+            if (u.SkyMode == 1) // Solid
+            {
+                eR = ((u.BgTop >> 16) & 0xFF) / 255.0;
+                eG = ((u.BgTop >> 8) & 0xFF) / 255.0;
+                eB = (u.BgTop & 0xFF) / 255.0;
+            }
+            else                // Gradient / Hdri-fallback
+            {
+                double t = Math.Clamp(0.5 * (ny + 1.0), 0, 1);
+                eR = ((1 - t) * ((u.BgBottom >> 16) & 0xFF) + t * ((u.BgTop >> 16) & 0xFF)) / 255.0;
+                eG = ((1 - t) * ((u.BgBottom >> 8) & 0xFF) + t * ((u.BgTop >> 8) & 0xFF)) / 255.0;
+                eB = ((1 - t) * (u.BgBottom & 0xFF) + t * (u.BgTop & 0xFF)) / 255.0;
+            }
+            double wv = u.IblStrength;
+            ambR = ambR * (1 - wv) + eR * wv;
+            ambG = ambG * (1 - wv) + eG * wv;
+            ambB = ambB * (1 - wv) + eB * wv;
+        }
+        sR = ambR + (sR / 255.0) * (1.0 - ambR) * diffSuppress;
+        sG = ambG + (sG / 255.0) * (1.0 - ambG) * diffSuppress;
+        sB = ambB + (sB / 255.0) * (1.0 - ambB) * diffSuppress;
         sR *= ao; sG *= ao; sB *= ao;
         double r = aR * sR + specR;
         double g = aG * sG + specG;
@@ -379,6 +421,72 @@ public static class ReliefRaymarchGpu
         specR += specBase * (F0r + (1.0 - F0r) * Fc) * cr;
         specG += specBase * (F0g + (1.0 - F0g) * Fc) * cg;
         specB += specBase * (F0b + (1.0 - F0b) * Fc) * cb;
+    }
+
+    /// <summary>4d — triplanar procedural texture. Twin of
+    /// <see cref="ShadingPipeline.ApplyTriplanar"/>: project the hit point onto
+    /// YZ/XZ/XY, sample the 2D fn per plane, blend by squared-normal weights,
+    /// modulate albedo by grey × tint × strength. Preserves the albedo alpha (the
+    /// relief cutout) rather than forcing 0xFF — ShadeFlat re-reads it.</summary>
+    private static uint ApplyTriplanar(uint albedo, double px, double py, double pz,
+                                       double nx, double ny, double nz, in ReliefUniforms u)
+    {
+        double wx = nx * nx, wy = ny * ny, wz = nz * nz;
+        double sum = wx + wy + wz;
+        if (sum < 1e-8) return albedo;
+        double inv = 1.0 / sum; wx *= inv; wy *= inv; wz *= inv;
+        double s = u.TriplanarScale;
+        int kind = u.TriplanarKind;
+        double txY = SampleProc2D(kind, py * s, pz * s);
+        double txX = SampleProc2D(kind, px * s, pz * s);
+        double txZ = SampleProc2D(kind, px * s, py * s);
+        double v = Math.Clamp(wx * txY + wy * txX + wz * txZ, 0, 1);
+        double Tr = ((u.TriplanarTint >> 16) & 0xFF) / 255.0;
+        double Tg = ((u.TriplanarTint >> 8) & 0xFF) / 255.0;
+        double Tb = (u.TriplanarTint & 0xFF) / 255.0;
+        double Ar = (albedo >> 16) & 0xFF, Ag = (albedo >> 8) & 0xFF, Ab = albedo & 0xFF;
+        double mix = u.TriplanarStrength;
+        double R = Ar * (1 - mix) + Ar * Tr * v * mix;
+        double G = Ag * (1 - mix) + Ag * Tg * v * mix;
+        double B = Ab * (1 - mix) + Ab * Tb * v * mix;
+        uint Rb = (uint)Math.Clamp(R, 0, 255);
+        uint Gb = (uint)Math.Clamp(G, 0, 255);
+        uint Bb = (uint)Math.Clamp(B, 0, 255);
+        return (albedo & 0xFF000000u) | (Rb << 16) | (Gb << 8) | Bb;
+    }
+
+    /// <summary>4d — procedural 2D sampler (greyscale [0,1]). Line-for-line twin
+    /// of ShadingPipeline.SampleProc2D. kind: 1 Wood, 2 Marble, 3 Rock, 4 Checker.</summary>
+    private static double SampleProc2D(int kind, double u, double v)
+    {
+        switch (kind)
+        {
+            case 1: // Wood
+            {
+                double r = Math.Sqrt(u * u + v * v);
+                double wobble = 0.1 * Math.Sin(u * 0.3) * Math.Cos(v * 0.3);
+                return 0.5 + 0.5 * Math.Sin((r + wobble) * 6.0);
+            }
+            case 2: // Marble
+            {
+                double turb = Math.Sin(v * 2.0 + Math.Sin(u * 4.0) * 1.5);
+                return 0.5 + 0.5 * Math.Sin(u * 3.0 + turb * 2.0);
+            }
+            case 3: // Rock
+            {
+                double a = Math.Sin(u * 12.9898 + v * 78.233) * 43758.5453;
+                double n = a - Math.Floor(a);
+                return Math.Clamp(0.3 + 0.7 * n, 0, 1);
+            }
+            case 4: // Checker
+            {
+                int cu = (int)Math.Floor(u) & 1;
+                int cv = (int)Math.Floor(v) & 1;
+                return (cu ^ cv) == 0 ? 0.2 : 1.0;
+            }
+            default:
+                return 1.0;
+        }
     }
 
     private static void Accum(double intensity, double cr, double cg, double cb,

@@ -122,6 +122,15 @@ public static class ReliefRaymarchGpuProbe
         // float-vs-double occlusion accumulation stays inside the gate thresholds.
         fx.AoSamples = 5;
         fx.AoStrength = 1.0;
+        // 4d (#168) — IBL-modulated ambient (gradient env, no HDRI image) +
+        // triplanar procedural texture. Marble keeps sin-cascade args bounded so
+        // the float-vs-double texture stays inside the gate thresholds (Rock's
+        // huge hash multiplier / Checker's floor seams would blow the edge band).
+        fx.IblStrength = 0.5;
+        fx.TriplanarKind = TriplanarTextureKind.Marble;
+        fx.TriplanarStrength = 0.5;
+        fx.TriplanarScale = 4.0;
+        fx.TriplanarTint = 0xFFFFFFFFu;
 
         var (hbuf, albedo, maxH) = BumpField(hw, hh, w, h);
         var u = BuildUniforms(w, h, hw, hh, hbuf, maxH, p, fx);

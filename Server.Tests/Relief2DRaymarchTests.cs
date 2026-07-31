@@ -676,6 +676,116 @@ public class ReliefRaymarchGpuTests
         Assert.True(darker > 200, $"AO darkened too few px ({darker})");
         Assert.Equal(0, brighter);
     }
+
+    // ── 4d (#168): IBL-modulated ambient + triplanar procedural texture ────
+
+    // TriplanarStrength == 0 must be byte-identical regardless of Kind/Scale/Tint
+    // — triplanar is fully gated, no regression to 4a/4b/4c.
+    [Fact]
+    public void CpuMirror_TriplanarOff_ByteIdentical_Regardless_Of_Knobs()
+    {
+        int w = 320, h = 240, hw = 320, hh = 240;
+        var p = ReliefParams();
+        var (hbuf, albedo, maxH) = BumpField(hw, hh, w, h);
+
+        var fxA = LightingFxData.CreateDefault();
+        fxA.TriplanarStrength = 0.0; fxA.TriplanarKind = TriplanarTextureKind.Rock;
+        fxA.TriplanarScale = 9.0; fxA.TriplanarTint = 0xFF3366CCu;
+        var uA = BuildUniforms(w, h, hw, hh, hbuf, maxH, p, fxA);
+        var a = new uint[w * h];
+        ReliefRaymarchGpu.RenderCpuMirror(in uA, hbuf, null, albedo, a, out _);
+
+        var fxB = LightingFxData.CreateDefault();
+        fxB.TriplanarStrength = 0.0; fxB.TriplanarKind = TriplanarTextureKind.None;
+        var uB = BuildUniforms(w, h, hw, hh, hbuf, maxH, p, fxB);
+        var b = new uint[w * h];
+        ReliefRaymarchGpu.RenderCpuMirror(in uB, hbuf, null, albedo, b, out _);
+
+        Assert.Equal(a, b);
+    }
+
+    // IblStrength == 0 must be byte-identical regardless of SkyMode — the IBL
+    // ambient blend is fully gated, ambient stays the scalar AmbientStrength.
+    [Fact]
+    public void CpuMirror_IblOff_ByteIdentical_Regardless_Of_SkyMode()
+    {
+        int w = 320, h = 240, hw = 320, hh = 240;
+        var p = ReliefParams();
+        var (hbuf, albedo, maxH) = BumpField(hw, hh, w, h);
+
+        var fxA = LightingFxData.CreateDefault();
+        fxA.IblStrength = 0.0; fxA.SkyMode = SkyMode.Solid;
+        var uA = BuildUniforms(w, h, hw, hh, hbuf, maxH, p, fxA);
+        var a = new uint[w * h];
+        ReliefRaymarchGpu.RenderCpuMirror(in uA, hbuf, null, albedo, a, out _);
+
+        var fxB = LightingFxData.CreateDefault();
+        fxB.IblStrength = 0.0; fxB.SkyMode = SkyMode.Gradient;
+        var uB = BuildUniforms(w, h, hw, hh, hbuf, maxH, p, fxB);
+        var b = new uint[w * h];
+        ReliefRaymarchGpu.RenderCpuMirror(in uB, hbuf, null, albedo, b, out _);
+
+        Assert.Equal(a, b);
+    }
+
+    // Triplanar on modulates the terrain albedo before lighting — many surface
+    // pixels change colour — while the silhouette (hit fraction) is untouched
+    // (texture never moves geometry). Sky/floor pixels are unaffected.
+    [Fact]
+    public void CpuMirror_TriplanarOn_Retextures_Without_Moving_Silhouette()
+    {
+        int w = 320, h = 240, hw = 320, hh = 240;
+        var p = ReliefParams();
+        var (hbuf, albedo, maxH) = BumpField(hw, hh, w, h);
+
+        var fxOff = LightingFxData.CreateDefault();
+        fxOff.TriplanarStrength = 0.0;
+        var uOff = BuildUniforms(w, h, hw, hh, hbuf, maxH, p, fxOff);
+        var off = new uint[w * h];
+        ReliefRaymarchGpu.RenderCpuMirror(in uOff, hbuf, null, albedo, off, out double hitOff);
+
+        var fxOn = LightingFxData.CreateDefault();
+        fxOn.TriplanarKind = TriplanarTextureKind.Marble;
+        fxOn.TriplanarStrength = 0.7; fxOn.TriplanarScale = 4.0; fxOn.TriplanarTint = 0xFFFFFFFFu;
+        var uOn = BuildUniforms(w, h, hw, hh, hbuf, maxH, p, fxOn);
+        var on = new uint[w * h];
+        ReliefRaymarchGpu.RenderCpuMirror(in uOn, hbuf, null, albedo, on, out double hitOn);
+
+        Assert.Equal(hitOff, hitOn);
+
+        int changed = 0;
+        for (int i = 0; i < w * h; i++) if (on[i] != off[i]) changed++;
+        Assert.True(changed > 100, $"triplanar retextured too few px ({changed})");
+    }
+
+    // IBL ambient on blends the gradient env (sampled at the surface normal) into
+    // the flat ambient, shifting shaded terrain pixels without moving the
+    // silhouette.
+    [Fact]
+    public void CpuMirror_IblOn_Shifts_Ambient_Without_Moving_Silhouette()
+    {
+        int w = 320, h = 240, hw = 320, hh = 240;
+        var p = ReliefParams();
+        var (hbuf, albedo, maxH) = BumpField(hw, hh, w, h);
+
+        var fxOff = LightingFxData.CreateDefault();
+        fxOff.IblStrength = 0.0;
+        var uOff = BuildUniforms(w, h, hw, hh, hbuf, maxH, p, fxOff);
+        var off = new uint[w * h];
+        ReliefRaymarchGpu.RenderCpuMirror(in uOff, hbuf, null, albedo, off, out double hitOff);
+
+        var fxOn = LightingFxData.CreateDefault();
+        fxOn.IblStrength = 0.6; fxOn.SkyMode = SkyMode.Gradient;
+        var uOn = BuildUniforms(w, h, hw, hh, hbuf, maxH, p, fxOn);
+        var on = new uint[w * h];
+        ReliefRaymarchGpu.RenderCpuMirror(in uOn, hbuf, null, albedo, on, out double hitOn);
+
+        Assert.Equal(hitOff, hitOn);
+
+        int changed = 0;
+        for (int i = 0; i < w * h; i++) if (on[i] != off[i]) changed++;
+        Assert.True(changed > 100, $"IBL ambient shifted too few px ({changed})");
+    }
 }
 
 // #162 (Slice 3d) — host-wiring seam. HeightfieldRaymarch2D.Render dispatches

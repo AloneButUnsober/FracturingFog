@@ -117,6 +117,13 @@ internal static class ReliefRaymarchProbe
         // occlusion accumulation stays inside the parity thresholds.
         fx.AoSamples = 5;
         fx.AoStrength = 1.0;
+        // 4d (#168) — IBL-modulated ambient (gradient env) + triplanar (matches
+        // the D3D gate). Marble keeps the DXC-SPIR-V texture inside the thresholds.
+        fx.IblStrength = 0.5;
+        fx.TriplanarKind = TriplanarTextureKind.Marble;
+        fx.TriplanarStrength = 0.5;
+        fx.TriplanarScale = 4.0;
+        fx.TriplanarTint = 0xFFFFFFFFu;
 
         var (hbuf, albedo, maxH) = BumpField(hw, hh, w, h);
         var u = BuildUniforms(w, h, hw, hh, hbuf, maxH, p, fx);
