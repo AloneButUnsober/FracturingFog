@@ -2981,6 +2981,7 @@ namespace FracturingFog.Rendering
             // buffer matches these dims; snapshots (srcAlreadyProcessed) already
             // carry relief. Writes to a scratch so the calculator's ColorBuffer
             // stays flat (idempotent across re-uploads).
+            bool reliefRaymarchApplied = false;
             {
                 var reliefParams = ViewState.FractalParameters;
                 bool raymarch = reliefParams.Relief2DRaymarch;
@@ -3000,11 +3001,14 @@ namespace FracturingFog.Rendering
                     if (_reliefColorScratch == null || _reliefColorScratch.Length < n)
                         _reliefColorScratch = new uint[n];
                     if (raymarch)
+                    {
                         // Phase 2 — oblique 3D raymarch of the (possibly hi-res)
                         // height field (perspective relief, silhouette, fog).
                         FracturingFog.Rendering.Lighting.HeightfieldRaymarch2D.Render(
                             src, _reliefHeight!, w, h, _reliefW, _reliefH,
                             reliefParams, _reliefColorScratch, out _);
+                        reliefRaymarchApplied = true;
+                    }
                     else
                         // Phase 1 — screen-space hillshade + cast-shadow post-pass.
                         FracturingFog.Rendering.Lighting.HeightfieldRelief2D.Apply(
@@ -3087,6 +3091,22 @@ namespace FracturingFog.Rendering
             else
             {
                 Array.Copy(src, dst, n);
+            }
+
+            // Lighting-FX debug HUD (Phase 19) for Relief 3D. The 3D raymarcher
+            // calculators bake the HUD into their ColorBuffer as the last step;
+            // the oblique-relief path renders through HeightfieldRaymarch2D (not a
+            // calculator), so draw it here on the final buffer using the SAME
+            // LightingFxData that lit the relief. Only for the Phase 2 raymarch
+            // (Phase 1 hillshade doesn't use the FX light rig). Drawn before the
+            // pre-overlay snapshot so screenshots include it, matching the 3D
+            // calculators. Self-skips when no flags set or the frame is < 128px.
+            if (reliefRaymarchApplied)
+            {
+                var hudFx = ViewState.FractalParameters.Lighting;
+                if (hudFx.DebugHudFlags != 0)
+                    FracturingFog.Rendering.Lighting.ScreenSpacePost.ApplyDebugHud(
+                        dst, w, h, in hudFx);
             }
 
             // Snapshot pre-overlay buffer so SaveLastFrameToPng can render a
