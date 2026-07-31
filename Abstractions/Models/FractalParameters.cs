@@ -418,6 +418,18 @@ namespace FracturingFog.Models
         /// base frame. Clamped to [480, 2160]. Default 1080.</summary>
         public int Relief2DFieldFloor { get; set; } = 1080;
 
+        /// <summary>#162 (Slice 3d) — dispatch the oblique relief raymarch on the
+        /// GPU (Rendering.D3D / Rendering.Vulkan compute kernel) instead of the CPU
+        /// sphere trace, when the host has a relief kernel attached. OPT-IN and
+        /// default OFF: the GPU kernel currently renders the Slice-3 shader subset
+        /// (flat three-light Lambert + ambient + gradient sky), so it does NOT yet
+        /// reproduce the CPU render's full ShadingPipeline FX (soft shadow, AO, PBR
+        /// spec, IBL, reflections, fog) — that is Slice 4 (#158). Only affects the
+        /// raymarch path (<see cref="Relief2DRaymarch"/>) on escape-time 2D types;
+        /// with no kernel attached the CPU path runs regardless. The CPU render
+        /// stays the fidelity fallback and the parity oracle.</summary>
+        public bool Relief2DGpuRaymarch { get; set; } = false;
+
         /// <summary>Master toggle: isolate the kept fractal as a standalone 3D
         /// object over a transparent background. Default false.</summary>
         public bool Relief2DIsolate { get; set; } = false;
@@ -815,6 +827,7 @@ namespace FracturingFog.Models
                 Relief2DEdgeFade = Relief2DEdgeFade,
                 Relief2DHiResField = Relief2DHiResField,
                 Relief2DFieldFloor = Relief2DFieldFloor,
+                Relief2DGpuRaymarch = Relief2DGpuRaymarch,
                 Relief2DIsolate = Relief2DIsolate,
                 Relief2DIsolateByDetail = Relief2DIsolateByDetail,
                 Relief2DDetailThreshold = Relief2DDetailThreshold,

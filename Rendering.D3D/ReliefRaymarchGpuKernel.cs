@@ -31,7 +31,7 @@ namespace FracturingFog.Rendering;
 /// <summary>D3D11 compute dispatch of the Relief 3D raymarch kernel (#160).
 /// See the file header for the buffer bindings and the parity contract.</summary>
 [SupportedOSPlatform("windows")]
-public sealed class ReliefRaymarchGpuKernel : IDisposable
+public sealed class ReliefRaymarchGpuKernel : IDisposable, FracturingFog.Rendering.Lighting.IReliefRaymarchKernel
 {
     // ReliefParams cbuffer twin. 16 float4 rows (256 B): every HLSL float3 is
     // followed by a scalar that fills its row, and every float3 starts a fresh

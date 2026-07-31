@@ -42,6 +42,12 @@ public static class BootstrapHooks
     /// (UseGpuCompute stays off).</summary>
     public static Func<IFractalRenderer, object, IGpuKernel?>? GpuKernelFactoryHook { get; set; }
 
+    /// <summary>#162 (Slice 3d) — D3D11 relief-raymarch kernel factory. Windows
+    /// installs the DirectXRenderer downcast → <c>ReliefRaymarchGpuKernel</c>
+    /// (same native handles as the escape-time kernel); null elsewhere (the CPU
+    /// relief raymarch runs regardless — the GPU path is opt-in).</summary>
+    public static Func<IFractalRenderer, object, FracturingFog.Rendering.Lighting.IReliefRaymarchKernel?>? ReliefKernelFactoryHook { get; set; }
+
     /// <summary>Native video writer probe. Windows installs the Media
     /// Foundation <c>Mp4Writer</c>; null elsewhere. The bootstrap falls
     /// through to ffmpeg when this returns null.</summary>
