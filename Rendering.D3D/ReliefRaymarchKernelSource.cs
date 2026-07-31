@@ -113,6 +113,11 @@ cbuffer ReliefParams : register(b0)
     float  gFogHeightFalloff; // density *= exp(-falloff * y)
     int    gVolumeSteps;      // >0 = single-scatter in-scatter walk; 0 = legacy exp fog
     float  gVolumeStepsFalloff;// adaptive volumetric LOD; 0 = fixed step count
+
+    int    gEmptySkip;        // 4f — empty-space-skip; 0 = off (byte-identical march)
+    int    gMipW;             // coarse max-height grid width
+    int    gMipH;             // coarse max-height grid height
+    int    gMipBlk;           // base cells per coarse cell
 };
 
 static const float RELIEF_PI = 3.14159265358979;
@@ -120,6 +125,7 @@ static const float RELIEF_PI = 3.14159265358979;
 StructuredBuffer<float> gHeight : register(t0);   // one float per field cell
 StructuredBuffer<uint>  gAlbedo : register(t1);   // packed ARGB per output pixel
 StructuredBuffer<uint>  gKeep   : register(t2);   // 0 = culled (bound iff gHasKeep)
+StructuredBuffer<float> gMip    : register(t3);   // 4f coarse max-height grid (bound iff gEmptySkip)
 
 RWStructuredBuffer<uint> gColor : register(u0);   // packed ARGB output
 
@@ -488,6 +494,38 @@ uint ApplyFogVolume(uint shaded, float3 o, float3 rd, float tHit)
     return (A << 24) | (Rb << 16) | (Gb << 8) | Bb;
 }
 
+// 4f — conservative empty-space-skip distance. Twin of ReliefRaymarchGpu.
+// EmptySkipDist: coarse block max at (px,pz); if the ray point is above it by
+// more than epsT, return min(descend-to-plane, cell-exit) — no terrain hit
+// possible within that span; else 0 (fall back to the point DE).
+float EmptySkipDist(float3 P, float3 rd, float epsT)
+{
+    float uu = P.x / gAspect + 0.5, vv = P.z + 0.5;
+    int cx = (int)floor(uu * gMipW);
+    int cz = (int)floor(vv * gMipH);
+    cx = ClampI(cx, 0, gMipW - 1);
+    cz = ClampI(cz, 0, gMipH - 1);
+    float hmax = gMip[cz * gMipW + cx] * gSy;
+    if (P.y <= hmax + epsT) return 0.0;
+
+    // Descend to epsT ABOVE the block max so the normal march refines the hit with
+    // a tight bracket (twin of ReliefRaymarchGpu). Still conservative.
+    float tPlane = rd.y < -1e-9 ? (P.y - (hmax + epsT)) / (-rd.y) : 3.4e38;
+
+    float xLo = (cx / (float)gMipW - 0.5) * gAspect;
+    float xHi = ((cx + 1) / (float)gMipW - 0.5) * gAspect;
+    float zLo = cz / (float)gMipH - 0.5;
+    float zHi = (cz + 1) / (float)gMipH - 0.5;
+    float tExit = 3.4e38;
+    if (rd.x > 1e-12) tExit = min(tExit, (xHi - P.x) / rd.x);
+    else if (rd.x < -1e-12) tExit = min(tExit, (xLo - P.x) / rd.x);
+    if (rd.z > 1e-12) tExit = min(tExit, (zHi - P.z) / rd.z);
+    else if (rd.z < -1e-12) tExit = min(tExit, (zLo - P.z) / rd.z);
+
+    float skip = min(tPlane, tExit);
+    return skip > 0.0 ? skip : 0.0;
+}
+
 [numthreads(8, 8, 1)]
 void CSRelief(uint3 tid : SV_DispatchThreadID)
 {
@@ -534,7 +572,14 @@ void CSRelief(uint3 tid : SV_DispatchThreadID)
             float epsT = gEps0 + gPixelAngle * t;
             if (d < epsT) { hit = true; break; }
             tPrev = t;
-            t += max(d, epsT * 0.5);
+            float adv = max(d, epsT * 0.5);
+            // 4f — empty-space skip (conservative; only enlarges the advance).
+            if (gEmptySkip != 0)
+            {
+                float skip = EmptySkipDist(pw, rd, epsT);
+                if (skip > adv) adv = skip;
+            }
+            t += adv;
         }
 
         if (hit)

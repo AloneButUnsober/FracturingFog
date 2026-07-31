@@ -102,6 +102,9 @@ public static class ReliefRaymarchGpuProbe
             Relief2DCameraElevationDeg = 45,
             Relief2DCameraFovDeg = 55,
             Relief2DGroundPlane = false,
+            // 4f (#170) — empty-space-skip on, so the gate proves GPU==twin with the
+            // coarse max-height grid driving the leap (both build the same grid).
+            Relief2DEmptySkip = true,
         };
         var fx = LightingFxData.CreateDefault();
         fx.BgTopColor = 0xFF335588u;

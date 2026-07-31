@@ -73,9 +73,10 @@ public sealed unsafe class ReliefRaymarchVulkanKernel : IDisposable, IReliefRaym
         public float IblStrength; public int SkyMode; public float TriplanarStrength, TriplanarScale;   // 4d
         public int TriplanarKind; public uint TriplanarTint; public float PadT0, PadT1;   // 4d
         public float FogDensity, FogHeightFalloff; public int VolumeSteps; public float VolumeStepsFalloff;   // 4e
+        public int EmptySkip, MipW, MipH, MipBlk;   // 4f
     }
 
-    private const int ParamBytes = 352;
+    private const int ParamBytes = 368;
 
     private struct Allocated { public Buffer Buffer; public DeviceMemory Memory; public ulong Size; }
 
@@ -92,8 +93,9 @@ public sealed unsafe class ReliefRaymarchVulkanKernel : IDisposable, IReliefRaym
 
     private Allocated _params;
     private Allocated _height, _keep;       // field-sized (hn)
+    private Allocated _mip;                 // t3 — 4f coarse max-height grid
     private Allocated _albedo, _color;      // output-sized (n)
-    private int _fieldCells, _outPixels;
+    private int _fieldCells, _mipCells, _outPixels;
     private bool _disposed;
 
     public double LastDispatchMs { get; private set; }
@@ -124,6 +126,9 @@ public sealed unsafe class ReliefRaymarchVulkanKernel : IDisposable, IReliefRaym
 
         BuildPipeline();
         _params = AllocBuffer(ParamBytes, BufferUsageFlags.UniformBufferBit);
+        // t3 must always be bound (no partially-bound flag); start with a 1-cell
+        // stub — the shader only reads it when gEmptySkip != 0.
+        EnsureMipBuffer(1);
     }
 
     /// <summary>Create a self-contained kernel that owns a fresh
@@ -168,17 +173,25 @@ public sealed unsafe class ReliefRaymarchVulkanKernel : IDisposable, IReliefRaym
         fixed (uint* p = albedo) WriteBytes(_albedo, p, n * sizeof(uint));
         UploadKeep(_keep, keep, hn);
 
+        // 4f — build + upload the coarse max-height grid when the skip is on.
+        if (u.EmptySkip != 0)
+        {
+            var mip = ReliefHeightMip.BuildMaxGrid(hbuf, u.Hw, u.Hh, u.MipBlk, out _, out _);
+            EnsureMipBuffer(mip.Length);
+            fixed (float* p = mip) WriteBytes(_mip, p, mip.Length * sizeof(float));
+        }
+
         var blob = BuildBlob(in u, keep != null);
         WriteBytes(_params, &blob, sizeof(ReliefParamsBlob));
 
         // Per-Run descriptor pool + set (a resize reallocates buffers, so a stale
         // set could dangle — build fresh each dispatch, like VulkanComputeKernel).
-        Buffer* srcBufs = stackalloc Buffer[5] { _params.Buffer, _height.Buffer, _albedo.Buffer, _keep.Buffer, _color.Buffer };
-        uint* bindNums = stackalloc uint[5] { 0, (uint)TShift, (uint)TShift + 1, (uint)TShift + 2, (uint)UShift };
-        var types = stackalloc DescriptorType[5]
+        Buffer* srcBufs = stackalloc Buffer[6] { _params.Buffer, _height.Buffer, _albedo.Buffer, _keep.Buffer, _mip.Buffer, _color.Buffer };
+        uint* bindNums = stackalloc uint[6] { 0, (uint)TShift, (uint)TShift + 1, (uint)TShift + 2, (uint)TShift + 3, (uint)UShift };
+        var types = stackalloc DescriptorType[6]
         {
             DescriptorType.UniformBuffer, DescriptorType.StorageBuffer, DescriptorType.StorageBuffer,
-            DescriptorType.StorageBuffer, DescriptorType.StorageBuffer,
+            DescriptorType.StorageBuffer, DescriptorType.StorageBuffer, DescriptorType.StorageBuffer,
         };
 
         DescriptorPool pool = default;
@@ -188,7 +201,7 @@ public sealed unsafe class ReliefRaymarchVulkanKernel : IDisposable, IReliefRaym
             var poolSizes = stackalloc DescriptorPoolSize[2]
             {
                 new DescriptorPoolSize { Type = DescriptorType.UniformBuffer, DescriptorCount = 1 },
-                new DescriptorPoolSize { Type = DescriptorType.StorageBuffer, DescriptorCount = 4 },
+                new DescriptorPoolSize { Type = DescriptorType.StorageBuffer, DescriptorCount = 5 },
             };
             var dpci = new DescriptorPoolCreateInfo
             {
@@ -205,9 +218,9 @@ public sealed unsafe class ReliefRaymarchVulkanKernel : IDisposable, IReliefRaym
             };
             Check(_vk.AllocateDescriptorSets(_device, in dsai, out DescriptorSet set), "vkAllocateDescriptorSets");
 
-            var infos = stackalloc DescriptorBufferInfo[5];
-            var writes = stackalloc WriteDescriptorSet[5];
-            for (int i = 0; i < 5; i++)
+            var infos = stackalloc DescriptorBufferInfo[6];
+            var writes = stackalloc WriteDescriptorSet[6];
+            for (int i = 0; i < 6; i++)
             {
                 infos[i] = new DescriptorBufferInfo { Buffer = srcBufs[i], Offset = 0, Range = Vk.WholeSize };
                 writes[i] = new WriteDescriptorSet
@@ -217,7 +230,7 @@ public sealed unsafe class ReliefRaymarchVulkanKernel : IDisposable, IReliefRaym
                     DescriptorType = types[i], PBufferInfo = &infos[i],
                 };
             }
-            _vk.UpdateDescriptorSets(_device, 5, writes, 0, null);
+            _vk.UpdateDescriptorSets(_device, 6, writes, 0, null);
 
             var cbai = new CommandBufferAllocateInfo
             {
@@ -291,6 +304,7 @@ public sealed unsafe class ReliefRaymarchVulkanKernel : IDisposable, IReliefRaym
             TriplanarKind = u.TriplanarKind, TriplanarTint = u.TriplanarTint, PadT0 = 0f, PadT1 = 0f,
             FogDensity = (float)u.FogDensity, FogHeightFalloff = (float)u.FogHeightFalloff,
             VolumeSteps = u.VolumeSteps, VolumeStepsFalloff = (float)u.VolumeStepsFalloff,
+            EmptySkip = u.EmptySkip, MipW = u.MipW, MipH = u.MipH, MipBlk = u.MipBlk,
         };
     }
 
@@ -313,10 +327,10 @@ public sealed unsafe class ReliefRaymarchVulkanKernel : IDisposable, IReliefRaym
             Check(_vk.CreateShaderModule(_device, in smci, null, out _module), "vkCreateShaderModule");
         }
 
-        // b0 UBO + t0/t1/t2 + u0 SSBOs.
-        uint* bindNums = stackalloc uint[5] { 0, (uint)TShift, (uint)TShift + 1, (uint)TShift + 2, (uint)UShift };
-        var bindings = stackalloc DescriptorSetLayoutBinding[5];
-        for (int i = 0; i < 5; i++)
+        // b0 UBO + t0/t1/t2/t3 + u0 SSBOs (t3 = 4f mip grid).
+        uint* bindNums = stackalloc uint[6] { 0, (uint)TShift, (uint)TShift + 1, (uint)TShift + 2, (uint)TShift + 3, (uint)UShift };
+        var bindings = stackalloc DescriptorSetLayoutBinding[6];
+        for (int i = 0; i < 6; i++)
             bindings[i] = new DescriptorSetLayoutBinding
             {
                 Binding = bindNums[i],
@@ -326,7 +340,7 @@ public sealed unsafe class ReliefRaymarchVulkanKernel : IDisposable, IReliefRaym
         var dslci = new DescriptorSetLayoutCreateInfo
         {
             SType = StructureType.DescriptorSetLayoutCreateInfo,
-            BindingCount = 5, PBindings = bindings,
+            BindingCount = 6, PBindings = bindings,
         };
         Check(_vk.CreateDescriptorSetLayout(_device, in dslci, null, out _dsl), "vkCreateDescriptorSetLayout");
 
@@ -368,6 +382,16 @@ public sealed unsafe class ReliefRaymarchVulkanKernel : IDisposable, IReliefRaym
         _height = AllocBuffer((ulong)(cells * sizeof(float)), BufferUsageFlags.StorageBufferBit);
         _keep = AllocBuffer((ulong)(cells * sizeof(uint)), BufferUsageFlags.StorageBufferBit);
         _fieldCells = cells;
+    }
+
+    // 4f — (re)allocate the coarse max-height grid buffer (t3) to `cells` floats.
+    private void EnsureMipBuffer(int cells)
+    {
+        if (cells < 1) cells = 1;
+        if (_mip.Buffer.Handle != 0 && _mipCells == cells) return;
+        FreeBuffer(ref _mip);
+        _mip = AllocBuffer((ulong)(cells * sizeof(float)), BufferUsageFlags.StorageBufferBit);
+        _mipCells = cells;
     }
 
     private void EnsureOutputBuffers(int n)
@@ -462,6 +486,7 @@ public sealed unsafe class ReliefRaymarchVulkanKernel : IDisposable, IReliefRaym
         FreeBuffer(ref _params);
         FreeBuffer(ref _height);
         FreeBuffer(ref _keep);
+        FreeBuffer(ref _mip);
         FreeBuffer(ref _albedo);
         FreeBuffer(ref _color);
         if (_cmdPool.Handle != 0) { _vk.DestroyCommandPool(_device, _cmdPool, null); _cmdPool = default; }

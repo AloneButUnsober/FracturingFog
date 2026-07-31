@@ -870,6 +870,75 @@ public class ReliefRaymarchGpuTests
         for (int i = 0; i < w * h; i++) if (vol[i] != off[i]) changed++;
         Assert.True(changed > 100, $"volumetric in-scatter changed too few px ({changed})");
     }
+
+    // 4f — the empty-space skip must cut the primary sphere-trace step count (it
+    // leaps the flat air above the dome instead of crawling) while landing on the
+    // SAME surface: the silhouette barely moves and the image stays within the
+    // float-parity band. A conservative skip never overshoots the first hit.
+    [Fact]
+    public void CpuMirror_EmptySkip_CutsMarchSteps_Preserving_Image()
+    {
+        int w = 320, h = 240, hw = 320, hh = 240;
+        var (hbuf, albedo, maxH) = BumpField(hw, hh, w, h);
+        var fx = LightingFxData.CreateDefault();
+
+        var pOff = ReliefParams(); pOff.Relief2DEmptySkip = false;
+        var uOff = BuildUniforms(w, h, hw, hh, hbuf, maxH, pOff, fx);
+        var off = new uint[w * h];
+        ReliefRaymarchGpu.RenderCpuMirror(in uOff, hbuf, null, albedo, off, out double hitOff, out long stepsOff);
+
+        var pOn = ReliefParams(); pOn.Relief2DEmptySkip = true;
+        var uOn = BuildUniforms(w, h, hw, hh, hbuf, maxH, pOn, fx);
+        var on = new uint[w * h];
+        ReliefRaymarchGpu.RenderCpuMirror(in uOn, hbuf, null, albedo, on, out double hitOn, out long stepsOn);
+
+        // Real step-count win (magnitude is scene-dependent — the skip pays off
+        // most on tall/steep terrain where the slope-limited point DE crawls; on
+        // this dome the flat exterior already leaps, so a strict reduction is the
+        // honest guard against a no-op regression).
+        Assert.True(stepsOn < stepsOff,
+            $"empty-space skip did not cut steps (off {stepsOff}, on {stepsOn})");
+
+        // Same surface: silhouette barely moves, and per-pixel change stays tiny —
+        // judged by magnitude (like the device gates), not raw changed-pixel count.
+        // A conservative skip only shifts where the last pre-hit sample lands, so
+        // the mean channel diff is a fraction of an LSB and only a few block-edge
+        // columns move by more than a hair.
+        Assert.True(Math.Abs(hitOn - hitOff) < 0.01, $"silhouette moved ({hitOff} → {hitOn})");
+        long sumAbs = 0; int big = 0;
+        for (int i = 0; i < w * h; i++)
+        {
+            uint a = off[i], b = on[i];
+            int dr = Math.Abs((int)((a >> 16) & 0xFF) - (int)((b >> 16) & 0xFF));
+            int dg = Math.Abs((int)((a >> 8) & 0xFF) - (int)((b >> 8) & 0xFF));
+            int db = Math.Abs((int)(a & 0xFF) - (int)(b & 0xFF));
+            sumAbs += dr + dg + db;
+            if (Math.Max(dr, Math.Max(dg, db)) > 16) big++;
+        }
+        double meanCh = sumAbs / (3.0 * w * h);
+        Assert.True(meanCh < 0.5, $"empty-space skip shifted the image too much (mean {meanCh:0.000})");
+        Assert.True(big < w * h / 100, $"empty-space skip flipped too many px hard ({big})");
+    }
+
+    // The coarse max-height grid must be a conservative UPPER bound: every base
+    // cell's height ≤ the max stored for the coarse cell that (with its halo)
+    // covers it. That is what makes the skip safe (never overshoots a spike).
+    [Fact]
+    public void ReliefHeightMip_MaxGrid_Is_Conservative_Upper_Bound()
+    {
+        int hw = 200, hh = 150, blk = ReliefHeightMip.Blk;
+        var (hbuf, _, _) = BumpField(hw, hh, hw, hh);
+        var grid = ReliefHeightMip.BuildMaxGrid(hbuf, hw, hh, blk, out int mw, out int mh);
+
+        for (int z = 0; z < hh; z++)
+        for (int x = 0; x < hw; x++)
+        {
+            int cx = Math.Min(x / blk, mw - 1);
+            int cz = Math.Min(z / blk, mh - 1);
+            Assert.True(hbuf[z * hw + x] <= grid[cz * mw + cx] + 1e-6f,
+                $"cell ({x},{z}) height {hbuf[z * hw + x]} exceeds block max {grid[cz * mw + cx]}");
+        }
+    }
 }
 
 // #162 (Slice 3d) — host-wiring seam. HeightfieldRaymarch2D.Render dispatches

@@ -98,6 +98,9 @@ internal static class ReliefRaymarchProbe
             Relief2DCameraElevationDeg = 45,
             Relief2DCameraFovDeg = 55,
             Relief2DGroundPlane = false,
+            // 4f (#170) — empty-space-skip on, matching the D3D gate (GPU==twin with
+            // the coarse max-height grid driving the leap).
+            Relief2DEmptySkip = true,
         };
         var fx = LightingFxData.CreateDefault();
         fx.BgTopColor = 0xFF335588u;
