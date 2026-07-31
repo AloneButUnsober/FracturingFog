@@ -61,6 +61,10 @@ public readonly struct ReliefUniforms
     // 4a — Cook-Torrance GGX material. SpecStrength == 0 → flat Lambert.
     public readonly double SpecStrength, Roughness, Metallic;
 
+    // 4b — per-light soft shadow (IQ penumbra DE-march). ShadowSteps == 0 → off.
+    public readonly int ShadowSteps, ShadowLightMask;
+    public readonly double ShadowSoftK;
+
     public readonly bool ShowSky, Isolate;
     public readonly uint BgTop, BgBottom, FloorAlbedo, DropColor;
 
@@ -71,7 +75,8 @@ public readonly struct ReliefUniforms
         double l2x, double l2y, double l2z, double i2, double c2r, double c2g, double c2b,
         double ambient, bool showSky, bool isolate,
         uint bgTop, uint bgBottom, uint floorAlbedo, uint dropColor,
-        double specStrength, double roughness, double metallic)
+        double specStrength, double roughness, double metallic,
+        int shadowSteps, double shadowSoftK, int shadowLightMask)
     {
         W = w; H = h; Hw = hw; Hh = hh; Sy = sy; Aspect = aspect;
         InvLip = invLip; Bicubic = bicubic; Cam = cam;
@@ -81,6 +86,7 @@ public readonly struct ReliefUniforms
         Ambient = ambient; ShowSky = showSky; Isolate = isolate;
         BgTop = bgTop; BgBottom = bgBottom; FloorAlbedo = floorAlbedo; DropColor = dropColor;
         SpecStrength = specStrength; Roughness = roughness; Metallic = metallic;
+        ShadowSteps = shadowSteps; ShadowSoftK = shadowSoftK; ShadowLightMask = shadowLightMask;
     }
 
     /// <summary>World-space direction of a directional light, matching
@@ -115,7 +121,8 @@ public readonly struct ReliefUniforms
             d2.x, d2.y, d2.z, fx.Light3.Intensity, (fx.Light3.Color >> 16) & 0xFF, (fx.Light3.Color >> 8) & 0xFF, fx.Light3.Color & 0xFF,
             fx.AmbientStrength, fx.ShowSkyBackdrop, p.Relief2DIsolate,
             fx.BgTopColor, fx.BgBottomColor, HeightfieldRaymarch2D.FloorAlbedoArgb, HeightfieldRaymarch2D.DropColorArgb,
-            fx.SpecularStrength, fx.Roughness, fx.Metallic);
+            fx.SpecularStrength, fx.Roughness, fx.Metallic,
+            fx.ShadowSteps, fx.ShadowSoftK, fx.ShadowLightMask);
     }
 }
 
@@ -227,7 +234,7 @@ public static class ReliefRaymarchGpu
 
                 double uu = hx / aspect + 0.5, vv = hz + 0.5;
                 uint alb = HeightfieldRaymarch2D.SampleAlbedoBilinear(albedo, w, h, uu, vv);
-                return (ShadeFlat(nx, ny, nz, -rdx, -rdy, -rdz, alb, in u), true);
+                return (ShadeFlat(nx, ny, nz, -rdx, -rdy, -rdz, hx, hy, hz, alb, in de, in u), true);
             }
         }
 
@@ -239,7 +246,7 @@ public static class ReliefRaymarchGpu
             {
                 double gx = ox + rdx * tp, gz = oz + rdz * tp;
                 if (Math.Abs(gx) <= cam.FloorBx && Math.Abs(gz) <= cam.FloorBz)
-                    return (ShadeFlat(0.0, 1.0, 0.0, -rdx, -rdy, -rdz, u.FloorAlbedo, in u), false);
+                    return (ShadeFlat(0.0, 1.0, 0.0, -rdx, -rdy, -rdz, gx, 0.0, gz, u.FloorAlbedo, in de, in u), false);
             }
         }
         uint bg = u.ShowSky ? GradientSky(rdy, in u) : u.DropColor;
@@ -252,12 +259,34 @@ public static class ReliefRaymarchGpu
     /// (spec/AO/IBL off): <c>s = amb + (Σ Iᵢ·max(0,N·Lᵢ)·Colᵢ / 255)·(1−amb)</c>,
     /// then <c>out = albedo · s</c>. Preserves the albedo's alpha.</summary>
     private static uint ShadeFlat(double nx, double ny, double nz,
-                                  double vx, double vy, double vz, uint albedo, in ReliefUniforms u)
+                                  double vx, double vy, double vz,
+                                  double px, double py, double pz, uint albedo,
+                                  in HeightfieldRaymarch2D.HeightDe de, in ReliefUniforms u)
     {
+        // 4b — per-light soft shadow. IQ penumbra DE-march toward each light,
+        // gating DIRECT lighting (diffuse + spec) only; ambient is left alone.
+        // Origin pushed eps·4 along the normal so the first sample doesn't hit
+        // the surface itself. Reuses ShadingPipeline.SoftShadow so the twin is
+        // exact vs the CPU render; the HLSL SoftShadow mirrors it.
+        double sh0 = 1.0, sh1 = 1.0, sh2 = 1.0;
+        if (u.ShadowSteps > 0)
+        {
+            double eps = u.Cam.Eps0;
+            double bias = eps * 4.0;
+            double ox = px + nx * bias, oy = py + ny * bias, oz = pz + nz * bias;
+            double k = u.ShadowSoftK;
+            if ((u.ShadowLightMask & 0x1) != 0 && u.I0 > 0)
+                sh0 = ShadingPipeline.SoftShadow(in de, ox, oy, oz, u.L0x, u.L0y, u.L0z, eps, 12.0, k, u.ShadowSteps);
+            if ((u.ShadowLightMask & 0x2) != 0 && u.I1 > 0)
+                sh1 = ShadingPipeline.SoftShadow(in de, ox, oy, oz, u.L1x, u.L1y, u.L1z, eps, 12.0, k, u.ShadowSteps);
+            if ((u.ShadowLightMask & 0x4) != 0 && u.I2 > 0)
+                sh2 = ShadingPipeline.SoftShadow(in de, ox, oy, oz, u.L2x, u.L2y, u.L2z, eps, 12.0, k, u.ShadowSteps);
+        }
+
         double sR = 0, sG = 0, sB = 0;
-        Accum(u.I0, u.C0r, u.C0g, u.C0b, u.L0x, u.L0y, u.L0z, nx, ny, nz, ref sR, ref sG, ref sB);
-        Accum(u.I1, u.C1r, u.C1g, u.C1b, u.L1x, u.L1y, u.L1z, nx, ny, nz, ref sR, ref sG, ref sB);
-        Accum(u.I2, u.C2r, u.C2g, u.C2b, u.L2x, u.L2y, u.L2z, nx, ny, nz, ref sR, ref sG, ref sB);
+        Accum(u.I0 * sh0, u.C0r, u.C0g, u.C0b, u.L0x, u.L0y, u.L0z, nx, ny, nz, ref sR, ref sG, ref sB);
+        Accum(u.I1 * sh1, u.C1r, u.C1g, u.C1b, u.L1x, u.L1y, u.L1z, nx, ny, nz, ref sR, ref sG, ref sB);
+        Accum(u.I2 * sh2, u.C2r, u.C2g, u.C2b, u.L2x, u.L2y, u.L2z, nx, ny, nz, ref sR, ref sG, ref sB);
 
         double aR = (albedo >> 16) & 0xFF, aG = (albedo >> 8) & 0xFF, aB = albedo & 0xFF;
 
@@ -273,9 +302,9 @@ public static class ReliefRaymarchGpu
             double F0g = 0.04 + (aG / 255.0 - 0.04) * u.Metallic;
             double F0b = 0.04 + (aB / 255.0 - 0.04) * u.Metallic;
             double NdotV = Math.Max(0.0, nx * vx + ny * vy + nz * vz);
-            SpecAccum(u.I0, u.C0r, u.C0g, u.C0b, u.L0x, u.L0y, u.L0z, nx, ny, nz, vx, vy, vz, NdotV, a2, kg, F0r, F0g, F0b, u.SpecStrength, ref specR, ref specG, ref specB);
-            SpecAccum(u.I1, u.C1r, u.C1g, u.C1b, u.L1x, u.L1y, u.L1z, nx, ny, nz, vx, vy, vz, NdotV, a2, kg, F0r, F0g, F0b, u.SpecStrength, ref specR, ref specG, ref specB);
-            SpecAccum(u.I2, u.C2r, u.C2g, u.C2b, u.L2x, u.L2y, u.L2z, nx, ny, nz, vx, vy, vz, NdotV, a2, kg, F0r, F0g, F0b, u.SpecStrength, ref specR, ref specG, ref specB);
+            SpecAccum(u.I0 * sh0, u.C0r, u.C0g, u.C0b, u.L0x, u.L0y, u.L0z, nx, ny, nz, vx, vy, vz, NdotV, a2, kg, F0r, F0g, F0b, u.SpecStrength, ref specR, ref specG, ref specB);
+            SpecAccum(u.I1 * sh1, u.C1r, u.C1g, u.C1b, u.L1x, u.L1y, u.L1z, nx, ny, nz, vx, vy, vz, NdotV, a2, kg, F0r, F0g, F0b, u.SpecStrength, ref specR, ref specG, ref specB);
+            SpecAccum(u.I2 * sh2, u.C2r, u.C2g, u.C2b, u.L2x, u.L2y, u.L2z, nx, ny, nz, vx, vy, vz, NdotV, a2, kg, F0r, F0g, F0b, u.SpecStrength, ref specR, ref specG, ref specB);
             diffSuppress = 1.0 - u.Metallic;
         }
 

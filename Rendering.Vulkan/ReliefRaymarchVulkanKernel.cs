@@ -68,9 +68,10 @@ public sealed unsafe class ReliefRaymarchVulkanKernel : IDisposable, IReliefRaym
         public float Ambient, FloorBx, FloorBz, Pad3;
         public uint BgTop, BgBottom, FloorAlbedo, DropColor;
         public float SpecStrength, Roughness, Metallic, PadS;   // 4a
+        public int ShadowSteps; public float ShadowSoftK; public int ShadowMask; public float PadSh;   // 4b
     }
 
-    private const int ParamBytes = 272;
+    private const int ParamBytes = 288;
 
     private struct Allocated { public Buffer Buffer; public DeviceMemory Memory; public ulong Size; }
 
@@ -279,6 +280,7 @@ public sealed unsafe class ReliefRaymarchVulkanKernel : IDisposable, IReliefRaym
             Ambient = (float)u.Ambient, FloorBx = (float)c.FloorBx, FloorBz = (float)c.FloorBz, Pad3 = 0f,
             BgTop = u.BgTop, BgBottom = u.BgBottom, FloorAlbedo = u.FloorAlbedo, DropColor = u.DropColor,
             SpecStrength = (float)u.SpecStrength, Roughness = (float)u.Roughness, Metallic = (float)u.Metallic, PadS = 0f,
+            ShadowSteps = u.ShadowSteps, ShadowSoftK = (float)u.ShadowSoftK, ShadowMask = u.ShadowLightMask, PadSh = 0f,
         };
     }
 

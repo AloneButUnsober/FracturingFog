@@ -88,6 +88,11 @@ cbuffer ReliefParams : register(b0)
     float  gRoughness;    // GGX roughness [0.05,1]
     float  gMetallic;     // dielectric(0) .. metal(1)
     float  gPadS;
+
+    int    gShadowSteps;  // 4b — IQ soft shadow; 0 = off
+    float  gShadowSoftK;  // penumbra hardness
+    int    gShadowMask;   // bit n enables shadow for light n
+    float  gPadSh;
 };
 
 static const float RELIEF_PI = 3.14159265358979;
@@ -223,16 +228,49 @@ void SpecAccum(float intensity, float3 col, float3 L, float3 N, float3 V,
     spec += specBase * F * col;
 }
 
-// Flat three-light Lambert + scalar ambient, plus 4a Cook-Torrance GGX spec.
-// Diffuse: s = amb + (Sum Ii*max(0,N.Li)*Coli/255)*(1-amb)*diffSuppress.
-// Spec (gSpecStrength>0): metallic F0 = lerp(0.04, albedo, gMetallic), diffuse
-// suppressed by (1-gMetallic). gSpecStrength==0 → flat-Lambert (byte-identical).
-uint ShadeFlat(float3 N, float3 V, uint albedo)
+// 4b — IQ soft shadow. March the height DE toward the light from o; min(k*h/t)
+// over the walk is visibility, 0 on a hard occluder hit. Twin of
+// ShadingPipeline.SoftShadow.
+float SoftShadow(float3 o, float3 L, float tMin, float tMax, float k, int steps)
 {
+    float res = 1.0, t = tMin;
+    [loop]
+    for (int s = 0; s < steps; s++)
+    {
+        float3 p = o + L * t;
+        float hh = Evaluate(p.x, p.y, p.z);
+        if (hh < 1e-4) return 0.0;
+        if (k > 0.0) res = min(res, k * hh / t);
+        t += hh;
+        if (t >= tMax) break;
+    }
+    return clamp(res, 0.0, 1.0);
+}
+
+// Flat three-light Lambert + scalar ambient, plus 4a Cook-Torrance GGX spec and
+// 4b per-light soft shadow. Diffuse: s = amb + (Sum Ii*shi*max(0,N.Li)*Coli/255)
+// *(1-amb)*diffSuppress. Spec (gSpecStrength>0): metallic F0 = lerp(0.04,albedo,
+// gMetallic), diffuse suppressed by (1-gMetallic). Shadow (gShadowSteps>0) gates
+// direct light only. All knobs 0 → flat-Lambert (byte-identical).
+uint ShadeFlat(float3 N, float3 V, float3 P, uint albedo)
+{
+    float sh0 = 1.0, sh1 = 1.0, sh2 = 1.0;
+    if (gShadowSteps > 0)
+    {
+        float bias = gEps0 * 4.0;
+        float3 o = P + N * bias;
+        if ((gShadowMask & 0x1) != 0 && gI0 > 0.0)
+            sh0 = SoftShadow(o, gL0, gEps0, 12.0, gShadowSoftK, gShadowSteps);
+        if ((gShadowMask & 0x2) != 0 && gI1 > 0.0)
+            sh1 = SoftShadow(o, gL1, gEps0, 12.0, gShadowSoftK, gShadowSteps);
+        if ((gShadowMask & 0x4) != 0 && gI2 > 0.0)
+            sh2 = SoftShadow(o, gL2, gEps0, 12.0, gShadowSoftK, gShadowSteps);
+    }
+
     float3 s = float3(0, 0, 0);
-    Accum(gI0, gC0, gL0, N, s);
-    Accum(gI1, gC1, gL1, N, s);
-    Accum(gI2, gC2, gL2, N, s);
+    Accum(gI0 * sh0, gC0, gL0, N, s);
+    Accum(gI1 * sh1, gC1, gL1, N, s);
+    Accum(gI2 * sh2, gC2, gL2, N, s);
 
     float3 alb = float3((albedo >> 16) & 0xFF, (albedo >> 8) & 0xFF, albedo & 0xFF);
     float3 spec = float3(0, 0, 0);
@@ -245,9 +283,9 @@ uint ShadeFlat(float3 N, float3 V, uint albedo)
         float kg = (rough + 1.0) * (rough + 1.0) / 8.0;
         float3 F0 = 0.04 + (alb / 255.0 - 0.04) * gMetallic;
         float NdotV = max(0.0, dot(N, V));
-        SpecAccum(gI0, gC0, gL0, N, V, NdotV, a2, kg, F0, spec);
-        SpecAccum(gI1, gC1, gL1, N, V, NdotV, a2, kg, F0, spec);
-        SpecAccum(gI2, gC2, gL2, N, V, NdotV, a2, kg, F0, spec);
+        SpecAccum(gI0 * sh0, gC0, gL0, N, V, NdotV, a2, kg, F0, spec);
+        SpecAccum(gI1 * sh1, gC1, gL1, N, V, NdotV, a2, kg, F0, spec);
+        SpecAccum(gI2 * sh2, gC2, gL2, N, V, NdotV, a2, kg, F0, spec);
         diffSuppress = 1.0 - gMetallic;
     }
 
@@ -334,7 +372,7 @@ void CSRelief(uint3 tid : SV_DispatchThreadID)
 
             float uu = hp.x / gAspect + 0.5, vv = hp.z + 0.5;
             uint alb = SampleAlbedo(uu, vv);
-            outCol = ShadeFlat(N, -rd, alb);
+            outCol = ShadeFlat(N, -rd, hp, alb);
             wrote = true;
         }
     }
@@ -350,7 +388,7 @@ void CSRelief(uint3 tid : SV_DispatchThreadID)
                 float gx = o.x + rd.x * tp, gz = o.z + rd.z * tp;
                 if (abs(gx) <= gFloorBx && abs(gz) <= gFloorBz)
                 {
-                    outCol = ShadeFlat(float3(0, 1, 0), -rd, gFloorAlbedo);
+                    outCol = ShadeFlat(float3(0, 1, 0), -rd, float3(gx, 0.0, gz), gFloorAlbedo);
                     floored = true;
                 }
             }
