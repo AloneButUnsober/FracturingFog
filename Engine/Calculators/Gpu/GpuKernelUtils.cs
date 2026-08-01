@@ -363,6 +363,39 @@ internal static class GpuKernelUtils
         return Math.Exp(-sp.VolumeSelfShadow * accum);
     }
 
+    /// <summary>Vol-color slice A/B/C GPU parity (#181) — one directional
+    /// light's contribution to the volumetric in-scatter accumulators. The
+    /// caller supplies the surface soft-shadow factor <paramref name="sh"/>
+    /// (marched against the fractal DE inline in the kernel, since ILGPU can't
+    /// take a struct-generic DE); this folds in cloud self-shadow, the
+    /// Henyey-Greenstein phase (VolumeAnisotropy), and the packed light color,
+    /// returning the transmittance-weighted RGB deltas to add to the in-scatter
+    /// accumulators. Mirrors <c>ShadingPipeline.AddVolumeScatter</c> minus the
+    /// DE soft-shadow. With g == 0 the phase term is skipped, so a single-light
+    /// call is bit-identical with the pre-parity kernel loop.</summary>
+    public static (double dR, double dG, double dB) VolumeScatterLight(
+        in GpuShadingParams sp,
+        double sx, double sy, double sz,
+        double lx, double ly, double lz,
+        double vdx, double vdy, double vdz,
+        double lR, double lG, double lB,
+        double li, double sh,
+        double T, double density, double stepSize)
+    {
+        sh *= CloudSelfShadow(sx, sy, sz, lx, ly, lz, in sp);
+        double scatter = density * sh * li * stepSize;
+        double g = sp.VolumeAnisotropy;
+        if (g != 0.0)
+        {
+            g = Math.Clamp(g, -0.99, 0.99);
+            double cosT = vdx * lx + vdy * ly + vdz * lz;
+            double denom = 1.0 + g * g - 2.0 * g * cosT;
+            scatter *= (1.0 - g * g) / (denom * Math.Sqrt(denom));
+        }
+        double w = T * scatter;
+        return (w * lR, w * lG, w * lB);
+    }
+
     /// <summary>P7c.3 — reflect view ray about a surface normal. Returns the
     /// unit reflection direction (rrx, rry, rrz) for the inline reflect-march
     /// each kernel runs against its own DE.</summary>
