@@ -167,6 +167,20 @@ internal static class ReliefRaymarchProbe
         fx.FogDensity = 0.5;
         fx.FogHeightFalloff = 0.3;
         fx.VolumeSteps = 16;
+        // 4e-ii (#172) — N-bounce reflections (mirror path) + FBM cloud-noise
+        // volumetrics, matching the D3D gate. GGX VNDF stays off (hash/trig parity
+        // landmine); VolumeNoiseAmount small + speed 0 keeps the density multiplier
+        // near 1 (value noise is C1-continuous, so the floor split is benign).
+        fx.ReflectionStrength = 0.4;
+        fx.ReflectionSteps = 24;
+        fx.MaxBounces = 2;
+        fx.UseGgxSampling = false;
+        fx.VolumeNoiseAmount = 0.15;
+        fx.VolumeNoiseScale = 0.3;
+        fx.VolumeNoiseSpeed = 0.0;
+        fx.VolumeNoiseOctaves = 3;
+        fx.VolumeSelfShadow = 0.5;
+        fx.VolumeSelfShadowSteps = 4;
 
         var (hbuf, albedo, maxH) = BumpField(hw, hh, w, h);
         var u = BuildUniforms(w, h, hw, hh, hbuf, maxH, p, fx);

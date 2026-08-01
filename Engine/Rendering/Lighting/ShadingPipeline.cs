@@ -1372,7 +1372,7 @@ public static class ShadingPipeline
     /// neighbours hash to different uniforms so the per-bounce lobe spread is
     /// spatially decorrelated without averaging cost.</summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private static (double U1, double U2) HashPair(double x, double y, double z, int bounce)
+    internal static (double U1, double U2) HashPair(double x, double y, double z, int bounce)
     {
         // Scale up so sub-pixel positions decorrelate; truncate to int so we
         // get a stable seed across frames. 1024 ≈ pixel-scale at typical
@@ -1401,7 +1401,7 @@ public static class ShadingPipeline
     /// <paramref name="alpha"/> ≈ 0 the result collapses to mirror reflect.
     /// One sample per call — temporal/spatial decorrelation from
     /// <see cref="HashPair"/> spreads the lobe across the screen.</summary>
-    private static (double X, double Y, double Z) SampleGgxReflect(
+    internal static (double X, double Y, double Z) SampleGgxReflect(
         double vx, double vy, double vz,
         double nx, double ny, double nz,
         double roughness,
