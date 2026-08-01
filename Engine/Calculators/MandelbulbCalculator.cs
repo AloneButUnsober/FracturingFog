@@ -124,6 +124,9 @@ public sealed class MandelbulbCalculator : IFractalCalculator
         // the legacy fields will reflect the Lighting struct values they were
         // saved under (Phase 9 region preset captures Lighting too).
         var fx = FractalParameters.Lighting;
+        // Vol-color slice D (#180) — bake the active theme gradient for the
+        // volumetric palette remap (no-op unless VolumePaletteStrength > 0).
+        VolumePaletteBaker.Bake(ref fx, ColorMap);
 
         // P3 — concrete DE struct so Shade<MandelbulbDe> devirtualizes every
         // Evaluate call site (AO inner loop, soft shadow march, reflection

@@ -278,6 +278,29 @@ public struct LightingFxData
     /// white (0xFFFFFFFF) → ×1 → bit-identical pre-slice-C.</summary>
     public uint FogColor;
 
+    /// <summary>Vol-color slice D (#180) — palette-mapped volumetric strength
+    /// [0, 1]. 0 = off (bit-identical pre-slice-D). When &gt;0 the accumulated
+    /// in-scatter is hue-remapped toward the active 3D color theme's gradient
+    /// (sampled by optical depth 1−transmittance), preserving in-scatter
+    /// brightness, then cross-faded by this amount — so the fog picks up the
+    /// same palette as the fractal surface. Deliberately non-PBR: a stylised
+    /// deviation consistent with FF's NPR surface color themes, layered on top
+    /// of the physically-based light color (A) / phase (B) / medium color (C).
+    /// Needs <see cref="VolumePalette"/> baked from the theme; a null/empty LUT
+    /// makes this a no-op regardless of strength.</summary>
+    public double VolumePaletteStrength;
+
+    /// <summary>Vol-color slice D (#180) — runtime-only theme gradient LUT
+    /// (packed ARGB, any length ≥2) the calculator bakes once per frame from
+    /// its active <c>IColorMap</c> when <see cref="VolumePaletteStrength"/>
+    /// &gt; 0. Sampled by normalized optical depth in
+    /// <c>ShadingPipeline.VolumetricInScatter</c>. Not a user knob and not
+    /// serialized — a reference field on this value type, defaulting to null
+    /// (no palette → slice D is a no-op). GPU parity would upload this as its
+    /// own buffer; deferred (the GPU path uses cheap-palette albedo, not the
+    /// theme).</summary>
+    public uint[]? VolumePalette;
+
     // ── Material (Phase 6 PBR-lite) ───────────────────────────────────
 
     /// <summary>Surface roughness for GGX specular [0, 1]. 0 = mirror,
@@ -603,6 +626,8 @@ public struct LightingFxData
         VolumeSelfShadowSteps = 4,
         VolumeAnisotropy   = 0.0,
         FogColor           = 0xFFFFFFFFu,
+        VolumePaletteStrength = 0.0,
+        VolumePalette      = null,
 
         Roughness          = 1.0,
         Metallic           = 0.0,

@@ -77,6 +77,9 @@ public sealed class LightingFxPresetData
     public int    VolumeSelfShadowSteps { get; set; } = 4;
     public double VolumeAnisotropy   { get; set; } = 0.0;
     public uint   FogColor           { get; set; } = 0xFFFFFFFFu;
+    // Slice D palette strength persists; the baked LUT (VolumePalette) is a
+    // per-frame runtime array, rebuilt from the theme, never serialized.
+    public double VolumePaletteStrength { get; set; } = 0.0;
 
     // ── Material ──────────────────────────────────────────────────────
 
@@ -159,6 +162,7 @@ public sealed class LightingFxPresetData
         VolumeNoiseOctaves = fx.VolumeNoiseOctaves,
         VolumeSelfShadow = fx.VolumeSelfShadow, VolumeSelfShadowSteps = fx.VolumeSelfShadowSteps,
         VolumeAnisotropy = fx.VolumeAnisotropy, FogColor = fx.FogColor,
+        VolumePaletteStrength = fx.VolumePaletteStrength,
 
         Roughness = fx.Roughness, Metallic = fx.Metallic,
         SpecularStrength = fx.SpecularStrength, SubSurfaceStrength = fx.SubSurfaceStrength,
@@ -208,6 +212,7 @@ public sealed class LightingFxPresetData
         VolumeNoiseOctaves = VolumeNoiseOctaves,
         VolumeSelfShadow = VolumeSelfShadow, VolumeSelfShadowSteps = VolumeSelfShadowSteps,
         VolumeAnisotropy = VolumeAnisotropy, FogColor = FogColor,
+        VolumePaletteStrength = VolumePaletteStrength,
 
         Roughness = Roughness, Metallic = Metallic,
         SpecularStrength = SpecularStrength, SubSurfaceStrength = SubSurfaceStrength,

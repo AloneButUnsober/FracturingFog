@@ -528,6 +528,14 @@ public sealed partial class FractalParamsViewModel
             Fire();
         }
     }
+    // Vol-color slice D (#180) — palette-mapped volumetric. 0 = off (default);
+    // >0 cross-fades the in-scatter toward the active 3D theme's gradient
+    // (keyed by fog optical depth). Non-PBR / stylised.
+    public double VolumePaletteStrength
+    {
+        get => _p.Lighting.VolumePaletteStrength;
+        set { MutateLighting(r => r.Fx.VolumePaletteStrength = Clamp(value, 0, 1)); this.RaisePropertyChanged(); Fire(); }
+    }
 
     // ── Triplanar material (Phase 14b) ────────────────────────────────
     public TriplanarTextureKind TriplanarKind

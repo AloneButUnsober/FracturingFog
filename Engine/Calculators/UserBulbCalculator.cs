@@ -877,6 +877,9 @@ namespace FracturingFogDyn
         // (legacy bulb dialog) are kept below as opt-in overrides only when
         // the Lighting struct value is at its untouched default.
         var fx = FractalParameters.Lighting;
+        // Vol-color slice D (#180) — bake the active theme gradient for the
+        // volumetric palette remap (no-op unless VolumePaletteStrength > 0).
+        VolumePaletteBaker.Bake(ref fx, ColorMap);
         // Treat fx.AoSamples == 0 as "user hasn't dialled this in via the
         // Lighting block" and respect the legacy bulb AO knob; otherwise
         // the Lighting value wins. Same logic for fog.

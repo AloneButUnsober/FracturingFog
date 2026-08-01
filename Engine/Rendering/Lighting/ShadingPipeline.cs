@@ -1210,9 +1210,61 @@ public static class ShadingPipeline
         double fr = ((fx.FogColor >> 16) & 0xFF) / 255.0;
         double fg = ((fx.FogColor >>  8) & 0xFF) / 255.0;
         double fb = ( fx.FogColor        & 0xFF) / 255.0;
-        br = br * T + inR * fr;
-        bg = bg * T + inG * fg;
-        bb = bb * T + inB * fb;
+        double fInR = inR * fr, fInG = inG * fg, fInB = inB * fb;
+
+        // Vol-color slice D (#180) — palette-map the in-scatter through the
+        // active 3D color-theme gradient, keyed by optical depth (1 − T: thicker
+        // fog samples deeper into the ramp). Energy-preserving hue remap
+        // (redistribute the in-scatter's own brightness across the palette hue),
+        // then cross-fade by VolumePaletteStrength. Strength 0 or no LUT →
+        // unchanged, so the default stays bit-identical with slice C.
+        double ps = fx.VolumePaletteStrength;
+        uint[]? lut = fx.VolumePalette;
+        if (ps > 0.0 && lut != null && lut.Length >= 2)
+        {
+            double energy = fInR + fInG + fInB;
+            if (energy > 0.0)
+            {
+                var (pr, pg, pb) = SamplePalette(lut, 1.0 - T);
+                double pSum = pr + pg + pb;
+                if (pSum > 1e-6)
+                {
+                    if (ps > 1.0) ps = 1.0;
+                    double k = energy / pSum;
+                    double omp = 1.0 - ps;
+                    fInR = fInR * omp + (pr * k) * ps;
+                    fInG = fInG * omp + (pg * k) * ps;
+                    fInB = fInB * omp + (pb * k) * ps;
+                }
+            }
+        }
+
+        br = br * T + fInR;
+        bg = bg * T + fInG;
+        bb = bb * T + fInB;
+    }
+
+    /// <summary>Vol-color slice D (#180) — sample a packed-ARGB gradient LUT at
+    /// <paramref name="u"/> ∈ [0, 1] with linear interpolation between adjacent
+    /// entries. Returns the RGB channels as doubles in [0, 255]. The LUT is the
+    /// active 3D theme's ramp, baked once per frame by the calculator; this is
+    /// the read side consumed by the volumetric in-scatter palette remap.</summary>
+    private static (double r, double g, double b) SamplePalette(uint[] lut, double u)
+    {
+        if (u < 0.0) u = 0.0; else if (u > 1.0) u = 1.0;
+        int n = lut.Length;
+        double f = u * (n - 1);
+        int i0 = (int)f;
+        if (i0 >= n - 1)
+        {
+            uint cl = lut[n - 1];
+            return ((cl >> 16) & 0xFF, (cl >> 8) & 0xFF, cl & 0xFF);
+        }
+        double t = f - i0;
+        uint c0 = lut[i0], c1 = lut[i0 + 1];
+        double r0 = (c0 >> 16) & 0xFF, g0 = (c0 >> 8) & 0xFF, b0 = c0 & 0xFF;
+        double r1 = (c1 >> 16) & 0xFF, g1 = (c1 >> 8) & 0xFF, b1 = c1 & 0xFF;
+        return (r0 + (r1 - r0) * t, g0 + (g1 - g0) * t, b0 + (b1 - b0) * t);
     }
 
     /// <summary>

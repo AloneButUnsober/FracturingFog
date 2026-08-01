@@ -141,4 +141,43 @@ public class VolumetricColorTests
         Assert.True(B(amber) <= B(white),
             $"amber fog did not suppress the blue in-scatter ({B(white)} → {B(amber)})");
     }
+
+    // ── Slice D (#180): palette-mapped volumetric ─────────────────────────
+
+    // Strength > 0 but no baked LUT (VolumePalette == null, the default) must be
+    // a no-op — the guard keeps the in-scatter bit-identical with slice C, so a
+    // theme that never bakes a ramp costs nothing and changes nothing.
+    [Fact]
+    public void PaletteStrength_Without_Lut_Is_BitIdentical()
+    {
+        uint baseline = ShadeOnce(VolFx());
+
+        var fx = VolFx();
+        fx.VolumePaletteStrength = 1.0;   // strength on, but VolumePalette stays null
+        uint noLut = ShadeOnce(fx);
+
+        Assert.Equal(baseline, noLut);
+    }
+
+    // A full-strength pure-green palette redistributes the in-scatter's own
+    // energy onto the green channel (energy-preserving hue remap): green rises,
+    // red and blue fall versus the untinted white-light in-scatter.
+    [Fact]
+    public void Palette_Remaps_InScatter_Toward_The_Theme_Hue()
+    {
+        uint white = ShadeOnce(VolFx());   // white in-scatter, no palette
+
+        var green = VolFx();
+        green.VolumePaletteStrength = 1.0;
+        green.VolumePalette = new uint[] { 0xFF00FF00u, 0xFF00FF00u };  // pure-green ramp
+        uint tinted = ShadeOnce(green);
+
+        Assert.NotEqual(white, tinted);
+        Assert.True(G(tinted) >= G(white),
+            $"palette did not push in-scatter energy into green ({G(white)} → {G(tinted)})");
+        Assert.True(R(tinted) <= R(white),
+            $"green palette did not suppress the red in-scatter ({R(white)} → {R(tinted)})");
+        Assert.True(B(tinted) <= B(white),
+            $"green palette did not suppress the blue in-scatter ({B(white)} → {B(tinted)})");
+    }
 }
