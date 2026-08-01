@@ -300,6 +300,85 @@ public class Relief2DRaymarchTests
         Assert.Equal(albedo, dst);
         Assert.Equal(0.0, hitFrac);
     }
+
+    // #184 — the shared segment in-scatter walk adds single-scatter light over an
+    // explicit air segment [tStart,tEnd] and composites it over the incoming
+    // background as bg·T + inScatter. With a NullDe (no occluder) and the default
+    // key light on, a black backdrop is lifted toward the light; a zero-length
+    // segment is a strict no-op. This is the kernel behind the sky/miss god-rays.
+    [Fact]
+    public void VolumetricInScatterSegment_Adds_Light_Over_Air_Segment()
+    {
+        var fx = LightingFxData.CreateDefault();   // Light1 on, white, no shadow
+        fx.FogDensity = 0.8;
+        fx.VolumeSteps = 16;
+        var de = default(NullDe);
+
+        // Zero-length segment: strict no-op (background untouched).
+        double br = 0, bg = 0, bb = 0;
+        ShadingPipeline.VolumetricInScatterSegment<NullDe>(
+            in fx, in de, 0, 0, 0, 0, 1, 0, 1e-3, 2.0, 2.0, ref br, ref bg, ref bb);
+        Assert.Equal(0.0, br); Assert.Equal(0.0, bg); Assert.Equal(0.0, bb);
+
+        // Real segment over a black backdrop: unshadowed in-scatter lifts every
+        // channel above zero.
+        br = 0; bg = 0; bb = 0;
+        ShadingPipeline.VolumetricInScatterSegment<NullDe>(
+            in fx, in de, 0, 0, 0, 0, 1, 0, 1e-3, 0.0, 4.0, ref br, ref bg, ref bb);
+        Assert.True(br > 1.0 && bg > 1.0 && bb > 1.0,
+            $"segment added no light: ({br},{bg},{bb})");
+    }
+
+    // #184 — the headline fix: crepuscular shafts now form against the SKY. With
+    // the ground plane off and the sky backdrop off (miss → the DropColor const),
+    // ray-miss pixels that traverse the fog slab pick up shadow-carved in-scatter,
+    // so they no longer equal DropColor. Before the fix, sky pixels bypassed the
+    // fog entirely and stayed exactly DropColor — this asserts they now glow.
+    [Fact]
+    public void SkyMiss_Rays_Receive_GodRay_InScatter()
+    {
+        const uint Drop = 0xFF0A0A0Eu;   // HeightfieldRaymarch2D.DropColor
+        int w = 320, h = 240;
+        var (albedo, height) = Mandelbrot(w, h);
+
+        var p = new FractalParameters
+        {
+            Relief2DEnabled = true,
+            Relief2DRaymarch = true,
+            Relief2DHeightScale = 2.5,       // tall slab → more grazing sky rays
+            Relief2DCameraAzimuthDeg = 25,
+            Relief2DCameraElevationDeg = 28, // low camera → high silhouette
+            Relief2DCameraFovDeg = 55,
+            Relief2DGroundPlane = false,     // sky, not floor, behind the terrain
+        };
+        var fxOff = p.Lighting;
+        fxOff.ShowSkyBackdrop = false;       // miss → DropColor const
+        p.Lighting = fxOff;
+        var noFog = new uint[w * h];
+        HeightfieldRaymarch2D.Render(albedo, height, w, h, p, noFog);
+
+        var pf = p.Clone();
+        var fx = pf.Lighting;
+        fx.FogDensity = 1.5;
+        fx.VolumeSteps = 24;
+        fx.VolumeAnisotropy = 0.7;           // forward scatter → shaft punch
+        pf.Lighting = fx;
+        var fog = new uint[w * h];
+        HeightfieldRaymarch2D.Render(albedo, height, w, h, pf, fog);
+
+        int skyPixels = 0, godRaySky = 0;
+        for (int i = 0; i < w * h; i++)
+        {
+            if (noFog[i] == Drop)            // a genuine ray-miss (sky) pixel
+            {
+                skyPixels++;
+                if (fog[i] != Drop) godRaySky++;
+            }
+        }
+        Assert.True(skyPixels > w * h / 20, $"test setup has too little sky: {skyPixels}");
+        Assert.True(godRaySky > 0,
+            $"no sky pixel received god-ray in-scatter ({godRaySky} of {skyPixels})");
+    }
 }
 
 // #159 (Relief 3D Slice 3a) — the GPU relief-raymarch foundation: the extracted
@@ -785,6 +864,96 @@ public class ReliefRaymarchGpuTests
         int changed = 0;
         for (int i = 0; i < w * h; i++) if (on[i] != off[i]) changed++;
         Assert.True(changed > 100, $"IBL ambient shifted too few px ({changed})");
+    }
+
+    // #184 (Slice 2) — GPU twin parity oracle: sky/miss rays that traverse the
+    // fog slab now pick up shadow-carved in-scatter, so ray-miss pixels no longer
+    // equal the plain backdrop. Mirrors the CPU relief render's sky god-ray path;
+    // this is the oracle the D3D/Vulkan device gates diff against.
+    [Fact]
+    public void CpuMirror_SkyMiss_Receives_GodRay_InScatter()
+    {
+        int w = 320, h = 240, hw = 320, hh = 240;
+        var p = ReliefParams();                 // ground off
+        p.Relief2DCameraElevationDeg = 28;      // low camera → high silhouette
+        p.Relief2DHeightScale = 2.5;            // tall slab → grazing sky rays
+        var (hbuf, albedo, maxH) = BumpField(hw, hh, w, h);
+
+        var fxOff = LightingFxData.CreateDefault();
+        fxOff.ShowSkyBackdrop = false;          // miss → DropColor const
+        fxOff.FogDensity = 0.0;
+        var uOff = BuildUniforms(w, h, hw, hh, hbuf, maxH, p, fxOff);
+        var off = new uint[w * h];
+        ReliefRaymarchGpu.RenderCpuMirror(in uOff, hbuf, null, albedo, off, out _);
+
+        var fxOn = LightingFxData.CreateDefault();
+        fxOn.ShowSkyBackdrop = false;
+        fxOn.FogDensity = 1.5; fxOn.VolumeSteps = 24;
+        var uOn = BuildUniforms(w, h, hw, hh, hbuf, maxH, p, fxOn);
+        var on = new uint[w * h];
+        ReliefRaymarchGpu.RenderCpuMirror(in uOn, hbuf, null, albedo, on, out _);
+
+        uint drop = uOff.DropColor;
+        int skyPixels = 0, godRaySky = 0;
+        for (int i = 0; i < w * h; i++)
+            if (off[i] == drop) { skyPixels++; if (on[i] != drop) godRaySky++; }
+        Assert.True(skyPixels > w * h / 20, $"too little sky: {skyPixels}");
+        Assert.True(godRaySky > 0, $"no sky god-ray in-scatter ({godRaySky}/{skyPixels})");
+    }
+
+    // #184 Slice 3 (B) — GPU twin: Henyey-Greenstein anisotropy reshapes the
+    // in-scatter (forward-scatter concentration toward the key light), so g=0.8
+    // differs from isotropic g=0. Silhouette unmoved. This is the knob the
+    // cookbook's "single hard shaft" recipe relies on — it was ignored on GPU.
+    [Fact]
+    public void CpuMirror_Anisotropy_Reshapes_InScatter()
+    {
+        int w = 320, h = 240, hw = 320, hh = 240;
+        var p = ReliefParams();
+        var (hbuf, albedo, maxH) = BumpField(hw, hh, w, h);
+
+        var fx0 = LightingFxData.CreateDefault();
+        fx0.FogDensity = 0.9; fx0.VolumeSteps = 24; fx0.VolumeAnisotropy = 0.0;
+        var u0 = BuildUniforms(w, h, hw, hh, hbuf, maxH, p, fx0);
+        var a = new uint[w * h];
+        ReliefRaymarchGpu.RenderCpuMirror(in u0, hbuf, null, albedo, a, out double hitA);
+
+        var fx1 = LightingFxData.CreateDefault();
+        fx1.FogDensity = 0.9; fx1.VolumeSteps = 24; fx1.VolumeAnisotropy = 0.8;
+        var u1 = BuildUniforms(w, h, hw, hh, hbuf, maxH, p, fx1);
+        var b = new uint[w * h];
+        ReliefRaymarchGpu.RenderCpuMirror(in u1, hbuf, null, albedo, b, out double hitB);
+
+        Assert.Equal(hitA, hitB);
+        int changed = 0;
+        for (int i = 0; i < w * h; i++) if (a[i] != b[i]) changed++;
+        Assert.True(changed > 100, $"anisotropy reshaped too few px ({changed})");
+    }
+
+    // #184 Slice 3 (C) — GPU twin: fog color tints the accumulated in-scatter. A
+    // green medium biases the in-scatter green vs a white medium.
+    [Fact]
+    public void CpuMirror_FogColor_Tints_InScatter()
+    {
+        int w = 320, h = 240, hw = 320, hh = 240;
+        var p = ReliefParams();
+        var (hbuf, albedo, maxH) = BumpField(hw, hh, w, h);
+
+        var fxW = LightingFxData.CreateDefault();
+        fxW.FogDensity = 1.2; fxW.VolumeSteps = 24; fxW.FogColor = 0xFFFFFFFFu;
+        var uW = BuildUniforms(w, h, hw, hh, hbuf, maxH, p, fxW);
+        var wImg = new uint[w * h];
+        ReliefRaymarchGpu.RenderCpuMirror(in uW, hbuf, null, albedo, wImg, out _);
+
+        var fxG = LightingFxData.CreateDefault();
+        fxG.FogDensity = 1.2; fxG.VolumeSteps = 24; fxG.FogColor = 0xFF00FF00u;
+        var uG = BuildUniforms(w, h, hw, hh, hbuf, maxH, p, fxG);
+        var gImg = new uint[w * h];
+        ReliefRaymarchGpu.RenderCpuMirror(in uG, hbuf, null, albedo, gImg, out _);
+
+        int changed = 0;
+        for (int i = 0; i < w * h; i++) if (wImg[i] != gImg[i]) changed++;
+        Assert.True(changed > 100, $"fog color tinted too few px ({changed})");
     }
 
     // 4e — FogDensity == 0 must be byte-identical regardless of VolumeSteps /

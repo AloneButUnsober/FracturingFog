@@ -137,7 +137,12 @@ cbuffer ReliefParams : register(b0)
     float  gVolSelfShadow;    // cloud self-shadow strength; 0 = off
     int    gVolSelfShadowSteps;// cloud self-shadow march steps (clamped 16)
     float  gSceneTime;        // animation clock for the cloud drift
+    float  gVolAnisotropy;    // #184 Slice 3 (B) — HG phase anisotropy; 0 = isotropic
+
+    uint   gFogColor;         // #184 Slice 3 (C) — medium scattering albedo (packed ARGB)
     float  gPadV;
+    float  gPadV2;
+    float  gPadV3;
 };
 
 static const float RELIEF_PI = 3.14159265358979;
@@ -799,39 +804,62 @@ float ExpNegSmall(float x)
 // sky by 1-exp(-tHit*gFogDensity). gFogDensity==0 → no-op (byte-identical). FBM
 // cloud-noise + cloud self-shadow + reflections are deferred (4e-ii); density mul
 // is 1 here. o is the primary ray origin (== camera for perspective).
+// #184 — single-scatter in-scatter over an explicit air segment [tStart,tEnd]
+// from o + rd·t, compositing over the incoming (br,bg,bb) as bg·T + inScatter.
+// Twin of ReliefRaymarchGpu.InScatterWalk / ShadingPipeline.VolumetricInScatter
+// Segment (key-light subset until Slice 3). Shared by the surface-hit fog
+// ([0,tHit]) and the sky/miss god-ray walk ([t0,t1]) so shafts form against the
+// sky. Adaptive LOD keys off the far end of the segment.
+void InScatterWalk(inout float br, inout float bg, inout float bb,
+                   float3 o, float3 rd, float tStart, float tEnd)
+{
+    float span = tEnd - tStart;
+    if (span <= 0.0) return;
+    int vs = gVolumeSteps;
+    if (gVolumeStepsFalloff > 0.0 && tEnd > 4.0)
+        vs = max(4, (int)(vs / (1.0 + (tEnd - 4.0) * gVolumeStepsFalloff)));
+    float stepSize = span / vs;
+    bool shadowOn = gShadowSteps > 0 && (gShadowMask & 0x1) != 0;
+    float T = 1.0; float3 inSc = float3(0, 0, 0);
+    [loop]
+    for (int s = 0; s < vs; s++)
+    {
+        float t = tStart + (s + 0.5) * stepSize;
+        float3 sp = o + rd * t;
+        float density = gFogDensity;
+        if (gFogHeightFalloff > 0.0)
+            density *= exp(-gFogHeightFalloff * sp.y);
+        density *= VolumetricDensityMul(sp);   // 4e-ii — FBM cloud modulation
+        float sh = 1.0;
+        if (shadowOn)
+            sh = SoftShadow(sp, gL0, gEps0, 12.0, gShadowSoftK, gShadowSteps);
+        sh *= CloudSelfShadow(sp, gL0);        // 4e-ii — cloud self-shadow
+        float scatter = density * sh * gI0 * stepSize;
+        // #184 Slice 3 (B) — Henyey-Greenstein phase, normalized so g=0 → 1.
+        float g = gVolAnisotropy;
+        if (g != 0.0)
+        {
+            g = clamp(g, -0.99, 0.99);
+            float cosT = dot(rd, gL0);
+            float denom = 1.0 + g * g - 2.0 * g * cosT;
+            scatter *= (1.0 - g * g) / (denom * sqrt(denom));
+        }
+        inSc += T * scatter * gC0;
+        float aT = density * stepSize;
+        T *= aT < 1.0 ? ExpNegSmall(aT) : exp(-aT);
+    }
+    // #184 Slice 3 (C) — tint accumulated in-scatter by the medium fog color.
+    float3 fc = float3((gFogColor >> 16) & 0xFF, (gFogColor >> 8) & 0xFF, gFogColor & 0xFF) / 255.0;
+    br = br * T + inSc.r * fc.r; bg = bg * T + inSc.g * fc.g; bb = bb * T + inSc.b * fc.b;
+}
+
 uint ApplyFogVolume(uint shaded, float3 o, float3 rd, float tHit)
 {
     if (gFogDensity <= 0.0) return shaded;
     float br = (shaded >> 16) & 0xFF, bg = (shaded >> 8) & 0xFF, bb = shaded & 0xFF;
 
     if (gVolumeSteps > 0 && gI0 > 0.0)
-    {
-        int vs = gVolumeSteps;
-        if (gVolumeStepsFalloff > 0.0 && tHit > 4.0)
-            vs = max(4, (int)(vs / (1.0 + (tHit - 4.0) * gVolumeStepsFalloff)));
-        float stepSize = tHit / vs;
-        bool shadowOn = gShadowSteps > 0 && (gShadowMask & 0x1) != 0;
-        float T = 1.0; float3 inSc = float3(0, 0, 0);
-        [loop]
-        for (int s = 0; s < vs; s++)
-        {
-            float t = (s + 0.5) * stepSize;
-            float3 sp = o + rd * t;
-            float density = gFogDensity;
-            if (gFogHeightFalloff > 0.0)
-                density *= exp(-gFogHeightFalloff * sp.y);
-            density *= VolumetricDensityMul(sp);   // 4e-ii — FBM cloud modulation
-            float sh = 1.0;
-            if (shadowOn)
-                sh = SoftShadow(sp, gL0, gEps0, 12.0, gShadowSoftK, gShadowSteps);
-            sh *= CloudSelfShadow(sp, gL0);        // 4e-ii — cloud self-shadow
-            float scatter = density * sh * gI0 * stepSize;
-            inSc += T * scatter * gC0;
-            float aT = density * stepSize;
-            T *= aT < 1.0 ? ExpNegSmall(aT) : exp(-aT);
-        }
-        br = br * T + inSc.r; bg = bg * T + inSc.g; bb = bb * T + inSc.b;
-    }
+        InScatterWalk(br, bg, bb, o, rd, 0.0, tHit);
     else
     {
         float fogF = 1.0 - exp(-tHit * gFogDensity);
@@ -844,6 +872,24 @@ uint ApplyFogVolume(uint shaded, float3 o, float3 rd, float tHit)
     uint A = (shaded >> 24) & 0xFFu;
     uint Rb = (uint)clamp(br + 0.5, 0.0, 255.0);
     uint Gb = (uint)clamp(bg + 0.5, 0.0, 255.0);
+    uint Bb = (uint)clamp(bb + 0.5, 0.0, 255.0);
+    return (A << 24) | (Rb << 16) | (Gb << 8) | Bb;
+}
+
+// #184 — sky/miss god-ray composite. When the ray traversed the fog slab
+// ([t0,t1]) but hit no terrain and no ground, march the air segment and
+// composite the shadow-carved in-scatter over the backdrop so shafts form
+// against the sky. No-op for isolate cutouts / when the volumetric gate is off.
+uint ApplyFogVolumeMiss(uint bg, float3 o, float3 rd, float tStart, float tEnd)
+{
+    if (gIsolate != 0 || gFogDensity <= 0.0 || gVolumeSteps <= 0 || gI0 <= 0.0) return bg;
+    float ts = max(tStart, 0.0);
+    if (tEnd <= ts) return bg;
+    float br = (bg >> 16) & 0xFF, bgc = (bg >> 8) & 0xFF, bb = bg & 0xFF;
+    InScatterWalk(br, bgc, bb, o, rd, ts, tEnd);
+    uint A = (bg >> 24) & 0xFFu;
+    uint Rb = (uint)clamp(br + 0.5, 0.0, 255.0);
+    uint Gb = (uint)clamp(bgc + 0.5, 0.0, 255.0);
     uint Bb = (uint)clamp(bb + 0.5, 0.0, 255.0);
     return (A << 24) | (Rb << 16) | (Gb << 8) | Bb;
 }
@@ -985,6 +1031,8 @@ void CSRelief(uint3 tid : SV_DispatchThreadID)
                 ? (gHasHdri != 0 ? HdriSkyPacked(rd) : GradientSky(rd.y))
                 : gDropColor;
             if (gIsolate != 0) bg = bg & 0x00FFFFFFu;
+            // #184 — sky/miss god-ray in-scatter over the fog slab air [t0,t1].
+            else if (inside) bg = ApplyFogVolumeMiss(bg, o, rd, t0, t1);
             outCol = bg;
         }
     }

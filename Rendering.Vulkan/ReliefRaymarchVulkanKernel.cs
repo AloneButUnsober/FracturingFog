@@ -77,10 +77,11 @@ public sealed unsafe class ReliefRaymarchVulkanKernel : IDisposable, IReliefRaym
         public int HasHdri, PadH0, PadH1, PadH2;   // 4d-ii
         public float ReflStrength; public int ReflSteps, MaxBounces, UseGgx;   // 4e-ii reflections
         public float VolNoiseAmount, VolNoiseScale, VolNoiseSpeed; public int VolNoiseOctaves;   // 4e-ii FBM
-        public float VolSelfShadow; public int VolSelfShadowSteps; public float SceneTime, PadV;   // 4e-ii
+        public float VolSelfShadow; public int VolSelfShadowSteps; public float SceneTime, VolAnisotropy;   // 4e-ii + #184 Slice 3 (B)
+        public uint FogColor; public float PadV, PadV2, PadV3;   // #184 Slice 3 (C)
     }
 
-    private const int ParamBytes = 432;
+    private const int ParamBytes = 448;
 
     private struct Allocated { public Buffer Buffer; public DeviceMemory Memory; public ulong Size; }
 
@@ -325,7 +326,8 @@ public sealed unsafe class ReliefRaymarchVulkanKernel : IDisposable, IReliefRaym
             VolNoiseAmount = (float)u.VolumeNoiseAmount, VolNoiseScale = (float)u.VolumeNoiseScale,
             VolNoiseSpeed = (float)u.VolumeNoiseSpeed, VolNoiseOctaves = u.VolumeNoiseOctaves,
             VolSelfShadow = (float)u.VolumeSelfShadow, VolSelfShadowSteps = u.VolumeSelfShadowSteps,
-            SceneTime = (float)u.SceneTime, PadV = 0f,
+            SceneTime = (float)u.SceneTime, VolAnisotropy = (float)u.VolAnisotropy,
+            FogColor = u.FogColor, PadV = 0f, PadV2 = 0f, PadV3 = 0f,
         };
     }
 
