@@ -26,6 +26,11 @@
                 <TextBlock Classes="section" Text="Lighting &amp; FX" />
                 <Button Classes="action help" Content="Relief 3D…" Command="{Binding Shell.ShowRelief3DCommand}" HorizontalAlignment="Stretch"
                         ToolTip.Tip="Opens the standalone Relief 3D panel (2D heightfield → raised relief / oblique 3D raymarch, mesh export). Independent of Fractal Params — stays open when you close Params." />
+                <!-- Mirrors the Ctrl+Shift+G hotkey. On = GPU sphere-trace (default,
+                     full ShadingPipeline FX parity); off = CPU sphere-trace (the
+                     parity oracle). Only affects Relief 3D raymarch mode. -->
+                <CheckBox Content="GPU relief raymarch" IsChecked="{Binding Shell.ReliefGpuRaymarch, Mode=TwoWay}" Margin="0,4,0,0"
+                          ToolTip.Tip="GPU sphere-trace for Relief 3D (Ctrl+Shift+G). On (default) = GPU with full ShadingPipeline FX parity. Off = CPU sphere-trace (the parity oracle). Inert unless Relief 3D raymarch mode is active." />
                 <Button Classes="action help" Content="Volumetric Lighting &amp; FX…" Command="{Binding Shell.ShowLightingFxCommand}" HorizontalAlignment="Stretch" Margin="0,4,0,0"
                         ToolTip.Tip="Opens the standalone Lighting &amp; FX panel (lights, ambient occlusion, fog, tonemap, HDRI/IBL) — no longer buried inside Fractal Params. Stays open across fractal-type changes." />
             </StackPanel>
@@ -34,7 +39,7 @@
         <Border Classes="group">
             <StackPanel Spacing="4">
                 <TextBlock Classes="section" Text="Post-FX" />
-                <Grid ColumnDefinitions="Auto,*,Auto" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto" Margin="0,4,0,0">
+                <Grid ColumnDefinitions="Auto,*,Auto" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto" Margin="0,4,0,0">
                     <TextBlock Grid.Row="0" Grid.Column="0" Classes="fxLabel" Text="{Binding Menu.BrightnessLabel}" Margin="0,0,6,4" />
                     <Slider    Grid.Row="0" Grid.Column="1" Value="{Binding Menu.Brightness}" Minimum="-100" Maximum="100" TickFrequency="25" Margin="0,0,6,4" ToolTip.Tip="Brightness (-100..100)" />
                     <CheckBox  Grid.Row="0" Grid.Column="2" IsChecked="{Binding Menu.BrightnessLocked}" ToolTip.Tip="Lock brightness" Margin="0,0,0,4" />
@@ -68,6 +73,12 @@
                                HorizontalAlignment="Left" Margin="0,4,6,0"
                                ToolTip.Tip="When checked, theme selection won't overwrite the active Lighting &amp; FX block (lights, AO, fog, tonemap, etc.)." />
                     <CheckBox  Grid.Row="5" Grid.Column="2" IsChecked="{Binding Menu.LightingLocked}" ToolTip.Tip="Lock lighting — ignore theme presets" Margin="0,4,0,0" />
+
+                    <!-- Gamma — mirrored from the FloatingMenu Post-FX block. Shared
+                         VM prop via Menu, so the two slots stay in lock-step. -->
+                    <TextBlock Grid.Row="6" Grid.Column="0" Classes="fxLabel" Text="{Binding Menu.GammaLabel}" Margin="0,4,6,0" />
+                    <Slider    Grid.Row="6" Grid.Column="1" Value="{Binding Menu.Gamma}" Minimum="-100" Maximum="100" TickFrequency="25" Margin="0,4,6,0"
+                               ToolTip.Tip="Image gamma (-100 to +100, default 0). +brightens, −darkens. Compounds with a theme's baked palette gamma." />
                 </Grid>
 
                 <!-- Adaptive sweep (mirrors the main menu) -->

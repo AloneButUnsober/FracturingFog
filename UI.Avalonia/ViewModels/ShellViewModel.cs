@@ -1555,9 +1555,22 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
     /// oracle) renders instead; the title gains a <c>[RELIEF GPU OFF]</c> suffix
     /// while relief raymarch is active. Retriggers via the Main VM property.</summary>
     public void ToggleReliefGpuRaymarch()
+        => ReliefGpuRaymarch = !ReliefGpuRaymarch;
+
+    /// <summary>Shell-level proxy for <see cref="MainViewModel.ReliefGpuRaymarch"/>
+    /// so the Control Center checkbox and the Ctrl+Shift+G hotkey drive the same
+    /// path — both raise this property (keeping the checkbox in sync) and rebuild
+    /// the window title (keeping the <c>[RELIEF GPU OFF]</c> suffix current).</summary>
+    public bool ReliefGpuRaymarch
     {
-        Main.ReliefGpuRaymarch = !Main.ReliefGpuRaymarch;
-        RebuildWindowTitle();
+        get => Main.ReliefGpuRaymarch;
+        set
+        {
+            if (Main.ReliefGpuRaymarch == value) return;
+            Main.ReliefGpuRaymarch = value;
+            this.RaisePropertyChanged();
+            RebuildWindowTitle();
+        }
     }
 
     // ── Local server indicator (status bar dot) ──────────────────────────
