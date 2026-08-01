@@ -556,6 +556,30 @@ public static class HeightfieldRaymarch2D
             // transparent (alpha 0) so the kept object exports as a cutout.
             uint bg = showSky ? ShadingPipeline.SkyColorHdri(rdx, rdy, rdz, in fx) : DropColor;
             if (isolate) bg &= 0x00FFFFFFu;
+            // #184 — sky/miss god-ray in-scatter. When the ray traversed the fog
+            // slab (inside the terrain AABB) but hit no terrain and no ground,
+            // march the air segment [t0, t1] through the fog and composite the
+            // lit, shadow-carved medium over the backdrop — the only way
+            // crepuscular shafts form against the sky. Skipped for isolate
+            // cutouts (keep clean alpha) and when the volumetric gate is off
+            // (VolumeSteps/FogDensity 0 or no light) → bit-identical legacy.
+            if (!isolate && inside
+                && fx.VolumeSteps > 0 && fx.FogDensity > 0
+                && (fx.Light1.Intensity > 0 || fx.Light2.Intensity > 0 || fx.Light3.Intensity > 0))
+            {
+                double ts = Math.Max(t0, 0.0);
+                if (t1 > ts)
+                {
+                    double br = (bg >> 16) & 0xFF, bgc = (bg >> 8) & 0xFF, bb = bg & 0xFF;
+                    ShadingPipeline.VolumetricInScatterSegment<HeightDe>(
+                        in fx, in de, ox, oy, oz, rdx, rdy, rdz, eps0, ts, t1,
+                        ref br, ref bgc, ref bb);
+                    byte R = (byte)Math.Clamp(br, 0, 255);
+                    byte G = (byte)Math.Clamp(bgc, 0, 255);
+                    byte B = (byte)Math.Clamp(bb, 0, 255);
+                    bg = (bg & 0xFF000000u) | ((uint)R << 16) | ((uint)G << 8) | B;
+                }
+            }
             return (bg, false);
         }
 
