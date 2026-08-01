@@ -135,6 +135,9 @@ public sealed class MandelboxCalculator : IFractalCalculator
 
         // Phase 1c — Lighting struct is authoritative for Light1/2/3.
         var fx = FractalParameters.Lighting;
+        // Vol-color slice D (#180) — bake the active theme gradient for the
+        // volumetric palette remap (no-op unless VolumePaletteStrength > 0).
+        VolumePaletteBaker.Bake(ref fx, ColorMap);
         // P3 — concrete DE struct for inlined Evaluate in Shade<TDe>.
         var deStruct = new De(scale, fixedR2, minR2, bailout2, deIter);
 

@@ -86,14 +86,31 @@ with per-light color from A and phase from B). White → ×1 → bit-identical.
 UI: color picker in the volumetric expander; tooltip — tint of the fog medium
 itself, independent of the lights.
 
-### D — Opt 3: palette-mapped volumetric (#180) — FUTURE
+### D — Opt 3: palette-mapped volumetric (#180) — DONE
 
-**Deferred. Start only after A+B+C land.** Map accumulated volumetric density
-(or in-scatter depth) through the active 3D color-theme gradient so fog picks
-up the same palette as the fractal surface. Explicitly **not** PBR — a
+Map the in-scatter through the active 3D color-theme gradient so fog picks up
+the same palette as the fractal surface. Explicitly **not** PBR — a
 stylized/NPR deviation consistent with FF's non-PBR surface color themes.
-New knob `VolumePaletteStrength` `[0,1]`, default 0 = off. Needs the active
-`ColorSchemes3D` theme ramp exposed to `ShadingPipeline`.
+New knob `VolumePaletteStrength` `[0,1]`, default 0 = off.
+
+Implementation (CPU):
+- `LightingFxData.VolumePaletteStrength` (double, default 0) + runtime-only
+  `VolumePalette` (uint[] LUT, default null — not serialized; a reference
+  field on the value type).
+- `VolumePaletteBaker.Bake(ref fx, colorMap)` (Engine, IColorMap-aware) bakes
+  the theme's iteration sweep into a 256-entry ARGB LUT once per frame when
+  strength > 0; all 8 CPU 3D calculators call it after taking their local `fx`.
+  ShadingPipeline never sees `IColorMap` — only the baked `uint[]`, keeping the
+  shading kernel decoupled from the theme machinery.
+- `ShadingPipeline.VolumetricInScatter` samples the LUT by optical depth
+  (`1 − T`) and does an **energy-preserving hue remap** of the accumulated
+  in-scatter (redistribute its own brightness across the palette hue), then
+  cross-fades by `VolumePaletteStrength`. Strength 0 or null LUT → unchanged
+  (bit-identical with slice C).
+
+GPU parity for D is **deferred** — the GPU path shades from cheap-palette
+albedo, not the theme LUT; a real port would upload the ramp as its own buffer.
+Slice E covered only A/B/C.
 
 ### E — GPU parity (#181) — follow-up
 
