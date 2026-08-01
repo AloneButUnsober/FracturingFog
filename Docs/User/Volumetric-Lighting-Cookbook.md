@@ -51,6 +51,16 @@ true or you get flat haze instead of shafts:
 
 Everything else (clouds, color, palette) is styling on top of those three.
 
+> [!NOTE]
+> **These recipes are tuned for the 3-D fractals** (Mandelbulb, Mandelbox, Quaternion,
+> KIFS, …), whose geometry fills the frame at unit scale. On **Relief 3D** (2-D
+> heightfield terrain) the same knobs work but the numbers differ — the fog is
+> bounded to the terrain's height band and the air path is shorter, so you need
+> higher `Fog density`, and shafts show against the sky only in the band just above
+> the ridge. The default GPU relief path also uses the **key light only** for fog,
+> and **Palette map** doesn't apply to relief yet. See the relief-specific caveats
+> in the [Relief 3D Cookbook → Foggy valley with god-rays](Relief3D-Cookbook.md#6--foggy-valley-with-god-rays).
+
 ---
 
 ## Tuning workflow

@@ -187,20 +187,43 @@ Relief terrain wrapped in volumetric fog with light shafts — atmospheric depth
 | Control | Value | Where |
 |---|---|---|
 | Oblique 3D raymarch | on | Relief 3D |
-| Camera elevation | 28° | Relief 3D |
+| Camera elevation | **28°** (low) | Relief 3D |
 | Base ground plane | on | Relief 3D |
+| Show sky backdrop | **on** | Lighting & FX |
 | Auto lighting defaults | on | Relief 3D |
-| Fog density | 0.15 | Lighting & FX (Fog/Volumetric) |
-| Volume steps | 28 | Lighting & FX |
+| Fog density | **0.6** | Lighting & FX (Fog/Volumetric) |
+| Volume steps | **32** | Lighting & FX |
 | Shadow steps | 24 | Lighting & FX (Shadow) |
-| Anisotropy | 0.7 | Lighting & FX |
+| Anisotropy | **0.7** | Lighting & FX |
 | Height falloff | 1.0 | Lighting & FX |
+| Light 1 azimuth/elev | put it **behind the ridge**, low | Lighting & FX (Light) |
 
-**Why:** in raymarch mode the terrain is a full member of the 3D shading pipeline,
-so all volumetric fog and god-ray controls apply. Height falloff pools the fog in
-the valleys; the low camera + forward anisotropy give shafts raking across the
-ridges. Every recipe in the [Volumetric Lighting Cookbook](Volumetric-Lighting-Cookbook.md)
-works here.
+**Why:** the shafts form where the view ray crosses lit fog next to shadowed fog.
+Aim **Light 1** low and *behind* the terrain silhouette so the ridge chops the
+light into shafts; the low camera makes them rake across the sky above the ridge.
+Height falloff pools the denser fog in the valleys. **Anisotropy** is what
+concentrates the haze into distinct shafts — without it you get flat fog.
+
+> [!WARNING]
+> **Relief god-rays behave differently from the 3D-fractal scenes** the
+> [Volumetric Lighting Cookbook](Volumetric-Lighting-Cookbook.md) was written for.
+> Read these before copying its numbers onto a relief scene:
+> - **Shafts against the sky need a backdrop to show against.** Keep *Show sky
+>   backdrop* on (or use the dark drop). Shafts appear in the band of sky just
+>   above the terrain, where the ray still passes through the fog layer — not high
+>   overhead, where there is no fog.
+> - **The fog lives in the terrain's height band.** Fog is bounded to the terrain
+>   bounding box, so it hugs the landscape rather than filling the whole frame.
+>   Raise **Height scale** to give shafts more vertical room.
+> - **Relief needs more fog than a Mandelbulb.** The air path over terrain is
+>   short, so densities that read well on a unit-scale 3D fractal look like
+>   nothing here. Start around **Fog density 0.4–0.8** and go up.
+> - **GPU relief uses the key light only for fog** (Ctrl+Shift+G, the default).
+>   Lights 2/3 still light the surface, but only **Light 1** carves shafts and
+>   tints the haze. Turn GPU relief off (CPU) to get all three lights + full
+>   volumetric color in the fog.
+> - **Palette-mapped fog (Palette map slider) does nothing on relief yet** — it is
+>   a 3D-fractal-only feature for now. Use **Fog color** to tint relief haze.
 
 ---
 
