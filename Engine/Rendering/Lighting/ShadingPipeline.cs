@@ -1099,7 +1099,7 @@ public static class ShadingPipeline
     /// misses and the name appears to be a filesystem path ending in .hdr,
     /// tries to load it from disk (and caches the result so future frames
     /// hit the in-memory copy). Phase 6b.</summary>
-    private static bool TryResolveHdri(string? name, out HdriImage? hdri)
+    internal static bool TryResolveHdri(string? name, out HdriImage? hdri)
     {
         if (HdriRegistry.TryGet(name, out hdri) && hdri is not null) return true;
         if (!string.IsNullOrWhiteSpace(name)

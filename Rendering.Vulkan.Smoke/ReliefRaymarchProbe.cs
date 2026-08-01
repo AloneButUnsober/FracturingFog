@@ -50,6 +50,32 @@ internal static class ReliefRaymarchProbe
         return (hbuf, albedo, maxH);
     }
 
+    // 4d-ii (#171) — small procedural equirect HDRI so the gate exercises the HDRI
+    // ambient + HDRI sky branches (matches the D3D gate). Azimuthal variation in
+    // R/B, polar gradient in G; values in [0.05,0.95]. The twin and both kernels
+    // sample the SAME flattened buffer, so it is the oracle.
+    private static void RegisterProcHdri(string name)
+    {
+        const int w = 64, hgt = 32;
+        var data = new float[w * hgt * 3];
+        for (int y = 0; y < hgt; y++)
+        {
+            double v = (y + 0.5) / hgt;
+            for (int x = 0; x < w; x++)
+            {
+                double uu = (x + 0.5) / w;
+                double r = 0.5 + 0.4 * Math.Sin(2.0 * Math.PI * uu);
+                double g = 0.9 - 0.6 * v;
+                double b = 0.5 + 0.35 * Math.Cos(2.0 * Math.PI * uu);
+                int i = (y * w + x) * 3;
+                data[i]     = (float)Math.Clamp(r, 0.05, 0.95);
+                data[i + 1] = (float)Math.Clamp(g, 0.05, 0.95);
+                data[i + 2] = (float)Math.Clamp(b, 0.05, 0.95);
+            }
+        }
+        HdriRegistry.Register(name, new HdriImage(w, hgt, data));
+    }
+
     private static ReliefUniforms BuildUniforms(int w, int h, int hw, int hh,
         float[] hbuf, float maxH, FractalParameters p, LightingFxData fx)
     {
@@ -127,6 +153,14 @@ internal static class ReliefRaymarchProbe
         fx.TriplanarStrength = 0.5;
         fx.TriplanarScale = 4.0;
         fx.TriplanarTint = 0xFFFFFFFFu;
+        // 4d-ii (#171) — HDRI equirect env: ambient at the surface normal (mip 0) +
+        // ray-miss HDRI sky, routed through the t4 SRV (DXC→SPIR-V). Matches the D3D
+        // gate; the twin samples the same flattened buffer, so GPU==twin proves it.
+        const string hdriName = "relief-vk-gate-proc";
+        RegisterProcHdri(hdriName);
+        fx.SkyMode = SkyMode.Hdri;
+        fx.EnvironmentName = hdriName;
+        fx.ShowSkyBackdrop = true;
         // 4e (#169) — single-scatter volumetric in-scatter (key light) + ground-
         // hugging fog, matching the D3D gate. VolumeStepsFalloff stays 0 so twin
         // and DXC-SPIR-V march the same fixed step count.

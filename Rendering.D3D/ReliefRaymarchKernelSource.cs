@@ -118,6 +118,11 @@ cbuffer ReliefParams : register(b0)
     int    gMipW;             // coarse max-height grid width
     int    gMipH;             // coarse max-height grid height
     int    gMipBlk;           // base cells per coarse cell
+
+    int    gHasHdri;          // 4d-ii — HDRI equirect env bound at t4; 0 = gradient/solid
+    int    gPadH0;
+    int    gPadH1;
+    int    gPadH2;
 };
 
 static const float RELIEF_PI = 3.14159265358979;
@@ -126,6 +131,7 @@ StructuredBuffer<float> gHeight : register(t0);   // one float per field cell
 StructuredBuffer<uint>  gAlbedo : register(t1);   // packed ARGB per output pixel
 StructuredBuffer<uint>  gKeep   : register(t2);   // 0 = culled (bound iff gHasKeep)
 StructuredBuffer<float> gMip    : register(t3);   // 4f coarse max-height grid (bound iff gEmptySkip)
+StructuredBuffer<uint>  gHdri   : register(t4);   // 4d-ii flattened HDRI env (bound iff gHasHdri)
 
 RWStructuredBuffer<uint> gColor : register(u0);   // packed ARGB output
 
@@ -343,6 +349,70 @@ float SoftShadow(float3 o, float3 L, float tMin, float tMax, float k, int steps)
 // diffuse+ambient term (not spec). 4d IBL (gIblStrength>0) blends env into the
 // per-channel ambient (triplanar is applied to the albedo at the call site). All
 // knobs 0 → flat-Lambert (byte-identical).
+// 4d-ii — flattened-HDRI sampler. Twin of ReliefHdriBuffer.Sample / SampleUvMip:
+// equirect projection, bilinear (u wraps, v clamps), roughness -> mip via
+// roughness^2 * (levels-1). gHdri is a uint SSBO: the header (levels, per-mip
+// offset/width/height) is read directly (integer loads are never denormal-
+// flushed); the RGB pixels are float bit-patterns recovered with asfloat. Returns
+// linear RGB (unclamped). See ReliefHdriBuffer.cs for the layout + the rationale.
+uint HdriLevels() { return gHdri[0]; }
+float3 HdriTexel(uint i) { return float3(asfloat(gHdri[i]), asfloat(gHdri[i + 1]), asfloat(gHdri[i + 2])); }
+
+float3 HdriSampleMip(float uu, float vv, uint mip)
+{
+    uint levels = HdriLevels();
+    if (mip >= levels) mip = levels - 1;
+    uint off = gHdri[1 + 3 * mip + 0];
+    uint mw  = gHdri[1 + 3 * mip + 1];
+    uint mh  = gHdri[1 + 3 * mip + 2];
+
+    uu -= floor(uu);
+    vv = clamp(vv, 0.0, 1.0);
+    float fx = uu * (float)(mw - 1);
+    float fy = vv * (float)(mh - 1);
+    int x0 = (int)floor(fx);
+    int y0 = (int)floor(fy);
+    int x1 = x0 + 1; if ((uint)x1 >= mw) x1 = 0;
+    int y1 = min(y0 + 1, (int)mh - 1);
+    float tx = fx - x0;
+    float ty = fy - y0;
+    uint i00 = off + (uint)((y0 * (int)mw + x0) * 3);
+    uint i10 = off + (uint)((y0 * (int)mw + x1) * 3);
+    uint i01 = off + (uint)((y1 * (int)mw + x0) * 3);
+    uint i11 = off + (uint)((y1 * (int)mw + x1) * 3);
+    float w00 = (1.0 - tx) * (1.0 - ty), w10 = tx * (1.0 - ty);
+    float w01 = (1.0 - tx) * ty,         w11 = tx * ty;
+    return HdriTexel(i00) * w00 + HdriTexel(i10) * w10 + HdriTexel(i01) * w01 + HdriTexel(i11) * w11;
+}
+
+float3 SampleHdri(float3 dir, float roughness)
+{
+    // atan2(0,0) is UNDEFINED in HLSL (→ NaN → NaN uv → out-of-bounds SSBO read →
+    // black), but CPU Math.Atan2(0,0) == 0. A flat-apex normal (grad exactly 0)
+    // gives dir.xz == (0,0) on both sides, so guard it to match the twin exactly.
+    float az = (dir.x == 0.0 && dir.z == 0.0) ? 0.0 : atan2(dir.z, dir.x);
+    float uu = 0.5 + az * (1.0 / (2.0 * RELIEF_PI));
+    float vv = acos(clamp(dir.y, -1.0, 1.0)) * (1.0 / RELIEF_PI);
+    uint levels = HdriLevels();
+    if (roughness <= 0.0 || levels <= 1) return HdriSampleMip(uu, vv, 0);
+    if (roughness > 1.0) roughness = 1.0;
+    float level = roughness * roughness * (float)(levels - 1);
+    uint lvl = (uint)floor(level);
+    if (lvl >= levels - 1) lvl = levels - 1;
+    return HdriSampleMip(uu, vv, lvl);
+}
+
+// HDRI sky along the view ray (mip 0). Twin of the no-roughness SkyColorHdri:
+// linear RGB clamped to bytes (truncating cast, matching (byte)Math.Clamp).
+uint HdriSkyPacked(float3 rd)
+{
+    float3 c = SampleHdri(rd, 0.0);
+    uint R = (uint)clamp(c.r * 255.0, 0.0, 255.0);
+    uint G = (uint)clamp(c.g * 255.0, 0.0, 255.0);
+    uint B = (uint)clamp(c.b * 255.0, 0.0, 255.0);
+    return 0xFF000000u | (R << 16) | (G << 8) | B;
+}
+
 uint ShadeFlat(float3 N, float3 V, float3 P, uint albedo)
 {
     float sh0 = 1.0, sh1 = 1.0, sh2 = 1.0;
@@ -406,9 +476,11 @@ uint ShadeFlat(float3 N, float3 V, float3 P, uint albedo)
     if (gIblStrength > 0.0)
     {
         float3 env;
-        if (gSkyMode == 1) // Solid
+        if (gHasHdri != 0) // 4d-ii — HDRI env sampled at the normal (mip 0)
+            env = SampleHdri(N, 0.0);
+        else if (gSkyMode == 1) // Solid
             env = float3((gBgTop >> 16) & 0xFF, (gBgTop >> 8) & 0xFF, gBgTop & 0xFF) / 255.0;
-        else               // Gradient / Hdri-fallback
+        else               // Gradient
         {
             float t = clamp(0.5 * (N.y + 1.0), 0.0, 1.0);
             float3 bb = float3((gBgBottom >> 16) & 0xFF, (gBgBottom >> 8) & 0xFF, gBgBottom & 0xFF);
@@ -627,7 +699,9 @@ void CSRelief(uint3 tid : SV_DispatchThreadID)
         }
         if (!floored)
         {
-            uint bg = gShowSky != 0 ? GradientSky(rd.y) : gDropColor;
+            uint bg = gShowSky != 0
+                ? (gHasHdri != 0 ? HdriSkyPacked(rd) : GradientSky(rd.y))
+                : gDropColor;
             if (gIsolate != 0) bg = bg & 0x00FFFFFFu;
             outCol = bg;
         }

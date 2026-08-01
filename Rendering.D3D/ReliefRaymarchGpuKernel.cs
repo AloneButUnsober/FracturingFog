@@ -60,9 +60,10 @@ public sealed class ReliefRaymarchGpuKernel : IDisposable, FracturingFog.Renderi
         public int TriplanarKind; public uint TriplanarTint; public float PadT0, PadT1;   // 4d
         public float FogDensity, FogHeightFalloff; public int VolumeSteps; public float VolumeStepsFalloff;   // 4e
         public int EmptySkip, MipW, MipH, MipBlk;   // 4f
+        public int HasHdri, PadH0, PadH1, PadH2;   // 4d-ii
     }
 
-    private const int ParamBytes = 368;
+    private const int ParamBytes = 384;
 
     private readonly ID3D11Device _device;
     private readonly ID3D11DeviceContext _ctx;
@@ -78,6 +79,10 @@ public sealed class ReliefRaymarchGpuKernel : IDisposable, FracturingFog.Renderi
     private ID3D11Buffer? _mipBuf;                // t3 — 4f coarse max-height grid
     private ID3D11ShaderResourceView? _mipSrv;
     private int _mipCells;
+
+    private ID3D11Buffer? _hdriBuf;               // t4 — 4d-ii flattened HDRI env
+    private ID3D11ShaderResourceView? _hdriSrv;
+    private int _hdriFloats;
 
     private ID3D11Buffer? _albedoBuf;             // t1 — output-sized (n)
     private ID3D11ShaderResourceView? _albedoSrv;
@@ -169,6 +174,29 @@ public sealed class ReliefRaymarchGpuKernel : IDisposable, FracturingFog.Renderi
         _mipCells = cells;
     }
 
+    // 4d-ii — (re)allocate the flattened-HDRI SRV (t4) to hold `count` uints.
+    private void EnsureHdriBuffer(int count)
+    {
+        if (_hdriBuf != null && _hdriFloats == count) return;
+        _hdriSrv?.Dispose(); _hdriBuf?.Dispose();
+        _hdriBuf = _device.CreateBuffer(new BufferDescription
+        {
+            ByteWidth = (uint)(count * sizeof(uint)),
+            BindFlags = BindFlags.ShaderResource,
+            Usage = ResourceUsage.Dynamic,
+            CPUAccessFlags = CpuAccessFlags.Write,
+            MiscFlags = ResourceOptionFlags.BufferStructured,
+            StructureByteStride = sizeof(uint),
+        });
+        _hdriSrv = _device.CreateShaderResourceView(_hdriBuf, new ShaderResourceViewDescription
+        {
+            Format = Vortice.DXGI.Format.Unknown,
+            ViewDimension = Vortice.Direct3D.ShaderResourceViewDimension.Buffer,
+            Buffer = new BufferShaderResourceView { FirstElement = 0, NumElements = (uint)count },
+        });
+        _hdriFloats = count;
+    }
+
     private void EnsureOutputBuffers(int n)
     {
         if (_albedoBuf != null && _outPixels == n) return;
@@ -248,6 +276,13 @@ public sealed class ReliefRaymarchGpuKernel : IDisposable, FracturingFog.Renderi
                 UploadFloats(_mipBuf!, mip, mip.Length);
             }
 
+            // 4d-ii — upload the flattened HDRI env when SkyMode == Hdri resolved.
+            if (u.HdriBuf != null)
+            {
+                EnsureHdriBuffer(u.HdriBuf.Length);
+                UploadColors(_hdriBuf!, u.HdriBuf, u.HdriBuf.Length);
+            }
+
             var p = BuildBlob(in u, keep != null);
             var mapped = _ctx.Map(_paramsBuf, 0, Vortice.Direct3D11.MapMode.WriteDiscard, MapFlags.None);
             unsafe { *(ReliefParamsBlob*)mapped.DataPointer = p; }
@@ -259,6 +294,7 @@ public sealed class ReliefRaymarchGpuKernel : IDisposable, FracturingFog.Renderi
             _ctx.CSSetShaderResource(1, _albedoSrv);
             _ctx.CSSetShaderResource(2, _keepSrv);
             _ctx.CSSetShaderResource(3, u.EmptySkip != 0 ? _mipSrv : null);
+            _ctx.CSSetShaderResource(4, u.HdriBuf != null ? _hdriSrv : null);
             _ctx.CSSetUnorderedAccessView(0, _colorUav);
 
             _ctx.Dispatch((uint)((w + 7) / 8), (uint)((h + 7) / 8), 1);
@@ -268,6 +304,7 @@ public sealed class ReliefRaymarchGpuKernel : IDisposable, FracturingFog.Renderi
             _ctx.CSSetShaderResource(1, null);
             _ctx.CSSetShaderResource(2, null);
             _ctx.CSSetShaderResource(3, null);
+            _ctx.CSSetShaderResource(4, null);
 
             _ctx.CopyResource(_colorStaging!, _colorBuf!);
             long tDispatch = System.Diagnostics.Stopwatch.GetTimestamp();
@@ -323,6 +360,7 @@ public sealed class ReliefRaymarchGpuKernel : IDisposable, FracturingFog.Renderi
             FogDensity = (float)u.FogDensity, FogHeightFalloff = (float)u.FogHeightFalloff,
             VolumeSteps = u.VolumeSteps, VolumeStepsFalloff = (float)u.VolumeStepsFalloff,
             EmptySkip = u.EmptySkip, MipW = u.MipW, MipH = u.MipH, MipBlk = u.MipBlk,
+            HasHdri = u.HdriBuf != null ? 1 : 0,
         };
     }
 
@@ -369,11 +407,13 @@ public sealed class ReliefRaymarchGpuKernel : IDisposable, FracturingFog.Renderi
         try { _heightSrv?.Dispose(); } catch { }
         try { _keepSrv?.Dispose(); } catch { }
         try { _mipSrv?.Dispose(); } catch { }
+        try { _hdriSrv?.Dispose(); } catch { }
         try { _albedoSrv?.Dispose(); } catch { }
         try { _colorUav?.Dispose(); } catch { }
         try { _heightBuf?.Dispose(); } catch { }
         try { _keepBuf?.Dispose(); } catch { }
         try { _mipBuf?.Dispose(); } catch { }
+        try { _hdriBuf?.Dispose(); } catch { }
         try { _albedoBuf?.Dispose(); } catch { }
         try { _colorBuf?.Dispose(); } catch { }
         try { _colorStaging?.Dispose(); } catch { }

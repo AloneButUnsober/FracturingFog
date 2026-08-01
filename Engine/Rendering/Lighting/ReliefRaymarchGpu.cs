@@ -90,6 +90,12 @@ public readonly struct ReliefUniforms
     // twin and both kernels build from hbuf via ReliefHeightMip.
     public readonly int EmptySkip, MipW, MipH, MipBlk;
 
+    // 4d-ii — flattened HDRI equirect environment (ReliefHdriBuffer.Flatten of the
+    // resolved HdriImage) uploaded as the t4 SRV. Null when SkyMode != Hdri or the
+    // environment name doesn't resolve → the twin/kernels fall back to the #168
+    // gradient/solid env (byte-identical). HasHdri (in the blob) gates the read.
+    public readonly uint[]? HdriBuf;
+
     public readonly bool ShowSky, Isolate;
     public readonly uint BgTop, BgBottom, FloorAlbedo, DropColor;
 
@@ -106,7 +112,8 @@ public readonly struct ReliefUniforms
         double iblStrength, int skyMode,
         int triplanarKind, double triplanarStrength, double triplanarScale, uint triplanarTint,
         double fogDensity, double fogHeightFalloff, int volumeSteps, double volumeStepsFalloff,
-        int emptySkip, int mipW, int mipH, int mipBlk)
+        int emptySkip, int mipW, int mipH, int mipBlk,
+        uint[]? hdriBuf)
     {
         W = w; H = h; Hw = hw; Hh = hh; Sy = sy; Aspect = aspect;
         InvLip = invLip; Bicubic = bicubic; Cam = cam;
@@ -124,6 +131,7 @@ public readonly struct ReliefUniforms
         FogDensity = fogDensity; FogHeightFalloff = fogHeightFalloff;
         VolumeSteps = volumeSteps; VolumeStepsFalloff = volumeStepsFalloff;
         EmptySkip = emptySkip; MipW = mipW; MipH = mipH; MipBlk = mipBlk;
+        HdriBuf = hdriBuf;
     }
 
     /// <summary>World-space direction of a directional light, matching
@@ -149,6 +157,15 @@ public readonly struct ReliefUniforms
         FractalParameters p, in LightingFxData fx)
     {
         var cam = HeightfieldRaymarch2D.BuildObliqueCamera(w, h, aspect, sy, maxH, p);
+
+        // 4d-ii — resolve + flatten the HDRI env once when SkyMode == Hdri. Both
+        // kernels upload this exact buffer (no per-device rebuild), so the twin
+        // stays the oracle. Unresolved name → null → gradient/solid fallback.
+        uint[]? hdriBuf = null;
+        if (fx.SkyMode == global::FracturingFog.Rendering.Lighting.SkyMode.Hdri
+            && ShadingPipeline.TryResolveHdri(fx.EnvironmentName, out var hdri) && hdri is not null)
+            hdriBuf = ReliefHdriBuffer.Flatten(hdri);
+
         var d0 = LightDir(fx.Light1.Theta, fx.Light1.Phi);
         var d1 = LightDir(fx.Light2.Theta, fx.Light2.Phi);
         var d2 = LightDir(fx.Light3.Theta, fx.Light3.Phi);
@@ -166,7 +183,8 @@ public readonly struct ReliefUniforms
             fx.FogDensity, fx.FogHeightFalloff, fx.VolumeSteps, fx.VolumeStepsFalloff,
             p.Relief2DEmptySkip ? 1 : 0,
             ReliefHeightMip.GridDim(hw, ReliefHeightMip.Blk),
-            ReliefHeightMip.GridDim(hh, ReliefHeightMip.Blk), ReliefHeightMip.Blk);
+            ReliefHeightMip.GridDim(hh, ReliefHeightMip.Blk), ReliefHeightMip.Blk,
+            hdriBuf);
     }
 }
 
@@ -330,7 +348,9 @@ public static class ReliefRaymarchGpu
                 }
             }
         }
-        uint bg = u.ShowSky ? GradientSky(rdy, in u) : u.DropColor;
+        uint bg = u.ShowSky
+            ? (u.HdriBuf is not null ? HdriSky(rdx, rdy, rdz, in u) : GradientSky(rdy, in u))
+            : u.DropColor;
         if (u.Isolate) bg &= 0x00FFFFFFu;
         return (bg, false);
     }
@@ -416,13 +436,17 @@ public static class ReliefRaymarchGpu
         if (u.IblStrength > 0)
         {
             double eR, eG, eB;
-            if (u.SkyMode == 1) // Solid
+            if (u.HdriBuf is not null) // 4d-ii — HDRI env, sampled at the normal (mip 0,
+            {                          // twin of the no-roughness SampleEnvAmbientHdri).
+                (eR, eG, eB) = ReliefHdriBuffer.Sample(u.HdriBuf, nx, ny, nz, 0.0);
+            }
+            else if (u.SkyMode == 1) // Solid
             {
                 eR = ((u.BgTop >> 16) & 0xFF) / 255.0;
                 eG = ((u.BgTop >> 8) & 0xFF) / 255.0;
                 eB = (u.BgTop & 0xFF) / 255.0;
             }
-            else                // Gradient / Hdri-fallback
+            else                // Gradient
             {
                 double t = Math.Clamp(0.5 * (ny + 1.0), 0, 1);
                 eR = ((1 - t) * ((u.BgBottom >> 16) & 0xFF) + t * ((u.BgTop >> 16) & 0xFF)) / 255.0;
@@ -636,6 +660,18 @@ public static class ReliefRaymarchGpu
         uint R = (uint)((((a >> 16) & 0xFF) * (1 - t) + ((b >> 16) & 0xFF) * t) + 0.5);
         uint G = (uint)((((a >> 8) & 0xFF) * (1 - t) + ((b >> 8) & 0xFF) * t) + 0.5);
         uint B = (uint)(((a & 0xFF) * (1 - t) + (b & 0xFF) * t) + 0.5);
+        return 0xFF000000u | (R << 16) | (G << 8) | B;
+    }
+
+    /// <summary>4d-ii — HDRI equirect sky along the view ray (mip 0, no roughness).
+    /// Twin of the no-roughness <c>ShadingPipeline.SkyColorHdri</c>: linear RGB from
+    /// the packed HDRI, clamped to bytes. Only called when <c>u.HdriBuf</c> resolves.</summary>
+    private static uint HdriSky(double rdx, double rdy, double rdz, in ReliefUniforms u)
+    {
+        var (r, g, b) = ReliefHdriBuffer.Sample(u.HdriBuf!, rdx, rdy, rdz, 0.0);
+        uint R = (uint)Math.Clamp(r * 255.0, 0, 255);
+        uint G = (uint)Math.Clamp(g * 255.0, 0, 255);
+        uint B = (uint)Math.Clamp(b * 255.0, 0, 255);
         return 0xFF000000u | (R << 16) | (G << 8) | B;
     }
 
