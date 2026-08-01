@@ -494,6 +494,13 @@ public sealed partial class FractalParamsViewModel
         get => _p.Lighting.VolumeSelfShadowSteps;
         set { MutateLighting(r => r.Fx.VolumeSelfShadowSteps = (int)Clamp(value, 0, 16)); this.RaisePropertyChanged(); Fire(); }
     }
+    // Vol-color slice B (#178) — Henyey-Greenstein phase anisotropy. 0 =
+    // isotropic (default); >0 forward god-rays, <0 back-scatter halo.
+    public double VolumeAnisotropy
+    {
+        get => _p.Lighting.VolumeAnisotropy;
+        set { MutateLighting(r => r.Fx.VolumeAnisotropy = Clamp(value, -1, 1)); this.RaisePropertyChanged(); Fire(); }
+    }
 
     // ── Triplanar material (Phase 14b) ────────────────────────────────
     public TriplanarTextureKind TriplanarKind

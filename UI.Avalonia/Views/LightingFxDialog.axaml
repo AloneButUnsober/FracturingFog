@@ -226,7 +226,7 @@
 
                 <!-- Fog / Volumetric -->
                 <Expander Header="Fog / Volumetric" HorizontalAlignment="Stretch">
-                    <Grid ColumnDefinitions="160,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto">
+                    <Grid ColumnDefinitions="160,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto">
                         <TextBlock Grid.Row="0" Grid.Column="0" Text="Fog density:" VerticalAlignment="Center"
                                    ToolTip.Tip="Beer–Lambert exponential. 0 = no fog. Scales by ray distance." />
                         <NumericUpDown Grid.Row="0" Grid.Column="1"
@@ -306,6 +306,15 @@
                                     Value="{Binding VolumeSelfShadowSteps, Mode=TwoWay}" />
                             <TextBlock Classes="knobValue" Grid.Column="1"
                                        Text="{Binding VolumeSelfShadowSteps}" />
+                        </Grid>
+
+                        <TextBlock Grid.Row="9" Grid.Column="0" Text="Anisotropy:" VerticalAlignment="Center"
+                                   ToolTip.Tip="Henyey-Greenstein phase [-1..1]. 0 = isotropic (even glow). &gt;0 = forward god-ray halo toward the light; &lt;0 = back-scatter halo away from it." />
+                        <Grid Grid.Row="9" Grid.Column="1" ColumnDefinitions="*,Auto" Margin="0,2">
+                            <Slider Classes="knob" Grid.Column="0" Minimum="-1" Maximum="1"
+                                    Value="{Binding VolumeAnisotropy, Mode=TwoWay}" />
+                            <TextBlock Classes="knobValue" Grid.Column="1"
+                                       Text="{Binding VolumeAnisotropy, StringFormat='F2'}" />
                         </Grid>
                     </Grid>
                 </Expander>

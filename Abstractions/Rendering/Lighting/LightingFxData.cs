@@ -261,6 +261,16 @@ public struct LightingFxData
     /// per volume step when self-shadow is on. Phase 22b.</summary>
     public int VolumeSelfShadowSteps;
 
+    /// <summary>Vol-color slice B (#178) — Henyey-Greenstein phase anisotropy
+    /// for the volumetric in-scatter, [-1, 1]. 0 = isotropic (bit-identical
+    /// pre-slice-B). &gt;0 forward-scatters — a bright god-ray halo when the
+    /// view ray points toward the light; &lt;0 back-scatters (halo away from
+    /// the light). The phase is normalized so g=0 evaluates to exactly 1 (the
+    /// 1/4π isotropic factor is folded into FogDensity / light intensity), and
+    /// clamped internally to ±0.99 to avoid the forward-scatter singularity.
+    /// Applied per light per volume step against dot(viewDir, lightDir).</summary>
+    public double VolumeAnisotropy;
+
     // ── Material (Phase 6 PBR-lite) ───────────────────────────────────
 
     /// <summary>Surface roughness for GGX specular [0, 1]. 0 = mirror,
@@ -584,6 +594,7 @@ public struct LightingFxData
         VolumeNoiseOctaves = 3,
         VolumeSelfShadow   = 0.0,
         VolumeSelfShadowSteps = 4,
+        VolumeAnisotropy   = 0.0,
 
         Roughness          = 1.0,
         Metallic           = 0.0,
