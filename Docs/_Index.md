@@ -32,6 +32,7 @@ Highlights (full menu on the index page):
 | [ColorGen DSL Guide](User/ColorGen-UserGuide.md)                                     | One-line palettes in a tiny domain language.                         |
 | [CalcGen / User Equation Guide](User/CalcGen-UserGuide.md)                           | Author your own fractal formula in C# or DSL pseudo-code.            |
 | [User Bulb 3D Guide](User/UserBulb-Guide.md)                                         | Mandelbulb-style 3-D fractals with raymarched DEs.                   |
+| [Relief 3D Guide](User/Relief3D-Guide.md) + [Cookbook](User/Relief3D-Cookbook.md)    | 2-D fractals as lit relief / oblique 3-D terrain + mesh export.      |
 | [Client / Server Guide](User/ClientServer-UserGuide.md)                              | Drive a heavy render from a thin client over mTLS.                   |
 | [Server Admin Guide](User/ServerAdmin-Guide.md)                                      | Configure the local render server.                                   |
 | [Cross-Platform User Guide](User/CrossPlatform-UserGuide.md)                         | Per-OS install + capability matrix (Windows / Linux / macOS).        |
