@@ -158,10 +158,13 @@ pipeline. Everything in the **Lighting & FX** dialog applies:
 - Soft shadows, DE-cone + screen-space AO, PBR (roughness/metallic/specular),
   sub-surface, IBL / HDRI environment, one-bounce reflections, tone-map / bloom.
 - **Volumetric fog and god-rays** — set **Fog density** + **Volume steps** in
-  Lighting & FX and the terrain gets real light shafts and atmosphere. See the
+  Lighting & FX and the terrain gets real light shafts and atmosphere, including
+  shafts against the sky just above the ridge. See the
   [Volumetric Lighting Guide](Volumetric-Lighting-Guide.md) and
-  [Cookbook](Volumetric-Lighting-Cookbook.md) — every fog recipe works on relief
-  terrain.
+  [Cookbook](Volumetric-Lighting-Cookbook.md), but note relief needs
+  **higher fog density** than a unit-scale 3D fractal and the fog is bounded to
+  the terrain's height band — the relief-specific caveats are in the
+  [Relief 3D Cookbook → god-rays recipe](Relief3D-Cookbook.md#6--foggy-valley-with-god-rays).
 
 **Auto lighting defaults** (§4) is the quick way to a good-looking 3D view: it
 seeds AO/shadow/spec only where you haven't set them.
@@ -170,8 +173,8 @@ seeds AO/shadow/spec only where you haven't set them.
 
 ## 7. GPU vs CPU relief
 
-The oblique raymarch runs on the **GPU by default**, with full shading-pipeline
-parity (shadows, AO, PBR, IBL, reflections, volumetric fog).
+The oblique raymarch runs on the **GPU by default**, with shading-pipeline
+parity for the surface (shadows, AO, PBR, IBL, reflections) and volumetric fog.
 
 - **Toggle:** `Ctrl+Shift+G`, or **Control Center → Color & Light → "GPU relief
   raymarch."**
@@ -180,8 +183,16 @@ parity (shadows, AO, PBR, IBL, reflections, volumetric fog).
   so you always know which path rendered.
 - The toggle is inert unless oblique raymarch mode is active.
 
-Use the CPU path when you want the reference image or are debugging a GPU
-artifact; otherwise leave GPU on for speed.
+> [!NOTE]
+> **The two paths differ in the fog only.** The GPU path scatters fog from the
+> **key light (Light 1) only** — Lights 2/3 still light the surface, but only
+> Light 1 carves god-ray shafts and tints the haze (via **Anisotropy** and **Fog
+> color**). The CPU path scatters all three lights and supports the palette-mapped
+> fog (**Palette map**). For a single hero shaft the GPU path is exactly what you
+> want; for multi-light colored haze or palette fog, turn GPU relief off.
+
+Use the CPU path when you want the reference image, multi-light/palette fog, or
+are debugging a GPU artifact; otherwise leave GPU on for speed.
 
 ---
 
