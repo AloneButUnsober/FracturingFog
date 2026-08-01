@@ -1521,6 +1521,12 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
         if (Main.RenderHost.MandelbrotDisableSeriesApproximation) sb.Append("  [SA OFF]");
         if (Main.RenderHost.MandelbrotDisableDdBla) sb.Append("  [DD-BLA OFF]");
         if (!Main.RenderHost.MandelbrotAllowPtRebasing) sb.Append("  [REBASE OFF]");
+        // GPU relief raymarch is default ON (Slice 4 parity). Flag the degraded
+        // state — CPU sphere-trace forced — only while relief raymarch is active,
+        // so plain 2D sessions never carry the suffix.
+        var rp = Main.RenderHost.ViewState.FractalParameters;
+        if (rp.Relief2DEnabled && rp.Relief2DRaymarch && !rp.Relief2DGpuRaymarch)
+            sb.Append("  [RELIEF GPU OFF]");
         return sb.ToString();
     }
 
@@ -1543,6 +1549,16 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
     /// <c>[DD-BLA OFF]</c> suffix while on.</summary>
     public void ToggleMandelbrotDdBla()
         => FloatingMenu.BypassDdBla = !FloatingMenu.BypassDdBla;
+
+    /// <summary>Slice 4 (#158) — toggle the GPU relief-raymarch path (default ON).
+    /// Bound to Ctrl+Shift+G. When off, the CPU sphere-trace (the full-FX parity
+    /// oracle) renders instead; the title gains a <c>[RELIEF GPU OFF]</c> suffix
+    /// while relief raymarch is active. Retriggers via the Main VM property.</summary>
+    public void ToggleReliefGpuRaymarch()
+    {
+        Main.ReliefGpuRaymarch = !Main.ReliefGpuRaymarch;
+        RebuildWindowTitle();
+    }
 
     // ── Local server indicator (status bar dot) ──────────────────────────
 
