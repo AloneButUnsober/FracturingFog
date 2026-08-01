@@ -50,6 +50,32 @@ internal static class ReliefRaymarchProbe
         return (hbuf, albedo, maxH);
     }
 
+    // 4d-ii (#171) — small procedural equirect HDRI so the gate exercises the HDRI
+    // ambient + HDRI sky branches (matches the D3D gate). Azimuthal variation in
+    // R/B, polar gradient in G; values in [0.05,0.95]. The twin and both kernels
+    // sample the SAME flattened buffer, so it is the oracle.
+    private static void RegisterProcHdri(string name)
+    {
+        const int w = 64, hgt = 32;
+        var data = new float[w * hgt * 3];
+        for (int y = 0; y < hgt; y++)
+        {
+            double v = (y + 0.5) / hgt;
+            for (int x = 0; x < w; x++)
+            {
+                double uu = (x + 0.5) / w;
+                double r = 0.5 + 0.4 * Math.Sin(2.0 * Math.PI * uu);
+                double g = 0.9 - 0.6 * v;
+                double b = 0.5 + 0.35 * Math.Cos(2.0 * Math.PI * uu);
+                int i = (y * w + x) * 3;
+                data[i]     = (float)Math.Clamp(r, 0.05, 0.95);
+                data[i + 1] = (float)Math.Clamp(g, 0.05, 0.95);
+                data[i + 2] = (float)Math.Clamp(b, 0.05, 0.95);
+            }
+        }
+        HdriRegistry.Register(name, new HdriImage(w, hgt, data));
+    }
+
     private static ReliefUniforms BuildUniforms(int w, int h, int hw, int hh,
         float[] hbuf, float maxH, FractalParameters p, LightingFxData fx)
     {
@@ -98,10 +124,63 @@ internal static class ReliefRaymarchProbe
             Relief2DCameraElevationDeg = 45,
             Relief2DCameraFovDeg = 55,
             Relief2DGroundPlane = false,
+            // 4f (#170) — empty-space-skip on, matching the D3D gate (GPU==twin with
+            // the coarse max-height grid driving the leap).
+            Relief2DEmptySkip = true,
         };
         var fx = LightingFxData.CreateDefault();
         fx.BgTopColor = 0xFF335588u;
         fx.BgBottomColor = 0xFF0A0C14u;
+        // 4a (#165) — exercise the Cook-Torrance GGX spec path (matches the D3D
+        // gate). Non-metallic, roughness 0.5 to keep the DXC-SPIR-V lobe fringe
+        // inside the parity thresholds vs the CPU twin.
+        fx.SpecularStrength = 0.5;
+        fx.Roughness = 0.5;
+        fx.Metallic = 0.0;
+        // 4b (#166) — exercise the IQ soft-shadow march (key light only), matches
+        // the D3D gate. DXC-SPIR-V penumbra stays inside the parity thresholds.
+        fx.ShadowSteps = 24;
+        fx.ShadowSoftK = 8.0;
+        fx.ShadowLightMask = 0x1;
+        // 4c (#167) — exercise the DE-cone AO (matches the D3D gate). DXC-SPIR-V
+        // occlusion accumulation stays inside the parity thresholds.
+        fx.AoSamples = 5;
+        fx.AoStrength = 1.0;
+        // 4d (#168) — IBL-modulated ambient (gradient env) + triplanar (matches
+        // the D3D gate). Marble keeps the DXC-SPIR-V texture inside the thresholds.
+        fx.IblStrength = 0.5;
+        fx.TriplanarKind = TriplanarTextureKind.Marble;
+        fx.TriplanarStrength = 0.5;
+        fx.TriplanarScale = 4.0;
+        fx.TriplanarTint = 0xFFFFFFFFu;
+        // 4d-ii (#171) — HDRI equirect env: ambient at the surface normal (mip 0) +
+        // ray-miss HDRI sky, routed through the t4 SRV (DXC→SPIR-V). Matches the D3D
+        // gate; the twin samples the same flattened buffer, so GPU==twin proves it.
+        const string hdriName = "relief-vk-gate-proc";
+        RegisterProcHdri(hdriName);
+        fx.SkyMode = SkyMode.Hdri;
+        fx.EnvironmentName = hdriName;
+        fx.ShowSkyBackdrop = true;
+        // 4e (#169) — single-scatter volumetric in-scatter (key light) + ground-
+        // hugging fog, matching the D3D gate. VolumeStepsFalloff stays 0 so twin
+        // and DXC-SPIR-V march the same fixed step count.
+        fx.FogDensity = 0.5;
+        fx.FogHeightFalloff = 0.3;
+        fx.VolumeSteps = 16;
+        // 4e-ii (#172) — N-bounce reflections (mirror path) + FBM cloud-noise
+        // volumetrics, matching the D3D gate. GGX VNDF stays off (hash/trig parity
+        // landmine); VolumeNoiseAmount small + speed 0 keeps the density multiplier
+        // near 1 (value noise is C1-continuous, so the floor split is benign).
+        fx.ReflectionStrength = 0.4;
+        fx.ReflectionSteps = 24;
+        fx.MaxBounces = 2;
+        fx.UseGgxSampling = false;
+        fx.VolumeNoiseAmount = 0.15;
+        fx.VolumeNoiseScale = 0.3;
+        fx.VolumeNoiseSpeed = 0.0;
+        fx.VolumeNoiseOctaves = 3;
+        fx.VolumeSelfShadow = 0.5;
+        fx.VolumeSelfShadowSteps = 4;
 
         var (hbuf, albedo, maxH) = BumpField(hw, hh, w, h);
         var u = BuildUniforms(w, h, hw, hh, hbuf, maxH, p, fx);

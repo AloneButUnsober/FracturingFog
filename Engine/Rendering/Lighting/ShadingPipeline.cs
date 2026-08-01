@@ -1099,7 +1099,7 @@ public static class ShadingPipeline
     /// misses and the name appears to be a filesystem path ending in .hdr,
     /// tries to load it from disk (and caches the result so future frames
     /// hit the in-memory copy). Phase 6b.</summary>
-    private static bool TryResolveHdri(string? name, out HdriImage? hdri)
+    internal static bool TryResolveHdri(string? name, out HdriImage? hdri)
     {
         if (HdriRegistry.TryGet(name, out hdri) && hdri is not null) return true;
         if (!string.IsNullOrWhiteSpace(name)
@@ -1372,7 +1372,7 @@ public static class ShadingPipeline
     /// neighbours hash to different uniforms so the per-bounce lobe spread is
     /// spatially decorrelated without averaging cost.</summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private static (double U1, double U2) HashPair(double x, double y, double z, int bounce)
+    internal static (double U1, double U2) HashPair(double x, double y, double z, int bounce)
     {
         // Scale up so sub-pixel positions decorrelate; truncate to int so we
         // get a stable seed across frames. 1024 ≈ pixel-scale at typical
@@ -1401,7 +1401,7 @@ public static class ShadingPipeline
     /// <paramref name="alpha"/> ≈ 0 the result collapses to mirror reflect.
     /// One sample per call — temporal/spatial decorrelation from
     /// <see cref="HashPair"/> spreads the lobe across the screen.</summary>
-    private static (double X, double Y, double Z) SampleGgxReflect(
+    internal static (double X, double Y, double Z) SampleGgxReflect(
         double vx, double vy, double vz,
         double nx, double ny, double nz,
         double roughness,

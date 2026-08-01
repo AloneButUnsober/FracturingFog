@@ -474,6 +474,742 @@ public class ReliefRaymarchGpuTests
         Assert.True(transparent > w * h / 10, $"too few transparent px: {transparent}");
         Assert.True(hit > 0.05, "isolate culled the whole surface");
     }
+
+    // ── 4a (#165): Cook-Torrance GGX specular ─────────────────────────────
+
+    private static int Luma(uint c)
+        => (int)((c >> 16) & 0xFF) + (int)((c >> 8) & 0xFF) + (int)(c & 0xFF);
+
+    // SpecularStrength == 0 must be byte-identical regardless of Roughness /
+    // Metallic — the material knobs are fully gated, so 4a can't regress the
+    // Slice-3 flat-Lambert path.
+    [Fact]
+    public void CpuMirror_SpecOff_ByteIdentical_Regardless_Of_Material()
+    {
+        int w = 320, h = 240, hw = 320, hh = 240;
+        var p = ReliefParams();
+        var (hbuf, albedo, maxH) = BumpField(hw, hh, w, h);
+
+        var fxA = LightingFxData.CreateDefault();
+        fxA.SpecularStrength = 0.0; fxA.Metallic = 1.0; fxA.Roughness = 0.1;
+        var uA = BuildUniforms(w, h, hw, hh, hbuf, maxH, p, fxA);
+        var a = new uint[w * h];
+        ReliefRaymarchGpu.RenderCpuMirror(in uA, hbuf, null, albedo, a, out _);
+
+        var fxB = LightingFxData.CreateDefault();
+        fxB.SpecularStrength = 0.0; fxB.Metallic = 0.0; fxB.Roughness = 1.0;
+        var uB = BuildUniforms(w, h, hw, hh, hbuf, maxH, p, fxB);
+        var b = new uint[w * h];
+        ReliefRaymarchGpu.RenderCpuMirror(in uB, hbuf, null, albedo, b, out _);
+
+        Assert.Equal(a, b);
+    }
+
+    // Turning spec on adds an additive GGX highlight — some lit-slope pixels get
+    // strictly brighter — while the terrain silhouette (hit fraction) is
+    // untouched (spec never moves geometry).
+    [Fact]
+    public void CpuMirror_SpecOn_Brightens_Without_Moving_Silhouette()
+    {
+        int w = 320, h = 240, hw = 320, hh = 240;
+        var p = ReliefParams();
+        var (hbuf, albedo, maxH) = BumpField(hw, hh, w, h);
+
+        var fxOff = LightingFxData.CreateDefault();
+        fxOff.SpecularStrength = 0.0;
+        var uOff = BuildUniforms(w, h, hw, hh, hbuf, maxH, p, fxOff);
+        var off = new uint[w * h];
+        ReliefRaymarchGpu.RenderCpuMirror(in uOff, hbuf, null, albedo, off, out double hitOff);
+
+        var fxOn = LightingFxData.CreateDefault();
+        fxOn.SpecularStrength = 0.8; fxOn.Roughness = 0.4; fxOn.Metallic = 0.0;
+        var uOn = BuildUniforms(w, h, hw, hh, hbuf, maxH, p, fxOn);
+        var on = new uint[w * h];
+        ReliefRaymarchGpu.RenderCpuMirror(in uOn, hbuf, null, albedo, on, out double hitOn);
+
+        Assert.Equal(hitOff, hitOn);
+
+        int brighter = 0;
+        for (int i = 0; i < w * h; i++) if (Luma(on[i]) > Luma(off[i])) brighter++;
+        Assert.True(brighter > 50, $"GGX spec added no visible highlight ({brighter} px)");
+    }
+
+    // Metallic = 1 with spec on suppresses diffuse (diffSuppress = 1 − metallic),
+    // so away from the highlight the metal render is darker than the dielectric.
+    [Fact]
+    public void CpuMirror_Metallic_Suppresses_Diffuse()
+    {
+        int w = 320, h = 240, hw = 320, hh = 240;
+        var p = ReliefParams();
+        var (hbuf, albedo, maxH) = BumpField(hw, hh, w, h);
+
+        var fxDiel = LightingFxData.CreateDefault();
+        fxDiel.SpecularStrength = 0.6; fxDiel.Roughness = 0.5; fxDiel.Metallic = 0.0;
+        var uDiel = BuildUniforms(w, h, hw, hh, hbuf, maxH, p, fxDiel);
+        var diel = new uint[w * h];
+        ReliefRaymarchGpu.RenderCpuMirror(in uDiel, hbuf, null, albedo, diel, out _);
+
+        var fxMetal = LightingFxData.CreateDefault();
+        fxMetal.SpecularStrength = 0.6; fxMetal.Roughness = 0.5; fxMetal.Metallic = 1.0;
+        var uMetal = BuildUniforms(w, h, hw, hh, hbuf, maxH, p, fxMetal);
+        var metal = new uint[w * h];
+        ReliefRaymarchGpu.RenderCpuMirror(in uMetal, hbuf, null, albedo, metal, out _);
+
+        int darker = 0;
+        for (int i = 0; i < w * h; i++) if (Luma(metal[i]) < Luma(diel[i])) darker++;
+        Assert.True(darker > 100, $"metallic did not suppress diffuse ({darker} px)");
+    }
+
+    // ── 4b (#166): IQ soft shadow ─────────────────────────────────────────
+
+    // ShadowSteps == 0 must be byte-identical regardless of ShadowSoftK /
+    // ShadowLightMask — soft shadow is fully gated, no regression to 4a.
+    [Fact]
+    public void CpuMirror_ShadowOff_ByteIdentical_Regardless_Of_ShadowKnobs()
+    {
+        int w = 320, h = 240, hw = 320, hh = 240;
+        var p = ReliefParams();
+        var (hbuf, albedo, maxH) = BumpField(hw, hh, w, h);
+
+        var fxA = LightingFxData.CreateDefault();
+        fxA.ShadowSteps = 0; fxA.ShadowSoftK = 8.0; fxA.ShadowLightMask = 0x7;
+        var uA = BuildUniforms(w, h, hw, hh, hbuf, maxH, p, fxA);
+        var a = new uint[w * h];
+        ReliefRaymarchGpu.RenderCpuMirror(in uA, hbuf, null, albedo, a, out _);
+
+        var fxB = LightingFxData.CreateDefault();
+        fxB.ShadowSteps = 0; fxB.ShadowSoftK = 0.0; fxB.ShadowLightMask = 0x0;
+        var uB = BuildUniforms(w, h, hw, hh, hbuf, maxH, p, fxB);
+        var b = new uint[w * h];
+        ReliefRaymarchGpu.RenderCpuMirror(in uB, hbuf, null, albedo, b, out _);
+
+        Assert.Equal(a, b);
+    }
+
+    // Soft shadow on casts the dome's shadow across the ground plane, darkening a
+    // swath of floor pixels. The grazing default key light (phi ≈ 81°) throws a
+    // long shadow; the terrain silhouette (hit fraction) is untouched.
+    [Fact]
+    public void CpuMirror_ShadowOn_Casts_On_Ground()
+    {
+        int w = 320, h = 240, hw = 320, hh = 240;
+        var p = ReliefParams();
+        p.Relief2DGroundPlane = true;   // give the dome a floor to cast onto
+        var (hbuf, albedo, maxH) = BumpField(hw, hh, w, h);
+
+        var fxOff = LightingFxData.CreateDefault();
+        fxOff.ShadowSteps = 0;
+        var uOff = BuildUniforms(w, h, hw, hh, hbuf, maxH, p, fxOff);
+        var off = new uint[w * h];
+        ReliefRaymarchGpu.RenderCpuMirror(in uOff, hbuf, null, albedo, off, out double hitOff);
+
+        var fxOn = LightingFxData.CreateDefault();
+        fxOn.ShadowSteps = 32; fxOn.ShadowSoftK = 8.0; fxOn.ShadowLightMask = 0x1;
+        var uOn = BuildUniforms(w, h, hw, hh, hbuf, maxH, p, fxOn);
+        var on = new uint[w * h];
+        ReliefRaymarchGpu.RenderCpuMirror(in uOn, hbuf, null, albedo, on, out double hitOn);
+
+        Assert.Equal(hitOff, hitOn);
+
+        int darker = 0;
+        for (int i = 0; i < w * h; i++) if (Luma(on[i]) < Luma(off[i])) darker++;
+        Assert.True(darker > 200, $"soft shadow darkened too few px ({darker})");
+    }
+
+    // ── 4c (#167): DE-cone ambient occlusion ──────────────────────────────
+
+    // AoSamples == 0 must be byte-identical regardless of AoStrength — AO is
+    // fully gated, so 4c can't regress the 4a/4b path.
+    [Fact]
+    public void CpuMirror_AoOff_ByteIdentical_Regardless_Of_AoStrength()
+    {
+        int w = 320, h = 240, hw = 320, hh = 240;
+        var p = ReliefParams();
+        var (hbuf, albedo, maxH) = BumpField(hw, hh, w, h);
+
+        var fxA = LightingFxData.CreateDefault();
+        fxA.AoSamples = 0; fxA.AoStrength = 2.0;
+        var uA = BuildUniforms(w, h, hw, hh, hbuf, maxH, p, fxA);
+        var a = new uint[w * h];
+        ReliefRaymarchGpu.RenderCpuMirror(in uA, hbuf, null, albedo, a, out _);
+
+        var fxB = LightingFxData.CreateDefault();
+        fxB.AoSamples = 0; fxB.AoStrength = 0.0;
+        var uB = BuildUniforms(w, h, hw, hh, hbuf, maxH, p, fxB);
+        var b = new uint[w * h];
+        ReliefRaymarchGpu.RenderCpuMirror(in uB, hbuf, null, albedo, b, out _);
+
+        Assert.Equal(a, b);
+    }
+
+    // AO on darkens occluded terrain (the dome's foot near the ground plane,
+    // where the cone-march sees nearby surface) without moving the silhouette.
+    // Spec is left untouched by AO, so no pixel gets brighter.
+    [Fact]
+    public void CpuMirror_AoOn_Darkens_Without_Moving_Silhouette()
+    {
+        int w = 320, h = 240, hw = 320, hh = 240;
+        var p = ReliefParams();
+        p.Relief2DGroundPlane = true;   // creases at the dome foot for AO to bite
+        var (hbuf, albedo, maxH) = BumpField(hw, hh, w, h);
+
+        var fxOff = LightingFxData.CreateDefault();
+        fxOff.AoSamples = 0;
+        var uOff = BuildUniforms(w, h, hw, hh, hbuf, maxH, p, fxOff);
+        var off = new uint[w * h];
+        ReliefRaymarchGpu.RenderCpuMirror(in uOff, hbuf, null, albedo, off, out double hitOff);
+
+        var fxOn = LightingFxData.CreateDefault();
+        fxOn.AoSamples = 5; fxOn.AoStrength = 1.0;
+        var uOn = BuildUniforms(w, h, hw, hh, hbuf, maxH, p, fxOn);
+        var on = new uint[w * h];
+        ReliefRaymarchGpu.RenderCpuMirror(in uOn, hbuf, null, albedo, on, out double hitOn);
+
+        Assert.Equal(hitOff, hitOn);
+
+        int darker = 0, brighter = 0;
+        for (int i = 0; i < w * h; i++)
+        {
+            int d = Luma(on[i]) - Luma(off[i]);
+            if (d < 0) darker++; else if (d > 0) brighter++;
+        }
+        Assert.True(darker > 200, $"AO darkened too few px ({darker})");
+        Assert.Equal(0, brighter);
+    }
+
+    // ── 4d (#168): IBL-modulated ambient + triplanar procedural texture ────
+
+    // TriplanarStrength == 0 must be byte-identical regardless of Kind/Scale/Tint
+    // — triplanar is fully gated, no regression to 4a/4b/4c.
+    [Fact]
+    public void CpuMirror_TriplanarOff_ByteIdentical_Regardless_Of_Knobs()
+    {
+        int w = 320, h = 240, hw = 320, hh = 240;
+        var p = ReliefParams();
+        var (hbuf, albedo, maxH) = BumpField(hw, hh, w, h);
+
+        var fxA = LightingFxData.CreateDefault();
+        fxA.TriplanarStrength = 0.0; fxA.TriplanarKind = TriplanarTextureKind.Rock;
+        fxA.TriplanarScale = 9.0; fxA.TriplanarTint = 0xFF3366CCu;
+        var uA = BuildUniforms(w, h, hw, hh, hbuf, maxH, p, fxA);
+        var a = new uint[w * h];
+        ReliefRaymarchGpu.RenderCpuMirror(in uA, hbuf, null, albedo, a, out _);
+
+        var fxB = LightingFxData.CreateDefault();
+        fxB.TriplanarStrength = 0.0; fxB.TriplanarKind = TriplanarTextureKind.None;
+        var uB = BuildUniforms(w, h, hw, hh, hbuf, maxH, p, fxB);
+        var b = new uint[w * h];
+        ReliefRaymarchGpu.RenderCpuMirror(in uB, hbuf, null, albedo, b, out _);
+
+        Assert.Equal(a, b);
+    }
+
+    // IblStrength == 0 must be byte-identical regardless of SkyMode — the IBL
+    // ambient blend is fully gated, ambient stays the scalar AmbientStrength.
+    [Fact]
+    public void CpuMirror_IblOff_ByteIdentical_Regardless_Of_SkyMode()
+    {
+        int w = 320, h = 240, hw = 320, hh = 240;
+        var p = ReliefParams();
+        var (hbuf, albedo, maxH) = BumpField(hw, hh, w, h);
+
+        var fxA = LightingFxData.CreateDefault();
+        fxA.IblStrength = 0.0; fxA.SkyMode = SkyMode.Solid;
+        var uA = BuildUniforms(w, h, hw, hh, hbuf, maxH, p, fxA);
+        var a = new uint[w * h];
+        ReliefRaymarchGpu.RenderCpuMirror(in uA, hbuf, null, albedo, a, out _);
+
+        var fxB = LightingFxData.CreateDefault();
+        fxB.IblStrength = 0.0; fxB.SkyMode = SkyMode.Gradient;
+        var uB = BuildUniforms(w, h, hw, hh, hbuf, maxH, p, fxB);
+        var b = new uint[w * h];
+        ReliefRaymarchGpu.RenderCpuMirror(in uB, hbuf, null, albedo, b, out _);
+
+        Assert.Equal(a, b);
+    }
+
+    // Triplanar on modulates the terrain albedo before lighting — many surface
+    // pixels change colour — while the silhouette (hit fraction) is untouched
+    // (texture never moves geometry). Sky/floor pixels are unaffected.
+    [Fact]
+    public void CpuMirror_TriplanarOn_Retextures_Without_Moving_Silhouette()
+    {
+        int w = 320, h = 240, hw = 320, hh = 240;
+        var p = ReliefParams();
+        var (hbuf, albedo, maxH) = BumpField(hw, hh, w, h);
+
+        var fxOff = LightingFxData.CreateDefault();
+        fxOff.TriplanarStrength = 0.0;
+        var uOff = BuildUniforms(w, h, hw, hh, hbuf, maxH, p, fxOff);
+        var off = new uint[w * h];
+        ReliefRaymarchGpu.RenderCpuMirror(in uOff, hbuf, null, albedo, off, out double hitOff);
+
+        var fxOn = LightingFxData.CreateDefault();
+        fxOn.TriplanarKind = TriplanarTextureKind.Marble;
+        fxOn.TriplanarStrength = 0.7; fxOn.TriplanarScale = 4.0; fxOn.TriplanarTint = 0xFFFFFFFFu;
+        var uOn = BuildUniforms(w, h, hw, hh, hbuf, maxH, p, fxOn);
+        var on = new uint[w * h];
+        ReliefRaymarchGpu.RenderCpuMirror(in uOn, hbuf, null, albedo, on, out double hitOn);
+
+        Assert.Equal(hitOff, hitOn);
+
+        int changed = 0;
+        for (int i = 0; i < w * h; i++) if (on[i] != off[i]) changed++;
+        Assert.True(changed > 100, $"triplanar retextured too few px ({changed})");
+    }
+
+    // IBL ambient on blends the gradient env (sampled at the surface normal) into
+    // the flat ambient, shifting shaded terrain pixels without moving the
+    // silhouette.
+    [Fact]
+    public void CpuMirror_IblOn_Shifts_Ambient_Without_Moving_Silhouette()
+    {
+        int w = 320, h = 240, hw = 320, hh = 240;
+        var p = ReliefParams();
+        var (hbuf, albedo, maxH) = BumpField(hw, hh, w, h);
+
+        var fxOff = LightingFxData.CreateDefault();
+        fxOff.IblStrength = 0.0;
+        var uOff = BuildUniforms(w, h, hw, hh, hbuf, maxH, p, fxOff);
+        var off = new uint[w * h];
+        ReliefRaymarchGpu.RenderCpuMirror(in uOff, hbuf, null, albedo, off, out double hitOff);
+
+        var fxOn = LightingFxData.CreateDefault();
+        fxOn.IblStrength = 0.6; fxOn.SkyMode = SkyMode.Gradient;
+        var uOn = BuildUniforms(w, h, hw, hh, hbuf, maxH, p, fxOn);
+        var on = new uint[w * h];
+        ReliefRaymarchGpu.RenderCpuMirror(in uOn, hbuf, null, albedo, on, out double hitOn);
+
+        Assert.Equal(hitOff, hitOn);
+
+        int changed = 0;
+        for (int i = 0; i < w * h; i++) if (on[i] != off[i]) changed++;
+        Assert.True(changed > 100, $"IBL ambient shifted too few px ({changed})");
+    }
+
+    // 4e — FogDensity == 0 must be byte-identical regardless of VolumeSteps /
+    // FogHeightFalloff. The whole fog+volumetric block is gated on FogDensity>0.
+    [Fact]
+    public void CpuMirror_FogOff_ByteIdentical_Regardless_Of_VolumeKnobs()
+    {
+        int w = 320, h = 240, hw = 320, hh = 240;
+        var p = ReliefParams();
+        var (hbuf, albedo, maxH) = BumpField(hw, hh, w, h);
+
+        var fxA = LightingFxData.CreateDefault();
+        fxA.FogDensity = 0.0; fxA.VolumeSteps = 24; fxA.FogHeightFalloff = 0.7; fxA.VolumeStepsFalloff = 0.5;
+        var uA = BuildUniforms(w, h, hw, hh, hbuf, maxH, p, fxA);
+        var a = new uint[w * h];
+        ReliefRaymarchGpu.RenderCpuMirror(in uA, hbuf, null, albedo, a, out _);
+
+        var fxB = LightingFxData.CreateDefault();
+        fxB.FogDensity = 0.0; fxB.VolumeSteps = 0;
+        var uB = BuildUniforms(w, h, hw, hh, hbuf, maxH, p, fxB);
+        var b = new uint[w * h];
+        ReliefRaymarchGpu.RenderCpuMirror(in uB, hbuf, null, albedo, b, out _);
+
+        Assert.Equal(a, b);
+    }
+
+    // Legacy exponential fog (VolumeSteps == 0, FogDensity > 0) blends the shaded
+    // terrain toward the gradient sky by 1-exp(-tHit·density). Surface pixels
+    // shift; the silhouette (hit fraction) never moves — fog is a post-shade
+    // colour blend, not geometry. Sky pixels stay untouched (fog runs on hits).
+    [Fact]
+    public void CpuMirror_LegacyFog_Blends_Toward_Sky_Without_Moving_Silhouette()
+    {
+        int w = 320, h = 240, hw = 320, hh = 240;
+        var p = ReliefParams();
+        var (hbuf, albedo, maxH) = BumpField(hw, hh, w, h);
+
+        var fxOff = LightingFxData.CreateDefault();
+        fxOff.FogDensity = 0.0;
+        var uOff = BuildUniforms(w, h, hw, hh, hbuf, maxH, p, fxOff);
+        var off = new uint[w * h];
+        ReliefRaymarchGpu.RenderCpuMirror(in uOff, hbuf, null, albedo, off, out double hitOff);
+
+        var fxOn = LightingFxData.CreateDefault();
+        fxOn.FogDensity = 1.5; fxOn.VolumeSteps = 0;   // legacy exp-fog path
+        var uOn = BuildUniforms(w, h, hw, hh, hbuf, maxH, p, fxOn);
+        var on = new uint[w * h];
+        ReliefRaymarchGpu.RenderCpuMirror(in uOn, hbuf, null, albedo, on, out double hitOn);
+
+        Assert.Equal(hitOff, hitOn);
+
+        int changed = 0;
+        for (int i = 0; i < w * h; i++) if (on[i] != off[i]) changed++;
+        Assert.True(changed > 100, $"legacy fog blended too few px ({changed})");
+    }
+
+    // Volumetric in-scatter (VolumeSteps > 0, FogDensity > 0, key light on) walks
+    // the primary ray adding single-scatter light and attenuating the surface by
+    // Beer-Lambert transmittance — a different result from legacy exp fog and from
+    // no fog, still without moving the silhouette.
+    [Fact]
+    public void CpuMirror_VolumetricInScatter_Changes_Shade_Without_Moving_Silhouette()
+    {
+        int w = 320, h = 240, hw = 320, hh = 240;
+        var p = ReliefParams();
+        var (hbuf, albedo, maxH) = BumpField(hw, hh, w, h);
+
+        var fxOff = LightingFxData.CreateDefault();
+        fxOff.FogDensity = 0.0;
+        var uOff = BuildUniforms(w, h, hw, hh, hbuf, maxH, p, fxOff);
+        var off = new uint[w * h];
+        ReliefRaymarchGpu.RenderCpuMirror(in uOff, hbuf, null, albedo, off, out double hitOff);
+
+        var fxVol = LightingFxData.CreateDefault();
+        fxVol.FogDensity = 0.5; fxVol.FogHeightFalloff = 0.3; fxVol.VolumeSteps = 16;
+        var uVol = BuildUniforms(w, h, hw, hh, hbuf, maxH, p, fxVol);
+        var vol = new uint[w * h];
+        ReliefRaymarchGpu.RenderCpuMirror(in uVol, hbuf, null, albedo, vol, out double hitVol);
+
+        Assert.Equal(hitOff, hitVol);
+
+        int changed = 0;
+        for (int i = 0; i < w * h; i++) if (vol[i] != off[i]) changed++;
+        Assert.True(changed > 100, $"volumetric in-scatter changed too few px ({changed})");
+    }
+
+    // 4f — the empty-space skip must cut the primary sphere-trace step count (it
+    // leaps the flat air above the dome instead of crawling) while landing on the
+    // SAME surface: the silhouette barely moves and the image stays within the
+    // float-parity band. A conservative skip never overshoots the first hit.
+    [Fact]
+    public void CpuMirror_EmptySkip_CutsMarchSteps_Preserving_Image()
+    {
+        int w = 320, h = 240, hw = 320, hh = 240;
+        var (hbuf, albedo, maxH) = BumpField(hw, hh, w, h);
+        var fx = LightingFxData.CreateDefault();
+
+        var pOff = ReliefParams(); pOff.Relief2DEmptySkip = false;
+        var uOff = BuildUniforms(w, h, hw, hh, hbuf, maxH, pOff, fx);
+        var off = new uint[w * h];
+        ReliefRaymarchGpu.RenderCpuMirror(in uOff, hbuf, null, albedo, off, out double hitOff, out long stepsOff);
+
+        var pOn = ReliefParams(); pOn.Relief2DEmptySkip = true;
+        var uOn = BuildUniforms(w, h, hw, hh, hbuf, maxH, pOn, fx);
+        var on = new uint[w * h];
+        ReliefRaymarchGpu.RenderCpuMirror(in uOn, hbuf, null, albedo, on, out double hitOn, out long stepsOn);
+
+        // Real step-count win (magnitude is scene-dependent — the skip pays off
+        // most on tall/steep terrain where the slope-limited point DE crawls; on
+        // this dome the flat exterior already leaps, so a strict reduction is the
+        // honest guard against a no-op regression).
+        Assert.True(stepsOn < stepsOff,
+            $"empty-space skip did not cut steps (off {stepsOff}, on {stepsOn})");
+
+        // Same surface: silhouette barely moves, and per-pixel change stays tiny —
+        // judged by magnitude (like the device gates), not raw changed-pixel count.
+        // A conservative skip only shifts where the last pre-hit sample lands, so
+        // the mean channel diff is a fraction of an LSB and only a few block-edge
+        // columns move by more than a hair.
+        Assert.True(Math.Abs(hitOn - hitOff) < 0.01, $"silhouette moved ({hitOff} → {hitOn})");
+        long sumAbs = 0; int big = 0;
+        for (int i = 0; i < w * h; i++)
+        {
+            uint a = off[i], b = on[i];
+            int dr = Math.Abs((int)((a >> 16) & 0xFF) - (int)((b >> 16) & 0xFF));
+            int dg = Math.Abs((int)((a >> 8) & 0xFF) - (int)((b >> 8) & 0xFF));
+            int db = Math.Abs((int)(a & 0xFF) - (int)(b & 0xFF));
+            sumAbs += dr + dg + db;
+            if (Math.Max(dr, Math.Max(dg, db)) > 16) big++;
+        }
+        double meanCh = sumAbs / (3.0 * w * h);
+        Assert.True(meanCh < 0.5, $"empty-space skip shifted the image too much (mean {meanCh:0.000})");
+        Assert.True(big < w * h / 100, $"empty-space skip flipped too many px hard ({big})");
+    }
+
+    // The coarse max-height grid must be a conservative UPPER bound: every base
+    // cell's height ≤ the max stored for the coarse cell that (with its halo)
+    // covers it. That is what makes the skip safe (never overshoots a spike).
+    [Fact]
+    public void ReliefHeightMip_MaxGrid_Is_Conservative_Upper_Bound()
+    {
+        int hw = 200, hh = 150, blk = ReliefHeightMip.Blk;
+        var (hbuf, _, _) = BumpField(hw, hh, hw, hh);
+        var grid = ReliefHeightMip.BuildMaxGrid(hbuf, hw, hh, blk, out int mw, out int mh);
+
+        for (int z = 0; z < hh; z++)
+        for (int x = 0; x < hw; x++)
+        {
+            int cx = Math.Min(x / blk, mw - 1);
+            int cz = Math.Min(z / blk, mh - 1);
+            Assert.True(hbuf[z * hw + x] <= grid[cz * mw + cx] + 1e-6f,
+                $"cell ({x},{z}) height {hbuf[z * hw + x]} exceeds block max {grid[cz * mw + cx]}");
+        }
+    }
+
+    // ── 4d-ii (#171): HDRI equirect environment (ambient + sky + roughness mip) ──
+
+    // Small procedural equirect HDRI (azimuthal R/B, polar G), registered under a
+    // unique name so the parity twin routes IBL ambient + sky through the flattened
+    // t4 buffer. Values in [0.05,0.95] keep the linear env well-behaved.
+    private static string RegisterProcHdri(string suffix)
+    {
+        const int w = 48, hgt = 24;
+        var data = new float[w * hgt * 3];
+        for (int y = 0; y < hgt; y++)
+        {
+            double v = (y + 0.5) / hgt;
+            for (int x = 0; x < w; x++)
+            {
+                double uu = (x + 0.5) / w;
+                int i = (y * w + x) * 3;
+                data[i]     = (float)Math.Clamp(0.5 + 0.4 * Math.Sin(2.0 * Math.PI * uu), 0.05, 0.95);
+                data[i + 1] = (float)Math.Clamp(0.9 - 0.6 * v, 0.05, 0.95);
+                data[i + 2] = (float)Math.Clamp(0.5 + 0.35 * Math.Cos(2.0 * Math.PI * uu), 0.05, 0.95);
+            }
+        }
+        string name = "relief-test-hdri-" + suffix;
+        HdriRegistry.Register(name, new HdriImage(w, hgt, data));
+        return name;
+    }
+
+    // SkyMode == Hdri but the environment name doesn't resolve must fall back to the
+    // gradient path byte-for-byte — an unresolved HDRI can never regress the #168
+    // gradient/solid env.
+    [Fact]
+    public void CpuMirror_HdriUnresolved_FallsBack_ByteIdentical()
+    {
+        int w = 320, h = 240, hw = 320, hh = 240;
+        var p = ReliefParams();
+        var (hbuf, albedo, maxH) = BumpField(hw, hh, w, h);
+
+        var fxA = LightingFxData.CreateDefault();
+        fxA.IblStrength = 0.5; fxA.ShowSkyBackdrop = true;
+        fxA.SkyMode = SkyMode.Hdri; fxA.EnvironmentName = "no-such-hdri-xyz";
+        var uA = BuildUniforms(w, h, hw, hh, hbuf, maxH, p, fxA);
+        Assert.Null(uA.HdriBuf);   // unresolved → no HDRI buffer → gradient fallback
+        var a = new uint[w * h];
+        ReliefRaymarchGpu.RenderCpuMirror(in uA, hbuf, null, albedo, a, out _);
+
+        var fxB = LightingFxData.CreateDefault();
+        fxB.IblStrength = 0.5; fxB.ShowSkyBackdrop = true;
+        fxB.SkyMode = SkyMode.Gradient;
+        var uB = BuildUniforms(w, h, hw, hh, hbuf, maxH, p, fxB);
+        var b = new uint[w * h];
+        ReliefRaymarchGpu.RenderCpuMirror(in uB, hbuf, null, albedo, b, out _);
+
+        Assert.Equal(a, b);
+    }
+
+    // HDRI ambient (IblStrength>0, SkyMode=Hdri) blends the HDRI sample at the
+    // surface normal into the ambient — shifting shaded terrain — without moving
+    // the silhouette. ShowSky is off (bg = DropColor, identical both) so the change
+    // is isolated to the terrain ambient, proving the HDRI ambient branch.
+    [Fact]
+    public void CpuMirror_HdriAmbient_Shifts_Surface_Without_Moving_Silhouette()
+    {
+        int w = 320, h = 240, hw = 320, hh = 240;
+        var p = ReliefParams();
+        var (hbuf, albedo, maxH) = BumpField(hw, hh, w, h);
+
+        var fxOff = LightingFxData.CreateDefault();
+        fxOff.IblStrength = 0.6; fxOff.ShowSkyBackdrop = false; fxOff.SkyMode = SkyMode.Gradient;
+        var uOff = BuildUniforms(w, h, hw, hh, hbuf, maxH, p, fxOff);
+        var off = new uint[w * h];
+        ReliefRaymarchGpu.RenderCpuMirror(in uOff, hbuf, null, albedo, off, out double hitOff);
+
+        var fxOn = LightingFxData.CreateDefault();
+        fxOn.IblStrength = 0.6; fxOn.ShowSkyBackdrop = false;
+        fxOn.SkyMode = SkyMode.Hdri; fxOn.EnvironmentName = RegisterProcHdri("amb");
+        var uOn = BuildUniforms(w, h, hw, hh, hbuf, maxH, p, fxOn);
+        Assert.NotNull(uOn.HdriBuf);
+        var on = new uint[w * h];
+        ReliefRaymarchGpu.RenderCpuMirror(in uOn, hbuf, null, albedo, on, out double hitOn);
+
+        Assert.Equal(hitOff, hitOn);
+        int changed = 0;
+        for (int i = 0; i < w * h; i++) if (on[i] != off[i]) changed++;
+        Assert.True(changed > 100, $"HDRI ambient shifted too few px ({changed})");
+    }
+
+    // HDRI sky (ShowSky on, SkyMode=Hdri) replaces the ray-miss gradient backdrop
+    // with the equirect HDRI sample along the view ray. IblStrength=0 leaves terrain
+    // shading identical, so every changed pixel is a background pixel — isolating
+    // the HDRI sky branch — and the silhouette (hit fraction) never moves.
+    [Fact]
+    public void CpuMirror_HdriSky_Replaces_Background_Without_Moving_Silhouette()
+    {
+        int w = 320, h = 240, hw = 320, hh = 240;
+        var p = ReliefParams();
+        var (hbuf, albedo, maxH) = BumpField(hw, hh, w, h);
+
+        var fxOff = LightingFxData.CreateDefault();
+        fxOff.IblStrength = 0.0; fxOff.ShowSkyBackdrop = true; fxOff.SkyMode = SkyMode.Gradient;
+        var uOff = BuildUniforms(w, h, hw, hh, hbuf, maxH, p, fxOff);
+        var off = new uint[w * h];
+        ReliefRaymarchGpu.RenderCpuMirror(in uOff, hbuf, null, albedo, off, out double hitOff);
+
+        var fxOn = LightingFxData.CreateDefault();
+        fxOn.IblStrength = 0.0; fxOn.ShowSkyBackdrop = true;
+        fxOn.SkyMode = SkyMode.Hdri; fxOn.EnvironmentName = RegisterProcHdri("sky");
+        var uOn = BuildUniforms(w, h, hw, hh, hbuf, maxH, p, fxOn);
+        var on = new uint[w * h];
+        ReliefRaymarchGpu.RenderCpuMirror(in uOn, hbuf, null, albedo, on, out double hitOn);
+
+        Assert.Equal(hitOff, hitOn);
+        int changed = 0;
+        for (int i = 0; i < w * h; i++) if (on[i] != off[i]) changed++;
+        Assert.True(changed > 100, $"HDRI sky changed too few px ({changed})");
+    }
+
+    // The flattened HDRI buffer's sampler must reproduce HdriImage.Sample(dir,
+    // roughness) exactly (both double, same equirect + bilinear + mip-select math)
+    // — that identity is what makes the twin the oracle for the GPU port.
+    [Fact]
+    public void ReliefHdriBuffer_Flatten_RoundTrips_HdriImage_Sample()
+    {
+        const int w = 32, hgt = 16;
+        var data = new float[w * hgt * 3];
+        for (int y = 0; y < hgt; y++)
+        for (int x = 0; x < w; x++)
+        {
+            int i = (y * w + x) * 3;
+            data[i]     = 0.1f + 0.8f * ((x * 7 + y * 3) % 11) / 11f;
+            data[i + 1] = 0.2f + 0.6f * ((x * 5 + y * 13) % 7) / 7f;
+            data[i + 2] = 0.3f + 0.5f * ((x + y * 2) % 5) / 5f;
+        }
+        var img = new HdriImage(w, hgt, data);
+        var buf = ReliefHdriBuffer.Flatten(img);
+        Assert.Equal(img.MipLevels, ReliefHdriBuffer.Levels(buf));
+
+        (double, double, double)[] dirs =
+        {
+            (1, 0, 0), (0, 1, 0), (0, 0, 1), (-1, 0, 0), (0, -1, 0),
+            (0.3, 0.6, -0.7), (-0.5, 0.2, 0.84), (0.71, -0.71, 0.0),
+        };
+        foreach (var (dx, dy, dz) in dirs)
+        foreach (double rough in new[] { 0.0, 0.25, 0.5, 0.75, 1.0 })
+        {
+            double l = Math.Sqrt(dx * dx + dy * dy + dz * dz);
+            var e = img.Sample(dx / l, dy / l, dz / l, rough);
+            var g = ReliefHdriBuffer.Sample(buf, dx / l, dy / l, dz / l, rough);
+            Assert.True(Math.Abs(e.R - g.R) < 1e-9 && Math.Abs(e.G - g.G) < 1e-9 && Math.Abs(e.B - g.B) < 1e-9,
+                $"dir ({dx},{dy},{dz}) rough {rough}: HdriImage ({e.R},{e.G},{e.B}) != flattened ({g.R},{g.G},{g.B})");
+        }
+    }
+
+    // ── 4e-ii (#172): shader-side reflections + FBM cloud-noise volumetrics ──
+
+    // ReflectionStrength == 0 is the off-switch: the whole reflection probe (steps,
+    // bounce count, GGX toggle) must not touch a single pixel. Proves the phase is
+    // additively gated (byte-identical to pre-4e-ii) regardless of the other knobs.
+    [Fact]
+    public void CpuMirror_ReflectionsOff_ByteIdentical_Regardless_Of_Knobs()
+    {
+        int w = 320, h = 240, hw = 320, hh = 240;
+        var p = ReliefParams();
+        var (hbuf, albedo, maxH) = BumpField(hw, hh, w, h);
+
+        var fxA = LightingFxData.CreateDefault();
+        fxA.ReflectionStrength = 0.0;
+        fxA.ReflectionSteps = 24; fxA.MaxBounces = 4; fxA.UseGgxSampling = true;
+        var uA = BuildUniforms(w, h, hw, hh, hbuf, maxH, p, fxA);
+        var a = new uint[w * h];
+        ReliefRaymarchGpu.RenderCpuMirror(in uA, hbuf, null, albedo, a, out _);
+
+        var fxB = LightingFxData.CreateDefault();
+        fxB.ReflectionStrength = 0.0;
+        var uB = BuildUniforms(w, h, hw, hh, hbuf, maxH, p, fxB);
+        var b = new uint[w * h];
+        ReliefRaymarchGpu.RenderCpuMirror(in uB, hbuf, null, albedo, b, out _);
+
+        Assert.Equal(a, b);
+    }
+
+    // Mirror reflections (ReflectionStrength > 0, UseGgxSampling off) sphere-trace
+    // reflect(rd,N) along the height DE and add a Fresnel-weighted env/sky tint to
+    // the surface. Terrain pixels shift; the silhouette never moves (reflection is a
+    // post-shade colour add on hits, not geometry).
+    [Fact]
+    public void CpuMirror_ReflectionsOn_Adds_Tint_Without_Moving_Silhouette()
+    {
+        int w = 320, h = 240, hw = 320, hh = 240;
+        var p = ReliefParams();
+        var (hbuf, albedo, maxH) = BumpField(hw, hh, w, h);
+
+        var fxOff = LightingFxData.CreateDefault();
+        fxOff.ReflectionStrength = 0.0;
+        var uOff = BuildUniforms(w, h, hw, hh, hbuf, maxH, p, fxOff);
+        var off = new uint[w * h];
+        ReliefRaymarchGpu.RenderCpuMirror(in uOff, hbuf, null, albedo, off, out double hitOff);
+
+        var fxOn = LightingFxData.CreateDefault();
+        fxOn.ReflectionStrength = 0.6; fxOn.ReflectionSteps = 24; fxOn.MaxBounces = 2;
+        fxOn.UseGgxSampling = false; fxOn.Metallic = 0.8;
+        var uOn = BuildUniforms(w, h, hw, hh, hbuf, maxH, p, fxOn);
+        var on = new uint[w * h];
+        ReliefRaymarchGpu.RenderCpuMirror(in uOn, hbuf, null, albedo, on, out double hitOn);
+
+        Assert.Equal(hitOff, hitOn);
+        int changed = 0;
+        for (int i = 0; i < w * h; i++) if (on[i] != off[i]) changed++;
+        Assert.True(changed > 100, $"reflections shifted too few px ({changed})");
+    }
+
+    // VolumeNoiseAmount == 0 is the off-switch for the FBM cloud modulation: with
+    // the in-scatter walk running, toggling the self-shadow / scale / speed / octave
+    // knobs must not change a pixel — the density multiplier stays 1 (byte-identical
+    // to the #169 in-scatter render).
+    [Fact]
+    public void CpuMirror_VolumeNoiseOff_ByteIdentical_Regardless_Of_NoiseKnobs()
+    {
+        int w = 320, h = 240, hw = 320, hh = 240;
+        var p = ReliefParams();
+        var (hbuf, albedo, maxH) = BumpField(hw, hh, w, h);
+
+        var fxA = LightingFxData.CreateDefault();
+        fxA.FogDensity = 0.5; fxA.FogHeightFalloff = 0.3; fxA.VolumeSteps = 16;
+        fxA.VolumeNoiseAmount = 0.0;
+        fxA.VolumeNoiseScale = 0.7; fxA.VolumeNoiseSpeed = 1.3; fxA.VolumeNoiseOctaves = 5;
+        fxA.VolumeSelfShadow = 0.9; fxA.VolumeSelfShadowSteps = 8; fxA.SceneTime = 2.0;
+        var uA = BuildUniforms(w, h, hw, hh, hbuf, maxH, p, fxA);
+        var a = new uint[w * h];
+        ReliefRaymarchGpu.RenderCpuMirror(in uA, hbuf, null, albedo, a, out _);
+
+        var fxB = LightingFxData.CreateDefault();
+        fxB.FogDensity = 0.5; fxB.FogHeightFalloff = 0.3; fxB.VolumeSteps = 16;
+        fxB.VolumeNoiseAmount = 0.0;
+        var uB = BuildUniforms(w, h, hw, hh, hbuf, maxH, p, fxB);
+        var b = new uint[w * h];
+        ReliefRaymarchGpu.RenderCpuMirror(in uB, hbuf, null, albedo, b, out _);
+
+        Assert.Equal(a, b);
+    }
+
+    // FBM cloud-noise (VolumeNoiseAmount > 0) modulates the per-step in-scatter
+    // density (and, with self-shadow on, the per-step transmittance), producing a
+    // different fog result from the smooth #169 walk — still without moving the
+    // silhouette (it is a density modulation inside the post-shade fog blend).
+    [Fact]
+    public void CpuMirror_VolumeNoiseOn_Modulates_Fog_Without_Moving_Silhouette()
+    {
+        int w = 320, h = 240, hw = 320, hh = 240;
+        var p = ReliefParams();
+        var (hbuf, albedo, maxH) = BumpField(hw, hh, w, h);
+
+        var fxOff = LightingFxData.CreateDefault();
+        fxOff.FogDensity = 0.5; fxOff.FogHeightFalloff = 0.3; fxOff.VolumeSteps = 16;
+        fxOff.VolumeNoiseAmount = 0.0;
+        var uOff = BuildUniforms(w, h, hw, hh, hbuf, maxH, p, fxOff);
+        var off = new uint[w * h];
+        ReliefRaymarchGpu.RenderCpuMirror(in uOff, hbuf, null, albedo, off, out double hitOff);
+
+        var fxOn = LightingFxData.CreateDefault();
+        fxOn.FogDensity = 0.5; fxOn.FogHeightFalloff = 0.3; fxOn.VolumeSteps = 16;
+        fxOn.VolumeNoiseAmount = 0.8; fxOn.VolumeNoiseScale = 0.5; fxOn.VolumeNoiseOctaves = 3;
+        fxOn.VolumeSelfShadow = 0.6; fxOn.VolumeSelfShadowSteps = 4;
+        var uOn = BuildUniforms(w, h, hw, hh, hbuf, maxH, p, fxOn);
+        var on = new uint[w * h];
+        ReliefRaymarchGpu.RenderCpuMirror(in uOn, hbuf, null, albedo, on, out double hitOn);
+
+        Assert.Equal(hitOff, hitOn);
+        int changed = 0;
+        for (int i = 0; i < w * h; i++) if (on[i] != off[i]) changed++;
+        Assert.True(changed > 100, $"cloud-noise modulated too few px ({changed})");
+    }
 }
 
 // #162 (Slice 3d) — host-wiring seam. HeightfieldRaymarch2D.Render dispatches
