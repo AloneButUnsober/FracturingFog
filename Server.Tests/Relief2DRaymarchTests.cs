@@ -939,6 +939,157 @@ public class ReliefRaymarchGpuTests
                 $"cell ({x},{z}) height {hbuf[z * hw + x]} exceeds block max {grid[cz * mw + cx]}");
         }
     }
+
+    // ── 4d-ii (#171): HDRI equirect environment (ambient + sky + roughness mip) ──
+
+    // Small procedural equirect HDRI (azimuthal R/B, polar G), registered under a
+    // unique name so the parity twin routes IBL ambient + sky through the flattened
+    // t4 buffer. Values in [0.05,0.95] keep the linear env well-behaved.
+    private static string RegisterProcHdri(string suffix)
+    {
+        const int w = 48, hgt = 24;
+        var data = new float[w * hgt * 3];
+        for (int y = 0; y < hgt; y++)
+        {
+            double v = (y + 0.5) / hgt;
+            for (int x = 0; x < w; x++)
+            {
+                double uu = (x + 0.5) / w;
+                int i = (y * w + x) * 3;
+                data[i]     = (float)Math.Clamp(0.5 + 0.4 * Math.Sin(2.0 * Math.PI * uu), 0.05, 0.95);
+                data[i + 1] = (float)Math.Clamp(0.9 - 0.6 * v, 0.05, 0.95);
+                data[i + 2] = (float)Math.Clamp(0.5 + 0.35 * Math.Cos(2.0 * Math.PI * uu), 0.05, 0.95);
+            }
+        }
+        string name = "relief-test-hdri-" + suffix;
+        HdriRegistry.Register(name, new HdriImage(w, hgt, data));
+        return name;
+    }
+
+    // SkyMode == Hdri but the environment name doesn't resolve must fall back to the
+    // gradient path byte-for-byte — an unresolved HDRI can never regress the #168
+    // gradient/solid env.
+    [Fact]
+    public void CpuMirror_HdriUnresolved_FallsBack_ByteIdentical()
+    {
+        int w = 320, h = 240, hw = 320, hh = 240;
+        var p = ReliefParams();
+        var (hbuf, albedo, maxH) = BumpField(hw, hh, w, h);
+
+        var fxA = LightingFxData.CreateDefault();
+        fxA.IblStrength = 0.5; fxA.ShowSkyBackdrop = true;
+        fxA.SkyMode = SkyMode.Hdri; fxA.EnvironmentName = "no-such-hdri-xyz";
+        var uA = BuildUniforms(w, h, hw, hh, hbuf, maxH, p, fxA);
+        Assert.Null(uA.HdriBuf);   // unresolved → no HDRI buffer → gradient fallback
+        var a = new uint[w * h];
+        ReliefRaymarchGpu.RenderCpuMirror(in uA, hbuf, null, albedo, a, out _);
+
+        var fxB = LightingFxData.CreateDefault();
+        fxB.IblStrength = 0.5; fxB.ShowSkyBackdrop = true;
+        fxB.SkyMode = SkyMode.Gradient;
+        var uB = BuildUniforms(w, h, hw, hh, hbuf, maxH, p, fxB);
+        var b = new uint[w * h];
+        ReliefRaymarchGpu.RenderCpuMirror(in uB, hbuf, null, albedo, b, out _);
+
+        Assert.Equal(a, b);
+    }
+
+    // HDRI ambient (IblStrength>0, SkyMode=Hdri) blends the HDRI sample at the
+    // surface normal into the ambient — shifting shaded terrain — without moving
+    // the silhouette. ShowSky is off (bg = DropColor, identical both) so the change
+    // is isolated to the terrain ambient, proving the HDRI ambient branch.
+    [Fact]
+    public void CpuMirror_HdriAmbient_Shifts_Surface_Without_Moving_Silhouette()
+    {
+        int w = 320, h = 240, hw = 320, hh = 240;
+        var p = ReliefParams();
+        var (hbuf, albedo, maxH) = BumpField(hw, hh, w, h);
+
+        var fxOff = LightingFxData.CreateDefault();
+        fxOff.IblStrength = 0.6; fxOff.ShowSkyBackdrop = false; fxOff.SkyMode = SkyMode.Gradient;
+        var uOff = BuildUniforms(w, h, hw, hh, hbuf, maxH, p, fxOff);
+        var off = new uint[w * h];
+        ReliefRaymarchGpu.RenderCpuMirror(in uOff, hbuf, null, albedo, off, out double hitOff);
+
+        var fxOn = LightingFxData.CreateDefault();
+        fxOn.IblStrength = 0.6; fxOn.ShowSkyBackdrop = false;
+        fxOn.SkyMode = SkyMode.Hdri; fxOn.EnvironmentName = RegisterProcHdri("amb");
+        var uOn = BuildUniforms(w, h, hw, hh, hbuf, maxH, p, fxOn);
+        Assert.NotNull(uOn.HdriBuf);
+        var on = new uint[w * h];
+        ReliefRaymarchGpu.RenderCpuMirror(in uOn, hbuf, null, albedo, on, out double hitOn);
+
+        Assert.Equal(hitOff, hitOn);
+        int changed = 0;
+        for (int i = 0; i < w * h; i++) if (on[i] != off[i]) changed++;
+        Assert.True(changed > 100, $"HDRI ambient shifted too few px ({changed})");
+    }
+
+    // HDRI sky (ShowSky on, SkyMode=Hdri) replaces the ray-miss gradient backdrop
+    // with the equirect HDRI sample along the view ray. IblStrength=0 leaves terrain
+    // shading identical, so every changed pixel is a background pixel — isolating
+    // the HDRI sky branch — and the silhouette (hit fraction) never moves.
+    [Fact]
+    public void CpuMirror_HdriSky_Replaces_Background_Without_Moving_Silhouette()
+    {
+        int w = 320, h = 240, hw = 320, hh = 240;
+        var p = ReliefParams();
+        var (hbuf, albedo, maxH) = BumpField(hw, hh, w, h);
+
+        var fxOff = LightingFxData.CreateDefault();
+        fxOff.IblStrength = 0.0; fxOff.ShowSkyBackdrop = true; fxOff.SkyMode = SkyMode.Gradient;
+        var uOff = BuildUniforms(w, h, hw, hh, hbuf, maxH, p, fxOff);
+        var off = new uint[w * h];
+        ReliefRaymarchGpu.RenderCpuMirror(in uOff, hbuf, null, albedo, off, out double hitOff);
+
+        var fxOn = LightingFxData.CreateDefault();
+        fxOn.IblStrength = 0.0; fxOn.ShowSkyBackdrop = true;
+        fxOn.SkyMode = SkyMode.Hdri; fxOn.EnvironmentName = RegisterProcHdri("sky");
+        var uOn = BuildUniforms(w, h, hw, hh, hbuf, maxH, p, fxOn);
+        var on = new uint[w * h];
+        ReliefRaymarchGpu.RenderCpuMirror(in uOn, hbuf, null, albedo, on, out double hitOn);
+
+        Assert.Equal(hitOff, hitOn);
+        int changed = 0;
+        for (int i = 0; i < w * h; i++) if (on[i] != off[i]) changed++;
+        Assert.True(changed > 100, $"HDRI sky changed too few px ({changed})");
+    }
+
+    // The flattened HDRI buffer's sampler must reproduce HdriImage.Sample(dir,
+    // roughness) exactly (both double, same equirect + bilinear + mip-select math)
+    // — that identity is what makes the twin the oracle for the GPU port.
+    [Fact]
+    public void ReliefHdriBuffer_Flatten_RoundTrips_HdriImage_Sample()
+    {
+        const int w = 32, hgt = 16;
+        var data = new float[w * hgt * 3];
+        for (int y = 0; y < hgt; y++)
+        for (int x = 0; x < w; x++)
+        {
+            int i = (y * w + x) * 3;
+            data[i]     = 0.1f + 0.8f * ((x * 7 + y * 3) % 11) / 11f;
+            data[i + 1] = 0.2f + 0.6f * ((x * 5 + y * 13) % 7) / 7f;
+            data[i + 2] = 0.3f + 0.5f * ((x + y * 2) % 5) / 5f;
+        }
+        var img = new HdriImage(w, hgt, data);
+        var buf = ReliefHdriBuffer.Flatten(img);
+        Assert.Equal(img.MipLevels, ReliefHdriBuffer.Levels(buf));
+
+        (double, double, double)[] dirs =
+        {
+            (1, 0, 0), (0, 1, 0), (0, 0, 1), (-1, 0, 0), (0, -1, 0),
+            (0.3, 0.6, -0.7), (-0.5, 0.2, 0.84), (0.71, -0.71, 0.0),
+        };
+        foreach (var (dx, dy, dz) in dirs)
+        foreach (double rough in new[] { 0.0, 0.25, 0.5, 0.75, 1.0 })
+        {
+            double l = Math.Sqrt(dx * dx + dy * dy + dz * dz);
+            var e = img.Sample(dx / l, dy / l, dz / l, rough);
+            var g = ReliefHdriBuffer.Sample(buf, dx / l, dy / l, dz / l, rough);
+            Assert.True(Math.Abs(e.R - g.R) < 1e-9 && Math.Abs(e.G - g.G) < 1e-9 && Math.Abs(e.B - g.B) < 1e-9,
+                $"dir ({dx},{dy},{dz}) rough {rough}: HdriImage ({e.R},{e.G},{e.B}) != flattened ({g.R},{g.G},{g.B})");
+        }
+    }
 }
 
 // #162 (Slice 3d) — host-wiring seam. HeightfieldRaymarch2D.Render dispatches
