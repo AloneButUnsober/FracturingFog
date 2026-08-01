@@ -300,6 +300,85 @@ public class Relief2DRaymarchTests
         Assert.Equal(albedo, dst);
         Assert.Equal(0.0, hitFrac);
     }
+
+    // #184 — the shared segment in-scatter walk adds single-scatter light over an
+    // explicit air segment [tStart,tEnd] and composites it over the incoming
+    // background as bg·T + inScatter. With a NullDe (no occluder) and the default
+    // key light on, a black backdrop is lifted toward the light; a zero-length
+    // segment is a strict no-op. This is the kernel behind the sky/miss god-rays.
+    [Fact]
+    public void VolumetricInScatterSegment_Adds_Light_Over_Air_Segment()
+    {
+        var fx = LightingFxData.CreateDefault();   // Light1 on, white, no shadow
+        fx.FogDensity = 0.8;
+        fx.VolumeSteps = 16;
+        var de = default(NullDe);
+
+        // Zero-length segment: strict no-op (background untouched).
+        double br = 0, bg = 0, bb = 0;
+        ShadingPipeline.VolumetricInScatterSegment<NullDe>(
+            in fx, in de, 0, 0, 0, 0, 1, 0, 1e-3, 2.0, 2.0, ref br, ref bg, ref bb);
+        Assert.Equal(0.0, br); Assert.Equal(0.0, bg); Assert.Equal(0.0, bb);
+
+        // Real segment over a black backdrop: unshadowed in-scatter lifts every
+        // channel above zero.
+        br = 0; bg = 0; bb = 0;
+        ShadingPipeline.VolumetricInScatterSegment<NullDe>(
+            in fx, in de, 0, 0, 0, 0, 1, 0, 1e-3, 0.0, 4.0, ref br, ref bg, ref bb);
+        Assert.True(br > 1.0 && bg > 1.0 && bb > 1.0,
+            $"segment added no light: ({br},{bg},{bb})");
+    }
+
+    // #184 — the headline fix: crepuscular shafts now form against the SKY. With
+    // the ground plane off and the sky backdrop off (miss → the DropColor const),
+    // ray-miss pixels that traverse the fog slab pick up shadow-carved in-scatter,
+    // so they no longer equal DropColor. Before the fix, sky pixels bypassed the
+    // fog entirely and stayed exactly DropColor — this asserts they now glow.
+    [Fact]
+    public void SkyMiss_Rays_Receive_GodRay_InScatter()
+    {
+        const uint Drop = 0xFF0A0A0Eu;   // HeightfieldRaymarch2D.DropColor
+        int w = 320, h = 240;
+        var (albedo, height) = Mandelbrot(w, h);
+
+        var p = new FractalParameters
+        {
+            Relief2DEnabled = true,
+            Relief2DRaymarch = true,
+            Relief2DHeightScale = 2.5,       // tall slab → more grazing sky rays
+            Relief2DCameraAzimuthDeg = 25,
+            Relief2DCameraElevationDeg = 28, // low camera → high silhouette
+            Relief2DCameraFovDeg = 55,
+            Relief2DGroundPlane = false,     // sky, not floor, behind the terrain
+        };
+        var fxOff = p.Lighting;
+        fxOff.ShowSkyBackdrop = false;       // miss → DropColor const
+        p.Lighting = fxOff;
+        var noFog = new uint[w * h];
+        HeightfieldRaymarch2D.Render(albedo, height, w, h, p, noFog);
+
+        var pf = p.Clone();
+        var fx = pf.Lighting;
+        fx.FogDensity = 1.5;
+        fx.VolumeSteps = 24;
+        fx.VolumeAnisotropy = 0.7;           // forward scatter → shaft punch
+        pf.Lighting = fx;
+        var fog = new uint[w * h];
+        HeightfieldRaymarch2D.Render(albedo, height, w, h, pf, fog);
+
+        int skyPixels = 0, godRaySky = 0;
+        for (int i = 0; i < w * h; i++)
+        {
+            if (noFog[i] == Drop)            // a genuine ray-miss (sky) pixel
+            {
+                skyPixels++;
+                if (fog[i] != Drop) godRaySky++;
+            }
+        }
+        Assert.True(skyPixels > w * h / 20, $"test setup has too little sky: {skyPixels}");
+        Assert.True(godRaySky > 0,
+            $"no sky pixel received god-ray in-scatter ({godRaySky} of {skyPixels})");
+    }
 }
 
 // #159 (Relief 3D Slice 3a) — the GPU relief-raymarch foundation: the extracted
