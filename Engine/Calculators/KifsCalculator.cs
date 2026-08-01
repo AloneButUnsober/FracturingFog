@@ -191,7 +191,7 @@ public sealed class KifsCalculator : IFractalCalculator
                     DEIter = deIter, SceneRadius = sceneRadius,
                 };
                 _gpuSierp ??= new SierpinskiGpuCalculator();
-                if (_gpuSierp.Render(renderBuffer, rp, sp, sip))
+                if (_gpuSierp.Render(renderBuffer, rp, sp, sip, fx.VolumePalette))
                 {
                     // #84 — GPU raymarch skips the CPU post stack; draw the debug
                     // HUD directly so the light compass still shows on GPU frames.
@@ -207,7 +207,7 @@ public sealed class KifsCalculator : IFractalCalculator
                     DEIter = deIter, SceneRadius = sceneRadius,
                 };
                 _gpuMenger ??= new MengerGpuCalculator();
-                if (_gpuMenger.Render(renderBuffer, rp, sp, mp))
+                if (_gpuMenger.Render(renderBuffer, rp, sp, mp, fx.VolumePalette))
                 {
                     // #84 — GPU raymarch skips the CPU post stack; draw the debug
                     // HUD directly so the light compass still shows on GPU frames.
