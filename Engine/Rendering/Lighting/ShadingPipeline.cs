@@ -1156,16 +1156,49 @@ public static class ShadingPipeline
         ref double br, ref double bg, ref double bb)
         where TDe : struct, IDistanceEstimator
     {
-        // Reconstruct camera origin from surface point + view ray.
+        // Reconstruct camera origin from surface point + view ray, then run the
+        // shared segment walk over the full [0, TotalT] air path. Bit-identical
+        // to the pre-refactor inline walk (same per-step math, tStart == 0).
         double camX = i.Px - i.Rdx * i.TotalT;
         double camY = i.Py - i.Rdy * i.TotalT;
         double camZ = i.Pz - i.Rdz * i.TotalT;
+        VolumetricInScatterSegment<TDe>(in fx, in de,
+            camX, camY, camZ, i.Rdx, i.Rdy, i.Rdz, i.Epsilon,
+            0.0, i.TotalT, l1, l2, l3, ref br, ref bg, ref bb);
+    }
+
+    /// <summary>
+    /// Single-scattering Beer–Lambert in-scatter over an explicit air segment
+    /// [<paramref name="tStart"/>, <paramref name="tEnd"/>] along a ray from
+    /// (<paramref name="camX"/>, camY, camZ) in direction (rdx, rdy, rdz),
+    /// compositing over the incoming background (br/bg/bb) as
+    /// <c>bg·T + inScatter</c>. This is the shared kernel behind both the
+    /// surface-hit fog in <see cref="VolumetricInScatter{TDe}"/> (segment
+    /// [0, TotalT]) and the #184 relief sky/miss god-ray walk, which marches the
+    /// air the ray traverses through the fog volume even when it never hits
+    /// geometry — the only way crepuscular shafts form against a dark backdrop.
+    /// Slices A–D (multi-light color / HG phase / fog color / palette map) all
+    /// apply here so hit and miss pixels are lit consistently.
+    /// </summary>
+    public static void VolumetricInScatterSegment<TDe>(
+        in LightingFxData fx, in TDe de,
+        double camX, double camY, double camZ,
+        double rdx, double rdy, double rdz, double eps,
+        double tStart, double tEnd,
+        in (double X, double Y, double Z) l1,
+        in (double X, double Y, double Z) l2,
+        in (double X, double Y, double Z) l3,
+        ref double br, ref double bg, ref double bb)
+        where TDe : struct, IDistanceEstimator
+    {
+        double span = tEnd - tStart;
+        if (span <= 0.0) return;
         int vs = fx.VolumeSteps;
         // P4 — adaptive volumetric LOD (see the Phase-5 note; falloff=0 →
-        // legacy bit-identical).
-        if (fx.VolumeStepsFalloff > 0 && i.TotalT > 4.0)
-            vs = Math.Max(4, (int)(vs / (1.0 + (i.TotalT - 4.0) * fx.VolumeStepsFalloff)));
-        double stepSize = i.TotalT / vs;
+        // legacy bit-identical). Keyed off the far end of the segment.
+        if (fx.VolumeStepsFalloff > 0 && tEnd > 4.0)
+            vs = Math.Max(4, (int)(vs / (1.0 + (tEnd - 4.0) * fx.VolumeStepsFalloff)));
+        double stepSize = span / vs;
 
         double L1i = fx.Light1.Intensity, L2i = fx.Light2.Intensity, L3i = fx.Light3.Intensity;
         bool ss = fx.ShadowSteps > 0;
@@ -1176,10 +1209,10 @@ public static class ShadingPipeline
         double T = 1.0, inR = 0, inG = 0, inB = 0;
         for (int s = 0; s < vs; s++)
         {
-            double t = (s + 0.5) * stepSize;
-            double sx = camX + i.Rdx * t;
-            double sy = camY + i.Rdy * t;
-            double sz = camZ + i.Rdz * t;
+            double t = tStart + (s + 0.5) * stepSize;
+            double sx = camX + rdx * t;
+            double sy = camY + rdy * t;
+            double sz = camZ + rdz * t;
             double density = fx.FogDensity;
             if (fx.FogHeightFalloff > 0)
                 density *= Math.Exp(-fx.FogHeightFalloff * sy);
@@ -1188,15 +1221,15 @@ public static class ShadingPipeline
 
             if (L1i > 0)
                 AddVolumeScatter(in de, in fx, sx, sy, sz, l1.X, l1.Y, l1.Z,
-                    i.Rdx, i.Rdy, i.Rdz, fx.Light1.Color, L1i, sh1On, i.Epsilon,
+                    rdx, rdy, rdz, fx.Light1.Color, L1i, sh1On, eps,
                     T, density, stepSize, ref inR, ref inG, ref inB);
             if (L2i > 0)
                 AddVolumeScatter(in de, in fx, sx, sy, sz, l2.X, l2.Y, l2.Z,
-                    i.Rdx, i.Rdy, i.Rdz, fx.Light2.Color, L2i, sh2On, i.Epsilon,
+                    rdx, rdy, rdz, fx.Light2.Color, L2i, sh2On, eps,
                     T, density, stepSize, ref inR, ref inG, ref inB);
             if (L3i > 0)
                 AddVolumeScatter(in de, in fx, sx, sy, sz, l3.X, l3.Y, l3.Z,
-                    i.Rdx, i.Rdy, i.Rdz, fx.Light3.Color, L3i, sh3On, i.Epsilon,
+                    rdx, rdy, rdz, fx.Light3.Color, L3i, sh3On, eps,
                     T, density, stepSize, ref inR, ref inG, ref inB);
 
             // P1: Padé(2,2) approx of exp(-x); density·stepSize stays small in
@@ -1242,6 +1275,27 @@ public static class ShadingPipeline
         br = br * T + fInR;
         bg = bg * T + fInG;
         bb = bb * T + fInB;
+    }
+
+    /// <summary>#184 — convenience overload that resolves the three light
+    /// directions from <paramref name="fx"/> (including the Phase-18 orbit,
+    /// identical to <see cref="Shade{TDe}"/>) before delegating to the full
+    /// segment walk. Used by callers that don't already hold the resolved light
+    /// vectors — e.g. the relief sky/miss god-ray path.</summary>
+    public static void VolumetricInScatterSegment<TDe>(
+        in LightingFxData fx, in TDe de,
+        double camX, double camY, double camZ,
+        double rdx, double rdy, double rdz, double eps,
+        double tStart, double tEnd,
+        ref double br, ref double bg, ref double bb)
+        where TDe : struct, IDistanceEstimator
+    {
+        double orbitT = fx.SceneTime * fx.LightOrbitSpeed;
+        var l1 = LightDir(fx.Light1.Theta + orbitT,       fx.Light1.Phi);
+        var l2 = LightDir(fx.Light2.Theta + orbitT * 0.7, fx.Light2.Phi);
+        var l3 = LightDir(fx.Light3.Theta + orbitT * 1.3, fx.Light3.Phi);
+        VolumetricInScatterSegment<TDe>(in fx, in de, camX, camY, camZ,
+            rdx, rdy, rdz, eps, tStart, tEnd, l1, l2, l3, ref br, ref bg, ref bb);
     }
 
     /// <summary>Vol-color slice D (#180) — sample a packed-ARGB gradient LUT at
