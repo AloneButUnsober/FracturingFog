@@ -271,6 +271,13 @@ public struct LightingFxData
     /// Applied per light per volume step against dot(viewDir, lightDir).</summary>
     public double VolumeAnisotropy;
 
+    /// <summary>Vol-color slice C (#179) — medium color / scattering albedo
+    /// (packed BGRA). The accumulated in-scatter is multiplied by this tint,
+    /// independent of the light colors, so the fog medium itself can be
+    /// colored (amber haze, teal mist) while the lights stay white. Default
+    /// white (0xFFFFFFFF) → ×1 → bit-identical pre-slice-C.</summary>
+    public uint FogColor;
+
     // ── Material (Phase 6 PBR-lite) ───────────────────────────────────
 
     /// <summary>Surface roughness for GGX specular [0, 1]. 0 = mirror,
@@ -595,6 +602,7 @@ public struct LightingFxData
         VolumeSelfShadow   = 0.0,
         VolumeSelfShadowSteps = 4,
         VolumeAnisotropy   = 0.0,
+        FogColor           = 0xFFFFFFFFu,
 
         Roughness          = 1.0,
         Metallic           = 0.0,

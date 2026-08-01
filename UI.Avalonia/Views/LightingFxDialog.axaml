@@ -226,7 +226,7 @@
 
                 <!-- Fog / Volumetric -->
                 <Expander Header="Fog / Volumetric" HorizontalAlignment="Stretch">
-                    <Grid ColumnDefinitions="160,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto">
+                    <Grid ColumnDefinitions="160,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto">
                         <TextBlock Grid.Row="0" Grid.Column="0" Text="Fog density:" VerticalAlignment="Center"
                                    ToolTip.Tip="Beer–Lambert exponential. 0 = no fog. Scales by ray distance." />
                         <NumericUpDown Grid.Row="0" Grid.Column="1"
@@ -316,6 +316,12 @@
                             <TextBlock Classes="knobValue" Grid.Column="1"
                                        Text="{Binding VolumeAnisotropy, StringFormat='F2'}" />
                         </Grid>
+
+                        <TextBlock Grid.Row="10" Grid.Column="0" Text="Fog color:" VerticalAlignment="Center"
+                                   ToolTip.Tip="Medium / scattering-albedo tint in AARRGGBB hex, independent of the light colors. FFFFFFFF = no tint (white). Examples: FFFFCC00 = amber haze, FF66CCFF = teal mist." />
+                        <TextBox Grid.Row="10" Grid.Column="1"
+                                 Text="{Binding FogColorHex, Mode=TwoWay, UpdateSourceTrigger=LostFocus}"
+                                 Margin="0,2" />
                     </Grid>
                 </Expander>
 

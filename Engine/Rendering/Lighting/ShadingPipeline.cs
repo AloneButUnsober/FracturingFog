@@ -1204,9 +1204,15 @@ public static class ShadingPipeline
             double aT = density * stepSize;
             T *= aT < 1.0 ? ExpNegSmall(aT) : Math.Exp(-aT);
         }
-        br = br * T + inR;
-        bg = bg * T + inG;
-        bb = bb * T + inB;
+        // Vol-color slice C (#179) — tint the accumulated in-scatter by the
+        // medium's own scattering albedo. White (0xFFFFFFFF) → ×1 → bit-
+        // identical; the multiply is linear so end-of-walk == per-step.
+        double fr = ((fx.FogColor >> 16) & 0xFF) / 255.0;
+        double fg = ((fx.FogColor >>  8) & 0xFF) / 255.0;
+        double fb = ( fx.FogColor        & 0xFF) / 255.0;
+        br = br * T + inR * fr;
+        bg = bg * T + inG * fg;
+        bb = bb * T + inB * fb;
     }
 
     /// <summary>

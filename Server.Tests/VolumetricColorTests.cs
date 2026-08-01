@@ -109,4 +109,36 @@ public class VolumetricColorTests
         Assert.True(R(bak) < R(iso),
             $"back phase did not dim aligned in-scatter ({R(iso)} → {R(bak)})");
     }
+
+    // ── Slice C (#179): medium color / scattering albedo ──────────────────
+
+    private static int G(uint bgra) => (int)((bgra >> 8) & 0xFF);
+    private static int B(uint bgra) => (int)(bgra & 0xFF);
+
+    // White FogColor (the default) must leave the in-scatter untinted — a
+    // multiply-by-1 that keeps the pre-slice-C output bit-identical.
+    [Fact]
+    public void WhiteFogColor_Is_BitIdentical()
+    {
+        var baseline = VolFx();                     // FogColor defaults to white
+        var white = VolFx(); white.FogColor = 0xFFFFFFFFu;
+        Assert.Equal(ShadeOnce(baseline), ShadeOnce(white));
+    }
+
+    // A colored medium tints the fog independently of the (white) lights: an
+    // amber FogColor keeps the red channel but suppresses blue.
+    [Fact]
+    public void ColoredFogColor_Tints_The_Medium()
+    {
+        uint white = ShadeOnce(VolFx());            // untinted white medium
+        var amberFx = VolFx();
+        amberFx.FogColor = 0xFFFFCC00u;             // amber: R full, G 0.8, B 0
+        uint amber = ShadeOnce(amberFx);
+
+        Assert.NotEqual(white, amber);
+        // Blue in-scatter is zeroed by the amber tint → amber's blue channel
+        // cannot exceed the white medium's.
+        Assert.True(B(amber) <= B(white),
+            $"amber fog did not suppress the blue in-scatter ({B(white)} → {B(amber)})");
+    }
 }
