@@ -131,6 +131,67 @@ the Color Theme Editor's eyedropper can also match a light to a sampled pixel.
 > slider). For most scenes, one shaft-caster (the key light) plus colored fill
 > glow is exactly what you want.
 
+### 3.2 Aiming Light 1 (θ / φ) for shafts
+
+The two light angles in the **Lights** expander are the raw spherical direction
+*toward* the light — not "compass + height above horizon", so they read a little
+unusually. Both are in **radians**.
+
+- **L1 θ (azim)** — the compass direction (which way around the up-axis). Spinner,
+  range −10 … 10.
+- **L1 φ (elev)** — despite the label, this is the angle measured **down from
+  straight up**, so **larger φ = lower light**. Slider, 0.01 … 3.13 (≈ 0 … π).
+
+The direction the app builds from them is:
+
+```
+dir_toward_light = ( sinφ·cosθ ,  cosφ ,  sinφ·sinθ )
+```
+
+**φ — how low.** `cosφ` is the light's height:
+
+| φ | Light sits… |
+|---|---|
+| ~0.3 | high overhead (flat, top-lit — no shafts) |
+| ~1.40 (default) | fairly low |
+| **1.45 – 1.55** | **just above the horizon — the god-ray sweet spot** |
+| 1.571 (π/2) | dead on the horizon (`dir.y = 0`) |
+| > 1.6 | below the horizon (underground — avoid) |
+
+**Aim it low: set φ ≈ 1.5.**
+
+**θ — behind the subject.** Shafts appear when the fractal (or relief ridge)
+sits **between the camera and the light**, so the silhouette chops the light into
+beams. That means the light must be on the **far side from the camera**. For a
+3-D-fractal scene, orbit the camera (or nudge θ) until the light hides behind the
+form. For **Relief 3D**, the camera azimuth is a known number (degrees, in the
+Relief 3D panel), so you can compute θ directly — put the light 180° opposite:
+
+```
+L1 θ  ≈  (CameraAzimuthDeg × π / 180)  +  π
+```
+
+*Example* — camera azimuth 25°:  θ ≈ 25 × 0.0175 + 3.14 ≈ **3.58**
+(θ ≈ −2.70 is the same direction; either is fine).
+
+**Then nudge θ by ~0.3** either way while watching the frame — the shafts pop
+when the silhouette lands between camera and light. If the whole scene just goes
+flat-bright, the light is on the *camera's* side (in front); add or subtract π to
+flip it behind.
+
+| Control | Where | Value |
+|---|---|---|
+| L1 φ (elev) | Lights | **1.5** (low, near horizon) |
+| L1 θ (azim) | Lights | far side of the subject — Relief: `camAz°·0.0175 + 3.14` |
+| L1 intensity | Lights | ≥ 1.0 |
+| Anisotropy | Fog / Volumetric | 0.7 – 0.85 (forward punch) |
+
+> [!NOTE]
+> Because the default shadow mask is **Light 1 only**, Light 1 is the light worth
+> aiming — it is the one that carves shafts. On **Relief 3D under GPU raymarch**
+> (the default) the fog scatters the key light *exclusively*, so aiming Light 1 is
+> the whole job there.
+
 ---
 
 ## 4. The four color layers
