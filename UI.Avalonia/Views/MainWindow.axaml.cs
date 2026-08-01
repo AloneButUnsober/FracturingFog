@@ -407,6 +407,17 @@ public sealed partial class MainWindow : Window
             e.Handled = true;
             return;
         }
+        // Ctrl+Shift+G — toggle the GPU relief-raymarch path (default ON since
+        // Slice 4 #158 reached full FX parity). Off forces the CPU sphere-trace
+        // (parity oracle). Title gains [RELIEF GPU OFF] while relief raymarch is
+        // active. Ctrl+Shift so it doesn't collide with Ctrl+G (Mandelbrot GPU
+        // compute) or plain G (grid).
+        if (e.Key == Key.G && e.KeyModifiers == ctrlShift)
+        {
+            _shell.ToggleReliefGpuRaymarch();
+            e.Handled = true;
+            return;
+        }
 
         // Command keys (M/T/R/V) — unmodified only; Ctrl/Alt/Shift combos are
         // reserved (diagnostic toggles, precise-pan). Escape is handled in

@@ -420,15 +420,17 @@ namespace FracturingFog.Models
 
         /// <summary>#162 (Slice 3d) — dispatch the oblique relief raymarch on the
         /// GPU (Rendering.D3D / Rendering.Vulkan compute kernel) instead of the CPU
-        /// sphere trace, when the host has a relief kernel attached. OPT-IN and
-        /// default OFF: the GPU kernel currently renders the Slice-3 shader subset
-        /// (flat three-light Lambert + ambient + gradient sky), so it does NOT yet
-        /// reproduce the CPU render's full ShadingPipeline FX (soft shadow, AO, PBR
-        /// spec, IBL, reflections, fog) — that is Slice 4 (#158). Only affects the
-        /// raymarch path (<see cref="Relief2DRaymarch"/>) on escape-time 2D types;
-        /// with no kernel attached the CPU path runs regardless. The CPU render
-        /// stays the fidelity fallback and the parity oracle.</summary>
-        public bool Relief2DGpuRaymarch { get; set; } = false;
+        /// sphere trace, when the host has a relief kernel attached. Default ON as
+        /// of Slice 4 (#158) completion: the GPU kernel now reproduces the CPU
+        /// render's full ShadingPipeline FX stack (PBR spec, soft shadow, AO, IBL +
+        /// HDRI env, triplanar, fog + volumetric, reflections, FBM cloud-noise) at
+        /// CPU-twin parity, verified by the D3D/WARP + Vulkan/GT710 device gates.
+        /// Only affects the raymarch path (<see cref="Relief2DRaymarch"/>) on
+        /// escape-time 2D types; with no kernel attached (software backend, non-relief
+        /// session, poster/wallpaper export) the CPU path runs regardless. The CPU
+        /// render stays the fidelity fallback and the parity oracle. Toggle at
+        /// runtime with Ctrl+Shift+G.</summary>
+        public bool Relief2DGpuRaymarch { get; set; } = true;
 
         /// <summary>Slice 4f (#170) — empty-space-skip acceleration. Builds a
         /// coarse max-height grid over the compressed field and lets the sphere
