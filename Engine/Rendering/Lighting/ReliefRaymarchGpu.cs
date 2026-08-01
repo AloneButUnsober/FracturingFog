@@ -85,6 +85,13 @@ public readonly struct ReliefUniforms
     public readonly int VolumeSteps;
     public readonly double VolumeStepsFalloff;
 
+    // #184 Slice 3 — volumetric-color parity with the CPU ShadingPipeline:
+    // (B) Henyey-Greenstein phase anisotropy — 0 → isotropic (no phase);
+    // (C) medium fog color (scattering albedo) — white (0xFFFFFFFF) → ×1.
+    // Both default to pass-through so the pre-Slice-3 GPU render is unchanged.
+    public readonly double VolAnisotropy;
+    public readonly uint FogColor;
+
     // 4f — empty-space-skip max-height grid. EmptySkip == 0 → no skip (the
     // byte-identical slow march). MipW/MipH/MipBlk describe the coarse grid the
     // twin and both kernels build from hbuf via ReliefHeightMip.
@@ -133,7 +140,8 @@ public readonly struct ReliefUniforms
         uint[]? hdriBuf,
         double reflectionStrength, int reflectionSteps, int maxBounces, bool useGgxSampling,
         double volumeNoiseAmount, double volumeNoiseScale, double volumeNoiseSpeed, int volumeNoiseOctaves,
-        double volumeSelfShadow, int volumeSelfShadowSteps, double sceneTime)
+        double volumeSelfShadow, int volumeSelfShadowSteps, double sceneTime,
+        double volAnisotropy, uint fogColor)
     {
         W = w; H = h; Hw = hw; Hh = hh; Sy = sy; Aspect = aspect;
         InvLip = invLip; Bicubic = bicubic; Cam = cam;
@@ -158,6 +166,7 @@ public readonly struct ReliefUniforms
         VolumeNoiseSpeed = volumeNoiseSpeed; VolumeNoiseOctaves = volumeNoiseOctaves;
         VolumeSelfShadow = volumeSelfShadow; VolumeSelfShadowSteps = volumeSelfShadowSteps;
         SceneTime = sceneTime;
+        VolAnisotropy = volAnisotropy; FogColor = fogColor;
     }
 
     /// <summary>World-space direction of a directional light, matching
@@ -213,7 +222,8 @@ public readonly struct ReliefUniforms
             hdriBuf,
             fx.ReflectionStrength, fx.ReflectionSteps, fx.MaxBounces, fx.UseGgxSampling,
             fx.VolumeNoiseAmount, fx.VolumeNoiseScale, fx.VolumeNoiseSpeed, fx.VolumeNoiseOctaves,
-            fx.VolumeSelfShadow, fx.VolumeSelfShadowSteps, fx.SceneTime);
+            fx.VolumeSelfShadow, fx.VolumeSelfShadowSteps, fx.SceneTime,
+            fx.VolumeAnisotropy, fx.FogColor);
     }
 }
 
@@ -861,11 +871,27 @@ public static class ReliefRaymarchGpu
             // 4e-ii — cloud self-shadow toward the key light (1.0 when off).
             sh *= CloudSelfShadow(sx, sy, sz, u.L0x, u.L0y, u.L0z, in u);
             double scatter = density * sh * Li * stepSize;
+            // #184 Slice 3 (B) — Henyey-Greenstein phase, normalized so g=0 → 1
+            // (bit-identical). Twin of ShadingPipeline.AddVolumeScatter; view dir
+            // = the ray dir (rd), forward-scatters toward the key light for g>0.
+            double g = u.VolAnisotropy;
+            if (g != 0.0)
+            {
+                g = Math.Clamp(g, -0.99, 0.99);
+                double cosT = rdx * u.L0x + rdy * u.L0y + rdz * u.L0z;
+                double denom = 1.0 + g * g - 2.0 * g * cosT;
+                scatter *= (1.0 - g * g) / (denom * Math.Sqrt(denom));
+            }
             inR += T * scatter * Lr; inG += T * scatter * Lg; inB += T * scatter * Lb;
             double aT = density * stepSize;
             T *= aT < 1.0 ? ExpNegSmall(aT) : Math.Exp(-aT);
         }
-        br = br * T + inR; bg = bg * T + inG; bb = bb * T + inB;
+        // #184 Slice 3 (C) — tint the accumulated in-scatter by the medium's own
+        // scattering albedo (FogColor). White → ×1 → bit-identical.
+        double fcr = ((u.FogColor >> 16) & 0xFF) / 255.0;
+        double fcg = ((u.FogColor >>  8) & 0xFF) / 255.0;
+        double fcb = ( u.FogColor        & 0xFF) / 255.0;
+        br = br * T + inR * fcr; bg = bg * T + inG * fcg; bb = bb * T + inB * fcb;
     }
 
     /// <summary>#184 — sky/miss god-ray composite. When the ray traversed the fog

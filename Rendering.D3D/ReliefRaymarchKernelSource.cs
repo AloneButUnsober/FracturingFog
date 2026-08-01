@@ -137,7 +137,12 @@ cbuffer ReliefParams : register(b0)
     float  gVolSelfShadow;    // cloud self-shadow strength; 0 = off
     int    gVolSelfShadowSteps;// cloud self-shadow march steps (clamped 16)
     float  gSceneTime;        // animation clock for the cloud drift
+    float  gVolAnisotropy;    // #184 Slice 3 (B) — HG phase anisotropy; 0 = isotropic
+
+    uint   gFogColor;         // #184 Slice 3 (C) — medium scattering albedo (packed ARGB)
     float  gPadV;
+    float  gPadV2;
+    float  gPadV3;
 };
 
 static const float RELIEF_PI = 3.14159265358979;
@@ -830,11 +835,22 @@ void InScatterWalk(inout float br, inout float bg, inout float bb,
             sh = SoftShadow(sp, gL0, gEps0, 12.0, gShadowSoftK, gShadowSteps);
         sh *= CloudSelfShadow(sp, gL0);        // 4e-ii — cloud self-shadow
         float scatter = density * sh * gI0 * stepSize;
+        // #184 Slice 3 (B) — Henyey-Greenstein phase, normalized so g=0 → 1.
+        float g = gVolAnisotropy;
+        if (g != 0.0)
+        {
+            g = clamp(g, -0.99, 0.99);
+            float cosT = dot(rd, gL0);
+            float denom = 1.0 + g * g - 2.0 * g * cosT;
+            scatter *= (1.0 - g * g) / (denom * sqrt(denom));
+        }
         inSc += T * scatter * gC0;
         float aT = density * stepSize;
         T *= aT < 1.0 ? ExpNegSmall(aT) : exp(-aT);
     }
-    br = br * T + inSc.r; bg = bg * T + inSc.g; bb = bb * T + inSc.b;
+    // #184 Slice 3 (C) — tint accumulated in-scatter by the medium fog color.
+    float3 fc = float3((gFogColor >> 16) & 0xFF, (gFogColor >> 8) & 0xFF, gFogColor & 0xFF) / 255.0;
+    br = br * T + inSc.r * fc.r; bg = bg * T + inSc.g * fc.g; bb = bb * T + inSc.b * fc.b;
 }
 
 uint ApplyFogVolume(uint shaded, float3 o, float3 rd, float tHit)

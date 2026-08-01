@@ -901,6 +901,61 @@ public class ReliefRaymarchGpuTests
         Assert.True(godRaySky > 0, $"no sky god-ray in-scatter ({godRaySky}/{skyPixels})");
     }
 
+    // #184 Slice 3 (B) — GPU twin: Henyey-Greenstein anisotropy reshapes the
+    // in-scatter (forward-scatter concentration toward the key light), so g=0.8
+    // differs from isotropic g=0. Silhouette unmoved. This is the knob the
+    // cookbook's "single hard shaft" recipe relies on — it was ignored on GPU.
+    [Fact]
+    public void CpuMirror_Anisotropy_Reshapes_InScatter()
+    {
+        int w = 320, h = 240, hw = 320, hh = 240;
+        var p = ReliefParams();
+        var (hbuf, albedo, maxH) = BumpField(hw, hh, w, h);
+
+        var fx0 = LightingFxData.CreateDefault();
+        fx0.FogDensity = 0.9; fx0.VolumeSteps = 24; fx0.VolumeAnisotropy = 0.0;
+        var u0 = BuildUniforms(w, h, hw, hh, hbuf, maxH, p, fx0);
+        var a = new uint[w * h];
+        ReliefRaymarchGpu.RenderCpuMirror(in u0, hbuf, null, albedo, a, out double hitA);
+
+        var fx1 = LightingFxData.CreateDefault();
+        fx1.FogDensity = 0.9; fx1.VolumeSteps = 24; fx1.VolumeAnisotropy = 0.8;
+        var u1 = BuildUniforms(w, h, hw, hh, hbuf, maxH, p, fx1);
+        var b = new uint[w * h];
+        ReliefRaymarchGpu.RenderCpuMirror(in u1, hbuf, null, albedo, b, out double hitB);
+
+        Assert.Equal(hitA, hitB);
+        int changed = 0;
+        for (int i = 0; i < w * h; i++) if (a[i] != b[i]) changed++;
+        Assert.True(changed > 100, $"anisotropy reshaped too few px ({changed})");
+    }
+
+    // #184 Slice 3 (C) — GPU twin: fog color tints the accumulated in-scatter. A
+    // green medium biases the in-scatter green vs a white medium.
+    [Fact]
+    public void CpuMirror_FogColor_Tints_InScatter()
+    {
+        int w = 320, h = 240, hw = 320, hh = 240;
+        var p = ReliefParams();
+        var (hbuf, albedo, maxH) = BumpField(hw, hh, w, h);
+
+        var fxW = LightingFxData.CreateDefault();
+        fxW.FogDensity = 1.2; fxW.VolumeSteps = 24; fxW.FogColor = 0xFFFFFFFFu;
+        var uW = BuildUniforms(w, h, hw, hh, hbuf, maxH, p, fxW);
+        var wImg = new uint[w * h];
+        ReliefRaymarchGpu.RenderCpuMirror(in uW, hbuf, null, albedo, wImg, out _);
+
+        var fxG = LightingFxData.CreateDefault();
+        fxG.FogDensity = 1.2; fxG.VolumeSteps = 24; fxG.FogColor = 0xFF00FF00u;
+        var uG = BuildUniforms(w, h, hw, hh, hbuf, maxH, p, fxG);
+        var gImg = new uint[w * h];
+        ReliefRaymarchGpu.RenderCpuMirror(in uG, hbuf, null, albedo, gImg, out _);
+
+        int changed = 0;
+        for (int i = 0; i < w * h; i++) if (wImg[i] != gImg[i]) changed++;
+        Assert.True(changed > 100, $"fog color tinted too few px ({changed})");
+    }
+
     // 4e — FogDensity == 0 must be byte-identical regardless of VolumeSteps /
     // FogHeightFalloff. The whole fog+volumetric block is gated on FogDensity>0.
     [Fact]
