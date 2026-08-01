@@ -494,6 +494,48 @@ public sealed partial class FractalParamsViewModel
         get => _p.Lighting.VolumeSelfShadowSteps;
         set { MutateLighting(r => r.Fx.VolumeSelfShadowSteps = (int)Clamp(value, 0, 16)); this.RaisePropertyChanged(); Fire(); }
     }
+    // Vol-color slice B (#178) — Henyey-Greenstein phase anisotropy. 0 =
+    // isotropic (default); >0 forward god-rays, <0 back-scatter halo.
+    public double VolumeAnisotropy
+    {
+        get => _p.Lighting.VolumeAnisotropy;
+        set { MutateLighting(r => r.Fx.VolumeAnisotropy = Clamp(value, -1, 1)); this.RaisePropertyChanged(); Fire(); }
+    }
+    // Vol-color slice C (#179) — medium color / scattering albedo. White =
+    // no tint (default). Independent of the light colors.
+    public uint FogColor
+    {
+        get => _p.Lighting.FogColor;
+        set { MutateLighting(r => r.Fx.FogColor = value); this.RaisePropertyChanged(); Fire(); }
+    }
+    /// <summary>Hex BGRA accessor for <see cref="FogColor"/>. Bound to a
+    /// TextBox for the same NumericUpDown-chokes-on-uint reason as
+    /// <see cref="TriplanarTintHex"/>.</summary>
+    public string FogColorHex
+    {
+        get => _p.Lighting.FogColor.ToString("X8", System.Globalization.CultureInfo.InvariantCulture);
+        set
+        {
+            var s = (value ?? string.Empty).Trim();
+            if (s.StartsWith("#")) s = s.Substring(1);
+            if (s.StartsWith("0x", StringComparison.OrdinalIgnoreCase)) s = s.Substring(2);
+            if (!uint.TryParse(s, System.Globalization.NumberStyles.HexNumber,
+                System.Globalization.CultureInfo.InvariantCulture, out uint u)) return;
+            if (_p.Lighting.FogColor == u) return;
+            MutateLighting(r => r.Fx.FogColor = u);
+            this.RaisePropertyChanged();
+            this.RaisePropertyChanged(nameof(FogColor));
+            Fire();
+        }
+    }
+    // Vol-color slice D (#180) — palette-mapped volumetric. 0 = off (default);
+    // >0 cross-fades the in-scatter toward the active 3D theme's gradient
+    // (keyed by fog optical depth). Non-PBR / stylised.
+    public double VolumePaletteStrength
+    {
+        get => _p.Lighting.VolumePaletteStrength;
+        set { MutateLighting(r => r.Fx.VolumePaletteStrength = Clamp(value, 0, 1)); this.RaisePropertyChanged(); Fire(); }
+    }
 
     // ── Triplanar material (Phase 14b) ────────────────────────────────
     public TriplanarTextureKind TriplanarKind

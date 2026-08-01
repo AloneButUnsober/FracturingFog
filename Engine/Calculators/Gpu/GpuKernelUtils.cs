@@ -23,6 +23,7 @@
 // normal G-buffer once 12b lands).
 
 using System;
+using ILGPU;
 
 namespace FracturingFog.Calculators.Gpu;
 
@@ -31,6 +32,12 @@ namespace FracturingFog.Calculators.Gpu;
 /// they obey.</summary>
 internal static class GpuKernelUtils
 {
+    /// <summary>Slice D GPU parity — the length-1 "feature off" palette buffer
+    /// every kernel Render uploads when no theme LUT is supplied, so the kernel
+    /// arity stays fixed. Length &lt; 2 makes <see cref="PaletteRemapInScatter"/>
+    /// a no-op regardless of strength.</summary>
+    public static readonly uint[] PaletteOff = { 0u };
+
     /// <summary>Construct the primary ray direction for pixel <c>(x, y)</c>
     /// from the camera basis baked into <paramref name="p"/>. Returns the
     /// unit direction as (rdx, rdy, rdz). Honors <see
@@ -361,6 +368,88 @@ internal static class GpuKernelUtils
             accum += d * stepSz;
         }
         return Math.Exp(-sp.VolumeSelfShadow * accum);
+    }
+
+    /// <summary>Vol-color slice A/B/C GPU parity (#181) — one directional
+    /// light's contribution to the volumetric in-scatter accumulators. The
+    /// caller supplies the surface soft-shadow factor <paramref name="sh"/>
+    /// (marched against the fractal DE inline in the kernel, since ILGPU can't
+    /// take a struct-generic DE); this folds in cloud self-shadow, the
+    /// Henyey-Greenstein phase (VolumeAnisotropy), and the packed light color,
+    /// returning the transmittance-weighted RGB deltas to add to the in-scatter
+    /// accumulators. Mirrors <c>ShadingPipeline.AddVolumeScatter</c> minus the
+    /// DE soft-shadow. With g == 0 the phase term is skipped, so a single-light
+    /// call is bit-identical with the pre-parity kernel loop.</summary>
+    public static (double dR, double dG, double dB) VolumeScatterLight(
+        in GpuShadingParams sp,
+        double sx, double sy, double sz,
+        double lx, double ly, double lz,
+        double vdx, double vdy, double vdz,
+        double lR, double lG, double lB,
+        double li, double sh,
+        double T, double density, double stepSize)
+    {
+        sh *= CloudSelfShadow(sx, sy, sz, lx, ly, lz, in sp);
+        double scatter = density * sh * li * stepSize;
+        double g = sp.VolumeAnisotropy;
+        if (g != 0.0)
+        {
+            g = Math.Clamp(g, -0.99, 0.99);
+            double cosT = vdx * lx + vdy * ly + vdz * lz;
+            double denom = 1.0 + g * g - 2.0 * g * cosT;
+            scatter *= (1.0 - g * g) / (denom * Math.Sqrt(denom));
+        }
+        double w = T * scatter;
+        return (w * lR, w * lG, w * lB);
+    }
+
+    /// <summary>Vol-color slice D GPU parity (#180) — sample the uploaded theme
+    /// gradient LUT (packed ARGB) at <paramref name="u"/> ∈ [0, 1] with linear
+    /// interpolation between adjacent entries. Returns RGB doubles in [0, 255].
+    /// Mirrors <c>ShadingPipeline.SamplePalette</c>.</summary>
+    public static (double r, double g, double b) SamplePalette(ArrayView<uint> lut, double u)
+    {
+        if (u < 0.0) u = 0.0; else if (u > 1.0) u = 1.0;
+        long n = lut.Length;
+        double f = u * (n - 1);
+        long i0 = (long)f;
+        if (i0 >= n - 1)
+        {
+            uint cl = lut[n - 1];
+            return ((cl >> 16) & 0xFF, (cl >> 8) & 0xFF, cl & 0xFF);
+        }
+        double t = f - i0;
+        uint c0 = lut[i0], c1 = lut[i0 + 1];
+        double r0 = (c0 >> 16) & 0xFF, g0 = (c0 >> 8) & 0xFF, b0 = c0 & 0xFF;
+        double r1 = (c1 >> 16) & 0xFF, g1 = (c1 >> 8) & 0xFF, b1 = c1 & 0xFF;
+        return (r0 + (r1 - r0) * t, g0 + (g1 - g0) * t, b0 + (b1 - b0) * t);
+    }
+
+    /// <summary>Vol-color slice D GPU parity (#180) — energy-preserving palette
+    /// hue remap of the fog-tinted in-scatter, keyed by optical depth (1 − T).
+    /// Mirrors the CPU <c>ShadingPipeline</c> slice-D block: redistribute the
+    /// in-scatter's own brightness across the palette hue, then cross-fade by
+    /// <see cref="GpuShadingParams.VolumePaletteStrength"/>. No-op (returns the
+    /// input unchanged, bit-identical with slice E) when strength ≤ 0, the LUT
+    /// is shorter than 2 entries (the length-1 "feature off" dummy), or the
+    /// in-scatter carries no energy.</summary>
+    public static (double r, double g, double b) PaletteRemapInScatter(
+        in GpuShadingParams sp, ArrayView<uint> lut,
+        double fInR, double fInG, double fInB, double T)
+    {
+        double ps = sp.VolumePaletteStrength;
+        if (ps <= 0.0 || lut.Length < 2) return (fInR, fInG, fInB);
+        double energy = fInR + fInG + fInB;
+        if (energy <= 0.0) return (fInR, fInG, fInB);
+        var (pr, pg, pb) = SamplePalette(lut, 1.0 - T);
+        double pSum = pr + pg + pb;
+        if (pSum <= 1e-6) return (fInR, fInG, fInB);
+        if (ps > 1.0) ps = 1.0;
+        double k = energy / pSum;
+        double omp = 1.0 - ps;
+        return (fInR * omp + (pr * k) * ps,
+                fInG * omp + (pg * k) * ps,
+                fInB * omp + (pb * k) * ps);
     }
 
     /// <summary>P7c.3 — reflect view ray about a surface normal. Returns the
