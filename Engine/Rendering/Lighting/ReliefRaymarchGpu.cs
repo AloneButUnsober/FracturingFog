@@ -381,6 +381,9 @@ public static class ReliefRaymarchGpu
             ? (u.HdriBuf is not null ? HdriSky(rdx, rdy, rdz, in u) : GradientSky(rdy, in u))
             : u.DropColor;
         if (u.Isolate) bg &= 0x00FFFFFFu;
+        // #184 — sky/miss god-ray in-scatter over the fog slab air path [t0,t1].
+        else if (inside)
+            bg = ApplyFogVolumeMiss(bg, ox, oy, oz, rdx, rdy, rdz, t0, t1, in de, in u);
         return (bg, false);
     }
 
@@ -801,38 +804,8 @@ public static class ReliefRaymarchGpu
         double br = (shaded >> 16) & 0xFF, bg = (shaded >> 8) & 0xFF, bb = shaded & 0xFF;
 
         if (u.VolumeSteps > 0 && u.I0 > 0)
-        {
-            int vs = u.VolumeSteps;
-            // Adaptive volumetric LOD (VolumeStepsFalloff > 0). Off in the gate →
-            // no float-vs-double step-count divergence.
-            if (u.VolumeStepsFalloff > 0 && tHit > 4.0)
-                vs = Math.Max(4, (int)(vs / (1.0 + (tHit - 4.0) * u.VolumeStepsFalloff)));
-            double stepSize = tHit / vs;
-            double Lr = u.C0r, Lg = u.C0g, Lb = u.C0b, Li = u.I0;
-            bool shadowOn = u.ShadowSteps > 0 && (u.ShadowLightMask & 0x1) != 0;
-            double T = 1.0, inR = 0, inG = 0, inB = 0;
-            for (int s = 0; s < vs; s++)
-            {
-                double t = (s + 0.5) * stepSize;
-                double sx = ox + rdx * t, sy = oy + rdy * t, sz = oz + rdz * t;
-                double density = u.FogDensity;
-                if (u.FogHeightFalloff > 0)
-                    density *= Math.Exp(-u.FogHeightFalloff * sy);
-                // 4e-ii — FBM cloud-noise density modulation (1.0 when off).
-                density *= VolumetricDensityMul(sx, sy, sz, in u);
-                double sh = 1.0;
-                if (shadowOn)
-                    sh = ShadingPipeline.SoftShadow(in de, sx, sy, sz, u.L0x, u.L0y, u.L0z,
-                                                    u.Cam.Eps0, 12.0, u.ShadowSoftK, u.ShadowSteps);
-                // 4e-ii — cloud self-shadow toward the key light (1.0 when off).
-                sh *= CloudSelfShadow(sx, sy, sz, u.L0x, u.L0y, u.L0z, in u);
-                double scatter = density * sh * Li * stepSize;
-                inR += T * scatter * Lr; inG += T * scatter * Lg; inB += T * scatter * Lb;
-                double aT = density * stepSize;
-                T *= aT < 1.0 ? ExpNegSmall(aT) : Math.Exp(-aT);
-            }
-            br = br * T + inR; bg = bg * T + inG; bb = bb * T + inB;
-        }
+            InScatterWalk(ref br, ref bg, ref bb, ox, oy, oz, rdx, rdy, rdz,
+                          0.0, tHit, in de, in u);
         else
         {
             double fogF = 1.0 - Math.Exp(-tHit * u.FogDensity);
@@ -846,6 +819,74 @@ public static class ReliefRaymarchGpu
         return (A << 24)
              | ((uint)Math.Clamp(br + 0.5, 0, 255) << 16)
              | ((uint)Math.Clamp(bg + 0.5, 0, 255) << 8)
+             | (uint)Math.Clamp(bb + 0.5, 0, 255);
+    }
+
+    /// <summary>#184 — single-scatter in-scatter walk over an explicit air
+    /// segment [tStart,tEnd] from o + rd·t, compositing over the incoming
+    /// (br,bg,bb) as <c>bg·T + inScatter</c>. Twin of
+    /// <see cref="ShadingPipeline.VolumetricInScatterSegment"/> (key-light subset
+    /// until Slice 3 ports B/C/D). Shared by the surface-hit fog ([0,tHit]) and
+    /// the sky/miss god-ray walk ([t0,t1]) so shafts form against the sky.
+    /// Adaptive LOD keys off the far end of the segment.</summary>
+    private static void InScatterWalk(ref double br, ref double bg, ref double bb,
+        double ox, double oy, double oz, double rdx, double rdy, double rdz,
+        double tStart, double tEnd,
+        in HeightfieldRaymarch2D.HeightDe de, in ReliefUniforms u)
+    {
+        double span = tEnd - tStart;
+        if (span <= 0) return;
+        int vs = u.VolumeSteps;
+        // Adaptive volumetric LOD (VolumeStepsFalloff > 0). Off in the gate →
+        // no float-vs-double step-count divergence.
+        if (u.VolumeStepsFalloff > 0 && tEnd > 4.0)
+            vs = Math.Max(4, (int)(vs / (1.0 + (tEnd - 4.0) * u.VolumeStepsFalloff)));
+        double stepSize = span / vs;
+        double Lr = u.C0r, Lg = u.C0g, Lb = u.C0b, Li = u.I0;
+        bool shadowOn = u.ShadowSteps > 0 && (u.ShadowLightMask & 0x1) != 0;
+        double T = 1.0, inR = 0, inG = 0, inB = 0;
+        for (int s = 0; s < vs; s++)
+        {
+            double t = tStart + (s + 0.5) * stepSize;
+            double sx = ox + rdx * t, sy = oy + rdy * t, sz = oz + rdz * t;
+            double density = u.FogDensity;
+            if (u.FogHeightFalloff > 0)
+                density *= Math.Exp(-u.FogHeightFalloff * sy);
+            // 4e-ii — FBM cloud-noise density modulation (1.0 when off).
+            density *= VolumetricDensityMul(sx, sy, sz, in u);
+            double sh = 1.0;
+            if (shadowOn)
+                sh = ShadingPipeline.SoftShadow(in de, sx, sy, sz, u.L0x, u.L0y, u.L0z,
+                                                u.Cam.Eps0, 12.0, u.ShadowSoftK, u.ShadowSteps);
+            // 4e-ii — cloud self-shadow toward the key light (1.0 when off).
+            sh *= CloudSelfShadow(sx, sy, sz, u.L0x, u.L0y, u.L0z, in u);
+            double scatter = density * sh * Li * stepSize;
+            inR += T * scatter * Lr; inG += T * scatter * Lg; inB += T * scatter * Lb;
+            double aT = density * stepSize;
+            T *= aT < 1.0 ? ExpNegSmall(aT) : Math.Exp(-aT);
+        }
+        br = br * T + inR; bg = bg * T + inG; bb = bb * T + inB;
+    }
+
+    /// <summary>#184 — sky/miss god-ray composite. When the ray traversed the fog
+    /// slab ([t0,t1]) but hit no terrain and no ground, march the air segment and
+    /// composite the shadow-carved in-scatter over the backdrop so shafts form
+    /// against the sky. No-op for isolate cutouts / when the volumetric gate is
+    /// off. Twin of the CPU relief render's #184 miss path.</summary>
+    private static uint ApplyFogVolumeMiss(uint bg, double ox, double oy, double oz,
+        double rdx, double rdy, double rdz, double tStart, double tEnd,
+        in HeightfieldRaymarch2D.HeightDe de, in ReliefUniforms u)
+    {
+        if (u.Isolate || u.FogDensity <= 0 || u.VolumeSteps <= 0 || u.I0 <= 0) return bg;
+        double ts = Math.Max(tStart, 0.0);
+        if (tEnd <= ts) return bg;
+        double br = (bg >> 16) & 0xFF, bgc = (bg >> 8) & 0xFF, bb = bg & 0xFF;
+        InScatterWalk(ref br, ref bgc, ref bb, ox, oy, oz, rdx, rdy, rdz,
+                      ts, tEnd, in de, in u);
+        uint A = (bg >> 24) & 0xFFu;
+        return (A << 24)
+             | ((uint)Math.Clamp(br + 0.5, 0, 255) << 16)
+             | ((uint)Math.Clamp(bgc + 0.5, 0, 255) << 8)
              | (uint)Math.Clamp(bb + 0.5, 0, 255);
     }
 

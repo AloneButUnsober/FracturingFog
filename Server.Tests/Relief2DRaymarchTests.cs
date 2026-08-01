@@ -866,6 +866,41 @@ public class ReliefRaymarchGpuTests
         Assert.True(changed > 100, $"IBL ambient shifted too few px ({changed})");
     }
 
+    // #184 (Slice 2) — GPU twin parity oracle: sky/miss rays that traverse the
+    // fog slab now pick up shadow-carved in-scatter, so ray-miss pixels no longer
+    // equal the plain backdrop. Mirrors the CPU relief render's sky god-ray path;
+    // this is the oracle the D3D/Vulkan device gates diff against.
+    [Fact]
+    public void CpuMirror_SkyMiss_Receives_GodRay_InScatter()
+    {
+        int w = 320, h = 240, hw = 320, hh = 240;
+        var p = ReliefParams();                 // ground off
+        p.Relief2DCameraElevationDeg = 28;      // low camera → high silhouette
+        p.Relief2DHeightScale = 2.5;            // tall slab → grazing sky rays
+        var (hbuf, albedo, maxH) = BumpField(hw, hh, w, h);
+
+        var fxOff = LightingFxData.CreateDefault();
+        fxOff.ShowSkyBackdrop = false;          // miss → DropColor const
+        fxOff.FogDensity = 0.0;
+        var uOff = BuildUniforms(w, h, hw, hh, hbuf, maxH, p, fxOff);
+        var off = new uint[w * h];
+        ReliefRaymarchGpu.RenderCpuMirror(in uOff, hbuf, null, albedo, off, out _);
+
+        var fxOn = LightingFxData.CreateDefault();
+        fxOn.ShowSkyBackdrop = false;
+        fxOn.FogDensity = 1.5; fxOn.VolumeSteps = 24;
+        var uOn = BuildUniforms(w, h, hw, hh, hbuf, maxH, p, fxOn);
+        var on = new uint[w * h];
+        ReliefRaymarchGpu.RenderCpuMirror(in uOn, hbuf, null, albedo, on, out _);
+
+        uint drop = uOff.DropColor;
+        int skyPixels = 0, godRaySky = 0;
+        for (int i = 0; i < w * h; i++)
+            if (off[i] == drop) { skyPixels++; if (on[i] != drop) godRaySky++; }
+        Assert.True(skyPixels > w * h / 20, $"too little sky: {skyPixels}");
+        Assert.True(godRaySky > 0, $"no sky god-ray in-scatter ({godRaySky}/{skyPixels})");
+    }
+
     // 4e — FogDensity == 0 must be byte-identical regardless of VolumeSteps /
     // FogHeightFalloff. The whole fog+volumetric block is gated on FogDensity>0.
     [Fact]
