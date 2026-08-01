@@ -139,6 +139,26 @@ public struct GpuShadingParams
     /// Mirrors LightingFxData.SceneTime.</summary>
     public double SceneTime;
 
+    // ── Vol-color slice B/C GPU parity (#181) ─────────────────────────────
+    /// <summary>Henyey-Greenstein phase anisotropy [-1, 1]. 0 = isotropic
+    /// (legacy, bit-identical). g &gt; 0 forward-scatters the in-scatter toward
+    /// each light; g &lt; 0 back-scatters. Clamped to ±0.99 in the kernel.
+    /// Mirrors LightingFxData.VolumeAnisotropy.</summary>
+    public double VolumeAnisotropy;
+    /// <summary>Medium scattering-albedo / fog color (RGB bytes-as-double in
+    /// [0, 255]). Tints the accumulated volumetric in-scatter. White
+    /// (255,255,255 — the default) is a ×1 no-op → bit-identical with the
+    /// pre-parity path. Mirrors LightingFxData.FogColor channels.</summary>
+    public double FogR, FogG, FogB;
+
+    // ── Vol-color slice D GPU parity (#180) ───────────────────────────────
+    /// <summary>Palette-mapped volumetric strength [0, 1]. 0 = off (legacy,
+    /// bit-identical). When &gt;0 the kernel cross-fades the in-scatter toward
+    /// the uploaded theme gradient LUT (passed as a separate ArrayView kernel
+    /// arg — it can't live on this blittable struct), keyed by optical depth
+    /// (1 − transmittance). Mirrors LightingFxData.VolumePaletteStrength.</summary>
+    public double VolumePaletteStrength;
+
     // ── P7c.3 one-bounce reflection ────────────────────────────────────────
     /// <summary>Reflection mix factor [0, 1]. 0 = off (legacy path).
     /// Mirrors LightingFxData.ReflectionStrength.</summary>
@@ -272,6 +292,17 @@ public struct GpuShadingParams
             VolumeSelfShadow      = fx.VolumeSelfShadow,
             VolumeSelfShadowSteps = fx.VolumeSelfShadowSteps,
             SceneTime             = fx.SceneTime,
+
+            // Slice B/C parity — anisotropy 0 + white fog default → kernel
+            // in-scatter stays bit-identical with the single-light path.
+            VolumeAnisotropy = fx.VolumeAnisotropy,
+            FogR = (fx.FogColor >> 16) & 0xFF,
+            FogG = (fx.FogColor >>  8) & 0xFF,
+            FogB =  fx.FogColor        & 0xFF,
+
+            // Slice D — strength gates the palette remap; the LUT itself is
+            // uploaded separately (ArrayView), not carried on this struct.
+            VolumePaletteStrength = fx.VolumePaletteStrength,
 
             ReflectStrength = fx.ReflectionStrength,
             ReflectSteps    = fx.ReflectionSteps,

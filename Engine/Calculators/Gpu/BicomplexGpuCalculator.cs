@@ -30,7 +30,7 @@ public struct BicomplexGpuParams
 
 public sealed class BicomplexGpuCalculator : IDisposable
 {
-    private Action<Index1D, ArrayView<uint>, GpuRaymarchParams, GpuShadingParams, BicomplexGpuParams>? _kernel;
+    private Action<Index1D, ArrayView<uint>, GpuRaymarchParams, GpuShadingParams, BicomplexGpuParams, ArrayView<uint>>? _kernel;
     private bool _initFailed;
     public string LastError { get; private set; } = string.Empty;
 
@@ -47,7 +47,7 @@ public sealed class BicomplexGpuCalculator : IDisposable
         try
         {
             _kernel = acc.LoadAutoGroupedStreamKernel<
-                Index1D, ArrayView<uint>, GpuRaymarchParams, GpuShadingParams, BicomplexGpuParams>(BicomplexKernel);
+                Index1D, ArrayView<uint>, GpuRaymarchParams, GpuShadingParams, BicomplexGpuParams, ArrayView<uint>>(BicomplexKernel);
             return true;
         }
         catch (Exception ex)
@@ -58,7 +58,7 @@ public sealed class BicomplexGpuCalculator : IDisposable
         }
     }
 
-    public bool Render(uint[] outBuffer, GpuRaymarchParams r, GpuShadingParams sp, BicomplexGpuParams p)
+    public bool Render(uint[] outBuffer, GpuRaymarchParams r, GpuShadingParams sp, BicomplexGpuParams p, uint[]? palette = null)
     {
         if (!TryInit() || _kernel == null) return false;
         if (!GpuAcceleratorHost.TryAcquire(out var acc)) return false;
@@ -66,7 +66,13 @@ public sealed class BicomplexGpuCalculator : IDisposable
         {
             int total = r.Width * r.Height;
             using var dev = acc.Allocate1D<uint>(total);
-            _kernel(total, dev.View, r, sp, p);
+            // Slice D GPU parity — upload the theme palette LUT (or a length-1
+            // dummy when off) so the kernel arity stays fixed; the kernel gates
+            // on VolumePaletteStrength + LUT length.
+            uint[] lut = palette is { Length: >= 2 } ? palette : GpuKernelUtils.PaletteOff;
+            using var devLut = acc.Allocate1D<uint>(lut.Length);
+            devLut.CopyFromCPU(lut);
+            _kernel(total, dev.View, r, sp, p, devLut.View);
             acc.Synchronize();
             dev.CopyToCPU(outBuffer);
             return true;
@@ -79,7 +85,7 @@ public sealed class BicomplexGpuCalculator : IDisposable
     }
 
     private static void BicomplexKernel(
-        Index1D idx, ArrayView<uint> output, GpuRaymarchParams r, GpuShadingParams sp, BicomplexGpuParams p)
+        Index1D idx, ArrayView<uint> output, GpuRaymarchParams r, GpuShadingParams sp, BicomplexGpuParams p, ArrayView<uint> palette)
     {
         int x = idx % r.Width;
         int y = idx / r.Width;
@@ -214,7 +220,8 @@ public sealed class BicomplexGpuCalculator : IDisposable
         }
 
         // P7c.2 — single-scattering volumetric in-scatter (Bicomplex DE).
-        if (sp.VolumeSteps > 0 && sp.FogDensity > 0 && sp.L1I > 0)
+        if (sp.VolumeSteps > 0 && sp.FogDensity > 0
+            && (sp.L1I > 0 || sp.L2I > 0 || sp.L3I > 0))
         {
             double camX = px - rdx * tT;
             double camY = py - rdy * tT;
@@ -223,7 +230,10 @@ public sealed class BicomplexGpuCalculator : IDisposable
             if (sp.VolumeStepsFalloff > 0 && tT > 4.0)
                 vs = Math.Max(4, (int)(vs / (1.0 + (tT - 4.0) * sp.VolumeStepsFalloff)));
             double stepSize = tT / vs;
-            bool shadowOn = sp.ShadowSteps > 0 && (sp.ShadowLightMask & 0x1) != 0;
+            bool ss = sp.ShadowSteps > 0;
+            bool sh1On = ss && (sp.ShadowLightMask & 0x1) != 0;
+            bool sh2On = ss && (sp.ShadowLightMask & 0x2) != 0;
+            bool sh3On = ss && (sp.ShadowLightMask & 0x4) != 0;
             double T = 1.0, inR = 0, inG = 0, inB = 0;
             for (int s = 0; s < vs; s++)
             {
@@ -235,21 +245,53 @@ public sealed class BicomplexGpuCalculator : IDisposable
                 if (sp.FogHeightFalloff > 0)
                     density *= Math.Exp(-sp.FogHeightFalloff * sy);
                 density *= GpuKernelUtils.VolumetricDensityMul(sx, sy, sz, in sp);
-                double sh = 1.0;
-                if (shadowOn)
-                    sh = SoftShadow(sx, sy, sz, sp.L1X, sp.L1Y, sp.L1Z,
-                        r.Eps, sp.ShadowTMax, sp.ShadowSoftK, sp.ShadowSteps, p);
-                sh *= GpuKernelUtils.CloudSelfShadow(sx, sy, sz, sp.L1X, sp.L1Y, sp.L1Z, in sp);
-                double scatter = density * sh * sp.L1I * stepSize;
-                inR += T * scatter * sp.L1R;
-                inG += T * scatter * sp.L1G;
-                inB += T * scatter * sp.L1B;
+                // Vol-color slice A/B/C GPU parity (#181): every emitting light
+                // adds its own colored, phase-weighted single-scatter. Surface
+                // soft-shadow marches this fractal's DE inline (ILGPU can't take
+                // a struct-generic DE); cloud self-shadow + HG phase + fog-color
+                // tint live in GpuKernelUtils, matching the CPU pipe.
+                if (sp.L1I > 0)
+                {
+                    double sh = sh1On ? SoftShadow(sx, sy, sz, sp.L1X, sp.L1Y, sp.L1Z,
+                        r.Eps, sp.ShadowTMax, sp.ShadowSoftK, sp.ShadowSteps, p) : 1.0;
+                    var (dR, dG, dB) = GpuKernelUtils.VolumeScatterLight(in sp,
+                        sx, sy, sz, sp.L1X, sp.L1Y, sp.L1Z, rdx, rdy, rdz,
+                        sp.L1R, sp.L1G, sp.L1B, sp.L1I, sh, T, density, stepSize);
+                    inR += dR; inG += dG; inB += dB;
+                }
+                if (sp.L2I > 0)
+                {
+                    double sh = sh2On ? SoftShadow(sx, sy, sz, sp.L2X, sp.L2Y, sp.L2Z,
+                        r.Eps, sp.ShadowTMax, sp.ShadowSoftK, sp.ShadowSteps, p) : 1.0;
+                    var (dR, dG, dB) = GpuKernelUtils.VolumeScatterLight(in sp,
+                        sx, sy, sz, sp.L2X, sp.L2Y, sp.L2Z, rdx, rdy, rdz,
+                        sp.L2R, sp.L2G, sp.L2B, sp.L2I, sh, T, density, stepSize);
+                    inR += dR; inG += dG; inB += dB;
+                }
+                if (sp.L3I > 0)
+                {
+                    double sh = sh3On ? SoftShadow(sx, sy, sz, sp.L3X, sp.L3Y, sp.L3Z,
+                        r.Eps, sp.ShadowTMax, sp.ShadowSoftK, sp.ShadowSteps, p) : 1.0;
+                    var (dR, dG, dB) = GpuKernelUtils.VolumeScatterLight(in sp,
+                        sx, sy, sz, sp.L3X, sp.L3Y, sp.L3Z, rdx, rdy, rdz,
+                        sp.L3R, sp.L3G, sp.L3B, sp.L3I, sh, T, density, stepSize);
+                    inR += dR; inG += dG; inB += dB;
+                }
                 double aT = density * stepSize;
                 T *= aT < 1.0 ? GpuKernelUtils.ExpNegSmall(aT) : Math.Exp(-aT);
             }
-            br = br * T + inR;
-            bg = bg * T + inG;
-            bb = bb * T + inB;
+            // Slice C: medium color / scattering-albedo tint. White fog → ×1 →
+            // bit-identical with the pre-parity single-light path.
+            double fInR = inR * (sp.FogR / 255.0);
+            double fInG = inG * (sp.FogG / 255.0);
+            double fInB = inB * (sp.FogB / 255.0);
+            // Slice D GPU parity: palette-map the in-scatter through the uploaded
+            // theme LUT (no-op when strength 0 / LUT is the length-1 dummy).
+            (fInR, fInG, fInB) = GpuKernelUtils.PaletteRemapInScatter(
+                in sp, palette, fInR, fInG, fInB, T);
+            br = br * T + fInR;
+            bg = bg * T + fInG;
+            bb = bb * T + fInB;
         }
         else
         {

@@ -155,6 +155,9 @@ public sealed class KifsCalculator : IFractalCalculator
 
         // Phase 1c — Lighting struct is authoritative for Light1/2/3.
         var fx = FractalParameters.Lighting;
+        // Vol-color slice D (#180) — bake the active theme gradient for the
+        // volumetric palette remap (no-op unless VolumePaletteStrength > 0).
+        VolumePaletteBaker.Bake(ref fx, ColorMap);
         DistanceEstimator deDelegate = (x, y, z) => DispatchDE(
             fold, x, y, z, scale, ox, oy, oz, deIter);
 
@@ -188,7 +191,7 @@ public sealed class KifsCalculator : IFractalCalculator
                     DEIter = deIter, SceneRadius = sceneRadius,
                 };
                 _gpuSierp ??= new SierpinskiGpuCalculator();
-                if (_gpuSierp.Render(renderBuffer, rp, sp, sip))
+                if (_gpuSierp.Render(renderBuffer, rp, sp, sip, fx.VolumePalette))
                 {
                     // #84 — GPU raymarch skips the CPU post stack; draw the debug
                     // HUD directly so the light compass still shows on GPU frames.
@@ -204,7 +207,7 @@ public sealed class KifsCalculator : IFractalCalculator
                     DEIter = deIter, SceneRadius = sceneRadius,
                 };
                 _gpuMenger ??= new MengerGpuCalculator();
-                if (_gpuMenger.Render(renderBuffer, rp, sp, mp))
+                if (_gpuMenger.Render(renderBuffer, rp, sp, mp, fx.VolumePalette))
                 {
                     // #84 — GPU raymarch skips the CPU post stack; draw the debug
                     // HUD directly so the light compass still shows on GPU frames.

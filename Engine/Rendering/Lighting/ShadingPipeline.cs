@@ -223,52 +223,16 @@ public static class ShadingPipeline
         // When VolumeSteps==0 and FogDensity>0, fall back to legacy exponential
         // fog (pre-Phase-5 behaviour). When neither, no fog math runs.
         if (fx.VolumeSteps > 0 && fx.FogDensity > 0 && de is not null
-            && fx.Light1.Intensity > 0)
+            && (fx.Light1.Intensity > 0 || fx.Light2.Intensity > 0 || fx.Light3.Intensity > 0))
         {
-            // Reconstruct camera origin from surface point + view ray.
-            double camX = i.Px - i.Rdx * i.TotalT;
-            double camY = i.Py - i.Rdy * i.TotalT;
-            double camZ = i.Pz - i.Rdz * i.TotalT;
-            int vs = fx.VolumeSteps;
-            double stepSize = i.TotalT / vs;
-            double Lr = (fx.Light1.Color >> 16) & 0xFF;
-            double Lg = (fx.Light1.Color >> 8) & 0xFF;
-            double Lb = fx.Light1.Color & 0xFF;
-            double Li = fx.Light1.Intensity;
-            bool shadowOn = fx.ShadowSteps > 0 && (fx.ShadowLightMask & 0x1) != 0;
-            double T = 1.0, inR = 0, inG = 0, inB = 0;
-            for (int s = 0; s < vs; s++)
-            {
-                double t = (s + 0.5) * stepSize;
-                double sx = camX + i.Rdx * t;
-                double sy = camY + i.Rdy * t;
-                double sz = camZ + i.Rdz * t;
-                double density = fx.FogDensity;
-                if (fx.FogHeightFalloff > 0)
-                    density *= Math.Exp(-fx.FogHeightFalloff * sy);
-                // Phase 22 — fbm cloud-noise modulation. Mul=1 when off, so
-                // pre-Phase-22 renders stay bit-identical.
-                density *= VolumetricDensityMul(sx, sy, sz, fx);
-                double sh = 1.0;
-                if (shadowOn)
-                    sh = SoftShadow(de, sx, sy, sz, l1.X, l1.Y, l1.Z,
-                                    i.Epsilon, 12.0, fx.ShadowSoftK, fx.ShadowSteps);
-                // Phase 22b — cloud self-shadow. Returns 1 when off so
-                // pre-Phase-22b renders stay bit-identical.
-                sh *= CloudSelfShadow(sx, sy, sz, l1.X, l1.Y, l1.Z, fx);
-                double scatter = density * sh * Li * stepSize;
-                inR += T * scatter * Lr;
-                inG += T * scatter * Lg;
-                inB += T * scatter * Lb;
-                // P1: Padé(2,2) approx of exp(-x). ~1e-4 accuracy on [0, 1];
-                // density*stepSize stays small in normal scenes. Math.Exp ~15 ns,
-                // Padé ~3 ns. Fall back outside the trust band.
-                double aT = density * stepSize;
-                T *= aT < 1.0 ? ExpNegSmall(aT) : Math.Exp(-aT);
-            }
-            br = br * T + inR;
-            bg = bg * T + inG;
-            bb = bb * T + inB;
+            // Vol-color slice A (#177) — route the material path through the
+            // shared struct-generic in-scatter helper (via DelegateDeAdapter)
+            // so it gets multi-light color and the P4 VolumeStepsFalloff LOD
+            // the generic Shade<TDe> path already had. This overload has no
+            // external callers; the unification removes a latent inconsistency.
+            var ada = new DelegateDeAdapter(de);
+            VolumetricInScatter(in i, in fx, in ada, l1, l2, l3,
+                ref br, ref bg, ref bb);
         }
         else if (fx.FogDensity > 0)
         {
@@ -683,58 +647,12 @@ public static class ShadingPipeline
         // When VolumeSteps==0 and FogDensity>0, fall back to legacy exponential
         // fog (pre-Phase-5 behaviour). When neither, no fog math runs.
         if (fx.VolumeSteps > 0 && fx.FogDensity > 0 && hasDe
-            && fx.Light1.Intensity > 0)
+            && (fx.Light1.Intensity > 0 || fx.Light2.Intensity > 0 || fx.Light3.Intensity > 0))
         {
-            // Reconstruct camera origin from surface point + view ray.
-            double camX = i.Px - i.Rdx * i.TotalT;
-            double camY = i.Py - i.Rdy * i.TotalT;
-            double camZ = i.Pz - i.Rdz * i.TotalT;
-            int vs = fx.VolumeSteps;
-            // P4 — adaptive volumetric LOD. Past 4 world units of camera depth
-            // the in-scatter contribution is already attenuated by T → 0, so
-            // shrink the step count rather than paying full ShadowSteps DE
-            // evals at every sample. Falloff=0 → legacy bit-identical.
-            if (fx.VolumeStepsFalloff > 0 && i.TotalT > 4.0)
-                vs = Math.Max(4, (int)(vs / (1.0 + (i.TotalT - 4.0) * fx.VolumeStepsFalloff)));
-            double stepSize = i.TotalT / vs;
-            double Lr = (fx.Light1.Color >> 16) & 0xFF;
-            double Lg = (fx.Light1.Color >> 8) & 0xFF;
-            double Lb = fx.Light1.Color & 0xFF;
-            double Li = fx.Light1.Intensity;
-            bool shadowOn = fx.ShadowSteps > 0 && (fx.ShadowLightMask & 0x1) != 0;
-            double T = 1.0, inR = 0, inG = 0, inB = 0;
-            for (int s = 0; s < vs; s++)
-            {
-                double t = (s + 0.5) * stepSize;
-                double sx = camX + i.Rdx * t;
-                double sy = camY + i.Rdy * t;
-                double sz = camZ + i.Rdz * t;
-                double density = fx.FogDensity;
-                if (fx.FogHeightFalloff > 0)
-                    density *= Math.Exp(-fx.FogHeightFalloff * sy);
-                // Phase 22 — fbm cloud-noise modulation. Mul=1 when off, so
-                // pre-Phase-22 renders stay bit-identical.
-                density *= VolumetricDensityMul(sx, sy, sz, fx);
-                double sh = 1.0;
-                if (shadowOn)
-                    sh = SoftShadow<TDe>(in de, sx, sy, sz, l1.X, l1.Y, l1.Z,
-                                          i.Epsilon, 12.0, fx.ShadowSoftK, fx.ShadowSteps);
-                // Phase 22b — cloud self-shadow. Returns 1 when off so
-                // pre-Phase-22b renders stay bit-identical.
-                sh *= CloudSelfShadow(sx, sy, sz, l1.X, l1.Y, l1.Z, fx);
-                double scatter = density * sh * Li * stepSize;
-                inR += T * scatter * Lr;
-                inG += T * scatter * Lg;
-                inB += T * scatter * Lb;
-                // P1: Padé(2,2) approx of exp(-x). ~1e-4 accuracy on [0, 1];
-                // density*stepSize stays small in normal scenes. Math.Exp ~15 ns,
-                // Padé ~3 ns. Fall back outside the trust band.
-                double aT = density * stepSize;
-                T *= aT < 1.0 ? ExpNegSmall(aT) : Math.Exp(-aT);
-            }
-            br = br * T + inR;
-            bg = bg * T + inG;
-            bb = bb * T + inB;
+            // Vol-color slice A (#177) — all three lights contribute colored
+            // in-scatter. Lights 2/3 default off → single-light bit-identical.
+            VolumetricInScatter<TDe>(in i, in fx, in de, l1, l2, l3,
+                ref br, ref bg, ref bb);
         }
         else if (fx.FogDensity > 0)
         {
@@ -1218,6 +1136,176 @@ public static class ShadingPipeline
         // amount=0 → 1.0; amount=1 → 2·n (range [0, ~1.75], mean ~0.875).
         double mul = 1.0 + fx.VolumeNoiseAmount * (2.0 * n - 1.0);
         return Math.Max(0.0, mul);
+    }
+
+    /// <summary>
+    /// Vol-color slice A (#177) — volumetric in-scatter over all three
+    /// directional lights. Single density/transmittance walk (shared per step);
+    /// each light with <c>Intensity &gt; 0</c> contributes its own colored,
+    /// self-/soft-shadowed scatter. Lights 2/3 default <c>Intensity = 0</c> so
+    /// they are skipped and the single-light output stays bit-identical with
+    /// the pre-multi-light Phase-5 path. Shared by both <c>Shade</c> entry
+    /// points (the material path routes through <see cref="DelegateDeAdapter"/>
+    /// so both use the same struct-generic body).
+    /// </summary>
+    public static void VolumetricInScatter<TDe>(
+        in ShadingInputs i, in LightingFxData fx, in TDe de,
+        in (double X, double Y, double Z) l1,
+        in (double X, double Y, double Z) l2,
+        in (double X, double Y, double Z) l3,
+        ref double br, ref double bg, ref double bb)
+        where TDe : struct, IDistanceEstimator
+    {
+        // Reconstruct camera origin from surface point + view ray.
+        double camX = i.Px - i.Rdx * i.TotalT;
+        double camY = i.Py - i.Rdy * i.TotalT;
+        double camZ = i.Pz - i.Rdz * i.TotalT;
+        int vs = fx.VolumeSteps;
+        // P4 — adaptive volumetric LOD (see the Phase-5 note; falloff=0 →
+        // legacy bit-identical).
+        if (fx.VolumeStepsFalloff > 0 && i.TotalT > 4.0)
+            vs = Math.Max(4, (int)(vs / (1.0 + (i.TotalT - 4.0) * fx.VolumeStepsFalloff)));
+        double stepSize = i.TotalT / vs;
+
+        double L1i = fx.Light1.Intensity, L2i = fx.Light2.Intensity, L3i = fx.Light3.Intensity;
+        bool ss = fx.ShadowSteps > 0;
+        bool sh1On = ss && (fx.ShadowLightMask & 0x1) != 0;
+        bool sh2On = ss && (fx.ShadowLightMask & 0x2) != 0;
+        bool sh3On = ss && (fx.ShadowLightMask & 0x4) != 0;
+
+        double T = 1.0, inR = 0, inG = 0, inB = 0;
+        for (int s = 0; s < vs; s++)
+        {
+            double t = (s + 0.5) * stepSize;
+            double sx = camX + i.Rdx * t;
+            double sy = camY + i.Rdy * t;
+            double sz = camZ + i.Rdz * t;
+            double density = fx.FogDensity;
+            if (fx.FogHeightFalloff > 0)
+                density *= Math.Exp(-fx.FogHeightFalloff * sy);
+            // Phase 22 — fbm cloud-noise modulation. Mul=1 when off.
+            density *= VolumetricDensityMul(sx, sy, sz, fx);
+
+            if (L1i > 0)
+                AddVolumeScatter(in de, in fx, sx, sy, sz, l1.X, l1.Y, l1.Z,
+                    i.Rdx, i.Rdy, i.Rdz, fx.Light1.Color, L1i, sh1On, i.Epsilon,
+                    T, density, stepSize, ref inR, ref inG, ref inB);
+            if (L2i > 0)
+                AddVolumeScatter(in de, in fx, sx, sy, sz, l2.X, l2.Y, l2.Z,
+                    i.Rdx, i.Rdy, i.Rdz, fx.Light2.Color, L2i, sh2On, i.Epsilon,
+                    T, density, stepSize, ref inR, ref inG, ref inB);
+            if (L3i > 0)
+                AddVolumeScatter(in de, in fx, sx, sy, sz, l3.X, l3.Y, l3.Z,
+                    i.Rdx, i.Rdy, i.Rdz, fx.Light3.Color, L3i, sh3On, i.Epsilon,
+                    T, density, stepSize, ref inR, ref inG, ref inB);
+
+            // P1: Padé(2,2) approx of exp(-x); density·stepSize stays small in
+            // normal scenes. Extinction is per-step (shared across lights).
+            double aT = density * stepSize;
+            T *= aT < 1.0 ? ExpNegSmall(aT) : Math.Exp(-aT);
+        }
+        // Vol-color slice C (#179) — tint the accumulated in-scatter by the
+        // medium's own scattering albedo. White (0xFFFFFFFF) → ×1 → bit-
+        // identical; the multiply is linear so end-of-walk == per-step.
+        double fr = ((fx.FogColor >> 16) & 0xFF) / 255.0;
+        double fg = ((fx.FogColor >>  8) & 0xFF) / 255.0;
+        double fb = ( fx.FogColor        & 0xFF) / 255.0;
+        double fInR = inR * fr, fInG = inG * fg, fInB = inB * fb;
+
+        // Vol-color slice D (#180) — palette-map the in-scatter through the
+        // active 3D color-theme gradient, keyed by optical depth (1 − T: thicker
+        // fog samples deeper into the ramp). Energy-preserving hue remap
+        // (redistribute the in-scatter's own brightness across the palette hue),
+        // then cross-fade by VolumePaletteStrength. Strength 0 or no LUT →
+        // unchanged, so the default stays bit-identical with slice C.
+        double ps = fx.VolumePaletteStrength;
+        uint[]? lut = fx.VolumePalette;
+        if (ps > 0.0 && lut != null && lut.Length >= 2)
+        {
+            double energy = fInR + fInG + fInB;
+            if (energy > 0.0)
+            {
+                var (pr, pg, pb) = SamplePalette(lut, 1.0 - T);
+                double pSum = pr + pg + pb;
+                if (pSum > 1e-6)
+                {
+                    if (ps > 1.0) ps = 1.0;
+                    double k = energy / pSum;
+                    double omp = 1.0 - ps;
+                    fInR = fInR * omp + (pr * k) * ps;
+                    fInG = fInG * omp + (pg * k) * ps;
+                    fInB = fInB * omp + (pb * k) * ps;
+                }
+            }
+        }
+
+        br = br * T + fInR;
+        bg = bg * T + fInG;
+        bb = bb * T + fInB;
+    }
+
+    /// <summary>Vol-color slice D (#180) — sample a packed-ARGB gradient LUT at
+    /// <paramref name="u"/> ∈ [0, 1] with linear interpolation between adjacent
+    /// entries. Returns the RGB channels as doubles in [0, 255]. The LUT is the
+    /// active 3D theme's ramp, baked once per frame by the calculator; this is
+    /// the read side consumed by the volumetric in-scatter palette remap.</summary>
+    private static (double r, double g, double b) SamplePalette(uint[] lut, double u)
+    {
+        if (u < 0.0) u = 0.0; else if (u > 1.0) u = 1.0;
+        int n = lut.Length;
+        double f = u * (n - 1);
+        int i0 = (int)f;
+        if (i0 >= n - 1)
+        {
+            uint cl = lut[n - 1];
+            return ((cl >> 16) & 0xFF, (cl >> 8) & 0xFF, cl & 0xFF);
+        }
+        double t = f - i0;
+        uint c0 = lut[i0], c1 = lut[i0 + 1];
+        double r0 = (c0 >> 16) & 0xFF, g0 = (c0 >> 8) & 0xFF, b0 = c0 & 0xFF;
+        double r1 = (c1 >> 16) & 0xFF, g1 = (c1 >> 8) & 0xFF, b1 = c1 & 0xFF;
+        return (r0 + (r1 - r0) * t, g0 + (g1 - g0) * t, b0 + (b1 - b0) * t);
+    }
+
+    /// <summary>
+    /// Single-light contribution to the volumetric in-scatter accumulators.
+    /// Matches the original single-light Phase-5 expression exactly (density ·
+    /// shadow · intensity · stepSize, weighted by transmittance × packed light
+    /// color) so the key-light-only default stays bit-identical.
+    /// </summary>
+    private static void AddVolumeScatter<TDe>(
+        in TDe de, in LightingFxData fx,
+        double sx, double sy, double sz,
+        double lx, double ly, double lz,
+        double vdx, double vdy, double vdz,
+        uint color, double li, bool shOn, double eps,
+        double T, double density, double stepSize,
+        ref double inR, ref double inG, ref double inB)
+        where TDe : struct, IDistanceEstimator
+    {
+        double lr = (color >> 16) & 0xFF;
+        double lg = (color >> 8) & 0xFF;
+        double lb = color & 0xFF;
+        double sh = shOn
+            ? SoftShadow<TDe>(in de, sx, sy, sz, lx, ly, lz,
+                              eps, 12.0, fx.ShadowSoftK, fx.ShadowSteps)
+            : 1.0;
+        // Phase 22b — cloud self-shadow toward this light. Returns 1 when off.
+        sh *= CloudSelfShadow(sx, sy, sz, lx, ly, lz, fx);
+        double scatter = density * sh * li * stepSize;
+        // Vol-color slice B (#178) — Henyey-Greenstein phase, normalized so
+        // g=0 → 1 (bit-identical). g>0 forward-scatters toward the light.
+        double g = fx.VolumeAnisotropy;
+        if (g != 0.0)
+        {
+            g = Math.Clamp(g, -0.99, 0.99);
+            double cosT = vdx * lx + vdy * ly + vdz * lz;
+            double denom = 1.0 + g * g - 2.0 * g * cosT;
+            scatter *= (1.0 - g * g) / (denom * Math.Sqrt(denom));
+        }
+        inR += T * scatter * lr;
+        inG += T * scatter * lg;
+        inB += T * scatter * lb;
     }
 
     /// <summary>

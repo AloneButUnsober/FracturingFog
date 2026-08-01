@@ -261,6 +261,46 @@ public struct LightingFxData
     /// per volume step when self-shadow is on. Phase 22b.</summary>
     public int VolumeSelfShadowSteps;
 
+    /// <summary>Vol-color slice B (#178) — Henyey-Greenstein phase anisotropy
+    /// for the volumetric in-scatter, [-1, 1]. 0 = isotropic (bit-identical
+    /// pre-slice-B). &gt;0 forward-scatters — a bright god-ray halo when the
+    /// view ray points toward the light; &lt;0 back-scatters (halo away from
+    /// the light). The phase is normalized so g=0 evaluates to exactly 1 (the
+    /// 1/4π isotropic factor is folded into FogDensity / light intensity), and
+    /// clamped internally to ±0.99 to avoid the forward-scatter singularity.
+    /// Applied per light per volume step against dot(viewDir, lightDir).</summary>
+    public double VolumeAnisotropy;
+
+    /// <summary>Vol-color slice C (#179) — medium color / scattering albedo
+    /// (packed BGRA). The accumulated in-scatter is multiplied by this tint,
+    /// independent of the light colors, so the fog medium itself can be
+    /// colored (amber haze, teal mist) while the lights stay white. Default
+    /// white (0xFFFFFFFF) → ×1 → bit-identical pre-slice-C.</summary>
+    public uint FogColor;
+
+    /// <summary>Vol-color slice D (#180) — palette-mapped volumetric strength
+    /// [0, 1]. 0 = off (bit-identical pre-slice-D). When &gt;0 the accumulated
+    /// in-scatter is hue-remapped toward the active 3D color theme's gradient
+    /// (sampled by optical depth 1−transmittance), preserving in-scatter
+    /// brightness, then cross-faded by this amount — so the fog picks up the
+    /// same palette as the fractal surface. Deliberately non-PBR: a stylised
+    /// deviation consistent with FF's NPR surface color themes, layered on top
+    /// of the physically-based light color (A) / phase (B) / medium color (C).
+    /// Needs <see cref="VolumePalette"/> baked from the theme; a null/empty LUT
+    /// makes this a no-op regardless of strength.</summary>
+    public double VolumePaletteStrength;
+
+    /// <summary>Vol-color slice D (#180) — runtime-only theme gradient LUT
+    /// (packed ARGB, any length ≥2) the calculator bakes once per frame from
+    /// its active <c>IColorMap</c> when <see cref="VolumePaletteStrength"/>
+    /// &gt; 0. Sampled by normalized optical depth in
+    /// <c>ShadingPipeline.VolumetricInScatter</c>. Not a user knob and not
+    /// serialized — a reference field on this value type, defaulting to null
+    /// (no palette → slice D is a no-op). GPU parity would upload this as its
+    /// own buffer; deferred (the GPU path uses cheap-palette albedo, not the
+    /// theme).</summary>
+    public uint[]? VolumePalette;
+
     // ── Material (Phase 6 PBR-lite) ───────────────────────────────────
 
     /// <summary>Surface roughness for GGX specular [0, 1]. 0 = mirror,
@@ -584,6 +624,10 @@ public struct LightingFxData
         VolumeNoiseOctaves = 3,
         VolumeSelfShadow   = 0.0,
         VolumeSelfShadowSteps = 4,
+        VolumeAnisotropy   = 0.0,
+        FogColor           = 0xFFFFFFFFu,
+        VolumePaletteStrength = 0.0,
+        VolumePalette      = null,
 
         Roughness          = 1.0,
         Metallic           = 0.0,
