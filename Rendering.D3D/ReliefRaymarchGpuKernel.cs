@@ -61,9 +61,12 @@ public sealed class ReliefRaymarchGpuKernel : IDisposable, FracturingFog.Renderi
         public float FogDensity, FogHeightFalloff; public int VolumeSteps; public float VolumeStepsFalloff;   // 4e
         public int EmptySkip, MipW, MipH, MipBlk;   // 4f
         public int HasHdri, PadH0, PadH1, PadH2;   // 4d-ii
+        public float ReflStrength; public int ReflSteps, MaxBounces, UseGgx;   // 4e-ii reflections
+        public float VolNoiseAmount, VolNoiseScale, VolNoiseSpeed; public int VolNoiseOctaves;   // 4e-ii FBM
+        public float VolSelfShadow; public int VolSelfShadowSteps; public float SceneTime, PadV;   // 4e-ii
     }
 
-    private const int ParamBytes = 384;
+    private const int ParamBytes = 432;
 
     private readonly ID3D11Device _device;
     private readonly ID3D11DeviceContext _ctx;
@@ -361,6 +364,12 @@ public sealed class ReliefRaymarchGpuKernel : IDisposable, FracturingFog.Renderi
             VolumeSteps = u.VolumeSteps, VolumeStepsFalloff = (float)u.VolumeStepsFalloff,
             EmptySkip = u.EmptySkip, MipW = u.MipW, MipH = u.MipH, MipBlk = u.MipBlk,
             HasHdri = u.HdriBuf != null ? 1 : 0,
+            ReflStrength = (float)u.ReflectionStrength, ReflSteps = u.ReflectionSteps,
+            MaxBounces = u.MaxBounces, UseGgx = u.UseGgxSampling ? 1 : 0,
+            VolNoiseAmount = (float)u.VolumeNoiseAmount, VolNoiseScale = (float)u.VolumeNoiseScale,
+            VolNoiseSpeed = (float)u.VolumeNoiseSpeed, VolNoiseOctaves = u.VolumeNoiseOctaves,
+            VolSelfShadow = (float)u.VolumeSelfShadow, VolSelfShadowSteps = u.VolumeSelfShadowSteps,
+            SceneTime = (float)u.SceneTime, PadV = 0f,
         };
     }
 

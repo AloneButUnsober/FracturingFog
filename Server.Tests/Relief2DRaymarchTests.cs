@@ -1090,6 +1090,126 @@ public class ReliefRaymarchGpuTests
                 $"dir ({dx},{dy},{dz}) rough {rough}: HdriImage ({e.R},{e.G},{e.B}) != flattened ({g.R},{g.G},{g.B})");
         }
     }
+
+    // ── 4e-ii (#172): shader-side reflections + FBM cloud-noise volumetrics ──
+
+    // ReflectionStrength == 0 is the off-switch: the whole reflection probe (steps,
+    // bounce count, GGX toggle) must not touch a single pixel. Proves the phase is
+    // additively gated (byte-identical to pre-4e-ii) regardless of the other knobs.
+    [Fact]
+    public void CpuMirror_ReflectionsOff_ByteIdentical_Regardless_Of_Knobs()
+    {
+        int w = 320, h = 240, hw = 320, hh = 240;
+        var p = ReliefParams();
+        var (hbuf, albedo, maxH) = BumpField(hw, hh, w, h);
+
+        var fxA = LightingFxData.CreateDefault();
+        fxA.ReflectionStrength = 0.0;
+        fxA.ReflectionSteps = 24; fxA.MaxBounces = 4; fxA.UseGgxSampling = true;
+        var uA = BuildUniforms(w, h, hw, hh, hbuf, maxH, p, fxA);
+        var a = new uint[w * h];
+        ReliefRaymarchGpu.RenderCpuMirror(in uA, hbuf, null, albedo, a, out _);
+
+        var fxB = LightingFxData.CreateDefault();
+        fxB.ReflectionStrength = 0.0;
+        var uB = BuildUniforms(w, h, hw, hh, hbuf, maxH, p, fxB);
+        var b = new uint[w * h];
+        ReliefRaymarchGpu.RenderCpuMirror(in uB, hbuf, null, albedo, b, out _);
+
+        Assert.Equal(a, b);
+    }
+
+    // Mirror reflections (ReflectionStrength > 0, UseGgxSampling off) sphere-trace
+    // reflect(rd,N) along the height DE and add a Fresnel-weighted env/sky tint to
+    // the surface. Terrain pixels shift; the silhouette never moves (reflection is a
+    // post-shade colour add on hits, not geometry).
+    [Fact]
+    public void CpuMirror_ReflectionsOn_Adds_Tint_Without_Moving_Silhouette()
+    {
+        int w = 320, h = 240, hw = 320, hh = 240;
+        var p = ReliefParams();
+        var (hbuf, albedo, maxH) = BumpField(hw, hh, w, h);
+
+        var fxOff = LightingFxData.CreateDefault();
+        fxOff.ReflectionStrength = 0.0;
+        var uOff = BuildUniforms(w, h, hw, hh, hbuf, maxH, p, fxOff);
+        var off = new uint[w * h];
+        ReliefRaymarchGpu.RenderCpuMirror(in uOff, hbuf, null, albedo, off, out double hitOff);
+
+        var fxOn = LightingFxData.CreateDefault();
+        fxOn.ReflectionStrength = 0.6; fxOn.ReflectionSteps = 24; fxOn.MaxBounces = 2;
+        fxOn.UseGgxSampling = false; fxOn.Metallic = 0.8;
+        var uOn = BuildUniforms(w, h, hw, hh, hbuf, maxH, p, fxOn);
+        var on = new uint[w * h];
+        ReliefRaymarchGpu.RenderCpuMirror(in uOn, hbuf, null, albedo, on, out double hitOn);
+
+        Assert.Equal(hitOff, hitOn);
+        int changed = 0;
+        for (int i = 0; i < w * h; i++) if (on[i] != off[i]) changed++;
+        Assert.True(changed > 100, $"reflections shifted too few px ({changed})");
+    }
+
+    // VolumeNoiseAmount == 0 is the off-switch for the FBM cloud modulation: with
+    // the in-scatter walk running, toggling the self-shadow / scale / speed / octave
+    // knobs must not change a pixel — the density multiplier stays 1 (byte-identical
+    // to the #169 in-scatter render).
+    [Fact]
+    public void CpuMirror_VolumeNoiseOff_ByteIdentical_Regardless_Of_NoiseKnobs()
+    {
+        int w = 320, h = 240, hw = 320, hh = 240;
+        var p = ReliefParams();
+        var (hbuf, albedo, maxH) = BumpField(hw, hh, w, h);
+
+        var fxA = LightingFxData.CreateDefault();
+        fxA.FogDensity = 0.5; fxA.FogHeightFalloff = 0.3; fxA.VolumeSteps = 16;
+        fxA.VolumeNoiseAmount = 0.0;
+        fxA.VolumeNoiseScale = 0.7; fxA.VolumeNoiseSpeed = 1.3; fxA.VolumeNoiseOctaves = 5;
+        fxA.VolumeSelfShadow = 0.9; fxA.VolumeSelfShadowSteps = 8; fxA.SceneTime = 2.0;
+        var uA = BuildUniforms(w, h, hw, hh, hbuf, maxH, p, fxA);
+        var a = new uint[w * h];
+        ReliefRaymarchGpu.RenderCpuMirror(in uA, hbuf, null, albedo, a, out _);
+
+        var fxB = LightingFxData.CreateDefault();
+        fxB.FogDensity = 0.5; fxB.FogHeightFalloff = 0.3; fxB.VolumeSteps = 16;
+        fxB.VolumeNoiseAmount = 0.0;
+        var uB = BuildUniforms(w, h, hw, hh, hbuf, maxH, p, fxB);
+        var b = new uint[w * h];
+        ReliefRaymarchGpu.RenderCpuMirror(in uB, hbuf, null, albedo, b, out _);
+
+        Assert.Equal(a, b);
+    }
+
+    // FBM cloud-noise (VolumeNoiseAmount > 0) modulates the per-step in-scatter
+    // density (and, with self-shadow on, the per-step transmittance), producing a
+    // different fog result from the smooth #169 walk — still without moving the
+    // silhouette (it is a density modulation inside the post-shade fog blend).
+    [Fact]
+    public void CpuMirror_VolumeNoiseOn_Modulates_Fog_Without_Moving_Silhouette()
+    {
+        int w = 320, h = 240, hw = 320, hh = 240;
+        var p = ReliefParams();
+        var (hbuf, albedo, maxH) = BumpField(hw, hh, w, h);
+
+        var fxOff = LightingFxData.CreateDefault();
+        fxOff.FogDensity = 0.5; fxOff.FogHeightFalloff = 0.3; fxOff.VolumeSteps = 16;
+        fxOff.VolumeNoiseAmount = 0.0;
+        var uOff = BuildUniforms(w, h, hw, hh, hbuf, maxH, p, fxOff);
+        var off = new uint[w * h];
+        ReliefRaymarchGpu.RenderCpuMirror(in uOff, hbuf, null, albedo, off, out double hitOff);
+
+        var fxOn = LightingFxData.CreateDefault();
+        fxOn.FogDensity = 0.5; fxOn.FogHeightFalloff = 0.3; fxOn.VolumeSteps = 16;
+        fxOn.VolumeNoiseAmount = 0.8; fxOn.VolumeNoiseScale = 0.5; fxOn.VolumeNoiseOctaves = 3;
+        fxOn.VolumeSelfShadow = 0.6; fxOn.VolumeSelfShadowSteps = 4;
+        var uOn = BuildUniforms(w, h, hw, hh, hbuf, maxH, p, fxOn);
+        var on = new uint[w * h];
+        ReliefRaymarchGpu.RenderCpuMirror(in uOn, hbuf, null, albedo, on, out double hitOn);
+
+        Assert.Equal(hitOff, hitOn);
+        int changed = 0;
+        for (int i = 0; i < w * h; i++) if (on[i] != off[i]) changed++;
+        Assert.True(changed > 100, $"cloud-noise modulated too few px ({changed})");
+    }
 }
 
 // #162 (Slice 3d) — host-wiring seam. HeightfieldRaymarch2D.Render dispatches

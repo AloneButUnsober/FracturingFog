@@ -96,6 +96,23 @@ public readonly struct ReliefUniforms
     // gradient/solid env (byte-identical). HasHdri (in the blob) gates the read.
     public readonly uint[]? HdriBuf;
 
+    // 4e-ii — N-bounce reflection probe. ReflectionStrength == 0 → off (no-op).
+    // ReflectionSteps <= 0 → 24. MaxBounces clamped [1,6]. UseGgxSampling routes
+    // the bounce dir through GGX VNDF (HashPair + SampleGgxReflect) — a
+    // hash+trig float-vs-double landmine, so it is left OFF in the parity gate.
+    public readonly double ReflectionStrength;   // Roughness/Metallic reuse the 4a fields.
+    public readonly int ReflectionSteps, MaxBounces;
+    public readonly bool UseGgxSampling;
+
+    // 4e-ii — FBM cloud-noise volumetrics. VolumeNoiseAmount == 0 → density mul 1
+    // (byte-identical to #169). VolumeSelfShadow/Steps gate the cloud self-shadow.
+    // SceneTime × VolumeNoiseSpeed drives the drift (kept at speed 0 in the gate).
+    public readonly double VolumeNoiseAmount, VolumeNoiseScale, VolumeNoiseSpeed;
+    public readonly int VolumeNoiseOctaves;
+    public readonly double VolumeSelfShadow;
+    public readonly int VolumeSelfShadowSteps;
+    public readonly double SceneTime;
+
     public readonly bool ShowSky, Isolate;
     public readonly uint BgTop, BgBottom, FloorAlbedo, DropColor;
 
@@ -113,7 +130,10 @@ public readonly struct ReliefUniforms
         int triplanarKind, double triplanarStrength, double triplanarScale, uint triplanarTint,
         double fogDensity, double fogHeightFalloff, int volumeSteps, double volumeStepsFalloff,
         int emptySkip, int mipW, int mipH, int mipBlk,
-        uint[]? hdriBuf)
+        uint[]? hdriBuf,
+        double reflectionStrength, int reflectionSteps, int maxBounces, bool useGgxSampling,
+        double volumeNoiseAmount, double volumeNoiseScale, double volumeNoiseSpeed, int volumeNoiseOctaves,
+        double volumeSelfShadow, int volumeSelfShadowSteps, double sceneTime)
     {
         W = w; H = h; Hw = hw; Hh = hh; Sy = sy; Aspect = aspect;
         InvLip = invLip; Bicubic = bicubic; Cam = cam;
@@ -132,6 +152,12 @@ public readonly struct ReliefUniforms
         VolumeSteps = volumeSteps; VolumeStepsFalloff = volumeStepsFalloff;
         EmptySkip = emptySkip; MipW = mipW; MipH = mipH; MipBlk = mipBlk;
         HdriBuf = hdriBuf;
+        ReflectionStrength = reflectionStrength; ReflectionSteps = reflectionSteps;
+        MaxBounces = maxBounces; UseGgxSampling = useGgxSampling;
+        VolumeNoiseAmount = volumeNoiseAmount; VolumeNoiseScale = volumeNoiseScale;
+        VolumeNoiseSpeed = volumeNoiseSpeed; VolumeNoiseOctaves = volumeNoiseOctaves;
+        VolumeSelfShadow = volumeSelfShadow; VolumeSelfShadowSteps = volumeSelfShadowSteps;
+        SceneTime = sceneTime;
     }
 
     /// <summary>World-space direction of a directional light, matching
@@ -184,7 +210,10 @@ public readonly struct ReliefUniforms
             p.Relief2DEmptySkip ? 1 : 0,
             ReliefHeightMip.GridDim(hw, ReliefHeightMip.Blk),
             ReliefHeightMip.GridDim(hh, ReliefHeightMip.Blk), ReliefHeightMip.Blk,
-            hdriBuf);
+            hdriBuf,
+            fx.ReflectionStrength, fx.ReflectionSteps, fx.MaxBounces, fx.UseGgxSampling,
+            fx.VolumeNoiseAmount, fx.VolumeNoiseScale, fx.VolumeNoiseSpeed, fx.VolumeNoiseOctaves,
+            fx.VolumeSelfShadow, fx.VolumeSelfShadowSteps, fx.SceneTime);
     }
 }
 
@@ -465,6 +494,12 @@ public static class ReliefRaymarchGpu
         double r = aR * sR + specR;
         double g = aG * sG + specG;
         double b = aB * sB + specB;
+
+        // 4e-ii — N-bounce reflection probe. Sphere-trace reflect(rd,N) along the
+        // height DE and add the Fresnel-weighted env-tinted contribution. rd is the
+        // primary view ray = -v. No-op when ReflectionStrength == 0.
+        Reflections(nx, ny, nz, -vx, -vy, -vz, px, py, pz, in de, in u, ref r, ref g, ref b);
+
         uint A = (albedo >> 24) & 0xFFu;
         return (A << 24)
              | ((uint)Math.Clamp(r + 0.5, 0, 255) << 16)
@@ -502,6 +537,175 @@ public static class ReliefRaymarchGpu
         specR += specBase * (F0r + (1.0 - F0r) * Fc) * cr;
         specG += specBase * (F0g + (1.0 - F0g) * Fc) * cg;
         specB += specBase * (F0b + (1.0 - F0b) * Fc) * cb;
+    }
+
+    /// <summary>4e-ii — N-bounce reflection probe. Sphere-traces reflect(rd,N)
+    /// along the height DE; per bounce accumulates a Schlick-Fresnel-weighted,
+    /// env-tinted hit (distance-attenuated) or sky-tinted miss, fading the chain
+    /// by (ReflectionStrength·F)^bounce. Optional GGX VNDF sample of the bounce
+    /// dir (UseGgxSampling) — a HashPair+SampleGgxReflect hash/trig float-vs-double
+    /// landmine, left OFF in the gate. Line-for-line twin of ShadingPipeline.Shade
+    /// Phase 16/16b, marching the HeightDe instead of the fractal DE. Adds into
+    /// r/g/b (0–255 space). ReflectionStrength == 0 → no-op.</summary>
+    private static void Reflections(
+        double nx, double ny, double nz, double rdx, double rdy, double rdz,
+        double px, double py, double pz,
+        in HeightfieldRaymarch2D.HeightDe de, in ReliefUniforms u,
+        ref double outR, ref double outG, ref double outB)
+    {
+        if (u.ReflectionStrength <= 0) return;
+        double eps = u.Cam.Eps0;
+        int reflSteps = u.ReflectionSteps > 0 ? u.ReflectionSteps : 24;
+        int maxBounces = u.MaxBounces > 0 ? u.MaxBounces : 1;
+        if (maxBounces > 6) maxBounces = 6;
+        double tMaxR = 12.0;
+        double bias = eps * 4.0;
+
+        double bOx = px + nx * bias, bOy = py + ny * bias, bOz = pz + nz * bias;
+        double rdN0 = rdx * nx + rdy * ny + rdz * nz;
+        double brx = rdx - 2.0 * rdN0 * nx;
+        double bry = rdy - 2.0 * rdN0 * ny;
+        double brz = rdz - 2.0 * rdN0 * nz;
+        if (u.UseGgxSampling)
+        {
+            var (u1, u2) = ShadingPipeline.HashPair(px, py, pz, 0);
+            var g = ShadingPipeline.SampleGgxReflect(-rdx, -rdy, -rdz, nx, ny, nz, u.Roughness, u1, u2);
+            if (g.X * nx + g.Y * ny + g.Z * nz > 0) { brx = g.X; bry = g.Y; brz = g.Z; }
+        }
+        double NdotV = Math.Max(0.0, nx * -rdx + ny * -rdy + nz * -rdz);
+
+        double accR = 0, accG = 0, accB = 0;
+        double chainW = u.ReflectionStrength;
+        for (int b = 0; b < maxBounces; b++)
+        {
+            double f0 = 0.04 + 0.96 * u.Metallic;
+            double omv = 1.0 - NdotV;
+            double Fc = omv * omv * omv * omv * omv;
+            double F = f0 + (1.0 - f0) * Fc;
+            double w = chainW * F;
+            if (w < 1e-4) break;
+
+            double tR = eps;
+            bool hitR = false;
+            double hitTR = 0.0, hpx = 0, hpy = 0, hpz = 0;
+            for (int s = 0; s < reflSteps; s++)
+            {
+                hpx = bOx + brx * tR; hpy = bOy + bry * tR; hpz = bOz + brz * tR;
+                double hR = de.Evaluate(hpx, hpy, hpz);
+                if (hR < eps * 2.0) { hitR = true; hitTR = tR; break; }
+                tR += hR;
+                if (tR > tMaxR) break;
+            }
+
+            if (!hitR)
+            {
+                uint skyR = SkyDirPacked(brx, bry, brz, u.Roughness, in u);
+                accR += ((skyR >> 16) & 0xFF) * w;
+                accG += ((skyR >>  8) & 0xFF) * w;
+                accB += ( skyR        & 0xFF) * w;
+                break;
+            }
+
+            var (eR, eG, eB) = EnvAmbientDir(brx, bry, brz, u.Roughness, in u);
+            double atten = Math.Exp(-hitTR * 0.15);
+            accR += eR * 255.0 * atten * w;
+            accG += eG * 255.0 * atten * w;
+            accB += eB * 255.0 * atten * w;
+
+            if (b + 1 >= maxBounces) break;
+
+            double h = eps * 2.0;
+            double nbx = de.Evaluate(hpx + h, hpy, hpz) - de.Evaluate(hpx - h, hpy, hpz);
+            double nby = de.Evaluate(hpx, hpy + h, hpz) - de.Evaluate(hpx, hpy - h, hpz);
+            double nbz = de.Evaluate(hpx, hpy, hpz + h) - de.Evaluate(hpx, hpy, hpz - h);
+            var n2 = ShadingPipeline.Normalize3(nbx, nby, nbz);
+            double rdN = brx * n2.X + bry * n2.Y + brz * n2.Z;
+            double bnx = brx - 2.0 * rdN * n2.X;
+            double bny = bry - 2.0 * rdN * n2.Y;
+            double bnz = brz - 2.0 * rdN * n2.Z;
+            if (u.UseGgxSampling)
+            {
+                var (u1, u2) = ShadingPipeline.HashPair(hpx, hpy, hpz, b + 1);
+                var g = ShadingPipeline.SampleGgxReflect(-brx, -bry, -brz, n2.X, n2.Y, n2.Z, u.Roughness, u1, u2);
+                if (g.X * n2.X + g.Y * n2.Y + g.Z * n2.Z > 0) { bnx = g.X; bny = g.Y; bnz = g.Z; }
+            }
+            NdotV = Math.Max(0.0, n2.X * -brx + n2.Y * -bry + n2.Z * -brz);
+            bOx = hpx + n2.X * bias; bOy = hpy + n2.Y * bias; bOz = hpz + n2.Z * bias;
+            brx = bnx; bry = bny; brz = bnz;
+            chainW = w;
+        }
+
+        outR += accR; outG += accG; outB += accB;
+    }
+
+    /// <summary>4e-ii — env ambient [0,1] along an arbitrary bounce direction.
+    /// Twin of ShadingPipeline.SampleEnvAmbientHdri(dir,roughness): HDRI when
+    /// loaded (roughness → mip), else the #168 gradient/solid env by dir.y.</summary>
+    private static (double R, double G, double B) EnvAmbientDir(
+        double dx, double dy, double dz, double roughness, in ReliefUniforms u)
+    {
+        if (u.HdriBuf is not null) return ReliefHdriBuffer.Sample(u.HdriBuf, dx, dy, dz, roughness);
+        if (u.SkyMode == 1)
+            return (((u.BgTop >> 16) & 0xFF) / 255.0, ((u.BgTop >> 8) & 0xFF) / 255.0, (u.BgTop & 0xFF) / 255.0);
+        double t = Math.Clamp(0.5 * (dy + 1.0), 0, 1);
+        double R = ((1 - t) * ((u.BgBottom >> 16) & 0xFF) + t * ((u.BgTop >> 16) & 0xFF)) / 255.0;
+        double G = ((1 - t) * ((u.BgBottom >> 8) & 0xFF) + t * ((u.BgTop >> 8) & 0xFF)) / 255.0;
+        double B = ((1 - t) * (u.BgBottom & 0xFF) + t * (u.BgTop & 0xFF)) / 255.0;
+        return (R, G, B);
+    }
+
+    /// <summary>4e-ii — packed sky along an arbitrary bounce direction. Twin of
+    /// ShadingPipeline.SkyColorHdri(dir,roughness): HDRI (clamped bytes) when
+    /// loaded, else the gradient sky by dir.y.</summary>
+    private static uint SkyDirPacked(double dx, double dy, double dz, double roughness, in ReliefUniforms u)
+    {
+        if (u.HdriBuf is not null)
+        {
+            var (r, g, b) = ReliefHdriBuffer.Sample(u.HdriBuf, dx, dy, dz, roughness);
+            uint R = (uint)Math.Clamp(r * 255.0, 0, 255);
+            uint G = (uint)Math.Clamp(g * 255.0, 0, 255);
+            uint B = (uint)Math.Clamp(b * 255.0, 0, 255);
+            return 0xFF000000u | (R << 16) | (G << 8) | B;
+        }
+        return GradientSky(dy, in u);
+    }
+
+    /// <summary>4e-ii — FBM cloud density multiplier for the in-scatter walk.
+    /// Twin of ShadingPipeline.VolumetricDensityMul (reuses the same FbmCloud3D
+    /// core). 1.0 when VolumeNoiseAmount == 0 (byte-identical to #169).</summary>
+    private static double VolumetricDensityMul(double sx, double sy, double sz, in ReliefUniforms u)
+    {
+        if (u.VolumeNoiseAmount <= 0) return 1.0;
+        double t = u.SceneTime * u.VolumeNoiseSpeed;
+        double scale = u.VolumeNoiseScale;
+        int oct = u.VolumeNoiseOctaves <= 0 ? 3 : u.VolumeNoiseOctaves;
+        double n = ShadingPipeline.FbmCloud3D(sx * scale + t, sy * scale + t * 0.3, sz * scale + t * 0.7, oct);
+        double mul = 1.0 + u.VolumeNoiseAmount * (2.0 * n - 1.0);
+        return Math.Max(0.0, mul);
+    }
+
+    /// <summary>4e-ii — cloud self-shadow transmittance toward the key light.
+    /// Twin of ShadingPipeline.CloudSelfShadow. 1.0 (no attenuation) when the
+    /// self-shadow / noise knobs are off.</summary>
+    private static double CloudSelfShadow(double sx, double sy, double sz,
+        double lx, double ly, double lz, in ReliefUniforms u)
+    {
+        if (u.VolumeSelfShadow <= 0 || u.VolumeSelfShadowSteps <= 0 || u.VolumeNoiseAmount <= 0) return 1.0;
+        int steps = Math.Min(u.VolumeSelfShadowSteps, 16);
+        const double marchLen = 2.0;
+        double stepSz = marchLen / steps;
+        double t = u.SceneTime * u.VolumeNoiseSpeed;
+        double scale = u.VolumeNoiseScale;
+        int oct = u.VolumeNoiseOctaves <= 0 ? 3 : u.VolumeNoiseOctaves;
+        double accum = 0;
+        for (int k = 1; k <= steps; k++)
+        {
+            double px = sx + lx * stepSz * k, py = sy + ly * stepSz * k, pz = sz + lz * stepSz * k;
+            double n = ShadingPipeline.FbmCloud3D(px * scale + t, py * scale + t * 0.3, pz * scale + t * 0.7, oct);
+            double d = Math.Max(0.0, 1.0 + u.VolumeNoiseAmount * (2.0 * n - 1.0));
+            accum += d * stepSz;
+        }
+        return Math.Exp(-u.VolumeSelfShadow * accum);
     }
 
     /// <summary>4d — triplanar procedural texture. Twin of
@@ -614,10 +818,14 @@ public static class ReliefRaymarchGpu
                 double density = u.FogDensity;
                 if (u.FogHeightFalloff > 0)
                     density *= Math.Exp(-u.FogHeightFalloff * sy);
+                // 4e-ii — FBM cloud-noise density modulation (1.0 when off).
+                density *= VolumetricDensityMul(sx, sy, sz, in u);
                 double sh = 1.0;
                 if (shadowOn)
                     sh = ShadingPipeline.SoftShadow(in de, sx, sy, sz, u.L0x, u.L0y, u.L0z,
                                                     u.Cam.Eps0, 12.0, u.ShadowSoftK, u.ShadowSteps);
+                // 4e-ii — cloud self-shadow toward the key light (1.0 when off).
+                sh *= CloudSelfShadow(sx, sy, sz, u.L0x, u.L0y, u.L0z, in u);
                 double scatter = density * sh * Li * stepSize;
                 inR += T * scatter * Lr; inG += T * scatter * Lg; inB += T * scatter * Lb;
                 double aT = density * stepSize;

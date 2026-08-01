@@ -171,12 +171,29 @@ public static class ReliefRaymarchGpuProbe
         fx.ShowSkyBackdrop = true;
         // 4e (#169) — single-scatter volumetric in-scatter (key light) + ground-
         // hugging fog. VolumeSteps>0 drives the in-scatter walk; the per-step key-
-        // light SoftShadow reuses the 4b shadow settings. FBM cloud-noise +
-        // reflections are deferred (4e-ii). VolumeStepsFalloff stays 0 so the twin
-        // and shader march the same fixed step count (no float-vs-double LOD flip).
+        // light SoftShadow reuses the 4b shadow settings. VolumeStepsFalloff stays 0
+        // so the twin and shader march the same fixed step count (no float-vs-double
+        // LOD flip).
         fx.FogDensity = 0.5;
         fx.FogHeightFalloff = 0.3;
         fx.VolumeSteps = 16;
+        // 4e-ii (#172) — N-bounce reflections (mirror path) + FBM cloud-noise
+        // volumetrics. Mirror reflect (UseGgxSampling OFF) is the deterministic,
+        // parity-friendly path — GGX VNDF hash/trig would scatter bounce rays and
+        // blow the edge band, so it stays off in the gate. VolumeNoiseAmount is kept
+        // small (bounded ±amount density swing) and speed 0 (static): value noise is
+        // C1-continuous across cell boundaries so the float-vs-double floor split is
+        // benign, but a small amount keeps the multiplier near 1 for safety.
+        fx.ReflectionStrength = 0.4;
+        fx.ReflectionSteps = 24;
+        fx.MaxBounces = 2;
+        fx.UseGgxSampling = false;
+        fx.VolumeNoiseAmount = 0.15;
+        fx.VolumeNoiseScale = 0.3;
+        fx.VolumeNoiseSpeed = 0.0;
+        fx.VolumeNoiseOctaves = 3;
+        fx.VolumeSelfShadow = 0.5;
+        fx.VolumeSelfShadowSteps = 4;
 
         var (hbuf, albedo, maxH) = BumpField(hw, hh, w, h);
         var u = BuildUniforms(w, h, hw, hh, hbuf, maxH, p, fx);

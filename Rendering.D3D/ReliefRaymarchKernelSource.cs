@@ -123,6 +123,21 @@ cbuffer ReliefParams : register(b0)
     int    gPadH0;
     int    gPadH1;
     int    gPadH2;
+
+    float  gReflStrength;     // 4e-ii — N-bounce reflection probe; 0 = off
+    int    gReflSteps;        // per-bounce march steps (<=0 → 24)
+    int    gMaxBounces;       // reflection bounce count, clamped [1,6]
+    int    gUseGgx;           // GGX VNDF bounce-dir sampling on/off
+
+    float  gVolNoiseAmount;   // 4e-ii — FBM cloud density swing; 0 = mul 1 (off)
+    float  gVolNoiseScale;    // world → noise-space scale
+    float  gVolNoiseSpeed;    // drift speed (× gSceneTime)
+    int    gVolNoiseOctaves;  // FBM octaves (<=0 → 3)
+
+    float  gVolSelfShadow;    // cloud self-shadow strength; 0 = off
+    int    gVolSelfShadowSteps;// cloud self-shadow march steps (clamped 16)
+    float  gSceneTime;        // animation clock for the cloud drift
+    float  gPadV;
 };
 
 static const float RELIEF_PI = 3.14159265358979;
@@ -413,6 +428,197 @@ uint HdriSkyPacked(float3 rd)
     return 0xFF000000u | (R << 16) | (G << 8) | B;
 }
 
+uint GradientSky(float rdy)
+{
+    float t = clamp(0.5 * rdy + 0.5, 0.0, 1.0);
+    float3 a = float3((gBgBottom >> 16) & 0xFF, (gBgBottom >> 8) & 0xFF, gBgBottom & 0xFF);
+    float3 b = float3((gBgTop >> 16) & 0xFF, (gBgTop >> 8) & 0xFF, gBgTop & 0xFF);
+    float3 c = lerp(a, b, t) + 0.5;
+    return 0xFF000000u | ((uint)c.r << 16) | ((uint)c.g << 8) | (uint)c.b;
+}
+
+// 4e-ii — env ambient [0,1] along an arbitrary bounce direction. Twin of
+// ShadingPipeline.SampleEnvAmbientHdri(dir,roughness): HDRI when loaded (roughness
+// → mip), else the #168 gradient/solid env by dir.y.
+float3 EnvAmbientDir(float3 dir, float roughness)
+{
+    if (gHasHdri != 0) return SampleHdri(dir, roughness);
+    if (gSkyMode == 1) // Solid
+        return float3((gBgTop >> 16) & 0xFF, (gBgTop >> 8) & 0xFF, gBgTop & 0xFF) / 255.0;
+    float t = clamp(0.5 * (dir.y + 1.0), 0.0, 1.0);
+    float3 bb = float3((gBgBottom >> 16) & 0xFF, (gBgBottom >> 8) & 0xFF, gBgBottom & 0xFF);
+    float3 bt = float3((gBgTop >> 16) & 0xFF, (gBgTop >> 8) & 0xFF, gBgTop & 0xFF);
+    return lerp(bb, bt, t) / 255.0;
+}
+
+// 4e-ii — packed sky along an arbitrary bounce direction. Twin of
+// ShadingPipeline.SkyColorHdri(dir,roughness): HDRI (clamped bytes) else gradient.
+uint SkyDirPacked(float3 dir, float roughness)
+{
+    if (gHasHdri != 0)
+    {
+        float3 c = SampleHdri(dir, roughness);
+        uint R = (uint)clamp(c.r * 255.0, 0.0, 255.0);
+        uint G = (uint)clamp(c.g * 255.0, 0.0, 255.0);
+        uint B = (uint)clamp(c.b * 255.0, 0.0, 255.0);
+        return 0xFF000000u | (R << 16) | (G << 8) | B;
+    }
+    return GradientSky(dir.y);
+}
+
+// 4e-ii — Wang-hash → two [0,1) uniforms for GGX VNDF sampling. Twin of
+// ShadingPipeline.HashPair. NOTE the /16777216 (2^24) divisor here vs the
+// /16777215 in Hash3D — they are deliberately different constants.
+void HashPair(float3 p, int bounce, out float u1, out float u2)
+{
+    uint a = (uint)(int)(p.x * 1024.0) ^ 0x9E3779B1u;
+    uint b = (uint)(int)(p.y * 1024.0) ^ 0x85EBCA77u;
+    uint c = (uint)(int)(p.z * 1024.0) ^ 0xC2B2AE3Du;
+    uint d = (uint)bounce ^ 0x27D4EB2Fu;
+    uint h = a;
+    h = (h ^ b) * 0x85EBCA6Bu;
+    h = (h ^ c) * 0xC2B2AE35u;
+    h = (h ^ d) * 0x27D4EB2Du;
+    h ^= h >> 16;
+    uint h2 = h * 0x85EBCA6Bu; h2 ^= h2 >> 13;
+    u1 = (h  & 0xFFFFFFu) / 16777216.0;
+    u2 = (h2 & 0xFFFFFFu) / 16777216.0;
+}
+
+// 4e-ii — GGX VNDF importance-sampled reflection dir (Heitz 2018). Twin of
+// ShadingPipeline.SampleGgxReflect. V is toward the viewer; returns L = reflect(-V,H).
+float3 SampleGgxReflect(float3 V, float3 N, float roughness, float u1, float u2)
+{
+    float sign = N.y >= 0.0 ? 1.0 : -1.0;
+    float a = -1.0 / (sign + N.y);
+    float bComp = N.x * N.z * a;
+    float3 t1 = float3(1.0 + sign * N.x * N.x * a, -sign * N.x, sign * bComp);
+    float3 t2 = float3(bComp, -N.z, sign + N.z * N.z * a);
+
+    float Vtx = dot(V, t1);
+    float Vty = dot(V, t2);
+    float Vtz = dot(V, N);
+
+    float alpha = roughness * roughness;
+    if (alpha < 1e-4) alpha = 1e-4;
+
+    float3 Vh = float3(alpha * Vtx, alpha * Vty, Vtz);
+    float Vhlen = sqrt(dot(Vh, Vh));
+    if (Vhlen < 1e-10) Vhlen = 1e-10;
+    Vh /= Vhlen;
+
+    float lensq = Vh.x * Vh.x + Vh.y * Vh.y;
+    float3 T1 = lensq > 0.0 ? float3(-Vh.y, Vh.x, 0.0) * rsqrt(lensq) : float3(1.0, 0.0, 0.0);
+    float3 T2 = cross(Vh, T1);
+
+    float r = sqrt(u1);
+    float phi = 2.0 * RELIEF_PI * u2;
+    float tA = r * cos(phi);
+    float tB = r * sin(phi);
+    float sC = 0.5 * (1.0 + Vh.z);
+    tB = (1.0 - sC) * sqrt(max(0.0, 1.0 - tA * tA)) + sC * tB;
+
+    float Nhz = sqrt(max(0.0, 1.0 - tA * tA - tB * tB));
+    float3 Nh = tA * T1 + tB * T2 + Nhz * Vh;
+
+    float3 Ht = float3(alpha * Nh.x, alpha * Nh.y, max(0.0, Nh.z));
+    float Hlen = sqrt(dot(Ht, Ht));
+    if (Hlen < 1e-10) Hlen = 1e-10;
+    Ht /= Hlen;
+
+    float3 H = Ht.x * t1 + Ht.y * t2 + Ht.z * N;
+    float VdotH = dot(V, H);
+    float3 L = 2.0 * VdotH * H - V;
+    float ll = length(L);
+    return ll < 1e-10 ? float3(0.0, 0.0, 0.0) : L / ll;
+}
+
+// 4e-ii — N-bounce reflection probe. Sphere-trace reflect(rd,N) along the height
+// DE; per bounce add a Schlick-Fresnel-weighted env-tinted hit (distance-
+// attenuated) / sky-tinted miss, fading the chain by (gReflStrength·F). Optional
+// GGX VNDF bounce dir (gUseGgx; off in the gate — hash/trig float-vs-double
+// landmine). Twin of ShadingPipeline.Shade Phase 16/16b. Returns 0-255 RGB.
+float3 Reflections(float3 N, float3 rd, float3 P)
+{
+    if (gReflStrength <= 0.0) return float3(0, 0, 0);
+    int reflSteps = gReflSteps > 0 ? gReflSteps : 24;
+    int maxBounces = gMaxBounces > 0 ? gMaxBounces : 1;
+    if (maxBounces > 6) maxBounces = 6;
+    float tMaxR = 12.0;
+    float bias = gEps0 * 4.0;
+
+    float3 bO = P + N * bias;
+    float rdN0 = dot(rd, N);
+    float3 br = rd - 2.0 * rdN0 * N;
+    if (gUseGgx != 0)
+    {
+        float u1, u2; HashPair(P, 0, u1, u2);
+        float3 g = SampleGgxReflect(-rd, N, gRoughness, u1, u2);
+        if (dot(g, N) > 0.0) br = g;
+    }
+    float NdotV = max(0.0, dot(N, -rd));
+
+    float3 acc = float3(0, 0, 0);
+    float chainW = gReflStrength;
+    [loop]
+    for (int b = 0; b < maxBounces; b++)
+    {
+        float f0 = 0.04 + 0.96 * gMetallic;
+        float omv = 1.0 - NdotV;
+        float Fc = omv * omv * omv * omv * omv;
+        float F = f0 + (1.0 - f0) * Fc;
+        float w = chainW * F;
+        if (w < 1e-4) break;
+
+        float tR = gEps0;
+        bool hitR = false;
+        float hitTR = 0.0;
+        float3 hp = float3(0, 0, 0);
+        [loop]
+        for (int s = 0; s < reflSteps; s++)
+        {
+            hp = bO + br * tR;
+            float hR = Evaluate(hp.x, hp.y, hp.z);
+            if (hR < gEps0 * 2.0) { hitR = true; hitTR = tR; break; }
+            tR += hR;
+            if (tR > tMaxR) break;
+        }
+
+        if (!hitR)
+        {
+            uint skyR = SkyDirPacked(br, gRoughness);
+            acc += float3((skyR >> 16) & 0xFF, (skyR >> 8) & 0xFF, skyR & 0xFF) * w;
+            break;
+        }
+
+        float3 env = EnvAmbientDir(br, gRoughness);
+        float atten = exp(-hitTR * 0.15);
+        acc += env * 255.0 * atten * w;
+
+        if (b + 1 >= maxBounces) break;
+
+        float h = gEps0 * 2.0;
+        float nbx = Evaluate(hp.x + h, hp.y, hp.z) - Evaluate(hp.x - h, hp.y, hp.z);
+        float nby = Evaluate(hp.x, hp.y + h, hp.z) - Evaluate(hp.x, hp.y - h, hp.z);
+        float nbz = Evaluate(hp.x, hp.y, hp.z + h) - Evaluate(hp.x, hp.y, hp.z - h);
+        float nl = length(float3(nbx, nby, nbz));
+        float3 n2 = nl < 1e-10 ? float3(0, 0, 0) : float3(nbx, nby, nbz) / nl;
+        float rdN = dot(br, n2);
+        float3 bn = br - 2.0 * rdN * n2;
+        if (gUseGgx != 0)
+        {
+            float u1, u2; HashPair(hp, b + 1, u1, u2);
+            float3 g = SampleGgxReflect(-br, n2, gRoughness, u1, u2);
+            if (dot(g, n2) > 0.0) bn = g;
+        }
+        NdotV = max(0.0, dot(n2, -br));
+        bO = hp + n2 * bias;
+        br = bn;
+        chainW = w;
+    }
+    return acc;
+}
+
 uint ShadeFlat(float3 N, float3 V, float3 P, uint albedo)
 {
     float sh0 = 1.0, sh1 = 1.0, sh2 = 1.0;
@@ -491,18 +697,92 @@ uint ShadeFlat(float3 N, float3 V, float3 P, uint albedo)
     }
     s = amb + (s / 255.0) * (1.0 - amb) * diffSuppress;
     s = s * ao;
-    float3 o = clamp(alb * s + spec + 0.5, 0.0, 255.0);
+    // 4e-ii — N-bounce reflection probe added to the combined colour (rd = -V).
+    float3 refl = Reflections(N, -V, P);
+    float3 o = clamp(alb * s + spec + refl + 0.5, 0.0, 255.0);
     uint A = (albedo >> 24) & 0xFFu;
     return (A << 24) | ((uint)o.r << 16) | ((uint)o.g << 8) | (uint)o.b;
 }
 
-uint GradientSky(float rdy)
+// 4e-ii — value-noise FBM cloud density. Twin of ShadingPipeline.Hash3D/
+// ValueNoise3D/FbmCloud3D. The integer hash is bit-exact (int/uint ops are
+// well-defined mod 2^32 on both compilers); value noise is C1-continuous across
+// cell boundaries so the float-vs-double floor split is benign (tiny diffs, no
+// jumps). NOTE the /16777215 divisor here vs /16777216 in HashPair.
+float Hash3D(int ix, int iy, int iz)
 {
-    float t = clamp(0.5 * rdy + 0.5, 0.0, 1.0);
-    float3 a = float3((gBgBottom >> 16) & 0xFF, (gBgBottom >> 8) & 0xFF, gBgBottom & 0xFF);
-    float3 b = float3((gBgTop >> 16) & 0xFF, (gBgTop >> 8) & 0xFF, gBgTop & 0xFF);
-    float3 c = lerp(a, b, t) + 0.5;
-    return 0xFF000000u | ((uint)c.r << 16) | ((uint)c.g << 8) | (uint)c.b;
+    uint h = (uint)(ix * 374761393 + iy * 668265263 + iz * 2147483647);
+    h = (h ^ (h >> 13)) * 1274126177u;
+    h ^= h >> 16;
+    return (h & 0xFFFFFFu) / 16777215.0;
+}
+
+float ValueNoise3D(float x, float y, float z)
+{
+    int ix = (int)floor(x), iy = (int)floor(y), iz = (int)floor(z);
+    float fx = x - ix, fy = y - iy, fz = z - iz;
+    float ux = fx * fx * (3.0 - 2.0 * fx);
+    float uy = fy * fy * (3.0 - 2.0 * fy);
+    float uz = fz * fz * (3.0 - 2.0 * fz);
+    float c000 = Hash3D(ix,     iy,     iz    ), c100 = Hash3D(ix + 1, iy,     iz    );
+    float c010 = Hash3D(ix,     iy + 1, iz    ), c110 = Hash3D(ix + 1, iy + 1, iz    );
+    float c001 = Hash3D(ix,     iy,     iz + 1), c101 = Hash3D(ix + 1, iy,     iz + 1);
+    float c011 = Hash3D(ix,     iy + 1, iz + 1), c111 = Hash3D(ix + 1, iy + 1, iz + 1);
+    float x00 = c000 + (c100 - c000) * ux;
+    float x10 = c010 + (c110 - c010) * ux;
+    float x01 = c001 + (c101 - c001) * ux;
+    float x11 = c011 + (c111 - c011) * ux;
+    float y0 = x00 + (x10 - x00) * uy;
+    float y1 = x01 + (x11 - x01) * uy;
+    return y0 + (y1 - y0) * uz;
+}
+
+float FbmCloud3D(float x, float y, float z, int octaves)
+{
+    if (octaves < 1) octaves = 1; else if (octaves > 6) octaves = 6;
+    float v = 0.0, amp = 0.5, freq = 1.0;
+    [loop]
+    for (int i = 0; i < octaves; i++)
+    {
+        v += amp * ValueNoise3D(x * freq, y * freq, z * freq);
+        freq *= 2.0; amp *= 0.5;
+    }
+    return v;
+}
+
+// 4e-ii — FBM cloud density multiplier for the in-scatter walk. Twin of
+// ShadingPipeline.VolumetricDensityMul. 1.0 when gVolNoiseAmount == 0.
+float VolumetricDensityMul(float3 sp)
+{
+    if (gVolNoiseAmount <= 0.0) return 1.0;
+    float t = gSceneTime * gVolNoiseSpeed;
+    float scale = gVolNoiseScale;
+    int oct = gVolNoiseOctaves <= 0 ? 3 : gVolNoiseOctaves;
+    float n = FbmCloud3D(sp.x * scale + t, sp.y * scale + t * 0.3, sp.z * scale + t * 0.7, oct);
+    float mul = 1.0 + gVolNoiseAmount * (2.0 * n - 1.0);
+    return max(0.0, mul);
+}
+
+// 4e-ii — cloud self-shadow transmittance toward the key light. Twin of
+// ShadingPipeline.CloudSelfShadow. 1.0 when the self-shadow / noise knobs are off.
+float CloudSelfShadow(float3 sp, float3 L)
+{
+    if (gVolSelfShadow <= 0.0 || gVolSelfShadowSteps <= 0 || gVolNoiseAmount <= 0.0) return 1.0;
+    int steps = min(gVolSelfShadowSteps, 16);
+    float stepSz = 2.0 / steps;
+    float t = gSceneTime * gVolNoiseSpeed;
+    float scale = gVolNoiseScale;
+    int oct = gVolNoiseOctaves <= 0 ? 3 : gVolNoiseOctaves;
+    float accum = 0.0;
+    [loop]
+    for (int k = 1; k <= steps; k++)
+    {
+        float3 p = sp + L * stepSz * k;
+        float n = FbmCloud3D(p.x * scale + t, p.y * scale + t * 0.3, p.z * scale + t * 0.7, oct);
+        float d = max(0.0, 1.0 + gVolNoiseAmount * (2.0 * n - 1.0));
+        accum += d * stepSz;
+    }
+    return exp(-gVolSelfShadow * accum);
 }
 
 // 4e — Padé(2,2) approx of exp(-x) on [0,1]. Twin of ShadingPipeline.ExpNegSmall.
@@ -540,9 +820,11 @@ uint ApplyFogVolume(uint shaded, float3 o, float3 rd, float tHit)
             float density = gFogDensity;
             if (gFogHeightFalloff > 0.0)
                 density *= exp(-gFogHeightFalloff * sp.y);
+            density *= VolumetricDensityMul(sp);   // 4e-ii — FBM cloud modulation
             float sh = 1.0;
             if (shadowOn)
                 sh = SoftShadow(sp, gL0, gEps0, 12.0, gShadowSoftK, gShadowSteps);
+            sh *= CloudSelfShadow(sp, gL0);        // 4e-ii — cloud self-shadow
             float scatter = density * sh * gI0 * stepSize;
             inSc += T * scatter * gC0;
             float aT = density * stepSize;
