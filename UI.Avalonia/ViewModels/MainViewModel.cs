@@ -746,6 +746,22 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
         }
     }
 
+    /// <summary>Slice 4 (#158): GPU relief-raymarch toggle. Flips the shared
+    /// <see cref="FractalParameters.Relief2DGpuRaymarch"/> and retriggers.
+    /// Bound to Ctrl+Shift+G. Default ON now that the GPU kernel reaches full
+    /// ShadingPipeline FX parity; turning it off forces the CPU sphere-trace
+    /// (the parity oracle). Inert unless relief raymarch mode is active.</summary>
+    public bool ReliefGpuRaymarch
+    {
+        get => _renderHost.ViewState.FractalParameters.Relief2DGpuRaymarch;
+        set
+        {
+            _renderHost.ViewState.FractalParameters.Relief2DGpuRaymarch = value;
+            this.RaisePropertyChanged(nameof(ReliefGpuRaymarch));
+            _renderHost.Trigger();
+        }
+    }
+
     /// <summary>Clear the perf HUD's rolling buffers + reset GC-rate
     /// baseline. Bound to Shift+H so the user can start a clean capture
     /// when switching regions mid-test.</summary>
