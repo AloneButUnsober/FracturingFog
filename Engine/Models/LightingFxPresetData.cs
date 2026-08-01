@@ -75,6 +75,7 @@ public sealed class LightingFxPresetData
     public int    VolumeNoiseOctaves { get; set; } = 3;
     public double VolumeSelfShadow   { get; set; } = 0.0;
     public int    VolumeSelfShadowSteps { get; set; } = 4;
+    public double VolumeAnisotropy   { get; set; } = 0.0;
 
     // ── Material ──────────────────────────────────────────────────────
 
@@ -156,6 +157,7 @@ public sealed class LightingFxPresetData
         VolumeNoiseScale = fx.VolumeNoiseScale, VolumeNoiseSpeed = fx.VolumeNoiseSpeed,
         VolumeNoiseOctaves = fx.VolumeNoiseOctaves,
         VolumeSelfShadow = fx.VolumeSelfShadow, VolumeSelfShadowSteps = fx.VolumeSelfShadowSteps,
+        VolumeAnisotropy = fx.VolumeAnisotropy,
 
         Roughness = fx.Roughness, Metallic = fx.Metallic,
         SpecularStrength = fx.SpecularStrength, SubSurfaceStrength = fx.SubSurfaceStrength,
@@ -204,6 +206,7 @@ public sealed class LightingFxPresetData
         VolumeNoiseScale = VolumeNoiseScale, VolumeNoiseSpeed = VolumeNoiseSpeed,
         VolumeNoiseOctaves = VolumeNoiseOctaves,
         VolumeSelfShadow = VolumeSelfShadow, VolumeSelfShadowSteps = VolumeSelfShadowSteps,
+        VolumeAnisotropy = VolumeAnisotropy,
 
         Roughness = Roughness, Metallic = Metallic,
         SpecularStrength = SpecularStrength, SubSurfaceStrength = SubSurfaceStrength,

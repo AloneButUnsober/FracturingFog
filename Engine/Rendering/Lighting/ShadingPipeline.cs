@@ -1188,16 +1188,16 @@ public static class ShadingPipeline
 
             if (L1i > 0)
                 AddVolumeScatter(in de, in fx, sx, sy, sz, l1.X, l1.Y, l1.Z,
-                    fx.Light1.Color, L1i, sh1On, i.Epsilon, T, density, stepSize,
-                    ref inR, ref inG, ref inB);
+                    i.Rdx, i.Rdy, i.Rdz, fx.Light1.Color, L1i, sh1On, i.Epsilon,
+                    T, density, stepSize, ref inR, ref inG, ref inB);
             if (L2i > 0)
                 AddVolumeScatter(in de, in fx, sx, sy, sz, l2.X, l2.Y, l2.Z,
-                    fx.Light2.Color, L2i, sh2On, i.Epsilon, T, density, stepSize,
-                    ref inR, ref inG, ref inB);
+                    i.Rdx, i.Rdy, i.Rdz, fx.Light2.Color, L2i, sh2On, i.Epsilon,
+                    T, density, stepSize, ref inR, ref inG, ref inB);
             if (L3i > 0)
                 AddVolumeScatter(in de, in fx, sx, sy, sz, l3.X, l3.Y, l3.Z,
-                    fx.Light3.Color, L3i, sh3On, i.Epsilon, T, density, stepSize,
-                    ref inR, ref inG, ref inB);
+                    i.Rdx, i.Rdy, i.Rdz, fx.Light3.Color, L3i, sh3On, i.Epsilon,
+                    T, density, stepSize, ref inR, ref inG, ref inB);
 
             // P1: Padé(2,2) approx of exp(-x); density·stepSize stays small in
             // normal scenes. Extinction is per-step (shared across lights).
@@ -1219,6 +1219,7 @@ public static class ShadingPipeline
         in TDe de, in LightingFxData fx,
         double sx, double sy, double sz,
         double lx, double ly, double lz,
+        double vdx, double vdy, double vdz,
         uint color, double li, bool shOn, double eps,
         double T, double density, double stepSize,
         ref double inR, ref double inG, ref double inB)
@@ -1234,6 +1235,16 @@ public static class ShadingPipeline
         // Phase 22b — cloud self-shadow toward this light. Returns 1 when off.
         sh *= CloudSelfShadow(sx, sy, sz, lx, ly, lz, fx);
         double scatter = density * sh * li * stepSize;
+        // Vol-color slice B (#178) — Henyey-Greenstein phase, normalized so
+        // g=0 → 1 (bit-identical). g>0 forward-scatters toward the light.
+        double g = fx.VolumeAnisotropy;
+        if (g != 0.0)
+        {
+            g = Math.Clamp(g, -0.99, 0.99);
+            double cosT = vdx * lx + vdy * ly + vdz * lz;
+            double denom = 1.0 + g * g - 2.0 * g * cosT;
+            scatter *= (1.0 - g * g) / (denom * Math.Sqrt(denom));
+        }
         inR += T * scatter * lr;
         inG += T * scatter * lg;
         inB += T * scatter * lb;

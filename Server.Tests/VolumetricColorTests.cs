@@ -17,14 +17,14 @@ public class VolumetricColorTests
         (x, y, z) => Math.Sqrt(x * x + y * y + z * z) - 1.0;
 
     // One surface hit on the unit sphere, view ray pointing +Y, fog active.
-    private static uint ShadeOnce(in LightingFxData fx)
+    private static uint ShadeOnce(in LightingFxData fx, uint albedo = 0xFF808080u)
     {
         var inp = new ShadingInputs(
             px: 0, py: 1, pz: 0,      // surface hit (top of the sphere)
             nx: 0, ny: 1, nz: 0,      // normal up
-            rdx: 0, rdy: 1, rdz: 0,   // view ray dir
+            rdx: 0, rdy: 1, rdz: 0,   // view ray dir (+Y)
             totalT: 3.0, hitDist: 0.0, hitStep: 1, epsilon: 1e-4);
-        return ShadingPipeline.Shade(in inp, 0xFF808080u, in fx, SphereDe);
+        return ShadingPipeline.Shade(in inp, albedo, in fx, SphereDe);
     }
 
     private static LightingFxData VolFx()
@@ -70,5 +70,43 @@ public class VolumetricColorTests
         Assert.NotEqual(off, lit);
         Assert.True(R(lit) >= R(off),
             $"red second light did not raise the red channel ({R(off)} → {R(lit)})");
+    }
+
+    // ── Slice B (#178): Henyey-Greenstein phase ───────────────────────────
+
+    // Dim, low-fog config so the in-scatter stays well below the 255 clamp and
+    // the phase term's effect on brightness is measurable. Light1 points +Y,
+    // aligned with the view ray, so cosθ = 1 (peak forward / trough back).
+    private static LightingFxData AlignedPhaseFx(double g)
+    {
+        var fx = LightingFxData.CreateDefault();
+        fx.FogDensity = 0.05;
+        fx.VolumeSteps = 12;
+        fx.VolumeAnisotropy = g;
+        // Light straight up (phi = 0), matching the +Y view ray.
+        fx.Light1 = new DirectionalLight(theta: 0.0, phi: 0.0, intensity: 1.0, color: 0xFFFFFFFFu);
+        return fx;
+    }
+
+    // Forward scatter (g > 0) with the light aligned to the view ray brightens
+    // the in-scatter vs isotropic (g = 0) — the god-ray halo toward the light.
+    [Fact]
+    public void ForwardPhase_Brightens_InScatter_Toward_Light()
+    {
+        uint iso = ShadeOnce(AlignedPhaseFx(0.0), 0xFF202020u);
+        uint fwd = ShadeOnce(AlignedPhaseFx(0.5), 0xFF202020u);
+        Assert.True(R(fwd) > R(iso),
+            $"forward phase did not brighten aligned in-scatter ({R(iso)} → {R(fwd)})");
+    }
+
+    // Back scatter (g < 0) with the light aligned to the view ray dims the
+    // in-scatter vs isotropic — confirming g = 0 is the neutral midpoint.
+    [Fact]
+    public void BackPhase_Dims_InScatter_Toward_Light()
+    {
+        uint iso = ShadeOnce(AlignedPhaseFx(0.0), 0xFF202020u);
+        uint bak = ShadeOnce(AlignedPhaseFx(-0.5), 0xFF202020u);
+        Assert.True(R(bak) < R(iso),
+            $"back phase did not dim aligned in-scatter ({R(iso)} → {R(bak)})");
     }
 }
