@@ -2686,7 +2686,7 @@ namespace FracturingFog.Rendering
                 int n = w * h;
                 var altCopy = new uint[n];
                 Array.Copy(altSrc, altCopy, Math.Min(altSrc.Length, n));
-                return altCopy;
+                return ApplyCachedRelief(altCopy, w, h);
             }
             if (needsFullRender)
             {
@@ -2716,7 +2716,41 @@ namespace FracturingFog.Rendering
             int mn = w * h;
             var copy = new uint[mn];
             Array.Copy(src, copy, Math.Min(src.Length, mn));
-            return copy;
+            return ApplyCachedRelief(copy, w, h);
+        }
+
+        // Reapply the cached heightfield relief to an off-screen recolor buffer
+        // (slideshow theme cross-fade target). The live upload path adds relief
+        // in UploadProcessedBuffer; standalone buffers returned to the slideshow
+        // skipped it, so a theme fade WITHIN a relief region blended a FLAT
+        // recolor and popped the 3D relief back on commit. Uses the stable height
+        // field captured on the region's base frame (_reliefHeight) — the view is
+        // unchanged across a theme-only fade, so the cached field still matches.
+        // CPU raymarch oracle (the GPU relief kernel is thread-affine to the calc
+        // thread; this runs on the slideshow's background thread → pass null).
+        // Returns the input unchanged when relief is off or the field mis-fits.
+        private uint[] ApplyCachedRelief(uint[] buf, int w, int h)
+        {
+            var rp = ViewState.FractalParameters;
+            if (!rp.Relief2DEnabled || !_reliefValid || _reliefHeight == null) return buf;
+            int n = w * h;
+            if (buf.Length < n) return buf;
+            bool raymarch = rp.Relief2DRaymarch;
+            // Mirror UploadProcessedBuffer's field-fit gate: the raymarch samples
+            // the field by normalised coords (field may be hi-res, dims _reliefW×
+            // _reliefH), the Phase 1 hillshade is screen-space (field must match w×h).
+            bool fieldOk = raymarch
+                ? (_reliefW > 0 && _reliefH > 0 && _reliefHeight.Length >= _reliefW * _reliefH)
+                : (_reliefW == w && _reliefH == h && _reliefHeight.Length >= n);
+            if (!fieldOk) return buf;
+            var dst = new uint[n];
+            if (raymarch)
+                FracturingFog.Rendering.Lighting.HeightfieldRaymarch2D.Render(
+                    buf, _reliefHeight, w, h, _reliefW, _reliefH, rp, dst, out _, null);
+            else
+                FracturingFog.Rendering.Lighting.HeightfieldRelief2D.Apply(
+                    buf, dst, _reliefHeight, w, h, rp);
+            return dst;
         }
 
         // ── Internals ─────────────────────────────────────────────────────────

@@ -1113,6 +1113,31 @@ namespace FracturingFog.Hosting
                 var src = calc.ColorBuffer;
                 var copy = new uint[src.Length];
                 System.Array.Copy(src, copy, src.Length);
+
+                // Relief 3D: the live view applies the heightfield-relief
+                // post-pass in FractalRenderHost.UploadProcessedBuffer, but this
+                // standalone offscreen render skipped it — so a slideshow
+                // cross-fade INTO a relief region blended the FLAT 2D escape-time
+                // image and then hard-popped to the 3D relief on commit (and OUT
+                // faded away the relief the same way). Reapply the region's saved
+                // relief here so the fade carries the same 3D look it commits to.
+                // CPU raymarch oracle (no GPU relief kernel on this offscreen
+                // path) — one-shot per leg on the engine's background thread.
+                var rp = new FractalParameters();
+                region.ApplyRelief3DAuthoritative(rp);
+                if (rp.Relief2DEnabled
+                    && calc is IHeightFieldSource hfs
+                    && hfs.SmoothBuffer is { } field && field.Length >= width * height)
+                {
+                    var reliefDst = new uint[copy.Length];
+                    if (rp.Relief2DRaymarch)
+                        FracturingFog.Rendering.Lighting.HeightfieldRaymarch2D.Render(
+                            copy, field, width, height, rp, reliefDst);
+                    else
+                        FracturingFog.Rendering.Lighting.HeightfieldRelief2D.Apply(
+                            copy, reliefDst, field, width, height, rp);
+                    return reliefDst;
+                }
                 return copy;
             }
             catch
