@@ -151,6 +151,14 @@ public struct GpuShadingParams
     /// pre-parity path. Mirrors LightingFxData.FogColor channels.</summary>
     public double FogR, FogG, FogB;
 
+    // ── Vol-color slice D GPU parity (#180) ───────────────────────────────
+    /// <summary>Palette-mapped volumetric strength [0, 1]. 0 = off (legacy,
+    /// bit-identical). When &gt;0 the kernel cross-fades the in-scatter toward
+    /// the uploaded theme gradient LUT (passed as a separate ArrayView kernel
+    /// arg — it can't live on this blittable struct), keyed by optical depth
+    /// (1 − transmittance). Mirrors LightingFxData.VolumePaletteStrength.</summary>
+    public double VolumePaletteStrength;
+
     // ── P7c.3 one-bounce reflection ────────────────────────────────────────
     /// <summary>Reflection mix factor [0, 1]. 0 = off (legacy path).
     /// Mirrors LightingFxData.ReflectionStrength.</summary>
@@ -291,6 +299,10 @@ public struct GpuShadingParams
             FogR = (fx.FogColor >> 16) & 0xFF,
             FogG = (fx.FogColor >>  8) & 0xFF,
             FogB =  fx.FogColor        & 0xFF,
+
+            // Slice D — strength gates the palette remap; the LUT itself is
+            // uploaded separately (ArrayView), not carried on this struct.
+            VolumePaletteStrength = fx.VolumePaletteStrength,
 
             ReflectStrength = fx.ReflectionStrength,
             ReflectSteps    = fx.ReflectionSteps,

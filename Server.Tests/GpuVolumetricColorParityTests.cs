@@ -69,4 +69,20 @@ public class GpuVolumetricColorParityTests
         Assert.Equal(0.0, gp.L2G);
         Assert.Equal(255.0, gp.L2B);
     }
+
+    // Slice D (#180) GPU parity: the palette-map strength gate reaches the
+    // kernel through the shading struct (default 0 = the kernel's bit-identical
+    // no-op). The theme LUT itself is uploaded as a separate ArrayView kernel
+    // arg — it can't ride on this blittable struct — and the kernel/LUT math is
+    // validated on-device (CLI probe + user smoke), same as the rest of the GPU
+    // shade path. Here we lock the CPU->GPU strength bridge + its default.
+    [Fact]
+    public void Build_Carries_PaletteStrength_And_Defaults_Off()
+    {
+        Assert.Equal(0.0, GpuShadingParams.Build(LightingFxData.CreateDefault()).VolumePaletteStrength);
+
+        var fx = LightingFxData.CreateDefault();
+        fx.VolumePaletteStrength = 0.75;
+        Assert.Equal(0.75, GpuShadingParams.Build(in fx).VolumePaletteStrength);
+    }
 }

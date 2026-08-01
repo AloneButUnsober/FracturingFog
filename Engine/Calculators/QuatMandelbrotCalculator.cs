@@ -169,7 +169,7 @@ public sealed class QuatMandelbrotCalculator : IFractalCalculator
             };
             var sp = GpuShadingParams.Build(in fx);
             _gpu ??= new QMandelGpuCalculator();
-            if (_gpu.Render(renderBuffer, rp, sp, qp))
+            if (_gpu.Render(renderBuffer, rp, sp, qp, fx.VolumePalette))
             {
                 // #84 — GPU raymarch skips the CPU post stack; draw the debug
                 // HUD directly so the light compass still appears on GPU frames.

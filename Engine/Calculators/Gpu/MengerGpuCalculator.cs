@@ -33,7 +33,7 @@ public struct MengerGpuParams
 
 public sealed class MengerGpuCalculator : IDisposable
 {
-    private Action<Index1D, ArrayView<uint>, GpuRaymarchParams, GpuShadingParams, MengerGpuParams>? _kernel;
+    private Action<Index1D, ArrayView<uint>, GpuRaymarchParams, GpuShadingParams, MengerGpuParams, ArrayView<uint>>? _kernel;
     private bool _initFailed;
     public string LastError { get; private set; } = string.Empty;
 
@@ -50,7 +50,7 @@ public sealed class MengerGpuCalculator : IDisposable
         try
         {
             _kernel = acc.LoadAutoGroupedStreamKernel<
-                Index1D, ArrayView<uint>, GpuRaymarchParams, GpuShadingParams, MengerGpuParams>(MengerKernel);
+                Index1D, ArrayView<uint>, GpuRaymarchParams, GpuShadingParams, MengerGpuParams, ArrayView<uint>>(MengerKernel);
             return true;
         }
         catch (Exception ex)
@@ -61,7 +61,7 @@ public sealed class MengerGpuCalculator : IDisposable
         }
     }
 
-    public bool Render(uint[] outBuffer, GpuRaymarchParams r, GpuShadingParams sp, MengerGpuParams p)
+    public bool Render(uint[] outBuffer, GpuRaymarchParams r, GpuShadingParams sp, MengerGpuParams p, uint[]? palette = null)
     {
         if (!TryInit() || _kernel == null) return false;
         if (!GpuAcceleratorHost.TryAcquire(out var acc)) return false;
@@ -69,7 +69,13 @@ public sealed class MengerGpuCalculator : IDisposable
         {
             int total = r.Width * r.Height;
             using var dev = acc.Allocate1D<uint>(total);
-            _kernel(total, dev.View, r, sp, p);
+            // Slice D GPU parity — upload the theme palette LUT (or a length-1
+            // dummy when off) so the kernel arity stays fixed; the kernel gates
+            // on VolumePaletteStrength + LUT length.
+            uint[] lut = palette is { Length: >= 2 } ? palette : GpuKernelUtils.PaletteOff;
+            using var devLut = acc.Allocate1D<uint>(lut.Length);
+            devLut.CopyFromCPU(lut);
+            _kernel(total, dev.View, r, sp, p, devLut.View);
             acc.Synchronize();
             dev.CopyToCPU(outBuffer);
             return true;
@@ -82,7 +88,7 @@ public sealed class MengerGpuCalculator : IDisposable
     }
 
     private static void MengerKernel(
-        Index1D idx, ArrayView<uint> output, GpuRaymarchParams r, GpuShadingParams sp, MengerGpuParams p)
+        Index1D idx, ArrayView<uint> output, GpuRaymarchParams r, GpuShadingParams sp, MengerGpuParams p, ArrayView<uint> palette)
     {
         int x = idx % r.Width;
         int y = idx / r.Width;
@@ -279,9 +285,16 @@ public sealed class MengerGpuCalculator : IDisposable
             }
             // Slice C: medium color / scattering-albedo tint. White fog → ×1 →
             // bit-identical with the pre-parity single-light path.
-            br = br * T + inR * (sp.FogR / 255.0);
-            bg = bg * T + inG * (sp.FogG / 255.0);
-            bb = bb * T + inB * (sp.FogB / 255.0);
+            double fInR = inR * (sp.FogR / 255.0);
+            double fInG = inG * (sp.FogG / 255.0);
+            double fInB = inB * (sp.FogB / 255.0);
+            // Slice D GPU parity: palette-map the in-scatter through the uploaded
+            // theme LUT (no-op when strength 0 / LUT is the length-1 dummy).
+            (fInR, fInG, fInB) = GpuKernelUtils.PaletteRemapInScatter(
+                in sp, palette, fInR, fInG, fInB, T);
+            br = br * T + fInR;
+            bg = bg * T + fInG;
+            bb = bb * T + fInB;
         }
         else
         {

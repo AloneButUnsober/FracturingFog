@@ -108,9 +108,16 @@ Implementation (CPU):
   cross-fades by `VolumePaletteStrength`. Strength 0 or null LUT → unchanged
   (bit-identical with slice C).
 
-GPU parity for D is **deferred** — the GPU path shades from cheap-palette
-albedo, not the theme LUT; a real port would upload the ramp as its own buffer.
-Slice E covered only A/B/C.
+GPU parity for D is **DONE** (follow-on to slice E). The baked theme LUT is
+uploaded as a separate `ArrayView<uint>` kernel arg (it can't ride on the
+blittable `GpuShadingParams`; a length-1 dummy `GpuKernelUtils.PaletteOff` keeps
+the kernel arity fixed when the feature is off). New
+`GpuShadingParams.VolumePaletteStrength` gates it; `GpuKernelUtils.SamplePalette`
++ `PaletteRemapInScatter` mirror the CPU energy-preserving remap. All 8
+per-fractal kernels + Render signatures thread the palette; the 8 CPU
+calculators pass `fx.VolumePalette`. Strength 0 / dummy LUT → bit-identical with
+slice E. UserBulb's separate GPU path stays cheap-palette (no volumetric), same
+scope boundary as slice E. On-device pixel parity = CLI probe + user smoke.
 
 ### E — GPU parity (#181) — follow-up
 

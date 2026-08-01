@@ -172,7 +172,7 @@ public sealed class MandelboxCalculator : IFractalCalculator
             };
             var sp = GpuShadingParams.Build(in fx);
             _gpu ??= new MandelboxGpuCalculator();
-            if (_gpu.Render(renderBuffer, rp, sp, bp))
+            if (_gpu.Render(renderBuffer, rp, sp, bp, fx.VolumePalette))
             {
                 // #84 — GPU raymarch skips the CPU post stack; draw the debug
                 // HUD directly so the light compass still appears on GPU frames.
