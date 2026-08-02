@@ -20,6 +20,7 @@ using System.Threading.Tasks;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 
+using FracturingFog.CalculatorGen;
 using FracturingFog.FFMath;
 using FracturingFog.Interefaces;
 using FracturingFog.Models;
@@ -91,11 +92,25 @@ public sealed class UserEquationCalculator : IFractalCalculator
     /// <summary>Most recent compile error, or empty string when last compile succeeded.</summary>
     public string LastError { get; private set; } = string.Empty;
 
-    /// <summary>True if last compile produced a usable delegate.</summary>
-    public bool IsCompiled => _compiled != null;
+    /// <summary>True if last compile produced a usable step function (DSL
+    /// interpreter or Roslyn delegate).</summary>
+    public bool IsCompiled => _compiled != null || _sbx != null;
 
     private Func<Complex, Complex, int, Complex>? _compiled;
+    // #27 Phase 1b — safe interpreted path. When the C# source translates
+    // cleanly to the Sandbox DSL, _sbx holds the parsed expression and the
+    // render loop walks it instead of a Roslyn delegate (no BCL surface). At
+    // most one of _sbx / _compiled is non-null after a successful Compile.
+    private SandboxExpression? _sbx;
+    // Reason the DSL path could not represent the source (untranslatable
+    // construct or parse failure). Surfaced to the user when the raw-C#
+    // fallback is unavailable because the origin is untrusted.
+    private string? _dslError;
     private string _compiledSource = string.Empty;
+
+    /// <summary>True when the last successful compile runs on the safe DSL
+    /// interpreter rather than the Roslyn delegate.</summary>
+    public bool UsingDsl => _sbx != null;
     // Keeps the assembly backing _compiled alive. Collectible so a superseded
     // compile can be GC-unloaded once no delegate references it (the render
     // loop snapshots `fn = _compiled` into a local, so an in-flight render
@@ -117,17 +132,33 @@ public sealed class UserEquationCalculator : IFractalCalculator
     /// <summary>
     /// Compiles the user source. The source is the BODY of:
     ///   Complex Step(Complex z, Complex c, int n) { ... }
-    /// It must return a Complex value. Available APIs: full System.Numerics.Complex
-    /// methods plus standard Math wrappers (Re-exported as Sin/Cos/Exp/Log/Pow/Abs).
+    /// returning a Complex value, written in the historical
+    /// System.Numerics.Complex form (Complex.Sin/Cos/Pow/…, new Complex(a,b),
+    /// arithmetic on z/c/n).
+    ///
+    /// #27 Phase 1b — the source is first translated to the safe Sandbox DSL
+    /// and, when it translates and parses, executed by an interpreter with no
+    /// BCL surface (<see cref="UsingDsl"/> is then true). Sources with a
+    /// construct that has no DSL form fall back to the Roslyn path, which is
+    /// gated by <see cref="UserCodeSecurityPolicy"/>: allowed for trusted
+    /// (Interactive / BuiltIn) origins, refused for untrusted (ExternalFile).
     /// </summary>
     public void Compile(string source)
     {
         if (string.IsNullOrWhiteSpace(source))
         {
             _compiled = null;
+            _sbx = null;
             LastError = "Source is empty";
             return;
         }
+
+        // #27 Phase 1b — prefer the safe interpreted DSL. Translate the
+        // historical C# `Complex.*` form to the Sandbox DSL and, when it
+        // translates cleanly and parses, run it through SandboxExpression:
+        // no Roslyn, no BCL surface, no assembly load. Raw C# is kept only as
+        // a trusted-origin fallback for sources with no DSL representation.
+        if (TryCompileDsl(source)) return;
 
         // #27 Phase 0 — trust-boundary gate. Raw-C# user code is arbitrary
         // in-process execution; refuse it for untrusted (file-borne) origins
@@ -137,7 +168,13 @@ public sealed class UserEquationCalculator : IFractalCalculator
         if (!gate.Allowed)
         {
             _compiled = null;
-            LastError = gate.DenyReason ?? "Raw-C# user code is disabled.";
+            _sbx = null;
+            // Lead with why the DSL could not take it, then the gate's block
+            // notice, so an untrusted source gets an actionable message
+            // instead of a bare "raw C# disabled".
+            LastError = string.IsNullOrEmpty(_dslError)
+                ? (gate.DenyReason ?? "Raw-C# user code is disabled.")
+                : $"{_dslError}\n{gate.DenyReason}";
             return;
         }
 
@@ -199,6 +236,48 @@ public sealed class UserEquationCalculator : IFractalCalculator
         }
     }
 
+    /// <summary>
+    /// #27 Phase 1b — attempt to run the source on the safe DSL. Translates
+    /// the C# `Complex.*` form via <see cref="EquationPreprocessor"/> and, if
+    /// no unsupported construct is flagged and the result parses, installs the
+    /// parsed <see cref="SandboxExpression"/>. Returns true on success. On
+    /// failure sets <see cref="_dslError"/> (why the DSL declined) and leaves
+    /// _sbx null so the caller can fall back to the gated Roslyn path.
+    /// </summary>
+    private bool TryCompileDsl(string source)
+    {
+        _dslError = null;
+
+        // Translate C# → DSL. A diagnostic means an unsupported construct
+        // (member access, Complex.Abs, a statement block, …) — no DSL form.
+        string dsl = EquationPreprocessor.Preprocess(source, out PreprocessDiagnostic? diag);
+        if (diag != null)
+        {
+            _dslError = diag.Message;
+            _sbx = null;
+            return false;
+        }
+
+        try
+        {
+            var expr = SandboxExpression.Parse(dsl);
+            _sbx = expr;
+            _compiled = null;
+            _lastContext = null;          // DSL mode pins no assembly
+            _compiledSource = source;
+            LastError = string.Empty;
+            return true;
+        }
+        catch (Exception ex)
+        {
+            // Parsed to DSL text but the DSL grammar rejected it (e.g. an
+            // operator with no DSL form). Keep it editable; report crisply.
+            _dslError = ex.Message;
+            _sbx = null;
+            return false;
+        }
+    }
+
     private static string WrapUserSource(string body)
     {
         // Emit a real compilation unit: a static Step method holding the user
@@ -230,7 +309,7 @@ namespace FracturingFog.UserEq.Generated
 
     public void Calculate(CancellationToken ct = default)
     {
-        if (_compiled == null)
+        if (_compiled == null && _sbx == null)
         {
             // Try compiling from FractalParameters.UserEquationSource lazily.
             if (!string.IsNullOrWhiteSpace(FractalParameters.UserEquationSource)
@@ -241,7 +320,8 @@ namespace FracturingFog.UserEq.Generated
         }
 
         var fn = _compiled;
-        if (fn == null)
+        var sbx = _sbx;   // #27 Phase 1b — safe DSL interpreter, when available
+        if (fn == null && sbx == null)
         {
             // No compiled equation — fill with theme InSetColor so the screen
             // is at least not stale.
@@ -289,6 +369,13 @@ namespace FracturingFog.UserEq.Generated
             double dyCos = dy * cosA;
             double dySin = dy * sinA;
             int rowBase = y * width;
+
+            // One env per row for the DSL interpreter (holds z/c/n + let-slots;
+            // mutated in place per step). Null in Roslyn-delegate mode. The
+            // step call dispatches to the interpreter or the delegate.
+            SbxVal[]? env = sbx?.NewEnv();
+            Complex Step(Complex zz, Complex cc, int it)
+                => sbx != null ? sbx.EvalStep(zz, cc, it, env!) : fn!(zz, cc, it);
             for (int x = 0; x < width; x++)
             {
                 double dx = (x - width * 0.5) * scale;
@@ -336,7 +423,7 @@ namespace FracturingFog.UserEq.Generated
                         if (r2 >= bailout2) break;
                         if (orbitMap != null && iter > 0)
                             orbitMap.Sample(ref acc, z.Real, z.Imaginary, cx, cy, iter);
-                        try { z = fn(z, c, iter); }
+                        try { z = Step(z, c, iter); }
                         catch { iter = maxIt; break; }
                     }
                 }
@@ -348,7 +435,7 @@ namespace FracturingFog.UserEq.Generated
                         if (r2 >= bailout2) break;
                         if (orbitMap != null && iter > 0)
                             orbitMap.Sample(ref acc, z.Real, z.Imaginary, cx, cy, iter);
-                        try { z = fn(z, c, iter); zP = fn(zP, cP, iter); }
+                        try { z = Step(z, c, iter); zP = Step(zP, cP, iter); }
                         catch { iter = maxIt; break; }
                     }
                 }

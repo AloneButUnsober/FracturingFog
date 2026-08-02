@@ -87,9 +87,43 @@ public sealed class UserCodeGateCalculatorTests
         finally { UserCodeSecurityPolicy.Mode = prior; }
     }
 
+    // A source with NO DSL form (member access can't be expressed in the
+    // Sandbox grammar) still falls through to the gated Roslyn path and is
+    // refused for an untrusted origin. #27 Phase 1b: `return z*z + c;` no
+    // longer belongs here — it now translates to the DSL and runs safely
+    // (see UserEquation_ExternalFile_TranslatableEquation_RunsOnDsl).
+    private const string RoslynOnlyEquation = "return z.Real + c;";
+
     [Fact]
     public void UserEquation_ExternalFile_RawCsharp_IsRefused()
     {
+        var prior = UserCodeSecurityPolicy.Mode;
+        try
+        {
+            UserCodeSecurityPolicy.Mode = RoslynUserCodeMode.TrustedOnly;
+            var calc = new UserEquationCalculator(8, 8)
+            {
+                FractalParameters = new FractalParameters
+                {
+                    UserEquationSource = RoslynOnlyEquation,
+                    UserCodeOrigin = UserCodeOrigin.ExternalFile,
+                }
+            };
+            calc.Compile(RoslynOnlyEquation);
+            Assert.False(calc.IsCompiled);
+            Assert.False(calc.UsingDsl);
+            Assert.Contains("Blocked", calc.LastError);
+        }
+        finally { UserCodeSecurityPolicy.Mode = prior; }
+    }
+
+    [Fact]
+    public void UserEquation_ExternalFile_TranslatableEquation_RunsOnDsl()
+    {
+        // #27 Phase 1b — an untrusted equation that the DSL can represent runs
+        // on the safe interpreter (no Roslyn), so it is NOT refused. This is
+        // the surface reduction: the file-borne source executes without ever
+        // touching the raw-C# path.
         var prior = UserCodeSecurityPolicy.Mode;
         try
         {
@@ -103,10 +137,46 @@ public sealed class UserCodeGateCalculatorTests
                 }
             };
             calc.Compile("return z*z + c;");
-            Assert.False(calc.IsCompiled);
-            Assert.Contains("Blocked", calc.LastError);
+            Assert.True(calc.IsCompiled, $"expected DSL compile, got: {calc.LastError}");
+            Assert.True(calc.UsingDsl);
         }
         finally { UserCodeSecurityPolicy.Mode = prior; }
+    }
+
+    [Fact]
+    public void UserEquation_Interactive_TranslatableEquation_PrefersDsl()
+    {
+        // Even for a trusted origin the safe DSL is preferred when the source
+        // translates — the raw path is reserved for constructs with no DSL form.
+        var calc = new UserEquationCalculator(8, 8)
+        {
+            FractalParameters = new FractalParameters
+            {
+                UserEquationSource = "return Complex.Pow(z, 2) + c;",
+                UserCodeOrigin = UserCodeOrigin.Interactive,
+            }
+        };
+        calc.Compile("return Complex.Pow(z, 2) + c;");
+        Assert.True(calc.IsCompiled, $"expected compile, got: {calc.LastError}");
+        Assert.True(calc.UsingDsl);
+    }
+
+    [Fact]
+    public void UserEquation_Interactive_RoslynOnlyEquation_UsesRoslynFallback()
+    {
+        // A trusted source with no DSL form still compiles — via the Roslyn
+        // fallback — so interactive editing never regresses.
+        var calc = new UserEquationCalculator(8, 8)
+        {
+            FractalParameters = new FractalParameters
+            {
+                UserEquationSource = RoslynOnlyEquation,
+                UserCodeOrigin = UserCodeOrigin.Interactive,
+            }
+        };
+        calc.Compile(RoslynOnlyEquation);
+        Assert.True(calc.IsCompiled, $"expected Roslyn compile, got: {calc.LastError}");
+        Assert.False(calc.UsingDsl);
     }
 
     [Fact]

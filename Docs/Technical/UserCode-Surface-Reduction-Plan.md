@@ -1,6 +1,7 @@
 # User-Code Surface Reduction Plan (#27)
 
-Status: **active** — Phase 0 complete (0a/0b/0c); Phase 1 next.
+Status: **active** — Phase 0 complete (0a/0b/0c); Phase 1 complete (1a/1b/1c);
+Phase 2 next.
 Tracking issues: #27 (umbrella) + per-phase children (see [Tracking](#tracking)).
 
 ## Problem
@@ -105,16 +106,28 @@ PR at phase completion. Ship in order.
   vm.ShowError`, rendered by the editor's existing `Classes.error` → `#FFCC00`
   status style (never red). Contract pinned by a test.*
 
-### Phase 1 — 2D DSL parity + fold UserEquation onto the DSL
-- **1a** Close `SandboxExpression` math gap vs `Complex`/`Math`: add
-  `asin acos atan asinh acosh atanh atan2 min max mod floor sign clamp`
-  (precedent: CalcGen lexer already tokenizes `atan2 min max mod`). Tests. Commit.
-- **1b** Route `UserEquation` through `SandboxExpression`; keep
-  `EquationPreprocessor` so saved `Complex.*` sources translate to DSL on load.
-  Legacy sources that use a construct with no DSL form surface a crisp error and
-  stay editable (never silently dropped). Commit.
-- **1c** Parity harness: render a corpus (z²+c, z^n+c, trig/hyperbolic, Julia)
-  old-path vs new-path; assert pixel/DE equivalence within tolerance. Commit.
+### Phase 1 — 2D DSL parity + fold UserEquation onto the DSL — **complete**
+- **1a** ✅ Closed the `SandboxExpression` math gap vs `Complex`/`Math`: added
+  `asin acos atan asinh acosh atanh` (real inside the principal real domain,
+  complex continuation outside — the inverse-hyperbolic complex branches use
+  log/sqrt identities since BCL `Complex` lacks them), per-component
+  `floor sign`, real-valued `atan2 min max clamp`, and centered per-component
+  `mod` (matches `Vec3.Mod` so 2D and 3D share one meaning). 28 unit tests.
+- **1b** ✅ `UserEquationCalculator` is DSL-first: `EquationPreprocessor`
+  (reused via a new Engine → `CalculatorGen.Lib` reference) translates the C#
+  `Complex.*` source; when it translates + parses it runs on `SandboxExpression`
+  (no Roslyn, no BCL, no assembly load). Roslyn stays only as a fallback for
+  sources with no DSL form, still gated by origin — so an untrusted equation the
+  DSL can express now *executes safely* instead of being refused, and trusted
+  editing never regresses. Untranslatable sources surface a crisp error and stay
+  editable. `UsingDsl` exposes which path ran.
+  *Interim note:* translatable equations now run interpreted rather than
+  JIT-native (a per-step slowdown), accepted as the direction toward Phase 3.
+- **1c** ✅ Parity harness (`UserEquationDslParityTests`): a 16-equation corpus
+  proves the translated DSL step equals the identical C# expression evaluated
+  natively (= the old Roslyn semantics) within relative 1e-10 over a (z, c, n)
+  grid; a render-level check confirms `UserEquationCalculator` (DSL) and
+  `SandboxCalculator` emit bitwise-identical pixel buffers.
 
 ### Phase 2 — 3D DSL parity + retire UserBulb Roslyn
 - **2a** Gap-audit `SandboxBulbExpression`/emitter vs every Roslyn Vec3/Quat/
