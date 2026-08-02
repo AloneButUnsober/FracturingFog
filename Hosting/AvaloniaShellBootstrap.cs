@@ -80,6 +80,10 @@ namespace FracturingFog.Hosting
         private static FractalRenderHost? s_renderHost;
         private static FractalInputController? s_input;
         private static ShellViewModel? s_shell;
+        // #189 feature 4 — the in-flight poster/high-res render's cancellation
+        // source, or null when no poster is rendering. Clicking Poster again while
+        // this is non-null cancels the render instead of starting a new one.
+        private static CancellationTokenSource? s_posterCts;
         private static IGpuSurface? s_surface;
         private static HostColorThemeService? s_themeService;
         // Hybrid-shell: the feature views are UserControls wrapped in a generic
@@ -1699,6 +1703,24 @@ namespace FracturingFog.Hosting
                 {
                     if (s_renderHost == null) return;
 
+                    // #189 feature 4 — a second click while a render is in flight
+                    // is a CANCEL. The render checks the token at each stage
+                    // (alt/Calculate + ThrowIfCancellationRequested), so it stops
+                    // at the next checkpoint; the awaiting call below surfaces the
+                    // OperationCanceledException and resets the button.
+                    if (s_posterCts != null)
+                    {
+                        try { s_posterCts.Cancel(); }
+                        catch (Exception cex)
+                        {
+                            await AvaloniaDialogs.ShowMessageAsync(
+                                "Poster",
+                                "Could not cancel the poster render:\n" + cex.Message,
+                                expectsConfirmation: false);
+                        }
+                        return;
+                    }
+
                     var dims = await AvaloniaDialogs.ShowPosterAsync(
                         watermarkNames: UserWatermarkStore.Instance.EnumerateNames(),
                         customWatermarkDefault: shell.Main.UseCustomWatermark,
@@ -1749,18 +1771,32 @@ namespace FracturingFog.Hosting
                         renderW, renderH, rotate: dims.Value.Portrait,
                         path, format, customWm);
 
+                    var cts = new CancellationTokenSource();
+                    s_posterCts = cts;
+                    shell.FloatingMenu.PosterButtonText = "Cancel Poster";
                     try
                     {
-                        var result = await Task.Run(() => PosterRenderer.RenderToFile(req, CancellationToken.None));
+                        var result = await Task.Run(() => PosterRenderer.RenderToFile(req, cts.Token));
                         await AvaloniaDialogs.ShowMessageAsync(
                             "Poster Saved",
                             $"Saved {result.SavedWidth}×{result.SavedHeight} px to:\n{path}\n({result.ElapsedMs} ms)",
                             expectsConfirmation: false);
                     }
+                    catch (OperationCanceledException)
+                    {
+                        await AvaloniaDialogs.ShowMessageAsync(
+                            "Poster", "Poster render cancelled.", expectsConfirmation: false);
+                    }
                     catch (Exception ex)
                     {
                         await AvaloniaDialogs.ShowMessageAsync(
                             "Poster", $"Render failed:\n{ex.Message}", expectsConfirmation: false);
+                    }
+                    finally
+                    {
+                        s_posterCts = null;
+                        cts.Dispose();
+                        shell.FloatingMenu.PosterButtonText = "Poster";
                     }
                 }
                 catch (Exception ex)

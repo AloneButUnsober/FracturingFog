@@ -11,7 +11,7 @@
                 <TextBlock Classes="section" Text="Stills &amp; Video" />
                 <UniformGrid Columns="3">
                     <Button Classes="action neutral"   Content="Image"  Command="{Binding Menu.ScreenshotCommand}" ToolTip.Tip="High-resolution screenshot" Margin="0,0,4,0" />
-                    <Button Classes="action neutral"   Content="Poster" Command="{Binding Menu.PosterCommand}"     ToolTip.Tip="Print-ready poster image" Margin="0,0,4,0" />
+                    <Button Classes="action neutral"   Content="{Binding Menu.PosterButtonText}" Command="{Binding Menu.PosterCommand}"     ToolTip.Tip="Print-ready poster image (click again while rendering to cancel)" Margin="0,0,4,0" />
                     <Button Classes="action video"     Content="{Binding Menu.VideoButtonText}" Command="{Binding Menu.VideoCommand}" ToolTip.Tip="Animated zoom" />
                 </UniformGrid>
                 <UniformGrid Columns="2" Margin="0,4,0,0">
