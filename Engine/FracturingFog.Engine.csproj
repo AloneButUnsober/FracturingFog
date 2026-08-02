@@ -22,6 +22,15 @@
   <ItemGroup>
     <ProjectReference Include="..\Abstractions\FracturingFog.Abstractions.csproj" />
     <!--
+      #27 Phase 1b — CalculatorGen.Lib supplies EquationPreprocessor, the
+      C# `Complex.*` → DSL translator. UserEquationCalculator uses it to run
+      the historical C# equation form through the safe SandboxExpression
+      interpreter (no Roslyn) whenever the source translates cleanly. It is a
+      library (not the sibling CalculatorGen.csproj Exe), so it adds no
+      NETSDK1150 self-contained-publish blocker.
+    -->
+    <ProjectReference Include="..\CalculatorGen.Lib\CalculatorGen.Lib.csproj" />
+    <!--
       Wave 2.13 (D-7.29) — CalculatorGen Roslyn source generator. Replaces
       the legacy `dotnet run -p CalculatorGen` step that wrote files
       into Engine/Calculators/Generated/. ReferenceOutputAssembly=false
