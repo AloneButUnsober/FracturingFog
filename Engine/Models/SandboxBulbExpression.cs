@@ -12,6 +12,9 @@
 // No BCL exposure: no File.IO, no reflection, no P/Invoke, no allocation
 // beyond AST + per-thread env array.
 //
+// Comments: `// line` and `/* block */` are skipped anywhere whitespace is
+// (a lone `/` is still division).
+//
 // Grammar (right-recursive descent) — superset of SandboxExpression:
 //   expr     := let_expr
 //   let_expr := "let" IDENT "=" expr "in" expr | ternary
@@ -921,7 +924,30 @@ namespace FracturingFog.Models
 
             private void SkipWs()
             {
-                while (_pos < _src.Length && char.IsWhiteSpace(_src[_pos])) _pos++;
+                // Skips whitespace and comments. `//` runs to end-of-line;
+                // `/* */` spans lines. A lone `/` is left for the division
+                // operator. #27 Phase 2a — the built-in bulb presets carry
+                // explanatory `//` comments; the DSL must accept them so the
+                // migrated presets (and hand-authored bulbs) keep their notes.
+                while (_pos < _src.Length)
+                {
+                    char ch = _src[_pos];
+                    if (char.IsWhiteSpace(ch)) { _pos++; continue; }
+                    if (ch == '/' && _pos + 1 < _src.Length && _src[_pos + 1] == '/')
+                    {
+                        _pos += 2;
+                        while (_pos < _src.Length && _src[_pos] != '\n') _pos++;
+                        continue;
+                    }
+                    if (ch == '/' && _pos + 1 < _src.Length && _src[_pos + 1] == '*')
+                    {
+                        _pos += 2;
+                        while (_pos + 1 < _src.Length && !(_src[_pos] == '*' && _src[_pos + 1] == '/')) _pos++;
+                        _pos = Math.Min(_src.Length, _pos + 2);
+                        continue;
+                    }
+                    break;
+                }
             }
 
             private void Expect(char c)
