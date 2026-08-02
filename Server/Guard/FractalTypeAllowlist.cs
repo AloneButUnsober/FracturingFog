@@ -2,10 +2,13 @@
 // SPDX-FileCopyrightText: 2026 Bradley Brown
 
 // Server/Guard/FractalTypeAllowlist.cs
-// Refuses fractal types that execute user-authored code or step functions.
-// UserEquation runs C#-script-compiled expressions, Sandbox executes a
-// user step function, UserBulb mixes ILGPU kernels with user parameters.
-// All three would be RCE risks if accepted over the network.
+// Refuses fractal types that execute user-authored step functions over the
+// network. #27 Phase 3 moved UserEquation / Sandbox / UserBulb onto safe DSL
+// interpreters (no BCL surface, no Roslyn), so the raw-C# RCE primitive is
+// gone — but these types still run arbitrary user-supplied step math and
+// unbounded iteration budgets, so they stay blocked as defense-in-depth
+// (network content is untrusted; no reason to accept a user step function
+// from a remote peer).
 
 using System;
 using System.Collections.Generic;
