@@ -75,17 +75,18 @@ visualised.
 3. [Identity Section](#3-identity-section)
 4. [Kind Selector](#4-kind-selector)
 5. [Color Stops](#5-color-stops)
-6. [Cycle Speed](#6-cycle-speed)
-7. [3D Lighting (Phong + PBR)](#7-3d-lighting-phong--pbr)
-8. [Phong3D Extras](#8-phong3d-extras)
-9. [Pbr3D Extras](#9-pbr3d-extras)
-10. [In-Set Color](#10-in-set-color)
-11. [Post-FX Defaults](#11-post-fx-defaults)
-12. [Live Preview + Actions](#12-live-preview--actions)
-13. [Image Palette Helper](#13-image-palette-helper)
-14. [JSON Schema](#14-json-schema)
-15. [Worked Examples](#15-worked-examples)
-16. [Tips + Troubleshooting](#16-tips--troubleshooting)
+6. [Randomize — Random Theme Generator](#6-randomize--random-theme-generator)
+7. [Cycle Speed](#7-cycle-speed)
+8. [3D Lighting (Phong + PBR)](#8-3d-lighting-phong--pbr)
+9. [Phong3D Extras](#9-phong3d-extras)
+10. [Pbr3D Extras](#10-pbr3d-extras)
+11. [In-Set Color](#11-in-set-color)
+12. [Post-FX Defaults](#12-post-fx-defaults)
+13. [Live Preview + Actions](#13-live-preview--actions)
+14. [Image Palette Helper](#14-image-palette-helper)
+15. [JSON Schema](#15-json-schema)
+16. [Worked Examples](#16-worked-examples)
+17. [Tips + Troubleshooting](#17-tips--troubleshooting)
 
 ---
 
@@ -110,16 +111,20 @@ The editor seeds from the currently-selected theme. Cancel-without-Save restores
 │           Description ___________  Max zoom _____                │
 ├──────────────────┬───────────────────────────────────────────────┤
 │ Color Stops      │ 3D Lighting                                   │
-│  [pos] [swatch]  │  Steepness ___   Ambient ___                  │
-│  [pos] [swatch]  │  Key   Dir XYZ  Diffuse RGB  Spec RGB  Shine  │
-│  [pos] [swatch]  │  Fill  Dir XYZ  Diffuse RGB  Spec RGB  Shine  │
-│  [+ Add] [- Del] │  ☐ Rim light                                  │
-│                  │                                               │
+│  Add 🎲Random    │  Steepness ___   Ambient ___                  │
+│   From/Import/Exp │  Key   Dir XYZ  Diffuse RGB  Spec RGB  Shine  │
+│  ☐Experim ☑In-set│  Fill  Dir XYZ  Diffuse RGB  Spec RGB  Shine  │
+│   ☐Post-FX       │  ☐ Rim light                                  │
+│   Seed ___ ☐Use  │                                               │
+│      ☑Interp     │                                               │
+│  ☐Inspect  ◎     │                                               │
+│  [pos] [swatch]  │                                               │
+│  [pos] [swatch]  │                                               │
 │ Cycle            │ Phong3D extras                                │
-│  Speed ___       │  (key spec extra, fill diff extra)            │
+│  Speed ___       │  Key/Fill/Rim  spec + diff scales             │
 │                  │                                               │
 │ In-Set           │ Pbr3D extras                                  │
-│  ☐ Override RGB  │  Lighting mode ▾  Glow exp / scl              │
+│  ☐ Override RGBA │  Lighting mode ▾  Glow exp / scl              │
 │                  │  Material bands [start end metal rough] …     │
 │ Post-FX defaults │                                               │
 │  Brightness ___  │                                               │
@@ -183,7 +188,47 @@ Stops interpolate linearly between adjacent positions. Outside [0, 1] the outer 
 
 ---
 
-## 6. Cycle Speed
+## 6. Randomize — Random Theme Generator
+
+The **🎲 Random** button (top of the Color Stops section) generates a complete theme in one click — not just the palette. It always builds a fresh set of colour stops via a golden-ratio hue walk (maximally-spaced hues so no two stops crowd the wheel), then layers on extra randomized settings chosen by the **current Kind** and by the toggle row directly beneath the button.
+
+### What gets randomized
+
+| Area | When |
+|---|---|
+| Colour stops | Always. |
+| Interpolation (Space / Curve / Transfer / Strength / Gamma) | When **Interpolation** is ticked (default on). |
+| Cycle settings (offset / density / speed / wrap mode) | Every Kind **except** Gradient. |
+| 3D light rig + shared Steepness / Ambient | Phong3D and Pbr3D. |
+| Phong extras (key/fill/rim spec + diff scales) | Phong3D only. |
+| PBR lighting mode, glow, and material bands | Pbr3D only. |
+| In-set (interior) colour | When **In-set** is ticked (default on). |
+| Post-FX defaults (Brightness / Contrast / Adaptive-HE) | When **Post-FX** is ticked (default off). |
+
+### The toggle row
+
+| Control | Default | Effect |
+|---|---|---|
+| **Random Experimental** | off | Off = *artful* mode: every value stays inside a logical range, and 3D light colours + the in-set colour are pulled from the palette just generated so the result reads as one family. On = *experimental* mode: caps are removed and the generator "goes wild" — full-range colours, wider counts, unconstrained placement. |
+| **In-set** | on | Include a random interior colour. Artful mode picks a dark member of the palette family (opaque) so the in-set reads as a recessed pocket; experimental mode allows any colour and any alpha. |
+| **Post-FX** | off | Include random Post-FX defaults. Ticking this also ticks the Brightness / Contrast / Adaptive *Use* checkboxes to match (and unticking clears them) so you never have to flip them by hand. Artful mode keeps Brightness/Contrast within ±20 and Adaptive-HE under 50; experimental mode uses the full slider ranges. |
+| **Interpolation** | on | Include random Space / Curve / Transfer / Transfer-strength / Palette-gamma. Artful keeps strength and gamma near neutral; experimental spans their full ranges. |
+
+### Seed and reproducibility
+
+- Every click records the seed used in the **Description** field and writes it into the **Seed** field.
+- **Use Seed** (default off): while off, the Seed field is greyed out and each click draws a fresh seed — so repeated clicks keep producing new themes. Tick **Use Seed** to enable the field; the next click uses the value you enter.
+- The same seed with the same toggles, Kind, and Experimental state reproduces an identical theme. A single seeded RNG drives every step in fixed order, so changing any of those inputs changes the result.
+
+> [!TIP]
+> Found a random theme you like? Its seed is already in the Seed field and the Description. Tick **Use Seed**, then flip **Random Experimental** on and off (or switch Kind) to explore controlled variations around the same starting point.
+
+> [!NOTE]
+> Randomize replaces the current stops and the settings it covers. Untick a scope toggle (In-set, Post-FX, Interpolation) to protect those sections from being overwritten.
+
+---
+
+## 7. Cycle Speed
 
 Active for Cycling / Phong3D / Pbr3D kinds.
 
@@ -193,7 +238,7 @@ For Phong3D + Pbr3D, the cycle controls the **base albedo** banding only — the
 
 ---
 
-## 7. 3D Lighting (Phong + PBR)
+## 8. 3D Lighting (Phong + PBR)
 
 Shared parameters between Phong3D and Pbr3D kinds:
 
@@ -219,20 +264,23 @@ A balanced 3-point setup: Key 1.0 / Fill 0.4 / Rim 0.3.
 
 ---
 
-## 8. Phong3D Extras
+## 9. Phong3D Extras
 
-Phong3D layers a second specular pass for the Fill light only, producing a softer secondary highlight you can use for atmospheric accent (e.g., a cyan halo opposite the warm key spec).
+Phong3D exposes five per-light scale factors on top of the shared 3D-lighting block, letting you dial each light's diffuse / specular contribution independently for atmospheric accent (e.g., a cyan fill halo opposite the warm key spec).
 
-| Field | Purpose |
-|---|---|
-| Fill diff extra | Extra diffuse contribution beyond the shared lighting block. |
-| Key spec extra | Extra specular bump on top of the shared key. |
+| Field | Purpose | Typical range |
+|---|---|---:|
+| Key spec | Specular strength of the Key light. | 0.4 – 1.2 |
+| Fill spec | Specular strength of the Fill light. | 0.1 – 0.5 |
+| Fill diff | Diffuse strength of the Fill light. | 0.2 – 0.6 |
+| Rim spec | Specular strength of the Rim light (only when Rim is enabled). | 0.5 – 1.5 |
+| Rim diff | Diffuse strength of the Rim light (only when Rim is enabled). | 0.1 – 0.4 |
 
-Default both to 0 unless you want the explicit accent.
+Leave them near their defaults for a balanced rig; push a single value when you want one light to dominate.
 
 ---
 
-## 9. Pbr3D Extras
+## 10. Pbr3D Extras
 
 Pbr3D uses a Cook-Torrance BRDF with a GGX normal-distribution function and Smith geometric occlusion. Material parameters drive the BRDF:
 
@@ -246,18 +294,18 @@ Material bands are evaluated in declared order — the first band whose `(start,
 
 ---
 
-## 10. In-Set Color
+## 11. In-Set Color
 
-When the **Override** checkbox is ticked, the picker sets the opaque RGB color for points that never escape (the cardioid + bulbs).
+When the **Override** checkbox is ticked, the picker sets the RGBA color for points that never escape (the cardioid + bulbs).
 
 Default behavior (override off) draws the in-set with opaque black. Useful overrides:
 - Dark navy `(8, 12, 32)` to keep contrast without harshness.
 - Very-dark hue-matched color taken from the gradient's tail — keeps the in-set from popping visually.
-- Transparent (alpha) — currently not honored; in-set is always opaque.
+- A partial alpha — the interior alpha **is** honored (per-theme, #96): below 255 the in-set composites over the 2D interior background, and the global `InteriorAlpha` knob multiplies this value. The swatch previews the authored alpha so a translucent interior reads as faded.
 
 ---
 
-## 11. Post-FX Defaults
+## 12. Post-FX Defaults
 
 Per-theme defaults for the three Post-FX sliders.
 
@@ -271,7 +319,7 @@ When you select this theme from a combo, the renderer snaps each slider to the c
 
 ---
 
-## 12. Live Preview + Actions
+## 13. Live Preview + Actions
 
 | Action | Behavior |
 |---|---|
@@ -286,7 +334,7 @@ When you select this theme from a combo, the renderer snaps each slider to the c
 
 ---
 
-## 13. Image Palette Helper
+## 14. Image Palette Helper
 
 Sample any PNG / JPG / BMP, get a 5-stop palette via k-means clustering in CIELAB color space, loaded straight into the Color Stops list.
 
@@ -302,7 +350,7 @@ Tip: pick a source image whose mood matches your fractal target. A sunset photo 
 
 ---
 
-## 14. JSON Schema
+## 15. JSON Schema
 
 Each entry in `colorthemes.json` is a single `ColorThemeData` object. Field omission follows `WhenWritingNull` — null fields disappear entirely.
 
@@ -362,7 +410,7 @@ next. Omit (or `0.5`) for a straight blend.
 
 ---
 
-## 15. Worked Examples
+## 16. Worked Examples
 
 ### Example 1 — Warm Sunset Gradient
 
@@ -490,7 +538,7 @@ next. Omit (or `0.5`) for a straight blend.
 
 ---
 
-## 16. Tips + Troubleshooting
+## 17. Tips + Troubleshooting
 
 **Live preview lagging.** Lower Cycle Speed temporarily, or untick Live preview and use Apply between edits.
 
