@@ -49,6 +49,24 @@ public sealed class UserCodeSecurityPolicyTests
     }
 
     [Fact]
+    public void ExternalFileDenial_PointsUserAtTheDsl()
+    {
+        // #27 Phase 0c — the deny message the editor surfaces (in yellow, via
+        // the existing Classes.error #FFCC00 status style — never red, per the
+        // colorblind guidance) must explain the block and steer to the DSL.
+        var prior = UserCodeSecurityPolicy.Mode;
+        try
+        {
+            UserCodeSecurityPolicy.Mode = RoslynUserCodeMode.TrustedOnly;
+            var gate = UserCodeGate.EnsureRoslynAllowed(UserCodeOrigin.ExternalFile);
+            Assert.False(gate.Allowed);
+            Assert.Contains("Blocked", gate.DenyReason);
+            Assert.Contains("DSL", gate.DenyReason);
+        }
+        finally { UserCodeSecurityPolicy.Mode = prior; }
+    }
+
+    [Fact]
     public void DefaultMode_IsTrustedOnly_WhenEnvUnset()
     {
         var prior = Environment.GetEnvironmentVariable("FF_ROSLYN_USERCODE");

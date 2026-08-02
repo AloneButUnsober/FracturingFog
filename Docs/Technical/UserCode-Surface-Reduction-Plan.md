@@ -1,6 +1,6 @@
 # User-Code Surface Reduction Plan (#27)
 
-Status: **active** — Phase 0 in progress.
+Status: **active** — Phase 0 complete (0a/0b/0c); Phase 1 next.
 Tracking issues: #27 (umbrella) + per-phase children (see [Tracking](#tracking)).
 
 ## Problem
@@ -101,6 +101,9 @@ PR at phase completion. Ship in order.
 - **0c** User-facing surfacing: when a compile is denied, `LastError` explains
   the block and points at the DSL. Yellow (`#FFCC00`) advisory in the editor —
   **not red** (red/green colorblind users). Commit.
+  *Done: the deny reason flows `calc.LastError → CompileUser{Equation,Bulb} →
+  vm.ShowError`, rendered by the editor's existing `Classes.error` → `#FFCC00`
+  status style (never red). Contract pinned by a test.*
 
 ### Phase 1 — 2D DSL parity + fold UserEquation onto the DSL
 - **1a** Close `SandboxExpression` math gap vs `Complex`/`Math`: add
