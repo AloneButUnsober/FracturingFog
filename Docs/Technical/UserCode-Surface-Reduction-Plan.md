@@ -1,7 +1,8 @@
 # User-Code Surface Reduction Plan (#27)
 
 Status: **active** — Phase 0 complete (0a/0b/0c); Phase 1 complete (1a/1b/1c);
-Phase 2 next.
+Phase 2 complete (2a/2b/2c; the original hard-delete 2d folds into Phase 3);
+Phase 3 next.
 Tracking issues: #27 (umbrella) + per-phase children (see [Tracking](#tracking)).
 
 ## Problem
@@ -129,23 +130,43 @@ PR at phase completion. Ship in order.
   grid; a render-level check confirms `UserEquationCalculator` (DSL) and
   `SandboxCalculator` emit bitwise-identical pixel buffers.
 
-### Phase 2 — 3D DSL parity + retire UserBulb Roslyn
-- **2a** Gap-audit `SandboxBulbExpression`/emitter vs every Roslyn Vec3/Quat/
-  Chain idiom; add missing DSL forms or document as unsupported. Commit.
-- **2b** Migrate all built-in `UserBulbStore` presets from Roslyn C# to DSL
-  syntax (respecting read-only built-in equations — replace the shipped source,
-  don't force it onto a user's saved copy). Commit.
-- **2c** Flip `FractalParameters.UserBulbCompiler` default → `Sandbox`. Commit.
-- **2d** Delete `WrapUserSource{,Quat,Chain}` + the Roslyn branch in
-  `UserBulbCalculator.Compile`. Parity harness for 3D. Commit.
+### Phase 2 — 3D DSL parity + make the bulb DSL primary — **complete**
+- **2a** ✅ Gap-audited `SandboxBulbExpression` vs every built-in preset idiom:
+  all math has a DSL form (`new Vec3`→`vec`, `Vec3.Fn`/`Math.Fn`→lowercase
+  builtins, `.X`→`.x`, `^`/`triplex`/`boxfold`/`spherefold`/`rot`/`abs*`
+  present); imperative `var`/`if` map to `let..in`/ternary. The one gap was
+  comments — added `//` and `/* */` skipping. `SandboxBulbDslAuditTests` makes
+  it executable (DSL == native `Vec3` math over a grid).
+- **2b** ✅ Migrated all built-in `UserBulbStore` presets and chain primitives
+  from raw C# to DSL and pinned each to `Compiler = Sandbox` in its `Settings`
+  snapshot. `MigrateBuiltinsToDsl()` upgrades a pre-2b `userbulbs.json` only
+  when the stored source still exactly matches the shipped C# (or the new DSL
+  awaiting a pin), so a user's own edit is preserved (read-only built-in
+  contract). ("Cosh × Sin bulb" used `Vec3*Vec3` — no operator, never compiled
+  under Roslyn — the DSL Hadamard repairs it.)
+- **2c** ✅ Flipped `FractalParameters.UserBulbCompiler` default → `Sandbox` and
+  made `UserBulbCalculator.Compile` DSL-first with a **trusted Roslyn
+  fallback**: a DSL parse failure falls through to the gated Roslyn path only
+  for a trusted origin and only when the body looks like C#; a DSL typo keeps
+  its DSL error; untrusted C# is refused with the gate's block notice. So no
+  user-authored C# bulb breaks, and the file-borne surface is not widened.
+- **~~2d~~** (original hard-delete) → **folded into Phase 3.** Per the
+  "keep trusted fallback" decision, `WrapUserSource{,Quat,Chain}` stays as the
+  trusted-origin fallback and is deleted alongside the UserEquation raw path in
+  Phase 3, not here.
 
 ### Phase 3 — remove the raw-C# user-code path entirely
-- **3a** Delete `UserEquationCalculator`'s raw Roslyn path (fold the type onto
-  the DSL engine). Commit.
-- **3b** Confirm no remaining user-text → Roslyn slot. CalcGen/ColorGen
+Now covers **both** raw-C# calculators (UserEquation from Phase 1, UserBulb
+from Phase 2 — both currently keep a trusted-origin Roslyn fallback).
+- **3a** Delete `UserEquationCalculator`'s raw Roslyn path (`WrapUserSource` +
+  the Roslyn branch); the type runs on `SandboxExpression` only. Commit.
+- **3b** Delete `UserBulbCalculator`'s `WrapUserSource{,Quat,Chain}` + the
+  Roslyn branch/fallback; the type runs on `SandboxBulbExpression` only.
+  Add the 3D render parity harness (was the old 2d). Commit.
+- **3c** Confirm no remaining user-text → Roslyn slot. CalcGen/ColorGen
   hot-load compile machine-generated source from a validated AST, not user text
   — audit + assert. Commit.
-- **3c** Keep `FractalTypeAllowlist` as defense-in-depth. Regression sweep. Commit.
+- **3d** Keep `FractalTypeAllowlist` as defense-in-depth. Regression sweep. Commit.
 
 ### Phase 4 — ColorGen to a full interpreted DSL
 Goal: the ColorGen DSL must be able to express **every** rich color theme with
