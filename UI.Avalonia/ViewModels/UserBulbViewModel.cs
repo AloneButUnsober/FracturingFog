@@ -69,7 +69,11 @@ public sealed class UserBulbViewModel : ViewModelBase
         _kifsScale    = _params.UserBulbKifsScale;
         _deModeIndex  = (int)_params.UserBulbDEMode;
         _backendIndex = (int)_params.UserBulbBackend;
-        _compilerIndex = (int)_params.UserBulbCompiler;
+        // #27 Phase 3 — the raw-C# Roslyn compiler is gone; the Sandbox DSL is
+        // the only path. Pin the persisted selector to Sandbox so exports and
+        // the (now-retired) UI stay honest, regardless of any legacy value.
+        _params.UserBulbCompiler = UserBulbCompilerKind.Sandbox;
+        _compilerIndex = (int)UserBulbCompilerKind.Sandbox;
         _axisModeIndex = (int)_params.UserBulbAxisMode;
         _quatSliceW   = _params.UserBulbQuatSliceW;
 
@@ -830,7 +834,9 @@ public sealed class UserBulbViewModel : ViewModelBase
     private void ApplySnapshotToParams(UserBulbSnapshot s)
     {
         if (s.AxisMode is { } axisMode)          _params.UserBulbAxisMode = axisMode;
-        if (s.Compiler is { } compiler)          _params.UserBulbCompiler = compiler;
+        // #27 Phase 3 — ignore any persisted Roslyn selector; the Sandbox DSL
+        // is the only compiler now.
+        _params.UserBulbCompiler = UserBulbCompilerKind.Sandbox;
         if (s.DEMode is { } deMode)              _params.UserBulbDEMode = deMode;
         if (s.Backend is { } backend)            _params.UserBulbBackend = backend;
         if (s.QuatSliceW is { } qsw)             _params.UserBulbQuatSliceW = qsw;
