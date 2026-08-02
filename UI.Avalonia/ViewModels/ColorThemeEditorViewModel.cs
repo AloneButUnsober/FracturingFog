@@ -458,42 +458,291 @@ public sealed class ColorThemeEditorViewModel : ViewModelBase
         FieldChanged();
     }
 
-    // ── Randomize (Phase C / F12) ─────────────────────────────────────────
+    // ── Randomize (Phase C / F12; Kind-aware extras #83) ──────────────────
     //
-    // One-click random palette: a golden-ratio hue walk (maximally-spaced
-    // hues, no two stops close on the wheel) with jittered saturation/value.
+    // One-click random theme. The palette is always a golden-ratio hue walk
+    // (maximally-spaced hues, no two stops close on the wheel) with jittered
+    // saturation/value. On top of that, the extras randomized depend on the
+    // current Kind and the three toggles below:
+    //   • Cycle settings   — all Kinds except Gradient.
+    //   • 3D light rig      — Phong3D / Pbr3D.
+    //   • Phong extras      — Phong3D only.
+    //   • PBR bands/material— Pbr3D only.
+    //   • In-set colour     — all Kinds, when RandomIncludeInSet is on (default).
+    //   • Post-FX defaults  — all Kinds, when RandomIncludePostFx is on.
+    //
+    // RandomExperimental switches every range from "artful" (clamped, logical,
+    // related to the palette) to "experimental" (caps removed — go wild).
     // Reproducible — a fresh integer seed drives a local Random each click and
-    // is recorded in the Description so a palette the user likes can be traced
-    // back. Replaces the current stops; kind/lighting untouched.
+    // is recorded in the Description so a theme the user likes can be traced
+    // back.
+
+    private bool _randomExperimental;
+    /// <summary>Off (default): random values stay in artful/logical ranges.
+    /// On: caps and conservativeness removed — randomization "goes wild" (#83).</summary>
+    public bool RandomExperimental
+    {
+        get => _randomExperimental;
+        set => this.RaiseAndSetIfChanged(ref _randomExperimental, value);
+    }
+
+    private bool _randomIncludeInSet = true;
+    /// <summary>On (default): Randomize includes an In-set (interior) colour.
+    /// Off: the In-set section is left untouched by Randomize (#83).</summary>
+    public bool RandomIncludeInSet
+    {
+        get => _randomIncludeInSet;
+        set => this.RaiseAndSetIfChanged(ref _randomIncludeInSet, value);
+    }
+
+    private bool _randomIncludePostFx;
+    /// <summary>Off (default): Randomize leaves Post-FX defaults alone.
+    /// On: Randomize also sets Brightness / Contrast / Adaptive-HE (#83).
+    /// Toggling this mirrors the three Use-* Post-FX checkboxes so the user
+    /// doesn't have to flip them by hand.</summary>
+    public bool RandomIncludePostFx
+    {
+        get => _randomIncludePostFx;
+        set
+        {
+            this.RaiseAndSetIfChanged(ref _randomIncludePostFx, value);
+            UseBrightness = value;
+            UseContrast = value;
+            UseAdaptive = value;
+        }
+    }
+
+    private bool _randomIncludeInterpolation = true;
+    /// <summary>On (default): Randomize also picks Interpolation settings
+    /// (Space / Curve / Transfer / Strength / Gamma). Off: they are left
+    /// untouched (#83).</summary>
+    public bool RandomIncludeInterpolation
+    {
+        get => _randomIncludeInterpolation;
+        set => this.RaiseAndSetIfChanged(ref _randomIncludeInterpolation, value);
+    }
+
+    private string _randomSeedText = "";
+    /// <summary>The seed field. Only consulted when <see cref="UseRandomSeed"/>
+    /// is on. After each Randomize it is set to the seed actually used so a
+    /// theme can be traced back / reproduced (#83).</summary>
+    public string RandomSeedText
+    {
+        get => _randomSeedText;
+        set => this.RaiseAndSetIfChanged(ref _randomSeedText, value);
+    }
+
+    private bool _useRandomSeed;
+    /// <summary>Off (default): the Seed field is disabled and ignored — each
+    /// click gets a fresh random seed (still written back to the field). On:
+    /// the Seed field value drives the next Randomize for reproducible output
+    /// (#83).</summary>
+    public bool UseRandomSeed
+    {
+        get => _useRandomSeed;
+        set => this.RaiseAndSetIfChanged(ref _useRandomSeed, value);
+    }
 
     private void RandomizePalette()
     {
-        int seed = System.Random.Shared.Next(1, 1_000_000);
+        int seed = (UseRandomSeed
+                    && int.TryParse((RandomSeedText ?? "").Trim(), out int userSeed)
+                    && userSeed > 0)
+            ? userSeed
+            : System.Random.Shared.Next(1, 1_000_000);
         var rng = new Random(seed);
-        const double golden = 0.6180339887498949;
-        const int n = 5;
-        double hue = rng.NextDouble();
+        bool wild = RandomExperimental;
 
         _suppressChange = true;
         try
         {
-            Stops.Clear();
-            for (int i = 0; i < n; i++)
-            {
-                hue = (hue + golden) % 1.0;
-                double sat = 0.55 + rng.NextDouble() * 0.40;  // 0.55..0.95
-                double val = 0.65 + rng.NextDouble() * 0.35;  // 0.65..1.00
-                var c = new HsvColor(1.0, hue * 360.0, sat, val).ToRgb();
-                float pos = i / (float)(n - 1);
-                Stops.Add(new ColorStopRowVm(
-                    new ColorStopDef { Position = pos, R = c.R, G = c.G, B = c.B }, this));
-            }
+            var pal = RandomizeStops(rng, wild);
+
+            if (RandomIncludeInterpolation)
+                RandomizeInterpolation(rng, wild);
+
+            if (Kind != ColorThemeKindDef.Gradient)
+                RandomizeCycle(rng, wild);
+
+            if (Kind == ColorThemeKindDef.Phong3D || Kind == ColorThemeKindDef.Pbr3D)
+                Randomize3DLights(rng, wild, pal);
+
+            if (Kind == ColorThemeKindDef.Phong3D)
+                RandomizePhongExtras(rng, wild);
+
+            if (Kind == ColorThemeKindDef.Pbr3D)
+                RandomizePbr(rng, wild);
+
+            if (RandomIncludeInSet)
+                RandomizeInSet(rng, wild, pal);
+
+            if (RandomIncludePostFx)
+                RandomizePostFx(rng, wild);
         }
         finally { _suppressChange = false; }
 
-        Description = $"Random palette (seed {seed})";
+        Description = $"Random theme (seed {seed}, {(wild ? "experimental" : "artful")})";
+        RandomSeedText = seed.ToString(System.Globalization.CultureInfo.InvariantCulture);
         FieldChanged();
+        RaiseLightsChanged();
         PushPreview();
+    }
+
+    // ── Randomize helpers (#83) ───────────────────────────────────────────
+    // Each helper assumes _suppressChange is already true (single FieldChanged
+    // + PushPreview fires once at the end of RandomizePalette).
+
+    private static double Lerp(double a, double b, double t) => a + (b - a) * t;
+    private static double Rng(Random r, double lo, double hi) => Lerp(lo, hi, r.NextDouble());
+    private static byte RandByte(Random r) => (byte)r.Next(0, 256);
+
+    /// <summary>Golden-ratio hue walk. Returns the generated stop colours so
+    /// lights / in-set can stay in relation to the palette (artful mode).</summary>
+    private List<(byte R, byte G, byte B)> RandomizeStops(Random rng, bool wild)
+    {
+        const double golden = 0.6180339887498949;
+        int n = wild ? rng.Next(3, 9) : 5;
+        double hue = rng.NextDouble();
+        double satLo = wild ? 0.10 : 0.55, satHi = wild ? 1.00 : 0.95;
+        double valLo = wild ? 0.20 : 0.65, valHi = 1.00;
+
+        var pal = new List<(byte, byte, byte)>(n);
+        Stops.Clear();
+        for (int i = 0; i < n; i++)
+        {
+            hue = (hue + golden) % 1.0;
+            double sat = Rng(rng, satLo, satHi);
+            double val = Rng(rng, valLo, valHi);
+            var c = new HsvColor(1.0, hue * 360.0, sat, val).ToRgb();
+            float pos = i / (float)(n - 1);
+            Stops.Add(new ColorStopRowVm(
+                new ColorStopDef { Position = pos, R = c.R, G = c.G, B = c.B }, this));
+            pal.Add((c.R, c.G, c.B));
+        }
+        return pal;
+    }
+
+    private void RandomizeInterpolation(Random rng, bool wild)
+    {
+        InterpSpace = ColorSpaceOptions[rng.Next(ColorSpaceOptions.Length)];
+        InterpCurve = CurveOptions[rng.Next(CurveOptions.Length)];
+        TransferFn  = TransferOptions[rng.Next(TransferOptions.Length)];
+        // Strength clamps to 0..1; artful leans toward the stronger end.
+        TransferStrength = wild ? Rng(rng, 0, 1) : Rng(rng, 0.3, 1.0);
+        // Gamma clamps to 0.2..3; artful stays near neutral.
+        PaletteGamma = wild ? Rng(rng, 0.2, 3.0) : Rng(rng, 0.7, 1.6);
+    }
+
+    private void RandomizeCycle(Random rng, bool wild)
+    {
+        ColorOffset  = (decimal)(wild ? Rng(rng, -10, 10)   : Rng(rng, -1, 1));
+        ColorDensity = (decimal)(wild ? Rng(rng, 0, 20)     : Rng(rng, 0.5, 4));
+        CycleSpeed   = (decimal)(wild ? Rng(rng, 0.0001, 10): Rng(rng, 0.005, 0.1));
+        var wraps = WrapModeOptions;
+        WrapMode = wraps[rng.Next(wraps.Length)];
+    }
+
+    private void Randomize3DLights(Random rng, bool wild, List<(byte R, byte G, byte B)> pal)
+    {
+        Steepness = (decimal)(wild ? Rng(rng, 0.1, 10) : Rng(rng, 0.8, 3.0));
+        Ambient   = (decimal)(wild ? Rng(rng, 0, 1)    : Rng(rng, 0.05, 0.30));
+
+        ApplyLight(KeyLight,  rng, wild, pal, shinLo: 16, shinHi: 128);
+        ApplyLight(FillLight, rng, wild, pal, shinLo: 8,  shinHi: 64);
+
+        // Rim: artful ~40% of the time, experimental ~70%.
+        UseRim = rng.NextDouble() < (wild ? 0.70 : 0.40);
+        if (UseRim)
+            ApplyLight(RimLight, rng, wild, pal, shinLo: 64, shinHi: 256);
+    }
+
+    private void ApplyLight(LightSourceRowVm light, Random rng, bool wild,
+                            List<(byte R, byte G, byte B)> pal, int shinLo, int shinHi)
+    {
+        // Placement: artful keeps Lz positive (light in front of the surface);
+        // experimental lets it come from anywhere.
+        light.Lx = (float)Rng(rng, -1, 1);
+        light.Ly = (float)Rng(rng, -1, 1);
+        light.Lz = (float)(wild ? Rng(rng, -1, 1) : Rng(rng, 0.3, 1.0));
+
+        if (wild)
+        {
+            light.DiffR = RandByte(rng); light.DiffG = RandByte(rng); light.DiffB = RandByte(rng);
+            light.SpecR = RandByte(rng); light.SpecG = RandByte(rng); light.SpecB = RandByte(rng);
+        }
+        else
+        {
+            // Diffuse pulled from a palette stop, blended toward white so the
+            // lit surface reads in the theme's colour family. Specular near white.
+            var (r, g, b) = pal.Count > 0 ? pal[rng.Next(pal.Count)] : ((byte)255, (byte)255, (byte)255);
+            light.DiffR = (byte)Lerp(r, 255, 0.35);
+            light.DiffG = (byte)Lerp(g, 255, 0.35);
+            light.DiffB = (byte)Lerp(b, 255, 0.35);
+            byte s = (byte)rng.Next(200, 256);
+            light.SpecR = s; light.SpecG = s; light.SpecB = s;
+        }
+
+        light.Shininess = wild ? rng.Next(1, 513) : rng.Next(shinLo, shinHi + 1);
+    }
+
+    private void RandomizePhongExtras(Random rng, bool wild)
+    {
+        KeySpec  = (decimal)(wild ? Rng(rng, 0, 10) : Rng(rng, 0.4, 1.2));
+        FillSpec = (decimal)(wild ? Rng(rng, 0, 10) : Rng(rng, 0.1, 0.5));
+        FillDiff = (decimal)(wild ? Rng(rng, 0, 10) : Rng(rng, 0.2, 0.6));
+        RimSpec  = (decimal)(wild ? Rng(rng, 0, 10) : Rng(rng, 0.5, 1.5));
+        RimDiff  = (decimal)(wild ? Rng(rng, 0, 10) : Rng(rng, 0.1, 0.4));
+    }
+
+    private void RandomizePbr(Random rng, bool wild)
+    {
+        var modes = PbrLightingModes;
+        if (modes.Count > 0) PbrLightingMode = modes[rng.Next(modes.Count)];
+        GlowExponent = (decimal)(wild ? Rng(rng, 0, 50) : Rng(rng, 2, 16));
+        GlowScale    = (decimal)(wild ? Rng(rng, 0, 10) : Rng(rng, 0, 2));
+
+        int bandCount = wild ? rng.Next(1, 9) : rng.Next(2, 5);
+        MaterialBands.Clear();
+        for (int i = 0; i < bandCount; i++)
+        {
+            // UpperT rises across the bands, last band = 1.0 (catch-all).
+            float upper = (i == bandCount - 1) ? 1f : (i + 1) / (float)bandCount;
+            float metal = (float)(wild ? rng.NextDouble() : Rng(rng, 0, 1));
+            float rough = (float)(wild ? rng.NextDouble() : Rng(rng, 0.2, 0.9));
+            MaterialBands.Add(new MaterialBandRowVm(
+                new PbrMaterialBandDef { UpperT = upper, Metal = metal, Roughness = rough }, this));
+        }
+    }
+
+    private void RandomizeInSet(Random rng, bool wild, List<(byte R, byte G, byte B)> pal)
+    {
+        UseInSet = true;
+        if (wild)
+        {
+            InSetR = RandByte(rng); InSetG = RandByte(rng); InSetB = RandByte(rng);
+            InSetA = RandByte(rng);
+        }
+        else
+        {
+            // Artful: a dark member of the palette family so the interior reads
+            // as a recessed pocket rather than clashing with the exterior bands.
+            var (r, g, b) = pal.Count > 0 ? pal[rng.Next(pal.Count)] : ((byte)0, (byte)0, (byte)0);
+            InSetR = (byte)Lerp(r, 0, 0.75);
+            InSetG = (byte)Lerp(g, 0, 0.75);
+            InSetB = (byte)Lerp(b, 0, 0.75);
+            InSetA = 255;
+        }
+    }
+
+    private void RandomizePostFx(Random rng, bool wild)
+    {
+        UseBrightness = true;
+        Brightness = wild ? rng.Next(-100, 101) : rng.Next(-20, 21);
+        UseContrast = true;
+        Contrast = wild ? rng.Next(-100, 101) : rng.Next(-20, 21);
+        UseAdaptive = true;
+        // Adaptive histogram-EQ: issue caps artful mode under 50.
+        Adaptive = wild ? rng.Next(0, 101) : rng.Next(0, 50);
     }
 
     // ── Inspect ───────────────────────────────────────────────────────────
