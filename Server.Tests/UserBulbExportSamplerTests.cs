@@ -32,10 +32,10 @@ public class UserBulbExportSamplerTests
                 UserBulbJacobianH = 1e-4,
             },
         };
-        // Triplex square (the default bulb-lite step). If the headless build
-        // can't compile, skip the DE assertions rather than fail spuriously.
-        calc.Compile("return new Vec3(z.X*z.X - z.Y*z.Y - z.Z*z.Z, 2*z.X*z.Y, 2*z.X*z.Z) + c;");
-        if (!calc.IsCompiled) return;
+        // Triplex square (the default bulb-lite step) as the safe DSL — #27
+        // Phase 3 removed the raw-C# compile path, so the body must be DSL.
+        calc.Compile("vec(z.x*z.x - z.y*z.y - z.z*z.z, 2*z.x*z.y, 2*z.x*z.z) + c");
+        Assert.True(calc.IsCompiled, $"DSL triplex-square should compile: {calc.LastError}");
 
         var sampler = calc.MakeExportSampler(12, 1e-5);
         Assert.NotNull(sampler);

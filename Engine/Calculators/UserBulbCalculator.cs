@@ -4,12 +4,16 @@
 // UserBulbCalculator.cs
 //
 // CPU distance-estimation raymarcher for a 3D escape-time fractal whose
-// per-iteration step function is supplied at runtime as a C# expression body,
-// compiled via Roslyn scripting. Conceptually the 3D analogue of
-// UserEquationCalculator: that one drives 2D escape-time over Complex; this
-// one drives Mandelbulb-style raymarched 3D over Vec3.
+// per-iteration step function is supplied at runtime as a Sandbox-DSL body.
+// Conceptually the 3D analogue of UserEquationCalculator: that one drives 2D
+// escape-time over Complex; this one drives Mandelbulb-style raymarched 3D over
+// Vec3 (or Quat). #27 Phase 3 — the source runs exclusively on the safe
+// SandboxBulbExpression / SandboxBulbChain interpreter (no BCL surface, no
+// assembly load). The raw-C# Roslyn compile path (WrapUserSource{,Quat,Chain})
+// was removed here; a body with no DSL form surfaces an editable error instead
+// of executing.
 //
-// User source signature (wrapped before compile):
+// User source: a Sandbox-DSL expression evaluated as
 //   Vec3 Step(Vec3 z, Vec3 c, int n)  -> returns new z
 //
 // DE estimation: no closed-form |dz/dc| for an arbitrary user step, so we
@@ -39,15 +43,10 @@ using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
 
-using Microsoft.CodeAnalysis;
-using Microsoft.CodeAnalysis.CSharp;
-using Microsoft.CodeAnalysis.Emit;
-
 using FracturingFog.Calculators;
 using FracturingFog.Interefaces;
 using FracturingFog.Models;
 using FracturingFog.Rendering.Lighting;
-using FracturingFog.Security;
 
 namespace FracturingFog;
 
@@ -225,25 +224,6 @@ public sealed class UserBulbCalculator : IFractalCalculator
         return Regex.IsMatch(stripped, @"\bc\b");
     }
 
-    /// <summary>#27 Phase 2c — heuristic: does this body look like raw C#
-    /// (so a failed DSL parse should fall back to Roslyn for a trusted origin)
-    /// rather than a DSL author's typo? DSL never uses `;`, `return`, `var`,
-    /// `new`, or namespaced `Vec3.` / `Math.` calls.</summary>
-    private static bool LooksLikeCSharp(string? s)
-    {
-        if (string.IsNullOrEmpty(s)) return false;
-        return s.Contains("Vec3.") || s.Contains("new Vec3") || s.Contains("Math.")
-            || s.Contains(';')
-            || Regex.IsMatch(s, @"\breturn\b") || Regex.IsMatch(s, @"\bvar\b");
-    }
-
-    private static string ChainSourceText(System.Collections.Generic.List<UserBulbChainStep> steps)
-    {
-        var sb = new System.Text.StringBuilder();
-        foreach (var st in steps) sb.Append(st.Source).Append('\n');
-        return sb.ToString();
-    }
-
     public void Compile(string source)
     {
         LastErrorPosition = -1;
@@ -275,188 +255,23 @@ public sealed class UserBulbCalculator : IFractalCalculator
 
         var axisMode = FractalParameters.UserBulbAxisMode;
         var paramNames = ValidateAndExtractParamNames(FractalParameters.UserBulbParams);
-        var compiler = FractalParameters.UserBulbCompiler;
 
-        if (compiler == UserBulbCompilerKind.Sandbox)
+        // #27 Phase 3 — the Sandbox DSL is the only compiler. The raw-C# Roslyn
+        // path (WrapUserSource{,Quat,Chain} + full-BCL CSharpCompilation) and
+        // its trusted-origin fallback were removed here. The persisted
+        // FractalParameters.UserBulbCompiler selector is ignored; a raw-C# body
+        // (or any construct with no DSL form) fails the DSL parse below and
+        // surfaces an editable error rather than executing. No origin gate is
+        // needed because the interpreter has no BCL surface.
+        if (axisMode == UserBulbAxisModeKind.Quat)
         {
-            if (axisMode == UserBulbAxisModeKind.Quat)
-            {
-                if (useChain) CompileSandboxChainQuat(chain!, paramNames);
-                else CompileSandboxQuat(source, paramNames);
-            }
-            else
-            {
-                if (useChain) CompileSandboxChain(chain!, paramNames);
-                else CompileSandbox(source, paramNames);
-            }
-            if (IsCompiled) return;
-
-            // #27 Phase 2c — DSL-first with a trusted Roslyn fallback. The DSL
-            // is the primary path (built-in presets and new bulbs default to
-            // it). A legacy raw-C# body — or any construct with no DSL form —
-            // falls through to the gated Roslyn path below, but only for a
-            // trusted origin and only when the source actually looks like C#;
-            // a DSL author's own typo keeps its DSL parse error instead of
-            // silently switching engines. Untrusted C# stays refused (the gate
-            // below denies it), so this does not widen the file-borne surface.
-            string probe = useChain ? ChainSourceText(chain!) : source;
-            if (!LooksLikeCSharp(probe)) return;   // genuine DSL error — surface it
-            var fallbackGate = UserCodeGate.EnsureRoslynAllowed(FractalParameters.UserCodeOrigin);
-            if (!fallbackGate.Allowed)
-            {
-                // Untrusted C# body: no Roslyn fallback. Replace the confusing
-                // DSL parse error with the gate's "Blocked … use the DSL" notice.
-                LastError = fallbackGate.DenyReason ?? LastError;
-                return;
-            }
-            // fall through to the Roslyn path (gate re-checked below)
+            if (useChain) CompileSandboxChainQuat(chain!, paramNames);
+            else CompileSandboxQuat(source, paramNames);
         }
-
-        // #27 Phase 0 — trust-boundary gate. The Roslyn compiler path below
-        // string-interpolates raw user C# into a class template and compiles it
-        // with full BCL references (arbitrary in-process execution). Refuse it
-        // for untrusted (file-borne) origins; the Sandbox path above is safe and
-        // stays ungated. Origin travels with the source on FractalParameters
-        // (stamped ExternalFile by disk-load boundaries).
-        var gate = UserCodeGate.EnsureRoslynAllowed(FractalParameters.UserCodeOrigin);
-        if (!gate.Allowed)
+        else
         {
-            _compiled = null;
-            _compiledQuat = null;
-            LastError = gate.DenyReason ?? "Raw-C# user code is disabled.";
-            return;
-        }
-
-        try
-        {
-            string code;
-            if (useChain)
-            {
-                if (axisMode == UserBulbAxisModeKind.Quat)
-                {
-                    LastError = "Chain mode currently Vec3-only. Switch axis or clear chain.";
-                    _compiled = null; _compiledQuat = null;
-                    return;
-                }
-                code = WrapUserSourceChain(chain!, paramNames);
-            }
-            else
-            {
-                code = axisMode == UserBulbAxisModeKind.Quat
-                    ? WrapUserSourceQuat(source, paramNames)
-                    : WrapUserSource(source, paramNames);
-            }
-            var tree = CSharpSyntaxTree.ParseText(code);
-            // S-X7.6 (2026-06-23) — typeof(T).Assembly.Location returns "" in
-            // single-file self-contained publish (the assembly is loaded from
-            // the embedded bundle, not disk). MetadataReference.CreateFromFile("")
-            // throws ArgumentException "value cannot be an empty string
-            // (Parameter 'path')" which surfaces under the equation entry as
-            // the compile error.
-            //
-            // S-X7.10 (2026-06-23) — broadened to include every TPA assembly
-            // (mirrors CalculatorGenHotLoad). The narrow marker list left
-            // generated code with unresolved namespace errors because Roslyn
-            // could not see forwarder assemblies it needed to compose the BCL
-            // primitives across single-file boundaries.
-            var refs = RoslynRefs.GatherAllTpaRefs();
-            var compilation = CSharpCompilation.Create(
-                "UserBulbDyn_" + Guid.NewGuid().ToString("N"),
-                new[] { tree },
-                refs,
-                new CSharpCompilationOptions(
-                    OutputKind.DynamicallyLinkedLibrary,
-                    optimizationLevel: OptimizationLevel.Release));
-
-            using var ms = new System.IO.MemoryStream();
-            EmitResult emit = compilation.Emit(ms);
-            if (!emit.Success)
-            {
-                var sb = new System.Text.StringBuilder();
-                foreach (var diag in emit.Diagnostics)
-                    if (diag.Severity == DiagnosticSeverity.Error) sb.AppendLine(diag.ToString());
-                LastError = sb.ToString();
-                _compiled = null;
-                return;
-            }
-            ms.Seek(0, System.IO.SeekOrigin.Begin);
-            var asm = System.Reflection.Assembly.Load(ms.ToArray());
-            var type = asm.GetType("FracturingFogDyn.UserBulbStep");
-            var method = type?.GetMethod("Step");
-            if (method == null)
-            {
-                LastError = "Internal: emit produced no Step method.";
-                _compiled = null;
-                _compiledQuat = null;
-                return;
-            }
-            Func<Vec3, Vec3, int, double[], Vec3>? fn = null;
-            Func<Quat, Quat, int, double[], Quat>? fnQ = null;
-            if (axisMode == UserBulbAxisModeKind.Quat)
-            {
-                fnQ = (Func<Quat, Quat, int, double[], Quat>)Delegate.CreateDelegate(
-                    typeof(Func<Quat, Quat, int, double[], Quat>), method);
-            }
-            else
-            {
-                fn = (Func<Vec3, Vec3, int, double[], Vec3>)Delegate.CreateDelegate(
-                    typeof(Func<Vec3, Vec3, int, double[], Vec3>), method);
-            }
-
-            // Smoke test: invoke once with finite inputs; reject if it throws
-            // or returns non-finite components. Lets the raymarch inner loop
-            // drop its try/catch.
-            double[] probeParams = new double[paramNames.Length + 1];
-            try
-            {
-                if (axisMode == UserBulbAxisModeKind.Quat)
-                {
-                    var pq = fnQ!(Quat.Zero, new Quat(0.5, 0.5, 0.5, 0.5), 0, probeParams);
-                    if (!double.IsFinite(pq.W) || !double.IsFinite(pq.X) || !double.IsFinite(pq.Y) || !double.IsFinite(pq.Z))
-                    {
-                        LastError = "Step function returned non-finite components on probe input.";
-                        _compiledQuat = null;
-                        return;
-                    }
-                }
-                else
-                {
-                    var probe = fn!(Vec3.Zero, new Vec3(0.5, 0.5, 0.5), 0, probeParams);
-                    if (!double.IsFinite(probe.X) || !double.IsFinite(probe.Y) || !double.IsFinite(probe.Z))
-                    {
-                        LastError = "Step function returned non-finite components on probe input.";
-                        _compiled = null;
-                        return;
-                    }
-                }
-            }
-            catch (Exception probeEx)
-            {
-                LastError = $"Step function threw on probe: {probeEx.Message}";
-                _compiled = null;
-                _compiledQuat = null;
-                return;
-            }
-
-            if (axisMode == UserBulbAxisModeKind.Quat) { _compiledQuat = fnQ; _compiled = null; }
-            else { _compiled = fn; _compiledQuat = null; }
-            _compiledSource = source;
-            _compiledAxisMode = axisMode;
-            _compiledCompiler = UserBulbCompilerKind.Roslyn;
-            _compiledParamNames = paramNames;
-            // Detect is axis-agnostic (string matcher). Vec3 uses it for the
-            // power-DE path; Quat uses a Square hit to engage the exact
-            // quaternion DE (#115). z*z+c is the only square that compiles in
-            // Quat mode (the explicit Vec3 form returns Vec3, not Quat).
-            _analyticPattern = UserBulbAnalyticDE.Detect(source);
-            LastError = string.Empty;
-        }
-        catch (Exception ex)
-        {
-            LastError = ex.Message;
-            if (ex is SbxParseException spe) { LastErrorPosition = spe.Position; LastErrorLength = spe.Length; }
-            _compiled = null;
-            _compiledQuat = null;
+            if (useChain) CompileSandboxChain(chain!, paramNames);
+            else CompileSandbox(source, paramNames);
         }
     }
 
@@ -627,102 +442,6 @@ public sealed class UserBulbCalculator : IFractalCalculator
         }
     }
 
-    private static string WrapUserSource(string body, string[] paramNames)
-    {
-        string wrappedBody = body.Contains("return") ? body : $"return {body};";
-        return $@"
-using System;
-using System.Numerics;
-using static System.Math;
-using FracturingFog.Models;
-
-namespace FracturingFogDyn
-{{
-    public static class UserBulbStep
-    {{
-        public static Vec3 Step(Vec3 z, Vec3 c, int n, double[] __p)
-        {{
-            {ParamLocals(paramNames)}
-            {wrappedBody}
-        }}
-    }}
-}}
-";
-    }
-
-    private static string WrapUserSourceQuat(string body, string[] paramNames)
-    {
-        string wrappedBody = body.Contains("return") ? body : $"return {body};";
-        return $@"
-using System;
-using System.Numerics;
-using static System.Math;
-using FracturingFog.Models;
-
-namespace FracturingFogDyn
-{{
-    public static class UserBulbStep
-    {{
-        public static Quat Step(Quat z, Quat c, int n, double[] __p)
-        {{
-            {ParamLocals(paramNames)}
-            {wrappedBody}
-        }}
-    }}
-}}
-";
-    }
-
-    private static string WrapUserSourceChain(System.Collections.Generic.List<UserBulbChainStep> steps, string[] paramNames)
-    {
-        var sb = new System.Text.StringBuilder();
-        sb.AppendLine("using System;");
-        sb.AppendLine("using System.Numerics;");
-        sb.AppendLine("using static System.Math;");
-        sb.AppendLine("using FracturingFog.Models;");
-        sb.AppendLine("namespace FracturingFogDyn {");
-        sb.AppendLine("public static class UserBulbStep {");
-        for (int i = 0; i < steps.Count; i++)
-        {
-            string body = steps[i].Source ?? "return z;";
-            string wrappedBody = body.Contains("return") ? body : $"return {body};";
-            sb.AppendLine($"    static Vec3 Step_{i}(Vec3 z, Vec3 c, int n, double[] __p, ChainCtx ctx) {{");
-            sb.Append(ParamLocals(paramNames));
-            // Expose every prior step's output as a Vec3 local so the user
-            // source can reference it as a bare identifier (matches the
-            // chain editor docs and the Sandbox chain compiler's behavior).
-            for (int j = 0; j < i; j++)
-            {
-                string priorName = string.IsNullOrWhiteSpace(steps[j].OutputName) ? $"step{j}" : steps[j].OutputName;
-                if (!IdentRe.IsMatch(priorName)) continue;
-                sb.AppendLine($"        Vec3 {priorName} = ctx.Get(\"{priorName}\");");
-            }
-            sb.AppendLine($"        {wrappedBody}");
-            sb.AppendLine("    }");
-        }
-        sb.AppendLine("    public static Vec3 Step(Vec3 z, Vec3 c, int n, double[] __p) {");
-        sb.AppendLine("        var ctx = new ChainCtx();");
-        sb.AppendLine("        Vec3 last = z;");
-        for (int i = 0; i < steps.Count; i++)
-        {
-            string name = string.IsNullOrWhiteSpace(steps[i].OutputName) ? $"step{i}" : steps[i].OutputName;
-            sb.AppendLine($"        last = Step_{i}(z, c, n, __p, ctx); ctx.Set(\"{name}\", last);");
-        }
-        sb.AppendLine("        return last;");
-        sb.AppendLine("    } } }");
-        return sb.ToString();
-    }
-
-    private static string ParamLocals(string[] names)
-    {
-        var sb = new System.Text.StringBuilder();
-        for (int i = 0; i < names.Length; i++)
-            sb.AppendLine($"            double {names[i]} = __p[{i}];");
-        // `t` is reserved: animation time, always at end of __p.
-        sb.AppendLine($"            double t = __p[__p.Length - 1];");
-        return sb.ToString();
-    }
-
     private static readonly System.Text.RegularExpressions.Regex IdentRe =
         new(@"^[A-Za-z_][A-Za-z0-9_]*$");
 
@@ -753,10 +472,12 @@ namespace FracturingFogDyn
         string effectiveSource = string.IsNullOrEmpty(chainKey)
             ? (FractalParameters.UserBulbSource ?? string.Empty)
             : chainKey;
+        // #27 Phase 3 — the compiler selector no longer participates: the
+        // Sandbox DSL is the only path, so a recompile is driven purely by
+        // source / axis-mode changes.
         bool needsCompile =
             (_compiled == null && _compiledQuat == null)
             || _compiledAxisMode != FractalParameters.UserBulbAxisMode
-            || _compiledCompiler != FractalParameters.UserBulbCompiler
             || effectiveSource != _compiledSource;
         if (needsCompile && (!string.IsNullOrWhiteSpace(FractalParameters.UserBulbSource) || !string.IsNullOrEmpty(chainKey)))
         {
@@ -1731,7 +1452,4 @@ namespace FracturingFogDyn
         double inv = 1.0 / len;
         return (x * inv, y * inv, z * inv);
     }
-
-    private static MetadataReference[] GatherRefs(params System.Reflection.Assembly[] markers)
-        => RoslynRefs.GatherRefs(markers);
 }
