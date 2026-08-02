@@ -587,7 +587,10 @@ public static class HeightfieldRaymarch2D
         double invSS = 1.0 / (ss * ss);
 
         long hitCount = 0;
-        Parallel.For(0, h, () => 0L, (py, _, localHits) =>
+        // #189 — cap workers to the process-global render throttle (poster path
+        // sets ~90% CPU; default -1 = unlimited, unchanged).
+        var po = new ParallelOptions { MaxDegreeOfParallelism = FracturingFog.Rendering.RenderThrottle.MaxDegreeOfParallelism };
+        Parallel.For(0, h, po, () => 0L, (py, _, localHits) =>
         {
             for (int px = 0; px < w; px++)
             {

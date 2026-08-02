@@ -636,6 +636,12 @@ public sealed class MandelbrotCalculator : Interefaces.IHeightFieldSource, Inter
 #endif
         ColorMap.MaxIterations = MaxIterations;
 
+        // #189 — honour the process-global CPU cap. -1 (default) is the
+        // System.Threading unlimited default, so an unthrottled render is
+        // byte- and perf-identical; the shell sets a cap only around heavy
+        // offscreen poster / wallpaper renders.
+        _po.MaxDegreeOfParallelism = FracturingFog.Rendering.RenderThrottle.MaxDegreeOfParallelism;
+
         // Update pixel scale so DE-style themes can normalise raw distance
         // (complex-plane units) into pixel units for stable rendering at any zoom.
         LastPixelScale = (3.5 / Math.Max(Width, Height)) / Zoom;

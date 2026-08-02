@@ -80,6 +80,10 @@ namespace FracturingFog.Hosting
         private static FractalRenderHost? s_renderHost;
         private static FractalInputController? s_input;
         private static ShellViewModel? s_shell;
+        // #189 feature 4 — the in-flight poster/high-res render's cancellation
+        // source, or null when no poster is rendering. Clicking Poster again while
+        // this is non-null cancels the render instead of starting a new one.
+        private static CancellationTokenSource? s_posterCts;
         private static IGpuSurface? s_surface;
         private static HostColorThemeService? s_themeService;
         // Hybrid-shell: the feature views are UserControls wrapped in a generic
@@ -1699,6 +1703,24 @@ namespace FracturingFog.Hosting
                 {
                     if (s_renderHost == null) return;
 
+                    // #189 feature 4 — a second click while a render is in flight
+                    // is a CANCEL. The render checks the token at each stage
+                    // (alt/Calculate + ThrowIfCancellationRequested), so it stops
+                    // at the next checkpoint; the awaiting call below surfaces the
+                    // OperationCanceledException and resets the button.
+                    if (s_posterCts != null)
+                    {
+                        try { s_posterCts.Cancel(); }
+                        catch (Exception cex)
+                        {
+                            await AvaloniaDialogs.ShowMessageAsync(
+                                "Poster",
+                                "Could not cancel the poster render:\n" + cex.Message,
+                                expectsConfirmation: false);
+                        }
+                        return;
+                    }
+
                     var dims = await AvaloniaDialogs.ShowPosterAsync(
                         watermarkNames: UserWatermarkStore.Instance.EnumerateNames(),
                         customWatermarkDefault: shell.Main.UseCustomWatermark,
@@ -1706,8 +1728,22 @@ namespace FracturingFog.Hosting
                         onEditWatermark: () => Dispatcher.UIThread.Post(() => shell.ShowWatermarkEditor()));
                     if (dims == null) return;
 
-                    int savedW = dims.Value.Portrait ? dims.Value.Height : dims.Value.Width;
-                    int savedH = dims.Value.Portrait ? dims.Value.Width  : dims.Value.Height;
+                    // The dialog's Width/Height are the labelled OUTPUT size (e.g.
+                    // 24"×36" portrait → 7200×10800 px). PosterRenderer's rotate
+                    // contract is "render LANDSCAPE (w×h), rotate 90° CW → portrait
+                    // (h×w)", so for a portrait poster we must feed it the
+                    // TRANSPOSED (landscape, wide) render dimensions and let the
+                    // rotate produce the portrait output. Passing the tall dims
+                    // directly (#190) rendered a portrait buffer whose calculator
+                    // scale (3.5 / max(W,H)) anchored the view span to the vertical
+                    // axis — cropping the sides into a zoomed-in centre — and then
+                    // rotated that into a landscape file. Rendering landscape first
+                    // keeps the on-screen framing and yields a true portrait file.
+                    int renderW = dims.Value.Portrait ? dims.Value.Height : dims.Value.Width;
+                    int renderH = dims.Value.Portrait ? dims.Value.Width  : dims.Value.Height;
+                    // Output (post-rotation) is always the labelled Width × Height.
+                    int savedW = dims.Value.Width;
+                    int savedH = dims.Value.Height;
 
                     string? path = await AvaloniaDialogs.PickSaveFileAsync(
                         "Save Poster Image",
@@ -1732,21 +1768,69 @@ namespace FracturingFog.Hosting
                         ? UserWatermarkStore.Instance.GetByName(dims.Value.WatermarkName)
                         : null;
                     var req = s_renderHost.CreatePosterRequest(
-                        dims.Value.Width, dims.Value.Height, rotate: dims.Value.Portrait,
+                        renderW, renderH, rotate: dims.Value.Portrait,
                         path, format, customWm);
 
+                    // #189 feature 5 — memory pre-flight. A print-resolution
+                    // poster can need gigabytes; warn (and let the user back out)
+                    // before a render that would exceed a safe share of RAM, so it
+                    // fails a confirmation instead of the process OOM-ing.
+                    bool relief = req.FractalParameters?.Relief2DEnabled == true;
+                    long estBytes = PosterRenderer.EstimatePeakBytes(renderW, renderH, relief, dims.Value.Portrait);
+                    long availBytes = PosterRenderer.AvailableMemoryBytes();
+                    if (availBytes > 0 && estBytes > 0.85 * availBytes)
+                    {
+                        var proceed = await AvaloniaDialogs.ShowMessageAsync(
+                            "Poster — large render",
+                            $"This {savedW:N0} × {savedH:N0} px poster may use about "
+                            + $"{estBytes / (1024.0 * 1024.0 * 1024.0):N1} GB of memory, out of "
+                            + $"~{availBytes / (1024.0 * 1024.0 * 1024.0):N1} GB available.\n\n"
+                            + "Rendering it could exhaust memory and fail. Continue anyway?",
+                            expectsConfirmation: true);
+                        if (proceed != AvaloniaDialogs.MessageResult.Yes) return;
+                    }
+
+                    var cts = new CancellationTokenSource();
+                    s_posterCts = cts;
+                    shell.FloatingMenu.PosterButtonText = "Cancel Poster";
+                    // #189 feature 5 — cap CPU near 90% for the duration of this
+                    // heavy offscreen render so it can't peg every core and starve
+                    // the UI. Restored in the finally; batch/server renders (which
+                    // never set this) still use the whole machine.
+                    int prevDop = FracturingFog.Rendering.RenderThrottle.MaxDegreeOfParallelism;
+                    FracturingFog.Rendering.RenderThrottle.MaxDegreeOfParallelism =
+                        FracturingFog.Rendering.RenderThrottle.Cpu90();
                     try
                     {
-                        var result = await Task.Run(() => PosterRenderer.RenderToFile(req, CancellationToken.None));
+                        var result = await Task.Run(() => PosterRenderer.RenderToFile(req, cts.Token));
                         await AvaloniaDialogs.ShowMessageAsync(
                             "Poster Saved",
                             $"Saved {result.SavedWidth}×{result.SavedHeight} px to:\n{path}\n({result.ElapsedMs} ms)",
+                            expectsConfirmation: false);
+                    }
+                    catch (OperationCanceledException)
+                    {
+                        await AvaloniaDialogs.ShowMessageAsync(
+                            "Poster", "Poster render cancelled.", expectsConfirmation: false);
+                    }
+                    catch (OutOfMemoryException)
+                    {
+                        await AvaloniaDialogs.ShowMessageAsync(
+                            "Poster",
+                            "Ran out of memory rendering this poster. Try a smaller size or a lower DPI.",
                             expectsConfirmation: false);
                     }
                     catch (Exception ex)
                     {
                         await AvaloniaDialogs.ShowMessageAsync(
                             "Poster", $"Render failed:\n{ex.Message}", expectsConfirmation: false);
+                    }
+                    finally
+                    {
+                        FracturingFog.Rendering.RenderThrottle.MaxDegreeOfParallelism = prevDop;
+                        s_posterCts = null;
+                        cts.Dispose();
+                        shell.FloatingMenu.PosterButtonText = "Poster";
                     }
                 }
                 catch (Exception ex)

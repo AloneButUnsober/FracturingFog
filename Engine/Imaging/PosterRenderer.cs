@@ -154,6 +154,36 @@ namespace FracturingFog.Imaging
     /// <summary>Offscreen high-resolution fractal renderer shared by both shells.</summary>
     public static class PosterRenderer
     {
+        /// <summary>#189 (performance safety) — a conservative estimate of the peak
+        /// managed memory (bytes) a poster render of <paramref name="width"/> ×
+        /// <paramref name="height"/> holds live at once: the final ARGB image, the
+        /// calculator's colour + iteration/smooth aux buffers, the relief field +
+        /// colour scratch when relief is on, and the rotation copy when the output
+        /// is rotated. Deliberately high so the shell warns before an out-of-memory
+        /// render rather than after. Overflow-safe (uses long math).</summary>
+        public static long EstimatePeakBytes(int width, int height, bool relief, bool rotate)
+        {
+            long px = Math.Max(0L, (long)width) * Math.Max(0, height);
+            // ARGB colour buffer = 4 B/px. Mandelbrot keeps iteration (int) +
+            // smooth (double) + escape aux alongside the colour buffer, so budget
+            // ~5× the colour buffer for a flat render. Relief adds the (possibly
+            // hi-res) height field + a colour scratch + per-hit work: ~8×.
+            long perPixel = relief ? 8L * 4L : 5L * 4L;
+            long bytes = px * perPixel;
+            if (rotate) bytes += px * 4L;   // separate rotated destination buffer
+            return bytes;
+        }
+
+        /// <summary>#189 — total physical memory the runtime currently believes is
+        /// available to the process, for comparing against
+        /// <see cref="EstimatePeakBytes"/>.</summary>
+        public static long AvailableMemoryBytes()
+        {
+            var info = GC.GetGCMemoryInfo();
+            long avail = info.TotalAvailableMemoryBytes;
+            return avail > 0 ? avail : 0;
+        }
+
         /// <summary>
         /// Render the request to an offscreen buffer and save it. Synchronous and
         /// cancellable — callers run this on a background thread. Throws on render
