@@ -305,6 +305,16 @@ public sealed class FloatingMenuViewModel : ViewModelBase
         set => this.RaiseAndSetIfChanged(ref _videoButtonText, value);
     }
 
+    /// <summary>Label for the Poster button. Flips to "Cancel Poster" while a
+    /// poster/high-res render is in flight so the same button cancels it (#189
+    /// feature 4). The shell bootstrap drives this from the render task.</summary>
+    private string _posterButtonText = "Poster";
+    public string PosterButtonText
+    {
+        get => _posterButtonText;
+        set => this.RaiseAndSetIfChanged(ref _posterButtonText, value);
+    }
+
     /// <summary>Label for the Slideshow button. Flips between "Slideshow" and
     /// "Stop" while the image slideshow cycler is running. ShellViewModel sets
     /// this when it toggles the engine. Matches the legacy MainForm parity

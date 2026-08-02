@@ -14,7 +14,7 @@
                     <Button Classes="action neutral" Content="{Binding Menu.SpanButtonText}" Command="{Binding Menu.SpanCommand}" ToolTip.Tip="Span across all monitors" Margin="0,0,4,4" />
                     <Button Classes="action neutral" Content="Wall"   Command="{Binding Menu.WallpaperCommand}"  ToolTip.Tip="Render a wallpaper-sized image at the virtual-screen union of every monitor" Margin="0,0,4,4" />
                     <Button Classes="action neutral" Content="Image"  Command="{Binding Menu.ScreenshotCommand}" ToolTip.Tip="High-resolution screenshot" Margin="0,0,4,4" />
-                    <Button Classes="action neutral" Content="Poster" Command="{Binding Menu.PosterCommand}"     ToolTip.Tip="Print-ready poster image" Margin="0,0,0,4" />
+                    <Button Classes="action neutral" Content="{Binding Menu.PosterButtonText}" Command="{Binding Menu.PosterCommand}"     ToolTip.Tip="Print-ready poster image (click again while rendering to cancel)" Margin="0,0,0,4" />
                 </UniformGrid>
                 <StackPanel Orientation="Horizontal" Spacing="14" Margin="0,4,0,0">
                     <CheckBox Content="Status" IsChecked="{Binding Menu.ShowStatusBar}" Foreground="#9B9B9B" FontWeight="Bold" />
