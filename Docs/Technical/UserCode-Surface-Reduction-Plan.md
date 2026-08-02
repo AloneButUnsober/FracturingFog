@@ -195,7 +195,7 @@ Phase 2 — both had kept a trusted-origin Roslyn fallback until here).
 Follow-up to Phase 3: after the raw-C# path was removed, a *saved* raw-C#
 equation with no DSL form stopped running. This widens the translation surface
 and persists translatable saved equations as DSL so shipped/user content keeps
-working. Issue #209 (PR #TBD).
+working. Issue #209 (PR #210, stacked on #208).
 - **5a-1** ✅ Extended `EquationPreprocessor` to translate the C# `Complex`
   member accessors it used to reject (they had DSL equivalents; only the
   syntax rewrite was missing): `x.Real → re(x)`, `x.Imaginary → im(x)`,
