@@ -47,6 +47,7 @@ using FracturingFog.Calculators;
 using FracturingFog.Interefaces;
 using FracturingFog.Models;
 using FracturingFog.Rendering.Lighting;
+using FracturingFog.Security;
 
 namespace FracturingFog;
 
@@ -269,6 +270,21 @@ public sealed class UserBulbCalculator : IFractalCalculator
                 if (useChain) CompileSandboxChain(chain!, paramNames);
                 else CompileSandbox(source, paramNames);
             }
+            return;
+        }
+
+        // #27 Phase 0 — trust-boundary gate. The Roslyn compiler path below
+        // string-interpolates raw user C# into a class template and compiles it
+        // with full BCL references (arbitrary in-process execution). Refuse it
+        // for untrusted (file-borne) origins; the Sandbox path above is safe and
+        // stays ungated. Origin travels with the source on FractalParameters
+        // (stamped ExternalFile by disk-load boundaries).
+        var gate = UserCodeGate.EnsureRoslynAllowed(FractalParameters.UserCodeOrigin);
+        if (!gate.Allowed)
+        {
+            _compiled = null;
+            _compiledQuat = null;
+            LastError = gate.DenyReason ?? "Raw-C# user code is disabled.";
             return;
         }
 

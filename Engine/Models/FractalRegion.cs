@@ -77,6 +77,15 @@ namespace FracturingFog.Models
         /// <summary>QD limb 3 of imaginary centre.  See <see cref="CenterX2"/>.</summary>
         public double CenterY3 { get; set; }
 
+        /// <summary>#27 Phase 0 — true when this region was loaded from an
+        /// external (cross-user) file via import. Runtime-only ([JsonIgnore]) so
+        /// it cannot be forged by the file itself. When set, applying the
+        /// region's UserEquationSource / UserBulbSource stamps
+        /// <see cref="UserCodeOrigin.ExternalFile"/> onto the render params so a
+        /// hostile raw-C# equation is refused under the default policy.</summary>
+        [JsonIgnore]
+        public bool ExternalOrigin { get; set; }
+
         /// <summary>Full double-double real centre, assembled from CenterX (Hi) + CenterXLo (Lo).</summary>
         [JsonIgnore]
         public DD CenterDDX

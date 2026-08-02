@@ -4,8 +4,10 @@
 using System;
 using System.Collections.Generic;
 using System.Numerics;
+using System.Text.Json.Serialization;
 
 using FracturingFog.Rendering.Lighting;
+using FracturingFog.Security;
 
 namespace FracturingFog.Models
 {
@@ -631,6 +633,15 @@ namespace FracturingFog.Models
         /// <summary>Step-function compiler. Roslyn = full C# body (default).
         /// Sandbox = restricted DSL (no BCL, shareable; Vec3 + Quat, CPU + GPU).</summary>
         public UserBulbCompilerKind UserBulbCompiler { get; set; } = UserBulbCompilerKind.Roslyn;
+        /// <summary>#27 Phase 0 — trust provenance of the user-code source
+        /// (UserEquationSource / UserBulbSource) carried by this params object.
+        /// Gates the raw-C# Roslyn compile: ExternalFile (loaded from a shared
+        /// region/scene file) is refused under the default security policy.
+        /// [JsonIgnore] so a hostile file cannot forge a trusted value —
+        /// deserialized params default to Interactive, and disk-load boundaries
+        /// stamp ExternalFile explicitly. Carried by Clone.</summary>
+        [JsonIgnore]
+        public UserCodeOrigin UserCodeOrigin { get; set; } = UserCodeOrigin.Interactive;
         /// <summary>W component of 4D slice plane (Quat mode only). c.W = this value.</summary>
         public double UserBulbQuatSliceW { get; set; } = 0.0;
         /// <summary>Named scalar params exposed in compiled step source. Live-tweakable.</summary>
@@ -917,6 +928,7 @@ namespace FracturingFog.Models
                 UserBulbBackend = UserBulbBackend,
                 UserBulbAxisMode = UserBulbAxisMode,
                 UserBulbCompiler = UserBulbCompiler,
+                UserCodeOrigin = UserCodeOrigin,
                 UserBulbQuatSliceW = UserBulbQuatSliceW,
                 UserBulbParams = UserBulbParams.ConvertAll(p => p.Clone()),
                 UserBulbTime = UserBulbTime,

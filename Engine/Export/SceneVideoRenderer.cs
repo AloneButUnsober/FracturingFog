@@ -444,11 +444,17 @@ namespace FracturingFog.Export
         // lighting half of HostColorThemeService.LoadRegionFractalParams.
         private static void LoadRegionParams(FractalRegion region, FractalParameters p)
         {
+            // #27 Phase 0 — inline raw-C# source from a cross-user imported
+            // region is refused by the gate; local-store sources re-mark trusted.
+            p.UserCodeOrigin = region.ExternalOrigin
+                ? FracturingFog.Security.UserCodeOrigin.ExternalFile
+                : FracturingFog.Security.UserCodeOrigin.Interactive;
+
             if (region.FractalType == FractalType.UserEquation
                 && !string.IsNullOrWhiteSpace(region.UserEquationName))
             {
                 var entry = UserEquationStore.Instance.GetByName(region.UserEquationName);
-                if (entry != null) { p.UserEquationSource = entry.Source; p.UserEquationName = entry.Name; }
+                if (entry != null) { p.UserEquationSource = entry.Source; p.UserEquationName = entry.Name; p.UserCodeOrigin = FracturingFog.Security.UserCodeOrigin.Interactive; }
             }
             if (region.FractalType == FractalType.Sandbox
                 && !string.IsNullOrWhiteSpace(region.SandboxName))
@@ -461,7 +467,7 @@ namespace FracturingFog.Export
                 var entry = !string.IsNullOrWhiteSpace(region.UserBulbName)
                     ? UserBulbStore.Instance.GetByName(region.UserBulbName)
                     : null;
-                if (entry != null) { p.UserBulbSource = entry.Source; p.UserBulbName = entry.Name; }
+                if (entry != null) { p.UserBulbSource = entry.Source; p.UserBulbName = entry.Name; p.UserCodeOrigin = FracturingFog.Security.UserCodeOrigin.Interactive; }
                 else if (!string.IsNullOrWhiteSpace(region.UserBulbSource))
                 {
                     p.UserBulbSource = region.UserBulbSource;
