@@ -1771,9 +1771,35 @@ namespace FracturingFog.Hosting
                         renderW, renderH, rotate: dims.Value.Portrait,
                         path, format, customWm);
 
+                    // #189 feature 5 — memory pre-flight. A print-resolution
+                    // poster can need gigabytes; warn (and let the user back out)
+                    // before a render that would exceed a safe share of RAM, so it
+                    // fails a confirmation instead of the process OOM-ing.
+                    bool relief = req.FractalParameters?.Relief2DEnabled == true;
+                    long estBytes = PosterRenderer.EstimatePeakBytes(renderW, renderH, relief, dims.Value.Portrait);
+                    long availBytes = PosterRenderer.AvailableMemoryBytes();
+                    if (availBytes > 0 && estBytes > 0.85 * availBytes)
+                    {
+                        var proceed = await AvaloniaDialogs.ShowMessageAsync(
+                            "Poster — large render",
+                            $"This {savedW:N0} × {savedH:N0} px poster may use about "
+                            + $"{estBytes / (1024.0 * 1024.0 * 1024.0):N1} GB of memory, out of "
+                            + $"~{availBytes / (1024.0 * 1024.0 * 1024.0):N1} GB available.\n\n"
+                            + "Rendering it could exhaust memory and fail. Continue anyway?",
+                            expectsConfirmation: true);
+                        if (proceed != AvaloniaDialogs.MessageResult.Yes) return;
+                    }
+
                     var cts = new CancellationTokenSource();
                     s_posterCts = cts;
                     shell.FloatingMenu.PosterButtonText = "Cancel Poster";
+                    // #189 feature 5 — cap CPU near 90% for the duration of this
+                    // heavy offscreen render so it can't peg every core and starve
+                    // the UI. Restored in the finally; batch/server renders (which
+                    // never set this) still use the whole machine.
+                    int prevDop = FracturingFog.Rendering.RenderThrottle.MaxDegreeOfParallelism;
+                    FracturingFog.Rendering.RenderThrottle.MaxDegreeOfParallelism =
+                        FracturingFog.Rendering.RenderThrottle.Cpu90();
                     try
                     {
                         var result = await Task.Run(() => PosterRenderer.RenderToFile(req, cts.Token));
@@ -1787,6 +1813,13 @@ namespace FracturingFog.Hosting
                         await AvaloniaDialogs.ShowMessageAsync(
                             "Poster", "Poster render cancelled.", expectsConfirmation: false);
                     }
+                    catch (OutOfMemoryException)
+                    {
+                        await AvaloniaDialogs.ShowMessageAsync(
+                            "Poster",
+                            "Ran out of memory rendering this poster. Try a smaller size or a lower DPI.",
+                            expectsConfirmation: false);
+                    }
                     catch (Exception ex)
                     {
                         await AvaloniaDialogs.ShowMessageAsync(
@@ -1794,6 +1827,7 @@ namespace FracturingFog.Hosting
                     }
                     finally
                     {
+                        FracturingFog.Rendering.RenderThrottle.MaxDegreeOfParallelism = prevDop;
                         s_posterCts = null;
                         cts.Dispose();
                         shell.FloatingMenu.PosterButtonText = "Poster";
