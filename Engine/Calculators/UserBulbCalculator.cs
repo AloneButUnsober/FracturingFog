@@ -47,6 +47,7 @@ using FracturingFog.Calculators;
 using FracturingFog.Interefaces;
 using FracturingFog.Models;
 using FracturingFog.Rendering.Lighting;
+using FracturingFog.Security;
 
 namespace FracturingFog;
 
@@ -189,6 +190,14 @@ public sealed class UserBulbCalculator : IFractalCalculator
     // render blank; they need the orbit seeded AT the sample point instead.
     // Default true = classic z=0 + c seeding (safe for z^p+c style maps).
     private bool _mapUsesC = true;
+
+    /// <summary>Provenance of the source handed to <see cref="Compile"/>.
+    /// #27 Phase 0 — the raw-C# (Roslyn compiler) path is gated on this via
+    /// <see cref="UserCodeGate"/>. The Sandbox DSL compiler is always allowed
+    /// (no BCL access). Defaults to Interactive; file-load paths set
+    /// <see cref="UserCodeOrigin.ExternalFile"/>.</summary>
+    public UserCodeOrigin CompileOrigin { get; set; } = UserCodeOrigin.Interactive;
+
     private readonly UserBulbTemporalCache _cache = new();
     private UserBulbGpuCalculator? _gpu;
     private UserBulbSandboxGpuCompiler? _sandboxGpu;
@@ -269,6 +278,20 @@ public sealed class UserBulbCalculator : IFractalCalculator
                 if (useChain) CompileSandboxChain(chain!, paramNames);
                 else CompileSandbox(source, paramNames);
             }
+            return;
+        }
+
+        // #27 Phase 0 — trust-boundary gate. The Roslyn compiler path below
+        // string-interpolates raw user C# into a class template and compiles it
+        // with full BCL references (arbitrary in-process execution). Refuse it
+        // for untrusted (file-borne) origins; the Sandbox path above is safe and
+        // stays ungated.
+        var gate = UserCodeGate.EnsureRoslynAllowed(CompileOrigin);
+        if (!gate.Allowed)
+        {
+            _compiled = null;
+            _compiledQuat = null;
+            LastError = gate.DenyReason ?? "Raw-C# user code is disabled.";
             return;
         }
 
