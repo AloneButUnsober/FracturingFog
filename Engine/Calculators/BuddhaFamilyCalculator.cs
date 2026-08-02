@@ -172,6 +172,14 @@ public abstract class BuddhaFamilyCalculator : IFractalCalculator, IHeightFieldS
         bool inSet = IsInSet;
         bool skipBulbs = !inSet;
 
+        // #193 — deterministic seed. Derive per-(thread, batch) seeds from the
+        // user-set BuddhaSeed instead of the wall clock so identical params
+        // render an identical image. Was Environment.TickCount, which made
+        // every re-sample a different random realization — so any setting
+        // change (which forces a full re-sample on this alt calculator) made
+        // the fractal appear to 'morph'.
+        int baseSeed = FractalParameters.BuddhaSeed;
+
         for (int batch = 0; batch < batches; batch++)
         {
             if (ct.IsCancellationRequested) break;
@@ -179,7 +187,7 @@ public abstract class BuddhaFamilyCalculator : IFractalCalculator, IHeightFieldS
             Parallel.For(0, threads, new ParallelOptions { CancellationToken = ct }, t =>
             {
                 if (ct.IsCancellationRequested) return;
-                int seed = unchecked(Environment.TickCount * 73856093 + t * 19349663 + batch * 83492791);
+                int seed = unchecked(baseSeed * 73856093 + t * 19349663 + batch * 83492791);
                 var rng = new Random(seed);
 
                 if (mh)
