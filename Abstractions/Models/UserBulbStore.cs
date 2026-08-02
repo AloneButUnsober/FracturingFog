@@ -112,12 +112,16 @@ namespace FracturingFog.Models
                     SeedDefaults();
                     Save();
                 }
-                else if (TopUpBuiltins())
+                else
                 {
-                    // Pre-existing userbulbs.json was missing newly-shipped
-                    // built-ins (e.g. Phase B.3 hybrids) — persist the merge
-                    // so the user sees them on next load too.
-                    Save();
+                    // Pre-existing userbulbs.json may be missing newly-shipped
+                    // built-ins (Phase B.3 hybrids) and/or still hold the
+                    // pre-Phase-2b raw-C# built-in bodies. Merge/repair, then
+                    // upgrade untouched built-ins to the safe DSL; persist if
+                    // anything changed so the user sees it on next load too.
+                    bool changed = TopUpBuiltins();
+                    changed |= MigrateBuiltinsToDsl();
+                    if (changed) Save();
                 }
             }
             catch
@@ -127,28 +131,71 @@ namespace FracturingFog.Models
             }
         }
 
+        // #27 Phase 2b — built-in preset bodies migrated from raw C# to the
+        // safe DSL (SandboxBulbExpression). new Vec3 -> vec, Vec3.Fn/Math.Fn ->
+        // lowercase builtins, member .X -> .x, `var`/`if` -> let/ternary. Each
+        // built-in pins Compiler = Sandbox so it runs on the interpreter
+        // regardless of the global default. Parity with the old C# math is
+        // proven by SandboxBulbDslAuditTests. See [[project_usercode_surface_reduction]].
+        internal const string DslSquare = "vec(z.x*z.x - z.y*z.y - z.z*z.z, 2*z.x*z.y, 2*z.x*z.z) + c";
+        internal const string DslBulb8 = "z^8 + c";
+        internal const string DslBulb4 = "z^4 + c";
+        internal const string DslSin = "sin(z)*1.5 + c";
+        internal const string DslAbs8 = "abs(z)^8 + c";
+        internal const string DslMandelbox = "spherefold(boxfold(z, 1.0), 0.5, 1.0)*2.0 + c";
+        internal const string DslCoshSin = "sin(z)*cosh(z) + c";
+        internal const string DslBreathing = "z^(4 + 2*sin(t)) + c";
+        internal const string DslFoldedAbsY = "absy(z)^8 + c";
+        internal const string DslReflected =
+            "let w = vec(abs(z.x), abs(z.y), z.z) in " +
+            "vec(w.x*w.x - w.y*w.y - w.z*w.z, 2*w.x*w.y, 2*w.x*w.z) + c";
+        internal const string DslHybridMbox = "(spherefold(boxfold(z, 1.0), 0.5, 1.0)*2.0 + c)^8.0 + c";
+        internal const string DslHybridMenger = "z^8.0 + c";
+        internal const string DslKifsSinglePass =
+            "// Single-pass fallback — chain form below carries fold/rot/scale.\n" +
+            "// Needs DE Mode = Scalar KIFS (scale 3): the per-iteration rotation\n" +
+            "// defeats the numerical-Jacobian DE.\n" +
+            "let v0 = abs(z) in\n" +
+            "let v1 = (v0.x - v0.y < 0 ? vec(v0.y, v0.x, v0.z) : v0) in\n" +
+            "let v2 = (v1.x - v1.z < 0 ? vec(v1.z, v1.y, v1.x) : v1) in\n" +
+            "let v3 = (v2.y - v2.z < 0 ? vec(v2.x, v2.z, v2.y) : v2) in\n" +
+            "rot(v3, vec(0, 1, 0), 0.3) * 3.0 - vec(2, 2, 0)";
+        internal const string DslQuatJulia =
+            "// Switch Axis Mode -> Quat + Julia Mode on in the editor.\n" +
+            "// Triplex squared map; c held constant by Julia mode.\n" +
+            "vec(z.x*z.x - z.y*z.y - z.z*z.z, 2*z.x*z.y, 2*z.x*z.z) + c";
+
+        /// <summary>Fresh snapshot that pins the safe DSL compiler. Merges onto
+        /// an existing snapshot when a built-in already carries settings.</summary>
+        private static UserBulbSnapshot SandboxPin(UserBulbSnapshot? existing = null)
+        {
+            var s = existing ?? new UserBulbSnapshot();
+            s.Compiler = UserBulbCompilerKind.Sandbox;
+            return s;
+        }
+
         private void SeedDefaults()
         {
             Equations.Add(new UserBulbEntry { Name = "Square triplex (z*z + c)",
-                Source = "return new Vec3(\n    z.X*z.X - z.Y*z.Y - z.Z*z.Z,\n    2*z.X*z.Y,\n    2*z.X*z.Z) + c;" });
+                Source = DslSquare, Settings = SandboxPin() });
             Equations.Add(new UserBulbEntry { Name = "Mandelbulb p=8",
-                Source = "return Vec3.Pow(z, 8) + c;" });
+                Source = DslBulb8, Settings = SandboxPin() });
             Equations.Add(new UserBulbEntry { Name = "Mandelbulb p=4",
-                Source = "return Vec3.Pow(z, 4) + c;" });
+                Source = DslBulb4, Settings = SandboxPin() });
             Equations.Add(new UserBulbEntry { Name = "Sin-bulb",
-                Source = "return Vec3.Sin(z) * 1.5 + c;" });
+                Source = DslSin, Settings = SandboxPin() });
             Equations.Add(new UserBulbEntry { Name = "Abs-bulb p=8",
-                Source = "return Vec3.Pow(Vec3.Abs(z), 8) + c;" });
+                Source = DslAbs8, Settings = SandboxPin() });
             Equations.Add(new UserBulbEntry { Name = "Mandelbox",
-                Source = "var v = Vec3.SphereFold(Vec3.BoxFold(z, 1.0), 0.5, 1.0);\nreturn v * 2.0 + c;" });
+                Source = DslMandelbox, Settings = SandboxPin() });
             Equations.Add(new UserBulbEntry { Name = "Cosh × Sin bulb",
-                Source = "return Vec3.Sin(z) * Vec3.Cosh(z) + c;" });
+                Source = DslCoshSin, Settings = SandboxPin() });
             Equations.Add(new UserBulbEntry { Name = "Animated breathing bulb (uses t)",
-                Source = "return Vec3.Pow(z, 4 + 2*Math.Sin(t)) + c;" });
+                Source = DslBreathing, Settings = SandboxPin() });
             Equations.Add(new UserBulbEntry { Name = "Folded abs-Y bulb",
-                Source = "return Vec3.Pow(Vec3.AbsY(z), 8) + c;" });
+                Source = DslFoldedAbsY, Settings = SandboxPin() });
             Equations.Add(new UserBulbEntry { Name = "Reflected triplex",
-                Source = "var w = new Vec3(Math.Abs(z.X), Math.Abs(z.Y), z.Z);\nreturn new Vec3(w.X*w.X - w.Y*w.Y - w.Z*w.Z, 2*w.X*w.Y, 2*w.X*w.Z) + c;" });
+                Source = DslReflected, Settings = SandboxPin() });
 
             // Phase B.3 hybrid chains. Source kept as a single-pass fallback
             // for legacy loaders; Chain is the canonical form and overrides
@@ -156,14 +203,16 @@ namespace FracturingFog.Models
             Equations.Add(new UserBulbEntry
             {
                 Name = "Hybrid: Mandelbox + Mandelbulb",
-                Source = "return Vec3.Pow(Vec3.SphereFold(Vec3.BoxFold(z, 1.0), 0.5, 1.0) * 2.0 + c, 8.0) + c;",
+                Source = DslHybridMbox,
                 Chain = UserBulbChainPrimitives.MandelboxBulbHybrid(),
+                Settings = SandboxPin(),
             });
             Equations.Add(new UserBulbEntry
             {
                 Name = "Hybrid: Menger + Mandelbulb",
-                Source = "return Vec3.Pow(z, 8.0) + c;",
+                Source = DslHybridMenger,
                 Chain = UserBulbChainPrimitives.MengerBulbHybrid(),
+                Settings = SandboxPin(),
             });
 
             // Wave 4.11 — pure KIFS folds + Quat-Julia preset.
@@ -171,38 +220,31 @@ namespace FracturingFog.Models
             {
                 Name = "Menger sponge step",
                 Source = UserBulbChainPrimitives.GetById(UserBulbChainPrimitives.IdMenger)!.Source,
+                Settings = SandboxPin(),
             });
             Equations.Add(new UserBulbEntry
             {
                 Name = "Sierpinski tetrahedron",
                 Source = UserBulbChainPrimitives.GetById(UserBulbChainPrimitives.IdSierpinski)!.Source,
+                Settings = SandboxPin(),
             });
             Equations.Add(new UserBulbEntry
             {
                 Name = "Kaleidoscopic IFS (fold + rot + scale)",
-                Source = "// Single-pass fallback — chain form below carries fold/rot/scale.\n" +
-                         "// Needs DE Mode = Scalar KIFS (scale 3): the per-iteration rotation\n" +
-                         "// defeats the numerical-Jacobian DE.\n" +
-                         "var v = Vec3.Abs(z);\n" +
-                         "if (v.X - v.Y < 0) v = new Vec3(v.Y, v.X, v.Z);\n" +
-                         "if (v.X - v.Z < 0) v = new Vec3(v.Z, v.Y, v.X);\n" +
-                         "if (v.Y - v.Z < 0) v = new Vec3(v.X, v.Z, v.Y);\n" +
-                         "v = Vec3.Rot(v, new Vec3(0, 1, 0), 0.3);\n" +
-                         "return v * 3.0 - new Vec3(2, 2, 0);",
+                Source = DslKifsSinglePass,
                 Chain = UserBulbChainPrimitives.KaleidoscopicIfsChain(),
-                Settings = new UserBulbSnapshot
+                Settings = SandboxPin(new UserBulbSnapshot
                 {
                     KifsScale = UserBulbChainPrimitives.KaleidoscopicIfsScale,
                     CameraDistance = 3.0,
                     Iterations = 12,
-                },
+                }),
             });
             Equations.Add(new UserBulbEntry
             {
                 Name = "Quaternion Julia (Quat mode, set Julia c)",
-                Source = "// Switch Axis Mode → Quat + Julia Mode on in the editor.\n" +
-                         "// Triplex squared map; c held constant by Julia mode.\n" +
-                         "return new Vec3(\n    z.X*z.X - z.Y*z.Y - z.Z*z.Z,\n    2*z.X*z.Y,\n    2*z.X*z.Z) + c;",
+                Source = DslQuatJulia,
+                Settings = SandboxPin(),
             });
         }
 
@@ -238,48 +280,46 @@ namespace FracturingFog.Models
             Ensure("Hybrid: Mandelbox + Mandelbulb", () => new UserBulbEntry
             {
                 Name = "Hybrid: Mandelbox + Mandelbulb",
-                Source = "return Vec3.Pow(Vec3.SphereFold(Vec3.BoxFold(z, 1.0), 0.5, 1.0) * 2.0 + c, 8.0) + c;",
+                Source = DslHybridMbox,
                 Chain = UserBulbChainPrimitives.MandelboxBulbHybrid(),
+                Settings = SandboxPin(),
             });
             Ensure("Hybrid: Menger + Mandelbulb", () => new UserBulbEntry
             {
                 Name = "Hybrid: Menger + Mandelbulb",
-                Source = "return Vec3.Pow(z, 8.0) + c;",
+                Source = DslHybridMenger,
                 Chain = UserBulbChainPrimitives.MengerBulbHybrid(),
+                Settings = SandboxPin(),
             });
             Ensure("Menger sponge step", () => new UserBulbEntry
             {
                 Name = "Menger sponge step",
                 Source = UserBulbChainPrimitives.GetById(UserBulbChainPrimitives.IdMenger)!.Source,
+                Settings = SandboxPin(),
             });
             Ensure("Sierpinski tetrahedron", () => new UserBulbEntry
             {
                 Name = "Sierpinski tetrahedron",
                 Source = UserBulbChainPrimitives.GetById(UserBulbChainPrimitives.IdSierpinski)!.Source,
+                Settings = SandboxPin(),
             });
             Ensure("Kaleidoscopic IFS (fold + rot + scale)", () => new UserBulbEntry
             {
                 Name = "Kaleidoscopic IFS (fold + rot + scale)",
-                Source = "// Needs DE Mode = Scalar KIFS (scale 3) — see chain steps.\n" +
-                         "var v = Vec3.Abs(z);\n" +
-                         "if (v.X - v.Y < 0) v = new Vec3(v.Y, v.X, v.Z);\n" +
-                         "if (v.X - v.Z < 0) v = new Vec3(v.Z, v.Y, v.X);\n" +
-                         "if (v.Y - v.Z < 0) v = new Vec3(v.X, v.Z, v.Y);\n" +
-                         "v = Vec3.Rot(v, new Vec3(0, 1, 0), 0.3);\n" +
-                         "return v * 3.0 - new Vec3(2, 2, 0);",
+                Source = DslKifsSinglePass,
                 Chain = UserBulbChainPrimitives.KaleidoscopicIfsChain(),
-                Settings = new UserBulbSnapshot
+                Settings = SandboxPin(new UserBulbSnapshot
                 {
                     KifsScale = UserBulbChainPrimitives.KaleidoscopicIfsScale,
                     CameraDistance = 3.0,
                     Iterations = 12,
-                },
+                }),
             });
             Ensure("Quaternion Julia (Quat mode, set Julia c)", () => new UserBulbEntry
             {
                 Name = "Quaternion Julia (Quat mode, set Julia c)",
-                Source = "// Switch Axis Mode → Quat + Julia Mode on in the editor.\n" +
-                         "return new Vec3(\n    z.X*z.X - z.Y*z.Y - z.Z*z.Z,\n    2*z.X*z.Y,\n    2*z.X*z.Z) + c;",
+                Source = DslQuatJulia,
+                Settings = SandboxPin(),
             });
             Repair("Hybrid: Mandelbox + Mandelbulb",
                    UserBulbChainPrimitives.IdMandelbox,
@@ -338,17 +378,71 @@ namespace FracturingFog.Models
             // name only, so user-authored equations are never touched.
             {
                 var q = GetByName("Quaternion Julia (Quat mode, set Julia c)");
-                if (q != null && (q.Settings != null || q.Source.Contains("z*z + c")))
+                // Detect the past corruption by its Hamilton `z*z + c` square
+                // (the correct triplex uses z.x*z.x…). #27 Phase 2b: the reset
+                // target is now the DSL triplex with the Sandbox compiler pin —
+                // the old `Settings != null` clause was dropped because a
+                // legitimate entry now always carries a pin snapshot.
+                if (q != null && q.Source.Contains("z*z + c"))
                 {
-                    q.Source = "// Switch Axis Mode → Quat + Julia Mode on in the editor.\n" +
-                               "return new Vec3(\n    z.X*z.X - z.Y*z.Y - z.Z*z.Z,\n    2*z.X*z.Y,\n    2*z.X*z.Z) + c;";
+                    q.Source = DslQuatJulia;
                     q.Chain = null;
-                    q.Settings = null;
+                    q.Settings = SandboxPin();
                     changed = true;
                 }
             }
             return changed;
         }
+
+        // #27 Phase 2b — single-source built-ins whose stored body may still be
+        // the pre-migration raw C#. Keyed by the exact shipped C# so a user's
+        // own edit (any other text) is preserved, honouring the read-only
+        // built-in contract [[feedback_no_save_over_examples]]. Chain-bearing
+        // built-ins are covered by the trusted Roslyn fallback (Phase 2c) and
+        // re-seed to DSL on a fresh install.
+        private static readonly (string Name, string OldCs, string NewDsl)[] _dslMigrations =
+        {
+            ("Square triplex (z*z + c)",
+             "return new Vec3(\n    z.X*z.X - z.Y*z.Y - z.Z*z.Z,\n    2*z.X*z.Y,\n    2*z.X*z.Z) + c;", DslSquare),
+            ("Mandelbulb p=8", "return Vec3.Pow(z, 8) + c;", DslBulb8),
+            ("Mandelbulb p=4", "return Vec3.Pow(z, 4) + c;", DslBulb4),
+            ("Sin-bulb", "return Vec3.Sin(z) * 1.5 + c;", DslSin),
+            ("Abs-bulb p=8", "return Vec3.Pow(Vec3.Abs(z), 8) + c;", DslAbs8),
+            ("Mandelbox",
+             "var v = Vec3.SphereFold(Vec3.BoxFold(z, 1.0), 0.5, 1.0);\nreturn v * 2.0 + c;", DslMandelbox),
+            ("Cosh × Sin bulb", "return Vec3.Sin(z) * Vec3.Cosh(z) + c;", DslCoshSin),
+            ("Animated breathing bulb (uses t)", "return Vec3.Pow(z, 4 + 2*Math.Sin(t)) + c;", DslBreathing),
+            ("Folded abs-Y bulb", "return Vec3.Pow(Vec3.AbsY(z), 8) + c;", DslFoldedAbsY),
+            ("Reflected triplex",
+             "var w = new Vec3(Math.Abs(z.X), Math.Abs(z.Y), z.Z);\nreturn new Vec3(w.X*w.X - w.Y*w.Y - w.Z*w.Z, 2*w.X*w.Y, 2*w.X*w.Z) + c;", DslReflected),
+        };
+
+        /// <summary>Upgrade untouched built-in bodies from raw C# to the safe
+        /// DSL and pin the Sandbox compiler. Only rewrites an entry whose stored
+        /// source still exactly matches the shipped C# (or the new DSL awaiting
+        /// a pin) — a user edit differs and is left alone. Idempotent: skips
+        /// entries already pinned to Sandbox. Returns true if anything changed.</summary>
+        private bool MigrateBuiltinsToDsl()
+        {
+            bool changed = false;
+            foreach (var (name, oldCs, newDsl) in _dslMigrations)
+            {
+                var e = GetByName(name);
+                if (e == null) continue;
+                if (e.Settings?.Compiler == UserBulbCompilerKind.Sandbox) continue;
+                if (!SourcesEqual(e.Source, oldCs) && !SourcesEqual(e.Source, newDsl)) continue;
+                e.Source = newDsl;
+                e.Settings = SandboxPin(e.Settings);
+                changed = true;
+            }
+            return changed;
+        }
+
+        private static bool SourcesEqual(string? a, string? b)
+            => string.Equals(
+                (a ?? string.Empty).Replace("\r\n", "\n").Trim(),
+                (b ?? string.Empty).Replace("\r\n", "\n").Trim(),
+                StringComparison.Ordinal);
 
         public void Save()
         {
