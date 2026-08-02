@@ -23,6 +23,7 @@ using Microsoft.CodeAnalysis.CSharp;
 using FracturingFog.FFMath;
 using FracturingFog.Interefaces;
 using FracturingFog.Models;
+using FracturingFog.Security;
 
 namespace FracturingFog;
 
@@ -125,6 +126,18 @@ public sealed class UserEquationCalculator : IFractalCalculator
         {
             _compiled = null;
             LastError = "Source is empty";
+            return;
+        }
+
+        // #27 Phase 0 — trust-boundary gate. Raw-C# user code is arbitrary
+        // in-process execution; refuse it for untrusted (file-borne) origins
+        // before it reaches Roslyn. Origin travels with the source on
+        // FractalParameters (stamped ExternalFile by disk-load boundaries).
+        var gate = UserCodeGate.EnsureRoslynAllowed(FractalParameters.UserCodeOrigin);
+        if (!gate.Allowed)
+        {
+            _compiled = null;
+            LastError = gate.DenyReason ?? "Raw-C# user code is disabled.";
             return;
         }
 

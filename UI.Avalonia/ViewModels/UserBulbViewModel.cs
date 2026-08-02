@@ -156,6 +156,9 @@ public sealed class UserBulbViewModel : ViewModelBase
             .Subscribe(_ =>
             {
                 _params.UserBulbSource = _source;
+                // #27 Phase 0 — editor content is interactive/trusted; clear any
+                // ExternalFile stamp left by a previously-viewed imported region.
+                _params.UserCodeOrigin = FracturingFog.Security.UserCodeOrigin.Interactive;
                 CompileRequested?.Invoke(this, EventArgs.Empty);
             });
     }
@@ -599,6 +602,7 @@ public sealed class UserBulbViewModel : ViewModelBase
             Source = entry.Source;
             _params.UserBulbSource = entry.Source;
             _params.UserBulbName = entry.Name;
+            _params.UserCodeOrigin = FracturingFog.Security.UserCodeOrigin.Interactive; // user's own library
 
             // Mirror the saved chain into both the params and the bound
             // ObservableCollection so the chain editor reflects what just
