@@ -160,11 +160,40 @@
                                     <Button Grid.Column="1" Classes="action add"    Content="Add"   Command="{Binding AddStopCommand}" />
                                     <Button Grid.Column="2" Classes="action new"    Content="🎲 Random"
                                             Command="{Binding RandomizeCommand}"
-                                            ToolTip.Tip="Generate a random 5-stop palette (golden-ratio hue walk; seed recorded in Description)." />
+                                            ToolTip.Tip="Generate a random theme: golden-ratio palette plus Kind-aware extras (cycle, 3D lights, PBR, In-set, Post-FX). See the toggles below. Seed recorded in Description." />
                                     <Button Grid.Column="3" Classes="action export" Content="From image…" Command="{Binding FromImageCommand}" />
                                     <Button Grid.Column="4" Classes="action save"   Content="Import…"     Command="{Binding ImportPaletteCommand}" />
                                     <Button Grid.Column="5" Classes="action export" Content="Export…"     Command="{Binding ExportPaletteCommand}" />
                                 </Grid>
+                            </Border>
+                            <!-- Randomize scope / mode toggles (#83) -->
+                            <Border BorderBrush="#2A2A2A" BorderThickness="0" Background="Transparent">
+                                <StackPanel Spacing="6">
+                                    <StackPanel Orientation="Horizontal" Spacing="18">
+                                        <CheckBox Content="Random Experimental" IsChecked="{Binding RandomExperimental}"
+                                                  Foreground="#DCDCDC" VerticalAlignment="Center"
+                                                  ToolTip.Tip="Off: keep random values in artful, logical ranges. On: remove caps and go wild." />
+                                        <CheckBox Content="In-set" IsChecked="{Binding RandomIncludeInSet}"
+                                                  Foreground="#DCDCDC" VerticalAlignment="Center"
+                                                  ToolTip.Tip="Include a random In-set (interior) colour when generating a random theme." />
+                                        <CheckBox Content="Post-FX" IsChecked="{Binding RandomIncludePostFx}"
+                                                  Foreground="#DCDCDC" VerticalAlignment="Center"
+                                                  ToolTip.Tip="Include random Post-FX defaults (Brightness / Contrast / Adaptive-HE) when generating a random theme." />
+                                    </StackPanel>
+                                    <StackPanel Orientation="Horizontal" Spacing="14">
+                                        <TextBlock Text="Seed:" Foreground="#DCDCDC" VerticalAlignment="Center" />
+                                        <TextBox Width="130" Text="{Binding RandomSeedText}"
+                                                 IsEnabled="{Binding UseRandomSeed}"
+                                                 PlaceholderText="(random)"
+                                                 ToolTip.Tip="When 'Use Seed' is on, enter a positive integer here and click Random to reproduce a theme. The seed used is always shown here afterward." />
+                                        <CheckBox Content="Use Seed" IsChecked="{Binding UseRandomSeed}"
+                                                  Foreground="#DCDCDC" VerticalAlignment="Center"
+                                                  ToolTip.Tip="Off: ignore the Seed field, use a fresh random seed each click. On: use the Seed field value for the next Random click." />
+                                        <CheckBox Content="Interpolation" IsChecked="{Binding RandomIncludeInterpolation}"
+                                                  Foreground="#DCDCDC" VerticalAlignment="Center"
+                                                  ToolTip.Tip="Include random Interpolation settings (Space / Curve / Transfer / Strength / Gamma) when generating a random theme." />
+                                    </StackPanel>
+                                </StackPanel>
                             </Border>
                             <Border BorderBrush="#2A2A2A" BorderThickness="0" Background="Transparent">
                             <Grid ColumnDefinitions="Auto,Auto,*">
