@@ -1706,8 +1706,22 @@ namespace FracturingFog.Hosting
                         onEditWatermark: () => Dispatcher.UIThread.Post(() => shell.ShowWatermarkEditor()));
                     if (dims == null) return;
 
-                    int savedW = dims.Value.Portrait ? dims.Value.Height : dims.Value.Width;
-                    int savedH = dims.Value.Portrait ? dims.Value.Width  : dims.Value.Height;
+                    // The dialog's Width/Height are the labelled OUTPUT size (e.g.
+                    // 24"×36" portrait → 7200×10800 px). PosterRenderer's rotate
+                    // contract is "render LANDSCAPE (w×h), rotate 90° CW → portrait
+                    // (h×w)", so for a portrait poster we must feed it the
+                    // TRANSPOSED (landscape, wide) render dimensions and let the
+                    // rotate produce the portrait output. Passing the tall dims
+                    // directly (#190) rendered a portrait buffer whose calculator
+                    // scale (3.5 / max(W,H)) anchored the view span to the vertical
+                    // axis — cropping the sides into a zoomed-in centre — and then
+                    // rotated that into a landscape file. Rendering landscape first
+                    // keeps the on-screen framing and yields a true portrait file.
+                    int renderW = dims.Value.Portrait ? dims.Value.Height : dims.Value.Width;
+                    int renderH = dims.Value.Portrait ? dims.Value.Width  : dims.Value.Height;
+                    // Output (post-rotation) is always the labelled Width × Height.
+                    int savedW = dims.Value.Width;
+                    int savedH = dims.Value.Height;
 
                     string? path = await AvaloniaDialogs.PickSaveFileAsync(
                         "Save Poster Image",
@@ -1732,7 +1746,7 @@ namespace FracturingFog.Hosting
                         ? UserWatermarkStore.Instance.GetByName(dims.Value.WatermarkName)
                         : null;
                     var req = s_renderHost.CreatePosterRequest(
-                        dims.Value.Width, dims.Value.Height, rotate: dims.Value.Portrait,
+                        renderW, renderH, rotate: dims.Value.Portrait,
                         path, format, customWm);
 
                     try
