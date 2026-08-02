@@ -186,4 +186,85 @@ public sealed class UserCodeGateCalculatorTests
         var clone = p.Clone();
         Assert.Equal(UserCodeOrigin.ExternalFile, clone.UserCodeOrigin);
     }
+
+    // ── #27 Phase 2c — bulb DSL-first with trusted Roslyn fallback ──────────
+
+    [Fact]
+    public void Bulb_Sandbox_CsharpBody_Interactive_FallsBackToRoslyn()
+    {
+        // Default compiler is now Sandbox. A trusted legacy C# body has no DSL
+        // form (the DSL parse fails), so it falls back to the gated Roslyn path.
+        var calc = new UserBulbCalculator(8, 8)
+        {
+            FractalParameters = new FractalParameters
+            {
+                UserBulbSource = ValidRoslynBulb,
+                UserBulbCompiler = UserBulbCompilerKind.Sandbox,
+                UserCodeOrigin = UserCodeOrigin.Interactive,
+            }
+        };
+        calc.Compile(ValidRoslynBulb);
+        Assert.True(calc.IsCompiled, $"expected Roslyn fallback, got: {calc.LastError}");
+    }
+
+    [Fact]
+    public void Bulb_Sandbox_CsharpBody_ExternalFile_IsRefused()
+    {
+        // Untrusted C# body under the Sandbox default: no Roslyn fallback, and
+        // the confusing DSL parse error is replaced by the gate's block notice.
+        var prior = UserCodeSecurityPolicy.Mode;
+        try
+        {
+            UserCodeSecurityPolicy.Mode = RoslynUserCodeMode.TrustedOnly;
+            var calc = new UserBulbCalculator(8, 8)
+            {
+                FractalParameters = new FractalParameters
+                {
+                    UserBulbSource = ValidRoslynBulb,
+                    UserBulbCompiler = UserBulbCompilerKind.Sandbox,
+                    UserCodeOrigin = UserCodeOrigin.ExternalFile,
+                }
+            };
+            calc.Compile(ValidRoslynBulb);
+            Assert.False(calc.IsCompiled);
+            Assert.Contains("Blocked", calc.LastError);
+        }
+        finally { UserCodeSecurityPolicy.Mode = prior; }
+    }
+
+    [Fact]
+    public void Bulb_Sandbox_DslTypo_KeepsDslError_NoFallback()
+    {
+        // A DSL author's typo (no C# markers) keeps its DSL parse error and
+        // never switches engines — even for a trusted origin.
+        const string dslTypo = "frobnicate(z) + c";
+        var calc = new UserBulbCalculator(8, 8)
+        {
+            FractalParameters = new FractalParameters
+            {
+                UserBulbSource = dslTypo,
+                UserBulbCompiler = UserBulbCompilerKind.Sandbox,
+                UserCodeOrigin = UserCodeOrigin.Interactive,
+            }
+        };
+        calc.Compile(dslTypo);
+        Assert.False(calc.IsCompiled);
+        Assert.DoesNotContain("Blocked", calc.LastError);
+    }
+
+    [Fact]
+    public void Bulb_Sandbox_DslBody_Compiles_NoFallback()
+    {
+        var calc = new UserBulbCalculator(8, 8)
+        {
+            FractalParameters = new FractalParameters
+            {
+                UserBulbSource = ValidSandboxBulb,
+                UserBulbCompiler = UserBulbCompilerKind.Sandbox,
+                UserCodeOrigin = UserCodeOrigin.Interactive,
+            }
+        };
+        calc.Compile(ValidSandboxBulb);
+        Assert.True(calc.IsCompiled, $"expected DSL compile, got: {calc.LastError}");
+    }
 }

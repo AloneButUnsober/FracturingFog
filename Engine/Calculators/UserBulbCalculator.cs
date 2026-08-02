@@ -225,6 +225,25 @@ public sealed class UserBulbCalculator : IFractalCalculator
         return Regex.IsMatch(stripped, @"\bc\b");
     }
 
+    /// <summary>#27 Phase 2c — heuristic: does this body look like raw C#
+    /// (so a failed DSL parse should fall back to Roslyn for a trusted origin)
+    /// rather than a DSL author's typo? DSL never uses `;`, `return`, `var`,
+    /// `new`, or namespaced `Vec3.` / `Math.` calls.</summary>
+    private static bool LooksLikeCSharp(string? s)
+    {
+        if (string.IsNullOrEmpty(s)) return false;
+        return s.Contains("Vec3.") || s.Contains("new Vec3") || s.Contains("Math.")
+            || s.Contains(';')
+            || Regex.IsMatch(s, @"\breturn\b") || Regex.IsMatch(s, @"\bvar\b");
+    }
+
+    private static string ChainSourceText(System.Collections.Generic.List<UserBulbChainStep> steps)
+    {
+        var sb = new System.Text.StringBuilder();
+        foreach (var st in steps) sb.Append(st.Source).Append('\n');
+        return sb.ToString();
+    }
+
     public void Compile(string source)
     {
         LastErrorPosition = -1;
@@ -270,7 +289,27 @@ public sealed class UserBulbCalculator : IFractalCalculator
                 if (useChain) CompileSandboxChain(chain!, paramNames);
                 else CompileSandbox(source, paramNames);
             }
-            return;
+            if (IsCompiled) return;
+
+            // #27 Phase 2c — DSL-first with a trusted Roslyn fallback. The DSL
+            // is the primary path (built-in presets and new bulbs default to
+            // it). A legacy raw-C# body — or any construct with no DSL form —
+            // falls through to the gated Roslyn path below, but only for a
+            // trusted origin and only when the source actually looks like C#;
+            // a DSL author's own typo keeps its DSL parse error instead of
+            // silently switching engines. Untrusted C# stays refused (the gate
+            // below denies it), so this does not widen the file-borne surface.
+            string probe = useChain ? ChainSourceText(chain!) : source;
+            if (!LooksLikeCSharp(probe)) return;   // genuine DSL error — surface it
+            var fallbackGate = UserCodeGate.EnsureRoslynAllowed(FractalParameters.UserCodeOrigin);
+            if (!fallbackGate.Allowed)
+            {
+                // Untrusted C# body: no Roslyn fallback. Replace the confusing
+                // DSL parse error with the gate's "Blocked … use the DSL" notice.
+                LastError = fallbackGate.DenyReason ?? LastError;
+                return;
+            }
+            // fall through to the Roslyn path (gate re-checked below)
         }
 
         // #27 Phase 0 — trust-boundary gate. The Roslyn compiler path below
