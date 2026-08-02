@@ -2559,7 +2559,9 @@ namespace FracturingFog.Rendering
                 map is IInteriorAwareColorMap  ||
                 map is IPostProcessColorMap;
 
-            if (!needsFullRender && SelectAltCalculator(ViewState.FractalType) == null)
+            IFractalCalculator? altCalc = SelectAltCalculator(ViewState.FractalType);
+
+            if (!needsFullRender && altCalc == null)
             {
                 // Mandelbrot fast path — recolour from cached buffers. This is
                 // cheap (keeps a slider drag responsive) but skips the MSAA /
@@ -2571,10 +2573,25 @@ namespace FracturingFog.Rendering
                 UploadProcessedBuffer(_calculator.ColorBuffer, _calculator.Width, _calculator.Height);
                 ArmColorSettle();
             }
+            else if (!needsFullRender && altCalc is ISupportsCheapRecolor recolorAlt)
+            {
+                // #194 — alt calculator with a cheap recolor path (Buddhabrot
+                // family): recomposite from cached intermediates instead of
+                // re-running Calculate(). For a Monte Carlo density plot the
+                // sample pass dominates, so this turns a theme change from a
+                // full re-sample (seconds) into a composite (milliseconds). The
+                // recolour IS the same composite a full render would produce, so
+                // no settle debounce is needed. ColorMap was already propagated
+                // to the alt calculator above.
+                DisarmColorSettle();
+                recolorAlt.Recolor();
+                UploadProcessedBuffer(altCalc.ColorBuffer, altCalc.Width, altCalc.Height);
+            }
             else
             {
-                // Alt calculator OR theme needs data not in the cached buffers:
-                // this already IS the full render, so cancel any pending settle.
+                // Alt calculator with no cheap path OR theme needs data not in
+                // the cached buffers: this already IS the full render, so cancel
+                // any pending settle.
                 DisarmColorSettle();
                 Trigger();
             }
