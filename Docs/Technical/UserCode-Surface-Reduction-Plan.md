@@ -3,7 +3,9 @@
 Status: **active** — Phase 0 complete (0a/0b/0c); Phase 1 complete (1a/1b/1c);
 Phase 2 complete (2a/2b/2c; the original hard-delete 2d folded into Phase 3);
 Phase 3 complete (3a/3b/3c/3d) — **both raw-C# calculators now run DSL-only, no
-Roslyn fallback anywhere**; Phase 4 (ColorGen interpreter) next.
+Roslyn fallback anywhere**; Phase 5a complete (widen equation translation +
+persist saved equations to DSL, backup-guarded); Phase 4 (ColorGen interpreter)
+outstanding.
 Tracking issues: #27 (umbrella) + per-phase children (see [Tracking](#tracking)).
 
 ## Problem
@@ -188,6 +190,35 @@ Phase 2 — both had kept a trusted-origin Roslyn fallback until here).
   UserEquation / Sandbox / UserBulb over RPC — they run user step math + open
   iteration budgets even though the RCE primitive is gone). Full regression
   sweep green (Server.Tests 867/867), solution builds clean.
+
+### Phase 5a — migrate saved user equations to the DSL — **complete**
+Follow-up to Phase 3: after the raw-C# path was removed, a *saved* raw-C#
+equation with no DSL form stopped running. This widens the translation surface
+and persists translatable saved equations as DSL so shipped/user content keeps
+working. Issue #209 (PR #TBD).
+- **5a-1** ✅ Extended `EquationPreprocessor` to translate the C# `Complex`
+  member accessors it used to reject (they had DSL equivalents; only the
+  syntax rewrite was missing): `x.Real → re(x)`, `x.Imaginary → im(x)`,
+  `x.Phase → arg(x)`, `x.Magnitude → sqrt(x*conj(x))`. Magnitude deliberately
+  avoids `abs`, whose meaning **differs** between the CalcGen DSL (|x|²) and the
+  `SandboxExpression` runtime (|x|); `x*conj(x)`=|x|² in both and sqrt of that is
+  |x| (the parity harness — which evaluates via `SandboxExpression` — caught the
+  divergence). Operand extraction covers identifier / paren-group / call-result.
+  `UserEquationDslParityTests` gains a member-access corpus (DSL == native
+  `Complex` within 1e-10).
+- **5a-2** ✅ `UserDataBackup.SnapshotBeforeMigration` — a timestamped
+  `<name>.<stamp>.<reason>.bak` snapshot taken before a store rewrites a user
+  JSON in place, distinct from `AtomicFile`'s rolling `.bak`. Retrofitted the
+  existing `UserBulbStore` built-in migration to snapshot first.
+- **5a-3** ✅ On startup (after `UserEquationStore.Load()`, via
+  `AvaloniaShellBootstrap`), `UserEquationDslMigration.Run` converts translatable
+  `Kind=UserEquation` entries to DSL text + `Kind=Dsl` — same
+  translate-then-validate (`EquationPreprocessor` → `SandboxExpression.Parse`)
+  the live calculator runs. `UserEquationStore.MigrateUserEquationsToDsl(translate)`
+  owns the file + backup + save (translation injected because the store is
+  UI-free); idempotent; untranslatable entries left editable. The migration lives
+  in Engine (needs both the preprocessor and the interpreter, which Abstractions
+  doesn't reference).
 
 ### Phase 4 — ColorGen to a full interpreted DSL
 Goal: the ColorGen DSL must be able to express **every** rich color theme with
