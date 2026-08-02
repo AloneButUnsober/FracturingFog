@@ -36,6 +36,12 @@
     -->
     <ProjectReference Include="..\Engine\FracturingFog.Engine.csproj" />
     <!--
+      #27 Phase 3c — ColorGen.Lib ref so the "no user text reaches Roslyn"
+      audit can drive ColorGenApi.Generate and assert injection-shaped sources
+      are rejected by the DSL parser before any Roslyn compile.
+    -->
+    <ProjectReference Include="..\ColorGen.Lib\ColorGen.Lib.csproj" />
+    <!--
       Region Editor (Animation Roadmap Sub-goal B) — Hosting ref added so the
       RegionEditorServiceTests can drive HostColorThemeService.GetRegionForEdit
       / UpdateRegionMetadata. Hosting is net10.0 and cross-platform-safe.
