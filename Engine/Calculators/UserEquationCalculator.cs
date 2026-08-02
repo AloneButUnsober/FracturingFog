@@ -4,27 +4,25 @@
 // UserEquationCalculator.cs
 //
 // Renders an escape-time fractal whose per-iteration step function is supplied
-// at runtime by the user as a C# expression / statement block, compiled via
-// Roslyn scripting. Runs scalar (no SIMD) — delegate-call overhead per pixel
-// means it is slower than the typed kernels, but interactive at 800×600 with
-// modest iteration counts.
+// at runtime by the user as a `Complex` expression. #27 Phase 3 — the source
+// runs exclusively on the safe `SandboxExpression` interpreter (no BCL surface,
+// no assembly load): the historical C# `Complex.*` form is translated to the
+// Sandbox DSL by `EquationPreprocessor` and evaluated by the interpreter. The
+// raw-C# Roslyn compile path was removed here (see the surface-reduction plan);
+// a source with no DSL representation now surfaces an editable error instead of
+// executing. Runs scalar (no SIMD) — interpreter overhead per pixel means it is
+// slower than the typed kernels, but interactive at 800×600 with modest
+// iteration counts.
 
 using System;
-using System.Collections.Generic;
-using System.IO;
 using System.Numerics;
-using System.Runtime.Loader;
 using System.Threading;
 using System.Threading.Tasks;
-
-using Microsoft.CodeAnalysis;
-using Microsoft.CodeAnalysis.CSharp;
 
 using FracturingFog.CalculatorGen;
 using FracturingFog.FFMath;
 using FracturingFog.Interefaces;
 using FracturingFog.Models;
-using FracturingFog.Security;
 
 namespace FracturingFog;
 
@@ -92,30 +90,24 @@ public sealed class UserEquationCalculator : IFractalCalculator
     /// <summary>Most recent compile error, or empty string when last compile succeeded.</summary>
     public string LastError { get; private set; } = string.Empty;
 
-    /// <summary>True if last compile produced a usable step function (DSL
-    /// interpreter or Roslyn delegate).</summary>
-    public bool IsCompiled => _compiled != null || _sbx != null;
+    /// <summary>True if last compile produced a usable step function on the
+    /// safe DSL interpreter.</summary>
+    public bool IsCompiled => _sbx != null;
 
-    private Func<Complex, Complex, int, Complex>? _compiled;
-    // #27 Phase 1b — safe interpreted path. When the C# source translates
-    // cleanly to the Sandbox DSL, _sbx holds the parsed expression and the
-    // render loop walks it instead of a Roslyn delegate (no BCL surface). At
-    // most one of _sbx / _compiled is non-null after a successful Compile.
+    // #27 Phase 3 — the source's only execution path. The C# `Complex.*` form
+    // is translated to the Sandbox DSL and parsed into _sbx; the render loop
+    // walks it (no BCL surface, no assembly load). The raw-C# Roslyn delegate
+    // was removed in Phase 3.
     private SandboxExpression? _sbx;
     // Reason the DSL path could not represent the source (untranslatable
-    // construct or parse failure). Surfaced to the user when the raw-C#
-    // fallback is unavailable because the origin is untrusted.
+    // construct or parse failure). Surfaced to the user as the compile error.
     private string? _dslError;
     private string _compiledSource = string.Empty;
 
     /// <summary>True when the last successful compile runs on the safe DSL
-    /// interpreter rather than the Roslyn delegate.</summary>
+    /// interpreter. Always true after a successful compile now that the DSL is
+    /// the only path; retained for callers that branch on it.</summary>
     public bool UsingDsl => _sbx != null;
-    // Keeps the assembly backing _compiled alive. Collectible so a superseded
-    // compile can be GC-unloaded once no delegate references it (the render
-    // loop snapshots `fn = _compiled` into a local, so an in-flight render
-    // pins the old context until it finishes — no mid-call unload).
-    private AssemblyLoadContext? _lastContext;
 
     public UserEquationCalculator(int width, int height) => Resize(width, height);
 
@@ -130,119 +122,48 @@ public sealed class UserEquationCalculator : IFractalCalculator
     }
 
     /// <summary>
-    /// Compiles the user source. The source is the BODY of:
-    ///   Complex Step(Complex z, Complex c, int n) { ... }
-    /// returning a Complex value, written in the historical
-    /// System.Numerics.Complex form (Complex.Sin/Cos/Pow/…, new Complex(a,b),
-    /// arithmetic on z/c/n).
+    /// Compiles the user source. The source is a `Complex`-valued expression in
+    /// the historical System.Numerics.Complex form (Complex.Sin/Cos/Pow/…,
+    /// new Complex(a,b), arithmetic on z/c/n), optionally wrapped in
+    /// `return … ;`.
     ///
-    /// #27 Phase 1b — the source is first translated to the safe Sandbox DSL
-    /// and, when it translates and parses, executed by an interpreter with no
-    /// BCL surface (<see cref="UsingDsl"/> is then true). Sources with a
-    /// construct that has no DSL form fall back to the Roslyn path, which is
-    /// gated by <see cref="UserCodeSecurityPolicy"/>: allowed for trusted
-    /// (Interactive / BuiltIn) origins, refused for untrusted (ExternalFile).
+    /// #27 Phase 3 — the source is translated to the safe Sandbox DSL by
+    /// <see cref="EquationPreprocessor"/> and, when it translates and parses,
+    /// executed by an interpreter with no BCL surface. There is no raw-C#
+    /// Roslyn path any more: a construct with no DSL form surfaces an editable
+    /// error (<see cref="LastError"/>) and does not execute.
     /// </summary>
     public void Compile(string source)
     {
         if (string.IsNullOrWhiteSpace(source))
         {
-            _compiled = null;
             _sbx = null;
             LastError = "Source is empty";
             return;
         }
 
-        // #27 Phase 1b — prefer the safe interpreted DSL. Translate the
+        // The safe interpreted DSL is the only execution path. Translate the
         // historical C# `Complex.*` form to the Sandbox DSL and, when it
         // translates cleanly and parses, run it through SandboxExpression:
-        // no Roslyn, no BCL surface, no assembly load. Raw C# is kept only as
-        // a trusted-origin fallback for sources with no DSL representation.
+        // no Roslyn, no BCL surface, no assembly load.
         if (TryCompileDsl(source)) return;
 
-        // #27 Phase 0 — trust-boundary gate. Raw-C# user code is arbitrary
-        // in-process execution; refuse it for untrusted (file-borne) origins
-        // before it reaches Roslyn. Origin travels with the source on
-        // FractalParameters (stamped ExternalFile by disk-load boundaries).
-        var gate = UserCodeGate.EnsureRoslynAllowed(FractalParameters.UserCodeOrigin);
-        if (!gate.Allowed)
-        {
-            _compiled = null;
-            _sbx = null;
-            // Lead with why the DSL could not take it, then the gate's block
-            // notice, so an untrusted source gets an actionable message
-            // instead of a bare "raw C# disabled".
-            LastError = string.IsNullOrEmpty(_dslError)
-                ? (gate.DenyReason ?? "Raw-C# user code is disabled.")
-                : $"{_dslError}\n{gate.DenyReason}";
-            return;
-        }
-
-        try
-        {
-            // Full CSharpCompilation, NOT the CSharpScript scripting API.
-            // Scripting auto-references the return-type + globals assemblies
-            // via Assembly.Location, which is "" under single-file self-
-            // contained publish (Linux default) — it throws "Can't create a
-            // metadata reference to an assembly without location" no matter
-            // what references we hand it, because that broken ref is one the
-            // engine adds itself. Compiling a real class to an in-memory
-            // assembly (like CalculatorGenHotLoad) sidesteps it entirely and
-            // takes references from RoslynRefs' TPA/in-bundle resolver.
-            string code = WrapUserSource(source);
-            var syntaxTree = CSharpSyntaxTree.ParseText(code);
-            var compilation = CSharpCompilation.Create(
-                assemblyName: $"UserEq_{Environment.TickCount}_{Guid.NewGuid():N}",
-                syntaxTrees: new[] { syntaxTree },
-                references: FracturingFog.Calculators.RoslynRefs.GatherAllTpaRefs(),
-                options: new CSharpCompilationOptions(
-                    OutputKind.DynamicallyLinkedLibrary,
-                    optimizationLevel: OptimizationLevel.Release));
-
-            using var ms = new MemoryStream();
-            var emit = compilation.Emit(ms);
-            if (!emit.Success)
-            {
-                var sb = new System.Text.StringBuilder();
-                foreach (var diag in emit.Diagnostics)
-                    if (diag.Severity == DiagnosticSeverity.Error)
-                        sb.AppendLine(diag.ToString());
-                LastError = sb.ToString();
-                _compiled = null;
-                return;
-            }
-
-            ms.Seek(0, SeekOrigin.Begin);
-            var ctx = new AssemblyLoadContext($"UserEq_{Environment.TickCount}", isCollectible: true);
-            var asm = ctx.LoadFromStream(ms);
-            var type = asm.GetType("FracturingFog.UserEq.Generated.__UserEq");
-            var del = type?.GetMethod("Get")?.Invoke(null, null)
-                          as Func<Complex, Complex, int, Complex>;
-            if (del == null)
-            {
-                LastError = "Compile succeeded but Step delegate was not found.";
-                _compiled = null;
-                return;
-            }
-            _compiled = del;
-            _lastContext = ctx;   // pin the backing assembly for the live delegate
-            _compiledSource = source;
-            LastError = string.Empty;
-        }
-        catch (Exception ex)
-        {
-            LastError = ex.Message;
-            _compiled = null;
-        }
+        // #27 Phase 3 — no Roslyn fallback. A source the DSL cannot represent
+        // (member access, an unsupported member, a statement block) no longer
+        // executes; surface why, so the user can rewrite it in DSL terms.
+        _sbx = null;
+        LastError = string.IsNullOrEmpty(_dslError)
+            ? "This equation can't be expressed in the safe expression language. " +
+              "Use DSL forms: sin cos tan exp log sqrt conj re im arg pow, `^` for powers, and z / c / n."
+            : _dslError;
     }
 
     /// <summary>
-    /// #27 Phase 1b — attempt to run the source on the safe DSL. Translates
-    /// the C# `Complex.*` form via <see cref="EquationPreprocessor"/> and, if
-    /// no unsupported construct is flagged and the result parses, installs the
-    /// parsed <see cref="SandboxExpression"/>. Returns true on success. On
-    /// failure sets <see cref="_dslError"/> (why the DSL declined) and leaves
-    /// _sbx null so the caller can fall back to the gated Roslyn path.
+    /// Translate the source to the safe DSL via
+    /// <see cref="EquationPreprocessor"/> and, if no unsupported construct is
+    /// flagged and the result parses, install the parsed
+    /// <see cref="SandboxExpression"/>. Returns true on success. On failure
+    /// sets <see cref="_dslError"/> (why the DSL declined) and leaves _sbx null.
     /// </summary>
     private bool TryCompileDsl(string source)
     {
@@ -262,8 +183,6 @@ public sealed class UserEquationCalculator : IFractalCalculator
         {
             var expr = SandboxExpression.Parse(dsl);
             _sbx = expr;
-            _compiled = null;
-            _lastContext = null;          // DSL mode pins no assembly
             _compiledSource = source;
             LastError = string.Empty;
             return true;
@@ -278,38 +197,9 @@ public sealed class UserEquationCalculator : IFractalCalculator
         }
     }
 
-    private static string WrapUserSource(string body)
-    {
-        // Emit a real compilation unit: a static Step method holding the user
-        // body, plus a Get() factory returning it as the delegate the render
-        // loop calls. `using static System.Math` re-exports Sin/Cos/Exp/... as
-        // bare calls (matches the old scripting AddImports("System.Math")); the
-        // System.Numerics import brings Complex + its static members.
-        string wrappedBody = body.Contains("return") ? body : $"return {body};";
-        return $@"
-using System;
-using System.Numerics;
-using static System.Math;
-
-namespace FracturingFog.UserEq.Generated
-{{
-    public static class __UserEq
-    {{
-        public static Complex Step(Complex z, Complex c, int n)
-        {{
-            {wrappedBody}
-        }}
-
-        public static Func<Complex, Complex, int, Complex> Get()
-            => (Func<Complex, Complex, int, Complex>)Step;
-    }}
-}}
-";
-    }
-
     public void Calculate(CancellationToken ct = default)
     {
-        if (_compiled == null && _sbx == null)
+        if (_sbx == null)
         {
             // Try compiling from FractalParameters.UserEquationSource lazily.
             if (!string.IsNullOrWhiteSpace(FractalParameters.UserEquationSource)
@@ -319,9 +209,8 @@ namespace FracturingFog.UserEq.Generated
             }
         }
 
-        var fn = _compiled;
-        var sbx = _sbx;   // #27 Phase 1b — safe DSL interpreter, when available
-        if (fn == null && sbx == null)
+        var sbx = _sbx;   // #27 Phase 3 — safe DSL interpreter is the only path
+        if (sbx == null)
         {
             // No compiled equation — fill with theme InSetColor so the screen
             // is at least not stale.
@@ -371,11 +260,9 @@ namespace FracturingFog.UserEq.Generated
             int rowBase = y * width;
 
             // One env per row for the DSL interpreter (holds z/c/n + let-slots;
-            // mutated in place per step). Null in Roslyn-delegate mode. The
-            // step call dispatches to the interpreter or the delegate.
-            SbxVal[]? env = sbx?.NewEnv();
-            Complex Step(Complex zz, Complex cc, int it)
-                => sbx != null ? sbx.EvalStep(zz, cc, it, env!) : fn!(zz, cc, it);
+            // mutated in place per step).
+            SbxVal[] env = sbx.NewEnv();
+            Complex Step(Complex zz, Complex cc, int it) => sbx.EvalStep(zz, cc, it, env);
             for (int x = 0; x < width; x++)
             {
                 double dx = (x - width * 0.5) * scale;

@@ -88,15 +88,39 @@ public sealed class UserCodeGateCalculatorTests
     }
 
     // A source with NO DSL form (member access can't be expressed in the
-    // Sandbox grammar) still falls through to the gated Roslyn path and is
-    // refused for an untrusted origin. #27 Phase 1b: `return z*z + c;` no
-    // longer belongs here — it now translates to the DSL and runs safely
-    // (see UserEquation_ExternalFile_TranslatableEquation_RunsOnDsl).
+    // Sandbox grammar). #27 Phase 3: the raw-C# Roslyn fallback is gone, so
+    // such a source no longer executes for ANY origin — it surfaces an
+    // editable DSL error instead. `return z*z + c;` no longer belongs here —
+    // it translates to the DSL and runs (see
+    // UserEquation_ExternalFile_TranslatableEquation_RunsOnDsl).
     private const string RoslynOnlyEquation = "return z.Real + c;";
 
     [Fact]
-    public void UserEquation_ExternalFile_RawCsharp_IsRefused()
+    public void UserEquation_NoDslForm_DoesNotExecute_AnyOrigin()
     {
+        // #27 Phase 3 — no Roslyn path at all. A member-access body has no DSL
+        // form, so it fails to compile even for a trusted (Interactive) origin,
+        // and the error is a crisp DSL message (not the gate's "Blocked").
+        var calc = new UserEquationCalculator(8, 8)
+        {
+            FractalParameters = new FractalParameters
+            {
+                UserEquationSource = RoslynOnlyEquation,
+                UserCodeOrigin = UserCodeOrigin.Interactive,
+            }
+        };
+        calc.Compile(RoslynOnlyEquation);
+        Assert.False(calc.IsCompiled);
+        Assert.False(calc.UsingDsl);
+        Assert.DoesNotContain("Blocked", calc.LastError);
+        Assert.False(string.IsNullOrWhiteSpace(calc.LastError));
+    }
+
+    [Fact]
+    public void UserEquation_ExternalFile_NoDslForm_DoesNotExecute()
+    {
+        // Same body, untrusted origin: still no execution (no Roslyn to gate),
+        // same DSL error path — the origin no longer changes the outcome.
         var prior = UserCodeSecurityPolicy.Mode;
         try
         {
@@ -112,7 +136,6 @@ public sealed class UserCodeGateCalculatorTests
             calc.Compile(RoslynOnlyEquation);
             Assert.False(calc.IsCompiled);
             Assert.False(calc.UsingDsl);
-            Assert.Contains("Blocked", calc.LastError);
         }
         finally { UserCodeSecurityPolicy.Mode = prior; }
     }
@@ -162,10 +185,12 @@ public sealed class UserCodeGateCalculatorTests
     }
 
     [Fact]
-    public void UserEquation_Interactive_RoslynOnlyEquation_UsesRoslynFallback()
+    public void UserEquation_Interactive_MemberAccessBody_ErrorGuidesToDsl()
     {
-        // A trusted source with no DSL form still compiles — via the Roslyn
-        // fallback — so interactive editing never regresses.
+        // #27 Phase 3 — with the Roslyn fallback gone, a trusted member-access
+        // body no longer compiles. The error should be actionable (mentions the
+        // DSL / a supported form) rather than a bare failure, since the user
+        // must now rewrite `z.Real` as the DSL `re(z)`.
         var calc = new UserEquationCalculator(8, 8)
         {
             FractalParameters = new FractalParameters
@@ -175,8 +200,9 @@ public sealed class UserCodeGateCalculatorTests
             }
         };
         calc.Compile(RoslynOnlyEquation);
-        Assert.True(calc.IsCompiled, $"expected Roslyn compile, got: {calc.LastError}");
+        Assert.False(calc.IsCompiled);
         Assert.False(calc.UsingDsl);
+        Assert.False(string.IsNullOrWhiteSpace(calc.LastError));
     }
 
     [Fact]
