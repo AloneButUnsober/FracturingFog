@@ -88,29 +88,29 @@ public sealed class UserCodeGateCalculatorTests
         finally { UserCodeSecurityPolicy.Mode = prior; }
     }
 
-    // A source with NO DSL form (member access can't be expressed in the
-    // Sandbox grammar). #27 Phase 3: the raw-C# Roslyn fallback is gone, so
-    // such a source no longer executes for ANY origin — it surfaces an
-    // editable DSL error instead. `return z*z + c;` no longer belongs here —
-    // it translates to the DSL and runs (see
-    // UserEquation_ExternalFile_TranslatableEquation_RunsOnDsl).
-    private const string RoslynOnlyEquation = "return z.Real + c;";
+    // A source with NO DSL form. #27 Phase 3: the raw-C# Roslyn fallback is
+    // gone, so such a source no longer executes for ANY origin — it surfaces an
+    // editable DSL error instead. `Complex.Abs` is a durable example: the DSL's
+    // `abs` has different semantics (|z| vs |z|²), so the preprocessor rejects
+    // it outright. (`z.Real` no longer belongs here — #27 Phase 5a translates
+    // member access to `re(z)`; `return z*z + c;` translates and runs.)
+    private const string NoDslFormEquation = "return Complex.Abs(z) + c;";
 
     [Fact]
     public void UserEquation_NoDslForm_DoesNotExecute_AnyOrigin()
     {
-        // #27 Phase 3 — no Roslyn path at all. A member-access body has no DSL
-        // form, so it fails to compile even for a trusted (Interactive) origin,
-        // and the error is a crisp DSL message (not the gate's "Blocked").
+        // #27 Phase 3 — no Roslyn path at all. A body with no DSL form fails to
+        // compile even for a trusted (Interactive) origin, and the error is a
+        // crisp DSL message (not the gate's "Blocked").
         var calc = new UserEquationCalculator(8, 8)
         {
             FractalParameters = new FractalParameters
             {
-                UserEquationSource = RoslynOnlyEquation,
+                UserEquationSource = NoDslFormEquation,
                 UserCodeOrigin = UserCodeOrigin.Interactive,
             }
         };
-        calc.Compile(RoslynOnlyEquation);
+        calc.Compile(NoDslFormEquation);
         Assert.False(calc.IsCompiled);
         Assert.False(calc.UsingDsl);
         Assert.DoesNotContain("Blocked", calc.LastError);
@@ -130,11 +130,11 @@ public sealed class UserCodeGateCalculatorTests
             {
                 FractalParameters = new FractalParameters
                 {
-                    UserEquationSource = RoslynOnlyEquation,
+                    UserEquationSource = NoDslFormEquation,
                     UserCodeOrigin = UserCodeOrigin.ExternalFile,
                 }
             };
-            calc.Compile(RoslynOnlyEquation);
+            calc.Compile(NoDslFormEquation);
             Assert.False(calc.IsCompiled);
             Assert.False(calc.UsingDsl);
         }
@@ -186,21 +186,21 @@ public sealed class UserCodeGateCalculatorTests
     }
 
     [Fact]
-    public void UserEquation_Interactive_MemberAccessBody_ErrorGuidesToDsl()
+    public void UserEquation_Interactive_NoDslForm_ErrorNotEmpty()
     {
-        // #27 Phase 3 — with the Roslyn fallback gone, a trusted member-access
-        // body no longer compiles. The error should be actionable (mentions the
-        // DSL / a supported form) rather than a bare failure, since the user
-        // must now rewrite `z.Real` as the DSL `re(z)`.
+        // #27 Phase 3 — with the Roslyn fallback gone, a trusted body with no DSL
+        // form no longer compiles, and the failure carries an actionable message
+        // (here the preprocessor's Complex.Abs rejection) rather than a bare
+        // failure.
         var calc = new UserEquationCalculator(8, 8)
         {
             FractalParameters = new FractalParameters
             {
-                UserEquationSource = RoslynOnlyEquation,
+                UserEquationSource = NoDslFormEquation,
                 UserCodeOrigin = UserCodeOrigin.Interactive,
             }
         };
-        calc.Compile(RoslynOnlyEquation);
+        calc.Compile(NoDslFormEquation);
         Assert.False(calc.IsCompiled);
         Assert.False(calc.UsingDsl);
         Assert.False(string.IsNullOrWhiteSpace(calc.LastError));
