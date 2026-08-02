@@ -48,7 +48,7 @@
                             <Button Classes="action neutral" Content="{Binding SpanButtonText}" Command="{Binding SpanCommand}" ToolTip.Tip="Span across all monitors" Margin="0,0,4,4" />
                             <Button Classes="action neutral" Content="Wall"   Command="{Binding WallpaperCommand}"  ToolTip.Tip="Render a wallpaper-sized image at the virtual-screen union of every monitor, regardless of window position or size. Use this on Linux/GNOME where Span mode cannot overlay the top bar + dock." Margin="0,0,4,4" />
                             <Button Classes="action neutral" Content="Image"  Command="{Binding ScreenshotCommand}" ToolTip.Tip="High-resolution screenshot" Margin="0,0,4,4" />
-                            <Button Classes="action neutral" Content="Poster" Command="{Binding PosterCommand}"     ToolTip.Tip="Print-ready poster image" Margin="0,0,0,4" />
+                            <Button Classes="action neutral" Content="{Binding PosterButtonText}" Command="{Binding PosterCommand}"     ToolTip.Tip="Print-ready poster image (click again while rendering to cancel)" Margin="0,0,0,4" />
                         </UniformGrid>
                         <UniformGrid Columns="3">
                             <Button Classes="action slideshow" Content="{Binding SlideshowButtonText}" Command="{Binding SlideshowCommand}"     ToolTip.Tip="Start/stop slideshow" Margin="0,0,4,0" />

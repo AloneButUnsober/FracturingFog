@@ -859,14 +859,43 @@ namespace FracturingFog.Hosting
 
             void Run()
             {
-                var widthTx = new TextBox { Text = "24", MinWidth = 70, PlaceholderText = "inches" };
-                var heightTx = new TextBox { Text = "36", MinWidth = 70, PlaceholderText = "inches" };
+                var ci = System.Globalization.CultureInfo.InvariantCulture;
+
+                // #189 — physical (poster) size fields, in the currently selected
+                // unit, plus their pixel-size twins. Either side may be edited; the
+                // other is kept in sync through the DPI. The returned dims are
+                // always PIXELS (parsed from the pixel fields on OK).
+                var widthTx = new TextBox { Text = "24", MinWidth = 70 };
+                var heightTx = new TextBox { Text = "36", MinWidth = 70 };
+                var pxWidthTx = new TextBox { Text = "7200", MinWidth = 70 };
+                var pxHeightTx = new TextBox { Text = "10800", MinWidth = 70 };
 
                 var portrait = new CheckBox { Content = "Portrait orientation", IsChecked = true, Foreground = Brushes.White };
+
+                // #189 feature 1 — Inches / Centimeters unit toggle.
+                var inchesRb = new RadioButton { Content = "Inches", GroupName = "units", IsChecked = true, Foreground = Brushes.White };
+                var cmRb = new RadioButton { Content = "Centimeters", GroupName = "units", Foreground = Brushes.White };
 
                 var lowDpi = new RadioButton { Content = "Low (150 DPI)", GroupName = "dpi", Foreground = Brushes.White };
                 var medDpi = new RadioButton { Content = "Med (300 DPI)", GroupName = "dpi", IsChecked = true, Foreground = Brushes.White };
                 var highDpi = new RadioButton { Content = "High (600 DPI)", GroupName = "dpi", Foreground = Brushes.White };
+
+                // #189 feature 3 — standard-definition presets. Blank first entry =
+                // "no preset"; a manual size edit snaps back to it.
+                var defCombo = new ComboBox { MinWidth = 160 };
+                var definitions = new (string Name, int W, int H)[]
+                {
+                    ("— none —", 0, 0),
+                    ("SD (640 × 480)", 640, 480),
+                    ("HD (1280 × 720)", 1280, 720),
+                    ("Full HD (1920 × 1080)", 1920, 1080),
+                    ("QHD (2560 × 1440)", 2560, 1440),
+                    ("4K UHD (3840 × 2160)", 3840, 2160),
+                    ("5K (5120 × 2880)", 5120, 2880),
+                    ("8K UHD (7680 × 4320)", 7680, 4320),
+                };
+                foreach (var d in definitions) defCombo.Items.Add(d.Name);
+                defCombo.SelectedIndex = 0;   // "— none —" shown after items exist
 
                 var pixelLabel = new TextBlock
                 {
@@ -874,28 +903,80 @@ namespace FracturingFog.Hosting
                     Margin = new Thickness(0, 6, 0, 0),
                     TextWrapping = TextWrapping.Wrap,
                 };
+                var wLbl = new TextBlock { Foreground = Brushes.White, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, 8, 6) };
+                var hLbl = new TextBlock { Foreground = Brushes.White, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, 8, 6) };
+
+                bool sync = false;   // re-entrancy guard for programmatic edits
 
                 int Dpi() => lowDpi.IsChecked == true ? 150 : highDpi.IsChecked == true ? 600 : 300;
-                (int w, int h) Pixels()
+                bool Cm() => cmRb.IsChecked == true;
+                double ToInch(double v) => Cm() ? v / 2.54 : v;
+                double FromInch(double inch) => Cm() ? inch * 2.54 : inch;
+                double ParseD(TextBox t)
                 {
-                    int.TryParse(widthTx.Text, out int wi);
-                    int.TryParse(heightTx.Text, out int hi);
-                    if (wi < 0) wi = 0;
-                    if (hi < 0) hi = 0;
-                    int dpi = Dpi();
-                    return (wi * dpi, hi * dpi);
+                    double.TryParse(t.Text, System.Globalization.NumberStyles.Any, ci, out double v);
+                    return v < 0 ? 0 : v;
                 }
-                void Refresh()
+                void SetText(TextBox t, string s) { sync = true; t.Text = s; sync = false; }
+                (int w, int h) PixelsNow()
                 {
-                    var (pw, ph) = Pixels();
+                    int.TryParse(pxWidthTx.Text, out int pw);
+                    int.TryParse(pxHeightTx.Text, out int ph);
+                    return (pw < 0 ? 0 : pw, ph < 0 ? 0 : ph);
+                }
+                void RefreshOut()
+                {
+                    var (pw, ph) = PixelsNow();
+                    pixelLabel.Foreground = Brushes.LightGray;
                     pixelLabel.Text = $"Output: {pw:N0} × {ph:N0} px  ({(long)pw * ph / 1_000_000:N0} MP)";
                 }
-                widthTx.PropertyChanged += (_, e) => { if (e.Property == TextBox.TextProperty) Refresh(); };
-                heightTx.PropertyChanged += (_, e) => { if (e.Property == TextBox.TextProperty) Refresh(); };
-                lowDpi.IsCheckedChanged += (_, _) => Refresh();
-                medDpi.IsCheckedChanged += (_, _) => Refresh();
-                highDpi.IsCheckedChanged += (_, _) => Refresh();
-                Refresh();
+                // Physical → pixels (poster fields drive).
+                void PosterToPixels()
+                {
+                    int dpi = Dpi();
+                    SetText(pxWidthTx, ((int)Math.Round(ToInch(ParseD(widthTx)) * dpi)).ToString(ci));
+                    SetText(pxHeightTx, ((int)Math.Round(ToInch(ParseD(heightTx)) * dpi)).ToString(ci));
+                    RefreshOut();
+                }
+                // Pixels → physical (pixel fields drive).
+                void PixelsToPoster()
+                {
+                    int dpi = Dpi();
+                    var (pw, ph) = PixelsNow();
+                    SetText(widthTx, FromInch(pw / (double)dpi).ToString("0.##", ci));
+                    SetText(heightTx, FromInch(ph / (double)dpi).ToString("0.##", ci));
+                    RefreshOut();
+                }
+                void UpdateUnitLabels()
+                {
+                    string u = Cm() ? "cm" : "in";
+                    wLbl.Text = $"Poster width ({u}):";
+                    hLbl.Text = $"Poster height ({u}):";
+                }
+                void ClearDefinition() { if (defCombo.SelectedIndex != 0) { sync = true; defCombo.SelectedIndex = 0; sync = false; } }
+
+                widthTx.PropertyChanged += (_, e) => { if (e.Property == TextBox.TextProperty && !sync) { ClearDefinition(); PosterToPixels(); } };
+                heightTx.PropertyChanged += (_, e) => { if (e.Property == TextBox.TextProperty && !sync) { ClearDefinition(); PosterToPixels(); } };
+                pxWidthTx.PropertyChanged += (_, e) => { if (e.Property == TextBox.TextProperty && !sync) { ClearDefinition(); PixelsToPoster(); } };
+                pxHeightTx.PropertyChanged += (_, e) => { if (e.Property == TextBox.TextProperty && !sync) { ClearDefinition(); PixelsToPoster(); } };
+                // DPI change keeps the physical size, recomputes pixels.
+                lowDpi.IsCheckedChanged += (_, _) => PosterToPixels();
+                medDpi.IsCheckedChanged += (_, _) => PosterToPixels();
+                highDpi.IsCheckedChanged += (_, _) => PosterToPixels();
+                // Unit change keeps the pixels, re-expresses the physical size.
+                inchesRb.IsCheckedChanged += (_, _) => { UpdateUnitLabels(); PixelsToPoster(); };
+                cmRb.IsCheckedChanged += (_, _) => { UpdateUnitLabels(); PixelsToPoster(); };
+                defCombo.SelectionChanged += (_, _) =>
+                {
+                    if (sync) return;
+                    int i = defCombo.SelectedIndex;
+                    if (i <= 0) return;
+                    SetText(pxWidthTx, definitions[i].W.ToString(ci));
+                    SetText(pxHeightTx, definitions[i].H.ToString(ci));
+                    PixelsToPoster();
+                };
+                UpdateUnitLabels();
+                RefreshOut();
 
                 var win = new Window
                 {
@@ -906,13 +987,6 @@ namespace FracturingFog.Hosting
                     CanResize = false,
                     ShowInTaskbar = false,
                     Background = Brushes.Black,
-                };
-
-                static TextBlock Lbl(string t) => new()
-                {
-                    Text = t,
-                    Foreground = Brushes.White,
-                    VerticalAlignment = VerticalAlignment.Center,
                 };
 
                 // Watermark sub-controls.
@@ -934,35 +1008,51 @@ namespace FracturingFog.Hosting
                 {
                     Margin = new Thickness(16),
                     ColumnDefinitions = new ColumnDefinitions("Auto,*"),
-                    RowDefinitions = new RowDefinitions("Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto"),
+                    RowDefinitions = new RowDefinitions("Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto"),
                 };
                 void Place(Control c, int row, int col) { Grid.SetRow(c, row); Grid.SetColumn(c, col); grid.Children.Add(c); }
+                void PlaceSpan(Control c, int row) { Grid.SetRow(c, row); Grid.SetColumn(c, 0); Grid.SetColumnSpan(c, 2); grid.Children.Add(c); }
 
-                var wLbl = Lbl("Poster width (in):");
-                var hLbl = Lbl("Poster height (in):");
-                wLbl.Margin = new Thickness(0, 0, 8, 6);
-                hLbl.Margin = new Thickness(0, 0, 8, 6);
+                int row = 0;
+
+                // Units row (#189 feature 1).
+                var unitRow = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 12, Margin = new Thickness(0, 0, 0, 6) };
+                unitRow.Children.Add(inchesRb);
+                unitRow.Children.Add(cmRb);
+                PlaceSpan(unitRow, row++);
+
+                // Definition preset row (#189 feature 3).
+                var defRow = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8, Margin = new Thickness(0, 0, 0, 6) };
+                defRow.Children.Add(new TextBlock { Text = "Definition:", Foreground = Brushes.White, VerticalAlignment = VerticalAlignment.Center });
+                defRow.Children.Add(defCombo);
+                PlaceSpan(defRow, row++);
+
                 widthTx.Margin = new Thickness(0, 0, 0, 6);
                 heightTx.Margin = new Thickness(0, 0, 0, 6);
-                Place(wLbl, 0, 0); Place(widthTx, 0, 1);
-                Place(hLbl, 1, 0); Place(heightTx, 1, 1);
+                Place(wLbl, row, 0); Place(widthTx, row, 1); row++;
+                Place(hLbl, row, 0); Place(heightTx, row, 1); row++;
 
                 var dpiRow = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 12, Margin = new Thickness(0, 0, 0, 4) };
                 dpiRow.Children.Add(lowDpi);
                 dpiRow.Children.Add(medDpi);
                 dpiRow.Children.Add(highDpi);
-                Grid.SetRow(dpiRow, 2); Grid.SetColumn(dpiRow, 0); Grid.SetColumnSpan(dpiRow, 2);
-                grid.Children.Add(dpiRow);
+                PlaceSpan(dpiRow, row++);
 
-                Grid.SetRow(portrait, 3); Grid.SetColumn(portrait, 0); Grid.SetColumnSpan(portrait, 2);
-                grid.Children.Add(portrait);
+                // Pixel-size fields (#189 feature 2).
+                var pxWLbl = new TextBlock { Text = "Pixel width (px):", Foreground = Brushes.White, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, 8, 6) };
+                var pxHLbl = new TextBlock { Text = "Pixel height (px):", Foreground = Brushes.White, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, 8, 6) };
+                pxWidthTx.Margin = new Thickness(0, 0, 0, 6);
+                pxHeightTx.Margin = new Thickness(0, 0, 0, 6);
+                Place(pxWLbl, row, 0); Place(pxWidthTx, row, 1); row++;
+                Place(pxHLbl, row, 0); Place(pxHeightTx, row, 1); row++;
 
-                Grid.SetRow(pixelLabel, 4); Grid.SetColumn(pixelLabel, 0); Grid.SetColumnSpan(pixelLabel, 2);
-                grid.Children.Add(pixelLabel);
+                PlaceSpan(portrait, row++);
+
+                // Replaces the old "Output" line; keeps the px + MP readout.
+                PlaceSpan(pixelLabel, row++);
 
                 // Watermark band — checkbox row, combo + edit-button row.
-                Grid.SetRow(useWatermark, 5); Grid.SetColumn(useWatermark, 0); Grid.SetColumnSpan(useWatermark, 2);
-                grid.Children.Add(useWatermark);
+                PlaceSpan(useWatermark, row++);
                 var wmRow = new StackPanel
                 {
                     Orientation = Orientation.Horizontal,
@@ -971,8 +1061,7 @@ namespace FracturingFog.Hosting
                 };
                 wmRow.Children.Add(wmCombo);
                 wmRow.Children.Add(editWmBtn);
-                Grid.SetRow(wmRow, 6); Grid.SetColumn(wmRow, 0); Grid.SetColumnSpan(wmRow, 2);
-                grid.Children.Add(wmRow);
+                PlaceSpan(wmRow, row++);
 
                 var ok = new Button { Content = "OK", MinWidth = 80, IsDefault = true };
                 var cancel = new Button { Content = "Cancel", MinWidth = 80, IsCancel = true };
@@ -980,11 +1069,11 @@ namespace FracturingFog.Hosting
                 void Close((int, int, bool, bool, string?)? r) { pending = r; win.Close(); }
                 ok.Click += (_, _) =>
                 {
-                    var (pw, ph) = Pixels();
+                    var (pw, ph) = PixelsNow();
                     if (pw <= 0 || ph <= 0)
                     {
                         pixelLabel.Foreground = Brushes.OrangeRed;
-                        pixelLabel.Text = "Enter positive width and height in inches.";
+                        pixelLabel.Text = "Enter a positive width and height.";
                         return;
                     }
                     Close((pw, ph, portrait.IsChecked == true,
@@ -1002,8 +1091,7 @@ namespace FracturingFog.Hosting
                 };
                 buttonRow.Children.Add(cancel);
                 buttonRow.Children.Add(ok);
-                Grid.SetRow(buttonRow, 7); Grid.SetColumn(buttonRow, 0); Grid.SetColumnSpan(buttonRow, 2);
-                grid.Children.Add(buttonRow);
+                PlaceSpan(buttonRow, row++);
 
                 win.Content = grid;
                 win.Closed += (_, _) => { if (!tcs.Task.IsCompleted) tcs.TrySetResult(pending); };
