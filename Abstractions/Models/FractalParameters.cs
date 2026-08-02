@@ -201,6 +201,16 @@ namespace FracturingFog.Models
         /// a few extra composites per render (cheap relative to sampling).</summary>
         public bool BuddhaProgressive { get; set; } = false;
 
+        /// <summary>Deterministic RNG seed for the Buddhabrot family Monte
+        /// Carlo sampler. Because Buddha is an alt calculator with no cheap
+        /// recolor path, any setting change forces a full re-sample; without a
+        /// fixed seed each re-sample is a different random realization, so the
+        /// fractal appears to 'morph' when unrelated settings (color theme,
+        /// quality, lighting) change. A fixed seed makes identical params
+        /// render an identical image. Change the seed to draw a different
+        /// (but reproducible) sampling of the same fractal. (#193)</summary>
+        public int BuddhaSeed { get; set; } = 12345;
+
         // Mandelbox (Tom Lowe, 2010). Box-fold + sphere-fold + scale DE.
         /// <summary>Mandelbox scale parameter. Per iter:
         /// z = scale · sphereFold(boxFold(z)) + c. Default 2.0;
@@ -768,6 +778,7 @@ namespace FracturingFog.Models
                 BuddhaQualityMode = BuddhaQualityMode,
                 BuddhaMetropolis = BuddhaMetropolis,
                 BuddhaProgressive = BuddhaProgressive,
+                BuddhaSeed = BuddhaSeed,
                 MandelboxScale = MandelboxScale,
                 MandelboxFixedRadius = MandelboxFixedRadius,
                 MandelboxMinRadius = MandelboxMinRadius,

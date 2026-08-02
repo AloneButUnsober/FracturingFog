@@ -78,6 +78,7 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
         _buddhaQualityMode = _p.BuddhaQualityMode;
         _buddhaMetropolis = _p.BuddhaMetropolis;
         _buddhaProgressive = _p.BuddhaProgressive;
+        _buddhaSeed = _p.BuddhaSeed;
         _bulbPower = _p.BulbPower;
         _bulbIterations = _p.BulbIterations;
         _bulbCameraTheta = _p.BulbCameraTheta;
@@ -935,6 +936,12 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
         get => _buddhaProgressive;
         set { Set(ref _buddhaProgressive, value); _p.BuddhaProgressive = value; Fire(); }
     }
+
+    // #193 — deterministic Monte Carlo seed. Changing it draws a different but
+    // reproducible sampling of the same fractal; identical seed + params = an
+    // identical image (no more 'morph' when unrelated settings change).
+    private int _buddhaSeed;
+    public int BuddhaSeed { get => _buddhaSeed; set { Set(ref _buddhaSeed, value); _p.BuddhaSeed = value; Fire(); } }
 
     // ── Mandelbulb ──
     private double _bulbPower;
