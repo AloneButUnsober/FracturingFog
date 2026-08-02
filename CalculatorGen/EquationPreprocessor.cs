@@ -27,6 +27,17 @@
 //                         → 1/x^|k|     (k < 0)
 //   Complex.Pow(x, expr)  → exp(expr*log(x))    (non-integer exponent)
 //
+// Member access (#27 Phase 5a — the DSL has these functions; only the C#
+// property-access syntax needed a rewrite so saved equations keep working
+// after the raw-C# path was removed)
+//   x.Real                → re(x)
+//   x.Imaginary           → im(x)
+//   x.Phase               → arg(x)
+//   x.Magnitude           → sqrt(x*conj(x))   (|x|; avoids `abs`, whose meaning
+//                           differs between the CalcGen DSL (|x|²) and the
+//                           SandboxExpression runtime (|x|) — x*conj(x) = |x|²
+//                           and sqrt of that = |x| under both)
+//
 // Explicit reject (with crisp error messages)
 //   Complex.Abs(x)        — DSL `abs(x)` is |x|² (squared mag), not |x|
 //   Any other Complex.X   — falls through, reported on second pass
@@ -154,6 +165,13 @@ public static class EquationPreprocessor
             }
             s = s.Substring(0, mNew.Index) + replacement + s.Substring(closeIdx + 1);
         }
+
+        // #27 Phase 5a — member-access rewrite. Run before the Complex.Abs /
+        // unsupported-member scans so an operand like `Complex.Sin(z).Real`
+        // resolves to `re(Complex.Sin(z))` and the inner call is picked up by
+        // the normal rewrite loop below.
+        s = RewriteMemberAccess(s);
+
         var mAbs = Regex.Match(s, @"\bComplex\.Abs\s*\(");
         if (mAbs.Success)
         {
@@ -334,6 +352,82 @@ public static class EquationPreprocessor
     }
 
     private static bool IsIdentPart(char c) => char.IsLetterOrDigit(c) || c == '_' || c == '.';
+
+    /// <summary>
+    /// #27 Phase 5a — rewrite `operand.Real / .Imaginary / .Phase / .Magnitude`
+    /// (System.Numerics.Complex accessors) into the DSL functions the sandbox
+    /// interpreter already supports: re / im / arg / sqrt(abs(·)). The operand
+    /// is the value immediately to the left of the `.` — a bare identifier /
+    /// number, a parenthesised group, or a call result (`f(x)` incl. a dotted
+    /// callee like `Complex.Sin(x)`). Applied to a fixed point so chained /
+    /// nested accessors fully resolve.
+    /// </summary>
+    private static string RewriteMemberAccess(string source)
+    {
+        string s = source;
+        for (int guard = 0; guard < 64; guard++)
+        {
+            var m = Regex.Match(s, @"\.(Real|Imaginary|Magnitude|Phase)\b");
+            if (!m.Success) break;
+
+            int dotIndex = m.Index;
+            int opStart = FindOperandStart(s, dotIndex);
+            if (opStart < 0)
+                break; // no valid operand — let the downstream parser report it
+
+            string operand = s.Substring(opStart, dotIndex - opStart);
+            int memberEnd = dotIndex + 1 + m.Groups[1].Value.Length; // past `.Member`
+            string repl = m.Groups[1].Value switch
+            {
+                "Real"      => $"re({operand})",
+                "Imaginary" => $"im({operand})",
+                "Phase"     => $"arg({operand})",
+                // |x| without `abs` (whose |x| vs |x|² meaning differs between
+                // the CalcGen DSL and the SandboxExpression runtime): x*conj(x)
+                // = |x|² in both, and sqrt of that is |x|.
+                "Magnitude" => $"sqrt(({operand})*conj({operand}))",
+                _           => operand,
+            };
+            s = s.Substring(0, opStart) + repl + s.Substring(memberEnd);
+        }
+        return s;
+    }
+
+    /// <summary>Index where the operand immediately left of <paramref name="dotIndex"/>
+    /// begins, or -1 when there is no value there. Handles a balanced `(…)`
+    /// group (optionally prefixed by a dotted callee name) and a bare
+    /// identifier / number run.</summary>
+    private static int FindOperandStart(string s, int dotIndex)
+    {
+        int i = dotIndex - 1;
+        if (i < 0) return -1;
+        char c = s[i];
+
+        if (c == ')')
+        {
+            int depth = 0;
+            while (i >= 0)
+            {
+                if (s[i] == ')') depth++;
+                else if (s[i] == '(') { depth--; if (depth == 0) break; }
+                i--;
+            }
+            if (i < 0) return -1; // unbalanced
+            // Absorb a preceding dotted callee (`Complex.Sin`, `sin`).
+            int j = i - 1;
+            while (j >= 0 && (char.IsLetterOrDigit(s[j]) || s[j] == '_' || s[j] == '.')) j--;
+            return j + 1;
+        }
+
+        if (char.IsLetterOrDigit(c) || c == '_' || c == '.')
+        {
+            int j = i;
+            while (j >= 0 && (char.IsLetterOrDigit(s[j]) || s[j] == '_' || s[j] == '.')) j--;
+            return j + 1;
+        }
+
+        return -1;
+    }
 
     private static int FindMatchingParen(string s, int openIdx)
     {

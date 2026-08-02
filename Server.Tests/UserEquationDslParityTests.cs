@@ -49,6 +49,15 @@ public sealed class UserEquationDslParityTests
         { "sin_of_sq",    "return Complex.Sin(z*z) + c;",    (z, c, n) => Complex.Sin(z * z) + c },
         { "iter_scaled",  "return z*z + c*n;",               (z, c, n) => z * z + c * n },
         { "nested_pow",   "return Complex.Pow(Complex.Pow(z, 2), 3) + c;", (z, c, n) => Complex.Pow(Complex.Pow(z, 2), 3) + c },
+        // #27 Phase 5a — member-access forms the preprocessor now translates.
+        { "real",         "return z.Real + c;",              (z, c, n) => z.Real + c },
+        { "imag",         "return z.Imaginary + c;",         (z, c, n) => z.Imaginary + c },
+        { "magnitude",    "return z.Magnitude + c;",         (z, c, n) => z.Magnitude + c },
+        { "phase",        "return z.Phase + c;",             (z, c, n) => z.Phase + c },
+        { "paren_real",   "return (z*z).Real + c;",          (z, c, n) => (z * z).Real + c },
+        { "call_real",    "return Complex.Sin(z).Real + c;", (z, c, n) => Complex.Sin(z).Real + c },
+        { "real_imag_mix","return z.Real*z.Real - z.Imaginary*z.Imaginary + c;",
+                          (z, c, n) => z.Real * z.Real - z.Imaginary * z.Imaginary + c },
     };
 
     // z samples avoid the origin and the negative-real axis so log's branch
