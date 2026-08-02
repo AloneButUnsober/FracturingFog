@@ -277,7 +277,7 @@ A modeless two-column floating editor for creating and tweaking themes with **li
 | Left column | Right column |
 |---|---|
 | Target (region + base theme picker) | 3D Lighting (Phong / PBR shared params) |
-| Identity (name, category, description, max zoom) | Phong 3D extras (key/fill spec, fill diff) |
+| Identity (name, category, description, max zoom) | Phong 3D extras (key/fill/rim spec + diff scales) |
 | Kind (Gradient / Cycling / Phong3D / Pbr3D) | PBR 3D extras (mode, glow exp/scale, material bands) |
 | Stops (color-stop list editor) | |
 | Cycle (cycling-speed numeric) | |
@@ -304,6 +304,7 @@ A modeless two-column floating editor for creating and tweaking themes with **li
 - **Region jump** — pick a region from the target dropdown to navigate without leaving the editor.
 - **Save to library** persists the theme to `%APPDATA%\FracturingFog\colorthemes.json` and rebuilds the theme combo. **An overwrite confirmation prompt appears if the typed name matches an existing user theme** (v0.6.2+).
 - **From Image…** — extract a 5-stop palette from any PNG / JPG via k-means in CIELAB.
+- **🎲 Random** — one-click Kind-aware theme generator. Rebuilds the stops via a golden-ratio hue walk, then randomizes the extras relevant to the current Kind (cycle, 3D lights, Phong/PBR extras, material bands) plus optional Interpolation, In-set, and Post-FX sections via a toggle row. **Random Experimental** switches between artful (clamped, palette-related) and experimental (caps removed) ranges. A **Seed** field with a **Use Seed** checkbox makes any generated theme reproducible; the seed used is recorded in the Description.
 
 See [Docs/ColorThemeEditor-Guide.md](Docs/ColorThemeEditor-Guide.md) for the full walkthrough + 20 worked examples.
 
