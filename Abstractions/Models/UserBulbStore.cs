@@ -121,7 +121,15 @@ namespace FracturingFog.Models
                     // anything changed so the user sees it on next load too.
                     bool changed = TopUpBuiltins();
                     changed |= MigrateBuiltinsToDsl();
-                    if (changed) Save();
+                    if (changed)
+                    {
+                        // #27 Phase 5a — the DSL migration rewrites stored
+                        // built-in bodies in place; snapshot the original file
+                        // first so it is recoverable independent of the rolling
+                        // AtomicFile .bak.
+                        UserDataBackup.SnapshotBeforeMigration(EquationsFile, "dslmigration");
+                        Save();
+                    }
                 }
             }
             catch
