@@ -1498,6 +1498,13 @@ namespace FracturingFog.Rendering
             var p = ViewState.FractalParameters;
             if (p == null) return;
 
+            // #27 Phase 0 — stamp user-code provenance; a cross-user imported
+            // region's inline raw-C# source is refused by the gate. Local-store
+            // sources below re-mark Interactive.
+            p.UserCodeOrigin = region.ExternalOrigin
+                ? FracturingFog.Security.UserCodeOrigin.ExternalFile
+                : FracturingFog.Security.UserCodeOrigin.Interactive;
+
             if (region.FractalType == FractalType.UserEquation
                 && !string.IsNullOrWhiteSpace(region.UserEquationName))
             {
@@ -1506,6 +1513,7 @@ namespace FracturingFog.Rendering
                 {
                     p.UserEquationSource = entry.Source;
                     p.UserEquationName = entry.Name;
+                    p.UserCodeOrigin = FracturingFog.Security.UserCodeOrigin.Interactive;
                     CompileUserEquation(entry.Source);
                 }
             }
@@ -1531,6 +1539,7 @@ namespace FracturingFog.Rendering
                     source = entry.Source;
                     p.UserBulbSource = entry.Source;
                     p.UserBulbName = entry.Name;
+                    p.UserCodeOrigin = FracturingFog.Security.UserCodeOrigin.Interactive;
                 }
                 else if (!string.IsNullOrWhiteSpace(region.UserBulbSource))
                 {

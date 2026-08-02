@@ -524,11 +524,15 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
             case EquationEngine.UserEquation:
                 p.UserEquationSource = r.Source;
                 p.UserEquationName = r.Name;
+                // #27 Phase 0 — promoted registry is the user's own; trusted.
+                // Also resets any stale ExternalFile stamp from a prior region.
+                p.UserCodeOrigin = FracturingFog.Security.UserCodeOrigin.Interactive;
                 _renderHost.CompileUserEquation(r.Source);
                 break;
             case EquationEngine.UserBulb:
                 p.UserBulbSource = r.Source;
                 p.UserBulbName = r.Name;
+                p.UserCodeOrigin = FracturingFog.Security.UserCodeOrigin.Interactive;
                 _renderHost.CompileUserBulb(r.Source);
                 break;
         }

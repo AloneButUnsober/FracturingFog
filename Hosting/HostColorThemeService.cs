@@ -312,6 +312,15 @@ namespace FracturingFog.Hosting
             if (p == null) return;
             var host = _renderHost as FractalRenderHost;
 
+            // #27 Phase 0 — stamp user-code provenance before any Compile call.
+            // A region loaded from a cross-user import is untrusted, so an inline
+            // raw-C# source it carries is refused by the gate. Sources pulled
+            // from the local library stores below are the user's own and are
+            // re-marked Interactive.
+            p.UserCodeOrigin = region.ExternalOrigin
+                ? FracturingFog.Security.UserCodeOrigin.ExternalFile
+                : FracturingFog.Security.UserCodeOrigin.Interactive;
+
             if (region.FractalType == FractalType.UserEquation
                 && !string.IsNullOrWhiteSpace(region.UserEquationName))
             {
@@ -320,6 +329,7 @@ namespace FracturingFog.Hosting
                 {
                     p.UserEquationSource = entry.Source;
                     p.UserEquationName = entry.Name;
+                    p.UserCodeOrigin = FracturingFog.Security.UserCodeOrigin.Interactive; // local library = trusted
                     host?.CompileUserEquation(entry.Source);
                 }
             }
@@ -347,6 +357,7 @@ namespace FracturingFog.Hosting
                     source = entry.Source;
                     p.UserBulbSource = entry.Source;
                     p.UserBulbName = entry.Name;
+                    p.UserCodeOrigin = FracturingFog.Security.UserCodeOrigin.Interactive; // local library = trusted
                 }
                 else if (!string.IsNullOrWhiteSpace(region.UserBulbSource))
                 {
@@ -896,6 +907,13 @@ namespace FracturingFog.Hosting
             {
                 if (string.IsNullOrWhiteSpace(region.Name)) { skipped++; continue; }
                 region.RegionType = RegionType.UserDefined;
+                // #27 Phase 0 — mark cross-user imports untrusted so applying a
+                // raw-C# UserEquation/UserBulb source stamps ExternalFile and the
+                // gate refuses it. NB: the flag is runtime-only ([JsonIgnore]);
+                // once persisted into the user's own regions.json it is treated
+                // as a trusted local region on the next launch. Phases 1-3 remove
+                // the raw-C# path entirely and close that reload gap.
+                region.ExternalOrigin = true;
                 if (FractalRegionLibrary.Instance.FindByName(region.Name) != null)
                 {
                     skipped++;

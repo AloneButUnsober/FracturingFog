@@ -94,13 +94,6 @@ public sealed class UserEquationCalculator : IFractalCalculator
     /// <summary>True if last compile produced a usable delegate.</summary>
     public bool IsCompiled => _compiled != null;
 
-    /// <summary>Provenance of the source handed to <see cref="Compile"/>.
-    /// #27 Phase 0 — the raw-C# Roslyn compile is gated on this via
-    /// <see cref="UserCodeGate"/>. Defaults to Interactive (editor use);
-    /// file-load paths set <see cref="UserCodeOrigin.ExternalFile"/> so a
-    /// hostile equation in a shared region/scene cannot execute on open.</summary>
-    public UserCodeOrigin CompileOrigin { get; set; } = UserCodeOrigin.Interactive;
-
     private Func<Complex, Complex, int, Complex>? _compiled;
     private string _compiledSource = string.Empty;
     // Keeps the assembly backing _compiled alive. Collectible so a superseded
@@ -138,8 +131,9 @@ public sealed class UserEquationCalculator : IFractalCalculator
 
         // #27 Phase 0 — trust-boundary gate. Raw-C# user code is arbitrary
         // in-process execution; refuse it for untrusted (file-borne) origins
-        // before it reaches Roslyn.
-        var gate = UserCodeGate.EnsureRoslynAllowed(CompileOrigin);
+        // before it reaches Roslyn. Origin travels with the source on
+        // FractalParameters (stamped ExternalFile by disk-load boundaries).
+        var gate = UserCodeGate.EnsureRoslynAllowed(FractalParameters.UserCodeOrigin);
         if (!gate.Allowed)
         {
             _compiled = null;

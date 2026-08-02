@@ -190,14 +190,6 @@ public sealed class UserBulbCalculator : IFractalCalculator
     // render blank; they need the orbit seeded AT the sample point instead.
     // Default true = classic z=0 + c seeding (safe for z^p+c style maps).
     private bool _mapUsesC = true;
-
-    /// <summary>Provenance of the source handed to <see cref="Compile"/>.
-    /// #27 Phase 0 — the raw-C# (Roslyn compiler) path is gated on this via
-    /// <see cref="UserCodeGate"/>. The Sandbox DSL compiler is always allowed
-    /// (no BCL access). Defaults to Interactive; file-load paths set
-    /// <see cref="UserCodeOrigin.ExternalFile"/>.</summary>
-    public UserCodeOrigin CompileOrigin { get; set; } = UserCodeOrigin.Interactive;
-
     private readonly UserBulbTemporalCache _cache = new();
     private UserBulbGpuCalculator? _gpu;
     private UserBulbSandboxGpuCompiler? _sandboxGpu;
@@ -285,8 +277,9 @@ public sealed class UserBulbCalculator : IFractalCalculator
         // string-interpolates raw user C# into a class template and compiles it
         // with full BCL references (arbitrary in-process execution). Refuse it
         // for untrusted (file-borne) origins; the Sandbox path above is safe and
-        // stays ungated.
-        var gate = UserCodeGate.EnsureRoslynAllowed(CompileOrigin);
+        // stays ungated. Origin travels with the source on FractalParameters
+        // (stamped ExternalFile by disk-load boundaries).
+        var gate = UserCodeGate.EnsureRoslynAllowed(FractalParameters.UserCodeOrigin);
         if (!gate.Allowed)
         {
             _compiled = null;

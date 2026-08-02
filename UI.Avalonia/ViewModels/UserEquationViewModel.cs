@@ -224,6 +224,7 @@ public sealed class UserEquationViewModel : ViewModelBase
             Source = next;
             _debounce.Disposable = null;
             _params.UserEquationSource = next;
+            _params.UserCodeOrigin = FracturingFog.Security.UserCodeOrigin.Interactive;
             CompileRequested?.Invoke();
             if (_validateForCalcGen) ValidateCalcGenForCurrentSource();
         }
@@ -492,6 +493,9 @@ public sealed class UserEquationViewModel : ViewModelBase
         _debounce.Disposable = null;
         if (_activeTabIndex != 0) return;
         _params.UserEquationSource = _source;
+        // #27 Phase 0 — editor content is interactive/trusted; clear any
+        // ExternalFile stamp left by a previously-viewed imported region.
+        _params.UserCodeOrigin = FracturingFog.Security.UserCodeOrigin.Interactive;
         CompileRequested?.Invoke();
     }
 
@@ -532,6 +536,7 @@ public sealed class UserEquationViewModel : ViewModelBase
             .Subscribe(_ =>
             {
                 _params.UserEquationSource = _source;
+                _params.UserCodeOrigin = FracturingFog.Security.UserCodeOrigin.Interactive;
                 CompileRequested?.Invoke();
                 // After Roslyn compile, also surface CalcGen-compatibility
                 // problems if the user opted in. Roslyn won't catch them
