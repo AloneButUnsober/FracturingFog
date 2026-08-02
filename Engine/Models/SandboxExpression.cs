@@ -27,7 +27,12 @@
 //   z, c, n               (input slots, refreshed per iteration)
 //   pi, e, i              (constants)
 // Functions:
-//   Sin Cos Tan Sinh Cosh Tanh Exp Log Sqrt Abs Conj Re Im Arg Pow(z,w)
+//   sin cos tan sinh cosh tanh exp log sqrt abs conj re im arg
+//   asin acos atan asinh acosh atanh          (1-arg; complex outside real domain)
+//   floor sign                                (1-arg; per-component)
+//   pow(z,w) atan2(y,x) min(a,b) max(a,b)     (2-arg)
+//   mod(x,p)                                  (2-arg; centered per-component)
+//   clamp(x,lo,hi)                            (3-arg; real-valued)
 
 using System;
 using System.Collections.Generic;
@@ -169,11 +174,26 @@ namespace FracturingFog.Models
 
         public override SbxVal Eval(SbxVal[] env)
         {
-            if (Name == "pow")
+            // Multi-arg functions first (evaluate their own args).
+            switch (Name)
             {
-                var a = Args[0].Eval(env);
-                var b = Args[1].Eval(env);
-                return SbxVal.Pow(a, b);
+                case "pow":   return SbxVal.Pow(Args[0].Eval(env), Args[1].Eval(env));
+                // atan2/min/max/clamp are real-valued: operands projected via
+                // AsReal (signed value if real, magnitude if complex) — mirrors
+                // the 3D bulb DSL's min/max/clamp semantics.
+                case "atan2": return SbxVal.Real(Math.Atan2(Args[0].Eval(env).AsReal(), Args[1].Eval(env).AsReal()));
+                case "min":   return SbxVal.Real(Math.Min(Args[0].Eval(env).AsReal(), Args[1].Eval(env).AsReal()));
+                case "max":   return SbxVal.Real(Math.Max(Args[0].Eval(env).AsReal(), Args[1].Eval(env).AsReal()));
+                case "clamp": return SbxVal.Real(Math.Clamp(Args[0].Eval(env).AsReal(), Args[1].Eval(env).AsReal(), Args[2].Eval(env).AsReal()));
+                // mod: centered per-component modulo (matches Vec3.Mod's
+                // x - p*floor(x/p + 0.5)); period from the 2nd operand's AsReal.
+                case "mod":
+                {
+                    var m = Args[0].Eval(env);
+                    double p = Args[1].Eval(env).AsReal();
+                    if (m.IsReal) return SbxVal.Real(CenteredMod(m.R, p));
+                    return new SbxVal(CenteredMod(m.R, p), CenteredMod(m.I, p));
+                }
             }
 
             var x = Args[0].Eval(env);
@@ -192,14 +212,35 @@ namespace FracturingFog.Models
                 case "sqrt": return x.IsReal && x.R >= 0
                                 ? SbxVal.Real(Math.Sqrt(x.R))
                                 : SbxVal.Cx(Complex.Sqrt(x.AsComplex()));
+                // Inverse trig / hyperbolic: real result inside the principal
+                // real domain, complex continuation outside it.
+                case "asin":  return x.IsReal && x.R >= -1 && x.R <= 1 ? SbxVal.Real(Math.Asin(x.R)) : SbxVal.Cx(Complex.Asin(x.AsComplex()));
+                case "acos":  return x.IsReal && x.R >= -1 && x.R <= 1 ? SbxVal.Real(Math.Acos(x.R)) : SbxVal.Cx(Complex.Acos(x.AsComplex()));
+                case "atan":  return x.IsReal ? SbxVal.Real(Math.Atan(x.R)) : SbxVal.Cx(Complex.Atan(x.AsComplex()));
+                case "asinh": return x.IsReal ? SbxVal.Real(Math.Asinh(x.R)) : SbxVal.Cx(ComplexAsinh(x.AsComplex()));
+                case "acosh": return x.IsReal && x.R >= 1 ? SbxVal.Real(Math.Acosh(x.R)) : SbxVal.Cx(ComplexAcosh(x.AsComplex()));
+                case "atanh": return x.IsReal && x.R > -1 && x.R < 1 ? SbxVal.Real(Math.Atanh(x.R)) : SbxVal.Cx(ComplexAtanh(x.AsComplex()));
                 case "abs":  return SbxVal.Real(x.IsReal ? Math.Abs(x.R) : Math.Sqrt(x.R * x.R + x.I * x.I));
                 case "conj": return x.IsReal ? x : new SbxVal(x.R, -x.I);
                 case "re":   return SbxVal.Real(x.R);
                 case "im":   return SbxVal.Real(x.IsReal ? 0.0 : x.I);
                 case "arg":  return SbxVal.Real(x.IsReal ? (x.R < 0 ? Math.PI : 0.0) : Math.Atan2(x.I, x.R));
+                // floor/sign apply per-component (reduce to scalar when real).
+                case "floor": return x.IsReal ? SbxVal.Real(Math.Floor(x.R)) : new SbxVal(Math.Floor(x.R), Math.Floor(x.I));
+                case "sign":  return x.IsReal ? SbxVal.Real(Math.Sign(x.R)) : new SbxVal(Math.Sign(x.R), Math.Sign(x.I));
                 default:     throw new InvalidOperationException("Unknown function " + Name);
             }
         }
+
+        // x - p*floor(x/p + 0.5): centered modulo into [-p/2, p/2). Matches
+        // Vec3.Mod so the 2D and 3D DSLs share one 'mod' meaning.
+        private static double CenteredMod(double x, double p)
+            => p == 0.0 ? x : x - p * Math.Floor(x / p + 0.5);
+
+        // Complex inverse-hyperbolic continuations (no BCL Complex.Asinh etc.).
+        private static Complex ComplexAsinh(Complex z) => Complex.Log(z + Complex.Sqrt(z * z + Complex.One));
+        private static Complex ComplexAcosh(Complex z) => Complex.Log(z + Complex.Sqrt(z * z - Complex.One));
+        private static Complex ComplexAtanh(Complex z) => 0.5 * Complex.Log((Complex.One + z) / (Complex.One - z));
     }
 
     /// <summary>Parsed Sandbox expression that can be evaluated per pixel.</summary>
@@ -463,8 +504,12 @@ namespace FracturingFog.Models
             {
                 "sin" or "cos" or "tan" or "sinh" or "cosh" or "tanh"
                     or "exp" or "log" or "sqrt"
-                    or "abs" or "conj" or "re" or "im" or "arg" => 1,
-                "pow" => 2,
+                    or "abs" or "conj" or "re" or "im" or "arg"
+                    or "asin" or "acos" or "atan"
+                    or "asinh" or "acosh" or "atanh"
+                    or "floor" or "sign" => 1,
+                "pow" or "atan2" or "min" or "max" or "mod" => 2,
+                "clamp" => 3,
                 _ => -1
             };
 
