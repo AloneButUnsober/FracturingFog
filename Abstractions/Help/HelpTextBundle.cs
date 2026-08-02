@@ -651,6 +651,43 @@ controls are hidden.
   Minimum 2 stops required. Linear interpolation between consecutive
   stops; outer stops clamp.
 
+=== Randomize (Random Theme Generator) ===
+
+The ""Random"" button (dice icon) generates a whole theme in one click,
+not just the palette. It always rebuilds the colour stops via a
+golden-ratio hue walk, then adds extra randomized settings chosen by
+the current Kind and by the toggle row beneath the button:
+
+  Colour stops   Always.
+  Interpolation  Space / curve / transfer / strength / gamma. Toggle
+                 ""Interpolation"" (default on).
+  Cycle          Offset / density / speed / wrap. All Kinds but Gradient.
+  3D light rig   Phong3D + Pbr3D (placement, colours, shininess,
+                 steepness, ambient; rim included at random).
+  Phong extras   Phong3D only (key/fill/rim spec + diff scales).
+  PBR            Pbr3D only (lighting mode, glow, material bands).
+  In-set colour  Toggle ""In-set"" (default on).
+  Post-FX        Toggle ""Post-FX"" (default off).
+
+Toggles:
+  Random Experimental  Off = artful: values stay in logical ranges and
+                       light / in-set colours are pulled from the
+                       generated palette. On = experimental: caps removed,
+                       full-range randomness.
+  In-set               Include a random interior colour (artful = a dark
+                       palette-family colour, opaque).
+  Post-FX              Include random Brightness / Contrast / Adaptive-HE.
+                       Ticking it also ticks the three Use-* Post-FX
+                       checkboxes to match. Artful caps B/C at +/-20 and
+                       Adaptive-HE under 50.
+  Interpolation        Include random interpolation settings.
+
+Seed / reproducibility:
+  Each click records the seed in the Description and the Seed field.
+  ""Use Seed"" off (default): the Seed field is disabled and a fresh seed
+  is drawn each click. On: the field value drives the next click. Same
+  seed + toggles + Kind + Experimental state reproduces the exact theme.
+
 === 3D Lighting (Phong3D + Pbr3D) ===
 
   Steepness   Z-scale on the synthetic surface normal. Higher =
@@ -675,7 +712,10 @@ controls are hidden.
 === In-Set Color ===
 
 Override the in-set fill (default opaque black). Useful when the
-gradient's tail is dark and ""black holes"" would visually merge.
+gradient's tail is dark and ""black holes"" would visually merge. The
+override carries an alpha channel: below 255 the interior composites
+over the 2D interior background (per-theme, #96), multiplied by the
+global InteriorAlpha knob.
 
 === Post-FX Defaults ===
 
