@@ -107,7 +107,7 @@
         <!-- BuddhaBrot / Nebulabrot / Anti-* family -->
         <Grid IsVisible="{Binding IsBuddhaBrot}"
               ColumnDefinitions="160,*"
-              RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto">
+              RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto">
             <TextBlock Grid.Row="0" Grid.Column="0" Text="Samples:" VerticalAlignment="Center" />
             <NumericUpDown Grid.Row="0" Grid.Column="1"
                            Minimum="50000" Maximum="50000000" Increment="50000" FormatString="N0"
@@ -145,6 +145,11 @@
                       IsChecked="{Binding BuddhaProgressive, Mode=TwoWay}"
                       Margin="0,2"
                       ToolTip.Tip="Composites image in 8 chunks. Cancel mid-render keeps a usable partial result." />
+            <TextBlock Grid.Row="8" Grid.Column="0" Text="Seed:" VerticalAlignment="Center" />
+            <NumericUpDown Grid.Row="8" Grid.Column="1"
+                           Minimum="0" Maximum="2147483647" Increment="1" FormatString="F0"
+                           Value="{Binding BuddhaSeed, Mode=TwoWay}" Margin="0,2"
+                           ToolTip.Tip="Deterministic Monte Carlo seed. Fixed seed = identical image on every re-render (no morph when unrelated settings change). Change it to draw a different but reproducible sampling." />
         </Grid>
 
         <!-- Plasma -->
