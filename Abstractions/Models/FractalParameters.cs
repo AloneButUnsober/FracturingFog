@@ -630,9 +630,11 @@ namespace FracturingFog.Models
         public UserBulbBackendKind UserBulbBackend { get; set; } = UserBulbBackendKind.CPU;
         /// <summary>Algebra mode: Vec3 (3D triplex) or Quat (4D Hamilton). Affects step signature.</summary>
         public UserBulbAxisModeKind UserBulbAxisMode { get; set; } = UserBulbAxisModeKind.Vec3;
-        /// <summary>Step-function compiler. Roslyn = full C# body (default).
-        /// Sandbox = restricted DSL (no BCL, shareable; Vec3 + Quat, CPU + GPU).</summary>
-        public UserBulbCompilerKind UserBulbCompiler { get; set; } = UserBulbCompilerKind.Roslyn;
+        /// <summary>Step-function compiler. Sandbox = restricted DSL (no BCL,
+        /// shareable; Vec3 + Quat, CPU + GPU) — the default since #27 Phase 2c.
+        /// Roslyn = full C# body; the Sandbox path falls back to it for a
+        /// trusted origin when a body has no DSL form.</summary>
+        public UserBulbCompilerKind UserBulbCompiler { get; set; } = UserBulbCompilerKind.Sandbox;
         /// <summary>#27 Phase 0 — trust provenance of the user-code source
         /// (UserEquationSource / UserBulbSource) carried by this params object.
         /// Gates the raw-C# Roslyn compile: ExternalFile (loaded from a shared
