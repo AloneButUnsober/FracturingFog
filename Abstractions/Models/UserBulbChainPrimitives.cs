@@ -28,7 +28,7 @@ namespace FracturingFog.Models
     {
         public string DisplayName { get; init; } = string.Empty;
         public string DefaultOutputName { get; init; } = "out";
-        public string Source { get; init; } = "return z;";
+        public string Source { get; init; } = "z";
         public string Description { get; init; } = string.Empty;
 
         /// <summary>Per-iteration linear scale of this fold, for the scalar-KIFS
@@ -72,9 +72,8 @@ namespace FracturingFog.Models
                 DefaultOutputName = IdMandelbox,
                 KifsScale = 2.0,
                 Source =
-                    "// Classic Mandelbox fold step. scale ≈ 2, fixedRadius 1, minRadius 0.5.\n" +
-                    "var v = Vec3.SphereFold(Vec3.BoxFold(z, 1.0), 0.5, 1.0);\n" +
-                    "return v * 2.0 + c;",
+                    "// Classic Mandelbox fold step. scale ~ 2, fixedRadius 1, minRadius 0.5.\n" +
+                    "spherefold(boxfold(z, 1.0), 0.5, 1.0) * 2.0 + c",
                 Description = "z = scale·sphereFold(boxFold(z)) + c. Try scale -1.5, 2, or 3.",
             },
             new()
@@ -84,11 +83,12 @@ namespace FracturingFog.Models
                 KifsScale = 3.0,
                 Source =
                     "// Menger-sponge fold: |x|,|y|,|z| then scale-3 from (1,1,1).\n" +
-                    "var v = Vec3.Abs(z);\n" +
-                    "if (v.X - v.Y < 0) v = new Vec3(v.Y, v.X, v.Z);\n" +
-                    "if (v.X - v.Z < 0) v = new Vec3(v.Z, v.Y, v.X);\n" +
-                    "if (v.Y - v.Z < 0) v = new Vec3(v.X, v.Z, v.Y);\n" +
-                    "return new Vec3(v.X * 3.0 - 2.0, v.Y * 3.0 - 2.0, v.Z * 3.0);",
+                    "// if (cond) v = A;  becomes  v = (cond ? A : v) via nested lets.\n" +
+                    "let v0 = abs(z) in\n" +
+                    "let v1 = (v0.x - v0.y < 0 ? vec(v0.y, v0.x, v0.z) : v0) in\n" +
+                    "let v2 = (v1.x - v1.z < 0 ? vec(v1.z, v1.y, v1.x) : v1) in\n" +
+                    "let v3 = (v2.y - v2.z < 0 ? vec(v2.x, v2.z, v2.y) : v2) in\n" +
+                    "vec(v3.x * 3.0 - 2.0, v3.y * 3.0 - 2.0, v3.z * 3.0)",
                 Description = "Sort |components|, scale 3 from (1,1,1). Tile-3 fold.",
             },
             new()
@@ -98,11 +98,11 @@ namespace FracturingFog.Models
                 KifsScale = 2.0,
                 Source =
                     "// Sierpinski tetrahedron fold: 3 vertex reflections, scale-2 from (1,1,1).\n" +
-                    "var v = z;\n" +
-                    "if (v.X + v.Y < 0) v = new Vec3(-v.Y, -v.X,  v.Z);\n" +
-                    "if (v.X + v.Z < 0) v = new Vec3(-v.Z,  v.Y, -v.X);\n" +
-                    "if (v.Y + v.Z < 0) v = new Vec3( v.X, -v.Z, -v.Y);\n" +
-                    "return new Vec3(v.X * 2.0 - 1.0, v.Y * 2.0 - 1.0, v.Z * 2.0 - 1.0);",
+                    "let v0 = z in\n" +
+                    "let v1 = (v0.x + v0.y < 0 ? vec(-v0.y, -v0.x,  v0.z) : v0) in\n" +
+                    "let v2 = (v1.x + v1.z < 0 ? vec(-v1.z,  v1.y, -v1.x) : v1) in\n" +
+                    "let v3 = (v2.y + v2.z < 0 ? vec( v2.x, -v2.z, -v2.y) : v2) in\n" +
+                    "vec(v3.x * 2.0 - 1.0, v3.y * 2.0 - 1.0, v3.z * 2.0 - 1.0)",
                 Description = "3 vertex reflections, scale 2 from (1,1,1).",
             },
             new()
@@ -111,7 +111,7 @@ namespace FracturingFog.Models
                 DefaultOutputName = IdBulbPow,
                 Source =
                     "// Triplex spherical-power Mandelbulb step. Power 8 is canonical.\n" +
-                    "return Vec3.Pow(z, 8.0) + c;",
+                    "z^8.0 + c",
                 Description = "Real Mandelbulb iteration z^n + c. Change 8.0 to try p=2, 4, 16.",
             },
         };
@@ -171,7 +171,7 @@ namespace FracturingFog.Models
                 {
                     OutputName = IdBulbPow,
                     Source = "// Contract Menger output so bulb-pow stays under bailout.\n" +
-                             "return Vec3.Pow(" + IdMenger + " * 0.3, 8.0) + c;",
+                             "(" + IdMenger + " * 0.3)^8.0 + c",
                 },
             };
         }
@@ -191,11 +191,11 @@ namespace FracturingFog.Models
                     Source = "// Menger-style fold: |x|,|y|,|z| then sort descending (no scale).\n" +
                              "// A pure isometric fold — the scale lives in the last step so the\n" +
                              "// Scalar KIFS DE (declared scale 3) tracks it exactly.\n" +
-                             "var v = Vec3.Abs(z);\n" +
-                             "if (v.X - v.Y < 0) v = new Vec3(v.Y, v.X, v.Z);\n" +
-                             "if (v.X - v.Z < 0) v = new Vec3(v.Z, v.Y, v.X);\n" +
-                             "if (v.Y - v.Z < 0) v = new Vec3(v.X, v.Z, v.Y);\n" +
-                             "return v;",
+                             "let v0 = abs(z) in\n" +
+                             "let v1 = (v0.x - v0.y < 0 ? vec(v0.y, v0.x, v0.z) : v0) in\n" +
+                             "let v2 = (v1.x - v1.z < 0 ? vec(v1.z, v1.y, v1.x) : v1) in\n" +
+                             "let v3 = (v2.y - v2.z < 0 ? vec(v2.x, v2.z, v2.y) : v2) in\n" +
+                             "v3",
                 },
                 new()
                 {
@@ -203,14 +203,14 @@ namespace FracturingFog.Models
                     Source = "// Per-iteration rotation — the 'kaleidoscopic' twist. This is why the\n" +
                              "// preset needs DE Mode = Scalar KIFS: rotating across the fold's\n" +
                              "// discontinuity planes defeats the numerical-Jacobian DE. Try 0.1..0.8.\n" +
-                             "return Vec3.Rot(" + IdKifsFold + ", new Vec3(0, 1, 0), 0.3);",
+                             "rot(" + IdKifsFold + ", vec(0, 1, 0), 0.3)",
                 },
                 new()
                 {
                     OutputName = IdKifsScale,
                     Source = "// Scale-3 + translation offset. The scale factor here (3) must match\n" +
                              "// the KIFS Scale setting so the running-derivative DE is exact.\n" +
-                             "return " + IdKifsRot + " * 3.0 - new Vec3(2, 2, 0);",
+                             IdKifsRot + " * 3.0 - vec(2, 2, 0)",
                 },
             };
         }
