@@ -48,7 +48,7 @@ using FracturingFog.Models;
 
 namespace FracturingFog;
 
-public abstract class BuddhaFamilyCalculator : IFractalCalculator, IHeightFieldSource
+public abstract class BuddhaFamilyCalculator : IFractalCalculator, IHeightFieldSource, ISupportsCheapRecolor
 {
     // Per-thread orbit buffer size limit. At 200K × 8 bytes × 2 arrays × 32
     // threads ≈ 100 MB — high but manageable; without the cap a 1M iteration
@@ -229,13 +229,29 @@ public abstract class BuddhaFamilyCalculator : IFractalCalculator, IHeightFieldS
             // Composite to ColorBuffer. Progressive mode does it every batch
             // so a mid-render cancel still yields a usable image; single-pass
             // mode does it once after the only batch.
-            if (FractalParameters.BuddhaColorMode == BuddhaColorMode.ColorMap)
-                RenderColorMap();
-            else
-                RenderBands();
-
-            UpdateHeightField();   // #139 — density → relief height
+            Composite();
         }
+    }
+
+    /// <summary>#194 — recomposite <see cref="ColorBuffer"/> from the retained
+    /// hit histograms using the current <see cref="ColorMap"/> and parameters,
+    /// WITHOUT re-sampling. The Monte Carlo sample pass is the dominant cost, so
+    /// a colour-theme change routes here instead of a full Calculate(). The
+    /// _hits* buffers persist after Calculate (cleared only at the next
+    /// Calculate), so this is a pure composite over cached data.</summary>
+    public void Recolor() => Composite();
+
+    /// <summary>Composite the accumulated hit histograms into ColorBuffer per
+    /// the active BuddhaColorMode, then refresh the relief height field. Shared
+    /// by Calculate() (per batch) and Recolor().</summary>
+    private void Composite()
+    {
+        if (FractalParameters.BuddhaColorMode == BuddhaColorMode.ColorMap)
+            RenderColorMap();
+        else
+            RenderBands();
+
+        UpdateHeightField();   // #139 — density → relief height
     }
 
     /// <summary>#139 — build the Relief 3D height field from the orbit-density
