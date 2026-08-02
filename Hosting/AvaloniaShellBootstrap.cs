@@ -589,6 +589,11 @@ namespace FracturingFog.Hosting
             // equations don't appear in their editors' Saved lists.
             try { FractalRegionLibrary.Instance.Load(); } catch { }
             try { UserEquationStore.Instance.Load(); }    catch { }
+            // #27 Phase 5a — convert saved C# equations to the safe DSL once the
+            // store is loaded (backup-guarded, idempotent). After Phase 3 the
+            // live path is DSL-only, so translatable saved equations are
+            // persisted as DSL; untranslatable ones are left editable.
+            try { FracturingFog.UserEquationDslMigration.Run(UserEquationStore.Instance); } catch { }
             try { SandboxEquationStore.Instance.Load(); }  catch { }
             try { UserBulbStore.Instance.Load(); }         catch { }
             try { UserWatermarkStore.Instance.Load(); }    catch { }

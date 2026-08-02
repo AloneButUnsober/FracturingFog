@@ -164,5 +164,47 @@ namespace FracturingFog.Models
                 if (e.Name.Equals(name, StringComparison.OrdinalIgnoreCase)) return e;
             return null;
         }
+
+        /// <summary>
+        /// #27 Phase 5a — convert saved <see cref="UserEquationKind.UserEquation"/>
+        /// entries to the safe DSL using the supplied translator. The store is
+        /// UI-free, so the translation (EquationPreprocessor → SandboxExpression,
+        /// which live in higher layers) is injected: <paramref name="translate"/>
+        /// returns the DSL text when the C# source translates and validates, or
+        /// null to leave the entry as-is (no DSL form — it stays editable and the
+        /// live path shows the DSL error). Entries already tagged
+        /// <see cref="UserEquationKind.Dsl"/> are skipped, so this is idempotent.
+        ///
+        /// Before the first rewrite the current <c>userequations.json</c> is
+        /// snapshotted via <see cref="UserDataBackup"/> so a user's original
+        /// authored text is recoverable ([[feedback_no_save_over_examples]]).
+        /// Returns the number of entries converted.
+        /// </summary>
+        public int MigrateUserEquationsToDsl(Func<string, string?> translate)
+        {
+            if (translate == null) return 0;
+
+            var pending = new List<(UserEquationEntry Entry, string Dsl)>();
+            foreach (var e in Equations)
+            {
+                if (e.Kind != UserEquationKind.UserEquation) continue;
+                if (string.IsNullOrWhiteSpace(e.Source)) continue;
+                string? dsl = translate(e.Source);
+                if (string.IsNullOrWhiteSpace(dsl)) continue; // no DSL form — leave it
+                pending.Add((e, dsl!));
+            }
+            if (pending.Count == 0) return 0;
+
+            // Snapshot the original file before the destructive rewrite.
+            UserDataBackup.SnapshotBeforeMigration(EquationsFile, "dslmigration");
+
+            foreach (var (entry, dsl) in pending)
+            {
+                entry.Source = dsl;
+                entry.Kind = UserEquationKind.Dsl;
+            }
+            Save();
+            return pending.Count;
+        }
     }
 }
