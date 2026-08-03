@@ -321,23 +321,47 @@ generated calculator compiles with no CS errors and its **in-set escape mask**
 matches `SandboxCalculator`'s at shallow zoom (pipeline-independent — isolates the
 maths from the two renderers' differing smooth/colour code).
 
-**Remaining (keep #215 open):**
-- **General `pow(x, y)`** with `Complex.Pow` zero-guard semantics
-  (`Pow(0, k) = 0`) — the Phase 5a live-path fix emits `pow()` for negative /
-  general exponents, so negative-power maps render live but not via Compile &
-  Load. Needs a guarded complex-power implementation across scalar / AVX2 / DD /
-  QD (a plain `exp(y·log x)` desugar reintroduces the z = 0 blank the 5a fix
-  removed).
-- **Inverse trig** `asin acos atan asinh acosh atanh` — holomorphic; either
-  branch-cut-exact complex implementations (to match `Complex.Asin` et al.) or
-  log/sqrt identities with a documented branch-cut tolerance, plus differentiator
-  rules to keep DE.
-- **Per-component** `floor round ceil trunc fract sign` — match
-  SandboxExpression's per-component semantics (both Re and Im), needing AVX
-  intrinsics + DD/QD per-limb handling.
-- **#213 emitter bug** — CS0103 `Cr_v`/`Ci_v` in the perturbation/deriv **SIMD**
-  template path (deep-zoom; out of the shallow-parity scope but a real codegen
-  crash to fix, needs a repro from the affected saved map).
+**Tranche 2 — general pow / inverse trig / per-component (SHIPPED, branch
+`feat/usercode-phase6b-215`):**
+- **General `pow(base, exp)`** — arbitrary complex exponent, matching the
+  SandboxExpression runtime exactly: both-real operands → `Math.Pow` (so
+  `pow(-2, 3) = -8`), else `System.Numerics.Complex.Pow` (zero-guarded principal
+  branch, `pow(0, 0) = 1`, `pow(0, k) = 0`). New `PowC` node, distinct from the
+  integer-only `^` operator (`Pow`). Unblocks negative/fractional-power maps
+  (Donut Star, Movie Reel) via Compile & Load — the zero guard removes the
+  `0·(1/0)` blank the old `1/(z)^n` desugar produced at the z = 0 seed.
+- **Inverse trig** `asin acos atan asinh acosh atanh` — emitted through the SAME
+  BCL calls (`Complex.Asin/Acos/Atan`) and log-formula continuations
+  (`asinh/acosh/atanh`) the interpreter uses, so the complex branch is
+  bit-identical; the real-domain fast path differs only by an escape-mask-
+  invisible amount. Uniform-complex form reuses the `OpSin`/`ScalarComplex`/AVX
+  per-lane machinery. DE disabled (no analytic rules implemented) → gated with
+  `hasTrans` + the DE gate.
+- **Per-component** `floor round ceil trunc fract sign` — real functions applied
+  to Re and Im independently (`(F(re), F(im))`, ImZero-preserving), like the
+  existing `fold`. AVX2 uses the native round intrinsics (`Avx.Floor/Ceiling/
+  RoundToNearestInteger/RoundToZero` — round-to-even / toward-zero match
+  `Math.Round`/`Math.Truncate`); `sign` per-lane scalarises. DD/QD degrade to
+  double on the high limb.
+
+All three families fold into `hasTrans` + the DE gate (perturbation / SA /
+analytic DE off) and render on the direct scalar / AVX2 / DD / QD paths at shallow
+zoom. `CalcGenSandboxParityTests` grew 9 corpus entries (3 per family; escape-mask
+parity ≥ 98%).
+
+**#213 emitter bug (FIXED, same branch — Closes #213):** the perturbation
+c-broadcast locals (`Cr_v`/`Ci_v` for AVX, `Cr`/`Ci` in the scalar rebase path)
+were declared inside the generated **derivative** block, but the sibling **δ**
+block also binds `CRef` → those names. Any perturbation-eligible c-COEFFICIENT map
+(δ carries c, e.g. `c·z²`) referenced undeclared locals → CS0103, failing the
+whole Roslyn compile. Fixed by hoisting the declarations to the shared
+per-iteration scope (AVX-2 + AVX-512 template blocks and scalar
+`TryIterateRebasePixel`). Bug 2 (negative-power blank) is resolved by the new
+zero-guarded `pow()`. Regression tests in `CalcGenHotLoad213RegressionTests`.
+
+**Remaining (keep #215 open for future tranches):** analytic DE for the inverse
+trig (derivative rules to restore surface normals — currently flat for these) and
+any further SandboxExpression functions not yet mirrored.
 
 ## Correctness guarantee (requirement 3 — "any and all fractal math")
 
