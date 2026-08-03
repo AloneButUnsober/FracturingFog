@@ -22,11 +22,13 @@
 //   Complex.Log(x)        → log(x)
 //   Complex.Conjugate(x)  → conj(x)
 //   Complex.Divide(a, b)  → ((a)/(b))
-//   Complex.Pow(x, k_int) → x^k         (k ≥ 2)
-//                         → x           (k == 1)
+//   Complex.Pow(x, k_int) → (x)^k       (k ≥ 2)
+//                         → (x)         (k == 1)
 //                         → 1           (k == 0)
-//                         → 1/x^|k|     (k < 0)
-//   Complex.Pow(x, expr)  → exp(expr*log(x))    (non-integer exponent)
+//                         → pow(x, k)   (k < 0)   (#27 P5a: NOT 1/x^|k| — that
+//                                       yields NaN at x=0 where Pow(0,k)=0)
+//   Complex.Pow(x, expr)  → pow(x, expr)  (non-integer exp; NOT exp(expr*log x),
+//                                       which is NaN at base 0 vs Pow(0,0)=1)
 //   Math.Atan2(y, x)      → atan2(y, x)
 //   Math.Min/Max(a, b)    → min/max(a, b)
 //   Math.IEEERemainder    → mod(a, b)
@@ -397,7 +399,12 @@ public static class EquationPreprocessor
         string s = source;
         for (int guard = 0; guard < 64; guard++)
         {
-            var m = Regex.Match(s, @"\.(Real|Imaginary|Magnitude|Phase)\b");
+            // Property-access form only: `z.Phase`, `z.Real`, … These are never
+            // followed by `(`. The negative lookahead lets the CALL form
+            // `Complex.Phase(z)` fall through to RewriteCall("Complex.Phase")
+            // below (→ arg(z)); without it `.Phase` here would eat the member
+            // and yield the broken `arg(Complex)(z)`.
+            var m = Regex.Match(s, @"\.(Real|Imaginary|Magnitude|Phase)\b(?!\s*\()");
             if (!m.Success) break;
 
             int dotIndex = m.Index;
