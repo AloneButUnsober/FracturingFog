@@ -3,7 +3,9 @@
 Status: **active** — Phase 0 complete (0a/0b/0c); Phase 1 complete (1a/1b/1c);
 Phase 2 complete (2a/2b/2c; the original hard-delete 2d folded into Phase 3);
 Phase 3 complete (3a/3b/3c/3d) — **both raw-C# calculators now run DSL-only, no
-Roslyn fallback anywhere**; Phase 4 (ColorGen interpreter) next.
+Roslyn fallback anywhere**; Phase 5a complete (widen equation translation +
+persist saved equations to DSL, backup-guarded); Phase 4 (ColorGen interpreter)
+outstanding.
 Tracking issues: #27 (umbrella) + per-phase children (see [Tracking](#tracking)).
 
 ## Problem
@@ -188,6 +190,55 @@ Phase 2 — both had kept a trusted-origin Roslyn fallback until here).
   UserEquation / Sandbox / UserBulb over RPC — they run user step math + open
   iteration budgets even though the RCE primitive is gone). Full regression
   sweep green (Server.Tests 867/867), solution builds clean.
+
+### Phase 5a — migrate saved user equations to the DSL — **complete**
+Follow-up to Phase 3: after the raw-C# path was removed, a *saved* raw-C#
+equation with no DSL form stopped running. This widens the translation surface
+and persists translatable saved equations as DSL so shipped/user content keeps
+working. Issue #209 (PR #210, stacked on #208).
+- **5a-1** ✅ Extended `EquationPreprocessor` to translate the C# `Complex`
+  member accessors it used to reject (they had DSL equivalents; only the
+  syntax rewrite was missing): `x.Real → re(x)`, `x.Imaginary → im(x)`,
+  `x.Phase → arg(x)`, `x.Magnitude → sqrt(x*conj(x))`. Magnitude deliberately
+  avoids `abs`, whose meaning **differs** between the CalcGen DSL (|x|²) and the
+  `SandboxExpression` runtime (|x|); `x*conj(x)`=|x|² in both and sqrt of that is
+  |x| (the parity harness — which evaluates via `SandboxExpression` — caught the
+  divergence). Operand extraction covers identifier / paren-group / call-result.
+  `UserEquationDslParityTests` gains a member-access corpus (DSL == native
+  `Complex` within 1e-10). **Near-misses also closed:** `Complex.Divide(a,b)` →
+  `((a)/(b))` (preprocessor); `SandboxExpression` now resolves constants
+  case-insensitively (`E`/`PI`), skips `//` and `/* */` comments, and tolerates
+  a single trailing `;` — so saved equations using those forms translate. Bare
+  Math statics (`Sin`/`Pow`/…) already worked (the call parser lowercases).
+- **5a-2** ✅ `UserDataBackup.SnapshotBeforeMigration` — a timestamped
+  `<name>.<stamp>.<reason>.bak` snapshot taken before a store rewrites a user
+  JSON in place, distinct from `AtomicFile`'s rolling `.bak`. Retrofitted the
+  existing `UserBulbStore` built-in migration to snapshot first.
+- **5a-3** ✅ On startup (after `UserEquationStore.Load()`, via
+  `AvaloniaShellBootstrap`), `UserEquationDslMigration.Run` converts translatable
+  `Kind=UserEquation` entries to DSL text + `Kind=Dsl` — same
+  translate-then-validate (`EquationPreprocessor` → `SandboxExpression.Parse`)
+  the live calculator runs. `UserEquationStore.MigrateUserEquationsToDsl(translate)`
+  owns the file + backup + save (translation injected because the store is
+  UI-free); idempotent; untranslatable entries left editable. The migration lives
+  in Engine (needs both the preprocessor and the interpreter, which Abstractions
+  doesn't reference).
+
+### Phase 5b — statement blocks in the equation DSL (planned, #212)
+The saved equations still erroring after 5a are C# **statement blocks**
+(`var`/`if`/multi-statement/`return`). The DSL already has `let..in` (= `var`)
+and ternary (= `if`), so this is a **front-end** parser extension — desugar
+`T x = e; …`, `x = e; …`, `if (c) x = e; …`, `return r;` to nested `let`/ternary
+— not a capability or security change (still pure, no BCL, no loops). One hard
+case out of scope: Phoenix-style maps need the previous `z` carried between
+iterations, which the `(z, c, n)` step signature can't supply (needs a `prev`
+slot — separate). Branches off `main` after #208 + #210 merge.
+
+### User Bulb C#→DSL translator (deferred, #211)
+No C#→DSL translator exists for `Vec3`/`Quat` bulb bodies (Phase 2b only swapped
+built-in strings). A bulb analogue of `EquationPreprocessor` + a backup-guarded
+startup migration would give saved user bulbs the same DSL conversion equations
+got. Deferred; soft-depends on Phase 5b (shared statement-block support).
 
 ### Phase 4 — ColorGen to a full interpreted DSL
 Goal: the ColorGen DSL must be able to express **every** rich color theme with
