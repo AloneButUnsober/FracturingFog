@@ -4,7 +4,9 @@ Status: **active** — Phase 0 complete (0a/0b/0c); Phase 1 complete (1a/1b/1c);
 Phase 2 complete (2a/2b/2c; the original hard-delete 2d folded into Phase 3);
 Phase 3 complete (3a/3b/3c/3d) — **both raw-C# calculators now run DSL-only, no
 Roslyn fallback anywhere**; Phase 5a complete (widen equation translation +
-persist saved equations to DSL, backup-guarded); Phase 4 (ColorGen interpreter)
+persist saved equations to DSL, backup-guarded); Phase 5b complete (statement
+blocks in the equation DSL); Phase 4 complete (ColorGen runs on the interpreter,
+**no Roslyn on the theme render path**). Phase 6 (CalcGen DSL parity, #215)
 outstanding.
 Tracking issues: #27 (umbrella) + per-phase children (see [Tracking](#tracking)).
 
@@ -261,24 +263,38 @@ built-in strings). A bulb analogue of `EquationPreprocessor` + a backup-guarded
 startup migration would give saved user bulbs the same DSL conversion equations
 got. Deferred; soft-depends on Phase 5b (shared statement-block support).
 
-### Phase 4 — ColorGen to a full interpreted DSL
-Goal: the ColorGen DSL must be able to express **every** rich color theme with
-**no Roslyn codegen and no assembly load at runtime**.
-- **4a** DSL richness audit: enumerate what the built-in / hardcoded C# themes
-  do (multi-stop gradients, HSV/HSL/OkLab/OkLCh, cosine palettes, orbit-trap
-  inputs, smooth-iteration inputs, normals, brightness/contrast/gamma) and
-  ensure the DSL surface + input set covers all of it. Add any missing builtin
-  functions / input slots. Commit.
-- **4b** Build a `CgProgram` interpreter (`CgNode.Eval` over a scalar/`Cg3`
-  value union, mirroring `SbxNode.Eval`) — pure, no BCL surface beyond `Math`,
-  no codegen, no `AssemblyLoadContext`. Reuse the existing `Cg3`/`CgScalar`
-  runtime helpers. Commit.
-- **4c** Make the interpreter the runtime path for custom themes; retire
-  `ColorGenHotLoad` (Roslyn) from the theme hot path. Keep the C#-emitter only
-  as an optional "export theme to source" convenience, clearly out of the
-  render path. Commit.
-- **4d** Parity harness: interpret vs previously-compiled output for a theme
-  corpus; assert per-pixel color equivalence. Commit.
+### Phase 4 — ColorGen to a full interpreted DSL — **complete (#204)**
+Goal: the ColorGen DSL runs with **no Roslyn codegen and no assembly load at
+runtime**. Branch `feat/usercode-phase4-204` off `main`.
+- **4a** ✅ DSL richness audit: the ColorGen DSL already covers every rich-theme
+  idiom — multi-stop `palette`, `hsv/hsl/oklab/oklch`, IQ `cosine`,
+  `brightness/contrast/gamma`, `mix`/`mix_oklab`, the full scalar-math set, and
+  all 15 render inputs (`smooth dist iter maxIter t nx ny zr zi dzr dzi arg mag
+  isInSet pxScale`) + constants `pi tau e phi`. No missing builtins; the audit
+  reduces to "the interpreter must cover every `ColorGenEmitter` case", which the
+  parity harness enforces.
+- **4b** ✅ `InterpretedColorMap` (Engine) parses a source to a `CgProgram` once
+  and walks the typed AST per pixel over a scalar/`CgRgb` value union, mirroring
+  `ColorGenEmitter`'s per-node C# exactly, against a compiled `CgRgb`/`CgMath`
+  runtime (`Engine/Models/ColorGenRuntime.cs`) ported verbatim from the template's
+  nested `Cg3`/`CgScalar`. Pure, no `Math` beyond the template's, no codegen, no
+  `AssemblyLoadContext`. Let-bindings use per-thread slot scratch (no per-pixel
+  alloc). Engine gains a `ColorGen.Lib` ProjectReference (leaf; mirrors
+  `CalculatorGen.Lib`; no cycle).
+- **4c** ✅ The interactive ColorGen editor's "Compile & Load"
+  (`AvaloniaShellBootstrap.OpenColorGenEditor` → `HotLoadRequested`) now calls
+  `InterpretedColorMap.TryCreate` instead of `ColorGenHotLoad.TryCompileAndLoad`
+  — **no Roslyn on the theme runtime path**. `InterpretedColorMap` still
+  implements `IGpuHlslPalette` (HLSL via `ColorGenHlslEmitter` — text, not Roslyn)
+  so GPU SP palettes are unaffected, and `IColorMapHandlesInSet` so `iter`/
+  `isInSet` keep their meaning. `ColorGenApi.Generate` stays for the "Generate to
+  file" export (writes `.cs` for a future build — off the render path);
+  `ColorGenHotLoad` is retired from the hot path (kept for the parity test + the
+  export/CLI).
+- **4d** ✅ `ColorGenInterpreterParityTests`: a 10-theme corpus spanning the whole
+  DSL surface is both Roslyn-compiled and interpreted; over a grid of sample
+  inputs (exterior + in-set, tilted normals, non-trivial final state) the two
+  `Map()` results are **bit-identical**. Suite 916/916.
 
 ## Correctness guarantee (requirement 3 — "any and all fractal math")
 
