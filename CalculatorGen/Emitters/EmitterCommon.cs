@@ -108,6 +108,22 @@ public abstract class EmitterBase
     protected virtual ComplexExpr OpFold(ComplexExpr a) =>
         throw new InvalidOperationException("OpFold not implemented in this emitter");
 
+    /// <summary>Per-component real functions applied to Re and Im independently
+    /// (floor/round/ceil/trunc/fract/sign). Preserve ImZero. Non-holomorphic.
+    /// #27 Phase 6 (tranche 2).</summary>
+    protected virtual ComplexExpr OpFloor(ComplexExpr a) =>
+        throw new InvalidOperationException("OpFloor not implemented in this emitter");
+    protected virtual ComplexExpr OpRound(ComplexExpr a) =>
+        throw new InvalidOperationException("OpRound not implemented in this emitter");
+    protected virtual ComplexExpr OpCeil(ComplexExpr a) =>
+        throw new InvalidOperationException("OpCeil not implemented in this emitter");
+    protected virtual ComplexExpr OpTrunc(ComplexExpr a) =>
+        throw new InvalidOperationException("OpTrunc not implemented in this emitter");
+    protected virtual ComplexExpr OpFract(ComplexExpr a) =>
+        throw new InvalidOperationException("OpFract not implemented in this emitter");
+    protected virtual ComplexExpr OpSign(ComplexExpr a) =>
+        throw new InvalidOperationException("OpSign not implemented in this emitter");
+
     /// <summary>Complex sine. Holomorphic.</summary>
     protected virtual ComplexExpr OpSin(ComplexExpr a) =>
         throw new InvalidOperationException("OpSin not implemented in this emitter");
@@ -123,6 +139,21 @@ public abstract class EmitterBase
     /// <summary>Complex natural log. Holomorphic on C\{0}.</summary>
     protected virtual ComplexExpr OpLog(ComplexExpr a) =>
         throw new InvalidOperationException("OpLog not implemented in this emitter");
+
+    /// <summary>Inverse trig / hyperbolic (asin/acos/atan/asinh/acosh/atanh).
+    /// Emitted via System.Numerics.Complex to match SandboxExpression. #27 Phase 6.</summary>
+    protected virtual ComplexExpr OpAsin(ComplexExpr a) =>
+        throw new InvalidOperationException("OpAsin not implemented in this emitter");
+    protected virtual ComplexExpr OpAcos(ComplexExpr a) =>
+        throw new InvalidOperationException("OpAcos not implemented in this emitter");
+    protected virtual ComplexExpr OpAtan(ComplexExpr a) =>
+        throw new InvalidOperationException("OpAtan not implemented in this emitter");
+    protected virtual ComplexExpr OpAsinh(ComplexExpr a) =>
+        throw new InvalidOperationException("OpAsinh not implemented in this emitter");
+    protected virtual ComplexExpr OpAcosh(ComplexExpr a) =>
+        throw new InvalidOperationException("OpAcosh not implemented in this emitter");
+    protected virtual ComplexExpr OpAtanh(ComplexExpr a) =>
+        throw new InvalidOperationException("OpAtanh not implemented in this emitter");
 
     /// <summary>Principal argument lifted to complex: (atan2(im, re), 0).
     /// Non-holomorphic. Output ImZero is true so downstream Add/Mul can
@@ -162,6 +193,12 @@ public abstract class EmitterBase
     protected virtual ComplexExpr OpClamp(ComplexExpr x, ComplexExpr lo, ComplexExpr hi) =>
         throw new InvalidOperationException("OpClamp not implemented in this emitter");
 
+    /// <summary>General power pow(base, exp) — arbitrary complex exponent.
+    /// Both-real → Math.Pow; else Complex.Pow (zero-guarded, principal branch).
+    /// Transcendental + non-holomorphic. #27 Phase 6 (tranche 2).</summary>
+    protected virtual ComplexExpr OpPow(ComplexExpr a, ComplexExpr b) =>
+        throw new InvalidOperationException("OpPow not implemented in this emitter");
+
     /// <summary>Piecewise selection: given a boolean expression and two
     /// pre-evaluated complex branches, return the selected complex value.
     /// Subclasses choose the strategy — scalar uses a C# ternary on the
@@ -188,13 +225,26 @@ public abstract class EmitterBase
         Sub s       => OpSub(Emit(s.Left), Emit(s.Right)),
         Mul m       => OpMul(Emit(m.Left), Emit(m.Right)),
         Pow p       => EmitPow(p),
+        PowC pc     => OpPow(Emit(pc.Base), Emit(pc.Exp)),
         Div d       => OpDiv(Emit(d.Left), Emit(d.Right)),
         Conj cj     => OpConj(Emit(cj.Operand)),
         Folded f    => OpFold(Emit(f.Operand)),
+        Floor fl    => OpFloor(Emit(fl.Operand)),
+        Round rd    => OpRound(Emit(rd.Operand)),
+        Ceil ce     => OpCeil(Emit(ce.Operand)),
+        Trunc tr    => OpTrunc(Emit(tr.Operand)),
+        Fract fr    => OpFract(Emit(fr.Operand)),
+        Sign sg     => OpSign(Emit(sg.Operand)),
         Sin s2      => OpSin(Emit(s2.Operand)),
         Cos c2      => OpCos(Emit(c2.Operand)),
         Exp ex      => OpExp(Emit(ex.Operand)),
         Log lg      => OpLog(Emit(lg.Operand)),
+        Asin as1    => OpAsin(Emit(as1.Operand)),
+        Acos ac1    => OpAcos(Emit(ac1.Operand)),
+        Atan at1    => OpAtan(Emit(at1.Operand)),
+        Asinh ah1   => OpAsinh(Emit(ah1.Operand)),
+        Acosh ch1   => OpAcosh(Emit(ch1.Operand)),
+        Atanh th1   => OpAtanh(Emit(th1.Operand)),
         Arg ar      => OpArg(Emit(ar.Operand)),
         Atan2 at    => OpAtan2(Emit(at.Y), Emit(at.X)),
         Min mn      => OpMin(Emit(mn.Left), Emit(mn.Right)),

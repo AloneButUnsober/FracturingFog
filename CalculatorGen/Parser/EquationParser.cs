@@ -86,9 +86,22 @@ public sealed class EquationParser
         TokenKind.Log    => "log(...)",
         TokenKind.Arg    => "arg(...)",
         TokenKind.Atan2  => "atan2(...)",
+        TokenKind.Asin   => "asin(...)",
+        TokenKind.Acos   => "acos(...)",
+        TokenKind.Atan   => "atan(...)",
+        TokenKind.Asinh  => "asinh(...)",
+        TokenKind.Acosh  => "acosh(...)",
+        TokenKind.Atanh  => "atanh(...)",
         TokenKind.Min    => "min(...)",
         TokenKind.Max    => "max(...)",
         TokenKind.Mod    => "mod(...)",
+        TokenKind.PowF   => "pow(...)",
+        TokenKind.Floor  => "floor(...)",
+        TokenKind.Round  => "round(...)",
+        TokenKind.Ceil   => "ceil(...)",
+        TokenKind.Trunc  => "trunc(...)",
+        TokenKind.Fract  => "fract(...)",
+        TokenKind.Sign   => "sign(...)",
         TokenKind.Comma  => "','",
         TokenKind.PiConst => "'pi'",
         TokenKind.EConst => "'e'",
@@ -393,6 +406,30 @@ public sealed class EquationParser
                 var atan2X = ParseExpr();
                 Expect(TokenKind.RParen);
                 return new Atan2(atan2Y, atan2X);
+            case TokenKind.Asin:
+                Advance(); Expect(TokenKind.LParen);
+                var asinArg = ParseExpr(); Expect(TokenKind.RParen);
+                return new Asin(asinArg);
+            case TokenKind.Acos:
+                Advance(); Expect(TokenKind.LParen);
+                var acosArg = ParseExpr(); Expect(TokenKind.RParen);
+                return new Acos(acosArg);
+            case TokenKind.Atan:
+                Advance(); Expect(TokenKind.LParen);
+                var atanArg = ParseExpr(); Expect(TokenKind.RParen);
+                return new Atan(atanArg);
+            case TokenKind.Asinh:
+                Advance(); Expect(TokenKind.LParen);
+                var asinhArg = ParseExpr(); Expect(TokenKind.RParen);
+                return new Asinh(asinhArg);
+            case TokenKind.Acosh:
+                Advance(); Expect(TokenKind.LParen);
+                var acoshArg = ParseExpr(); Expect(TokenKind.RParen);
+                return new Acosh(acoshArg);
+            case TokenKind.Atanh:
+                Advance(); Expect(TokenKind.LParen);
+                var atanhArg = ParseExpr(); Expect(TokenKind.RParen);
+                return new Atanh(atanhArg);
             case TokenKind.Re:
                 // #27 Phase 6 — expression-position re(x)/im(x)/abs(x) (parity
                 // with the SandboxExpression interpreter). The identically-named
@@ -451,6 +488,41 @@ public sealed class EquationParser
                 var modR = ParseExpr();
                 Expect(TokenKind.RParen);
                 return new Mod(modL, modR);
+            case TokenKind.PowF:
+                // pow(base, exp) — general power (negative/fractional/complex
+                // exponent), matching the SandboxExpression runtime's pow(). The
+                // integer-only `^` operator stays a separate surface (Pow node).
+                Advance();
+                Expect(TokenKind.LParen);
+                var powBase = ParseExpr();
+                Expect(TokenKind.Comma);
+                var powExp = ParseExpr();
+                Expect(TokenKind.RParen);
+                return new PowC(powBase, powExp);
+            case TokenKind.Floor:
+                Advance(); Expect(TokenKind.LParen);
+                var floorArg = ParseExpr(); Expect(TokenKind.RParen);
+                return new Floor(floorArg);
+            case TokenKind.Round:
+                Advance(); Expect(TokenKind.LParen);
+                var roundArg = ParseExpr(); Expect(TokenKind.RParen);
+                return new Round(roundArg);
+            case TokenKind.Ceil:
+                Advance(); Expect(TokenKind.LParen);
+                var ceilArg = ParseExpr(); Expect(TokenKind.RParen);
+                return new Ceil(ceilArg);
+            case TokenKind.Trunc:
+                Advance(); Expect(TokenKind.LParen);
+                var truncArg = ParseExpr(); Expect(TokenKind.RParen);
+                return new Trunc(truncArg);
+            case TokenKind.Fract:
+                Advance(); Expect(TokenKind.LParen);
+                var fractArg = ParseExpr(); Expect(TokenKind.RParen);
+                return new Fract(fractArg);
+            case TokenKind.Sign:
+                Advance(); Expect(TokenKind.LParen);
+                var signArg = ParseExpr(); Expect(TokenKind.RParen);
+                return new Sign(signArg);
             case TokenKind.PiConst:
                 Advance();
                 return new RealConst(Math.PI);
