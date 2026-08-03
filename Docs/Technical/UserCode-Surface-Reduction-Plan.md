@@ -349,6 +349,23 @@ analytic DE off) and render on the direct scalar / AVX2 / DD / QD paths at shall
 zoom. `CalcGenSandboxParityTests` grew 9 corpus entries (3 per family; escape-mask
 parity ≥ 98%).
 
+> **Analytic DE for inverse trig — SHIPPED (branch `feat/usercode-invtrig-de-215`,
+> Closes #215).** The inverse trig / hyperbolic functions were later lifted OUT of
+> the DE gate: `AstDifferentiator` now carries their first-order dz/dc chain rules
+> — `∂asin(u)/∂v = u'/√(1−u²)`, `∂acos = −u'/√(1−u²)`, `∂atan = u'/(1+u²)`,
+> `∂asinh = u'/√(u²+1)`, `∂acosh = u'/√(u²−1)`, `∂atanh = u'/(1−u²)` — so
+> `SupportsDe` stays **ON** and surface normals / exterior distance estimate work
+> for these maps on the shallow direct path. They still gate perturbation / SA off
+> via `hasTrans` (transcendental, no closed-form δ-Taylor). The √ radicand lowers
+> through a new INTERNAL `Sqrt` AST node (no `sqrt` surface syntax — produced only
+> by the differentiator), emitted via the full complex `Complex.Sqrt` so a
+> negative real radicand still yields the correct imaginary result. Only the
+> emitters that walk a derivative AST lower it (direct Scalar / AVX2 + the three
+> perturbation-deriv emitters); the DD / QD z-update emitters never see it. Tests:
+> symbolic rules in `CalculatorGenUnitTests` (8 cases incl. chain rule) +
+> `CalcGenInverseTrigDeTests` (Preview flag state, Roslyn compile of all six, and
+> a `z*z + asin(c)` mixed-render whose ∂p/∂c carries the √ term).
+
 **#213 emitter bug (FIXED, same branch — Closes #213):** the perturbation
 c-broadcast locals (`Cr_v`/`Ci_v` for AVX, `Cr`/`Ci` in the scalar rebase path)
 were declared inside the generated **derivative** block, but the sibling **δ**
@@ -359,9 +376,9 @@ per-iteration scope (AVX-2 + AVX-512 template blocks and scalar
 `TryIterateRebasePixel`). Bug 2 (negative-power blank) is resolved by the new
 zero-guarded `pow()`. Regression tests in `CalcGenHotLoad213RegressionTests`.
 
-**Remaining (keep #215 open for future tranches):** analytic DE for the inverse
-trig (derivative rules to restore surface normals — currently flat for these) and
-any further SandboxExpression functions not yet mirrored.
+**Remaining:** analytic DE for the inverse trig is now DONE (see the callout
+above — `Closes #215`). Any further SandboxExpression functions not yet mirrored
+would be new tranches under fresh issues.
 
 ## Correctness guarantee (requirement 3 — "any and all fractal math")
 

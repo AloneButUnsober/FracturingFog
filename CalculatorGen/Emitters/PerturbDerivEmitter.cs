@@ -136,6 +136,16 @@ public sealed class PerturbDerivEmitter : EmitterBase
             $"Math.Atan2({a.Im}, {a.Re})", ImZero: false);
     }
 
+    // √ — appears in derivative trees from the inverse trig / hyperbolic DE
+    // rules (∂asin(u)/∂z = u'/√(1−u²)). Full complex Sqrt so a negative real
+    // radicand yields the correct imaginary result. Mirrors ScalarEmitter.
+    protected override ComplexExpr OpSqrt(ComplexExpr a)
+    {
+        string z = $"new System.Numerics.Complex({a.Re}, {(a.ImZero ? "0.0" : a.Im)})";
+        string s = $"System.Numerics.Complex.Sqrt({z})";
+        return new($"({s}).Real", $"({s}).Imaginary", ImZero: false);
+    }
+
     // Piecewise — appears in derivative trees because dz/dc chain rule
     // preserves the source's If node: d(If(c, t, e))/dz = If(c, dt/dz,
     // de/dz). Scope: perturbation loop where z = Z + δ aliases into

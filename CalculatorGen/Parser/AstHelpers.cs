@@ -44,6 +44,7 @@ public static class AstHelpers
         Cos co => Contains<T>(co.Operand),
         Exp e  => Contains<T>(e.Operand),
         Log lg => Contains<T>(lg.Operand),
+        Sqrt sq => Contains<T>(sq.Operand),
         Arg ar => Contains<T>(ar.Operand),
         Atan2 at => Contains<T>(at.Y) || Contains<T>(at.X),
         Asin as1  => Contains<T>(as1.Operand),
