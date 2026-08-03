@@ -163,14 +163,32 @@ public sealed record Exp(AstNode Operand) : AstNode;
 /// Holomorphic on C\{0}. See <see cref="Sin"/> for capability notes.</summary>
 public sealed record Log(AstNode Operand) : AstNode;
 
+/// <summary>Complex principal square root (System.Numerics.Complex.Sqrt).
+/// INTERNAL node — there is no <c>sqrt</c> surface syntax; the lexer/parser
+/// never produce it. It is emitted ONLY by <see cref="AstDifferentiator"/> as
+/// part of the analytic-DE derivative rules for the inverse trig / hyperbolic
+/// functions (∂asin(u)/∂v = u'/√(1−u²), etc.). Because it appears only inside
+/// an already-differentiated tree (never re-differentiated in the first-order
+/// dz/dc chain), only the emitters that walk a derivative AST need to lower it
+/// (Scalar / Avx2 direct-DE + the three perturbation-deriv emitters); the
+/// z-update direct emitters (DD / QD) never see it. Always lowered via the
+/// full complex Sqrt (NOT Math.Sqrt) so a negative real radicand — e.g.
+/// √(1−u²) for a real |u|>1 — yields the correct imaginary result.</summary>
+public sealed record Sqrt(AstNode Operand) : AstNode;
+
 // Inverse trigonometric / hyperbolic functions. #27 Phase 6 (tranche 2).
 // Holomorphic on their principal branches, BUT the emitters compute them via
 // System.Numerics.Complex.{Asin,Acos,Atan} and the log-formula continuations
 // for asinh/acosh/atanh — identical to the SandboxExpression runtime. No
-// closed-form δ-Taylor / SA recurrence is derived and the analytic-DE
-// derivative rules are not implemented, so all six gate perturbation / SA /
-// DE off (folded into hasTrans + the DE gate); they render on the direct
-// scalar / AVX2 / DD / QD paths at shallow zoom where parity holds.
+// closed-form δ-Taylor / SA recurrence is derived, so all six keep perturbation
+// / SA gated off (folded into hasTrans); they render on the direct scalar /
+// AVX2 / DD / QD paths at shallow zoom where parity holds.
+//
+// ANALYTIC DE (#215): the first-order dz/dc chain rules ARE implemented
+// (∂asin(u)/∂v = u'/√(1−u²), ∂atan(u)/∂v = u'/(1+u²), etc. — see
+// AstDifferentiator), so SupportsDe stays ON and surface normals / exterior
+// distance estimate work for these maps on the shallow direct path. The
+// √ radicand is lowered through the internal <see cref="Sqrt"/> node.
 //
 // SEMANTIC NOTE: SandboxExpression returns a REAL result (Math.Asin etc.) for
 // a provably-real operand inside the principal real domain, and the complex
