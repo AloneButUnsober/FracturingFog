@@ -23,13 +23,18 @@
 //   unary    := "-" unary | primary
 //   primary  := NUMBER | IDENT | IDENT "(" args ")" | "(" expr ")"
 //
+// Comments: `//` to end-of-line and `/* */` blocks are skipped (a lone `/`
+// stays division).
+//
 // Built-in identifiers:
 //   z, c, n               (input slots, refreshed per iteration)
-//   pi, e, i              (constants)
+//   pi, e, i              (constants; also accepted case-insensitively as
+//                          PI / E / I so translated C# equations resolve)
 // Functions:
-//   sin cos tan sinh cosh tanh exp log sqrt abs conj re im arg
+//   sin cos tan sinh cosh tanh exp log sqrt sqr abs conj re im arg
 //   asin acos atan asinh acosh atanh          (1-arg; complex outside real domain)
-//   floor sign                                (1-arg; per-component)
+//   floor sign fract round ceil trunc         (1-arg; per-component)
+//   fold                                      (1-arg; (|Re|,|Im|) burning-ship fold)
 //   pow(z,w) atan2(y,x) min(a,b) max(a,b)     (2-arg)
 //   mod(x,p)                                  (2-arg; centered per-component)
 //   clamp(x,lo,hi)                            (3-arg; real-valued)
@@ -212,6 +217,11 @@ namespace FracturingFog.Models
                 case "sqrt": return x.IsReal && x.R >= 0
                                 ? SbxVal.Real(Math.Sqrt(x.R))
                                 : SbxVal.Cx(Complex.Sqrt(x.AsComplex()));
+                // #27 Phase 5a — sqr(x) = x² (the CalcGen DSL has this; the live
+                // interpreter did not). Complex square (a+bi)² = (a²−b², 2ab).
+                case "sqr":  return x.IsReal
+                                ? SbxVal.Real(x.R * x.R)
+                                : SbxVal.Cx(x.R * x.R - x.I * x.I, 2.0 * x.R * x.I);
                 // Inverse trig / hyperbolic: real result inside the principal
                 // real domain, complex continuation outside it.
                 case "asin":  return x.IsReal && x.R >= -1 && x.R <= 1 ? SbxVal.Real(Math.Asin(x.R)) : SbxVal.Cx(Complex.Asin(x.AsComplex()));
@@ -225,9 +235,17 @@ namespace FracturingFog.Models
                 case "re":   return SbxVal.Real(x.R);
                 case "im":   return SbxVal.Real(x.IsReal ? 0.0 : x.I);
                 case "arg":  return SbxVal.Real(x.IsReal ? (x.R < 0 ? Math.PI : 0.0) : Math.Atan2(x.I, x.R));
-                // floor/sign apply per-component (reduce to scalar when real).
+                // Per-component (reduce to scalar when real).
                 case "floor": return x.IsReal ? SbxVal.Real(Math.Floor(x.R)) : new SbxVal(Math.Floor(x.R), Math.Floor(x.I));
                 case "sign":  return x.IsReal ? SbxVal.Real(Math.Sign(x.R)) : new SbxVal(Math.Sign(x.R), Math.Sign(x.I));
+                // #27 Phase 5a — CalcGen parity + fractal-useful per-component fns.
+                // fold = (|Re|, |Im|), the burning-ship abs-fold (matches CalcGen).
+                case "fold":  return x.IsReal ? SbxVal.Real(Math.Abs(x.R)) : new SbxVal(Math.Abs(x.R), Math.Abs(x.I));
+                // fract = x - floor(x) (domain warping / tiling / Kali-style maps).
+                case "fract": return x.IsReal ? SbxVal.Real(x.R - Math.Floor(x.R)) : new SbxVal(x.R - Math.Floor(x.R), x.I - Math.Floor(x.I));
+                case "round": return x.IsReal ? SbxVal.Real(Math.Round(x.R)) : new SbxVal(Math.Round(x.R), Math.Round(x.I));
+                case "ceil":  return x.IsReal ? SbxVal.Real(Math.Ceiling(x.R)) : new SbxVal(Math.Ceiling(x.R), Math.Ceiling(x.I));
+                case "trunc": return x.IsReal ? SbxVal.Real(Math.Truncate(x.R)) : new SbxVal(Math.Truncate(x.R), Math.Truncate(x.I));
                 default:     throw new InvalidOperationException("Unknown function " + Name);
             }
         }
@@ -299,6 +317,11 @@ namespace FracturingFog.Models
                 SkipWs();
                 var node = ParseExpr();
                 SkipWs();
+                // #27 Phase 5a — tolerate a single trailing `;` (a pasted C#
+                // `return expr;` whose semicolon survived, possibly followed by
+                // a trailing comment). Interior `;` statement separators are a
+                // later phase.
+                if (Peek() == ';') { _pos++; SkipWs(); }
                 if (_pos < _src.Length)
                     throw new FormatException($"Unexpected '{_src[_pos]}' at position {_pos}");
                 return node;
@@ -474,6 +497,17 @@ namespace FracturingFog.Models
                     if (name == "i")  return new SbxConst(SbxVal.Cx(0.0, 1.0));
 
                     if (_scope.TryGetValue(name, out int slot)) return new SbxSlot(slot);
+
+                    // #27 Phase 5a — accept the C# Math spellings `E` / `PI` (and
+                    // any case variant of the built-in constants) so translated
+                    // equations using them resolve. Checked AFTER scope so a
+                    // let-bound name of the same spelling still wins.
+                    switch (name.ToLowerInvariant())
+                    {
+                        case "pi": return new SbxConst(SbxVal.Real(Math.PI));
+                        case "e":  return new SbxConst(SbxVal.Real(Math.E));
+                        case "i":  return new SbxConst(SbxVal.Cx(0.0, 1.0));
+                    }
                     throw new FormatException($"Unknown identifier '{name}' at {_pos}");
                 }
                 throw new FormatException($"Unexpected character '{p}' at {_pos}");
@@ -503,11 +537,12 @@ namespace FracturingFog.Models
             private static int ArityOf(string name) => name switch
             {
                 "sin" or "cos" or "tan" or "sinh" or "cosh" or "tanh"
-                    or "exp" or "log" or "sqrt"
+                    or "exp" or "log" or "sqrt" or "sqr"
                     or "abs" or "conj" or "re" or "im" or "arg"
                     or "asin" or "acos" or "atan"
                     or "asinh" or "acosh" or "atanh"
-                    or "floor" or "sign" => 1,
+                    or "floor" or "sign" or "fold" or "fract"
+                    or "round" or "ceil" or "trunc" => 1,
                 "pow" or "atan2" or "min" or "max" or "mod" => 2,
                 "clamp" => 3,
                 _ => -1
@@ -537,7 +572,33 @@ namespace FracturingFog.Models
 
             private void SkipWs()
             {
-                while (_pos < _src.Length && char.IsWhiteSpace(_src[_pos])) _pos++;
+                // #27 Phase 5a — skip whitespace and comments (`//` to EOL,
+                // `/* */` block). A lone `/` is left for the division operator.
+                // Mirrors SandboxBulbExpression so saved C# equations carrying
+                // comments translate + parse.
+                while (_pos < _src.Length)
+                {
+                    char c = _src[_pos];
+                    if (char.IsWhiteSpace(c)) { _pos++; continue; }
+                    if (c == '/' && _pos + 1 < _src.Length)
+                    {
+                        char d = _src[_pos + 1];
+                        if (d == '/')
+                        {
+                            _pos += 2;
+                            while (_pos < _src.Length && _src[_pos] != '\n') _pos++;
+                            continue;
+                        }
+                        if (d == '*')
+                        {
+                            _pos += 2;
+                            while (_pos + 1 < _src.Length && !(_src[_pos] == '*' && _src[_pos + 1] == '/')) _pos++;
+                            _pos = Math.Min(_src.Length, _pos + 2);
+                            continue;
+                        }
+                    }
+                    break;
+                }
             }
 
             private void Expect(char c)
