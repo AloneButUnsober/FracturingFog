@@ -177,6 +177,24 @@ public static class CalculatorGenUnitTests
                 string s = DpDzOf("exp(z*z) + c");
                 return s == "exp(z*z)*(z + z)" || s == "(z + z)*exp(z*z)";
             });
+        // ── inverse trig / hyperbolic: analytic-DE chain rules (#215) ──
+        Check("diff: ∂(asin(z)+c)/∂z = 1/sqrt(1 - z*z)",
+            () => DpDzOf("asin(z) + c") == "1/sqrt(1 - z*z)");
+        Check("diff: ∂(acos(z)+c)/∂z = -(1/sqrt(1 - z*z))",
+            () => DpDzOf("acos(z) + c") == "-(1/sqrt(1 - z*z))");
+        Check("diff: ∂(atan(z)+c)/∂z = 1/(1 + z*z)",
+            () => DpDzOf("atan(z) + c") == "1/(1 + z*z)");
+        Check("diff: ∂(asinh(z)+c)/∂z = 1/sqrt(z*z + 1)",
+            () => DpDzOf("asinh(z) + c") == "1/sqrt(z*z + 1)");
+        Check("diff: ∂(acosh(z)+c)/∂z = 1/sqrt(z*z - 1)",
+            () => DpDzOf("acosh(z) + c") == "1/sqrt(z*z - 1)");
+        Check("diff: ∂(atanh(z)+c)/∂z = 1/(1 - z*z)",
+            () => DpDzOf("atanh(z) + c") == "1/(1 - z*z)");
+        Check("diff: ∂(asin(z*z)+c)/∂z = (z+z)/sqrt(1 - z*z*z*z) — chain rule",
+            () => DpDzOf("asin(z*z) + c") == "(z + z)/sqrt(1 - z*z*z*z)");
+        Check("diff: ∂(asin(z)+c)/∂c = 1 (operand real-diff to 0 in numerator)",
+            () => DpDcOf("asin(z) + c") == "1");
+
         Check("SA: sin(z) + c → 0 (transcendental)",
             () => AstSaDetector.DetectZdPlusC(EquationParser.Parse("sin(z) + c")) == 0
                && AstSaDetector.DetectPolyInZPlusC(

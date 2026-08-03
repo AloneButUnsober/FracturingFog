@@ -274,6 +274,8 @@ public sealed class Avx2Emitter : EmitterBase
         "arg" => $"{rOut} = Math.Atan2({im}, {re}); {iOut} = 0.0;",
         // sign per component (no AVX2 intrinsic): (Math.Sign(re), Math.Sign(im)).
         "sign" => $"{rOut} = Math.Sign({re}); {iOut} = Math.Sign({im});",
+        // √ per lane (analytic-DE derivative trees) via full complex Sqrt.
+        "sqrt" => $"{{ var _p = System.Numerics.Complex.Sqrt(new System.Numerics.Complex({re}, {im})); {rOut} = _p.Real; {iOut} = _p.Imaginary; }}",
         // Inverse trig / hyperbolic per lane via System.Numerics.Complex —
         // matches SandboxExpression's complex branch. Each wraps its own block
         // scope so the per-lane local doesn't collide across the 4 unrolled lanes.
@@ -297,6 +299,9 @@ public sealed class Avx2Emitter : EmitterBase
     protected override ComplexExpr OpAsinh(ComplexExpr a) => EmitPerLaneTranscendental(a, "asinh");
     protected override ComplexExpr OpAcosh(ComplexExpr a) => EmitPerLaneTranscendental(a, "acosh");
     protected override ComplexExpr OpAtanh(ComplexExpr a) => EmitPerLaneTranscendental(a, "atanh");
+    // √ — appears only in analytic-DE derivative trees (inverse trig / hyperbolic
+    // rules); per-lane full complex Sqrt. #215.
+    protected override ComplexExpr OpSqrt(ComplexExpr a)  => EmitPerLaneTranscendental(a, "sqrt");
     // Binary atan2(y, x) has no AVX2 vector intrinsic, but we can still
     // keep the surrounding pipeline vectorised by per-lane-scalarising
     // exactly like OpMod does: extract the 4 lanes of y.Re and x.Re,

@@ -137,8 +137,10 @@ public static class CalculatorGenApi
                       // δ-Taylor expansion; disable perturbation/SA + analytic DE.
                       || AstHelpers.Contains<PowC>(root)
                       // #27 Phase 6 (tranche 2) — inverse trig / hyperbolic are
-                      // non-polynomial (no closed-form δ-Taylor / SA) and have no
-                      // analytic-DE rules implemented; disable perturbation/SA + DE.
+                      // non-polynomial (no closed-form δ-Taylor / SA): disable
+                      // perturbation/SA here. Their analytic DE dz/dc rules ARE
+                      // implemented (#215), so they are deliberately absent from
+                      // the DE gate (hasArg) — SupportsDe stays ON.
                       || AstHelpers.Contains<Asin>(root)
                       || AstHelpers.Contains<Acos>(root)
                       || AstHelpers.Contains<Atan>(root)
@@ -171,15 +173,11 @@ public static class CalculatorGenApi
                       // transcendental (exp·log) + non-holomorphic under the
                       // δ-Taylor expansion; disable perturbation/SA + analytic DE.
                       || AstHelpers.Contains<PowC>(root)
-                      // #27 Phase 6 (tranche 2) — inverse trig / hyperbolic are
-                      // non-polynomial (no closed-form δ-Taylor / SA) and have no
-                      // analytic-DE rules implemented; disable perturbation/SA + DE.
-                      || AstHelpers.Contains<Asin>(root)
-                      || AstHelpers.Contains<Acos>(root)
-                      || AstHelpers.Contains<Atan>(root)
-                      || AstHelpers.Contains<Asinh>(root)
-                      || AstHelpers.Contains<Acosh>(root)
-                      || AstHelpers.Contains<Atanh>(root)
+                      // #215 — inverse trig / hyperbolic are NOT in the DE gate:
+                      // their analytic dz/dc chain rules ARE implemented (see
+                      // AstDifferentiator), so SupportsDe stays ON. They still
+                      // disable perturbation / SA via hasTrans (transcendental,
+                      // no closed-form δ-Taylor). Intentionally NOT listed here.
                       // #27 Phase 6 (tranche 2) — per-component floor/round/ceil/
                       // trunc/fract/sign are piecewise-constant (non-holomorphic);
                       // disable perturbation/SA + analytic DE.
@@ -508,8 +506,10 @@ public static class CalculatorGenApi
                       // δ-Taylor expansion; disable perturbation/SA + analytic DE.
                       || AstHelpers.Contains<PowC>(root)
                       // #27 Phase 6 (tranche 2) — inverse trig / hyperbolic are
-                      // non-polynomial (no closed-form δ-Taylor / SA) and have no
-                      // analytic-DE rules implemented; disable perturbation/SA + DE.
+                      // non-polynomial (no closed-form δ-Taylor / SA): disable
+                      // perturbation/SA here. Their analytic DE dz/dc rules ARE
+                      // implemented (#215), so they are deliberately absent from
+                      // the DE gate (hasArg) — SupportsDe stays ON.
                       || AstHelpers.Contains<Asin>(root)
                       || AstHelpers.Contains<Acos>(root)
                       || AstHelpers.Contains<Atan>(root)
@@ -540,15 +540,11 @@ public static class CalculatorGenApi
                       // transcendental (exp·log) + non-holomorphic under the
                       // δ-Taylor expansion; disable perturbation/SA + analytic DE.
                       || AstHelpers.Contains<PowC>(root)
-                      // #27 Phase 6 (tranche 2) — inverse trig / hyperbolic are
-                      // non-polynomial (no closed-form δ-Taylor / SA) and have no
-                      // analytic-DE rules implemented; disable perturbation/SA + DE.
-                      || AstHelpers.Contains<Asin>(root)
-                      || AstHelpers.Contains<Acos>(root)
-                      || AstHelpers.Contains<Atan>(root)
-                      || AstHelpers.Contains<Asinh>(root)
-                      || AstHelpers.Contains<Acosh>(root)
-                      || AstHelpers.Contains<Atanh>(root)
+                      // #215 — inverse trig / hyperbolic are NOT in the DE gate:
+                      // their analytic dz/dc chain rules ARE implemented (see
+                      // AstDifferentiator), so SupportsDe stays ON. They still
+                      // disable perturbation / SA via hasTrans (transcendental,
+                      // no closed-form δ-Taylor). Intentionally NOT listed here.
                       // #27 Phase 6 (tranche 2) — per-component floor/round/ceil/
                       // trunc/fract/sign are piecewise-constant (non-holomorphic);
                       // disable perturbation/SA + analytic DE.
