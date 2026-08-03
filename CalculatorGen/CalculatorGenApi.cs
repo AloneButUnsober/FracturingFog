@@ -294,7 +294,10 @@ public static class CalculatorGenApi
         string template = LoadTemplate("Calculator.template.cs");
         string rendered = template
             .Replace("{{CLASS_NAME}}",      name)
-            .Replace("{{EQUATION_SOURCE}}", equation)
+            // The template embeds the source in a single-line `//` comment, so a
+            // multi-line equation must be collapsed to one line or its 2nd+ lines
+            // escape the comment and become code (CS1002 / CS1529). #27 Phase 5a.
+            .Replace("{{EQUATION_SOURCE}}", OneLine(equation))
             .Replace("{{DPDZ_TEXT}}",       AstPrinter.Print(dpdz))
             .Replace("{{DPDC_TEXT}}",       AstPrinter.Print(dpdc))
             .Replace("{{DERIV_TEXT}}",      AstPrinter.Print(derivUpdate))
@@ -482,4 +485,12 @@ public static class CalculatorGenApi
         using var reader = new System.IO.StreamReader(stream);
         return reader.ReadToEnd();
     }
+
+    /// <summary>Collapse CR/LF (and any following comment-continuation
+    /// whitespace) to single spaces so a multi-line source can be embedded in a
+    /// one-line `//` comment without its later lines escaping the comment.</summary>
+    private static string OneLine(string s)
+        => string.IsNullOrEmpty(s)
+            ? string.Empty
+            : s.Replace("\r\n", " ").Replace('\r', ' ').Replace('\n', ' ');
 }
