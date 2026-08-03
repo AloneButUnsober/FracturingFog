@@ -307,6 +307,28 @@ public sealed class Avx2Emitter : EmitterBase
     protected override ComplexExpr OpMax(ComplexExpr a, ComplexExpr b) =>
         new($"Vector256.Max({a.Re}, {b.Re})", "Vector256<double>.Zero", ImZero: true);
 
+    // #27 Phase 6 — real-lift parity ops. All lift a real result to (result, 0).
+    protected override ComplexExpr OpRe(ComplexExpr a) =>
+        new(a.Re, "Vector256<double>.Zero", ImZero: true);
+
+    protected override ComplexExpr OpIm(ComplexExpr a) =>
+        new(a.ImZero ? "Vector256<double>.Zero" : a.Im, "Vector256<double>.Zero", ImZero: true);
+
+    // abs(x) = |x|. Real input → sign-bit clear (AndNot); complex → Avx.Sqrt of
+    // the squared-magnitude (Fma keeps it one op).
+    protected override ComplexExpr OpAbs(ComplexExpr a)
+    {
+        if (a.ImZero)
+            return new($"Avx.AndNot(Vector256.Create(-0.0), {a.Re})", "Vector256<double>.Zero", ImZero: true);
+        return new($"Avx.Sqrt(Fma.MultiplyAdd({a.Re}, {a.Re}, Avx.Multiply({a.Im}, {a.Im})))",
+                   "Vector256<double>.Zero", ImZero: true);
+    }
+
+    // clamp(x, lo, hi) = max(lo, min(x, hi)) — matches Math.Clamp for lo ≤ hi.
+    protected override ComplexExpr OpClamp(ComplexExpr x, ComplexExpr lo, ComplexExpr hi) =>
+        new($"Vector256.Max({lo.Re}, Vector256.Min({x.Re}, {hi.Re}))",
+            "Vector256<double>.Zero", ImZero: true);
+
     // mod (%) has no SIMD intrinsic — fall back to per-lane scalar via the
     // existing transcendental infrastructure, but adapted to two inputs.
     // Materialise both vectors into 4 doubles each, run % per lane, repack.
