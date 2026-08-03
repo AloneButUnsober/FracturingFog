@@ -140,6 +140,13 @@ public abstract class EmitterBase
     protected virtual ComplexExpr OpLog(ComplexExpr a) =>
         throw new InvalidOperationException("OpLog not implemented in this emitter");
 
+    /// <summary>Complex principal square root. INTERNAL — appears only inside
+    /// analytic-DE derivative trees (inverse trig / hyperbolic rules). Only the
+    /// emitters that walk a derivative AST override it; the z-update direct
+    /// emitters (DD / QD) never see a Sqrt node. #215.</summary>
+    protected virtual ComplexExpr OpSqrt(ComplexExpr a) =>
+        throw new InvalidOperationException("OpSqrt not implemented in this emitter");
+
     /// <summary>Inverse trig / hyperbolic (asin/acos/atan/asinh/acosh/atanh).
     /// Emitted via System.Numerics.Complex to match SandboxExpression. #27 Phase 6.</summary>
     protected virtual ComplexExpr OpAsin(ComplexExpr a) =>
@@ -239,6 +246,7 @@ public abstract class EmitterBase
         Cos c2      => OpCos(Emit(c2.Operand)),
         Exp ex      => OpExp(Emit(ex.Operand)),
         Log lg      => OpLog(Emit(lg.Operand)),
+        Sqrt sq     => OpSqrt(Emit(sq.Operand)),
         Asin as1    => OpAsin(Emit(as1.Operand)),
         Acos ac1    => OpAcos(Emit(ac1.Operand)),
         Atan at1    => OpAtan(Emit(at1.Operand)),

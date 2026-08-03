@@ -89,6 +89,9 @@ public static class AstPrinter
             case Log lg:
                 sb.Append("log("); WriteExpr(sb, lg.Operand, 0); sb.Append(')');
                 break;
+            case Sqrt sq:
+                sb.Append("sqrt("); WriteExpr(sb, sq.Operand, 0); sb.Append(')');
+                break;
             case Arg ar:
                 sb.Append("arg("); WriteExpr(sb, ar.Operand, 0); sb.Append(')');
                 break;

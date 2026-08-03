@@ -198,6 +198,8 @@ public sealed class Avx512DerivEmitter : EmitterBase
         "exp" => $"{{ double ex = Math.Exp({re}); {rOut} = ex * Math.Cos({im}); {iOut} = ex * Math.Sin({im}); }}",
         "log" => $"{rOut} = 0.5 * Math.Log({re} * {re} + {im} * {im}); {iOut} = Math.Atan2({im}, {re});",
         "arg" => $"{rOut} = Math.Atan2({im}, {re}); {iOut} = 0.0;",
+        // √ per lane (analytic-DE derivative trees) via full complex Sqrt.
+        "sqrt" => $"{{ var _p = System.Numerics.Complex.Sqrt(new System.Numerics.Complex({re}, {im})); {rOut} = _p.Real; {iOut} = _p.Imaginary; }}",
         _ => throw new InvalidOperationException($"Avx512DerivEmitter: unknown transcendental {op}"),
     };
 
@@ -205,6 +207,8 @@ public sealed class Avx512DerivEmitter : EmitterBase
     protected override ComplexExpr OpCos(ComplexExpr a) => EmitPerLaneTranscendental(a, "cos");
     protected override ComplexExpr OpExp(ComplexExpr a) => EmitPerLaneTranscendental(a, "exp");
     protected override ComplexExpr OpLog(ComplexExpr a) => EmitPerLaneTranscendental(a, "log");
+    // √ from the inverse trig / hyperbolic DE rules. #215.
+    protected override ComplexExpr OpSqrt(ComplexExpr a) => EmitPerLaneTranscendental(a, "sqrt");
 
     // Piecewise — mask blend across 8 Vector512 lanes via Avx512F.Compare
     // → Vector512.ConditionalSelect. Both branches eager-evaluated by

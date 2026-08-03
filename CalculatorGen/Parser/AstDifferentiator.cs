@@ -83,16 +83,34 @@ public static class AstDifferentiator
         // SupportsDe is gated off by Contains<Arg> / Contains<Atan2> upstream.
         Arg        => new RealConst(0.0),
         Atan2      => new RealConst(0.0),
-        // Inverse trig / hyperbolic: holomorphic, but analytic-DE derivative
-        // rules are not implemented — DE is gated off upstream (folded into the
-        // DE gate), so this opaque 0 is never used; it just keeps the
-        // unconditional derivUpdate build from throwing.
-        Asin       => new RealConst(0.0),
-        Acos       => new RealConst(0.0),
-        Atan       => new RealConst(0.0),
-        Asinh      => new RealConst(0.0),
-        Acosh      => new RealConst(0.0),
-        Atanh      => new RealConst(0.0),
+        // Inverse trig / hyperbolic: holomorphic — analytic-DE chain rules
+        // (#215). u' = Diff(u, v); u² = Mul(u, u); the √ radicand goes through
+        // the internal Sqrt node (lowered via Complex.Sqrt, so a negative real
+        // radicand still yields the correct imaginary result). SupportsDe stays
+        // on for these maps; perturbation/SA remain gated (transcendental).
+        //   d/dv asin(u)  =  u' / √(1 − u²)
+        //   d/dv acos(u)  = −u' / √(1 − u²)
+        //   d/dv atan(u)  =  u' / (1 + u²)
+        //   d/dv asinh(u) =  u' / √(u² + 1)
+        //   d/dv acosh(u) =  u' / √(u² − 1)
+        //   d/dv atanh(u) =  u' / (1 − u²)
+        Asin a1    => new Div(Diff(a1.Operand, v),
+                              new Sqrt(new Sub(new RealConst(1.0), Square(a1.Operand)))),
+        Acos ac1   => new Neg(new Div(Diff(ac1.Operand, v),
+                              new Sqrt(new Sub(new RealConst(1.0), Square(ac1.Operand))))),
+        Atan at1   => new Div(Diff(at1.Operand, v),
+                              new Add(new RealConst(1.0), Square(at1.Operand))),
+        Asinh ah1  => new Div(Diff(ah1.Operand, v),
+                              new Sqrt(new Add(Square(ah1.Operand), new RealConst(1.0)))),
+        Acosh ch1  => new Div(Diff(ch1.Operand, v),
+                              new Sqrt(new Sub(Square(ch1.Operand), new RealConst(1.0)))),
+        Atanh th1  => new Div(Diff(th1.Operand, v),
+                              new Sub(new RealConst(1.0), Square(th1.Operand))),
+        // √u appears only inside the derivative trees built above; the
+        // first-order dz/dc chain never re-differentiates it, so this rule is
+        // for completeness: d/dv √u = u' / (2·√u).
+        Sqrt sq    => new Div(Diff(sq.Operand, v),
+                              new Mul(new RealConst(2.0), new Sqrt(sq.Operand))),
         // min/max/mod: subgradient at boundary, treated as opaque for the
         // chain rule. Distance estimate is disabled when present anyway.
         Min        => new RealConst(0.0),
@@ -154,4 +172,8 @@ public static class AstDifferentiator
     /// <summary>Convenience: simplified ∂p/∂c.</summary>
     public static AstNode DpDc(AstNode stepFn)
         => AstSimplifier.Simplify(Diff(stepFn, Var.C));
+
+    /// <summary>u² as a shared-subtree multiply. Used by the inverse trig /
+    /// hyperbolic derivative rules for their √(1 ± u²) / (1 ± u²) radicands.</summary>
+    private static AstNode Square(AstNode u) => new Mul(u, u);
 }

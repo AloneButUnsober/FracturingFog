@@ -213,6 +213,16 @@ public sealed class ScalarEmitter : EmitterBase
         return new($"({expr}).Real", $"({expr}).Imaginary", ImZero: false);
     }
 
+    // √ for analytic-DE derivative trees (inverse trig / hyperbolic rules).
+    // ALWAYS the full complex Sqrt — never Math.Sqrt — so a negative real
+    // radicand (√(1−u²) for a real |u|>1) yields the correct imaginary result.
+    protected override ComplexExpr OpSqrt(ComplexExpr a)
+    {
+        string z = $"new System.Numerics.Complex({a.Re}, {(a.ImZero ? "0.0" : a.Im)})";
+        string s = $"System.Numerics.Complex.Sqrt({z})";
+        return new($"({s}).Real", $"({s}).Imaginary", ImZero: false);
+    }
+
     protected override ComplexExpr OpAsin(ComplexExpr a)  => ComplexInvTrig(a, "asin");
     protected override ComplexExpr OpAcos(ComplexExpr a)  => ComplexInvTrig(a, "acos");
     protected override ComplexExpr OpAtan(ComplexExpr a)  => ComplexInvTrig(a, "atan");
