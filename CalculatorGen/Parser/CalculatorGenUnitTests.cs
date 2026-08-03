@@ -272,8 +272,10 @@ public static class CalculatorGenUnitTests
             () => Pre("return z * z + c;") == "z * z + c");
         Check("preproc: Complex.Pow(z, 2) → z^2",
             () => Pre("Complex.Pow(z, 2)") == "(z)^2");
-        Check("preproc: Complex.Pow(z, -3) → 1/z^3",
-            () => Pre("Complex.Pow(z, -3)") == "(1/(z)^3)");
+        // #27 Phase 5a: negative int exponent → pow() (Complex.Pow), NOT
+        // 1/(z)^3 — the latter is NaN at z=0 where Complex.Pow(0,-3)=0.
+        Check("preproc: Complex.Pow(z, -3) → pow(z, -3)",
+            () => Pre("Complex.Pow(z, -3)") == "pow(z, -3)");
         Check("preproc: Complex.Pow(z, 1) collapses to z",
             () => Pre("Complex.Pow(z, 1)") == "(z)");
         Check("preproc: Complex.Pow(z, 0) → 1",
@@ -291,9 +293,9 @@ public static class CalculatorGenUnitTests
             () => Pre("Complex.Pow(Complex.Pow(z, 2), 3)") == "((z)^2)^3");
         Check("preproc: user's actual reported equation translates",
             () => Pre("return z * Complex.Pow(z,-3) + c * Complex.Pow(c,-2);")
-                == "z * (1/(z)^3) + c * (1/(c)^2)");
-        Check("preproc: Complex.Pow with non-int exponent → exp/log",
-            () => Pre("Complex.Pow(z, c)") == "exp((c)*log(z))");
+                == "z * pow(z, -3) + c * pow(c, -2)");
+        Check("preproc: Complex.Pow with non-int exponent → pow()",
+            () => Pre("Complex.Pow(z, c)") == "pow(z, c)");
 
         // Reject paths
         // PR8: ImaginaryOne / new Complex are now first-class — rewrites to 'i'.
