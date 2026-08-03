@@ -52,12 +52,14 @@ public sealed class UserEquationDslMigrationTests
         int converted = UserEquationDslMigration.Run(store);
         Assert.Equal(2, converted);
 
+        // #27 Phase 5a fix — converted entries stay on the live-rendering
+        // UserEquation tab; only the source is rewritten to DSL text.
         var a = store.GetByName("TransA")!;
-        Assert.Equal(UserEquationKind.Dsl, a.Kind);
+        Assert.Equal(UserEquationKind.UserEquation, a.Kind);
         Assert.DoesNotContain("Complex.", a.Source);   // now DSL text
 
         var b = store.GetByName("TransB")!;
-        Assert.Equal(UserEquationKind.Dsl, b.Kind);
+        Assert.Equal(UserEquationKind.UserEquation, b.Kind);
         Assert.Contains("re(", b.Source);              // z.Real -> re(z)
 
         var noDsl = store.GetByName("NoDsl")!;
@@ -89,7 +91,8 @@ public sealed class UserEquationDslMigrationTests
         Assert.Equal(1, UserEquationDslMigration.Run(store));
 
         var entry = store.GetByName("Renders")!;
-        Assert.Equal(UserEquationKind.Dsl, entry.Kind);
+        Assert.Equal(UserEquationKind.UserEquation, entry.Kind); // stays on the live tab
+        Assert.DoesNotContain("Complex.", entry.Source);         // source is DSL now
 
         // The persisted DSL text compiles + runs on the live calculator.
         var calc = new UserEquationCalculator(8, 8)
@@ -97,6 +100,42 @@ public sealed class UserEquationDslMigrationTests
             FractalParameters = new FractalParameters { UserEquationSource = entry.Source },
         };
         calc.Compile(entry.Source);
+        Assert.True(calc.IsCompiled, calc.LastError);
+        Assert.True(calc.UsingDsl);
+    }
+
+    [Fact]
+    public void CorrectiveFlip_MovesDslEntriesBackToUserEquationTab()
+    {
+        // A prior build wrongly flipped migrated equations to Kind=Dsl (an editor
+        // tab that doesn't render live). The one-time corrective flips them back
+        // to UserEquation so the safe interpreter renders them by default; the
+        // DSL source is preserved.
+        string marker = AppDataPaths.Combine(".userequations-kindfix");
+        if (File.Exists(marker)) File.Delete(marker);
+
+        SeedFile(new UserEquationEntry
+        {
+            Name = "WasFlipped",
+            Source = "sin(z) + c",
+            Kind = UserEquationKind.Dsl,
+        });
+
+        var store = UserEquationStore.Instance;
+        store.Load();
+        UserEquationDslMigration.Run(store);
+
+        var e = store.GetByName("WasFlipped")!;
+        Assert.Equal(UserEquationKind.UserEquation, e.Kind); // moved to the live tab
+        Assert.Equal("sin(z) + c", e.Source);                // DSL source preserved
+        Assert.True(File.Exists(marker));                    // one-time marker set
+
+        // The flipped entry renders on the live interpreter.
+        var calc = new UserEquationCalculator(8, 8)
+        {
+            FractalParameters = new FractalParameters { UserEquationSource = e.Source },
+        };
+        calc.Compile(e.Source);
         Assert.True(calc.IsCompiled, calc.LastError);
         Assert.True(calc.UsingDsl);
     }
