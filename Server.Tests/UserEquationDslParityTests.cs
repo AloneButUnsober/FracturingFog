@@ -150,6 +150,81 @@ public sealed class UserEquationDslParityTests
             $"z=0 seed produced NaN (blank render): {got}");
     }
 
+    // ── #27 Phase 5b — statement-block corpus ────────────────────────────────
+    // Saved equations authored as a C# statement block (typed / var decls,
+    // reassignment, an if-seed / if-return guard, interior `;`, a final return)
+    // must translate (EquationPreprocessor pass-through) + parse (SandboxExpression
+    // statement front-end) + evaluate to the SAME math as the native C# body.
+    // Reference lambdas execute the identical statement semantics.
+    public static TheoryData<string, string, Func<Complex, Complex, int, Complex>> StmtBlockCorpus() => new()
+    {
+        { "decl_pow",
+          "Complex z2 = Complex.Pow(z, 2); return z2 + c;",
+          (z, c, n) => Complex.Pow(z, 2) + c },
+
+        { "var_decl",
+          "var t = z*z + c; return t;",
+          (z, c, n) => z * z + c },
+
+        { "double_local",
+          "double k = 2; return z*k + c;",
+          (z, c, n) => z * 2 + c },
+
+        { "reassign_chain",
+          "Complex t = z*z; t = t + c; return t;",
+          (z, c, n) => { var t = z * z; t = t + c; return t; } },
+
+        { "newton_z3",
+          "Complex f = z*z*z - 1; Complex d = 3*z*z; return z - f/d;",
+          (z, c, n) => { var f = z * z * z - 1; var d = 3 * z * z; return z - f / d; } },
+
+        { "nova_z3",
+          "Complex f = Complex.Pow(z,3) - 1; Complex fp = 3*Complex.Pow(z,2); return z - f/fp + c;",
+          (z, c, n) => { var f = Complex.Pow(z, 3) - 1; var fp = 3 * Complex.Pow(z, 2); return z - f / fp + c; } },
+
+        { "tricorn_decl",
+          "Complex w = Complex.Conjugate(z); return w*w + c;",
+          (z, c, n) => { var w = Complex.Conjugate(z); return w * w + c; } },
+
+        { "if_seed",
+          "if (n == 0) z = c; return z*z + c;",
+          (z, c, n) => { var zz = (n == 0) ? c : z; return zz * zz + c; } },
+
+        { "if_return_guard",
+          "if (n == 0) return c; return z*z + c;",
+          (z, c, n) => (n == 0) ? c : z * z + c },
+
+        { "burning_ship",
+          "Complex zf = new Complex(Math.Abs(z.Real), Math.Abs(z.Imaginary)); return zf*zf + c;",
+          (z, c, n) => { var zf = new Complex(Math.Abs(z.Real), Math.Abs(z.Imaginary)); return zf * zf + c; } },
+
+        { "comment_in_block",
+          "Complex t = z*z; // square\n return t + c;",
+          (z, c, n) => z * z + c },
+    };
+
+    [Theory]
+    [MemberData(nameof(StmtBlockCorpus))]
+    public void StmtBlockDslStep_MatchesNativeCSharp(string label, string csharp, Func<Complex, Complex, int, Complex> reference)
+    {
+        string dsl = EquationPreprocessor.Preprocess(csharp, out PreprocessDiagnostic? diag);
+        Assert.True(diag == null, $"[{label}] unexpected translation diagnostic: {diag?.Message}");
+        var expr = SandboxExpression.Parse(dsl);
+        var env = expr.NewEnv();
+
+        foreach (var z in ZSamples)
+        foreach (var c in CSamples)
+        foreach (var n in NSamples)
+        {
+            Complex want = reference(z, c, n);
+            Complex got = expr.EvalStep(z, c, n, env);
+            double err = Complex.Abs(want - got);
+            double scale = Math.Max(1.0, Complex.Abs(want));
+            Assert.True(err <= Tol * scale,
+                $"[{label}] z={z} c={c} n={n}: want {want}, got {got}, err {err}");
+        }
+    }
+
     // ── Part B — render parity: UserEquation(DSL) ≡ SandboxCalculator ────────
 
     [Theory]
