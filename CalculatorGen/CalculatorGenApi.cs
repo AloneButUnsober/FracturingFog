@@ -124,14 +124,27 @@ public static class CalculatorGenApi
                       || AstHelpers.Contains<Atan2>(root)
                       || AstHelpers.Contains<Min>(root)
                       || AstHelpers.Contains<Max>(root)
-                      || AstHelpers.Contains<Mod>(root);
+                      || AstHelpers.Contains<Mod>(root)
+                      // #27 Phase 6 — re/im/abs/clamp are non-holomorphic; disable
+                      // perturbation + SA (they render on the direct scalar/AVX/
+                      // DD/QD paths at shallow zoom, which is where parity holds).
+                      || AstHelpers.Contains<ReOp>(root)
+                      || AstHelpers.Contains<ImOp>(root)
+                      || AstHelpers.Contains<AbsOp>(root)
+                      || AstHelpers.Contains<Clamp>(root);
         // arg / atan2 / min / max / mod are non-holomorphic. Distance
         // estimate breaks like Conj/Folded — feed all into the DE gate.
         bool hasArg    = AstHelpers.Contains<Arg>(root)
                       || AstHelpers.Contains<Atan2>(root)
                       || AstHelpers.Contains<Min>(root)
                       || AstHelpers.Contains<Max>(root)
-                      || AstHelpers.Contains<Mod>(root);
+                      || AstHelpers.Contains<Mod>(root)
+                      // #27 Phase 6 — re/im/abs/clamp are non-holomorphic → the
+                      // dz/dc chain is meaningless; disable analytic DE.
+                      || AstHelpers.Contains<ReOp>(root)
+                      || AstHelpers.Contains<ImOp>(root)
+                      || AstHelpers.Contains<AbsOp>(root)
+                      || AstHelpers.Contains<Clamp>(root);
         // Conditional / piecewise (If): branches are individually
         // holomorphic so DE survives inside each side (a discontinuity
         // along the boundary locus is the only cost), but the δ-Taylor
@@ -438,12 +451,25 @@ public static class CalculatorGenApi
                       || AstHelpers.Contains<Atan2>(root)
                       || AstHelpers.Contains<Min>(root)
                       || AstHelpers.Contains<Max>(root)
-                      || AstHelpers.Contains<Mod>(root);
+                      || AstHelpers.Contains<Mod>(root)
+                      // #27 Phase 6 — re/im/abs/clamp are non-holomorphic; disable
+                      // perturbation + SA (they render on the direct scalar/AVX/
+                      // DD/QD paths at shallow zoom, which is where parity holds).
+                      || AstHelpers.Contains<ReOp>(root)
+                      || AstHelpers.Contains<ImOp>(root)
+                      || AstHelpers.Contains<AbsOp>(root)
+                      || AstHelpers.Contains<Clamp>(root);
         bool hasArg    = AstHelpers.Contains<Arg>(root)
                       || AstHelpers.Contains<Atan2>(root)
                       || AstHelpers.Contains<Min>(root)
                       || AstHelpers.Contains<Max>(root)
-                      || AstHelpers.Contains<Mod>(root);
+                      || AstHelpers.Contains<Mod>(root)
+                      // #27 Phase 6 — re/im/abs/clamp are non-holomorphic → the
+                      // dz/dc chain is meaningless; disable analytic DE.
+                      || AstHelpers.Contains<ReOp>(root)
+                      || AstHelpers.Contains<ImOp>(root)
+                      || AstHelpers.Contains<AbsOp>(root)
+                      || AstHelpers.Contains<Clamp>(root);
         bool hasCond  = AstHelpers.Contains<If>(root);
         bool hasPrev  = AstHelpers.Contains<PrevRef>(root);
         bool hasIter  = AstHelpers.Contains<IterRef>(root);

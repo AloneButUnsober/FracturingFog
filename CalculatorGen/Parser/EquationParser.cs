@@ -98,6 +98,7 @@ public sealed class EquationParser
         TokenKind.Re     => "re(...)",
         TokenKind.Im     => "im(...)",
         TokenKind.Abs    => "abs(...)",
+        TokenKind.Clamp  => "clamp(...)",
         TokenKind.Gt     => "'>'",
         TokenKind.Lt     => "'<'",
         TokenKind.Ge     => "'>='",
@@ -392,6 +393,40 @@ public sealed class EquationParser
                 var atan2X = ParseExpr();
                 Expect(TokenKind.RParen);
                 return new Atan2(atan2Y, atan2X);
+            case TokenKind.Re:
+                // #27 Phase 6 — expression-position re(x)/im(x)/abs(x) (parity
+                // with the SandboxExpression interpreter). The identically-named
+                // condition terms (ParseCondTerm) are a separate grammar
+                // position and unaffected. abs(x) here is |x| (see AbsOp);
+                // condition `abs` stays |x|² (CondAbs2).
+                Advance();
+                Expect(TokenKind.LParen);
+                var reArg2 = ParseExpr();
+                Expect(TokenKind.RParen);
+                return new ReOp(reArg2);
+            case TokenKind.Im:
+                Advance();
+                Expect(TokenKind.LParen);
+                var imArg2 = ParseExpr();
+                Expect(TokenKind.RParen);
+                return new ImOp(imArg2);
+            case TokenKind.Abs:
+                Advance();
+                Expect(TokenKind.LParen);
+                var absArg2 = ParseExpr();
+                Expect(TokenKind.RParen);
+                return new AbsOp(absArg2);
+            case TokenKind.Clamp:
+                // clamp(x, lo, hi) — real-valued, matches SandboxExpression.
+                Advance();
+                Expect(TokenKind.LParen);
+                var clX = ParseExpr();
+                Expect(TokenKind.Comma);
+                var clLo = ParseExpr();
+                Expect(TokenKind.Comma);
+                var clHi = ParseExpr();
+                Expect(TokenKind.RParen);
+                return new Clamp(clX, clLo, clHi);
             case TokenKind.Min:
                 Advance();
                 Expect(TokenKind.LParen);

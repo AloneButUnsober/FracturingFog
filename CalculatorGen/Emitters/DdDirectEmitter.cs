@@ -162,6 +162,30 @@ public sealed class DdDirectEmitter : EmitterBase
     protected override ComplexExpr OpMod(ComplexExpr a, ComplexExpr b) =>
         new($"(DD)(((DD)({a.Re})).Hi % ((DD)({b.Re})).Hi)", "(DD)0.0", ImZero: true);
 
+    // #27 Phase 6 — real-lift parity ops. re/im keep full DD; abs/clamp compare
+    // on the high limb (.Hi), matching the atan2/min/max degradation pattern.
+    protected override ComplexExpr OpRe(ComplexExpr a) =>
+        new($"((DD)({a.Re}))", "(DD)0.0", ImZero: true);
+
+    protected override ComplexExpr OpIm(ComplexExpr a) =>
+        new(a.ImZero ? "(DD)0.0" : $"((DD)({a.Im}))", "(DD)0.0", ImZero: true);
+
+    // abs(x) = |x|. Real input keeps full DD via sign-flip; complex magnitude
+    // degrades to double inside the sqrt (same trade-off as OpArg/OpMod).
+    protected override ComplexExpr OpAbs(ComplexExpr a)
+    {
+        if (a.ImZero)
+            return new($"(((DD)({a.Re})).Hi < 0.0 ? -((DD)({a.Re})) : ((DD)({a.Re})))", "(DD)0.0", ImZero: true);
+        string reHi = $"((DD)({a.Re})).Hi";
+        string imHi = $"((DD)({a.Im})).Hi";
+        return new($"(DD)Math.Sqrt({reHi} * {reHi} + {imHi} * {imHi})", "(DD)0.0", ImZero: true);
+    }
+
+    protected override ComplexExpr OpClamp(ComplexExpr x, ComplexExpr lo, ComplexExpr hi) =>
+        new($"(((DD)({x.Re})).Hi < ((DD)({lo.Re})).Hi ? ((DD)({lo.Re})) : " +
+            $"(((DD)({x.Re})).Hi > ((DD)({hi.Re})).Hi ? ((DD)({hi.Re})) : ((DD)({x.Re}))))",
+            "(DD)0.0", ImZero: true);
+
     // Piecewise: condition compares DD values via .Hi (high-double).
     // Sufficient for typical Mandelbrot-style thresholds — the
     // boundary locus is itself measure-zero, so the low-double

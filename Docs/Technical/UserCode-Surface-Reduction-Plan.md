@@ -296,6 +296,49 @@ runtime**. Branch `feat/usercode-phase4-204` off `main`.
   inputs (exterior + in-set, tilted normals, non-trivial final state) the two
   `Map()` results are **bit-identical**. Suite 916/916.
 
+### Phase 6 — CalcGen DSL parity with SandboxExpression (#215, IN PROGRESS)
+Goal: bring the **CalcGen** codegen path ("Compile & Load" → generate typed C# →
+Roslyn) to functional + semantic parity with the **live SandboxExpression**
+interpreter on the shared feature set, at **shallow zoom** (deep-zoom SIMD / SA /
+perturbation / DD-QD divergence is out of scope by design).
+
+**Tranche 1 — real-lift function set (SHIPPED, branch `feat/usercode-phase6-215`):**
+Added the expression-position functions `re(x)`, `im(x)`, `abs(x)`, and
+`clamp(x, lo, hi)` to CalcGen (lexer → parser → AST nodes `ReOp`/`ImOp`/`AbsOp`/
+`Clamp` → `EmitterBase` + all five direct emitters: Scalar / AVX2 / DdDirect /
+QdDirect / Qd). These are non-holomorphic real-lifts, wired exactly like the
+existing `arg`/`min`/`max`/`mod`: they gate off SA + perturbation (`hasTrans`) and
+analytic DE (`hasArg`), so the generated calculator runs the direct scalar/AVX/
+DD/QD path where shallow-zoom parity holds. **Semantic reconciliation:** the
+expression `abs(x)` is `|x|` (matches `Complex.Abs` + the SandboxExpression
+runtime) — distinct from the pre-existing condition-only `abs` shorthand
+(`CondAbs2` = `|x|²`), which is a different grammar position (inside `if`) and
+unchanged. Defensive cases added to `AstDifferentiator` (unconditional
+`derivUpdate` build) and `AstPrinter` (unconditional source echo); `AstHelpers.
+Contains` recurses into the new nodes. Parity harness
+`CalcGenSandboxParityTests`: for a corpus using the new functions, the CalcGen
+generated calculator compiles with no CS errors and its **in-set escape mask**
+matches `SandboxCalculator`'s at shallow zoom (pipeline-independent — isolates the
+maths from the two renderers' differing smooth/colour code).
+
+**Remaining (keep #215 open):**
+- **General `pow(x, y)`** with `Complex.Pow` zero-guard semantics
+  (`Pow(0, k) = 0`) — the Phase 5a live-path fix emits `pow()` for negative /
+  general exponents, so negative-power maps render live but not via Compile &
+  Load. Needs a guarded complex-power implementation across scalar / AVX2 / DD /
+  QD (a plain `exp(y·log x)` desugar reintroduces the z = 0 blank the 5a fix
+  removed).
+- **Inverse trig** `asin acos atan asinh acosh atanh` — holomorphic; either
+  branch-cut-exact complex implementations (to match `Complex.Asin` et al.) or
+  log/sqrt identities with a documented branch-cut tolerance, plus differentiator
+  rules to keep DE.
+- **Per-component** `floor round ceil trunc fract sign` — match
+  SandboxExpression's per-component semantics (both Re and Im), needing AVX
+  intrinsics + DD/QD per-limb handling.
+- **#213 emitter bug** — CS0103 `Cr_v`/`Ci_v` in the perturbation/deriv **SIMD**
+  template path (deep-zoom; out of the shallow-parity scope but a real codegen
+  crash to fix, needs a repro from the affected saved map).
+
 ## Correctness guarantee (requirement 3 — "any and all fractal math")
 
 Every phase that retires a Roslyn path first ships the DSL features that path
