@@ -90,6 +90,19 @@ public sealed record Mul(AstNode Left, AstNode Right) : AstNode;
 /// subexpressions). Exponent must be a small non-negative integer.</summary>
 public sealed record Pow(AstNode Base, int Exponent) : AstNode;
 
+/// <summary>General power <c>pow(base, exp)</c> with an arbitrary complex
+/// exponent (negative, fractional, or complex). Matches the SandboxExpression
+/// runtime's <c>pow</c>: when BOTH operands are provably real the emitter uses
+/// <c>Math.Pow</c> (real result, so <c>pow(-2, 3) = -8</c> exactly); otherwise
+/// <c>System.Numerics.Complex.Pow</c> (principal branch, zero-guarded so
+/// <c>pow(0,0)=1</c> and <c>pow(0,k)=0</c>). #27 Phase 6 (tranche 2) — this
+/// unblocks negative/fractional-power maps in compiled kernels. Distinct from
+/// the integer-only <see cref="Pow"/> node (the <c>^</c> operator). Transcendental
+/// + non-holomorphic under δ-expansion: perturbation / SA / analytic DE all gate
+/// off (folded into hasTrans / hasArg), so it renders on the direct scalar /
+/// AVX2 / DD / QD paths at shallow zoom where parity holds.</summary>
+public sealed record PowC(AstNode Base, AstNode Exp) : AstNode;
+
 /// <summary>Complex division. Anti-pole behaviour at |b| == 0 is left to
 /// the emitted code; for typical Mandelbrot-style equations the iterate
 /// rarely lands exactly on a pole.</summary>
@@ -104,6 +117,31 @@ public sealed record Conj(AstNode Operand) : AstNode;
 /// <summary>BurningShip-style component fold: (re, im) → (|re|, |im|).
 /// Like Conj, non-holomorphic — disables distance estimate.</summary>
 public sealed record Folded(AstNode Operand) : AstNode;
+
+// Per-component real functions applied independently to Re and Im (reducing
+// to (F(re), 0) when the operand is provably real). #27 Phase 6 (tranche 2) —
+// parity with the SandboxExpression runtime, which lifts these the same way.
+// Non-holomorphic (piecewise-constant / kinked): perturbation / SA / analytic
+// DE all gate off, so they render on the direct scalar / AVX2 / DD / QD paths.
+
+/// <summary>Per-component floor: (⌊re⌋, ⌊im⌋).</summary>
+public sealed record Floor(AstNode Operand) : AstNode;
+
+/// <summary>Per-component round-half-to-even (Math.Round): (round(re), round(im)).</summary>
+public sealed record Round(AstNode Operand) : AstNode;
+
+/// <summary>Per-component ceiling: (⌈re⌉, ⌈im⌉).</summary>
+public sealed record Ceil(AstNode Operand) : AstNode;
+
+/// <summary>Per-component truncate-toward-zero: (trunc(re), trunc(im)).</summary>
+public sealed record Trunc(AstNode Operand) : AstNode;
+
+/// <summary>Per-component fractional part x−⌊x⌋: (re−⌊re⌋, im−⌊im⌋). Useful for
+/// domain-warping / tiling / Kali-style maps.</summary>
+public sealed record Fract(AstNode Operand) : AstNode;
+
+/// <summary>Per-component sign (Math.Sign): (sign(re), sign(im)) ∈ {−1,0,1}².</summary>
+public sealed record Sign(AstNode Operand) : AstNode;
 
 /// <summary>Complex sine. sin(a+bi) = sin(a)cosh(b) + i cos(a)sinh(b).
 /// Holomorphic — distance estimate via d/dz sin(u) = cos(u)·u' preserved.
@@ -124,6 +162,40 @@ public sealed record Exp(AstNode Operand) : AstNode;
 /// log(a+bi) = (1/2)·log(a²+b²) + i·atan2(b, a).
 /// Holomorphic on C\{0}. See <see cref="Sin"/> for capability notes.</summary>
 public sealed record Log(AstNode Operand) : AstNode;
+
+// Inverse trigonometric / hyperbolic functions. #27 Phase 6 (tranche 2).
+// Holomorphic on their principal branches, BUT the emitters compute them via
+// System.Numerics.Complex.{Asin,Acos,Atan} and the log-formula continuations
+// for asinh/acosh/atanh — identical to the SandboxExpression runtime. No
+// closed-form δ-Taylor / SA recurrence is derived and the analytic-DE
+// derivative rules are not implemented, so all six gate perturbation / SA /
+// DE off (folded into hasTrans + the DE gate); they render on the direct
+// scalar / AVX2 / DD / QD paths at shallow zoom where parity holds.
+//
+// SEMANTIC NOTE: SandboxExpression returns a REAL result (Math.Asin etc.) for
+// a provably-real operand inside the principal real domain, and the complex
+// continuation outside it. CalcGen emits the uniform complex form for every
+// operand — numerically ≈ the real branch inside the domain (a negligible,
+// escape-mask-invisible difference), and bit-identical to Sandbox's complex
+// branch (same BCL call / same formula) everywhere else.
+
+/// <summary>Complex inverse sine, System.Numerics.Complex.Asin.</summary>
+public sealed record Asin(AstNode Operand) : AstNode;
+
+/// <summary>Complex inverse cosine, System.Numerics.Complex.Acos.</summary>
+public sealed record Acos(AstNode Operand) : AstNode;
+
+/// <summary>Complex inverse tangent, System.Numerics.Complex.Atan.</summary>
+public sealed record Atan(AstNode Operand) : AstNode;
+
+/// <summary>Complex inverse hyperbolic sine, log(z + sqrt(z²+1)).</summary>
+public sealed record Asinh(AstNode Operand) : AstNode;
+
+/// <summary>Complex inverse hyperbolic cosine, log(z + sqrt(z²−1)).</summary>
+public sealed record Acosh(AstNode Operand) : AstNode;
+
+/// <summary>Complex inverse hyperbolic tangent, ½·log((1+z)/(1−z)).</summary>
+public sealed record Atanh(AstNode Operand) : AstNode;
 
 /// <summary>Principal argument of a complex number, lifted to complex as
 /// (arg, 0). arg(a+bi) = atan2(b, a) ∈ (-π, π]. Non-holomorphic — same

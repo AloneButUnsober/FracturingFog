@@ -49,6 +49,33 @@ public sealed class CalcGenSandboxParityTests
         // introduce between two independent FP implementations.
         { "z_ops_zeroed", "z*z + c + (abs(z) + re(z) + clamp(im(z), -1.0, 1.0)) * 0.0" },
         { "mixed_c",      "sqr(z) + abs(c) + clamp(re(c), -1.5, 1.5)" },
+        // #27 Phase 6 (tranche 2) — general pow(base, exp). Both engines route
+        // the complex case through the SAME System.Numerics.Complex.Pow and the
+        // both-real case through the SAME Math.Pow, so the shallow-zoom scalar
+        // path is near-exact. pow_sq_c is the real dynamics test (z² + c through
+        // the general-pow path); pow_real_c exercises the both-real Math.Pow
+        // branch; pow_mix_zeroed exercises the negative/fractional-exponent
+        // emitters (zero-guarded at the z=0 seed) without chaotic divergence.
+        { "pow_sq_c",       "pow(z, 2) + c" },
+        { "pow_real_c",     "z*z + pow(re(c), 2.0)" },
+        { "pow_mix_zeroed", "z*z + c + (pow(z, -2.0) + pow(c, 0.5)) * 0.0" },
+        // #27 Phase 6 (tranche 2) — inverse trig / hyperbolic. Both engines route
+        // through the SAME System.Numerics.Complex.{Asin,Acos,Atan} + log-formula
+        // continuations, so the direct-path dynamics are identical. Applied to the
+        // per-pixel constant c (bounded, no iterate-amplified sensitive dependence)
+        // for the real-dynamics tests; the zeroed form exercises all six emitter
+        // paths (compile + run) at once.
+        { "atan_c",         "z*z + atan(c)" },
+        { "asinh_c",        "z*z + asinh(c) * 0.3" },
+        { "invtrig_zeroed", "z*z + c + (asin(c) + acos(c) + atan(c) + asinh(c) + acosh(c) + atanh(c)) * 0.0" },
+        // #27 Phase 6 (tranche 2) — per-component floor/round/ceil/trunc/fract/
+        // sign. Both engines lift (F(re), F(im)) identically (same Math.* per
+        // component), so the direct-path dynamics match exactly. Applied to the
+        // per-pixel constant c for the real-dynamics tests; the zeroed form
+        // exercises all six emitter paths at once.
+        { "fract_c",        "z*z + fract(c)" },
+        { "floor_c",        "z*z + floor(c) * 0.15" },
+        { "percomp_zeroed", "z*z + c + (floor(z) + round(z) + ceil(z) + trunc(z) + fract(z) + sign(z)) * 0.0" },
     };
 
     [Theory]

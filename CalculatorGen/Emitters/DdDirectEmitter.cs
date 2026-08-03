@@ -110,6 +110,22 @@ public sealed class DdDirectEmitter : EmitterBase
         return new(reAbs, imAbs, ImZero: false);
     }
 
+    // Per-component real functions — degrade to double on the .Hi limb (DD has
+    // no floor/round/…), apply independently to Re and Im, preserve ImZero.
+    private static ComplexExpr PerComp(ComplexExpr a, Func<string, string> f)
+    {
+        string re = $"(DD)({f($"((DD)({a.Re})).Hi")})";
+        if (a.ImZero) return new(re, "(DD)0.0", ImZero: true);
+        string im = $"(DD)({f($"((DD)({a.Im})).Hi")})";
+        return new(re, im, ImZero: false);
+    }
+    protected override ComplexExpr OpFloor(ComplexExpr a) => PerComp(a, s => $"Math.Floor({s})");
+    protected override ComplexExpr OpRound(ComplexExpr a) => PerComp(a, s => $"Math.Round({s})");
+    protected override ComplexExpr OpCeil(ComplexExpr a)  => PerComp(a, s => $"Math.Ceiling({s})");
+    protected override ComplexExpr OpTrunc(ComplexExpr a) => PerComp(a, s => $"Math.Truncate({s})");
+    protected override ComplexExpr OpFract(ComplexExpr a) => PerComp(a, s => $"(({s}) - Math.Floor({s}))");
+    protected override ComplexExpr OpSign(ComplexExpr a)  => PerComp(a, s => $"(double)Math.Sign({s})");
+
     // Transcendentals: DD library lacks sin/cos/exp/log. Promote
     // .Hi → double, compute, demote back. Same degradation tradeoff
     // as QdEmitter — accuracy ~16 digits inside the call.
@@ -117,6 +133,22 @@ public sealed class DdDirectEmitter : EmitterBase
     {
         string re = $"{a.Re}.Hi";
         string im = a.ImZero ? "0.0" : $"{a.Im}.Hi";
+        // Inverse trig / hyperbolic degrade to double inside the Complex call
+        // (same trade-off as sin/exp/log). Demote the (Real, Imaginary) back to DD.
+        if (opName is "asin" or "acos" or "atan" or "asinh" or "acosh" or "atanh")
+        {
+            string z = $"new System.Numerics.Complex({re}, {im})";
+            string ex = opName switch
+            {
+                "asin"  => $"System.Numerics.Complex.Asin({z})",
+                "acos"  => $"System.Numerics.Complex.Acos({z})",
+                "atan"  => $"System.Numerics.Complex.Atan({z})",
+                "asinh" => $"System.Numerics.Complex.Log({z} + System.Numerics.Complex.Sqrt({z} * {z} + System.Numerics.Complex.One))",
+                "acosh" => $"System.Numerics.Complex.Log({z} + System.Numerics.Complex.Sqrt({z} * {z} - System.Numerics.Complex.One))",
+                _       => $"(0.5 * System.Numerics.Complex.Log((System.Numerics.Complex.One + {z}) / (System.Numerics.Complex.One - {z})))",
+            };
+            return new($"(DD)({ex}).Real", $"(DD)({ex}).Imaginary", ImZero: false);
+        }
         return opName switch
         {
             "sin" => a.ImZero
@@ -143,6 +175,12 @@ public sealed class DdDirectEmitter : EmitterBase
     protected override ComplexExpr OpCos(ComplexExpr a) => ScalarComplex(a, "cos");
     protected override ComplexExpr OpExp(ComplexExpr a) => ScalarComplex(a, "exp");
     protected override ComplexExpr OpLog(ComplexExpr a) => ScalarComplex(a, "log");
+    protected override ComplexExpr OpAsin(ComplexExpr a)  => ScalarComplex(a, "asin");
+    protected override ComplexExpr OpAcos(ComplexExpr a)  => ScalarComplex(a, "acos");
+    protected override ComplexExpr OpAtan(ComplexExpr a)  => ScalarComplex(a, "atan");
+    protected override ComplexExpr OpAsinh(ComplexExpr a) => ScalarComplex(a, "asinh");
+    protected override ComplexExpr OpAcosh(ComplexExpr a) => ScalarComplex(a, "acosh");
+    protected override ComplexExpr OpAtanh(ComplexExpr a) => ScalarComplex(a, "atanh");
     // arg / atan2 return a real angle; precision degrades to plain double
     // inside the atan2 call (same as the imag-part of OpLog). DD has no
     // implicit double cast — extract .Hi explicitly to feed Math.Atan2.
@@ -185,6 +223,22 @@ public sealed class DdDirectEmitter : EmitterBase
         new($"(((DD)({x.Re})).Hi < ((DD)({lo.Re})).Hi ? ((DD)({lo.Re})) : " +
             $"(((DD)({x.Re})).Hi > ((DD)({hi.Re})).Hi ? ((DD)({hi.Re})) : ((DD)({x.Re}))))",
             "(DD)0.0", ImZero: true);
+
+    // pow(base, exp): transcendental — degrade to double on the .Hi limb
+    // (same trade-off as sin/exp/log/abs). Both-real → Math.Pow; else
+    // Complex.Pow (zero-guarded principal branch). Result demoted back to DD.
+    protected override ComplexExpr OpPow(ComplexExpr a, ComplexExpr b)
+    {
+        string aRe = $"((DD)({a.Re})).Hi";
+        string bRe = $"((DD)({b.Re})).Hi";
+        if (a.ImZero && b.ImZero)
+            return new($"(DD)Math.Pow({aRe}, {bRe})", "(DD)0.0", ImZero: true);
+        string aIm = a.ImZero ? "0.0" : $"((DD)({a.Im})).Hi";
+        string bIm = b.ImZero ? "0.0" : $"((DD)({b.Im})).Hi";
+        string pw = $"System.Numerics.Complex.Pow(new System.Numerics.Complex({aRe}, {aIm}), " +
+                    $"new System.Numerics.Complex({bRe}, {bIm}))";
+        return new($"(DD)({pw}).Real", $"(DD)({pw}).Imaginary", ImZero: false);
+    }
 
     // Piecewise: condition compares DD values via .Hi (high-double).
     // Sufficient for typical Mandelbrot-style thresholds — the

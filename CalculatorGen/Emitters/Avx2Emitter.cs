@@ -187,6 +187,22 @@ public sealed class Avx2Emitter : EmitterBase
         return Bind($"Avx.AndNot({sign}, {a.Re})", $"Avx.AndNot({sign}, {a.Im})");
     }
 
+    // Per-component real functions — floor/ceil/round/trunc/fract have native
+    // Vector256 intrinsics (round-to-even / toward-zero match Math.Round /
+    // Math.Truncate). Applied to Re and Im independently, preserving ImZero.
+    // sign has no intrinsic → per-lane scalarise via the transcendental path.
+    private ComplexExpr PerCompVec(ComplexExpr a, Func<string, string> f)
+    {
+        if (a.ImZero) return BindReOnly(f(a.Re));
+        return Bind(f(a.Re), f(a.Im));
+    }
+    protected override ComplexExpr OpFloor(ComplexExpr a) => PerCompVec(a, v => $"Avx.Floor({v})");
+    protected override ComplexExpr OpCeil(ComplexExpr a)  => PerCompVec(a, v => $"Avx.Ceiling({v})");
+    protected override ComplexExpr OpRound(ComplexExpr a) => PerCompVec(a, v => $"Avx.RoundToNearestInteger({v})");
+    protected override ComplexExpr OpTrunc(ComplexExpr a) => PerCompVec(a, v => $"Avx.RoundToZero({v})");
+    protected override ComplexExpr OpFract(ComplexExpr a) => PerCompVec(a, v => $"Avx.Subtract({v}, Avx.Floor({v}))");
+    protected override ComplexExpr OpSign(ComplexExpr a)  => EmitPerLaneTranscendental(a, "sign");
+
     // Transcendentals are scalar-only on AVX2 — System.Math has no
     // Vector256 sin/cos/exp/log. Per-lane fallback: extract each of
     // the 4 lanes, apply the scalar complex identity, repack into a
@@ -256,6 +272,17 @@ public sealed class Avx2Emitter : EmitterBase
         "log" => $"{rOut} = 0.5 * Math.Log({re} * {re} + {im} * {im}); {iOut} = Math.Atan2({im}, {re});",
         // arg(a+bi) = atan2(b, a). Result lifted to (arg, 0) — iOut = 0.
         "arg" => $"{rOut} = Math.Atan2({im}, {re}); {iOut} = 0.0;",
+        // sign per component (no AVX2 intrinsic): (Math.Sign(re), Math.Sign(im)).
+        "sign" => $"{rOut} = Math.Sign({re}); {iOut} = Math.Sign({im});",
+        // Inverse trig / hyperbolic per lane via System.Numerics.Complex —
+        // matches SandboxExpression's complex branch. Each wraps its own block
+        // scope so the per-lane local doesn't collide across the 4 unrolled lanes.
+        "asin"  => $"{{ var _p = System.Numerics.Complex.Asin(new System.Numerics.Complex({re}, {im})); {rOut} = _p.Real; {iOut} = _p.Imaginary; }}",
+        "acos"  => $"{{ var _p = System.Numerics.Complex.Acos(new System.Numerics.Complex({re}, {im})); {rOut} = _p.Real; {iOut} = _p.Imaginary; }}",
+        "atan"  => $"{{ var _p = System.Numerics.Complex.Atan(new System.Numerics.Complex({re}, {im})); {rOut} = _p.Real; {iOut} = _p.Imaginary; }}",
+        "asinh" => $"{{ var _z = new System.Numerics.Complex({re}, {im}); var _p = System.Numerics.Complex.Log(_z + System.Numerics.Complex.Sqrt(_z * _z + System.Numerics.Complex.One)); {rOut} = _p.Real; {iOut} = _p.Imaginary; }}",
+        "acosh" => $"{{ var _z = new System.Numerics.Complex({re}, {im}); var _p = System.Numerics.Complex.Log(_z + System.Numerics.Complex.Sqrt(_z * _z - System.Numerics.Complex.One)); {rOut} = _p.Real; {iOut} = _p.Imaginary; }}",
+        "atanh" => $"{{ var _z = new System.Numerics.Complex({re}, {im}); var _p = 0.5 * System.Numerics.Complex.Log((System.Numerics.Complex.One + _z) / (System.Numerics.Complex.One - _z)); {rOut} = _p.Real; {iOut} = _p.Imaginary; }}",
         _ => throw new InvalidOperationException($"Avx2Emitter: unknown transcendental {op}"),
     };
 
@@ -264,6 +291,12 @@ public sealed class Avx2Emitter : EmitterBase
     protected override ComplexExpr OpExp(ComplexExpr a) => EmitPerLaneTranscendental(a, "exp");
     protected override ComplexExpr OpLog(ComplexExpr a) => EmitPerLaneTranscendental(a, "log");
     protected override ComplexExpr OpArg(ComplexExpr a) => EmitPerLaneTranscendental(a, "arg");
+    protected override ComplexExpr OpAsin(ComplexExpr a)  => EmitPerLaneTranscendental(a, "asin");
+    protected override ComplexExpr OpAcos(ComplexExpr a)  => EmitPerLaneTranscendental(a, "acos");
+    protected override ComplexExpr OpAtan(ComplexExpr a)  => EmitPerLaneTranscendental(a, "atan");
+    protected override ComplexExpr OpAsinh(ComplexExpr a) => EmitPerLaneTranscendental(a, "asinh");
+    protected override ComplexExpr OpAcosh(ComplexExpr a) => EmitPerLaneTranscendental(a, "acosh");
+    protected override ComplexExpr OpAtanh(ComplexExpr a) => EmitPerLaneTranscendental(a, "atanh");
     // Binary atan2(y, x) has no AVX2 vector intrinsic, but we can still
     // keep the surrounding pipeline vectorised by per-lane-scalarising
     // exactly like OpMod does: extract the 4 lanes of y.Re and x.Re,
@@ -328,6 +361,64 @@ public sealed class Avx2Emitter : EmitterBase
     protected override ComplexExpr OpClamp(ComplexExpr x, ComplexExpr lo, ComplexExpr hi) =>
         new($"Vector256.Max({lo.Re}, Vector256.Min({x.Re}, {hi.Re}))",
             "Vector256<double>.Zero", ImZero: true);
+
+    // pow(base, exp) has no AVX2 intrinsic — per-lane scalarise exactly like
+    // OpMod / the transcendental fallback, but with two complex inputs and a
+    // complex output. Both-real (at emit time) → Math.Pow per lane (real,
+    // ImZero output); else Complex.Pow per lane (zero-guarded principal
+    // branch). Kills SIMD parallelism for pow but keeps width consistent.
+    protected override ComplexExpr OpPow(ComplexExpr a, ComplexExpr b)
+    {
+        bool bothReal = a.ImZero && b.ImZero;
+        string ar = a.Re, br = b.Re;
+        string tre = NewTemp("re");
+        string tim = NewTemp("im");
+        string ns = tre;
+        _prelude.Append(_indent).Append("Vector256<double> ").Append(tre)
+            .Append("; Vector256<double> ").Append(tim).Append(';').Append('\n');
+        _prelude.Append(_indent).Append("{\n");
+        for (int k = 0; k < 4; k++)
+            _prelude.Append(_indent).Append("    double ar").Append(k).Append('_').Append(ns)
+                .Append(" = ").Append(ar).Append(".GetElement(").Append(k).Append(");\n");
+        for (int k = 0; k < 4; k++)
+            _prelude.Append(_indent).Append("    double br").Append(k).Append('_').Append(ns)
+                .Append(" = ").Append(br).Append(".GetElement(").Append(k).Append(");\n");
+        if (!bothReal)
+        {
+            for (int k = 0; k < 4; k++)
+                _prelude.Append(_indent).Append("    double ai").Append(k).Append('_').Append(ns)
+                    .Append(" = ").Append(a.ImZero ? "0.0" : $"{a.Im}.GetElement({k})").Append(";\n");
+            for (int k = 0; k < 4; k++)
+                _prelude.Append(_indent).Append("    double bi").Append(k).Append('_').Append(ns)
+                    .Append(" = ").Append(b.ImZero ? "0.0" : $"{b.Im}.GetElement({k})").Append(";\n");
+        }
+        _prelude.Append(_indent).Append("    double r0_").Append(ns).Append(",r1_").Append(ns)
+            .Append(",r2_").Append(ns).Append(",r3_").Append(ns).Append(",i0_").Append(ns)
+            .Append(",i1_").Append(ns).Append(",i2_").Append(ns).Append(",i3_").Append(ns).Append(";\n");
+        for (int k = 0; k < 4; k++)
+        {
+            if (bothReal)
+                _prelude.Append(_indent).Append("    r").Append(k).Append('_').Append(ns)
+                    .Append(" = Math.Pow(ar").Append(k).Append('_').Append(ns)
+                    .Append(", br").Append(k).Append('_').Append(ns).Append("); i")
+                    .Append(k).Append('_').Append(ns).Append(" = 0.0;\n");
+            else
+                _prelude.Append(_indent).Append("    { var p").Append(k).Append('_').Append(ns)
+                    .Append(" = System.Numerics.Complex.Pow(new System.Numerics.Complex(ar")
+                    .Append(k).Append('_').Append(ns).Append(", ai").Append(k).Append('_').Append(ns)
+                    .Append("), new System.Numerics.Complex(br").Append(k).Append('_').Append(ns)
+                    .Append(", bi").Append(k).Append('_').Append(ns).Append(")); r")
+                    .Append(k).Append('_').Append(ns).Append(" = p").Append(k).Append('_').Append(ns)
+                    .Append(".Real; i").Append(k).Append('_').Append(ns).Append(" = p")
+                    .Append(k).Append('_').Append(ns).Append(".Imaginary; }\n");
+        }
+        _prelude.Append(_indent).Append("    ").Append(tre).Append(" = Vector256.Create(r0_")
+            .Append(ns).Append(", r1_").Append(ns).Append(", r2_").Append(ns).Append(", r3_").Append(ns).Append(");\n");
+        _prelude.Append(_indent).Append("    ").Append(tim).Append(" = Vector256.Create(i0_")
+            .Append(ns).Append(", i1_").Append(ns).Append(", i2_").Append(ns).Append(", i3_").Append(ns).Append(");\n");
+        _prelude.Append(_indent).Append("}\n");
+        return new ComplexExpr(tre, tim, ImZero: bothReal);
+    }
 
     // mod (%) has no SIMD intrinsic — fall back to per-lane scalar via the
     // existing transcendental infrastructure, but adapted to two inputs.

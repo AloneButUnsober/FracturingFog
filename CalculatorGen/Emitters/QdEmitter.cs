@@ -124,6 +124,22 @@ public sealed class QdEmitter : EmitterBase
         return new(reAbs, imAbs, ImZero: false);
     }
 
+    // Per-component real functions — degrade to double on the .X0 limb (QD has
+    // no floor/round/…), apply independently to Re and Im, preserve ImZero.
+    private static ComplexExpr PerComp(ComplexExpr a, Func<string, string> f)
+    {
+        string re = $"(QD)({f($"((QD)({a.Re})).X0")})";
+        if (a.ImZero) return new(re, "(QD)0.0", ImZero: true);
+        string im = $"(QD)({f($"((QD)({a.Im})).X0")})";
+        return new(re, im, ImZero: false);
+    }
+    protected override ComplexExpr OpFloor(ComplexExpr a) => PerComp(a, s => $"Math.Floor({s})");
+    protected override ComplexExpr OpRound(ComplexExpr a) => PerComp(a, s => $"Math.Round({s})");
+    protected override ComplexExpr OpCeil(ComplexExpr a)  => PerComp(a, s => $"Math.Ceiling({s})");
+    protected override ComplexExpr OpTrunc(ComplexExpr a) => PerComp(a, s => $"Math.Truncate({s})");
+    protected override ComplexExpr OpFract(ComplexExpr a) => PerComp(a, s => $"(({s}) - Math.Floor({s}))");
+    protected override ComplexExpr OpSign(ComplexExpr a)  => PerComp(a, s => $"(double)Math.Sign({s})");
+
     // Transcendentals: QD library lacks sin/cos/exp/log. Promote to
     // double via .X0, compute, promote result back. Precision degrades
     // to ~16 decimal digits inside the transcendental call; the
@@ -134,6 +150,22 @@ public sealed class QdEmitter : EmitterBase
     {
         string re = a.ImZero ? $"{a.Re}.X0" : $"{a.Re}.X0";
         string im = a.ImZero ? "0.0" : $"{a.Im}.X0";
+        // Inverse trig / hyperbolic degrade to double inside the Complex call
+        // (same trade-off as sin/exp/log). Demote (Real, Imaginary) back to QD.
+        if (opName is "asin" or "acos" or "atan" or "asinh" or "acosh" or "atanh")
+        {
+            string z = $"new System.Numerics.Complex({re}, {im})";
+            string ex = opName switch
+            {
+                "asin"  => $"System.Numerics.Complex.Asin({z})",
+                "acos"  => $"System.Numerics.Complex.Acos({z})",
+                "atan"  => $"System.Numerics.Complex.Atan({z})",
+                "asinh" => $"System.Numerics.Complex.Log({z} + System.Numerics.Complex.Sqrt({z} * {z} + System.Numerics.Complex.One))",
+                "acosh" => $"System.Numerics.Complex.Log({z} + System.Numerics.Complex.Sqrt({z} * {z} - System.Numerics.Complex.One))",
+                _       => $"(0.5 * System.Numerics.Complex.Log((System.Numerics.Complex.One + {z}) / (System.Numerics.Complex.One - {z})))",
+            };
+            return new($"(QD)({ex}).Real", $"(QD)({ex}).Imaginary", ImZero: false);
+        }
         return opName switch
         {
             "sin" => a.ImZero
@@ -160,6 +192,12 @@ public sealed class QdEmitter : EmitterBase
     protected override ComplexExpr OpCos(ComplexExpr a) => ScalarComplex(a, "cos");
     protected override ComplexExpr OpExp(ComplexExpr a) => ScalarComplex(a, "exp");
     protected override ComplexExpr OpLog(ComplexExpr a) => ScalarComplex(a, "log");
+    protected override ComplexExpr OpAsin(ComplexExpr a)  => ScalarComplex(a, "asin");
+    protected override ComplexExpr OpAcos(ComplexExpr a)  => ScalarComplex(a, "acos");
+    protected override ComplexExpr OpAtan(ComplexExpr a)  => ScalarComplex(a, "atan");
+    protected override ComplexExpr OpAsinh(ComplexExpr a) => ScalarComplex(a, "asinh");
+    protected override ComplexExpr OpAcosh(ComplexExpr a) => ScalarComplex(a, "acosh");
+    protected override ComplexExpr OpAtanh(ComplexExpr a) => ScalarComplex(a, "atanh");
     protected override ComplexExpr OpArg(ComplexExpr a) =>
         new($"(QD)Math.Atan2({(a.ImZero ? "0.0" : $"((QD)({a.Im})).X0")}, ((QD)({a.Re})).X0)", "(QD)0.0", ImZero: true);
     protected override ComplexExpr OpAtan2(ComplexExpr y, ComplexExpr x) =>
@@ -191,6 +229,22 @@ public sealed class QdEmitter : EmitterBase
         new($"(((QD)({x.Re})).X0 < ((QD)({lo.Re})).X0 ? ((QD)({lo.Re})) : " +
             $"(((QD)({x.Re})).X0 > ((QD)({hi.Re})).X0 ? ((QD)({hi.Re})) : ((QD)({x.Re}))))",
             "(QD)0.0", ImZero: true);
+
+    // pow(base, exp): transcendental — degrade to double on the .X0 limb
+    // (same trade-off as sin/exp/log/abs). Both-real → Math.Pow; else
+    // Complex.Pow (zero-guarded principal branch). Result demoted back to QD.
+    protected override ComplexExpr OpPow(ComplexExpr a, ComplexExpr b)
+    {
+        string aRe = $"((QD)({a.Re})).X0";
+        string bRe = $"((QD)({b.Re})).X0";
+        if (a.ImZero && b.ImZero)
+            return new($"(QD)Math.Pow({aRe}, {bRe})", "(QD)0.0", ImZero: true);
+        string aIm = a.ImZero ? "0.0" : $"((QD)({a.Im})).X0";
+        string bIm = b.ImZero ? "0.0" : $"((QD)({b.Im})).X0";
+        string pw = $"System.Numerics.Complex.Pow(new System.Numerics.Complex({aRe}, {aIm}), " +
+                    $"new System.Numerics.Complex({bRe}, {bIm}))";
+        return new($"(QD)({pw}).Real", $"(QD)({pw}).Imaginary", ImZero: false);
+    }
 
     // Piecewise — compare on QD .X0 (high limb), select via C# ternary.
     // Eager-evaluated branches.

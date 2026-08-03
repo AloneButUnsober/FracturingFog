@@ -70,16 +70,38 @@ public static class AstDifferentiator
         // only.
         Conj       => new RealConst(0.0),
         Folded     => new RealConst(0.0),
+        // Per-component floor/round/ceil/trunc/fract/sign: piecewise-constant
+        // (derivative 0 a.e.). Non-holomorphic; DE gated off upstream.
+        Floor      => new RealConst(0.0),
+        Round      => new RealConst(0.0),
+        Ceil       => new RealConst(0.0),
+        Trunc      => new RealConst(0.0),
+        Fract      => new RealConst(0.0),
+        Sign       => new RealConst(0.0),
         // arg / atan2 are non-holomorphic (Wirtinger-real derivative). Treat
         // them like Conj/Folded: ∂/∂z arg(u) = 0 in the holomorphic chain.
         // SupportsDe is gated off by Contains<Arg> / Contains<Atan2> upstream.
         Arg        => new RealConst(0.0),
         Atan2      => new RealConst(0.0),
+        // Inverse trig / hyperbolic: holomorphic, but analytic-DE derivative
+        // rules are not implemented — DE is gated off upstream (folded into the
+        // DE gate), so this opaque 0 is never used; it just keeps the
+        // unconditional derivUpdate build from throwing.
+        Asin       => new RealConst(0.0),
+        Acos       => new RealConst(0.0),
+        Atan       => new RealConst(0.0),
+        Asinh      => new RealConst(0.0),
+        Acosh      => new RealConst(0.0),
+        Atanh      => new RealConst(0.0),
         // min/max/mod: subgradient at boundary, treated as opaque for the
         // chain rule. Distance estimate is disabled when present anyway.
         Min        => new RealConst(0.0),
         Max        => new RealConst(0.0),
         Mod        => new RealConst(0.0),
+        // pow(base, exp): general power. Analytic DE is gated off upstream
+        // (PowC folded into hasArg), so the derivative is never used — but
+        // the unconditional derivUpdate build must not throw. Treat opaque.
+        PowC       => new RealConst(0.0),
         // #27 Phase 6 — re/im/abs/clamp are non-holomorphic real-lifts. Opaque
         // to the chain rule (∂/∂v = 0); SupportsDe is gated off upstream via
         // Contains<ReOp>/… so this derivative is never actually used, but the
