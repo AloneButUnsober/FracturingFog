@@ -164,5 +164,73 @@ namespace FracturingFog.Models
                 if (e.Name.Equals(name, StringComparison.OrdinalIgnoreCase)) return e;
             return null;
         }
+
+        /// <summary>
+        /// #27 Phase 5a — normalise saved equations onto the safe DSL while
+        /// keeping them on the live-rendering <see cref="UserEquationKind.UserEquation"/>
+        /// path. The store is UI-free, so the translation (EquationPreprocessor →
+        /// SandboxExpression, which live in higher layers) is injected:
+        /// <paramref name="translate"/> returns the DSL text when a C# source
+        /// translates and validates, or null to leave it as-is (no DSL form — it
+        /// stays editable and the live path shows the DSL error).
+        ///
+        /// Two operations:
+        /// <list type="bullet">
+        /// <item>Rewrite a <c>UserEquation</c> entry's C# source to its DSL form
+        ///   (Kind kept). Idempotent — an entry already stored as its own DSL is
+        ///   skipped (the translation equals the source).</item>
+        /// <item>When <paramref name="flipDslEntriesToUserEquation"/> is set (a
+        ///   one-time corrective), move every <c>Dsl</c>-tagged entry back to the
+        ///   <c>UserEquation</c> tab. A prior migration wrongly flipped entries to
+        ///   <c>Dsl</c>, which routed them to an editor tab that does not render
+        ///   live (only the CalcGen "Compile &amp; Load" codegen path) — the
+        ///   safe interpreter renders the same DSL directly on the UserEquation
+        ///   tab, so this restores default rendering. The DSL source is kept.</item>
+        /// </list>
+        ///
+        /// Before the first change the current <c>userequations.json</c> is
+        /// snapshotted via <see cref="UserDataBackup"/> so a user's original
+        /// authored text is recoverable ([[feedback_no_save_over_examples]]).
+        /// Returns the number of entries changed.
+        /// </summary>
+        public int MigrateUserEquationsToDsl(Func<string, string?> translate, bool flipDslEntriesToUserEquation)
+        {
+            if (translate == null) return 0;
+
+            var flips = new List<UserEquationEntry>();
+            var rewrites = new List<(UserEquationEntry Entry, string Dsl)>();
+
+            foreach (var e in Equations)
+            {
+                if (flipDslEntriesToUserEquation && e.Kind == UserEquationKind.Dsl)
+                {
+                    // Source is already DSL; just move it back to the live tab.
+                    flips.Add(e);
+                    continue;
+                }
+                if (e.Kind != UserEquationKind.UserEquation) continue;
+                if (string.IsNullOrWhiteSpace(e.Source)) continue;
+                string? dsl = translate(e.Source);
+                if (string.IsNullOrWhiteSpace(dsl)) continue;   // no DSL form — leave it
+                if (SourcesEqual(dsl!, e.Source)) continue;      // already DSL text — idempotent
+                rewrites.Add((e, dsl!));
+            }
+
+            if (flips.Count == 0 && rewrites.Count == 0) return 0;
+
+            // Snapshot the original file before the destructive change.
+            UserDataBackup.SnapshotBeforeMigration(EquationsFile, "dslmigration");
+
+            foreach (var e in flips) e.Kind = UserEquationKind.UserEquation;
+            foreach (var (entry, dsl) in rewrites) entry.Source = dsl; // Kind stays UserEquation
+            Save();
+            return flips.Count + rewrites.Count;
+        }
+
+        private static bool SourcesEqual(string? a, string? b)
+            => string.Equals(
+                (a ?? string.Empty).Replace("\r\n", "\n").Trim(),
+                (b ?? string.Empty).Replace("\r\n", "\n").Trim(),
+                StringComparison.Ordinal);
     }
 }

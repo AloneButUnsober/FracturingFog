@@ -21,11 +21,23 @@
 //   Complex.Exp(x)        → exp(x)
 //   Complex.Log(x)        → log(x)
 //   Complex.Conjugate(x)  → conj(x)
+//   Complex.Divide(a, b)  → ((a)/(b))
 //   Complex.Pow(x, k_int) → x^k         (k ≥ 2)
 //                         → x           (k == 1)
 //                         → 1           (k == 0)
 //                         → 1/x^|k|     (k < 0)
 //   Complex.Pow(x, expr)  → exp(expr*log(x))    (non-integer exponent)
+//
+// Member access (#27 Phase 5a — the DSL has these functions; only the C#
+// property-access syntax needed a rewrite so saved equations keep working
+// after the raw-C# path was removed)
+//   x.Real                → re(x)
+//   x.Imaginary           → im(x)
+//   x.Phase               → arg(x)
+//   x.Magnitude           → sqrt(x*conj(x))   (|x|; avoids `abs`, whose meaning
+//                           differs between the CalcGen DSL (|x|²) and the
+//                           SandboxExpression runtime (|x|) — x*conj(x) = |x|²
+//                           and sqrt of that = |x| under both)
 //
 // Explicit reject (with crisp error messages)
 //   Complex.Abs(x)        — DSL `abs(x)` is |x|² (squared mag), not |x|
@@ -154,6 +166,13 @@ public static class EquationPreprocessor
             }
             s = s.Substring(0, mNew.Index) + replacement + s.Substring(closeIdx + 1);
         }
+
+        // #27 Phase 5a — member-access rewrite. Run before the Complex.Abs /
+        // unsupported-member scans so an operand like `Complex.Sin(z).Real`
+        // resolves to `re(Complex.Sin(z))` and the inner call is picked up by
+        // the normal rewrite loop below.
+        s = RewriteMemberAccess(s);
+
         var mAbs = Regex.Match(s, @"\bComplex\.Abs\s*\(");
         if (mAbs.Success)
         {
@@ -190,7 +209,7 @@ public static class EquationPreprocessor
         // else short-circuits with a span pointing at the user's character.
         var known = new HashSet<string>(StringComparer.Ordinal)
         { "Sin", "Cos", "Tan", "Sinh", "Cosh", "Tanh", "Sqrt",
-          "Exp", "Log", "Conjugate", "Pow", "Phase",
+          "Exp", "Log", "Conjugate", "Pow", "Phase", "Divide",
           "Zero", "One", "ImaginaryOne", "Abs" };
         foreach (Match m in Regex.Matches(s, @"\bComplex\.([A-Za-z_][A-Za-z0-9_]*)\b"))
         {
@@ -247,6 +266,9 @@ public static class EquationPreprocessor
             s = RewriteCall(s, "Complex.Exp",       args => args.Length == 1 ? $"exp({args[0].Trim()})"  : null);
             s = RewriteCall(s, "Complex.Log",       args => args.Length == 1 ? $"log({args[0].Trim()})"  : null);
             s = RewriteCall(s, "Complex.Conjugate", args => args.Length == 1 ? $"conj({args[0].Trim()})" : null);
+            // Complex.Divide(a, b) is plain division; wrap both operands so the
+            // surrounding precedence is preserved.
+            s = RewriteCall(s, "Complex.Divide", args => args.Length == 2 ? $"(({args[0].Trim()})/({args[1].Trim()}))" : null);
             // Complex.Phase is the BCL accessor for arg(z). Translates 1:1.
             s = RewriteCall(s, "Complex.Phase",     args => args.Length == 1 ? $"arg({args[0].Trim()})"  : null);
             // Math.Atan2(y, x) is real-valued; DSL atan2 lifts to complex.
@@ -256,10 +278,16 @@ public static class EquationPreprocessor
             s = RewriteCall(s, "Math.Max",          args => args.Length == 2 ? $"max({args[0].Trim()}, {args[1].Trim()})" : null);
             s = RewriteCall(s, "Math.IEEERemainder", args => args.Length == 2 ? $"mod({args[0].Trim()}, {args[1].Trim()})" : null);
 
-            // Pow has a special-case integer-exponent fast path so common
-            // cases like `Complex.Pow(z, -3)` translate to a clean `1/(z)^3`
-            // instead of `exp(-3*log(z))` (which is correct but loses the
-            // polynomial-detector classification, perturbation Taylor, etc.).
+            // Pow: only POSITIVE integer exponents get the `(x)^n` fast path
+            // (polynomial-detector / perturbation Taylor friendly, and 0^n = 0
+            // matches Complex.Pow). Negative and non-integer/expression
+            // exponents translate to the `pow(x, y)` DSL function, which the
+            // SandboxExpression runtime evaluates via Complex.Pow — crucially
+            // replicating .NET's zero guards (`Pow(0, k)` = 0 for k != 0,
+            // `Pow(x, 0)` = 1). The earlier `1/(x)^n` / `exp(y·log x)` forms did
+            // NOT: they yield NaN at x = 0, so maps singular at the z = 0 seed
+            // (negative powers of z; `sin(z)^k` at z = 0) rendered blank whereas
+            // the original Complex.Pow rendered them. #27 Phase 5a.
             s = RewriteCall(s, "Complex.Pow", args =>
             {
                 if (args.Length != 2) return null;
@@ -271,14 +299,14 @@ public static class EquationPreprocessor
                     if (n == 0) return "1";
                     if (n == 1) return $"({baseExpr})";
                     if (n > 0) return $"({baseExpr})^{n}";
-                    // Negative: rewrite 1 / x^|n|. Wraps in extra parens so
-                    // surrounding precedence still bites correctly.
-                    return $"(1/({baseExpr})^{-n})";
+                    // Negative integer: pow() (Complex.Pow), NOT 1/x^|n| — the
+                    // latter is NaN at x = 0 where Complex.Pow(0, -n) = 0.
+                    return $"pow({baseExpr}, {n})";
                 }
-                // General complex exponent: x^y ≡ exp(y · log(x)). Loses any
-                // SA / perturbation Taylor benefit (becomes a transcendental
-                // chain) but keeps the math correct.
-                return $"exp(({expExpr})*log({baseExpr}))";
+                // General exponent: pow() (Complex.Pow), NOT exp(y·log x) — the
+                // latter is NaN when the base is 0 (e.g. exponent 0 gives NaN
+                // instead of Complex.Pow(x, 0) = 1).
+                return $"pow({baseExpr}, {expExpr})";
             });
 
             if (s == before) break;
@@ -334,6 +362,82 @@ public static class EquationPreprocessor
     }
 
     private static bool IsIdentPart(char c) => char.IsLetterOrDigit(c) || c == '_' || c == '.';
+
+    /// <summary>
+    /// #27 Phase 5a — rewrite `operand.Real / .Imaginary / .Phase / .Magnitude`
+    /// (System.Numerics.Complex accessors) into the DSL functions the sandbox
+    /// interpreter already supports: re / im / arg / sqrt(abs(·)). The operand
+    /// is the value immediately to the left of the `.` — a bare identifier /
+    /// number, a parenthesised group, or a call result (`f(x)` incl. a dotted
+    /// callee like `Complex.Sin(x)`). Applied to a fixed point so chained /
+    /// nested accessors fully resolve.
+    /// </summary>
+    private static string RewriteMemberAccess(string source)
+    {
+        string s = source;
+        for (int guard = 0; guard < 64; guard++)
+        {
+            var m = Regex.Match(s, @"\.(Real|Imaginary|Magnitude|Phase)\b");
+            if (!m.Success) break;
+
+            int dotIndex = m.Index;
+            int opStart = FindOperandStart(s, dotIndex);
+            if (opStart < 0)
+                break; // no valid operand — let the downstream parser report it
+
+            string operand = s.Substring(opStart, dotIndex - opStart);
+            int memberEnd = dotIndex + 1 + m.Groups[1].Value.Length; // past `.Member`
+            string repl = m.Groups[1].Value switch
+            {
+                "Real"      => $"re({operand})",
+                "Imaginary" => $"im({operand})",
+                "Phase"     => $"arg({operand})",
+                // |x| without `abs` (whose |x| vs |x|² meaning differs between
+                // the CalcGen DSL and the SandboxExpression runtime): x*conj(x)
+                // = |x|² in both, and sqrt of that is |x|.
+                "Magnitude" => $"sqrt(({operand})*conj({operand}))",
+                _           => operand,
+            };
+            s = s.Substring(0, opStart) + repl + s.Substring(memberEnd);
+        }
+        return s;
+    }
+
+    /// <summary>Index where the operand immediately left of <paramref name="dotIndex"/>
+    /// begins, or -1 when there is no value there. Handles a balanced `(…)`
+    /// group (optionally prefixed by a dotted callee name) and a bare
+    /// identifier / number run.</summary>
+    private static int FindOperandStart(string s, int dotIndex)
+    {
+        int i = dotIndex - 1;
+        if (i < 0) return -1;
+        char c = s[i];
+
+        if (c == ')')
+        {
+            int depth = 0;
+            while (i >= 0)
+            {
+                if (s[i] == ')') depth++;
+                else if (s[i] == '(') { depth--; if (depth == 0) break; }
+                i--;
+            }
+            if (i < 0) return -1; // unbalanced
+            // Absorb a preceding dotted callee (`Complex.Sin`, `sin`).
+            int j = i - 1;
+            while (j >= 0 && (char.IsLetterOrDigit(s[j]) || s[j] == '_' || s[j] == '.')) j--;
+            return j + 1;
+        }
+
+        if (char.IsLetterOrDigit(c) || c == '_' || c == '.')
+        {
+            int j = i;
+            while (j >= 0 && (char.IsLetterOrDigit(s[j]) || s[j] == '_' || s[j] == '.')) j--;
+            return j + 1;
+        }
+
+        return -1;
+    }
 
     private static int FindMatchingParen(string s, int openIdx)
     {

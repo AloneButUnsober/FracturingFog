@@ -49,6 +49,27 @@ public sealed class UserEquationDslParityTests
         { "sin_of_sq",    "return Complex.Sin(z*z) + c;",    (z, c, n) => Complex.Sin(z * z) + c },
         { "iter_scaled",  "return z*z + c*n;",               (z, c, n) => z * z + c * n },
         { "nested_pow",   "return Complex.Pow(Complex.Pow(z, 2), 3) + c;", (z, c, n) => Complex.Pow(Complex.Pow(z, 2), 3) + c },
+        // #27 Phase 5a — member-access forms the preprocessor now translates.
+        { "real",         "return z.Real + c;",              (z, c, n) => z.Real + c },
+        { "imag",         "return z.Imaginary + c;",         (z, c, n) => z.Imaginary + c },
+        { "magnitude",    "return z.Magnitude + c;",         (z, c, n) => z.Magnitude + c },
+        { "phase",        "return z.Phase + c;",             (z, c, n) => z.Phase + c },
+        { "paren_real",   "return (z*z).Real + c;",          (z, c, n) => (z * z).Real + c },
+        { "call_real",    "return Complex.Sin(z).Real + c;", (z, c, n) => Complex.Sin(z).Real + c },
+        { "real_imag_mix","return z.Real*z.Real - z.Imaginary*z.Imaginary + c;",
+                          (z, c, n) => z.Real * z.Real - z.Imaginary * z.Imaginary + c },
+        // #27 Phase 5a near-misses — Complex.Divide, bare Math statics (E / PI /
+        // Pow via `using static System.Math`), and comments.
+        { "divide",       "return Complex.Divide(z, 5) + c;", (z, c, n) => Complex.Divide(z, 5) + c },
+        { "const_e",      "return z + E;",                    (z, c, n) => z + Math.E },
+        { "const_pi",     "return z*PI + c;",                 (z, c, n) => z * Math.PI + c },
+        { "bare_pow",     "return Pow(z, 3) + c;",            (z, c, n) => Complex.Pow(z, 3) + c },
+        { "line_comment", "return z*z + c; // classic",       (z, c, n) => z * z + c },
+        { "block_comment","return z*z /* squared */ + c;",    (z, c, n) => z * z + c },
+        // #27 Phase 5a — negative / non-integer powers now translate to pow()
+        // (Complex.Pow-exact) rather than 1/x^n or exp(y·log x).
+        { "neg_pow_int",  "return z * Complex.Pow(z, -3) + c;", (z, c, n) => z * Complex.Pow(z, -3) + c },
+        { "neg_pow_c",    "return z + c * Complex.Pow(c, -2);", (z, c, n) => z + c * Complex.Pow(c, -2) },
     };
 
     // z samples avoid the origin and the negative-real axis so log's branch
@@ -87,6 +108,46 @@ public sealed class UserEquationDslParityTests
             Assert.True(err <= Tol * scale,
                 $"[{label}] z={z} c={c} n={n}: want {want}, got {got}, err {err}");
         }
+    }
+
+    // ── #27 Phase 5a near-misses — real saved equations that used to fail ────
+    // Exact sources pulled from a real userequations.json. Each was left as C#
+    // (Kind=UserEquation, erroring) before the near-miss fixes (Complex.Divide,
+    // bare Math statics E/PI/Pow, `//` `/* */` comments, trailing `;`). They must
+    // now translate + parse on the safe interpreter so the migration converts them.
+    [Theory]
+    [InlineData("return Complex.Divide(z,5)*z + Complex.Log(c) + c;")]
+    [InlineData("return Complex.Sin(z * Pow(n,2)) + Complex.Pow(E,Complex.Pow(c,2));")]
+    [InlineData("return Complex.Sin(z * Pow(n,1)) + Complex.Sqrt(Complex.Pow(E,Complex.Pow(c,4)));")]
+    [InlineData("return \nComplex.Pow(Complex.Pow(Complex.Sin(z),2 + Sin(Pow(n,2.55))) ,2)\n//* \n//Complex.Pow(Complex.Sin(z),2 + Cos(Pow(n,2.5))) \n+ \nComplex.Pow(c,-2);")]
+    [InlineData("return \nComplex.Pow(Complex.Sin(z * 2),2 * Sin(Pow(n,5))) \n//* \n//Complex.Pow(Complex.Sin(z),2.1 + Cos(n)) \n+ \nComplex.Pow(c,-2);")]
+    public void RealSavedEquation_NowTranslatesAndParses(string csharp)
+    {
+        string dsl = EquationPreprocessor.Preprocess(csharp, out PreprocessDiagnostic? diag);
+        Assert.True(diag == null, $"unexpected translation diagnostic: {diag?.Message}\nsource: {csharp}");
+
+        var expr = SandboxExpression.Parse(dsl); // must not throw
+        var env = expr.NewEnv();
+        // Evaluating must not throw (values may be non-finite for these maps).
+        expr.EvalStep(new Complex(0.3, 0.2), new Complex(-0.5, 0.1), 5, env);
+    }
+
+    // #27 Phase 5a — the z=0 seed is exactly where the old 1/x^n / exp(y·log x)
+    // translations produced NaN (blank render) while Complex.Pow returns a finite
+    // value. pow() must match Complex.Pow's zero guards.
+    [Theory]
+    [InlineData("return z * Complex.Pow(z, -3) + c;")]  // z*Pow(0,-3)+c = 0*0+c = c
+    [InlineData("return Complex.Pow(Complex.Sin(z), n) + c;")] // Pow(sin(0),0)=Pow(0,0)=1
+    public void Power_AtZeroSeed_IsFinite_MatchingComplexPow(string csharp)
+    {
+        string dsl = EquationPreprocessor.Preprocess(csharp, out PreprocessDiagnostic? diag);
+        Assert.True(diag == null, diag?.Message);
+        Assert.Contains("pow(", dsl); // routed through Complex.Pow, not 1/x^n or exp/log
+        var expr = SandboxExpression.Parse(dsl);
+        var env = expr.NewEnv();
+        Complex got = expr.EvalStep(Complex.Zero, new Complex(0.3, 0.1), 0, env);
+        Assert.False(double.IsNaN(got.Real) || double.IsNaN(got.Imaginary),
+            $"z=0 seed produced NaN (blank render): {got}");
     }
 
     // ── Part B — render parity: UserEquation(DSL) ≡ SandboxCalculator ────────

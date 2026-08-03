@@ -31,6 +31,28 @@ public sealed class SandboxExpressionMathTests
             $"expected {expected}, got {actual}");
     }
 
+    // ── sqr (CalcGen-parity builtin) ────────────────────────────────────────
+
+    [Fact] public void Sqr_Real()    => AssertClose(new Complex(9.0, 0.0), Eval("sqr(z)", 3.0));
+    [Fact] public void Sqr_Complex() => AssertClose(new Complex(0.3, 0.7) * new Complex(0.3, 0.7), Eval("sqr(z)", new Complex(0.3, 0.7)));
+    [Fact] public void Sqr_EqualsZTimesZ()
+        => AssertClose(Eval("z*z", new Complex(1.2, -0.5)), Eval("sqr(z)", new Complex(1.2, -0.5)));
+    [Fact] public void Sqr_CaseInsensitiveCall()
+        => AssertClose(new Complex(9.0, 0.0), Eval("Sqr(z)", 3.0)); // ParseCall lowercases
+
+    // ── fold + per-component builtins ───────────────────────────────────────
+
+    [Fact] public void Fold_AbsBothComponents()
+        => AssertClose(new Complex(1.2, 0.5), Eval("fold(z)", new Complex(-1.2, -0.5)));
+    [Fact] public void Fract_PerComponent()
+        => AssertClose(new Complex(0.25, 0.75), Eval("fract(z)", new Complex(1.25, -0.25)));
+    [Fact] public void Round_PerComponent()
+        => AssertClose(new Complex(2.0, -1.0), Eval("round(z)", new Complex(1.6, -0.6)));
+    [Fact] public void Ceil_PerComponent()
+        => AssertClose(new Complex(2.0, -1.0), Eval("ceil(z)", new Complex(1.1, -1.9)));
+    [Fact] public void Trunc_PerComponent()
+        => AssertClose(new Complex(1.0, -1.0), Eval("trunc(z)", new Complex(1.9, -1.9)));
+
     // ── inverse trig: real inside principal domain ──────────────────────────
 
     [Fact] public void Asin_RealDomain() => AssertClose(Math.Asin(0.5), Eval("asin(z)", 0.5));
