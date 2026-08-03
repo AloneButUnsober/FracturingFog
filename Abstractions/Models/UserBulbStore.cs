@@ -398,8 +398,9 @@ namespace FracturingFog.Models
         // the pre-migration raw C#. Keyed by the exact shipped C# so a user's
         // own edit (any other text) is preserved, honouring the read-only
         // built-in contract [[feedback_no_save_over_examples]]. Chain-bearing
-        // built-ins are covered by the trusted Roslyn fallback (Phase 2c) and
-        // re-seed to DSL on a fresh install.
+        // built-ins re-seed to DSL on a fresh install; a stored raw-C# body a
+        // user never edited that predates DSL no longer runs (Phase 3 removed
+        // the Roslyn path) — the user re-picks the DSL built-in.
         private static readonly (string Name, string OldCs, string NewDsl)[] _dslMigrations =
         {
             ("Square triplex (z*z + c)",
