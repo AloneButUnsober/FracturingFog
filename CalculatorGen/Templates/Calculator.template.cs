@@ -1447,18 +1447,22 @@ public sealed class {{CLASS_NAME}} : IFractalCalculator, IHeightFieldSource, IDi
                             }
                         }
 
+                        // c at pixel = (ref centre Cr/Ci scalars in outer scope)
+                        // broadcast across the SIMD lanes. Declared here in the
+                        // shared per-iteration scope so BOTH the derivative body
+                        // and the δ body can read c through Cr_v/Ci_v (the AVX-512
+                        // deriv AND perturbation emitters bind CRef → these). It
+                        // used to live inside the Derivative block only, so a δ
+                        // update that referenced c (e.g. a negative-power map after
+                        // DSL translation) failed Roslyn with CS0103 — #213 bug 1.
+                        // Per-lane ε offset isn't added — the perturbation δ is in
+                        // deriv space already; mathematically this approximates
+                        // c ≈ C for the deriv chain.
+                        Vector512<double> Cr_v = Vector512.Create(Cr);
+                        Vector512<double> Ci_v = Vector512.Create(Ci);
+
                         // Derivative
                         {
-                            // c at pixel = (ref centre Cr/Ci scalars in outer
-                            // scope) broadcast across the SIMD lanes. Equations
-                            // whose derivative references c (e.g. CondArg over
-                            // a c-containing sub-expression) read Cr_v/Ci_v
-                            // through the AVX-512 deriv emitter's CRef binding.
-                            // Per-lane ε offset isn't added — the perturbation
-                            // δ is in deriv space already; mathematically this
-                            // approximates c ≈ C for the deriv chain.
-                            Vector512<double> Cr_v = Vector512.Create(Cr);
-                            Vector512<double> Ci_v = Vector512.Create(Ci);
 {{PERTURB_DERIV_AVX512_BODY}}
                             Vector512<double> keep = activeMask.AsDouble();
                             drv = Avx512F.BlendVariable(drv, drv_new, keep);
@@ -1692,13 +1696,16 @@ public sealed class {{CLASS_NAME}} : IFractalCalculator, IHeightFieldSource, IDi
                             }
                         }
 
+                        // c at pixel broadcast across the AVX-2 lanes. Declared in
+                        // the shared per-iteration scope so both the derivative and
+                        // δ bodies can read c via Cr_v/Ci_v — see the AVX-512 block
+                        // above for the full rationale (#213 bug 1: a δ body that
+                        // references c hit CS0103 when this lived in the deriv block).
+                        Vector256<double> Cr_v = Vector256.Create(Cr);
+                        Vector256<double> Ci_v = Vector256.Create(Ci);
+
                         // Derivative
                         {
-                            // c at pixel = (ref centre Cr/Ci scalars in outer
-                            // scope) broadcast across the AVX-2 lanes. See
-                            // the AVX-512 deriv block above for the rationale.
-                            Vector256<double> Cr_v = Vector256.Create(Cr);
-                            Vector256<double> Ci_v = Vector256.Create(Ci);
 {{PERTURB_DERIV_AVX2_BODY}}
                             Vector256<double> keep = activeMask.AsDouble();
                             drv = Avx.BlendVariable(drv, drv_new, keep);
@@ -2462,20 +2469,21 @@ public sealed class {{CLASS_NAME}} : IFractalCalculator, IHeightFieldSource, IDi
                 finalZMag2 = zr_dd.Square() + zi_dd.Square();
                 goto rebDone;
             }
-            {
-                // Per-pixel c = ref-orbit centre. TryIterateRebasePixel
-                // doesn't carry the rebase centre into scope; declare 0
-                // so the emitted Cr/Ci references compile. Equations
-                // whose derivative actually depends on c approximate the
-                // derivative chain through c≈0 inside the rebase path —
-                // for polynomial-derivative-of-c-independent equations
-                // this is exact (the references aren't emitted at all).
-                // CS0219: Cr/Ci go unused whenever the derivative body is
-                // c-independent (the common case), so silence the generated
-                // "assigned but never used" for this pair only.
+            // Per-pixel c = ref-orbit centre. TryIterateRebasePixel doesn't
+            // carry the rebase centre into scope; declare 0 so the emitted
+            // Cr/Ci references compile. Equations whose derivative actually
+            // depends on c approximate the derivative chain through c≈0 inside
+            // the rebase path — for c-independent-derivative equations this is
+            // exact (the references aren't emitted at all). Declared in the
+            // SHARED scope so BOTH the derivative body AND the δ body see it —
+            // a c-COEFFICIENT map (e.g. c*z²) emits Cr/Ci into the δ update too,
+            // which used to hit CS0103 when this lived inside the deriv block
+            // only (#213 bug 1). CS0219: Cr/Ci go unused for the common
+            // c-independent case — silence "assigned but never used".
 #pragma warning disable CS0219
-                double Cr = 0.0, Ci = 0.0;
+            double Cr = 0.0, Ci = 0.0;
 #pragma warning restore CS0219
+            {
 {{PERTURB_DERIV_BODY}}
                 drv = drv_new; div = div_new;
             }

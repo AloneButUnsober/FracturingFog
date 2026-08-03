@@ -62,6 +62,24 @@ public static class AstPrinter
             case Sin s2:
                 sb.Append("sin("); WriteExpr(sb, s2.Operand, 0); sb.Append(')');
                 break;
+            case Floor fl:
+                sb.Append("floor("); WriteExpr(sb, fl.Operand, 0); sb.Append(')');
+                break;
+            case Round rd:
+                sb.Append("round("); WriteExpr(sb, rd.Operand, 0); sb.Append(')');
+                break;
+            case Ceil ce:
+                sb.Append("ceil("); WriteExpr(sb, ce.Operand, 0); sb.Append(')');
+                break;
+            case Trunc tr:
+                sb.Append("trunc("); WriteExpr(sb, tr.Operand, 0); sb.Append(')');
+                break;
+            case Fract fr:
+                sb.Append("fract("); WriteExpr(sb, fr.Operand, 0); sb.Append(')');
+                break;
+            case Sign sg:
+                sb.Append("sign("); WriteExpr(sb, sg.Operand, 0); sb.Append(')');
+                break;
             case Cos c2:
                 sb.Append("cos("); WriteExpr(sb, c2.Operand, 0); sb.Append(')');
                 break;
@@ -73,6 +91,24 @@ public static class AstPrinter
                 break;
             case Arg ar:
                 sb.Append("arg("); WriteExpr(sb, ar.Operand, 0); sb.Append(')');
+                break;
+            case Asin as1:
+                sb.Append("asin("); WriteExpr(sb, as1.Operand, 0); sb.Append(')');
+                break;
+            case Acos ac1:
+                sb.Append("acos("); WriteExpr(sb, ac1.Operand, 0); sb.Append(')');
+                break;
+            case Atan at1:
+                sb.Append("atan("); WriteExpr(sb, at1.Operand, 0); sb.Append(')');
+                break;
+            case Asinh ah1:
+                sb.Append("asinh("); WriteExpr(sb, ah1.Operand, 0); sb.Append(')');
+                break;
+            case Acosh ch1:
+                sb.Append("acosh("); WriteExpr(sb, ch1.Operand, 0); sb.Append(')');
+                break;
+            case Atanh th1:
+                sb.Append("atanh("); WriteExpr(sb, th1.Operand, 0); sb.Append(')');
                 break;
             case Atan2 at:
                 sb.Append("atan2(");
@@ -100,6 +136,13 @@ public static class AstPrinter
                 WriteExpr(sb, md.Left, 0);
                 sb.Append(", ");
                 WriteExpr(sb, md.Right, 0);
+                sb.Append(')');
+                break;
+            case PowC pc:
+                sb.Append("pow(");
+                WriteExpr(sb, pc.Base, 0);
+                sb.Append(", ");
+                WriteExpr(sb, pc.Exp, 0);
                 sb.Append(')');
                 break;
             case ReOp r3:
