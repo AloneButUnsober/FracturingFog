@@ -124,6 +124,23 @@ public sealed class ScalarEmitter : EmitterBase
         return new($"Math.Abs({a.Re})", im, a.ImZero);
     }
 
+    // Per-component real functions — apply to Re and Im independently, preserve
+    // ImZero (matches the SandboxExpression runtime's (F(re), F(im)) lift).
+    protected override ComplexExpr OpFloor(ComplexExpr a) =>
+        new($"Math.Floor({a.Re})", a.ImZero ? "0.0" : $"Math.Floor({a.Im})", a.ImZero);
+    protected override ComplexExpr OpRound(ComplexExpr a) =>
+        new($"Math.Round({a.Re})", a.ImZero ? "0.0" : $"Math.Round({a.Im})", a.ImZero);
+    protected override ComplexExpr OpCeil(ComplexExpr a) =>
+        new($"Math.Ceiling({a.Re})", a.ImZero ? "0.0" : $"Math.Ceiling({a.Im})", a.ImZero);
+    protected override ComplexExpr OpTrunc(ComplexExpr a) =>
+        new($"Math.Truncate({a.Re})", a.ImZero ? "0.0" : $"Math.Truncate({a.Im})", a.ImZero);
+    protected override ComplexExpr OpFract(ComplexExpr a) =>
+        new($"({a.Re} - Math.Floor({a.Re}))",
+            a.ImZero ? "0.0" : $"({a.Im} - Math.Floor({a.Im}))", a.ImZero);
+    protected override ComplexExpr OpSign(ComplexExpr a) =>
+        new($"((double)Math.Sign({a.Re}))",
+            a.ImZero ? "0.0" : $"((double)Math.Sign({a.Im}))", a.ImZero);
+
     // sin(a+bi) = sin(a)·cosh(b) + i·cos(a)·sinh(b).
     // When b is zero, collapses to (sin(a), 0). The same imag-zero
     // optimisation as other ops — no temp local needed; complex
@@ -174,6 +191,35 @@ public sealed class ScalarEmitter : EmitterBase
             ImZero: false);
     }
 
+    // Inverse trig / hyperbolic — computed via System.Numerics.Complex so the
+    // result is bit-identical to the SandboxExpression runtime's complex branch
+    // (asin/acos/atan use the same BCL calls; asinh/acosh/atanh use the same
+    // log-formula continuations). The uniform-complex form is emitted for every
+    // operand (Sandbox's real-domain Math.* fast path differs only by an
+    // escape-mask-invisible amount). Fully qualified — no extra `using`.
+    private static ComplexExpr ComplexInvTrig(ComplexExpr a, string op)
+    {
+        string z = $"new System.Numerics.Complex({a.Re}, {(a.ImZero ? "0.0" : a.Im)})";
+        string expr = op switch
+        {
+            "asin"  => $"System.Numerics.Complex.Asin({z})",
+            "acos"  => $"System.Numerics.Complex.Acos({z})",
+            "atan"  => $"System.Numerics.Complex.Atan({z})",
+            "asinh" => $"System.Numerics.Complex.Log({z} + System.Numerics.Complex.Sqrt({z} * {z} + System.Numerics.Complex.One))",
+            "acosh" => $"System.Numerics.Complex.Log({z} + System.Numerics.Complex.Sqrt({z} * {z} - System.Numerics.Complex.One))",
+            "atanh" => $"(0.5 * System.Numerics.Complex.Log((System.Numerics.Complex.One + {z}) / (System.Numerics.Complex.One - {z})))",
+            _ => throw new InvalidOperationException($"ScalarEmitter: unknown inverse-trig {op}"),
+        };
+        return new($"({expr}).Real", $"({expr}).Imaginary", ImZero: false);
+    }
+
+    protected override ComplexExpr OpAsin(ComplexExpr a)  => ComplexInvTrig(a, "asin");
+    protected override ComplexExpr OpAcos(ComplexExpr a)  => ComplexInvTrig(a, "acos");
+    protected override ComplexExpr OpAtan(ComplexExpr a)  => ComplexInvTrig(a, "atan");
+    protected override ComplexExpr OpAsinh(ComplexExpr a) => ComplexInvTrig(a, "asinh");
+    protected override ComplexExpr OpAcosh(ComplexExpr a) => ComplexInvTrig(a, "acosh");
+    protected override ComplexExpr OpAtanh(ComplexExpr a) => ComplexInvTrig(a, "atanh");
+
     // arg(a+bi) = atan2(b, a) ∈ (-π, π]. Lift to complex (arg, 0). When
     // the input has ImZero, the angle is 0 (positive a) or π (negative a)
     // — emit Math.Atan2(0, a) so the sign of a still picks the right
@@ -216,6 +262,20 @@ public sealed class ScalarEmitter : EmitterBase
 
     protected override ComplexExpr OpClamp(ComplexExpr x, ComplexExpr lo, ComplexExpr hi) =>
         new($"Math.Clamp({x.Re}, {lo.Re}, {hi.Re})", "0.0", ImZero: true);
+
+    // pow(base, exp) — matches SandboxExpression.Pow: both-real → Math.Pow
+    // (real result, so pow(-2,3) = -8 exactly), else Complex.Pow (principal
+    // branch, zero-guarded: pow(0,0)=1, pow(0,k)=0). Complex.Pow is fully
+    // qualified so no extra `using` is needed in the generated calculator.
+    protected override ComplexExpr OpPow(ComplexExpr a, ComplexExpr b)
+    {
+        if (a.ImZero && b.ImZero)
+            return new($"Math.Pow({a.Re}, {b.Re})", "0.0", ImZero: true);
+        string aC = $"new System.Numerics.Complex({a.Re}, {(a.ImZero ? "0.0" : a.Im)})";
+        string bC = $"new System.Numerics.Complex({b.Re}, {(b.ImZero ? "0.0" : b.Im)})";
+        string pw = $"System.Numerics.Complex.Pow({aC}, {bC})";
+        return new($"({pw}).Real", $"({pw}).Imaginary", ImZero: false);
+    }
 
     // Piecewise selection — scalar C# ternary on the rendered cond
     // expression. Both branches were eager-evaluated by EmitterBase so

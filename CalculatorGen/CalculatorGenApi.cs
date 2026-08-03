@@ -131,7 +131,29 @@ public static class CalculatorGenApi
                       || AstHelpers.Contains<ReOp>(root)
                       || AstHelpers.Contains<ImOp>(root)
                       || AstHelpers.Contains<AbsOp>(root)
-                      || AstHelpers.Contains<Clamp>(root);
+                      || AstHelpers.Contains<Clamp>(root)
+                      // #27 Phase 6 (tranche 2) — general pow(base,exp) is
+                      // transcendental (exp·log) + non-holomorphic under the
+                      // δ-Taylor expansion; disable perturbation/SA + analytic DE.
+                      || AstHelpers.Contains<PowC>(root)
+                      // #27 Phase 6 (tranche 2) — inverse trig / hyperbolic are
+                      // non-polynomial (no closed-form δ-Taylor / SA) and have no
+                      // analytic-DE rules implemented; disable perturbation/SA + DE.
+                      || AstHelpers.Contains<Asin>(root)
+                      || AstHelpers.Contains<Acos>(root)
+                      || AstHelpers.Contains<Atan>(root)
+                      || AstHelpers.Contains<Asinh>(root)
+                      || AstHelpers.Contains<Acosh>(root)
+                      || AstHelpers.Contains<Atanh>(root)
+                      // #27 Phase 6 (tranche 2) — per-component floor/round/ceil/
+                      // trunc/fract/sign are piecewise-constant (non-holomorphic);
+                      // disable perturbation/SA + analytic DE.
+                      || AstHelpers.Contains<Floor>(root)
+                      || AstHelpers.Contains<Round>(root)
+                      || AstHelpers.Contains<Ceil>(root)
+                      || AstHelpers.Contains<Trunc>(root)
+                      || AstHelpers.Contains<Fract>(root)
+                      || AstHelpers.Contains<Sign>(root);
         // arg / atan2 / min / max / mod are non-holomorphic. Distance
         // estimate breaks like Conj/Folded — feed all into the DE gate.
         bool hasArg    = AstHelpers.Contains<Arg>(root)
@@ -144,7 +166,29 @@ public static class CalculatorGenApi
                       || AstHelpers.Contains<ReOp>(root)
                       || AstHelpers.Contains<ImOp>(root)
                       || AstHelpers.Contains<AbsOp>(root)
-                      || AstHelpers.Contains<Clamp>(root);
+                      || AstHelpers.Contains<Clamp>(root)
+                      // #27 Phase 6 (tranche 2) — general pow(base,exp) is
+                      // transcendental (exp·log) + non-holomorphic under the
+                      // δ-Taylor expansion; disable perturbation/SA + analytic DE.
+                      || AstHelpers.Contains<PowC>(root)
+                      // #27 Phase 6 (tranche 2) — inverse trig / hyperbolic are
+                      // non-polynomial (no closed-form δ-Taylor / SA) and have no
+                      // analytic-DE rules implemented; disable perturbation/SA + DE.
+                      || AstHelpers.Contains<Asin>(root)
+                      || AstHelpers.Contains<Acos>(root)
+                      || AstHelpers.Contains<Atan>(root)
+                      || AstHelpers.Contains<Asinh>(root)
+                      || AstHelpers.Contains<Acosh>(root)
+                      || AstHelpers.Contains<Atanh>(root)
+                      // #27 Phase 6 (tranche 2) — per-component floor/round/ceil/
+                      // trunc/fract/sign are piecewise-constant (non-holomorphic);
+                      // disable perturbation/SA + analytic DE.
+                      || AstHelpers.Contains<Floor>(root)
+                      || AstHelpers.Contains<Round>(root)
+                      || AstHelpers.Contains<Ceil>(root)
+                      || AstHelpers.Contains<Trunc>(root)
+                      || AstHelpers.Contains<Fract>(root)
+                      || AstHelpers.Contains<Sign>(root);
         // Conditional / piecewise (If): branches are individually
         // holomorphic so DE survives inside each side (a discontinuity
         // along the boundary locus is the only cost), but the δ-Taylor
@@ -458,7 +502,29 @@ public static class CalculatorGenApi
                       || AstHelpers.Contains<ReOp>(root)
                       || AstHelpers.Contains<ImOp>(root)
                       || AstHelpers.Contains<AbsOp>(root)
-                      || AstHelpers.Contains<Clamp>(root);
+                      || AstHelpers.Contains<Clamp>(root)
+                      // #27 Phase 6 (tranche 2) — general pow(base,exp) is
+                      // transcendental (exp·log) + non-holomorphic under the
+                      // δ-Taylor expansion; disable perturbation/SA + analytic DE.
+                      || AstHelpers.Contains<PowC>(root)
+                      // #27 Phase 6 (tranche 2) — inverse trig / hyperbolic are
+                      // non-polynomial (no closed-form δ-Taylor / SA) and have no
+                      // analytic-DE rules implemented; disable perturbation/SA + DE.
+                      || AstHelpers.Contains<Asin>(root)
+                      || AstHelpers.Contains<Acos>(root)
+                      || AstHelpers.Contains<Atan>(root)
+                      || AstHelpers.Contains<Asinh>(root)
+                      || AstHelpers.Contains<Acosh>(root)
+                      || AstHelpers.Contains<Atanh>(root)
+                      // #27 Phase 6 (tranche 2) — per-component floor/round/ceil/
+                      // trunc/fract/sign are piecewise-constant (non-holomorphic);
+                      // disable perturbation/SA + analytic DE.
+                      || AstHelpers.Contains<Floor>(root)
+                      || AstHelpers.Contains<Round>(root)
+                      || AstHelpers.Contains<Ceil>(root)
+                      || AstHelpers.Contains<Trunc>(root)
+                      || AstHelpers.Contains<Fract>(root)
+                      || AstHelpers.Contains<Sign>(root);
         bool hasArg    = AstHelpers.Contains<Arg>(root)
                       || AstHelpers.Contains<Atan2>(root)
                       || AstHelpers.Contains<Min>(root)
@@ -469,7 +535,29 @@ public static class CalculatorGenApi
                       || AstHelpers.Contains<ReOp>(root)
                       || AstHelpers.Contains<ImOp>(root)
                       || AstHelpers.Contains<AbsOp>(root)
-                      || AstHelpers.Contains<Clamp>(root);
+                      || AstHelpers.Contains<Clamp>(root)
+                      // #27 Phase 6 (tranche 2) — general pow(base,exp) is
+                      // transcendental (exp·log) + non-holomorphic under the
+                      // δ-Taylor expansion; disable perturbation/SA + analytic DE.
+                      || AstHelpers.Contains<PowC>(root)
+                      // #27 Phase 6 (tranche 2) — inverse trig / hyperbolic are
+                      // non-polynomial (no closed-form δ-Taylor / SA) and have no
+                      // analytic-DE rules implemented; disable perturbation/SA + DE.
+                      || AstHelpers.Contains<Asin>(root)
+                      || AstHelpers.Contains<Acos>(root)
+                      || AstHelpers.Contains<Atan>(root)
+                      || AstHelpers.Contains<Asinh>(root)
+                      || AstHelpers.Contains<Acosh>(root)
+                      || AstHelpers.Contains<Atanh>(root)
+                      // #27 Phase 6 (tranche 2) — per-component floor/round/ceil/
+                      // trunc/fract/sign are piecewise-constant (non-holomorphic);
+                      // disable perturbation/SA + analytic DE.
+                      || AstHelpers.Contains<Floor>(root)
+                      || AstHelpers.Contains<Round>(root)
+                      || AstHelpers.Contains<Ceil>(root)
+                      || AstHelpers.Contains<Trunc>(root)
+                      || AstHelpers.Contains<Fract>(root)
+                      || AstHelpers.Contains<Sign>(root);
         bool hasCond  = AstHelpers.Contains<If>(root);
         bool hasPrev  = AstHelpers.Contains<PrevRef>(root);
         bool hasIter  = AstHelpers.Contains<IterRef>(root);
