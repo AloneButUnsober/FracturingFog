@@ -15,12 +15,17 @@ namespace FracturingFog.Server.Tests;
 
 public sealed class UserCodeGateCalculatorTests
 {
-    private const string ValidRoslynBulb = "return Vec3.Pow(z, 8.0) + c;";
+    // A raw-C# bulb body (member/static access, statements) — no DSL form.
+    // #27 Phase 3: the Roslyn compile path and its trusted fallback are gone,
+    // so this no longer executes for ANY origin; it fails the DSL parse.
+    private const string CsharpBulbBody = "return Vec3.Pow(z, 8.0) + c;";
     private const string ValidSandboxBulb = "triplex(z, 8) + c";
 
     [Fact]
-    public void ExternalFile_RawCsharp_IsRefused_UnderDefaultPolicy()
+    public void Bulb_CsharpBody_DoesNotExecute_ExternalFile()
     {
+        // #27 Phase 3 — no Roslyn path. A C# body from an untrusted file fails
+        // the DSL parse and never executes. The compiler selector is ignored.
         var prior = UserCodeSecurityPolicy.Mode;
         try
         {
@@ -29,38 +34,34 @@ public sealed class UserCodeGateCalculatorTests
             {
                 FractalParameters = new FractalParameters
                 {
-                    UserBulbSource = ValidRoslynBulb,
+                    UserBulbSource = CsharpBulbBody,
                     UserBulbCompiler = UserBulbCompilerKind.Roslyn,
                     UserCodeOrigin = UserCodeOrigin.ExternalFile,
                 }
             };
-            calc.Compile(ValidRoslynBulb);
+            calc.Compile(CsharpBulbBody);
             Assert.False(calc.IsCompiled);
-            Assert.Contains("Blocked", calc.LastError);
         }
         finally { UserCodeSecurityPolicy.Mode = prior; }
     }
 
     [Fact]
-    public void Interactive_RawCsharp_Compiles()
+    public void Bulb_CsharpBody_DoesNotExecute_Interactive()
     {
-        var prior = UserCodeSecurityPolicy.Mode;
-        try
+        // #27 Phase 3 — even a trusted (Interactive) C# body no longer compiles;
+        // with the Roslyn fallback deleted the DSL is the only path.
+        var calc = new UserBulbCalculator(8, 8)
         {
-            UserCodeSecurityPolicy.Mode = RoslynUserCodeMode.TrustedOnly;
-            var calc = new UserBulbCalculator(8, 8)
+            FractalParameters = new FractalParameters
             {
-                FractalParameters = new FractalParameters
-                {
-                    UserBulbSource = ValidRoslynBulb,
-                    UserBulbCompiler = UserBulbCompilerKind.Roslyn,
-                    UserCodeOrigin = UserCodeOrigin.Interactive,
-                }
-            };
-            calc.Compile(ValidRoslynBulb);
-            Assert.True(calc.IsCompiled, $"expected compile, got: {calc.LastError}");
-        }
-        finally { UserCodeSecurityPolicy.Mode = prior; }
+                UserBulbSource = CsharpBulbBody,
+                UserBulbCompiler = UserBulbCompilerKind.Roslyn,
+                UserCodeOrigin = UserCodeOrigin.Interactive,
+            }
+        };
+        calc.Compile(CsharpBulbBody);
+        Assert.False(calc.IsCompiled);
+        Assert.False(string.IsNullOrWhiteSpace(calc.LastError));
     }
 
     [Fact]
@@ -88,15 +89,39 @@ public sealed class UserCodeGateCalculatorTests
     }
 
     // A source with NO DSL form (member access can't be expressed in the
-    // Sandbox grammar) still falls through to the gated Roslyn path and is
-    // refused for an untrusted origin. #27 Phase 1b: `return z*z + c;` no
-    // longer belongs here — it now translates to the DSL and runs safely
-    // (see UserEquation_ExternalFile_TranslatableEquation_RunsOnDsl).
+    // Sandbox grammar). #27 Phase 3: the raw-C# Roslyn fallback is gone, so
+    // such a source no longer executes for ANY origin — it surfaces an
+    // editable DSL error instead. `return z*z + c;` no longer belongs here —
+    // it translates to the DSL and runs (see
+    // UserEquation_ExternalFile_TranslatableEquation_RunsOnDsl).
     private const string RoslynOnlyEquation = "return z.Real + c;";
 
     [Fact]
-    public void UserEquation_ExternalFile_RawCsharp_IsRefused()
+    public void UserEquation_NoDslForm_DoesNotExecute_AnyOrigin()
     {
+        // #27 Phase 3 — no Roslyn path at all. A member-access body has no DSL
+        // form, so it fails to compile even for a trusted (Interactive) origin,
+        // and the error is a crisp DSL message (not the gate's "Blocked").
+        var calc = new UserEquationCalculator(8, 8)
+        {
+            FractalParameters = new FractalParameters
+            {
+                UserEquationSource = RoslynOnlyEquation,
+                UserCodeOrigin = UserCodeOrigin.Interactive,
+            }
+        };
+        calc.Compile(RoslynOnlyEquation);
+        Assert.False(calc.IsCompiled);
+        Assert.False(calc.UsingDsl);
+        Assert.DoesNotContain("Blocked", calc.LastError);
+        Assert.False(string.IsNullOrWhiteSpace(calc.LastError));
+    }
+
+    [Fact]
+    public void UserEquation_ExternalFile_NoDslForm_DoesNotExecute()
+    {
+        // Same body, untrusted origin: still no execution (no Roslyn to gate),
+        // same DSL error path — the origin no longer changes the outcome.
         var prior = UserCodeSecurityPolicy.Mode;
         try
         {
@@ -112,7 +137,6 @@ public sealed class UserCodeGateCalculatorTests
             calc.Compile(RoslynOnlyEquation);
             Assert.False(calc.IsCompiled);
             Assert.False(calc.UsingDsl);
-            Assert.Contains("Blocked", calc.LastError);
         }
         finally { UserCodeSecurityPolicy.Mode = prior; }
     }
@@ -162,10 +186,12 @@ public sealed class UserCodeGateCalculatorTests
     }
 
     [Fact]
-    public void UserEquation_Interactive_RoslynOnlyEquation_UsesRoslynFallback()
+    public void UserEquation_Interactive_MemberAccessBody_ErrorGuidesToDsl()
     {
-        // A trusted source with no DSL form still compiles — via the Roslyn
-        // fallback — so interactive editing never regresses.
+        // #27 Phase 3 — with the Roslyn fallback gone, a trusted member-access
+        // body no longer compiles. The error should be actionable (mentions the
+        // DSL / a supported form) rather than a bare failure, since the user
+        // must now rewrite `z.Real` as the DSL `re(z)`.
         var calc = new UserEquationCalculator(8, 8)
         {
             FractalParameters = new FractalParameters
@@ -175,8 +201,9 @@ public sealed class UserCodeGateCalculatorTests
             }
         };
         calc.Compile(RoslynOnlyEquation);
-        Assert.True(calc.IsCompiled, $"expected Roslyn compile, got: {calc.LastError}");
+        Assert.False(calc.IsCompiled);
         Assert.False(calc.UsingDsl);
+        Assert.False(string.IsNullOrWhiteSpace(calc.LastError));
     }
 
     [Fact]
@@ -187,56 +214,13 @@ public sealed class UserCodeGateCalculatorTests
         Assert.Equal(UserCodeOrigin.ExternalFile, clone.UserCodeOrigin);
     }
 
-    // ── #27 Phase 2c — bulb DSL-first with trusted Roslyn fallback ──────────
+    // ── #27 Phase 3 — bulb DSL is the only compiler (no Roslyn fallback) ────
 
     [Fact]
-    public void Bulb_Sandbox_CsharpBody_Interactive_FallsBackToRoslyn()
+    public void Bulb_Sandbox_DslTypo_KeepsDslError()
     {
-        // Default compiler is now Sandbox. A trusted legacy C# body has no DSL
-        // form (the DSL parse fails), so it falls back to the gated Roslyn path.
-        var calc = new UserBulbCalculator(8, 8)
-        {
-            FractalParameters = new FractalParameters
-            {
-                UserBulbSource = ValidRoslynBulb,
-                UserBulbCompiler = UserBulbCompilerKind.Sandbox,
-                UserCodeOrigin = UserCodeOrigin.Interactive,
-            }
-        };
-        calc.Compile(ValidRoslynBulb);
-        Assert.True(calc.IsCompiled, $"expected Roslyn fallback, got: {calc.LastError}");
-    }
-
-    [Fact]
-    public void Bulb_Sandbox_CsharpBody_ExternalFile_IsRefused()
-    {
-        // Untrusted C# body under the Sandbox default: no Roslyn fallback, and
-        // the confusing DSL parse error is replaced by the gate's block notice.
-        var prior = UserCodeSecurityPolicy.Mode;
-        try
-        {
-            UserCodeSecurityPolicy.Mode = RoslynUserCodeMode.TrustedOnly;
-            var calc = new UserBulbCalculator(8, 8)
-            {
-                FractalParameters = new FractalParameters
-                {
-                    UserBulbSource = ValidRoslynBulb,
-                    UserBulbCompiler = UserBulbCompilerKind.Sandbox,
-                    UserCodeOrigin = UserCodeOrigin.ExternalFile,
-                }
-            };
-            calc.Compile(ValidRoslynBulb);
-            Assert.False(calc.IsCompiled);
-            Assert.Contains("Blocked", calc.LastError);
-        }
-        finally { UserCodeSecurityPolicy.Mode = prior; }
-    }
-
-    [Fact]
-    public void Bulb_Sandbox_DslTypo_KeepsDslError_NoFallback()
-    {
-        // A DSL author's typo (no C# markers) keeps its DSL parse error and
-        // never switches engines — even for a trusted origin.
+        // A DSL author's typo keeps its DSL parse error — the compile fails with
+        // a plain parser message, never a gate "Blocked" notice.
         const string dslTypo = "frobnicate(z) + c";
         var calc = new UserBulbCalculator(8, 8)
         {

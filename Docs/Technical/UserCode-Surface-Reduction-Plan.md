@@ -1,8 +1,9 @@
 # User-Code Surface Reduction Plan (#27)
 
 Status: **active** — Phase 0 complete (0a/0b/0c); Phase 1 complete (1a/1b/1c);
-Phase 2 complete (2a/2b/2c; the original hard-delete 2d folds into Phase 3);
-Phase 3 next.
+Phase 2 complete (2a/2b/2c; the original hard-delete 2d folded into Phase 3);
+Phase 3 complete (3a/3b/3c/3d) — **both raw-C# calculators now run DSL-only, no
+Roslyn fallback anywhere**; Phase 4 (ColorGen interpreter) next.
 Tracking issues: #27 (umbrella) + per-phase children (see [Tracking](#tracking)).
 
 ## Problem
@@ -155,18 +156,38 @@ PR at phase completion. Ship in order.
   trusted-origin fallback and is deleted alongside the UserEquation raw path in
   Phase 3, not here.
 
-### Phase 3 — remove the raw-C# user-code path entirely
-Now covers **both** raw-C# calculators (UserEquation from Phase 1, UserBulb
-from Phase 2 — both currently keep a trusted-origin Roslyn fallback).
-- **3a** Delete `UserEquationCalculator`'s raw Roslyn path (`WrapUserSource` +
-  the Roslyn branch); the type runs on `SandboxExpression` only. Commit.
-- **3b** Delete `UserBulbCalculator`'s `WrapUserSource{,Quat,Chain}` + the
-  Roslyn branch/fallback; the type runs on `SandboxBulbExpression` only.
-  Add the 3D render parity harness (was the old 2d). Commit.
-- **3c** Confirm no remaining user-text → Roslyn slot. CalcGen/ColorGen
-  hot-load compile machine-generated source from a validated AST, not user text
-  — audit + assert. Commit.
-- **3d** Keep `FractalTypeAllowlist` as defense-in-depth. Regression sweep. Commit.
+### Phase 3 — remove the raw-C# user-code path entirely — **complete**
+Covered **both** raw-C# calculators (UserEquation from Phase 1, UserBulb from
+Phase 2 — both had kept a trusted-origin Roslyn fallback until here).
+- **3a** ✅ Deleted `UserEquationCalculator`'s raw Roslyn path (`WrapUserSource`,
+  the `CSharpCompilation` / `AssemblyLoadContext` branch, the `_compiled`
+  delegate + pinned context, the origin gate). The type runs on
+  `SandboxExpression` only; a source with no DSL form surfaces an editable error
+  pointing at the DSL instead of executing.
+- **3b** ✅ Deleted `UserBulbCalculator`'s `WrapUserSource{,Quat,Chain}` + the
+  full-BCL Roslyn branch + the Phase-2c trusted fallback (`LooksLikeCSharp` /
+  `ChainSourceText` probes) + the origin gate + the `GatherRefs` helper. The
+  type runs on `SandboxBulbExpression` / `SandboxBulbChain` only; the persisted
+  `UserBulbCompiler` selector is ignored and the now-dead "Roslyn (full C#)"
+  editor dropdown was retired (view-model pins Sandbox). Added
+  `UserBulbDslRenderParityTests` (the old 2d harness): every seeded built-in
+  compiles on the interpreter, a representative DSL bulb renders
+  deterministically + non-blank end-to-end, and a raw-C# body no longer
+  compiles. (Per-step DSL-vs-native math parity stays covered by
+  `SandboxBulbDslAuditTests`.)
+- **3c** ✅ Audited the remaining runtime Roslyn sites (`CalculatorGenHotLoad`,
+  `ColorGenHotLoad`, and the Sandbox-GPU emitters): each compiles only the
+  source its generator emits, and `CalculatorGenApi.Generate` /
+  `ColorGenApi.Generate` gate that on `EquationParser` / `ColorGenParser` —
+  restricted grammars that reject any construct outside the DSL. Raw user text
+  embedded in the generated file (an `EQUATION_SOURCE` token; a per-line `//`
+  comment block, never a `/* */` block) can't break out because the parse
+  refuses it first. `NoRawUserTextReachesRoslynTests` asserts 12 injection-shaped
+  inputs are refused by both generators while benign DSL still generates.
+- **3d** ✅ Kept `FractalTypeAllowlist` as defense-in-depth (still blocks
+  UserEquation / Sandbox / UserBulb over RPC — they run user step math + open
+  iteration budgets even though the RCE primitive is gone). Full regression
+  sweep green (Server.Tests 867/867), solution builds clean.
 
 ### Phase 4 — ColorGen to a full interpreted DSL
 Goal: the ColorGen DSL must be able to express **every** rich color theme with
