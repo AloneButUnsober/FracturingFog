@@ -39,6 +39,12 @@ public sealed class UserEquationDslMigrationTests
     [Fact]
     public void Migration_ConvertsTranslatable_LeavesUntranslatable_AndBacksUp()
     {
+        // Clear stale backups from sibling tests so backups[0] below is this
+        // test's own pre-migration snapshot (the temp data root is shared).
+        string dir = Path.GetDirectoryName(EquationsFile)!;
+        Directory.CreateDirectory(dir);
+        foreach (var f in Directory.GetFiles(dir, "userequations.json.*.dslmigration.bak")) File.Delete(f);
+
         // A translatable C# body (Complex.* + a member access) and one with no
         // DSL form (an unsupported member the preprocessor can't take).
         SeedFile(
@@ -67,7 +73,6 @@ public sealed class UserEquationDslMigrationTests
         Assert.Equal("return z.GetType().ToString().Length + c;", noDsl.Source);
 
         // A timestamped snapshot of the pre-migration file exists.
-        string dir = Path.GetDirectoryName(EquationsFile)!;
         var backups = Directory.GetFiles(dir, "userequations.json.*dslmigration*.bak");
         Assert.NotEmpty(backups);
         Assert.Contains("Complex.Pow(z, 2)", File.ReadAllText(backups[0])); // original preserved
@@ -102,6 +107,41 @@ public sealed class UserEquationDslMigrationTests
         calc.Compile(entry.Source);
         Assert.True(calc.IsCompiled, calc.LastError);
         Assert.True(calc.UsingDsl);
+    }
+
+    [Fact]
+    public void PowFixRepair_ReTranslatesBadPowerForms_FromBackup()
+    {
+        string dir = Path.GetDirectoryName(EquationsFile)!;
+        Directory.CreateDirectory(dir);
+        string powMarker = AppDataPaths.Combine(".userequations-powfix");
+        if (File.Exists(powMarker)) File.Delete(powMarker);
+        foreach (var f in Directory.GetFiles(dir, "userequations.json.*.dslmigration.bak")) File.Delete(f);
+
+        // Pre-migration backup holds the ORIGINAL C# (negative power of z).
+        string backup = Path.Combine(dir, "userequations.json.20260101-000000.dslmigration.bak");
+        File.WriteAllText(backup, JsonSerializer.Serialize(new[]
+        {
+            new UserEquationEntry { Name = "NegPow", Source = "return z * Complex.Pow(z,-3) + c;", Kind = UserEquationKind.UserEquation },
+        }, new JsonSerializerOptions { WriteIndented = true }));
+
+        // Current store carries the BAD migrated DSL a prior build produced
+        // (1/(z)^3 — NaN at z=0, renders blank).
+        SeedFile(new UserEquationEntry { Name = "NegPow", Source = "z * (1/(z)^3) + c", Kind = UserEquationKind.UserEquation });
+
+        var store = UserEquationStore.Instance;
+        store.Load();
+        UserEquationDslMigration.Run(store);
+
+        var e = store.GetByName("NegPow")!;
+        Assert.Contains("pow(", e.Source);                       // re-baked to Complex.Pow form
+        Assert.DoesNotContain("1/(z)^3", e.Source.Replace(" ", ""));
+        Assert.True(File.Exists(powMarker));
+
+        // Renders finite at the z=0 seed now (was NaN).
+        var expr = SandboxExpression.Parse(e.Source);
+        var got = expr.EvalStep(System.Numerics.Complex.Zero, new System.Numerics.Complex(0.3, 0.1), 0, expr.NewEnv());
+        Assert.False(double.IsNaN(got.Real) || double.IsNaN(got.Imaginary));
     }
 
     [Fact]

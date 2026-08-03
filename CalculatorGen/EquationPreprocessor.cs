@@ -278,10 +278,16 @@ public static class EquationPreprocessor
             s = RewriteCall(s, "Math.Max",          args => args.Length == 2 ? $"max({args[0].Trim()}, {args[1].Trim()})" : null);
             s = RewriteCall(s, "Math.IEEERemainder", args => args.Length == 2 ? $"mod({args[0].Trim()}, {args[1].Trim()})" : null);
 
-            // Pow has a special-case integer-exponent fast path so common
-            // cases like `Complex.Pow(z, -3)` translate to a clean `1/(z)^3`
-            // instead of `exp(-3*log(z))` (which is correct but loses the
-            // polynomial-detector classification, perturbation Taylor, etc.).
+            // Pow: only POSITIVE integer exponents get the `(x)^n` fast path
+            // (polynomial-detector / perturbation Taylor friendly, and 0^n = 0
+            // matches Complex.Pow). Negative and non-integer/expression
+            // exponents translate to the `pow(x, y)` DSL function, which the
+            // SandboxExpression runtime evaluates via Complex.Pow — crucially
+            // replicating .NET's zero guards (`Pow(0, k)` = 0 for k != 0,
+            // `Pow(x, 0)` = 1). The earlier `1/(x)^n` / `exp(y·log x)` forms did
+            // NOT: they yield NaN at x = 0, so maps singular at the z = 0 seed
+            // (negative powers of z; `sin(z)^k` at z = 0) rendered blank whereas
+            // the original Complex.Pow rendered them. #27 Phase 5a.
             s = RewriteCall(s, "Complex.Pow", args =>
             {
                 if (args.Length != 2) return null;
@@ -293,14 +299,14 @@ public static class EquationPreprocessor
                     if (n == 0) return "1";
                     if (n == 1) return $"({baseExpr})";
                     if (n > 0) return $"({baseExpr})^{n}";
-                    // Negative: rewrite 1 / x^|n|. Wraps in extra parens so
-                    // surrounding precedence still bites correctly.
-                    return $"(1/({baseExpr})^{-n})";
+                    // Negative integer: pow() (Complex.Pow), NOT 1/x^|n| — the
+                    // latter is NaN at x = 0 where Complex.Pow(0, -n) = 0.
+                    return $"pow({baseExpr}, {n})";
                 }
-                // General complex exponent: x^y ≡ exp(y · log(x)). Loses any
-                // SA / perturbation Taylor benefit (becomes a transcendental
-                // chain) but keeps the math correct.
-                return $"exp(({expExpr})*log({baseExpr}))";
+                // General exponent: pow() (Complex.Pow), NOT exp(y·log x) — the
+                // latter is NaN when the base is 0 (e.g. exponent 0 gives NaN
+                // instead of Complex.Pow(x, 0) = 1).
+                return $"pow({baseExpr}, {expExpr})";
             });
 
             if (s == before) break;
