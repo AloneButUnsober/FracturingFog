@@ -30,6 +30,7 @@
       NETSDK1150 self-contained-publish blocker.
     -->
     <ProjectReference Include="..\CalculatorGen.Lib\CalculatorGen.Lib.csproj" />
+    <ProjectReference Include="..\ColorGen.Lib\ColorGen.Lib.csproj" />
     <!--
       Wave 2.13 (D-7.29) — CalculatorGen Roslyn source generator. Replaces
       the legacy `dotnet run -p CalculatorGen` step that wrote files

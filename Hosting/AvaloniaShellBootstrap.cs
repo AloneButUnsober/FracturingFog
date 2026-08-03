@@ -2710,12 +2710,12 @@ namespace FracturingFog.Hosting
                         Category = "User",
                         Description = description ?? "",
                     };
-                    var result = FracturingFog.ColorGen.ColorGenHotLoad
-                        .TryCompileAndLoad(source, className, opts);
-                    if (!result.Ok) return result.Error;
-                    var map = (FracturingFog.Interefaces.IColorMap?)
-                        Activator.CreateInstance(result.ColorMapType!);
-                    if (map == null) return "Activator returned null.";
+                    // #27 Phase 4 — the theme runs on the safe DSL INTERPRETER
+                    // (InterpretedColorMap), not Roslyn codegen + AssemblyLoadContext.
+                    // No compile, no assembly load: a custom theme is a data object.
+                    var map = FracturingFog.Models.InterpretedColorMap
+                        .TryCreate(source, opts, out string? cgError);
+                    if (map == null) return cgError ?? "Theme failed to parse.";
                     FracturingFog.Models.ColorPalette.RegisterHotLoaded(map);
                     s_renderHost!.ApplyColorMap(map);
                     // Refresh the FloatingMenu theme combo so the freshly
