@@ -33,7 +33,8 @@
 // Functions:
 //   sin cos tan sinh cosh tanh exp log sqrt sqr abs conj re im arg
 //   asin acos atan asinh acosh atanh          (1-arg; complex outside real domain)
-//   floor sign                                (1-arg; per-component)
+//   floor sign fract round ceil trunc         (1-arg; per-component)
+//   fold                                      (1-arg; (|Re|,|Im|) burning-ship fold)
 //   pow(z,w) atan2(y,x) min(a,b) max(a,b)     (2-arg)
 //   mod(x,p)                                  (2-arg; centered per-component)
 //   clamp(x,lo,hi)                            (3-arg; real-valued)
@@ -234,9 +235,17 @@ namespace FracturingFog.Models
                 case "re":   return SbxVal.Real(x.R);
                 case "im":   return SbxVal.Real(x.IsReal ? 0.0 : x.I);
                 case "arg":  return SbxVal.Real(x.IsReal ? (x.R < 0 ? Math.PI : 0.0) : Math.Atan2(x.I, x.R));
-                // floor/sign apply per-component (reduce to scalar when real).
+                // Per-component (reduce to scalar when real).
                 case "floor": return x.IsReal ? SbxVal.Real(Math.Floor(x.R)) : new SbxVal(Math.Floor(x.R), Math.Floor(x.I));
                 case "sign":  return x.IsReal ? SbxVal.Real(Math.Sign(x.R)) : new SbxVal(Math.Sign(x.R), Math.Sign(x.I));
+                // #27 Phase 5a — CalcGen parity + fractal-useful per-component fns.
+                // fold = (|Re|, |Im|), the burning-ship abs-fold (matches CalcGen).
+                case "fold":  return x.IsReal ? SbxVal.Real(Math.Abs(x.R)) : new SbxVal(Math.Abs(x.R), Math.Abs(x.I));
+                // fract = x - floor(x) (domain warping / tiling / Kali-style maps).
+                case "fract": return x.IsReal ? SbxVal.Real(x.R - Math.Floor(x.R)) : new SbxVal(x.R - Math.Floor(x.R), x.I - Math.Floor(x.I));
+                case "round": return x.IsReal ? SbxVal.Real(Math.Round(x.R)) : new SbxVal(Math.Round(x.R), Math.Round(x.I));
+                case "ceil":  return x.IsReal ? SbxVal.Real(Math.Ceiling(x.R)) : new SbxVal(Math.Ceiling(x.R), Math.Ceiling(x.I));
+                case "trunc": return x.IsReal ? SbxVal.Real(Math.Truncate(x.R)) : new SbxVal(Math.Truncate(x.R), Math.Truncate(x.I));
                 default:     throw new InvalidOperationException("Unknown function " + Name);
             }
         }
@@ -532,7 +541,8 @@ namespace FracturingFog.Models
                     or "abs" or "conj" or "re" or "im" or "arg"
                     or "asin" or "acos" or "atan"
                     or "asinh" or "acosh" or "atanh"
-                    or "floor" or "sign" => 1,
+                    or "floor" or "sign" or "fold" or "fract"
+                    or "round" or "ceil" or "trunc" => 1,
                 "pow" or "atan2" or "min" or "max" or "mod" => 2,
                 "clamp" => 3,
                 _ => -1
