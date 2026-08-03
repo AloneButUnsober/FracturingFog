@@ -21,6 +21,7 @@
 //   Complex.Exp(x)        → exp(x)
 //   Complex.Log(x)        → log(x)
 //   Complex.Conjugate(x)  → conj(x)
+//   Complex.Divide(a, b)  → ((a)/(b))
 //   Complex.Pow(x, k_int) → x^k         (k ≥ 2)
 //                         → x           (k == 1)
 //                         → 1           (k == 0)
@@ -208,7 +209,7 @@ public static class EquationPreprocessor
         // else short-circuits with a span pointing at the user's character.
         var known = new HashSet<string>(StringComparer.Ordinal)
         { "Sin", "Cos", "Tan", "Sinh", "Cosh", "Tanh", "Sqrt",
-          "Exp", "Log", "Conjugate", "Pow", "Phase",
+          "Exp", "Log", "Conjugate", "Pow", "Phase", "Divide",
           "Zero", "One", "ImaginaryOne", "Abs" };
         foreach (Match m in Regex.Matches(s, @"\bComplex\.([A-Za-z_][A-Za-z0-9_]*)\b"))
         {
@@ -265,6 +266,9 @@ public static class EquationPreprocessor
             s = RewriteCall(s, "Complex.Exp",       args => args.Length == 1 ? $"exp({args[0].Trim()})"  : null);
             s = RewriteCall(s, "Complex.Log",       args => args.Length == 1 ? $"log({args[0].Trim()})"  : null);
             s = RewriteCall(s, "Complex.Conjugate", args => args.Length == 1 ? $"conj({args[0].Trim()})" : null);
+            // Complex.Divide(a, b) is plain division; wrap both operands so the
+            // surrounding precedence is preserved.
+            s = RewriteCall(s, "Complex.Divide", args => args.Length == 2 ? $"(({args[0].Trim()})/({args[1].Trim()}))" : null);
             // Complex.Phase is the BCL accessor for arg(z). Translates 1:1.
             s = RewriteCall(s, "Complex.Phase",     args => args.Length == 1 ? $"arg({args[0].Trim()})"  : null);
             // Math.Atan2(y, x) is real-valued; DSL atan2 lifts to complex.

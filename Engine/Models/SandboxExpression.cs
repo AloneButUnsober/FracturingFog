@@ -23,9 +23,13 @@
 //   unary    := "-" unary | primary
 //   primary  := NUMBER | IDENT | IDENT "(" args ")" | "(" expr ")"
 //
+// Comments: `//` to end-of-line and `/* */` blocks are skipped (a lone `/`
+// stays division).
+//
 // Built-in identifiers:
 //   z, c, n               (input slots, refreshed per iteration)
-//   pi, e, i              (constants)
+//   pi, e, i              (constants; also accepted case-insensitively as
+//                          PI / E / I so translated C# equations resolve)
 // Functions:
 //   sin cos tan sinh cosh tanh exp log sqrt abs conj re im arg
 //   asin acos atan asinh acosh atanh          (1-arg; complex outside real domain)
@@ -299,6 +303,11 @@ namespace FracturingFog.Models
                 SkipWs();
                 var node = ParseExpr();
                 SkipWs();
+                // #27 Phase 5a — tolerate a single trailing `;` (a pasted C#
+                // `return expr;` whose semicolon survived, possibly followed by
+                // a trailing comment). Interior `;` statement separators are a
+                // later phase.
+                if (Peek() == ';') { _pos++; SkipWs(); }
                 if (_pos < _src.Length)
                     throw new FormatException($"Unexpected '{_src[_pos]}' at position {_pos}");
                 return node;
@@ -474,6 +483,17 @@ namespace FracturingFog.Models
                     if (name == "i")  return new SbxConst(SbxVal.Cx(0.0, 1.0));
 
                     if (_scope.TryGetValue(name, out int slot)) return new SbxSlot(slot);
+
+                    // #27 Phase 5a — accept the C# Math spellings `E` / `PI` (and
+                    // any case variant of the built-in constants) so translated
+                    // equations using them resolve. Checked AFTER scope so a
+                    // let-bound name of the same spelling still wins.
+                    switch (name.ToLowerInvariant())
+                    {
+                        case "pi": return new SbxConst(SbxVal.Real(Math.PI));
+                        case "e":  return new SbxConst(SbxVal.Real(Math.E));
+                        case "i":  return new SbxConst(SbxVal.Cx(0.0, 1.0));
+                    }
                     throw new FormatException($"Unknown identifier '{name}' at {_pos}");
                 }
                 throw new FormatException($"Unexpected character '{p}' at {_pos}");
@@ -537,7 +557,33 @@ namespace FracturingFog.Models
 
             private void SkipWs()
             {
-                while (_pos < _src.Length && char.IsWhiteSpace(_src[_pos])) _pos++;
+                // #27 Phase 5a — skip whitespace and comments (`//` to EOL,
+                // `/* */` block). A lone `/` is left for the division operator.
+                // Mirrors SandboxBulbExpression so saved C# equations carrying
+                // comments translate + parse.
+                while (_pos < _src.Length)
+                {
+                    char c = _src[_pos];
+                    if (char.IsWhiteSpace(c)) { _pos++; continue; }
+                    if (c == '/' && _pos + 1 < _src.Length)
+                    {
+                        char d = _src[_pos + 1];
+                        if (d == '/')
+                        {
+                            _pos += 2;
+                            while (_pos < _src.Length && _src[_pos] != '\n') _pos++;
+                            continue;
+                        }
+                        if (d == '*')
+                        {
+                            _pos += 2;
+                            while (_pos + 1 < _src.Length && !(_src[_pos] == '*' && _src[_pos + 1] == '/')) _pos++;
+                            _pos = Math.Min(_src.Length, _pos + 2);
+                            continue;
+                        }
+                    }
+                    break;
+                }
             }
 
             private void Expect(char c)
