@@ -224,15 +224,36 @@ working. Issue #209 (PR #210, stacked on #208).
   in Engine (needs both the preprocessor and the interpreter, which Abstractions
   doesn't reference).
 
-### Phase 5b — statement blocks in the equation DSL (planned, #212)
-The saved equations still erroring after 5a are C# **statement blocks**
-(`var`/`if`/multi-statement/`return`). The DSL already has `let..in` (= `var`)
-and ternary (= `if`), so this is a **front-end** parser extension — desugar
-`T x = e; …`, `x = e; …`, `if (c) x = e; …`, `return r;` to nested `let`/ternary
-— not a capability or security change (still pure, no BCL, no loops). One hard
-case out of scope: Phoenix-style maps need the previous `z` carried between
-iterations, which the `(z, c, n)` step signature can't supply (needs a `prev`
-slot — separate). Branches off `main` after #208 + #210 merge.
+### Phase 5b — statement blocks in the equation DSL (DONE, #212)
+The saved equations still erroring after 5a were C# **statement blocks**
+(`var`/`if`/multi-statement/`return`). The DSL already had `let..in` (= `var`)
+and ternary (= `if`), so this was a **front-end** parser extension — not a
+capability or security change (still pure, no BCL, no loops, no braces).
+Shipped in `SandboxExpression`'s parser (`ParseBlock` + `BindBlock` +
+`TryParseAssignment`, desugaring to the existing let/ternary AST):
+- `TYPE? ident = expr ;` → `let ident = expr in <rest>` (TYPE ∈
+  var/Complex/double/int/float/long/decimal, discarded — dynamically typed).
+- `ident = expr ;` (reassignment, incl. `z = …`) → shadowing `let`; the RHS
+  sees the prior binding, the body sees the new one (sequential semantics).
+- `if (cond) ident = expr ;` → `let ident = (cond ? expr : ident) in <rest>`
+  (the seed form; the assigned name must already be bound).
+- `if (cond) return expr ;` → `cond ? expr : <rest-of-block>` (early-guard).
+- `return expr ;` / bare trailing expr → the block's value.
+
+`ParsePrimary` now resolves scope **before** the `pi`/`e`/`i` constants so a
+block-local of that spelling shadows the constant (C# scoping). Translator
+side (`EquationPreprocessor`): statement tokens pass through untouched (no
+`Complex.` prefix); added `Math.Abs → abs` (Burning Ship's `new Complex(|Re|,
+|Im|)` fold) and `Math.PI/Math.E → pi/e`. The startup migration converts these
+blocks with no wiring change (translate-then-parse now succeeds). Tests:
+`SandboxExpressionStmtBlockTests` (parser) + `StmtBlockCorpus` in
+`UserEquationDslParityTests` (native-C# parity over the classic
+Newton/Nova/Tricorn/Burning-Ship/if-seed/if-return corpus) +
+`Migration_ConvertsStatementBlockEquation_AndItRenders`.
+
+One hard case still out of scope: **Phoenix-style maps** need the previous `z`
+carried between iterations, which the `(z, c, n)` step signature can't supply
+(needs a `prev` slot — tracked separately, not part of the parser work).
 
 ### User Bulb C#→DSL translator (deferred, #211)
 No C#→DSL translator exists for `Vec3`/`Quat` bulb bodies (Phase 2b only swapped

@@ -27,6 +27,17 @@
 //                         → 1           (k == 0)
 //                         → 1/x^|k|     (k < 0)
 //   Complex.Pow(x, expr)  → exp(expr*log(x))    (non-integer exponent)
+//   Math.Atan2(y, x)      → atan2(y, x)
+//   Math.Min/Max(a, b)    → min/max(a, b)
+//   Math.IEEERemainder    → mod(a, b)
+//   Math.Abs(x)           → abs(x)   (real part; |x|)     (#27 Phase 5b)
+//   Math.PI / Math.E      → pi / e                        (#27 Phase 5b)
+//
+// Statement blocks (#27 Phase 5b): typed / `var` declarations, reassignments,
+// an `if (n==0) …;` seed, an early `if (cond) return …;` guard, interior `;`
+// separators, and a final `return` pass through this translator unchanged
+// (they carry no `Complex.` prefix) and are parsed by SandboxExpression's
+// statement-block front-end, which desugars them to let/ternary.
 //
 // Member access (#27 Phase 5a — the DSL has these functions; only the C#
 // property-access syntax needed a rewrite so saved equations keep working
@@ -115,6 +126,11 @@ public static class EquationPreprocessor
         // form directly. No diagnostic (it's no longer a rejected
         // construct) and downstream consumers see a plain `i` token.
         s = Regex.Replace(s, @"\bComplex\.ImaginaryOne\b", "i");
+        // #27 Phase 5b — real Math constants used inside statement-block
+        // equations (`Math.PI`, `Math.E`). The DSL has `pi` / `e`; the dotted
+        // BCL spelling would otherwise trip the SandboxExpression parser.
+        s = Regex.Replace(s, @"\bMath\.PI\b", "pi");
+        s = Regex.Replace(s, @"\bMath\.E\b",  "e");
 
         // PR8: `new Complex(a, b)` now translates to a DSL `(a + (b)*i)`
         // expression. Special cases drop redundant parts:
@@ -273,6 +289,10 @@ public static class EquationPreprocessor
             s = RewriteCall(s, "Complex.Phase",     args => args.Length == 1 ? $"arg({args[0].Trim()})"  : null);
             // Math.Atan2(y, x) is real-valued; DSL atan2 lifts to complex.
             s = RewriteCall(s, "Math.Atan2",        args => args.Length == 2 ? $"atan2({args[0].Trim()}, {args[1].Trim()})" : null);
+            // #27 Phase 5b — Math.Abs(x) on a real part (Burning Ship's
+            // `new Complex(Math.Abs(z.Real), Math.Abs(z.Imaginary))` fold). The
+            // SandboxExpression `abs` is |x| (matches Math.Abs on a real value).
+            s = RewriteCall(s, "Math.Abs",          args => args.Length == 1 ? $"abs({args[0].Trim()})" : null);
             // Math.Min / Max / IEEERemainder → DSL counterparts.
             s = RewriteCall(s, "Math.Min",          args => args.Length == 2 ? $"min({args[0].Trim()}, {args[1].Trim()})" : null);
             s = RewriteCall(s, "Math.Max",          args => args.Length == 2 ? $"max({args[0].Trim()}, {args[1].Trim()})" : null);

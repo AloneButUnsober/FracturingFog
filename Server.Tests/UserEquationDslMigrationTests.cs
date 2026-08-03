@@ -145,6 +145,37 @@ public sealed class UserEquationDslMigrationTests
     }
 
     [Fact]
+    public void Migration_ConvertsStatementBlockEquation_AndItRenders()
+    {
+        // #27 Phase 5b — a C# statement block (typed decls + a final return) that
+        // Phase 5a could not fold now translates + parses on the safe interpreter,
+        // so the startup migration converts it and it renders on the live tab.
+        SeedFile(new UserEquationEntry
+        {
+            Name = "NewtonBlock",
+            Source = "Complex f = z*z*z - 1; Complex d = 3*z*z; return z - f/d;",
+            Kind = UserEquationKind.UserEquation,
+        });
+
+        var store = UserEquationStore.Instance;
+        store.Load();
+        Assert.Equal(1, UserEquationDslMigration.Run(store));
+
+        var e = store.GetByName("NewtonBlock")!;
+        Assert.Equal(UserEquationKind.UserEquation, e.Kind); // stays on the live tab
+        Assert.DoesNotContain("Complex.", e.Source);         // Complex.* translated out
+        Assert.Contains("return", e.Source);                 // block structure preserved
+
+        var calc = new UserEquationCalculator(8, 8)
+        {
+            FractalParameters = new FractalParameters { UserEquationSource = e.Source },
+        };
+        calc.Compile(e.Source);
+        Assert.True(calc.IsCompiled, calc.LastError);
+        Assert.True(calc.UsingDsl);
+    }
+
+    [Fact]
     public void CorrectiveFlip_MovesDslEntriesBackToUserEquationTab()
     {
         // A prior build wrongly flipped migrated equations to Kind=Dsl (an editor

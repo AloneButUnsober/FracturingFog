@@ -10,8 +10,25 @@
 // reflection, no P/Invoke, no allocation beyond AST + per-thread env array.
 //
 // Grammar (right-recursive descent):
+//   program  := block
+//   block    := "return" expr ";"?                              ; block value
+//             | "if" "(" expr ")" "return" expr ";"? block       ; guard -> ternary
+//             | "if" "(" expr ")" IDENT "=" expr ";"? block      ; if-seed -> let
+//             | (TYPE? IDENT "=" expr ";"?) block                ; decl/assign -> let
+//             | expr ";"?                                        ; terminal expression
 //   expr     := let_expr
 //   let_expr := "let" IDENT "=" expr "in" expr | ternary
+//
+// Statement blocks (#27 Phase 5b): a saved C# equation may be a sequence of
+// statements — typed / `var` declarations, reassignments (`z = z*z + c;`), a
+// leading `if (n==0) z = ...;` seed, an early `if (cond) return ...;` guard,
+// and a final `return`. Each binding statement desugars to a `let` over the
+// remaining block; reassignment shadows the prior binding; the terminal
+// `return` / bare expression is the block's value. This is a front-end only:
+// still no BCL, no loops, no side effects, no braces — the same pure,
+// terminating evaluator runs, and assignment is let-binding, not mutation.
+// TYPE is one of var/Complex/double/int/float/long/decimal (ignored — the
+// value's own kind is what matters at runtime).
 //   ternary  := or_expr ("?" expr ":" expr)?
 //   or_expr  := and_expr ("||" and_expr)*
 //   and_expr := not_expr ("&&" not_expr)*
@@ -315,17 +332,140 @@ namespace FracturingFog.Models
             public SbxNode ParseProgram()
             {
                 SkipWs();
-                var node = ParseExpr();
+                var node = ParseBlock();
                 SkipWs();
-                // #27 Phase 5a — tolerate a single trailing `;` (a pasted C#
-                // `return expr;` whose semicolon survived, possibly followed by
-                // a trailing comment). Interior `;` statement separators are a
-                // later phase.
+                // Tolerate a single trailing `;` (a pasted `return expr;` whose
+                // semicolon survived, possibly followed by a trailing comment).
                 if (Peek() == ';') { _pos++; SkipWs(); }
                 if (_pos < _src.Length)
                     throw new FormatException($"Unexpected '{_src[_pos]}' at position {_pos}");
                 return node;
             }
+
+            // #27 Phase 5b — statement-block front-end. Parses a sequence of
+            // statements and returns the desugared expression (let/ternary AST).
+            // See the grammar block at the top of the file.
+            private SbxNode ParseBlock()
+            {
+                SkipWs();
+
+                // return <expr> ;   — the block's value. Anything after it is
+                // dead code and rejected by ParseProgram's trailing check.
+                if (MatchKeyword("return"))
+                {
+                    var e = ParseExpr();
+                    SkipWs();
+                    if (Peek() == ';') _pos++;
+                    return e;
+                }
+
+                // if ( cond ) ...   — two shapes:
+                //   if (cond) return X;  -> cond ? X : <rest-of-block>
+                //   if (cond) v = X;     -> let v = (cond ? X : v) in <rest-of-block>
+                if (MatchKeyword("if"))
+                {
+                    SkipWs();
+                    Expect('(');
+                    var cond = ParseExpr();
+                    SkipWs();
+                    Expect(')');
+                    SkipWs();
+
+                    if (MatchKeyword("return"))
+                    {
+                        var thenE = ParseExpr();
+                        SkipWs();
+                        if (Peek() == ';') _pos++;
+                        var elseE = ParseBlock();          // rest of the block
+                        return new SbxTernary(cond, thenE, elseE);
+                    }
+
+                    string ifName = ReadIdent();
+                    if (string.IsNullOrEmpty(ifName))
+                        throw new FormatException($"Expected assignment or 'return' after 'if (...)' at {_pos}");
+                    SkipWs();
+                    Expect('=');
+                    var ifRhs = ParseExpr();
+                    SkipWs();
+                    if (Peek() == ';') _pos++;
+                    // The else branch keeps the variable's prior value, so it must
+                    // already be bound (`z`/`c`/`n` or an earlier decl).
+                    if (!_scope.TryGetValue(ifName, out int priorSlot))
+                        throw new FormatException($"'if' assigns to unbound '{ifName}' at {_pos}");
+                    var seeded = new SbxTernary(cond, ifRhs, new SbxSlot(priorSlot));
+                    return BindBlock(ifName, seeded);
+                }
+
+                // [type] ident = expr ;   (declaration or reassignment)
+                var assign = TryParseAssignment();
+                if (assign != null) return assign;
+
+                // Terminal: a let-expression, ternary, or plain expression, with
+                // an optional trailing ';' so a lone `expr;` statement parses.
+                var expr = ParseExpr();
+                SkipWs();
+                if (Peek() == ';') _pos++;
+                return expr;
+            }
+
+            // Bind <name> to a fresh slot for the remainder of the block and
+            // desugar to `let name = value in <rest>`. Reassignment shadows the
+            // prior binding (restored on exit), so the sandbox stays pure.
+            private SbxNode BindBlock(string name, SbxNode valueExpr)
+            {
+                bool hadPrior = _scope.TryGetValue(name, out int prior);
+                int slot = EnvSize++;
+                _scope[name] = slot;
+                try
+                {
+                    var body = ParseBlock();
+                    return new SbxLet(slot, valueExpr, body);
+                }
+                finally
+                {
+                    if (hadPrior) _scope[name] = prior;
+                    else _scope.Remove(name);
+                }
+            }
+
+            // Lookahead for `[type] ident = expr ;`. On success the value is
+            // parsed, the rest of the block recursed, and the desugared let-node
+            // returned. On no-match the position is fully restored and null
+            // returned — so a comparison (`a == b`), a call (`f(x)`), or a
+            // `let`/`in`/`return`/`if` expression falls through to ParseExpr.
+            private SbxNode? TryParseAssignment()
+            {
+                int save = _pos;
+                SkipWs();
+                string first = ReadIdent();
+                if (first.Length == 0) { _pos = save; return null; }
+                if (first is "let" or "in" or "return" or "if") { _pos = save; return null; }
+
+                string name;
+                if (IsTypeKeyword(first))
+                {
+                    SkipWs();
+                    name = ReadIdent();
+                    if (name.Length == 0) { _pos = save; return null; }
+                }
+                else name = first;
+
+                SkipWs();
+                // A single '=' (not '==') marks an assignment statement.
+                if (!(Peek() == '=' && Peek(1) != '=')) { _pos = save; return null; }
+                _pos++; // consume '='
+
+                var rhs = ParseExpr();
+                SkipWs();
+                if (Peek() == ';') _pos++;
+                return BindBlock(name, rhs);
+            }
+
+            // C# local-declaration type tokens accepted before a variable name.
+            // The DSL is dynamically typed (SbxVal), so the type is discarded —
+            // it only tells the parser this is a declaration, not an expression.
+            private static bool IsTypeKeyword(string w) =>
+                w is "var" or "Complex" or "double" or "int" or "float" or "long" or "decimal";
 
             private SbxNode ParseExpr() => ParseLet();
 
@@ -491,12 +631,15 @@ namespace FracturingFog.Models
                     SkipWs();
                     if (Peek() == '(') return ParseCall(name);
 
+                    // Scope wins over the built-in constants so a statement-block
+                    // local named `e`/`i`/`pi` (#27 Phase 5b lets a block bind any
+                    // name) shadows the constant, matching C# scoping.
+                    if (_scope.TryGetValue(name, out int slot)) return new SbxSlot(slot);
+
                     // Reserved single-letter constants
                     if (name == "pi") return new SbxConst(SbxVal.Real(Math.PI));
                     if (name == "e")  return new SbxConst(SbxVal.Real(Math.E));
                     if (name == "i")  return new SbxConst(SbxVal.Cx(0.0, 1.0));
-
-                    if (_scope.TryGetValue(name, out int slot)) return new SbxSlot(slot);
 
                     // #27 Phase 5a — accept the C# Math spellings `E` / `PI` (and
                     // any case variant of the built-in constants) so translated
