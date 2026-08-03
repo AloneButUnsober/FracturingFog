@@ -31,6 +31,15 @@ public sealed class SandboxExpressionMathTests
             $"expected {expected}, got {actual}");
     }
 
+    // ── sqr (CalcGen-parity builtin) ────────────────────────────────────────
+
+    [Fact] public void Sqr_Real()    => AssertClose(new Complex(9.0, 0.0), Eval("sqr(z)", 3.0));
+    [Fact] public void Sqr_Complex() => AssertClose(new Complex(0.3, 0.7) * new Complex(0.3, 0.7), Eval("sqr(z)", new Complex(0.3, 0.7)));
+    [Fact] public void Sqr_EqualsZTimesZ()
+        => AssertClose(Eval("z*z", new Complex(1.2, -0.5)), Eval("sqr(z)", new Complex(1.2, -0.5)));
+    [Fact] public void Sqr_CaseInsensitiveCall()
+        => AssertClose(new Complex(9.0, 0.0), Eval("Sqr(z)", 3.0)); // ParseCall lowercases
+
     // ── inverse trig: real inside principal domain ──────────────────────────
 
     [Fact] public void Asin_RealDomain() => AssertClose(Math.Asin(0.5), Eval("asin(z)", 0.5));

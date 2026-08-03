@@ -31,7 +31,7 @@
 //   pi, e, i              (constants; also accepted case-insensitively as
 //                          PI / E / I so translated C# equations resolve)
 // Functions:
-//   sin cos tan sinh cosh tanh exp log sqrt abs conj re im arg
+//   sin cos tan sinh cosh tanh exp log sqrt sqr abs conj re im arg
 //   asin acos atan asinh acosh atanh          (1-arg; complex outside real domain)
 //   floor sign                                (1-arg; per-component)
 //   pow(z,w) atan2(y,x) min(a,b) max(a,b)     (2-arg)
@@ -216,6 +216,11 @@ namespace FracturingFog.Models
                 case "sqrt": return x.IsReal && x.R >= 0
                                 ? SbxVal.Real(Math.Sqrt(x.R))
                                 : SbxVal.Cx(Complex.Sqrt(x.AsComplex()));
+                // #27 Phase 5a — sqr(x) = x² (the CalcGen DSL has this; the live
+                // interpreter did not). Complex square (a+bi)² = (a²−b², 2ab).
+                case "sqr":  return x.IsReal
+                                ? SbxVal.Real(x.R * x.R)
+                                : SbxVal.Cx(x.R * x.R - x.I * x.I, 2.0 * x.R * x.I);
                 // Inverse trig / hyperbolic: real result inside the principal
                 // real domain, complex continuation outside it.
                 case "asin":  return x.IsReal && x.R >= -1 && x.R <= 1 ? SbxVal.Real(Math.Asin(x.R)) : SbxVal.Cx(Complex.Asin(x.AsComplex()));
@@ -523,7 +528,7 @@ namespace FracturingFog.Models
             private static int ArityOf(string name) => name switch
             {
                 "sin" or "cos" or "tan" or "sinh" or "cosh" or "tanh"
-                    or "exp" or "log" or "sqrt"
+                    or "exp" or "log" or "sqrt" or "sqr"
                     or "abs" or "conj" or "re" or "im" or "arg"
                     or "asin" or "acos" or "atan"
                     or "asinh" or "acosh" or "atanh"
