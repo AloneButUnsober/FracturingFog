@@ -59,6 +59,7 @@ public enum TokenKind
     Re,
     Im,
     Abs,
+    Clamp,
     Gt,
     Lt,
     Ge,
@@ -187,6 +188,8 @@ public static class EquationLexer
                     tokens.Add(new Token(TokenKind.Im, name, start, startLine, startCol));
                 else if (name.Equals("abs", StringComparison.OrdinalIgnoreCase))
                     tokens.Add(new Token(TokenKind.Abs, name, start, startLine, startCol));
+                else if (name.Equals("clamp", StringComparison.OrdinalIgnoreCase))
+                    tokens.Add(new Token(TokenKind.Clamp, name, start, startLine, startCol));
                 else if (name.Equals("prev", StringComparison.OrdinalIgnoreCase))
                     tokens.Add(new Token(TokenKind.Prev, name, start, startLine, startCol));
                 else if (name.Equals("iter", StringComparison.OrdinalIgnoreCase)
@@ -202,7 +205,7 @@ public static class EquationLexer
                     // Suggest the closest valid keyword via Levenshtein-≤2.
                     string[] keywords = { "z", "c", "conj", "fold", "sqr", "sin", "cos", "tan",
                                           "sinh", "cosh", "tanh", "sqrt", "exp", "log", "arg", "atan2",
-                                          "min", "max", "mod", "pi", "e", "i",
+                                          "min", "max", "mod", "clamp", "pi", "e", "i",
                                           "if", "then", "else", "re", "im", "abs", "prev", "iter", "n" };
                     string? best = null;
                     int bestD = int.MaxValue;
@@ -219,7 +222,7 @@ public static class EquationLexer
                     throw new FormatException(
                         $"Unknown identifier '{name}' at {where}.{suggestion} " +
                         "Allowed: z, c, conj, fold, sqr, sin, cos, tan, sinh, cosh, tanh, sqrt, " +
-                        "exp, log, arg, atan2, min, max, mod, pi, e, i, " +
+                        "exp, log, arg, atan2, min, max, mod, clamp, pi, e, i, " +
                         "if, then, else, re, im, abs, prev, iter (or n).");
                 }
                 continue;

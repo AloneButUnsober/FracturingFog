@@ -80,6 +80,14 @@ public static class AstDifferentiator
         Min        => new RealConst(0.0),
         Max        => new RealConst(0.0),
         Mod        => new RealConst(0.0),
+        // #27 Phase 6 — re/im/abs/clamp are non-holomorphic real-lifts. Opaque
+        // to the chain rule (∂/∂v = 0); SupportsDe is gated off upstream via
+        // Contains<ReOp>/… so this derivative is never actually used, but the
+        // unconditional derivUpdate build must not throw.
+        ReOp       => new RealConst(0.0),
+        ImOp       => new RealConst(0.0),
+        AbsOp      => new RealConst(0.0),
+        Clamp      => new RealConst(0.0),
         // Transcendentals — holomorphic chain rules:
         //   d/dv sin(u) =  cos(u) · u'
         //   d/dv cos(u) = -sin(u) · u'

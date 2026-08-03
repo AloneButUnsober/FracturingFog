@@ -148,6 +148,31 @@ public sealed record Min(AstNode Left, AstNode Right) : AstNode;
 /// <summary>Real maximum of two operands, lifted to complex. See <see cref="Min"/>.</summary>
 public sealed record Max(AstNode Left, AstNode Right) : AstNode;
 
+/// <summary>Real part lifted to complex: (Re(x), 0). Holomorphic-wise this is
+/// non-holomorphic (like <see cref="Conj"/>) — distance estimate / perturbation
+/// / SA all gate off. #27 Phase 6 — the expression-position `re(x)` that brings
+/// CalcGen to parity with the SandboxExpression interpreter (which has it). Note
+/// the SEPARATE condition-only <see cref="CondRe"/> already existed for `if`
+/// terms; this is the value-expression form.</summary>
+public sealed record ReOp(AstNode Operand) : AstNode;
+
+/// <summary>Imaginary part lifted to complex: (Im(x), 0). Non-holomorphic; same
+/// gating as <see cref="ReOp"/>. #27 Phase 6.</summary>
+public sealed record ImOp(AstNode Operand) : AstNode;
+
+/// <summary>Magnitude lifted to complex: (|x|, 0) = (sqrt(Re²+Im²), 0).
+/// Non-holomorphic; same gating. #27 Phase 6 — SEMANTIC RECONCILIATION: the
+/// expression `abs(x)` is |x| (matches the SandboxExpression runtime and
+/// Complex.Abs). This is DISTINCT from the condition-only `abs` shorthand
+/// (<see cref="CondAbs2"/>) which is |x|² (squared magnitude) — a different
+/// grammar position (inside `if`), kept for its bailout-threshold convenience.</summary>
+public sealed record AbsOp(AstNode Operand) : AstNode;
+
+/// <summary>Real-valued clamp lifted to complex: (clamp(Re(x), Re(lo), Re(hi)), 0).
+/// Matches SandboxExpression's real-valued clamp. Non-holomorphic; same gating as
+/// <see cref="Min"/>/<see cref="Max"/>. #27 Phase 6.</summary>
+public sealed record Clamp(AstNode X, AstNode Lo, AstNode Hi) : AstNode;
+
 /// <summary>Real modulo (IEEE remainder semantics): mod(a, b) = a - trunc(a/b)*b
 /// on the real components, lifted to complex. The emitter uses C#'s `%`
 /// on doubles (matches Math.IEEERemainder for finite arguments after the

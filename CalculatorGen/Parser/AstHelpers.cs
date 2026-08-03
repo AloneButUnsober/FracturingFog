@@ -42,6 +42,10 @@ public static class AstHelpers
         Min mn => Contains<T>(mn.Left) || Contains<T>(mn.Right),
         Max mx => Contains<T>(mx.Left) || Contains<T>(mx.Right),
         Mod md => Contains<T>(md.Left) || Contains<T>(md.Right),
+        ReOp r3  => Contains<T>(r3.Operand),
+        ImOp im3 => Contains<T>(im3.Operand),
+        AbsOp ab => Contains<T>(ab.Operand),
+        Clamp cl => Contains<T>(cl.X) || Contains<T>(cl.Lo) || Contains<T>(cl.Hi),
         // Piecewise — recurse into both branches and into any AstNodes
         // embedded inside the condition's CondTerms (re(...)/im(...)/abs(...)
         // each carry a complex sub-expression).

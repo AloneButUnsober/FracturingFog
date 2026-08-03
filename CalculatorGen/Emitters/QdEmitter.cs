@@ -171,6 +171,27 @@ public sealed class QdEmitter : EmitterBase
     protected override ComplexExpr OpMod(ComplexExpr a, ComplexExpr b) =>
         new($"(QD)(((QD)({a.Re})).X0 % ((QD)({b.Re})).X0)", "(QD)0.0", ImZero: true);
 
+    // #27 Phase 6 — real-lift parity ops (re/im keep full QD; abs/clamp on .X0).
+    protected override ComplexExpr OpRe(ComplexExpr a) =>
+        new($"((QD)({a.Re}))", "(QD)0.0", ImZero: true);
+
+    protected override ComplexExpr OpIm(ComplexExpr a) =>
+        new(a.ImZero ? "(QD)0.0" : $"((QD)({a.Im}))", "(QD)0.0", ImZero: true);
+
+    protected override ComplexExpr OpAbs(ComplexExpr a)
+    {
+        if (a.ImZero)
+            return new($"(((QD)({a.Re})).X0 < 0.0 ? -((QD)({a.Re})) : ((QD)({a.Re})))", "(QD)0.0", ImZero: true);
+        string reHi = $"((QD)({a.Re})).X0";
+        string imHi = $"((QD)({a.Im})).X0";
+        return new($"(QD)Math.Sqrt({reHi} * {reHi} + {imHi} * {imHi})", "(QD)0.0", ImZero: true);
+    }
+
+    protected override ComplexExpr OpClamp(ComplexExpr x, ComplexExpr lo, ComplexExpr hi) =>
+        new($"(((QD)({x.Re})).X0 < ((QD)({lo.Re})).X0 ? ((QD)({lo.Re})) : " +
+            $"(((QD)({x.Re})).X0 > ((QD)({hi.Re})).X0 ? ((QD)({hi.Re})) : ((QD)({x.Re}))))",
+            "(QD)0.0", ImZero: true);
+
     // Piecewise — compare on QD .X0 (high limb), select via C# ternary.
     // Eager-evaluated branches.
     protected override ComplexExpr OpIf(CondNode cond, ComplexExpr thenV, ComplexExpr elseV)

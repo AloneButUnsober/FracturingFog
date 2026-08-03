@@ -102,6 +102,30 @@ public static class AstPrinter
                 WriteExpr(sb, md.Right, 0);
                 sb.Append(')');
                 break;
+            case ReOp r3:
+                sb.Append("re(");
+                WriteExpr(sb, r3.Operand, 0);
+                sb.Append(')');
+                break;
+            case ImOp im3:
+                sb.Append("im(");
+                WriteExpr(sb, im3.Operand, 0);
+                sb.Append(')');
+                break;
+            case AbsOp ab:
+                sb.Append("abs(");
+                WriteExpr(sb, ab.Operand, 0);
+                sb.Append(')');
+                break;
+            case Clamp cl:
+                sb.Append("clamp(");
+                WriteExpr(sb, cl.X, 0);
+                sb.Append(", ");
+                WriteExpr(sb, cl.Lo, 0);
+                sb.Append(", ");
+                WriteExpr(sb, cl.Hi, 0);
+                sb.Append(')');
+                break;
             case If i:
                 Wrap(sb, parentPrec, 0, () =>
                 {

@@ -200,6 +200,23 @@ public sealed class ScalarEmitter : EmitterBase
     protected override ComplexExpr OpMod(ComplexExpr a, ComplexExpr b) =>
         new($"(({a.Re}) % ({b.Re}))", "0.0", ImZero: true);
 
+    // #27 Phase 6 — real-lift parity ops (re/im/abs/clamp). All produce a
+    // real-valued result lifted to complex (result, 0) with ImZero=true.
+    protected override ComplexExpr OpRe(ComplexExpr a) =>
+        new(a.Re, "0.0", ImZero: true);
+
+    protected override ComplexExpr OpIm(ComplexExpr a) =>
+        new(a.ImZero ? "0.0" : a.Im, "0.0", ImZero: true);
+
+    // abs(x) = |x| = sqrt(Re²+Im²) — matches Complex.Abs / SandboxExpression.
+    protected override ComplexExpr OpAbs(ComplexExpr a) =>
+        new(a.ImZero ? $"Math.Abs({a.Re})"
+                     : $"Math.Sqrt({a.Re} * {a.Re} + {a.Im} * {a.Im})",
+            "0.0", ImZero: true);
+
+    protected override ComplexExpr OpClamp(ComplexExpr x, ComplexExpr lo, ComplexExpr hi) =>
+        new($"Math.Clamp({x.Re}, {lo.Re}, {hi.Re})", "0.0", ImZero: true);
+
     // Piecewise selection — scalar C# ternary on the rendered cond
     // expression. Both branches were eager-evaluated by EmitterBase so
     // any Sin/Cos/etc work has been folded into the ComplexExpr inline

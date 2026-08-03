@@ -146,6 +146,22 @@ public abstract class EmitterBase
     protected virtual ComplexExpr OpMod(ComplexExpr a, ComplexExpr b) =>
         throw new InvalidOperationException("OpMod not implemented in this emitter");
 
+    /// <summary>Real part lifted to complex (Re, 0). Non-holomorphic. #27 Phase 6.</summary>
+    protected virtual ComplexExpr OpRe(ComplexExpr a) =>
+        throw new InvalidOperationException("OpRe not implemented in this emitter");
+
+    /// <summary>Imaginary part lifted to complex (Im, 0). Non-holomorphic. #27 Phase 6.</summary>
+    protected virtual ComplexExpr OpIm(ComplexExpr a) =>
+        throw new InvalidOperationException("OpIm not implemented in this emitter");
+
+    /// <summary>Magnitude lifted to complex (|x|, 0). Non-holomorphic. #27 Phase 6.</summary>
+    protected virtual ComplexExpr OpAbs(ComplexExpr a) =>
+        throw new InvalidOperationException("OpAbs not implemented in this emitter");
+
+    /// <summary>Real-valued clamp lifted to complex (clamp(Re), 0). Non-holomorphic. #27 Phase 6.</summary>
+    protected virtual ComplexExpr OpClamp(ComplexExpr x, ComplexExpr lo, ComplexExpr hi) =>
+        throw new InvalidOperationException("OpClamp not implemented in this emitter");
+
     /// <summary>Piecewise selection: given a boolean expression and two
     /// pre-evaluated complex branches, return the selected complex value.
     /// Subclasses choose the strategy — scalar uses a C# ternary on the
@@ -184,6 +200,10 @@ public abstract class EmitterBase
         Min mn      => OpMin(Emit(mn.Left), Emit(mn.Right)),
         Max mx      => OpMax(Emit(mx.Left), Emit(mx.Right)),
         Mod md      => OpMod(Emit(md.Left), Emit(md.Right)),
+        ReOp r3     => OpRe(Emit(r3.Operand)),
+        ImOp im3    => OpIm(Emit(im3.Operand)),
+        AbsOp ab    => OpAbs(Emit(ab.Operand)),
+        Clamp cl    => OpClamp(Emit(cl.X), Emit(cl.Lo), Emit(cl.Hi)),
         // Eager-evaluate both branches so any SSA prelude they emit
         // runs unconditionally — matches SIMD lane semantics where
         // every lane evaluates every branch. The cost is paid in
