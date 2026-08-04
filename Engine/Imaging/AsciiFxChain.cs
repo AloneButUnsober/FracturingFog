@@ -62,7 +62,7 @@ namespace FracturingFog.Imaging
             byte solThresh = (byte)Math.Clamp(fx.SolarizeThreshold * 255.0, 0, 255);
             int qLevels = Math.Max(2, fx.QuantizeLevels);
             bool doPerCell = doGlyph || fx.HueCycle || fx.Monochrome || fx.Saturate
-                || fx.Invert || fx.Solarize || fx.Quantize;
+                || fx.Invert || fx.Solarize || fx.Quantize || fx.Duotone;
             if (doPerCell)
             for (int y = 0; y < rows; y++)
             {
@@ -98,7 +98,16 @@ namespace FracturingFog.Imaging
                         }
                     }
 
-                    // Colour-space: hue cycle, monochrome tint, then scanline dim.
+                    // Colour-space. Duotone first (full remap from luma), then
+                    // hue / saturation / tone can further process.
+                    if (fx.Duotone)
+                    {
+                        double t = (0.2126 * r + 0.7152 * g + 0.0722 * b) / 255.0;
+                        if (t > 1.0) t = 1.0;
+                        r = (byte)Math.Round(fx.DuotoneLoR + (fx.DuotoneHiR - fx.DuotoneLoR) * t);
+                        g = (byte)Math.Round(fx.DuotoneLoG + (fx.DuotoneHiG - fx.DuotoneLoG) * t);
+                        b = (byte)Math.Round(fx.DuotoneLoB + (fx.DuotoneHiB - fx.DuotoneLoB) * t);
+                    }
                     if (fx.HueCycle && (r != 0 || g != 0 || b != 0))
                         RotateHue(ref r, ref g, ref b, hueShift);
                     if (fx.Saturate)
