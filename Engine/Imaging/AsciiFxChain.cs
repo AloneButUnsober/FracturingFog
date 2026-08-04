@@ -59,7 +59,9 @@ namespace FracturingFog.Imaging
                 satScale = Math.Max(0.0, fx.SaturateMid + fx.SaturateAmp * s);
             }
 
-            bool doPerCell = doGlyph || fx.HueCycle || fx.Monochrome || fx.Saturate;
+            byte solThresh = (byte)Math.Clamp(fx.SolarizeThreshold * 255.0, 0, 255);
+            bool doPerCell = doGlyph || fx.HueCycle || fx.Monochrome || fx.Saturate
+                || fx.Invert || fx.Solarize;
             if (doPerCell)
             for (int y = 0; y < rows; y++)
             {
@@ -100,6 +102,16 @@ namespace FracturingFog.Imaging
                         RotateHue(ref r, ref g, ref b, hueShift);
                     if (fx.Saturate)
                         ScaleSaturation(ref r, ref g, ref b, satScale);
+                    if (fx.Invert)
+                    {
+                        r = (byte)(255 - r); g = (byte)(255 - g); b = (byte)(255 - b);
+                    }
+                    if (fx.Solarize)
+                    {
+                        if (r > solThresh) r = (byte)(255 - r);
+                        if (g > solThresh) g = (byte)(255 - g);
+                        if (b > solThresh) b = (byte)(255 - b);
+                    }
                     if (fx.Monochrome)
                     {
                         // Preserve brightness (luma), replace chroma with the tint.

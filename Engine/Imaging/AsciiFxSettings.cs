@@ -70,6 +70,14 @@ namespace FracturingFog.Imaging
         public double SaturateAmp { get; set; } = 0.0;
         public double SaturateHz { get; set; } = 0.3;
 
+        /// <summary>Invert every colour channel (photographic negative). Static.</summary>
+        public bool Invert { get; set; }
+        /// <summary>Solarize: invert only channels brighter than
+        /// <see cref="SolarizeThreshold"/> — the Sabattier tone-reversal look.</summary>
+        public bool Solarize { get; set; }
+        /// <summary>Solarize crossover, [0,1] of full brightness.</summary>
+        public double SolarizeThreshold { get; set; } = 0.5;
+
         // ── Structural (stateful) ─────────────────────────────────────────
 
         /// <summary>"Matrix" digital rain: falling columns of glyphs, the fractal
@@ -86,7 +94,7 @@ namespace FracturingFog.Imaging
 
         /// <summary>True when any effect is enabled (the host can skip the pass).</summary>
         public bool AnyEnabled => HueCycle || Crt || Breathe || CharsetSwap || Monochrome
-            || Saturate || MatrixRain;
+            || Saturate || Invert || Solarize || MatrixRain;
 
         /// <summary>True when an enabled effect varies with time (the live view
         /// must repaint on a timer for these, not only on buffer changes).</summary>
