@@ -228,6 +228,23 @@ namespace FracturingFog.Imaging
                     }
             }
 
+            if (fx.Glitch && fx.GlitchIntensity > 0)
+            {
+                int frame = (int)Math.Floor(fx.TimeSeconds * fx.GlitchHz);
+                uint thresh = (uint)(Math.Clamp(fx.GlitchIntensity, 0.0, 1.0) * uint.MaxValue);
+                int maxShift = Math.Max(1, cols / 5);
+                var src = (AsciiCell[])cells.Clone();
+                for (int y = 0; y < rows; y++)
+                {
+                    uint h = Hash(0, y, frame * 7);
+                    if (h >= thresh) continue;                       // this row untorn
+                    int shift = (int)((h >> 9) % (uint)(2 * maxShift + 1)) - maxShift;
+                    if (shift == 0) continue;
+                    for (int x = 0; x < cols; x++)
+                        cells[y * cols + x] = src[y * cols + Clamp(x - shift, 0, cols - 1)];
+                }
+            }
+
             // Shading (last): vignette, then CRT scanline dim.
             if (fx.Vignette)
             {

@@ -66,6 +66,14 @@ namespace FracturingFog.Imaging
         /// <summary>Peak twist angle at the centre, in radians.</summary>
         public double TwistStrength { get; set; } = 1.5;
 
+        /// <summary>Glitch: tear random rows sideways in bursts. Stateless (hashed
+        /// from row + frame), so reproducible. Animated.</summary>
+        public bool Glitch { get; set; }
+        /// <summary>Fraction of rows torn each burst, [0,1].</summary>
+        public double GlitchIntensity { get; set; } = 0.3;
+        /// <summary>Glitch re-roll rate (bursts per second).</summary>
+        public double GlitchHz { get; set; } = 8.0;
+
         /// <summary>"Breathe" the glyph density: animate a gamma on the ramp index
         /// so the whole field pulses lighter/darker over time (independent of the
         /// fractal). Operates on the chosen glyph via the ramp, so no re-sample.</summary>
@@ -168,12 +176,12 @@ namespace FracturingFog.Imaging
         /// <summary>True when any effect is enabled (the host can skip the pass).</summary>
         public bool AnyEnabled => HueCycle || Crt || Breathe || CharsetSwap || Monochrome
             || Saturate || Invert || Solarize || Quantize || Duotone || RampScroll || Grain
-            || Vignette || ChromaticAberration || Wave || Drift || Twist || MatrixRain;
+            || Vignette || ChromaticAberration || Wave || Drift || Twist || Glitch || MatrixRain;
 
         /// <summary>True when an enabled effect varies with time (the live view
         /// must repaint on a timer for these, not only on buffer changes).</summary>
         public bool AnyAnimated => HueCycle || Breathe || MatrixRain || RampScroll || Grain || Wave
-            || Drift || (Saturate && SaturateAmp > 0);
+            || Drift || Glitch || (Saturate && SaturateAmp > 0);
 
         /// <summary>True when an enabled effect evolves across frames and so needs
         /// a persistent <see cref="AsciiFxState"/> (not a pure grid+clock function).</summary>
