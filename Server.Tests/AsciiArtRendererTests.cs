@@ -333,4 +333,112 @@ public sealed class AsciiArtRendererTests
         string art = AsciiArtRenderer.Render(px, null, 1, 1, new AsciiArtOptions { Columns = 1 });
         Assert.False(string.IsNullOrEmpty(art));
     }
+
+    // ── watermark string-export (#241 follow-up) ───────────────────────
+    //
+    // The single-frame string formats stamp the same resolved WatermarkRender the
+    // live Terminal / video paths use: PlainText/Ansi via the cell grid, the
+    // sub-cell formats (HTML/SVG/half-block/Braille) via the ink overlay. The
+    // block-font ink glyph is '#', so its presence in an otherwise '#'-free render
+    // is the watermark signal.
+
+    private static FracturingFog.Imaging.WatermarkRender Mark(
+        string top = "ZOOM",
+        FracturingFog.Models.WatermarkPlacement place = FracturingFog.Models.WatermarkPlacement.Bottom)
+        => new()
+        {
+            TopText = top,
+            SubText = "FF v1",
+            TextColor = new FracturingFog.Models.RgbDef(10, 220, 40),
+            Placement = place,
+            Justify = FracturingFog.Models.WatermarkJustify.Right,
+        };
+
+    private static AsciiArtOptions Opt(AsciiArtFormat fmt, FracturingFog.Imaging.WatermarkRender? wm)
+        => new()
+        {
+            Format = fmt,
+            Columns = 120,
+            CellAspect = 2.0,
+            Ramp = " .:-=+*",            // no '#' in the ramp → '#' means watermark ink
+            Watermark = wm,
+        };
+
+    [Fact]
+    public void PlainText_Watermark_StampsBlockInk()
+    {
+        var px = Solid(240, 240, 90, 90, 90);   // mid-grey → ramp mid, never '#'
+        string plain = AsciiArtRenderer.Render(px, null, 240, 240, Opt(AsciiArtFormat.PlainText, null));
+        string inked = AsciiArtRenderer.Render(px, null, 240, 240, Opt(AsciiArtFormat.PlainText, Mark()));
+        Assert.DoesNotContain('#', plain);
+        Assert.Contains('#', inked);            // block-font ink now present
+    }
+
+    [Fact]
+    public void Html_Watermark_UsesResolvedColour()
+    {
+        var px = Solid(240, 240, 90, 90, 90);
+        string html = AsciiArtRenderer.Render(px, null, 240, 240, Opt(AsciiArtFormat.Html, Mark()));
+        Assert.Contains("#0adc28", html);       // 10,220,40 hex → the ink colour
+        Assert.Contains(">#<", html);           // an ink glyph inside a span
+    }
+
+    [Fact]
+    public void Svg_Watermark_EmitsInkGlyphAndColour()
+    {
+        var px = Solid(240, 240, 90, 90, 90);
+        string svg = AsciiArtRenderer.Render(px, null, 240, 240, Opt(AsciiArtFormat.Svg, Mark()));
+        Assert.Contains("fill=\"#0adc28\"", svg);
+        Assert.Contains(">#</tspan>", svg);
+    }
+
+    [Fact]
+    public void HalfBlock_Watermark_EmitsInkGlyph()
+    {
+        var px = Solid(240, 240, 90, 90, 90);
+        string ans = AsciiArtRenderer.Render(px, null, 240, 240, Opt(AsciiArtFormat.AnsiHalfBlock, Mark()));
+        // Ink paints the block glyph in the resolved colour, not the ▀ half-block.
+        Assert.Contains("\x1b[38;2;10;220;40m#", ans);
+    }
+
+    [Fact]
+    public void Braille_Watermark_OverridesDotCellWithInk()
+    {
+        var px = Solid(240, 240, 90, 90, 90);
+        string plain = AsciiArtRenderer.Render(px, null, 240, 240, Opt(AsciiArtFormat.Braille, null));
+        string inked = AsciiArtRenderer.Render(px, null, 240, 240, Opt(AsciiArtFormat.Braille, Mark()));
+        Assert.DoesNotContain('#', plain);      // braille dots are U+28xx, never '#'
+        Assert.Contains('#', inked);
+    }
+
+    [Fact]
+    public void Watermark_Placement_TopVsBottom_MovesInk()
+    {
+        var px = Solid(240, 240, 90, 90, 90);
+        string bottom = AsciiArtRenderer.Render(px, null, 240, 240,
+            Opt(AsciiArtFormat.PlainText, Mark(place: FracturingFog.Models.WatermarkPlacement.Bottom)));
+        string top = AsciiArtRenderer.Render(px, null, 240, 240,
+            Opt(AsciiArtFormat.PlainText, Mark(place: FracturingFog.Models.WatermarkPlacement.Top)));
+
+        var bRows = bottom.Split('\n');
+        var tRows = top.Split('\n');
+        int FirstInk(string[] rows)
+        {
+            for (int i = 0; i < rows.Length; i++) if (rows[i].Contains('#')) return i;
+            return -1;
+        }
+        Assert.True(FirstInk(tRows) < FirstInk(bRows), "top placement inks a higher row than bottom");
+    }
+
+    [Fact]
+    public void NoWatermark_LeavesRampGlyphsOnly()
+    {
+        // A null Watermark must not perturb the art (regression guard for the
+        // overlay short-circuit).
+        var px = GreyGradientX(120, 60);
+        string a = AsciiArtRenderer.Render(px, null, 120, 60, Opt(AsciiArtFormat.PlainText, null));
+        string b = AsciiArtRenderer.Render(px, null, 120, 60,
+            new AsciiArtOptions { Format = AsciiArtFormat.PlainText, Columns = 120, CellAspect = 2.0, Ramp = " .:-=+*" });
+        Assert.Equal(a, b);
+    }
 }

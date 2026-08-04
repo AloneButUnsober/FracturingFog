@@ -40,8 +40,35 @@ namespace FracturingFog.Imaging
             AsciiCell[] cells, int cols, int rows,
             WatermarkRender wm, AsciiWatermarkStyle style)
         {
-            if (cells == null || wm == null || cols <= 0 || rows <= 0) return;
+            if (cells == null || cols <= 0 || rows <= 0) return;
             if (cells.Length < (long)cols * rows) return;
+            PlaceInk(cols, rows, wm, style,
+                (x, y, g, r, gg, b) => cells[y * cols + x] = new AsciiCell(g, r, gg, b));
+        }
+
+        /// <summary>Resolve the watermark to a sparse ink overlay over a
+        /// <paramref name="cols"/>×<paramref name="rows"/> character grid. The
+        /// string-export formats (HTML / SVG / half-block / Braille) build their
+        /// glyphs directly instead of an <see cref="AsciiCell"/> grid, so they
+        /// consult this overlay per output cell rather than calling
+        /// <see cref="Stamp"/>. Empty (no ink) when text is blank.</summary>
+        public static AsciiWatermarkOverlay BuildOverlay(
+            int cols, int rows, WatermarkRender wm, AsciiWatermarkStyle style)
+        {
+            var overlay = new AsciiWatermarkOverlay(cols, rows);
+            PlaceInk(cols, rows, wm, style, overlay.Set);
+            return overlay;
+        }
+
+        // Shared placement + block layout. Emits one call to <paramref name="write"/>
+        // per ink cell (x, y, glyph, r, g, b); blank glyphs are skipped so the
+        // fractal shows through. Both Stamp and BuildOverlay ride this so the
+        // grid mutation and the export overlay place identically.
+        private static void PlaceInk(
+            int cols, int rows, WatermarkRender wm, AsciiWatermarkStyle style,
+            Action<int, int, char, byte, byte, byte> write)
+        {
+            if (wm == null || cols <= 0 || rows <= 0) return;
 
             string top = (wm.TopText ?? string.Empty).Trim();
             string sub = (wm.SubText ?? string.Empty).Trim();
@@ -79,7 +106,7 @@ namespace FracturingFog.Imaging
                     if (g == ' ') continue; // transparent — fractal shows through
                     int x = lineX + c;
                     if (x < 0 || x >= cols) continue;
-                    cells[y * cols + x] = new AsciiCell(g, cr, cg, cb);
+                    write(x, y, g, cr, cg, cb);
                 }
             }
         }
@@ -263,5 +290,47 @@ namespace FracturingFog.Imaging
             ['!'] = new[] { "#", "#", "#", " ", "#" },
             ['#'] = new[] { " # # ", "#####", " # # ", "#####", " # # " },
         };
+    }
+
+    /// <summary>A sparse watermark ink layer over a character grid, produced by
+    /// <see cref="AsciiWatermark.BuildOverlay"/>. The string-export formats query
+    /// it per output cell: an inked cell overrides the fractal glyph (and, for the
+    /// coloured formats, its colour) with the watermark's.</summary>
+    public sealed class AsciiWatermarkOverlay
+    {
+        private readonly int _cols;
+        private readonly int _rows;
+        // Glyph == '\0' marks an empty (non-ink) cell — the block font never
+        // emits NUL, so it is a safe sentinel.
+        private readonly AsciiCell[] _cells;
+
+        internal AsciiWatermarkOverlay(int cols, int rows)
+        {
+            _cols = Math.Max(0, cols);
+            _rows = Math.Max(0, rows);
+            _cells = new AsciiCell[_cols * _rows];
+        }
+
+        /// <summary>True when at least one cell carries watermark ink.</summary>
+        public bool HasInk { get; private set; }
+
+        internal void Set(int x, int y, char glyph, byte r, byte g, byte b)
+        {
+            if ((uint)x >= (uint)_cols || (uint)y >= (uint)_rows) return;
+            _cells[y * _cols + x] = new AsciiCell(glyph, r, g, b);
+            HasInk = true;
+        }
+
+        /// <summary>Fetch the ink at (<paramref name="x"/>, <paramref name="y"/>).
+        /// Returns false for out-of-range or non-ink cells.</summary>
+        public bool TryGet(int x, int y, out AsciiCell cell)
+        {
+            cell = default;
+            if ((uint)x >= (uint)_cols || (uint)y >= (uint)_rows) return false;
+            var c = _cells[y * _cols + x];
+            if (c.Glyph == '\0') return false;
+            cell = c;
+            return true;
+        }
     }
 }
