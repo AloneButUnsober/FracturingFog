@@ -564,6 +564,8 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
             () => ScreenshotRequested?.Invoke(this, EventArgs.Empty));
         AsciiArtCommand        = ReactiveCommand.Create(
             () => AsciiArtRequested?.Invoke(this, EventArgs.Empty));
+        RecordAsciiCommand     = ReactiveCommand.Create(
+            () => RecordAsciiRequested?.Invoke(this, EventArgs.Empty));
 
         // Slideshow control commands (right-click context menu). The
         // checkbox/text state for the items is read off SlideshowLockRegion
@@ -1657,6 +1659,7 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
     public ReactiveCommand<Unit, Unit> SaveRegionCommand { get; }
     public ReactiveCommand<Unit, Unit> ScreenshotCommand { get; }
     public ReactiveCommand<Unit, Unit> AsciiArtCommand { get; }
+    public ReactiveCommand<Unit, Unit> RecordAsciiCommand { get; }
     public ReactiveCommand<Unit, Unit> ToggleSlideshowLockRegionCommand { get; }
     public ReactiveCommand<Unit, Unit> ToggleSlideshowFocusCommand { get; }
 
@@ -2782,6 +2785,11 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
     /// <c>FractalRenderHost.SaveLastFrameAsAsciiArt</c>, which consumes the real
     /// IColorMap-coloured frame buffer.</summary>
     public event EventHandler? AsciiArtRequested;
+
+    /// <summary>Record the current frame's ASCII FX animation to a shareable file
+    /// (#230). Host pops a SaveFilePicker (.cast / .svg / .ans) and calls
+    /// <c>IFractalRenderHost.RecordAsciiAnimation</c> with the active FX settings.</summary>
+    public event EventHandler? RecordAsciiRequested;
 
     /// <summary>Render a wallpaper-sized image at the virtual-screen union of
     /// every connected monitor, regardless of the current window state. Host

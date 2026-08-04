@@ -128,6 +128,18 @@ namespace FracturingFog.Render
             int columns, double cellAspect, bool color, bool invert, bool fineRamp,
             bool rampFromColor = false, FracturingFog.Imaging.AsciiFxSettings? fx = null);
 
+        /// <summary>Record the current frame's ASCII FX animation to a shareable
+        /// text container (#230). Re-renders the same last frame <paramref name="frames"/>
+        /// times, advancing the FX clock by 1/<paramref name="fps"/> each step so
+        /// the animated effects (hue / plasma / rain / breathe / reveals …) play
+        /// out, and serialises the sequence. Returns null before the first frame.</summary>
+        /// <param name="format">"cast" (asciinema v2), "svg" (animated SVG), or
+        /// "ans" (raw ANSI frame sequence).</param>
+        /// <returns>The serialised animation text, or null if unavailable.</returns>
+        string? RecordAsciiAnimation(
+            int columns, double cellAspect, bool invert, bool fineRamp, bool rampFromColor,
+            FracturingFog.Imaging.AsciiFxSettings fx, int frames, double fps, string format);
+
         /// <summary>Present the current GPU back buffer to the screen.
         /// Safe to call from any thread — the host serialises this with
         /// every other renderer access (UpdateTexture / Resize) so the
