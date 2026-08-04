@@ -210,6 +210,24 @@ namespace FracturingFog.Imaging
                 }
             }
 
+            if (fx.Twist && fx.TwistStrength != 0)
+            {
+                var src = (AsciiCell[])cells.Clone();
+                double cx = (cols - 1) * 0.5, cy = (rows - 1) * 0.5;
+                double maxR = Math.Max(1e-3, Math.Sqrt(cx * cx + cy * cy));
+                for (int y = 0; y < rows; y++)
+                    for (int x = 0; x < cols; x++)
+                    {
+                        double dx = x - cx, dy = y - cy;
+                        double r = Math.Sqrt(dx * dx + dy * dy);
+                        double a = fx.TwistStrength * (1.0 - r / maxR);   // sample source rotated back
+                        double ca = Math.Cos(a), sa = Math.Sin(a);
+                        int sx = Clamp((int)Math.Round(cx + dx * ca - dy * sa), 0, cols - 1);
+                        int sy = Clamp((int)Math.Round(cy + dx * sa + dy * ca), 0, rows - 1);
+                        cells[y * cols + x] = src[sy * cols + sx];
+                    }
+            }
+
             // Shading (last): vignette, then CRT scanline dim.
             if (fx.Vignette)
             {

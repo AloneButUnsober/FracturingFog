@@ -360,6 +360,21 @@ public sealed class AsciiFxChainTests
     }
 
     [Fact]
+    public void Twist_RearrangesGridButKeepsCentre()
+    {
+        const int cols = 11, rows = 11;
+        var cells = Grid(cols, rows, (x, y) => new AsciiCell((char)('A' + (x + y) % 26), 5, 5, 5));
+        var before = (AsciiCell[])cells.Clone();
+        AsciiFxChain.Apply(cells, cols, rows, Ramp,
+            new AsciiFxSettings { Twist = true, TwistStrength = 1.5 });
+        int centre = (rows / 2) * cols + (cols / 2);
+        Assert.Equal(before[centre].Glyph, cells[centre].Glyph); // r≈0 → a≈max but dx=dy=0, unchanged
+        int diff = 0;
+        for (int i = 0; i < cells.Length; i++) if (cells[i].Glyph != before[i].Glyph) diff++;
+        Assert.True(diff > 0, "twist should rearrange off-centre cells");
+    }
+
+    [Fact]
     public void MatrixRain_ProducesGreenDropsAndGhostsBackground()
     {
         const int cols = 20, rows = 30;

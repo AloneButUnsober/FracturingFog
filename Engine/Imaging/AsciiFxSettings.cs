@@ -60,6 +60,12 @@ namespace FracturingFog.Imaging
         public double DriftDxPerSec { get; set; } = 3.0;
         public double DriftDyPerSec { get; set; } = 0.0;
 
+        /// <summary>Twist: rotate the grid about its centre, the angle strongest at
+        /// the centre and fading to the edge — a swirl. Static.</summary>
+        public bool Twist { get; set; }
+        /// <summary>Peak twist angle at the centre, in radians.</summary>
+        public double TwistStrength { get; set; } = 1.5;
+
         /// <summary>"Breathe" the glyph density: animate a gamma on the ramp index
         /// so the whole field pulses lighter/darker over time (independent of the
         /// fractal). Operates on the chosen glyph via the ramp, so no re-sample.</summary>
@@ -162,7 +168,7 @@ namespace FracturingFog.Imaging
         /// <summary>True when any effect is enabled (the host can skip the pass).</summary>
         public bool AnyEnabled => HueCycle || Crt || Breathe || CharsetSwap || Monochrome
             || Saturate || Invert || Solarize || Quantize || Duotone || RampScroll || Grain
-            || Vignette || ChromaticAberration || Wave || Drift || MatrixRain;
+            || Vignette || ChromaticAberration || Wave || Drift || Twist || MatrixRain;
 
         /// <summary>True when an enabled effect varies with time (the live view
         /// must repaint on a timer for these, not only on buffer changes).</summary>
