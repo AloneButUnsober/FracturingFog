@@ -34,6 +34,12 @@ namespace FracturingFog.Imaging
         /// <summary>Vignette depth, [0,1] — how dark the corners get.</summary>
         public double VignetteStrength { get; set; } = 0.7;
 
+        /// <summary>CRT full: a bundled retro-monitor look — barrel warp + green
+        /// phosphor bias + scanlines + vignette in one toggle. Static.</summary>
+        public bool CrtFull { get; set; }
+        /// <summary>Barrel (bulge) amount for <see cref="CrtFull"/>.</summary>
+        public double CrtBarrel { get; set; } = 0.12;
+
         // ── Spatial (read neighbours / displace) ──────────────────────────
 
         /// <summary>Chromatic aberration: offset the red / blue channels
@@ -238,7 +244,7 @@ namespace FracturingFog.Imaging
         public double TrailDecay { get; set; } = 0.85;
 
         /// <summary>True when any effect is enabled (the host can skip the pass).</summary>
-        public bool AnyEnabled => HueCycle || Crt || Breathe || CharsetSwap || Monochrome
+        public bool AnyEnabled => HueCycle || Crt || CrtFull || Breathe || CharsetSwap || Monochrome
             || Saturate || Invert || Solarize || Quantize || Dither || Duotone || Plasma
             || RampScroll || Grain || Vignette || ChromaticAberration || Wave || Drift || Twist
             || Glitch || Bloom || Edge || MatrixRain || Particles || Typewriter || Dissolve || Trails;
