@@ -162,6 +162,13 @@ namespace FracturingFog.Imaging
         /// even per-channel posterize.</summary>
         public bool QuantizeTerminal16 { get; set; }
 
+        /// <summary>Ordered (Bayer 4×4) dithering of colour to
+        /// <see cref="DitherLevels"/> per-channel steps — retro banding-free
+        /// gradients from few colours. Static.</summary>
+        public bool Dither { get; set; }
+        /// <summary>Per-channel levels the dither resolves to (≥2).</summary>
+        public int DitherLevels { get; set; } = 3;
+
         /// <summary>Duotone / gradient wash: remap each cell's brightness (luma)
         /// onto a shadow→highlight colour gradient, discarding the source chroma.
         /// Static.</summary>
@@ -189,7 +196,7 @@ namespace FracturingFog.Imaging
 
         /// <summary>True when any effect is enabled (the host can skip the pass).</summary>
         public bool AnyEnabled => HueCycle || Crt || Breathe || CharsetSwap || Monochrome
-            || Saturate || Invert || Solarize || Quantize || Duotone || RampScroll || Grain
+            || Saturate || Invert || Solarize || Quantize || Dither || Duotone || RampScroll || Grain
             || Vignette || ChromaticAberration || Wave || Drift || Twist || Glitch || Bloom || Edge
             || MatrixRain;
 

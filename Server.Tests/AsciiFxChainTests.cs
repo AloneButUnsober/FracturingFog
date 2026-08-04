@@ -427,6 +427,20 @@ public sealed class AsciiFxChainTests
     }
 
     [Fact]
+    public void Dither_ResolvesFlatMidtoneToTwoLevels()
+    {
+        // A flat mid-grey field at 2 levels should dither to a mix of 0 and 255
+        // across cells (ordered pattern), not one uniform value.
+        const int cols = 8, rows = 8;
+        var cells = Grid(cols, rows, (x, y) => new AsciiCell('#', 128, 128, 128));
+        AsciiFxChain.Apply(cells, cols, rows, Ramp,
+            new AsciiFxSettings { Dither = true, DitherLevels = 2 });
+        bool hasLow = false, hasHigh = false;
+        foreach (var c in cells) { if (c.R == 0) hasLow = true; if (c.R == 255) hasHigh = true; }
+        Assert.True(hasLow && hasHigh, "ordered dither should mix both levels across the field");
+    }
+
+    [Fact]
     public void MatrixRain_ProducesGreenDropsAndGhostsBackground()
     {
         const int cols = 20, rows = 30;

@@ -66,8 +66,9 @@ namespace FracturingFog.Imaging
 
             byte solThresh = (byte)Math.Clamp(fx.SolarizeThreshold * 255.0, 0, 255);
             int qLevels = Math.Max(2, fx.QuantizeLevels);
+            int dLevels = Math.Max(2, fx.DitherLevels);
             bool doPerCell = doGlyph || fx.HueCycle || fx.Monochrome || fx.Saturate
-                || fx.Invert || fx.Solarize || fx.Quantize || fx.Duotone;
+                || fx.Invert || fx.Solarize || fx.Quantize || fx.Dither || fx.Duotone;
             if (doPerCell)
             for (int y = 0; y < rows; y++)
             {
@@ -156,6 +157,13 @@ namespace FracturingFog.Imaging
                     {
                         if (fx.QuantizeTerminal16) SnapTerminal16(ref r, ref g, ref b);
                         else { r = Posterize(r, qLevels); g = Posterize(g, qLevels); b = Posterize(b, qLevels); }
+                    }
+                    if (fx.Dither)
+                    {
+                        double d = (Bayer4[(y & 3) * 4 + (x & 3)] + 0.5) / 16.0 - 0.5; // -0.5..0.5
+                        r = DitherChannel(r, dLevels, d);
+                        g = DitherChannel(g, dLevels, d);
+                        b = DitherChannel(b, dLevels, d);
                     }
                     cells[i] = new AsciiCell(glyph, r, g, b);
                 }
@@ -407,6 +415,20 @@ namespace FracturingFog.Imaging
             uint h = (uint)(x * 73856093) ^ (uint)(y * 19349663) ^ (uint)(frame * 83492791);
             h ^= h >> 13; h *= 0x5bd1e995; h ^= h >> 15;
             return h;
+        }
+
+        // Bayer 4×4 ordered-dither matrix (0..15).
+        private static readonly int[] Bayer4 =
+            { 0, 8, 2, 10, 12, 4, 14, 6, 3, 11, 1, 9, 15, 7, 13, 5 };
+
+        // Ordered-dither one channel to N levels: bias by the Bayer offset (one
+        // level-step wide) before snapping, so alternating cells straddle a level
+        // boundary and average to intermediate tones.
+        private static byte DitherChannel(byte v, int levels, double bias)
+        {
+            double step = 255.0 / (levels - 1);
+            double q = Math.Round((v + bias * step) / step) * step;
+            return (byte)Math.Clamp(q, 0, 255);
         }
 
         // Snap a channel to N evenly-spaced levels across [0,255].
