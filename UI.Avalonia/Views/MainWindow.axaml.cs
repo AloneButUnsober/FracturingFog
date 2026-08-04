@@ -562,6 +562,8 @@ public sealed partial class MainWindow : Window
         shell.ToyModeToggleRequested  += OnToyModeToggleRequested;
         shell.TerminalModeToggleRequested += OnTerminalModeToggleRequested;
         shell.SideBySideModeToggleRequested += OnSideBySideModeToggleRequested;
+        shell.AsciiFxPanelRequested += OnAsciiFxPanelRequested;
+        shell.FxPanel.Changed += OnAsciiFxPanelChanged;
 
         // Initial sync in case the shell already has flags set.
         SyncMenu();
@@ -602,6 +604,8 @@ public sealed partial class MainWindow : Window
             _shell.ToyModeToggleRequested  -= OnToyModeToggleRequested;
             _shell.TerminalModeToggleRequested -= OnTerminalModeToggleRequested;
             _shell.SideBySideModeToggleRequested -= OnSideBySideModeToggleRequested;
+            _shell.AsciiFxPanelRequested -= OnAsciiFxPanelRequested;
+            _shell.FxPanel.Changed -= OnAsciiFxPanelChanged;
             StopAsciiPump();
 
             // S-X8 (2026-06-27) — drop MiniDepth handlers off the long-lived
@@ -1035,6 +1039,33 @@ public sealed partial class MainWindow : Window
         {
             _asciiFxTimer?.Stop();
         }
+    }
+
+    // The floating ASCII FX panel window (a separate top-level so the native GPU
+    // HWND can't occlude it). Reused across opens.
+    private Views.AsciiFxPanelWindow? _asciiFxPanelWindow;
+
+    private void OnAsciiFxPanelRequested(object? sender, EventArgs e)
+    {
+        if (_shell == null) return;
+        if (_asciiFxPanelWindow == null)
+        {
+            _asciiFxPanelWindow = new Views.AsciiFxPanelWindow { DataContext = _shell.FxPanel };
+            _asciiFxPanelWindow.Closed += (_, _) => _asciiFxPanelWindow = null;
+            _asciiFxPanelWindow.Show(this);
+        }
+        else
+        {
+            _asciiFxPanelWindow.Activate();
+        }
+    }
+
+    // Any FX-panel edit: restart the animation timer (a newly-enabled animated
+    // effect must start ticking) and repaint the live view immediately.
+    private void OnAsciiFxPanelChanged(object? sender, EventArgs e)
+    {
+        UpdateAsciiFxTimer();
+        if (_asciiFrameHandler != null) PumpAsciiFrame();
     }
 
     private void PumpAsciiFrame()

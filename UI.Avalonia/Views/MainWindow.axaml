@@ -95,6 +95,10 @@
                               ItemsSource="{Binding AsciiFxPresetNames}"
                               SelectedItem="{Binding SelectedAsciiFxPreset, Mode=TwoWay}"
                               ToolTip.Tip="ASCII FX preset — a one-click curated look (Matrix, CRT, Fire, …)" />
+                    <Button Classes="toolbar" Content="FX…"
+                            IsVisible="{Binding IsAsciiVisible}"
+                            Command="{Binding ShowAsciiFxPanelCommand}"
+                            ToolTip.Tip="Open the full ASCII FX panel for per-effect control" />
                     <!--<ToggleButton Classes="toolbar" Content="Grid"
                                   IsChecked="{Binding Main.ShowGrid, Mode=TwoWay}"
                                   ToolTip.Tip="Show Cartesian grid overlay" />
