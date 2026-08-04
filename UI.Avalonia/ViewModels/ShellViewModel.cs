@@ -1858,6 +1858,26 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
 
     public ReactiveCommand<Unit, bool> ToggleSideBySideModeCommand { get; private set; } = null!;
 
+    // ── Live ASCII recording (#230) ─────────────────────────────────────
+    // While on, the host captures every live ASCII frame at wall-clock cadence,
+    // so whatever is animating (zoom video / Scene / slideshow / interactive) is
+    // recorded. The code-behind starts the host recorder on true, and on false
+    // pops a save dialog + serialises / encodes the capture.
+    private bool _isAsciiRecording;
+    public bool IsAsciiRecording
+    {
+        get => _isAsciiRecording;
+        set
+        {
+            if (this.RaiseAndSetIfChangedReturnsChanged(ref _isAsciiRecording, value))
+                AsciiRecordingToggleRequested?.Invoke(this, value);
+        }
+    }
+
+    /// <summary>Fires when live ASCII recording toggles (true = start capturing,
+    /// false = stop + save).</summary>
+    public event EventHandler<bool>? AsciiRecordingToggleRequested;
+
     /// <summary>True whenever the ASCII view is on screen (either mode). Bound by
     /// controls that should appear only when ASCII is visible (Ramp: FX).</summary>
     public bool IsAsciiVisible => IsTerminalMode || IsSideBySideMode;

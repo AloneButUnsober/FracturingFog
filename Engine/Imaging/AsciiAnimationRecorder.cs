@@ -70,6 +70,46 @@ namespace FracturingFog.Imaging
             TotalSeconds += hold;
         }
 
+        /// <summary>Append one frame from an <see cref="FracturingFog.Render.AsciiFrame"/>
+        /// (the live-view payload) — unpacks its 0x00RRGGBB colours into cells. Used
+        /// by the live "record" capture, which only has AsciiFrames on hand.</summary>
+        public void AddFrame(FracturingFog.Render.AsciiFrame frame, double holdSeconds)
+        {
+            if (frame.IsEmpty) throw new ArgumentException("empty frame", nameof(frame));
+            int cols = frame.Cols, rows = frame.Rows;
+            var cells = new AsciiCell[cols * rows];
+            bool hasColor = frame.HasColor && frame.Colors != null && frame.Colors.Length >= cols * rows;
+            for (int i = 0; i < cells.Length; i++)
+            {
+                uint c = hasColor ? frame.Colors[i] : 0xDCDCDCu;
+                cells[i] = new AsciiCell(frame.Glyphs[i],
+                    (byte)((c >> 16) & 0xFF), (byte)((c >> 8) & 0xFF), (byte)(c & 0xFF));
+            }
+            AddFrame(cells, cols, rows, holdSeconds);
+        }
+
+        /// <summary>Materialise the captured grids as <see cref="FracturingFog.Render.AsciiFrame"/>s
+        /// (colour re-packed 0x00RRGGBB) — for the MP4 exporter, which rasterises
+        /// each frame to pixels.</summary>
+        public System.Collections.Generic.IReadOnlyList<FracturingFog.Render.AsciiFrame> ExportFrames()
+        {
+            var list = new System.Collections.Generic.List<FracturingFog.Render.AsciiFrame>(_frames.Count);
+            foreach (var fr in _frames)
+            {
+                int n = Cols * Rows;
+                var glyphs = new char[n];
+                var colors = new uint[n];
+                for (int i = 0; i < n; i++)
+                {
+                    var c = fr.Cells[i];
+                    glyphs[i] = c.Glyph;
+                    colors[i] = ((uint)c.R << 16) | ((uint)c.G << 8) | c.B;
+                }
+                list.Add(new FracturingFog.Render.AsciiFrame(Cols, Rows, glyphs, colors, true));
+            }
+            return list;
+        }
+
         /// <summary>Suggested file extension for a format.</summary>
         public static string ExtensionFor(AsciiAnimationFormat fmt) => fmt switch
         {

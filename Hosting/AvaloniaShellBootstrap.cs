@@ -1431,6 +1431,51 @@ namespace FracturingFog.Hosting
                 }
             };
 
+            // Live ASCII recording (#230) — capture whatever is animating (zoom
+            // video / Scene / slideshow / interactive) as it plays. Start on true;
+            // on false freeze the capture, then pop a save dialog + serialise/encode.
+            shell.AsciiRecordingToggleRequested += async (_, recording) =>
+            {
+                try
+                {
+                    if (s_renderHost == null) return;
+                    if (recording) { s_renderHost.BeginLiveAsciiRecording(); return; }
+
+                    int count = s_renderHost.StopLiveAsciiRecording();
+                    if (count == 0) { s_renderHost.ClearPendingRecording(); return; }
+
+                    string? path = await AvaloniaDialogs.PickSaveFileAsync(
+                        "Save Recorded ASCII",
+                        suggestedName: BuildSuggestedFileName("cast", isSpanning: s_spanning),
+                        filter:
+                            "asciinema cast (*.cast)|*.cast|" +
+                            "Animated SVG (*.svg)|*.svg|" +
+                            "ANSI frame sequence (*.ans)|*.ans|" +
+                            "MP4 video (*.mp4)|*.mp4");
+                    if (string.IsNullOrEmpty(path)) { s_renderHost.ClearPendingRecording(); return; }
+
+                    string ext = System.IO.Path.GetExtension(path).TrimStart('.').ToLowerInvariant();
+                    if (ext == "mp4")
+                    {
+                        var grids = s_renderHost.PendingRecordingFrames();
+                        if (grids != null) await ExportFramesToMp4Async(path, grids, 20.0);
+                    }
+                    else
+                    {
+                        string format = ext switch { "svg" => "svg", "ans" => "ans", _ => "cast" };
+                        string? text = s_renderHost.SerializePendingRecording(format);
+                        if (!string.IsNullOrEmpty(text))
+                            await System.IO.File.WriteAllTextAsync(path, text, new System.Text.UTF8Encoding(false));
+                    }
+                    s_renderHost.ClearPendingRecording();
+                }
+                catch (Exception ex)
+                {
+                    Console.Error.WriteLine($"[AvaloniaShellBootstrap] Live ASCII recording failed: {ex.Message}");
+                    try { s_renderHost?.ClearPendingRecording(); } catch { }
+                }
+            };
+
             // Wallpaper screenshot — render an offscreen image sized to the
             // union of every connected monitor's pixel bounds, regardless of
             // the current window state. Sidesteps the GNOME/Wayland limitation
@@ -3529,6 +3574,20 @@ namespace FracturingFog.Hosting
                 columns: cols, cellAspect: raster.CellAspect, invert: false,
                 fineRamp: false, rampFromColor: rampFromColor, fx: fx, frames: frames, fps: fps);
             if (grids == null || grids.Count == 0) return;
+            await ExportFramesToMp4Async(path, grids, fps, raster);
+        }
+
+        // Rasterise each AsciiFrame (UI thread) then encode via the ffmpeg pipeline
+        // off-thread. Shared by the current-frame FX-loop MP4 and the live-record
+        // MP4. A fresh rasteriser is made if none is supplied.
+        private static async System.Threading.Tasks.Task ExportFramesToMp4Async(
+            string path,
+            System.Collections.Generic.IReadOnlyList<FracturingFog.Render.AsciiFrame> grids,
+            double fps,
+            FracturingFog.UI.Avalonia.Controls.AsciiFrameRasterizer? raster = null)
+        {
+            if (grids == null || grids.Count == 0) return;
+            raster ??= new FracturingFog.UI.Avalonia.Controls.AsciiFrameRasterizer();
 
             var bufs = new System.Collections.Generic.List<uint[]>(grids.Count);
             int w = 0, h = 0;
@@ -3540,12 +3599,12 @@ namespace FracturingFog.Hosting
             }
             if (w < 2 || h < 2) return;
 
+            int encFps = (int)Math.Max(1, Math.Round(fps));
             await System.Threading.Tasks.Task.Run(() =>
             {
                 using var vw = new FracturingFog.Imaging.FfmpegVideoWriter(
-                    path, w, h, (int)Math.Round(fps),
-                    FracturingFog.FfmpegEncoder.Preset.HighQualityH264Mp4);
-                long dt100ns = (long)(1e7 / fps);
+                    path, w, h, encFps, FracturingFog.FfmpegEncoder.Preset.HighQualityH264Mp4);
+                long dt100ns = (long)(1e7 / encFps);
                 long ts = 0;
                 foreach (var b in bufs) { vw.WriteFrame(b, ts); ts += dt100ns; }
             });

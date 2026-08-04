@@ -148,6 +148,29 @@ namespace FracturingFog.Render
             int columns, double cellAspect, bool invert, bool fineRamp, bool rampFromColor,
             FracturingFog.Imaging.AsciiFxSettings fx, int frames, double fps);
 
+        /// <summary>True while a live ASCII recording is actively capturing frames.</summary>
+        bool IsLiveAsciiRecording { get; }
+
+        /// <summary>Start capturing every live ASCII frame (#230) at wall-clock
+        /// cadence — records whatever is animating (zoom video / Scene / slideshow
+        /// / interactive) as it plays. Discards any prior capture.</summary>
+        void BeginLiveAsciiRecording();
+
+        /// <summary>Freeze the capture and hold it pending for a save. Returns the
+        /// captured frame count.</summary>
+        int StopLiveAsciiRecording();
+
+        /// <summary>Serialise the pending recording to a text container
+        /// ("cast" / "svg" / "ans"). Null if none pending / empty.</summary>
+        string? SerializePendingRecording(string format);
+
+        /// <summary>The pending recording's grids for the MP4 exporter. Null if
+        /// none pending / empty.</summary>
+        System.Collections.Generic.IReadOnlyList<AsciiFrame>? PendingRecordingFrames();
+
+        /// <summary>Drop the pending recording (save cancelled).</summary>
+        void ClearPendingRecording();
+
         /// <summary>Present the current GPU back buffer to the screen.
         /// Safe to call from any thread — the host serialises this with
         /// every other renderer access (UpdateTexture / Resize) so the
