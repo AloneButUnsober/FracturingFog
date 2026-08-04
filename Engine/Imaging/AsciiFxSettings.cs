@@ -39,8 +39,19 @@ namespace FracturingFog.Imaging
         /// <summary>Breathe cycles per second.</summary>
         public double BreatheHz { get; set; } = 0.35;
 
+        // ── Glyph-space ───────────────────────────────────────────────────
+
+        /// <summary>Re-map every glyph onto a different character set of the same
+        /// tonal ordering (blocks / dots / pure-ASCII / custom), preserving each
+        /// cell's density. Static.</summary>
+        public bool CharsetSwap { get; set; }
+        /// <summary>Replacement ramp for <see cref="CharsetSwap"/> (dark→light).
+        /// A cell's position along the source ramp is carried to the same
+        /// position along this one.</summary>
+        public string SwapRamp { get; set; } = "░▒▓█"; // ░▒▓█
+
         /// <summary>True when any effect is enabled (the host can skip the pass).</summary>
-        public bool AnyEnabled => HueCycle || Crt || Breathe;
+        public bool AnyEnabled => HueCycle || Crt || Breathe || CharsetSwap;
 
         /// <summary>True when an enabled effect varies with time (the live view
         /// must repaint on a timer for these, not only on buffer changes).</summary>
