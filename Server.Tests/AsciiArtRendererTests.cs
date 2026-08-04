@@ -124,6 +124,30 @@ public sealed class AsciiArtRendererTests
     }
 
     [Fact]
+    public void SmoothField_OutlierDoesNotCrushMidtones()
+    {
+        // Most pixels share a modest smooth value; a few deep-boundary pixels
+        // spike very high (as happens at high iteration counts). Normalising by
+        // the raw max would map the modest majority to ~0 (blank), fading the art
+        // to black. The percentile normaliser must keep those mid-tones dense.
+        int w = 200, h = 2;
+        var px = Solid(w, h, 255, 255, 255);
+        var smooth = new float[w * h];
+        for (int i = 0; i < smooth.Length; i++) smooth[i] = 10f;
+        smooth[w - 1] = 2000f;                 // a lone deep-boundary spike (<0.5%)
+
+        var opt = new AsciiArtOptions
+        {
+            Format = AsciiArtFormat.PlainText, Columns = 20, CellAspect = 2.0,
+            Ramp = " .:-=+*#%@", UseSmoothField = true,
+        };
+        string row = AsciiArtRenderer.Render(px, smooth, w, h, opt).Split('\n')[0];
+        int idx = opt.Ramp.IndexOf(row[0]); // a modest-smooth cell
+        Assert.True(idx >= opt.Ramp.Length - 3,
+            $"outlier crushed the mid-tones: '{row[0]}' (idx {idx})");
+    }
+
+    [Fact]
     public void RampFromColorLuma_DrivesRampFromPixelsOverSmooth()
     {
         // Opposite of the smooth-field test: the smooth field is flat-high
