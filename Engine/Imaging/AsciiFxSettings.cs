@@ -78,6 +78,16 @@ namespace FracturingFog.Imaging
         /// <summary>Solarize crossover, [0,1] of full brightness.</summary>
         public double SolarizeThreshold { get; set; } = 0.5;
 
+        /// <summary>Posterize: snap each channel to <see cref="QuantizeLevels"/>
+        /// steps, or to the 16-colour ANSI palette when
+        /// <see cref="QuantizeTerminal16"/> is set. Static.</summary>
+        public bool Quantize { get; set; }
+        /// <summary>Per-channel levels for posterize (≥2).</summary>
+        public int QuantizeLevels { get; set; } = 4;
+        /// <summary>Snap to the classic 16-colour terminal palette instead of an
+        /// even per-channel posterize.</summary>
+        public bool QuantizeTerminal16 { get; set; }
+
         // ── Structural (stateful) ─────────────────────────────────────────
 
         /// <summary>"Matrix" digital rain: falling columns of glyphs, the fractal
@@ -94,7 +104,7 @@ namespace FracturingFog.Imaging
 
         /// <summary>True when any effect is enabled (the host can skip the pass).</summary>
         public bool AnyEnabled => HueCycle || Crt || Breathe || CharsetSwap || Monochrome
-            || Saturate || Invert || Solarize || MatrixRain;
+            || Saturate || Invert || Solarize || Quantize || MatrixRain;
 
         /// <summary>True when an enabled effect varies with time (the live view
         /// must repaint on a timer for these, not only on buffer changes).</summary>

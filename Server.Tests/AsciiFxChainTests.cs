@@ -208,6 +208,30 @@ public sealed class AsciiFxChainTests
     }
 
     [Fact]
+    public void Quantize_PosterizesToLevels()
+    {
+        // 2 levels → each channel snaps to 0 or 255.
+        var cells = Grid(1, 1, (x, y) => new AsciiCell('#', 100, 200, 10));
+        AsciiFxChain.Apply(cells, 1, 1, Ramp,
+            new AsciiFxSettings { Quantize = true, QuantizeLevels = 2 });
+        Assert.Equal(0, cells[0].R);    // 100 < 127.5 → 0
+        Assert.Equal(255, cells[0].G);  // 200 → 255
+        Assert.Equal(0, cells[0].B);    // 10 → 0
+    }
+
+    [Fact]
+    public void Quantize_Terminal16SnapsToPaletteColour()
+    {
+        var cells = Grid(1, 1, (x, y) => new AsciiCell('#', 240, 10, 10));
+        AsciiFxChain.Apply(cells, 1, 1, Ramp,
+            new AsciiFxSettings { Quantize = true, QuantizeTerminal16 = true });
+        // Nearest ANSI entry to bright red is (255,0,0).
+        Assert.Equal(255, cells[0].R);
+        Assert.Equal(0, cells[0].G);
+        Assert.Equal(0, cells[0].B);
+    }
+
+    [Fact]
     public void MatrixRain_ProducesGreenDropsAndGhostsBackground()
     {
         const int cols = 20, rows = 30;
