@@ -331,6 +331,35 @@ namespace FracturingFog.Imaging
                     }
             }
 
+            // CRT full — barrel (bulge) warp + green phosphor bias. Scanlines and
+            // vignette are folded into the shading block below.
+            if (fx.CrtFull)
+            {
+                if (fx.CrtBarrel != 0)
+                {
+                    var src = (AsciiCell[])cells.Clone();
+                    double cx = (cols - 1) * 0.5, cy = (rows - 1) * 0.5;
+                    double k = fx.CrtBarrel;
+                    for (int y = 0; y < rows; y++)
+                        for (int x = 0; x < cols; x++)
+                        {
+                            double nx = (x - cx) / Math.Max(1e-3, cx);
+                            double ny = (y - cy) / Math.Max(1e-3, cy);
+                            double r2 = nx * nx + ny * ny;
+                            double f = 1.0 - k * r2;               // pull edges inward (bulge centre)
+                            int sx = Clamp((int)Math.Round(cx + nx * f * cx), 0, cols - 1);
+                            int sy = Clamp((int)Math.Round(cy + ny * f * cy), 0, rows - 1);
+                            cells[y * cols + x] = src[sy * cols + sx];
+                        }
+                }
+                for (int i = 0; i < cells.Length; i++)
+                {
+                    var c = cells[i]; // slight green phosphor bias
+                    cells[i] = new AsciiCell(c.Glyph,
+                        (byte)(c.R * 0.9), (byte)Math.Min(255, c.G * 1.05), (byte)(c.B * 0.9));
+                }
+            }
+
             // Transitions: gate cells to blank until revealed, over the transition.
             if (fx.Typewriter || fx.Dissolve)
             {
@@ -378,10 +407,10 @@ namespace FracturingFog.Imaging
                 }
             }
 
-            // Shading (last): vignette, then CRT scanline dim.
-            if (fx.Vignette)
+            // Shading (last): vignette, then CRT scanline dim. CrtFull implies both.
+            if (fx.Vignette || fx.CrtFull)
             {
-                double strength = Math.Clamp(fx.VignetteStrength, 0.0, 1.0);
+                double strength = fx.Vignette ? Math.Clamp(fx.VignetteStrength, 0.0, 1.0) : 0.6;
                 double cx = (cols - 1) * 0.5, cy = (rows - 1) * 0.5;
                 double maxD2 = cx * cx + cy * cy;
                 if (maxD2 < 1e-9) maxD2 = 1.0;
@@ -397,7 +426,7 @@ namespace FracturingFog.Imaging
                             (byte)(c.R * f), (byte)(c.G * f), (byte)(c.B * f));
                     }
             }
-            if (fx.Crt)
+            if (fx.Crt || fx.CrtFull)
             {
                 double dim = Math.Clamp(fx.CrtScanlineDim, 0.0, 1.0);
                 for (int y = 1; y < rows; y += 2)

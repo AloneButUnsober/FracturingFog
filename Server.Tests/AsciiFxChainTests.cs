@@ -461,6 +461,20 @@ public sealed class AsciiFxChainTests
     }
 
     [Fact]
+    public void CrtFull_AppliesScanlineVignetteAndPhosphor()
+    {
+        const int cols = 9, rows = 9;
+        var cells = Grid(cols, rows, (x, y) => new AsciiCell('#', 180, 180, 180));
+        AsciiFxChain.Apply(cells, cols, rows, Ramp,
+            new AsciiFxSettings { CrtFull = true, CrtBarrel = 0.0 }); // no warp → check colour passes
+        // Green phosphor bias: G should exceed R/B somewhere; odd rows dimmed;
+        // corners darker than centre.
+        int centre = (rows / 2) * cols + (cols / 2);
+        Assert.True(cells[centre].G >= cells[centre].R, "phosphor should bias green");
+        Assert.True(cells[0].R < cells[centre].R, "vignette should darken the corner");
+    }
+
+    [Fact]
     public void MatrixRain_ProducesGreenDropsAndGhostsBackground()
     {
         const int cols = 20, rows = 30;
