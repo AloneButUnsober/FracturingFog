@@ -1888,19 +1888,29 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
         set => this.RaiseAndSetIfChanged(ref _asciiFxBreathe, value);
     }
 
-    /// <summary>Build the ASCII FX settings the live pump feeds to the render
-    /// host each frame. Currently the three quick-toggles (hue / CRT / breathe);
-    /// the preset picker and full FX panel populate the rest of the chain. Returns
-    /// null when nothing is enabled so the host skips the pass.</summary>
+    /// <summary>Named ASCII FX presets for the toolbar picker ("None" + catalogue).</summary>
+    public System.Collections.Generic.IReadOnlyList<string> AsciiFxPresetNames { get; }
+        = FracturingFog.Imaging.AsciiFxPresets.Names;
+
+    private string _selectedAsciiFxPreset = FracturingFog.Imaging.AsciiFxPresets.NoneName;
+    /// <summary>Selected FX preset; the pump folds it into the built settings.</summary>
+    public string SelectedAsciiFxPreset
+    {
+        get => _selectedAsciiFxPreset;
+        set => this.RaiseAndSetIfChanged(ref _selectedAsciiFxPreset, value ?? FracturingFog.Imaging.AsciiFxPresets.NoneName);
+    }
+
+    /// <summary>Build the ASCII FX settings the live pump feeds to the render host
+    /// each frame: the selected preset as the base, with the hue / CRT / breathe
+    /// quick-toggles OR'd on top. Returns null when nothing is enabled so the host
+    /// skips the pass.</summary>
     public FracturingFog.Imaging.AsciiFxSettings? BuildAsciiFxSettings(double timeSeconds)
     {
-        var fx = new FracturingFog.Imaging.AsciiFxSettings
-        {
-            TimeSeconds = timeSeconds,
-            HueCycle = _asciiFxHue,
-            Crt = _asciiFxCrt,
-            Breathe = _asciiFxBreathe,
-        };
+        var fx = new FracturingFog.Imaging.AsciiFxSettings { TimeSeconds = timeSeconds };
+        FracturingFog.Imaging.AsciiFxPresets.ApplyByName(_selectedAsciiFxPreset, fx);
+        if (_asciiFxHue) fx.HueCycle = true;
+        if (_asciiFxCrt) fx.Crt = true;
+        if (_asciiFxBreathe) fx.Breathe = true;
         return fx.AnyEnabled ? fx : null;
     }
 
