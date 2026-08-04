@@ -375,6 +375,26 @@ public sealed class AsciiFxChainTests
     }
 
     [Fact]
+    public void Glitch_TearsSomeRows_Deterministically()
+    {
+        const int cols = 30, rows = 30;
+        AsciiCell[] Run()
+        {
+            var cells = Grid(cols, rows, (x, y) => new AsciiCell((char)('A' + x % 26), 5, 5, 5));
+            AsciiFxChain.Apply(cells, cols, rows, Ramp, new AsciiFxSettings
+            { Glitch = true, GlitchIntensity = 0.5, TimeSeconds = 1.0 });
+            return cells;
+        }
+        var a = Run();
+        var pristine = Grid(cols, rows, (x, y) => new AsciiCell((char)('A' + x % 26), 5, 5, 5));
+        int torn = 0;
+        for (int i = 0; i < a.Length; i++) if (a[i].Glyph != pristine[i].Glyph) { torn++; }
+        Assert.True(torn > 0, "glitch should tear some rows");
+        var b = Run();
+        for (int i = 0; i < a.Length; i++) Assert.Equal(a[i].Glyph, b[i].Glyph); // reproducible
+    }
+
+    [Fact]
     public void MatrixRain_ProducesGreenDropsAndGhostsBackground()
     {
         const int cols = 20, rows = 30;
