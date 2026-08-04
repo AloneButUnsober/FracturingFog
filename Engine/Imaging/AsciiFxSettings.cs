@@ -88,6 +88,17 @@ namespace FracturingFog.Imaging
         /// even per-channel posterize.</summary>
         public bool QuantizeTerminal16 { get; set; }
 
+        /// <summary>Duotone / gradient wash: remap each cell's brightness (luma)
+        /// onto a shadow→highlight colour gradient, discarding the source chroma.
+        /// Static.</summary>
+        public bool Duotone { get; set; }
+        public byte DuotoneLoR { get; set; } = 10;
+        public byte DuotoneLoG { get; set; } = 20;
+        public byte DuotoneLoB { get; set; } = 60;   // deep blue shadow
+        public byte DuotoneHiR { get; set; } = 255;
+        public byte DuotoneHiG { get; set; } = 200;
+        public byte DuotoneHiB { get; set; } = 80;    // warm highlight
+
         // ── Structural (stateful) ─────────────────────────────────────────
 
         /// <summary>"Matrix" digital rain: falling columns of glyphs, the fractal
@@ -104,7 +115,7 @@ namespace FracturingFog.Imaging
 
         /// <summary>True when any effect is enabled (the host can skip the pass).</summary>
         public bool AnyEnabled => HueCycle || Crt || Breathe || CharsetSwap || Monochrome
-            || Saturate || Invert || Solarize || Quantize || MatrixRain;
+            || Saturate || Invert || Solarize || Quantize || Duotone || MatrixRain;
 
         /// <summary>True when an enabled effect varies with time (the live view
         /// must repaint on a timer for these, not only on buffer changes).</summary>

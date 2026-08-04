@@ -232,6 +232,25 @@ public sealed class AsciiFxChainTests
     }
 
     [Fact]
+    public void Duotone_MapsLumaToGradientEndpoints()
+    {
+        var lo = new AsciiFxSettings
+        {
+            Duotone = true,
+            DuotoneLoR = 0, DuotoneLoG = 0, DuotoneLoB = 100,
+            DuotoneHiR = 200, DuotoneHiG = 100, DuotoneHiB = 0,
+        };
+        // Black (luma 0) → shadow endpoint.
+        var dark = Grid(1, 1, (x, y) => new AsciiCell('#', 0, 0, 0));
+        AsciiFxChain.Apply(dark, 1, 1, Ramp, lo);
+        Assert.Equal(0, dark[0].R); Assert.Equal(0, dark[0].G); Assert.Equal(100, dark[0].B);
+        // White (luma 1) → highlight endpoint.
+        var light = Grid(1, 1, (x, y) => new AsciiCell('#', 255, 255, 255));
+        AsciiFxChain.Apply(light, 1, 1, Ramp, lo);
+        Assert.Equal(200, light[0].R); Assert.Equal(100, light[0].G); Assert.Equal(0, light[0].B);
+    }
+
+    [Fact]
     public void MatrixRain_ProducesGreenDropsAndGhostsBackground()
     {
         const int cols = 20, rows = 30;
