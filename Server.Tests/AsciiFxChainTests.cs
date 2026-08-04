@@ -164,4 +164,68 @@ public sealed class AsciiFxChainTests
         Assert.InRange((int)cells[0].G, 90, 110); // ~0.5 * 200
         Assert.Equal(0, cells[0].B);
     }
+
+    [Fact]
+    public void MatrixRain_ProducesGreenDropsAndGhostsBackground()
+    {
+        const int cols = 20, rows = 30;
+        var cells = Grid(cols, rows, (x, y) => new AsciiCell('#', 180, 180, 180));
+        var fx = new AsciiFxSettings { MatrixRain = true, TimeSeconds = 1.0 };
+        var state = new AsciiFxState();
+        AsciiFxChain.Apply(cells, cols, rows, Ramp, fx, state);
+
+        int green = 0, ghost = 0;
+        foreach (var c in cells)
+        {
+            if (c.G > c.R && c.G > c.B && c.G > 40) green++;
+            // Background ghosts: original 180 dimmed to ~21 and left grey.
+            if (c.R == c.G && c.G == c.B && c.R < 40 && c.R > 0) ghost++;
+        }
+        Assert.True(green > 0, "expected some green rain cells");
+        Assert.True(ghost > 0, "expected dimmed fractal ghost in the background");
+    }
+
+    [Fact]
+    public void MatrixRain_NoStateIsNoOp()
+    {
+        var cells = Grid(4, 4, (x, y) => new AsciiCell('#', 180, 180, 180));
+        var copy = (AsciiCell[])cells.Clone();
+        AsciiFxChain.Apply(cells, 4, 4, Ramp,
+            new AsciiFxSettings { MatrixRain = true, TimeSeconds = 1.0 }); // no state
+        for (int i = 0; i < cells.Length; i++)
+            Assert.Equal(copy[i].Glyph, cells[i].Glyph);
+    }
+
+    [Fact]
+    public void MatrixRain_DeterministicForSameSeed()
+    {
+        const int cols = 16, rows = 24;
+        AsciiCell[] Run()
+        {
+            var cells = Grid(cols, rows, (x, y) => new AsciiCell('#', 100, 100, 100));
+            var s = new AsciiFxState(seed: 42);
+            // Advance a few frames so drops move.
+            for (int f = 0; f < 3; f++)
+            {
+                for (int i = 0; i < cells.Length; i++) cells[i] = new AsciiCell('#', 100, 100, 100);
+                AsciiFxChain.Apply(cells, cols, rows, Ramp,
+                    new AsciiFxSettings { MatrixRain = true, TimeSeconds = 0.1 * (f + 1) }, s);
+            }
+            return cells;
+        }
+        var a = Run();
+        var b = Run();
+        for (int i = 0; i < a.Length; i++)
+        {
+            Assert.Equal(a[i].Glyph, b[i].Glyph);
+            Assert.Equal(a[i].G, b[i].G);
+        }
+    }
+
+    [Fact]
+    public void NeedsState_TrueOnlyForStatefulEffects()
+    {
+        Assert.False(new AsciiFxSettings { HueCycle = true }.NeedsState);
+        Assert.True(new AsciiFxSettings { MatrixRain = true }.NeedsState);
+    }
 }

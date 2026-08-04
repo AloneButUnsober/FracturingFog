@@ -62,11 +62,29 @@ namespace FracturingFog.Imaging
         public byte MonochromeG { get; set; } = 255;
         public byte MonochromeB { get; set; } = 90;
 
+        // ── Structural (stateful) ─────────────────────────────────────────
+
+        /// <summary>"Matrix" digital rain: falling columns of glyphs, the fractal
+        /// showing through as a ghost mask. Animated; needs an
+        /// <see cref="AsciiFxState"/>.</summary>
+        public bool MatrixRain { get; set; }
+        /// <summary>Base fall speed in rows per second.</summary>
+        public double MatrixRainSpeed { get; set; } = 14.0;
+        /// <summary>Fraction of columns that carry a drop, [0,1].</summary>
+        public double MatrixRainDensity { get; set; } = 0.85;
+        /// <summary>How strongly the underlying fractal brightness masks the rain
+        /// (0 = uniform rain, 1 = rain only where the fractal is bright).</summary>
+        public double MatrixRainMask { get; set; } = 0.6;
+
         /// <summary>True when any effect is enabled (the host can skip the pass).</summary>
-        public bool AnyEnabled => HueCycle || Crt || Breathe || CharsetSwap || Monochrome;
+        public bool AnyEnabled => HueCycle || Crt || Breathe || CharsetSwap || Monochrome || MatrixRain;
 
         /// <summary>True when an enabled effect varies with time (the live view
         /// must repaint on a timer for these, not only on buffer changes).</summary>
-        public bool AnyAnimated => HueCycle || Breathe;
+        public bool AnyAnimated => HueCycle || Breathe || MatrixRain;
+
+        /// <summary>True when an enabled effect evolves across frames and so needs
+        /// a persistent <see cref="AsciiFxState"/> (not a pure grid+clock function).</summary>
+        public bool NeedsState => MatrixRain;
     }
 }
