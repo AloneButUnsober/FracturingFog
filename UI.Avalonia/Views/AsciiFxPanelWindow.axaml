@@ -23,6 +23,19 @@
         <Style Selector="Expander">
             <Setter Property="Foreground" Value="#DDD" />
             <Setter Property="Margin" Value="0,0,0,4" />
+            <Setter Property="HorizontalAlignment" Value="Stretch" />
+            <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+        </Style>
+        <Style Selector="Expander /template/ ToggleButton">
+            <Setter Property="HorizontalAlignment" Value="Stretch" />
+            <Setter Property="HorizontalContentAlignment" Value="Left" />
+        </Style>
+        <Style Selector="Expander /template/ ContentPresenter#PART_ContentPresenter">
+            <Setter Property="HorizontalAlignment" Value="Stretch" />
+            <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+        </Style>
+        <Style Selector="ToggleSwitch">
+            <Setter Property="HorizontalAlignment" Value="Stretch" />
         </Style>
         <Style Selector="Slider">
             <Setter Property="Margin" Value="12,0,0,0" />
@@ -51,7 +64,13 @@
                         <ToggleSwitch Content="Grain (glyph jitter)" IsChecked="{Binding Grain}" />
                         <Slider Minimum="0" Maximum="1" Value="{Binding GrainAmount}" />
                         <ToggleSwitch Content="Charset swap" IsChecked="{Binding CharsetSwap}" />
+                        <ComboBox HorizontalAlignment="Stretch" Margin="12,0,0,0"
+                                  ItemsSource="{Binding CharsetPresetNames}"
+                                  SelectedItem="{Binding SelectedCharset}"
+                                  Background="#1E1E1E" Foreground="#EEE"
+                                  ToolTip.Tip="Pick a glyph set (dark→light), or type your own below" />
                         <TextBox Text="{Binding SwapRamp}" Watermark="dark→light glyphs"
+                                 FontFamily="Consolas,Menlo,monospace"
                                  Background="#1E1E1E" Foreground="#EEE" Margin="12,0,0,0" />
                     </StackPanel>
                 </Expander>

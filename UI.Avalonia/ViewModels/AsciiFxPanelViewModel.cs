@@ -50,6 +50,45 @@ public sealed class AsciiFxPanelViewModel : ReactiveObject
     private bool _charsetSwap; public bool CharsetSwap { get => _charsetSwap; set => Set(ref _charsetSwap, value); }
     private string _swapRamp = "░▒▓█"; public string SwapRamp { get => _swapRamp; set => Set(ref _swapRamp, value ?? " "); }
 
+    /// <summary>Named glyph ramps (dark→light) for the charset picker, plus a
+    /// "Custom…" sentinel that keeps whatever is in <see cref="SwapRamp"/>.</summary>
+    public static readonly (string Name, string Ramp)[] CharsetPresets =
+    {
+        ("Blocks",   "░▒▓█"),
+        ("Shades",   " .:-=+*#%@"),
+        ("ASCII",    " .,:;irsXA253hMHGS#9B&@"),
+        ("Dots",     " ·:•●"),
+        ("Circles",  " ◌○◍◉●"),
+        ("Stars",    " .*✦★"),
+        ("Binary",   " 01"),
+        ("Hearts",   " ♡♥"),
+    };
+
+    public System.Collections.Generic.IReadOnlyList<string> CharsetPresetNames { get; }
+        = BuildCharsetNames();
+
+    private static string[] BuildCharsetNames()
+    {
+        var n = new string[CharsetPresets.Length + 1];
+        n[0] = "Custom…";
+        for (int i = 0; i < CharsetPresets.Length; i++) n[i + 1] = CharsetPresets[i].Name;
+        return n;
+    }
+
+    private string _selectedCharset = "Blocks";
+    /// <summary>Charset picker selection; choosing a named ramp sets
+    /// <see cref="SwapRamp"/>. "Custom…" leaves the textbox value as-is.</summary>
+    public string SelectedCharset
+    {
+        get => _selectedCharset;
+        set
+        {
+            this.RaiseAndSetIfChanged(ref _selectedCharset, value ?? "Custom…");
+            foreach (var (name, ramp) in CharsetPresets)
+                if (name == value) { SwapRamp = ramp; break; }
+        }
+    }
+
     // ── Colour-space ──────────────────────────────────────────────────────
     private bool _hueCycle; public bool HueCycle { get => _hueCycle; set => Set(ref _hueCycle, value); }
     private double _hueSpeed = 40; public double HueSpeed { get => _hueSpeed; set => Set(ref _hueSpeed, value); }
