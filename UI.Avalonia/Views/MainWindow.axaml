@@ -66,6 +66,16 @@
                             Command="{Binding Main.ResetViewCommand}" />
                     <Button Classes="toolbar" Content="Menu"
                             Command="{Binding ShowFloatingMenuCommand}" />
+                    <ToggleButton Classes="toolbar" Content="Terminal"
+                                  IsChecked="{Binding IsTerminalMode, Mode=TwoWay}"
+                                  ToolTip.Tip="Terminal Mode — show the fractal as live ASCII / text art" />
+                    <ToggleButton Classes="toolbar" Content="Split"
+                                  IsChecked="{Binding IsSideBySideMode, Mode=TwoWay}"
+                                  ToolTip.Tip="Side-by-side — full render on the left, live ASCII on the right" />
+                    <ToggleButton Classes="toolbar" Content="Ramp: FX"
+                                  IsVisible="{Binding IsAsciiVisible}"
+                                  IsChecked="{Binding AsciiRampFromColor, Mode=TwoWay}"
+                                  ToolTip.Tip="Drive the ASCII glyph ramp from the post-FX image (adaptive / brightness / contrast) instead of the raw iteration field" />
                     <!--<ToggleButton Classes="toolbar" Content="Grid"
                                   IsChecked="{Binding Main.ShowGrid, Mode=TwoWay}"
                                   ToolTip.Tip="Show Cartesian grid overlay" />
@@ -137,12 +147,25 @@
              OS composites that HWND on top of all Avalonia content
              regardless of XAML Z-order — so an Avalonia.Media overlay above
              this Grid would not be visible). -->
-        <Grid Grid.Row="1">
-            <ctrl:GpuSurfaceControl x:Name="GpuSurface" />
+        <!-- Two columns so Side-by-side Mode (#228) can place the GPU surface in
+             column 0 and the ASCII view in column 1. In Normal / Terminal mode
+             the active surface spans both columns. Visibility + Grid.Column /
+             ColumnSpan are driven from code-behind (ApplyAsciiLayout) so the
+             three-state Normal / Terminal / SideBySide logic lives in one place.
+             The native GPU HWND only ever covers its own column, so in split
+             mode it never overlaps (occludes) the Avalonia ASCII view. -->
+        <Grid Grid.Row="1" x:Name="RenderGrid" ColumnDefinitions="*,*">
+            <ctrl:GpuSurfaceControl x:Name="GpuSurface"
+                                    Grid.Column="0" Grid.ColumnSpan="2" />
+            <ctrl:AsciiView x:Name="AsciiSurface"
+                            Grid.Column="0" Grid.ColumnSpan="2"
+                            IsVisible="False" />
             <!-- Transparent input sponge above the native HWND child. Pointer
                  + key events from this Border feed AvaloniaInputAdapter,
-                 which translates them into the IFractalInputController. -->
+                 which translates them into the IFractalInputController. Spans
+                 both columns so a click on either panel drives the shared view. -->
             <Border x:Name="InputSponge"
+                    Grid.Column="0" Grid.ColumnSpan="2"
                     Background="Transparent"
                     IsHitTestVisible="True"
                     Focusable="True" />

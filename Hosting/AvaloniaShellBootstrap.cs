@@ -1344,6 +1344,46 @@ namespace FracturingFog.Hosting
                 }
             };
 
+            // ASCII / text-art export (#226) — save the current frame as
+            // character art. The chosen file extension selects the format; the
+            // exporter consumes the real IColorMap-coloured buffer + smooth field
+            // off the render host.
+            shell.AsciiArtRequested += async (_, _) =>
+            {
+                try
+                {
+                    if (s_renderHost == null) return;
+                    string? path = await AvaloniaDialogs.PickSaveFileAsync(
+                        "Save Text Art",
+                        suggestedName: BuildSuggestedFileName("html", isSpanning: s_spanning),
+                        filter:
+                            "HTML (coloured) (*.html)|*.html|" +
+                            "SVG (vector, coloured) (*.svg)|*.svg|" +
+                            "ANSI half-block (*.ans)|*.ans|" +
+                            "ANSI per-character (*.ansi)|*.ansi|" +
+                            "Plain text (*.txt)|*.txt|" +
+                            "Braille dots (*.brl)|*.brl");
+                    if (string.IsNullOrEmpty(path)) return;
+
+                    var fmt = AsciiFormatFromExtension(path);
+                    var opts = new FracturingFog.Imaging.AsciiArtOptions
+                    {
+                        Format = fmt,
+                        Columns = 200,
+                    };
+                    // Monochrome-density formats read best on the fine ramp.
+                    if (fmt == FracturingFog.Imaging.AsciiArtFormat.PlainText ||
+                        fmt == FracturingFog.Imaging.AsciiArtFormat.Braille)
+                        opts.WithFineRamp();
+
+                    s_renderHost.SaveLastFrameAsAsciiArt(path, opts);
+                }
+                catch (Exception ex)
+                {
+                    Console.Error.WriteLine($"[AvaloniaShellBootstrap] Text-art export failed: {ex.Message}");
+                }
+            };
+
             // Wallpaper screenshot — render an offscreen image sized to the
             // union of every connected monitor's pixel bounds, regardless of
             // the current window state. Sidesteps the GNOME/Wayland limitation
@@ -3407,6 +3447,25 @@ namespace FracturingFog.Hosting
             }
             string s = sb.ToString().Trim('_');
             return s.Length == 0 ? "Scene" : s;
+        }
+
+        // Map a chosen save-path extension to an ASCII text-art format (#226).
+        // Two variants each share the natural .ans/.txt containers, so distinct
+        // extensions (.ansi, .brl) disambiguate the per-character ANSI and
+        // braille formats in the save dialog. Unknown → HTML (safe default).
+        private static FracturingFog.Imaging.AsciiArtFormat AsciiFormatFromExtension(string path)
+        {
+            string ext = System.IO.Path.GetExtension(path).ToLowerInvariant();
+            return ext switch
+            {
+                ".txt"          => FracturingFog.Imaging.AsciiArtFormat.PlainText,
+                ".brl"          => FracturingFog.Imaging.AsciiArtFormat.Braille,
+                ".ans"          => FracturingFog.Imaging.AsciiArtFormat.AnsiHalfBlock,
+                ".ansi"         => FracturingFog.Imaging.AsciiArtFormat.Ansi,
+                ".svg"          => FracturingFog.Imaging.AsciiArtFormat.Svg,
+                ".html" or ".htm" => FracturingFog.Imaging.AsciiArtFormat.Html,
+                _               => FracturingFog.Imaging.AsciiArtFormat.Html,
+            };
         }
 
         private static string BuildSuggestedFileName(
