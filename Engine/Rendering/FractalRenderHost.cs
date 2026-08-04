@@ -3797,9 +3797,14 @@ namespace FracturingFog.Rendering
         }
 
         /// <inheritdoc/>
+        // Persistent cross-frame state for the stateful ASCII FX (rain / particles
+        // / trails). The host owns it because the UI shell can't reference the
+        // Engine-side AsciiFxState; the live pump just passes settings each frame.
+        private FracturingFog.Imaging.AsciiFxState? _asciiFxState;
+
         public FracturingFog.Render.AsciiFrame? RenderLastFrameAscii(
             int columns, double cellAspect, bool color, bool invert, bool fineRamp,
-            bool rampFromColor = false)
+            bool rampFromColor = false, FracturingFog.Imaging.AsciiFxSettings? fx = null)
         {
             if (_disposed) return null;
             if (!TryGetAsciiSource(out var buf, out var smooth, out int w, out int h)) return null;
@@ -3819,6 +3824,15 @@ namespace FracturingFog.Rendering
 
             var cells = FracturingFog.Imaging.AsciiArtRenderer.RenderCells(
                 buf, smooth, w, h, opt, out int cols, out int rows);
+
+            // ASCII-native FX (#229): transform the cell grid in place. The full
+            // effect set arrives in `fx`; the host supplies the persistent state
+            // for the stateful effects.
+            if (fx != null && fx.AnyEnabled)
+            {
+                var state = fx.NeedsState ? (_asciiFxState ??= new FracturingFog.Imaging.AsciiFxState()) : null;
+                FracturingFog.Imaging.AsciiFxChain.Apply(cells, cols, rows, opt.Ramp, fx, state);
+            }
 
             int n = cols * rows;
             var glyphs = new char[n];

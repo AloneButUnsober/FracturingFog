@@ -1,0 +1,139 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:FracturingFog.UI.Avalonia.ViewModels"
+        x:Class="FracturingFog.UI.Avalonia.Views.AsciiFxPanelWindow"
+        x:DataType="vm:AsciiFxPanelViewModel"
+        Title="ASCII FX"
+        Width="340" Height="640"
+        MinWidth="300" MinHeight="360"
+        Background="#161616">
+
+    <Window.Styles>
+        <Style Selector="TextBlock.h">
+            <Setter Property="Foreground" Value="#9B9B9B" />
+            <Setter Property="FontWeight" Value="Bold" />
+            <Setter Property="Margin" Value="0,2,0,2" />
+        </Style>
+        <Style Selector="ToggleSwitch">
+            <Setter Property="Foreground" Value="#EEE" />
+            <Setter Property="OnContent" Value="" />
+            <Setter Property="OffContent" Value="" />
+            <Setter Property="Margin" Value="0,1,0,1" />
+        </Style>
+        <Style Selector="Expander">
+            <Setter Property="Foreground" Value="#DDD" />
+            <Setter Property="Margin" Value="0,0,0,4" />
+            <Setter Property="HorizontalAlignment" Value="Stretch" />
+            <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+        </Style>
+        <Style Selector="Expander /template/ ToggleButton">
+            <Setter Property="HorizontalAlignment" Value="Stretch" />
+            <Setter Property="HorizontalContentAlignment" Value="Left" />
+        </Style>
+        <Style Selector="Expander /template/ ContentPresenter#PART_ContentPresenter">
+            <Setter Property="HorizontalAlignment" Value="Stretch" />
+            <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+        </Style>
+        <Style Selector="ToggleSwitch">
+            <Setter Property="HorizontalAlignment" Value="Stretch" />
+        </Style>
+        <Style Selector="Slider">
+            <Setter Property="Margin" Value="12,0,0,0" />
+        </Style>
+    </Window.Styles>
+
+    <DockPanel LastChildFill="True">
+        <Border DockPanel.Dock="Top" Padding="8,6" Background="#1E1E1E"
+                BorderBrush="#333" BorderThickness="0,0,0,1">
+            <StackPanel Orientation="Horizontal" Spacing="8">
+                <TextBlock Text="ASCII FX — per-effect control" Foreground="#CFCFCF"
+                           VerticalAlignment="Center" FontWeight="Bold" />
+                <Button Content="All off" Command="{Binding ClearCommand}"
+                        Background="#333" Foreground="#EEE" Padding="8,3" />
+            </StackPanel>
+        </Border>
+
+        <ScrollViewer Padding="8">
+            <StackPanel Spacing="2">
+
+                <Expander Header="Glyph" IsExpanded="True">
+                    <StackPanel Spacing="2">
+                        <ToggleSwitch Content="Breathe (density pulse)" IsChecked="{Binding Breathe}" />
+                        <ToggleSwitch Content="Ramp scroll (shimmer)" IsChecked="{Binding RampScroll}" />
+                        <Slider Minimum="0.5" Maximum="12" Value="{Binding RampScrollSpeed}" />
+                        <ToggleSwitch Content="Grain (glyph jitter)" IsChecked="{Binding Grain}" />
+                        <Slider Minimum="0" Maximum="1" Value="{Binding GrainAmount}" />
+                        <ToggleSwitch Content="Charset swap" IsChecked="{Binding CharsetSwap}" />
+                        <ComboBox HorizontalAlignment="Stretch" Margin="12,0,0,0"
+                                  ItemsSource="{Binding CharsetPresetNames}"
+                                  SelectedItem="{Binding SelectedCharset}"
+                                  Background="#1E1E1E" Foreground="#EEE"
+                                  ToolTip.Tip="Pick a glyph set (dark→light), or type your own below" />
+                        <TextBox Text="{Binding SwapRamp}" Watermark="dark→light glyphs"
+                                 FontFamily="Consolas,Menlo,monospace"
+                                 Background="#1E1E1E" Foreground="#EEE" Margin="12,0,0,0" />
+                    </StackPanel>
+                </Expander>
+
+                <Expander Header="Colour" IsExpanded="True">
+                    <StackPanel Spacing="2">
+                        <ToggleSwitch Content="Hue cycle" IsChecked="{Binding HueCycle}" />
+                        <Slider Minimum="5" Maximum="180" Value="{Binding HueSpeed}" />
+                        <ToggleSwitch Content="Saturate" IsChecked="{Binding Saturate}" />
+                        <Slider Minimum="0" Maximum="2.5" Value="{Binding SaturateMid}" />
+                        <ToggleSwitch Content="Monochrome tint" IsChecked="{Binding Monochrome}" />
+                        <ToggleSwitch Content="Invert" IsChecked="{Binding Invert}" />
+                        <ToggleSwitch Content="Solarize" IsChecked="{Binding Solarize}" />
+                        <ToggleSwitch Content="Quantize (posterize)" IsChecked="{Binding Quantize}" />
+                        <Slider Minimum="2" Maximum="12" Value="{Binding QuantizeLevels}" />
+                        <ToggleSwitch Content="  → snap ANSI-16" IsChecked="{Binding QuantizeTerminal16}" />
+                        <ToggleSwitch Content="Dither" IsChecked="{Binding Dither}" />
+                        <ToggleSwitch Content="Duotone wash" IsChecked="{Binding Duotone}" />
+                        <ToggleSwitch Content="Plasma / fire" IsChecked="{Binding Plasma}" />
+                        <Slider Minimum="0" Maximum="1" Value="{Binding PlasmaStrength}" />
+                    </StackPanel>
+                </Expander>
+
+                <Expander Header="Spatial" IsExpanded="False">
+                    <StackPanel Spacing="2">
+                        <ToggleSwitch Content="Chromatic aberration" IsChecked="{Binding ChromaticAberration}" />
+                        <ToggleSwitch Content="Wave / ripple" IsChecked="{Binding Wave}" />
+                        <Slider Minimum="0" Maximum="8" Value="{Binding WaveAmplitude}" />
+                        <ToggleSwitch Content="Drift" IsChecked="{Binding Drift}" />
+                        <ToggleSwitch Content="Twist swirl" IsChecked="{Binding Twist}" />
+                        <Slider Minimum="0" Maximum="4" Value="{Binding TwistStrength}" />
+                        <ToggleSwitch Content="Glitch burst" IsChecked="{Binding Glitch}" />
+                        <Slider Minimum="0" Maximum="1" Value="{Binding GlitchIntensity}" />
+                        <ToggleSwitch Content="Bloom / glow" IsChecked="{Binding Bloom}" />
+                        <Slider Minimum="0" Maximum="2" Value="{Binding BloomStrength}" />
+                        <ToggleSwitch Content="Edge / contour" IsChecked="{Binding Edge}" />
+                    </StackPanel>
+                </Expander>
+
+                <Expander Header="Structural" IsExpanded="False">
+                    <StackPanel Spacing="2">
+                        <ToggleSwitch Content="Matrix rain" IsChecked="{Binding MatrixRain}" />
+                        <Slider Minimum="0.1" Maximum="1" Value="{Binding MatrixRainDensity}" />
+                        <ToggleSwitch Content="Particles (snow)" IsChecked="{Binding Particles}" />
+                        <Slider Minimum="10" Maximum="200" Value="{Binding ParticleCount}" />
+                        <ToggleSwitch Content="Vignette" IsChecked="{Binding Vignette}" />
+                        <Slider Minimum="0" Maximum="1" Value="{Binding VignetteStrength}" />
+                        <ToggleSwitch Content="CRT full (barrel+phosphor)" IsChecked="{Binding CrtFull}" />
+                        <ToggleSwitch Content="CRT scanlines" IsChecked="{Binding Crt}" />
+                    </StackPanel>
+                </Expander>
+
+                <Expander Header="Transitions" IsExpanded="False">
+                    <StackPanel Spacing="2">
+                        <ToggleSwitch Content="Typewriter reveal" IsChecked="{Binding Typewriter}" />
+                        <ToggleSwitch Content="Dissolve reveal" IsChecked="{Binding Dissolve}" />
+                        <Slider Minimum="0.3" Maximum="8" Value="{Binding TransitionSeconds}" />
+                        <ToggleSwitch Content="Frame trails / echo" IsChecked="{Binding Trails}" />
+                        <Slider Minimum="0" Maximum="0.98" Value="{Binding TrailDecay}" />
+                    </StackPanel>
+                </Expander>
+
+            </StackPanel>
+        </ScrollViewer>
+    </DockPanel>
+</Window>
