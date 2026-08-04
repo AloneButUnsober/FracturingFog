@@ -62,6 +62,13 @@ static class Program
         if (args.Length > 0 && args[0] == "--asciiart")
             return FracturingFog.Diagnostics.AsciiArtProbe.RunGate();
 
+        // --asciianim: #230 prototype/gate — record an FX-animated Mandelbrot into
+        // every ASCII animation format (asciinema .cast / animated SVG / raw ANSI
+        // sequence) and assert each container is well-formed with varying frames.
+        // Writes asciianim/*.{cast,svg,ans} + asciianim.out next to the exe.
+        if (args.Length > 0 && args[0] == "--asciianim")
+            return FracturingFog.Diagnostics.AsciiAnimationProbe.RunGate();
+
         // --heightfieldraymarch: #102 Phase 2 gate — oblique 3D raymarch of the
         // heightfield through the full ShadingPipeline, incl. volumetric fog.
         // Asserts a real 3D view (silhouette against sky) + that the volumetric
