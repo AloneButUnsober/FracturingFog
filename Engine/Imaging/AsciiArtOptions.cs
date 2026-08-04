@@ -42,6 +42,13 @@ namespace FracturingFog.Imaging
         /// otherwise. Colored formats always tint from the pixel buffer.</summary>
         public bool UseSmoothField { get; set; } = true;
 
+        /// <summary>Drive the glyph ramp from the (post-FX) pixel-buffer luminance
+        /// instead of the smooth iteration field. The buffer already carries
+        /// adaptive histogram-EQ / brightness / contrast, so this makes an
+        /// adaptive sweep modulate glyph density — not just colour. Overrides
+        /// <see cref="UseSmoothField"/> when set.</summary>
+        public bool RampFromColorLuma { get; set; }
+
         /// <summary>Background colour token for HTML/SVG documents (CSS color).</summary>
         public string BackgroundCss { get; set; } = "#000000";
 

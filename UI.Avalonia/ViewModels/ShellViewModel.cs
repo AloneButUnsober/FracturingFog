@@ -1822,6 +1822,17 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
 
     public ReactiveCommand<Unit, bool> ToggleTerminalModeCommand { get; private set; } = null!;
 
+    // Terminal Mode: drive the glyph ramp from the post-FX pixel luminance
+    // instead of the raw smooth field, so an adaptive sweep (or brightness /
+    // contrast) modulates glyph density and not just colour. The host code-behind
+    // reads this in the ASCII pump and repaints when it flips.
+    private bool _asciiRampFromColor;
+    public bool AsciiRampFromColor
+    {
+        get => _asciiRampFromColor;
+        set => this.RaiseAndSetIfChanged(ref _asciiRampFromColor, value);
+    }
+
     /// <summary>Apply a region jump: relabel the watermark, mutate ViewState
     /// via the host service, mirror the resulting fractal type into the toolbar
     /// (without snapping its centre/zoom), then trigger a render. Shared by the

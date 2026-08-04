@@ -632,6 +632,11 @@ public sealed partial class MainWindow : Window
         if (_shell == null) return;
         switch (e.PropertyName)
         {
+            case nameof(ShellViewModel.AsciiRampFromColor):
+                // Repaint the ASCII view immediately so the ramp-source toggle
+                // shows without waiting for the next render.
+                if (_asciiFrameHandler != null) PumpAsciiFrame();
+                break;
             case nameof(ShellViewModel.IsFloatingMenuVisible):
                 SyncMenu();
                 break;
@@ -882,7 +887,7 @@ public sealed partial class MainWindow : Window
     // to the UI thread. A single-slot coalescing gate drops intermediate frames
     // when the UI can't keep up during a fast pan/zoom.
     private AsciiView? _asciiView;
-    private EventHandler<FracturingFog.Render.RenderFrameInfo>? _asciiFrameHandler;
+    private EventHandler? _asciiFrameHandler;
     private int _asciiUpdateQueued; // 0 = idle, 1 = a UI update is already posted
 
     private void OnTerminalModeToggleRequested(object? sender, bool enter)
@@ -897,8 +902,11 @@ public sealed partial class MainWindow : Window
         _asciiView ??= this.FindControl<AsciiView>("AsciiSurface");
         if (_asciiView == null) return;
 
+        // FrameBufferChanged (not FrameCompleted): fires on EVERY upload,
+        // including post-FX / adaptive repaints, so brightness / contrast /
+        // adaptive-sweep changes update the ASCII live, not just re-renders.
         _asciiFrameHandler = (_, _) => PumpAsciiFrame();
-        _shell.Main.RenderHost.FrameCompleted += _asciiFrameHandler;
+        _shell.Main.RenderHost.FrameBufferChanged += _asciiFrameHandler;
         // Paint the current frame immediately so entering the mode isn't blank
         // until the next render lands.
         PumpAsciiFrame();
@@ -907,7 +915,7 @@ public sealed partial class MainWindow : Window
     private void StopAsciiPump()
     {
         if (_shell != null && _asciiFrameHandler != null)
-            _shell.Main.RenderHost.FrameCompleted -= _asciiFrameHandler;
+            _shell.Main.RenderHost.FrameBufferChanged -= _asciiFrameHandler;
         _asciiFrameHandler = null;
         System.Threading.Interlocked.Exchange(ref _asciiUpdateQueued, 0);
         _asciiView?.Clear();
@@ -925,7 +933,9 @@ public sealed partial class MainWindow : Window
 
         int cols = view.LiveColumns;            // volatile — safe off UI thread
         double aspect = view.CellAspect;        // constant after metrics
-        var frame = host.RenderLastFrameAscii(cols, aspect, color: true, invert: false, fineRamp: false);
+        bool rampFromColor = _shell?.AsciiRampFromColor ?? false;
+        var frame = host.RenderLastFrameAscii(
+            cols, aspect, color: true, invert: false, fineRamp: false, rampFromColor: rampFromColor);
 
         global::Avalonia.Threading.Dispatcher.UIThread.Post(() =>
         {

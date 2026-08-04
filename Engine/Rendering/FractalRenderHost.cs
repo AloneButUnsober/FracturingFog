@@ -518,6 +518,7 @@ namespace FracturingFog.Rendering
         public FractalViewState ViewState { get; }
 
         public event EventHandler<RenderFrameInfo>? FrameCompleted;
+        public event EventHandler? FrameBufferChanged;
         public event EventHandler? AnimationFrameUploaded;
         public event EventHandler<string>? StatusRequested;
         public event EventHandler? ColorMapChanged;
@@ -3481,6 +3482,12 @@ namespace FracturingFog.Rendering
                 _lastFullResHeight = h;
             }
             } // _uploadGate
+
+            // Every upload path funnels through here — full calculations, the
+            // post-FX / adaptive repaints, alpha/relief recomposites. Signal
+            // buffer consumers (the live ASCII view) AFTER the gate releases so
+            // their pull re-locks cleanly and sees the fresh _lastPreOverlayBuffer.
+            FrameBufferChanged?.Invoke(this, EventArgs.Empty);
         }
 
         // S-X9 (2026-06-27) — see UploadProcessedBuffer for activation gate.
@@ -3791,7 +3798,8 @@ namespace FracturingFog.Rendering
 
         /// <inheritdoc/>
         public FracturingFog.Render.AsciiFrame? RenderLastFrameAscii(
-            int columns, double cellAspect, bool color, bool invert, bool fineRamp)
+            int columns, double cellAspect, bool color, bool invert, bool fineRamp,
+            bool rampFromColor = false)
         {
             if (_disposed) return null;
             if (!TryGetAsciiSource(out var buf, out var smooth, out int w, out int h)) return null;
@@ -3803,6 +3811,7 @@ namespace FracturingFog.Rendering
                 CellAspect = cellAspect > 0.1 ? cellAspect : 2.0,
                 Invert = invert,
                 UseSmoothField = true,
+                RampFromColorLuma = rampFromColor,
                 Ramp = fineRamp
                     ? FracturingFog.Imaging.AsciiArtOptions.FineRamp
                     : new FracturingFog.Imaging.AsciiArtOptions().Ramp,

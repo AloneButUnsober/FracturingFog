@@ -124,6 +124,28 @@ public sealed class AsciiArtRendererTests
     }
 
     [Fact]
+    public void RampFromColorLuma_DrivesRampFromPixelsOverSmooth()
+    {
+        // Opposite of the smooth-field test: the smooth field is flat-high
+        // everywhere (would map every cell to '@'), but the pixel luma ramps
+        // 0→bright across x. With RampFromColorLuma the glyph must follow the
+        // pixels, so the left end is blank and the right end full.
+        int w = 10, h = 2;
+        var px = GreyGradientX(w, h);          // luma 0 → 1 across x
+        var smooth = new float[w * h];
+        for (int i = 0; i < smooth.Length; i++) smooth[i] = 100f; // flat, non-zero
+
+        var opt = new AsciiArtOptions
+        {
+            Format = AsciiArtFormat.PlainText, Columns = 10, CellAspect = 2.0,
+            Ramp = " .:-=+*#%@", UseSmoothField = true, RampFromColorLuma = true,
+        };
+        string row = AsciiArtRenderer.Render(px, smooth, w, h, opt).Split('\n')[0];
+        Assert.Equal(' ', row[0]);     // dark pixels → blank, despite high smooth
+        Assert.Equal('@', row[^1]);    // bright pixels → full
+    }
+
+    [Fact]
     public void Interior_SmoothZero_RendersBlank()
     {
         // Mixed frame: left half interior (smooth 0), right half exterior (high
