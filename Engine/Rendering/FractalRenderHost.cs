@@ -3769,6 +3769,93 @@ namespace FracturingFog.Rendering
                 wm);
         }
 
+        /// <summary>
+        /// Render the most-recently-uploaded frame as character/text art (#226)
+        /// and write it to <paramref name="path"/>. Consumes the real
+        /// <see cref="FracturingFog.Interefaces.IColorMap"/> output — the same
+        /// pre-overlay BGRA buffer the screenshot path uses — so the colored
+        /// formats (ANSI / half-block / HTML / SVG) tint from the active theme.
+        /// When the active calculator exposes an <see cref="Interefaces.IHeightFieldSource"/>
+        /// smooth field at matching dimensions it drives the glyph ramp
+        /// (banding-free); otherwise the exporter falls back to pixel luminance.
+        /// No watermark — the output is plain text. No-op before the first frame.
+        /// </summary>
+        public void SaveLastFrameAsAsciiArt(
+            string path, FracturingFog.Imaging.AsciiArtOptions options)
+        {
+            if (_disposed) return;
+            if (string.IsNullOrEmpty(path) || options == null) return;
+            if (!TryGetAsciiSource(out var buf, out var smooth, out int w, out int h)) return;
+            FracturingFog.Imaging.AsciiArtRenderer.WriteToFile(buf, smooth, w, h, options, path);
+        }
+
+        /// <inheritdoc/>
+        public FracturingFog.Render.AsciiFrame? RenderLastFrameAscii(
+            int columns, double cellAspect, bool color, bool invert, bool fineRamp)
+        {
+            if (_disposed) return null;
+            if (!TryGetAsciiSource(out var buf, out var smooth, out int w, out int h)) return null;
+
+            var opt = new FracturingFog.Imaging.AsciiArtOptions
+            {
+                Format = FracturingFog.Imaging.AsciiArtFormat.PlainText, // grid producer ignores format
+                Columns = Math.Max(1, columns),
+                CellAspect = cellAspect > 0.1 ? cellAspect : 2.0,
+                Invert = invert,
+                UseSmoothField = true,
+                Ramp = fineRamp
+                    ? FracturingFog.Imaging.AsciiArtOptions.FineRamp
+                    : new FracturingFog.Imaging.AsciiArtOptions().Ramp,
+            };
+
+            var cells = FracturingFog.Imaging.AsciiArtRenderer.RenderCells(
+                buf, smooth, w, h, opt, out int cols, out int rows);
+
+            int n = cols * rows;
+            var glyphs = new char[n];
+            uint[] colors = color ? new uint[n] : System.Array.Empty<uint>();
+            for (int i = 0; i < n; i++)
+            {
+                var c = cells[i];
+                glyphs[i] = c.Glyph;
+                if (color) colors[i] = ((uint)c.R << 16) | ((uint)c.G << 8) | c.B;
+            }
+            return new FracturingFog.Render.AsciiFrame(cols, rows, glyphs, colors, color);
+        }
+
+        // Shared source selection for both the ASCII file export (#226) and the
+        // live ASCII display (#227): the real IColorMap pre-overlay BGRA buffer
+        // plus the smooth iteration field read off whichever calculator produced
+        // the last frame (alt for non-Mandelbrot types, else the concrete
+        // primary), only when its dimensions match the uploaded buffer (deep-zoom
+        // / MSAA / preview paths can mismatch — the exporter falls back to luma).
+        private bool TryGetAsciiSource(
+            out uint[] buf, out float[]? smooth, out int w, out int h)
+        {
+            buf = System.Array.Empty<uint>(); smooth = null; w = 0; h = 0;
+            lock (_uploadGate)
+            {
+                var src = _lastPreOverlayBuffer ?? _lastUploadedBuffer;
+                w = _lastUploadedWidth; h = _lastUploadedHeight;
+                if (src == null || w <= 0 || h <= 0) { w = h = 0; return false; }
+                int n = w * h;
+                buf = new uint[n];
+                Array.Copy(src, buf, n);
+            }
+
+            IFractalCalculator? alt = SelectAltCalculator(ViewState.FractalType);
+            Interefaces.IHeightFieldSource? hfSrc;
+            int cw, ch;
+            if (alt != null) { hfSrc = alt as Interefaces.IHeightFieldSource; cw = alt.Width; ch = alt.Height; }
+            else             { hfSrc = _calculator; cw = _calculator.Width; ch = _calculator.Height; }
+            if (hfSrc != null && cw == w && ch == h)
+            {
+                var sb = hfSrc.SmoothBuffer;
+                if (sb != null && sb.Length == (long)w * h) smooth = sb;
+            }
+            return true;
+        }
+
         // Phase 18b — animation tick callback. Polls the active Lighting
         // struct for any non-zero animation speed; if none, returns without
         // touching ViewState (idle scene stays bit-identical to a stopped

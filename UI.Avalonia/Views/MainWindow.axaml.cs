@@ -275,6 +275,7 @@ public sealed partial class MainWindow : Window
         menu.Items.Add(new Separator());
 
         AddItem(menu, "Save Image…",        () => shell.ScreenshotCommand.Execute().Subscribe());
+        AddItem(menu, "Save Text Art…",     () => shell.AsciiArtCommand.Execute().Subscribe());
         AddItem(menu, "Save Current Region",() => shell.SaveRegionCommand.Execute().Subscribe());
         menu.Items.Add(new Separator());
 
@@ -559,6 +560,7 @@ public sealed partial class MainWindow : Window
         shell.Main.PropertyChanged += OnMainPropertyChanged;
         shell.MiniModeToggleRequested += OnMiniModeToggleRequested;
         shell.ToyModeToggleRequested  += OnToyModeToggleRequested;
+        shell.TerminalModeToggleRequested += OnTerminalModeToggleRequested;
 
         // Initial sync in case the shell already has flags set.
         SyncMenu();
@@ -596,6 +598,8 @@ public sealed partial class MainWindow : Window
             _shell.Main.PropertyChanged -= OnMainPropertyChanged;
             _shell.MiniModeToggleRequested -= OnMiniModeToggleRequested;
             _shell.ToyModeToggleRequested  -= OnToyModeToggleRequested;
+            _shell.TerminalModeToggleRequested -= OnTerminalModeToggleRequested;
+            StopAsciiPump();
 
             // S-X8 (2026-06-27) — drop MiniDepth handlers off the long-lived
             // RenderHost event list so the captured window can be collected
@@ -870,6 +874,65 @@ public sealed partial class MainWindow : Window
         if (enter == _toyModeActive) return;
         if (enter) EnterToyMode();
         else        ExitToyMode();
+    }
+
+    // ── Terminal Mode ASCII pump (#228) ─────────────────────────────────
+    // On FrameCompleted (a background render thread) we generate an AsciiFrame
+    // from the render host — cheap, off the UI thread — then marshal the paint
+    // to the UI thread. A single-slot coalescing gate drops intermediate frames
+    // when the UI can't keep up during a fast pan/zoom.
+    private AsciiView? _asciiView;
+    private EventHandler<FracturingFog.Render.RenderFrameInfo>? _asciiFrameHandler;
+    private int _asciiUpdateQueued; // 0 = idle, 1 = a UI update is already posted
+
+    private void OnTerminalModeToggleRequested(object? sender, bool enter)
+    {
+        if (enter) StartAsciiPump();
+        else        StopAsciiPump();
+    }
+
+    private void StartAsciiPump()
+    {
+        if (_shell == null || _asciiFrameHandler != null) return;
+        _asciiView ??= this.FindControl<AsciiView>("AsciiSurface");
+        if (_asciiView == null) return;
+
+        _asciiFrameHandler = (_, _) => PumpAsciiFrame();
+        _shell.Main.RenderHost.FrameCompleted += _asciiFrameHandler;
+        // Paint the current frame immediately so entering the mode isn't blank
+        // until the next render lands.
+        PumpAsciiFrame();
+    }
+
+    private void StopAsciiPump()
+    {
+        if (_shell != null && _asciiFrameHandler != null)
+            _shell.Main.RenderHost.FrameCompleted -= _asciiFrameHandler;
+        _asciiFrameHandler = null;
+        System.Threading.Interlocked.Exchange(ref _asciiUpdateQueued, 0);
+        _asciiView?.Clear();
+    }
+
+    private void PumpAsciiFrame()
+    {
+        var view = _asciiView;
+        var host = _shell?.Main.RenderHost;
+        if (view == null || host == null) return;
+
+        // Coalesce: if a paint is already queued, skip regenerating — the queued
+        // one will pull the latest buffer when it runs.
+        if (System.Threading.Interlocked.Exchange(ref _asciiUpdateQueued, 1) == 1) return;
+
+        int cols = view.LiveColumns;            // volatile — safe off UI thread
+        double aspect = view.CellAspect;        // constant after metrics
+        var frame = host.RenderLastFrameAscii(cols, aspect, color: true, invert: false, fineRamp: false);
+
+        global::Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+        {
+            System.Threading.Interlocked.Exchange(ref _asciiUpdateQueued, 0);
+            if (_asciiFrameHandler == null) return; // mode left before this ran
+            if (frame.HasValue) view.Update(frame.Value);
+        });
     }
 
     private void EnterToyMode()

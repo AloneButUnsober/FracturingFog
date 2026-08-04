@@ -104,6 +104,22 @@ namespace FracturingFog.Render
         /// </summary>
         void PresentBuffer(uint[] bgra, int width, int height);
 
+        /// <summary>Render the most-recently-completed frame as a live ASCII /
+        /// text-art cell grid (#227), consuming the real IColorMap-coloured
+        /// buffer + smooth field. Returns null before the first frame. Thread-safe
+        /// (reads the frame buffers under the host's upload gate); the returned
+        /// grid is a fresh allocation the caller owns.</summary>
+        /// <param name="columns">Target character columns; rows are derived from
+        /// the frame aspect and <paramref name="cellAspect"/>.</param>
+        /// <param name="cellAspect">Character cell height ÷ width of the display
+        /// font, so the art keeps its shape.</param>
+        /// <param name="color">True for per-cell truecolor; false for monochrome
+        /// (glyph ramp only).</param>
+        /// <param name="invert">Invert the glyph ramp.</param>
+        /// <param name="fineRamp">Use the 70-step ramp instead of the 10-step.</param>
+        AsciiFrame? RenderLastFrameAscii(
+            int columns, double cellAspect, bool color, bool invert, bool fineRamp);
+
         /// <summary>Present the current GPU back buffer to the screen.
         /// Safe to call from any thread — the host serialises this with
         /// every other renderer access (UpdateTexture / Resize) so the
