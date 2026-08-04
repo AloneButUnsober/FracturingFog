@@ -411,6 +411,22 @@ public sealed class AsciiFxChainTests
     }
 
     [Fact]
+    public void Edge_DrawsLineGlyphsOnBoundaryDimsInterior()
+    {
+        // Left half dark, right half bright → a vertical edge down the middle.
+        const int cols = 8, rows = 4;
+        var cells = Grid(cols, rows, (x, y) =>
+            x < cols / 2 ? new AsciiCell('#', 0, 0, 0) : new AsciiCell('#', 255, 255, 255));
+        AsciiFxChain.Apply(cells, cols, rows, Ramp,
+            new AsciiFxSettings { Edge = true, EdgeThreshold = 0.2 });
+        // Somewhere a vertical-edge glyph should appear; flat interior blanks out.
+        bool hasEdge = false, hasBlank = false;
+        foreach (var c in cells) { if (c.Glyph == '|') hasEdge = true; if (c.Glyph == ' ') hasBlank = true; }
+        Assert.True(hasEdge, "expected a vertical edge glyph");
+        Assert.True(hasBlank, "expected flat interior to blank");
+    }
+
+    [Fact]
     public void MatrixRain_ProducesGreenDropsAndGhostsBackground()
     {
         const int cols = 20, rows = 30;

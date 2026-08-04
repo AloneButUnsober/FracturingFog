@@ -82,6 +82,12 @@ namespace FracturingFog.Imaging
         /// <summary>Only neighbours brighter than this luma glow, [0,1].</summary>
         public double BloomThreshold { get; set; } = 0.55;
 
+        /// <summary>Edge / contour: Sobel the brightness and draw oriented line
+        /// glyphs on the boundaries, dimming the interior. Static.</summary>
+        public bool Edge { get; set; }
+        /// <summary>Gradient magnitude to count as an edge, [0,1].</summary>
+        public double EdgeThreshold { get; set; } = 0.22;
+
         /// <summary>"Breathe" the glyph density: animate a gamma on the ramp index
         /// so the whole field pulses lighter/darker over time (independent of the
         /// fractal). Operates on the chosen glyph via the ramp, so no re-sample.</summary>
@@ -184,7 +190,8 @@ namespace FracturingFog.Imaging
         /// <summary>True when any effect is enabled (the host can skip the pass).</summary>
         public bool AnyEnabled => HueCycle || Crt || Breathe || CharsetSwap || Monochrome
             || Saturate || Invert || Solarize || Quantize || Duotone || RampScroll || Grain
-            || Vignette || ChromaticAberration || Wave || Drift || Twist || Glitch || Bloom || MatrixRain;
+            || Vignette || ChromaticAberration || Wave || Drift || Twist || Glitch || Bloom || Edge
+            || MatrixRain;
 
         /// <summary>True when an enabled effect varies with time (the live view
         /// must repaint on a timer for these, not only on buffer changes).</summary>
