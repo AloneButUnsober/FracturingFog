@@ -81,10 +81,9 @@ namespace FracturingFog.Imaging
             }),
             new AsciiFxPreset("Snow", fx =>
             {
+                // Additive white flecks over the user's chosen colour theme — no
+                // Duotone recolour (that discarded the palette and looked dark).
                 fx.Particles = true; fx.ParticleCount = 90; fx.ParticleGlyph = '*'; fx.ParticleSpeed = 5;
-                fx.Duotone = true;
-                fx.DuotoneLoR = 10; fx.DuotoneLoG = 20; fx.DuotoneLoB = 45;
-                fx.DuotoneHiR = 200; fx.DuotoneHiG = 220; fx.DuotoneHiB = 255;
             }),
             new AsciiFxPreset("Glitch", fx =>
             {
