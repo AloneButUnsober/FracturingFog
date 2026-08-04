@@ -1941,6 +1941,24 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
         }
     }
 
+    /// <summary>ASCII watermark glyph styles for the toolbar picker. Bound to the
+    /// enum so the combo lists Block / PlainLabel / BoxedBanner.</summary>
+    public System.Array AsciiWatermarkStyles { get; }
+        = System.Enum.GetValues(typeof(FracturingFog.Imaging.AsciiWatermarkStyle));
+
+    /// <summary>Selected ASCII watermark style. Proxies to the render host (via
+    /// <see cref="MainViewModel"/>) so live Terminal + ASCII export both use it.</summary>
+    public FracturingFog.Imaging.AsciiWatermarkStyle SelectedAsciiWatermarkStyle
+    {
+        get => Main.AsciiWatermarkStyle;
+        set
+        {
+            if (Main.AsciiWatermarkStyle == value) return;
+            Main.AsciiWatermarkStyle = value;
+            this.RaisePropertyChanged();
+        }
+    }
+
     /// <summary>Build the ASCII FX settings the live pump feeds to the render host
     /// each frame: the full FX panel snapshot, with the hue / CRT / breathe
     /// quick-toggles OR'd on top. Returns null when nothing is enabled so the host
