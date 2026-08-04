@@ -180,6 +180,17 @@ namespace FracturingFog.Imaging
         public byte DuotoneHiG { get; set; } = 200;
         public byte DuotoneHiB { get; set; } = 80;    // warm highlight
 
+        /// <summary>Plasma / fire: blend an animated procedural noise field (fire
+        /// palette) over the colour. Stateless (a function of x, y, time).
+        /// Animated.</summary>
+        public bool Plasma { get; set; }
+        /// <summary>Blend amount of the plasma over the base colour, [0,1].</summary>
+        public double PlasmaStrength { get; set; } = 0.55;
+        /// <summary>Spatial frequency of the plasma.</summary>
+        public double PlasmaScale { get; set; } = 0.18;
+        /// <summary>Plasma animation speed.</summary>
+        public double PlasmaSpeed { get; set; } = 1.2;
+
         // ── Structural (stateful) ─────────────────────────────────────────
 
         /// <summary>"Matrix" digital rain: falling columns of glyphs, the fractal
@@ -196,14 +207,14 @@ namespace FracturingFog.Imaging
 
         /// <summary>True when any effect is enabled (the host can skip the pass).</summary>
         public bool AnyEnabled => HueCycle || Crt || Breathe || CharsetSwap || Monochrome
-            || Saturate || Invert || Solarize || Quantize || Dither || Duotone || RampScroll || Grain
-            || Vignette || ChromaticAberration || Wave || Drift || Twist || Glitch || Bloom || Edge
-            || MatrixRain;
+            || Saturate || Invert || Solarize || Quantize || Dither || Duotone || Plasma
+            || RampScroll || Grain || Vignette || ChromaticAberration || Wave || Drift || Twist
+            || Glitch || Bloom || Edge || MatrixRain;
 
         /// <summary>True when an enabled effect varies with time (the live view
         /// must repaint on a timer for these, not only on buffer changes).</summary>
         public bool AnyAnimated => HueCycle || Breathe || MatrixRain || RampScroll || Grain || Wave
-            || Drift || Glitch || (Saturate && SaturateAmp > 0);
+            || Drift || Glitch || Plasma || (Saturate && SaturateAmp > 0);
 
         /// <summary>True when an enabled effect evolves across frames and so needs
         /// a persistent <see cref="AsciiFxState"/> (not a pure grid+clock function).</summary>
