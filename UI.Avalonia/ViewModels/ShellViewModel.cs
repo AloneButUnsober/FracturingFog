@@ -1922,9 +1922,11 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
     /// each frame: the full FX panel snapshot, with the hue / CRT / breathe
     /// quick-toggles OR'd on top. Returns null when nothing is enabled so the host
     /// skips the pass.</summary>
-    public FracturingFog.Imaging.AsciiFxSettings? BuildAsciiFxSettings(double timeSeconds)
+    public FracturingFog.Imaging.AsciiFxSettings? BuildAsciiFxSettings(
+        double timeSeconds, double transitionSeconds = 0.0)
     {
         var fx = FxPanel.Snapshot(timeSeconds);
+        fx.TransitionTimeSeconds = transitionSeconds;
         if (_asciiFxHue) fx.HueCycle = true;
         if (_asciiFxCrt) fx.Crt = true;
         if (_asciiFxBreathe) fx.Breathe = true;

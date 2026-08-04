@@ -521,7 +521,7 @@ public sealed class AsciiFxChainTests
         const int cols = 10, rows = 10; // 100 cells
         var cells = Grid(cols, rows, (x, y) => new AsciiCell('#', 200, 200, 200));
         AsciiFxChain.Apply(cells, cols, rows, Ramp, new AsciiFxSettings
-        { Typewriter = true, TransitionSeconds = 1.0, TimeSeconds = 0.3 }); // 30% → 30 cells
+        { Typewriter = true, TransitionSeconds = 1.0, TransitionTimeSeconds = 0.3 }); // 30% → 30 cells
         Assert.NotEqual(' ', cells[0].Glyph);   // start revealed
         Assert.NotEqual(' ', cells[29].Glyph);
         Assert.Equal(' ', cells[30].Glyph);     // rest blank
@@ -533,8 +533,9 @@ public sealed class AsciiFxChainTests
     {
         const int cols = 4, rows = 4;
         var cells = Grid(cols, rows, (x, y) => new AsciiCell('#', 200, 200, 200));
+        // One-shot (default): past the duration → fully revealed.
         AsciiFxChain.Apply(cells, cols, rows, Ramp, new AsciiFxSettings
-        { Typewriter = true, TransitionLoop = false, TransitionSeconds = 1.0, TimeSeconds = 5.0 });
+        { Typewriter = true, TransitionSeconds = 1.0, TransitionTimeSeconds = 5.0 });
         foreach (var c in cells) Assert.Equal('#', c.Glyph); // fully revealed
     }
 
@@ -543,9 +544,9 @@ public sealed class AsciiFxChainTests
     {
         const int cols = 4, rows = 4;
         var cells = Grid(cols, rows, (x, y) => new AsciiCell('#', 200, 200, 200));
-        // Loop (default): t = 2·dur → progress wraps to 0 → all blank (re-wiping).
+        // Loop opt-in: t = 2·dur → progress wraps to 0 → all blank (re-wiping).
         AsciiFxChain.Apply(cells, cols, rows, Ramp, new AsciiFxSettings
-        { Typewriter = true, TransitionSeconds = 1.0, TimeSeconds = 2.0 });
+        { Typewriter = true, TransitionLoop = true, TransitionSeconds = 1.0, TransitionTimeSeconds = 2.0 });
         foreach (var c in cells) Assert.Equal(' ', c.Glyph);
     }
 
@@ -555,7 +556,7 @@ public sealed class AsciiFxChainTests
         const int cols = 20, rows = 20; // 400 cells
         var cells = Grid(cols, rows, (x, y) => new AsciiCell('#', 200, 200, 200));
         AsciiFxChain.Apply(cells, cols, rows, Ramp, new AsciiFxSettings
-        { Dissolve = true, TransitionSeconds = 1.0, TimeSeconds = 0.5 }); // ~50%
+        { Dissolve = true, TransitionSeconds = 1.0, TransitionTimeSeconds = 0.5 }); // ~50%
         int shown = 0; foreach (var c in cells) if (c.Glyph != ' ') shown++;
         Assert.InRange(shown, 120, 280); // roughly half, hashed
     }
