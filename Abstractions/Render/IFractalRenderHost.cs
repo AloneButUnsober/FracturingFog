@@ -140,6 +140,14 @@ namespace FracturingFog.Render
             int columns, double cellAspect, bool invert, bool fineRamp, bool rampFromColor,
             FracturingFog.Imaging.AsciiFxSettings fx, int frames, double fps, string format);
 
+        /// <summary>Like <see cref="RecordAsciiAnimation"/> but returns the raw
+        /// per-frame ASCII grids (glyph + colour) instead of a serialised text
+        /// container — for the MP4 exporter, which rasterises each grid to pixels
+        /// and feeds the ffmpeg pipeline. Null before the first frame.</summary>
+        System.Collections.Generic.IReadOnlyList<AsciiFrame>? RecordAsciiFrames(
+            int columns, double cellAspect, bool invert, bool fineRamp, bool rampFromColor,
+            FracturingFog.Imaging.AsciiFxSettings fx, int frames, double fps);
+
         /// <summary>Present the current GPU back buffer to the screen.
         /// Safe to call from any thread — the host serialises this with
         /// every other renderer access (UpdateTexture / Resize) so the

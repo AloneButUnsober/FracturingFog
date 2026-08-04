@@ -1397,23 +1397,33 @@ namespace FracturingFog.Hosting
                         filter:
                             "asciinema cast (*.cast)|*.cast|" +
                             "Animated SVG (*.svg)|*.svg|" +
-                            "ANSI frame sequence (*.ans)|*.ans");
+                            "ANSI frame sequence (*.ans)|*.ans|" +
+                            "MP4 video (*.mp4)|*.mp4");
                     if (string.IsNullOrEmpty(path)) return;
 
                     string ext = System.IO.Path.GetExtension(path).TrimStart('.').ToLowerInvariant();
-                    string format = ext switch { "svg" => "svg", "ans" => "ans", _ => "cast" };
 
                     // Bake the active FX (or a static clip if none) over a ~5s,
                     // 12fps loop at export resolution.
                     var fx = shell.BuildAsciiFxSettings(0.0) ?? new FracturingFog.Imaging.AsciiFxSettings();
                     const double fps = 12.0;
                     const int frames = 60; // ~5 seconds
-                    string? text = s_renderHost.RecordAsciiAnimation(
-                        columns: 160, cellAspect: 2.0, invert: false, fineRamp: false,
-                        rampFromColor: shell.AsciiRampFromColor, fx: fx,
-                        frames: frames, fps: fps, format: format);
-                    if (string.IsNullOrEmpty(text)) return;
-                    await System.IO.File.WriteAllTextAsync(path, text, new System.Text.UTF8Encoding(false));
+                    const int cols = 160;
+
+                    if (ext == "mp4")
+                    {
+                        await ExportAsciiMp4Async(path, fx, cols, frames, fps, shell.AsciiRampFromColor);
+                    }
+                    else
+                    {
+                        string format = ext switch { "svg" => "svg", "ans" => "ans", _ => "cast" };
+                        string? text = s_renderHost.RecordAsciiAnimation(
+                            columns: cols, cellAspect: 2.0, invert: false, fineRamp: false,
+                            rampFromColor: shell.AsciiRampFromColor, fx: fx,
+                            frames: frames, fps: fps, format: format);
+                        if (string.IsNullOrEmpty(text)) return;
+                        await System.IO.File.WriteAllTextAsync(path, text, new System.Text.UTF8Encoding(false));
+                    }
                 }
                 catch (Exception ex)
                 {
@@ -3503,6 +3513,42 @@ namespace FracturingFog.Hosting
                 ".html" or ".htm" => FracturingFog.Imaging.AsciiArtFormat.Html,
                 _               => FracturingFog.Imaging.AsciiArtFormat.Html,
             };
+        }
+
+        // ASCII → MP4 (#230): pull the FX-animated grids from the host, rasterise
+        // each on the UI thread (RenderTargetBitmap needs it), then encode via the
+        // existing ffmpeg pipeline off-thread so the UI isn't blocked.
+        private static async System.Threading.Tasks.Task ExportAsciiMp4Async(
+            string path, FracturingFog.Imaging.AsciiFxSettings fx,
+            int cols, int frames, double fps, bool rampFromColor)
+        {
+            if (s_renderHost == null) return;
+
+            var raster = new FracturingFog.UI.Avalonia.Controls.AsciiFrameRasterizer();
+            var grids = s_renderHost.RecordAsciiFrames(
+                columns: cols, cellAspect: raster.CellAspect, invert: false,
+                fineRamp: false, rampFromColor: rampFromColor, fx: fx, frames: frames, fps: fps);
+            if (grids == null || grids.Count == 0) return;
+
+            var bufs = new System.Collections.Generic.List<uint[]>(grids.Count);
+            int w = 0, h = 0;
+            foreach (var g in grids)
+            {
+                var (bgra, gw, gh) = raster.Rasterize(g);
+                w = gw; h = gh;
+                bufs.Add(bgra);
+            }
+            if (w < 2 || h < 2) return;
+
+            await System.Threading.Tasks.Task.Run(() =>
+            {
+                using var vw = new FracturingFog.Imaging.FfmpegVideoWriter(
+                    path, w, h, (int)Math.Round(fps),
+                    FracturingFog.FfmpegEncoder.Preset.HighQualityH264Mp4);
+                long dt100ns = (long)(1e7 / fps);
+                long ts = 0;
+                foreach (var b in bufs) { vw.WriteFrame(b, ts); ts += dt100ns; }
+            });
         }
 
         private static string BuildSuggestedFileName(

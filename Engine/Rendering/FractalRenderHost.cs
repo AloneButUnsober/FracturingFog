@@ -3870,9 +3870,72 @@ namespace FracturingFog.Rendering
             };
 
             // Re-render the same last frame each step, advancing the FX clock so
-            // the animated effects play out. A fresh state makes the recording
-            // deterministic and independent of the live view's state.
+            // the animated effects play out, and accumulate into the recorder.
             var rec = new FracturingFog.Imaging.AsciiAnimationRecorder();
+            RecordAsciiInto(buf, smooth, w, h, opt, fx, frames, fps,
+                (cells, cols, rows, dt) => rec.AddFrame(cells, cols, rows, dt));
+
+            var fmt = format?.ToLowerInvariant() switch
+            {
+                "svg" => FracturingFog.Imaging.AsciiAnimationFormat.AnimatedSvg,
+                "ans" => FracturingFog.Imaging.AsciiAnimationFormat.AnsiSequence,
+                _      => FracturingFog.Imaging.AsciiAnimationFormat.AsciinemaCast,
+            };
+            return rec.Serialize(fmt, opt);
+        }
+
+        /// <inheritdoc/>
+        public System.Collections.Generic.IReadOnlyList<FracturingFog.Render.AsciiFrame>? RecordAsciiFrames(
+            int columns, double cellAspect, bool invert, bool fineRamp, bool rampFromColor,
+            FracturingFog.Imaging.AsciiFxSettings fx, int frames, double fps)
+        {
+            if (_disposed || fx is null) return null;
+            if (frames <= 0) frames = 1;
+            if (fps <= 0) fps = 12.0;
+            if (!TryGetAsciiSource(out var buf, out var smooth, out int w, out int h)) return null;
+
+            var opt = BuildAsciiOptions(columns, cellAspect, invert, fineRamp, rampFromColor);
+            var list = new System.Collections.Generic.List<FracturingFog.Render.AsciiFrame>(frames);
+            RecordAsciiInto(buf, smooth, w, h, opt, fx, frames, fps, (cells, cols, rows, dt) =>
+            {
+                int n = cols * rows;
+                var glyphs = new char[n];
+                var colors = new uint[n];
+                for (int i = 0; i < n; i++)
+                {
+                    var c = cells[i];
+                    glyphs[i] = c.Glyph;
+                    colors[i] = ((uint)c.R << 16) | ((uint)c.G << 8) | c.B;
+                }
+                list.Add(new FracturingFog.Render.AsciiFrame(cols, rows, glyphs, colors, true));
+            });
+            return list;
+        }
+
+        private static FracturingFog.Imaging.AsciiArtOptions BuildAsciiOptions(
+            int columns, double cellAspect, bool invert, bool fineRamp, bool rampFromColor) =>
+            new()
+            {
+                Format = FracturingFog.Imaging.AsciiArtFormat.PlainText,
+                Columns = Math.Max(1, columns),
+                CellAspect = cellAspect > 0.1 ? cellAspect : 2.0,
+                Invert = invert,
+                UseSmoothField = true,
+                RampFromColorLuma = rampFromColor,
+                Ramp = fineRamp
+                    ? FracturingFog.Imaging.AsciiArtOptions.FineRamp
+                    : new FracturingFog.Imaging.AsciiArtOptions().Ramp,
+            };
+
+        // Shared record loop: re-render the same last frame `frames` times,
+        // advancing the FX + transition clocks by 1/fps each step, and hand each
+        // FX'd cell grid to `sink`. A fresh AsciiFxState keeps it deterministic.
+        private static void RecordAsciiInto(
+            uint[] buf, float[]? smooth, int w, int h,
+            FracturingFog.Imaging.AsciiArtOptions opt, FracturingFog.Imaging.AsciiFxSettings fx,
+            int frames, double fps,
+            System.Action<FracturingFog.Imaging.AsciiCell[], int, int, double> sink)
+        {
             var state = fx.NeedsState ? new FracturingFog.Imaging.AsciiFxState() : null;
             double dt = 1.0 / fps;
             for (int f = 0; f < frames; f++)
@@ -3883,16 +3946,8 @@ namespace FracturingFog.Rendering
                 fx.TransitionTimeSeconds = f * dt;
                 if (fx.AnyEnabled)
                     FracturingFog.Imaging.AsciiFxChain.Apply(cells, cols, rows, opt.Ramp, fx, state);
-                rec.AddFrame(cells, cols, rows, dt);
+                sink(cells, cols, rows, dt);
             }
-
-            var fmt = format?.ToLowerInvariant() switch
-            {
-                "svg" => FracturingFog.Imaging.AsciiAnimationFormat.AnimatedSvg,
-                "ans" => FracturingFog.Imaging.AsciiAnimationFormat.AnsiSequence,
-                _      => FracturingFog.Imaging.AsciiAnimationFormat.AsciinemaCast,
-            };
-            return rec.Serialize(fmt, opt);
         }
 
         // Shared source selection for both the ASCII file export (#226) and the
