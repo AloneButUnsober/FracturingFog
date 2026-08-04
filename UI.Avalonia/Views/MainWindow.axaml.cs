@@ -640,6 +640,16 @@ public sealed partial class MainWindow : Window
                 // shows without waiting for the next render.
                 if (_asciiFrameHandler != null) PumpAsciiFrame();
                 break;
+            case nameof(ShellViewModel.AsciiFxHue):
+            case nameof(ShellViewModel.AsciiFxBreathe):
+                // Animated FX: start/stop the repaint timer, then repaint now.
+                UpdateAsciiFxTimer();
+                if (_asciiFrameHandler != null) PumpAsciiFrame();
+                break;
+            case nameof(ShellViewModel.AsciiFxCrt):
+                // Static FX: just repaint.
+                if (_asciiFrameHandler != null) PumpAsciiFrame();
+                break;
             case nameof(ShellViewModel.IsFloatingMenuVisible):
                 SyncMenu();
                 break;
@@ -892,6 +902,8 @@ public sealed partial class MainWindow : Window
     private AsciiView? _asciiView;
     private EventHandler? _asciiFrameHandler;
     private int _asciiUpdateQueued; // 0 = idle, 1 = a UI update is already posted
+    private readonly System.Diagnostics.Stopwatch _asciiFxClock = new();
+    private global::Avalonia.Threading.DispatcherTimer? _asciiFxTimer;
 
     // Terminal and Side-by-side are mutually exclusive; entering one clears the
     // other (its setter re-enters here, harmlessly, and SyncAsciiMode is
@@ -981,6 +993,8 @@ public sealed partial class MainWindow : Window
         // adaptive-sweep changes update the ASCII live, not just re-renders.
         _asciiFrameHandler = (_, _) => PumpAsciiFrame();
         _shell.Main.RenderHost.FrameBufferChanged += _asciiFrameHandler;
+        _asciiFxClock.Restart();
+        UpdateAsciiFxTimer();
         // Paint the current frame immediately so entering the mode isn't blank
         // until the next render lands.
         PumpAsciiFrame();
@@ -991,8 +1005,34 @@ public sealed partial class MainWindow : Window
         if (_shell != null && _asciiFrameHandler != null)
             _shell.Main.RenderHost.FrameBufferChanged -= _asciiFrameHandler;
         _asciiFrameHandler = null;
+        _asciiFxTimer?.Stop();
+        _asciiFxClock.Stop();
         System.Threading.Interlocked.Exchange(ref _asciiUpdateQueued, 0);
         _asciiView?.Clear();
+    }
+
+    // Run a ~30fps repaint timer only while an ASCII mode is active AND an
+    // animated FX (hue cycle / breathe) is on — those vary with time, so the
+    // buffer-change pump alone won't advance them on a static fractal. Static FX
+    // (CRT) and the base render still refresh via FrameBufferChanged.
+    private void UpdateAsciiFxTimer()
+    {
+        bool want = _asciiFrameHandler != null && _shell != null
+                    && (_shell.AsciiFxHue || _shell.AsciiFxBreathe);
+        if (want)
+        {
+            if (_asciiFxTimer == null)
+            {
+                _asciiFxTimer = new global::Avalonia.Threading.DispatcherTimer
+                { Interval = TimeSpan.FromMilliseconds(33) };
+                _asciiFxTimer.Tick += (_, _) => PumpAsciiFrame();
+            }
+            if (!_asciiFxTimer.IsEnabled) _asciiFxTimer.Start();
+        }
+        else
+        {
+            _asciiFxTimer?.Stop();
+        }
     }
 
     private void PumpAsciiFrame()
@@ -1008,8 +1048,14 @@ public sealed partial class MainWindow : Window
         int cols = view.LiveColumns;            // volatile — safe off UI thread
         double aspect = view.CellAspect;        // constant after metrics
         bool rampFromColor = _shell?.AsciiRampFromColor ?? false;
+        var fx = new FracturingFog.Render.AsciiFxSpec(
+            hueCycle: _shell?.AsciiFxHue ?? false,
+            crt: _shell?.AsciiFxCrt ?? false,
+            breathe: _shell?.AsciiFxBreathe ?? false,
+            timeSeconds: _asciiFxClock.Elapsed.TotalSeconds);
         var frame = host.RenderLastFrameAscii(
-            cols, aspect, color: true, invert: false, fineRamp: false, rampFromColor: rampFromColor);
+            cols, aspect, color: true, invert: false, fineRamp: false,
+            rampFromColor: rampFromColor, fx: fx);
 
         global::Avalonia.Threading.Dispatcher.UIThread.Post(() =>
         {

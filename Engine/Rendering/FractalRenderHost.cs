@@ -3799,7 +3799,7 @@ namespace FracturingFog.Rendering
         /// <inheritdoc/>
         public FracturingFog.Render.AsciiFrame? RenderLastFrameAscii(
             int columns, double cellAspect, bool color, bool invert, bool fineRamp,
-            bool rampFromColor = false)
+            bool rampFromColor = false, FracturingFog.Render.AsciiFxSpec fx = default)
         {
             if (_disposed) return null;
             if (!TryGetAsciiSource(out var buf, out var smooth, out int w, out int h)) return null;
@@ -3819,6 +3819,19 @@ namespace FracturingFog.Rendering
 
             var cells = FracturingFog.Imaging.AsciiArtRenderer.RenderCells(
                 buf, smooth, w, h, opt, out int cols, out int rows);
+
+            // ASCII-native FX (#229): transform the cell grid in place.
+            if (fx.AnyEnabled)
+            {
+                var fxs = new FracturingFog.Imaging.AsciiFxSettings
+                {
+                    TimeSeconds = fx.TimeSeconds,
+                    HueCycle = fx.HueCycle,
+                    Crt = fx.Crt,
+                    Breathe = fx.Breathe,
+                };
+                FracturingFog.Imaging.AsciiFxChain.Apply(cells, cols, rows, opt.Ramp, fxs);
+            }
 
             int n = cols * rows;
             var glyphs = new char[n];
