@@ -145,13 +145,20 @@ float3 EvalPalette(
             0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0), x, y);
 ";
 
-    /// <summary>Colour-write splice for the escape branch of CSMain.</summary>
+    /// <summary>Colour-write splice for the escape branch of CSMain.
+    /// in_dist is the exterior distance estimate |z|·ln|z|/|dz| — mirrors the
+    /// CPU FillAuxAndColorHP formula so distance-shaded palettes (HSV, DSL
+    /// themes reading `dist`, …) darken with distance on the GPU instead of
+    /// rendering a flat full-brightness fill. HLSL `log` is natural log, so it
+    /// matches the CPU Math.Log inner term exactly.</summary>
     public const string EscapeColorSplice = @"
         float t_iter = gMaxIter > 0 ? sm / (float)gMaxIter : 0.0;
         float in_arg = atan2(zi, zr);
         float in_mag = sqrt(zr * zr + zi * zi);
+        float de_dz = sqrt(dr * dr + di * di);
+        float in_dist = de_dz > 1e-10 ? in_mag * log(in_mag) / de_dz : 0.0;
         gColor[idx] = cg_pack_bgra(EvalPalette(
-            sm, 0.0, (float)it, (float)gMaxIter,
+            sm, in_dist, (float)it, (float)gMaxIter,
             t_iter, 0.0, 0.0, zr, zi, dr, di, in_arg, in_mag, 0.0, 0.0), x, y);
 ";
 
