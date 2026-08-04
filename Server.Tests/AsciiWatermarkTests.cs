@@ -143,4 +143,47 @@ public sealed class AsciiWatermarkTests
         Assert.Contains('Z', glyphs);
         Assert.Contains('M', glyphs);
     }
+
+    // ── overlay (string-export path, #241 follow-up) ───────────────────
+
+    [Fact]
+    public void BuildOverlay_HasInk_AndMatchesStamp()
+    {
+        var wm = Wm("ABC", r: 12, gc: 34, b: 56);
+        var overlay = AsciiWatermark.BuildOverlay(80, 30, wm, AsciiWatermarkStyle.Block);
+        Assert.True(overlay.HasInk);
+
+        // Every inked cell in the reference stamp must be reported by the overlay
+        // with the same glyph and resolved colour (they share PlaceInk).
+        var grid = BlankGrid(80, 30);
+        AsciiWatermark.Stamp(grid, 80, 30, wm, AsciiWatermarkStyle.Block);
+        for (int y = 0; y < 30; y++)
+            for (int x = 0; x < 80; x++)
+            {
+                var cell = grid[y * 80 + x];
+                bool got = overlay.TryGet(x, y, out var ink);
+                if (cell.Glyph == ' ') { Assert.False(got); continue; }
+                Assert.True(got);
+                Assert.Equal(cell.Glyph, ink.Glyph);
+                Assert.Equal((12, 34, 56), (ink.R, ink.G, ink.B));
+            }
+    }
+
+    [Fact]
+    public void BuildOverlay_EmptyText_HasNoInk()
+    {
+        var overlay = AsciiWatermark.BuildOverlay(40, 12, Wm("", ""), AsciiWatermarkStyle.Block);
+        Assert.False(overlay.HasInk);
+        Assert.False(overlay.TryGet(0, 0, out _));
+    }
+
+    [Fact]
+    public void BuildOverlay_TryGet_OutOfRange_False()
+    {
+        var overlay = AsciiWatermark.BuildOverlay(40, 12, Wm("HI"), AsciiWatermarkStyle.Block);
+        Assert.False(overlay.TryGet(-1, 0, out _));
+        Assert.False(overlay.TryGet(0, -1, out _));
+        Assert.False(overlay.TryGet(40, 0, out _));
+        Assert.False(overlay.TryGet(0, 12, out _));
+    }
 }

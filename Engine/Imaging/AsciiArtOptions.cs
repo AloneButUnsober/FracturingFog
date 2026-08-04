@@ -61,6 +61,17 @@ namespace FracturingFog.Imaging
         /// this). Lower = denser dots. Ignored by other formats.</summary>
         public double BrailleThreshold { get; set; } = 0.35;
 
+        /// <summary>Optional watermark to paint into the art as character-art ink
+        /// (#241 string-export follow-up). When set, <see cref="AsciiArtRenderer"/>
+        /// stamps the same resolved <see cref="WatermarkRender"/> the live Terminal
+        /// and video paths use into every format (PlainText/Ansi via the cell grid,
+        /// HTML/SVG/half-block/Braille via a per-cell overlay). Null = no watermark.</summary>
+        public WatermarkRender? Watermark { get; set; }
+
+        /// <summary>Style for <see cref="Watermark"/> — block font, plain single-row
+        /// label, or boxed banner. Ignored when <see cref="Watermark"/> is null.</summary>
+        public AsciiWatermarkStyle WatermarkStyle { get; set; } = AsciiWatermarkStyle.Block;
+
         /// <summary>Convenience: switch <see cref="Ramp"/> to <see cref="FineRamp"/>.</summary>
         public AsciiArtOptions WithFineRamp() { Ramp = FineRamp; return this; }
     }
