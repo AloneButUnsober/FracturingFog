@@ -300,6 +300,18 @@ public sealed class AsciiFxChainTests
     }
 
     [Fact]
+    public void Vignette_DarkensCornersNotCentre()
+    {
+        const int cols = 9, rows = 9;
+        var cells = Grid(cols, rows, (x, y) => new AsciiCell('#', 200, 200, 200));
+        AsciiFxChain.Apply(cells, cols, rows, Ramp,
+            new AsciiFxSettings { Vignette = true, VignetteStrength = 0.8 });
+        int centre = (rows / 2) * cols + (cols / 2);
+        Assert.Equal(200, cells[centre].R);          // centre untouched
+        Assert.True(cells[0].R < 100, $"corner should darken, got {cells[0].R}");
+    }
+
+    [Fact]
     public void MatrixRain_ProducesGreenDropsAndGhostsBackground()
     {
         const int cols = 20, rows = 30;

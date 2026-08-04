@@ -29,6 +29,11 @@ namespace FracturingFog.Imaging
         /// <summary>Brightness multiplier applied to dimmed scanline rows, [0,1].</summary>
         public double CrtScanlineDim { get; set; } = 0.55;
 
+        /// <summary>Darken toward the frame edges (radial falloff). Static.</summary>
+        public bool Vignette { get; set; }
+        /// <summary>Vignette depth, [0,1] — how dark the corners get.</summary>
+        public double VignetteStrength { get; set; } = 0.7;
+
         /// <summary>"Breathe" the glyph density: animate a gamma on the ramp index
         /// so the whole field pulses lighter/darker over time (independent of the
         /// fractal). Operates on the chosen glyph via the ramp, so no re-sample.</summary>
@@ -130,7 +135,8 @@ namespace FracturingFog.Imaging
 
         /// <summary>True when any effect is enabled (the host can skip the pass).</summary>
         public bool AnyEnabled => HueCycle || Crt || Breathe || CharsetSwap || Monochrome
-            || Saturate || Invert || Solarize || Quantize || Duotone || RampScroll || Grain || MatrixRain;
+            || Saturate || Invert || Solarize || Quantize || Duotone || RampScroll || Grain
+            || Vignette || MatrixRain;
 
         /// <summary>True when an enabled effect varies with time (the live view
         /// must repaint on a timer for these, not only on buffer changes).</summary>
