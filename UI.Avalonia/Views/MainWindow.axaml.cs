@@ -562,6 +562,8 @@ public sealed partial class MainWindow : Window
         shell.ToyModeToggleRequested  += OnToyModeToggleRequested;
         shell.TerminalModeToggleRequested += OnTerminalModeToggleRequested;
         shell.SideBySideModeToggleRequested += OnSideBySideModeToggleRequested;
+        shell.AsciiFxPanelRequested += OnAsciiFxPanelRequested;
+        shell.FxPanel.Changed += OnAsciiFxPanelChanged;
 
         // Initial sync in case the shell already has flags set.
         SyncMenu();
@@ -602,6 +604,8 @@ public sealed partial class MainWindow : Window
             _shell.ToyModeToggleRequested  -= OnToyModeToggleRequested;
             _shell.TerminalModeToggleRequested -= OnTerminalModeToggleRequested;
             _shell.SideBySideModeToggleRequested -= OnSideBySideModeToggleRequested;
+            _shell.AsciiFxPanelRequested -= OnAsciiFxPanelRequested;
+            _shell.FxPanel.Changed -= OnAsciiFxPanelChanged;
             StopAsciiPump();
 
             // S-X8 (2026-06-27) — drop MiniDepth handlers off the long-lived
@@ -628,6 +632,30 @@ public sealed partial class MainWindow : Window
                            or nameof(MainViewModel.SelectedFractalEntry)
                            or nameof(MainViewModel.SelectedQuality))
             FocusSponge();
+
+        // In an ASCII mode, replay the one-shot reveal (typewriter / dissolve)
+        // over the newly-displayed view when the region or fractal type changes.
+        if (e.PropertyName is nameof(MainViewModel.SelectedFractalType)
+                           or nameof(MainViewModel.SelectedFractalEntry)
+                           or nameof(MainViewModel.SelectedRegion))
+            RetriggerAsciiReveal();
+    }
+
+    // Restart the reveal clock so typewriter / dissolve wipe in again over the
+    // newly-selected view. No-op unless an ASCII mode is active.
+    //
+    // Deliberately does NOT pump here: the type / region change kicks off a new
+    // render whose FrameBufferChanged will paint the fresh frame. Pumping now
+    // would capture the STALE pre-change buffer and, via the single-slot
+    // coalescing gate, drop that real new-frame pump — leaving the ASCII view one
+    // selection behind whenever no animation timer is running to recover it.
+    // When a reveal (or any animated FX) is on, UpdateAsciiFxTimer keeps the
+    // ~30fps timer running, which both animates the wipe and repaints promptly.
+    private void RetriggerAsciiReveal()
+    {
+        if (_asciiFrameHandler == null) return;
+        _asciiTransitionClock.Restart();
+        UpdateAsciiFxTimer();
     }
 
     private void OnShellPropertyChanged(object? sender, PropertyChangedEventArgs e)
@@ -642,7 +670,8 @@ public sealed partial class MainWindow : Window
                 break;
             case nameof(ShellViewModel.AsciiFxHue):
             case nameof(ShellViewModel.AsciiFxBreathe):
-                // Animated FX: start/stop the repaint timer, then repaint now.
+            case nameof(ShellViewModel.SelectedAsciiFxPreset):
+                // Possibly-animated FX: start/stop the repaint timer, then repaint.
                 UpdateAsciiFxTimer();
                 if (_asciiFrameHandler != null) PumpAsciiFrame();
                 break;
@@ -903,6 +932,11 @@ public sealed partial class MainWindow : Window
     private EventHandler? _asciiFrameHandler;
     private int _asciiUpdateQueued; // 0 = idle, 1 = a UI update is already posted
     private readonly System.Diagnostics.Stopwatch _asciiFxClock = new();
+    // Separate clock for the one-shot reveal transitions (typewriter / dissolve):
+    // restarts on entering an ASCII mode and on region / fractal-type change, so a
+    // reveal replays over each newly-displayed view without disturbing the
+    // continuously-running FX on the main clock.
+    private readonly System.Diagnostics.Stopwatch _asciiTransitionClock = new();
     private global::Avalonia.Threading.DispatcherTimer? _asciiFxTimer;
 
     // Terminal and Side-by-side are mutually exclusive; entering one clears the
@@ -994,6 +1028,7 @@ public sealed partial class MainWindow : Window
         _asciiFrameHandler = (_, _) => PumpAsciiFrame();
         _shell.Main.RenderHost.FrameBufferChanged += _asciiFrameHandler;
         _asciiFxClock.Restart();
+        _asciiTransitionClock.Restart(); // reveal plays on entering the mode
         UpdateAsciiFxTimer();
         // Paint the current frame immediately so entering the mode isn't blank
         // until the next render lands.
@@ -1007,18 +1042,20 @@ public sealed partial class MainWindow : Window
         _asciiFrameHandler = null;
         _asciiFxTimer?.Stop();
         _asciiFxClock.Stop();
+        _asciiTransitionClock.Stop();
         System.Threading.Interlocked.Exchange(ref _asciiUpdateQueued, 0);
         _asciiView?.Clear();
     }
 
     // Run a ~30fps repaint timer only while an ASCII mode is active AND an
-    // animated FX (hue cycle / breathe) is on — those vary with time, so the
-    // buffer-change pump alone won't advance them on a static fractal. Static FX
-    // (CRT) and the base render still refresh via FrameBufferChanged.
+    // animated FX is on — those vary with time, so the buffer-change pump alone
+    // won't advance them on a static fractal. Static FX and the base render still
+    // refresh via FrameBufferChanged. The built settings (preset + quick-toggles)
+    // report whether anything animates.
     private void UpdateAsciiFxTimer()
     {
         bool want = _asciiFrameHandler != null && _shell != null
-                    && (_shell.AsciiFxHue || _shell.AsciiFxBreathe);
+                    && (_shell.BuildAsciiFxSettings(0.0)?.AnyAnimated ?? false);
         if (want)
         {
             if (_asciiFxTimer == null)
@@ -1035,6 +1072,33 @@ public sealed partial class MainWindow : Window
         }
     }
 
+    // The floating ASCII FX panel window (a separate top-level so the native GPU
+    // HWND can't occlude it). Reused across opens.
+    private Views.AsciiFxPanelWindow? _asciiFxPanelWindow;
+
+    private void OnAsciiFxPanelRequested(object? sender, EventArgs e)
+    {
+        if (_shell == null) return;
+        if (_asciiFxPanelWindow == null)
+        {
+            _asciiFxPanelWindow = new Views.AsciiFxPanelWindow { DataContext = _shell.FxPanel };
+            _asciiFxPanelWindow.Closed += (_, _) => _asciiFxPanelWindow = null;
+            _asciiFxPanelWindow.Show(this);
+        }
+        else
+        {
+            _asciiFxPanelWindow.Activate();
+        }
+    }
+
+    // Any FX-panel edit: restart the animation timer (a newly-enabled animated
+    // effect must start ticking) and repaint the live view immediately.
+    private void OnAsciiFxPanelChanged(object? sender, EventArgs e)
+    {
+        UpdateAsciiFxTimer();
+        if (_asciiFrameHandler != null) PumpAsciiFrame();
+    }
+
     private void PumpAsciiFrame()
     {
         var view = _asciiView;
@@ -1048,11 +1112,9 @@ public sealed partial class MainWindow : Window
         int cols = view.LiveColumns;            // volatile — safe off UI thread
         double aspect = view.CellAspect;        // constant after metrics
         bool rampFromColor = _shell?.AsciiRampFromColor ?? false;
-        var fx = new FracturingFog.Render.AsciiFxSpec(
-            hueCycle: _shell?.AsciiFxHue ?? false,
-            crt: _shell?.AsciiFxCrt ?? false,
-            breathe: _shell?.AsciiFxBreathe ?? false,
-            timeSeconds: _asciiFxClock.Elapsed.TotalSeconds);
+        var fx = _shell?.BuildAsciiFxSettings(
+            _asciiFxClock.Elapsed.TotalSeconds,
+            _asciiTransitionClock.Elapsed.TotalSeconds);
         var frame = host.RenderLastFrameAscii(
             cols, aspect, color: true, invert: false, fineRamp: false,
             rampFromColor: rampFromColor, fx: fx);

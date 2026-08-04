@@ -532,6 +532,8 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
             () => OpenColorGenEditorRequested?.Invoke(this, EventArgs.Empty));
         ShowFractalParamsCommand  = ReactiveCommand.Create(
             () => FractalParamsRequested?.Invoke(this, EventArgs.Empty));
+        ShowAsciiFxPanelCommand   = ReactiveCommand.Create(
+            () => AsciiFxPanelRequested?.Invoke(this, EventArgs.Empty));
         ShowLightingFxCommand     = ReactiveCommand.Create(
             () => LightingFxRequested?.Invoke(this, EventArgs.Empty));
         ShowRelief3DCommand       = ReactiveCommand.Create(
@@ -1632,6 +1634,9 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
     public ReactiveCommand<Unit, Unit> ShowColorGenEditorCommand { get; }
     public ReactiveCommand<Unit, Unit> ShowFractalParamsCommand { get; }
 
+    /// <summary>Opens the full ASCII FX panel (per-effect control for #229).</summary>
+    public ReactiveCommand<Unit, Unit> ShowAsciiFxPanelCommand { get; }
+
     /// <summary>S2 — opens the standalone Volumetric Lighting &amp; FX panel
     /// (the Lighting/FX block on its own, not buried inside Fractal Params).</summary>
     public ReactiveCommand<Unit, Unit> ShowLightingFxCommand { get; }
@@ -1887,6 +1892,50 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
         get => _asciiFxBreathe;
         set => this.RaiseAndSetIfChanged(ref _asciiFxBreathe, value);
     }
+
+    /// <summary>Named ASCII FX presets for the toolbar picker ("None" + catalogue).</summary>
+    public System.Collections.Generic.IReadOnlyList<string> AsciiFxPresetNames { get; }
+        = FracturingFog.Imaging.AsciiFxPresets.Names;
+
+    /// <summary>Full per-effect control surface (the "FX…" panel). The preset
+    /// picker loads into it, and the pump reads its snapshot each frame.</summary>
+    public AsciiFxPanelViewModel FxPanel { get; } = new();
+
+    private string _selectedAsciiFxPreset = FracturingFog.Imaging.AsciiFxPresets.NoneName;
+    /// <summary>Selected FX preset. Choosing one loads its combo into
+    /// <see cref="FxPanel"/> so the panel and the live view reflect it.</summary>
+    public string SelectedAsciiFxPreset
+    {
+        get => _selectedAsciiFxPreset;
+        set
+        {
+            value ??= FracturingFog.Imaging.AsciiFxPresets.NoneName;
+            if (!this.RaiseAndSetIfChangedReturnsChanged(ref _selectedAsciiFxPreset, value)) return;
+            // Load the preset's effect combo into the panel (None = all-off).
+            var fx = new FracturingFog.Imaging.AsciiFxSettings();
+            FracturingFog.Imaging.AsciiFxPresets.ApplyByName(value, fx);
+            FxPanel.LoadFrom(fx);
+        }
+    }
+
+    /// <summary>Build the ASCII FX settings the live pump feeds to the render host
+    /// each frame: the full FX panel snapshot, with the hue / CRT / breathe
+    /// quick-toggles OR'd on top. Returns null when nothing is enabled so the host
+    /// skips the pass.</summary>
+    public FracturingFog.Imaging.AsciiFxSettings? BuildAsciiFxSettings(
+        double timeSeconds, double transitionSeconds = 0.0)
+    {
+        var fx = FxPanel.Snapshot(timeSeconds);
+        fx.TransitionTimeSeconds = transitionSeconds;
+        if (_asciiFxHue) fx.HueCycle = true;
+        if (_asciiFxCrt) fx.Crt = true;
+        if (_asciiFxBreathe) fx.Breathe = true;
+        return fx.AnyEnabled ? fx : null;
+    }
+
+    /// <summary>Raised by <see cref="ShowAsciiFxPanelCommand"/>; the code-behind
+    /// shows the floating FX panel window.</summary>
+    public event EventHandler? AsciiFxPanelRequested;
 
     /// <summary>Apply a region jump: relabel the watermark, mutate ViewState
     /// via the host service, mirror the resulting fractal type into the toolbar
