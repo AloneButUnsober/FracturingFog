@@ -328,6 +328,30 @@ namespace FracturingFog.Imaging
                     }
             }
 
+            // Transitions: gate cells to blank until revealed, over the transition.
+            if (fx.Typewriter || fx.Dissolve)
+            {
+                double dur = Math.Max(1e-4, fx.TransitionSeconds);
+                double progress = Math.Clamp(fx.TimeSeconds / dur, 0.0, 1.0);
+                if (progress < 1.0)
+                {
+                    if (fx.Typewriter)
+                    {
+                        long revealed = (long)(progress * cols * rows);
+                        for (long i = revealed; i < (long)cols * rows; i++)
+                            cells[i] = new AsciiCell(' ', 0, 0, 0);
+                    }
+                    if (fx.Dissolve)
+                    {
+                        uint thresh = (uint)(progress * uint.MaxValue);
+                        for (int y = 0; y < rows; y++)
+                            for (int x = 0; x < cols; x++)
+                                if (Hash(x, y, 0) >= thresh)
+                                    cells[y * cols + x] = new AsciiCell(' ', 0, 0, 0);
+                    }
+                }
+            }
+
             // Shading (last): vignette, then CRT scanline dim.
             if (fx.Vignette)
             {

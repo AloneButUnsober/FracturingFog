@@ -502,6 +502,40 @@ public sealed class AsciiFxChainTests
     }
 
     [Fact]
+    public void Typewriter_RevealsReadingOrderPrefix()
+    {
+        const int cols = 10, rows = 10; // 100 cells
+        var cells = Grid(cols, rows, (x, y) => new AsciiCell('#', 200, 200, 200));
+        AsciiFxChain.Apply(cells, cols, rows, Ramp, new AsciiFxSettings
+        { Typewriter = true, TransitionSeconds = 1.0, TimeSeconds = 0.3 }); // 30% → 30 cells
+        Assert.NotEqual(' ', cells[0].Glyph);   // start revealed
+        Assert.NotEqual(' ', cells[29].Glyph);
+        Assert.Equal(' ', cells[30].Glyph);     // rest blank
+        Assert.Equal(' ', cells[99].Glyph);
+    }
+
+    [Fact]
+    public void Typewriter_CompleteWhenPastDuration()
+    {
+        const int cols = 4, rows = 4;
+        var cells = Grid(cols, rows, (x, y) => new AsciiCell('#', 200, 200, 200));
+        AsciiFxChain.Apply(cells, cols, rows, Ramp, new AsciiFxSettings
+        { Typewriter = true, TransitionSeconds = 1.0, TimeSeconds = 5.0 });
+        foreach (var c in cells) Assert.Equal('#', c.Glyph); // fully revealed
+    }
+
+    [Fact]
+    public void Dissolve_RevealsFractionByProgress()
+    {
+        const int cols = 20, rows = 20; // 400 cells
+        var cells = Grid(cols, rows, (x, y) => new AsciiCell('#', 200, 200, 200));
+        AsciiFxChain.Apply(cells, cols, rows, Ramp, new AsciiFxSettings
+        { Dissolve = true, TransitionSeconds = 1.0, TimeSeconds = 0.5 }); // ~50%
+        int shown = 0; foreach (var c in cells) if (c.Glyph != ' ') shown++;
+        Assert.InRange(shown, 120, 280); // roughly half, hashed
+    }
+
+    [Fact]
     public void MatrixRain_NoStateIsNoOp()
     {
         var cells = Grid(4, 4, (x, y) => new AsciiCell('#', 180, 180, 180));
