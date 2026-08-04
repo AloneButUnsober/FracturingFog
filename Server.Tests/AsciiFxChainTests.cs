@@ -395,6 +395,22 @@ public sealed class AsciiFxChainTests
     }
 
     [Fact]
+    public void Bloom_BleedsBrightNeighbourOntoDarkCell()
+    {
+        // 3x1: dark, bright, dark. The dark cells should brighten from the middle.
+        var cells = new[]
+        {
+            new AsciiCell('.', 0, 0, 0),
+            new AsciiCell('@', 255, 255, 255),
+            new AsciiCell('.', 0, 0, 0),
+        };
+        AsciiFxChain.Apply(cells, 3, 1, Ramp,
+            new AsciiFxSettings { Bloom = true, BloomStrength = 0.8, BloomThreshold = 0.5 });
+        Assert.True(cells[0].R > 0, "dark neighbour should pick up glow");
+        Assert.True(cells[2].R > 0);
+    }
+
+    [Fact]
     public void MatrixRain_ProducesGreenDropsAndGhostsBackground()
     {
         const int cols = 20, rows = 30;

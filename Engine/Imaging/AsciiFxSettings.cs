@@ -74,6 +74,14 @@ namespace FracturingFog.Imaging
         /// <summary>Glitch re-roll rate (bursts per second).</summary>
         public double GlitchHz { get; set; } = 8.0;
 
+        /// <summary>Bloom: bright cells bleed a soft glow onto their neighbours.
+        /// Static.</summary>
+        public bool Bloom { get; set; }
+        /// <summary>Glow add strength, [0,~2].</summary>
+        public double BloomStrength { get; set; } = 0.6;
+        /// <summary>Only neighbours brighter than this luma glow, [0,1].</summary>
+        public double BloomThreshold { get; set; } = 0.55;
+
         /// <summary>"Breathe" the glyph density: animate a gamma on the ramp index
         /// so the whole field pulses lighter/darker over time (independent of the
         /// fractal). Operates on the chosen glyph via the ramp, so no re-sample.</summary>
@@ -176,7 +184,7 @@ namespace FracturingFog.Imaging
         /// <summary>True when any effect is enabled (the host can skip the pass).</summary>
         public bool AnyEnabled => HueCycle || Crt || Breathe || CharsetSwap || Monochrome
             || Saturate || Invert || Solarize || Quantize || Duotone || RampScroll || Grain
-            || Vignette || ChromaticAberration || Wave || Drift || Twist || Glitch || MatrixRain;
+            || Vignette || ChromaticAberration || Wave || Drift || Twist || Glitch || Bloom || MatrixRain;
 
         /// <summary>True when an enabled effect varies with time (the live view
         /// must repaint on a timer for these, not only on buffer changes).</summary>
