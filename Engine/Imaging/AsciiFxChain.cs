@@ -165,6 +165,25 @@ namespace FracturingFog.Imaging
             if (fx.MatrixRain && state != null)
                 RainPass(cells, cols, rows, fx, state);
 
+            // Spatial stage: effects that read neighbours or displace cells. Each
+            // snapshots the current grid so reads see pre-effect values.
+            if (fx.ChromaticAberration)
+            {
+                int shift = Math.Max(0, fx.ChromaticShift);
+                if (shift > 0)
+                {
+                    var src = (AsciiCell[])cells.Clone();
+                    for (int y = 0; y < rows; y++)
+                        for (int x = 0; x < cols; x++)
+                        {
+                            var mid = src[y * cols + x];
+                            byte rr = src[y * cols + Clamp(x - shift, 0, cols - 1)].R;
+                            byte bb = src[y * cols + Clamp(x + shift, 0, cols - 1)].B;
+                            cells[y * cols + x] = new AsciiCell(mid.Glyph, rr, mid.G, bb);
+                        }
+                }
+            }
+
             // Shading (last): vignette, then CRT scanline dim.
             if (fx.Vignette)
             {

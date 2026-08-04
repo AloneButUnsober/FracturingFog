@@ -312,6 +312,25 @@ public sealed class AsciiFxChainTests
     }
 
     [Fact]
+    public void ChromaticAberration_PullsRedAndBlueFromNeighbours()
+    {
+        // Row: [red, green, blue] cells. Shift 1: centre keeps glyph+G, takes R
+        // from left (red cell) and B from right (blue cell).
+        var cells = new[]
+        {
+            new AsciiCell('a', 255, 0, 0),
+            new AsciiCell('b', 0, 200, 0),
+            new AsciiCell('c', 0, 0, 255),
+        };
+        AsciiFxChain.Apply(cells, 3, 1, Ramp,
+            new AsciiFxSettings { ChromaticAberration = true, ChromaticShift = 1 });
+        Assert.Equal('b', cells[1].Glyph);
+        Assert.Equal(255, cells[1].R); // from left (red)
+        Assert.Equal(200, cells[1].G); // own
+        Assert.Equal(255, cells[1].B); // from right (blue)
+    }
+
+    [Fact]
     public void MatrixRain_ProducesGreenDropsAndGhostsBackground()
     {
         const int cols = 20, rows = 30;
