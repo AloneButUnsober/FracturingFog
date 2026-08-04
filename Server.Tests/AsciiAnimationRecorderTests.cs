@@ -67,6 +67,20 @@ public sealed class AsciiAnimationRecorderTests
     }
 
     [Fact]
+    public void AddFrame_FromAsciiFrame_UnpacksColours()
+    {
+        var rec = new AsciiAnimationRecorder();
+        var glyphs = new[] { '#', '#' };
+        var colors = new uint[] { 0x0000FF00u, 0x00FF0000u }; // green, red (0x00RRGGBB)
+        var frame = new FracturingFog.Render.AsciiFrame(2, 1, glyphs, colors, true);
+        rec.AddFrame(frame, 0.1);
+        rec.AddFrame(frame, 0.1);
+        string cast = rec.Serialize(AsciiAnimationFormat.AsciinemaCast);
+        Assert.Contains("38;2;0;255;0", cast);   // green cell
+        Assert.Contains("38;2;255;0;0", cast);   // red cell
+    }
+
+    [Fact]
     public void Serialize_EmptyRecorder_Throws()
     {
         var rec = new AsciiAnimationRecorder();

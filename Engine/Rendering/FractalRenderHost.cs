@@ -3802,6 +3802,74 @@ namespace FracturingFog.Rendering
         // Engine-side AsciiFxState; the live pump just passes settings each frame.
         private FracturingFog.Imaging.AsciiFxState? _asciiFxState;
 
+        // Live ASCII recording (#230): while active, every RenderLastFrameAscii
+        // captures its FX'd grid at wall-clock cadence, so whatever is animating
+        // (zoom video / Scene / slideshow / interactive) is recorded frame-by-frame.
+        private readonly object _liveRecLock = new();
+        private FracturingFog.Imaging.AsciiAnimationRecorder? _liveRec;      // capturing now
+        private FracturingFog.Imaging.AsciiAnimationRecorder? _liveRecPending; // stopped, awaiting save
+        private readonly System.Diagnostics.Stopwatch _liveRecClock = new();
+        private double _liveRecLast;
+        private const int MaxLiveRecFrames = 3600; // ~2 min at 30fps — bounds memory
+
+        /// <summary>True while a live ASCII recording is actively capturing.</summary>
+        public bool IsLiveAsciiRecording { get { lock (_liveRecLock) return _liveRec != null; } }
+
+        /// <summary>Start capturing the live ASCII frames. Discards any prior
+        /// (active or pending) capture.</summary>
+        public void BeginLiveAsciiRecording()
+        {
+            lock (_liveRecLock)
+            {
+                _liveRec = new FracturingFog.Imaging.AsciiAnimationRecorder();
+                _liveRecPending = null;
+                _liveRecClock.Restart();
+                _liveRecLast = 0.0;
+            }
+        }
+
+        /// <summary>Freeze the capture (no more frames appended) and hold it as
+        /// pending for a save. Returns the captured frame count.</summary>
+        public int StopLiveAsciiRecording()
+        {
+            lock (_liveRecLock)
+            {
+                _liveRecClock.Stop();
+                _liveRecPending = _liveRec;
+                _liveRec = null;
+                return _liveRecPending?.FrameCount ?? 0;
+            }
+        }
+
+        /// <summary>Serialise the pending recording to a text container
+        /// ("cast" / "svg" / "ans"). Null if none pending / empty.</summary>
+        public string? SerializePendingRecording(string format)
+        {
+            FracturingFog.Imaging.AsciiAnimationRecorder? rec;
+            lock (_liveRecLock) rec = _liveRecPending;
+            if (rec == null || rec.FrameCount == 0) return null;
+            var fmt = format?.ToLowerInvariant() switch
+            {
+                "svg" => FracturingFog.Imaging.AsciiAnimationFormat.AnimatedSvg,
+                "ans" => FracturingFog.Imaging.AsciiAnimationFormat.AnsiSequence,
+                _      => FracturingFog.Imaging.AsciiAnimationFormat.AsciinemaCast,
+            };
+            return rec.Serialize(fmt, new FracturingFog.Imaging.AsciiArtOptions());
+        }
+
+        /// <summary>The pending recording's grids for the MP4 exporter. Null if
+        /// none pending / empty.</summary>
+        public System.Collections.Generic.IReadOnlyList<FracturingFog.Render.AsciiFrame>? PendingRecordingFrames()
+        {
+            FracturingFog.Imaging.AsciiAnimationRecorder? rec;
+            lock (_liveRecLock) rec = _liveRecPending;
+            if (rec == null || rec.FrameCount == 0) return null;
+            return rec.ExportFrames();
+        }
+
+        /// <summary>Drop the pending recording (save cancelled).</summary>
+        public void ClearPendingRecording() { lock (_liveRecLock) _liveRecPending = null; }
+
         public FracturingFog.Render.AsciiFrame? RenderLastFrameAscii(
             int columns, double cellAspect, bool color, bool invert, bool fineRamp,
             bool rampFromColor = false, FracturingFog.Imaging.AsciiFxSettings? fx = null)
@@ -3832,6 +3900,19 @@ namespace FracturingFog.Rendering
             {
                 var state = fx.NeedsState ? (_asciiFxState ??= new FracturingFog.Imaging.AsciiFxState()) : null;
                 FracturingFog.Imaging.AsciiFxChain.Apply(cells, cols, rows, opt.Ramp, fx, state);
+            }
+
+            // Live recording (#230): append this exact grid at wall-clock cadence.
+            lock (_liveRecLock)
+            {
+                if (_liveRec != null && _liveRec.FrameCount < MaxLiveRecFrames)
+                {
+                    double now = _liveRecClock.Elapsed.TotalSeconds;
+                    double hold = now - _liveRecLast;
+                    _liveRecLast = now;
+                    try { _liveRec.AddFrame(cells, cols, rows, hold); }
+                    catch { /* grid-size change mid-record: skip the odd frame */ }
+                }
             }
 
             int n = cols * rows;
