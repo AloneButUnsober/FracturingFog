@@ -41,7 +41,7 @@ as your imagination wants to take you.
 | Direct a cinematic Scene — timeline, flying camera, video | [Scene Engine Guide](SceneEngine-UserGuide.md)                |
 | Recolour what you see, or invent a new palette           | [Colour Theme Editor Guide](ColorThemeEditor-Guide.md)         |
 | Write a one-line palette in a tiny domain language       | [ColorGen User Guide](ColorGen-UserGuide.md)                   |
-| Type your own fractal formula in C# or pseudo-code       | [CalcGen / User Equation Guide](CalcGen-UserGuide.md)          |
+| Write your own fractal formula in the equation DSL       | [User Equation & DSL Guide + Cookbook](CalcGen-UserGuide.md)    |
 | Explore Mandelbulb-style 3-D fractals                    | [User Bulb 3D Guide](UserBulb-Guide.md)                        |
 | Turn a 2-D fractal into lit relief or 3-D terrain (+ mesh export) | [Relief 3D Guide](Relief3D-Guide.md) + [Cookbook](Relief3D-Cookbook.md) |
 | Add god rays, cinematic fog, and volumetric clouds to 3-D scenes | [Volumetric Lighting Guide](Volumetric-Lighting-Guide.md) + [Cookbook](Volumetric-Lighting-Cookbook.md) |
