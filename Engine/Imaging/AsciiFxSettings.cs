@@ -62,6 +62,14 @@ namespace FracturingFog.Imaging
         public byte MonochromeG { get; set; } = 255;
         public byte MonochromeB { get; set; } = 90;
 
+        /// <summary>Scale colour saturation. <see cref="SaturateAmp"/> &gt; 0 makes
+        /// it pulse over time (animated); otherwise a static boost/desaturate at
+        /// <see cref="SaturateMid"/>. 1 = unchanged, 0 = greyscale, &gt;1 = vivid.</summary>
+        public bool Saturate { get; set; }
+        public double SaturateMid { get; set; } = 1.0;
+        public double SaturateAmp { get; set; } = 0.0;
+        public double SaturateHz { get; set; } = 0.3;
+
         // ── Structural (stateful) ─────────────────────────────────────────
 
         /// <summary>"Matrix" digital rain: falling columns of glyphs, the fractal
@@ -77,11 +85,13 @@ namespace FracturingFog.Imaging
         public double MatrixRainMask { get; set; } = 0.6;
 
         /// <summary>True when any effect is enabled (the host can skip the pass).</summary>
-        public bool AnyEnabled => HueCycle || Crt || Breathe || CharsetSwap || Monochrome || MatrixRain;
+        public bool AnyEnabled => HueCycle || Crt || Breathe || CharsetSwap || Monochrome
+            || Saturate || MatrixRain;
 
         /// <summary>True when an enabled effect varies with time (the live view
         /// must repaint on a timer for these, not only on buffer changes).</summary>
-        public bool AnyAnimated => HueCycle || Breathe || MatrixRain;
+        public bool AnyAnimated => HueCycle || Breathe || MatrixRain
+            || (Saturate && SaturateAmp > 0);
 
         /// <summary>True when an enabled effect evolves across frames and so needs
         /// a persistent <see cref="AsciiFxState"/> (not a pure grid+clock function).</summary>

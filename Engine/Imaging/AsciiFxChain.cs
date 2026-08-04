@@ -51,7 +51,15 @@ namespace FracturingFog.Imaging
             int swapLen = swap?.Length ?? 0;
             bool doGlyph = (fx.Breathe && rampLen > 1) || (swapLen > 1 && rampLen > 1);
 
-            bool doPerCell = doGlyph || fx.HueCycle || fx.Monochrome;
+            double satScale = 1.0;
+            if (fx.Saturate)
+            {
+                double s = fx.SaturateAmp != 0
+                    ? Math.Sin(fx.TimeSeconds * fx.SaturateHz * 2.0 * Math.PI) : 0.0;
+                satScale = Math.Max(0.0, fx.SaturateMid + fx.SaturateAmp * s);
+            }
+
+            bool doPerCell = doGlyph || fx.HueCycle || fx.Monochrome || fx.Saturate;
             if (doPerCell)
             for (int y = 0; y < rows; y++)
             {
@@ -90,6 +98,8 @@ namespace FracturingFog.Imaging
                     // Colour-space: hue cycle, monochrome tint, then scanline dim.
                     if (fx.HueCycle && (r != 0 || g != 0 || b != 0))
                         RotateHue(ref r, ref g, ref b, hueShift);
+                    if (fx.Saturate)
+                        ScaleSaturation(ref r, ref g, ref b, satScale);
                     if (fx.Monochrome)
                     {
                         // Preserve brightness (luma), replace chroma with the tint.
@@ -171,6 +181,16 @@ namespace FracturingFog.Imaging
         }
 
         private static int Clamp(int v, int lo, int hi) => v < lo ? lo : (v > hi ? hi : v);
+
+        // In-place saturation scale about the pixel's luma (grey axis). scale 0 →
+        // greyscale, 1 → unchanged, >1 → more vivid (clamped to byte range).
+        private static void ScaleSaturation(ref byte r, ref byte g, ref byte b, double scale)
+        {
+            double luma = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+            r = (byte)Math.Clamp(luma + (r - luma) * scale, 0, 255);
+            g = (byte)Math.Clamp(luma + (g - luma) * scale, 0, 255);
+            b = (byte)Math.Clamp(luma + (b - luma) * scale, 0, 255);
+        }
 
         // In-place RGB hue rotation by degrees. Standard HSV round-trip; cheap
         // enough per cell at ASCII grid sizes (a few thousand cells).

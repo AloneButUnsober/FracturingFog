@@ -166,6 +166,27 @@ public sealed class AsciiFxChainTests
     }
 
     [Fact]
+    public void Saturate_ZeroGivesGreyscale()
+    {
+        var cells = Grid(1, 1, (x, y) => new AsciiCell('#', 200, 50, 50));
+        AsciiFxChain.Apply(cells, 1, 1, Ramp,
+            new AsciiFxSettings { Saturate = true, SaturateMid = 0.0 });
+        // All channels collapse to the luma → equal.
+        Assert.Equal(cells[0].R, cells[0].G);
+        Assert.Equal(cells[0].G, cells[0].B);
+    }
+
+    [Fact]
+    public void Saturate_BoostPushesChannelsApart()
+    {
+        var cells = Grid(1, 1, (x, y) => new AsciiCell('#', 160, 120, 120));
+        AsciiFxChain.Apply(cells, 1, 1, Ramp,
+            new AsciiFxSettings { Saturate = true, SaturateMid = 2.0 });
+        // Dominant channel gets more dominant; spread widens vs original 40.
+        Assert.True(cells[0].R - cells[0].G > 40, $"spread {cells[0].R - cells[0].G}");
+    }
+
+    [Fact]
     public void MatrixRain_ProducesGreenDropsAndGhostsBackground()
     {
         const int cols = 20, rows = 30;
