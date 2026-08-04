@@ -50,6 +50,12 @@ namespace FracturingFog.Imaging
         /// position along this one.</summary>
         public string SwapRamp { get; set; } = "░▒▓█"; // ░▒▓█
 
+        /// <summary>Cyclically scroll each glyph through the ramp over time, so the
+        /// whole field shimmers. Animated.</summary>
+        public bool RampScroll { get; set; }
+        /// <summary>Ramp steps per second for <see cref="RampScroll"/>.</summary>
+        public double RampScrollSpeed { get; set; } = 4.0;
+
         // ── Colour-space ──────────────────────────────────────────────────
 
         /// <summary>Collapse every cell to a single tint hue, keeping its
@@ -115,11 +121,11 @@ namespace FracturingFog.Imaging
 
         /// <summary>True when any effect is enabled (the host can skip the pass).</summary>
         public bool AnyEnabled => HueCycle || Crt || Breathe || CharsetSwap || Monochrome
-            || Saturate || Invert || Solarize || Quantize || Duotone || MatrixRain;
+            || Saturate || Invert || Solarize || Quantize || Duotone || RampScroll || MatrixRain;
 
         /// <summary>True when an enabled effect varies with time (the live view
         /// must repaint on a timer for these, not only on buffer changes).</summary>
-        public bool AnyAnimated => HueCycle || Breathe || MatrixRain
+        public bool AnyAnimated => HueCycle || Breathe || MatrixRain || RampScroll
             || (Saturate && SaturateAmp > 0);
 
         /// <summary>True when an enabled effect evolves across frames and so needs

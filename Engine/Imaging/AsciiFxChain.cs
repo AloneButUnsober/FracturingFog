@@ -49,7 +49,9 @@ namespace FracturingFog.Imaging
             int rampLen = ramp?.Length ?? 0;
             string? swap = fx.CharsetSwap ? fx.SwapRamp : null;
             int swapLen = swap?.Length ?? 0;
-            bool doGlyph = (fx.Breathe && rampLen > 1) || (swapLen > 1 && rampLen > 1);
+            int scrollOff = fx.RampScroll && rampLen > 1
+                ? ((int)Math.Floor(fx.TimeSeconds * fx.RampScrollSpeed) % rampLen + rampLen) % rampLen : 0;
+            bool doGlyph = ((fx.Breathe || fx.RampScroll) && rampLen > 1) || (swapLen > 1 && rampLen > 1);
 
             double satScale = 1.0;
             if (fx.Saturate)
@@ -85,6 +87,12 @@ namespace FracturingFog.Imaging
                                 double t = idx / (double)(rampLen - 1);
                                 double tg = Math.Pow(t, gamma);
                                 idx = Clamp((int)Math.Round(tg * (rampLen - 1)), 0, rampLen - 1);
+                                glyph = ramp[idx];
+                            }
+                            // Ramp scroll: cyclic shift through the ramp → shimmer.
+                            if (scrollOff != 0)
+                            {
+                                idx = (idx + scrollOff) % rampLen;
                                 glyph = ramp[idx];
                             }
                             // Charset swap: carry the (post-Breathe) density to the
