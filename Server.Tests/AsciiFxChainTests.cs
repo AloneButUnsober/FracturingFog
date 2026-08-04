@@ -331,6 +331,21 @@ public sealed class AsciiFxChainTests
     }
 
     [Fact]
+    public void Wave_ShiftsRowsHorizontally()
+    {
+        // Distinct glyph per column; a wave with amplitude should move a marker.
+        const int cols = 10, rows = 6;
+        var cells = Grid(cols, rows, (x, y) => new AsciiCell((char)('A' + x), 10, 10, 10));
+        var before = (AsciiCell[])cells.Clone();
+        AsciiFxChain.Apply(cells, cols, rows, Ramp, new AsciiFxSettings
+        { Wave = true, WaveAmplitude = 3.0, WaveLength = 4.0, WaveSpeed = 0.0, TimeSeconds = 0.0 });
+        // At least one row's glyph layout must differ (some rows have non-zero sine).
+        bool moved = false;
+        for (int i = 0; i < cells.Length; i++) if (cells[i].Glyph != before[i].Glyph) { moved = true; break; }
+        Assert.True(moved, "wave should displace at least one row");
+    }
+
+    [Fact]
     public void MatrixRain_ProducesGreenDropsAndGhostsBackground()
     {
         const int cols = 20, rows = 30;
