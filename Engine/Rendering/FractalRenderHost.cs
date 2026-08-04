@@ -3808,7 +3808,9 @@ namespace FracturingFog.Rendering
         /// When the active calculator exposes an <see cref="Interefaces.IHeightFieldSource"/>
         /// smooth field at matching dimensions it drives the glyph ramp
         /// (banding-free); otherwise the exporter falls back to pixel luminance.
-        /// No watermark — the output is plain text. No-op before the first frame.
+        /// The resolved watermark is stamped into every format as character-art ink
+        /// (#241), matching the always-on watermark on the PNG/video paths. No-op
+        /// before the first frame.
         /// </summary>
         public void SaveLastFrameAsAsciiArt(
             string path, FracturingFog.Imaging.AsciiArtOptions options)
@@ -3816,6 +3818,11 @@ namespace FracturingFog.Rendering
             if (_disposed) return;
             if (string.IsNullOrEmpty(path) || options == null) return;
             if (!TryGetAsciiSource(out var buf, out var smooth, out int w, out int h)) return;
+            // Stamp the same resolved watermark every other export surface uses.
+            // Explicit export always carries it (parity with SaveLastFrameToPng /
+            // video), independent of the live-terminal ShowWatermark toggle.
+            options.Watermark = BuildAsciiWatermark();
+            options.WatermarkStyle = AsciiWatermarkStyle;
             FracturingFog.Imaging.AsciiArtRenderer.WriteToFile(buf, smooth, w, h, options, path);
         }
 
