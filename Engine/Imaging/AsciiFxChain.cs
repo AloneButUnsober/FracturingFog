@@ -51,7 +51,10 @@ namespace FracturingFog.Imaging
             int swapLen = swap?.Length ?? 0;
             int scrollOff = fx.RampScroll && rampLen > 1
                 ? ((int)Math.Floor(fx.TimeSeconds * fx.RampScrollSpeed) % rampLen + rampLen) % rampLen : 0;
-            bool doGlyph = ((fx.Breathe || fx.RampScroll) && rampLen > 1) || (swapLen > 1 && rampLen > 1);
+            int grainFrame = fx.Grain ? (int)Math.Floor(fx.TimeSeconds * fx.GrainHz) : 0;
+            uint grainThresh = (uint)(Math.Clamp(fx.GrainAmount, 0.0, 1.0) * uint.MaxValue);
+            bool doGlyph = ((fx.Breathe || fx.RampScroll || fx.Grain) && rampLen > 1)
+                || (swapLen > 1 && rampLen > 1);
 
             double satScale = 1.0;
             if (fx.Saturate)
@@ -94,6 +97,16 @@ namespace FracturingFog.Imaging
                             {
                                 idx = (idx + scrollOff) % rampLen;
                                 glyph = ramp[idx];
+                            }
+                            // Grain: hashed ±1 jitter, re-rolled per frame → twinkle.
+                            if (fx.Grain)
+                            {
+                                uint h = Hash(x, y, grainFrame);
+                                if (h < grainThresh)
+                                {
+                                    idx = Clamp(idx + ((h & 0x10000) != 0 ? 1 : -1), 0, rampLen - 1);
+                                    glyph = ramp[idx];
+                                }
                             }
                             // Charset swap: carry the (post-Breathe) density to the
                             // same fractional position along the replacement set.
@@ -216,6 +229,15 @@ namespace FracturingFog.Imaging
         }
 
         private static int Clamp(int v, int lo, int hi) => v < lo ? lo : (v > hi ? hi : v);
+
+        // Cheap stateless spatial-temporal hash → uniform-ish uint. Used by grain
+        // so the noise is reproducible from (x, y, frame) with no RNG state.
+        private static uint Hash(int x, int y, int frame)
+        {
+            uint h = (uint)(x * 73856093) ^ (uint)(y * 19349663) ^ (uint)(frame * 83492791);
+            h ^= h >> 13; h *= 0x5bd1e995; h ^= h >> 15;
+            return h;
+        }
 
         // Snap a channel to N evenly-spaced levels across [0,255].
         private static byte Posterize(byte v, int levels)
