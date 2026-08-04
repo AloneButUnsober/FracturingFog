@@ -19,8 +19,13 @@ namespace FracturingFog.Imaging
         /// <summary>Apply the enabled effects to <paramref name="cells"/> in place.
         /// <paramref name="ramp"/> is the glyph ramp the cells were mapped from —
         /// needed by glyph-space effects (Breathe) to shift a cell along it.</summary>
+        // Half-width katakana + digits — the canonical "digital rain" glyph pool.
+        private const string MatrixGlyphs =
+            "0123456789ABCDEFｱｲｳｴｵｶｷｸｹｺｻｼｽｾｿﾀﾁﾂﾃﾄﾅﾆﾇﾈﾉﾊﾋﾌﾍﾎ";
+
         public static void Apply(
-            AsciiCell[] cells, int cols, int rows, string ramp, AsciiFxSettings fx)
+            AsciiCell[] cells, int cols, int rows, string ramp, AsciiFxSettings fx,
+            AsciiFxState? state = null)
         {
             if (cells is null || fx is null || !fx.AnyEnabled) return;
 
@@ -46,10 +51,10 @@ namespace FracturingFog.Imaging
             int swapLen = swap?.Length ?? 0;
             bool doGlyph = (fx.Breathe && rampLen > 1) || (swapLen > 1 && rampLen > 1);
 
+            bool doPerCell = doGlyph || fx.HueCycle || fx.Monochrome;
+            if (doPerCell)
             for (int y = 0; y < rows; y++)
             {
-                bool dimRow = fx.Crt && (y & 1) == 1;
-                double rowDim = dimRow ? Math.Clamp(fx.CrtScanlineDim, 0.0, 1.0) : 1.0;
                 for (int x = 0; x < cols; x++)
                 {
                     int i = y * cols + x;
@@ -94,13 +99,72 @@ namespace FracturingFog.Imaging
                         g = (byte)Math.Round(fx.MonochromeG * luma);
                         b = (byte)Math.Round(fx.MonochromeB * luma);
                     }
-                    if (rowDim < 1.0)
-                    {
-                        r = (byte)(r * rowDim);
-                        g = (byte)(g * rowDim);
-                        b = (byte)(b * rowDim);
-                    }
+                    cells[i] = new AsciiCell(glyph, r, g, b);
+                }
+            }
 
+            // Structural overlay (stateful): Matrix rain rewrites the grid.
+            if (fx.MatrixRain && state != null)
+                RainPass(cells, cols, rows, fx, state);
+
+            // Shading (last): CRT scanline dim over whatever the stages produced.
+            if (fx.Crt)
+            {
+                double dim = Math.Clamp(fx.CrtScanlineDim, 0.0, 1.0);
+                for (int y = 1; y < rows; y += 2)
+                    for (int x = 0; x < cols; x++)
+                    {
+                        int i = y * cols + x;
+                        var c = cells[i];
+                        cells[i] = new AsciiCell(c.Glyph,
+                            (byte)(c.R * dim), (byte)(c.G * dim), (byte)(c.B * dim));
+                    }
+            }
+        }
+
+        // Matrix digital rain: per column a falling drop with a fading trail; the
+        // underlying grid brightness masks it so the fractal ghosts through.
+        private static void RainPass(
+            AsciiCell[] cells, int cols, int rows, AsciiFxSettings fx, AsciiFxState state)
+        {
+            state.EnsureSize(cols, rows);
+            if (!state.RainInitialised) state.InitRain(Math.Clamp(fx.MatrixRainDensity, 0.0, 1.0));
+            double dt = state.AdvanceClock(fx.TimeSeconds);
+
+            // Snapshot brightness (mask), then dim the background to a faint ghost.
+            var luma = state.Luma;
+            for (int i = 0; i < cells.Length; i++)
+            {
+                var c = cells[i];
+                luma[i] = (0.2126 * c.R + 0.7152 * c.G + 0.0722 * c.B) / 255.0;
+                cells[i] = new AsciiCell(c.Glyph,
+                    (byte)(c.R * 0.12), (byte)(c.G * 0.12), (byte)(c.B * 0.12));
+            }
+
+            double maskAmt = Math.Clamp(fx.MatrixRainMask, 0.0, 1.0);
+            var rng = state.Rng;
+            for (int x = 0; x < cols; x++)
+            {
+                if (!state.RainActive[x]) continue;
+                state.RainHead[x] += state.RainSpeed[x] * fx.MatrixRainSpeed * dt;
+                if (state.RainHead[x] - state.RainLen[x] > rows)
+                    state.RespawnRainColumn(x, aboveOnly: true);
+
+                int head = (int)Math.Floor(state.RainHead[x]);
+                int len = state.RainLen[x];
+                for (int k = 0; k < len; k++)
+                {
+                    int row = head - k;
+                    if (row < 0 || row >= rows) continue;
+                    int i = row * cols + x;
+                    double fall = 1.0 - (k / (double)len);        // 1 at head → 0 at tail
+                    double mask = (1.0 - maskAmt) + maskAmt * luma[i];
+                    double bright = fall * fall * Math.Clamp(mask, 0.0, 1.0);
+                    char glyph = MatrixGlyphs[rng.Next(MatrixGlyphs.Length)];
+
+                    byte r, g, b;
+                    if (k == 0) { r = (byte)(200 * bright + 55); g = 255; b = (byte)(200 * bright + 55); } // near-white head
+                    else { r = (byte)(30 * bright); g = (byte)(255 * bright); b = (byte)(70 * bright); }    // green trail
                     cells[i] = new AsciiCell(glyph, r, g, b);
                 }
             }
