@@ -1,14 +1,26 @@
 # ColorGen — User Guide
 
-ColorGen turns a short DSL expression into a fully-functional
-algorithmic colour theme. Every pixel's escape data is exposed as
-named inputs; the DSL evaluates to a `Vec3` colour in `[0, 1]^3` and
-the runtime packs that into ARGB. Output is a sealed `IColorMap`
-subclass that joins the live palette list immediately (Compile & Load)
-or ships as a permanent C# file (Generate via ColorGen).
+ColorGen turns a short DSL program into a fully-functional algorithmic
+colour theme. Every pixel's escape data is exposed as named inputs; the
+DSL evaluates to a `Vec3` colour in `[0, 1]^3` and the runtime packs that
+into ARGB.
+
+**Compile & Load** builds an **interpreted** colour map — the program is
+parsed once and evaluated directly per pixel. There is **no compilation
+step and no Roslyn/.NET code generation on the render path**, so it loads
+instantly and is safe to share and open from other users' theme files.
+**Generate via ColorGen** is the separate export path: it writes a
+permanent C# file you can build into the app.
 
 Open the editor from the render surface's **right-click → ColorGen
 Editor…** menu.
+
+> [!NOTE]
+> ColorGen themes run on a pure interpreter (`InterpretedColorMap`). The
+> older versions compiled each theme to a `.NET` assembly at runtime; that
+> path was retired — nothing you type is ever compiled or executed as code.
+> On the GPU, the same program is translated to an HLSL palette function
+> (again, generated text, not compiled .NET), so GPU rendering is unaffected.
 
 > Companion pages: [User Index](_Index.md) · [Color Theme Editor Guide](ColorThemeEditor-Guide.md)
 
@@ -35,7 +47,7 @@ return rgb(1.0, 0.5, 0.0);
 ```
 
 That is an orange palette. Every pixel is the same colour. Boring — but it *is* a valid theme, and
-it compiles. Useful for proving the editor works.
+it loads. Useful for proving the editor works.
 
 ### A first useful palette — hue tracks escape speed
 
@@ -681,16 +693,23 @@ colour edges the way a real lens does.
 
 ## 5. Compile & Load vs Generate via ColorGen
 
-| Path                       | When to use                                                |
-|----------------------------|------------------------------------------------------------|
-| **Compile & Load**         | Iterative tuning. Theme lives until you close the app.    |
-| **Save…**                  | Persist the **DSL source** between sessions.              |
-| **Generate via ColorGen**  | Promote keepers to a permanent C# file you commit + ship. |
+| Path                       | What it does | When to use |
+|----------------------------|--------------|-------------|
+| **Compile & Load**         | Parses the program and loads it as an **interpreted** map — no compile step, instant | Iterative tuning. Theme lives until you close the app. |
+| **Save…**                  | Persists the **DSL source** | Keep a theme between sessions. |
+| **Generate via ColorGen**  | Emits a permanent **C# file** for the build | Promote a keeper you want to commit + ship. |
 
-Generated files land at
-`Models/ColorSchemes/Generated/{Name}Theme.cs`. A `dotnet build` of the
-main project picks them up via the default glob; the theme then appears
-in every theme combo under its **Algorithmic** kind.
+Despite the button name, **Compile & Load does not compile anything** — it
+parses your program to an AST and runs it through the interpreter. That is
+why it is instant and why an error there is always a *parse/type* error
+(see [§7](#7-troubleshooting)), never a C# compiler error.
+
+**Generate via ColorGen** is the only path that emits C#. The file lands at
+`Models/ColorSchemes/Generated/{Name}Theme.cs`; a `dotnet build` of the main
+project picks it up via the default glob, and the theme then appears in every
+theme combo under its **Algorithmic** kind. That generated file *is* compiled
+by the build (Roslyn), which is where a C# compiler error could surface — at
+build time, never on the live render path.
 
 ---
 
@@ -714,7 +733,7 @@ ensure the JSON regenerates cleanly.
 | `palette() arg 1 must be scalar …`                 | First palette arg is `t`; stops come after.              |
 | `palette() stops must be Vec3 …`                   | Use `rgb`/`hsv`/`hsl` for each stop.                     |
 | `Channel access requires a Vec3 …`                 | `.r/.g/.b` only on Vec3 values.                          |
-| Compile failed CSxxxx (after Compile & Load)       | Generated C# rejected by Roslyn — error includes line/col. |
+| A C# compiler error (`CSxxxx`)                     | Only from **Generate via ColorGen** at build time — never from Compile & Load (which is interpreted). Fix the DSL and regenerate. |
 | Theme picks up but render unchanged                | Some calculators cache; pan/zoom once to force recolor.  |
 
 ---
@@ -749,5 +768,5 @@ galleries in §3 (everyday) and §4 (advanced) covers virtually every
 - [ColorThemeEditor-Guide.md](ColorThemeEditor-Guide.md) — Stops / Phong / PBR3D editor for non-DSL theme authoring
 - [Avalonia-UserGuide.md](Avalonia-UserGuide.md) — UI walkthrough including the ColorGen editor
 - [CalcGen-UserGuide.md](CalcGen-UserGuide.md) — sibling DSL for algorithmic fractal equations
-- [Architecture-Overview.md](Architecture-Overview.md) — where ColorGen sits in the solution
+- [Architecture-Overview.md](../Technical/Architecture-Overview.md) — where ColorGen sits in the solution
 - [Capture-Guide.md](Capture-Guide.md) — using ColorGen output in posters / videos
