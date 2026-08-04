@@ -1,17 +1,23 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // SPDX-FileCopyrightText: 2026 Bradley Brown
 
-// Imaging/AsciiFxSettings.cs
+// Abstractions/Render/AsciiFxSettings.cs
 //
 // Settings for the ASCII-native FX chain (#229) — post effects applied to the
 // character grid AFTER downsample/ramp, before paint or file emit. Pure CPU, no
 // fractal recompute. Animated effects read TimeSeconds (wall clock for the live
 // view, or SceneTime when baked into an animation export).
+//
+// Lives in Abstractions (not Engine) so the UI shell — which does not reference
+// Engine — can build the full effect set and hand it to IFractalRenderHost. The
+// namespace stays FracturingFog.Imaging (namespaces span assemblies) so the
+// Engine-side AsciiFxChain / AsciiFxState consume it unchanged. The effect
+// implementation and cross-frame state remain Engine types.
 
 namespace FracturingFog.Imaging
 {
-    /// <summary>Knobs for <see cref="AsciiFxChain"/>. All effects off by default
-    /// (identity pass).</summary>
+    /// <summary>Knobs for the ASCII FX chain (<c>AsciiFxChain</c>). All effects
+    /// off by default (identity pass).</summary>
     public sealed class AsciiFxSettings
     {
         /// <summary>Animation clock in seconds. Drives the time-varying effects
@@ -200,8 +206,8 @@ namespace FracturingFog.Imaging
         // ── Structural (stateful) ─────────────────────────────────────────
 
         /// <summary>"Matrix" digital rain: falling columns of glyphs, the fractal
-        /// showing through as a ghost mask. Animated; needs an
-        /// <see cref="AsciiFxState"/>.</summary>
+        /// showing through as a ghost mask. Animated; needs a persistent
+        /// <c>AsciiFxState</c>.</summary>
         public bool MatrixRain { get; set; }
         /// <summary>Base fall speed in rows per second.</summary>
         public double MatrixRainSpeed { get; set; } = 14.0;
@@ -212,7 +218,7 @@ namespace FracturingFog.Imaging
         public double MatrixRainMask { get; set; } = 0.6;
 
         /// <summary>Particles: drifting snow / rain flecks over the art. Animated;
-        /// needs an <see cref="AsciiFxState"/>.</summary>
+        /// needs a persistent <c>AsciiFxState</c>.</summary>
         public bool Particles { get; set; }
         /// <summary>Number of particles.</summary>
         public int ParticleCount { get; set; } = 60;
@@ -237,8 +243,8 @@ namespace FracturingFog.Imaging
         public bool Dissolve { get; set; }
 
         /// <summary>Frame trails: blend a decayed copy of the previous frame into
-        /// this one — a phosphor / motion smear. Animated; needs an
-        /// <see cref="AsciiFxState"/>.</summary>
+        /// this one — a phosphor / motion smear. Animated; needs a persistent
+        /// <c>AsciiFxState</c>.</summary>
         public bool Trails { get; set; }
         /// <summary>Per-frame trail persistence, [0,1) — higher = longer smear.</summary>
         public double TrailDecay { get; set; } = 0.85;
@@ -256,7 +262,7 @@ namespace FracturingFog.Imaging
             || (Saturate && SaturateAmp > 0);
 
         /// <summary>True when an enabled effect evolves across frames and so needs
-        /// a persistent <see cref="AsciiFxState"/> (not a pure grid+clock function).</summary>
+        /// a persistent <c>AsciiFxState</c> (not a pure grid+clock function).</summary>
         public bool NeedsState => MatrixRain || Particles || Trails;
     }
 }

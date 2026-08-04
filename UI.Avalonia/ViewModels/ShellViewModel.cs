@@ -1888,6 +1888,22 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
         set => this.RaiseAndSetIfChanged(ref _asciiFxBreathe, value);
     }
 
+    /// <summary>Build the ASCII FX settings the live pump feeds to the render
+    /// host each frame. Currently the three quick-toggles (hue / CRT / breathe);
+    /// the preset picker and full FX panel populate the rest of the chain. Returns
+    /// null when nothing is enabled so the host skips the pass.</summary>
+    public FracturingFog.Imaging.AsciiFxSettings? BuildAsciiFxSettings(double timeSeconds)
+    {
+        var fx = new FracturingFog.Imaging.AsciiFxSettings
+        {
+            TimeSeconds = timeSeconds,
+            HueCycle = _asciiFxHue,
+            Crt = _asciiFxCrt,
+            Breathe = _asciiFxBreathe,
+        };
+        return fx.AnyEnabled ? fx : null;
+    }
+
     /// <summary>Apply a region jump: relabel the watermark, mutate ViewState
     /// via the host service, mirror the resulting fractal type into the toolbar
     /// (without snapping its centre/zoom), then trigger a render. Shared by the
