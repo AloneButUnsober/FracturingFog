@@ -1384,6 +1384,43 @@ namespace FracturingFog.Hosting
                 }
             };
 
+            // Record the current view's ASCII FX animation (#230) — bakes the
+            // active FX (preset / panel) over a short loop into a shareable file.
+            shell.RecordAsciiRequested += async (_, _) =>
+            {
+                try
+                {
+                    if (s_renderHost == null) return;
+                    string? path = await AvaloniaDialogs.PickSaveFileAsync(
+                        "Record ASCII Animation",
+                        suggestedName: BuildSuggestedFileName("cast", isSpanning: s_spanning),
+                        filter:
+                            "asciinema cast (*.cast)|*.cast|" +
+                            "Animated SVG (*.svg)|*.svg|" +
+                            "ANSI frame sequence (*.ans)|*.ans");
+                    if (string.IsNullOrEmpty(path)) return;
+
+                    string ext = System.IO.Path.GetExtension(path).TrimStart('.').ToLowerInvariant();
+                    string format = ext switch { "svg" => "svg", "ans" => "ans", _ => "cast" };
+
+                    // Bake the active FX (or a static clip if none) over a ~5s,
+                    // 12fps loop at export resolution.
+                    var fx = shell.BuildAsciiFxSettings(0.0) ?? new FracturingFog.Imaging.AsciiFxSettings();
+                    const double fps = 12.0;
+                    const int frames = 60; // ~5 seconds
+                    string? text = s_renderHost.RecordAsciiAnimation(
+                        columns: 160, cellAspect: 2.0, invert: false, fineRamp: false,
+                        rampFromColor: shell.AsciiRampFromColor, fx: fx,
+                        frames: frames, fps: fps, format: format);
+                    if (string.IsNullOrEmpty(text)) return;
+                    await System.IO.File.WriteAllTextAsync(path, text, new System.Text.UTF8Encoding(false));
+                }
+                catch (Exception ex)
+                {
+                    Console.Error.WriteLine($"[AvaloniaShellBootstrap] ASCII animation record failed: {ex.Message}");
+                }
+            };
+
             // Wallpaper screenshot — render an offscreen image sized to the
             // union of every connected monitor's pixel bounds, regardless of
             // the current window state. Sidesteps the GNOME/Wayland limitation

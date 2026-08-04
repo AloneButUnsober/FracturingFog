@@ -14,8 +14,9 @@
                     <Button Classes="action neutral"   Content="{Binding Menu.PosterButtonText}" Command="{Binding Menu.PosterCommand}"     ToolTip.Tip="Print-ready poster image (click again while rendering to cancel)" Margin="0,0,4,0" />
                     <Button Classes="action video"     Content="{Binding Menu.VideoButtonText}" Command="{Binding Menu.VideoCommand}" ToolTip.Tip="Animated zoom" />
                 </UniformGrid>
-                <UniformGrid Columns="1" Margin="0,4,0,0">
-                    <Button Classes="action neutral"   Content="Text Art…" Command="{Binding Shell.AsciiArtCommand}" ToolTip.Tip="Save the current frame as ASCII / text art (HTML, SVG, ANSI, plain text or braille — chosen by file extension)" />
+                <UniformGrid Columns="2" Margin="0,4,0,0">
+                    <Button Classes="action neutral"   Content="Text Art…" Command="{Binding Shell.AsciiArtCommand}" ToolTip.Tip="Save the current frame as ASCII / text art (HTML, SVG, ANSI, plain text or braille — chosen by file extension)" Margin="0,0,4,0" />
+                    <Button Classes="action neutral"   Content="Record ASCII…" Command="{Binding Shell.RecordAsciiCommand}" ToolTip.Tip="Record the current view's ASCII FX animation to a shareable file (asciinema .cast, animated SVG, or ANSI frame sequence). Uses the active preset / FX panel." />
                 </UniformGrid>
                 <UniformGrid Columns="2" Margin="0,4,0,0">
                     <Button Classes="action slideshow" Content="{Binding Menu.SlideshowButtonText}" Command="{Binding Menu.SlideshowCommand}" ToolTip.Tip="Start/stop slideshow" Margin="0,0,4,0" />

@@ -3846,6 +3846,55 @@ namespace FracturingFog.Rendering
             return new FracturingFog.Render.AsciiFrame(cols, rows, glyphs, colors, color);
         }
 
+        /// <inheritdoc/>
+        public string? RecordAsciiAnimation(
+            int columns, double cellAspect, bool invert, bool fineRamp, bool rampFromColor,
+            FracturingFog.Imaging.AsciiFxSettings fx, int frames, double fps, string format)
+        {
+            if (_disposed || fx is null) return null;
+            if (frames <= 0) frames = 1;
+            if (fps <= 0) fps = 12.0;
+            if (!TryGetAsciiSource(out var buf, out var smooth, out int w, out int h)) return null;
+
+            var opt = new FracturingFog.Imaging.AsciiArtOptions
+            {
+                Format = FracturingFog.Imaging.AsciiArtFormat.PlainText,
+                Columns = Math.Max(1, columns),
+                CellAspect = cellAspect > 0.1 ? cellAspect : 2.0,
+                Invert = invert,
+                UseSmoothField = true,
+                RampFromColorLuma = rampFromColor,
+                Ramp = fineRamp
+                    ? FracturingFog.Imaging.AsciiArtOptions.FineRamp
+                    : new FracturingFog.Imaging.AsciiArtOptions().Ramp,
+            };
+
+            // Re-render the same last frame each step, advancing the FX clock so
+            // the animated effects play out. A fresh state makes the recording
+            // deterministic and independent of the live view's state.
+            var rec = new FracturingFog.Imaging.AsciiAnimationRecorder();
+            var state = fx.NeedsState ? new FracturingFog.Imaging.AsciiFxState() : null;
+            double dt = 1.0 / fps;
+            for (int f = 0; f < frames; f++)
+            {
+                var cells = FracturingFog.Imaging.AsciiArtRenderer.RenderCells(
+                    buf, smooth, w, h, opt, out int cols, out int rows);
+                fx.TimeSeconds = f * dt;
+                fx.TransitionTimeSeconds = f * dt;
+                if (fx.AnyEnabled)
+                    FracturingFog.Imaging.AsciiFxChain.Apply(cells, cols, rows, opt.Ramp, fx, state);
+                rec.AddFrame(cells, cols, rows, dt);
+            }
+
+            var fmt = format?.ToLowerInvariant() switch
+            {
+                "svg" => FracturingFog.Imaging.AsciiAnimationFormat.AnimatedSvg,
+                "ans" => FracturingFog.Imaging.AsciiAnimationFormat.AnsiSequence,
+                _      => FracturingFog.Imaging.AsciiAnimationFormat.AsciinemaCast,
+            };
+            return rec.Serialize(fmt, opt);
+        }
+
         // Shared source selection for both the ASCII file export (#226) and the
         // live ASCII display (#227): the real IColorMap pre-overlay BGRA buffer
         // plus the smooth iteration field read off whichever calculator produced
