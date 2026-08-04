@@ -271,6 +271,32 @@ namespace FracturingFog.Imaging
                     }
             }
 
+            if (fx.Edge)
+            {
+                var src = (AsciiCell[])cells.Clone();
+                double thr = Math.Clamp(fx.EdgeThreshold, 0.0, 1.0) * 1020.0; // Sobel mag scale
+                for (int y = 0; y < rows; y++)
+                    for (int x = 0; x < cols; x++)
+                    {
+                        double gx = EdgeLuma(src, cols, rows, x + 1, y) - EdgeLuma(src, cols, rows, x - 1, y);
+                        double gy = EdgeLuma(src, cols, rows, x, y + 1) - EdgeLuma(src, cols, rows, x, y - 1);
+                        double mag = Math.Sqrt(gx * gx + gy * gy);
+                        var c = src[y * cols + x];
+                        if (mag >= thr)
+                        {
+                            // Edge orientation → a line glyph perpendicular to the gradient.
+                            double ang = Math.Atan2(gy, gx);
+                            char e = OrientedEdgeGlyph(ang);
+                            cells[y * cols + x] = new AsciiCell(e, c.R, c.G, c.B);
+                        }
+                        else
+                        {
+                            cells[y * cols + x] = new AsciiCell(' ',
+                                (byte)(c.R * 0.1), (byte)(c.G * 0.1), (byte)(c.B * 0.1));
+                        }
+                    }
+            }
+
             // Shading (last): vignette, then CRT scanline dim.
             if (fx.Vignette)
             {
@@ -353,6 +379,26 @@ namespace FracturingFog.Imaging
         }
 
         private static int Clamp(int v, int lo, int hi) => v < lo ? lo : (v > hi ? hi : v);
+
+        // Clamped-edge luma sample for the Sobel edge pass.
+        private static double EdgeLuma(AsciiCell[] src, int cols, int rows, int x, int y)
+        {
+            if (x < 0) x = 0; else if (x >= cols) x = cols - 1;
+            if (y < 0) y = 0; else if (y >= rows) y = rows - 1;
+            var c = src[y * cols + x];
+            return 0.2126 * c.R + 0.7152 * c.G + 0.0722 * c.B;
+        }
+
+        // Line glyph drawn perpendicular to a gradient at angle `ang` (radians).
+        private static char OrientedEdgeGlyph(double ang)
+        {
+            double a = ang; if (a < 0) a += Math.PI; // fold to [0,π)
+            double deg = a * 180.0 / Math.PI;
+            if (deg < 22.5 || deg >= 157.5) return '|';   // horizontal gradient → vertical edge
+            if (deg < 67.5) return '\\';
+            if (deg < 112.5) return '-';                   // vertical gradient → horizontal edge
+            return '/';
+        }
 
         // Cheap stateless spatial-temporal hash → uniform-ish uint. Used by grain
         // so the noise is reproducible from (x, y, frame) with no RNG state.
