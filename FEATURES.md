@@ -39,7 +39,7 @@
 
 ## 1. Overview
 
-Fracturing Fog is a cross-platform desktop application for exploring the Mandelbrot set and ~38 other fractal families in real time, from a wide view of the entire set all the way down to zooms past **10⁵⁸** — well beyond the resolving power of standard double-precision arithmetic. It combines a hardware-accelerated renderer (DirectX on Windows, Silk.NET OpenGL on Linux + macOS, SkiaSharp CPU fallback everywhere), SIMD-vectorized CPU math, extended-precision arithmetic (double-double and quad-double), perturbation theory with series approximation + bilinear approximation (BLA), and a Roslyn-compiled user-equation engine + an algorithmic color-palette DSL.
+Fracturing Fog is a cross-platform desktop application for exploring the Mandelbrot set and ~38 other fractal families in real time, from a wide view of the entire set all the way down to zooms past **10⁵⁸** — well beyond the resolving power of standard double-precision arithmetic. It combines a hardware-accelerated renderer (DirectX on Windows, Silk.NET OpenGL on Linux + macOS, SkiaSharp CPU fallback everywhere), SIMD-vectorized CPU math, extended-precision arithmetic (double-double and quad-double), perturbation theory with series approximation + bilinear approximation (BLA), and a safe expression-DSL user-equation engine (with an optional Roslyn-backed compile-to-native path via CalcGen) + an algorithmic color-palette DSL.
 
 The shell is **Avalonia 12** — pure MVVM. The cross-platform `FracturingFog.App` ships on Windows, Linux, and macOS; the legacy WinForms shell stays as a Windows-only fallback during the migration tail. See the platform-support matrix in §1.1 for what lights up per OS.
 
@@ -549,19 +549,19 @@ See [Docs/Capture-Guide.md](Docs/Capture-Guide.md).
 
 Three authoring engines for one-off custom fractals.
 
-### 16.1 User Equation (CalcGen)
+### 16.1 User Equation (DSL + CalcGen)
 
-- Roslyn-compiled per-pixel `Complex Step(Complex z, Complex c, int n)`.
-- Full access to `System.Numerics.Complex` + `System.Math`.
-- Auto-recompile 500 ms after the last keystroke.
-- **CalcGen** can additionally code-generate a full 5-path calculator (scalar + AVX2 + Pert + BLA + ILGPU GPU) from a one-line equation.
+- Runs on a **safe expression DSL** — no .NET BCL access, no reflection, no I/O — so equations are safe to save, share, and open from other users' files. (Legacy C#-style input is auto-translated to the DSL; the old raw-Roslyn path was retired for safety.)
+- Live interpreter with auto-render ~500 ms after the last keystroke.
+- **CalcGen** additionally code-generates a full 5-path calculator (scalar + AVX2 + perturbation + BLA/SA + ILGPU GPU, plus DD/QD deep zoom and analytic surface normals / distance estimate) from the same one-line equation via **Compile & Load** — Roslyn compiles the *generated typed C#*, never raw user text.
+- Function set: `sqr pow sqrt exp log sin cos tan sinh cosh tanh asin acos atan asinh acosh atanh floor round ceil trunc fract sign fold re im abs arg conj min max mod clamp atan2`; constants `pi e i`; state `z c n prev`.
 - Saved to `%APPDATA%\FracturingFog\userequations.json`.
-- See [Docs/CalcGen-UserGuide.md](Docs/CalcGen-UserGuide.md).
+- See [Docs/User/CalcGen-UserGuide.md](Docs/User/CalcGen-UserGuide.md).
 
 ### 16.2 Sandbox
 
-- Restricted DSL — no .NET BCL access, safe to share.
-- `z*z + c`, `let x = expr in body`, ternary, `sin / cos / sqrt / exp / log / conj`, `abs / re / im / arg`.
+- The same safe DSL as a dedicated fractal type — no .NET BCL access, safe to share.
+- `z*z + c`, `let x = expr in body`, ternary `?:`, boolean `&& || !`, multi-statement blocks, plus the full function catalogue above.
 - Saved to `%APPDATA%\FracturingFog\sandboxequations.json`.
 
 ### 16.3 User Bulb 3D
@@ -572,7 +572,7 @@ Three authoring engines for one-off custom fractals.
 - Hybrid composition: drop in Mandelbox-fold / KIFS-Menger / KIFS-Sierpinski / Mandelbulb-power primitives from the **+ Primitive** menu, or load a worked-example chain from **Hybrid ▾** (Mandelbox+Mandelbulb, Menger+Mandelbulb).
 - OBJ mesh export.
 - Saved to `%APPDATA%\FracturingFog\userbulbs.json`.
-- See [Docs/UserBulb-Guide.md](Docs/UserBulb-Guide.md).
+- See [Docs/User/UserBulb-Guide.md](Docs/User/UserBulb-Guide.md).
 
 All three persist with the option to **Promote to fractal list** — promoted entries appear in the toolbar Type combo as first-class fractal types.
 

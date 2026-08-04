@@ -478,13 +478,88 @@ z*z + pi*c                — quadratic with π-scaled forcing
 `pi` and `e` parse as their numeric values (`Math.PI`, `Math.E`)
 respectively, exactly like writing `3.14159...`.
 
+### 6.10 General power — `pow(base, exp)`
+
+```
+pow(z, 3) + c             — cubic Multibrot, general-power form
+pow(z, -2) + c            — inverse ("Donut") map, finite at the z=0 seed
+pow(z, 2.5) + c           — fractional Multibrot
+z*pow(z, -3) + c*pow(c, -2)   — "Movie Reel" mixed inverse powers
+```
+
+`pow` is distinct from the `^` operator. `^` takes a **non-negative integer**
+exponent ≤ 64 and stays a polynomial (fully deep-zoomable). `pow(base, exp)`
+accepts **any** exponent — negative, fractional, or complex — and evaluates it
+as the principal complex power, matching the `SandboxExpression` runtime and
+`System.Numerics.Complex.Pow`. It is **zero-guarded**: `pow(0, 0) = 1` and
+`pow(0, k) = 0`, so a negative-power map is finite at the `z = 0` Mandelbrot
+seed. (The naïve `1/z^k` form is `NaN` there and blanks the image — always use
+`pow` for negative powers.) Being transcendental (`exp·log` under the hood), it
+disables perturbation / BLA / SA **and** the distance estimate.
+
+### 6.11 Inverse trigonometric / hyperbolic family
+
+```
+atan(z) + c               — bounded inverse-tangent map
+asin(z) + c               — bounded; all-inside is the correct render
+z*z + asin(c) + c         — escaping driver + inverse-trig, with normals
+asinh(z*z) + c            — chain rule exercised in the dz/dc derivative
+```
+
+`asin acos atan asinh acosh atanh` are the holomorphic inverse functions
+(`asin/acos/atan` via `System.Numerics.Complex`; `asinh/acosh/atanh` via the
+log/sqrt continuations, since the BCL `Complex` lacks them). They are the one
+non-polynomial family that **keeps the analytic distance estimate**: the
+differentiator carries their closed-form `dz/dc` rules —
+
+$$
+\tfrac{d}{dv}\operatorname{asin}(u)=\frac{u'}{\sqrt{1-u^{2}}},\quad
+\tfrac{d}{dv}\operatorname{atan}(u)=\frac{u'}{1+u^{2}},\quad
+\tfrac{d}{dv}\operatorname{asinh}(u)=\frac{u'}{\sqrt{u^{2}+1}},\ \dots
+$$
+
+so surface normals and exterior distance estimate work for them (on the shallow
+direct path — like the other transcendentals they disable deep-zoom
+perturbation). The `√` radicand is lowered through an internal `Sqrt` node via
+the full complex `Complex.Sqrt`, so a negative real radicand still yields the
+correct imaginary derivative.
+
+> **Bounded maps.** Pure `asin`, `acos`, `atanh` orbits stay small and may never
+> exceed the bailout — a solid "all inside the set" render is correct, not a
+> failure. Drive them with an escaping term (a `z*z`) for classic banding.
+
+### 6.12 Per-component functions — `floor round ceil trunc fract sign`
+
+```
+z*z + fract(z) + c        — domain-warped / tiled Mandelbrot
+z*z + 0.1*floor(z*4) + c  — quantised feedback ("pixelated" bands)
+z*z + 0.2*sign(re(z)) + c — sign-driven asymmetry
+```
+
+Each applies its real function to the real and imaginary parts independently
+(`f(a+bi) = f(a) + f(b)·i`), like `fold`. On AVX2 the rounding functions use the
+native vector intrinsics (`Avx.Floor`/`Ceiling`/`RoundToNearestInteger` =
+round-half-to-even = `Math.Round`/`RoundToZero` = `Math.Truncate`); `sign`
+scalarises per lane. They are piecewise-constant (kinked), so they disable
+perturbation / BLA / SA **and** the distance estimate.
+
 ### Important note: gating
 
 Transcendentals disable perturbation, BLA, and SA. The deep-zoom path
 falls back to DD/QD HpDirect with **scalar-precision** transcendental
 calls inside the QD chain (precision degrades to ~16 decimal digits
-inside each `sin`/`exp` etc. call). Distance estimate stays available
-— sin/cos/exp/log are all holomorphic.
+inside each `sin`/`exp` etc. call).
+
+Distance estimate (surface normals) availability across the non-polynomial
+families:
+
+| Family | Perturbation / BLA / SA | Distance estimate |
+|---|:--:|:--:|
+| `sin cos tan sinh cosh tanh exp log sqrt` | off | **on** (holomorphic chain rule) |
+| `asin acos atan asinh acosh atanh` | off | **on** (analytic rules, §6.11) |
+| `pow(base, exp)` | off | off |
+| `floor round ceil trunc fract sign` | off | off |
+| `conj fold re im abs arg atan2 min max mod clamp` | off | off (non-holomorphic) |
 
 ---
 
@@ -922,11 +997,15 @@ Operators that disable specific paths:
 |----------------|--------------------------------------------|
 | `conj`, `fold` | Perturbation, BLA, SA, DE                  |
 | `/` (div)      | Perturbation, BLA, SA                      |
-| `sin`/`cos`/   | Perturbation, BLA, SA                      |
-| `exp`/`log`/   | (DE still works — holomorphic)             |
-| `tan`/`sinh`/  |                                            |
-| `cosh`/`tanh`/ |                                            |
-| `sqrt`         |                                            |
+| `sin`/`cos`/`tan`/ | Perturbation, BLA, SA                  |
+| `sinh`/`cosh`/`tanh`/ | (DE still works — holomorphic)      |
+| `exp`/`log`/`sqrt` |                                        |
+| `asin`/`acos`/`atan`/ | Perturbation, BLA, SA               |
+| `asinh`/`acosh`/`atanh` | (**DE still works** — analytic rules, §6.11) |
+| `pow(base,exp)` | Perturbation, BLA, SA, DE                 |
+| `floor`/`round`/`ceil`/ | Perturbation, BLA, SA, DE           |
+| `trunc`/`fract`/`sign` |                                     |
+| `re`,`im`,`abs`,`clamp` | Perturbation, BLA, SA, DE           |
 | `arg`,`atan2`  | Perturbation, BLA, SA, DE                  |
 | `min`,`max`,`mod` | Perturbation, BLA, SA, DE               |
 | `if`           | Perturbation, BLA, SA                      |
