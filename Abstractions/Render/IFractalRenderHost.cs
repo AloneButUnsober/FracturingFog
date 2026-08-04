@@ -120,9 +120,13 @@ namespace FracturingFog.Render
         /// <param name="rampFromColor">Drive the glyph ramp from the post-FX pixel
         /// luminance instead of the raw smooth field, so adaptive/brightness/
         /// contrast modulate glyph density and not only colour.</param>
+        /// <param name="fx">ASCII-native effect settings to apply to the cell grid
+        /// (#229) — the full FX chain. Null / all-off = none. The host owns the
+        /// cross-frame FX state for the stateful effects (rain / particles /
+        /// trails).</param>
         AsciiFrame? RenderLastFrameAscii(
             int columns, double cellAspect, bool color, bool invert, bool fineRamp,
-            bool rampFromColor = false);
+            bool rampFromColor = false, FracturingFog.Imaging.AsciiFxSettings? fx = null);
 
         /// <summary>Present the current GPU back buffer to the screen.
         /// Safe to call from any thread — the host serialises this with
