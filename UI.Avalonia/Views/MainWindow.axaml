@@ -95,6 +95,13 @@
                               ItemsSource="{Binding AsciiFxPresetNames}"
                               SelectedItem="{Binding SelectedAsciiFxPreset, Mode=TwoWay}"
                               ToolTip.Tip="ASCII FX preset — a one-click curated look (Matrix, CRT, Fire, …)" />
+                    <ComboBox x:Name="AsciiWatermarkStyleCombo"
+                              Classes="toolbar"
+                              MinWidth="110"
+                              IsVisible="{Binding IsAsciiVisible}"
+                              ItemsSource="{Binding AsciiWatermarkStyles}"
+                              SelectedItem="{Binding SelectedAsciiWatermarkStyle, Mode=TwoWay}"
+                              ToolTip.Tip="ASCII watermark style — how the region/theme watermark is drawn as text art (Block, Plain label, Boxed banner). Shows in Terminal Mode when Watermark is on; always on ASCII exports." />
                     <Button Classes="toolbar" Content="FX…"
                             IsVisible="{Binding IsAsciiVisible}"
                             Command="{Binding ShowAsciiFxPanelCommand}"
