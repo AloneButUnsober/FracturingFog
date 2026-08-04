@@ -188,12 +188,15 @@ namespace FracturingFog.Imaging
 
             // Structural overlays (stateful). Advance the shared clock ONCE per
             // frame, then hand the delta to each stateful pass.
-            if (state != null && (fx.MatrixRain || fx.Particles))
+            if (state != null && fx.NeedsState)
             {
                 state.EnsureSize(cols, rows);
-                double dt = state.AdvanceClock(fx.TimeSeconds);
-                if (fx.MatrixRain) RainPass(cells, cols, rows, fx, state, dt);
-                if (fx.Particles) ParticlePass(cells, cols, rows, fx, state, dt);
+                if (fx.MatrixRain || fx.Particles)
+                {
+                    double dt = state.AdvanceClock(fx.TimeSeconds);
+                    if (fx.MatrixRain) RainPass(cells, cols, rows, fx, state, dt);
+                    if (fx.Particles) ParticlePass(cells, cols, rows, fx, state, dt);
+                }
             }
 
             // Spatial stage: effects that read neighbours or displace cells. Each
@@ -349,6 +352,29 @@ namespace FracturingFog.Imaging
                                 if (Hash(x, y, 0) >= thresh)
                                     cells[y * cols + x] = new AsciiCell(' ', 0, 0, 0);
                     }
+                }
+            }
+
+            // Frame trails: blend the decayed previous frame in, then store the
+            // result for next time. Runs after transitions so the smear follows
+            // the fully-composited image.
+            if (fx.Trails && state != null)
+            {
+                state.EnsureSize(cols, rows);
+                var prev = state.TrailPrev;
+                double decay = Math.Clamp(fx.TrailDecay, 0.0, 0.999);
+                for (int i = 0; i < cells.Length; i++)
+                {
+                    var cur = cells[i];
+                    var pv = prev[i];
+                    byte r = (byte)Math.Max(cur.R, pv.R * decay);
+                    byte g = (byte)Math.Max(cur.G, pv.G * decay);
+                    byte b = (byte)Math.Max(cur.B, pv.B * decay);
+                    // Keep the live glyph; where blank, let the fading echo's glyph show.
+                    char glyph = cur.Glyph != ' ' ? cur.Glyph : pv.Glyph;
+                    var outc = new AsciiCell(glyph, r, g, b);
+                    cells[i] = outc;
+                    prev[i] = outc;
                 }
             }
 

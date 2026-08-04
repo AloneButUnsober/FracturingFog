@@ -536,6 +536,21 @@ public sealed class AsciiFxChainTests
     }
 
     [Fact]
+    public void Trails_EchoDecaysFromPreviousFrame()
+    {
+        const int cols = 3, rows = 1;
+        var state = new AsciiFxState();
+        // Frame 1: a bright cell at x=0.
+        var f1 = new[] { new AsciiCell('#', 200, 200, 200), new AsciiCell(' ', 0, 0, 0), new AsciiCell(' ', 0, 0, 0) };
+        AsciiFxChain.Apply(f1, cols, rows, Ramp, new AsciiFxSettings { Trails = true, TrailDecay = 0.5 }, state);
+        // Frame 2: all blank — the echo of x=0 should persist, decayed.
+        var f2 = new[] { new AsciiCell(' ', 0, 0, 0), new AsciiCell(' ', 0, 0, 0), new AsciiCell(' ', 0, 0, 0) };
+        AsciiFxChain.Apply(f2, cols, rows, Ramp, new AsciiFxSettings { Trails = true, TrailDecay = 0.5 }, state);
+        Assert.InRange((int)f2[0].R, 90, 110); // ~200*0.5 echo
+        Assert.Equal('#', f2[0].Glyph);        // echo keeps the glyph
+    }
+
+    [Fact]
     public void MatrixRain_NoStateIsNoOp()
     {
         var cells = Grid(4, 4, (x, y) => new AsciiCell('#', 180, 180, 180));

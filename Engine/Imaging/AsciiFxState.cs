@@ -41,6 +41,9 @@ namespace FracturingFog.Imaging
         internal double[] PartSway = Array.Empty<double>();   // per-particle sway phase
         private bool _partInit;
 
+        // ── Frame trails ──────────────────────────────────────────────────
+        internal AsciiCell[] TrailPrev = Array.Empty<AsciiCell>(); // previous blended frame
+
         public AsciiFxState(int seed = 0x5CA1E)
         {
             _rng = new Random(seed);
@@ -62,6 +65,7 @@ namespace FracturingFog.Imaging
             if (cols == Cols && rows == Rows && Luma.Length == cols * rows) return;
             Cols = cols; Rows = rows;
             Luma = new double[cols * rows];
+            TrailPrev = new AsciiCell[cols * rows]; // all blank
             RainHead = new double[cols];
             RainSpeed = new double[cols];
             RainLen = new int[cols];
