@@ -1865,6 +1865,29 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
         set => this.RaiseAndSetIfChanged(ref _asciiRampFromColor, value);
     }
 
+    // ASCII-native FX (#229). The host code-behind reads these in the pump,
+    // repaints on change, and runs a repaint timer while an animated one is on.
+    private bool _asciiFxHue;
+    public bool AsciiFxHue
+    {
+        get => _asciiFxHue;
+        set => this.RaiseAndSetIfChanged(ref _asciiFxHue, value);
+    }
+
+    private bool _asciiFxCrt;
+    public bool AsciiFxCrt
+    {
+        get => _asciiFxCrt;
+        set => this.RaiseAndSetIfChanged(ref _asciiFxCrt, value);
+    }
+
+    private bool _asciiFxBreathe;
+    public bool AsciiFxBreathe
+    {
+        get => _asciiFxBreathe;
+        set => this.RaiseAndSetIfChanged(ref _asciiFxBreathe, value);
+    }
+
     /// <summary>Apply a region jump: relabel the watermark, mutate ViewState
     /// via the host service, mirror the resulting fractal type into the toolbar
     /// (without snapping its centre/zoom), then trigger a render. Shared by the

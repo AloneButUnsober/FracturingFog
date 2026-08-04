@@ -76,6 +76,18 @@
                                   IsVisible="{Binding IsAsciiVisible}"
                                   IsChecked="{Binding AsciiRampFromColor, Mode=TwoWay}"
                                   ToolTip.Tip="Drive the ASCII glyph ramp from the post-FX image (adaptive / brightness / contrast) instead of the raw iteration field" />
+                    <ToggleButton Classes="toolbar" Content="Hue"
+                                  IsVisible="{Binding IsAsciiVisible}"
+                                  IsChecked="{Binding AsciiFxHue, Mode=TwoWay}"
+                                  ToolTip.Tip="ASCII FX — cycle the palette hue over time" />
+                    <ToggleButton Classes="toolbar" Content="CRT"
+                                  IsVisible="{Binding IsAsciiVisible}"
+                                  IsChecked="{Binding AsciiFxCrt, Mode=TwoWay}"
+                                  ToolTip.Tip="ASCII FX — CRT scanlines" />
+                    <ToggleButton Classes="toolbar" Content="Breathe"
+                                  IsVisible="{Binding IsAsciiVisible}"
+                                  IsChecked="{Binding AsciiFxBreathe, Mode=TwoWay}"
+                                  ToolTip.Tip="ASCII FX — pulse the glyph density over time" />
                     <!--<ToggleButton Classes="toolbar" Content="Grid"
                                   IsChecked="{Binding Main.ShowGrid, Mode=TwoWay}"
                                   ToolTip.Tip="Show Cartesian grid overlay" />
