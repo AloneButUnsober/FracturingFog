@@ -232,6 +232,25 @@ public sealed class AsciiFxChainTests
     }
 
     [Fact]
+    public void RampScroll_ShiftsGlyphAlongRampOverTime()
+    {
+        // Ramp[3] = '-'. Speed 1 step/s, at t=2s → shift by 2 → Ramp[5] = '+'.
+        var cells = Grid(1, 1, (x, y) => new AsciiCell(Ramp[3], 10, 10, 10));
+        AsciiFxChain.Apply(cells, 1, 1, Ramp, new AsciiFxSettings
+        { RampScroll = true, RampScrollSpeed = 1.0, TimeSeconds = 2.0 });
+        Assert.Equal(Ramp[5], cells[0].Glyph);
+    }
+
+    [Fact]
+    public void RampScroll_LeavesSpacesBlank()
+    {
+        var cells = Grid(1, 1, (x, y) => new AsciiCell(' ', 0, 0, 0));
+        AsciiFxChain.Apply(cells, 1, 1, Ramp, new AsciiFxSettings
+        { RampScroll = true, RampScrollSpeed = 3.0, TimeSeconds = 2.0 });
+        Assert.Equal(' ', cells[0].Glyph);
+    }
+
+    [Fact]
     public void Duotone_MapsLumaToGradientEndpoints()
     {
         var lo = new AsciiFxSettings
