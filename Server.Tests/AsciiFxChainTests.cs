@@ -106,4 +106,37 @@ public sealed class AsciiFxChainTests
         { Breathe = true, BreatheGammaAmp = 1.5, TimeSeconds = 0.25 });
         Assert.Equal(' ', cells[0].Glyph);
     }
+
+    [Fact]
+    public void CharsetSwap_MapsDensityToNewSet_KeepsColour()
+    {
+        // Ramp[9] = '@' is the densest → maps to the densest swap glyph.
+        var cells = Grid(1, 1, (x, y) => new AsciiCell('@', 30, 60, 90));
+        AsciiFxChain.Apply(cells, 1, 1, Ramp,
+            new AsciiFxSettings { CharsetSwap = true, SwapRamp = "abcd" });
+        Assert.Equal('d', cells[0].Glyph); // densest → last swap glyph
+        Assert.Equal(30, cells[0].R);
+        Assert.Equal(60, cells[0].G);
+        Assert.Equal(90, cells[0].B);
+    }
+
+    [Fact]
+    public void CharsetSwap_MapsMidGlyphProportionally()
+    {
+        // Ramp index 0 (' ' is blank, skip) → use index 3 '-' (t = 3/9 = .33).
+        // Swap "abcdefg" (len 7): round(.333*6) = 2 → 'c'.
+        var cells = Grid(1, 1, (x, y) => new AsciiCell(Ramp[3], 10, 10, 10));
+        AsciiFxChain.Apply(cells, 1, 1, Ramp,
+            new AsciiFxSettings { CharsetSwap = true, SwapRamp = "abcdefg" });
+        Assert.Equal('c', cells[0].Glyph);
+    }
+
+    [Fact]
+    public void CharsetSwap_LeavesSpacesBlank()
+    {
+        var cells = Grid(1, 1, (x, y) => new AsciiCell(' ', 0, 0, 0));
+        AsciiFxChain.Apply(cells, 1, 1, Ramp,
+            new AsciiFxSettings { CharsetSwap = true, SwapRamp = "abcd" });
+        Assert.Equal(' ', cells[0].Glyph);
+    }
 }

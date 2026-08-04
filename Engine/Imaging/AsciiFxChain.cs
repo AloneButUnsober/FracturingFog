@@ -24,7 +24,16 @@ namespace FracturingFog.Imaging
         {
             if (cells is null || fx is null || !fx.AnyEnabled) return;
 
-            // Precompute the per-frame constants once.
+            // Ordered pipeline. Each stage is skipped unless its effect is on, so
+            // the common single-effect case stays one pass. Glyph-space runs
+            // before colour-space so density-changing effects (Breathe, charset
+            // swap) settle the glyph first; shading (CRT) is last.
+            //
+            //   1. glyph-space   : Breathe, CharsetSwap   (per cell)
+            //   2. colour-space  : HueCycle               (per cell)
+            //   3. shading       : Crt scanline dim       (per row)
+
+            // Per-frame constants.
             double hueShift = fx.HueCycle ? (fx.TimeSeconds * fx.HueCycleDegPerSec) % 360.0 : 0.0;
             double gamma = 1.0;
             if (fx.Breathe)
@@ -33,6 +42,9 @@ namespace FracturingFog.Imaging
                 gamma = Math.Max(0.05, fx.BreatheGammaMid + fx.BreatheGammaAmp * s);
             }
             int rampLen = ramp?.Length ?? 0;
+            string? swap = fx.CharsetSwap ? fx.SwapRamp : null;
+            int swapLen = swap?.Length ?? 0;
+            bool doGlyph = (fx.Breathe && rampLen > 1) || (swapLen > 1 && rampLen > 1);
 
             for (int y = 0; y < rows; y++)
             {
@@ -45,18 +57,28 @@ namespace FracturingFog.Imaging
                     char glyph = c.Glyph;
                     byte r = c.R, g = c.G, b = c.B;
 
-                    // Glyph-space: Breathe shifts the cell along the ramp via a
-                    // gamma on its normalized ramp index, so density pulses.
-                    if (fx.Breathe && rampLen > 1 && glyph != ' ')
+                    if (doGlyph && glyph != ' ' && rampLen > 1)
                     {
                         int idx = ramp!.IndexOf(glyph);
                         if (idx >= 0)
                         {
-                            double t = idx / (double)(rampLen - 1);
-                            double tg = Math.Pow(t, gamma);
-                            int ni = (int)Math.Round(tg * (rampLen - 1));
-                            if (ni < 0) ni = 0; else if (ni >= rampLen) ni = rampLen - 1;
-                            glyph = ramp[ni];
+                            // Breathe: gamma on the normalized ramp index, so
+                            // density pulses.
+                            if (fx.Breathe)
+                            {
+                                double t = idx / (double)(rampLen - 1);
+                                double tg = Math.Pow(t, gamma);
+                                idx = Clamp((int)Math.Round(tg * (rampLen - 1)), 0, rampLen - 1);
+                                glyph = ramp[idx];
+                            }
+                            // Charset swap: carry the (post-Breathe) density to the
+                            // same fractional position along the replacement set.
+                            if (swapLen > 1)
+                            {
+                                double t = idx / (double)(rampLen - 1);
+                                int ni = Clamp((int)Math.Round(t * (swapLen - 1)), 0, swapLen - 1);
+                                glyph = swap![ni];
+                            }
                         }
                     }
 
@@ -74,6 +96,8 @@ namespace FracturingFog.Imaging
                 }
             }
         }
+
+        private static int Clamp(int v, int lo, int hi) => v < lo ? lo : (v > hi ? hi : v);
 
         // In-place RGB hue rotation by degrees. Standard HSV round-trip; cheap
         // enough per cell at ASCII grid sizes (a few thousand cells).
