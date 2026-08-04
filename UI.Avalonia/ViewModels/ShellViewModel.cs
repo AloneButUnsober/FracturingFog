@@ -538,6 +538,7 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
             () => LightingFxRequested?.Invoke(this, EventArgs.Empty));
         ShowRelief3DCommand       = ReactiveCommand.Create(
             () => Relief3DRequested?.Invoke(this, EventArgs.Empty));
+        ShowBigButtonsCommand     = ReactiveCommand.Create(ShowBigButtons);
 
         // Context-menu commands. Toolbar / status / grid / watermark are
         // simple flag flips; the rest delegate to the existing private
@@ -1648,6 +1649,11 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
     /// Params leaves Relief 3D open.</summary>
     public ReactiveCommand<Unit, Unit> ShowRelief3DCommand { get; }
 
+    /// <summary>Launches the standalone Big Buttons kid dialog (Color / Place /
+    /// Show) from the Control Center View section and auto-closes the Control
+    /// Center.</summary>
+    public ReactiveCommand<Unit, Unit> ShowBigButtonsCommand { get; }
+
     // Context-menu commands (right-click on render surface).
     public ReactiveCommand<Unit, bool> ToggleToolbarCommand { get; }
     public ReactiveCommand<Unit, bool> ToggleStatusBarCommand { get; }
@@ -2060,33 +2066,7 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
             // the host translates it into an IColorMap on its IColorThemeService
             // impl and pushes onto the render host. The actual translation
             // lives outside the VM (host-owned) — we just relay.
-            vm.PreviewRequested       += (_, def)  =>
-            {
-                ColorThemePreviewRequested?.Invoke(this, def);
-                // Post-FX defaults (Brightness / Contrast / Adaptive) aren't
-                // part of the IColorMap — push them through the MainViewModel
-                // setters so ViewState + the repaint/recalc stay in sync.
-                // Mirrors legacy MainForm.ApplyThemePostFx: a null field resets
-                // the value to neutral 0; a locked slider is left untouched so
-                // the user can pin a preferred value across theme edits.
-                if (!Main.BrightnessLocked) Main.Brightness = def.Brightness ?? 0;
-                if (!Main.ContrastLocked)   Main.Contrast   = def.Contrast   ?? 0;
-                if (!Main.AdaptiveLocked)
-                {
-                    int adaptive = def.Adaptive ?? 0;
-                    bool changed = adaptive != Main.Adaptive;
-                    Main.Adaptive = adaptive;
-                    // ApplyColorMap (above) just rewrote the framebuffer with a
-                    // pure palette pass, dropping the prior histogram-eq layer.
-                    // The Adaptive setter only schedules a re-apply on a value
-                    // change, so when the user touches another editor field
-                    // while Adaptive is non-zero the visible result drops back
-                    // to non-adaptive until they toggle the checkbox. Force
-                    // the histogram-eq pass to re-run on every preview.
-                    if (!changed && adaptive > 0)
-                        Main.RenderHost.RepaintWithAdaptive();
-                }
-            };
+            vm.PreviewRequested       += (_, def)  => OnColorThemePreview(def);
             // Real-time Post-FX (UI-gap #18 follow-up): the editor's
             // Brightness/Contrast/Adaptive sliders raise LivePostFxChanged
             // immediately, bypassing the 150ms preview debounce. Push the
@@ -2112,6 +2092,94 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
             ColorThemeEditor = vm;
         }
         IsColorThemeEditorVisible = true;
+    }
+
+    /// <summary>Apply a live colour-theme preview to the render host — the same
+    /// pipe the Color Theme Editor uses. Relays the def to the host (which
+    /// builds the IColorMap) and pushes the theme's Post-FX defaults through the
+    /// MainViewModel setters so ViewState + the repaint/recalc stay in sync.
+    /// Factored out so the Big Buttons "Color" dice can reuse it without a save.</summary>
+    private void OnColorThemePreview(ColorThemeDef def)
+    {
+        ColorThemePreviewRequested?.Invoke(this, def);
+        // Post-FX defaults (Brightness / Contrast / Adaptive) aren't part of the
+        // IColorMap — push them through the MainViewModel setters. Mirrors legacy
+        // MainForm.ApplyThemePostFx: a null field resets to neutral 0; a locked
+        // slider is left untouched so the user can pin a value across edits.
+        if (!Main.BrightnessLocked) Main.Brightness = def.Brightness ?? 0;
+        if (!Main.ContrastLocked)   Main.Contrast   = def.Contrast   ?? 0;
+        if (!Main.AdaptiveLocked)
+        {
+            int adaptive = def.Adaptive ?? 0;
+            bool changed = adaptive != Main.Adaptive;
+            Main.Adaptive = adaptive;
+            // ApplyColorMap just rewrote the framebuffer with a pure palette
+            // pass, dropping the prior histogram-eq layer. The Adaptive setter
+            // only schedules a re-apply on a value change, so force the
+            // histogram-eq pass to re-run on every preview.
+            if (!changed && adaptive > 0)
+                Main.RenderHost.RepaintWithAdaptive();
+        }
+    }
+
+    // ── Big Buttons (kid mode) ────────────────────────────────────────────
+    //
+    // A large, resizable dialog with three oversized buttons (Color / Place /
+    // Show) for young explorers. Each button drives the same machinery the
+    // grown-up UI uses, but with zero configuration: Color randomises the whole
+    // theme (Kind included) without saving; Place jumps to a random slideshow
+    // region; Show toggles the slideshow. The dialog is host-owned (opened from
+    // AvaloniaShellBootstrap on BigButtonsRequested) and auto-closes the Control
+    // Center on launch.
+
+    private ColorThemeEditorViewModel? _kidColorVm;
+
+    /// <summary>"Color" button — full-randomness recolour, Kind included, with
+    /// no library save. Reuses the Color Theme Editor's Randomize (the same
+    /// button the editor exposes) on a headless editor VM whose preview is piped
+    /// straight to the render host via <see cref="OnColorThemePreview"/>.</summary>
+    public void RandomizeKidColors()
+    {
+        if (_kidColorVm == null)
+        {
+            _kidColorVm = new ColorThemeEditorViewModel(_themeService,
+                initialThemeName: Main.SelectedTheme,
+                initialRegionName: Main.SelectedRegion,
+                viewParams: Main.ViewState.FractalParameters);
+            // Wild mode = maximum variety per press (kids want dramatic change).
+            _kidColorVm.RandomExperimental = true;
+            _kidColorVm.PreviewRequested += (_, def) => OnColorThemePreview(def);
+        }
+        // Full randomness = randomise the Kind too, then run the editor's own
+        // Randomize (which is Kind-aware: cycle / 3D-light extras follow Kind).
+        _kidColorVm.Kind = (ColorThemeKindDef)System.Random.Shared.Next(
+            0, System.Enum.GetValues<ColorThemeKindDef>().Length);
+        _kidColorVm.RandomizeCommand.Execute().Subscribe();
+    }
+
+    /// <summary>"Place" button — jump to a random curated slideshow region, the
+    /// same pool the slideshow cycles through. Mirrors the pick into the toolbar
+    /// region combo so the label stays in sync.</summary>
+    public void JumpToRandomRegion()
+    {
+        var regions = _themeService.EnumerateSlideshowRegionNames();
+        if (regions == null || regions.Count == 0) return;
+        var name = regions[System.Random.Shared.Next(regions.Count)];
+        JumpToRegion(name);
+        FloatingMenu.SetRegionSilent(name);
+    }
+
+    /// <summary>"Show / Stop" button — start or stop the slideshow, exactly the
+    /// context-menu Slideshow toggle. Public wrapper so the Big Buttons dialog
+    /// can drive it.</summary>
+    public void ToggleKidSlideshow() => ToggleSlideshow();
+
+    /// <summary>Open (or re-focus) the standalone Big Buttons kid dialog and
+    /// auto-close the Control Center, per the View-section launcher.</summary>
+    private void ShowBigButtons()
+    {
+        IsControlCenterVisible = false;
+        BigButtonsRequested?.Invoke(this, EventArgs.Empty);
     }
 
     /// <summary>Open the Watermark Editor dialog. Public so the Poster dialog
@@ -2904,6 +2972,11 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
     /// shared ViewState. Independent of Fractal Params — launchable from the
     /// Control Center and stays open when Params closes.</summary>
     public event EventHandler? Relief3DRequested;
+
+    /// <summary>User asked for the standalone Big Buttons kid dialog from the
+    /// Control Center View section. Host pops a <c>BigButtonsView</c> bound to a
+    /// <c>BigButtonsViewModel</c> over this shell. Re-focus if already open.</summary>
+    public event EventHandler? BigButtonsRequested;
 
     /// <summary>Begin a video zoom / slideshow from a request the host
     /// collected via the dialog. Sets the button label + (slideshow) shows the
