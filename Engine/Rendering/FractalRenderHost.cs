@@ -3802,6 +3802,74 @@ namespace FracturingFog.Rendering
         // Engine-side AsciiFxState; the live pump just passes settings each frame.
         private FracturingFog.Imaging.AsciiFxState? _asciiFxState;
 
+        // Live ASCII recording (#230): while active, every RenderLastFrameAscii
+        // captures its FX'd grid at wall-clock cadence, so whatever is animating
+        // (zoom video / Scene / slideshow / interactive) is recorded frame-by-frame.
+        private readonly object _liveRecLock = new();
+        private FracturingFog.Imaging.AsciiAnimationRecorder? _liveRec;      // capturing now
+        private FracturingFog.Imaging.AsciiAnimationRecorder? _liveRecPending; // stopped, awaiting save
+        private readonly System.Diagnostics.Stopwatch _liveRecClock = new();
+        private double _liveRecLast;
+        private const int MaxLiveRecFrames = 3600; // ~2 min at 30fps — bounds memory
+
+        /// <summary>True while a live ASCII recording is actively capturing.</summary>
+        public bool IsLiveAsciiRecording { get { lock (_liveRecLock) return _liveRec != null; } }
+
+        /// <summary>Start capturing the live ASCII frames. Discards any prior
+        /// (active or pending) capture.</summary>
+        public void BeginLiveAsciiRecording()
+        {
+            lock (_liveRecLock)
+            {
+                _liveRec = new FracturingFog.Imaging.AsciiAnimationRecorder();
+                _liveRecPending = null;
+                _liveRecClock.Restart();
+                _liveRecLast = 0.0;
+            }
+        }
+
+        /// <summary>Freeze the capture (no more frames appended) and hold it as
+        /// pending for a save. Returns the captured frame count.</summary>
+        public int StopLiveAsciiRecording()
+        {
+            lock (_liveRecLock)
+            {
+                _liveRecClock.Stop();
+                _liveRecPending = _liveRec;
+                _liveRec = null;
+                return _liveRecPending?.FrameCount ?? 0;
+            }
+        }
+
+        /// <summary>Serialise the pending recording to a text container
+        /// ("cast" / "svg" / "ans"). Null if none pending / empty.</summary>
+        public string? SerializePendingRecording(string format)
+        {
+            FracturingFog.Imaging.AsciiAnimationRecorder? rec;
+            lock (_liveRecLock) rec = _liveRecPending;
+            if (rec == null || rec.FrameCount == 0) return null;
+            var fmt = format?.ToLowerInvariant() switch
+            {
+                "svg" => FracturingFog.Imaging.AsciiAnimationFormat.AnimatedSvg,
+                "ans" => FracturingFog.Imaging.AsciiAnimationFormat.AnsiSequence,
+                _      => FracturingFog.Imaging.AsciiAnimationFormat.AsciinemaCast,
+            };
+            return rec.Serialize(fmt, new FracturingFog.Imaging.AsciiArtOptions());
+        }
+
+        /// <summary>The pending recording's grids for the MP4 exporter. Null if
+        /// none pending / empty.</summary>
+        public System.Collections.Generic.IReadOnlyList<FracturingFog.Render.AsciiFrame>? PendingRecordingFrames()
+        {
+            FracturingFog.Imaging.AsciiAnimationRecorder? rec;
+            lock (_liveRecLock) rec = _liveRecPending;
+            if (rec == null || rec.FrameCount == 0) return null;
+            return rec.ExportFrames();
+        }
+
+        /// <summary>Drop the pending recording (save cancelled).</summary>
+        public void ClearPendingRecording() { lock (_liveRecLock) _liveRecPending = null; }
+
         public FracturingFog.Render.AsciiFrame? RenderLastFrameAscii(
             int columns, double cellAspect, bool color, bool invert, bool fineRamp,
             bool rampFromColor = false, FracturingFog.Imaging.AsciiFxSettings? fx = null)
@@ -3834,6 +3902,19 @@ namespace FracturingFog.Rendering
                 FracturingFog.Imaging.AsciiFxChain.Apply(cells, cols, rows, opt.Ramp, fx, state);
             }
 
+            // Live recording (#230): append this exact grid at wall-clock cadence.
+            lock (_liveRecLock)
+            {
+                if (_liveRec != null && _liveRec.FrameCount < MaxLiveRecFrames)
+                {
+                    double now = _liveRecClock.Elapsed.TotalSeconds;
+                    double hold = now - _liveRecLast;
+                    _liveRecLast = now;
+                    try { _liveRec.AddFrame(cells, cols, rows, hold); }
+                    catch { /* grid-size change mid-record: skip the odd frame */ }
+                }
+            }
+
             int n = cols * rows;
             var glyphs = new char[n];
             uint[] colors = color ? new uint[n] : System.Array.Empty<uint>();
@@ -3844,6 +3925,110 @@ namespace FracturingFog.Rendering
                 if (color) colors[i] = ((uint)c.R << 16) | ((uint)c.G << 8) | c.B;
             }
             return new FracturingFog.Render.AsciiFrame(cols, rows, glyphs, colors, color);
+        }
+
+        /// <inheritdoc/>
+        public string? RecordAsciiAnimation(
+            int columns, double cellAspect, bool invert, bool fineRamp, bool rampFromColor,
+            FracturingFog.Imaging.AsciiFxSettings fx, int frames, double fps, string format)
+        {
+            if (_disposed || fx is null) return null;
+            if (frames <= 0) frames = 1;
+            if (fps <= 0) fps = 12.0;
+            if (!TryGetAsciiSource(out var buf, out var smooth, out int w, out int h)) return null;
+
+            var opt = new FracturingFog.Imaging.AsciiArtOptions
+            {
+                Format = FracturingFog.Imaging.AsciiArtFormat.PlainText,
+                Columns = Math.Max(1, columns),
+                CellAspect = cellAspect > 0.1 ? cellAspect : 2.0,
+                Invert = invert,
+                UseSmoothField = true,
+                RampFromColorLuma = rampFromColor,
+                Ramp = fineRamp
+                    ? FracturingFog.Imaging.AsciiArtOptions.FineRamp
+                    : new FracturingFog.Imaging.AsciiArtOptions().Ramp,
+            };
+
+            // Re-render the same last frame each step, advancing the FX clock so
+            // the animated effects play out, and accumulate into the recorder.
+            var rec = new FracturingFog.Imaging.AsciiAnimationRecorder();
+            RecordAsciiInto(buf, smooth, w, h, opt, fx, frames, fps,
+                (cells, cols, rows, dt) => rec.AddFrame(cells, cols, rows, dt));
+
+            var fmt = format?.ToLowerInvariant() switch
+            {
+                "svg" => FracturingFog.Imaging.AsciiAnimationFormat.AnimatedSvg,
+                "ans" => FracturingFog.Imaging.AsciiAnimationFormat.AnsiSequence,
+                _      => FracturingFog.Imaging.AsciiAnimationFormat.AsciinemaCast,
+            };
+            return rec.Serialize(fmt, opt);
+        }
+
+        /// <inheritdoc/>
+        public System.Collections.Generic.IReadOnlyList<FracturingFog.Render.AsciiFrame>? RecordAsciiFrames(
+            int columns, double cellAspect, bool invert, bool fineRamp, bool rampFromColor,
+            FracturingFog.Imaging.AsciiFxSettings fx, int frames, double fps)
+        {
+            if (_disposed || fx is null) return null;
+            if (frames <= 0) frames = 1;
+            if (fps <= 0) fps = 12.0;
+            if (!TryGetAsciiSource(out var buf, out var smooth, out int w, out int h)) return null;
+
+            var opt = BuildAsciiOptions(columns, cellAspect, invert, fineRamp, rampFromColor);
+            var list = new System.Collections.Generic.List<FracturingFog.Render.AsciiFrame>(frames);
+            RecordAsciiInto(buf, smooth, w, h, opt, fx, frames, fps, (cells, cols, rows, dt) =>
+            {
+                int n = cols * rows;
+                var glyphs = new char[n];
+                var colors = new uint[n];
+                for (int i = 0; i < n; i++)
+                {
+                    var c = cells[i];
+                    glyphs[i] = c.Glyph;
+                    colors[i] = ((uint)c.R << 16) | ((uint)c.G << 8) | c.B;
+                }
+                list.Add(new FracturingFog.Render.AsciiFrame(cols, rows, glyphs, colors, true));
+            });
+            return list;
+        }
+
+        private static FracturingFog.Imaging.AsciiArtOptions BuildAsciiOptions(
+            int columns, double cellAspect, bool invert, bool fineRamp, bool rampFromColor) =>
+            new()
+            {
+                Format = FracturingFog.Imaging.AsciiArtFormat.PlainText,
+                Columns = Math.Max(1, columns),
+                CellAspect = cellAspect > 0.1 ? cellAspect : 2.0,
+                Invert = invert,
+                UseSmoothField = true,
+                RampFromColorLuma = rampFromColor,
+                Ramp = fineRamp
+                    ? FracturingFog.Imaging.AsciiArtOptions.FineRamp
+                    : new FracturingFog.Imaging.AsciiArtOptions().Ramp,
+            };
+
+        // Shared record loop: re-render the same last frame `frames` times,
+        // advancing the FX + transition clocks by 1/fps each step, and hand each
+        // FX'd cell grid to `sink`. A fresh AsciiFxState keeps it deterministic.
+        private static void RecordAsciiInto(
+            uint[] buf, float[]? smooth, int w, int h,
+            FracturingFog.Imaging.AsciiArtOptions opt, FracturingFog.Imaging.AsciiFxSettings fx,
+            int frames, double fps,
+            System.Action<FracturingFog.Imaging.AsciiCell[], int, int, double> sink)
+        {
+            var state = fx.NeedsState ? new FracturingFog.Imaging.AsciiFxState() : null;
+            double dt = 1.0 / fps;
+            for (int f = 0; f < frames; f++)
+            {
+                var cells = FracturingFog.Imaging.AsciiArtRenderer.RenderCells(
+                    buf, smooth, w, h, opt, out int cols, out int rows);
+                fx.TimeSeconds = f * dt;
+                fx.TransitionTimeSeconds = f * dt;
+                if (fx.AnyEnabled)
+                    FracturingFog.Imaging.AsciiFxChain.Apply(cells, cols, rows, opt.Ramp, fx, state);
+                sink(cells, cols, rows, dt);
+            }
         }
 
         // Shared source selection for both the ASCII file export (#226) and the

@@ -564,6 +564,8 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
             () => ScreenshotRequested?.Invoke(this, EventArgs.Empty));
         AsciiArtCommand        = ReactiveCommand.Create(
             () => AsciiArtRequested?.Invoke(this, EventArgs.Empty));
+        RecordAsciiCommand     = ReactiveCommand.Create(
+            () => RecordAsciiRequested?.Invoke(this, EventArgs.Empty));
 
         // Slideshow control commands (right-click context menu). The
         // checkbox/text state for the items is read off SlideshowLockRegion
@@ -1657,6 +1659,7 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
     public ReactiveCommand<Unit, Unit> SaveRegionCommand { get; }
     public ReactiveCommand<Unit, Unit> ScreenshotCommand { get; }
     public ReactiveCommand<Unit, Unit> AsciiArtCommand { get; }
+    public ReactiveCommand<Unit, Unit> RecordAsciiCommand { get; }
     public ReactiveCommand<Unit, Unit> ToggleSlideshowLockRegionCommand { get; }
     public ReactiveCommand<Unit, Unit> ToggleSlideshowFocusCommand { get; }
 
@@ -1854,6 +1857,26 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
     public event EventHandler<bool>? SideBySideModeToggleRequested;
 
     public ReactiveCommand<Unit, bool> ToggleSideBySideModeCommand { get; private set; } = null!;
+
+    // ── Live ASCII recording (#230) ─────────────────────────────────────
+    // While on, the host captures every live ASCII frame at wall-clock cadence,
+    // so whatever is animating (zoom video / Scene / slideshow / interactive) is
+    // recorded. The code-behind starts the host recorder on true, and on false
+    // pops a save dialog + serialises / encodes the capture.
+    private bool _isAsciiRecording;
+    public bool IsAsciiRecording
+    {
+        get => _isAsciiRecording;
+        set
+        {
+            if (this.RaiseAndSetIfChangedReturnsChanged(ref _isAsciiRecording, value))
+                AsciiRecordingToggleRequested?.Invoke(this, value);
+        }
+    }
+
+    /// <summary>Fires when live ASCII recording toggles (true = start capturing,
+    /// false = stop + save).</summary>
+    public event EventHandler<bool>? AsciiRecordingToggleRequested;
 
     /// <summary>True whenever the ASCII view is on screen (either mode). Bound by
     /// controls that should appear only when ASCII is visible (Ramp: FX).</summary>
@@ -2782,6 +2805,11 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
     /// <c>FractalRenderHost.SaveLastFrameAsAsciiArt</c>, which consumes the real
     /// IColorMap-coloured frame buffer.</summary>
     public event EventHandler? AsciiArtRequested;
+
+    /// <summary>Record the current frame's ASCII FX animation to a shareable file
+    /// (#230). Host pops a SaveFilePicker (.cast / .svg / .ans) and calls
+    /// <c>IFractalRenderHost.RecordAsciiAnimation</c> with the active FX settings.</summary>
+    public event EventHandler? RecordAsciiRequested;
 
     /// <summary>Render a wallpaper-sized image at the virtual-screen union of
     /// every connected monitor, regardless of the current window state. Host
