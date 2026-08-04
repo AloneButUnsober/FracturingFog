@@ -88,6 +88,13 @@
                                   IsVisible="{Binding IsAsciiVisible}"
                                   IsChecked="{Binding AsciiFxBreathe, Mode=TwoWay}"
                                   ToolTip.Tip="ASCII FX — pulse the glyph density over time" />
+                    <ComboBox x:Name="AsciiFxPresetCombo"
+                              Classes="toolbar"
+                              MinWidth="140"
+                              IsVisible="{Binding IsAsciiVisible}"
+                              ItemsSource="{Binding AsciiFxPresetNames}"
+                              SelectedItem="{Binding SelectedAsciiFxPreset, Mode=TwoWay}"
+                              ToolTip.Tip="ASCII FX preset — a one-click curated look (Matrix, CRT, Fire, …)" />
                     <!--<ToggleButton Classes="toolbar" Content="Grid"
                                   IsChecked="{Binding Main.ShowGrid, Mode=TwoWay}"
                                   ToolTip.Tip="Show Cartesian grid overlay" />

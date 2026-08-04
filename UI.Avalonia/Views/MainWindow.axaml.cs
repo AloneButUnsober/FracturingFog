@@ -642,7 +642,8 @@ public sealed partial class MainWindow : Window
                 break;
             case nameof(ShellViewModel.AsciiFxHue):
             case nameof(ShellViewModel.AsciiFxBreathe):
-                // Animated FX: start/stop the repaint timer, then repaint now.
+            case nameof(ShellViewModel.SelectedAsciiFxPreset):
+                // Possibly-animated FX: start/stop the repaint timer, then repaint.
                 UpdateAsciiFxTimer();
                 if (_asciiFrameHandler != null) PumpAsciiFrame();
                 break;
@@ -1012,13 +1013,14 @@ public sealed partial class MainWindow : Window
     }
 
     // Run a ~30fps repaint timer only while an ASCII mode is active AND an
-    // animated FX (hue cycle / breathe) is on — those vary with time, so the
-    // buffer-change pump alone won't advance them on a static fractal. Static FX
-    // (CRT) and the base render still refresh via FrameBufferChanged.
+    // animated FX is on — those vary with time, so the buffer-change pump alone
+    // won't advance them on a static fractal. Static FX and the base render still
+    // refresh via FrameBufferChanged. The built settings (preset + quick-toggles)
+    // report whether anything animates.
     private void UpdateAsciiFxTimer()
     {
         bool want = _asciiFrameHandler != null && _shell != null
-                    && (_shell.AsciiFxHue || _shell.AsciiFxBreathe);
+                    && (_shell.BuildAsciiFxSettings(0.0)?.AnyAnimated ?? false);
         if (want)
         {
             if (_asciiFxTimer == null)
