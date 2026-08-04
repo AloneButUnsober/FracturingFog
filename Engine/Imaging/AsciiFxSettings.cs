@@ -230,20 +230,27 @@ namespace FracturingFog.Imaging
         /// transition, the rest blank. Animated (one-shot).</summary>
         public bool Dissolve { get; set; }
 
+        /// <summary>Frame trails: blend a decayed copy of the previous frame into
+        /// this one — a phosphor / motion smear. Animated; needs an
+        /// <see cref="AsciiFxState"/>.</summary>
+        public bool Trails { get; set; }
+        /// <summary>Per-frame trail persistence, [0,1) — higher = longer smear.</summary>
+        public double TrailDecay { get; set; } = 0.85;
+
         /// <summary>True when any effect is enabled (the host can skip the pass).</summary>
         public bool AnyEnabled => HueCycle || Crt || Breathe || CharsetSwap || Monochrome
             || Saturate || Invert || Solarize || Quantize || Dither || Duotone || Plasma
             || RampScroll || Grain || Vignette || ChromaticAberration || Wave || Drift || Twist
-            || Glitch || Bloom || Edge || MatrixRain || Particles || Typewriter || Dissolve;
+            || Glitch || Bloom || Edge || MatrixRain || Particles || Typewriter || Dissolve || Trails;
 
         /// <summary>True when an enabled effect varies with time (the live view
         /// must repaint on a timer for these, not only on buffer changes).</summary>
         public bool AnyAnimated => HueCycle || Breathe || MatrixRain || RampScroll || Grain || Wave
-            || Drift || Glitch || Plasma || Particles || Typewriter || Dissolve
+            || Drift || Glitch || Plasma || Particles || Typewriter || Dissolve || Trails
             || (Saturate && SaturateAmp > 0);
 
         /// <summary>True when an enabled effect evolves across frames and so needs
         /// a persistent <see cref="AsciiFxState"/> (not a pure grid+clock function).</summary>
-        public bool NeedsState => MatrixRain || Particles;
+        public bool NeedsState => MatrixRain || Particles || Trails;
     }
 }
