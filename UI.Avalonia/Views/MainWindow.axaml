@@ -66,6 +66,9 @@
                             Command="{Binding Main.ResetViewCommand}" />
                     <Button Classes="toolbar" Content="Menu"
                             Command="{Binding ShowFloatingMenuCommand}" />
+                    <ToggleButton Classes="toolbar" Content="Terminal"
+                                  IsChecked="{Binding IsTerminalMode, Mode=TwoWay}"
+                                  ToolTip.Tip="Terminal Mode — show the fractal as live ASCII / text art" />
                     <!--<ToggleButton Classes="toolbar" Content="Grid"
                                   IsChecked="{Binding Main.ShowGrid, Mode=TwoWay}"
                                   ToolTip.Tip="Show Cartesian grid overlay" />
@@ -138,7 +141,14 @@
              regardless of XAML Z-order — so an Avalonia.Media overlay above
              this Grid would not be visible). -->
         <Grid Grid.Row="1">
-            <ctrl:GpuSurfaceControl x:Name="GpuSurface" />
+            <ctrl:GpuSurfaceControl x:Name="GpuSurface"
+                                    IsVisible="{Binding !IsTerminalMode}" />
+            <!-- Terminal Mode (#228): live ASCII render of the same frame. Shown
+                 only when IsTerminalMode; the GPU native HWND is hidden above so
+                 this Avalonia content is not occluded. Non-hit-testable so the
+                 InputSponge still drives the real render underneath. -->
+            <ctrl:AsciiView x:Name="AsciiSurface"
+                            IsVisible="{Binding IsTerminalMode}" />
             <!-- Transparent input sponge above the native HWND child. Pointer
                  + key events from this Border feed AvaloniaInputAdapter,
                  which translates them into the IFractalInputController. -->
