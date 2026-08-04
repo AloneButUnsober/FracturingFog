@@ -534,6 +534,8 @@ namespace FracturingFog.Rendering
 
         public bool ShowGrid { get; set; }
         public bool ShowWatermark { get; set; }
+        public FracturingFog.Imaging.AsciiWatermarkStyle AsciiWatermarkStyle { get; set; }
+            = FracturingFog.Imaging.AsciiWatermarkStyle.Block;
         /// <summary>When true, the post-FX upload composites a perf HUD
         /// (phase timings + HW summary) into the top-left of the frame.
         /// Cheap (~0.1 ms/frame) — safe to leave on during video record.</summary>
@@ -3870,6 +3872,23 @@ namespace FracturingFog.Rendering
         /// <summary>Drop the pending recording (save cancelled).</summary>
         public void ClearPendingRecording() { lock (_liveRecLock) _liveRecPending = null; }
 
+        // Resolve the same watermark payload every other surface uses, for the
+        // ASCII painter. The default (non-custom) text colour is a bright neutral
+        // rather than the per-pixel auto-contrast the raster path samples — a
+        // Terminal watermark is monochrome ink over the character art, and the
+        // grid has no stable "lower-right patch" to sample at cell resolution.
+        private FracturingFog.Imaging.WatermarkRender BuildAsciiWatermark()
+            => FracturingFog.Imaging.WatermarkResolver.Resolve(
+                activeCustom: ActiveWatermark,
+                regionEmbedded: null,
+                overrideRegionWatermark: ActiveWatermark != null,
+                useCustomWatermark: ActiveWatermark != null,
+                regionName: RegionName ?? string.Empty,
+                themeName: ThemeName ?? string.Empty,
+                programName: ProgramName ?? "Fracturing Fog",
+                programVersion: ProgramVersion ?? string.Empty,
+                defaultTextColor: new FracturingFog.Models.RgbDef(230, 230, 230));
+
         public FracturingFog.Render.AsciiFrame? RenderLastFrameAscii(
             int columns, double cellAspect, bool color, bool invert, bool fineRamp,
             bool rampFromColor = false, FracturingFog.Imaging.AsciiFxSettings? fx = null)
@@ -3901,6 +3920,13 @@ namespace FracturingFog.Rendering
                 var state = fx.NeedsState ? (_asciiFxState ??= new FracturingFog.Imaging.AsciiFxState()) : null;
                 FracturingFog.Imaging.AsciiFxChain.Apply(cells, cols, rows, opt.Ramp, fx, state);
             }
+
+            // ASCII watermark (#241): stamp last, over the FX, so it stays legible.
+            // Live Terminal honours the same ShowWatermark toggle as the render
+            // window; stamped before the recording capture so REC is WYSIWYG.
+            if (ShowWatermark)
+                FracturingFog.Imaging.AsciiWatermark.Stamp(
+                    cells, cols, rows, BuildAsciiWatermark(), AsciiWatermarkStyle);
 
             // Live recording (#230): append this exact grid at wall-clock cadence.
             lock (_liveRecLock)
@@ -3954,7 +3980,8 @@ namespace FracturingFog.Rendering
             // the animated effects play out, and accumulate into the recorder.
             var rec = new FracturingFog.Imaging.AsciiAnimationRecorder();
             RecordAsciiInto(buf, smooth, w, h, opt, fx, frames, fps,
-                (cells, cols, rows, dt) => rec.AddFrame(cells, cols, rows, dt));
+                (cells, cols, rows, dt) => rec.AddFrame(cells, cols, rows, dt),
+                BuildAsciiWatermark(), AsciiWatermarkStyle);
 
             var fmt = format?.ToLowerInvariant() switch
             {
@@ -3989,7 +4016,8 @@ namespace FracturingFog.Rendering
                     colors[i] = ((uint)c.R << 16) | ((uint)c.G << 8) | c.B;
                 }
                 list.Add(new FracturingFog.Render.AsciiFrame(cols, rows, glyphs, colors, true));
-            });
+            },
+            BuildAsciiWatermark(), AsciiWatermarkStyle);
             return list;
         }
 
@@ -4015,7 +4043,10 @@ namespace FracturingFog.Rendering
             uint[] buf, float[]? smooth, int w, int h,
             FracturingFog.Imaging.AsciiArtOptions opt, FracturingFog.Imaging.AsciiFxSettings fx,
             int frames, double fps,
-            System.Action<FracturingFog.Imaging.AsciiCell[], int, int, double> sink)
+            System.Action<FracturingFog.Imaging.AsciiCell[], int, int, double> sink,
+            FracturingFog.Imaging.WatermarkRender? watermark = null,
+            FracturingFog.Imaging.AsciiWatermarkStyle watermarkStyle =
+                FracturingFog.Imaging.AsciiWatermarkStyle.Block)
         {
             var state = fx.NeedsState ? new FracturingFog.Imaging.AsciiFxState() : null;
             double dt = 1.0 / fps;
@@ -4027,6 +4058,10 @@ namespace FracturingFog.Rendering
                 fx.TransitionTimeSeconds = f * dt;
                 if (fx.AnyEnabled)
                     FracturingFog.Imaging.AsciiFxChain.Apply(cells, cols, rows, opt.Ramp, fx, state);
+                // Export always carries the watermark, matching image / video save.
+                if (watermark != null)
+                    FracturingFog.Imaging.AsciiWatermark.Stamp(
+                        cells, cols, rows, watermark, watermarkStyle);
                 sink(cells, cols, rows, dt);
             }
         }

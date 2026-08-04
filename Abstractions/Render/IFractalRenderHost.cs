@@ -248,6 +248,13 @@ namespace FracturingFog.Render
         /// into the next uploaded frame.</summary>
         bool ShowWatermark { get; set; }
 
+        /// <summary>Glyph style for the ASCII watermark (Terminal Mode + ASCII
+        /// export). The resolved watermark payload (text / colour / placement) is
+        /// unchanged — this only picks how the top-line is drawn into the grid.
+        /// Live Terminal honours <see cref="ShowWatermark"/>; ASCII exports always
+        /// stamp, matching image / video save.</summary>
+        FracturingFog.Imaging.AsciiWatermarkStyle AsciiWatermarkStyle { get; set; }
+
         /// <summary>True to blend the perf HUD (phase timings + HW summary)
         /// into the top-left of the next uploaded frame. Cheap (~0.1 ms /
         /// frame) — safe during video record. Toggled by the shell.</summary>

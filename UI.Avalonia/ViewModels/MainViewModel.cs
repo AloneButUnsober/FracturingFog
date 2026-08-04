@@ -720,6 +720,23 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
         }
     }
 
+    private FracturingFog.Imaging.AsciiWatermarkStyle _asciiWatermarkStyle
+        = FracturingFog.Imaging.AsciiWatermarkStyle.Block;
+    /// <summary>Glyph style for the ASCII watermark (Terminal Mode + ASCII
+    /// export). Changing it repaints so the live terminal reflects it at once.</summary>
+    public FracturingFog.Imaging.AsciiWatermarkStyle AsciiWatermarkStyle
+    {
+        get => _asciiWatermarkStyle;
+        set
+        {
+            if (this.RaiseAndSetIfChangedReturnsChanged(ref _asciiWatermarkStyle, value))
+            {
+                _renderHost.AsciiWatermarkStyle = value;
+                _renderHost.RepaintWithPostFx(); // fires FrameBufferChanged → ASCII pump
+            }
+        }
+    }
+
     private bool _showPerfHud;
     /// <summary>True to blend the perf HUD (phase timings + HW summary)
     /// into the top-left of the uploaded texture. Cheap to leave on.</summary>
