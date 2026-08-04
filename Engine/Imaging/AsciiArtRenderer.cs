@@ -63,14 +63,24 @@ namespace FracturingFog.Imaging
 
             double smoothMax = ComputeSmoothMax(opt, smooth);
 
+            // Watermark ink overlay (#241 string-export follow-up). The PlainText/
+            // Ansi formats stamp the AsciiCell grid directly (RenderChars); the
+            // sub-cell formats build glyphs inline and consult this overlay per
+            // output character cell. All output grids are cols×rows characters, so
+            // one overlay aligns with every format.
+            var wm = opt.Watermark != null
+                ? AsciiWatermark.BuildOverlay(cols, rows, opt.Watermark, opt.WatermarkStyle)
+                : null;
+            if (wm != null && !wm.HasInk) wm = null;
+
             return opt.Format switch
             {
                 AsciiArtFormat.PlainText     => RenderChars(pixels, smooth, width, height, cols, rows, smoothMax, opt, color: false),
                 AsciiArtFormat.Ansi          => RenderChars(pixels, smooth, width, height, cols, rows, smoothMax, opt, color: true),
-                AsciiArtFormat.AnsiHalfBlock => RenderHalfBlock(pixels, smooth, width, height, cols, rows, smoothMax, opt),
-                AsciiArtFormat.Html          => RenderHtml(pixels, smooth, width, height, cols, rows, smoothMax, opt),
-                AsciiArtFormat.Svg           => RenderSvg(pixels, smooth, width, height, cols, rows, smoothMax, opt),
-                AsciiArtFormat.Braille       => RenderBraille(pixels, smooth, width, height, cols, rows, smoothMax, opt),
+                AsciiArtFormat.AnsiHalfBlock => RenderHalfBlock(pixels, smooth, width, height, cols, rows, smoothMax, opt, wm),
+                AsciiArtFormat.Html          => RenderHtml(pixels, smooth, width, height, cols, rows, smoothMax, opt, wm),
+                AsciiArtFormat.Svg           => RenderSvg(pixels, smooth, width, height, cols, rows, smoothMax, opt, wm),
+                AsciiArtFormat.Braille       => RenderBraille(pixels, smooth, width, height, cols, rows, smoothMax, opt, wm),
                 _                            => RenderChars(pixels, smooth, width, height, cols, rows, smoothMax, opt, color: false),
             };
         }
@@ -244,6 +254,10 @@ namespace FracturingFog.Imaging
         {
             // Shares the grid producer with the live display path (#227).
             var cells = RenderCells(px, smooth, w, h, opt, out cols, out rows);
+            // Watermark: PlainText/Ansi own a real AsciiCell grid, so reuse the
+            // tested grid stamp rather than the overlay the sub-cell formats need.
+            if (opt.Watermark != null)
+                AsciiWatermark.Stamp(cells, cols, rows, opt.Watermark, opt.WatermarkStyle);
             var sb = new StringBuilder(rows * (cols + (color ? cols * 20 : 1)));
             for (int y = 0; y < rows; y++)
             {
@@ -269,7 +283,7 @@ namespace FracturingFog.Imaging
 
         private static string RenderHalfBlock(
             uint[] px, float[]? smooth, int w, int h, int cols, int rows,
-            double smoothMax, AsciiArtOptions opt)
+            double smoothMax, AsciiArtOptions opt, AsciiWatermarkOverlay? wm)
         {
             int sh = rows * 2; // two vertical sub-rows per character cell
             var cells = Sample(px, smooth, w, h, cols, sh, opt.UseSmoothField, smoothMax);
@@ -278,6 +292,15 @@ namespace FracturingFog.Imaging
             {
                 for (int x = 0; x < cols; x++)
                 {
+                    if (wm != null && wm.TryGet(x, y, out var ink))
+                    {
+                        // Reset the prior cell's background, then paint the ink
+                        // glyph in the watermark colour over the fractal.
+                        sb.Append("\x1b[0m\x1b[38;2;")
+                          .Append(ink.R).Append(';').Append(ink.G).Append(';').Append(ink.B).Append('m')
+                          .Append(ink.Glyph);
+                        continue;
+                    }
                     var top = cells[(2 * y) * cols + x];
                     var bot = cells[(2 * y + 1) * cols + x];
                     sb.Append("\x1b[38;2;")
@@ -295,7 +318,7 @@ namespace FracturingFog.Imaging
 
         private static string RenderHtml(
             uint[] px, float[]? smooth, int w, int h, int cols, int rows,
-            double smoothMax, AsciiArtOptions opt)
+            double smoothMax, AsciiArtOptions opt, AsciiWatermarkOverlay? wm)
         {
             var cells = Sample(px, smooth, w, h, cols, rows, opt.UseSmoothField, smoothMax);
             var sb = new StringBuilder(rows * cols * 40);
@@ -308,8 +331,11 @@ namespace FracturingFog.Imaging
                 {
                     var c = cells[y * cols + x];
                     char g = Glyph(c.Field, opt.Ramp, opt.Invert);
+                    int cr = (int)c.R, cg = (int)c.G, cb = (int)c.B;
+                    if (wm != null && wm.TryGet(x, y, out var ink))
+                    { g = ink.Glyph; cr = ink.R; cg = ink.G; cb = ink.B; }
                     sb.Append("<span style=\"color:#")
-                      .Append(Hex2((int)c.R)).Append(Hex2((int)c.G)).Append(Hex2((int)c.B))
+                      .Append(Hex2(cr)).Append(Hex2(cg)).Append(Hex2(cb))
                       .Append("\">").Append(HtmlEscape(g)).Append("</span>");
                 }
                 sb.Append('\n');
@@ -322,7 +348,7 @@ namespace FracturingFog.Imaging
 
         private static string RenderSvg(
             uint[] px, float[]? smooth, int w, int h, int cols, int rows,
-            double smoothMax, AsciiArtOptions opt)
+            double smoothMax, AsciiArtOptions opt, AsciiWatermarkOverlay? wm)
         {
             var cells = Sample(px, smooth, w, h, cols, rows, opt.UseSmoothField, smoothMax);
             double fs = opt.FontSizePx;
@@ -346,9 +372,12 @@ namespace FracturingFog.Imaging
                 {
                     var c = cells[y * cols + x];
                     char g = Glyph(c.Field, opt.Ramp, opt.Invert);
+                    int cr = (int)c.R, cg = (int)c.G, cb = (int)c.B;
+                    if (wm != null && wm.TryGet(x, y, out var ink))
+                    { g = ink.Glyph; cr = ink.R; cg = ink.G; cb = ink.B; }
                     double gx = x * advance;
                     sb.Append(string.Create(CultureInfo.InvariantCulture,
-                        $"<tspan x=\"{gx:0.##}\" fill=\"#{Hex2((int)c.R)}{Hex2((int)c.G)}{Hex2((int)c.B)}\">"))
+                        $"<tspan x=\"{gx:0.##}\" fill=\"#{Hex2(cr)}{Hex2(cg)}{Hex2(cb)}\">"))
                       .Append(HtmlEscape(g)).Append("</tspan>");
                 }
                 sb.Append("</text>\n");
@@ -361,7 +390,7 @@ namespace FracturingFog.Imaging
 
         private static string RenderBraille(
             uint[] px, float[]? smooth, int w, int h, int cols, int rows,
-            double smoothMax, AsciiArtOptions opt)
+            double smoothMax, AsciiArtOptions opt, AsciiWatermarkOverlay? wm)
         {
             int sw = cols * 2, sh = rows * 4;
             var cells = Sample(px, smooth, w, h, sw, sh, opt.UseSmoothField, smoothMax);
@@ -380,6 +409,10 @@ namespace FracturingFog.Imaging
             {
                 for (int cx = 0; cx < cols; cx++)
                 {
+                    // Braille is monochrome: an inked cell simply overrides the
+                    // dot cell with the watermark's block glyph.
+                    if (wm != null && wm.TryGet(cx, cy, out var ink))
+                    { sb.Append(ink.Glyph); continue; }
                     int mask = 0;
                     for (int dx = 0; dx < 2; dx++)
                         for (int dy = 0; dy < 4; dy++)
