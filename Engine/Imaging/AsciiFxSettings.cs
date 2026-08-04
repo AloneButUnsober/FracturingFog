@@ -205,19 +205,31 @@ namespace FracturingFog.Imaging
         /// (0 = uniform rain, 1 = rain only where the fractal is bright).</summary>
         public double MatrixRainMask { get; set; } = 0.6;
 
+        /// <summary>Particles: drifting snow / rain flecks over the art. Animated;
+        /// needs an <see cref="AsciiFxState"/>.</summary>
+        public bool Particles { get; set; }
+        /// <summary>Number of particles.</summary>
+        public int ParticleCount { get; set; } = 60;
+        /// <summary>Fall speed in rows per second.</summary>
+        public double ParticleSpeed { get; set; } = 6.0;
+        /// <summary>Horizontal sway amplitude in cells.</summary>
+        public double ParticleSway { get; set; } = 1.5;
+        /// <summary>Glyph drawn for each particle.</summary>
+        public char ParticleGlyph { get; set; } = '*';
+
         /// <summary>True when any effect is enabled (the host can skip the pass).</summary>
         public bool AnyEnabled => HueCycle || Crt || Breathe || CharsetSwap || Monochrome
             || Saturate || Invert || Solarize || Quantize || Dither || Duotone || Plasma
             || RampScroll || Grain || Vignette || ChromaticAberration || Wave || Drift || Twist
-            || Glitch || Bloom || Edge || MatrixRain;
+            || Glitch || Bloom || Edge || MatrixRain || Particles;
 
         /// <summary>True when an enabled effect varies with time (the live view
         /// must repaint on a timer for these, not only on buffer changes).</summary>
         public bool AnyAnimated => HueCycle || Breathe || MatrixRain || RampScroll || Grain || Wave
-            || Drift || Glitch || Plasma || (Saturate && SaturateAmp > 0);
+            || Drift || Glitch || Plasma || Particles || (Saturate && SaturateAmp > 0);
 
         /// <summary>True when an enabled effect evolves across frames and so needs
         /// a persistent <see cref="AsciiFxState"/> (not a pure grid+clock function).</summary>
-        public bool NeedsState => MatrixRain;
+        public bool NeedsState => MatrixRain || Particles;
     }
 }

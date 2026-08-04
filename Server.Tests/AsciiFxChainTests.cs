@@ -481,6 +481,27 @@ public sealed class AsciiFxChainTests
     }
 
     [Fact]
+    public void Particles_PaintFlecksAndAdvanceOverTime()
+    {
+        const int cols = 30, rows = 30;
+        AsciiCell[] Frame(AsciiFxState s, double t)
+        {
+            var cells = Grid(cols, rows, (x, y) => new AsciiCell('.', 0, 0, 0));
+            AsciiFxChain.Apply(cells, cols, rows, Ramp,
+                new AsciiFxSettings { Particles = true, ParticleCount = 40, ParticleGlyph = '*', TimeSeconds = t }, s);
+            return cells;
+        }
+        var st = new AsciiFxState();
+        var f0 = Frame(st, 0.0);
+        int flecks = 0; foreach (var c in f0) if (c.Glyph == '*') flecks++;
+        Assert.True(flecks > 0, "expected particle flecks");
+        var f1 = Frame(st, 0.5); // advanced clock → positions changed
+        bool moved = false;
+        for (int i = 0; i < f0.Length; i++) if (f0[i].Glyph != f1[i].Glyph) { moved = true; break; }
+        Assert.True(moved, "particles should drift between frames");
+    }
+
+    [Fact]
     public void MatrixRain_NoStateIsNoOp()
     {
         var cells = Grid(4, 4, (x, y) => new AsciiCell('#', 180, 180, 180));

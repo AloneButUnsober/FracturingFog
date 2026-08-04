@@ -186,9 +186,15 @@ namespace FracturingFog.Imaging
                 }
             }
 
-            // Structural overlay (stateful): Matrix rain rewrites the grid.
-            if (fx.MatrixRain && state != null)
-                RainPass(cells, cols, rows, fx, state);
+            // Structural overlays (stateful). Advance the shared clock ONCE per
+            // frame, then hand the delta to each stateful pass.
+            if (state != null && (fx.MatrixRain || fx.Particles))
+            {
+                state.EnsureSize(cols, rows);
+                double dt = state.AdvanceClock(fx.TimeSeconds);
+                if (fx.MatrixRain) RainPass(cells, cols, rows, fx, state, dt);
+                if (fx.Particles) ParticlePass(cells, cols, rows, fx, state, dt);
+            }
 
             // Spatial stage: effects that read neighbours or displace cells. Each
             // snapshots the current grid so reads see pre-effect values.
@@ -358,11 +364,9 @@ namespace FracturingFog.Imaging
         // Matrix digital rain: per column a falling drop with a fading trail; the
         // underlying grid brightness masks it so the fractal ghosts through.
         private static void RainPass(
-            AsciiCell[] cells, int cols, int rows, AsciiFxSettings fx, AsciiFxState state)
+            AsciiCell[] cells, int cols, int rows, AsciiFxSettings fx, AsciiFxState state, double dt)
         {
-            state.EnsureSize(cols, rows);
             if (!state.RainInitialised) state.InitRain(Math.Clamp(fx.MatrixRainDensity, 0.0, 1.0));
-            double dt = state.AdvanceClock(fx.TimeSeconds);
 
             // Snapshot brightness (mask), then dim the background to a faint ghost.
             var luma = state.Luma;
@@ -400,6 +404,31 @@ namespace FracturingFog.Imaging
                     else { r = (byte)(30 * bright); g = (byte)(255 * bright); b = (byte)(70 * bright); }    // green trail
                     cells[i] = new AsciiCell(glyph, r, g, b);
                 }
+            }
+        }
+
+        // Drifting particles (snow / rain): fall down with a gentle horizontal
+        // sway, wrap at the bottom, painted as a bright glyph over the grid.
+        private static void ParticlePass(
+            AsciiCell[] cells, int cols, int rows, AsciiFxSettings fx, AsciiFxState state, double dt)
+        {
+            int count = Math.Max(0, fx.ParticleCount);
+            if (count == 0) return;
+            if (!state.ParticlesInitialised || state.PartX.Length != count)
+                state.InitParticles(count);
+
+            for (int p = 0; p < count; p++)
+            {
+                state.PartY[p] += fx.ParticleSpeed * dt;
+                if (state.PartY[p] >= rows)
+                {
+                    state.PartY[p] -= rows;                        // wrap to top
+                    state.PartX[p] = state.Rng.NextDouble() * cols;
+                }
+                double sway = fx.ParticleSway * Math.Sin(state.PartY[p] * 0.4 + state.PartSway[p]);
+                int x = Clamp((int)Math.Round(state.PartX[p] + sway), 0, cols - 1);
+                int y = Clamp((int)state.PartY[p], 0, rows - 1);
+                cells[y * cols + x] = new AsciiCell(fx.ParticleGlyph, 235, 240, 255); // near-white fleck
             }
         }
 
