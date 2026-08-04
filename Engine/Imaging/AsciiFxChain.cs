@@ -60,8 +60,9 @@ namespace FracturingFog.Imaging
             }
 
             byte solThresh = (byte)Math.Clamp(fx.SolarizeThreshold * 255.0, 0, 255);
+            int qLevels = Math.Max(2, fx.QuantizeLevels);
             bool doPerCell = doGlyph || fx.HueCycle || fx.Monochrome || fx.Saturate
-                || fx.Invert || fx.Solarize;
+                || fx.Invert || fx.Solarize || fx.Quantize;
             if (doPerCell)
             for (int y = 0; y < rows; y++)
             {
@@ -120,6 +121,11 @@ namespace FracturingFog.Imaging
                         r = (byte)Math.Round(fx.MonochromeR * luma);
                         g = (byte)Math.Round(fx.MonochromeG * luma);
                         b = (byte)Math.Round(fx.MonochromeB * luma);
+                    }
+                    if (fx.Quantize)
+                    {
+                        if (fx.QuantizeTerminal16) SnapTerminal16(ref r, ref g, ref b);
+                        else { r = Posterize(r, qLevels); g = Posterize(g, qLevels); b = Posterize(b, qLevels); }
                     }
                     cells[i] = new AsciiCell(glyph, r, g, b);
                 }
@@ -193,6 +199,34 @@ namespace FracturingFog.Imaging
         }
 
         private static int Clamp(int v, int lo, int hi) => v < lo ? lo : (v > hi ? hi : v);
+
+        // Snap a channel to N evenly-spaced levels across [0,255].
+        private static byte Posterize(byte v, int levels)
+        {
+            double step = (levels - 1);
+            int q = (int)Math.Round(v / 255.0 * step);
+            return (byte)Math.Clamp(q / step * 255.0, 0, 255);
+        }
+
+        // Standard 16-colour ANSI palette (system + bright).
+        private static readonly (byte r, byte g, byte b)[] Ansi16 =
+        {
+            (0,0,0),(128,0,0),(0,128,0),(128,128,0),(0,0,128),(128,0,128),(0,128,128),(192,192,192),
+            (128,128,128),(255,0,0),(0,255,0),(255,255,0),(0,0,255),(255,0,255),(0,255,255),(255,255,255),
+        };
+
+        // Snap a colour to the nearest ANSI-16 palette entry (squared distance).
+        private static void SnapTerminal16(ref byte r, ref byte g, ref byte b)
+        {
+            int best = 0, bestD = int.MaxValue;
+            for (int i = 0; i < Ansi16.Length; i++)
+            {
+                int dr = r - Ansi16[i].r, dg = g - Ansi16[i].g, db = b - Ansi16[i].b;
+                int d = dr * dr + dg * dg + db * db;
+                if (d < bestD) { bestD = d; best = i; }
+            }
+            r = Ansi16[best].r; g = Ansi16[best].g; b = Ansi16[best].b;
+        }
 
         // In-place saturation scale about the pixel's luma (grey axis). scale 0 →
         // greyscale, 1 → unchanged, >1 → more vivid (clamped to byte range).
