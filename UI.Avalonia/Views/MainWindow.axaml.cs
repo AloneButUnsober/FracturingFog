@@ -641,14 +641,21 @@ public sealed partial class MainWindow : Window
             RetriggerAsciiReveal();
     }
 
-    // Restart the reveal clock so typewriter / dissolve wipe in again, then
-    // repaint. No-op unless an ASCII mode is active.
+    // Restart the reveal clock so typewriter / dissolve wipe in again over the
+    // newly-selected view. No-op unless an ASCII mode is active.
+    //
+    // Deliberately does NOT pump here: the type / region change kicks off a new
+    // render whose FrameBufferChanged will paint the fresh frame. Pumping now
+    // would capture the STALE pre-change buffer and, via the single-slot
+    // coalescing gate, drop that real new-frame pump — leaving the ASCII view one
+    // selection behind whenever no animation timer is running to recover it.
+    // When a reveal (or any animated FX) is on, UpdateAsciiFxTimer keeps the
+    // ~30fps timer running, which both animates the wipe and repaints promptly.
     private void RetriggerAsciiReveal()
     {
         if (_asciiFrameHandler == null) return;
         _asciiTransitionClock.Restart();
         UpdateAsciiFxTimer();
-        PumpAsciiFrame();
     }
 
     private void OnShellPropertyChanged(object? sender, PropertyChangedEventArgs e)
