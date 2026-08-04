@@ -165,7 +165,25 @@ namespace FracturingFog.Imaging
             if (fx.MatrixRain && state != null)
                 RainPass(cells, cols, rows, fx, state);
 
-            // Shading (last): CRT scanline dim over whatever the stages produced.
+            // Shading (last): vignette, then CRT scanline dim.
+            if (fx.Vignette)
+            {
+                double strength = Math.Clamp(fx.VignetteStrength, 0.0, 1.0);
+                double cx = (cols - 1) * 0.5, cy = (rows - 1) * 0.5;
+                double maxD2 = cx * cx + cy * cy;
+                if (maxD2 < 1e-9) maxD2 = 1.0;
+                for (int y = 0; y < rows; y++)
+                    for (int x = 0; x < cols; x++)
+                    {
+                        double dx = x - cx, dy = y - cy;
+                        double f = 1.0 - strength * (dx * dx + dy * dy) / maxD2; // 1 centre → 1-strength corner
+                        if (f < 0) f = 0;
+                        int i = y * cols + x;
+                        var c = cells[i];
+                        cells[i] = new AsciiCell(c.Glyph,
+                            (byte)(c.R * f), (byte)(c.G * f), (byte)(c.B * f));
+                    }
+            }
             if (fx.Crt)
             {
                 double dim = Math.Clamp(fx.CrtScanlineDim, 0.0, 1.0);
