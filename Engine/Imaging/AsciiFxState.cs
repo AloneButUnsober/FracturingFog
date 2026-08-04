@@ -35,6 +35,12 @@ namespace FracturingFog.Imaging
         internal double[] Luma = Array.Empty<double>();       // scratch mask (cols*rows)
         private bool _rainInit;
 
+        // ── Particles ─────────────────────────────────────────────────────
+        internal double[] PartX = Array.Empty<double>();
+        internal double[] PartY = Array.Empty<double>();
+        internal double[] PartSway = Array.Empty<double>();   // per-particle sway phase
+        private bool _partInit;
+
         public AsciiFxState(int seed = 0x5CA1E)
         {
             _rng = new Random(seed);
@@ -46,6 +52,7 @@ namespace FracturingFog.Imaging
         {
             _lastTime = double.NaN;
             _rainInit = false;
+            _partInit = false;
         }
 
         /// <summary>Ensure buffers match <paramref name="cols"/>×<paramref name="rows"/>;
@@ -60,6 +67,24 @@ namespace FracturingFog.Imaging
             RainLen = new int[cols];
             RainActive = new bool[cols];
             _rainInit = false;
+            _partInit = false;
+        }
+
+        internal bool ParticlesInitialised => _partInit;
+
+        // Seed `count` particles at random positions with random sway phase.
+        internal void InitParticles(int count)
+        {
+            PartX = new double[count];
+            PartY = new double[count];
+            PartSway = new double[count];
+            for (int i = 0; i < count; i++)
+            {
+                PartX[i] = _rng.NextDouble() * Cols;
+                PartY[i] = _rng.NextDouble() * Rows;
+                PartSway[i] = _rng.NextDouble() * Math.PI * 2.0;
+            }
+            _partInit = true;
         }
 
         /// <summary>Advance the clock, returning the delta since the last frame
