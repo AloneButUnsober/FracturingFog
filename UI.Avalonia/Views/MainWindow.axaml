@@ -69,6 +69,10 @@
                     <ToggleButton Classes="toolbar" Content="Terminal"
                                   IsChecked="{Binding IsTerminalMode, Mode=TwoWay}"
                                   ToolTip.Tip="Terminal Mode — show the fractal as live ASCII / text art" />
+                    <ToggleButton Classes="toolbar" Content="Ramp: FX"
+                                  IsVisible="{Binding IsTerminalMode}"
+                                  IsChecked="{Binding AsciiRampFromColor, Mode=TwoWay}"
+                                  ToolTip.Tip="Drive the ASCII glyph ramp from the post-FX image (adaptive / brightness / contrast) instead of the raw iteration field" />
                     <!--<ToggleButton Classes="toolbar" Content="Grid"
                                   IsChecked="{Binding Main.ShowGrid, Mode=TwoWay}"
                                   ToolTip.Tip="Show Cartesian grid overlay" />

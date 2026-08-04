@@ -108,6 +108,9 @@ namespace FracturingFog.Imaging
         private static double ComputeSmoothMax(AsciiArtOptions opt, float[]? smooth)
         {
             double m = 0.0;
+            // RampFromColorLuma forces the luma path: a zero max makes Sample fall
+            // through to post-FX pixel luminance for every format.
+            if (opt.RampFromColorLuma) return 0.0;
             if (opt.UseSmoothField && smooth != null)
                 for (int i = 0; i < smooth.Length; i++)
                     if (smooth[i] > m) m = smooth[i];
