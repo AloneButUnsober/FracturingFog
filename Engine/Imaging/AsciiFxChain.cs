@@ -184,6 +184,19 @@ namespace FracturingFog.Imaging
                 }
             }
 
+            if (fx.Wave && fx.WaveAmplitude != 0)
+            {
+                double wl = Math.Max(1e-3, fx.WaveLength);
+                double phase = fx.TimeSeconds * fx.WaveSpeed;
+                var src = (AsciiCell[])cells.Clone();
+                for (int y = 0; y < rows; y++)
+                {
+                    int off = (int)Math.Round(fx.WaveAmplitude * Math.Sin(y / wl * 2.0 * Math.PI + phase));
+                    for (int x = 0; x < cols; x++)
+                        cells[y * cols + x] = src[y * cols + Clamp(x - off, 0, cols - 1)];
+                }
+            }
+
             // Shading (last): vignette, then CRT scanline dim.
             if (fx.Vignette)
             {

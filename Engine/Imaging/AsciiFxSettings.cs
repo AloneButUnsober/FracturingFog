@@ -43,6 +43,16 @@ namespace FracturingFog.Imaging
         /// <summary>Channel offset in cells for <see cref="ChromaticAberration"/>.</summary>
         public int ChromaticShift { get; set; } = 1;
 
+        /// <summary>Ripple: displace each row horizontally by a travelling sine
+        /// wave. Animated.</summary>
+        public bool Wave { get; set; }
+        /// <summary>Peak horizontal displacement in cells.</summary>
+        public double WaveAmplitude { get; set; } = 2.0;
+        /// <summary>Wavelength in rows.</summary>
+        public double WaveLength { get; set; } = 8.0;
+        /// <summary>Wave travel speed (radians per second).</summary>
+        public double WaveSpeed { get; set; } = 2.0;
+
         /// <summary>"Breathe" the glyph density: animate a gamma on the ramp index
         /// so the whole field pulses lighter/darker over time (independent of the
         /// fractal). Operates on the chosen glyph via the ramp, so no re-sample.</summary>
@@ -145,11 +155,11 @@ namespace FracturingFog.Imaging
         /// <summary>True when any effect is enabled (the host can skip the pass).</summary>
         public bool AnyEnabled => HueCycle || Crt || Breathe || CharsetSwap || Monochrome
             || Saturate || Invert || Solarize || Quantize || Duotone || RampScroll || Grain
-            || Vignette || ChromaticAberration || MatrixRain;
+            || Vignette || ChromaticAberration || Wave || MatrixRain;
 
         /// <summary>True when an enabled effect varies with time (the live view
         /// must repaint on a timer for these, not only on buffer changes).</summary>
-        public bool AnyAnimated => HueCycle || Breathe || MatrixRain || RampScroll || Grain
+        public bool AnyAnimated => HueCycle || Breathe || MatrixRain || RampScroll || Grain || Wave
             || (Saturate && SaturateAmp > 0);
 
         /// <summary>True when an enabled effect evolves across frames and so needs
