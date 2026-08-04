@@ -183,6 +183,15 @@ namespace FracturingFog.Rendering
         // compositing onto a buffer that already has one baked in.
         private uint[]? _lastPreOverlayBuffer;
 
+        // True when the most recent buffer to reach the screen came from an
+        // external PresentBuffer (slideshow cross-fade blend, video-slideshow
+        // leg) rather than a real render through UploadProcessedBuffer. Those
+        // presents update _lastUploadedBuffer but leave _lastPreOverlayBuffer
+        // pointing at the previous real render — so the live ASCII source must
+        // read _lastUploadedBuffer directly to mirror the blend, or Terminal
+        // Mode would sample the stale committed frame and show no cross-fade.
+        private volatile bool _lastUploadExternal;
+
         // Right-drag rubber-band rectangle (pixel space). Set by the shell via
         // SetSelectionBox while the user box-zooms; cleared on release. Drawn
         // on top of grid + watermark by FractalOverlayCompositor.
@@ -3242,6 +3251,9 @@ namespace FracturingFog.Rendering
             {
                 _lastPreOverlayBuffer = null;
             }
+            // Real render: the pre-overlay snapshot (or ColorBuffer) is now the
+            // authoritative ASCII source again.
+            _lastUploadExternal = false;
 
             // F10.5 / issue #96 — composite translucent 2D pixels over a
             // background. The on-screen present is opaque (the swap-chain ignores
@@ -3716,6 +3728,9 @@ namespace FracturingFog.Rendering
             _lastPresentedBuffer = bgra;
             _lastPresentedWidth = width;
             _lastPresentedHeight = height;
+            // Route the ASCII source to this presented buffer (see field note) —
+            // _lastPreOverlayBuffer still points at the previous real render.
+            _lastUploadExternal = true;
             // A live ASCII view mirrors the buffer via FrameBufferChanged. An
             // external present (slideshow cross-fade steps, etc.) mutates
             // _lastUploadedBuffer — the ASCII source — without going through
@@ -4049,7 +4064,13 @@ namespace FracturingFog.Rendering
             buf = System.Array.Empty<uint>(); smooth = null; w = 0; h = 0;
             lock (_uploadGate)
             {
-                var src = _lastPreOverlayBuffer ?? _lastUploadedBuffer;
+                // Prefer the clean pre-overlay snapshot so ASCII doesn't sample
+                // baked-in grid/watermark pixels — EXCEPT after an external
+                // present (slideshow blend), where that snapshot is a stale
+                // committed frame and the presented buffer is the live content.
+                var src = _lastUploadExternal
+                    ? _lastUploadedBuffer
+                    : (_lastPreOverlayBuffer ?? _lastUploadedBuffer);
                 w = _lastUploadedWidth; h = _lastUploadedHeight;
                 if (src == null || w <= 0 || h <= 0) { w = h = 0; return false; }
                 int n = w * h;
