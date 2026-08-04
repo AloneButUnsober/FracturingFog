@@ -930,6 +930,7 @@ public sealed partial class MainWindow : Window
     // when the UI can't keep up during a fast pan/zoom.
     private AsciiView? _asciiView;
     private EventHandler? _asciiFrameHandler;
+    private EventHandler? _asciiColumnsHandler;
     private int _asciiUpdateQueued; // 0 = idle, 1 = a UI update is already posted
     private readonly System.Diagnostics.Stopwatch _asciiFxClock = new();
     // Separate clock for the one-shot reveal transitions (typewriter / dissolve):
@@ -1027,6 +1028,11 @@ public sealed partial class MainWindow : Window
         // adaptive-sweep changes update the ASCII live, not just re-renders.
         _asciiFrameHandler = (_, _) => PumpAsciiFrame();
         _shell.Main.RenderHost.FrameBufferChanged += _asciiFrameHandler;
+        // Resize re-pump: a window / column-width change alters the fitted
+        // column count but fires no buffer-change event, so re-render the ASCII
+        // grid at the new resolution instead of letterboxing the old one.
+        _asciiColumnsHandler = (_, _) => PumpAsciiFrame();
+        _asciiView.LiveColumnsChanged += _asciiColumnsHandler;
         _asciiFxClock.Restart();
         _asciiTransitionClock.Restart(); // reveal plays on entering the mode
         UpdateAsciiFxTimer();
@@ -1044,6 +1050,9 @@ public sealed partial class MainWindow : Window
         if (_shell != null && _asciiFrameHandler != null)
             _shell.Main.RenderHost.FrameBufferChanged -= _asciiFrameHandler;
         _asciiFrameHandler = null;
+        if (_asciiView != null && _asciiColumnsHandler != null)
+            _asciiView.LiveColumnsChanged -= _asciiColumnsHandler;
+        _asciiColumnsHandler = null;
         _asciiFxTimer?.Stop();
         _asciiFxClock.Stop();
         _asciiTransitionClock.Stop();

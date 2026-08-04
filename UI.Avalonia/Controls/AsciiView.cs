@@ -49,6 +49,13 @@ public sealed class AsciiView : Control
     /// UI-thread state. Updated whenever the control's bounds change.</summary>
     public volatile int LiveColumns = 80;
 
+    /// <summary>Raised (UI thread) when a bounds change alters the fitted column
+    /// count. The stored grid is a fixed Cols×Rows produced for the previous
+    /// width — without a re-pull a resize would only re-centre / letterbox the
+    /// old grid, never re-render at the new resolution. The host re-pumps a
+    /// freshly-sized frame in response.</summary>
+    public event EventHandler? LiveColumnsChanged;
+
     public AsciiView()
     {
         EnsureMetrics();
@@ -91,7 +98,12 @@ public sealed class AsciiView : Control
         {
             EnsureMetrics();
             int cols = _advance > 0 ? (int)(Bounds.Width / _advance) : 80;
-            LiveColumns = Math.Clamp(cols, 20, 400);
+            cols = Math.Clamp(cols, 20, 400);
+            if (cols != LiveColumns)
+            {
+                LiveColumns = cols;
+                LiveColumnsChanged?.Invoke(this, EventArgs.Empty);
+            }
         }
     }
 

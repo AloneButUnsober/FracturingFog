@@ -3716,6 +3716,12 @@ namespace FracturingFog.Rendering
             _lastPresentedBuffer = bgra;
             _lastPresentedWidth = width;
             _lastPresentedHeight = height;
+            // A live ASCII view mirrors the buffer via FrameBufferChanged. An
+            // external present (slideshow cross-fade steps, etc.) mutates
+            // _lastUploadedBuffer — the ASCII source — without going through
+            // UploadProcessedBuffer, so fire the event here too or Terminal Mode
+            // would snap between committed frames instead of cross-fading.
+            FrameBufferChanged?.Invoke(this, EventArgs.Empty);
         }
 
         /// <summary>
