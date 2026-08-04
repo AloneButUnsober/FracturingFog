@@ -1048,11 +1048,7 @@ public sealed partial class MainWindow : Window
         int cols = view.LiveColumns;            // volatile — safe off UI thread
         double aspect = view.CellAspect;        // constant after metrics
         bool rampFromColor = _shell?.AsciiRampFromColor ?? false;
-        var fx = new FracturingFog.Render.AsciiFxSpec(
-            hueCycle: _shell?.AsciiFxHue ?? false,
-            crt: _shell?.AsciiFxCrt ?? false,
-            breathe: _shell?.AsciiFxBreathe ?? false,
-            timeSeconds: _asciiFxClock.Elapsed.TotalSeconds);
+        var fx = _shell?.BuildAsciiFxSettings(_asciiFxClock.Elapsed.TotalSeconds);
         var frame = host.RenderLastFrameAscii(
             cols, aspect, color: true, invert: false, fineRamp: false,
             rampFromColor: rampFromColor, fx: fx);
