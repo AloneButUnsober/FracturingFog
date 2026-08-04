@@ -369,9 +369,10 @@ namespace FracturingFog.Imaging
             if (fx.Typewriter || fx.Dissolve)
             {
                 double dur = Math.Max(1e-4, fx.TransitionSeconds);
+                double tt = fx.TransitionTimeSeconds;
                 double progress = fx.TransitionLoop
-                    ? (fx.TimeSeconds % dur + dur) % dur / dur
-                    : Math.Clamp(fx.TimeSeconds / dur, 0.0, 1.0);
+                    ? (tt % dur + dur) % dur / dur
+                    : Math.Clamp(tt / dur, 0.0, 1.0);
                 if (progress < 1.0)
                 {
                     if (fx.Typewriter)

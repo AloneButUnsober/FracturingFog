@@ -21,9 +21,16 @@ namespace FracturingFog.Imaging
     public sealed class AsciiFxSettings
     {
         /// <summary>Animation clock in seconds. Drives the time-varying effects
-        /// (<see cref="HueCycle"/>, <see cref="Breathe"/>). Static effects
+        /// (<see cref="HueCycle"/>, <see cref="Breathe"/>, …). Static effects
         /// (<see cref="Crt"/>) ignore it.</summary>
         public double TimeSeconds { get; set; }
+
+        /// <summary>Separate clock for the reveal transitions (<see cref="Typewriter"/>,
+        /// <see cref="Dissolve"/>) so a reveal can restart on a trigger (entering
+        /// terminal mode, changing region / fractal type) without disturbing the
+        /// continuously-running effects on <see cref="TimeSeconds"/>. Seconds since
+        /// the current reveal began.</summary>
+        public double TransitionTimeSeconds { get; set; }
 
         /// <summary>Rotate every cell's colour hue over time — palette cycling.</summary>
         public bool HueCycle { get; set; }
@@ -236,11 +243,12 @@ namespace FracturingFog.Imaging
         /// <summary>Seconds for a reveal transition to complete.</summary>
         public double TransitionSeconds { get; set; } = 2.0;
 
-        /// <summary>When true (default) reveal transitions loop — wipe in, reset,
-        /// wipe in again — so they are visibly animating in the live view. Set
-        /// false for a one-shot intro (e.g. baked at the head of a recording),
-        /// which stays fully revealed once complete.</summary>
-        public bool TransitionLoop { get; set; } = true;
+        /// <summary>When true the reveal transitions loop — wipe in, reset, wipe in
+        /// again. Default false: a one-shot reveal that plays once (on entering
+        /// terminal mode or changing region / fractal type — the live view
+        /// restarts <see cref="TransitionTimeSeconds"/> on those) and then stays
+        /// fully revealed.</summary>
+        public bool TransitionLoop { get; set; }
 
         /// <summary>Typewriter: reveal cells in reading order over the transition,
         /// the rest blank. Animated.</summary>
