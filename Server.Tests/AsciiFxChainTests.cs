@@ -139,4 +139,29 @@ public sealed class AsciiFxChainTests
             new AsciiFxSettings { CharsetSwap = true, SwapRamp = "abcd" });
         Assert.Equal(' ', cells[0].Glyph);
     }
+
+    [Fact]
+    public void Monochrome_TintsToHueKeepingBrightness()
+    {
+        // White (luma 1) → full tint colour; keeps glyph.
+        var cells = Grid(1, 1, (x, y) => new AsciiCell('#', 255, 255, 255));
+        AsciiFxChain.Apply(cells, 1, 1, Ramp, new AsciiFxSettings
+        { Monochrome = true, MonochromeR = 40, MonochromeG = 255, MonochromeB = 90 });
+        Assert.Equal('#', cells[0].Glyph);
+        Assert.Equal(40, cells[0].R);
+        Assert.Equal(255, cells[0].G);
+        Assert.Equal(90, cells[0].B);
+    }
+
+    [Fact]
+    public void Monochrome_ScalesTintByLuma()
+    {
+        // Mid-grey (luma ≈ 0.5) → roughly half the tint.
+        var cells = Grid(1, 1, (x, y) => new AsciiCell('#', 128, 128, 128));
+        AsciiFxChain.Apply(cells, 1, 1, Ramp, new AsciiFxSettings
+        { Monochrome = true, MonochromeR = 0, MonochromeG = 200, MonochromeB = 0 });
+        Assert.Equal(0, cells[0].R);
+        Assert.InRange((int)cells[0].G, 90, 110); // ~0.5 * 200
+        Assert.Equal(0, cells[0].B);
+    }
 }
