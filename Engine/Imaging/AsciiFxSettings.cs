@@ -217,16 +217,30 @@ namespace FracturingFog.Imaging
         /// <summary>Glyph drawn for each particle.</summary>
         public char ParticleGlyph { get; set; } = '*';
 
+        // ── Transitions (reveal over TransitionSeconds) ───────────────────
+
+        /// <summary>Seconds for a reveal transition to complete.</summary>
+        public double TransitionSeconds { get; set; } = 2.0;
+
+        /// <summary>Typewriter: reveal cells in reading order over the transition,
+        /// the rest blank. Animated (one-shot).</summary>
+        public bool Typewriter { get; set; }
+
+        /// <summary>Dissolve: reveal cells in a fixed pseudo-random order over the
+        /// transition, the rest blank. Animated (one-shot).</summary>
+        public bool Dissolve { get; set; }
+
         /// <summary>True when any effect is enabled (the host can skip the pass).</summary>
         public bool AnyEnabled => HueCycle || Crt || Breathe || CharsetSwap || Monochrome
             || Saturate || Invert || Solarize || Quantize || Dither || Duotone || Plasma
             || RampScroll || Grain || Vignette || ChromaticAberration || Wave || Drift || Twist
-            || Glitch || Bloom || Edge || MatrixRain || Particles;
+            || Glitch || Bloom || Edge || MatrixRain || Particles || Typewriter || Dissolve;
 
         /// <summary>True when an enabled effect varies with time (the live view
         /// must repaint on a timer for these, not only on buffer changes).</summary>
         public bool AnyAnimated => HueCycle || Breathe || MatrixRain || RampScroll || Grain || Wave
-            || Drift || Glitch || Plasma || Particles || (Saturate && SaturateAmp > 0);
+            || Drift || Glitch || Plasma || Particles || Typewriter || Dissolve
+            || (Saturate && SaturateAmp > 0);
 
         /// <summary>True when an enabled effect evolves across frames and so needs
         /// a persistent <see cref="AsciiFxState"/> (not a pure grid+clock function).</summary>
