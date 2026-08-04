@@ -576,6 +576,7 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
         ToggleMiniModeCommand  = ReactiveCommand.Create(() => IsMiniMode = !IsMiniMode);
         ToggleToyModeCommand   = ReactiveCommand.Create(() => IsToyMode  = !IsToyMode);
         ToggleTerminalModeCommand = ReactiveCommand.Create(() => IsTerminalMode = !IsTerminalMode);
+        ToggleSideBySideModeCommand = ReactiveCommand.Create(() => IsSideBySideMode = !IsSideBySideMode);
 
         // Push live view-state into the MiniMap VM on every frame so the
         // indicator tracks the user's pan/zoom. Mirrors legacy MainForm's
@@ -1812,7 +1813,10 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
         set
         {
             if (this.RaiseAndSetIfChangedReturnsChanged(ref _isTerminalMode, value))
+            {
+                this.RaisePropertyChanged(nameof(IsAsciiVisible));
                 TerminalModeToggleRequested?.Invoke(this, value);
+            }
         }
     }
 
@@ -1821,6 +1825,34 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
     public event EventHandler<bool>? TerminalModeToggleRequested;
 
     public ReactiveCommand<Unit, bool> ToggleTerminalModeCommand { get; private set; } = null!;
+
+    // ── Side-by-side Mode (#228) ────────────────────────────────────────
+    // Full GPU render on one half, live ASCII on the other. Mutually exclusive
+    // with Terminal Mode (the host enforces the switch). Because the two panels
+    // occupy separate columns, the native GPU HWND never overlaps the Avalonia
+    // ASCII view, so both composite fine side by side.
+    private bool _isSideBySideMode;
+    public bool IsSideBySideMode
+    {
+        get => _isSideBySideMode;
+        set
+        {
+            if (this.RaiseAndSetIfChangedReturnsChanged(ref _isSideBySideMode, value))
+            {
+                this.RaisePropertyChanged(nameof(IsAsciiVisible));
+                SideBySideModeToggleRequested?.Invoke(this, value);
+            }
+        }
+    }
+
+    /// <summary>Fires when Side-by-side Mode toggles.</summary>
+    public event EventHandler<bool>? SideBySideModeToggleRequested;
+
+    public ReactiveCommand<Unit, bool> ToggleSideBySideModeCommand { get; private set; } = null!;
+
+    /// <summary>True whenever the ASCII view is on screen (either mode). Bound by
+    /// controls that should appear only when ASCII is visible (Ramp: FX).</summary>
+    public bool IsAsciiVisible => IsTerminalMode || IsSideBySideMode;
 
     // Terminal Mode: drive the glyph ramp from the post-FX pixel luminance
     // instead of the raw smooth field, so an adaptive sweep (or brightness /

@@ -561,11 +561,13 @@ public sealed partial class MainWindow : Window
         shell.MiniModeToggleRequested += OnMiniModeToggleRequested;
         shell.ToyModeToggleRequested  += OnToyModeToggleRequested;
         shell.TerminalModeToggleRequested += OnTerminalModeToggleRequested;
+        shell.SideBySideModeToggleRequested += OnSideBySideModeToggleRequested;
 
         // Initial sync in case the shell already has flags set.
         SyncMenu();
         SyncEditor();
         SyncHelp();
+        SyncAsciiMode();
     }
 
     // Region combo right-click menu: "Edit region…" + separator, then the
@@ -599,6 +601,7 @@ public sealed partial class MainWindow : Window
             _shell.MiniModeToggleRequested -= OnMiniModeToggleRequested;
             _shell.ToyModeToggleRequested  -= OnToyModeToggleRequested;
             _shell.TerminalModeToggleRequested -= OnTerminalModeToggleRequested;
+            _shell.SideBySideModeToggleRequested -= OnSideBySideModeToggleRequested;
             StopAsciiPump();
 
             // S-X8 (2026-06-27) — drop MiniDepth handlers off the long-lived
@@ -890,10 +893,81 @@ public sealed partial class MainWindow : Window
     private EventHandler? _asciiFrameHandler;
     private int _asciiUpdateQueued; // 0 = idle, 1 = a UI update is already posted
 
+    // Terminal and Side-by-side are mutually exclusive; entering one clears the
+    // other (its setter re-enters here, harmlessly, and SyncAsciiMode is
+    // idempotent). Both funnel through SyncAsciiMode → layout + pump lifecycle.
     private void OnTerminalModeToggleRequested(object? sender, bool enter)
     {
-        if (enter) StartAsciiPump();
-        else        StopAsciiPump();
+        if (enter && _shell != null && _shell.IsSideBySideMode) _shell.IsSideBySideMode = false;
+        SyncAsciiMode();
+    }
+
+    private void OnSideBySideModeToggleRequested(object? sender, bool enter)
+    {
+        if (enter && _shell != null && _shell.IsTerminalMode) _shell.IsTerminalMode = false;
+        SyncAsciiMode();
+    }
+
+    private void SyncAsciiMode()
+    {
+        ApplyAsciiLayout();
+        bool wantAscii = _shell != null && (_shell.IsTerminalMode || _shell.IsSideBySideMode);
+        if (wantAscii) StartAsciiPump();
+        else            StopAsciiPump();
+    }
+
+    // Position/size the GPU surface, ASCII view, and input sponge for the active
+    // mode. Normal: GPU spans both columns, ASCII hidden. Terminal: ASCII spans
+    // both, GPU hidden (native HWND gone so it can't occlude the ASCII). Split:
+    // GPU in column 0, ASCII in column 1 — separate columns, so the native HWND
+    // never overlaps the Avalonia ASCII view. The input sponge sits over the GPU
+    // side so panning targets the render.
+    private void ApplyAsciiLayout()
+    {
+        if (_shell == null) return;
+        var gpu = this.FindControl<GpuSurfaceControl>("GpuSurface");
+        _asciiView ??= this.FindControl<AsciiView>("AsciiSurface");
+        _sponge ??= this.FindControl<Border>("InputSponge");
+        if (gpu == null || _asciiView == null) return;
+
+        if (_shell.IsSideBySideMode)
+        {
+            gpu.IsVisible = true;
+            global::Avalonia.Controls.Grid.SetColumn(gpu, 0);
+            global::Avalonia.Controls.Grid.SetColumnSpan(gpu, 1);
+            _asciiView.IsVisible = true;
+            global::Avalonia.Controls.Grid.SetColumn(_asciiView, 1);
+            global::Avalonia.Controls.Grid.SetColumnSpan(_asciiView, 1);
+            if (_sponge != null)
+            {
+                global::Avalonia.Controls.Grid.SetColumn(_sponge, 0);
+                global::Avalonia.Controls.Grid.SetColumnSpan(_sponge, 1);
+            }
+        }
+        else if (_shell.IsTerminalMode)
+        {
+            gpu.IsVisible = false;
+            _asciiView.IsVisible = true;
+            global::Avalonia.Controls.Grid.SetColumn(_asciiView, 0);
+            global::Avalonia.Controls.Grid.SetColumnSpan(_asciiView, 2);
+            if (_sponge != null)
+            {
+                global::Avalonia.Controls.Grid.SetColumn(_sponge, 0);
+                global::Avalonia.Controls.Grid.SetColumnSpan(_sponge, 2);
+            }
+        }
+        else // Normal
+        {
+            gpu.IsVisible = true;
+            global::Avalonia.Controls.Grid.SetColumn(gpu, 0);
+            global::Avalonia.Controls.Grid.SetColumnSpan(gpu, 2);
+            _asciiView.IsVisible = false;
+            if (_sponge != null)
+            {
+                global::Avalonia.Controls.Grid.SetColumn(_sponge, 0);
+                global::Avalonia.Controls.Grid.SetColumnSpan(_sponge, 2);
+            }
+        }
     }
 
     private void StartAsciiPump()
