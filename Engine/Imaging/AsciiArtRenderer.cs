@@ -107,14 +107,48 @@ namespace FracturingFog.Imaging
 
         private static double ComputeSmoothMax(AsciiArtOptions opt, float[]? smooth)
         {
-            double m = 0.0;
             // RampFromColorLuma forces the luma path: a zero max makes Sample fall
             // through to post-FX pixel luminance for every format.
             if (opt.RampFromColorLuma) return 0.0;
-            if (opt.UseSmoothField && smooth != null)
-                for (int i = 0; i < smooth.Length; i++)
-                    if (smooth[i] > m) m = smooth[i];
-            return m;
+            if (!opt.UseSmoothField || smooth == null) return 0.0;
+
+            // Raw max first (also the histogram scale).
+            double rawMax = 0.0;
+            for (int i = 0; i < smooth.Length; i++)
+                if (smooth[i] > rawMax) rawMax = smooth[i];
+            if (rawMax <= 1e-9) return 0.0;
+
+            // Normalise by a HIGH PERCENTILE of the non-zero smooth values, not the
+            // raw max. At high iteration counts a few deep-boundary pixels reach
+            // very large smooth values; dividing by that raw max crushes every
+            // other cell toward 0 (the blank end of the ramp), so the art fades to
+            // black as quality/iterations rise. A percentile clips those outliers
+            // (they simply saturate to the brightest glyph) and keeps the mid-tones
+            // spread across the ramp regardless of maxIter.
+            const int bins = 1024;
+            Span<int> hist = stackalloc int[bins];
+            hist.Clear();
+            int total = 0;
+            double scale = (bins - 1) / rawMax;
+            for (int i = 0; i < smooth.Length; i++)
+            {
+                float s = smooth[i];
+                if (s <= 0f) continue;               // interior pixels stay blank
+                int b = (int)(s * scale);
+                if (b < 0) b = 0; else if (b >= bins) b = bins - 1;
+                hist[b]++; total++;
+            }
+            if (total == 0) return rawMax;
+
+            int target = (int)(total * 0.995);        // 99.5th percentile
+            int cum = 0, cutoff = bins - 1;
+            for (int b = 0; b < bins; b++)
+            {
+                cum += hist[b];
+                if (cum >= target) { cutoff = b; break; }
+            }
+            double norm = (cutoff + 1) / (double)bins * rawMax;
+            return Math.Max(norm, 1e-6);
         }
 
         private static byte ToByte(double v)

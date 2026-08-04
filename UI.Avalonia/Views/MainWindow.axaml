@@ -99,6 +99,10 @@
                             IsVisible="{Binding IsAsciiVisible}"
                             Command="{Binding ShowAsciiFxPanelCommand}"
                             ToolTip.Tip="Open the full ASCII FX panel for per-effect control" />
+                    <ToggleButton Classes="toolbar" Content="● REC"
+                                  IsVisible="{Binding IsAsciiVisible}"
+                                  IsChecked="{Binding IsAsciiRecording, Mode=TwoWay}"
+                                  ToolTip.Tip="Record the live ASCII animation to a file (zoom video / scene / slideshow / interactive). Toggle off to choose .cast / .svg / .ans / .mp4." />
                     <!--<ToggleButton Classes="toolbar" Content="Grid"
                                   IsChecked="{Binding Main.ShowGrid, Mode=TwoWay}"
                                   ToolTip.Tip="Show Cartesian grid overlay" />

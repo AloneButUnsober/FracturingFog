@@ -1037,6 +1037,10 @@ public sealed partial class MainWindow : Window
 
     private void StopAsciiPump()
     {
+        // Leaving an ASCII mode while recording finalises the capture (fires the
+        // toggle handler → save dialog).
+        if (_shell != null && _shell.IsAsciiRecording) _shell.IsAsciiRecording = false;
+
         if (_shell != null && _asciiFrameHandler != null)
             _shell.Main.RenderHost.FrameBufferChanged -= _asciiFrameHandler;
         _asciiFrameHandler = null;
