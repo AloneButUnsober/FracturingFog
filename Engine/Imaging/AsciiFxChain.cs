@@ -197,6 +197,19 @@ namespace FracturingFog.Imaging
                 }
             }
 
+            if (fx.Drift && (fx.DriftDxPerSec != 0 || fx.DriftDyPerSec != 0))
+            {
+                int dx = ((int)Math.Round(fx.TimeSeconds * fx.DriftDxPerSec) % cols + cols) % cols;
+                int dy = ((int)Math.Round(fx.TimeSeconds * fx.DriftDyPerSec) % rows + rows) % rows;
+                if (dx != 0 || dy != 0)
+                {
+                    var src = (AsciiCell[])cells.Clone();
+                    for (int y = 0; y < rows; y++)
+                        for (int x = 0; x < cols; x++)
+                            cells[y * cols + x] = src[((y - dy + rows) % rows) * cols + ((x - dx + cols) % cols)];
+                }
+            }
+
             // Shading (last): vignette, then CRT scanline dim.
             if (fx.Vignette)
             {

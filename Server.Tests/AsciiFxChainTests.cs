@@ -346,6 +346,20 @@ public sealed class AsciiFxChainTests
     }
 
     [Fact]
+    public void Drift_PansGridWithWrap()
+    {
+        // Column-indexed glyphs; drift +2 cells/sec at t=1 → each cell takes the
+        // glyph from 2 columns left (wrapping).
+        const int cols = 5, rows = 1;
+        var cells = Grid(cols, rows, (x, y) => new AsciiCell((char)('0' + x), 1, 1, 1));
+        AsciiFxChain.Apply(cells, cols, rows, Ramp, new AsciiFxSettings
+        { Drift = true, DriftDxPerSec = 2.0, DriftDyPerSec = 0.0, TimeSeconds = 1.0 });
+        // cell x gets src[(x-2) mod 5]: x=0 → src[3]='3', x=2 → src[0]='0'.
+        Assert.Equal('3', cells[0].Glyph);
+        Assert.Equal('0', cells[2].Glyph);
+    }
+
+    [Fact]
     public void MatrixRain_ProducesGreenDropsAndGhostsBackground()
     {
         const int cols = 20, rows = 30;

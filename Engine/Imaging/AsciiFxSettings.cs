@@ -53,6 +53,13 @@ namespace FracturingFog.Imaging
         /// <summary>Wave travel speed (radians per second).</summary>
         public double WaveSpeed { get; set; } = 2.0;
 
+        /// <summary>Drift: pan the whole grid over time, wrapping at the edges,
+        /// independent of the fractal. Animated.</summary>
+        public bool Drift { get; set; }
+        /// <summary>Horizontal / vertical drift in cells per second.</summary>
+        public double DriftDxPerSec { get; set; } = 3.0;
+        public double DriftDyPerSec { get; set; } = 0.0;
+
         /// <summary>"Breathe" the glyph density: animate a gamma on the ramp index
         /// so the whole field pulses lighter/darker over time (independent of the
         /// fractal). Operates on the chosen glyph via the ramp, so no re-sample.</summary>
@@ -155,12 +162,12 @@ namespace FracturingFog.Imaging
         /// <summary>True when any effect is enabled (the host can skip the pass).</summary>
         public bool AnyEnabled => HueCycle || Crt || Breathe || CharsetSwap || Monochrome
             || Saturate || Invert || Solarize || Quantize || Duotone || RampScroll || Grain
-            || Vignette || ChromaticAberration || Wave || MatrixRain;
+            || Vignette || ChromaticAberration || Wave || Drift || MatrixRain;
 
         /// <summary>True when an enabled effect varies with time (the live view
         /// must repaint on a timer for these, not only on buffer changes).</summary>
         public bool AnyAnimated => HueCycle || Breathe || MatrixRain || RampScroll || Grain || Wave
-            || (Saturate && SaturateAmp > 0);
+            || Drift || (Saturate && SaturateAmp > 0);
 
         /// <summary>True when an enabled effect evolves across frames and so needs
         /// a persistent <see cref="AsciiFxState"/> (not a pure grid+clock function).</summary>
