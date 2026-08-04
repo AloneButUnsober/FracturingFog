@@ -245,6 +245,32 @@ namespace FracturingFog.Imaging
                 }
             }
 
+            if (fx.Bloom && fx.BloomStrength > 0)
+            {
+                var src = (AsciiCell[])cells.Clone();
+                double thr = Math.Clamp(fx.BloomThreshold, 0.0, 1.0) * 255.0;
+                double str = fx.BloomStrength;
+                for (int y = 0; y < rows; y++)
+                    for (int x = 0; x < cols; x++)
+                    {
+                        double ar = 0, ag = 0, ab = 0; int n = 0;
+                        for (int ny = Math.Max(0, y - 1); ny <= Math.Min(rows - 1, y + 1); ny++)
+                            for (int nx = Math.Max(0, x - 1); nx <= Math.Min(cols - 1, x + 1); nx++)
+                            {
+                                var s = src[ny * cols + nx];
+                                double nl = 0.2126 * s.R + 0.7152 * s.G + 0.0722 * s.B;
+                                if (nl > thr) { ar += s.R; ag += s.G; ab += s.B; n++; }
+                            }
+                        var c = src[y * cols + x];
+                        if (n == 0) { cells[y * cols + x] = c; continue; }
+                        double k = str / n;
+                        cells[y * cols + x] = new AsciiCell(c.Glyph,
+                            (byte)Math.Clamp(c.R + ar * k, 0, 255),
+                            (byte)Math.Clamp(c.G + ag * k, 0, 255),
+                            (byte)Math.Clamp(c.B + ab * k, 0, 255));
+                    }
+            }
+
             // Shading (last): vignette, then CRT scanline dim.
             if (fx.Vignette)
             {
