@@ -50,8 +50,20 @@ namespace FracturingFog.Imaging
         /// position along this one.</summary>
         public string SwapRamp { get; set; } = "░▒▓█"; // ░▒▓█
 
+        // ── Colour-space ──────────────────────────────────────────────────
+
+        /// <summary>Collapse every cell to a single tint hue, keeping its
+        /// brightness (luma) — the classic amber / green-phosphor terminal look.
+        /// Static.</summary>
+        public bool Monochrome { get; set; }
+        /// <summary>Tint colour for <see cref="Monochrome"/> at full brightness.
+        /// Default is phosphor green.</summary>
+        public byte MonochromeR { get; set; } = 40;
+        public byte MonochromeG { get; set; } = 255;
+        public byte MonochromeB { get; set; } = 90;
+
         /// <summary>True when any effect is enabled (the host can skip the pass).</summary>
-        public bool AnyEnabled => HueCycle || Crt || Breathe || CharsetSwap;
+        public bool AnyEnabled => HueCycle || Crt || Breathe || CharsetSwap || Monochrome;
 
         /// <summary>True when an enabled effect varies with time (the live view
         /// must repaint on a timer for these, not only on buffer changes).</summary>

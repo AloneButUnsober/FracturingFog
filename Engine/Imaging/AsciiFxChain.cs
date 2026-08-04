@@ -82,9 +82,18 @@ namespace FracturingFog.Imaging
                         }
                     }
 
-                    // Colour-space: hue cycle then scanline dim.
+                    // Colour-space: hue cycle, monochrome tint, then scanline dim.
                     if (fx.HueCycle && (r != 0 || g != 0 || b != 0))
                         RotateHue(ref r, ref g, ref b, hueShift);
+                    if (fx.Monochrome)
+                    {
+                        // Preserve brightness (luma), replace chroma with the tint.
+                        double luma = (0.2126 * r + 0.7152 * g + 0.0722 * b) / 255.0;
+                        if (luma > 1.0) luma = 1.0;
+                        r = (byte)Math.Round(fx.MonochromeR * luma);
+                        g = (byte)Math.Round(fx.MonochromeG * luma);
+                        b = (byte)Math.Round(fx.MonochromeB * luma);
+                    }
                     if (rowDim < 1.0)
                     {
                         r = (byte)(r * rowDim);
