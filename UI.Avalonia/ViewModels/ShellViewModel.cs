@@ -560,6 +560,8 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
         SaveRegionCommand      = ReactiveCommand.Create(TriggerSaveView);
         ScreenshotCommand      = ReactiveCommand.Create(
             () => ScreenshotRequested?.Invoke(this, EventArgs.Empty));
+        AsciiArtCommand        = ReactiveCommand.Create(
+            () => AsciiArtRequested?.Invoke(this, EventArgs.Empty));
 
         // Slideshow control commands (right-click context menu). The
         // checkbox/text state for the items is read off SlideshowLockRegion
@@ -573,6 +575,8 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
         TogglePostFxHudCommand = ReactiveCommand.Create(() => IsPostFxHudVisible = !IsPostFxHudVisible);
         ToggleMiniModeCommand  = ReactiveCommand.Create(() => IsMiniMode = !IsMiniMode);
         ToggleToyModeCommand   = ReactiveCommand.Create(() => IsToyMode  = !IsToyMode);
+        ToggleTerminalModeCommand = ReactiveCommand.Create(() => IsTerminalMode = !IsTerminalMode);
+        ToggleSideBySideModeCommand = ReactiveCommand.Create(() => IsSideBySideMode = !IsSideBySideMode);
 
         // Push live view-state into the MiniMap VM on every frame so the
         // indicator tracks the user's pan/zoom. Mirrors legacy MainForm's
@@ -1647,6 +1651,7 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
     public ReactiveCommand<Unit, Unit> ToggleVideoCommand { get; }
     public ReactiveCommand<Unit, Unit> SaveRegionCommand { get; }
     public ReactiveCommand<Unit, Unit> ScreenshotCommand { get; }
+    public ReactiveCommand<Unit, Unit> AsciiArtCommand { get; }
     public ReactiveCommand<Unit, Unit> ToggleSlideshowLockRegionCommand { get; }
     public ReactiveCommand<Unit, Unit> ToggleSlideshowFocusCommand { get; }
 
@@ -1793,6 +1798,72 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
     public event EventHandler<bool>? ToyModeToggleRequested;
 
     public ReactiveCommand<Unit, bool> ToggleToyModeCommand { get; private set; } = null!;
+
+    // ── Terminal Mode (ASCII view, #228) ────────────────────────────────
+    // Replaces the GPU render surface with a live ASCII / text-art render of
+    // the same frame. The GPU surface is a native HWND that occludes Avalonia
+    // content, so the host toggles its visibility off and shows the AsciiView
+    // in its place. Input still flows through the InputSponge, driving the real
+    // (now hidden) render underneath. The host code-behind owns the per-frame
+    // ASCII pump; ShellViewModel just carries the flag + signal.
+    private bool _isTerminalMode;
+    public bool IsTerminalMode
+    {
+        get => _isTerminalMode;
+        set
+        {
+            if (this.RaiseAndSetIfChangedReturnsChanged(ref _isTerminalMode, value))
+            {
+                this.RaisePropertyChanged(nameof(IsAsciiVisible));
+                TerminalModeToggleRequested?.Invoke(this, value);
+            }
+        }
+    }
+
+    /// <summary>Fires when Terminal Mode toggles. Bool payload is the target
+    /// state — true to show the ASCII view, false to restore the GPU surface.</summary>
+    public event EventHandler<bool>? TerminalModeToggleRequested;
+
+    public ReactiveCommand<Unit, bool> ToggleTerminalModeCommand { get; private set; } = null!;
+
+    // ── Side-by-side Mode (#228) ────────────────────────────────────────
+    // Full GPU render on one half, live ASCII on the other. Mutually exclusive
+    // with Terminal Mode (the host enforces the switch). Because the two panels
+    // occupy separate columns, the native GPU HWND never overlaps the Avalonia
+    // ASCII view, so both composite fine side by side.
+    private bool _isSideBySideMode;
+    public bool IsSideBySideMode
+    {
+        get => _isSideBySideMode;
+        set
+        {
+            if (this.RaiseAndSetIfChangedReturnsChanged(ref _isSideBySideMode, value))
+            {
+                this.RaisePropertyChanged(nameof(IsAsciiVisible));
+                SideBySideModeToggleRequested?.Invoke(this, value);
+            }
+        }
+    }
+
+    /// <summary>Fires when Side-by-side Mode toggles.</summary>
+    public event EventHandler<bool>? SideBySideModeToggleRequested;
+
+    public ReactiveCommand<Unit, bool> ToggleSideBySideModeCommand { get; private set; } = null!;
+
+    /// <summary>True whenever the ASCII view is on screen (either mode). Bound by
+    /// controls that should appear only when ASCII is visible (Ramp: FX).</summary>
+    public bool IsAsciiVisible => IsTerminalMode || IsSideBySideMode;
+
+    // Terminal Mode: drive the glyph ramp from the post-FX pixel luminance
+    // instead of the raw smooth field, so an adaptive sweep (or brightness /
+    // contrast) modulates glyph density and not just colour. The host code-behind
+    // reads this in the ASCII pump and repaints when it flips.
+    private bool _asciiRampFromColor;
+    public bool AsciiRampFromColor
+    {
+        get => _asciiRampFromColor;
+        set => this.RaiseAndSetIfChanged(ref _asciiRampFromColor, value);
+    }
 
     /// <summary>Apply a region jump: relabel the watermark, mutate ViewState
     /// via the host service, mirror the resulting fractal type into the toolbar
@@ -2633,6 +2704,12 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
     /// <summary>Save the most-recent rendered frame to a PNG. Host pops a
     /// SaveFilePicker and writes the BGRA buffer.</summary>
     public event EventHandler? ScreenshotRequested;
+
+    /// <summary>Save the most-recent rendered frame as ASCII / text art (#226).
+    /// Host pops a format chooser + SaveFilePicker and calls
+    /// <c>FractalRenderHost.SaveLastFrameAsAsciiArt</c>, which consumes the real
+    /// IColorMap-coloured frame buffer.</summary>
+    public event EventHandler? AsciiArtRequested;
 
     /// <summary>Render a wallpaper-sized image at the virtual-screen union of
     /// every connected monitor, regardless of the current window state. Host

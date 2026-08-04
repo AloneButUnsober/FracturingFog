@@ -55,6 +55,13 @@ static class Program
         if (args.Length > 0 && args[0] == "--heightfieldspike")
             return FracturingFog.Diagnostics.HeightfieldReliefProbe.RunGate();
 
+        // --asciiart: #226 prototype/gate — render a Mandelbrot region into every
+        // text-art format (plain / ANSI / ANSI half-block / HTML / SVG / braille)
+        // and assert each output is non-degenerate. Writes asciiart/*.{txt,ans,
+        // html,svg} + asciiart.out next to the exe.
+        if (args.Length > 0 && args[0] == "--asciiart")
+            return FracturingFog.Diagnostics.AsciiArtProbe.RunGate();
+
         // --heightfieldraymarch: #102 Phase 2 gate — oblique 3D raymarch of the
         // heightfield through the full ShadingPipeline, incl. volumetric fog.
         // Asserts a real 3D view (silhouette against sky) + that the volumetric

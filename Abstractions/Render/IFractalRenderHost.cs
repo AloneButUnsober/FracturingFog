@@ -104,6 +104,26 @@ namespace FracturingFog.Render
         /// </summary>
         void PresentBuffer(uint[] bgra, int width, int height);
 
+        /// <summary>Render the most-recently-completed frame as a live ASCII /
+        /// text-art cell grid (#227), consuming the real IColorMap-coloured
+        /// buffer + smooth field. Returns null before the first frame. Thread-safe
+        /// (reads the frame buffers under the host's upload gate); the returned
+        /// grid is a fresh allocation the caller owns.</summary>
+        /// <param name="columns">Target character columns; rows are derived from
+        /// the frame aspect and <paramref name="cellAspect"/>.</param>
+        /// <param name="cellAspect">Character cell height ÷ width of the display
+        /// font, so the art keeps its shape.</param>
+        /// <param name="color">True for per-cell truecolor; false for monochrome
+        /// (glyph ramp only).</param>
+        /// <param name="invert">Invert the glyph ramp.</param>
+        /// <param name="fineRamp">Use the 70-step ramp instead of the 10-step.</param>
+        /// <param name="rampFromColor">Drive the glyph ramp from the post-FX pixel
+        /// luminance instead of the raw smooth field, so adaptive/brightness/
+        /// contrast modulate glyph density and not only colour.</param>
+        AsciiFrame? RenderLastFrameAscii(
+            int columns, double cellAspect, bool color, bool invert, bool fineRamp,
+            bool rampFromColor = false);
+
         /// <summary>Present the current GPU back buffer to the screen.
         /// Safe to call from any thread — the host serialises this with
         /// every other renderer access (UpdateTexture / Resize) so the
@@ -117,6 +137,16 @@ namespace FracturingFog.Render
         /// <summary>Raised after each completed calculation. Carries the
         /// info MainForm currently pushes into the status bar.</summary>
         event EventHandler<RenderFrameInfo>? FrameCompleted;
+
+        /// <summary>Raised after EVERY buffer upload to the renderer — not only
+        /// full calculations (<see cref="FrameCompleted"/>) but also the post-FX
+        /// and adaptive repaints (<see cref="RepaintWithPostFx"/> /
+        /// <see cref="RepaintWithAdaptive"/>) that re-upload without recomputing.
+        /// A superset of FrameCompleted; consumers that mirror the on-screen
+        /// buffer (the live ASCII view) subscribe to this so brightness /
+        /// contrast / adaptive-sweep changes update them, not just re-renders.
+        /// May fire on a background thread; marshal before touching UI.</summary>
+        event EventHandler? FrameBufferChanged;
 
         /// <summary>Raised when an in-flight calculate gets cancelled (rapid
         /// pan/zoom or animation tick before the prior frame's TAA / final
