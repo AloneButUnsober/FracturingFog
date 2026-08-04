@@ -187,6 +187,27 @@ public sealed class AsciiFxChainTests
     }
 
     [Fact]
+    public void Invert_NegatesChannels()
+    {
+        var cells = Grid(1, 1, (x, y) => new AsciiCell('#', 10, 128, 250));
+        AsciiFxChain.Apply(cells, 1, 1, Ramp, new AsciiFxSettings { Invert = true });
+        Assert.Equal(245, cells[0].R);
+        Assert.Equal(127, cells[0].G);
+        Assert.Equal(5, cells[0].B);
+    }
+
+    [Fact]
+    public void Solarize_InvertsOnlyBrightChannels()
+    {
+        var cells = Grid(1, 1, (x, y) => new AsciiCell('#', 40, 200, 130));
+        AsciiFxChain.Apply(cells, 1, 1, Ramp,
+            new AsciiFxSettings { Solarize = true, SolarizeThreshold = 0.5 }); // thresh 127
+        Assert.Equal(40, cells[0].R);         // below → untouched
+        Assert.Equal(55, cells[0].G);         // 200 > 127 → 255-200
+        Assert.Equal(125, cells[0].B);        // 130 > 127 → 255-130
+    }
+
+    [Fact]
     public void MatrixRain_ProducesGreenDropsAndGhostsBackground()
     {
         const int cols = 20, rows = 30;
