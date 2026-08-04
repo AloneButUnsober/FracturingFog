@@ -106,4 +106,517 @@ public sealed class AsciiFxChainTests
         { Breathe = true, BreatheGammaAmp = 1.5, TimeSeconds = 0.25 });
         Assert.Equal(' ', cells[0].Glyph);
     }
+
+    [Fact]
+    public void CharsetSwap_MapsDensityToNewSet_KeepsColour()
+    {
+        // Ramp[9] = '@' is the densest → maps to the densest swap glyph.
+        var cells = Grid(1, 1, (x, y) => new AsciiCell('@', 30, 60, 90));
+        AsciiFxChain.Apply(cells, 1, 1, Ramp,
+            new AsciiFxSettings { CharsetSwap = true, SwapRamp = "abcd" });
+        Assert.Equal('d', cells[0].Glyph); // densest → last swap glyph
+        Assert.Equal(30, cells[0].R);
+        Assert.Equal(60, cells[0].G);
+        Assert.Equal(90, cells[0].B);
+    }
+
+    [Fact]
+    public void CharsetSwap_MapsMidGlyphProportionally()
+    {
+        // Ramp index 0 (' ' is blank, skip) → use index 3 '-' (t = 3/9 = .33).
+        // Swap "abcdefg" (len 7): round(.333*6) = 2 → 'c'.
+        var cells = Grid(1, 1, (x, y) => new AsciiCell(Ramp[3], 10, 10, 10));
+        AsciiFxChain.Apply(cells, 1, 1, Ramp,
+            new AsciiFxSettings { CharsetSwap = true, SwapRamp = "abcdefg" });
+        Assert.Equal('c', cells[0].Glyph);
+    }
+
+    [Fact]
+    public void CharsetSwap_LeavesSpacesBlank()
+    {
+        var cells = Grid(1, 1, (x, y) => new AsciiCell(' ', 0, 0, 0));
+        AsciiFxChain.Apply(cells, 1, 1, Ramp,
+            new AsciiFxSettings { CharsetSwap = true, SwapRamp = "abcd" });
+        Assert.Equal(' ', cells[0].Glyph);
+    }
+
+    [Fact]
+    public void Monochrome_TintsToHueKeepingBrightness()
+    {
+        // White (luma 1) → full tint colour; keeps glyph.
+        var cells = Grid(1, 1, (x, y) => new AsciiCell('#', 255, 255, 255));
+        AsciiFxChain.Apply(cells, 1, 1, Ramp, new AsciiFxSettings
+        { Monochrome = true, MonochromeR = 40, MonochromeG = 255, MonochromeB = 90 });
+        Assert.Equal('#', cells[0].Glyph);
+        Assert.Equal(40, cells[0].R);
+        Assert.Equal(255, cells[0].G);
+        Assert.Equal(90, cells[0].B);
+    }
+
+    [Fact]
+    public void Monochrome_ScalesTintByLuma()
+    {
+        // Mid-grey (luma ≈ 0.5) → roughly half the tint.
+        var cells = Grid(1, 1, (x, y) => new AsciiCell('#', 128, 128, 128));
+        AsciiFxChain.Apply(cells, 1, 1, Ramp, new AsciiFxSettings
+        { Monochrome = true, MonochromeR = 0, MonochromeG = 200, MonochromeB = 0 });
+        Assert.Equal(0, cells[0].R);
+        Assert.InRange((int)cells[0].G, 90, 110); // ~0.5 * 200
+        Assert.Equal(0, cells[0].B);
+    }
+
+    [Fact]
+    public void Saturate_ZeroGivesGreyscale()
+    {
+        var cells = Grid(1, 1, (x, y) => new AsciiCell('#', 200, 50, 50));
+        AsciiFxChain.Apply(cells, 1, 1, Ramp,
+            new AsciiFxSettings { Saturate = true, SaturateMid = 0.0 });
+        // All channels collapse to the luma → equal.
+        Assert.Equal(cells[0].R, cells[0].G);
+        Assert.Equal(cells[0].G, cells[0].B);
+    }
+
+    [Fact]
+    public void Saturate_BoostPushesChannelsApart()
+    {
+        var cells = Grid(1, 1, (x, y) => new AsciiCell('#', 160, 120, 120));
+        AsciiFxChain.Apply(cells, 1, 1, Ramp,
+            new AsciiFxSettings { Saturate = true, SaturateMid = 2.0 });
+        // Dominant channel gets more dominant; spread widens vs original 40.
+        Assert.True(cells[0].R - cells[0].G > 40, $"spread {cells[0].R - cells[0].G}");
+    }
+
+    [Fact]
+    public void Invert_NegatesChannels()
+    {
+        var cells = Grid(1, 1, (x, y) => new AsciiCell('#', 10, 128, 250));
+        AsciiFxChain.Apply(cells, 1, 1, Ramp, new AsciiFxSettings { Invert = true });
+        Assert.Equal(245, cells[0].R);
+        Assert.Equal(127, cells[0].G);
+        Assert.Equal(5, cells[0].B);
+    }
+
+    [Fact]
+    public void Solarize_InvertsOnlyBrightChannels()
+    {
+        var cells = Grid(1, 1, (x, y) => new AsciiCell('#', 40, 200, 130));
+        AsciiFxChain.Apply(cells, 1, 1, Ramp,
+            new AsciiFxSettings { Solarize = true, SolarizeThreshold = 0.5 }); // thresh 127
+        Assert.Equal(40, cells[0].R);         // below → untouched
+        Assert.Equal(55, cells[0].G);         // 200 > 127 → 255-200
+        Assert.Equal(125, cells[0].B);        // 130 > 127 → 255-130
+    }
+
+    [Fact]
+    public void Quantize_PosterizesToLevels()
+    {
+        // 2 levels → each channel snaps to 0 or 255.
+        var cells = Grid(1, 1, (x, y) => new AsciiCell('#', 100, 200, 10));
+        AsciiFxChain.Apply(cells, 1, 1, Ramp,
+            new AsciiFxSettings { Quantize = true, QuantizeLevels = 2 });
+        Assert.Equal(0, cells[0].R);    // 100 < 127.5 → 0
+        Assert.Equal(255, cells[0].G);  // 200 → 255
+        Assert.Equal(0, cells[0].B);    // 10 → 0
+    }
+
+    [Fact]
+    public void Quantize_Terminal16SnapsToPaletteColour()
+    {
+        var cells = Grid(1, 1, (x, y) => new AsciiCell('#', 240, 10, 10));
+        AsciiFxChain.Apply(cells, 1, 1, Ramp,
+            new AsciiFxSettings { Quantize = true, QuantizeTerminal16 = true });
+        // Nearest ANSI entry to bright red is (255,0,0).
+        Assert.Equal(255, cells[0].R);
+        Assert.Equal(0, cells[0].G);
+        Assert.Equal(0, cells[0].B);
+    }
+
+    [Fact]
+    public void RampScroll_ShiftsGlyphAlongRampOverTime()
+    {
+        // Ramp[3] = '-'. Speed 1 step/s, at t=2s → shift by 2 → Ramp[5] = '+'.
+        var cells = Grid(1, 1, (x, y) => new AsciiCell(Ramp[3], 10, 10, 10));
+        AsciiFxChain.Apply(cells, 1, 1, Ramp, new AsciiFxSettings
+        { RampScroll = true, RampScrollSpeed = 1.0, TimeSeconds = 2.0 });
+        Assert.Equal(Ramp[5], cells[0].Glyph);
+    }
+
+    [Fact]
+    public void RampScroll_LeavesSpacesBlank()
+    {
+        var cells = Grid(1, 1, (x, y) => new AsciiCell(' ', 0, 0, 0));
+        AsciiFxChain.Apply(cells, 1, 1, Ramp, new AsciiFxSettings
+        { RampScroll = true, RampScrollSpeed = 3.0, TimeSeconds = 2.0 });
+        Assert.Equal(' ', cells[0].Glyph);
+    }
+
+    [Fact]
+    public void Grain_JittersSomeGlyphs_Deterministically()
+    {
+        const int cols = 40, rows = 40;
+        AsciiCell[] Run()
+        {
+            var cells = Grid(cols, rows, (x, y) => new AsciiCell(Ramp[5], 10, 10, 10));
+            AsciiFxChain.Apply(cells, cols, rows, Ramp, new AsciiFxSettings
+            { Grain = true, GrainAmount = 0.5, TimeSeconds = 1.0 });
+            return cells;
+        }
+        var a = Run();
+        int changed = 0;
+        foreach (var c in a) if (c.Glyph != Ramp[5]) changed++;
+        Assert.True(changed > 0, "grain should jitter some cells");
+        Assert.True(changed < cols * rows, "grain should not touch every cell at amount 0.5");
+        // Reproducible: same inputs → identical grid.
+        var b = Run();
+        for (int i = 0; i < a.Length; i++) Assert.Equal(a[i].Glyph, b[i].Glyph);
+    }
+
+    [Fact]
+    public void Grain_LeavesSpacesBlank()
+    {
+        var cells = Grid(1, 1, (x, y) => new AsciiCell(' ', 0, 0, 0));
+        AsciiFxChain.Apply(cells, 1, 1, Ramp, new AsciiFxSettings
+        { Grain = true, GrainAmount = 1.0, TimeSeconds = 1.0 });
+        Assert.Equal(' ', cells[0].Glyph);
+    }
+
+    [Fact]
+    public void Duotone_MapsLumaToGradientEndpoints()
+    {
+        var lo = new AsciiFxSettings
+        {
+            Duotone = true,
+            DuotoneLoR = 0, DuotoneLoG = 0, DuotoneLoB = 100,
+            DuotoneHiR = 200, DuotoneHiG = 100, DuotoneHiB = 0,
+        };
+        // Black (luma 0) → shadow endpoint.
+        var dark = Grid(1, 1, (x, y) => new AsciiCell('#', 0, 0, 0));
+        AsciiFxChain.Apply(dark, 1, 1, Ramp, lo);
+        Assert.Equal(0, dark[0].R); Assert.Equal(0, dark[0].G); Assert.Equal(100, dark[0].B);
+        // White (luma 1) → highlight endpoint.
+        var light = Grid(1, 1, (x, y) => new AsciiCell('#', 255, 255, 255));
+        AsciiFxChain.Apply(light, 1, 1, Ramp, lo);
+        Assert.Equal(200, light[0].R); Assert.Equal(100, light[0].G); Assert.Equal(0, light[0].B);
+    }
+
+    [Fact]
+    public void Vignette_DarkensCornersNotCentre()
+    {
+        const int cols = 9, rows = 9;
+        var cells = Grid(cols, rows, (x, y) => new AsciiCell('#', 200, 200, 200));
+        AsciiFxChain.Apply(cells, cols, rows, Ramp,
+            new AsciiFxSettings { Vignette = true, VignetteStrength = 0.8 });
+        int centre = (rows / 2) * cols + (cols / 2);
+        Assert.Equal(200, cells[centre].R);          // centre untouched
+        Assert.True(cells[0].R < 100, $"corner should darken, got {cells[0].R}");
+    }
+
+    [Fact]
+    public void ChromaticAberration_PullsRedAndBlueFromNeighbours()
+    {
+        // Row: [red, green, blue] cells. Shift 1: centre keeps glyph+G, takes R
+        // from left (red cell) and B from right (blue cell).
+        var cells = new[]
+        {
+            new AsciiCell('a', 255, 0, 0),
+            new AsciiCell('b', 0, 200, 0),
+            new AsciiCell('c', 0, 0, 255),
+        };
+        AsciiFxChain.Apply(cells, 3, 1, Ramp,
+            new AsciiFxSettings { ChromaticAberration = true, ChromaticShift = 1 });
+        Assert.Equal('b', cells[1].Glyph);
+        Assert.Equal(255, cells[1].R); // from left (red)
+        Assert.Equal(200, cells[1].G); // own
+        Assert.Equal(255, cells[1].B); // from right (blue)
+    }
+
+    [Fact]
+    public void Wave_ShiftsRowsHorizontally()
+    {
+        // Distinct glyph per column; a wave with amplitude should move a marker.
+        const int cols = 10, rows = 6;
+        var cells = Grid(cols, rows, (x, y) => new AsciiCell((char)('A' + x), 10, 10, 10));
+        var before = (AsciiCell[])cells.Clone();
+        AsciiFxChain.Apply(cells, cols, rows, Ramp, new AsciiFxSettings
+        { Wave = true, WaveAmplitude = 3.0, WaveLength = 4.0, WaveSpeed = 0.0, TimeSeconds = 0.0 });
+        // At least one row's glyph layout must differ (some rows have non-zero sine).
+        bool moved = false;
+        for (int i = 0; i < cells.Length; i++) if (cells[i].Glyph != before[i].Glyph) { moved = true; break; }
+        Assert.True(moved, "wave should displace at least one row");
+    }
+
+    [Fact]
+    public void Drift_PansGridWithWrap()
+    {
+        // Column-indexed glyphs; drift +2 cells/sec at t=1 → each cell takes the
+        // glyph from 2 columns left (wrapping).
+        const int cols = 5, rows = 1;
+        var cells = Grid(cols, rows, (x, y) => new AsciiCell((char)('0' + x), 1, 1, 1));
+        AsciiFxChain.Apply(cells, cols, rows, Ramp, new AsciiFxSettings
+        { Drift = true, DriftDxPerSec = 2.0, DriftDyPerSec = 0.0, TimeSeconds = 1.0 });
+        // cell x gets src[(x-2) mod 5]: x=0 → src[3]='3', x=2 → src[0]='0'.
+        Assert.Equal('3', cells[0].Glyph);
+        Assert.Equal('0', cells[2].Glyph);
+    }
+
+    [Fact]
+    public void Twist_RearrangesGridButKeepsCentre()
+    {
+        const int cols = 11, rows = 11;
+        var cells = Grid(cols, rows, (x, y) => new AsciiCell((char)('A' + (x + y) % 26), 5, 5, 5));
+        var before = (AsciiCell[])cells.Clone();
+        AsciiFxChain.Apply(cells, cols, rows, Ramp,
+            new AsciiFxSettings { Twist = true, TwistStrength = 1.5 });
+        int centre = (rows / 2) * cols + (cols / 2);
+        Assert.Equal(before[centre].Glyph, cells[centre].Glyph); // r≈0 → a≈max but dx=dy=0, unchanged
+        int diff = 0;
+        for (int i = 0; i < cells.Length; i++) if (cells[i].Glyph != before[i].Glyph) diff++;
+        Assert.True(diff > 0, "twist should rearrange off-centre cells");
+    }
+
+    [Fact]
+    public void Glitch_TearsSomeRows_Deterministically()
+    {
+        const int cols = 30, rows = 30;
+        AsciiCell[] Run()
+        {
+            var cells = Grid(cols, rows, (x, y) => new AsciiCell((char)('A' + x % 26), 5, 5, 5));
+            AsciiFxChain.Apply(cells, cols, rows, Ramp, new AsciiFxSettings
+            { Glitch = true, GlitchIntensity = 0.5, TimeSeconds = 1.0 });
+            return cells;
+        }
+        var a = Run();
+        var pristine = Grid(cols, rows, (x, y) => new AsciiCell((char)('A' + x % 26), 5, 5, 5));
+        int torn = 0;
+        for (int i = 0; i < a.Length; i++) if (a[i].Glyph != pristine[i].Glyph) { torn++; }
+        Assert.True(torn > 0, "glitch should tear some rows");
+        var b = Run();
+        for (int i = 0; i < a.Length; i++) Assert.Equal(a[i].Glyph, b[i].Glyph); // reproducible
+    }
+
+    [Fact]
+    public void Bloom_BleedsBrightNeighbourOntoDarkCell()
+    {
+        // 3x1: dark, bright, dark. The dark cells should brighten from the middle.
+        var cells = new[]
+        {
+            new AsciiCell('.', 0, 0, 0),
+            new AsciiCell('@', 255, 255, 255),
+            new AsciiCell('.', 0, 0, 0),
+        };
+        AsciiFxChain.Apply(cells, 3, 1, Ramp,
+            new AsciiFxSettings { Bloom = true, BloomStrength = 0.8, BloomThreshold = 0.5 });
+        Assert.True(cells[0].R > 0, "dark neighbour should pick up glow");
+        Assert.True(cells[2].R > 0);
+    }
+
+    [Fact]
+    public void Edge_DrawsLineGlyphsOnBoundaryDimsInterior()
+    {
+        // Left half dark, right half bright → a vertical edge down the middle.
+        const int cols = 8, rows = 4;
+        var cells = Grid(cols, rows, (x, y) =>
+            x < cols / 2 ? new AsciiCell('#', 0, 0, 0) : new AsciiCell('#', 255, 255, 255));
+        AsciiFxChain.Apply(cells, cols, rows, Ramp,
+            new AsciiFxSettings { Edge = true, EdgeThreshold = 0.2 });
+        // Somewhere a vertical-edge glyph should appear; flat interior blanks out.
+        bool hasEdge = false, hasBlank = false;
+        foreach (var c in cells) { if (c.Glyph == '|') hasEdge = true; if (c.Glyph == ' ') hasBlank = true; }
+        Assert.True(hasEdge, "expected a vertical edge glyph");
+        Assert.True(hasBlank, "expected flat interior to blank");
+    }
+
+    [Fact]
+    public void Dither_ResolvesFlatMidtoneToTwoLevels()
+    {
+        // A flat mid-grey field at 2 levels should dither to a mix of 0 and 255
+        // across cells (ordered pattern), not one uniform value.
+        const int cols = 8, rows = 8;
+        var cells = Grid(cols, rows, (x, y) => new AsciiCell('#', 128, 128, 128));
+        AsciiFxChain.Apply(cells, cols, rows, Ramp,
+            new AsciiFxSettings { Dither = true, DitherLevels = 2 });
+        bool hasLow = false, hasHigh = false;
+        foreach (var c in cells) { if (c.R == 0) hasLow = true; if (c.R == 255) hasHigh = true; }
+        Assert.True(hasLow && hasHigh, "ordered dither should mix both levels across the field");
+    }
+
+    [Fact]
+    public void Plasma_BlendsFireColourAcrossField()
+    {
+        const int cols = 24, rows = 24;
+        var cells = Grid(cols, rows, (x, y) => new AsciiCell('#', 0, 0, 0));
+        AsciiFxChain.Apply(cells, cols, rows, Ramp,
+            new AsciiFxSettings { Plasma = true, PlasmaStrength = 1.0, TimeSeconds = 0.5 });
+        // Fire palette is red-dominant: expect cells where R > G and R > B, and
+        // the field is not uniform.
+        int redish = 0; var first = cells[0];
+        bool varied = false;
+        foreach (var c in cells)
+        {
+            if (c.R >= c.G && c.R >= c.B && c.R > 20) redish++;
+            if (c.R != first.R) varied = true;
+        }
+        Assert.True(redish > 0, "plasma should paint fire-red cells");
+        Assert.True(varied, "plasma field should vary across the grid");
+    }
+
+    [Fact]
+    public void CrtFull_AppliesScanlineVignetteAndPhosphor()
+    {
+        const int cols = 9, rows = 9;
+        var cells = Grid(cols, rows, (x, y) => new AsciiCell('#', 180, 180, 180));
+        AsciiFxChain.Apply(cells, cols, rows, Ramp,
+            new AsciiFxSettings { CrtFull = true, CrtBarrel = 0.0 }); // no warp → check colour passes
+        // Green phosphor bias: G should exceed R/B somewhere; odd rows dimmed;
+        // corners darker than centre.
+        int centre = (rows / 2) * cols + (cols / 2);
+        Assert.True(cells[centre].G >= cells[centre].R, "phosphor should bias green");
+        Assert.True(cells[0].R < cells[centre].R, "vignette should darken the corner");
+    }
+
+    [Fact]
+    public void MatrixRain_ProducesGreenDropsAndGhostsBackground()
+    {
+        const int cols = 20, rows = 30;
+        var cells = Grid(cols, rows, (x, y) => new AsciiCell('#', 180, 180, 180));
+        var fx = new AsciiFxSettings { MatrixRain = true, TimeSeconds = 1.0 };
+        var state = new AsciiFxState();
+        AsciiFxChain.Apply(cells, cols, rows, Ramp, fx, state);
+
+        int green = 0, ghost = 0;
+        foreach (var c in cells)
+        {
+            if (c.G > c.R && c.G > c.B && c.G > 40) green++;
+            // Background ghosts: original 180 dimmed to ~21 and left grey.
+            if (c.R == c.G && c.G == c.B && c.R < 40 && c.R > 0) ghost++;
+        }
+        Assert.True(green > 0, "expected some green rain cells");
+        Assert.True(ghost > 0, "expected dimmed fractal ghost in the background");
+    }
+
+    [Fact]
+    public void Particles_PaintFlecksAndAdvanceOverTime()
+    {
+        const int cols = 30, rows = 30;
+        AsciiCell[] Frame(AsciiFxState s, double t)
+        {
+            var cells = Grid(cols, rows, (x, y) => new AsciiCell('.', 0, 0, 0));
+            AsciiFxChain.Apply(cells, cols, rows, Ramp,
+                new AsciiFxSettings { Particles = true, ParticleCount = 40, ParticleGlyph = '*', TimeSeconds = t }, s);
+            return cells;
+        }
+        var st = new AsciiFxState();
+        var f0 = Frame(st, 0.0);
+        int flecks = 0; foreach (var c in f0) if (c.Glyph == '*') flecks++;
+        Assert.True(flecks > 0, "expected particle flecks");
+        var f1 = Frame(st, 0.5); // advanced clock → positions changed
+        bool moved = false;
+        for (int i = 0; i < f0.Length; i++) if (f0[i].Glyph != f1[i].Glyph) { moved = true; break; }
+        Assert.True(moved, "particles should drift between frames");
+    }
+
+    [Fact]
+    public void Typewriter_RevealsReadingOrderPrefix()
+    {
+        const int cols = 10, rows = 10; // 100 cells
+        var cells = Grid(cols, rows, (x, y) => new AsciiCell('#', 200, 200, 200));
+        AsciiFxChain.Apply(cells, cols, rows, Ramp, new AsciiFxSettings
+        { Typewriter = true, TransitionSeconds = 1.0, TransitionTimeSeconds = 0.3 }); // 30% → 30 cells
+        Assert.NotEqual(' ', cells[0].Glyph);   // start revealed
+        Assert.NotEqual(' ', cells[29].Glyph);
+        Assert.Equal(' ', cells[30].Glyph);     // rest blank
+        Assert.Equal(' ', cells[99].Glyph);
+    }
+
+    [Fact]
+    public void Typewriter_OneShot_CompleteWhenPastDuration()
+    {
+        const int cols = 4, rows = 4;
+        var cells = Grid(cols, rows, (x, y) => new AsciiCell('#', 200, 200, 200));
+        // One-shot (default): past the duration → fully revealed.
+        AsciiFxChain.Apply(cells, cols, rows, Ramp, new AsciiFxSettings
+        { Typewriter = true, TransitionSeconds = 1.0, TransitionTimeSeconds = 5.0 });
+        foreach (var c in cells) Assert.Equal('#', c.Glyph); // fully revealed
+    }
+
+    [Fact]
+    public void Typewriter_Loop_ResetsAtCycleBoundary()
+    {
+        const int cols = 4, rows = 4;
+        var cells = Grid(cols, rows, (x, y) => new AsciiCell('#', 200, 200, 200));
+        // Loop opt-in: t = 2·dur → progress wraps to 0 → all blank (re-wiping).
+        AsciiFxChain.Apply(cells, cols, rows, Ramp, new AsciiFxSettings
+        { Typewriter = true, TransitionLoop = true, TransitionSeconds = 1.0, TransitionTimeSeconds = 2.0 });
+        foreach (var c in cells) Assert.Equal(' ', c.Glyph);
+    }
+
+    [Fact]
+    public void Dissolve_RevealsFractionByProgress()
+    {
+        const int cols = 20, rows = 20; // 400 cells
+        var cells = Grid(cols, rows, (x, y) => new AsciiCell('#', 200, 200, 200));
+        AsciiFxChain.Apply(cells, cols, rows, Ramp, new AsciiFxSettings
+        { Dissolve = true, TransitionSeconds = 1.0, TransitionTimeSeconds = 0.5 }); // ~50%
+        int shown = 0; foreach (var c in cells) if (c.Glyph != ' ') shown++;
+        Assert.InRange(shown, 120, 280); // roughly half, hashed
+    }
+
+    [Fact]
+    public void Trails_EchoDecaysFromPreviousFrame()
+    {
+        const int cols = 3, rows = 1;
+        var state = new AsciiFxState();
+        // Frame 1: a bright cell at x=0.
+        var f1 = new[] { new AsciiCell('#', 200, 200, 200), new AsciiCell(' ', 0, 0, 0), new AsciiCell(' ', 0, 0, 0) };
+        AsciiFxChain.Apply(f1, cols, rows, Ramp, new AsciiFxSettings { Trails = true, TrailDecay = 0.5 }, state);
+        // Frame 2: all blank — the echo of x=0 should persist, decayed.
+        var f2 = new[] { new AsciiCell(' ', 0, 0, 0), new AsciiCell(' ', 0, 0, 0), new AsciiCell(' ', 0, 0, 0) };
+        AsciiFxChain.Apply(f2, cols, rows, Ramp, new AsciiFxSettings { Trails = true, TrailDecay = 0.5 }, state);
+        Assert.InRange((int)f2[0].R, 90, 110); // ~200*0.5 echo
+        Assert.Equal('#', f2[0].Glyph);        // echo keeps the glyph
+    }
+
+    [Fact]
+    public void MatrixRain_NoStateIsNoOp()
+    {
+        var cells = Grid(4, 4, (x, y) => new AsciiCell('#', 180, 180, 180));
+        var copy = (AsciiCell[])cells.Clone();
+        AsciiFxChain.Apply(cells, 4, 4, Ramp,
+            new AsciiFxSettings { MatrixRain = true, TimeSeconds = 1.0 }); // no state
+        for (int i = 0; i < cells.Length; i++)
+            Assert.Equal(copy[i].Glyph, cells[i].Glyph);
+    }
+
+    [Fact]
+    public void MatrixRain_DeterministicForSameSeed()
+    {
+        const int cols = 16, rows = 24;
+        AsciiCell[] Run()
+        {
+            var cells = Grid(cols, rows, (x, y) => new AsciiCell('#', 100, 100, 100));
+            var s = new AsciiFxState(seed: 42);
+            // Advance a few frames so drops move.
+            for (int f = 0; f < 3; f++)
+            {
+                for (int i = 0; i < cells.Length; i++) cells[i] = new AsciiCell('#', 100, 100, 100);
+                AsciiFxChain.Apply(cells, cols, rows, Ramp,
+                    new AsciiFxSettings { MatrixRain = true, TimeSeconds = 0.1 * (f + 1) }, s);
+            }
+            return cells;
+        }
+        var a = Run();
+        var b = Run();
+        for (int i = 0; i < a.Length; i++)
+        {
+            Assert.Equal(a[i].Glyph, b[i].Glyph);
+            Assert.Equal(a[i].G, b[i].G);
+        }
+    }
+
+    [Fact]
+    public void NeedsState_TrueOnlyForStatefulEffects()
+    {
+        Assert.False(new AsciiFxSettings { HueCycle = true }.NeedsState);
+        Assert.True(new AsciiFxSettings { MatrixRain = true }.NeedsState);
+    }
 }
