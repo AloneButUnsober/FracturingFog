@@ -529,13 +529,24 @@ public sealed class AsciiFxChainTests
     }
 
     [Fact]
-    public void Typewriter_CompleteWhenPastDuration()
+    public void Typewriter_OneShot_CompleteWhenPastDuration()
     {
         const int cols = 4, rows = 4;
         var cells = Grid(cols, rows, (x, y) => new AsciiCell('#', 200, 200, 200));
         AsciiFxChain.Apply(cells, cols, rows, Ramp, new AsciiFxSettings
-        { Typewriter = true, TransitionSeconds = 1.0, TimeSeconds = 5.0 });
+        { Typewriter = true, TransitionLoop = false, TransitionSeconds = 1.0, TimeSeconds = 5.0 });
         foreach (var c in cells) Assert.Equal('#', c.Glyph); // fully revealed
+    }
+
+    [Fact]
+    public void Typewriter_Loop_ResetsAtCycleBoundary()
+    {
+        const int cols = 4, rows = 4;
+        var cells = Grid(cols, rows, (x, y) => new AsciiCell('#', 200, 200, 200));
+        // Loop (default): t = 2·dur → progress wraps to 0 → all blank (re-wiping).
+        AsciiFxChain.Apply(cells, cols, rows, Ramp, new AsciiFxSettings
+        { Typewriter = true, TransitionSeconds = 1.0, TimeSeconds = 2.0 });
+        foreach (var c in cells) Assert.Equal(' ', c.Glyph);
     }
 
     [Fact]

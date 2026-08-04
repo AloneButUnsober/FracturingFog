@@ -97,8 +97,10 @@ namespace FracturingFog.Imaging
         /// <summary>Edge / contour: Sobel the brightness and draw oriented line
         /// glyphs on the boundaries, dimming the interior. Static.</summary>
         public bool Edge { get; set; }
-        /// <summary>Gradient magnitude to count as an edge, [0,1].</summary>
-        public double EdgeThreshold { get; set; } = 0.22;
+        /// <summary>Gradient magnitude to count as an edge, [0,1] of a full
+        /// black↔white step between adjacent cells. Low values reveal fine
+        /// contours (needed at zoom, where per-cell contrast is gentle).</summary>
+        public double EdgeThreshold { get; set; } = 0.12;
 
         /// <summary>"Breathe" the glyph density: animate a gamma on the ramp index
         /// so the whole field pulses lighter/darker over time (independent of the
@@ -234,20 +236,26 @@ namespace FracturingFog.Imaging
         /// <summary>Seconds for a reveal transition to complete.</summary>
         public double TransitionSeconds { get; set; } = 2.0;
 
+        /// <summary>When true (default) reveal transitions loop — wipe in, reset,
+        /// wipe in again — so they are visibly animating in the live view. Set
+        /// false for a one-shot intro (e.g. baked at the head of a recording),
+        /// which stays fully revealed once complete.</summary>
+        public bool TransitionLoop { get; set; } = true;
+
         /// <summary>Typewriter: reveal cells in reading order over the transition,
-        /// the rest blank. Animated (one-shot).</summary>
+        /// the rest blank. Animated.</summary>
         public bool Typewriter { get; set; }
 
         /// <summary>Dissolve: reveal cells in a fixed pseudo-random order over the
-        /// transition, the rest blank. Animated (one-shot).</summary>
+        /// transition, the rest blank. Animated.</summary>
         public bool Dissolve { get; set; }
 
         /// <summary>Frame trails: blend a decayed copy of the previous frame into
-        /// this one — a phosphor / motion smear. Animated; needs a persistent
-        /// <c>AsciiFxState</c>.</summary>
+        /// this one — a phosphor / motion smear (most visible while navigating).
+        /// Animated; needs a persistent <c>AsciiFxState</c>.</summary>
         public bool Trails { get; set; }
         /// <summary>Per-frame trail persistence, [0,1) — higher = longer smear.</summary>
-        public double TrailDecay { get; set; } = 0.85;
+        public double TrailDecay { get; set; } = 0.92;
 
         /// <summary>True when any effect is enabled (the host can skip the pass).</summary>
         public bool AnyEnabled => HueCycle || Crt || CrtFull || Breathe || CharsetSwap || Monochrome

@@ -308,7 +308,10 @@ namespace FracturingFog.Imaging
             if (fx.Edge)
             {
                 var src = (AsciiCell[])cells.Clone();
-                double thr = Math.Clamp(fx.EdgeThreshold, 0.0, 1.0) * 1020.0; // Sobel mag scale
+                // Central-difference gradient is a per-cell luma delta (±255 per
+                // axis), so scale the [0,1] threshold by 255, not the 4·255 Sobel
+                // kernel max — otherwise nothing clears it and the grid goes black.
+                double thr = Math.Clamp(fx.EdgeThreshold, 0.0, 1.0) * 255.0;
                 for (int y = 0; y < rows; y++)
                     for (int x = 0; x < cols; x++)
                     {
@@ -361,10 +364,14 @@ namespace FracturingFog.Imaging
             }
 
             // Transitions: gate cells to blank until revealed, over the transition.
+            // Loop (default) so they visibly re-wipe in the live view; one-shot
+            // clamps and stays fully revealed once past the duration.
             if (fx.Typewriter || fx.Dissolve)
             {
                 double dur = Math.Max(1e-4, fx.TransitionSeconds);
-                double progress = Math.Clamp(fx.TimeSeconds / dur, 0.0, 1.0);
+                double progress = fx.TransitionLoop
+                    ? (fx.TimeSeconds % dur + dur) % dur / dur
+                    : Math.Clamp(fx.TimeSeconds / dur, 0.0, 1.0);
                 if (progress < 1.0)
                 {
                     if (fx.Typewriter)
