@@ -251,6 +251,36 @@ public sealed class AsciiFxChainTests
     }
 
     [Fact]
+    public void Grain_JittersSomeGlyphs_Deterministically()
+    {
+        const int cols = 40, rows = 40;
+        AsciiCell[] Run()
+        {
+            var cells = Grid(cols, rows, (x, y) => new AsciiCell(Ramp[5], 10, 10, 10));
+            AsciiFxChain.Apply(cells, cols, rows, Ramp, new AsciiFxSettings
+            { Grain = true, GrainAmount = 0.5, TimeSeconds = 1.0 });
+            return cells;
+        }
+        var a = Run();
+        int changed = 0;
+        foreach (var c in a) if (c.Glyph != Ramp[5]) changed++;
+        Assert.True(changed > 0, "grain should jitter some cells");
+        Assert.True(changed < cols * rows, "grain should not touch every cell at amount 0.5");
+        // Reproducible: same inputs → identical grid.
+        var b = Run();
+        for (int i = 0; i < a.Length; i++) Assert.Equal(a[i].Glyph, b[i].Glyph);
+    }
+
+    [Fact]
+    public void Grain_LeavesSpacesBlank()
+    {
+        var cells = Grid(1, 1, (x, y) => new AsciiCell(' ', 0, 0, 0));
+        AsciiFxChain.Apply(cells, 1, 1, Ramp, new AsciiFxSettings
+        { Grain = true, GrainAmount = 1.0, TimeSeconds = 1.0 });
+        Assert.Equal(' ', cells[0].Glyph);
+    }
+
+    [Fact]
     public void Duotone_MapsLumaToGradientEndpoints()
     {
         var lo = new AsciiFxSettings

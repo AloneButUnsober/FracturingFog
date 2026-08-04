@@ -56,6 +56,15 @@ namespace FracturingFog.Imaging
         /// <summary>Ramp steps per second for <see cref="RampScroll"/>.</summary>
         public double RampScrollSpeed { get; set; } = 4.0;
 
+        /// <summary>Film grain: randomly nudge each glyph ±1 along the ramp,
+        /// re-rolled over time — twinkle / noise. Stateless (hashed from cell +
+        /// frame), so reproducible. Animated.</summary>
+        public bool Grain { get; set; }
+        /// <summary>Fraction of cells that jitter each frame, [0,1].</summary>
+        public double GrainAmount { get; set; } = 0.4;
+        /// <summary>Grain re-roll rate (frames per second).</summary>
+        public double GrainHz { get; set; } = 20.0;
+
         // ── Colour-space ──────────────────────────────────────────────────
 
         /// <summary>Collapse every cell to a single tint hue, keeping its
@@ -121,11 +130,11 @@ namespace FracturingFog.Imaging
 
         /// <summary>True when any effect is enabled (the host can skip the pass).</summary>
         public bool AnyEnabled => HueCycle || Crt || Breathe || CharsetSwap || Monochrome
-            || Saturate || Invert || Solarize || Quantize || Duotone || RampScroll || MatrixRain;
+            || Saturate || Invert || Solarize || Quantize || Duotone || RampScroll || Grain || MatrixRain;
 
         /// <summary>True when an enabled effect varies with time (the live view
         /// must repaint on a timer for these, not only on buffer changes).</summary>
-        public bool AnyAnimated => HueCycle || Breathe || MatrixRain || RampScroll
+        public bool AnyAnimated => HueCycle || Breathe || MatrixRain || RampScroll || Grain
             || (Saturate && SaturateAmp > 0);
 
         /// <summary>True when an enabled effect evolves across frames and so needs
