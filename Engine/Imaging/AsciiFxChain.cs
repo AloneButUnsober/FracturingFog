@@ -67,8 +67,11 @@ namespace FracturingFog.Imaging
             byte solThresh = (byte)Math.Clamp(fx.SolarizeThreshold * 255.0, 0, 255);
             int qLevels = Math.Max(2, fx.QuantizeLevels);
             int dLevels = Math.Max(2, fx.DitherLevels);
+            double plasmaT = fx.TimeSeconds * fx.PlasmaSpeed;
+            double plasmaK = Math.Max(1e-4, fx.PlasmaScale);
+            double plasmaBlend = Math.Clamp(fx.PlasmaStrength, 0.0, 1.0);
             bool doPerCell = doGlyph || fx.HueCycle || fx.Monochrome || fx.Saturate
-                || fx.Invert || fx.Solarize || fx.Quantize || fx.Dither || fx.Duotone;
+                || fx.Invert || fx.Solarize || fx.Quantize || fx.Dither || fx.Duotone || fx.Plasma;
             if (doPerCell)
             for (int y = 0; y < rows; y++)
             {
@@ -164,6 +167,20 @@ namespace FracturingFog.Imaging
                         r = DitherChannel(r, dLevels, d);
                         g = DitherChannel(g, dLevels, d);
                         b = DitherChannel(b, dLevels, d);
+                    }
+                    if (fx.Plasma)
+                    {
+                        double p = Math.Sin(x * plasmaK + plasmaT)
+                                 + Math.Sin(y * plasmaK * 1.3 - plasmaT * 0.7)
+                                 + Math.Sin((x + y) * plasmaK * 0.7 + plasmaT * 1.3);
+                        p = p / 3.0 * 0.5 + 0.5;                 // 0..1
+                        double t3 = p * 3.0;                      // fire ramp: black→red→yellow→white
+                        byte pr = (byte)(Math.Clamp(t3, 0, 1) * 255);
+                        byte pg = (byte)(Math.Clamp(t3 - 1, 0, 1) * 255);
+                        byte pb = (byte)(Math.Clamp(t3 - 2, 0, 1) * 255);
+                        r = (byte)(r * (1 - plasmaBlend) + pr * plasmaBlend);
+                        g = (byte)(g * (1 - plasmaBlend) + pg * plasmaBlend);
+                        b = (byte)(b * (1 - plasmaBlend) + pb * plasmaBlend);
                     }
                     cells[i] = new AsciiCell(glyph, r, g, b);
                 }

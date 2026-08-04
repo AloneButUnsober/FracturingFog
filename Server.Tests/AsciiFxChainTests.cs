@@ -441,6 +441,26 @@ public sealed class AsciiFxChainTests
     }
 
     [Fact]
+    public void Plasma_BlendsFireColourAcrossField()
+    {
+        const int cols = 24, rows = 24;
+        var cells = Grid(cols, rows, (x, y) => new AsciiCell('#', 0, 0, 0));
+        AsciiFxChain.Apply(cells, cols, rows, Ramp,
+            new AsciiFxSettings { Plasma = true, PlasmaStrength = 1.0, TimeSeconds = 0.5 });
+        // Fire palette is red-dominant: expect cells where R > G and R > B, and
+        // the field is not uniform.
+        int redish = 0; var first = cells[0];
+        bool varied = false;
+        foreach (var c in cells)
+        {
+            if (c.R >= c.G && c.R >= c.B && c.R > 20) redish++;
+            if (c.R != first.R) varied = true;
+        }
+        Assert.True(redish > 0, "plasma should paint fire-red cells");
+        Assert.True(varied, "plasma field should vary across the grid");
+    }
+
+    [Fact]
     public void MatrixRain_ProducesGreenDropsAndGhostsBackground()
     {
         const int cols = 20, rows = 30;
