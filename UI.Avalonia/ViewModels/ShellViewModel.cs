@@ -2146,8 +2146,9 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
                 initialThemeName: Main.SelectedTheme,
                 initialRegionName: Main.SelectedRegion,
                 viewParams: Main.ViewState.FractalParameters);
-            // Wild mode = maximum variety per press (kids want dramatic change).
-            _kidColorVm.RandomExperimental = true;
+            // Match the Color Theme Editor's Random with the Experimental
+            // checkbox unchecked — artful (clamped, logical) ranges, not wild.
+            _kidColorVm.RandomExperimental = false;
             _kidColorVm.PreviewRequested += (_, def) => OnColorThemePreview(def);
         }
         // Full randomness = randomise the Kind too, then run the editor's own
