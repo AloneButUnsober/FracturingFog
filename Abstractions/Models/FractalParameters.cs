@@ -118,6 +118,31 @@ namespace FracturingFog.Models
         /// roughness) deterministically produces the same field.</summary>
         public int PlasmaSeed { get; set; } = 12345;
 
+        /// <summary>Acid Warp pattern selector (#247). Index into the
+        /// clean-room procedural pattern table in <c>AcidWarpCalculator</c>;
+        /// wrapped modulo the pattern count so any value is legal. Each pattern
+        /// is a closed-form map from pixel coordinate to a cyclic scalar
+        /// sampled through the active colour map. Default 0 = concentric
+        /// rings.</summary>
+        public int AcidWarpPattern { get; set; } = 0;
+
+        /// <summary>Global frequency scale for the Acid Warp pattern (#247) —
+        /// multiplies ring / wave / spoke density. Default 1.0.</summary>
+        public double AcidWarpFrequency { get; set; } = 1.0;
+
+        /// <summary>Acid Warp pattern centre X in normalised units where the
+        /// shorter screen axis spans [-1, 1] and 0 is screen centre (#247).
+        /// Shifts the focus of radial / angular patterns.</summary>
+        public double AcidWarpCenterX { get; set; } = 0.0;
+
+        /// <summary>Acid Warp pattern centre Y (see <see cref="AcidWarpCenterX"/>).</summary>
+        public double AcidWarpCenterY { get; set; } = 0.0;
+
+        /// <summary>PRNG seed for the Acid Warp stochastic patterns (#247).
+        /// Deterministic: same (pattern, seed, size) yields the same
+        /// field.</summary>
+        public int AcidWarpSeed { get; set; } = 12345;
+
         /// <summary>Optional explicit Flame-fractal map list. When null the
         /// renderer falls back to <see cref="FlamePresetName"/> from
         /// <c>FlamePresets.All</c>.</summary>
@@ -770,6 +795,11 @@ namespace FracturingFog.Models
                 LSystemDepth = LSystemDepth,
                 PlasmaRoughness = PlasmaRoughness,
                 PlasmaSeed = PlasmaSeed,
+                AcidWarpPattern = AcidWarpPattern,
+                AcidWarpFrequency = AcidWarpFrequency,
+                AcidWarpCenterX = AcidWarpCenterX,
+                AcidWarpCenterY = AcidWarpCenterY,
+                AcidWarpSeed = AcidWarpSeed,
                 FlameMaps = FlameMaps is null ? null : new List<FlameMap>(FlameMaps),
                 FlamePresetName = FlamePresetName,
                 FlameIterations = FlameIterations,
