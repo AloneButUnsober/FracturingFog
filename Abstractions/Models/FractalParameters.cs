@@ -118,6 +118,12 @@ namespace FracturingFog.Models
         /// roughness) deterministically produces the same field.</summary>
         public int PlasmaSeed { get; set; } = 12345;
 
+        /// <summary>Number of distinct Acid Warp patterns (#247). Single source
+        /// of truth shared by <c>AcidWarpCalculator</c> (Engine) and the params
+        /// view-model (UI, which references only Abstractions). The pattern
+        /// selector is taken modulo this.</summary>
+        public const int AcidWarpPatternCount = 20;
+
         /// <summary>Acid Warp pattern selector (#247). Index into the
         /// clean-room procedural pattern table in <c>AcidWarpCalculator</c>;
         /// wrapped modulo the pattern count so any value is legal. Each pattern

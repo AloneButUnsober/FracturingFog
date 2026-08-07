@@ -1036,6 +1036,18 @@ namespace FracturingFog.Models
             },
             new()
             {
+                Name        = "Acid Warp - Rings",
+                CenterX     =  0.0,
+                CenterY     =  0.0,
+                Zoom        =  1.0,
+                Iterations  = 64,
+                Description = "Clean-room homage to Noah Spurrier's 1992 Acid Warp. Concentric-ring procedural pattern mapped through the active colour theme; pan/zoom is a no-op. Switch AcidWarpPattern for spokes, spirals, interference, plaid and more; pair with animated palette cycling.",
+                RegionType  = RegionType.BuiltIn,
+                FractalType = FractalType.AcidWarp,
+                QualityPreset = QualityPreset.Standard
+            },
+            new()
+            {
                 Name        = "Flame - Default Chaos",
                 CenterX     =  0.0,
                 CenterY     =  0.0,

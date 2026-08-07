@@ -481,6 +481,7 @@ namespace FracturingFog.Imaging
                 FractalType.QuaternionJulia  => new QuatJuliaCalculator(w, h),
                 FractalType.QuaternionMandelbrot => new QuatMandelbrotCalculator(w, h),
                 FractalType.Plasma           => new PlasmaCalculator(w, h),
+                FractalType.AcidWarp         => new AcidWarpCalculator(w, h),
                 FractalType.Apollonian       => new ApollonianCalculator(w, h),
                 FractalType.Kleinian         => new KleinianCalculator(w, h),
                 FractalType.BicomplexMandelbrot => new BicomplexMandelbrotCalculator(w, h),
@@ -517,6 +518,7 @@ namespace FracturingFog.Imaging
                 case QuatJuliaCalculator qj:   qj.FractalParameters = req.FractalParameters; break;
                 case QuatMandelbrotCalculator qm: qm.FractalParameters = req.FractalParameters; break;
                 case PlasmaCalculator pl:      pl.FractalParameters = req.FractalParameters; break;
+                case AcidWarpCalculator aw:    aw.FractalParameters = req.FractalParameters; break;
                 case ApollonianCalculator ap:  ap.FractalParameters = req.FractalParameters; break;
                 case KleinianCalculator kl:    kl.FractalParameters = req.FractalParameters; break;
                 case BicomplexMandelbrotCalculator bc: bc.FractalParameters = req.FractalParameters; break;
