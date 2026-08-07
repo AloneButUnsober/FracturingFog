@@ -1,0 +1,50 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:FracturingFog.UI.Avalonia.ViewModels"
+        x:Class="FracturingFog.UI.Avalonia.Views.BigButtonsView"
+        x:DataType="vm:BigButtonsViewModel"
+        Foreground="White">
+
+    <!--
+      Big Buttons (kid mode). Three oversized, colourful buttons a young explorer
+      can drive with no configuration: Color randomises the whole theme (Kind
+      included, no save), Place jumps to a random slideshow region, and Show/Stop
+      toggles the slideshow (the label follows the run state). Hosted in a large,
+      resizable PanelHostWindow — the buttons stretch to fill whatever size the
+      window is dragged to.
+    -->
+
+    <UserControl.Styles>
+        <Style Selector="Button.big">
+            <Setter Property="HorizontalAlignment" Value="Stretch" />
+            <Setter Property="VerticalAlignment" Value="Stretch" />
+            <Setter Property="HorizontalContentAlignment" Value="Center" />
+            <Setter Property="VerticalContentAlignment" Value="Center" />
+            <Setter Property="FontSize" Value="52" />
+            <Setter Property="FontWeight" Value="Bold" />
+            <Setter Property="Foreground" Value="White" />
+            <Setter Property="CornerRadius" Value="18" />
+            <Setter Property="Margin" Value="0,0,0,14" />
+        </Style>
+    </UserControl.Styles>
+
+    <Grid Margin="18" RowDefinitions="*,*,*,Auto">
+        <!-- Colourblind-safe trio (orange / blue / purple): distinguishable under
+             red-green deficiency, and each button is also labelled. -->
+        <Button Grid.Row="0" Classes="big" Content="Color"
+                Command="{Binding ColorCommand}"
+                Background="#E67E22" ToolTip.Tip="New random colors!" />
+
+        <Button Grid.Row="1" Classes="big" Content="Place"
+                Command="{Binding PlaceCommand}"
+                Background="#2E86C1" ToolTip.Tip="Go somewhere new!" />
+
+        <Button Grid.Row="2" Classes="big" Content="{Binding ShowStopLabel}"
+                Command="{Binding ShowStopCommand}"
+                Background="#8E44AD" Margin="0"
+                ToolTip.Tip="Start or stop the picture show" />
+
+        <Button Grid.Row="3" Content="Close" Click="OnCloseClick"
+                HorizontalAlignment="Right" Padding="18,6" Margin="0,14,0,0" />
+    </Grid>
+</UserControl>
