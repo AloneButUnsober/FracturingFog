@@ -49,8 +49,10 @@ public sealed class AcidWarpCalculator : IFractalCalculator
     public FractalParameters FractalParameters { get; set; } = new();
 
     /// <summary>Number of distinct clean-room patterns. The pattern selector
-    /// is taken modulo this, so any <c>AcidWarpPattern</c> value is legal.</summary>
-    public const int PatternCount = 20;
+    /// is taken modulo this, so any <c>AcidWarpPattern</c> value is legal.
+    /// Aliases <see cref="FractalParameters.AcidWarpPatternCount"/> so Engine
+    /// and the Abstractions-only UI agree on the count.</summary>
+    public const int PatternCount = FractalParameters.AcidWarpPatternCount;
 
     public AcidWarpCalculator(int width, int height) => Resize(width, height);
 

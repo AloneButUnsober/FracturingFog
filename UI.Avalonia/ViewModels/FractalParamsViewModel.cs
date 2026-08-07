@@ -116,6 +116,11 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
         _qmCameraDistance = _p.QMandelCameraDistance;
         _plasmaRoughness = _p.PlasmaRoughness;
         _plasmaSeed = _p.PlasmaSeed;
+        _acidWarpPattern = _p.AcidWarpPattern;
+        _acidWarpFrequency = _p.AcidWarpFrequency;
+        _acidWarpCenterX = _p.AcidWarpCenterX;
+        _acidWarpCenterY = _p.AcidWarpCenterY;
+        _acidWarpSeed = _p.AcidWarpSeed;
         _apolloDepth = _p.ApollonianDepth;
         _apolloMinPx = _p.ApollonianMinPixelRadius;
         _apolloColorByDepth = _p.ApollonianColorByDepth;
@@ -212,6 +217,7 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
     public bool IsQuatJulia => FractalType == FractalType.QuaternionJulia;
     public bool IsQuatMandelbrot => FractalType == FractalType.QuaternionMandelbrot;
     public bool IsPlasma => FractalType == FractalType.Plasma;
+    public bool IsAcidWarp => FractalType == FractalType.AcidWarp;
     public bool IsFlame => FractalType == FractalType.Flame;
     public bool IsApollonian => FractalType == FractalType.Apollonian;
     public bool IsKleinian => FractalType == FractalType.Kleinian;
@@ -274,7 +280,7 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
     public bool HasNoParams =>
         !(IsJulia || IsMultibrot || IsPhoenix || IsGlynn || IsLogistic || IsSpider || IsNewtonOrNova || IsIFS
           || IsLSystem || IsStrangeAttractor || IsBuddhaBrot || IsMandelbulb || IsMandelbox || IsKifs
-          || IsQuatJulia || IsQuatMandelbrot || IsPlasma || IsFlame || IsApollonian || IsKleinian
+          || IsQuatJulia || IsQuatMandelbrot || IsPlasma || IsAcidWarp || IsFlame || IsApollonian || IsKleinian
           || IsBicomplexMandelbrot || IsDla || IsInteriorAlphaApplicable || IsRelief2DApplicable);
 
     // ── Interior alpha (2D) — issue #96 ──────────────────────────────────────
@@ -1029,6 +1035,20 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
     public double PlasmaRoughness { get => _plasmaRoughness; set { Set(ref _plasmaRoughness, Clamp(value, 0.0, 1.0)); _p.PlasmaRoughness = _plasmaRoughness; Fire(); } }
     private int _plasmaSeed;
     public int PlasmaSeed { get => _plasmaSeed; set { Set(ref _plasmaSeed, value); _p.PlasmaSeed = _plasmaSeed; Fire(); } }
+
+    // ── Acid Warp (#247) ──
+    private int _acidWarpPattern;
+    public int AcidWarpPattern { get => _acidWarpPattern; set { Set(ref _acidWarpPattern, (int)Clamp(value, 0, FractalParameters.AcidWarpPatternCount - 1)); _p.AcidWarpPattern = _acidWarpPattern; Fire(); } }
+    /// <summary>Upper bound for the pattern slider (inclusive).</summary>
+    public int AcidWarpPatternMax => FractalParameters.AcidWarpPatternCount - 1;
+    private double _acidWarpFrequency;
+    public double AcidWarpFrequency { get => _acidWarpFrequency; set { Set(ref _acidWarpFrequency, Clamp(value, 0.1, 8.0)); _p.AcidWarpFrequency = _acidWarpFrequency; Fire(); } }
+    private double _acidWarpCenterX;
+    public double AcidWarpCenterX { get => _acidWarpCenterX; set { Set(ref _acidWarpCenterX, Clamp(value, -2.0, 2.0)); _p.AcidWarpCenterX = _acidWarpCenterX; Fire(); } }
+    private double _acidWarpCenterY;
+    public double AcidWarpCenterY { get => _acidWarpCenterY; set { Set(ref _acidWarpCenterY, Clamp(value, -2.0, 2.0)); _p.AcidWarpCenterY = _acidWarpCenterY; Fire(); } }
+    private int _acidWarpSeed;
+    public int AcidWarpSeed { get => _acidWarpSeed; set { Set(ref _acidWarpSeed, value); _p.AcidWarpSeed = _acidWarpSeed; Fire(); } }
 
     // ── Apollonian ──
     private int _apolloDepth;

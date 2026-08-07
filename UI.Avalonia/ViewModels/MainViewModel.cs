@@ -226,6 +226,7 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
         (FractalType.QuaternionJulia,       "Quaternion Julia (3D)"),
         (FractalType.QuaternionMandelbrot,  "Quaternion Mandelbrot (3D)"),
         (FractalType.Plasma,                "Plasma (Diamond-Square)"),
+        (FractalType.AcidWarp,              "Acid Warp (Palette Cycling)"),
         (FractalType.Flame,                 "Flame (Apophysis)"),
         (FractalType.Apollonian,            "Apollonian Gasket"),
         (FractalType.Kleinian,              "Kleinian Limit Set (3D)"),

@@ -68,6 +68,9 @@ public static class FractalAnimatableParamsMap
         FractalType.Plasma
             => _plasmaList,
 
+        FractalType.AcidWarp
+            => _acidWarpList,
+
         FractalType.Flame
             => _flameList,
 
@@ -195,6 +198,16 @@ public static class FractalAnimatableParamsMap
         new("PlasmaSeed", AnimatableParamKind.ScalarInt, Min: 0, Max: 1_000_000,
             Cost: AnimatableParamCost.Expensive,
             Notes: "Seed change regenerates the noise field — flashes at high rates."),
+    };
+
+    private static readonly AnimatableParamDescriptor[] _acidWarpList =
+    {
+        new("AcidWarpFrequency", AnimatableParamKind.ScalarDouble, Min: 0.1, Max: 8.0),
+        new("AcidWarpCenterX", AnimatableParamKind.ScalarDouble, Min: -2.0, Max: 2.0),
+        new("AcidWarpCenterY", AnimatableParamKind.ScalarDouble, Min: -2.0, Max: 2.0),
+        new("AcidWarpPattern", AnimatableParamKind.ScalarInt, Min: 0, Max: 19,
+            Cost: AnimatableParamCost.Expensive,
+            Notes: "Pattern switch swaps the whole field — hard cut, not a morph."),
     };
 
     private static readonly AnimatableParamDescriptor[] _flameList =

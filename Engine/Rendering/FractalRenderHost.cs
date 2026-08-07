@@ -77,6 +77,7 @@ namespace FracturingFog.Rendering
         private QuatJuliaCalculator _quatJuliaCalculator;
         private QuatMandelbrotCalculator _quatMandelbrotCalculator;
         private PlasmaCalculator _plasmaCalculator;
+        private AcidWarpCalculator _acidWarpCalculator;
         private ApollonianCalculator _apollonianCalculator;
         private KleinianCalculator _kleinianCalculator;
         private BicomplexMandelbrotCalculator _bicomplexCalculator;
@@ -441,6 +442,7 @@ namespace FracturingFog.Rendering
             _quatJuliaCalculator = new QuatJuliaCalculator(w, h);
             _quatMandelbrotCalculator = new QuatMandelbrotCalculator(w, h);
             _plasmaCalculator = new PlasmaCalculator(w, h);
+            _acidWarpCalculator = new AcidWarpCalculator(w, h);
             _apollonianCalculator = new ApollonianCalculator(w, h);
             _kleinianCalculator = new KleinianCalculator(w, h);
             _bicomplexCalculator = new BicomplexMandelbrotCalculator(w, h);
@@ -2847,6 +2849,7 @@ namespace FracturingFog.Rendering
                 case QuatJuliaCalculator qj: qj.FractalParameters = ViewState.FractalParameters; break;
                 case QuatMandelbrotCalculator qm: qm.FractalParameters = ViewState.FractalParameters; break;
                 case PlasmaCalculator pl: pl.FractalParameters = ViewState.FractalParameters; break;
+                case AcidWarpCalculator aw: aw.FractalParameters = ViewState.FractalParameters; break;
                 case ApollonianCalculator ap: ap.FractalParameters = ViewState.FractalParameters; break;
                 case KleinianCalculator kl: kl.FractalParameters = ViewState.FractalParameters; break;
                 case BicomplexMandelbrotCalculator bc: bc.FractalParameters = ViewState.FractalParameters; break;
@@ -2996,6 +2999,7 @@ namespace FracturingFog.Rendering
             FractalType.QuaternionJulia => _quatJuliaCalculator,
             FractalType.QuaternionMandelbrot => _quatMandelbrotCalculator,
             FractalType.Plasma => _plasmaCalculator,
+            FractalType.AcidWarp => _acidWarpCalculator,
             FractalType.Apollonian => _apollonianCalculator,
             FractalType.Kleinian => _kleinianCalculator,
             FractalType.BicomplexMandelbrot => _bicomplexCalculator,
