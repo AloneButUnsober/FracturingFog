@@ -105,6 +105,11 @@ namespace FracturingFog.Hosting
         // launchable straight from the Control Center. Re-focus if already open.
         private static PanelHostWindow? s_relief3DWin;
 
+        // Standalone Big Buttons kid dialog (Color / Place / Show). Large,
+        // resizable, host-owned — bound to a BigButtonsViewModel over the shell.
+        // Re-focus if already open. Nulled on close.
+        private static PanelHostWindow? s_bigButtonsWin;
+
         // Dedicated source-compiled editors (one window each, modeless).
         private static PanelHostWindow? s_userEqWin;
         private static PanelHostWindow? s_sandboxWin;
@@ -2249,6 +2254,53 @@ namespace FracturingFog.Hosting
                     };
                     win.Closed += (_, _) => s_relief3DWin = null;
                     s_relief3DWin = win;
+
+                    var owner = AvaloniaDialogs.ActiveMainWindow;
+                    if (owner != null)
+                    {
+                        // Match Span-mode Topmost so the panel floats above the
+                        // borderless fullscreen render window instead of behind it.
+                        win.Topmost = owner.Topmost;
+                        win.Show(owner);
+                    }
+                    else win.Show();
+                });
+            };
+
+            // ── Standalone Big Buttons (kid mode) ────────────────────────────
+            //
+            // Large, resizable dialog with three oversized buttons (Color /
+            // Place / Show) for young explorers. Launched from the Control Center
+            // View section (which auto-closes on launch). Bound to a
+            // BigButtonsViewModel over the shell so every press drives the same
+            // machinery the grown-up UI uses. Re-focus if already open.
+            shell.BigButtonsRequested += (_, _) =>
+            {
+                Dispatcher.UIThread.Post(() =>
+                {
+                    if (s_bigButtonsWin is { IsVisible: true })
+                    {
+                        s_bigButtonsWin.Activate();
+                        return;
+                    }
+
+                    var win = new PanelHostWindow(
+                        new BigButtonsView(),
+                        new PanelHostOptions(
+                            "Big Buttons",
+                            Width: 560, Height: 720, MinWidth: 360, MinHeight: 420,
+                            SizeToContentHeight: false, CanResize: true, ShowInTaskbar: true,
+                            StartupLocation: WindowStartupLocation.CenterOwner,
+                            Background: new SolidColorBrush(Color.FromRgb(0x28, 0x28, 0x28))))
+                    {
+                        DataContext = new BigButtonsViewModel(shell),
+                    };
+                    win.Closed += (_, _) =>
+                    {
+                        (win.DataContext as BigButtonsViewModel)?.Dispose();
+                        s_bigButtonsWin = null;
+                    };
+                    s_bigButtonsWin = win;
 
                     var owner = AvaloniaDialogs.ActiveMainWindow;
                     if (owner != null)
