@@ -13,6 +13,26 @@ Status legend: ☐ not started · ◐ in progress · ☑ shipped
 > **Design R&D provenance.** This plan was produced design-only. No engine code
 > was written when it was filed — only this doc and the tracking issues.
 
+## Implementation status (2026-08-08)
+
+Branch `feat/acidwarp-mode` (off `main`, not pushed). Full suite 1111/1111.
+
+| Issue | State | Notes |
+|---|---|---|
+| #247 AW-1 calculator | ☑ shipped | 20 clean-room patterns; 7 tests |
+| #248 AW-2 wiring + params UI | ☑ shipped | full FractalType wiring + picker + region |
+| #249 IDEA-1 live palette cycling | ☑ shipped | LUT rotation + "Cycle" toolbar toggle |
+| #250 AW-4 Spurrier intro | ☑ shipped | once-per-process gate |
+| #251 IDEA-6 auto-VJ | ◐ core | shuffle+classic-first playlist shipped+tested; **SlideshowEngine hold/fade wiring remains** |
+| #252 IDEA-2 XOR post-transform | ☑ shipped | colour-index moiré on any field |
+| #253 IDEA-3 domain-warp | ◐ core | warp inside Acid Warp shipped; **cross-fractal warp deferred (deep-zoom path + visual sign-off)** |
+| #254 IDEA-4 sparkle | ☑ shipped | every-Nth LUT boost |
+| #255 IDEA-5 seamless toggle | ☑ shipped | opt-in close-the-loop |
+
+Remaining app-integration work (both want on-device visual verification): the
+auto-VJ SlideshowEngine playback profile (#251) and the cross-fractal domain
+warp (#253).
+
 ---
 
 ## 0. Licensing gate (READ FIRST)
