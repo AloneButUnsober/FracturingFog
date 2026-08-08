@@ -119,4 +119,34 @@ public class AcidWarpCalculatorTests
         }
         Assert.True(anyDifferent);
     }
+
+    [Fact]
+    public void Renders_Rich_Image_Through_Real_Gradient_At_Display_Size()
+    {
+        // End-to-end guard mimicking the app path: a multi-stop data-driven
+        // theme, MaxIterations lifted off the (Mandelbrot) host, a realistic
+        // surface size. A working ring field must yield many distinct colours —
+        // a single solid colour (the resize/upload regression) would fail here.
+        var theme = new DataDrivenGradient(new ColorThemeData
+        {
+            Name = "grad",
+            Stops = new System.Collections.Generic.List<ColorStopData>
+            {
+                new() { Position = 0f,   R = 0,   G = 0,   B = 0 },
+                new() { Position = 0.5f, R = 255, G = 0,   B = 128 },
+                new() { Position = 1f,   R = 0,   G = 255, B = 255 },
+            },
+        });
+
+        var c = new AcidWarpCalculator(160, 120)
+        {
+            ColorMap = theme,
+            MaxIterations = 1000,   // as SyncAltStateFromMandel would set it
+            FractalParameters = new FractalParameters { AcidWarpPattern = 0 },
+        };
+        c.Calculate(default);
+
+        var distinct = new System.Collections.Generic.HashSet<uint>(c.ColorBuffer);
+        Assert.True(distinct.Count > 50, $"expected a rich field, got {distinct.Count} colours");
+    }
 }
