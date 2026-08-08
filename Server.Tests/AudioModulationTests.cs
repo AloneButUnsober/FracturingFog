@@ -167,6 +167,23 @@ public class AudioModulationTests
         Assert.Equal(0f, src.Sample().BpmPhaseSaw);
     }
 
+    // ── Source: monotonic edge counters (#262 beat-lock) ────────────────
+    [Fact]
+    public void Beat_And_Downbeat_Counts_Increment_Monotonically()
+    {
+        var (fake, src, now, _) = Build();
+        Assert.Equal(0, src.BeatCount);
+        Assert.Equal(0, src.DownbeatCount);
+
+        fake.RaiseBeat(now(), 1.0);
+        fake.RaiseBeat(now(), 1.0);
+        Assert.Equal(2, src.BeatCount);
+        Assert.Equal(0, src.DownbeatCount);
+
+        fake.RaiseDownbeat(now(), 1.0);
+        Assert.Equal(1, src.DownbeatCount);
+    }
+
     [Fact]
     public void SampleAt_Falls_Back_To_Sample_For_Live_Source()
     {

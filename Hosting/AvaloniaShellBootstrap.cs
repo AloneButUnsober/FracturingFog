@@ -642,6 +642,9 @@ namespace FracturingFog.Hosting
             // owns the eventual capture stop.
             s_shell.GetAudioModulationSource = () => s_audioDriver?.ModulationSource;
             s_shell.EnsureAudioModulationStarted = EnsureAudioCaptureStarted;
+            // #262 — Acid Fog beat-lock lives on MainViewModel's ambient loop.
+            s_shell.Main.GetAudioModulationSource = () => s_audioDriver?.ModulationSource;
+            s_shell.Main.EnsureAudioModulationStarted = EnsureAudioCaptureStarted;
 
             // Window title: "{ProgramName} v{Version}  —  {renderer description}"
             // (legacy MainForm parity, MainForm.cs:917). RebuildWindowTitle()

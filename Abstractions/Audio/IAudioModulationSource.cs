@@ -18,6 +18,16 @@ namespace FracturingFog.Audio
         /// untouched (see <see cref="AudioModulationFrame.Inactive"/>).</summary>
         bool IsActive { get; }
 
+        /// <summary>Monotonic count of beats seen since construction. A consumer
+        /// stores the last value it observed and treats an increase as one-or-more
+        /// fresh beats — lock-free, multi-consumer edge detection for discrete
+        /// "do this on the beat" actions (vs. the continuous frame signals).</summary>
+        long BeatCount { get; }
+
+        /// <summary>Monotonic count of downbeats (bar starts) seen since
+        /// construction. Same edge-detection contract as <see cref="BeatCount"/>.</summary>
+        long DownbeatCount { get; }
+
         /// <summary>Snapshot every signal at the current wall-clock instant.
         /// Cheap, allocation-free, thread-safe.</summary>
         AudioModulationFrame Sample();

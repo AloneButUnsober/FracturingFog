@@ -125,6 +125,10 @@
                                   IsVisible="{Binding Main.IsAcidFogType}"
                                   IsChecked="{Binding Main.AcidFogAmbientLocked, Mode=TwoWay}"
                                   ToolTip.Tip="Lock the auto-VJ loop: freeze pattern advancement while the colour keeps cycling." />
+                    <ToggleButton Classes="toolbar" Content="Beat"
+                                  IsVisible="{Binding Main.IsAcidFogType}"
+                                  IsChecked="{Binding Main.AcidFogAmbientBeatSync, Mode=TwoWay}"
+                                  ToolTip.Tip="Beat-lock the auto-VJ loop: advance patterns on the music's downbeats and slave the palette cycle rate to the detected BPM." />
                     <Button Classes="toolbar" Content="Next ▸"
                             IsVisible="{Binding Main.IsAcidFogType}"
                             Command="{Binding Main.AcidFogAmbientNextCommand}"
