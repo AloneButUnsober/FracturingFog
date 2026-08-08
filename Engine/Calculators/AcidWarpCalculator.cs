@@ -76,6 +76,7 @@ public sealed class AcidWarpCalculator : IFractalCalculator
         double cx = p.AcidWarpCenterX;
         double cy = p.AcidWarpCenterY;
         int seed = p.AcidWarpSeed;
+        double warp = p.AcidWarpWarpStrength;
 
         // Normalise so the shorter axis spans [-1, 1]; 0 is screen centre.
         double scale = 2.0 / Math.Max(w, h);
@@ -99,7 +100,9 @@ public sealed class AcidWarpCalculator : IFractalCalculator
                 for (int i = 0; i < w; i++)
                 {
                     double nx = (i - halfW) * scale - cx;
-                    double v = Evaluate(pattern, nx, ny, freq, seed);
+                    double wx = nx, wy = ny;
+                    if (warp != 0.0) DomainWarp(ref wx, ref wy, warp, freq);
+                    double v = Evaluate(pattern, wx, wy, freq, seed);
                     double t = v - Math.Floor(v);            // frac → [0,1)
                     ColorBuffer[outRow + i] = (uint)map.Map((float)(t * 256.0), 0f, 256);
                 }
@@ -207,6 +210,19 @@ public sealed class AcidWarpCalculator : IFractalCalculator
             default:
                 return dist * 6.0 * freq;
         }
+    }
+
+    // #253 / IDEA-3: domain warp. Displace the sampling coordinate by a smooth
+    // interference field (sin of the orthogonal axis) so straight rings/waves
+    // fold into organic swirls. A standard IQ-style two-tap warp; strength 0 is
+    // an exact no-op (guarded by the caller).
+    private static void DomainWarp(ref double x, ref double y, double strength, double freq)
+    {
+        double k = 3.0 * freq;
+        double dx = Math.Sin(y * k + x * 1.3);
+        double dy = Math.Sin(x * k - y * 1.3);
+        x += strength * dx;
+        y += strength * dy;
     }
 
     private static double Dist(double x, double y, double ox, double oy)

@@ -84,6 +84,29 @@ public class AcidWarpCalculatorTests
     }
 
     [Fact]
+    public void DomainWarp_Zero_Is_Baseline_NonZero_Differs()
+    {
+        // #253 — warp strength 0 is an exact no-op; a positive strength deforms.
+        var baseline = Render(0);
+
+        var noWarp = new AcidWarpCalculator(64, 48)
+        {
+            ColorMap = new GrayscalePalette(),
+            FractalParameters = new FractalParameters { AcidWarpPattern = 0, AcidWarpWarpStrength = 0.0 },
+        };
+        noWarp.Calculate(default);
+        Assert.Equal(baseline, noWarp.ColorBuffer);
+
+        var warped = new AcidWarpCalculator(64, 48)
+        {
+            ColorMap = new GrayscalePalette(),
+            FractalParameters = new FractalParameters { AcidWarpPattern = 0, AcidWarpWarpStrength = 0.4 },
+        };
+        warped.Calculate(default);
+        Assert.NotEqual(baseline, (uint[])warped.ColorBuffer.Clone());
+    }
+
+    [Fact]
     public void Fill_Is_Not_Flat()
     {
         // A real field must contain more than one colour.
