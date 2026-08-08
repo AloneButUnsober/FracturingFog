@@ -645,6 +645,14 @@ namespace FracturingFog.Hosting
             // #262 — Acid Fog beat-lock lives on MainViewModel's ambient loop.
             s_shell.Main.GetAudioModulationSource = () => s_audioDriver?.ModulationSource;
             s_shell.Main.EnsureAudioModulationStarted = EnsureAudioCaptureStarted;
+            // #263 — audio→param modulation matrix manager (app-scoped), driving
+            // fractal params through the shared render-gated animation bus.
+            s_shell.AudioModulation = new FracturingFog.UI.Avalonia.ViewModels.Animation.AudioModulationManager(
+                () => s_audioDriver?.ModulationSource,
+                EnsureAudioCaptureStarted,
+                () => s_shell.Main.ViewState.FractalParameters,
+                () => s_shell.Main.ViewState.FractalType,
+                () => FracturingFog.UI.Avalonia.ViewModels.Animation.AnimationBusHost.Bus);
 
             // Window title: "{ProgramName} v{Version}  —  {renderer description}"
             // (legacy MainForm parity, MainForm.cs:917). RebuildWindowTitle()
@@ -1673,8 +1681,14 @@ namespace FracturingFog.Hosting
             {
                 try
                 {
+                    // Build one matrix row per animatable scalar of the current
+                    // fractal type, bound to the app-scoped manager (in-session).
+                    var mgr = s_shell.AudioModulation;
+                    var rows = mgr?.DescriptorsForCurrentType()
+                        .Select(d => new FracturingFog.UI.Avalonia.ViewModels.AudioBindingRowViewModel(d, mgr))
+                        .ToList();
                     await AvaloniaDialogs.ShowAudioSettingsAsync(
-                        owner: null, liveSource: s_audioDriver?.BeatSource);
+                        owner: null, liveSource: s_audioDriver?.BeatSource, bindingRows: rows);
                     if (s_audioDriver != null)
                         s_audioDriver.Reconfigure(AudioSettingsStore.Load());
                 }

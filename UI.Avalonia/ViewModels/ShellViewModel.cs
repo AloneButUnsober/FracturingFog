@@ -1950,6 +1950,11 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
     /// bootstrap.</summary>
     public Action? EnsureAudioModulationStarted { get; set; }
 
+    /// <summary>#263 — app-scoped audio→param modulation matrix manager. Set by
+    /// the bootstrap; drives fractal params from audio via the shared animation
+    /// bus. Null in headless / test contexts.</summary>
+    public Animation.AudioModulationManager? AudioModulation { get; set; }
+
     /// <summary>Named ASCII FX presets for the toolbar picker ("None" + catalogue).</summary>
     public System.Collections.Generic.IReadOnlyList<string> AsciiFxPresetNames { get; }
         = FracturingFog.Imaging.AsciiFxPresets.Names;
@@ -2098,6 +2103,9 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
                 isAcidFog && attachedAnim != null
                 && attachedAnim.Tracks.Any(t => t.Enabled
                     && string.Equals(t.ParamName, "AcidWarpFlow", StringComparison.Ordinal));
+            // #263 — re-resolve audio→param animators against the region's params
+            // instance + fractal type (drops params the new type can't animate).
+            AudioModulation?.Rebind();
             Main.RenderHost.Trigger();
         }
     }
