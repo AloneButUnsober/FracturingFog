@@ -379,6 +379,12 @@ namespace FracturingFog.Hosting
                     host?.CompileUserBulb(source);
             }
 
+            // #253 — domain warp toggles WITH the region (authoritative, like
+            // Relief 3D below): reset it off first, then ApplyTo restores it for
+            // a region that saved a warp. So loading any region without a warp
+            // block turns the swirl off instead of leaking the prior state.
+            p.DomainWarpEnabled = false;
+
             // Multi-type video roadmap P1 (#91): overlay the snapshotted core
             // per-family params (Julia constant, Newton exponent, Apollonian
             // knobs, …) captured at save time. No-op for legacy regions (null

@@ -181,7 +181,7 @@
                 BorderBrush="#404040" BorderThickness="0,1,0,0"
                 Padding="0,8,0,0" Margin="0,4,0,0">
             <StackPanel Spacing="6">
-                <TextBlock Text="Domain warp (#253)" FontWeight="Bold" Foreground="#FFCC00" />
+                <TextBlock Text="Domain warp" FontWeight="Bold" Foreground="#FFCC00" />
                 <Grid ColumnDefinitions="160,*" RowDefinitions="Auto,Auto,Auto">
                     <TextBlock Grid.Row="0" Grid.Column="0" Text="Enable warp:" VerticalAlignment="Center" />
                     <CheckBox Grid.Row="0" Grid.Column="1"
