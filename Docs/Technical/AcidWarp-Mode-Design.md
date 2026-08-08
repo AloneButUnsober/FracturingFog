@@ -23,15 +23,16 @@ Branch `feat/acidwarp-mode` (off `main`, not pushed). Full suite 1111/1111.
 | #248 AW-2 wiring + params UI | ☑ shipped | full FractalType wiring + picker + region |
 | #249 IDEA-1 live palette cycling | ☑ shipped | LUT rotation + "Cycle" toolbar toggle |
 | #250 AW-4 Spurrier intro | ☑ shipped | once-per-process gate |
-| #251 IDEA-6 auto-VJ | ◐ core | shuffle+classic-first playlist shipped+tested; **SlideshowEngine hold/fade wiring remains** |
+| #251 IDEA-6 auto-VJ | ☑ shipped | shuffle+classic-first playlist + `AcidWarpAmbientDirector` (hold/lock/pause/next) wired into MainViewModel with fade-to-black advance; toolbar Auto-VJ / Lock / Next (Acid Fog only); awaits on-device visual sign-off |
 | #252 IDEA-2 XOR post-transform | ☑ shipped | colour-index moiré on any field |
 | #253 IDEA-3 domain-warp | ◐ core | warp inside Acid Warp shipped; **cross-fractal warp deferred (deep-zoom path + visual sign-off)** |
 | #254 IDEA-4 sparkle | ☑ shipped | every-Nth LUT boost |
 | #255 IDEA-5 seamless toggle | ☑ shipped | opt-in close-the-loop |
 
-Remaining app-integration work (both want on-device visual verification): the
-auto-VJ SlideshowEngine playback profile (#251) and the cross-fractal domain
-warp (#253).
+Remaining app-integration work (wants on-device visual verification): the
+cross-fractal domain warp (#253). The auto-VJ ambient loop (#251) is wired
+(MainViewModel ambient loop + `AcidWarpAmbientDirector`), pending only on-device
+visual sign-off of the fade.
 
 ---
 
@@ -131,7 +132,7 @@ Key structural facts (from `ColorTheme-Enhancement-Roadmap.md §1`):
   second yields a shuffled id. New process resets.
 - **Depends on:** AW-1, AW-2.
 
-### AW-5 — Auto-VJ ambient loop  ☐  *(= IDEA-6)*
+### AW-5 — Auto-VJ ambient loop  ☑  *(= IDEA-6)*
 - See §3 IDEA-6. Shuffle playlist + timed auto-advance + fade-to-black
   crossfade + lock-field/cycle-color. Reuses slideshow + Scene transitions.
 - **Depends on:** AW-2, AW-3.
@@ -219,7 +220,7 @@ AW-3 / AW-5; IDEA-2..5 are independently useful on the existing fractals.
 - **Test.** ON ⇒ `|LUT[0] - LUT[255]|` within tolerance; OFF ⇒ LUT identical to
   today.
 
-### IDEA-6 — Auto-VJ ambient loop  ☐  *(= AW-5)*
+### IDEA-6 — Auto-VJ ambient loop  ☑  *(= AW-5)*
 - **What.** Acid Warp's signature loop = **lock geometry, cycle color,
   auto-advance on a timer with a fade-to-black crossfade**, drawing from a
   **shuffled, non-repeating** playlist (`makeShuffledList`). FF's slideshow
