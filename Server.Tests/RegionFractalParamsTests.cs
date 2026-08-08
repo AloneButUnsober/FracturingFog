@@ -89,6 +89,75 @@ public sealed class RegionFractalParamsTests
         Assert.Equal(0.337, applied.JuliaC.Imaginary, 12);
     }
 
+    // ── #253 cross-fractal domain warp round-trip ─────────────────────────
+
+    [Fact]
+    public void DomainWarp_NotCaptured_WhenDisabled()
+    {
+        // Default (warp off) → no block for Julia beyond its constant, and none
+        // at all for a defaults-suffice type like Burning Ship.
+        var julia = RegionFractalParams.Snapshot(FractalType.Julia,
+            new FractalParameters { JuliaC = new Complex(0.1, 0.2) });
+        Assert.Null(julia!.DomainWarpEnabled);
+
+        Assert.Null(RegionFractalParams.Snapshot(FractalType.BurningShip, new FractalParameters()));
+    }
+
+    [Theory]
+    [InlineData(FractalType.Julia)]
+    [InlineData(FractalType.BurningShip)]   // base block null — warp rides alone
+    [InlineData(FractalType.Magnet1)]
+    [InlineData(FractalType.Spider)]
+    public void DomainWarp_RoundTrips_WhenEnabled(FractalType t)
+    {
+        var src = new FractalParameters
+        {
+            DomainWarpEnabled = true,
+            DomainWarpStrength = 0.23,
+            DomainWarpFrequency = 2.5,
+        };
+        var snap = RegionFractalParams.Snapshot(t, src);
+        Assert.NotNull(snap);
+        Assert.True(snap!.DomainWarpEnabled);
+
+        var dst = new FractalParameters();      // warp off by default
+        snap.ApplyTo(dst);
+        Assert.True(dst.DomainWarpEnabled);
+        Assert.Equal(0.23, dst.DomainWarpStrength, 12);
+        Assert.Equal(2.5, dst.DomainWarpFrequency, 12);
+    }
+
+    [Fact]
+    public void DomainWarp_NotCaptured_ForUnsupportedType()
+    {
+        // Mandelbrot runs on the deep-zoom calc; warp isn't carried even if the
+        // flag is somehow set, so it never leaks onto that path.
+        var snap = RegionFractalParams.Snapshot(FractalType.Mandelbrot,
+            new FractalParameters { DomainWarpEnabled = true, DomainWarpStrength = 0.3 });
+        Assert.Null(snap);
+    }
+
+    [Fact]
+    public void DomainWarp_Serializes_AndRoundTrips()
+    {
+        var region = new FractalRegion
+        {
+            Name = "Warped Ship",
+            FractalType = FractalType.BurningShip,
+            Zoom = 1.0,
+            Params = RegionFractalParams.Snapshot(FractalType.BurningShip,
+                new FractalParameters { DomainWarpEnabled = true, DomainWarpStrength = 0.4, DomainWarpFrequency = 1.5 }),
+        };
+        string json = JsonSerializer.Serialize(region);
+        Assert.Contains("DomainWarpEnabled", json);
+
+        var back = JsonSerializer.Deserialize<FractalRegion>(json);
+        var applied = new FractalParameters();
+        back!.Params!.ApplyTo(applied);
+        Assert.True(applied.DomainWarpEnabled);
+        Assert.Equal(0.4, applied.DomainWarpStrength, 12);
+    }
+
     [Fact]
     public void LegacyRegion_WithoutParams_DeserializesToNull()
     {

@@ -5,6 +5,7 @@ using System;
 using System.Collections.Generic;
 using System.Numerics;
 using System.Reactive;
+using System.Runtime.CompilerServices;
 using global::Avalonia.Threading;
 using FracturingFog;
 using FracturingFog.Models;
@@ -124,6 +125,9 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
         _acidWarpWarpStrength = _p.AcidWarpWarpStrength;
         _acidWarpMorph = _p.AcidWarpMorph;
         _acidWarpFlow = _p.AcidWarpFlow;
+        _domainWarpEnabled = _p.DomainWarpEnabled;
+        _domainWarpStrength = _p.DomainWarpStrength;
+        _domainWarpFrequency = _p.DomainWarpFrequency;
         _apolloDepth = _p.ApollonianDepth;
         _apolloMinPx = _p.ApollonianMinPixelRadius;
         _apolloColorByDepth = _p.ApollonianColorByDepth;
@@ -280,11 +284,24 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
         || IsBuddhaBrot
         || IsApollonian;
 
+    /// <summary>Visibility flag for the cross-fractal domain-warp section
+    /// (#253 / IDEA-3). True for the 2D escape-time family routed through
+    /// <c>EscapeTimeCalculator</c> — the calculator that honours the warp.
+    /// Mandelbrot is excluded: it runs on the dedicated deep-zoom calculator
+    /// whose SIMD path the per-pixel warp doesn't touch.</summary>
+    public bool SupportsDomainWarp =>
+        IsJulia || IsMultibrot || IsPhoenix || IsGlynn || IsSpider
+        || FractalType == FractalType.BurningShip
+        || FractalType == FractalType.Tricorn
+        || FractalType == FractalType.Magnet1
+        || FractalType == FractalType.Magnet2;
+
     public bool HasNoParams =>
         !(IsJulia || IsMultibrot || IsPhoenix || IsGlynn || IsLogistic || IsSpider || IsNewtonOrNova || IsIFS
           || IsLSystem || IsStrangeAttractor || IsBuddhaBrot || IsMandelbulb || IsMandelbox || IsKifs
           || IsQuatJulia || IsQuatMandelbrot || IsPlasma || IsAcidWarp || IsFlame || IsApollonian || IsKleinian
-          || IsBicomplexMandelbrot || IsDla || IsInteriorAlphaApplicable || IsRelief2DApplicable);
+          || IsBicomplexMandelbrot || IsDla || IsInteriorAlphaApplicable || IsRelief2DApplicable
+          || SupportsDomainWarp);
 
     // ── Interior alpha (2D) — issue #96 ──────────────────────────────────────
     // Reads/writes FractalParameters directly (no cached backing field), same as
@@ -1066,6 +1083,18 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
     /// <summary>Upper bound for the Flow slider (== pattern count, wraps).</summary>
     public double AcidWarpFlowMax => FractalParameters.AcidWarpPatternCount;
 
+    // ── Cross-fractal domain warp (#253 / IDEA-3) ──
+    private bool _domainWarpEnabled;
+    /// <summary>Enable the cross-fractal domain warp — displaces each pixel's
+    /// sampling coordinate by a sine-interference field before iterating.</summary>
+    public bool DomainWarpEnabled { get => _domainWarpEnabled; set { Set(ref _domainWarpEnabled, value); _p.DomainWarpEnabled = _domainWarpEnabled; Fire(); } }
+    private double _domainWarpStrength;
+    /// <summary>Domain-warp strength (fraction of the half-view span). 0 = off.</summary>
+    public double DomainWarpStrength { get => _domainWarpStrength; set { Set(ref _domainWarpStrength, Clamp(value, 0.0, 1.0)); _p.DomainWarpStrength = _domainWarpStrength; Fire(); } }
+    private double _domainWarpFrequency;
+    /// <summary>Domain-warp field frequency (spatial density of the swirl).</summary>
+    public double DomainWarpFrequency { get => _domainWarpFrequency; set { Set(ref _domainWarpFrequency, Clamp(value, 0.1, 8.0)); _p.DomainWarpFrequency = _domainWarpFrequency; Fire(); } }
+
     // ── Apollonian ──
     private int _apolloDepth;
     public int ApollonianDepth { get => _apolloDepth; set { Set(ref _apolloDepth, (int)Clamp(value, 0, 40)); _p.ApollonianDepth = _apolloDepth; Fire(); } }
@@ -1157,10 +1186,15 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
         ParamChanged?.Invoke();
     }
 
-    private bool Set<T>(ref T field, T value)
+    // NOTE: forward the caller property name. Without it CallerMemberName
+    // resolves to "Set" here, so every VM-initiated PropertyChanged fired under
+    // the wrong name — value bindings survived (the control pushes its own
+    // value) but dependent IsEnabled / IsVisible bindings never refreshed (e.g.
+    // the Domain-warp toggle enabling Strength/Frequency, AcidWarp Morph→Flow).
+    private bool Set<T>(ref T field, T value, [CallerMemberName] string? propertyName = null)
     {
         if (EqualityComparer<T>.Default.Equals(field, value)) return false;
-        this.RaiseAndSetIfChanged(ref field, value);
+        this.RaiseAndSetIfChanged(ref field, value, propertyName);
         return true;
     }
 

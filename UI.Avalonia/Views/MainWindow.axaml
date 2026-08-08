@@ -110,9 +110,21 @@
                                   IsVisible="{Binding IsAsciiVisible}"
                                   IsChecked="{Binding IsAsciiRecording, Mode=TwoWay}"
                                   ToolTip.Tip="Record the live ASCII animation to a file (zoom video / scene / slideshow / interactive). Toggle off to choose .cast / .svg / .ans / .mp4." />
-                    <ToggleButton Classes="toolbar" Content="Cycle"
+                    <ToggleButton Classes="toolbar" Content="Warp"
                                   IsChecked="{Binding Main.PaletteCycleEnabled, Mode=TwoWay}"
-                                  ToolTip.Tip="Animate the palette (colour cycling) over the current view — rotates the colour LUT without moving the camera. Cheap on Acid Fog / procedural types." />
+                                  ToolTip.Tip="Warp the palette (colour cycling) over the current view — rotates the colour LUT without moving the camera. Cheap on Acid Fog / procedural types." />
+                    <ToggleButton Classes="toolbar" Content="Auto-VJ"
+                                  IsVisible="{Binding Main.IsAcidFogType}"
+                                  IsChecked="{Binding Main.AcidFogAmbientEnabled, Mode=TwoWay}"
+                                  ToolTip.Tip="Acid Fog auto-VJ ambient loop: hold each pattern while the palette cycles, then fade-to-black and advance through a shuffled, non-repeating pattern playlist (classic first)." />
+                    <ToggleButton Classes="toolbar" Content="Lock"
+                                  IsVisible="{Binding Main.IsAcidFogType}"
+                                  IsChecked="{Binding Main.AcidFogAmbientLocked, Mode=TwoWay}"
+                                  ToolTip.Tip="Lock the auto-VJ loop: freeze pattern advancement while the colour keeps cycling." />
+                    <Button Classes="toolbar" Content="Next ▸"
+                            IsVisible="{Binding Main.IsAcidFogType}"
+                            Command="{Binding Main.AcidFogAmbientNextCommand}"
+                            ToolTip.Tip="Auto-VJ: advance to the next pattern now (works even when locked)." />
                     <!--<ToggleButton Classes="toolbar" Content="Grid"
                                   IsChecked="{Binding Main.ShowGrid, Mode=TwoWay}"
                                   ToolTip.Tip="Show Cartesian grid overlay" />
