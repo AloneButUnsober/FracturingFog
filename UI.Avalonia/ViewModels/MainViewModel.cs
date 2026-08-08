@@ -30,6 +30,7 @@ using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Reactive;
+using Avalonia.Threading;
 using FracturingFog;
 using FracturingFog.Input;
 using FracturingFog.Models;
@@ -1199,8 +1200,71 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
         OnFrameCompleted(this, info.Value);
     }
 
+    // ── #249 / IDEA-1: live palette cycling (animate colour, not camera) ──────
+    // A DispatcherTimer advances a rotation phase over wall-clock and pushes it
+    // to the render host, which re-maps the field through the rotated LUT. Cheap
+    // for the procedural / Acid Warp families; heavier for escape-time types.
+
+    private DispatcherTimer? _paletteCycleTimer;
+    private double _paletteCyclePhase;   // turns, wraps mod 1
+    private DateTime _paletteCycleLastTick;
+
+    private bool _paletteCycleEnabled;
+    /// <summary>Toggle live palette cycling on the current view.</summary>
+    public bool PaletteCycleEnabled
+    {
+        get => _paletteCycleEnabled;
+        set
+        {
+            if (this.RaiseAndSetIfChangedReturnsChanged(ref _paletteCycleEnabled, value))
+            {
+                if (value) StartPaletteCycle();
+                else StopPaletteCycle();
+            }
+        }
+    }
+
+    private double _paletteCycleRate = 0.15;
+    /// <summary>Palette-cycle speed in LUT turns per second. Default 0.15
+    /// (~7 s per full palette sweep).</summary>
+    public double PaletteCycleRate
+    {
+        get => _paletteCycleRate;
+        set => this.RaiseAndSetIfChanged(ref _paletteCycleRate, Math.Clamp(value, 0.01, 5.0));
+    }
+
+    private void StartPaletteCycle()
+    {
+        _paletteCycleLastTick = DateTime.UtcNow;
+        _paletteCycleTimer ??= new DispatcherTimer(
+            TimeSpan.FromMilliseconds(50), DispatcherPriority.Background, OnPaletteCycleTick);
+        _paletteCycleTimer.Start();
+    }
+
+    private void StopPaletteCycle()
+    {
+        _paletteCycleTimer?.Stop();
+        _paletteCyclePhase = 0;
+        _renderHost.SetLivePaletteRotation(0f);   // clear + repaint at rest
+    }
+
+    private void OnPaletteCycleTick(object? sender, EventArgs e)
+    {
+        var now = DateTime.UtcNow;
+        double dt = (now - _paletteCycleLastTick).TotalSeconds;
+        _paletteCycleLastTick = now;
+        if (dt <= 0) return;
+        if (dt > 0.25) dt = 0.25;                 // guard a stalled dispatcher
+
+        _paletteCyclePhase += _paletteCycleRate * dt;
+        _paletteCyclePhase -= Math.Floor(_paletteCyclePhase);
+        _renderHost.SetLivePaletteRotation((float)_paletteCyclePhase);
+    }
+
     public void Dispose()
     {
+        _paletteCycleTimer?.Stop();
+        _paletteCycleTimer = null;
         _input.ViewChanged -= OnInputViewChanged;
         _renderHost.FrameCompleted -= OnFrameCompleted;
         _renderHost.StatusRequested -= OnRenderHostStatusRequested;

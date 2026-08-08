@@ -86,4 +86,54 @@ public class PalettePostFxTests
         Assert.Equal(0.4f, map.ExportSparkleBoost, 3);
         Assert.True(map.ExportSeamlessCycle);
     }
+
+    // #249 / IDEA-1 — live palette rotation (animate colour, not camera).
+    [Fact]
+    public void LivePaletteRotation_Zero_Is_Baseline_And_Wraps_At_One()
+    {
+        var map = new DataDrivenGradient(TwoStop());
+        try
+        {
+            GradientColorMap.LivePaletteRotation = 0f;
+            var baseline = new (int, int, int)[256];
+            for (int i = 0; i < 256; i++) baseline[i] = Sample(map, i + 0.5f);
+
+            // A full turn (1.0) wraps back to the baseline.
+            GradientColorMap.LivePaletteRotation = 1f;
+            for (int i = 0; i < 256; i++)
+                Assert.Equal(baseline[i], Sample(map, i + 0.5f));
+
+            // A quarter turn actually moves the colours.
+            GradientColorMap.LivePaletteRotation = 0.25f;
+            bool moved = false;
+            for (int i = 0; i < 256; i++)
+                if (Sample(map, i + 0.5f) != baseline[i]) { moved = true; break; }
+            Assert.True(moved);
+        }
+        finally
+        {
+            GradientColorMap.LivePaletteRotation = 0f;
+        }
+    }
+
+    [Fact]
+    public void LivePaletteRotation_Half_Turn_Shifts_By_Half_The_Lut()
+    {
+        // Rotating by 0.5 maps index i to index i+128 (mod 256).
+        var map = new DataDrivenGradient(TwoStop());
+        try
+        {
+            GradientColorMap.LivePaletteRotation = 0f;
+            var at192 = Sample(map, 192 + 0.5f);
+
+            GradientColorMap.LivePaletteRotation = 0.5f;
+            var at64 = Sample(map, 64 + 0.5f);   // 64 + 128 = 192
+
+            Assert.Equal(at192, at64);
+        }
+        finally
+        {
+            GradientColorMap.LivePaletteRotation = 0f;
+        }
+    }
 }
