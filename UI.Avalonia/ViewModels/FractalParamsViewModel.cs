@@ -5,6 +5,7 @@ using System;
 using System.Collections.Generic;
 using System.Numerics;
 using System.Reactive;
+using System.Runtime.CompilerServices;
 using global::Avalonia.Threading;
 using FracturingFog;
 using FracturingFog.Models;
@@ -1185,10 +1186,15 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
         ParamChanged?.Invoke();
     }
 
-    private bool Set<T>(ref T field, T value)
+    // NOTE: forward the caller property name. Without it CallerMemberName
+    // resolves to "Set" here, so every VM-initiated PropertyChanged fired under
+    // the wrong name — value bindings survived (the control pushes its own
+    // value) but dependent IsEnabled / IsVisible bindings never refreshed (e.g.
+    // the Domain-warp toggle enabling Strength/Frequency, AcidWarp Morph→Flow).
+    private bool Set<T>(ref T field, T value, [CallerMemberName] string? propertyName = null)
     {
         if (EqualityComparer<T>.Default.Equals(field, value)) return false;
-        this.RaiseAndSetIfChanged(ref field, value);
+        this.RaiseAndSetIfChanged(ref field, value, propertyName);
         return true;
     }
 
