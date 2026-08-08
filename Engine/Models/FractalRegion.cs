@@ -226,6 +226,17 @@ namespace FracturingFog.Models
         public List<string>? CuratedThemes { get; set; }
 
         /// <summary>
+        /// When true, recalling this region applies its first valid
+        /// <see cref="CuratedThemes"/> entry as the active colour theme, so the
+        /// saved look comes back on jump. Default false = recall leaves the
+        /// active theme untouched (legacy behaviour; no regression for regions
+        /// that already rely on whatever theme is live). Omitted from JSON when
+        /// false so legacy regions stay clean.
+        /// </summary>
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+        public bool UseCuratedThemesOnly { get; set; }
+
+        /// <summary>
         /// Animation Roadmap Phase 3 — optional name of a saved
         /// <c>AnimationData</c> entry in <c>AnimationLibrary</c>. On region
         /// recall the shell loads the animation onto the shared
@@ -337,6 +348,8 @@ namespace FracturingFog.Models
         [JsonIgnore(Condition = OmitNull)] public int? AcidWarpPattern { get; set; }
         [JsonIgnore(Condition = OmitNull)] public double? AcidWarpFrequency { get; set; }
         [JsonIgnore(Condition = OmitNull)] public double? AcidWarpWarpStrength { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public bool? AcidWarpMorph { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public double? AcidWarpFlow { get; set; }
 
         /// <summary>
         /// Capture the P1-relevant parameters for <paramref name="type"/> from a
@@ -395,6 +408,8 @@ namespace FracturingFog.Models
                     AcidWarpPattern = p.AcidWarpPattern,
                     AcidWarpFrequency = p.AcidWarpFrequency,
                     AcidWarpWarpStrength = p.AcidWarpWarpStrength,
+                    AcidWarpMorph = p.AcidWarpMorph ? true : null,
+                    AcidWarpFlow = p.AcidWarpMorph ? p.AcidWarpFlow : null,
                 },
                 // Mandelbrot, Tricorn, BurningShip, Magnet1/2, TearDrop and the
                 // generated families need no extra params — defaults suffice.
@@ -438,6 +453,10 @@ namespace FracturingFog.Models
                 p.AcidWarpFrequency = AcidWarpFrequency.Value;
             if (AcidWarpWarpStrength.HasValue)
                 p.AcidWarpWarpStrength = AcidWarpWarpStrength.Value;
+            if (AcidWarpMorph.HasValue)
+                p.AcidWarpMorph = AcidWarpMorph.Value;
+            if (AcidWarpFlow.HasValue)
+                p.AcidWarpFlow = AcidWarpFlow.Value;
         }
     }
 
@@ -1060,6 +1079,7 @@ namespace FracturingFog.Models
                 RegionType  = RegionType.BuiltIn,
                 FractalType = FractalType.AcidWarp,
                 CuratedThemes = new List<string> { "Acid Warp Spectrum" },
+                UseCuratedThemesOnly = true,
                 QualityPreset = QualityPreset.Standard
             },
             new()
@@ -1074,6 +1094,7 @@ namespace FracturingFog.Models
                 FractalType = FractalType.AcidWarp,
                 Params      = new RegionFractalParams { AcidWarpPattern = 9, AcidWarpFrequency = 1.0, AcidWarpWarpStrength = 0.0 },
                 CuratedThemes = new List<string> { "Acid Warp Spectrum" },
+                UseCuratedThemesOnly = true,
                 QualityPreset = QualityPreset.Standard
             },
             new()

@@ -148,6 +148,88 @@ public class AcidWarpCalculatorTests
     }
 
     [Fact]
+    public void Morph_Off_Is_Byte_Identical_To_Discrete_Pattern()
+    {
+        // With morph disabled the render must exactly match the discrete path,
+        // regardless of the Flow value (Flow is inert while morph is off).
+        var discrete = Render(9);
+
+        var off = new AcidWarpCalculator(64, 48)
+        {
+            ColorMap = new GrayscalePalette(),
+            FractalParameters = new FractalParameters
+            {
+                AcidWarpPattern = 9, AcidWarpMorph = false, AcidWarpFlow = 3.7,
+            },
+        };
+        off.Calculate(default);
+        Assert.Equal(discrete, off.ColorBuffer);
+    }
+
+    [Fact]
+    public void Morph_At_Integer_Flow_Equals_That_Pattern()
+    {
+        // Morph on, Flow == an integer N → mix 0 → identical to discrete pattern N.
+        var discrete = Render(2);
+
+        var morph = new AcidWarpCalculator(64, 48)
+        {
+            ColorMap = new GrayscalePalette(),
+            FractalParameters = new FractalParameters
+            {
+                AcidWarpMorph = true, AcidWarpFlow = 2.0,
+            },
+        };
+        morph.Calculate(default);
+        Assert.Equal(discrete, morph.ColorBuffer);
+    }
+
+    [Fact]
+    public void Morph_Between_Patterns_Blends_Not_Hard_Cut()
+    {
+        // Fractional Flow must produce a field distinct from both neighbours —
+        // a real morph, not a snap to either end.
+        var p2 = Render(2);
+        var p3 = Render(3);
+
+        var mid = new AcidWarpCalculator(64, 48)
+        {
+            ColorMap = new GrayscalePalette(),
+            FractalParameters = new FractalParameters
+            {
+                AcidWarpMorph = true, AcidWarpFlow = 2.5,
+            },
+        };
+        mid.Calculate(default);
+        var blend = (uint[])mid.ColorBuffer.Clone();
+        Assert.NotEqual(p2, blend);
+        Assert.NotEqual(p3, blend);
+    }
+
+    [Fact]
+    public void Morph_Flow_Wraps_Seamlessly_At_PatternCount()
+    {
+        // Flow == PatternCount wraps back to Flow == 0 (both are pattern 0, mix 0).
+        var atZero = new AcidWarpCalculator(64, 48)
+        {
+            ColorMap = new GrayscalePalette(),
+            FractalParameters = new FractalParameters { AcidWarpMorph = true, AcidWarpFlow = 0.0 },
+        };
+        atZero.Calculate(default);
+
+        var atCount = new AcidWarpCalculator(64, 48)
+        {
+            ColorMap = new GrayscalePalette(),
+            FractalParameters = new FractalParameters
+            {
+                AcidWarpMorph = true, AcidWarpFlow = AcidWarpCalculator.PatternCount,
+            },
+        };
+        atCount.Calculate(default);
+        Assert.Equal((uint[])atZero.ColorBuffer.Clone(), atCount.ColorBuffer);
+    }
+
+    [Fact]
     public void Renders_Rich_Image_Through_Real_Gradient_At_Display_Size()
     {
         // End-to-end guard mimicking the app path: a multi-stop data-driven

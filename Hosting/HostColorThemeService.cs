@@ -500,6 +500,27 @@ namespace FracturingFog.Hosting
         }
 
         /// <inheritdoc/>
+        public bool TryGetRegionCuratedThemeToApply(string regionName, out string themeName)
+        {
+            themeName = string.Empty;
+            if (string.IsNullOrWhiteSpace(regionName)) return false;
+            var r = FractalRegionLibrary.Instance.All
+                .FirstOrDefault(x => string.Equals(x.Name, regionName, StringComparison.OrdinalIgnoreCase));
+            if (r == null || !r.UseCuratedThemesOnly || r.CuratedThemes == null) return false;
+
+            // First curated name that still resolves to a real theme; unknown
+            // names (renamed / deleted themes) are skipped rather than applied.
+            var known = new HashSet<string>(EnumerateThemeNames(), StringComparer.OrdinalIgnoreCase);
+            foreach (var name in r.CuratedThemes)
+                if (!string.IsNullOrWhiteSpace(name) && known.Contains(name))
+                {
+                    themeName = name;
+                    return true;
+                }
+            return false;
+        }
+
+        /// <inheritdoc/>
         public FracturingFog.Abstractions.Animation.AnimationData? GetAnimation(string animationName)
         {
             if (string.IsNullOrWhiteSpace(animationName)) return null;
@@ -682,6 +703,7 @@ namespace FracturingFog.Hosting
                 // Defensive copy so editor edits don't mutate the live library
                 // entry before the user commits.
                 CuratedThemes = r.CuratedThemes != null ? new List<string>(r.CuratedThemes) : null,
+                UseCuratedThemesOnly = r.UseCuratedThemesOnly,
                 KeepLightingOverride  = true,
                 KeepEmbeddedWatermark = true,
                 FractalTypeName = r.FractalType.ToString(),
@@ -740,6 +762,9 @@ namespace FracturingFog.Hosting
             region.CuratedThemes = (edits.CuratedThemes != null && edits.CuratedThemes.Count > 0)
                 ? new List<string>(edits.CuratedThemes)
                 : null;
+            // Only meaningful when a curated pool exists; drop the flag when the
+            // whitelist is empty so a region can't claim "curated only" with none.
+            region.UseCuratedThemesOnly = edits.UseCuratedThemesOnly && region.CuratedThemes != null;
             // Keep vs clear the two attached assets. Cloned built-ins carry the
             // source's override/watermark forward when kept.
             region.LightingOverride  = edits.KeepLightingOverride  ? source.LightingOverride : null;

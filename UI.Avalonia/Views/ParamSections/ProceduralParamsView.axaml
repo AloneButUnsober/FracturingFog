@@ -171,7 +171,7 @@
         <!-- Acid Warp (#247) -->
         <Grid IsVisible="{Binding IsAcidWarp}"
               ColumnDefinitions="160,*"
-              RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto">
+              RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto">
             <TextBlock Grid.Row="0" Grid.Column="0" Text="Pattern:" VerticalAlignment="Center" />
             <NumericUpDown Grid.Row="0" Grid.Column="1"
                            Minimum="0" Maximum="{Binding AcidWarpPatternMax}" Increment="1" FormatString="F0"
@@ -202,6 +202,17 @@
                            Minimum="0" Maximum="2" Increment="0.05" FormatString="F2"
                            Value="{Binding AcidWarpWarpStrength, Mode=TwoWay}" Margin="0,2"
                            ToolTip.Tip="#253 — domain warp: fold straight rings/waves into organic swirls. 0 = off." />
+            <TextBlock Grid.Row="6" Grid.Column="0" Text="Morph:" VerticalAlignment="Center" />
+            <CheckBox Grid.Row="6" Grid.Column="1"
+                      IsChecked="{Binding AcidWarpMorph, Mode=TwoWay}" Margin="0,2"
+                      Content="Blend adjacent patterns (animate Flow)"
+                      ToolTip.Tip="Continuous morph: blends the base and next pattern in field space so animating Flow melts smoothly between patterns instead of hard-cutting. Off = discrete Pattern pick (byte-identical)." />
+            <TextBlock Grid.Row="7" Grid.Column="0" Text="Flow:" VerticalAlignment="Center" />
+            <NumericUpDown Grid.Row="7" Grid.Column="1"
+                           IsEnabled="{Binding AcidWarpMorph}"
+                           Minimum="0" Maximum="{Binding AcidWarpFlowMax}" Increment="0.1" FormatString="F2"
+                           Value="{Binding AcidWarpFlow, Mode=TwoWay}" Margin="0,2"
+                           ToolTip.Tip="Continuous pattern position — integer part picks the base pattern, fraction blends toward the next. Animate 0 → pattern-count for an endless morph. Needs Morph on." />
         </Grid>
 
         <!-- Flame -->

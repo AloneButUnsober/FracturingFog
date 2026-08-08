@@ -125,6 +125,10 @@
                                 </ItemsControl>
                             </ScrollViewer>
                         </Border>
+                        <CheckBox Content="Use curated color theme(s) only"
+                                  IsChecked="{Binding UseCuratedThemesOnly}"
+                                  Foreground="#DCDCDC"
+                                  ToolTip.Tip="When on, recalling this region applies its first checked curated theme as the active color theme (the saved look comes back on jump). Off = recall leaves whatever theme is active untouched." />
                         <CheckBox Content="Keep lighting override"
                                   IsChecked="{Binding KeepLightingOverride}"
                                   IsVisible="{Binding HasLightingOverride}"

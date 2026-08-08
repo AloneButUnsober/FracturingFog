@@ -122,6 +122,8 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
         _acidWarpCenterY = _p.AcidWarpCenterY;
         _acidWarpSeed = _p.AcidWarpSeed;
         _acidWarpWarpStrength = _p.AcidWarpWarpStrength;
+        _acidWarpMorph = _p.AcidWarpMorph;
+        _acidWarpFlow = _p.AcidWarpFlow;
         _apolloDepth = _p.ApollonianDepth;
         _apolloMinPx = _p.ApollonianMinPixelRadius;
         _apolloColorByDepth = _p.ApollonianColorByDepth;
@@ -1052,6 +1054,17 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
     public int AcidWarpSeed { get => _acidWarpSeed; set { Set(ref _acidWarpSeed, value); _p.AcidWarpSeed = _acidWarpSeed; Fire(); } }
     private double _acidWarpWarpStrength;
     public double AcidWarpWarpStrength { get => _acidWarpWarpStrength; set { Set(ref _acidWarpWarpStrength, Clamp(value, 0.0, 2.0)); _p.AcidWarpWarpStrength = _acidWarpWarpStrength; Fire(); } }
+    private bool _acidWarpMorph;
+    /// <summary>Enable continuous pattern morphing (blend adjacent patterns via
+    /// <see cref="AcidWarpFlow"/>) instead of hard-cutting between them.</summary>
+    public bool AcidWarpMorph { get => _acidWarpMorph; set { Set(ref _acidWarpMorph, value); _p.AcidWarpMorph = _acidWarpMorph; Fire(); } }
+    private double _acidWarpFlow;
+    /// <summary>Continuous pattern position (integer part picks the base pattern,
+    /// fraction blends toward the next). Only used when <see cref="AcidWarpMorph"/>
+    /// is on. Animate 0 → pattern-count for an endless morph.</summary>
+    public double AcidWarpFlow { get => _acidWarpFlow; set { Set(ref _acidWarpFlow, Clamp(value, 0.0, FractalParameters.AcidWarpPatternCount)); _p.AcidWarpFlow = _acidWarpFlow; Fire(); } }
+    /// <summary>Upper bound for the Flow slider (== pattern count, wraps).</summary>
+    public double AcidWarpFlowMax => FractalParameters.AcidWarpPatternCount;
 
     // ── Apollonian ──
     private int _apolloDepth;
