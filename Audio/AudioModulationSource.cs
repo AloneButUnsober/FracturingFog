@@ -64,6 +64,13 @@ namespace FracturingFog.Audio
 
         public bool IsActive => _beats.IsActive;
 
+        // Monotonic edge counters — bumped under Interlocked so a puller on any
+        // thread reads a coherent value without taking _gate.
+        private long _beatCount;
+        private long _downbeatCount;
+        public long BeatCount => System.Threading.Interlocked.Read(ref _beatCount);
+        public long DownbeatCount => System.Threading.Interlocked.Read(ref _downbeatCount);
+
         private void OnBeat(object? sender, BeatEventArgs e)
         {
             lock (_gate)
@@ -72,6 +79,7 @@ namespace FracturingFog.Audio
                 _lastBeatStrength = Clamp01((float)e.Strength);
                 if (_phaseAnchorUtc == DateTime.MinValue) _phaseAnchorUtc = e.TimestampUtc;
             }
+            System.Threading.Interlocked.Increment(ref _beatCount);
         }
 
         private void OnDownbeat(object? sender, BeatEventArgs e)
@@ -82,6 +90,7 @@ namespace FracturingFog.Audio
                 _lastDownbeatStrength = Clamp01((float)e.Strength);
                 _phaseAnchorUtc = e.TimestampUtc;   // re-anchor phase to the bar
             }
+            System.Threading.Interlocked.Increment(ref _downbeatCount);
         }
 
         public AudioModulationFrame Sample() => SampleInternal(_nowUtc());
