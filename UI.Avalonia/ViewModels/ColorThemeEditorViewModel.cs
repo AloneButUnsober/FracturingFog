@@ -424,6 +424,33 @@ public sealed class ColorThemeEditorViewModel : ViewModelBase
         set { this.RaiseAndSetIfChanged(ref _wrapMode, value); FieldChanged(); }
     }
 
+    // ── Palette post-fx: sparkle (#254) + seamless cycling (#255) ──────────
+
+    private int _sparkleStride;
+    /// <summary>Sparkle stride (#254): brighten every Nth LUT entry. 0 = off.</summary>
+    public int SparkleStride
+    {
+        get => _sparkleStride;
+        set { this.RaiseAndSetIfChanged(ref _sparkleStride, Math.Max(0, value)); FieldChanged(); }
+    }
+
+    private double _sparkleBoost;
+    /// <summary>Sparkle brightness boost (#254), fraction of white [0,1]. 0 = off.</summary>
+    public double SparkleBoost
+    {
+        get => _sparkleBoost;
+        set { this.RaiseAndSetIfChanged(ref _sparkleBoost, Math.Clamp(value, 0d, 1d)); FieldChanged(); }
+    }
+
+    private bool _seamlessCycle;
+    /// <summary>Seamless-under-rotation (#255): close the LUT loop so palette
+    /// cycling never seams. Opt-in creative choice; default off.</summary>
+    public bool SeamlessCycle
+    {
+        get => _seamlessCycle;
+        set { this.RaiseAndSetIfChanged(ref _seamlessCycle, value); FieldChanged(); }
+    }
+
     // ── Stops ─────────────────────────────────────────────────────────────
 
     public ObservableCollection<ColorStopRowVm> Stops { get; } = new();
@@ -640,6 +667,21 @@ public sealed class ColorThemeEditorViewModel : ViewModelBase
         CycleSpeed   = (decimal)(wild ? Rng(rng, 0.0001, 10): Rng(rng, 0.005, 0.1));
         var wraps = WrapModeOptions;
         WrapMode = wraps[rng.Next(wraps.Length)];
+
+        // #255 — artful cycling wants no seam; wild is a coin-flip for variety.
+        SeamlessCycle = wild ? rng.NextDouble() < 0.5 : true;
+
+        // #254 — sparkle is an experimental accent: wild-only, ~30% of the time.
+        if (wild && rng.NextDouble() < 0.3)
+        {
+            SparkleStride = rng.Next(4, 25);
+            SparkleBoost = Rng(rng, 0.3, 0.8);
+        }
+        else
+        {
+            SparkleStride = 0;
+            SparkleBoost = 0d;
+        }
     }
 
     private void Randomize3DLights(Random rng, bool wild, List<(byte R, byte G, byte B)> pal)
@@ -1527,6 +1569,9 @@ public sealed class ColorThemeEditorViewModel : ViewModelBase
             ColorOffset = ClampDec((decimal)def.ColorOffset, -10M, 10M);
             ColorDensity = ClampDec((decimal)def.ColorDensity, 0M, 20M);
             WrapMode = def.WrapMode;
+            SparkleStride = Math.Max(0, def.SparkleStride);
+            SparkleBoost = Math.Clamp((double)def.SparkleBoost, 0d, 1d);
+            SeamlessCycle = def.SeamlessCycle;
             Steepness = ClampDec((decimal)def.Steepness, 0.1M, 10M);
             Ambient = ClampDec((decimal)def.Ambient, 0M, 1M);
 
@@ -1603,6 +1648,9 @@ public sealed class ColorThemeEditorViewModel : ViewModelBase
             ColorOffset = (float)ColorOffset,
             ColorDensity = (float)ColorDensity,
             WrapMode = WrapMode,
+            SparkleStride = SparkleStride,
+            SparkleBoost = (float)SparkleBoost,
+            SeamlessCycle = SeamlessCycle,
             Steepness = (float)Steepness,
             Ambient = (float)Ambient,
             KeyLight = KeyLight.ToDef(),

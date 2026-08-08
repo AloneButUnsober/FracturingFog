@@ -165,7 +165,39 @@ namespace FracturingFog.Models
             set { if (_paletteGamma != value) { _paletteGamma = value; InvalidateGradientLut(); } }
         }
 
+        // ── Palette post-fx baked into the LUT (free per pixel) ──────────────
+        private int _sparkleStride;
+        private float _sparkleBoost;
+        private bool _seamlessCycle;
+
+        /// <summary>Sparkle stride (#254). Every Nth LUT entry is brightened by
+        /// <see cref="SparkleBoost"/>. 0 = off. LUT-affecting → invalidates.</summary>
+        protected int SparkleStride
+        {
+            get => _sparkleStride;
+            set { if (_sparkleStride != value) { _sparkleStride = value; InvalidateGradientLut(); } }
+        }
+
+        /// <summary>Sparkle boost (#254), fraction of white added to sparkled
+        /// entries. 0 = off. LUT-affecting → invalidates.</summary>
+        protected float SparkleBoost
+        {
+            get => _sparkleBoost;
+            set { if (_sparkleBoost != value) { _sparkleBoost = value; InvalidateGradientLut(); } }
+        }
+
+        /// <summary>Seamless-under-rotation toggle (#255). Closes the LUT loop so
+        /// palette cycling never seams. LUT-affecting → invalidates.</summary>
+        protected bool SeamlessCycle
+        {
+            get => _seamlessCycle;
+            set { if (_seamlessCycle != value) { _seamlessCycle = value; InvalidateGradientLut(); } }
+        }
+
         // Export accessors so data-driven themes round-trip the options to JSON.
+        public int ExportSparkleStride => _sparkleStride;
+        public float ExportSparkleBoost => _sparkleBoost;
+        public bool ExportSeamlessCycle => _seamlessCycle;
         public GradientColorSpace ExportInterpolationSpace => _interpSpace;
         public float ExportColorOffset => ColorOffset;
         public float ExportColorDensity => ColorDensity;
@@ -362,6 +394,28 @@ namespace FracturingFog.Models
                 // in MapNormalized interpolates it for free alongside RGB.
                 samples[i] = Vector128.Create(r, g, b, alpha);
             }
+
+            // #254 sparkle: lift every Nth LUT entry — a glitter / lightning
+            // accent baked into the LUT (alpha untouched; it is coverage).
+            if (_sparkleStride > 0 && _sparkleBoost > 0f)
+            {
+                float boost = _sparkleBoost * 255f;
+                for (int i = 0; i < LutSize; i += _sparkleStride)
+                {
+                    Vector128<float> s = samples[i];
+                    samples[i] = Vector128.Create(
+                        MathF.Min(s.GetElement(0) + boost, 255f),
+                        MathF.Min(s.GetElement(1) + boost, 255f),
+                        MathF.Min(s.GetElement(2) + boost, 255f),
+                        s.GetElement(3));
+                }
+            }
+
+            // #255 seamless: close the loop so the last segment ramps back to
+            // the first colour and palette cycling shows no seam.
+            if (_seamlessCycle)
+                samples[LutSize] = samples[0];
+
             for (int i = 0; i < LutSize; i++)
             {
                 Vector128<float> a = samples[i];

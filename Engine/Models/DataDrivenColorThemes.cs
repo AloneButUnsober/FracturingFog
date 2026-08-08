@@ -90,6 +90,9 @@ namespace FracturingFog.Models
                             TransferFunction = pbr.ExportTransferFunction,
                             TransferStrength = pbr.ExportTransferStrength,
                             PaletteGamma = pbr.ExportPaletteGamma,
+                            SparkleStride = pbr.ExportSparkleStride,
+                            SparkleBoost = pbr.ExportSparkleBoost,
+                            SeamlessCycle = pbr.ExportSeamlessCycle,
                             ColorOffset = pbr.ExportColorOffset,
                             ColorDensity = pbr.ExportColorDensity,
                             WrapMode = pbr.ExportWrapMode,
@@ -132,6 +135,9 @@ namespace FracturingFog.Models
                         TransferFunction = phong.ExportTransferFunction,
                         TransferStrength = phong.ExportTransferStrength,
                         PaletteGamma = phong.ExportPaletteGamma,
+                        SparkleStride = phong.ExportSparkleStride,
+                        SparkleBoost = phong.ExportSparkleBoost,
+                        SeamlessCycle = phong.ExportSeamlessCycle,
                         ColorOffset = phong.ExportColorOffset,
                         ColorDensity = phong.ExportColorDensity,
                         WrapMode = phong.ExportWrapMode,
@@ -166,6 +172,9 @@ namespace FracturingFog.Models
                         TransferFunction = cyc.ExportTransferFunction,
                         TransferStrength = cyc.ExportTransferStrength,
                         PaletteGamma = cyc.ExportPaletteGamma,
+                        SparkleStride = cyc.ExportSparkleStride,
+                        SparkleBoost = cyc.ExportSparkleBoost,
+                        SeamlessCycle = cyc.ExportSeamlessCycle,
                         ColorOffset = cyc.ExportColorOffset,
                         ColorDensity = cyc.ExportColorDensity,
                         WrapMode = cyc.ExportWrapMode,
@@ -190,6 +199,9 @@ namespace FracturingFog.Models
                         TransferFunction = grad.ExportTransferFunction,
                         TransferStrength = grad.ExportTransferStrength,
                         PaletteGamma = grad.ExportPaletteGamma,
+                        SparkleStride = grad.ExportSparkleStride,
+                        SparkleBoost = grad.ExportSparkleBoost,
+                        SeamlessCycle = grad.ExportSeamlessCycle,
                         Stops = StopsToData(grad.ExportStops),
                         Brightness = bright,
                         Contrast = contrast,
@@ -311,6 +323,9 @@ namespace FracturingFog.Models
             Transfer = data.TransferFunction;
             TransferStrength = data.TransferStrength;
             PaletteGamma = data.PaletteGamma;
+            SparkleStride = data.SparkleStride;
+            SparkleBoost = data.SparkleBoost;
+            SeamlessCycle = data.SeamlessCycle;
             foreach (var s in data.Stops)
                 Stops.Add(s.ToColorStop());
         }
@@ -353,6 +368,9 @@ namespace FracturingFog.Models
             Transfer = data.TransferFunction;
             TransferStrength = data.TransferStrength;
             PaletteGamma = data.PaletteGamma;
+            SparkleStride = data.SparkleStride;
+            SparkleBoost = data.SparkleBoost;
+            SeamlessCycle = data.SeamlessCycle;
             ColorOffset = data.ColorOffset;
             ColorDensity = data.ColorDensity;
             CycleWrap = data.WrapMode;
@@ -416,6 +434,9 @@ namespace FracturingFog.Models
             Transfer = data.TransferFunction;
             TransferStrength = data.TransferStrength;
             PaletteGamma = data.PaletteGamma;
+            SparkleStride = data.SparkleStride;
+            SparkleBoost = data.SparkleBoost;
+            SeamlessCycle = data.SeamlessCycle;
             ColorOffset = data.ColorOffset;
             ColorDensity = data.ColorDensity;
             CycleWrap = data.WrapMode;
@@ -511,6 +532,9 @@ namespace FracturingFog.Models
             Transfer = data.TransferFunction;
             TransferStrength = data.TransferStrength;
             PaletteGamma = data.PaletteGamma;
+            SparkleStride = data.SparkleStride;
+            SparkleBoost = data.SparkleBoost;
+            SeamlessCycle = data.SeamlessCycle;
             ColorOffset = data.ColorOffset;
             ColorDensity = data.ColorDensity;
             CycleWrap = data.WrapMode;

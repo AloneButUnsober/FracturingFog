@@ -170,6 +170,17 @@ namespace FracturingFog.Models
         /// <summary>Boundary behaviour of the cycling parameter (F5). Default Repeat.</summary>
         public ColorWrapModeDef WrapMode { get; set; } = ColorWrapModeDef.Repeat;
 
+        // ── Palette post-fx (baked into the LUT) ─────────────────────────
+        /// <summary>Sparkle stride (#254 / IDEA-4): brighten every Nth LUT
+        /// entry. 0 = disabled (default).</summary>
+        public int SparkleStride { get; set; } = 0;
+        /// <summary>Sparkle brightness boost (#254 / IDEA-4) as a fraction of
+        /// white. 0 = disabled.</summary>
+        public float SparkleBoost { get; set; } = 0f;
+        /// <summary>Seamless-under-rotation toggle (#255 / IDEA-5): close the
+        /// LUT loop so palette cycling shows no seam. Opt-in; default false.</summary>
+        public bool SeamlessCycle { get; set; } = false;
+
         // ── 3D shared (Phong + PBR) ──────────────────────────────────────
         public float Steepness { get; set; } = 1.6f;
         public float Ambient { get; set; } = 0.12f;
