@@ -435,6 +435,10 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
                 // image inside the new set → every pixel hits MAX_ITER and
                 // the calc takes minutes, looking like a UI lockup.
                 ViewState.SnapToFractalDefault(value);
+                // #250 — the first time Acid Warp is started this launch, show
+                // Noah Spurrier's original into-screen (classic ring pattern).
+                if (value == FractalType.AcidWarp && AcidWarpIntro.TryConsumeIntro())
+                    AcidWarpIntro.ApplyClassic(ViewState.FractalParameters);
                 var entry = FindEntryForType(value);
                 if (entry != null && !ReferenceEquals(_selectedFractalEntry, entry))
                 {
