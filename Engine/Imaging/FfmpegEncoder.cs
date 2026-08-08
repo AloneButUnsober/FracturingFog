@@ -186,6 +186,77 @@ namespace FracturingFog
             return (true, log);
         }
 
+        /// <summary>
+        /// Mux an audio file into an existing (video-only) container, writing a new
+        /// container at <paramref name="outputPath"/>. Video is stream-copied (no
+        /// re-encode); audio is encoded to AAC and trimmed to the shorter stream so
+        /// a long track can't pad the tail. Used by the scene exporter to attach the
+        /// analysed audio to the rendered MP4 (Audio-Reactive Phase 7 / #266).
+        /// <paramref name="outputPath"/> must differ from <paramref name="videoPath"/>.
+        /// Returns (success, stderr-tail).
+        /// </summary>
+        public static async Task<(bool ok, string log)> MuxAudioAsync(
+            string videoPath, string audioPath, string outputPath,
+            CancellationToken ct = default)
+        {
+            string? exe = FindFfmpeg();
+            if (exe == null) return (false, "ffmpeg not found.");
+            if (!File.Exists(videoPath)) return (false, "video not found: " + videoPath);
+            if (!File.Exists(audioPath)) return (false, "audio not found: " + audioPath);
+
+            string args =
+                $"-y -i \"{videoPath}\" -i \"{audioPath}\" " +
+                "-map 0:v:0 -map 1:a:0 -c:v copy -c:a aac -b:a 256k -shortest " +
+                $"\"{outputPath}\"";
+
+            var psi = new ProcessStartInfo
+            {
+                FileName = exe,
+                Arguments = args,
+                CreateNoWindow = true,
+                UseShellExecute = false,
+                RedirectStandardError = true,
+                RedirectStandardOutput = true,
+            };
+
+            using var proc = new Process { StartInfo = psi, EnableRaisingEvents = true };
+            var logBuf = new System.Text.StringBuilder();
+            proc.ErrorDataReceived += (_, e) =>
+            {
+                if (e.Data == null) return;
+                lock (logBuf)
+                {
+                    logBuf.AppendLine(e.Data);
+                    if (logBuf.Length > 32_000) logBuf.Remove(0, logBuf.Length - 16_000);
+                }
+            };
+            proc.OutputDataReceived += (_, _) => { };
+
+            try { proc.Start(); }
+            catch (Exception ex) { return (false, $"ffmpeg launch failed: {ex.Message}"); }
+
+            proc.BeginErrorReadLine();
+            proc.BeginOutputReadLine();
+            using var reg = ct.Register(() =>
+            {
+                try { if (!proc.HasExited) proc.Kill(entireProcessTree: true); } catch { }
+            });
+
+            try { await proc.WaitForExitAsync(CancellationToken.None).ConfigureAwait(false); }
+            catch (Exception ex) { return (false, $"ffmpeg wait failed: {ex.Message}\n{logBuf}"); }
+            try { proc.WaitForExit(); } catch { }
+
+            string log;
+            lock (logBuf) log = logBuf.ToString();
+            int exitCode;
+            try { exitCode = proc.ExitCode; } catch { exitCode = -1; }
+            if (ct.IsCancellationRequested) return (false, "Mux cancelled.\n" + log);
+            if (exitCode != 0)
+                return (false, $"ffmpeg mux exit code: {exitCode}\nCommand: \"{exe}\" {args}\n" +
+                    (string.IsNullOrWhiteSpace(log) ? "(no stderr)" : log));
+            return (true, log);
+        }
+
         private static string BuildArgs(string pngFolder, string outputPath, Preset preset, int fps)
         {
             // -start_number 1 because PngSequenceWriter names frames frame_000001.png

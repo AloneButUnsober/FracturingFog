@@ -902,6 +902,10 @@ namespace FracturingFog.Hosting
             // offline render on a background thread (one calculator live at a
             // time -> inside the ~90% cap), then report the outcome. ffmpeg
             // missing -> the render keeps a recoverable PNG sequence.
+            // Phase 7 (#266) — Scene Editor "Browse…" for the export audio file.
+            shell.SceneAudioFileBrowseRequested += async e =>
+                e.Path = await AvaloniaDialogs.PickOpenFileAsync(e.Title, e.Filter);
+
             shell.ExportSceneRequested += async (_, args) =>
             {
                 try
@@ -942,7 +946,31 @@ namespace FracturingFog.Hosting
                     };
 
                     var result = await Task.Run(() =>
-                        FracturingFog.Export.SceneVideoRenderer.Render(args.Scene, opts));
+                    {
+                        // Phase 7 (#266) — deterministic audio-reactive export: bake
+                        // the scene's audio file into a seekable modulation source
+                        // and mux it into the encoded video. No file / no ffmpeg =
+                        // audio-silent, exactly as before.
+                        var scene = args.Scene;
+                        if (scene.AudioTracks is { Count: > 0 }
+                            && !string.IsNullOrWhiteSpace(scene.AudioFilePath))
+                        {
+                            string? ff = FracturingFog.FfmpegEncoder.FindFfmpeg();
+                            if (ff != null)
+                            {
+                                var aset = s_audioDriver?.Settings;
+                                var baked = FracturingFog.Audio.OfflineAudioAnalysis.AnalyzeFile(
+                                    scene.AudioFilePath, ff,
+                                    aset?.Sensitivity ?? 0.5f, aset?.BandWeights);
+                                if (baked != null)
+                                {
+                                    opts.AudioSource = baked;
+                                    opts.AudioMuxPath = scene.AudioFilePath;
+                                }
+                            }
+                        }
+                        return FracturingFog.Export.SceneVideoRenderer.Render(scene, opts);
+                    });
 
                     string msg = result.Ok
                         ? (!string.IsNullOrEmpty(result.VideoPath)

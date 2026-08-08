@@ -2298,6 +2298,10 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
             vm.PreviewShotRequested  += (_, shot) => PreviewSceneShot(shot);
             vm.PlaySceneRequested    += (_, scene) => PlayScene(scene);
             vm.ExportSceneRequested  += (_, args) => ExportSceneRequested?.Invoke(this, args);
+            vm.BrowseAudioFileRequested += async e =>
+            {
+                if (SceneAudioFileBrowseRequested is { } h) await h(e);
+            };
             vm.StopPreviewRequested  += (_, _) => StopScenePreview();
             vm.CloseRequested        += (_, _) => IsSceneEditorVisible = false;
             vm.MessageRequested      += (_, args) => MessageRequested?.Invoke(this, args);
@@ -2867,6 +2871,10 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
     /// to render + encode a scene offline (the host picks the output path and
     /// drives the Engine's SceneVideoRenderer).</summary>
     public event EventHandler<SceneExportEventArgs>? ExportSceneRequested;
+
+    /// <summary>Scene Editor wants to pick the export audio file (Phase 7 / #266).
+    /// The host fills <see cref="OpenFileEventArgs.Path"/> via its file picker.</summary>
+    public event Func<OpenFileEventArgs, Task>? SceneAudioFileBrowseRequested;
 
     /// <summary>Editor or other child VM wants to show a MessageBox.</summary>
     public event EventHandler<ThemeMessageEventArgs>? MessageRequested;

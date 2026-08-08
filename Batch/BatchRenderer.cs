@@ -1153,6 +1153,26 @@ namespace FracturingFog.Batch
             if (!FfmpegEncoder.IsAvailable())
                 Console.WriteLine("  note        : ffmpeg not found — will keep the PNG sequence instead of encoding.");
 
+            // Phase 7 (#266) — deterministic audio-reactive export: analyse the
+            // scene's audio file into a seekable modulation source, sampled at each
+            // frame's scene time, and mux it into the encoded video. Headless, so no
+            // live capture; reproducible from the file alone.
+            if (scene.AudioTracks is { Count: > 0 } && !string.IsNullOrWhiteSpace(scene.AudioFilePath))
+            {
+                string? ff = FfmpegEncoder.FindFfmpeg();
+                if (ff != null)
+                {
+                    var baked = FracturingFog.Audio.OfflineAudioAnalysis.AnalyzeFile(scene.AudioFilePath, ff);
+                    if (baked != null)
+                    {
+                        sceneOpts.AudioSource = baked;
+                        sceneOpts.AudioMuxPath = scene.AudioFilePath;
+                        Console.WriteLine($"  audio       : {scene.AudioFilePath}  (audio-reactive)");
+                    }
+                    else Console.WriteLine($"  audio       : could not analyse '{scene.AudioFilePath}' — rendering silent.");
+                }
+            }
+
             var progress = new ConsoleProgress("Frames");
             var result = FracturingFog.Export.SceneVideoRenderer.Render(
                 scene, sceneOpts,
