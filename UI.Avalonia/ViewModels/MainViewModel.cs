@@ -420,6 +420,12 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
         }
     }
 
+    /// <summary>Raised when the user picks Acid Fog from the toolbar Type combo
+    /// (the genuine setter, not the silent region-recall mirror). The shell
+    /// listens to auto-select the animated "Acid Fog Spectrum" theme so cycling
+    /// is visible immediately — a plain/static theme would show no motion.</summary>
+    public event EventHandler? AcidFogTypeSelected;
+
     private FractalType _selectedFractalType;
     public FractalType SelectedFractalType
     {
@@ -445,6 +451,10 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
                         StartAcidWarpIntro();
                     else
                         PaletteCycleEnabled = true;
+                    // Ask the shell to snap to the animated Acid Fog Spectrum
+                    // theme (raised AFTER the property change, so the shell's
+                    // compat re-filter has already put it in the theme combo).
+                    AcidFogTypeSelected?.Invoke(this, EventArgs.Empty);
                 }
                 else
                 {

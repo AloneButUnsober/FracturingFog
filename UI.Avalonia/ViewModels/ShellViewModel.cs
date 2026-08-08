@@ -355,6 +355,12 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
                 FloatingMenu.SetShowWatermarkSilent(Main.ShowWatermark);
         };
 
+        // Acid Fog toolbar pick → auto-select the animated "Acid Fog Spectrum"
+        // theme so palette cycling is visible on selection. Runs only on the
+        // genuine user pick (not silent region mirrors, which own their theme);
+        // fires after the compat re-filter, so the theme is already in the combo.
+        Main.AcidFogTypeSelected += (_, _) => ApplyAcidFogDefaultTheme();
+
         // Seed the menu mirror so the checkbox reflects the persisted state
         // on first open instead of always defaulting to unchecked.
         FloatingMenu.SetShowWatermarkSilent(Main.ShowWatermark);
@@ -2061,6 +2067,24 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
                     && string.Equals(t.ParamName, "AcidWarpFlow", StringComparison.Ordinal));
             Main.RenderHost.Trigger();
         }
+    }
+
+    // Built-in animated Acid Fog theme (AcidWarpSpectrumMap.Name). Hardcoded
+    // because UI.Avalonia can't reference Engine where the theme type lives;
+    // LegacyNameAliases forwards the old "Acid Warp Spectrum" name if needed.
+    private const string AcidFogSpectrumThemeName = "Acid Fog Spectrum";
+
+    /// <summary>Snap the active colour theme to the animated Acid Fog Spectrum
+    /// when the user picks Acid Fog from the toolbar, so palette cycling is
+    /// visible immediately. No-op if the theme isn't in the (compat-filtered)
+    /// combo or is already selected. Routes through the theme combo so the same
+    /// apply+sync chain a manual pick fires runs here.</summary>
+    private void ApplyAcidFogDefaultTheme()
+    {
+        if (!FloatingMenu.ThemeNames.Contains(AcidFogSpectrumThemeName)) return;
+        if (string.Equals(FloatingMenu.SelectedTheme, AcidFogSpectrumThemeName, StringComparison.Ordinal))
+            return;
+        FloatingMenu.SelectedTheme = AcidFogSpectrumThemeName;
     }
 
     private void ShowColorThemeEditor()
