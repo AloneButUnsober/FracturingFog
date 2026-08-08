@@ -110,9 +110,9 @@
                                   IsVisible="{Binding IsAsciiVisible}"
                                   IsChecked="{Binding IsAsciiRecording, Mode=TwoWay}"
                                   ToolTip.Tip="Record the live ASCII animation to a file (zoom video / scene / slideshow / interactive). Toggle off to choose .cast / .svg / .ans / .mp4." />
-                    <ToggleButton Classes="toolbar" Content="Cycle"
+                    <ToggleButton Classes="toolbar" Content="Warp"
                                   IsChecked="{Binding Main.PaletteCycleEnabled, Mode=TwoWay}"
-                                  ToolTip.Tip="Animate the palette (colour cycling) over the current view — rotates the colour LUT without moving the camera. Cheap on Acid Fog / procedural types." />
+                                  ToolTip.Tip="Warp the palette (colour cycling) over the current view — rotates the colour LUT without moving the camera. Cheap on Acid Fog / procedural types." />
                     <ToggleButton Classes="toolbar" Content="Auto-VJ"
                                   IsVisible="{Binding Main.IsAcidFogType}"
                                   IsChecked="{Binding Main.AcidFogAmbientEnabled, Mode=TwoWay}"
