@@ -181,6 +181,27 @@ namespace FracturingFog.Models
         /// Default 0.0 (== pattern 0, no blend).</summary>
         public double AcidWarpFlow { get; set; } = 0.0;
 
+        /// <summary>Cross-fractal domain-warp toggle (#253 / IDEA-3). When true
+        /// the 2D escape-time family (Julia, Burning Ship, Tricorn, Multibrot,
+        /// Magnet, Glynn, Phoenix, Spider) displaces each pixel's sampling
+        /// coordinate by a smooth sine-interference field before iterating,
+        /// folding the fractal into organic swirls. Off (default) or
+        /// <see cref="DomainWarpStrength"/> == 0 → byte-identical to the
+        /// un-warped fractal. Only active at shallow zoom (the deep-zoom
+        /// perturbation path is intentionally excluded).</summary>
+        public bool DomainWarpEnabled { get; set; } = false;
+
+        /// <summary>Cross-fractal domain-warp strength (#253 / IDEA-3). Fraction
+        /// of the half-view span the warp field may displace a coordinate by.
+        /// 0 = no warp (default, byte-identical); ~0.05–0.4 is a pleasant range.
+        /// Requires <see cref="DomainWarpEnabled"/>.</summary>
+        public double DomainWarpStrength { get; set; } = 0.0;
+
+        /// <summary>Cross-fractal domain-warp frequency (#253 / IDEA-3). Spatial
+        /// density of the warp field — higher folds the fractal at a finer
+        /// scale. Default 1.0.</summary>
+        public double DomainWarpFrequency { get; set; } = 1.0;
+
         /// <summary>Optional explicit Flame-fractal map list. When null the
         /// renderer falls back to <see cref="FlamePresetName"/> from
         /// <c>FlamePresets.All</c>.</summary>
@@ -842,6 +863,9 @@ namespace FracturingFog.Models
                 AcidWarpMorph = AcidWarpMorph,
                 AcidWarpFlow = AcidWarpFlow,
                 AcidWarpTitleCard = AcidWarpTitleCard,
+                DomainWarpEnabled = DomainWarpEnabled,
+                DomainWarpStrength = DomainWarpStrength,
+                DomainWarpFrequency = DomainWarpFrequency,
                 FlameMaps = FlameMaps is null ? null : new List<FlameMap>(FlameMaps),
                 FlamePresetName = FlamePresetName,
                 FlameIterations = FlameIterations,
