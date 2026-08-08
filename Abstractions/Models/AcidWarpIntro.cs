@@ -34,6 +34,7 @@ namespace FracturingFog.Models
         public static void ApplyClassic(FractalParameters p)
         {
             if (p == null) return;
+            p.AcidWarpTitleCard = false;   // dissolve the wordmark
             p.AcidWarpPattern = ClassicPattern;
             p.AcidWarpFrequency = ClassicFrequency;
             p.AcidWarpCenterX = 0.0;

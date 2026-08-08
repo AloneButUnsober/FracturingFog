@@ -1223,11 +1223,13 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
     private void StartAcidWarpIntro()
     {
         var p = ViewState.FractalParameters;
-        p.AcidWarpPattern = FractalParameters.AcidWarpTitleCardPattern;
+        p.AcidWarpTitleCard = true;
+        p.AcidWarpPattern = AcidWarpIntro.ClassicPattern;   // rings behind the wordmark
         p.AcidWarpFrequency = AcidWarpIntro.ClassicFrequency;
         p.AcidWarpCenterX = 0.0;
         p.AcidWarpCenterY = 0.0;
         p.AcidWarpWarpStrength = 0.0;
+        p.AcidWarpMorph = false;   // no morphing under the card
 
         // Animate the card (and the classic look that follows) via palette cycle.
         PaletteCycleEnabled = true;
