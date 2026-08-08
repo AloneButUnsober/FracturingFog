@@ -363,16 +363,32 @@ namespace FracturingFog.Models
         [JsonIgnore(Condition = OmitNull)] public bool? AcidWarpMorph { get; set; }
         [JsonIgnore(Condition = OmitNull)] public double? AcidWarpFlow { get; set; }
 
+        // #253 — cross-fractal domain warp. Carried for the escape-time family
+        // (Julia, Burning Ship, Tricorn, Multibrot, Magnet 1/2, Glynn, Phoenix,
+        // Spider) whenever it's enabled, even on types whose base block is null.
+        // Only recorded when on; recall resets the warp off for any region that
+        // doesn't carry it (authoritative, like Relief 3D).
+        [JsonIgnore(Condition = OmitNull)] public bool? DomainWarpEnabled { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public double? DomainWarpStrength { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public double? DomainWarpFrequency { get; set; }
+
         /// <summary>
         /// Capture the P1-relevant parameters for <paramref name="type"/> from a
         /// live <paramref name="p"/>. Returns null when the family needs nothing
         /// (its defaults already reproduce the look) or when <paramref name="p"/>
         /// is null — so a Mandelbrot region never carries an empty block.
         /// </summary>
+        /// <summary>Fractal types whose renderer (EscapeTimeCalculator) honours
+        /// the #253 cross-fractal domain warp.</summary>
+        internal static bool SupportsDomainWarp(FractalType t) =>
+            t is FractalType.Julia or FractalType.BurningShip or FractalType.Tricorn
+              or FractalType.Multibrot or FractalType.Magnet1 or FractalType.Magnet2
+              or FractalType.Glynn or FractalType.Phoenix or FractalType.Spider;
+
         public static RegionFractalParams? Snapshot(FractalType type, FractalParameters? p)
         {
             if (p == null) return null;
-            return type switch
+            var rp = type switch
             {
                 FractalType.Julia => new RegionFractalParams
                 {
@@ -427,6 +443,20 @@ namespace FracturingFog.Models
                 // generated families need no extra params — defaults suffice.
                 _ => null,
             };
+
+            // #253 — cross-fractal domain warp rides along for the escape-time
+            // family whenever it's on, even on types whose base block is null
+            // (Burning Ship, Tricorn, Magnet). Captured only when enabled; recall
+            // resets it off for regions that don't carry it.
+            if (SupportsDomainWarp(type) && p.DomainWarpEnabled)
+            {
+                rp ??= new RegionFractalParams();
+                rp.DomainWarpEnabled = true;
+                rp.DomainWarpStrength = p.DomainWarpStrength;
+                rp.DomainWarpFrequency = p.DomainWarpFrequency;
+            }
+
+            return rp;
         }
 
         /// <summary>
@@ -469,6 +499,15 @@ namespace FracturingFog.Models
                 p.AcidWarpMorph = AcidWarpMorph.Value;
             if (AcidWarpFlow.HasValue)
                 p.AcidWarpFlow = AcidWarpFlow.Value;
+            // #253 — domain warp overlay. Only sets the enable flag when carried;
+            // the recall path (LoadRegionFractalParams) resets it off first so a
+            // region without a warp block turns the warp off.
+            if (DomainWarpEnabled.HasValue)
+                p.DomainWarpEnabled = DomainWarpEnabled.Value;
+            if (DomainWarpStrength.HasValue)
+                p.DomainWarpStrength = DomainWarpStrength.Value;
+            if (DomainWarpFrequency.HasValue)
+                p.DomainWarpFrequency = DomainWarpFrequency.Value;
         }
     }
 
