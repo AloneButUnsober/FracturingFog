@@ -175,9 +175,20 @@ live source each tick), re-installed per shot by `AnimationBusHost.LoadSceneShot
 `ShellViewModel` spins up capture when a played scene has audio tracks and hands
 the live source in. Authored in the Scene Editor's "Audio Reactive" section (a
 flat list of target/signal/curve/gain/range/invert rows) and shipped as the
-built-in **"Audio Pulse"** demo. Offline export applies audio tracks only once
-Phase 7 seeks the source per frame (`SampleAt`); until then an exported scene is
-audio-silent, rendering as its shots + keyframe globals dictate.
+built-in **"Audio Pulse"** demo. Offline export is wired in Phase 7 (below).
+
+**Shipped (Phase 7 / #266) — deterministic export.** `OfflineAudioModulationSource`
+is a seekable `IAudioModulationSource` baked once from a file:
+`OfflineAudioAnalysis.AnalyzeFile` decodes to f32le PCM via ffmpeg and runs the same
+`BeatAnalyzer` over it hop-by-hop (audio-clock, not `DateTime.UtcNow`), producing a
+timeline of band/RMS snapshots + beat/downbeat times in audio seconds.
+`SampleAt(seconds)` reconstructs every signal at scene time exactly as the live
+source does — same file → same frame at the same second. `SceneData.AudioFilePath`
+carries the file; `SceneVideoRenderer` seeks the source per sub-frame at its scene
+time and muxes the audio into the encoded MP4 (`FfmpegEncoder.MuxAudioAsync`). Wired
+into both the shell "Export Scene…" and the headless `--scene` batch path; authored
+via the Scene Editor's "Export audio" browse row. `AnalyzePcm` is the ffmpeg-free,
+unit-tested deterministic core.
 
 ### 3.6 Post-FX / colour
 
@@ -186,13 +197,12 @@ pattern.
 
 ## 4. Design constraints / gotchas
 
-- **Export determinism (⚠ the one hard part).** MP4 / scene export must sample
-  audio at **scene time**, not wall clock, or renders are unreproducible. The
-  `File` source is already supported end-to-end; the export path must run the
-  analyzer over the file timeline offline and seek the modulation source to each
-  frame's timestamp. `AudioModulationFrame` therefore also needs a
-  `SampleAt(double seconds)` form for the offline pass. Live view uses the
-  wall-clock `Sample()`.
+- **Export determinism (⚠ the one hard part — SHIPPED Phase 7 / #266).** MP4 /
+  scene export must sample audio at **scene time**, not wall clock, or renders are
+  unreproducible. Resolved by `OfflineAudioModulationSource` +
+  `OfflineAudioAnalysis`: the export path runs the analyzer over the decoded file
+  offline (audio-clock) and `SampleAt(double seconds)` seeks the modulation source
+  to each frame's scene time. Live view still uses the wall-clock `Sample()`.
 - **Smoothing.** Band levels are already dual-EMA smoothed. Beat/downbeat
   envelopes carry their own attack/decay so params never snap.
 - **Cost gating.** Never beat-slam `Expensive` params. Reuse the bus `Ceiling` +
@@ -214,7 +224,7 @@ pattern.
 | **4** | `AudioModulatorAnimator` + modulation-matrix UI → fractal params | #263 | #260 | med |
 | **5** | Fractal breathing — view-scale / zoom-pulse / camera-shake modulator | #264 | #260, #263 | med |
 | **6** | Scene Engine audio track | #265 | #260 | med |
-| **7** | Deterministic audio→MP4 / scene export (`SampleAt`) | #266 | #260, #264 | hard |
+| **7** ✅ | Deterministic audio→MP4 / scene export (`SampleAt`) | #266 | #260, #264 | hard |
 
 Phase 1 lands the foundation with zero UI and full unit coverage; phases 2–3 are
 quick wins on top; the fractal-param work and export determinism come last.

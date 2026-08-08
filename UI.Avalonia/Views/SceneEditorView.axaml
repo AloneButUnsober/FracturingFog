@@ -297,7 +297,17 @@
                                     Command="{Binding AddAudioTrackCommand}" />
                         </Grid>
                         <TextBlock Foreground="#8A8A8A" FontSize="11" TextWrapping="Wrap"
-                                   Text="Scene-wide post/look scalars driven live by the music, applied on top of every shot. Play spins up audio capture. Offline export is silent until deterministic audio export (Phase 7)." />
+                                   Text="Scene-wide post/look scalars driven live by the music, applied on top of every shot. Play spins up live audio capture; offline export analyses the file below and samples it deterministically at each frame's scene time." />
+
+                        <!-- Export audio file (Phase 7 / #266) -->
+                        <Grid ColumnDefinitions="Auto,*,Auto,Auto" ColumnSpacing="6">
+                            <TextBlock Grid.Column="0" Text="Export audio" VerticalAlignment="Center" FontSize="11" />
+                            <TextBox Grid.Column="1" Text="{Binding AudioFilePath}" Watermark="(none — silent export)"
+                                     FontSize="11" VerticalAlignment="Center" />
+                            <Button Grid.Column="2" Content="Browse…" Command="{Binding BrowseAudioFileCommand}" />
+                            <Button Grid.Column="3" Content="Clear" Command="{Binding ClearAudioFileCommand}"
+                                    IsEnabled="{Binding HasAudioFile}" />
+                        </Grid>
 
                         <ItemsControl ItemsSource="{Binding AudioTracks}">
                             <ItemsControl.ItemTemplate>

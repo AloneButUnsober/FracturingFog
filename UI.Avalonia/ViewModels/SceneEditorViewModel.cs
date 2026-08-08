@@ -458,6 +458,8 @@ public sealed class SceneEditorViewModel : ViewModelBase
         DeleteCommand      = ReactiveCommand.CreateFromTask(DeleteAsync);
         AddShotCommand     = ReactiveCommand.Create(AddShot);
         AddAudioTrackCommand = ReactiveCommand.Create(AddAudioTrack);
+        BrowseAudioFileCommand = ReactiveCommand.CreateFromTask(BrowseAudioFileAsync);
+        ClearAudioFileCommand = ReactiveCommand.Create(() => { AudioFilePath = string.Empty; });
         PlayCommand        = ReactiveCommand.Create(Play);
         ExportCommand      = ReactiveCommand.CreateFromTask(ExportAsync);
         ImportCommand      = ReactiveCommand.Create(() =>
@@ -586,6 +588,19 @@ public sealed class SceneEditorViewModel : ViewModelBase
         set { this.RaiseAndSetIfChanged(ref _tags, value); FieldChanged(); }
     }
 
+    private string _audioFilePath = string.Empty;
+    /// <summary>Audio file that drives the scene's audio tracks during offline
+    /// export (Phase 7 / #266). Empty = audio-silent export. Live playback is
+    /// unaffected (it uses the running capture source).</summary>
+    public string AudioFilePath
+    {
+        get => _audioFilePath;
+        set { this.RaiseAndSetIfChanged(ref _audioFilePath, value); this.RaisePropertyChanged(nameof(HasAudioFile)); FieldChanged(); }
+    }
+
+    /// <summary>True when an export audio file is set — drives the Clear button.</summary>
+    public bool HasAudioFile => !string.IsNullOrWhiteSpace(_audioFilePath);
+
     private string _titleText = "Scene Editor — new";
     public string TitleText
     {
@@ -608,6 +623,8 @@ public sealed class SceneEditorViewModel : ViewModelBase
     public ReactiveCommand<Unit, Unit> DeleteCommand { get; }
     public ReactiveCommand<Unit, Unit> AddShotCommand { get; }
     public ReactiveCommand<Unit, Unit> AddAudioTrackCommand { get; }
+    public ReactiveCommand<Unit, Unit> BrowseAudioFileCommand { get; }
+    public ReactiveCommand<Unit, Unit> ClearAudioFileCommand { get; }
     public ReactiveCommand<Unit, Unit> PlayCommand { get; }
     public ReactiveCommand<Unit, Unit> ExportCommand { get; }
     public ReactiveCommand<Unit, Unit> ImportCommand { get; }
@@ -640,6 +657,11 @@ public sealed class SceneEditorViewModel : ViewModelBase
     /// calls <see cref="RefreshSceneNames"/> back when it lands.</summary>
     public event EventHandler? ImportRequested;
 
+    /// <summary>Raised by the "Browse…" button to pick the export audio file. The
+    /// host fills <see cref="OpenFileEventArgs.Path"/> with the chosen path (async
+    /// file picker), mirroring the equation editors' import prompt.</summary>
+    public event Func<OpenFileEventArgs, Task>? BrowseAudioFileRequested;
+
     public event EventHandler? StopPreviewRequested;
 
     public event EventHandler? CloseRequested;
@@ -655,6 +677,7 @@ public sealed class SceneEditorViewModel : ViewModelBase
             Name = string.IsNullOrWhiteSpace(_name) ? "Unnamed Scene" : _name.Trim(),
             Description = _description ?? string.Empty,
             Category = string.IsNullOrWhiteSpace(_category) ? "User" : _category.Trim(),
+            AudioFilePath = _audioFilePath ?? string.Empty,
         };
         foreach (var row in Shots) data.Shots.Add(row.ToShot());
         foreach (var row in AudioTracks) data.AudioTracks.Add(row.ToTrack());
@@ -689,6 +712,7 @@ public sealed class SceneEditorViewModel : ViewModelBase
             Description = data.Description ?? string.Empty;
             Category = string.IsNullOrWhiteSpace(data.Category) ? "User" : data.Category!;
             Tags = string.Join(", ", data.Tags ?? new List<string>());
+            AudioFilePath = data.AudioFilePath ?? string.Empty;
 
             Shots.Clear();
             if (data.Shots != null)
@@ -756,6 +780,16 @@ public sealed class SceneEditorViewModel : ViewModelBase
     {
         AudioTracks.Remove(row);
         FieldChanged();
+    }
+
+    private async Task BrowseAudioFileAsync()
+    {
+        if (BrowseAudioFileRequested is not { } pick) return;
+        var args = new OpenFileEventArgs(
+            "Select export audio file",
+            "Audio (*.mp3;*.wav;*.flac;*.m4a;*.ogg;*.aac)|*.mp3;*.wav;*.flac;*.m4a;*.ogg;*.aac|All files (*.*)|*.*");
+        await pick(args);
+        if (!string.IsNullOrWhiteSpace(args.Path)) AudioFilePath = args.Path!;
     }
 
     private void RemoveShot(SceneShotRowViewModel row)
@@ -860,6 +894,7 @@ public sealed class SceneEditorViewModel : ViewModelBase
             Description = string.Empty;
             Category = "User";
             Tags = string.Empty;
+            AudioFilePath = string.Empty;
             Shots.Clear();
             AudioTracks.Clear();
             _preservedGlobalTracks = new List<SceneGlobalTrack>();
