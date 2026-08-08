@@ -24,10 +24,16 @@ namespace FracturingFog.Audio
         private readonly object _lock = new();
         private readonly IAudioCaptureBackend? _backend;
         private readonly BeatAnalyzer _analyzer;
+        private readonly AudioModulationSource _modulation;
         private AudioSettings _settings;
         private bool _disposed;
 
         public IBeatSource BeatSource => _analyzer;
+
+        /// <summary>Derived modulation signals (bands / RMS / beat envelopes /
+        /// tempo phase) over <see cref="BeatSource"/>, for the audio-reactive
+        /// expansion consumers (#259). Shares the driver's analyzer lifetime.</summary>
+        public IAudioModulationSource ModulationSource => _modulation;
         public AudioSettings Settings => _settings;
         public bool IsRunning { get; private set; }
 
@@ -53,6 +59,7 @@ namespace FracturingFog.Audio
             _analyzer.Sensitivity = _settings.Sensitivity;
             if (_settings.BandWeights != null)
                 _analyzer.SetBandWeights(_settings.BandWeights);
+            _modulation = new AudioModulationSource(_analyzer);
 
             if (_backend != null)
             {
