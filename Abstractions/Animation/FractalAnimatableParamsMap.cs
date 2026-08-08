@@ -44,6 +44,11 @@ public static class FractalAnimatableParamsMap
         FractalType.Spider
             => _spiderList,
 
+        // #253 — domain warp is the only animatable scalar on these.
+        FractalType.BurningShip or FractalType.Tricorn
+            or FractalType.Magnet1 or FractalType.Magnet2
+            => _domainWarpOnlyList,
+
         // Newton / Halley / Secant share the polynomial-exponent + relaxation
         // pair. Secant also exposes an initial-offset complex.
         FractalType.Newton or FractalType.Nova or FractalType.Halley
@@ -121,30 +126,50 @@ public static class FractalAnimatableParamsMap
     // Names match public property names on FractalParameters.cs verbatim.
     // Reflection in the round-trip test enforces that.
 
+    // #253 — cross-fractal domain warp. Shared across the escape-time family;
+    // animate for a breathing swirl. Needs the Domain-warp toggle on and a
+    // shallow zoom (inactive above EscapeTimeCalculator.MaxWarpZoom).
+    private static readonly AnimatableParamDescriptor _domainWarp =
+        new("DomainWarpStrength", AnimatableParamKind.ScalarDouble, Min: 0.0, Max: 1.0,
+            Notes: "#253 domain warp — animate for a breathing swirl. Needs the "
+                 + "Domain-warp toggle on; shallow zoom only.");
+
     private static readonly AnimatableParamDescriptor[] _juliaList =
     {
         new("JuliaC", AnimatableParamKind.Complex, Min: 0.05, Max: 1.5,
             Notes: "Classic orbit-around-the-Mandelbrot-boundary sweep."),
+        _domainWarp,
     };
 
     private static readonly AnimatableParamDescriptor[] _multibrotList =
     {
         new("MultibrotExponent", AnimatableParamKind.ScalarInt, Min: 2, Max: 8),
+        _domainWarp,
     };
 
     private static readonly AnimatableParamDescriptor[] _phoenixList =
     {
         new("PhoenixP", AnimatableParamKind.Complex, Min: 0.0, Max: 1.5),
+        _domainWarp,
     };
 
     private static readonly AnimatableParamDescriptor[] _glynnList =
     {
         new("GlynnC", AnimatableParamKind.Complex, Min: 0.05, Max: 1.0),
+        _domainWarp,
     };
 
     private static readonly AnimatableParamDescriptor[] _spiderList =
     {
         new("SpiderCDecay", AnimatableParamKind.ScalarDouble, Min: 0.0, Max: 1.0),
+        _domainWarp,
+    };
+
+    // BurningShip / Tricorn / Magnet 1&2 have no other animatable scalar; the
+    // domain warp (#253) is their sole animatable knob.
+    private static readonly AnimatableParamDescriptor[] _domainWarpOnlyList =
+    {
+        _domainWarp,
     };
 
     private static readonly AnimatableParamDescriptor[] _newtonList =

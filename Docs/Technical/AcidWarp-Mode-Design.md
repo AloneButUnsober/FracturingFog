@@ -25,14 +25,15 @@ Branch `feat/acidwarp-mode` (off `main`, not pushed). Full suite 1111/1111.
 | #250 AW-4 Spurrier intro | ☑ shipped | once-per-process gate |
 | #251 IDEA-6 auto-VJ | ☑ shipped | shuffle+classic-first playlist + `AcidWarpAmbientDirector` (hold/lock/pause/next) wired into MainViewModel with fade-to-black advance; toolbar Auto-VJ / Lock / Next (Acid Fog only); awaits on-device visual sign-off |
 | #252 IDEA-2 XOR post-transform | ☑ shipped | colour-index moiré on any field |
-| #253 IDEA-3 domain-warp | ◐ core | warp inside Acid Warp shipped; **cross-fractal warp deferred (deep-zoom path + visual sign-off)** |
+| #253 IDEA-3 domain-warp | ☑ shipped | warp inside Acid Warp + **cross-fractal warp on the EscapeTimeCalculator family** (Julia/Burning Ship/Tricorn/Multibrot/Magnet/Glynn/Phoenix/Spider), toggle + strength + frequency, animatable; Mandelbrot's dedicated deep-zoom SIMD calc intentionally excluded |
 | #254 IDEA-4 sparkle | ☑ shipped | every-Nth LUT boost |
 | #255 IDEA-5 seamless toggle | ☑ shipped | opt-in close-the-loop |
 
 Remaining app-integration work (wants on-device visual verification): the
-cross-fractal domain warp (#253). The auto-VJ ambient loop (#251) is wired
-(MainViewModel ambient loop + `AcidWarpAmbientDirector`), pending only on-device
-visual sign-off of the fade.
+auto-VJ ambient loop (#251) is wired (MainViewModel ambient loop +
+`AcidWarpAmbientDirector`), pending only on-device visual sign-off of the fade;
+and the cross-fractal domain warp (#253) — shipped on the EscapeTimeCalculator
+family (see below) — wants a visual pass on the swirl.
 
 ---
 
@@ -175,7 +176,7 @@ AW-3 / AW-5; IDEA-2..5 are independently useful on the existing fractals.
   transform is selected.
 - **Test.** Golden-hash a known XOR pattern; verify bit-exactness across runs.
 
-### IDEA-3 — Multi-center sine superposition + domain-warp modulation  ☐
+### IDEA-3 — Multi-center sine superposition + domain-warp modulation  ☑
 - **What.** Sum of `sin(dist_k)` from N offset centers = **coherent** wave
   interference ("peacock"). FF's `Plasma` is *incoherent* noise — this is a
   different, orderly beauty. Bonus: reuse the same field as a **domain-warp**
@@ -187,6 +188,19 @@ AW-3 / AW-5; IDEA-2..5 are independently useful on the existing fractals.
 - **Injection.** Pattern cases; a warp stage guarded behind a toggle + strength.
 - **Back-compat.** Warp strength default 0 = no-op.
 - **Test.** Zero strength ⇒ byte-identical to the un-warped fractal.
+- **Shipped.** Multi-centre "peacock" patterns live in `AcidWarpCalculator`
+  (cases 8/9). The **cross-fractal warp** is `FractalDomainWarp.Apply` — the same
+  two-tap sine field lifted to a shared helper — injected as a pre-sample
+  coordinate stage in `EscapeTimeCalculator`'s scalar cores (Julia, Burning Ship,
+  Tricorn, Multibrot, Magnet 1/2, Glynn, Phoenix, Spider). Tunables
+  `DomainWarpEnabled` / `DomainWarpStrength` / `DomainWarpFrequency` on
+  `FractalParameters`; `DomainWarpStrength` is animatable (breathing swirl). An
+  active warp forces the scalar path (SIMD builds one `cy` per row, which a
+  per-pixel warp breaks) and skips GPU; it is gated below
+  `EscapeTimeCalculator.MaxWarpZoom` (1e6). **Mandelbrot is excluded** — it runs
+  on the dedicated deep-zoom SIMD/perturbation calculator, and warping that
+  vectorised path is out of scope (the original deep-zoom deferral). Off /
+  strength 0 stays byte-identical (`FractalDomainWarpTests`).
 
 ### IDEA-4 — Sparkle palette post-fx  ☐
 - **What.** Acid Warp's `add_sparkles_to_palette` brightens every Nth palette
