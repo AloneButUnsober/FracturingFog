@@ -408,6 +408,7 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
         // General application settings — host pops the Avalonia AppSettings
         // dialog seeded from persisted AnimationSettings, saves on OK.
         FloatingMenu.AppSettingsClick += (_, _) => AppSettingsRequested?.Invoke(this, EventArgs.Empty);
+        FloatingMenu.AudioSettingsClick += (_, _) => AudioSettingsRequested?.Invoke(this, EventArgs.Empty);
 
         // Export / Import / Delete user colour themes — same shape as the
         // region IO above. Export/Import bubble to a file picker on the host;
@@ -2935,6 +2936,10 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
     /// <summary>Open the general application-settings dialog. Host seeds it
     /// from the persisted AnimationSettings and writes back on OK.</summary>
     public event EventHandler? AppSettingsRequested;
+
+    /// <summary>Raised to open the Audio-Reactive settings dialog standalone
+    /// (regression fix — previously reachable only from Slideshow Settings).</summary>
+    public event EventHandler? AudioSettingsRequested;
 
     /// <summary>Export user-defined colour themes to a JSON file. Host pops a
     /// SaveFilePicker then calls IColorThemeService.ExportUserThemesToFile.</summary>

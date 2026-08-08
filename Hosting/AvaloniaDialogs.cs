@@ -414,16 +414,29 @@ namespace FracturingFog.Hosting
         /// is no active beat source in the settings context, so BPM/level read
         /// "—" (the VM degrades gracefully when liveSource is null).
         /// </summary>
-        public static Task ShowAudioSettingsAsync(Window? owner)
+        public static Task ShowAudioSettingsAsync(
+            Window? owner,
+            global::FracturingFog.Audio.IBeatSource? liveSource = null)
         {
             var tcs = new TaskCompletionSource<bool>();
 
             async void Run()
             {
                 var current = AudioSettingsStore.Load();
-                var vm = new AudioSettingsViewModel(current, liveSource: null,
+                var vm = new AudioSettingsViewModel(current, liveSource,
                     capabilities: AudioCapabilityProbe.Detect());
                 var panel = new AudioSettingsView { DataContext = vm };
+
+                // Live meter pump — while a beat source is active, refresh the
+                // BPM / band-level readout ~20 Hz. Stopped when the dialog closes.
+                DispatcherTimer? meter = null;
+                if (liveSource != null)
+                {
+                    meter = new DispatcherTimer(
+                        TimeSpan.FromMilliseconds(50), DispatcherPriority.Background,
+                        (_, _) => vm.Tick());
+                    meter.Start();
+                }
 
                 // Browse… → Avalonia open-file picker; push the chosen path back.
                 vm.BrowseFileRequested += async (_, _) =>
@@ -434,19 +447,23 @@ namespace FracturingFog.Hosting
                     if (!string.IsNullOrEmpty(path)) vm.FilePath = path!;
                 };
 
-                var result = await WindowService.ShowPanelDialogAsync(
-                    panel,
-                    new PanelHostOptions(
-                        "Audio-Reactive Slideshow",
-                        Width: 520, MinWidth: 420,
-                        Background: new SolidColorBrush(Color.FromRgb(0x1C, 0x1C, 0x1C))),
-                    owner);
-
-                // OK (true) commits vm.Result; persist it. Cancel/dismiss → no save.
-                if (result == true)
+                try
                 {
-                    try { AudioSettingsStore.Save(vm.Result); } catch { }
+                    var result = await WindowService.ShowPanelDialogAsync(
+                        panel,
+                        new PanelHostOptions(
+                            "Audio-Reactive Settings",
+                            Width: 520, MinWidth: 420,
+                            Background: new SolidColorBrush(Color.FromRgb(0x1C, 0x1C, 0x1C))),
+                        owner);
+
+                    // OK (true) commits vm.Result; persist it. Cancel/dismiss → no save.
+                    if (result == true)
+                    {
+                        try { AudioSettingsStore.Save(vm.Result); } catch { }
+                    }
                 }
+                finally { meter?.Stop(); }
 
                 if (!tcs.Task.IsCompleted) tcs.TrySetResult(true);
             }

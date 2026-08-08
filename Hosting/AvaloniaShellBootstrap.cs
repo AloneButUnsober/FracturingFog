@@ -1664,6 +1664,26 @@ namespace FracturingFog.Hosting
                 }
             };
 
+            // Audio-reactive settings — standalone entry (regression fix: was
+            // only reachable from the Slideshow Settings dialog). Opens bound to
+            // the persisted store; on close, reconfigure a running driver so any
+            // edits (source / sensitivity / band weights) apply to live audio-
+            // reactive consumers (Beat FX, Acid Fog beat-lock) without a restart.
+            shell.AudioSettingsRequested += async (_, _) =>
+            {
+                try
+                {
+                    await AvaloniaDialogs.ShowAudioSettingsAsync(
+                        owner: null, liveSource: s_audioDriver?.BeatSource);
+                    if (s_audioDriver != null)
+                        s_audioDriver.Reconfigure(AudioSettingsStore.Load());
+                }
+                catch (Exception ex)
+                {
+                    Console.Error.WriteLine($"[AvaloniaShellBootstrap] AudioSettings failed: {ex.Message}");
+                }
+            };
+
             // Slideshow settings — load persisted settings, pop the dialog,
             // write back on OK. The Avalonia shell doesn't run the slideshow
             // engine yet (legacy Slideshow.cs stays intact per scope), but the
