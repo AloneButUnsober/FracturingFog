@@ -134,7 +134,7 @@ public class AcidWarpCalculatorTests
             ColorMap = new GrayscalePalette(),
             FractalParameters = new FractalParameters
             {
-                AcidWarpPattern = FractalParameters.AcidWarpTitleCardPattern,
+                AcidWarpTitleCard = true,
             },
         };
         card.Calculate(default);
@@ -145,6 +145,41 @@ public class AcidWarpCalculatorTests
 
         Assert.True(diff > 0, "title card must stamp the wordmark");
         Assert.True(diff < rings.Length, "title card must keep the ring background");
+    }
+
+    [Fact]
+    public void TitleCard_Is_Driven_By_Flag_Independent_Of_Pattern()
+    {
+        // Regression: the card was formerly a sentinel pattern value (0x7A17)
+        // stashed in AcidWarpPattern, which the params-panel NumericUpDown
+        // (Maximum == PatternCount-1) coerced away, so the wordmark never showed.
+        // Now a dedicated flag drives it — the wordmark must render even with
+        // AcidWarpPattern pinned at the in-range maximum.
+        var plainMax = Render(AcidWarpCalculator.PatternCount - 1);
+
+        var card = new AcidWarpCalculator(64, 48)
+        {
+            ColorMap = new GrayscalePalette(),
+            FractalParameters = new FractalParameters
+            {
+                AcidWarpTitleCard = true,
+                AcidWarpPattern = AcidWarpCalculator.PatternCount - 1, // max in-range
+            },
+        };
+        card.Calculate(default);
+
+        // The flag forces the ring field (pattern 0) + wordmark, so it must
+        // differ from a plain max-pattern render.
+        Assert.NotEqual(plainMax, (uint[])card.ColorBuffer.Clone());
+
+        // And it must match the ring-based card (pattern is ignored under the flag).
+        var ringCard = new AcidWarpCalculator(64, 48)
+        {
+            ColorMap = new GrayscalePalette(),
+            FractalParameters = new FractalParameters { AcidWarpTitleCard = true, AcidWarpPattern = 0 },
+        };
+        ringCard.Calculate(default);
+        Assert.Equal((uint[])ringCard.ColorBuffer.Clone(), card.ColorBuffer);
     }
 
     [Fact]

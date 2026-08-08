@@ -71,7 +71,7 @@ public sealed class AcidWarpCalculator : IFractalCalculator
         if (w <= 0 || h <= 0) return;
 
         var p = FractalParameters;
-        bool titleCard = p.AcidWarpPattern == FractalParameters.AcidWarpTitleCardPattern;
+        bool titleCard = p.AcidWarpTitleCard;
         int pattern = titleCard ? 0
             : ((p.AcidWarpPattern % PatternCount) + PatternCount) % PatternCount;
 

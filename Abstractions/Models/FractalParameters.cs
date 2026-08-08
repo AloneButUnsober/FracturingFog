@@ -124,11 +124,13 @@ namespace FracturingFog.Models
         /// selector is taken modulo this.</summary>
         public const int AcidWarpPatternCount = 20;
 
-        /// <summary>Sentinel <see cref="AcidWarpPattern"/> value that renders the
-        /// animated "ACID FOG" title card (#250) — a clean-room homage to the
-        /// Acid Warp intro, distinct in name and styling. Outside the normal
-        /// pattern range so it is never produced by the shuffle.</summary>
-        public const int AcidWarpTitleCardPattern = 0x7A17;
+        /// <summary>When true the Acid Warp calculator renders the animated
+        /// "ACID FOG" title card (#250) — a clean-room homage to the Acid Warp
+        /// intro, distinct in name and styling — over the current pattern field.
+        /// A dedicated flag (not an out-of-range <see cref="AcidWarpPattern"/>
+        /// sentinel) so the params-panel Pattern control never coerces it away.
+        /// Process-only: never persisted to a region or animation.</summary>
+        public bool AcidWarpTitleCard { get; set; } = false;
 
         /// <summary>Acid Warp pattern selector (#247). Index into the
         /// clean-room procedural pattern table in <c>AcidWarpCalculator</c>;
@@ -839,6 +841,7 @@ namespace FracturingFog.Models
                 AcidWarpWarpStrength = AcidWarpWarpStrength,
                 AcidWarpMorph = AcidWarpMorph,
                 AcidWarpFlow = AcidWarpFlow,
+                AcidWarpTitleCard = AcidWarpTitleCard,
                 FlameMaps = FlameMaps is null ? null : new List<FlameMap>(FlameMaps),
                 FlamePresetName = FlamePresetName,
                 FlameIterations = FlameIterations,
