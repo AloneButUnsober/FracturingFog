@@ -180,6 +180,11 @@ namespace FracturingFog.Models
         /// <summary>Seamless-under-rotation toggle (#255 / IDEA-5): close the
         /// LUT loop so palette cycling shows no seam. Opt-in; default false.</summary>
         public bool SeamlessCycle { get; set; } = false;
+        /// <summary>XOR index post-transform levels (#252 / IDEA-2). &gt;1 shatters
+        /// the gradient into a plaid / moiré; 0 = off.</summary>
+        public int XorLevels { get; set; } = 0;
+        /// <summary>XOR mask for the quantised index (#252 / IDEA-2).</summary>
+        public int XorMask { get; set; } = 0;
 
         // ── 3D shared (Phong + PBR) ──────────────────────────────────────
         public float Steepness { get; set; } = 1.6f;

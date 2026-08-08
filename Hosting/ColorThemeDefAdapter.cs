@@ -48,6 +48,8 @@ namespace FracturingFog.Hosting
                 SparkleStride = def.SparkleStride,
                 SparkleBoost = def.SparkleBoost,
                 SeamlessCycle = def.SeamlessCycle,
+                XorLevels = def.XorLevels,
+                XorMask = def.XorMask,
 
                 Steepness = def.Steepness,
                 Ambient = def.Ambient,
@@ -142,6 +144,8 @@ namespace FracturingFog.Hosting
                 SparkleStride = data.SparkleStride,
                 SparkleBoost = data.SparkleBoost,
                 SeamlessCycle = data.SeamlessCycle,
+                XorLevels = data.XorLevels,
+                XorMask = data.XorMask,
 
                 Steepness = data.Steepness,
                 Ambient = data.Ambient,

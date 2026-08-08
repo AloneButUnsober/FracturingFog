@@ -451,6 +451,23 @@ public sealed class ColorThemeEditorViewModel : ViewModelBase
         set { this.RaiseAndSetIfChanged(ref _seamlessCycle, value); FieldChanged(); }
     }
 
+    private int _xorLevels;
+    /// <summary>XOR index post-transform level count (#252). &gt;1 shatters the
+    /// gradient into a plaid/moiré. 0 = off.</summary>
+    public int XorLevels
+    {
+        get => _xorLevels;
+        set { this.RaiseAndSetIfChanged(ref _xorLevels, Math.Max(0, value)); FieldChanged(); }
+    }
+
+    private int _xorMask;
+    /// <summary>XOR mask for the quantised index (#252).</summary>
+    public int XorMask
+    {
+        get => _xorMask;
+        set { this.RaiseAndSetIfChanged(ref _xorMask, Math.Max(0, value)); FieldChanged(); }
+    }
+
     // ── Stops ─────────────────────────────────────────────────────────────
 
     public ObservableCollection<ColorStopRowVm> Stops { get; } = new();
@@ -681,6 +698,18 @@ public sealed class ColorThemeEditorViewModel : ViewModelBase
         {
             SparkleStride = 0;
             SparkleBoost = 0d;
+        }
+
+        // #252 — XOR moiré is a strong effect: wild-only, ~15% of the time.
+        if (wild && rng.NextDouble() < 0.15)
+        {
+            XorLevels = rng.Next(4, 33);
+            XorMask = rng.Next(1, XorLevels);
+        }
+        else
+        {
+            XorLevels = 0;
+            XorMask = 0;
         }
     }
 
@@ -1572,6 +1601,8 @@ public sealed class ColorThemeEditorViewModel : ViewModelBase
             SparkleStride = Math.Max(0, def.SparkleStride);
             SparkleBoost = Math.Clamp((double)def.SparkleBoost, 0d, 1d);
             SeamlessCycle = def.SeamlessCycle;
+            XorLevels = Math.Max(0, def.XorLevels);
+            XorMask = Math.Max(0, def.XorMask);
             Steepness = ClampDec((decimal)def.Steepness, 0.1M, 10M);
             Ambient = ClampDec((decimal)def.Ambient, 0M, 1M);
 
@@ -1651,6 +1682,8 @@ public sealed class ColorThemeEditorViewModel : ViewModelBase
             SparkleStride = SparkleStride,
             SparkleBoost = (float)SparkleBoost,
             SeamlessCycle = SeamlessCycle,
+            XorLevels = XorLevels,
+            XorMask = XorMask,
             Steepness = (float)Steepness,
             Ambient = (float)Ambient,
             KeyLight = KeyLight.ToDef(),

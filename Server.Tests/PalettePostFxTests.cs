@@ -19,13 +19,15 @@ namespace FracturingFog.Server.Tests;
 public class PalettePostFxTests
 {
     private static ColorThemeData TwoStop(int sparkleStride = 0, float sparkleBoost = 0f,
-                                          bool seamless = false)
+                                          bool seamless = false, int xorLevels = 0, int xorMask = 0)
         => new ColorThemeData
         {
             Name = "test",
             SparkleStride = sparkleStride,
             SparkleBoost = sparkleBoost,
             SeamlessCycle = seamless,
+            XorLevels = xorLevels,
+            XorMask = xorMask,
             Stops = new List<ColorStopData>
             {
                 new() { Position = 0f, R = 255, G = 0, B = 0 },   // red
@@ -85,6 +87,31 @@ public class PalettePostFxTests
         Assert.Equal(12, map.ExportSparkleStride);
         Assert.Equal(0.4f, map.ExportSparkleBoost, 3);
         Assert.True(map.ExportSeamlessCycle);
+    }
+
+    // #252 / IDEA-2 — XOR index post-transform.
+    [Fact]
+    public void Xor_Off_Is_Baseline()
+    {
+        var baseMap = new DataDrivenGradient(TwoStop());
+        var off0 = new DataDrivenGradient(TwoStop(xorLevels: 0));
+        var off1 = new DataDrivenGradient(TwoStop(xorLevels: 1)); // <=1 is a no-op
+        for (int i = 0; i < 256; i++)
+        {
+            Assert.Equal(Sample(baseMap, i + 0.5f), Sample(off0, i + 0.5f));
+            Assert.Equal(Sample(baseMap, i + 0.5f), Sample(off1, i + 0.5f));
+        }
+    }
+
+    [Fact]
+    public void Xor_Shatters_The_Gradient()
+    {
+        var baseMap = new DataDrivenGradient(TwoStop());
+        var xor = new DataDrivenGradient(TwoStop(xorLevels: 8, xorMask: 5));
+        int diffs = 0;
+        for (int i = 0; i < 256; i++)
+            if (Sample(baseMap, i + 0.5f) != Sample(xor, i + 0.5f)) diffs++;
+        Assert.True(diffs > 0);   // the moiré remap moves many entries
     }
 
     // #249 / IDEA-1 — live palette rotation (animate colour, not camera).
