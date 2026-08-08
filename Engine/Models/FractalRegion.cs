@@ -237,6 +237,18 @@ namespace FracturingFog.Models
         public bool UseCuratedThemesOnly { get; set; }
 
         /// <summary>
+        /// Per-region palette-cycling (LUT rotation) preference. On recall the
+        /// shell sets <c>MainViewModel.PaletteCycleEnabled</c> to this value,
+        /// honouring the region's saved toggle *over* the toolbar Cycle button —
+        /// some Acid Fog looks (e.g. a Flow-morph animation) read better with
+        /// cycling off. Null = "no opinion" (legacy regions): recall falls back to
+        /// the type default (cycle on for <see cref="FractalType.AcidWarp"/>, off
+        /// otherwise). Omitted from JSON when null so legacy regions stay clean.
+        /// </summary>
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public bool? PaletteCycleEnabled { get; set; }
+
+        /// <summary>
         /// Animation Roadmap Phase 3 — optional name of a saved
         /// <c>AnimationData</c> entry in <c>AnimationLibrary</c>. On region
         /// recall the shell loads the animation onto the shared
@@ -1080,6 +1092,7 @@ namespace FracturingFog.Models
                 FractalType = FractalType.AcidWarp,
                 CuratedThemes = new List<string> { "Acid Fog Spectrum" },
                 UseCuratedThemesOnly = true,
+                PaletteCycleEnabled = true,
                 QualityPreset = QualityPreset.Standard
             },
             new()
@@ -1095,6 +1108,7 @@ namespace FracturingFog.Models
                 Params      = new RegionFractalParams { AcidWarpPattern = 9, AcidWarpFrequency = 1.0, AcidWarpWarpStrength = 0.0 },
                 CuratedThemes = new List<string> { "Acid Fog Spectrum" },
                 UseCuratedThemesOnly = true,
+                PaletteCycleEnabled = true,
                 QualityPreset = QualityPreset.Standard
             },
             new()

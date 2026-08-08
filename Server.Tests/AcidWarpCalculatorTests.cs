@@ -147,6 +147,47 @@ public class AcidWarpCalculatorTests
         Assert.True(diff < rings.Length, "title card must keep the ring background");
     }
 
+    /// <summary>Flat palette that maps every sample to one colour, so any
+    /// darkening the calculator applies (title-card glyph + halo) is visible as a
+    /// strictly-lower value against an otherwise uniform field.</summary>
+    private sealed class ConstColorMap : IColorMap
+    {
+        public const uint Value = 0xFFC8C8C8u; // opaque mid-grey (200,200,200)
+        public ColorPaletteType Type => ColorPaletteType.Algorithmic;
+        public int MaxIterations { get; set; }
+        public int Map(float smooth, float distance, int iterations) => unchecked((int)Value);
+    }
+
+    [Fact]
+    public void TitleCard_Wordmark_Is_Darkened_With_A_Dark_Halo()
+    {
+        // #250 smoke: the wordmark must read over the cycling field. On a flat
+        // palette the ring background is one uniform colour; the glyph fill is
+        // darkened for luminance contrast and wrapped in an even darker halo, so
+        // the card must contain values strictly below the background — and a very
+        // dark tier (the halo) below the glyph tier.
+        var card = new AcidWarpCalculator(64, 48)
+        {
+            ColorMap = new ConstColorMap(),
+            FractalParameters = new FractalParameters { AcidWarpTitleCard = true },
+        };
+        card.Calculate(default);
+
+        uint bg = ConstColorMap.Value;
+        int bgLum = Lum(bg);
+        bool anyGlyphTier = false, anyHaloTier = false;
+        foreach (var px in card.ColorBuffer)
+        {
+            int l = Lum(px);
+            if (l < bgLum) anyGlyphTier = true;
+            if (l < bgLum / 3) anyHaloTier = true; // halo is ≤0.20× ⇒ well under a third
+        }
+        Assert.True(anyGlyphTier, "wordmark must be darkened below the background");
+        Assert.True(anyHaloTier, "wordmark must carry a dark halo outline");
+
+        static int Lum(uint c) => (int)((c >> 16 & 0xFF) + (c >> 8 & 0xFF) + (c & 0xFF));
+    }
+
     [Fact]
     public void TitleCard_Is_Driven_By_Flag_Independent_Of_Pattern()
     {

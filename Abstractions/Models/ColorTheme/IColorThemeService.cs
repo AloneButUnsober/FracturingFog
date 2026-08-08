@@ -230,6 +230,13 @@ namespace FracturingFog.Models
         /// theme untouched.</summary>
         bool TryGetRegionCuratedThemeToApply(string regionName, out string themeName);
 
+        /// <summary>Per-region palette-cycling (LUT rotation) preference. Returns
+        /// the region's saved toggle, or null when the region doesn't exist or
+        /// carries no opinion (legacy). On recall the shell honours a non-null
+        /// value over the toolbar Cycle button, falling back to the type default
+        /// (cycle on for Acid Fog / <see cref="FractalType.AcidWarp"/>) when null.</summary>
+        bool? GetRegionCycleEnabled(string regionName);
+
         /// <summary>Animation Roadmap Phase 3 — fetch a saved animation
         /// asset by name. Returns null when the library has no entry by
         /// that name. Used by the shared animation bus host to resolve a
@@ -475,6 +482,12 @@ namespace FracturingFog.Models
         /// curated theme as the active colour theme. Default false = recall
         /// leaves the active theme alone (no regression).</summary>
         public bool UseCuratedThemesOnly { get; set; }
+        /// <summary>Per-region palette-cycling (LUT rotation) toggle — the region
+        /// editor's "Cycle" checkbox, emulating the toolbar Cycle button. On
+        /// load it reflects the region's saved value (or the type default when
+        /// unset); on save it is persisted so recall honours it over the toolbar.
+        /// Only surfaced in the editor for Acid Fog regions.</summary>
+        public bool CycleEnabled { get; set; }
         /// <summary>Keep the region's existing lighting override on save.
         /// Only meaningful when <see cref="HasLightingOverride"/>; false = clear it.</summary>
         public bool KeepLightingOverride { get; set; } = true;
