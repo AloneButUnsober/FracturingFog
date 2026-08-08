@@ -88,6 +88,10 @@
                                   IsVisible="{Binding IsAsciiVisible}"
                                   IsChecked="{Binding AsciiFxBreathe, Mode=TwoWay}"
                                   ToolTip.Tip="ASCII FX — pulse the glyph density over time" />
+                    <ToggleButton Classes="toolbar" Content="Beat"
+                                  IsVisible="{Binding IsAsciiVisible}"
+                                  IsChecked="{Binding AsciiFxAudioReactive, Mode=TwoWay}"
+                                  ToolTip.Tip="ASCII FX — drive breathe / bloom / hue / glitch from live audio" />
                     <ComboBox x:Name="AsciiFxPresetCombo"
                               Classes="toolbar"
                               MinWidth="140"

@@ -635,6 +635,13 @@ namespace FracturingFog.Hosting
                 var s = AudioSettingsStore.Load();
                 return (Math.Max(1, s.BeatsPerTheme), Math.Max(1, s.BeatsPerRegion));
             };
+            // #259 audio-reactive expansion — pure getter for the modulation
+            // source (no side effects) plus an ensure-started hook the shell
+            // fires when an audio-reactive consumer (ASCII FX, params) turns on
+            // outside a slideshow. Left warm on toggle-off; slideshow stop still
+            // owns the eventual capture stop.
+            s_shell.GetAudioModulationSource = () => s_audioDriver?.ModulationSource;
+            s_shell.EnsureAudioModulationStarted = EnsureAudioCaptureStarted;
 
             // Window title: "{ProgramName} v{Version}  —  {renderer description}"
             // (legacy MainForm parity, MainForm.cs:917). RebuildWindowTitle()

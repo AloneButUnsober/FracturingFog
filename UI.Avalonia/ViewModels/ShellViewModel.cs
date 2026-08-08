@@ -1922,6 +1922,33 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
         set => this.RaiseAndSetIfChanged(ref _asciiFxBreathe, value);
     }
 
+    // #261 / Audio-Reactive Phase 2 — drive the ASCII FX from live audio.
+    private bool _asciiFxAudioReactive;
+    /// <summary>When true, the live pump routes the built ASCII FX settings
+    /// through <see cref="FracturingFog.Imaging.AudioReactiveAsciiFx.Apply"/>
+    /// each frame so the terminal view pulses with the music. Turning it on
+    /// spins up audio capture (via <see cref="EnsureAudioModulationStarted"/>).</summary>
+    public bool AsciiFxAudioReactive
+    {
+        get => _asciiFxAudioReactive;
+        set
+        {
+            if (value == _asciiFxAudioReactive) return;
+            _asciiFxAudioReactive = value;
+            if (value) EnsureAudioModulationStarted?.Invoke();
+            this.RaisePropertyChanged();
+        }
+    }
+
+    /// <summary>Host-supplied getter for the live audio modulation source
+    /// (null when no audio backend / not yet started). Set by the bootstrap.</summary>
+    public Func<FracturingFog.Audio.IAudioModulationSource?>? GetAudioModulationSource { get; set; }
+
+    /// <summary>Host-supplied hook to ensure audio capture is running, invoked
+    /// when an audio-reactive consumer turns on outside a slideshow. Set by the
+    /// bootstrap.</summary>
+    public Action? EnsureAudioModulationStarted { get; set; }
+
     /// <summary>Named ASCII FX presets for the toolbar picker ("None" + catalogue).</summary>
     public System.Collections.Generic.IReadOnlyList<string> AsciiFxPresetNames { get; }
         = FracturingFog.Imaging.AsciiFxPresets.Names;
@@ -1977,6 +2004,11 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
         if (_asciiFxHue) fx.HueCycle = true;
         if (_asciiFxCrt) fx.Crt = true;
         if (_asciiFxBreathe) fx.Breathe = true;
+        // #261 — audio-reactive: map the live modulation frame onto the FX
+        // scalars. No-op when the source is null / inactive (frame passes the
+        // gate inside Apply), so the base look is preserved without audio.
+        if (_asciiFxAudioReactive && GetAudioModulationSource?.Invoke() is { IsActive: true } modSrc)
+            FracturingFog.Imaging.AudioReactiveAsciiFx.Apply(fx, modSrc.Sample());
         return fx.AnyEnabled ? fx : null;
     }
 

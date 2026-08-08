@@ -670,6 +670,7 @@ public sealed partial class MainWindow : Window
                 break;
             case nameof(ShellViewModel.AsciiFxHue):
             case nameof(ShellViewModel.AsciiFxBreathe):
+            case nameof(ShellViewModel.AsciiFxAudioReactive):
             case nameof(ShellViewModel.SelectedAsciiFxPreset):
                 // Possibly-animated FX: start/stop the repaint timer, then repaint.
                 UpdateAsciiFxTimer();
@@ -1068,7 +1069,10 @@ public sealed partial class MainWindow : Window
     private void UpdateAsciiFxTimer()
     {
         bool want = _asciiFrameHandler != null && _shell != null
-                    && (_shell.BuildAsciiFxSettings(0.0)?.AnyAnimated ?? false);
+                    && ((_shell.BuildAsciiFxSettings(0.0)?.AnyAnimated ?? false)
+                        // #261 — audio-reactive keeps the pump alive even before
+                        // audio spins up, so it re-evaluates once samples arrive.
+                        || _shell.AsciiFxAudioReactive);
         if (want)
         {
             if (_asciiFxTimer == null)
