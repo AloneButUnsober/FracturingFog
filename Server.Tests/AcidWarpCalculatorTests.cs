@@ -121,6 +121,33 @@ public class AcidWarpCalculatorTests
     }
 
     [Fact]
+    public void TitleCard_Renders_Wordmark_Over_Rings()
+    {
+        // The title-card sentinel renders the "ACID FOG" wordmark (phase-shifted
+        // over the ring field), so it must differ from a plain ring render but
+        // share the ring background — i.e. differ in a bounded central band, not
+        // everywhere.
+        var rings = Render(0);
+
+        var card = new AcidWarpCalculator(64, 48)
+        {
+            ColorMap = new GrayscalePalette(),
+            FractalParameters = new FractalParameters
+            {
+                AcidWarpPattern = FractalParameters.AcidWarpTitleCardPattern,
+            },
+        };
+        card.Calculate(default);
+
+        int diff = 0;
+        for (int i = 0; i < rings.Length; i++)
+            if (rings[i] != card.ColorBuffer[i]) diff++;
+
+        Assert.True(diff > 0, "title card must stamp the wordmark");
+        Assert.True(diff < rings.Length, "title card must keep the ring background");
+    }
+
+    [Fact]
     public void Renders_Rich_Image_Through_Real_Gradient_At_Display_Size()
     {
         // End-to-end guard mimicking the app path: a multi-stop data-driven

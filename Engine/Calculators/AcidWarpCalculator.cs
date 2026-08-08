@@ -71,7 +71,9 @@ public sealed class AcidWarpCalculator : IFractalCalculator
         if (w <= 0 || h <= 0) return;
 
         var p = FractalParameters;
-        int pattern = ((p.AcidWarpPattern % PatternCount) + PatternCount) % PatternCount;
+        bool titleCard = p.AcidWarpPattern == FractalParameters.AcidWarpTitleCardPattern;
+        int pattern = titleCard ? 0
+            : ((p.AcidWarpPattern % PatternCount) + PatternCount) % PatternCount;
         double freq = p.AcidWarpFrequency <= 0 ? 1.0 : p.AcidWarpFrequency;
         double cx = p.AcidWarpCenterX;
         double cy = p.AcidWarpCenterY;
@@ -81,6 +83,9 @@ public sealed class AcidWarpCalculator : IFractalCalculator
         // Normalise so the shorter axis spans [-1, 1]; 0 is screen centre.
         double scale = 2.0 / Math.Max(w, h);
         double halfW = w * 0.5, halfH = h * 0.5;
+
+        // Title-card wordmark layout (font-pixel space); computed once.
+        var title = titleCard ? TitleLayout.For(w, h) : default;
 
         // Snapshot the colour map once — Map() is a pure LUT sample.
         IColorMap map = ColorMap;
@@ -103,6 +108,9 @@ public sealed class AcidWarpCalculator : IFractalCalculator
                     double wx = nx, wy = ny;
                     if (warp != 0.0) DomainWarp(ref wx, ref wy, warp, freq);
                     double v = Evaluate(pattern, wx, wy, freq, seed);
+                    // Title card: the wordmark reads in the complementary palette
+                    // colour (phase +0.5) over the ring field, so both cycle.
+                    if (titleCard && title.Hit(i, j)) v += 0.5;
                     double t = v - Math.Floor(v);            // frac → [0,1)
                     ColorBuffer[outRow + i] = (uint)map.Map((float)(t * 256.0), 0f, 256);
                 }
@@ -271,4 +279,59 @@ public sealed class AcidWarpCalculator : IFractalCalculator
         hh ^= hh >> 16;
         return hh / 4294967296.0;
     }
+
+    // ---- #250 title card: "ACID FOG" wordmark in a 5x7 pixel font ---------
+    // A clean-room homage to the Acid Warp intro — an original name/styling,
+    // rendered as a mask over the ring field so it colour-cycles like the rest.
+
+    private const string TitleText = "ACID FOG";
+    private const int GlyphW = 5, GlyphH = 7, GlyphAdvance = 6;
+
+    private readonly struct TitleLayout
+    {
+        private readonly int _originX, _originY, _scale, _spanW, _spanH;
+
+        private TitleLayout(int ox, int oy, int s, int sw, int sh)
+        { _originX = ox; _originY = oy; _scale = s; _spanW = sw; _spanH = sh; }
+
+        public static TitleLayout For(int w, int h)
+        {
+            int fontW = TitleText.Length * GlyphAdvance;     // font-pixels wide
+            int sX = (int)(w * 0.82) / fontW;
+            int sY = (int)(h * 0.42) / GlyphH;
+            int s = Math.Max(1, Math.Min(sX, sY));
+            int spanW = fontW * s, spanH = GlyphH * s;
+            return new TitleLayout((w - spanW) / 2, (h - spanH) / 2, s, spanW, spanH);
+        }
+
+        /// <summary>True if pixel (i,j) falls inside a lit glyph cell.</summary>
+        public bool Hit(int i, int j)
+        {
+            int fx = i - _originX, fy = j - _originY;
+            if (fx < 0 || fy < 0 || fx >= _spanW || fy >= _spanH) return false;
+            int col = fx / _scale, row = fy / _scale;
+            int charIdx = col / GlyphAdvance;
+            int colInChar = col - charIdx * GlyphAdvance;
+            if (colInChar >= GlyphW) return false;           // inter-glyph gap
+            if (charIdx >= TitleText.Length) return false;
+            int bits = GlyphRow(TitleText[charIdx], row);
+            return (bits & (1 << (GlyphW - 1 - colInChar))) != 0;
+        }
+    }
+
+    // 5-bit-per-row glyphs (MSB = leftmost column), rows top→bottom.
+    private static int GlyphRow(char c, int row) => c switch
+    {
+        'A' => Row(0b01110, 0b10001, 0b10001, 0b11111, 0b10001, 0b10001, 0b10001, row),
+        'C' => Row(0b01110, 0b10001, 0b10000, 0b10000, 0b10000, 0b10001, 0b01110, row),
+        'I' => Row(0b11111, 0b00100, 0b00100, 0b00100, 0b00100, 0b00100, 0b11111, row),
+        'D' => Row(0b11110, 0b10001, 0b10001, 0b10001, 0b10001, 0b10001, 0b11110, row),
+        'F' => Row(0b11111, 0b10000, 0b10000, 0b11110, 0b10000, 0b10000, 0b10000, row),
+        'O' => Row(0b01110, 0b10001, 0b10001, 0b10001, 0b10001, 0b10001, 0b01110, row),
+        'G' => Row(0b01110, 0b10001, 0b10000, 0b10111, 0b10001, 0b10001, 0b01111, row),
+        _   => 0, // space and anything else → blank
+    };
+
+    private static int Row(int r0, int r1, int r2, int r3, int r4, int r5, int r6, int row)
+        => row switch { 0 => r0, 1 => r1, 2 => r2, 3 => r3, 4 => r4, 5 => r5, _ => r6 };
 }

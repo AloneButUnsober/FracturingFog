@@ -435,10 +435,11 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
                 // image inside the new set → every pixel hits MAX_ITER and
                 // the calc takes minutes, looking like a UI lockup.
                 ViewState.SnapToFractalDefault(value);
-                // #250 — the first time Acid Warp is started this launch, show
-                // Noah Spurrier's original into-screen (classic ring pattern).
+                // #250 — the first time Acid Warp is started this launch, play
+                // the animated "ACID FOG" title card, then dissolve into the
+                // classic ring field (a clean-room homage to the original intro).
                 if (value == FractalType.AcidWarp && AcidWarpIntro.TryConsumeIntro())
-                    AcidWarpIntro.ApplyClassic(ViewState.FractalParameters);
+                    StartAcidWarpIntro();
                 var entry = FindEntryForType(value);
                 if (entry != null && !ReferenceEquals(_selectedFractalEntry, entry))
                 {
@@ -1204,6 +1205,35 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
         OnFrameCompleted(this, info.Value);
     }
 
+    // ── #250: animated Acid Warp title card, then dissolve to the rings ──────
+    private DispatcherTimer? _acidIntroTimer;
+
+    private void StartAcidWarpIntro()
+    {
+        var p = ViewState.FractalParameters;
+        p.AcidWarpPattern = FractalParameters.AcidWarpTitleCardPattern;
+        p.AcidWarpFrequency = AcidWarpIntro.ClassicFrequency;
+        p.AcidWarpCenterX = 0.0;
+        p.AcidWarpCenterY = 0.0;
+        p.AcidWarpWarpStrength = 0.0;
+
+        // Animate the card (and the classic look that follows) via palette cycle.
+        PaletteCycleEnabled = true;
+        _renderHost.Trigger();
+
+        _acidIntroTimer?.Stop();
+        _acidIntroTimer = new DispatcherTimer(
+            TimeSpan.FromSeconds(3.5), DispatcherPriority.Background, (_, _) =>
+            {
+                _acidIntroTimer?.Stop();
+                _acidIntroTimer = null;
+                // Dissolve into the classic ring field; keep cycling.
+                AcidWarpIntro.ApplyClassic(ViewState.FractalParameters);
+                _renderHost.Trigger();
+            });
+        _acidIntroTimer.Start();
+    }
+
     // ── #249 / IDEA-1: live palette cycling (animate colour, not camera) ──────
     // A DispatcherTimer advances a rotation phase over wall-clock and pushes it
     // to the render host, which re-maps the field through the rotated LUT. Cheap
@@ -1267,6 +1297,8 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
 
     public void Dispose()
     {
+        _acidIntroTimer?.Stop();
+        _acidIntroTimer = null;
         _paletteCycleTimer?.Stop();
         _paletteCycleTimer = null;
         _input.ViewChanged -= OnInputViewChanged;
