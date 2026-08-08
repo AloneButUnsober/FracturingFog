@@ -32,9 +32,11 @@ using System.Collections.ObjectModel;
 using System.Reactive;
 using Avalonia.Threading;
 using FracturingFog;
+using FracturingFog.Abstractions.Animation;
 using FracturingFog.Input;
 using FracturingFog.Models;
 using FracturingFog.Render;
+using FracturingFog.UI.Avalonia.ViewModels.Animation;
 using FracturingFog.ViewState;
 using ReactiveUI;
 
@@ -1433,6 +1435,52 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
                 EnsureAudioModulationStarted?.Invoke();
                 // Baseline the edge counter so we don't fire on stale history.
                 _lastAmbientDownbeatSeen = GetAudioModulationSource?.Invoke()?.DownbeatCount ?? 0;
+            }
+        }
+    }
+
+    // #264 / Audio-Reactive Phase 5 — view "breathing" (zoom-pulse + shake).
+    private ViewBreatheAnimator? _viewBreathe;
+    private bool _audioViewBreathe;
+    /// <summary>When true, the view zoom-pulses (and optionally shakes) with the
+    /// music: a render-gated <see cref="ViewBreatheAnimator"/> registers on the
+    /// shared bus and writes a transient overlay the render host applies per
+    /// frame. The base centre / zoom are never mutated, so navigation stays exact.
+    /// Turning it on spins up audio capture; off snaps the view back to base.
+    /// Shallow-zoom only (suppressed past 1e6).</summary>
+    public bool AudioViewBreathe
+    {
+        get => _audioViewBreathe;
+        set
+        {
+            if (!this.RaiseAndSetIfChangedReturnsChanged(ref _audioViewBreathe, value))
+                return;
+
+            var bus = AnimationBusHost.Bus;
+            if (value)
+            {
+                EnsureAudioModulationStarted?.Invoke();
+                var src = GetAudioModulationSource?.Invoke();
+                if (src != null && bus != null)
+                {
+                    // Fresh animator each enable so it binds the current source.
+                    _viewBreathe = new ViewBreatheAnimator(src, ViewState) { IsEnabled = true };
+                    bus.Register(_viewBreathe);
+                    bus.Refresh();
+                }
+            }
+            else
+            {
+                if (_viewBreathe != null && bus != null)
+                {
+                    _viewBreathe.IsEnabled = false;
+                    bus.UnregisterPermanent(_viewBreathe);
+                    bus.Refresh();
+                }
+                _viewBreathe?.ResetOverlay();
+                _viewBreathe = null;
+                // Snap the view back to the base (no more ticks will fire).
+                _renderHost.Trigger();
             }
         }
     }

@@ -117,6 +117,9 @@
                     <ToggleButton Classes="toolbar" Content="Warp"
                                   IsChecked="{Binding Main.PaletteCycleEnabled, Mode=TwoWay}"
                                   ToolTip.Tip="Warp the palette (colour cycling) over the current view — rotates the colour LUT without moving the camera. Cheap on Acid Fog / procedural types." />
+                    <ToggleButton Classes="toolbar" Content="Pulse"
+                                  IsChecked="{Binding Main.AudioViewBreathe, Mode=TwoWay}"
+                                  ToolTip.Tip="Audio view-breathe: the view zoom-pulses with the music (kick-driven). Base centre/zoom stay exact — the wobble is render-only. Shallow zoom only. Spins up audio capture." />
                     <ToggleButton Classes="toolbar" Content="Auto-VJ"
                                   IsVisible="{Binding Main.IsAcidFogType}"
                                   IsChecked="{Binding Main.AcidFogAmbientEnabled, Mode=TwoWay}"

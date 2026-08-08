@@ -171,6 +171,32 @@ namespace FracturingFog.ViewState
         /// alpha. Toggling needs only a post-FX repaint, not a fresh render.</summary>
         public bool AlphaPreview { get; set; }
 
+        // ── Audio view-breathe overlay (P5 #264) ──────────────────────────────
+        // Transient render-time overlay, NOT part of the input/navigation state
+        // and NOT serialized. ViewCamera + region save read the base Zoom /
+        // GetCenter(); the render host multiplies these on top per frame and
+        // restores them immediately after configuring the calculators, so a
+        // beat-driven zoom wobble or camera shake never drifts the persistent
+        // centre. Identity = { 1, 0, 0 }. Written by ViewBreatheAnimator; applied
+        // only at shallow zoom (deep-zoom limb math / perturbation reference make
+        // a per-frame view wobble pointless and risky there).
+
+        /// <summary>Multiplicative zoom applied on top of <see cref="Zoom"/> for
+        /// one frame (1 = no pulse).</summary>
+        public double BreatheZoomFactor { get; set; } = 1.0;
+
+        /// <summary>Screen-centre X offset for one frame, as a fraction of the
+        /// plane extent at the current zoom (0 = centred).</summary>
+        public double BreatheOffsetXFrac { get; set; }
+
+        /// <summary>Screen-centre Y offset for one frame, as a fraction of the
+        /// plane extent at the current zoom (0 = centred).</summary>
+        public double BreatheOffsetYFrac { get; set; }
+
+        /// <summary>True when any breathe overlay is off its identity value.</summary>
+        public bool HasBreathe =>
+            BreatheZoomFactor != 1.0 || BreatheOffsetXFrac != 0.0 || BreatheOffsetYFrac != 0.0;
+
         // ── Helpers ───────────────────────────────────────────────────────────
 
         /// <summary>
