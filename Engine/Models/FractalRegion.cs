@@ -334,6 +334,9 @@ namespace FracturingFog.Models
         [JsonIgnore(Condition = OmitNull)] public int? ApollonianDepth { get; set; }
         [JsonIgnore(Condition = OmitNull)] public double? ApollonianMinPixelRadius { get; set; }
         [JsonIgnore(Condition = OmitNull)] public bool? ApollonianColorByDepth { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public int? AcidWarpPattern { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public double? AcidWarpFrequency { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public double? AcidWarpWarpStrength { get; set; }
 
         /// <summary>
         /// Capture the P1-relevant parameters for <paramref name="type"/> from a
@@ -387,6 +390,12 @@ namespace FracturingFog.Models
                     ApollonianMinPixelRadius = p.ApollonianMinPixelRadius,
                     ApollonianColorByDepth = p.ApollonianColorByDepth,
                 },
+                FractalType.AcidWarp => new RegionFractalParams
+                {
+                    AcidWarpPattern = p.AcidWarpPattern,
+                    AcidWarpFrequency = p.AcidWarpFrequency,
+                    AcidWarpWarpStrength = p.AcidWarpWarpStrength,
+                },
                 // Mandelbrot, Tricorn, BurningShip, Magnet1/2, TearDrop and the
                 // generated families need no extra params — defaults suffice.
                 _ => null,
@@ -423,6 +432,12 @@ namespace FracturingFog.Models
                 p.ApollonianMinPixelRadius = ApollonianMinPixelRadius.Value;
             if (ApollonianColorByDepth.HasValue)
                 p.ApollonianColorByDepth = ApollonianColorByDepth.Value;
+            if (AcidWarpPattern.HasValue)
+                p.AcidWarpPattern = AcidWarpPattern.Value;
+            if (AcidWarpFrequency.HasValue)
+                p.AcidWarpFrequency = AcidWarpFrequency.Value;
+            if (AcidWarpWarpStrength.HasValue)
+                p.AcidWarpWarpStrength = AcidWarpWarpStrength.Value;
         }
     }
 
@@ -1044,6 +1059,21 @@ namespace FracturingFog.Models
                 Description = "Clean-room homage to Noah Spurrier's 1992 Acid Warp. Concentric-ring procedural pattern mapped through the active colour theme; pan/zoom is a no-op. Switch AcidWarpPattern for spokes, spirals, interference, plaid and more; pair with animated palette cycling.",
                 RegionType  = RegionType.BuiltIn,
                 FractalType = FractalType.AcidWarp,
+                CuratedThemes = new List<string> { "Acid Warp Spectrum" },
+                QualityPreset = QualityPreset.Standard
+            },
+            new()
+            {
+                Name        = "Acid Warp - Classic",
+                CenterX     =  0.0,
+                CenterY     =  0.0,
+                Zoom        =  1.0,
+                Iterations  = 64,
+                Description = "The classic Acid Warp look/feel: the multi-centre 'peacock' interference field. Pick the 'Acid Warp Spectrum' theme and turn on the Cycle toolbar toggle for the continuously-flowing psychedelic animation.",
+                RegionType  = RegionType.BuiltIn,
+                FractalType = FractalType.AcidWarp,
+                Params      = new RegionFractalParams { AcidWarpPattern = 9, AcidWarpFrequency = 1.0, AcidWarpWarpStrength = 0.0 },
+                CuratedThemes = new List<string> { "Acid Warp Spectrum" },
                 QualityPreset = QualityPreset.Standard
             },
             new()
