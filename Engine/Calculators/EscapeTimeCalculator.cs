@@ -137,6 +137,39 @@ public sealed class EscapeTimeCalculator : Interefaces.IFractalCalculator, Inter
         FinalDiBuffer = GC.AllocateUninitializedArray<float>(n, pinned: true);
     }
 
+    // ── #253 / IDEA-3 cross-fractal domain warp ──────────────────────────────
+    //
+    // A pre-sample coordinate warp: each pixel's c is displaced by a smooth
+    // interference field before the fractal iterates (FractalDomainWarp). It is
+    // an artful, shallow-zoom effect — gated below MaxWarpZoom so the deep-zoom
+    // Phoenix perturbation tier (Zoom ≥ 1e10) never warps — and it forces the
+    // scalar cores (SIMD builds one cy per row, which a per-pixel warp breaks;
+    // GPU is skipped for the same reason). Off / strength 0 → byte-identical.
+
+    /// <summary>Upper zoom bound for the domain warp. Above this the warp is
+    /// inactive (the field is defined in normalised view space and would just
+    /// freeze into a constant displacement at extreme zoom anyway).</summary>
+    public const double MaxWarpZoom = 1.0e6;
+
+    private bool WarpActive =>
+        FractalParameters.DomainWarpEnabled
+        && FractalParameters.DomainWarpStrength != 0.0
+        && Zoom <= MaxWarpZoom;
+
+    private readonly struct WarpCtx
+    {
+        public readonly bool Active;
+        public readonly double Strength, Frequency, HalfSpan;
+        public WarpCtx(bool active, double strength, double frequency, double halfSpan)
+        { Active = active; Strength = strength; Frequency = frequency; HalfSpan = halfSpan; }
+    }
+
+    private WarpCtx MakeWarp(double scale, int width, int height)
+        => new(WarpActive,
+               FractalParameters.DomainWarpStrength,
+               FractalParameters.DomainWarpFrequency,
+               0.5 * Math.Max(width, height) * scale);
+
     // ── Entry point ──────────────────────────────────────────────────────────
 
     public void Calculate(CancellationToken ct = default)
@@ -153,32 +186,45 @@ public sealed class EscapeTimeCalculator : Interefaces.IFractalCalculator, Inter
         // zoom exceeds MaxGpuZoom (FP32 precision band), or when the
         // active fractal type isn't shader-supported (Multibrot needs
         // pow, Phoenix has prev-z carry — both stay CPU).
+        // Domain warp (#253) needs the scalar cores (per-pixel c) — skip GPU
+        // and route the SIMD kinds through the scalar dispatch when it's active.
+        bool warp = WarpActive;
+
         if (UseGpuCompute && GpuKernel != null
             && Zoom <= MandelbrotCalculator.MaxGpuZoom
+            && !warp
             && TryDispatchGpu(ct))
             return;
 
         switch (FractalType)
         {
-            // SIMD-capable kernels (pure polynomial in zr/zi).
+            // SIMD-capable kernels (pure polynomial in zr/zi). Forced scalar
+            // under an active domain warp.
             case FractalType.Mandelbrot:
-                DispatchByColorMapSimd(new MandelbrotKernel(), ct);
+                if (warp) DispatchByColorMap(new MandelbrotKernel(), ct);
+                else      DispatchByColorMapSimd(new MandelbrotKernel(), ct);
                 break;
             case FractalType.Julia:
-                DispatchByColorMapSimd(new JuliaKernel(FractalParameters.JuliaC.Real, FractalParameters.JuliaC.Imaginary), ct);
+            {
+                var jk = new JuliaKernel(FractalParameters.JuliaC.Real, FractalParameters.JuliaC.Imaginary);
+                if (warp) DispatchByColorMap(jk, ct);
+                else      DispatchByColorMapSimd(jk, ct);
                 break;
+            }
             case FractalType.BurningShip:
-                DispatchByColorMapSimd(new BurningShipKernel(), ct);
+                if (warp) DispatchByColorMap(new BurningShipKernel(), ct);
+                else      DispatchByColorMapSimd(new BurningShipKernel(), ct);
                 break;
             case FractalType.Tricorn:
-                DispatchByColorMapSimd(new TricornKernel(), ct);
+                if (warp) DispatchByColorMap(new TricornKernel(), ct);
+                else      DispatchByColorMapSimd(new TricornKernel(), ct);
                 break;
             // Multibrot d ∈ {3,4,5}: SIMD via direct complex multiplication.
             // d ≥ 6: polar fallback (atan2 + pow + cos + sin), scalar.
             case FractalType.Multibrot:
             {
                 var mk = new MultibrotKernel(FractalParameters.MultibrotExponent);
-                if (mk.SimdSupported)
+                if (mk.SimdSupported && !warp)
                     DispatchByColorMapSimd(mk, ct);
                 else
                     DispatchByColorMap(mk, ct);
@@ -586,6 +632,7 @@ public sealed class EscapeTimeCalculator : Interefaces.IFractalCalculator, Inter
         int height = Height;
         double bailout2 = kernel.BailoutRadius2;
         bool hasCardioidSkip = kernel.HasCardioidSkip;
+        var warp = MakeWarp(scale, width, height);
 
         _po.CancellationToken = ct;
         var po = _po;
@@ -594,11 +641,20 @@ public sealed class EscapeTimeCalculator : Interefaces.IFractalCalculator, Inter
             if (ct.IsCancellationRequested) return;
             int rowMaxIt = useTileCap ? perRow![y] : maxIt;
             if (rowMaxIt <= 0) rowMaxIt = maxIt;
-            double cy = centerY + (y - height * 0.5) * scale;
+            double cyRow = centerY + (y - height * 0.5) * scale;
             int rowBase = y * width;
             for (int x = 0; x < width; x++)
             {
-                double cx = centerX + (x - width * 0.5) * scale;
+                double ox = (x - width * 0.5) * scale;
+                double cx = centerX + ox;
+                double cy = cyRow;
+                if (warp.Active)
+                {
+                    double oy = (y - height * 0.5) * scale;
+                    FractalDomainWarp.Apply(ref ox, ref oy, warp.HalfSpan, warp.Strength, warp.Frequency);
+                    cx = centerX + ox;
+                    cy = centerY + oy;
+                }
                 int idx = rowBase + x;
 
                 if (hasCardioidSkip && kernel.IsInTrivialInSet(cx, cy))
@@ -662,6 +718,7 @@ public sealed class EscapeTimeCalculator : Interefaces.IFractalCalculator, Inter
         int width = Width;
         int height = Height;
         double bailout2 = kernel.BailoutRadius2;
+        var warp = MakeWarp(scale, width, height);
 
         _po.CancellationToken = ct;
         var po = _po;
@@ -670,11 +727,20 @@ public sealed class EscapeTimeCalculator : Interefaces.IFractalCalculator, Inter
             if (ct.IsCancellationRequested) return;
             int rowMaxIt = useTileCap ? perRow![y] : maxIt;
             if (rowMaxIt <= 0) rowMaxIt = maxIt;
-            double cy = centerY + (y - height * 0.5) * scale;
+            double cyRow = centerY + (y - height * 0.5) * scale;
             int rowBase = y * width;
             for (int x = 0; x < width; x++)
             {
-                double cx = centerX + (x - width * 0.5) * scale;
+                double ox = (x - width * 0.5) * scale;
+                double cx = centerX + ox;
+                double cy = cyRow;
+                if (warp.Active)
+                {
+                    double oy = (y - height * 0.5) * scale;
+                    FractalDomainWarp.Apply(ref ox, ref oy, warp.HalfSpan, warp.Strength, warp.Frequency);
+                    cx = centerX + ox;
+                    cy = centerY + oy;
+                }
                 int idx = rowBase + x;
 
                 double zr = 0, zi = 0, prevZr = 0, prevZi = 0;
@@ -867,6 +933,7 @@ public sealed class EscapeTimeCalculator : Interefaces.IFractalCalculator, Inter
         int width = Width;
         int height = Height;
         double bailout2 = kernel.BailoutRadius2;
+        var warp = MakeWarp(scale, width, height);
 
         _po.CancellationToken = ct;
         var po = _po;
@@ -875,11 +942,20 @@ public sealed class EscapeTimeCalculator : Interefaces.IFractalCalculator, Inter
             if (ct.IsCancellationRequested) return;
             int rowMaxIt = useTileCap ? perRow![y] : maxIt;
             if (rowMaxIt <= 0) rowMaxIt = maxIt;
-            double cy0 = centerY + (y - height * 0.5) * scale;
+            double cyRow = centerY + (y - height * 0.5) * scale;
             int rowBase = y * width;
             for (int x = 0; x < width; x++)
             {
-                double cx0 = centerX + (x - width * 0.5) * scale;
+                double ox = (x - width * 0.5) * scale;
+                double cx0 = centerX + ox;
+                double cy0 = cyRow;
+                if (warp.Active)
+                {
+                    double oy = (y - height * 0.5) * scale;
+                    FractalDomainWarp.Apply(ref ox, ref oy, warp.HalfSpan, warp.Strength, warp.Frequency);
+                    cx0 = centerX + ox;
+                    cy0 = centerY + oy;
+                }
                 int idx = rowBase + x;
 
                 // Per-pixel c starts at the pixel coordinate and then drifts

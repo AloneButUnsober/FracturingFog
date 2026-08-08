@@ -420,6 +420,12 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
         }
     }
 
+    /// <summary>Raised when the user picks Acid Fog from the toolbar Type combo
+    /// (the genuine setter, not the silent region-recall mirror). The shell
+    /// listens to auto-select the animated "Acid Fog Spectrum" theme so cycling
+    /// is visible immediately — a plain/static theme would show no motion.</summary>
+    public event EventHandler? AcidFogTypeSelected;
+
     private FractalType _selectedFractalType;
     public FractalType SelectedFractalType
     {
@@ -445,13 +451,20 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
                         StartAcidWarpIntro();
                     else
                         PaletteCycleEnabled = true;
+                    // Ask the shell to snap to the animated Acid Fog Spectrum
+                    // theme (raised AFTER the property change, so the shell's
+                    // compat re-filter has already put it in the theme combo).
+                    AcidFogTypeSelected?.Invoke(this, EventArgs.Empty);
                 }
                 else
                 {
                     // Leaving Acid Warp via the toolbar clears cycling so the
-                    // LUT rotation doesn't keep spinning on a non-cycling type.
+                    // LUT rotation doesn't keep spinning on a non-cycling type,
+                    // and stops the auto-VJ ambient loop (Acid Fog only).
                     PaletteCycleEnabled = false;
+                    AcidFogAmbientEnabled = false;
                 }
+                this.RaisePropertyChanged(nameof(IsAcidFogType));
                 var entry = FindEntryForType(value);
                 if (entry != null && !ReferenceEquals(_selectedFractalEntry, entry))
                 {
@@ -480,7 +493,12 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
             _selectedFractalEntry = entry;
             this.RaisePropertyChanged(nameof(SelectedFractalEntry));
         }
+        this.RaisePropertyChanged(nameof(IsAcidFogType));
     }
+
+    /// <summary>True when the active fractal type is Acid Fog — gates the
+    /// Cycle-adjacent auto-VJ (ambient loop) toolbar affordances.</summary>
+    public bool IsAcidFogType => _selectedFractalType == FractalType.AcidWarp;
 
     private FractalTypeEntry? _selectedFractalEntry;
     /// <summary>Toolbar Type combo binding target. Distinguishes built-in
@@ -1298,6 +1316,11 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
 
     private void OnPaletteCycleTick(object? sender, EventArgs e)
     {
+        // Suspend the recolor while an ambient fade-to-black is presenting its
+        // own blended buffers — otherwise SetLivePaletteRotation would repaint
+        // the full-bright field and fight the fade.
+        if (_acidAmbientFading) return;
+
         var now = DateTime.UtcNow;
         double dt = (now - _paletteCycleLastTick).TotalSeconds;
         _paletteCycleLastTick = now;
@@ -1309,10 +1332,311 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
         _renderHost.SetLivePaletteRotation((float)_paletteCyclePhase);
     }
 
+    // ── #251 / IDEA-6: Acid Fog auto-VJ ambient loop ─────────────────────────
+    // Hold a pattern while the palette cycles, then fade-to-black and advance to
+    // the next pattern from a shuffled, non-repeating playlist. The pure timing
+    // lives in AcidWarpAmbientDirector; this wires it to the render host: a 50 ms
+    // DispatcherTimer ticks the director and, on an advance, drives a stepped
+    // fade-to-black on the outgoing frame before swapping the pattern in.
+
+    private DispatcherTimer? _acidAmbientTimer;
+    private AcidWarpAmbientDirector? _acidAmbientDirector;
+    private DateTime _acidAmbientLastTick;
+
+    // Fade state machine. _acidAmbientFading gates the palette-cycle recolor so
+    // it does not overwrite the fade's blended buffers. A transition is:
+    //   FadingOut  — ramp the outgoing frame down to black
+    //   WaitingFrame — pattern swapped + recompute triggered; hold black until
+    //                  the new field's frame uploads
+    //   FadingIn   — ramp the new field up from black
+    private enum AcidFadePhase { None, FadingOut, WaitingFrame, FadingIn }
+    private volatile bool _acidAmbientFading;
+    private AcidFadePhase _acidAmbientPhase;
+    private uint[]? _acidAmbientFadeFrom;   // outgoing frame (FadingOut)
+    private uint[]? _acidAmbientFadeTo;     // incoming field (FadingIn)
+    private int _acidAmbientFadeW, _acidAmbientFadeH;
+    private int _acidAmbientFadeStep;
+    private int _acidAmbientWaitTicks;
+    private volatile bool _acidAmbientFrameReady;
+    private EventHandler? _acidAmbientFrameHandler;
+    private int _acidAmbientPendingPattern;
+    private const int AcidAmbientFadeSteps = 10;   // ~500 ms at the 50 ms tick
+    private const int AcidAmbientWaitTimeoutTicks = 60; // ~3 s recompute guard
+
+    private bool _acidFogAmbientEnabled;
+    /// <summary>Toggle the Acid Fog auto-VJ ambient loop. Enabling it also turns
+    /// on palette cycling (the loop holds each pattern while the colour cycles).
+    /// No-op unless the active type is Acid Fog.</summary>
+    public bool AcidFogAmbientEnabled
+    {
+        get => _acidFogAmbientEnabled;
+        set
+        {
+            if (!this.RaiseAndSetIfChangedReturnsChanged(ref _acidFogAmbientEnabled, value))
+                return;
+            if (value) StartAcidAmbient();
+            else StopAcidAmbient();
+        }
+    }
+
+    private bool _acidFogAmbientLocked;
+    /// <summary>Lock the ambient loop: freeze pattern advancement while the
+    /// colour keeps cycling (classic Acid Warp "lock field, cycle colour").</summary>
+    public bool AcidFogAmbientLocked
+    {
+        get => _acidFogAmbientLocked;
+        set
+        {
+            if (this.RaiseAndSetIfChangedReturnsChanged(ref _acidFogAmbientLocked, value)
+                && _acidAmbientDirector != null)
+                _acidAmbientDirector.Locked = value;
+        }
+    }
+
+    private double _acidFogAmbientHoldSeconds = 6.0;
+    /// <summary>Per-pattern hold before the loop auto-advances (seconds).</summary>
+    public double AcidFogAmbientHoldSeconds
+    {
+        get => _acidFogAmbientHoldSeconds;
+        set
+        {
+            double v = Math.Clamp(value, 0.5, 120.0);
+            if (this.RaiseAndSetIfChangedReturnsChanged(ref _acidFogAmbientHoldSeconds, v)
+                && _acidAmbientDirector != null)
+                _acidAmbientDirector.HoldMs = (int)(v * 1000);
+        }
+    }
+
+    /// <summary>Manual "next" — advance to the next pattern now, even when locked.</summary>
+    public void AcidFogAmbientNext() => _acidAmbientDirector?.RequestNext();
+
+    private ReactiveCommand<Unit, Unit>? _acidFogAmbientNextCommand;
+    /// <summary>Toolbar "Next ▸" binding for the auto-VJ manual advance.</summary>
+    public ReactiveCommand<Unit, Unit> AcidFogAmbientNextCommand
+        => _acidFogAmbientNextCommand ??= ReactiveCommand.Create(AcidFogAmbientNext);
+
+    private void StartAcidAmbient()
+    {
+        // Ambient is an Acid Fog behaviour; ignore the toggle on other types.
+        if (_selectedFractalType != FractalType.AcidWarp)
+        {
+            _acidFogAmbientEnabled = false;
+            this.RaisePropertyChanged(nameof(AcidFogAmbientEnabled));
+            return;
+        }
+
+        var playlist = new AcidWarpPlaylist(
+            new Random().Next,
+            FractalParameters.AcidWarpPatternCount,
+            startWithClassic: true);
+        _acidAmbientDirector = new AcidWarpAmbientDirector(
+            playlist, (int)(_acidFogAmbientHoldSeconds * 1000))
+        {
+            Locked = _acidFogAmbientLocked,
+        };
+
+        // Show the first pattern immediately (no fade for the entry), cycling on.
+        var p = ViewState.FractalParameters;
+        p.AcidWarpTitleCard = false;
+        p.AcidWarpMorph = false;
+        p.AcidWarpPattern = _acidAmbientDirector.CurrentPattern;
+        PaletteCycleEnabled = true;
+        _renderHost.Trigger();
+
+        _acidAmbientLastTick = DateTime.UtcNow;
+        _acidAmbientTimer ??= new DispatcherTimer(
+            TimeSpan.FromMilliseconds(50), DispatcherPriority.Background, OnAcidAmbientTick);
+        _acidAmbientTimer.Start();
+    }
+
+    private void StopAcidAmbient()
+    {
+        _acidAmbientTimer?.Stop();
+        _acidAmbientDirector = null;
+        _acidAmbientFading = false;
+        _acidAmbientPhase = AcidFadePhase.None;
+        _acidAmbientFadeFrom = null;
+        _acidAmbientFadeTo = null;
+        if (_acidAmbientFrameHandler != null)
+        {
+            _renderHost.AnimationFrameUploaded -= _acidAmbientFrameHandler;
+            _acidAmbientFrameHandler = null;
+        }
+    }
+
+    private void OnAcidAmbientTick(object? sender, EventArgs e)
+    {
+        var now = DateTime.UtcNow;
+        int dtMs = (int)(now - _acidAmbientLastTick).TotalMilliseconds;
+        _acidAmbientLastTick = now;
+        if (dtMs <= 0) dtMs = 50;
+
+        // Mid-transition: keep stepping the fade, ignore advance timing.
+        if (_acidAmbientFading) { StepAcidFade(); return; }
+
+        var d = _acidAmbientDirector;
+        if (d == null) return;
+        if (d.Tick(dtMs)) BeginAcidFade(d.CurrentPattern);
+    }
+
+    // Snapshot the live frame and begin fading it to black; once black, the
+    // pattern swaps in and the recomputed field fades back up (fade-out → hold
+    // black for the recompute → fade-in), a symmetric fade-to-black crossfade.
+    private void BeginAcidFade(int targetPattern)
+    {
+        _acidAmbientFadeFrom = _renderHost.SnapshotFrame(out _acidAmbientFadeW, out _acidAmbientFadeH);
+        _acidAmbientPendingPattern = targetPattern;
+        _acidAmbientFadeStep = 0;
+        // No frame to fade (cold view) — swap immediately.
+        if (_acidAmbientFadeFrom == null || _acidAmbientFadeFrom.Length == 0
+            || _acidAmbientFadeW <= 0 || _acidAmbientFadeH <= 0)
+        {
+            CommitAcidPattern(targetPattern);
+            return;
+        }
+        _acidAmbientPhase = AcidFadePhase.FadingOut;
+        _acidAmbientFading = true;
+    }
+
+    private void StepAcidFade()
+    {
+        switch (_acidAmbientPhase)
+        {
+            case AcidFadePhase.FadingOut: StepFadeOut(); break;
+            case AcidFadePhase.WaitingFrame: StepWaitForFrame(); break;
+            case AcidFadePhase.FadingIn: StepFadeIn(); break;
+            default: _acidAmbientFading = false; break;
+        }
+    }
+
+    private void StepFadeOut()
+    {
+        var from = _acidAmbientFadeFrom;
+        int w = _acidAmbientFadeW, h = _acidAmbientFadeH;
+        if (from == null || w <= 0 || h <= 0)
+        {
+            _acidAmbientFading = false;
+            _acidAmbientPhase = AcidFadePhase.None;
+            CommitAcidPattern(_acidAmbientPendingPattern);
+            return;
+        }
+
+        _acidAmbientFadeStep++;
+        if (_acidAmbientFadeStep >= AcidAmbientFadeSteps)
+        {
+            // Reached black — swap the pattern in, trigger the recompute, and
+            // wait (holding black) for the new field's frame to upload.
+            PresentAcidBlack(w, h);
+            _acidAmbientFadeFrom = null;
+            _acidAmbientFrameReady = false;
+            _acidAmbientWaitTicks = 0;
+            _acidAmbientFrameHandler = (_, _) =>
+            {
+                _acidAmbientFrameReady = true;
+                if (_acidAmbientFrameHandler != null)
+                {
+                    _renderHost.AnimationFrameUploaded -= _acidAmbientFrameHandler;
+                    _acidAmbientFrameHandler = null;
+                }
+            };
+            _renderHost.AnimationFrameUploaded += _acidAmbientFrameHandler;
+            _acidAmbientPhase = AcidFadePhase.WaitingFrame;
+            CommitAcidPattern(_acidAmbientPendingPattern);
+            return;
+        }
+
+        float ia = 1f - _acidAmbientFadeStep / (float)AcidAmbientFadeSteps; // → 0
+        _renderHost.PresentBuffer(ScaleAcid(from, w * h, ia), w, h);
+    }
+
+    private void StepWaitForFrame()
+    {
+        _acidAmbientWaitTicks++;
+        bool timedOut = _acidAmbientWaitTicks >= AcidAmbientWaitTimeoutTicks;
+        if (!_acidAmbientFrameReady && !timedOut)
+        {
+            // Hold black while the new field computes.
+            PresentAcidBlack(_acidAmbientFadeW, _acidAmbientFadeH);
+            return;
+        }
+
+        // New field is on screen (bright) — grab it as the fade-in target, then
+        // cover with black so the fade-in starts from black, not a pop.
+        _acidAmbientFadeTo = _renderHost.SnapshotFrame(out _acidAmbientFadeW, out _acidAmbientFadeH);
+        if (_acidAmbientFadeTo == null || _acidAmbientFadeW <= 0 || _acidAmbientFadeH <= 0)
+        {
+            // Nothing to fade in — just resume (the live field is already shown).
+            _acidAmbientFading = false;
+            _acidAmbientPhase = AcidFadePhase.None;
+            return;
+        }
+        PresentAcidBlack(_acidAmbientFadeW, _acidAmbientFadeH);
+        _acidAmbientFadeStep = 0;
+        _acidAmbientPhase = AcidFadePhase.FadingIn;
+    }
+
+    private void StepFadeIn()
+    {
+        var to = _acidAmbientFadeTo;
+        int w = _acidAmbientFadeW, h = _acidAmbientFadeH;
+        if (to == null || w <= 0 || h <= 0)
+        {
+            _acidAmbientFading = false;
+            _acidAmbientPhase = AcidFadePhase.None;
+            return;
+        }
+
+        _acidAmbientFadeStep++;
+        if (_acidAmbientFadeStep >= AcidAmbientFadeSteps)
+        {
+            // Full brightness — present the field exactly and hand back to the
+            // palette-cycle tick (which resumes recolouring from here).
+            _renderHost.PresentBuffer(to, w, h);
+            _acidAmbientFadeTo = null;
+            _acidAmbientFading = false;
+            _acidAmbientPhase = AcidFadePhase.None;
+            return;
+        }
+
+        float a = _acidAmbientFadeStep / (float)AcidAmbientFadeSteps; // 0 → 1
+        _renderHost.PresentBuffer(ScaleAcid(to, w * h, a), w, h);
+    }
+
+    // Scale RGB toward black by factor f (0..1), preserving opaque alpha.
+    private static uint[] ScaleAcid(uint[] src, int n, float f)
+    {
+        var blend = new uint[src.Length];
+        for (int i = 0; i < n; i++)
+        {
+            uint o = src[i];
+            byte r = (byte)(((o >> 16) & 0xFF) * f);
+            byte g = (byte)(((o >> 8) & 0xFF) * f);
+            byte b = (byte)((o & 0xFF) * f);
+            blend[i] = 0xFF000000u | ((uint)r << 16) | ((uint)g << 8) | b;
+        }
+        return blend;
+    }
+
+    private void PresentAcidBlack(int w, int h)
+    {
+        if (w <= 0 || h <= 0) return;
+        var black = new uint[w * h];
+        for (int i = 0; i < black.Length; i++) black[i] = 0xFF000000u;
+        _renderHost.PresentBuffer(black, w, h);
+    }
+
+    private void CommitAcidPattern(int pattern)
+    {
+        ViewState.FractalParameters.AcidWarpPattern = pattern;
+        _renderHost.Trigger();
+    }
+
     public void Dispose()
     {
         _acidIntroTimer?.Stop();
         _acidIntroTimer = null;
+        _acidAmbientTimer?.Stop();
+        _acidAmbientTimer = null;
         _paletteCycleTimer?.Stop();
         _paletteCycleTimer = null;
         _input.ViewChanged -= OnInputViewChanged;

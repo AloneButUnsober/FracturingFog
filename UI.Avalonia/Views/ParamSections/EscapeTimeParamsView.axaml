@@ -176,6 +176,34 @@
              opened from the "Relief 3D…" launcher button in FractalParamsView so
              this per-family params panel stays compact. -->
 
+        <!-- Cross-fractal domain warp (#253 / IDEA-3) -->
+        <Border IsVisible="{Binding SupportsDomainWarp}"
+                BorderBrush="#404040" BorderThickness="0,1,0,0"
+                Padding="0,8,0,0" Margin="0,4,0,0">
+            <StackPanel Spacing="6">
+                <TextBlock Text="Domain warp" FontWeight="Bold" Foreground="#FFCC00" />
+                <Grid ColumnDefinitions="160,*" RowDefinitions="Auto,Auto,Auto">
+                    <TextBlock Grid.Row="0" Grid.Column="0" Text="Enable warp:" VerticalAlignment="Center" />
+                    <CheckBox Grid.Row="0" Grid.Column="1"
+                              IsChecked="{Binding DomainWarpEnabled, Mode=TwoWay}" Margin="0,2"
+                              Content="Fold coordinates into swirls"
+                              ToolTip.Tip="Displaces each pixel's sampling coordinate by a sine-interference field before the fractal iterates. Shallow zoom only; off = byte-identical." />
+                    <TextBlock Grid.Row="1" Grid.Column="0" Text="Strength:" VerticalAlignment="Center" />
+                    <NumericUpDown Grid.Row="1" Grid.Column="1"
+                                   IsEnabled="{Binding DomainWarpEnabled}"
+                                   Minimum="0" Maximum="1" Increment="0.02" FormatString="F2"
+                                   Value="{Binding DomainWarpStrength, Mode=TwoWay}" Margin="0,2"
+                                   ToolTip.Tip="Fraction of the half-view span the warp may displace a coordinate. 0 = no warp; ~0.05–0.4 is a pleasant range." />
+                    <TextBlock Grid.Row="2" Grid.Column="0" Text="Frequency:" VerticalAlignment="Center" />
+                    <NumericUpDown Grid.Row="2" Grid.Column="1"
+                                   IsEnabled="{Binding DomainWarpEnabled}"
+                                   Minimum="0.1" Maximum="8.0" Increment="0.1" FormatString="F2"
+                                   Value="{Binding DomainWarpFrequency, Mode=TwoWay}" Margin="0,2"
+                                   ToolTip.Tip="Spatial density of the warp field — higher folds the fractal at a finer scale." />
+                </Grid>
+            </StackPanel>
+        </Border>
+
         <!-- Secant initial-offset add-on -->
         <Grid IsVisible="{Binding IsSecant}"
               ColumnDefinitions="160,*" RowDefinitions="Auto,Auto">
