@@ -272,6 +272,28 @@ namespace FracturingFog.Models
         /// </summary>
         public ColorWrapMode WrapMode { get; set; } = ColorWrapMode.Repeat;
 
+        /// <summary>
+        /// Sparkle post-fx stride (#254 / IDEA-4). Every Nth of the 256 LUT
+        /// entries is brightened by <see cref="SparkleBoost"/> — a cheap
+        /// glitter / lightning accent baked into the LUT (free per pixel).
+        /// 0 = disabled (default), so the LUT is byte-identical.
+        /// </summary>
+        public int SparkleStride { get; set; } = 0;
+
+        /// <summary>
+        /// Sparkle brightness boost (#254 / IDEA-4) as a fraction of full white
+        /// added to each sparkled entry (clamped at white). 0 = disabled.
+        /// </summary>
+        public float SparkleBoost { get; set; } = 0f;
+
+        /// <summary>
+        /// Seamless-under-rotation toggle (#255 / IDEA-5). When true the gradient
+        /// LUT closes the loop (last entry ramps back to the first) so palette
+        /// cycling shows no seam. Opt-in creative choice: default false leaves
+        /// the palette exactly as authored (a hard seam is sometimes wanted).
+        /// </summary>
+        public bool SeamlessCycle { get; set; } = false;
+
         // ── 3D shared (Phong + PBR) ───────────────────────────────────────────
 
         public float Steepness { get; set; } = 1.6f;

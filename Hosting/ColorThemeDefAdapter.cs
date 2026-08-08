@@ -45,6 +45,9 @@ namespace FracturingFog.Hosting
                 ColorOffset = def.ColorOffset,
                 ColorDensity = def.ColorDensity,
                 WrapMode = (ColorWrapMode)def.WrapMode,
+                SparkleStride = def.SparkleStride,
+                SparkleBoost = def.SparkleBoost,
+                SeamlessCycle = def.SeamlessCycle,
 
                 Steepness = def.Steepness,
                 Ambient = def.Ambient,
@@ -136,6 +139,9 @@ namespace FracturingFog.Hosting
                 ColorOffset = data.ColorOffset,
                 ColorDensity = data.ColorDensity,
                 WrapMode = (ColorWrapModeDef)data.WrapMode,
+                SparkleStride = data.SparkleStride,
+                SparkleBoost = data.SparkleBoost,
+                SeamlessCycle = data.SeamlessCycle,
 
                 Steepness = data.Steepness,
                 Ambient = data.Ambient,
