@@ -2032,6 +2032,10 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
             AnimationBusHost.LoadRegionAnimation(
                 attachedAnim,
                 Main.ViewState.FractalParameters);
+            // #250 — Acid Warp regions auto-start the palette-cycle animation on
+            // recall (the classic flowing look), matching the toolbar type pick.
+            if (Main.ViewState.FractalType == FracturingFog.FractalType.AcidWarp)
+                Main.PaletteCycleEnabled = true;
             Main.RenderHost.Trigger();
         }
     }
