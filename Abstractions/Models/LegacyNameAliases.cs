@@ -23,6 +23,14 @@ namespace FracturingFog.Models
         private static readonly Dictionary<string, string> Map =
             new(System.StringComparer.OrdinalIgnoreCase)
         {
+            // #250 — the user-facing feature was renamed "Acid Warp" -> "Acid Fog"
+            // (the internal FractalType.AcidWarp enum is unchanged). Saved regions,
+            // slideshow configs, scene shots and CuratedThemes referencing the old
+            // built-in region / theme names still resolve through these aliases.
+            { "Acid Warp - Rings", "Acid Fog - Rings" },
+            { "Acid Warp - Classic", "Acid Fog - Classic" },
+            { "Acid Warp Spectrum", "Acid Fog Spectrum" },
+
             { "Apollonian — (−1, 2, 2, 3) Gasket", "Apollonian - (-1, 2, 2, 3) Gasket" },
             { "Apollonian — L/R Kissing Cusp", "Apollonian - L/R Kissing Cusp" },
             { "Arg Decomp — Pinwheel (8)", "Arg Decomp - Pinwheel (8)" },

@@ -371,11 +371,38 @@ public sealed class RegionEditorServiceTests
     public void BuiltIn_AcidWarp_Regions_Are_CuratedThemeOnly()
     {
         var lib = FractalRegionLibrary.Instance;
-        foreach (var n in new[] { "Acid Warp - Rings", "Acid Warp - Classic" })
+        foreach (var n in new[] { "Acid Fog - Rings", "Acid Fog - Classic" })
         {
             var r = lib.All.First(x => string.Equals(x.Name, n, StringComparison.OrdinalIgnoreCase));
             Assert.True(r.UseCuratedThemesOnly, $"{n} should default to curated-theme-only");
             Assert.NotNull(r.CuratedThemes);
+            Assert.Contains("Acid Fog Spectrum", r.CuratedThemes!);
         }
+    }
+
+    [Fact]
+    public void AcidWarp_To_AcidFog_Rename_Has_BackCompat_Aliases()
+    {
+        // #250 — user-facing "Acid Warp" -> "Acid Fog". Old saved references
+        // (regions, curated themes) must still resolve forward to the new names.
+        Assert.Equal("Acid Fog - Rings",   LegacyNameAliases.Resolve("Acid Warp - Rings"));
+        Assert.Equal("Acid Fog - Classic", LegacyNameAliases.Resolve("Acid Warp - Classic"));
+        Assert.Equal("Acid Fog Spectrum",  LegacyNameAliases.Resolve("Acid Warp Spectrum"));
+
+        // A stale region recall (curated theme under the OLD name) still resolves.
+        var svc = new HostColorThemeService();
+        var lib = FractalRegionLibrary.Instance;
+        string name = $"FF-LegacyCurated-{Guid.NewGuid():N}";
+        try
+        {
+            var r = MakeUserRegion(name);
+            r.CuratedThemes = new System.Collections.Generic.List<string> { "Acid Warp Spectrum" };
+            r.UseCuratedThemesOnly = true;
+            Assert.True(lib.AddUserRegion(r));
+
+            Assert.True(svc.TryGetRegionCuratedThemeToApply(name, out var resolved));
+            Assert.Equal("Acid Fog Spectrum", resolved); // forwarded to the current name
+        }
+        finally { lib.RemoveUserRegion(name); }
     }
 }

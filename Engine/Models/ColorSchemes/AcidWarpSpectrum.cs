@@ -19,10 +19,10 @@ namespace FracturingFog.Models
     /// seamless flag closes the loop so that rotation never shows a seam.</summary>
     public sealed class AcidWarpSpectrumMap : GradientColorMap
     {
-        public static string Name => "Acid Warp Spectrum";
+        public static string Name => "Acid Fog Spectrum";
         public static string Category => "Psychedelic";
         public static string Description =>
-            "Saturated seamless rainbow for Acid Warp — one full spectrum, flows under palette cycling.";
+            "Saturated seamless rainbow for Acid Fog — one full spectrum, flows under palette cycling.";
         public static ColorMapFeatures Features =>
             ColorMapFeatures.UsesSmooth | ColorMapFeatures.HighContrast |
             ColorMapFeatures.GradientBased;

@@ -509,14 +509,18 @@ namespace FracturingFog.Hosting
             if (r == null || !r.UseCuratedThemesOnly || r.CuratedThemes == null) return false;
 
             // First curated name that still resolves to a real theme; unknown
-            // names (renamed / deleted themes) are skipped rather than applied.
+            // names (deleted themes) are skipped rather than applied. Legacy
+            // names (e.g. the old "Acid Warp Spectrum") are mapped forward so
+            // saved regions keep resolving, and the *current* name is returned
+            // (the theme combo only holds current names).
             var known = new HashSet<string>(EnumerateThemeNames(), StringComparer.OrdinalIgnoreCase);
-            foreach (var name in r.CuratedThemes)
-                if (!string.IsNullOrWhiteSpace(name) && known.Contains(name))
-                {
-                    themeName = name;
-                    return true;
-                }
+            foreach (var raw in r.CuratedThemes)
+            {
+                if (string.IsNullOrWhiteSpace(raw)) continue;
+                if (known.Contains(raw)) { themeName = raw; return true; }
+                var aliased = LegacyNameAliases.Resolve(raw);
+                if (aliased != null && known.Contains(aliased)) { themeName = aliased; return true; }
+            }
             return false;
         }
 
