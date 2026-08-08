@@ -129,6 +129,11 @@
                                   IsChecked="{Binding UseCuratedThemesOnly}"
                                   Foreground="#DCDCDC"
                                   ToolTip.Tip="When on, recalling this region applies its first checked curated theme as the active color theme (the saved look comes back on jump). Off = recall leaves whatever theme is active untouched." />
+                        <CheckBox Content="Cycle (palette rotation)"
+                                  IsChecked="{Binding CycleEnabled}"
+                                  IsVisible="{Binding ShowCycleToggle}"
+                                  Foreground="#DCDCDC"
+                                  ToolTip.Tip="Region-scoped palette cycling, like the toolbar Cycle button. On recall this wins over the toolbar toggle — turn it off for Acid Fog looks that read better without the flowing LUT rotation (e.g. a Flow-morph animation)." />
                         <CheckBox Content="Keep lighting override"
                                   IsChecked="{Binding KeepLightingOverride}"
                                   IsVisible="{Binding HasLightingOverride}"

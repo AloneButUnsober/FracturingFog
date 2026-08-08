@@ -525,6 +525,15 @@ namespace FracturingFog.Hosting
         }
 
         /// <inheritdoc/>
+        public bool? GetRegionCycleEnabled(string regionName)
+        {
+            if (string.IsNullOrWhiteSpace(regionName)) return null;
+            var r = FractalRegionLibrary.Instance.All
+                .FirstOrDefault(x => string.Equals(x.Name, regionName, StringComparison.OrdinalIgnoreCase));
+            return r?.PaletteCycleEnabled;
+        }
+
+        /// <inheritdoc/>
         public FracturingFog.Abstractions.Animation.AnimationData? GetAnimation(string animationName)
         {
             if (string.IsNullOrWhiteSpace(animationName)) return null;
@@ -708,6 +717,10 @@ namespace FracturingFog.Hosting
                 // entry before the user commits.
                 CuratedThemes = r.CuratedThemes != null ? new List<string>(r.CuratedThemes) : null,
                 UseCuratedThemesOnly = r.UseCuratedThemesOnly,
+                // Reflect the saved toggle, or the type default when the region
+                // carries no opinion, so the editor checkbox opens in the state
+                // recall would actually use.
+                CycleEnabled = r.PaletteCycleEnabled ?? (r.FractalType == FractalType.AcidWarp),
                 KeepLightingOverride  = true,
                 KeepEmbeddedWatermark = true,
                 FractalTypeName = r.FractalType.ToString(),
@@ -769,6 +782,12 @@ namespace FracturingFog.Hosting
             // Only meaningful when a curated pool exists; drop the flag when the
             // whitelist is empty so a region can't claim "curated only" with none.
             region.UseCuratedThemesOnly = edits.UseCuratedThemesOnly && region.CuratedThemes != null;
+            // Persist the Cycle toggle only for Acid Fog regions (the only place
+            // the editor surfaces it); other types stay null so recall uses the
+            // type default and JSON stays clean.
+            region.PaletteCycleEnabled = region.FractalType == FractalType.AcidWarp
+                ? edits.CycleEnabled
+                : (bool?)null;
             // Keep vs clear the two attached assets. Cloned built-ins carry the
             // source's override/watermark forward when kept.
             region.LightingOverride  = edits.KeepLightingOverride  ? source.LightingOverride : null;

@@ -55,6 +55,9 @@ public sealed class RegionEditorViewModel : ViewModelBase
         _keepLightingOverride  = model.KeepLightingOverride;
         _keepEmbeddedWatermark = model.KeepEmbeddedWatermark;
         _useCuratedThemesOnly  = model.UseCuratedThemesOnly;
+        _cycleEnabled          = model.CycleEnabled;
+        ShowCycleToggle = string.Equals(
+            model.FractalTypeName, nameof(FractalType.AcidWarp), StringComparison.Ordinal);
 
         // Curated-theme whitelist as a checkable list against the theme
         // library. Any curated name no longer present in the library is kept
@@ -191,6 +194,20 @@ public sealed class RegionEditorViewModel : ViewModelBase
         set => this.RaiseAndSetIfChanged(ref _useCuratedThemesOnly, value);
     }
 
+    /// <summary>True only for Acid Fog regions — gates the "Cycle" checkbox's
+    /// visibility (palette cycling is meaningless on static fractals).</summary>
+    public bool ShowCycleToggle { get; }
+
+    private bool _cycleEnabled;
+    /// <summary>Region-scoped palette-cycling toggle, emulating the toolbar Cycle
+    /// button. On recall this wins over the toolbar state. Only surfaced when
+    /// <see cref="ShowCycleToggle"/> is true.</summary>
+    public bool CycleEnabled
+    {
+        get => _cycleEnabled;
+        set => this.RaiseAndSetIfChanged(ref _cycleEnabled, value);
+    }
+
     private bool _keepLightingOverride;
     public bool KeepLightingOverride
     {
@@ -239,6 +256,7 @@ public sealed class RegionEditorViewModel : ViewModelBase
             : _selectedAnimation;
         _model.CuratedThemes = CollectCuratedThemes();
         _model.UseCuratedThemesOnly = _useCuratedThemesOnly;
+        _model.CycleEnabled = _cycleEnabled;
         _model.KeepLightingOverride  = _keepLightingOverride;
         _model.KeepEmbeddedWatermark = _keepEmbeddedWatermark;
 

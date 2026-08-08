@@ -135,9 +135,30 @@ public sealed class AcidWarpCalculator : IFractalCalculator
                         double v2 = Evaluate(patternB, wx, wy, freq, seed);
                         v += (v2 - v) * mix;
                     }
-                    // Title card: the wordmark reads in the complementary palette
-                    // colour (phase +0.5) over the ring field, so both cycle.
-                    if (titleCard && title.Hit(i, j)) v += 0.5;
+
+                    if (titleCard)
+                    {
+                        // Title card wordmark legibility (#250 smoke): the letters
+                        // read in the complementary palette colour (phase +0.5)
+                        // *and* are darkened for luminance contrast, wrapped in a
+                        // dark one-pixel halo so "ACID FOG" stays legible over any
+                        // phase of the cycling ring field behind it.
+                        if (title.Hit(i, j))
+                        {
+                            double tg = v + 0.5; tg -= Math.Floor(tg);
+                            ColorBuffer[outRow + i] =
+                                Darken((uint)map.Map((float)(tg * 256.0), 0f, 256), 0.72);
+                            continue;
+                        }
+                        if (title.Halo(i, j))
+                        {
+                            double th = v - Math.Floor(v);
+                            ColorBuffer[outRow + i] =
+                                Darken((uint)map.Map((float)(th * 256.0), 0f, 256), 0.20);
+                            continue;
+                        }
+                    }
+
                     double t = v - Math.Floor(v);            // frac → [0,1)
                     ColorBuffer[outRow + i] = (uint)map.Map((float)(t * 256.0), 0f, 256);
                 }
@@ -298,6 +319,18 @@ public sealed class AcidWarpCalculator : IFractalCalculator
 
     private static double Smoother(double t) => t * t * t * (t * (t * 6.0 - 15.0) + 10.0);
 
+    /// <summary>Scale the RGB channels of a packed colour by <paramref name="f"/>
+    /// (0..1), preserving the top (alpha) byte. Channel order is irrelevant — the
+    /// three low bytes are scaled uniformly — so this works for ARGB or ABGR.</summary>
+    private static uint Darken(uint c, double f)
+    {
+        uint a =  c & 0xFF000000u;
+        uint r = (uint)(((c >> 16) & 0xFF) * f) & 0xFF;
+        uint g = (uint)(((c >> 8)  & 0xFF) * f) & 0xFF;
+        uint b = (uint)(( c        & 0xFF) * f) & 0xFF;
+        return a | (r << 16) | (g << 8) | b;
+    }
+
     private static double Hash01(int x, int y, int seed)
     {
         // Integer hash → [0, 1). Splittable-style avalanche.
@@ -343,6 +376,20 @@ public sealed class AcidWarpCalculator : IFractalCalculator
             if (charIdx >= TitleText.Length) return false;
             int bits = GlyphRow(TitleText[charIdx], row);
             return (bits & (1 << (GlyphW - 1 - colInChar))) != 0;
+        }
+
+        /// <summary>True for a pixel just outside a glyph (a one-font-pixel ring):
+        /// not itself lit, but with a lit glyph cell in its 8-neighbourhood at
+        /// font-pixel scale. Drives the dark outline that keeps the wordmark
+        /// legible over the cycling field.</summary>
+        public bool Halo(int i, int j)
+        {
+            if (Hit(i, j)) return false;
+            int s = _scale;
+            return Hit(i - s, j)     || Hit(i + s, j)
+                || Hit(i, j - s)     || Hit(i, j + s)
+                || Hit(i - s, j - s) || Hit(i + s, j - s)
+                || Hit(i - s, j + s) || Hit(i + s, j + s);
         }
     }
 
