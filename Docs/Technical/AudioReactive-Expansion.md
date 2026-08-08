@@ -164,6 +164,21 @@ No effect code changes — only the settings feed.
 alongside keyframes/easing: a scene param reads a band/binding instead of a
 curve.
 
+**Shipped (Phase 6 / #265).** `SceneAudioTrack` drives the same
+`SceneGlobalTarget` scalars the keyframe `SceneGlobalTrack` set does (exposure /
+bloom / vignette / chromatic aberration) — one target, two sources: keyframes or
+an `AudioModulationBinding` reading the music. `SceneData.AudioTracks` persists
+them; `SceneAudioTracks.Apply(tracks, params, frame)` is the pure seam
+(inactive-frame gated, later-track-wins) shared by realtime and offline. Realtime
+consumer `SceneAudioTrackAnimator` rides the animation bus (Cheap, sampling the
+live source each tick), re-installed per shot by `AnimationBusHost.LoadSceneShot`;
+`ShellViewModel` spins up capture when a played scene has audio tracks and hands
+the live source in. Authored in the Scene Editor's "Audio Reactive" section (a
+flat list of target/signal/curve/gain/range/invert rows) and shipped as the
+built-in **"Audio Pulse"** demo. Offline export applies audio tracks only once
+Phase 7 seeks the source per frame (`SampleAt`); until then an exported scene is
+audio-silent, rendering as its shots + keyframe globals dictate.
+
 ### 3.6 Post-FX / colour
 
 Palette rotation phase and bloom strength ← `Rms`/`BeatPulse`, same binding

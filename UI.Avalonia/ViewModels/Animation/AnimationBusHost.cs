@@ -4,6 +4,7 @@
 using System;
 using System.Collections.Generic;
 using FracturingFog.Abstractions.Animation;
+using FracturingFog.Audio;
 using FracturingFog.Models;
 using FracturingFog.Render;
 
@@ -92,8 +93,15 @@ public static class AnimationBusHost
     /// set per cut) seeded at <paramref name="globalTimeOffset"/> (this shot's
     /// global start time) so the sweep continues mid-timeline across a cut instead
     /// of restarting.</para></summary>
+    /// <param name="audioTracks">The scene's #265 audio-reactive post/look tracks —
+    /// re-installed per shot alongside the keyframe globals. Driven live from
+    /// <paramref name="audioSource"/>; skipped when either is null / empty (a
+    /// headless or silent backend leaves the base look untouched).</param>
+    /// <param name="audioSource">Live audio modulation source for
+    /// <paramref name="audioTracks"/>. Null = no audio reactivity this run.</param>
     public static void LoadSceneShot(SceneShot shot, AnimationData? shotAnimation, FractalParameters target,
-        IReadOnlyList<SceneGlobalTrack>? globalTracks = null, double globalTimeOffset = 0.0)
+        IReadOnlyList<SceneGlobalTrack>? globalTracks = null, double globalTimeOffset = 0.0,
+        IReadOnlyList<SceneAudioTrack>? audioTracks = null, IAudioModulationSource? audioSource = null)
     {
         if (_bus == null) return;
 
@@ -137,6 +145,15 @@ public static class AnimationBusHost
         {
             var g = new SceneGlobalTrackAnimator(globalTracks, target, globalTimeOffset);
             if (g.HasWork) _bus.RegisterDynamic(g);
+        }
+
+        // Scene-wide audio-reactive tracks (#265). Cheap (post-process scalars),
+        // driven live from the modulation source. Needs both tracks and a source —
+        // no source (headless / silent) leaves the base look untouched.
+        if (audioTracks != null && audioTracks.Count > 0 && audioSource != null)
+        {
+            var a = new SceneAudioTrackAnimator(audioTracks, target, audioSource);
+            if (a.HasWork) _bus.RegisterDynamic(a);
         }
 
         _bus.Ceiling = ResolveCeiling(includesRaymarched3D);

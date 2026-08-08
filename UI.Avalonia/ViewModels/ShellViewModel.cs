@@ -2380,6 +2380,11 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
             return;
         }
 
+        // A scene with audio-reactive tracks (#265) needs the capture running so
+        // the tracks have a live source when their shots load onto the bus.
+        if (scene.AudioTracks is { Count: > 0 })
+            EnsureAudioModulationStarted?.Invoke();
+
         StopScene();
         _scenePlaying = scene;
         _sceneTimeline = timeline;
@@ -2478,7 +2483,8 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
             shotStart = tl.Entries[sample.CurrentEntry].StartTime;
 
         AnimationBusHost.LoadSceneShot(shot, anim, Main.ViewState.FractalParameters,
-            scene.GlobalTracks, shotStart);
+            scene.GlobalTracks, shotStart,
+            scene.AudioTracks, GetAudioModulationSource?.Invoke());
     }
 
     /// <summary>Animation Roadmap Sub-goal B — open the Region Editor for the
