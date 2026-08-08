@@ -30,6 +30,7 @@ using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Reactive;
+using Avalonia.Threading;
 using FracturingFog;
 using FracturingFog.Input;
 using FracturingFog.Models;
@@ -226,6 +227,7 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
         (FractalType.QuaternionJulia,       "Quaternion Julia (3D)"),
         (FractalType.QuaternionMandelbrot,  "Quaternion Mandelbrot (3D)"),
         (FractalType.Plasma,                "Plasma (Diamond-Square)"),
+        (FractalType.AcidWarp,              "Acid Fog (Palette Cycling)"),
         (FractalType.Flame,                 "Flame (Apophysis)"),
         (FractalType.Apollonian,            "Apollonian Gasket"),
         (FractalType.Kleinian,              "Kleinian Limit Set (3D)"),
@@ -433,6 +435,23 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
                 // image inside the new set → every pixel hits MAX_ITER and
                 // the calc takes minutes, looking like a UI lockup.
                 ViewState.SnapToFractalDefault(value);
+                // #250 — Acid Warp auto-starts its palette-cycle animation (the
+                // classic flowing look). The first time this launch, play the
+                // animated "ACID FOG" title card first (which also turns cycling
+                // on), then dissolve into the classic ring field.
+                if (value == FractalType.AcidWarp)
+                {
+                    if (AcidWarpIntro.TryConsumeIntro())
+                        StartAcidWarpIntro();
+                    else
+                        PaletteCycleEnabled = true;
+                }
+                else
+                {
+                    // Leaving Acid Warp via the toolbar clears cycling so the
+                    // LUT rotation doesn't keep spinning on a non-cycling type.
+                    PaletteCycleEnabled = false;
+                }
                 var entry = FindEntryForType(value);
                 if (entry != null && !ReferenceEquals(_selectedFractalEntry, entry))
                 {
@@ -1198,8 +1217,104 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
         OnFrameCompleted(this, info.Value);
     }
 
+    // ── #250: animated Acid Warp title card, then dissolve to the rings ──────
+    private DispatcherTimer? _acidIntroTimer;
+
+    private void StartAcidWarpIntro()
+    {
+        var p = ViewState.FractalParameters;
+        p.AcidWarpTitleCard = true;
+        p.AcidWarpPattern = AcidWarpIntro.ClassicPattern;   // rings behind the wordmark
+        p.AcidWarpFrequency = AcidWarpIntro.ClassicFrequency;
+        p.AcidWarpCenterX = 0.0;
+        p.AcidWarpCenterY = 0.0;
+        p.AcidWarpWarpStrength = 0.0;
+        p.AcidWarpMorph = false;   // no morphing under the card
+
+        // Animate the card (and the classic look that follows) via palette cycle.
+        PaletteCycleEnabled = true;
+        _renderHost.Trigger();
+
+        _acidIntroTimer?.Stop();
+        _acidIntroTimer = new DispatcherTimer(
+            TimeSpan.FromSeconds(3.5), DispatcherPriority.Background, (_, _) =>
+            {
+                _acidIntroTimer?.Stop();
+                _acidIntroTimer = null;
+                // Dissolve into the classic ring field; keep cycling.
+                AcidWarpIntro.ApplyClassic(ViewState.FractalParameters);
+                _renderHost.Trigger();
+            });
+        _acidIntroTimer.Start();
+    }
+
+    // ── #249 / IDEA-1: live palette cycling (animate colour, not camera) ──────
+    // A DispatcherTimer advances a rotation phase over wall-clock and pushes it
+    // to the render host, which re-maps the field through the rotated LUT. Cheap
+    // for the procedural / Acid Warp families; heavier for escape-time types.
+
+    private DispatcherTimer? _paletteCycleTimer;
+    private double _paletteCyclePhase;   // turns, wraps mod 1
+    private DateTime _paletteCycleLastTick;
+
+    private bool _paletteCycleEnabled;
+    /// <summary>Toggle live palette cycling on the current view.</summary>
+    public bool PaletteCycleEnabled
+    {
+        get => _paletteCycleEnabled;
+        set
+        {
+            if (this.RaiseAndSetIfChangedReturnsChanged(ref _paletteCycleEnabled, value))
+            {
+                if (value) StartPaletteCycle();
+                else StopPaletteCycle();
+            }
+        }
+    }
+
+    private double _paletteCycleRate = 0.15;
+    /// <summary>Palette-cycle speed in LUT turns per second. Default 0.15
+    /// (~7 s per full palette sweep).</summary>
+    public double PaletteCycleRate
+    {
+        get => _paletteCycleRate;
+        set => this.RaiseAndSetIfChanged(ref _paletteCycleRate, Math.Clamp(value, 0.01, 5.0));
+    }
+
+    private void StartPaletteCycle()
+    {
+        _paletteCycleLastTick = DateTime.UtcNow;
+        _paletteCycleTimer ??= new DispatcherTimer(
+            TimeSpan.FromMilliseconds(50), DispatcherPriority.Background, OnPaletteCycleTick);
+        _paletteCycleTimer.Start();
+    }
+
+    private void StopPaletteCycle()
+    {
+        _paletteCycleTimer?.Stop();
+        _paletteCyclePhase = 0;
+        _renderHost.SetLivePaletteRotation(0f);   // clear + repaint at rest
+    }
+
+    private void OnPaletteCycleTick(object? sender, EventArgs e)
+    {
+        var now = DateTime.UtcNow;
+        double dt = (now - _paletteCycleLastTick).TotalSeconds;
+        _paletteCycleLastTick = now;
+        if (dt <= 0) return;
+        if (dt > 0.25) dt = 0.25;                 // guard a stalled dispatcher
+
+        _paletteCyclePhase += _paletteCycleRate * dt;
+        _paletteCyclePhase -= Math.Floor(_paletteCyclePhase);
+        _renderHost.SetLivePaletteRotation((float)_paletteCyclePhase);
+    }
+
     public void Dispose()
     {
+        _acidIntroTimer?.Stop();
+        _acidIntroTimer = null;
+        _paletteCycleTimer?.Stop();
+        _paletteCycleTimer = null;
         _input.ViewChanged -= OnInputViewChanged;
         _renderHost.FrameCompleted -= OnFrameCompleted;
         _renderHost.StatusRequested -= OnRenderHostStatusRequested;

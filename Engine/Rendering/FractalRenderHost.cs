@@ -77,6 +77,7 @@ namespace FracturingFog.Rendering
         private QuatJuliaCalculator _quatJuliaCalculator;
         private QuatMandelbrotCalculator _quatMandelbrotCalculator;
         private PlasmaCalculator _plasmaCalculator;
+        private AcidWarpCalculator _acidWarpCalculator;
         private ApollonianCalculator _apollonianCalculator;
         private KleinianCalculator _kleinianCalculator;
         private BicomplexMandelbrotCalculator _bicomplexCalculator;
@@ -441,6 +442,7 @@ namespace FracturingFog.Rendering
             _quatJuliaCalculator = new QuatJuliaCalculator(w, h);
             _quatMandelbrotCalculator = new QuatMandelbrotCalculator(w, h);
             _plasmaCalculator = new PlasmaCalculator(w, h);
+            _acidWarpCalculator = new AcidWarpCalculator(w, h);
             _apollonianCalculator = new ApollonianCalculator(w, h);
             _kleinianCalculator = new KleinianCalculator(w, h);
             _bicomplexCalculator = new BicomplexMandelbrotCalculator(w, h);
@@ -478,6 +480,7 @@ namespace FracturingFog.Rendering
                 _quatJuliaCalculator.ColorMap = initialColorMap;
                 _quatMandelbrotCalculator.ColorMap = initialColorMap;
                 _plasmaCalculator.ColorMap = initialColorMap;
+                _acidWarpCalculator.ColorMap = initialColorMap;
                 _apollonianCalculator.ColorMap = initialColorMap;
                 _kleinianCalculator.ColorMap = initialColorMap;
                 _bicomplexCalculator.ColorMap = initialColorMap;
@@ -888,6 +891,7 @@ namespace FracturingFog.Rendering
                 _quatJuliaCalculator.ColorMap = value;
                 _quatMandelbrotCalculator.ColorMap = value;
                 _plasmaCalculator.ColorMap = value;
+                _acidWarpCalculator.ColorMap = value;
                 _apollonianCalculator.ColorMap = value;
                 _kleinianCalculator.ColorMap = value;
                 _bicomplexCalculator.ColorMap = value;
@@ -1094,6 +1098,21 @@ namespace FracturingFog.Rendering
                 _adaptiveCdfValid = false;
                 _cachedAdaptiveCdf = null;
             }
+        }
+
+        /// <summary>#249 / IDEA-1 — set the global live palette-rotation phase
+        /// and re-render so the palette appears to rotate over the field. The
+        /// rotation lives on <see cref="GradientColorMap.LivePaletteRotation"/>
+        /// (read inside the per-pixel LUT sample); a fast re-render re-maps the
+        /// field through the rotated LUT. Cheap for procedural / Acid Warp.</summary>
+        public void SetLivePaletteRotation(float turns)
+        {
+            if (_disposed) return;
+            GradientColorMap.LivePaletteRotation = turns;
+            // Re-run the map over the field. TriggerFast keeps live cycling
+            // smooth (capped-iter for heavy types); procedural fills ignore the
+            // cap and just re-evaluate their closed form.
+            TriggerFast();
         }
 
         public void Trigger(bool progressive = false)
@@ -2368,6 +2387,7 @@ namespace FracturingFog.Rendering
             _quatJuliaCalculator.Resize(w, h);
             _quatMandelbrotCalculator.Resize(w, h);
             _plasmaCalculator.Resize(w, h);
+            _acidWarpCalculator.Resize(w, h);
             _apollonianCalculator.Resize(w, h);
             _kleinianCalculator.Resize(w, h);
             _bicomplexCalculator.Resize(w, h);
@@ -2847,6 +2867,7 @@ namespace FracturingFog.Rendering
                 case QuatJuliaCalculator qj: qj.FractalParameters = ViewState.FractalParameters; break;
                 case QuatMandelbrotCalculator qm: qm.FractalParameters = ViewState.FractalParameters; break;
                 case PlasmaCalculator pl: pl.FractalParameters = ViewState.FractalParameters; break;
+                case AcidWarpCalculator aw: aw.FractalParameters = ViewState.FractalParameters; break;
                 case ApollonianCalculator ap: ap.FractalParameters = ViewState.FractalParameters; break;
                 case KleinianCalculator kl: kl.FractalParameters = ViewState.FractalParameters; break;
                 case BicomplexMandelbrotCalculator bc: bc.FractalParameters = ViewState.FractalParameters; break;
@@ -2996,6 +3017,7 @@ namespace FracturingFog.Rendering
             FractalType.QuaternionJulia => _quatJuliaCalculator,
             FractalType.QuaternionMandelbrot => _quatMandelbrotCalculator,
             FractalType.Plasma => _plasmaCalculator,
+            FractalType.AcidWarp => _acidWarpCalculator,
             FractalType.Apollonian => _apollonianCalculator,
             FractalType.Kleinian => _kleinianCalculator,
             FractalType.BicomplexMandelbrot => _bicomplexCalculator,

@@ -174,6 +174,17 @@ namespace FracturingFog
         /// amplitude / very rough), <c>PlasmaSeed</c>. Pan/zoom is a
         /// no-op — the generated field IS the image.</summary>
         Plasma,
+        /// <summary>Acid Warp (#247) — clean-room homage to Noah Spurrier's
+        /// 1992 DOS palette-cycling demo. A non-fractal procedural field:
+        /// <c>AcidWarpCalculator</c> maps each pixel through one of ~20
+        /// closed-form patterns (rings, spokes, spirals, multi-centre
+        /// interference, plaid, XOR moire, rose, value-noise) to a cyclic
+        /// scalar sampled through the active colour map. Tunables on
+        /// <c>FractalParameters</c>: <c>AcidWarpPattern</c>,
+        /// <c>AcidWarpFrequency</c>, <c>AcidWarpCenterX/Y</c>,
+        /// <c>AcidWarpSeed</c>. Pan/zoom is a no-op — the field IS the image;
+        /// designed to pair with animated palette cycling (#249).</summary>
+        AcidWarp,
         /// <summary>Flame fractal (Apophysis-style). IFS chaos game with
         /// per-map non-linear "variation" (linear, sinusoidal, spherical,
         /// swirl, polar, heart, disc, julia), gamma-corrected log-density
@@ -365,6 +376,7 @@ namespace FracturingFog
                 or FractalType.Dla
                 or FractalType.Flame
                 or FractalType.Plasma
+                or FractalType.AcidWarp
                 or FractalType.Logistic
                 => FractalCapabilities.SuppliesHistogram,
 
