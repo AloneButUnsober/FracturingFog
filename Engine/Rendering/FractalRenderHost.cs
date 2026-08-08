@@ -480,6 +480,7 @@ namespace FracturingFog.Rendering
                 _quatJuliaCalculator.ColorMap = initialColorMap;
                 _quatMandelbrotCalculator.ColorMap = initialColorMap;
                 _plasmaCalculator.ColorMap = initialColorMap;
+                _acidWarpCalculator.ColorMap = initialColorMap;
                 _apollonianCalculator.ColorMap = initialColorMap;
                 _kleinianCalculator.ColorMap = initialColorMap;
                 _bicomplexCalculator.ColorMap = initialColorMap;
@@ -890,6 +891,7 @@ namespace FracturingFog.Rendering
                 _quatJuliaCalculator.ColorMap = value;
                 _quatMandelbrotCalculator.ColorMap = value;
                 _plasmaCalculator.ColorMap = value;
+                _acidWarpCalculator.ColorMap = value;
                 _apollonianCalculator.ColorMap = value;
                 _kleinianCalculator.ColorMap = value;
                 _bicomplexCalculator.ColorMap = value;
@@ -2385,6 +2387,7 @@ namespace FracturingFog.Rendering
             _quatJuliaCalculator.Resize(w, h);
             _quatMandelbrotCalculator.Resize(w, h);
             _plasmaCalculator.Resize(w, h);
+            _acidWarpCalculator.Resize(w, h);
             _apollonianCalculator.Resize(w, h);
             _kleinianCalculator.Resize(w, h);
             _bicomplexCalculator.Resize(w, h);
