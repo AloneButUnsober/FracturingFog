@@ -446,6 +446,12 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
                     else
                         PaletteCycleEnabled = true;
                 }
+                else
+                {
+                    // Leaving Acid Warp via the toolbar clears cycling so the
+                    // LUT rotation doesn't keep spinning on a non-cycling type.
+                    PaletteCycleEnabled = false;
+                }
                 var entry = FindEntryForType(value);
                 if (entry != null && !ReferenceEquals(_selectedFractalEntry, entry))
                 {

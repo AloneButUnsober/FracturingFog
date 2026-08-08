@@ -74,6 +74,26 @@ public sealed class AcidWarpCalculator : IFractalCalculator
         bool titleCard = p.AcidWarpPattern == FractalParameters.AcidWarpTitleCardPattern;
         int pattern = titleCard ? 0
             : ((p.AcidWarpPattern % PatternCount) + PatternCount) % PatternCount;
+
+        // Continuous pattern morph (#247 follow-up). When enabled, the base +
+        // next pattern and the blend weight come from the fractional Flow
+        // position instead of the discrete selector, so animating Flow melts
+        // one field into the next. Off (or on the title card) → a single
+        // pattern with mix 0, i.e. byte-identical to the discrete path.
+        bool morph = p.AcidWarpMorph && !titleCard;
+        int patternB = pattern;
+        double mix = 0.0;
+        if (morph)
+        {
+            double flow = p.AcidWarpFlow;
+            double fp = flow - Math.Floor(flow / PatternCount) * PatternCount; // → [0, count)
+            int a = (int)Math.Floor(fp);
+            if (a >= PatternCount) a = PatternCount - 1;                        // guard fp==count
+            mix = fp - a;
+            pattern  = a;
+            patternB = (a + 1) % PatternCount;
+        }
+
         double freq = p.AcidWarpFrequency <= 0 ? 1.0 : p.AcidWarpFrequency;
         double cx = p.AcidWarpCenterX;
         double cy = p.AcidWarpCenterY;
@@ -108,6 +128,13 @@ public sealed class AcidWarpCalculator : IFractalCalculator
                     double wx = nx, wy = ny;
                     if (warp != 0.0) DomainWarp(ref wx, ref wy, warp, freq);
                     double v = Evaluate(pattern, wx, wy, freq, seed);
+                    // Morph: blend the base and next pattern in field space, then
+                    // take frac below — melting one pattern into the next.
+                    if (mix > 0.0)
+                    {
+                        double v2 = Evaluate(patternB, wx, wy, freq, seed);
+                        v += (v2 - v) * mix;
+                    }
                     // Title card: the wordmark reads in the complementary palette
                     // colour (phase +0.5) over the ring field, so both cycle.
                     if (titleCard && title.Hit(i, j)) v += 0.5;

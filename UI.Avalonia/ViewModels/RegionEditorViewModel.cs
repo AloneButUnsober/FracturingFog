@@ -54,6 +54,7 @@ public sealed class RegionEditorViewModel : ViewModelBase
         _description = model.Description ?? string.Empty;
         _keepLightingOverride  = model.KeepLightingOverride;
         _keepEmbeddedWatermark = model.KeepEmbeddedWatermark;
+        _useCuratedThemesOnly  = model.UseCuratedThemesOnly;
 
         // Curated-theme whitelist as a checkable list against the theme
         // library. Any curated name no longer present in the library is kept
@@ -180,6 +181,16 @@ public sealed class RegionEditorViewModel : ViewModelBase
         }
     }
 
+    private bool _useCuratedThemesOnly;
+    /// <summary>When on, recalling this region applies its first valid curated
+    /// theme as the active colour theme. Off (default) = recall leaves the
+    /// active theme alone.</summary>
+    public bool UseCuratedThemesOnly
+    {
+        get => _useCuratedThemesOnly;
+        set => this.RaiseAndSetIfChanged(ref _useCuratedThemesOnly, value);
+    }
+
     private bool _keepLightingOverride;
     public bool KeepLightingOverride
     {
@@ -227,6 +238,7 @@ public sealed class RegionEditorViewModel : ViewModelBase
             ? null
             : _selectedAnimation;
         _model.CuratedThemes = CollectCuratedThemes();
+        _model.UseCuratedThemesOnly = _useCuratedThemesOnly;
         _model.KeepLightingOverride  = _keepLightingOverride;
         _model.KeepEmbeddedWatermark = _keepEmbeddedWatermark;
 

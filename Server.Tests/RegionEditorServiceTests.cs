@@ -308,4 +308,74 @@ public sealed class RegionEditorServiceTests
         }
         finally { lib.RemoveUserRegion(name); }
     }
+
+    [Fact]
+    public void CuratedThemeOnly_RoundTrips_Echoes_And_Resolves()
+    {
+        var svc = new HostColorThemeService();
+        var lib = FractalRegionLibrary.Instance;
+        string name = $"FF-Curated-{Guid.NewGuid():N}";
+        string theme = svc.EnumerateThemeNames().First();
+
+        try
+        {
+            var r = MakeUserRegion(name);
+            r.CuratedThemes = new System.Collections.Generic.List<string> { theme };
+            r.UseCuratedThemesOnly = true;
+            Assert.True(lib.AddUserRegion(r));
+
+            // Echoed into the edit model.
+            var model = svc.GetRegionForEdit(name)!;
+            Assert.True(model.UseCuratedThemesOnly);
+
+            // Resolves for the recall path.
+            Assert.True(svc.TryGetRegionCuratedThemeToApply(name, out var resolved));
+            Assert.Equal(theme, resolved);
+
+            // Persists across an in-place edit.
+            var res = svc.UpdateRegionMetadata(model);
+            Assert.True(res.Success);
+            Assert.True(lib.FindByName(name)!.UseCuratedThemesOnly);
+        }
+        finally { lib.RemoveUserRegion(name); }
+    }
+
+    [Fact]
+    public void CuratedThemeOnly_Off_Or_EmptyList_DoesNotResolve()
+    {
+        var svc = new HostColorThemeService();
+        var lib = FractalRegionLibrary.Instance;
+        string name = $"FF-Curated-Off-{Guid.NewGuid():N}";
+
+        try
+        {
+            // Flag off (default) → recall leaves the active theme alone.
+            var r = MakeUserRegion(name);
+            r.CuratedThemes = new System.Collections.Generic.List<string> { svc.EnumerateThemeNames().First() };
+            Assert.True(lib.AddUserRegion(r));
+            Assert.False(svc.TryGetRegionCuratedThemeToApply(name, out _));
+
+            // Flag on but no curated whitelist → the service drops the flag on
+            // save, and nothing resolves.
+            var model = svc.GetRegionForEdit(name)!;
+            model.UseCuratedThemesOnly = true;
+            model.CuratedThemes = null;
+            Assert.True(svc.UpdateRegionMetadata(model).Success);
+            Assert.False(lib.FindByName(name)!.UseCuratedThemesOnly);
+            Assert.False(svc.TryGetRegionCuratedThemeToApply(name, out _));
+        }
+        finally { lib.RemoveUserRegion(name); }
+    }
+
+    [Fact]
+    public void BuiltIn_AcidWarp_Regions_Are_CuratedThemeOnly()
+    {
+        var lib = FractalRegionLibrary.Instance;
+        foreach (var n in new[] { "Acid Warp - Rings", "Acid Warp - Classic" })
+        {
+            var r = lib.All.First(x => string.Equals(x.Name, n, StringComparison.OrdinalIgnoreCase));
+            Assert.True(r.UseCuratedThemesOnly, $"{n} should default to curated-theme-only");
+            Assert.NotNull(r.CuratedThemes);
+        }
+    }
 }

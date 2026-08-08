@@ -207,7 +207,14 @@ public static class FractalAnimatableParamsMap
         new("AcidWarpCenterY", AnimatableParamKind.ScalarDouble, Min: -2.0, Max: 2.0),
         new("AcidWarpPattern", AnimatableParamKind.ScalarInt, Min: 0, Max: 19,
             Cost: AnimatableParamCost.Expensive,
-            Notes: "Pattern switch swaps the whole field — hard cut, not a morph."),
+            Notes: "Discrete pattern pick — hard-cuts between fields. For a smooth "
+                 + "transition enable Morph and animate AcidWarpFlow instead."),
+        new("AcidWarpFlow", AnimatableParamKind.ScalarDouble,
+            Min: 0, Max: FracturingFog.Models.FractalParameters.AcidWarpPatternCount,
+            Cost: AnimatableParamCost.Expensive,
+            Notes: "Continuous pattern position (needs Morph on). Animate 0 → "
+                 + "pattern-count for an endless morph through every pattern, "
+                 + "wrapping seamlessly. Blends two fields per pixel — expensive."),
     };
 
     private static readonly AnimatableParamDescriptor[] _flameList =

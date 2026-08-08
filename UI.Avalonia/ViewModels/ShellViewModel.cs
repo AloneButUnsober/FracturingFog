@@ -2032,10 +2032,22 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
             AnimationBusHost.LoadRegionAnimation(
                 attachedAnim,
                 Main.ViewState.FractalParameters);
+            // Region opted into "use curated theme(s) only": apply its first
+            // valid curated theme as the active colour theme so the saved look
+            // comes back on recall. Default off → recall leaves the active theme
+            // alone (no regression for regions that rely on the live theme).
+            // Route through the theme combo so the same chain a user pick fires
+            // runs here: syncs Main.SelectedTheme, calls ApplyTheme, honours any
+            // bundled lighting preset. No-op when the theme is already active.
+            if (_themeService.TryGetRegionCuratedThemeToApply(name, out var curatedTheme))
+                FloatingMenu.SelectedTheme = curatedTheme;
             // #250 — Acid Warp regions auto-start the palette-cycle animation on
             // recall (the classic flowing look), matching the toolbar type pick.
-            if (Main.ViewState.FractalType == FracturingFog.FractalType.AcidWarp)
-                Main.PaletteCycleEnabled = true;
+            // Recall to any *other* type clears cycling so it never leaks into a
+            // non-Acid-Warp region (the palette rotation would otherwise keep
+            // spinning the LUT on a fractal that isn't meant to cycle).
+            Main.PaletteCycleEnabled =
+                Main.ViewState.FractalType == FracturingFog.FractalType.AcidWarp;
             Main.RenderHost.Trigger();
         }
     }

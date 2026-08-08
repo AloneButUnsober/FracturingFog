@@ -222,6 +222,14 @@ namespace FracturingFog.Models
         /// bus.</summary>
         string? GetRegionAnimationName(string regionName);
 
+        /// <summary>When the named region opted into "use curated theme(s) only",
+        /// resolve the first curated theme name that still exists in the library.
+        /// Returns true + that name so the shell can apply it on recall; false
+        /// (with an empty out) when the region doesn't exist, the flag is off, or
+        /// no curated entry resolves — in which case recall leaves the active
+        /// theme untouched.</summary>
+        bool TryGetRegionCuratedThemeToApply(string regionName, out string themeName);
+
         /// <summary>Animation Roadmap Phase 3 — fetch a saved animation
         /// asset by name. Returns null when the library has no entry by
         /// that name. Used by the shared animation bus host to resolve a
@@ -463,6 +471,10 @@ namespace FracturingFog.Models
         public string? AnimationName { get; set; }
         /// <summary>Curated colour-theme whitelist, or null for "no opinion".</summary>
         public List<string>? CuratedThemes { get; set; }
+        /// <summary>When true, recalling the region applies its first valid
+        /// curated theme as the active colour theme. Default false = recall
+        /// leaves the active theme alone (no regression).</summary>
+        public bool UseCuratedThemesOnly { get; set; }
         /// <summary>Keep the region's existing lighting override on save.
         /// Only meaningful when <see cref="HasLightingOverride"/>; false = clear it.</summary>
         public bool KeepLightingOverride { get; set; } = true;

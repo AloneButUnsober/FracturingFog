@@ -161,6 +161,24 @@ namespace FracturingFog.Models
         /// swirls. 0 = no warp (default); ~0.1–0.5 is a pleasant range.</summary>
         public double AcidWarpWarpStrength { get; set; } = 0.0;
 
+        /// <summary>Acid Warp continuous pattern morph toggle (#247 follow-up).
+        /// When false (default) the pattern selector is the discrete integer
+        /// <see cref="AcidWarpPattern"/> and animating it hard-cuts between
+        /// fields. When true the calculator instead reads the continuous
+        /// <see cref="AcidWarpFlow"/> position and blends adjacent patterns in
+        /// field space, so animating Flow melts smoothly from one pattern into
+        /// the next — the flowing, never-settling classic Acid Warp motion.
+        /// Byte-identical to the discrete path when off.</summary>
+        public bool AcidWarpMorph { get; set; } = false;
+
+        /// <summary>Acid Warp continuous pattern position, active only when
+        /// <see cref="AcidWarpMorph"/> is true. The integer part (mod the
+        /// pattern count) selects the base pattern; the fractional part is the
+        /// blend weight toward the next pattern. Animate it 0 → pattern-count
+        /// for an endless morph through every pattern, wrapping seamlessly.
+        /// Default 0.0 (== pattern 0, no blend).</summary>
+        public double AcidWarpFlow { get; set; } = 0.0;
+
         /// <summary>Optional explicit Flame-fractal map list. When null the
         /// renderer falls back to <see cref="FlamePresetName"/> from
         /// <c>FlamePresets.All</c>.</summary>
@@ -819,6 +837,8 @@ namespace FracturingFog.Models
                 AcidWarpCenterY = AcidWarpCenterY,
                 AcidWarpSeed = AcidWarpSeed,
                 AcidWarpWarpStrength = AcidWarpWarpStrength,
+                AcidWarpMorph = AcidWarpMorph,
+                AcidWarpFlow = AcidWarpFlow,
                 FlameMaps = FlameMaps is null ? null : new List<FlameMap>(FlameMaps),
                 FlamePresetName = FlamePresetName,
                 FlameIterations = FlameIterations,
