@@ -1333,14 +1333,25 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
     private AcidWarpAmbientDirector? _acidAmbientDirector;
     private DateTime _acidAmbientLastTick;
 
-    // Fade state. _acidAmbientFading gates the palette-cycle recolor so it does
-    // not overwrite the fade's blended buffers.
+    // Fade state machine. _acidAmbientFading gates the palette-cycle recolor so
+    // it does not overwrite the fade's blended buffers. A transition is:
+    //   FadingOut  — ramp the outgoing frame down to black
+    //   WaitingFrame — pattern swapped + recompute triggered; hold black until
+    //                  the new field's frame uploads
+    //   FadingIn   — ramp the new field up from black
+    private enum AcidFadePhase { None, FadingOut, WaitingFrame, FadingIn }
     private volatile bool _acidAmbientFading;
-    private uint[]? _acidAmbientFadeFrom;
+    private AcidFadePhase _acidAmbientPhase;
+    private uint[]? _acidAmbientFadeFrom;   // outgoing frame (FadingOut)
+    private uint[]? _acidAmbientFadeTo;     // incoming field (FadingIn)
     private int _acidAmbientFadeW, _acidAmbientFadeH;
     private int _acidAmbientFadeStep;
+    private int _acidAmbientWaitTicks;
+    private volatile bool _acidAmbientFrameReady;
+    private EventHandler? _acidAmbientFrameHandler;
     private int _acidAmbientPendingPattern;
     private const int AcidAmbientFadeSteps = 10;   // ~500 ms at the 50 ms tick
+    private const int AcidAmbientWaitTimeoutTicks = 60; // ~3 s recompute guard
 
     private bool _acidFogAmbientEnabled;
     /// <summary>Toggle the Acid Fog auto-VJ ambient loop. Enabling it also turns
@@ -1433,7 +1444,14 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
         _acidAmbientTimer?.Stop();
         _acidAmbientDirector = null;
         _acidAmbientFading = false;
+        _acidAmbientPhase = AcidFadePhase.None;
         _acidAmbientFadeFrom = null;
+        _acidAmbientFadeTo = null;
+        if (_acidAmbientFrameHandler != null)
+        {
+            _renderHost.AnimationFrameUploaded -= _acidAmbientFrameHandler;
+            _acidAmbientFrameHandler = null;
+        }
     }
 
     private void OnAcidAmbientTick(object? sender, EventArgs e)
@@ -1443,7 +1461,7 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
         _acidAmbientLastTick = now;
         if (dtMs <= 0) dtMs = 50;
 
-        // Mid-fade: keep stepping the fade-to-black, ignore advance timing.
+        // Mid-transition: keep stepping the fade, ignore advance timing.
         if (_acidAmbientFading) { StepAcidFade(); return; }
 
         var d = _acidAmbientDirector;
@@ -1451,8 +1469,9 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
         if (d.Tick(dtMs)) BeginAcidFade(d.CurrentPattern);
     }
 
-    // Snapshot the live frame and begin fading it to black; the pattern swaps in
-    // once the screen reaches black (StepAcidFade), reading as a fade transition.
+    // Snapshot the live frame and begin fading it to black; once black, the
+    // pattern swaps in and the recomputed field fades back up (fade-out → hold
+    // black for the recompute → fade-in), a symmetric fade-to-black crossfade.
     private void BeginAcidFade(int targetPattern)
     {
         _acidAmbientFadeFrom = _renderHost.SnapshotFrame(out _acidAmbientFadeW, out _acidAmbientFadeH);
@@ -1465,43 +1484,135 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
             CommitAcidPattern(targetPattern);
             return;
         }
+        _acidAmbientPhase = AcidFadePhase.FadingOut;
         _acidAmbientFading = true;
     }
 
     private void StepAcidFade()
     {
-        _acidAmbientFadeStep++;
+        switch (_acidAmbientPhase)
+        {
+            case AcidFadePhase.FadingOut: StepFadeOut(); break;
+            case AcidFadePhase.WaitingFrame: StepWaitForFrame(); break;
+            case AcidFadePhase.FadingIn: StepFadeIn(); break;
+            default: _acidAmbientFading = false; break;
+        }
+    }
+
+    private void StepFadeOut()
+    {
         var from = _acidAmbientFadeFrom;
         int w = _acidAmbientFadeW, h = _acidAmbientFadeH;
         if (from == null || w <= 0 || h <= 0)
         {
             _acidAmbientFading = false;
+            _acidAmbientPhase = AcidFadePhase.None;
             CommitAcidPattern(_acidAmbientPendingPattern);
             return;
         }
 
+        _acidAmbientFadeStep++;
         if (_acidAmbientFadeStep >= AcidAmbientFadeSteps)
         {
-            // Reached black — swap the pattern in and end the fade. The new field
-            // recomputes and reveals from black (classic fade-to-black cut-in).
-            _acidAmbientFading = false;
+            // Reached black — swap the pattern in, trigger the recompute, and
+            // wait (holding black) for the new field's frame to upload.
+            PresentAcidBlack(w, h);
             _acidAmbientFadeFrom = null;
+            _acidAmbientFrameReady = false;
+            _acidAmbientWaitTicks = 0;
+            _acidAmbientFrameHandler = (_, _) =>
+            {
+                _acidAmbientFrameReady = true;
+                if (_acidAmbientFrameHandler != null)
+                {
+                    _renderHost.AnimationFrameUploaded -= _acidAmbientFrameHandler;
+                    _acidAmbientFrameHandler = null;
+                }
+            };
+            _renderHost.AnimationFrameUploaded += _acidAmbientFrameHandler;
+            _acidAmbientPhase = AcidFadePhase.WaitingFrame;
             CommitAcidPattern(_acidAmbientPendingPattern);
             return;
         }
 
         float ia = 1f - _acidAmbientFadeStep / (float)AcidAmbientFadeSteps; // → 0
-        int n = w * h;
-        var blend = new uint[from.Length];
+        _renderHost.PresentBuffer(ScaleAcid(from, w * h, ia), w, h);
+    }
+
+    private void StepWaitForFrame()
+    {
+        _acidAmbientWaitTicks++;
+        bool timedOut = _acidAmbientWaitTicks >= AcidAmbientWaitTimeoutTicks;
+        if (!_acidAmbientFrameReady && !timedOut)
+        {
+            // Hold black while the new field computes.
+            PresentAcidBlack(_acidAmbientFadeW, _acidAmbientFadeH);
+            return;
+        }
+
+        // New field is on screen (bright) — grab it as the fade-in target, then
+        // cover with black so the fade-in starts from black, not a pop.
+        _acidAmbientFadeTo = _renderHost.SnapshotFrame(out _acidAmbientFadeW, out _acidAmbientFadeH);
+        if (_acidAmbientFadeTo == null || _acidAmbientFadeW <= 0 || _acidAmbientFadeH <= 0)
+        {
+            // Nothing to fade in — just resume (the live field is already shown).
+            _acidAmbientFading = false;
+            _acidAmbientPhase = AcidFadePhase.None;
+            return;
+        }
+        PresentAcidBlack(_acidAmbientFadeW, _acidAmbientFadeH);
+        _acidAmbientFadeStep = 0;
+        _acidAmbientPhase = AcidFadePhase.FadingIn;
+    }
+
+    private void StepFadeIn()
+    {
+        var to = _acidAmbientFadeTo;
+        int w = _acidAmbientFadeW, h = _acidAmbientFadeH;
+        if (to == null || w <= 0 || h <= 0)
+        {
+            _acidAmbientFading = false;
+            _acidAmbientPhase = AcidFadePhase.None;
+            return;
+        }
+
+        _acidAmbientFadeStep++;
+        if (_acidAmbientFadeStep >= AcidAmbientFadeSteps)
+        {
+            // Full brightness — present the field exactly and hand back to the
+            // palette-cycle tick (which resumes recolouring from here).
+            _renderHost.PresentBuffer(to, w, h);
+            _acidAmbientFadeTo = null;
+            _acidAmbientFading = false;
+            _acidAmbientPhase = AcidFadePhase.None;
+            return;
+        }
+
+        float a = _acidAmbientFadeStep / (float)AcidAmbientFadeSteps; // 0 → 1
+        _renderHost.PresentBuffer(ScaleAcid(to, w * h, a), w, h);
+    }
+
+    // Scale RGB toward black by factor f (0..1), preserving opaque alpha.
+    private static uint[] ScaleAcid(uint[] src, int n, float f)
+    {
+        var blend = new uint[src.Length];
         for (int i = 0; i < n; i++)
         {
-            uint o = from[i];
-            byte r = (byte)(((o >> 16) & 0xFF) * ia);
-            byte g = (byte)(((o >> 8) & 0xFF) * ia);
-            byte b = (byte)((o & 0xFF) * ia);
+            uint o = src[i];
+            byte r = (byte)(((o >> 16) & 0xFF) * f);
+            byte g = (byte)(((o >> 8) & 0xFF) * f);
+            byte b = (byte)((o & 0xFF) * f);
             blend[i] = 0xFF000000u | ((uint)r << 16) | ((uint)g << 8) | b;
         }
-        _renderHost.PresentBuffer(blend, w, h);
+        return blend;
+    }
+
+    private void PresentAcidBlack(int w, int h)
+    {
+        if (w <= 0 || h <= 0) return;
+        var black = new uint[w * h];
+        for (int i = 0; i < black.Length; i++) black[i] = 0xFF000000u;
+        _renderHost.PresentBuffer(black, w, h);
     }
 
     private void CommitAcidPattern(int pattern)
