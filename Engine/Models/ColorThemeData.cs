@@ -294,6 +294,19 @@ namespace FracturingFog.Models
         /// </summary>
         public bool SeamlessCycle { get; set; } = false;
 
+        /// <summary>
+        /// XOR index post-transform level count (#252 / IDEA-2). When &gt; 1 the
+        /// mapping scalar is quantised to this many levels, XOR-ed with
+        /// <see cref="XorMask"/>, and renormalised — shattering the gradient into
+        /// a demoscene plaid / moiré on any field. 0 = disabled (default).
+        /// </summary>
+        public int XorLevels { get; set; } = 0;
+
+        /// <summary>XOR mask applied to the quantised index (#252 / IDEA-2).
+        /// Different masks give different moiré weaves. Ignored when
+        /// <see cref="XorLevels"/> is 0.</summary>
+        public int XorMask { get; set; } = 0;
+
         // ── 3D shared (Phong + PBR) ───────────────────────────────────────────
 
         public float Steepness { get; set; } = 1.6f;

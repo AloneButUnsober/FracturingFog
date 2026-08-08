@@ -93,6 +93,8 @@ namespace FracturingFog.Models
                             SparkleStride = pbr.ExportSparkleStride,
                             SparkleBoost = pbr.ExportSparkleBoost,
                             SeamlessCycle = pbr.ExportSeamlessCycle,
+                            XorLevels = pbr.ExportXorLevels,
+                            XorMask = pbr.ExportXorMask,
                             ColorOffset = pbr.ExportColorOffset,
                             ColorDensity = pbr.ExportColorDensity,
                             WrapMode = pbr.ExportWrapMode,
@@ -138,6 +140,8 @@ namespace FracturingFog.Models
                         SparkleStride = phong.ExportSparkleStride,
                         SparkleBoost = phong.ExportSparkleBoost,
                         SeamlessCycle = phong.ExportSeamlessCycle,
+                        XorLevels = phong.ExportXorLevels,
+                        XorMask = phong.ExportXorMask,
                         ColorOffset = phong.ExportColorOffset,
                         ColorDensity = phong.ExportColorDensity,
                         WrapMode = phong.ExportWrapMode,
@@ -175,6 +179,8 @@ namespace FracturingFog.Models
                         SparkleStride = cyc.ExportSparkleStride,
                         SparkleBoost = cyc.ExportSparkleBoost,
                         SeamlessCycle = cyc.ExportSeamlessCycle,
+                        XorLevels = cyc.ExportXorLevels,
+                        XorMask = cyc.ExportXorMask,
                         ColorOffset = cyc.ExportColorOffset,
                         ColorDensity = cyc.ExportColorDensity,
                         WrapMode = cyc.ExportWrapMode,
@@ -202,6 +208,8 @@ namespace FracturingFog.Models
                         SparkleStride = grad.ExportSparkleStride,
                         SparkleBoost = grad.ExportSparkleBoost,
                         SeamlessCycle = grad.ExportSeamlessCycle,
+                        XorLevels = grad.ExportXorLevels,
+                        XorMask = grad.ExportXorMask,
                         Stops = StopsToData(grad.ExportStops),
                         Brightness = bright,
                         Contrast = contrast,
@@ -326,6 +334,8 @@ namespace FracturingFog.Models
             SparkleStride = data.SparkleStride;
             SparkleBoost = data.SparkleBoost;
             SeamlessCycle = data.SeamlessCycle;
+            XorLevels = data.XorLevels;
+            XorMask = data.XorMask;
             foreach (var s in data.Stops)
                 Stops.Add(s.ToColorStop());
         }
@@ -371,6 +381,8 @@ namespace FracturingFog.Models
             SparkleStride = data.SparkleStride;
             SparkleBoost = data.SparkleBoost;
             SeamlessCycle = data.SeamlessCycle;
+            XorLevels = data.XorLevels;
+            XorMask = data.XorMask;
             ColorOffset = data.ColorOffset;
             ColorDensity = data.ColorDensity;
             CycleWrap = data.WrapMode;
@@ -437,6 +449,8 @@ namespace FracturingFog.Models
             SparkleStride = data.SparkleStride;
             SparkleBoost = data.SparkleBoost;
             SeamlessCycle = data.SeamlessCycle;
+            XorLevels = data.XorLevels;
+            XorMask = data.XorMask;
             ColorOffset = data.ColorOffset;
             ColorDensity = data.ColorDensity;
             CycleWrap = data.WrapMode;
@@ -535,6 +549,8 @@ namespace FracturingFog.Models
             SparkleStride = data.SparkleStride;
             SparkleBoost = data.SparkleBoost;
             SeamlessCycle = data.SeamlessCycle;
+            XorLevels = data.XorLevels;
+            XorMask = data.XorMask;
             ColorOffset = data.ColorOffset;
             ColorDensity = data.ColorDensity;
             CycleWrap = data.WrapMode;

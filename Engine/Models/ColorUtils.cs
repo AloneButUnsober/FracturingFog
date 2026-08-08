@@ -194,10 +194,23 @@ namespace FracturingFog.Models
             set { if (_seamlessCycle != value) { _seamlessCycle = value; InvalidateGradientLut(); } }
         }
 
+        // #252 / IDEA-2: XOR index post-transform. Runtime (per-pixel in
+        // MapNormalized), not LUT-baked, so plain fields — no invalidate needed.
+        private int _xorLevels;
+        private int _xorMask;
+
+        /// <summary>XOR post-transform level count (#252). &gt;1 enables; 0 = off.</summary>
+        protected int XorLevels { get => _xorLevels; set => _xorLevels = value; }
+
+        /// <summary>XOR mask for the quantised index (#252).</summary>
+        protected int XorMask { get => _xorMask; set => _xorMask = value; }
+
         // Export accessors so data-driven themes round-trip the options to JSON.
         public int ExportSparkleStride => _sparkleStride;
         public float ExportSparkleBoost => _sparkleBoost;
         public bool ExportSeamlessCycle => _seamlessCycle;
+        public int ExportXorLevels => _xorLevels;
+        public int ExportXorMask => _xorMask;
         public GradientColorSpace ExportInterpolationSpace => _interpSpace;
         public float ExportColorOffset => ColorOffset;
         public float ExportColorDensity => ColorDensity;
@@ -608,6 +621,19 @@ namespace FracturingFog.Models
             {
                 t = System.Math.Clamp(t, 0f, 1f);
             }
+
+            // #252 / IDEA-2: XOR index post-transform — quantise, XOR, renormalise
+            // to shatter the gradient into a plaid / moiré. Off (levels 0/1) is a
+            // no-op so the byte-exact path is unchanged.
+            if (_xorLevels > 1)
+            {
+                int q = (int)(t * _xorLevels);
+                if (q >= _xorLevels) q = _xorLevels - 1;
+                int x = (q ^ _xorMask) % _xorLevels;
+                if (x < 0) x += _xorLevels;
+                t = x / (float)_xorLevels;
+            }
+
             float scaled = t * LutSize;
             int idx = (int)scaled;
             if (idx >= LutSize) idx = LutSize - 1;
