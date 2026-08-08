@@ -171,7 +171,7 @@
         <!-- Acid Warp (#247) -->
         <Grid IsVisible="{Binding IsAcidWarp}"
               ColumnDefinitions="160,*"
-              RowDefinitions="Auto,Auto,Auto,Auto,Auto">
+              RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto">
             <TextBlock Grid.Row="0" Grid.Column="0" Text="Pattern:" VerticalAlignment="Center" />
             <NumericUpDown Grid.Row="0" Grid.Column="1"
                            Minimum="0" Maximum="{Binding AcidWarpPatternMax}" Increment="1" FormatString="F0"
@@ -197,6 +197,11 @@
                            Minimum="-2147483648" Maximum="2147483647" Increment="1" FormatString="F0"
                            Value="{Binding AcidWarpSeed, Mode=TwoWay}" Margin="0,2"
                            ToolTip.Tip="PRNG seed for the stochastic value-noise pattern." />
+            <TextBlock Grid.Row="5" Grid.Column="0" Text="Warp:" VerticalAlignment="Center" />
+            <NumericUpDown Grid.Row="5" Grid.Column="1"
+                           Minimum="0" Maximum="2" Increment="0.05" FormatString="F2"
+                           Value="{Binding AcidWarpWarpStrength, Mode=TwoWay}" Margin="0,2"
+                           ToolTip.Tip="#253 — domain warp: fold straight rings/waves into organic swirls. 0 = off." />
         </Grid>
 
         <!-- Flame -->

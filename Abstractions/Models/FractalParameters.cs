@@ -149,6 +149,12 @@ namespace FracturingFog.Models
         /// field.</summary>
         public int AcidWarpSeed { get; set; } = 12345;
 
+        /// <summary>Acid Warp domain-warp strength (#253 / IDEA-3). Displaces the
+        /// pattern sampling coordinate by a smooth interference field before the
+        /// pattern is evaluated, folding straight rings/waves into organic
+        /// swirls. 0 = no warp (default); ~0.1–0.5 is a pleasant range.</summary>
+        public double AcidWarpWarpStrength { get; set; } = 0.0;
+
         /// <summary>Optional explicit Flame-fractal map list. When null the
         /// renderer falls back to <see cref="FlamePresetName"/> from
         /// <c>FlamePresets.All</c>.</summary>
@@ -806,6 +812,7 @@ namespace FracturingFog.Models
                 AcidWarpCenterX = AcidWarpCenterX,
                 AcidWarpCenterY = AcidWarpCenterY,
                 AcidWarpSeed = AcidWarpSeed,
+                AcidWarpWarpStrength = AcidWarpWarpStrength,
                 FlameMaps = FlameMaps is null ? null : new List<FlameMap>(FlameMaps),
                 FlamePresetName = FlamePresetName,
                 FlameIterations = FlameIterations,

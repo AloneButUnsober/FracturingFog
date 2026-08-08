@@ -121,6 +121,7 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
         _acidWarpCenterX = _p.AcidWarpCenterX;
         _acidWarpCenterY = _p.AcidWarpCenterY;
         _acidWarpSeed = _p.AcidWarpSeed;
+        _acidWarpWarpStrength = _p.AcidWarpWarpStrength;
         _apolloDepth = _p.ApollonianDepth;
         _apolloMinPx = _p.ApollonianMinPixelRadius;
         _apolloColorByDepth = _p.ApollonianColorByDepth;
@@ -1049,6 +1050,8 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
     public double AcidWarpCenterY { get => _acidWarpCenterY; set { Set(ref _acidWarpCenterY, Clamp(value, -2.0, 2.0)); _p.AcidWarpCenterY = _acidWarpCenterY; Fire(); } }
     private int _acidWarpSeed;
     public int AcidWarpSeed { get => _acidWarpSeed; set { Set(ref _acidWarpSeed, value); _p.AcidWarpSeed = _acidWarpSeed; Fire(); } }
+    private double _acidWarpWarpStrength;
+    public double AcidWarpWarpStrength { get => _acidWarpWarpStrength; set { Set(ref _acidWarpWarpStrength, Clamp(value, 0.0, 2.0)); _p.AcidWarpWarpStrength = _acidWarpWarpStrength; Fire(); } }
 
     // ── Apollonian ──
     private int _apolloDepth;
