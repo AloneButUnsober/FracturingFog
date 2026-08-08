@@ -2090,7 +2090,8 @@ namespace FracturingFog.Hosting
                         lsystemPresets: new List<string>(LSystemPresets.All.Keys),
                         attractorPresets: null,
                         attractorDefaults: global::FracturingFog.AttractorCalculator.DefaultParams,
-                        flamePresets: new List<string>(FlamePresets.All.Keys));
+                        flamePresets: new List<string>(FlamePresets.All.Keys),
+                        audioModulation: s_shell?.AudioModulation);
                     vm.ParamChanged += () => s_renderHost?.Trigger();
 
                     // #135 — drop-colour eyedropper: route the params VM's sample
@@ -2224,7 +2225,8 @@ namespace FracturingFog.Hosting
                     }
 
                     var vs = s_renderHost.ViewState;
-                    var vm = new FractalParamsViewModel(vs.FractalType, vs.FractalParameters);
+                    var vm = new FractalParamsViewModel(vs.FractalType, vs.FractalParameters,
+                        audioModulation: s_shell?.AudioModulation);
                     vm.ParamChanged += () => s_renderHost?.Trigger();
 
                     var win = new PanelHostWindow(
@@ -2272,7 +2274,8 @@ namespace FracturingFog.Hosting
                     }
 
                     var vs = s_renderHost.ViewState;
-                    var vm = new FractalParamsViewModel(vs.FractalType, vs.FractalParameters);
+                    var vm = new FractalParamsViewModel(vs.FractalType, vs.FractalParameters,
+                        audioModulation: s_shell?.AudioModulation);
                     vm.ParamChanged += () => s_renderHost?.Trigger();
                     // #147 fix — the mesh-export button lives in this standalone
                     // dialog; wire its handler here too (it was only wired on the

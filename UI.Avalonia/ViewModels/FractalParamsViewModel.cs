@@ -8,6 +8,7 @@ using System.Reactive;
 using System.Runtime.CompilerServices;
 using global::Avalonia.Threading;
 using FracturingFog;
+using FracturingFog.Abstractions.Animation;
 using FracturingFog.Models;
 using FracturingFog.UI.Avalonia.ViewModels.Animation;
 using ReactiveUI;
@@ -34,7 +35,8 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
         IReadOnlyList<string>? lsystemPresets = null,
         IReadOnlyList<string>? attractorPresets = null,
         Func<string, (double a, double b, double c, double d)>? attractorDefaults = null,
-        IReadOnlyList<string>? flamePresets = null)
+        IReadOnlyList<string>? flamePresets = null,
+        AudioModulationManager? audioModulation = null)
     {
         ArgumentNullException.ThrowIfNull(parameters);
 
@@ -150,6 +152,21 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
         _flameGamma = _p.FlameGamma;
         _flameVibrancy = _p.FlameVibrancy;
 
+        // #263 P4c — inline audio-reactive affordance. One row per animatable
+        // scalar of this fractal type (Complex kinds excluded — out of P4 scope),
+        // each bound to the shared app-scoped AudioModulationManager so a toggle
+        // here and the central Audio Settings matrix edit the same binding.
+        if (audioModulation != null)
+        {
+            var rows = new List<AudioBindingRowViewModel>();
+            foreach (var d in FractalAnimatableParamsMap.For(type))
+            {
+                if (d.Kind == AnimatableParamKind.Complex) continue;
+                rows.Add(new AudioBindingRowViewModel(d, audioModulation));
+            }
+            AudioDrivableParams = rows;
+        }
+
         CloseCommand = ReactiveCommand.Create(() =>
         {
             StopJuliaAnimate();
@@ -194,6 +211,14 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
     }
 
     public FractalType FractalType { get; }
+
+    /// <summary>#263 P4c — audio-drivable scalar params for this fractal type
+    /// (inline modulation rows). Empty when no manager was supplied or the type
+    /// has no animatable scalars.</summary>
+    public IReadOnlyList<AudioBindingRowViewModel> AudioDrivableParams { get; }
+        = Array.Empty<AudioBindingRowViewModel>();
+    public bool HasAudioReactiveParams => AudioDrivableParams.Count > 0;
+
     public IReadOnlyList<string> IfsPresets { get; }
     public IReadOnlyList<string> LSystemPresets { get; }
     public IReadOnlyList<string> AttractorPresets { get; }

@@ -33,6 +33,57 @@
                        FontStyle="Italic"
                        Margin="0,8" />
 
+            <!-- #263 P4c — inline audio-reactive drive. Same binding rows the
+                 central Audio Settings matrix uses (one AudioModulationManager),
+                 so a toggle here and there stay in sync. Collapsed by default so
+                 the panel stays compact; visible only when the type has
+                 animatable scalars and a manager was supplied. -->
+            <Expander IsVisible="{Binding HasAudioReactiveParams}"
+                      Header="Audio Reactive"
+                      Margin="0,10,0,0">
+                <StackPanel Spacing="4">
+                    <TextBlock Text="Drive a parameter from live audio. Tune curve / gain / range here or in Audio Settings — same binding."
+                               Foreground="#9AACA0" FontSize="11" TextWrapping="Wrap" Margin="0,0,0,2" />
+                    <ItemsControl ItemsSource="{Binding AudioDrivableParams}">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate x:DataType="vm:AudioBindingRowViewModel">
+                                <Border Background="#1F1F1F" CornerRadius="3" Padding="6" Margin="0,0,0,4">
+                                    <StackPanel Spacing="3">
+                                        <Grid ColumnDefinitions="Auto,*">
+                                            <CheckBox Grid.Column="0"
+                                                      IsChecked="{Binding Enabled, Mode=TwoWay}"
+                                                      VerticalAlignment="Center" />
+                                            <TextBlock Grid.Column="1" Text="{Binding ParamName}"
+                                                       FontWeight="Bold" VerticalAlignment="Center" Margin="4,0,0,0" />
+                                        </Grid>
+                                        <Grid ColumnDefinitions="Auto,*,Auto,*" IsEnabled="{Binding Enabled}">
+                                            <TextBlock Grid.Column="0" Text="Signal:" VerticalAlignment="Center" Margin="0,0,4,0" />
+                                            <ComboBox Grid.Column="1" ItemsSource="{Binding Signals}"
+                                                      SelectedItem="{Binding Source, Mode=TwoWay}" HorizontalAlignment="Stretch" />
+                                            <TextBlock Grid.Column="2" Text="Curve:" VerticalAlignment="Center" Margin="8,0,4,0" />
+                                            <ComboBox Grid.Column="3" ItemsSource="{Binding Curves}"
+                                                      SelectedItem="{Binding Curve, Mode=TwoWay}" HorizontalAlignment="Stretch" />
+                                        </Grid>
+                                        <Grid ColumnDefinitions="Auto,70,Auto,70,Auto,70,Auto" IsEnabled="{Binding Enabled}">
+                                            <TextBlock Grid.Column="0" Text="Gain:" VerticalAlignment="Center" Margin="0,0,4,0" />
+                                            <NumericUpDown Grid.Column="1" Value="{Binding Gain, Mode=TwoWay}" Increment="0.1" FormatString="F2" />
+                                            <TextBlock Grid.Column="2" Text="Min:" VerticalAlignment="Center" Margin="8,0,4,0" />
+                                            <NumericUpDown Grid.Column="3" Value="{Binding OutMin, Mode=TwoWay}" Increment="0.1" FormatString="F2" />
+                                            <TextBlock Grid.Column="4" Text="Max:" VerticalAlignment="Center" Margin="8,0,4,0" />
+                                            <NumericUpDown Grid.Column="5" Value="{Binding OutMax, Mode=TwoWay}" Increment="0.1" FormatString="F2" />
+                                            <CheckBox Grid.Column="6" Content="Invert" IsChecked="{Binding Invert, Mode=TwoWay}"
+                                                      VerticalAlignment="Center" Margin="8,0,0,0" />
+                                        </Grid>
+                                        <TextBlock Text="{Binding Notes}" IsVisible="{Binding HasNotes}"
+                                                   Foreground="#9AACA0" FontSize="10" TextWrapping="Wrap" />
+                                    </StackPanel>
+                                </Border>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </StackPanel>
+            </Expander>
+
             <!--
               ── Lighting & FX launcher ────────────────────────────────────
               Visible for 3D raymarchers and for Oblique 3D heightfield raymarch
