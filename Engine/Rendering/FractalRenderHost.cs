@@ -1144,6 +1144,23 @@ namespace FracturingFog.Rendering
                 cts = _calcCts;
             }
 
+            // ── P5 #264 — audio view-breathe overlay ──────────────────────────
+            // Apply the transient zoom-pulse / camera-shake to ViewState so
+            // ApplyView() and the alt-calc limb copy below pick it up, then
+            // restore (after those copies) so ViewCamera / region save keep the
+            // exact base centre + zoom. Shallow-zoom only (1e6): the deep-zoom
+            // limb + perturbation-reference path must not see a per-frame wobble.
+            bool breathing = ViewState.HasBreathe && ViewState.Zoom <= 1e6;
+            double breatheBaseZoom = ViewState.Zoom;
+            var breatheBaseCenter = ViewState.GetCenter();
+            if (breathing)
+            {
+                double ext = 3.5 / breatheBaseZoom;   // 3.5 = ViewCamera.PlaneExtent
+                ViewState.Zoom = breatheBaseZoom * ViewState.BreatheZoomFactor;
+                ViewState.SetCenter(breatheBaseCenter.Translate(
+                    ViewState.BreatheOffsetXFrac * ext, ViewState.BreatheOffsetYFrac * ext));
+            }
+
             ApplyView();
 
             var token = cts.Token;
@@ -1208,6 +1225,14 @@ namespace FracturingFog.Rendering
                         gz5.UseBla          = true;
                         break;
                 }
+            }
+
+            // P5 #264 — restore base view now the calculators have captured the
+            // overlayed values, so the input path never sees the wobble.
+            if (breathing)
+            {
+                ViewState.Zoom = breatheBaseZoom;
+                ViewState.SetCenter(breatheBaseCenter);
             }
 
             var sw = Stopwatch.StartNew();
