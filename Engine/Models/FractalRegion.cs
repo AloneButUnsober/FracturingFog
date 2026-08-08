@@ -1070,30 +1070,30 @@ namespace FracturingFog.Models
             },
             new()
             {
-                Name        = "Acid Warp - Rings",
+                Name        = "Acid Fog - Rings",
                 CenterX     =  0.0,
                 CenterY     =  0.0,
                 Zoom        =  1.0,
                 Iterations  = 64,
-                Description = "Clean-room homage to Noah Spurrier's 1992 Acid Warp. Concentric-ring procedural pattern mapped through the active colour theme; pan/zoom is a no-op. Switch AcidWarpPattern for spokes, spirals, interference, plaid and more; pair with animated palette cycling.",
+                Description = "Clean-room homage to Noah Spurrier's 1992 Acid Warp. Concentric-ring procedural pattern mapped through the active colour theme; pan/zoom is a no-op. Switch the pattern for spokes, spirals, interference, plaid and more; pair with animated palette cycling.",
                 RegionType  = RegionType.BuiltIn,
                 FractalType = FractalType.AcidWarp,
-                CuratedThemes = new List<string> { "Acid Warp Spectrum" },
+                CuratedThemes = new List<string> { "Acid Fog Spectrum" },
                 UseCuratedThemesOnly = true,
                 QualityPreset = QualityPreset.Standard
             },
             new()
             {
-                Name        = "Acid Warp - Classic",
+                Name        = "Acid Fog - Classic",
                 CenterX     =  0.0,
                 CenterY     =  0.0,
                 Zoom        =  1.0,
                 Iterations  = 64,
-                Description = "The classic Acid Warp look/feel: the multi-centre 'peacock' interference field. Pick the 'Acid Warp Spectrum' theme and turn on the Cycle toolbar toggle for the continuously-flowing psychedelic animation.",
+                Description = "The classic palette-cycling look/feel (homage to Noah Spurrier's 1992 Acid Warp): the multi-centre 'peacock' interference field. Pick the 'Acid Fog Spectrum' theme and turn on the Cycle toolbar toggle for the continuously-flowing psychedelic animation.",
                 RegionType  = RegionType.BuiltIn,
                 FractalType = FractalType.AcidWarp,
                 Params      = new RegionFractalParams { AcidWarpPattern = 9, AcidWarpFrequency = 1.0, AcidWarpWarpStrength = 0.0 },
-                CuratedThemes = new List<string> { "Acid Warp Spectrum" },
+                CuratedThemes = new List<string> { "Acid Fog Spectrum" },
                 UseCuratedThemesOnly = true,
                 QualityPreset = QualityPreset.Standard
             },
