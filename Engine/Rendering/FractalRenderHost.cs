@@ -1098,6 +1098,21 @@ namespace FracturingFog.Rendering
             }
         }
 
+        /// <summary>#249 / IDEA-1 — set the global live palette-rotation phase
+        /// and re-render so the palette appears to rotate over the field. The
+        /// rotation lives on <see cref="GradientColorMap.LivePaletteRotation"/>
+        /// (read inside the per-pixel LUT sample); a fast re-render re-maps the
+        /// field through the rotated LUT. Cheap for procedural / Acid Warp.</summary>
+        public void SetLivePaletteRotation(float turns)
+        {
+            if (_disposed) return;
+            GradientColorMap.LivePaletteRotation = turns;
+            // Re-run the map over the field. TriggerFast keeps live cycling
+            // smooth (capped-iter for heavy types); procedural fills ignore the
+            // cap and just re-evaluate their closed form.
+            TriggerFast();
+        }
+
         public void Trigger(bool progressive = false)
         {
             if (_disposed) return;

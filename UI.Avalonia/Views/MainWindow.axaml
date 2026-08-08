@@ -110,6 +110,9 @@
                                   IsVisible="{Binding IsAsciiVisible}"
                                   IsChecked="{Binding IsAsciiRecording, Mode=TwoWay}"
                                   ToolTip.Tip="Record the live ASCII animation to a file (zoom video / scene / slideshow / interactive). Toggle off to choose .cast / .svg / .ans / .mp4." />
+                    <ToggleButton Classes="toolbar" Content="Cycle"
+                                  IsChecked="{Binding Main.PaletteCycleEnabled, Mode=TwoWay}"
+                                  ToolTip.Tip="Animate the palette (colour cycling) over the current view — rotates the colour LUT without moving the camera. Cheap on Acid Warp / procedural types." />
                     <!--<ToggleButton Classes="toolbar" Content="Grid"
                                   IsChecked="{Binding Main.ShowGrid, Mode=TwoWay}"
                                   ToolTip.Tip="Show Cartesian grid overlay" />

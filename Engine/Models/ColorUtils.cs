@@ -229,6 +229,23 @@ namespace FracturingFog.Models
         /// 1.0 = full ±0.5-LSB spread.</summary>
         public static float DitherStrength { get; set; } = 1f;
 
+        // ── #249 / IDEA-1: live palette cycling (animate colour, not camera) ──
+        // A global phase added to the final LUT index in MapNormalized so the
+        // whole palette rotates over wall-clock time WITHOUT re-deriving the
+        // field — Acid Warp's core trick. The host advances this each frame and
+        // triggers a recolor-only pass. 0 (default) restores the exact original
+        // clamp, so --colorprobe stays byte-exact when cycling is off.
+        private static float _livePaletteRotation;
+
+        /// <summary>Global live palette-rotation phase in LUT turns (wraps mod 1).
+        /// Non-zero rotates every gradient map's LUT by that fraction. Set by the
+        /// host's palette-cycle clock; 0 = no rotation (default).</summary>
+        public static float LivePaletteRotation
+        {
+            get => _livePaletteRotation;
+            set => _livePaletteRotation = value;
+        }
+
         private float _paletteDitherStrength = 1f;
 
         /// <summary>Per-theme dither strength carried in the data model so a
@@ -579,7 +596,18 @@ namespace FracturingFog.Models
 
             var lut = EnsureLut();
 
-            t = System.Math.Clamp(t, 0f, 1f);
+            // #249 / IDEA-1: live palette cycling rotates the whole LUT. When the
+            // rotation is 0 (default) this is the exact original clamp; otherwise
+            // the index wraps so the rotation is seamless (pairs with #255).
+            if (_livePaletteRotation != 0f)
+            {
+                t += _livePaletteRotation;
+                t -= MathF.Floor(t);
+            }
+            else
+            {
+                t = System.Math.Clamp(t, 0f, 1f);
+            }
             float scaled = t * LutSize;
             int idx = (int)scaled;
             if (idx >= LutSize) idx = LutSize - 1;
