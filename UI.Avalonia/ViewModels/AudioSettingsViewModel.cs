@@ -2,6 +2,7 @@
 // SPDX-FileCopyrightText: 2026 Bradley Brown
 
 using System;
+using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Globalization;
 using System.Reactive;
@@ -42,9 +43,11 @@ public sealed class AudioSettingsViewModel : ViewModelBase, IClosableDialog
             AudioBackendCapabilities.SystemLoopback |
             AudioBackendCapabilities.Microphone |
             AudioBackendCapabilities.FilePlayback |
-            AudioBackendCapabilities.SynthPlayback)
+            AudioBackendCapabilities.SynthPlayback,
+        IReadOnlyList<AudioBindingRowViewModel>? bindingRows = null)
     {
         ArgumentNullException.ThrowIfNull(current);
+        BindingRows = bindingRows ?? Array.Empty<AudioBindingRowViewModel>();
         _working = Clone(current);
         _liveSource = liveSource;
         _slideshowToggle = slideshowToggle;
@@ -101,6 +104,14 @@ public sealed class AudioSettingsViewModel : ViewModelBase, IClosableDialog
     }
 
     public AudioSettings Result { get; private set; } = new();
+
+    /// <summary>#263 — audio→param modulation matrix rows for the current fractal
+    /// type. Empty (matrix hidden) when the dialog is opened without a manager
+    /// (e.g. nested from Slideshow Settings).</summary>
+    public IReadOnlyList<AudioBindingRowViewModel> BindingRows { get; }
+
+    /// <summary>True when the modulation matrix has any rows to show.</summary>
+    public bool HasBindings => BindingRows.Count > 0;
     public bool ShowSlideshowToggle => _slideshowToggle != null && _slideshowIsRunning != null;
 
     public ObservableCollection<AudioSourceOption> Sources { get; }
