@@ -108,6 +108,7 @@ namespace FracturingFog.Models
             FractalType.StrangeAttractor => FractalMotionClass.NonSpatial,
             FractalType.Logistic => FractalMotionClass.NonSpatial,
             FractalType.Plasma => FractalMotionClass.NonSpatial,
+            FractalType.AcidWarp => FractalMotionClass.NonSpatial,
             FractalType.Flame => FractalMotionClass.NonSpatial,
             FractalType.Dla => FractalMotionClass.NonSpatial,
 

@@ -168,6 +168,53 @@
                            ToolTip.Tip="PRNG seed — same seed + roughness + size = identical field." />
         </Grid>
 
+        <!-- Acid Warp (#247) -->
+        <Grid IsVisible="{Binding IsAcidWarp}"
+              ColumnDefinitions="160,*"
+              RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto">
+            <TextBlock Grid.Row="0" Grid.Column="0" Text="Pattern:" VerticalAlignment="Center" />
+            <NumericUpDown Grid.Row="0" Grid.Column="1"
+                           Minimum="0" Maximum="{Binding AcidWarpPatternMax}" Increment="1" FormatString="F0"
+                           Value="{Binding AcidWarpPattern, Mode=TwoWay}" Margin="0,2"
+                           ToolTip.Tip="Pattern selector: rings, spokes, spirals, interference, plaid, XOR moire, rose, value-noise." />
+            <TextBlock Grid.Row="1" Grid.Column="0" Text="Frequency:" VerticalAlignment="Center" />
+            <NumericUpDown Grid.Row="1" Grid.Column="1"
+                           Minimum="0.1" Maximum="8.0" Increment="0.1" FormatString="F2"
+                           Value="{Binding AcidWarpFrequency, Mode=TwoWay}" Margin="0,2"
+                           ToolTip.Tip="Ring / wave / spoke density." />
+            <TextBlock Grid.Row="2" Grid.Column="0" Text="Center X:" VerticalAlignment="Center" />
+            <NumericUpDown Grid.Row="2" Grid.Column="1"
+                           Minimum="-2.0" Maximum="2.0" Increment="0.05" FormatString="F2"
+                           Value="{Binding AcidWarpCenterX, Mode=TwoWay}" Margin="0,2"
+                           ToolTip.Tip="Pattern focus X in normalised units (0 = screen centre)." />
+            <TextBlock Grid.Row="3" Grid.Column="0" Text="Center Y:" VerticalAlignment="Center" />
+            <NumericUpDown Grid.Row="3" Grid.Column="1"
+                           Minimum="-2.0" Maximum="2.0" Increment="0.05" FormatString="F2"
+                           Value="{Binding AcidWarpCenterY, Mode=TwoWay}" Margin="0,2"
+                           ToolTip.Tip="Pattern focus Y in normalised units (0 = screen centre)." />
+            <TextBlock Grid.Row="4" Grid.Column="0" Text="Seed:" VerticalAlignment="Center" />
+            <NumericUpDown Grid.Row="4" Grid.Column="1"
+                           Minimum="-2147483648" Maximum="2147483647" Increment="1" FormatString="F0"
+                           Value="{Binding AcidWarpSeed, Mode=TwoWay}" Margin="0,2"
+                           ToolTip.Tip="PRNG seed for the stochastic value-noise pattern." />
+            <TextBlock Grid.Row="5" Grid.Column="0" Text="Warp:" VerticalAlignment="Center" />
+            <NumericUpDown Grid.Row="5" Grid.Column="1"
+                           Minimum="0" Maximum="2" Increment="0.05" FormatString="F2"
+                           Value="{Binding AcidWarpWarpStrength, Mode=TwoWay}" Margin="0,2"
+                           ToolTip.Tip="#253 — domain warp: fold straight rings/waves into organic swirls. 0 = off." />
+            <TextBlock Grid.Row="6" Grid.Column="0" Text="Morph:" VerticalAlignment="Center" />
+            <CheckBox Grid.Row="6" Grid.Column="1"
+                      IsChecked="{Binding AcidWarpMorph, Mode=TwoWay}" Margin="0,2"
+                      Content="Blend adjacent patterns (animate Flow)"
+                      ToolTip.Tip="Continuous morph: blends the base and next pattern in field space so animating Flow melts smoothly between patterns instead of hard-cutting. Off = discrete Pattern pick (byte-identical)." />
+            <TextBlock Grid.Row="7" Grid.Column="0" Text="Flow:" VerticalAlignment="Center" />
+            <NumericUpDown Grid.Row="7" Grid.Column="1"
+                           IsEnabled="{Binding AcidWarpMorph}"
+                           Minimum="0" Maximum="{Binding AcidWarpFlowMax}" Increment="0.1" FormatString="F2"
+                           Value="{Binding AcidWarpFlow, Mode=TwoWay}" Margin="0,2"
+                           ToolTip.Tip="Continuous pattern position — integer part picks the base pattern, fraction blends toward the next. Animate 0 → pattern-count for an endless morph. Needs Morph on." />
+        </Grid>
+
         <!-- Flame -->
         <Grid IsVisible="{Binding IsFlame}"
               ColumnDefinitions="160,*"

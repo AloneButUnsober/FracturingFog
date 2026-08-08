@@ -165,7 +165,52 @@ namespace FracturingFog.Models
             set { if (_paletteGamma != value) { _paletteGamma = value; InvalidateGradientLut(); } }
         }
 
+        // ── Palette post-fx baked into the LUT (free per pixel) ──────────────
+        private int _sparkleStride;
+        private float _sparkleBoost;
+        private bool _seamlessCycle;
+
+        /// <summary>Sparkle stride (#254). Every Nth LUT entry is brightened by
+        /// <see cref="SparkleBoost"/>. 0 = off. LUT-affecting → invalidates.</summary>
+        protected int SparkleStride
+        {
+            get => _sparkleStride;
+            set { if (_sparkleStride != value) { _sparkleStride = value; InvalidateGradientLut(); } }
+        }
+
+        /// <summary>Sparkle boost (#254), fraction of white added to sparkled
+        /// entries. 0 = off. LUT-affecting → invalidates.</summary>
+        protected float SparkleBoost
+        {
+            get => _sparkleBoost;
+            set { if (_sparkleBoost != value) { _sparkleBoost = value; InvalidateGradientLut(); } }
+        }
+
+        /// <summary>Seamless-under-rotation toggle (#255). Closes the LUT loop so
+        /// palette cycling never seams. LUT-affecting → invalidates.</summary>
+        protected bool SeamlessCycle
+        {
+            get => _seamlessCycle;
+            set { if (_seamlessCycle != value) { _seamlessCycle = value; InvalidateGradientLut(); } }
+        }
+
+        // #252 / IDEA-2: XOR index post-transform. Runtime (per-pixel in
+        // MapNormalized), not LUT-baked, so plain fields — no invalidate needed.
+        private int _xorLevels;
+        private int _xorMask;
+
+        /// <summary>XOR post-transform level count (#252). &gt;1 enables; 0 = off.</summary>
+        protected int XorLevels { get => _xorLevels; set => _xorLevels = value; }
+
+        /// <summary>XOR mask for the quantised index (#252).</summary>
+        protected int XorMask { get => _xorMask; set => _xorMask = value; }
+
         // Export accessors so data-driven themes round-trip the options to JSON.
+        public int ExportSparkleStride => _sparkleStride;
+        public float ExportSparkleBoost => _sparkleBoost;
+        public bool ExportSeamlessCycle => _seamlessCycle;
+        public int ExportXorLevels => _xorLevels;
+        public int ExportXorMask => _xorMask;
         public GradientColorSpace ExportInterpolationSpace => _interpSpace;
         public float ExportColorOffset => ColorOffset;
         public float ExportColorDensity => ColorDensity;
@@ -196,6 +241,23 @@ namespace FracturingFog.Models
         /// host lifts the active theme's strength here when enabling dither.
         /// 1.0 = full ±0.5-LSB spread.</summary>
         public static float DitherStrength { get; set; } = 1f;
+
+        // ── #249 / IDEA-1: live palette cycling (animate colour, not camera) ──
+        // A global phase added to the final LUT index in MapNormalized so the
+        // whole palette rotates over wall-clock time WITHOUT re-deriving the
+        // field — Acid Warp's core trick. The host advances this each frame and
+        // triggers a recolor-only pass. 0 (default) restores the exact original
+        // clamp, so --colorprobe stays byte-exact when cycling is off.
+        private static float _livePaletteRotation;
+
+        /// <summary>Global live palette-rotation phase in LUT turns (wraps mod 1).
+        /// Non-zero rotates every gradient map's LUT by that fraction. Set by the
+        /// host's palette-cycle clock; 0 = no rotation (default).</summary>
+        public static float LivePaletteRotation
+        {
+            get => _livePaletteRotation;
+            set => _livePaletteRotation = value;
+        }
 
         private float _paletteDitherStrength = 1f;
 
@@ -362,6 +424,28 @@ namespace FracturingFog.Models
                 // in MapNormalized interpolates it for free alongside RGB.
                 samples[i] = Vector128.Create(r, g, b, alpha);
             }
+
+            // #254 sparkle: lift every Nth LUT entry — a glitter / lightning
+            // accent baked into the LUT (alpha untouched; it is coverage).
+            if (_sparkleStride > 0 && _sparkleBoost > 0f)
+            {
+                float boost = _sparkleBoost * 255f;
+                for (int i = 0; i < LutSize; i += _sparkleStride)
+                {
+                    Vector128<float> s = samples[i];
+                    samples[i] = Vector128.Create(
+                        MathF.Min(s.GetElement(0) + boost, 255f),
+                        MathF.Min(s.GetElement(1) + boost, 255f),
+                        MathF.Min(s.GetElement(2) + boost, 255f),
+                        s.GetElement(3));
+                }
+            }
+
+            // #255 seamless: close the loop so the last segment ramps back to
+            // the first colour and palette cycling shows no seam.
+            if (_seamlessCycle)
+                samples[LutSize] = samples[0];
+
             for (int i = 0; i < LutSize; i++)
             {
                 Vector128<float> a = samples[i];
@@ -525,7 +609,31 @@ namespace FracturingFog.Models
 
             var lut = EnsureLut();
 
-            t = System.Math.Clamp(t, 0f, 1f);
+            // #249 / IDEA-1: live palette cycling rotates the whole LUT. When the
+            // rotation is 0 (default) this is the exact original clamp; otherwise
+            // the index wraps so the rotation is seamless (pairs with #255).
+            if (_livePaletteRotation != 0f)
+            {
+                t += _livePaletteRotation;
+                t -= MathF.Floor(t);
+            }
+            else
+            {
+                t = System.Math.Clamp(t, 0f, 1f);
+            }
+
+            // #252 / IDEA-2: XOR index post-transform — quantise, XOR, renormalise
+            // to shatter the gradient into a plaid / moiré. Off (levels 0/1) is a
+            // no-op so the byte-exact path is unchanged.
+            if (_xorLevels > 1)
+            {
+                int q = (int)(t * _xorLevels);
+                if (q >= _xorLevels) q = _xorLevels - 1;
+                int x = (q ^ _xorMask) % _xorLevels;
+                if (x < 0) x += _xorLevels;
+                t = x / (float)_xorLevels;
+            }
+
             float scaled = t * LutSize;
             int idx = (int)scaled;
             if (idx >= LutSize) idx = LutSize - 1;

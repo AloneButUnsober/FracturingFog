@@ -167,6 +167,9 @@ namespace FracturingFog.Models
             new ViridisColorMap(),
             new PlasmaColorMap(),
 
+            // ── Psychedelic (Acid Warp) ───────────────────────────────────────
+            new AcidWarpSpectrumMap(),
+
             // ── Orbit Trap ────────────────────────────────────────────────────
             new OrbitTrapPointMap(),
             new OrbitTrapCrossMap(),

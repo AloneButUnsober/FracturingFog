@@ -2038,6 +2038,33 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
             AnimationBusHost.LoadRegionAnimation(
                 attachedAnim,
                 Main.ViewState.FractalParameters);
+            // Region opted into "use curated theme(s) only": apply its first
+            // valid curated theme as the active colour theme so the saved look
+            // comes back on recall. Default off → recall leaves the active theme
+            // alone (no regression for regions that rely on the live theme).
+            // Route through the theme combo so the same chain a user pick fires
+            // runs here: syncs Main.SelectedTheme, calls ApplyTheme, honours any
+            // bundled lighting preset. No-op when the theme is already active.
+            if (_themeService.TryGetRegionCuratedThemeToApply(name, out var curatedTheme))
+                FloatingMenu.SelectedTheme = curatedTheme;
+            // #250 — palette cycling on recall. A region may carry its own Cycle
+            // toggle (region editor checkbox), which wins over the toolbar Cycle
+            // button so an Acid Fog look that reads better *without* the flowing
+            // LUT rotation stays off. When the region has no opinion (legacy /
+            // non-Acid-Fog), fall back to the type default: cycle on for Acid Fog,
+            // off otherwise (so it never leaks onto a fractal not meant to cycle).
+            bool isAcidFog = Main.ViewState.FractalType == FracturingFog.FractalType.AcidWarp;
+            Main.PaletteCycleEnabled =
+                _themeService.GetRegionCycleEnabled(name) ?? isAcidFog;
+            // Smoke #4 — auto-enable pattern Morph when this Acid Fog region's
+            // attached animation actually drives AcidWarpFlow, so the user sees
+            // the morph without having to hand-toggle it. Cleared for a non-Acid-
+            // Fog region, or an Acid Fog region whose animation doesn't animate
+            // Flow (a plain hard-cut pattern), matching the calc's morph gate.
+            Main.ViewState.FractalParameters.AcidWarpMorph =
+                isAcidFog && attachedAnim != null
+                && attachedAnim.Tracks.Any(t => t.Enabled
+                    && string.Equals(t.ParamName, "AcidWarpFlow", StringComparison.Ordinal));
             Main.RenderHost.Trigger();
         }
     }

@@ -67,6 +67,15 @@ namespace FracturingFog.Render
         /// back to the renderer via the host's bound IFractalRenderer.</summary>
         void Trigger(bool progressive = false);
 
+        /// <summary>#249 / IDEA-1 — set the global live palette-rotation phase (in
+        /// LUT turns, wraps mod 1) and re-render so the whole palette appears to
+        /// rotate. This animates COLOUR, not the camera: the field is unchanged,
+        /// only its mapping through the gradient LUT is rotated. Cheap for the
+        /// procedural / Acid Warp families (their Calculate is a closed-form
+        /// fill); heavier for escape-time types since it re-runs the map. Pass 0
+        /// to clear the rotation.</summary>
+        void SetLivePaletteRotation(float turns);
+
         /// <summary>Fire a capped-iter render for live-drag responsiveness.
         /// The shell's pan-stop debounce timer typically fires a follow-up
         /// <see cref="Trigger"/> once motion stops.</summary>

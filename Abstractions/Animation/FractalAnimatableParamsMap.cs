@@ -68,6 +68,9 @@ public static class FractalAnimatableParamsMap
         FractalType.Plasma
             => _plasmaList,
 
+        FractalType.AcidWarp
+            => _acidWarpList,
+
         FractalType.Flame
             => _flameList,
 
@@ -195,6 +198,23 @@ public static class FractalAnimatableParamsMap
         new("PlasmaSeed", AnimatableParamKind.ScalarInt, Min: 0, Max: 1_000_000,
             Cost: AnimatableParamCost.Expensive,
             Notes: "Seed change regenerates the noise field — flashes at high rates."),
+    };
+
+    private static readonly AnimatableParamDescriptor[] _acidWarpList =
+    {
+        new("AcidWarpFrequency", AnimatableParamKind.ScalarDouble, Min: 0.1, Max: 8.0),
+        new("AcidWarpCenterX", AnimatableParamKind.ScalarDouble, Min: -2.0, Max: 2.0),
+        new("AcidWarpCenterY", AnimatableParamKind.ScalarDouble, Min: -2.0, Max: 2.0),
+        new("AcidWarpPattern", AnimatableParamKind.ScalarInt, Min: 0, Max: 19,
+            Cost: AnimatableParamCost.Expensive,
+            Notes: "Discrete pattern pick — hard-cuts between fields. For a smooth "
+                 + "transition enable Morph and animate AcidWarpFlow instead."),
+        new("AcidWarpFlow", AnimatableParamKind.ScalarDouble,
+            Min: 0, Max: FracturingFog.Models.FractalParameters.AcidWarpPatternCount,
+            Cost: AnimatableParamCost.Expensive,
+            Notes: "Continuous pattern position (needs Morph on). Animate 0 → "
+                 + "pattern-count for an endless morph through every pattern, "
+                 + "wrapping seamlessly. Blends two fields per pixel — expensive."),
     };
 
     private static readonly AnimatableParamDescriptor[] _flameList =

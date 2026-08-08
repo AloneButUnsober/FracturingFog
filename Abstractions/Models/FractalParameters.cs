@@ -118,6 +118,69 @@ namespace FracturingFog.Models
         /// roughness) deterministically produces the same field.</summary>
         public int PlasmaSeed { get; set; } = 12345;
 
+        /// <summary>Number of distinct Acid Warp patterns (#247). Single source
+        /// of truth shared by <c>AcidWarpCalculator</c> (Engine) and the params
+        /// view-model (UI, which references only Abstractions). The pattern
+        /// selector is taken modulo this.</summary>
+        public const int AcidWarpPatternCount = 20;
+
+        /// <summary>When true the Acid Warp calculator renders the animated
+        /// "ACID FOG" title card (#250) — a clean-room homage to the Acid Warp
+        /// intro, distinct in name and styling — over the current pattern field.
+        /// A dedicated flag (not an out-of-range <see cref="AcidWarpPattern"/>
+        /// sentinel) so the params-panel Pattern control never coerces it away.
+        /// Process-only: never persisted to a region or animation.</summary>
+        public bool AcidWarpTitleCard { get; set; } = false;
+
+        /// <summary>Acid Warp pattern selector (#247). Index into the
+        /// clean-room procedural pattern table in <c>AcidWarpCalculator</c>;
+        /// wrapped modulo the pattern count so any value is legal. Each pattern
+        /// is a closed-form map from pixel coordinate to a cyclic scalar
+        /// sampled through the active colour map. Default 0 = concentric
+        /// rings.</summary>
+        public int AcidWarpPattern { get; set; } = 0;
+
+        /// <summary>Global frequency scale for the Acid Warp pattern (#247) —
+        /// multiplies ring / wave / spoke density. Default 1.0.</summary>
+        public double AcidWarpFrequency { get; set; } = 1.0;
+
+        /// <summary>Acid Warp pattern centre X in normalised units where the
+        /// shorter screen axis spans [-1, 1] and 0 is screen centre (#247).
+        /// Shifts the focus of radial / angular patterns.</summary>
+        public double AcidWarpCenterX { get; set; } = 0.0;
+
+        /// <summary>Acid Warp pattern centre Y (see <see cref="AcidWarpCenterX"/>).</summary>
+        public double AcidWarpCenterY { get; set; } = 0.0;
+
+        /// <summary>PRNG seed for the Acid Warp stochastic patterns (#247).
+        /// Deterministic: same (pattern, seed, size) yields the same
+        /// field.</summary>
+        public int AcidWarpSeed { get; set; } = 12345;
+
+        /// <summary>Acid Warp domain-warp strength (#253 / IDEA-3). Displaces the
+        /// pattern sampling coordinate by a smooth interference field before the
+        /// pattern is evaluated, folding straight rings/waves into organic
+        /// swirls. 0 = no warp (default); ~0.1–0.5 is a pleasant range.</summary>
+        public double AcidWarpWarpStrength { get; set; } = 0.0;
+
+        /// <summary>Acid Warp continuous pattern morph toggle (#247 follow-up).
+        /// When false (default) the pattern selector is the discrete integer
+        /// <see cref="AcidWarpPattern"/> and animating it hard-cuts between
+        /// fields. When true the calculator instead reads the continuous
+        /// <see cref="AcidWarpFlow"/> position and blends adjacent patterns in
+        /// field space, so animating Flow melts smoothly from one pattern into
+        /// the next — the flowing, never-settling classic Acid Warp motion.
+        /// Byte-identical to the discrete path when off.</summary>
+        public bool AcidWarpMorph { get; set; } = false;
+
+        /// <summary>Acid Warp continuous pattern position, active only when
+        /// <see cref="AcidWarpMorph"/> is true. The integer part (mod the
+        /// pattern count) selects the base pattern; the fractional part is the
+        /// blend weight toward the next pattern. Animate it 0 → pattern-count
+        /// for an endless morph through every pattern, wrapping seamlessly.
+        /// Default 0.0 (== pattern 0, no blend).</summary>
+        public double AcidWarpFlow { get; set; } = 0.0;
+
         /// <summary>Optional explicit Flame-fractal map list. When null the
         /// renderer falls back to <see cref="FlamePresetName"/> from
         /// <c>FlamePresets.All</c>.</summary>
@@ -770,6 +833,15 @@ namespace FracturingFog.Models
                 LSystemDepth = LSystemDepth,
                 PlasmaRoughness = PlasmaRoughness,
                 PlasmaSeed = PlasmaSeed,
+                AcidWarpPattern = AcidWarpPattern,
+                AcidWarpFrequency = AcidWarpFrequency,
+                AcidWarpCenterX = AcidWarpCenterX,
+                AcidWarpCenterY = AcidWarpCenterY,
+                AcidWarpSeed = AcidWarpSeed,
+                AcidWarpWarpStrength = AcidWarpWarpStrength,
+                AcidWarpMorph = AcidWarpMorph,
+                AcidWarpFlow = AcidWarpFlow,
+                AcidWarpTitleCard = AcidWarpTitleCard,
                 FlameMaps = FlameMaps is null ? null : new List<FlameMap>(FlameMaps),
                 FlamePresetName = FlamePresetName,
                 FlameIterations = FlameIterations,

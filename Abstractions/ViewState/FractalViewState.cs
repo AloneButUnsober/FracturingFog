@@ -242,6 +242,7 @@ namespace FracturingFog.ViewState
                 FractalType.QuaternionJulia       => ( 0.0,  0.0, 1.0),
                 FractalType.QuaternionMandelbrot  => ( 0.0,  0.0, 1.0),
                 FractalType.Plasma                => ( 0.0,  0.0, 1.0),
+                FractalType.AcidWarp              => ( 0.0,  0.0, 1.0),
                 FractalType.Flame                 => ( 0.0,  0.0, 1.0),
                 FractalType.Apollonian            => ( 0.0,  0.0, 2.0),
                 FractalType.Kleinian              => ( 0.0,  0.0, 1.0),

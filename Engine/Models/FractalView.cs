@@ -140,6 +140,7 @@ namespace FracturingFog.Models
             {FractalType.QuaternionJulia, "Quaternion Julia" },
             {FractalType.QuaternionMandelbrot, "Quaternion Mandelbrot" },
             {FractalType.Plasma, "Plasma" },
+            {FractalType.AcidWarp, "Acid Fog" },
             {FractalType.Flame, "Flame" },
             {FractalType.Apollonian, "Apollonian" },
             {FractalType.Kleinian, "Kleinian" },

@@ -308,4 +308,189 @@ public sealed class RegionEditorServiceTests
         }
         finally { lib.RemoveUserRegion(name); }
     }
+
+    [Fact]
+    public void CuratedThemeOnly_RoundTrips_Echoes_And_Resolves()
+    {
+        var svc = new HostColorThemeService();
+        var lib = FractalRegionLibrary.Instance;
+        string name = $"FF-Curated-{Guid.NewGuid():N}";
+        string theme = svc.EnumerateThemeNames().First();
+
+        try
+        {
+            var r = MakeUserRegion(name);
+            r.CuratedThemes = new System.Collections.Generic.List<string> { theme };
+            r.UseCuratedThemesOnly = true;
+            Assert.True(lib.AddUserRegion(r));
+
+            // Echoed into the edit model.
+            var model = svc.GetRegionForEdit(name)!;
+            Assert.True(model.UseCuratedThemesOnly);
+
+            // Resolves for the recall path.
+            Assert.True(svc.TryGetRegionCuratedThemeToApply(name, out var resolved));
+            Assert.Equal(theme, resolved);
+
+            // Persists across an in-place edit.
+            var res = svc.UpdateRegionMetadata(model);
+            Assert.True(res.Success);
+            Assert.True(lib.FindByName(name)!.UseCuratedThemesOnly);
+        }
+        finally { lib.RemoveUserRegion(name); }
+    }
+
+    [Fact]
+    public void CuratedThemeOnly_Off_Or_EmptyList_DoesNotResolve()
+    {
+        var svc = new HostColorThemeService();
+        var lib = FractalRegionLibrary.Instance;
+        string name = $"FF-Curated-Off-{Guid.NewGuid():N}";
+
+        try
+        {
+            // Flag off (default) → recall leaves the active theme alone.
+            var r = MakeUserRegion(name);
+            r.CuratedThemes = new System.Collections.Generic.List<string> { svc.EnumerateThemeNames().First() };
+            Assert.True(lib.AddUserRegion(r));
+            Assert.False(svc.TryGetRegionCuratedThemeToApply(name, out _));
+
+            // Flag on but no curated whitelist → the service drops the flag on
+            // save, and nothing resolves.
+            var model = svc.GetRegionForEdit(name)!;
+            model.UseCuratedThemesOnly = true;
+            model.CuratedThemes = null;
+            Assert.True(svc.UpdateRegionMetadata(model).Success);
+            Assert.False(lib.FindByName(name)!.UseCuratedThemesOnly);
+            Assert.False(svc.TryGetRegionCuratedThemeToApply(name, out _));
+        }
+        finally { lib.RemoveUserRegion(name); }
+    }
+
+    [Fact]
+    public void BuiltIn_AcidWarp_Regions_Are_CuratedThemeOnly()
+    {
+        var lib = FractalRegionLibrary.Instance;
+        foreach (var n in new[] { "Acid Fog - Rings", "Acid Fog - Classic" })
+        {
+            var r = lib.All.First(x => string.Equals(x.Name, n, StringComparison.OrdinalIgnoreCase));
+            Assert.True(r.UseCuratedThemesOnly, $"{n} should default to curated-theme-only");
+            Assert.NotNull(r.CuratedThemes);
+            Assert.Contains("Acid Fog Spectrum", r.CuratedThemes!);
+        }
+    }
+
+    [Fact]
+    public void AcidWarp_To_AcidFog_Rename_Has_BackCompat_Aliases()
+    {
+        // #250 — user-facing "Acid Warp" -> "Acid Fog". Old saved references
+        // (regions, curated themes) must still resolve forward to the new names.
+        Assert.Equal("Acid Fog - Rings",   LegacyNameAliases.Resolve("Acid Warp - Rings"));
+        Assert.Equal("Acid Fog - Classic", LegacyNameAliases.Resolve("Acid Warp - Classic"));
+        Assert.Equal("Acid Fog Spectrum",  LegacyNameAliases.Resolve("Acid Warp Spectrum"));
+
+        // A stale region recall (curated theme under the OLD name) still resolves.
+        var svc = new HostColorThemeService();
+        var lib = FractalRegionLibrary.Instance;
+        string name = $"FF-LegacyCurated-{Guid.NewGuid():N}";
+        try
+        {
+            var r = MakeUserRegion(name);
+            r.CuratedThemes = new System.Collections.Generic.List<string> { "Acid Warp Spectrum" };
+            r.UseCuratedThemesOnly = true;
+            Assert.True(lib.AddUserRegion(r));
+
+            Assert.True(svc.TryGetRegionCuratedThemeToApply(name, out var resolved));
+            Assert.Equal("Acid Fog Spectrum", resolved); // forwarded to the current name
+        }
+        finally { lib.RemoveUserRegion(name); }
+    }
+
+    // ── Smoke #2: per-region Cycle (palette-rotation) toggle ──────────────────
+
+    private static FractalRegion MakeAcidFogRegion(string name) => new()
+    {
+        Name = name,
+        CenterX = 0.0, CenterY = 0.0, Zoom = 1.0, Iterations = 64,
+        FractalType = FractalType.AcidWarp,
+        Description = "acid fog",
+    };
+
+    [Fact]
+    public void CycleToggle_RoundTrips_On_AcidFog_Region()
+    {
+        var svc = new HostColorThemeService();
+        var lib = FractalRegionLibrary.Instance;
+        string name = $"FF-Cycle-{Guid.NewGuid():N}";
+        try
+        {
+            var r = MakeAcidFogRegion(name);
+            r.PaletteCycleEnabled = true;
+            Assert.True(lib.AddUserRegion(r));
+
+            // Editor echoes the saved value; user turns cycling off and saves.
+            var model = svc.GetRegionForEdit(name)!;
+            Assert.True(model.CycleEnabled);
+            model.CycleEnabled = false;
+            Assert.True(svc.UpdateRegionMetadata(model).Success);
+
+            Assert.False(lib.FindByName(name)!.PaletteCycleEnabled);
+            Assert.False(svc.GetRegionCycleEnabled(name));
+        }
+        finally { lib.RemoveUserRegion(name); }
+    }
+
+    [Fact]
+    public void CycleToggle_Echoes_TypeDefault_When_Region_Has_No_Opinion()
+    {
+        var svc = new HostColorThemeService();
+        var lib = FractalRegionLibrary.Instance;
+        string acid = $"FF-CycleDefA-{Guid.NewGuid():N}";
+        string mandel = $"FF-CycleDefM-{Guid.NewGuid():N}";
+        try
+        {
+            Assert.True(lib.AddUserRegion(MakeAcidFogRegion(acid)));   // null cycle
+            Assert.True(lib.AddUserRegion(MakeUserRegion(mandel)));    // null cycle
+
+            // No stored opinion → service returns null; the editor model shows
+            // the type default (on for Acid Fog, off for a static fractal).
+            Assert.Null(svc.GetRegionCycleEnabled(acid));
+            Assert.Null(svc.GetRegionCycleEnabled(mandel));
+            Assert.True(svc.GetRegionForEdit(acid)!.CycleEnabled);
+            Assert.False(svc.GetRegionForEdit(mandel)!.CycleEnabled);
+        }
+        finally { lib.RemoveUserRegion(acid); lib.RemoveUserRegion(mandel); }
+    }
+
+    [Fact]
+    public void CycleToggle_Not_Persisted_On_NonAcidFog_Region()
+    {
+        var svc = new HostColorThemeService();
+        var lib = FractalRegionLibrary.Instance;
+        string name = $"FF-CycleMandel-{Guid.NewGuid():N}";
+        try
+        {
+            Assert.True(lib.AddUserRegion(MakeUserRegion(name)));
+            var model = svc.GetRegionForEdit(name)!;
+            model.CycleEnabled = true; // meaningless on a Mandelbrot region
+            Assert.True(svc.UpdateRegionMetadata(model).Success);
+
+            // Dropped to null so recall uses the type default, never spinning the
+            // LUT on a fractal that isn't meant to cycle.
+            Assert.Null(lib.FindByName(name)!.PaletteCycleEnabled);
+            Assert.Null(svc.GetRegionCycleEnabled(name));
+        }
+        finally { lib.RemoveUserRegion(name); }
+    }
+
+    [Fact]
+    public void BuiltIn_AcidFog_Regions_Enable_Cycle_By_Default()
+    {
+        var lib = FractalRegionLibrary.Instance;
+        foreach (var n in new[] { "Acid Fog - Rings", "Acid Fog - Classic" })
+        {
+            var r = lib.All.First(x => string.Equals(x.Name, n, StringComparison.OrdinalIgnoreCase));
+            Assert.True(r.PaletteCycleEnabled, $"{n} should default to cycle on");
+        }
+    }
 }

@@ -44,6 +44,7 @@ system. The codebase is a single .NET 10 solution.
 | Building the Region Editor (Animation Roadmap Sub-goal B)   | [Region Editor Dev Plan](RegionEditor-DevPlan.md) |
 | Building the cross-asset Asset Manager (Sub-goal A, deferred) | [Asset Manager Dev Plan](AssetManager-DevPlan.md) |
 | Working on cinematic Scenes — camera track, timeline, offline render | [Scene Engine Architecture](SceneEngine-Architecture.md) |
+| Adding the Acid Warp palette-cycling mode + color-motion ideas | [Acid Warp Mode Design](AcidWarp-Mode-Design.md) |
 | Building the distributed master/worker rendering cluster   | [Distributed Rendering Development Plan](DistributedRendering-DevelopmentPlan.md) — phase notes: [D-1](D-1-Session-Notes.md), [D-2](D-2-Session-Notes.md) |
 | Maintaining the docs themselves                            | [Documentation Plan](../Documentation-Plan.md)              |
 | Citing the maths behind a piece of code                    | [Resources & Bibliography](../Resources-Bibliography.md)    |

@@ -338,6 +338,31 @@
                                               Width="135" HorizontalAlignment="Left"
                                               ToolTip.Tip="Boundary behaviour: Repeat (modulo), PingPong (seamless mirror), Clamp (F5)." />
                                 </StackPanel>
+                                <CheckBox IsChecked="{Binding SeamlessCycle}"
+                                          Content="Seamless cycling (close the loop)"
+                                          ToolTip.Tip="#255 — nudge the palette so its last colour ramps back to the first, so palette cycling shows no seam. Opt-in: leave off to keep a deliberate hard seam." />
+                                <StackPanel Orientation="Horizontal" Spacing="8">
+                                    <TextBlock Classes="label" Text="Sparkle:" Width="56" />
+                                    <NumericUpDown Value="{Binding SparkleStride}"
+                                                   Minimum="0" Maximum="128" Increment="1"
+                                                   FormatString="0" Width="90"
+                                                   ToolTip.Tip="#254 — brighten every Nth of 256 LUT entries (glitter/lightning). 0 = off." />
+                                    <NumericUpDown Value="{Binding SparkleBoost}"
+                                                   Minimum="0" Maximum="1" Increment="0.05"
+                                                   FormatString="0.00" Width="90"
+                                                   ToolTip.Tip="Sparkle brightness boost (fraction of white). 0 = off." />
+                                </StackPanel>
+                                <StackPanel Orientation="Horizontal" Spacing="8">
+                                    <TextBlock Classes="label" Text="XOR:" Width="56" />
+                                    <NumericUpDown Value="{Binding XorLevels}"
+                                                   Minimum="0" Maximum="256" Increment="1"
+                                                   FormatString="0" Width="90"
+                                                   ToolTip.Tip="#252 — quantise the palette index to N levels then XOR, shattering the gradient into a plaid/moiré on any field. 0 = off." />
+                                    <NumericUpDown Value="{Binding XorMask}"
+                                                   Minimum="0" Maximum="255" Increment="1"
+                                                   FormatString="0" Width="90"
+                                                   ToolTip.Tip="XOR mask — different masks give different weaves." />
+                                </StackPanel>
                             </StackPanel>
 
                             <!-- In-set -->

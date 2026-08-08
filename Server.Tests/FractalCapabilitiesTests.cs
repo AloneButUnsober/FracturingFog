@@ -47,6 +47,7 @@ public sealed class FractalCapabilitiesTests
 
     [Theory]
     [InlineData(FractalType.Plasma)]
+    [InlineData(FractalType.AcidWarp)]
     [InlineData(FractalType.Flame)]
     [InlineData(FractalType.Dla)]
     [InlineData(FractalType.Logistic)]
