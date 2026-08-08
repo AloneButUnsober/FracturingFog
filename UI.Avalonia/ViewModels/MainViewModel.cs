@@ -435,11 +435,17 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
                 // image inside the new set → every pixel hits MAX_ITER and
                 // the calc takes minutes, looking like a UI lockup.
                 ViewState.SnapToFractalDefault(value);
-                // #250 — the first time Acid Warp is started this launch, play
-                // the animated "ACID FOG" title card, then dissolve into the
-                // classic ring field (a clean-room homage to the original intro).
-                if (value == FractalType.AcidWarp && AcidWarpIntro.TryConsumeIntro())
-                    StartAcidWarpIntro();
+                // #250 — Acid Warp auto-starts its palette-cycle animation (the
+                // classic flowing look). The first time this launch, play the
+                // animated "ACID FOG" title card first (which also turns cycling
+                // on), then dissolve into the classic ring field.
+                if (value == FractalType.AcidWarp)
+                {
+                    if (AcidWarpIntro.TryConsumeIntro())
+                        StartAcidWarpIntro();
+                    else
+                        PaletteCycleEnabled = true;
+                }
                 var entry = FindEntryForType(value);
                 if (entry != null && !ReferenceEquals(_selectedFractalEntry, entry))
                 {
