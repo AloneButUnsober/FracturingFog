@@ -945,8 +945,9 @@ namespace FracturingFog.Hosting
                         },
                     };
 
-                    // Status-bar "Rendering…" chip while the offline job runs.
-                    var busy = shell.BeginRenderBusy("Rendering scene…");
+                    // Status-bar "Rendering…" chip (with Cancel) while the job runs.
+                    using var sceneCts = new CancellationTokenSource();
+                    var busy = shell.BeginRenderBusy("Rendering scene…", () => { try { sceneCts.Cancel(); } catch { } });
                     FracturingFog.Export.SceneVideoResult result;
                     try
                     {
@@ -976,7 +977,8 @@ namespace FracturingFog.Hosting
                             }
                         }
                         return FracturingFog.Export.SceneVideoRenderer.Render(scene, opts,
-                            (frac, line) => shell.UpdateRenderBusy($"Rendering scene… {frac * 100:0}%"));
+                            (frac, line) => shell.UpdateRenderBusy($"Rendering scene… {frac * 100:0}%"),
+                            sceneCts.Token);
                         });
                     }
                     finally { busy.Dispose(); }
@@ -987,6 +989,11 @@ namespace FracturingFog.Hosting
                             : $"Frames rendered ({result.FramesWritten}):\n{result.FrameFolder}")
                         : (result.Message ?? "Scene export failed.");
                     await AvaloniaDialogs.ShowMessageAsync("Export Scene", msg, false);
+                }
+                catch (OperationCanceledException)
+                {
+                    try { await AvaloniaDialogs.ShowMessageAsync("Export Scene", "Scene export cancelled.", false); }
+                    catch { /* dialog itself failed */ }
                 }
                 catch (Exception ex)
                 {
@@ -2021,7 +2028,7 @@ namespace FracturingFog.Hosting
                     int prevDop = FracturingFog.Rendering.RenderThrottle.MaxDegreeOfParallelism;
                     FracturingFog.Rendering.RenderThrottle.MaxDegreeOfParallelism =
                         FracturingFog.Rendering.RenderThrottle.Cpu90();
-                    var posterBusy = shell.BeginRenderBusy("Rendering poster…");
+                    var posterBusy = shell.BeginRenderBusy("Rendering poster…", () => { try { cts.Cancel(); } catch { } });
                     try
                     {
                         var result = await Task.Run(() => PosterRenderer.RenderToFile(req, cts.Token));

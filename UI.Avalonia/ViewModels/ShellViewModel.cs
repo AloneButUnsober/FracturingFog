@@ -528,6 +528,7 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
             _ => global::Avalonia.Threading.Dispatcher.UIThread.Post(RecordNavChange),
             null, global::System.Threading.Timeout.Infinite, global::System.Threading.Timeout.Infinite);
 
+        CancelRenderBusyCommand   = ReactiveCommand.Create(CancelCurrentBusy);
         ShowFloatingMenuCommand   = ReactiveCommand.Create(() => IsFloatingMenuVisible = !IsFloatingMenuVisible);
         ShowHelpCommand           = ReactiveCommand.Create(ShowHelp);
         ShowColorThemeEditorCommand = ReactiveCommand.Create(ShowColorThemeEditor);
@@ -1632,14 +1633,22 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
 
     // ── Render-busy indicator (status bar dot) ───────────────────────────
     //
-    // A shared, ref-counted "something expensive is rendering" chip for the
-    // status bar, mirroring the Server dot. Long offline jobs (scene export,
-    // large poster prints) wrap their work in BeginRenderBusy(label); the chip
-    // shows while any job is active and hides when the last one ends. The dot is
-    // yellow (#FFCC00) — an in-progress signal that stays legible for
-    // red/green-colorblind users.
+    // A shared "something expensive is rendering" chip for the status bar,
+    // mirroring the Server dot. Long jobs (scene export, poster prints, wallpaper,
+    // server-dispatched renders) wrap their work in BeginRenderBusy(label); the
+    // chip shows the most-recent active job and hides when the last one ends. The
+    // dot is yellow (#FFCC00) — an in-progress signal that stays legible for
+    // red/green-colorblind users. A job may pass an onCancel action; the chip then
+    // shows a Cancel button that invokes it.
 
-    private int _renderBusyCount;
+    private sealed class BusyEntry
+    {
+        public string Label = "";
+        public Action? OnCancel;
+    }
+
+    private readonly System.Collections.Generic.List<BusyEntry> _busy = new();
+    private readonly object _busyLock = new();
 
     private bool _isRenderBusy;
     /// <summary>True while at least one expensive render job is running — drives
@@ -1658,51 +1667,83 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
         private set => this.RaiseAndSetIfChanged(ref _renderBusyText, value);
     }
 
+    private bool _renderBusyCancellable;
+    /// <summary>True when the current (most-recent) job supplied a cancel action —
+    /// drives the chip's Cancel button visibility.</summary>
+    public bool RenderBusyCancellable
+    {
+        get => _renderBusyCancellable;
+        private set => this.RaiseAndSetIfChanged(ref _renderBusyCancellable, value);
+    }
+
+    /// <summary>Cancel the current (most-recent) cancellable job.</summary>
+    public ReactiveCommand<Unit, Unit> CancelRenderBusyCommand { get; }
+
+    private void RefreshBusyChip()
+    {
+        BusyEntry? top;
+        int count;
+        lock (_busyLock)
+        {
+            count = _busy.Count;
+            top = count > 0 ? _busy[^1] : null;
+        }
+        void Apply()
+        {
+            IsRenderBusy = count > 0;
+            RenderBusyText = top != null ? "● " + top.Label : "";
+            RenderBusyCancellable = top?.OnCancel != null;
+        }
+        if (Dispatcher.UIThread.CheckAccess()) Apply();
+        else Dispatcher.UIThread.Post(Apply);
+    }
+
     /// <summary>Begin an expensive render job: shows the status-bar chip with
     /// <paramref name="label"/>. Dispose the returned scope when done (safe from
-    /// any thread). Ref-counted, so concurrent jobs coexist.</summary>
-    public IDisposable BeginRenderBusy(string label)
+    /// any thread). Concurrent jobs coexist; the chip shows the most recent.
+    /// An optional <paramref name="onCancel"/> surfaces a Cancel button.</summary>
+    public IDisposable BeginRenderBusy(string label, Action? onCancel = null)
     {
-        void Apply()
-        {
-            _renderBusyCount++;
-            RenderBusyText = "● " + label;
-            IsRenderBusy = _renderBusyCount > 0;
-        }
-        if (Dispatcher.UIThread.CheckAccess()) Apply();
-        else Dispatcher.UIThread.Post(Apply);
-        return new RenderBusyScope(this);
+        var entry = new BusyEntry { Label = label, OnCancel = onCancel };
+        lock (_busyLock) _busy.Add(entry);
+        RefreshBusyChip();
+        return new RenderBusyScope(this, entry);
     }
 
-    /// <summary>Update the busy chip label for an in-flight job (e.g. progress
-    /// percent). No-op when nothing is busy. Safe from any thread.</summary>
+    /// <summary>Update a running job's chip label (e.g. progress percent). Updates
+    /// the currently-shown job. No-op when nothing is busy. Safe from any thread.</summary>
     public void UpdateRenderBusy(string label)
     {
-        void Apply() { if (_renderBusyCount > 0) RenderBusyText = "● " + label; }
-        if (Dispatcher.UIThread.CheckAccess()) Apply();
-        else Dispatcher.UIThread.Post(Apply);
+        lock (_busyLock)
+        {
+            if (_busy.Count == 0) return;
+            _busy[^1].Label = label;
+        }
+        RefreshBusyChip();
     }
 
-    private void EndRenderBusy()
+    private void EndRenderBusy(BusyEntry entry)
     {
-        void Apply()
-        {
-            _renderBusyCount = System.Math.Max(0, _renderBusyCount - 1);
-            IsRenderBusy = _renderBusyCount > 0;
-            if (!IsRenderBusy) RenderBusyText = "";
-        }
-        if (Dispatcher.UIThread.CheckAccess()) Apply();
-        else Dispatcher.UIThread.Post(Apply);
+        lock (_busyLock) _busy.Remove(entry);
+        RefreshBusyChip();
+    }
+
+    private void CancelCurrentBusy()
+    {
+        Action? cancel;
+        lock (_busyLock) cancel = _busy.Count > 0 ? _busy[^1].OnCancel : null;
+        try { cancel?.Invoke(); } catch { /* cancel is best-effort */ }
     }
 
     private sealed class RenderBusyScope : IDisposable
     {
         private ShellViewModel? _owner;
-        public RenderBusyScope(ShellViewModel owner) => _owner = owner;
+        private readonly BusyEntry _entry;
+        public RenderBusyScope(ShellViewModel owner, BusyEntry entry) { _owner = owner; _entry = entry; }
         public void Dispose()
         {
             var o = System.Threading.Interlocked.Exchange(ref _owner, null);
-            o?.EndRenderBusy();
+            o?.EndRenderBusy(_entry);
         }
     }
 
@@ -2797,6 +2838,20 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
             // sibling floating windows). The view is a UserControl now and can
             // no longer self-close.
             FFClient.CloseRequested += (_, _) => IsFFClientVisible = false;
+
+            // #269 follow-up — surface server-dispatched renders on the shared
+            // status-bar busy chip (the client view has its own status too).
+            IDisposable? clientBusy = null;
+            FFClient.WhenAnyValue(x => x.IsRendering).Subscribe(rendering =>
+            {
+                if (rendering) clientBusy ??= BeginRenderBusy("Server render…");
+                else { clientBusy?.Dispose(); clientBusy = null; }
+            });
+            FFClient.WhenAnyValue(x => x.RenderStatus).Subscribe(s =>
+            {
+                if (clientBusy != null && !string.IsNullOrWhiteSpace(s))
+                    UpdateRenderBusy("Server render — " + s);
+            });
         }
         // Mirror MainViewModel's active custom watermark in so the form's
         // "Send custom watermark" checkbox has something to send.
