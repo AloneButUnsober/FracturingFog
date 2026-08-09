@@ -1630,6 +1630,82 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
         });
     }
 
+    // ── Render-busy indicator (status bar dot) ───────────────────────────
+    //
+    // A shared, ref-counted "something expensive is rendering" chip for the
+    // status bar, mirroring the Server dot. Long offline jobs (scene export,
+    // large poster prints) wrap their work in BeginRenderBusy(label); the chip
+    // shows while any job is active and hides when the last one ends. The dot is
+    // yellow (#FFCC00) — an in-progress signal that stays legible for
+    // red/green-colorblind users.
+
+    private int _renderBusyCount;
+
+    private bool _isRenderBusy;
+    /// <summary>True while at least one expensive render job is running — drives
+    /// the status-bar "Rendering…" chip's visibility.</summary>
+    public bool IsRenderBusy
+    {
+        get => _isRenderBusy;
+        private set => this.RaiseAndSetIfChanged(ref _isRenderBusy, value);
+    }
+
+    private string _renderBusyText = "";
+    /// <summary>Label shown in the busy chip, e.g. "● Rendering scene… 42%".</summary>
+    public string RenderBusyText
+    {
+        get => _renderBusyText;
+        private set => this.RaiseAndSetIfChanged(ref _renderBusyText, value);
+    }
+
+    /// <summary>Begin an expensive render job: shows the status-bar chip with
+    /// <paramref name="label"/>. Dispose the returned scope when done (safe from
+    /// any thread). Ref-counted, so concurrent jobs coexist.</summary>
+    public IDisposable BeginRenderBusy(string label)
+    {
+        void Apply()
+        {
+            _renderBusyCount++;
+            RenderBusyText = "● " + label;
+            IsRenderBusy = _renderBusyCount > 0;
+        }
+        if (Dispatcher.UIThread.CheckAccess()) Apply();
+        else Dispatcher.UIThread.Post(Apply);
+        return new RenderBusyScope(this);
+    }
+
+    /// <summary>Update the busy chip label for an in-flight job (e.g. progress
+    /// percent). No-op when nothing is busy. Safe from any thread.</summary>
+    public void UpdateRenderBusy(string label)
+    {
+        void Apply() { if (_renderBusyCount > 0) RenderBusyText = "● " + label; }
+        if (Dispatcher.UIThread.CheckAccess()) Apply();
+        else Dispatcher.UIThread.Post(Apply);
+    }
+
+    private void EndRenderBusy()
+    {
+        void Apply()
+        {
+            _renderBusyCount = System.Math.Max(0, _renderBusyCount - 1);
+            IsRenderBusy = _renderBusyCount > 0;
+            if (!IsRenderBusy) RenderBusyText = "";
+        }
+        if (Dispatcher.UIThread.CheckAccess()) Apply();
+        else Dispatcher.UIThread.Post(Apply);
+    }
+
+    private sealed class RenderBusyScope : IDisposable
+    {
+        private ShellViewModel? _owner;
+        public RenderBusyScope(ShellViewModel owner) => _owner = owner;
+        public void Dispose()
+        {
+            var o = System.Threading.Interlocked.Exchange(ref _owner, null);
+            o?.EndRenderBusy();
+        }
+    }
+
     // ── Top-level commands ────────────────────────────────────────────────
 
     public ReactiveCommand<Unit, bool> ShowFloatingMenuCommand { get; }
