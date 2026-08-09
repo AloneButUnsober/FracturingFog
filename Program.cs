@@ -1621,6 +1621,36 @@ static class Program
             }
         }
 
+        // #271 (parent #58) — OpenAL live-audio probe. Reports whether the
+        // OpenAL runtime loads, the capability set AudioCapabilityProbe derives,
+        // and (when present) the live backend's negotiated caps incl. Linux
+        // monitor-loopback detection. CI can gate the cross-platform legs on
+        // this without opening a UI. Exit 0 = runtime present, 3 = absent
+        // (informational, not a build failure), 2 = unexpected error.
+        if (args.Length > 0 && args[0] == "--openalprobe")
+        {
+            try
+            {
+                bool available = FracturingFog.Audio.OpenAlRuntime.IsAvailable();
+                var caps = FracturingFog.Audio.AudioCapabilityProbe.Detect();
+                Console.WriteLine($"openalprobe: runtime={(available ? "present" : "absent")}");
+                Console.WriteLine($"openalprobe: probe-caps={caps}");
+                if (available)
+                {
+                    foreach (var dev in FracturingFog.Audio.OpenAlAudioBackend.EnumerateCaptureDevices())
+                        Console.WriteLine($"openalprobe: capture-device=\"{dev}\"");
+                    using var be = new FracturingFog.Audio.OpenAlAudioBackend();
+                    Console.WriteLine($"openalprobe: backend-caps={be.Capabilities}");
+                }
+                return available ? 0 : 3;
+            }
+            catch (Exception ex)
+            {
+                Console.Error.WriteLine($"openalprobe FAIL: {ex.GetType().Name}: {ex.Message}");
+                return 2;
+            }
+        }
+
         // Headless batch processing: render single image or zoom video to disk
         // without showing any UI. Attaches to the parent console so the
         // progress meter is visible from cmd/PowerShell.

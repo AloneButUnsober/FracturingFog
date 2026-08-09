@@ -3947,6 +3947,25 @@ namespace FracturingFog.Hosting
                         $"[AvaloniaShellBootstrap] WindowsNAudioBackend load failed, falling back to noop: {ex.Message}");
                 }
             }
+            else if (OpenAlRuntime.IsAvailable())
+            {
+                // #271 (parent #58) — Linux/macOS live audio. OpenAlAudioBackend
+                // adds mic everywhere + monitor loopback on Linux; file/synth
+                // still work through it. Falls back to noop if construction fails
+                // (lib vanished between probe and here, or no capture extension).
+                try
+                {
+                    var oal = new OpenAlAudioBackend();
+                    if ((oal.Capabilities & AudioBackendCapabilities.Microphone) != 0)
+                        return oal;
+                    oal.Dispose(); // capture extension unusable — degrade to noop
+                }
+                catch (Exception ex)
+                {
+                    Console.Error.WriteLine(
+                        $"[AvaloniaShellBootstrap] OpenAlAudioBackend load failed, falling back to noop: {ex.Message}");
+                }
+            }
             return new NoopAudioBackend();
         }
     }

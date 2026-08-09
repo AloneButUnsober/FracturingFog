@@ -1,0 +1,32 @@
+OpenAL Soft — third-party component notice
+==========================================
+
+Fracturing Fog bundles the OpenAL Soft runtime (native library) to provide
+cross-platform live audio capture (microphone, and system loopback on Linux)
+for the audio-reactive features. See issue #271 / parent #58.
+
+Component:   OpenAL Soft
+Upstream:    https://github.com/kcat/openal-soft  /  https://openal-soft.org/
+Delivered via NuGet: Silk.NET.OpenAL.Soft.Native (per-RID native asset),
+             wrapped by Silk.NET.OpenAL / Silk.NET.OpenAL.Extensions.EXT.
+License:     GNU Lesser General Public License, version 2.1 (LGPL-2.1)
+
+Linking
+-------
+OpenAL Soft is used strictly as a DYNAMICALLY LINKED shared library. Fracturing
+Fog does not statically link it, does not modify its source, and loads it at
+runtime through the OpenAL C API (ALC_EXT_CAPTURE). This mode of use is
+permitted by the LGPL for an application under a different license.
+
+The user may replace the bundled OpenAL Soft library with their own compatible
+build/version of OpenAL: on Linux/macOS install a system OpenAL (e.g.
+"sudo apt install libopenal1") and the app will load it via the OS loader
+search path; the in-app "Live Audio Setup" dialog documents this.
+
+License text
+------------
+The full text of the GNU LGPL v2.1 is available at:
+    https://www.gnu.org/licenses/old-licenses/lgpl-2.1.txt
+
+A copy of OpenAL Soft's own COPYING/license file ships inside the
+Silk.NET.OpenAL.Soft.Native NuGet package under its NuGet cache directory.

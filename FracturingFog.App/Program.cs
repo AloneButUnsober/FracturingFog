@@ -85,6 +85,37 @@ internal static class Program
             }
         }
 
+        // #271 (parent #58) — OpenAL live-audio probe. Cross-platform: reports
+        // whether the OpenAL runtime loads, the AudioCapabilityProbe capability
+        // set, and (when present) the live backend's negotiated caps incl. Linux
+        // monitor-loopback detection. This is the flag the Linux/macOS smoke uses
+        // (the WinExe carries the same block). Exit 0 = present, 3 = absent
+        // (informational), 2 = unexpected error.
+        if (args.Length > 0 && args[0] == "--openalprobe")
+        {
+            try
+            {
+                bool available = FracturingFog.Audio.OpenAlRuntime.IsAvailable();
+                var caps = FracturingFog.Audio.AudioCapabilityProbe.Detect();
+                Console.WriteLine($"openalprobe: runtime={(available ? "present" : "absent")}");
+                Console.WriteLine($"openalprobe: probe-caps={caps}");
+                if (available)
+                {
+                    foreach (var dev in FracturingFog.Audio.OpenAlAudioBackend.EnumerateCaptureDevices())
+                        Console.WriteLine($"openalprobe: capture-device=\"{dev}\"");
+                    using var be = new FracturingFog.Audio.OpenAlAudioBackend();
+                    Console.WriteLine($"openalprobe: backend-caps={be.Capabilities}");
+                }
+                Console.Out.Flush();
+                return available ? 0 : 3;
+            }
+            catch (Exception ex)
+            {
+                Console.Error.WriteLine($"openalprobe FAIL: {ex.GetType().Name}: {ex.Message}");
+                return 2;
+            }
+        }
+
         // UserBulbSandboxGpuSpike — Engine-side GPU spike harness. Cross-plat
         // because the kernel sits in FracturingFog.Engine and routes through
         // ILGPU's CPU/CUDA/OpenCL accelerator picker.
