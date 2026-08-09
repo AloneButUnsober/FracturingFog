@@ -1637,6 +1637,8 @@ static class Program
                 Console.WriteLine($"openalprobe: probe-caps={caps}");
                 if (available)
                 {
+                    foreach (var dev in FracturingFog.Audio.OpenAlAudioBackend.EnumerateCaptureDevices())
+                        Console.WriteLine($"openalprobe: capture-device=\"{dev}\"");
                     using var be = new FracturingFog.Audio.OpenAlAudioBackend();
                     Console.WriteLine($"openalprobe: backend-caps={be.Capabilities}");
                 }

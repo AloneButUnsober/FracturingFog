@@ -248,32 +248,74 @@ namespace FracturingFog.Audio
         }
 
         /// <summary>
-        /// Returns the default sink's monitor capture-device name, or the first
-        /// device whose name contains ".monitor", or null when none exists
-        /// (macOS / bare ALSA). Never throws.
+        /// Returns the first capture device whose name marks it as a monitor /
+        /// loopback of an output sink, or null when none exists (macOS / bare
+        /// ALSA). PulseAudio / PipeWire monitors surface either by internal name
+        /// ("…​.monitor") or by friendly description ("Monitor of …"), so match
+        /// the word "monitor" either way. Never throws.
         /// </summary>
         private string? TryFindMonitorDevice()
         {
-            if (_alc is not ALContext alc) return null;
+            foreach (var d in EnumerateCaptureDevices())
+                if (LooksLikeMonitor(d))
+                    return d;
+            return null;
+        }
+
+        private static bool LooksLikeMonitor(string name) =>
+            !string.IsNullOrEmpty(name) &&
+            name.Contains("monitor", StringComparison.OrdinalIgnoreCase);
+
+        /// <summary>
+        /// Enumerate the ALC capture-device specifiers (mic + any monitor
+        /// sources). Empty when the runtime / enumeration extension is
+        /// unavailable. Static so the --openalprobe diagnostic can list devices
+        /// without constructing a full backend. Never throws.
+        /// </summary>
+        public static IReadOnlyList<string> EnumerateCaptureDevices()
+        {
+            ALContext? owned = null;
             try
             {
+                ALContext? alc = null;
+                foreach (bool soft in new[] { true, false })
+                {
+                    try
+                    {
+                        var candidate = ALContext.GetApi(soft);
+                        if (candidate.TryGetExtension<CaptureEnumerationEnumeration>((Device*)null, out var probe) && probe != null)
+                        {
+                            alc = candidate;
+                            break;
+                        }
+                        candidate.Dispose();
+                    }
+                    catch { /* try next name container */ }
+                }
+                if (alc == null) return Array.Empty<string>();
+                owned = alc;
+
                 if (!alc.TryGetExtension<CaptureEnumerationEnumeration>((Device*)null, out var en) || en == null)
-                    return null;
+                    return Array.Empty<string>();
 
-                IEnumerable<string> devices =
-                    en.GetStringList(Silk.NET.OpenAL.Extensions.EXT.Enumeration.GetCaptureContextStringList.CaptureDeviceSpecifiers);
-                if (devices == null) return null;
+                var devices = en.GetStringList(
+                    Silk.NET.OpenAL.Extensions.EXT.Enumeration.GetCaptureContextStringList.CaptureDeviceSpecifiers);
+                if (devices == null) return Array.Empty<string>();
 
+                var list = new List<string>();
                 foreach (var d in devices)
-                    if (!string.IsNullOrEmpty(d) &&
-                        d.Contains(".monitor", StringComparison.OrdinalIgnoreCase))
-                        return d;
+                    if (!string.IsNullOrEmpty(d))
+                        list.Add(d);
+                return list;
             }
             catch
             {
-                // Enumeration unsupported → treat as "no loopback".
+                return Array.Empty<string>();
             }
-            return null;
+            finally
+            {
+                try { owned?.Dispose(); } catch { }
+            }
         }
 
         // ── file / synth (shared pump, same as NoopAudioBackend) ─────────
