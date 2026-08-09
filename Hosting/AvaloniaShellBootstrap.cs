@@ -945,7 +945,12 @@ namespace FracturingFog.Hosting
                         },
                     };
 
-                    var result = await Task.Run(() =>
+                    // Status-bar "Rendering…" chip while the offline job runs.
+                    var busy = shell.BeginRenderBusy("Rendering scene…");
+                    FracturingFog.Export.SceneVideoResult result;
+                    try
+                    {
+                        result = await Task.Run(() =>
                     {
                         // Phase 7 (#266) — deterministic audio-reactive export: bake
                         // the scene's audio file into a seekable modulation source
@@ -955,6 +960,7 @@ namespace FracturingFog.Hosting
                         if (scene.AudioTracks is { Count: > 0 }
                             && !string.IsNullOrWhiteSpace(scene.AudioFilePath))
                         {
+                            shell.UpdateRenderBusy("Analysing audio…");
                             string? ff = FracturingFog.FfmpegEncoder.FindFfmpeg();
                             if (ff != null)
                             {
@@ -969,8 +975,11 @@ namespace FracturingFog.Hosting
                                 }
                             }
                         }
-                        return FracturingFog.Export.SceneVideoRenderer.Render(scene, opts);
-                    });
+                        return FracturingFog.Export.SceneVideoRenderer.Render(scene, opts,
+                            (frac, line) => shell.UpdateRenderBusy($"Rendering scene… {frac * 100:0}%"));
+                        });
+                    }
+                    finally { busy.Dispose(); }
 
                     string msg = result.Ok
                         ? (!string.IsNullOrEmpty(result.VideoPath)
@@ -1600,7 +1609,10 @@ namespace FracturingFog.Hosting
 
                     try
                     {
-                        var result = await Task.Run(() => PosterRenderer.RenderToFile(req, CancellationToken.None));
+                        var busy = shell.BeginRenderBusy("Rendering wallpaper…");
+                        FracturingFog.Imaging.PosterResult result;
+                        try { result = await Task.Run(() => PosterRenderer.RenderToFile(req, CancellationToken.None)); }
+                        finally { busy.Dispose(); }
                         await AvaloniaDialogs.ShowMessageAsync(
                             "Wallpaper Saved",
                             $"Saved {result.SavedWidth}×{result.SavedHeight} px to:\n{path}\n({result.ElapsedMs} ms)",
@@ -2009,6 +2021,7 @@ namespace FracturingFog.Hosting
                     int prevDop = FracturingFog.Rendering.RenderThrottle.MaxDegreeOfParallelism;
                     FracturingFog.Rendering.RenderThrottle.MaxDegreeOfParallelism =
                         FracturingFog.Rendering.RenderThrottle.Cpu90();
+                    var posterBusy = shell.BeginRenderBusy("Rendering poster…");
                     try
                     {
                         var result = await Task.Run(() => PosterRenderer.RenderToFile(req, cts.Token));
@@ -2036,6 +2049,7 @@ namespace FracturingFog.Hosting
                     }
                     finally
                     {
+                        posterBusy.Dispose();
                         FracturingFog.Rendering.RenderThrottle.MaxDegreeOfParallelism = prevDop;
                         s_posterCts = null;
                         cts.Dispose();
