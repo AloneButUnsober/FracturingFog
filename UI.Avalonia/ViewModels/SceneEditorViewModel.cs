@@ -26,6 +26,7 @@ using System.Threading.Tasks;
 
 using FracturingFog;
 using FracturingFog.Abstractions.Animation;
+using FracturingFog.Audio;
 using FracturingFog.Models;
 using FracturingFog.Render;
 using FracturingFog.Rendering.Lighting;
@@ -348,6 +349,83 @@ public sealed class SceneShotRowViewModel : ReactiveObject
     }
 }
 
+/// <summary>One scene-wide audio-reactive track row (#265 / Audio-Reactive
+/// Phase 6). Edits a <see cref="SceneAudioTrack"/> — a <see cref="SceneGlobalTarget"/>
+/// scalar (exposure / bloom / vignette / chromatic aberration) driven live from
+/// an audio signal + shaping, applied on top of every shot. Removing routes back
+/// to the owning editor via the supplied action.</summary>
+public sealed class SceneAudioTrackRowViewModel : ReactiveObject
+{
+    private readonly Action _onChanged;
+    private readonly AudioModulationBinding _binding;
+
+    public static IReadOnlyList<SceneGlobalTarget> Targets { get; } =
+        Enum.GetValues<SceneGlobalTarget>();
+    public static IReadOnlyList<AudioSignalKind> Signals { get; } =
+        Enum.GetValues<AudioSignalKind>();
+    public static IReadOnlyList<AudioResponseCurve> Curves { get; } =
+        Enum.GetValues<AudioResponseCurve>();
+
+    public SceneAudioTrackRowViewModel(SceneAudioTrack track, Action onChanged,
+        Action<SceneAudioTrackRowViewModel> onRemove)
+    {
+        ArgumentNullException.ThrowIfNull(track);
+        _onChanged = onChanged;
+        _target = track.Target;
+        _binding = track.Binding ?? new AudioModulationBinding();
+        RemoveCommand = ReactiveCommand.Create(() => onRemove(this));
+    }
+
+    private SceneGlobalTarget _target;
+    public SceneGlobalTarget Target
+    {
+        get => _target;
+        set { this.RaiseAndSetIfChanged(ref _target, value); _onChanged(); }
+    }
+
+    public AudioSignalKind Source
+    {
+        get => _binding.Source;
+        set { _binding.Source = value; this.RaisePropertyChanged(); _onChanged(); }
+    }
+
+    public AudioResponseCurve Curve
+    {
+        get => _binding.Curve;
+        set { _binding.Curve = value; this.RaisePropertyChanged(); _onChanged(); }
+    }
+
+    public bool Invert
+    {
+        get => _binding.Invert;
+        set { _binding.Invert = value; this.RaisePropertyChanged(); _onChanged(); }
+    }
+
+    public double Gain
+    {
+        get => _binding.Gain;
+        set { _binding.Gain = value; this.RaisePropertyChanged(); _onChanged(); }
+    }
+
+    public double OutMin
+    {
+        get => _binding.OutMin;
+        set { _binding.OutMin = value; this.RaisePropertyChanged(); _onChanged(); }
+    }
+
+    public double OutMax
+    {
+        get => _binding.OutMax;
+        set { _binding.OutMax = value; this.RaisePropertyChanged(); _onChanged(); }
+    }
+
+    public ReactiveCommand<Unit, Unit> RemoveCommand { get; }
+
+    /// <summary>Build the persistable track. The binding is the shared instance
+    /// this row has been editing in place.</summary>
+    public SceneAudioTrack ToTrack() => new() { Target = _target, Binding = _binding };
+}
+
 public sealed class SceneEditorViewModel : ViewModelBase
 {
     private readonly IColorThemeService _service;
@@ -372,12 +450,16 @@ public sealed class SceneEditorViewModel : ViewModelBase
         TransitionKinds = Enum.GetValues<SceneTransitionKind>();
 
         Shots = new ObservableCollection<SceneShotRowViewModel>();
+        AudioTracks = new ObservableCollection<SceneAudioTrackRowViewModel>();
 
         NewBlankCommand    = ReactiveCommand.Create(NewBlank);
         RevertCommand      = ReactiveCommand.Create(Revert);
         SaveCommand        = ReactiveCommand.CreateFromTask(SaveAsync);
         DeleteCommand      = ReactiveCommand.CreateFromTask(DeleteAsync);
         AddShotCommand     = ReactiveCommand.Create(AddShot);
+        AddAudioTrackCommand = ReactiveCommand.Create(AddAudioTrack);
+        BrowseAudioFileCommand = ReactiveCommand.CreateFromTask(BrowseAudioFileAsync);
+        ClearAudioFileCommand = ReactiveCommand.Create(() => { AudioFilePath = string.Empty; });
         PlayCommand        = ReactiveCommand.Create(Play);
         ExportCommand      = ReactiveCommand.CreateFromTask(ExportAsync);
         ImportCommand      = ReactiveCommand.Create(() =>
@@ -412,6 +494,16 @@ public sealed class SceneEditorViewModel : ViewModelBase
     // ── Collections ───────────────────────────────────────────────────────────
     public ObservableCollection<string> SceneNames { get; }
     public ObservableCollection<SceneShotRowViewModel> Shots { get; }
+
+    /// <summary>Scene-wide audio-reactive tracks (#265). Edited as a flat list —
+    /// each drives one post/look scalar from an audio signal.</summary>
+    public ObservableCollection<SceneAudioTrackRowViewModel> AudioTracks { get; }
+
+    /// <summary>The loaded scene's keyframe global tracks (S8), carried through a
+    /// load → save round-trip untouched — the editor has no keyframe-global UI, so
+    /// preserving the reference stops a re-save from silently dropping an authored
+    /// exposure ramp / bloom swell.</summary>
+    private List<SceneGlobalTrack> _preservedGlobalTracks = new();
 
     private readonly List<string> _regionNames;
     private readonly List<string> _themeNames;
@@ -496,6 +588,19 @@ public sealed class SceneEditorViewModel : ViewModelBase
         set { this.RaiseAndSetIfChanged(ref _tags, value); FieldChanged(); }
     }
 
+    private string _audioFilePath = string.Empty;
+    /// <summary>Audio file that drives the scene's audio tracks during offline
+    /// export (Phase 7 / #266). Empty = audio-silent export. Live playback is
+    /// unaffected (it uses the running capture source).</summary>
+    public string AudioFilePath
+    {
+        get => _audioFilePath;
+        set { this.RaiseAndSetIfChanged(ref _audioFilePath, value); this.RaisePropertyChanged(nameof(HasAudioFile)); FieldChanged(); }
+    }
+
+    /// <summary>True when an export audio file is set — drives the Clear button.</summary>
+    public bool HasAudioFile => !string.IsNullOrWhiteSpace(_audioFilePath);
+
     private string _titleText = "Scene Editor — new";
     public string TitleText
     {
@@ -517,6 +622,9 @@ public sealed class SceneEditorViewModel : ViewModelBase
     public ReactiveCommand<Unit, Unit> SaveCommand { get; }
     public ReactiveCommand<Unit, Unit> DeleteCommand { get; }
     public ReactiveCommand<Unit, Unit> AddShotCommand { get; }
+    public ReactiveCommand<Unit, Unit> AddAudioTrackCommand { get; }
+    public ReactiveCommand<Unit, Unit> BrowseAudioFileCommand { get; }
+    public ReactiveCommand<Unit, Unit> ClearAudioFileCommand { get; }
     public ReactiveCommand<Unit, Unit> PlayCommand { get; }
     public ReactiveCommand<Unit, Unit> ExportCommand { get; }
     public ReactiveCommand<Unit, Unit> ImportCommand { get; }
@@ -549,6 +657,11 @@ public sealed class SceneEditorViewModel : ViewModelBase
     /// calls <see cref="RefreshSceneNames"/> back when it lands.</summary>
     public event EventHandler? ImportRequested;
 
+    /// <summary>Raised by the "Browse…" button to pick the export audio file. The
+    /// host fills <see cref="OpenFileEventArgs.Path"/> with the chosen path (async
+    /// file picker), mirroring the equation editors' import prompt.</summary>
+    public event Func<OpenFileEventArgs, Task>? BrowseAudioFileRequested;
+
     public event EventHandler? StopPreviewRequested;
 
     public event EventHandler? CloseRequested;
@@ -564,8 +677,13 @@ public sealed class SceneEditorViewModel : ViewModelBase
             Name = string.IsNullOrWhiteSpace(_name) ? "Unnamed Scene" : _name.Trim(),
             Description = _description ?? string.Empty,
             Category = string.IsNullOrWhiteSpace(_category) ? "User" : _category.Trim(),
+            AudioFilePath = _audioFilePath ?? string.Empty,
         };
         foreach (var row in Shots) data.Shots.Add(row.ToShot());
+        foreach (var row in AudioTracks) data.AudioTracks.Add(row.ToTrack());
+        // Keyframe global tracks have no editor UI — pass the loaded set through
+        // untouched so a re-save doesn't drop an authored exposure ramp / swell.
+        data.GlobalTracks = new List<SceneGlobalTrack>(_preservedGlobalTracks);
         if (!string.IsNullOrWhiteSpace(_tags))
         {
             foreach (var t in _tags.Split(',', StringSplitOptions.RemoveEmptyEntries))
@@ -594,6 +712,7 @@ public sealed class SceneEditorViewModel : ViewModelBase
             Description = data.Description ?? string.Empty;
             Category = string.IsNullOrWhiteSpace(data.Category) ? "User" : data.Category!;
             Tags = string.Join(", ", data.Tags ?? new List<string>());
+            AudioFilePath = data.AudioFilePath ?? string.Empty;
 
             Shots.Clear();
             if (data.Shots != null)
@@ -606,6 +725,16 @@ public sealed class SceneEditorViewModel : ViewModelBase
                 }
             }
             SelectedShot = Shots.FirstOrDefault();
+
+            AudioTracks.Clear();
+            if (data.AudioTracks != null)
+                foreach (var t in data.AudioTracks) AddAudioTrackRow(t);
+
+            // Keep keyframe global tracks for a lossless re-save (no editor UI).
+            _preservedGlobalTracks = data.GlobalTracks != null
+                ? new List<SceneGlobalTrack>(data.GlobalTracks)
+                : new List<SceneGlobalTrack>();
+
             TitleText = $"Scene Editor — {Name}";
         }
         finally { _suppressChange = false; }
@@ -623,6 +752,44 @@ public sealed class SceneEditorViewModel : ViewModelBase
         Shots.Add(row);
         SelectedShot = row;
         FieldChanged();
+    }
+
+    private void AddAudioTrack()
+    {
+        // Seed a sensible exposure pump on the kick so a fresh row does something
+        // audible without configuration (exposure neutral 1.0 → +40% on bass).
+        var track = new SceneAudioTrack
+        {
+            Target = SceneGlobalTarget.Exposure,
+            Binding = new AudioModulationBinding
+            {
+                Source = AudioSignalKind.Bass,
+                Curve = AudioResponseCurve.Smoothstep,
+                OutMin = 1.0,
+                OutMax = 1.4,
+            },
+        };
+        AddAudioTrackRow(track);
+        FieldChanged();
+    }
+
+    private void AddAudioTrackRow(SceneAudioTrack track)
+        => AudioTracks.Add(new SceneAudioTrackRowViewModel(track, FieldChanged, RemoveAudioTrack));
+
+    private void RemoveAudioTrack(SceneAudioTrackRowViewModel row)
+    {
+        AudioTracks.Remove(row);
+        FieldChanged();
+    }
+
+    private async Task BrowseAudioFileAsync()
+    {
+        if (BrowseAudioFileRequested is not { } pick) return;
+        var args = new OpenFileEventArgs(
+            "Select export audio file",
+            "Audio (*.mp3;*.wav;*.flac;*.m4a;*.ogg;*.aac)|*.mp3;*.wav;*.flac;*.m4a;*.ogg;*.aac|All files (*.*)|*.*");
+        await pick(args);
+        if (!string.IsNullOrWhiteSpace(args.Path)) AudioFilePath = args.Path!;
     }
 
     private void RemoveShot(SceneShotRowViewModel row)
@@ -727,7 +894,10 @@ public sealed class SceneEditorViewModel : ViewModelBase
             Description = string.Empty;
             Category = "User";
             Tags = string.Empty;
+            AudioFilePath = string.Empty;
             Shots.Clear();
+            AudioTracks.Clear();
+            _preservedGlobalTracks = new List<SceneGlobalTrack>();
             // Seed one shot so a brand-new scene isn't empty.
             var row = NewShotRow();
             row.Name = "Shot 1";

@@ -149,6 +149,55 @@
                            Margin="6,0,0,0" />
             </Grid>
 
+            <!-- #263 — audio→fractal-param modulation matrix. Visible only when a
+                 manager supplied rows for the current fractal type (standalone
+                 open); hidden when nested from Slideshow Settings. -->
+            <StackPanel IsVisible="{Binding HasBindings}" Margin="0,12,0,0" Spacing="2">
+                <TextBlock Text="Drive Fractal Parameters with Audio"
+                           Foreground="#B4DCB4" FontWeight="Bold" />
+                <TextBlock Text="Map an audio signal onto each animatable parameter of the current fractal type. Live for this session."
+                           Foreground="#9AACA0" FontSize="11" TextWrapping="Wrap" Margin="0,0,0,4" />
+                <ScrollViewer MaxHeight="240" HorizontalScrollBarVisibility="Disabled">
+                    <ItemsControl ItemsSource="{Binding BindingRows}">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate x:DataType="vm:AudioBindingRowViewModel">
+                                <Border Background="#1F1F1F" CornerRadius="3" Padding="6" Margin="0,0,0,4">
+                                    <StackPanel Spacing="3">
+                                        <Grid ColumnDefinitions="Auto,*">
+                                            <CheckBox Grid.Column="0"
+                                                      IsChecked="{Binding Enabled, Mode=TwoWay}"
+                                                      VerticalAlignment="Center" />
+                                            <TextBlock Grid.Column="1" Text="{Binding ParamName}"
+                                                       FontWeight="Bold" VerticalAlignment="Center" Margin="4,0,0,0" />
+                                        </Grid>
+                                        <Grid ColumnDefinitions="Auto,*,Auto,*" IsEnabled="{Binding Enabled}">
+                                            <TextBlock Grid.Column="0" Text="Signal:" VerticalAlignment="Center" Margin="0,0,4,0" />
+                                            <ComboBox Grid.Column="1" ItemsSource="{Binding Signals}"
+                                                      SelectedItem="{Binding Source, Mode=TwoWay}" HorizontalAlignment="Stretch" />
+                                            <TextBlock Grid.Column="2" Text="Curve:" VerticalAlignment="Center" Margin="8,0,4,0" />
+                                            <ComboBox Grid.Column="3" ItemsSource="{Binding Curves}"
+                                                      SelectedItem="{Binding Curve, Mode=TwoWay}" HorizontalAlignment="Stretch" />
+                                        </Grid>
+                                        <Grid ColumnDefinitions="Auto,70,Auto,70,Auto,70,Auto" IsEnabled="{Binding Enabled}">
+                                            <TextBlock Grid.Column="0" Text="Gain:" VerticalAlignment="Center" Margin="0,0,4,0" />
+                                            <NumericUpDown Grid.Column="1" Value="{Binding Gain, Mode=TwoWay}" Increment="0.1" FormatString="F2" />
+                                            <TextBlock Grid.Column="2" Text="Min:" VerticalAlignment="Center" Margin="8,0,4,0" />
+                                            <NumericUpDown Grid.Column="3" Value="{Binding OutMin, Mode=TwoWay}" Increment="0.1" FormatString="F2" />
+                                            <TextBlock Grid.Column="4" Text="Max:" VerticalAlignment="Center" Margin="8,0,4,0" />
+                                            <NumericUpDown Grid.Column="5" Value="{Binding OutMax, Mode=TwoWay}" Increment="0.1" FormatString="F2" />
+                                            <CheckBox Grid.Column="6" Content="Invert" IsChecked="{Binding Invert, Mode=TwoWay}"
+                                                      VerticalAlignment="Center" Margin="8,0,0,0" />
+                                        </Grid>
+                                        <TextBlock Text="{Binding Notes}" IsVisible="{Binding HasNotes}"
+                                                   Foreground="#9AACA0" FontSize="10" TextWrapping="Wrap" />
+                                    </StackPanel>
+                                </Border>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </ScrollViewer>
+            </StackPanel>
+
             <!-- Meters -->
             <Grid ColumnDefinitions="*,*" Margin="0,10,0,0">
                 <TextBlock Grid.Column="0"

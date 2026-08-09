@@ -304,6 +304,58 @@ namespace FracturingFog.Models
                     },
                 },
             };
+
+            // A Mandelbulb orbit whose exposure pumps on the kick and whose bloom
+            // swells with loudness — the built-in demonstration of an audio-reactive
+            // scene track (#265). Silent / headless: the tracks are inert and it
+            // renders exactly like a plain orbit.
+            yield return new SceneData
+            {
+                Name = "Audio Pulse",
+                Category = "Built-in",
+                Description = "The same camera orbit as \"Mandelbulb Orbit\", but the whole " +
+                              "clip breathes with the music: exposure pumps on the kick and " +
+                              "the bloom swells with loudness — the built-in demonstration of " +
+                              "an audio-reactive scene track. Play spins up audio capture; with " +
+                              "no audio the tracks are inert and it renders as a plain orbit.",
+                Tags = new List<string> { "demo", "3D", "audio-reactive" },
+                Shots = new List<SceneShot>
+                {
+                    new SceneShot
+                    {
+                        Name = "Pulse",
+                        FractalType = FracturingFog.FractalType.Mandelbulb,
+                        DurationSeconds = 20.0,
+                        Transition = SceneTransitionKind.Cut,
+                        Camera = OrbitTrack(distance: 2.6, turns: 1, seconds: 20.0, phi: 0.34),
+                    },
+                },
+                AudioTracks = new List<SceneAudioTrack>
+                {
+                    new SceneAudioTrack
+                    {
+                        Target = SceneGlobalTarget.Exposure,
+                        Binding = new FracturingFog.Audio.AudioModulationBinding
+                        {
+                            Source = FracturingFog.Audio.AudioSignalKind.Bass,
+                            Curve = FracturingFog.Audio.AudioResponseCurve.Smoothstep,
+                            OutMin = 0.9,
+                            OutMax = 1.6,
+                        },
+                    },
+                    new SceneAudioTrack
+                    {
+                        Target = SceneGlobalTarget.BloomStrength,
+                        Binding = new FracturingFog.Audio.AudioModulationBinding
+                        {
+                            Source = FracturingFog.Audio.AudioSignalKind.Rms,
+                            Curve = FracturingFog.Audio.AudioResponseCurve.Linear,
+                            OutMin = 0.15,
+                            OutMax = 0.75,
+                        },
+                    },
+                },
+            };
         }
 
         /// <summary>A closed fly-around orbit: azimuth (theta) sweeps

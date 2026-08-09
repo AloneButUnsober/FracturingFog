@@ -408,6 +408,7 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
         // General application settings — host pops the Avalonia AppSettings
         // dialog seeded from persisted AnimationSettings, saves on OK.
         FloatingMenu.AppSettingsClick += (_, _) => AppSettingsRequested?.Invoke(this, EventArgs.Empty);
+        FloatingMenu.AudioSettingsClick += (_, _) => AudioSettingsRequested?.Invoke(this, EventArgs.Empty);
 
         // Export / Import / Delete user colour themes — same shape as the
         // region IO above. Export/Import bubble to a file picker on the host;
@@ -527,6 +528,7 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
             _ => global::Avalonia.Threading.Dispatcher.UIThread.Post(RecordNavChange),
             null, global::System.Threading.Timeout.Infinite, global::System.Threading.Timeout.Infinite);
 
+        CancelRenderBusyCommand   = ReactiveCommand.Create(CancelCurrentBusy);
         ShowFloatingMenuCommand   = ReactiveCommand.Create(() => IsFloatingMenuVisible = !IsFloatingMenuVisible);
         ShowHelpCommand           = ReactiveCommand.Create(ShowHelp);
         ShowColorThemeEditorCommand = ReactiveCommand.Create(ShowColorThemeEditor);
@@ -1630,6 +1632,122 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
         });
     }
 
+    // ── Render-busy indicator (status bar dot) ───────────────────────────
+    //
+    // A shared "something expensive is rendering" chip for the status bar,
+    // mirroring the Server dot. Long jobs (scene export, poster prints, wallpaper,
+    // server-dispatched renders) wrap their work in BeginRenderBusy(label); the
+    // chip shows the most-recent active job and hides when the last one ends. The
+    // dot is yellow (#FFCC00) — an in-progress signal that stays legible for
+    // red/green-colorblind users. A job may pass an onCancel action; the chip then
+    // shows a Cancel button that invokes it.
+
+    private sealed class BusyEntry
+    {
+        public string Label = "";
+        public Action? OnCancel;
+    }
+
+    private readonly System.Collections.Generic.List<BusyEntry> _busy = new();
+    private readonly object _busyLock = new();
+
+    private bool _isRenderBusy;
+    /// <summary>True while at least one expensive render job is running — drives
+    /// the status-bar "Rendering…" chip's visibility.</summary>
+    public bool IsRenderBusy
+    {
+        get => _isRenderBusy;
+        private set => this.RaiseAndSetIfChanged(ref _isRenderBusy, value);
+    }
+
+    private string _renderBusyText = "";
+    /// <summary>Label shown in the busy chip, e.g. "● Rendering scene… 42%".</summary>
+    public string RenderBusyText
+    {
+        get => _renderBusyText;
+        private set => this.RaiseAndSetIfChanged(ref _renderBusyText, value);
+    }
+
+    private bool _renderBusyCancellable;
+    /// <summary>True when the current (most-recent) job supplied a cancel action —
+    /// drives the chip's Cancel button visibility.</summary>
+    public bool RenderBusyCancellable
+    {
+        get => _renderBusyCancellable;
+        private set => this.RaiseAndSetIfChanged(ref _renderBusyCancellable, value);
+    }
+
+    /// <summary>Cancel the current (most-recent) cancellable job.</summary>
+    public ReactiveCommand<Unit, Unit> CancelRenderBusyCommand { get; }
+
+    private void RefreshBusyChip()
+    {
+        BusyEntry? top;
+        int count;
+        lock (_busyLock)
+        {
+            count = _busy.Count;
+            top = count > 0 ? _busy[^1] : null;
+        }
+        void Apply()
+        {
+            IsRenderBusy = count > 0;
+            RenderBusyText = top != null ? "● " + top.Label : "";
+            RenderBusyCancellable = top?.OnCancel != null;
+        }
+        if (Dispatcher.UIThread.CheckAccess()) Apply();
+        else Dispatcher.UIThread.Post(Apply);
+    }
+
+    /// <summary>Begin an expensive render job: shows the status-bar chip with
+    /// <paramref name="label"/>. Dispose the returned scope when done (safe from
+    /// any thread). Concurrent jobs coexist; the chip shows the most recent.
+    /// An optional <paramref name="onCancel"/> surfaces a Cancel button.</summary>
+    public IDisposable BeginRenderBusy(string label, Action? onCancel = null)
+    {
+        var entry = new BusyEntry { Label = label, OnCancel = onCancel };
+        lock (_busyLock) _busy.Add(entry);
+        RefreshBusyChip();
+        return new RenderBusyScope(this, entry);
+    }
+
+    /// <summary>Update a running job's chip label (e.g. progress percent). Updates
+    /// the currently-shown job. No-op when nothing is busy. Safe from any thread.</summary>
+    public void UpdateRenderBusy(string label)
+    {
+        lock (_busyLock)
+        {
+            if (_busy.Count == 0) return;
+            _busy[^1].Label = label;
+        }
+        RefreshBusyChip();
+    }
+
+    private void EndRenderBusy(BusyEntry entry)
+    {
+        lock (_busyLock) _busy.Remove(entry);
+        RefreshBusyChip();
+    }
+
+    private void CancelCurrentBusy()
+    {
+        Action? cancel;
+        lock (_busyLock) cancel = _busy.Count > 0 ? _busy[^1].OnCancel : null;
+        try { cancel?.Invoke(); } catch { /* cancel is best-effort */ }
+    }
+
+    private sealed class RenderBusyScope : IDisposable
+    {
+        private ShellViewModel? _owner;
+        private readonly BusyEntry _entry;
+        public RenderBusyScope(ShellViewModel owner, BusyEntry entry) { _owner = owner; _entry = entry; }
+        public void Dispose()
+        {
+            var o = System.Threading.Interlocked.Exchange(ref _owner, null);
+            o?.EndRenderBusy(_entry);
+        }
+    }
+
     // ── Top-level commands ────────────────────────────────────────────────
 
     public ReactiveCommand<Unit, bool> ShowFloatingMenuCommand { get; }
@@ -1928,6 +2046,38 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
         set => this.RaiseAndSetIfChanged(ref _asciiFxBreathe, value);
     }
 
+    // #261 / Audio-Reactive Phase 2 — drive the ASCII FX from live audio.
+    private bool _asciiFxAudioReactive;
+    /// <summary>When true, the live pump routes the built ASCII FX settings
+    /// through <see cref="FracturingFog.Imaging.AudioReactiveAsciiFx.Apply"/>
+    /// each frame so the terminal view pulses with the music. Turning it on
+    /// spins up audio capture (via <see cref="EnsureAudioModulationStarted"/>).</summary>
+    public bool AsciiFxAudioReactive
+    {
+        get => _asciiFxAudioReactive;
+        set
+        {
+            if (value == _asciiFxAudioReactive) return;
+            _asciiFxAudioReactive = value;
+            if (value) EnsureAudioModulationStarted?.Invoke();
+            this.RaisePropertyChanged();
+        }
+    }
+
+    /// <summary>Host-supplied getter for the live audio modulation source
+    /// (null when no audio backend / not yet started). Set by the bootstrap.</summary>
+    public Func<FracturingFog.Audio.IAudioModulationSource?>? GetAudioModulationSource { get; set; }
+
+    /// <summary>Host-supplied hook to ensure audio capture is running, invoked
+    /// when an audio-reactive consumer turns on outside a slideshow. Set by the
+    /// bootstrap.</summary>
+    public Action? EnsureAudioModulationStarted { get; set; }
+
+    /// <summary>#263 — app-scoped audio→param modulation matrix manager. Set by
+    /// the bootstrap; drives fractal params from audio via the shared animation
+    /// bus. Null in headless / test contexts.</summary>
+    public Animation.AudioModulationManager? AudioModulation { get; set; }
+
     /// <summary>Named ASCII FX presets for the toolbar picker ("None" + catalogue).</summary>
     public System.Collections.Generic.IReadOnlyList<string> AsciiFxPresetNames { get; }
         = FracturingFog.Imaging.AsciiFxPresets.Names;
@@ -1983,6 +2133,11 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
         if (_asciiFxHue) fx.HueCycle = true;
         if (_asciiFxCrt) fx.Crt = true;
         if (_asciiFxBreathe) fx.Breathe = true;
+        // #261 — audio-reactive: map the live modulation frame onto the FX
+        // scalars. No-op when the source is null / inactive (frame passes the
+        // gate inside Apply), so the base look is preserved without audio.
+        if (_asciiFxAudioReactive && GetAudioModulationSource?.Invoke() is { IsActive: true } modSrc)
+            FracturingFog.Imaging.AudioReactiveAsciiFx.Apply(fx, modSrc.Sample());
         return fx.AnyEnabled ? fx : null;
     }
 
@@ -2071,6 +2226,13 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
                 isAcidFog && attachedAnim != null
                 && attachedAnim.Tracks.Any(t => t.Enabled
                     && string.Equals(t.ParamName, "AcidWarpFlow", StringComparison.Ordinal));
+            // #268 — hydrate the audio→param manager from this region's saved
+            // bindings before re-resolving, so a recalled region restores its audio
+            // drive. Null / empty clears any prior region's drive.
+            AudioModulation?.LoadBindings(_themeService.GetRegionAudioBindings(name));
+            // #263 — re-resolve audio→param animators against the region's params
+            // instance + fractal type (drops params the new type can't animate).
+            AudioModulation?.Rebind();
             Main.RenderHost.Trigger();
         }
     }
@@ -2326,6 +2488,10 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
             vm.PreviewShotRequested  += (_, shot) => PreviewSceneShot(shot);
             vm.PlaySceneRequested    += (_, scene) => PlayScene(scene);
             vm.ExportSceneRequested  += (_, args) => ExportSceneRequested?.Invoke(this, args);
+            vm.BrowseAudioFileRequested += async e =>
+            {
+                if (SceneAudioFileBrowseRequested is { } h) await h(e);
+            };
             vm.StopPreviewRequested  += (_, _) => StopScenePreview();
             vm.CloseRequested        += (_, _) => IsSceneEditorVisible = false;
             vm.MessageRequested      += (_, args) => MessageRequested?.Invoke(this, args);
@@ -2407,6 +2573,11 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
                 MessageSeverity.Warning));
             return;
         }
+
+        // A scene with audio-reactive tracks (#265) needs the capture running so
+        // the tracks have a live source when their shots load onto the bus.
+        if (scene.AudioTracks is { Count: > 0 })
+            EnsureAudioModulationStarted?.Invoke();
 
         StopScene();
         _scenePlaying = scene;
@@ -2506,7 +2677,8 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
             shotStart = tl.Entries[sample.CurrentEntry].StartTime;
 
         AnimationBusHost.LoadSceneShot(shot, anim, Main.ViewState.FractalParameters,
-            scene.GlobalTracks, shotStart);
+            scene.GlobalTracks, shotStart,
+            scene.AudioTracks, GetAudioModulationSource?.Invoke());
     }
 
     /// <summary>Animation Roadmap Sub-goal B — open the Region Editor for the
@@ -2739,6 +2911,20 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
             // sibling floating windows). The view is a UserControl now and can
             // no longer self-close.
             FFClient.CloseRequested += (_, _) => IsFFClientVisible = false;
+
+            // #269 follow-up — surface server-dispatched renders on the shared
+            // status-bar busy chip (the client view has its own status too).
+            IDisposable? clientBusy = null;
+            FFClient.WhenAnyValue(x => x.IsRendering).Subscribe(rendering =>
+            {
+                if (rendering) clientBusy ??= BeginRenderBusy("Server render…");
+                else { clientBusy?.Dispose(); clientBusy = null; }
+            });
+            FFClient.WhenAnyValue(x => x.RenderStatus).Subscribe(s =>
+            {
+                if (clientBusy != null && !string.IsNullOrWhiteSpace(s))
+                    UpdateRenderBusy("Server render — " + s);
+            });
         }
         // Mirror MainViewModel's active custom watermark in so the form's
         // "Send custom watermark" checkbox has something to send.
@@ -2890,6 +3076,10 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
     /// drives the Engine's SceneVideoRenderer).</summary>
     public event EventHandler<SceneExportEventArgs>? ExportSceneRequested;
 
+    /// <summary>Scene Editor wants to pick the export audio file (Phase 7 / #266).
+    /// The host fills <see cref="OpenFileEventArgs.Path"/> via its file picker.</summary>
+    public event Func<OpenFileEventArgs, Task>? SceneAudioFileBrowseRequested;
+
     /// <summary>Editor or other child VM wants to show a MessageBox.</summary>
     public event EventHandler<ThemeMessageEventArgs>? MessageRequested;
 
@@ -2972,6 +3162,10 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
     /// <summary>Open the general application-settings dialog. Host seeds it
     /// from the persisted AnimationSettings and writes back on OK.</summary>
     public event EventHandler? AppSettingsRequested;
+
+    /// <summary>Raised to open the Audio-Reactive settings dialog standalone
+    /// (regression fix — previously reachable only from Slideshow Settings).</summary>
+    public event EventHandler? AudioSettingsRequested;
 
     /// <summary>Export user-defined colour themes to a JSON file. Host pops a
     /// SaveFilePicker then calls IColorThemeService.ExportUserThemesToFile.</summary>

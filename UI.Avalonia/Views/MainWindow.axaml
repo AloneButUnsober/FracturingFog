@@ -88,6 +88,10 @@
                                   IsVisible="{Binding IsAsciiVisible}"
                                   IsChecked="{Binding AsciiFxBreathe, Mode=TwoWay}"
                                   ToolTip.Tip="ASCII FX — pulse the glyph density over time" />
+                    <ToggleButton Classes="toolbar" Content="Beat"
+                                  IsVisible="{Binding IsAsciiVisible}"
+                                  IsChecked="{Binding AsciiFxAudioReactive, Mode=TwoWay}"
+                                  ToolTip.Tip="ASCII FX — drive breathe / bloom / hue / glitch from live audio" />
                     <ComboBox x:Name="AsciiFxPresetCombo"
                               Classes="toolbar"
                               MinWidth="140"
@@ -113,6 +117,9 @@
                     <ToggleButton Classes="toolbar" Content="Warp"
                                   IsChecked="{Binding Main.PaletteCycleEnabled, Mode=TwoWay}"
                                   ToolTip.Tip="Warp the palette (colour cycling) over the current view — rotates the colour LUT without moving the camera. Cheap on Acid Fog / procedural types." />
+                    <ToggleButton Classes="toolbar" Content="Pulse"
+                                  IsChecked="{Binding Main.AudioViewBreathe, Mode=TwoWay}"
+                                  ToolTip.Tip="Audio view-breathe: the view zoom-pulses with the music (kick-driven). Base centre/zoom stay exact — the wobble is render-only. Shallow zoom only. Spins up audio capture." />
                     <ToggleButton Classes="toolbar" Content="Auto-VJ"
                                   IsVisible="{Binding Main.IsAcidFogType}"
                                   IsChecked="{Binding Main.AcidFogAmbientEnabled, Mode=TwoWay}"
@@ -121,6 +128,10 @@
                                   IsVisible="{Binding Main.IsAcidFogType}"
                                   IsChecked="{Binding Main.AcidFogAmbientLocked, Mode=TwoWay}"
                                   ToolTip.Tip="Lock the auto-VJ loop: freeze pattern advancement while the colour keeps cycling." />
+                    <ToggleButton Classes="toolbar" Content="Beat"
+                                  IsVisible="{Binding Main.IsAcidFogType}"
+                                  IsChecked="{Binding Main.AcidFogAmbientBeatSync, Mode=TwoWay}"
+                                  ToolTip.Tip="Beat-lock the auto-VJ loop: advance patterns on the music's downbeats and slave the palette cycle rate to the detected BPM." />
                     <Button Classes="toolbar" Content="Next ▸"
                             IsVisible="{Binding Main.IsAcidFogType}"
                             Command="{Binding Main.AcidFogAmbientNextCommand}"
@@ -246,6 +257,22 @@
                            FontFamily="Consolas,Menlo,monospace"
                            Margin="12,0,0,0"
                            ToolTip.Tip="Local FracturingFog render server status — open Floating Menu → Server… for controls" />
+                <!-- Render-busy chip (scene export, poster prints, server jobs, …).
+                     Yellow dot stays legible for red/green-colorblind users. -->
+                <StackPanel DockPanel.Dock="Right" Orientation="Horizontal"
+                            IsVisible="{Binding IsRenderBusy}"
+                            Margin="12,0,0,0" Spacing="6">
+                    <TextBlock Text="{Binding RenderBusyText}"
+                               Foreground="#FFCC00"
+                               FontFamily="Consolas,Menlo,monospace"
+                               VerticalAlignment="Center"
+                               ToolTip.Tip="An offline render is running" />
+                    <Button Content="Cancel"
+                            IsVisible="{Binding RenderBusyCancellable}"
+                            Command="{Binding CancelRenderBusyCommand}"
+                            Padding="6,1" FontSize="11"
+                            ToolTip.Tip="Cancel the running render" />
+                </StackPanel>
                 <TextBlock Text="{Binding Main.StatusText}"
                            Foreground="#C0C0C0"
                            FontFamily="Consolas,Menlo,monospace" />

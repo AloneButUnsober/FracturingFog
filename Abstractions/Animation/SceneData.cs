@@ -128,6 +128,25 @@ public sealed class SceneData
     /// dictate. See <see cref="SceneGlobalTrack"/>.</summary>
     public List<SceneGlobalTrack> GlobalTracks { get; set; } = new();
 
+    /// <summary>Scene-wide audio-reactive post/look tracks (#265 / Audio-Reactive
+    /// Phase 6). Each drives one <see cref="SceneGlobalTarget"/> scalar from a live
+    /// audio signal instead of keyframes, applied on top of every shot after the
+    /// keyframe <see cref="GlobalTracks"/> — the live modulation layer riding the
+    /// static scene look. Empty = no audio reactivity, so the scene renders
+    /// exactly as its shots + keyframe tracks dictate. See
+    /// <see cref="SceneAudioTrack"/>.</summary>
+    public List<SceneAudioTrack> AudioTracks { get; set; } = new();
+
+    /// <summary>Optional path to an audio file that drives the scene's
+    /// <see cref="AudioTracks"/> during <em>offline export</em> (Audio-Reactive
+    /// Phase 7 / #266). The exporter analyses this file once into a deterministic,
+    /// seekable modulation source and samples it at each frame's scene time, so an
+    /// exported video is reproducible frame-for-frame; the encoded MP4 also carries
+    /// this file as its audio track. Empty = no audio-reactive export (live
+    /// playback still uses the running capture source). Not required for live
+    /// playback; only the offline renderer reads it.</summary>
+    public string AudioFilePath { get; set; } = string.Empty;
+
     /// <summary>Free-form tags for the Asset Manager / slideshow filter UI
     /// ("demo", "3D", "calm", …). Case-sensitive.</summary>
     public List<string> Tags { get; set; } = new();
