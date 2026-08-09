@@ -25,10 +25,17 @@
     <LangVersion>latest</LangVersion>
     <RootNamespace>FracturingFog.Audio</RootNamespace>
     <AssemblyName>FracturingFog.Audio</AssemblyName>
+    <!-- #271 — OpenAlAudioBackend uses Device*/short* with the ALC capture API. -->
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
   </PropertyGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\Abstractions\FracturingFog.Abstractions.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- #271 — SampleProviderPump is internal; unit tests exercise it directly. -->
+    <InternalsVisibleTo Include="FracturingFog.Server.Tests" />
   </ItemGroup>
 
   <ItemGroup>
@@ -39,6 +46,24 @@
       new RID-specific native lands.
     -->
     <PackageReference Include="MathNet.Numerics" Version="5.0.0" />
+    <!--
+      #271 (parent #58) — cross-platform live audio (mic + Linux loopback) via
+      OpenAL. Silk.NET.OpenAL wraps ALC capture with per-RID native name
+      resolution; Silk.NET.OpenAL.Soft.Native bundles the OpenAL Soft runtime
+      per RID so the common desktop case needs no user install (Tier A). The
+      Enumeration extension lists capture devices to find the PulseAudio /
+      PipeWire ".monitor" sink for system loopback on Linux.
+
+      LICENSE: OpenAL Soft is LGPL v2.1. It is consumed here as a dynamically
+      linked native library (no static link, no source modification), which the
+      LGPL permits for a differently-licensed application. Attribution + a copy
+      of the LGPL text ship in Docs/Licenses/OpenAL-Soft-LGPL.txt.
+    -->
+    <PackageReference Include="Silk.NET.OpenAL" Version="2.23.0" />
+    <!-- Extensions.EXT owns ALC_EXT_CAPTURE (mic/loopback) + capture-device
+         enumeration used to locate the Linux ".monitor" sink for loopback. -->
+    <PackageReference Include="Silk.NET.OpenAL.Extensions.EXT" Version="2.23.0" />
+    <PackageReference Include="Silk.NET.OpenAL.Soft.Native" Version="1.23.1" />
   </ItemGroup>
 
 </Project>
