@@ -140,6 +140,9 @@
     <Compile Remove="Hosting\PngSlideshowFrameRecorder.cs" />
     <!-- Wave 1.C1 — FfmpegSetupDialog moved into FracturingFog.Hosting.dll. -->
     <Compile Remove="Hosting\FfmpegSetupDialog.cs" />
+    <!-- #271 — AudioRuntimeSetupDialog lives in FracturingFog.Hosting.dll like
+         the other Avalonia host dialogs; WinExe consumes it via the ref. -->
+    <Compile Remove="Hosting\AudioRuntimeSetupDialog.cs" />
     <!-- Wave 1.C1 closure (2026-06-22) — AvaloniaDialogs moved into
          FracturingFog.Hosting.dll after the QD coord codec + Audio capability
          probe carve-outs. WinExe consumes it across the ProjectReference. -->
