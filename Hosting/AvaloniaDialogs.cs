@@ -424,6 +424,18 @@ namespace FracturingFog.Hosting
 
             async void Run()
             {
+                // #271 (parent #58) — Tier B lazy prompt. On Linux/macOS where the
+                // OpenAL runtime is missing, live mic/loopback are greyed in the
+                // picker; offer the one-time install/skip dialog first so the user
+                // learns why and can enable it. Suppressed after they elect
+                // Manual/Skip; a successful rescan ungreys sources for this open.
+                if (!OperatingSystem.IsWindows()
+                    && !global::FracturingFog.Audio.OpenAlRuntime.IsAvailable()
+                    && !global::FracturingFog.Models.AudioRuntimePreferences.Instance.SuppressPrompt())
+                {
+                    try { await AudioRuntimeSetupDialog.ShowAsync(owner); } catch { }
+                }
+
                 var current = AudioSettingsStore.Load();
                 var vm = new AudioSettingsViewModel(current, liveSource,
                     capabilities: AudioCapabilityProbe.Detect(),
