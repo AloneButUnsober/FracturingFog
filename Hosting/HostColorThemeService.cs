@@ -608,7 +608,7 @@ namespace FracturingFog.Hosting
             return SceneLibrary.Instance.Remove(sceneName);
         }
 
-        public bool SaveCurrentAsRegion(string regionName, FractalViewState state, WatermarkDef? embeddedWatermark = null, string? animationName = null)
+        public bool SaveCurrentAsRegion(string regionName, FractalViewState state, WatermarkDef? embeddedWatermark = null, string? animationName = null, System.Collections.Generic.IReadOnlyList<FracturingFog.Audio.AudioParamBinding>? audioBindings = null)
         {
             if (string.IsNullOrWhiteSpace(regionName) || state == null) return false;
 
@@ -624,10 +624,24 @@ namespace FracturingFog.Hosting
             region.Description = "";
             region.EmbeddedWatermark = embeddedWatermark?.Clone();
             region.AnimationName = string.IsNullOrWhiteSpace(animationName) ? null : animationName;
+            // #268 — persist audio→param bindings so this region's audio reactivity
+            // comes back on recall. Null / empty leaves the region audio-clean.
+            region.AudioBindings = (audioBindings != null && audioBindings.Count > 0)
+                ? new System.Collections.Generic.List<FracturingFog.Audio.AudioParamBinding>(audioBindings)
+                : null;
 
             FractalRegionLibrary.Instance.UserRegions.Add(region);
             FractalRegionLibrary.Instance.Save();
             return true;
+        }
+
+        /// <inheritdoc/>
+        public System.Collections.Generic.IReadOnlyList<FracturingFog.Audio.AudioParamBinding>? GetRegionAudioBindings(string regionName)
+        {
+            if (string.IsNullOrWhiteSpace(regionName)) return null;
+            var r = FractalRegionLibrary.Instance.All
+                .FirstOrDefault(x => string.Equals(x.Name, regionName, StringComparison.OrdinalIgnoreCase));
+            return r?.AudioBindings;
         }
 
         /// <summary>
