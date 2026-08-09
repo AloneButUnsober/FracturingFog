@@ -34,6 +34,7 @@ using System.IO;
 using System.Threading;
 
 using FracturingFog.Abstractions.Animation;
+using FracturingFog.Audio;
 using FracturingFog.Imaging;
 using FracturingFog.Interefaces;
 using FracturingFog.Models;
@@ -62,6 +63,22 @@ namespace FracturingFog.Export
 
         /// <summary>Keep the intermediate PNG sequence after a successful encode.</summary>
         public bool KeepFrames { get; set; }
+
+        /// <summary>Deterministic, seekable audio source for the scene's
+        /// <see cref="SceneData.AudioTracks"/> (Audio-Reactive Phase 7 / #266). When
+        /// set and <see cref="IAudioModulationSource.IsActive"/>, each sub-frame
+        /// samples it at its scene-global time (<c>SampleAt</c>) and applies the
+        /// scene's audio tracks on top of the shot params — so the render is
+        /// reproducible from the audio timeline, never the wall clock. Null = the
+        /// scene renders audio-silent (shots + keyframe globals only). The caller
+        /// bakes this via <c>OfflineAudioAnalysis.AnalyzeFile</c>.</summary>
+        public IAudioModulationSource? AudioSource { get; set; }
+
+        /// <summary>Optional audio file to mux into the encoded container after a
+        /// successful video encode (Phase 7). Normally the same file
+        /// <see cref="AudioSource"/> was baked from, so the exported MP4 carries its
+        /// music. Null / missing = a silent video.</summary>
+        public string? AudioMuxPath { get; set; }
     }
 
     /// <summary>Outcome of a scene render.</summary>
@@ -155,6 +172,15 @@ namespace FracturingFog.Export
             // GLOBAL time and applied on top of the shot's own params.
             var globalTracks = scene.GlobalTracks;
 
+            // Scene-wide audio-reactive tracks (Phase 7) — deterministic: sampled
+            // from the seekable source at each sub-frame's GLOBAL scene time. Only
+            // live when a source is supplied and active; otherwise the scene renders
+            // audio-silent exactly as before.
+            IAudioModulationSource? audioSource =
+                (options.AudioSource is { IsActive: true } && scene.AudioTracks is { Count: > 0 })
+                    ? options.AudioSource : null;
+            var audioTracks = audioSource != null ? scene.AudioTracks : null;
+
             int n = w * h;
             var accum = new float[n * 3];     // weighted RGB accumulator
             var outBuf = new uint[n];
@@ -196,7 +222,7 @@ namespace FracturingFog.Export
                             (morphBase != null && s.OriginalIndex == frame.PrimaryOriginalIndex)
                                 ? morphBase : null;
                         uint[] buf = RenderShotFrame(resolved, s.OriginalIndex, s.LocalTime, w, h, ct,
-                            overrideBase, s.GlobalTime, globalTracks);
+                            overrideBase, s.GlobalTime, globalTracks, audioSource, audioTracks);
                         float wt = (float)s.Weight;
                         for (int i = 0; i < n; i++)
                         {
@@ -277,6 +303,32 @@ namespace FracturingFog.Export
                     "ffmpeg encode failed (PNG sequence kept at " + pngFolder + "):\n" + Tail(log));
             }
 
+            // ── Mux audio (Phase 7 / #266) ──
+            // Attach the analysed audio file to the encoded video so the exported
+            // MP4 actually carries its music. A mux failure is non-fatal: keep the
+            // (silent) video rather than losing the whole render.
+            if (!string.IsNullOrWhiteSpace(options.AudioMuxPath) && File.Exists(options.AudioMuxPath))
+            {
+                progress?.Invoke(1.0, "muxing audio");
+                string muxed = outPath + ".audio" + ext;
+                var (mok, _) = FfmpegEncoder
+                    .MuxAudioAsync(outPath, options.AudioMuxPath!, muxed, ct)
+                    .GetAwaiter().GetResult();
+                if (mok)
+                {
+                    try
+                    {
+                        File.Delete(outPath);
+                        File.Move(muxed, outPath);
+                    }
+                    catch { try { File.Delete(muxed); } catch { /* best effort */ } }
+                }
+                else
+                {
+                    try { File.Delete(muxed); } catch { /* best effort */ }
+                }
+            }
+
             if (options.KeepFrames)
                 return new SceneVideoResult(true, framesWritten, outPath, pngFolder, null);
 
@@ -291,7 +343,9 @@ namespace FracturingFog.Export
             double localTime, int w, int h, CancellationToken ct,
             FractalParameters? overrideBase = null,
             double globalTime = 0.0,
-            IReadOnlyList<SceneGlobalTrack>? globalTracks = null)
+            IReadOnlyList<SceneGlobalTrack>? globalTracks = null,
+            IAudioModulationSource? audioSource = null,
+            IReadOnlyList<SceneAudioTrack>? audioTracks = null)
         {
             if (!cache.TryGetValue(originalIndex, out var shot))
                 return BlackFrame(w, h);
@@ -328,6 +382,14 @@ namespace FracturingFog.Export
             // lighting uniformly across the whole timeline. No-op when the scene
             // has no global tracks (frozen-outgoing renders pass none).
             SceneGlobalTracks.Apply(globalTracks, p, globalTime);
+
+            // Scene-wide audio-reactive tracks (Phase 7 / #266) at this sub-frame's
+            // GLOBAL scene time, seeked deterministically from the offline source.
+            // Applied after the keyframe globals — the live modulation layer riding
+            // the static look. No-op when no source (frozen-outgoing renders, or a
+            // scene without audio).
+            if (audioSource != null && audioTracks is { Count: > 0 })
+                SceneAudioTracks.Apply(audioTracks, p, audioSource.SampleAt(globalTime));
 
             // Per-shot tone-map override (S8). Applied last so it pins this shot's
             // HDR tone-map regardless of the region lighting; null = inherit.

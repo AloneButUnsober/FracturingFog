@@ -274,6 +274,17 @@ namespace FracturingFog.Models
         public RegionFractalParams? Params { get; set; }
 
         /// <summary>
+        /// #268 / Audio-Reactive Phase 4 fast-follow — optional snapshot of the
+        /// region's audio→param modulation bindings (signal / curve / gain / bias /
+        /// invert / out-range + enabled), keyed by parameter name. Hydrated into the
+        /// app-scoped <c>AudioModulationManager</c> on region jump so a saved
+        /// region's audio reactivity comes back on recall. Null for regions with no
+        /// audio drive; omitted from JSON when null so legacy regions stay clean.
+        /// </summary>
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public List<FracturingFog.Audio.AudioParamBinding>? AudioBindings { get; set; }
+
+        /// <summary>
         /// Optional snapshot of the Relief 3D (2D heightfield / Oblique raymarch)
         /// settings active when the region was saved. Null = the region captured
         /// no relief view (either relief was off, or it predates relief-aware

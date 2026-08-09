@@ -68,6 +68,7 @@ public sealed class FloatingMenuViewModel : ViewModelBase
             () => SaveLightingToThemeClick?.Invoke(this, SelectedTheme ?? string.Empty));
         SlideshowSettingsCommand= MakeCmd(() => SlideshowSettingsClick?.Invoke(this, EventArgs.Empty));
         AppSettingsCommand      = MakeCmd(() => AppSettingsClick?.Invoke(this, EventArgs.Empty));
+        AudioSettingsCommand    = MakeCmd(() => AudioSettingsClick?.Invoke(this, EventArgs.Empty));
         ServerCommand           = MakeCmd(() => ServerClick?.Invoke(this, EventArgs.Empty));
         ClientCommand           = MakeCmd(() => ClientClick?.Invoke(this, EventArgs.Empty));
         ToggleAdaptiveSweepCommand = ReactiveCommand.Create(ToggleAdaptiveSweep);
@@ -1038,6 +1039,7 @@ public sealed class FloatingMenuViewModel : ViewModelBase
     public ReactiveCommand<Unit, Unit> SaveLightingToThemeCommand { get; }
     public ReactiveCommand<Unit, Unit> SlideshowSettingsCommand { get; }
     public ReactiveCommand<Unit, Unit> AppSettingsCommand { get; }
+    public ReactiveCommand<Unit, Unit> AudioSettingsCommand { get; }
     public ReactiveCommand<Unit, Unit> ServerCommand { get; }
     public ReactiveCommand<Unit, Unit> ClientCommand { get; }
     public ReactiveCommand<Unit, Unit> ToggleAdaptiveSweepCommand { get; }
@@ -1088,6 +1090,9 @@ public sealed class FloatingMenuViewModel : ViewModelBase
     /// <summary>Open the general application-settings dialog (animated-param
     /// ceiling override, and future app-global settings).</summary>
     public event EventHandler? AppSettingsClick;
+    /// <summary>Raised by <see cref="AudioSettingsCommand"/> — opens the
+    /// Audio-Reactive settings dialog standalone (not only via Slideshow).</summary>
+    public event EventHandler? AudioSettingsClick;
     public event EventHandler? ServerClick;
     public event EventHandler? ClientClick;
     public event EventHandler? EditWatermarkClick;

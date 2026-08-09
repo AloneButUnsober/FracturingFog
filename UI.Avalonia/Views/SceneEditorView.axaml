@@ -288,6 +288,64 @@
                     </StackPanel>
                 </Border>
 
+                <!-- Audio Reactive (scene-wide, #265) -->
+                <Border Classes="group">
+                    <StackPanel Spacing="6">
+                        <Grid ColumnDefinitions="*,Auto">
+                            <TextBlock Classes="section" Grid.Column="0" Text="Audio Reactive" VerticalAlignment="Center" />
+                            <Button Grid.Column="1" Classes="action new" Content="+ Add track"
+                                    Command="{Binding AddAudioTrackCommand}" />
+                        </Grid>
+                        <TextBlock Foreground="#8A8A8A" FontSize="11" TextWrapping="Wrap"
+                                   Text="Scene-wide post/look scalars driven live by the music, applied on top of every shot. Play spins up live audio capture; offline export analyses the file below and samples it deterministically at each frame's scene time." />
+
+                        <!-- Export audio file (Phase 7 / #266) -->
+                        <Grid ColumnDefinitions="Auto,*,Auto,Auto" ColumnSpacing="6">
+                            <TextBlock Grid.Column="0" Text="Export audio" VerticalAlignment="Center" FontSize="11" />
+                            <TextBox Grid.Column="1" Text="{Binding AudioFilePath}" Watermark="(none — silent export)"
+                                     FontSize="11" VerticalAlignment="Center" />
+                            <Button Grid.Column="2" Content="Browse…" Command="{Binding BrowseAudioFileCommand}" />
+                            <Button Grid.Column="3" Content="Clear" Command="{Binding ClearAudioFileCommand}"
+                                    IsEnabled="{Binding HasAudioFile}" />
+                        </Grid>
+
+                        <ItemsControl ItemsSource="{Binding AudioTracks}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate x:DataType="vm:SceneAudioTrackRowViewModel">
+                                    <Border Classes="keyrow">
+                                        <Grid ColumnDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,*,Auto"
+                                              ColumnSpacing="4">
+                                            <TextBlock Classes="label" Grid.Column="0" Text="target" FontSize="10" />
+                                            <ComboBox Grid.Column="1" ItemsSource="{Binding Targets}"
+                                                      SelectedItem="{Binding Target}" MinWidth="150"
+                                                      ToolTip.Tip="Which scene-wide post/look scalar this track drives" />
+                                            <TextBlock Classes="label" Grid.Column="2" Text="signal" FontSize="10" />
+                                            <ComboBox Grid.Column="3" ItemsSource="{Binding Signals}"
+                                                      SelectedItem="{Binding Source}" MinWidth="120" />
+                                            <TextBlock Classes="label" Grid.Column="4" Text="curve" FontSize="10" />
+                                            <ComboBox Grid.Column="5" ItemsSource="{Binding Curves}"
+                                                      SelectedItem="{Binding Curve}" MinWidth="110" />
+                                            <TextBlock Classes="label" Grid.Column="6" Text="gain" FontSize="10" />
+                                            <NumericUpDown Grid.Column="7" Value="{Binding Gain}"
+                                                           Increment="0.1" FormatString="0.##" MinWidth="80" />
+                                            <TextBlock Classes="label" Grid.Column="8" Text="min" FontSize="10" />
+                                            <NumericUpDown Grid.Column="9" Value="{Binding OutMin}"
+                                                           Increment="0.05" FormatString="0.###" MinWidth="90" />
+                                            <TextBlock Classes="label" Grid.Column="10" Text="max" FontSize="10" />
+                                            <NumericUpDown Grid.Column="11" Value="{Binding OutMax}"
+                                                           Increment="0.05" FormatString="0.###" MinWidth="90" />
+                                            <CheckBox Grid.Column="12" Content="invert" IsChecked="{Binding Invert}"
+                                                      VerticalAlignment="Center" Margin="8,0,0,0" />
+                                            <Button Grid.Column="13" Classes="mini" Content="✕"
+                                                    Command="{Binding RemoveCommand}" ToolTip.Tip="Remove track" />
+                                        </Grid>
+                                    </Border>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </StackPanel>
+                </Border>
+
             </StackPanel>
         </ScrollViewer>
 

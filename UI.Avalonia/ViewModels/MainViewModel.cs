@@ -32,9 +32,11 @@ using System.Collections.ObjectModel;
 using System.Reactive;
 using Avalonia.Threading;
 using FracturingFog;
+using FracturingFog.Abstractions.Animation;
 using FracturingFog.Input;
 using FracturingFog.Models;
 using FracturingFog.Render;
+using FracturingFog.UI.Avalonia.ViewModels.Animation;
 using FracturingFog.ViewState;
 using ReactiveUI;
 
@@ -1407,6 +1409,82 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
         }
     }
 
+    // #262 / Audio-Reactive Phase 3 — beat-lock the auto-VJ loop.
+    /// <summary>Host getter for the live audio modulation source. Set by the
+    /// bootstrap; null when no audio backend.</summary>
+    public Func<FracturingFog.Audio.IAudioModulationSource?>? GetAudioModulationSource { get; set; }
+
+    /// <summary>Host hook to ensure audio capture is running. Set by the bootstrap.</summary>
+    public Action? EnsureAudioModulationStarted { get; set; }
+
+    private long _lastAmbientDownbeatSeen;
+    private bool _acidFogAmbientBeatSync;
+    /// <summary>When true (and the ambient loop is running), pattern advances are
+    /// driven by the music's downbeats instead of the hold clock, and the palette
+    /// cycle rate tracks the detected BPM. Turning it on spins up audio capture.
+    /// A downbeat advance fires even while <see cref="AcidFogAmbientLocked"/>.</summary>
+    public bool AcidFogAmbientBeatSync
+    {
+        get => _acidFogAmbientBeatSync;
+        set
+        {
+            if (!this.RaiseAndSetIfChangedReturnsChanged(ref _acidFogAmbientBeatSync, value))
+                return;
+            if (value)
+            {
+                EnsureAudioModulationStarted?.Invoke();
+                // Baseline the edge counter so we don't fire on stale history.
+                _lastAmbientDownbeatSeen = GetAudioModulationSource?.Invoke()?.DownbeatCount ?? 0;
+            }
+        }
+    }
+
+    // #264 / Audio-Reactive Phase 5 — view "breathing" (zoom-pulse + shake).
+    private ViewBreatheAnimator? _viewBreathe;
+    private bool _audioViewBreathe;
+    /// <summary>When true, the view zoom-pulses (and optionally shakes) with the
+    /// music: a render-gated <see cref="ViewBreatheAnimator"/> registers on the
+    /// shared bus and writes a transient overlay the render host applies per
+    /// frame. The base centre / zoom are never mutated, so navigation stays exact.
+    /// Turning it on spins up audio capture; off snaps the view back to base.
+    /// Shallow-zoom only (suppressed past 1e6).</summary>
+    public bool AudioViewBreathe
+    {
+        get => _audioViewBreathe;
+        set
+        {
+            if (!this.RaiseAndSetIfChangedReturnsChanged(ref _audioViewBreathe, value))
+                return;
+
+            var bus = AnimationBusHost.Bus;
+            if (value)
+            {
+                EnsureAudioModulationStarted?.Invoke();
+                var src = GetAudioModulationSource?.Invoke();
+                if (src != null && bus != null)
+                {
+                    // Fresh animator each enable so it binds the current source.
+                    _viewBreathe = new ViewBreatheAnimator(src, ViewState) { IsEnabled = true };
+                    bus.Register(_viewBreathe);
+                    bus.Refresh();
+                }
+            }
+            else
+            {
+                if (_viewBreathe != null && bus != null)
+                {
+                    _viewBreathe.IsEnabled = false;
+                    bus.UnregisterPermanent(_viewBreathe);
+                    bus.Refresh();
+                }
+                _viewBreathe?.ResetOverlay();
+                _viewBreathe = null;
+                // Snap the view back to the base (no more ticks will fire).
+                _renderHost.Trigger();
+            }
+        }
+    }
+
     /// <summary>Manual "next" — advance to the next pattern now, even when locked.</summary>
     public void AcidFogAmbientNext() => _acidAmbientDirector?.RequestNext();
 
@@ -1443,6 +1521,14 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
         PaletteCycleEnabled = true;
         _renderHost.Trigger();
 
+        // #262 — baseline the beat-sync edge counter so the first downbeat after
+        // start advances, not a stale one accrued before the loop began.
+        if (_acidFogAmbientBeatSync)
+        {
+            EnsureAudioModulationStarted?.Invoke();
+            _lastAmbientDownbeatSeen = GetAudioModulationSource?.Invoke()?.DownbeatCount ?? 0;
+        }
+
         _acidAmbientLastTick = DateTime.UtcNow;
         _acidAmbientTimer ??= new DispatcherTimer(
             TimeSpan.FromMilliseconds(50), DispatcherPriority.Background, OnAcidAmbientTick);
@@ -1476,6 +1562,27 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
 
         var d = _acidAmbientDirector;
         if (d == null) return;
+
+        // #262 — beat-lock: advance on the downbeat and slave the palette cycle
+        // rate to BPM, instead of the wall-clock hold. Falls back to the hold
+        // clock when audio is inactive so a dropped signal doesn't freeze the loop.
+        if (_acidFogAmbientBeatSync
+            && GetAudioModulationSource?.Invoke() is { IsActive: true } mod)
+        {
+            var f = mod.Sample();
+            if (f.Bpm > 0)
+                PaletteCycleRate = Math.Clamp(f.Bpm / 240.0, 0.05, 2.0);
+
+            long dc = mod.DownbeatCount;
+            if (dc > _lastAmbientDownbeatSeen)
+            {
+                _lastAmbientDownbeatSeen = dc;
+                d.RequestNext();                       // advance on the bar
+            }
+            if (d.Tick(0)) BeginAcidFade(d.CurrentPattern); // dt=0: no hold accrual
+            return;
+        }
+
         if (d.Tick(dtMs)) BeginAcidFade(d.CurrentPattern);
     }
 

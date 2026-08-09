@@ -640,6 +640,24 @@ namespace FracturingFog.Hosting
                 var s = AudioSettingsStore.Load();
                 return (Math.Max(1, s.BeatsPerTheme), Math.Max(1, s.BeatsPerRegion));
             };
+            // #259 audio-reactive expansion — pure getter for the modulation
+            // source (no side effects) plus an ensure-started hook the shell
+            // fires when an audio-reactive consumer (ASCII FX, params) turns on
+            // outside a slideshow. Left warm on toggle-off; slideshow stop still
+            // owns the eventual capture stop.
+            s_shell.GetAudioModulationSource = () => s_audioDriver?.ModulationSource;
+            s_shell.EnsureAudioModulationStarted = EnsureAudioCaptureStarted;
+            // #262 — Acid Fog beat-lock lives on MainViewModel's ambient loop.
+            s_shell.Main.GetAudioModulationSource = () => s_audioDriver?.ModulationSource;
+            s_shell.Main.EnsureAudioModulationStarted = EnsureAudioCaptureStarted;
+            // #263 — audio→param modulation matrix manager (app-scoped), driving
+            // fractal params through the shared render-gated animation bus.
+            s_shell.AudioModulation = new FracturingFog.UI.Avalonia.ViewModels.Animation.AudioModulationManager(
+                () => s_audioDriver?.ModulationSource,
+                EnsureAudioCaptureStarted,
+                () => s_shell.Main.ViewState.FractalParameters,
+                () => s_shell.Main.ViewState.FractalType,
+                () => FracturingFog.UI.Avalonia.ViewModels.Animation.AnimationBusHost.Bus);
 
             // Window title: "{ProgramName} v{Version}  —  {renderer description}"
             // (legacy MainForm parity, MainForm.cs:917). RebuildWindowTitle()
@@ -889,6 +907,10 @@ namespace FracturingFog.Hosting
             // offline render on a background thread (one calculator live at a
             // time -> inside the ~90% cap), then report the outcome. ffmpeg
             // missing -> the render keeps a recoverable PNG sequence.
+            // Phase 7 (#266) — Scene Editor "Browse…" for the export audio file.
+            shell.SceneAudioFileBrowseRequested += async e =>
+                e.Path = await AvaloniaDialogs.PickOpenFileAsync(e.Title, e.Filter);
+
             shell.ExportSceneRequested += async (_, args) =>
             {
                 try
@@ -928,8 +950,43 @@ namespace FracturingFog.Hosting
                         },
                     };
 
-                    var result = await Task.Run(() =>
-                        FracturingFog.Export.SceneVideoRenderer.Render(args.Scene, opts));
+                    // Status-bar "Rendering…" chip (with Cancel) while the job runs.
+                    using var sceneCts = new CancellationTokenSource();
+                    var busy = shell.BeginRenderBusy("Rendering scene…", () => { try { sceneCts.Cancel(); } catch { } });
+                    FracturingFog.Export.SceneVideoResult result;
+                    try
+                    {
+                        result = await Task.Run(() =>
+                    {
+                        // Phase 7 (#266) — deterministic audio-reactive export: bake
+                        // the scene's audio file into a seekable modulation source
+                        // and mux it into the encoded video. No file / no ffmpeg =
+                        // audio-silent, exactly as before.
+                        var scene = args.Scene;
+                        if (scene.AudioTracks is { Count: > 0 }
+                            && !string.IsNullOrWhiteSpace(scene.AudioFilePath))
+                        {
+                            shell.UpdateRenderBusy("Analysing audio…");
+                            string? ff = FracturingFog.FfmpegEncoder.FindFfmpeg();
+                            if (ff != null)
+                            {
+                                var aset = s_audioDriver?.Settings;
+                                var baked = FracturingFog.Audio.OfflineAudioAnalysis.AnalyzeFile(
+                                    scene.AudioFilePath, ff,
+                                    aset?.Sensitivity ?? 0.5f, aset?.BandWeights);
+                                if (baked != null)
+                                {
+                                    opts.AudioSource = baked;
+                                    opts.AudioMuxPath = scene.AudioFilePath;
+                                }
+                            }
+                        }
+                        return FracturingFog.Export.SceneVideoRenderer.Render(scene, opts,
+                            (frac, line) => shell.UpdateRenderBusy($"Rendering scene… {frac * 100:0}%"),
+                            sceneCts.Token);
+                        });
+                    }
+                    finally { busy.Dispose(); }
 
                     string msg = result.Ok
                         ? (!string.IsNullOrEmpty(result.VideoPath)
@@ -937,6 +994,11 @@ namespace FracturingFog.Hosting
                             : $"Frames rendered ({result.FramesWritten}):\n{result.FrameFolder}")
                         : (result.Message ?? "Scene export failed.");
                     await AvaloniaDialogs.ShowMessageAsync("Export Scene", msg, false);
+                }
+                catch (OperationCanceledException)
+                {
+                    try { await AvaloniaDialogs.ShowMessageAsync("Export Scene", "Scene export cancelled.", false); }
+                    catch { /* dialog itself failed */ }
                 }
                 catch (Exception ex)
                 {
@@ -1277,7 +1339,8 @@ namespace FracturingFog.Hosting
                             ? shell.Main.ActiveCustomWatermark
                             : null;
                         bool ok = ((IColorThemeService)s_themeService!)
-                            .SaveCurrentAsRegion(picked.Name, s_renderHost.ViewState, embedded, picked.AnimationName);
+                            .SaveCurrentAsRegion(picked.Name, s_renderHost.ViewState, embedded, picked.AnimationName,
+                                shell.AudioModulation?.ExportBindings());
                         if (ok)
                         {
                             // RefreshRegions honours the menu's active sort +
@@ -1559,7 +1622,10 @@ namespace FracturingFog.Hosting
 
                     try
                     {
-                        var result = await Task.Run(() => PosterRenderer.RenderToFile(req, CancellationToken.None));
+                        var busy = shell.BeginRenderBusy("Rendering wallpaper…");
+                        FracturingFog.Imaging.PosterResult result;
+                        try { result = await Task.Run(() => PosterRenderer.RenderToFile(req, CancellationToken.None)); }
+                        finally { busy.Dispose(); }
                         await AvaloniaDialogs.ShowMessageAsync(
                             "Wallpaper Saved",
                             $"Saved {result.SavedWidth}×{result.SavedHeight} px to:\n{path}\n({result.ElapsedMs} ms)",
@@ -1656,6 +1722,32 @@ namespace FracturingFog.Hosting
                 catch (Exception ex)
                 {
                     Console.Error.WriteLine($"[AvaloniaShellBootstrap] AppSettings failed: {ex.Message}");
+                }
+            };
+
+            // Audio-reactive settings — standalone entry (regression fix: was
+            // only reachable from the Slideshow Settings dialog). Opens bound to
+            // the persisted store; on close, reconfigure a running driver so any
+            // edits (source / sensitivity / band weights) apply to live audio-
+            // reactive consumers (Beat FX, Acid Fog beat-lock) without a restart.
+            shell.AudioSettingsRequested += async (_, _) =>
+            {
+                try
+                {
+                    // Build one matrix row per animatable scalar of the current
+                    // fractal type, bound to the app-scoped manager (in-session).
+                    var mgr = s_shell.AudioModulation;
+                    var rows = mgr?.DescriptorsForCurrentType()
+                        .Select(d => new FracturingFog.UI.Avalonia.ViewModels.AudioBindingRowViewModel(d, mgr))
+                        .ToList();
+                    await AvaloniaDialogs.ShowAudioSettingsAsync(
+                        owner: null, liveSource: s_audioDriver?.BeatSource, bindingRows: rows);
+                    if (s_audioDriver != null)
+                        s_audioDriver.Reconfigure(AudioSettingsStore.Load());
+                }
+                catch (Exception ex)
+                {
+                    Console.Error.WriteLine($"[AvaloniaShellBootstrap] AudioSettings failed: {ex.Message}");
                 }
             };
 
@@ -1942,6 +2034,7 @@ namespace FracturingFog.Hosting
                     int prevDop = FracturingFog.Rendering.RenderThrottle.MaxDegreeOfParallelism;
                     FracturingFog.Rendering.RenderThrottle.MaxDegreeOfParallelism =
                         FracturingFog.Rendering.RenderThrottle.Cpu90();
+                    var posterBusy = shell.BeginRenderBusy("Rendering poster…", () => { try { cts.Cancel(); } catch { } });
                     try
                     {
                         var result = await Task.Run(() => PosterRenderer.RenderToFile(req, cts.Token));
@@ -1969,6 +2062,7 @@ namespace FracturingFog.Hosting
                     }
                     finally
                     {
+                        posterBusy.Dispose();
                         FracturingFog.Rendering.RenderThrottle.MaxDegreeOfParallelism = prevDop;
                         s_posterCts = null;
                         cts.Dispose();
@@ -2051,7 +2145,8 @@ namespace FracturingFog.Hosting
                         lsystemPresets: new List<string>(LSystemPresets.All.Keys),
                         attractorPresets: null,
                         attractorDefaults: global::FracturingFog.AttractorCalculator.DefaultParams,
-                        flamePresets: new List<string>(FlamePresets.All.Keys));
+                        flamePresets: new List<string>(FlamePresets.All.Keys),
+                        audioModulation: s_shell?.AudioModulation);
                     vm.ParamChanged += () => s_renderHost?.Trigger();
 
                     // #135 — drop-colour eyedropper: route the params VM's sample
@@ -2185,7 +2280,8 @@ namespace FracturingFog.Hosting
                     }
 
                     var vs = s_renderHost.ViewState;
-                    var vm = new FractalParamsViewModel(vs.FractalType, vs.FractalParameters);
+                    var vm = new FractalParamsViewModel(vs.FractalType, vs.FractalParameters,
+                        audioModulation: s_shell?.AudioModulation);
                     vm.ParamChanged += () => s_renderHost?.Trigger();
 
                     var win = new PanelHostWindow(
@@ -2233,7 +2329,8 @@ namespace FracturingFog.Hosting
                     }
 
                     var vs = s_renderHost.ViewState;
-                    var vm = new FractalParamsViewModel(vs.FractalType, vs.FractalParameters);
+                    var vm = new FractalParamsViewModel(vs.FractalType, vs.FractalParameters,
+                        audioModulation: s_shell?.AudioModulation);
                     vm.ParamChanged += () => s_renderHost?.Trigger();
                     // #147 fix — the mesh-export button lives in this standalone
                     // dialog; wire its handler here too (it was only wired on the
