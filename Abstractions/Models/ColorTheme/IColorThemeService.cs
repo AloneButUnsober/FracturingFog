@@ -206,7 +206,13 @@ namespace FracturingFog.Models
         /// host's region library (built-in regions are never overwritten —
         /// the host should pop a friendly error and bail in that case).
         /// </summary>
-        bool SaveCurrentAsRegion(string regionName, FractalViewState state, WatermarkDef? embeddedWatermark = null, string? animationName = null);
+        bool SaveCurrentAsRegion(string regionName, FractalViewState state, WatermarkDef? embeddedWatermark = null, string? animationName = null, System.Collections.Generic.IReadOnlyList<FracturingFog.Audio.AudioParamBinding>? audioBindings = null);
+
+        /// <summary>#268 — the named region's saved audio→param modulation
+        /// bindings, or null when the region doesn't exist or carries none. Looked
+        /// up on region-recall so the shell can hydrate the audio modulation
+        /// manager before it re-registers animators.</summary>
+        System.Collections.Generic.IReadOnlyList<FracturingFog.Audio.AudioParamBinding>? GetRegionAudioBindings(string regionName);
 
         /// <summary>Look up the watermark embedded into a saved region, if any.
         /// Returns null when the region doesn't exist or has no embedded

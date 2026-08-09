@@ -1334,7 +1334,8 @@ namespace FracturingFog.Hosting
                             ? shell.Main.ActiveCustomWatermark
                             : null;
                         bool ok = ((IColorThemeService)s_themeService!)
-                            .SaveCurrentAsRegion(picked.Name, s_renderHost.ViewState, embedded, picked.AnimationName);
+                            .SaveCurrentAsRegion(picked.Name, s_renderHost.ViewState, embedded, picked.AnimationName,
+                                shell.AudioModulation?.ExportBindings());
                         if (ok)
                         {
                             // RefreshRegions honours the menu's active sort +

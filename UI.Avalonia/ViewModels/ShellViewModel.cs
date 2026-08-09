@@ -2220,6 +2220,10 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
                 isAcidFog && attachedAnim != null
                 && attachedAnim.Tracks.Any(t => t.Enabled
                     && string.Equals(t.ParamName, "AcidWarpFlow", StringComparison.Ordinal));
+            // #268 — hydrate the audio→param manager from this region's saved
+            // bindings before re-resolving, so a recalled region restores its audio
+            // drive. Null / empty clears any prior region's drive.
+            AudioModulation?.LoadBindings(_themeService.GetRegionAudioBindings(name));
             // #263 — re-resolve audio→param animators against the region's params
             // instance + fractal type (drops params the new type can't animate).
             AudioModulation?.Rebind();

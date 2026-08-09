@@ -92,6 +92,64 @@ public sealed class AudioModulationManager
         Rebind();
     }
 
+    /// <summary>#268 — snapshot every binding (param name + mapping + enabled) for
+    /// persistence on a region. Clones the mappings so later edits don't mutate the
+    /// saved copy.</summary>
+    public IReadOnlyList<AudioParamBinding> ExportBindings()
+    {
+        var list = new List<AudioParamBinding>(_entries.Count);
+        foreach (var (name, e) in _entries)
+        {
+            list.Add(new AudioParamBinding
+            {
+                ParamName = name,
+                Enabled = e.Enabled,
+                Binding = CloneBinding(e.Binding),
+            });
+        }
+        return list;
+    }
+
+    /// <summary>#268 — replace the in-session bindings with a region's saved set,
+    /// tearing down any current animator registrations first. Call
+    /// <see cref="Rebind"/> afterwards to re-register the enabled ones against the
+    /// new region's params. Null / empty clears all drive (region carried none).</summary>
+    public void LoadBindings(IEnumerable<AudioParamBinding>? bindings)
+    {
+        var bus = _getBus();
+        foreach (var e in _entries.Values)
+            if (e.Animator != null) { bus?.UnregisterPermanent(e.Animator); e.Animator = null; }
+        _entries.Clear();
+
+        bool anyEnabled = false;
+        if (bindings != null)
+        {
+            foreach (var b in bindings)
+            {
+                if (string.IsNullOrEmpty(b?.ParamName)) continue;
+                _entries[b.ParamName] = new Entry
+                {
+                    Binding = CloneBinding(b.Binding ?? new AudioModulationBinding()),
+                    Enabled = b.Enabled,
+                };
+                anyEnabled |= b.Enabled;
+            }
+        }
+        // Enabled bindings need the capture running to produce signal.
+        if (anyEnabled) _ensureStarted();
+    }
+
+    private static AudioModulationBinding CloneBinding(AudioModulationBinding b) => new()
+    {
+        Source = b.Source,
+        Gain = b.Gain,
+        Bias = b.Bias,
+        Curve = b.Curve,
+        Invert = b.Invert,
+        OutMin = b.OutMin,
+        OutMax = b.OutMax,
+    };
+
     /// <summary>Re-resolve every enabled binding against the current params /
     /// type. Call on region jump or fractal-type change.</summary>
     public void Rebind()
