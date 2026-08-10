@@ -131,6 +131,21 @@ namespace FracturingFog.Input
                 return;
             }
 
+            // Middle-click drag in 3D = the same rubber-band zoom as 2D's
+            // right-drag, on a different button (right stays camera-orbit in
+            // 3D). Track the rect; the zoom is applied on release.
+            if ((e.Buttons & PointerButton.Middle) != 0 && ViewState.Is3D)
+            {
+                _boxSelecting = true;
+                _boxStartX = _boxCurX = e.X;
+                _boxStartY = _boxCurY = e.Y;
+                _boxClientW = Math.Max(1, e.ClientWidth);
+                _boxClientH = Math.Max(1, e.ClientHeight);
+                CursorRequested?.Invoke(this, new InputCursorRequest(InputCursor.Cross));
+                RaiseSelectionBox();
+                return;
+            }
+
             if ((e.Buttons & PointerButton.Left) == 0) return;
 
             _panning = true;
@@ -236,6 +251,24 @@ namespace FracturingFog.Input
 
         public void OnPointerUp(PointerInput e)
         {
+            // Middle-button release ends a 3D marquee zoom (see OnPointerDown).
+            // Checked before the right-button branch so a 3D middle-drag is
+            // never confused with a 2D right-drag box.
+            if ((e.Buttons & PointerButton.Middle) != 0 && _boxSelecting)
+            {
+                _boxSelecting = false;
+                _boxCurX = e.X;
+                _boxCurY = e.Y;
+                int mrx = Math.Min(_boxStartX, _boxCurX);
+                int mry = Math.Min(_boxStartY, _boxCurY);
+                int mrw = Math.Abs(_boxCurX - _boxStartX);
+                int mrh = Math.Abs(_boxCurY - _boxStartY);
+                SelectionBoxChanged?.Invoke(this, null);
+                CursorRequested?.Invoke(this, new InputCursorRequest(InputCursor.Cross));
+                if (mrw >= BoxMinPixels && mrh >= BoxMinPixels)
+                    ApplyBoxZoom3D(mrx, mry, mrw, mrh, _boxClientW, _boxClientH);
+                return;
+            }
             if ((e.Buttons & PointerButton.Right) != 0 && _boxSelecting)
             {
                 _boxSelecting = false;
@@ -300,6 +333,31 @@ namespace FracturingFog.Input
             _camera.BoxZoomToPoint(
                 midPxX, midPxY, factor, w, h,
                 ViewState.Quality.ZoomMin, ViewState.Quality.ZoomMax);
+            RaiseViewChanged(RenderHint.Full);
+        }
+
+        // 3D marquee zoom (middle-drag). Mirrors the 2D box zoom: recentre the
+        // camera target on the rect midpoint, then multiply Zoom by the fit
+        // factor so the outlined region fills the view. The recentre uses the
+        // same screen→target mapping as the 3D double-click focus
+        // (OnPointerDoubleClick), and Zoom is clamped by the active quality
+        // bounds exactly like the 3D wheel — no quality auto-adapt in 3D.
+        private void ApplyBoxZoom3D(int rx, int ry, int rw, int rh, int w, int h)
+        {
+            double midPxX = rx + rw * 0.5;
+            double midPxY = ry + rh * 0.5;
+
+            double s3 = CurrentScale3D(w, h);
+            ViewState.CenterX += (midPxX - w * 0.5) * s3;
+            ViewState.CenterY += (midPxY - h * 0.5) * s3;
+
+            // Fit: shrink the smaller of width/height ratios so the whole rect
+            // remains visible after zoom (no clipping).
+            double factor = Math.Min((double)w / rw, (double)h / rh);
+            ViewState.Zoom = Math.Clamp(ViewState.Zoom * factor,
+                ViewState.Quality.ZoomMin, ViewState.Quality.ZoomMax);
+
+            ClearLowLimbs();
             RaiseViewChanged(RenderHint.Full);
         }
 

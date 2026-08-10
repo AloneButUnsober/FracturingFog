@@ -432,6 +432,7 @@ L1 / L2 / L3 intensity sliders weight three directional contributions (key / fil
 | Left-click drag | Pan in screen space |
 | Right-click drag X | Orbit Theta |
 | Right-click drag Y | Orbit Phi (inverted) |
+| **Middle-drag** | **Marquee zoom** — hold the middle button, drag a box, release to recentre + zoom into it. Same outline-to-zoom as the 2D right-drag, on a different button so right-drag stays camera orbit. Esc cancels before release. |
 
 ---
 

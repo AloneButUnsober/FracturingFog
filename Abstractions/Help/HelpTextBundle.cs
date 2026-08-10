@@ -71,6 +71,10 @@ view-state, color pipeline, and capture suite.
   Right-click (3D)   In Mandelbulb / User Bulb 3D, drag rotates the
                      camera — X = theta, Y = phi (inverted for natural
                      ""tilt up"" mapping).
+  Middle-drag (3D)   Highlight-to-zoom for 3D fractals. Same marquee as
+                     the 2D right-drag, on the middle button so right-
+                     drag stays camera rotation. Outline a box, release
+                     to recentre + zoom in; Esc cancels before release.
 
 === Navigation — Keyboard ===
 
@@ -2254,6 +2258,12 @@ Mouse:
     Right-click drag Y      Orbit Phi.  Y is INVERTED in
                             User Bulb so drag-down → camera tips
                             UP, matching standard 3D editors.
+    Middle-drag             Marquee zoom.  Hold the middle button
+                            and drag a box, release to zoom into
+                            it — the same outline-to-zoom as the
+                            2D right-drag, on a different button so
+                            right-drag stays camera orbit.  Esc
+                            cancels before release.
 
 === Params Bank (named scalar sliders) ===
 
