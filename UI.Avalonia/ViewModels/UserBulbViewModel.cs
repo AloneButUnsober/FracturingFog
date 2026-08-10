@@ -68,6 +68,9 @@ public sealed class UserBulbViewModel : ViewModelBase
         _cullRadius   = _params.UserBulbCullRadius;
         _kifsScale    = _params.UserBulbKifsScale;
         _deModeIndex  = (int)_params.UserBulbDEMode;
+        _neDEMultiplier = _params.UserBulbNonEscDEMultiplier;
+        _neStabilityAxis = _params.UserBulbNonEscStabilityAxis;
+        _neStabilityLimit = _params.UserBulbNonEscStabilityLimit;
         _backendIndex = (int)_params.UserBulbBackend;
         // #27 Phase 3 — the raw-C# Roslyn compiler is gone; the Sandbox DSL is
         // the only path. Pin the persisted selector to Sandbox so exports and
@@ -292,7 +295,26 @@ public sealed class UserBulbViewModel : ViewModelBase
     public double KifsScale { get => _kifsScale; set => SetRender(ref _kifsScale, Math.Clamp(value, 0.0, 20.0), () => _params.UserBulbKifsScale = _kifsScale); }
 
     private int _deModeIndex;
-    public int DEModeIndex { get => _deModeIndex; set => SetRender(ref _deModeIndex, Math.Clamp(value, 0, 2), () => _params.UserBulbDEMode = (UserBulbDEModeKind)_deModeIndex); }
+    public int DEModeIndex { get => _deModeIndex; set => SetRender(ref _deModeIndex, Math.Clamp(value, 0, 3), () => { _params.UserBulbDEMode = (UserBulbDEModeKind)_deModeIndex; this.RaisePropertyChanged(nameof(NonEscapingEnabled)); }); }
+
+    /// <summary>True when DE Mode = NonEscaping (#280). Gates visibility of the
+    /// NonEscaping-only controls (DEMultiplier / stability clamp) in the view.</summary>
+    public bool NonEscapingEnabled => _deModeIndex == (int)UserBulbDEModeKind.NonEscaping;
+
+    private double _neDEMultiplier;
+    /// <summary>#280 — global multiplier on the NonEscaping DE (forum
+    /// "DEMultiplier" / "FudgeFactor"). &lt;1 pulls the surface in on pointy
+    /// features to suppress overstepping.</summary>
+    public double NonEscDEMultiplier { get => _neDEMultiplier; set => SetRender(ref _neDEMultiplier, Math.Clamp(value, 0.01, 4.0), () => _params.UserBulbNonEscDEMultiplier = _neDEMultiplier); }
+
+    private int _neStabilityAxis;
+    /// <summary>#280 — component (0=x,1=y,2=z) for the NonEscaping stability
+    /// clamp (numeric-overflow guard, not an escape test).</summary>
+    public int NonEscStabilityAxis { get => _neStabilityAxis; set => SetRender(ref _neStabilityAxis, Math.Clamp(value, 0, 2), () => _params.UserBulbNonEscStabilityAxis = _neStabilityAxis); }
+
+    private double _neStabilityLimit;
+    /// <summary>#280 — magnitude threshold for the NonEscaping stability clamp.</summary>
+    public double NonEscStabilityLimit { get => _neStabilityLimit; set => SetRender(ref _neStabilityLimit, Math.Clamp(value, 1.0, 64.0), () => _params.UserBulbNonEscStabilityLimit = _neStabilityLimit); }
 
     private int _backendIndex;
     public int BackendIndex { get => _backendIndex; set => SetRender(ref _backendIndex, Math.Clamp(value, 0, 1), () => _params.UserBulbBackend = (UserBulbBackendKind)_backendIndex); }
@@ -820,6 +842,9 @@ public sealed class UserBulbViewModel : ViewModelBase
         JacobianH        = _params.UserBulbJacobianH,
         CullRadius       = _params.UserBulbCullRadius,
         KifsScale        = _params.UserBulbKifsScale,
+        NonEscDEMultiplier   = _params.UserBulbNonEscDEMultiplier,
+        NonEscStabilityAxis  = _params.UserBulbNonEscStabilityAxis,
+        NonEscStabilityLimit = _params.UserBulbNonEscStabilityLimit,
         FovDegrees       = _params.UserBulbFovDegrees,
         ClipPlaneEnabled = _params.UserBulbClipPlaneEnabled,
         SuperSample      = _params.UserBulbSuperSample,
@@ -867,6 +892,9 @@ public sealed class UserBulbViewModel : ViewModelBase
         if (s.JacobianH is { } jh)               _params.UserBulbJacobianH = jh;
         if (s.CullRadius is { } cr)              _params.UserBulbCullRadius = cr;
         if (s.KifsScale is { } kifs)             _params.UserBulbKifsScale = kifs;
+        if (s.NonEscDEMultiplier is { } nem)     _params.UserBulbNonEscDEMultiplier = nem;
+        if (s.NonEscStabilityAxis is { } nea)    _params.UserBulbNonEscStabilityAxis = nea;
+        if (s.NonEscStabilityLimit is { } nel)   _params.UserBulbNonEscStabilityLimit = nel;
         if (s.FovDegrees is { } fov)             _params.UserBulbFovDegrees = fov;
         if (s.ClipPlaneEnabled is { } cpe)       _params.UserBulbClipPlaneEnabled = cpe;
         if (s.SuperSample is { } ss)             _params.UserBulbSuperSample = ss;
@@ -914,6 +942,9 @@ public sealed class UserBulbViewModel : ViewModelBase
             _jacobianH    = _params.UserBulbJacobianH;
             _cullRadius   = _params.UserBulbCullRadius;
             _kifsScale    = _params.UserBulbKifsScale;
+            _neDEMultiplier = _params.UserBulbNonEscDEMultiplier;
+            _neStabilityAxis = _params.UserBulbNonEscStabilityAxis;
+            _neStabilityLimit = _params.UserBulbNonEscStabilityLimit;
             _deModeIndex  = (int)_params.UserBulbDEMode;
             _backendIndex = (int)_params.UserBulbBackend;
             _compilerIndex = (int)_params.UserBulbCompiler;
@@ -961,6 +992,10 @@ public sealed class UserBulbViewModel : ViewModelBase
         this.RaisePropertyChanged(nameof(JacobianH));
         this.RaisePropertyChanged(nameof(CullRadius));
         this.RaisePropertyChanged(nameof(KifsScale));
+        this.RaisePropertyChanged(nameof(NonEscDEMultiplier));
+        this.RaisePropertyChanged(nameof(NonEscStabilityAxis));
+        this.RaisePropertyChanged(nameof(NonEscStabilityLimit));
+        this.RaisePropertyChanged(nameof(NonEscapingEnabled));
         this.RaisePropertyChanged(nameof(DEModeIndex));
         this.RaisePropertyChanged(nameof(BackendIndex));
         this.RaisePropertyChanged(nameof(CompilerIndex));
