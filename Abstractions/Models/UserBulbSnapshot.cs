@@ -71,6 +71,10 @@ namespace FracturingFog.Models
         public double? JacobianH { get; set; }
         public double? CullRadius { get; set; }
         public double? KifsScale { get; set; }
+        // #280 — NonEscaping DE (only consulted when DEMode == NonEscaping).
+        public double? NonEscDEMultiplier { get; set; }
+        public int? NonEscStabilityAxis { get; set; }
+        public double? NonEscStabilityLimit { get; set; }
 
         // ── View ───────────────────────────────────────────────────────
         public double? FovDegrees { get; set; }

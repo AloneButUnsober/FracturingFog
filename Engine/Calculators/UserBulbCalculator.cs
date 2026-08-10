@@ -114,6 +114,12 @@ public sealed class UserBulbCalculator : IFractalCalculator
                 jul, FractalParameters.UserBulbJuliaCW, FractalParameters.UserBulbJuliaCX,
                 FractalParameters.UserBulbJuliaCY, FractalParameters.UserBulbJuliaCZ);
         }
+        if (FractalParameters.UserBulbDEMode == UserBulbDEModeKind.NonEscaping)
+            return UserBulbNonEscapingDE(_compiled!, x, y, z, iter, jacH, pArr,
+                jul, FractalParameters.UserBulbJuliaCX, FractalParameters.UserBulbJuliaCY, FractalParameters.UserBulbJuliaCZ,
+                FractalParameters.UserBulbNonEscDEMultiplier,
+                Math.Clamp(FractalParameters.UserBulbNonEscStabilityAxis, 0, 2),
+                Math.Max(1e-3, FractalParameters.UserBulbNonEscStabilityLimit));
         return UserBulbDE(_compiled!, x, y, z, iter, bailout, jacH, pArr,
             jul, FractalParameters.UserBulbJuliaCX, FractalParameters.UserBulbJuliaCY, FractalParameters.UserBulbJuliaCZ,
             FractalParameters.UserBulbKifsScale);
@@ -166,6 +172,16 @@ public sealed class UserBulbCalculator : IFractalCalculator
             var fn = _compiled!;
             double jcX = FractalParameters.UserBulbJuliaCX, jcY = FractalParameters.UserBulbJuliaCY, jcZ = FractalParameters.UserBulbJuliaCZ;
             double kifsScale = FractalParameters.UserBulbKifsScale;
+            // #280 — snapshot NonEscaping eligibility; export must match the
+            // rendered surface (numerical Jacobian would be a different object).
+            if (FractalParameters.UserBulbDEMode == UserBulbDEModeKind.NonEscaping)
+            {
+                double neMult = FractalParameters.UserBulbNonEscDEMultiplier;
+                int neAxis = Math.Clamp(FractalParameters.UserBulbNonEscStabilityAxis, 0, 2);
+                double neLimit = Math.Max(1e-3, FractalParameters.UserBulbNonEscStabilityLimit);
+                return (x, y, z) => UserBulbNonEscapingDE(fn, x, y, z, iter, jacH, pArr,
+                    jul, jcX, jcY, jcZ, neMult, neAxis, neLimit);
+            }
             return (x, y, z) => UserBulbDE(fn, x, y, z, iter, bailout, jacH, pArr,
                 jul, jcX, jcY, jcZ, kifsScale);
         }
@@ -588,6 +604,22 @@ public sealed class UserBulbCalculator : IFractalCalculator
                     && UserBulbAnalyticDE.AcceptAuto(fn!, _analyticPattern, deIter, bailout, jacH, pArr)));
         double analyticPower = _analyticPattern.Power;
 
+        // #280 — Non-escaping DE (vec mode only). Seeds at the sample point,
+        // running min(1/dr), stability clamp instead of escape. Mutually
+        // exclusive with useAnalytic (which requires DE mode Analytic/Auto).
+        bool useNonEsc = !quatMode && deMode == UserBulbDEModeKind.NonEscaping;
+        double neMult = FractalParameters.UserBulbNonEscDEMultiplier;
+        int neAxis = Math.Clamp(FractalParameters.UserBulbNonEscStabilityAxis, 0, 2);
+        double neLimit = Math.Max(1e-3, FractalParameters.UserBulbNonEscStabilityLimit);
+
+        // Vec-mode DE selection captured once so every raymarch / cone / normal
+        // / AO site shares one policy (mirrors quatSample). Delegate indirection
+        // is negligible against the 2–4 fn calls each DE evaluation makes.
+        Func<double, double, double, double> vecSample =
+              useNonEsc   ? (x, y, z) => UserBulbNonEscapingDE(fn!, x, y, z, deIter, jacH, pArr, juliaMode, jcX, jcY, jcZ, neMult, neAxis, neLimit)
+            : useAnalytic ? (x, y, z) => UserBulbAnalyticDE.PowerDE(fn!, x, y, z, deIter, bailout, analyticPower, pArr)
+            :               (x, y, z) => UserBulbDE(fn!, x, y, z, deIter, bailout, jacH, pArr, juliaMode, jcX, jcY, jcZ, kifsScale);
+
         // #115 — exact full-derivative quaternion DE for q²+c. Opt-in via
         // DE Mode = Analytic (kept out of Auto/default pending in-GUI sign-off;
         // the numerical Jacobian stays the fallback). Gated to a detected Square
@@ -670,11 +702,7 @@ public sealed class UserBulbCalculator : IFractalCalculator
         // DE delegate captured once for ShadingPipeline AO / shadow / volume
         // walks. Mode dispatch matches the primary raymarch above so AO walks
         // sample the same surface (quat / analytic-power / numeric Jacobian).
-        DistanceEstimator deDelegate = (x, y, z) => quatMode
-            ? quatSample(x, y, z)
-            : useAnalytic
-                ? UserBulbAnalyticDE.PowerDE(fn!, x, y, z, deIter, bailout, analyticPower, pArr)
-                : UserBulbDE(fn!, x, y, z, deIter, bailout, jacH, pArr, juliaMode, jcX, jcY, jcZ, kifsScale);
+        DistanceEstimator deDelegate = (x, y, z) => quatMode ? quatSample(x, y, z) : vecSample(x, y, z);
 
         // Phase 4 — G-buffer for SSAO post-pass. Skipped during low-res preview
         // because the SSAO pass is much heavier than the preview budget allows.
@@ -843,11 +871,7 @@ public sealed class UserBulbCalculator : IFractalCalculator
                 for (int s = 0; s < coneSteps; s++)
                 {
                     if (ct.IsCancellationRequested) return;
-                    double d = quatMode
-                        ? quatSample(px, py, pz)
-                        : useAnalytic
-                            ? UserBulbAnalyticDE.PowerDE(fn!, px, py, pz, deIter, bailout, analyticPower, pArr)
-                            : UserBulbDE(fn!, px, py, pz, deIter, bailout, jacH, pArr, juliaMode, jcX, jcY, jcZ, kifsScale);
+                    double d = quatMode ? quatSample(px, py, pz) : vecSample(px, py, pz);
                     if (d < coneEps) { tMin = tT; break; }
                     if (tT > tEx + 1.0) break;
                     px += rdx * d; py += rdy * d; pz += rdz * d;
@@ -914,11 +938,7 @@ public sealed class UserBulbCalculator : IFractalCalculator
                 for (int step = 0; step < maxSteps; step++)
                 {
                     if (ct.IsCancellationRequested) return;
-                    double dist = quatMode
-                        ? quatSample(px, py, pz)
-                        : useAnalytic
-                            ? UserBulbAnalyticDE.PowerDE(fn!, px, py, pz, deIter, bailout, analyticPower, pArr)
-                            : UserBulbDE(fn!, px, py, pz, deIter, bailout, jacH, pArr, juliaMode, jcX, jcY, jcZ, kifsScale);
+                    double dist = quatMode ? quatSample(px, py, pz) : vecSample(px, py, pz);
                     if (dist < eps)
                     {
                         // Clip plane: if surface point is on positive side of plane, skip past.
@@ -954,21 +974,9 @@ public sealed class UserBulbCalculator : IFractalCalculator
                 // Forward-diff normals: reuse hitDist as f(p), 3 extra probes.
                 double h = eps * 2;
                 double invH = 1.0 / h;
-                double dxp = quatMode
-                    ? quatSample(px + h, py, pz)
-                    : useAnalytic
-                        ? UserBulbAnalyticDE.PowerDE(fn!, px + h, py, pz, deIter, bailout, analyticPower, pArr)
-                        : UserBulbDE(fn!, px + h, py, pz, deIter, bailout, jacH, pArr, juliaMode, jcX, jcY, jcZ, kifsScale);
-                double dyp = quatMode
-                    ? quatSample(px, py + h, pz)
-                    : useAnalytic
-                        ? UserBulbAnalyticDE.PowerDE(fn!, px, py + h, pz, deIter, bailout, analyticPower, pArr)
-                        : UserBulbDE(fn!, px, py + h, pz, deIter, bailout, jacH, pArr, juliaMode, jcX, jcY, jcZ, kifsScale);
-                double dzp = quatMode
-                    ? quatSample(px, py, pz + h)
-                    : useAnalytic
-                        ? UserBulbAnalyticDE.PowerDE(fn!, px, py, pz + h, deIter, bailout, analyticPower, pArr)
-                        : UserBulbDE(fn!, px, py, pz + h, deIter, bailout, jacH, pArr, juliaMode, jcX, jcY, jcZ, kifsScale);
+                double dxp = quatMode ? quatSample(px + h, py, pz) : vecSample(px + h, py, pz);
+                double dyp = quatMode ? quatSample(px, py + h, pz) : vecSample(px, py + h, pz);
+                double dzp = quatMode ? quatSample(px, py, pz + h) : vecSample(px, py, pz + h);
                 double n0 = (dxp - hitDist) * invH;
                 double n1 = (dyp - hitDist) * invH;
                 double n2 = (dzp - hitDist) * invH;
@@ -1089,6 +1097,7 @@ public sealed class UserBulbCalculator : IFractalCalculator
             p.UserBulbIterations, p.UserBulbBailout,
             p.UserBulbMaxSteps, p.UserBulbEpsilon, p.UserBulbJacobianH,
             p.UserBulbCullRadius, (int)p.UserBulbDEMode,
+            p.UserBulbNonEscDEMultiplier, p.UserBulbNonEscStabilityAxis, p.UserBulbNonEscStabilityLimit,
             (int)p.UserBulbAxisMode, p.UserBulbQuatSliceW,
             // Animation time — required so playback invalidates cache each frame.
             p.UserBulbTime,
@@ -1308,6 +1317,77 @@ public sealed class UserBulbCalculator : IFractalCalculator
         }
         // Linear escape estimate: distance to the fractal ≈ |z| / dr.
         return r / Math.Max(dr, 1e-30);
+    }
+
+    /// <summary>#280 — Non-escaping running-derivative DE. For maps whose
+    /// orbits never escape (pseudo-Kleinian / lattice maps such as the Amoser
+    /// complex-sine), the escape-time Jacobian and analytic-power estimators do
+    /// not apply. Instead the orbit is seeded AT the sample point and a running
+    /// derivative bound <c>dr</c> is accumulated; the distance estimate is the
+    /// running minimum of <c>1/dr</c> over the orbit, scaled by
+    /// <paramref name="deMult"/> (the reference "DEMultiplier" / "FudgeFactor").
+    ///
+    /// The per-iteration expansion factor (<c>stretch</c>) is measured
+    /// numerically here via a two-trajectory tangent method: a companion point
+    /// offset by <paramref name="h"/> is stepped in lockstep and renormalised to
+    /// distance h each iteration, so <c>|Δz|/h</c> tracks the local operator
+    /// norm along the dominant expanding direction. Cost is 2 delegate calls per
+    /// iteration (vs 4 for the numerical Jacobian). Slice #281 replaces this
+    /// numerical stretch with a user-authored analytic <c>dr</c> body, dropping
+    /// the companion trajectory to a single orbit.
+    ///
+    /// There is no escape test — only a stability clamp on one component
+    /// (<paramref name="stabAxis"/> / <paramref name="stabLimit"/>) to bail
+    /// before the hyperbolic terms overflow to non-finite. Julia mode holds
+    /// <c>c</c> at the Julia constant with derivative offset 0; Mandelbrot mode
+    /// holds <c>c</c> at the sample point with offset 1 (the d c / d c term).
+    /// See Docs/Technical/NonEscaping-DE-DevPlan.md.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static double UserBulbNonEscapingDE(
+        Func<Vec3, Vec3, int, double[], Vec3> fn,
+        double px, double py, double pz,
+        int iter, double h, double[] pArr,
+        bool juliaMode, double jcX, double jcY, double jcZ,
+        double deMult, int stabAxis, double stabLimit)
+    {
+        Vec3 z = new(px, py, pz);
+        Vec3 c;
+        double offset;
+        if (juliaMode) { c = new Vec3(jcX, jcY, jcZ); offset = 0.0; }
+        else           { c = z;                       offset = 1.0; }
+
+        // Companion tangent point, initially offset by h along +x; renormalised
+        // to length h each iteration so the finite difference stays linear.
+        Vec3 zc = new(px + h, py, pz);
+        double invH = 1.0 / h;
+        double dr = 1.0;
+        double de = 1e20;   // sentinel: never-updated → far miss (matches ref frag)
+        for (int i = 0; i < iter; i++)
+        {
+            double clampComp = stabAxis == 0 ? z.X : stabAxis == 2 ? z.Z : z.Y;
+            if (!double.IsFinite(clampComp) || Math.Abs(clampComp) > stabLimit) break;
+
+            z  = fn(z,  c, i, pArr);
+            zc = fn(zc, c, i, pArr);
+
+            double sep = (zc - z).Length;
+            double stretch = sep * invH;
+            if (!double.IsFinite(stretch)) break;
+
+            dr = stretch * dr + offset;
+            if (dr > 1e-30)
+            {
+                double cand = 1.0 / dr;
+                if (cand < de) de = cand;
+            }
+
+            // Renormalise companion back to distance h along the current
+            // separation direction (dominant-Lyapunov tangent method).
+            if (sep > 1e-30) zc = z + (zc - z) * (h / sep);
+            else             zc = new Vec3(z.X + h, z.Y, z.Z);
+        }
+        if (!double.IsFinite(de)) return 1e20;
+        return deMult * de;
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
