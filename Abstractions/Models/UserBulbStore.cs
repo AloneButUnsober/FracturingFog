@@ -173,6 +173,47 @@ namespace FracturingFog.Models
             "// Triplex squared map; c held constant by Julia mode.\n" +
             "vec(z.x*z.x - z.y*z.y - z.z*z.z, 2*z.x*z.y, 2*z.x*z.z) + c";
 
+        // #282 — Amoser complex-sine, a non-escaping (pseudo-Kleinian) map. The
+        // trajectory never leaves a bounded slab, so the escape-time estimators
+        // do not apply; it renders only under the NonEscaping DE (#279/#280) with
+        // the author's analytic dr recurrence (#281). Step + dr body + params +
+        // NonEscaping knobs are shipped together so the preset is one-click.
+        public const string DslAmoserStep =
+            "vec(sin(z.x)*cosh(z.y), cos(z.x)*cos(z.z)*sinh(z.y), sin(z.z)*cosh(z.y)) + c";
+        // Analytic dr: the runner owns de = min(1/dr) + DEMultiplier; the body
+        // returns only the next dr. The dominant stretch is the cosh growth along
+        // the sinh/cosh axis; StretchMax floors it, StretchScale trims it.
+        public const string DslAmoserDeBody =
+            "let ez = exp(z.z) in " +
+            "let s = max(StretchMax, StretchScale*sqrt(0.5*(ez*ez + 1/(ez*ez)))) in " +
+            "drScale*s*dr + drOffset";
+
+        /// <summary>Snapshot for the Amoser preset: NonEscaping DE mode + dr body
+        /// + the four params the body reads, pinned to the Sandbox compiler.
+        /// worldUp is hard-coded +Y in the UserBulb camera, so the forum's
+        /// Up=(0,0,1) framing is not literally reproducible; distance is set for
+        /// a sensible default view.</summary>
+        private static UserBulbSnapshot AmoserSettings() => SandboxPin(new UserBulbSnapshot
+        {
+            AxisMode = UserBulbAxisModeKind.Vec3,
+            DEMode = UserBulbDEModeKind.NonEscaping,
+            DeBody = DslAmoserDeBody,
+            NonEscDEMultiplier = 0.5,
+            NonEscStabilityAxis = 1,      // clamp on y (the cosh/sinh axis)
+            NonEscStabilityLimit = 8.0,
+            Iterations = 8,
+            CameraDistance = 12.0,
+            Params = new List<UserBulbParam>
+            {
+                new() { Name = "StretchScale", Value = 0.81, Min = 0.1, Max = 2.0 },
+                new() { Name = "StretchMax",   Value = 1.04, Min = 1.0, Max = 4.0 },
+                new() { Name = "drScale",      Value = 1.0,  Min = 0.1, Max = 2.0 },
+                new() { Name = "drOffset",     Value = 1.0,  Min = 0.0, Max = 4.0 },
+            },
+        });
+
+        public const string AmoserName = "Amoser complex-sine (non-escaping DE)";
+
         /// <summary>Fresh snapshot that pins the safe DSL compiler. Merges onto
         /// an existing snapshot when a built-in already carries settings.</summary>
         private static UserBulbSnapshot SandboxPin(UserBulbSnapshot? existing = null)
@@ -254,6 +295,14 @@ namespace FracturingFog.Models
                 Source = DslQuatJulia,
                 Settings = SandboxPin(),
             });
+
+            // #282 — Amoser complex-sine non-escaping preset.
+            Equations.Add(new UserBulbEntry
+            {
+                Name = AmoserName,
+                Source = DslAmoserStep,
+                Settings = AmoserSettings(),
+            });
         }
 
         /// <summary>
@@ -328,6 +377,12 @@ namespace FracturingFog.Models
                 Name = "Quaternion Julia (Quat mode, set Julia c)",
                 Source = DslQuatJulia,
                 Settings = SandboxPin(),
+            });
+            Ensure(AmoserName, () => new UserBulbEntry
+            {
+                Name = AmoserName,
+                Source = DslAmoserStep,
+                Settings = AmoserSettings(),
             });
             Repair("Hybrid: Mandelbox + Mandelbulb",
                    UserBulbChainPrimitives.IdMandelbox,

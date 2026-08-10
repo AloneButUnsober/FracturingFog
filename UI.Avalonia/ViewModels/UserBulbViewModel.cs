@@ -52,6 +52,7 @@ public sealed class UserBulbViewModel : ViewModelBase
         _source = string.IsNullOrWhiteSpace(parameters.UserBulbSource)
             ? DefaultSource
             : parameters.UserBulbSource;
+        _deBody = parameters.UserBulbDeBody ?? string.Empty;
 
         // Initial knob mirror.
         _camDistance     = _params.UserBulbCameraDistance;
@@ -68,6 +69,9 @@ public sealed class UserBulbViewModel : ViewModelBase
         _cullRadius   = _params.UserBulbCullRadius;
         _kifsScale    = _params.UserBulbKifsScale;
         _deModeIndex  = (int)_params.UserBulbDEMode;
+        _neDEMultiplier = _params.UserBulbNonEscDEMultiplier;
+        _neStabilityAxis = _params.UserBulbNonEscStabilityAxis;
+        _neStabilityLimit = _params.UserBulbNonEscStabilityLimit;
         _backendIndex = (int)_params.UserBulbBackend;
         // #27 Phase 3 — the raw-C# Roslyn compiler is gone; the Sandbox DSL is
         // the only path. Pin the persisted selector to Sandbox so exports and
@@ -148,6 +152,23 @@ public sealed class UserBulbViewModel : ViewModelBase
             // Manual edits dissociate from any named saved entry.
             _params.UserBulbName = null;
             this.RaisePropertyChanged(nameof(SelectedSavedName));
+            ScheduleCompile();
+        }
+    }
+
+    private string _deBody;
+    /// <summary>#281 — optional NonEscaping dr body (Sandbox DSL). Empty → the
+    /// runner uses the numerical tangent. Recompiles on edit (debounced with the
+    /// step); a parse error surfaces via the status line without breaking a
+    /// valid step compile.</summary>
+    public string DeBody
+    {
+        get => _deBody;
+        set
+        {
+            this.RaiseAndSetIfChanged(ref _deBody, value);
+            _params.UserBulbDeBody = string.IsNullOrWhiteSpace(_deBody) ? null : _deBody;
+            if (_loadingNamedEquation) return;
             ScheduleCompile();
         }
     }
@@ -295,7 +316,26 @@ public sealed class UserBulbViewModel : ViewModelBase
     public double KifsScale { get => _kifsScale; set => SetRender(ref _kifsScale, Math.Clamp(value, 0.0, 20.0), () => _params.UserBulbKifsScale = _kifsScale); }
 
     private int _deModeIndex;
-    public int DEModeIndex { get => _deModeIndex; set => SetRender(ref _deModeIndex, Math.Clamp(value, 0, 2), () => _params.UserBulbDEMode = (UserBulbDEModeKind)_deModeIndex); }
+    public int DEModeIndex { get => _deModeIndex; set => SetRender(ref _deModeIndex, Math.Clamp(value, 0, 3), () => { _params.UserBulbDEMode = (UserBulbDEModeKind)_deModeIndex; this.RaisePropertyChanged(nameof(NonEscapingEnabled)); }); }
+
+    /// <summary>True when DE Mode = NonEscaping (#280). Gates visibility of the
+    /// NonEscaping-only controls (DEMultiplier / stability clamp) in the view.</summary>
+    public bool NonEscapingEnabled => _deModeIndex == (int)UserBulbDEModeKind.NonEscaping;
+
+    private double _neDEMultiplier;
+    /// <summary>#280 — global multiplier on the NonEscaping DE (forum
+    /// "DEMultiplier" / "FudgeFactor"). &lt;1 pulls the surface in on pointy
+    /// features to suppress overstepping.</summary>
+    public double NonEscDEMultiplier { get => _neDEMultiplier; set => SetRender(ref _neDEMultiplier, Math.Clamp(value, 0.01, 4.0), () => _params.UserBulbNonEscDEMultiplier = _neDEMultiplier); }
+
+    private int _neStabilityAxis;
+    /// <summary>#280 — component (0=x,1=y,2=z) for the NonEscaping stability
+    /// clamp (numeric-overflow guard, not an escape test).</summary>
+    public int NonEscStabilityAxis { get => _neStabilityAxis; set => SetRender(ref _neStabilityAxis, Math.Clamp(value, 0, 2), () => _params.UserBulbNonEscStabilityAxis = _neStabilityAxis); }
+
+    private double _neStabilityLimit;
+    /// <summary>#280 — magnitude threshold for the NonEscaping stability clamp.</summary>
+    public double NonEscStabilityLimit { get => _neStabilityLimit; set => SetRender(ref _neStabilityLimit, Math.Clamp(value, 1.0, 64.0), () => _params.UserBulbNonEscStabilityLimit = _neStabilityLimit); }
 
     private int _backendIndex;
     public int BackendIndex { get => _backendIndex; set => SetRender(ref _backendIndex, Math.Clamp(value, 0, 1), () => _params.UserBulbBackend = (UserBulbBackendKind)_backendIndex); }
@@ -636,7 +676,14 @@ public sealed class UserBulbViewModel : ViewModelBase
             // render budget/params/Time). Legacy entries have no Settings —
             // leave the current knobs untouched (old load behaviour).
             if (entry.Settings != null)
+            {
                 ApplySnapshotToParams(entry.Settings);
+                // #281 — force the DE body from the entry (may be null to clear a
+                // stale body from the previously-loaded bulb; nulls are elided in
+                // the snapshot so ApplySnapshotToParams can't distinguish absent
+                // from "explicitly none").
+                _params.UserBulbDeBody = entry.Settings.DeBody;
+            }
         }
         finally { _loadingNamedEquation = false; }
 
@@ -829,6 +876,10 @@ public sealed class UserBulbViewModel : ViewModelBase
         JacobianH        = _params.UserBulbJacobianH,
         CullRadius       = _params.UserBulbCullRadius,
         KifsScale        = _params.UserBulbKifsScale,
+        NonEscDEMultiplier   = _params.UserBulbNonEscDEMultiplier,
+        NonEscStabilityAxis  = _params.UserBulbNonEscStabilityAxis,
+        NonEscStabilityLimit = _params.UserBulbNonEscStabilityLimit,
+        DeBody               = _params.UserBulbDeBody,
         FovDegrees       = _params.UserBulbFovDegrees,
         ClipPlaneEnabled = _params.UserBulbClipPlaneEnabled,
         SuperSample      = _params.UserBulbSuperSample,
@@ -880,6 +931,12 @@ public sealed class UserBulbViewModel : ViewModelBase
         if (s.JacobianH is { } jh)               _params.UserBulbJacobianH = jh;
         if (s.CullRadius is { } cr)              _params.UserBulbCullRadius = cr;
         if (s.KifsScale is { } kifs)             _params.UserBulbKifsScale = kifs;
+        if (s.NonEscDEMultiplier is { } nem)     _params.UserBulbNonEscDEMultiplier = nem;
+        if (s.NonEscStabilityAxis is { } nea)    _params.UserBulbNonEscStabilityAxis = nea;
+        if (s.NonEscStabilityLimit is { } nel)   _params.UserBulbNonEscStabilityLimit = nel;
+        // DeBody intentionally NOT guarded by the snapshot here — a bulb with no
+        // body writes no field (nulls elided), so switching bulbs must be able to
+        // CLEAR a stale body. LoadEquationByName force-sets it from the entry.
         if (s.FovDegrees is { } fov)             _params.UserBulbFovDegrees = fov;
         if (s.ClipPlaneEnabled is { } cpe)       _params.UserBulbClipPlaneEnabled = cpe;
         if (s.SuperSample is { } ss)             _params.UserBulbSuperSample = ss;
@@ -931,6 +988,10 @@ public sealed class UserBulbViewModel : ViewModelBase
             _jacobianH    = _params.UserBulbJacobianH;
             _cullRadius   = _params.UserBulbCullRadius;
             _kifsScale    = _params.UserBulbKifsScale;
+            _neDEMultiplier = _params.UserBulbNonEscDEMultiplier;
+            _neStabilityAxis = _params.UserBulbNonEscStabilityAxis;
+            _neStabilityLimit = _params.UserBulbNonEscStabilityLimit;
+            _deBody       = _params.UserBulbDeBody ?? string.Empty;
             _deModeIndex  = (int)_params.UserBulbDEMode;
             _backendIndex = (int)_params.UserBulbBackend;
             _compilerIndex = (int)_params.UserBulbCompiler;
@@ -978,6 +1039,11 @@ public sealed class UserBulbViewModel : ViewModelBase
         this.RaisePropertyChanged(nameof(JacobianH));
         this.RaisePropertyChanged(nameof(CullRadius));
         this.RaisePropertyChanged(nameof(KifsScale));
+        this.RaisePropertyChanged(nameof(NonEscDEMultiplier));
+        this.RaisePropertyChanged(nameof(NonEscStabilityAxis));
+        this.RaisePropertyChanged(nameof(NonEscStabilityLimit));
+        this.RaisePropertyChanged(nameof(NonEscapingEnabled));
+        this.RaisePropertyChanged(nameof(DeBody));
         this.RaisePropertyChanged(nameof(DEModeIndex));
         this.RaisePropertyChanged(nameof(BackendIndex));
         this.RaisePropertyChanged(nameof(CompilerIndex));

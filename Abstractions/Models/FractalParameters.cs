@@ -707,6 +707,31 @@ namespace FracturingFog.Models
         /// a probe validates within tolerance; Analytic forces analytic (mis-detect = wrong
         /// surface); Numerical forces numerical Jacobian.</summary>
         public UserBulbDEModeKind UserBulbDEMode { get; set; } = UserBulbDEModeKind.Auto;
+        /// <summary>#280 — global multiplier on the NonEscaping DE result (the
+        /// forum "DEMultiplier" / "FudgeFactor"). &lt;1 pulls the surface in to
+        /// suppress overstepping on pointy features; the reference default is
+        /// 0.5. Only consulted when <see cref="UserBulbDEMode"/> is NonEscaping.</summary>
+        public double UserBulbNonEscDEMultiplier { get; set; } = 0.5;
+        /// <summary>#280 — component whose magnitude triggers the NonEscaping
+        /// stability clamp (0 = x, 1 = y, 2 = z). This is a numeric-overflow
+        /// guard, NOT an escape test: the orbit is bounded, but the hyperbolic
+        /// terms (cosh/sinh) can overflow to non-finite before the iteration cap.
+        /// The reference frag clamps on y (or z in the elevation-swapped port).</summary>
+        public int UserBulbNonEscStabilityAxis { get; set; } = 1;
+        /// <summary>#280 — magnitude threshold for the NonEscaping stability
+        /// clamp on <see cref="UserBulbNonEscStabilityAxis"/>. Reference: 8.</summary>
+        public double UserBulbNonEscStabilityLimit { get; set; } = 8.0;
+        /// <summary>#281 — optional user-authored NonEscaping DE body. A Sandbox
+        /// DSL scalar expression evaluated once per iteration that returns the
+        /// new running derivative bound <c>dr</c>. In scope: the pre-step orbit
+        /// point <c>z</c>, the constant <c>c</c>, iteration <c>n</c>, animation
+        /// <c>t</c>, the named params, and the previous <c>dr</c> / <c>de</c>.
+        /// The runner owns the accumulation <c>de = min(de, 1/dr)</c> and the
+        /// final <c>DEMultiplier · de</c>. Null/empty → the runner falls back to
+        /// the numerical two-trajectory tangent estimate (#280). Only consulted
+        /// when <see cref="UserBulbDEMode"/> is NonEscaping and axis mode is
+        /// Vec3. See Docs/Technical/NonEscaping-DE-DevPlan.md.</summary>
+        public string? UserBulbDeBody { get; set; }
         /// <summary>Enable identity-blit cache when scene+camera unchanged between renders.</summary>
         public bool UserBulbTemporalReuse { get; set; } = true;
         /// <summary>Render backend. GPU mode requires source pass UserBulbIlgpuTranslator
@@ -1204,6 +1229,15 @@ namespace FracturingFog.Models
         Auto,
         Analytic,
         Numerical,
+        /// <summary>Non-escaping running-derivative DE (#280). Seeds the orbit
+        /// AT the sample point, runs a single (or finite-diff) trajectory with
+        /// no escape test — only a stability clamp — accumulates
+        /// <c>de = min(de, 1/dr)</c> across the orbit, and returns
+        /// <c>DEMultiplier · de</c>. Targets pseudo-Kleinian / lattice maps
+        /// (Amoser complex-sine) whose orbits never escape, where the
+        /// escape-time Jacobian/analytic estimators do not apply. See
+        /// Docs/Technical/NonEscaping-DE-DevPlan.md.</summary>
+        NonEscaping,
     }
 
     public enum UserBulbBackendKind

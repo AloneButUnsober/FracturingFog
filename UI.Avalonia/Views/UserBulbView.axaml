@@ -90,6 +90,22 @@
                              Text="{Binding Source, Mode=TwoWay}"
                              MinHeight="110"/>
                 </Border>
+
+                <!-- #281 — NonEscaping dr body editor; visible only in NonEscaping mode. -->
+                <StackPanel IsVisible="{Binding NonEscapingEnabled}" Margin="0,4,0,0">
+                    <TextBlock Classes="label"
+                               Text="DE body (dr) — returns new dr; z,c,n,dr,de,t + params in scope. Empty = numerical tangent."
+                               TextWrapping="Wrap" Margin="0,0,0,2"/>
+                    <Border BorderBrush="#5A5A5A" BorderThickness="1" Background="#1C1C1C">
+                        <TextBox x:Name="DeBodyEditor"
+                                 Classes="code"
+                                 AcceptsReturn="True"
+                                 AcceptsTab="True"
+                                 Text="{Binding DeBody, Mode=TwoWay}"
+                                 MinHeight="70"
+                                 ToolTip.Tip="Optional Sandbox-DSL scalar expression evaluated once per iteration, returning the new running-derivative bound dr. In scope: the pre-step orbit point z, the constant c, iteration n, animation t, the named params, and the previous dr / de. The engine owns de = min(de, 1/dr) and the final DEMultiplier*de. Example (Amoser): let ez = exp(z.z) in let s = max(StretchMax, StretchScale*sqrt(0.5*(ez*ez + 1/(ez*ez)))) in drScale*s*dr + drOffset"/>
+                    </Border>
+                </StackPanel>
                 <TextBlock Classes="error"
                            Text="{Binding StatusMessage}"
                            IsVisible="{Binding StatusIsError}" />
@@ -163,10 +179,12 @@
                              removed; the safe Sandbox DSL is the only path, so
                              the Compiler selector is retired. -->
                     <TextBlock Grid.Row="1" Grid.Column="0" Classes="label" Text="DE mode:" Margin="10,0,4,0"/>
-                    <ComboBox Grid.Row="1" Grid.Column="1" SelectedIndex="{Binding DEModeIndex}" MinWidth="120">
+                    <ComboBox Grid.Row="1" Grid.Column="1" SelectedIndex="{Binding DEModeIndex}" MinWidth="120"
+                              ToolTip.Tip="Auto/Analytic/Numerical are escape-time estimators. NonEscaping seeds the orbit at the sample point and accumulates min(1/dr) with a stability clamp instead of an escape test — for pseudo-Kleinian / lattice maps (e.g. Amoser complex-sine) that never escape.">
                         <ComboBoxItem Content="Auto" />
                         <ComboBoxItem Content="Analytic" />
                         <ComboBoxItem Content="Numerical" />
+                        <ComboBoxItem Content="NonEscaping" />
                     </ComboBox>
                     <TextBlock Grid.Row="1" Grid.Column="2" Classes="label" Text="Backend:" Margin="8,0,4,0" />
                     <ComboBox    Grid.Row="1" Grid.Column="3" SelectedIndex="{Binding BackendIndex}" MinWidth="120"
@@ -178,7 +196,7 @@
                         </Grid>
                     <Border Grid.Row="2" Grid.Column="0" BorderBrush="#5A5A5A" BorderThickness="1"
                             Margin="0,4,0,0" Padding="0,2,0,2">
-                            <Grid ColumnDefinitions="75,Auto,75,Auto,Auto,Auto,Auto" RowDefinitions="Auto,Auto,Auto" 
+                            <Grid ColumnDefinitions="75,Auto,75,Auto,Auto,Auto,Auto" RowDefinitions="Auto,Auto,Auto,Auto"
                                   RowSpacing="4">
                                 <TextBlock Grid.Row="0" Grid.Column="0" Classes="label" Text="Iterations:" />
                     <NumericUpDown Grid.Row="0" Grid.Column="1" Minimum="2" Maximum="64" Increment="1" FormatString="0"
@@ -208,8 +226,29 @@
                                     <NumericUpDown Grid.Column="1" Minimum="0.00001" Maximum="0.1" Increment="0.0005" FormatString="0.00000" 
                                                    Value="{Binding Epsilon}" MinWidth="120" />
                                     <TextBlock Grid.Column="2" Classes="label" Text="Jac h:" Margin="10,0,6,0" />
-                                    <NumericUpDown Grid.Column="3" Minimum="0.0000001" Maximum="0.01" Increment="0.00005" FormatString="0.0000000" 
-                                                   Value="{Binding JacobianH}" MinWidth="120" />    
+                                    <NumericUpDown Grid.Column="3" Minimum="0.0000001" Maximum="0.01" Increment="0.00005" FormatString="0.0000000"
+                                                   Value="{Binding JacobianH}" MinWidth="120" />
+                                </Grid>
+
+                                <!-- #280 — NonEscaping DE controls; visible only when DE Mode = NonEscaping. -->
+                                <Grid Grid.Row="3" Grid.Column="0" Grid.ColumnSpan="7"
+                                      ColumnDefinitions="75,Auto,90,Auto,90,Auto"
+                                      IsVisible="{Binding NonEscapingEnabled}">
+                                    <TextBlock Grid.Column="0" Classes="label" Text="DE mult:" />
+                                    <NumericUpDown Grid.Column="1" Minimum="0.01" Maximum="4" Increment="0.05" FormatString="0.00"
+                                                   ToolTip.Tip="NonEscaping DE global multiplier (the reference DEMultiplier / FudgeFactor). Below 1 pulls the surface in to suppress overstepping on pointy features. Reference default 0.5."
+                                                   Value="{Binding NonEscDEMultiplier}" MinWidth="110" />
+                                    <TextBlock Grid.Column="2" Classes="label" Text="Clamp axis:" Margin="10,0,6,0" />
+                                    <ComboBox Grid.Column="3" SelectedIndex="{Binding NonEscStabilityAxis}" MinWidth="80"
+                                              ToolTip.Tip="Component whose magnitude triggers the NonEscaping stability clamp. This is a numeric-overflow guard (cosh/sinh can overflow), NOT an escape test.">
+                                        <ComboBoxItem Content="x" />
+                                        <ComboBoxItem Content="y" />
+                                        <ComboBoxItem Content="z" />
+                                    </ComboBox>
+                                    <TextBlock Grid.Column="4" Classes="label" Text="Clamp lim:" Margin="10,0,6,0" />
+                                    <NumericUpDown Grid.Column="5" Minimum="1" Maximum="64" Increment="1" FormatString="0.0"
+                                                   ToolTip.Tip="Magnitude threshold for the NonEscaping stability clamp. Reference 8."
+                                                   Value="{Binding NonEscStabilityLimit}" MinWidth="110" />
                                 </Grid>
                             </Grid>
                         </Border>
