@@ -41,6 +41,7 @@ system. The codebase is a single .NET 10 solution.
 | Tracking the GPU JIT / perturbation roadmap                | [Performance Development Plan](Performance-DevelopmentPlan.md) |
 | Porting away from Direct3D                                 | [Cross-Platform Roadmap](CrossPlatform-Roadmap.md) and [Implementation Plan](CrossPlatform-ImplementationPlan.md) |
 | Extending the 3-D Mandelbulb / User Bulb engine            | [User Bulb 3D Development Plan](UserBulb3D-DevelopmentPlan.md) and [Sandbox](UserBulbSandbox-DevPlan.md) |
+| Adding non-escaping / user-supplied DE (pseudo-Kleinian, Amoser sine) | [Non-Escaping DE Dev Plan](NonEscaping-DE-DevPlan.md) |
 | Building the Region Editor (Animation Roadmap Sub-goal B)   | [Region Editor Dev Plan](RegionEditor-DevPlan.md) |
 | Building the cross-asset Asset Manager (Sub-goal A, deferred) | [Asset Manager Dev Plan](AssetManager-DevPlan.md) |
 | Working on cinematic Scenes — camera track, timeline, offline render | [Scene Engine Architecture](SceneEngine-Architecture.md) |
