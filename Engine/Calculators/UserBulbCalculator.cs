@@ -119,7 +119,8 @@ public sealed class UserBulbCalculator : IFractalCalculator
                 jul, FractalParameters.UserBulbJuliaCX, FractalParameters.UserBulbJuliaCY, FractalParameters.UserBulbJuliaCZ,
                 FractalParameters.UserBulbNonEscDEMultiplier,
                 Math.Clamp(FractalParameters.UserBulbNonEscStabilityAxis, 0, 2),
-                Math.Max(1e-3, FractalParameters.UserBulbNonEscStabilityLimit));
+                Math.Max(1e-3, FractalParameters.UserBulbNonEscStabilityLimit),
+                BuildDrStep(pArr));
         return UserBulbDE(_compiled!, x, y, z, iter, bailout, jacH, pArr,
             jul, FractalParameters.UserBulbJuliaCX, FractalParameters.UserBulbJuliaCY, FractalParameters.UserBulbJuliaCZ,
             FractalParameters.UserBulbKifsScale);
@@ -179,8 +180,9 @@ public sealed class UserBulbCalculator : IFractalCalculator
                 double neMult = FractalParameters.UserBulbNonEscDEMultiplier;
                 int neAxis = Math.Clamp(FractalParameters.UserBulbNonEscStabilityAxis, 0, 2);
                 double neLimit = Math.Max(1e-3, FractalParameters.UserBulbNonEscStabilityLimit);
+                var drStep = BuildDrStep(pArr);   // snapshot once for the export loop
                 return (x, y, z) => UserBulbNonEscapingDE(fn, x, y, z, iter, jacH, pArr,
-                    jul, jcX, jcY, jcZ, neMult, neAxis, neLimit);
+                    jul, jcX, jcY, jcZ, neMult, neAxis, neLimit, drStep);
             }
             return (x, y, z) => UserBulbDE(fn, x, y, z, iter, bailout, jacH, pArr,
                 jul, jcX, jcY, jcZ, kifsScale);
@@ -199,6 +201,12 @@ public sealed class UserBulbCalculator : IFractalCalculator
     private UserBulbAxisModeKind _compiledAxisMode = UserBulbAxisModeKind.Vec3;
     private UserBulbCompilerKind _compiledCompiler = UserBulbCompilerKind.Roslyn;
     private AnalyticDEPattern _analyticPattern = new(AnalyticDEKind.None, 0);
+    // #281 — optional user-authored NonEscaping dr body (vec mode only). When
+    // present it supplies the running-derivative recurrence for the NonEscaping
+    // DE; otherwise the runner uses the numerical two-trajectory tangent (#280).
+    private SandboxBulbExpression? _deBody;
+    private ThreadLocal<SbxVal3[]>? _deBodyEnv;
+    private string _compiledDeBody = string.Empty;
     // True when the compiled step references the sample point `c`. Maps that
     // don't (pure z-folds: KIFS Menger/Sierpinski, Kaleidoscopic-IFS chains)
     // are position-independent under the Mandelbrot seeding (z=0, c=point) and
@@ -288,6 +296,47 @@ public sealed class UserBulbCalculator : IFractalCalculator
         {
             if (useChain) CompileSandboxChain(chain!, paramNames);
             else CompileSandbox(source, paramNames);
+        }
+
+        // #281 — compile the optional NonEscaping dr body (vec mode only). A
+        // parse failure surfaces via LastError but does NOT invalidate the step:
+        // the NonEscaping runner simply falls back to the numerical tangent.
+        CompileDeBody(axisMode, paramNames);
+    }
+
+    /// <summary>#281 — parse the user-authored NonEscaping <c>dr</c> body into a
+    /// scalar Sandbox expression. In scope: z, c, n, the named params, animation
+    /// <c>t</c>, and the previous <c>dr</c> / <c>de</c> (injected as trailing
+    /// scalars). Vec3 axis mode only — NonEscaping is not wired for Quat. On any
+    /// failure the body is dropped (null) and the runner uses the tangent
+    /// estimate; the message is appended to <see cref="LastError"/> so the editor
+    /// can surface it without discarding a valid step compile.</summary>
+    private void CompileDeBody(UserBulbAxisModeKind axisMode, string[] paramNames)
+    {
+        _deBody = null;
+        _deBodyEnv = null;
+        string body = FractalParameters.UserBulbDeBody ?? string.Empty;
+        _compiledDeBody = body;
+        if (axisMode != UserBulbAxisModeKind.Vec3 || string.IsNullOrWhiteSpace(body))
+            return;
+        try
+        {
+            var extras = new System.Collections.Generic.List<string>(paramNames.Length + 3);
+            extras.AddRange(paramNames);
+            extras.Add("t");
+            extras.Add("dr");
+            extras.Add("de");
+            var expr = SandboxBulbExpression.Parse(body, extras);
+            int envSize = expr.EnvSize;
+            _deBodyEnv = new ThreadLocal<SbxVal3[]>(() => new SbxVal3[envSize]);
+            _deBody = expr;
+        }
+        catch (Exception ex)
+        {
+            _deBody = null;
+            _deBodyEnv = null;
+            string msg = "DE body: " + ex.Message;
+            LastError = string.IsNullOrEmpty(LastError) ? msg : LastError + "  |  " + msg;
         }
     }
 
@@ -461,7 +510,7 @@ public sealed class UserBulbCalculator : IFractalCalculator
     private static readonly System.Text.RegularExpressions.Regex IdentRe =
         new(@"^[A-Za-z_][A-Za-z0-9_]*$");
 
-    private static readonly System.Collections.Generic.HashSet<string> ReservedParamNames = new() { "t", "z", "c", "n" };
+    private static readonly System.Collections.Generic.HashSet<string> ReservedParamNames = new() { "t", "z", "c", "n", "dr", "de" };
 
     private static string[] ValidateAndExtractParamNames(System.Collections.Generic.List<UserBulbParam> ps)
     {
@@ -494,7 +543,9 @@ public sealed class UserBulbCalculator : IFractalCalculator
         bool needsCompile =
             (_compiled == null && _compiledQuat == null)
             || _compiledAxisMode != FractalParameters.UserBulbAxisMode
-            || effectiveSource != _compiledSource;
+            || effectiveSource != _compiledSource
+            // #281 — DE body edits must re-parse (it compiles alongside the step).
+            || (FractalParameters.UserBulbDeBody ?? string.Empty) != _compiledDeBody;
         if (needsCompile && (!string.IsNullOrWhiteSpace(FractalParameters.UserBulbSource) || !string.IsNullOrEmpty(chainKey)))
         {
             Compile(FractalParameters.UserBulbSource ?? string.Empty);
@@ -612,11 +663,15 @@ public sealed class UserBulbCalculator : IFractalCalculator
         int neAxis = Math.Clamp(FractalParameters.UserBulbNonEscStabilityAxis, 0, 2);
         double neLimit = Math.Max(1e-3, FractalParameters.UserBulbNonEscStabilityLimit);
 
+        // #281 — user dr body (null unless authored + parsed). Drives the
+        // single-trajectory NonEscaping path; null falls back to the tangent.
+        var neDrStep = useNonEsc ? BuildDrStep(pArr) : null;
+
         // Vec-mode DE selection captured once so every raymarch / cone / normal
         // / AO site shares one policy (mirrors quatSample). Delegate indirection
         // is negligible against the 2–4 fn calls each DE evaluation makes.
         Func<double, double, double, double> vecSample =
-              useNonEsc   ? (x, y, z) => UserBulbNonEscapingDE(fn!, x, y, z, deIter, jacH, pArr, juliaMode, jcX, jcY, jcZ, neMult, neAxis, neLimit)
+              useNonEsc   ? (x, y, z) => UserBulbNonEscapingDE(fn!, x, y, z, deIter, jacH, pArr, juliaMode, jcX, jcY, jcZ, neMult, neAxis, neLimit, neDrStep)
             : useAnalytic ? (x, y, z) => UserBulbAnalyticDE.PowerDE(fn!, x, y, z, deIter, bailout, analyticPower, pArr)
             :               (x, y, z) => UserBulbDE(fn!, x, y, z, deIter, bailout, jacH, pArr, juliaMode, jcX, jcY, jcZ, kifsScale);
 
@@ -1098,6 +1153,7 @@ public sealed class UserBulbCalculator : IFractalCalculator
             p.UserBulbMaxSteps, p.UserBulbEpsilon, p.UserBulbJacobianH,
             p.UserBulbCullRadius, (int)p.UserBulbDEMode,
             p.UserBulbNonEscDEMultiplier, p.UserBulbNonEscStabilityAxis, p.UserBulbNonEscStabilityLimit,
+            p.UserBulbDeBody ?? "",
             (int)p.UserBulbAxisMode, p.UserBulbQuatSliceW,
             // Animation time — required so playback invalidates cache each frame.
             p.UserBulbTime,
@@ -1319,6 +1375,30 @@ public sealed class UserBulbCalculator : IFractalCalculator
         return r / Math.Max(dr, 1e-30);
     }
 
+    /// <summary>#281 — build the per-render <c>dr</c>-step delegate from the
+    /// compiled DE body. Returns null when no body is compiled (the NonEscaping
+    /// runner then uses the numerical tangent). The returned delegate takes the
+    /// pre-step orbit point, the constant c, the iteration index, and the
+    /// previous dr / de, and returns the new dr. Per-thread scratch arrays keep
+    /// it allocation-free under the parallel raymarch; the extras layout mirrors
+    /// the parse order [params…, t, dr, de] (pArr already holds [params…, t]).</summary>
+    private Func<Vec3, Vec3, int, double, double, double>? BuildDrStep(double[] pArr)
+    {
+        var expr = _deBody;
+        var envL = _deBodyEnv;
+        if (expr == null || envL == null) return null;
+        int baseLen = pArr.Length;   // params + t
+        var exLocal = new ThreadLocal<double[]>(() => new double[baseLen + 2]);
+        return (zPre, c, n, drPrev, dePrev) =>
+        {
+            double[] ex = exLocal.Value!;
+            Array.Copy(pArr, ex, baseLen);
+            ex[baseLen] = drPrev;
+            ex[baseLen + 1] = dePrev;
+            return expr.EvalStep(zPre, c, n, envL.Value!, ex).X;
+        };
+    }
+
     /// <summary>#280 — Non-escaping running-derivative DE. For maps whose
     /// orbits never escape (pseudo-Kleinian / lattice maps such as the Amoser
     /// complex-sine), the escape-time Jacobian and analytic-power estimators do
@@ -1332,9 +1412,12 @@ public sealed class UserBulbCalculator : IFractalCalculator
     /// offset by <paramref name="h"/> is stepped in lockstep and renormalised to
     /// distance h each iteration, so <c>|Δz|/h</c> tracks the local operator
     /// norm along the dominant expanding direction. Cost is 2 delegate calls per
-    /// iteration (vs 4 for the numerical Jacobian). Slice #281 replaces this
-    /// numerical stretch with a user-authored analytic <c>dr</c> body, dropping
-    /// the companion trajectory to a single orbit.
+    /// iteration (vs 4 for the numerical Jacobian). When a user-authored
+    /// <paramref name="drStep"/> body is supplied (#281) the companion
+    /// trajectory is dropped to a single orbit: the body returns the new
+    /// <c>dr</c> directly from the pre-step orbit point, and it owns the whole
+    /// recurrence (including any additive offset), so the runner only
+    /// accumulates <c>de = min(de, 1/dr)</c>.
     ///
     /// There is no escape test — only a stability clamp on one component
     /// (<paramref name="stabAxis"/> / <paramref name="stabLimit"/>) to bail
@@ -1348,13 +1431,40 @@ public sealed class UserBulbCalculator : IFractalCalculator
         double px, double py, double pz,
         int iter, double h, double[] pArr,
         bool juliaMode, double jcX, double jcY, double jcZ,
-        double deMult, int stabAxis, double stabLimit)
+        double deMult, int stabAxis, double stabLimit,
+        Func<Vec3, Vec3, int, double, double, double>? drStep = null)
     {
         Vec3 z = new(px, py, pz);
         Vec3 c;
         double offset;
         if (juliaMode) { c = new Vec3(jcX, jcY, jcZ); offset = 0.0; }
         else           { c = z;                       offset = 1.0; }
+
+        // #281 — single-trajectory path: the user dr body supplies the whole
+        // recurrence from the pre-step orbit point. The runner still owns the
+        // stability clamp and the de = min(1/dr) accumulation.
+        if (drStep != null)
+        {
+            double drU = 1.0;
+            double deU = 1e20;
+            for (int i = 0; i < iter; i++)
+            {
+                double comp = stabAxis == 0 ? z.X : stabAxis == 2 ? z.Z : z.Y;
+                if (!double.IsFinite(comp) || Math.Abs(comp) > stabLimit) break;
+
+                Vec3 zPre = z;
+                z = fn(z, c, i, pArr);
+                drU = drStep(zPre, c, i, drU, deU);
+                if (!double.IsFinite(drU)) break;
+                if (drU > 1e-30)
+                {
+                    double candU = 1.0 / drU;
+                    if (candU < deU) deU = candU;
+                }
+            }
+            if (!double.IsFinite(deU)) return 1e20;
+            return deMult * deU;
+        }
 
         // Companion tangent point, initially offset by h along +x; renormalised
         // to length h each iteration so the finite difference stays linear.

@@ -19,7 +19,9 @@ public class UserBulbNonEscapingDeTests
     private const string Step =
         "vec(sin(z.x)*cosh(z.y), cos(z.x)*cos(z.z)*sinh(z.y), sin(z.z)*cosh(z.y)) + c";
 
-    private static UserBulbCalculator MakeCalc(UserBulbDEModeKind de, double deMult = 0.5)
+    private static UserBulbCalculator MakeCalc(
+        UserBulbDEModeKind de, double deMult = 0.5,
+        string step = Step, string? deBody = null, int iter = 12)
     {
         var calc = new UserBulbCalculator(16, 16)
         {
@@ -27,15 +29,16 @@ public class UserBulbNonEscapingDeTests
             {
                 UserBulbAxisMode = UserBulbAxisModeKind.Vec3,
                 UserBulbDEMode = de,
-                UserBulbIterations = 12,
+                UserBulbIterations = iter,
                 UserBulbBailout = 16.0,
                 UserBulbJacobianH = 1e-4,
                 UserBulbNonEscDEMultiplier = deMult,
                 UserBulbNonEscStabilityAxis = 1,   // clamp on y (cosh/sinh axis)
                 UserBulbNonEscStabilityLimit = 8.0,
+                UserBulbDeBody = deBody,
             },
         };
-        calc.Compile(Step);
+        calc.Compile(step);
         Assert.True(calc.IsCompiled, $"step failed to compile: {calc.LastError}");
         return calc;
     }
@@ -110,5 +113,52 @@ public class UserBulbNonEscapingDeTests
             if (double.IsFinite(a) && double.IsFinite(b) && Math.Abs(a - b) > 1e-6) differ++;
         }
         Assert.True(differ > 0, "NonEscaping field identical to numerical Jacobian — path not engaged");
+    }
+
+    // ── #281 — user-authored dr body ─────────────────────────────────────
+
+    [Fact]
+    public void UserDrBody_drives_the_recurrence_exactly()
+    {
+        // Step "c" holds z = sample point (bounded, no clamp). DE body "dr*2"
+        // doubles dr each iteration independent of z: dr_i = 2^i, so
+        // de = min(1/dr) = 1/2^Iter, and SampleDE = DEMultiplier * that.
+        const int iter = 6;
+        var calc = MakeCalc(UserBulbDEModeKind.NonEscaping, deMult: 1.0,
+            step: "c", deBody: "dr*2", iter: iter);
+        double de = calc.SampleDE(0.1, 0.2, 0.1);
+        double expected = 1.0 / Math.Pow(2.0, iter);   // = 1/64
+        Assert.Equal(expected, de, 9);
+    }
+
+    [Fact]
+    public void UserDrBody_differs_from_the_numerical_tangent()
+    {
+        // Same step, one calc with the analytic dr body and one without (empty
+        // body → numerical tangent). With step "c" the tangent separation is 0,
+        // so its dr degenerates to the offset (1) → de = 1, DE = deMult*1 = 0.5;
+        // the "dr*2" body yields 1/64. They must diverge — proving the body is
+        // consulted, not ignored.
+        var withBody = MakeCalc(UserBulbDEModeKind.NonEscaping, deMult: 0.5,
+            step: "c", deBody: "dr*2", iter: 6);
+        var tangent = MakeCalc(UserBulbDEModeKind.NonEscaping, deMult: 0.5,
+            step: "c", deBody: null, iter: 6);
+        double a = withBody.SampleDE(0.1, 0.2, 0.1);
+        double b = tangent.SampleDE(0.1, 0.2, 0.1);
+        Assert.True(Math.Abs(a - b) > 1e-4, $"body ignored: withBody={a}, tangent={b}");
+    }
+
+    [Fact]
+    public void BadDrBody_falls_back_to_tangent_without_breaking_the_step()
+    {
+        // A DE body that does not parse must NOT invalidate the step compile:
+        // the calculator stays compiled, surfaces the DE-body error, and the
+        // NonEscaping runner falls back to the numerical tangent (finite field).
+        var calc = MakeCalc(UserBulbDEModeKind.NonEscaping, deMult: 0.5,
+            step: "c", deBody: "dr +", iter: 6);
+        Assert.True(calc.IsCompiled, "bad DE body wrongly invalidated the step compile");
+        Assert.Contains("DE body", calc.LastError);
+        double de = calc.SampleDE(0.1, 0.2, 0.1);
+        Assert.True(double.IsFinite(de) && de >= 0.0, $"fallback field not finite/non-negative: {de}");
     }
 }

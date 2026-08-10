@@ -637,6 +637,17 @@ namespace FracturingFog.Models
         /// <summary>#280 — magnitude threshold for the NonEscaping stability
         /// clamp on <see cref="UserBulbNonEscStabilityAxis"/>. Reference: 8.</summary>
         public double UserBulbNonEscStabilityLimit { get; set; } = 8.0;
+        /// <summary>#281 — optional user-authored NonEscaping DE body. A Sandbox
+        /// DSL scalar expression evaluated once per iteration that returns the
+        /// new running derivative bound <c>dr</c>. In scope: the pre-step orbit
+        /// point <c>z</c>, the constant <c>c</c>, iteration <c>n</c>, animation
+        /// <c>t</c>, the named params, and the previous <c>dr</c> / <c>de</c>.
+        /// The runner owns the accumulation <c>de = min(de, 1/dr)</c> and the
+        /// final <c>DEMultiplier · de</c>. Null/empty → the runner falls back to
+        /// the numerical two-trajectory tangent estimate (#280). Only consulted
+        /// when <see cref="UserBulbDEMode"/> is NonEscaping and axis mode is
+        /// Vec3. See Docs/Technical/NonEscaping-DE-DevPlan.md.</summary>
+        public string? UserBulbDeBody { get; set; }
         /// <summary>Enable identity-blit cache when scene+camera unchanged between renders.</summary>
         public bool UserBulbTemporalReuse { get; set; } = true;
         /// <summary>Render backend. GPU mode requires source pass UserBulbIlgpuTranslator

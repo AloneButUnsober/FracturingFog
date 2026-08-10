@@ -90,6 +90,22 @@
                              Text="{Binding Source, Mode=TwoWay}"
                              MinHeight="110"/>
                 </Border>
+
+                <!-- #281 — NonEscaping dr body editor; visible only in NonEscaping mode. -->
+                <StackPanel IsVisible="{Binding NonEscapingEnabled}" Margin="0,4,0,0">
+                    <TextBlock Classes="label"
+                               Text="DE body (dr) — returns new dr; z,c,n,dr,de,t + params in scope. Empty = numerical tangent."
+                               TextWrapping="Wrap" Margin="0,0,0,2"/>
+                    <Border BorderBrush="#5A5A5A" BorderThickness="1" Background="#1C1C1C">
+                        <TextBox x:Name="DeBodyEditor"
+                                 Classes="code"
+                                 AcceptsReturn="True"
+                                 AcceptsTab="True"
+                                 Text="{Binding DeBody, Mode=TwoWay}"
+                                 MinHeight="70"
+                                 ToolTip.Tip="Optional Sandbox-DSL scalar expression evaluated once per iteration, returning the new running-derivative bound dr. In scope: the pre-step orbit point z, the constant c, iteration n, animation t, the named params, and the previous dr / de. The engine owns de = min(de, 1/dr) and the final DEMultiplier*de. Example (Amoser): let ez = exp(z.z) in let s = max(StretchMax, StretchScale*sqrt(0.5*(ez*ez + 1/(ez*ez)))) in drScale*s*dr + drOffset"/>
+                    </Border>
+                </StackPanel>
                 <TextBlock Classes="error"
                            Text="{Binding StatusMessage}"
                            IsVisible="{Binding StatusIsError}" />
