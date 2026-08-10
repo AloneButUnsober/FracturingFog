@@ -2006,7 +2006,7 @@ JuliaC for every iteration.  z is still seeded to Zero.
 
 === Distance Estimation — DE mode ===
 
-Three DE modes, chosen from the ""DE mode"" combo:
+Four DE modes, chosen from the ""DE mode"" combo:
 
   Auto       Engine attempts to detect a closed-form ""power-N
              triplex"" pattern in your source.  If matched, uses
@@ -2031,9 +2031,131 @@ Three DE modes, chosen from the ""DE mode"" combo:
              dr = max(|z_px−z_base|, |z_py−z_base|, |z_pz−z_base|) / h.
              Works for ANY map; ~4× slower than Analytic.
 
+  Non-       For maps whose orbit NEVER escapes — pseudo-Kleinian
+  escaping   / lattice / double-periodic maps such as the Amoser
+             complex-sine.  See the dedicated section below.  The
+             escape-time estimators (Auto/Analytic/Numerical) all
+             assume the orbit eventually leaves the bailout sphere;
+             a non-escaping orbit sits inside it forever, so those
+             modes read a nonsense DE and the surface is unreachable
+             by tuning.  This mode swaps the escape test for a
+             stability clamp and a running-derivative bound.
+
 The ""Jac h"" slider sets the finite-difference perturbation:
 1e-4 default.  Too small → cancellation noise; too large →
-soft-edged surface.
+soft-edged surface.  (Non-escaping mode does not use Jac h when a
+DE body is supplied; it uses your analytic dr instead.)
+
+=== Non-Escaping DE — maps that never escape ===
+
+Some of the most interesting 3D maps are NOT escape-time. Their
+orbit is trapped forever inside a bounded slab (pseudo-Kleinian,
+lattice, Kleinian-limit, the Amoser complex-sine
+    z = ( sin(z.x)·cosh(z.y),
+          cos(z.x)·cos(z.z)·sinh(z.y),
+          sin(z.z)·cosh(z.y) ) + c ).
+Because |z| never crosses the bailout, the escape-time DE modes
+produce a blank or garbage surface no matter how you tune
+Iterations / Bailout / Max steps / Epsilon.
+
+Non-escaping DE replaces the escape test with a STABILITY CLAMP and
+accumulates a distance bound from the running derivative dr:
+
+    de = ∞
+    dr = 1
+    for n in 0 … Iterations:
+        z  = Step(z, c, n, p)           // your step map
+        dr = DrBody(z, c, n, dr, …)     // your dr recurrence (or auto)
+        de = min(de, 1 / dr)            // tightest bound so far
+        if |z.axis| > StabilityLimit:   // clamp, not escape
+            break
+    return DEMultiplier · de
+
+  Settings (visible only when DE mode = Non-escaping):
+
+    DEMultiplier      Pure gain on the final distance.  0.5 is the
+                      usual starting point (matches the reference
+                      Fragmentarium renders).  Lower = the raymarch
+                      takes smaller steps → crisper but slower; too
+                      high → the surface is over-stepped and holes
+                      appear.  Range ~0.1 … 2.0.
+
+    Stability axis    Which component (x / y / z) the clamp watches.
+                      Pick the axis the map grows along — for the
+                      Amoser map that is y (the cosh / sinh axis).
+
+    Stability limit   The clamp threshold on that axis.  When the
+                      component exceeds it the inner loop stops for
+                      that ray.  ~8 for the Amoser map.  Larger =
+                      more interior detail but slower and noisier;
+                      smaller = smoother but eats fine structure.
+
+=== Non-Escaping DE — the DE body editor ===
+
+The ""DE body"" editor (shown in Non-escaping mode) lets you write
+the running-derivative recurrence yourself, in the same safe DSL as
+the step.  You write ONE scalar expression that returns the NEXT dr.
+The engine owns the rest: it computes de = min(de, 1/dr) each
+iteration and multiplies the result by DEMultiplier.  You never
+write the min or the multiplier — only the dr growth.
+
+  In scope inside the DE body:
+    z          the PRE-step position this iteration (Vec3)
+    c          the constant / Julia c (Vec3)
+    n          iteration index (scalar)
+    t          animation time (scalar)
+    <params>   every named param from the Params bank
+    dr         the PREVIOUS iteration's dr (scalar)
+    de         the PREVIOUS iteration's de (scalar)
+
+  Rules of thumb:
+    • The body is SCALAR — return a number, not a vec.
+    • The classic shape is  dr = stretch · dr + offset  where
+      ""stretch"" is the local magnitude of the map's derivative and
+      ""offset"" is usually 1 (the seed ray's own length).
+    • If the body fails to parse it does NOT break your step: the
+      engine falls back to a two-trajectory numerical tangent and
+      surfaces the error text, so the render still appears.
+
+  Example 1 — constant growth (teaching example):
+      dr*2
+    Doubles dr every iteration regardless of z.  With N iterations
+    de = 1/2^N.  Useless as a real fractal, handy to see the
+    mechanism: bigger dr → smaller de → tighter surface.
+
+  Example 2 — Amoser complex-sine stretch (the shipped preset):
+      let ez = exp(z.z) in
+      let s  = max(StretchMax, StretchScale*sqrt(0.5*(ez*ez + 1/(ez*ez)))) in
+      drScale*s*dr + drOffset
+    The map's dominant stretch is the cosh growth along the
+    sinh/cosh axis; sqrt(0.5·(e^2z + e^-2z)) = sqrt(cosh(2·z.z)) is
+    that magnitude.  StretchMax floors it so the bound never
+    collapses to zero; StretchScale trims it; drScale / drOffset are
+    the classic ""stretch · dr + offset"" gain and seed.  Params:
+    StretchScale 0.81, StretchMax 1.04, drScale 1.0, drOffset 1.0.
+
+  Example 3 — length-based stretch (generic non-escaping starter):
+      max(1.0, length(z)) * dr + 1.0
+    A crude but often-usable bound for an unknown non-escaping map:
+    grow dr by how far the point has travelled, floored at 1 so it
+    is monotone.  Tune the floor and add a scale param once you can
+    see the surface.
+
+  Example 4 — folded / periodic map with a per-axis stretch:
+      let g = max(abs(cos(z.x)), abs(cosh(z.y))) in
+      Scale*g*dr + 1.0
+    When the step is a product of trig / hyperbolic factors, the
+    stretch is the largest per-factor magnitude.  Expose Scale as a
+    param so you can dial the bound tightness live.
+
+  Leaving the DE body BLANK is valid: Non-escaping mode then uses an
+  automatic two-trajectory numerical tangent for dr.  It works for
+  any non-escaping map but is softer and ~2× the cost of a good
+  analytic body — write the body once you know the map's stretch.
+
+  One-click: the ""Amoser complex-sine (non-escaping DE)"" saved
+  preset wires the step, the Example-2 dr body, the four params, and
+  the Non-escaping settings together.  Load it, then edit from there.
 
 === Getting a crisp render AND a detailed mesh export ===
 
