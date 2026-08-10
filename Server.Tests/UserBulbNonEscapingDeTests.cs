@@ -148,6 +148,65 @@ public class UserBulbNonEscapingDeTests
         Assert.True(Math.Abs(a - b) > 1e-4, $"body ignored: withBody={a}, tangent={b}");
     }
 
+    // ── #282 — shipped Amoser preset ────────────────────────────────────
+
+    [Fact]
+    public void Amoser_preset_body_engages_with_its_params()
+    {
+        // The shipped preset's dr body reads StretchScale/StretchMax/drScale/
+        // drOffset. With those params defined it must compile (no DE-body error)
+        // and drive a finite, spatially-varying field that differs from the
+        // numerical tangent — proving the params resolve and the body is used.
+        var calc = MakeAmoser(withParams: true);
+        Assert.True(calc.IsCompiled, $"preset step failed: {calc.LastError}");
+        Assert.DoesNotContain("DE body", calc.LastError ?? string.Empty);
+
+        double min = double.PositiveInfinity, max = 0.0;
+        foreach (var (x, y, z) in Pts)
+        {
+            double de = calc.SampleDE(x, y, z);
+            Assert.True(double.IsFinite(de) && de >= 0.0, $"bad DE at ({x},{y},{z}): {de}");
+            if (de < min) min = de;
+            if (de > max) max = de;
+        }
+        Assert.True(max > min * 1.5, $"field too flat: min={min}, max={max}");
+
+        // Same step/body but params absent → body fails to compile (unknown
+        // identifiers) → tangent fallback. The two fields must diverge.
+        var noParams = MakeAmoser(withParams: false);
+        Assert.Contains("DE body", noParams.LastError ?? string.Empty);
+        int differ = 0;
+        foreach (var (x, y, z) in Pts)
+            if (Math.Abs(calc.SampleDE(x, y, z) - noParams.SampleDE(x, y, z)) > 1e-6) differ++;
+        Assert.True(differ > 0, "preset body identical to tangent — params/body not engaged");
+    }
+
+    private static UserBulbCalculator MakeAmoser(bool withParams)
+    {
+        var fp = new FractalParameters
+        {
+            UserBulbAxisMode = UserBulbAxisModeKind.Vec3,
+            UserBulbDEMode = UserBulbDEModeKind.NonEscaping,
+            UserBulbIterations = 8,
+            UserBulbBailout = 16.0,
+            UserBulbJacobianH = 1e-4,
+            UserBulbNonEscDEMultiplier = 0.5,
+            UserBulbNonEscStabilityAxis = 1,
+            UserBulbNonEscStabilityLimit = 8.0,
+            UserBulbDeBody = UserBulbStore.DslAmoserDeBody,
+        };
+        if (withParams)
+        {
+            fp.UserBulbParams.Add(new UserBulbParam { Name = "StretchScale", Value = 0.81 });
+            fp.UserBulbParams.Add(new UserBulbParam { Name = "StretchMax",   Value = 1.04 });
+            fp.UserBulbParams.Add(new UserBulbParam { Name = "drScale",      Value = 1.0 });
+            fp.UserBulbParams.Add(new UserBulbParam { Name = "drOffset",     Value = 1.0 });
+        }
+        var calc = new UserBulbCalculator(16, 16) { FractalParameters = fp };
+        calc.Compile(UserBulbStore.DslAmoserStep);
+        return calc;
+    }
+
     [Fact]
     public void BadDrBody_falls_back_to_tangent_without_breaking_the_step()
     {
