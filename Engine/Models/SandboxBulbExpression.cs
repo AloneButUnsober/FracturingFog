@@ -260,7 +260,7 @@ namespace FracturingFog.Models
         public override SbxVal3 Eval(SbxVal3[] env)
         {
             var v = A.Eval(env);
-            return Op == '-' ? SbxVal3.Neg(v) : SbxVal3.R(v.AsBool() ? 0.0 : 1.0);
+            return Op == '-' ? SbxVal3.Neg(v) : SbxFuncEval.Not(v);
         }
     }
 
@@ -307,13 +307,7 @@ namespace FracturingFog.Models
                 SbxBinOp.Mul => SbxVal3.Mul(a, b),
                 SbxBinOp.Div => SbxVal3.Div(a, b),
                 SbxBinOp.Pow => SbxVal3.Pow(a, b),
-                SbxBinOp.Lt  => SbxVal3.R(a.AsReal() <  b.AsReal() ? 1.0 : 0.0),
-                SbxBinOp.Gt  => SbxVal3.R(a.AsReal() >  b.AsReal() ? 1.0 : 0.0),
-                SbxBinOp.Le  => SbxVal3.R(a.AsReal() <= b.AsReal() ? 1.0 : 0.0),
-                SbxBinOp.Ge  => SbxVal3.R(a.AsReal() >= b.AsReal() ? 1.0 : 0.0),
-                SbxBinOp.Eq  => SbxVal3.R(a.AsReal() == b.AsReal() ? 1.0 : 0.0),
-                SbxBinOp.Ne  => SbxVal3.R(a.AsReal() != b.AsReal() ? 1.0 : 0.0),
-                _            => throw new InvalidOperationException("Unknown op " + Op),
+                _            => SbxFuncEval.Compare(OpKind, a, b),
             };
         }
     }
@@ -333,17 +327,7 @@ namespace FracturingFog.Models
         public readonly char Axis; // 'x','y','z','w'
         public Sbx3Member(Sbx3Node t, char a) { Target = t; Axis = a; }
         public override SbxVal3 Eval(SbxVal3[] env)
-        {
-            var v = Target.Eval(env);
-            return Axis switch
-            {
-                'x' => SbxVal3.R(v.X),
-                'y' => SbxVal3.R(v.IsVecOrQuat ? v.Y : v.X),
-                'z' => SbxVal3.R(v.IsVecOrQuat ? v.Z : v.X),
-                'w' => SbxVal3.R(v.IsQuat ? v.W : 0.0),
-                _   => throw new InvalidOperationException("Bad axis " + Axis)
-            };
-        }
+            => SbxFuncEval.MemberAxis(Target.Eval(env), Axis);
     }
 
     public sealed class Sbx3Call : Sbx3Node
@@ -417,104 +401,125 @@ namespace FracturingFog.Models
 
         public override SbxVal3 Eval(SbxVal3[] env)
         {
-            switch (Func)
-            {
-                case SbxFuncId.Vec:
-                {
-                    var a = Args[0].Eval(env);
-                    var b = Args[1].Eval(env);
-                    var c = Args[2].Eval(env);
-                    return SbxVal3.V(a.AsReal(), b.AsReal(), c.AsReal());
-                }
-                case SbxFuncId.QVec:
-                {
-                    var qx = Args[0].Eval(env).AsReal();
-                    var qy = Args[1].Eval(env).AsReal();
-                    var qz = Args[2].Eval(env).AsReal();
-                    var qw = Args[3].Eval(env).AsReal();
-                    return SbxVal3.Q(qw, qx, qy, qz);
-                }
-                case SbxFuncId.QMul:   return SbxVal3.Q(Args[0].Eval(env).AsQuat() * Args[1].Eval(env).AsQuat());
-                case SbxFuncId.QConj:  return SbxVal3.Q(Args[0].Eval(env).AsQuat().Conjugate());
-                case SbxFuncId.QExp:   return SbxVal3.Q(Quat.Exp(Args[0].Eval(env).AsQuat()));
-                case SbxFuncId.QLog:   return SbxVal3.Q(Quat.Log(Args[0].Eval(env).AsQuat()));
-                case SbxFuncId.QSqrt:  return SbxVal3.Q(Quat.Sqrt(Args[0].Eval(env).AsQuat()));
-                case SbxFuncId.QInv:   return SbxVal3.Q(Quat.Inverse(Args[0].Eval(env).AsQuat()));
-                case SbxFuncId.QSin:   return SbxVal3.Q(Quat.Sin(Args[0].Eval(env).AsQuat()));
-                case SbxFuncId.QCos:   return SbxVal3.Q(Quat.Cos(Args[0].Eval(env).AsQuat()));
-                case SbxFuncId.QTan:   return SbxVal3.Q(Quat.Tan(Args[0].Eval(env).AsQuat()));
-                case SbxFuncId.QSinh:  return SbxVal3.Q(Quat.Sinh(Args[0].Eval(env).AsQuat()));
-                case SbxFuncId.QCosh:  return SbxVal3.Q(Quat.Cosh(Args[0].Eval(env).AsQuat()));
-                case SbxFuncId.QTanh:  return SbxVal3.Q(Quat.Tanh(Args[0].Eval(env).AsQuat()));
-                case SbxFuncId.QAsin:  return SbxVal3.Q(Quat.Asin(Args[0].Eval(env).AsQuat()));
-                case SbxFuncId.QAcos:  return SbxVal3.Q(Quat.Acos(Args[0].Eval(env).AsQuat()));
-                case SbxFuncId.QAtan:  return SbxVal3.Q(Quat.Atan(Args[0].Eval(env).AsQuat()));
-                case SbxFuncId.QAsinh: return SbxVal3.Q(Quat.Asinh(Args[0].Eval(env).AsQuat()));
-                case SbxFuncId.QAcosh: return SbxVal3.Q(Quat.Acosh(Args[0].Eval(env).AsQuat()));
-                case SbxFuncId.QAtanh: return SbxVal3.Q(Quat.Atanh(Args[0].Eval(env).AsQuat()));
-                case SbxFuncId.QCsc:   return SbxVal3.Q(Quat.Csc(Args[0].Eval(env).AsQuat()));
-                case SbxFuncId.QSec:   return SbxVal3.Q(Quat.Sec(Args[0].Eval(env).AsQuat()));
-                case SbxFuncId.QCot:   return SbxVal3.Q(Quat.Cot(Args[0].Eval(env).AsQuat()));
-                case SbxFuncId.QCsch:  return SbxVal3.Q(Quat.Csch(Args[0].Eval(env).AsQuat()));
-                case SbxFuncId.QSech:  return SbxVal3.Q(Quat.Sech(Args[0].Eval(env).AsQuat()));
-                case SbxFuncId.QCoth:  return SbxVal3.Q(Quat.Coth(Args[0].Eval(env).AsQuat()));
-                case SbxFuncId.QPow:
-                {
-                    var qa = Args[0].Eval(env);
-                    var qb = Args[1].Eval(env);
-                    return SbxVal3.Pow(qa.IsQuat ? qa : SbxVal3.Q(qa.AsQuat()), qb);
-                }
-                case SbxFuncId.Length:   return SbxVal3.R(Args[0].Eval(env).AsVec().Length);
-                case SbxFuncId.Dot:      return SbxVal3.R(Vec3.Dot(Args[0].Eval(env).AsVec(), Args[1].Eval(env).AsVec()));
-                case SbxFuncId.Cross:    return SbxVal3.V(Vec3.Cross(Args[0].Eval(env).AsVec(), Args[1].Eval(env).AsVec()));
-                case SbxFuncId.Normalize:return SbxVal3.V(Args[0].Eval(env).AsVec().Normalized());
-                case SbxFuncId.Triplex:  return SbxVal3.V(Vec3.Pow(Args[0].Eval(env).AsVec(), Args[1].Eval(env).AsReal()));
-                case SbxFuncId.Rot:      return SbxVal3.V(Vec3.Rot(Args[0].Eval(env).AsVec(), Args[1].Eval(env).AsVec(), Args[2].Eval(env).AsReal()));
-                case SbxFuncId.BoxFold:  return SbxVal3.V(Vec3.BoxFold(Args[0].Eval(env).AsVec(), Args[1].Eval(env).AsReal()));
-                case SbxFuncId.SphereFold:
-                {
-                    var v = Args[0].Eval(env).AsVec();
-                    return SbxVal3.V(Vec3.SphereFold(v, Args[1].Eval(env).AsReal(), Args[2].Eval(env).AsReal()));
-                }
-                case SbxFuncId.AbsX:     return SbxVal3.V(Vec3.AbsX(Args[0].Eval(env).AsVec()));
-                case SbxFuncId.AbsY:     return SbxVal3.V(Vec3.AbsY(Args[0].Eval(env).AsVec()));
-                case SbxFuncId.AbsZ:     return SbxVal3.V(Vec3.AbsZ(Args[0].Eval(env).AsVec()));
-                case SbxFuncId.Mod:      return SbxVal3.V(Vec3.Mod(Args[0].Eval(env).AsVec(), Args[1].Eval(env).AsReal()));
-                case SbxFuncId.SMin:
-                    return SbxVal3.R(Vec3.SMin(Args[0].Eval(env).AsReal(), Args[1].Eval(env).AsReal(), Args[2].Eval(env).AsReal()));
-                case SbxFuncId.Pow2:
-                {
-                    var pa = Args[0].Eval(env);
-                    var pb = Args[1].Eval(env);
-                    return SbxVal3.Pow(pa, pb);
-                }
-                case SbxFuncId.Floor:    return SbxVal3.R(Math.Floor(Args[0].Eval(env).AsReal()));
-                case SbxFuncId.Sign:     return SbxVal3.R(Math.Sign(Args[0].Eval(env).AsReal()));
-                case SbxFuncId.Min:      return SbxVal3.R(Math.Min(Args[0].Eval(env).AsReal(), Args[1].Eval(env).AsReal()));
-                case SbxFuncId.Max:      return SbxVal3.R(Math.Max(Args[0].Eval(env).AsReal(), Args[1].Eval(env).AsReal()));
-                case SbxFuncId.Clamp:    return SbxVal3.R(Math.Clamp(Args[0].Eval(env).AsReal(), Args[1].Eval(env).AsReal(), Args[2].Eval(env).AsReal()));
-            }
+            // Evaluate present args left-to-right (preserves let-in-arg side
+            // effects + eval order), then dispatch through the shared applier.
+            // #283 — SbxFuncEval.Apply is the single source of truth for every
+            // built-in's semantics, called by both this interpreter and the
+            // Expression-tree compiler, so the two paths cannot diverge.
+            SbxVal3 a0 = Args.Length > 0 ? Args[0].Eval(env) : default;
+            SbxVal3 a1 = Args.Length > 1 ? Args[1].Eval(env) : default;
+            SbxVal3 a2 = Args.Length > 2 ? Args[2].Eval(env) : default;
+            SbxVal3 a3 = Args.Length > 3 ? Args[3].Eval(env) : default;
+            return SbxFuncEval.Apply(Func, a0, a1, a2, a3);
+        }
+    }
 
-            // Single-arg scalar/componentwise math.
-            var x = Args[0].Eval(env);
-            return Func switch
+    /// <summary>Single source of truth for the semantics of every built-in
+    /// function. Takes already-evaluated argument values (up to four; unused
+    /// slots are <c>default</c>) so it is callable both from the AST
+    /// interpreter (<see cref="Sbx3Call.Eval"/>) and from the compiled
+    /// Expression-tree kernel (#283). Keeping one implementation guarantees the
+    /// interpreter and the compiled delegate are bit-identical.</summary>
+    internal static class SbxFuncEval
+    {
+        public static SbxVal3 Apply(SbxFuncId func, SbxVal3 a0, SbxVal3 a1, SbxVal3 a2, SbxVal3 a3)
+        {
+            switch (func)
             {
+                case SbxFuncId.Vec:    return SbxVal3.V(a0.AsReal(), a1.AsReal(), a2.AsReal());
+                case SbxFuncId.QVec:   return SbxVal3.Q(a3.AsReal(), a0.AsReal(), a1.AsReal(), a2.AsReal());
+                case SbxFuncId.QMul:   return SbxVal3.Q(a0.AsQuat() * a1.AsQuat());
+                case SbxFuncId.QConj:  return SbxVal3.Q(a0.AsQuat().Conjugate());
+                case SbxFuncId.QExp:   return SbxVal3.Q(Quat.Exp(a0.AsQuat()));
+                case SbxFuncId.QLog:   return SbxVal3.Q(Quat.Log(a0.AsQuat()));
+                case SbxFuncId.QSqrt:  return SbxVal3.Q(Quat.Sqrt(a0.AsQuat()));
+                case SbxFuncId.QInv:   return SbxVal3.Q(Quat.Inverse(a0.AsQuat()));
+                case SbxFuncId.QSin:   return SbxVal3.Q(Quat.Sin(a0.AsQuat()));
+                case SbxFuncId.QCos:   return SbxVal3.Q(Quat.Cos(a0.AsQuat()));
+                case SbxFuncId.QTan:   return SbxVal3.Q(Quat.Tan(a0.AsQuat()));
+                case SbxFuncId.QSinh:  return SbxVal3.Q(Quat.Sinh(a0.AsQuat()));
+                case SbxFuncId.QCosh:  return SbxVal3.Q(Quat.Cosh(a0.AsQuat()));
+                case SbxFuncId.QTanh:  return SbxVal3.Q(Quat.Tanh(a0.AsQuat()));
+                case SbxFuncId.QAsin:  return SbxVal3.Q(Quat.Asin(a0.AsQuat()));
+                case SbxFuncId.QAcos:  return SbxVal3.Q(Quat.Acos(a0.AsQuat()));
+                case SbxFuncId.QAtan:  return SbxVal3.Q(Quat.Atan(a0.AsQuat()));
+                case SbxFuncId.QAsinh: return SbxVal3.Q(Quat.Asinh(a0.AsQuat()));
+                case SbxFuncId.QAcosh: return SbxVal3.Q(Quat.Acosh(a0.AsQuat()));
+                case SbxFuncId.QAtanh: return SbxVal3.Q(Quat.Atanh(a0.AsQuat()));
+                case SbxFuncId.QCsc:   return SbxVal3.Q(Quat.Csc(a0.AsQuat()));
+                case SbxFuncId.QSec:   return SbxVal3.Q(Quat.Sec(a0.AsQuat()));
+                case SbxFuncId.QCot:   return SbxVal3.Q(Quat.Cot(a0.AsQuat()));
+                case SbxFuncId.QCsch:  return SbxVal3.Q(Quat.Csch(a0.AsQuat()));
+                case SbxFuncId.QSech:  return SbxVal3.Q(Quat.Sech(a0.AsQuat()));
+                case SbxFuncId.QCoth:  return SbxVal3.Q(Quat.Coth(a0.AsQuat()));
+                case SbxFuncId.QPow:   return SbxVal3.Pow(a0.IsQuat ? a0 : SbxVal3.Q(a0.AsQuat()), a1);
+                case SbxFuncId.Length:   return SbxVal3.R(a0.AsVec().Length);
+                case SbxFuncId.Dot:      return SbxVal3.R(Vec3.Dot(a0.AsVec(), a1.AsVec()));
+                case SbxFuncId.Cross:    return SbxVal3.V(Vec3.Cross(a0.AsVec(), a1.AsVec()));
+                case SbxFuncId.Normalize:return SbxVal3.V(a0.AsVec().Normalized());
+                case SbxFuncId.Triplex:  return SbxVal3.V(Vec3.Pow(a0.AsVec(), a1.AsReal()));
+                case SbxFuncId.Rot:      return SbxVal3.V(Vec3.Rot(a0.AsVec(), a1.AsVec(), a2.AsReal()));
+                case SbxFuncId.BoxFold:  return SbxVal3.V(Vec3.BoxFold(a0.AsVec(), a1.AsReal()));
+                case SbxFuncId.SphereFold:return SbxVal3.V(Vec3.SphereFold(a0.AsVec(), a1.AsReal(), a2.AsReal()));
+                case SbxFuncId.AbsX:     return SbxVal3.V(Vec3.AbsX(a0.AsVec()));
+                case SbxFuncId.AbsY:     return SbxVal3.V(Vec3.AbsY(a0.AsVec()));
+                case SbxFuncId.AbsZ:     return SbxVal3.V(Vec3.AbsZ(a0.AsVec()));
+                case SbxFuncId.Mod:      return SbxVal3.V(Vec3.Mod(a0.AsVec(), a1.AsReal()));
+                case SbxFuncId.SMin:     return SbxVal3.R(Vec3.SMin(a0.AsReal(), a1.AsReal(), a2.AsReal()));
+                case SbxFuncId.Pow2:     return SbxVal3.Pow(a0, a1);
+                case SbxFuncId.Floor:    return SbxVal3.R(Math.Floor(a0.AsReal()));
+                case SbxFuncId.Sign:     return SbxVal3.R(Math.Sign(a0.AsReal()));
+                case SbxFuncId.Min:      return SbxVal3.R(Math.Min(a0.AsReal(), a1.AsReal()));
+                case SbxFuncId.Max:      return SbxVal3.R(Math.Max(a0.AsReal(), a1.AsReal()));
+                case SbxFuncId.Clamp:    return SbxVal3.R(Math.Clamp(a0.AsReal(), a1.AsReal(), a2.AsReal()));
+
                 // Transcendentals: defined elementwise on Real/Vec only.
                 // Per-component on Quat is geometrically meaningless (treats
                 // the quaternion as a 4-tuple, not as a rotation/algebra
                 // element), so reject explicitly.
-                SbxFuncId.Sin  => ApplyScalar(x, Math.Sin,  "sin"),
-                SbxFuncId.Cos  => ApplyScalar(x, Math.Cos,  "cos"),
-                SbxFuncId.Tan  => ApplyScalar(x, Math.Tan,  "tan"),
-                SbxFuncId.Sinh => ApplyScalar(x, Math.Sinh, "sinh"),
-                SbxFuncId.Cosh => ApplyScalar(x, Math.Cosh, "cosh"),
-                SbxFuncId.Tanh => ApplyScalar(x, Math.Tanh, "tanh"),
-                SbxFuncId.Exp  => ApplyScalar(x, Math.Exp,  "exp"),
-                SbxFuncId.Log  => ApplyScalar(x, Math.Log,  "log"),
-                SbxFuncId.Sqrt => ApplyScalar(x, Math.Sqrt, "sqrt"),
+                case SbxFuncId.Sin:  return ApplyScalar(a0, Math.Sin,  "sin");
+                case SbxFuncId.Cos:  return ApplyScalar(a0, Math.Cos,  "cos");
+                case SbxFuncId.Tan:  return ApplyScalar(a0, Math.Tan,  "tan");
+                case SbxFuncId.Sinh: return ApplyScalar(a0, Math.Sinh, "sinh");
+                case SbxFuncId.Cosh: return ApplyScalar(a0, Math.Cosh, "cosh");
+                case SbxFuncId.Tanh: return ApplyScalar(a0, Math.Tanh, "tanh");
+                case SbxFuncId.Exp:  return ApplyScalar(a0, Math.Exp,  "exp");
+                case SbxFuncId.Log:  return ApplyScalar(a0, Math.Log,  "log");
+                case SbxFuncId.Sqrt: return ApplyScalar(a0, Math.Sqrt, "sqrt");
                 // abs is well-defined componentwise on Quat (per-axis fold).
-                SbxFuncId.Abs  => ApplyAll(x, Math.Abs),
-                _ => throw new InvalidOperationException("Unknown function " + Name),
+                case SbxFuncId.Abs:  return ApplyAll(a0, Math.Abs);
+            }
+            throw new InvalidOperationException("Unknown function id " + func);
+        }
+
+        /// <summary>Member access .x/.y/.z/.w. Shared by the interpreter
+        /// (<see cref="Sbx3Member"/>) and the compiler.</summary>
+        public static SbxVal3 MemberAxis(SbxVal3 v, char axis) => axis switch
+        {
+            'x' => SbxVal3.R(v.X),
+            'y' => SbxVal3.R(v.IsVecOrQuat ? v.Y : v.X),
+            'z' => SbxVal3.R(v.IsVecOrQuat ? v.Z : v.X),
+            'w' => SbxVal3.R(v.IsQuat ? v.W : 0.0),
+            _   => throw new InvalidOperationException("Bad axis " + axis),
+        };
+
+        /// <summary>Logical NOT: 1 when the value is falsey, else 0.</summary>
+        public static SbxVal3 Not(SbxVal3 v) => SbxVal3.R(v.AsBool() ? 0.0 : 1.0);
+
+        /// <summary>Real-valued comparison ops (not And/Or — those short-circuit
+        /// in the caller). Shared by interpreter + compiler.</summary>
+        public static SbxVal3 Compare(SbxBinOp op, SbxVal3 a, SbxVal3 b)
+        {
+            double x = a.AsReal(), y = b.AsReal();
+            return op switch
+            {
+                SbxBinOp.Lt => SbxVal3.R(x <  y ? 1.0 : 0.0),
+                SbxBinOp.Gt => SbxVal3.R(x >  y ? 1.0 : 0.0),
+                SbxBinOp.Le => SbxVal3.R(x <= y ? 1.0 : 0.0),
+                SbxBinOp.Ge => SbxVal3.R(x >= y ? 1.0 : 0.0),
+                SbxBinOp.Eq => SbxVal3.R(x == y ? 1.0 : 0.0),
+                SbxBinOp.Ne => SbxVal3.R(x != y ? 1.0 : 0.0),
+                _           => throw new InvalidOperationException("Not a comparison op " + op),
             };
         }
 
@@ -585,6 +590,28 @@ namespace FracturingFog.Models
 
         public SbxVal3[] NewEnv() => new SbxVal3[EnvSize];
 
+        // #283 — optional Expression-tree-compiled root. Null until TryCompile
+        // succeeds; when set, the Eval*Compiled entries dispatch through it
+        // instead of the virtual AST walk. Correctness is identical because the
+        // compiler and the interpreter share SbxFuncEval.Apply + the SbxVal3
+        // static ops. Falls back silently to the interpreter if compilation of
+        // a construct is unsupported.
+        private Func<SbxVal3[], SbxVal3>? _compiledRoot;
+
+        /// <summary>True once a compiled root delegate is available.</summary>
+        public bool IsCompiled => _compiledRoot != null;
+
+        /// <summary>Attempt to JIT-compile the AST to a delegate (System.Linq.
+        /// Expressions — not Roslyn, no source compile, #27-safe: only the same
+        /// fixed op surface the interpreter already invokes). Idempotent;
+        /// returns true when a compiled root is present afterwards.</summary>
+        public bool TryCompile()
+        {
+            if (_compiledRoot != null) return true;
+            _compiledRoot = SandboxBulbCompiler.TryCompile(Root);
+            return _compiledRoot != null;
+        }
+
         /// <summary>Evaluate Step(z, c, n) → Vec3. env must come from <see cref="NewEnv"/>.
         /// extras (when provided) must match the names passed to <see cref="Parse(string, IReadOnlyList{string})"/>.</summary>
         public Vec3 EvalStep(Vec3 z, Vec3 c, int n, SbxVal3[] env, ReadOnlySpan<double> extras = default)
@@ -594,7 +621,8 @@ namespace FracturingFog.Models
             env[SlotN] = SbxVal3.R(n);
             for (int i = 0; i < ExtraScalarSlots.Count && i < extras.Length; i++)
                 env[ExtraScalarSlots[i]] = SbxVal3.R(extras[i]);
-            return Root.Eval(env).AsVec();
+            var root = _compiledRoot;
+            return (root != null ? root(env) : Root.Eval(env)).AsVec();
         }
 
         /// <summary>Quat-mode evaluator. Same AST, Quat-tagged z and c slots.
@@ -607,7 +635,8 @@ namespace FracturingFog.Models
             env[SlotN] = SbxVal3.R(n);
             for (int i = 0; i < ExtraScalarSlots.Count && i < extras.Length; i++)
                 env[ExtraScalarSlots[i]] = SbxVal3.R(extras[i]);
-            return Root.Eval(env).AsQuat();
+            var root = _compiledRoot;
+            return (root != null ? root(env) : Root.Eval(env)).AsQuat();
         }
 
         // ── Parser ────────────────────────────────────────────────────────────
