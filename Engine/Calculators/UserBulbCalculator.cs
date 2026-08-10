@@ -327,6 +327,7 @@ public sealed class UserBulbCalculator : IFractalCalculator
             extras.Add("dr");
             extras.Add("de");
             var expr = SandboxBulbExpression.Parse(body, extras);
+            expr.TryCompile();   // #283 — JIT the dr recurrence, #27-safe.
             int envSize = expr.EnvSize;
             _deBodyEnv = new ThreadLocal<SbxVal3[]>(() => new SbxVal3[envSize]);
             _deBody = expr;
@@ -351,6 +352,10 @@ public sealed class UserBulbCalculator : IFractalCalculator
             extras.AddRange(paramNames);
             extras.Add("t");
             var expr = SandboxBulbExpression.Parse(source, extras);
+            // #283 — JIT the AST (System.Linq.Expressions, #27-safe). Silent
+            // fallback to the interpreter on failure; the probe below exercises
+            // whichever path is now active.
+            expr.TryCompile();
             int envSize = expr.EnvSize;
             var envLocal = new System.Threading.ThreadLocal<SbxVal3[]>(() => new SbxVal3[envSize]);
             Func<Vec3, Vec3, int, double[], Vec3> fn = (z, c, n, pp) =>
@@ -393,6 +398,7 @@ public sealed class UserBulbCalculator : IFractalCalculator
             extras.AddRange(paramNames);
             extras.Add("t");
             var expr = SandboxBulbExpression.Parse(source, extras);
+            expr.TryCompile();   // #283 — JIT, #27-safe, silent interpreter fallback.
             int envSize = expr.EnvSize;
             var envLocal = new System.Threading.ThreadLocal<SbxVal3[]>(() => new SbxVal3[envSize]);
             Func<Quat, Quat, int, double[], Quat> fnQ = (z, c, n, pp) =>
