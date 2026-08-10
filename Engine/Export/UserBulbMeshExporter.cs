@@ -46,8 +46,9 @@ public static class UserBulbMeshExporter
         string filePath, FracturingFog.Rendering.Lighting.IDistanceEstimator de,
         double cx, double cy, double cz, double range, int n,
         double isoScale = 0.5, bool isoAbsolute = false, int superSamples = 1,
-        CancellationToken ct = default)
-        => ExportMarchingCubes(filePath, de.Evaluate, cx, cy, cz, range, n, isoScale, isoAbsolute, superSamples, ct);
+        double creaseDegrees = 180.0, CancellationToken ct = default)
+        => ExportMarchingCubes(filePath, de.Evaluate, cx, cy, cz, range, n,
+                               isoScale, isoAbsolute, superSamples, creaseDegrees, ct);
 
     /// <summary>Marching Cubes export. Dispatches on file extension:
     /// `.stl` → binary STL (face normals); anything else → OBJ with
@@ -66,14 +67,21 @@ public static class UserBulbMeshExporter
     /// per grid corner (1 = single sample, the default). Filaments thinner than a
     /// cell alias into broken tubes/dots when point-sampled; averaging antialiases
     /// them into continuous arms. Cost is ~s³× the DE evaluations, so keep it low
-    /// (2–3) on fine grids.</summary>
+    /// (2–3) on fine grids.
+    /// <paramref name="creaseDegrees"/> preserves hard edges: adjacent faces whose
+    /// normals differ by more than this angle are NOT smoothed together (the
+    /// vertex splits, so e.g. Mandelbox facets stay crisp while curved bulb arms
+    /// smooth). 180 (default) = smooth everything, byte-identical to the prior
+    /// exporter; ≈30 keeps facets.</summary>
     public static int ExportMarchingCubes(
         string filePath, SampleDistance sample,
         double cx, double cy, double cz, double range, int n,
         double isoScale = 0.5, bool isoAbsolute = false, int superSamples = 1,
-        CancellationToken ct = default)
+        double creaseDegrees = 180.0, CancellationToken ct = default)
     {
         var (verts, norms, tris) = BuildMarchingCubes(sample, cx, cy, cz, range, n, isoScale, isoAbsolute, superSamples, ct);
+        if (creaseDegrees < 179.9 && tris.Count > 0)
+            (verts, norms, tris) = ApplyCreaseNormals(verts, tris, creaseDegrees);
         if (tris.Count == 0) { File.WriteAllText(filePath, "# empty\n"); return 0; }
         if (filePath.EndsWith(".stl", StringComparison.OrdinalIgnoreCase))
             WriteStlBinary(filePath, verts, tris);
@@ -363,6 +371,85 @@ public static class UserBulbMeshExporter
         verts.Add((x, y, z));
         edgeVert[key] = idx;
         return idx;
+    }
+
+    // ── Crease-angle normals ────────────────────────────────────────────────
+
+    // Rebuild the mesh so a vertex shared across a HARD edge carries a separate
+    // normal per side (facet stays sharp) while smooth regions still share one
+    // normal (curved surface stays smooth). For each triangle corner the vertex
+    // normal is the average of the incident face normals within creaseDegrees of
+    // THAT triangle's face normal; corners that resolve to the same
+    // (vertex, quantised-normal) are welded, so smooth areas don't bloat.
+    private static (List<(double X, double Y, double Z)> verts,
+                    List<(double X, double Y, double Z)> norms,
+                    List<(int A, int B, int C)> tris)
+        ApplyCreaseNormals(
+            List<(double X, double Y, double Z)> verts,
+            List<(int A, int B, int C)> tris,
+            double creaseDegrees)
+    {
+        double cosCrease = Math.Cos(Math.Clamp(creaseDegrees, 0.0, 180.0) * Math.PI / 180.0);
+        int tc = tris.Count;
+
+        // Unit face normals.
+        var fn = new (double x, double y, double z)[tc];
+        for (int t = 0; t < tc; t++)
+        {
+            var (a, b, c) = tris[t];
+            var (ax, ay, az) = verts[a];
+            var (bx, by, bz) = verts[b];
+            var (cx, cy, cz) = verts[c];
+            double ex = bx - ax, ey = by - ay, ez = bz - az;
+            double gx = cx - ax, gy = cy - ay, gz = cz - az;
+            double nx = ey * gz - ez * gy, ny = ez * gx - ex * gz, nz = ex * gy - ey * gx;
+            double L = Math.Sqrt(nx * nx + ny * ny + nz * nz);
+            fn[t] = L > 1e-20 ? (nx / L, ny / L, nz / L) : (0, 0, 1);
+        }
+
+        // Incident faces per original vertex.
+        var incident = new List<int>[verts.Count];
+        for (int t = 0; t < tc; t++)
+        {
+            var (a, b, c) = tris[t];
+            (incident[a] ??= new List<int>()).Add(t);
+            (incident[b] ??= new List<int>()).Add(t);
+            (incident[c] ??= new List<int>()).Add(t);
+        }
+
+        var outV = new List<(double, double, double)>();
+        var outN = new List<(double, double, double)>();
+        var outT = new List<(int, int, int)>(tc);
+        var map = new Dictionary<(int, long, long, long), int>();
+
+        int Corner(int vi, (double x, double y, double z) ft)
+        {
+            double nx = 0, ny = 0, nz = 0;
+            foreach (int s in incident[vi])
+            {
+                var f = fn[s];
+                if (f.x * ft.x + f.y * ft.y + f.z * ft.z >= cosCrease) { nx += f.x; ny += f.y; nz += f.z; }
+            }
+            double L = Math.Sqrt(nx * nx + ny * ny + nz * nz);
+            if (L > 1e-20) { nx /= L; ny /= L; nz /= L; } else { nx = ft.x; ny = ft.y; nz = ft.z; }
+            var key = (vi, (long)Math.Round(nx * 1000), (long)Math.Round(ny * 1000), (long)Math.Round(nz * 1000));
+            if (!map.TryGetValue(key, out int idx))
+            {
+                idx = outV.Count;
+                outV.Add(verts[vi]);
+                outN.Add((nx, ny, nz));
+                map[key] = idx;
+            }
+            return idx;
+        }
+
+        for (int t = 0; t < tc; t++)
+        {
+            var (a, b, c) = tris[t];
+            var ft = fn[t];
+            outT.Add((Corner(a, ft), Corner(b, ft), Corner(c, ft)));
+        }
+        return (outV, outN, outT);
     }
 
     // ── Writers ─────────────────────────────────────────────────────────────

@@ -95,6 +95,9 @@ namespace FracturingFog.Models
         // Box-average s×s×s DE stencil per grid corner (1 = single sample) to
         // antialias sub-cell filaments.
         public int? ExportSuperSamples { get; set; }
+        // Crease angle (deg); faces differing by more keep a hard edge. 180 =
+        // smooth everything.
+        public double? ExportCreaseDegrees { get; set; }
 
         // ── Named params (UserBulbParam.Value / Min / Max) ─────────────
         public List<UserBulbParam>? Params { get; set; }
