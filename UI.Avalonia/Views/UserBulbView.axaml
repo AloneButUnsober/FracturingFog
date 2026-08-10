@@ -416,6 +416,13 @@
                                        ToolTip.Tip="Object-space half-extent of the sampled cube. Must enclose the fractal; too small clips it." />
                             <NumericUpDown Width="86" Minimum="0.25" Maximum="64" Increment="0.25" FormatString="F2"
                                            Value="{Binding ExportRange, Mode=TwoWay}" />
+                            <TextBlock Text="Iso" VerticalAlignment="Center"
+                                       ToolTip.Tip="Surface level. As a cell fraction (abs off) 0.5 sits a half-cell OUTSIDE the true surface, so filaments inflate into fat tubes and gaps fuse into a ball; lower toward 0.1–0.25 to hug the surface and keep filament detail, raise to bridge gaps if the mesh shatters. With abs on it is an object-space distance (grid-independent)." />
+                            <NumericUpDown Width="86" Minimum="0.005" Maximum="2" Increment="0.01" FormatString="F3"
+                                           Value="{Binding ExportIsoScale, Mode=TwoWay}" />
+                            <CheckBox Content="abs" VerticalAlignment="Center"
+                                      IsChecked="{Binding ExportIsoAbsolute, Mode=TwoWay}"
+                                      ToolTip.Tip="Treat Iso as an absolute object-space distance (grid-independent surface level) instead of a fraction of the cell size. Change the Grid without re-tuning Iso." />
                             <TextBlock Text="(uses Iterations + JacobianH above)" VerticalAlignment="Center"
                                        Opacity="0.7" FontStyle="Italic"
                                        ToolTip.Tip="Mesh DE quality reuses the panel's Iterations + JacobianH. For crisp export geometry raise Iterations (native quaternion types use 11–14; the render default 8 is blobby) and/or lower JacobianH toward 1e-5." />

@@ -87,6 +87,11 @@ namespace FracturingFog.Models
         // the user dialled in, not the defaults.
         public int? ExportGridN { get; set; }
         public double? ExportRange { get; set; }
+        // Marching-cubes iso level. Lower crispens (keeps filaments); higher
+        // fuses gaps. ExportIsoAbsolute switches it from a cell-size fraction
+        // (iso = step·this) to an absolute object-space distance.
+        public double? ExportIsoScale { get; set; }
+        public bool? ExportIsoAbsolute { get; set; }
 
         // ── Named params (UserBulbParam.Value / Min / Max) ─────────────
         public List<UserBulbParam>? Params { get; set; }
