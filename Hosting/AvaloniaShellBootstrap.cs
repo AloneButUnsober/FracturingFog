@@ -596,6 +596,12 @@ namespace FracturingFog.Hosting
             try { FracturingFog.UserEquationDslMigration.Run(UserEquationStore.Instance); } catch { }
             try { SandboxEquationStore.Instance.Load(); }  catch { }
             try { UserBulbStore.Instance.Load(); }         catch { }
+            // #27 / #211 — convert saved C# Vec3/Quat bulbs to the safe DSL once
+            // the store is loaded (backup-guarded, idempotent). Mirrors the
+            // equation migration above: after Phase 3 the live bulb path is
+            // DSL-only, so translatable saved bulbs are persisted as DSL;
+            // untranslatable ones are left editable.
+            try { FracturingFog.UserBulbDslMigration.Run(UserBulbStore.Instance); } catch { }
             try { UserWatermarkStore.Instance.Load(); }    catch { }
             // Animation Roadmap P2/P4 — without this the library stays empty at
             // runtime, so the editor's Load dropdown, the Save-Region animation
