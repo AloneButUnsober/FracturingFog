@@ -92,6 +92,9 @@ namespace FracturingFog.Models
         // (iso = step·this) to an absolute object-space distance.
         public double? ExportIsoScale { get; set; }
         public bool? ExportIsoAbsolute { get; set; }
+        // Box-average s×s×s DE stencil per grid corner (1 = single sample) to
+        // antialias sub-cell filaments.
+        public int? ExportSuperSamples { get; set; }
 
         // ── Named params (UserBulbParam.Value / Min / Max) ─────────────
         public List<UserBulbParam>? Params { get; set; }
