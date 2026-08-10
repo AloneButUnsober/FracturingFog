@@ -416,6 +416,9 @@
                                        ToolTip.Tip="Object-space half-extent of the sampled cube. Must enclose the fractal; too small clips it." />
                             <NumericUpDown Width="86" Minimum="0.25" Maximum="64" Increment="0.25" FormatString="F2"
                                            Value="{Binding ExportRange, Mode=TwoWay}" />
+                            <Button Classes="tool" Content="Auto"
+                                    Command="{Binding AutoRangeCommand}"
+                                    ToolTip.Tip="Probe the fractal's extent (using the export Iterations + JacobianH) and set Range to just enclose it — avoids clipping and wasted resolution." />
                             <TextBlock Text="Iso" VerticalAlignment="Center"
                                        ToolTip.Tip="Surface level. As a cell fraction (abs off) 0.5 sits a half-cell OUTSIDE the true surface, so filaments inflate into fat tubes and gaps fuse into a ball; lower toward 0.1–0.25 to hug the surface and keep filament detail, raise to bridge gaps if the mesh shatters. With abs on it is an object-space distance (grid-independent)." />
                             <NumericUpDown Width="86" Minimum="0.005" Maximum="2" Increment="0.01" FormatString="F3"
