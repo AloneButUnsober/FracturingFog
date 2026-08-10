@@ -837,6 +837,7 @@ public sealed class UserBulbViewModel : ViewModelBase
         ExportRange      = _exportRange,
         ExportIsoScale   = _exportIsoScale,
         ExportIsoAbsolute = _exportIsoAbsolute,
+        ExportSuperSamples = _exportSuperSamples,
         Params           = _params.UserBulbParams.ConvertAll(p => p.Clone()),
     };
 
@@ -891,6 +892,7 @@ public sealed class UserBulbViewModel : ViewModelBase
         if (s.ExportRange is { } erg)            ExportRange = erg;
         if (s.ExportIsoScale is { } eis)         ExportIsoScale = eis;
         if (s.ExportIsoAbsolute is { } eia)      ExportIsoAbsolute = eia;
+        if (s.ExportSuperSamples is { } ess)     ExportSuperSamples = ess;
 
         if (s.Params is { Count: > 0 } srcParams)
         {
@@ -1148,7 +1150,8 @@ public sealed class UserBulbViewModel : ViewModelBase
         // For crisp export geometry raise Iterations (native quaternion types use
         // 11–14; render default 8 is blobby) and/or drop JacobianH toward 1e-5.
         var meshArgs = new MeshExportEventArgs(
-            ExportGridN, ExportRange, pathArgs.Path!, Iterations, JacobianH, ExportIsoScale, ExportIsoAbsolute);
+            ExportGridN, ExportRange, pathArgs.Path!, Iterations, JacobianH,
+            ExportIsoScale, ExportIsoAbsolute, ExportSuperSamples);
         ExportMeshRequested?.Invoke(this, meshArgs);
     }
 
@@ -1213,6 +1216,16 @@ public sealed class UserBulbViewModel : ViewModelBase
     {
         get => _exportIsoAbsolute;
         set => this.RaiseAndSetIfChanged(ref _exportIsoAbsolute, value);
+    }
+
+    private int _exportSuperSamples = 1;
+    /// <summary>Box-average an s×s×s DE stencil per grid corner (1 = single
+    /// sample). Antialiases sub-cell filaments into continuous surface instead of
+    /// broken tubes. Cost is ~s³× the DE work, so keep it 2–3 on fine grids.</summary>
+    public int ExportSuperSamples
+    {
+        get => _exportSuperSamples;
+        set => this.RaiseAndSetIfChanged(ref _exportSuperSamples, Math.Clamp(value, 1, 4));
     }
 
     private string NextFreeName()
@@ -1281,8 +1294,8 @@ public sealed class SaveFileEventArgs : EventArgs
 public sealed class MeshExportEventArgs : EventArgs
 {
     public MeshExportEventArgs(int gridN, double range, string path, int iterations, double jacobianH,
-                               double isoScale, bool isoAbsolute)
-    { GridN = gridN; Range = range; Path = path; Iterations = iterations; JacobianH = jacobianH; IsoScale = isoScale; IsoAbsolute = isoAbsolute; }
+                               double isoScale, bool isoAbsolute, int superSamples)
+    { GridN = gridN; Range = range; Path = path; Iterations = iterations; JacobianH = jacobianH; IsoScale = isoScale; IsoAbsolute = isoAbsolute; SuperSamples = superSamples; }
     public int GridN { get; }
     public double Range { get; }
     public string Path { get; }
@@ -1291,6 +1304,9 @@ public sealed class MeshExportEventArgs : EventArgs
     // from a cell-size fraction to an absolute object-space distance.
     public double IsoScale { get; }
     public bool IsoAbsolute { get; }
+    // Box-average s×s×s DE stencil per grid corner (1 = single sample) to
+    // antialias sub-cell filaments into continuous surface. Cost ~s³×.
+    public int SuperSamples { get; }
     // #112 — export-specific DE quality (independent of the render's live iter/
     // jacH) so mesh geometry can resolve detail the numerical DE otherwise
     // smooths away.

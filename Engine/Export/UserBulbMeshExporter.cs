@@ -45,8 +45,9 @@ public static class UserBulbMeshExporter
     public static int ExportMarchingCubes(
         string filePath, FracturingFog.Rendering.Lighting.IDistanceEstimator de,
         double cx, double cy, double cz, double range, int n,
-        double isoScale = 0.5, bool isoAbsolute = false, CancellationToken ct = default)
-        => ExportMarchingCubes(filePath, de.Evaluate, cx, cy, cz, range, n, isoScale, isoAbsolute, ct);
+        double isoScale = 0.5, bool isoAbsolute = false, int superSamples = 1,
+        CancellationToken ct = default)
+        => ExportMarchingCubes(filePath, de.Evaluate, cx, cy, cz, range, n, isoScale, isoAbsolute, superSamples, ct);
 
     /// <summary>Marching Cubes export. Dispatches on file extension:
     /// `.stl` → binary STL (face normals); anything else → OBJ with
@@ -60,13 +61,19 @@ public static class UserBulbMeshExporter
     /// iso level directly in object-space distance units — grid-independent, so
     /// changing the grid does not move the surface. Lower (fraction ≈0.1–0.25, or
     /// a small absolute distance) hugs the true surface and keeps filament detail;
-    /// raise it to bridge gaps if the mesh comes out shattered.</summary>
+    /// raise it to bridge gaps if the mesh comes out shattered.
+    /// <paramref name="superSamples"/> box-averages an s×s×s stencil of the DE
+    /// per grid corner (1 = single sample, the default). Filaments thinner than a
+    /// cell alias into broken tubes/dots when point-sampled; averaging antialiases
+    /// them into continuous arms. Cost is ~s³× the DE evaluations, so keep it low
+    /// (2–3) on fine grids.</summary>
     public static int ExportMarchingCubes(
         string filePath, SampleDistance sample,
         double cx, double cy, double cz, double range, int n,
-        double isoScale = 0.5, bool isoAbsolute = false, CancellationToken ct = default)
+        double isoScale = 0.5, bool isoAbsolute = false, int superSamples = 1,
+        CancellationToken ct = default)
     {
-        var (verts, norms, tris) = BuildMarchingCubes(sample, cx, cy, cz, range, n, isoScale, isoAbsolute, ct);
+        var (verts, norms, tris) = BuildMarchingCubes(sample, cx, cy, cz, range, n, isoScale, isoAbsolute, superSamples, ct);
         if (tris.Count == 0) { File.WriteAllText(filePath, "# empty\n"); return 0; }
         if (filePath.EndsWith(".stl", StringComparison.OrdinalIgnoreCase))
             WriteStlBinary(filePath, verts, tris);
@@ -179,10 +186,30 @@ public static class UserBulbMeshExporter
                     List<(int A, int B, int C)> tris)
         BuildMarchingCubes(SampleDistance sample,
                            double cx, double cy, double cz, double range, int n,
-                           double isoScale, bool isoAbsolute, CancellationToken ct)
+                           double isoScale, bool isoAbsolute, int superSamples,
+                           CancellationToken ct)
     {
         if (n < 8) n = 8;
         double step = 2.0 * range / n;
+
+        // Corner sampler: single point (ss<=1) or a box-averaged s×s×s stencil
+        // spanning the corner's cell (±half a step), to antialias sub-cell
+        // filaments into continuous surface instead of broken tubes.
+        int ss = Math.Clamp(superSamples, 1, 4);
+        double SampleCorner(double x, double y, double z)
+        {
+            if (ss <= 1) return sample(x, y, z);
+            double h = 0.5 * step, span = 2.0 * h / ss;
+            double acc = 0.0;
+            for (int ax = 0; ax < ss; ax++)
+            for (int ay = 0; ay < ss; ay++)
+            for (int az = 0; az < ss; az++)
+                acc += sample(x - h + (ax + 0.5) * span,
+                              y - h + (ay + 0.5) * span,
+                              z - h + (az + 0.5) * span);
+            return acc / (ss * ss * ss);
+        }
+
         // Iso level: absolute object-space distance (grid-independent) or a
         // fraction of the cell size (tracks the grid). Both clamped positive and
         // below the sampled half-extent so the surface stays inside the cube.
@@ -200,7 +227,7 @@ public static class UserBulbMeshExporter
                 double x = cx - range + i * step;
                 double y = cy - range + j * step;
                 double z = cz - range + k * step;
-                field[(i * side + j) * side + k] = sample(x, y, z);
+                field[(i * side + j) * side + k] = SampleCorner(x, y, z);
             }
         }
         done_sample:;
