@@ -123,6 +123,9 @@ namespace FracturingFog.Hosting
         // (analyzer-only) on Linux/macOS.
         private static IAudioCaptureBackend? s_audioBackend;
         private static AudioCaptureDriver? s_audioDriver;
+        // #277 — audio-reactive slideshow demand flag, one input to the capture
+        // reconcile predicate (the toggle consumers are read live off the VMs).
+        private static bool s_slideshowAudioDemand;
 
         private static readonly object s_gate = new();
 
@@ -632,10 +635,18 @@ namespace FracturingFog.Hosting
             // user can edit AudioSettings mid-session.
             s_shell.StartAudioReactive = () =>
             {
-                EnsureAudioCaptureStarted();
+                s_slideshowAudioDemand = true;
+                ReconcileAudioCapture();
                 return s_audioDriver?.BeatSource;
             };
-            s_shell.StopAudioReactive = StopAudioCapture;
+            // #277 — the slideshow no longer hard-stops shared capture; it drops
+            // its demand and reconciles, so a still-active toggle (Pulse, Beat FX)
+            // keeps audio alive, and nothing else keeps a File source playing.
+            s_shell.StopAudioReactive = () =>
+            {
+                s_slideshowAudioDemand = false;
+                ReconcileAudioCapture();
+            };
             s_shell.GetAudioBeatCadence = () =>
             {
                 var s = AudioSettingsStore.Load();
@@ -648,14 +659,18 @@ namespace FracturingFog.Hosting
             // owns the eventual capture stop.
             s_shell.GetAudioModulationSource = () => s_audioDriver?.ModulationSource;
             s_shell.EnsureAudioModulationStarted = EnsureAudioCaptureStarted;
+            // #277 — reconcile hook: consumers call this on toggle on AND off so a
+            // File source stops when the last consumer turns off (was left warm).
+            s_shell.ReconcileAudioCapture = ReconcileAudioCapture;
             // #262 — Acid Fog beat-lock lives on MainViewModel's ambient loop.
             s_shell.Main.GetAudioModulationSource = () => s_audioDriver?.ModulationSource;
             s_shell.Main.EnsureAudioModulationStarted = EnsureAudioCaptureStarted;
+            s_shell.Main.ReconcileAudioCapture = ReconcileAudioCapture;
             // #263 — audio→param modulation matrix manager (app-scoped), driving
             // fractal params through the shared render-gated animation bus.
             s_shell.AudioModulation = new FracturingFog.UI.Avalonia.ViewModels.Animation.AudioModulationManager(
                 () => s_audioDriver?.ModulationSource,
-                EnsureAudioCaptureStarted,
+                ReconcileAudioCapture,
                 () => s_shell.Main.ViewState.FractalParameters,
                 () => s_shell.Main.ViewState.FractalType,
                 () => FracturingFog.UI.Avalonia.ViewModels.Animation.AnimationBusHost.Bus);
@@ -1741,10 +1756,17 @@ namespace FracturingFog.Hosting
                     var rows = mgr?.DescriptorsForCurrentType()
                         .Select(d => new FracturingFog.UI.Avalonia.ViewModels.AudioBindingRowViewModel(d, mgr))
                         .ToList();
+                    var before = AudioSettingsStore.Load();
                     await AvaloniaDialogs.ShowAudioSettingsAsync(
                         owner: null, liveSource: s_audioDriver?.BeatSource, bindingRows: rows);
-                    if (s_audioDriver != null)
-                        s_audioDriver.Reconfigure(AudioSettingsStore.Load());
+                    // #277 — only reconfigure a *running* driver, and only when the
+                    // capture-relevant settings actually changed. The old code
+                    // reconfigured unconditionally after every close (incl. Cancel),
+                    // which restarted a File source from the top even on no-op opens.
+                    var after = AudioSettingsStore.Load();
+                    if (s_audioDriver is { IsRunning: true }
+                        && AudioCaptureSettingsChanged(before, after))
+                        s_audioDriver.Reconfigure(after);
                 }
                 catch (Exception ex)
                 {
@@ -3887,17 +3909,21 @@ namespace FracturingFog.Hosting
         {
             try
             {
-                var settings = AudioSettingsStore.Load();
                 if (s_audioDriver == null)
                 {
                     s_audioBackend = CreateAudioBackend();
-                    s_audioDriver = new AudioCaptureDriver(s_audioBackend, settings);
+                    s_audioDriver = new AudioCaptureDriver(s_audioBackend, AudioSettingsStore.Load());
                 }
-                else
+                // #277 — only (re)load settings + start when not already running.
+                // Reconfiguring a live driver here restarts a File source from the
+                // top, so a second consumer turning on would jog the music back to
+                // zero. Mid-session edits go through the Audio Settings dialog's
+                // explicit reconfigure instead.
+                if (!s_audioDriver.IsRunning)
                 {
-                    s_audioDriver.Reconfigure(settings);
+                    s_audioDriver.Reconfigure(AudioSettingsStore.Load());
+                    s_audioDriver.Start();
                 }
-                if (!s_audioDriver.IsRunning) s_audioDriver.Start();
             }
             catch (Exception ex)
             {
@@ -3915,6 +3941,49 @@ namespace FracturingFog.Hosting
             {
                 Console.Error.WriteLine($"[AvaloniaShellBootstrap] Audio capture stop failed: {ex.Message}");
             }
+        }
+
+        /// <summary>#277 — true when any audio-reactive consumer currently wants
+        /// live capture. Keyed on the consumers' explicit on/off state (not a
+        /// reference count) so <see cref="ReconcileAudioCapture"/> is idempotent:
+        /// no leaked "warm forever" capture, and no premature stop while another
+        /// consumer is still active.</summary>
+        private static bool AnyAudioConsumerActive()
+            => s_shell != null &&
+               (s_shell.AsciiFxAudioReactive
+                || s_shell.Main.AudioViewBreathe
+                || s_shell.Main.AcidFogAmbientBeatSync
+                || (s_shell.AudioModulation?.HasEnabledBindings ?? false)
+                || s_shell.SceneAudioActive
+                || s_slideshowAudioDemand);
+
+        /// <summary>#277 — start or stop shared audio capture to match current
+        /// demand. Idempotent; consumers call it after any toggle on or off.</summary>
+        private static void ReconcileAudioCapture()
+        {
+            if (AnyAudioConsumerActive()) EnsureAudioCaptureStarted();
+            else StopAudioCapture();
+        }
+
+        /// <summary>#277 — compare the capture-relevant fields of two AudioSettings
+        /// so the Audio Settings dialog only reconfigures a live driver on a real
+        /// change (source / file / sensitivity / band weights).</summary>
+        private static bool AudioCaptureSettingsChanged(AudioSettings a, AudioSettings b)
+        {
+            if (a is null || b is null) return a is not null || b is not null;
+            if (a.Source != b.Source) return true;
+            if (!string.Equals(a.FilePath, b.FilePath, StringComparison.Ordinal)) return true;
+            if (a.Sensitivity != b.Sensitivity) return true;
+            if (a.RouteSynthThroughAnalyzer != b.RouteSynthThroughAnalyzer) return true;
+            if (a.PlaySynthOutput != b.PlaySynthOutput) return true;
+            if (a.SynthBpm != b.SynthBpm) return true;
+            var wa = a.BandWeights;
+            var wb = b.BandWeights;
+            if (wa is null || wb is null) return !ReferenceEquals(wa, wb);
+            if (wa.Length != wb.Length) return true;
+            for (int i = 0; i < wa.Length; i++)
+                if (wa[i] != wb[i]) return true;
+            return false;
         }
 
         /// <summary>
