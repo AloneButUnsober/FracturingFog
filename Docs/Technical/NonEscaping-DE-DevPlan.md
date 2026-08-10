@@ -4,6 +4,8 @@
 
 Tracking issues: parent **#279**, slices **#280** (NonEscaping runner), **#281** (dr/de DSL slots + DE body), **#282** (Amoser complex-sine preset), **#283** (Expr-compile CPU kernel). File ↔ issue links are two-way per project convention.
 
+> **Status — SHIPPED (PR #284, merged).** All four slices landed on `main`. User-facing usage lives in the [User Bulb Guide §6.1–6.2](../User/UserBulb-Guide.md) and the in-app help (Math → User Bulb → *Non-Escaping DE*). Follow-on docs pass: #285. The sections below are the design record.
+
 ---
 
 ## Motivation

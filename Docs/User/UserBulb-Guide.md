@@ -279,13 +279,14 @@ Algebra change triggers a recompile.
 
 ## 6. DE Modes
 
-Three distance-estimation modes selectable from the DE mode combo:
+Four distance-estimation modes selectable from the DE mode combo:
 
 | Mode | When valid | Speed | Accuracy |
 |---|---|---|---|
 | Auto | Default; detects triplex-power patterns | Fast when matched, Numerical fallback otherwise | Best per-map |
 | Analytic | Hubbard-Douady analytic DE only valid for triplex power maps | ~4× faster | Exact for matched maps; wrong for everything else |
-| Numerical | Always | Slow | Works for any map |
+| Numerical | Always (escape-time maps) | Slow | Works for any escaping map |
+| Non-escaping | Maps that never escape (pseudo-Kleinian / lattice / Amoser sine) | Single-trajectory | Stability-clamp + running `min(1/dr)` |
 
 Analytic formula:
 
@@ -294,9 +295,88 @@ DE(p) = 0.5 · ln(|z|) · |z| / dr
 dr  = p · r^(p-1) · dr + 1
 ```
 
-Numerical formula: 4 lockstep trajectories at `(c, c+h·êx, c+h·êy, c+h·êz)`, `dr = max(|z_px-z_base|, |z_py-z_base|, |z_pz-z_base|) / h`. Works for ANY map.
+Numerical formula: 4 lockstep trajectories at `(c, c+h·êx, c+h·êy, c+h·êz)`, `dr = max(|z_px-z_base|, |z_py-z_base|, |z_pz-z_base|) / h`. Works for ANY *escaping* map.
 
 **Jac h** slider controls the finite-difference perturbation. 1e-4 default. Too small → cancellation noise; too large → soft-edged surface.
+
+### 6.1 Non-escaping DE (maps that never leave the bailout)
+
+Auto / Analytic / Numerical are all **escape-time**: they assume the orbit eventually crosses `|z| > Bailout`. Some of the richest 3-D maps never do — their orbit is trapped forever in a bounded slab. Examples: pseudo-Kleinian and lattice maps, and the **Amoser complex-sine**:
+
+```
+z = ( sin(z.x)·cosh(z.y),
+      cos(z.x)·cos(z.z)·sinh(z.y),
+      sin(z.z)·cosh(z.y) ) + c
+```
+
+On these, the escape-time modes read a nonsense DE and you get a blank or garbage surface **no matter how you tune Iterations / Bailout / Max steps / Epsilon**. Switch DE mode to **Non-escaping**. It replaces the escape test with a stability clamp and accumulates a distance bound from the running derivative `dr`:
+
+```
+de = ∞;  dr = 1
+for n in 0 … Iterations:
+    z  = Step(z, c, n, p)           # your step map
+    dr = DrBody(z, c, n, dr, …)     # your dr recurrence (or auto tangent)
+    de = min(de, 1 / dr)            # tightest bound so far
+    if |z.axis| > StabilityLimit:   # CLAMP, not escape
+        break
+return DEMultiplier · de
+```
+
+Three settings appear (only in this mode):
+
+| Setting | What it does | Amoser start |
+|---|---|---|
+| **DEMultiplier** | Pure gain on the final distance. Lower → smaller raymarch steps → crisper but slower; too high → over-stepped, holes. | 0.5 |
+| **Stability axis** | Which component (x/y/z) the clamp watches — pick the axis the map grows along. | y (cosh/sinh axis) |
+| **Stability limit** | Clamp threshold on that axis. Larger → more interior detail, noisier; smaller → smoother, eats fine structure. | 8 |
+
+### 6.2 The DE body editor — write your own `dr`
+
+In Non-escaping mode a **DE body** editor appears. You write **one scalar DSL expression** that returns the **next `dr`**. The engine owns everything else: it computes `de = min(de, 1/dr)` each iteration and multiplies by `DEMultiplier`. You write only the derivative growth.
+
+In scope inside the DE body:
+
+| Name | Meaning |
+|---|---|
+| `z` | the **pre-step** position this iteration (Vec3) |
+| `c` | the constant / Julia c (Vec3) |
+| `n` | iteration index (scalar) |
+| `t` | animation time (scalar) |
+| *params* | every named param from the Param Bank |
+| `dr` | the **previous** iteration's `dr` (scalar) |
+| `de` | the **previous** iteration's `de` (scalar) |
+
+Rules:
+
+- The body is **scalar** — return a number, not a `vec`.
+- Classic shape is `dr = stretch · dr + offset`, where *stretch* is the local magnitude of the map's derivative and *offset* is usually `1`.
+- If the body fails to parse it does **not** break your step: the engine falls back to a two-trajectory numerical tangent and shows the error, so the render still appears.
+- Leaving the body **blank** is valid — Non-escaping mode then uses the auto tangent (works for any non-escaping map, softer, ~2× the cost of a good analytic body).
+
+**Examples**
+
+```text
+# 1 — constant growth (teaching): de = 1/2^Iterations
+dr*2
+
+# 2 — Amoser complex-sine stretch (the shipped preset)
+#    sqrt(0.5·(e^2z + e^-2z)) = sqrt(cosh(2·z.z)) is the cosh stretch magnitude
+let ez = exp(z.z) in
+let s  = max(StretchMax, StretchScale*sqrt(0.5*(ez*ez + 1/(ez*ez)))) in
+drScale*s*dr + drOffset
+#    params: StretchScale 0.81, StretchMax 1.04, drScale 1.0, drOffset 1.0
+
+# 3 — generic non-escaping starter (length-based stretch)
+max(1.0, length(z)) * dr + 1.0
+
+# 4 — folded / periodic map: stretch = largest per-factor magnitude
+let g = max(abs(cos(z.x)), abs(cosh(z.y))) in
+Scale*g*dr + 1.0
+```
+
+**One click:** load the saved preset **"Amoser complex-sine (non-escaping DE)"** — it wires the step, the Example-2 dr body, the four params, and the Non-escaping settings together. Edit from there.
+
+> Camera note: the User Bulb camera hard-codes world-up +Y, so the reference Fragmentarium framing (`Up = (0,0,1)`) is not literally reproducible — the preset sets a sensible default distance instead.
 
 ---
 
@@ -352,6 +432,7 @@ L1 / L2 / L3 intensity sliders weight three directional contributions (key / fil
 | Left-click drag | Pan in screen space |
 | Right-click drag X | Orbit Theta |
 | Right-click drag Y | Orbit Phi (inverted) |
+| **Middle-drag** | **Marquee zoom** — hold the middle button, drag a box, release to recentre + zoom into it. Same outline-to-zoom as the 2D right-drag, on a different button so right-drag stays camera orbit. Esc cancels before release. |
 
 ---
 

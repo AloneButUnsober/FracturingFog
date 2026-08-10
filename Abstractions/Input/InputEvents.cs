@@ -82,9 +82,10 @@ namespace FracturingFog.Input
         int ClientHeight);
 
     /// <summary>Pixel-space rubber-band rectangle the input layer raises while
-    /// the user is right-drag-selecting a zoom region (non-3D only). X/Y is
-    /// the top-left corner; Width/Height are positive. Null Rect means the
-    /// drag ended or was cancelled — host should clear any preview overlay.</summary>
+    /// the user is drag-selecting a zoom region (2D right-drag, or 3D
+    /// middle-drag). X/Y is the top-left corner; Width/Height are positive.
+    /// Null Rect means the drag ended or was cancelled — host should clear any
+    /// preview overlay.</summary>
     public readonly record struct SelectionBoxChange(
         int X,
         int Y,
