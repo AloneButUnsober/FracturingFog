@@ -75,6 +75,8 @@ namespace FracturingFog.Models
         public double? NonEscDEMultiplier { get; set; }
         public int? NonEscStabilityAxis { get; set; }
         public double? NonEscStabilityLimit { get; set; }
+        // #281 — optional user-authored NonEscaping dr body (Sandbox DSL).
+        public string? DeBody { get; set; }
 
         // ── View ───────────────────────────────────────────────────────
         public double? FovDegrees { get; set; }

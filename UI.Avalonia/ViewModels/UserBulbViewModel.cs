@@ -52,6 +52,7 @@ public sealed class UserBulbViewModel : ViewModelBase
         _source = string.IsNullOrWhiteSpace(parameters.UserBulbSource)
             ? DefaultSource
             : parameters.UserBulbSource;
+        _deBody = parameters.UserBulbDeBody ?? string.Empty;
 
         // Initial knob mirror.
         _camDistance     = _params.UserBulbCameraDistance;
@@ -148,6 +149,23 @@ public sealed class UserBulbViewModel : ViewModelBase
             // Manual edits dissociate from any named saved entry.
             _params.UserBulbName = null;
             this.RaisePropertyChanged(nameof(SelectedSavedName));
+            ScheduleCompile();
+        }
+    }
+
+    private string _deBody;
+    /// <summary>#281 — optional NonEscaping dr body (Sandbox DSL). Empty → the
+    /// runner uses the numerical tangent. Recompiles on edit (debounced with the
+    /// step); a parse error surfaces via the status line without breaking a
+    /// valid step compile.</summary>
+    public string DeBody
+    {
+        get => _deBody;
+        set
+        {
+            this.RaiseAndSetIfChanged(ref _deBody, value);
+            _params.UserBulbDeBody = string.IsNullOrWhiteSpace(_deBody) ? null : _deBody;
+            if (_loadingNamedEquation) return;
             ScheduleCompile();
         }
     }
@@ -649,7 +667,14 @@ public sealed class UserBulbViewModel : ViewModelBase
             // render budget/params/Time). Legacy entries have no Settings —
             // leave the current knobs untouched (old load behaviour).
             if (entry.Settings != null)
+            {
                 ApplySnapshotToParams(entry.Settings);
+                // #281 — force the DE body from the entry (may be null to clear a
+                // stale body from the previously-loaded bulb; nulls are elided in
+                // the snapshot so ApplySnapshotToParams can't distinguish absent
+                // from "explicitly none").
+                _params.UserBulbDeBody = entry.Settings.DeBody;
+            }
         }
         finally { _loadingNamedEquation = false; }
 
@@ -845,6 +870,7 @@ public sealed class UserBulbViewModel : ViewModelBase
         NonEscDEMultiplier   = _params.UserBulbNonEscDEMultiplier,
         NonEscStabilityAxis  = _params.UserBulbNonEscStabilityAxis,
         NonEscStabilityLimit = _params.UserBulbNonEscStabilityLimit,
+        DeBody               = _params.UserBulbDeBody,
         FovDegrees       = _params.UserBulbFovDegrees,
         ClipPlaneEnabled = _params.UserBulbClipPlaneEnabled,
         SuperSample      = _params.UserBulbSuperSample,
@@ -895,6 +921,9 @@ public sealed class UserBulbViewModel : ViewModelBase
         if (s.NonEscDEMultiplier is { } nem)     _params.UserBulbNonEscDEMultiplier = nem;
         if (s.NonEscStabilityAxis is { } nea)    _params.UserBulbNonEscStabilityAxis = nea;
         if (s.NonEscStabilityLimit is { } nel)   _params.UserBulbNonEscStabilityLimit = nel;
+        // DeBody intentionally NOT guarded by the snapshot here — a bulb with no
+        // body writes no field (nulls elided), so switching bulbs must be able to
+        // CLEAR a stale body. LoadEquationByName force-sets it from the entry.
         if (s.FovDegrees is { } fov)             _params.UserBulbFovDegrees = fov;
         if (s.ClipPlaneEnabled is { } cpe)       _params.UserBulbClipPlaneEnabled = cpe;
         if (s.SuperSample is { } ss)             _params.UserBulbSuperSample = ss;
@@ -945,6 +974,7 @@ public sealed class UserBulbViewModel : ViewModelBase
             _neDEMultiplier = _params.UserBulbNonEscDEMultiplier;
             _neStabilityAxis = _params.UserBulbNonEscStabilityAxis;
             _neStabilityLimit = _params.UserBulbNonEscStabilityLimit;
+            _deBody       = _params.UserBulbDeBody ?? string.Empty;
             _deModeIndex  = (int)_params.UserBulbDEMode;
             _backendIndex = (int)_params.UserBulbBackend;
             _compilerIndex = (int)_params.UserBulbCompiler;
@@ -996,6 +1026,7 @@ public sealed class UserBulbViewModel : ViewModelBase
         this.RaisePropertyChanged(nameof(NonEscStabilityAxis));
         this.RaisePropertyChanged(nameof(NonEscStabilityLimit));
         this.RaisePropertyChanged(nameof(NonEscapingEnabled));
+        this.RaisePropertyChanged(nameof(DeBody));
         this.RaisePropertyChanged(nameof(DEModeIndex));
         this.RaisePropertyChanged(nameof(BackendIndex));
         this.RaisePropertyChanged(nameof(CompilerIndex));
