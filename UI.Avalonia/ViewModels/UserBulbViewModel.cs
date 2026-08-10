@@ -122,7 +122,10 @@ public sealed class UserBulbViewModel : ViewModelBase
         RemoveParamCommand = ReactiveCommand.Create<UserBulbParam>(OnRemoveParam);
         RemoveChainCommand = ReactiveCommand.Create<UserBulbChainStep>(OnRemoveChain);
         TogglePlayCommand = ReactiveCommand.Create(OnTogglePlay);
-        ExportMeshCommand = ReactiveCommand.CreateFromTask(OnExportMeshAsync);
+        ExportMeshCommand = ReactiveCommand.CreateFromTask(OnExportMeshAsync,
+            this.WhenAnyValue(x => x.IsExporting, busy => !busy));
+        AutoRangeCommand = ReactiveCommand.Create(OnAutoRange,
+            this.WhenAnyValue(x => x.IsExporting, busy => !busy));
         OpenHelpCommand = ReactiveCommand.Create(() =>
         {
             // Jump directly to the Sandbox DSL chapter when the Sandbox
@@ -552,6 +555,7 @@ public sealed class UserBulbViewModel : ViewModelBase
     public IReadOnlyList<UserBulbChainPrimitive> ChainPrimitives => UserBulbChainPrimitives.All;
     public ReactiveCommand<Unit, Unit> TogglePlayCommand { get; }
     public ReactiveCommand<Unit, Unit> ExportMeshCommand { get; }
+    public ReactiveCommand<Unit, Unit> AutoRangeCommand { get; }
     public ReactiveCommand<Unit, Unit> OpenHelpCommand { get; }
 
     /// <summary>Tuple: (docId, anchor, title). View opens HelpViewerView.
@@ -583,6 +587,11 @@ public sealed class UserBulbViewModel : ViewModelBase
 
     /// <summary>Args: gridN, range, path.</summary>
     public event EventHandler<MeshExportEventArgs>? ExportMeshRequested;
+
+    /// <summary>Fires when the user clicks Auto-range. The host probes the DE
+    /// bounding extent (using the export-quality Iterations + JacobianH) and
+    /// writes it back into <see cref="AutoRangeEventArgs.Result"/>.</summary>
+    public event EventHandler<AutoRangeEventArgs>? AutoRangeRequested;
 
     // ── Public helpers (host-callable) ─────────────────────────────────
 
@@ -828,6 +837,10 @@ public sealed class UserBulbViewModel : ViewModelBase
         AnimLoopSeconds  = _animLoopSeconds,
         ExportGridN      = _exportGridN,
         ExportRange      = _exportRange,
+        ExportIsoScale   = _exportIsoScale,
+        ExportIsoAbsolute = _exportIsoAbsolute,
+        ExportSuperSamples = _exportSuperSamples,
+        ExportCreaseDegrees = _exportCreaseDegrees,
         Params           = _params.UserBulbParams.ConvertAll(p => p.Clone()),
     };
 
@@ -880,6 +893,10 @@ public sealed class UserBulbViewModel : ViewModelBase
         // public setters so they clamp + notify the bound controls.
         if (s.ExportGridN is { } egn)            ExportGridN = egn;
         if (s.ExportRange is { } erg)            ExportRange = erg;
+        if (s.ExportIsoScale is { } eis)         ExportIsoScale = eis;
+        if (s.ExportIsoAbsolute is { } eia)      ExportIsoAbsolute = eia;
+        if (s.ExportSuperSamples is { } ess)     ExportSuperSamples = ess;
+        if (s.ExportCreaseDegrees is { } ecd)    ExportCreaseDegrees = ecd;
 
         if (s.Params is { Count: > 0 } srcParams)
         {
@@ -1137,8 +1154,50 @@ public sealed class UserBulbViewModel : ViewModelBase
         // For crisp export geometry raise Iterations (native quaternion types use
         // 11–14; render default 8 is blobby) and/or drop JacobianH toward 1e-5.
         var meshArgs = new MeshExportEventArgs(
-            ExportGridN, ExportRange, pathArgs.Path!, Iterations, JacobianH);
-        ExportMeshRequested?.Invoke(this, meshArgs);
+            ExportGridN, ExportRange, pathArgs.Path!, Iterations, JacobianH,
+            ExportIsoScale, ExportIsoAbsolute, ExportSuperSamples, ExportCreaseDegrees);
+        // The host runs the marching cubes off-thread and calls NotifyExportDone
+        // when finished; gate the buttons meanwhile. Only latch busy when a host
+        // is actually listening, else the flag would never clear.
+        if (ExportMeshRequested is { } handler)
+        {
+            IsExporting = true;
+            handler(this, meshArgs);
+        }
+    }
+
+    /// <summary>Host callback: the off-thread mesh export has finished (or
+    /// failed) — clear the busy flag so the export buttons re-enable.</summary>
+    public void NotifyExportDone() => IsExporting = false;
+
+    private bool _isExporting;
+    /// <summary>True while a mesh export runs on the host's background thread.
+    /// Disables the export + auto-range buttons and drives the "Exporting…"
+    /// status so the user waits instead of force-quitting a busy app.</summary>
+    public bool IsExporting
+    {
+        get => _isExporting;
+        private set => this.RaiseAndSetIfChanged(ref _isExporting, value);
+    }
+
+    private void OnAutoRange()
+    {
+        if (AutoRangeRequested is not { } handler)
+            return;
+        // Reuse the export-quality DE (same Iterations + JacobianH the mesh
+        // export uses) so the probed extent matches what will be tessellated.
+        var e = new AutoRangeEventArgs(Iterations, JacobianH);
+        handler(this, e);
+        if (e.Result > 0.0)
+        {
+            ExportRange = e.Result; // setter clamps + notifies the bound control
+            MessageRequested?.Invoke(this, $"Auto-range set to {ExportRange:0.##}.");
+        }
+        else
+        {
+            MessageRequested?.Invoke(this,
+                "Auto-range found no surface — check the equation compiles and renders.");
+        }
     }
 
     // ── Mesh-export geometry knobs (#112) — export-only; no render equivalent.
@@ -1158,6 +1217,51 @@ public sealed class UserBulbViewModel : ViewModelBase
     {
         get => _exportRange;
         set => this.RaiseAndSetIfChanged(ref _exportRange, Math.Clamp(value, 0.25, 64.0));
+    }
+
+    private double _exportIsoScale = 0.5;
+    /// <summary>Marching-cubes iso level. When <see cref="ExportIsoAbsolute"/> is
+    /// false this is a fraction of the cell size (iso = step·this); the default
+    /// 0.5 sits a half-cell OUTSIDE the true DE≈0 shell, so at coarse grids thin
+    /// filaments inflate into fat tubes and gaps fuse into a ball. When absolute,
+    /// this is the iso level directly in object-space distance (grid-independent).
+    /// Lower toward 0.1–0.25 (or a small absolute distance) to hug the surface and
+    /// keep filament detail; raise to bridge gaps if the mesh shatters.</summary>
+    public double ExportIsoScale
+    {
+        get => _exportIsoScale;
+        set => this.RaiseAndSetIfChanged(ref _exportIsoScale, Math.Clamp(value, 0.005, 2.0));
+    }
+
+    private bool _exportIsoAbsolute;
+    /// <summary>When true, <see cref="ExportIsoScale"/> is an absolute object-space
+    /// distance (grid-independent surface level); when false it is a fraction of
+    /// the cell size (surface level tracks the grid).</summary>
+    public bool ExportIsoAbsolute
+    {
+        get => _exportIsoAbsolute;
+        set => this.RaiseAndSetIfChanged(ref _exportIsoAbsolute, value);
+    }
+
+    private int _exportSuperSamples = 1;
+    /// <summary>Box-average an s×s×s DE stencil per grid corner (1 = single
+    /// sample). Antialiases sub-cell filaments into continuous surface instead of
+    /// broken tubes. Cost is ~s³× the DE work, so keep it 2–3 on fine grids.</summary>
+    public int ExportSuperSamples
+    {
+        get => _exportSuperSamples;
+        set => this.RaiseAndSetIfChanged(ref _exportSuperSamples, Math.Clamp(value, 1, 4));
+    }
+
+    private double _exportCreaseDegrees = 180.0;
+    /// <summary>Crease angle in degrees. Adjacent faces differing by more than
+    /// this keep a hard edge (Mandelbox facets stay crisp) while curved bulb arms
+    /// still smooth. 180 (default) smooths everything, like the prior exporter;
+    /// ≈30 preserves facets.</summary>
+    public double ExportCreaseDegrees
+    {
+        get => _exportCreaseDegrees;
+        set => this.RaiseAndSetIfChanged(ref _exportCreaseDegrees, Math.Clamp(value, 5.0, 180.0));
     }
 
     private string NextFreeName()
@@ -1225,16 +1329,40 @@ public sealed class SaveFileEventArgs : EventArgs
 
 public sealed class MeshExportEventArgs : EventArgs
 {
-    public MeshExportEventArgs(int gridN, double range, string path, int iterations, double jacobianH)
-    { GridN = gridN; Range = range; Path = path; Iterations = iterations; JacobianH = jacobianH; }
+    public MeshExportEventArgs(int gridN, double range, string path, int iterations, double jacobianH,
+                               double isoScale, bool isoAbsolute, int superSamples, double creaseDegrees)
+    { GridN = gridN; Range = range; Path = path; Iterations = iterations; JacobianH = jacobianH; IsoScale = isoScale; IsoAbsolute = isoAbsolute; SuperSamples = superSamples; CreaseDegrees = creaseDegrees; }
     public int GridN { get; }
     public double Range { get; }
     public string Path { get; }
+    // #112 follow-up — marching-cubes iso level. Lower crispens (hugs the true
+    // surface, keeps filaments); higher fuses gaps. IsoAbsolute switches IsoScale
+    // from a cell-size fraction to an absolute object-space distance.
+    public double IsoScale { get; }
+    public bool IsoAbsolute { get; }
+    // Box-average s×s×s DE stencil per grid corner (1 = single sample) to
+    // antialias sub-cell filaments into continuous surface. Cost ~s³×.
+    public int SuperSamples { get; }
+    // Crease angle (deg): faces differing by more than this keep a hard edge
+    // (facets stay sharp). 180 = smooth everything.
+    public double CreaseDegrees { get; }
     // #112 — export-specific DE quality (independent of the render's live iter/
     // jacH) so mesh geometry can resolve detail the numerical DE otherwise
     // smooths away.
     public int Iterations { get; }
     public double JacobianH { get; }
+}
+
+public sealed class AutoRangeEventArgs : EventArgs
+{
+    public AutoRangeEventArgs(int iterations, double jacobianH)
+    { Iterations = iterations; JacobianH = jacobianH; }
+    // Export-quality DE knobs so the probe matches the export sampler.
+    public int Iterations { get; }
+    public double JacobianH { get; }
+    /// <summary>Host writes the probed object-space half-extent here; 0 (the
+    /// default) means no surface was found.</summary>
+    public double Result { get; set; }
 }
 
 internal static class ReactiveObjectExtensions

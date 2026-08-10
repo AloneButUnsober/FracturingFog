@@ -87,7 +87,11 @@ absolute-value step makes the map non-smooth.
 14. [Chain Editor](#14-chain-editor)
     - 14.1 [Hybrid primitives (Mandelbulber-style)](#141-hybrid-primitives-mandelbulber-style)
 15. [Save / Load / Promote](#15-save--load--promote)
-16. [Mesh Export (OBJ)](#16-mesh-export-obj)
+16. [Mesh Export (OBJ / STL)](#16-mesh-export-obj--stl)
+    - 16.1 [Export knobs](#161-export-knobs)
+    - 16.2 [Getting a detailed mesh (not a blob)](#162-getting-a-detailed-mesh-not-a-blob)
+    - 16.3 [Recommended recipes](#163-recommended-recipes)
+    - 16.4 [Mesh export troubleshooting](#164-mesh-export-troubleshooting)
 17. [Example Gallery](#17-example-gallery)
 18. [Pitfalls + Troubleshooting](#18-pitfalls--troubleshooting)
 19. [Sandbox DSL Compiler](#19-sandbox-dsl-compiler)
@@ -477,20 +481,29 @@ Saved bulbs persist to `%APPDATA%\FracturingFog\userbulbs.json`.
 
 ---
 
-## 16. Mesh Export (OBJ)
+## 16. Mesh Export (OBJ / STL)
 
-Click **Export mesh (OBJ)…** to sample the DE field on a uniform N³ grid inside a cube of side `2·Range` centred at origin and extract the surface with **marching cubes** (interpolated triangles, not blocky voxels). ASCII OBJ output.
+Click **Export mesh (OBJ)…** to sample the DE field on a uniform N³ grid inside a cube of side `2·Range` centred at origin and extract the surface with **marching cubes** (interpolated triangles, not blocky voxels). Choose `.obj` (ASCII, smooth per-vertex normals) or `.stl` (binary, faceted) in the save dialog.
 
-Export knobs sit next to the button:
+The export runs on a **background thread** — the app stays responsive. A status-bar chip reads **"Exporting mesh…"** with a **Cancel** button; cancelling aborts the run and leaves any existing file untouched (no half-written stub). The export + Auto buttons disable while a run is in flight, so you can't launch two at once.
 
-| Field | Range | Default | Notes |
+### 16.1 Export knobs
+
+The knobs sit on their own row beneath the export button:
+
+| Knob | Range | Default | What it does |
 |---|---:|---:|---|
-| Grid | 16 – 512 | 96 | Marching-cubes resolution per axis; cost ~N³. 128 for fine detail. |
-| Range | 0.25 – 64 | 2.0 | Object-space half-extent. Must **enclose** the fractal — too small clips it. |
+| **Grid** | 16 – 512 | 96 | Marching-cubes resolution per axis. Cost ~N³ DE evaluations (sampling is parallelised across CPU cores). Finer grid = more detail **and** smaller cells, which also tightens the fraction-mode Iso band. 256–384 for a detailed mesh. |
+| **Range** | 0.25 – 64 | 2.0 | Object-space half-extent of the sampled cube. Must **enclose** the fractal — too small clips it; too large wastes resolution and can leave the mesh open where the surface exits the cube face. |
+| **Auto** | — | — | Probes the DE along 64 rays from the centre, finds the fractal's extent, and sets **Range** to enclose it with a 20% margin. Use it first — removes the guess-and-clip loop and prevents boundary holes. |
+| **Iso** | 0.005 – 2 | 0.5 | Iso-surface level. With **abs off** it is a *fraction of the cell size* (`iso = step·Iso`); the default 0.5 sits a half-cell **outside** the true surface, so at coarse grids thin filaments inflate into fat tubes and gaps fuse into a ball. Lower toward **0.1–0.25** to hug the surface and keep filament detail; raise it to bridge gaps if the mesh comes out shattered. |
+| **abs** | on/off | off | When on, **Iso** is an *absolute object-space distance* (grid-independent). Set the surface level once and change Grid freely without re-tuning Iso. |
+| **SS** | 1 – 4 | 1 | Supersampling. Box-averages an `s×s×s` stencil of DE samples per grid corner, antialiasing sub-cell filaments into **continuous arms** instead of broken tubes/dots. Cost is ~`s³×`, so keep it **1 at Grid ≥ 256** and reserve **2 for Grid ≤ 192**. |
+| **Crease°** | 5 – 180 | 180 | Normal-smoothing threshold. 180 smooths **everything** (rounds off Mandelbox-style facets). Lower it (~**30**) to keep hard edges crisp — faces meeting at a sharper angle than this split into separate normals, so facets stay sharp while curved bulb arms still smooth. |
 
-DE quality (Iterations, Jac h, DE mode) comes from the **Render** knobs above — the export DE is the same kernel as the render.
+DE **quality** (Iterations, Jac h, DE mode) comes from the **Render** knobs above — the export DE is the same kernel as the render. All export knobs (Grid, Range, Iso, abs, SS, Crease°) **persist** with a saved bulb, along with the Render Iterations / Jac h.
 
-### Getting a detailed mesh (not a blob)
+### 16.2 Getting a detailed mesh (not a blob)
 
 The exported mesh is only as good as the distance estimate:
 
@@ -498,12 +511,33 @@ The exported mesh is only as good as the distance estimate:
 - **Quaternion fractals → Axis Mode = Quat + Julia mode.** The *Quaternion Julia* saved preset sets these automatically; a `z*z + c` in Quat mode meshes like the built-in Quaternion Julia fractal type.
 - **KIFS folds (Menger / Sierpinski / Mandelbox / kaleidoscopic) → set KIFS Scale** (3 for Menger, 2 for Sierpinski/Mandelbox). Inserting a fold primitive or loading a fold hybrid now sets this for you. Without it the numerical DE cannot cross the fold discontinuities and export yields **zero triangles**.
 - **Raise Iterations** for geometry — the render default (8) is low; try 14–16 for export.
+- **Drop Iso** — the single biggest lever against the "ball with tubes" look. Pair it with a higher Grid.
 
-A **0-triangle** export almost always means Range doesn't enclose the fractal, or a fold needs KIFS Scale.
+### 16.3 Recommended recipes
 
-Grid, Range, and the Render Iterations / Jac h all **persist** with a saved bulb.
+| Goal | Auto | Grid | Iso | SS | Crease° | Also |
+|---|:--:|--:|--:|--:|--:|---|
+| **Fast preview** | ✓ | 160 | 0.15 | 1 | 180 | — |
+| **Detailed organic bulb** | ✓ | 320–384 | 0.12 | 1 | 180 | Iter 14–16, Jac h 1e-5, DE Analytic |
+| **Filament close-up** | ✓ | 160–192 | 0.12 | 2 | 180 | SS antialiases thin arms |
+| **Faceted hybrid** (Mandelbox + bulb) | ✓ | 256 | 0.15 | 1 | 30 | keeps box facets crisp |
+| **3-D print (solid)** | ✓ | 192–256 | 0.30+ | 1 | 60 | higher Iso fuses thin filaments into a printable solid |
 
 > **Reality check.** User Bulb is a general interpreter — for an *arbitrary* equation it can only estimate the DE numerically, so its mesh is inherently softer than a hand-written analytic calculator. For a faithful mesh of a *known* fractal (Quaternion Julia/Mandelbrot, Mandelbulb, Mandelbox, KIFS), prefer that concrete **Fractal Type**, whose exact DE meshes at full detail.
+
+### 16.4 Mesh export troubleshooting
+
+| Symptom | Cause | Fix |
+|---|---|---|
+| **Ball with tubes / cones** sticking out the ends | Iso too high for the grid — the half-cell offset inflates filaments and fuses gaps | Lower **Iso** to 0.1–0.2 and raise **Grid**; keep **SS 1** |
+| **Blobby / soft**, no fine detail | Numerical DE + low iterations smooth the field | **DE mode → Analytic**, **Iterations 14–16**, **Jac h 1e-5** |
+| **Broken filaments / dotty arms** | Sub-cell aliasing — arms thinner than a cell get point-sampled away | Raise **SS** to 2 (drop Grid to keep cost sane), or raise **Grid** |
+| **Box facets look rounded** | Crease smoothing averages across the hard edges | Set **Crease° ~30** |
+| **0 triangles exported** | Range doesn't enclose the set, or a fold needs its scale | Click **Auto**; for folds set **KIFS Scale** (3 Menger, 2 Sierpinski/Mandelbox) |
+| **Mesh has holes / not watertight** | The surface reaches the cube face and marching cubes leaves it open | Click **Auto** (adds margin), or raise **Range** |
+| **Shattered / disconnected shell** | Iso so low the surface falls between grid cells | Raise **Iso** slightly, or raise **Grid**; turn **abs** on for a grid-independent level |
+| **Export hangs / very slow** | Grid×SS is huge (millions of DE evals × s³) | Lower **Grid** or **SS**, or hit **Cancel**; use **SS 1** at Grid ≥ 256 |
+| **File enormous** | High Grid (and Crease° < 180 splits extra vertices) | Lower **Grid**; export `.stl` if you don't need smooth normals |
 
 ---
 
