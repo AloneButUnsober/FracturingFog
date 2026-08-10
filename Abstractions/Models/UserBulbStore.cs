@@ -453,6 +453,62 @@ namespace FracturingFog.Models
                 (b ?? string.Empty).Replace("\r\n", "\n").Trim(),
                 StringComparison.Ordinal);
 
+        /// <summary>
+        /// #27 / #211 — one-time upgrade of saved <b>user-authored</b> raw-C# bulbs
+        /// to the safe DSL, the bulb analogue of
+        /// <see cref="UserEquationStore.MigrateUserEquationsToDsl"/>. Skips entries
+        /// already pinned to <see cref="UserBulbCompilerKind.Sandbox"/> (idempotent).
+        /// For a chain-bearing entry the chain is authoritative: it must translate
+        /// in full (<paramref name="translateChain"/> returns the rewritten steps or
+        /// null) or the entry is left editable; its single-pass fallback
+        /// <see cref="UserBulbEntry.Source"/> is upgraded best-effort. A chain-free
+        /// entry migrates only when its Source translates. The translators are
+        /// injected because the DSL lives in Engine, which this UI-free layer does
+        /// not reference; each is expected to translate <i>and validate</i> (parse)
+        /// so a body the grammar still rejects returns null and is left alone.
+        /// Backup-guarded (one snapshot before the first rewrite). Returns the
+        /// number of entries changed.
+        /// </summary>
+        public int MigrateUserBulbsToDsl(
+            Func<string, string?> translateBody,
+            Func<List<UserBulbChainStep>, List<UserBulbChainStep>?> translateChain)
+        {
+            if (translateBody == null || translateChain == null) return 0;
+
+            var pending = new List<(UserBulbEntry Entry, string? Source, List<UserBulbChainStep>? Chain)>();
+            foreach (var e in Equations)
+            {
+                if (e.Settings?.Compiler == UserBulbCompilerKind.Sandbox) continue; // idempotent
+
+                if (e.Chain is { Count: > 0 })
+                {
+                    var newChain = translateChain(e.Chain);
+                    if (newChain == null) continue;                 // authoritative chain must translate
+                    string? newSrc = string.IsNullOrWhiteSpace(e.Source) ? null : translateBody(e.Source);
+                    pending.Add((e, newSrc, newChain));             // fallback Source upgraded best-effort
+                }
+                else
+                {
+                    if (string.IsNullOrWhiteSpace(e.Source)) continue;
+                    string? newSrc = translateBody(e.Source);
+                    if (string.IsNullOrWhiteSpace(newSrc)) continue; // no DSL form — leave editable
+                    pending.Add((e, newSrc, null));
+                }
+            }
+
+            if (pending.Count == 0) return 0;
+
+            UserDataBackup.SnapshotBeforeMigration(EquationsFile, "userbulbdsl");
+            foreach (var (entry, source, chain) in pending)
+            {
+                if (source != null) entry.Source = source;
+                if (chain != null) entry.Chain = chain;
+                entry.Settings = SandboxPin(entry.Settings);
+            }
+            Save();
+            return pending.Count;
+        }
+
         public void Save()
         {
             try
