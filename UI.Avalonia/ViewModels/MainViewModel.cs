@@ -1417,6 +1417,12 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
     /// <summary>Host hook to ensure audio capture is running. Set by the bootstrap.</summary>
     public Action? EnsureAudioModulationStarted { get; set; }
 
+    /// <summary>#277 — host hook to re-evaluate audio-capture demand and start or
+    /// stop capture accordingly. Idempotent; call after any audio-reactive toggle
+    /// (on or off) so a File source doesn't keep playing after toggle-off. Set by
+    /// the bootstrap.</summary>
+    public Action? ReconcileAudioCapture { get; set; }
+
     private long _lastAmbientDownbeatSeen;
     private bool _acidFogAmbientBeatSync;
     /// <summary>When true (and the ambient loop is running), pattern advances are
@@ -1430,9 +1436,10 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
         {
             if (!this.RaiseAndSetIfChangedReturnsChanged(ref _acidFogAmbientBeatSync, value))
                 return;
+            // #277 — start (on) or stop (off) capture per overall demand.
+            ReconcileAudioCapture?.Invoke();
             if (value)
             {
-                EnsureAudioModulationStarted?.Invoke();
                 // Baseline the edge counter so we don't fire on stale history.
                 _lastAmbientDownbeatSeen = GetAudioModulationSource?.Invoke()?.DownbeatCount ?? 0;
             }
@@ -1456,10 +1463,13 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
             if (!this.RaiseAndSetIfChangedReturnsChanged(ref _audioViewBreathe, value))
                 return;
 
+            // #277 — reconcile capture first: on turns it on (so the source below
+            // is live), off stops it when no other consumer still wants audio.
+            ReconcileAudioCapture?.Invoke();
+
             var bus = AnimationBusHost.Bus;
             if (value)
             {
-                EnsureAudioModulationStarted?.Invoke();
                 var src = GetAudioModulationSource?.Invoke();
                 if (src != null && bus != null)
                 {
@@ -1525,7 +1535,7 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
         // start advances, not a stale one accrued before the loop began.
         if (_acidFogAmbientBeatSync)
         {
-            EnsureAudioModulationStarted?.Invoke();
+            ReconcileAudioCapture?.Invoke();
             _lastAmbientDownbeatSeen = GetAudioModulationSource?.Invoke()?.DownbeatCount ?? 0;
         }
 

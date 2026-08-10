@@ -89,6 +89,18 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
     /// the AudioEngine when the slideshow ends.</summary>
     public Action? StopAudioReactive { get; set; }
 
+    /// <summary>#277 — host hook that re-evaluates whether any audio-reactive
+    /// consumer is active and starts or stops audio capture to match. Idempotent;
+    /// call after any consumer toggles on or off. Set by the bootstrap; null in
+    /// headless / test hosts. Replaces the old "left warm forever" behaviour that
+    /// left a File source playing after every consumer turned off.</summary>
+    public Action? ReconcileAudioCapture { get; set; }
+
+    /// <summary>#277 — true while a scene with audio-reactive tracks is playing.
+    /// Feeds the bootstrap's audio-capture demand predicate so scene audio stops
+    /// with the scene.</summary>
+    public bool SceneAudioActive { get; private set; }
+
     /// <summary>Beat-skip cadence pushed onto the SlideshowEngine when an
     /// audio-reactive slideshow starts. Host loads from
     /// <c>AudioSettingsStore</c>; <c>(8, 32)</c> matches the legacy default.</summary>
@@ -2059,7 +2071,8 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
         {
             if (value == _asciiFxAudioReactive) return;
             _asciiFxAudioReactive = value;
-            if (value) EnsureAudioModulationStarted?.Invoke();
+            // #277 — start (on) or stop (off) capture per overall demand.
+            ReconcileAudioCapture?.Invoke();
             this.RaisePropertyChanged();
         }
     }
@@ -2574,12 +2587,15 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
             return;
         }
 
-        // A scene with audio-reactive tracks (#265) needs the capture running so
-        // the tracks have a live source when their shots load onto the bus.
-        if (scene.AudioTracks is { Count: > 0 })
-            EnsureAudioModulationStarted?.Invoke();
-
         StopScene();
+
+        // A scene with audio-reactive tracks (#265) needs the capture running so
+        // the tracks have a live source when their shots load onto the bus. Set
+        // demand after StopScene() (which clears the prior scene's demand) so the
+        // reconcile below starts — not stops — capture (#277).
+        SceneAudioActive = scene.AudioTracks is { Count: > 0 };
+        if (SceneAudioActive) ReconcileAudioCapture?.Invoke();
+
         _scenePlaying = scene;
         _sceneTimeline = timeline;
         _sceneClock = 0;
@@ -2603,6 +2619,13 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
         _sceneTimeline = null;
         _scenePlaying = null;
         _sceneCurrentEntry = -1;
+        // #277 — drop this scene's audio demand and stop capture if nothing else
+        // (Pulse / Beat FX / param bindings / slideshow) still needs it.
+        if (SceneAudioActive)
+        {
+            SceneAudioActive = false;
+            ReconcileAudioCapture?.Invoke();
+        }
     }
 
     private void OnSceneTick(object? sender, EventArgs e)
