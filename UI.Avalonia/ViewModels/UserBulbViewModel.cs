@@ -828,6 +828,8 @@ public sealed class UserBulbViewModel : ViewModelBase
         AnimLoopSeconds  = _animLoopSeconds,
         ExportGridN      = _exportGridN,
         ExportRange      = _exportRange,
+        ExportIsoScale   = _exportIsoScale,
+        ExportIsoAbsolute = _exportIsoAbsolute,
         Params           = _params.UserBulbParams.ConvertAll(p => p.Clone()),
     };
 
@@ -880,6 +882,8 @@ public sealed class UserBulbViewModel : ViewModelBase
         // public setters so they clamp + notify the bound controls.
         if (s.ExportGridN is { } egn)            ExportGridN = egn;
         if (s.ExportRange is { } erg)            ExportRange = erg;
+        if (s.ExportIsoScale is { } eis)         ExportIsoScale = eis;
+        if (s.ExportIsoAbsolute is { } eia)      ExportIsoAbsolute = eia;
 
         if (s.Params is { Count: > 0 } srcParams)
         {
@@ -1137,7 +1141,7 @@ public sealed class UserBulbViewModel : ViewModelBase
         // For crisp export geometry raise Iterations (native quaternion types use
         // 11–14; render default 8 is blobby) and/or drop JacobianH toward 1e-5.
         var meshArgs = new MeshExportEventArgs(
-            ExportGridN, ExportRange, pathArgs.Path!, Iterations, JacobianH);
+            ExportGridN, ExportRange, pathArgs.Path!, Iterations, JacobianH, ExportIsoScale, ExportIsoAbsolute);
         ExportMeshRequested?.Invoke(this, meshArgs);
     }
 
@@ -1158,6 +1162,30 @@ public sealed class UserBulbViewModel : ViewModelBase
     {
         get => _exportRange;
         set => this.RaiseAndSetIfChanged(ref _exportRange, Math.Clamp(value, 0.25, 64.0));
+    }
+
+    private double _exportIsoScale = 0.5;
+    /// <summary>Marching-cubes iso level. When <see cref="ExportIsoAbsolute"/> is
+    /// false this is a fraction of the cell size (iso = step·this); the default
+    /// 0.5 sits a half-cell OUTSIDE the true DE≈0 shell, so at coarse grids thin
+    /// filaments inflate into fat tubes and gaps fuse into a ball. When absolute,
+    /// this is the iso level directly in object-space distance (grid-independent).
+    /// Lower toward 0.1–0.25 (or a small absolute distance) to hug the surface and
+    /// keep filament detail; raise to bridge gaps if the mesh shatters.</summary>
+    public double ExportIsoScale
+    {
+        get => _exportIsoScale;
+        set => this.RaiseAndSetIfChanged(ref _exportIsoScale, Math.Clamp(value, 0.005, 2.0));
+    }
+
+    private bool _exportIsoAbsolute;
+    /// <summary>When true, <see cref="ExportIsoScale"/> is an absolute object-space
+    /// distance (grid-independent surface level); when false it is a fraction of
+    /// the cell size (surface level tracks the grid).</summary>
+    public bool ExportIsoAbsolute
+    {
+        get => _exportIsoAbsolute;
+        set => this.RaiseAndSetIfChanged(ref _exportIsoAbsolute, value);
     }
 
     private string NextFreeName()
@@ -1225,11 +1253,17 @@ public sealed class SaveFileEventArgs : EventArgs
 
 public sealed class MeshExportEventArgs : EventArgs
 {
-    public MeshExportEventArgs(int gridN, double range, string path, int iterations, double jacobianH)
-    { GridN = gridN; Range = range; Path = path; Iterations = iterations; JacobianH = jacobianH; }
+    public MeshExportEventArgs(int gridN, double range, string path, int iterations, double jacobianH,
+                               double isoScale, bool isoAbsolute)
+    { GridN = gridN; Range = range; Path = path; Iterations = iterations; JacobianH = jacobianH; IsoScale = isoScale; IsoAbsolute = isoAbsolute; }
     public int GridN { get; }
     public double Range { get; }
     public string Path { get; }
+    // #112 follow-up — marching-cubes iso level. Lower crispens (hugs the true
+    // surface, keeps filaments); higher fuses gaps. IsoAbsolute switches IsoScale
+    // from a cell-size fraction to an absolute object-space distance.
+    public double IsoScale { get; }
+    public bool IsoAbsolute { get; }
     // #112 — export-specific DE quality (independent of the render's live iter/
     // jacH) so mesh geometry can resolve detail the numerical DE otherwise
     // smooths away.

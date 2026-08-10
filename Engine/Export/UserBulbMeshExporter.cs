@@ -45,18 +45,28 @@ public static class UserBulbMeshExporter
     public static int ExportMarchingCubes(
         string filePath, FracturingFog.Rendering.Lighting.IDistanceEstimator de,
         double cx, double cy, double cz, double range, int n,
-        CancellationToken ct = default)
-        => ExportMarchingCubes(filePath, de.Evaluate, cx, cy, cz, range, n, ct);
+        double isoScale = 0.5, bool isoAbsolute = false, CancellationToken ct = default)
+        => ExportMarchingCubes(filePath, de.Evaluate, cx, cy, cz, range, n, isoScale, isoAbsolute, ct);
 
     /// <summary>Marching Cubes export. Dispatches on file extension:
     /// `.stl` → binary STL (face normals); anything else → OBJ with
-    /// smooth per-vertex normals.</summary>
+    /// smooth per-vertex normals.
+    /// <paramref name="isoScale"/> sets the iso-surface level. When
+    /// <paramref name="isoAbsolute"/> is false (default) it is a fraction of the
+    /// cell size (iso = step·isoScale), so the surface level tracks the grid; the
+    /// historical 0.5 places the surface a half-cell OUTSIDE the true DE≈0 shell,
+    /// which inflates thin filaments into fat tubes and fuses gaps into a ball at
+    /// coarse grids. When <paramref name="isoAbsolute"/> is true, isoScale is the
+    /// iso level directly in object-space distance units — grid-independent, so
+    /// changing the grid does not move the surface. Lower (fraction ≈0.1–0.25, or
+    /// a small absolute distance) hugs the true surface and keeps filament detail;
+    /// raise it to bridge gaps if the mesh comes out shattered.</summary>
     public static int ExportMarchingCubes(
         string filePath, SampleDistance sample,
         double cx, double cy, double cz, double range, int n,
-        CancellationToken ct = default)
+        double isoScale = 0.5, bool isoAbsolute = false, CancellationToken ct = default)
     {
-        var (verts, norms, tris) = BuildMarchingCubes(sample, cx, cy, cz, range, n, ct);
+        var (verts, norms, tris) = BuildMarchingCubes(sample, cx, cy, cz, range, n, isoScale, isoAbsolute, ct);
         if (tris.Count == 0) { File.WriteAllText(filePath, "# empty\n"); return 0; }
         if (filePath.EndsWith(".stl", StringComparison.OrdinalIgnoreCase))
             WriteStlBinary(filePath, verts, tris);
@@ -126,11 +136,16 @@ public static class UserBulbMeshExporter
                     List<(int A, int B, int C)> tris)
         BuildMarchingCubes(SampleDistance sample,
                            double cx, double cy, double cz, double range, int n,
-                           CancellationToken ct)
+                           double isoScale, bool isoAbsolute, CancellationToken ct)
     {
         if (n < 8) n = 8;
         double step = 2.0 * range / n;
-        double iso = step * 0.5;
+        // Iso level: absolute object-space distance (grid-independent) or a
+        // fraction of the cell size (tracks the grid). Both clamped positive and
+        // below the sampled half-extent so the surface stays inside the cube.
+        double iso = isoAbsolute
+            ? Math.Clamp(isoScale, 1e-6, range)
+            : step * Math.Clamp(isoScale, 0.02, 1.0);
         int side = n + 1;
         var field = new double[side * side * side];
         for (int i = 0; i < side; i++)
