@@ -30,6 +30,7 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
 using System.Threading;
+using System.Threading.Tasks;
 
 namespace FracturingFog.Export;
 
@@ -226,19 +227,33 @@ public static class UserBulbMeshExporter
             : step * Math.Clamp(isoScale, 0.02, 1.0);
         int side = n + 1;
         var field = new double[side * side * side];
-        for (int i = 0; i < side; i++)
+        // The DE sample is the export's dominant cost (a numerical Jacobian runs
+        // the kernel several times per point, ×s³ under supersampling), so it is
+        // parallelised across the grid's outer axis. The compiled kernel's env is
+        // a ThreadLocal buffer, so concurrent SampleCorner calls are race-free.
+        // A single hand-tuned grid at high resolution would otherwise freeze the
+        // caller for minutes; here it scales with core count and honours ct.
+        try
         {
-            if (ct.IsCancellationRequested) goto done_sample;
-            for (int j = 0; j < side; j++)
-            for (int k = 0; k < side; k++)
+            Parallel.For(0, side, new ParallelOptions { CancellationToken = ct }, i =>
             {
-                double x = cx - range + i * step;
-                double y = cy - range + j * step;
-                double z = cz - range + k * step;
-                field[(i * side + j) * side + k] = SampleCorner(x, y, z);
-            }
+                for (int j = 0; j < side; j++)
+                for (int k = 0; k < side; k++)
+                {
+                    double x = cx - range + i * step;
+                    double y = cy - range + j * step;
+                    double z = cz - range + k * step;
+                    field[(i * side + j) * side + k] = SampleCorner(x, y, z);
+                }
+            });
         }
-        done_sample:;
+        catch (OperationCanceledException)
+        {
+            // Cancelled mid-sample — return an empty mesh (caller writes nothing).
+            return (new List<(double, double, double)>(),
+                    new List<(double, double, double)>(),
+                    new List<(int, int, int)>());
+        }
 
         var verts = new List<(double, double, double)>();
         var tris = new List<(int, int, int)>();

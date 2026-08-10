@@ -122,8 +122,10 @@ public sealed class UserBulbViewModel : ViewModelBase
         RemoveParamCommand = ReactiveCommand.Create<UserBulbParam>(OnRemoveParam);
         RemoveChainCommand = ReactiveCommand.Create<UserBulbChainStep>(OnRemoveChain);
         TogglePlayCommand = ReactiveCommand.Create(OnTogglePlay);
-        ExportMeshCommand = ReactiveCommand.CreateFromTask(OnExportMeshAsync);
-        AutoRangeCommand = ReactiveCommand.Create(OnAutoRange);
+        ExportMeshCommand = ReactiveCommand.CreateFromTask(OnExportMeshAsync,
+            this.WhenAnyValue(x => x.IsExporting, busy => !busy));
+        AutoRangeCommand = ReactiveCommand.Create(OnAutoRange,
+            this.WhenAnyValue(x => x.IsExporting, busy => !busy));
         OpenHelpCommand = ReactiveCommand.Create(() =>
         {
             // Jump directly to the Sandbox DSL chapter when the Sandbox
@@ -1154,7 +1156,28 @@ public sealed class UserBulbViewModel : ViewModelBase
         var meshArgs = new MeshExportEventArgs(
             ExportGridN, ExportRange, pathArgs.Path!, Iterations, JacobianH,
             ExportIsoScale, ExportIsoAbsolute, ExportSuperSamples, ExportCreaseDegrees);
-        ExportMeshRequested?.Invoke(this, meshArgs);
+        // The host runs the marching cubes off-thread and calls NotifyExportDone
+        // when finished; gate the buttons meanwhile. Only latch busy when a host
+        // is actually listening, else the flag would never clear.
+        if (ExportMeshRequested is { } handler)
+        {
+            IsExporting = true;
+            handler(this, meshArgs);
+        }
+    }
+
+    /// <summary>Host callback: the off-thread mesh export has finished (or
+    /// failed) — clear the busy flag so the export buttons re-enable.</summary>
+    public void NotifyExportDone() => IsExporting = false;
+
+    private bool _isExporting;
+    /// <summary>True while a mesh export runs on the host's background thread.
+    /// Disables the export + auto-range buttons and drives the "Exporting…"
+    /// status so the user waits instead of force-quitting a busy app.</summary>
+    public bool IsExporting
+    {
+        get => _isExporting;
+        private set => this.RaiseAndSetIfChanged(ref _isExporting, value);
     }
 
     private void OnAutoRange()

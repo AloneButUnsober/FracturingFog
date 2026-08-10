@@ -2859,36 +2859,48 @@ namespace FracturingFog.Hosting
 
             vm.ExportMeshRequested += (_, e) =>
             {
-                if (s_renderHost == null) return;
-                try
+                if (s_renderHost == null) { vm.NotifyExportDone(); return; }
+                // Build the snapshot sampler on the UI thread (cheap) so it reads a
+                // consistent kernel + params, then run the heavy marching-cubes off
+                // the UI thread. Running it inline froze the app on high Grid/SS
+                // (the DE field is millions of numerical-Jacobian evals); Task.Run
+                // + a busy flag keeps the UI alive and the button disabled.
+                var sampler = s_renderHost.MakeUserBulbExportSampler(e.Iterations, e.JacobianH);
+                global::FracturingFog.Export.SampleDistance de = sampler != null
+                    ? (x, y, z) => sampler(x, y, z)
+                    : (x, y, z) => s_renderHost!.SampleUserBulbDE(x, y, z);
+                double cx0 = s_renderHost.UserBulbCenterX, cy0 = -s_renderHost.UserBulbCenterY;
+                System.Threading.Tasks.Task.Run(() =>
                 {
-                    // #112 — snapshot sampler with export-specific iter + Jacobian
-                    // step so the numerical DE resolves geometry; falls back to
-                    // the live-param sampler if no kernel override is available.
-                    var sampler = s_renderHost.MakeUserBulbExportSampler(e.Iterations, e.JacobianH);
-                    global::FracturingFog.Export.SampleDistance de = sampler != null
-                        ? (x, y, z) => sampler(x, y, z)
-                        : (x, y, z) => s_renderHost!.SampleUserBulbDE(x, y, z);
-                    int tris = global::FracturingFog.Export.UserBulbMeshExporter.ExportMarchingCubes(
-                        e.Path,
-                        de,
-                        s_renderHost.UserBulbCenterX, -s_renderHost.UserBulbCenterY, 0,
-                        e.Range, e.GridN, e.IsoScale, e.IsoAbsolute, e.SuperSamples, e.CreaseDegrees);
-                    if (tris == 0)
-                        // #113 — a fold/IFS map under the numerical DE crosses no
-                        // iso surface. Point the user at the scalar-KIFS knob.
-                        ShowInfo("Mesh export",
-                            "Exported 0 triangles — the distance field never crossed the surface. " +
-                            "For fold / IFS maps (Menger, Sierpinski, Mandelbox, kaleidoscopic) set " +
-                            "KIFS Scale to the fold's per-iteration scale (e.g. 3 for Menger), then re-export. " +
-                            "Also check Range encloses the fractal.", true);
-                    else
-                        ShowInfo("Mesh export", $"Exported {tris} triangles to {e.Path}", false);
-                }
-                catch (Exception ex)
-                {
-                    ShowInfo("Mesh export error", $"Export failed: {ex.Message}", true);
-                }
+                    try
+                    {
+                        int tris = global::FracturingFog.Export.UserBulbMeshExporter.ExportMarchingCubes(
+                            e.Path, de, cx0, cy0, 0,
+                            e.Range, e.GridN, e.IsoScale, e.IsoAbsolute, e.SuperSamples, e.CreaseDegrees);
+                        Dispatcher.UIThread.Post(() =>
+                        {
+                            vm.NotifyExportDone();
+                            if (tris == 0)
+                                // #113 — a fold/IFS map under the numerical DE crosses
+                                // no iso surface. Point the user at the scalar-KIFS knob.
+                                ShowInfo("Mesh export",
+                                    "Exported 0 triangles — the distance field never crossed the surface. " +
+                                    "For fold / IFS maps (Menger, Sierpinski, Mandelbox, kaleidoscopic) set " +
+                                    "KIFS Scale to the fold's per-iteration scale (e.g. 3 for Menger), then re-export. " +
+                                    "Also check Range encloses the fractal.", true);
+                            else
+                                ShowInfo("Mesh export", $"Exported {tris} triangles to {e.Path}", false);
+                        });
+                    }
+                    catch (Exception ex)
+                    {
+                        Dispatcher.UIThread.Post(() =>
+                        {
+                            vm.NotifyExportDone();
+                            ShowInfo("Mesh export error", $"Export failed: {ex.Message}", true);
+                        });
+                    }
+                });
             };
 
             // ~30 Hz animation pump. The VM advances t and raises RenderRequested
