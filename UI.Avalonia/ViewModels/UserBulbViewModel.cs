@@ -838,6 +838,7 @@ public sealed class UserBulbViewModel : ViewModelBase
         ExportIsoScale   = _exportIsoScale,
         ExportIsoAbsolute = _exportIsoAbsolute,
         ExportSuperSamples = _exportSuperSamples,
+        ExportCreaseDegrees = _exportCreaseDegrees,
         Params           = _params.UserBulbParams.ConvertAll(p => p.Clone()),
     };
 
@@ -893,6 +894,7 @@ public sealed class UserBulbViewModel : ViewModelBase
         if (s.ExportIsoScale is { } eis)         ExportIsoScale = eis;
         if (s.ExportIsoAbsolute is { } eia)      ExportIsoAbsolute = eia;
         if (s.ExportSuperSamples is { } ess)     ExportSuperSamples = ess;
+        if (s.ExportCreaseDegrees is { } ecd)    ExportCreaseDegrees = ecd;
 
         if (s.Params is { Count: > 0 } srcParams)
         {
@@ -1151,7 +1153,7 @@ public sealed class UserBulbViewModel : ViewModelBase
         // 11–14; render default 8 is blobby) and/or drop JacobianH toward 1e-5.
         var meshArgs = new MeshExportEventArgs(
             ExportGridN, ExportRange, pathArgs.Path!, Iterations, JacobianH,
-            ExportIsoScale, ExportIsoAbsolute, ExportSuperSamples);
+            ExportIsoScale, ExportIsoAbsolute, ExportSuperSamples, ExportCreaseDegrees);
         ExportMeshRequested?.Invoke(this, meshArgs);
     }
 
@@ -1228,6 +1230,17 @@ public sealed class UserBulbViewModel : ViewModelBase
         set => this.RaiseAndSetIfChanged(ref _exportSuperSamples, Math.Clamp(value, 1, 4));
     }
 
+    private double _exportCreaseDegrees = 180.0;
+    /// <summary>Crease angle in degrees. Adjacent faces differing by more than
+    /// this keep a hard edge (Mandelbox facets stay crisp) while curved bulb arms
+    /// still smooth. 180 (default) smooths everything, like the prior exporter;
+    /// ≈30 preserves facets.</summary>
+    public double ExportCreaseDegrees
+    {
+        get => _exportCreaseDegrees;
+        set => this.RaiseAndSetIfChanged(ref _exportCreaseDegrees, Math.Clamp(value, 5.0, 180.0));
+    }
+
     private string NextFreeName()
     {
         var used = new System.Collections.Generic.HashSet<string>();
@@ -1294,8 +1307,8 @@ public sealed class SaveFileEventArgs : EventArgs
 public sealed class MeshExportEventArgs : EventArgs
 {
     public MeshExportEventArgs(int gridN, double range, string path, int iterations, double jacobianH,
-                               double isoScale, bool isoAbsolute, int superSamples)
-    { GridN = gridN; Range = range; Path = path; Iterations = iterations; JacobianH = jacobianH; IsoScale = isoScale; IsoAbsolute = isoAbsolute; SuperSamples = superSamples; }
+                               double isoScale, bool isoAbsolute, int superSamples, double creaseDegrees)
+    { GridN = gridN; Range = range; Path = path; Iterations = iterations; JacobianH = jacobianH; IsoScale = isoScale; IsoAbsolute = isoAbsolute; SuperSamples = superSamples; CreaseDegrees = creaseDegrees; }
     public int GridN { get; }
     public double Range { get; }
     public string Path { get; }
@@ -1307,6 +1320,9 @@ public sealed class MeshExportEventArgs : EventArgs
     // Box-average s×s×s DE stencil per grid corner (1 = single sample) to
     // antialias sub-cell filaments into continuous surface. Cost ~s³×.
     public int SuperSamples { get; }
+    // Crease angle (deg): faces differing by more than this keep a hard edge
+    // (facets stay sharp). 180 = smooth everything.
+    public double CreaseDegrees { get; }
     // #112 — export-specific DE quality (independent of the render's live iter/
     // jacH) so mesh geometry can resolve detail the numerical DE otherwise
     // smooths away.

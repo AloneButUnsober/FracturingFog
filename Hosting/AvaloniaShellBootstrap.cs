@@ -2873,7 +2873,7 @@ namespace FracturingFog.Hosting
                         e.Path,
                         de,
                         s_renderHost.UserBulbCenterX, -s_renderHost.UserBulbCenterY, 0,
-                        e.Range, e.GridN, e.IsoScale, e.IsoAbsolute, e.SuperSamples);
+                        e.Range, e.GridN, e.IsoScale, e.IsoAbsolute, e.SuperSamples, e.CreaseDegrees);
                     if (tris == 0)
                         // #113 — a fold/IFS map under the numerical DE crosses no
                         // iso surface. Point the user at the scalar-KIFS knob.
