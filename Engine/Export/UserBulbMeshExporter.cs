@@ -30,6 +30,7 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
 using System.Threading;
+using System.Threading.Tasks;
 
 namespace FracturingFog.Export;
 
@@ -45,24 +46,95 @@ public static class UserBulbMeshExporter
     public static int ExportMarchingCubes(
         string filePath, FracturingFog.Rendering.Lighting.IDistanceEstimator de,
         double cx, double cy, double cz, double range, int n,
-        CancellationToken ct = default)
-        => ExportMarchingCubes(filePath, de.Evaluate, cx, cy, cz, range, n, ct);
+        double isoScale = 0.5, bool isoAbsolute = false, int superSamples = 1,
+        double creaseDegrees = 180.0, CancellationToken ct = default)
+        => ExportMarchingCubes(filePath, de.Evaluate, cx, cy, cz, range, n,
+                               isoScale, isoAbsolute, superSamples, creaseDegrees, ct);
 
     /// <summary>Marching Cubes export. Dispatches on file extension:
     /// `.stl` → binary STL (face normals); anything else → OBJ with
-    /// smooth per-vertex normals.</summary>
+    /// smooth per-vertex normals.
+    /// <paramref name="isoScale"/> sets the iso-surface level. When
+    /// <paramref name="isoAbsolute"/> is false (default) it is a fraction of the
+    /// cell size (iso = step·isoScale), so the surface level tracks the grid; the
+    /// historical 0.5 places the surface a half-cell OUTSIDE the true DE≈0 shell,
+    /// which inflates thin filaments into fat tubes and fuses gaps into a ball at
+    /// coarse grids. When <paramref name="isoAbsolute"/> is true, isoScale is the
+    /// iso level directly in object-space distance units — grid-independent, so
+    /// changing the grid does not move the surface. Lower (fraction ≈0.1–0.25, or
+    /// a small absolute distance) hugs the true surface and keeps filament detail;
+    /// raise it to bridge gaps if the mesh comes out shattered.
+    /// <paramref name="superSamples"/> box-averages an s×s×s stencil of the DE
+    /// per grid corner (1 = single sample, the default). Filaments thinner than a
+    /// cell alias into broken tubes/dots when point-sampled; averaging antialiases
+    /// them into continuous arms. Cost is ~s³× the DE evaluations, so keep it low
+    /// (2–3) on fine grids.
+    /// <paramref name="creaseDegrees"/> preserves hard edges: adjacent faces whose
+    /// normals differ by more than this angle are NOT smoothed together (the
+    /// vertex splits, so e.g. Mandelbox facets stay crisp while curved bulb arms
+    /// smooth). 180 (default) = smooth everything, byte-identical to the prior
+    /// exporter; ≈30 keeps facets.</summary>
     public static int ExportMarchingCubes(
         string filePath, SampleDistance sample,
         double cx, double cy, double cz, double range, int n,
-        CancellationToken ct = default)
+        double isoScale = 0.5, bool isoAbsolute = false, int superSamples = 1,
+        double creaseDegrees = 180.0, CancellationToken ct = default)
     {
-        var (verts, norms, tris) = BuildMarchingCubes(sample, cx, cy, cz, range, n, ct);
+        var (verts, norms, tris) = BuildMarchingCubes(sample, cx, cy, cz, range, n, isoScale, isoAbsolute, superSamples, ct);
+        // Cancelled mid-build: leave any existing file untouched (don't clobber it
+        // with an empty stub) and report nothing written.
+        if (ct.IsCancellationRequested) return 0;
+        if (creaseDegrees < 179.9 && tris.Count > 0)
+            (verts, norms, tris) = ApplyCreaseNormals(verts, tris, creaseDegrees);
         if (tris.Count == 0) { File.WriteAllText(filePath, "# empty\n"); return 0; }
         if (filePath.EndsWith(".stl", StringComparison.OrdinalIgnoreCase))
             WriteStlBinary(filePath, verts, tris);
         else
             WriteObjSmooth(filePath, verts, norms, tris);
         return tris.Count;
+    }
+
+    /// <summary>Probe the object-space half-extent that encloses the set, so the
+    /// export cube can be auto-sized instead of hand-tuned (too small clips the
+    /// fractal; too large wastes grid resolution and can leave the mesh open where
+    /// the surface exits the cube face). Casts <paramref name="dirs"/> rays on a
+    /// Fibonacci sphere from the centre and records the farthest radius along each
+    /// where the DE is at/inside the surface, then pads by a margin. Returns 0
+    /// when no surface is found (empty/degenerate field) — the caller should keep
+    /// the current range and warn.</summary>
+    public static double ProbeBoundingRange(
+        SampleDistance sample, double cx, double cy, double cz,
+        double maxRange = 8.0, double threshold = 0.0,
+        int dirs = 64, int steps = 256, CancellationToken ct = default)
+    {
+        if (maxRange <= 0.0) maxRange = 8.0;
+        if (dirs < 8) dirs = 8;
+        if (steps < 16) steps = 16;
+        double dt = maxRange / steps;
+        // Surface = DE at/below the iso band; approximate with ~one step so the
+        // probe brackets the true surface. The 20% margin below absorbs the slack.
+        double thr = threshold > 0.0 ? threshold : dt;
+        double extent = 0.0;
+        double golden = Math.PI * (3.0 - Math.Sqrt(5.0)); // golden angle
+        for (int d = 0; d < dirs; d++)
+        {
+            if (ct.IsCancellationRequested) break;
+            // Fibonacci-sphere direction (near-uniform coverage).
+            double zc = 1.0 - 2.0 * (d + 0.5) / dirs;
+            double rr = Math.Sqrt(Math.Max(0.0, 1.0 - zc * zc));
+            double phi = golden * d;
+            double ux = Math.Cos(phi) * rr, uy = Math.Sin(phi) * rr, uz = zc;
+            double lastHit = 0.0;
+            for (int s = 1; s <= steps; s++)
+            {
+                double t = s * dt;
+                double dval = sample(cx + ux * t, cy + uy * t, cz + uz * t);
+                if (dval <= thr) lastHit = t;
+            }
+            if (lastHit > extent) extent = lastHit;
+        }
+        if (extent <= 0.0) return 0.0;
+        return Math.Clamp(extent * 1.2 + dt, 0.25, maxRange);
     }
 
     /// <summary>Legacy voxel-cube OBJ export. Kept for parity with
@@ -126,26 +198,65 @@ public static class UserBulbMeshExporter
                     List<(int A, int B, int C)> tris)
         BuildMarchingCubes(SampleDistance sample,
                            double cx, double cy, double cz, double range, int n,
+                           double isoScale, bool isoAbsolute, int superSamples,
                            CancellationToken ct)
     {
         if (n < 8) n = 8;
         double step = 2.0 * range / n;
-        double iso = step * 0.5;
+
+        // Corner sampler: single point (ss<=1) or a box-averaged s×s×s stencil
+        // spanning the corner's cell (±half a step), to antialias sub-cell
+        // filaments into continuous surface instead of broken tubes.
+        int ss = Math.Clamp(superSamples, 1, 4);
+        double SampleCorner(double x, double y, double z)
+        {
+            if (ss <= 1) return sample(x, y, z);
+            double h = 0.5 * step, span = 2.0 * h / ss;
+            double acc = 0.0;
+            for (int ax = 0; ax < ss; ax++)
+            for (int ay = 0; ay < ss; ay++)
+            for (int az = 0; az < ss; az++)
+                acc += sample(x - h + (ax + 0.5) * span,
+                              y - h + (ay + 0.5) * span,
+                              z - h + (az + 0.5) * span);
+            return acc / (ss * ss * ss);
+        }
+
+        // Iso level: absolute object-space distance (grid-independent) or a
+        // fraction of the cell size (tracks the grid). Both clamped positive and
+        // below the sampled half-extent so the surface stays inside the cube.
+        double iso = isoAbsolute
+            ? Math.Clamp(isoScale, 1e-6, range)
+            : step * Math.Clamp(isoScale, 0.02, 1.0);
         int side = n + 1;
         var field = new double[side * side * side];
-        for (int i = 0; i < side; i++)
+        // The DE sample is the export's dominant cost (a numerical Jacobian runs
+        // the kernel several times per point, ×s³ under supersampling), so it is
+        // parallelised across the grid's outer axis. The compiled kernel's env is
+        // a ThreadLocal buffer, so concurrent SampleCorner calls are race-free.
+        // A single hand-tuned grid at high resolution would otherwise freeze the
+        // caller for minutes; here it scales with core count and honours ct.
+        try
         {
-            if (ct.IsCancellationRequested) goto done_sample;
-            for (int j = 0; j < side; j++)
-            for (int k = 0; k < side; k++)
+            Parallel.For(0, side, new ParallelOptions { CancellationToken = ct }, i =>
             {
-                double x = cx - range + i * step;
-                double y = cy - range + j * step;
-                double z = cz - range + k * step;
-                field[(i * side + j) * side + k] = sample(x, y, z);
-            }
+                for (int j = 0; j < side; j++)
+                for (int k = 0; k < side; k++)
+                {
+                    double x = cx - range + i * step;
+                    double y = cy - range + j * step;
+                    double z = cz - range + k * step;
+                    field[(i * side + j) * side + k] = SampleCorner(x, y, z);
+                }
+            });
         }
-        done_sample:;
+        catch (OperationCanceledException)
+        {
+            // Cancelled mid-sample — return an empty mesh (caller writes nothing).
+            return (new List<(double, double, double)>(),
+                    new List<(double, double, double)>(),
+                    new List<(int, int, int)>());
+        }
 
         var verts = new List<(double, double, double)>();
         var tris = new List<(int, int, int)>();
@@ -278,6 +389,85 @@ public static class UserBulbMeshExporter
         verts.Add((x, y, z));
         edgeVert[key] = idx;
         return idx;
+    }
+
+    // ── Crease-angle normals ────────────────────────────────────────────────
+
+    // Rebuild the mesh so a vertex shared across a HARD edge carries a separate
+    // normal per side (facet stays sharp) while smooth regions still share one
+    // normal (curved surface stays smooth). For each triangle corner the vertex
+    // normal is the average of the incident face normals within creaseDegrees of
+    // THAT triangle's face normal; corners that resolve to the same
+    // (vertex, quantised-normal) are welded, so smooth areas don't bloat.
+    private static (List<(double X, double Y, double Z)> verts,
+                    List<(double X, double Y, double Z)> norms,
+                    List<(int A, int B, int C)> tris)
+        ApplyCreaseNormals(
+            List<(double X, double Y, double Z)> verts,
+            List<(int A, int B, int C)> tris,
+            double creaseDegrees)
+    {
+        double cosCrease = Math.Cos(Math.Clamp(creaseDegrees, 0.0, 180.0) * Math.PI / 180.0);
+        int tc = tris.Count;
+
+        // Unit face normals.
+        var fn = new (double x, double y, double z)[tc];
+        for (int t = 0; t < tc; t++)
+        {
+            var (a, b, c) = tris[t];
+            var (ax, ay, az) = verts[a];
+            var (bx, by, bz) = verts[b];
+            var (cx, cy, cz) = verts[c];
+            double ex = bx - ax, ey = by - ay, ez = bz - az;
+            double gx = cx - ax, gy = cy - ay, gz = cz - az;
+            double nx = ey * gz - ez * gy, ny = ez * gx - ex * gz, nz = ex * gy - ey * gx;
+            double L = Math.Sqrt(nx * nx + ny * ny + nz * nz);
+            fn[t] = L > 1e-20 ? (nx / L, ny / L, nz / L) : (0, 0, 1);
+        }
+
+        // Incident faces per original vertex.
+        var incident = new List<int>[verts.Count];
+        for (int t = 0; t < tc; t++)
+        {
+            var (a, b, c) = tris[t];
+            (incident[a] ??= new List<int>()).Add(t);
+            (incident[b] ??= new List<int>()).Add(t);
+            (incident[c] ??= new List<int>()).Add(t);
+        }
+
+        var outV = new List<(double, double, double)>();
+        var outN = new List<(double, double, double)>();
+        var outT = new List<(int, int, int)>(tc);
+        var map = new Dictionary<(int, long, long, long), int>();
+
+        int Corner(int vi, (double x, double y, double z) ft)
+        {
+            double nx = 0, ny = 0, nz = 0;
+            foreach (int s in incident[vi])
+            {
+                var f = fn[s];
+                if (f.x * ft.x + f.y * ft.y + f.z * ft.z >= cosCrease) { nx += f.x; ny += f.y; nz += f.z; }
+            }
+            double L = Math.Sqrt(nx * nx + ny * ny + nz * nz);
+            if (L > 1e-20) { nx /= L; ny /= L; nz /= L; } else { nx = ft.x; ny = ft.y; nz = ft.z; }
+            var key = (vi, (long)Math.Round(nx * 1000), (long)Math.Round(ny * 1000), (long)Math.Round(nz * 1000));
+            if (!map.TryGetValue(key, out int idx))
+            {
+                idx = outV.Count;
+                outV.Add(verts[vi]);
+                outN.Add((nx, ny, nz));
+                map[key] = idx;
+            }
+            return idx;
+        }
+
+        for (int t = 0; t < tc; t++)
+        {
+            var (a, b, c) = tris[t];
+            var ft = fn[t];
+            outT.Add((Corner(a, ft), Corner(b, ft), Corner(c, ft)));
+        }
+        return (outV, outN, outT);
     }
 
     // ── Writers ─────────────────────────────────────────────────────────────

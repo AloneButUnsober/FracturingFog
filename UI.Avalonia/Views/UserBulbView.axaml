@@ -372,10 +372,10 @@
                     <TextBlock Grid.Column="0" Classes="header" Text="Chain (when non-empty, overrides single source)"
                                Margin="0,0,0,0" Grid.Row="0"/>
                     <!-- Export -->
-                    <Grid ColumnDefinitions="110,Auto,Auto,Auto,Auto" Grid.Row="1" Grid.Column="0">
-                        <Button    Grid.Column="1" Grid.Row="1" Classes="tool" Content="+ Step"
+                    <Grid ColumnDefinitions="110,Auto,Auto,Auto,Auto" RowDefinitions="Auto,Auto" Grid.Row="1" Grid.Column="0">
+                        <Button    Grid.Column="1" Grid.Row="0" Classes="tool" Content="+ Step"
                                    Command="{Binding AddChainCommand}" Margin="6,0,0,0" />
-                        <Button    Grid.Column="2" Grid.Row="1" Classes="tool" Content="+ Primitive ▾" Margin="6,0,0,0"
+                        <Button    Grid.Column="2" Grid.Row="0" Classes="tool" Content="+ Primitive ▾" Margin="6,0,0,0"
                                    ToolTip.Tip="Append a fold/power primitive to the chain">
                             <Button.Flyout>
                                 <MenuFlyout ItemsSource="{Binding ChainPrimitives}">
@@ -389,7 +389,7 @@
                                 </MenuFlyout>
                             </Button.Flyout>
                         </Button>
-                        <Button Grid.Column="3" Grid.Row="1"  Classes="tool" Content="Hybrid ▾" Margin="6,0,0,0"
+                        <Button Grid.Column="3" Grid.Row="0"  Classes="tool" Content="Hybrid ▾" Margin="6,0,0,0"
                                 ToolTip.Tip="Replace chain with a worked-example hybrid">
                             <Button.Flyout>
                                 <MenuFlyout>
@@ -402,24 +402,65 @@
                                 </MenuFlyout>
                             </Button.Flyout>
                         </Button>
-                        <StackPanel Grid.Column="4" Grid.Row="1" Orientation="Horizontal" Margin="6,0,0,0"
-                                    VerticalAlignment="Center" Spacing="6">
+                        <StackPanel Grid.Column="4" Grid.Row="0" Orientation="Horizontal" Margin="6,0,0,0"
+                                    VerticalAlignment="Center" Spacing="8">
                             <Button Classes="tool"
                                     Content="Export mesh (OBJ)…"
                                     Command="{Binding ExportMeshCommand}"
                                     HorizontalAlignment="Left" />
-                            <TextBlock Text="Grid" VerticalAlignment="Center"
-                                       ToolTip.Tip="Marching-cubes resolution per axis. Higher = finer mesh (cost ~N³). 96 = native-exporter parity." />
-                            <NumericUpDown Width="86" Minimum="16" Maximum="512" Increment="16" FormatString="F0"
-                                           Value="{Binding ExportGridN, Mode=TwoWay}" />
-                            <TextBlock Text="Range" VerticalAlignment="Center"
-                                       ToolTip.Tip="Object-space half-extent of the sampled cube. Must enclose the fractal; too small clips it." />
-                            <NumericUpDown Width="86" Minimum="0.25" Maximum="64" Increment="0.25" FormatString="F2"
-                                           Value="{Binding ExportRange, Mode=TwoWay}" />
-                            <TextBlock Text="(uses Iterations + JacobianH above)" VerticalAlignment="Center"
+                            <TextBlock Text="Exporting mesh…" VerticalAlignment="Center"
+                                       Foreground="#FFCC00" FontStyle="Italic"
+                                       IsVisible="{Binding IsExporting}"
+                                       ToolTip.Tip="A mesh export is running on a background thread. High Grid/SS can take a while; the app stays responsive — no need to force-quit." />
+                        </StackPanel>
+
+                        <!-- Mesh-export knobs on their own row beneath the buttons
+                             so the numeric fields are wide enough to read and wrap
+                             onto new lines on a narrow panel instead of crushing
+                             off to the right. Each label+field is grouped so a wrap
+                             never splits a pair. -->
+                        <WrapPanel Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="5"
+                                   Orientation="Horizontal" Margin="0,8,0,0">
+                            <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Spacing="4" Margin="0,0,16,4">
+                                <TextBlock Text="Grid" VerticalAlignment="Center"
+                                           ToolTip.Tip="Marching-cubes resolution per axis. Higher = finer mesh (cost ~N³). 96 = native-exporter parity." />
+                                <NumericUpDown MinWidth="140" Minimum="16" Maximum="512" Increment="16" FormatString="F0"
+                                               Value="{Binding ExportGridN, Mode=TwoWay}" />
+                            </StackPanel>
+                            <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Spacing="4" Margin="0,0,16,4">
+                                <TextBlock Text="Range" VerticalAlignment="Center"
+                                           ToolTip.Tip="Object-space half-extent of the sampled cube. Must enclose the fractal; too small clips it." />
+                                <NumericUpDown MinWidth="140" Minimum="0.25" Maximum="64" Increment="0.25" FormatString="F2"
+                                               Value="{Binding ExportRange, Mode=TwoWay}" />
+                                <Button Classes="tool" Content="Auto" Margin="4,0,0,0"
+                                        Command="{Binding AutoRangeCommand}"
+                                        ToolTip.Tip="Probe the fractal's extent (using the export Iterations + JacobianH) and set Range to just enclose it — avoids clipping and wasted resolution." />
+                            </StackPanel>
+                            <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Spacing="4" Margin="0,0,16,4">
+                                <TextBlock Text="Iso" VerticalAlignment="Center"
+                                           ToolTip.Tip="Surface level. As a cell fraction (abs off) 0.5 sits a half-cell OUTSIDE the true surface, so filaments inflate into fat tubes and gaps fuse into a ball; lower toward 0.1–0.25 to hug the surface and keep filament detail, raise to bridge gaps if the mesh shatters. With abs on it is an object-space distance (grid-independent)." />
+                                <NumericUpDown MinWidth="140" Minimum="0.005" Maximum="2" Increment="0.01" FormatString="F3"
+                                               Value="{Binding ExportIsoScale, Mode=TwoWay}" />
+                                <CheckBox Content="abs" VerticalAlignment="Center" Margin="4,0,0,0"
+                                          IsChecked="{Binding ExportIsoAbsolute, Mode=TwoWay}"
+                                          ToolTip.Tip="Treat Iso as an absolute object-space distance (grid-independent surface level) instead of a fraction of the cell size. Change the Grid without re-tuning Iso." />
+                            </StackPanel>
+                            <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Spacing="4" Margin="0,0,16,4">
+                                <TextBlock Text="SS" VerticalAlignment="Center"
+                                           ToolTip.Tip="Supersampling: box-average an s×s×s DE stencil per grid corner (1 = off). Antialiases thin sub-cell filaments into continuous surface instead of broken tubes/dots. Cost ~s³× — keep it 2–3 on fine grids." />
+                                <NumericUpDown MinWidth="140" Minimum="1" Maximum="4" Increment="1" FormatString="F0"
+                                               Value="{Binding ExportSuperSamples, Mode=TwoWay}" />
+                            </StackPanel>
+                            <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Spacing="4" Margin="0,0,16,4">
+                                <TextBlock Text="Crease°" VerticalAlignment="Center"
+                                           ToolTip.Tip="Crease angle. Faces differing by more than this keep a hard edge (Mandelbox facets stay crisp) while curved bulb arms still smooth. 180 = smooth everything (default); ~30 preserves facets." />
+                                <NumericUpDown MinWidth="140" Minimum="5" Maximum="180" Increment="5" FormatString="F0"
+                                               Value="{Binding ExportCreaseDegrees, Mode=TwoWay}" />
+                            </StackPanel>
+                            <TextBlock Text="(uses Iterations + JacobianH above)" VerticalAlignment="Center" Margin="0,0,0,4"
                                        Opacity="0.7" FontStyle="Italic"
                                        ToolTip.Tip="Mesh DE quality reuses the panel's Iterations + JacobianH. For crisp export geometry raise Iterations (native quaternion types use 11–14; the render default 8 is blobby) and/or lower JacobianH toward 1e-5." />
-                        </StackPanel>
+                        </WrapPanel>
                     </Grid>
                 </Grid>
             <Border Grid.Row="7" BorderBrush="#5A5A5A" BorderThickness="1" Background="#232323" >
