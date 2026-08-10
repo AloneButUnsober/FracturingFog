@@ -81,6 +81,9 @@ public static class UserBulbMeshExporter
         double creaseDegrees = 180.0, CancellationToken ct = default)
     {
         var (verts, norms, tris) = BuildMarchingCubes(sample, cx, cy, cz, range, n, isoScale, isoAbsolute, superSamples, ct);
+        // Cancelled mid-build: leave any existing file untouched (don't clobber it
+        // with an empty stub) and report nothing written.
+        if (ct.IsCancellationRequested) return 0;
         if (creaseDegrees < 179.9 && tris.Count > 0)
             (verts, norms, tris) = ApplyCreaseNormals(verts, tris, creaseDegrees);
         if (tris.Count == 0) { File.WriteAllText(filePath, "# empty\n"); return 0; }
