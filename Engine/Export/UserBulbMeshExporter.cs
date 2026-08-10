@@ -75,6 +75,49 @@ public static class UserBulbMeshExporter
         return tris.Count;
     }
 
+    /// <summary>Probe the object-space half-extent that encloses the set, so the
+    /// export cube can be auto-sized instead of hand-tuned (too small clips the
+    /// fractal; too large wastes grid resolution and can leave the mesh open where
+    /// the surface exits the cube face). Casts <paramref name="dirs"/> rays on a
+    /// Fibonacci sphere from the centre and records the farthest radius along each
+    /// where the DE is at/inside the surface, then pads by a margin. Returns 0
+    /// when no surface is found (empty/degenerate field) — the caller should keep
+    /// the current range and warn.</summary>
+    public static double ProbeBoundingRange(
+        SampleDistance sample, double cx, double cy, double cz,
+        double maxRange = 8.0, double threshold = 0.0,
+        int dirs = 64, int steps = 256, CancellationToken ct = default)
+    {
+        if (maxRange <= 0.0) maxRange = 8.0;
+        if (dirs < 8) dirs = 8;
+        if (steps < 16) steps = 16;
+        double dt = maxRange / steps;
+        // Surface = DE at/below the iso band; approximate with ~one step so the
+        // probe brackets the true surface. The 20% margin below absorbs the slack.
+        double thr = threshold > 0.0 ? threshold : dt;
+        double extent = 0.0;
+        double golden = Math.PI * (3.0 - Math.Sqrt(5.0)); // golden angle
+        for (int d = 0; d < dirs; d++)
+        {
+            if (ct.IsCancellationRequested) break;
+            // Fibonacci-sphere direction (near-uniform coverage).
+            double zc = 1.0 - 2.0 * (d + 0.5) / dirs;
+            double rr = Math.Sqrt(Math.Max(0.0, 1.0 - zc * zc));
+            double phi = golden * d;
+            double ux = Math.Cos(phi) * rr, uy = Math.Sin(phi) * rr, uz = zc;
+            double lastHit = 0.0;
+            for (int s = 1; s <= steps; s++)
+            {
+                double t = s * dt;
+                double dval = sample(cx + ux * t, cy + uy * t, cz + uz * t);
+                if (dval <= thr) lastHit = t;
+            }
+            if (lastHit > extent) extent = lastHit;
+        }
+        if (extent <= 0.0) return 0.0;
+        return Math.Clamp(extent * 1.2 + dt, 0.25, maxRange);
+    }
+
     /// <summary>Legacy voxel-cube OBJ export. Kept for parity with
     /// pre-4.12 shipment + as a fallback when MC topology gets pinched
     /// at very low N.</summary>

@@ -123,6 +123,7 @@ public sealed class UserBulbViewModel : ViewModelBase
         RemoveChainCommand = ReactiveCommand.Create<UserBulbChainStep>(OnRemoveChain);
         TogglePlayCommand = ReactiveCommand.Create(OnTogglePlay);
         ExportMeshCommand = ReactiveCommand.CreateFromTask(OnExportMeshAsync);
+        AutoRangeCommand = ReactiveCommand.Create(OnAutoRange);
         OpenHelpCommand = ReactiveCommand.Create(() =>
         {
             // Jump directly to the Sandbox DSL chapter when the Sandbox
@@ -552,6 +553,7 @@ public sealed class UserBulbViewModel : ViewModelBase
     public IReadOnlyList<UserBulbChainPrimitive> ChainPrimitives => UserBulbChainPrimitives.All;
     public ReactiveCommand<Unit, Unit> TogglePlayCommand { get; }
     public ReactiveCommand<Unit, Unit> ExportMeshCommand { get; }
+    public ReactiveCommand<Unit, Unit> AutoRangeCommand { get; }
     public ReactiveCommand<Unit, Unit> OpenHelpCommand { get; }
 
     /// <summary>Tuple: (docId, anchor, title). View opens HelpViewerView.
@@ -583,6 +585,11 @@ public sealed class UserBulbViewModel : ViewModelBase
 
     /// <summary>Args: gridN, range, path.</summary>
     public event EventHandler<MeshExportEventArgs>? ExportMeshRequested;
+
+    /// <summary>Fires when the user clicks Auto-range. The host probes the DE
+    /// bounding extent (using the export-quality Iterations + JacobianH) and
+    /// writes it back into <see cref="AutoRangeEventArgs.Result"/>.</summary>
+    public event EventHandler<AutoRangeEventArgs>? AutoRangeRequested;
 
     // ── Public helpers (host-callable) ─────────────────────────────────
 
@@ -1145,6 +1152,26 @@ public sealed class UserBulbViewModel : ViewModelBase
         ExportMeshRequested?.Invoke(this, meshArgs);
     }
 
+    private void OnAutoRange()
+    {
+        if (AutoRangeRequested is not { } handler)
+            return;
+        // Reuse the export-quality DE (same Iterations + JacobianH the mesh
+        // export uses) so the probed extent matches what will be tessellated.
+        var e = new AutoRangeEventArgs(Iterations, JacobianH);
+        handler(this, e);
+        if (e.Result > 0.0)
+        {
+            ExportRange = e.Result; // setter clamps + notifies the bound control
+            MessageRequested?.Invoke(this, $"Auto-range set to {ExportRange:0.##}.");
+        }
+        else
+        {
+            MessageRequested?.Invoke(this,
+                "Auto-range found no surface — check the equation compiles and renders.");
+        }
+    }
+
     // ── Mesh-export geometry knobs (#112) — export-only; no render equivalent.
     private int _exportGridN = 96;
     /// <summary>Marching-cubes grid resolution per axis. Higher = finer mesh,
@@ -1269,6 +1296,18 @@ public sealed class MeshExportEventArgs : EventArgs
     // smooths away.
     public int Iterations { get; }
     public double JacobianH { get; }
+}
+
+public sealed class AutoRangeEventArgs : EventArgs
+{
+    public AutoRangeEventArgs(int iterations, double jacobianH)
+    { Iterations = iterations; JacobianH = jacobianH; }
+    // Export-quality DE knobs so the probe matches the export sampler.
+    public int Iterations { get; }
+    public double JacobianH { get; }
+    /// <summary>Host writes the probed object-space half-extent here; 0 (the
+    /// default) means no surface was found.</summary>
+    public double Result { get; set; }
 }
 
 internal static class ReactiveObjectExtensions

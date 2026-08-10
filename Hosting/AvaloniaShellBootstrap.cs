@@ -2839,6 +2839,24 @@ namespace FracturingFog.Hosting
             vm.OpenFilePromptRequested += async e => e.Path = await PickOpenAsync(e.Title, e.Filter);
             vm.SaveFilePromptRequested += async e => e.Path = await PickSaveAsync(e.Title, e.Filter, e.DefaultName);
             vm.MessageRequested += (_, msg) => ShowInfo("UserBulb", msg, false);
+            vm.AutoRangeRequested += (_, e) =>
+            {
+                if (s_renderHost == null) return;
+                try
+                {
+                    var sampler = s_renderHost.MakeUserBulbExportSampler(e.Iterations, e.JacobianH);
+                    global::FracturingFog.Export.SampleDistance de = sampler != null
+                        ? (x, y, z) => sampler(x, y, z)
+                        : (x, y, z) => s_renderHost!.SampleUserBulbDE(x, y, z);
+                    e.Result = global::FracturingFog.Export.UserBulbMeshExporter.ProbeBoundingRange(
+                        de, s_renderHost.UserBulbCenterX, -s_renderHost.UserBulbCenterY, 0);
+                }
+                catch
+                {
+                    e.Result = 0.0; // VM warns on no-surface
+                }
+            };
+
             vm.ExportMeshRequested += (_, e) =>
             {
                 if (s_renderHost == null) return;
