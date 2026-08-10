@@ -2870,17 +2870,28 @@ namespace FracturingFog.Hosting
                     ? (x, y, z) => sampler(x, y, z)
                     : (x, y, z) => s_renderHost!.SampleUserBulbDE(x, y, z);
                 double cx0 = s_renderHost.UserBulbCenterX, cy0 = -s_renderHost.UserBulbCenterY;
+                // #269 busy chip + cancellation. The chip's Cancel button trips the
+                // token; ExportMarchingCubes' Parallel.For + cell loop honour it and
+                // return without writing, so a long high-Grid/SS export is abortable.
+                var cts = new System.Threading.CancellationTokenSource();
+                IDisposable? busy = s_shell?.BeginRenderBusy("Exporting mesh…", cts.Cancel);
                 System.Threading.Tasks.Task.Run(() =>
                 {
                     try
                     {
                         int tris = global::FracturingFog.Export.UserBulbMeshExporter.ExportMarchingCubes(
                             e.Path, de, cx0, cy0, 0,
-                            e.Range, e.GridN, e.IsoScale, e.IsoAbsolute, e.SuperSamples, e.CreaseDegrees);
+                            e.Range, e.GridN, e.IsoScale, e.IsoAbsolute, e.SuperSamples, e.CreaseDegrees,
+                            cts.Token);
+                        bool cancelled = cts.IsCancellationRequested;
                         Dispatcher.UIThread.Post(() =>
                         {
+                            busy?.Dispose();
                             vm.NotifyExportDone();
-                            if (tris == 0)
+                            cts.Dispose();
+                            if (cancelled)
+                                ShowInfo("Mesh export", "Export cancelled.", false);
+                            else if (tris == 0)
                                 // #113 — a fold/IFS map under the numerical DE crosses
                                 // no iso surface. Point the user at the scalar-KIFS knob.
                                 ShowInfo("Mesh export",
@@ -2896,7 +2907,9 @@ namespace FracturingFog.Hosting
                     {
                         Dispatcher.UIThread.Post(() =>
                         {
+                            busy?.Dispose();
                             vm.NotifyExportDone();
+                            cts.Dispose();
                             ShowInfo("Mesh export error", $"Export failed: {ex.Message}", true);
                         });
                     }
