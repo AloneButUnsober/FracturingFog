@@ -36,7 +36,7 @@ public sealed class AudioModulationManager
     }
 
     private readonly Func<IAudioModulationSource?> _getSource;
-    private readonly Action _ensureStarted;
+    private readonly Action _reconcile;
     private readonly Func<FractalParameters?> _getParams;
     private readonly Func<FractalType> _getType;
     private readonly Func<ParameterAnimationBus?> _getBus;
@@ -44,13 +44,13 @@ public sealed class AudioModulationManager
 
     public AudioModulationManager(
         Func<IAudioModulationSource?> getSource,
-        Action ensureStarted,
+        Action reconcile,
         Func<FractalParameters?> getParams,
         Func<FractalType> getType,
         Func<ParameterAnimationBus?> getBus)
     {
         _getSource = getSource ?? throw new ArgumentNullException(nameof(getSource));
-        _ensureStarted = ensureStarted ?? throw new ArgumentNullException(nameof(ensureStarted));
+        _reconcile = reconcile ?? throw new ArgumentNullException(nameof(reconcile));
         _getParams = getParams ?? throw new ArgumentNullException(nameof(getParams));
         _getType = getType ?? throw new ArgumentNullException(nameof(getType));
         _getBus = getBus ?? throw new ArgumentNullException(nameof(getBus));
@@ -81,15 +81,21 @@ public sealed class AudioModulationManager
     public bool IsEnabled(string paramName)
         => _entries.TryGetValue(paramName, out var e) && e.Enabled;
 
-    /// <summary>Enable / disable audio drive for a param. Enabling ensures audio
-    /// capture is running, then rebuilds the bus registration set.</summary>
+    /// <summary>#277 — true when at least one binding is enabled. Feeds the
+    /// host's audio-capture demand predicate.</summary>
+    public bool HasEnabledBindings => _entries.Values.Any(e => e.Enabled);
+
+    /// <summary>Enable / disable audio drive for a param. Enabling reconciles
+    /// capture on (before rebind, so the source exists); disabling reconciles
+    /// after teardown so capture stops when nothing else needs it.</summary>
     public void SetEnabled(string paramName, bool enabled)
     {
         if (!_entries.TryGetValue(paramName, out var e)) return;
         if (e.Enabled == enabled) return;
         e.Enabled = enabled;
-        if (enabled) _ensureStarted();
+        if (enabled) _reconcile();
         Rebind();
+        if (!enabled) _reconcile();
     }
 
     /// <summary>#268 — snapshot every binding (param name + mapping + enabled) for
@@ -121,7 +127,6 @@ public sealed class AudioModulationManager
             if (e.Animator != null) { bus?.UnregisterPermanent(e.Animator); e.Animator = null; }
         _entries.Clear();
 
-        bool anyEnabled = false;
         if (bindings != null)
         {
             foreach (var b in bindings)
@@ -132,11 +137,11 @@ public sealed class AudioModulationManager
                     Binding = CloneBinding(b.Binding ?? new AudioModulationBinding()),
                     Enabled = b.Enabled,
                 };
-                anyEnabled |= b.Enabled;
             }
         }
-        // Enabled bindings need the capture running to produce signal.
-        if (anyEnabled) _ensureStarted();
+        // Reconcile capture: start if the loaded set enables any binding, stop
+        // if this region carried none and nothing else wants audio (#277).
+        _reconcile();
     }
 
     private static AudioModulationBinding CloneBinding(AudioModulationBinding b) => new()
