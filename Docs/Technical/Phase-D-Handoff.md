@@ -335,8 +335,8 @@ That correctness work is F10.3.
 
 - **CLAUDE.md:** all new UI work goes to `UI.Avalonia/` only; do not touch
   `MainForm.cs` / WinForms `Views/` without asking.
-- Leave the pre-existing uncommitted `FracturingFogCLD.csproj` change and the
-  untracked `FR.Bench/` `FR.Smoke/` `FracturedRefract/` dirs alone.
+- Leave the pre-existing uncommitted `FracturingFogCLD.csproj` change and any
+  unrelated untracked working-directory folders alone.
 - Commit trailer: `Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>`.
 - User is red/green colourblind — use yellow `#FFCC00`, not red, for any error/
   validation UI state.
