@@ -41,7 +41,7 @@
 
 Fracturing Fog is a cross-platform desktop application for exploring the Mandelbrot set and ~38 other fractal families in real time, from a wide view of the entire set all the way down to zooms past **10⁵⁸** — well beyond the resolving power of standard double-precision arithmetic. It combines a hardware-accelerated renderer (DirectX on Windows, Silk.NET OpenGL on Linux + macOS, SkiaSharp CPU fallback everywhere), SIMD-vectorized CPU math, extended-precision arithmetic (double-double and quad-double), perturbation theory with series approximation + bilinear approximation (BLA), and a safe expression-DSL user-equation engine (with an optional Roslyn-backed compile-to-native path via CalcGen) + an algorithmic color-palette DSL.
 
-The shell is **Avalonia 12** — pure MVVM. The cross-platform `FracturingFog.App` ships on Windows, Linux, and macOS; the legacy WinForms shell stays as a Windows-only fallback during the migration tail. See the platform-support matrix in §1.1 for what lights up per OS.
+The shell is **Avalonia 12** — pure MVVM, and the only UI (the legacy WinForms shell was removed). The cross-platform `FracturingFog.App` ships on Windows, Linux, and macOS. See the platform-support matrix in §1.1 for what lights up per OS.
 
 **Key pillars:**
 
@@ -50,7 +50,7 @@ The shell is **Avalonia 12** — pure MVVM. The cross-platform `FracturingFog.Ap
 | Real-time interactivity | Pan, zoom, color-cycle with smooth feedback |
 | Extreme zoom depth | Quad-double precision out to ~5 × 10⁵⁸ |
 | ~38 fractal families | 2D escape-time: Mandelbrot, Julia, Burning Ship, Tricorn, Multibrot, Phoenix, Newton, Nova, Tear Drop, Magnet 1/2, Glynn, Halley, Secant, Spider. Histogram / orbit-replay: Buddhabrot, Nebulabrot, Anti-Buddhabrot, Anti-Nebulabrot, Logistic bifurcation. Procedural / stochastic: IFS, L-System, Strange Attractor, Plasma, Flame, Apollonian gasket, DLA. 3D raymarchers: Mandelbulb, Mandelbox, KIFS, Quaternion Julia, Quaternion Mandelbrot, Bicomplex Mandelbrot, Kleinian. Authoring: User Equation, Sandbox, User Bulb (3D). Plus CalcGen-generated family (Z² / Z³ / Z⁴ / Z⁵ / Tricorn / Burning Ship). |
-| 200+ color themes | Built-in palettes plus JSON-imported user themes plus algorithmic ColorGen DSL |
+| 290+ color themes | Built-in palettes plus JSON-imported user themes plus algorithmic ColorGen DSL |
 | Full theme editor | Live-preview parameter tweaking with save/export + From-Image kmeans extractor |
 | Capture suite | PNG, multi-tile poster, MP4 video (built-in + ffmpeg lossless), PNG sequence |
 | Automation | Slideshow + animated zoom slideshow + audio-reactive mode |
@@ -66,7 +66,6 @@ this host today.
 | Feature                         | Windows | Linux   | macOS   |
 |---------------------------------|:-------:|:-------:|:-------:|
 | Avalonia shell                  | Yes     | Yes     | Yes     |
-| WinForms legacy shell           | Yes     | No      | No      |
 | **Render — DirectX 11 / 12**    | Yes     | No      | No      |
 | **Render — Silk.NET OpenGL**    | Yes (opt-in via `--renderer silk`) | Yes (default) | Yes (default, CGL/GL 4.10 fallback) |
 | **Render — SkiaSharp CPU**      | Yes (opt-in via `--renderer skia`) | Yes | Yes |
@@ -80,7 +79,7 @@ this host today.
 | Audio-reactive slideshow        | Yes     | Yes     | Yes     |
 | Standard slideshow              | Yes     | Yes     | Yes     |
 | **Video export — Media Foundation MP4** | Yes | No | No |
-| **Video export — ffmpeg (H.264 / FFV1)** | Yes (bundled) | Yes (apt / dnf / pacman) | Yes (brew) |
+| **Video export — ffmpeg (H.264 / FFV1)** | Yes (auto-download / PATH) | Yes (apt / dnf / pacman) | Yes (brew) |
 | Frame-sequence PNG export       | Yes     | Yes     | Yes     |
 | Slideshow PNG capture           | Yes     | Yes     | Yes     |
 | Screenshots + watermark         | Yes     | Yes     | Yes     |
@@ -174,7 +173,7 @@ Fracturing Fog automatically promotes the arithmetic precision based on the acti
 | **Mouse wheel** | Zoom in / out anchored at the cursor |
 | **Left-click + drag** | Pan the view (fast pass mid-drag; full re-render 300 ms after release) |
 | **Double-click** | Center on point and zoom in one step |
-| **Right-click + drag** | **Highlight-to-zoom** — marquee box; release centers + zooms to fill rectangle (new in v0.6) |
+| **Right-click + drag** | **Highlight-to-zoom** — marquee box; release centers + zooms to fill rectangle (since v0.6) |
 | **Right-click + drag (3D)** | Orbit camera (X = theta, Y = phi, inverted for natural ""tilt up"" feel) |
 
 ### 4.2 Keyboard
@@ -228,7 +227,7 @@ Iteration count auto-scales with depth: `IterBase + ⌊log₁₀(zoom) × IterPe
 
 ## 6. Color Themes & Palettes
 
-Fracturing Fog ships with **200+ built-in color palettes** organized into categories, plus unlimited JSON-imported user themes and the ColorGen DSL for algorithmic theme authoring.
+Fracturing Fog ships with **290+ built-in color palettes** organized into categories, plus unlimited JSON-imported user themes and the ColorGen DSL for algorithmic theme authoring.
 
 ### 6.1 Categories
 
