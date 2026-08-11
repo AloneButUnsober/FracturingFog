@@ -70,6 +70,7 @@ this host today.
 | **Render — Silk.NET OpenGL**    | Yes (opt-in via `--renderer silk`) | Yes (default) | Yes (default, CGL/GL 4.10 fallback) |
 | **Render — SkiaSharp CPU**      | Yes (opt-in via `--renderer skia`) | Yes | Yes |
 | GPU compute (D3D11 kernel)      | Yes     | No      | No      |
+| GPU compute (Vulkan / SPIR-V) ‡ | Opt-in (`--renderer vulkan`) | Opt-in (`--renderer vulkan`) | Opt-in (`--renderer vulkan`) |
 | GPU compute (ILGPU CUDA / OpenCL) | Yes (when GPU drivers present) | Yes (when GPU drivers present) | Limited (Metal backend pending upstream — CPU fallback) |
 | CPU compute (SIMD AVX2 / 512)   | Yes     | Yes     | Yes     |
 | **Audio — System loopback**     | Yes     | No      | No      |
@@ -96,6 +97,13 @@ this host today.
 | First-run FFmpeg auto-download  | Yes     | No (package-manager flow) | No (Homebrew flow) |
 | Code-signed installer           | No (zip ships unsigned) | No (AppImage) | Limited (notarisation pending Apple Developer cert) |
 | Multi-monitor span              | Yes     | Yes     | Yes     |
+
+‡ **Vulkan / SPIR-V GPU compute is experimental.** Enabled by selecting the
+Vulkan backend (`--renderer vulkan`); it needs a Vulkan device (deep-zoom
+perturbation additionally needs `shaderFloat64`). Exercised so far only against
+software rasterizers (e.g. lavapipe) and low-end parts — **pending validation on
+a capable discrete GPU**. The Ctrl+G hotkey and the Control Center "GPU compute"
+checkbox toggle the separate **D3D11** shallow-Mandelbrot path, not Vulkan.
 
 See [Docs/User/CrossPlatform-UserGuide.md](Docs/User/CrossPlatform-UserGuide.md)
 for the per-OS install and caveat details and
