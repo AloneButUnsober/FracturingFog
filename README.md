@@ -19,7 +19,7 @@ and macOS.
 
 | OS                     | Download                                | After download                                                      |
 |------------------------|-----------------------------------------|---------------------------------------------------------------------|
-| Windows 10/11 (x64)    | `FracturingFog-win-x64.zip`             | Unzip + double-click `FracturingFog.App.exe`. Bundled ffmpeg.       |
+| Windows 10/11 (x64)    | `FracturingFog-win-x64.zip`             | Unzip + double-click `FracturingFog.App.exe`. Video export needs ffmpeg (in-app auto-download, or on PATH). |
 | Linux (x64)            | `FracturingFog-linux-x64.AppImage`      | `chmod +x` + run. `sudo apt install ffmpeg` enables video export.   |
 | Linux (arm64)          | `FracturingFog-linux-arm64.AppImage`    | Same as linux-x64.                                                  |
 | macOS (Apple Silicon)  | `FracturingFog-osx-arm64.tar.gz`        | `tar xf` + drag `FracturingFog.app` into `/Applications/`. `brew install ffmpeg` enables video. |
@@ -35,7 +35,7 @@ accepts them.
 ## Build from source
 
 ```
-dotnet build FracturingFogCLD.csproj -c Release   # legacy WinForms shell (Windows)
+dotnet build FracturingFogCLD.csproj -c Release   # Windows build (D3D/Win backends)
 dotnet build FracturingFog.App                    # cross-platform Avalonia shell
 ```
 
@@ -49,8 +49,9 @@ dotnet build FracturingFog.App                    # cross-platform Avalonia shel
 * QuestPDF (palette PDF export)
 * MathNet.Numerics (FFT beat analyzer)
 
-See [CLAUDE.md](CLAUDE.md) for the WinForms-deprecation rule of thumb —
-new UI work lands in `UI.Avalonia/`, not `MainForm.cs`.
+The Avalonia shell (`UI.Avalonia/`) is the only UI; the legacy WinForms
+shell was removed. See [CLAUDE.md](CLAUDE.md) for the rule of thumb — all
+new UI work lands in `UI.Avalonia/`.
 
 ## Status
 
