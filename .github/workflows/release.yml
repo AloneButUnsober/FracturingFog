@@ -173,7 +173,19 @@ jobs:
                             -o -name 'FracturingFog-*.zip' \
                             -o -name 'FracturingFog-*.sha256' \) \
                 -exec cp {} release/ \;
+          # Linux install bundle — the curl|sh bootstrap (web-install.sh) and
+          # the local installer (install.sh) pull the AppImage from this same
+          # release, so ship them as assets alongside the binary.
+          cp Tools/Packaging/linux/install.sh     release/
+          cp Tools/Packaging/linux/web-install.sh release/
           ls -la release/
+
+      - name: Combined SHA256SUMS
+        # web-install.sh verifies the AppImage against a file named exactly
+        # SHA256SUMS (greps for the asset name). Build it from the release dir.
+        run: |
+          (cd release && sha256sum FracturingFog-*.AppImage FracturingFog-*.zip FracturingFog-*.tar.gz 2>/dev/null > SHA256SUMS || true)
+          cat release/SHA256SUMS || true
 
       - name: Draft GitHub Release
         uses: softprops/action-gh-release@v2

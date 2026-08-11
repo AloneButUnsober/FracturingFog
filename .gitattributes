@@ -3,6 +3,10 @@
 ###############################################################################
 * text=auto
 
+# Shell scripts must stay LF — they ship as release assets and run on Linux;
+# a CRLF (#!/bin/sh\r) breaks the shebang on the runner and on end-user hosts.
+*.sh text eol=lf
+
 ###############################################################################
 # Set default behavior for command prompt diff.
 #
