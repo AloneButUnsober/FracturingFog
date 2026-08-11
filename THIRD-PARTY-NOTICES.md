@@ -86,6 +86,22 @@ are provided as scholarly attribution, not because any code was copied.
 - **Milnor / Hubbard derivative recurrences** for exterior distance, referenced
   in the CalculatorGen differentiator.
 
+- **Acid Warp palette-cycling pattern field**
+  Inspired by Noah Spurrier's 1992 DOS *Acid Warp* demo (modern SDL/Emscripten
+  port by Boris Gjenero / dreamlayers). The upstream acidwarp is **GPL-licensed**
+  (a GPL-2.0-only upstream would *not* be license-compatible with AGPL-3.0). The
+  Fracturing Fog implementation is a **clean-room** reimplementation of the
+  *mathematics only* — the closed-form pattern maps (plasma sums, radial/angular
+  sine interference, XOR fields) reimplemented fresh in C#. **No acidwarp source
+  code, precomputed lookup tables (`lut_sin` / `lut_dist` / `lut_angle`), or
+  palette data were copied.** Pattern equations and math are not copyrightable,
+  so the upstream GPL does not attach to this original code. Implemented in
+  `Engine/Calculators/AcidWarpCalculator.cs` (see also
+  `Engine/Models/ColorSchemes/AcidWarpSpectrum.cs` and
+  `Docs/Technical/AcidWarp-Mode-Design.md` §0 licensing gate). Credit to Noah
+  Spurrier (original concept) and Boris Gjenero (modern port) is given as a
+  courtesy.
+
 ---
 
 ## 3. External binaries (not compiled in)
