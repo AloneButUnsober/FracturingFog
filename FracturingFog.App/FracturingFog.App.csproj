@@ -117,32 +117,14 @@
   </ItemGroup>
 
   <!--
-    Phase X.2 / Slice 2.4 — bundled ffmpeg, Windows only.
-    Licensing audit (per CrossPlatform-ImplementationPlan.md Slice 2.4):
-    most prebuilt ffmpeg binaries enable GPL codecs which bind the
-    shipping container to a GPL-compatible licence. The Windows bundle
-    has matched our distribution licence since 2024 and ships today.
-    Linux/macOS users install ffmpeg via apt/brew — the cross-platform
-    smoke doc covers this path. Revisit when a per-RID LGPL ffmpeg bundle
-    is available for every shipping leg.
-
-    Both include paths land at the same per-RID location at runtime so
-    FfmpegEncoder.FindFfmpeg's Tools/<rid>/ffmpeg{.exe} probe (Slice 2.3)
-    picks them up. The Exists() guard keeps the build green when the
-    binary is absent (developer checkouts, CI, fresh clones).
+    ffmpeg is intentionally NOT bundled. Prebuilt ffmpeg binaries typically
+    enable GPL codecs, so shipping one would drag GPL redistribution duties
+    (license + corresponding-source offer) onto every release. Instead it is
+    resolved at runtime: FfmpegEncoder.FindFfmpeg probes PATH / the app base /
+    Tools/<rid>, and FfmpegInstaller can fetch it on demand. Linux/macOS users
+    install via apt/brew. To bundle a licensed (e.g. LGPL) build per RID later,
+    add a per-RID <None Include=... CopyToOutputDirectory> item here.
   -->
-  <ItemGroup>
-    <None Include="..\Tools\win-x64\ffmpeg.exe"
-          Condition="'$(RuntimeIdentifier)' == 'win-x64' and Exists('..\Tools\win-x64\ffmpeg.exe')"
-          Link="Tools\win-x64\ffmpeg.exe"
-          CopyToOutputDirectory="PreserveNewest"
-          Pack="false" />
-    <None Include="..\Tools\ffmpeg.exe"
-          Condition="'$(RuntimeIdentifier)' == 'win-x64' and Exists('..\Tools\ffmpeg.exe') and !Exists('..\Tools\win-x64\ffmpeg.exe')"
-          Link="Tools\ffmpeg.exe"
-          CopyToOutputDirectory="PreserveNewest"
-          Pack="false" />
-  </ItemGroup>
 
   <!--
     Windows-only project refs (Rendering.D3D, FracturingFog.Win, Audio.Win) are
