@@ -84,7 +84,7 @@ else
     <key>CFBundleDisplayName</key>
     <string>Fracturing Fog</string>
     <key>CFBundleIdentifier</key>
-    <string>com.dpiserve.fracturingfog</string>
+    <string>io.github.alonebutunsober.fracturingfog</string>
     <key>CFBundleVersion</key>
     <string>1.0.0</string>
     <key>CFBundleShortVersionString</key>

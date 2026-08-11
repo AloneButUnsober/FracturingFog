@@ -21,7 +21,7 @@ gaps still are.
 ### Windows (10 / 11, x64)
 
 1. Download `FracturingFog-win-x64.zip` from the
-   [Releases page](https://github.com/dpiserve/FracturingFog/releases).
+   [Releases page](https://github.com/AloneButUnsober/FracturingFog/releases).
 2. Unzip anywhere (`%LOCALAPPDATA%\Programs\FracturingFog\` works).
 3. Double-click `FracturingFog.App.exe`. Bundled ffmpeg ships in
    `Tools/win-x64/ffmpeg.exe`; nothing else needs installing.
@@ -29,7 +29,7 @@ gaps still are.
 ### Linux (x64 or arm64, glibc 2.27+)
 
 1. Download `FracturingFog-linux-x64.AppImage` (or `-linux-arm64`) from
-   the [Releases page](https://github.com/dpiserve/FracturingFog/releases).
+   the [Releases page](https://github.com/AloneButUnsober/FracturingFog/releases).
 2. `chmod +x FracturingFog-linux-x64.AppImage`.
 3. Run it. The AppImage extracts to `~/.cache/appimage/` on first launch.
 
@@ -48,7 +48,7 @@ install.
 ### macOS (Apple Silicon — Sonoma+; Intel — Big Sur+)
 
 1. Download `FracturingFog-osx-arm64.tar.gz` (or `-osx-x64`) from the
-   [Releases page](https://github.com/dpiserve/FracturingFog/releases).
+   [Releases page](https://github.com/AloneButUnsober/FracturingFog/releases).
 2. `tar xf FracturingFog-osx-arm64.tar.gz`.
 3. Drag `FracturingFog.app` into `/Applications/`.
 4. Right-click → Open the first time so Gatekeeper accepts the unsigned
