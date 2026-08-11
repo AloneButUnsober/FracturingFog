@@ -26,7 +26,7 @@ and macOS.
 | macOS (Intel)          | `FracturingFog-osx-x64.tar.gz`          | Same as osx-arm64.                                                  |
 
 Archives ship on every tagged release; grab the latest from the
-[Releases page](https://github.com/dpiserve/FracturingFog/releases).
+[Releases page](https://github.com/AloneButUnsober/FracturingFog/releases).
 
 Self-contained — no .NET runtime install is needed. macOS bundles are
 not yet code-signed; right-click → Open the first launch so Gatekeeper
@@ -82,6 +82,16 @@ corresponding source. If you distribute or host a modified build, you must make
 your source available to its users.
 
 Copyright © 2026 Bradley Brown.
+
+### Affiliation
+
+Fracturing Fog is an independent personal project by Bradley Brown (a.k.a.
+DanarDalin). It is **not affiliated with, endorsed by, sponsored by, or a work
+product of DPI Information Services, Inc. (dpiserve.com)**. The `@dpiserve.com`
+address appearing in historical commit metadata reflects only the email
+configured in the author's Git client at commit time and does not indicate any
+corporate involvement, ownership, or endorsement. See [`DISCLAIMER.md`](DISCLAIMER.md)
+for the full statement.
 
 ### Contributing
 

@@ -273,22 +273,22 @@ AW-1.
 
 ## 5. Issue map
 
-Filed under `AloneButUnsober/MandelbrotExplorer`. Tracking issue:
-[#246](https://github.com/AloneButUnsober/MandelbrotExplorer/issues/246).
+Filed under `AloneButUnsober/FracturingFog`. Tracking issue:
+[#246](https://github.com/AloneButUnsober/FracturingFog/issues/246).
 Each slice/idea is one issue (per the repo's issue-first convention).
 
 | Item | Issue |
 |---|---|
-| Tracking | [#246](https://github.com/AloneButUnsober/MandelbrotExplorer/issues/246) |
-| AW-1 calculator | [#247](https://github.com/AloneButUnsober/MandelbrotExplorer/issues/247) |
-| AW-2 type + UI | [#248](https://github.com/AloneButUnsober/MandelbrotExplorer/issues/248) |
-| AW-3 / IDEA-1 animate color | [#249](https://github.com/AloneButUnsober/MandelbrotExplorer/issues/249) |
-| AW-4 Spurrier intro | [#250](https://github.com/AloneButUnsober/MandelbrotExplorer/issues/250) |
-| AW-5 / IDEA-6 auto-VJ | [#251](https://github.com/AloneButUnsober/MandelbrotExplorer/issues/251) |
-| IDEA-2 xor fields | [#252](https://github.com/AloneButUnsober/MandelbrotExplorer/issues/252) |
-| IDEA-3 interference / warp | [#253](https://github.com/AloneButUnsober/MandelbrotExplorer/issues/253) |
-| IDEA-4 sparkle pfx | [#254](https://github.com/AloneButUnsober/MandelbrotExplorer/issues/254) |
-| IDEA-5 seamless toggle | [#255](https://github.com/AloneButUnsober/MandelbrotExplorer/issues/255) |
+| Tracking | [#246](https://github.com/AloneButUnsober/FracturingFog/issues/246) |
+| AW-1 calculator | [#247](https://github.com/AloneButUnsober/FracturingFog/issues/247) |
+| AW-2 type + UI | [#248](https://github.com/AloneButUnsober/FracturingFog/issues/248) |
+| AW-3 / IDEA-1 animate color | [#249](https://github.com/AloneButUnsober/FracturingFog/issues/249) |
+| AW-4 Spurrier intro | [#250](https://github.com/AloneButUnsober/FracturingFog/issues/250) |
+| AW-5 / IDEA-6 auto-VJ | [#251](https://github.com/AloneButUnsober/FracturingFog/issues/251) |
+| IDEA-2 xor fields | [#252](https://github.com/AloneButUnsober/FracturingFog/issues/252) |
+| IDEA-3 interference / warp | [#253](https://github.com/AloneButUnsober/FracturingFog/issues/253) |
+| IDEA-4 sparkle pfx | [#254](https://github.com/AloneButUnsober/FracturingFog/issues/254) |
+| IDEA-5 seamless toggle | [#255](https://github.com/AloneButUnsober/FracturingFog/issues/255) |
 
 To auto-close at merge, each PR needs its own explicit `Closes #N` line per
 issue — ranges / mentions don't count (see the repo's PR-issue-autoclose note).

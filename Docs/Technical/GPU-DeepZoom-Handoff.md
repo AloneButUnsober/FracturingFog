@@ -4,14 +4,14 @@
 # GPU Deep-Zoom — Session Handoff
 
 **Branch:** `feature/vulkan-compute` · **Tip at handoff:** `468859c` ·
-**Next task:** SA/BLA-on-GPU spike ([#88](https://github.com/AloneButUnsober/MandelbrotExplorer/issues/88)) — jump to
+**Next task:** SA/BLA-on-GPU spike ([#88](https://github.com/AloneButUnsober/FracturingFog/issues/88)) — jump to
 [§6](#6-start-here-next-session--sabla-on-gpu-spike-88).
 
 ---
 
 ## 1. TL;DR — where things stand
 
-- **V6 GPU deep-zoom perturbation ([#82](https://github.com/AloneButUnsober/MandelbrotExplorer/issues/82)) is
+- **V6 GPU deep-zoom perturbation ([#82](https://github.com/AloneButUnsober/FracturingFog/issues/82)) is
   functionally complete on BOTH backends** (Vulkan + D3D11), off by default, gated, tiled for TDR safety, with a
   perf auto-fallback. Correctness is **bit-exact vs the CPU deep path** and validated headless.
 - **No fast-FP64 hardware is available in this environment for a perf sign-off.** Both test GPUs are too weak at
@@ -98,11 +98,11 @@ dotnet run --project Rendering.Vulkan.Smoke/FracturingFog.Rendering.Vulkan.Smoke
 
 | # | Title | State |
 |---|-------|-------|
-| [#82](https://github.com/AloneButUnsober/MandelbrotExplorer/issues/82) | V6 GPU perturbation | Core done both backends. Remaining: `MaxGpuPerturbZoom` lift decision + close-out — **both need a strong-FP64 perf sign-off**. |
-| [#88](https://github.com/AloneButUnsober/MandelbrotExplorer/issues/88) | **SA/BLA on GPU** | **Deferred — the next task (this handoff).** |
-| [#85](https://github.com/AloneButUnsober/MandelbrotExplorer/issues/85) | Resize-during-calc buffer realloc race | Mitigated (cancel before realloc) + not reproducing; proper **full calc-thread drain** still open, low priority. |
-| [#84](https://github.com/AloneButUnsober/MandelbrotExplorer/issues/84) | LightingFX HUD gone post-Vulkan | Open UI regression, unrelated to compute — quick win, weak HW fine. |
-| [#44](https://github.com/AloneButUnsober/MandelbrotExplorer/issues/44) | V5 macOS via MoltenVK | Stretch — needs a **Mac**, not FP64. |
+| [#82](https://github.com/AloneButUnsober/FracturingFog/issues/82) | V6 GPU perturbation | Core done both backends. Remaining: `MaxGpuPerturbZoom` lift decision + close-out — **both need a strong-FP64 perf sign-off**. |
+| [#88](https://github.com/AloneButUnsober/FracturingFog/issues/88) | **SA/BLA on GPU** | **Deferred — the next task (this handoff).** |
+| [#85](https://github.com/AloneButUnsober/FracturingFog/issues/85) | Resize-during-calc buffer realloc race | Mitigated (cancel before realloc) + not reproducing; proper **full calc-thread drain** still open, low priority. |
+| [#84](https://github.com/AloneButUnsober/FracturingFog/issues/84) | LightingFX HUD gone post-Vulkan | Open UI regression, unrelated to compute — quick win, weak HW fine. |
+| [#44](https://github.com/AloneButUnsober/FracturingFog/issues/44) | V5 macOS via MoltenVK | Stretch — needs a **Mac**, not FP64. |
 
 Closed this arc: #86 (stale deep frame → was TDR device-removed, fixed by tiling), #87 (perf-fallback, done).
 

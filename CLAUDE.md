@@ -10,7 +10,7 @@ rather than tracked only in scratch notes or ad-hoc TODOs.
   the body (repo has no labels/milestones/auto-blocking configured).
 - A companion design/dev doc under `Docs/Technical/` may back a plan, but the
   issues are the canonical task list — link doc ↔ issues both ways.
-- Repo: `AloneButUnsober/MandelbrotExplorer`. `gh` is authenticated with admin.
+- Repo: `AloneButUnsober/FracturingFog`. `gh` is authenticated with admin.
 
 ## UI status: Avalonia is the only shell. WinForms was removed (#116).
 

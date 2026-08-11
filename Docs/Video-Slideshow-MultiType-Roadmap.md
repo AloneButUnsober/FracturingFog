@@ -7,10 +7,10 @@ follow-up patch.
 
 Tracking issues: [#91] (P1, done) · [#92] (P2) · [#93] (P3) · [#94] (P4).
 
-[#91]: https://github.com/AloneButUnsober/MandelbrotExplorer/issues/91
-[#92]: https://github.com/AloneButUnsober/MandelbrotExplorer/issues/92
-[#93]: https://github.com/AloneButUnsober/MandelbrotExplorer/issues/93
-[#94]: https://github.com/AloneButUnsober/MandelbrotExplorer/issues/94
+[#91]: https://github.com/AloneButUnsober/FracturingFog/issues/91
+[#92]: https://github.com/AloneButUnsober/FracturingFog/issues/92
+[#93]: https://github.com/AloneButUnsober/FracturingFog/issues/93
+[#94]: https://github.com/AloneButUnsober/FracturingFog/issues/94
 
 ## Problem (original)
 

@@ -2,7 +2,7 @@
 # Fracturing Fog — network bootstrap installer.
 #
 # One-liner:
-#   curl -fsSL https://github.com/AloneButUnsober/MandelbrotExplorer/releases/latest/download/web-install.sh | sh
+#   curl -fsSL https://github.com/AloneButUnsober/FracturingFog/releases/latest/download/web-install.sh | sh
 #
 # Or pin a release / choose scope via env vars:
 #   FF_TAG=v1.0.0 curl -fsSL .../web-install.sh | sh      # specific release
@@ -18,7 +18,7 @@
 
 set -eu
 
-REPO="${FF_REPO:-AloneButUnsober/MandelbrotExplorer}"
+REPO="${FF_REPO:-AloneButUnsober/FracturingFog}"
 APP_NAME="FracturingFog"
 TAG="${FF_TAG:-latest}"
 

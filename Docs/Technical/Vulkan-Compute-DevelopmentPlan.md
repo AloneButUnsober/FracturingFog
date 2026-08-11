@@ -31,7 +31,7 @@ Decided across the 2026-07-18 design session. Summary of the reasoning:
   > … survive largely intact." **There is no HLSL perturbation kernel** — the HLSL path is a ~290-line
   > FP32 escape-time kernel used only at `Zoom ≤ MaxGpuZoom (1e4)`; deep-zoom perturbation lives on
   > the CPU. The reuse argument holds for the *shallow* kernel + colour pipeline (what V1–V3 shipped);
-  > a GPU perturbation kernel is net-new, tracked in [#82](https://github.com/AloneButUnsober/MandelbrotExplorer/issues/82). See §13.
+  > a GPU perturbation kernel is net-new, tracked in [#82](https://github.com/AloneButUnsober/FracturingFog/issues/82). See §13.
 - **Compute-only skips Vulkan's worst boilerplate.** The current D3D kernel already round-trips
   through CPU (writes `gColor` structured buffer → `Map` → `UpdateTexture`). Mirror that:
   **Vulkan headless compute → map → existing Silk GL blit for present.** No swapchain, no WSI
@@ -98,15 +98,15 @@ Each slice lands behind a smoke gate and is independently revertible. Checkbox =
 
 | Slice | Issue |
 |---|---|
-| V0 spike | [#39](https://github.com/AloneButUnsober/MandelbrotExplorer/issues/39) |
-| V1 kernel | [#40](https://github.com/AloneButUnsober/MandelbrotExplorer/issues/40) |
-| V2 colour | [#41](https://github.com/AloneButUnsober/MandelbrotExplorer/issues/41) |
-| V3 backend/present | [#42](https://github.com/AloneButUnsober/MandelbrotExplorer/issues/42) |
-| V4 deep-zoom (parity — resolved trivially, §13) | [#43](https://github.com/AloneButUnsober/MandelbrotExplorer/issues/43) |
-| V6 GPU perturbation kernel (net-new; **spike CLEARED §14; full build LANDED Vulkan §15**, D3D + GUI-enable fast-follow) | [#82](https://github.com/AloneButUnsober/MandelbrotExplorer/issues/82) |
-| V5 macOS (stretch) | [#44](https://github.com/AloneButUnsober/MandelbrotExplorer/issues/44) |
+| V0 spike | [#39](https://github.com/AloneButUnsober/FracturingFog/issues/39) |
+| V1 kernel | [#40](https://github.com/AloneButUnsober/FracturingFog/issues/40) |
+| V2 colour | [#41](https://github.com/AloneButUnsober/FracturingFog/issues/41) |
+| V3 backend/present | [#42](https://github.com/AloneButUnsober/FracturingFog/issues/42) |
+| V4 deep-zoom (parity — resolved trivially, §13) | [#43](https://github.com/AloneButUnsober/FracturingFog/issues/43) |
+| V6 GPU perturbation kernel (net-new; **spike CLEARED §14; full build LANDED Vulkan §15**, D3D + GUI-enable fast-follow) | [#82](https://github.com/AloneButUnsober/FracturingFog/issues/82) |
+| V5 macOS (stretch) | [#44](https://github.com/AloneButUnsober/FracturingFog/issues/44) |
 
-### V0 — Spike: HLSL→SPIR-V compute proof (headless, no UI)  ← [#39](https://github.com/AloneButUnsober/MandelbrotExplorer/issues/39)  ✅ **DONE — see §9**
+### V0 — Spike: HLSL→SPIR-V compute proof (headless, no UI)  ← [#39](https://github.com/AloneButUnsober/FracturingFog/issues/39)  ✅ **DONE — see §9**
 - [x] `dotnet` project `Rendering.Vulkan.Smoke` (mirrors `Compute.Smoke`): enumerate Vulkan
       devices, create instance/device/compute queue, no swapchain.
 - [x] DXC toolchain wired: compile a **trivial** HLSL CS (`gColor[i] = pack(uv.x, uv.y, 0)`) → SPIR-V,
@@ -160,7 +160,7 @@ Each slice lands behind a smoke gate and is independently revertible. Checkbox =
   `--focusprobe`/`--navrepro` are headless **calculator** self-tests that run before any `--renderer`
   parse, so "re-run them on the Vulkan backend" was never meaningful. A **real** GPU perturbation
   kernel (ref-orbit SSBO + per-pixel δ + rebasing in-shader) is genuine net-new work that *no* backend
-  has today — re-filed as its own spike-gated slice, [#82](https://github.com/AloneButUnsober/MandelbrotExplorer/issues/82).
+  has today — re-filed as its own spike-gated slice, [#82](https://github.com/AloneButUnsober/FracturingFog/issues/82).
 - **Gate (as-shipped):** `--focusprobe` green on HEAD; deep-zoom output invariant under `--renderer`
   selection by construction (`Zoom > MaxGpuZoom` ⇒ no GPU dispatch).
 
@@ -186,11 +186,11 @@ Each slice lands behind a smoke gate and is independently revertible. Checkbox =
 
 | Risk | Mitigation |
 |---|---|
-| DXC HLSL→SPIR-V feature gaps in the ~~perturbation~~ *shallow* kernel | V0 spike de-risks with a trivial kernel first; V1 ports incrementally with per-variant gates. (The GPU *perturbation* kernel's feared DXC risk — QD/DD limb math in HLSL — was **retired by the [#82](https://github.com/AloneButUnsober/MandelbrotExplorer/issues/82) spike, §14**: the default δ path is plain `double`, no limbs; DXC `cs_6_0` + FXC `cs_5_0` both compile it, GT710 runs it. Needs `shaderFloat64`.) |
+| DXC HLSL→SPIR-V feature gaps in the ~~perturbation~~ *shallow* kernel | V0 spike de-risks with a trivial kernel first; V1 ports incrementally with per-variant gates. (The GPU *perturbation* kernel's feared DXC risk — QD/DD limb math in HLSL — was **retired by the [#82](https://github.com/AloneButUnsober/FracturingFog/issues/82) spike, §14**: the default δ path is plain `double`, no limbs; DXC `cs_6_0` + FXC `cs_5_0` both compile it, GT710 runs it. Needs `shaderFloat64`.) |
 | Vulkan boilerplate cost (solo dev) | Compute-only headless removes ~60% of it (no WSI/swapchain/present). Silk.NET.Vulkan gives thin bindings. |
 | CI has no GPU | Mesa **lavapipe** (software Vulkan) runs the smoke gates headless; real-GPU validation is manual/local. |
 | Colour drift on a new backend | `--colorprobe` golden gate is the hard stop; V2 cannot merge without it green. |
-| Deep-zoom precision regression | **N/A for V1–V5** — deep zoom is all-CPU (`Zoom > MaxGpuZoom 1e4` ⇒ no GPU dispatch), so no backend can regress it; `--focusprobe` green on HEAD confirms. Becomes a live risk only once [#82](https://github.com/AloneButUnsober/MandelbrotExplorer/issues/82) puts perturbation on the GPU. |
+| Deep-zoom precision regression | **N/A for V1–V5** — deep zoom is all-CPU (`Zoom > MaxGpuZoom 1e4` ⇒ no GPU dispatch), so no backend can regress it; `--focusprobe` green on HEAD confirms. Becomes a live risk only once [#82](https://github.com/AloneButUnsober/FracturingFog/issues/82) puts perturbation on the GPU. |
 | Scope creep into Vulkan present | Explicit non-goal. Present stays GL. Zero-copy interop is a *later* optimisation, not v1. |
 
 ---
@@ -220,7 +220,7 @@ work (lavapipe CI, `--vulkanprobe`, colour-golden reuse, ILGPU A/B in V0).
 
 ---
 
-## 9. V0 spike findings (issue [#39](https://github.com/AloneButUnsober/MandelbrotExplorer/issues/39)) — **DONE**
+## 9. V0 spike findings (issue [#39](https://github.com/AloneButUnsober/FracturingFog/issues/39)) — **DONE**
 
 Landed on branch `feature/vulkan-compute`. New standalone project `Rendering.Vulkan.Smoke`
 (Silk.NET.Vulkan 2.23, mirrors `Compute.Smoke`, exit 0/1/2), in four commits: (1) instance +
@@ -231,7 +231,7 @@ compute pipeline, dispatch 64×64, `vkMapMemory` read-back + sanity; (3) lavapip
 **Proven both ways.** Local (real GPU, GeForce GT 710): DXC-compiles the trivial uv-gradient kernel
 → dispatch → read-back `distinct=4096`, all four corners bit-exact vs the CPU pack → exit 0. CI
 (software Vulkan, Mesa lavapipe on linux-x64): `Run Vulkan smoke` exits 0 —
-[run 29682409585](https://github.com/AloneButUnsober/MandelbrotExplorer/actions/runs/29682409585).
+[run 29682409585](https://github.com/AloneButUnsober/FracturingFog/actions/runs/29682409585).
 
 The trivial kernel reuses the exact `cg_pack_bgra` convention from
 [`MandelbrotGpuKernel`](../../Rendering.D3D/MandelbrotGpuKernel.cs), so V1 swaps in the real body
@@ -242,7 +242,7 @@ DXC→SPIR-V works end-to-end on the trivial kernel with **no dialect surprises*
 decisive advantage: the tuned HLSL escape-time kernel + `ColorGenHlslEmitter` survive **intact**
 via DXC — zero re-port. _(2026-07-19 correction: this originally said "856-line perturbation kernel";
 that kernel does not exist — the reused HLSL is the ~290-line shallow escape-time + colour kernel. See
-§13 / [#82](https://github.com/AloneButUnsober/MandelbrotExplorer/issues/82).)_ The ILGPU alternative would re-express iter/smooth + `EvalPalette` as **C#**
+§13 / [#82](https://github.com/AloneButUnsober/FracturingFog/issues/82).)_ The ILGPU alternative would re-express iter/smooth + `EvalPalette` as **C#**
 kernels (`ColorGenEmitter`), reusing the C# colour emitter but abandoning the tuned HLSL kernel and
 adding a second colour-parity surface. HLSL reuse is the higher-value asset; **proceed with Vulkan**.
 ILGPU stays the calculator-side path, unchanged (§2 note holds).
@@ -270,12 +270,12 @@ The Linux/macOS legs already fail at `Build FracturingFog.App` — it multi-targ
 `net10.0;net10.0-windows`, and the CI step builds with no `-f`, so the `net10.0-windows` TFM pulls
 the Windows-only `FracturingFog.Win` (WinForms) and trips NETSDK1073. Pre-existing on `main`; the
 Vulkan steps are guarded `!cancelled()` so the gate still reports. Tracked in
-[#49](https://github.com/AloneButUnsober/MandelbrotExplorer/issues/49) (fix: build App `-f net10.0`
-on non-Windows legs). **Fixed in [#50](https://github.com/AloneButUnsober/MandelbrotExplorer/pull/50).**
+[#49](https://github.com/AloneButUnsober/FracturingFog/issues/49) (fix: build App `-f net10.0`
+on non-Windows legs). **Fixed in [#50](https://github.com/AloneButUnsober/FracturingFog/pull/50).**
 
 ---
 
-## 10. V1 findings (issue [#40](https://github.com/AloneButUnsober/MandelbrotExplorer/issues/40)) — **DONE**
+## 10. V1 findings (issue [#40](https://github.com/AloneButUnsober/FracturingFog/issues/40)) — **DONE**
 
 The real SP Mandelbrot base kernel (iter/smooth, no colour) now runs on Vulkan compute and matches
 the D3D float math within a documented band.
@@ -312,7 +312,7 @@ cross-vendor float without a false-fail.
 - Per-theme SPIR-V compile-cache keyed on `PaletteId`, mirroring the D3D `_csByPaletteId` cache.
 - `--colorprobe` colour-golden reuse is the V2 gate (colour parity is non-negotiable).
 
-## 11. V2 findings (issue [#41](https://github.com/AloneButUnsober/MandelbrotExplorer/issues/41)) — **DONE**
+## 11. V2 findings (issue [#41](https://github.com/AloneButUnsober/FracturingFog/issues/41)) — **DONE**
 
 The colour-emitting kernel (`EvalPalette` → packed BGRA) now runs on Vulkan compute and matches a
 deterministic CPU mirror of the same HLSL palette + pack within a documented band.
@@ -359,7 +359,7 @@ gate's own platform re-pins it.
 - Per-theme SPIR-V caching (keyed on `PaletteId`) is still a V2-scoped nicety not yet built — the
   probe compiles one theme per run. Add the cache when the renderer switches themes at runtime.
 
-## 12. V3 findings (issue [#42](https://github.com/AloneButUnsober/MandelbrotExplorer/issues/42)) — **DONE (headless half)**
+## 12. V3 findings (issue [#42](https://github.com/AloneButUnsober/FracturingFog/issues/42)) — **DONE (headless half)**
 
 Vulkan compute is now a real, referenced backend at the `IGpuKernel` boundary, driven through the
 exact API the calculator uses, and gated headless. The interactive GL-present wiring is a follow-up.
@@ -411,7 +411,7 @@ class as the V2 `Rendering.Vulkan.Smoke` fix). Any new sibling net10 project nee
 
 ---
 
-## 13. V4 findings (issue [#43](https://github.com/AloneButUnsober/MandelbrotExplorer/issues/43)) — **RESOLVED: deep-zoom parity holds by construction; GPU perturbation re-filed as [#82](https://github.com/AloneButUnsober/MandelbrotExplorer/issues/82)**
+## 13. V4 findings (issue [#43](https://github.com/AloneButUnsober/FracturingFog/issues/43)) — **RESOLVED: deep-zoom parity holds by construction; GPU perturbation re-filed as [#82](https://github.com/AloneButUnsober/FracturingFog/issues/82)**
 
 V4 was scoped as "validate the reference-orbit upload path deep on Vulkan and re-run the deep-zoom
 gates." Investigation showed the scope rested on a **false premise inherited from §1**: that an HLSL
@@ -439,7 +439,7 @@ There is nothing to port and nothing to gate beyond confirming the CPU path is h
 `maxUseful = 1e62` (a location property, see [Deep-Zoom-Perturbation.md](../Deep-Zoom-Perturbation.md)
 §3 — not a bug, not a regression).
 
-**The genuine feature — a GPU perturbation kernel — is net-new and re-filed as [#82](https://github.com/AloneButUnsober/MandelbrotExplorer/issues/82).**
+**The genuine feature — a GPU perturbation kernel — is net-new and re-filed as [#82](https://github.com/AloneButUnsober/FracturingFog/issues/82).**
 It would upload the reference orbit as an SSBO and run per-pixel δ + Zhuoran rebasing in-shader,
 raising `MaxGpuZoom` far past 1e4. It does **not** exist on D3D either, so it is a cross-backend
 capability, not a Vulkan port. Its headline risk is new: **QD/DD limb arithmetic in HLSL** (the CPU
@@ -447,7 +447,7 @@ reference orbit is up to OD/~124-digit; a float/double δ is fine but the on-GPU
 `dc` term need enough precision). That risk is unproven under DXC→SPIR-V *and* FXC, so #82 leads with
 a limb-math spike before any full build.
 
-## 14. V6 spike findings (issue [#82](https://github.com/AloneButUnsober/MandelbrotExplorer/issues/82)) — **SPIKE CLEARS: double perturbation loop ports to GPU; the feared QD/DD-limb-in-HLSL risk is avoidable**
+## 14. V6 spike findings (issue [#82](https://github.com/AloneButUnsober/FracturingFog/issues/82)) — **SPIKE CLEARS: double perturbation loop ports to GPU; the feared QD/DD-limb-in-HLSL risk is avoidable**
 
 Spike gate (`--vulkanpturbprobe`, `Rendering.Vulkan.Smoke/PerturbSpikeProbe.cs`) run 2026-07-19 on
 **GT710** (Kepler, FP64 at 1/24 rate). It runs a self-contained `double` δ-rebased perturbation kernel
@@ -495,7 +495,7 @@ default path. Remaining full-build work is engineering + the deep-`dc` precision
 feasibility unknown. The full build stays a **separate, user-gated slice** (it touches production
 render paths and raises `MaxGpuZoom`) — the spike's job was to de-risk it, and it has.
 
-## 15. V6 full build (issue [#82](https://github.com/AloneButUnsober/MandelbrotExplorer/issues/82)) — **LANDED (Vulkan): shared kernel + backend + calculator wiring, gated; D3D backend + GUI-enable are the fast-follow**
+## 15. V6 full build (issue [#82](https://github.com/AloneButUnsober/FracturingFog/issues/82)) — **LANDED (Vulkan): shared kernel + backend + calculator wiring, gated; D3D backend + GUI-enable are the fast-follow**
 
 Built 2026-07-19 on the spike's findings, in two validated slices (commits `d4bae1c`, `db7274c`).
 

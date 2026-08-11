@@ -170,7 +170,7 @@ This produces `Docs/site/index.html` and one HTML page per source `.md`. Open `i
 in a browser; no web server required.
 
 When the site is published to GitHub Pages the URL is
-`https://<user>.github.io/MandelbrotExplorer/site/` (adjust to the actual deployment).
+`https://<user>.github.io/FracturingFog/site/` (adjust to the actual deployment).
 
 > [!TIP]
 > The static-site output is **not committed** by default — it is build artefact. If you want to

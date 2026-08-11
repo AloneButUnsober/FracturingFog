@@ -35,7 +35,7 @@ namespace PaletteBuilder.Views;
 public sealed partial class MainWindow : Window
 {
     // _service is only allocated when the standalone PaletteBuilder.exe
-    // wrapper opens the window. When MandelbrotExplorer's host opens the
+    // wrapper opens the window. When FracturingFog's host opens the
     // window as a picker, the host injects its own IPaletteExtractionService
     // (HostPaletteExtractionService) and this field stays null.
     private readonly PaletteExtractionService? _service;

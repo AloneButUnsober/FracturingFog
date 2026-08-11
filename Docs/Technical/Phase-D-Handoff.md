@@ -312,7 +312,7 @@ That correctness work is F10.3.
       carriers). If someone later hand-writes an HLSL body on a gradient theme,
       this fails loudly (the point where the float3→float4 work would actually
       become necessary) instead of shipping silent opaque output.
-    - Issue [#46](https://github.com/AloneButUnsober/MandelbrotExplorer/issues/46)
+    - Issue [#46](https://github.com/AloneButUnsober/FracturingFog/issues/46)
       closed as by-design with this reasoning + the gate as the regression guard.
 
 ## Remaining Phase-D work
