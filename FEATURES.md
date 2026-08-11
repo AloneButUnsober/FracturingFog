@@ -3,7 +3,7 @@
 # Fracturing Fog
 ### Real-Time High-Precision Mandelbrot Explorer
 
-**Version 0.6.x** &nbsp;·&nbsp; Windows x64 &nbsp;·&nbsp; .NET 10 &nbsp;·&nbsp; Avalonia 12 &nbsp;·&nbsp; Direct3D 11 / 12
+**Version 0.7.0-rc2** &nbsp;·&nbsp; Windows · Linux · macOS &nbsp;·&nbsp; .NET 10 &nbsp;·&nbsp; Avalonia 12 &nbsp;·&nbsp; Direct3D 11 / 12 · Silk OpenGL · Vulkan
 
 *A complete tour of every feature, switch, and slider in the Avalonia shell.*
 

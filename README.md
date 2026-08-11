@@ -1,7 +1,7 @@
 # Fracturing Fog
 
 ![Fractal families](https://img.shields.io/badge/fractal%20families-~38-blue)
-![Color themes](https://img.shields.io/badge/color%20themes-200%2B-purple)
+![Color themes](https://img.shields.io/badge/built--in%20themes-290%2B-purple)
 ![Platforms](https://img.shields.io/badge/platforms-Win%20%7C%20Linux%20%7C%20macOS-green)
 ![.NET](https://img.shields.io/badge/.NET-10-512BD4)
 
@@ -68,7 +68,8 @@ new UI work lands in `UI.Avalonia/`.
 | X.6      | Packaging (AppImage + .app + workflow)     | Shipped  |
 | X.7      | Documentation + UX                         | Shipped  |
 
-Tracking branch: `feature/cross-platform-full`. Plan:
+The cross-platform initiative (phases above) has shipped and is merged to
+`main`. Plan:
 [Docs/Technical/CrossPlatform-ImplementationPlan.md](Docs/Technical/CrossPlatform-ImplementationPlan.md).
 
 ## License
@@ -106,9 +107,10 @@ maintainer offer alternative (e.g. commercial) licenses in addition to the AGPL.
 Full attributions and dependency licenses are listed in
 [`THIRD-PARTY-NOTICES.md`](THIRD-PARTY-NOTICES.md). Summary:
 
-* **ffmpeg** — GPL (optional Windows bundle); AGPL-3.0 is GPLv3-compatible, so
-  the bundle is a compatible aggregate. apt / brew installs follow the user's
-  distro licence.
+* **ffmpeg** — used as an external tool for video export, **not bundled**.
+  Resolved at runtime from `PATH` / the app directory, or fetched on demand;
+  Linux/macOS install via apt / brew. ffmpeg is GPL/LGPL; invoking it as a
+  separate program is mere aggregation, not a derivative work.
 * **QuestPDF** — Community licence (free for OSS / sub-USD-1M revenue).
 * **Avalonia, Silk.NET, SkiaSharp, NAudio, ILGPU, Vortice.\***, Roslyn,
   MathNet.Numerics, Markdig — MIT / BSD / NCSA (permissive).
