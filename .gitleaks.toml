@@ -1,0 +1,35 @@
+# gitleaks configuration for Fracturing Fog.
+#
+# Extends the built-in ruleset and allowlists two verified false positives
+# from the 8.30.1 baseline scan of full history. Neither is a secret:
+#   * UserEquationView.axaml — an Avalonia KeyBinding gesture ("Ctrl+.")
+#   * CertSelfSignedHelper.cs — the C# type name "X509Certificate2"
+# Both tripped the entropy-based generic-api-key rule on benign identifiers.
+
+title = "Fracturing Fog gitleaks config"
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Verified false positives — no real secrets in history."
+
+# Exact fingerprints from the baseline scan (commit:file:rule:line). These pin
+# the two historical hits; stable as long as history is not rewritten.
+fingerprints = [
+  "21a368f442b33c1e42b57a71a7fee8bf1d1eeb60:UI.Avalonia/Views/UserEquationView.axaml:generic-api-key:20",
+  "b37d48397176f30677e3a06b14e8adbc0dfbc5af:Server/Tls/CertSelfSignedHelper.cs:generic-api-key:78",
+]
+
+# Primary suppression: gitleaks matches allowlist regexes/stopwords against the
+# detected *secret*, not the whole line. These benign tokens are identifiers
+# (a keybinding gesture and a C# type name), not secrets, and may recur at new
+# lines/commits as the files evolve — so match the secret text directly.
+regexes = [
+  '''Ctrl\+OemPeriod''',
+  '''X509Certificate2''',
+]
+stopwords = [
+  "OemPeriod",
+  "X509Certificate2",
+]

@@ -1,0 +1,32 @@
+# Secret-scanning gate. Runs gitleaks over full git history on every push to
+# main and every pull request. Uses the pinned gitleaks binary (no action
+# license gate) and the repo's .gitleaks.toml (default ruleset + allowlisted
+# false positives).
+
+name: gitleaks
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout (full history)
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # git-mode scan needs the whole history
+
+      - name: Install gitleaks
+        run: |
+          VERSION=8.30.1
+          curl -sSL "https://github.com/gitleaks/gitleaks/releases/download/v${VERSION}/gitleaks_${VERSION}_linux_x64.tar.gz" -o gitleaks.tar.gz
+          tar xzf gitleaks.tar.gz gitleaks
+          sudo mv gitleaks /usr/local/bin/gitleaks
+          gitleaks version
+
+      - name: Scan full history
+        run: gitleaks git --config .gitleaks.toml --redact --verbose
