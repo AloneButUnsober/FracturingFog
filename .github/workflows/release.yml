@@ -77,7 +77,11 @@ jobs:
           TAG="${GITHUB_REF##*/}"
           VERSION="${TAG#v}"
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
-          echo "Tag $TAG → version $VERSION"
+          # MSI ProductVersion is numeric x.y.z only — strip any semver suffix
+          # (e.g. 0.7.0-rc2 -> 0.7.0) or wix/Windows Installer rejects it.
+          MSI_VERSION="${VERSION%%-*}"
+          echo "msi_version=$MSI_VERSION" >> "$GITHUB_OUTPUT"
+          echo "Tag $TAG → version $VERSION (msi $MSI_VERSION)"
 
       - name: Publish FracturingFog.App
         run: dotnet publish FracturingFog.App/FracturingFog.App.csproj -c Release -f ${{ matrix.tfm }} -p:PublishProfile=${{ matrix.rid }} -p:Version=${{ steps.version.outputs.version }}
@@ -118,6 +122,31 @@ jobs:
           if (Test-Path $archive) { Remove-Item $archive }
           Compress-Archive -Path "$publishDir/*" -DestinationPath $archive
 
+      # ── MSI installer (Windows) ─────────────────────────────────────────
+      # Ships the full Windows build (FracturingFogCLD — DirectX renderer +
+      # Windows audio) via WiX v5, alongside the portable App zip. build-
+      # installer.ps1 does its own self-contained publish into Installer/Stage.
+
+      - name: Install WiX (Windows)
+        if: matrix.rid == 'win-x64'
+        shell: pwsh
+        run: |
+          dotnet tool install --global wix --version 5.0.2
+          $tools = "$env:USERPROFILE\.dotnet\tools"
+          $tools | Out-File -FilePath $env:GITHUB_PATH -Append -Encoding utf8
+          & "$tools\wix.exe" extension add -g WixToolset.UI.wixext/5.0.2
+          & "$tools\wix.exe" extension add -g WixToolset.Util.wixext/5.0.2
+
+      - name: Build MSI (Windows)
+        if: matrix.rid == 'win-x64'
+        shell: pwsh
+        run: |
+          ./Installer/build-installer.ps1 -Version ${{ steps.version.outputs.msi_version }}
+          New-Item -ItemType Directory -Force -Path dist | Out-Null
+          Copy-Item "Installer/FracturingFog-${{ steps.version.outputs.msi_version }}-x64.msi" `
+                    "dist/FracturingFog-${{ matrix.rid }}.msi" -Force
+          Get-Item "dist/FracturingFog-${{ matrix.rid }}.msi" | Select-Object Name, Length
+
       # ── Checksums ───────────────────────────────────────────────────────
 
       - name: SHA-256 (Linux + macOS)
@@ -132,10 +161,14 @@ jobs:
         shell: pwsh
         run: |
           cd dist
-          $archive = "FracturingFog-${{ matrix.rid }}.zip"
-          $hash = (Get-FileHash $archive -Algorithm SHA256).Hash.ToLower()
-          "$hash  $archive" | Set-Content "FracturingFog-${{ matrix.rid }}.sha256"
-          Get-Content "FracturingFog-${{ matrix.rid }}.sha256"
+          $sha = "FracturingFog-${{ matrix.rid }}.sha256"
+          if (Test-Path $sha) { Remove-Item $sha }
+          # Hash both the portable zip and the MSI installer.
+          Get-ChildItem -File | Where-Object { $_.Name -match '\.(zip|msi)$' } | ForEach-Object {
+            $hash = (Get-FileHash $_.Name -Algorithm SHA256).Hash.ToLower()
+            "$hash  $($_.Name)" | Add-Content $sha
+          }
+          Get-Content $sha
 
       # ── Upload ──────────────────────────────────────────────────────────
 
@@ -171,6 +204,7 @@ jobs:
           find dist -type f \( -name 'FracturingFog-*.AppImage' \
                             -o -name 'FracturingFog-*.tar.gz' \
                             -o -name 'FracturingFog-*.zip' \
+                            -o -name 'FracturingFog-*.msi' \
                             -o -name 'FracturingFog-*.sha256' \) \
                 -exec cp {} release/ \;
           # Linux install bundle — the curl|sh bootstrap (web-install.sh) and
