@@ -1,5 +1,17 @@
 # Fracturing Fog — Project Notes for Claude
 
+## Git commit identity — ALWAYS ABUDev, NEVER dpiserve
+
+**Every commit MUST be authored and committed as
+`ABUDev <56877581+AloneButUnsober@users.noreply.github.com>`.**
+
+NEVER commit (or author) as `Bradley Brown <bradley.brown@dpiserve.com>` (the
+"bbrowndpi" account) — that DPI-associated identity is deliberately kept out of
+this project (see `DISCLAIMER.md`). The machine's *global* git config defaults to
+the dpiserve email, so a repo-**local** override pins the clean identity. Before
+committing, verify `git config user.email` shows the noreply address; if the
+local override is missing, re-add it — never commit with the dpiserve identity.
+
 ## Dev tracking: use GitHub issues
 
 **Prefer the GitHub issues list for dev tracking whenever possible.** New work,
