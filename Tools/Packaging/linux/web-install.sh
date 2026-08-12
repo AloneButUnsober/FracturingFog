@@ -1,15 +1,20 @@
 #!/bin/sh
 # Fracturing Fog — network bootstrap installer.
 #
-# One-liner:
+# One-liner (once a STABLE, non-pre-release exists):
 #   curl -fsSL https://github.com/AloneButUnsober/FracturingFog/releases/latest/download/web-install.sh | sh
 #
+# Pre-release / RC phase: github's /releases/latest/ path EXCLUDES pre-releases,
+# so while the newest release is a pre-release you must bootstrap from its tag:
+#   curl -fsSL https://github.com/AloneButUnsober/FracturingFog/releases/download/<tag>/web-install.sh | FF_TAG=<tag> sh
+#
 # Or pin a release / choose scope via env vars:
-#   FF_TAG=v1.0.0 curl -fsSL .../web-install.sh | sh      # specific release
+#   FF_TAG=v1.0.0 curl -fsSL .../web-install.sh | sh          # specific release
 #   FF_SYSTEM=1   curl -fsSL .../web-install.sh | sudo -E sh   # system-wide
 #
 # What it does:
-#   1. Finds the latest (or FF_TAG) GitHub release.
+#   1. Finds the release: an explicit FF_TAG, else the newest release resolved
+#      via the API (pre-releases included — see the resolve section below).
 #   2. Downloads the matching install.sh + FracturingFog AppImage.
 #   3. Runs install.sh (desktop-menu integration, PATH launcher, icon).
 #
@@ -43,9 +48,25 @@ case "$ARCH" in
 esac
 
 # --- Resolve asset base URL ---------------------------------------------------
+# NOTE: github.com/<repo>/releases/latest/download EXCLUDES pre-releases. If the
+# newest (or only) release is a pre-release, that path 404s. So for "latest" we
+# resolve the newest release — including pre-releases — via the API list
+# endpoint (/releases returns newest-first and DOES include pre-releases) and
+# download from its explicit tag. Falls back to the web /latest/ path if the API
+# is unreachable.
 if [ "$TAG" = "latest" ]; then
-    BASE="https://github.com/$REPO/releases/latest/download"
-    echo "Fetching latest $APP_NAME release from $REPO..."
+    RESOLVED=$(DLO "https://api.github.com/repos/$REPO/releases?per_page=1" 2>/dev/null \
+        | grep -m1 '"tag_name"' \
+        | sed -E 's/.*"tag_name"[[:space:]]*:[[:space:]]*"([^"]+)".*/\1/')
+    if [ -n "$RESOLVED" ]; then
+        TAG="$RESOLVED"
+        BASE="https://github.com/$REPO/releases/download/$TAG"
+        echo "Resolved latest $APP_NAME release: $TAG"
+    else
+        # API unreachable — fall back to the stable-only latest path.
+        BASE="https://github.com/$REPO/releases/latest/download"
+        echo "Fetching latest $APP_NAME release from $REPO (API unavailable)..."
+    fi
 else
     BASE="https://github.com/$REPO/releases/download/$TAG"
     echo "Fetching $APP_NAME release $TAG from $REPO..."

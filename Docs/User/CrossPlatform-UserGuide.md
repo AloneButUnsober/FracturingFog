@@ -23,10 +23,35 @@ gaps still are.
 1. Download `FracturingFog-win-x64.zip` from the
    [Releases page](https://github.com/AloneButUnsober/FracturingFog/releases).
 2. Unzip anywhere (`%LOCALAPPDATA%\Programs\FracturingFog\` works).
-3. Double-click `FracturingFog.App.exe`. Bundled ffmpeg ships in
-   `Tools/win-x64/ffmpeg.exe`; nothing else needs installing.
+3. Double-click `FracturingFog.App.exe`. ffmpeg is not bundled — video
+   export resolves it at runtime (in-app auto-download, or `ffmpeg` on
+   `PATH`). An MSI installer (`FracturingFog-win-x64.msi`) is also on the
+   Releases page for a Start-menu install.
 
 ### Linux (x64 or arm64, glibc 2.27+)
+
+**Quick install (script):**
+
+```bash
+curl -fsSL https://github.com/AloneButUnsober/FracturingFog/releases/latest/download/web-install.sh | sh
+```
+
+This pulls the AppImage + installer and sets up a menu entry + `fracturingfog`
+launcher. Add `FF_SYSTEM=1 ... | sudo -E sh` for a system-wide install.
+
+> **Pre-release / RC note:** the `latest` path above only resolves **stable**
+> (non-pre-release) releases. While the newest release is a pre-release (e.g.
+> `v0.7.0-rc2`), bootstrap from its tag instead:
+>
+> ```bash
+> curl -fsSL https://github.com/AloneButUnsober/FracturingFog/releases/download/v0.7.0-rc2/web-install.sh | FF_TAG=v0.7.0-rc2 sh
+> ```
+>
+> (Once you run the script, it resolves the AppImage itself via the API and
+> handles pre-releases automatically — only the initial bootstrap URL needs the
+> tag.)
+
+**Manual:**
 
 1. Download `FracturingFog-linux-x64.AppImage` (or `-linux-arm64`) from
    the [Releases page](https://github.com/AloneButUnsober/FracturingFog/releases).
