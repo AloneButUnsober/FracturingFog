@@ -136,6 +136,32 @@ public sealed class LightingFxPresetData
     public double CausticsAnimSpeed   { get; set; } = 0.0;
     public int    DebugHudFlags       { get; set; } = 0;
 
+    // ── Late-added runtime fields (previously dropped on round-trip) ───
+    // These were added to LightingFxData after this DTO stopped tracking it,
+    // so any non-default value was silently lost through FromFx/ToFx. Defaults
+    // MUST match LightingFxData.CreateDefault(). The EveryLightingFxDataField_
+    // HasMatchingDtoProperty guard test enforces no further drift.
+
+    // VL adaptive-LOD falloff (VL Guide §5.4 "set via preset").
+    public double VolumeStepsFalloff { get; set; } = 0.5;
+
+    // Reflection multi-bounce + GGX sampling.
+    public int  MaxBounces     { get; set; } = 1;
+    public bool UseGgxSampling { get; set; } = false;
+
+    // GPU path toggles (post-passes vs full render).
+    public bool UseGpuPost   { get; set; } = false;
+    public bool UseGpuRender { get; set; } = false;
+
+    // Phase-14 triplanar texturing.
+    public TriplanarTextureKind TriplanarKind { get; set; } = TriplanarTextureKind.None;
+    public double TriplanarScale    { get; set; } = 4.0;
+    public double TriplanarStrength { get; set; } = 0.0;
+    public uint   TriplanarTint     { get; set; } = 0xFFFFFFFFu;
+
+    // Stereo per-eye lateral offset (separation was persisted; offset wasn't).
+    public double StereoEyeOffset { get; set; } = 0.0;
+
     // ── Conversion ────────────────────────────────────────────────────
 
     /// <summary>Snapshot a <see cref="LightingFxData"/> into a preset DTO
@@ -190,6 +216,13 @@ public sealed class LightingFxPresetData
         SceneTime = fx.SceneTime, LightOrbitSpeed = fx.LightOrbitSpeed,
         CausticsAnimSpeed = fx.CausticsAnimSpeed,
         DebugHudFlags = fx.DebugHudFlags,
+
+        VolumeStepsFalloff = fx.VolumeStepsFalloff,
+        MaxBounces = fx.MaxBounces, UseGgxSampling = fx.UseGgxSampling,
+        UseGpuPost = fx.UseGpuPost, UseGpuRender = fx.UseGpuRender,
+        TriplanarKind = fx.TriplanarKind, TriplanarScale = fx.TriplanarScale,
+        TriplanarStrength = fx.TriplanarStrength, TriplanarTint = fx.TriplanarTint,
+        StereoEyeOffset = fx.StereoEyeOffset,
     };
 
     /// <summary>Materialise this preset as a runtime <see cref="LightingFxData"/>
@@ -240,6 +273,13 @@ public sealed class LightingFxPresetData
         SceneTime = SceneTime, LightOrbitSpeed = LightOrbitSpeed,
         CausticsAnimSpeed = CausticsAnimSpeed,
         DebugHudFlags = DebugHudFlags,
+
+        VolumeStepsFalloff = VolumeStepsFalloff,
+        MaxBounces = MaxBounces, UseGgxSampling = UseGgxSampling,
+        UseGpuPost = UseGpuPost, UseGpuRender = UseGpuRender,
+        TriplanarKind = TriplanarKind, TriplanarScale = TriplanarScale,
+        TriplanarStrength = TriplanarStrength, TriplanarTint = TriplanarTint,
+        StereoEyeOffset = StereoEyeOffset,
     };
 
     /// <summary>Apply this preset to a fractal parameter set. Overwrites
