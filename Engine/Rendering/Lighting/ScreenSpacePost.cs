@@ -129,15 +129,19 @@ public static class ScreenSpacePost
         using var aoBlurLease = PostPassBufferPool.RentFloat(aoN);
         var aoBuffer = aoLease.Buffer;
 
-        // Vogel-disk sample offsets (unit-disk Halton-spiral). Pre-compute up
-        // to MAX so we don't allocate per pixel. golden_angle = 137.508 deg.
-        const int MaxSamples = 64;
-        var offsetsX = new double[MaxSamples];
-        var offsetsY = new double[MaxSamples];
+        // Vogel-disk sample offsets (unit-disk Halton-spiral). Pre-compute once
+        // per pass so we don't allocate per pixel. golden_angle = 137.508 deg.
+        // Divisor MUST be `samples` (not a fixed 64): Vogel radius grows as
+        // sqrt(s/N), so dividing by a fixed max would leave low sample counts
+        // clustered in the inner disk and silently shrink the effective AO
+        // radius as SsaoSamples drops. Sizing to `samples` fills the requested
+        // SsaoRadius at every sample count.
+        var offsetsX = new double[samples];
+        var offsetsY = new double[samples];
         const double GoldenAngle = 2.39996323;
-        for (int s = 0; s < MaxSamples; s++)
+        for (int s = 0; s < samples; s++)
         {
-            double r = Math.Sqrt((s + 0.5) / MaxSamples);
+            double r = Math.Sqrt((s + 0.5) / samples);
             double a = s * GoldenAngle;
             offsetsX[s] = r * Math.Cos(a);
             offsetsY[s] = r * Math.Sin(a);
