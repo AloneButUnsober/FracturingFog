@@ -1654,8 +1654,18 @@ static class Program
         // Headless batch processing: render single image or zoom video to disk
         // without showing any UI. Attaches to the parent console so the
         // progress meter is visible from cmd/PowerShell.
+        //
+        // VLAO audit #291 — batch dispatch runs before the full
+        // WindowsBootstrap.Install() below, so BatchRenderer's video path
+        // (now routed through BatchVideoWriterFactoryHook, shared with the
+        // cross-platform exe) would see a null hook and drop to ffmpeg. Wire
+        // just the Media-Foundation batch writer here to keep the built-in WMF
+        // MP4 output with the CLI-requested fps.
         if (args.Length > 0 && (args[0] == "--batch" || args[0] == "-b"))
+        {
+            FracturingFog.Win.WindowsBootstrap.InstallBatchVideoHook();
             return BatchEntry.Run(args);
+        }
 
         // Headless render server: JSON-RPC over mTLS TCP, reuses the same
         // PosterRenderer + video pipeline the --batch path drives. Mutex

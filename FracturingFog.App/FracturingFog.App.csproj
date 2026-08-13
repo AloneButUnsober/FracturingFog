@@ -117,6 +117,18 @@
   </ItemGroup>
 
   <!--
+    VLAO audit #291 — headless batch subsystem. The Batch/ folder has no
+    csproj of its own; the legacy WinExe root-globs it. Source-link it here so
+    the cross-platform exe can dispatch the batch flag too. BatchRenderer's only
+    Windows-only dependency (the Media-Foundation Mp4Writer in Rendering.D3D)
+    is behind BootstrapHooks.BatchVideoWriterFactoryHook, so this closure
+    compiles on the net10.0 (cross-plat) leg.
+  -->
+  <ItemGroup>
+    <Compile Include="..\Batch\*.cs" LinkBase="Batch" />
+  </ItemGroup>
+
+  <!--
     ffmpeg is intentionally NOT bundled. Prebuilt ffmpeg binaries typically
     enable GPL codecs, so shipping one would drag GPL redistribution duties
     (license + corresponding-source offer) onto every release. Instead it is

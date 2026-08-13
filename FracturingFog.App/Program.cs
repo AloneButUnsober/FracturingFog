@@ -155,6 +155,13 @@ internal static class Program
         if (args.Length > 0 && args[0] == "--cluster-video-parity")
             return FracturingFog.ServerHost.ClusterVideoParitySelfTest.Run(args);
 
+        // VLAO audit #291 — headless batch, now reachable from the cross-plat
+        // exe (was WinExe-only). WindowsBootstrap.Install above already wired
+        // BatchVideoWriterFactoryHook on the Windows leg; on Linux/macOS the
+        // hook stays null and BatchRenderer uses the PNG-sequence + ffmpeg path.
+        if (args.Length > 0 && (args[0] == "--batch" || args[0] == "-b"))
+            return FracturingFog.Batch.BatchEntry.Run(args);
+
         // Phase X.4 / Slice 4.1 — --renderer override. Default is
         // RendererBackend.Auto (DX on Win, Silk on Linux/macOS, picked by
         // RendererFactory.Create from the surface kind). Explicit values let
