@@ -116,7 +116,7 @@ screen-space relief, but a true 3D scene.
 | **Frame-fill zoom** | 0.2 – 5 | How much of the window the terrain fills. 1.0 = auto-fit; >1 pulls in (edges may clip); <1 pulls back for margin. |
 | **Anti-alias (N×N)** | 1 – 4 | Supersampling: N×N rays/pixel averaged. 1 = fastest; 2–4 = smoother edges/silhouette at N² cost. |
 | **Height curve** | Log / Sqrt / Linear | Tone curve on the height field (see [§2](#the-height-curve)). |
-| **Edge fade** | 0 – 0.5 | Ramps the height to the base plane near the image edges, so structure running off-frame tapers out instead of forming streaky "arms". 0 = off. |
+| **Edge fade** | 0 – 0.5 | Ramps the height to the base plane near the image edges, so structure running off-frame tapers out instead of forming streaky "arms". 0 = off. **Not** the same as the Lighting & FX panel's **Edge strength** — that is an unrelated screen-space silhouette-inking post-pass (colored strokes over edges), not a heightfield taper. |
 | **Field floor (px)** | 480 – 2160 | Short-axis resolution the height field is computed at, independent of window size. Only active with **Hi-res height field**, and only when the window is smaller than this. |
 
 ### Toggles
