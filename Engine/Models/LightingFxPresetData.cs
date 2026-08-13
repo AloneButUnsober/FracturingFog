@@ -113,7 +113,7 @@ public sealed class LightingFxPresetData
     // ── Reflection / Edge / Stereo / DoF / Anim ───────────────────────
 
     public double ReflectionStrength  { get; set; } = 0.0;
-    public int    ReflectionSteps     { get; set; } = 0;
+    public int    ReflectionSteps     { get; set; } = 24;   // effective default (runtime maps 0 → 24 for legacy presets)
     public double CausticsStrength    { get; set; } = 0.0;
     public double CausticsFloorY      { get; set; } = 0.0;
     public double CausticsScale       { get; set; } = 3.0;

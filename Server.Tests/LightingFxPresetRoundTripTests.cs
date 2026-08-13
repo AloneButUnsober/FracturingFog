@@ -109,4 +109,20 @@ public sealed class LightingFxPresetRoundTripTests
             "for these LightingFxData fields — add them or the value drops on " +
             $"round-trip: {string.Join(", ", missing)}");
     }
+
+    // Finding #10 (issue #294): the DTO default for sentinel-fallback fields now
+    // visibly matches the runtime effective default, so a user reading the JSON
+    // sees the value that actually runs (0 still maps to 24 internally for
+    // legacy presets, but a fresh preset serializes the honest value).
+    [Fact]
+    public void DtoDefaults_Match_RuntimeEffectiveDefaults()
+    {
+        var dto = new LightingFxPresetData();
+        Assert.Equal(24, dto.ReflectionSteps);
+        Assert.Equal(1, dto.MaxBounces);
+
+        var fx = LightingFxData.CreateDefault();
+        Assert.Equal(24, fx.ReflectionSteps);
+        Assert.Equal(1, fx.MaxBounces);
+    }
 }
