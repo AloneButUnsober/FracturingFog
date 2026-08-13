@@ -475,6 +475,17 @@ namespace FracturingFog.Hosting
         }
 
         /// <inheritdoc/>
+        public bool GetRegionLightingIsAuthoritative(string regionName)
+        {
+            if (string.IsNullOrEmpty(regionName)) return false;
+            var region = FractalRegionLibrary.Instance.All.FirstOrDefault(
+                r => string.Equals(r.Name, regionName, StringComparison.Ordinal))
+                ?? FractalRegionLibrary.Instance.AllSlideshowRegions.FirstOrDefault(
+                    r => string.Equals(r.Name, regionName, StringComparison.Ordinal));
+            return region?.LightingIsAuthoritative ?? false;
+        }
+
+        /// <inheritdoc/>
         public bool ApplyThemeSilent(string themeName)
         {
             if (string.IsNullOrEmpty(themeName) || _renderHost == null) return false;
@@ -737,6 +748,7 @@ namespace FracturingFog.Hosting
                 // entry before the user commits.
                 CuratedThemes = r.CuratedThemes != null ? new List<string>(r.CuratedThemes) : null,
                 UseCuratedThemesOnly = r.UseCuratedThemesOnly,
+                LightingIsAuthoritative = r.LightingIsAuthoritative,
                 // Reflect the saved toggle, or the type default when the region
                 // carries no opinion, so the editor checkbox opens in the state
                 // recall would actually use.
@@ -802,6 +814,8 @@ namespace FracturingFog.Hosting
             // Only meaningful when a curated pool exists; drop the flag when the
             // whitelist is empty so a region can't claim "curated only" with none.
             region.UseCuratedThemesOnly = edits.UseCuratedThemesOnly && region.CuratedThemes != null;
+            // VLAO audit #295 — persist the authoritative-lighting opt-in.
+            region.LightingIsAuthoritative = edits.LightingIsAuthoritative;
             // Persist the Cycle toggle only for Acid Fog regions (the only place
             // the editor surfaces it); other types stay null so recall uses the
             // type default and JSON stays clean.

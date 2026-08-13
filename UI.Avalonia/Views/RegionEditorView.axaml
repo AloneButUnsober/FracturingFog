@@ -138,6 +138,10 @@
                                   IsChecked="{Binding KeepLightingOverride}"
                                   IsVisible="{Binding HasLightingOverride}"
                                   Foreground="#DCDCDC" />
+                        <CheckBox Content="Lighting is authoritative (portable look)"
+                                  IsChecked="{Binding LightingIsAuthoritative}"
+                                  Foreground="#DCDCDC"
+                                  ToolTip.Tip="When on, recalling this region resets lighting to stock defaults if it has no captured override, so the region looks the same on any install. Off = recall inherits whatever Lighting &amp; FX state is currently active." />
                         <CheckBox Content="Keep embedded watermark"
                                   IsChecked="{Binding KeepEmbeddedWatermark}"
                                   IsVisible="{Binding HasEmbeddedWatermark}"

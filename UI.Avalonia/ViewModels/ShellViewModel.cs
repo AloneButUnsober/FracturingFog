@@ -2192,14 +2192,25 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
             // most user flows, and a region's lighting tuning is more
             // specific than a theme's. Bit-identical when LightingOverride
             // is null on the region (the common case).
-            if (!Main.LightingLocked
-                && _themeService.TryGetRegionLightingOverride(name, out var lightOverride))
+            if (!Main.LightingLocked)
             {
-                Main.ViewState.FractalParameters.Lighting = lightOverride;
-                // Wave 4.3 — preset-apply bypasses the VM EnvironmentName
-                // setter, so kick the HDRI preload here too.
-                if (!string.IsNullOrWhiteSpace(lightOverride.EnvironmentName))
-                    FracturingFog.Rendering.Lighting.HdriProbe.Preload?.Invoke(lightOverride.EnvironmentName);
+                if (_themeService.TryGetRegionLightingOverride(name, out var lightOverride))
+                {
+                    Main.ViewState.FractalParameters.Lighting = lightOverride;
+                    // Wave 4.3 — preset-apply bypasses the VM EnvironmentName
+                    // setter, so kick the HDRI preload here too.
+                    if (!string.IsNullOrWhiteSpace(lightOverride.EnvironmentName))
+                        FracturingFog.Rendering.Lighting.HdriProbe.Preload?.Invoke(lightOverride.EnvironmentName);
+                }
+                else if (_themeService.GetRegionLightingIsAuthoritative(name))
+                {
+                    // VLAO audit #295 — region opted into authoritative lighting
+                    // but carries no override: reset to stock defaults so the
+                    // region renders the same on any install instead of
+                    // inheriting whatever lighting is currently dialled in.
+                    Main.ViewState.FractalParameters.Lighting =
+                        FracturingFog.Rendering.Lighting.LightingFxData.CreateDefault();
+                }
             }
             // Animation Roadmap Phase 3b — region's attached animation, if
             // any. Wipes the prior dynamic animator set even when this region

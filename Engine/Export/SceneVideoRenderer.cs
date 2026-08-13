@@ -544,8 +544,14 @@ namespace FracturingFog.Export
                     p.UserBulbLightPhi = region.UserBulbLightPhi;
                 }
             }
-            // Region lighting override snapshot (Phase 10) — no-op when null.
-            region.ApplyLightingTo(p);
+            // Region lighting override snapshot (Phase 10) — no-op when null,
+            // unless the region opted into authoritative lighting (#295), in
+            // which case a null override resets to stock defaults so the
+            // rendered scene matches the region's portable look.
+            if (region.LightingIsAuthoritative)
+                region.ApplyLightingAuthoritative(p);
+            else
+                region.ApplyLightingTo(p);
             // Region Relief 3D snapshot — no-op when null.
             region.ApplyRelief3DTo(p);
         }

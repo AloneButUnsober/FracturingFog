@@ -55,6 +55,7 @@ public sealed class RegionEditorViewModel : ViewModelBase
         _keepLightingOverride  = model.KeepLightingOverride;
         _keepEmbeddedWatermark = model.KeepEmbeddedWatermark;
         _useCuratedThemesOnly  = model.UseCuratedThemesOnly;
+        _lightingIsAuthoritative = model.LightingIsAuthoritative;
         _cycleEnabled          = model.CycleEnabled;
         ShowCycleToggle = string.Equals(
             model.FractalTypeName, nameof(FractalType.AcidWarp), StringComparison.Ordinal);
@@ -194,6 +195,17 @@ public sealed class RegionEditorViewModel : ViewModelBase
         set => this.RaiseAndSetIfChanged(ref _useCuratedThemesOnly, value);
     }
 
+    private bool _lightingIsAuthoritative;
+    /// <summary>VLAO audit #295 — when on, recalling this region resets lighting
+    /// to stock defaults if it has no captured override, so the region looks the
+    /// same on any install. Off (default) = recall inherits whatever lighting is
+    /// currently active.</summary>
+    public bool LightingIsAuthoritative
+    {
+        get => _lightingIsAuthoritative;
+        set => this.RaiseAndSetIfChanged(ref _lightingIsAuthoritative, value);
+    }
+
     /// <summary>True only for Acid Fog regions — gates the "Cycle" checkbox's
     /// visibility (palette cycling is meaningless on static fractals).</summary>
     public bool ShowCycleToggle { get; }
@@ -256,6 +268,7 @@ public sealed class RegionEditorViewModel : ViewModelBase
             : _selectedAnimation;
         _model.CuratedThemes = CollectCuratedThemes();
         _model.UseCuratedThemesOnly = _useCuratedThemesOnly;
+        _model.LightingIsAuthoritative = _lightingIsAuthoritative;
         _model.CycleEnabled = _cycleEnabled;
         _model.KeepLightingOverride  = _keepLightingOverride;
         _model.KeepEmbeddedWatermark = _keepEmbeddedWatermark;
