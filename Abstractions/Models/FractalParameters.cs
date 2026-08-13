@@ -486,6 +486,15 @@ namespace FracturingFog.Models
         /// non-zero user values always win. Default true.</summary>
         public bool Relief2DAutoShade { get; set; } = true;
 
+        /// <summary>VLAO audit #296 — when auto-shade is on, keep explicit user
+        /// zeros on the AO / shadow *enable* knobs (AoSamples, ShadowSteps)
+        /// instead of refilling them. Lets a user disable AO or shadows while
+        /// still letting auto-shade supply the harmless look defaults (ambient,
+        /// specular, soft-k). Default false = legacy behaviour (fill every
+        /// zero). Full unset-vs-explicit-zero disambiguation would need a
+        /// sentinel across the DTO/UI; this covers the common footgun.</summary>
+        public bool Relief2DAutoShadeKeepExplicitZeros { get; set; } = false;
+
         // #135 — isolate filaments as a standalone 3D object. When on, dropped
         // cells produce no surface (rays pass through) and ray-miss pixels are
         // written transparent (alpha 0) so the kept fractal floats alone and
@@ -981,6 +990,7 @@ namespace FracturingFog.Models
                 Relief2DBicubicHeight = Relief2DBicubicHeight,
                 Relief2DGroundPlane = Relief2DGroundPlane,
                 Relief2DAutoShade = Relief2DAutoShade,
+                Relief2DAutoShadeKeepExplicitZeros = Relief2DAutoShadeKeepExplicitZeros,
                 Relief2DEdgeFade = Relief2DEdgeFade,
                 Relief2DHiResField = Relief2DHiResField,
                 Relief2DFieldFloor = Relief2DFieldFloor,
