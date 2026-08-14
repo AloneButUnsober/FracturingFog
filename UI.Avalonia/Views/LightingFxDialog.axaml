@@ -672,6 +672,9 @@
                         <CheckBox Content="Composition guides"
                                   IsChecked="{Binding DebugHudGuides, Mode=TwoWay}"
                                   ToolTip.Tip="Rule-of-thirds grid + center cross + title-safe frame. Framing aid for stills / posters." />
+                        <CheckBox Content="Clipping zebra"
+                                  IsChecked="{Binding DebugHudZebra, Mode=TwoWay}"
+                                  ToolTip.Tip="Diagonal stripes on blown highlights (yellow) and crushed shadows (blue) — a quick over/under-exposure check for the tone-map / exposure / bloom knobs." />
                     </StackPanel>
                 </Expander>
 

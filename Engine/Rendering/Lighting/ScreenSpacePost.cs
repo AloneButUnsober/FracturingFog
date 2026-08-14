@@ -655,10 +655,37 @@ public static class ScreenSpacePost
         if (colorBuffer.Length < width * height) return;
         if (width < 128 || height < 128) return;
 
+        // Full-frame diagnostics (recolour pixels) run FIRST so the corner
+        // widgets below stay legible on top of them.
+        if ((flags & 0x20)  != 0) DrawClippingZebra(colorBuffer, width, height);
+
         if ((flags & 0x1)   != 0) DrawLightCompass(colorBuffer, width, height, fx);
         if ((flags & 0x2)   != 0) DrawParamBars(colorBuffer, width, height, fx);
         if ((flags & 0x4)   != 0) DrawTimeClock(colorBuffer, width, height, fx);
         if ((flags & 0x10)  != 0) DrawCompositionGuides(colorBuffer, width, height);
+    }
+
+    // ── Slice 3 (#314) — clipping zebra ───────────────────────────────
+    /// <summary>Diagonal-stripe over/under-exposure markers. Blown highlights
+    /// (luma ≥ 250) get yellow stripes (#FFCC00, colourblind-safe — not red);
+    /// crushed shadows (luma ≤ 4) get blue stripes. Pairs with the HDR tone-map /
+    /// exposure / bloom knobs.</summary>
+    private static void DrawClippingZebra(uint[] buf, int w, int h)
+    {
+        const uint over = 0xFFFFCC00u;  // yellow — blown highlight
+        const uint under = 0xFF3399FFu; // blue — crushed shadow
+        for (int y = 0; y < h; y++)
+        {
+            int row = y * w;
+            for (int x = 0; x < w; x++)
+            {
+                uint c = buf[row + x];
+                double lum = ((c >> 16) & 0xFF) * 0.299 + ((c >> 8) & 0xFF) * 0.587 + (c & 0xFF) * 0.114;
+                bool stripe = (((x + y) / 6) & 1) == 0;
+                if (lum >= 250.0) { if (stripe) buf[row + x] = over; }
+                else if (lum <= 4.0) { if (stripe) buf[row + x] = under; }
+            }
+        }
     }
 
     // ── Slice 2 (#313) — composition guides ───────────────────────────

@@ -646,6 +646,13 @@ public sealed partial class FractalParamsViewModel
         set { SetHudBit(0x10, value); this.RaisePropertyChanged(); Fire(); }
     }
 
+    /// <summary>#314 — over/under-exposure zebra stripes.</summary>
+    public bool DebugHudZebra
+    {
+        get => (_p.Lighting.DebugHudFlags & 0x20) != 0;
+        set { SetHudBit(0x20, value); this.RaisePropertyChanged(); Fire(); }
+    }
+
     // ── Speed-driven effect Start/Stop toggles ──────────────────────────
     //
     // Each speed-driven effect (light orbit, caustics phase, cloud-noise

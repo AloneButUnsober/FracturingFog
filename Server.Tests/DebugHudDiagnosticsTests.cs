@@ -52,4 +52,32 @@ public sealed class DebugHudDiagnosticsTests
         // A pixel off every guide line / cross / frame stays untouched.
         Assert.Equal(Mid, buf[(H / 3 + 7) * W + (W / 3 + 7)]);
     }
+
+    // ── Slice 3 (#314) — clipping zebra ───────────────────────────────
+    [Fact]
+    public void Zebra_Stripes_Clipped_Highlights_And_Shadows_Only()
+    {
+        // Left half blown white, right half crushed black.
+        var fx = LightingFxData.CreateDefault();
+        fx.DebugHudFlags = 0x20;
+        var buf = new uint[W * H];
+        for (int y = 0; y < H; y++)
+        for (int x = 0; x < W; x++)
+            buf[y * W + x] = x < W / 2 ? 0xFFFFFFFFu : 0xFF000000u;
+        ScreenSpacePost.ApplyDebugHud(buf, W, H, in fx);
+
+        long over = 0, under = 0, mid = 0;
+        for (int i = 0; i < buf.Length; i++)
+        {
+            if (buf[i] == 0xFFFFCC00u) over++;   // yellow on blown highlight
+            else if (buf[i] == 0xFF3399FFu) under++; // blue on crushed shadow
+        }
+        Assert.True(over > 100, $"expected highlight stripes (got {over})");
+        Assert.True(under > 100, $"expected shadow stripes (got {under})");
+
+        // A properly-exposed mid-grey frame gets NO zebra.
+        var midBuf = WithHud(0x20);
+        for (int i = 0; i < midBuf.Length; i++) if (midBuf[i] != Mid) mid++;
+        Assert.Equal(0, mid);
+    }
 }
