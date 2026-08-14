@@ -18,17 +18,18 @@ namespace FracturingFog.Server.Tests;
 
 public sealed class PosterReliefNonMandelbrotTests
 {
-    private static FractalParameters ReliefParams(bool enabled) => new()
+    private static FractalParameters ReliefParams(bool enabled, double heightScale) => new()
     {
         Relief2DEnabled = enabled,
         Relief2DRaymarch = true,
-        Relief2DHeightScale = 1.4,
+        Relief2DHeightScale = heightScale,
         Relief2DCameraAzimuthDeg = 25,
         Relief2DCameraElevationDeg = 45,
         Relief2DCameraFovDeg = 55,
+        Relief2DGroundPlane = false,
     };
 
-    private static byte[] RenderTricorn(bool relief, string path)
+    private static byte[] RenderTricorn(FractalParameters fp, string path)
     {
         var req = new PosterRequest
         {
@@ -39,7 +40,7 @@ public sealed class PosterReliefNonMandelbrotTests
             Width = 160, Height = 120,
             ColorMap = ColorPalette.BuiltIns[0],
             Quality = QualityPreset.Standard,
-            FractalParameters = ReliefParams(relief),
+            FractalParameters = fp,
             Path = path,
             Format = ImageFileFormat.Png,
         };
@@ -54,14 +55,34 @@ public sealed class PosterReliefNonMandelbrotTests
         Directory.CreateDirectory(dir);
         try
         {
-            byte[] flat   = RenderTricorn(relief: false, Path.Combine(dir, "flat.png"));
-            byte[] relief = RenderTricorn(relief: true,  Path.Combine(dir, "relief.png"));
+            byte[] flat   = RenderTricorn(ReliefParams(false, 1.4), Path.Combine(dir, "flat.png"));
+            byte[] relief = RenderTricorn(ReliefParams(true, 1.4),  Path.Combine(dir, "relief.png"));
 
-            // Relief raymarch reshapes the image entirely (lit terrain + sky),
-            // so the two encodes must differ. Byte-identical == relief was
-            // silently skipped (the bug).
             Assert.False(System.Linq.Enumerable.SequenceEqual(flat, relief),
                 "Tricorn relief poster is byte-identical to the flat render — relief was not applied.");
+        }
+        finally
+        {
+            try { Directory.Delete(dir, recursive: true); } catch { }
+        }
+    }
+
+    [Fact]
+    public void Tricorn_Poster_Relief_Has_Real_Height_Structure()
+    {
+        // A tilted flat plane (no terrain) is invariant to height scale; real
+        // heightfield relief is not. Render the same Tricorn poster at a tall vs
+        // near-flat height scale and require a substantial pixel difference —
+        // proves the SAVED height field actually raises terrain, not just tilts
+        // a 2D image onto an angled plane.
+        string dir = Path.Combine(Path.GetTempPath(), "ff-poster-height-" + System.Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(dir);
+        try
+        {
+            byte[] tall = RenderTricorn(ReliefParams(true, 1.5),  Path.Combine(dir, "tall.png"));
+            byte[] flat = RenderTricorn(ReliefParams(true, 0.02), Path.Combine(dir, "flat.png"));
+            Assert.False(System.Linq.Enumerable.SequenceEqual(tall, flat),
+                "Tricorn relief poster is invariant to height scale — terrain is flat (no 3D structure).");
         }
         finally
         {
