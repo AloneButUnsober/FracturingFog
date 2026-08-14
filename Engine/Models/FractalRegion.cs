@@ -213,6 +213,20 @@ namespace FracturingFog.Models
         public LightingFxPresetData? LightingOverride { get; set; }
 
         /// <summary>
+        /// VLAO audit #295 — when true, recalling this region applies its
+        /// lighting <em>authoritatively</em>: a non-null <see cref="LightingOverride"/>
+        /// is restored as before, but a null override resets lighting to stock
+        /// defaults instead of inheriting whatever the installer state happens
+        /// to be. This makes the region portable — it looks the same on any
+        /// install. Default false = legacy "leave user lighting alone on null"
+        /// so existing regions don't change behaviour. Omitted from JSON when
+        /// false so legacy regions stay clean. Mirrors the authoritative apply
+        /// that <see cref="Relief3D"/> already has.
+        /// </summary>
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+        public bool LightingIsAuthoritative { get; set; }
+
+        /// <summary>
         /// P6: optional hand-picked colour-theme names this region looks best
         /// with. When non-null+non-empty the slideshow / video slideshow draw
         /// theme picks from this pool first; unknown names are dropped, and if
@@ -304,6 +318,23 @@ namespace FracturingFog.Models
         /// </summary>
         public void ApplyLightingTo(FractalParameters parameters)
             => LightingOverride?.ApplyTo(parameters);
+
+        /// <summary>VLAO audit #295 — authoritatively set lighting from this
+        /// region: restore the saved <see cref="LightingOverride"/> when present,
+        /// or reset to <see cref="LightingFxData.CreateDefault"/> when the region
+        /// has none. Use on region-to-region recall so a region with no captured
+        /// lighting renders identically on every install instead of inheriting
+        /// the ambient app state. Contrast with <see cref="ApplyLightingTo"/>,
+        /// which leaves lighting untouched on null. Mirrors
+        /// <see cref="ApplyRelief3DAuthoritative"/>.</summary>
+        public void ApplyLightingAuthoritative(FractalParameters parameters)
+        {
+            if (parameters is null) return;
+            if (LightingOverride != null)
+                LightingOverride.ApplyTo(parameters);
+            else
+                parameters.Lighting = FracturingFog.Rendering.Lighting.LightingFxData.CreateDefault();
+        }
 
         /// <summary>Apply this region's Relief 3D snapshot (if any) to the given
         /// params. No-op when null (leaves the current relief state alone).</summary>

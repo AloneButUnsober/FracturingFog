@@ -201,6 +201,18 @@ namespace FracturingFog.Models
         bool TryGetRegionLightingOverride(string regionName, out LightingFxData lighting);
 
         /// <summary>
+        /// VLAO audit #295 — does the named region want its lighting applied
+        /// authoritatively? True when the region's
+        /// <c>LightingIsAuthoritative</c> flag is set: on recall a null
+        /// <c>LightingOverride</c> should reset lighting to stock defaults
+        /// (portability) rather than inheriting the ambient app state. False for
+        /// legacy regions and unknown names. Pairs with
+        /// <see cref="TryGetRegionLightingOverride"/>: the caller applies the
+        /// override when present, else resets to default when this is true.
+        /// </summary>
+        bool GetRegionLightingIsAuthoritative(string regionName);
+
+        /// <summary>
         /// Persist the current view state as a new user region under the given
         /// name. Returns true on success. Implementations write through to the
         /// host's region library (built-in regions are never overwritten —
@@ -488,6 +500,11 @@ namespace FracturingFog.Models
         /// curated theme as the active colour theme. Default false = recall
         /// leaves the active theme alone (no regression).</summary>
         public bool UseCuratedThemesOnly { get; set; }
+        /// <summary>VLAO audit #295 — when true, recall applies the region's
+        /// lighting authoritatively (a null override resets to stock defaults
+        /// for portability) instead of inheriting the ambient app lighting.
+        /// Default false = legacy behaviour.</summary>
+        public bool LightingIsAuthoritative { get; set; }
         /// <summary>Per-region palette-cycling (LUT rotation) toggle — the region
         /// editor's "Cycle" checkbox, emulating the toolbar Cycle button. On
         /// load it reflects the region's saved value (or the type default when

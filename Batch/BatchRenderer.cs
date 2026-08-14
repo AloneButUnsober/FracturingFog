@@ -13,10 +13,10 @@
 
 using System;
 using System.Diagnostics;
-using System.Drawing.Imaging;
 using System.IO;
 using System.Threading;
 
+using FracturingFog.Hosting;
 using FracturingFog.Imaging;
 using FracturingFog.Interefaces;
 using FracturingFog.Models;
@@ -253,13 +253,21 @@ namespace FracturingFog.Batch
                 return 3;
             }
 
-            // WMF MP4 writer used only when no lossless preset selected.
-            Mp4Writer? mp4 = null;
+            // WMF MP4 writer used only when no lossless preset selected. The
+            // concrete Media-Foundation Mp4Writer lives in the Windows-only
+            // Rendering.D3D assembly, which the cross-platform exe cannot
+            // reference; go through BatchVideoWriterFactoryHook (wired by
+            // WindowsBootstrap on Windows, null elsewhere). Null → PNG
+            // sequence + ffmpeg, which every platform can run.
+            IVideoWriter? mp4 = null;
             if (losslessPreset == null)
             {
                 try
                 {
-                    mp4 = new Mp4Writer(finalVideoPath, outW, outH, opts.VideoFps, 1);
+                    mp4 = BootstrapHooks.BatchVideoWriterFactoryHook?.Invoke(
+                        finalVideoPath, outW, outH, opts.VideoFps);
+                    if (mp4 == null)
+                        Console.WriteLine("  MP4 writer unavailable; PNG sequence + ffmpeg.");
                 }
                 catch (Exception ex)
                 {
@@ -323,8 +331,8 @@ namespace FracturingFog.Batch
                     // ffmpeg image2 demuxer wants frames numbered starting at 1.
                     string framePath = Path.Combine(pngFolder,
                         string.Format(FrameNameFmt, f + 1));
-                    ImageExportGdi.SavePixelsToFile(
-                        buffer, outW, outH, framePath, ImageFormat.Png,
+                    ImageExport.SavePixelsToFile(
+                        buffer, outW, outH, framePath, ImageFileFormat.Png,
                         watermarkText: "", fontColor: System.Drawing.Color.White, subText: "");
 
                     framesWritten++;

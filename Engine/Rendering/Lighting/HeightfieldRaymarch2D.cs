@@ -388,7 +388,7 @@ public static class HeightfieldRaymarch2D
         // the knob is still at zero so Oblique 3D looks good out of the box.
         // Explicit non-zero user values always survive.
         var fx = p.Lighting;
-        if (p.Relief2DAutoShade) FillAutoShadeDefaults(ref fx);
+        if (p.Relief2DAutoShade) FillAutoShadeDefaults(ref fx, p.Relief2DAutoShadeKeepExplicitZeros);
 
         // Oblique camera + AABB + cone-epsilon. Extracted (#159 / Slice 3a) into
         // BuildObliqueCamera so the GPU relief kernel and its CPU parity twin
@@ -773,11 +773,19 @@ public static class HeightfieldRaymarch2D
     /// <see cref="Render(uint[],float[],int,int,int,int,FractalParameters,uint[],out double)"/>
     /// (auto-shade path) and <see cref="MakePreviewParams"/> so the two paths
     /// can never drift.</summary>
-    internal static void FillAutoShadeDefaults(ref LightingFxData fx)
+    internal static void FillAutoShadeDefaults(ref LightingFxData fx, bool keepExplicitZeros = false)
     {
-        if (fx.AoSamples <= 0)        fx.AoSamples = 5;
+        // Enable knobs: AoSamples / ShadowSteps == 0 means "feature off". When
+        // the caller opts in (Relief2DAutoShadeKeepExplicitZeros), leave a user
+        // zero alone so auto-shade can't silently re-enable a disabled effect.
+        if (!keepExplicitZeros)
+        {
+            if (fx.AoSamples <= 0)   fx.AoSamples = 5;
+            if (fx.ShadowSteps <= 0) fx.ShadowSteps = 24;
+        }
+        // Look defaults: only shape an already-enabled effect (inert when the
+        // enable knob above is 0), so filling them never re-enables anything.
         if (fx.AoStrength <= 0)       fx.AoStrength = 0.5;
-        if (fx.ShadowSteps <= 0)      fx.ShadowSteps = 24;
         if (fx.ShadowLightMask == 0)  fx.ShadowLightMask = 0x1;
         if (fx.ShadowSoftK <= 0)      fx.ShadowSoftK = 8.0;
         if (fx.AmbientStrength <= 0)  fx.AmbientStrength = 0.3;
@@ -786,8 +794,9 @@ public static class HeightfieldRaymarch2D
 
     /// <summary>#155 — build a reduced-cost parameter set for the progressive
     /// PREVIEW raymarch. Forces supersample off and drops the heavy per-hit FX
-    /// (DE-cone AO, SSAO, reflections, volumetric in-scatter) while keeping the
-    /// cheap dominant depth cues (soft shadow + specular + ambient) IDENTICAL to
+    /// (DE-cone AO, SSAO, reflections) and CAPS the volumetric in-scatter march
+    /// (#293 — shafts stay visible while tuning) while keeping the cheap
+    /// dominant depth cues (soft shadow + specular + ambient) IDENTICAL to
     /// the final frame — so the 3D preview frames the same as the final (no
     /// flat↔3D flash, #131), it just skips the expensive lighting the eye can't
     /// resolve on a transient preview. Auto-shade is baked in here and then
@@ -798,12 +807,19 @@ public static class HeightfieldRaymarch2D
         var pp = p.Clone();
         pp.Relief2DSupersample = 1;
         var fx = pp.Lighting;
-        if (pp.Relief2DAutoShade) FillAutoShadeDefaults(ref fx);
+        if (pp.Relief2DAutoShade) FillAutoShadeDefaults(ref fx, pp.Relief2DAutoShadeKeepExplicitZeros);
         pp.Relief2DAutoShade = false;   // defaults baked → Render won't refill AO
         fx.AoSamples = 0;               // drop DE-cone AO (5 evals / hit)
         fx.SsaoSamples = 0;             // drop SSAO post-pass
         fx.ReflectionStrength = 0.0;    // drop reflection bounces (~24 evals / hit)
-        fx.VolumeSteps = 0;             // drop volumetric in-scatter walk
+        // VLAO audit #293 — do NOT zero VolumeSteps. Zeroing dropped the
+        // preview into the flat-fog fallback path, so a user tuning god-rays
+        // saw no shafts in the preview and a completely different final frame.
+        // Cap the march instead: cheap enough to stay interactive, but the
+        // volumetric shafts are the whole point of the tune and the eye reads
+        // them at large scale. (Surface ShadowSteps stays at full quality — it
+        // is already kept identical to the final frame above.)
+        fx.VolumeSteps = fx.VolumeSteps > 0 ? Math.Min(fx.VolumeSteps, 8) : 0;
         pp.Lighting = fx;
         return pp;
     }

@@ -658,7 +658,7 @@ public struct LightingFxData
         AnamorphicSqueeze  = 1.0,
 
         ReflectionStrength = 0.0,
-        ReflectionSteps    = 0,
+        ReflectionSteps    = 24,   // effective default; runtime still treats 0 as "auto → 24" for legacy presets
         MaxBounces         = 1,
         UseGgxSampling     = false,
 

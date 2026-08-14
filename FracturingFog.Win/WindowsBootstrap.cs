@@ -38,6 +38,21 @@ public static class WindowsBootstrap
     /// <c>AvaloniaShell.Run</c> on every Windows entry point (legacy
     /// WinExe and the cross-plat App on its win-x64 leg).
     /// </summary>
+    /// <summary>VLAO audit #291 — wire only the batch video-writer hook.
+    /// The headless <c>--batch</c> dispatch runs before <see cref="Install"/>
+    /// on the legacy WinExe, so that entry point calls this directly to keep
+    /// Media-Foundation MP4 output (with the CLI-requested fps) available.
+    /// Idempotent; safe to call again from <see cref="Install"/>.</summary>
+    public static void InstallBatchVideoHook()
+    {
+        if (!OperatingSystem.IsWindows()) return;
+        BootstrapHooks.BatchVideoWriterFactoryHook = (path, w, h, fps) =>
+        {
+            try { return new FracturingFog.Mp4Writer(path, w, h, fps); }
+            catch { return null; /* MF init failed → BatchRenderer falls through to ffmpeg */ }
+        };
+    }
+
     public static void Install()
     {
         if (!OperatingSystem.IsWindows()) return;
@@ -81,6 +96,8 @@ public static class WindowsBootstrap
             try { return new FracturingFog.Mp4Writer(path, w, h); }
             catch { return null; /* MF init failed → bootstrap falls through to ffmpeg */ }
         };
+
+        InstallBatchVideoHook();
 
         BootstrapHooks.NativeInputBridge = new WindowsNativeInputBridge();
 

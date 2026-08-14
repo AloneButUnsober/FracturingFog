@@ -479,6 +479,24 @@ namespace FracturingFog.Export
             if (region != null)
                 LoadRegionParams(region, p);
 
+            // #295 follow-up — per-shot lighting override by name. Borrow another
+            // region's captured Lighting & FX for this shot, overriding the shot
+            // region's own lighting applied above. Precedence: scene global track
+            // > this shot override > shot region > theme > default. Applied
+            // wholesale (ApplyLighting* replaces p.Lighting), so the named source
+            // wins. No-op when unset or the named region is missing.
+            if (!string.IsNullOrEmpty(shot.LightingRegionName))
+            {
+                var lightRegion = FractalRegionLibrary.Instance.FindByName(shot.LightingRegionName);
+                if (lightRegion != null)
+                {
+                    if (lightRegion.LightingIsAuthoritative)
+                        lightRegion.ApplyLightingAuthoritative(p);
+                    else
+                        lightRegion.ApplyLightingTo(p);
+                }
+            }
+
             var anim = ResolveAnimation(shot, region);
             var theme = ResolveTheme(shot, region);
 
@@ -544,8 +562,14 @@ namespace FracturingFog.Export
                     p.UserBulbLightPhi = region.UserBulbLightPhi;
                 }
             }
-            // Region lighting override snapshot (Phase 10) — no-op when null.
-            region.ApplyLightingTo(p);
+            // Region lighting override snapshot (Phase 10) — no-op when null,
+            // unless the region opted into authoritative lighting (#295), in
+            // which case a null override resets to stock defaults so the
+            // rendered scene matches the region's portable look.
+            if (region.LightingIsAuthoritative)
+                region.ApplyLightingAuthoritative(p);
+            else
+                region.ApplyLightingTo(p);
             // Region Relief 3D snapshot — no-op when null.
             region.ApplyRelief3DTo(p);
         }

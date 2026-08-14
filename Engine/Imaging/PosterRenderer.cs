@@ -227,6 +227,14 @@ namespace FracturingFog.Imaging
                 buffer = alt.ColorBuffer;
                 w = alt.Width;
                 h = alt.Height;
+                // #102 heightfield relief for non-Mandelbrot families. The
+                // escape-time alt calculators (Julia, BurningShip, Tricorn,
+                // Multibrot, Phoenix, Magnet, Glynn, Spider, Newton, …) expose
+                // the same SmoothBuffer height field as Mandelbrot, so a poster
+                // of a Relief 3D scene must apply relief here too — otherwise it
+                // silently falls back to the flat 2D themed colour. No-op when
+                // relief is off or the calc exposes no field.
+                buffer = ApplyReliefIfEnabled(buffer, alt as IHeightFieldSource, w, h, req.FractalParameters);
             }
             else
             {
@@ -294,10 +302,11 @@ namespace FracturingFog.Imaging
                 // #102 heightfield relief — modulate the flat themed colour with
                 // real raised 3D relief so a poster / wallpaper matches the
                 // on-screen Relief 3D frame (UploadProcessedBuffer does the same
-                // for the interactive path). Mandelbrot-only, mirroring the
-                // !useAlt gate in FractalRenderHost. Field == output dims here:
-                // a poster is already high-res, so the display-size undersampling
-                // the hi-res field works around does not apply.
+                // for the interactive path). The non-Mandelbrot alt families are
+                // handled by the same call in the alt branch above. Field ==
+                // output dims here: a poster is already high-res, so the
+                // display-size undersampling the hi-res field works around does
+                // not apply.
                 buffer = ApplyReliefIfEnabled(buffer, calc, w, h, req.FractalParameters);
             }
 
@@ -342,11 +351,12 @@ namespace FracturingFog.Imaging
             }
         }
 
-        // #102 — apply heightfield relief to a freshly rendered Mandelbrot
-        // colour buffer, matching FractalRenderHost.UploadProcessedBuffer so a
-        // poster / wallpaper carries the same raised 3D relief as the screen.
-        // Returns the input buffer unchanged when relief is off or the calc
-        // exposes no height field. Field dims == output dims (poster is hi-res).
+        // #102 — apply heightfield relief to a freshly rendered colour buffer
+        // (Mandelbrot or any escape-time alt family that exposes a height
+        // field), matching FractalRenderHost.UploadProcessedBuffer so a poster /
+        // wallpaper carries the same raised 3D relief as the screen. Returns the
+        // input buffer unchanged when relief is off or the calc exposes no
+        // height field. Field dims == output dims (poster is hi-res).
         private static uint[] ApplyReliefIfEnabled(
             uint[] buffer, IHeightFieldSource? heightSource, int w, int h, FractalParameters p)
         {

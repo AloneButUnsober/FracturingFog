@@ -68,6 +68,16 @@ public sealed class SceneShot
     /// name). Null / empty = the region's own <c>AnimationName</c>, or none.</summary>
     public string? AnimationName { get; set; }
 
+    /// <summary>Optional per-shot lighting override, referenced by region name
+    /// (assets-by-name, like <see cref="RegionName"/> / <see cref="ThemeName"/>).
+    /// When set, this shot borrows the named region's captured Lighting &amp; FX
+    /// (VL / fog / AO / lights / sky), overriding the lighting of its own
+    /// <see cref="RegionName"/> — so a scene can re-light a shot without editing
+    /// the source region. Null / empty = use the shot region's own lighting.
+    /// Precedence: scene global track &gt; this shot override &gt; shot region &gt;
+    /// theme preset &gt; default.</summary>
+    public string? LightingRegionName { get; set; }
+
     /// <summary>The fractal type this shot renders. Normally mirrors the named
     /// region's type; kept explicit so a <see cref="Camera"/> track can be
     /// validated against <see cref="Render.CameraParamBinding"/> without first

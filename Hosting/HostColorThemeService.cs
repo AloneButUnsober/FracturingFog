@@ -475,6 +475,17 @@ namespace FracturingFog.Hosting
         }
 
         /// <inheritdoc/>
+        public bool GetRegionLightingIsAuthoritative(string regionName)
+        {
+            if (string.IsNullOrEmpty(regionName)) return false;
+            var region = FractalRegionLibrary.Instance.All.FirstOrDefault(
+                r => string.Equals(r.Name, regionName, StringComparison.Ordinal))
+                ?? FractalRegionLibrary.Instance.AllSlideshowRegions.FirstOrDefault(
+                    r => string.Equals(r.Name, regionName, StringComparison.Ordinal));
+            return region?.LightingIsAuthoritative ?? false;
+        }
+
+        /// <inheritdoc/>
         public bool ApplyThemeSilent(string themeName)
         {
             if (string.IsNullOrEmpty(themeName) || _renderHost == null) return false;
@@ -645,12 +656,13 @@ namespace FracturingFog.Hosting
         }
 
         /// <summary>
-        /// Build a fresh user-defined region carrying only geometry, quality,
-        /// fractal type, and per-engine source identity captured from the
-        /// <b>live</b> <paramref name="state"/>. Metadata (Name, Description,
-        /// animation, curated themes, lighting/watermark) is left at defaults
-        /// for the caller to fill. Shared by <see cref="SaveCurrentAsRegion"/>
-        /// and the Region Editor's "Capture current view" (Phase R3).
+        /// Build a fresh user-defined region carrying geometry, quality, fractal
+        /// type, per-engine source identity, the Relief 3D snapshot, AND the
+        /// Lighting &amp; FX snapshot captured from the <b>live</b>
+        /// <paramref name="state"/>. Free-text metadata (Name, Description,
+        /// animation, curated themes, watermark) is left at defaults for the
+        /// caller to fill. Shared by <see cref="SaveCurrentAsRegion"/> and the
+        /// Region Editor's "Capture current view" (Phase R3).
         /// </summary>
         private static FractalRegion BuildGeometryFromLiveState(FractalViewState state)
         {
@@ -702,6 +714,19 @@ namespace FracturingFog.Hosting
                 // the full relief look on recall (camera, tone curve, isolation,
                 // mesh knobs). Null when relief is off, so plain 2D regions stay clean.
                 Relief3D = Relief3DSettings.Snapshot(p),
+                // Lighting & FX (VL / fog / AO / lights / sky) snapshot. A region
+                // is a look snapshot, so — like a saved shot in a 3D app — it
+                // captures the scene lighting, not just geometry. Recall restores
+                // it (see FractalRegion.ApplyLightingTo / ShellViewModel jump).
+                //
+                // Gated to contexts where lighting actually renders: a 3D
+                // raymarched fractal (state.Is3D) or a 2D fractal shown through
+                // Relief 3D. Plain flat-2D bookmarks — where VL / fog / AO are
+                // inert — stay lighting-clean (null), so regions.json isn't
+                // bloated with a default block that would render nothing.
+                LightingOverride = (p != null && (state.Is3D || p.Relief2DEnabled))
+                    ? LightingFxPresetData.FromFx(p.Lighting)
+                    : null,
             };
         }
 
@@ -737,6 +762,7 @@ namespace FracturingFog.Hosting
                 // entry before the user commits.
                 CuratedThemes = r.CuratedThemes != null ? new List<string>(r.CuratedThemes) : null,
                 UseCuratedThemesOnly = r.UseCuratedThemesOnly,
+                LightingIsAuthoritative = r.LightingIsAuthoritative,
                 // Reflect the saved toggle, or the type default when the region
                 // carries no opinion, so the editor checkbox opens in the state
                 // recall would actually use.
@@ -802,6 +828,8 @@ namespace FracturingFog.Hosting
             // Only meaningful when a curated pool exists; drop the flag when the
             // whitelist is empty so a region can't claim "curated only" with none.
             region.UseCuratedThemesOnly = edits.UseCuratedThemesOnly && region.CuratedThemes != null;
+            // VLAO audit #295 — persist the authoritative-lighting opt-in.
+            region.LightingIsAuthoritative = edits.LightingIsAuthoritative;
             // Persist the Cycle toggle only for Acid Fog regions (the only place
             // the editor surfaces it); other types stay null so recall uses the
             // type default and JSON stays clean.

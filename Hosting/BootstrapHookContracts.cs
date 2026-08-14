@@ -53,6 +53,14 @@ public static class BootstrapHooks
     /// through to ffmpeg when this returns null.</summary>
     public static Func<string, int, int, IVideoWriter?>? NativeVideoWriterFactoryHook { get; set; }
 
+    /// <summary>VLAO audit #291 — headless-batch video writer probe. Same
+    /// Media-Foundation <c>Mp4Writer</c> as <see cref="NativeVideoWriterFactoryHook"/>
+    /// but carries the explicit frame rate the batch CLI requests (the batch
+    /// entry runs before the full bootstrap, and batch fps must not silently
+    /// default to 30). Null off Windows → BatchRenderer falls through to the
+    /// PNG-sequence + ffmpeg path. Signature: (path, width, height, fps).</summary>
+    public static Func<string, int, int, int, IVideoWriter?>? BatchVideoWriterFactoryHook { get; set; }
+
     /// <summary>Native input bridge. Windows installs the swap-chain HWND
     /// subclass + Win32 client→screen + screen-pixel sampler; null elsewhere
     /// (Avalonia PointerPressed routing handles input directly).</summary>

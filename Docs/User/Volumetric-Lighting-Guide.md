@@ -39,11 +39,20 @@ for effects you dial up.
 
 ### Which fractals support it
 
-Volumetric lighting applies to the **3D ray-marched fractals**: Mandelbulb,
-Mandelbox, Menger Sponge, Sierpinski, Quaternion Julia, Quaternion Mandelbrot,
-Kleinian, Bicomplex, and UserBulb. It is a property of the 3D shading pipeline;
-**2D escape-time fractals do not use it** (they have their own color themes and
-2.5D relief).
+Volumetric lighting applies to:
+
+- The **3D ray-marched fractals** — Mandelbulb, Mandelbox, Menger Sponge,
+  Sierpinski, Quaternion Julia, Quaternion Mandelbrot, Kleinian, Bicomplex,
+  and UserBulb.
+- **2D escape-time fractals rendered through Relief 3D** (Mandelbrot, Julia,
+  Burning Ship, Tricorn, and the other zoomable-2D families). Relief 3D is a
+  lit heightfield renderer and shares the same VL in-scatter walk, so a
+  Mandelbrot region **can** get god-rays. See the
+  [Relief 3D Cookbook](Relief3D-Cookbook.md) for the tuning differences
+  between 3D-fractal VL and relief VL.
+
+Volumetric lighting does **not** apply to 2D escape-time fractals rendered
+*without* Relief 3D (the flat 2D view) — those use the color theme alone.
 
 ---
 
@@ -79,10 +88,20 @@ Values below list the **UI range** and **default**. "Bit-identical default"
 means: at that value the control changes nothing, and the render is pixel-for-
 pixel what it was with the feature off.
 
+> **Half of these controls only apply when Volume steps > 0.** With
+> **Volume steps = 0** the fog uses a cheap flat-exponential fallback that
+> honours only **Fog density** and the sky gradient's top/bottom colors.
+> In that mode **Fog color**, **Anisotropy**, **Height falloff**, **Palette
+> map**, Light 2/3 in-scatter, and non-Gradient **Sky mode** are inert — the
+> slider moves but nothing changes. Turn **Volume steps** up (16+) to bring
+> them to life. See Recipe 2 in the [Cookbook](Volumetric-Lighting-Cookbook.md)
+> for the intended flat-fog use. Rows below marked *(needs Volume steps > 0)*
+> are the affected ones.
+
 | Control | Range | Default | What it does |
 |---|---|---|---|
 | **Fog density** | 0 – 2 | 0 | Master switch for fog. Beer–Lambert extinction per unit of ray distance. 0 = no fog. ~0.05 = faint haze; ~0.2 = obvious atmosphere; ~0.6+ = pea soup. Also the base density for in-scatter. |
-| **Height falloff** | 0 – 4 | 0 | Fog thins with world height: `density × exp(-coef · y)`. 0 = uniform fog everywhere; higher = fog pools near the "ground" and clears overhead (ground mist, valley fog). |
+| **Height falloff** | 0 – 4 | 0 | *(needs Volume steps > 0)* Fog thins with world height: `density × exp(-coef · y)`. 0 = uniform fog everywhere; higher = fog pools near the "ground" and clears overhead (ground mist, valley fog). |
 | **Volume steps** | 0 – 64 | 0 | Number of in-scatter samples along each ray. **0 = flat exponential fog only (no shafts, no glow).** Turn this up to enable volumetric light. 16 is a usable minimum; 24–32 is the sweet spot; 48+ for hero stills. Cost scales with this × shadow steps. |
 | **Volume noise** | 0 – 1 | 0 | FBM cloud modulation of density. 0 = perfectly smooth medium; toward 1 the fog breaks into cloud-like clumps and wisps. This is what turns "haze" into "clouds". |
 | **Noise scale** | 0.01 – 100 | 1.0 | Cloud frequency. Low (0.2–0.5) = big soft fluffy masses; high (2–5) = fine turbulent detail. |
@@ -90,9 +109,9 @@ pixel what it was with the feature off.
 | **Noise octaves** | 1 – 6 | 3 | Layers of detail in the cloud noise. More octaves = finer wisps at more render cost. 3 is a good default; 5–6 for dramatic storm detail. |
 | **Self-shadow** | 0 – 4 | 0 | Clouds cast shadows *on themselves*. 0 = evenly lit clouds; higher = dense clouds darken internally, giving god-ray banding *inside* the cloud body. Only meaningful when **Volume noise > 0**. |
 | **Self-shadow steps** | 0 – 16 | 4 | Samples for the cloud self-shadow march. Higher = smoother internal shadowing, more cost. |
-| **Anisotropy** | −1 – 1 | 0 | **Henyey-Greenstein phase.** The directional "punch" of the fog. 0 = even glow from every angle. **Positive (0.4–0.85) = forward scatter**: a bright halo when you look toward the light — the classic god-ray look. Negative = back-scatter: the halo appears when the light is *behind you*. |
-| **Fog color** | AARRGGBB hex | FFFFFFFF (white) | The medium's own tint (scattering albedo), independent of the lights. White = no tint. `FFFFCC00` = amber haze, `FF66CCFF` = teal mist, `FF88FF88` = eerie green. Multiplies the accumulated in-scatter. |
-| **Palette map** | 0 – 1 | 0 | Cross-fades the lit fog toward the **active 3D color theme's gradient**, keyed by fog depth. 0 = physically-based (fog is colored by the lights). 1 = the fog takes the same palette as the fractal surface. A stylised / non-realistic effect (see [§4](#4-the-four-color-layers)). |
+| **Anisotropy** | −1 – 1 | 0 | *(needs Volume steps > 0)* **Henyey-Greenstein phase.** The directional "punch" of the fog. 0 = even glow from every angle. **Positive (0.4–0.85) = forward scatter**: a bright halo when you look toward the light — the classic god-ray look. Negative = back-scatter: the halo appears when the light is *behind you*. |
+| **Fog color** | AARRGGBB hex | FFFFFFFF (white) | *(needs Volume steps > 0)* The medium's own tint (scattering albedo), independent of the lights. White = no tint. `FFFFCC00` = amber haze, `FF66CCFF` = teal mist, `FF88FF88` = eerie green. Multiplies the accumulated in-scatter. |
+| **Palette map** | 0 – 1 | 0 | *(needs Volume steps > 0)* Cross-fades the lit fog toward the **active 3D color theme's gradient**, keyed by fog depth. 0 = physically-based (fog is colored by the lights). 1 = the fog takes the same palette as the fractal surface. A stylised / non-realistic effect (see [§4](#4-the-four-color-layers)). |
 
 ### Related controls in other expanders
 
@@ -290,18 +309,27 @@ system on is always an explicit, reversible choice.
 
 ## 6. CPU vs GPU
 
-Volumetric lighting runs on both paths:
+Volumetric lighting runs on both paths, but feature parity depends on **which**
+GPU path is engaged — there are two, and they are not the same:
 
-- **CPU** (default) — full support for all effects on every 3D fractal listed in
-  §1, including UserBulb.
-- **GPU** (`Use GPU render`) — full volumetric parity (light color, phase, medium
-  color, palette map) for the eight ray-marched kernels: Mandelbulb, Mandelbox,
-  Menger, Sierpinski, Quaternion Julia/Mandelbrot, Kleinian, Bicomplex.
-  **UserBulb's GPU path is cheap-shaded and skips volumetrics** — if you want
-  volumetric fog on a UserBulb scene, render it on the CPU.
+- **CPU** (default) — full support for all VL effects on every 3D fractal listed
+  in §1, **and** on Relief 3D of 2D fractals (see the
+  [Relief 3D Cookbook](Relief3D-Cookbook.md) for relief-specific tuning).
 
-The two paths are built to match visually; when in doubt for a final render,
-compare a still on both.
+- **GPU: 3D-fractal kernels** (`Use GPU render` on Mandelbulb, Mandelbox,
+  Menger, Sierpinski, Quaternion Julia/Mandelbrot, Kleinian, Bicomplex) — full
+  volumetric parity with the CPU path: light color, phase, medium color,
+  palette map. **UserBulb's GPU path is cheap-shaded and skips volumetrics** —
+  for volumetric UserBulb, render on the CPU.
+
+- **GPU: Relief 3D raymarch** (the default on Relief 3D scenes) — **subset**
+  parity, not full: **Light 1 only** contributes to the fog / god-rays (Lights
+  2/3 still shade the surface), and **no palette-mapped fog**. To get the full
+  VL feature set on a Relief 3D scene, disable the GPU relief path
+  (**Ctrl+Shift+G**) and render on the CPU.
+
+The 3D-fractal GPU and CPU paths are built to match visually; when in doubt for
+a final render, compare a still on both.
 
 ---
 
