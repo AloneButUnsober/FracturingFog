@@ -678,6 +678,9 @@
                         <CheckBox Content="Light gauge + shaft readiness"
                                   IsChecked="{Binding DebugHudLightGauge, Mode=TwoWay}"
                                   ToolTip.Tip="Bottom-right: side-on elevation of each light (overhead=top, horizon=middle). The lamp turns yellow when the key light is raking AND fog + volume steps + shadow steps are on — i.e. god-ray shafts will actually render (not a flat glow)." />
+                        <CheckBox Content="Lookdev reference balls"
+                                  IsChecked="{Binding DebugHudReferenceBalls, Mode=TwoWay}"
+                                  ToolTip.Tip="Left edge: an 18%-grey matte ball and a chrome ball, lit by your current lights + IBL/sky. Read light direction, colour and reflections at a glance (the classic lookdev reference spheres)." />
                     </StackPanel>
                 </Expander>
 

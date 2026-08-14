@@ -660,6 +660,13 @@ public sealed partial class FractalParamsViewModel
         set { SetHudBit(0x8, value); this.RaisePropertyChanged(); Fire(); }
     }
 
+    /// <summary>#315 — lookdev reference balls (18%-grey matte + chrome).</summary>
+    public bool DebugHudReferenceBalls
+    {
+        get => (_p.Lighting.DebugHudFlags & 0x40) != 0;
+        set { SetHudBit(0x40, value); this.RaisePropertyChanged(); Fire(); }
+    }
+
     // ── Speed-driven effect Start/Stop toggles ──────────────────────────
     //
     // Each speed-driven effect (light orbit, caustics phase, cloud-noise

@@ -664,6 +664,100 @@ public static class ScreenSpacePost
         if ((flags & 0x4)   != 0) DrawTimeClock(colorBuffer, width, height, fx);
         if ((flags & 0x10)  != 0) DrawCompositionGuides(colorBuffer, width, height);
         if ((flags & 0x8)   != 0) DrawLightGauge(colorBuffer, width, height, fx);
+        if ((flags & 0x40)  != 0) DrawReferenceBalls(colorBuffer, width, height, fx);
+    }
+
+    // ── Slice 4 (#315) — lookdev reference balls ──────────────────────
+    /// <summary>18%-grey matte + chrome spheres stacked on the left edge, shaded
+    /// analytically against the live lights (dir + colour + intensity), ambient,
+    /// and the IBL/sky env (chrome reflection via <see cref="ShadingPipeline
+    /// .SkyColorHdri"/>). A fixed straight-on view — the classic lookdev balls
+    /// that read light direction / colour / reflections at a glance.</summary>
+    private static void DrawReferenceBalls(uint[] buf, int w, int h, in LightingFxData fx)
+    {
+        int r = 20;
+        int cx = 8 + r;
+        int cyG = h / 2 - r - 4;   // grey ball (top)
+        int cyC = h / 2 + r + 4;   // chrome ball (bottom)
+
+        double orbitT = fx.SceneTime * fx.LightOrbitSpeed;
+        var l1 = LightDir3(fx.Light1.Theta + orbitT,       fx.Light1.Phi);
+        var l2 = LightDir3(fx.Light2.Theta + orbitT * 0.7, fx.Light2.Phi);
+        var l3 = LightDir3(fx.Light3.Theta + orbitT * 1.3, fx.Light3.Phi);
+
+        ShadeBall(buf, w, h, cx, cyG, r, in fx, l1, l2, l3, chrome: false);
+        ShadeBall(buf, w, h, cx, cyC, r, in fx, l1, l2, l3, chrome: true);
+        DrawCircleOutline(buf, w, h, cx, cyG, r, 0xFF303030u);
+        DrawCircleOutline(buf, w, h, cx, cyC, r, 0xFF303030u);
+    }
+
+    private static (double x, double y, double z) LightDir3(double theta, double phi)
+    {
+        double sp = Math.Sin(phi);
+        return (sp * Math.Cos(theta), Math.Cos(phi), sp * Math.Sin(theta));
+    }
+
+    private static void ShadeBall(
+        uint[] buf, int w, int h, int cx, int cy, int r, in LightingFxData fx,
+        (double x, double y, double z) l1, (double x, double y, double z) l2,
+        (double x, double y, double z) l3, bool chrome)
+    {
+        double i1 = fx.Light1.Intensity, i2 = fx.Light2.Intensity, i3 = fx.Light3.Intensity;
+        double amb = fx.AmbientStrength;
+        for (int py = cy - r; py <= cy + r; py++)
+        {
+            if ((uint)py >= (uint)h) continue;
+            for (int px = cx - r; px <= cx + r; px++)
+            {
+                if ((uint)px >= (uint)w) continue;
+                double nx = (px - cx) / (double)r, ny = -(py - cy) / (double)r;
+                double d2 = nx * nx + ny * ny;
+                if (d2 > 1.0) continue;
+                double nz = Math.Sqrt(1.0 - d2);   // toward viewer (+Z)
+
+                double oR, oG, oB;
+                if (!chrome)
+                {
+                    // 18% grey Lambert.
+                    double diff = amb
+                        + Lambert(nx, ny, nz, l1, i1) + Lambert(nx, ny, nz, l2, i2)
+                        + Lambert(nx, ny, nz, l3, i3);
+                    double a = 0.18 * 255.0;
+                    oR = oG = oB = a * diff;
+                }
+                else
+                {
+                    // Chrome: reflect the view (0,0,1) about N and sample the env.
+                    double dot = nz;                    // dot(N, V) with V=(0,0,1)
+                    double rx = 2 * dot * nx, ry = 2 * dot * ny, rz = 2 * dot * nz - 1.0;
+                    uint sky = ShadingPipeline.SkyColorHdri(rx, ry, rz, in fx);
+                    oR = (sky >> 16) & 0xFF; oG = (sky >> 8) & 0xFF; oB = sky & 0xFF;
+                    double sp = Spec(rx, ry, rz, l1, i1) + Spec(rx, ry, rz, l2, i2) + Spec(rx, ry, rz, l3, i3);
+                    oR += sp * 255; oG += sp * 255; oB += sp * 255;
+                }
+                buf[py * w + px] = 0xFF000000u
+                    | ((uint)Math.Clamp(oR, 0, 255) << 16)
+                    | ((uint)Math.Clamp(oG, 0, 255) << 8)
+                    |  (uint)Math.Clamp(oB, 0, 255);
+            }
+        }
+    }
+
+    private static double Lambert(double nx, double ny, double nz,
+        (double x, double y, double z) l, double intensity)
+    {
+        if (intensity <= 0) return 0;
+        double d = nx * l.x + ny * l.y + nz * l.z;
+        return d > 0 ? d * intensity : 0;
+    }
+
+    private static double Spec(double rx, double ry, double rz,
+        (double x, double y, double z) l, double intensity)
+    {
+        if (intensity <= 0) return 0;
+        double d = rx * l.x + ry * l.y + rz * l.z;
+        if (d <= 0) return 0;
+        double d2 = d * d; return d2 * d2 * d2 * d2 * intensity * 0.6; // ~pow(d,8)
     }
 
     // ── Slice 1 (#312) — light elevation gauge + shaft-readiness lamp ──

@@ -120,4 +120,35 @@ public sealed class DebugHudDiagnosticsTests
         for (int i = 0; i < notReady.Length; i++) if (notReady[i] != clean[i]) changed++;
         Assert.True(changed > 20, $"gauge should draw regardless of readiness (got {changed})");
     }
+
+    // ── Slice 4 (#315) — lookdev reference balls ──────────────────────
+    private static double Lum(uint c)
+        => ((c >> 16) & 0xFF) * 0.299 + ((c >> 8) & 0xFF) * 0.587 + (c & 0xFF) * 0.114;
+
+    [Fact]
+    public void ReferenceBalls_GreyBall_Lit_Side_Follows_Key_Light()
+    {
+        // Single key light pointing +X (dir = (1,0,0)) -> the grey ball's +X
+        // (right) hemisphere is lit, the -X (left) is shadow.
+        var buf = WithHud(0x40, (ref LightingFxData fx) =>
+        {
+            fx.Light1.Theta = 0.0;
+            fx.Light1.Phi = System.Math.PI / 2;   // horizon, straight to +X
+            fx.Light1.Intensity = 3.0;
+            fx.Light2.Intensity = 0.0;
+            fx.Light3.Intensity = 0.0;
+            fx.AmbientStrength = 0.05;
+        });
+
+        int r = 20, cx = 8 + r, cyG = H / 2 - r - 4;
+        double litRight = Lum(buf[cyG * W + (cx + r / 2)]);
+        double darkLeft = Lum(buf[cyG * W + (cx - r / 2)]);
+        Assert.True(litRight > darkLeft + 20,
+            $"grey ball lit side should be brighter (right={litRight:0}, left={darkLeft:0})");
+
+        // Balls actually draw a meaningful number of pixels.
+        long changed = 0; var clean = Canvas();
+        for (int i = 0; i < buf.Length; i++) if (buf[i] != clean[i]) changed++;
+        Assert.True(changed > 400, $"two balls should cover many pixels (got {changed})");
+    }
 }
