@@ -683,6 +683,24 @@
                         <CheckBox Content="Scene-time clock"
                                   IsChecked="{Binding DebugHudClock, Mode=TwoWay}"
                                   ToolTip.Tip="Top-left rotating dial that visualises SceneTime advance." />
+                        <CheckBox Content="Composition guides"
+                                  IsChecked="{Binding DebugHudGuides, Mode=TwoWay}"
+                                  ToolTip.Tip="Rule-of-thirds grid + center cross + title-safe frame. Framing aid for stills / posters." />
+                        <CheckBox Content="Clipping zebra"
+                                  IsChecked="{Binding DebugHudZebra, Mode=TwoWay}"
+                                  ToolTip.Tip="Diagonal stripes on blown highlights (yellow) and crushed shadows (blue) — a quick over/under-exposure check for the tone-map / exposure / bloom knobs." />
+                        <CheckBox Content="Light gauge + shaft readiness"
+                                  IsChecked="{Binding DebugHudLightGauge, Mode=TwoWay}"
+                                  ToolTip.Tip="Bottom-right: side-on elevation of each light (overhead=top, horizon=middle). The lamp turns yellow when the key light is raking AND fog + volume steps + shadow steps are on — i.e. god-ray shafts will actually render (not a flat glow)." />
+                        <CheckBox Content="Lookdev reference balls"
+                                  IsChecked="{Binding DebugHudReferenceBalls, Mode=TwoWay}"
+                                  ToolTip.Tip="Left edge: an 18%-grey matte ball and a chrome ball, lit by your current lights + IBL/sky. Read light direction, colour and reflections at a glance (the classic lookdev reference spheres)." />
+                        <CheckBox Content="Exposure false-color"
+                                  IsChecked="{Binding DebugHudFalseColor, Mode=TwoWay}"
+                                  ToolTip.Tip="Full-frame exposure zones: blue = crushed shadows, cyan/grey = midtones (grey band ≈ 18%), yellow = near clip, white = blown. Colorblind-safe (blue↔yellow, no red/green)." />
+                        <CheckBox Content="Luma histogram"
+                                  IsChecked="{Binding DebugHudHistogram, Mode=TwoWay}"
+                                  ToolTip.Tip="Bottom-center luma distribution (log-scaled). Yellow edge bars flag energy piled at pure black / pure white (clipping)." />
                     </StackPanel>
                 </Expander>
 

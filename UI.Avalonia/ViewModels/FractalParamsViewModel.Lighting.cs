@@ -629,6 +629,58 @@ public sealed partial class FractalParamsViewModel
         }
     }
 
+    // #311 — expanded artist-diagnostic HUD overlays (each a DebugHudFlags bit).
+    private void SetHudBit(int bit, bool on)
+    {
+        MutateLighting(r =>
+        {
+            if (on) r.Fx.DebugHudFlags |= bit;
+            else    r.Fx.DebugHudFlags &= ~bit;
+        });
+    }
+
+    /// <summary>#313 — rule-of-thirds + center cross + title-safe frame.</summary>
+    public bool DebugHudGuides
+    {
+        get => (_p.Lighting.DebugHudFlags & 0x10) != 0;
+        set { SetHudBit(0x10, value); this.RaisePropertyChanged(); Fire(); }
+    }
+
+    /// <summary>#314 — over/under-exposure zebra stripes.</summary>
+    public bool DebugHudZebra
+    {
+        get => (_p.Lighting.DebugHudFlags & 0x20) != 0;
+        set { SetHudBit(0x20, value); this.RaisePropertyChanged(); Fire(); }
+    }
+
+    /// <summary>#312 — light elevation gauge + god-ray shaft-readiness lamp.</summary>
+    public bool DebugHudLightGauge
+    {
+        get => (_p.Lighting.DebugHudFlags & 0x8) != 0;
+        set { SetHudBit(0x8, value); this.RaisePropertyChanged(); Fire(); }
+    }
+
+    /// <summary>#315 — lookdev reference balls (18%-grey matte + chrome).</summary>
+    public bool DebugHudReferenceBalls
+    {
+        get => (_p.Lighting.DebugHudFlags & 0x40) != 0;
+        set { SetHudBit(0x40, value); this.RaisePropertyChanged(); Fire(); }
+    }
+
+    /// <summary>#316 — exposure false-colour (full-frame zone recolour).</summary>
+    public bool DebugHudFalseColor
+    {
+        get => (_p.Lighting.DebugHudFlags & 0x80) != 0;
+        set { SetHudBit(0x80, value); this.RaisePropertyChanged(); Fire(); }
+    }
+
+    /// <summary>#316 — luma histogram panel.</summary>
+    public bool DebugHudHistogram
+    {
+        get => (_p.Lighting.DebugHudFlags & 0x100) != 0;
+        set { SetHudBit(0x100, value); this.RaisePropertyChanged(); Fire(); }
+    }
+
     // ── Speed-driven effect Start/Stop toggles ──────────────────────────
     //
     // Each speed-driven effect (light orbit, caustics phase, cloud-noise

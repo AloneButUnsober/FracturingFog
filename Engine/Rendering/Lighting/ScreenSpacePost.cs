@@ -659,9 +659,297 @@ public static class ScreenSpacePost
         if (colorBuffer.Length < width * height) return;
         if (width < 128 || height < 128) return;
 
-        if ((flags & 0x1) != 0) DrawLightCompass(colorBuffer, width, height, fx);
-        if ((flags & 0x2) != 0) DrawParamBars(colorBuffer, width, height, fx);
-        if ((flags & 0x4) != 0) DrawTimeClock(colorBuffer, width, height, fx);
+        // Snapshot the luma histogram BEFORE any full-frame recolour so it always
+        // reflects the real image, not the false-colour view.
+        int[]? hist = (flags & 0x100) != 0 ? BuildLumaHistogram(colorBuffer, width, height) : null;
+
+        // Full-frame diagnostics (recolour pixels) run FIRST so the corner
+        // widgets below stay legible on top of them.
+        if ((flags & 0x80)  != 0) DrawExposureFalseColor(colorBuffer, width, height);
+        if ((flags & 0x20)  != 0) DrawClippingZebra(colorBuffer, width, height);
+
+        if ((flags & 0x1)   != 0) DrawLightCompass(colorBuffer, width, height, fx);
+        if ((flags & 0x2)   != 0) DrawParamBars(colorBuffer, width, height, fx);
+        if ((flags & 0x4)   != 0) DrawTimeClock(colorBuffer, width, height, fx);
+        if ((flags & 0x10)  != 0) DrawCompositionGuides(colorBuffer, width, height);
+        if ((flags & 0x8)   != 0) DrawLightGauge(colorBuffer, width, height, fx);
+        if ((flags & 0x40)  != 0) DrawReferenceBalls(colorBuffer, width, height, fx);
+        if (hist != null)         DrawLumaHistogram(colorBuffer, width, height, hist);
+    }
+
+    // ── Slice 5 (#316) — false-color exposure + luma histogram ────────
+    private static double Luma8(uint c)
+        => ((c >> 16) & 0xFF) * 0.299 + ((c >> 8) & 0xFF) * 0.587 + (c & 0xFF) * 0.114;
+
+    // Colourblind-safe exposure ramp (blue -> cyan -> grey mid -> yellow ->
+    // white clip). Deliberately no red-vs-green discrimination.
+    private static readonly (int hi, uint col)[] FalseColorZones =
+    {
+        (2,   0xFF0000AAu),  // crushed black
+        (32,  0xFF3355CCu),
+        (64,  0xFF3399FFu),
+        (96,  0xFF33CCCCu),
+        (128, 0xFFBBBBBBu),  // 18% mid reference band
+        (160, 0xFFDDDDDDu),
+        (208, 0xFFFFE066u),
+        (250, 0xFFFFCC00u),  // near clip
+        (255, 0xFFFFFFFFu),  // blown highlight
+    };
+
+    /// <summary>Arnold/Nuke-style exposure false-colour: recolour every pixel by
+    /// its luma zone so exposure reads at a glance. Full-frame view mode.</summary>
+    private static void DrawExposureFalseColor(uint[] buf, int w, int h)
+    {
+        for (int i = 0; i < w * h; i++)
+        {
+            int lum = (int)(Luma8(buf[i]) + 0.5);
+            uint zc = 0xFFFFFFFFu;
+            foreach (var (hi, col) in FalseColorZones)
+                if (lum <= hi) { zc = col; break; }
+            buf[i] = zc;
+        }
+    }
+
+    private static int[] BuildLumaHistogram(uint[] buf, int w, int h)
+    {
+        var bins = new int[256];
+        int n = w * h;
+        for (int i = 0; i < n; i++) bins[(int)(Luma8(buf[i]) + 0.5) & 0xFF]++;
+        return bins;
+    }
+
+    /// <summary>Luma histogram panel (bottom-centre): 128 columns over a 50%
+    /// black backdrop, log-scaled so sparse tails stay visible. Yellow edge ticks
+    /// flag energy piled at pure black / pure white (clipping).</summary>
+    private static void DrawLumaHistogram(uint[] buf, int w, int h, int[] bins)
+    {
+        const int cols = 128, panelH = 52, pad = 4;
+        int panelW = cols + pad * 2;
+        int x0 = (w - panelW) / 2, y0 = h - panelH - 10;
+        FillRectAlpha(buf, w, h, x0, y0, x0 + panelW, y0 + panelH, 0xFF000000u, 0.5);
+
+        int barBase = y0 + panelH - pad, barTop = y0 + pad, barMaxH = barBase - barTop;
+        // Fold 256 bins into 128 columns; log-scale against the peak.
+        var col = new double[cols];
+        double peak = 1;
+        for (int i = 0; i < 256; i++) col[i >> 1] += bins[i];
+        for (int i = 0; i < cols; i++) { col[i] = Math.Log10(col[i] + 1); if (col[i] > peak) peak = col[i]; }
+
+        for (int i = 0; i < cols; i++)
+        {
+            int bh = (int)Math.Round(col[i] / peak * barMaxH);
+            if (bh <= 0) continue;
+            int bx = x0 + pad + i;
+            // Clip flags: leftmost (black) / rightmost (white) columns in yellow.
+            uint c = (i == 0 || i == cols - 1) ? 0xFFFFCC00u : 0xFFDDDDDDu;
+            FillRectAlpha(buf, w, h, bx, barBase - bh, bx + 1, barBase, c, 1.0);
+        }
+    }
+
+    // ── Slice 4 (#315) — lookdev reference balls ──────────────────────
+    /// <summary>18%-grey matte + chrome spheres stacked on the left edge, shaded
+    /// analytically against the live lights (dir + colour + intensity), ambient,
+    /// and the IBL/sky env (chrome reflection via <see cref="ShadingPipeline
+    /// .SkyColorHdri"/>). A fixed straight-on view — the classic lookdev balls
+    /// that read light direction / colour / reflections at a glance.</summary>
+    private static void DrawReferenceBalls(uint[] buf, int w, int h, in LightingFxData fx)
+    {
+        int r = 20;
+        int cx = 8 + r;
+        int cyG = h / 2 - r - 4;   // grey ball (top)
+        int cyC = h / 2 + r + 4;   // chrome ball (bottom)
+
+        double orbitT = fx.SceneTime * fx.LightOrbitSpeed;
+        var l1 = LightDir3(fx.Light1.Theta + orbitT,       fx.Light1.Phi);
+        var l2 = LightDir3(fx.Light2.Theta + orbitT * 0.7, fx.Light2.Phi);
+        var l3 = LightDir3(fx.Light3.Theta + orbitT * 1.3, fx.Light3.Phi);
+
+        ShadeBall(buf, w, h, cx, cyG, r, in fx, l1, l2, l3, chrome: false);
+        ShadeBall(buf, w, h, cx, cyC, r, in fx, l1, l2, l3, chrome: true);
+        DrawCircleOutline(buf, w, h, cx, cyG, r, 0xFF303030u);
+        DrawCircleOutline(buf, w, h, cx, cyC, r, 0xFF303030u);
+    }
+
+    private static (double x, double y, double z) LightDir3(double theta, double phi)
+    {
+        double sp = Math.Sin(phi);
+        return (sp * Math.Cos(theta), Math.Cos(phi), sp * Math.Sin(theta));
+    }
+
+    private static void ShadeBall(
+        uint[] buf, int w, int h, int cx, int cy, int r, in LightingFxData fx,
+        (double x, double y, double z) l1, (double x, double y, double z) l2,
+        (double x, double y, double z) l3, bool chrome)
+    {
+        double i1 = fx.Light1.Intensity, i2 = fx.Light2.Intensity, i3 = fx.Light3.Intensity;
+        double amb = fx.AmbientStrength;
+        for (int py = cy - r; py <= cy + r; py++)
+        {
+            if ((uint)py >= (uint)h) continue;
+            for (int px = cx - r; px <= cx + r; px++)
+            {
+                if ((uint)px >= (uint)w) continue;
+                double nx = (px - cx) / (double)r, ny = -(py - cy) / (double)r;
+                double d2 = nx * nx + ny * ny;
+                if (d2 > 1.0) continue;
+                double nz = Math.Sqrt(1.0 - d2);   // toward viewer (+Z)
+
+                double oR, oG, oB;
+                if (!chrome)
+                {
+                    // 18% grey Lambert.
+                    double diff = amb
+                        + Lambert(nx, ny, nz, l1, i1) + Lambert(nx, ny, nz, l2, i2)
+                        + Lambert(nx, ny, nz, l3, i3);
+                    double a = 0.18 * 255.0;
+                    oR = oG = oB = a * diff;
+                }
+                else
+                {
+                    // Chrome: reflect the view (0,0,1) about N and sample the env.
+                    double dot = nz;                    // dot(N, V) with V=(0,0,1)
+                    double rx = 2 * dot * nx, ry = 2 * dot * ny, rz = 2 * dot * nz - 1.0;
+                    uint sky = ShadingPipeline.SkyColorHdri(rx, ry, rz, in fx);
+                    oR = (sky >> 16) & 0xFF; oG = (sky >> 8) & 0xFF; oB = sky & 0xFF;
+                    double sp = Spec(rx, ry, rz, l1, i1) + Spec(rx, ry, rz, l2, i2) + Spec(rx, ry, rz, l3, i3);
+                    oR += sp * 255; oG += sp * 255; oB += sp * 255;
+                }
+                buf[py * w + px] = 0xFF000000u
+                    | ((uint)Math.Clamp(oR, 0, 255) << 16)
+                    | ((uint)Math.Clamp(oG, 0, 255) << 8)
+                    |  (uint)Math.Clamp(oB, 0, 255);
+            }
+        }
+    }
+
+    private static double Lambert(double nx, double ny, double nz,
+        (double x, double y, double z) l, double intensity)
+    {
+        if (intensity <= 0) return 0;
+        double d = nx * l.x + ny * l.y + nz * l.z;
+        return d > 0 ? d * intensity : 0;
+    }
+
+    private static double Spec(double rx, double ry, double rz,
+        (double x, double y, double z) l, double intensity)
+    {
+        if (intensity <= 0) return 0;
+        double d = rx * l.x + ry * l.y + rz * l.z;
+        if (d <= 0) return 0;
+        double d2 = d * d; return d2 * d2 * d2 * d2 * intensity * 0.6; // ~pow(d,8)
+    }
+
+    // ── Slice 1 (#312) — light elevation gauge + shaft-readiness lamp ──
+    /// <summary>Whether the key light will actually cast god-ray SHAFTS: a raking
+    /// (low-elevation) key light, fog + volume steps on, AND per-step shadow
+    /// enabled (ShadowSteps &gt; 0 with the key light in the shadow mask). Without
+    /// the shadow term the medium only scatters uniformly (flat glow).</summary>
+    internal static bool ShaftReady(in LightingFxData fx)
+    {
+        double elevY = Math.Cos(fx.Light1.Phi);   // world +Y component of the key dir
+        return fx.Light1.Intensity > 0.0
+            && fx.FogDensity > 0.0
+            && fx.VolumeSteps > 0
+            && fx.ShadowSteps > 0
+            && (fx.ShadowLightMask & 0x1) != 0
+            && elevY > 0.03 && elevY < 0.6;        // raking, above the horizon
+    }
+
+    /// <summary>Side-on elevation gauge for the three lights: a vertical scale
+    /// with the horizon at centre and a coloured dot per light placed by its
+    /// world +Y (overhead = top, horizon = middle, below = bottom). A lamp at the
+    /// foot turns yellow (#FFCC00) when <see cref="ShaftReady"/> — i.e. the
+    /// current rig will render god-ray shafts, not a flat glow.</summary>
+    private static void DrawLightGauge(uint[] buf, int w, int h, in LightingFxData fx)
+    {
+        const int bw = 74, bh = 60;
+        int x0 = w - bw - 8, y0 = h - bh - 8;
+        FillRectAlpha(buf, w, h, x0, y0, x0 + bw, y0 + bh, 0xFF000000u, 0.5);
+
+        int axisX = x0 + 14;
+        int top = y0 + 6, bot = y0 + bh - 14;     // leave room for the lamp
+        int mid = (top + bot) / 2, halfH = (bot - top) / 2;
+        // Scale + horizon tick.
+        FillRectAlpha(buf, w, h, axisX, top, axisX + 1, bot, 0xFFFFFFFFu, 0.8);
+        FillRectAlpha(buf, w, h, axisX - 4, mid, axisX + 5, mid + 1, 0xFF888888u, 0.9);
+
+        DrawLightDot(buf, w, h, axisX, mid, halfH, fx.Light1.Phi, fx.Light1.Intensity, fx.Light1.Color, 18);
+        DrawLightDot(buf, w, h, axisX, mid, halfH, fx.Light2.Phi, fx.Light2.Intensity, fx.Light2.Color, 34);
+        DrawLightDot(buf, w, h, axisX, mid, halfH, fx.Light3.Phi, fx.Light3.Intensity, fx.Light3.Color, 50);
+
+        // Shaft-readiness lamp (bottom-left of the box).
+        bool ready = ShaftReady(in fx);
+        uint lamp = ready ? 0xFFFFCC00u : 0xFF404040u;
+        int lx = x0 + 6, ly = y0 + bh - 11;
+        FillRectAlpha(buf, w, h, lx, ly, lx + 9, ly + 6, lamp, 1.0);
+        DrawCircleOutline(buf, w, h, lx + 4, ly + 3, 3, ready ? 0xFFFFFFFFu : 0xFF666666u);
+    }
+
+    private static void DrawLightDot(
+        uint[] buf, int w, int h, int axisX, int mid, int halfH,
+        double phi, double intensity, uint color, int dx)
+    {
+        if (intensity <= 0.0) return;
+        double y = Math.Cos(phi);                 // +1 overhead .. 0 horizon .. -1 below
+        int py = mid - (int)Math.Round(y * halfH);
+        int px = axisX + dx;
+        // Connector from the scale to the dot so the height reads clearly.
+        FillRectAlpha(buf, w, h, axisX, py, px, py + 1, color, 0.5);
+        FillRectAlpha(buf, w, h, px - 2, py - 2, px + 3, py + 3, color, 1.0);
+    }
+
+    // ── Slice 3 (#314) — clipping zebra ───────────────────────────────
+    /// <summary>Diagonal-stripe over/under-exposure markers. Blown highlights
+    /// (luma ≥ 250) get yellow stripes (#FFCC00, colourblind-safe — not red);
+    /// crushed shadows (luma ≤ 4) get blue stripes. Pairs with the HDR tone-map /
+    /// exposure / bloom knobs.</summary>
+    private static void DrawClippingZebra(uint[] buf, int w, int h)
+    {
+        const uint over = 0xFFFFCC00u;  // yellow — blown highlight
+        const uint under = 0xFF3399FFu; // blue — crushed shadow
+        for (int y = 0; y < h; y++)
+        {
+            int row = y * w;
+            for (int x = 0; x < w; x++)
+            {
+                uint c = buf[row + x];
+                double lum = ((c >> 16) & 0xFF) * 0.299 + ((c >> 8) & 0xFF) * 0.587 + (c & 0xFF) * 0.114;
+                bool stripe = (((x + y) / 6) & 1) == 0;
+                if (lum >= 250.0) { if (stripe) buf[row + x] = over; }
+                else if (lum <= 4.0) { if (stripe) buf[row + x] = under; }
+            }
+        }
+    }
+
+    // ── Slice 2 (#313) — composition guides ───────────────────────────
+    /// <summary>Rule-of-thirds grid + center cross + title-safe frame. Framing
+    /// aid for stills / posters. Thin, low-alpha white so it never dominates.</summary>
+    private static void DrawCompositionGuides(uint[] buf, int w, int h)
+    {
+        const uint line = 0xFFFFFFFFu;
+        const double a = 0.30;
+        // Rule-of-thirds.
+        int x1 = w / 3, x2 = 2 * w / 3, y1 = h / 3, y2 = 2 * h / 3;
+        FillRectAlpha(buf, w, h, x1, 0, x1 + 1, h, line, a);
+        FillRectAlpha(buf, w, h, x2, 0, x2 + 1, h, line, a);
+        FillRectAlpha(buf, w, h, 0, y1, w, y1 + 1, line, a);
+        FillRectAlpha(buf, w, h, 0, y2, w, y2 + 1, line, a);
+        // Center cross (brighter, short).
+        int cx = w / 2, cy = h / 2, arm = Math.Max(6, Math.Min(w, h) / 24);
+        FillRectAlpha(buf, w, h, cx - arm, cy, cx + arm + 1, cy + 1, line, 0.6);
+        FillRectAlpha(buf, w, h, cx, cy - arm, cx + 1, cy + arm + 1, line, 0.6);
+        // Title-safe frame (5% inset outline).
+        int mx = w / 20, my = h / 20;
+        DrawRectOutlineAlpha(buf, w, h, mx, my, w - mx, h - my, line, 0.35);
+    }
+
+    private static void DrawRectOutlineAlpha(
+        uint[] buf, int w, int h, int x0, int y0, int x1, int y1, uint color, double a)
+    {
+        FillRectAlpha(buf, w, h, x0, y0, x1, y0 + 1, color, a);   // top
+        FillRectAlpha(buf, w, h, x0, y1 - 1, x1, y1, color, a);   // bottom
+        FillRectAlpha(buf, w, h, x0, y0, x0 + 1, y1, color, a);   // left
+        FillRectAlpha(buf, w, h, x1 - 1, y0, x1, y1, color, a);   // right
     }
 
     private static void DrawLightCompass(
