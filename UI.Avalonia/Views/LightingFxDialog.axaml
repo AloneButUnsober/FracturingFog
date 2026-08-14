@@ -45,6 +45,15 @@
                            Foreground="#FFCC00"
                            Margin="0,0,0,4" />
 
+                <!-- #306 — volumetric preset droplist (artistic starting points) -->
+                <Grid ColumnDefinitions="160,*" Margin="0,0,0,4">
+                    <TextBlock Grid.Column="0" Text="Volumetric preset:" VerticalAlignment="Center"
+                               ToolTip.Tip="Curated fog / god-ray / cloud starting points, applied over the current lighting — then tune the Fog / Volumetric sliders below. '—' = no change. A region save snapshots whatever you land on." />
+                    <ComboBox Grid.Column="1" HorizontalAlignment="Stretch"
+                              ItemsSource="{Binding VolumetricPresetNames}"
+                              SelectedItem="{Binding SelectedVolumetricPreset, Mode=TwoWay}" />
+                </Grid>
+
                 <!-- Lights -->
                 <Expander Header="Lights" IsExpanded="True" HorizontalAlignment="Stretch">
                     <Grid ColumnDefinitions="160,*"
