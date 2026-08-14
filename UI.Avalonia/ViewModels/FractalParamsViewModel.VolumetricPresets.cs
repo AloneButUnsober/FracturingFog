@@ -36,7 +36,11 @@ public sealed partial class FractalParamsViewModel
             this.RaiseAndSetIfChanged(ref _selectedVolumetricPreset, value);
             if (string.IsNullOrEmpty(value) || value == VolumetricFxPresets.NoneName) return;
             _p.Lighting = VolumetricFxPresets.ApplyByName(value, _p.Lighting);
-            this.RaisePropertyChanged(string.Empty);   // refresh every fog knob
+            // Named notifications (NOT an empty-string broadcast, and NOT
+            // re-raising SelectedVolumetricPreset mid-selection — either reverts
+            // the ComboBox to its previous value on the next click). This makes
+            // the fog sliders re-read the applied preset values.
+            RaiseLightingKnobsChanged();
             Fire();
         }
     }

@@ -80,9 +80,11 @@ public sealed partial class FractalParamsViewModel
     private void ResetLightingToDefaults()
     {
         _p.Lighting = LightingFxData.CreateDefault();
-        // Applying defaults invalidates the "which preset am I on" hint.
+        // Applying defaults invalidates the "which preset am I on" hint. Safe to
+        // raise the droplist here (driven by the button, not the ComboBox).
         _selectedVolumetricPreset = VolumetricFxPresets.NoneName;
-        this.RaisePropertyChanged(string.Empty);   // refresh every lighting knob
+        this.RaisePropertyChanged(nameof(SelectedVolumetricPreset));
+        RaiseLightingKnobsChanged();
         Fire();
     }
 
@@ -162,7 +164,7 @@ public sealed partial class FractalParamsViewModel
         _p.Relief2DMeshGrid           = d.Relief2DMeshGrid;
         _p.Relief2DMeshMaxMB          = d.Relief2DMeshMaxMB;
         _p.Relief2DMeshUnderside      = d.Relief2DMeshUnderside;
-        this.RaisePropertyChanged(string.Empty);   // refresh every relief knob
+        RaiseReliefKnobsChanged();
         Fire();
     }
 
@@ -174,4 +176,69 @@ public sealed partial class FractalParamsViewModel
         t.Tick += (_, _) => disarm();
         return t;
     }
+
+    private void RaiseChanged(string[] names)
+    {
+        foreach (var n in names) this.RaisePropertyChanged(n);
+    }
+
+    // Every Lighting & FX knob the dialogs bind (Lighting.cs). Explicit names,
+    // not an empty-string broadcast: Avalonia compiled bindings (x:DataType) do
+    // not reliably re-read on a blanket "" notification, and re-raising the
+    // preset ComboBox's own property mid-selection reverts its visual selection.
+    // Deliberately EXCLUDES SelectedVolumetricPreset for that reason.
+    private static readonly string[] LightingKnobNames =
+    {
+        nameof(Light1Theta), nameof(Light1Phi), nameof(Light1Intensity), nameof(Light1Color),
+        nameof(Light2Theta), nameof(Light2Phi), nameof(Light2Intensity), nameof(Light2Color),
+        nameof(Light3Theta), nameof(Light3Phi), nameof(Light3Intensity), nameof(Light3Color),
+        nameof(AmbientStrength), nameof(AoSamples), nameof(AoStrength),
+        nameof(SsaoSamples), nameof(SsaoRadius), nameof(SsaoStrength),
+        nameof(ShadowSteps), nameof(ShadowSoftK),
+        nameof(FogDensity), nameof(FogHeightFalloff), nameof(VolumeSteps),
+        nameof(VolumeNoiseAmount), nameof(VolumeNoiseScale), nameof(VolumeNoiseSpeed),
+        nameof(VolumeNoiseOctaves), nameof(VolumeSelfShadow), nameof(VolumeSelfShadowSteps),
+        nameof(VolumeAnisotropy), nameof(FogColor), nameof(FogColorHex), nameof(VolumePaletteStrength),
+        nameof(Roughness), nameof(Metallic), nameof(SpecularStrength), nameof(SubSurfaceStrength),
+        nameof(SkyMode), nameof(BgTopColor), nameof(BgBottomColor), nameof(EnvironmentName),
+        nameof(IblStrength), nameof(ShowSkyBackdrop),
+        nameof(ToneMap), nameof(Exposure), nameof(BloomThreshold), nameof(BloomStrength),
+        nameof(ChromaticAberration), nameof(LensDistortion), nameof(Vignette),
+        nameof(LensTangentialX), nameof(LensTangentialY), nameof(AnamorphicSqueeze),
+        nameof(ReflectionStrength), nameof(ReflectionSteps), nameof(EdgeStrength),
+        nameof(EdgeColor), nameof(EdgeColorHex), nameof(EdgeThreshold), nameof(EdgeKernel),
+        nameof(MaxBounces), nameof(StereoMode), nameof(StereoEyeSeparation),
+        nameof(StereoFovDegrees), nameof(StereoConvergence), nameof(StereoMaxDisparity),
+        nameof(StereoLayout), nameof(DofAperture), nameof(DofFocusDistance), nameof(DofSamples),
+        nameof(LightOrbitSpeed), nameof(CausticsAnimSpeed),
+        nameof(TriplanarKind), nameof(TriplanarScale), nameof(TriplanarStrength),
+        nameof(TriplanarTint), nameof(TriplanarTintHex),
+        nameof(DebugHudCompass), nameof(DebugHudBars), nameof(DebugHudClock),
+        // derived Start/Stop labels
+        nameof(IsLightOrbitRunning), nameof(LightOrbitToggleLabel),
+        nameof(IsCausticsRunning), nameof(CausticsToggleLabel),
+        nameof(IsVolumeNoiseRunning), nameof(VolumeNoiseToggleLabel),
+    };
+
+    /// <summary>Raise a change for every Lighting &amp; FX knob so the dialog
+    /// sliders/readouts re-read after an in-place mutation of _p.Lighting.</summary>
+    private void RaiseLightingKnobsChanged() => RaiseChanged(LightingKnobNames);
+
+    // Every Relief 3D knob the dialog binds (main VM partial).
+    private static readonly string[] ReliefKnobNames =
+    {
+        nameof(Relief2DHeightScale), nameof(Relief2DLightAzimuthDeg), nameof(Relief2DLightElevationDeg),
+        nameof(Relief2DShadowStrength), nameof(Relief2DStrength),
+        nameof(Relief2DCameraAzimuthDeg), nameof(Relief2DCameraElevationDeg), nameof(Relief2DCameraFovDeg),
+        nameof(Relief2DCameraZoom), nameof(Relief2DCameraOrthographic), nameof(Relief2DSupersample),
+        nameof(Relief2DHeightCurve), nameof(Relief2DBicubicHeight), nameof(Relief2DGroundPlane),
+        nameof(Relief2DAutoShade), nameof(Relief2DEdgeFade), nameof(Relief2DHiResField),
+        nameof(Relief2DFieldFloor), nameof(Relief2DIsolate), nameof(Relief2DIsolateByDetail),
+        nameof(Relief2DDetailThreshold), nameof(Relief2DIsolateByColor), nameof(Relief2DDropColorsCsv),
+        nameof(Relief2DColorTolerance), nameof(Relief2DMeshHeight), nameof(Relief2DMeshSmoothing),
+        nameof(Relief2DMeshGrid), nameof(Relief2DMeshMaxMB), nameof(Relief2DMeshUnderside),
+        nameof(Relief2DMeshSizeEstimate),
+    };
+
+    private void RaiseReliefKnobsChanged() => RaiseChanged(ReliefKnobNames);
 }
