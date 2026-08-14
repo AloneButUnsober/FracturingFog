@@ -629,6 +629,23 @@ public sealed partial class FractalParamsViewModel
         }
     }
 
+    // #311 — expanded artist-diagnostic HUD overlays (each a DebugHudFlags bit).
+    private void SetHudBit(int bit, bool on)
+    {
+        MutateLighting(r =>
+        {
+            if (on) r.Fx.DebugHudFlags |= bit;
+            else    r.Fx.DebugHudFlags &= ~bit;
+        });
+    }
+
+    /// <summary>#313 — rule-of-thirds + center cross + title-safe frame.</summary>
+    public bool DebugHudGuides
+    {
+        get => (_p.Lighting.DebugHudFlags & 0x10) != 0;
+        set { SetHudBit(0x10, value); this.RaisePropertyChanged(); Fire(); }
+    }
+
     // ── Speed-driven effect Start/Stop toggles ──────────────────────────
     //
     // Each speed-driven effect (light orbit, caustics phase, cloud-noise

@@ -655,9 +655,41 @@ public static class ScreenSpacePost
         if (colorBuffer.Length < width * height) return;
         if (width < 128 || height < 128) return;
 
-        if ((flags & 0x1) != 0) DrawLightCompass(colorBuffer, width, height, fx);
-        if ((flags & 0x2) != 0) DrawParamBars(colorBuffer, width, height, fx);
-        if ((flags & 0x4) != 0) DrawTimeClock(colorBuffer, width, height, fx);
+        if ((flags & 0x1)   != 0) DrawLightCompass(colorBuffer, width, height, fx);
+        if ((flags & 0x2)   != 0) DrawParamBars(colorBuffer, width, height, fx);
+        if ((flags & 0x4)   != 0) DrawTimeClock(colorBuffer, width, height, fx);
+        if ((flags & 0x10)  != 0) DrawCompositionGuides(colorBuffer, width, height);
+    }
+
+    // ── Slice 2 (#313) — composition guides ───────────────────────────
+    /// <summary>Rule-of-thirds grid + center cross + title-safe frame. Framing
+    /// aid for stills / posters. Thin, low-alpha white so it never dominates.</summary>
+    private static void DrawCompositionGuides(uint[] buf, int w, int h)
+    {
+        const uint line = 0xFFFFFFFFu;
+        const double a = 0.30;
+        // Rule-of-thirds.
+        int x1 = w / 3, x2 = 2 * w / 3, y1 = h / 3, y2 = 2 * h / 3;
+        FillRectAlpha(buf, w, h, x1, 0, x1 + 1, h, line, a);
+        FillRectAlpha(buf, w, h, x2, 0, x2 + 1, h, line, a);
+        FillRectAlpha(buf, w, h, 0, y1, w, y1 + 1, line, a);
+        FillRectAlpha(buf, w, h, 0, y2, w, y2 + 1, line, a);
+        // Center cross (brighter, short).
+        int cx = w / 2, cy = h / 2, arm = Math.Max(6, Math.Min(w, h) / 24);
+        FillRectAlpha(buf, w, h, cx - arm, cy, cx + arm + 1, cy + 1, line, 0.6);
+        FillRectAlpha(buf, w, h, cx, cy - arm, cx + 1, cy + arm + 1, line, 0.6);
+        // Title-safe frame (5% inset outline).
+        int mx = w / 20, my = h / 20;
+        DrawRectOutlineAlpha(buf, w, h, mx, my, w - mx, h - my, line, 0.35);
+    }
+
+    private static void DrawRectOutlineAlpha(
+        uint[] buf, int w, int h, int x0, int y0, int x1, int y1, uint color, double a)
+    {
+        FillRectAlpha(buf, w, h, x0, y0, x1, y0 + 1, color, a);   // top
+        FillRectAlpha(buf, w, h, x0, y1 - 1, x1, y1, color, a);   // bottom
+        FillRectAlpha(buf, w, h, x0, y0, x0 + 1, y1, color, a);   // left
+        FillRectAlpha(buf, w, h, x1 - 1, y0, x1, y1, color, a);   // right
     }
 
     private static void DrawLightCompass(
