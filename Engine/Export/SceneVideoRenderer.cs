@@ -479,6 +479,24 @@ namespace FracturingFog.Export
             if (region != null)
                 LoadRegionParams(region, p);
 
+            // #295 follow-up — per-shot lighting override by name. Borrow another
+            // region's captured Lighting & FX for this shot, overriding the shot
+            // region's own lighting applied above. Precedence: scene global track
+            // > this shot override > shot region > theme > default. Applied
+            // wholesale (ApplyLighting* replaces p.Lighting), so the named source
+            // wins. No-op when unset or the named region is missing.
+            if (!string.IsNullOrEmpty(shot.LightingRegionName))
+            {
+                var lightRegion = FractalRegionLibrary.Instance.FindByName(shot.LightingRegionName);
+                if (lightRegion != null)
+                {
+                    if (lightRegion.LightingIsAuthoritative)
+                        lightRegion.ApplyLightingAuthoritative(p);
+                    else
+                        lightRegion.ApplyLightingTo(p);
+                }
+            }
+
             var anim = ResolveAnimation(shot, region);
             var theme = ResolveTheme(shot, region);
 
