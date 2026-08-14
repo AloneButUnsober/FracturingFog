@@ -54,4 +54,33 @@ public sealed class RegionLightingCaptureTests
         }
         finally { lib.RemoveUserRegion(name); }
     }
+
+    [Fact]
+    public void SaveCurrentAsRegion_Skips_Lighting_On_Flat_2D()
+    {
+        // Plain 2D bookmark (no Relief 3D, not a 3D type): VL/fog/AO render
+        // nothing, so lighting is NOT captured — regions.json stays clean.
+        var svc = new HostColorThemeService();
+        var lib = FractalRegionLibrary.Instance;
+        string name = $"FF-VLGate-{Guid.NewGuid():N}";
+
+        var fp = new FractalParameters { Relief2DEnabled = false };
+        var fx = fp.Lighting;
+        fx.FogDensity = 0.7;   // tuned, but inert on flat 2D
+        fp.Lighting = fx;
+
+        var live = new FractalViewState
+        {
+            CenterX = -0.5, CenterY = 0, Zoom = 1.0,
+            FractalType = FractalType.Mandelbrot,
+            FractalParameters = fp,
+        };
+
+        try
+        {
+            Assert.True(svc.SaveCurrentAsRegion(name, live));
+            Assert.Null(lib.FindByName(name)!.LightingOverride);
+        }
+        finally { lib.RemoveUserRegion(name); }
+    }
 }

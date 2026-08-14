@@ -718,8 +718,13 @@ namespace FracturingFog.Hosting
                 // is a look snapshot, so — like a saved shot in a 3D app — it
                 // captures the scene lighting, not just geometry. Recall restores
                 // it (see FractalRegion.ApplyLightingTo / ShellViewModel jump).
-                // Auto-capture: what you see is what saves.
-                LightingOverride = p != null
+                //
+                // Gated to contexts where lighting actually renders: a 3D
+                // raymarched fractal (state.Is3D) or a 2D fractal shown through
+                // Relief 3D. Plain flat-2D bookmarks — where VL / fog / AO are
+                // inert — stay lighting-clean (null), so regions.json isn't
+                // bloated with a default block that would render nothing.
+                LightingOverride = (p != null && (state.Is3D || p.Relief2DEnabled))
                     ? LightingFxPresetData.FromFx(p.Lighting)
                     : null,
             };
