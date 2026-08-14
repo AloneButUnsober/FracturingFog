@@ -656,12 +656,13 @@ namespace FracturingFog.Hosting
         }
 
         /// <summary>
-        /// Build a fresh user-defined region carrying only geometry, quality,
-        /// fractal type, and per-engine source identity captured from the
-        /// <b>live</b> <paramref name="state"/>. Metadata (Name, Description,
-        /// animation, curated themes, lighting/watermark) is left at defaults
-        /// for the caller to fill. Shared by <see cref="SaveCurrentAsRegion"/>
-        /// and the Region Editor's "Capture current view" (Phase R3).
+        /// Build a fresh user-defined region carrying geometry, quality, fractal
+        /// type, per-engine source identity, the Relief 3D snapshot, AND the
+        /// Lighting &amp; FX snapshot captured from the <b>live</b>
+        /// <paramref name="state"/>. Free-text metadata (Name, Description,
+        /// animation, curated themes, watermark) is left at defaults for the
+        /// caller to fill. Shared by <see cref="SaveCurrentAsRegion"/> and the
+        /// Region Editor's "Capture current view" (Phase R3).
         /// </summary>
         private static FractalRegion BuildGeometryFromLiveState(FractalViewState state)
         {
@@ -713,6 +714,14 @@ namespace FracturingFog.Hosting
                 // the full relief look on recall (camera, tone curve, isolation,
                 // mesh knobs). Null when relief is off, so plain 2D regions stay clean.
                 Relief3D = Relief3DSettings.Snapshot(p),
+                // Lighting & FX (VL / fog / AO / lights / sky) snapshot. A region
+                // is a look snapshot, so — like a saved shot in a 3D app — it
+                // captures the scene lighting, not just geometry. Recall restores
+                // it (see FractalRegion.ApplyLightingTo / ShellViewModel jump).
+                // Auto-capture: what you see is what saves.
+                LightingOverride = p != null
+                    ? LightingFxPresetData.FromFx(p.Lighting)
+                    : null,
             };
         }
 
