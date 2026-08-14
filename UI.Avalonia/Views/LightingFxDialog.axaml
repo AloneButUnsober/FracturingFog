@@ -681,6 +681,12 @@
                         <CheckBox Content="Lookdev reference balls"
                                   IsChecked="{Binding DebugHudReferenceBalls, Mode=TwoWay}"
                                   ToolTip.Tip="Left edge: an 18%-grey matte ball and a chrome ball, lit by your current lights + IBL/sky. Read light direction, colour and reflections at a glance (the classic lookdev reference spheres)." />
+                        <CheckBox Content="Exposure false-color"
+                                  IsChecked="{Binding DebugHudFalseColor, Mode=TwoWay}"
+                                  ToolTip.Tip="Full-frame exposure zones: blue = crushed shadows, cyan/grey = midtones (grey band ≈ 18%), yellow = near clip, white = blown. Colorblind-safe (blue↔yellow, no red/green)." />
+                        <CheckBox Content="Luma histogram"
+                                  IsChecked="{Binding DebugHudHistogram, Mode=TwoWay}"
+                                  ToolTip.Tip="Bottom-center luma distribution (log-scaled). Yellow edge bars flag energy piled at pure black / pure white (clipping)." />
                     </StackPanel>
                 </Expander>
 

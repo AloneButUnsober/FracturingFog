@@ -655,8 +655,13 @@ public static class ScreenSpacePost
         if (colorBuffer.Length < width * height) return;
         if (width < 128 || height < 128) return;
 
+        // Snapshot the luma histogram BEFORE any full-frame recolour so it always
+        // reflects the real image, not the false-colour view.
+        int[]? hist = (flags & 0x100) != 0 ? BuildLumaHistogram(colorBuffer, width, height) : null;
+
         // Full-frame diagnostics (recolour pixels) run FIRST so the corner
         // widgets below stay legible on top of them.
+        if ((flags & 0x80)  != 0) DrawExposureFalseColor(colorBuffer, width, height);
         if ((flags & 0x20)  != 0) DrawClippingZebra(colorBuffer, width, height);
 
         if ((flags & 0x1)   != 0) DrawLightCompass(colorBuffer, width, height, fx);
@@ -665,6 +670,76 @@ public static class ScreenSpacePost
         if ((flags & 0x10)  != 0) DrawCompositionGuides(colorBuffer, width, height);
         if ((flags & 0x8)   != 0) DrawLightGauge(colorBuffer, width, height, fx);
         if ((flags & 0x40)  != 0) DrawReferenceBalls(colorBuffer, width, height, fx);
+        if (hist != null)         DrawLumaHistogram(colorBuffer, width, height, hist);
+    }
+
+    // ── Slice 5 (#316) — false-color exposure + luma histogram ────────
+    private static double Luma8(uint c)
+        => ((c >> 16) & 0xFF) * 0.299 + ((c >> 8) & 0xFF) * 0.587 + (c & 0xFF) * 0.114;
+
+    // Colourblind-safe exposure ramp (blue -> cyan -> grey mid -> yellow ->
+    // white clip). Deliberately no red-vs-green discrimination.
+    private static readonly (int hi, uint col)[] FalseColorZones =
+    {
+        (2,   0xFF0000AAu),  // crushed black
+        (32,  0xFF3355CCu),
+        (64,  0xFF3399FFu),
+        (96,  0xFF33CCCCu),
+        (128, 0xFFBBBBBBu),  // 18% mid reference band
+        (160, 0xFFDDDDDDu),
+        (208, 0xFFFFE066u),
+        (250, 0xFFFFCC00u),  // near clip
+        (255, 0xFFFFFFFFu),  // blown highlight
+    };
+
+    /// <summary>Arnold/Nuke-style exposure false-colour: recolour every pixel by
+    /// its luma zone so exposure reads at a glance. Full-frame view mode.</summary>
+    private static void DrawExposureFalseColor(uint[] buf, int w, int h)
+    {
+        for (int i = 0; i < w * h; i++)
+        {
+            int lum = (int)(Luma8(buf[i]) + 0.5);
+            uint zc = 0xFFFFFFFFu;
+            foreach (var (hi, col) in FalseColorZones)
+                if (lum <= hi) { zc = col; break; }
+            buf[i] = zc;
+        }
+    }
+
+    private static int[] BuildLumaHistogram(uint[] buf, int w, int h)
+    {
+        var bins = new int[256];
+        int n = w * h;
+        for (int i = 0; i < n; i++) bins[(int)(Luma8(buf[i]) + 0.5) & 0xFF]++;
+        return bins;
+    }
+
+    /// <summary>Luma histogram panel (bottom-centre): 128 columns over a 50%
+    /// black backdrop, log-scaled so sparse tails stay visible. Yellow edge ticks
+    /// flag energy piled at pure black / pure white (clipping).</summary>
+    private static void DrawLumaHistogram(uint[] buf, int w, int h, int[] bins)
+    {
+        const int cols = 128, panelH = 52, pad = 4;
+        int panelW = cols + pad * 2;
+        int x0 = (w - panelW) / 2, y0 = h - panelH - 10;
+        FillRectAlpha(buf, w, h, x0, y0, x0 + panelW, y0 + panelH, 0xFF000000u, 0.5);
+
+        int barBase = y0 + panelH - pad, barTop = y0 + pad, barMaxH = barBase - barTop;
+        // Fold 256 bins into 128 columns; log-scale against the peak.
+        var col = new double[cols];
+        double peak = 1;
+        for (int i = 0; i < 256; i++) col[i >> 1] += bins[i];
+        for (int i = 0; i < cols; i++) { col[i] = Math.Log10(col[i] + 1); if (col[i] > peak) peak = col[i]; }
+
+        for (int i = 0; i < cols; i++)
+        {
+            int bh = (int)Math.Round(col[i] / peak * barMaxH);
+            if (bh <= 0) continue;
+            int bx = x0 + pad + i;
+            // Clip flags: leftmost (black) / rightmost (white) columns in yellow.
+            uint c = (i == 0 || i == cols - 1) ? 0xFFFFCC00u : 0xFFDDDDDDu;
+            FillRectAlpha(buf, w, h, bx, barBase - bh, bx + 1, barBase, c, 1.0);
+        }
     }
 
     // ── Slice 4 (#315) — lookdev reference balls ──────────────────────

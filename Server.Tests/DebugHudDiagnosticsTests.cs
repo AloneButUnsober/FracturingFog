@@ -151,4 +151,44 @@ public sealed class DebugHudDiagnosticsTests
         for (int i = 0; i < buf.Length; i++) if (buf[i] != clean[i]) changed++;
         Assert.True(changed > 400, $"two balls should cover many pixels (got {changed})");
     }
+
+    // ── Slice 5 (#316) — false-color + histogram ──────────────────────
+    private static uint[] Fill(uint c) { var b = new uint[W * H]; for (int i = 0; i < b.Length; i++) b[i] = c; return b; }
+
+    [Fact]
+    public void FalseColor_Maps_Luma_To_Exposure_Zones()
+    {
+        var fx = LightingFxData.CreateDefault();
+        fx.DebugHudFlags = 0x80;
+
+        // Dark (luma ~20) -> a blue zone; bright (luma ~240) -> yellow zone.
+        var dark = Fill(0xFF141414u);
+        ScreenSpacePost.ApplyDebugHud(dark, W, H, in fx);
+        Assert.Equal(0xFF3355CCu, dark[0]);   // zone hi=32
+
+        var bright = Fill(0xFFF0F0F0u);
+        ScreenSpacePost.ApplyDebugHud(bright, W, H, in fx);
+        Assert.Equal(0xFFFFCC00u, bright[0]); // zone hi=250
+
+        // Every pixel recoloured (full-frame view mode).
+        Assert.All(dark, c => Assert.Equal(0xFF3355CCu, c));
+    }
+
+    [Fact]
+    public void Histogram_Draws_Panel_And_Flags_White_Clip()
+    {
+        var fx = LightingFxData.CreateDefault();
+        fx.DebugHudFlags = 0x100;
+        var buf = Fill(0xFFFFFFFFu);   // fully blown -> energy piled at bin 255
+        ScreenSpacePost.ApplyDebugHud(buf, W, H, in fx);
+
+        long backdrop = 0, clipBar = 0;
+        for (int i = 0; i < buf.Length; i++)
+        {
+            if (buf[i] != 0xFFFFFFFFu) backdrop++;      // panel darkened / drew over white
+            if (buf[i] == 0xFFFFCC00u) clipBar++;       // yellow clip column
+        }
+        Assert.True(backdrop > 200, $"histogram panel should draw (got {backdrop})");
+        Assert.True(clipBar > 0, "white-clip should raise the rightmost (yellow) bar");
+    }
 }

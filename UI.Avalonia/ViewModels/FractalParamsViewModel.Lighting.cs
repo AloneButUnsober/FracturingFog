@@ -667,6 +667,20 @@ public sealed partial class FractalParamsViewModel
         set { SetHudBit(0x40, value); this.RaisePropertyChanged(); Fire(); }
     }
 
+    /// <summary>#316 — exposure false-colour (full-frame zone recolour).</summary>
+    public bool DebugHudFalseColor
+    {
+        get => (_p.Lighting.DebugHudFlags & 0x80) != 0;
+        set { SetHudBit(0x80, value); this.RaisePropertyChanged(); Fire(); }
+    }
+
+    /// <summary>#316 — luma histogram panel.</summary>
+    public bool DebugHudHistogram
+    {
+        get => (_p.Lighting.DebugHudFlags & 0x100) != 0;
+        set { SetHudBit(0x100, value); this.RaisePropertyChanged(); Fire(); }
+    }
+
     // ── Speed-driven effect Start/Stop toggles ──────────────────────────
     //
     // Each speed-driven effect (light orbit, caustics phase, cloud-noise
