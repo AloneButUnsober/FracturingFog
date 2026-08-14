@@ -33,6 +33,11 @@
             <Setter Property="Margin" Value="6,0,0,0" />
             <Setter Property="Foreground" Value="#C8C8C8" />
         </Style>
+        <!-- #305 — armed "Confirm reset?" state: yellow (#FFCC00, colorblind-safe). -->
+        <Style Selector="Button.armed">
+            <Setter Property="Foreground" Value="#FFCC00" />
+            <Setter Property="BorderBrush" Value="#FFCC00" />
+        </Style>
     </UserControl.Styles>
 
     <Grid Margin="14" RowDefinitions="*,Auto">
@@ -44,6 +49,15 @@
                            FontWeight="Bold"
                            Foreground="#FFCC00"
                            Margin="0,0,0,4" />
+
+                <!-- #306 — volumetric preset droplist (artistic starting points) -->
+                <Grid ColumnDefinitions="160,*" Margin="0,0,0,4">
+                    <TextBlock Grid.Column="0" Text="Volumetric preset:" VerticalAlignment="Center"
+                               ToolTip.Tip="Curated fog / god-ray / cloud starting points, applied over the current lighting — then tune the Fog / Volumetric sliders below. '—' = no change. A region save snapshots whatever you land on." />
+                    <ComboBox Grid.Column="1" HorizontalAlignment="Stretch"
+                              ItemsSource="{Binding VolumetricPresetNames}"
+                              SelectedItem="{Binding SelectedVolumetricPreset, Mode=TwoWay}" />
+                </Grid>
 
                 <!-- Lights -->
                 <Expander Header="Lights" IsExpanded="True" HorizontalAlignment="Stretch">
@@ -675,18 +689,25 @@
             </StackPanel>
         </ScrollViewer>
 
-        <!-- Close button -->
-        <StackPanel Grid.Row="1"
-                    Orientation="Horizontal"
-                    HorizontalAlignment="Right"
-                    Spacing="8"
-                    Margin="0,12,0,0">
-            <Button Content="Close"
+        <!-- Defaults + Close -->
+        <Grid Grid.Row="1" ColumnDefinitions="Auto,*,Auto" Margin="0,12,0,0">
+            <!-- #305 — two-click reset to LightingFxData.CreateDefault(). First
+                 click arms (label flips + turns yellow), second click applies. -->
+            <Button Grid.Column="0"
+                    Content="{Binding LightingResetLabel}"
+                    Classes.armed="{Binding LightingResetArmed}"
+                    Command="{Binding ResetLightingCommand}"
+                    Padding="14,6"
+                    Background="#464646"
+                    Foreground="White"
+                    ToolTip.Tip="Reset every Lighting &amp; FX knob to sane defaults. Click once to arm, again to confirm (destructive of your in-session tuning)." />
+            <Button Grid.Column="2"
+                    Content="Close"
                     Click="OnCloseClick"
                     IsCancel="True"
                     Padding="18,6"
                     Background="#464646"
                     Foreground="White" />
-        </StackPanel>
+        </Grid>
     </Grid>
 </UserControl>
