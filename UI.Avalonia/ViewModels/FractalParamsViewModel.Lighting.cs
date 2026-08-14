@@ -653,6 +653,13 @@ public sealed partial class FractalParamsViewModel
         set { SetHudBit(0x20, value); this.RaisePropertyChanged(); Fire(); }
     }
 
+    /// <summary>#312 — light elevation gauge + god-ray shaft-readiness lamp.</summary>
+    public bool DebugHudLightGauge
+    {
+        get => (_p.Lighting.DebugHudFlags & 0x8) != 0;
+        set { SetHudBit(0x8, value); this.RaisePropertyChanged(); Fire(); }
+    }
+
     // ── Speed-driven effect Start/Stop toggles ──────────────────────────
     //
     // Each speed-driven effect (light orbit, caustics phase, cloud-noise

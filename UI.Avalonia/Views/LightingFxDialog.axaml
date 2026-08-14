@@ -675,6 +675,9 @@
                         <CheckBox Content="Clipping zebra"
                                   IsChecked="{Binding DebugHudZebra, Mode=TwoWay}"
                                   ToolTip.Tip="Diagonal stripes on blown highlights (yellow) and crushed shadows (blue) — a quick over/under-exposure check for the tone-map / exposure / bloom knobs." />
+                        <CheckBox Content="Light gauge + shaft readiness"
+                                  IsChecked="{Binding DebugHudLightGauge, Mode=TwoWay}"
+                                  ToolTip.Tip="Bottom-right: side-on elevation of each light (overhead=top, horizon=middle). The lamp turns yellow when the key light is raking AND fog + volume steps + shadow steps are on — i.e. god-ray shafts will actually render (not a flat glow)." />
                     </StackPanel>
                 </Expander>
 

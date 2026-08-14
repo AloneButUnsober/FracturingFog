@@ -19,11 +19,15 @@ public sealed class DebugHudDiagnosticsTests
     private static uint[] Canvas() { var b = new uint[W * H]; for (int i = 0; i < b.Length; i++) b[i] = Mid; return b; }
     private static long Diffs(uint[] a, uint[] b) { long n = 0; for (int i = 0; i < a.Length; i++) if (a[i] != b[i]) n++; return n; }
 
-    private static uint[] WithHud(int bits, System.Action<LightingFxData>? tune = null)
+    // Ref delegate — LightingFxData is a struct, so a by-value Action would mutate
+    // a copy and the tuned fields would never reach ApplyDebugHud.
+    private delegate void FxTune(ref LightingFxData fx);
+
+    private static uint[] WithHud(int bits, FxTune? tune = null)
     {
         var fx = LightingFxData.CreateDefault();
         fx.DebugHudFlags = bits;
-        tune?.Invoke(fx);
+        tune?.Invoke(ref fx);
         var buf = Canvas();
         ScreenSpacePost.ApplyDebugHud(buf, W, H, in fx);
         return buf;
@@ -79,5 +83,41 @@ public sealed class DebugHudDiagnosticsTests
         var midBuf = WithHud(0x20);
         for (int i = 0; i < midBuf.Length; i++) if (midBuf[i] != Mid) mid++;
         Assert.Equal(0, mid);
+    }
+
+    // ── Slice 1 (#312) — light gauge + shaft-readiness lamp ───────────
+    private static long YellowLampPixels(uint[] buf)
+    { long n = 0; foreach (var c in buf) if (c == 0xFFFFCC00u) n++; return n; }
+
+    [Fact]
+    public void LightGauge_Lamp_Yellow_Only_When_Shafts_Will_Render()
+    {
+        // Raking key light (cos(phi) ~= 0.4) + fog + volume + shadow steps -> ready.
+        var ready = WithHud(0x8, (ref LightingFxData fx) =>
+        {
+            fx.Light1.Phi = System.Math.Acos(0.4);
+            fx.Light1.Intensity = 1.4;
+            fx.FogDensity = 0.5;
+            fx.VolumeSteps = 32;
+            fx.ShadowSteps = 24;
+            fx.ShadowLightMask = 0x1;
+        });
+        Assert.True(YellowLampPixels(ready) > 0, "shaft-ready rig should light the lamp yellow");
+
+        // Same rig but ShadowSteps=0 -> uniform glow, no shafts -> lamp not lit.
+        var notReady = WithHud(0x8, (ref LightingFxData fx) =>
+        {
+            fx.Light1.Phi = System.Math.Acos(0.4);
+            fx.Light1.Intensity = 1.4;
+            fx.FogDensity = 0.5;
+            fx.VolumeSteps = 32;
+            fx.ShadowSteps = 0;
+        });
+        Assert.Equal(0, YellowLampPixels(notReady));
+
+        // The gauge still draws (bottom-right pixels changed) even when not ready.
+        long changed = 0; var clean = Canvas();
+        for (int i = 0; i < notReady.Length; i++) if (notReady[i] != clean[i]) changed++;
+        Assert.True(changed > 20, $"gauge should draw regardless of readiness (got {changed})");
     }
 }

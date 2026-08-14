@@ -663,6 +663,66 @@ public static class ScreenSpacePost
         if ((flags & 0x2)   != 0) DrawParamBars(colorBuffer, width, height, fx);
         if ((flags & 0x4)   != 0) DrawTimeClock(colorBuffer, width, height, fx);
         if ((flags & 0x10)  != 0) DrawCompositionGuides(colorBuffer, width, height);
+        if ((flags & 0x8)   != 0) DrawLightGauge(colorBuffer, width, height, fx);
+    }
+
+    // ── Slice 1 (#312) — light elevation gauge + shaft-readiness lamp ──
+    /// <summary>Whether the key light will actually cast god-ray SHAFTS: a raking
+    /// (low-elevation) key light, fog + volume steps on, AND per-step shadow
+    /// enabled (ShadowSteps &gt; 0 with the key light in the shadow mask). Without
+    /// the shadow term the medium only scatters uniformly (flat glow).</summary>
+    internal static bool ShaftReady(in LightingFxData fx)
+    {
+        double elevY = Math.Cos(fx.Light1.Phi);   // world +Y component of the key dir
+        return fx.Light1.Intensity > 0.0
+            && fx.FogDensity > 0.0
+            && fx.VolumeSteps > 0
+            && fx.ShadowSteps > 0
+            && (fx.ShadowLightMask & 0x1) != 0
+            && elevY > 0.03 && elevY < 0.6;        // raking, above the horizon
+    }
+
+    /// <summary>Side-on elevation gauge for the three lights: a vertical scale
+    /// with the horizon at centre and a coloured dot per light placed by its
+    /// world +Y (overhead = top, horizon = middle, below = bottom). A lamp at the
+    /// foot turns yellow (#FFCC00) when <see cref="ShaftReady"/> — i.e. the
+    /// current rig will render god-ray shafts, not a flat glow.</summary>
+    private static void DrawLightGauge(uint[] buf, int w, int h, in LightingFxData fx)
+    {
+        const int bw = 74, bh = 60;
+        int x0 = w - bw - 8, y0 = h - bh - 8;
+        FillRectAlpha(buf, w, h, x0, y0, x0 + bw, y0 + bh, 0xFF000000u, 0.5);
+
+        int axisX = x0 + 14;
+        int top = y0 + 6, bot = y0 + bh - 14;     // leave room for the lamp
+        int mid = (top + bot) / 2, halfH = (bot - top) / 2;
+        // Scale + horizon tick.
+        FillRectAlpha(buf, w, h, axisX, top, axisX + 1, bot, 0xFFFFFFFFu, 0.8);
+        FillRectAlpha(buf, w, h, axisX - 4, mid, axisX + 5, mid + 1, 0xFF888888u, 0.9);
+
+        DrawLightDot(buf, w, h, axisX, mid, halfH, fx.Light1.Phi, fx.Light1.Intensity, fx.Light1.Color, 18);
+        DrawLightDot(buf, w, h, axisX, mid, halfH, fx.Light2.Phi, fx.Light2.Intensity, fx.Light2.Color, 34);
+        DrawLightDot(buf, w, h, axisX, mid, halfH, fx.Light3.Phi, fx.Light3.Intensity, fx.Light3.Color, 50);
+
+        // Shaft-readiness lamp (bottom-left of the box).
+        bool ready = ShaftReady(in fx);
+        uint lamp = ready ? 0xFFFFCC00u : 0xFF404040u;
+        int lx = x0 + 6, ly = y0 + bh - 11;
+        FillRectAlpha(buf, w, h, lx, ly, lx + 9, ly + 6, lamp, 1.0);
+        DrawCircleOutline(buf, w, h, lx + 4, ly + 3, 3, ready ? 0xFFFFFFFFu : 0xFF666666u);
+    }
+
+    private static void DrawLightDot(
+        uint[] buf, int w, int h, int axisX, int mid, int halfH,
+        double phi, double intensity, uint color, int dx)
+    {
+        if (intensity <= 0.0) return;
+        double y = Math.Cos(phi);                 // +1 overhead .. 0 horizon .. -1 below
+        int py = mid - (int)Math.Round(y * halfH);
+        int px = axisX + dx;
+        // Connector from the scale to the dot so the height reads clearly.
+        FillRectAlpha(buf, w, h, axisX, py, px, py + 1, color, 0.5);
+        FillRectAlpha(buf, w, h, px - 2, py - 2, px + 3, py + 3, color, 1.0);
     }
 
     // ── Slice 3 (#314) — clipping zebra ───────────────────────────────
