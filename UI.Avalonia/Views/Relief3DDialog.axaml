@@ -5,6 +5,14 @@
         x:DataType="vm:FractalParamsViewModel"
         Foreground="White">
 
+    <UserControl.Styles>
+        <!-- #305 — armed "Confirm reset?" state: yellow (#FFCC00, colorblind-safe). -->
+        <Style Selector="Button.armed">
+            <Setter Property="Foreground" Value="#FFCC00" />
+            <Setter Property="BorderBrush" Value="#FFCC00" />
+        </Style>
+    </UserControl.Styles>
+
     <!--
       Standalone Relief 3D (2D heightfield) panel (#137). Extracted from the
       inline block in EscapeTimeParamsView so the compact Params dialog stays
@@ -262,9 +270,16 @@
             </StackPanel>
         </ScrollViewer>
 
-        <StackPanel Grid.Row="1" Orientation="Horizontal" HorizontalAlignment="Right"
-                    Spacing="8" Margin="0,12,0,0">
-            <Button Content="Close" Click="OnCloseClick" Padding="16,6" />
-        </StackPanel>
+        <Grid Grid.Row="1" ColumnDefinitions="Auto,*,Auto" Margin="0,12,0,0">
+            <!-- #305 — two-click reset of the Relief2D* look to defaults (the
+                 Enable / raymarch mode toggles are preserved). -->
+            <Button Grid.Column="0"
+                    Content="{Binding Relief3DResetLabel}"
+                    Classes.armed="{Binding Relief3DResetArmed}"
+                    Command="{Binding ResetRelief3DCommand}"
+                    Padding="14,6"
+                    ToolTip.Tip="Reset the Relief 3D settings to sane defaults (keeps the Enable / Oblique-raymarch toggles). Click once to arm, again to confirm (destructive of your in-session tuning)." />
+            <Button Grid.Column="2" Content="Close" Click="OnCloseClick" Padding="16,6" />
+        </Grid>
     </Grid>
 </UserControl>
