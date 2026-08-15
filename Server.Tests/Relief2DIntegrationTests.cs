@@ -71,4 +71,47 @@ public class Relief2DIntegrationTests
         HeightfieldRelief2D.Apply(src, dst, height, w, h, p);
         Assert.Equal(src, dst);
     }
+
+    // #127 — a FLAT (constant-height, zero-slope) exterior is the shallow-view
+    // degenerate case: RELATIVE relief nets to neutral (flats are left alone),
+    // while ABSOLUTE relief shades the whole surface by its orientation to the
+    // light. This is the crisp difference between the two modes.
+    [Fact]
+    public void Relief2D_Absolute_Shades_Flat_Surface_Relative_Leaves_It()
+    {
+        int w = 64, h = 64, n = w * h;
+        var src = new uint[n];
+        var height = new float[n];
+        for (int i = 0; i < n; i++) { src[i] = 0xFF404040u; height[i] = 5.0f; } // flat plane
+
+        var relative = new uint[n];
+        var absolute = new uint[n];
+        var pRel = new FractalParameters
+        {
+            Relief2DEnabled = true, Relief2DStrength = 1.0,
+            Relief2DLightElevationDeg = 30, Relief2DShadowStrength = 0.0,
+            Relief2DAbsolute = false,
+        };
+        var pAbs = pRel.Clone();
+        pAbs.Relief2DAbsolute = true;
+
+        HeightfieldRelief2D.Apply(src, relative, height, w, h, pRel);
+        HeightfieldRelief2D.Apply(src, absolute, height, w, h, pAbs);
+
+        // Relative: a flat surface reads neutral → unchanged.
+        Assert.Equal(src, relative);
+
+        // Absolute: the whole flat surface tilts into the light → every pixel
+        // shifts (here brightened, elevation 30 → positive lambert).
+        int changed = 0, brightened = 0;
+        for (int i = 0; i < n; i++)
+        {
+            if (absolute[i] != src[i]) changed++;
+            int sf = (int)(src[i] & 0xFF);
+            int la = (int)(absolute[i] & 0xFF);
+            if (la > sf + 20) brightened++;
+        }
+        Assert.Equal(n, changed);
+        Assert.Equal(n, brightened);
+    }
 }

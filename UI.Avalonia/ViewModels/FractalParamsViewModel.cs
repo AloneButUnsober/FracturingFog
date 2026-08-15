@@ -381,6 +381,14 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
         set { double v = Clamp(value, 0.0, 1.0); if (_p.Relief2DStrength == v) return; _p.Relief2DStrength = v; this.RaisePropertyChanged(); Fire(); }
     }
 
+    // #127 — absolute-height relief (emboss path): shade the whole surface, not
+    // only real slopes, so shallow whole-set views get a strong global 3D read.
+    public bool Relief2DAbsolute
+    {
+        get => _p.Relief2DAbsolute;
+        set { if (_p.Relief2DAbsolute == value) return; _p.Relief2DAbsolute = value; this.RaisePropertyChanged(); Fire(); }
+    }
+
     // #102 Phase 2 — oblique heightfield raymarch (perspective relief + volumetric).
     public bool Relief2DRaymarch
     {

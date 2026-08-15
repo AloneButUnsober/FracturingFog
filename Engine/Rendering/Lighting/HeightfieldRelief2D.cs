@@ -100,8 +100,20 @@ public static class HeightfieldRelief2D
         const double shininess = 14.0;   // specular tightness
         const double gain = 2.6;         // diffuse slope amplification
         const double specStrength = 0.7; // additive highlight weight
-        double flatLambert = lvz;                                   // (0,0,1)·L
-        double flatSpec = hz > 0 ? Math.Pow(hz, shininess) : 0.0;   // (0,0,1)·H
+
+        // #127 — ABSOLUTE-height mode: don't subtract the flat-normal baseline, so
+        // the whole exterior surface tilts and shades by its orientation to the
+        // light instead of only real slopes. On a shallow whole-set view the
+        // smooth exterior potential is a gentle global ramp that nets to ~0 under
+        // relative shading (flat → neutral) — that is the "settings change only
+        // inner-detail pixels, overall image unaffected" report. Zeroing the
+        // baselines lets that global ramp read as an overall 3D tilt. Relative
+        // mode stays the default (no palette wash when zoomed into filaments).
+        // Peak renormalisation (invMax) is retained in both modes.
+        bool absolute = p.Relief2DAbsolute;
+        double flatLambert = absolute ? 0.0 : lvz;                  // (0,0,1)·L
+        double flatSpec = absolute ? 0.0
+                        : (hz > 0 ? Math.Pow(hz, shininess) : 0.0); // (0,0,1)·H
 
         Parallel.For(0, h, y =>
         {
