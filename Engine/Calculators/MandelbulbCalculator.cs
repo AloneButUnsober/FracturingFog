@@ -140,7 +140,9 @@ public sealed class MandelbulbCalculator : IFractalCalculator
         // Caller toggles via fx.UseGpuRender when they want raw speed and
         // accept the visual trade. Skipped for lowRes since the CPU low-res
         // preview is already fast and runs the full FX stack.
-        if (fx.UseGpuRender && !lowRes)
+        // #320 — a non-Beauty AOV view is produced by the CPU ShadingPipeline
+        // (GPU kernels have no view-mode path), so force CPU while one is active.
+        if (fx.UseGpuRender && fx.DebugAov == AovView.Beauty && !lowRes)
         {
             double lightX = Math.Sin(fx.Light1.Phi) * Math.Cos(fx.Light1.Theta);
             double lightY = Math.Cos(fx.Light1.Phi);

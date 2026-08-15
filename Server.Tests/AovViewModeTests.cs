@@ -6,6 +6,9 @@
 // surface hit instead of the beauty pass. Beauty stays the normal shaded output
 // (default). These lock the per-mode encoding on the deterministic CPU path.
 
+using System.Collections.Generic;
+using FracturingFog;
+using FracturingFog.Models;
 using FracturingFog.Rendering.Lighting;
 using Xunit;
 
@@ -13,6 +16,40 @@ namespace FracturingFog.Server.Tests;
 
 public sealed class AovViewModeTests
 {
+    // ── end-to-end through a real 3D raymarcher (#317/#320) ───────────
+    // UserBulb is a CPU raymarcher that routes hits through ShadingPipeline.Shade,
+    // so a non-Beauty DebugAov must change its full-render output. (The GPU-gated
+    // calculators force this same CPU path while a view is active, #320.)
+    private static uint[] RenderBulb(AovView view)
+    {
+        var fx = LightingFxData.CreateDefault();
+        fx.DebugAov = view;
+        var fp = new FractalParameters
+        {
+            UserBulbSource = "z^8 + c",
+            UserBulbCompiler = UserBulbCompilerKind.Sandbox,
+            UserBulbIterations = 6,
+            UserBulbMaxSteps = 48,
+            Lighting = fx,
+        };
+        var calc = new UserBulbCalculator(48, 48) { FractalParameters = fp };
+        calc.Calculate();
+        return (uint[])calc.ColorBuffer.Clone();
+    }
+
+    [Fact]
+    public void Aov_View_Changes_A_Real_Raymarcher_Render()
+    {
+        var beauty = RenderBulb(AovView.Beauty);
+        var normals = RenderBulb(AovView.Normals);
+
+        Assert.True(new HashSet<uint>(beauty).Count > 1, "beauty render should be non-blank");
+        Assert.True(new HashSet<uint>(normals).Count > 1, "normals AOV should be non-blank");
+        // The view mode actually altered surface shading.
+        Assert.False(System.Linq.Enumerable.SequenceEqual(beauty, normals),
+            "AOV view should differ from the beauty pass");
+    }
+
     // Hit facing up (+Y), 5 units down the ray, step 48.
     private static ShadingInputs Hit(double nx, double ny, double nz)
         => new(px: 0, py: 0, pz: 0, nx: nx, ny: ny, nz: nz,

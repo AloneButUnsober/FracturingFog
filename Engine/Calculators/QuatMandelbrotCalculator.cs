@@ -144,7 +144,8 @@ public sealed class QuatMandelbrotCalculator : IFractalCalculator
 
         // P7b — opt-in GPU raymarch path (cheap-palette shading). See
         // MandelbulbCalculator for the FX-drop trade-off + P7c lift plan.
-        if (fx.UseGpuRender && !lowRes)
+        // #320 — force CPU while an AOV view is active (GPU has no view path).
+        if (fx.UseGpuRender && fx.DebugAov == AovView.Beauty && !lowRes)
         {
             var rp = new GpuRaymarchParams
             {
