@@ -230,6 +230,13 @@
                                                           SelectedItem="{Binding SelectedToneMap}"
                                                           HorizontalAlignment="Stretch" Margin="0,4,8,0"
                                                           ToolTip.Tip="Pin this shot's HDR tone-map operator, or inherit the region lighting's" />
+
+                                                <TextBlock Classes="label" Grid.Row="3" Grid.Column="2" Text="Lighting:" Margin="0,4,8,0" />
+                                                <ComboBox Grid.Row="3" Grid.Column="3"
+                                                          ItemsSource="{Binding LightingRegionNames}"
+                                                          SelectedItem="{Binding SelectedLightingRegion}"
+                                                          HorizontalAlignment="Stretch" Margin="0,4,0,0"
+                                                          ToolTip.Tip="Borrow another region's lighting (fog / volume / lights) for this shot without changing its own region or params" />
                                             </Grid>
 
                                             <!-- Camera track (3D types only) -->
