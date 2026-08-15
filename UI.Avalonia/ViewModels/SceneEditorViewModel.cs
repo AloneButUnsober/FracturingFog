@@ -110,6 +110,10 @@ public sealed class SceneShotRowViewModel : ReactiveObject
     public const string RegionNone = "(default params)";
     public const string ThemeNone = "(region default)";
     public const string AnimationNone = "(none)";
+    /// <summary>Lighting-region combo sentinel — no per-shot lighting override, so
+    /// the shot lights from its own region (current behavior). Maps to
+    /// <see cref="SceneShot.LightingRegionName"/> = null.</summary>
+    public const string LightingRegionNone = "(use shot's region)";
     /// <summary>Tone-map combo sentinel — inherit the region lighting's operator
     /// rather than pin one on the shot.</summary>
     public const string ToneMapInherit = "(region default)";
@@ -120,6 +124,7 @@ public sealed class SceneShotRowViewModel : ReactiveObject
         IReadOnlyList<string> regionNames,
         IReadOnlyList<string> themeNames,
         IReadOnlyList<string> animationNames,
+        IReadOnlyList<string> lightingRegionNames,
         IReadOnlyList<FractalType> fractalTypes,
         IReadOnlyList<SceneTransitionKind> transitionKinds,
         Action onChanged,
@@ -131,6 +136,7 @@ public sealed class SceneShotRowViewModel : ReactiveObject
         _onChanged = onChanged;
         RegionNames = regionNames;
         ThemeNames = themeNames;
+        LightingRegionNames = lightingRegionNames;
         AnimationNames = animationNames;
         FractalTypes = fractalTypes;
         TransitionKinds = transitionKinds;
@@ -148,6 +154,10 @@ public sealed class SceneShotRowViewModel : ReactiveObject
     public IReadOnlyList<string> RegionNames { get; }
     public IReadOnlyList<string> ThemeNames { get; }
     public IReadOnlyList<string> AnimationNames { get; }
+    /// <summary>Region pool for the per-shot lighting override, prefixed with
+    /// <see cref="LightingRegionNone"/>. Same names as <see cref="RegionNames"/>
+    /// but a distinct "none" sentinel (borrow-none vs. default-params).</summary>
+    public IReadOnlyList<string> LightingRegionNames { get; }
     public IReadOnlyList<FractalType> FractalTypes { get; }
     public IReadOnlyList<SceneTransitionKind> TransitionKinds { get; }
 
@@ -172,6 +182,17 @@ public sealed class SceneShotRowViewModel : ReactiveObject
     {
         get => _selectedTheme;
         set { this.RaiseAndSetIfChanged(ref _selectedTheme, value); _onChanged(); }
+    }
+
+    private string _selectedLightingRegion = LightingRegionNone;
+    /// <summary>Selected per-shot lighting-override region name, or the none
+    /// sentinel. Maps to <see cref="SceneShot.LightingRegionName"/> (null when
+    /// none) — the shot borrows that region's lighting without changing its own
+    /// region/params.</summary>
+    public string SelectedLightingRegion
+    {
+        get => _selectedLightingRegion;
+        set { this.RaiseAndSetIfChanged(ref _selectedLightingRegion, value); _onChanged(); }
     }
 
     private string _selectedAnimation = AnimationNone;
@@ -292,6 +313,8 @@ public sealed class SceneShotRowViewModel : ReactiveObject
                 ? string.Empty : _selectedRegion,
             ThemeName = string.Equals(_selectedTheme, ThemeNone, StringComparison.Ordinal)
                 ? null : _selectedTheme,
+            LightingRegionName = string.Equals(_selectedLightingRegion, LightingRegionNone, StringComparison.Ordinal)
+                ? null : _selectedLightingRegion,
             AnimationName = string.Equals(_selectedAnimation, AnimationNone, StringComparison.Ordinal)
                 ? null : _selectedAnimation,
             FractalType = _fractalType,
@@ -320,6 +343,8 @@ public sealed class SceneShotRowViewModel : ReactiveObject
             : (RegionNames.Contains(shot.RegionName) ? shot.RegionName : RegionNone);
         _selectedTheme = string.IsNullOrEmpty(shot.ThemeName) ? ThemeNone
             : (ThemeNames.Contains(shot.ThemeName!) ? shot.ThemeName! : ThemeNone);
+        _selectedLightingRegion = string.IsNullOrEmpty(shot.LightingRegionName) ? LightingRegionNone
+            : (LightingRegionNames.Contains(shot.LightingRegionName!) ? shot.LightingRegionName! : LightingRegionNone);
         _selectedAnimation = string.IsNullOrEmpty(shot.AnimationName) ? AnimationNone
             : (AnimationNames.Contains(shot.AnimationName!) ? shot.AnimationName! : AnimationNone);
         _fractalType = shot.FractalType;
@@ -338,6 +363,7 @@ public sealed class SceneShotRowViewModel : ReactiveObject
         this.RaisePropertyChanged(nameof(Name));
         this.RaisePropertyChanged(nameof(SelectedRegion));
         this.RaisePropertyChanged(nameof(SelectedTheme));
+        this.RaisePropertyChanged(nameof(SelectedLightingRegion));
         this.RaisePropertyChanged(nameof(SelectedAnimation));
         this.RaisePropertyChanged(nameof(FractalType));
         this.RaisePropertyChanged(nameof(Supports3DCamera));
@@ -441,6 +467,7 @@ public sealed class SceneEditorViewModel : ViewModelBase
         // Region / theme / animation picker sources, each prefixed with a "none"
         // sentinel so a shot can opt out of the override.
         _regionNames = BuildList(SceneShotRowViewModel.RegionNone, _service.EnumerateRegionNames());
+        _lightingRegionNames = BuildList(SceneShotRowViewModel.LightingRegionNone, _service.EnumerateRegionNames());
         _themeNames = BuildList(SceneShotRowViewModel.ThemeNone, _service.EnumerateThemeNames());
         _animationNames = BuildList(SceneShotRowViewModel.AnimationNone, _service.EnumerateAnimationNames());
 
@@ -465,6 +492,8 @@ public sealed class SceneEditorViewModel : ViewModelBase
         ImportCommand      = ReactiveCommand.Create(() =>
             ImportRequested?.Invoke(this, EventArgs.Empty));
         StopPreviewCommand = ReactiveCommand.Create(StopPreview);
+        ResetPreviewLightingCommand = ReactiveCommand.Create(
+            () => ResetPreviewLightingRequested?.Invoke(this, EventArgs.Empty));
         CloseCommand       = ReactiveCommand.Create(() =>
         {
             StopPreview();
@@ -506,6 +535,7 @@ public sealed class SceneEditorViewModel : ViewModelBase
     private List<SceneGlobalTrack> _preservedGlobalTracks = new();
 
     private readonly List<string> _regionNames;
+    private readonly List<string> _lightingRegionNames;
     private readonly List<string> _themeNames;
     private readonly List<string> _animationNames;
     public IReadOnlyList<FractalType> AvailableFractalTypes { get; }
@@ -629,6 +659,7 @@ public sealed class SceneEditorViewModel : ViewModelBase
     public ReactiveCommand<Unit, Unit> ExportCommand { get; }
     public ReactiveCommand<Unit, Unit> ImportCommand { get; }
     public ReactiveCommand<Unit, Unit> StopPreviewCommand { get; }
+    public ReactiveCommand<Unit, Unit> ResetPreviewLightingCommand { get; }
     public ReactiveCommand<Unit, Unit> CloseCommand { get; }
 
     // ── Events for the shell ───────────────────────────────────────────────────
@@ -663,6 +694,14 @@ public sealed class SceneEditorViewModel : ViewModelBase
     public event Func<OpenFileEventArgs, Task>? BrowseAudioFileRequested;
 
     public event EventHandler? StopPreviewRequested;
+
+    /// <summary>#307 — snap the live view's lighting back to stock defaults. A
+    /// per-shot "lighting from region" borrow mutates the shared live params, so
+    /// after previewing a lit scene the live lighting stays dialled to that
+    /// scene; this lets the user clear it on demand before playing a scene whose
+    /// shots name no lighting source (which would otherwise inherit the stale
+    /// lighting). The shell owns LightingFxData, so it does the reset.</summary>
+    public event EventHandler? ResetPreviewLightingRequested;
 
     public event EventHandler? CloseRequested;
     public event EventHandler<ThemeMessageEventArgs>? MessageRequested;
@@ -742,7 +781,7 @@ public sealed class SceneEditorViewModel : ViewModelBase
     }
 
     private SceneShotRowViewModel NewShotRow()
-        => new(_regionNames, _themeNames, _animationNames, AvailableFractalTypes, TransitionKinds,
+        => new(_regionNames, _themeNames, _animationNames, _lightingRegionNames, AvailableFractalTypes, TransitionKinds,
                FieldChanged, RemoveShot, MoveShotUp, MoveShotDown, PreviewShot);
 
     private void AddShot()
