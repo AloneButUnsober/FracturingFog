@@ -249,6 +249,50 @@ public static class ShadingPipeline
         return 0xFF000000u | ((uint)R << 16) | ((uint)G << 8) | B;
     }
 
+    // ── #317 — AOV / view-mode encoder ────────────────────────────────
+    private static uint PackRgb(double r, double g, double b) => 0xFF000000u
+        | ((uint)Math.Clamp(r * 255.0 + 0.5, 0, 255) << 16)
+        | ((uint)Math.Clamp(g * 255.0 + 0.5, 0, 255) << 8)
+        |  (uint)Math.Clamp(b * 255.0 + 0.5, 0, 255);
+
+    /// <summary>Encode one surface hit into the selected diagnostic buffer.
+    /// Inputs are the components <see cref="Shade{TDe}"/> already resolved:
+    /// normal + depth + step from <paramref name="i"/>; shadowed diffuse
+    /// (<paramref name="sR"/>..), specular, AO and key-light visibility.</summary>
+    internal static uint EncodeAov(
+        AovView mode, in ShadingInputs i,
+        double sR, double sG, double sB,
+        double specR, double specG, double specB,
+        double ao, double sh1)
+    {
+        switch (mode)
+        {
+            case AovView.Normals:
+                return PackRgb(i.Nx * 0.5 + 0.5, i.Ny * 0.5 + 0.5, i.Nz * 0.5 + 0.5);
+            case AovView.Depth:
+            {
+                double v = 1.0 - Math.Exp(-i.TotalT * 0.12); // near=dark, far=light
+                return PackRgb(v, v, v);
+            }
+            case AovView.StepCount:
+            {
+                // Cost heat: blue (cheap) → yellow (expensive). Colourblind-safe.
+                double v = Math.Clamp(i.HitStep / 96.0, 0.0, 1.0);
+                return PackRgb(v, v * 0.8, 1.0 - v);
+            }
+            case AovView.AmbientOcclusion:
+                return PackRgb(ao, ao, ao);
+            case AovView.Diffuse:
+                return PackRgb(sR / 255.0, sG / 255.0, sB / 255.0);
+            case AovView.Specular:
+                return PackRgb(specR / 255.0, specG / 255.0, specB / 255.0);
+            case AovView.Shadow:
+                return PackRgb(sh1, sh1, sh1);
+            default:
+                return 0xFF000000u;
+        }
+    }
+
     /// <summary>
     /// Bit-identical port of the legacy UserBulb shade block. Operates on
     /// the packed BGRA albedo directly so byte→float→byte round-trip
@@ -423,6 +467,14 @@ public static class ShadingPipeline
             }
             ao = Math.Clamp(1.0 - fx.AoStrength * (occl / Math.Max(w, 1)), 0, 1);
         }
+
+        // #317 — AOV / view-mode override. Every geometry + lighting component is
+        // resolved by here (normal + depth + step from the hit record; shadow /
+        // diffuse / specular / AO computed above), so a non-Beauty view returns
+        // the chosen diagnostic buffer and skips the beauty composite below.
+        // Beauty (default) falls through untouched → bit-identical.
+        if (fx.DebugAov != AovView.Beauty)
+            return EncodeAov(fx.DebugAov, in i, sR, sG, sB, specR, specG, specB, ao, sh1);
 
         // Phase 6 — IBL-modulated per-channel ambient. IblStrength==0 keeps the
         // legacy scalar AmbientStrength (bit-identical). When >0, blend env-map

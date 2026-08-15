@@ -405,7 +405,10 @@ public static class HeightfieldRaymarch2D
         // the full-FX fallback + parity oracle. hitFraction is not reported for the
         // GPU path — the 3b/3c device gates own hit-silhouette validation via the
         // CPU twin, and the host callers discard it.
-        if (gpuKernel != null && p.Relief2DGpuRaymarch)
+        // #317 — a non-Beauty AOV view is produced by the CPU ShadingPipeline
+        // (the GPU relief kernel has no view-mode path), so force the CPU trace
+        // below while a diagnostic view is active.
+        if (gpuKernel != null && p.Relief2DGpuRaymarch && fx.DebugAov == AovView.Beauty)
         {
             var u = ReliefUniforms.Build(w, h, hw, hh, sy, aspect, invLip, maxH, p, in fx);
             gpuKernel.Run(in u, hbuf, keep, albedo, dst);
