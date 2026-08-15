@@ -2551,10 +2551,37 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
             Main.SetThemeName(shot.ThemeName);
             FloatingMenu.SetThemeSilent(shot.ThemeName);
         }
+        // #307 — per-shot lighting override (see ApplySceneSample).
+        ApplyShotLightingOverride(shot);
         var anim = string.IsNullOrEmpty(shot.AnimationName)
             ? null
             : _themeService.GetAnimation(shot.AnimationName!);
         AnimationBusHost.LoadRegionAnimation(anim, Main.ViewState.FractalParameters);
+    }
+
+    /// <summary>#307 — apply a shot's per-shot lighting override
+    /// (<see cref="FracturingFog.Abstractions.Animation.SceneShot.LightingRegionName"/>)
+    /// to the live params: borrow the named region's captured Lighting &amp; FX.
+    /// Mirrors the JumpToRegion per-region override + the export path
+    /// (<c>SceneVideoRenderer.ResolveShot</c>): honour LightingLocked, then apply
+    /// the override; an authoritative source with no override resets to stock
+    /// defaults. No-op when unset, locked, or the named region is missing.</summary>
+    private void ApplyShotLightingOverride(FracturingFog.Abstractions.Animation.SceneShot shot)
+    {
+        if (shot == null || string.IsNullOrEmpty(shot.LightingRegionName)) return;
+        if (Main.LightingLocked) return;
+
+        if (_themeService.TryGetRegionLightingOverride(shot.LightingRegionName!, out var lightOverride))
+        {
+            Main.ViewState.FractalParameters.Lighting = lightOverride;
+            if (!string.IsNullOrWhiteSpace(lightOverride.EnvironmentName))
+                FracturingFog.Rendering.Lighting.HdriProbe.Preload?.Invoke(lightOverride.EnvironmentName);
+        }
+        else if (_themeService.GetRegionLightingIsAuthoritative(shot.LightingRegionName!))
+        {
+            Main.ViewState.FractalParameters.Lighting =
+                FracturingFog.Rendering.Lighting.LightingFxData.CreateDefault();
+        }
     }
 
     /// <summary>Stop any scene-preview param animation + scene playback
@@ -2689,6 +2716,13 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
             Main.SetThemeName(shot.ThemeName);
             FloatingMenu.SetThemeSilent(shot.ThemeName);
         }
+
+        // #307 — per-shot lighting override by name. Borrow another region's
+        // lighting after the region + theme so it wins (scene track > shot
+        // override > shot region > theme > default). Mirrors the export path
+        // (SceneVideoRenderer.ResolveShot). Runs before the tone-map override so
+        // that override layers on the borrowed lighting rather than being lost.
+        ApplyShotLightingOverride(shot);
 
         // Per-shot tone-map override (S8) — pin it on the live params after the
         // region jump so it survives the shot; null inherits the region's.
