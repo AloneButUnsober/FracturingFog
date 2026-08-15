@@ -1757,7 +1757,7 @@ namespace FracturingFog.Hosting
                 {
                     // Build one matrix row per animatable scalar of the current
                     // fractal type, bound to the app-scoped manager (in-session).
-                    var mgr = s_shell.AudioModulation;
+                    var mgr = s_shell?.AudioModulation;
                     var rows = mgr?.DescriptorsForCurrentType()
                         .Select(d => new FracturingFog.UI.Avalonia.ViewModels.AudioBindingRowViewModel(d, mgr))
                         .ToList();

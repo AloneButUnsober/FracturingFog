@@ -1066,7 +1066,9 @@ namespace FracturingFog.Rendering
             _escapeCalculator.Quality = ViewState.Quality;
             _escapeCalculator.MaxIterations = _calculator.MaxIterations;
             _escapeCalculator.FractalType = ViewState.FractalType;
-            _escapeCalculator.FractalParameters = ViewState.FractalParameters;
+            // FractalParameters is non-null (initialised = new()); the ?. at the
+            // InteriorAlpha line above only flow-narrows it. Assert non-null here.
+            _escapeCalculator.FractalParameters = ViewState.FractalParameters!;
             _escapeCalculator.ColorMap = _calculator.ColorMap;
 
             _tearDropCalculator.CenterX = ViewState.CenterX;
@@ -1080,7 +1082,7 @@ namespace FracturingFog.Rendering
             _tearDropCalculator.Zoom = ViewState.Zoom;
             _tearDropCalculator.Quality = ViewState.Quality;
             _tearDropCalculator.MaxIterations = _calculator.MaxIterations;
-            _tearDropCalculator.FractalParameters = ViewState.FractalParameters;
+            _tearDropCalculator.FractalParameters = ViewState.FractalParameters!;
             _tearDropCalculator.ColorMap = _calculator.ColorMap;
         }
 
@@ -1475,9 +1477,9 @@ namespace FracturingFog.Rendering
             // tonemap/bloom), so it uploads with srcAlreadyProcessed:true and
             // presents straight to screen + the screenshot/export snapshot.
             {
-                var stFx = ViewState?.FractalParameters?.Lighting;
+                var stFx = ViewState.FractalParameters?.Lighting;
                 bool trueStereo = !useAlt
-                    && (ViewState?.Is3D ?? false)
+                    && ViewState.Is3D
                     && stFx.HasValue
                     && stFx.Value.StereoMode == FracturingFog.Rendering.Lighting.StereoMode.True
                     && stFx.Value.StereoEyeSeparation > 0.0;
@@ -1487,7 +1489,7 @@ namespace FracturingFog.Rendering
                     try
                     {
                         sbs = FracturingFog.Rendering.Lighting.StereoRender.RenderTrueStereo(
-                            ViewState!.FractalParameters,
+                            ViewState.FractalParameters!, // non-null; ?. on .Lighting above only narrows flow
                             t => calc.Calculate(t),
                             () => calc.ColorBuffer,
                             calc.Width, calc.Height, token);
@@ -1503,7 +1505,7 @@ namespace FracturingFog.Rendering
                     if (sbs != null && !token.IsCancellationRequested)
                     {
                         var (outW, outH) = FracturingFog.Rendering.Lighting.StereoRender
-                            .OutputDims(calc.Width, calc.Height, stFx.Value.StereoLayout);
+                            .OutputDims(calc.Width, calc.Height, stFx.GetValueOrDefault().StereoLayout);
                         lock (_uploadGate)
                         {
                             if (TryClaimPresent(job.Seq))
@@ -2104,6 +2106,7 @@ namespace FracturingFog.Rendering
                             previewSrc = _reliefPreviewScratch;
                         }
                     }
+                    if (previewSrc != null)
                     lock (_d3dGate)
                     {
                         _renderer.UpdateTexture(previewSrc, pw, ph);
@@ -3485,7 +3488,7 @@ namespace FracturingFog.Rendering
                 try
                 {
                     var snap = _perfStats.Snapshot();
-                    string lbl = _calculator.IsHighPrecisionActive ? "DD" : "SP";
+                    string lbl = _calculator!.IsHighPrecisionActive ? "DD" : "SP";
                     // T3.1: append GPU marker when the SP path actually ran
                     // on the GPU compute kernel this frame. Mirrors the
                     // exact same predicate the calculator uses (toggle on,

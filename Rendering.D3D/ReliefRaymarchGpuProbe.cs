@@ -210,7 +210,7 @@ public static class ReliefRaymarchGpuProbe
         try
         {
             var hr = D3D11.D3D11CreateDevice(null, DriverType.Warp, DeviceCreationFlags.None,
-                null, out dev, out _, out ctx);
+                null!, out dev, out _, out ctx);
             if (hr.Failure || dev == null || ctx == null)
             {
                 sb.AppendLine($"  SKIP: could not create a WARP D3D11 device (0x{hr.Code:X8})");
