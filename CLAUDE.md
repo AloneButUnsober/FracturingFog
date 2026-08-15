@@ -12,6 +12,17 @@ the dpiserve email, so a repo-**local** override pins the clean identity. Before
 committing, verify `git config user.email` shows the noreply address; if the
 local override is missing, re-add it — never commit with the dpiserve identity.
 
+### NO `Co-Authored-By: Claude` trailer (CLA gate)
+
+**Do NOT add a `Co-Authored-By: Claude ...` trailer to commit messages in this
+repo.** This OVERRIDES the default Claude Code convention. The `cla-assistant`
+CI check treats every commit co-author as a contributor and hard-fails the PR
+when `noreply@anthropic.com` (never a CLA signatory) appears, blocking merge.
+Commits stay single-author `ABUDev`. (A `🤖 Generated with Claude Code` line in
+the PR *body* is fine — the CLA bot only parses commit authors/co-authors, not
+the PR description.) If a trailer slips in, strip it before pushing:
+`FILTER_BRANCH_SQUELCH_WARNING=1 git filter-branch -f --msg-filter 'grep -v "Co-Authored-By: Claude"' main..HEAD`.
+
 ## Dev tracking: use GitHub issues
 
 **Prefer the GitHub issues list for dev tracking whenever possible.** New work,
