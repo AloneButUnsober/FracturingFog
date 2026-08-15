@@ -34,7 +34,7 @@
                 <Expander Header="Relief lighting" HorizontalAlignment="Stretch"
                           IsExpanded="{Binding Relief2DEnabled, Mode=OneWay}"
                           IsEnabled="{Binding Relief2DEnabled}">
-                <Grid ColumnDefinitions="160,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto">
+                <Grid ColumnDefinitions="160,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto">
                     <TextBlock Grid.Row="0" Grid.Column="0" Text="Height scale:" VerticalAlignment="Center"
                                ToolTip.Tip="Vertical exaggeration. Higher = deeper carving and longer shadows." />
                     <NumericUpDown Grid.Row="0" Grid.Column="1"
@@ -62,6 +62,11 @@
                                ToolTip.Tip="Blend of relief lighting vs the flat themed colour. 1 = full relief." />
                     <Slider Grid.Row="4" Grid.Column="1" Minimum="0" Maximum="1"
                             Value="{Binding Relief2DStrength, Mode=TwoWay}" Margin="0,2" />
+
+                    <CheckBox Grid.Row="5" Grid.Column="0" Grid.ColumnSpan="2" Margin="0,2"
+                              Content="Absolute height (shade whole surface)"
+                              IsChecked="{Binding Relief2DAbsolute, Mode=TwoWay}"
+                              ToolTip.Tip="Shade the entire surface by its orientation to the light instead of only real slopes. Restores a strong overall 3D read on shallow / whole-set views, where the near-flat exterior otherwise nets to neutral and only inner detail changes. No effect with Oblique 3D raymarch (already an absolute surface)." />
                 </Grid>
                 </Expander>
 

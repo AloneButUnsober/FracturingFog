@@ -573,6 +573,7 @@ namespace FracturingFog.Models
         public double LightElevationDeg { get; set; } = 30.0;
         public double ShadowStrength { get; set; } = 0.6;
         public double Strength { get; set; } = 1.0;
+        public bool Absolute { get; set; } = false;   // #127
 
         // Oblique 3D raymarch (Phase 2)
         public bool Raymarch { get; set; } = false;
@@ -631,6 +632,7 @@ namespace FracturingFog.Models
                 LightElevationDeg  = p.Relief2DLightElevationDeg,
                 ShadowStrength     = p.Relief2DShadowStrength,
                 Strength           = p.Relief2DStrength,
+                Absolute           = p.Relief2DAbsolute,
                 Raymarch           = p.Relief2DRaymarch,
                 CameraAzimuthDeg   = p.Relief2DCameraAzimuthDeg,
                 CameraElevationDeg = p.Relief2DCameraElevationDeg,
@@ -669,6 +671,7 @@ namespace FracturingFog.Models
             p.Relief2DLightElevationDeg  = LightElevationDeg;
             p.Relief2DShadowStrength     = ShadowStrength;
             p.Relief2DStrength           = Strength;
+            p.Relief2DAbsolute           = Absolute;
             p.Relief2DRaymarch           = Raymarch;
             p.Relief2DCameraAzimuthDeg   = CameraAzimuthDeg;
             p.Relief2DCameraElevationDeg = CameraElevationDeg;

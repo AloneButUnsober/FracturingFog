@@ -432,6 +432,15 @@ namespace FracturingFog.Models
         /// <summary>Overall blend of the relief lighting against the flat themed
         /// colour [0,1]. 0 = flat (bypass); 1 = full relief. Default 1.0.</summary>
         public double Relief2DStrength { get; set; } = 1.0;
+        /// <summary>#127 — ABSOLUTE-height relief (Phase-1 emboss path only). When
+        /// false (default) relief is RELATIVE: a flat surface reads neutral and
+        /// only real slopes shade, so a shallow whole-set view (near-flat exterior
+        /// potential) changes little overall. When true, the flat-normal baseline
+        /// is not subtracted, so the whole exterior surface tilts and shades by its
+        /// orientation to the light — restoring a strong global 3D read on shallow
+        /// views. No effect on the raymarch path (<see cref="Relief2DRaymarch"/>),
+        /// which is already an absolute 3D surface.</summary>
+        public bool Relief2DAbsolute { get; set; } = false;
 
         // #102 Phase 2 — oblique heightfield RAYMARCH. Instead of the screen-
         // space hillshade post-pass (Phase 1, above), extrude the smooth-count
@@ -979,6 +988,7 @@ namespace FracturingFog.Models
                 Relief2DLightElevationDeg = Relief2DLightElevationDeg,
                 Relief2DShadowStrength = Relief2DShadowStrength,
                 Relief2DStrength = Relief2DStrength,
+                Relief2DAbsolute = Relief2DAbsolute,
                 Relief2DRaymarch = Relief2DRaymarch,
                 Relief2DCameraAzimuthDeg = Relief2DCameraAzimuthDeg,
                 Relief2DCameraElevationDeg = Relief2DCameraElevationDeg,

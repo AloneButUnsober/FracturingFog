@@ -140,6 +140,7 @@ public sealed partial class FractalParamsViewModel
         _p.Relief2DLightElevationDeg  = d.Relief2DLightElevationDeg;
         _p.Relief2DShadowStrength     = d.Relief2DShadowStrength;
         _p.Relief2DStrength           = d.Relief2DStrength;
+        _p.Relief2DAbsolute           = d.Relief2DAbsolute;
         _p.Relief2DCameraAzimuthDeg   = d.Relief2DCameraAzimuthDeg;
         _p.Relief2DCameraElevationDeg = d.Relief2DCameraElevationDeg;
         _p.Relief2DCameraFovDeg       = d.Relief2DCameraFovDeg;
@@ -228,7 +229,7 @@ public sealed partial class FractalParamsViewModel
     private static readonly string[] ReliefKnobNames =
     {
         nameof(Relief2DHeightScale), nameof(Relief2DLightAzimuthDeg), nameof(Relief2DLightElevationDeg),
-        nameof(Relief2DShadowStrength), nameof(Relief2DStrength),
+        nameof(Relief2DShadowStrength), nameof(Relief2DStrength), nameof(Relief2DAbsolute),
         nameof(Relief2DCameraAzimuthDeg), nameof(Relief2DCameraElevationDeg), nameof(Relief2DCameraFovDeg),
         nameof(Relief2DCameraZoom), nameof(Relief2DCameraOrthographic), nameof(Relief2DSupersample),
         nameof(Relief2DHeightCurve), nameof(Relief2DBicubicHeight), nameof(Relief2DGroundPlane),
