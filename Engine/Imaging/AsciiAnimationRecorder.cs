@@ -81,7 +81,7 @@ namespace FracturingFog.Imaging
             bool hasColor = frame.HasColor && frame.Colors != null && frame.Colors.Length >= cols * rows;
             for (int i = 0; i < cells.Length; i++)
             {
-                uint c = hasColor ? frame.Colors[i] : 0xDCDCDCu;
+                uint c = hasColor ? frame.Colors![i] : 0xDCDCDCu; // hasColor guards Colors != null
                 cells[i] = new AsciiCell(frame.Glyphs[i],
                     (byte)((c >> 16) & 0xFF), (byte)((c >> 8) & 0xFF), (byte)(c & 0xFF));
             }

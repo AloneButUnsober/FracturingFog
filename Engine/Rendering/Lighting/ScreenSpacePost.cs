@@ -24,7 +24,7 @@ using System.Threading.Tasks;
 
 namespace FracturingFog.Rendering.Lighting;
 
-public static class ScreenSpacePost
+public static partial class ScreenSpacePost
 {
     /// <summary>
     /// Sentinel "no surface" depth value. Sky / ray-miss pixels write this
@@ -674,6 +674,7 @@ public static class ScreenSpacePost
         if ((flags & 0x10)  != 0) DrawCompositionGuides(colorBuffer, width, height);
         if ((flags & 0x8)   != 0) DrawLightGauge(colorBuffer, width, height, fx);
         if ((flags & 0x40)  != 0) DrawReferenceBalls(colorBuffer, width, height, fx);
+        if ((flags & 0x200) != 0) DrawTelemetry(colorBuffer, width, height, in fx); // #318
         if (hist != null)         DrawLumaHistogram(colorBuffer, width, height, hist);
     }
 

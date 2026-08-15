@@ -135,6 +135,7 @@ public sealed class LightingFxPresetData
     public double LightOrbitSpeed     { get; set; } = 0.0;
     public double CausticsAnimSpeed   { get; set; } = 0.0;
     public int    DebugHudFlags       { get; set; } = 0;
+    public AovView DebugAov           { get; set; } = AovView.Beauty; // #317
 
     // ── Late-added runtime fields (previously dropped on round-trip) ───
     // These were added to LightingFxData after this DTO stopped tracking it,
@@ -216,6 +217,7 @@ public sealed class LightingFxPresetData
         SceneTime = fx.SceneTime, LightOrbitSpeed = fx.LightOrbitSpeed,
         CausticsAnimSpeed = fx.CausticsAnimSpeed,
         DebugHudFlags = fx.DebugHudFlags,
+        DebugAov = fx.DebugAov,
 
         VolumeStepsFalloff = fx.VolumeStepsFalloff,
         MaxBounces = fx.MaxBounces, UseGgxSampling = fx.UseGgxSampling,
@@ -273,6 +275,7 @@ public sealed class LightingFxPresetData
         SceneTime = SceneTime, LightOrbitSpeed = LightOrbitSpeed,
         CausticsAnimSpeed = CausticsAnimSpeed,
         DebugHudFlags = DebugHudFlags,
+        DebugAov = DebugAov,
 
         VolumeStepsFalloff = VolumeStepsFalloff,
         MaxBounces = MaxBounces, UseGgxSampling = UseGgxSampling,

@@ -79,6 +79,14 @@ public sealed class LightingFxPresetRoundTripTests
         Assert.Equal(0.42, RoundTrip(in fx).StereoEyeOffset);
     }
 
+    [Fact]
+    public void RoundTrip_Preserves_DebugAov() // #317 — was dropped by the DTO
+    {
+        var fx = LightingFxData.CreateDefault();
+        fx.DebugAov = AovView.Normals;
+        Assert.Equal(AovView.Normals, RoundTrip(in fx).DebugAov);
+    }
+
     // Drift guard: every public instance field on LightingFxData must be carried
     // by LightingFxPresetData, either as a same-named property or flattened.
     // Excludes the three DirectionalLight structs (flattened into Light{1,2,3}

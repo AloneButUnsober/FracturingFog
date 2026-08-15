@@ -709,6 +709,9 @@
                         <CheckBox Content="Luma histogram"
                                   IsChecked="{Binding DebugHudHistogram, Mode=TwoWay}"
                                   ToolTip.Tip="Bottom-center luma distribution (log-scaled). Yellow edge bars flag energy piled at pure black / pure white (clipping)." />
+                        <CheckBox Content="Numeric telemetry"
+                                  IsChecked="{Binding DebugHudTelemetry, Mode=TwoWay}"
+                                  ToolTip.Tip="Top-left text panel: resolution, active-light count, fog optical depth, supersample, active AOV view, and frame-time/FPS. Uses a bitmap font baked into the frame, so it survives PNG / video export (unlike the on-screen perf HUD)." />
                     </StackPanel>
                 </Expander>
 

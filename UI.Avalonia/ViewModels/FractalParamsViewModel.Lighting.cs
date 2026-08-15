@@ -681,6 +681,15 @@ public sealed partial class FractalParamsViewModel
         set { SetHudBit(0x100, value); this.RaisePropertyChanged(); Fire(); }
     }
 
+    /// <summary>#318 — numeric telemetry panel (bitmap font): resolution, active
+    /// lights, fog optical depth, supersample, AOV view, frame-time/FPS. Baked
+    /// into the frame (survives PNG / video export).</summary>
+    public bool DebugHudTelemetry
+    {
+        get => (_p.Lighting.DebugHudFlags & 0x200) != 0;
+        set { SetHudBit(0x200, value); this.RaisePropertyChanged(); Fire(); }
+    }
+
     /// <summary>#317 — AOV / render-buffer view mode. Beauty = normal output;
     /// other values isolate a diagnostic buffer (normals / depth / step heat /
     /// AO / diffuse / specular / shadow). CPU raymarchers + CPU relief.</summary>
