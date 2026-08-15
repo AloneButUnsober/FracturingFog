@@ -48,6 +48,34 @@ public struct DirectionalLight
 /// Tone-map operator selector. Applied at the end of ShadingPipeline.Shade
 /// once HDR linear color is composited.
 /// </summary>
+/// <summary>#317 — AOV / render-buffer "view mode". Beauty is the normal shaded
+/// result (default, bit-identical). Any other value makes <see cref="ShadingPipeline
+/// .Shade{TDe}"/> return the chosen diagnostic buffer for each surface hit
+/// instead of the beauty pass — the standard lookdev isolates (Blender/Unreal
+/// "view modes"): geometry (normals / depth / raymarch step-count heat) and
+/// lighting components (AO / diffuse / specular / shadow). CPU raymarchers + the
+/// CPU relief path only; GPU kernels stay beauty (relief forces its CPU path
+/// while a view is active). Ray-miss (sky) pixels keep the background.</summary>
+public enum AovView
+{
+    /// <summary>Normal shaded output (default).</summary>
+    Beauty = 0,
+    /// <summary>Surface normal as RGB (n·0.5+0.5).</summary>
+    Normals,
+    /// <summary>Ray distance to the hit, grayscale (near=dark, far=light).</summary>
+    Depth,
+    /// <summary>Raymarch step index at hit, blue→yellow heat (cost diagnostic).</summary>
+    StepCount,
+    /// <summary>Ambient-occlusion term, grayscale.</summary>
+    AmbientOcclusion,
+    /// <summary>Diffuse direct lighting only (shadowed), RGB.</summary>
+    Diffuse,
+    /// <summary>Specular highlight only, RGB.</summary>
+    Specular,
+    /// <summary>Key-light shadow visibility, grayscale (lit=white, shadow=black).</summary>
+    Shadow,
+}
+
 public enum ToneMapOperator
 {
     /// <summary>Legacy clamp [0, 255] (matches pre-Phase-7 behaviour). Default
@@ -578,6 +606,13 @@ public struct LightingFxData
     /// Pure visual — no font/text. Useful for verifying that animation +
     /// orbit math is doing what the parameters say it is.</summary>
     public int DebugHudFlags;
+
+    /// <summary>#317 — AOV / view-mode override. <see cref="AovView.Beauty"/>
+    /// (default) = normal shaded output, bit-identical. Any other value makes
+    /// <see cref="ShadingPipeline.Shade{TDe}"/> return that diagnostic buffer for
+    /// each surface hit (CPU raymarchers + CPU relief; miss pixels keep the
+    /// background).</summary>
+    public AovView DebugAov;
 
     // ────────────────────────────────────────────────────────────────────
 

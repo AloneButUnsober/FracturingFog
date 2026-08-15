@@ -674,6 +674,14 @@
                 <!-- Debug HUD -->
                 <Expander Header="Debug HUD" HorizontalAlignment="Stretch">
                     <StackPanel Spacing="4" Margin="6,4,0,4">
+                        <!-- #317 — AOV / render-buffer view mode -->
+                        <Grid ColumnDefinitions="120,*" Margin="0,0,0,4">
+                            <TextBlock Grid.Column="0" Text="View (AOV):" VerticalAlignment="Center"
+                                       ToolTip.Tip="Isolate a render buffer instead of the beauty pass: Normals, Depth, StepCount (raymarch cost heat), AmbientOcclusion, Diffuse, Specular, Shadow. Beauty = normal output. CPU raymarchers + Relief 3D (forces the CPU path); sky pixels keep the background." />
+                            <ComboBox Grid.Column="1" HorizontalAlignment="Stretch"
+                                      ItemsSource="{Binding AovViews}"
+                                      SelectedItem="{Binding DebugAov, Mode=TwoWay}" />
+                        </Grid>
                         <CheckBox Content="Light-direction compass"
                                   IsChecked="{Binding DebugHudCompass, Mode=TwoWay}"
                                   ToolTip.Tip="Top-right compass showing L1/L2/L3 azimuth + elevation. Pure visual, no text." />

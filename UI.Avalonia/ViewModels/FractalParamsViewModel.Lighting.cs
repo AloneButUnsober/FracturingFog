@@ -681,6 +681,16 @@ public sealed partial class FractalParamsViewModel
         set { SetHudBit(0x100, value); this.RaisePropertyChanged(); Fire(); }
     }
 
+    /// <summary>#317 — AOV / render-buffer view mode. Beauty = normal output;
+    /// other values isolate a diagnostic buffer (normals / depth / step heat /
+    /// AO / diffuse / specular / shadow). CPU raymarchers + CPU relief.</summary>
+    public AovView DebugAov
+    {
+        get => _p.Lighting.DebugAov;
+        set { MutateLighting(r => r.Fx.DebugAov = value); this.RaisePropertyChanged(); Fire(); }
+    }
+    public Array AovViews => Enum.GetValues(typeof(AovView));
+
     // ── Speed-driven effect Start/Stop toggles ──────────────────────────
     //
     // Each speed-driven effect (light orbit, caustics phase, cloud-noise
