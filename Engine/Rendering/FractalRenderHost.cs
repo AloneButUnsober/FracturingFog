@@ -556,6 +556,11 @@ namespace FracturingFog.Rendering
         // Rolling perf collector. Sampled by the calc thread + upload path.
         private readonly PerfStats _perfStats = new();
 
+        // #318 — last frame time (ms) for the byte-buffer HUD telemetry panel.
+        // Independent of ShowPerfHud (which gates the Skia perf overlay) so the
+        // baked FPS readout works whenever the telemetry panel is enabled.
+        private double _hudLastFrameMs;
+
         /// <summary>Clear the perf HUD's rolling buffers + reset the
         /// GC-rate baseline. Used to start a clean capture window when
         /// switching regions / starting a video so the prior region's
@@ -1449,6 +1454,16 @@ namespace FracturingFog.Rendering
 
             long calcStart = Stopwatch.GetTimestamp();
 
+            // #318 — feed the byte-buffer HUD telemetry panel (bit 0x200) before
+            // Calculate, since the 3D raymarcher calculators bake the HUD during
+            // Calculate. Frame-time is the previous frame's (rolling) so the value
+            // is one frame behind — standard for an FPS readout. Supersample is
+            // stamped 0 here (hidden for the 3D raymarchers, which use TAA not
+            // supersampling); the relief path stamps its real factor at its own
+            // HUD call. Both self-hide when 0.
+            FracturingFog.Rendering.Lighting.ScreenSpacePost.HudFrameMs = _hudLastFrameMs;
+            FracturingFog.Rendering.Lighting.ScreenSpacePost.HudSupersample = 0;
+
             // #107 — True per-eye side-by-side stereo. Only the 3D raymarcher
             // family honours StereoEyeOffset (ViewState.Is3D). The two eye
             // renders must run here on the calc thread: RenderTrueStereo drives
@@ -1583,6 +1598,7 @@ namespace FracturingFog.Rendering
             }
 
             long ms = job.Sw.ElapsedMilliseconds;
+            _hudLastFrameMs = ms; // #318 — HUD telemetry FPS (rolling, next frame)
 
             // Hand the post-calc upload to the threadpool so this calc
             // thread loops back for the next queued frame without blocking
@@ -3278,8 +3294,15 @@ namespace FracturingFog.Rendering
             {
                 var hudFx = ViewState.FractalParameters.Lighting;
                 if (hudFx.DebugHudFlags != 0)
+                {
+                    // #318 — the relief path DOES supersample; surface its real
+                    // factor on the telemetry panel (the 3D-calc path leaves this
+                    // 0 = hidden). Frame-time was already stamped in RunFrameJobCalc.
+                    FracturingFog.Rendering.Lighting.ScreenSpacePost.HudSupersample =
+                        ViewState.FractalParameters.Relief2DSupersample;
                     FracturingFog.Rendering.Lighting.ScreenSpacePost.ApplyDebugHud(
                         dst, w, h, in hudFx);
+                }
             }
 
             // Snapshot pre-overlay buffer so SaveLastFrameToPng can render a
