@@ -153,7 +153,8 @@ public sealed class BicomplexMandelbrotCalculator : IFractalCalculator
         // Wave 5.14 — GPU kernel still hardcodes the legacy K-axis assignment;
         // non-K slice-axis selections fall back to the CPU path until the
         // kernel grows an axis parameter.
-        if (fx.UseGpuRender && !lowRes && sliceAxis == BicomplexSliceAxis.K)
+        // #320 — force CPU while an AOV view is active (GPU has no view path).
+        if (fx.UseGpuRender && fx.DebugAov == AovView.Beauty && !lowRes && sliceAxis == BicomplexSliceAxis.K)
         {
             var rp = new GpuRaymarchParams
             {

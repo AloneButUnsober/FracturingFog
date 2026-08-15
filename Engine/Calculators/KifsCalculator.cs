@@ -165,7 +165,8 @@ public sealed class KifsCalculator : IFractalCalculator
         // their own kernel (branchy fold-switch in one kernel bloats the JIT).
         // Cheap-palette shading only — see MandelbulbCalculator for the
         // FX-drop trade-off + P7c lift plan.
-        if (fx.UseGpuRender && !lowRes && gpuEligibleFold)
+        // #320 — force CPU while an AOV view is active (GPU has no view path).
+        if (fx.UseGpuRender && fx.DebugAov == AovView.Beauty && !lowRes && gpuEligibleFold)
         {
             var rp = new GpuRaymarchParams
             {
