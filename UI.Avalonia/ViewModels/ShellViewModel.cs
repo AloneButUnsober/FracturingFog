@@ -2517,6 +2517,7 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
                 if (SceneAudioFileBrowseRequested is { } h) await h(e);
             };
             vm.StopPreviewRequested  += (_, _) => StopScenePreview();
+            vm.ResetPreviewLightingRequested += (_, _) => ResetPreviewLighting();
             vm.CloseRequested        += (_, _) => IsSceneEditorVisible = false;
             vm.MessageRequested      += (_, args) => MessageRequested?.Invoke(this, args);
             vm.ImportRequested       += (_, _) => AssetJsonImportRequested?.Invoke(this,
@@ -2590,6 +2591,18 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
     {
         StopScene();
         AnimationBusHost.LoadRegionAnimation(null, Main.ViewState.FractalParameters);
+    }
+
+    /// <summary>#307 — snap the live view's lighting back to stock defaults for
+    /// the Scene Editor's "Reset Preview Lighting" button. A per-shot lighting
+    /// borrow mutates the shared live params and never self-clears, so this lets
+    /// the user wipe stale scene lighting before playing a scene whose shots name
+    /// no lighting source (no source → inherits current global lighting). Runs
+    /// even when LightingLocked — it is an explicit user action.</summary>
+    private void ResetPreviewLighting()
+    {
+        Main.ViewState.FractalParameters.Lighting =
+            FracturingFog.Rendering.Lighting.LightingFxData.CreateDefault();
     }
 
     // ── Scene playback (S6) ──────────────────────────────────────────────────

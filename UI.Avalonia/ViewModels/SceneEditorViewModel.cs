@@ -492,6 +492,8 @@ public sealed class SceneEditorViewModel : ViewModelBase
         ImportCommand      = ReactiveCommand.Create(() =>
             ImportRequested?.Invoke(this, EventArgs.Empty));
         StopPreviewCommand = ReactiveCommand.Create(StopPreview);
+        ResetPreviewLightingCommand = ReactiveCommand.Create(
+            () => ResetPreviewLightingRequested?.Invoke(this, EventArgs.Empty));
         CloseCommand       = ReactiveCommand.Create(() =>
         {
             StopPreview();
@@ -657,6 +659,7 @@ public sealed class SceneEditorViewModel : ViewModelBase
     public ReactiveCommand<Unit, Unit> ExportCommand { get; }
     public ReactiveCommand<Unit, Unit> ImportCommand { get; }
     public ReactiveCommand<Unit, Unit> StopPreviewCommand { get; }
+    public ReactiveCommand<Unit, Unit> ResetPreviewLightingCommand { get; }
     public ReactiveCommand<Unit, Unit> CloseCommand { get; }
 
     // ── Events for the shell ───────────────────────────────────────────────────
@@ -691,6 +694,14 @@ public sealed class SceneEditorViewModel : ViewModelBase
     public event Func<OpenFileEventArgs, Task>? BrowseAudioFileRequested;
 
     public event EventHandler? StopPreviewRequested;
+
+    /// <summary>#307 — snap the live view's lighting back to stock defaults. A
+    /// per-shot "lighting from region" borrow mutates the shared live params, so
+    /// after previewing a lit scene the live lighting stays dialled to that
+    /// scene; this lets the user clear it on demand before playing a scene whose
+    /// shots name no lighting source (which would otherwise inherit the stale
+    /// lighting). The shell owns LightingFxData, so it does the reset.</summary>
+    public event EventHandler? ResetPreviewLightingRequested;
 
     public event EventHandler? CloseRequested;
     public event EventHandler<ThemeMessageEventArgs>? MessageRequested;
