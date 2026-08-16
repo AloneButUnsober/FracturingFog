@@ -135,6 +135,7 @@ namespace FracturingFog.UI.Avalonia.Services
             var screen = ResolveScreen(win, owner, placement);
             ApplyScreenFit(win, screen, fitFraction);
             ApplyPlacement(win, owner, screen, placement);
+            MatchRenderTopmost(win);
 
             // Centralized nested-modal foreground fix. A modal-of-a-modal on
             // Win32 (with ShowInTaskbar=false) does not reliably front; forcing
@@ -146,6 +147,31 @@ namespace FracturingFog.UI.Avalonia.Services
                 try { win.Activate(); } catch { }
                 try { ClampIntoScreen(win); } catch { }
             };
+        }
+
+        // ── Topmost inheritance ──────────────────────────────────────────────
+
+        /// <summary>
+        /// Floats <paramref name="win"/> above the render window whenever that
+        /// window is always-on-top — Mini / Toy / Span modes make it borderless
+        /// Topmost, and the "On Top" toggle sets it too. Without this, a dialog
+        /// (worse, a nested modal-of-a-modal, which does not reliably front on
+        /// Win32) opens *behind* the topmost render surface and is unreachable —
+        /// the user cannot see or move it (Avalonia has no Ctrl+Space to summon
+        /// it). This is the general fix for #52 (Video Settings invisible when
+        /// launched from Slideshow Settings in Mini/Toy mode); the per-launcher
+        /// Topmost-matching in the Relief 3D / Lighting FX openers was the same
+        /// fix applied one window at a time.
+        /// </summary>
+        private static void MatchRenderTopmost(Window win)
+        {
+            try
+            {
+                var main = ActiveMainWindow;
+                if (main != null && main.Topmost && !ReferenceEquals(win, main))
+                    win.Topmost = true;
+            }
+            catch { }
         }
 
         // ── Screen resolution ────────────────────────────────────────────────
