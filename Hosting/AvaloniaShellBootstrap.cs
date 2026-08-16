@@ -92,12 +92,14 @@ namespace FracturingFog.Hosting
         // the hide-on-close MainWindow Sync* windows.
         private static PanelHostWindow? s_paramsWin;
 
-        // S2 — the standalone Volumetric Lighting & FX window is owned by
-        // WindowService (single app-wide instance, always owned by the main
-        // window so no calling panel can cascade it shut). The menu toggles it;
-        // the Params / Relief 3D panels open-or-refocus it.
+        // S2 — standalone Volumetric Lighting & FX panel. Independent of the
+        // Fractal Params window: its own FractalParamsViewModel over the shared
+        // ViewState, and because LightingFxData is type-independent it stays open
+        // across fractal-type changes (unlike s_paramsWin, which is retyped/
+        // reopened on type change). Toggle-close, close-and-destroy.
+        private static PanelHostWindow? s_lightingFxWin;
 
-        // #147 — standalone Relief 3D panel. Its own
+        // #147 — standalone Relief 3D panel. Like s_lightingFxWin: its own
         // FractalParamsViewModel over the shared ViewState, independent of the
         // Fractal Params window so closing Params leaves Relief 3D open, and
         // launchable straight from the Control Center. Re-focus if already open.
@@ -2298,17 +2300,35 @@ namespace FracturingFog.Hosting
                 {
                     if (s_renderHost == null) return;
 
-                    // Menu toggles the single WindowService-owned window. The VM
-                    // is built lazily (only when opening) over the shared
-                    // ViewState so every Lighting/FX edit fires a re-render.
-                    WindowService.ToggleLightingFx(() =>
+                    if (s_lightingFxWin != null)
                     {
-                        var vs = s_renderHost.ViewState;
-                        var vm = new FractalParamsViewModel(vs.FractalType, vs.FractalParameters,
-                            audioModulation: s_shell?.AudioModulation);
-                        vm.ParamChanged += () => s_renderHost?.Trigger();
-                        return vm;
-                    }, "Volumetric Lighting & FX");
+                        try { s_lightingFxWin.Close(); } catch { }
+                        s_lightingFxWin = null;
+                        return;
+                    }
+
+                    var vs = s_renderHost.ViewState;
+                    var vm = new FractalParamsViewModel(vs.FractalType, vs.FractalParameters,
+                        audioModulation: s_shell?.AudioModulation);
+                    vm.ParamChanged += () => s_renderHost?.Trigger();
+
+                    var win = new PanelHostWindow(
+                        new LightingFxDialog(),
+                        new PanelHostOptions(
+                            "Volumetric Lighting & FX",
+                            Width: 520, Height: 720, MinWidth: 440, MinHeight: 400,
+                            SizeToContentHeight: false, CanResize: true, ShowInTaskbar: true,
+                            StartupLocation: WindowStartupLocation.CenterOwner,
+                            Background: new SolidColorBrush(Color.FromRgb(0x28, 0x28, 0x28))))
+                    {
+                        DataContext = vm,
+                    };
+                    win.Closed += (_, _) => s_lightingFxWin = null;
+                    s_lightingFxWin = win;
+
+                    var owner = AvaloniaDialogs.ActiveMainWindow;
+                    if (owner != null) win.Show(owner);
+                    else win.Show();
                 });
             };
 

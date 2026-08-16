@@ -8,11 +8,8 @@ using System.Threading.Tasks;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.ApplicationLifetimes;
-using Avalonia.Media;
 using Avalonia.Platform;
 using Avalonia.Threading;
-
-using FracturingFog.UI.Avalonia.Views;
 
 namespace FracturingFog.UI.Avalonia.Services
 {
@@ -104,79 +101,6 @@ namespace FracturingFog.UI.Avalonia.Services
             host.Closed += (_, _) => tcs.TrySetResult(host.DialogResult);
             _ = ShowDialogAsync(host, owner, placement);
             return tcs.Task;
-        }
-
-        // ── Standalone Volumetric Lighting & FX window ───────────────────────
-        //
-        // Single app-wide instance. Every launcher (Fractal Params panel, Relief
-        // 3D panel, the shell menu) routes through here so the window is ALWAYS
-        // owned by the main render window — never the calling panel. An
-        // owned-of-panel VL FX window closed with its owner (Avalonia cascades
-        // owned windows shut), which is the "closing the calling form also
-        // closed VL FX" bug; owning to the main window makes it truly standalone.
-        // The Lighting/FX block is fractal-type-independent, so a single window
-        // shared across callers is correct.
-        private static PanelHostWindow? s_lightingFx;
-
-        private static PanelHostOptions LightingFxOptions(string title) =>
-            new PanelHostOptions(
-                title,
-                Width: 520, Height: 720, MinWidth: 440, MinHeight: 400,
-                SizeToContentHeight: false, CanResize: true, ShowInTaskbar: true,
-                StartupLocation: WindowStartupLocation.CenterOwner,
-                Background: new SolidColorBrush(Color.FromRgb(0x28, 0x28, 0x28)));
-
-        /// <summary>
-        /// Opens the app-wide Volumetric Lighting &amp; FX window (or re-focuses
-        /// it, rebinding to <paramref name="dataContext"/>, when already open).
-        /// Non-modal and owned by the main window, so closing the launching panel
-        /// never closes it. Returns the live window.
-        /// </summary>
-        public static PanelHostWindow ShowLightingFx(
-            object dataContext, string title = "Volumetric Lighting & FX")
-        {
-            if (s_lightingFx is { IsVisible: true })
-            {
-                s_lightingFx.DataContext = dataContext;
-                try { s_lightingFx.Activate(); } catch { }
-                return s_lightingFx;
-            }
-
-            var win = new PanelHostWindow(new LightingFxDialog(), LightingFxOptions(title))
-            {
-                DataContext = dataContext,
-            };
-            win.Closed += (_, _) =>
-            {
-                if (ReferenceEquals(s_lightingFx, win)) s_lightingFx = null;
-            };
-            s_lightingFx = win;
-
-            var owner = ActiveMainWindow;
-            // Prepare() gives the standard screen-fit clamp, foreground fix, and
-            // (crucially in Span/Mini/Toy mode) the render-window Topmost match so
-            // the panel is not hidden behind the borderless render surface.
-            Prepare(win, owner);
-            if (owner != null) win.Show(owner);
-            else win.Show();
-            return win;
-        }
-
-        /// <summary>
-        /// Menu behavior: closes the Lighting &amp; FX window if open, otherwise
-        /// opens it via <see cref="ShowLightingFx"/> using a lazily built
-        /// DataContext (so the VM is only constructed when actually shown).
-        /// </summary>
-        public static void ToggleLightingFx(
-            Func<object> dataContextFactory, string title = "Volumetric Lighting & FX")
-        {
-            if (s_lightingFx != null)
-            {
-                try { s_lightingFx.Close(); } catch { }
-                s_lightingFx = null;
-                return;
-            }
-            ShowLightingFx(dataContextFactory(), title);
         }
 
         /// <summary>

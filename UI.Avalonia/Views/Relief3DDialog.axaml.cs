@@ -4,6 +4,7 @@
 using Avalonia.Controls;
 using Avalonia.Interactivity;
 using Avalonia.Markup.Xaml;
+using Avalonia.Media;
 
 using FracturingFog.UI.Avalonia.Services;
 
@@ -20,9 +21,16 @@ namespace FracturingFog.UI.Avalonia.Views;
 /// </summary>
 public sealed partial class Relief3DDialog : UserControl
 {
+    private PanelHostWindow? _lightingFxWin;
+
     public Relief3DDialog()
     {
         AvaloniaXamlLoader.Load(this);
+        Unloaded += (_, _) =>
+        {
+            _lightingFxWin?.Close();
+            _lightingFxWin = null;
+        };
     }
 
     private void OnCloseClick(object? sender, RoutedEventArgs e)
@@ -33,11 +41,26 @@ public sealed partial class Relief3DDialog : UserControl
     /// edits propagate through the same path as the params panel's launcher.</summary>
     private void OnOpenLightingFxClick(object? sender, RoutedEventArgs e)
     {
-        // Open (or re-focus) the single app-wide Lighting & FX window, owned by
-        // the main window (not this panel) via WindowService, so closing Relief
-        // 3D leaves it open. Shares this dialog's VM so edits re-render through
-        // the same ParamChanged path.
-        if (DataContext != null)
-            WindowService.ShowLightingFx(DataContext, "Volumetric Lighting & FX");
+        if (_lightingFxWin is { IsVisible: true })
+        {
+            _lightingFxWin.Activate();
+            return;
+        }
+
+        _lightingFxWin = new PanelHostWindow(
+            new LightingFxDialog(),
+            new PanelHostOptions(
+                "Lighting & FX",
+                Width: 520, Height: 720, MinWidth: 440, MinHeight: 400,
+                SizeToContentHeight: false, CanResize: true, ShowInTaskbar: true,
+                StartupLocation: WindowStartupLocation.CenterOwner,
+                Background: new SolidColorBrush(Color.FromRgb(0x28, 0x28, 0x28))))
+        {
+            DataContext = DataContext,
+        };
+        _lightingFxWin.Closed += (_, _) => _lightingFxWin = null;
+        var owner = TopLevel.GetTopLevel(this) as Window;
+        if (owner != null) _lightingFxWin.Show(owner);
+        else _lightingFxWin.Show();
     }
 }
