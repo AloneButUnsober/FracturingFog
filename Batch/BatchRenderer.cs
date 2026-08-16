@@ -51,6 +51,13 @@ namespace FracturingFog.Batch
             if (opts.FlameGamma.HasValue)         fp.FlameGamma         = opts.FlameGamma.Value;
             if (opts.FlameVibrancy.HasValue)      fp.FlameVibrancy      = opts.FlameVibrancy.Value;
             if (opts.InteriorAlpha.HasValue)      fp.InteriorAlpha      = opts.InteriorAlpha.Value;
+            if (opts.AcidPattern.HasValue)        fp.AcidWarpPattern      = opts.AcidPattern.Value;
+            if (opts.AcidFrequency.HasValue)      fp.AcidWarpFrequency    = opts.AcidFrequency.Value;
+            if (opts.AcidWarpStrength.HasValue)   fp.AcidWarpWarpStrength = opts.AcidWarpStrength.Value;
+            if (opts.AcidSeed.HasValue)           fp.AcidWarpSeed         = opts.AcidSeed.Value;
+            if (opts.DomainWarp)                  fp.DomainWarpEnabled    = true;
+            if (opts.DomainWarpStrength.HasValue) fp.DomainWarpStrength   = opts.DomainWarpStrength.Value;
+            if (opts.DomainWarpFrequency.HasValue) fp.DomainWarpFrequency = opts.DomainWarpFrequency.Value;
 
             var (pfBrightness, pfContrast, pfAdaptive) = ResolvePostFx(opts, null);
 

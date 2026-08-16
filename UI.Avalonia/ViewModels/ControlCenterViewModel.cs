@@ -251,7 +251,9 @@ public sealed class ControlCenterViewModel : ViewModelBase
             ThemeIsUnsaved      = string.IsNullOrWhiteSpace(main.SelectedTheme),
             ReliefEnabled       = fp?.Relief2DEnabled ?? false,
             StereoActive        = fp != null && fp.Lighting.StereoMode != FracturingFog.Rendering.Lighting.StereoMode.Off,
-            DomainWarpActive    = fp?.DomainWarpEnabled ?? false,
+            DomainWarpActive    = fp?.DomainWarpEnabled ?? false,   // #363 — now emitted as flags
+            DomainWarpStrength  = fp?.DomainWarpStrength ?? 0.0,
+            DomainWarpFrequency = fp?.DomainWarpFrequency ?? 1.0,
         };
 
         var report = FracturingFog.Cli.BatchCommandBuilder.BuildWithReport(snap);
