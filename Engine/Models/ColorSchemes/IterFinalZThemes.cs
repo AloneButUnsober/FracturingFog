@@ -150,4 +150,48 @@ namespace FracturingFog.Models
         protected override double ChannelTerm(double r01, double i01, double q01)
             => WeightImag * i01;
     }
+
+    /// <summary>
+    /// "Iter + Real/Imag" — smooth iteration bands cross-modulated by the ratio
+    /// of the real and imaginary parts of z at escape.  The ratio is taken as an
+    /// ANGLE (<c>atan2(re, im)</c>) so it stays continuous with no divide-by-zero
+    /// at the <c>finalZi -> 0</c> pole.  <c>u = frac(t + wQ·q01)</c>.
+    /// </summary>
+    public sealed class IterPlusRatioMap : IterFinalZBaseMap
+    {
+        public static string Name => "Iter + Real/Imag";
+        public static string Category => "Binary / Argument Decomposition";
+        public static string Description =>
+            "Smooth iteration bands cross-modulated by the real/imaginary ratio " +
+            "of z at escape, encoded as atan2(re,im) to avoid the im->0 pole.  " +
+            "Ultra Fractal 'iter+real/imag' family.";
+        public static ColorMapFeatures Features =>
+            ColorMapFeatures.UsesSmooth | ColorMapFeatures.UsesFinalZ |
+            ColorMapFeatures.GradientBased | ColorMapFeatures.Cyclic;
+
+        protected override double ChannelTerm(double r01, double i01, double q01)
+            => WeightRatio * q01;
+    }
+
+    /// <summary>
+    /// "Iter + Real + Imag + Ratio" — the full four-way composite: smooth
+    /// iteration bands cross-modulated by all three compressed final-z channels
+    /// (real, imaginary, and their atan2 ratio) summed with per-channel weights.
+    /// <c>u = frac(t + wR·r01 + wI·i01 + wQ·q01)</c>.
+    /// </summary>
+    public sealed class IterRealImagRatioMap : IterFinalZBaseMap
+    {
+        public static string Name => "Iter + Real + Imag + Ratio";
+        public static string Category => "Binary / Argument Decomposition";
+        public static string Description =>
+            "Four-way composite: smooth iteration bands modulated by the real, " +
+            "imaginary and atan2-ratio channels of z at escape (per-channel " +
+            "weights).  Densest of the Ultra Fractal 'iter+real+imag' family.";
+        public static ColorMapFeatures Features =>
+            ColorMapFeatures.UsesSmooth | ColorMapFeatures.UsesFinalZ |
+            ColorMapFeatures.GradientBased | ColorMapFeatures.Cyclic;
+
+        protected override double ChannelTerm(double r01, double i01, double q01)
+            => WeightReal * r01 + WeightImag * i01 + WeightRatio * q01;
+    }
 }

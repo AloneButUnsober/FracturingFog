@@ -266,6 +266,8 @@ namespace FracturingFog.Models
             // ── Iter + final-z combination (#69 / #358) ───────────────────────\
             new IterPlusRealMap(),
             new IterPlusImagMap(),
+            new IterPlusRatioMap(),
+            new IterRealImagRatioMap(),
 
             // ── Derivative Magnitude Map ──────────────────────────────────────\
             new DerivativeAngleMap(),
