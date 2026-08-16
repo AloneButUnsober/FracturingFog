@@ -17,9 +17,11 @@
 // retry up to a fixed attempt budget, then that index is skipped (the radius
 // keeps shrinking, so later shapes slot into the remaining gaps).
 //
-// Overlap test uses a uniform spatial-hash grid (cell = rMax), so each candidate
-// only checks the shapes in its neighbourhood — ~O(N) placement instead of the
-// naive O(N²). Same acceleration DlaCalculator uses for aggregate proximity.
+// Overlap test uses a SIZE-TIERED spatial-hash grid (#341): each tile buckets
+// into a grid whose cell matches its own radius tier, so the heavy power-law
+// tail of tiny tiles no longer piles into a few rMax-sized cells. Candidates
+// probe only their neighbourhood per tier — ~O(N) placement instead of the
+// O(N²) a single rMax-cell grid degrades to at high count.
 //
 // Determinism: (Width, Height, Seed, Count, SizeExponent, Gap) uniquely
 // determine the output — one seeded Random drives every draw in a fixed order.
@@ -179,17 +181,44 @@ public sealed class RandomTileCalculator : IFractalCalculator, IHeightFieldSourc
         double x0, double x1, double y0, double y1, double minWorldR,
         RandomTileShape shape, CancellationToken ct)
     {
-        // Uniform spatial hash. Cell = rMax; two tiles overlap only if their
-        // centres are within r_a + r_b ≤ 2·rMax, so a candidate need only probe
-        // cells within ⌈(r_cand + rMax)/cell⌉ = 2 of its own. Cell indices are
+        // Size-tiered spatial hash (#341). A single grid with cell = rMax is
+        // O(N²) at high count: radii follow a heavy power-law tail, so the
+        // thousands of sub-rMax tiles all fall into a handful of rMax-sized
+        // cells and every candidate re-scans a giant bucket. Instead, bucket each
+        // tile by a size tier k = ⌊log2(rMax / r)⌋ (radius in (rMax·2^-(k+1),
+        // rMax·2^-k]) into that tier's OWN grid whose cell = the tier's max
+        // radius (rMax·2^-k). Non-overlapping tiles of one tier are ≥ their radius
+        // apart, so O(1) fit per cell → bounded bucket occupancy → ~O(N).
+        //
+        // A candidate probes every existing tier. Within tier k (cell c_k, max
+        // tile radius c_k) an overlapper's centre lies within r + c_k + margin,
+        // i.e. P_k = ⌈(r + c_k + margin)/c_k⌉ + 1 cells (the +1 is a conservative
+        // ring so the accept/reject decision is byte-identical to the old
+        // fixed-cell scan — never a false negative). Cell indices are
         // domain-relative (offset by x0/y0) and packed into a long key.
-        double cell = Math.Max(rMax, 1e-12);
-        var grid = new Dictionary<long, List<int>>(Math.Max(64, count));
+        var tierGrids = new List<Dictionary<long, List<int>>?>();
+        var tierCells = new List<double>();
+        double log2rMax = Math.Log2(rMax);
         var tiles = new List<Tile>(count);
 
         static long PackCell(int cx, int cy) => ((long)cx << 32) ^ (uint)cy;
-        int CellX(double wx) => (int)Math.Floor((wx - x0) / cell);
-        int CellY(double wy) => (int)Math.Floor((wy - y0) / cell);
+
+        int TierOf(double r)
+        {
+            int k = (int)Math.Floor(log2rMax - Math.Log2(Math.Max(r, 1e-300)));
+            return k < 0 ? 0 : k;
+        }
+
+        Dictionary<long, List<int>> GridForTier(int k)
+        {
+            while (tierGrids.Count <= k) { tierGrids.Add(null); tierCells.Add(0.0); }
+            if (tierGrids[k] == null)
+            {
+                tierGrids[k] = new Dictionary<long, List<int>>();
+                tierCells[k] = rMax * Math.Pow(0.5, k);
+            }
+            return tierGrids[k]!;
+        }
 
         int vertCount = shape == RandomTileShape.Square ? 4
                       : shape == RandomTileShape.Triangle ? 3 : 0;
@@ -204,21 +233,30 @@ public sealed class RandomTileCalculator : IFractalCalculator, IHeightFieldSourc
         bool Overlaps(double cx, double cy, double r, double margin, int cn,
             Span<double> cvx, Span<double> cvy, Span<double> nvx, Span<double> nvy)
         {
-            int ccx = CellX(cx), ccy = CellY(cy);
-            for (int dx = -2; dx <= 2; dx++)
-            for (int dy = -2; dy <= 2; dy++)
+            for (int k = 0; k < tierGrids.Count; k++)
             {
-                if (!grid.TryGetValue(PackCell(ccx + dx, ccy + dy), out var bucket))
-                    continue;
-                foreach (int ti in bucket)
+                var grid = tierGrids[k];
+                if (grid == null || grid.Count == 0) continue;
+                double ck = tierCells[k];
+                double inv = 1.0 / ck;
+                int ccx = (int)Math.Floor((cx - x0) * inv);
+                int ccy = (int)Math.Floor((cy - y0) * inv);
+                int p = (int)Math.Ceiling((r + ck + margin) * inv) + 1;
+                for (int dx = -p; dx <= p; dx++)
+                for (int dy = -p; dy <= p; dy++)
                 {
-                    var t = tiles[ti];
-                    double ex = t.X - cx, ey = t.Y - cy;
-                    double circ = t.R + r + margin;
-                    if (ex * ex + ey * ey >= circ * circ) continue;   // circumcircles clear
-                    if (cn == 0) return true;                          // circle — real overlap
-                    BuildVerts(t.X, t.Y, t.R, t.Angle, shape, nvx, nvy);
-                    if (!PolysClear(cvx, cvy, cn, nvx, nvy, cn, margin)) return true;
+                    if (!grid.TryGetValue(PackCell(ccx + dx, ccy + dy), out var bucket))
+                        continue;
+                    foreach (int ti in bucket)
+                    {
+                        var t = tiles[ti];
+                        double ex = t.X - cx, ey = t.Y - cy;
+                        double circ = t.R + r + margin;
+                        if (ex * ex + ey * ey >= circ * circ) continue;   // circumcircles clear
+                        if (cn == 0) return true;                          // circle — real overlap
+                        BuildVerts(t.X, t.Y, t.R, t.Angle, shape, nvx, nvy);
+                        if (!PolysClear(cvx, cvy, cn, nvx, nvy, cn, margin)) return true;
+                    }
                 }
             }
             return false;
@@ -261,9 +299,13 @@ public sealed class RandomTileCalculator : IFractalCalculator, IHeightFieldSourc
 
                 int idx = tiles.Count;
                 tiles.Add(new Tile(cxw, cyw, r, ang, i));
-                long ckey = PackCell(CellX(cxw), CellY(cyw));
-                if (!grid.TryGetValue(ckey, out var b))
-                    grid[ckey] = b = new List<int>(4);
+                int tier = TierOf(r);
+                var g = GridForTier(tier);
+                double tc = tierCells[tier], tinv = 1.0 / tc;
+                long ckey = PackCell((int)Math.Floor((cxw - x0) * tinv),
+                                     (int)Math.Floor((cyw - y0) * tinv));
+                if (!g.TryGetValue(ckey, out var b))
+                    g[ckey] = b = new List<int>(4);
                 b.Add(idx);
                 break;
                 // A skipped index (all attempts overlapped) is fine — the radius
