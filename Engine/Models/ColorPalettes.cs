@@ -258,6 +258,11 @@ namespace FracturingFog.Models
             new BinaryDecompContourMap(),
             new BinaryDecompGoldMap(),
 
+            // ── Argument (phase) decomposition ────────────────────────────────\
+            new ArgDecompQuadrantsMap(),
+            new ArgDecompPinwheelMap(),
+            new ArgDecompSpectralMap(),
+
             // ── Iter + final-z combination (#69 / #358) ───────────────────────\
             new IterPlusRealMap(),
             new IterPlusImagMap(),
