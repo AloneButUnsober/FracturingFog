@@ -142,12 +142,14 @@ Target: green in the existing suite, no new zoom cap regressions.
 
 ## 6. Slice plan (issues)
 
-- **#358 — P1**: `IterFinalZBaseMap` + `IterPlusRealMap` + `IterPlusImagMap`,
-  registration, tunable weights/period, tests 1–5. Ships two usable themes and
-  the shared base.
-- **#359 — P2** (depends on #358): `IterPlusRatioMap` +
+- **#358 — P1** ✅ DONE (commit 5192598): `IterFinalZBaseMap` + `IterPlusRealMap`
+  + `IterPlusImagMap`, registration, tunable weights/period, tests 1–5. Ships two
+  usable themes and the shared base.
+- **#359 — P2** ✅ DONE (commit 80aab49, depends on #358): `IterPlusRatioMap` +
   `IterRealImagRatioMap` (atan2 ratio channel + 4-way composite), tests + the
-  deep-zoom parity smoke (test 6).
+  deep-zoom parity smoke (test 6, asserts finalZ populated on scalar + HP paths).
+
+The #69 combination family is complete; full Server.Tests suite green (1446).
 
 Both slices Mandelbrot-family escape-time only (where finalZ is defined). Other
 escape-time types inherit automatically if they populate the finalZ buffers;
