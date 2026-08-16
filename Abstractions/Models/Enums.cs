@@ -14,6 +14,11 @@ namespace FracturingFog
     /// (heaviest compression); <see cref="Linear"/> is the un-tamed original.</summary>
     public enum HeightCurve2D { Linear, Sqrt, Log }
 
+    /// <summary>Tile shape for the RandomTile (Bourke random space-filling)
+    /// calculator. All shapes are inscribed in the placement circumradius and
+    /// carry the same radial-dome relief; only the paint mask differs.</summary>
+    public enum RandomTileShape { Circle, Square, Triangle }
+
     /// <summary>
     /// Background composited behind translucent 2D pixels when the interior
     /// (in-set) region carries alpha &lt; 255 (issue #96). Only consulted by the

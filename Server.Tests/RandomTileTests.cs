@@ -14,7 +14,8 @@ public class RandomTileTests
 
     private static RandomTileCalculator Render(
         int seed = 1, int count = 3000, double alpha = 1.6,
-        double gap = 0.0, double minPx = 0.75, double relief = 1.0)
+        double gap = 0.0, double minPx = 0.75, double relief = 1.0,
+        RandomTileShape shape = RandomTileShape.Circle)
     {
         var calc = new RandomTileCalculator(W, H)
         {
@@ -27,6 +28,7 @@ public class RandomTileTests
                 RandomTileGap = gap,
                 RandomTileMinPixelRadius = minPx,
                 RandomTileRelief = relief,
+                RandomTileShape = shape,
             },
         };
         calc.Calculate();
@@ -96,5 +98,47 @@ public class RandomTileTests
     {
         var calc = Render(seed: 1, count: 2000, relief: 0.0);
         Assert.True(PaintedPixels(calc.ColorBuffer) > 0);
+    }
+
+    // ── P3: shapes ──
+
+    [Theory]
+    [InlineData(RandomTileShape.Circle)]
+    [InlineData(RandomTileShape.Square)]
+    [InlineData(RandomTileShape.Triangle)]
+    public void EveryShape_Paints_And_Leaves_Gaps(RandomTileShape shape)
+    {
+        int painted = PaintedPixels(Render(seed: 2, count: 4000, shape: shape).ColorBuffer);
+        Assert.InRange(painted, W * H / 20, W * H - 1);
+    }
+
+    [Fact]
+    public void Shape_Changes_The_Tiling()
+    {
+        var circle = Render(seed: 2, count: 2000, shape: RandomTileShape.Circle);
+        var square = Render(seed: 2, count: 2000, shape: RandomTileShape.Square);
+        var tri = Render(seed: 2, count: 2000, shape: RandomTileShape.Triangle);
+        Assert.False(circle.ColorBuffer.AsSpan().SequenceEqual(square.ColorBuffer));
+        Assert.False(square.ColorBuffer.AsSpan().SequenceEqual(tri.ColorBuffer));
+    }
+
+    [Theory]
+    [InlineData(RandomTileShape.Square)]
+    [InlineData(RandomTileShape.Triangle)]
+    public void Polygon_Placement_Is_Deterministic(RandomTileShape shape)
+    {
+        var a = Render(seed: 5, count: 2500, shape: shape);
+        var b = Render(seed: 5, count: 2500, shape: shape);
+        Assert.True(a.ColorBuffer.AsSpan().SequenceEqual(b.ColorBuffer));
+    }
+
+    [Fact]
+    public void Circle_Path_Unchanged_By_Shape_Feature()
+    {
+        // The Circle branch must stay byte-identical to the shape-less behaviour:
+        // no rotation draw, inside ⇔ dd ≤ r². Two circle renders match exactly.
+        var a = Render(seed: 9, count: 3000, shape: RandomTileShape.Circle);
+        var b = Render(seed: 9, count: 3000);   // default shape == Circle
+        Assert.True(a.ColorBuffer.AsSpan().SequenceEqual(b.ColorBuffer));
     }
 }

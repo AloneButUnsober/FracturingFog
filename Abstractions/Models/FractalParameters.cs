@@ -672,6 +672,10 @@ namespace FracturingFog.Models
         /// height field). 0 = flat discs (no relief, fast path); 1 = full
         /// hemisphere. Ignored by flat 2D themes. Default 1.0.</summary>
         public double RandomTileRelief { get; set; } = 1.0;
+        /// <summary>Tile shape. Circle (default), Square or Triangle — all
+        /// inscribed in the placement circumradius, carrying the same radial-dome
+        /// relief. Non-circle shapes get a random per-tile rotation.</summary>
+        public RandomTileShape RandomTileShape { get; set; } = RandomTileShape.Circle;
 
         // Kleinian limit set (3D, sphere-inversion Schottky group).
         /// <summary>Inversion-iteration cap for the Kleinian DE. Higher =
@@ -1064,6 +1068,7 @@ namespace FracturingFog.Models
                 RandomTileMinPixelRadius = RandomTileMinPixelRadius,
                 RandomTileColorByIndex = RandomTileColorByIndex,
                 RandomTileRelief = RandomTileRelief,
+                RandomTileShape = RandomTileShape,
                 KleinianIterations = KleinianIterations,
                 KleinianSphereScale = KleinianSphereScale,
                 KleinianMaxSteps = KleinianMaxSteps,

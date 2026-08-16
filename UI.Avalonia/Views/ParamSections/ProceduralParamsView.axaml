@@ -286,7 +286,13 @@
         <!-- Random Tiling (Bourke) -->
         <Grid IsVisible="{Binding IsRandomTile}"
               ColumnDefinitions="160,*"
-              RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto">
+              RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto">
+            <TextBlock Grid.Row="7" Grid.Column="0" Text="Shape:" VerticalAlignment="Center" />
+            <ComboBox Grid.Row="7" Grid.Column="1"
+                      ItemsSource="{Binding RandomTileShapes}"
+                      SelectedItem="{Binding RandomTileShape, Mode=TwoWay}"
+                      Margin="0,2"
+                      ToolTip.Tip="Tile shape. Square / Triangle are inscribed in the placement radius with a random rotation; all shapes carry the same domed relief." />
             <TextBlock Grid.Row="0" Grid.Column="0" Text="Shapes:" VerticalAlignment="Center" />
             <NumericUpDown Grid.Row="0" Grid.Column="1"
                            Minimum="1" Maximum="200000" Increment="500" FormatString="F0"

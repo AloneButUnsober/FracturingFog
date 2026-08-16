@@ -80,9 +80,11 @@ public sealed class RandomTileCalculator : IFractalCalculator, IHeightFieldSourc
     {
         public readonly double X;      // world centre
         public readonly double Y;
-        public readonly double R;      // world radius
+        public readonly double R;      // world circumradius
+        public readonly double Angle;  // rotation (rad); 0 for circles
         public readonly int Index;     // placement order (0 = biggest)
-        public Tile(double x, double y, double r, int index) { X = x; Y = y; R = r; Index = index; }
+        public Tile(double x, double y, double r, double angle, int index)
+        { X = x; Y = y; R = r; Angle = angle; Index = index; }
     }
 
     public void Calculate(CancellationToken ct = default)
@@ -149,6 +151,7 @@ public sealed class RandomTileCalculator : IFractalCalculator, IHeightFieldSourc
 
         var rng = new Random(FractalParameters.RandomTileSeed);
         const int maxAttempts = 200;
+        RandomTileShape shape = FractalParameters.RandomTileShape;
 
         for (int i = 0; i < count; i++)
         {
@@ -166,8 +169,15 @@ public sealed class RandomTileCalculator : IFractalCalculator, IHeightFieldSourc
 
                 if (Overlaps(cxw, cyw, r, margin)) continue;
 
+                // Random per-tile rotation for polygons (circles are rotation-
+                // invariant, so the draw is skipped to keep the circle stream
+                // byte-identical to the shape-less P1 behaviour).
+                double ang = shape == RandomTileShape.Circle
+                    ? 0.0
+                    : rng.NextDouble() * (2.0 * Math.PI);
+
                 int idx = tiles.Count;
-                tiles.Add(new Tile(cxw, cyw, r, i));
+                tiles.Add(new Tile(cxw, cyw, r, ang, i));
                 long key = PackCell(CellX(cxw), CellY(cyw));
                 if (!grid.TryGetValue(key, out var b))
                     grid[key] = b = new List<int>(4);
@@ -215,9 +225,39 @@ public sealed class RandomTileCalculator : IFractalCalculator, IHeightFieldSourc
 
         double r2 = sr * sr;
 
+        // Shape mask. Circle stays byte-identical to the P1 disk (inside ⇔
+        // dd ≤ r²). Square/Triangle are inscribed in the circumradius and tested
+        // in the tile-local frame (rotate the pixel offset by −Angle). All shapes
+        // share the SAME radial dome height + normal, so the polygon reads as a
+        // rounded prism and the relief / 3D / volumetric path is unchanged.
+        RandomTileShape shape = FractalParameters.RandomTileShape;
+        double ca = Math.Cos(-t.Angle), sa = Math.Sin(-t.Angle);
+        double halfSq = sr * 0.70710678118654752; // 1/√2 — square inscribed in circumradius
+
+        bool Inside(double dx, double dy)
+        {
+            switch (shape)
+            {
+                case RandomTileShape.Square:
+                {
+                    double lx = dx * ca - dy * sa;
+                    double ly = dx * sa + dy * ca;
+                    return Math.Abs(lx) <= halfSq && Math.Abs(ly) <= halfSq;
+                }
+                case RandomTileShape.Triangle:
+                {
+                    double lx = dx * ca - dy * sa;
+                    double ly = dx * sa + dy * ca;
+                    return InsideTriangle(lx, ly, sr);
+                }
+                default:
+                    return dx * dx + dy * dy <= r2;
+            }
+        }
+
         if (_relief <= 0.0)
         {
-            // Flat fast path — one colour per disk.
+            // Flat fast path — one colour per shape.
             uint col = (uint)ColorMap.Map(tt, 0f, ColorMap.MaxIterations);
             for (int py = y0; py <= y1; py++)
             {
@@ -226,18 +266,16 @@ public sealed class RandomTileCalculator : IFractalCalculator, IHeightFieldSourc
                 for (int px = x0; px <= x1; px++)
                 {
                     double dx = px - sx;
+                    if (!Inside(dx, dy)) continue;
                     double dd = dx * dx + dy * dy;
-                    if (dd <= r2)
-                    {
-                        ColorBuffer[row + px] = col;
-                        SmoothBuffer[row + px] = (float)Math.Sqrt(1.0 - dd / r2);
-                    }
+                    ColorBuffer[row + px] = col;
+                    SmoothBuffer[row + px] = (float)Math.Sqrt(Math.Max(0.0, 1.0 - dd / r2));
                 }
             }
             return;
         }
 
-        // Lit sphere-imposter path — each disk is a dome. In-plane normal grows
+        // Lit sphere-imposter path — each shape is a dome. In-plane normal grows
         // from centre (flat, facing viewer) to rim (grazing): (u, v) = (dx, dy)
         // / sr, scaled by relief. ny negated for the complex-plane y-up
         // convention the 3D themes expect.
@@ -249,14 +287,33 @@ public sealed class RandomTileCalculator : IFractalCalculator, IHeightFieldSourc
             for (int px = x0; px <= x1; px++)
             {
                 double dx = px - sx;
+                if (!Inside(dx, dy)) continue;
                 double dd = dx * dx + dy * dy;
-                if (dd > r2) continue;
                 float nx = (float)(_relief * dx * invSr);
                 float ny = (float)(-_relief * dy * invSr);
                 ColorBuffer[row + px] =
                     (uint)ColorMap.Map(tt, 0f, ColorMap.MaxIterations, nx, ny);
-                SmoothBuffer[row + px] = (float)Math.Sqrt(1.0 - dd / r2);
+                SmoothBuffer[row + px] = (float)Math.Sqrt(Math.Max(0.0, 1.0 - dd / r2));
             }
         }
+    }
+
+    // Point-in-equilateral-triangle (upward, circumradius R, centred at origin).
+    // Vertices at 90° / 210° / 330°. Inside ⇔ the point is on the same side of
+    // all three edges (all cross products share sign).
+    private static bool InsideTriangle(double px, double py, double r)
+    {
+        const double C30 = 0.86602540378443865; // cos30 = √3/2
+        double v0x = 0.0,        v0y = r;
+        double v1x = -C30 * r,   v1y = -0.5 * r;
+        double v2x =  C30 * r,   v2y = -0.5 * r;
+
+        double d0 = (v1x - v0x) * (py - v0y) - (v1y - v0y) * (px - v0x);
+        double d1 = (v2x - v1x) * (py - v1y) - (v2y - v1y) * (px - v1x);
+        double d2 = (v0x - v2x) * (py - v2y) - (v0y - v2y) * (px - v2x);
+
+        bool hasNeg = d0 < 0 || d1 < 0 || d2 < 0;
+        bool hasPos = d0 > 0 || d1 > 0 || d2 > 0;
+        return !(hasNeg && hasPos);
     }
 }

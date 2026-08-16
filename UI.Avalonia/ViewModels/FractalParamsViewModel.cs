@@ -141,6 +141,7 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
         _rtMinPx = _p.RandomTileMinPixelRadius;
         _rtColorByIndex = _p.RandomTileColorByIndex;
         _rtRelief = _p.RandomTileRelief;
+        _rtShape = _p.RandomTileShape;
         _kleinIter = _p.KleinianIterations;
         _kleinScale = _p.KleinianSphereScale;
         _kleinCameraTheta = _p.KleinianCameraTheta;
@@ -1171,6 +1172,10 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
     private double _rtRelief;
     /// <summary>Dome relief amplitude for 3D themes (0 = flat).</summary>
     public double RandomTileRelief { get => _rtRelief; set { Set(ref _rtRelief, Clamp(value, 0.0, 4.0)); _p.RandomTileRelief = _rtRelief; Fire(); } }
+    private RandomTileShape _rtShape;
+    /// <summary>Tile shape — Circle / Square / Triangle (polygons get random rotation).</summary>
+    public RandomTileShape RandomTileShape { get => _rtShape; set { Set(ref _rtShape, value); _p.RandomTileShape = value; Fire(); } }
+    public System.Array RandomTileShapes => System.Enum.GetValues(typeof(RandomTileShape));
 
     // ── DLA ──
     private int _dlaParticles;
