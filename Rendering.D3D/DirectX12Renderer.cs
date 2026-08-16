@@ -87,8 +87,13 @@ public sealed class DirectX12Renderer : IFractalRenderer
     private bool _disposed;
 
     // Pending CPU→GPU upload (set by UpdateTexture, consumed by Render).
+    // _pendingPixels always points at a buffer this renderer OWNS (a snapshot
+    // taken in UpdateTexture), never the caller's array — see the issue #25
+    // note there. _freeBuf is a single recycled spare so the snapshot copy
+    // reuses one allocation across frames instead of churning the GC.
     private readonly object _pendingLock = new();
     private uint[]? _pendingPixels;
+    private uint[]? _freeBuf;
     private int _pendingW, _pendingH;
     private bool _pendingDirty;
 
@@ -329,9 +334,38 @@ float4 PS(VSOut i) : SV_Target { return g_Tex.Sample(g_Samp, i.UV); }";
     public void UpdateTexture(uint[] colorBuffer, int width, int height)
     {
         if (_disposed) return;
+        int n = width * height;
+        if (n <= 0 || colorBuffer.Length < n) return;
+
+        // Snapshot the caller's pixels into a buffer WE own before returning.
+        // The actual GPU upload is deferred to the render thread
+        // (FlushPendingUpload), which copies row-by-row. The transition paths
+        // (slideshow / video cross-fade) reuse a single array across steps and
+        // overwrite it between presents on another thread; without this
+        // snapshot the deferred row copy could read a half-overwritten array →
+        // a torn frame with a horizontal seam (issue #25 — horizontal banding,
+        // worse on slow hardware because the render thread lags further behind).
+        //
+        // SPSC hand-off: pull the spare buffer under the lock, fill it OUTSIDE
+        // the lock (we hold it exclusively — it is neither pending nor in
+        // flush), then publish it as the new pending frame.
+        uint[]? buf;
         lock (_pendingLock)
         {
-            _pendingPixels = colorBuffer;
+            buf = _freeBuf;
+            _freeBuf = null;
+        }
+        if (buf == null || buf.Length < n)
+            buf = new uint[n];
+        Array.Copy(colorBuffer, buf, n);
+
+        lock (_pendingLock)
+        {
+            // A prior frame that Render never consumed can be recycled rather
+            // than dropped to the GC.
+            if (_pendingPixels != null)
+                _freeBuf ??= _pendingPixels;
+            _pendingPixels = buf;
             _pendingW = width;
             _pendingH = height;
             _pendingDirty = true;
@@ -403,6 +437,10 @@ float4 PS(VSOut i) : SV_Target { return g_Tex.Sample(g_Samp, i.UV); }";
             pw = _pendingW;
             ph = _pendingH;
             _pendingDirty = false;
+            // Detach: from here `pixels` is owned exclusively by this flush, so
+            // a concurrent UpdateTexture cannot pick it as its spare and start
+            // overwriting it mid-copy.
+            _pendingPixels = null;
         }
 
         // (Re-)create texture and upload buffer when dimensions change.
@@ -495,6 +533,9 @@ float4 PS(VSOut i) : SV_Target { return g_Tex.Sample(g_Samp, i.UV); }";
                         dst + (long)row * dstPitch,
                         srcPitch, srcPitch);
             }
+            // `pixels` is fully consumed — hand it back as the spare so the
+            // next UpdateTexture reuses this allocation.
+            lock (_pendingLock) { _freeBuf ??= pixels; }
             _uploadBuf.Unmap(0, null);
 
             // Record CopyTextureRegion command.
