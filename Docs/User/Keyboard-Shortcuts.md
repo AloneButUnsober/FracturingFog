@@ -43,7 +43,7 @@ a suffix such as `[ACCEL OFF]` or `[SA OFF]` so you never forget it is engaged.
 
 | Combo | Action |
 |---|---|
-| `Ctrl + G` | Toggle **GPU compute** for the single-precision Mandelbrot path. Falls back to CPU automatically on backends that cannot engage it; the Control Center checkbox stays in sync. |
+| `Ctrl + G` | Toggle **GPU compute** for the single-precision Mandelbrot path, using whichever compute backend the session attached (D3D11 on Windows, or Vulkan/SPIR-V under `--renderer vulkan`). Falls back to CPU automatically on backends that cannot engage it; the Control Center checkbox stays in sync. |
 | `Ctrl + Shift + A` | Toggle Mandelbrot **acceleration** (perturbation / BLA fast path). Off = plain per-pixel iteration. |
 | `Ctrl + Shift + S` | Toggle **Series Approximation** — the polynomial skip that fast-forwards the first thousands of iterations near the reference orbit. |
 | `Ctrl + Shift + D` | Toggle **double-double (DD) BLA** precision on the bilinear-approximation step. |

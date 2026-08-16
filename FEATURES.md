@@ -103,7 +103,12 @@ Vulkan backend (`--renderer vulkan`); it needs a Vulkan device (deep-zoom
 perturbation additionally needs `shaderFloat64`). Exercised so far only against
 software rasterizers (e.g. lavapipe) and low-end parts — **pending validation on
 a capable discrete GPU**. The Ctrl+G hotkey and the Control Center "GPU compute"
-checkbox toggle the separate **D3D11** shallow-Mandelbrot path, not Vulkan.
+checkbox toggle the shallow-Mandelbrot GPU path for **whichever compute backend
+this session attached** — D3D11 on a default Windows run, or Vulkan/SPIR-V under
+`--renderer vulkan` (one backend per session, chosen at launch by `--renderer`).
+The box clears itself when no device can engage. Deep-zoom perturbation is a
+separate auto-enabled path (needs `shaderFloat64`) and is unaffected by the
+checkbox.
 
 See [Docs/User/CrossPlatform-UserGuide.md](Docs/User/CrossPlatform-UserGuide.md)
 for the per-OS install and caveat details and

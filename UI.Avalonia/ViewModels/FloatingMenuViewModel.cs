@@ -988,8 +988,9 @@ public sealed class FloatingMenuViewModel : ViewModelBase
     // GPU compute (shallow FP32 Mandelbrot path) on/off. Mirrors Ctrl+G.
     // Checked = attempt GPU compute; the shell writes the host's *actual*
     // state back via SetGpuComputeState so the box clears when the backend
-    // can't engage (non-D3D11 present, no GPU kernel) — matching the
-    // "didn't engage" reflection MainViewModel.UseGpuCompute already does.
+    // can't engage — no GPU kernel factory, or a session whose factory found no
+    // device (D3D11 or Vulkan; #288) — matching the "didn't engage" reflection
+    // MainViewModel.UseGpuCompute already does.
     private bool _useGpuCompute;
     public bool UseGpuCompute
     {
