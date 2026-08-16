@@ -61,6 +61,8 @@ public sealed class ControlCenterViewModel : ViewModelBase
         ToggleModeCommand = ReactiveCommand.Create(ToggleMode);
         DetachSectionCommand = ReactiveCommand.Create(
             () => DetachRequested?.Invoke(this, _selectedSection));
+        GenerateCommandCommand = ReactiveCommand.Create(GenerateCommand);
+        CopyCommandCommand = ReactiveCommand.Create(CopyCommand);
         RebuildNav();
     }
 
@@ -161,5 +163,78 @@ public sealed class ControlCenterViewModel : ViewModelBase
         // Advanced), fall back to the first visible group.
         if (Nav.All(n => n.Section != _selectedSection))
             SelectedSection = Nav[0].Section;
+    }
+
+    // ── CLI Command Builder (#361, slice of #64) ──────────────────────────────
+    // Reads the live 2D configuration off the shell's MainViewModel and emits a
+    // copy/paste `--batch` command that reproduces the current poster. MVP: 2D
+    // image path only. Fx families with no batch flag (lighting / relief / etc.)
+    // are not represented — #362 adds the gap-detection warning.
+
+    public ReactiveCommand<Unit, Unit> GenerateCommandCommand { get; }
+    public ReactiveCommand<Unit, Unit> CopyCommandCommand { get; }
+
+    private int _commandWidth = 1920;
+    /// <summary>Poster width the generated command targets. Defaults to the
+    /// batch default (1920); the live viewport size is unrelated to output size.</summary>
+    public int CommandWidth
+    {
+        get => _commandWidth;
+        set => this.RaiseAndSetIfChanged(ref _commandWidth, value < 1 ? 1 : value);
+    }
+
+    private int _commandHeight = 1080;
+    /// <summary>Poster height the generated command targets (batch default 1080).</summary>
+    public int CommandHeight
+    {
+        get => _commandHeight;
+        set => this.RaiseAndSetIfChanged(ref _commandHeight, value < 1 ? 1 : value);
+    }
+
+    private string _generatedCommand = "";
+    /// <summary>The last-generated command string, bound to a read-only field.</summary>
+    public string GeneratedCommand
+    {
+        get => _generatedCommand;
+        private set => this.RaiseAndSetIfChanged(ref _generatedCommand, value);
+    }
+
+    private void GenerateCommand()
+    {
+        var main = Shell.Main;
+        var vs = main.ViewState;
+
+        // Effective iteration count: honour an explicit lock / region override,
+        // else the quality preset's zoom-derived count — matching what the live
+        // calculator uses, so the poster does not drift.
+        int iter = vs.IterLocked ? vs.LockedIterations
+                 : vs.PreferredIterations > 0 ? vs.PreferredIterations
+                 : vs.Quality?.ComputeIterations(vs.Zoom) ?? 0;
+
+        var snap = new FracturingFog.Cli.BatchCommandSnapshot
+        {
+            Fractal     = main.SelectedFractalType,
+            CenterX     = vs.CenterX,
+            CenterY     = vs.CenterY,
+            Zoom        = vs.Zoom,
+            Iterations  = iter,
+            ThemeName   = main.SelectedTheme ?? "HSV",
+            QualityName = main.SelectedQuality?.Name ?? "Standard",
+            Width       = CommandWidth,
+            Height      = CommandHeight,
+            Brightness  = vs.Brightness,
+            Contrast    = vs.Contrast,
+            HistogramEq = vs.HistogramEq,
+            Parameters  = vs.FractalParameters,
+        };
+
+        GeneratedCommand = FracturingFog.Cli.BatchCommandBuilder.Build(snap);
+    }
+
+    private void CopyCommand()
+    {
+        if (string.IsNullOrEmpty(GeneratedCommand)) GenerateCommand();
+        if (!string.IsNullOrEmpty(GeneratedCommand))
+            Shell.RequestCopyToClipboard(GeneratedCommand);
     }
 }
