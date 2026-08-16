@@ -258,6 +258,10 @@ namespace FracturingFog.Models
             new BinaryDecompContourMap(),
             new BinaryDecompGoldMap(),
 
+            // ── Iter + final-z combination (#69 / #358) ───────────────────────\
+            new IterPlusRealMap(),
+            new IterPlusImagMap(),
+
             // ── Derivative Magnitude Map ──────────────────────────────────────\
             new DerivativeAngleMap(),
             new DerivativeFlowMap(),
