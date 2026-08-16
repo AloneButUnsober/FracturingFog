@@ -191,7 +191,18 @@ public sealed class RandomTileCalculator : IFractalCalculator, IHeightFieldSourc
         int CellX(double wx) => (int)Math.Floor((wx - x0) / cell);
         int CellY(double wy) => (int)Math.Floor((wy - y0) / cell);
 
-        bool Overlaps(double cx, double cy, double r, double margin)
+        int vertCount = shape == RandomTileShape.Square ? 4
+                      : shape == RandomTileShape.Triangle ? 3 : 0;
+
+        // Overlap test. Broad phase is the circumcircle (cell-bucketed): if the
+        // circumcircles clear by the margin, the shapes cannot touch. Circles
+        // stop there (the circumcircle IS the shape — byte-identical to before).
+        // Polygons then run an SAT narrow phase against the ACTUAL rotated shape,
+        // so squares/triangles pack tight instead of each reserving a full circle
+        // of empty space. cvx/cvy carry the candidate's world vertices; nvx/nvy
+        // is scratch for the neighbour (both are the same shape).
+        bool Overlaps(double cx, double cy, double r, double margin, int cn,
+            Span<double> cvx, Span<double> cvy, Span<double> nvx, Span<double> nvy)
         {
             int ccx = CellX(cx), ccy = CellY(cy);
             for (int dx = -2; dx <= 2; dx++)
@@ -203,8 +214,11 @@ public sealed class RandomTileCalculator : IFractalCalculator, IHeightFieldSourc
                 {
                     var t = tiles[ti];
                     double ex = t.X - cx, ey = t.Y - cy;
-                    double minDist = t.R + r + margin;
-                    if (ex * ex + ey * ey < minDist * minDist) return true;
+                    double circ = t.R + r + margin;
+                    if (ex * ex + ey * ey >= circ * circ) continue;   // circumcircles clear
+                    if (cn == 0) return true;                          // circle — real overlap
+                    BuildVerts(t.X, t.Y, t.R, t.Angle, shape, nvx, nvy);
+                    if (!PolysClear(cvx, cvy, cn, nvx, nvy, cn, margin)) return true;
                 }
             }
             return false;
@@ -212,6 +226,13 @@ public sealed class RandomTileCalculator : IFractalCalculator, IHeightFieldSourc
 
         var rng = new Random(FractalParameters.RandomTileSeed);
         const int maxAttempts = 200;
+
+        // Vertex scratch buffers — allocated ONCE (never inside the attempt loop,
+        // which would grow the stack). Max 4 verts (square).
+        Span<double> cvx = stackalloc double[4];
+        Span<double> cvy = stackalloc double[4];
+        Span<double> nvx = stackalloc double[4];
+        Span<double> nvy = stackalloc double[4];
 
         for (int i = 0; i < count; i++)
         {
@@ -227,14 +248,16 @@ public sealed class RandomTileCalculator : IFractalCalculator, IHeightFieldSourc
                 double cxw = x0 + r + rng.NextDouble() * Math.Max(0.0, (x1 - x0) - 2 * r);
                 double cyw = y0 + r + rng.NextDouble() * Math.Max(0.0, (y1 - y0) - 2 * r);
 
-                if (Overlaps(cxw, cyw, r, margin)) continue;
-
-                // Random per-tile rotation for polygons (circles are rotation-
-                // invariant, so the draw is skipped to keep the circle stream
-                // byte-identical to the shape-less P1 behaviour).
+                // Random per-tile rotation for polygons, drawn BEFORE the overlap
+                // test (the rotation decides whether the shape actually fits).
+                // Circles are rotation-invariant, so the draw is skipped — keeping
+                // the circle RNG stream byte-identical to the shape-less path.
                 double ang = shape == RandomTileShape.Circle
                     ? 0.0
                     : rng.NextDouble() * (2.0 * Math.PI);
+                if (vertCount > 0) BuildVerts(cxw, cyw, r, ang, shape, cvx, cvy);
+
+                if (Overlaps(cxw, cyw, r, margin, vertCount, cvx, cvy, nvx, nvy)) continue;
 
                 int idx = tiles.Count;
                 tiles.Add(new Tile(cxw, cyw, r, ang, i));
@@ -249,6 +272,77 @@ public sealed class RandomTileCalculator : IFractalCalculator, IHeightFieldSourc
         }
 
         return tiles;
+    }
+
+    // World-space vertices of a tile inscribed in circumradius R (square corners
+    // at Angle+45°+k·90°; triangle vertices at Angle+90°+k·120°). Matches the
+    // paint mask so collision and pixels agree.
+    private static void BuildVerts(double cx, double cy, double r, double ang,
+        RandomTileShape shape, Span<double> vx, Span<double> vy)
+    {
+        if (shape == RandomTileShape.Square)
+        {
+            for (int k = 0; k < 4; k++)
+            {
+                double a = ang + Math.PI / 4.0 + k * (Math.PI / 2.0);
+                vx[k] = cx + r * Math.Cos(a);
+                vy[k] = cy + r * Math.Sin(a);
+            }
+        }
+        else // Triangle
+        {
+            for (int k = 0; k < 3; k++)
+            {
+                double a = ang + Math.PI / 2.0 + k * (2.0 * Math.PI / 3.0);
+                vx[k] = cx + r * Math.Cos(a);
+                vy[k] = cy + r * Math.Sin(a);
+            }
+        }
+    }
+
+    // Separating Axis Theorem for two convex polygons. Returns true when a
+    // separating axis exists with at least `margin` clearance (i.e. the shapes
+    // are apart by the requested gap). Axes are the edge normals of both polys.
+    private static bool PolysClear(
+        Span<double> ax, Span<double> ay, int na,
+        Span<double> bx, Span<double> by, int nb, double margin)
+    {
+        for (int poly = 0; poly < 2; poly++)
+        {
+            Span<double> ex = poly == 0 ? ax : bx;
+            Span<double> ey = poly == 0 ? ay : by;
+            int ne = poly == 0 ? na : nb;
+            for (int k = 0; k < ne; k++)
+            {
+                int k2 = (k + 1) % ne;
+                double nx = ey[k2] - ey[k];        // edge normal = (dy, −dx)
+                double ny = -(ex[k2] - ex[k]);
+                double len = Math.Sqrt(nx * nx + ny * ny);
+                if (len < 1e-12) continue;
+                nx /= len; ny /= len;
+
+                double amin = double.PositiveInfinity, amax = double.NegativeInfinity;
+                for (int j = 0; j < na; j++)
+                {
+                    double p = ax[j] * nx + ay[j] * ny;
+                    if (p < amin) amin = p;
+                    if (p > amax) amax = p;
+                }
+                double bmin = double.PositiveInfinity, bmax = double.NegativeInfinity;
+                for (int j = 0; j < nb; j++)
+                {
+                    double p = bx[j] * nx + by[j] * ny;
+                    if (p < bmin) bmin = p;
+                    if (p > bmax) bmax = p;
+                }
+
+                // Separation along this axis (positive = apart). If any axis
+                // clears by the margin, the shapes are acceptably apart.
+                double sep = Math.Max(amin - bmax, bmin - amax);
+                if (sep >= margin) return true;
+            }
+        }
+        return false;
     }
 
     private void PaintDisk(in Tile t)

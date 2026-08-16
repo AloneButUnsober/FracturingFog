@@ -1,5 +1,6 @@
 using System;
 using System.Linq;
+using System.Reflection;
 using Xunit;
 using FracturingFog;
 using FracturingFog.Models;
@@ -110,6 +111,43 @@ public class RandomTileTests
     {
         int painted = PaintedPixels(Render(seed: 2, count: 4000, shape: shape).ColorBuffer);
         Assert.InRange(painted, W * H / 20, W * H - 1);
+    }
+
+    [Theory]
+    [InlineData(RandomTileShape.Square)]
+    [InlineData(RandomTileShape.Triangle)]
+    public void Polygons_Pack_Inside_Former_Circular_Haloes(RandomTileShape shape)
+    {
+        // The SAT narrow-phase fix: polygons pack against each other's true edges
+        // instead of each reserving a full circumcircle of empty space. Proof =
+        // placed pairs whose CIRCUMCIRCLES overlap (centre distance < Ra+Rb).
+        // Impossible under the old circumradius-only reject (zero such pairs);
+        // with SAT, tiles nestle into former haloes → many. (Coverage % can't see
+        // this — it's a small near-edge area dominated by the few biggest tiles.)
+        var calc = Render(seed: 1, count: 4000, alpha: 1.3, minPx: 1.0, shape: shape);
+
+        var field = typeof(RandomTileCalculator).GetField("_cachedTiles",
+            BindingFlags.NonPublic | BindingFlags.Instance);
+        var list = (System.Collections.IList)field!.GetValue(calc)!;
+        int n = list.Count;
+        Assert.True(n > 10, "too few tiles to judge packing");
+
+        var tileType = list[0]!.GetType();
+        var fx = tileType.GetField("X"); var fy = tileType.GetField("Y"); var fr = tileType.GetField("R");
+        var X = new double[n]; var Y = new double[n]; var R = new double[n];
+        for (int i = 0; i < n; i++)
+        { X[i] = (double)fx!.GetValue(list[i])!; Y[i] = (double)fy!.GetValue(list[i])!; R[i] = (double)fr!.GetValue(list[i])!; }
+
+        int circOverlap = 0;
+        for (int i = 0; i < n; i++)
+        for (int j = i + 1; j < n; j++)
+        {
+            double dx = X[i] - X[j], dy = Y[i] - Y[j];
+            double sum = R[i] + R[j];
+            if (dx * dx + dy * dy < sum * sum) circOverlap++;
+        }
+        Assert.True(circOverlap > 5,
+            $"{shape}: only {circOverlap} circumcircle-overlapping pairs — SAT tight packing not engaged");
     }
 
     [Fact]
