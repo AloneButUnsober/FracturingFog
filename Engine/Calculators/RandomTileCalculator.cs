@@ -66,6 +66,35 @@ public sealed class RandomTileCalculator : IFractalCalculator, IHeightFieldSourc
     // Dome relief amplitude for the sphere-imposter paint path (see PaintDisk).
     private double _relief = 1.0;
 
+    // #338 — placement cache. The rejection-sampling placement is O(N) and
+    // depends only on the geometry + placement params (NOT relief / colour), so
+    // shading-only re-renders (relief-knob drag, relief/colour animation) reuse
+    // the tile list and re-run just the paint pass.
+    private List<Tile>? _cachedTiles;
+    private PlacementKey _cacheKey;
+    private bool _cacheValid;
+
+    private readonly struct PlacementKey : IEquatable<PlacementKey>
+    {
+        public readonly int W, H, Seed, Count;
+        public readonly double CX, CY, Zoom, Alpha, Gap, MinPx;
+        public readonly RandomTileShape Shape;
+        public PlacementKey(int w, int h, double cx, double cy, double zoom,
+            int seed, int count, double alpha, double gap, double minPx,
+            RandomTileShape shape)
+        { W = w; H = h; CX = cx; CY = cy; Zoom = zoom; Seed = seed; Count = count;
+          Alpha = alpha; Gap = gap; MinPx = minPx; Shape = shape; }
+
+        public bool Equals(PlacementKey o) =>
+            W == o.W && H == o.H && Seed == o.Seed && Count == o.Count &&
+            CX == o.CX && CY == o.CY && Zoom == o.Zoom && Alpha == o.Alpha &&
+            Gap == o.Gap && MinPx == o.MinPx && Shape == o.Shape;
+        public override bool Equals(object? o) => o is PlacementKey k && Equals(k);
+        public override int GetHashCode() =>
+            HashCode.Combine(W, H, Seed, Count, CX, CY, Zoom,
+                HashCode.Combine(Alpha, Gap, MinPx, (int)Shape));
+    }
+
     public RandomTileCalculator(int width, int height) => Resize(width, height);
 
     public void Resize(int width, int height)
@@ -96,6 +125,7 @@ public sealed class RandomTileCalculator : IFractalCalculator, IHeightFieldSourc
         double alpha = Math.Max(0.2, FractalParameters.RandomTileSizeExponent);
         double gap = Math.Max(0.0, FractalParameters.RandomTileGap);
         double minPx = Math.Max(0.25, FractalParameters.RandomTileMinPixelRadius);
+        RandomTileShape shape = FractalParameters.RandomTileShape;
         _relief = Math.Clamp(FractalParameters.RandomTileRelief, 0.0, 4.0);
 
         // World→screen scale matches the standard 2D convention: pixel pitch =
@@ -106,18 +136,49 @@ public sealed class RandomTileCalculator : IFractalCalculator, IHeightFieldSourc
         // Visible world half-extents (the domain we fill).
         double halfW = Width * 0.5 * pixelPitch;
         double halfH = Height * 0.5 * pixelPitch;
-        double x0 = CenterX - halfW, x1 = CenterX + halfW;
-        double y0 = CenterY - halfH, y1 = CenterY + halfH;
-
-        // Biggest tile ≈ 0.5× the smaller domain half-extent, so the largest few
-        // read as clear anchors without swallowing the whole frame.
         double rMax = 0.5 * Math.Min(halfW, halfH);
         if (rMax < minWorldR || count == 0) return;
 
         // Colour spans the palette across placement order (big → small) when
         // colouring by index; the log-radius fallback emphasises scale instead.
+        // Colour-only param — never part of the placement cache key.
         ColorMap.MaxIterations = Math.Max(16, count);
 
+        // #338 — reuse the cached placement when nothing that affects it changed.
+        var key = new PlacementKey(Width, Height, CenterX, CenterY, Zoom,
+            FractalParameters.RandomTileSeed, count, alpha, gap, minPx, shape);
+        List<Tile>? tiles = (_cacheValid && _cachedTiles != null && _cacheKey.Equals(key))
+            ? _cachedTiles
+            : null;
+
+        if (tiles == null)
+        {
+            tiles = BuildTiles(count, alpha, gap, minPx, rMax,
+                CenterX - halfW, CenterX + halfW, CenterY - halfH, CenterY + halfH,
+                minWorldR, shape, ct);
+            if (ct.IsCancellationRequested) return;   // don't cache a partial pass
+            _cachedTiles = tiles;
+            _cacheKey = key;
+            _cacheValid = true;
+        }
+
+        // Tiles are generated in strictly-decreasing-radius order, so painting in
+        // list order draws biggest first and smaller shapes nest on top.
+        foreach (var t in tiles)
+        {
+            if (ct.IsCancellationRequested) return;
+            PaintDisk(t);
+        }
+    }
+
+    // Rejection-sample the non-overlapping packing. Pure function of the geometry
+    // + placement params (the PlacementKey fields); relief / colour never enter
+    // here, which is what lets Calculate cache the result across shading changes.
+    private List<Tile> BuildTiles(
+        int count, double alpha, double gap, double minPx, double rMax,
+        double x0, double x1, double y0, double y1, double minWorldR,
+        RandomTileShape shape, CancellationToken ct)
+    {
         // Uniform spatial hash. Cell = rMax; two tiles overlap only if their
         // centres are within r_a + r_b ≤ 2·rMax, so a candidate need only probe
         // cells within ⌈(r_cand + rMax)/cell⌉ = 2 of its own. Cell indices are
@@ -151,11 +212,10 @@ public sealed class RandomTileCalculator : IFractalCalculator, IHeightFieldSourc
 
         var rng = new Random(FractalParameters.RandomTileSeed);
         const int maxAttempts = 200;
-        RandomTileShape shape = FractalParameters.RandomTileShape;
 
         for (int i = 0; i < count; i++)
         {
-            if ((i & 0x3FF) == 0 && ct.IsCancellationRequested) return;
+            if ((i & 0x3FF) == 0 && ct.IsCancellationRequested) return tiles;
 
             double r = rMax / Math.Pow(i + 1, 1.0 / alpha);
             if (r < minWorldR) break;                       // sub-pixel — done
@@ -178,9 +238,9 @@ public sealed class RandomTileCalculator : IFractalCalculator, IHeightFieldSourc
 
                 int idx = tiles.Count;
                 tiles.Add(new Tile(cxw, cyw, r, ang, i));
-                long key = PackCell(CellX(cxw), CellY(cyw));
-                if (!grid.TryGetValue(key, out var b))
-                    grid[key] = b = new List<int>(4);
+                long ckey = PackCell(CellX(cxw), CellY(cyw));
+                if (!grid.TryGetValue(ckey, out var b))
+                    grid[ckey] = b = new List<int>(4);
                 b.Add(idx);
                 break;
                 // A skipped index (all attempts overlapped) is fine — the radius
@@ -188,13 +248,7 @@ public sealed class RandomTileCalculator : IFractalCalculator, IHeightFieldSourc
             }
         }
 
-        // Tiles are generated in strictly-decreasing-radius order, so painting in
-        // list order draws biggest first and smaller shapes nest on top.
-        foreach (var t in tiles)
-        {
-            if (ct.IsCancellationRequested) return;
-            PaintDisk(t);
-        }
+        return tiles;
     }
 
     private void PaintDisk(in Tile t)

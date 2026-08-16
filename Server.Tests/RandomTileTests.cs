@@ -132,6 +132,54 @@ public class RandomTileTests
         Assert.True(a.ColorBuffer.AsSpan().SequenceEqual(b.ColorBuffer));
     }
 
+    // ── #338: placement cache ──
+
+    [Fact]
+    public void PlacementCache_Is_Transparent_To_Output()
+    {
+        // Warm instance: render once (builds the cache), then flip a shading-only
+        // param (relief) and render again — this exercises the cache-reuse path.
+        var warm = new RandomTileCalculator(W, H)
+        {
+            CenterX = 0, CenterY = 0, Zoom = 1.0,
+            FractalParameters = new FractalParameters
+            { RandomTileSeed = 4, RandomTileCount = 3000, RandomTileRelief = 1.0 },
+        };
+        warm.Calculate();
+        warm.FractalParameters.RandomTileRelief = 0.0;
+        warm.Calculate();
+
+        // Cold instance built directly at relief 0 (no cache reuse).
+        var cold = new RandomTileCalculator(W, H)
+        {
+            CenterX = 0, CenterY = 0, Zoom = 1.0,
+            FractalParameters = new FractalParameters
+            { RandomTileSeed = 4, RandomTileCount = 3000, RandomTileRelief = 0.0 },
+        };
+        cold.Calculate();
+
+        // Reused placement must yield byte-identical output to a cold render.
+        Assert.True(warm.ColorBuffer.AsSpan().SequenceEqual(cold.ColorBuffer));
+    }
+
+    [Fact]
+    public void PlacementCache_Rebuilds_When_Placement_Param_Changes()
+    {
+        var calc = new RandomTileCalculator(W, H)
+        {
+            CenterX = 0, CenterY = 0, Zoom = 1.0,
+            FractalParameters = new FractalParameters
+            { RandomTileSeed = 4, RandomTileCount = 3000, RandomTileSizeExponent = 1.6 },
+        };
+        calc.Calculate();
+        var first = (uint[])calc.ColorBuffer.Clone();
+
+        // A placement-determining change must invalidate the cache → new tiling.
+        calc.FractalParameters.RandomTileSizeExponent = 2.4;
+        calc.Calculate();
+        Assert.False(first.AsSpan().SequenceEqual(calc.ColorBuffer));
+    }
+
     [Fact]
     public void Circle_Path_Unchanged_By_Shape_Feature()
     {
