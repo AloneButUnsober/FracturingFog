@@ -34,6 +34,37 @@
 
         <Border Classes="group">
             <StackPanel Spacing="6">
+                <TextBlock Classes="section" Text="CLI Command" />
+                <TextBlock Text="Generate a copy/paste --batch command that reproduces the current 2D view."
+                           Foreground="#9A9A9A" FontSize="11" TextWrapping="Wrap" />
+                <UniformGrid Columns="2">
+                    <StackPanel Margin="0,0,4,0">
+                        <TextBlock Text="Width" Foreground="#9A9A9A" FontSize="11" />
+                        <NumericUpDown Value="{Binding CommandWidth, Mode=TwoWay}" Minimum="1" Maximum="61440" Increment="16" FormatString="0" />
+                    </StackPanel>
+                    <StackPanel>
+                        <TextBlock Text="Height" Foreground="#9A9A9A" FontSize="11" />
+                        <NumericUpDown Value="{Binding CommandHeight, Mode=TwoWay}" Minimum="1" Maximum="34560" Increment="16" FormatString="0" />
+                    </StackPanel>
+                </UniformGrid>
+                <UniformGrid Columns="2">
+                    <Button Classes="action neutral" Content="Generate" Command="{Binding GenerateCommandCommand}" HorizontalAlignment="Stretch" HorizontalContentAlignment="Center" Margin="0,0,4,0" ToolTip.Tip="Build the --batch command from the current fractal, coordinates, theme, quality, size and post-FX" />
+                    <Button Classes="action neutral" Content="Copy" Command="{Binding CopyCommandCommand}" HorizontalAlignment="Stretch" HorizontalContentAlignment="Center" ToolTip.Tip="Copy the generated command to the clipboard (generates it first if empty)" />
+                </UniformGrid>
+                <TextBox Text="{Binding GeneratedCommand, Mode=OneWay}" IsReadOnly="True"
+                         AcceptsReturn="True" TextWrapping="Wrap"
+                         FontFamily="Consolas,Menlo,monospace" FontSize="11"
+                         MinHeight="72" MaxHeight="160"
+                         PlaceholderText="Click Generate to build the command…"
+                         VerticalContentAlignment="Top"
+                         ToolTip.Tip="Read-only. Replace &lt;OUTPUT.png&gt; with your target file path before running." />
+                <TextBlock Text="Replace &lt;OUTPUT.png&gt; with a real path. Lighting, relief, acid and other fx are not represented yet."
+                           Foreground="#9A9A9A" FontSize="10" TextWrapping="Wrap" />
+            </StackPanel>
+        </Border>
+
+        <Border Classes="group">
+            <StackPanel Spacing="6">
                 <TextBlock Classes="section" Text="Watermark" />
                 <CheckBox Content="Show watermark" IsChecked="{Binding Menu.ShowWatermark, Mode=TwoWay}" ToolTip.Tip="Master toggle for the on-screen watermark overlay" />
                 <CheckBox Content="Use custom watermark" IsChecked="{Binding Menu.UseCustomWatermark, Mode=TwoWay}" ToolTip.Tip="Replace the default region/theme watermark with your saved custom one" />

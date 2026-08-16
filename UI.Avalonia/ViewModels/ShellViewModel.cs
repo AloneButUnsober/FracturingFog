@@ -3195,6 +3195,11 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
     /// TopLevel.Clipboard call; payload is the string to copy.</summary>
     public event EventHandler<string>? CopyToClipboardRequested;
 
+    /// <summary>Raise <see cref="CopyToClipboardRequested"/> for callers outside
+    /// this VM (e.g. the Control Center command builder, #361).</summary>
+    public void RequestCopyToClipboard(string text)
+        => CopyToClipboardRequested?.Invoke(this, text);
+
     /// <summary>Save the current view as a new user region. Host prompts
     /// the user for a name (via the message dialog), then asks
     /// <see cref="IColorThemeService"/> to persist. Args carry the
