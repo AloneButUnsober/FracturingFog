@@ -283,5 +283,51 @@
                            ToolTip.Tip="Dome curvature for 3D (normal-mapped) themes: each circle is lit as a sphere. 0 = flat discs; 1 = full hemisphere. Ignored by flat 2D themes." />
         </Grid>
 
+        <!-- Random Tiling (Bourke) -->
+        <Grid IsVisible="{Binding IsRandomTile}"
+              ColumnDefinitions="160,*"
+              RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto">
+            <TextBlock Grid.Row="7" Grid.Column="0" Text="Shape:" VerticalAlignment="Center" />
+            <ComboBox Grid.Row="7" Grid.Column="1"
+                      ItemsSource="{Binding RandomTileShapes}"
+                      SelectedItem="{Binding RandomTileShape, Mode=TwoWay}"
+                      Margin="0,2"
+                      ToolTip.Tip="Tile shape. Square / Triangle are inscribed in the placement radius with a random rotation; all shapes carry the same domed relief." />
+            <TextBlock Grid.Row="0" Grid.Column="0" Text="Shapes:" VerticalAlignment="Center" />
+            <NumericUpDown Grid.Row="0" Grid.Column="1"
+                           Minimum="1" Maximum="200000" Increment="500" FormatString="F0"
+                           Value="{Binding RandomTileCount, Mode=TwoWay}" Margin="0,2"
+                           ToolTip.Tip="Maximum shapes to place. Placement also stops when the power-law radius drops below the min-px floor." />
+            <TextBlock Grid.Row="1" Grid.Column="0" Text="Size exponent (α):" VerticalAlignment="Center" />
+            <NumericUpDown Grid.Row="1" Grid.Column="1"
+                           Minimum="0.2" Maximum="6.0" Increment="0.1" FormatString="F2"
+                           Value="{Binding RandomTileSizeExponent, Mode=TwoWay}" Margin="0,2"
+                           ToolTip.Tip="Size falloff. Larger = a few big shapes plus a heavy tail of tiny ones; smaller = more uniform sizes." />
+            <TextBlock Grid.Row="2" Grid.Column="0" Text="Seed:" VerticalAlignment="Center" />
+            <NumericUpDown Grid.Row="2" Grid.Column="1"
+                           Minimum="-2147483648" Maximum="2147483647" Increment="1" FormatString="F0"
+                           Value="{Binding RandomTileSeed, Mode=TwoWay}" Margin="0,2"
+                           ToolTip.Tip="PRNG seed — same seed + settings + canvas size = identical tiling." />
+            <TextBlock Grid.Row="3" Grid.Column="0" Text="Gap:" VerticalAlignment="Center" />
+            <NumericUpDown Grid.Row="3" Grid.Column="1"
+                           Minimum="0.0" Maximum="2.0" Increment="0.05" FormatString="F2"
+                           Value="{Binding RandomTileGap, Mode=TwoWay}" Margin="0,2"
+                           ToolTip.Tip="Margin between shapes as a fraction of the candidate radius. 0 = shapes may kiss; higher = looser packing." />
+            <TextBlock Grid.Row="4" Grid.Column="0" Text="Min px radius:" VerticalAlignment="Center" />
+            <NumericUpDown Grid.Row="4" Grid.Column="1"
+                           Minimum="0.25" Maximum="16.0" Increment="0.25" FormatString="F2"
+                           Value="{Binding RandomTileMinPixelRadius, Mode=TwoWay}" Margin="0,2"
+                           ToolTip.Tip="Stop placing when the next radius would draw smaller than this many device pixels." />
+            <TextBlock Grid.Row="5" Grid.Column="0" Text="Colour by index:" VerticalAlignment="Center" />
+            <CheckBox Grid.Row="5" Grid.Column="1"
+                      IsChecked="{Binding RandomTileColorByIndex, Mode=TwoWay}" Margin="0,2"
+                      ToolTip.Tip="On = palette swept across placement order (big → small). Off = log(radius) gradient." />
+            <TextBlock Grid.Row="6" Grid.Column="0" Text="3D relief:" VerticalAlignment="Center" />
+            <NumericUpDown Grid.Row="6" Grid.Column="1"
+                           Minimum="0.0" Maximum="4.0" Increment="0.1" FormatString="F1"
+                           Value="{Binding RandomTileRelief, Mode=TwoWay}" Margin="0,2"
+                           ToolTip.Tip="Dome curvature for 3D (normal-mapped) themes: each shape is lit as a sphere. 0 = flat discs; 1 = full hemisphere. Ignored by flat 2D themes." />
+        </Grid>
+
     </StackPanel>
 </UserControl>

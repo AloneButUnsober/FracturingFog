@@ -1106,6 +1106,18 @@ namespace FracturingFog.Models
             },
             new()
             {
+                Name        = "Random Tiling - Bourke Fill",
+                CenterX     =  0.0,
+                CenterY     =  0.0,
+                Zoom        =  1.0,
+                Iterations  = 1,
+                Description = "Paul Bourke's random space filling of the plane: shapes of power-law-decreasing size dropped at random, non-overlapping positions until the plane fills. Seed-deterministic; each shape domes for Relief3D / volumetric. Tune RandomTileCount / RandomTileSizeExponent / RandomTileSeed.",
+                RegionType  = RegionType.BuiltIn,
+                FractalType = FractalType.RandomTile,
+                QualityPreset = QualityPreset.Standard
+            },
+            new()
+            {
                 Name        = "Bicomplex Mandelbrot - Slice k = 0",
                 CenterX     =  0.0,
                 CenterY     =  0.0,

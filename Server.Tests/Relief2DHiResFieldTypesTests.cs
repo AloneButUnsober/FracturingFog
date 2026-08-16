@@ -35,6 +35,7 @@ public class Relief2DHiResFieldTypesTests
     [InlineData(FractalType.Nova)]
     [InlineData(FractalType.Halley)]
     [InlineData(FractalType.Apollonian)]
+    [InlineData(FractalType.RandomTile)]
     public void Supported_Types_Report_HiRes_Support(FractalType type)
     {
         Assert.True(FractalRenderHost.SupportsHiResReliefField(type),
@@ -49,6 +50,7 @@ public class Relief2DHiResFieldTypesTests
     [InlineData(FractalType.Nova)]
     [InlineData(FractalType.Halley)]
     [InlineData(FractalType.Apollonian)]
+    [InlineData(FractalType.RandomTile)]
     public void Alt_Supported_Types_Get_A_HeightField_Twin(FractalType type)
     {
         var twin = FractalRenderHost.CreateReliefFieldCalc(type, 64, 64);
@@ -93,6 +95,7 @@ public class Relief2DHiResFieldTypesTests
     [InlineData(FractalType.Newton, typeof(NewtonCalculator))]
     [InlineData(FractalType.Halley, typeof(HalleyCalculator))]
     [InlineData(FractalType.Apollonian, typeof(ApollonianCalculator))]
+    [InlineData(FractalType.RandomTile, typeof(RandomTileCalculator))]
     public void Factory_Builds_The_Right_Concrete_Type(FractalType type, Type expected)
     {
         var twin = FractalRenderHost.CreateReliefFieldCalc(type, 32, 32);

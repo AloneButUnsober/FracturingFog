@@ -94,6 +94,12 @@ static class Program
         if (args.Length > 0 && args[0] == "--heightfieldhires")
             return FracturingFog.Diagnostics.HeightfieldRaymarchProbe.RunHiResGate();
 
+        // --randomtileprobe: #332 gate — Bourke random space-filling calculator.
+        // Determinism, seed sensitivity, monotonic fill, non-trivial relief.
+        // Writes randomtileprobe.out.
+        if (args.Length > 0 && args[0] == "--randomtileprobe")
+            return FracturingFog.Diagnostics.RandomTileProbe.RunGate();
+
         // --reliefgpuraymarch: #160 (Relief 3D Slice 3b) gate — the D3D relief
         // compute kernel (CSRelief) vs the CPU parity twin over identical
         // ReliefUniforms, on a WARP device (no GPU needed). Asserts a real 3D

@@ -48,7 +48,13 @@ are flagged for fixing in [Documentation Plan → Citation maintenance](Document
 - **Clifford A. Pickover.** *Computers, Pattern, Chaos, and Beauty.* St. Martin's Press, 1990. Source
   of the Clifford / De Jong attractor formulae used by the Strange Attractor family.
 
-### Deep zoom acceleration
+<a id="bourke-random-tile"></a>
+
+- **Paul Bourke.** *Random space filling of the plane.*
+  <https://paulbourke.net/fractals/randomtile/>, 2011. The power-law shape-size distribution and
+  random non-overlapping placement scheme implemented by the `RandomTile` calculator — shapes of
+  radius $r_i = r_{\max}/(i+1)^{1/\alpha}$ dropped at random positions and rejected on overlap until
+  the plane fills. See [RandomTile dev plan](Technical/RandomTile-Plan.md).
 
 - **Kevin I. Martin.** *Superfractalthing: Mandelbrot Set Calculation in High Precision.*
   Bulletin of the Mandel-machine project, 2014. Original published perturbation + series

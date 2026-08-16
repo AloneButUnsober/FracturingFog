@@ -14,6 +14,11 @@ namespace FracturingFog
     /// (heaviest compression); <see cref="Linear"/> is the un-tamed original.</summary>
     public enum HeightCurve2D { Linear, Sqrt, Log }
 
+    /// <summary>Tile shape for the RandomTile (Bourke random space-filling)
+    /// calculator. All shapes are inscribed in the placement circumradius and
+    /// carry the same radial-dome relief; only the paint mask differs.</summary>
+    public enum RandomTileShape { Circle, Square, Triangle }
+
     /// <summary>
     /// Background composited behind translucent 2D pixels when the interior
     /// (in-set) region carries alpha &lt; 255 (issue #96). Only consulted by the
@@ -238,6 +243,18 @@ namespace FracturingFog
         /// Pan/zoom unsupported — the simulation IS the image and pan/zoom
         /// would invalidate the cached grid.</summary>
         Dla,
+        /// <summary>Random space filling of the plane (Paul Bourke,
+        /// https://paulbourke.net/fractals/randomtile/). Non-escape-time 2D
+        /// packing: shapes of power-law-decreasing size are placed at random,
+        /// non-overlapping positions (uniform spatial-hash reject), filling the
+        /// plane. Seed-deterministic. Each shape is a raised dome, so Relief3D /
+        /// 3D themes / volumetric ride the shared <c>IHeightFieldSource</c> path
+        /// (as Apollonian does). Tunables on <c>FractalParameters</c>:
+        /// <c>RandomTileCount</c>, <c>RandomTileSizeExponent</c>,
+        /// <c>RandomTileSeed</c>, <c>RandomTileGap</c>,
+        /// <c>RandomTileMinPixelRadius</c>, <c>RandomTileColorByIndex</c>,
+        /// <c>RandomTileRelief</c>.</summary>
+        RandomTile,
     }
 
     public enum RenderProfile { Preview, Final }

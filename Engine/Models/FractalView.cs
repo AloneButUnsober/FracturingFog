@@ -145,7 +145,8 @@ namespace FracturingFog.Models
             {FractalType.Apollonian, "Apollonian" },
             {FractalType.Kleinian, "Kleinian" },
             {FractalType.BicomplexMandelbrot, "Bicomplex Mandelbrot" },
-            {FractalType.Dla, "DLA" }
+            {FractalType.Dla, "DLA" },
+            {FractalType.RandomTile, "Random Tiling" }
         };
     }
 
