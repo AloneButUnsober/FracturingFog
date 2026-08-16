@@ -244,12 +244,12 @@ public sealed class ControlCenterViewModel : ViewModelBase
             Brightness  = vs.Brightness,
             Contrast    = vs.Contrast,
             HistogramEq = vs.HistogramEq,
+            InteriorAlpha = fp?.InteriorAlpha ?? 255,   // #363 — now emitted as a flag
             Parameters  = fp,
 
             // Fidelity-gap inputs (#362). These live fx have no 2D batch flag.
             ThemeIsUnsaved      = string.IsNullOrWhiteSpace(main.SelectedTheme),
             ReliefEnabled       = fp?.Relief2DEnabled ?? false,
-            InteriorAlphaActive = (fp?.InteriorAlpha ?? 255) < 255,
             StereoActive        = fp != null && fp.Lighting.StereoMode != FracturingFog.Rendering.Lighting.StereoMode.Off,
             DomainWarpActive    = fp?.DomainWarpEnabled ?? false,
         };

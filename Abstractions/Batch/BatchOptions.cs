@@ -117,6 +117,12 @@ namespace FracturingFog.Batch
         public int? Contrast { get; set; }     // -100..100, 0 = none
         public int? Adaptive { get; set; }     //    0..100, 0 = none (HistogramEq)
 
+        /// <summary>Global interior (in-set) alpha, 0..255 (#96). 255 = opaque
+        /// (default, legacy pixel-identical); below 255 the interior turns
+        /// translucent over the theme's interior background. Null = leave the
+        /// FractalParameters default. Mandelbrot 2D only.</summary>
+        public int? InteriorAlpha { get; set; }
+
         // Optional fractal-parameter overrides plumbed into FractalParameters.
         // Default null means "leave the FractalParameters default in place".
         public double? BulbPower { get; set; }
@@ -371,6 +377,11 @@ namespace FracturingFog.Batch
                         opts.Adaptive = adv;
                         break;
 
+                    case BatchFlags.InteriorAlpha:
+                        if (!NextInt(args, ref i, a, out int iav, out error)) return false;
+                        opts.InteriorAlpha = iav;
+                        break;
+
                     case BatchFlags.BulbPower:
                         if (!NextDouble(args, ref i, a, out double bpv, out error)) return false;
                         opts.BulbPower = bpv;
@@ -494,6 +505,8 @@ namespace FracturingFog.Batch
                 { error = "--contrast must be -100..100."; return false; }
             if (opts.Adaptive is < 0 or > 100)
                 { error = "--adaptive must be 0..100."; return false; }
+            if (opts.InteriorAlpha is < 0 or > 255)
+                { error = "--interior-alpha must be 0..255."; return false; }
 
             if (opts.Mode == BatchMode.Slideshow)
             {

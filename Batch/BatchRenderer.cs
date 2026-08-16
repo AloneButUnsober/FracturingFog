@@ -50,6 +50,7 @@ namespace FracturingFog.Batch
             if (opts.FlameIterations.HasValue)    fp.FlameIterations    = opts.FlameIterations.Value;
             if (opts.FlameGamma.HasValue)         fp.FlameGamma         = opts.FlameGamma.Value;
             if (opts.FlameVibrancy.HasValue)      fp.FlameVibrancy      = opts.FlameVibrancy.Value;
+            if (opts.InteriorAlpha.HasValue)      fp.InteriorAlpha      = opts.InteriorAlpha.Value;
 
             var (pfBrightness, pfContrast, pfAdaptive) = ResolvePostFx(opts, null);
 

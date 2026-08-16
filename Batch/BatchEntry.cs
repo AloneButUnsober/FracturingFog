@@ -203,6 +203,9 @@ namespace FracturingFog.Batch
             Console.WriteLine("                              (Mandelbrot only). Alias: --histogram-eq.");
             Console.WriteLine("                              In slideshow mode these override the preset's PostFx");
             Console.WriteLine("                              block; omit to use the preset.");
+            Console.WriteLine("  --interior-alpha N          Interior (in-set) opacity 0..255 (#96). 255 = opaque");
+            Console.WriteLine("                              (default); below 255 the interior turns translucent");
+            Console.WriteLine("                              over the theme's interior background. Mandelbrot 2D only.");
             Console.WriteLine();
             Console.WriteLine("Remote rendering (uses a saved FFClient connection + render preset):");
             Console.WriteLine("  --remote                    Route this batch through a remote FracturingFog server");
