@@ -1975,19 +1975,59 @@ namespace FracturingFog.Rendering
             dst.DisableDdBla = src.DisableDdBla;
         }
 
-        /// <summary>#143 — render the smooth-count height field at a resolution
-        /// floor (short axis <see cref="FractalParameters.Relief2DFieldFloor"/>,
+        /// <summary>#328 — is <paramref name="type"/> a 2D height-field type whose
+        /// relief FIELD we can supersample (i.e. we can build a dedicated hi-res
+        /// twin for it)? Mandelbrot plus the alt escape-time / root-finding /
+        /// Apollonian families that expose <see cref="Interefaces.IHeightFieldSource"/>.
+        /// Buddha family is excluded (Monte-Carlo; supersample semantics differ).</summary>
+        public static bool SupportsHiResReliefField(FractalType type) => type switch
+        {
+            FractalType.Mandelbrot => true,
+            FractalType.Julia or FractalType.BurningShip or FractalType.Tricorn
+                or FractalType.Multibrot or FractalType.Phoenix or FractalType.Magnet1
+                or FractalType.Magnet2 or FractalType.Glynn or FractalType.Spider => true,
+            FractalType.Newton or FractalType.Nova => true,
+            FractalType.Halley => true,
+            FractalType.Apollonian => true,
+            _ => false,
+        };
+
+        /// <summary>#328 — construct a dedicated relief-field twin for an ALT
+        /// height-field <paramref name="type"/> at the given size, or null when the
+        /// type has no supersamplable alt field. The twin is a fresh instance
+        /// (never a shared singleton) so the field render can't clobber the
+        /// display-res buffer that is about to be uploaded. Mandelbrot is NOT built
+        /// here — it uses its own dedicated MandelbrotCalculator twin (it is not an
+        /// <see cref="Interefaces.IFractalCalculator"/>); this factory returns null
+        /// for it.</summary>
+        public static IFractalCalculator? CreateReliefFieldCalc(FractalType type, int w, int h) => type switch
+        {
+            FractalType.Julia or FractalType.BurningShip or FractalType.Tricorn
+                or FractalType.Multibrot or FractalType.Phoenix or FractalType.Magnet1
+                or FractalType.Magnet2 or FractalType.Glynn or FractalType.Spider
+                    => new EscapeTimeCalculator(w, h),
+            FractalType.Newton or FractalType.Nova => new NewtonCalculator(w, h),
+            FractalType.Halley => new HalleyCalculator(w, h),
+            FractalType.Apollonian => new ApollonianCalculator(w, h),
+            _ => null,
+        };
+
+        /// <summary>#143 / #328 — render the smooth-count height field at a
+        /// resolution floor (short axis <see cref="FractalParameters.Relief2DFieldFloor"/>,
         /// aspect preserved) into <see cref="_reliefHeight"/>, decoupling relief
         /// quality from the display size. Returns false — leaving the relief state
         /// untouched so the caller falls back to the display-res field — when the
-        /// window is already at/above the floor or the field render is cancelled.
-        /// Runs on the calc thread after the main Calculate; the dedicated
-        /// <see cref="_reliefFieldCalc"/> mirrors the main calc's view + precision
-        /// so deep-zoom perturbation is reproduced at the higher resolution.</summary>
-        private bool TryCaptureHiResReliefField(MandelbrotCalculator calc,
+        /// window is already at/above the floor, the active type has no
+        /// supersamplable field, or the field render is cancelled. Runs on the calc
+        /// thread after the main Calculate; the dedicated <see cref="_reliefFieldCalc"/>
+        /// twin mirrors the active view via the same state-sync the main render
+        /// uses (Mandelbrot: view + precision incl. deep-zoom limbs; alt types:
+        /// view + FractalParameters via <see cref="SyncAltStateFromMandel"/>).</summary>
+        private bool TryCaptureHiResReliefField(FractalType type,
             FractalParameters p, int dispW, int dispH, CancellationToken token)
         {
             if (dispW <= 2 || dispH <= 2) return false;
+            if (!SupportsHiResReliefField(type)) return false;
             int floor = Math.Clamp(p.Relief2DFieldFloor, 480, 2160);
             int shortAxis = Math.Min(dispW, dispH);
             if (shortAxis >= floor) return false;   // display already ≥ floor — no gain
@@ -2008,25 +2048,54 @@ namespace FracturingFog.Rendering
 
             try
             {
-                var rc = _reliefFieldCalc ??= new MandelbrotCalculator(fw, fh);
-                if (rc.Width != fw || rc.Height != fh) rc.Resize(fw, fh);
-                MirrorMandelbrotState(calc, rc);
-                // #156 — run the hi-res relief field on the GPU whenever the main
-                // calc does. MirrorMandelbrotState copies view + precision but not
-                // the GPU config, so without this the dedicated field calc always
-                // fell back to CPU — the single biggest relief cost at depth. The
-                // kernel is thread-affine to the calc thread; this capture runs on
-                // that thread AFTER the main Calculate, so the two calcs share the
-                // one kernel sequentially (no concurrent dispatch). Shallow uses the
-                // FP32 escape-time kernel; deep uses the perturbation kernel
-                // (static UseGpuPerturbation + IGpuKernel.SupportsPerturbation),
-                // exactly as the main calc chooses.
-                rc.UseGpuCompute = calc.UseGpuCompute;
-                rc.GpuKernel = calc.GpuKernel;
-                rc.Calculate(token);
+                Interefaces.IHeightFieldSource? fieldSrc;
+                if (type == FractalType.Mandelbrot)
+                {
+                    // Mandelbrot: dedicated MandelbrotCalculator twin. Copy view +
+                    // precision (deep-zoom limbs) from the primary calc, and run on
+                    // the GPU whenever the main calc does. #156 — MirrorMandelbrotState
+                    // copies view + precision but not the GPU config; without this the
+                    // field calc always fell back to CPU (the single biggest relief
+                    // cost at depth). The kernel is thread-affine to the calc thread;
+                    // this capture runs on that thread AFTER the main Calculate, so the
+                    // two calcs share the one kernel sequentially (no concurrent
+                    // dispatch). Shallow uses the FP32 escape-time kernel; deep uses
+                    // the perturbation kernel, exactly as the main calc chooses.
+                    var rc = _reliefFieldCalc ??= new MandelbrotCalculator(fw, fh);
+                    if (rc.Width != fw || rc.Height != fh) rc.Resize(fw, fh);
+                    MirrorMandelbrotState(_calculator, rc);
+                    rc.UseGpuCompute = _calculator.UseGpuCompute;
+                    rc.GpuKernel = _calculator.GpuKernel;
+                    rc.Calculate(token);
+                    fieldSrc = rc;
+                }
+                else
+                {
+                    // #328 — alt height-field type. Rebuild the twin when the active
+                    // type changes (the cached instance is type-specific).
+                    if (_reliefFieldAltCalc != null && _reliefFieldAltType != type)
+                    {
+                        (_reliefFieldAltCalc as IDisposable)?.Dispose();
+                        _reliefFieldAltCalc = null;
+                    }
+                    var rc = _reliefFieldAltCalc ??= CreateReliefFieldCalc(type, fw, fh);
+                    if (rc == null) return false;
+                    _reliefFieldAltType = type;
+                    if (rc.Width != fw || rc.Height != fh) rc.Resize(fw, fh);
+                    // SyncAltStateFromMandel reads the primary calc's view (kept in
+                    // lock-step with ViewState by ApplyView) + the active FractalType
+                    // / FractalParameters, exactly as the live alt render is
+                    // configured. CPU only — these alt calcs have no GPU/perturbation
+                    // path, which is fine at the shallow/mid zooms where 2D relief is
+                    // used.
+                    SyncAltStateFromMandel(rc);
+                    rc.Calculate(token);
+                    fieldSrc = rc as Interefaces.IHeightFieldSource;
+                }
+
                 if (token.IsCancellationRequested) return false;
 
-                var field = (rc as Interefaces.IHeightFieldSource)?.SmoothBuffer;
+                var field = fieldSrc?.SmoothBuffer;
                 int hn = fw * fh;
                 if (field == null || field.Length < hn) return false;
                 if (_reliefHeight == null || _reliefHeight.Length < hn)
@@ -2243,17 +2312,19 @@ namespace FracturingFog.Rendering
                     }
                     else if (job.TaaSampleIndex == 0)
                     {
-                        // #143 — for the canonical Mandelbrot path, compute the
-                        // height field at a resolution floor (independent of the
-                        // window size) so a small window renders the same smooth
-                        // terrain as a maximized one. Falls back to the display-res
-                        // SmoothBuffer when the hi-res knob is off, the window is
-                        // already at/above the floor, or the field render is
-                        // cancelled. Alt calcs keep the display-res field.
+                        // #143 / #328 — compute the height field at a resolution
+                        // floor (independent of the window size) so a small window
+                        // renders the same smooth terrain as a maximized one. Works
+                        // for every supersamplable 2D height-field type (Mandelbrot
+                        // + the alt escape-time / Newton / Halley / Apollonian
+                        // families); TryCaptureHiResReliefField returns false for
+                        // the rest, and for the knob-off / window-≥-floor / cancelled
+                        // cases — all of which fall back to the display-res
+                        // SmoothBuffer below.
                         var rp = ViewState.FractalParameters;
-                        if (!useAlt && rp.Relief2DEnabled && rp.Relief2DRaymarch
+                        if (rp.Relief2DEnabled && rp.Relief2DRaymarch
                             && rp.Relief2DHiResField
-                            && TryCaptureHiResReliefField(calc, rp, hw, hh, token))
+                            && TryCaptureHiResReliefField(ViewState.FractalType, rp, hw, hh, token))
                         {
                             // _reliefHeight / _reliefW / _reliefH / _reliefValid
                             // set inside on success.
@@ -3135,14 +3206,22 @@ namespace FracturingFog.Rendering
         private int _reliefW, _reliefH;
         private uint[]? _reliefColorScratch;
         private uint[]? _reliefPreviewScratch;   // #131 — relief applied to the pan preview
-        // #143 — dedicated hi-res relief FIELD calculator. When the oblique
+        // #143 / #328 — dedicated hi-res relief FIELD calculator. When the oblique
         // raymarch is active and the display is smaller than the field floor, the
         // smooth-count height field is computed here at a resolution floor
         // (short axis Relief2DFieldFloor, aspect preserved) instead of reusing the
         // display-resolution SmoothBuffer, so relief quality is decoupled from
         // window size (small windows no longer collapse the boundary into spiky
-        // needles). Mandelbrot path only; lazily sized on the calc thread.
+        // needles). Lazily sized on the calc thread.
+        //
+        // Mandelbrot keeps a dedicated MandelbrotCalculator twin (it is not an
+        // IFractalCalculator — its deep-zoom limbs / GPU-perturbation surface
+        // don't generalise). #328 added a second twin for the ALT height-field
+        // types (EscapeTime family, Newton/Nova, Halley, Apollonian): a fresh
+        // instance of the active type, rebuilt when the type changes.
         private MandelbrotCalculator? _reliefFieldCalc;
+        private IFractalCalculator? _reliefFieldAltCalc;
+        private FractalType _reliefFieldAltType = FractalType.Mandelbrot;
 
         private void UploadProcessedBuffer(uint[] src, int w, int h, bool srcAlreadyProcessed = false)
         {
