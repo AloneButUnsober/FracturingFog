@@ -8,7 +8,6 @@ using Avalonia.Controls;
 using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Interactivity;
 using Avalonia.Markup.Xaml;
-using Avalonia.Media;
 
 using FracturingFog.UI.Avalonia.Services;
 using FracturingFog.UI.Avalonia.ViewModels;
@@ -28,8 +27,6 @@ namespace FracturingFog.UI.Avalonia.Views;
 /// </summary>
 public sealed partial class FractalParamsView : UserControl
 {
-    private PanelHostWindow? _lightingFxWin;
-
     public FractalParamsView()
     {
         AvaloniaXamlLoader.Load(this);
@@ -43,14 +40,13 @@ public sealed partial class FractalParamsView : UserControl
         };
         // Detach from the visual tree = the host window closed (close-and-
         // destroy). Stop any Julia timers explicitly to avoid a leaked
-        // DispatcherTimer ticking against a stale animation, and close any open
-        // Lighting FX child so it can't outlive its parent. (Was Window.Closing
-        // before the UserControl conversion.)
+        // DispatcherTimer ticking against a stale animation. The Lighting & FX
+        // window is intentionally NOT closed here: it is owned by the main
+        // window via WindowService, so it stays open (standalone) after this
+        // panel closes. (Was Window.Closing before the UserControl conversion.)
         Unloaded += (_, _) =>
         {
             (DataContext as FractalParamsViewModel)?.StopAnimations();
-            _lightingFxWin?.Close();
-            _lightingFxWin = null;
         };
     }
 
@@ -85,26 +81,11 @@ public sealed partial class FractalParamsView : UserControl
     /// fire ParamChanged through the same path as edits in this view.</summary>
     private void OnOpenLightingFxClick(object? sender, RoutedEventArgs e)
     {
-        if (_lightingFxWin is { IsVisible: true })
-        {
-            _lightingFxWin.Activate();
-            return;
-        }
-
-        _lightingFxWin = new PanelHostWindow(
-            new LightingFxDialog(),
-            new PanelHostOptions(
-                "Lighting & FX",
-                Width: 520, Height: 720, MinWidth: 440, MinHeight: 400,
-                SizeToContentHeight: false, CanResize: true, ShowInTaskbar: true,
-                StartupLocation: WindowStartupLocation.CenterOwner,
-                Background: new SolidColorBrush(Color.FromRgb(0x28, 0x28, 0x28))))
-        {
-            DataContext = DataContext,
-        };
-        _lightingFxWin.Closed += (_, _) => _lightingFxWin = null;
-        var owner = TopLevel.GetTopLevel(this) as Window;
-        if (owner != null) _lightingFxWin.Show(owner);
-        else _lightingFxWin.Show();
+        // Open (or re-focus) the single app-wide Lighting & FX window. Owned by
+        // the main window (not this panel) via WindowService, so closing Params
+        // leaves it open. Shares this panel's VM so edits re-render through the
+        // same ParamChanged path.
+        if (DataContext != null)
+            WindowService.ShowLightingFx(DataContext, "Volumetric Lighting & FX");
     }
 }
