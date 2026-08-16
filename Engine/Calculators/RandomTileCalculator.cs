@@ -66,6 +66,35 @@ public sealed class RandomTileCalculator : IFractalCalculator, IHeightFieldSourc
     // Dome relief amplitude for the sphere-imposter paint path (see PaintDisk).
     private double _relief = 1.0;
 
+    // #338 — placement cache. The rejection-sampling placement is O(N) and
+    // depends only on the geometry + placement params (NOT relief / colour), so
+    // shading-only re-renders (relief-knob drag, relief/colour animation) reuse
+    // the tile list and re-run just the paint pass.
+    private List<Tile>? _cachedTiles;
+    private PlacementKey _cacheKey;
+    private bool _cacheValid;
+
+    private readonly struct PlacementKey : IEquatable<PlacementKey>
+    {
+        public readonly int W, H, Seed, Count;
+        public readonly double CX, CY, Zoom, Alpha, Gap, MinPx;
+        public readonly RandomTileShape Shape;
+        public PlacementKey(int w, int h, double cx, double cy, double zoom,
+            int seed, int count, double alpha, double gap, double minPx,
+            RandomTileShape shape)
+        { W = w; H = h; CX = cx; CY = cy; Zoom = zoom; Seed = seed; Count = count;
+          Alpha = alpha; Gap = gap; MinPx = minPx; Shape = shape; }
+
+        public bool Equals(PlacementKey o) =>
+            W == o.W && H == o.H && Seed == o.Seed && Count == o.Count &&
+            CX == o.CX && CY == o.CY && Zoom == o.Zoom && Alpha == o.Alpha &&
+            Gap == o.Gap && MinPx == o.MinPx && Shape == o.Shape;
+        public override bool Equals(object? o) => o is PlacementKey k && Equals(k);
+        public override int GetHashCode() =>
+            HashCode.Combine(W, H, Seed, Count, CX, CY, Zoom,
+                HashCode.Combine(Alpha, Gap, MinPx, (int)Shape));
+    }
+
     public RandomTileCalculator(int width, int height) => Resize(width, height);
 
     public void Resize(int width, int height)
@@ -96,6 +125,7 @@ public sealed class RandomTileCalculator : IFractalCalculator, IHeightFieldSourc
         double alpha = Math.Max(0.2, FractalParameters.RandomTileSizeExponent);
         double gap = Math.Max(0.0, FractalParameters.RandomTileGap);
         double minPx = Math.Max(0.25, FractalParameters.RandomTileMinPixelRadius);
+        RandomTileShape shape = FractalParameters.RandomTileShape;
         _relief = Math.Clamp(FractalParameters.RandomTileRelief, 0.0, 4.0);
 
         // World→screen scale matches the standard 2D convention: pixel pitch =
@@ -106,18 +136,49 @@ public sealed class RandomTileCalculator : IFractalCalculator, IHeightFieldSourc
         // Visible world half-extents (the domain we fill).
         double halfW = Width * 0.5 * pixelPitch;
         double halfH = Height * 0.5 * pixelPitch;
-        double x0 = CenterX - halfW, x1 = CenterX + halfW;
-        double y0 = CenterY - halfH, y1 = CenterY + halfH;
-
-        // Biggest tile ≈ 0.5× the smaller domain half-extent, so the largest few
-        // read as clear anchors without swallowing the whole frame.
         double rMax = 0.5 * Math.Min(halfW, halfH);
         if (rMax < minWorldR || count == 0) return;
 
         // Colour spans the palette across placement order (big → small) when
         // colouring by index; the log-radius fallback emphasises scale instead.
+        // Colour-only param — never part of the placement cache key.
         ColorMap.MaxIterations = Math.Max(16, count);
 
+        // #338 — reuse the cached placement when nothing that affects it changed.
+        var key = new PlacementKey(Width, Height, CenterX, CenterY, Zoom,
+            FractalParameters.RandomTileSeed, count, alpha, gap, minPx, shape);
+        List<Tile>? tiles = (_cacheValid && _cachedTiles != null && _cacheKey.Equals(key))
+            ? _cachedTiles
+            : null;
+
+        if (tiles == null)
+        {
+            tiles = BuildTiles(count, alpha, gap, minPx, rMax,
+                CenterX - halfW, CenterX + halfW, CenterY - halfH, CenterY + halfH,
+                minWorldR, shape, ct);
+            if (ct.IsCancellationRequested) return;   // don't cache a partial pass
+            _cachedTiles = tiles;
+            _cacheKey = key;
+            _cacheValid = true;
+        }
+
+        // Tiles are generated in strictly-decreasing-radius order, so painting in
+        // list order draws biggest first and smaller shapes nest on top.
+        foreach (var t in tiles)
+        {
+            if (ct.IsCancellationRequested) return;
+            PaintDisk(t);
+        }
+    }
+
+    // Rejection-sample the non-overlapping packing. Pure function of the geometry
+    // + placement params (the PlacementKey fields); relief / colour never enter
+    // here, which is what lets Calculate cache the result across shading changes.
+    private List<Tile> BuildTiles(
+        int count, double alpha, double gap, double minPx, double rMax,
+        double x0, double x1, double y0, double y1, double minWorldR,
+        RandomTileShape shape, CancellationToken ct)
+    {
         // Uniform spatial hash. Cell = rMax; two tiles overlap only if their
         // centres are within r_a + r_b ≤ 2·rMax, so a candidate need only probe
         // cells within ⌈(r_cand + rMax)/cell⌉ = 2 of its own. Cell indices are
@@ -130,7 +191,18 @@ public sealed class RandomTileCalculator : IFractalCalculator, IHeightFieldSourc
         int CellX(double wx) => (int)Math.Floor((wx - x0) / cell);
         int CellY(double wy) => (int)Math.Floor((wy - y0) / cell);
 
-        bool Overlaps(double cx, double cy, double r, double margin)
+        int vertCount = shape == RandomTileShape.Square ? 4
+                      : shape == RandomTileShape.Triangle ? 3 : 0;
+
+        // Overlap test. Broad phase is the circumcircle (cell-bucketed): if the
+        // circumcircles clear by the margin, the shapes cannot touch. Circles
+        // stop there (the circumcircle IS the shape — byte-identical to before).
+        // Polygons then run an SAT narrow phase against the ACTUAL rotated shape,
+        // so squares/triangles pack tight instead of each reserving a full circle
+        // of empty space. cvx/cvy carry the candidate's world vertices; nvx/nvy
+        // is scratch for the neighbour (both are the same shape).
+        bool Overlaps(double cx, double cy, double r, double margin, int cn,
+            Span<double> cvx, Span<double> cvy, Span<double> nvx, Span<double> nvy)
         {
             int ccx = CellX(cx), ccy = CellY(cy);
             for (int dx = -2; dx <= 2; dx++)
@@ -142,8 +214,11 @@ public sealed class RandomTileCalculator : IFractalCalculator, IHeightFieldSourc
                 {
                     var t = tiles[ti];
                     double ex = t.X - cx, ey = t.Y - cy;
-                    double minDist = t.R + r + margin;
-                    if (ex * ex + ey * ey < minDist * minDist) return true;
+                    double circ = t.R + r + margin;
+                    if (ex * ex + ey * ey >= circ * circ) continue;   // circumcircles clear
+                    if (cn == 0) return true;                          // circle — real overlap
+                    BuildVerts(t.X, t.Y, t.R, t.Angle, shape, nvx, nvy);
+                    if (!PolysClear(cvx, cvy, cn, nvx, nvy, cn, margin)) return true;
                 }
             }
             return false;
@@ -151,11 +226,17 @@ public sealed class RandomTileCalculator : IFractalCalculator, IHeightFieldSourc
 
         var rng = new Random(FractalParameters.RandomTileSeed);
         const int maxAttempts = 200;
-        RandomTileShape shape = FractalParameters.RandomTileShape;
+
+        // Vertex scratch buffers — allocated ONCE (never inside the attempt loop,
+        // which would grow the stack). Max 4 verts (square).
+        Span<double> cvx = stackalloc double[4];
+        Span<double> cvy = stackalloc double[4];
+        Span<double> nvx = stackalloc double[4];
+        Span<double> nvy = stackalloc double[4];
 
         for (int i = 0; i < count; i++)
         {
-            if ((i & 0x3FF) == 0 && ct.IsCancellationRequested) return;
+            if ((i & 0x3FF) == 0 && ct.IsCancellationRequested) return tiles;
 
             double r = rMax / Math.Pow(i + 1, 1.0 / alpha);
             if (r < minWorldR) break;                       // sub-pixel — done
@@ -167,20 +248,22 @@ public sealed class RandomTileCalculator : IFractalCalculator, IHeightFieldSourc
                 double cxw = x0 + r + rng.NextDouble() * Math.Max(0.0, (x1 - x0) - 2 * r);
                 double cyw = y0 + r + rng.NextDouble() * Math.Max(0.0, (y1 - y0) - 2 * r);
 
-                if (Overlaps(cxw, cyw, r, margin)) continue;
-
-                // Random per-tile rotation for polygons (circles are rotation-
-                // invariant, so the draw is skipped to keep the circle stream
-                // byte-identical to the shape-less P1 behaviour).
+                // Random per-tile rotation for polygons, drawn BEFORE the overlap
+                // test (the rotation decides whether the shape actually fits).
+                // Circles are rotation-invariant, so the draw is skipped — keeping
+                // the circle RNG stream byte-identical to the shape-less path.
                 double ang = shape == RandomTileShape.Circle
                     ? 0.0
                     : rng.NextDouble() * (2.0 * Math.PI);
+                if (vertCount > 0) BuildVerts(cxw, cyw, r, ang, shape, cvx, cvy);
+
+                if (Overlaps(cxw, cyw, r, margin, vertCount, cvx, cvy, nvx, nvy)) continue;
 
                 int idx = tiles.Count;
                 tiles.Add(new Tile(cxw, cyw, r, ang, i));
-                long key = PackCell(CellX(cxw), CellY(cyw));
-                if (!grid.TryGetValue(key, out var b))
-                    grid[key] = b = new List<int>(4);
+                long ckey = PackCell(CellX(cxw), CellY(cyw));
+                if (!grid.TryGetValue(ckey, out var b))
+                    grid[ckey] = b = new List<int>(4);
                 b.Add(idx);
                 break;
                 // A skipped index (all attempts overlapped) is fine — the radius
@@ -188,13 +271,78 @@ public sealed class RandomTileCalculator : IFractalCalculator, IHeightFieldSourc
             }
         }
 
-        // Tiles are generated in strictly-decreasing-radius order, so painting in
-        // list order draws biggest first and smaller shapes nest on top.
-        foreach (var t in tiles)
+        return tiles;
+    }
+
+    // World-space vertices of a tile inscribed in circumradius R (square corners
+    // at Angle+45°+k·90°; triangle vertices at Angle+90°+k·120°). Matches the
+    // paint mask so collision and pixels agree.
+    private static void BuildVerts(double cx, double cy, double r, double ang,
+        RandomTileShape shape, Span<double> vx, Span<double> vy)
+    {
+        if (shape == RandomTileShape.Square)
         {
-            if (ct.IsCancellationRequested) return;
-            PaintDisk(t);
+            for (int k = 0; k < 4; k++)
+            {
+                double a = ang + Math.PI / 4.0 + k * (Math.PI / 2.0);
+                vx[k] = cx + r * Math.Cos(a);
+                vy[k] = cy + r * Math.Sin(a);
+            }
         }
+        else // Triangle
+        {
+            for (int k = 0; k < 3; k++)
+            {
+                double a = ang + Math.PI / 2.0 + k * (2.0 * Math.PI / 3.0);
+                vx[k] = cx + r * Math.Cos(a);
+                vy[k] = cy + r * Math.Sin(a);
+            }
+        }
+    }
+
+    // Separating Axis Theorem for two convex polygons. Returns true when a
+    // separating axis exists with at least `margin` clearance (i.e. the shapes
+    // are apart by the requested gap). Axes are the edge normals of both polys.
+    private static bool PolysClear(
+        Span<double> ax, Span<double> ay, int na,
+        Span<double> bx, Span<double> by, int nb, double margin)
+    {
+        for (int poly = 0; poly < 2; poly++)
+        {
+            Span<double> ex = poly == 0 ? ax : bx;
+            Span<double> ey = poly == 0 ? ay : by;
+            int ne = poly == 0 ? na : nb;
+            for (int k = 0; k < ne; k++)
+            {
+                int k2 = (k + 1) % ne;
+                double nx = ey[k2] - ey[k];        // edge normal = (dy, −dx)
+                double ny = -(ex[k2] - ex[k]);
+                double len = Math.Sqrt(nx * nx + ny * ny);
+                if (len < 1e-12) continue;
+                nx /= len; ny /= len;
+
+                double amin = double.PositiveInfinity, amax = double.NegativeInfinity;
+                for (int j = 0; j < na; j++)
+                {
+                    double p = ax[j] * nx + ay[j] * ny;
+                    if (p < amin) amin = p;
+                    if (p > amax) amax = p;
+                }
+                double bmin = double.PositiveInfinity, bmax = double.NegativeInfinity;
+                for (int j = 0; j < nb; j++)
+                {
+                    double p = bx[j] * nx + by[j] * ny;
+                    if (p < bmin) bmin = p;
+                    if (p > bmax) bmax = p;
+                }
+
+                // Separation along this axis (positive = apart). If any axis
+                // clears by the margin, the shapes are acceptably apart.
+                double sep = Math.Max(amin - bmax, bmin - amax);
+                if (sep >= margin) return true;
+            }
+        }
+        return false;
     }
 
     private void PaintDisk(in Tile t)
@@ -225,40 +373,33 @@ public sealed class RandomTileCalculator : IFractalCalculator, IHeightFieldSourc
 
         double r2 = sr * sr;
 
-        // Shape mask. Circle stays byte-identical to the P1 disk (inside ⇔
-        // dd ≤ r²). Square/Triangle are inscribed in the circumradius and tested
-        // in the tile-local frame (rotate the pixel offset by −Angle). All shapes
-        // share the SAME radial dome height + normal, so the polygon reads as a
-        // rounded prism and the relief / 3D / volumetric path is unchanged.
         RandomTileShape shape = FractalParameters.RandomTileShape;
-        double ca = Math.Cos(-t.Angle), sa = Math.Sin(-t.Angle);
-        double halfSq = sr * 0.70710678118654752; // 1/√2 — square inscribed in circumradius
 
-        bool Inside(double dx, double dy)
+        // ── Circle — radial sphere-cap dome (byte-identical to P1/P2). ──
+        if (shape == RandomTileShape.Circle)
         {
-            switch (shape)
+            if (_relief <= 0.0)
             {
-                case RandomTileShape.Square:
+                uint col0 = (uint)ColorMap.Map(tt, 0f, ColorMap.MaxIterations);
+                for (int py = y0; py <= y1; py++)
                 {
-                    double lx = dx * ca - dy * sa;
-                    double ly = dx * sa + dy * ca;
-                    return Math.Abs(lx) <= halfSq && Math.Abs(ly) <= halfSq;
+                    double dy = py - sy;
+                    int row = py * Width;
+                    for (int px = x0; px <= x1; px++)
+                    {
+                        double dx = px - sx;
+                        double dd = dx * dx + dy * dy;
+                        if (dd <= r2)
+                        {
+                            ColorBuffer[row + px] = col0;
+                            SmoothBuffer[row + px] = (float)Math.Sqrt(1.0 - dd / r2);
+                        }
+                    }
                 }
-                case RandomTileShape.Triangle:
-                {
-                    double lx = dx * ca - dy * sa;
-                    double ly = dx * sa + dy * ca;
-                    return InsideTriangle(lx, ly, sr);
-                }
-                default:
-                    return dx * dx + dy * dy <= r2;
+                return;
             }
-        }
 
-        if (_relief <= 0.0)
-        {
-            // Flat fast path — one colour per shape.
-            uint col = (uint)ColorMap.Map(tt, 0f, ColorMap.MaxIterations);
+            double invSr = sr > 1e-9 ? 1.0 / sr : 0.0;
             for (int py = y0; py <= y1; py++)
             {
                 double dy = py - sy;
@@ -266,20 +407,68 @@ public sealed class RandomTileCalculator : IFractalCalculator, IHeightFieldSourc
                 for (int px = x0; px <= x1; px++)
                 {
                     double dx = px - sx;
-                    if (!Inside(dx, dy)) continue;
                     double dd = dx * dx + dy * dy;
-                    ColorBuffer[row + px] = col;
-                    SmoothBuffer[row + px] = (float)Math.Sqrt(Math.Max(0.0, 1.0 - dd / r2));
+                    if (dd > r2) continue;
+                    float nx = (float)(_relief * dx * invSr);
+                    float ny = (float)(-_relief * dy * invSr);
+                    ColorBuffer[row + px] =
+                        (uint)ColorMap.Map(tt, 0f, ColorMap.MaxIterations, nx, ny);
+                    SmoothBuffer[row + px] = (float)Math.Sqrt(1.0 - dd / r2);
                 }
             }
             return;
         }
 
-        // Lit sphere-imposter path — each shape is a dome. In-plane normal grows
-        // from centre (flat, facing viewer) to rim (grazing): (u, v) = (dx, dy)
-        // / sr, scaled by relief. ny negated for the complex-plane y-up
-        // convention the 3D themes expect.
-        double invSr = sr > 1e-9 ? 1.0 / sr : 0.0;
+        // ── Square / Triangle — shape-correct SDF cap (#336). ──
+        // Test in the tile-local frame (rotate the pixel offset by −Angle). Height
+        // is a dome over the normalised distance-to-nearest-edge (peak at the
+        // incentre, 0 at the boundary) — NOT the circle's radial dome — so corners
+        // no longer sink to zero. The in-plane normal is the nearest edge's OUTWARD
+        // normal (rotated back to screen), tilting downslope toward that edge and
+        // growing to the rim — the polygon analogue of the circle rim normal.
+        const double C30 = 0.86602540378443865; // cos30 = √3/2
+        double cosA = Math.Cos(t.Angle), sinA = Math.Sin(t.Angle);
+        double halfSq = sr * 0.70710678118654752; // 1/√2 — square inscribed in circumradius
+        double rInTri = 0.5 * sr;                  // equilateral inradius = R/2
+
+        // (h, sox, soy) for a pixel offset, or false when outside the shape.
+        bool CapPoint(double dx, double dy, out float h, out double sox, out double soy)
+        {
+            h = 0f; sox = 0; soy = 0;
+            double lx = dx * cosA + dy * sinA;      // screen → local (rotate −Angle)
+            double ly = -dx * sinA + dy * cosA;
+            double dEdge, rIn, enx, eny;
+
+            if (shape == RandomTileShape.Square)
+            {
+                double ax = Math.Abs(lx), ay = Math.Abs(ly);
+                if (ax > halfSq || ay > halfSq) return false;
+                rIn = halfSq;
+                if (halfSq - ax <= halfSq - ay) { dEdge = halfSq - ax; enx = lx >= 0 ? 1 : -1; eny = 0; }
+                else { dEdge = halfSq - ay; enx = 0; eny = ly >= 0 ? 1 : -1; }
+            }
+            else // Triangle — upward equilateral, circumradius sr, edges' outward
+            {    // normals at 270° / 30° / 150°, each an inradius from the centre.
+                double d0 = rInTri + ly;                    // bottom  n = (0,−1)
+                double d1 = rInTri - (C30 * lx + 0.5 * ly); // right   n = (C30, 0.5)
+                double d2 = rInTri - (-C30 * lx + 0.5 * ly);// left    n = (−C30, 0.5)
+                if (d0 < 0 || d1 < 0 || d2 < 0) return false;
+                rIn = rInTri;
+                dEdge = d0; enx = 0; eny = -1;
+                if (d1 < dEdge) { dEdge = d1; enx = C30; eny = 0.5; }
+                if (d2 < dEdge) { dEdge = d2; enx = -C30; eny = 0.5; }
+            }
+
+            double dNorm = dEdge / rIn;
+            if (dNorm > 1.0) dNorm = 1.0; else if (dNorm < 0.0) dNorm = 0.0;
+            h = (float)Math.Sqrt(dNorm * (2.0 - dNorm));    // dome: 0 at edge, 1 at incentre
+            double mag = _relief * (1.0 - dNorm);           // rim-growing, like the circle
+            sox = mag * (enx * cosA - eny * sinA);          // local → screen (rotate +Angle)
+            soy = mag * (enx * sinA + eny * cosA);
+            return true;
+        }
+
+        uint flatCol = _relief <= 0.0 ? (uint)ColorMap.Map(tt, 0f, ColorMap.MaxIterations) : 0u;
         for (int py = y0; py <= y1; py++)
         {
             double dy = py - sy;
@@ -287,33 +476,12 @@ public sealed class RandomTileCalculator : IFractalCalculator, IHeightFieldSourc
             for (int px = x0; px <= x1; px++)
             {
                 double dx = px - sx;
-                if (!Inside(dx, dy)) continue;
-                double dd = dx * dx + dy * dy;
-                float nx = (float)(_relief * dx * invSr);
-                float ny = (float)(-_relief * dy * invSr);
-                ColorBuffer[row + px] =
-                    (uint)ColorMap.Map(tt, 0f, ColorMap.MaxIterations, nx, ny);
-                SmoothBuffer[row + px] = (float)Math.Sqrt(Math.Max(0.0, 1.0 - dd / r2));
+                if (!CapPoint(dx, dy, out float h, out double sox, out double soy)) continue;
+                ColorBuffer[row + px] = _relief <= 0.0
+                    ? flatCol
+                    : (uint)ColorMap.Map(tt, 0f, ColorMap.MaxIterations, (float)sox, (float)-soy);
+                SmoothBuffer[row + px] = h;
             }
         }
-    }
-
-    // Point-in-equilateral-triangle (upward, circumradius R, centred at origin).
-    // Vertices at 90° / 210° / 330°. Inside ⇔ the point is on the same side of
-    // all three edges (all cross products share sign).
-    private static bool InsideTriangle(double px, double py, double r)
-    {
-        const double C30 = 0.86602540378443865; // cos30 = √3/2
-        double v0x = 0.0,        v0y = r;
-        double v1x = -C30 * r,   v1y = -0.5 * r;
-        double v2x =  C30 * r,   v2y = -0.5 * r;
-
-        double d0 = (v1x - v0x) * (py - v0y) - (v1y - v0y) * (px - v0x);
-        double d1 = (v2x - v1x) * (py - v1y) - (v2y - v1y) * (px - v1x);
-        double d2 = (v0x - v2x) * (py - v2y) - (v0y - v2y) * (px - v2x);
-
-        bool hasNeg = d0 < 0 || d1 < 0 || d2 < 0;
-        bool hasPos = d0 > 0 || d1 > 0 || d2 > 0;
-        return !(hasNeg && hasPos);
     }
 }

@@ -1,5 +1,6 @@
 using System;
 using System.Linq;
+using System.Reflection;
 using Xunit;
 using FracturingFog;
 using FracturingFog.Models;
@@ -112,6 +113,43 @@ public class RandomTileTests
         Assert.InRange(painted, W * H / 20, W * H - 1);
     }
 
+    [Theory]
+    [InlineData(RandomTileShape.Square)]
+    [InlineData(RandomTileShape.Triangle)]
+    public void Polygons_Pack_Inside_Former_Circular_Haloes(RandomTileShape shape)
+    {
+        // The SAT narrow-phase fix: polygons pack against each other's true edges
+        // instead of each reserving a full circumcircle of empty space. Proof =
+        // placed pairs whose CIRCUMCIRCLES overlap (centre distance < Ra+Rb).
+        // Impossible under the old circumradius-only reject (zero such pairs);
+        // with SAT, tiles nestle into former haloes → many. (Coverage % can't see
+        // this — it's a small near-edge area dominated by the few biggest tiles.)
+        var calc = Render(seed: 1, count: 4000, alpha: 1.3, minPx: 1.0, shape: shape);
+
+        var field = typeof(RandomTileCalculator).GetField("_cachedTiles",
+            BindingFlags.NonPublic | BindingFlags.Instance);
+        var list = (System.Collections.IList)field!.GetValue(calc)!;
+        int n = list.Count;
+        Assert.True(n > 10, "too few tiles to judge packing");
+
+        var tileType = list[0]!.GetType();
+        var fx = tileType.GetField("X"); var fy = tileType.GetField("Y"); var fr = tileType.GetField("R");
+        var X = new double[n]; var Y = new double[n]; var R = new double[n];
+        for (int i = 0; i < n; i++)
+        { X[i] = (double)fx!.GetValue(list[i])!; Y[i] = (double)fy!.GetValue(list[i])!; R[i] = (double)fr!.GetValue(list[i])!; }
+
+        int circOverlap = 0;
+        for (int i = 0; i < n; i++)
+        for (int j = i + 1; j < n; j++)
+        {
+            double dx = X[i] - X[j], dy = Y[i] - Y[j];
+            double sum = R[i] + R[j];
+            if (dx * dx + dy * dy < sum * sum) circOverlap++;
+        }
+        Assert.True(circOverlap > 5,
+            $"{shape}: only {circOverlap} circumcircle-overlapping pairs — SAT tight packing not engaged");
+    }
+
     [Fact]
     public void Shape_Changes_The_Tiling()
     {
@@ -130,6 +168,54 @@ public class RandomTileTests
         var a = Render(seed: 5, count: 2500, shape: shape);
         var b = Render(seed: 5, count: 2500, shape: shape);
         Assert.True(a.ColorBuffer.AsSpan().SequenceEqual(b.ColorBuffer));
+    }
+
+    // ── #338: placement cache ──
+
+    [Fact]
+    public void PlacementCache_Is_Transparent_To_Output()
+    {
+        // Warm instance: render once (builds the cache), then flip a shading-only
+        // param (relief) and render again — this exercises the cache-reuse path.
+        var warm = new RandomTileCalculator(W, H)
+        {
+            CenterX = 0, CenterY = 0, Zoom = 1.0,
+            FractalParameters = new FractalParameters
+            { RandomTileSeed = 4, RandomTileCount = 3000, RandomTileRelief = 1.0 },
+        };
+        warm.Calculate();
+        warm.FractalParameters.RandomTileRelief = 0.0;
+        warm.Calculate();
+
+        // Cold instance built directly at relief 0 (no cache reuse).
+        var cold = new RandomTileCalculator(W, H)
+        {
+            CenterX = 0, CenterY = 0, Zoom = 1.0,
+            FractalParameters = new FractalParameters
+            { RandomTileSeed = 4, RandomTileCount = 3000, RandomTileRelief = 0.0 },
+        };
+        cold.Calculate();
+
+        // Reused placement must yield byte-identical output to a cold render.
+        Assert.True(warm.ColorBuffer.AsSpan().SequenceEqual(cold.ColorBuffer));
+    }
+
+    [Fact]
+    public void PlacementCache_Rebuilds_When_Placement_Param_Changes()
+    {
+        var calc = new RandomTileCalculator(W, H)
+        {
+            CenterX = 0, CenterY = 0, Zoom = 1.0,
+            FractalParameters = new FractalParameters
+            { RandomTileSeed = 4, RandomTileCount = 3000, RandomTileSizeExponent = 1.6 },
+        };
+        calc.Calculate();
+        var first = (uint[])calc.ColorBuffer.Clone();
+
+        // A placement-determining change must invalidate the cache → new tiling.
+        calc.FractalParameters.RandomTileSizeExponent = 2.4;
+        calc.Calculate();
+        Assert.False(first.AsSpan().SequenceEqual(calc.ColorBuffer));
     }
 
     [Fact]

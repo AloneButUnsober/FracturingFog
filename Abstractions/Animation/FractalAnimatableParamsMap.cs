@@ -85,6 +85,9 @@ public static class FractalAnimatableParamsMap
         FractalType.Dla
             => _dlaList,
 
+        FractalType.RandomTile
+            => _randomTileList,
+
         // ── 3D raymarched ─────────────────────────────────────────────────
         FractalType.Mandelbulb
             => _mandelbulbList,
@@ -260,6 +263,33 @@ public static class FractalAnimatableParamsMap
         new("DlaParticles", AnimatableParamKind.ScalarInt, Min: 1000, Max: 50_000,
             Cost: AnimatableParamCost.Expensive,
             Notes: "Each tick re-runs the random-walk simulation. Animate slowly."),
+    };
+
+    // RandomTile (Bourke). Two axes animate cleanly; the rest reshuffle the
+    // packing every tick (a deliberate boil, not a smooth tween) — labelled so
+    // the editor / cost-ceiling can treat them accordingly (cf. DLA).
+    private static readonly AnimatableParamDescriptor[] _randomTileList =
+    {
+        // Placement is a deterministic prefix, so growing the count only *adds*
+        // tiles — existing ones stay put. A genuine fill-in reveal.
+        new("RandomTileCount", AnimatableParamKind.ScalarInt, Min: 100, Max: 20_000,
+            Cost: AnimatableParamCost.Expensive,
+            Notes: "Monotonic fill-in reveal — existing tiles stay put; re-renders each tick."),
+        // Shading only — placement is cached (#338), so this is a paint-only
+        // re-render and morphs smoothly.
+        new("RandomTileRelief", AnimatableParamKind.ScalarDouble, Min: 0.0, Max: 2.0,
+            Cost: AnimatableParamCost.Cheap,
+            Notes: "Smooth — shading only; placement cached, paint-only re-render."),
+        // The regenerating axes: any change reshuffles the whole packing.
+        new("RandomTileSizeExponent", AnimatableParamKind.ScalarDouble, Min: 0.5, Max: 3.0,
+            Cost: AnimatableParamCost.Expensive,
+            Notes: "Regenerates the packing each tick (boil) — deliberate effect, not a tween."),
+        new("RandomTileGap", AnimatableParamKind.ScalarDouble, Min: 0.0, Max: 1.0,
+            Cost: AnimatableParamCost.Expensive,
+            Notes: "Regenerates the packing each tick (boil) — deliberate effect, not a tween."),
+        new("RandomTileMinPixelRadius", AnimatableParamKind.ScalarDouble, Min: 0.5, Max: 8.0,
+            Cost: AnimatableParamCost.Expensive,
+            Notes: "Regenerates the packing each tick (boil) — deliberate effect, not a tween."),
     };
 
     private static readonly AnimatableParamDescriptor[] _mandelbulbList =

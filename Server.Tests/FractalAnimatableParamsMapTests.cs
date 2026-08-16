@@ -115,4 +115,28 @@ public sealed class FractalAnimatableParamsMapTests
         Assert.Contains(descriptors,
             d => d.ParamName == "JuliaC" && d.Kind == AnimatableParamKind.Complex);
     }
+
+    /// <summary>#337 — RandomTile exposes the two clean axes (Count reveal,
+    /// Relief ramp) plus the regenerating params, correctly cost-labelled:
+    /// Relief is Cheap (placement cached, paint-only), the packing-reshuffling
+    /// params are Expensive.</summary>
+    [Fact]
+    public void RandomTile_ExposesCleanAxes_And_LabelsRegeneratingParamsExpensive()
+    {
+        var d = FractalAnimatableParamsMap.For(FractalType.RandomTile);
+
+        Assert.Contains(d, x => x.ParamName == "RandomTileCount"
+            && x.Kind == AnimatableParamKind.ScalarInt);
+        Assert.Contains(d, x => x.ParamName == "RandomTileRelief"
+            && x.Kind == AnimatableParamKind.ScalarDouble
+            && x.Cost == AnimatableParamCost.Cheap);
+
+        foreach (var name in new[] { "RandomTileSizeExponent", "RandomTileGap", "RandomTileMinPixelRadius" })
+            Assert.Contains(d, x => x.ParamName == name
+                && x.Cost == AnimatableParamCost.Expensive);
+
+        // Seed and Shape are deliberately NOT animatable scalars.
+        Assert.DoesNotContain(d, x => x.ParamName == "RandomTileSeed");
+        Assert.DoesNotContain(d, x => x.ParamName == "RandomTileShape");
+    }
 }
