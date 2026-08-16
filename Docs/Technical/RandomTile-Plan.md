@@ -10,8 +10,10 @@ fractal type, `FractalType.RandomTile`, with full color-theme / Relief3D / 3D /
 volumetric support.
 
 Reference & credit: **Paul Bourke, "Random space filling of the plane"** —
-<https://paulbourke.net/fractals/randomtile/>. Full accreditation and a
-bibliography entry are delivered in P4 (#335), per the #324 requirement.
+<https://paulbourke.net/fractals/randomtile/>, 2011. The algorithm, the
+power-law size distribution, and the random-rejection placement are Bourke's;
+this project only ports them to the engine's 2D packing-rasterizer pipeline.
+Canonical citation: [Resources & Bibliography → Bourke, random space filling](../Resources-Bibliography.md#bourke-random-tile).
 
 ## Algorithm
 
@@ -85,13 +87,22 @@ Every point where `Apollonian` is wired (use it as the checklist):
 
 ## Phases
 
-- **P1 (#332)** — core calculator (circle-only, grid-reject, determinism) + full
-  registration + one preset. Renders 2D. `--randomtileprobe` headless gate.
-  `Server.Tests/RandomTileTests.cs`.
-- **P2 (#333)** — verify SmoothBuffer feeds Relief3D + volumetric on-device;
-  relief UI knob. Mostly test (relief free from P1).
-- **P3 (#334)** — square/triangle shapes + prism relief profiles + shape dropdown.
-- **P4 (#335)** — docs finalized + Bourke accreditation & bibliography. Closes #324.
+- **P1 (#332) — DONE (commit d077498).** Core calculator (circle-only,
+  grid-reject, determinism) + full registration + one preset. Renders 2D.
+  `--randomtileprobe` headless gate. `Server.Tests/RandomTileTests.cs`.
+- **P2 (#333) — DONE (commit 30e8c93).** Relief3D / 3D / volumetric verified
+  headless (dome field feeds `HeightfieldRelief2D.Apply` hillshade + the hi-res
+  relief-field twin + normal-mapped theme shading); on-device volumetric smoke
+  signed off. Relief UI knob shipped in P1. `Server.Tests/RandomTileReliefTests.cs`.
+- **P3 (#334) — DONE (commit 968028a).** Square / triangle shapes (inscribed in
+  the circumradius, random rotation, radial-dome relief) + shape dropdown. Circle
+  path kept byte-identical.
+- **P4 (#335) — DONE.** Docs finalized; full Bourke accreditation + bibliography
+  entry ([Resources & Bibliography](../Resources-Bibliography.md#bourke-random-tile)).
+  Closes #324.
+
+The RandomTile suite is 19 tests (7 core + 7 shape + 5 relief), plus 3 RandomTile
+cases added to `Relief2DHiResFieldTypesTests`.
 
 ## Risks
 
@@ -115,5 +126,8 @@ No perturbation / deep-zoom / GPU-kernel surface — self-contained, low risk.
 
 ## Bibliography
 
-- Paul Bourke. *Random space filling of the plane.*
-  <https://paulbourke.net/fractals/randomtile/>. (Finalised in P4 / #335.)
+- **Paul Bourke.** *Random space filling of the plane.*
+  <https://paulbourke.net/fractals/randomtile/>, 2011. Canonical citation logged
+  in [Resources & Bibliography → Specific fractal families](../Resources-Bibliography.md#bourke-random-tile)
+  (anchor `bourke-random-tile`), cross-linked from the code comments in
+  `Engine/Calculators/RandomTileCalculator.cs`.
