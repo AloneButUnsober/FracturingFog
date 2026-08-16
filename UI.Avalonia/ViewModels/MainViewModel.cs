@@ -793,9 +793,12 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
         }
     }
 
-    /// <summary>T3.1: GPU compute toggle for the SP Mandelbrot path.
-    /// Bound to Ctrl+G. Re-reads from the host after assignment so the
-    /// UI reflects "didn't engage" when the renderer is not D3D11.</summary>
+    /// <summary>T3.1: GPU compute toggle for the SP Mandelbrot path. Bound to
+    /// Ctrl+G. Drives whichever compute backend the session attached via the
+    /// host's GpuKernelFactory — D3D11 on Windows, or the Vulkan/SPIR-V kernel
+    /// under <c>--renderer vulkan</c> (#288). Re-reads from the host after
+    /// assignment so the UI reflects "didn't engage" when no device can attach
+    /// (non-D3D11 present with no Vulkan factory, or a missing GPU device).</summary>
     public bool UseGpuCompute
     {
         get => _renderHost.UseGpuCompute;

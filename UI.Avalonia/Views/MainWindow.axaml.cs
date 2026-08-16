@@ -371,14 +371,17 @@ public sealed partial class MainWindow : Window
             return;
         }
 
-        // Ctrl+G = toggle T3.1 GPU compute on the SP Mandelbrot path.
-        // Handled before the unmodified switch so it doesn't fall through
-        // to plain G (Grid toggle).
+        // Ctrl+G = toggle T3.1 GPU compute on the SP Mandelbrot path. Drives
+        // whichever compute backend this session attached via the host's
+        // GpuKernelFactory — D3D11 on a default Windows run, or the Vulkan /
+        // SPIR-V kernel under --renderer vulkan (#288: one shared toggle, not a
+        // separate Vulkan control). Handled before the unmodified switch so it
+        // doesn't fall through to plain G (Grid toggle).
         if (e.Key == Key.G && e.KeyModifiers == KeyModifiers.Control)
         {
             _shell.Main.UseGpuCompute = !_shell.Main.UseGpuCompute;
             // Keep the Control Center checkbox in lock-step with the hotkey
-            // (read-back reflects "didn't engage" on non-D3D11 backends).
+            // (read-back reflects "didn't engage" when no device can attach).
             _shell.FloatingMenu.SetGpuComputeState(_shell.Main.UseGpuCompute);
             e.Handled = true;
             return;

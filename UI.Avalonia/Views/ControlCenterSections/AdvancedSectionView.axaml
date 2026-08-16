@@ -21,7 +21,7 @@
                 <TextBlock Classes="section" Text="GPU / Performance" />
                 <CheckBox Content="GPU compute"
                           IsChecked="{Binding Menu.UseGpuCompute, Mode=TwoWay}"
-                          ToolTip.Tip="Ctrl+G — run the shallow Mandelbrot pass on the GPU (D3D11). Clears itself if the backend can't engage. Deep-zoom stays on the CPU." />
+                          ToolTip.Tip="Ctrl+G — run the shallow Mandelbrot pass on the GPU, using whichever compute backend this session attached (D3D11 on Windows, or Vulkan/SPIR-V under --renderer vulkan). Clears itself if no device can engage. Deep-zoom stays on the CPU." />
             </StackPanel>
         </Border>
 
