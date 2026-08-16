@@ -639,6 +639,40 @@ namespace FracturingFog.Models
         /// seed, particles) reproduce the same tree. Default 12345.</summary>
         public int DlaSeed { get; set; } = 12345;
 
+        // Random space filling of the plane (Paul Bourke —
+        // https://paulbourke.net/fractals/randomtile/). Non-escape-time 2D
+        // packing; forks the Apollonian rasterizer + relief machinery.
+        /// <summary>Maximum number of shapes to place. Placement stops early if
+        /// the power-law radius falls below <see cref="RandomTileMinPixelRadius"/>.
+        /// Default 4000 fills a canvas with a recognisable tiling in well under
+        /// a second at the default exponent.</summary>
+        public int RandomTileCount { get; set; } = 4000;
+        /// <summary>Size falloff exponent α. Shape i radius = rMax / (i + k)^(1/α).
+        /// Larger α → a few big shapes plus many tiny ones (heavier tail);
+        /// smaller α → more uniform sizes. Default 1.6.</summary>
+        public double RandomTileSizeExponent { get; set; } = 1.6;
+        /// <summary>PRNG seed for the placement draws. Identical (W, H, seed,
+        /// count, exponent, gap) reproduce the same tiling. Default 1.</summary>
+        public int RandomTileSeed { get; set; } = 1;
+        /// <summary>Extra margin between shapes as a fraction of the candidate
+        /// radius. 0 = shapes may kiss; higher = looser packing with visible
+        /// background between tiles. Default 0.0.</summary>
+        public double RandomTileGap { get; set; } = 0.0;
+        /// <summary>Stop placing when the next power-law radius would draw at
+        /// fewer than this many device pixels. Higher = lighter/faster; lower =
+        /// denser fill. Default 0.75.</summary>
+        public double RandomTileMinPixelRadius { get; set; } = 0.75;
+        /// <summary>When true, each shape is coloured by its placement index
+        /// modulo palette size. When false, colour is driven by log(radius) —
+        /// a gradient that emphasises scale instead of placement order.
+        /// Default true.</summary>
+        public bool RandomTileColorByIndex { get; set; } = true;
+        /// <summary>Dome relief for 3D (normal-mapped) themes. Each shape is
+        /// shaded as a lit sphere-imposter (sphere-cap profile written to the
+        /// height field). 0 = flat discs (no relief, fast path); 1 = full
+        /// hemisphere. Ignored by flat 2D themes. Default 1.0.</summary>
+        public double RandomTileRelief { get; set; } = 1.0;
+
         // Kleinian limit set (3D, sphere-inversion Schottky group).
         /// <summary>Inversion-iteration cap for the Kleinian DE. Higher =
         /// sharper limit-set boundary, slower per ray sample. Default 16
@@ -1023,6 +1057,13 @@ namespace FracturingFog.Models
                 ApollonianRelief = ApollonianRelief,
                 DlaParticles = DlaParticles,
                 DlaSeed = DlaSeed,
+                RandomTileCount = RandomTileCount,
+                RandomTileSizeExponent = RandomTileSizeExponent,
+                RandomTileSeed = RandomTileSeed,
+                RandomTileGap = RandomTileGap,
+                RandomTileMinPixelRadius = RandomTileMinPixelRadius,
+                RandomTileColorByIndex = RandomTileColorByIndex,
+                RandomTileRelief = RandomTileRelief,
                 KleinianIterations = KleinianIterations,
                 KleinianSphereScale = KleinianSphereScale,
                 KleinianMaxSteps = KleinianMaxSteps,

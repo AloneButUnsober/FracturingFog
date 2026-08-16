@@ -238,6 +238,18 @@ namespace FracturingFog
         /// Pan/zoom unsupported — the simulation IS the image and pan/zoom
         /// would invalidate the cached grid.</summary>
         Dla,
+        /// <summary>Random space filling of the plane (Paul Bourke,
+        /// https://paulbourke.net/fractals/randomtile/). Non-escape-time 2D
+        /// packing: shapes of power-law-decreasing size are placed at random,
+        /// non-overlapping positions (uniform spatial-hash reject), filling the
+        /// plane. Seed-deterministic. Each shape is a raised dome, so Relief3D /
+        /// 3D themes / volumetric ride the shared <c>IHeightFieldSource</c> path
+        /// (as Apollonian does). Tunables on <c>FractalParameters</c>:
+        /// <c>RandomTileCount</c>, <c>RandomTileSizeExponent</c>,
+        /// <c>RandomTileSeed</c>, <c>RandomTileGap</c>,
+        /// <c>RandomTileMinPixelRadius</c>, <c>RandomTileColorByIndex</c>,
+        /// <c>RandomTileRelief</c>.</summary>
+        RandomTile,
     }
 
     public enum RenderProfile { Preview, Final }

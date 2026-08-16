@@ -111,6 +111,9 @@ namespace FracturingFog.Models
             FractalType.AcidWarp => FractalMotionClass.NonSpatial,
             FractalType.Flame => FractalMotionClass.NonSpatial,
             FractalType.Dla => FractalMotionClass.NonSpatial,
+            // Random tiling: the placement IS the image; pan/zoom can't reuse the
+            // packing state, so zoom is a no-op (matches DLA). P1 ships zoom-off.
+            FractalType.RandomTile => FractalMotionClass.NonSpatial,
 
             // Unknown/future types default to NonSpatial so a new family never
             // silently lands a broken zoom leg in the slideshow.

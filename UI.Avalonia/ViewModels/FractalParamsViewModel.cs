@@ -134,6 +134,13 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
         _apolloMinPx = _p.ApollonianMinPixelRadius;
         _apolloColorByDepth = _p.ApollonianColorByDepth;
         _apolloRelief = _p.ApollonianRelief;
+        _rtCount = _p.RandomTileCount;
+        _rtSizeExponent = _p.RandomTileSizeExponent;
+        _rtSeed = _p.RandomTileSeed;
+        _rtGap = _p.RandomTileGap;
+        _rtMinPx = _p.RandomTileMinPixelRadius;
+        _rtColorByIndex = _p.RandomTileColorByIndex;
+        _rtRelief = _p.RandomTileRelief;
         _kleinIter = _p.KleinianIterations;
         _kleinScale = _p.KleinianSphereScale;
         _kleinCameraTheta = _p.KleinianCameraTheta;
@@ -255,6 +262,7 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
     public bool IsKleinian => FractalType == FractalType.Kleinian;
     public bool IsBicomplexMandelbrot => FractalType == FractalType.BicomplexMandelbrot;
     public bool IsDla => FractalType == FractalType.Dla;
+    public bool IsRandomTile => FractalType == FractalType.RandomTile;
 
     /// <summary>
     /// Visibility flag for the shared LightingFx section. True for every
@@ -307,7 +315,10 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
         || FractalType == FractalType.Nova
         || FractalType == FractalType.Halley
         || IsBuddhaBrot
-        || IsApollonian;
+        || IsApollonian
+        // Random tiling — synthesised sphere-cap dome height (same path as
+        // Apollonian).
+        || IsRandomTile;
 
     /// <summary>Visibility flag for the cross-fractal domain-warp section
     /// (#253 / IDEA-3). True for the 2D escape-time family routed through
@@ -325,7 +336,7 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
         !(IsJulia || IsMultibrot || IsPhoenix || IsGlynn || IsLogistic || IsSpider || IsNewtonOrNova || IsIFS
           || IsLSystem || IsStrangeAttractor || IsBuddhaBrot || IsMandelbulb || IsMandelbox || IsKifs
           || IsQuatJulia || IsQuatMandelbrot || IsPlasma || IsAcidWarp || IsFlame || IsApollonian || IsKleinian
-          || IsBicomplexMandelbrot || IsDla || IsInteriorAlphaApplicable || IsRelief2DApplicable
+          || IsBicomplexMandelbrot || IsDla || IsRandomTile || IsInteriorAlphaApplicable || IsRelief2DApplicable
           || SupportsDomainWarp);
 
     // ── Interior alpha (2D) — issue #96 ──────────────────────────────────────
@@ -1137,6 +1148,29 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
     public bool ApollonianColorByDepth { get => _apolloColorByDepth; set { Set(ref _apolloColorByDepth, value); _p.ApollonianColorByDepth = _apolloColorByDepth; Fire(); } }
     private double _apolloRelief;
     public double ApollonianRelief { get => _apolloRelief; set { Set(ref _apolloRelief, Clamp(value, 0.0, 4.0)); _p.ApollonianRelief = _apolloRelief; Fire(); } }
+
+    // ── Random Tiling (Bourke) ──
+    private int _rtCount;
+    /// <summary>Maximum number of shapes to place.</summary>
+    public int RandomTileCount { get => _rtCount; set { Set(ref _rtCount, (int)Clamp(value, 1, 200000)); _p.RandomTileCount = _rtCount; Fire(); } }
+    private double _rtSizeExponent;
+    /// <summary>Size falloff exponent α (larger → few big + many tiny shapes).</summary>
+    public double RandomTileSizeExponent { get => _rtSizeExponent; set { Set(ref _rtSizeExponent, Clamp(value, 0.2, 6.0)); _p.RandomTileSizeExponent = _rtSizeExponent; Fire(); } }
+    private int _rtSeed;
+    /// <summary>PRNG seed — identical settings + seed reproduce the tiling.</summary>
+    public int RandomTileSeed { get => _rtSeed; set { Set(ref _rtSeed, value); _p.RandomTileSeed = _rtSeed; Fire(); } }
+    private double _rtGap;
+    /// <summary>Margin between shapes as a fraction of the candidate radius.</summary>
+    public double RandomTileGap { get => _rtGap; set { Set(ref _rtGap, Clamp(value, 0.0, 2.0)); _p.RandomTileGap = _rtGap; Fire(); } }
+    private double _rtMinPx;
+    /// <summary>Stop placing when the next radius would draw below this many pixels.</summary>
+    public double RandomTileMinPixelRadius { get => _rtMinPx; set { Set(ref _rtMinPx, Clamp(value, 0.25, 16.0)); _p.RandomTileMinPixelRadius = _rtMinPx; Fire(); } }
+    private bool _rtColorByIndex;
+    /// <summary>Colour by placement index (palette sweep) vs. log-radius.</summary>
+    public bool RandomTileColorByIndex { get => _rtColorByIndex; set { Set(ref _rtColorByIndex, value); _p.RandomTileColorByIndex = _rtColorByIndex; Fire(); } }
+    private double _rtRelief;
+    /// <summary>Dome relief amplitude for 3D themes (0 = flat).</summary>
+    public double RandomTileRelief { get => _rtRelief; set { Set(ref _rtRelief, Clamp(value, 0.0, 4.0)); _p.RandomTileRelief = _rtRelief; Fire(); } }
 
     // ── DLA ──
     private int _dlaParticles;
