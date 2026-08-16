@@ -199,6 +199,23 @@ public sealed class ControlCenterViewModel : ViewModelBase
         private set => this.RaiseAndSetIfChanged(ref _generatedCommand, value);
     }
 
+    private string _commandGapWarning = "";
+    /// <summary>Human-readable list of live fx the generated command cannot
+    /// reproduce (#362). Empty when the 2D config is fully expressible. Bound to
+    /// a yellow banner (#FFCC00 — colour-blind-safe, never red).</summary>
+    public string CommandGapWarning
+    {
+        get => _commandGapWarning;
+        private set
+        {
+            this.RaiseAndSetIfChanged(ref _commandGapWarning, value);
+            this.RaisePropertyChanged(nameof(HasCommandGaps));
+        }
+    }
+
+    /// <summary>True when the last generate found unrepresented fx.</summary>
+    public bool HasCommandGaps => _commandGapWarning.Length > 0;
+
     private void GenerateCommand()
     {
         var main = Shell.Main;
@@ -211,6 +228,8 @@ public sealed class ControlCenterViewModel : ViewModelBase
                  : vs.PreferredIterations > 0 ? vs.PreferredIterations
                  : vs.Quality?.ComputeIterations(vs.Zoom) ?? 0;
 
+        var fp = vs.FractalParameters;
+
         var snap = new FracturingFog.Cli.BatchCommandSnapshot
         {
             Fractal     = main.SelectedFractalType,
@@ -218,17 +237,28 @@ public sealed class ControlCenterViewModel : ViewModelBase
             CenterY     = vs.CenterY,
             Zoom        = vs.Zoom,
             Iterations  = iter,
-            ThemeName   = main.SelectedTheme ?? "HSV",
-            QualityName = main.SelectedQuality?.Name ?? "Standard",
+            ThemeName   = main.SelectedTheme ?? FracturingFog.Batch.BatchDefaults.ThemeName,
+            QualityName = main.SelectedQuality?.Name ?? FracturingFog.Batch.BatchDefaults.QualityName,
             Width       = CommandWidth,
             Height      = CommandHeight,
             Brightness  = vs.Brightness,
             Contrast    = vs.Contrast,
             HistogramEq = vs.HistogramEq,
-            Parameters  = vs.FractalParameters,
+            Parameters  = fp,
+
+            // Fidelity-gap inputs (#362). These live fx have no 2D batch flag.
+            ThemeIsUnsaved      = string.IsNullOrWhiteSpace(main.SelectedTheme),
+            ReliefEnabled       = fp?.Relief2DEnabled ?? false,
+            InteriorAlphaActive = (fp?.InteriorAlpha ?? 255) < 255,
+            StereoActive        = fp != null && fp.Lighting.StereoMode != FracturingFog.Rendering.Lighting.StereoMode.Off,
+            DomainWarpActive    = fp?.DomainWarpEnabled ?? false,
         };
 
-        GeneratedCommand = FracturingFog.Cli.BatchCommandBuilder.Build(snap);
+        var report = FracturingFog.Cli.BatchCommandBuilder.BuildWithReport(snap);
+        GeneratedCommand = report.Command;
+        CommandGapWarning = report.HasGaps
+            ? "Not represented (rendered output will differ): " + string.Join("; ", report.Gaps)
+            : "";
     }
 
     private void CopyCommand()

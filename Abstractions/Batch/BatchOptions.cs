@@ -39,18 +39,18 @@ namespace FracturingFog.Batch
         public int? Iterations { get; set; }
 
         // Color theme by name. Default = HSV.
-        public string ThemeName { get; set; } = "HSV";
+        public string ThemeName { get; set; } = BatchDefaults.ThemeName;
 
         // Output dimensions.
-        public int Width { get; set; } = 1920;
-        public int Height { get; set; } = 1080;
+        public int Width { get; set; } = BatchDefaults.Width;
+        public int Height { get; set; } = BatchDefaults.Height;
 
         // Output path. Treated as folder when video, file when image.
         public string OutputPath { get; set; } = "";
         public string? OutputName { get; set; }
 
         // Quality preset name. Default Standard.
-        public string QualityName { get; set; } = "Standard";
+        public string QualityName { get; set; } = BatchDefaults.QualityName;
 
         // Video-specific.
         public double VideoSeconds { get; set; } = 20.0;
@@ -208,13 +208,13 @@ namespace FracturingFog.Batch
                         }
                         break;
 
-                    case "--region":
+                    case BatchFlags.Region:
                     case "-r":
                         if (!Next(args, ref i, a, out string rv, out error)) return false;
                         opts.RegionName = rv;
                         break;
 
-                    case "--fractal":
+                    case BatchFlags.Fractal:
                     case "-f":
                         if (!Next(args, ref i, a, out string fv, out error)) return false;
                         if (!Enum.TryParse<FractalType>(fv, ignoreCase: true, out var ft))
@@ -225,48 +225,48 @@ namespace FracturingFog.Batch
                         opts.FractalType = ft;
                         break;
 
-                    case "--x":
+                    case BatchFlags.X:
                         if (!NextDouble(args, ref i, a, out double xv, out error)) return false;
                         opts.CenterX = xv;
                         break;
 
-                    case "--y":
+                    case BatchFlags.Y:
                         if (!NextDouble(args, ref i, a, out double yv, out error)) return false;
                         opts.CenterY = yv;
                         break;
 
                     case "--z":
-                    case "--zoom":
+                    case BatchFlags.Zoom:
                         if (!NextDouble(args, ref i, a, out double zv, out error)) return false;
                         opts.Zoom = zv;
                         break;
 
                     case "--i":
-                    case "--iter":
+                    case BatchFlags.Iter:
                     case "--iterations":
                         if (!NextInt(args, ref i, a, out int iv, out error)) return false;
                         opts.Iterations = iv;
                         break;
 
-                    case "--theme":
+                    case BatchFlags.Theme:
                     case "-t":
                         if (!Next(args, ref i, a, out string tv, out error)) return false;
                         opts.ThemeName = tv;
                         break;
 
-                    case "--width":
+                    case BatchFlags.Width:
                     case "-w":
                         if (!NextInt(args, ref i, a, out int wv, out error)) return false;
                         opts.Width = wv;
                         break;
 
-                    case "--height":
+                    case BatchFlags.Height:
                     case "-h":
                         if (!NextInt(args, ref i, a, out int hv, out error)) return false;
                         opts.Height = hv;
                         break;
 
-                    case "--out":
+                    case BatchFlags.Out:
                     case "-o":
                         if (!Next(args, ref i, a, out string ov, out error)) return false;
                         opts.OutputPath = ov;
@@ -278,7 +278,7 @@ namespace FracturingFog.Batch
                         opts.OutputName = nv;
                         break;
 
-                    case "--quality":
+                    case BatchFlags.Quality:
                     case "-q":
                         if (!Next(args, ref i, a, out string qv, out error)) return false;
                         opts.QualityName = qv;
@@ -355,71 +355,71 @@ namespace FracturingFog.Batch
                         opts.Verbose = true;
                         break;
 
-                    case "--brightness":
+                    case BatchFlags.Brightness:
                         if (!NextInt(args, ref i, a, out int brv, out error)) return false;
                         opts.Brightness = brv;
                         break;
 
-                    case "--contrast":
+                    case BatchFlags.Contrast:
                         if (!NextInt(args, ref i, a, out int ctv, out error)) return false;
                         opts.Contrast = ctv;
                         break;
 
-                    case "--adaptive":
+                    case BatchFlags.Adaptive:
                     case "--histogram-eq":
                         if (!NextInt(args, ref i, a, out int adv, out error)) return false;
                         opts.Adaptive = adv;
                         break;
 
-                    case "--bulb-power":
+                    case BatchFlags.BulbPower:
                         if (!NextDouble(args, ref i, a, out double bpv, out error)) return false;
                         opts.BulbPower = bpv;
                         break;
 
-                    case "--multibrot-exp":
+                    case BatchFlags.MultibrotExp:
                     case "--multibrot-power":
                         if (!NextInt(args, ref i, a, out int mev, out error)) return false;
                         opts.MultibrotExponent = mev;
                         break;
 
-                    case "--lsystem-preset":
+                    case BatchFlags.LSystemPreset:
                     case "--lsystem":
                         if (!Next(args, ref i, a, out string lspv, out error)) return false;
                         opts.LSystemPresetName = lspv;
                         break;
 
-                    case "--lsystem-depth":
+                    case BatchFlags.LSystemDepth:
                         if (!NextInt(args, ref i, a, out int lsdv, out error)) return false;
                         opts.LSystemDepth = lsdv;
                         break;
 
-                    case "--plasma-roughness":
+                    case BatchFlags.PlasmaRoughness:
                         if (!NextDouble(args, ref i, a, out double prv, out error)) return false;
                         opts.PlasmaRoughness = prv;
                         break;
 
-                    case "--plasma-seed":
+                    case BatchFlags.PlasmaSeed:
                         if (!NextInt(args, ref i, a, out int psv, out error)) return false;
                         opts.PlasmaSeed = psv;
                         break;
 
-                    case "--flame-preset":
+                    case BatchFlags.FlamePreset:
                     case "--flame":
                         if (!Next(args, ref i, a, out string fpv, out error)) return false;
                         opts.FlamePresetName = fpv;
                         break;
 
-                    case "--flame-iter":
+                    case BatchFlags.FlameIter:
                         if (!NextInt(args, ref i, a, out int fiv, out error)) return false;
                         opts.FlameIterations = fiv;
                         break;
 
-                    case "--flame-gamma":
+                    case BatchFlags.FlameGamma:
                         if (!NextDouble(args, ref i, a, out double fgv, out error)) return false;
                         opts.FlameGamma = fgv;
                         break;
 
-                    case "--flame-vibrancy":
+                    case BatchFlags.FlameVibrancy:
                         if (!NextDouble(args, ref i, a, out double fvv, out error)) return false;
                         opts.FlameVibrancy = fvv;
                         break;

@@ -58,7 +58,18 @@
                          PlaceholderText="Click Generate to build the command…"
                          VerticalContentAlignment="Top"
                          ToolTip.Tip="Read-only. Replace &lt;OUTPUT.png&gt; with your target file path before running." />
-                <TextBlock Text="Replace &lt;OUTPUT.png&gt; with a real path. Lighting, relief, acid and other fx are not represented yet."
+                <!-- Fidelity-gap banner (#362). Yellow (#FFCC00), never red —
+                     the user is red/green colour-blind. -->
+                <Border IsVisible="{Binding HasCommandGaps}"
+                        Background="#33FFCC00" BorderBrush="#FFCC00" BorderThickness="1"
+                        CornerRadius="3" Padding="8,6" Margin="0,2,0,0">
+                    <StackPanel Orientation="Horizontal" Spacing="6">
+                        <TextBlock Text="⚠" Foreground="#FFCC00" FontSize="13" VerticalAlignment="Top" />
+                        <TextBlock Text="{Binding CommandGapWarning}" Foreground="#FFE08A"
+                                   FontSize="11" TextWrapping="Wrap" />
+                    </StackPanel>
+                </Border>
+                <TextBlock Text="Replace &lt;OUTPUT.png&gt; with a real path before running."
                            Foreground="#9A9A9A" FontSize="10" TextWrapping="Wrap" />
             </StackPanel>
         </Border>

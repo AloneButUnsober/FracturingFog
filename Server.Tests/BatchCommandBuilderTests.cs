@@ -1,19 +1,17 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // SPDX-FileCopyrightText: 2026 Bradley Brown
 
-// #361 (slice of #64) — CLI Command Builder MVP tests. Asserts the emitted
-// `--batch` string is well-formed and that flags pair correctly with values.
-//
-// NOTE: the real Batch/BatchOptions parser lives in the WinExe root project,
-// which this cross-plat test assembly cannot reference. #362 moves the flag
-// grammar into a shared table consumed by both parser and builder; a true
-// parse-round-trip test becomes possible then. Until then this verifies the
-// emitted string is self-consistent via a generic flag→value map.
+// #361 / #362 (slices of #64) — CLI Command Builder tests. Asserts the emitted
+// `--batch` string is well-formed, pairs flags with values, ROUND-TRIPS through
+// the real BatchOptions parser (now shared in Abstractions, #362), and reports
+// fidelity gaps for live fx the 2D batch path cannot reproduce.
 
 using System.Globalization;
 using FracturingFog;
+using FracturingFog.Batch;
 using FracturingFog.Cli;
 using FracturingFog.Models;
+using FracturingFog.Rendering.Lighting;
 using Xunit;
 
 namespace FracturingFog.Server.Tests
@@ -145,25 +143,12 @@ namespace FracturingFog.Server.Tests
             Assert.Contains("<OUTPUT.png>", cmd);
         }
 
-        // Parse the emitted string into a flag→value map (every token starting
-        // with "--" is a flag; the following non-flag token is its value).
-        private static System.Collections.Generic.Dictionary<string, string> FlagMap(string cmd)
-        {
-            var argv = Tokenize(cmd);
-            var map = new System.Collections.Generic.Dictionary<string, string>();
-            for (int i = 0; i < argv.Length; i++)
-            {
-                if (!argv[i].StartsWith("--")) continue;
-                string val = (i + 1 < argv.Length && !argv[i + 1].StartsWith("--")) ? argv[i + 1] : "";
-                map[argv[i]] = val;
-            }
-            return map;
-        }
-
-        // Fidelity: every emitted flag pairs with its intended value, and the
-        // round-trippable numeric formatting parses back to the exact input.
+        // The fidelity contract (#362): the emitted command parses back to the
+        // same values through the REAL BatchOptions parser. This is possible now
+        // that both parser and builder share Batch/BatchFlags + live in
+        // Abstractions.
         [Fact]
-        public void Build_FlagsPairWithExpectedValues()
+        public void Build_RoundTripsThroughBatchOptions()
         {
             var snap = new BatchCommandSnapshot
             {
@@ -181,21 +166,109 @@ namespace FracturingFog.Server.Tests
                 HistogramEq = 25,
             };
 
-            var m = FlagMap(BatchCommandBuilder.Build(snap));
+            var argv = Tokenize(BatchCommandBuilder.Build(snap));
 
-            Assert.Equal("BurningShip", m["--fractal"]);
-            Assert.Equal(snap.CenterX, double.Parse(m["--x"], CultureInfo.InvariantCulture), 12);
-            Assert.Equal(snap.CenterY, double.Parse(m["--y"], CultureInfo.InvariantCulture), 12);
-            Assert.Equal(snap.Zoom, double.Parse(m["--zoom"], CultureInfo.InvariantCulture), 6);
-            Assert.Equal("2048", m["--iter"]);
-            Assert.Equal("Fire", m["--theme"]);
-            Assert.Equal("High", m["--quality"]);
-            Assert.Equal("3840", m["--width"]);
-            Assert.Equal("2160", m["--height"]);
-            Assert.Equal("5", m["--brightness"]);
-            Assert.Equal("-3", m["--contrast"]);
-            Assert.Equal("25", m["--adaptive"]);
-            Assert.True(m.ContainsKey("--out"));
+            // argv[0] is the exe name; the parser starts at the flag after it.
+            Assert.Equal("--batch", argv[1]);
+
+            // The builder emits an <OUTPUT.png> placeholder; substitute a real
+            // path so the parser's --out requirement is satisfied.
+            for (int i = 0; i < argv.Length; i++)
+                if (argv[i] == "<OUTPUT.png>") argv[i] = "out.png";
+
+            bool ok = BatchOptions.TryParse(argv, startIndex: 2, out var opts, out var err);
+            Assert.True(ok, err);
+
+            Assert.Equal(FractalType.BurningShip, opts.FractalType);
+            Assert.Equal(snap.CenterX, opts.CenterX!.Value, 12);
+            Assert.Equal(snap.CenterY, opts.CenterY!.Value, 12);
+            Assert.Equal(snap.Zoom, opts.Zoom!.Value, 6);
+            Assert.Equal(2048, opts.Iterations);
+            Assert.Equal("Fire", opts.ThemeName);
+            Assert.Equal("High", opts.QualityName);
+            Assert.Equal(3840, opts.Width);
+            Assert.Equal(2160, opts.Height);
+            Assert.Equal(5, opts.Brightness);
+            Assert.Equal(-3, opts.Contrast);
+            Assert.Equal(25, opts.Adaptive);
+        }
+
+        [Fact]
+        public void Build_FlameParams_RoundTripThroughBatchOptions()
+        {
+            var snap = new BatchCommandSnapshot
+            {
+                Fractal = FractalType.Flame,
+                CenterX = 0, CenterY = 0, Zoom = 1,
+                Parameters = new FractalParameters
+                {
+                    FlamePresetName = "Swirl Gasket",
+                    FlameIterations = 5_000_000,
+                    FlameGamma = 2.4,
+                    FlameVibrancy = 0.7,
+                },
+            };
+
+            var argv = Tokenize(BatchCommandBuilder.Build(snap));
+            for (int i = 0; i < argv.Length; i++)
+                if (argv[i] == "<OUTPUT.png>") argv[i] = "out.png";
+
+            Assert.True(BatchOptions.TryParse(argv, startIndex: 2, out var opts, out var err), err);
+            Assert.Equal("Swirl Gasket", opts.FlamePresetName);
+            Assert.Equal(5_000_000, opts.FlameIterations);
+            Assert.Equal(2.4, opts.FlameGamma!.Value, 6);
+            Assert.Equal(0.7, opts.FlameVibrancy!.Value, 6);
+        }
+
+        // ── Fidelity gap detection (#362) ─────────────────────────────────────
+
+        [Fact]
+        public void DetectGaps_EmptyWhenNoUnrepresentedFx()
+        {
+            var gaps = BatchCommandBuilder.DetectGaps(new BatchCommandSnapshot());
+            Assert.Empty(gaps);
+        }
+
+        [Fact]
+        public void DetectGaps_FlagsReliefInteriorStereoAndWarp()
+        {
+            var report = BatchCommandBuilder.BuildWithReport(new BatchCommandSnapshot
+            {
+                ReliefEnabled = true,
+                InteriorAlphaActive = true,
+                StereoActive = true,
+                DomainWarpActive = true,
+            });
+
+            Assert.True(report.HasGaps);
+            Assert.Equal(4, report.Gaps.Count);
+            Assert.Contains(report.Gaps, g => g.Contains("relief", System.StringComparison.OrdinalIgnoreCase));
+            Assert.Contains(report.Gaps, g => g.Contains("Interior alpha"));
+            Assert.Contains(report.Gaps, g => g.Contains("SBS"));
+            Assert.Contains(report.Gaps, g => g.Contains("Domain-warp"));
+        }
+
+        [Fact]
+        public void UnsavedTheme_IsAGapAndSuppressesThemeFlag()
+        {
+            var report = BatchCommandBuilder.BuildWithReport(new BatchCommandSnapshot
+            {
+                ThemeName = "My Custom Edit",
+                ThemeIsUnsaved = true,
+            });
+
+            // No --theme emitted (nothing to reference by name)…
+            Assert.DoesNotContain("--theme", report.Command);
+            // …and the user is warned.
+            Assert.Contains(report.Gaps, g => g.Contains("unsaved", System.StringComparison.OrdinalIgnoreCase));
+        }
+
+        [Fact]
+        public void Stereo_GapUsesRealLightingFxDataDefaultAsBaseline()
+        {
+            // A default LightingFxData has StereoMode.Off — no gap.
+            var off = LightingFxData.CreateDefault();
+            Assert.Equal(StereoMode.Off, off.StereoMode);
         }
     }
 }
