@@ -61,10 +61,27 @@
 
             <!-- Middle: filtered list -->
             <Grid Grid.Column="1" RowDefinitions="Auto,*" RowSpacing="6">
-                <TextBox Grid.Row="0"
-                         Text="{Binding FilterText}"
-                         PlaceholderText="Filter by name…"
-                         Background="#1E1E1E" />
+                <!-- Filter box + sort selector (issue #51). Sort applies to every
+                     asset list and persists until the app closes. -->
+                <Grid Grid.Row="0" ColumnDefinitions="*,Auto,Auto" ColumnSpacing="6">
+                    <TextBox Grid.Column="0"
+                             Text="{Binding FilterText}"
+                             PlaceholderText="Filter by name…"
+                             Background="#1E1E1E" />
+                    <TextBlock Grid.Column="1" Text="Sort:"
+                               Classes="label" VerticalAlignment="Center" />
+                    <ComboBox Grid.Column="2"
+                              MinWidth="180"
+                              ItemsSource="{Binding SortOptions}"
+                              SelectedItem="{Binding SelectedSort, Mode=TwoWay}"
+                              ToolTip.Tip="Sort order for this and every asset list (kept until the app closes)">
+                        <ComboBox.ItemTemplate>
+                            <DataTemplate x:DataType="vm:AssetSortOption">
+                                <TextBlock Text="{Binding Label}" />
+                            </DataTemplate>
+                        </ComboBox.ItemTemplate>
+                    </ComboBox>
+                </Grid>
                 <Border Grid.Row="1" Classes="pane">
                     <Grid>
                         <ListBox x:Name="AssetsList"

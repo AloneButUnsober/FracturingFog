@@ -9,7 +9,9 @@
         <Border Classes="group">
             <StackPanel Spacing="6">
                 <TextBlock Classes="section" Text="Color Themes" />
-                <ComboBox ItemsSource="{Binding Menu.ThemeNames}" SelectedItem="{Binding Menu.SelectedTheme}" HorizontalAlignment="Stretch" Margin="0,4,0,0" />
+                <!-- Right-click sort menu wired in code-behind to match the
+                     toolbar Theme combo (issue #51). -->
+                <ComboBox x:Name="ThemeCombo" ItemsSource="{Binding Menu.ThemeNames}" SelectedItem="{Binding Menu.SelectedTheme}" HorizontalAlignment="Stretch" Margin="0,4,0,0" />
                 <UniformGrid Columns="4">
                     <Button Classes="action neutral" Content="Exp…"   Command="{Binding Menu.ExportThemeCommand}"  ToolTip.Tip="Export current theme to JSON" Margin="0,0,4,0" />
                     <Button Classes="action neutral" Content="Imp…"   Command="{Binding Menu.ImportThemeCommand}"  ToolTip.Tip="Import themes from JSON" Margin="0,0,4,0" />
