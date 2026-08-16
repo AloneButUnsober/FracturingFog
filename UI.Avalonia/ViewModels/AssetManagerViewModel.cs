@@ -31,11 +31,19 @@ public sealed class AssetManagerViewModel : ViewModelBase
 {
     private readonly IReadOnlyList<IAssetSource> _sources;
 
+    // Last-picked sort mode, static so it survives closing and reopening the
+    // Asset Manager within one app run (issue #51 — no cross-run persistence
+    // wanted). Applies to every asset list, not per-type.
+    private static AssetSortMode _lastSortMode = AssetSortMode.NameAsc;
+
     /// <summary>Left-pane type tree, one node per asset source.</summary>
     public ObservableCollection<AssetTypeNode> Types { get; } = new();
 
     /// <summary>Middle-pane list for the selected type, after the name filter.</summary>
     public ObservableCollection<AssetRowViewModel> Assets { get; } = new();
+
+    /// <summary>Sort options offered for every asset list (issue #51).</summary>
+    public IReadOnlyList<AssetSortOption> SortOptions { get; } = AssetSortOption.All;
 
     public AssetManagerViewModel(IReadOnlyList<IAssetSource>? sources)
     {
@@ -47,8 +55,25 @@ public sealed class AssetManagerViewModel : ViewModelBase
         RefreshCommand = ReactiveCommand.Create(RefreshAssets);
         EditCommand    = ReactiveCommand.Create(RaiseOpen);
 
+        // Restore the app-session sort choice before the first RefreshAssets.
+        _selectedSort = AssetSortOption.For(_lastSortMode);
+
         // Default to the first type so the view opens on content, not blank.
         if (Types.Count > 0) SelectedType = Types[0];
+    }
+
+    private AssetSortOption _selectedSort = AssetSortOption.For(AssetSortMode.NameAsc);
+    /// <summary>Active sort applied to the middle list. Persists in-session.</summary>
+    public AssetSortOption SelectedSort
+    {
+        get => _selectedSort;
+        set
+        {
+            var v = value ?? AssetSortOption.For(AssetSortMode.NameAsc);
+            this.RaiseAndSetIfChanged(ref _selectedSort, v);
+            _lastSortMode = v.Mode;
+            RefreshAssets();
+        }
     }
 
     private AssetTypeNode? _selectedType;
@@ -102,17 +127,69 @@ public sealed class AssetManagerViewModel : ViewModelBase
         if (src != null)
         {
             string filter = _filterText.Trim();
+            var rows = new List<AssetRowViewModel>();
             foreach (var d in src.Enumerate())
             {
                 if (filter.Length > 0 &&
                     d.Name.IndexOf(filter, StringComparison.OrdinalIgnoreCase) < 0)
                     continue;
-                Assets.Add(new AssetRowViewModel(d));
+                rows.Add(new AssetRowViewModel(d));
             }
+            foreach (var row in SortRows(rows, _selectedSort.Mode))
+                Assets.Add(row);
         }
         SelectedAsset = null;
         this.RaisePropertyChanged(nameof(HeaderText));
         this.RaisePropertyChanged(nameof(IsEmpty));
+    }
+
+    // Stable sort of the filtered rows by the active mode. Name compares are
+    // ordinal-ignore-case; ties break on name so equal sizes/dates stay tidy.
+    private static IEnumerable<AssetRowViewModel> SortRows(
+        List<AssetRowViewModel> rows, AssetSortMode mode)
+    {
+        Comparison<AssetRowViewModel> byName =
+            (a, b) => string.Compare(a.Name, b.Name, StringComparison.OrdinalIgnoreCase);
+
+        switch (mode)
+        {
+            case AssetSortMode.NameDesc:
+                rows.Sort((a, b) => byName(b, a));
+                break;
+            case AssetSortMode.SizeDesc:
+                rows.Sort((a, b) =>
+                {
+                    int c = b.Descriptor.SizeOnDisk.CompareTo(a.Descriptor.SizeOnDisk);
+                    return c != 0 ? c : byName(a, b);
+                });
+                break;
+            case AssetSortMode.SizeAsc:
+                rows.Sort((a, b) =>
+                {
+                    int c = a.Descriptor.SizeOnDisk.CompareTo(b.Descriptor.SizeOnDisk);
+                    return c != 0 ? c : byName(a, b);
+                });
+                break;
+            case AssetSortMode.NewestFirst:
+                rows.Sort((a, b) =>
+                {
+                    int c = Nullable.Compare(b.Descriptor.CreatedAt, a.Descriptor.CreatedAt);
+                    return c != 0 ? c : byName(a, b);
+                });
+                break;
+            case AssetSortMode.OldestFirst:
+                rows.Sort((a, b) =>
+                {
+                    int c = Nullable.Compare(a.Descriptor.CreatedAt, b.Descriptor.CreatedAt);
+                    return c != 0 ? c : byName(a, b);
+                });
+                break;
+            case AssetSortMode.NameAsc:
+            default:
+                rows.Sort(byName);
+                break;
+        }
+        return rows;
     }
 
     public ReactiveCommand<Unit, Unit> CloseCommand   { get; }
@@ -378,6 +455,52 @@ public sealed class AssetJsonImportEventArgs : EventArgs
 
     /// <summary>Dialog caption, e.g. "Import Scenes".</summary>
     public string Title { get; }
+}
+
+/// <summary>Sort orders offered for every Asset Manager list (issue #51).</summary>
+public enum AssetSortMode
+{
+    NameAsc,
+    NameDesc,
+    SizeDesc,
+    SizeAsc,
+    NewestFirst,
+    OldestFirst,
+}
+
+/// <summary>Display wrapper binding a human label to an <see cref="AssetSortMode"/>
+/// for the sort combo. Shares one static option list across every VM instance.</summary>
+public sealed class AssetSortOption
+{
+    public AssetSortOption(AssetSortMode mode, string label)
+    {
+        Mode = mode;
+        Label = label;
+    }
+
+    public AssetSortMode Mode { get; }
+    public string Label { get; }
+
+    public override string ToString() => Label;
+
+    public static IReadOnlyList<AssetSortOption> All { get; } = new[]
+    {
+        new AssetSortOption(AssetSortMode.NameAsc,     "Name (A→Z)"),
+        new AssetSortOption(AssetSortMode.NameDesc,    "Name (Z→A)"),
+        new AssetSortOption(AssetSortMode.SizeDesc,    "Size (largest first)"),
+        new AssetSortOption(AssetSortMode.SizeAsc,     "Size (smallest first)"),
+        new AssetSortOption(AssetSortMode.NewestFirst, "Created (newest first)"),
+        new AssetSortOption(AssetSortMode.OldestFirst, "Created (oldest first)"),
+    };
+
+    /// <summary>The shared option instance for a mode (so combo SelectedItem
+    /// reference-matches the ItemsSource entry).</summary>
+    public static AssetSortOption For(AssetSortMode mode)
+    {
+        foreach (var o in All)
+            if (o.Mode == mode) return o;
+        return All[0];
+    }
 }
 
 /// <summary>Left-pane type-tree node — a thin display wrapper over one source.</summary>

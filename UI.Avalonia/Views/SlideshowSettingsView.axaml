@@ -192,60 +192,97 @@
             </StackPanel>
         </Border>
 
-        <!-- Row 12: Filter expander — regions / themes / fractal types / quality presets -->
+        <!-- Row 12: Filter expander — regions / themes / fractal types / quality presets.
+             Each list lives in its own nested expander with a name-search box; all
+             stretch the full form width (issue #51). Searching only hides rows — it
+             never unchecks, and OK still saves from the full Available* masters. -->
         <Expander Grid.Row="13" Grid.ColumnSpan="2"
                   Header="Filters (regions / themes / fractal type / quality)"
                   Margin="0,12,0,0"
+                  HorizontalAlignment="Stretch"
+                  HorizontalContentAlignment="Stretch"
                   IsExpanded="False">
-            <StackPanel Spacing="6" Margin="0,6,0,0">
-                <TextBlock Text="Included Regions  (unchecked all = all eligible)"
-                           Foreground="#B4DCB4" FontWeight="Bold" />
-                <ListBox ItemsSource="{Binding AvailableRegions}"
-                         MaxHeight="140"
-                         SelectionMode="Multiple">
-                    <ListBox.ItemTemplate>
-                        <DataTemplate>
-                            <CheckBox Content="{Binding Name}"
-                                      IsChecked="{Binding IsChecked, Mode=TwoWay}" />
-                        </DataTemplate>
-                    </ListBox.ItemTemplate>
-                </ListBox>
+            <StackPanel Spacing="6" Margin="0,6,0,0" HorizontalAlignment="Stretch">
 
-                <TextBlock Text="Included Color Themes" Foreground="#B4DCB4" FontWeight="Bold" Margin="0,6,0,0" />
-                <ListBox ItemsSource="{Binding AvailableThemes}"
-                         MaxHeight="140"
-                         SelectionMode="Multiple">
-                    <ListBox.ItemTemplate>
-                        <DataTemplate>
-                            <CheckBox Content="{Binding Name}"
-                                      IsChecked="{Binding IsChecked, Mode=TwoWay}" />
-                        </DataTemplate>
-                    </ListBox.ItemTemplate>
-                </ListBox>
+                <Expander Header="Included Regions  (unchecked all = all eligible)"
+                          HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch"
+                          IsExpanded="True">
+                    <StackPanel Spacing="4" Margin="0,4,0,0" HorizontalAlignment="Stretch">
+                        <TextBox Text="{Binding RegionFilterText}"
+                                 PlaceholderText="Search regions…"
+                                 HorizontalAlignment="Stretch" />
+                        <ListBox ItemsSource="{Binding FilteredRegions}"
+                                 MaxHeight="180" HorizontalAlignment="Stretch"
+                                 SelectionMode="Multiple">
+                            <ListBox.ItemTemplate>
+                                <DataTemplate>
+                                    <CheckBox Content="{Binding Name}"
+                                              IsChecked="{Binding IsChecked, Mode=TwoWay}" />
+                                </DataTemplate>
+                            </ListBox.ItemTemplate>
+                        </ListBox>
+                    </StackPanel>
+                </Expander>
 
-                <TextBlock Text="Restrict by Fractal Type" Foreground="#B4DCB4" FontWeight="Bold" Margin="0,6,0,0" />
-                <ListBox ItemsSource="{Binding AvailableFractalTypes}"
-                         MaxHeight="120"
-                         SelectionMode="Multiple">
-                    <ListBox.ItemTemplate>
-                        <DataTemplate>
-                            <CheckBox Content="{Binding Name}"
-                                      IsChecked="{Binding IsChecked, Mode=TwoWay}" />
-                        </DataTemplate>
-                    </ListBox.ItemTemplate>
-                </ListBox>
+                <Expander Header="Included Color Themes"
+                          HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch"
+                          IsExpanded="True">
+                    <StackPanel Spacing="4" Margin="0,4,0,0" HorizontalAlignment="Stretch">
+                        <TextBox Text="{Binding ThemeFilterText}"
+                                 PlaceholderText="Search themes…"
+                                 HorizontalAlignment="Stretch" />
+                        <ListBox ItemsSource="{Binding FilteredThemes}"
+                                 MaxHeight="180" HorizontalAlignment="Stretch"
+                                 SelectionMode="Multiple">
+                            <ListBox.ItemTemplate>
+                                <DataTemplate>
+                                    <CheckBox Content="{Binding Name}"
+                                              IsChecked="{Binding IsChecked, Mode=TwoWay}" />
+                                </DataTemplate>
+                            </ListBox.ItemTemplate>
+                        </ListBox>
+                    </StackPanel>
+                </Expander>
 
-                <TextBlock Text="Restrict by Quality" Foreground="#B4DCB4" FontWeight="Bold" Margin="0,6,0,0" />
-                <ListBox ItemsSource="{Binding AvailableQualityPresets}"
-                         MaxHeight="100"
-                         SelectionMode="Multiple">
-                    <ListBox.ItemTemplate>
-                        <DataTemplate>
-                            <CheckBox Content="{Binding Name}"
-                                      IsChecked="{Binding IsChecked, Mode=TwoWay}" />
-                        </DataTemplate>
-                    </ListBox.ItemTemplate>
-                </ListBox>
+                <Expander Header="Restrict by Fractal Type"
+                          HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch"
+                          IsExpanded="True">
+                    <StackPanel Spacing="4" Margin="0,4,0,0" HorizontalAlignment="Stretch">
+                        <TextBox Text="{Binding FractalTypeFilterText}"
+                                 PlaceholderText="Search fractal types…"
+                                 HorizontalAlignment="Stretch" />
+                        <ListBox ItemsSource="{Binding FilteredFractalTypes}"
+                                 MaxHeight="160" HorizontalAlignment="Stretch"
+                                 SelectionMode="Multiple">
+                            <ListBox.ItemTemplate>
+                                <DataTemplate>
+                                    <CheckBox Content="{Binding Name}"
+                                              IsChecked="{Binding IsChecked, Mode=TwoWay}" />
+                                </DataTemplate>
+                            </ListBox.ItemTemplate>
+                        </ListBox>
+                    </StackPanel>
+                </Expander>
+
+                <Expander Header="Restrict by Quality"
+                          HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch"
+                          IsExpanded="True">
+                    <StackPanel Spacing="4" Margin="0,4,0,0" HorizontalAlignment="Stretch">
+                        <TextBox Text="{Binding QualityFilterText}"
+                                 PlaceholderText="Search quality presets…"
+                                 HorizontalAlignment="Stretch" />
+                        <ListBox ItemsSource="{Binding FilteredQualityPresets}"
+                                 MaxHeight="140" HorizontalAlignment="Stretch"
+                                 SelectionMode="Multiple">
+                            <ListBox.ItemTemplate>
+                                <DataTemplate>
+                                    <CheckBox Content="{Binding Name}"
+                                              IsChecked="{Binding IsChecked, Mode=TwoWay}" />
+                                </DataTemplate>
+                            </ListBox.ItemTemplate>
+                        </ListBox>
+                    </StackPanel>
+                </Expander>
             </StackPanel>
         </Expander>
 
@@ -253,6 +290,8 @@
         <Expander Grid.Row="14" Grid.ColumnSpan="2"
                   Header="Adaptive Sweep"
                   Margin="0,8,0,0"
+                  HorizontalAlignment="Stretch"
+                  HorizontalContentAlignment="Stretch"
                   IsExpanded="False">
             <StackPanel Spacing="6" Margin="0,6,0,0">
                 <CheckBox Content="Enable per-leg Adaptive sweep"
@@ -311,6 +350,8 @@
         <Expander Grid.Row="15" Grid.ColumnSpan="2"
                   Header="Post-FX snapshot"
                   Margin="0,8,0,0"
+                  HorizontalAlignment="Stretch"
+                  HorizontalContentAlignment="Stretch"
                   IsExpanded="False">
             <StackPanel Spacing="6" Margin="0,6,0,0">
                 <DockPanel LastChildFill="False">
@@ -361,6 +402,8 @@
         <Expander Grid.Row="16" Grid.ColumnSpan="2"
                   Header="Animations"
                   Margin="0,8,0,0"
+                  HorizontalAlignment="Stretch"
+                  HorizontalContentAlignment="Stretch"
                   IsExpanded="{Binding AnimationsExpanded}">
             <StackPanel Spacing="6" Margin="0,6,0,0">
                 <CheckBox Content="Enable animations on this slideshow"

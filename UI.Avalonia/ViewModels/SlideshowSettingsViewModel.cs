@@ -232,6 +232,77 @@ public sealed class SlideshowSettingsViewModel : ViewModelBase
     /// <summary>Available animations for the include-list (Animation type).</summary>
     public ObservableCollection<CheckableItem> AvailableAnimations { get; } = new();
 
+    // ── Filters expander text-search (issue #51) ─────────────────────────────
+    // Each Filters list has its own name-search box. The Filtered* views are what
+    // the ListBoxes bind to; the Available* masters keep the full set + checked
+    // state, so typing in a box only hides rows — it never unchecks anything, and
+    // OK still saves from the masters. Search is case-insensitive substring.
+
+    /// <summary>Name-filtered view of <see cref="AvailableRegions"/>.</summary>
+    public ObservableCollection<CheckableItem> FilteredRegions { get; } = new();
+    /// <summary>Name-filtered view of <see cref="AvailableThemes"/>.</summary>
+    public ObservableCollection<CheckableItem> FilteredThemes { get; } = new();
+    /// <summary>Name-filtered view of <see cref="AvailableFractalTypes"/>.</summary>
+    public ObservableCollection<CheckableItem> FilteredFractalTypes { get; } = new();
+    /// <summary>Name-filtered view of <see cref="AvailableQualityPresets"/>.</summary>
+    public ObservableCollection<CheckableItem> FilteredQualityPresets { get; } = new();
+
+    private string _regionFilterText = string.Empty;
+    public string RegionFilterText
+    {
+        get => _regionFilterText;
+        set { this.RaiseAndSetIfChanged(ref _regionFilterText, value ?? string.Empty); RebuildFilteredView(AvailableRegions, FilteredRegions, _regionFilterText); }
+    }
+
+    private string _themeFilterText = string.Empty;
+    public string ThemeFilterText
+    {
+        get => _themeFilterText;
+        set { this.RaiseAndSetIfChanged(ref _themeFilterText, value ?? string.Empty); RebuildFilteredView(AvailableThemes, FilteredThemes, _themeFilterText); }
+    }
+
+    private string _fractalTypeFilterText = string.Empty;
+    public string FractalTypeFilterText
+    {
+        get => _fractalTypeFilterText;
+        set { this.RaiseAndSetIfChanged(ref _fractalTypeFilterText, value ?? string.Empty); RebuildFilteredView(AvailableFractalTypes, FilteredFractalTypes, _fractalTypeFilterText); }
+    }
+
+    private string _qualityFilterText = string.Empty;
+    public string QualityFilterText
+    {
+        get => _qualityFilterText;
+        set { this.RaiseAndSetIfChanged(ref _qualityFilterText, value ?? string.Empty); RebuildFilteredView(AvailableQualityPresets, FilteredQualityPresets, _qualityFilterText); }
+    }
+
+    // Rebuild a Filtered* view from its master by case-insensitive name substring.
+    // Shares the master CheckableItem instances so IsChecked stays bound to the
+    // authoritative item the OK handler reads.
+    private static void RebuildFilteredView(
+        ObservableCollection<CheckableItem> master,
+        ObservableCollection<CheckableItem> view,
+        string filter)
+    {
+        view.Clear();
+        string f = (filter ?? string.Empty).Trim();
+        foreach (var item in master)
+        {
+            if (f.Length > 0 &&
+                item.Name.IndexOf(f, StringComparison.OrdinalIgnoreCase) < 0)
+                continue;
+            view.Add(item);
+        }
+    }
+
+    // Re-apply all four Filters searches — called after the masters are rebuilt.
+    private void RefreshFilteredViews()
+    {
+        RebuildFilteredView(AvailableRegions, FilteredRegions, _regionFilterText);
+        RebuildFilteredView(AvailableThemes, FilteredThemes, _themeFilterText);
+        RebuildFilteredView(AvailableFractalTypes, FilteredFractalTypes, _fractalTypeFilterText);
+        RebuildFilteredView(AvailableQualityPresets, FilteredQualityPresets, _qualityFilterText);
+    }
+
     /// <summary>When true, an Animation slideshow ignores each region's
     /// attached animation and draws a random type-compatible library
     /// animation instead (Animation Roadmap Phase 4).</summary>
@@ -295,6 +366,9 @@ public sealed class SlideshowSettingsViewModel : ViewModelBase
         if (animationNames != null)
             foreach (var a in animationNames)
                 AvailableAnimations.Add(new CheckableItem(a, _working.IncludedAnimations.Contains(a)) { Owner = this });
+
+        // Seed the Filters search views from the freshly built masters (#51).
+        RefreshFilteredViews();
     }
 
     internal void OnFilterItemChanged() => MarkDirty();

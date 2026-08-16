@@ -9,7 +9,10 @@
         <Border Classes="group">
             <StackPanel Spacing="6">
                 <TextBlock Classes="section" Text="Region Navigation" />
-                <ComboBox ItemsSource="{Binding Menu.RegionNames}"
+                <!-- Right-click ("Edit region…" + filter-by-fractal-type) is wired
+                     in code-behind to match the toolbar Region combo (issue #51). -->
+                <ComboBox x:Name="RegionCombo"
+                          ItemsSource="{Binding Menu.RegionNames}"
                           SelectedItem="{Binding Menu.SelectedRegion}"
                           HorizontalAlignment="Stretch" Margin="0,4,0,0" />
                 <UniformGrid Columns="4">
