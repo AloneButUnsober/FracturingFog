@@ -102,6 +102,39 @@ public class RandomTileReliefTests
                     > CenterWindowDistinct(flatRelief.ColorBuffer, 160, 160));
     }
 
+    [Theory]
+    [InlineData(RandomTileShape.Square)]
+    [InlineData(RandomTileShape.Triangle)]
+    public void Polygon_SDF_Cap_Peaks_Interior_And_Tapers_To_Edges(RandomTileShape shape)
+    {
+        // #336 — shape-correct SDF cap: height domes to ~1 at the incentre and
+        // tapers to 0 along the whole boundary. The sqrt profile rises steeply,
+        // so the sub-0.3 rim is a thin band — assert it exists (a real taper)
+        // plus the interior peak, which together characterise a cap (vs a flat
+        // fill, which would have no interior peak and no graded rim).
+        var calc = new RandomTileCalculator(160, 160)
+        {
+            CenterX = 0, CenterY = 0, Zoom = 1.0,
+            FractalParameters = new FractalParameters
+            {
+                RandomTileSeed = 3, RandomTileCount = 1500,
+                RandomTileSizeExponent = 1.4, RandomTileShape = shape,
+            },
+        };
+        calc.Calculate();
+
+        float max = 0f; int painted = 0, low = 0;
+        foreach (float h in calc.SmoothBuffer)
+        {
+            if (h <= 0f) continue;
+            painted++;
+            if (h > max) max = h;
+            if (h < 0.3f) low++;
+        }
+        Assert.True(max > 0.9f, $"cap never peaks interior (max={max})");
+        Assert.True(low > painted / 40, $"no graded edge taper ({low}/{painted}) — not a shape cap");
+    }
+
     [Fact]
     public void HeightField_Drives_Hillshade_Relief_Pipeline()
     {

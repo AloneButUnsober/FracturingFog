@@ -279,40 +279,33 @@ public sealed class RandomTileCalculator : IFractalCalculator, IHeightFieldSourc
 
         double r2 = sr * sr;
 
-        // Shape mask. Circle stays byte-identical to the P1 disk (inside ⇔
-        // dd ≤ r²). Square/Triangle are inscribed in the circumradius and tested
-        // in the tile-local frame (rotate the pixel offset by −Angle). All shapes
-        // share the SAME radial dome height + normal, so the polygon reads as a
-        // rounded prism and the relief / 3D / volumetric path is unchanged.
         RandomTileShape shape = FractalParameters.RandomTileShape;
-        double ca = Math.Cos(-t.Angle), sa = Math.Sin(-t.Angle);
-        double halfSq = sr * 0.70710678118654752; // 1/√2 — square inscribed in circumradius
 
-        bool Inside(double dx, double dy)
+        // ── Circle — radial sphere-cap dome (byte-identical to P1/P2). ──
+        if (shape == RandomTileShape.Circle)
         {
-            switch (shape)
+            if (_relief <= 0.0)
             {
-                case RandomTileShape.Square:
+                uint col0 = (uint)ColorMap.Map(tt, 0f, ColorMap.MaxIterations);
+                for (int py = y0; py <= y1; py++)
                 {
-                    double lx = dx * ca - dy * sa;
-                    double ly = dx * sa + dy * ca;
-                    return Math.Abs(lx) <= halfSq && Math.Abs(ly) <= halfSq;
+                    double dy = py - sy;
+                    int row = py * Width;
+                    for (int px = x0; px <= x1; px++)
+                    {
+                        double dx = px - sx;
+                        double dd = dx * dx + dy * dy;
+                        if (dd <= r2)
+                        {
+                            ColorBuffer[row + px] = col0;
+                            SmoothBuffer[row + px] = (float)Math.Sqrt(1.0 - dd / r2);
+                        }
+                    }
                 }
-                case RandomTileShape.Triangle:
-                {
-                    double lx = dx * ca - dy * sa;
-                    double ly = dx * sa + dy * ca;
-                    return InsideTriangle(lx, ly, sr);
-                }
-                default:
-                    return dx * dx + dy * dy <= r2;
+                return;
             }
-        }
 
-        if (_relief <= 0.0)
-        {
-            // Flat fast path — one colour per shape.
-            uint col = (uint)ColorMap.Map(tt, 0f, ColorMap.MaxIterations);
+            double invSr = sr > 1e-9 ? 1.0 / sr : 0.0;
             for (int py = y0; py <= y1; py++)
             {
                 double dy = py - sy;
@@ -320,20 +313,68 @@ public sealed class RandomTileCalculator : IFractalCalculator, IHeightFieldSourc
                 for (int px = x0; px <= x1; px++)
                 {
                     double dx = px - sx;
-                    if (!Inside(dx, dy)) continue;
                     double dd = dx * dx + dy * dy;
-                    ColorBuffer[row + px] = col;
-                    SmoothBuffer[row + px] = (float)Math.Sqrt(Math.Max(0.0, 1.0 - dd / r2));
+                    if (dd > r2) continue;
+                    float nx = (float)(_relief * dx * invSr);
+                    float ny = (float)(-_relief * dy * invSr);
+                    ColorBuffer[row + px] =
+                        (uint)ColorMap.Map(tt, 0f, ColorMap.MaxIterations, nx, ny);
+                    SmoothBuffer[row + px] = (float)Math.Sqrt(1.0 - dd / r2);
                 }
             }
             return;
         }
 
-        // Lit sphere-imposter path — each shape is a dome. In-plane normal grows
-        // from centre (flat, facing viewer) to rim (grazing): (u, v) = (dx, dy)
-        // / sr, scaled by relief. ny negated for the complex-plane y-up
-        // convention the 3D themes expect.
-        double invSr = sr > 1e-9 ? 1.0 / sr : 0.0;
+        // ── Square / Triangle — shape-correct SDF cap (#336). ──
+        // Test in the tile-local frame (rotate the pixel offset by −Angle). Height
+        // is a dome over the normalised distance-to-nearest-edge (peak at the
+        // incentre, 0 at the boundary) — NOT the circle's radial dome — so corners
+        // no longer sink to zero. The in-plane normal is the nearest edge's OUTWARD
+        // normal (rotated back to screen), tilting downslope toward that edge and
+        // growing to the rim — the polygon analogue of the circle rim normal.
+        const double C30 = 0.86602540378443865; // cos30 = √3/2
+        double cosA = Math.Cos(t.Angle), sinA = Math.Sin(t.Angle);
+        double halfSq = sr * 0.70710678118654752; // 1/√2 — square inscribed in circumradius
+        double rInTri = 0.5 * sr;                  // equilateral inradius = R/2
+
+        // (h, sox, soy) for a pixel offset, or false when outside the shape.
+        bool CapPoint(double dx, double dy, out float h, out double sox, out double soy)
+        {
+            h = 0f; sox = 0; soy = 0;
+            double lx = dx * cosA + dy * sinA;      // screen → local (rotate −Angle)
+            double ly = -dx * sinA + dy * cosA;
+            double dEdge, rIn, enx, eny;
+
+            if (shape == RandomTileShape.Square)
+            {
+                double ax = Math.Abs(lx), ay = Math.Abs(ly);
+                if (ax > halfSq || ay > halfSq) return false;
+                rIn = halfSq;
+                if (halfSq - ax <= halfSq - ay) { dEdge = halfSq - ax; enx = lx >= 0 ? 1 : -1; eny = 0; }
+                else { dEdge = halfSq - ay; enx = 0; eny = ly >= 0 ? 1 : -1; }
+            }
+            else // Triangle — upward equilateral, circumradius sr, edges' outward
+            {    // normals at 270° / 30° / 150°, each an inradius from the centre.
+                double d0 = rInTri + ly;                    // bottom  n = (0,−1)
+                double d1 = rInTri - (C30 * lx + 0.5 * ly); // right   n = (C30, 0.5)
+                double d2 = rInTri - (-C30 * lx + 0.5 * ly);// left    n = (−C30, 0.5)
+                if (d0 < 0 || d1 < 0 || d2 < 0) return false;
+                rIn = rInTri;
+                dEdge = d0; enx = 0; eny = -1;
+                if (d1 < dEdge) { dEdge = d1; enx = C30; eny = 0.5; }
+                if (d2 < dEdge) { dEdge = d2; enx = -C30; eny = 0.5; }
+            }
+
+            double dNorm = dEdge / rIn;
+            if (dNorm > 1.0) dNorm = 1.0; else if (dNorm < 0.0) dNorm = 0.0;
+            h = (float)Math.Sqrt(dNorm * (2.0 - dNorm));    // dome: 0 at edge, 1 at incentre
+            double mag = _relief * (1.0 - dNorm);           // rim-growing, like the circle
+            sox = mag * (enx * cosA - eny * sinA);          // local → screen (rotate +Angle)
+            soy = mag * (enx * sinA + eny * cosA);
+            return true;
+        }
+
+        uint flatCol = _relief <= 0.0 ? (uint)ColorMap.Map(tt, 0f, ColorMap.MaxIterations) : 0u;
         for (int py = y0; py <= y1; py++)
         {
             double dy = py - sy;
@@ -341,33 +382,12 @@ public sealed class RandomTileCalculator : IFractalCalculator, IHeightFieldSourc
             for (int px = x0; px <= x1; px++)
             {
                 double dx = px - sx;
-                if (!Inside(dx, dy)) continue;
-                double dd = dx * dx + dy * dy;
-                float nx = (float)(_relief * dx * invSr);
-                float ny = (float)(-_relief * dy * invSr);
-                ColorBuffer[row + px] =
-                    (uint)ColorMap.Map(tt, 0f, ColorMap.MaxIterations, nx, ny);
-                SmoothBuffer[row + px] = (float)Math.Sqrt(Math.Max(0.0, 1.0 - dd / r2));
+                if (!CapPoint(dx, dy, out float h, out double sox, out double soy)) continue;
+                ColorBuffer[row + px] = _relief <= 0.0
+                    ? flatCol
+                    : (uint)ColorMap.Map(tt, 0f, ColorMap.MaxIterations, (float)sox, (float)-soy);
+                SmoothBuffer[row + px] = h;
             }
         }
-    }
-
-    // Point-in-equilateral-triangle (upward, circumradius R, centred at origin).
-    // Vertices at 90° / 210° / 330°. Inside ⇔ the point is on the same side of
-    // all three edges (all cross products share sign).
-    private static bool InsideTriangle(double px, double py, double r)
-    {
-        const double C30 = 0.86602540378443865; // cos30 = √3/2
-        double v0x = 0.0,        v0y = r;
-        double v1x = -C30 * r,   v1y = -0.5 * r;
-        double v2x =  C30 * r,   v2y = -0.5 * r;
-
-        double d0 = (v1x - v0x) * (py - v0y) - (v1y - v0y) * (px - v0x);
-        double d1 = (v2x - v1x) * (py - v1y) - (v2y - v1y) * (px - v1x);
-        double d2 = (v0x - v2x) * (py - v2y) - (v0y - v2y) * (px - v2x);
-
-        bool hasNeg = d0 < 0 || d1 < 0 || d2 < 0;
-        bool hasPos = d0 > 0 || d1 > 0 || d2 > 0;
-        return !(hasNeg && hasPos);
     }
 }
