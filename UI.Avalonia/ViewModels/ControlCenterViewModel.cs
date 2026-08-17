@@ -247,9 +247,18 @@ public sealed class ControlCenterViewModel : ViewModelBase
             InteriorAlpha = fp?.InteriorAlpha ?? 255,   // #363 — now emitted as a flag
             Parameters  = fp,
 
+            // Relief core knobs (#363 — Tier-1). Emitted when relief is on.
+            ReliefEnabled        = fp?.Relief2DEnabled ?? false,
+            ReliefRaymarch       = fp?.Relief2DRaymarch ?? false,
+            ReliefHeight         = fp?.Relief2DHeightScale ?? 1.0,
+            ReliefStrength       = fp?.Relief2DStrength ?? 1.0,
+            ReliefLightAzimuth   = fp?.Relief2DLightAzimuthDeg ?? 135.0,
+            ReliefLightElevation = fp?.Relief2DLightElevationDeg ?? 30.0,
+            ReliefShadow         = fp?.Relief2DShadowStrength ?? 0.6,
+            ReliefAdvancedActive = ReliefUsesBeyondCore(fp),
+
             // Fidelity-gap inputs (#362). These live fx have no 2D batch flag.
             ThemeIsUnsaved      = string.IsNullOrWhiteSpace(main.SelectedTheme),
-            ReliefEnabled       = fp?.Relief2DEnabled ?? false,
             StereoActive        = fp != null && fp.Lighting.StereoMode != FracturingFog.Rendering.Lighting.StereoMode.Off,
             DomainWarpActive    = fp?.DomainWarpEnabled ?? false,   // #363 — now emitted as flags
             DomainWarpStrength  = fp?.DomainWarpStrength ?? 0.0,
@@ -261,6 +270,25 @@ public sealed class ControlCenterViewModel : ViewModelBase
         CommandGapWarning = report.HasGaps
             ? "Not represented (rendered output will differ): " + string.Join("; ", report.Gaps)
             : "";
+    }
+
+    /// <summary>True when relief is on and uses a beyond-Tier-1 knob the batch
+    /// flags don't emit (raymarch camera moved from default, or isolate on).
+    /// Drives the narrow relief fidelity gap (#363).</summary>
+    private static bool ReliefUsesBeyondCore(FracturingFog.Models.FractalParameters? fp)
+    {
+        if (fp == null || !fp.Relief2DEnabled) return false;
+        if (fp.Relief2DIsolate) return true;
+        // Raymarch camera framing is not emitted by the Tier-1 flags.
+        if (fp.Relief2DRaymarch)
+        {
+            if (fp.Relief2DCameraOrthographic) return true;
+            if (fp.Relief2DCameraAzimuthDeg   != 0.0)  return true;
+            if (fp.Relief2DCameraElevationDeg != 45.0) return true;
+            if (fp.Relief2DCameraFovDeg       != 50.0) return true;
+            if (fp.Relief2DCameraZoom         != 1.0)  return true;
+        }
+        return false;
     }
 
     private void CopyCommand()

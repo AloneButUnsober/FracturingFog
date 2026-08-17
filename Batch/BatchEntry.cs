@@ -215,6 +215,15 @@ namespace FracturingFog.Batch
             Console.WriteLine("                              (default); below 255 the interior turns translucent");
             Console.WriteLine("                              over the theme's interior background. Mandelbrot 2D only.");
             Console.WriteLine();
+            Console.WriteLine("2D relief (heightfield shading; any relief flag implies --relief):");
+            Console.WriteLine("  --relief                    Enable the 2D heightfield relief post-pass.");
+            Console.WriteLine("  --relief-raymarch           Use the oblique raymarch path (vs default emboss).");
+            Console.WriteLine("  --relief-height F           Height exaggeration (>0). Default 1.0.");
+            Console.WriteLine("  --relief-strength F         Blend of relief vs flat colour 0..1. Default 1.0.");
+            Console.WriteLine("  --relief-light-azimuth F    Light azimuth degrees 0..360. Default 135.");
+            Console.WriteLine("  --relief-light-elevation F  Light elevation degrees -90..90. Default 30.");
+            Console.WriteLine("  --relief-shadow F           Shadow strength 0..1. Default 0.6.");
+            Console.WriteLine();
             Console.WriteLine("Remote rendering (uses a saved FFClient connection + render preset):");
             Console.WriteLine("  --remote                    Route this batch through a remote FracturingFog server");
             Console.WriteLine("  --connection NAME           Saved client-connection name (required with --remote)");

@@ -230,18 +230,96 @@ namespace FracturingFog.Server.Tests
         }
 
         [Fact]
-        public void DetectGaps_FlagsReliefAndStereo()
+        public void DetectGaps_FlagsStereoOnly()
         {
             var report = BatchCommandBuilder.BuildWithReport(new BatchCommandSnapshot
             {
-                ReliefEnabled = true,
                 StereoActive = true,
             });
 
             Assert.True(report.HasGaps);
-            Assert.Equal(2, report.Gaps.Count);
-            Assert.Contains(report.Gaps, g => g.Contains("relief", System.StringComparison.OrdinalIgnoreCase));
+            Assert.Single(report.Gaps);
             Assert.Contains(report.Gaps, g => g.Contains("SBS"));
+        }
+
+        // #363 — core relief is emitted, not a blanket gap.
+        [Fact]
+        public void Relief_CoreEmittedAndNotAGap()
+        {
+            var report = BatchCommandBuilder.BuildWithReport(new BatchCommandSnapshot
+            {
+                ReliefEnabled = true,
+                ReliefHeight = 2.5,
+                ReliefLightAzimuth = 90.0,
+                ReliefShadow = 0.8,
+            });
+            Assert.Contains("--relief", report.Command);
+            Assert.Contains("--relief-height 2.5", report.Command);
+            Assert.Contains("--relief-light-azimuth 90", report.Command);
+            Assert.Contains("--relief-shadow 0.8", report.Command);
+            Assert.Empty(report.Gaps);
+        }
+
+        [Fact]
+        public void Relief_DefaultsOmitKnobsButEmitMaster()
+        {
+            var cmd = BatchCommandBuilder.Build(new BatchCommandSnapshot { ReliefEnabled = true });
+            Assert.Contains("--relief", cmd);
+            Assert.DoesNotContain("--relief-height", cmd);
+            Assert.DoesNotContain("--relief-strength", cmd);
+        }
+
+        [Fact]
+        public void Relief_AdvancedIsANarrowGap()
+        {
+            var report = BatchCommandBuilder.BuildWithReport(new BatchCommandSnapshot
+            {
+                ReliefEnabled = true,
+                ReliefRaymarch = true,
+                ReliefAdvancedActive = true,   // camera moved / isolate on
+            });
+            Assert.Contains("--relief-raymarch", report.Command);
+            Assert.Contains(report.Gaps, g => g.Contains("advanced", System.StringComparison.OrdinalIgnoreCase));
+        }
+
+        [Fact]
+        public void Relief_RoundTripsThroughBatchOptions()
+        {
+            var snap = new BatchCommandSnapshot
+            {
+                Fractal = FractalType.Mandelbrot,
+                CenterX = -0.5, CenterY = 0, Zoom = 1,
+                ReliefEnabled = true,
+                ReliefRaymarch = true,
+                ReliefHeight = 3.0,
+                ReliefStrength = 0.75,
+                ReliefLightAzimuth = 210.0,
+                ReliefLightElevation = 55.0,
+                ReliefShadow = 0.4,
+            };
+            var argv = Tokenize(BatchCommandBuilder.Build(snap));
+            for (int i = 0; i < argv.Length; i++)
+                if (argv[i] == "<OUTPUT.png>") argv[i] = "out.png";
+
+            Assert.True(BatchOptions.TryParse(argv, startIndex: 2, out var opts, out var err), err);
+            Assert.True(opts.Relief);
+            Assert.True(opts.ReliefRaymarch);
+            Assert.Equal(3.0, opts.ReliefHeight!.Value, 6);
+            Assert.Equal(0.75, opts.ReliefStrength!.Value, 6);
+            Assert.Equal(210.0, opts.ReliefLightAzimuth!.Value, 6);
+            Assert.Equal(55.0, opts.ReliefLightElevation!.Value, 6);
+            Assert.Equal(0.4, opts.ReliefShadow!.Value, 6);
+        }
+
+        [Fact]
+        public void Relief_StrengthOutOfRangeRejected()
+        {
+            // Builder won't emit this, but the parser must guard it directly.
+            string[] argv = { "FracturingFog", "--batch", "--fractal", "Mandelbrot",
+                "--x", "-0.5", "--y", "0", "--zoom", "1", "--relief-strength", "2.5",
+                "--out", "out.png" };
+            Assert.False(BatchOptions.TryParse(argv, startIndex: 2, out _, out var err));
+            Assert.Contains("relief-strength", err);
         }
 
         // #363 — domain-warp is now a flag, not a gap.

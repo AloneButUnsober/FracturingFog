@@ -82,8 +82,26 @@ namespace FracturingFog.Cli
         // else) but the UI warns that these will not survive the round trip.
 
         /// <summary>2D relief / height-field shading is active
-        /// (FractalParameters.Relief2DEnabled). No batch flag (#363).</summary>
+        /// (FractalParameters.Relief2DEnabled). Emits <c>--relief</c> + core
+        /// knobs (#363).</summary>
         public bool ReliefEnabled { get; init; }
+
+        /// <summary>Relief uses the oblique raymarch path (Relief2DRaymarch).
+        /// Emits <c>--relief-raymarch</c>.</summary>
+        public bool ReliefRaymarch { get; init; }
+
+        // Relief core knobs. Defaults mirror FractalParameters; emitted only when
+        // relief is on and the value deviates from its default.
+        public double ReliefHeight { get; init; } = 1.0;
+        public double ReliefStrength { get; init; } = 1.0;
+        public double ReliefLightAzimuth { get; init; } = 135.0;
+        public double ReliefLightElevation { get; init; } = 30.0;
+        public double ReliefShadow { get; init; } = 0.6;
+
+        /// <summary>Relief is on AND uses a beyond-core knob the Tier-1 flags do
+        /// not emit (raymarch camera moved from default, or isolate on). Kept as
+        /// a narrow fidelity gap — core relief IS reproduced (#363).</summary>
+        public bool ReliefAdvancedActive { get; init; }
 
         /// <summary>Stereo / SBS output is on (Lighting.StereoMode != Off).
         /// No batch flag (#363).</summary>
@@ -193,6 +211,19 @@ namespace FracturingFog.Cli
                 { parts.Add(BatchFlags.DomainWarpFrequency); parts.Add(Num(snap.DomainWarpFrequency)); }
             }
 
+            // 2D relief (any fractal the poster renders relief for). Master flag
+            // plus core knobs when they deviate from their defaults.
+            if (snap.ReliefEnabled)
+            {
+                parts.Add(BatchFlags.Relief);
+                if (snap.ReliefRaymarch) parts.Add(BatchFlags.ReliefRaymarch);
+                if (snap.ReliefHeight != 1.0)          { parts.Add(BatchFlags.ReliefHeight);         parts.Add(Num(snap.ReliefHeight)); }
+                if (snap.ReliefStrength != 1.0)        { parts.Add(BatchFlags.ReliefStrength);       parts.Add(Num(snap.ReliefStrength)); }
+                if (snap.ReliefLightAzimuth != 135.0)  { parts.Add(BatchFlags.ReliefLightAzimuth);   parts.Add(Num(snap.ReliefLightAzimuth)); }
+                if (snap.ReliefLightElevation != 30.0) { parts.Add(BatchFlags.ReliefLightElevation); parts.Add(Num(snap.ReliefLightElevation)); }
+                if (snap.ReliefShadow != 0.6)          { parts.Add(BatchFlags.ReliefShadow);         parts.Add(Num(snap.ReliefShadow)); }
+            }
+
             // Fractal-specific parameters that have batch flags. Emitted only for
             // the matching fractal type so unrelated defaults never clutter.
             AppendFractalParams(parts, snap);
@@ -211,8 +242,8 @@ namespace FracturingFog.Cli
             var gaps = new List<string>();
             if (snap.ThemeIsUnsaved)
                 gaps.Add("Custom/unsaved theme (save it first so the command can reference it by name; falls back to HSV)");
-            if (snap.ReliefEnabled)
-                gaps.Add("2D relief / height-field shading");
+            if (snap.ReliefAdvancedActive)
+                gaps.Add("Relief advanced settings (raymarch camera / isolate) — core relief IS emitted");
             if (snap.StereoActive)
                 gaps.Add("Stereo / side-by-side (SBS) output");
             return gaps;

@@ -59,6 +59,16 @@ namespace FracturingFog.Batch
         public const string DomainWarp          = "--domain-warp";
         public const string DomainWarpStrength  = "--domain-warp-strength";
         public const string DomainWarpFrequency = "--domain-warp-frequency";
+
+        // 2D heightfield relief — Tier-1 core knobs (#363). Any relief flag
+        // implies relief on. Raymarch camera + isolate knobs are a follow-up.
+        public const string Relief               = "--relief";
+        public const string ReliefHeight         = "--relief-height";
+        public const string ReliefStrength       = "--relief-strength";
+        public const string ReliefLightAzimuth   = "--relief-light-azimuth";
+        public const string ReliefLightElevation = "--relief-light-elevation";
+        public const string ReliefShadow         = "--relief-shadow";
+        public const string ReliefRaymarch       = "--relief-raymarch";
     }
 
     /// <summary>Default values shared between the parser (what it initialises an
