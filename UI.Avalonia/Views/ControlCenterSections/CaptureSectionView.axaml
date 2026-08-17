@@ -47,10 +47,11 @@
                         <NumericUpDown Value="{Binding CommandHeight, Mode=TwoWay}" Minimum="1" Maximum="34560" Increment="16" FormatString="0" />
                     </StackPanel>
                 </UniformGrid>
-                <UniformGrid Columns="2">
-                    <Button Classes="action neutral" Content="Generate" Command="{Binding GenerateCommandCommand}" HorizontalAlignment="Stretch" HorizontalContentAlignment="Center" Margin="0,0,4,0" ToolTip.Tip="Build the --batch command from the current fractal, coordinates, theme, quality, size and post-FX" />
-                    <Button Classes="action neutral" Content="Copy" Command="{Binding CopyCommandCommand}" HorizontalAlignment="Stretch" HorizontalContentAlignment="Center" ToolTip.Tip="Copy the generated command to the clipboard (generates it first if empty)" />
-                </UniformGrid>
+                <Grid ColumnDefinitions="*,*,Auto">
+                    <Button Grid.Column="0" Classes="action neutral" Content="Generate" Command="{Binding GenerateCommandCommand}" HorizontalAlignment="Stretch" HorizontalContentAlignment="Center" Margin="0,0,4,0" ToolTip.Tip="Build the --batch command from the current fractal, coordinates, theme, quality, size and post-FX" />
+                    <Button Grid.Column="1" Classes="action neutral" Content="Copy" Command="{Binding CopyCommandCommand}" HorizontalAlignment="Stretch" HorizontalContentAlignment="Center" ToolTip.Tip="Copy the generated command to the clipboard (generates it first if empty)" />
+                    <CheckBox Grid.Column="2" Content="Full exe path" IsChecked="{Binding UseFullExePath, Mode=TwoWay}" VerticalAlignment="Center" Margin="10,0,0,0" FontSize="11" ToolTip.Tip="Lead the command with the full path to the running FracturingFog executable instead of the bare name. Off = executable name only (default)." />
+                </Grid>
                 <TextBox Text="{Binding GeneratedCommand, Mode=OneWay}" IsReadOnly="True"
                          AcceptsReturn="True" TextWrapping="Wrap"
                          FontFamily="Consolas,Menlo,monospace" FontSize="11"
