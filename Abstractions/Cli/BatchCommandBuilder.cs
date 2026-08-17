@@ -2,25 +2,28 @@
 // SPDX-FileCopyrightText: 2026 Bradley Brown
 
 // Abstractions/Cli/BatchCommandBuilder.cs
-// #361 (slice of #64) — CLI Command Builder, MVP.
+// #361 / #362 (slices of #64) — CLI Command Builder.
 //
 // Turns a snapshot of the live 2D configuration into a copy/paste-ready
-// `--batch` command line. This is the *reverse* of Batch/BatchOptions.TryParse:
-// the flag names + default values here MUST stay in step with that parser.
-// #362 replaces this hand-kept pairing with a single shared flag-metadata
-// table consumed by both sides; until then, treat the two files as a couple.
+// `--batch` command line. This is the *reverse* of Batch/BatchOptions.TryParse;
+// both sides now share the flag names + defaults in Batch/BatchFlags.cs, so the
+// two cannot drift (#362). A parse-round-trip test in Server.Tests locks the
+// pairing.
 //
-// MVP scope (image / 2D poster path only): fractal, coordinates, iterations,
-// theme, quality, size, post-FX (brightness / contrast / adaptive) and the
-// fractal-specific parameters that already have batch flags. Fx families with
-// no batch flag (lighting / relief / volumetric / interior-alpha / acid / SBS)
-// are NOT represented here — #362 adds the gap-detection banner that warns the
-// user when the live config uses one of them.
+// #362 also adds FIDELITY GAP DETECTION: the live config carries fx that the
+// 2D batch path has no flag for (relief, interior-alpha, stereo/SBS, domain
+// warp, and unsaved themes with no name to reference). Emitting a command that
+// silently drops them would produce a different image than the screen — worse
+// than no command. BuildWithReport surfaces those gaps so the UI can warn.
+//
+// Fx that ARE carried by the theme (3D/PBR lighting via ColorThemeDef) are NOT
+// treated as gaps here: --theme reproduces them. Per-fx flags for the remaining
+// families are tracked in #363; as they land, the gap list shrinks.
 
 using System;
 using System.Collections.Generic;
 using System.Globalization;
-using System.Text;
+using FracturingFog.Batch;
 using FracturingFog.Models;
 
 namespace FracturingFog.Cli
@@ -37,20 +40,20 @@ namespace FracturingFog.Cli
         // Live authoritative coordinates. Emitted verbatim (round-trippable) so
         // the command reproduces exactly what is on screen — even when a region
         // was loaded and then panned/zoomed away from its saved coordinates.
-        public double CenterX { get; init; } = FractalViewStateDefaults.CenterX;
-        public double CenterY { get; init; } = FractalViewStateDefaults.CenterY;
-        public double Zoom { get; init; } = FractalViewStateDefaults.Zoom;
+        public double CenterX { get; init; } = BatchDefaults.CenterX;
+        public double CenterY { get; init; } = BatchDefaults.CenterY;
+        public double Zoom { get; init; } = BatchDefaults.Zoom;
 
         /// <summary>Effective iteration count in use for the current render.
         /// Emitted as <c>--iter</c> whenever &gt; 0 so the poster does not drift
         /// with the quality preset's iteration formula.</summary>
         public int Iterations { get; init; }
 
-        public string ThemeName { get; init; } = "HSV";
-        public string QualityName { get; init; } = "Standard";
+        public string ThemeName { get; init; } = BatchDefaults.ThemeName;
+        public string QualityName { get; init; } = BatchDefaults.QualityName;
 
-        public int Width { get; init; } = 1920;
-        public int Height { get; init; } = 1080;
+        public int Width { get; init; } = BatchDefaults.Width;
+        public int Height { get; init; } = BatchDefaults.Height;
 
         // Post-FX (parity with the interactive sliders). 0 = neutral / omit.
         public int Brightness { get; init; }
@@ -68,22 +71,58 @@ namespace FracturingFog.Cli
         /// <summary>Placeholder token emitted for <c>--out</c>. The builder never
         /// invents a real path — the user substitutes one.</summary>
         public string OutputPlaceholder { get; init; } = "<OUTPUT.png>";
+
+        // ── Fidelity-gap inputs (#362) ────────────────────────────────────────
+        // Live fx state the 2D batch path cannot express. When set, the builder
+        // records a gap; the command is still emitted (it reproduces everything
+        // else) but the UI warns that these will not survive the round trip.
+
+        /// <summary>2D relief / height-field shading is active
+        /// (FractalParameters.Relief2DEnabled). No batch flag (#363).</summary>
+        public bool ReliefEnabled { get; init; }
+
+        /// <summary>Interior alpha is below opaque (InteriorAlpha &lt; 255).
+        /// No batch flag (#363).</summary>
+        public bool InteriorAlphaActive { get; init; }
+
+        /// <summary>Stereo / SBS output is on (Lighting.StereoMode != Off).
+        /// No batch flag (#363).</summary>
+        public bool StereoActive { get; init; }
+
+        /// <summary>Domain-warp post-fx is on (DomainWarpEnabled).
+        /// No batch flag (#363).</summary>
+        public bool DomainWarpActive { get; init; }
+
+        /// <summary>The active theme is a custom/edited palette with no saved
+        /// name to reference. The command cannot emit <c>--theme</c> for it, so
+        /// the poster falls back to the batch default (HSV).</summary>
+        public bool ThemeIsUnsaved { get; init; }
     }
 
-    /// <summary>Default view-state constants mirrored here so the snapshot has
-    /// sensible defaults without depending on the ViewState assembly's layout.</summary>
-    internal static class FractalViewStateDefaults
+    /// <summary>Result of <see cref="BatchCommandBuilder.BuildWithReport"/>:
+    /// the command string plus any fidelity gaps the caller should surface.</summary>
+    public sealed class CommandBuildReport
     {
-        public const double CenterX = -0.5;
-        public const double CenterY = 0.0;
-        public const double Zoom = 0.13;
+        public string Command { get; }
+        public IReadOnlyList<string> Gaps { get; }
+        public bool HasGaps => Gaps.Count > 0;
+
+        public CommandBuildReport(string command, IReadOnlyList<string> gaps)
+        {
+            Command = command;
+            Gaps = gaps;
+        }
     }
 
     public static class BatchCommandBuilder
     {
         /// <summary>Serialise <paramref name="snap"/> to a single-line
-        /// <c>--batch</c> command string suitable for copy/paste.</summary>
-        public static string Build(BatchCommandSnapshot snap)
+        /// <c>--batch</c> command string (no gap report).</summary>
+        public static string Build(BatchCommandSnapshot snap) => BuildWithReport(snap).Command;
+
+        /// <summary>Serialise <paramref name="snap"/> and collect any fidelity
+        /// gaps (live fx the 2D batch path cannot reproduce).</summary>
+        public static CommandBuildReport BuildWithReport(BatchCommandSnapshot snap)
         {
             if (snap == null) throw new ArgumentNullException(nameof(snap));
 
@@ -94,53 +133,73 @@ namespace FracturingFog.Cli
             };
 
             // Fractal type — always explicit so the command is self-describing.
-            parts.Add("--fractal");
+            parts.Add(BatchFlags.Fractal);
             parts.Add(Token(snap.Fractal.ToString()));
 
             // Live coordinates + iterations — always emitted for exact fidelity.
-            parts.Add("--x");    parts.Add(Num(snap.CenterX));
-            parts.Add("--y");    parts.Add(Num(snap.CenterY));
-            parts.Add("--zoom"); parts.Add(Num(snap.Zoom));
+            parts.Add(BatchFlags.X);    parts.Add(Num(snap.CenterX));
+            parts.Add(BatchFlags.Y);    parts.Add(Num(snap.CenterY));
+            parts.Add(BatchFlags.Zoom); parts.Add(Num(snap.Zoom));
             if (snap.Iterations > 0)
             {
-                parts.Add("--iter");
+                parts.Add(BatchFlags.Iter);
                 parts.Add(snap.Iterations.ToString(CultureInfo.InvariantCulture));
             }
 
-            // Theme — emit unless it is the batch default (HSV).
-            if (!string.IsNullOrWhiteSpace(snap.ThemeName) &&
-                !string.Equals(snap.ThemeName, "HSV", StringComparison.OrdinalIgnoreCase))
+            // Theme — emit unless it is the batch default (HSV) or unsaved (no
+            // name to reference). An unsaved theme is recorded as a gap below.
+            if (!snap.ThemeIsUnsaved &&
+                !string.IsNullOrWhiteSpace(snap.ThemeName) &&
+                !string.Equals(snap.ThemeName, BatchDefaults.ThemeName, StringComparison.OrdinalIgnoreCase))
             {
-                parts.Add("--theme");
+                parts.Add(BatchFlags.Theme);
                 parts.Add(Token(snap.ThemeName));
             }
 
             // Quality — emit unless the batch default (Standard).
             if (!string.IsNullOrWhiteSpace(snap.QualityName) &&
-                !string.Equals(snap.QualityName, "Standard", StringComparison.OrdinalIgnoreCase))
+                !string.Equals(snap.QualityName, BatchDefaults.QualityName, StringComparison.OrdinalIgnoreCase))
             {
-                parts.Add("--quality");
+                parts.Add(BatchFlags.Quality);
                 parts.Add(Token(snap.QualityName));
             }
 
             // Output size — always explicit (deterministic poster dimensions).
-            parts.Add("--width");  parts.Add(snap.Width.ToString(CultureInfo.InvariantCulture));
-            parts.Add("--height"); parts.Add(snap.Height.ToString(CultureInfo.InvariantCulture));
+            parts.Add(BatchFlags.Width);  parts.Add(snap.Width.ToString(CultureInfo.InvariantCulture));
+            parts.Add(BatchFlags.Height); parts.Add(snap.Height.ToString(CultureInfo.InvariantCulture));
 
             // Post-FX — only when non-neutral.
-            if (snap.Brightness != 0)  { parts.Add("--brightness"); parts.Add(snap.Brightness.ToString(CultureInfo.InvariantCulture)); }
-            if (snap.Contrast != 0)    { parts.Add("--contrast");   parts.Add(snap.Contrast.ToString(CultureInfo.InvariantCulture)); }
-            if (snap.HistogramEq != 0) { parts.Add("--adaptive");   parts.Add(snap.HistogramEq.ToString(CultureInfo.InvariantCulture)); }
+            if (snap.Brightness != 0)  { parts.Add(BatchFlags.Brightness); parts.Add(snap.Brightness.ToString(CultureInfo.InvariantCulture)); }
+            if (snap.Contrast != 0)    { parts.Add(BatchFlags.Contrast);   parts.Add(snap.Contrast.ToString(CultureInfo.InvariantCulture)); }
+            if (snap.HistogramEq != 0) { parts.Add(BatchFlags.Adaptive);   parts.Add(snap.HistogramEq.ToString(CultureInfo.InvariantCulture)); }
 
             // Fractal-specific parameters that have batch flags. Emitted only for
             // the matching fractal type so unrelated defaults never clutter.
             AppendFractalParams(parts, snap);
 
             // Output path placeholder — always last, always a placeholder.
-            parts.Add("--out");
+            parts.Add(BatchFlags.Out);
             parts.Add(Token(snap.OutputPlaceholder));
 
-            return string.Join(" ", parts);
+            return new CommandBuildReport(string.Join(" ", parts), DetectGaps(snap));
+        }
+
+        /// <summary>List the live fx the emitted command cannot reproduce.
+        /// Empty when the 2D config is fully expressible.</summary>
+        public static IReadOnlyList<string> DetectGaps(BatchCommandSnapshot snap)
+        {
+            var gaps = new List<string>();
+            if (snap.ThemeIsUnsaved)
+                gaps.Add("Custom/unsaved theme (save it first so the command can reference it by name; falls back to HSV)");
+            if (snap.ReliefEnabled)
+                gaps.Add("2D relief / height-field shading");
+            if (snap.InteriorAlphaActive)
+                gaps.Add("Interior alpha (translucent in-set)");
+            if (snap.StereoActive)
+                gaps.Add("Stereo / side-by-side (SBS) output");
+            if (snap.DomainWarpActive)
+                gaps.Add("Domain-warp post-fx");
+            return gaps;
         }
 
         private static void AppendFractalParams(List<string> parts, BatchCommandSnapshot snap)
@@ -151,37 +210,37 @@ namespace FracturingFog.Cli
             switch (snap.Fractal)
             {
                 case FractalType.Multibrot:
-                    parts.Add("--multibrot-exp");
+                    parts.Add(BatchFlags.MultibrotExp);
                     parts.Add(p.MultibrotExponent.ToString(CultureInfo.InvariantCulture));
                     break;
 
                 case FractalType.Mandelbulb:
-                    parts.Add("--bulb-power");
+                    parts.Add(BatchFlags.BulbPower);
                     parts.Add(Num(p.BulbPower));
                     break;
 
                 case FractalType.LSystem:
-                    parts.Add("--lsystem-preset");
+                    parts.Add(BatchFlags.LSystemPreset);
                     parts.Add(Token(p.LSystemPresetName));
-                    parts.Add("--lsystem-depth");
+                    parts.Add(BatchFlags.LSystemDepth);
                     parts.Add(p.LSystemDepth.ToString(CultureInfo.InvariantCulture));
                     break;
 
                 case FractalType.Plasma:
-                    parts.Add("--plasma-roughness");
+                    parts.Add(BatchFlags.PlasmaRoughness);
                     parts.Add(Num(p.PlasmaRoughness));
-                    parts.Add("--plasma-seed");
+                    parts.Add(BatchFlags.PlasmaSeed);
                     parts.Add(p.PlasmaSeed.ToString(CultureInfo.InvariantCulture));
                     break;
 
                 case FractalType.Flame:
-                    parts.Add("--flame-preset");
+                    parts.Add(BatchFlags.FlamePreset);
                     parts.Add(Token(p.FlamePresetName));
-                    parts.Add("--flame-iter");
+                    parts.Add(BatchFlags.FlameIter);
                     parts.Add(p.FlameIterations.ToString(CultureInfo.InvariantCulture));
-                    parts.Add("--flame-gamma");
+                    parts.Add(BatchFlags.FlameGamma);
                     parts.Add(Num(p.FlameGamma));
-                    parts.Add("--flame-vibrancy");
+                    parts.Add(BatchFlags.FlameVibrancy);
                     parts.Add(Num(p.FlameVibrancy));
                     break;
             }
