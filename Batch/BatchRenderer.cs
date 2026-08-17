@@ -58,6 +58,13 @@ namespace FracturingFog.Batch
             if (opts.DomainWarp)                  fp.DomainWarpEnabled    = true;
             if (opts.DomainWarpStrength.HasValue) fp.DomainWarpStrength   = opts.DomainWarpStrength.Value;
             if (opts.DomainWarpFrequency.HasValue) fp.DomainWarpFrequency = opts.DomainWarpFrequency.Value;
+            if (opts.Relief)                      fp.Relief2DEnabled      = true;
+            if (opts.ReliefRaymarch)              fp.Relief2DRaymarch     = true;
+            if (opts.ReliefHeight.HasValue)       fp.Relief2DHeightScale  = opts.ReliefHeight.Value;
+            if (opts.ReliefStrength.HasValue)     fp.Relief2DStrength     = opts.ReliefStrength.Value;
+            if (opts.ReliefLightAzimuth.HasValue) fp.Relief2DLightAzimuthDeg   = opts.ReliefLightAzimuth.Value;
+            if (opts.ReliefLightElevation.HasValue) fp.Relief2DLightElevationDeg = opts.ReliefLightElevation.Value;
+            if (opts.ReliefShadow.HasValue)       fp.Relief2DShadowStrength = opts.ReliefShadow.Value;
 
             var (pfBrightness, pfContrast, pfAdaptive) = ResolvePostFx(opts, null);
 

@@ -148,6 +148,16 @@ namespace FracturingFog.Batch
         public double? DomainWarpStrength { get; set; }
         public double? DomainWarpFrequency { get; set; }
 
+        // 2D heightfield relief — Tier-1 core (#363). Any relief flag sets
+        // Relief (enabled). Raymarch camera + isolate knobs are a follow-up.
+        public bool Relief { get; set; }
+        public bool ReliefRaymarch { get; set; }
+        public double? ReliefHeight { get; set; }          // > 0
+        public double? ReliefStrength { get; set; }        // 0..1
+        public double? ReliefLightAzimuth { get; set; }    // 0..360
+        public double? ReliefLightElevation { get; set; }  // -90..90
+        public double? ReliefShadow { get; set; }          // 0..1
+
         // ── Phase 3 remote rendering ──────────────────────────────────────
         /// <summary>True when --remote was passed; flips dispatch into the
         /// FFClientConnection path. Both --connection and --render become
@@ -483,6 +493,45 @@ namespace FracturingFog.Batch
                         opts.DomainWarp = true;
                         break;
 
+                    case BatchFlags.Relief:
+                        opts.Relief = true;
+                        break;
+
+                    case BatchFlags.ReliefRaymarch:
+                        opts.ReliefRaymarch = true;
+                        opts.Relief = true;
+                        break;
+
+                    case BatchFlags.ReliefHeight:
+                        if (!NextDouble(args, ref i, a, out double rhv, out error)) return false;
+                        opts.ReliefHeight = rhv;
+                        opts.Relief = true;
+                        break;
+
+                    case BatchFlags.ReliefStrength:
+                        if (!NextDouble(args, ref i, a, out double rsv, out error)) return false;
+                        opts.ReliefStrength = rsv;
+                        opts.Relief = true;
+                        break;
+
+                    case BatchFlags.ReliefLightAzimuth:
+                        if (!NextDouble(args, ref i, a, out double rlav, out error)) return false;
+                        opts.ReliefLightAzimuth = rlav;
+                        opts.Relief = true;
+                        break;
+
+                    case BatchFlags.ReliefLightElevation:
+                        if (!NextDouble(args, ref i, a, out double rlev, out error)) return false;
+                        opts.ReliefLightElevation = rlev;
+                        opts.Relief = true;
+                        break;
+
+                    case BatchFlags.ReliefShadow:
+                        if (!NextDouble(args, ref i, a, out double rshv, out error)) return false;
+                        opts.ReliefShadow = rshv;
+                        opts.Relief = true;
+                        break;
+
                     case "--remote":
                         opts.Remote = true;
                         break;
@@ -557,6 +606,16 @@ namespace FracturingFog.Batch
                 { error = "--interior-alpha must be 0..255."; return false; }
             if (opts.AcidPattern is < 0 or >= FractalParameters.AcidWarpPatternCount)
                 { error = $"--acid-pattern must be 0..{FractalParameters.AcidWarpPatternCount - 1}."; return false; }
+            if (opts.ReliefHeight is <= 0)
+                { error = "--relief-height must be > 0."; return false; }
+            if (opts.ReliefStrength is < 0 or > 1)
+                { error = "--relief-strength must be 0..1."; return false; }
+            if (opts.ReliefShadow is < 0 or > 1)
+                { error = "--relief-shadow must be 0..1."; return false; }
+            if (opts.ReliefLightAzimuth is < 0 or > 360)
+                { error = "--relief-light-azimuth must be 0..360."; return false; }
+            if (opts.ReliefLightElevation is < -90 or > 90)
+                { error = "--relief-light-elevation must be -90..90."; return false; }
 
             if (opts.Mode == BatchMode.Slideshow)
             {
