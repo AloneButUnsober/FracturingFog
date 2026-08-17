@@ -98,10 +98,24 @@ namespace FracturingFog.Cli
         public double ReliefLightElevation { get; init; } = 30.0;
         public double ReliefShadow { get; init; } = 0.6;
 
-        /// <summary>Relief is on AND uses a beyond-core knob the Tier-1 flags do
-        /// not emit (raymarch camera moved from default, or isolate on). Kept as
-        /// a narrow fidelity gap — core relief IS reproduced (#363).</summary>
-        public bool ReliefAdvancedActive { get; init; }
+        /// <summary>Emboss absolute-height mode (Relief2DAbsolute).</summary>
+        public bool ReliefAbsolute { get; init; }
+
+        // Relief raymarch camera. Emitted only when relief + raymarch are on and
+        // the value deviates from its default. Defaults mirror FractalParameters.
+        public double ReliefCameraAzimuth { get; init; } = 0.0;
+        public double ReliefCameraElevation { get; init; } = 45.0;
+        public double ReliefCameraFov { get; init; } = 50.0;
+        public double ReliefCameraZoom { get; init; } = 1.0;
+        public bool ReliefCameraOrtho { get; init; }
+
+        // Relief isolate masking. Emitted when relief + isolate are on.
+        public bool ReliefIsolate { get; init; }
+        public bool ReliefIsolateByDetail { get; init; } = true;
+        public double ReliefIsolateThreshold { get; init; } = 0.6;
+        public bool ReliefIsolateByColor { get; init; }
+        public string ReliefIsolateColors { get; init; } = "";
+        public double ReliefIsolateTolerance { get; init; } = 0.12;
 
         /// <summary>Stereo / SBS output is on (Lighting.StereoMode != Off).
         /// No batch flag (#363).</summary>
@@ -217,11 +231,33 @@ namespace FracturingFog.Cli
             {
                 parts.Add(BatchFlags.Relief);
                 if (snap.ReliefRaymarch) parts.Add(BatchFlags.ReliefRaymarch);
+                if (snap.ReliefAbsolute) parts.Add(BatchFlags.ReliefAbsolute);
                 if (snap.ReliefHeight != 1.0)          { parts.Add(BatchFlags.ReliefHeight);         parts.Add(Num(snap.ReliefHeight)); }
                 if (snap.ReliefStrength != 1.0)        { parts.Add(BatchFlags.ReliefStrength);       parts.Add(Num(snap.ReliefStrength)); }
                 if (snap.ReliefLightAzimuth != 135.0)  { parts.Add(BatchFlags.ReliefLightAzimuth);   parts.Add(Num(snap.ReliefLightAzimuth)); }
                 if (snap.ReliefLightElevation != 30.0) { parts.Add(BatchFlags.ReliefLightElevation); parts.Add(Num(snap.ReliefLightElevation)); }
                 if (snap.ReliefShadow != 0.6)          { parts.Add(BatchFlags.ReliefShadow);         parts.Add(Num(snap.ReliefShadow)); }
+
+                // Raymarch camera framing — only relevant on the raymarch path.
+                if (snap.ReliefRaymarch)
+                {
+                    if (snap.ReliefCameraOrtho) parts.Add(BatchFlags.ReliefCameraOrtho);
+                    if (snap.ReliefCameraAzimuth != 0.0)    { parts.Add(BatchFlags.ReliefCameraAzimuth);   parts.Add(Num(snap.ReliefCameraAzimuth)); }
+                    if (snap.ReliefCameraElevation != 45.0) { parts.Add(BatchFlags.ReliefCameraElevation); parts.Add(Num(snap.ReliefCameraElevation)); }
+                    if (snap.ReliefCameraFov != 50.0)       { parts.Add(BatchFlags.ReliefCameraFov);       parts.Add(Num(snap.ReliefCameraFov)); }
+                    if (snap.ReliefCameraZoom != 1.0)       { parts.Add(BatchFlags.ReliefCameraZoom);      parts.Add(Num(snap.ReliefCameraZoom)); }
+                }
+
+                // Isolate masking.
+                if (snap.ReliefIsolate)
+                {
+                    parts.Add(BatchFlags.ReliefIsolate);
+                    if (!snap.ReliefIsolateByDetail) parts.Add(BatchFlags.ReliefIsolateNoDetail);
+                    if (snap.ReliefIsolateThreshold != 0.6) { parts.Add(BatchFlags.ReliefIsolateThreshold); parts.Add(Num(snap.ReliefIsolateThreshold)); }
+                    if (snap.ReliefIsolateByColor) parts.Add(BatchFlags.ReliefIsolateByColor);
+                    if (!string.IsNullOrEmpty(snap.ReliefIsolateColors)) { parts.Add(BatchFlags.ReliefIsolateColors); parts.Add(Token(snap.ReliefIsolateColors)); }
+                    if (snap.ReliefIsolateTolerance != 0.12) { parts.Add(BatchFlags.ReliefIsolateTolerance); parts.Add(Num(snap.ReliefIsolateTolerance)); }
+                }
             }
 
             // Fractal-specific parameters that have batch flags. Emitted only for
@@ -242,8 +278,6 @@ namespace FracturingFog.Cli
             var gaps = new List<string>();
             if (snap.ThemeIsUnsaved)
                 gaps.Add("Custom/unsaved theme (save it first so the command can reference it by name; falls back to HSV)");
-            if (snap.ReliefAdvancedActive)
-                gaps.Add("Relief advanced settings (raymarch camera / isolate) — core relief IS emitted");
             if (snap.StereoActive)
                 gaps.Add("Stereo / side-by-side (SBS) output");
             return gaps;

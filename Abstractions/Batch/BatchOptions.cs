@@ -157,6 +157,23 @@ namespace FracturingFog.Batch
         public double? ReliefLightAzimuth { get; set; }    // 0..360
         public double? ReliefLightElevation { get; set; }  // -90..90
         public double? ReliefShadow { get; set; }          // 0..1
+        public bool ReliefAbsolute { get; set; }           // emboss abs-height mode
+
+        // Relief raymarch camera (#363 follow-up). Any camera flag implies relief.
+        public double? ReliefCameraAzimuth { get; set; }   // 0..360
+        public double? ReliefCameraElevation { get; set; } // -90..90
+        public double? ReliefCameraFov { get; set; }       // 1..179
+        public double? ReliefCameraZoom { get; set; }      // > 0
+        public bool ReliefCameraOrtho { get; set; }
+
+        // Relief isolate masking (#363 follow-up). Any isolate flag implies
+        // relief + isolate on. NoDetail turns OFF the default detail isolation.
+        public bool ReliefIsolate { get; set; }
+        public bool ReliefIsolateNoDetail { get; set; }
+        public double? ReliefIsolateThreshold { get; set; }  // 0..1
+        public bool ReliefIsolateByColor { get; set; }
+        public string? ReliefIsolateColors { get; set; }     // CSV hex/rgb
+        public double? ReliefIsolateTolerance { get; set; }  // 0..1
 
         // ── Phase 3 remote rendering ──────────────────────────────────────
         /// <summary>True when --remote was passed; flips dispatch into the
@@ -532,6 +549,79 @@ namespace FracturingFog.Batch
                         opts.Relief = true;
                         break;
 
+                    case BatchFlags.ReliefAbsolute:
+                        opts.ReliefAbsolute = true;
+                        opts.Relief = true;
+                        break;
+
+                    case BatchFlags.ReliefCameraAzimuth:
+                        if (!NextDouble(args, ref i, a, out double rcav, out error)) return false;
+                        opts.ReliefCameraAzimuth = rcav;
+                        opts.Relief = true;
+                        break;
+
+                    case BatchFlags.ReliefCameraElevation:
+                        if (!NextDouble(args, ref i, a, out double rcev, out error)) return false;
+                        opts.ReliefCameraElevation = rcev;
+                        opts.Relief = true;
+                        break;
+
+                    case BatchFlags.ReliefCameraFov:
+                        if (!NextDouble(args, ref i, a, out double rcfv, out error)) return false;
+                        opts.ReliefCameraFov = rcfv;
+                        opts.Relief = true;
+                        break;
+
+                    case BatchFlags.ReliefCameraZoom:
+                        if (!NextDouble(args, ref i, a, out double rczv, out error)) return false;
+                        opts.ReliefCameraZoom = rczv;
+                        opts.Relief = true;
+                        break;
+
+                    case BatchFlags.ReliefCameraOrtho:
+                        opts.ReliefCameraOrtho = true;
+                        opts.Relief = true;
+                        break;
+
+                    case BatchFlags.ReliefIsolate:
+                        opts.ReliefIsolate = true;
+                        opts.Relief = true;
+                        break;
+
+                    case BatchFlags.ReliefIsolateNoDetail:
+                        opts.ReliefIsolateNoDetail = true;
+                        opts.ReliefIsolate = true;
+                        opts.Relief = true;
+                        break;
+
+                    case BatchFlags.ReliefIsolateThreshold:
+                        if (!NextDouble(args, ref i, a, out double ritv, out error)) return false;
+                        opts.ReliefIsolateThreshold = ritv;
+                        opts.ReliefIsolate = true;
+                        opts.Relief = true;
+                        break;
+
+                    case BatchFlags.ReliefIsolateByColor:
+                        opts.ReliefIsolateByColor = true;
+                        opts.ReliefIsolate = true;
+                        opts.Relief = true;
+                        break;
+
+                    case BatchFlags.ReliefIsolateColors:
+                        if (!Next(args, ref i, a, out string ricv, out error)) return false;
+                        opts.ReliefIsolateColors = ricv;
+                        opts.ReliefIsolateByColor = true;
+                        opts.ReliefIsolate = true;
+                        opts.Relief = true;
+                        break;
+
+                    case BatchFlags.ReliefIsolateTolerance:
+                        if (!NextDouble(args, ref i, a, out double ricotv, out error)) return false;
+                        opts.ReliefIsolateTolerance = ricotv;
+                        opts.ReliefIsolate = true;
+                        opts.Relief = true;
+                        break;
+
                     case "--remote":
                         opts.Remote = true;
                         break;
@@ -616,6 +706,18 @@ namespace FracturingFog.Batch
                 { error = "--relief-light-azimuth must be 0..360."; return false; }
             if (opts.ReliefLightElevation is < -90 or > 90)
                 { error = "--relief-light-elevation must be -90..90."; return false; }
+            if (opts.ReliefCameraAzimuth is < 0 or > 360)
+                { error = "--relief-camera-azimuth must be 0..360."; return false; }
+            if (opts.ReliefCameraElevation is < -90 or > 90)
+                { error = "--relief-camera-elevation must be -90..90."; return false; }
+            if (opts.ReliefCameraFov is < 1 or > 179)
+                { error = "--relief-camera-fov must be 1..179."; return false; }
+            if (opts.ReliefCameraZoom is <= 0)
+                { error = "--relief-camera-zoom must be > 0."; return false; }
+            if (opts.ReliefIsolateThreshold is < 0 or > 1)
+                { error = "--relief-isolate-threshold must be 0..1."; return false; }
+            if (opts.ReliefIsolateTolerance is < 0 or > 1)
+                { error = "--relief-isolate-tolerance must be 0..1."; return false; }
 
             if (opts.Mode == BatchMode.Slideshow)
             {

@@ -65,6 +65,18 @@ namespace FracturingFog.Batch
             if (opts.ReliefLightAzimuth.HasValue) fp.Relief2DLightAzimuthDeg   = opts.ReliefLightAzimuth.Value;
             if (opts.ReliefLightElevation.HasValue) fp.Relief2DLightElevationDeg = opts.ReliefLightElevation.Value;
             if (opts.ReliefShadow.HasValue)       fp.Relief2DShadowStrength = opts.ReliefShadow.Value;
+            if (opts.ReliefAbsolute)              fp.Relief2DAbsolute      = true;
+            if (opts.ReliefCameraAzimuth.HasValue)   fp.Relief2DCameraAzimuthDeg   = opts.ReliefCameraAzimuth.Value;
+            if (opts.ReliefCameraElevation.HasValue) fp.Relief2DCameraElevationDeg = opts.ReliefCameraElevation.Value;
+            if (opts.ReliefCameraFov.HasValue)    fp.Relief2DCameraFovDeg  = opts.ReliefCameraFov.Value;
+            if (opts.ReliefCameraZoom.HasValue)   fp.Relief2DCameraZoom    = opts.ReliefCameraZoom.Value;
+            if (opts.ReliefCameraOrtho)           fp.Relief2DCameraOrthographic = true;
+            if (opts.ReliefIsolate)               fp.Relief2DIsolate       = true;
+            if (opts.ReliefIsolateNoDetail)       fp.Relief2DIsolateByDetail = false;
+            if (opts.ReliefIsolateThreshold.HasValue) fp.Relief2DDetailThreshold = opts.ReliefIsolateThreshold.Value;
+            if (opts.ReliefIsolateByColor)        fp.Relief2DIsolateByColor = true;
+            if (!string.IsNullOrEmpty(opts.ReliefIsolateColors)) fp.Relief2DDropColorsCsv = opts.ReliefIsolateColors!;
+            if (opts.ReliefIsolateTolerance.HasValue) fp.Relief2DColorTolerance = opts.ReliefIsolateTolerance.Value;
 
             var (pfBrightness, pfContrast, pfAdaptive) = ResolvePostFx(opts, null);
 
