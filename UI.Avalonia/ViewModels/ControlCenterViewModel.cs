@@ -281,7 +281,18 @@ public sealed class ControlCenterViewModel : ViewModelBase
             ReliefLightAzimuth   = fp?.Relief2DLightAzimuthDeg ?? 135.0,
             ReliefLightElevation = fp?.Relief2DLightElevationDeg ?? 30.0,
             ReliefShadow         = fp?.Relief2DShadowStrength ?? 0.6,
-            ReliefAdvancedActive = ReliefUsesBeyondCore(fp),
+            ReliefAbsolute       = fp?.Relief2DAbsolute ?? false,
+            ReliefCameraAzimuth  = fp?.Relief2DCameraAzimuthDeg ?? 0.0,
+            ReliefCameraElevation = fp?.Relief2DCameraElevationDeg ?? 45.0,
+            ReliefCameraFov      = fp?.Relief2DCameraFovDeg ?? 50.0,
+            ReliefCameraZoom     = fp?.Relief2DCameraZoom ?? 1.0,
+            ReliefCameraOrtho    = fp?.Relief2DCameraOrthographic ?? false,
+            ReliefIsolate        = fp?.Relief2DIsolate ?? false,
+            ReliefIsolateByDetail = fp?.Relief2DIsolateByDetail ?? true,
+            ReliefIsolateThreshold = fp?.Relief2DDetailThreshold ?? 0.6,
+            ReliefIsolateByColor = fp?.Relief2DIsolateByColor ?? false,
+            ReliefIsolateColors  = fp?.Relief2DDropColorsCsv ?? "",
+            ReliefIsolateTolerance = fp?.Relief2DColorTolerance ?? 0.12,
 
             // Fidelity-gap inputs (#362). These live fx have no 2D batch flag.
             ThemeIsUnsaved      = string.IsNullOrWhiteSpace(main.SelectedTheme),
@@ -296,25 +307,6 @@ public sealed class ControlCenterViewModel : ViewModelBase
         CommandGapWarning = report.HasGaps
             ? "Not represented (rendered output will differ): " + string.Join("; ", report.Gaps)
             : "";
-    }
-
-    /// <summary>True when relief is on and uses a beyond-Tier-1 knob the batch
-    /// flags don't emit (raymarch camera moved from default, or isolate on).
-    /// Drives the narrow relief fidelity gap (#363).</summary>
-    private static bool ReliefUsesBeyondCore(FracturingFog.Models.FractalParameters? fp)
-    {
-        if (fp == null || !fp.Relief2DEnabled) return false;
-        if (fp.Relief2DIsolate) return true;
-        // Raymarch camera framing is not emitted by the Tier-1 flags.
-        if (fp.Relief2DRaymarch)
-        {
-            if (fp.Relief2DCameraOrthographic) return true;
-            if (fp.Relief2DCameraAzimuthDeg   != 0.0)  return true;
-            if (fp.Relief2DCameraElevationDeg != 45.0) return true;
-            if (fp.Relief2DCameraFovDeg       != 50.0) return true;
-            if (fp.Relief2DCameraZoom         != 1.0)  return true;
-        }
-        return false;
     }
 
     private void CopyCommand()

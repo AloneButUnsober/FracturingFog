@@ -279,17 +279,75 @@ namespace FracturingFog.Server.Tests
             Assert.DoesNotContain("--relief-strength", cmd);
         }
 
+        // #363 follow-up — camera + isolate now emitted; no relief gap remains.
         [Fact]
-        public void Relief_AdvancedIsANarrowGap()
+        public void Relief_CameraAndIsolate_NoGap()
         {
             var report = BatchCommandBuilder.BuildWithReport(new BatchCommandSnapshot
             {
                 ReliefEnabled = true,
                 ReliefRaymarch = true,
-                ReliefAdvancedActive = true,   // camera moved / isolate on
+                ReliefCameraAzimuth = 30.0,
+                ReliefCameraOrtho = true,
+                ReliefIsolate = true,
             });
-            Assert.Contains("--relief-raymarch", report.Command);
-            Assert.Contains(report.Gaps, g => g.Contains("advanced", System.StringComparison.OrdinalIgnoreCase));
+            Assert.Contains("--relief-camera-azimuth 30", report.Command);
+            Assert.Contains("--relief-camera-ortho", report.Command);
+            Assert.Contains("--relief-isolate", report.Command);
+            Assert.Empty(report.Gaps);
+        }
+
+        [Fact]
+        public void Relief_CameraOmittedWithoutRaymarch()
+        {
+            // Camera knobs are only meaningful on the raymarch path.
+            var cmd = BatchCommandBuilder.Build(new BatchCommandSnapshot
+            {
+                ReliefEnabled = true,
+                ReliefCameraAzimuth = 30.0,   // emboss path — not emitted
+            });
+            Assert.DoesNotContain("--relief-camera-azimuth", cmd);
+        }
+
+        [Fact]
+        public void Relief_CameraAndIsolate_RoundTripThroughBatchOptions()
+        {
+            var snap = new BatchCommandSnapshot
+            {
+                Fractal = FractalType.Mandelbrot,
+                CenterX = -0.5, CenterY = 0, Zoom = 1,
+                ReliefEnabled = true,
+                ReliefRaymarch = true,
+                ReliefAbsolute = true,
+                ReliefCameraAzimuth = 30.0,
+                ReliefCameraElevation = 60.0,
+                ReliefCameraFov = 40.0,
+                ReliefCameraZoom = 1.5,
+                ReliefCameraOrtho = true,
+                ReliefIsolate = true,
+                ReliefIsolateByDetail = false,
+                ReliefIsolateThreshold = 0.3,
+                ReliefIsolateByColor = true,
+                ReliefIsolateColors = "#000000,#ffffff",
+                ReliefIsolateTolerance = 0.2,
+            };
+            var argv = Tokenize(BatchCommandBuilder.Build(snap));
+            for (int i = 0; i < argv.Length; i++)
+                if (argv[i] == "<OUTPUT.png>") argv[i] = "out.png";
+
+            Assert.True(BatchOptions.TryParse(argv, startIndex: 2, out var opts, out var err), err);
+            Assert.True(opts.ReliefAbsolute);
+            Assert.Equal(30.0, opts.ReliefCameraAzimuth!.Value, 6);
+            Assert.Equal(60.0, opts.ReliefCameraElevation!.Value, 6);
+            Assert.Equal(40.0, opts.ReliefCameraFov!.Value, 6);
+            Assert.Equal(1.5, opts.ReliefCameraZoom!.Value, 6);
+            Assert.True(opts.ReliefCameraOrtho);
+            Assert.True(opts.ReliefIsolate);
+            Assert.True(opts.ReliefIsolateNoDetail);
+            Assert.Equal(0.3, opts.ReliefIsolateThreshold!.Value, 6);
+            Assert.True(opts.ReliefIsolateByColor);
+            Assert.Equal("#000000,#ffffff", opts.ReliefIsolateColors);
+            Assert.Equal(0.2, opts.ReliefIsolateTolerance!.Value, 6);
         }
 
         [Fact]

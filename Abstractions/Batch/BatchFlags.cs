@@ -69,6 +69,24 @@ namespace FracturingFog.Batch
         public const string ReliefLightElevation = "--relief-light-elevation";
         public const string ReliefShadow         = "--relief-shadow";
         public const string ReliefRaymarch       = "--relief-raymarch";
+        public const string ReliefAbsolute       = "--relief-absolute";
+
+        // Relief raymarch camera (#363 follow-up). Only meaningful with
+        // --relief-raymarch; all imply relief on.
+        public const string ReliefCameraAzimuth   = "--relief-camera-azimuth";
+        public const string ReliefCameraElevation = "--relief-camera-elevation";
+        public const string ReliefCameraFov       = "--relief-camera-fov";
+        public const string ReliefCameraZoom      = "--relief-camera-zoom";
+        public const string ReliefCameraOrtho     = "--relief-camera-ortho";
+
+        // Relief isolate masking (#363 follow-up). --relief-isolate turns it on;
+        // sub-knobs imply it on.
+        public const string ReliefIsolate          = "--relief-isolate";
+        public const string ReliefIsolateNoDetail  = "--relief-isolate-no-detail";
+        public const string ReliefIsolateThreshold = "--relief-isolate-threshold";
+        public const string ReliefIsolateByColor   = "--relief-isolate-by-color";
+        public const string ReliefIsolateColors    = "--relief-isolate-colors";
+        public const string ReliefIsolateTolerance = "--relief-isolate-tolerance";
     }
 
     /// <summary>Default values shared between the parser (what it initialises an
