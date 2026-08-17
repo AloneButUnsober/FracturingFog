@@ -35,6 +35,7 @@ namespace FracturingFog.Batch
         public const string Brightness     = "--brightness";
         public const string Contrast       = "--contrast";
         public const string Adaptive       = "--adaptive";
+        public const string InteriorAlpha  = "--interior-alpha";
 
         public const string MultibrotExp   = "--multibrot-exp";
         public const string BulbPower      = "--bulb-power";

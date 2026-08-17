@@ -230,22 +230,56 @@ namespace FracturingFog.Server.Tests
         }
 
         [Fact]
-        public void DetectGaps_FlagsReliefInteriorStereoAndWarp()
+        public void DetectGaps_FlagsReliefStereoAndWarp()
         {
             var report = BatchCommandBuilder.BuildWithReport(new BatchCommandSnapshot
             {
                 ReliefEnabled = true,
-                InteriorAlphaActive = true,
                 StereoActive = true,
                 DomainWarpActive = true,
             });
 
             Assert.True(report.HasGaps);
-            Assert.Equal(4, report.Gaps.Count);
+            Assert.Equal(3, report.Gaps.Count);
             Assert.Contains(report.Gaps, g => g.Contains("relief", System.StringComparison.OrdinalIgnoreCase));
-            Assert.Contains(report.Gaps, g => g.Contains("Interior alpha"));
             Assert.Contains(report.Gaps, g => g.Contains("SBS"));
             Assert.Contains(report.Gaps, g => g.Contains("Domain-warp"));
+        }
+
+        // #363 — interior alpha is now a real flag, not a gap.
+        [Fact]
+        public void InteriorAlpha_EmittedAndNotAGap()
+        {
+            var report = BatchCommandBuilder.BuildWithReport(new BatchCommandSnapshot
+            {
+                InteriorAlpha = 128,
+            });
+            Assert.Contains("--interior-alpha 128", report.Command);
+            Assert.DoesNotContain(report.Gaps, g => g.Contains("nterior"));
+        }
+
+        [Fact]
+        public void InteriorAlpha_OpaqueDefaultIsOmitted()
+        {
+            var cmd = BatchCommandBuilder.Build(new BatchCommandSnapshot { InteriorAlpha = 255 });
+            Assert.DoesNotContain("--interior-alpha", cmd);
+        }
+
+        [Fact]
+        public void InteriorAlpha_RoundTripsThroughBatchOptions()
+        {
+            var snap = new BatchCommandSnapshot
+            {
+                Fractal = FractalType.Mandelbrot,
+                CenterX = -0.5, CenterY = 0, Zoom = 1,
+                InteriorAlpha = 64,
+            };
+            var argv = Tokenize(BatchCommandBuilder.Build(snap));
+            for (int i = 0; i < argv.Length; i++)
+                if (argv[i] == "<OUTPUT.png>") argv[i] = "out.png";
+
+            Assert.True(BatchOptions.TryParse(argv, startIndex: 2, out var opts, out var err), err);
+            Assert.Equal(64, opts.InteriorAlpha);
         }
 
         [Fact]

@@ -60,6 +60,10 @@ namespace FracturingFog.Cli
         public int Contrast { get; init; }
         public int HistogramEq { get; init; }
 
+        /// <summary>Global interior alpha, 0..255 (#96). 255 = opaque (omit the
+        /// flag); below 255 emits <c>--interior-alpha N</c>.</summary>
+        public int InteriorAlpha { get; init; } = 255;
+
         /// <summary>Fractal-specific parameters. Only the fields with a matching
         /// batch flag are read, and only for the matching fractal type.</summary>
         public FractalParameters? Parameters { get; init; }
@@ -80,10 +84,6 @@ namespace FracturingFog.Cli
         /// <summary>2D relief / height-field shading is active
         /// (FractalParameters.Relief2DEnabled). No batch flag (#363).</summary>
         public bool ReliefEnabled { get; init; }
-
-        /// <summary>Interior alpha is below opaque (InteriorAlpha &lt; 255).
-        /// No batch flag (#363).</summary>
-        public bool InteriorAlphaActive { get; init; }
 
         /// <summary>Stereo / SBS output is on (Lighting.StereoMode != Off).
         /// No batch flag (#363).</summary>
@@ -172,6 +172,7 @@ namespace FracturingFog.Cli
             if (snap.Brightness != 0)  { parts.Add(BatchFlags.Brightness); parts.Add(snap.Brightness.ToString(CultureInfo.InvariantCulture)); }
             if (snap.Contrast != 0)    { parts.Add(BatchFlags.Contrast);   parts.Add(snap.Contrast.ToString(CultureInfo.InvariantCulture)); }
             if (snap.HistogramEq != 0) { parts.Add(BatchFlags.Adaptive);   parts.Add(snap.HistogramEq.ToString(CultureInfo.InvariantCulture)); }
+            if (snap.InteriorAlpha < 255) { parts.Add(BatchFlags.InteriorAlpha); parts.Add(snap.InteriorAlpha.ToString(CultureInfo.InvariantCulture)); }
 
             // Fractal-specific parameters that have batch flags. Emitted only for
             // the matching fractal type so unrelated defaults never clutter.
@@ -193,8 +194,6 @@ namespace FracturingFog.Cli
                 gaps.Add("Custom/unsaved theme (save it first so the command can reference it by name; falls back to HSV)");
             if (snap.ReliefEnabled)
                 gaps.Add("2D relief / height-field shading");
-            if (snap.InteriorAlphaActive)
-                gaps.Add("Interior alpha (translucent in-set)");
             if (snap.StereoActive)
                 gaps.Add("Stereo / side-by-side (SBS) output");
             if (snap.DomainWarpActive)
