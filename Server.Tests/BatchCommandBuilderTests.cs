@@ -47,6 +47,16 @@ namespace FracturingFog.Server.Tests
         }
 
         [Fact]
+        public void Build_FullExePathWithSpacesIsQuoted()
+        {
+            var cmd = BatchCommandBuilder.Build(new BatchCommandSnapshot
+            {
+                ExecutableName = @"C:\Program Files\FracturingFog\FracturingFog.exe",
+            });
+            Assert.StartsWith("\"C:\\Program Files\\FracturingFog\\FracturingFog.exe\" --batch", cmd);
+        }
+
+        [Fact]
         public void Build_OmitsDefaultThemeAndQuality()
         {
             var cmd = BatchCommandBuilder.Build(new BatchCommandSnapshot

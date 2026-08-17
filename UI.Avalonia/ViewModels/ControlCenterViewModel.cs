@@ -191,6 +191,31 @@ public sealed class ControlCenterViewModel : ViewModelBase
         set => this.RaiseAndSetIfChanged(ref _commandHeight, value < 1 ? 1 : value);
     }
 
+    private bool _useFullExePath;
+    /// <summary>When checked, lead the command with the full path to the running
+    /// FracturingFog executable instead of the bare "FracturingFog" name.
+    /// Default off. Toggling re-emits the command if one is already shown.</summary>
+    public bool UseFullExePath
+    {
+        get => _useFullExePath;
+        set
+        {
+            if (this.RaiseAndSetIfChangedReturnsChanged(ref _useFullExePath, value)
+                && GeneratedCommand.Length > 0)
+                GenerateCommand();   // keep the shown command in sync with the toggle
+        }
+    }
+
+    /// <summary>The command leader: bare "FracturingFog" by default, or the full
+    /// path to the running executable when <see cref="UseFullExePath"/> is on.
+    /// Falls back to the bare name when the process path is unavailable.</summary>
+    private string ResolveExecutableName()
+    {
+        if (!_useFullExePath) return "FracturingFog";
+        string? path = System.Environment.ProcessPath;
+        return string.IsNullOrWhiteSpace(path) ? "FracturingFog" : path;
+    }
+
     private string _generatedCommand = "";
     /// <summary>The last-generated command string, bound to a read-only field.</summary>
     public string GeneratedCommand
@@ -232,6 +257,7 @@ public sealed class ControlCenterViewModel : ViewModelBase
 
         var snap = new FracturingFog.Cli.BatchCommandSnapshot
         {
+            ExecutableName = ResolveExecutableName(),
             Fractal     = main.SelectedFractalType,
             CenterX     = vs.CenterX,
             CenterY     = vs.CenterY,
