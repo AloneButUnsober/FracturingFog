@@ -136,6 +136,18 @@ namespace FracturingFog.Batch
         public double? FlameGamma { get; set; }
         public double? FlameVibrancy { get; set; }
 
+        // Acid Warp static pattern knobs (#363). Requires --fractal AcidWarp.
+        public int? AcidPattern { get; set; }        // 0..19
+        public double? AcidFrequency { get; set; }
+        public double? AcidWarpStrength { get; set; }
+        public int? AcidSeed { get; set; }
+
+        // Domain-warp post-fx (#363). --domain-warp turns it on; the strength /
+        // frequency knobs tune it (and imply it on when supplied).
+        public bool DomainWarp { get; set; }
+        public double? DomainWarpStrength { get; set; }
+        public double? DomainWarpFrequency { get; set; }
+
         // ── Phase 3 remote rendering ──────────────────────────────────────
         /// <summary>True when --remote was passed; flips dispatch into the
         /// FFClientConnection path. Both --connection and --render become
@@ -435,6 +447,42 @@ namespace FracturingFog.Batch
                         opts.FlameVibrancy = fvv;
                         break;
 
+                    case BatchFlags.AcidPattern:
+                        if (!NextInt(args, ref i, a, out int apv, out error)) return false;
+                        opts.AcidPattern = apv;
+                        break;
+
+                    case BatchFlags.AcidFrequency:
+                        if (!NextDouble(args, ref i, a, out double afv, out error)) return false;
+                        opts.AcidFrequency = afv;
+                        break;
+
+                    case BatchFlags.AcidWarpStrength:
+                        if (!NextDouble(args, ref i, a, out double awv, out error)) return false;
+                        opts.AcidWarpStrength = awv;
+                        break;
+
+                    case BatchFlags.AcidSeed:
+                        if (!NextInt(args, ref i, a, out int asv, out error)) return false;
+                        opts.AcidSeed = asv;
+                        break;
+
+                    case BatchFlags.DomainWarp:
+                        opts.DomainWarp = true;
+                        break;
+
+                    case BatchFlags.DomainWarpStrength:
+                        if (!NextDouble(args, ref i, a, out double dwsv, out error)) return false;
+                        opts.DomainWarpStrength = dwsv;
+                        opts.DomainWarp = true;
+                        break;
+
+                    case BatchFlags.DomainWarpFrequency:
+                        if (!NextDouble(args, ref i, a, out double dwfv, out error)) return false;
+                        opts.DomainWarpFrequency = dwfv;
+                        opts.DomainWarp = true;
+                        break;
+
                     case "--remote":
                         opts.Remote = true;
                         break;
@@ -507,6 +555,8 @@ namespace FracturingFog.Batch
                 { error = "--adaptive must be 0..100."; return false; }
             if (opts.InteriorAlpha is < 0 or > 255)
                 { error = "--interior-alpha must be 0..255."; return false; }
+            if (opts.AcidPattern is < 0 or >= FractalParameters.AcidWarpPatternCount)
+                { error = $"--acid-pattern must be 0..{FractalParameters.AcidWarpPatternCount - 1}."; return false; }
 
             if (opts.Mode == BatchMode.Slideshow)
             {

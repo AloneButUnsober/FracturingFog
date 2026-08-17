@@ -47,6 +47,18 @@ namespace FracturingFog.Batch
         public const string FlameIter      = "--flame-iter";
         public const string FlameGamma     = "--flame-gamma";
         public const string FlameVibrancy  = "--flame-vibrancy";
+
+        // Acid Warp static pattern knobs (#363). Time-varying morph/flow/cycle
+        // are animation-only and have no still-poster flag.
+        public const string AcidPattern      = "--acid-pattern";
+        public const string AcidFrequency    = "--acid-frequency";
+        public const string AcidWarpStrength = "--acid-warp-strength";
+        public const string AcidSeed         = "--acid-seed";
+
+        // Domain-warp post-fx distortion (#363), applies to any fractal.
+        public const string DomainWarp          = "--domain-warp";
+        public const string DomainWarpStrength  = "--domain-warp-strength";
+        public const string DomainWarpFrequency = "--domain-warp-frequency";
     }
 
     /// <summary>Default values shared between the parser (what it initialises an

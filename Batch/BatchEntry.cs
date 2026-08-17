@@ -140,6 +140,14 @@ namespace FracturingFog.Batch
             Console.WriteLine("  --flame-iter N              Flame chaos-game sample count. Default 8000000.");
             Console.WriteLine("  --flame-gamma F             Flame tone-map gamma. Default 2.2.");
             Console.WriteLine("  --flame-vibrancy F          Flame highlight saturation 0..1. Default 0.8.");
+            Console.WriteLine("  --acid-pattern N            Acid Warp static pattern index 0..19. Requires");
+            Console.WriteLine("                              --fractal AcidWarp.");
+            Console.WriteLine("  --acid-frequency F          Acid Warp pattern frequency. Default 1.0.");
+            Console.WriteLine("  --acid-warp-strength F      Acid Warp spatial warp strength. Default 0 (none).");
+            Console.WriteLine("  --acid-seed N               Acid Warp PRNG seed. Default 12345.");
+            Console.WriteLine("  --domain-warp               Enable domain-warp post-fx distortion (any fractal).");
+            Console.WriteLine("  --domain-warp-strength F    Domain-warp strength (implies --domain-warp).");
+            Console.WriteLine("  --domain-warp-frequency F   Domain-warp frequency (implies --domain-warp). Default 1.0.");
             Console.WriteLine("  --out PATH, -o PATH         Output file (image) or folder (video) — required");
             Console.WriteLine("  --name NAME, -n NAME        Base filename (default derived from region/coords)");
             Console.WriteLine("  --verbose, -v               Print extra diagnostics");

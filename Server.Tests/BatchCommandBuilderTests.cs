@@ -230,20 +230,88 @@ namespace FracturingFog.Server.Tests
         }
 
         [Fact]
-        public void DetectGaps_FlagsReliefStereoAndWarp()
+        public void DetectGaps_FlagsReliefAndStereo()
         {
             var report = BatchCommandBuilder.BuildWithReport(new BatchCommandSnapshot
             {
                 ReliefEnabled = true,
                 StereoActive = true,
-                DomainWarpActive = true,
             });
 
             Assert.True(report.HasGaps);
-            Assert.Equal(3, report.Gaps.Count);
+            Assert.Equal(2, report.Gaps.Count);
             Assert.Contains(report.Gaps, g => g.Contains("relief", System.StringComparison.OrdinalIgnoreCase));
             Assert.Contains(report.Gaps, g => g.Contains("SBS"));
-            Assert.Contains(report.Gaps, g => g.Contains("Domain-warp"));
+        }
+
+        // #363 — domain-warp is now a flag, not a gap.
+        [Fact]
+        public void DomainWarp_EmittedAndNotAGap()
+        {
+            var report = BatchCommandBuilder.BuildWithReport(new BatchCommandSnapshot
+            {
+                DomainWarpActive = true,
+                DomainWarpStrength = 0.4,
+                DomainWarpFrequency = 2.0,
+            });
+            Assert.Contains("--domain-warp", report.Command);
+            Assert.Contains("--domain-warp-strength 0.4", report.Command);
+            Assert.Contains("--domain-warp-frequency 2", report.Command);
+            Assert.DoesNotContain(report.Gaps, g => g.Contains("warp", System.StringComparison.OrdinalIgnoreCase));
+        }
+
+        [Fact]
+        public void DomainWarp_OffOmitsAllDomainFlags()
+        {
+            var cmd = BatchCommandBuilder.Build(new BatchCommandSnapshot { DomainWarpActive = false });
+            Assert.DoesNotContain("--domain-warp", cmd);
+        }
+
+        [Fact]
+        public void AcidWarp_StaticParams_RoundTripThroughBatchOptions()
+        {
+            var snap = new BatchCommandSnapshot
+            {
+                Fractal = FractalType.AcidWarp,
+                CenterX = 0, CenterY = 0, Zoom = 1,
+                Parameters = new FractalParameters
+                {
+                    AcidWarpPattern = 7,
+                    AcidWarpFrequency = 1.5,
+                    AcidWarpWarpStrength = 0.3,
+                    AcidWarpSeed = 999,
+                },
+            };
+            var argv = Tokenize(BatchCommandBuilder.Build(snap));
+            for (int i = 0; i < argv.Length; i++)
+                if (argv[i] == "<OUTPUT.png>") argv[i] = "out.png";
+
+            Assert.True(BatchOptions.TryParse(argv, startIndex: 2, out var opts, out var err), err);
+            Assert.Equal(7, opts.AcidPattern);
+            Assert.Equal(1.5, opts.AcidFrequency!.Value, 6);
+            Assert.Equal(0.3, opts.AcidWarpStrength!.Value, 6);
+            Assert.Equal(999, opts.AcidSeed);
+        }
+
+        [Fact]
+        public void DomainWarp_RoundTripsThroughBatchOptions()
+        {
+            var snap = new BatchCommandSnapshot
+            {
+                Fractal = FractalType.Mandelbrot,
+                CenterX = -0.5, CenterY = 0, Zoom = 1,
+                DomainWarpActive = true,
+                DomainWarpStrength = 0.25,
+                DomainWarpFrequency = 3.0,
+            };
+            var argv = Tokenize(BatchCommandBuilder.Build(snap));
+            for (int i = 0; i < argv.Length; i++)
+                if (argv[i] == "<OUTPUT.png>") argv[i] = "out.png";
+
+            Assert.True(BatchOptions.TryParse(argv, startIndex: 2, out var opts, out var err), err);
+            Assert.True(opts.DomainWarp);
+            Assert.Equal(0.25, opts.DomainWarpStrength!.Value, 6);
+            Assert.Equal(3.0, opts.DomainWarpFrequency!.Value, 6);
         }
 
         // #363 — interior alpha is now a real flag, not a gap.

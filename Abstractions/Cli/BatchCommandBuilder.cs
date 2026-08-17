@@ -89,9 +89,17 @@ namespace FracturingFog.Cli
         /// No batch flag (#363).</summary>
         public bool StereoActive { get; init; }
 
-        /// <summary>Domain-warp post-fx is on (DomainWarpEnabled).
-        /// No batch flag (#363).</summary>
+        /// <summary>Domain-warp post-fx is on (DomainWarpEnabled). Emitted as
+        /// <c>--domain-warp</c> (#363).</summary>
         public bool DomainWarpActive { get; init; }
+
+        /// <summary>Domain-warp strength; emitted when domain warp is on and the
+        /// value is non-zero.</summary>
+        public double DomainWarpStrength { get; init; }
+
+        /// <summary>Domain-warp frequency; emitted when domain warp is on and the
+        /// value differs from the default (1.0).</summary>
+        public double DomainWarpFrequency { get; init; } = 1.0;
 
         /// <summary>The active theme is a custom/edited palette with no saved
         /// name to reference. The command cannot emit <c>--theme</c> for it, so
@@ -174,6 +182,17 @@ namespace FracturingFog.Cli
             if (snap.HistogramEq != 0) { parts.Add(BatchFlags.Adaptive);   parts.Add(snap.HistogramEq.ToString(CultureInfo.InvariantCulture)); }
             if (snap.InteriorAlpha < 255) { parts.Add(BatchFlags.InteriorAlpha); parts.Add(snap.InteriorAlpha.ToString(CultureInfo.InvariantCulture)); }
 
+            // Domain-warp post-fx (any fractal). Emit the toggle, plus knobs when
+            // they deviate from their defaults.
+            if (snap.DomainWarpActive)
+            {
+                parts.Add(BatchFlags.DomainWarp);
+                if (snap.DomainWarpStrength != 0.0)
+                { parts.Add(BatchFlags.DomainWarpStrength); parts.Add(Num(snap.DomainWarpStrength)); }
+                if (snap.DomainWarpFrequency != 1.0)
+                { parts.Add(BatchFlags.DomainWarpFrequency); parts.Add(Num(snap.DomainWarpFrequency)); }
+            }
+
             // Fractal-specific parameters that have batch flags. Emitted only for
             // the matching fractal type so unrelated defaults never clutter.
             AppendFractalParams(parts, snap);
@@ -196,8 +215,6 @@ namespace FracturingFog.Cli
                 gaps.Add("2D relief / height-field shading");
             if (snap.StereoActive)
                 gaps.Add("Stereo / side-by-side (SBS) output");
-            if (snap.DomainWarpActive)
-                gaps.Add("Domain-warp post-fx");
             return gaps;
         }
 
@@ -241,6 +258,19 @@ namespace FracturingFog.Cli
                     parts.Add(Num(p.FlameGamma));
                     parts.Add(BatchFlags.FlameVibrancy);
                     parts.Add(Num(p.FlameVibrancy));
+                    break;
+
+                case FractalType.AcidWarp:
+                    // Static pattern knobs only — morph / flow / palette-cycle are
+                    // animation and have no meaning for a still poster.
+                    parts.Add(BatchFlags.AcidPattern);
+                    parts.Add(p.AcidWarpPattern.ToString(CultureInfo.InvariantCulture));
+                    parts.Add(BatchFlags.AcidFrequency);
+                    parts.Add(Num(p.AcidWarpFrequency));
+                    parts.Add(BatchFlags.AcidWarpStrength);
+                    parts.Add(Num(p.AcidWarpWarpStrength));
+                    parts.Add(BatchFlags.AcidSeed);
+                    parts.Add(p.AcidWarpSeed.ToString(CultureInfo.InvariantCulture));
                     break;
             }
         }
