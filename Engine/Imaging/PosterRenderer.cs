@@ -273,7 +273,10 @@ namespace FracturingFog.Imaging
                     // every type (interiors rendered opaque even when the window
                     // showed them translucent). Theme InSetColor.A already worked
                     // — it is baked into the buffer at the in-set write.
-                    InteriorAlpha = req.FractalParameters?.InteriorAlpha ?? 255,
+                    // NB: no ?. — PosterRequest.FractalParameters is non-nullable
+                    // (= new()); a null-conditional here poisons the flow state
+                    // and trips CS8604 at the ApplyReliefIfEnabled call below.
+                    InteriorAlpha = req.FractalParameters.InteriorAlpha,
                     // D-6b — sub-rect + seeded orbit for cluster tile workers.
                     // All four properties default to 0 (= legacy full-image render);
                     // any non-zero value engages the sub-rect dc geometry.
