@@ -27,9 +27,11 @@ using FracturingFog.Models;
 namespace FracturingFog.Rendering
 {
     /// <summary>Composites translucent 2D pixels over the interior-alpha backdrop
-    /// (F10.5 / #96). Shared by the live upload path and the offscreen export
-    /// path so the two can never drift.</summary>
-    internal static class Interior2DBackgroundCompositor
+    /// (F10.5 / #96). Shared by the live upload path, the offscreen export path
+    /// (PosterRenderer) and the headless batch video / slideshow paths so none of
+    /// them can drift. Public so the batch renderer — which lives in the WinExe
+    /// assembly, not Engine — can call the same choke point.</summary>
+    public static class Interior2DBackgroundCompositor
     {
         /// <summary>
         /// Composite every translucent pixel (alpha &lt; 255, read from
