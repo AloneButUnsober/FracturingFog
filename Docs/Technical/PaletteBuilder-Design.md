@@ -148,6 +148,22 @@ Forward-hook: drives emission / transmission color when roadmap **S5** lands.
 | Freeform vector / paint canvas | **Skip** | Off-idiom |
 | Node **material editor** | **Careful** | Pair palette *with* material presets (S10.10); don't build a material node graph (that is the S9 / Blender line) |
 
+## 6b. Documentation discipline (every slice)
+
+Docs ship with the code, not after. **Every S10 slice must update existing docs and
+create new documentation where warranted:**
+
+- **Update in step** — a slice that changes color behavior updates the docs that
+  describe it (this doc, the [ColorTheme Enhancement Roadmap](ColorTheme-Enhancement-Roadmap.md),
+  and any User color guide) in the same PR.
+- **Create when new** — a user-facing capability (CVD simulation, color advisor,
+  "looks", perceptual export) gets its own User guide — a colorblind-first authoring
+  guide is itself a differentiator worth writing — indexed in
+  [`_Index.md`](_Index.md) / the [User Index](../User/_Index.md) and cross-linked to
+  issue #392 both ways.
+- **Keep doc ↔ issue in step** — this doc is the canonical design; #392 is the
+  canonical task list. A slice landing without its doc update is incomplete.
+
 ## 7. Sequencing
 
 1. **S10.1** perceptual core — underpins everything.

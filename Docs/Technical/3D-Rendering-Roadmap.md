@@ -260,6 +260,24 @@ Blender's job; *render the distance field cinematically* is FF's.
    → fractal-aware preview → advisor + 3D items. See
    [PaletteBuilder-Design.md](PaletteBuilder-Design.md).
 
+## 5b. Documentation discipline (every slice)
+
+Docs are part of "done," not an afterthought. **Every slice must update existing
+documentation and create new documentation where warranted** before it counts as
+shipped:
+
+- **Update in step** — when a slice changes behavior a doc describes, flip that doc
+  in the same PR (the #185 pattern: it updated the VL Guide §6 + Relief3D Cookbook
+  caveats). A parity/contract test that asserts the old behavior (e.g.
+  `ReliefGpuVolumetricParityTests`) is the tripwire that *forces* the doc edit.
+- **Create when new** — a slice that introduces a user-facing capability (EXR AOVs,
+  view transform, DOF, isosurface export, "looks") gets its own User guide or
+  Technical design doc, indexed in [`_Index.md`](_Index.md) and the
+  [User Index](../User/_Index.md), and cross-linked to its issue both ways.
+- **Keep doc ↔ issue in step** — this doc is the canonical design; the issues are the
+  canonical task list (repo convention). A slice landing without its doc update is
+  incomplete.
+
 ## 6. Strategy in one line
 
 **Stop discarding the passes you already compute (S1), render them in linear and
