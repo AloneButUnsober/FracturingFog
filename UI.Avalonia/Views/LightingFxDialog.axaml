@@ -257,14 +257,20 @@
                         </Grid>
 
                         <TextBlock Grid.Row="2" Grid.Column="0" Text="Volume steps:" VerticalAlignment="Center"
-                                   ToolTip.Tip="In-scatter raymarch step count (light shafts). 0 = exp fog only. Cost = steps × shadow per sample." />
-                        <Grid Grid.Row="2" Grid.Column="1" ColumnDefinitions="*,Auto" Margin="0,2">
-                            <Slider Classes="knob" Grid.Column="0" Minimum="0" Maximum="64"
-                                    IsSnapToTickEnabled="True" TickFrequency="1"
-                                    Value="{Binding VolumeSteps, Mode=TwoWay}" />
-                            <TextBlock Classes="knobValue" Grid.Column="1"
-                                       Text="{Binding VolumeSteps}" />
-                        </Grid>
+                                   ToolTip.Tip="In-scatter raymarch step count (light shafts). 0 = exp fog only. Cost = steps × shadow per sample.&#x0a;NOTE: god-ray SHAFTS also need Shadow steps &gt; 0 (Shadow expander) plus a directional key light with terrain to occlude it. With Shadow steps = 0 the fog is a uniform glow, not shafts." />
+                        <StackPanel Grid.Row="2" Grid.Column="1">
+                            <Grid ColumnDefinitions="*,Auto" Margin="0,2">
+                                <Slider Classes="knob" Grid.Column="0" Minimum="0" Maximum="64"
+                                        IsSnapToTickEnabled="True" TickFrequency="1"
+                                        Value="{Binding VolumeSteps, Mode=TwoWay}" />
+                                <TextBlock Classes="knobValue" Grid.Column="1"
+                                           Text="{Binding VolumeSteps}" />
+                            </Grid>
+                            <!-- #309 — advisory: fog is a flat glow until Shadow steps > 0 casts shafts -->
+                            <TextBlock Foreground="#FFCC00" FontSize="11" TextWrapping="Wrap" Margin="0,0,0,2"
+                                       IsVisible="{Binding ShowVolumeShaftHint}"
+                                       Text="Fog is a uniform glow — raise Shadow steps (Shadow expander) above 0 for god-ray shafts." />
+                        </StackPanel>
 
                         <TextBlock Grid.Row="3" Grid.Column="0" Text="Volume noise:" VerticalAlignment="Center"
                                    ToolTip.Tip="FBM cloud modulation [0,1]. 0 = uniform medium; 1 = cloud-like." />
