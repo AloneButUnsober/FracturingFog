@@ -82,6 +82,17 @@ public static class RendererFactory
     public static RendererBackend PreferredBackend { get; set; } = RendererBackend.Auto;
 
     /// <summary>
+    /// Escape hatch to force the DirectX 11 backend even when DX12 is available.
+    /// Set by Program.cs from <c>--renderer dx11</c> or the <c>FF_FORCE_D3D11</c>
+    /// environment variable. Flows to <see cref="Win32HwndBackend"/> as the
+    /// <c>force_D3D11</c> argument so <c>WindowsDxRendererFactory.Create</c> skips
+    /// the DX12 path. Exists because DX12 can hang / hit DXGI_ERROR_DEVICE_REMOVED
+    /// on some GPUs/drivers while DX11 stays stable, and the auto-selection
+    /// otherwise gives no way back to DX11.
+    /// </summary>
+    public static bool ForceD3D11 { get; set; }
+
+    /// <summary>
     /// Windows-only HWND renderer hook. <c>FracturingFog.Win.WindowsBootstrap</c>
     /// registers <c>WindowsDxRendererFactory.Create</c> here on Windows hosts.
     /// Left null on Linux/macOS so a Win32Hwnd surface arriving on a non-Win
@@ -202,7 +213,7 @@ public static class RendererFactory
         int w = System.Math.Max(1, surface.PixelWidth);
         int h = System.Math.Max(1, surface.PixelHeight);
 
-        IFractalRenderer? renderer = Win32HwndBackend(surface.Handle, w, h, force_D3D11)
+        IFractalRenderer? renderer = Win32HwndBackend(surface.Handle, w, h, force_D3D11 || ForceD3D11)
             ?? throw new InvalidOperationException(
                 "Win32HwndBackend returned null. WindowsDxRendererFactory.Create never " +
                 "returns null today — investigate the hook registration.");
@@ -224,6 +235,11 @@ public static class RendererFactory
     {
         if (PreferredBackend == RendererBackend.Vulkan)
             return VulkanProbeBackend?.Invoke() ?? "Vulkan (compute) + OpenGL (present)";
+        // Forced DX11 overrides the probe (which otherwise reports DX12 whenever
+        // the GPU is FL12-capable) so the title bar / System Info reflect what
+        // actually runs.
+        if (ForceD3D11 && Win32ProbeBackend is not null)
+            return "DirectX 11";
         return Win32ProbeBackend?.Invoke() ?? "Silk.NET OpenGL";
     }
 
