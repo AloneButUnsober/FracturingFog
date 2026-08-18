@@ -151,7 +151,7 @@ Broadens the lighting vocabulary without a scene graph.
 - **Twin:** per-light attenuation is a scalar change → twinnable; area-light soft
   shadow raises sample cost (coordinate with S4 denoise).
 
-### S9 — Mesh export maturation ☐
+### S9 — Mesh export maturation ☐ (#391)
 Mesh export is the **one place FF crosses from renderer into geometry producer** —
 THE handoff line. The discipline: be a great mesh *exporter*, never a mesh
 *editor*. Today FF meshes the relief heightfield (2.5D displaced grid → printable);
