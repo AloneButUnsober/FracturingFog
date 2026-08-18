@@ -200,6 +200,31 @@ Sub-items (ranked fit × payoff):
 - **Boundary:** auto-repair *to guarantee manifold on export* is in-lane; a mesh
   repair/sculpt *workbench* is not (see §4).
 
+### S10 — PaletteBuilder as a perceptual, colorblind-first color assistant ☐ (#392)
+The home of FF's **art idiom**. Making FF *great* — not just deep-zooming — means
+making PaletteBuilder a genuinely great color assistant: perceptual, **colorblind-
+first**, fractal-aware, advisory. Full design in
+[PaletteBuilder-Design.md](PaletteBuilder-Design.md).
+
+Unifying insight: **luminance is load-bearing twice** — in 3D, form reads from
+shading (luminance *is* apparent relief); in colorblind vision, luminance is the
+channel that survives when hue collapses. One discipline (perceptually-uniform,
+luminance-structured ramps) serves 3D form-reading **and** CVD accessibility. Almost
+no creative color tool is colorblind-first — an unclaimed gap, and one that matters
+to this project.
+- **Reuse:** OkLab extraction lib, the render engine (live fractal preview), the
+  iteration histogram (`HistogramEqualizer`, #145), the ColorGen cosine idiom, the
+  `#FFCC00`-not-red UI precedent — all already present.
+- **Twin:** CVD simulation + ΔE + luminance-monotonicity are deterministic → assert
+  in tests (the color analog of the render parity twin); perceptual round-trips get
+  epsilon-stable tests.
+- **3D reach:** preview the palette's *shaded gamut* under 3D lighting (couples to
+  **S2** linear/tonemap), preview it as fog/god-rays (the #185 palette map), warn
+  when a ramp flattens relief, and author "looks" (palette + material preset + sky
+  tint) — without becoming a material editor (see §4).
+- **Boundary:** a color/palette assistant, not an image editor / DAM / material node
+  graph.
+
 ## 4. Explicit non-goals (the Blender trap)
 
 Holding this boundary is as important as shipping the slices. FF exports **mesh
@@ -230,6 +255,10 @@ Blender's job; *render the distance field cinematically* is FF's.
    watertight-contract + validator sub-item is the low-risk starting point (hardens
    the relief mesh FF already ships); isosurface export for true 3D fractals is the
    larger, higher-payoff follow-on.
+8. **S10 (PaletteBuilder)** — independent art-idiom axis; couples to **S2** only for
+   the shaded-gamut preview. Perceptual core → CVD-first suite (the differentiator)
+   → fractal-aware preview → advisor + 3D items. See
+   [PaletteBuilder-Design.md](PaletteBuilder-Design.md).
 
 ## 6. Strategy in one line
 
