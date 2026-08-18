@@ -1700,29 +1700,41 @@ static class Program
         // Phase X.4 / Slice 4.1 — --renderer override. Default is RendererBackend.Auto
         // (DX on Win, Silk on Linux/macOS, picked by RendererFactory.Create
         // from the surface kind). Explicit values let the user parity-test
-        // Silk or Skia on a Windows host or downgrade from DX12 to Silk when
-        // the discrete GPU is busy:
-        //   --renderer dx     → force DX (Win only; auto-picks DX12 if available).
-        //   --renderer dx11   → force the DirectX 11 backend even when DX12 is
-        //                       available (escape hatch: DX12 can hang / hit
-        //                       DXGI_ERROR_DEVICE_REMOVED on some GPUs).
+        // Silk or Skia on a Windows host or downgrade to Silk when the discrete
+        // GPU is busy:
+        //   --renderer dx     → force DX (Win only). #375: DX11 is now the
+        //                       DEFAULT — plain 'dx' no longer auto-picks DX12.
+        //   --renderer dx11   → force the DirectX 11 backend (same as the default
+        //                       today; explicit for scripts / clarity).
+        //   --renderer dx12   → opt back into the DirectX 12 backend. Off by
+        //                       default because DX12 could hang / hit
+        //                       DXGI_ERROR_DEVICE_REMOVED on some GPUs/drivers
+        //                       (and under RDP), taking the process down.
         //   --renderer silk   → force Silk.NET OpenGL.
         //   --renderer skia   → force SkiaSharp CPU.
-        //   --renderer auto   → default; same as omitting the flag.
+        //   --renderer auto   → default; same as omitting the flag (DX11 on Win).
         // The selection is set on the RendererFactory before either shell
         // boots so OnSurfaceReady picks it up the first time a surface
         // arrives.
         //
-        // Env fallback: FF_FORCE_D3D11=1 (or true/yes) forces DX11 without a CLI
-        // flag, for users who launch via a shortcut / installed exe.
-        string? forceDx11Env = Environment.GetEnvironmentVariable("FF_FORCE_D3D11");
-        if (!string.IsNullOrEmpty(forceDx11Env)
-            && (forceDx11Env == "1"
-                || string.Equals(forceDx11Env, "true", StringComparison.OrdinalIgnoreCase)
-                || string.Equals(forceDx11Env, "yes", StringComparison.OrdinalIgnoreCase)))
+        // Env fallbacks for shortcut / installed-exe launches (no CLI flag):
+        //   FF_FORCE_D3D11=1|true|yes  → force DX11 (redundant with the new
+        //                                default, kept for back-compat).
+        //   FF_PREFER_D3D12=1|true|yes → opt back into DX12.
+        static bool EnvTrue(string? v) =>
+            !string.IsNullOrEmpty(v)
+            && (v == "1"
+                || string.Equals(v, "true", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(v, "yes", StringComparison.OrdinalIgnoreCase));
+        if (EnvTrue(Environment.GetEnvironmentVariable("FF_FORCE_D3D11")))
         {
             RendererFactory.PreferredBackend = RendererBackend.Dx;
             RendererFactory.ForceD3D11 = true;
+        }
+        if (EnvTrue(Environment.GetEnvironmentVariable("FF_PREFER_D3D12")))
+        {
+            RendererFactory.PreferredBackend = RendererBackend.Dx;
+            RendererFactory.PreferD3D12 = true;
         }
         for (int i = 0; i < args.Length - 1; i++)
         {
@@ -1734,6 +1746,7 @@ static class Program
                 "auto"   => RendererBackend.Auto,
                 "dx"     => RendererBackend.Dx,
                 "dx11"   => RendererBackend.Dx,
+                "dx12"   => RendererBackend.Dx,
                 "silk"   => RendererBackend.Silk,
                 "skia"   => RendererBackend.Skia,
                 "vulkan" => RendererBackend.Vulkan,
@@ -1742,12 +1755,14 @@ static class Program
             if (backend == null)
             {
                 Console.Error.WriteLine(
-                    $"--renderer expects one of: auto | dx | dx11 | silk | skia | vulkan (got '{val}').");
+                    $"--renderer expects one of: auto | dx | dx11 | dx12 | silk | skia | vulkan (got '{val}').");
                 return 2;
             }
             RendererFactory.PreferredBackend = backend.Value;
-            // dx11 additionally forces the DX11 path (dx alone still auto-picks DX12).
+            // #375: DX11 is the default. 'dx11' pins DX11; 'dx12' opts back into
+            // DX12; plain 'dx' / 'auto' leave both flags clear → DX11.
             RendererFactory.ForceD3D11 = string.Equals(val, "dx11", StringComparison.OrdinalIgnoreCase);
+            RendererFactory.PreferD3D12 = string.Equals(val, "dx12", StringComparison.OrdinalIgnoreCase);
             break;
         }
 

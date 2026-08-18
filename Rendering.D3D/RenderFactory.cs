@@ -23,16 +23,23 @@ using FracturingFog.Abstractions;
 namespace FracturingFog;
 
 /// <summary>
-/// Windows-only DirectX 11/12 renderer factory. Prefers DX12 when the GPU
-/// supports Feature Level 12.0+, otherwise falls back to DX11. Wired into
-/// the cross-platform <see cref="RendererFactory.Win32HwndBackend"/> hook by
+/// Windows-only DirectX 11/12 renderer factory. When <c>force_D3D11</c> is
+/// false it builds a DX12 renderer on an FL 12.0+ GPU (falling back to DX11
+/// otherwise); when true it always builds DX11. Wired into the cross-platform
+/// <see cref="RendererFactory.Win32HwndBackend"/> hook by
 /// <c>FracturingFog.Win.WindowsBootstrap.Install</c>.
+///
+/// #375: the app-level DEFAULT is DX11 — the Engine <see cref="RendererFactory"/>
+/// passes <c>force_D3D11 = true</c> unless the user opted into DX12
+/// (<see cref="RendererFactory.PreferD3D12"/>), because DX12 could hang / hit
+/// DXGI_ERROR_DEVICE_REMOVED on some GPUs. This factory just honours the bool.
 /// </summary>
 public static class WindowsDxRendererFactory
 {
     /// <summary>
-    /// Creates a DirectX 12 renderer if the GPU supports FL 12.0+, otherwise
-    /// creates a DirectX 11 renderer. Never throws — falls back silently.
+    /// Creates a DirectX 12 renderer when <paramref name="force_D3D11"/> is false
+    /// and the GPU supports FL 12.0+, otherwise a DirectX 11 renderer. Never
+    /// throws — falls back silently.
     /// </summary>
     [SupportedOSPlatform("windows")]
     public static IFractalRenderer Create(IntPtr hwnd, int width, int height, bool force_D3D11 = false)
