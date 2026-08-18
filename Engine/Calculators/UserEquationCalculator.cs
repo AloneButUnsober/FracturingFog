@@ -60,6 +60,13 @@ public sealed class UserEquationCalculator : IFractalCalculator
     public double Zoom { get; set; } = 1.0;
     public int MaxIterations { get; set; } = 256;
 
+    /// <summary>#96/#382 — global interior alpha (0..255). Scales the alpha of
+    /// the in-set colour so the interior can composite over the chosen
+    /// <c>Interior2DBackground</c>. 255 = opaque (bit-identical to before). Set
+    /// from <c>FractalParameters.InteriorAlpha</c> by the render host / poster
+    /// builder, mirroring the Mandelbrot canonical path.</summary>
+    public int InteriorAlpha { get; set; } = 255;
+
     // ── High-precision centre limbs ─────────────────────────────────────────
     //
     // The input controller anchors box-zoom, double-click recenter, and
@@ -251,6 +258,17 @@ public sealed class UserEquationCalculator : IFractalCalculator
         // P5: gate orbit sampling once per render. Non-orbit themes pay nothing.
         var orbitMap = ColorMap as IOrbitAwareColorMap;
 
+        // #382: pre-scale the in-set colour's alpha by the global InteriorAlpha
+        // knob once (multiplies any alpha the theme's InSetColor already carries).
+        // InteriorAlpha == 255 leaves the colour bit-identical.
+        uint inSet = ColorMap.InSetColor;
+        if (InteriorAlpha < 255)
+        {
+            uint a = (inSet >> 24) & 0xFFu;
+            uint na = (a * (uint)InteriorAlpha) / 255u;
+            inSet = (inSet & 0x00FFFFFFu) | (na << 24);
+        }
+
         Parallel.For(0, height, new ParallelOptions { CancellationToken = ct }, y =>
         {
             if (ct.IsCancellationRequested) return;
@@ -329,7 +347,7 @@ public sealed class UserEquationCalculator : IFractalCalculator
                 int idx = rowBase + x;
                 if (iter >= maxIt)
                 {
-                    ColorBuffer[idx] = ColorMap.InSetColor;
+                    ColorBuffer[idx] = inSet;   // #382: alpha pre-scaled above
                     NormalXBuffer[idx] = 0f;
                     NormalYBuffer[idx] = 0f;
                 }

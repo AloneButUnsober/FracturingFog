@@ -264,6 +264,8 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
     public bool IsBicomplexMandelbrot => FractalType == FractalType.BicomplexMandelbrot;
     public bool IsDla => FractalType == FractalType.Dla;
     public bool IsRandomTile => FractalType == FractalType.RandomTile;
+    public bool IsUserEquation => FractalType == FractalType.UserEquation;
+    public bool IsSandbox => FractalType == FractalType.Sandbox;
 
     /// <summary>
     /// Visibility flag for the shared LightingFx section. True for every
@@ -285,10 +287,12 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
     public bool ShowLightingFxLauncher =>
         IsAny3DRaymarcher || (IsRelief2DApplicable && Relief2DEnabled && Relief2DRaymarch);
 
-    /// <summary>Visibility flag for the 2D interior-alpha section (issue #96).
-    /// True only for the canonical Mandelbrot path — the only 2D family whose
-    /// interior alpha the render pipeline currently honours.</summary>
-    public bool IsInteriorAlphaApplicable => IsMandelbrot;
+    /// <summary>Visibility flag for the 2D interior-alpha section (issue #96,
+    /// #382). True for the canonical Mandelbrot path plus the DSL escape-time
+    /// families (UserEquation, Sandbox), which share the <c>iter &gt;= maxIt</c>
+    /// in-set invariant and now scale their in-set alpha by the global knob and
+    /// composite over <c>Interior2DBackground</c>.</summary>
+    public bool IsInteriorAlphaApplicable => IsMandelbrot || IsUserEquation || IsSandbox;
 
     /// <summary>Visibility flag for the 2D heightfield-relief section (#102, #139).
     /// True for every 2D family that exposes an <c>IHeightFieldSource</c> the
