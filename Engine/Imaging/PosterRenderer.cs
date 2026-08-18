@@ -267,6 +267,13 @@ namespace FracturingFog.Imaging
                     MaxIterations = req.MaxIterations,
                     ColorMap = req.ColorMap,
                     Quality = req.Quality,
+                    // #384: honor the global interior-alpha knob on export. The
+                    // live path sets _calculator.InteriorAlpha; PosterRenderer
+                    // dropped it, so image/poster export ignored the slider for
+                    // every type (interiors rendered opaque even when the window
+                    // showed them translucent). Theme InSetColor.A already worked
+                    // — it is baked into the buffer at the in-set write.
+                    InteriorAlpha = req.FractalParameters?.InteriorAlpha ?? 255,
                     // D-6b — sub-rect + seeded orbit for cluster tile workers.
                     // All four properties default to 0 (= legacy full-image render);
                     // any non-zero value engages the sub-rect dc geometry.
