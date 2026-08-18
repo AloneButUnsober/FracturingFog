@@ -151,6 +151,55 @@ Broadens the lighting vocabulary without a scene graph.
 - **Twin:** per-light attenuation is a scalar change → twinnable; area-light soft
   shadow raises sample cost (coordinate with S4 denoise).
 
+### S9 — Mesh export maturation ☐
+Mesh export is the **one place FF crosses from renderer into geometry producer** —
+THE handoff line. The discipline: be a great mesh *exporter*, never a mesh
+*editor*. Today FF meshes the relief heightfield (2.5D displaced grid → printable);
+the DE opens far more. Same reuse thesis as the render slices — **FF already holds
+everything a great exporter needs and just doesn't assemble it**: the DE field
+(surface = DE == 0), the analytic DE gradient (exact vertex normals), the color map
+(vertex colors), the shading material (roughness/metallic/albedo), and the
+empty-space-skip mip grid (near-surface octree seeds for adaptive meshing).
+
+Two DE-native superpowers Blender can't match cleanly — lean into these:
+- **Exact isosurface + analytic normals.** FF has the function that *defines* the
+  surface, so it meshes ground truth (marching cubes → **dual contouring**, which
+  preserves sharp Mandelbox/KIFS edges from the gradient). Blender remeshes an
+  approximation.
+- **Analytic hollow / shell.** Print wall thickness = a second isosurface at
+  `DE == −t`. FF hollows a fractal *exactly* by re-thresholding the DE; Blender's
+  shell modifier self-intersects on concave fractal detail.
+
+Sub-items (ranked fit × payoff):
+1. **Watertight / manifold as a hard contract** — the mesh analog of the parity
+   twin: guarantee closed 2-manifold output (wall + base + weld relief; Manifold
+   Dual Contouring for true 3D) and ship a validator that reports hole count,
+   non-manifold edges, bounding size, tri count, est. volume (Blender's "3D Print
+   Toolbox" is the model). "Will this print?" before export.
+2. **Isosurface export for true 3D fractals** — marching cubes / dual contouring
+   on the DE; the headline capability FF is uniquely positioned for.
+3. **Vertex-color export** — bake the theme into per-vertex color (PLY / 3MF
+   color / glTF) so a color print or web drop-in carries the fractal's *palette*.
+   The palette idiom crossing into mesh — the biggest differentiator.
+4. **Carry the material** — export **glTF / GLB** with the PBR material so the
+   mesh lands in Blender / web dressed, not grey clay. Format discipline: STL
+   (dumb slicers), PLY (vertex color), glTF/GLB (PBR), 3MF (color + material +
+   units). Pick formats that carry what FF uniquely has.
+5. **Adaptive resolution** — octree-refine the DE only near the surface, seeded by
+   the empty-space-skip mip FF already builds.
+6. **Print-ready units / orientation / base** — mm, centered, flat base, Z-up.
+7. **Analytic hollow + drain holes** as export *options* (DE-threshold shell).
+8. **Decimation as a knob** (quadric, to a triangle budget) — an export option,
+   NOT an interactive tool.
+- **Reuse:** DE field, analytic normals, color map, PBR material, empty-space-skip
+  mip — all already computed.
+- **Twin:** meshing is deterministic geometry → the correctness contract is
+  *watertightness/manifold validation* (assert in tests), the mesh analog of the
+  render parity twin. Vertex color/material export is data plumbing (byte-stable
+  test, no render twin).
+- **Boundary:** auto-repair *to guarantee manifold on export* is in-lane; a mesh
+  repair/sculpt *workbench* is not (see §4).
+
 ## 4. Explicit non-goals (the Blender trap)
 
 Holding this boundary is as important as shipping the slices. FF exports **mesh
@@ -159,7 +208,8 @@ Blender's job; *render the distance field cinematically* is FF's.
 
 | Tempting DCC feature | Verdict | Why |
 |---|---|---|
-| Mesh modeling / sculpt / UV / retopo | **Skip** | No mesh scene; off-primitive |
+| Mesh modeling / sculpt / UV / retopo | **Skip** | No mesh scene; off-primitive (S9 *exports* mesh; it never *edits* it) |
+| Mesh repair / sculpt **workbench** | **Careful** | Auto-repair to guarantee manifold *on export* (S9) is in-lane; an interactive repair tool is not |
 | Rigging / particles / physics sim | **Skip** | Off-primitive, huge, duplicates Blender |
 | Full shader **node editor** | **Careful** | Grow the ColorGen DSL instead of cloning nodes |
 | Asset library / geometry nodes / heavy instancing | **Skip** | Not FF's game (exception: sphere-imposters, already used for Apollonian) |
@@ -176,6 +226,10 @@ Blender's job; *render the distance field cinematically* is FF's.
 5. **S4 (denoise)** — rides S1's guide buffers.
 6. **S5 (refraction)**, **S8 (lights)**, **S6 (froxel)** — independent, schedule
    by appetite; #388 is a good warm-up on the volumetric axis.
+7. **S9 (mesh export)** — independent of the render pipeline; its own axis. The
+   watertight-contract + validator sub-item is the low-risk starting point (hardens
+   the relief mesh FF already ships); isosurface export for true 3D fractals is the
+   larger, higher-payoff follow-on.
 
 ## 6. Strategy in one line
 
