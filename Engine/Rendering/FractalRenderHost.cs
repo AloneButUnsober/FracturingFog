@@ -2978,6 +2978,9 @@ namespace FracturingFog.Rendering
                 case NewtonCalculator n: n.FractalParameters = ViewState.FractalParameters; break;
                 case UserEquationCalculator u:
                     u.FractalParameters = ViewState.FractalParameters;
+                    // #382: global interior alpha (parity with the Mandelbrot
+                    // canonical path at line ~1056).
+                    u.InteriorAlpha = ViewState.FractalParameters?.InteriorAlpha ?? 255;
                     // Plumb the centre's low limbs so deep-zoom pan / box /
                     // double-click recenter anchors to the right pixel. The
                     // base sync above only copies the Hi limb; at zoom >
@@ -3003,7 +3006,10 @@ namespace FracturingFog.Rendering
                 case DlaCalculator dl: dl.FractalParameters = ViewState.FractalParameters; break;
                 case RandomTileCalculator rt: rt.FractalParameters = ViewState.FractalParameters; break;
                 case FlameRenderer fr: fr.FractalParameters = ViewState.FractalParameters; break;
-                case SandboxCalculator sb: sb.FractalParameters = ViewState.FractalParameters; break;
+                case SandboxCalculator sb:
+                    sb.FractalParameters = ViewState.FractalParameters;
+                    sb.InteriorAlpha = ViewState.FractalParameters?.InteriorAlpha ?? 255;  // #382
+                    break;
                 case UserBulbCalculator ub: ub.FractalParameters = ViewState.FractalParameters; break;
                 case LogisticCalculator lg: lg.FractalParameters = ViewState.FractalParameters; break;
                 case HalleyCalculator hc: hc.FractalParameters = ViewState.FractalParameters; break;

@@ -567,7 +567,10 @@ namespace FracturingFog.Imaging
                 case AttractorCalculator a:    a.FractalParameters = req.FractalParameters; break;
                 case BuddhaFamilyCalculator b: b.FractalParameters = req.FractalParameters; break;
                 case NewtonCalculator n:       n.FractalParameters = req.FractalParameters; break;
-                case UserEquationCalculator u: u.FractalParameters = req.FractalParameters; break;
+                case UserEquationCalculator u:
+                    u.FractalParameters = req.FractalParameters;
+                    u.InteriorAlpha = req.FractalParameters?.InteriorAlpha ?? 255;  // #382
+                    break;
                 case MandelbulbCalculator m:   m.FractalParameters = req.FractalParameters; break;
                 case MandelboxCalculator mb:   mb.FractalParameters = req.FractalParameters; break;
                 case KifsCalculator kf:        kf.FractalParameters = req.FractalParameters; break;
@@ -580,7 +583,10 @@ namespace FracturingFog.Imaging
                 case BicomplexMandelbrotCalculator bc: bc.FractalParameters = req.FractalParameters; break;
                 case DlaCalculator dl:         dl.FractalParameters = req.FractalParameters; break;
                 case FlameRenderer fr:         fr.FractalParameters = req.FractalParameters; break;
-                case SandboxCalculator sb:     sb.FractalParameters = req.FractalParameters; break;
+                case SandboxCalculator sb:
+                    sb.FractalParameters = req.FractalParameters;
+                    sb.InteriorAlpha = req.FractalParameters?.InteriorAlpha ?? 255;  // #382
+                    break;
                 case UserBulbCalculator ub:    ub.FractalParameters = req.FractalParameters; break;
             }
             return c;
