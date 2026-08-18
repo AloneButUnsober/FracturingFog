@@ -20,6 +20,7 @@ using FracturingFog.Hosting;
 using FracturingFog.Imaging;
 using FracturingFog.Interefaces;
 using FracturingFog.Models;
+using FracturingFog.Rendering;
 
 namespace FracturingFog.Batch
 {
@@ -470,7 +471,9 @@ namespace FracturingFog.Batch
                 alt.Calculate(CancellationToken.None);
                 if (adaptive > 0 && alt is FracturingFog.Interefaces.ISupportsHistogramEq heAlt)
                     heAlt.ApplyHistogramEqualization(adaptive / 100.0);
-                return CopyBuffer(alt.ColorBuffer, w, h);
+                var altBuf = CopyBuffer(alt.ColorBuffer, w, h);
+                CompositeInteriorAlpha(altBuf, w, h, theme);
+                return altBuf;
             }
 
             var calc = new MandelbrotCalculator(w, h)
@@ -485,7 +488,9 @@ namespace FracturingFog.Batch
             calc.Calculate(CancellationToken.None);
             if (adaptive > 0)
                 calc.ApplyHistogramEqualization(adaptive / 100.0);
-            return CopyBuffer(calc.ColorBuffer, w, h);
+            var buf = CopyBuffer(calc.ColorBuffer, w, h);
+            CompositeInteriorAlpha(buf, w, h, theme);
+            return buf;
         }
 
         // True when every pixel in the buffer is opaque black (0xFF000000).
@@ -499,6 +504,31 @@ namespace FracturingFog.Batch
             for (int i = 0; i < len; i++)
                 if (pixels[i] != OpaqueBlack) return false;
             return true;
+        }
+
+        // Default interior-alpha params for the headless video / slideshow paths.
+        // Neither leg threads the interactive Interior(2D) knobs, so the composite
+        // runs against the canonical default state (Checkerboard backdrop) — the
+        // same thing the on-screen present shows a user who never touched them.
+        private static readonly FractalParameters s_defaultInteriorFp = new();
+
+        // #96 / F10.5 parity for headless video + slideshow frames. The D3D
+        // present ignores alpha (always opaque) and composites authored
+        // translucency — translucent-interior themes (InSetColor.A < 255, e.g.
+        // Cuba Vacation) and per-colour-stop exterior alpha — over the theme's
+        // Interior2DBackground. The image path already gets this through
+        // PosterRenderer; the raw-calculator video/slideshow frames did not, so
+        // a translucent theme exported straight alpha (flattened to black by the
+        // encoder) instead of matching the window. Opaque themes are a no-op
+        // (the compositor's gate early-returns), so this is byte-identical for
+        // the common case.
+        private static void CompositeInteriorAlpha(
+            uint[] buf, int w, int h, IColorMap? theme)
+        {
+            Interior2DBackgroundCompositor.Composite(
+                buf, buf, w, h, s_defaultInteriorFp,
+                theme?.InSetColor ?? 0xFF000000u,
+                alphaPreview: false, srcAlreadyProcessed: false);
         }
 
         private static uint[] CopyBuffer(uint[] src, int w, int h)
@@ -587,7 +617,9 @@ namespace FracturingFog.Batch
             };
             calc.Calculate(CancellationToken.None);
             if (adaptive > 0) calc.ApplyHistogramEqualization(adaptive / 100.0);
-            return CopyBuffer(calc.ColorBuffer, w, h);
+            var buf = CopyBuffer(calc.ColorBuffer, w, h);
+            CompositeInteriorAlpha(buf, w, h, theme);
+            return buf;
         }
 
         // Cross-fade helper: write `fadeFrames` blended frames from `from` to
@@ -1027,6 +1059,11 @@ namespace FracturingFog.Batch
                         // Own the pixels — calc.ColorBuffer is reused across
                         // calculators / recolours, and we mutate it below.
                         currFrame = CopyBuffer(calc.ColorBuffer, outW, outH);
+                        // #96/F10.5: composite authored translucency over the
+                        // interior backdrop before the B/C pass, watermark and
+                        // cross-fade so slideshow frames match the on-screen
+                        // present (see CompositeInteriorAlpha).
+                        CompositeInteriorAlpha(currFrame, outW, outH, theme);
                         themeChosen = themeName;
                         break;
                     }
