@@ -78,7 +78,7 @@ public sealed unsafe class ReliefRaymarchVulkanKernel : IDisposable, IReliefRaym
         public float ReflStrength; public int ReflSteps, MaxBounces, UseGgx;   // 4e-ii reflections
         public float VolNoiseAmount, VolNoiseScale, VolNoiseSpeed; public int VolNoiseOctaves;   // 4e-ii FBM
         public float VolSelfShadow; public int VolSelfShadowSteps; public float SceneTime, VolAnisotropy;   // 4e-ii + #184 Slice 3 (B)
-        public uint FogColor; public float PadV, PadV2, PadV3;   // #184 Slice 3 (C)
+        public uint FogColor; public float VolPaletteStrength; public int HasPalette, PaletteLen;   // #184 Slice 3 (C) + #185 slice D
     }
 
     private const int ParamBytes = 448;
@@ -100,8 +100,9 @@ public sealed unsafe class ReliefRaymarchVulkanKernel : IDisposable, IReliefRaym
     private Allocated _height, _keep;       // field-sized (hn)
     private Allocated _mip;                 // t3 — 4f coarse max-height grid
     private Allocated _hdri;                // t4 — 4d-ii flattened HDRI env
+    private Allocated _palette;             // t5 — #185 theme ramp LUT
     private Allocated _albedo, _color;      // output-sized (n)
-    private int _fieldCells, _mipCells, _hdriFloats, _outPixels;
+    private int _fieldCells, _mipCells, _hdriFloats, _paletteLen, _outPixels;
     private bool _disposed;
 
     public double LastDispatchMs { get; private set; }
@@ -132,10 +133,12 @@ public sealed unsafe class ReliefRaymarchVulkanKernel : IDisposable, IReliefRaym
 
         BuildPipeline();
         _params = AllocBuffer(ParamBytes, BufferUsageFlags.UniformBufferBit);
-        // t3 / t4 must always be bound (no partially-bound flag); start with 1-cell
-        // stubs — the shader reads them only when gEmptySkip / gHasHdri != 0.
+        // t3 / t4 / t5 must always be bound (no partially-bound flag); start with
+        // 1-cell stubs — the shader reads them only when gEmptySkip / gHasHdri /
+        // gHasPalette != 0.
         EnsureMipBuffer(1);
         EnsureHdriBuffer(1);
+        EnsurePaletteBuffer(1);
     }
 
     /// <summary>Create a self-contained kernel that owns a fresh
@@ -195,18 +198,25 @@ public sealed unsafe class ReliefRaymarchVulkanKernel : IDisposable, IReliefRaym
             fixed (uint* p = u.HdriBuf) WriteBytes(_hdri, p, u.HdriBuf.Length * sizeof(uint));
         }
 
+        // #185 — upload the theme ramp when the palette map is active.
+        if (u.VolPaletteStrength > 0.0 && u.VolPalette != null && u.VolPalette.Length >= 2)
+        {
+            EnsurePaletteBuffer(u.VolPalette.Length);
+            fixed (uint* p = u.VolPalette) WriteBytes(_palette, p, u.VolPalette.Length * sizeof(uint));
+        }
+
         var blob = BuildBlob(in u, keep != null);
         WriteBytes(_params, &blob, sizeof(ReliefParamsBlob));
 
         // Per-Run descriptor pool + set (a resize reallocates buffers, so a stale
         // set could dangle — build fresh each dispatch, like VulkanComputeKernel).
-        Buffer* srcBufs = stackalloc Buffer[7] { _params.Buffer, _height.Buffer, _albedo.Buffer, _keep.Buffer, _mip.Buffer, _hdri.Buffer, _color.Buffer };
-        uint* bindNums = stackalloc uint[7] { 0, (uint)TShift, (uint)TShift + 1, (uint)TShift + 2, (uint)TShift + 3, (uint)TShift + 4, (uint)UShift };
-        var types = stackalloc DescriptorType[7]
+        Buffer* srcBufs = stackalloc Buffer[8] { _params.Buffer, _height.Buffer, _albedo.Buffer, _keep.Buffer, _mip.Buffer, _hdri.Buffer, _palette.Buffer, _color.Buffer };
+        uint* bindNums = stackalloc uint[8] { 0, (uint)TShift, (uint)TShift + 1, (uint)TShift + 2, (uint)TShift + 3, (uint)TShift + 4, (uint)TShift + 5, (uint)UShift };
+        var types = stackalloc DescriptorType[8]
         {
             DescriptorType.UniformBuffer, DescriptorType.StorageBuffer, DescriptorType.StorageBuffer,
             DescriptorType.StorageBuffer, DescriptorType.StorageBuffer, DescriptorType.StorageBuffer,
-            DescriptorType.StorageBuffer,
+            DescriptorType.StorageBuffer, DescriptorType.StorageBuffer,
         };
 
         DescriptorPool pool = default;
@@ -216,7 +226,7 @@ public sealed unsafe class ReliefRaymarchVulkanKernel : IDisposable, IReliefRaym
             var poolSizes = stackalloc DescriptorPoolSize[2]
             {
                 new DescriptorPoolSize { Type = DescriptorType.UniformBuffer, DescriptorCount = 1 },
-                new DescriptorPoolSize { Type = DescriptorType.StorageBuffer, DescriptorCount = 6 },
+                new DescriptorPoolSize { Type = DescriptorType.StorageBuffer, DescriptorCount = 7 },
             };
             var dpci = new DescriptorPoolCreateInfo
             {
@@ -233,9 +243,9 @@ public sealed unsafe class ReliefRaymarchVulkanKernel : IDisposable, IReliefRaym
             };
             Check(_vk.AllocateDescriptorSets(_device, in dsai, out DescriptorSet set), "vkAllocateDescriptorSets");
 
-            var infos = stackalloc DescriptorBufferInfo[7];
-            var writes = stackalloc WriteDescriptorSet[7];
-            for (int i = 0; i < 7; i++)
+            var infos = stackalloc DescriptorBufferInfo[8];
+            var writes = stackalloc WriteDescriptorSet[8];
+            for (int i = 0; i < 8; i++)
             {
                 infos[i] = new DescriptorBufferInfo { Buffer = srcBufs[i], Offset = 0, Range = Vk.WholeSize };
                 writes[i] = new WriteDescriptorSet
@@ -245,7 +255,7 @@ public sealed unsafe class ReliefRaymarchVulkanKernel : IDisposable, IReliefRaym
                     DescriptorType = types[i], PBufferInfo = &infos[i],
                 };
             }
-            _vk.UpdateDescriptorSets(_device, 7, writes, 0, null);
+            _vk.UpdateDescriptorSets(_device, 8, writes, 0, null);
 
             var cbai = new CommandBufferAllocateInfo
             {
@@ -327,7 +337,10 @@ public sealed unsafe class ReliefRaymarchVulkanKernel : IDisposable, IReliefRaym
             VolNoiseSpeed = (float)u.VolumeNoiseSpeed, VolNoiseOctaves = u.VolumeNoiseOctaves,
             VolSelfShadow = (float)u.VolumeSelfShadow, VolSelfShadowSteps = u.VolumeSelfShadowSteps,
             SceneTime = (float)u.SceneTime, VolAnisotropy = (float)u.VolAnisotropy,
-            FogColor = u.FogColor, PadV = 0f, PadV2 = 0f, PadV3 = 0f,
+            FogColor = u.FogColor,
+            VolPaletteStrength = (float)u.VolPaletteStrength,
+            HasPalette = (u.VolPaletteStrength > 0.0 && u.VolPalette != null && u.VolPalette.Length >= 2) ? 1 : 0,
+            PaletteLen = u.VolPalette?.Length ?? 0,
         };
     }
 
@@ -350,10 +363,11 @@ public sealed unsafe class ReliefRaymarchVulkanKernel : IDisposable, IReliefRaym
             Check(_vk.CreateShaderModule(_device, in smci, null, out _module), "vkCreateShaderModule");
         }
 
-        // b0 UBO + t0/t1/t2/t3/t4 + u0 SSBOs (t3 = 4f mip grid, t4 = 4d-ii HDRI env).
-        uint* bindNums = stackalloc uint[7] { 0, (uint)TShift, (uint)TShift + 1, (uint)TShift + 2, (uint)TShift + 3, (uint)TShift + 4, (uint)UShift };
-        var bindings = stackalloc DescriptorSetLayoutBinding[7];
-        for (int i = 0; i < 7; i++)
+        // b0 UBO + t0/t1/t2/t3/t4/t5 + u0 SSBOs (t3 = 4f mip grid, t4 = 4d-ii HDRI
+        // env, t5 = #185 theme ramp).
+        uint* bindNums = stackalloc uint[8] { 0, (uint)TShift, (uint)TShift + 1, (uint)TShift + 2, (uint)TShift + 3, (uint)TShift + 4, (uint)TShift + 5, (uint)UShift };
+        var bindings = stackalloc DescriptorSetLayoutBinding[8];
+        for (int i = 0; i < 8; i++)
             bindings[i] = new DescriptorSetLayoutBinding
             {
                 Binding = bindNums[i],
@@ -363,7 +377,7 @@ public sealed unsafe class ReliefRaymarchVulkanKernel : IDisposable, IReliefRaym
         var dslci = new DescriptorSetLayoutCreateInfo
         {
             SType = StructureType.DescriptorSetLayoutCreateInfo,
-            BindingCount = 7, PBindings = bindings,
+            BindingCount = 8, PBindings = bindings,
         };
         Check(_vk.CreateDescriptorSetLayout(_device, in dslci, null, out _dsl), "vkCreateDescriptorSetLayout");
 
@@ -425,6 +439,16 @@ public sealed unsafe class ReliefRaymarchVulkanKernel : IDisposable, IReliefRaym
         FreeBuffer(ref _hdri);
         _hdri = AllocBuffer((ulong)(count * sizeof(uint)), BufferUsageFlags.StorageBufferBit);
         _hdriFloats = count;
+    }
+
+    // #185 — (re)allocate the theme-ramp buffer (t5) to `count` packed-ARGB uints.
+    private void EnsurePaletteBuffer(int count)
+    {
+        if (count < 1) count = 1;
+        if (_palette.Buffer.Handle != 0 && _paletteLen == count) return;
+        FreeBuffer(ref _palette);
+        _palette = AllocBuffer((ulong)(count * sizeof(uint)), BufferUsageFlags.StorageBufferBit);
+        _paletteLen = count;
     }
 
     private void EnsureOutputBuffers(int n)
@@ -521,6 +545,7 @@ public sealed unsafe class ReliefRaymarchVulkanKernel : IDisposable, IReliefRaym
         FreeBuffer(ref _keep);
         FreeBuffer(ref _mip);
         FreeBuffer(ref _hdri);
+        FreeBuffer(ref _palette);
         FreeBuffer(ref _albedo);
         FreeBuffer(ref _color);
         if (_cmdPool.Handle != 0) { _vk.DestroyCommandPool(_device, _cmdPool, null); _cmdPool = default; }

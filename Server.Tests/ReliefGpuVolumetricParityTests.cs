@@ -2,11 +2,12 @@
 // SPDX-FileCopyrightText: 2026 Bradley Brown
 
 // VLAO audit finding #7 / #16 (issues #297, #301): the Relief-3D GPU raymarch
-// is a strict subset of the full CPU volumetric pipeline — fog is driven by the
-// key light only and there is NO palette-mapped fog. The parity contract is the
-// ReliefUniforms cbuffer twin; these tests lock the subset structurally so a
-// future change that adds palette support (or drops a fog field) trips a test
-// and forces the VL Guide §6 / Relief3D Cookbook docs to be updated in step.
+// was a strict subset of the full CPU volumetric pipeline — fog driven by the
+// key light only, and NO palette-mapped fog. #185 (slice D) brought the palette
+// map to the relief path across all backends, so the contract now DOES carry it.
+// The parity contract is the ReliefUniforms cbuffer twin; these tests lock the
+// supported set structurally so a change that drops a field trips a test and
+// forces the VL Guide §6 / Relief3D Cookbook docs to be updated in step.
 
 using System.Linq;
 using System.Reflection;
@@ -24,15 +25,15 @@ public sealed class ReliefGpuVolumetricParityTests
             .ToArray();
 
     [Fact]
-    public void ReliefUniforms_Has_No_PaletteMappedFog_Field()
+    public void ReliefUniforms_Carries_PaletteMappedFog_Field()
     {
-        // GPU relief has no VolumePaletteStrength in its contract → palette-mapped
-        // fog is a CPU-relief-only feature. If you add it to the GPU path, add
-        // the field here AND update Volumetric-Lighting-Guide §6 +
-        // Relief3D-Cookbook (the "GPU relief only" caveat).
+        // #185 (slice D) — the relief contract now carries the palette-map strength
+        // + the baked theme-ramp LUT, so the D3D / Vulkan kernels and the parity
+        // twin all hue-remap the in-scatter through the active 3D theme. If you
+        // drop these, update Volumetric-Lighting-Guide §6 + Relief3D-Cookbook.
         var names = UniformFieldNames();
-        Assert.DoesNotContain("VolumePaletteStrength", names);
-        Assert.DoesNotContain("VolumePalette", names);
+        Assert.Contains("VolPaletteStrength", names);
+        Assert.Contains("VolPalette", names);
     }
 
     [Fact]

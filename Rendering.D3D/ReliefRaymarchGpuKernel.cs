@@ -64,7 +64,7 @@ public sealed class ReliefRaymarchGpuKernel : IDisposable, FracturingFog.Renderi
         public float ReflStrength; public int ReflSteps, MaxBounces, UseGgx;   // 4e-ii reflections
         public float VolNoiseAmount, VolNoiseScale, VolNoiseSpeed; public int VolNoiseOctaves;   // 4e-ii FBM
         public float VolSelfShadow; public int VolSelfShadowSteps; public float SceneTime, VolAnisotropy;   // 4e-ii + #184 Slice 3 (B)
-        public uint FogColor; public float PadV, PadV2, PadV3;   // #184 Slice 3 (C)
+        public uint FogColor; public float VolPaletteStrength; public int HasPalette, PaletteLen;   // #184 Slice 3 (C) + #185 slice D
     }
 
     private const int ParamBytes = 448;
@@ -87,6 +87,10 @@ public sealed class ReliefRaymarchGpuKernel : IDisposable, FracturingFog.Renderi
     private ID3D11Buffer? _hdriBuf;               // t4 — 4d-ii flattened HDRI env
     private ID3D11ShaderResourceView? _hdriSrv;
     private int _hdriFloats;
+
+    private ID3D11Buffer? _paletteBuf;            // t5 — #185 theme ramp LUT
+    private ID3D11ShaderResourceView? _paletteSrv;
+    private int _paletteLen;
 
     private ID3D11Buffer? _albedoBuf;             // t1 — output-sized (n)
     private ID3D11ShaderResourceView? _albedoSrv;
@@ -201,6 +205,29 @@ public sealed class ReliefRaymarchGpuKernel : IDisposable, FracturingFog.Renderi
         _hdriFloats = count;
     }
 
+    // #185 — (re)allocate the theme-ramp SRV (t5) to hold `count` packed-ARGB uints.
+    private void EnsurePaletteBuffer(int count)
+    {
+        if (_paletteBuf != null && _paletteLen == count) return;
+        _paletteSrv?.Dispose(); _paletteBuf?.Dispose();
+        _paletteBuf = _device.CreateBuffer(new BufferDescription
+        {
+            ByteWidth = (uint)(count * sizeof(uint)),
+            BindFlags = BindFlags.ShaderResource,
+            Usage = ResourceUsage.Dynamic,
+            CPUAccessFlags = CpuAccessFlags.Write,
+            MiscFlags = ResourceOptionFlags.BufferStructured,
+            StructureByteStride = sizeof(uint),
+        });
+        _paletteSrv = _device.CreateShaderResourceView(_paletteBuf, new ShaderResourceViewDescription
+        {
+            Format = Vortice.DXGI.Format.Unknown,
+            ViewDimension = Vortice.Direct3D.ShaderResourceViewDimension.Buffer,
+            Buffer = new BufferShaderResourceView { FirstElement = 0, NumElements = (uint)count },
+        });
+        _paletteLen = count;
+    }
+
     private void EnsureOutputBuffers(int n)
     {
         if (_albedoBuf != null && _outPixels == n) return;
@@ -287,6 +314,14 @@ public sealed class ReliefRaymarchGpuKernel : IDisposable, FracturingFog.Renderi
                 UploadColors(_hdriBuf!, u.HdriBuf, u.HdriBuf.Length);
             }
 
+            // #185 — upload the theme ramp when the palette map is active.
+            bool hasPalette = u.VolPaletteStrength > 0.0 && u.VolPalette != null && u.VolPalette.Length >= 2;
+            if (hasPalette)
+            {
+                EnsurePaletteBuffer(u.VolPalette!.Length);
+                UploadColors(_paletteBuf!, u.VolPalette, u.VolPalette.Length);
+            }
+
             var p = BuildBlob(in u, keep != null);
             var mapped = _ctx.Map(_paramsBuf, 0, Vortice.Direct3D11.MapMode.WriteDiscard, MapFlags.None);
             unsafe { *(ReliefParamsBlob*)mapped.DataPointer = p; }
@@ -299,6 +334,7 @@ public sealed class ReliefRaymarchGpuKernel : IDisposable, FracturingFog.Renderi
             _ctx.CSSetShaderResource(2, _keepSrv);
             _ctx.CSSetShaderResource(3, u.EmptySkip != 0 ? _mipSrv : null);
             _ctx.CSSetShaderResource(4, u.HdriBuf != null ? _hdriSrv : null);
+            _ctx.CSSetShaderResource(5, hasPalette ? _paletteSrv : null);
             _ctx.CSSetUnorderedAccessView(0, _colorUav);
 
             _ctx.Dispatch((uint)((w + 7) / 8), (uint)((h + 7) / 8), 1);
@@ -309,6 +345,7 @@ public sealed class ReliefRaymarchGpuKernel : IDisposable, FracturingFog.Renderi
             _ctx.CSSetShaderResource(2, null);
             _ctx.CSSetShaderResource(3, null);
             _ctx.CSSetShaderResource(4, null);
+            _ctx.CSSetShaderResource(5, null);
 
             _ctx.CopyResource(_colorStaging!, _colorBuf!);
             long tDispatch = System.Diagnostics.Stopwatch.GetTimestamp();
@@ -371,7 +408,10 @@ public sealed class ReliefRaymarchGpuKernel : IDisposable, FracturingFog.Renderi
             VolNoiseSpeed = (float)u.VolumeNoiseSpeed, VolNoiseOctaves = u.VolumeNoiseOctaves,
             VolSelfShadow = (float)u.VolumeSelfShadow, VolSelfShadowSteps = u.VolumeSelfShadowSteps,
             SceneTime = (float)u.SceneTime, VolAnisotropy = (float)u.VolAnisotropy,
-            FogColor = u.FogColor, PadV = 0f, PadV2 = 0f, PadV3 = 0f,
+            FogColor = u.FogColor,
+            VolPaletteStrength = (float)u.VolPaletteStrength,
+            HasPalette = (u.VolPaletteStrength > 0.0 && u.VolPalette != null && u.VolPalette.Length >= 2) ? 1 : 0,
+            PaletteLen = u.VolPalette?.Length ?? 0,
         };
     }
 
@@ -419,12 +459,14 @@ public sealed class ReliefRaymarchGpuKernel : IDisposable, FracturingFog.Renderi
         try { _keepSrv?.Dispose(); } catch { }
         try { _mipSrv?.Dispose(); } catch { }
         try { _hdriSrv?.Dispose(); } catch { }
+        try { _paletteSrv?.Dispose(); } catch { }
         try { _albedoSrv?.Dispose(); } catch { }
         try { _colorUav?.Dispose(); } catch { }
         try { _heightBuf?.Dispose(); } catch { }
         try { _keepBuf?.Dispose(); } catch { }
         try { _mipBuf?.Dispose(); } catch { }
         try { _hdriBuf?.Dispose(); } catch { }
+        try { _paletteBuf?.Dispose(); } catch { }
         try { _albedoBuf?.Dispose(); } catch { }
         try { _colorBuf?.Dispose(); } catch { }
         try { _colorStaging?.Dispose(); } catch { }

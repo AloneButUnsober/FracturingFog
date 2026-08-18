@@ -2923,12 +2923,30 @@ namespace FracturingFog.Rendering
             if (!fieldOk) return buf;
             var dst = new uint[n];
             if (raymarch)
+            {
+                BakeReliefVolumePalette(rp);
                 FracturingFog.Rendering.Lighting.HeightfieldRaymarch2D.Render(
                     buf, _reliefHeight, w, h, _reliefW, _reliefH, rp, dst, out _, null);
+            }
             else
                 FracturingFog.Rendering.Lighting.HeightfieldRelief2D.Apply(
                     buf, dst, _reliefHeight, w, h, rp);
             return dst;
+        }
+
+        // #185 (slice D) — bake the active 3D color theme's gradient into the
+        // transient VolumePalette LUT on the relief params' Lighting so the
+        // volumetric in-scatter can be hue-remapped through the same ramp as the
+        // surface. The 8 3D-fractal calculators bake this in their own Calculate;
+        // the relief path never runs a fractal calculator, so the host bakes it
+        // here from the active color map. No-op (clears the LUT) unless
+        // VolumePaletteStrength > 0; the LUT is runtime-only (never serialized),
+        // so writing it back onto the shared params is a harmless transient.
+        private void BakeReliefVolumePalette(FractalParameters p)
+        {
+            var fx = p.Lighting;
+            FracturingFog.Rendering.Lighting.VolumePaletteBaker.Bake(ref fx, _calculator.ColorMap);
+            p.Lighting = fx;
         }
 
         // ── Internals ─────────────────────────────────────────────────────────
@@ -3296,6 +3314,7 @@ namespace FracturingFog.Rendering
                         // sphere trace (full-FX oracle) otherwise. The kernel is
                         // built lazily only when the flag is on, so a non-relief GPU
                         // session never constructs it.
+                        BakeReliefVolumePalette(reliefParams);   // #185 slice D
                         FracturingFog.Rendering.Lighting.HeightfieldRaymarch2D.Render(
                             src, _reliefHeight!, w, h, _reliefW, _reliefH,
                             reliefParams, _reliefColorScratch, out _,

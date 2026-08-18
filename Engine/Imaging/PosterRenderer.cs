@@ -239,7 +239,7 @@ namespace FracturingFog.Imaging
                 // of a Relief 3D scene must apply relief here too — otherwise it
                 // silently falls back to the flat 2D themed colour. No-op when
                 // relief is off or the calc exposes no field.
-                buffer = ApplyReliefIfEnabled(buffer, alt as IHeightFieldSource, w, h, req.FractalParameters);
+                buffer = ApplyReliefIfEnabled(buffer, alt as IHeightFieldSource, w, h, req.FractalParameters, alt?.ColorMap);
             }
             else
             {
@@ -322,7 +322,7 @@ namespace FracturingFog.Imaging
                 // output dims here: a poster is already high-res, so the
                 // display-size undersampling the hi-res field works around does
                 // not apply.
-                buffer = ApplyReliefIfEnabled(buffer, calc, w, h, req.FractalParameters);
+                buffer = ApplyReliefIfEnabled(buffer, calc, w, h, req.FractalParameters, calc.ColorMap);
             }
 
             }
@@ -389,7 +389,8 @@ namespace FracturingFog.Imaging
         // input buffer unchanged when relief is off or the calc exposes no
         // height field. Field dims == output dims (poster is hi-res).
         private static uint[] ApplyReliefIfEnabled(
-            uint[] buffer, IHeightFieldSource? heightSource, int w, int h, FractalParameters p)
+            uint[] buffer, IHeightFieldSource? heightSource, int w, int h, FractalParameters p,
+            IColorMap? colorMap = null)
         {
             if (p == null || !p.Relief2DEnabled) return buffer;
             var field = heightSource?.SmoothBuffer;
@@ -399,8 +400,16 @@ namespace FracturingFog.Imaging
 
             var dst = new uint[n];
             if (p.Relief2DRaymarch)
+            {
+                // #185 (slice D) — bake the active theme ramp so the export's
+                // volumetric in-scatter is palette-mapped identically to the screen.
+                // No-op unless VolumePaletteStrength > 0. Runtime-only LUT.
+                var fx = p.Lighting;
+                FracturingFog.Rendering.Lighting.VolumePaletteBaker.Bake(ref fx, colorMap);
+                p.Lighting = fx;
                 FracturingFog.Rendering.Lighting.HeightfieldRaymarch2D.Render(
                     buffer, field, w, h, p, dst);
+            }
             else
                 FracturingFog.Rendering.Lighting.HeightfieldRelief2D.Apply(
                     buffer, dst, field, w, h, p);

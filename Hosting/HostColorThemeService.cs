@@ -1245,8 +1245,16 @@ namespace FracturingFog.Hosting
                 {
                     var reliefDst = new uint[copy.Length];
                     if (rp.Relief2DRaymarch)
+                    {
+                        // #185 (slice D) — bake the theme ramp so the cross-fade's
+                        // relief in-scatter is palette-mapped like the committed
+                        // frame. No-op unless VolumePaletteStrength > 0.
+                        var rfx = rp.Lighting;
+                        FracturingFog.Rendering.Lighting.VolumePaletteBaker.Bake(ref rfx, map);
+                        rp.Lighting = rfx;
                         FracturingFog.Rendering.Lighting.HeightfieldRaymarch2D.Render(
                             copy, field, width, height, rp, reliefDst);
+                    }
                     else
                         FracturingFog.Rendering.Lighting.HeightfieldRelief2D.Apply(
                             copy, reliefDst, field, width, height, rp);

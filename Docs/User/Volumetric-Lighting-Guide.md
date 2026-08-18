@@ -324,9 +324,11 @@ GPU path is engaged — there are two, and they are not the same:
 
 - **GPU: Relief 3D raymarch** (the default on Relief 3D scenes) — **subset**
   parity, not full: **Light 1 only** contributes to the fog / god-rays (Lights
-  2/3 still shade the surface), and **no palette-mapped fog**. To get the full
-  VL feature set on a Relief 3D scene, disable the GPU relief path
-  (**Ctrl+Shift+G**) and render on the CPU.
+  2/3 still shade the surface). The **palette map (D) is supported** — the relief
+  render bakes the active theme ramp (host-side) and both relief GPU backends
+  (D3D, Vulkan) upload it and hue-remap the in-scatter, matching the CPU render.
+  For the full multi-light fog set on a Relief 3D scene, disable the GPU relief
+  path (**Ctrl+Shift+G**) and render on the CPU.
 
 The 3D-fractal GPU and CPU paths are built to match visually; when in doubt for
 a final render, compare a still on both.

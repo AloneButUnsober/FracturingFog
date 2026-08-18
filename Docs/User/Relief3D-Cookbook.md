@@ -222,11 +222,10 @@ concentrates the haze into distinct shafts — without it you get flat fog.
 >   Lights 2/3 still light the surface, but only **Light 1** carves shafts and
 >   tints the haze. Turn GPU relief off (CPU) to get all three lights + full
 >   volumetric color in the fog.
-> - **Palette-mapped fog (Palette map slider) does nothing on *GPU* relief yet**
->   (Ctrl+Shift+G, the default path). It **does** work on the **CPU** relief
->   path — turn GPU relief off to use it. So: on the default GPU path use
->   **Fog color** to tint relief haze; on CPU, both **Fog color** and **Palette
->   map** apply.
+> - **Palette-mapped fog (Palette map slider) now works on relief** — on both the
+>   CPU path **and** the default GPU relief path (D3D / Vulkan). The relief render
+>   bakes the active theme ramp and hue-remaps the in-scatter through it, so
+>   **Fog color** and **Palette map** both tint relief haze on either path.
 
 ---
 
