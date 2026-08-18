@@ -165,8 +165,15 @@ public sealed partial class FractalParamsViewModel
     public int ShadowSteps
     {
         get => _p.Lighting.ShadowSteps;
-        set { MutateLighting(r => r.Fx.ShadowSteps = (int)Clamp(value, 0, 64)); this.RaisePropertyChanged(); Fire(); }
+        set { MutateLighting(r => r.Fx.ShadowSteps = (int)Clamp(value, 0, 64)); this.RaisePropertyChanged(); this.RaisePropertyChanged(nameof(ShowVolumeShaftHint)); Fire(); }
     }
+
+    // #309 — advisory: fog in-scatter is a flat glow until terrain shadows are
+    // marched into it. Shafts (actual god-rays) need ShadowSteps > 0; VolumeSteps
+    // alone only casts a uniform brighten. True when the user has fog + volume
+    // steps up but shadows off, so a yellow (#FFCC00, colorblind-safe) hint shows.
+    public bool ShowVolumeShaftHint
+        => VolumeSteps > 0 && FogDensity > 0 && ShadowSteps == 0;
     public double ShadowSoftK
     {
         get => _p.Lighting.ShadowSoftK;
@@ -178,7 +185,7 @@ public sealed partial class FractalParamsViewModel
     public double FogDensity
     {
         get => _p.Lighting.FogDensity;
-        set { MutateLighting(r => r.Fx.FogDensity = Clamp(value, 0, 2)); this.RaisePropertyChanged(); Fire(); }
+        set { MutateLighting(r => r.Fx.FogDensity = Clamp(value, 0, 2)); this.RaisePropertyChanged(); this.RaisePropertyChanged(nameof(ShowVolumeShaftHint)); Fire(); }
     }
     public double FogHeightFalloff
     {
@@ -188,7 +195,7 @@ public sealed partial class FractalParamsViewModel
     public int VolumeSteps
     {
         get => _p.Lighting.VolumeSteps;
-        set { MutateLighting(r => r.Fx.VolumeSteps = (int)Clamp(value, 0, 64)); this.RaisePropertyChanged(); Fire(); }
+        set { MutateLighting(r => r.Fx.VolumeSteps = (int)Clamp(value, 0, 64)); this.RaisePropertyChanged(); this.RaisePropertyChanged(nameof(ShowVolumeShaftHint)); Fire(); }
     }
     public double VolumeNoiseAmount
     {
