@@ -65,6 +65,11 @@ namespace FracturingFog.Imaging
         // colour buffer is read (Mandelbrot only).
         public int Brightness { get; init; }   // -100..100, 0 = none
         public int Contrast { get; init; }     // -100..100, 0 = none
+        // F6 part 2 — image gamma slider parity with the interactive present.
+        // Same encoding as ViewState.Gamma (−100..100, 0 = none); gamma =
+        // 2^(slider/100). Without this the offscreen poster silently dropped the
+        // live gamma the on-screen frame applied (FractalRenderHost.UploadProcessedBuffer).
+        public int Gamma { get; init; }        // -100..100, 0 = none
         public int HistogramEq { get; init; }  //    0..100, 0 = none
 
         /// <summary>F11 ordered-dither deband of the palette float→byte quantise
@@ -319,8 +324,24 @@ namespace FracturingFog.Imaging
 
             sw.Stop();
 
-            // Brightness/Contrast BGRA post-pass (both calculator paths).
-            ApplyBrightnessContrast(buffer, w * h, req.Brightness, req.Contrast);
+            // Brightness/Contrast/Gamma BGRA post-pass (both calculator paths).
+            // Alpha is PRESERVED here (F10.3) so the interior-alpha composite below
+            // still sees the authored coverage byte.
+            ApplyBrightnessContrastGamma(buffer, w * h, req.Brightness, req.Contrast, req.Gamma);
+
+            // Interior-alpha composite — the SAME shared helper the live path
+            // (FractalRenderHost.UploadProcessedBuffer) calls, so a poster/wallpaper
+            // matches the on-screen window pixel-for-pixel. The D3D present ignores
+            // the alpha channel, so authored translucency (interior alpha + per-stop
+            // exterior alpha) only shows once composited over the chosen
+            // Interior2DBackground; without it the offscreen render wrote a straight-
+            // alpha PNG that washed out over a viewer's white background. In-place:
+            // the b/c/gamma pass above preserved the coverage byte, so the same buffer
+            // supplies both RGB and coverage. Transparent mode keeps straight alpha.
+            FracturingFog.Rendering.Interior2DBackgroundCompositor.Composite(
+                buffer, buffer, w, h, req.FractalParameters,
+                req.ColorMap?.InSetColor ?? 0xFF000000u,
+                alphaPreview: false, srcAlreadyProcessed: false);
 
             if (req.Rotate)
             {
@@ -376,15 +397,17 @@ namespace FracturingFog.Imaging
             return dst;
         }
 
-        // In-place brightness/contrast BGRA post-pass. Same math as
+        // In-place brightness/contrast/gamma BGRA post-pass. Same math as
         // FractalRenderHost.UploadProcessedBuffer so poster output matches the
         // interactive image: contrast pivots around mid-grey (127.5), then
-        // brightness offsets in 0..255 space.
-        private static void ApplyBrightnessContrast(uint[] buf, int n, int brightness, int contrast)
+        // brightness offsets in 0..255 space, then the gamma LUT is applied last.
+        private static void ApplyBrightnessContrastGamma(
+            uint[] buf, int n, int brightness, int contrast, int gamma)
         {
-            if (brightness == 0 && contrast == 0) return;
+            if (brightness == 0 && contrast == 0 && gamma == 0) return;
             float contrastFactor = 1f + contrast / 100f;
             float brightnessOffset255 = brightness / 100f * 255f;
+            byte[]? gammaLut = gamma != 0 ? BuildGammaLut(gamma) : null;
             int len = Math.Min(n, buf.Length);
             for (int i = 0; i < len; i++)
             {
@@ -398,11 +421,34 @@ namespace FracturingFog.Imaging
                 byte R = (byte)Math.Clamp(r, 0f, 255f);
                 byte G = (byte)Math.Clamp(g, 0f, 255f);
                 byte B = (byte)Math.Clamp(b, 0f, 255f);
+                if (gammaLut != null)
+                {
+                    R = gammaLut[R];
+                    G = gammaLut[G];
+                    B = gammaLut[B];
+                }
                 // F10.3 — preserve the source alpha byte (was forced 0xFF, which
                 // clobbered per-stop coverage on any brightness/contrast export).
                 // Opaque pixels keep 0xFF, so pre-F10 output is byte-identical.
                 buf[i] = (p & 0xFF000000u) | ((uint)R << 16) | ((uint)G << 8) | B;
             }
+        }
+
+        // Builds the 256-entry byte gamma LUT for the live image gamma slider
+        // (F6 part 2), matching FractalRenderHost.BuildGammaLut exactly: slider
+        // maps to gamma = 2^(slider/100) and the LUT stores round(pow(v/255, 1/gamma) * 255).
+        private static byte[] BuildGammaLut(int gammaSlider)
+        {
+            double gammaValue = Math.Pow(2.0, gammaSlider / 100.0);
+            double exp = 1.0 / gammaValue;
+            var lut = new byte[256];
+            for (int v = 0; v < 256; v++)
+            {
+                double outN = Math.Pow(v / 255.0, exp);
+                int o = (int)(outN * 255.0 + 0.5);
+                lut[v] = (byte)Math.Clamp(o, 0, 255);
+            }
+            return lut;
         }
 
         private static WatermarkRender? BuildPosterWatermark(PosterRequest req, Color fontColor)
