@@ -93,6 +93,17 @@ public static class RendererFactory
     public static bool ForceD3D11 { get; set; }
 
     /// <summary>
+    /// #375 — opt back into the DirectX 12 backend. DX11 is now the DEFAULT on
+    /// Windows because DX12 auto-selection could hang / hit
+    /// DXGI_ERROR_DEVICE_REMOVED on some GPUs/drivers (and under RDP), taking the
+    /// process down. Set by Program.cs from <c>--renderer dx12</c> or the
+    /// <c>FF_PREFER_D3D12</c> environment variable. When false (the default),
+    /// <see cref="Create(IGpuSurface, bool)"/> forces DX11 even on FL12-capable
+    /// GPUs; <see cref="ForceD3D11"/> still wins if both are set.
+    /// </summary>
+    public static bool PreferD3D12 { get; set; }
+
+    /// <summary>
     /// Windows-only HWND renderer hook. <c>FracturingFog.Win.WindowsBootstrap</c>
     /// registers <c>WindowsDxRendererFactory.Create</c> here on Windows hosts.
     /// Left null on Linux/macOS so a Win32Hwnd surface arriving on a non-Win
@@ -213,7 +224,11 @@ public static class RendererFactory
         int w = System.Math.Max(1, surface.PixelWidth);
         int h = System.Math.Max(1, surface.PixelHeight);
 
-        IFractalRenderer? renderer = Win32HwndBackend(surface.Handle, w, h, force_D3D11 || ForceD3D11)
+        // #375: DX11 is the default. DX12 runs only when explicitly opted in
+        // (PreferD3D12); otherwise — or when DX11 is force-requested — pass
+        // force_D3D11=true so WindowsDxRendererFactory skips the DX12 path.
+        bool useD3D11 = force_D3D11 || ForceD3D11 || !PreferD3D12;
+        IFractalRenderer? renderer = Win32HwndBackend(surface.Handle, w, h, useD3D11)
             ?? throw new InvalidOperationException(
                 "Win32HwndBackend returned null. WindowsDxRendererFactory.Create never " +
                 "returns null today — investigate the hook registration.");
@@ -235,10 +250,12 @@ public static class RendererFactory
     {
         if (PreferredBackend == RendererBackend.Vulkan)
             return VulkanProbeBackend?.Invoke() ?? "Vulkan (compute) + OpenGL (present)";
-        // Forced DX11 overrides the probe (which otherwise reports DX12 whenever
-        // the GPU is FL12-capable) so the title bar / System Info reflect what
-        // actually runs.
-        if (ForceD3D11 && Win32ProbeBackend is not null)
+        // #375: DX11 is the default and DX12 is opt-in (PreferD3D12), so the
+        // probe reports DX11 unless the user opted into DX12 — otherwise the
+        // Win32 probe would report DX12 on any FL12-capable GPU and mislead the
+        // title bar / System Info about what actually runs. ForceD3D11 also pins
+        // DX11 even if PreferD3D12 is set.
+        if (Win32ProbeBackend is not null && (ForceD3D11 || !PreferD3D12))
             return "DirectX 11";
         return Win32ProbeBackend?.Invoke() ?? "Silk.NET OpenGL";
     }

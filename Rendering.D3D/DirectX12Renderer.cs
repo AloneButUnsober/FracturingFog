@@ -86,6 +86,17 @@ public sealed class DirectX12Renderer : IFractalRenderer
     private int _frameIndex;
     private bool _disposed;
 
+    // #375: device-removed / TDR guard. On DXGI_ERROR_DEVICE_REMOVED the whole
+    // D3D12 device is dead — every subsequent submit / present / resize throws
+    // the same HRESULT, and letting it escape unhandled took the process down
+    // (crash on pan or maximise, reliably on some GPUs and under RDP). Once we
+    // see it we latch this flag, log the removed reason once, and turn Render /
+    // Resize / UpdateTexture into no-ops so the app keeps running (frozen last
+    // frame) instead of crashing. Recovery today = relaunch; DX11 is the default
+    // backend and DX12 is opt-in (--renderer dx12), so a lost device no longer
+    // bricks the session.
+    private volatile bool _deviceRemoved;
+
     // Pending CPU→GPU upload (set by UpdateTexture, consumed by Render).
     // _pendingPixels always points at a buffer this renderer OWNS (a snapshot
     // taken in UpdateTexture), never the caller's array — see the issue #25
@@ -99,6 +110,12 @@ public sealed class DirectX12Renderer : IFractalRenderer
 
     // ── IFractalRenderer ──────────────────────────────────────────────────────
     public string RendererDescription => "DirectX 12";
+
+    /// <summary>#375 — true once the D3D12 device was lost (TDR /
+    /// DXGI_ERROR_DEVICE_REMOVED). The renderer then stops presenting instead of
+    /// throwing; a host that wants live recovery can observe this and swap in a
+    /// fresh renderer (the DX11 backend is the stable default).</summary>
+    public bool DeviceRemoved => _deviceRemoved;
 
     /// <inheritdoc/>
     public bool VSync { get; set; } = true;
@@ -333,7 +350,7 @@ float4 PS(VSOut i) : SV_Target { return g_Tex.Sample(g_Samp, i.UV); }";
 
     public void UpdateTexture(uint[] colorBuffer, int width, int height)
     {
-        if (_disposed) return;
+        if (_disposed || _deviceRemoved) return;
         int n = width * height;
         if (n <= 0 || colorBuffer.Length < n) return;
 
@@ -372,14 +389,68 @@ float4 PS(VSOut i) : SV_Target { return g_Tex.Sample(g_Samp, i.UV); }";
         }
     }
 
+    // ── Device-removed / TDR handling (#375) ───────────────────────────────────
+
+    // DXGI_ERROR_DEVICE_REMOVED / DXGI_ERROR_DEVICE_RESET HRESULTs.
+    private const int DXGI_ERROR_DEVICE_REMOVED = unchecked((int)0x887A0005);
+    private const int DXGI_ERROR_DEVICE_RESET   = unchecked((int)0x887A0007);
+
+    /// <summary>
+    /// Decide whether a SharpGen failure is a lost device and, if so, latch
+    /// <see cref="_deviceRemoved"/> and log the removed reason once. The
+    /// authoritative signal is <c>ID3D12Device.DeviceRemovedReason</c> (a failing
+    /// reason means the device is gone regardless of which call surfaced it); the
+    /// HRESULT is a secondary check. Returns false for a genuine non-device error
+    /// so the caller can rethrow it as the bug it is.
+    /// </summary>
+    private bool HandleIfDeviceRemoved(SharpGenException ex, string where)
+    {
+        Result reason = Result.Ok;
+        bool queryFailed = false;
+        try { reason = _device.DeviceRemovedReason; }
+        catch { queryFailed = true; }   // device object itself unusable → treat as removed
+
+        bool removed = queryFailed
+            || reason.Failure
+            || ex.HResult == DXGI_ERROR_DEVICE_REMOVED
+            || ex.HResult == DXGI_ERROR_DEVICE_RESET;
+        if (!removed) return false;
+
+        if (!_deviceRemoved)
+        {
+            _deviceRemoved = true;
+            string msg =
+                $"D3D12 device lost in {where} (HRESULT 0x{ex.HResult:X8}, reason 0x{reason.Code:X8}). " +
+                "Rendering halted to avoid a crash — restart the app. DX11 is the default backend; " +
+                "opt back into D3D12 with --renderer dx12.";
+            System.Diagnostics.Debug.WriteLine("[DirectX12Renderer] " + msg);
+            try { Console.Error.WriteLine(msg); } catch { /* no console */ }
+        }
+        return true;
+    }
+
     // ── Render ────────────────────────────────────────────────────────────────
 
     public void Render()
     {
-        if (_disposed) return;
+        if (_disposed || _deviceRemoved) return;
+        try
+        {
+            RenderCore();
+        }
+        catch (SharpGenException ex)
+        {
+            // A lost device fails soft (stop presenting); anything else is a real
+            // bug and still throws.
+            if (!HandleIfDeviceRemoved(ex, "Render")) throw;
+        }
+    }
 
+    private void RenderCore()
+    {
         // Upload any pending CPU texture before drawing.
         FlushPendingUpload();
+        if (_deviceRemoved) return;   // upload latched a lost device
 
         if (_texture == null) return;
 
@@ -578,15 +649,10 @@ float4 PS(VSOut i) : SV_Target { return g_Tex.Sample(g_Samp, i.UV); }";
         }
         catch (SharpGen.Runtime.SharpGenException sharpEX)
         {
-            
-            SharpGen.Runtime.Result sharpResult = _device.DeviceRemovedReason;
-            ID3D12DeviceRemovedExtendedData drData = _device.QueryInterface<ID3D12DeviceRemovedExtendedData>();
-            string errorMsg = $"D3D12 operation failed: {sharpEX.Message}\n" +
-                $"Device Removed Reason: {sharpResult}\n"; // +
-                //$"DRED Category: {drData.Category}\n" +
-                //$"DRED ReasonCode: {drData.ReasonCode}\n" +
-                //$"DRED Description: {drData.Description}";
-            throw new Exception(errorMsg);
+            // #375: a lost device during upload latches _deviceRemoved and is
+            // swallowed (RenderCore checks the flag and bails); any other GPU
+            // error is a genuine bug and still propagates.
+            if (!HandleIfDeviceRemoved(sharpEX, "upload")) throw;
         }
     }
 
@@ -594,22 +660,32 @@ float4 PS(VSOut i) : SV_Target { return g_Tex.Sample(g_Samp, i.UV); }";
 
     public void Resize(int width, int height)
     {
-        if (_disposed || width < 1 || height < 1) return;
+        if (_disposed || _deviceRemoved || width < 1 || height < 1) return;
         if (width == _width && height == _height) return;
 
-        WaitForAllFrames();
+        try
+        {
+            WaitForAllFrames();
 
-        foreach (var rt in _renderTargets) rt.Dispose();
+            foreach (var rt in _renderTargets) rt.Dispose();
 
-        _swapChain.ResizeBuffers(
-            0, (uint)width, (uint)height,
-            Format.Unknown, SwapChainFlags.None).CheckError();
+            _swapChain.ResizeBuffers(
+                0, (uint)width, (uint)height,
+                Format.Unknown, SwapChainFlags.None).CheckError();
 
-        _width = width;
-        _height = height;
-        _frameIndex = (int)_swapChain.CurrentBackBufferIndex;
+            _width = width;
+            _height = height;
+            _frameIndex = (int)_swapChain.CurrentBackBufferIndex;
 
-        CreateRenderTargetViews();
+            CreateRenderTargetViews();
+        }
+        catch (SharpGenException ex)
+        {
+            // #375: maximise / DPI change on a lost device threw
+            // DXGI_ERROR_DEVICE_REMOVED here unhandled (the captured crash stack).
+            // Fail soft; a real error still throws.
+            if (!HandleIfDeviceRemoved(ex, "Resize")) throw;
+        }
     }
 
     // ── Fence helpers ─────────────────────────────────────────────────────────
