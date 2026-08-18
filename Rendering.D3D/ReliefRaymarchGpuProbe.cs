@@ -177,6 +177,17 @@ public static class ReliefRaymarchGpuProbe
         fx.FogDensity = 0.5;
         fx.FogHeightFalloff = 0.3;
         fx.VolumeSteps = 16;
+        // #388 — exercise the multi-light in-scatter port. Arm Light 2 (fill, its
+        // default cool color) and Light 3 (rim, warm) so the fog/god-ray walk sums
+        // all three lights, each HG-phased toward its own direction. Extend the
+        // shadow mask to 0x3 so a SECOND light also casts volumetric shafts (its
+        // per-step SoftShadow now runs); Light 3 stays unshadowed. GPU==twin here
+        // proves the three-light relief kernel matches the oracle. Kept to two
+        // shadowed lights so the added penumbra float-vs-double divergence stays
+        // inside the gate's edge band.
+        fx.Light2.Intensity = 0.7;
+        fx.Light3.Intensity = 0.5;
+        fx.ShadowLightMask = 0x3;
         // 4e-ii (#172) — N-bounce reflections (mirror path) + FBM cloud-noise
         // volumetrics. Mirror reflect (UseGgxSampling OFF) is the deterministic,
         // parity-friendly path — GGX VNDF hash/trig would scatter bounce rays and

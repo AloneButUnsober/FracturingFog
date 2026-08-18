@@ -674,6 +674,73 @@ public class ReliefRaymarchGpuTests
         Assert.Equal(a, b);
     }
 
+    // #388 — multi-light volumetric in-scatter on the relief twin. With the key
+    // light OFF, the ONLY path that can light the fog is the #388 multi-light
+    // in-scatter loop, so a pure-blue fill (Light2) makes fog-lit pixels bluer than
+    // the same scene with fog off. Extinction alone can only darken the backdrop —
+    // added blue proves Light2 now feeds the fog. Geometry (hit fraction) unmoved.
+    [Fact]
+    public void CpuMirror_MultiLight_InScatter_FillLight_Lights_Fog()
+    {
+        int w = 320, h = 240, hw = 320, hh = 240;
+        var p = ReliefParams();
+        var (hbuf, albedo, maxH) = BumpField(hw, hh, w, h);
+
+        // Key light off; Light2 = strong pure-blue fill. Fog off vs fog on.
+        var fxNoFog = LightingFxData.CreateDefault();
+        fxNoFog.Light1.Intensity = 0.0;
+        fxNoFog.Light2.Intensity = 2.0; fxNoFog.Light2.Color = 0xFF0000FFu;
+        fxNoFog.FogDensity = 0.0;
+        var uNoFog = BuildUniforms(w, h, hw, hh, hbuf, maxH, p, fxNoFog);
+        var noFog = new uint[w * h];
+        ReliefRaymarchGpu.RenderCpuMirror(in uNoFog, hbuf, null, albedo, noFog, out double hitNoFog);
+
+        var fxFog = LightingFxData.CreateDefault();
+        fxFog.Light1.Intensity = 0.0;
+        fxFog.Light2.Intensity = 2.0; fxFog.Light2.Color = 0xFF0000FFu;
+        fxFog.FogDensity = 1.8; fxFog.VolumeSteps = 32;
+        var uFog = BuildUniforms(w, h, hw, hh, hbuf, maxH, p, fxFog);
+        var fog = new uint[w * h];
+        ReliefRaymarchGpu.RenderCpuMirror(in uFog, hbuf, null, albedo, fog, out double hitFog);
+
+        Assert.Equal(hitNoFog, hitFog);   // fog never moves geometry
+
+        int bluer = 0;
+        for (int i = 0; i < w * h; i++)
+            if ((int)(fog[i] & 0xFF) > (int)(noFog[i] & 0xFF)) bluer++;
+        Assert.True(bluer > 50, $"fill-light fog added no blue in-scatter ({bluer} px) — #388 not firing");
+    }
+
+    // #388 — an intensity-0 light contributes nothing to the fog, so mutating
+    // Light2/Light3 direction and color while their intensity stays 0 leaves the
+    // render byte-identical. Guards the intensity gate that keeps the single-light
+    // default free (drop the `if (Ii > 0)` and an off light's color would leak in).
+    [Fact]
+    public void CpuMirror_MultiLight_ZeroIntensity_Lights_Are_Inert()
+    {
+        int w = 200, h = 160, hw = 200, hh = 160;
+        var p = ReliefParams();
+        var (hbuf, albedo, maxH) = BumpField(hw, hh, w, h);
+
+        var fxA = LightingFxData.CreateDefault();
+        fxA.FogDensity = 1.2; fxA.VolumeSteps = 16;   // key light only, default L2/L3 = 0
+        var uA = BuildUniforms(w, h, hw, hh, hbuf, maxH, p, fxA);
+        var a = new uint[w * h];
+        ReliefRaymarchGpu.RenderCpuMirror(in uA, hbuf, null, albedo, a, out _);
+
+        var fxB = LightingFxData.CreateDefault();
+        fxB.FogDensity = 1.2; fxB.VolumeSteps = 16;
+        // Loud L2/L3 params, but intensity stays 0 → must not touch the render.
+        fxB.Light2.Color = 0xFFFF0000u; fxB.Light2.Theta = 1.0; fxB.Light2.Phi = 2.0;
+        fxB.Light3.Color = 0xFF00FF00u; fxB.Light3.Theta = 2.5; fxB.Light3.Phi = 1.0;
+        fxB.ShadowLightMask = 0x7;   // arm shadow bits for L2/L3 too — still inert at intensity 0
+        var uB = BuildUniforms(w, h, hw, hh, hbuf, maxH, p, fxB);
+        var b = new uint[w * h];
+        ReliefRaymarchGpu.RenderCpuMirror(in uB, hbuf, null, albedo, b, out _);
+
+        Assert.Equal(a, b);
+    }
+
     // Metallic = 1 with spec on suppresses diffuse (diffSuppress = 1 − metallic),
     // so away from the highlight the metal render is darker than the dielectric.
     [Fact]

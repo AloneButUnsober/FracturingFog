@@ -824,7 +824,7 @@ public static class ReliefRaymarchGpu
         if (u.FogDensity <= 0) return shaded;
         double br = (shaded >> 16) & 0xFF, bg = (shaded >> 8) & 0xFF, bb = shaded & 0xFF;
 
-        if (u.VolumeSteps > 0 && u.I0 > 0)
+        if (u.VolumeSteps > 0 && (u.I0 > 0 || u.I1 > 0 || u.I2 > 0))   // #388 — any light lights the fog
             InScatterWalk(ref br, ref bg, ref bb, ox, oy, oz, rdx, rdy, rdz,
                           0.0, tHit, in de, in u);
         else
@@ -846,8 +846,8 @@ public static class ReliefRaymarchGpu
     /// <summary>#184 — single-scatter in-scatter walk over an explicit air
     /// segment [tStart,tEnd] from o + rd·t, compositing over the incoming
     /// (br,bg,bb) as <c>bg·T + inScatter</c>. Twin of
-    /// <see cref="ShadingPipeline.VolumetricInScatterSegment"/> (key-light subset
-    /// until Slice 3 ports B/C/D). Shared by the surface-hit fog ([0,tHit]) and
+    /// <see cref="ShadingPipeline.VolumetricInScatterSegment"/> — full three-light
+    /// in-scatter (#388), matching the CPU path. Shared by the surface-hit fog ([0,tHit]) and
     /// the sky/miss god-ray walk ([t0,t1]) so shafts form against the sky.
     /// Adaptive LOD keys off the far end of the segment.</summary>
     private static void InScatterWalk(ref double br, ref double bg, ref double bb,
@@ -863,8 +863,17 @@ public static class ReliefRaymarchGpu
         if (u.VolumeStepsFalloff > 0 && tEnd > 4.0)
             vs = Math.Max(4, (int)(vs / (1.0 + (tEnd - 4.0) * u.VolumeStepsFalloff)));
         double stepSize = span / vs;
-        double Lr = u.C0r, Lg = u.C0g, Lb = u.C0b, Li = u.I0;
-        bool shadowOn = u.ShadowSteps > 0 && (u.ShadowLightMask & 0x1) != 0;
+        // #388 — multi-light in-scatter. Loop all three lights (intensity-gated),
+        // each with its own direction / color / ShadowLightMask bit, mirroring the
+        // CPU ShadingPipeline.VolumetricInScatterSegment three-light loop. Extinction
+        // T is per-step, shared across lights (identical to the CPU path). A light at
+        // intensity 0 contributes nothing, so the single-light default stays
+        // bit-identical (key light = L0, mask & 0x1).
+        double L0i = u.I0, L1i = u.I1, L2i = u.I2;
+        bool ss = u.ShadowSteps > 0;
+        bool sh0On = ss && (u.ShadowLightMask & 0x1) != 0;
+        bool sh1On = ss && (u.ShadowLightMask & 0x2) != 0;
+        bool sh2On = ss && (u.ShadowLightMask & 0x4) != 0;
         double T = 1.0, inR = 0, inG = 0, inB = 0;
         for (int s = 0; s < vs; s++)
         {
@@ -875,25 +884,20 @@ public static class ReliefRaymarchGpu
                 density *= Math.Exp(-u.FogHeightFalloff * sy);
             // 4e-ii — FBM cloud-noise density modulation (1.0 when off).
             density *= VolumetricDensityMul(sx, sy, sz, in u);
-            double sh = 1.0;
-            if (shadowOn)
-                sh = ShadingPipeline.SoftShadow(in de, sx, sy, sz, u.L0x, u.L0y, u.L0z,
-                                                u.Cam.Eps0, 12.0, u.ShadowSoftK, u.ShadowSteps);
-            // 4e-ii — cloud self-shadow toward the key light (1.0 when off).
-            sh *= CloudSelfShadow(sx, sy, sz, u.L0x, u.L0y, u.L0z, in u);
-            double scatter = density * sh * Li * stepSize;
-            // #184 Slice 3 (B) — Henyey-Greenstein phase, normalized so g=0 → 1
-            // (bit-identical). Twin of ShadingPipeline.AddVolumeScatter; view dir
-            // = the ray dir (rd), forward-scatters toward the key light for g>0.
-            double g = u.VolAnisotropy;
-            if (g != 0.0)
-            {
-                g = Math.Clamp(g, -0.99, 0.99);
-                double cosT = rdx * u.L0x + rdy * u.L0y + rdz * u.L0z;
-                double denom = 1.0 + g * g - 2.0 * g * cosT;
-                scatter *= (1.0 - g * g) / (denom * Math.Sqrt(denom));
-            }
-            inR += T * scatter * Lr; inG += T * scatter * Lg; inB += T * scatter * Lb;
+
+            if (L0i > 0)
+                AddReliefScatter(ref inR, ref inG, ref inB, in de, in u, sx, sy, sz,
+                    u.L0x, u.L0y, u.L0z, rdx, rdy, rdz, u.C0r, u.C0g, u.C0b, L0i,
+                    sh0On, T, density, stepSize);
+            if (L1i > 0)
+                AddReliefScatter(ref inR, ref inG, ref inB, in de, in u, sx, sy, sz,
+                    u.L1x, u.L1y, u.L1z, rdx, rdy, rdz, u.C1r, u.C1g, u.C1b, L1i,
+                    sh1On, T, density, stepSize);
+            if (L2i > 0)
+                AddReliefScatter(ref inR, ref inG, ref inB, in de, in u, sx, sy, sz,
+                    u.L2x, u.L2y, u.L2z, rdx, rdy, rdz, u.C2r, u.C2g, u.C2b, L2i,
+                    sh2On, T, density, stepSize);
+
             double aT = density * stepSize;
             T *= aT < 1.0 ? ExpNegSmall(aT) : Math.Exp(-aT);
         }
@@ -934,6 +938,40 @@ public static class ReliefRaymarchGpu
         br = br * T + fInR; bg = bg * T + fInG; bb = bb * T + fInB;
     }
 
+    /// <summary>#388 — single-light contribution to the volumetric in-scatter
+    /// accumulators. Exact twin of <see cref="ShadingPipeline.AddVolumeScatter"/>:
+    /// density · shadow · intensity · stepSize, HG-phased toward this light, weighted
+    /// by transmittance × light color. Called once per light per volume step so the
+    /// GPU relief fog matches the CPU multi-light path.</summary>
+    private static void AddReliefScatter(ref double inR, ref double inG, ref double inB,
+        in HeightfieldRaymarch2D.HeightDe de, in ReliefUniforms u,
+        double sx, double sy, double sz,
+        double lx, double ly, double lz,
+        double rdx, double rdy, double rdz,
+        double Lr, double Lg, double Lb, double li, bool shOn,
+        double T, double density, double stepSize)
+    {
+        double sh = 1.0;
+        if (shOn)
+            sh = ShadingPipeline.SoftShadow(in de, sx, sy, sz, lx, ly, lz,
+                                            u.Cam.Eps0, 12.0, u.ShadowSoftK, u.ShadowSteps);
+        // 4e-ii — cloud self-shadow toward this light (1.0 when off).
+        sh *= CloudSelfShadow(sx, sy, sz, lx, ly, lz, in u);
+        double scatter = density * sh * li * stepSize;
+        // #184 Slice 3 (B) — Henyey-Greenstein phase, normalized so g=0 → 1
+        // (bit-identical). View dir = the ray dir (rd); forward-scatters toward
+        // this light for g>0.
+        double g = u.VolAnisotropy;
+        if (g != 0.0)
+        {
+            g = Math.Clamp(g, -0.99, 0.99);
+            double cosT = rdx * lx + rdy * ly + rdz * lz;
+            double denom = 1.0 + g * g - 2.0 * g * cosT;
+            scatter *= (1.0 - g * g) / (denom * Math.Sqrt(denom));
+        }
+        inR += T * scatter * Lr; inG += T * scatter * Lg; inB += T * scatter * Lb;
+    }
+
     /// <summary>#185 (slice D) — sample a packed-ARGB gradient LUT at
     /// <paramref name="u"/> ∈ [0, 1] with linear interpolation between adjacent
     /// entries; returns the RGB channels as doubles in [0, 255]. Exact twin of
@@ -965,7 +1003,8 @@ public static class ReliefRaymarchGpu
         double rdx, double rdy, double rdz, double tStart, double tEnd,
         in HeightfieldRaymarch2D.HeightDe de, in ReliefUniforms u)
     {
-        if (u.Isolate || u.FogDensity <= 0 || u.VolumeSteps <= 0 || u.I0 <= 0) return bg;
+        if (u.Isolate || u.FogDensity <= 0 || u.VolumeSteps <= 0
+            || (u.I0 <= 0 && u.I1 <= 0 && u.I2 <= 0)) return bg;   // #388 — any light lights the fog
         double ts = Math.Max(tStart, 0.0);
         if (tEnd <= ts) return bg;
         double br = (bg >> 16) & 0xFF, bgc = (bg >> 8) & 0xFF, bb = bg & 0xFF;

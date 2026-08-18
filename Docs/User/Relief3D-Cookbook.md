@@ -218,10 +218,10 @@ concentrates the haze into distinct shafts — without it you get flat fog.
 > - **Relief needs more fog than a Mandelbulb.** The air path over terrain is
 >   short, so densities that read well on a unit-scale 3D fractal look like
 >   nothing here. Start around **Fog density 0.4–0.8** and go up.
-> - **GPU relief uses the key light only for fog** (Ctrl+Shift+G, the default).
->   Lights 2/3 still light the surface, but only **Light 1** carves shafts and
->   tints the haze. Turn GPU relief off (CPU) to get all three lights + full
->   volumetric color in the fog.
+> - **GPU relief scatters all three lights into the fog** (#388) — the default GPU
+>   relief path now matches the CPU render for multi-light fog. Arm Lights 2/3
+>   (and give them a shadow-mask bit) and their color feeds the haze / god-rays,
+>   no need to drop to the CPU path.
 > - **Palette-mapped fog (Palette map slider) now works on relief** — on both the
 >   CPU path **and** the default GPU relief path (D3D / Vulkan). The relief render
 >   bakes the active theme ramp and hue-remaps the in-scatter through it, so

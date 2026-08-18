@@ -207,9 +207,10 @@ flip it behind.
 
 > [!NOTE]
 > Because the default shadow mask is **Light 1 only**, Light 1 is the light worth
-> aiming — it is the one that carves shafts. On **Relief 3D under GPU raymarch**
-> (the default) the fog scatters the key light *exclusively*, so aiming Light 1 is
-> the whole job there.
+> aiming — it is the one that carves shafts by default. As of #388, **Relief 3D
+> under GPU raymarch scatters all three lights** into the fog (matching the CPU
+> path), so colored fill/rim lights now tint the haze on the default relief render
+> too — arm Lights 2/3 and give them a shadow-mask bit for extra shafts.
 
 ---
 
@@ -322,13 +323,13 @@ GPU path is engaged — there are two, and they are not the same:
   palette map. **UserBulb's GPU path is cheap-shaded and skips volumetrics** —
   for volumetric UserBulb, render on the CPU.
 
-- **GPU: Relief 3D raymarch** (the default on Relief 3D scenes) — **subset**
-  parity, not full: **Light 1 only** contributes to the fog / god-rays (Lights
-  2/3 still shade the surface). The **palette map (D) is supported** — the relief
-  render bakes the active theme ramp (host-side) and both relief GPU backends
-  (D3D, Vulkan) upload it and hue-remap the in-scatter, matching the CPU render.
-  For the full multi-light fog set on a Relief 3D scene, disable the GPU relief
-  path (**Ctrl+Shift+G**) and render on the CPU.
+- **GPU: Relief 3D raymarch** (the default on Relief 3D scenes) — **full**
+  volumetric parity with the CPU path as of #388: **all three lights** contribute
+  to the fog / god-rays (each with its own color, intensity and shadow-mask bit),
+  plus anisotropy, medium color and the **palette map (D)** — the relief render
+  bakes the active theme ramp (host-side) and both relief GPU backends (D3D,
+  Vulkan) upload it and hue-remap the in-scatter. No need to drop to the CPU path
+  for multi-light relief fog anymore.
 
 The 3D-fractal GPU and CPU paths are built to match visually; when in doubt for
 a final render, compare a still on both.
@@ -344,7 +345,8 @@ on. Tips:
 - Tune the look at **low Volume steps (12–16)**, then raise for the final render.
 - **Adaptive LOD** (§5.4) reclaims most of the cost on deep scenes for free.
 - Cloud **self-shadow** multiplies cost by its step count — add it last.
-- Keep shafts to the **key light** (default) rather than shadow-masking all three.
+- Each armed light adds its own in-scatter march; on Relief 3D, colored fill/rim
+  lights now feed the fog (#388), so arm Lights 2/3 only when you want their haze.
 - The GPU path is dramatically faster for heavy volumetrics on the supported
   fractals.
 
