@@ -808,7 +808,7 @@ float ExpNegSmall(float x)
 // #184 — single-scatter in-scatter over an explicit air segment [tStart,tEnd]
 // from o + rd·t, compositing over the incoming (br,bg,bb) as bg·T + inScatter.
 // Twin of ReliefRaymarchGpu.InScatterWalk / ShadingPipeline.VolumetricInScatter
-// Segment (key-light subset until Slice 3). Shared by the surface-hit fog
+// Segment — full three-light in-scatter (#388). Shared by the surface-hit fog
 // ([0,tHit]) and the sky/miss god-ray walk ([t0,t1]) so shafts form against the
 // sky. Adaptive LOD keys off the far end of the segment.
 // #185 (slice D) — sample the packed-ARGB theme ramp (t5) at u in [0,1] with
@@ -832,6 +832,30 @@ float3 SamplePalette(float u)
     return v0 + (v1 - v0) * t;
 }
 
+// #388 — single-light contribution to the in-scatter accumulator. Twin of
+// ShadingPipeline.AddVolumeScatter / ReliefRaymarchGpu.AddReliefScatter:
+// density · shadow · intensity · stepSize, HG-phased toward L, weighted by
+// transmittance × light colour. Returns the increment; called once per light.
+float3 ReliefScatter(float3 sp, float3 L, float3 rd, float3 Lc, float li, bool shOn,
+                     float T, float density, float stepSize)
+{
+    float sh = 1.0;
+    if (shOn)
+        sh = SoftShadow(sp, L, gEps0, 12.0, gShadowSoftK, gShadowSteps);
+    sh *= CloudSelfShadow(sp, L);              // 4e-ii — cloud self-shadow
+    float scatter = density * sh * li * stepSize;
+    // #184 Slice 3 (B) — Henyey-Greenstein phase, normalized so g=0 → 1.
+    float g = gVolAnisotropy;
+    if (g != 0.0)
+    {
+        g = clamp(g, -0.99, 0.99);
+        float cosT = dot(rd, L);
+        float denom = 1.0 + g * g - 2.0 * g * cosT;
+        scatter *= (1.0 - g * g) / (denom * sqrt(denom));
+    }
+    return T * scatter * Lc;
+}
+
 void InScatterWalk(inout float br, inout float bg, inout float bb,
                    float3 o, float3 rd, float tStart, float tEnd)
 {
@@ -841,7 +865,13 @@ void InScatterWalk(inout float br, inout float bg, inout float bb,
     if (gVolumeStepsFalloff > 0.0 && tEnd > 4.0)
         vs = max(4, (int)(vs / (1.0 + (tEnd - 4.0) * gVolumeStepsFalloff)));
     float stepSize = span / vs;
-    bool shadowOn = gShadowSteps > 0 && (gShadowMask & 0x1) != 0;
+    // #388 — multi-light in-scatter: loop all three lights (intensity-gated), each
+    // with its own dir / colour / ShadowMask bit. Extinction T is per-step, shared
+    // across lights. A light at intensity 0 contributes nothing → the single-light
+    // default (key light L0, mask & 0x1) stays byte-identical.
+    bool sh0On = gShadowSteps > 0 && (gShadowMask & 0x1) != 0;
+    bool sh1On = gShadowSteps > 0 && (gShadowMask & 0x2) != 0;
+    bool sh2On = gShadowSteps > 0 && (gShadowMask & 0x4) != 0;
     float T = 1.0; float3 inSc = float3(0, 0, 0);
     [loop]
     for (int s = 0; s < vs; s++)
@@ -852,21 +882,12 @@ void InScatterWalk(inout float br, inout float bg, inout float bb,
         if (gFogHeightFalloff > 0.0)
             density *= exp(-gFogHeightFalloff * sp.y);
         density *= VolumetricDensityMul(sp);   // 4e-ii — FBM cloud modulation
-        float sh = 1.0;
-        if (shadowOn)
-            sh = SoftShadow(sp, gL0, gEps0, 12.0, gShadowSoftK, gShadowSteps);
-        sh *= CloudSelfShadow(sp, gL0);        // 4e-ii — cloud self-shadow
-        float scatter = density * sh * gI0 * stepSize;
-        // #184 Slice 3 (B) — Henyey-Greenstein phase, normalized so g=0 → 1.
-        float g = gVolAnisotropy;
-        if (g != 0.0)
-        {
-            g = clamp(g, -0.99, 0.99);
-            float cosT = dot(rd, gL0);
-            float denom = 1.0 + g * g - 2.0 * g * cosT;
-            scatter *= (1.0 - g * g) / (denom * sqrt(denom));
-        }
-        inSc += T * scatter * gC0;
+        if (gI0 > 0.0)
+            inSc += ReliefScatter(sp, gL0, rd, gC0, gI0, sh0On, T, density, stepSize);
+        if (gI1 > 0.0)
+            inSc += ReliefScatter(sp, gL1, rd, gC1, gI1, sh1On, T, density, stepSize);
+        if (gI2 > 0.0)
+            inSc += ReliefScatter(sp, gL2, rd, gC2, gI2, sh2On, T, density, stepSize);
         float aT = density * stepSize;
         T *= aT < 1.0 ? ExpNegSmall(aT) : exp(-aT);
     }
@@ -901,7 +922,7 @@ uint ApplyFogVolume(uint shaded, float3 o, float3 rd, float tHit)
     if (gFogDensity <= 0.0) return shaded;
     float br = (shaded >> 16) & 0xFF, bg = (shaded >> 8) & 0xFF, bb = shaded & 0xFF;
 
-    if (gVolumeSteps > 0 && gI0 > 0.0)
+    if (gVolumeSteps > 0 && (gI0 > 0.0 || gI1 > 0.0 || gI2 > 0.0))   // #388 — any light lights the fog
         InScatterWalk(br, bg, bb, o, rd, 0.0, tHit);
     else
     {
@@ -925,7 +946,8 @@ uint ApplyFogVolume(uint shaded, float3 o, float3 rd, float tHit)
 // against the sky. No-op for isolate cutouts / when the volumetric gate is off.
 uint ApplyFogVolumeMiss(uint bg, float3 o, float3 rd, float tStart, float tEnd)
 {
-    if (gIsolate != 0 || gFogDensity <= 0.0 || gVolumeSteps <= 0 || gI0 <= 0.0) return bg;
+    if (gIsolate != 0 || gFogDensity <= 0.0 || gVolumeSteps <= 0
+        || (gI0 <= 0.0 && gI1 <= 0.0 && gI2 <= 0.0)) return bg;   // #388 — any light lights the fog
     float ts = max(tStart, 0.0);
     if (tEnd <= ts) return bg;
     float br = (bg >> 16) & 0xFF, bgc = (bg >> 8) & 0xFF, bb = bg & 0xFF;
