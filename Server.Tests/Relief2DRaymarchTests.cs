@@ -613,6 +613,67 @@ public class ReliefRaymarchGpuTests
         Assert.True(brighter > 50, $"GGX spec added no visible highlight ({brighter} px)");
     }
 
+    // #185 (slice D) — palette-mapped volumetric in-scatter on the relief twin.
+    // With a strongly-hued theme ramp bound, fog-lit pixels shift toward the ramp.
+    // The energy-preserving remap keeps it a hue shift (never moves geometry).
+    [Fact]
+    public void CpuMirror_PaletteMap_Tints_InScatter_Toward_Ramp()
+    {
+        int w = 320, h = 240, hw = 320, hh = 240;
+        var p = ReliefParams();
+        var (hbuf, albedo, maxH) = BumpField(hw, hh, w, h);
+
+        var fxNo = LightingFxData.CreateDefault();
+        fxNo.FogDensity = 1.5; fxNo.VolumeSteps = 24;
+        var uNo = BuildUniforms(w, h, hw, hh, hbuf, maxH, p, fxNo);
+        var noPal = new uint[w * h];
+        ReliefRaymarchGpu.RenderCpuMirror(in uNo, hbuf, null, albedo, noPal, out double hitNo);
+
+        // Pure-blue theme ramp (every entry 0xFF0000FF).
+        var lut = new uint[256];
+        for (int i = 0; i < lut.Length; i++) lut[i] = 0xFF0000FFu;
+        var fxPal = LightingFxData.CreateDefault();
+        fxPal.FogDensity = 1.5; fxPal.VolumeSteps = 24;
+        fxPal.VolumePaletteStrength = 1.0; fxPal.VolumePalette = lut;
+        var uPal = BuildUniforms(w, h, hw, hh, hbuf, maxH, p, fxPal);
+        var pal = new uint[w * h];
+        ReliefRaymarchGpu.RenderCpuMirror(in uPal, hbuf, null, albedo, pal, out double hitPal);
+
+        Assert.Equal(hitNo, hitPal);   // palette never moves geometry
+
+        int bluer = 0;
+        for (int i = 0; i < w * h; i++)
+            if ((int)(pal[i] & 0xFF) > (int)(noPal[i] & 0xFF)) bluer++;
+        Assert.True(bluer > 50, $"palette map shifted no pixel toward the blue ramp ({bluer} px)");
+    }
+
+    // Strength 0 (with a LUT still present) is bit-identical to the pre-slice-D
+    // render, so a default scene pays nothing and stays byte-for-byte the same.
+    [Fact]
+    public void CpuMirror_PaletteMap_StrengthZero_Is_BitIdentical()
+    {
+        int w = 200, h = 160, hw = 200, hh = 160;
+        var p = ReliefParams();
+        var (hbuf, albedo, maxH) = BumpField(hw, hh, w, h);
+
+        var fxNull = LightingFxData.CreateDefault();
+        fxNull.FogDensity = 1.2; fxNull.VolumeSteps = 16;
+        var uNull = BuildUniforms(w, h, hw, hh, hbuf, maxH, p, fxNull);
+        var a = new uint[w * h];
+        ReliefRaymarchGpu.RenderCpuMirror(in uNull, hbuf, null, albedo, a, out _);
+
+        var lut = new uint[256];
+        for (int i = 0; i < lut.Length; i++) lut[i] = 0xFF00FF00u;
+        var fxZero = LightingFxData.CreateDefault();
+        fxZero.FogDensity = 1.2; fxZero.VolumeSteps = 16;
+        fxZero.VolumePaletteStrength = 0.0; fxZero.VolumePalette = lut;   // gate off
+        var uZero = BuildUniforms(w, h, hw, hh, hbuf, maxH, p, fxZero);
+        var b = new uint[w * h];
+        ReliefRaymarchGpu.RenderCpuMirror(in uZero, hbuf, null, albedo, b, out _);
+
+        Assert.Equal(a, b);
+    }
+
     // Metallic = 1 with spec on suppresses diffuse (diffSuppress = 1 − metallic),
     // so away from the highlight the metal render is darker than the dielectric.
     [Fact]

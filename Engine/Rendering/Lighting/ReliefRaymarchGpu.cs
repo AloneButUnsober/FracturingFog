@@ -92,6 +92,14 @@ public readonly struct ReliefUniforms
     public readonly double VolAnisotropy;
     public readonly uint FogColor;
 
+    // #185 (slice D) — volumetric palette-map. VolPaletteStrength == 0 or a null
+    // VolPalette LUT → the in-scatter is untouched (bit-identical to slice C).
+    // VolPalette is the active 3D theme's ramp, baked host-side by
+    // VolumePaletteBaker.Bake (packed ARGB, one entry per ramp step); the kernels
+    // upload it as the t5 SRV. Keyed by optical depth (1 − T) at composite time.
+    public readonly double VolPaletteStrength;
+    public readonly uint[]? VolPalette;
+
     // 4f — empty-space-skip max-height grid. EmptySkip == 0 → no skip (the
     // byte-identical slow march). MipW/MipH/MipBlk describe the coarse grid the
     // twin and both kernels build from hbuf via ReliefHeightMip.
@@ -141,7 +149,8 @@ public readonly struct ReliefUniforms
         double reflectionStrength, int reflectionSteps, int maxBounces, bool useGgxSampling,
         double volumeNoiseAmount, double volumeNoiseScale, double volumeNoiseSpeed, int volumeNoiseOctaves,
         double volumeSelfShadow, int volumeSelfShadowSteps, double sceneTime,
-        double volAnisotropy, uint fogColor)
+        double volAnisotropy, uint fogColor,
+        double volPaletteStrength, uint[]? volPalette)
     {
         W = w; H = h; Hw = hw; Hh = hh; Sy = sy; Aspect = aspect;
         InvLip = invLip; Bicubic = bicubic; Cam = cam;
@@ -167,6 +176,7 @@ public readonly struct ReliefUniforms
         VolumeSelfShadow = volumeSelfShadow; VolumeSelfShadowSteps = volumeSelfShadowSteps;
         SceneTime = sceneTime;
         VolAnisotropy = volAnisotropy; FogColor = fogColor;
+        VolPaletteStrength = volPaletteStrength; VolPalette = volPalette;
     }
 
     /// <summary>World-space direction of a directional light, matching
@@ -223,7 +233,8 @@ public readonly struct ReliefUniforms
             fx.ReflectionStrength, fx.ReflectionSteps, fx.MaxBounces, fx.UseGgxSampling,
             fx.VolumeNoiseAmount, fx.VolumeNoiseScale, fx.VolumeNoiseSpeed, fx.VolumeNoiseOctaves,
             fx.VolumeSelfShadow, fx.VolumeSelfShadowSteps, fx.SceneTime,
-            fx.VolumeAnisotropy, fx.FogColor);
+            fx.VolumeAnisotropy, fx.FogColor,
+            fx.VolumePaletteStrength, fx.VolumePalette);
     }
 }
 
@@ -891,7 +902,58 @@ public static class ReliefRaymarchGpu
         double fcr = ((u.FogColor >> 16) & 0xFF) / 255.0;
         double fcg = ((u.FogColor >>  8) & 0xFF) / 255.0;
         double fcb = ( u.FogColor        & 0xFF) / 255.0;
-        br = br * T + inR * fcr; bg = bg * T + inG * fcg; bb = bb * T + inB * fcb;
+        double fInR = inR * fcr, fInG = inG * fcg, fInB = inB * fcb;
+
+        // #185 (slice D) — palette-map the in-scatter through the active 3D theme
+        // gradient, keyed by optical depth (1 − T: thicker fog → deeper into the
+        // ramp). Energy-preserving hue remap (redistribute the in-scatter's own
+        // brightness across the palette hue), then cross-fade by VolPaletteStrength.
+        // Line-for-line twin of ShadingPipeline's slice-D block. Strength 0 / null
+        // LUT → unchanged, so the pre-slice-D relief render stays bit-identical.
+        double ps = u.VolPaletteStrength;
+        uint[]? lut = u.VolPalette;
+        if (ps > 0.0 && lut != null && lut.Length >= 2)
+        {
+            double energy = fInR + fInG + fInB;
+            if (energy > 0.0)
+            {
+                var (pr, pg, pb) = SamplePalette(lut, 1.0 - T);
+                double pSum = pr + pg + pb;
+                if (pSum > 1e-6)
+                {
+                    if (ps > 1.0) ps = 1.0;
+                    double k = energy / pSum;
+                    double omp = 1.0 - ps;
+                    fInR = fInR * omp + (pr * k) * ps;
+                    fInG = fInG * omp + (pg * k) * ps;
+                    fInB = fInB * omp + (pb * k) * ps;
+                }
+            }
+        }
+
+        br = br * T + fInR; bg = bg * T + fInG; bb = bb * T + fInB;
+    }
+
+    /// <summary>#185 (slice D) — sample a packed-ARGB gradient LUT at
+    /// <paramref name="u"/> ∈ [0, 1] with linear interpolation between adjacent
+    /// entries; returns the RGB channels as doubles in [0, 255]. Exact twin of
+    /// <c>ShadingPipeline.SamplePalette</c> and of the HLSL <c>SamplePalette</c>.</summary>
+    private static (double r, double g, double b) SamplePalette(uint[] lut, double u)
+    {
+        if (u < 0.0) u = 0.0; else if (u > 1.0) u = 1.0;
+        int n = lut.Length;
+        double f = u * (n - 1);
+        int i0 = (int)f;
+        if (i0 >= n - 1)
+        {
+            uint cl = lut[n - 1];
+            return ((cl >> 16) & 0xFF, (cl >> 8) & 0xFF, cl & 0xFF);
+        }
+        double t = f - i0;
+        uint c0 = lut[i0], c1 = lut[i0 + 1];
+        double r0 = (c0 >> 16) & 0xFF, g0 = (c0 >> 8) & 0xFF, b0 = c0 & 0xFF;
+        double r1 = (c1 >> 16) & 0xFF, g1 = (c1 >> 8) & 0xFF, b1 = c1 & 0xFF;
+        return (r0 + (r1 - r0) * t, g0 + (g1 - g0) * t, b0 + (b1 - b0) * t);
     }
 
     /// <summary>#184 — sky/miss god-ray composite. When the ray traversed the fog

@@ -140,9 +140,9 @@ cbuffer ReliefParams : register(b0)
     float  gVolAnisotropy;    // #184 Slice 3 (B) — HG phase anisotropy; 0 = isotropic
 
     uint   gFogColor;         // #184 Slice 3 (C) — medium scattering albedo (packed ARGB)
-    float  gPadV;
-    float  gPadV2;
-    float  gPadV3;
+    float  gVolPaletteStrength;// #185 (slice D) — in-scatter palette cross-fade; 0 = off
+    int    gHasPalette;       // #185 — theme ramp bound at t5; 0 = no palette remap
+    int    gPaletteLen;       // #185 — ramp entry count (>=2 to activate)
 };
 
 static const float RELIEF_PI = 3.14159265358979;
@@ -152,6 +152,7 @@ StructuredBuffer<uint>  gAlbedo : register(t1);   // packed ARGB per output pixe
 StructuredBuffer<uint>  gKeep   : register(t2);   // 0 = culled (bound iff gHasKeep)
 StructuredBuffer<float> gMip    : register(t3);   // 4f coarse max-height grid (bound iff gEmptySkip)
 StructuredBuffer<uint>  gHdri   : register(t4);   // 4d-ii flattened HDRI env (bound iff gHasHdri)
+StructuredBuffer<uint>  gPalette: register(t5);   // #185 theme ramp (bound iff gHasPalette)
 
 RWStructuredBuffer<uint> gColor : register(u0);   // packed ARGB output
 
@@ -810,6 +811,27 @@ float ExpNegSmall(float x)
 // Segment (key-light subset until Slice 3). Shared by the surface-hit fog
 // ([0,tHit]) and the sky/miss god-ray walk ([t0,t1]) so shafts form against the
 // sky. Adaptive LOD keys off the far end of the segment.
+// #185 (slice D) — sample the packed-ARGB theme ramp (t5) at u in [0,1] with
+// linear interpolation. Returns RGB in [0,255]. Twin of ShadingPipeline.Sample
+// Palette / ReliefRaymarchGpu.SamplePalette.
+float3 SamplePalette(float u)
+{
+    u = clamp(u, 0.0, 1.0);
+    int n = gPaletteLen;
+    float f = u * (n - 1);
+    int i0 = (int)f;
+    if (i0 >= n - 1)
+    {
+        uint cl = gPalette[n - 1];
+        return float3((cl >> 16) & 0xFF, (cl >> 8) & 0xFF, cl & 0xFF);
+    }
+    float t = f - i0;
+    uint c0 = gPalette[i0], c1 = gPalette[i0 + 1];
+    float3 v0 = float3((c0 >> 16) & 0xFF, (c0 >> 8) & 0xFF, c0 & 0xFF);
+    float3 v1 = float3((c1 >> 16) & 0xFF, (c1 >> 8) & 0xFF, c1 & 0xFF);
+    return v0 + (v1 - v0) * t;
+}
+
 void InScatterWalk(inout float br, inout float bg, inout float bb,
                    float3 o, float3 rd, float tStart, float tEnd)
 {
@@ -850,7 +872,28 @@ void InScatterWalk(inout float br, inout float bg, inout float bb,
     }
     // #184 Slice 3 (C) — tint accumulated in-scatter by the medium fog color.
     float3 fc = float3((gFogColor >> 16) & 0xFF, (gFogColor >> 8) & 0xFF, gFogColor & 0xFF) / 255.0;
-    br = br * T + inSc.r * fc.r; bg = bg * T + inSc.g * fc.g; bb = bb * T + inSc.b * fc.b;
+    float3 fIn = float3(inSc.r * fc.r, inSc.g * fc.g, inSc.b * fc.b);
+
+    // #185 (slice D) — palette-map the in-scatter through the theme ramp, keyed by
+    // optical depth (1 − T). Energy-preserving hue remap + cross-fade by
+    // gVolPaletteStrength. Twin of ShadingPipeline / ReliefRaymarchGpu slice-D.
+    if (gHasPalette != 0 && gPaletteLen >= 2 && gVolPaletteStrength > 0.0)
+    {
+        float energy = fIn.r + fIn.g + fIn.b;
+        if (energy > 0.0)
+        {
+            float3 pal = SamplePalette(1.0 - T);
+            float pSum = pal.r + pal.g + pal.b;
+            if (pSum > 1e-6)
+            {
+                float ps = min(gVolPaletteStrength, 1.0);
+                float kk = energy / pSum;
+                fIn = fIn * (1.0 - ps) + (pal * kk) * ps;
+            }
+        }
+    }
+
+    br = br * T + fIn.r; bg = bg * T + fIn.g; bb = bb * T + fIn.b;
 }
 
 uint ApplyFogVolume(uint shaded, float3 o, float3 rd, float tHit)
