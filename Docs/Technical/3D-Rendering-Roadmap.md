@@ -101,9 +101,20 @@ benefits most. Blender's Filmic → AgX migration is the precedent.
   `FractalViewState.ViewTransform`/`ViewExposureEv` wired into both the live
   (`FractalRenderHost`) and export (`PosterRenderer`) display encode with screen↔
   poster parity; 8 tests. First slice tonemaps the **8-bit** buffer (a look
-  operator). **Remaining:** UI selector + `--viewtransform` batch flag, the *core*
-  true-linear/float intermediate (couples S7), default-look validation, SIMD, user
-  doc when the selector ships.
+  operator).
+- **Wiring (integration follow-up, landed):** the transform is now user-drivable
+  end-to-end. Batch flags `--view-transform none|reinhard|aces|agx|filmic` (alias
+  `--tonemap`) + `--exposure EV` (−16..16), parsed into `BatchOptions`, applied on
+  the poster in `BatchRenderer` (image mode), and emitted by the Control Center CLI
+  builder (`BatchCommandBuilder`, round-trip-tested). Live UI: a **View** dropdown +
+  **Exposure** slider in the Post-FX HUD (`PostFxHudWindow`) → `FloatingMenuViewModel`
+  → `ShellViewModel` → `MainViewModel` write-through to `ViewState` + `RepaintWithPostFx`
+  (no recalc), mirroring the Brightness/Contrast path. 14 wiring tests
+  (`ViewTransformBatchWiringTests`). Default (None / 0 EV) stays omitted =
+  byte-identical.
+- **Remaining:** video/slideshow frame path (raw-frame stage has no post-buffer
+  hook yet), the *core* true-linear/float intermediate (couples S7), default-look
+  validation, SIMD.
 
 ### S3 — Cinematic camera: DOF, exposure, motion blur ◐ (#400)
 Depth of field is nearly free in a raymarcher — jitter the ray origin across an

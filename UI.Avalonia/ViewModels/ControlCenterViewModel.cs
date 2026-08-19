@@ -271,6 +271,8 @@ public sealed class ControlCenterViewModel : ViewModelBase
             Contrast    = vs.Contrast,
             HistogramEq = vs.HistogramEq,
             InteriorAlpha = fp?.InteriorAlpha ?? 255,   // #363 — now emitted as a flag
+            ViewTransform  = vs.ViewTransform,           // S2 (#389) — output tonemap
+            ViewExposureEv = vs.ViewExposureEv,
             Parameters  = fp,
 
             // Relief core knobs (#363 — Tier-1). Emitted when relief is on.

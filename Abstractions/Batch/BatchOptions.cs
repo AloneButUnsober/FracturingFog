@@ -7,6 +7,7 @@
 
 using System;
 using System.Globalization;
+using FracturingFog.Imaging;
 using FracturingFog.Models;
 
 namespace FracturingFog.Batch
@@ -116,6 +117,18 @@ namespace FracturingFog.Batch
         public int? Brightness { get; set; }   // -100..100, 0 = none
         public int? Contrast { get; set; }     // -100..100, 0 = none
         public int? Adaptive { get; set; }     //    0..100, 0 = none (HistogramEq)
+
+        /// <summary>Output-stage view transform / tonemap (roadmap S2, #389).
+        /// Null = leave the FractalViewState default (None = identity, byte-
+        /// identical). Applied on the poster buffer after brightness/contrast/
+        /// gamma, exactly like the interactive path (image mode only today —
+        /// the raw video frame path has no post-buffer stage yet).</summary>
+        public ViewTransform? ViewTransform { get; set; }
+
+        /// <summary>Exposure in stops applied before the view transform (roadmap
+        /// S2, #389). Null = neutral (0). Only meaningful alongside a non-None
+        /// <see cref="ViewTransform"/>, but honoured on its own too.</summary>
+        public double? ViewExposureEv { get; set; }
 
         /// <summary>Global interior (in-set) alpha, 0..255 (#96). 255 = opaque
         /// (default, legacy pixel-identical); below 255 the interior turns
@@ -421,6 +434,22 @@ namespace FracturingFog.Batch
                         opts.InteriorAlpha = iav;
                         break;
 
+                    case BatchFlags.ViewTransform:
+                    case "--tonemap":
+                        if (!Next(args, ref i, a, out string vtv, out error)) return false;
+                        if (!TryParseViewTransform(vtv, out var vt))
+                        {
+                            error = $"Unknown --view-transform '{vtv}'. Use none|reinhard|aces|agx|filmic.";
+                            return false;
+                        }
+                        opts.ViewTransform = vt;
+                        break;
+
+                    case BatchFlags.Exposure:
+                        if (!NextDouble(args, ref i, a, out double exv, out error)) return false;
+                        opts.ViewExposureEv = exv;
+                        break;
+
                     case BatchFlags.BulbPower:
                         if (!NextDouble(args, ref i, a, out double bpv, out error)) return false;
                         opts.BulbPower = bpv;
@@ -694,6 +723,8 @@ namespace FracturingFog.Batch
                 { error = "--adaptive must be 0..100."; return false; }
             if (opts.InteriorAlpha is < 0 or > 255)
                 { error = "--interior-alpha must be 0..255."; return false; }
+            if (opts.ViewExposureEv is < -16.0 or > 16.0)
+                { error = "--exposure must be -16..16 (stops)."; return false; }
             if (opts.AcidPattern is < 0 or >= FractalParameters.AcidWarpPatternCount)
                 { error = $"--acid-pattern must be 0..{FractalParameters.AcidWarpPatternCount - 1}."; return false; }
             if (opts.ReliefHeight is <= 0)
@@ -752,6 +783,27 @@ namespace FracturingFog.Batch
             }
 
             return true;
+        }
+
+        /// <summary>Map a friendly --view-transform name to the enum. Accepts the
+        /// short aliases the interactive selector shows (aces, agx) as well as the
+        /// exact enum names.</summary>
+        internal static bool TryParseViewTransform(string s, out FracturingFog.Imaging.ViewTransform vt)
+        {
+            switch (s.Trim().ToLowerInvariant())
+            {
+                case "none":     vt = FracturingFog.Imaging.ViewTransform.None; return true;
+                case "reinhard": vt = FracturingFog.Imaging.ViewTransform.Reinhard; return true;
+                case "aces":
+                case "acesfilmic": vt = FracturingFog.Imaging.ViewTransform.AcesFilmic; return true;
+                case "agx":      vt = FracturingFog.Imaging.ViewTransform.AgX; return true;
+                case "filmic":
+                case "hable":    vt = FracturingFog.Imaging.ViewTransform.Filmic; return true;
+                default:
+                    // Fall back to the exact enum spelling for forward-compat.
+                    return Enum.TryParse(s, ignoreCase: true, out vt)
+                        && Enum.IsDefined(vt);
+            }
         }
 
         private static bool Next(string[] a, ref int i, string flag, out string v, out string? err)

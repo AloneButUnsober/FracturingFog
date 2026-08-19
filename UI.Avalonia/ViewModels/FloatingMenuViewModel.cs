@@ -560,6 +560,46 @@ public sealed class FloatingMenuViewModel : ViewModelBase
     }
     public string AdaptiveLabel => $"Adaptive: {Adaptive}";
 
+    // ── View transform / tonemap (roadmap S2, #389) ──────────────────────────
+
+    /// <summary>The selectable output-stage view transforms, in menu order.
+    /// Bound as the ComboBox item source; the enum's ToString is shown.</summary>
+    public FracturingFog.Imaging.ViewTransform[] ViewTransformOptions { get; } =
+        (FracturingFog.Imaging.ViewTransform[])System.Enum.GetValues(typeof(FracturingFog.Imaging.ViewTransform));
+
+    private FracturingFog.Imaging.ViewTransform _viewTransform;
+    /// <summary>Output-stage view transform. Raises <see cref="ViewTransformChanged"/>
+    /// so ShellViewModel mirrors it into the live render. None = identity.</summary>
+    public FracturingFog.Imaging.ViewTransform ViewTransform
+    {
+        get => _viewTransform;
+        set
+        {
+            this.RaiseAndSetIfChanged(ref _viewTransform, value);
+            this.RaisePropertyChanged(nameof(ExposureEnabled));
+            ViewTransformChanged?.Invoke(this, value);
+        }
+    }
+
+    /// <summary>Exposure is only meaningful once a transform is active; the HUD
+    /// greys the slider out at None.</summary>
+    public bool ExposureEnabled => _viewTransform != FracturingFog.Imaging.ViewTransform.None;
+
+    private double _exposure;
+    /// <summary>Exposure in stops before the transform, -16..16; 0 = neutral.</summary>
+    public double Exposure
+    {
+        get => _exposure;
+        set
+        {
+            double v = Math.Clamp(value, -16.0, 16.0);
+            this.RaiseAndSetIfChanged(ref _exposure, v);
+            this.RaisePropertyChanged(nameof(ExposureLabel));
+            ExposureSlide?.Invoke(this, v);
+        }
+    }
+    public string ExposureLabel => $"Exposure: {Exposure:+0.#;-0.#;0} EV";
+
     private int _gamma;
     /// <summary>Live image gamma in [-100, 100]; 0 = neutral. No theme default
     /// (themes carry their own baked <c>PaletteGamma</c>), so there is no lock
@@ -1118,6 +1158,8 @@ public sealed class FloatingMenuViewModel : ViewModelBase
     public event EventHandler<int>? BrightnessSlide;
     public event EventHandler<int>? ContrastSlide;
     public event EventHandler<int>? AdaptiveSlide;
+    public event EventHandler<FracturingFog.Imaging.ViewTransform>? ViewTransformChanged;
+    public event EventHandler<double>? ExposureSlide;
     public event EventHandler<int>? GammaSlide;
     public event EventHandler<bool>? BandDitherToggle;
     public event EventHandler<int>? BandDitherStrengthSlide;
