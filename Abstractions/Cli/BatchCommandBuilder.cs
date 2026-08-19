@@ -124,6 +124,13 @@ namespace FracturingFog.Cli
         public double ReliefDofAperture { get; init; }
         public double ReliefDofFocus { get; init; }
 
+        // Guided À-Trous denoise (S4, #389). Emitted only on the raymarch path,
+        // iterations > 0. Sigmas default to the operator defaults.
+        public int ReliefDenoiseIterations { get; init; }
+        public double ReliefDenoiseColorSigma { get; init; } = 0.10;
+        public double ReliefDenoiseNormalSigma { get; init; } = 0.30;
+        public double ReliefDenoiseDepthSigma { get; init; } = 0.20;
+
         // Relief isolate masking. Emitted when relief + isolate are on.
         public bool ReliefIsolate { get; init; }
         public bool ReliefIsolateByDetail { get; init; } = true;
@@ -279,6 +286,17 @@ namespace FracturingFog.Cli
                     {
                         parts.Add(BatchFlags.DofAperture); parts.Add(Num(snap.ReliefDofAperture));
                         if (snap.ReliefDofFocus > 0.0) { parts.Add(BatchFlags.DofFocus); parts.Add(Num(snap.ReliefDofFocus)); }
+                    }
+
+                    // Guided À-Trous denoise (S4, #389) — emit only when on. The
+                    // sigmas ride along only when the pass runs and they differ
+                    // from the pure operator's defaults (0.10 / 0.30 / 0.20).
+                    if (snap.ReliefDenoiseIterations > 0)
+                    {
+                        parts.Add(BatchFlags.Denoise); parts.Add(snap.ReliefDenoiseIterations.ToString(System.Globalization.CultureInfo.InvariantCulture));
+                        if (snap.ReliefDenoiseColorSigma != 0.10)  { parts.Add(BatchFlags.DenoiseColorSigma);  parts.Add(Num(snap.ReliefDenoiseColorSigma)); }
+                        if (snap.ReliefDenoiseNormalSigma != 0.30) { parts.Add(BatchFlags.DenoiseNormalSigma); parts.Add(Num(snap.ReliefDenoiseNormalSigma)); }
+                        if (snap.ReliefDenoiseDepthSigma != 0.20)  { parts.Add(BatchFlags.DenoiseDepthSigma);  parts.Add(Num(snap.ReliefDenoiseDepthSigma)); }
                     }
                 }
 

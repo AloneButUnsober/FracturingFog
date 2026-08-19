@@ -83,6 +83,10 @@ namespace FracturingFog.Batch
             if (opts.ReliefCameraOrtho)           fp.Relief2DCameraOrthographic = true;
             if (opts.ReliefDofAperture.HasValue)  fp.Relief2DDofApertureRadius = opts.ReliefDofAperture.Value;
             if (opts.ReliefDofFocus.HasValue)     fp.Relief2DDofFocusDistance  = opts.ReliefDofFocus.Value;
+            if (opts.ReliefDenoiseIterations.HasValue)  fp.Relief2DDenoiseIterations = opts.ReliefDenoiseIterations.Value;   // S4 (#389)
+            if (opts.ReliefDenoiseColorSigma.HasValue)  fp.Relief2DDenoiseColorSigma = opts.ReliefDenoiseColorSigma.Value;
+            if (opts.ReliefDenoiseNormalSigma.HasValue) fp.Relief2DDenoiseNormalSigma = opts.ReliefDenoiseNormalSigma.Value;
+            if (opts.ReliefDenoiseDepthSigma.HasValue)  fp.Relief2DDenoiseDepthSigma = opts.ReliefDenoiseDepthSigma.Value;
             if (opts.ReliefIsolate)               fp.Relief2DIsolate       = true;
             if (opts.ReliefIsolateNoDetail)       fp.Relief2DIsolateByDetail = false;
             if (opts.ReliefIsolateThreshold.HasValue) fp.Relief2DDetailThreshold = opts.ReliefIsolateThreshold.Value;

@@ -91,6 +91,14 @@ namespace FracturingFog.Batch
         public const string DofAperture           = "--dof-aperture";
         public const string DofFocus              = "--dof-focus";
 
+        // Guided À-Trous denoise on the relief raymarch (roadmap S4, #389). Keyed
+        // on the render's own float normal/depth AOVs. Any denoise flag implies
+        // --relief-raymarch (only the raymarch emits the guides). 0 passes = off.
+        public const string Denoise               = "--denoise";
+        public const string DenoiseColorSigma     = "--denoise-color-sigma";
+        public const string DenoiseNormalSigma    = "--denoise-normal-sigma";
+        public const string DenoiseDepthSigma     = "--denoise-depth-sigma";
+
         // Relief isolate masking (#363 follow-up). --relief-isolate turns it on;
         // sub-knobs imply it on.
         public const string ReliefIsolate          = "--relief-isolate";

@@ -488,6 +488,29 @@ namespace FracturingFog.Models
         /// Only consulted when <see cref="Relief2DDofApertureRadius"/> &gt; 0.</summary>
         public double Relief2DDofFocusDistance { get; set; } = 0.0;
 
+        // ── Roadmap S4 (#389) — guided À-Trous denoise ────────────────────────
+        // AO / soft shadow / reflections are Monte Carlo (noisy); the raymarch
+        // now emits float normal + depth AOVs (#416), so an edge-avoiding À-Trous
+        // wavelet pass (Dammertz 2010) can pay that noise down keyed on those
+        // guides — smoothing within a surface, stopping at geometric edges — for
+        // fewer supersamples at equal quality. Raymarch path only (needs the AOVs).
+        /// <summary>Number of À-Trous denoise passes over the relief beauty, guided
+        /// by the render's own float normal + depth AOVs. 0 = off (byte-identical
+        /// default). Each pass doubles the tap dilation, so N passes reach a
+        /// (2^(N+1)−1)-wide footprint. Only the oblique raymarch
+        /// (<see cref="Relief2DRaymarch"/>) supplies the guides; a non-zero value
+        /// forces the CPU relief trace (the GPU kernel emits no AOVs yet).</summary>
+        public int Relief2DDenoiseIterations { get; set; } = 0;
+        /// <summary>Denoise colour edge-stop. Smaller = sharper (stops at fainter
+        /// colour differences); larger = smoother. Squared-RGB distance in [0,1].</summary>
+        public double Relief2DDenoiseColorSigma { get; set; } = 0.10;
+        /// <summary>Denoise normal edge-stop — smaller keeps geometric creases
+        /// crisp. Consulted via the captured normal AOV.</summary>
+        public double Relief2DDenoiseNormalSigma { get; set; } = 0.30;
+        /// <summary>Denoise depth edge-stop — smaller keeps silhouettes crisp.
+        /// Consulted via the captured world-units depth AOV.</summary>
+        public double Relief2DDenoiseDepthSigma { get; set; } = 0.20;
+
         /// <summary>Anti-alias supersampling factor: N×N rays per pixel, averaged.
         /// 1 = off, 2–4 = progressively smoother silhouette/edges at N² cost.
         /// Default 2.</summary>
@@ -1047,6 +1070,10 @@ namespace FracturingFog.Models
                 Relief2DCameraFovDeg = Relief2DCameraFovDeg,
                 Relief2DDofApertureRadius = Relief2DDofApertureRadius,
                 Relief2DDofFocusDistance = Relief2DDofFocusDistance,
+                Relief2DDenoiseIterations = Relief2DDenoiseIterations,
+                Relief2DDenoiseColorSigma = Relief2DDenoiseColorSigma,
+                Relief2DDenoiseNormalSigma = Relief2DDenoiseNormalSigma,
+                Relief2DDenoiseDepthSigma = Relief2DDenoiseDepthSigma,
                 Relief2DCameraZoom = Relief2DCameraZoom,
                 Relief2DCameraOrthographic = Relief2DCameraOrthographic,
                 Relief2DSupersample = Relief2DSupersample,

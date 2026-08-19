@@ -454,6 +454,30 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
     }
     /// <summary>Focus-distance control is only meaningful once the lens is open.</summary>
     public bool DofEnabled => _p.Relief2DDofApertureRadius > 0.0;
+
+    // Guided À-Trous denoise (roadmap S4, #389). Iterations 0 = off (byte-identical).
+    public int Relief2DDenoiseIterations
+    {
+        get => _p.Relief2DDenoiseIterations;
+        set { int v = (int)Clamp(value, 0, 8); if (_p.Relief2DDenoiseIterations == v) return; _p.Relief2DDenoiseIterations = v; this.RaisePropertyChanged(); this.RaisePropertyChanged(nameof(DenoiseEnabled)); Fire(); }
+    }
+    public double Relief2DDenoiseColorSigma
+    {
+        get => _p.Relief2DDenoiseColorSigma;
+        set { double v = Clamp(value, 0.001, 4.0); if (_p.Relief2DDenoiseColorSigma == v) return; _p.Relief2DDenoiseColorSigma = v; this.RaisePropertyChanged(); Fire(); }
+    }
+    public double Relief2DDenoiseNormalSigma
+    {
+        get => _p.Relief2DDenoiseNormalSigma;
+        set { double v = Clamp(value, 0.001, 4.0); if (_p.Relief2DDenoiseNormalSigma == v) return; _p.Relief2DDenoiseNormalSigma = v; this.RaisePropertyChanged(); Fire(); }
+    }
+    public double Relief2DDenoiseDepthSigma
+    {
+        get => _p.Relief2DDenoiseDepthSigma;
+        set { double v = Clamp(value, 0.001, 4.0); if (_p.Relief2DDenoiseDepthSigma == v) return; _p.Relief2DDenoiseDepthSigma = v; this.RaisePropertyChanged(); Fire(); }
+    }
+    /// <summary>The sigma controls only bite once at least one denoise pass runs.</summary>
+    public bool DenoiseEnabled => _p.Relief2DDenoiseIterations > 0;
     public FracturingFog.HeightCurve2D Relief2DHeightCurve
     {
         get => _p.Relief2DHeightCurve;

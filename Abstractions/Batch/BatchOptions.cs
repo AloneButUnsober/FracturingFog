@@ -190,6 +190,12 @@ namespace FracturingFog.Batch
         public double? ReliefDofAperture { get; set; }     // 0..1, 0 = pinhole
         public double? ReliefDofFocus { get; set; }        // >= 0, 0 = auto-focus origin
 
+        // S4 (#389) — guided À-Trous denoise on the relief raymarch.
+        public int? ReliefDenoiseIterations { get; set; }  // 0 = off
+        public double? ReliefDenoiseColorSigma { get; set; }
+        public double? ReliefDenoiseNormalSigma { get; set; }
+        public double? ReliefDenoiseDepthSigma { get; set; }
+
         // Relief isolate masking (#363 follow-up). Any isolate flag implies
         // relief + isolate on. NoDetail turns OFF the default detail isolation.
         public bool ReliefIsolate { get; set; }
@@ -641,6 +647,34 @@ namespace FracturingFog.Batch
                         opts.Relief = true;
                         break;
 
+                    case BatchFlags.Denoise:
+                        if (!NextInt(args, ref i, a, out int dni, out error)) return false;
+                        opts.ReliefDenoiseIterations = dni;
+                        opts.ReliefRaymarch = true;
+                        opts.Relief = true;
+                        break;
+
+                    case BatchFlags.DenoiseColorSigma:
+                        if (!NextDouble(args, ref i, a, out double dncs, out error)) return false;
+                        opts.ReliefDenoiseColorSigma = dncs;
+                        opts.ReliefRaymarch = true;
+                        opts.Relief = true;
+                        break;
+
+                    case BatchFlags.DenoiseNormalSigma:
+                        if (!NextDouble(args, ref i, a, out double dnns, out error)) return false;
+                        opts.ReliefDenoiseNormalSigma = dnns;
+                        opts.ReliefRaymarch = true;
+                        opts.Relief = true;
+                        break;
+
+                    case BatchFlags.DenoiseDepthSigma:
+                        if (!NextDouble(args, ref i, a, out double dnds, out error)) return false;
+                        opts.ReliefDenoiseDepthSigma = dnds;
+                        opts.ReliefRaymarch = true;
+                        opts.Relief = true;
+                        break;
+
                     case BatchFlags.ReliefIsolate:
                         opts.ReliefIsolate = true;
                         opts.Relief = true;
@@ -780,6 +814,14 @@ namespace FracturingFog.Batch
                 { error = "--dof-aperture must be 0..1."; return false; }
             if (opts.ReliefDofFocus is < 0)
                 { error = "--dof-focus must be >= 0."; return false; }
+            if (opts.ReliefDenoiseIterations is < 0 or > 8)
+                { error = "--denoise must be 0..8 (passes)."; return false; }
+            if (opts.ReliefDenoiseColorSigma is <= 0)
+                { error = "--denoise-color-sigma must be > 0."; return false; }
+            if (opts.ReliefDenoiseNormalSigma is <= 0)
+                { error = "--denoise-normal-sigma must be > 0."; return false; }
+            if (opts.ReliefDenoiseDepthSigma is <= 0)
+                { error = "--denoise-depth-sigma must be > 0."; return false; }
             if (opts.ReliefIsolateThreshold is < 0 or > 1)
                 { error = "--relief-isolate-threshold must be 0..1."; return false; }
             if (opts.ReliefIsolateTolerance is < 0 or > 1)

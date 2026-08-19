@@ -450,8 +450,13 @@ namespace FracturingFog.Imaging
                 var fx = p.Lighting;
                 FracturingFog.Rendering.Lighting.VolumePaletteBaker.Bake(ref fx, colorMap);
                 p.Lighting = fx;
+                // S4 (#389) — capture the float normal/depth AOVs and denoise iff
+                // the guided À-Trous pass is on. MakeCapture is null when off, so
+                // this is byte-identical by default (Render keeps its GPU path).
+                var aov = ReliefDenoisePass.MakeCapture(p, w, h);
                 FracturingFog.Rendering.Lighting.HeightfieldRaymarch2D.Render(
-                    buffer, field, w, h, p, dst);
+                    buffer, field, w, h, w, h, p, dst, out _, null, aov);
+                ReliefDenoisePass.Apply(dst, aov, w, h, p);
             }
             else
                 FracturingFog.Rendering.Lighting.HeightfieldRelief2D.Apply(
