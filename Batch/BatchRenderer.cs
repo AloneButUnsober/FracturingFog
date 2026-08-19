@@ -38,6 +38,15 @@ namespace FracturingFog.Batch
 
             FracturingFog.Imaging.ImageFileFormat format = GuessImageFormat(outPath);
 
+            // AOV EXR export (roadmap S1, #389): force the .exr writer regardless
+            // of the output extension so `--aov-exr --out foo.png` still produces a
+            // multi-layer EXR (foo.exr) rather than a flat PNG.
+            if (opts.AovExr)
+            {
+                outPath = Path.ChangeExtension(outPath, ".exr");
+                format = FracturingFog.Imaging.ImageFileFormat.Exr;
+            }
+
             var fp = new FractalParameters();
             if (opts.BulbPower.HasValue)          fp.BulbPower          = opts.BulbPower.Value;
             if (opts.MultibrotExponent.HasValue)  fp.MultibrotExponent  = opts.MultibrotExponent.Value;
@@ -148,11 +157,19 @@ namespace FracturingFog.Batch
             Console.WriteLine($"  out     : {outPath}");
 
             using var spinner = new ConsoleSpinner("Rendering");
-            PosterResult result;
             try
             {
-                result = PosterRenderer.RenderToFile(req, CancellationToken.None);
-                spinner.Stop($"saved {Path.GetFileName(outPath)} ({result.SavedWidth}x{result.SavedHeight}, {result.ElapsedMs} ms)");
+                if (opts.AovExr)
+                {
+                    // Multi-pass AOV render (beauty + each pass) → one multi-layer EXR.
+                    var (aw, ah) = FracturingFog.Imaging.AovExrRenderer.RenderToFile(req, outPath, CancellationToken.None);
+                    spinner.Stop($"saved {Path.GetFileName(outPath)} ({aw}x{ah}, {FracturingFog.Imaging.AovExrRenderer.DefaultViews.Count + 1} layers)");
+                }
+                else
+                {
+                    var result = PosterRenderer.RenderToFile(req, CancellationToken.None);
+                    spinner.Stop($"saved {Path.GetFileName(outPath)} ({result.SavedWidth}x{result.SavedHeight}, {result.ElapsedMs} ms)");
+                }
             }
             catch
             {

@@ -41,6 +41,9 @@ namespace FracturingFog.Batch
         public const string ViewTransform  = "--view-transform";
         public const string Exposure       = "--exposure";
 
+        // Multi-layer AOV OpenEXR export (roadmap S1, #389). Image mode only.
+        public const string AovExr         = "--aov-exr";
+
         public const string MultibrotExp   = "--multibrot-exp";
         public const string BulbPower      = "--bulb-power";
         public const string LSystemPreset  = "--lsystem-preset";
