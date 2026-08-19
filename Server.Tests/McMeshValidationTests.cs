@@ -12,8 +12,9 @@
 //   • the recommended path — auto-size the cube with ProbeBoundingRange so the set
 //     is enclosed — produces a PRINT-READY mesh even when the raw range was too
 //     small;
-//   • an UNDERSIZED cube leaves the mesh OPEN where the surface exits the box
-//     (a documented MC limitation — capping the boundary is the S9.2 follow-up);
+//   • an UNDERSIZED cube leaves the mesh OPEN with capping OFF, but the default
+//     boundary cap (#422) seals the box-face cut into a watertight solid — while
+//     staying a byte-for-byte no-op when the surface is interior;
 //   • the crease-normal path (which splits vertices for shading) does not change
 //     the welded topology, so the solid stays closed.
 
@@ -30,15 +31,28 @@ public class McMeshValidationTests
     private static SampleDistance Sphere(double r) => (x, y, z) => Math.Sqrt(x * x + y * y + z * z) - r;
 
     private static MeshReport ExportAndValidate(SampleDistance de, double range, int n,
-        double creaseDegrees = 180.0)
+        double creaseDegrees = 180.0, bool capBoundary = true)
     {
         string path = Path.Combine(Path.GetTempPath(), $"ff-mc-{Guid.NewGuid():N}.stl");
         try
         {
             UserBulbMeshExporter.ExportMarchingCubes(path, de, 0, 0, 0, range, n,
-                isoScale: 0.5, isoAbsolute: false, superSamples: 1, creaseDegrees: creaseDegrees);
+                isoScale: 0.5, isoAbsolute: false, superSamples: 1,
+                creaseDegrees: creaseDegrees, capBoundary: capBoundary);
             var (pos, tris) = StlMeshReader.ReadBinary(path);
             return MeshValidator.Validate(pos, tris, weldEpsilon: 1e-5);
+        }
+        finally { if (File.Exists(path)) File.Delete(path); }
+    }
+
+    private static int ExportTris(SampleDistance de, double range, int n, bool capBoundary)
+    {
+        string path = Path.Combine(Path.GetTempPath(), $"ff-mc-{Guid.NewGuid():N}.stl");
+        try
+        {
+            return UserBulbMeshExporter.ExportMarchingCubes(path, de, 0, 0, 0, range, n,
+                isoScale: 0.5, isoAbsolute: false, superSamples: 1,
+                creaseDegrees: 180.0, capBoundary: capBoundary);
         }
         finally { if (File.Exists(path)) File.Delete(path); }
     }
@@ -74,16 +88,41 @@ public class McMeshValidationTests
     }
 
     [Fact]
-    public void Undersized_Cube_Leaves_Boundary_Open()
+    public void Undersized_Cube_Leaves_Boundary_Open_Without_Cap()
     {
-        // Documents the MC limitation: a surface that exits the sample cube is not
-        // capped, so the mesh has boundary edges (S9.2 follow-up = cap the box).
-        var r = ExportAndValidate(Sphere(1.8), range: 1.6, n: 48);
+        // Documents the raw MC limitation with capping OFF: a surface that exits the
+        // sample cube is not capped, so the mesh has boundary edges.
+        var r = ExportAndValidate(Sphere(1.8), range: 1.6, n: 48, capBoundary: false);
         Assert.False(r.IsWatertight, r.Summary());
         Assert.True(r.BoundaryEdgeCount > 0);
         // Even open, MC keeps it edge-manifold and consistently wound.
         Assert.True(r.IsEdgeManifold, r.Summary());
         Assert.True(r.IsConsistentlyOriented, r.Summary());
+    }
+
+    [Fact]
+    public void Undersized_Cube_Capped_Is_Closed_Solid()
+    {
+        // #422: the SAME undersized cube, with boundary capping ON (the default),
+        // seals the box-face cut into a watertight, outward-wound solid — a fractal
+        // that exits the sample cube now exports print-ready instead of as a shell
+        // with holes.
+        var r = ExportAndValidate(Sphere(1.8), range: 1.6, n: 48);   // capBoundary defaults true
+        Assert.Equal(0, r.BoundaryEdgeCount);
+        Assert.True(r.IsClosedManifold, r.Summary());
+        Assert.True(r.SignedVolume > 0, r.Summary());                // wound outward
+    }
+
+    [Fact]
+    public void Cap_Is_NoOp_When_Surface_Interior()
+    {
+        // When the surface is fully interior the shell corners are all outside, so
+        // no cap fires: capped and uncapped exports are geometrically identical.
+        var de = Sphere(1.0);
+        int capped   = ExportTris(de, range: 1.6, n: 48, capBoundary: true);
+        int uncapped = ExportTris(de, range: 1.6, n: 48, capBoundary: false);
+        Assert.Equal(uncapped, capped);
+        Assert.True(capped > 0);
     }
 
     [Fact]

@@ -2936,7 +2936,7 @@ namespace FracturingFog.Hosting
                         int tris = global::FracturingFog.Export.UserBulbMeshExporter.ExportMarchingCubes(
                             e.Path, de, cx0, cy0, 0,
                             e.Range, e.GridN, e.IsoScale, e.IsoAbsolute, e.SuperSamples, e.CreaseDegrees,
-                            cts.Token);
+                            ct: cts.Token);
                         bool cancelled = cts.IsCancellationRequested;
                         Dispatcher.UIThread.Post(() =>
                         {
