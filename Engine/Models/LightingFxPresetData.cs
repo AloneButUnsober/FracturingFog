@@ -49,6 +49,20 @@ public sealed class LightingFxPresetData
     public double Light3Intensity { get; set; } = 0.0;
     public uint   Light3Color { get; set; } = 0xFFFFC890u;
 
+    // Point / spot light fields (roadmap S8, #389). Default Directional keeps
+    // legacy directional presets byte-identical (position / range / cone ignored).
+    public LightType Light1Type { get; set; } = LightType.Directional;
+    public double Light1PosX { get; set; } public double Light1PosY { get; set; } public double Light1PosZ { get; set; }
+    public double Light1Range { get; set; } public double Light1SpotInner { get; set; } = 15.0; public double Light1SpotOuter { get; set; } = 25.0;
+
+    public LightType Light2Type { get; set; } = LightType.Directional;
+    public double Light2PosX { get; set; } public double Light2PosY { get; set; } public double Light2PosZ { get; set; }
+    public double Light2Range { get; set; } public double Light2SpotInner { get; set; } = 15.0; public double Light2SpotOuter { get; set; } = 25.0;
+
+    public LightType Light3Type { get; set; } = LightType.Directional;
+    public double Light3PosX { get; set; } public double Light3PosY { get; set; } public double Light3PosZ { get; set; }
+    public double Light3Range { get; set; } public double Light3SpotInner { get; set; } = 15.0; public double Light3SpotOuter { get; set; } = 25.0;
+
     // ── Ambient / AO ──────────────────────────────────────────────────
 
     public double AmbientStrength { get; set; } = 0.15;
@@ -177,10 +191,16 @@ public sealed class LightingFxPresetData
     {
         Light1Theta = fx.Light1.Theta, Light1Phi = fx.Light1.Phi,
         Light1Intensity = fx.Light1.Intensity, Light1Color = fx.Light1.Color,
+        Light1Type = fx.Light1.Type, Light1PosX = fx.Light1.PosX, Light1PosY = fx.Light1.PosY, Light1PosZ = fx.Light1.PosZ,
+        Light1Range = fx.Light1.Range, Light1SpotInner = fx.Light1.SpotInnerDeg, Light1SpotOuter = fx.Light1.SpotOuterDeg,
         Light2Theta = fx.Light2.Theta, Light2Phi = fx.Light2.Phi,
         Light2Intensity = fx.Light2.Intensity, Light2Color = fx.Light2.Color,
+        Light2Type = fx.Light2.Type, Light2PosX = fx.Light2.PosX, Light2PosY = fx.Light2.PosY, Light2PosZ = fx.Light2.PosZ,
+        Light2Range = fx.Light2.Range, Light2SpotInner = fx.Light2.SpotInnerDeg, Light2SpotOuter = fx.Light2.SpotOuterDeg,
         Light3Theta = fx.Light3.Theta, Light3Phi = fx.Light3.Phi,
         Light3Intensity = fx.Light3.Intensity, Light3Color = fx.Light3.Color,
+        Light3Type = fx.Light3.Type, Light3PosX = fx.Light3.PosX, Light3PosY = fx.Light3.PosY, Light3PosZ = fx.Light3.PosZ,
+        Light3Range = fx.Light3.Range, Light3SpotInner = fx.Light3.SpotInnerDeg, Light3SpotOuter = fx.Light3.SpotOuterDeg,
 
         AmbientStrength = fx.AmbientStrength,
         AoSamples = fx.AoSamples, AoStrength = fx.AoStrength,
@@ -238,9 +258,21 @@ public sealed class LightingFxPresetData
     /// struct ready to assign into <see cref="FractalParameters.Lighting"/>.</summary>
     public LightingFxData ToFx() => new()
     {
-        Light1 = new DirectionalLight(Light1Theta, Light1Phi, Light1Intensity, Light1Color),
-        Light2 = new DirectionalLight(Light2Theta, Light2Phi, Light2Intensity, Light2Color),
-        Light3 = new DirectionalLight(Light3Theta, Light3Phi, Light3Intensity, Light3Color),
+        Light1 = new DirectionalLight(Light1Theta, Light1Phi, Light1Intensity, Light1Color)
+        {
+            Type = Light1Type, PosX = Light1PosX, PosY = Light1PosY, PosZ = Light1PosZ,
+            Range = Light1Range, SpotInnerDeg = Light1SpotInner, SpotOuterDeg = Light1SpotOuter,
+        },
+        Light2 = new DirectionalLight(Light2Theta, Light2Phi, Light2Intensity, Light2Color)
+        {
+            Type = Light2Type, PosX = Light2PosX, PosY = Light2PosY, PosZ = Light2PosZ,
+            Range = Light2Range, SpotInnerDeg = Light2SpotInner, SpotOuterDeg = Light2SpotOuter,
+        },
+        Light3 = new DirectionalLight(Light3Theta, Light3Phi, Light3Intensity, Light3Color)
+        {
+            Type = Light3Type, PosX = Light3PosX, PosY = Light3PosY, PosZ = Light3PosZ,
+            Range = Light3Range, SpotInnerDeg = Light3SpotInner, SpotOuterDeg = Light3SpotOuter,
+        },
 
         AmbientStrength = AmbientStrength,
         AoSamples = AoSamples, AoStrength = AoStrength,

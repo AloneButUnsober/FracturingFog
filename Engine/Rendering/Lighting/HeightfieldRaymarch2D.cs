@@ -411,8 +411,11 @@ public static class HeightfieldRaymarch2D
         // S3 (#389) — thin-lens DOF is CPU-only in this slice (the GPU relief
         // kernel has no lens path), so force the CPU trace when the aperture is
         // open. GPU DOF is a follow-up; the parity gate uses aperture 0.
+        // S8 (#389): the GPU relief kernel resolves only directional lights from
+        // Theta/Phi, so a point/spot light forces the CPU trace (same discipline
+        // as DOF / DebugAov). Directional-only scenes stay on the GPU byte-identical.
         if (gpuKernel != null && p.Relief2DGpuRaymarch && fx.DebugAov == AovView.Beauty
-            && p.Relief2DDofApertureRadius <= 0.0)
+            && p.Relief2DDofApertureRadius <= 0.0 && !fx.HasPositionalLight)
         {
             var u = ReliefUniforms.Build(w, h, hw, hh, sy, aspect, invLip, maxH, p, in fx);
             gpuKernel.Run(in u, hbuf, keep, albedo, dst);

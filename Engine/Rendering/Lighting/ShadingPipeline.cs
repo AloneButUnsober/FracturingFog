@@ -152,9 +152,12 @@ public static class ShadingPipeline
         // Lights. Phase 18 — orbit theta by SceneTime · LightOrbitSpeed.
         // Lights 2/3 take 0.7× / 1.3× so they desync. Speed==0 → bit-identical.
         double orbitT = fx.SceneTime * fx.LightOrbitSpeed;
-        var l1 = LightDir(fx.Light1.Theta + orbitT,        fx.Light1.Phi);
-        var l2 = LightDir(fx.Light2.Theta + orbitT * 0.7,  fx.Light2.Phi);
-        var l3 = LightDir(fx.Light3.Theta + orbitT * 1.3,  fx.Light3.Phi);
+        // S8 (#389): ResolveLight keeps directional lights byte-identical
+        // (attenuation 1) and gives point/spot lights a surface-relative
+        // direction + falloff. Position is the primary hit (i.Px/Py/Pz).
+        var l1 = ResolveLight(in fx.Light1, orbitT,        i.Px, i.Py, i.Pz);
+        var l2 = ResolveLight(in fx.Light2, orbitT * 0.7,  i.Px, i.Py, i.Pz);
+        var l3 = ResolveLight(in fx.Light3, orbitT * 1.3,  i.Px, i.Py, i.Pz);
 
         // Phase 3 — per-light soft shadow. IQ DE-march toward light; min
         // (k·h/t) over walk is visibility. Shadow gates direct lighting only;
@@ -182,9 +185,9 @@ public static class ShadingPipeline
         }
 
         double sR = 0, sG = 0, sB = 0;
-        AccumulateLight(fx.Light1.Intensity * sh1, fx.Light1.Color, l1.X, l1.Y, l1.Z, i.Nx, i.Ny, i.Nz, ref sR, ref sG, ref sB);
-        AccumulateLight(fx.Light2.Intensity * sh2, fx.Light2.Color, l2.X, l2.Y, l2.Z, i.Nx, i.Ny, i.Nz, ref sR, ref sG, ref sB);
-        AccumulateLight(fx.Light3.Intensity * sh3, fx.Light3.Color, l3.X, l3.Y, l3.Z, i.Nx, i.Ny, i.Nz, ref sR, ref sG, ref sB);
+        AccumulateLight(fx.Light1.Intensity * sh1 * l1.Atten, fx.Light1.Color, l1.X, l1.Y, l1.Z, i.Nx, i.Ny, i.Nz, ref sR, ref sG, ref sB);
+        AccumulateLight(fx.Light2.Intensity * sh2 * l2.Atten, fx.Light2.Color, l2.X, l2.Y, l2.Z, i.Nx, i.Ny, i.Nz, ref sR, ref sG, ref sB);
+        AccumulateLight(fx.Light3.Intensity * sh3 * l3.Atten, fx.Light3.Color, l3.X, l3.Y, l3.Z, i.Nx, i.Ny, i.Nz, ref sR, ref sG, ref sB);
 
         // DE-cone AO. Bit-identical to UserBulb when AoSamples > 0.
         double ao = 1.0;
@@ -231,7 +234,9 @@ public static class ShadingPipeline
             // the generic Shade<TDe> path already had. This overload has no
             // external callers; the unification removes a latent inconsistency.
             var ada = new DelegateDeAdapter(de);
-            VolumetricInScatter(in i, in fx, in ada, l1, l2, l3,
+            // Volumetric in-scatter stays directional this slice (positional
+            // lights in the fog march are a follow-up) — pass the direction only.
+            VolumetricInScatter(in i, in fx, in ada, (l1.X, l1.Y, l1.Z), (l2.X, l2.Y, l2.Z), (l3.X, l3.Y, l3.Z),
                 ref br, ref bg, ref bb);
         }
         else if (fx.FogDensity > 0)
@@ -358,9 +363,12 @@ public static class ShadingPipeline
         // Lights. Phase 18 — orbit theta by SceneTime · LightOrbitSpeed.
         // Lights 2/3 take 0.7× / 1.3× so they desync. Speed==0 → bit-identical.
         double orbitT = fx.SceneTime * fx.LightOrbitSpeed;
-        var l1 = LightDir(fx.Light1.Theta + orbitT,        fx.Light1.Phi);
-        var l2 = LightDir(fx.Light2.Theta + orbitT * 0.7,  fx.Light2.Phi);
-        var l3 = LightDir(fx.Light3.Theta + orbitT * 1.3,  fx.Light3.Phi);
+        // S8 (#389): ResolveLight keeps directional lights byte-identical
+        // (attenuation 1) and gives point/spot lights a surface-relative
+        // direction + falloff. Position is the primary hit (i.Px/Py/Pz).
+        var l1 = ResolveLight(in fx.Light1, orbitT,        i.Px, i.Py, i.Pz);
+        var l2 = ResolveLight(in fx.Light2, orbitT * 0.7,  i.Px, i.Py, i.Pz);
+        var l3 = ResolveLight(in fx.Light3, orbitT * 1.3,  i.Px, i.Py, i.Pz);
 
         // Phase 3 — per-light soft shadow. IQ DE-march toward light; min
         // (k·h/t) over walk is visibility. Shadow gates direct lighting only;
@@ -388,9 +396,9 @@ public static class ShadingPipeline
         }
 
         double sR = 0, sG = 0, sB = 0;
-        AccumulateLight(fx.Light1.Intensity * sh1, fx.Light1.Color, l1.X, l1.Y, l1.Z, i.Nx, i.Ny, i.Nz, ref sR, ref sG, ref sB);
-        AccumulateLight(fx.Light2.Intensity * sh2, fx.Light2.Color, l2.X, l2.Y, l2.Z, i.Nx, i.Ny, i.Nz, ref sR, ref sG, ref sB);
-        AccumulateLight(fx.Light3.Intensity * sh3, fx.Light3.Color, l3.X, l3.Y, l3.Z, i.Nx, i.Ny, i.Nz, ref sR, ref sG, ref sB);
+        AccumulateLight(fx.Light1.Intensity * sh1 * l1.Atten, fx.Light1.Color, l1.X, l1.Y, l1.Z, i.Nx, i.Ny, i.Nz, ref sR, ref sG, ref sB);
+        AccumulateLight(fx.Light2.Intensity * sh2 * l2.Atten, fx.Light2.Color, l2.X, l2.Y, l2.Z, i.Nx, i.Ny, i.Nz, ref sR, ref sG, ref sB);
+        AccumulateLight(fx.Light3.Intensity * sh3 * l3.Atten, fx.Light3.Color, l3.X, l3.Y, l3.Z, i.Nx, i.Ny, i.Nz, ref sR, ref sG, ref sB);
 
         // Phase 14 — Triplanar procedural texture. Modulates the albedo before
         // any lighting math runs so PBR + SSS + spec all see the textured
@@ -420,13 +428,13 @@ public static class ShadingPipeline
             double F0r = 0.04 + (Ar - 0.04) * fx.Metallic;
             double F0g = 0.04 + (Ag - 0.04) * fx.Metallic;
             double F0b = 0.04 + (Ab - 0.04) * fx.Metallic;
-            AccumulateSpec(fx.Light1.Intensity * sh1, fx.Light1.Color, l1.X, l1.Y, l1.Z,
+            AccumulateSpec(fx.Light1.Intensity * sh1 * l1.Atten, fx.Light1.Color, l1.X, l1.Y, l1.Z,
                 i.Nx, i.Ny, i.Nz, vx, vy, vz, NdotV, a2, kg, F0r, F0g, F0b,
                 fx.SpecularStrength, ref specR, ref specG, ref specB);
-            AccumulateSpec(fx.Light2.Intensity * sh2, fx.Light2.Color, l2.X, l2.Y, l2.Z,
+            AccumulateSpec(fx.Light2.Intensity * sh2 * l2.Atten, fx.Light2.Color, l2.X, l2.Y, l2.Z,
                 i.Nx, i.Ny, i.Nz, vx, vy, vz, NdotV, a2, kg, F0r, F0g, F0b,
                 fx.SpecularStrength, ref specR, ref specG, ref specB);
-            AccumulateSpec(fx.Light3.Intensity * sh3, fx.Light3.Color, l3.X, l3.Y, l3.Z,
+            AccumulateSpec(fx.Light3.Intensity * sh3 * l3.Atten, fx.Light3.Color, l3.X, l3.Y, l3.Z,
                 i.Nx, i.Ny, i.Nz, vx, vy, vz, NdotV, a2, kg, F0r, F0g, F0b,
                 fx.SpecularStrength, ref specR, ref specG, ref specB);
         }
@@ -443,13 +451,13 @@ public static class ShadingPipeline
         if (fx.SubSurfaceStrength > 0)
         {
             double vx = -i.Rdx, vy = -i.Rdy, vz = -i.Rdz;
-            AccumulateSss(fx.Light1.Intensity * sh1, fx.Light1.Color, l1.X, l1.Y, l1.Z,
+            AccumulateSss(fx.Light1.Intensity * sh1 * l1.Atten, fx.Light1.Color, l1.X, l1.Y, l1.Z,
                 i.Nx, i.Ny, i.Nz, vx, vy, vz, fx.SubSurfaceStrength,
                 ref sssR, ref sssG, ref sssB);
-            AccumulateSss(fx.Light2.Intensity * sh2, fx.Light2.Color, l2.X, l2.Y, l2.Z,
+            AccumulateSss(fx.Light2.Intensity * sh2 * l2.Atten, fx.Light2.Color, l2.X, l2.Y, l2.Z,
                 i.Nx, i.Ny, i.Nz, vx, vy, vz, fx.SubSurfaceStrength,
                 ref sssR, ref sssG, ref sssB);
-            AccumulateSss(fx.Light3.Intensity * sh3, fx.Light3.Color, l3.X, l3.Y, l3.Z,
+            AccumulateSss(fx.Light3.Intensity * sh3 * l3.Atten, fx.Light3.Color, l3.X, l3.Y, l3.Z,
                 i.Nx, i.Ny, i.Nz, vx, vy, vz, fx.SubSurfaceStrength,
                 ref sssR, ref sssG, ref sssB);
         }
@@ -703,7 +711,7 @@ public static class ShadingPipeline
         {
             // Vol-color slice A (#177) — all three lights contribute colored
             // in-scatter. Lights 2/3 default off → single-light bit-identical.
-            VolumetricInScatter<TDe>(in i, in fx, in de, l1, l2, l3,
+            VolumetricInScatter<TDe>(in i, in fx, in de, (l1.X, l1.Y, l1.Z), (l2.X, l2.Y, l2.Z), (l3.X, l3.Y, l3.Z),
                 ref br, ref bg, ref bb);
         }
         else if (fx.FogDensity > 0)
@@ -752,6 +760,28 @@ public static class ShadingPipeline
     {
         double sinPhi = Math.Sin(phi);
         return Normalize3(sinPhi * Math.Cos(theta), Math.Cos(phi), sinPhi * Math.Sin(theta));
+    }
+
+    /// <summary>Resolve a light to its unit direction-toward-light + a scalar
+    /// attenuation at the surface point (roadmap S8, #389). Directional lights
+    /// keep the legacy <see cref="LightDir"/> of (Theta + orbit, Phi) with
+    /// attenuation 1 — byte-identical to the pre-S8 path. Point / spot lights use
+    /// <see cref="LightSampler"/> with the light's world position, so their
+    /// direction + falloff depend on where the surface is.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static (double X, double Y, double Z, double Atten) ResolveLight(
+        in DirectionalLight L, double orbitPhase, double sx, double sy, double sz)
+    {
+        var dir = LightDir(L.Theta + orbitPhase, L.Phi);
+        if (L.Type == LightType.Directional)
+            return (dir.X, dir.Y, dir.Z, 1.0);
+
+        double innerCos = Math.Cos(L.SpotInnerDeg * Math.PI / 180.0);
+        double outerCos = Math.Cos(L.SpotOuterDeg * Math.PI / 180.0);
+        var s = LightSampler.Sample(
+            L.Type, dir.X, dir.Y, dir.Z, L.PosX, L.PosY, L.PosZ,
+            L.Range, innerCos, outerCos, sx, sy, sz);
+        return (s.lx, s.ly, s.lz, s.atten);
     }
 
     /// <summary>Accumulate one directional light's diffuse contribution into
