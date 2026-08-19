@@ -215,6 +215,25 @@ public sealed partial class FractalParamsViewModel
         get => _p.Lighting.Metallic;
         set { MutateLighting(r => r.Fx.Metallic = Clamp(value, 0, 1)); this.RaisePropertyChanged(); Fire(); }
     }
+    // Glass / dielectric transmission (roadmap S5, #389). Transmission 0 = opaque
+    // (byte-identical default); IOR bends the refracted environment.
+    public double Transmission
+    {
+        get => _p.Lighting.Transmission;
+        set { MutateLighting(r => r.Fx.Transmission = Clamp(value, 0, 1)); this.RaisePropertyChanged(); this.RaisePropertyChanged(nameof(GlassEnabled)); Fire(); }
+    }
+    public double Ior
+    {
+        get => _p.Lighting.Ior;
+        set { MutateLighting(r => r.Fx.Ior = Clamp(value, 1.0, 3.0)); this.RaisePropertyChanged(); Fire(); }
+    }
+    public double AbsorptionDistance
+    {
+        get => _p.Lighting.AbsorptionDistance;
+        set { MutateLighting(r => r.Fx.AbsorptionDistance = Clamp(value, 0.01, 10.0)); this.RaisePropertyChanged(); Fire(); }
+    }
+    /// <summary>IOR / absorption controls only matter once transmission is on.</summary>
+    public bool GlassEnabled => _p.Lighting.Transmission > 0.0;
     public double SpecularStrength
     {
         get => _p.Lighting.SpecularStrength;

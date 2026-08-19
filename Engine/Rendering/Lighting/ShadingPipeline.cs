@@ -669,6 +669,48 @@ public static class ShadingPipeline
             bb += accB;
         }
 
+        // S5 (#389) — refractive transmission (glass). On a transmissive hit,
+        // refract the view ray about the surface normal (Snell / TIR), sample the
+        // environment along the refracted direction (the distorted see-through
+        // background), tint it by Beer-Lambert absorption, and Fresnel-mix it with
+        // the reflected environment; the result is blended into the opaque surface
+        // by the transmission amount. This is the ENVIRONMENT-refraction
+        // approximation — one interface, no internal two-surface march — which is
+        // cheap, deterministic and twinnable; a full internal glass march is a
+        // follow-up. Transmission==0 → the block is skipped → byte-identical.
+        if (fx.Transmission > 0.0)
+        {
+            double ior = fx.Ior > 1.0 ? fx.Ior : 1.0;
+            // Incident ray into the surface; N is outward (against the ray).
+            var (tx, ty, tz, tir) = DielectricOps.Refract(
+                i.Rdx, i.Rdy, i.Rdz, i.Nx, i.Ny, i.Nz, 1.0 / ior);
+
+            double f0 = DielectricOps.F0(1.0, ior);
+            double NdotVr = Math.Max(0.0, i.Nx * -i.Rdx + i.Ny * -i.Rdy + i.Nz * -i.Rdz);
+            double Fr = tir ? 1.0 : DielectricOps.FresnelSchlick(NdotVr, f0);
+
+            // Transmitted: the environment seen along the refracted ray.
+            uint tSky = SkyColorHdri(tx, ty, tz, fx.Roughness, in fx);
+            double trR = (tSky >> 16) & 0xFF, trG = (tSky >> 8) & 0xFF, trB = tSky & 0xFF;
+            // Beer-Lambert glass tint over a nominal one-unit slab (AbsorptionColor
+            // = the surviving tint at AbsorptionDistance).
+            var (aR, aG, aB) = DielectricOps.BeerLambert(fx.AbsorptionColor, fx.AbsorptionDistance, 1.0);
+            trR *= aR; trG *= aG; trB *= aB;
+
+            // Reflected: the environment along the mirror direction.
+            var (rx, ry, rz) = DielectricOps.Reflect(i.Rdx, i.Rdy, i.Rdz, i.Nx, i.Ny, i.Nz);
+            uint rSky = SkyColorHdri(rx, ry, rz, fx.Roughness, in fx);
+            double reR = (rSky >> 16) & 0xFF, reG = (rSky >> 8) & 0xFF, reB = rSky & 0xFF;
+
+            double gR = reR * Fr + trR * (1.0 - Fr);
+            double gG = reG * Fr + trG * (1.0 - Fr);
+            double gB = reB * Fr + trB * (1.0 - Fr);
+            double t = fx.Transmission > 1.0 ? 1.0 : fx.Transmission;
+            br = br * (1.0 - t) + gR * t;
+            bg = bg * (1.0 - t) + gG * t;
+            bb = bb * (1.0 - t) + gB * t;
+        }
+
         // Phase 17 — fake caustics. Sample procedural pattern in world (x, z)
         // at the surface point, weighted by upward-facing surface (NdotUp) and
         // distance from the focusing plane (exp falloff). Multiplied by the key
