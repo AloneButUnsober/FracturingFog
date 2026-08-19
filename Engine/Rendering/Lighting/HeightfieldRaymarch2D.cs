@@ -408,7 +408,11 @@ public static class HeightfieldRaymarch2D
         // #317 — a non-Beauty AOV view is produced by the CPU ShadingPipeline
         // (the GPU relief kernel has no view-mode path), so force the CPU trace
         // below while a diagnostic view is active.
-        if (gpuKernel != null && p.Relief2DGpuRaymarch && fx.DebugAov == AovView.Beauty)
+        // S3 (#389) — thin-lens DOF is CPU-only in this slice (the GPU relief
+        // kernel has no lens path), so force the CPU trace when the aperture is
+        // open. GPU DOF is a follow-up; the parity gate uses aperture 0.
+        if (gpuKernel != null && p.Relief2DGpuRaymarch && fx.DebugAov == AovView.Beauty
+            && p.Relief2DDofApertureRadius <= 0.0)
         {
             var u = ReliefUniforms.Build(w, h, hw, hh, sy, aspect, invLip, maxH, p, in fx);
             gpuKernel.Run(in u, hbuf, keep, albedo, dst);
@@ -431,10 +435,19 @@ public static class HeightfieldRaymarch2D
         bool showSky = fx.ShowSkyBackdrop;               // #133 — honour the toggle
         bool isolate = p.Relief2DIsolate;                // #135 — transparent bg
 
+        // S3 (#389) — thin-lens depth of field. Perspective only (ortho has no
+        // lens). aperture 0 = pinhole = byte-identical default. Auto-focus on the
+        // world origin (the fractal centre) when no explicit focus distance is set.
+        double dofAperture = ortho ? 0.0 : Math.Max(0.0, p.Relief2DDofApertureRadius);
+        double dofFocus = p.Relief2DDofFocusDistance;
+        if (dofAperture > 0.0 && dofFocus <= 0.0)
+            dofFocus = Math.Sqrt(camX * camX + camY * camY + camZ * camZ);
+
         // One primary sample. Returns the shaded colour + whether it hit the
         // terrain (ground / sky return false so the silhouette metric stays the
-        // terrain coverage).
-        (uint col, bool terrainHit) SamplePixel(double sxpix, double sypix)
+        // terrain coverage). (lensX, lensY) is a unit-disc lens sample; ignored
+        // when DOF is off (aperture 0).
+        (uint col, bool terrainHit) SamplePixel(double sxpix, double sypix, double lensX, double lensY)
         {
             double ndcx = 2.0 * sxpix / w - 1.0;
             double ndcy = 1.0 - 2.0 * sypix / h;
@@ -456,6 +469,16 @@ public static class HeightfieldRaymarch2D
                 rdz = fZ + rZ * a + uZ * b;
                 double il = 1.0 / Math.Sqrt(rdx * rdx + rdy * rdy + rdz * rdz);
                 rdx *= il; rdy *= il; rdz *= il;
+
+                // S3 — displace the origin onto the lens and re-aim through the
+                // focal point (no-op when aperture 0).
+                if (dofAperture > 0.0)
+                {
+                    var (nox, noy, noz, nrx, nry, nrz) = CameraDof.ThinLensRay(
+                        camX, camY, camZ, rdx, rdy, rdz, rX, rY, rZ, uX, uY, uZ,
+                        dofFocus, dofAperture, lensX, lensY);
+                    ox = nox; oy = noy; oz = noz; rdx = nrx; rdy = nry; rdz = nrz;
+                }
             }
 
             // Ray-slab against the terrain AABB.
@@ -602,7 +625,15 @@ public static class HeightfieldRaymarch2D
                 for (int sj = 0; sj < ss; sj++)
                 for (int si = 0; si < ss; si++)
                 {
-                    var (col, hit) = SamplePixel(px + (si + 0.5) / ss, py + (sj + 0.5) / ss);
+                    // S3 — per-tap lens sample (seeded, deterministic) so the
+                    // supersample loop integrates the aperture. Off → (0,0) centre.
+                    double lensX = 0.0, lensY = 0.0;
+                    if (dofAperture > 0.0)
+                    {
+                        var (lu1, lu2) = ShadingPipeline.HashPair(px * ss + si, py * ss + sj, 0.0, 7);
+                        (lensX, lensY) = CameraDof.ConcentricSampleDisk(lu1, lu2);
+                    }
+                    var (col, hit) = SamplePixel(px + (si + 0.5) / ss, py + (sj + 0.5) / ss, lensX, lensY);
                     aR += (col >> 16) & 0xFF;
                     aG += (col >> 8) & 0xFF;
                     aB += col & 0xFF;

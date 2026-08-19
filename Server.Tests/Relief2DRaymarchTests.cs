@@ -22,6 +22,44 @@ public class Relief2DRaymarchTests
         return ((uint[])calc.ColorBuffer.Clone(), (float[])calc.SmoothBuffer.Clone());
     }
 
+    // S3 (#389) — thin-lens depth of field on the CPU relief render. Aperture 0
+    // is the pinhole default (deterministic, unchanged); opening the aperture
+    // integrates the lens over the supersample taps and blurs off-focus pixels,
+    // so the render differs from the pinhole in a meaningful number of pixels.
+    [Fact]
+    public void Dof_ApertureZero_Is_Pinhole_ApertureOpen_Blurs()
+    {
+        int w = 200, h = 150;
+        var (albedo, height) = Mandelbrot(w, h);
+        static FractalParameters Base() => new()
+        {
+            Relief2DEnabled = true,
+            Relief2DRaymarch = true,
+            Relief2DHeightScale = 1.4,
+            Relief2DCameraAzimuthDeg = 25,
+            Relief2DCameraElevationDeg = 45,
+            Relief2DCameraFovDeg = 55,
+            Relief2DGroundPlane = false,
+            Relief2DSupersample = 3,
+        };
+
+        var pin = new uint[w * h];
+        HeightfieldRaymarch2D.Render(albedo, height, w, h, Base(), pin, out _);
+        // Aperture 0 (default) → deterministic, identical re-render.
+        var pin2 = new uint[w * h];
+        HeightfieldRaymarch2D.Render(albedo, height, w, h, Base(), pin2, out _);
+        Assert.Equal(pin, pin2);
+
+        var pd = Base();
+        pd.Relief2DDofApertureRadius = 0.25;   // open the lens
+        var dof = new uint[w * h];
+        HeightfieldRaymarch2D.Render(albedo, height, w, h, pd, dof, out _);
+
+        int diff = 0;
+        for (int i = 0; i < w * h; i++) if (pin[i] != dof[i]) diff++;
+        Assert.True(diff > w * h / 50, $"DOF changed too few pixels ({diff}) — lens not integrated");
+    }
+
     [Fact]
     public void Raymarch_Produces_Surface_And_Sky_Silhouette()
     {

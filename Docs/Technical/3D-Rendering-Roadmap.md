@@ -105,15 +105,22 @@ benefits most. Blender's Filmic → AgX migration is the precedent.
   true-linear/float intermediate (couples S7), default-look validation, SIMD, user
   doc when the selector ships.
 
-### S3 — Cinematic camera: DOF, exposure, motion blur ☐
+### S3 — Cinematic camera: DOF, exposure, motion blur ◐ (#400)
 Depth of field is nearly free in a raymarcher — jitter the ray origin across an
 aperture disc. Motion blur samples over Scene-Engine time (keyframes already
 exist). Exposure / tonemap piggybacks on S2. Highest visible "wow" per line of
 code.
 - **Reuse:** existing camera (`BuildObliqueCamera`, perspective/ortho), Scene
-  Engine time.
+  Engine time; the S2 exposure (`ViewExposureEv`).
 - **Twin:** aperture/time jitter is seeded + deterministic → twinnable (mirror
   the existing `HashPair` discipline used for GGX sampling).
+- **Status:** `CameraDof` landed — pure thin-lens math (concentric disc sample +
+  `ThinLensRay` re-aimed through the focal point), `FractalParameters.Relief2DDof*`
+  wired into the relief supersample loop (aperture 0 = pinhole identity; DOF forces
+  CPU path so the parity gate is unaffected); 6 module tests + a relief blur
+  integration test; `--reliefgpuraymarch` still PASS. **Remaining:** UI/batch
+  controls, click-to-focus, GPU relief DOF (+ twin/gate), DOF on the 3D-fractal
+  cameras, in-camera exposure control, **motion blur** (own slice over Scene time).
 
 ### S4 — Guided denoiser (À-Trous / SVGF-lite) ☐
 AO, soft shadow and reflections are Monte Carlo → noisy → paid for with

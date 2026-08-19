@@ -474,6 +474,20 @@ namespace FracturingFog.Models
         /// Removes the perspective stretch that grows with frame-fill/FOV — a
         /// clean "relief-map" look. Default false (perspective).</summary>
         public bool Relief2DCameraOrthographic { get; set; } = false;
+
+        // S3 (#389) — thin-lens depth of field. Nearly free in the raymarcher:
+        // the aperture jitters the ray origin, the focus distance keeps one plane
+        // sharp. Perspective only (ortho has no lens). CPU relief path.
+        /// <summary>Lens aperture radius in world units for depth of field.
+        /// 0 = pinhole (no DOF, byte-identical default); larger = shallower focus /
+        /// stronger bokeh. Quality scales with <see cref="Relief2DSupersample"/>
+        /// (the lens is integrated over the supersample taps).</summary>
+        public double Relief2DDofApertureRadius { get; set; } = 0.0;
+        /// <summary>Focus distance along the view ray in world units — the plane
+        /// kept sharp. ≤ 0 auto-focuses on the world origin (the fractal centre).
+        /// Only consulted when <see cref="Relief2DDofApertureRadius"/> &gt; 0.</summary>
+        public double Relief2DDofFocusDistance { get; set; } = 0.0;
+
         /// <summary>Anti-alias supersampling factor: N×N rays per pixel, averaged.
         /// 1 = off, 2–4 = progressively smoother silhouette/edges at N² cost.
         /// Default 2.</summary>
@@ -1031,6 +1045,8 @@ namespace FracturingFog.Models
                 Relief2DCameraAzimuthDeg = Relief2DCameraAzimuthDeg,
                 Relief2DCameraElevationDeg = Relief2DCameraElevationDeg,
                 Relief2DCameraFovDeg = Relief2DCameraFovDeg,
+                Relief2DDofApertureRadius = Relief2DDofApertureRadius,
+                Relief2DDofFocusDistance = Relief2DDofFocusDistance,
                 Relief2DCameraZoom = Relief2DCameraZoom,
                 Relief2DCameraOrthographic = Relief2DCameraOrthographic,
                 Relief2DSupersample = Relief2DSupersample,
