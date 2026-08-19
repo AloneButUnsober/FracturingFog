@@ -356,6 +356,16 @@ Sub-items (ranked fit × payoff):
 3. **Vertex-color export** — bake the theme into per-vertex color (PLY / 3MF
    color / glTF) so a color print or web drop-in carries the fractal's *palette*.
    The palette idiom crossing into mesh — the biggest differentiator.
+   - **Relief PLY LANDED (PR #424).** Binary little-endian PLY writer
+     (`HeightfieldMeshExporter.WritePly`) carrying position + smooth normal +
+     per-vertex RGB — the format built for vertex colour (STL can't; OBJ vertex
+     colour is non-standard). `.ply` dispatch + Export Relief Mesh dialog option +
+     `PlyMeshReader` for validation. `PlyVertexColorExportTests`: header advertises
+     the colour props, the `.ply` round-trips to a closed 2-manifold outward solid
+     (through `MeshValidator`), and the baked colours vary (theme carried). The
+     relief exporter already computed the colour; this stops discarding it.
+     **Remaining:** Marching-Cubes vertex colour (needs a colour source for the 3D
+     DE families), 3MF colour.
 4. **Carry the material** — export **glTF / GLB** with the PBR material so the
    mesh lands in Blender / web dressed, not grey clay. Format discipline: STL
    (dumb slicers), PLY (vertex color), glTF/GLB (PBR), 3MF (color + material +
