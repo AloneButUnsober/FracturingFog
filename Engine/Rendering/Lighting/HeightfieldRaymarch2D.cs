@@ -171,6 +171,24 @@ public static class HeightfieldRaymarch2D
     /// <paramref name="albedo"/> is the flat themed ARGB buffer (sampled at each
     /// hit's source pixel for surface colour). No-op copy when disabled / mis-sized.
     /// </summary>
+    /// <summary>Float-native AOV capture target (roadmap S1, #389). The relief
+    /// render fills these per-pixel float planes from the PRIMARY (centre-tap) hit
+    /// in the SAME pass that produces the beauty — no 8-bit quantisation, no
+    /// re-render. <see cref="NormalXyz"/> is the world-space unit normal packed
+    /// x,y,z (length w·h·3); <see cref="Depth"/> is the ray distance to the hit in
+    /// world units (length w·h), a large value on a sky/background miss. These are
+    /// the guide buffers the À-Trous denoiser (S4) consumes.</summary>
+    public sealed class ReliefAovBuffers
+    {
+        public ReliefAovBuffers(int w, int h)
+        {
+            NormalXyz = new float[(long)w * h * 3];
+            Depth = new float[(long)w * h];
+        }
+        public float[] NormalXyz { get; }
+        public float[] Depth { get; }
+    }
+
     public static void Render(uint[] albedo, float[] height, int w, int h,
                               FractalParameters p, uint[] dst,
                               IReliefRaymarchKernel? gpuKernel = null)
@@ -201,7 +219,8 @@ public static class HeightfieldRaymarch2D
     public static void Render(uint[] albedo, float[] height, int w, int h,
                               int hw, int hh,
                               FractalParameters p, uint[] dst, out double hitFraction,
-                              IReliefRaymarchKernel? gpuKernel = null)
+                              IReliefRaymarchKernel? gpuKernel = null,
+                              ReliefAovBuffers? aov = null)
     {
         hitFraction = 0.0;
         int n = w * h;            // OUTPUT / albedo pixel count
@@ -416,9 +435,11 @@ public static class HeightfieldRaymarch2D
         // as DOF / DebugAov). Directional-only scenes stay on the GPU byte-identical.
         // S5 (#389): the GPU kernel has no refraction path either, so a transmissive
         // (glass) material likewise forces the CPU trace.
+        // S1 (#389): float-native AOV capture reads the primary hit's normal/depth
+        // from the CPU trace, so a capture request also forces the CPU path.
         if (gpuKernel != null && p.Relief2DGpuRaymarch && fx.DebugAov == AovView.Beauty
             && p.Relief2DDofApertureRadius <= 0.0 && !fx.HasPositionalLight
-            && fx.Transmission <= 0.0)
+            && fx.Transmission <= 0.0 && aov == null)
         {
             var u = ReliefUniforms.Build(w, h, hw, hh, sy, aspect, invLip, maxH, p, in fx);
             gpuKernel.Run(in u, hbuf, keep, albedo, dst);
@@ -453,7 +474,8 @@ public static class HeightfieldRaymarch2D
         // terrain (ground / sky return false so the silhouette metric stays the
         // terrain coverage). (lensX, lensY) is a unit-disc lens sample; ignored
         // when DOF is off (aperture 0).
-        (uint col, bool terrainHit) SamplePixel(double sxpix, double sypix, double lensX, double lensY)
+        (uint col, bool terrainHit, float nrmX, float nrmY, float nrmZ, float depth) SamplePixel(
+            double sxpix, double sypix, double lensX, double lensY)
         {
             double ndcx = 2.0 * sxpix / w - 1.0;
             double ndcy = 1.0 - 2.0 * sypix / h;
@@ -563,7 +585,7 @@ public static class HeightfieldRaymarch2D
                         }
                         tcol = BlendArgb(tcol, behind, fade);
                     }
-                    return (tcol, true);
+                    return (tcol, true, (float)nx, (float)ny, (float)nz, (float)tf);
                 }
             }
 
@@ -579,7 +601,7 @@ public static class HeightfieldRaymarch2D
                         var sg = new ShadingInputs(
                             gx, 0.0, gz, 0.0, 1.0, 0.0, rdx, rdy, rdz,
                             totalT: tp, hitDist: 0.0, hitStep: 0, epsilon: eps0);
-                        return (ShadingPipeline.Shade<HeightDe>(in sg, FloorAlbedo, in fx, in de, true), false);
+                        return (ShadingPipeline.Shade<HeightDe>(in sg, FloorAlbedo, in fx, in de, true), false, 0f, 1f, 0f, (float)tp);
                     }
                 }
             }
@@ -612,7 +634,9 @@ public static class HeightfieldRaymarch2D
                     bg = (bg & 0xFF000000u) | ((uint)R << 16) | ((uint)G << 8) | B;
                 }
             }
-            return (bg, false);
+            // Background / sky miss: no surface — a zero normal + a far depth so a
+            // guided denoiser preserves the foreground↔background silhouette.
+            return (bg, false, 0f, 0f, 0f, 1e6f);
         }
 
         int ss = Math.Clamp(p.Relief2DSupersample, 1, 4);
@@ -639,12 +663,21 @@ public static class HeightfieldRaymarch2D
                         var (lu1, lu2) = ShadingPipeline.HashPair(px * ss + si, py * ss + sj, 0.0, 7);
                         (lensX, lensY) = CameraDof.ConcentricSampleDisk(lu1, lu2);
                     }
-                    var (col, hit) = SamplePixel(px + (si + 0.5) / ss, py + (sj + 0.5) / ss, lensX, lensY);
+                    var (col, hit, snx, sny, snz, sdepth) = SamplePixel(px + (si + 0.5) / ss, py + (sj + 0.5) / ss, lensX, lensY);
                     aR += (col >> 16) & 0xFF;
                     aG += (col >> 8) & 0xFF;
                     aB += col & 0xFF;
                     aA += (col >> 24) & 0xFF;   // #135 — average alpha → soft cutout edges
                     if (hit) subHits++;
+                    // S1 (#389) — float AOV capture from the first (centre) tap.
+                    if (aov != null && si == 0 && sj == 0)
+                    {
+                        int pi = py * w + px;
+                        aov.NormalXyz[pi * 3] = snx;
+                        aov.NormalXyz[pi * 3 + 1] = sny;
+                        aov.NormalXyz[pi * 3 + 2] = snz;
+                        aov.Depth[pi] = sdepth;
+                    }
                 }
                 byte R = (byte)Math.Clamp(aR * invSS + 0.5, 0, 255);
                 byte G = (byte)Math.Clamp(aG * invSS + 0.5, 0, 255);

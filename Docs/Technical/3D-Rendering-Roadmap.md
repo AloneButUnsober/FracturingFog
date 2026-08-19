@@ -94,8 +94,23 @@ discarded, not that it is uncomputed.
   `LightingFxData` is a **struct** property — `DebugAov` must be set by reassigning
   the whole `fp.Lighting`, not a member write (silently discarded). CPU-only (the
   shade path honours `DebugAov`); a flat 2D render yields beauty-equal planes.
-- **Remaining:** GUI "Export AOV EXR" action, **float-native AOVs in one pass**
-  (the deeper slice, couples S2), light compositor, motion-vector AOV.
+- **Float-native AOVs in one pass (deep slice, landed):** the relief raymarch now
+  captures a `ReliefAovBuffers` — world-space unit **normal** (raw x,y,z) + **depth**
+  in **world units** — from the PRIMARY (centre-tap) hit in the SAME pass as the
+  beauty (no 8-bit quantisation, no re-render). Optional `aov` arg on the core
+  `HeightfieldRaymarch2D.Render`; supplying it forces the CPU trace (the GPU kernel
+  can't fill it), so the beauty is byte-identical when off. `AovExrExporter.
+  BuildFloatChannels` / `WriteFloatAov` pack the raw float planes (`normal.*`
+  full-precision, `Z` = true world depth). These are exactly the guide buffers the
+  S4 À-Trous denoiser needs — **S4 is now unblocked**. 5 tests
+  (`FloatAovCaptureTests`) incl. unit-normal-on-hits, far-depth sentinel on sky,
+  world-units (not 0..1) depth, raw float-channel values. NOTE: surfaced a
+  pre-existing relief-prepass **static-scratch concurrency hazard** (s_compressed /
+  s_prepassMaxH …) — flagged separately, independent of this work.
+- **Remaining:** GUI "Export AOV EXR" action, float lighting-component AOVs (diffuse/
+  specular/AO/shadow — needs a `Shade` out-param overload), wire float capture into
+  the `--aov-exr` orchestrator (replace the 8-bit normal/depth), light compositor,
+  motion-vector AOV.
 
 ### S2 — Linear-light rendering + view transform (AgX / ACES / Filmic) ◐ (#396)
 Render and composite in **linear light**, apply a filmic **view transform** at

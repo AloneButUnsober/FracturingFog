@@ -83,6 +83,66 @@ public static class AovExrExporter
         OpenExrWriter.WriteFile(path, width, height, channels);
     }
 
+    /// <summary>Build the channel set for a FLOAT-NATIVE AOV EXR (roadmap S1, #389):
+    /// beauty (linear RGBA from the 8-bit buffer) + a raw <c>normal.R/G/B</c> plane
+    /// (world-space unit normal in [-1,1], length w·h·3, interleaved x,y,z) + a raw
+    /// <c>Z</c> plane (ray distance to the hit in WORLD UNITS, length w·h). Unlike
+    /// <see cref="BuildChannels"/> these are not 8-bit-quantised — the values come
+    /// straight from the render's float capture, so Z carries true depth and the
+    /// normals are full-precision. Null planes are skipped.</summary>
+    public static IReadOnlyList<ExrChannel> BuildFloatChannels(
+        int width, int height, uint[] beauty, float[]? normalXyz, float[]? depth)
+    {
+        if (beauty == null) throw new ArgumentNullException(nameof(beauty));
+        long n = (long)width * height;
+        if (beauty.Length < n) throw new ArgumentException("Float AOV EXR: beauty buffer smaller than width*height.");
+
+        var channels = new List<ExrChannel>(8);
+        var br = new float[n]; var bg = new float[n]; var bb = new float[n]; var ba = new float[n];
+        for (int i = 0; i < n; i++)
+        {
+            uint p = beauty[i];
+            br[i] = ViewTransformOps.SrgbToLinear(((p >> 16) & 0xFF) / 255f);
+            bg[i] = ViewTransformOps.SrgbToLinear(((p >> 8) & 0xFF) / 255f);
+            bb[i] = ViewTransformOps.SrgbToLinear((p & 0xFF) / 255f);
+            ba[i] = ((p >> 24) & 0xFF) / 255f;
+        }
+        channels.Add(new ExrChannel("R", br));
+        channels.Add(new ExrChannel("G", bg));
+        channels.Add(new ExrChannel("B", bb));
+        channels.Add(new ExrChannel("A", ba));
+
+        if (normalXyz != null && normalXyz.Length >= n * 3)
+        {
+            var nx = new float[n]; var ny = new float[n]; var nz = new float[n];
+            for (int i = 0; i < n; i++)
+            {
+                nx[i] = normalXyz[i * 3];
+                ny[i] = normalXyz[i * 3 + 1];
+                nz[i] = normalXyz[i * 3 + 2];
+            }
+            channels.Add(new ExrChannel("normal.R", nx));
+            channels.Add(new ExrChannel("normal.G", ny));
+            channels.Add(new ExrChannel("normal.B", nz));
+        }
+        if (depth != null && depth.Length >= n)
+        {
+            var z = new float[n];
+            Array.Copy(depth, z, n);
+            channels.Add(new ExrChannel("Z", z));
+        }
+        return channels;
+    }
+
+    /// <summary>Write a float-native AOV EXR (beauty + world-space normal + world-
+    /// units depth) to <paramref name="path"/> (roadmap S1, #389).</summary>
+    public static void WriteFloatAov(string path, int width, int height,
+        uint[] beauty, float[]? normalXyz, float[]? depth)
+    {
+        var channels = BuildFloatChannels(width, height, beauty, normalXyz, depth);
+        OpenExrWriter.WriteFile(path, width, height, channels);
+    }
+
     private static void AddAovChannels(List<ExrChannel> channels, AovView view, uint[] buf, int n)
     {
         switch (view)
