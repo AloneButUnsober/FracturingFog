@@ -219,6 +219,10 @@ namespace FracturingFog.Batch
             Console.WriteLine("                              Alias: --tonemap.");
             Console.WriteLine("  --exposure EV               Exposure in stops before the view transform, -16..16.");
             Console.WriteLine("                              Default 0 (neutral).");
+            Console.WriteLine("  --aov-exr                   Export a multi-layer AOV OpenEXR (beauty + normal /");
+            Console.WriteLine("                              depth / AO / diffuse / specular / shadow / stepcount)");
+            Console.WriteLine("                              instead of a flat image. Forces .exr; image mode only.");
+            Console.WriteLine("                              AOVs are meaningful for 3D / --relief-raymarch renders.");
             Console.WriteLine();
             Console.WriteLine("2D relief (heightfield shading; any relief flag implies --relief):");
             Console.WriteLine("  --relief                    Enable the 2D heightfield relief post-pass.");

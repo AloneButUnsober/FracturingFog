@@ -81,8 +81,20 @@ discarded, not that it is uncomputed.
 - **Status:** `AovExrExporter` landed — packs beauty (bare RGBA) + each `AovView`
   into named multi-layer EXR sub-layers (`normal.*`, `Z`, `AO.V`, `diffuse.*`,
   `specular.*`, `shadow.V`) via the S7 writer; 6 tests incl. a real reader
-  round-trip. Values are 8-bit-sourced today. **Remaining:** render orchestration
-  + "Export AOV EXR" action / `--aov-exr` flag, **float-native AOVs in one pass**
+  round-trip. Values are 8-bit-sourced today.
+- **Orchestration (integration follow-up, landed):** `AovExrRenderer` renders the
+  scene **once per `AovView`** (beauty + normal/depth/AO/diffuse/specular/shadow/
+  stepcount), toggling `LightingFxData.DebugAov`, and hands the buffers to the
+  packer → one multi-layer `.exr`. Reached the render loop by extracting
+  `PosterRenderer.RenderToPixels` (the composed calc+relief buffer *before* the
+  b/c/gamma + view-transform + interior-composite post-pipeline — those would
+  corrupt data AOVs). Batch flag `--aov-exr` (image mode only, forces `.exr`).
+  4 orchestration tests (`AovExrOrchestrationTests`) incl. a real reader load +
+  a beauty≠normals proof that `RenderToPixels` honours `DebugAov`. GOTCHA:
+  `LightingFxData` is a **struct** property — `DebugAov` must be set by reassigning
+  the whole `fp.Lighting`, not a member write (silently discarded). CPU-only (the
+  shade path honours `DebugAov`); a flat 2D render yields beauty-equal planes.
+- **Remaining:** GUI "Export AOV EXR" action, **float-native AOVs in one pass**
   (the deeper slice, couples S2), light compositor, motion-vector AOV.
 
 ### S2 — Linear-light rendering + view transform (AgX / ACES / Filmic) ◐ (#396)

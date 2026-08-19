@@ -125,6 +125,12 @@ namespace FracturingFog.Batch
         /// the raw video frame path has no post-buffer stage yet).</summary>
         public ViewTransform? ViewTransform { get; set; }
 
+        /// <summary>Export a multi-layer AOV OpenEXR (beauty + normal/depth/AO/
+        /// diffuse/specular/shadow/stepcount passes) instead of a flat image
+        /// (roadmap S1, #389). Image mode only; forces the .exr writer. AOVs are
+        /// meaningful for 3D / relief-raymarch renders (the CPU shade path).</summary>
+        public bool AovExr { get; set; }
+
         /// <summary>Exposure in stops applied before the view transform (roadmap
         /// S2, #389). Null = neutral (0). Only meaningful alongside a non-None
         /// <see cref="ViewTransform"/>, but honoured on its own too.</summary>
@@ -455,6 +461,10 @@ namespace FracturingFog.Batch
                         opts.ViewExposureEv = exv;
                         break;
 
+                    case BatchFlags.AovExr:
+                        opts.AovExr = true;
+                        break;
+
                     case BatchFlags.BulbPower:
                         if (!NextDouble(args, ref i, a, out double bpv, out error)) return false;
                         opts.BulbPower = bpv;
@@ -744,6 +754,8 @@ namespace FracturingFog.Batch
                 { error = "--interior-alpha must be 0..255."; return false; }
             if (opts.ViewExposureEv is < -16.0 or > 16.0)
                 { error = "--exposure must be -16..16 (stops)."; return false; }
+            if (opts.AovExr && opts.Mode != BatchMode.Image)
+                { error = "--aov-exr is image mode only."; return false; }
             if (opts.AcidPattern is < 0 or >= FractalParameters.AcidWarpPatternCount)
                 { error = $"--acid-pattern must be 0..{FractalParameters.AcidWarpPatternCount - 1}."; return false; }
             if (opts.ReliefHeight is <= 0)

@@ -209,8 +209,47 @@ namespace FracturingFog.Imaging
 
             var sw = System.Diagnostics.Stopwatch.StartNew();
 
+            uint[] buffer = RenderComposedBuffer(req, token, out int w, out int h);
+
+            sw.Stop();
+
+            // Brightness/Contrast/Gamma BGRA post-pass (both calculator paths).
+            // Alpha is PRESERVED here (F10.3) so the interior-alpha composite below
+            // still sees the authored coverage byte.
+            ApplyBrightnessContrastGamma(buffer, w * h, req.Brightness, req.Contrast, req.Gamma);
+
+            // S2 (#389) — output-stage view transform (tonemap), layered on the
+            // b/c/gamma post-pass exactly as the live path does, so a poster matches
+            // the on-screen frame. None = no-op (byte-identical).
+            if (req.ViewTransform != ViewTransform.None)
+                ViewTransformOps.Apply(buffer, w * h, req.ViewTransform, req.ViewExposureEv);
+
+            // Interior-alpha composite — the SAME shared helper the live path
+            // (FractalRenderHost.UploadProcessedBuffer) calls, so a poster/wallpaper
+            // matches the on-screen window pixel-for-pixel. The D3D present ignores
+            // the alpha channel, so authored translucency (interior alpha + per-stop
+            // exterior alpha) only shows once composited over the chosen
+            // Interior2DBackground; without it the offscreen render wrote a straight-
+            // alpha PNG that washed out over a viewer's white background. In-place:
+            // the b/c/gamma pass above preserved the coverage byte, so the same buffer
+            // supplies both RGB and coverage. Transparent mode keeps straight alpha.
+            FracturingFog.Rendering.Interior2DBackgroundCompositor.Composite(
+                buffer, buffer, w, h, req.FractalParameters,
+                req.ColorMap?.InSetColor ?? 0xFF000000u,
+                alphaPreview: false, srcAlreadyProcessed: false);
+
+            return WritePoster(req, buffer, w, h, sw.ElapsedMilliseconds);
+        }
+
+        /// <summary>Render the composed scene buffer — calculator colour + #102
+        /// heightfield relief — but WITHOUT the output post-pipeline (brightness /
+        /// contrast / gamma, S2 view transform, interior-alpha composite). This is
+        /// the raw pass the AOV export orchestrator captures per <c>DebugAov</c>
+        /// (roadmap S1, #389): grading + tonemap would corrupt data AOVs (normals /
+        /// depth), so they are applied only on the file path above.</summary>
+        internal static uint[] RenderComposedBuffer(PosterRequest req, CancellationToken token, out int w, out int h)
+        {
             uint[] buffer;
-            int w, h;
 
             // F11 deband — the colour pipeline reads dither state from process-global
             // GradientColorMap statics, so set them from this request for the render
@@ -339,33 +378,24 @@ namespace FracturingFog.Imaging
                 GradientColorMap.DitherStrength = prevDitherStrength;
             }
 
-            sw.Stop();
+            return buffer;
+        }
 
-            // Brightness/Contrast/Gamma BGRA post-pass (both calculator paths).
-            // Alpha is PRESERVED here (F10.3) so the interior-alpha composite below
-            // still sees the authored coverage byte.
-            ApplyBrightnessContrastGamma(buffer, w * h, req.Brightness, req.Contrast, req.Gamma);
+        /// <summary>Render the composed scene buffer as a straight pixel array —
+        /// calculator colour + relief, no output post-pipeline — cloned so the
+        /// caller owns it (roadmap S1, #389; the AOV export orchestrator captures
+        /// one of these per <c>DebugAov</c>).</summary>
+        public static uint[] RenderToPixels(PosterRequest req, CancellationToken token, out int w, out int h)
+        {
+            if (req == null) throw new ArgumentNullException(nameof(req));
+            if (req.Width <= 0 || req.Height <= 0)
+                throw new ArgumentException("Poster dimensions must be positive.", nameof(req));
+            return (uint[])RenderComposedBuffer(req, token, out w, out h).Clone();
+        }
 
-            // S2 (#389) — output-stage view transform (tonemap), layered on the
-            // b/c/gamma post-pass exactly as the live path does, so a poster matches
-            // the on-screen frame. None = no-op (byte-identical).
-            if (req.ViewTransform != ViewTransform.None)
-                ViewTransformOps.Apply(buffer, w * h, req.ViewTransform, req.ViewExposureEv);
-
-            // Interior-alpha composite — the SAME shared helper the live path
-            // (FractalRenderHost.UploadProcessedBuffer) calls, so a poster/wallpaper
-            // matches the on-screen window pixel-for-pixel. The D3D present ignores
-            // the alpha channel, so authored translucency (interior alpha + per-stop
-            // exterior alpha) only shows once composited over the chosen
-            // Interior2DBackground; without it the offscreen render wrote a straight-
-            // alpha PNG that washed out over a viewer's white background. In-place:
-            // the b/c/gamma pass above preserved the coverage byte, so the same buffer
-            // supplies both RGB and coverage. Transparent mode keeps straight alpha.
-            FracturingFog.Rendering.Interior2DBackgroundCompositor.Composite(
-                buffer, buffer, w, h, req.FractalParameters,
-                req.ColorMap?.InSetColor ?? 0xFF000000u,
-                alphaPreview: false, srcAlreadyProcessed: false);
-
+        /// <summary>Watermark + write the composed poster buffer to the request path.</summary>
+        private static PosterResult WritePoster(PosterRequest req, uint[] buffer, int w, int h, long elapsedMs)
+        {
             if (req.Rotate)
             {
                 // 90° clockwise: landscape (w×h) becomes portrait (h×w).
@@ -381,7 +411,7 @@ namespace FracturingFog.Imaging
                 ImageExport.SavePixelsToFile(
                     rotated, savedW, savedH, req.Path, req.Format,
                     wm, poster: true, dpi: req.Dpi);
-                return new PosterResult(savedW, savedH, sw.ElapsedMilliseconds);
+                return new PosterResult(savedW, savedH, elapsedMs);
             }
             else
             {
@@ -391,7 +421,7 @@ namespace FracturingFog.Imaging
                 ImageExport.SavePixelsToFile(
                     buffer, w, h, req.Path, req.Format,
                     wm, poster: true, dpi: req.Dpi);
-                return new PosterResult(w, h, sw.ElapsedMilliseconds);
+                return new PosterResult(w, h, elapsedMs);
             }
         }
 
