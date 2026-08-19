@@ -137,7 +137,7 @@ supplies the guide buffers.
   float AOVs as guides (the S1 coupling — the payoff), UI/`--denoise` + adaptive-
   supersample coupling, full SVGF variance weighting, parallelize/SIMD.
 
-### S5 — Refractive / transmissive materials ☐
+### S5 — Refractive / transmissive materials ◐ (#406)
 Cook-Torrance GGX today is opaque. Add **transmission + IOR** → glass fractals.
 Fits DE raymarching natively: at the surface, refract the ray and keep marching.
 The Principled-BSDF lesson taken *only as far as FF's primitive allows* (skip the
@@ -146,6 +146,11 @@ full uber-shader — add transmission, optionally clearcoat / emission).
 - **Twin:** refraction ray continuation is deterministic → twinnable across all
   three backends (mirror the reflection path already twinned in
   `ReliefRaymarchGpu.Reflections`).
+- **Status:** `DielectricOps` landed — pure Snell refraction + TIR, mirror reflect,
+  Schlick Fresnel, per-channel Beer-Lambert; `LightingFxData` gains
+  `Transmission`/`Ior`/`Absorption*` (opaque default = byte-identical, persisted);
+  6 tests. **Remaining:** refract-and-continue in the raymarch (CPU → twin → GPU),
+  Fresnel reflect+refract combine, rough refraction (couple S4), UI.
 
 ### S6 — Froxel / unified volume march ☐
 Today's volumetrics are per-surface single-scatter. A froxel (frustum-voxel)

@@ -87,6 +87,11 @@ public sealed class LightingFxPresetData
     public double Metallic           { get; set; } = 0.0;
     public double SpecularStrength   { get; set; } = 0.0;
     public double SubSurfaceStrength { get; set; } = 0.0;
+    // S5 (#389) — refraction / transmission.
+    public double Transmission       { get; set; } = 0.0;
+    public double Ior                { get; set; } = 1.5;
+    public uint   AbsorptionColor    { get; set; } = 0xFFFFFFFFu;
+    public double AbsorptionDistance { get; set; } = 1.0;
 
     // ── Sky / IBL ─────────────────────────────────────────────────────
 
@@ -193,6 +198,8 @@ public sealed class LightingFxPresetData
 
         Roughness = fx.Roughness, Metallic = fx.Metallic,
         SpecularStrength = fx.SpecularStrength, SubSurfaceStrength = fx.SubSurfaceStrength,
+        Transmission = fx.Transmission, Ior = fx.Ior,
+        AbsorptionColor = fx.AbsorptionColor, AbsorptionDistance = fx.AbsorptionDistance,
 
         SkyMode = fx.SkyMode, BgTopColor = fx.BgTopColor, BgBottomColor = fx.BgBottomColor,
         EnvironmentName = fx.EnvironmentName, IblStrength = fx.IblStrength,
@@ -251,6 +258,8 @@ public sealed class LightingFxPresetData
 
         Roughness = Roughness, Metallic = Metallic,
         SpecularStrength = SpecularStrength, SubSurfaceStrength = SubSurfaceStrength,
+        Transmission = Transmission, Ior = Ior,
+        AbsorptionColor = AbsorptionColor, AbsorptionDistance = AbsorptionDistance,
 
         SkyMode = SkyMode, BgTopColor = BgTopColor, BgBottomColor = BgBottomColor,
         EnvironmentName = EnvironmentName, IblStrength = IblStrength,

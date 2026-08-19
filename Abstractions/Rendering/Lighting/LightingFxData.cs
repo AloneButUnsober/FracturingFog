@@ -383,6 +383,29 @@ public struct LightingFxData
     /// back-lit lobe via dot(-L, V) * exp(-distInside * k). Phase 13.</summary>
     public double SubSurfaceStrength;
 
+    // ── Refraction / transmission (S5, #389) ──────────────────────────────
+
+    /// <summary>Transmission [0, 1]: how much the surface refracts light through
+    /// itself instead of shading opaque → glass fractals. 0 = opaque (legacy,
+    /// byte-identical). Blends the refracted-and-continued ray against the opaque
+    /// shade by this amount.</summary>
+    public double Transmission;
+
+    /// <summary>Index of refraction for the transmissive surface. 1.0 = no bend,
+    /// 1.5 ≈ glass, 1.33 ≈ water, 2.4 ≈ diamond. Only consulted when
+    /// <see cref="Transmission"/> &gt; 0. Default 1.5.</summary>
+    public double Ior;
+
+    /// <summary>0xAARRGGBB Beer-Lambert absorption tint — the color that survives
+    /// one <see cref="AbsorptionDistance"/> of travel inside the medium. White
+    /// (0xFFFFFFFF) = clear (no absorption). Only consulted when
+    /// <see cref="Transmission"/> &gt; 0.</summary>
+    public uint AbsorptionColor;
+
+    /// <summary>Reference distance (world units) over which <see cref="AbsorptionColor"/>
+    /// is reached. Larger = clearer glass. ≤ 0 disables absorption.</summary>
+    public double AbsorptionDistance;
+
     // ── Triplanar texture (Phase 14) ──────────────────────────────────
 
     /// <summary>Procedural texture selector. <see cref="TriplanarTextureKind.None"/>
@@ -705,6 +728,10 @@ public struct LightingFxData
         Metallic           = 0.0,
         SpecularStrength   = 0.0,
         SubSurfaceStrength = 0.0,
+        Transmission       = 0.0,          // opaque (legacy)
+        Ior                = 1.5,          // glass
+        AbsorptionColor    = 0xFFFFFFFFu,  // clear
+        AbsorptionDistance = 1.0,
 
         TriplanarKind      = TriplanarTextureKind.None,
         TriplanarScale     = 4.0,
