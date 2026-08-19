@@ -298,7 +298,7 @@ Broadens the lighting vocabulary without a scene graph.
   force-CPU on the 8 GPU 3D-fractal calculators (relief path gated; those still
   render directional-only on GPU), area lights (couple S4).
 
-### S9 — Mesh export maturation ☐ (#391)
+### S9 — Mesh export maturation ◐ (#391)
 Mesh export is the **one place FF crosses from renderer into geometry producer** —
 THE handoff line. The discipline: be a great mesh *exporter*, never a mesh
 *editor*. Today FF meshes the relief heightfield (2.5D displaced grid → printable);
@@ -323,6 +323,18 @@ Sub-items (ranked fit × payoff):
    Dual Contouring for true 3D) and ship a validator that reports hole count,
    non-manifold edges, bounding size, tri count, est. volume (Blender's "3D Print
    Toolbox" is the model). "Will this print?" before export.
+   - **S9.1 validator LANDED (PR #420).** `Engine/Export/MeshValidator` (positions +
+     index triples → `MeshReport`: watertight / edge-manifold / oriented verdict +
+     boundary/non-manifold/flipped edge counts + bounds + area + signed volume +
+     `.Summary()`; welds the triangle-SOUP the exporters emit before measuring edge
+     incidence) + `StlMeshReader` (validate an exported file). `MeshValidatorTests`
+     (cube = full contract, welded soup, open sheet, three-sheet fin, flipped face,
+     degenerate, real relief export); suite 1619/1619. **Finding:** the shipped
+     `HeightfieldMeshExporter` output is watertight + edge-manifold with real volume
+     but its skirt-wall seams wind against the surfaces they meet (~147 flipped
+     edges) → **S9.1a #419** (exporter left byte-identical here; the winding fix
+     alters geometry so it's a separate change). **Remaining:** weld-based manifold
+     repair on true-3D output, validate `UserBulbMeshExporter`, export-time warn UI.
 2. **Isosurface export for true 3D fractals** — marching cubes / dual contouring
    on the DE; the headline capability FF is uniquely positioned for.
 3. **Vertex-color export** — bake the theme into per-vertex color (PLY / 3MF
