@@ -41,6 +41,10 @@ namespace FracturingFog.Imaging
             string watermarkText, Color fontColor, string subText = "", bool poster = false,
             float dpi = 0f)
         {
+            // S7 — EXR routes to the float writer, not Skia. Watermark text is a
+            // display-space overlay; a scene-linear HDR export has no watermark.
+            if (IsExr(format, path)) { OpenExrWriter.WriteBgra8(path, pixels, w, h); return; }
+
             SaveBgraSkia(pixels, w, h, path, format, dpi);
             if (string.IsNullOrEmpty(watermarkText)) return;
             CompositeWatermarkSkia(path, format,
@@ -57,6 +61,9 @@ namespace FracturingFog.Imaging
             uint[] pixels, int w, int h, string path, ImageFileFormat format,
             WatermarkRender? wm, bool poster = false, float dpi = 0f)
         {
+            // S7 — EXR routes to the float writer, no watermark (see above).
+            if (IsExr(format, path)) { OpenExrWriter.WriteBgra8(path, pixels, w, h); return; }
+
             SaveBgraSkia(pixels, w, h, path, format, dpi);
 
             bool hasWm = wm != null && (!string.IsNullOrEmpty(wm.TopText) || !string.IsNullOrEmpty(wm.SubText));
@@ -64,6 +71,14 @@ namespace FracturingFog.Imaging
 
             CompositeWatermarkRenderSkia(path, format, wm!, poster);
         }
+
+        /// <summary>True when the save should produce an OpenEXR file — either the
+        /// explicit <see cref="ImageFileFormat.Exr"/> token or an <c>.exr</c>
+        /// extension under <see cref="ImageFileFormat.Auto"/>.</summary>
+        private static bool IsExr(ImageFileFormat format, string path) =>
+            format == ImageFileFormat.Exr
+            || (format == ImageFileFormat.Auto
+                && Path.GetExtension(path).Equals(".exr", StringComparison.OrdinalIgnoreCase));
 
         // ── SkiaSharp save path ───────────────────────────────────────────
         //
