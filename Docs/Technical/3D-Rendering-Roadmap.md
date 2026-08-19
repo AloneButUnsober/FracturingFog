@@ -227,9 +227,22 @@ Broadens the lighting vocabulary without a scene graph.
   shadow raises sample cost (coordinate with S4 denoise).
 - **Status:** `LightType` (Directional/Point/Spot) + point/spot fields on the light
   model, and `LightSampler` — pure dir+attenuation sampling (inverse-square + Karis
-  range window + smooth spot cone; Directional = identity); 6 tests. **Remaining:**
-  wire `LightSampler` per shade point (CPU `ShadingPipeline` → twin → GPU kernels),
-  preset persistence + UI, area lights (couple S4).
+  range window + smooth spot cone; Directional = identity); 6 tests.
+- **Shade wiring (integration follow-up, landed):** `ShadingPipeline.ResolveLight`
+  now resolves each of the 3 lights per shade point — directional keeps the legacy
+  `LightDir(θ+orbit, φ)` with attenuation 1 (**byte-identical**); point/spot call
+  `LightSampler` with the surface position so direction + falloff are surface-
+  relative. Wired at both surface shade sites (`Shade` + `Shade<TDe>`): diffuse,
+  specular (GGX) and SSS all scale by the attenuation. `LightingFxData.
+  HasPositionalLight` forces the **CPU** trace in the relief path (the GPU kernel is
+  directional-only) — same discipline as DOF/DebugAov, so the parity gate is
+  untouched. Point/spot fields persist through `LightingFxPresetData` (round-trip
+  tested). 7 wiring tests (`LightTypeShadingTests`) incl. inverse-square falloff +
+  a full-Shade brightness check. Directional-only shading suite (74) unchanged.
+- **Remaining:** UI (LightingFx dialog: 3 lights × type/pos/range/cone) + batch
+  flags, **positional lights in the volumetric march** (fog site stays directional),
+  force-CPU on the 8 GPU 3D-fractal calculators (relief path gated; those still
+  render directional-only on GPU), area lights (couple S4).
 
 ### S9 — Mesh export maturation ☐ (#391)
 Mesh export is the **one place FF crosses from renderer into geometry producer** —
