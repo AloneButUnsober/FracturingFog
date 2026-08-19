@@ -240,134 +240,30 @@ public static class HeightfieldRaymarch2D
         // orbit, progressive-preview restages and re-theme all re-enter Render
         // with the identical field, so re-running the ~8-pass filter chain every
         // frame is wasted work. Hash the inputs; on a match reuse the cached
-        // compressed field (`s_compressed`), its max, and the unitless
-        // grid-slope maxima. sy / invLip stay per-call (cheap, scale-dependent).
+        // immutable ReliefPrepass (compressed field + max + grid-slope maxima).
+        // sy / invLip stay per-call (cheap, scale-dependent).
         HeightCurve2D curve = p.Relief2DHeightCurve;
         double edgeFade = Math.Clamp(p.Relief2DEdgeFade, 0.0, 0.5);
         ulong key = PrepassKey(height, hn, hw, hh, curve, edgeFade);
 
-        float[] hbuf;
-        float maxH, gMaxX, gMaxZ;
-        if (s_prepassValid && key == s_prepassKey
-            && s_compressed is { } cached && cached.Length >= hn)
+        // Reuse the last-published IMMUTABLE prepass when the key matches, else
+        // build a fresh one into its OWN arrays (thread-safe: no two renders share
+        // mutable prepass scratch). The published result's Compressed field is only
+        // ever READ downstream (BuildKeepMask / HeightDe / the GPU kernel), so a
+        // cache hit can safely share it across concurrent renders.
+        ReliefPrepass? pre;
+        lock (s_prepassLock)
         {
-            hbuf = cached;
-            maxH = s_prepassMaxH; gMaxX = s_prepassGMaxX; gMaxZ = s_prepassGMaxZ;
+            pre = (s_prepass is { } c && s_prepassKey == key && c.Compressed.Length >= hn) ? c : null;
         }
-        else
+        if (pre is null)
         {
-            s_prepassValid = false;   // invalid until the recompute below finishes
-            hbuf = s_compressed is { } sc && sc.Length >= hn
-                ? sc : (s_compressed = new float[hn]);
-
-            // Height tone-curve (#132 #7 / #130). The raw smooth-iteration count
-            // is unbounded near the fractal boundary (high dwell) while the
-            // interior is 0, so a single boundary needle sets the global max and
-            // linear normalisation flattens everything else into thin tall
-            // spires — a "hedgehog" that a close camera stretches into distorted
-            // streaks. Compress so boundary dwell reads as terrain relief.
-            for (int i = 0; i < hn; i++)
-            {
-                float hv = height[i];
-                hbuf[i] = hv <= 0f ? 0f : curve switch
-                {
-                    HeightCurve2D.Linear => hv,
-                    HeightCurve2D.Sqrt   => (float)Math.Sqrt(hv),
-                    _                    => (float)Math.Log(1.0 + hv),   // Log (default)
-                };
-            }
-
-            // Exterior baseline subtraction (#141) — the tone curve (esp. Log)
-            // lifts the low far-from-set smooth counts into a raised rectangular
-            // PLATEAU (a tabletop) whose clipped domain boundary reads as a
-            // persistent rectangle at the fractal plane. Subtract a low
-            // percentile of the nonzero heights so the far exterior sits back on
-            // the base plane and only the boundary structure rises; the plateau
-            // — and its rectangle — disappears, as it does when the user zooms in.
-            {
-                float hmax = 0f;
-                for (int i = 0; i < hn; i++) { float hv = hbuf[i]; if (hv > hmax) hmax = hv; }
-                if (hmax > 1e-9f)
-                {
-                    const int B = 512;
-                    Span<int> hist = stackalloc int[B];
-                    int nz = 0;
-                    for (int i = 0; i < hn; i++)
-                    {
-                        float hv = hbuf[i];
-                        if (hv > 0f) { hist[Math.Clamp((int)(hv / hmax * (B - 1)), 0, B - 1)]++; nz++; }
-                    }
-                    if (nz > 0)
-                    {
-                        int target = (int)(0.60 * nz), cum = 0;
-                        float baseline = 0f;
-                        for (int b = 0; b < B; b++) { cum += hist[b]; if (cum >= target) { baseline = (b + 0.5f) / B * hmax; break; } }
-                        if (baseline > 0f)
-                            for (int i = 0; i < hn; i++)
-                                hbuf[i] = hbuf[i] > baseline ? hbuf[i] - baseline : 0f;
-                    }
-                }
-            }
-
-            // Resolution-adaptive despike (#145). At small window sizes (Mini /
-            // Toy mode) the fractal boundary is undersampled, so a lone
-            // high-dwell cell whose neighbours all escaped fast reads as an
-            // isolated tall NEEDLE — the "hedgehog" the oblique camera stretches
-            // into a spike. Clamp every cell to its 8-neighbour max plus a small
-            // margin: connected ridges and filaments (a neighbour is nearly as
-            // tall) survive; only isolated single-cell peaks are pulled down.
-            // Self-gating — at maximized / Span resolution the boundary is
-            // connected so nothing clamps and the signed-off view is unchanged.
-            DespikeNeighborMax(hbuf, hw, hh);
-
-            // Resolution-adaptive low-pass (#145b). The despike above only
-            // removes ISOLATED needles; along the fractal boundary every cell is
-            // high but the dwell oscillates wildly, so at Mini (320×240) / Toy
-            // (200×150) sizes the undersampled boundary reads as a jagged COMB of
-            // tall cells. A neighbour-max clamp can't fix a comb whose cells are
-            // all tall; a low-pass can. Blur strength ramps from 0 at ≥480 px
-            // (maximized / Span untouched) up to ~3 box passes at Toy size,
-            // blended continuously so a window resize never snaps the look.
-            LowPassAdaptive(hbuf, hw, hh);
-
-            // Edge fade (#137, #140) — pull tall structure near each image edge
-            // down to the base plane so filaments running off the frame taper
-            // out instead of extruding into streaky border "arms". A height CAP,
-            // not a multiply: cap = window·maxRaw ramps from 0 at the very edge
-            // to the field max inside the margin, and only heights ABOVE the cap
-            // are lowered. The near-flat exterior stays flat, so the fade no
-            // longer lifts the border into a rectangular lip/ridge (#140). 0 = off.
-            if (edgeFade > 0.0)
-            {
-                double mx = Math.Max(1.0, edgeFade * hw);
-                double my = Math.Max(1.0, edgeFade * hh);
-                for (int y = 0; y < hh; y++)
-                {
-                    double dy = Math.Min(y, hh - 1 - y);
-                    double wy = dy >= my ? 1.0 : Smoothstep(dy / my);
-                    int row = y * hw;
-                    for (int x = 0; x < hw; x++)
-                    {
-                        double dx = Math.Min(x, hw - 1 - x);
-                        double wx = dx >= mx ? 1.0 : Smoothstep(dx / mx);
-                        double f = wx * wy;
-                        if (f < 1.0) hbuf[row + x] = (float)(hbuf[row + x] * f);
-                    }
-                }
-            }
-
-            maxH = 0f;
-            for (int i = 0; i < hn; i++) { float hv = hbuf[i]; if (hv > maxH) maxH = hv; }
-
-            // Unitless per-cell grid-slope maxima (parallel reduction, #155).
-            // Independent of sy / world scale so the cache survives an aspect or
-            // height-scale change; the world-space Lipschitz slope is
-            // reconstructed per call below.
-            (gMaxX, gMaxZ) = GridSlopeMaxima(hbuf, hw, hh);
-
-            s_prepassMaxH = maxH; s_prepassGMaxX = gMaxX; s_prepassGMaxZ = gMaxZ;
-            s_prepassKey = key; s_prepassValid = true;
+            pre = BuildPrepass(height, hn, hw, hh, curve, edgeFade);
+            lock (s_prepassLock) { s_prepass = pre; s_prepassKey = key; }
         }
+
+        float[] hbuf = pre.Compressed;
+        float maxH = pre.MaxH, gMaxX = pre.GMaxX, gMaxZ = pre.GMaxZ;
 
         if (maxH <= 1e-9f)   // dead-flat field (all interior) — nothing to raymarch
         {
@@ -827,18 +723,31 @@ public static class HeightfieldRaymarch2D
     // Tone-curve-compressed height scratch (#130). Reused across frames on the
     // render thread that calls Render (serialised by the host upload gate); the
     // Parallel.For only reads it via the HeightDe.
-    private static float[]? s_compressed;
-    private static byte[]? s_keep;   // #135 isolation cull mask scratch
-    private static float[]? s_despikeSrc;   // #145 despike neighbour-read snapshot
+    /// <summary>#155 pre-pass cache — an IMMUTABLE snapshot of the filtered height
+    /// field + its maxima, keyed by field content + params and swapped under
+    /// <see cref="s_prepassLock"/>. Concurrent relief renders never share mutable
+    /// prepass scratch: a cache miss builds into its OWN arrays and only the
+    /// finished, read-only result is published; a hit reuses the immutable object
+    /// (its <see cref="Compressed"/> array is only ever read downstream). Replaces
+    /// the old mutable <c>s_compressed</c> / <c>s_prepassMaxH</c> statics that two
+    /// overlapping renders (UI vs batch, or parallel tests) could clobber.</summary>
+    private sealed class ReliefPrepass
+    {
+        public ReliefPrepass(float[] compressed, float maxH, float gMaxX, float gMaxZ)
+        { Compressed = compressed; MaxH = maxH; GMaxX = gMaxX; GMaxZ = gMaxZ; }
+        public float[] Compressed { get; }
+        public float MaxH { get; }
+        public float GMaxX { get; }
+        public float GMaxZ { get; }
+    }
 
-    // #155 pre-pass cache. `s_compressed` holds the last computed compressed +
-    // filtered field; these describe which inputs produced it and the scalars
-    // the (scale-dependent) per-call math needs. Guarded by the same single-
-    // entry assumption as the scratch buffers above (host upload gate serialises
-    // Render); the Parallel.For inside only reads the field.
+    // #155 pre-pass cache — the last published immutable snapshot + its key,
+    // guarded by s_prepassLock. A miss builds a fresh ReliefPrepass into its own
+    // arrays (see BuildPrepass) and publishes it here; a hit reuses the read-only
+    // object. Concurrent renders are safe: they never write shared prepass scratch.
+    private static readonly object s_prepassLock = new();
+    private static ReliefPrepass? s_prepass;
     private static ulong s_prepassKey;
-    private static bool  s_prepassValid;
-    private static float s_prepassMaxH, s_prepassGMaxX, s_prepassGMaxZ;
 
     /// <summary>#132 — fill sensible AO / soft-shadow / specular / ambient
     /// defaults wherever the knob is still at zero so Oblique 3D looks good out
@@ -895,6 +804,106 @@ public static class HeightfieldRaymarch2D
         fx.VolumeSteps = fx.VolumeSteps > 0 ? Math.Min(fx.VolumeSteps, 8) : 0;
         pp.Lighting = fx;
         return pp;
+    }
+
+    /// <summary>#155 — run the tone-curve → baseline → despike → low-pass → edge-
+    /// fade filter chain into a FRESH compressed field and reduce its max + grid-
+    /// slope maxima. Allocation-owning + side-effect-free on shared state, so two
+    /// renders can build concurrently without racing (the fix for the old shared
+    /// <c>s_compressed</c>). The result is immutable once returned.</summary>
+    private static ReliefPrepass BuildPrepass(
+        float[] height, int hn, int hw, int hh, HeightCurve2D curve, double edgeFade)
+    {
+        var hbuf = new float[hn];
+
+        // Height tone-curve (#132 #7 / #130). The raw smooth-iteration count is
+        // unbounded near the fractal boundary (high dwell) while the interior is 0,
+        // so a single boundary needle sets the global max and linear normalisation
+        // flattens everything else into thin tall spires — a "hedgehog" a close
+        // camera stretches into distorted streaks. Compress so boundary dwell reads
+        // as terrain relief.
+        for (int i = 0; i < hn; i++)
+        {
+            float hv = height[i];
+            hbuf[i] = hv <= 0f ? 0f : curve switch
+            {
+                HeightCurve2D.Linear => hv,
+                HeightCurve2D.Sqrt   => (float)Math.Sqrt(hv),
+                _                    => (float)Math.Log(1.0 + hv),   // Log (default)
+            };
+        }
+
+        // Exterior baseline subtraction (#141) — the tone curve (esp. Log) lifts
+        // the low far-from-set smooth counts into a raised rectangular PLATEAU
+        // whose clipped domain boundary reads as a persistent rectangle at the
+        // fractal plane. Subtract a low percentile of the nonzero heights so the
+        // far exterior sits back on the base plane and only the boundary rises.
+        {
+            float hmax = 0f;
+            for (int i = 0; i < hn; i++) { float hv = hbuf[i]; if (hv > hmax) hmax = hv; }
+            if (hmax > 1e-9f)
+            {
+                const int B = 512;
+                Span<int> hist = stackalloc int[B];
+                int nz = 0;
+                for (int i = 0; i < hn; i++)
+                {
+                    float hv = hbuf[i];
+                    if (hv > 0f) { hist[Math.Clamp((int)(hv / hmax * (B - 1)), 0, B - 1)]++; nz++; }
+                }
+                if (nz > 0)
+                {
+                    int target = (int)(0.60 * nz), cum = 0;
+                    float baseline = 0f;
+                    for (int b = 0; b < B; b++) { cum += hist[b]; if (cum >= target) { baseline = (b + 0.5f) / B * hmax; break; } }
+                    if (baseline > 0f)
+                        for (int i = 0; i < hn; i++)
+                            hbuf[i] = hbuf[i] > baseline ? hbuf[i] - baseline : 0f;
+                }
+            }
+        }
+
+        // Resolution-adaptive despike (#145) — clamp isolated single-cell needles
+        // (undersampled boundary at Mini / Toy sizes) to their 8-neighbour max;
+        // connected ridges survive. No-op at maximized / Span resolution.
+        DespikeNeighborMax(hbuf, hw, hh);
+
+        // Resolution-adaptive low-pass (#145b) — median + light box blur, strength
+        // ramping from 0 at high resolution to ~3 passes at Toy size, so the
+        // undersampled boundary comb reads as a smooth ridge. No-op at Span.
+        LowPassAdaptive(hbuf, hw, hh);
+
+        // Edge fade (#137, #140) — cap tall structure near each image edge down to
+        // the base plane so filaments running off-frame taper instead of extruding
+        // into streaky border arms. 0 = off.
+        if (edgeFade > 0.0)
+        {
+            double mx = Math.Max(1.0, edgeFade * hw);
+            double my = Math.Max(1.0, edgeFade * hh);
+            for (int y = 0; y < hh; y++)
+            {
+                double dy = Math.Min(y, hh - 1 - y);
+                double wy = dy >= my ? 1.0 : Smoothstep(dy / my);
+                int row = y * hw;
+                for (int x = 0; x < hw; x++)
+                {
+                    double dx = Math.Min(x, hw - 1 - x);
+                    double wx = dx >= mx ? 1.0 : Smoothstep(dx / mx);
+                    double f = wx * wy;
+                    if (f < 1.0) hbuf[row + x] = (float)(hbuf[row + x] * f);
+                }
+            }
+        }
+
+        float maxH = 0f;
+        for (int i = 0; i < hn; i++) { float hv = hbuf[i]; if (hv > maxH) maxH = hv; }
+
+        // Unitless per-cell grid-slope maxima (parallel reduction, #155),
+        // independent of sy / world scale so the cache survives an aspect or
+        // height-scale change; the world Lipschitz slope is reconstructed per call.
+        var (gMaxX, gMaxZ) = GridSlopeMaxima(hbuf, hw, hh);
+
+        return new ReliefPrepass(hbuf, maxH, gMaxX, gMaxZ);
     }
 
     /// <summary>#155 — content + params signature that keys the pre-pass cache.
@@ -973,8 +982,9 @@ public static class HeightfieldRaymarch2D
         if (maxH <= 1e-9f) return;
         float margin = 0.05f * maxH;
 
-        // Read neighbours from a snapshot so in-place clamps don't cascade.
-        float[] src = s_despikeSrc is { } s && s.Length >= n ? s : (s_despikeSrc = new float[n]);
+        // Read neighbours from a snapshot so in-place clamps don't cascade. Local
+        // (not a shared static) so concurrent prepass builds don't race.
+        float[] src = new float[n];
         Array.Copy(hbuf, src, n);
 
         for (int y = 0; y < h; y++)
@@ -1020,8 +1030,6 @@ public static class HeightfieldRaymarch2D
     private static double ResolutionRamp(int w, int h)
         => Smoothstep((920.0 - Math.Min(w, h)) / (920.0 - 200.0));
 
-    private static float[]? s_lowpassSrc;   // #145b box-blur neighbour-read snapshot
-
     /// <summary>#145b — resolution-adaptive box-blur low-pass of the compressed
     /// height field. Strength ramps from 0 at ≥480 px (min window dimension) up
     /// to ~3 passes at ≤200 px (Toy mode), blended continuously so there is no
@@ -1057,7 +1065,7 @@ public static class HeightfieldRaymarch2D
     private static void Median3x3(float[] hbuf, int w, int h, float amt)
     {
         int n = w * h;
-        float[] src = s_lowpassSrc is { } s && s.Length >= n ? s : (s_lowpassSrc = new float[n]);
+        float[] src = new float[n];   // local — concurrent prepass builds don't race
         Array.Copy(hbuf, src, n);
         Span<float> win = stackalloc float[9];
         for (int y = 0; y < h; y++)
@@ -1092,7 +1100,7 @@ public static class HeightfieldRaymarch2D
     private static void BoxBlur3x3(float[] hbuf, int w, int h, float amt)
     {
         int n = w * h;
-        float[] src = s_lowpassSrc is { } s && s.Length >= n ? s : (s_lowpassSrc = new float[n]);
+        float[] src = new float[n];   // local — concurrent prepass builds don't race
         Array.Copy(hbuf, src, n);
         for (int y = 0; y < h; y++)
         {
@@ -1147,7 +1155,9 @@ public static class HeightfieldRaymarch2D
         if (!byDetail && !byColor) return null;   // isolate bg only, keep all surface
 
         int n = w * h;   // FIELD cell count (mask grid)
-        byte[] keep = s_keep is { } sk && sk.Length >= n ? sk : (s_keep = new byte[n]);
+        // Local (not a shared static): the returned mask is handed to HeightDe /
+        // the GPU kernel for the whole render, so it must be this render's own.
+        byte[] keep = new byte[n];
         // Detail threshold is a DROP FRACTION: cull the flattest `thr` share of
         // cells (by local gradient). A quantile — not a fraction of the max — so
         // a single sharp boundary spike can't skew it. Higher = keep only the
