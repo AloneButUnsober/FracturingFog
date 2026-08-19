@@ -342,6 +342,17 @@ Sub-items (ranked fit × payoff):
      output, validate `UserBulbMeshExporter`, export-time warn UI.
 2. **Isosurface export for true 3D fractals** — marching cubes / dual contouring
    on the DE; the headline capability FF is uniquely positioned for.
+   - **MC validated + oriented (PR #423).** `MeshValidator` extended to
+     `UserBulbMeshExporter`'s Marching Cubes: when the surface is interior to the
+     sample cube it is a closed, edge-manifold, consistently-wound solid (the Bourke
+     tables + edge dedup are sound). Fixed an inside-out defect — the `TriTable`
+     wound faces INWARD (negative signed volume) with the `DE < iso` inside bit, so
+     STL/OBJ normals pointed into the solid; reversed the emitted winding to
+     `(a,c,b)` (count unchanged). `McMeshValidationTests` locks interior =
+     print-ready, `ProbeBoundingRange` auto-size = closed, undersized cube = open,
+     crease path = still closed. **Remaining:** cap the mesh where the surface
+     exceeds the cube (open-boundary, **#422**); dual contouring for sharp
+     Mandelbox/KIFS edges.
 3. **Vertex-color export** — bake the theme into per-vertex color (PLY / 3MF
    color / glTF) so a color print or web drop-in carries the fractal's *palette*.
    The palette idiom crossing into mesh — the biggest differentiator.
