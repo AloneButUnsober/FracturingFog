@@ -2929,8 +2929,13 @@ namespace FracturingFog.Rendering
             if (raymarch)
             {
                 BakeReliefVolumePalette(rp);
+                // S4 (#389) — guided À-Trous denoise on the render's own float
+                // normal/depth AOVs. aov is null unless the denoise is on, so this
+                // is byte-identical by default (Render keeps its GPU fast path).
+                var aov = FracturingFog.Imaging.ReliefDenoisePass.MakeCapture(rp, w, h);
                 FracturingFog.Rendering.Lighting.HeightfieldRaymarch2D.Render(
-                    buf, _reliefHeight, w, h, _reliefW, _reliefH, rp, dst, out _, null);
+                    buf, _reliefHeight, w, h, _reliefW, _reliefH, rp, dst, out _, null, aov);
+                FracturingFog.Imaging.ReliefDenoisePass.Apply(dst, aov, w, h, rp);
             }
             else
                 FracturingFog.Rendering.Lighting.HeightfieldRelief2D.Apply(
@@ -3319,10 +3324,15 @@ namespace FracturingFog.Rendering
                         // built lazily only when the flag is on, so a non-relief GPU
                         // session never constructs it.
                         BakeReliefVolumePalette(reliefParams);   // #185 slice D
+                        // S4 (#389) — capture float AOVs + guided À-Trous denoise
+                        // iff on; null keeps the GPU fast path (byte-identical off).
+                        var reliefAov = FracturingFog.Imaging.ReliefDenoisePass.MakeCapture(reliefParams, w, h);
                         FracturingFog.Rendering.Lighting.HeightfieldRaymarch2D.Render(
                             src, _reliefHeight!, w, h, _reliefW, _reliefH,
                             reliefParams, _reliefColorScratch, out _,
-                            reliefParams.Relief2DGpuRaymarch ? EnsureReliefKernel() : null);
+                            reliefParams.Relief2DGpuRaymarch ? EnsureReliefKernel() : null,
+                            reliefAov);
+                        FracturingFog.Imaging.ReliefDenoisePass.Apply(_reliefColorScratch, reliefAov, w, h, reliefParams);
                         reliefRaymarchApplied = true;
                     }
                     else

@@ -169,7 +169,7 @@ code.
 - **Remaining:** click-to-focus, GPU relief DOF (+ twin/gate), DOF on the 3D-fractal
   cameras, in-camera exposure control, **motion blur** (own slice over Scene time).
 
-### S4 — Guided denoiser (À-Trous / SVGF-lite) ◐ (#402)
+### S4 — Guided denoiser (À-Trous / SVGF-lite) ● (#402)
 AO, soft shadow and reflections are Monte Carlo → noisy → paid for with
 supersamples. A bilateral / edge-avoiding denoiser **keyed on the normal + depth
 AOVs from S1** cuts samples for equal quality. High fit precisely because S1
@@ -180,9 +180,21 @@ supplies the guide buffers.
 - **Depends on:** S1.
 - **Status:** `AtrousDenoiser` landed — pure deterministic B3-spline À-Trous with
   color + optional normal/depth edge-stopping weights, `Iterations` 0 = identity;
-  5 tests incl. guided normal-edge preservation. **Remaining:** wire the render's
-  float AOVs as guides (the S1 coupling — the payoff), UI/`--denoise` + adaptive-
-  supersample coupling, full SVGF variance weighting, parallelize/SIMD.
+  5 tests incl. guided normal-edge preservation.
+- **Integration (landed, PR #418):** `Imaging/ReliefDenoisePass` wires the operator
+  into the relief-raymarch path keyed on the render's own float normal + depth AOVs
+  (#416). `MakeCapture`/`Apply` at all three raymarch sites (poster, live final
+  frame, cached recolour; preview left FX-stripped). `Iterations` 0 (default) ⇒ no
+  capture ⇒ GPU fast path kept ⇒ **byte-identical**; a non-zero count forces the CPU
+  trace (kernel emits no AOVs yet), so the guides are always the render's float data
+  (CPU-parity). Surface: `FractalParameters.Relief2DDenoise{Iterations,Color/Normal/
+  DepthSigma}`, `Relief3DDialog` rows, `--denoise` / `--denoise-{color,normal,depth}-
+  sigma` batch flags + builder round-trip. `DenoiseBatchWiringTests` +
+  `ReliefDenoiseIntegrationTests` (off = byte-identical, on changes + deterministic);
+  suite 1612/1612.
+- **Remaining (deep, still open on #402):** GPU AOV emit so denoise doesn't force
+  CPU; adaptive-supersample coupling (fewer samples when denoise on); full SVGF
+  variance/temporal weighting; parallelize/SIMD.
 
 ### S5 — Refractive / transmissive materials ◐ (#406)
 Cook-Torrance GGX today is opaque. Add **transmission + IOR** → glass fractals.
