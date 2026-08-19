@@ -126,6 +126,10 @@ namespace FracturingFog.Batch
                 Brightness = pfBrightness,
                 Contrast = pfContrast,
                 HistogramEq = pfAdaptive,
+                // S2 (#389) — output-stage view transform / tonemap. Null leaves
+                // the poster default (None = identity, byte-identical).
+                ViewTransform = opts.ViewTransform ?? FracturingFog.Imaging.ViewTransform.None,
+                ViewExposureEv = (float)(opts.ViewExposureEv ?? 0.0),
             };
 
             Console.WriteLine($"Batch image render");
@@ -137,6 +141,8 @@ namespace FracturingFog.Batch
             Console.WriteLine($"  size    : {opts.Width}x{opts.Height}");
             if (pfBrightness != 0 || pfContrast != 0 || pfAdaptive != 0)
                 Console.WriteLine($"  post-fx : brightness {pfBrightness}  contrast {pfContrast}  adaptive {pfAdaptive}");
+            if (req.ViewTransform != FracturingFog.Imaging.ViewTransform.None || req.ViewExposureEv != 0f)
+                Console.WriteLine($"  view    : {req.ViewTransform}  exposure {req.ViewExposureEv:+0.##;-0.##;0} EV");
             Console.WriteLine($"  out     : {outPath}");
 
             using var spinner = new ConsoleSpinner("Rendering");

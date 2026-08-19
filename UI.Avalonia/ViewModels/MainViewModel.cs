@@ -94,6 +94,8 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
         _brightness = ViewState.Brightness;
         _contrast = ViewState.Contrast;
         _adaptive = ViewState.HistogramEq;
+        _viewTransform = ViewState.ViewTransform;
+        _viewExposure = ViewState.ViewExposureEv;
         _iterLocked = ViewState.IterLocked;
         _lockedIterations = ViewState.LockedIterations;
 
@@ -647,6 +649,42 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
                 // RepaintWithAdaptive so the histogram-eq pass doesn't
                 // thrash mid-drag.
                 _adaptiveRepaintDebounce.Change(AdaptiveRepaintDebounceMs, System.Threading.Timeout.Infinite);
+            }
+        }
+    }
+
+    private FracturingFog.Imaging.ViewTransform _viewTransform;
+    /// <summary>Output-stage view transform / tonemap (roadmap S2, #389).
+    /// Write-through to ViewState + post-FX repaint (no recalc), exactly like
+    /// Brightness/Contrast — the transform is a beauty-buffer pass. None (default)
+    /// leaves the image byte-identical.</summary>
+    public FracturingFog.Imaging.ViewTransform ViewTransform
+    {
+        get => _viewTransform;
+        set
+        {
+            if (this.RaiseAndSetIfChangedReturnsChanged(ref _viewTransform, value))
+            {
+                ViewState.ViewTransform = value;
+                _renderHost.RepaintWithPostFx();
+            }
+        }
+    }
+
+    private double _viewExposure;
+    /// <summary>Exposure in stops applied before the view transform (roadmap S2,
+    /// #389). 0 = neutral. Write-through + post-FX repaint. Clamped to the same
+    /// -16..16 range the batch <c>--exposure</c> flag accepts.</summary>
+    public double ViewExposure
+    {
+        get => _viewExposure;
+        set
+        {
+            double v = Math.Clamp(value, -16.0, 16.0);
+            if (this.RaiseAndSetIfChangedReturnsChanged(ref _viewExposure, v))
+            {
+                ViewState.ViewExposureEv = (float)v;
+                _renderHost.RepaintWithPostFx();
             }
         }
     }

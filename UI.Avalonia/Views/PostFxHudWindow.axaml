@@ -23,7 +23,7 @@
                            Margin="6,0,0,0" />
             </Border>
 
-            <Grid Grid.Row="1" ColumnDefinitions="Auto,*,Auto" RowDefinitions="Auto,Auto,Auto,Auto" Margin="6">
+            <Grid Grid.Row="1" ColumnDefinitions="Auto,*,Auto" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto" Margin="6">
                 <TextBlock Grid.Row="0" Grid.Column="0" Classes="fxLabel" Text="{Binding BrightnessLabel}" Margin="0,0,6,4" />
                 <Slider    Grid.Row="0" Grid.Column="1" Value="{Binding Brightness}" Minimum="-100" Maximum="100" TickFrequency="25" Margin="0,0,6,4" ToolTip.Tip="Brightness (-100..100)" />
                 <CheckBox  Grid.Row="0" Grid.Column="2" IsChecked="{Binding BrightnessLocked}" ToolTip.Tip="Lock brightness" Margin="0,0,0,4" />
@@ -36,12 +36,23 @@
                 <Slider    Grid.Row="2" Grid.Column="1" Value="{Binding Adaptive}" Minimum="0" Maximum="100" TickFrequency="25" Margin="0,0,6,4" IsEnabled="{Binding AdaptiveEnabled}" ToolTip.Tip="Adaptive contrast (0=off, 100=full)" />
                 <CheckBox  Grid.Row="2" Grid.Column="2" IsChecked="{Binding AdaptiveLocked}" IsEnabled="{Binding AdaptiveEnabled}" ToolTip.Tip="Lock adaptive" />
 
+                <!-- View transform / tonemap (roadmap S2, #389). -->
+                <TextBlock Grid.Row="3" Grid.Column="0" Classes="fxLabel" Text="View" Margin="0,0,6,4" />
+                <ComboBox  Grid.Row="3" Grid.Column="1" Grid.ColumnSpan="2"
+                           ItemsSource="{Binding ViewTransformOptions}"
+                           SelectedItem="{Binding ViewTransform}"
+                           HorizontalAlignment="Stretch" Margin="0,0,0,4"
+                           ToolTip.Tip="Output view transform / tonemap (None = unchanged)" />
+
+                <TextBlock Grid.Row="4" Grid.Column="0" Classes="fxLabel" Text="{Binding ExposureLabel}" Margin="0,0,6,4" IsEnabled="{Binding ExposureEnabled}" />
+                <Slider    Grid.Row="4" Grid.Column="1" Grid.ColumnSpan="2" Value="{Binding Exposure}" Minimum="-16" Maximum="16" TickFrequency="4" Margin="0,0,0,4" IsEnabled="{Binding ExposureEnabled}" ToolTip.Tip="Exposure in stops before the view transform" />
+
                 <!-- Not fxLabel (that style fixes Width=84 and clips this text). -->
-                <TextBlock Grid.Row="3" Grid.Column="0" Grid.ColumnSpan="2" Text="Lock Lighting &amp; FX"
+                <TextBlock Grid.Row="5" Grid.Column="0" Grid.ColumnSpan="2" Text="Lock Lighting &amp; FX"
                            Foreground="#9B9B9B" FontWeight="Bold" VerticalAlignment="Center"
                            HorizontalAlignment="Left" Margin="0,4,6,0"
                            ToolTip.Tip="When checked, theme selection won't overwrite the active Lighting &amp; FX block." />
-                <CheckBox  Grid.Row="3" Grid.Column="2" IsChecked="{Binding LightingLocked}" ToolTip.Tip="Lock lighting — ignore theme presets" Margin="0,4,0,0" />
+                <CheckBox  Grid.Row="5" Grid.Column="2" IsChecked="{Binding LightingLocked}" ToolTip.Tip="Lock lighting — ignore theme presets" Margin="0,4,0,0" />
             </Grid>
         </Grid>
     </Border>

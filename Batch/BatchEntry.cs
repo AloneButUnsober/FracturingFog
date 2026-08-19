@@ -214,6 +214,11 @@ namespace FracturingFog.Batch
             Console.WriteLine("  --interior-alpha N          Interior (in-set) opacity 0..255 (#96). 255 = opaque");
             Console.WriteLine("                              (default); below 255 the interior turns translucent");
             Console.WriteLine("                              over the theme's interior background. Mandelbrot 2D only.");
+            Console.WriteLine("  --view-transform NAME       Output view transform / tonemap (image mode). One of");
+            Console.WriteLine("                              none|reinhard|aces|agx|filmic. Default none (identity).");
+            Console.WriteLine("                              Alias: --tonemap.");
+            Console.WriteLine("  --exposure EV               Exposure in stops before the view transform, -16..16.");
+            Console.WriteLine("                              Default 0 (neutral).");
             Console.WriteLine();
             Console.WriteLine("2D relief (heightfield shading; any relief flag implies --relief):");
             Console.WriteLine("  --relief                    Enable the 2D heightfield relief post-pass.");

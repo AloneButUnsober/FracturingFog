@@ -204,6 +204,8 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
         FloatingMenu.BrightnessSlide   += (_, v) => Main.Brightness = v;
         FloatingMenu.ContrastSlide     += (_, v) => Main.Contrast = v;
         FloatingMenu.AdaptiveSlide     += (_, v) => Main.Adaptive = v;
+        FloatingMenu.ViewTransformChanged += (_, v) => Main.ViewTransform = v;
+        FloatingMenu.ExposureSlide     += (_, v) => Main.ViewExposure = v;
         FloatingMenu.GammaSlide        += (_, v) => Main.Gamma = v;
         FloatingMenu.BandDitherToggle          += (_, v) => Main.BandDither = v;
         FloatingMenu.BandDitherStrengthSlide   += (_, v) => Main.BandDitherStrength = v;

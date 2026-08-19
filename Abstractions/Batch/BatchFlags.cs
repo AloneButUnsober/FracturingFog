@@ -37,6 +37,10 @@ namespace FracturingFog.Batch
         public const string Adaptive       = "--adaptive";
         public const string InteriorAlpha  = "--interior-alpha";
 
+        // Output-stage view transform / tonemap (roadmap S2, #389).
+        public const string ViewTransform  = "--view-transform";
+        public const string Exposure       = "--exposure";
+
         public const string MultibrotExp   = "--multibrot-exp";
         public const string BulbPower      = "--bulb-power";
         public const string LSystemPreset  = "--lsystem-preset";

@@ -24,6 +24,7 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using FracturingFog.Batch;
+using FracturingFog.Imaging;
 using FracturingFog.Models;
 
 namespace FracturingFog.Cli
@@ -63,6 +64,15 @@ namespace FracturingFog.Cli
         /// <summary>Global interior alpha, 0..255 (#96). 255 = opaque (omit the
         /// flag); below 255 emits <c>--interior-alpha N</c>.</summary>
         public int InteriorAlpha { get; init; } = 255;
+
+        /// <summary>Output-stage view transform / tonemap (roadmap S2, #389).
+        /// None (default) omits the flag; anything else emits
+        /// <c>--view-transform NAME</c>.</summary>
+        public ViewTransform ViewTransform { get; init; } = ViewTransform.None;
+
+        /// <summary>Exposure in stops before the view transform (roadmap S2,
+        /// #389). 0 (default) omits the flag; otherwise emits <c>--exposure EV</c>.</summary>
+        public double ViewExposureEv { get; init; }
 
         /// <summary>Fractal-specific parameters. Only the fields with a matching
         /// batch flag are read, and only for the matching fractal type.</summary>
@@ -214,6 +224,18 @@ namespace FracturingFog.Cli
             if (snap.HistogramEq != 0) { parts.Add(BatchFlags.Adaptive);   parts.Add(snap.HistogramEq.ToString(CultureInfo.InvariantCulture)); }
             if (snap.InteriorAlpha < 255) { parts.Add(BatchFlags.InteriorAlpha); parts.Add(snap.InteriorAlpha.ToString(CultureInfo.InvariantCulture)); }
 
+            // View transform / tonemap (S2, #389) — only when non-identity.
+            if (snap.ViewTransform != ViewTransform.None)
+            {
+                parts.Add(BatchFlags.ViewTransform);
+                parts.Add(ViewTransformFlagValue(snap.ViewTransform));
+            }
+            if (snap.ViewExposureEv != 0.0)
+            {
+                parts.Add(BatchFlags.Exposure);
+                parts.Add(snap.ViewExposureEv.ToString("0.###", CultureInfo.InvariantCulture));
+            }
+
             // Domain-warp post-fx (any fractal). Emit the toggle, plus knobs when
             // they deviate from their defaults.
             if (snap.DomainWarpActive)
@@ -343,6 +365,17 @@ namespace FracturingFog.Cli
         /// <summary>Round-trippable invariant formatting for a double so the
         /// parsed value reproduces the live one bit-for-bit.</summary>
         private static string Num(double v) => v.ToString("R", CultureInfo.InvariantCulture);
+
+        /// <summary>Short flag spelling for a view transform, matching the aliases
+        /// <see cref="BatchOptions.TryParseViewTransform"/> accepts.</summary>
+        private static string ViewTransformFlagValue(ViewTransform vt) => vt switch
+        {
+            ViewTransform.Reinhard   => "reinhard",
+            ViewTransform.AcesFilmic => "aces",
+            ViewTransform.AgX        => "agx",
+            ViewTransform.Filmic     => "filmic",
+            _                        => "none",
+        };
 
         /// <summary>Quote a token when it contains whitespace or characters a
         /// shell would split on; escape embedded double quotes.</summary>
