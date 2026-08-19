@@ -135,11 +135,10 @@ public class MeshValidatorTests
 
     // ── Real relief export ────────────────────────────────────────────────────
     // The shipped HeightfieldMeshExporter builds top + contoured base + skirt
-    // walls; the validator proves it is a closed, 2-manifold solid with real
-    // volume. Orientation-consistency is a KNOWN gap (the wall seams wind against
-    // the surfaces they meet) tracked as S9.1a (#419) — so this asserts the hard
-    // topological contract (watertight + edge-manifold + positive volume) but not
-    // full winding consistency, which #419 will tighten to IsClosedManifold.
+    // walls; the validator proves it is a CLOSED 2-MANIFOLD solid — watertight, no
+    // three-sheet edges, consistently wound (outward: positive signed volume), with
+    // real volume. The wall-seam winding was fixed in S9.1a (#419); this asserts
+    // the full IsClosedManifold contract as the regression guard.
     private static (uint[] albedo, float[] height) Bump(int w, int h)
     {
         var albedo = new uint[w * h];
@@ -176,10 +175,12 @@ public class MeshValidatorTests
             Assert.Equal(tris, t.Count);
 
             var r = MeshValidator.Validate(pos, t);
-            // The hard topological contract holds today.
+            // Full 3D-print contract: closed, 2-manifold, consistently wound.
             Assert.True(r.IsWatertight, r.Summary());
             Assert.True(r.IsEdgeManifold, r.Summary());
-            Assert.True(r.Volume > 0, r.Summary());
+            Assert.True(r.IsConsistentlyOriented, r.Summary());   // S9.1a #419 wall-winding fix
+            Assert.True(r.IsClosedManifold, r.Summary());
+            Assert.True(r.SignedVolume > 0, r.Summary());          // wound OUTWARD (not inside-out)
             Assert.True(r.WeldedVertexCount < r.RawVertexCount);   // welding recovered shared topology
             // Bounds track the raymarch world frame (X spans the image aspect, Y is up).
             Assert.True(r.SizeX > r.SizeZ, r.Summary());

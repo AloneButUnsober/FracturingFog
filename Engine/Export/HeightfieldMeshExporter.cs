@@ -323,27 +323,41 @@ public static class HeightfieldMeshExporter
     }
 
     // A vertical wall quad from the top edge (t0->t1) down to the base at each
-    // end (baseY0 under t0, baseY1 under t1), wound so it faces outward. Two
-    // triangles, flat wall normal.
+    // end (baseY0 under t0, baseY1 under t1), closing the solid. The callers pass
+    // the seam edge as the TOP SURFACE traverses it (t0->t1); the wall is wound so
+    // its own top edge runs the OTHER way (t1->t0), so the shared edge is crossed
+    // once in each direction — a manifold-consistent seam. (S9.1a #419: the old
+    // winding matched the surface's, flipping ~every wall seam — watertight and
+    // 2-manifold but not consistently oriented, caught by MeshValidator.) The flat
+    // wall normal is taken from the actual winding so the STL per-face normal and
+    // the OBJ vn agree and point outward.
     private static void AddWall(
         List<(int, int, int)> tris, List<Vert> verts,
         (double x, double y, double z) t0, (double x, double y, double z) t1,
         uint c0, uint c1, double baseY0, double baseY1)
     {
-        // Outward horizontal normal of the wall: perpendicular to the top edge,
-        // in the XZ plane. Edge dir e = t1 - t0; normal = (e.z, 0, -e.x).
-        double ex = t1.x - t0.x, ez = t1.z - t0.z;
-        double nx = ez, nz = -ex;
-        double nl = Math.Sqrt(nx * nx + nz * nz);
+        // Quad corners: a = top@t0, b = top@t1, c = base@t1, d = base@t0.
+        // Wound (b,a,d)+(b,d,c): top edge b->a = t1->t0 (opposes the surface).
+        double ax = t0.x, ay = t0.y, az = t0.z;
+        double bx = t1.x, by = t1.y, bz = t1.z;
+        double cx = t1.x, cy = baseY1, cz = t1.z;
+        double dx = t0.x, dy = baseY0, dz = t0.z;
+
+        // Face normal of the wound triangle (b,a,d): cross(a-b, d-b).
+        double ux = ax - bx, uy = ay - by, uz = az - bz;
+        double vx = dx - bx, vy = dy - by, vz = dz - bz;
+        double nx = uy * vz - uz * vy, ny = uz * vx - ux * vz, nz = ux * vy - uy * vx;
+        double nl = Math.Sqrt(nx * nx + ny * ny + nz * nz);
         float wnx = nl > 1e-12 ? (float)(nx / nl) : 0f;
+        float wny = nl > 1e-12 ? (float)(ny / nl) : 0f;
         float wnz = nl > 1e-12 ? (float)(nz / nl) : 0f;
 
-        int a = verts.Count; verts.Add(new Vert(t0.x, t0.y, t0.z, c0, wnx, 0f, wnz));
-        int b = verts.Count; verts.Add(new Vert(t1.x, t1.y, t1.z, c1, wnx, 0f, wnz));
-        int c = verts.Count; verts.Add(new Vert(t1.x, baseY1, t1.z, c1, wnx, 0f, wnz));
-        int d = verts.Count; verts.Add(new Vert(t0.x, baseY0, t0.z, c0, wnx, 0f, wnz));
-        tris.Add((a, b, c));
-        tris.Add((a, c, d));
+        int a = verts.Count; verts.Add(new Vert(ax, ay, az, c0, wnx, wny, wnz));
+        int b = verts.Count; verts.Add(new Vert(bx, by, bz, c1, wnx, wny, wnz));
+        int c = verts.Count; verts.Add(new Vert(cx, cy, cz, c1, wnx, wny, wnz));
+        int d = verts.Count; verts.Add(new Vert(dx, dy, dz, c0, wnx, wny, wnz));
+        tris.Add((b, a, d));
+        tris.Add((b, d, c));
     }
 
     // 3x3 median filter (despike). Writes into a scratch copy then back.

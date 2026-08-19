@@ -330,11 +330,16 @@ Sub-items (ranked fit × payoff):
      incidence) + `StlMeshReader` (validate an exported file). `MeshValidatorTests`
      (cube = full contract, welded soup, open sheet, three-sheet fin, flipped face,
      degenerate, real relief export); suite 1619/1619. **Finding:** the shipped
-     `HeightfieldMeshExporter` output is watertight + edge-manifold with real volume
-     but its skirt-wall seams wind against the surfaces they meet (~147 flipped
-     edges) → **S9.1a #419** (exporter left byte-identical here; the winding fix
-     alters geometry so it's a separate change). **Remaining:** weld-based manifold
-     repair on true-3D output, validate `UserBulbMeshExporter`, export-time warn UI.
+     `HeightfieldMeshExporter` output was watertight + edge-manifold with real volume
+     but its skirt-wall seams wound against the surfaces they meet (~147 flipped
+     edges).
+   - **S9.1a wall-winding FIXED (PR #421, Closes #419).** Wind each skirt wall so
+     its top edge opposes the surface's traversal + take the wall normal from the
+     actual winding (STL face normal + OBJ vn now agree, outward). Triangle count
+     unchanged. Relief export now passes the FULL contract — `IsClosedManifold` with
+     positive signed volume (outward); the real-export test is tightened to that as
+     the regression guard. **Remaining:** weld-based manifold repair on true-3D
+     output, validate `UserBulbMeshExporter`, export-time warn UI.
 2. **Isosurface export for true 3D fractals** — marching cubes / dual contouring
    on the DE; the headline capability FF is uniquely positioned for.
 3. **Vertex-color export** — bake the theme into per-vertex color (PLY / 3MF
