@@ -212,9 +212,23 @@ animated.
 - **Status:** `FroxelGrid` (exponential near-dense depth slices + invertible
   `DepthToSlice`) + `FroxelIntegrator` (energy-conserving front-to-back column
   integration à la Hillaire + depth sample) landed; 6 tests incl. uniform-medium
-  transmittance == exp(-σ·d). **Remaining:** populate + composite the 3D volume
-  (reuse #388 multi-light in-scatter), temporal reprojection, GPU froxel pass,
-  unify the existing per-surface march.
+  transmittance == exp(-σ·d).
+- **Pass assembly (integration follow-up, landed):** `FroxelVolumePass` assembles
+  the primitives into a **populate → integrate → composite** pipeline. `Populate`
+  fills every froxel with noise-modulated density → extinction + single directional
+  in-scatter (Henyey-Greenstein phase — the same model as the per-surface march,
+  reusing the public `ShadingPipeline.FbmCloud3D`), then integrates each column
+  front-to-back (`FroxelIntegrator`). `Composite(beauty, depth01, w, h)` attenuates
+  each pixel by the transmittance in front of its depth and adds the accumulated
+  in-scatter — a cheap depth-indexed read, no per-pixel march. Pure/deterministic
+  (twinnable, --batch-stable). 6 tests (`FroxelVolumePassTests`) incl. empty-medium
+  no-op, far>near attenuation, Beer-Lambert far transmittance, colored in-scatter
+  tint, noise heterogeneity. World mapping is an axis-aligned slab (depth along the
+  froxel Z).
+- **Remaining:** wire the **live camera frustum** populate + per-pixel depth into
+  the relief / 3D render (replacing the background `VolumetricInScatterSegment`
+  march), multi-light in-scatter (reuse #388), **temporal reprojection** (Scene
+  Engine history, additive gated), GPU froxel compute pass.
 
 ### S7 — Float / multi-layer EXR export ◐ (#394)
 Enabler for S1 (AOV layers), S2 (linear/HDR intermediate) and S6 (HDR
