@@ -317,6 +317,8 @@ public static class HeightfieldMeshExporter
 
         if (path.EndsWith(".stl", StringComparison.OrdinalIgnoreCase))
             WriteStl(path, verts, tris);
+        else if (path.EndsWith(".ply", StringComparison.OrdinalIgnoreCase))
+            WritePly(path, verts, tris);
         else
             WriteObj(path, verts, tris);
         return tris.Count;
@@ -613,6 +615,49 @@ public static class HeightfieldMeshExporter
             sb.Append(string.Create(ci,
                 $"f {t.a + 1}//{t.a + 1} {t.b + 1}//{t.b + 1} {t.c + 1}//{t.c + 1}\n"));
         File.WriteAllText(path, sb.ToString());
+    }
+
+    // Binary little-endian PLY with per-vertex COLOUR (roadmap S9.3, #391) — the
+    // palette idiom crossing into mesh: the exported solid carries the fractal's
+    // theme as vertex colours, so a colour print (3MF/PLY slicers) or a web/Blender
+    // drop-in lands dressed instead of grey clay. STL (WriteStl) cannot hold colour
+    // and OBJ vertex colour is a non-standard extension many tools ignore; PLY is
+    // the widely-read format built for it (MeshLab, Blender, Meshmixer, colour
+    // slicers). Positions + smooth normals + RGB per vertex; the same watertight,
+    // outward-wound topology WriteStl/WriteObj emit.
+    private static void WritePly(string path, List<Vert> verts, List<(int a, int b, int c)> tris)
+    {
+        using var fs = new FileStream(path, FileMode.Create, FileAccess.Write);
+        // Header is ASCII; the body is binary little-endian. Write the header bytes
+        // directly so no encoder inserts a BOM or CRLF that would corrupt the offset.
+        var header =
+            "ply\n" +
+            "format binary_little_endian 1.0\n" +
+            "comment Fracturing Fog relief mesh export (S9.3 vertex colour)\n" +
+            $"element vertex {verts.Count}\n" +
+            "property float x\nproperty float y\nproperty float z\n" +
+            "property float nx\nproperty float ny\nproperty float nz\n" +
+            "property uchar red\nproperty uchar green\nproperty uchar blue\n" +
+            $"element face {tris.Count}\n" +
+            "property list uchar int vertex_indices\n" +
+            "end_header\n";
+        var headerBytes = System.Text.Encoding.ASCII.GetBytes(header);
+        fs.Write(headerBytes, 0, headerBytes.Length);
+
+        using var bw = new BinaryWriter(fs);
+        foreach (var v in verts)
+        {
+            bw.Write((float)v.X); bw.Write((float)v.Y); bw.Write((float)v.Z);
+            bw.Write(v.Nx); bw.Write(v.Ny); bw.Write(v.Nz);
+            bw.Write((byte)((v.C >> 16) & 0xFF));   // red
+            bw.Write((byte)((v.C >> 8) & 0xFF));    // green
+            bw.Write((byte)(v.C & 0xFF));           // blue
+        }
+        foreach (var t in tris)
+        {
+            bw.Write((byte)3);
+            bw.Write(t.a); bw.Write(t.b); bw.Write(t.c);
+        }
     }
 
     private static void WriteStl(string path, List<Vert> verts, List<(int a, int b, int c)> tris)

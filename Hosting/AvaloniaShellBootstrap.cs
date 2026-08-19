@@ -2226,7 +2226,7 @@ namespace FracturingFog.Hosting
                         if (string.IsNullOrEmpty(path)) return;
                         double range = global::FracturingFog.Export.RaymarchMeshSampler.SuggestedRange(
                             vsx.FractalType, vsx.FractalParameters);
-                        System.Threading.Tasks.Task.Run(() =>
+                        _ = System.Threading.Tasks.Task.Run(() =>
                         {
                             try
                             {
@@ -3186,14 +3186,14 @@ namespace FracturingFog.Hosting
                 }
                 var pex = host2.ViewState.FractalParameters;
                 string? path = await PickSaveAsync("Export Relief Mesh",
-                    "OBJ (*.obj)|*.obj|STL (*.stl)|*.stl|All files (*.*)|*.*",
+                    "OBJ (*.obj)|*.obj|PLY (vertex colour, *.ply)|*.ply|STL (*.stl)|*.stl|All files (*.*)|*.*",
                     host2.ViewState.FractalType + "-relief");
                 if (string.IsNullOrEmpty(path)) return;
                 // Copy the live buffers before handing to the worker (the render
                 // thread may overwrite them on the next frame).
                 var albCopy = (uint[])alb.Clone();
                 var hgtCopy = (float[])hgt.Clone();
-                System.Threading.Tasks.Task.Run(() =>
+                _ = System.Threading.Tasks.Task.Run(() =>
                 {
                     try
                     {
