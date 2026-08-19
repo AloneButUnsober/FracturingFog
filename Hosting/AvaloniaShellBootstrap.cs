@@ -3186,7 +3186,7 @@ namespace FracturingFog.Hosting
                 }
                 var pex = host2.ViewState.FractalParameters;
                 string? path = await PickSaveAsync("Export Relief Mesh",
-                    "OBJ (*.obj)|*.obj|STL (*.stl)|*.stl|All files (*.*)|*.*",
+                    "OBJ (*.obj)|*.obj|PLY (vertex colour, *.ply)|*.ply|STL (*.stl)|*.stl|All files (*.*)|*.*",
                     host2.ViewState.FractalType + "-relief");
                 if (string.IsNullOrEmpty(path)) return;
                 // Copy the live buffers before handing to the worker (the render
