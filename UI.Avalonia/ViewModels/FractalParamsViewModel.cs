@@ -441,6 +441,19 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
         get => _p.Relief2DSupersample;
         set { int v = (int)Clamp(value, 1, 4); if (_p.Relief2DSupersample == v) return; _p.Relief2DSupersample = v; this.RaisePropertyChanged(); Fire(); }
     }
+    // Depth of field (roadmap S3, #389). Aperture 0 = pinhole (byte-identical).
+    public double Relief2DDofApertureRadius
+    {
+        get => _p.Relief2DDofApertureRadius;
+        set { double v = Clamp(value, 0.0, 1.0); if (_p.Relief2DDofApertureRadius == v) return; _p.Relief2DDofApertureRadius = v; this.RaisePropertyChanged(); this.RaisePropertyChanged(nameof(DofEnabled)); Fire(); }
+    }
+    public double Relief2DDofFocusDistance
+    {
+        get => _p.Relief2DDofFocusDistance;
+        set { double v = Clamp(value, 0.0, 100.0); if (_p.Relief2DDofFocusDistance == v) return; _p.Relief2DDofFocusDistance = v; this.RaisePropertyChanged(); Fire(); }
+    }
+    /// <summary>Focus-distance control is only meaningful once the lens is open.</summary>
+    public bool DofEnabled => _p.Relief2DDofApertureRadius > 0.0;
     public FracturingFog.HeightCurve2D Relief2DHeightCurve
     {
         get => _p.Relief2DHeightCurve;

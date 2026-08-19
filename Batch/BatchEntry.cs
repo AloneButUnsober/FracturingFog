@@ -235,6 +235,11 @@ namespace FracturingFog.Batch
             Console.WriteLine("  --relief-camera-fov F       Camera field of view 1..179. Default 50.");
             Console.WriteLine("  --relief-camera-zoom F      Camera zoom (>0). Default 1.0.");
             Console.WriteLine("  --relief-camera-ortho       Orthographic camera (vs perspective).");
+            Console.WriteLine("  --dof-aperture F            Depth-of-field lens radius 0..1 (0 = pinhole, default).");
+            Console.WriteLine("                              Implies --relief-raymarch; perspective camera only.");
+            Console.WriteLine("                              Blur integrates over --relief supersample taps.");
+            Console.WriteLine("  --dof-focus F               DOF focus distance (>=0 world units; 0 = auto-focus");
+            Console.WriteLine("                              the fractal centre). Only used with --dof-aperture.");
             Console.WriteLine("  Isolate masking:");
             Console.WriteLine("  --relief-isolate            Isolate high-relief features (drop flat/low-detail).");
             Console.WriteLine("  --relief-isolate-no-detail  Turn OFF the default detail-based isolation.");

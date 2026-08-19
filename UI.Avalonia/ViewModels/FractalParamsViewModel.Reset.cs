@@ -146,6 +146,8 @@ public sealed partial class FractalParamsViewModel
         _p.Relief2DCameraFovDeg       = d.Relief2DCameraFovDeg;
         _p.Relief2DCameraZoom         = d.Relief2DCameraZoom;
         _p.Relief2DCameraOrthographic = d.Relief2DCameraOrthographic;
+        _p.Relief2DDofApertureRadius  = d.Relief2DDofApertureRadius;
+        _p.Relief2DDofFocusDistance   = d.Relief2DDofFocusDistance;
         _p.Relief2DSupersample        = d.Relief2DSupersample;
         _p.Relief2DHeightCurve        = d.Relief2DHeightCurve;
         _p.Relief2DBicubicHeight      = d.Relief2DBicubicHeight;
@@ -232,6 +234,7 @@ public sealed partial class FractalParamsViewModel
         nameof(Relief2DShadowStrength), nameof(Relief2DStrength), nameof(Relief2DAbsolute),
         nameof(Relief2DCameraAzimuthDeg), nameof(Relief2DCameraElevationDeg), nameof(Relief2DCameraFovDeg),
         nameof(Relief2DCameraZoom), nameof(Relief2DCameraOrthographic), nameof(Relief2DSupersample),
+        nameof(Relief2DDofApertureRadius), nameof(Relief2DDofFocusDistance), nameof(DofEnabled),
         nameof(Relief2DHeightCurve), nameof(Relief2DBicubicHeight), nameof(Relief2DGroundPlane),
         nameof(Relief2DAutoShade), nameof(Relief2DEdgeFade), nameof(Relief2DHiResField),
         nameof(Relief2DFieldFloor), nameof(Relief2DIsolate), nameof(Relief2DIsolateByDetail),

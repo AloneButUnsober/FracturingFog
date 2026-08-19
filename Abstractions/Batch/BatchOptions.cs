@@ -179,6 +179,11 @@ namespace FracturingFog.Batch
         public double? ReliefCameraZoom { get; set; }      // > 0
         public bool ReliefCameraOrtho { get; set; }
 
+        // Depth of field on the relief raymarch camera (roadmap S3, #389). Any
+        // DOF flag implies relief + raymarch (perspective camera only).
+        public double? ReliefDofAperture { get; set; }     // 0..1, 0 = pinhole
+        public double? ReliefDofFocus { get; set; }        // >= 0, 0 = auto-focus origin
+
         // Relief isolate masking (#363 follow-up). Any isolate flag implies
         // relief + isolate on. NoDetail turns OFF the default detail isolation.
         public bool ReliefIsolate { get; set; }
@@ -612,6 +617,20 @@ namespace FracturingFog.Batch
                         opts.Relief = true;
                         break;
 
+                    case BatchFlags.DofAperture:
+                        if (!NextDouble(args, ref i, a, out double dofa, out error)) return false;
+                        opts.ReliefDofAperture = dofa;
+                        opts.ReliefRaymarch = true;
+                        opts.Relief = true;
+                        break;
+
+                    case BatchFlags.DofFocus:
+                        if (!NextDouble(args, ref i, a, out double doff, out error)) return false;
+                        opts.ReliefDofFocus = doff;
+                        opts.ReliefRaymarch = true;
+                        opts.Relief = true;
+                        break;
+
                     case BatchFlags.ReliefIsolate:
                         opts.ReliefIsolate = true;
                         opts.Relief = true;
@@ -745,6 +764,10 @@ namespace FracturingFog.Batch
                 { error = "--relief-camera-fov must be 1..179."; return false; }
             if (opts.ReliefCameraZoom is <= 0)
                 { error = "--relief-camera-zoom must be > 0."; return false; }
+            if (opts.ReliefDofAperture is < 0 or > 1)
+                { error = "--dof-aperture must be 0..1."; return false; }
+            if (opts.ReliefDofFocus is < 0)
+                { error = "--dof-focus must be >= 0."; return false; }
             if (opts.ReliefIsolateThreshold is < 0 or > 1)
                 { error = "--relief-isolate-threshold must be 0..1."; return false; }
             if (opts.ReliefIsolateTolerance is < 0 or > 1)

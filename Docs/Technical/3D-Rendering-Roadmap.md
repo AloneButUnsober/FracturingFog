@@ -129,8 +129,17 @@ code.
   `ThinLensRay` re-aimed through the focal point), `FractalParameters.Relief2DDof*`
   wired into the relief supersample loop (aperture 0 = pinhole identity; DOF forces
   CPU path so the parity gate is unaffected); 6 module tests + a relief blur
-  integration test; `--reliefgpuraymarch` still PASS. **Remaining:** UI/batch
-  controls, click-to-focus, GPU relief DOF (+ twin/gate), DOF on the 3D-fractal
+  integration test; `--reliefgpuraymarch` still PASS.
+- **Wiring (integration follow-up, landed):** DOF is now user-drivable. Batch flags
+  `--dof-aperture F` (0..1, 0 = pinhole) + `--dof-focus F` (≥0, 0 = auto-focus the
+  fractal centre), both implying `--relief-raymarch` (perspective-only); parsed into
+  `BatchOptions`, mapped to `fp.Relief2DDof*` in `BatchRenderer`, emitted by the CLI
+  builder on the raymarch path (round-trip-tested) + populated from live params in
+  `ControlCenterViewModel`. Live UI: **DOF aperture** + **DOF focus dist** rows in the
+  Relief 3D dialog's Camera & quality expander (`FractalParamsViewModel` write-through
+  `Fire()` re-render; focus greyed until aperture > 0). 8 wiring tests
+  (`DofBatchWiringTests`). Pinhole (aperture 0) stays omitted = byte-identical.
+- **Remaining:** click-to-focus, GPU relief DOF (+ twin/gate), DOF on the 3D-fractal
   cameras, in-camera exposure control, **motion blur** (own slice over Scene time).
 
 ### S4 — Guided denoiser (À-Trous / SVGF-lite) ◐ (#402)
