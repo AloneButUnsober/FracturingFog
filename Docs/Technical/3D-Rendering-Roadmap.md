@@ -152,7 +152,7 @@ full uber-shader — add transmission, optionally clearcoat / emission).
   6 tests. **Remaining:** refract-and-continue in the raymarch (CPU → twin → GPU),
   Fresnel reflect+refract combine, rough refraction (couple S4), UI.
 
-### S6 — Froxel / unified volume march ☐
+### S6 — Froxel / unified volume march ◐ (#408)
 Today's volumetrics are per-surface single-scatter. A froxel (frustum-voxel)
 volume LUT à la Frostbite/Hillaire unifies fog across all 3D types and — crucially
 — gives **temporal stability**, which becomes necessary the moment the Scene
@@ -164,6 +164,12 @@ animated.
   gated layer.
 - **Related:** #388 (multi-light relief in-scatter) is a smaller, nearer-term
   step on the same volumetric axis.
+- **Status:** `FroxelGrid` (exponential near-dense depth slices + invertible
+  `DepthToSlice`) + `FroxelIntegrator` (energy-conserving front-to-back column
+  integration à la Hillaire + depth sample) landed; 6 tests incl. uniform-medium
+  transmittance == exp(-σ·d). **Remaining:** populate + composite the 3D volume
+  (reuse #388 multi-light in-scatter), temporal reprojection, GPU froxel pass,
+  unify the existing per-surface march.
 
 ### S7 — Float / multi-layer EXR export ◐ (#394)
 Enabler for S1 (AOV layers), S2 (linear/HDR intermediate) and S6 (HDR
