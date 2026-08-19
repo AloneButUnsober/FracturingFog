@@ -181,8 +181,21 @@ full uber-shader — add transmission, optionally clearcoat / emission).
 - **Status:** `DielectricOps` landed — pure Snell refraction + TIR, mirror reflect,
   Schlick Fresnel, per-channel Beer-Lambert; `LightingFxData` gains
   `Transmission`/`Ior`/`Absorption*` (opaque default = byte-identical, persisted);
-  6 tests. **Remaining:** refract-and-continue in the raymarch (CPU → twin → GPU),
-  Fresnel reflect+refract combine, rough refraction (couple S4), UI.
+  6 tests.
+- **Shade wiring (integration follow-up, landed):** `ShadingPipeline.Shade<TDe>`
+  now refracts on a transmissive hit — refract the view ray (`DielectricOps.Refract`
+  / TIR), sample the environment along the refracted dir (the distorted see-through
+  background), Beer-Lambert-tint it, Fresnel-mix with the reflected environment, and
+  blend into the surface by `Transmission`. `HasPositionalLight`-style, a
+  transmissive material forces the **CPU** relief trace (GPU kernel has no refraction)
+  so the parity gate is untouched. UI: **Transmission / IOR / Absorption dist**
+  sliders in the LightingFx dialog's Material section (IOR + absorption greyed until
+  transmission > 0). 4 wiring tests (`RefractionShadingTests`) incl. the opaque
+  byte-identical gate + a colored-absorption tint check. SCOPE: **environment-
+  refraction** approximation — one interface, no internal two-surface march.
+- **Remaining:** full internal glass march (refract-and-continue through the solid,
+  CPU → twin → GPU), rough refraction (couple S4), AbsorptionColor picker + batch
+  flags, GPU-kernel refraction.
 
 ### S6 — Froxel / unified volume march ◐ (#408)
 Today's volumetrics are per-surface single-scatter. A froxel (frustum-voxel)

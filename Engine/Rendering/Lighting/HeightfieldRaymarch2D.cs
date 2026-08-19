@@ -414,8 +414,11 @@ public static class HeightfieldRaymarch2D
         // S8 (#389): the GPU relief kernel resolves only directional lights from
         // Theta/Phi, so a point/spot light forces the CPU trace (same discipline
         // as DOF / DebugAov). Directional-only scenes stay on the GPU byte-identical.
+        // S5 (#389): the GPU kernel has no refraction path either, so a transmissive
+        // (glass) material likewise forces the CPU trace.
         if (gpuKernel != null && p.Relief2DGpuRaymarch && fx.DebugAov == AovView.Beauty
-            && p.Relief2DDofApertureRadius <= 0.0 && !fx.HasPositionalLight)
+            && p.Relief2DDofApertureRadius <= 0.0 && !fx.HasPositionalLight
+            && fx.Transmission <= 0.0)
         {
             var u = ReliefUniforms.Build(w, h, hw, hh, sy, aspect, invLip, maxH, p, in fx);
             gpuKernel.Run(in u, hbuf, keep, albedo, dst);

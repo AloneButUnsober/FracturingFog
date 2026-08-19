@@ -356,7 +356,7 @@
 
                 <!-- Material -->
                 <Expander Header="Material" HorizontalAlignment="Stretch">
-                    <Grid ColumnDefinitions="160,*" RowDefinitions="Auto,Auto,Auto,Auto">
+                    <Grid ColumnDefinitions="160,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto">
                         <TextBlock Grid.Row="0" Grid.Column="0" Text="Roughness:" VerticalAlignment="Center"
                                    ToolTip.Tip="GGX roughness. 0 = mirror, 1 = lambert." />
                         <Grid Grid.Row="0" Grid.Column="1" ColumnDefinitions="*,Auto" Margin="0,2">
@@ -390,6 +390,36 @@
                                     Value="{Binding SubSurfaceStrength, Mode=TwoWay}" />
                             <TextBlock Classes="knobValue" Grid.Column="1"
                                        Text="{Binding SubSurfaceStrength, StringFormat='F2'}" />
+                        </Grid>
+
+                        <!-- Glass / refraction (roadmap S5, #389). -->
+                        <TextBlock Grid.Row="4" Grid.Column="0" Text="Transmission:" VerticalAlignment="Center"
+                                   ToolTip.Tip="Glass transparency. 0 = opaque; 1 = fully see-through (refracts the environment). Forces the CPU relief trace when > 0." />
+                        <Grid Grid.Row="4" Grid.Column="1" ColumnDefinitions="*,Auto" Margin="0,2">
+                            <Slider Classes="knob" Grid.Column="0" Minimum="0" Maximum="1"
+                                    Value="{Binding Transmission, Mode=TwoWay}" />
+                            <TextBlock Classes="knobValue" Grid.Column="1"
+                                       Text="{Binding Transmission, StringFormat='F2'}" />
+                        </Grid>
+
+                        <TextBlock Grid.Row="5" Grid.Column="0" Text="IOR:" VerticalAlignment="Center"
+                                   IsEnabled="{Binding GlassEnabled}"
+                                   ToolTip.Tip="Index of refraction. 1.5 = glass, 1.33 = water, 2.4 = diamond. Bends the refracted background." />
+                        <Grid Grid.Row="5" Grid.Column="1" ColumnDefinitions="*,Auto" Margin="0,2" IsEnabled="{Binding GlassEnabled}">
+                            <Slider Classes="knob" Grid.Column="0" Minimum="1" Maximum="3"
+                                    Value="{Binding Ior, Mode=TwoWay}" />
+                            <TextBlock Classes="knobValue" Grid.Column="1"
+                                       Text="{Binding Ior, StringFormat='F2'}" />
+                        </Grid>
+
+                        <TextBlock Grid.Row="6" Grid.Column="0" Text="Absorption dist:" VerticalAlignment="Center"
+                                   IsEnabled="{Binding GlassEnabled}"
+                                   ToolTip.Tip="Beer-Lambert reference distance for the glass tint (Absorption color). Smaller = stronger tint." />
+                        <Grid Grid.Row="6" Grid.Column="1" ColumnDefinitions="*,Auto" Margin="0,2" IsEnabled="{Binding GlassEnabled}">
+                            <Slider Classes="knob" Grid.Column="0" Minimum="0.01" Maximum="10"
+                                    Value="{Binding AbsorptionDistance, Mode=TwoWay}" />
+                            <TextBlock Classes="knobValue" Grid.Column="1"
+                                       Text="{Binding AbsorptionDistance, StringFormat='F2'}" />
                         </Grid>
                     </Grid>
                 </Expander>
