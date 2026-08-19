@@ -122,7 +122,7 @@ code.
   controls, click-to-focus, GPU relief DOF (+ twin/gate), DOF on the 3D-fractal
   cameras, in-camera exposure control, **motion blur** (own slice over Scene time).
 
-### S4 — Guided denoiser (À-Trous / SVGF-lite) ☐
+### S4 — Guided denoiser (À-Trous / SVGF-lite) ◐ (#402)
 AO, soft shadow and reflections are Monte Carlo → noisy → paid for with
 supersamples. A bilateral / edge-avoiding denoiser **keyed on the normal + depth
 AOVs from S1** cuts samples for equal quality. High fit precisely because S1
@@ -131,6 +131,11 @@ supplies the guide buffers.
 - **Twin:** À-Trous is a deterministic separable filter — twinnable; keep it
   CPU-parity so `--batch` renders denoise identically.
 - **Depends on:** S1.
+- **Status:** `AtrousDenoiser` landed — pure deterministic B3-spline À-Trous with
+  color + optional normal/depth edge-stopping weights, `Iterations` 0 = identity;
+  5 tests incl. guided normal-edge preservation. **Remaining:** wire the render's
+  float AOVs as guides (the S1 coupling — the payoff), UI/`--denoise` + adaptive-
+  supersample coupling, full SVGF variance weighting, parallelize/SIMD.
 
 ### S5 — Refractive / transmissive materials ☐
 Cook-Torrance GGX today is opaque. Add **transmission + IOR** → glass fractals.
