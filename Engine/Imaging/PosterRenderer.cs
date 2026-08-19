@@ -72,6 +72,13 @@ namespace FracturingFog.Imaging
         public int Gamma { get; init; }        // -100..100, 0 = none
         public int HistogramEq { get; init; }  //    0..100, 0 = none
 
+        /// <summary>S2 (#389) — output-stage view transform / tonemap, parity with
+        /// <c>ViewState.ViewTransform</c>. Default None = identity (byte-identical).</summary>
+        public ViewTransform ViewTransform { get; init; } = ViewTransform.None;
+        /// <summary>S2 (#389) — exposure in stops before the view transform; 0 =
+        /// neutral. Parity with <c>ViewState.ViewExposureEv</c>.</summary>
+        public float ViewExposureEv { get; init; }
+
         /// <summary>F11 ordered-dither deband of the palette float→byte quantise
         /// (CPU F11a + GPU F11b). Off = plain truncate/round. The colour pipeline
         /// reads this through process-global <see cref="GradientColorMap"/> statics,
@@ -338,6 +345,12 @@ namespace FracturingFog.Imaging
             // Alpha is PRESERVED here (F10.3) so the interior-alpha composite below
             // still sees the authored coverage byte.
             ApplyBrightnessContrastGamma(buffer, w * h, req.Brightness, req.Contrast, req.Gamma);
+
+            // S2 (#389) — output-stage view transform (tonemap), layered on the
+            // b/c/gamma post-pass exactly as the live path does, so a poster matches
+            // the on-screen frame. None = no-op (byte-identical).
+            if (req.ViewTransform != ViewTransform.None)
+                ViewTransformOps.Apply(buffer, w * h, req.ViewTransform, req.ViewExposureEv);
 
             // Interior-alpha composite — the SAME shared helper the live path
             // (FractalRenderHost.UploadProcessedBuffer) calls, so a poster/wallpaper

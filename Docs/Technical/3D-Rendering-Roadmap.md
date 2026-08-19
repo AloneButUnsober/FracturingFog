@@ -79,10 +79,10 @@ discarded, not that it is uncomputed.
 - **Twin:** AOVs are deterministic scalar outputs — trivially twinnable.
 - **Depends on:** S7 (EXR) for float/multi-layer output.
 
-### S2 — Linear-light rendering + view transform (AgX / ACES / Filmic) ☐
+### S2 — Linear-light rendering + view transform (AgX / ACES / Filmic) ◐ (#396)
 Render and composite in **linear light**, apply a filmic **view transform** at
-output. FF very likely composites in sRGB-ish 8-bit today; that is the root cause
-of volumetric fog highlight blowouts and banded gradients. Lowest risk (pipeline
+output. FF composites in sRGB-ish 8-bit today; that is the root cause of
+volumetric fog highlight blowouts and banded gradients. Lowest risk (pipeline
 discipline, not new geometry), lifts *every* render, and the palette/theme system
 benefits most. Blender's Filmic → AgX migration is the precedent.
 - **Reuse:** the entire existing shading + palette pipeline.
@@ -90,6 +90,14 @@ benefits most. Blender's Filmic → AgX migration is the precedent.
   the intermediate must go float (couples to S7).
 - **Risk:** changes default look → gate behind a view-transform selector,
   default preserving current output until validated.
+- **Status:** `ViewTransformOps` landed — pure per-pixel Reinhard / ACES / AgX /
+  Filmic operators + sRGB↔linear + exposure, `None` = byte-identical identity;
+  `FractalViewState.ViewTransform`/`ViewExposureEv` wired into both the live
+  (`FractalRenderHost`) and export (`PosterRenderer`) display encode with screen↔
+  poster parity; 8 tests. First slice tonemaps the **8-bit** buffer (a look
+  operator). **Remaining:** UI selector + `--viewtransform` batch flag, the *core*
+  true-linear/float intermediate (couples S7), default-look validation, SIMD, user
+  doc when the selector ships.
 
 ### S3 — Cinematic camera: DOF, exposure, motion blur ☐
 Depth of field is nearly free in a raymarcher — jitter the ray origin across an

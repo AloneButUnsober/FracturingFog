@@ -153,6 +153,18 @@ namespace FracturingFog.ViewState
         /// <summary>Adaptive contrast (histogram eq) strength in [0, 100]; 0 = off.</summary>
         public int HistogramEq { get; set; }
 
+        /// <summary>S2 (#389) — output-stage view transform / tonemap. Applied as
+        /// the final display encode after brightness/contrast/gamma. Default
+        /// <see cref="FracturingFog.Imaging.ViewTransform.None"/> = identity, so
+        /// the current look is byte-identical until the user opts in.</summary>
+        public FracturingFog.Imaging.ViewTransform ViewTransform { get; set; }
+            = FracturingFog.Imaging.ViewTransform.None;
+
+        /// <summary>S2 (#389) — exposure in stops applied in linear light before
+        /// the view transform. 0 = neutral. Only consulted when
+        /// <see cref="ViewTransform"/> is not None.</summary>
+        public float ViewExposureEv { get; set; }
+
         /// <summary>F11: ordered-dither deband of the palette float→byte quantise
         /// (CPU F11a + GPU F11b). Off = the plain truncate/round. Applied during
         /// colorize, so toggling needs a fresh render, not a post-FX repaint.</summary>

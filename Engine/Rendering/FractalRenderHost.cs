@@ -1011,6 +1011,10 @@ namespace FracturingFog.Rendering
                 Brightness = s.Brightness,
                 Contrast = s.Contrast,
                 Gamma = s.Gamma,
+                // S2 (#389) — view-transform parity: carry the live tonemap +
+                // exposure into the offscreen render so a poster matches the screen.
+                ViewTransform = s.ViewTransform,
+                ViewExposureEv = s.ViewExposureEv,
                 // F11 deband parity — carry the interactive toggle into the
                 // offscreen render so an exported still matches what the deband
                 // switch shows on screen (WYSIWYG). Default-off requests stay
@@ -3404,6 +3408,15 @@ namespace FracturingFog.Rendering
             {
                 Array.Copy(src, dst, n);
             }
+
+            // S2 (#389) — output-stage view transform (tonemap). The final display
+            // encode, layered on top of brightness/contrast/gamma. None = no-op, so
+            // the buffer is byte-identical to the pre-S2 pipeline until the user
+            // selects a transform. Applied to the beauty buffer before the debug HUD
+            // and the interior-alpha composite.
+            if (ViewState.ViewTransform != FracturingFog.Imaging.ViewTransform.None)
+                FracturingFog.Imaging.ViewTransformOps.Apply(
+                    dst, n, ViewState.ViewTransform, ViewState.ViewExposureEv);
 
             // Lighting-FX debug HUD (Phase 19) for Relief 3D. The 3D raymarcher
             // calculators bake the HUD into their ColorBuffer as the last step;
