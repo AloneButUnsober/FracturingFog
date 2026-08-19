@@ -2226,7 +2226,7 @@ namespace FracturingFog.Hosting
                         if (string.IsNullOrEmpty(path)) return;
                         double range = global::FracturingFog.Export.RaymarchMeshSampler.SuggestedRange(
                             vsx.FractalType, vsx.FractalParameters);
-                        System.Threading.Tasks.Task.Run(() =>
+                        _ = System.Threading.Tasks.Task.Run(() =>
                         {
                             try
                             {
@@ -3193,7 +3193,7 @@ namespace FracturingFog.Hosting
                 // thread may overwrite them on the next frame).
                 var albCopy = (uint[])alb.Clone();
                 var hgtCopy = (float[])hgt.Clone();
-                System.Threading.Tasks.Task.Run(() =>
+                _ = System.Threading.Tasks.Task.Run(() =>
                 {
                     try
                     {

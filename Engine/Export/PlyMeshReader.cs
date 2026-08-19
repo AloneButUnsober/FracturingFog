@@ -99,10 +99,11 @@ public static class PlyMeshReader
         }
 
         var tris = new List<(int, int, int)>(faceCount);
+        Span<int> scratch = stackalloc int[32];   // hoisted out of the loop
         for (int i = 0; i < faceCount; i++)
         {
             int count = ReadIndex(br, faceProp.ListCountSize);
-            Span<int> idx = count <= 32 ? stackalloc int[count] : new int[count];
+            Span<int> idx = count <= scratch.Length ? scratch.Slice(0, count) : new int[count];
             for (int j = 0; j < count; j++) idx[j] = ReadIndex(br, faceProp.ListItemSize);
             for (int j = 1; j + 1 < count; j++) tris.Add((idx[0], idx[j], idx[j + 1]));   // fan-triangulate
         }
