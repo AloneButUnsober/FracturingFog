@@ -78,13 +78,22 @@ The Image button in the Floating Menu saves the current view as a single still.
 
 | Behavior | Description |
 |---|---|
-| Format | PNG (default), TIFF, BMP — chosen by file extension |
+| Format | PNG (default), TIFF, BMP, **EXR** — chosen by file extension |
 | Resolution | Current panel resolution, OR full virtual desktop when Span is active |
 | Post-FX | Live brightness / contrast / adaptive applied |
 | Watermark | Embedded if the Watermark toggle is on. Contrast-aware text color. |
 | Filename | Auto-generated: `FracturingFog_Theme_Region_x...y...z...i..._WxH.png` |
 
 The file dialog defaults to your Pictures folder; switch to any path before confirming.
+
+> [!NOTE]
+> **Name the file `.exr`** to save an OpenEXR instead of a PNG. EXR is a
+> floating-point, scene-linear format that Blender, Nuke, DaVinci Resolve and
+> `oiiotool` read — the right choice when you plan to grade or composite the
+> render, not just view it. The RGB is un-gamma'd to linear on the way out and
+> alpha is preserved. (Watermarks are skipped on EXR — they are a display-space
+> overlay.) Today the source is the same 8-bit render promoted to float;
+> true high-dynamic-range AOV layers land with the render-pass work (roadmap S1).
 
 ---
 

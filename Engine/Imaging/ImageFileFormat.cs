@@ -30,5 +30,9 @@ namespace FracturingFog.Imaging
         Gif,
         Tiff,
         Webp,
+        /// <summary>OpenEXR float / half scanline image (roadmap S7). Written by
+        /// <see cref="OpenExrWriter"/>, not Skia — scene-linear HDR + multi-layer
+        /// AOVs. The 8-bit save path promotes BGRA to linear half RGBA.</summary>
+        Exr,
     }
 }

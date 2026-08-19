@@ -134,14 +134,20 @@ animated.
 - **Related:** #388 (multi-light relief in-scatter) is a smaller, nearer-term
   step on the same volumetric axis.
 
-### S7 — Float / multi-layer EXR export ☐
+### S7 — Float / multi-layer EXR export ◐ (#394)
 Enabler for S1 (AOV layers), S2 (linear/HDR intermediate) and S6 (HDR
-volumetrics). FF is likely 8-bit PNG today. Add OpenEXR float output with named
+volumetrics). FF is 8-bit PNG/Skia today. Add OpenEXR float output with named
 layers.
-- **Reuse:** existing `ImageExport` / poster path.
+- **Reuse:** existing `ImageExport` / poster path; **mirror of the pure-managed
+  `OpenExrReader`** already in the tree (HDRI env loader).
 - **Twin:** file format, not render math — no twin needed; assert byte-stable
   output in a test.
 - **Blocks:** S1, S2, S6 at full fidelity.
+- **Status:** `OpenExrWriter` landed — pure-managed scanline encoder (HALF/FLOAT,
+  arbitrary named channels, uncompressed → byte-stable), an 8-bit→linear-half
+  bridge so `.exr` export works now, `ImageFileFormat.Exr` + `.exr` wiring, 6
+  round-trip/byte-stability tests. **Remaining:** feed real float AOV layers (needs
+  S1), optional ZIP compression, GUI/batch format surface, Blender smoke.
 
 ### S8 — Richer light types: point / spot / area ☐
 Three directional lights + IBL today. Point/spot (inverse-square + cone) and area
