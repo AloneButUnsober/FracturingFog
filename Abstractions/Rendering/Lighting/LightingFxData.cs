@@ -21,14 +21,32 @@ using System;
 
 namespace FracturingFog.Rendering.Lighting;
 
+/// <summary>S8 (#389) — light kind. Directional is the legacy default (a light
+/// at infinity, constant direction, no attenuation); Point / Spot add a world
+/// position + inverse-square falloff, and Spot a cone.</summary>
+public enum LightType
+{
+    /// <summary>Legacy: infinitely-far, constant direction, no attenuation.</summary>
+    Directional = 0,
+    /// <summary>Omni light at <see cref="DirectionalLight.PosX"/>… with
+    /// inverse-square + range falloff.</summary>
+    Point,
+    /// <summary>Point light restricted to a cone around Theta/Phi's direction.</summary>
+    Spot,
+}
+
 /// <summary>
-/// Single directional light: spherical angles (theta = azimuth around Y,
-/// phi = elevation from +Y), packed BGRA color, scalar intensity.
-/// Intensity 0 = off (no contribution; skip dot product).
+/// One scene light. Legacy directional light (spherical angles theta = azimuth
+/// around Y, phi = elevation from +Y, packed BGRA color, scalar intensity;
+/// intensity 0 = off). S8 (#389) adds Point / Spot: a world position, an
+/// inverse-square range falloff, and a spot cone. <see cref="Type"/> defaults to
+/// <see cref="LightType.Directional"/> so an unchanged light behaves exactly as
+/// before.
 /// </summary>
 public struct DirectionalLight
 {
-    /// <summary>Azimuth around the world +Y axis (radians).</summary>
+    /// <summary>Azimuth around the world +Y axis (radians). For Spot, this + Phi
+    /// give the cone axis (the direction the light shines).</summary>
     public double Theta;
     /// <summary>Elevation from world +Y (radians). 0 = straight up,
     /// pi/2 = horizon, pi = straight down.</summary>
@@ -38,9 +56,28 @@ public struct DirectionalLight
     /// <summary>0xAARRGGBB packed color. Multiplies diffuse/spec.</summary>
     public uint Color;
 
+    // ── S8 (#389) — point / spot ──────────────────────────────────────────
+    /// <summary>Light kind. Default <see cref="LightType.Directional"/>.</summary>
+    public LightType Type;
+    /// <summary>World-space position (Point / Spot only).</summary>
+    public double PosX, PosY, PosZ;
+    /// <summary>Attenuation range in world units (Point / Spot). ≤ 0 = no range
+    /// window (pure inverse-square). Beyond the range the contribution is 0.</summary>
+    public double Range;
+    /// <summary>Spot cone inner half-angle in degrees — full intensity inside.</summary>
+    public double SpotInnerDeg;
+    /// <summary>Spot cone outer half-angle in degrees — zero intensity beyond;
+    /// the inner→outer band is the smooth penumbra.</summary>
+    public double SpotOuterDeg;
+
     public DirectionalLight(double theta, double phi, double intensity, uint color)
     {
         Theta = theta; Phi = phi; Intensity = intensity; Color = color;
+        Type = LightType.Directional;
+        PosX = PosY = PosZ = 0.0;
+        Range = 0.0;
+        SpotInnerDeg = 15.0;
+        SpotOuterDeg = 25.0;
     }
 }
 

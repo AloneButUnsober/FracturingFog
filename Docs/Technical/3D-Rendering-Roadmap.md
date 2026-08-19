@@ -175,13 +175,18 @@ layers.
   round-trip/byte-stability tests. **Remaining:** feed real float AOV layers (needs
   S1), optional ZIP compression, GUI/batch format surface, Blender smoke.
 
-### S8 — Richer light types: point / spot / area ☐
+### S8 — Richer light types: point / spot / area ◐ (#404)
 Three directional lights + IBL today. Point/spot (inverse-square + cone) and area
 lights (soft realistic shadows) are cheap per-sample changes in a DE march.
 Broadens the lighting vocabulary without a scene graph.
 - **Reuse:** the per-light accumulation in `ShadingPipeline` + the relief twin.
 - **Twin:** per-light attenuation is a scalar change → twinnable; area-light soft
   shadow raises sample cost (coordinate with S4 denoise).
+- **Status:** `LightType` (Directional/Point/Spot) + point/spot fields on the light
+  model, and `LightSampler` — pure dir+attenuation sampling (inverse-square + Karis
+  range window + smooth spot cone; Directional = identity); 6 tests. **Remaining:**
+  wire `LightSampler` per shade point (CPU `ShadingPipeline` → twin → GPU kernels),
+  preset persistence + UI, area lights (couple S4).
 
 ### S9 — Mesh export maturation ☐ (#391)
 Mesh export is the **one place FF crosses from renderer into geometry producer** —
