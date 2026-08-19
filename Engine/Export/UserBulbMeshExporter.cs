@@ -330,7 +330,14 @@ public static class UserBulbMeshExporter
                     int b = edgeIdx[TriTable[ci, t + 1]];
                     int c = edgeIdx[TriTable[ci, t + 2]];
                     if (a == b || b == c || a == c) continue;
-                    tris.Add((a, b, c));
+                    // Emit with REVERSED winding (a,c,b): with the "inside" bit set
+                    // when DE < iso, the Bourke TriTable's (a,b,c) order winds the
+                    // face INWARD here (negative signed volume — inside-out normals),
+                    // so the STL per-face normal + accumulated OBJ vn pointed into the
+                    // solid. Reversing gives outward normals (S9 mesh-export contract,
+                    // MeshValidator SignedVolume > 0). Smooth-normal accumulation and
+                    // the STL writer both read this order, so they flip consistently.
+                    tris.Add((a, c, b));
                 }
             }
         }
