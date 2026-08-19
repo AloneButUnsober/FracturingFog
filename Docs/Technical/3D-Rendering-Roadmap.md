@@ -67,17 +67,23 @@ times *visible payoff*. The top trio (S1–S3) is the strategic core: it moves
 FF's 3D output a full tier while reusing data FF already produces and adding zero
 mesh machinery.
 
-### S1 — AOV / render-pass output + light compositor ☐
+### S1 — AOV / render-pass output + light compositor ◐ (#398)
 Promote the per-pixel data the raymarch already resolves — depth, normal, world
 position, albedo, AO, material id, motion — to **first-class render passes**, and
 export them as a multi-layer **EXR** (see S7). Then relight / DOF / denoise /
 bloom / grade in post without re-rendering. This is the actual superpower of
 Blender's compositor, and FF has the source data today; the gap is that it is
 discarded, not that it is uncomputed.
-- **Reuse:** `AovView` already carries Beauty/normal; the shading pipeline
-  already produces the rest internally.
+- **Reuse:** `AovView` (#317) already carries Beauty / normal / depth / AO /
+  diffuse / specular / shadow view modes; the shading pipeline produces the rest.
 - **Twin:** AOVs are deterministic scalar outputs — trivially twinnable.
 - **Depends on:** S7 (EXR) for float/multi-layer output.
+- **Status:** `AovExrExporter` landed — packs beauty (bare RGBA) + each `AovView`
+  into named multi-layer EXR sub-layers (`normal.*`, `Z`, `AO.V`, `diffuse.*`,
+  `specular.*`, `shadow.V`) via the S7 writer; 6 tests incl. a real reader
+  round-trip. Values are 8-bit-sourced today. **Remaining:** render orchestration
+  + "Export AOV EXR" action / `--aov-exr` flag, **float-native AOVs in one pass**
+  (the deeper slice, couples S2), light compositor, motion-vector AOV.
 
 ### S2 — Linear-light rendering + view transform (AgX / ACES / Filmic) ◐ (#396)
 Render and composite in **linear light**, apply a filmic **view transform** at
