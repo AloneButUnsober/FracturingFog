@@ -289,6 +289,8 @@ public sealed class ControlCenterViewModel : ViewModelBase
             ReliefCameraFov      = fp?.Relief2DCameraFovDeg ?? 50.0,
             ReliefCameraZoom     = fp?.Relief2DCameraZoom ?? 1.0,
             ReliefCameraOrtho    = fp?.Relief2DCameraOrthographic ?? false,
+            ReliefDofAperture    = fp?.Relief2DDofApertureRadius ?? 0.0,   // S3 (#389)
+            ReliefDofFocus       = fp?.Relief2DDofFocusDistance ?? 0.0,
             ReliefIsolate        = fp?.Relief2DIsolate ?? false,
             ReliefIsolateByDetail = fp?.Relief2DIsolateByDetail ?? true,
             ReliefIsolateThreshold = fp?.Relief2DDetailThreshold ?? 0.6,

@@ -119,6 +119,11 @@ namespace FracturingFog.Cli
         public double ReliefCameraZoom { get; init; } = 1.0;
         public bool ReliefCameraOrtho { get; init; }
 
+        // Depth of field on the relief raymarch camera (roadmap S3, #389).
+        // Aperture 0 = pinhole (omit both flags). Emitted only on the raymarch path.
+        public double ReliefDofAperture { get; init; }
+        public double ReliefDofFocus { get; init; }
+
         // Relief isolate masking. Emitted when relief + isolate are on.
         public bool ReliefIsolate { get; init; }
         public bool ReliefIsolateByDetail { get; init; } = true;
@@ -268,6 +273,13 @@ namespace FracturingFog.Cli
                     if (snap.ReliefCameraElevation != 45.0) { parts.Add(BatchFlags.ReliefCameraElevation); parts.Add(Num(snap.ReliefCameraElevation)); }
                     if (snap.ReliefCameraFov != 50.0)       { parts.Add(BatchFlags.ReliefCameraFov);       parts.Add(Num(snap.ReliefCameraFov)); }
                     if (snap.ReliefCameraZoom != 1.0)       { parts.Add(BatchFlags.ReliefCameraZoom);      parts.Add(Num(snap.ReliefCameraZoom)); }
+
+                    // Depth of field (S3, #389) — emit only when the lens is open.
+                    if (snap.ReliefDofAperture > 0.0)
+                    {
+                        parts.Add(BatchFlags.DofAperture); parts.Add(Num(snap.ReliefDofAperture));
+                        if (snap.ReliefDofFocus > 0.0) { parts.Add(BatchFlags.DofFocus); parts.Add(Num(snap.ReliefDofFocus)); }
+                    }
                 }
 
                 // Isolate masking.

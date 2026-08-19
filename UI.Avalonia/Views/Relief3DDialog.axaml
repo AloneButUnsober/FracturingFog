@@ -79,7 +79,7 @@
                           IsExpanded="{Binding Relief2DRaymarch, Mode=OneWay}"
                           IsEnabled="{Binding Relief2DRaymarch}">
                 <StackPanel Spacing="6">
-                <Grid ColumnDefinitions="160,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto">
+                <Grid ColumnDefinitions="160,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto">
                     <TextBlock Grid.Row="0" Grid.Column="0" Text="Camera azimuth (°):" VerticalAlignment="Center"
                                ToolTip.Tip="Orbit the terrain around the up axis. 0 = looking straight at the scene." />
                     <NumericUpDown Grid.Row="0" Grid.Column="1"
@@ -128,6 +128,21 @@
                                    Minimum="480" Maximum="2160" Increment="120" FormatString="F0"
                                    IsEnabled="{Binding Relief2DHiResField}"
                                    Value="{Binding Relief2DFieldFloor, Mode=TwoWay}" Margin="0,2" />
+
+                    <!-- Depth of field (roadmap S3, #389). Perspective only. -->
+                    <TextBlock Grid.Row="8" Grid.Column="0" Text="DOF aperture:" VerticalAlignment="Center"
+                               ToolTip.Tip="Thin-lens depth of field: lens radius. 0 = pinhole (everything sharp, byte-identical). Larger = shallower focus / stronger bokeh. Integrated over the anti-alias taps, so raise Anti-alias (N×N) for smoother blur. Perspective camera only." />
+                    <NumericUpDown Grid.Row="8" Grid.Column="1"
+                                   Minimum="0" Maximum="1" Increment="0.01" FormatString="F2"
+                                   Value="{Binding Relief2DDofApertureRadius, Mode=TwoWay}" Margin="0,2" />
+
+                    <TextBlock Grid.Row="9" Grid.Column="0" Text="DOF focus dist:" VerticalAlignment="Center"
+                               IsEnabled="{Binding DofEnabled}"
+                               ToolTip.Tip="World-space distance to the plane kept sharp. 0 = auto-focus on the fractal centre (the world origin). Only used when DOF aperture > 0." />
+                    <NumericUpDown Grid.Row="9" Grid.Column="1"
+                                   Minimum="0" Maximum="100" Increment="0.1" FormatString="F2"
+                                   IsEnabled="{Binding DofEnabled}"
+                                   Value="{Binding Relief2DDofFocusDistance, Mode=TwoWay}" Margin="0,2" />
                 </Grid>
 
                 <CheckBox Content="Hi-res height field (window-independent quality)"
