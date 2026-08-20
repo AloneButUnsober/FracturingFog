@@ -2221,17 +2221,18 @@ namespace FracturingFog.Hosting
                             return;
                         }
                         string? path = await PickSaveAsync("Export Mesh",
-                            "OBJ (*.obj)|*.obj|glTF binary (PBR material, *.glb)|*.glb|glTF (*.gltf)|*.gltf|STL (*.stl)|*.stl|All files (*.*)|*.*",
+                            "OBJ (*.obj)|*.obj|glTF binary (colour + PBR, *.glb)|*.glb|glTF (*.gltf)|*.gltf|PLY (vertex colour, *.ply)|*.ply|STL (*.stl)|*.stl|All files (*.*)|*.*",
                             vsx.FractalType.ToString());
                         if (string.IsNullOrEmpty(path)) return;
                         double range = global::FracturingFog.Export.RaymarchMeshSampler.SuggestedRange(
                             vsx.FractalType, vsx.FractalParameters);
+                        var colorFn = MakeMeshColorSource(s_renderHost?.ColorMap, range);
                         _ = System.Threading.Tasks.Task.Run(() =>
                         {
                             try
                             {
                                 int tris = global::FracturingFog.Export.UserBulbMeshExporter.ExportMarchingCubes(
-                                    path, de, 0, 0, 0, range, 96);
+                                    path, de, 0, 0, 0, range, 96, sampleColor: colorFn);
                                 Dispatcher.UIThread.Post(() =>
                                     ShowInfo("Mesh export", $"Exported {tris} triangles to {path}", false));
                             }
@@ -2924,6 +2925,7 @@ namespace FracturingFog.Hosting
                     ? (x, y, z) => sampler(x, y, z)
                     : (x, y, z) => s_renderHost!.SampleUserBulbDE(x, y, z);
                 double cx0 = s_renderHost.UserBulbCenterX, cy0 = -s_renderHost.UserBulbCenterY;
+                var colorFn = MakeMeshColorSource(s_renderHost.ColorMap, Math.Max(1e-6, e.Range));
                 // #269 busy chip + cancellation. The chip's Cancel button trips the
                 // token; ExportMarchingCubes' Parallel.For + cell loop honour it and
                 // return without writing, so a long high-Grid/SS export is abortable.
@@ -2936,7 +2938,7 @@ namespace FracturingFog.Hosting
                         int tris = global::FracturingFog.Export.UserBulbMeshExporter.ExportMarchingCubes(
                             e.Path, de, cx0, cy0, 0,
                             e.Range, e.GridN, e.IsoScale, e.IsoAbsolute, e.SuperSamples, e.CreaseDegrees,
-                            ct: cts.Token);
+                            sampleColor: colorFn, ct: cts.Token);
                         bool cancelled = cts.IsCancellationRequested;
                         Dispatcher.UIThread.Post(() =>
                         {
@@ -3167,6 +3169,29 @@ namespace FracturingFog.Hosting
         // #138 / #147 — export the active Oblique 3D heightfield object as a
         // watertight mesh (OBJ with vertex colour + smooth normals, or binary
         // STL). Pulls the active 2D calculator's height + flat albedo and
+        // Per-vertex albedo source for the Marching-Cubes export (roadmap S9.4 MC
+        // vertex colour, #391). The screen colour driver is view-dependent (raymarch
+        // step count + view depth) so it can't be replayed at a bare surface point;
+        // this drives the SAME active palette with a view-INDEPENDENT scalar (radial
+        // distance from the object centre, normalised by the export range) plus the
+        // vertex normal, so the exported solid carries the theme even though it is
+        // not a pixel-exact match of any one camera. Returns null when there is no
+        // colour map (mesh then falls back to a flat material / grey).
+        private static global::FracturingFog.Export.SampleSurfaceColor? MakeMeshColorSource(
+            IColorMap? map, double range)
+        {
+            if (map == null) return null;
+            double inv = 1.0 / Math.Max(1e-9, range);
+            return (x, y, z, nx, ny, nz) =>
+            {
+                double rad = Math.Sqrt(x * x + y * y + z * z) * inv;
+                float value = (float)Math.Clamp(rad, 0.0, 1.0) * 256f;
+                // Map returns a packed 0x00RRGGBB / 0xAARRGGBB albedo; force opaque.
+                uint c = unchecked((uint)map.Map(value, 0f, 256, (float)nx, (float)ny));
+                return c | 0xFF000000u;
+            };
+        }
+
         // tessellates a solid matching the on-screen cutout. Shared by the
         // Fractal Params window and the standalone Relief 3D window so the
         // export button works from either host (the standalone launcher used to

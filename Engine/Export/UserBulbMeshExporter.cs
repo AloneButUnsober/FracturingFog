@@ -36,6 +36,16 @@ namespace FracturingFog.Export;
 
 public delegate double SampleDistance(double x, double y, double z);
 
+/// <summary>Per-vertex surface colour for the Marching-Cubes export (roadmap S9.4
+/// MC vertex colour, #391). Returns a packed 0xAARRGGBB albedo at an object-space
+/// surface point given the smooth vertex normal. The render's screen colour driver
+/// is view-dependent (raymarch step count + view depth), so it can't be reproduced
+/// at a bare surface point; a mesh colour source uses a view-INDEPENDENT driver into
+/// the SAME palette instead, so the theme is carried even though it is not a
+/// pixel-exact match of any one camera.</summary>
+public delegate uint SampleSurfaceColor(
+    double x, double y, double z, double nx, double ny, double nz);
+
 public static class UserBulbMeshExporter
 {
     // ── Public API ──────────────────────────────────────────────────────────
@@ -47,9 +57,11 @@ public static class UserBulbMeshExporter
         string filePath, FracturingFog.Rendering.Lighting.IDistanceEstimator de,
         double cx, double cy, double cz, double range, int n,
         double isoScale = 0.5, bool isoAbsolute = false, int superSamples = 1,
-        double creaseDegrees = 180.0, bool capBoundary = true, CancellationToken ct = default)
+        double creaseDegrees = 180.0, bool capBoundary = true,
+        SampleSurfaceColor? sampleColor = null, CancellationToken ct = default)
         => ExportMarchingCubes(filePath, de.Evaluate, cx, cy, cz, range, n,
-                               isoScale, isoAbsolute, superSamples, creaseDegrees, capBoundary, ct);
+                               isoScale, isoAbsolute, superSamples, creaseDegrees, capBoundary,
+                               sampleColor, ct);
 
     /// <summary>Marching Cubes export. Dispatches on file extension:
     /// `.stl` → binary STL (face normals); anything else → OBJ with
@@ -73,7 +85,12 @@ public static class UserBulbMeshExporter
     /// normals differ by more than this angle are NOT smoothed together (the
     /// vertex splits, so e.g. Mandelbox facets stay crisp while curved bulb arms
     /// smooth). 180 (default) = smooth everything, byte-identical to the prior
-    /// exporter; ≈30 keeps facets.</summary>
+    /// exporter; ≈30 keeps facets.
+    /// <paramref name="sampleColor"/> (optional) bakes a per-vertex albedo (roadmap
+    /// S9.4 MC vertex colour, #391) evaluated at each surface vertex with its smooth
+    /// normal; it lands in the colour-capable formats (glTF COLOR_0, PLY) so the
+    /// true-3D isosurface carries the theme. null = no colour (STL/OBJ unaffected;
+    /// glTF/PLY fall back to a flat material / grey).</summary>
     /// <remarks><paramref name="capBoundary"/> (default true) seals the mesh where
     /// the solid crosses a sample-cube FACE (#422): classic MC leaves that cut open,
     /// so a fractal that exits the cube exports as a shell with holes (not
@@ -86,7 +103,8 @@ public static class UserBulbMeshExporter
         string filePath, SampleDistance sample,
         double cx, double cy, double cz, double range, int n,
         double isoScale = 0.5, bool isoAbsolute = false, int superSamples = 1,
-        double creaseDegrees = 180.0, bool capBoundary = true, CancellationToken ct = default)
+        double creaseDegrees = 180.0, bool capBoundary = true,
+        SampleSurfaceColor? sampleColor = null, CancellationToken ct = default)
     {
         var (verts, norms, tris) = BuildMarchingCubes(sample, cx, cy, cz, range, n, isoScale, isoAbsolute, superSamples, capBoundary, ct);
         // Cancelled mid-build: leave any existing file untouched (don't clobber it
@@ -95,11 +113,27 @@ public static class UserBulbMeshExporter
         if (creaseDegrees < 179.9 && tris.Count > 0)
             (verts, norms, tris) = ApplyCreaseNormals(verts, tris, creaseDegrees);
         if (tris.Count == 0) { File.WriteAllText(filePath, "# empty\n"); return 0; }
+
+        // Per-vertex albedo from the theme (view-independent driver), for the
+        // colour-capable formats. Evaluated at the smooth-normal vertex.
+        List<uint>? colors = null;
+        if (sampleColor != null)
+        {
+            colors = new List<uint>(verts.Count);
+            for (int i = 0; i < verts.Count; i++)
+            {
+                var v = verts[i]; var nn = norms[i];
+                colors.Add(sampleColor(v.X, v.Y, v.Z, nn.X, nn.Y, nn.Z));
+            }
+        }
+
         if (filePath.EndsWith(".stl", StringComparison.OrdinalIgnoreCase))
             WriteStlBinary(filePath, verts, tris);
         else if (filePath.EndsWith(".glb", StringComparison.OrdinalIgnoreCase)
               || filePath.EndsWith(".gltf", StringComparison.OrdinalIgnoreCase))
-            WriteGltf(filePath, verts, norms, tris);
+            WriteGltf(filePath, verts, norms, colors, tris);
+        else if (filePath.EndsWith(".ply", StringComparison.OrdinalIgnoreCase))
+            WritePlyColored(filePath, verts, norms, colors, tris);
         else
             WriteObjSmooth(filePath, verts, norms, tris);
         return tris.Count;
@@ -553,18 +587,66 @@ public static class UserBulbMeshExporter
 
     // glTF 2.0 (.glb / .gltf) with a PBR material + smooth normals (roadmap S9.4,
     // #391) — the true-3D isosurface lands in Blender / a web viewer already shaded.
-    // The MC path has no per-vertex colour source yet (a follow-up for the 3D DE
-    // families), so it dresses the solid in a flat matte grey material.
+    // With a per-vertex albedo (MC vertex colour) it carries the theme as COLOR_0 and
+    // the material base stays white so the vertex colour drives it; without one it
+    // dresses the solid in a flat matte grey.
     private static void WriteGltf(
         string filePath,
         List<(double X, double Y, double Z)> verts,
         List<(double X, double Y, double Z)> norms,
+        List<uint>? colors,
         List<(int A, int B, int C)> tris)
     {
         var nrm = new List<(float, float, float)>(norms.Count);
         foreach (var n in norms) nrm.Add(((float)n.X, (float)n.Y, (float)n.Z));
-        GltfMeshWriter.Write(filePath, verts, nrm, null, tris,
-            GltfMeshWriter.PbrMaterial.Matte(0.72f, 0.72f, 0.74f));
+        var material = colors != null
+            ? GltfMeshWriter.PbrMaterial.MatteWhite
+            : GltfMeshWriter.PbrMaterial.Matte(0.72f, 0.72f, 0.74f);
+        GltfMeshWriter.Write(filePath, verts, nrm, colors, tris, material);
+    }
+
+    // Binary little-endian PLY with per-vertex COLOUR + smooth normals for the MC
+    // isosurface (roadmap S9.4 MC vertex colour, #391). Mirrors the relief PLY
+    // writer so the true-3D solid carries the theme in the format colour slicers /
+    // MeshLab / Blender read. A null colour list falls back to mid-grey.
+    private static void WritePlyColored(
+        string filePath,
+        List<(double X, double Y, double Z)> verts,
+        List<(double X, double Y, double Z)> norms,
+        List<uint>? colors,
+        List<(int A, int B, int C)> tris)
+    {
+        using var fs = new FileStream(filePath, FileMode.Create, FileAccess.Write);
+        var header =
+            "ply\n" +
+            "format binary_little_endian 1.0\n" +
+            "comment Fracturing Fog Marching-Cubes mesh export (S9.4 vertex colour)\n" +
+            $"element vertex {verts.Count}\n" +
+            "property float x\nproperty float y\nproperty float z\n" +
+            "property float nx\nproperty float ny\nproperty float nz\n" +
+            "property uchar red\nproperty uchar green\nproperty uchar blue\n" +
+            $"element face {tris.Count}\n" +
+            "property list uchar int vertex_indices\n" +
+            "end_header\n";
+        var headerBytes = System.Text.Encoding.ASCII.GetBytes(header);
+        fs.Write(headerBytes, 0, headerBytes.Length);
+
+        using var bw = new BinaryWriter(fs);
+        for (int i = 0; i < verts.Count; i++)
+        {
+            var v = verts[i]; var nn = norms[i];
+            bw.Write((float)v.X); bw.Write((float)v.Y); bw.Write((float)v.Z);
+            bw.Write((float)nn.X); bw.Write((float)nn.Y); bw.Write((float)nn.Z);
+            uint c = colors != null ? colors[i] : 0xFFB4B4B7u;
+            bw.Write((byte)((c >> 16) & 0xFF));   // red
+            bw.Write((byte)((c >> 8) & 0xFF));    // green
+            bw.Write((byte)(c & 0xFF));           // blue
+        }
+        foreach (var t in tris)
+        {
+            bw.Write((byte)3);
+            bw.Write(t.A); bw.Write(t.B); bw.Write(t.C);
+        }
     }
 
     private static void WriteStlBinary(

@@ -372,8 +372,17 @@ Sub-items (ranked fit × payoff):
      the colour props, the `.ply` round-trips to a closed 2-manifold outward solid
      (through `MeshValidator`), and the baked colours vary (theme carried). The
      relief exporter already computed the colour; this stops discarding it.
-     **Remaining:** Marching-Cubes vertex colour (needs a colour source for the 3D
-     DE families), 3MF colour.
+   - **MC vertex colour LANDED (PR #427).** The Marching-Cubes isosurface now bakes
+     a per-vertex albedo too. The screen colour driver is view-dependent (raymarch
+     step count + view depth) so it can't be replayed at a bare surface point;
+     instead an optional `SampleSurfaceColor` delegate drives the SAME active palette
+     with a view-independent scalar (radial distance from the object centre) + the
+     vertex normal, wired from the render host's `IColorMap`
+     (`MakeMeshColorSource`). Lands in glTF COLOR_0 + a new MC binary-PLY writer
+     (`.ply` dispatch added); OBJ stays colourless (byte-compat), STL can't hold it.
+     `McVertexColorTests` lock varying colour in PLY + GLB COLOR_0 on a closed,
+     outward solid. **Remaining:** a fractal-meaningful driver (orbit trap / escape)
+     if derivable view-independently; 3MF colour.
 4. **Carry the material** — export **glTF / GLB** with the PBR material so the
    mesh lands in Blender / web dressed, not grey clay. Format discipline: STL
    (dumb slicers), PLY (vertex color), glTF/GLB (PBR), 3MF (color + material +
@@ -386,10 +395,10 @@ Sub-items (ranked fit × payoff):
      min/max; `doubleSided` pbrMetallicRoughness material (matte: metallic 0,
      roughness 0.8). Base colour stays white when vertex colour is present so
      COLOR_0 drives the albedo. Wired into BOTH exporters: relief carries the theme
-     as COLOR_0, MC (no colour source yet) dresses in flat matte grey. `GltfMeshReader`
-     validates end-to-end (GLB/gltf → MeshValidator, closed + outward). Save dialogs
-     offer `.glb` / `.gltf`. **Remaining:** MC vertex colour once the 3D DE families
-     have a colour source; 3MF (colour + units); optional texture/emissive extensions.
+     as COLOR_0; MC dresses in flat matte grey unless a colour source is supplied
+     (now wired — PR #427). `GltfMeshReader` validates end-to-end (GLB/gltf →
+     MeshValidator, closed + outward). Save dialogs offer `.glb` / `.gltf`.
+     **Remaining:** 3MF (colour + units); optional texture/emissive extensions.
 5. **Adaptive resolution** — octree-refine the DE only near the surface, seeded by
    the empty-space-skip mip FF already builds.
 6. **Print-ready units / orientation / base** — mm, centered, flat base, Z-up.
