@@ -137,6 +137,114 @@ namespace FracturingFog.Rendering.Lighting
                 fx.FogColor = 0xFF66CCFFu;   // teal
                 return fx;
             }),
+            // ── Palette-mapped in-scatter test set (volumetric-colour work) ──────
+            // These lean on VolumePaletteStrength: the medium tints toward the
+            // fractal's own theme LUT instead of a flat FogColor, so the fog reads
+            // the palette. Good for eyeballing the colored in-scatter + HG phase.
+
+            // Fog inherits the fractal theme — a coloured plume rising off the set.
+            // FogColor near-white so the palette drives the hue, not a tint.
+            new VolumetricFxPreset("Palette plume", fx =>
+            {
+                fx.FogDensity = 0.45;
+                fx.FogHeightFalloff = 0.35;
+                fx.VolumeSteps = 32;
+                fx.VolumeNoiseAmount = 0.5;
+                fx.VolumeNoiseScale = 1.2;
+                fx.VolumeNoiseOctaves = 3;
+                fx.VolumeSelfShadow = 0.8;
+                fx.VolumeSelfShadowSteps = 6;
+                fx.VolumeAnisotropy = 0.4;   // gentle forward halo
+                fx.ShadowSteps = 16;
+                fx.ShadowSoftK = 16.0;
+                fx.FogColor = 0xFFF0F0F0u;
+                fx.VolumePaletteStrength = 0.85;   // theme-coloured medium
+                return fx;
+            }),
+            // Thin, tall, drifting palette veil — wispy and animated. Exercises the
+            // noise-speed animation + palette map at low density.
+            new VolumetricFxPreset("Aurora veil", fx =>
+            {
+                fx.FogDensity = 0.22;
+                fx.FogHeightFalloff = 1.1;   // hugs the vertical, thins with height
+                fx.VolumeSteps = 40;
+                fx.VolumeNoiseAmount = 0.7;
+                fx.VolumeNoiseScale = 2.0;
+                fx.VolumeNoiseSpeed = 0.3;   // slow drift (video / live)
+                fx.VolumeNoiseOctaves = 3;
+                fx.VolumeSelfShadow = 0.4;
+                fx.VolumeSelfShadowSteps = 4;
+                fx.VolumeAnisotropy = 0.6;   // forward-scatter shimmer
+                fx.ShadowSteps = 12;
+                fx.ShadowSoftK = 20.0;
+                fx.FogColor = 0xFFEAFBFFu;    // faint cool base under the palette
+                fx.VolumePaletteStrength = 0.7;
+                return fx;
+            }),
+            // Warm ember haze — palette embers over an amber base. High-octave noise
+            // for a grainy glow; tests palette + FogColor blend.
+            new VolumetricFxPreset("Ember glow", fx =>
+            {
+                fx.FogDensity = 0.35;
+                fx.FogHeightFalloff = 0.7;
+                fx.VolumeSteps = 28;
+                fx.VolumeNoiseAmount = 0.8;
+                fx.VolumeNoiseScale = 2.4;
+                fx.VolumeNoiseOctaves = 4;
+                fx.VolumeSelfShadow = 0.6;
+                fx.VolumeSelfShadowSteps = 5;
+                fx.VolumeAnisotropy = 0.35;
+                fx.ShadowSteps = 16;
+                fx.ShadowSoftK = 14.0;
+                fx.FogColor = 0xFFFFC000u;    // amber base (colourblind-safe accent)
+                fx.VolumePaletteStrength = 0.5;   // half palette, half amber
+                return fx;
+            }),
+
+            // ── Phase / shadow test set (no palette — isolates the mechanics) ────
+
+            // Back-scatter rim: NEGATIVE anisotropy throws the halo AWAY from the
+            // key light, so the medium glows brightest opposite the light. Isolates
+            // the HG phase sign (VolumePaletteStrength stays 0).
+            new VolumetricFxPreset("Backlit smoke", fx =>
+            {
+                fx.FogDensity = 0.55;
+                fx.FogHeightFalloff = 0.25;
+                fx.VolumeSteps = 40;
+                fx.VolumeNoiseAmount = 0.85;
+                fx.VolumeNoiseScale = 1.6;
+                fx.VolumeNoiseOctaves = 4;
+                fx.VolumeSelfShadow = 2.0;
+                fx.VolumeSelfShadowSteps = 8;
+                fx.VolumeAnisotropy = -0.55;   // back-scatter (rim / silhouette glow)
+                fx.ShadowSteps = 20;
+                fx.ShadowSoftK = 12.0;
+                fx.FogColor = 0xFFC8C8D0u;      // neutral cool grey
+                fx.VolumePaletteStrength = 0.0;
+                return fx;
+            }),
+            // Maximum occlusion god-rays — dense shadow steps + tight forward lobe.
+            // Deliberately a heavy shadow/AOV load, so it doubles as a stress test
+            // for the relief float-AOV denoiser (S4): lots of high-frequency shaft
+            // banding for the A-Trous pass to clean.
+            new VolumetricFxPreset("Cathedral shafts", fx =>
+            {
+                fx.FogDensity = 0.5;
+                fx.FogHeightFalloff = 0.3;
+                fx.VolumeSteps = 48;
+                fx.VolumeNoiseAmount = 0.35;
+                fx.VolumeNoiseScale = 1.0;
+                fx.VolumeNoiseOctaves = 3;
+                fx.VolumeSelfShadow = 3.0;
+                fx.VolumeSelfShadowSteps = 10;   // crisp god-ray banding in the medium
+                fx.VolumeAnisotropy = 0.85;      // strong forward shafts
+                fx.ShadowSteps = 32;             // deep terrain-cast shafts
+                fx.ShadowSoftK = 10.0;
+                fx.FogColor = 0xFFFFFFFFu;
+                fx.VolumePaletteStrength = 0.0;
+                return fx;
+            }),
+
             // Wipe the fog back to nothing (fast way to A/B against no medium).
             new VolumetricFxPreset("Clear (no fog)", fx =>
             {
