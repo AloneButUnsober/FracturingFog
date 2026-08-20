@@ -9,6 +9,17 @@ Windows) and the ability to run one command. If you are a contributor and want t
 the code, the parameter matrix, how to add a case — read the
 [Benchmark Subsystem](../Technical/Benchmark-Subsystem.md) technical reference instead.
 
+> [!WARNING]
+> **The benchmarks run on Windows only.** They are built into the Windows program
+> (`FracturingFogCLD.csproj`), which is a Windows-only build and will not even compile on Linux or
+> macOS — trying it fails with an error like `NETSDK1073 … Microsoft.WindowsDesktop.App…`. That is
+> expected, not a bug: it means you pointed a Linux build at the Windows program. The other
+> Fracturing Fog command-line features (`--server`, `--batch`, and friends) *do* work cross-platform
+> via a different program, but the benchmark commands have not been wired into it yet. If you are on
+> Linux/macOS and need benchmarks, that porting task is described for developers in the
+> [Benchmark Subsystem](../Technical/Benchmark-Subsystem.md#wiring-the-harness-into-fracturingfogapp-linuxmacos)
+> reference.
+
 > [!NOTE]
 > A *benchmark* here means: the app renders the same fractal views over and over, times how long
 > each render takes, and prints a table. Nothing is saved to your gallery and no window opens —
