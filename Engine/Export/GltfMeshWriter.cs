@@ -53,7 +53,7 @@ public static class GltfMeshWriter
     public static void Write(
         string path,
         IReadOnlyList<(double X, double Y, double Z)> positions,
-        IReadOnlyList<(float X, float Y, float Z)> normals,
+        IReadOnlyList<(float X, float Y, float Z)>? normals,
         IReadOnlyList<uint>? colorsArgb,
         IReadOnlyList<(int A, int B, int C)> triangles,
         PbrMaterial material)
@@ -95,9 +95,9 @@ public static class GltfMeshWriter
         if (hasNormal)
             for (int i = 0; i < v; i++)
             {
-                WriteF(buffer, normOff + i * 12 + 0, normals[i].X);
-                WriteF(buffer, normOff + i * 12 + 4, normals[i].Y);
-                WriteF(buffer, normOff + i * 12 + 8, normals[i].Z);
+                WriteF(buffer, normOff + i * 12 + 0, normals![i].X);
+                WriteF(buffer, normOff + i * 12 + 4, normals![i].Y);
+                WriteF(buffer, normOff + i * 12 + 8, normals![i].Z);
             }
         if (hasColor)
             for (int i = 0; i < v; i++)
