@@ -26,7 +26,7 @@ public class UserBulbMeshCancelTests
         try
         {
             int tris = UserBulbMeshExporter.ExportMarchingCubes(
-                path, Sphere, 0, 0, 0, 2.0, 48, 0.5, false, 1, 180.0, cts.Token);
+                path, Sphere, 0, 0, 0, 2.0, 48, 0.5, false, 1, 180.0, ct: cts.Token);
 
             Assert.Equal(0, tris);
             Assert.False(File.Exists(path), "a cancelled export must not write (or clobber) the file");
@@ -47,7 +47,7 @@ public class UserBulbMeshCancelTests
         try
         {
             int tris = UserBulbMeshExporter.ExportMarchingCubes(
-                path, Sphere, 0, 0, 0, 2.0, 48, 0.5, false, 1, 180.0, cts.Token);
+                path, Sphere, 0, 0, 0, 2.0, 48, 0.5, false, 1, 180.0, ct: cts.Token);
             Assert.True(tris > 0);
             Assert.True(File.Exists(path));
         }

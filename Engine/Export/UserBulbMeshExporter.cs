@@ -47,9 +47,9 @@ public static class UserBulbMeshExporter
         string filePath, FracturingFog.Rendering.Lighting.IDistanceEstimator de,
         double cx, double cy, double cz, double range, int n,
         double isoScale = 0.5, bool isoAbsolute = false, int superSamples = 1,
-        double creaseDegrees = 180.0, CancellationToken ct = default)
+        double creaseDegrees = 180.0, bool capBoundary = true, CancellationToken ct = default)
         => ExportMarchingCubes(filePath, de.Evaluate, cx, cy, cz, range, n,
-                               isoScale, isoAbsolute, superSamples, creaseDegrees, ct);
+                               isoScale, isoAbsolute, superSamples, creaseDegrees, capBoundary, ct);
 
     /// <summary>Marching Cubes export. Dispatches on file extension:
     /// `.stl` → binary STL (face normals); anything else → OBJ with
@@ -74,13 +74,21 @@ public static class UserBulbMeshExporter
     /// vertex splits, so e.g. Mandelbox facets stay crisp while curved bulb arms
     /// smooth). 180 (default) = smooth everything, byte-identical to the prior
     /// exporter; ≈30 keeps facets.</summary>
+    /// <remarks><paramref name="capBoundary"/> (default true) seals the mesh where
+    /// the solid crosses a sample-cube FACE (#422): classic MC leaves that cut open,
+    /// so a fractal that exits the cube exports as a shell with holes (not
+    /// printable). An extra ring of cells is marched against a virtual outside shell
+    /// so the crossing is capped flush at the box face, giving a closed, watertight
+    /// solid. When the surface is interior to the cube (the auto-sized
+    /// ProbeBoundingRange path) no cap fires and the geometry is byte-identical to
+    /// uncapped; false restores the raw open-boundary MC output.</remarks>
     public static int ExportMarchingCubes(
         string filePath, SampleDistance sample,
         double cx, double cy, double cz, double range, int n,
         double isoScale = 0.5, bool isoAbsolute = false, int superSamples = 1,
-        double creaseDegrees = 180.0, CancellationToken ct = default)
+        double creaseDegrees = 180.0, bool capBoundary = true, CancellationToken ct = default)
     {
-        var (verts, norms, tris) = BuildMarchingCubes(sample, cx, cy, cz, range, n, isoScale, isoAbsolute, superSamples, ct);
+        var (verts, norms, tris) = BuildMarchingCubes(sample, cx, cy, cz, range, n, isoScale, isoAbsolute, superSamples, capBoundary, ct);
         // Cancelled mid-build: leave any existing file untouched (don't clobber it
         // with an empty stub) and report nothing written.
         if (ct.IsCancellationRequested) return 0;
@@ -199,7 +207,7 @@ public static class UserBulbMeshExporter
         BuildMarchingCubes(SampleDistance sample,
                            double cx, double cy, double cz, double range, int n,
                            double isoScale, bool isoAbsolute, int superSamples,
-                           CancellationToken ct)
+                           bool capBoundary, CancellationToken ct)
     {
         if (n < 8) n = 8;
         double step = 2.0 * range / n;
@@ -261,10 +269,30 @@ public static class UserBulbMeshExporter
         var verts = new List<(double, double, double)>();
         var tris = new List<(int, int, int)>();
 
-        // Edge ownership: each grid corner (i,j,k) owns up to 3 edges,
-        // along +X / +Y / +Z. Pack (i,j,k,axis) → linear index into
-        // a single -1-seeded array. Size: side³·3.
-        var edgeVert = new int[side * side * side * 3];
+        // Boundary cap (#422): where the solid crosses a cube FACE (DE < iso on the
+        // outermost real corners) classic MC leaves that cut open — the mesh is
+        // watertight only when the whole surface is interior to the sample cube (the
+        // auto-sized ProbeBoundingRange path). To seal it, march one extra ring of
+        // cells on every side against a VIRTUAL outside shell (DE = +OUTSIDE): an
+        // inside face-corner paired with an outside virtual corner emits a cap
+        // triangle flush at the box face, closing the mesh into a print-ready solid.
+        // When the surface is interior the shell corners are all outside too, so no
+        // cap fires and the geometry is byte-identical to uncapped.
+        const double OUTSIDE = 1e30;
+        double F(int i, int j, int k) =>
+            (i < 0 || i > n || j < 0 || j > n || k < 0 || k > n)
+                ? OUTSIDE
+                : field[(i * side + j) * side + k];
+        double PX(int i) => cx - range + i * step;
+        double PY(int j) => cy - range + j * step;
+        double PZ(int k) => cz - range + k * step;
+
+        // Edge ownership over the padded corner space (indices -1..n+1, shifted +1
+        // so the key stays non-negative): each corner owns up to 3 edges, along
+        // +X / +Y / +Z. Pack (i,j,k,axis) → linear index into a single -1-seeded
+        // array. Size: side2³·3 where side2 = n+3.
+        int side2 = n + 3;
+        var edgeVert = new int[side2 * side2 * side2 * 3];
         Array.Fill(edgeVert, -1);
 
         // Per-cell corner offsets matching Bourke's vertex order:
@@ -277,21 +305,26 @@ public static class UserBulbMeshExporter
         // where "axis" picks which of +X/+Y/+Z the edge runs along, and
         // "low-corner offset" selects from the 8-vertex list above.
 
+        // Cell low-corner range: [0,n) uncapped, [-1,n) capped (the extra ring seals
+        // the box faces). cHi is exclusive.
+        int cLo = capBoundary ? -1 : 0;
+        int cHi = capBoundary ? n + 1 : n;
+
         Span<int> edgeIdx = stackalloc int[12];
-        for (int i = 0; i < n; i++)
+        for (int i = cLo; i < cHi; i++)
         {
             if (ct.IsCancellationRequested) goto done_cells;
-            for (int j = 0; j < n; j++)
-            for (int k = 0; k < n; k++)
+            for (int j = cLo; j < cHi; j++)
+            for (int k = cLo; k < cHi; k++)
             {
-                double v0 = field[((i + 0) * side + (j + 0)) * side + (k + 0)];
-                double v1 = field[((i + 1) * side + (j + 0)) * side + (k + 0)];
-                double v2 = field[((i + 1) * side + (j + 1)) * side + (k + 0)];
-                double v3 = field[((i + 0) * side + (j + 1)) * side + (k + 0)];
-                double v4 = field[((i + 0) * side + (j + 0)) * side + (k + 1)];
-                double v5 = field[((i + 1) * side + (j + 0)) * side + (k + 1)];
-                double v6 = field[((i + 1) * side + (j + 1)) * side + (k + 1)];
-                double v7 = field[((i + 0) * side + (j + 1)) * side + (k + 1)];
+                double v0 = F(i + 0, j + 0, k + 0);
+                double v1 = F(i + 1, j + 0, k + 0);
+                double v2 = F(i + 1, j + 1, k + 0);
+                double v3 = F(i + 0, j + 1, k + 0);
+                double v4 = F(i + 0, j + 0, k + 1);
+                double v5 = F(i + 1, j + 0, k + 1);
+                double v6 = F(i + 1, j + 1, k + 1);
+                double v7 = F(i + 0, j + 1, k + 1);
 
                 int ci = 0;
                 if (v0 < iso) ci |= 1;
@@ -306,23 +339,23 @@ public static class UserBulbMeshExporter
                 int em = EdgeTable[ci];
                 if (em == 0) continue;
 
-                double x0 = cx - range + i * step;
-                double y0 = cy - range + j * step;
-                double z0 = cz - range + k * step;
+                double x0 = PX(i);
+                double y0 = PY(j);
+                double z0 = PZ(k);
 
                 // 0: X-edge from (0,0,0) → (1,0,0).
-                if ((em & 1)    != 0) edgeIdx[0]  = GetOrCreateEdgeVert(edgeVert, verts, side, i,   j,   k,   0, x0,        y0,        z0,        x0 + step, y0,        z0,        v0, v1, iso);
-                if ((em & 2)    != 0) edgeIdx[1]  = GetOrCreateEdgeVert(edgeVert, verts, side, i+1, j,   k,   1, x0 + step, y0,        z0,        x0 + step, y0 + step, z0,        v1, v2, iso);
-                if ((em & 4)    != 0) edgeIdx[2]  = GetOrCreateEdgeVert(edgeVert, verts, side, i,   j+1, k,   0, x0,        y0 + step, z0,        x0 + step, y0 + step, z0,        v3, v2, iso);
-                if ((em & 8)    != 0) edgeIdx[3]  = GetOrCreateEdgeVert(edgeVert, verts, side, i,   j,   k,   1, x0,        y0,        z0,        x0,        y0 + step, z0,        v0, v3, iso);
-                if ((em & 16)   != 0) edgeIdx[4]  = GetOrCreateEdgeVert(edgeVert, verts, side, i,   j,   k+1, 0, x0,        y0,        z0 + step, x0 + step, y0,        z0 + step, v4, v5, iso);
-                if ((em & 32)   != 0) edgeIdx[5]  = GetOrCreateEdgeVert(edgeVert, verts, side, i+1, j,   k+1, 1, x0 + step, y0,        z0 + step, x0 + step, y0 + step, z0 + step, v5, v6, iso);
-                if ((em & 64)   != 0) edgeIdx[6]  = GetOrCreateEdgeVert(edgeVert, verts, side, i,   j+1, k+1, 0, x0,        y0 + step, z0 + step, x0 + step, y0 + step, z0 + step, v7, v6, iso);
-                if ((em & 128)  != 0) edgeIdx[7]  = GetOrCreateEdgeVert(edgeVert, verts, side, i,   j,   k+1, 1, x0,        y0,        z0 + step, x0,        y0 + step, z0 + step, v4, v7, iso);
-                if ((em & 256)  != 0) edgeIdx[8]  = GetOrCreateEdgeVert(edgeVert, verts, side, i,   j,   k,   2, x0,        y0,        z0,        x0,        y0,        z0 + step, v0, v4, iso);
-                if ((em & 512)  != 0) edgeIdx[9]  = GetOrCreateEdgeVert(edgeVert, verts, side, i+1, j,   k,   2, x0 + step, y0,        z0,        x0 + step, y0,        z0 + step, v1, v5, iso);
-                if ((em & 1024) != 0) edgeIdx[10] = GetOrCreateEdgeVert(edgeVert, verts, side, i+1, j+1, k,   2, x0 + step, y0 + step, z0,        x0 + step, y0 + step, z0 + step, v2, v6, iso);
-                if ((em & 2048) != 0) edgeIdx[11] = GetOrCreateEdgeVert(edgeVert, verts, side, i,   j+1, k,   2, x0,        y0 + step, z0,        x0,        y0 + step, z0 + step, v3, v7, iso);
+                if ((em & 1)    != 0) edgeIdx[0]  = GetOrCreateEdgeVert(edgeVert, verts, side2, i,   j,   k,   0, x0,        y0,        z0,        x0 + step, y0,        z0,        v0, v1, iso);
+                if ((em & 2)    != 0) edgeIdx[1]  = GetOrCreateEdgeVert(edgeVert, verts, side2, i+1, j,   k,   1, x0 + step, y0,        z0,        x0 + step, y0 + step, z0,        v1, v2, iso);
+                if ((em & 4)    != 0) edgeIdx[2]  = GetOrCreateEdgeVert(edgeVert, verts, side2, i,   j+1, k,   0, x0,        y0 + step, z0,        x0 + step, y0 + step, z0,        v3, v2, iso);
+                if ((em & 8)    != 0) edgeIdx[3]  = GetOrCreateEdgeVert(edgeVert, verts, side2, i,   j,   k,   1, x0,        y0,        z0,        x0,        y0 + step, z0,        v0, v3, iso);
+                if ((em & 16)   != 0) edgeIdx[4]  = GetOrCreateEdgeVert(edgeVert, verts, side2, i,   j,   k+1, 0, x0,        y0,        z0 + step, x0 + step, y0,        z0 + step, v4, v5, iso);
+                if ((em & 32)   != 0) edgeIdx[5]  = GetOrCreateEdgeVert(edgeVert, verts, side2, i+1, j,   k+1, 1, x0 + step, y0,        z0 + step, x0 + step, y0 + step, z0 + step, v5, v6, iso);
+                if ((em & 64)   != 0) edgeIdx[6]  = GetOrCreateEdgeVert(edgeVert, verts, side2, i,   j+1, k+1, 0, x0,        y0 + step, z0 + step, x0 + step, y0 + step, z0 + step, v7, v6, iso);
+                if ((em & 128)  != 0) edgeIdx[7]  = GetOrCreateEdgeVert(edgeVert, verts, side2, i,   j,   k+1, 1, x0,        y0,        z0 + step, x0,        y0 + step, z0 + step, v4, v7, iso);
+                if ((em & 256)  != 0) edgeIdx[8]  = GetOrCreateEdgeVert(edgeVert, verts, side2, i,   j,   k,   2, x0,        y0,        z0,        x0,        y0,        z0 + step, v0, v4, iso);
+                if ((em & 512)  != 0) edgeIdx[9]  = GetOrCreateEdgeVert(edgeVert, verts, side2, i+1, j,   k,   2, x0 + step, y0,        z0,        x0 + step, y0,        z0 + step, v1, v5, iso);
+                if ((em & 1024) != 0) edgeIdx[10] = GetOrCreateEdgeVert(edgeVert, verts, side2, i+1, j+1, k,   2, x0 + step, y0 + step, z0,        x0 + step, y0 + step, z0 + step, v2, v6, iso);
+                if ((em & 2048) != 0) edgeIdx[11] = GetOrCreateEdgeVert(edgeVert, verts, side2, i,   j+1, k,   2, x0,        y0 + step, z0,        x0,        y0 + step, z0 + step, v3, v7, iso);
 
                 for (int t = 0; TriTable[ci, t] != -1; t += 3)
                 {
@@ -374,12 +407,14 @@ public static class UserBulbMeshExporter
     }
 
     private static int GetOrCreateEdgeVert(
-        int[] edgeVert, List<(double, double, double)> verts, int side,
+        int[] edgeVert, List<(double, double, double)> verts, int sideKey,
         int i, int j, int k, int axis,
         double ax, double ay, double az, double bx, double by, double bz,
         double va, double vb, double iso)
     {
-        int key = ((i * side + j) * side + k) * 3 + axis;
+        // Shift the (possibly -1) corner index into [0, sideKey) so the packed key
+        // stays non-negative over the padded (cap) corner space.
+        int key = (((i + 1) * sideKey + (j + 1)) * sideKey + (k + 1)) * 3 + axis;
         int existing = edgeVert[key];
         if (existing >= 0) return existing;
         // Linear interp toward iso. Guard div-zero when corners exactly

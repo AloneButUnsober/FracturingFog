@@ -350,9 +350,17 @@ Sub-items (ranked fit × payoff):
      STL/OBJ normals pointed into the solid; reversed the emitted winding to
      `(a,c,b)` (count unchanged). `McMeshValidationTests` locks interior =
      print-ready, `ProbeBoundingRange` auto-size = closed, undersized cube = open,
-     crease path = still closed. **Remaining:** cap the mesh where the surface
-     exceeds the cube (open-boundary, **#422**); dual contouring for sharp
-     Mandelbox/KIFS edges.
+     crease path = still closed.
+   - **Boundary cap LANDED (PR #425, Closes #422).** Where the solid crosses a
+     sample-cube face MC left the cut open (a fractal exiting the cube exported as
+     a shell with holes). Default-on cap marches one extra ring of cells against a
+     virtual outside shell (`DE = +OUTSIDE`) so the crossing gets a triangle flush
+     at the box face — sealed, watertight, outward-wound. Byte-identical no-op when
+     the surface is interior (shell corners all outside), so the auto-sized path is
+     unchanged; `capBoundary` flag (default true) on both `ExportMarchingCubes`
+     overloads. Tests: undersized cube now closed+outward with cap, still open with
+     cap off, cap tri-for-tri no-op when interior. **Remaining:** a UI toggle for
+     the cap; dual contouring for sharp Mandelbox/KIFS edges.
 3. **Vertex-color export** — bake the theme into per-vertex color (PLY / 3MF
    color / glTF) so a color print or web drop-in carries the fractal's *palette*.
    The palette idiom crossing into mesh — the biggest differentiator.
