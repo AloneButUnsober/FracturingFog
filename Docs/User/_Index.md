@@ -49,6 +49,7 @@ as your imagination wants to take you.
 | Configure the local render server                        | [Server Admin Guide](ServerAdmin-Guide.md)                     |
 | Stand up a multi-machine render cluster                  | [Distributed Rendering Guide](Distributed-UserGuide.md)        |
 | Memorise the keyboard shortcuts                          | [Keyboard Shortcuts](Keyboard-Shortcuts.md)                    |
+| Measure how fast rendering is on your machine            | [Benchmarks Guide](Benchmarks-Guide.md)                        |
 
 ---
 
