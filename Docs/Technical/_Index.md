@@ -39,6 +39,7 @@ system. The codebase is a single .NET 10 solution.
 | Adding a new fractal family                                | [Fractal Equation Design Guide](FractalEquation-DesignGuide.md) |
 | Touching the calculator generator                          | [CalculatorGen Architecture](CalculatorGen-Architecture.md) and [Authoring](CalculatorGen-Authoring.md) |
 | Tracking the GPU JIT / perturbation roadmap                | [Performance Development Plan](Performance-DevelopmentPlan.md) |
+| Measuring perf — running/reading the benchmark harness     | [Benchmark Subsystem](Benchmark-Subsystem.md)               |
 | Porting away from Direct3D                                 | [Cross-Platform Roadmap](CrossPlatform-Roadmap.md) and [Implementation Plan](CrossPlatform-ImplementationPlan.md) |
 | Extending the 3-D Mandelbulb / User Bulb engine            | [User Bulb 3D Development Plan](UserBulb3D-DevelopmentPlan.md) and [Sandbox](UserBulbSandbox-DevPlan.md) |
 | Adding non-escaping / user-supplied DE (pseudo-Kleinian, Amoser sine) | [Non-Escaping DE Dev Plan](NonEscaping-DE-DevPlan.md) |
