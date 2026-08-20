@@ -97,6 +97,9 @@ public static class UserBulbMeshExporter
         if (tris.Count == 0) { File.WriteAllText(filePath, "# empty\n"); return 0; }
         if (filePath.EndsWith(".stl", StringComparison.OrdinalIgnoreCase))
             WriteStlBinary(filePath, verts, tris);
+        else if (filePath.EndsWith(".glb", StringComparison.OrdinalIgnoreCase)
+              || filePath.EndsWith(".gltf", StringComparison.OrdinalIgnoreCase))
+            WriteGltf(filePath, verts, norms, tris);
         else
             WriteObjSmooth(filePath, verts, norms, tris);
         return tris.Count;
@@ -546,6 +549,22 @@ public static class UserBulbMeshExporter
             w.WriteLine($"v {v.X.ToString("G7", inv)} {v.Y.ToString("G7", inv)} {v.Z.ToString("G7", inv)}");
         foreach (var t in tris)
             w.WriteLine($"f {t.A} {t.B} {t.C}");
+    }
+
+    // glTF 2.0 (.glb / .gltf) with a PBR material + smooth normals (roadmap S9.4,
+    // #391) — the true-3D isosurface lands in Blender / a web viewer already shaded.
+    // The MC path has no per-vertex colour source yet (a follow-up for the 3D DE
+    // families), so it dresses the solid in a flat matte grey material.
+    private static void WriteGltf(
+        string filePath,
+        List<(double X, double Y, double Z)> verts,
+        List<(double X, double Y, double Z)> norms,
+        List<(int A, int B, int C)> tris)
+    {
+        var nrm = new List<(float, float, float)>(norms.Count);
+        foreach (var n in norms) nrm.Add(((float)n.X, (float)n.Y, (float)n.Z));
+        GltfMeshWriter.Write(filePath, verts, nrm, null, tris,
+            GltfMeshWriter.PbrMaterial.Matte(0.72f, 0.72f, 0.74f));
     }
 
     private static void WriteStlBinary(

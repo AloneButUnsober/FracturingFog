@@ -319,6 +319,9 @@ public static class HeightfieldMeshExporter
             WriteStl(path, verts, tris);
         else if (path.EndsWith(".ply", StringComparison.OrdinalIgnoreCase))
             WritePly(path, verts, tris);
+        else if (path.EndsWith(".glb", StringComparison.OrdinalIgnoreCase)
+              || path.EndsWith(".gltf", StringComparison.OrdinalIgnoreCase))
+            WriteGltf(path, verts, tris);
         else
             WriteObj(path, verts, tris);
         return tris.Count;
@@ -658,6 +661,21 @@ public static class HeightfieldMeshExporter
             bw.Write((byte)3);
             bw.Write(t.a); bw.Write(t.b); bw.Write(t.c);
         }
+    }
+
+    // glTF 2.0 (.glb / .gltf) with a PBR material + per-vertex COLOR_0 (roadmap
+    // S9.4, #391) — carries the theme AND a shaded material, so the relief solid
+    // opens in Blender / a web viewer dressed, not grey clay. Same watertight,
+    // outward-wound topology the other writers emit. Base colour left white so the
+    // vertex colours drive the albedo; matte (metallic 0, roughness 0.8) reads
+    // print-like.
+    private static void WriteGltf(string path, List<Vert> verts, List<(int a, int b, int c)> tris)
+    {
+        var pos = new List<(double, double, double)>(verts.Count);
+        var nrm = new List<(float, float, float)>(verts.Count);
+        var col = new List<uint>(verts.Count);
+        foreach (var v in verts) { pos.Add((v.X, v.Y, v.Z)); nrm.Add((v.Nx, v.Ny, v.Nz)); col.Add(v.C); }
+        GltfMeshWriter.Write(path, pos, nrm, col, tris, GltfMeshWriter.PbrMaterial.MatteWhite);
     }
 
     private static void WriteStl(string path, List<Vert> verts, List<(int a, int b, int c)> tris)

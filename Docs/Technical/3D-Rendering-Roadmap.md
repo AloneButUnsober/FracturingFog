@@ -378,6 +378,18 @@ Sub-items (ranked fit × payoff):
    mesh lands in Blender / web dressed, not grey clay. Format discipline: STL
    (dumb slicers), PLY (vertex color), glTF/GLB (PBR), 3MF (color + material +
    units). Pick formats that carry what FF uniquely has.
+   - **glTF/GLB LANDED (PR #426).** Self-contained glTF 2.0 writer
+     (`GltfMeshWriter`, no dependency): `.glb` single-file binary container
+     (header + JSON chunk + BIN chunk) or `.gltf` with the buffer inlined as a
+     base64 data URI. One mesh / one primitive; a 4-aligned buffer of POSITION +
+     NORMAL + optional COLOR_0 (normalized ubyte4) + UINT indices; POSITION accessor
+     min/max; `doubleSided` pbrMetallicRoughness material (matte: metallic 0,
+     roughness 0.8). Base colour stays white when vertex colour is present so
+     COLOR_0 drives the albedo. Wired into BOTH exporters: relief carries the theme
+     as COLOR_0, MC (no colour source yet) dresses in flat matte grey. `GltfMeshReader`
+     validates end-to-end (GLB/gltf → MeshValidator, closed + outward). Save dialogs
+     offer `.glb` / `.gltf`. **Remaining:** MC vertex colour once the 3D DE families
+     have a colour source; 3MF (colour + units); optional texture/emissive extensions.
 5. **Adaptive resolution** — octree-refine the DE only near the surface, seeded by
    the empty-space-skip mip FF already builds.
 6. **Print-ready units / orientation / base** — mm, centered, flat base, Z-up.
