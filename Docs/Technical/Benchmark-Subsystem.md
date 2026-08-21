@@ -10,6 +10,19 @@ make a frame faster or slower, and did it change allocations?* Every entry point
 runs off a CLI flag on the main WinExe, and centres on a **fixed viewpoint ladder** so results
 are comparable across commits.
 
+> [!WARNING]
+> **Windows-only today.** All three benchmark flags live on `FracturingFogCLD.csproj`, which is a
+> `net10.0-windows` WinExe (it ProjectReferences the Windows-only D3D / Win / Audio.Win backends).
+> That project **cannot build on Linux/macOS** — attempting it fails at restore with
+> `NETSDK1073 … Microsoft.WindowsDesktop.App…` because the Windows Desktop targeting pack is
+> absent (this is *not* a WinForms regression; WinForms was removed in #116 and no project sets
+> `UseWindowsForms=true`). The cross-platform CLI leg, `FracturingFog.App` (`net10.0`), dispatches
+> `--server`, `--batch`, `--ilgpu-probe`, the cluster flags, etc., but **does not** dispatch
+> `--bench`, `--gentestbench`, or `--benchmark` — the `Benchmarks/` sources compile only into the
+> WinExe. `BenchEntry.Run` is *written* to be portable (its Win32 console-attach is gated behind
+> `OperatingSystem.IsWindows()`), but the App-side wiring never landed. **Run benchmarks on
+> Windows.** Porting them is tracked under "Wiring the harness into FracturingFog.App" below.
+
 ---
 
 ## Three entry points, two engines
@@ -266,7 +279,8 @@ the exe.
 ## Running them
 
 See the [Benchmarks Guide](../User/Benchmarks-Guide.md) for the copy-paste commands and machine
-hygiene. In short, from the repo root:
+hygiene. **Run these on Windows** — the flags live on the Windows-only WinExe (see the platform
+warning at the top). In short, from the repo root:
 
 ```powershell
 # Full 32-case statistical sweep (minutes; do it on a Release build)
@@ -300,6 +314,35 @@ dotnet run -c Release --project FracturingFogCLD.csproj -- --benchmark --equatio
   resolve references.
 - **Keep the ladders in sync.** `--gentestbench` and `--benchmark` share a coordinate ladder by
   convention; if you change one rung's centre/zoom, change both so their outputs stay comparable.
+
+---
+
+## Wiring the harness into FracturingFog.App (Linux/macOS)
+
+The harness is Windows-only today only because of *packaging*, not portability of the code — the
+maths pipeline under test (`MandelbrotCalculator`, the generated calculators, SA/BLA) already
+builds and runs on the `net10.0` leg. To make `--bench` work on Linux/macOS:
+
+1. **Compile the benchmark sources into the portable leg.** `Benchmarks/MandelbrotBench.cs` is
+   currently picked up only by `FracturingFogCLD.csproj`. Add it (and a `BenchmarkDotNet`
+   `PackageReference`) to `FracturingFog.App.csproj`, or factor the harness into a small shared
+   project both exes reference. Keep the Win32 `AttachConsole`/`AllocConsole` P/Invokes behind the
+   existing `OperatingSystem.IsWindows()` gate — on Linux/macOS stdout is already wired to the
+   launching terminal, so `BenchEntry` needs no console attach there.
+2. **Dispatch the flags in `FracturingFog.App/Program.cs`.** Add the `--bench` / `--gentestbench`
+   / `--benchmark` branches (mirroring `Program.cs` in the WinExe) ahead of the Avalonia boot,
+   next to the existing `--server` / `--batch` / `--ilgpu-probe` dispatch.
+3. **Invoke with the framework pinned.** `FracturingFog.App` multi-targets
+   `net10.0;net10.0-windows`, so `dotnet run` must be told which TFM to use on a non-Windows host:
+
+   ```bash
+   dotnet run -c Release --project FracturingFog.App/FracturingFog.App.csproj -f net10.0 -- --bench
+   ```
+
+Caveats to verify when porting: the `DeepHP*` regimes depend on **AVX2** (and the SP paths may use
+**AVX-512**) — on an ARM host (Apple Silicon, aarch64 Linux) those intrinsics are unavailable and
+the calculator falls back to its scalar path, so absolute numbers are not comparable to an x86 run.
+The `InProcessEmitToolchain` and `MemoryDiagnoser` are cross-platform and need no change.
 
 ---
 
