@@ -103,6 +103,54 @@ public class DualContouringTests
         finally { if (File.Exists(path)) File.Delete(path); }
     }
 
+    [Fact]
+    public void Undersized_Dc_Capped_Is_Closed_Solid()
+    {
+        // Sphere radius 1.8 in a half-extent-1.6 cube exits the box; the default cap
+        // seals it into a watertight, outward solid.
+        string path = Path.Combine(Path.GetTempPath(), $"ff-dc-{Guid.NewGuid():N}.stl");
+        try
+        {
+            UserBulbMeshExporter.ExportDualContouring(path, Sphere(1.8), 0, 0, 0, 1.6, 48); // cap default true
+            var (pos, t) = StlMeshReader.ReadBinary(path);
+            var r = MeshValidator.Validate(pos, t, weldEpsilon: 1e-5);
+            Assert.Equal(0, r.BoundaryEdgeCount);
+            Assert.True(r.IsClosedManifold, r.Summary());
+            Assert.True(r.SignedVolume > 0, r.Summary());
+        }
+        finally { if (File.Exists(path)) File.Delete(path); }
+    }
+
+    [Fact]
+    public void Undersized_Dc_Uncapped_Leaves_Boundary_Open()
+    {
+        string path = Path.Combine(Path.GetTempPath(), $"ff-dc-{Guid.NewGuid():N}.stl");
+        try
+        {
+            UserBulbMeshExporter.ExportDualContouring(path, Sphere(1.8), 0, 0, 0, 1.6, 48, capBoundary: false);
+            var (pos, t) = StlMeshReader.ReadBinary(path);
+            var r = MeshValidator.Validate(pos, t, weldEpsilon: 1e-5);
+            Assert.False(r.IsWatertight, r.Summary());
+            Assert.True(r.BoundaryEdgeCount > 0);
+        }
+        finally { if (File.Exists(path)) File.Delete(path); }
+    }
+
+    [Fact]
+    public void Dc_Cap_Is_NoOp_When_Surface_Interior()
+    {
+        string capped = Path.Combine(Path.GetTempPath(), $"ff-dc-{Guid.NewGuid():N}.stl");
+        string uncapped = Path.Combine(Path.GetTempPath(), $"ff-dc-{Guid.NewGuid():N}.stl");
+        try
+        {
+            int a = UserBulbMeshExporter.ExportDualContouring(capped,   Sphere(1.0), 0, 0, 0, 1.6, 48, capBoundary: true);
+            int b = UserBulbMeshExporter.ExportDualContouring(uncapped, Sphere(1.0), 0, 0, 0, 1.6, 48, capBoundary: false);
+            Assert.Equal(b, a);
+            Assert.True(a > 0);
+        }
+        finally { if (File.Exists(capped)) File.Delete(capped); if (File.Exists(uncapped)) File.Delete(uncapped); }
+    }
+
     private static double Dist((double X, double Y, double Z) p, double c)
     {
         double dx = p.X - c, dy = p.Y - c, dz = p.Z - c;

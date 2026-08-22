@@ -14,11 +14,11 @@
 // edge are joined into a quad (two triangles), giving the surface as the dual of the
 // grid.
 //
-// This is the interior mesher: it emits quads only for grid edges shared by four
-// cells, so the surface is closed when the shape is fully inside the sample cube
-// (the auto-sized ProbeBoundingRange path) and open where it exits the box — the
-// same starting point Marching Cubes had before the boundary cap (#422). A DC
-// boundary cap is a follow-up.
+// With capBoundary off it emits quads only for grid edges shared by four real
+// cells, so the surface is closed when the shape is inside the cube and open where
+// it exits. With capBoundary on (default) an extra ring of padding cells is marched
+// against a virtual outside shell, so box-face crossings are sealed flush into a
+// watertight solid — the DC analog of the Marching-Cubes cap (#422).
 //
 // QEF is solved by the regularised normal equations (ATA + lambda*I) p = ATb +
 // lambda*c, biased toward the cell's mass point c and clamped to the cell — robust
@@ -44,7 +44,7 @@ public static class DualContourMesher
                    List<(double X, double Y, double Z)> norms,
                    List<(int A, int B, int C)> tris)
         Build(SampleDistance sample, double cx, double cy, double cz, double range, int n,
-              double isoScale, bool isoAbsolute, CancellationToken ct)
+              double isoScale, bool isoAbsolute, bool capBoundary, CancellationToken ct)
     {
         if (n < 8) n = 8;
         double step = 2.0 * range / n;
@@ -73,7 +73,15 @@ public static class DualContourMesher
             return (new(), new(), new());
         }
 
-        double F(int i, int j, int k) => field[(i * side + j) * side + k];
+        // Boundary cap (#422 analog for DC): treat corners outside the sampled grid
+        // as a virtual OUTSIDE shell so the solid gets sealed flush at the box face
+        // where it exits the cube. When the surface is interior, the shell corners
+        // are all outside → no cap cells activate and the mesh is unchanged.
+        const double OUTSIDE = 1e30;
+        double F(int i, int j, int k) =>
+            (i < 0 || i > n || j < 0 || j > n || k < 0 || k > n)
+                ? OUTSIDE
+                : field[(i * side + j) * side + k];
         double PX(int i) => cx - range + i * step;
         double PY(int j) => cy - range + j * step;
         double PZ(int k) => cz - range + k * step;
@@ -95,12 +103,20 @@ public static class DualContourMesher
         Span<int> ea = stackalloc int[12] { 0, 2, 4, 6,  0, 1, 4, 5,  0, 1, 2, 3 };
         Span<int> eb = stackalloc int[12] { 1, 3, 5, 7,  2, 3, 6, 7,  4, 5, 6, 7 };
 
+        // Cell low-corner range: [0,n) uncapped; [-1,n] capped (an extra ring of
+        // padding cells against the virtual outside shell seals the box faces). cHi
+        // is exclusive.
+        int cLo = capBoundary ? -1 : 0;
+        int cHi = capBoundary ? n + 1 : n;
+
         // One vertex per active cell (a cell with at least one sign-changing edge).
-        var cellVert = new int[n * n * n];
+        // Padded cell index space [-1, n] → shift +1; size n+2 per axis.
+        int cs = n + 2;
+        var cellVert = new int[cs * cs * cs];
         Array.Fill(cellVert, -1);
         var verts = new List<(double, double, double)>();
 
-        int CellIdx(int i, int j, int k) => (i * n + j) * n + k;
+        int CellIdx(int i, int j, int k) => ((i + 1) * cs + (j + 1)) * cs + (k + 1);
 
         // Per-cell scratch — allocated ONCE (stackalloc inside the n^3 loop would
         // never free and overflow the stack).
@@ -108,11 +124,11 @@ public static class DualContourMesher
         Span<double> px = stackalloc double[8];
         Span<double> py = stackalloc double[8];
         Span<double> pz = stackalloc double[8];
-        for (int i = 0; i < n; i++)
+        for (int i = cLo; i < cHi; i++)
         {
             if (ct.IsCancellationRequested) return (new(), new(), new());
-            for (int j = 0; j < n; j++)
-            for (int k = 0; k < n; k++)
+            for (int j = cLo; j < cHi; j++)
+            for (int k = cLo; k < cHi; k++)
             {
                 // Corner scalars in local 0..7 order.
                 for (int c = 0; c < 8; c++)
@@ -192,9 +208,9 @@ public static class DualContourMesher
         }
 
         // X-edges: (i,j,k)->(i+1,j,k). 4 cells vary in (j-1/j, k-1/k), cell x = i.
-        for (int i = 0; i < n; i++)
-        for (int j = 1; j < n; j++)
-        for (int k = 1; k < n; k++)
+        for (int i = cLo; i < cHi; i++)
+        for (int j = cLo + 1; j < cHi; j++)
+        for (int k = cLo + 1; k < cHi; k++)
         {
             bool ia = F(i, j, k) < iso, ib = F(i + 1, j, k) < iso;
             if (ia == ib) continue;
@@ -206,9 +222,9 @@ public static class DualContourMesher
             Quad(q0, q1, q2, q3, ia);
         }
         // Y-edges: (i,j,k)->(i,j+1,k). 4 cells vary in (i-1/i, k-1/k), cell y = j.
-        for (int i = 1; i < n; i++)
-        for (int j = 0; j < n; j++)
-        for (int k = 1; k < n; k++)
+        for (int i = cLo + 1; i < cHi; i++)
+        for (int j = cLo; j < cHi; j++)
+        for (int k = cLo + 1; k < cHi; k++)
         {
             bool ia = F(i, j, k) < iso, ib = F(i, j + 1, k) < iso;
             if (ia == ib) continue;
@@ -222,9 +238,9 @@ public static class DualContourMesher
             Quad(q0, q1, q2, q3, !ia);
         }
         // Z-edges: (i,j,k)->(i,j,k+1). 4 cells vary in (i-1/i, j-1/j), cell z = k.
-        for (int i = 1; i < n; i++)
-        for (int j = 1; j < n; j++)
-        for (int k = 0; k < n; k++)
+        for (int i = cLo + 1; i < cHi; i++)
+        for (int j = cLo + 1; j < cHi; j++)
+        for (int k = cLo; k < cHi; k++)
         {
             bool ia = F(i, j, k) < iso, ib = F(i, j, k + 1) < iso;
             if (ia == ib) continue;

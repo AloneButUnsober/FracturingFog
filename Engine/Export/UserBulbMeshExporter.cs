@@ -155,27 +155,28 @@ public static class UserBulbMeshExporter
     public static int ExportDualContouring(
         string filePath, FracturingFog.Rendering.Lighting.IDistanceEstimator de,
         double cx, double cy, double cz, double range, int n,
-        double isoScale = 0.5, bool isoAbsolute = false,
+        double isoScale = 0.5, bool isoAbsolute = false, bool capBoundary = true,
         SampleSurfaceColor? sampleColor = null, Action<MeshReport>? onReport = null,
         CancellationToken ct = default)
         => ExportDualContouring(filePath, de.Evaluate, cx, cy, cz, range, n,
-                                isoScale, isoAbsolute, sampleColor, onReport, ct);
+                                isoScale, isoAbsolute, capBoundary, sampleColor, onReport, ct);
 
     /// <summary>Dual-contouring export. Places ONE QEF-solved vertex per cell so hard
     /// creases (Mandelbox facets, KIFS corners) stay crisp instead of being rounded
     /// onto grid edges like Marching Cubes. Same file-extension dispatch, per-vertex
     /// colour (<paramref name="sampleColor"/>) and print-readiness callback
-    /// (<paramref name="onReport"/>) as the MC path. Interior mesher — closed when the
-    /// shape is fully inside the sample cube (auto-sized range), open where it exits
-    /// the box (a boundary cap is a follow-up).</summary>
+    /// (<paramref name="onReport"/>) as the MC path. <paramref name="capBoundary"/>
+    /// (default true) seals the mesh where the solid crosses a sample-cube face into a
+    /// watertight solid (the DC analog of the MC cap, #422); byte-identical no-op when
+    /// the surface is interior to the cube.</summary>
     public static int ExportDualContouring(
         string filePath, SampleDistance sample,
         double cx, double cy, double cz, double range, int n,
-        double isoScale = 0.5, bool isoAbsolute = false,
+        double isoScale = 0.5, bool isoAbsolute = false, bool capBoundary = true,
         SampleSurfaceColor? sampleColor = null, Action<MeshReport>? onReport = null,
         CancellationToken ct = default)
     {
-        var (verts, norms, tris) = DualContourMesher.Build(sample, cx, cy, cz, range, n, isoScale, isoAbsolute, ct);
+        var (verts, norms, tris) = DualContourMesher.Build(sample, cx, cy, cz, range, n, isoScale, isoAbsolute, capBoundary, ct);
         if (ct.IsCancellationRequested) return 0;
         if (tris.Count == 0) { File.WriteAllText(filePath, "# empty\n"); return 0; }
 
