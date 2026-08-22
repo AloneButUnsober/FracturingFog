@@ -85,6 +85,37 @@ public readonly record struct MeshReport(
         sb.Append(string.Create(ci, $"Verdict:    {(IsClosedManifold ? "CLOSED 2-MANIFOLD (print-ready)" : "NOT print-ready")}\n"));
         return sb.ToString();
     }
+
+    /// <summary>A short, plain-language "will this print?" verdict for the export
+    /// dialog (roadmap S9, #391) — the headline, the specific issues in print terms,
+    /// and the size / volume / triangle count. Deliberately text-only (no colour):
+    /// the shell renders it as neutral dialog text, and colour-as-signal is avoided
+    /// for accessibility.</summary>
+    public string PrintReadiness()
+    {
+        var ci = CultureInfo.InvariantCulture;
+        var sb = new StringBuilder();
+        if (IsClosedManifold)
+        {
+            sb.Append("Print check: PRINT-READY — closed, watertight, 2-manifold solid.\n");
+        }
+        else
+        {
+            sb.Append("Print check: NOT print-ready. Issues:\n");
+            if (!IsWatertight)
+                sb.Append(string.Create(ci, $"  - Has holes (not watertight): {BoundaryEdgeCount} open edge(s).\n"));
+            if (!IsEdgeManifold)
+                sb.Append(string.Create(ci, $"  - Non-manifold edges (3+ faces meet): {NonManifoldEdgeCount}.\n"));
+            if (!IsConsistentlyOriented)
+                sb.Append(string.Create(ci, $"  - Flipped / inconsistent faces: {FlippedEdgeCount} edge(s).\n"));
+            sb.Append("  Many slicers auto-repair minor issues; otherwise adjust range / grid / iso and re-export.\n");
+        }
+        if (DegenerateTriangleCount > 0)
+            sb.Append(string.Create(ci, $"  Note: {DegenerateTriangleCount} degenerate (zero-area) triangle(s) skipped.\n"));
+        sb.Append(string.Create(ci, $"Size: {SizeX:0.###} x {SizeY:0.###} x {SizeZ:0.###}   "));
+        sb.Append(string.Create(ci, $"Volume: {Volume:0.####}   Triangles: {TriangleCount:N0}"));
+        return sb.ToString();
+    }
 }
 
 /// <summary>Validates an exported triangle mesh against the 3D-print contract:

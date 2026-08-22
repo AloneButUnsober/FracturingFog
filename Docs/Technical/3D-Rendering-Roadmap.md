@@ -5,7 +5,11 @@ what to build, what to borrow from mature 3D / DCC software (Blender, Houdini,
 Arnold, the Frostbite/Hillaire volumetrics line), and — just as important — what
 **not** to build so FF stays FF and does not drift into being a worse Blender.
 
-Status legend: ☐ not started · ◐ in progress · ☑ shipped
+Status legend: ☐ not started · ◐ in progress (a first tranche has shipped with
+tests — see each slice) · ☑ slice fully closed. A slice is marked ☑ only when it is
+*entirely* done; every S1–S9 slice already has merged, tested work landed but stays
+◐ because deeper GPU / full-fidelity tails remain. **S1–S9 are all underway; S10 is
+deferred (not started).**
 
 Parent tracking issue: **#389**. Each slice below is (or becomes) its own issue;
 this doc is the canonical design and the issues are the canonical task list —
@@ -338,8 +342,18 @@ Sub-items (ranked fit × payoff):
      actual winding (STL face normal + OBJ vn now agree, outward). Triangle count
      unchanged. Relief export now passes the FULL contract — `IsClosedManifold` with
      positive signed volume (outward); the real-export test is tightened to that as
-     the regression guard. **Remaining:** weld-based manifold repair on true-3D
-     output, validate `UserBulbMeshExporter`, export-time warn UI.
+     the regression guard.
+   - **Export-time "will this print?" check LANDED (PR #442).** The exporters now run
+     `MeshValidator` on the written solid via an optional `onReport` callback and the
+     shell shows `MeshReport.PrintReadiness()` — a plain-language verdict (PRINT-READY,
+     or NOT print-ready naming the holes / non-manifold / flipped issues + size /
+     volume / triangle count) after every mesh export. Text-only (no colour-as-signal)
+     for accessibility; zero cost + byte-identical output when the callback is unset.
+     Wired into all three export sites (generic 3D, UserBulb, relief). The Relief 3D
+     dialog's Mesh export expander also shows the verdict LIVE after each export
+     (`ReliefMeshPrintStatus`, PR #444) — the print-path analog of the MC cap toggle,
+     since the relief mesh is watertight by construction and has nothing to cap.
+     **Remaining:** weld-based manifold auto-repair on true-3D output.
 2. **Isosurface export for true 3D fractals** — marching cubes / dual contouring
    on the DE; the headline capability FF is uniquely positioned for.
    - **MC validated + oriented (PR #423).** `MeshValidator` extended to
@@ -359,8 +373,11 @@ Sub-items (ranked fit × payoff):
      the surface is interior (shell corners all outside), so the auto-sized path is
      unchanged; `capBoundary` flag (default true) on both `ExportMarchingCubes`
      overloads. Tests: undersized cube now closed+outward with cap, still open with
-     cap off, cap tri-for-tri no-op when interior. **Remaining:** a UI toggle for
-     the cap; dual contouring for sharp Mandelbox/KIFS edges.
+     cap off, cap tri-for-tri no-op when interior.
+   - **Cap UI toggle LANDED (PR #443).** "Seal box faces" checkbox on the UserBulb
+     mesh-export panel drives `capBoundary`; persisted per bulb
+     (`UserBulbSnapshot.ExportCapBoundary`, nullable → older snapshots keep the
+     default-on). **Remaining:** dual contouring for sharp Mandelbox/KIFS edges.
 3. **Vertex-color export** — bake the theme into per-vertex color (PLY / 3MF
    color / glTF) so a color print or web drop-in carries the fractal's *palette*.
    The palette idiom crossing into mesh — the biggest differentiator.
@@ -382,7 +399,17 @@ Sub-items (ranked fit × payoff):
      (`.ply` dispatch added); OBJ stays colourless (byte-compat), STL can't hold it.
      `McVertexColorTests` lock varying colour in PLY + GLB COLOR_0 on a closed,
      outward solid. **Remaining:** a fractal-meaningful driver (orbit trap / escape)
-     if derivable view-independently; 3MF colour.
+     if derivable view-independently.
+   - **3MF LANDED (PR #441).** Self-contained 3MF writer (`ThreeMfMeshWriter`) — the
+     OPC ZIP ([Content_Types].xml + _rels/.rels + 3D/3dmodel.model) the colour
+     slicers (PrusaSlicer/Bambu/Cura/3D Builder) prefer over STL. Carries a
+     millimetre PRINT UNIT + per-vertex colour via an `<m:colorgroup>` (distinct
+     colours; each triangle references a colour index per corner). Wired into BOTH
+     exporters (`.3mf` dispatch) — relief bakes `Vert.C`, MC bakes the
+     `SampleSurfaceColor` albedo. `ThreeMfMeshReader` validates end-to-end
+     (unzip → parse → MeshValidator, closed + outward + mm unit). Save dialogs offer
+     `.3mf`. Completes the colour-carry matrix: STL (geometry) / PLY (colour) /
+     glTF-GLB (colour + PBR) / 3MF (colour + units).
 4. **Carry the material** — export **glTF / GLB** with the PBR material so the
    mesh lands in Blender / web dressed, not grey clay. Format discipline: STL
    (dumb slicers), PLY (vertex color), glTF/GLB (PBR), 3MF (color + material +
@@ -398,7 +425,8 @@ Sub-items (ranked fit × payoff):
      as COLOR_0; MC dresses in flat matte grey unless a colour source is supplied
      (now wired — PR #427). `GltfMeshReader` validates end-to-end (GLB/gltf →
      MeshValidator, closed + outward). Save dialogs offer `.glb` / `.gltf`.
-     **Remaining:** 3MF (colour + units); optional texture/emissive extensions.
+     **Remaining:** optional texture/emissive extensions. (3MF colour + units landed
+     separately — see the vertex-colour item above.)
 5. **Adaptive resolution** — octree-refine the DE only near the surface, seeded by
    the empty-space-skip mip FF already builds.
 6. **Print-ready units / orientation / base** — mm, centered, flat base, Z-up.
@@ -414,8 +442,10 @@ Sub-items (ranked fit × payoff):
 - **Boundary:** auto-repair *to guarantee manifold on export* is in-lane; a mesh
   repair/sculpt *workbench* is not (see §4).
 
-### S10 — PaletteBuilder as a perceptual, colorblind-first color assistant ☐ (#392)
-The home of FF's **art idiom**. Making FF *great* — not just deep-zooming — means
+### S10 — PaletteBuilder as a perceptual, colorblind-first color assistant ☐ DEFERRED (#392)
+**Deferred** — parked until the S1–S9 render/export axes mature; independent
+art-idiom axis, picked up later. The home of FF's **art idiom**. Making FF *great* —
+not just deep-zooming — means
 making PaletteBuilder a genuinely great color assistant: perceptual, **colorblind-
 first**, fractal-aware, advisory. Full design in
 [PaletteBuilder-Design.md](PaletteBuilder-Design.md).
@@ -469,7 +499,8 @@ Blender's job; *render the distance field cinematically* is FF's.
    watertight-contract + validator sub-item is the low-risk starting point (hardens
    the relief mesh FF already ships); isosurface export for true 3D fractals is the
    larger, higher-payoff follow-on.
-8. **S10 (PaletteBuilder)** — independent art-idiom axis; couples to **S2** only for
+8. **S10 (PaletteBuilder)** — **deferred** (parked until S1–S9 mature). Independent
+   art-idiom axis; couples to **S2** only for
    the shaded-gamut preview. Perceptual core → CVD-first suite (the differentiator)
    → fractal-aware preview → advisor + 3D items. See
    [PaletteBuilder-Design.md](PaletteBuilder-Design.md).

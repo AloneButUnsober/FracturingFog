@@ -2221,7 +2221,7 @@ namespace FracturingFog.Hosting
                             return;
                         }
                         string? path = await PickSaveAsync("Export Mesh",
-                            "OBJ (*.obj)|*.obj|glTF binary (colour + PBR, *.glb)|*.glb|glTF (*.gltf)|*.gltf|PLY (vertex colour, *.ply)|*.ply|STL (*.stl)|*.stl|All files (*.*)|*.*",
+                            "OBJ (*.obj)|*.obj|glTF binary (colour + PBR, *.glb)|*.glb|glTF (*.gltf)|*.gltf|PLY (vertex colour, *.ply)|*.ply|3MF (colour + print units, *.3mf)|*.3mf|STL (*.stl)|*.stl|All files (*.*)|*.*",
                             vsx.FractalType.ToString());
                         if (string.IsNullOrEmpty(path)) return;
                         double range = global::FracturingFog.Export.RaymarchMeshSampler.SuggestedRange(
@@ -2231,10 +2231,12 @@ namespace FracturingFog.Hosting
                         {
                             try
                             {
+                                global::FracturingFog.Export.MeshReport? rep = null;
                                 int tris = global::FracturingFog.Export.UserBulbMeshExporter.ExportMarchingCubes(
-                                    path, de, 0, 0, 0, range, 96, sampleColor: colorFn);
+                                    path, de, 0, 0, 0, range, 96, sampleColor: colorFn, onReport: r => rep = r);
                                 Dispatcher.UIThread.Post(() =>
-                                    ShowInfo("Mesh export", $"Exported {tris} triangles to {path}", false));
+                                    ShowInfo("Mesh export",
+                                        $"Exported {tris} triangles to {path}\n\n{rep?.PrintReadiness()}", false));
                             }
                             catch (Exception ex)
                             {
@@ -2935,10 +2937,12 @@ namespace FracturingFog.Hosting
                 {
                     try
                     {
+                        global::FracturingFog.Export.MeshReport? rep = null;
                         int tris = global::FracturingFog.Export.UserBulbMeshExporter.ExportMarchingCubes(
                             e.Path, de, cx0, cy0, 0,
                             e.Range, e.GridN, e.IsoScale, e.IsoAbsolute, e.SuperSamples, e.CreaseDegrees,
-                            sampleColor: colorFn, ct: cts.Token);
+                            capBoundary: e.CapBoundary,
+                            sampleColor: colorFn, onReport: r => rep = r, ct: cts.Token);
                         bool cancelled = cts.IsCancellationRequested;
                         Dispatcher.UIThread.Post(() =>
                         {
@@ -2956,7 +2960,8 @@ namespace FracturingFog.Hosting
                                     "KIFS Scale to the fold's per-iteration scale (e.g. 3 for Menger), then re-export. " +
                                     "Also check Range encloses the fractal.", true);
                             else
-                                ShowInfo("Mesh export", $"Exported {tris} triangles to {e.Path}", false);
+                                ShowInfo("Mesh export",
+                                    $"Exported {tris} triangles to {e.Path}\n\n{rep?.PrintReadiness()}", false);
                         });
                     }
                     catch (Exception ex)
@@ -3211,7 +3216,7 @@ namespace FracturingFog.Hosting
                 }
                 var pex = host2.ViewState.FractalParameters;
                 string? path = await PickSaveAsync("Export Relief Mesh",
-                    "OBJ (*.obj)|*.obj|glTF binary (colour + PBR, *.glb)|*.glb|glTF (*.gltf)|*.gltf|PLY (vertex colour, *.ply)|*.ply|STL (*.stl)|*.stl|All files (*.*)|*.*",
+                    "OBJ (*.obj)|*.obj|glTF binary (colour + PBR, *.glb)|*.glb|glTF (*.gltf)|*.gltf|PLY (vertex colour, *.ply)|*.ply|3MF (colour + print units, *.3mf)|*.3mf|STL (*.stl)|*.stl|All files (*.*)|*.*",
                     host2.ViewState.FractalType + "-relief");
                 if (string.IsNullOrEmpty(path)) return;
                 // Copy the live buffers before handing to the worker (the render
@@ -3222,17 +3227,28 @@ namespace FracturingFog.Hosting
                 {
                     try
                     {
+                        global::FracturingFog.Export.MeshReport? rep = null;
                         int tris = global::FracturingFog.Export.HeightfieldMeshExporter.Export(
-                            albCopy, hgtCopy, hw, hh, pex, path);
-                        Dispatcher.UIThread.Post(() => ShowInfo("Relief mesh export",
-                            tris > 0 ? $"Exported {tris} triangles to {path}"
-                                     : "Nothing to export (height field is flat or fully culled).",
-                            tris == 0));
+                            albCopy, hgtCopy, hw, hh, pex, path, onReport: r => rep = r);
+                        string readiness = tris > 0 && rep != null
+                            ? rep.Value.PrintReadiness()
+                            : "Nothing to export (height field is flat or fully culled).";
+                        string body = tris > 0
+                            ? $"Exported {tris} triangles to {path}\n\n{readiness}"
+                            : readiness;
+                        Dispatcher.UIThread.Post(() =>
+                        {
+                            vm.ReliefMeshPrintStatus = readiness;   // live status in the expander
+                            ShowInfo("Relief mesh export", body, tris == 0);
+                        });
                     }
                     catch (Exception ex)
                     {
                         Dispatcher.UIThread.Post(() =>
-                            ShowInfo("Relief mesh export error", $"Export failed: {ex.Message}", true));
+                        {
+                            vm.ReliefMeshPrintStatus = $"Export failed: {ex.Message}";
+                            ShowInfo("Relief mesh export error", $"Export failed: {ex.Message}", true);
+                        });
                     }
                 });
             };

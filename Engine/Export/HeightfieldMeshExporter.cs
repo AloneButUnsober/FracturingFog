@@ -50,7 +50,8 @@ public static class HeightfieldMeshExporter
     /// (downsample); pass -1 to take it from <see cref="FractalParameters.Relief2DMeshGrid"/>.
     /// No-op (returns 0) on an all-flat field.</summary>
     public static int Export(uint[] albedo, float[] height, int w, int h,
-                             FractalParameters p, string path, int targetGrid = -1)
+                             FractalParameters p, string path, int targetGrid = -1,
+                             Action<MeshReport>? onReport = null)
     {
         if (w < 2 || h < 2 || height.Length < w * h) return 0;
 
@@ -322,8 +323,22 @@ public static class HeightfieldMeshExporter
         else if (path.EndsWith(".glb", StringComparison.OrdinalIgnoreCase)
               || path.EndsWith(".gltf", StringComparison.OrdinalIgnoreCase))
             WriteGltf(path, verts, tris);
+        else if (path.EndsWith(".3mf", StringComparison.OrdinalIgnoreCase))
+            WriteThreeMf(path, verts, tris);
         else
             WriteObj(path, verts, tris);
+
+        // Export-time print-readiness check (#391): validate the solid we just wrote
+        // against the watertight / manifold / oriented contract, only when a caller
+        // wants the report (the UI shows a "will this print?" verdict).
+        if (onReport != null)
+        {
+            var pos = new List<(double, double, double)>(verts.Count);
+            foreach (var v in verts) pos.Add((v.X, v.Y, v.Z));
+            var t = new List<(int, int, int)>(tris.Count);
+            foreach (var tr in tris) t.Add((tr.a, tr.b, tr.c));
+            onReport(MeshValidator.Validate(pos, t));
+        }
         return tris.Count;
     }
 
@@ -618,6 +633,19 @@ public static class HeightfieldMeshExporter
             sb.Append(string.Create(ci,
                 $"f {t.a + 1}//{t.a + 1} {t.b + 1}//{t.b + 1} {t.c + 1}//{t.c + 1}\n"));
         File.WriteAllText(path, sb.ToString());
+    }
+
+    // 3MF (.3mf) with per-vertex colour + a millimetre print unit (roadmap S9,
+    // #391) — the format colour slicers prefer over STL. Same watertight, outward
+    // topology; the theme rides as the 3MF colour group.
+    private static void WriteThreeMf(string path, List<Vert> verts, List<(int a, int b, int c)> tris)
+    {
+        var pos = new List<(double, double, double)>(verts.Count);
+        var col = new List<uint>(verts.Count);
+        foreach (var v in verts) { pos.Add((v.X, v.Y, v.Z)); col.Add(v.C); }
+        var t = new List<(int, int, int)>(tris.Count);
+        foreach (var tr in tris) t.Add((tr.a, tr.b, tr.c));
+        ThreeMfMeshWriter.Write(path, pos, col, t);
     }
 
     // Binary little-endian PLY with per-vertex COLOUR (roadmap S9.3, #391) — the
