@@ -302,7 +302,7 @@ Broadens the lighting vocabulary without a scene graph.
   force-CPU on the 8 GPU 3D-fractal calculators (relief path gated; those still
   render directional-only on GPU), area lights (couple S4).
 
-### S9 — Mesh export maturation ◐ (#391)
+### S9 — Mesh export maturation ☑ (#391)
 Mesh export is the **one place FF crosses from renderer into geometry producer** —
 THE handoff line. The discipline: be a great mesh *exporter*, never a mesh
 *editor*. Today FF meshes the relief heightfield (2.5D displaced grid → printable);
