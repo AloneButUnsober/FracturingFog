@@ -147,6 +147,65 @@ public static class UserBulbMeshExporter
         return tris.Count;
     }
 
+    // ── Dual contouring (sharp-feature meshing, roadmap S9, #391) ─────────────
+
+    /// <summary>Dual-contouring export from any distance estimator — the
+    /// sharp-feature alternative to <c>ExportMarchingCubes</c>. Thin adapter over the
+    /// <see cref="SampleDistance"/> overload.</summary>
+    public static int ExportDualContouring(
+        string filePath, FracturingFog.Rendering.Lighting.IDistanceEstimator de,
+        double cx, double cy, double cz, double range, int n,
+        double isoScale = 0.5, bool isoAbsolute = false,
+        SampleSurfaceColor? sampleColor = null, Action<MeshReport>? onReport = null,
+        CancellationToken ct = default)
+        => ExportDualContouring(filePath, de.Evaluate, cx, cy, cz, range, n,
+                                isoScale, isoAbsolute, sampleColor, onReport, ct);
+
+    /// <summary>Dual-contouring export. Places ONE QEF-solved vertex per cell so hard
+    /// creases (Mandelbox facets, KIFS corners) stay crisp instead of being rounded
+    /// onto grid edges like Marching Cubes. Same file-extension dispatch, per-vertex
+    /// colour (<paramref name="sampleColor"/>) and print-readiness callback
+    /// (<paramref name="onReport"/>) as the MC path. Interior mesher — closed when the
+    /// shape is fully inside the sample cube (auto-sized range), open where it exits
+    /// the box (a boundary cap is a follow-up).</summary>
+    public static int ExportDualContouring(
+        string filePath, SampleDistance sample,
+        double cx, double cy, double cz, double range, int n,
+        double isoScale = 0.5, bool isoAbsolute = false,
+        SampleSurfaceColor? sampleColor = null, Action<MeshReport>? onReport = null,
+        CancellationToken ct = default)
+    {
+        var (verts, norms, tris) = DualContourMesher.Build(sample, cx, cy, cz, range, n, isoScale, isoAbsolute, ct);
+        if (ct.IsCancellationRequested) return 0;
+        if (tris.Count == 0) { File.WriteAllText(filePath, "# empty\n"); return 0; }
+
+        List<uint>? colors = null;
+        if (sampleColor != null)
+        {
+            colors = new List<uint>(verts.Count);
+            for (int i = 0; i < verts.Count; i++)
+            {
+                var v = verts[i]; var nn = norms[i];
+                colors.Add(sampleColor(v.X, v.Y, v.Z, nn.X, nn.Y, nn.Z));
+            }
+        }
+
+        if (filePath.EndsWith(".stl", StringComparison.OrdinalIgnoreCase))
+            WriteStlBinary(filePath, verts, tris);
+        else if (filePath.EndsWith(".glb", StringComparison.OrdinalIgnoreCase)
+              || filePath.EndsWith(".gltf", StringComparison.OrdinalIgnoreCase))
+            WriteGltf(filePath, verts, norms, colors, tris);
+        else if (filePath.EndsWith(".ply", StringComparison.OrdinalIgnoreCase))
+            WritePlyColored(filePath, verts, norms, colors, tris);
+        else if (filePath.EndsWith(".3mf", StringComparison.OrdinalIgnoreCase))
+            ThreeMfMeshWriter.Write(filePath, verts, colors, tris);
+        else
+            WriteObjSmooth(filePath, verts, norms, tris);
+
+        if (onReport != null) onReport(MeshValidator.Validate(verts, tris));
+        return tris.Count;
+    }
+
     /// <summary>Probe the object-space half-extent that encloses the set, so the
     /// export cube can be auto-sized instead of hand-tuned (too small clips the
     /// fractal; too large wastes grid resolution and can leave the mesh open where
