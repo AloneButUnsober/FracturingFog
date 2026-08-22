@@ -11,6 +11,15 @@ using FracturingFog.UI.Avalonia.ViewModels;
 namespace FracturingFog.UI.Avalonia.Views;
 
 /// <summary>
+/// DEPRECATED (rc3-ui-prep). The FloatingMenu VIEW is retired — the Control
+/// Center (<see cref="ControlCenterView"/> / <see cref="ViewModels.ControlCenterViewModel"/>)
+/// is the main menu form going forward. No UI path opens this window anymore
+/// (toolbar Menu button, the "M" hotkey, and the render-window right-click all
+/// route to the Control Center). Do NOT wire this view back up or add features
+/// to it; build new menu surfaces in the Control Center instead. Only
+/// <see cref="ViewModels.FloatingMenuViewModel"/> lives on — the Control Center
+/// reuses it as the shared command/state hub.
+///
 /// Avalonia port of <c>FloatingMenu</c>. Main floating control panel —
 /// region navigation, theme library, post-FX sliders, slideshow + video
 /// launchers. All host coupling flows through

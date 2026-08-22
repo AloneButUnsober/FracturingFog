@@ -44,6 +44,23 @@ tree, and the `--winforms` launch flag — was deleted in #116. The root
 `FracturingFogCLD.csproj` no longer sets `UseWindowsForms`; there is no
 `System.Windows.Forms` reference anywhere in the codebase.
 
+### Main menu = Control Center. FloatingMenu view is DEPRECATED.
+
+**The Control Center (`UI.Avalonia/Views/ControlCenterView.axaml` +
+`ViewModels/ControlCenterViewModel.cs`) is the main menu form going forward.**
+The old `FloatingMenuView` window is retired (rc3-ui-prep): the toolbar **Menu**
+button, the **M** hotkey, and the render-window right-click all open the Control
+Center now. No UI path opens `FloatingMenuView` anymore.
+
+- **Do NOT make changes to `FloatingMenuView.axaml` / `.axaml.cs`** or re-wire it
+  back into the UI. Add new menu surfaces as Control Center sections
+  (`UI.Avalonia/Views/ControlCenterSections/*`) instead.
+- **`FloatingMenuViewModel` lives on** — it is the shared command/state hub the
+  Control Center binds through (`ControlCenterViewModel.Menu = shell.FloatingMenu`)
+  and the shell wires many events on it. That VM is fine to touch; the *view* is not.
+- `ShowFloatingMenuCommand` + `ShellViewModel.IsFloatingMenuVisible` +
+  `MainWindow.SyncMenu` are dormant/deprecated; leave them, don't re-bind.
+
 ### What is the Avalonia shell? (the only path)
 
 - Entry: `Program.cs` → `FracturingFog.UI.Avalonia.AvaloniaShell.Run(...)`

@@ -64,8 +64,11 @@
                 <StackPanel Orientation="Horizontal" Spacing="6" DockPanel.Dock="Left">
                     <Button Classes="toolbar" Content="Reset"
                             Command="{Binding Main.ResetViewCommand}" />
+                    <!-- Menu now opens the Control Center (the main menu form going
+                         forward). The legacy FloatingMenu view is deprecated. -->
                     <Button Classes="toolbar" Content="Menu"
-                            Command="{Binding ShowFloatingMenuCommand}" />
+                            Command="{Binding ShowControlCenterCommand}"
+                            ToolTip.Tip="Open the Control Center (main menu)" />
                     <ToggleButton Classes="toolbar" Content="Terminal"
                                   IsChecked="{Binding IsTerminalMode, Mode=TwoWay}"
                                   ToolTip.Tip="Terminal Mode — show the fractal as live ASCII / text art" />

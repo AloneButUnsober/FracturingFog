@@ -93,8 +93,13 @@
              re-instantiated in a floating PanelHostWindow when detached. Child
              DataContext is inherited (this ControlCenterViewModel), so bindings
              resolve identically docked or detached. -->
-        <ScrollViewer Padding="14,12" VerticalScrollBarVisibility="Auto">
-            <Panel>
+        <!-- Padding lives on the inner Panel (as Margin), NOT on the ScrollViewer:
+             ScrollViewer bottom Padding shrinks the viewport but is not counted in
+             the scroll extent, so the last control (e.g. Color & Light's final
+             checkbox) could never scroll fully into view. Margin is measured as
+             part of the content, so the extent now includes the bottom gap. -->
+        <ScrollViewer VerticalScrollBarVisibility="Auto">
+            <Panel Margin="14,12">
                 <sections:ViewSectionView       IsVisible="{Binding IsViewSection}" />
                 <sections:ExploreSectionView    IsVisible="{Binding IsExploreSection}" />
                 <sections:ColorLightSectionView IsVisible="{Binding IsColorLightSection}" />

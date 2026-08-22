@@ -53,8 +53,11 @@
             </StackPanel>
         </Border>
 
-        <ScrollViewer Padding="8">
-            <StackPanel Spacing="2">
+        <!-- Padding as inner Margin, not on the ScrollViewer: bottom ScrollViewer
+             Padding shrinks the viewport but is not in the scroll extent, so the
+             last control can't scroll fully into view. -->
+        <ScrollViewer>
+            <StackPanel Spacing="2" Margin="8">
 
                 <Expander Header="Glyph" IsExpanded="True">
                     <StackPanel Spacing="2">

@@ -86,10 +86,14 @@ public sealed partial class ControlCenterView : UserControl
         content.DataContext = vm;
 
         // Wrap so a tall section (e.g. Explore) can scroll inside the window.
+        // Inset lives on the content Margin, NOT the ScrollViewer Padding: bottom
+        // ScrollViewer Padding shrinks the viewport but is not counted in the
+        // scroll extent, so the last control (e.g. Color & Light's final checkbox)
+        // could never scroll fully into view in a detached panel.
+        content.Margin = new Thickness(12);
         var scroller = new ScrollViewer
         {
             Content = content,
-            Padding = new Thickness(12),
             VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
         };
 

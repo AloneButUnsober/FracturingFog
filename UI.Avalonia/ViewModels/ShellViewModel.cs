@@ -543,6 +543,9 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
             null, global::System.Threading.Timeout.Infinite, global::System.Threading.Timeout.Infinite);
 
         CancelRenderBusyCommand   = ReactiveCommand.Create(CancelCurrentBusy);
+        // DEPRECATED: opens the retired FloatingMenu view. No longer bound from
+        // any UI (toolbar Menu button + "M" hotkey now open the Control Center).
+        // Kept only so stale bindings don't NRE; do not re-bind. See ControlCenter.
         ShowFloatingMenuCommand   = ReactiveCommand.Create(() => IsFloatingMenuVisible = !IsFloatingMenuVisible);
         ShowHelpCommand           = ReactiveCommand.Create(ShowHelp);
         ShowColorThemeEditorCommand = ReactiveCommand.Create(ShowColorThemeEditor);
@@ -682,8 +685,8 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
     {
         switch (key)
         {
-            case InputKey.M:                       // toggle floating menu
-                IsFloatingMenuVisible = !IsFloatingMenuVisible;
+            case InputKey.M:                       // open Control Center (main menu)
+                ShowControlCenter();
                 return true;
             case InputKey.T:                       // open colour-theme editor
                 ShowColorThemeEditor();
