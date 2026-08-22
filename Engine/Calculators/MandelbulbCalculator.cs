@@ -335,11 +335,41 @@ public sealed class MandelbulbCalculator : IFractalCalculator
 /// <summary>P3 — concrete DE struct for the Mandelbulb. Passed to
 /// <see cref="FracturingFog.Rendering.Lighting.ShadingPipeline.Shade{TDe}"/>
 /// so every shadow / AO / reflection / volumetric DE call inlines.</summary>
-public readonly struct MandelbulbDe : FracturingFog.Rendering.Lighting.IDistanceEstimator
+public readonly struct MandelbulbDe
+    : FracturingFog.Rendering.Lighting.IDistanceEstimator,
+      FracturingFog.Rendering.Lighting.IOrbitTrapEstimator
 {
     public readonly double Power;
     public readonly int Iter;
     public MandelbulbDe(double power, int iter) { Power = power; Iter = iter; }
+
+    /// <summary>Origin orbit trap (roadmap S9, #391): the closest the iteration orbit
+    /// passes to the origin, normalized to [0, 1] over the r &lt; 2 escape radius. A
+    /// view-independent, fractal-meaningful colour driver for the mesh export.</summary>
+    public double OrbitTrap(double x, double y, double z)
+    {
+        double zx = x, zy = y, zz = z;
+        double minR = double.PositiveInfinity;
+        int iter = Iter;
+        double power = Power;
+        for (int i = 0; i < iter; i++)
+        {
+            double r = System.Math.Sqrt(zx * zx + zy * zy + zz * zz);
+            if (r < minR) minR = r;
+            if (r > 2.0) break;
+            double theta = System.Math.Acos(zz / r);
+            double phi = System.Math.Atan2(zy, zx);
+            double rPow = System.Math.Pow(r, power);
+            double newTheta = theta * power;
+            double newPhi = phi * power;
+            double sinT = System.Math.Sin(newTheta);
+            zx = rPow * sinT * System.Math.Cos(newPhi) + x;
+            zy = rPow * sinT * System.Math.Sin(newPhi) + y;
+            zz = rPow * System.Math.Cos(newTheta) + z;
+        }
+        if (double.IsPositiveInfinity(minR)) return 0.0;
+        return System.Math.Clamp(minR * 0.5, 0.0, 1.0);   // r in [0,2] → [0,1]
+    }
     [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.AggressiveInlining)]
     public double Evaluate(double x, double y, double z)
     {
