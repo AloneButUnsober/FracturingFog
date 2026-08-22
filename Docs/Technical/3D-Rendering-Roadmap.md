@@ -390,8 +390,12 @@ Sub-items (ranked fit × payoff):
    - **Mesher UI selector LANDED (PR #447).** "Mesher:" combo on the UserBulb export
      panel picks Marching Cubes / Dual contouring (`MeshingMode` enum, persisted per
      bulb via `UserBulbSnapshot.ExportMeshingMode`); the host switches
-     `ExportMarchingCubes` / `ExportDualContouring` accordingly. **Remaining:** a DC
-     boundary cap.
+     `ExportMarchingCubes` / `ExportDualContouring` accordingly.
+   - **DC boundary cap LANDED (PR #448).** DC gained the #422 seal: an extra ring of
+     padding cells marched against a virtual outside shell caps box-face crossings
+     into a watertight solid (byte-identical no-op when interior). The "Seal box
+     faces" toggle now governs both meshers. Both MC and DC are print-ready on all
+     paths.
 3. **Vertex-color export** — bake the theme into per-vertex color (PLY / 3MF
    color / glTF) so a color print or web drop-in carries the fractal's *palette*.
    The palette idiom crossing into mesh — the biggest differentiator.

@@ -2942,6 +2942,7 @@ namespace FracturingFog.Hosting
                             ? global::FracturingFog.Export.UserBulbMeshExporter.ExportDualContouring(
                                 e.Path, de, cx0, cy0, 0,
                                 e.Range, e.GridN, e.IsoScale, e.IsoAbsolute,
+                                capBoundary: e.CapBoundary,
                                 sampleColor: colorFn, onReport: r => rep = r, ct: cts.Token)
                             : global::FracturingFog.Export.UserBulbMeshExporter.ExportMarchingCubes(
                                 e.Path, de, cx0, cy0, 0,
