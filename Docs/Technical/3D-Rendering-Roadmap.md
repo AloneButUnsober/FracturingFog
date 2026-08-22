@@ -386,8 +386,12 @@ Sub-items (ranked fit × payoff):
      instead of chamfering onto grid edges like MC. `UserBulbMeshExporter.ExportDualContouring`
      shares the MC path's format dispatch, colour and print-readiness. Interior mesher
      (closed when the shape is inside the cube). Tests: sphere → closed/outward/volume,
-     L∞ box → DC vertex on the true 3D corner far tighter than MC. **Remaining:** a UI
-     mode selector (MC / DC) and a DC boundary cap.
+     L∞ box → DC vertex on the true 3D corner far tighter than MC.
+   - **Mesher UI selector LANDED (PR #447).** "Mesher:" combo on the UserBulb export
+     panel picks Marching Cubes / Dual contouring (`MeshingMode` enum, persisted per
+     bulb via `UserBulbSnapshot.ExportMeshingMode`); the host switches
+     `ExportMarchingCubes` / `ExportDualContouring` accordingly. **Remaining:** a DC
+     boundary cap.
 3. **Vertex-color export** — bake the theme into per-vertex color (PLY / 3MF
    color / glTF) so a color print or web drop-in carries the fractal's *palette*.
    The palette idiom crossing into mesh — the biggest differentiator.
