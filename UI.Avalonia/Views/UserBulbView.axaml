@@ -479,6 +479,12 @@
                                     <NumericUpDown MinWidth="140" Minimum="5" Maximum="180" Increment="5" FormatString="F0"
                                                    Value="{Binding ExportCreaseDegrees, Mode=TwoWay}" />
                                  </StackPanel>
+                                 <StackPanel Grid.Column="3" Grid.Row="0" Orientation="Horizontal" VerticalAlignment="Center"
+                                             Spacing="4" Margin="10,0,4,0">
+                                    <CheckBox Content="Seal box faces" VerticalAlignment="Center"
+                                              IsChecked="{Binding ExportCapBoundary, Mode=TwoWay}"
+                                              ToolTip.Tip="Cap the mesh where the solid crosses a face of the sample cube (#422). On (default) → a watertight, print-ready solid even when the fractal exits the box. Off → raw Marching Cubes, leaving open holes where the surface exits (a shell, not a solid). No effect when the fractal is fully inside the Range." />
+                                 </StackPanel>
                              </Grid>
                         <!--<WrapPanel Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="5" Grid.RowSpan="2"
                                    Orientation="Horizontal" Margin="0,8,0,0">

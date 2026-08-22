@@ -892,6 +892,7 @@ public sealed class UserBulbViewModel : ViewModelBase
         ExportIsoAbsolute = _exportIsoAbsolute,
         ExportSuperSamples = _exportSuperSamples,
         ExportCreaseDegrees = _exportCreaseDegrees,
+        ExportCapBoundary = _exportCapBoundary,
         Params           = _params.UserBulbParams.ConvertAll(p => p.Clone()),
     };
 
@@ -954,6 +955,7 @@ public sealed class UserBulbViewModel : ViewModelBase
         if (s.ExportIsoAbsolute is { } eia)      ExportIsoAbsolute = eia;
         if (s.ExportSuperSamples is { } ess)     ExportSuperSamples = ess;
         if (s.ExportCreaseDegrees is { } ecd)    ExportCreaseDegrees = ecd;
+        if (s.ExportCapBoundary is { } ecb)      ExportCapBoundary = ecb;
 
         if (s.Params is { Count: > 0 } srcParams)
         {
@@ -1221,7 +1223,8 @@ public sealed class UserBulbViewModel : ViewModelBase
         // 11–14; render default 8 is blobby) and/or drop JacobianH toward 1e-5.
         var meshArgs = new MeshExportEventArgs(
             ExportGridN, ExportRange, pathArgs.Path!, Iterations, JacobianH,
-            ExportIsoScale, ExportIsoAbsolute, ExportSuperSamples, ExportCreaseDegrees);
+            ExportIsoScale, ExportIsoAbsolute, ExportSuperSamples, ExportCreaseDegrees,
+            ExportCapBoundary);
         // The host runs the marching cubes off-thread and calls NotifyExportDone
         // when finished; gate the buttons meanwhile. Only latch busy when a host
         // is actually listening, else the flag would never clear.
@@ -1330,6 +1333,18 @@ public sealed class UserBulbViewModel : ViewModelBase
         set => this.RaiseAndSetIfChanged(ref _exportCreaseDegrees, Math.Clamp(value, 5.0, 180.0));
     }
 
+    private bool _exportCapBoundary = true;
+    /// <summary>Seal the mesh where the solid crosses a sample-cube face (#422).
+    /// On (default) marches an extra ring against a virtual outside shell so the
+    /// box-face cut is capped flush → a watertight, print-ready solid even when the
+    /// fractal exits the cube. Off restores the raw open-boundary Marching-Cubes
+    /// output (a shell with holes where it exits the box).</summary>
+    public bool ExportCapBoundary
+    {
+        get => _exportCapBoundary;
+        set => this.RaiseAndSetIfChanged(ref _exportCapBoundary, value);
+    }
+
     private string NextFreeName()
     {
         var used = new System.Collections.Generic.HashSet<string>();
@@ -1396,8 +1411,9 @@ public sealed class SaveFileEventArgs : EventArgs
 public sealed class MeshExportEventArgs : EventArgs
 {
     public MeshExportEventArgs(int gridN, double range, string path, int iterations, double jacobianH,
-                               double isoScale, bool isoAbsolute, int superSamples, double creaseDegrees)
-    { GridN = gridN; Range = range; Path = path; Iterations = iterations; JacobianH = jacobianH; IsoScale = isoScale; IsoAbsolute = isoAbsolute; SuperSamples = superSamples; CreaseDegrees = creaseDegrees; }
+                               double isoScale, bool isoAbsolute, int superSamples, double creaseDegrees,
+                               bool capBoundary = true)
+    { GridN = gridN; Range = range; Path = path; Iterations = iterations; JacobianH = jacobianH; IsoScale = isoScale; IsoAbsolute = isoAbsolute; SuperSamples = superSamples; CreaseDegrees = creaseDegrees; CapBoundary = capBoundary; }
     public int GridN { get; }
     public double Range { get; }
     public string Path { get; }
@@ -1412,6 +1428,9 @@ public sealed class MeshExportEventArgs : EventArgs
     // Crease angle (deg): faces differing by more than this keep a hard edge
     // (facets stay sharp). 180 = smooth everything.
     public double CreaseDegrees { get; }
+    // #422 — seal the mesh where the solid crosses a sample-cube face. On (default)
+    // → watertight print-ready solid; off → raw open-boundary Marching Cubes.
+    public bool CapBoundary { get; }
     // #112 — export-specific DE quality (independent of the render's live iter/
     // jacH) so mesh geometry can resolve detail the numerical DE otherwise
     // smooths away.
