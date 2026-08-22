@@ -3230,15 +3230,25 @@ namespace FracturingFog.Hosting
                         global::FracturingFog.Export.MeshReport? rep = null;
                         int tris = global::FracturingFog.Export.HeightfieldMeshExporter.Export(
                             albCopy, hgtCopy, hw, hh, pex, path, onReport: r => rep = r);
-                        string body = tris > 0
-                            ? $"Exported {tris} triangles to {path}\n\n{rep?.PrintReadiness()}"
+                        string readiness = tris > 0 && rep != null
+                            ? rep.Value.PrintReadiness()
                             : "Nothing to export (height field is flat or fully culled).";
-                        Dispatcher.UIThread.Post(() => ShowInfo("Relief mesh export", body, tris == 0));
+                        string body = tris > 0
+                            ? $"Exported {tris} triangles to {path}\n\n{readiness}"
+                            : readiness;
+                        Dispatcher.UIThread.Post(() =>
+                        {
+                            vm.ReliefMeshPrintStatus = readiness;   // live status in the expander
+                            ShowInfo("Relief mesh export", body, tris == 0);
+                        });
                     }
                     catch (Exception ex)
                     {
                         Dispatcher.UIThread.Post(() =>
-                            ShowInfo("Relief mesh export error", $"Export failed: {ex.Message}", true));
+                        {
+                            vm.ReliefMeshPrintStatus = $"Export failed: {ex.Message}";
+                            ShowInfo("Relief mesh export error", $"Export failed: {ex.Message}", true);
+                        });
                     }
                 });
             };

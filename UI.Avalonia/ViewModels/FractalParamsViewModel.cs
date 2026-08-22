@@ -597,6 +597,17 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
         }
     }
 
+    private string _reliefMeshPrintStatus = "Export a mesh to check print-readiness.";
+    /// <summary>Live "will this print?" verdict for the relief mesh export
+    /// (roadmap S9, #391) — set by the host after each export from the MeshValidator
+    /// report, shown in the Mesh export expander so the user sees whether the solid
+    /// is watertight / print-ready without opening the toast.</summary>
+    public string ReliefMeshPrintStatus
+    {
+        get => _reliefMeshPrintStatus;
+        set => this.RaiseAndSetIfChanged(ref _reliefMeshPrintStatus, value);
+    }
+
     public Interior2DBackgroundMode Interior2DBackground
     {
         get => _p.Interior2DBackground;

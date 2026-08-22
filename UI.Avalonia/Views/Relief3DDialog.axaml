@@ -308,11 +308,17 @@
                 </Grid>
                 <TextBlock HorizontalAlignment="Right" Opacity="0.75"
                            Text="{Binding Relief2DMeshSizeEstimate, StringFormat=Estimated size: {0}}" />
+                <!-- Live "will this print?" verdict (roadmap S9, #391) — set from the
+                     MeshValidator report after each export. -->
+                <TextBlock Margin="0,6,0,0" TextWrapping="Wrap" FontFamily="Consolas,monospace"
+                           FontSize="11" Opacity="0.9"
+                           Text="{Binding ReliefMeshPrintStatus}"
+                           ToolTip.Tip="Print-readiness of the last relief mesh export: watertight / 2-manifold check from the mesh validator, plus size, volume and triangle count." />
                 </StackPanel>
                 </Expander>
 
                 <!-- #138 — export the 3D object as a mesh -->
-                <Button Content="Export mesh (OBJ / STL)…"
+                <Button Content="Export mesh (OBJ / PLY / glTF / 3MF / STL)…"
                         Command="{Binding ExportReliefMeshCommand}"
                         IsEnabled="{Binding Relief2DRaymarch}"
                         HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"
