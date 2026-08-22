@@ -370,8 +370,11 @@ Sub-items (ranked fit × payoff):
      the surface is interior (shell corners all outside), so the auto-sized path is
      unchanged; `capBoundary` flag (default true) on both `ExportMarchingCubes`
      overloads. Tests: undersized cube now closed+outward with cap, still open with
-     cap off, cap tri-for-tri no-op when interior. **Remaining:** a UI toggle for
-     the cap; dual contouring for sharp Mandelbox/KIFS edges.
+     cap off, cap tri-for-tri no-op when interior.
+   - **Cap UI toggle LANDED (PR #443).** "Seal box faces" checkbox on the UserBulb
+     mesh-export panel drives `capBoundary`; persisted per bulb
+     (`UserBulbSnapshot.ExportCapBoundary`, nullable → older snapshots keep the
+     default-on). **Remaining:** dual contouring for sharp Mandelbox/KIFS edges.
 3. **Vertex-color export** — bake the theme into per-vertex color (PLY / 3MF
    color / glTF) so a color print or web drop-in carries the fractal's *palette*.
    The palette idiom crossing into mesh — the biggest differentiator.
