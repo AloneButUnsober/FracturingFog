@@ -2938,11 +2938,16 @@ namespace FracturingFog.Hosting
                     try
                     {
                         global::FracturingFog.Export.MeshReport? rep = null;
-                        int tris = global::FracturingFog.Export.UserBulbMeshExporter.ExportMarchingCubes(
-                            e.Path, de, cx0, cy0, 0,
-                            e.Range, e.GridN, e.IsoScale, e.IsoAbsolute, e.SuperSamples, e.CreaseDegrees,
-                            capBoundary: e.CapBoundary,
-                            sampleColor: colorFn, onReport: r => rep = r, ct: cts.Token);
+                        int tris = e.MeshingMode == global::FracturingFog.Models.MeshingMode.DualContouring
+                            ? global::FracturingFog.Export.UserBulbMeshExporter.ExportDualContouring(
+                                e.Path, de, cx0, cy0, 0,
+                                e.Range, e.GridN, e.IsoScale, e.IsoAbsolute,
+                                sampleColor: colorFn, onReport: r => rep = r, ct: cts.Token)
+                            : global::FracturingFog.Export.UserBulbMeshExporter.ExportMarchingCubes(
+                                e.Path, de, cx0, cy0, 0,
+                                e.Range, e.GridN, e.IsoScale, e.IsoAbsolute, e.SuperSamples, e.CreaseDegrees,
+                                capBoundary: e.CapBoundary,
+                                sampleColor: colorFn, onReport: r => rep = r, ct: cts.Token);
                         bool cancelled = cts.IsCancellationRequested;
                         Dispatcher.UIThread.Post(() =>
                         {

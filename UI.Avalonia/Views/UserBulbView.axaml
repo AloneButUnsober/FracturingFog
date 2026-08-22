@@ -483,7 +483,16 @@
                                              Spacing="4" Margin="10,0,4,0">
                                     <CheckBox Content="Seal box faces" VerticalAlignment="Center"
                                               IsChecked="{Binding ExportCapBoundary, Mode=TwoWay}"
-                                              ToolTip.Tip="Cap the mesh where the solid crosses a face of the sample cube (#422). On (default) → a watertight, print-ready solid even when the fractal exits the box. Off → raw Marching Cubes, leaving open holes where the surface exits (a shell, not a solid). No effect when the fractal is fully inside the Range." />
+                                              ToolTip.Tip="Cap the mesh where the solid crosses a face of the sample cube (#422). On (default) → a watertight, print-ready solid even when the fractal exits the box. Off → raw Marching Cubes, leaving open holes where the surface exits (a shell, not a solid). No effect when the fractal is fully inside the Range. (Marching Cubes only.)" />
+                                 </StackPanel>
+                                 <StackPanel Grid.Column="3" Grid.Row="1" Orientation="Horizontal" VerticalAlignment="Center"
+                                             Spacing="4" Margin="10,0,4,0">
+                                    <TextBlock Text="Mesher:" VerticalAlignment="Center"
+                                               ToolTip.Tip="Isosurface algorithm. Marching Cubes is smooth but rounds hard edges onto the grid; Dual contouring places one vertex per cell to keep hard creases sharp (Mandelbox facets, KIFS corners). Crease / SS / Seal box faces apply to Marching Cubes only." />
+                                    <ComboBox MinWidth="150" SelectedIndex="{Binding ExportMeshingModeIndex}">
+                                        <ComboBoxItem Content="Marching Cubes (smooth)" />
+                                        <ComboBoxItem Content="Dual contouring (sharp)" />
+                                    </ComboBox>
                                  </StackPanel>
                              </Grid>
                         <!--<WrapPanel Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="5" Grid.RowSpan="2"
