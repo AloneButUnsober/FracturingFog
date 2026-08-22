@@ -58,10 +58,11 @@ public static class UserBulbMeshExporter
         double cx, double cy, double cz, double range, int n,
         double isoScale = 0.5, bool isoAbsolute = false, int superSamples = 1,
         double creaseDegrees = 180.0, bool capBoundary = true,
-        SampleSurfaceColor? sampleColor = null, CancellationToken ct = default)
+        SampleSurfaceColor? sampleColor = null, Action<MeshReport>? onReport = null,
+        CancellationToken ct = default)
         => ExportMarchingCubes(filePath, de.Evaluate, cx, cy, cz, range, n,
                                isoScale, isoAbsolute, superSamples, creaseDegrees, capBoundary,
-                               sampleColor, ct);
+                               sampleColor, onReport, ct);
 
     /// <summary>Marching Cubes export. Dispatches on file extension:
     /// `.stl` → binary STL (face normals); anything else → OBJ with
@@ -104,7 +105,8 @@ public static class UserBulbMeshExporter
         double cx, double cy, double cz, double range, int n,
         double isoScale = 0.5, bool isoAbsolute = false, int superSamples = 1,
         double creaseDegrees = 180.0, bool capBoundary = true,
-        SampleSurfaceColor? sampleColor = null, CancellationToken ct = default)
+        SampleSurfaceColor? sampleColor = null, Action<MeshReport>? onReport = null,
+        CancellationToken ct = default)
     {
         var (verts, norms, tris) = BuildMarchingCubes(sample, cx, cy, cz, range, n, isoScale, isoAbsolute, superSamples, capBoundary, ct);
         // Cancelled mid-build: leave any existing file untouched (don't clobber it
@@ -138,6 +140,10 @@ public static class UserBulbMeshExporter
             ThreeMfMeshWriter.Write(filePath, verts, colors, tris);
         else
             WriteObjSmooth(filePath, verts, norms, tris);
+
+        // Export-time print-readiness check (#391): validate the written solid only
+        // when the caller wants the report (the UI's "will this print?" verdict).
+        if (onReport != null) onReport(MeshValidator.Validate(verts, tris));
         return tris.Count;
     }
 

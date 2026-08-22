@@ -50,7 +50,8 @@ public static class HeightfieldMeshExporter
     /// (downsample); pass -1 to take it from <see cref="FractalParameters.Relief2DMeshGrid"/>.
     /// No-op (returns 0) on an all-flat field.</summary>
     public static int Export(uint[] albedo, float[] height, int w, int h,
-                             FractalParameters p, string path, int targetGrid = -1)
+                             FractalParameters p, string path, int targetGrid = -1,
+                             Action<MeshReport>? onReport = null)
     {
         if (w < 2 || h < 2 || height.Length < w * h) return 0;
 
@@ -326,6 +327,18 @@ public static class HeightfieldMeshExporter
             WriteThreeMf(path, verts, tris);
         else
             WriteObj(path, verts, tris);
+
+        // Export-time print-readiness check (#391): validate the solid we just wrote
+        // against the watertight / manifold / oriented contract, only when a caller
+        // wants the report (the UI shows a "will this print?" verdict).
+        if (onReport != null)
+        {
+            var pos = new List<(double, double, double)>(verts.Count);
+            foreach (var v in verts) pos.Add((v.X, v.Y, v.Z));
+            var t = new List<(int, int, int)>(tris.Count);
+            foreach (var tr in tris) t.Add((tr.a, tr.b, tr.c));
+            onReport(MeshValidator.Validate(pos, t));
+        }
         return tris.Count;
     }
 
