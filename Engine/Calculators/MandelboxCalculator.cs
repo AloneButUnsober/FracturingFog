@@ -301,7 +301,9 @@ public sealed class MandelboxCalculator : IFractalCalculator
     /// DE = |z| / |dz|. dz at +1 per iter accounts for the +c term.
     /// </summary>
     /// <summary>P3 — concrete DE struct. Inlines through Shade&lt;De&gt;.</summary>
-    public readonly struct De : FracturingFog.Rendering.Lighting.IDistanceEstimator
+    public readonly struct De
+        : FracturingFog.Rendering.Lighting.IDistanceEstimator,
+          FracturingFog.Rendering.Lighting.IOrbitTrapEstimator
     {
         private readonly double _scale, _fixedR2, _minR2, _bailout2;
         private readonly int _iter;
@@ -310,6 +312,34 @@ public sealed class MandelboxCalculator : IFractalCalculator
         [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.AggressiveInlining)]
         public double Evaluate(double x, double y, double z)
             => MandelboxDE(x, y, z, _scale, _fixedR2, _minR2, _bailout2, _iter);
+
+        // Origin orbit trap (roadmap S9, #391): closest the folded orbit passes to
+        // the origin, normalized over the bailout radius. View-independent mesh
+        // colour driver.
+        public double OrbitTrap(double x, double y, double z)
+            => MandelboxTrap(x, y, z, _scale, _fixedR2, _minR2, _bailout2, _iter);
+    }
+
+    private static double MandelboxTrap(double cx, double cy, double cz,
+        double scale, double fixedR2, double minR2, double bailout2, int iter)
+    {
+        double zx = cx, zy = cy, zz = cz;
+        double minR2t = double.MaxValue;
+        for (int i = 0; i < iter; i++)
+        {
+            if (zx > 1.0) zx = 2.0 - zx; else if (zx < -1.0) zx = -2.0 - zx;
+            if (zy > 1.0) zy = 2.0 - zy; else if (zy < -1.0) zy = -2.0 - zy;
+            if (zz > 1.0) zz = 2.0 - zz; else if (zz < -1.0) zz = -2.0 - zz;
+            double r2 = zx * zx + zy * zy + zz * zz;
+            if (r2 < minR2) { double f = fixedR2 / minR2; zx *= f; zy *= f; zz *= f; }
+            else if (r2 < fixedR2) { double f = fixedR2 / r2; zx *= f; zy *= f; zz *= f; }
+            zx = scale * zx + cx; zy = scale * zy + cy; zz = scale * zz + cz;
+            double rr = zx * zx + zy * zy + zz * zz;
+            if (rr < minR2t) minR2t = rr;
+            if (rr > bailout2) break;
+        }
+        double bail = Math.Sqrt(Math.Max(bailout2, 1e-9));
+        return Math.Clamp(Math.Sqrt(minR2t) / bail, 0.0, 1.0);
     }
 
     private static double MandelboxDE(double cx, double cy, double cz,

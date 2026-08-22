@@ -307,7 +307,9 @@ public sealed class KleinianCalculator : IFractalCalculator
     /// </summary>
     /// <summary>P3 — concrete DE struct. Holds references to the sphere
     /// centre arrays + tangent radius; iter loop runs inside KleinianDE.</summary>
-    public readonly struct De : FracturingFog.Rendering.Lighting.IDistanceEstimator
+    public readonly struct De
+        : FracturingFog.Rendering.Lighting.IDistanceEstimator,
+          FracturingFog.Rendering.Lighting.IOrbitTrapEstimator
     {
         private readonly double[] _cx, _cy, _cz;
         private readonly double _r;
@@ -317,6 +319,41 @@ public sealed class KleinianCalculator : IFractalCalculator
         [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.AggressiveInlining)]
         public double Evaluate(double x, double y, double z)
             => KleinianDE(x, y, z, _cx, _cy, _cz, _r, _iter);
+
+        // Orbit trap (roadmap S9, #391): closest the inversion orbit passes to a
+        // sphere boundary, normalized by the sphere radius. The natural trap for a
+        // sphere-inversion IFS; view-independent mesh colour driver.
+        public double OrbitTrap(double x, double y, double z)
+            => KleinianTrap(x, y, z, _cx, _cy, _cz, _r, _iter);
+    }
+
+    private static double KleinianTrap(
+        double px, double py, double pz,
+        double[] cx, double[] cy, double[] cz, double r, int iter)
+    {
+        double r2 = r * r;
+        int n = cx.Length;
+        double minBoundary = double.MaxValue;
+        for (int i = 0; i < iter; i++)
+        {
+            int bestK = -1;
+            double bestDeep = 0.0;
+            for (int k = 0; k < n; k++)
+            {
+                double dx = px - cx[k], dy = py - cy[k], dz = pz - cz[k];
+                double d = Math.Sqrt(dx * dx + dy * dy + dz * dz) - r;
+                double a = Math.Abs(d);
+                if (a < minBoundary) minBoundary = a;
+                if (d < bestDeep) { bestDeep = d; bestK = k; }
+            }
+            if (bestK < 0) break;
+            double ex = px - cx[bestK], ey = py - cy[bestK], ez = pz - cz[bestK];
+            double e2 = ex * ex + ey * ey + ez * ez;
+            if (e2 < 1e-30) break;
+            double f = r2 / e2;
+            px = cx[bestK] + ex * f; py = cy[bestK] + ey * f; pz = cz[bestK] + ez * f;
+        }
+        return Math.Clamp(minBoundary / Math.Max(r, 1e-9), 0.0, 1.0);
     }
 
     private static double KleinianDE(

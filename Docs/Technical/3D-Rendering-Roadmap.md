@@ -302,7 +302,7 @@ Broadens the lighting vocabulary without a scene graph.
   force-CPU on the 8 GPU 3D-fractal calculators (relief path gated; those still
   render directional-only on GPU), area lights (couple S4).
 
-### S9 — Mesh export maturation ◐ (#391)
+### S9 — Mesh export maturation ☑ (#391)
 Mesh export is the **one place FF crosses from renderer into geometry producer** —
 THE handoff line. The discipline: be a great mesh *exporter*, never a mesh
 *editor*. Today FF meshes the relief heightfield (2.5D displaced grid → printable);
@@ -430,8 +430,12 @@ Sub-items (ranked fit × payoff):
      point; `MandelbulbDe` implements it (closest the orbit passes to the origin),
      and `MakeMeshColorSource` drives the palette with the trap when the DE supports
      it, radial otherwise. So a Mandelbulb mesh carries fractal structure in its
-     colour. **Remaining:** implement `IOrbitTrapEstimator` on the other DE families
-     (Mandelbox / Julia / Kleinian / …) — they keep the radial fallback until then.
+     colour.
+   - **Orbit trap across all struct families LANDED (PR #451).** `IOrbitTrapEstimator`
+     now on Mandelbox / QuaternionJulia / QuaternionMandelbrot / BicomplexMandelbrot
+     (origin trap) + Kleinian (nearest sphere-boundary trap). Every struct-based 3D
+     family exports with fractal-structured colour; only KIFS (a delegate-adapter DE)
+     keeps the radial fallback. S9 vertex-colour is complete.
    - **3MF LANDED (PR #441).** Self-contained 3MF writer (`ThreeMfMeshWriter`) — the
      OPC ZIP ([Content_Types].xml + _rels/.rels + 3D/3dmodel.model) the colour
      slicers (PrusaSlicer/Bambu/Cura/3D Builder) prefer over STL. Carries a
