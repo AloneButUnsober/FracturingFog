@@ -110,6 +110,9 @@ namespace FracturingFog.Models
         // Isosurface mesher: Marching Cubes (smooth) or Dual contouring (sharp
         // creases). Null → default (Marching Cubes).
         public MeshingMode? ExportMeshingMode { get; set; }
+        // Run the export-time manifold repair (drop degenerate/duplicate faces + fix
+        // winding). Null → default (off).
+        public bool? ExportRepair { get; set; }
 
         // ── Named params (UserBulbParam.Value / Min / Max) ─────────────
         public List<UserBulbParam>? Params { get; set; }
