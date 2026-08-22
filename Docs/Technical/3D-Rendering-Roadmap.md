@@ -377,7 +377,17 @@ Sub-items (ranked fit × payoff):
    - **Cap UI toggle LANDED (PR #443).** "Seal box faces" checkbox on the UserBulb
      mesh-export panel drives `capBoundary`; persisted per bulb
      (`UserBulbSnapshot.ExportCapBoundary`, nullable → older snapshots keep the
-     default-on). **Remaining:** dual contouring for sharp Mandelbox/KIFS edges.
+     default-on).
+   - **Dual contouring LANDED (PR #446).** The sharp-feature mesher: `DualContourMesher`
+     places one QEF-solved vertex per cell (regularised normal equations over the
+     cell's Hermite data — edge crossings + DE gradient normals — biased to the mass
+     point, clamped to the cell, no SVD), joining the four cells around each
+     sign-changing edge into a quad, so Mandelbox facets / KIFS corners snap sharp
+     instead of chamfering onto grid edges like MC. `UserBulbMeshExporter.ExportDualContouring`
+     shares the MC path's format dispatch, colour and print-readiness. Interior mesher
+     (closed when the shape is inside the cube). Tests: sphere → closed/outward/volume,
+     L∞ box → DC vertex on the true 3D corner far tighter than MC. **Remaining:** a UI
+     mode selector (MC / DC) and a DC boundary cap.
 3. **Vertex-color export** — bake the theme into per-vertex color (PLY / 3MF
    color / glTF) so a color print or web drop-in carries the fractal's *palette*.
    The palette idiom crossing into mesh — the biggest differentiator.
