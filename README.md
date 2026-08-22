@@ -114,3 +114,29 @@ Full attributions and dependency licenses are listed in
 * **QuestPDF** — Community licence (free for OSS / sub-USD-1M revenue).
 * **Avalonia, Silk.NET, SkiaSharp, NAudio, ILGPU, Vortice.\***, Roslyn,
   MathNet.Numerics, Markdig — MIT / BSD / NCSA (permissive).
+
+### Third-party telemetry
+
+The **shipped application makes no telemetry calls** — nothing phones home at
+runtime. There is one **build-time** exception to be aware of:
+
+* **Avalonia** pulls in a transitive package, `Avalonia.BuildServices`, which
+  posts anonymized build statistics to `av-build-tel-api-v1.avaloniaui.net`
+  during compilation (an MSBuild task that runs before `CoreCompile`). It
+  collects hashed project/machine identifiers, OS/architecture, target
+  framework, Avalonia version, IDE, and CI detection — **no source code, file
+  paths, or personal data**, and **nothing at runtime**. See Avalonia's
+  [privacy policy](https://avaloniaui.net/legal-center/privacy-policy).
+
+This project's CI opts out (see `.github/workflows/`). To opt out of build-time
+telemetry on your own machine, set these environment variables before building:
+
+```sh
+# Avalonia build-time telemetry
+export AVALONIA_TELEMETRY_OPTOUT=1
+# .NET SDK/CLI usage telemetry (Microsoft toolchain, not a project dependency)
+export DOTNET_CLI_TELEMETRY_OPTOUT=1
+```
+
+On Windows, set them persistently with `setx AVALONIA_TELEMETRY_OPTOUT 1` and
+`setx DOTNET_CLI_TELEMETRY_OPTOUT 1` (opens a new shell to take effect).
