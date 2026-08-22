@@ -349,7 +349,10 @@ Sub-items (ranked fit × payoff):
      or NOT print-ready naming the holes / non-manifold / flipped issues + size /
      volume / triangle count) after every mesh export. Text-only (no colour-as-signal)
      for accessibility; zero cost + byte-identical output when the callback is unset.
-     Wired into all three export sites (generic 3D, UserBulb, relief).
+     Wired into all three export sites (generic 3D, UserBulb, relief). The Relief 3D
+     dialog's Mesh export expander also shows the verdict LIVE after each export
+     (`ReliefMeshPrintStatus`, PR #444) — the print-path analog of the MC cap toggle,
+     since the relief mesh is watertight by construction and has nothing to cap.
      **Remaining:** weld-based manifold auto-repair on true-3D output.
 2. **Isosurface export for true 3D fractals** — marching cubes / dual contouring
    on the DE; the headline capability FF is uniquely positioned for.
