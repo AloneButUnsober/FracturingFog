@@ -50,4 +50,13 @@ public class UserBulbExportSnapshotTests
         var backMc = JsonSerializer.Deserialize<UserBulbSnapshot>(JsonSerializer.Serialize(mc))!;
         Assert.Equal(MeshingMode.MarchingCubes, backMc.ExportMeshingMode);
     }
+
+    [Fact]
+    public void ExportRepair_Round_Trips_Through_Json()
+    {
+        var snap = new UserBulbSnapshot { ExportRepair = true };
+        var back = JsonSerializer.Deserialize<UserBulbSnapshot>(JsonSerializer.Serialize(snap))!;
+        Assert.True(back.ExportRepair);
+        Assert.Null(JsonSerializer.Deserialize<UserBulbSnapshot>("{}")!.ExportRepair);
+    }
 }

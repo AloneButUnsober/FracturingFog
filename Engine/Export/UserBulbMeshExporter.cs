@@ -57,12 +57,12 @@ public static class UserBulbMeshExporter
         string filePath, FracturingFog.Rendering.Lighting.IDistanceEstimator de,
         double cx, double cy, double cz, double range, int n,
         double isoScale = 0.5, bool isoAbsolute = false, int superSamples = 1,
-        double creaseDegrees = 180.0, bool capBoundary = true,
+        double creaseDegrees = 180.0, bool capBoundary = true, bool repair = false,
         SampleSurfaceColor? sampleColor = null, Action<MeshReport>? onReport = null,
         CancellationToken ct = default)
         => ExportMarchingCubes(filePath, de.Evaluate, cx, cy, cz, range, n,
                                isoScale, isoAbsolute, superSamples, creaseDegrees, capBoundary,
-                               sampleColor, onReport, ct);
+                               repair, sampleColor, onReport, ct);
 
     /// <summary>Marching Cubes export. Dispatches on file extension:
     /// `.stl` → binary STL (face normals); anything else → OBJ with
@@ -104,7 +104,7 @@ public static class UserBulbMeshExporter
         string filePath, SampleDistance sample,
         double cx, double cy, double cz, double range, int n,
         double isoScale = 0.5, bool isoAbsolute = false, int superSamples = 1,
-        double creaseDegrees = 180.0, bool capBoundary = true,
+        double creaseDegrees = 180.0, bool capBoundary = true, bool repair = false,
         SampleSurfaceColor? sampleColor = null, Action<MeshReport>? onReport = null,
         CancellationToken ct = default)
     {
@@ -115,6 +115,10 @@ public static class UserBulbMeshExporter
         if (creaseDegrees < 179.9 && tris.Count > 0)
             (verts, norms, tris) = ApplyCreaseNormals(verts, tris, creaseDegrees);
         if (tris.Count == 0) { File.WriteAllText(filePath, "# empty\n"); return 0; }
+
+        // Export-time manifold repair (#391) — drop degenerate/duplicate faces and
+        // make the winding consistent + outward. Opt-in; no-op on already-clean output.
+        if (repair) tris = MeshRepair.Repair(verts, tris).triangles;
 
         // Per-vertex albedo from the theme (view-independent driver), for the
         // colour-capable formats. Evaluated at the smooth-normal vertex.
@@ -155,11 +159,11 @@ public static class UserBulbMeshExporter
     public static int ExportDualContouring(
         string filePath, FracturingFog.Rendering.Lighting.IDistanceEstimator de,
         double cx, double cy, double cz, double range, int n,
-        double isoScale = 0.5, bool isoAbsolute = false, bool capBoundary = true,
+        double isoScale = 0.5, bool isoAbsolute = false, bool capBoundary = true, bool repair = false,
         SampleSurfaceColor? sampleColor = null, Action<MeshReport>? onReport = null,
         CancellationToken ct = default)
         => ExportDualContouring(filePath, de.Evaluate, cx, cy, cz, range, n,
-                                isoScale, isoAbsolute, capBoundary, sampleColor, onReport, ct);
+                                isoScale, isoAbsolute, capBoundary, repair, sampleColor, onReport, ct);
 
     /// <summary>Dual-contouring export. Places ONE QEF-solved vertex per cell so hard
     /// creases (Mandelbox facets, KIFS corners) stay crisp instead of being rounded
@@ -172,13 +176,16 @@ public static class UserBulbMeshExporter
     public static int ExportDualContouring(
         string filePath, SampleDistance sample,
         double cx, double cy, double cz, double range, int n,
-        double isoScale = 0.5, bool isoAbsolute = false, bool capBoundary = true,
+        double isoScale = 0.5, bool isoAbsolute = false, bool capBoundary = true, bool repair = false,
         SampleSurfaceColor? sampleColor = null, Action<MeshReport>? onReport = null,
         CancellationToken ct = default)
     {
         var (verts, norms, tris) = DualContourMesher.Build(sample, cx, cy, cz, range, n, isoScale, isoAbsolute, capBoundary, ct);
         if (ct.IsCancellationRequested) return 0;
         if (tris.Count == 0) { File.WriteAllText(filePath, "# empty\n"); return 0; }
+
+        // Export-time manifold repair (#391) — opt-in; no-op on already-clean output.
+        if (repair) tris = MeshRepair.Repair(verts, tris).triangles;
 
         List<uint>? colors = null;
         if (sampleColor != null)

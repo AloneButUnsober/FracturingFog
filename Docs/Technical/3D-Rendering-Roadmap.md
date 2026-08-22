@@ -353,7 +353,14 @@ Sub-items (ranked fit × payoff):
      dialog's Mesh export expander also shows the verdict LIVE after each export
      (`ReliefMeshPrintStatus`, PR #444) — the print-path analog of the MC cap toggle,
      since the relief mesh is watertight by construction and has nothing to cap.
-     **Remaining:** weld-based manifold auto-repair on true-3D output.
+   - **Manifold auto-repair LANDED (PR #449).** `MeshRepair` (pure, appearance-
+     preserving): welds for topology (keeps original indices → colour/normals
+     untouched), drops degenerate + duplicate faces, flood-fills a consistent winding
+     and flips globally to outward via signed volume. No-op + idempotent on clean
+     output; does not fill holes / cut non-manifold edges (that's the off-limits
+     interactive workbench). Opt-in `repair` flag on both true-3D exporters + a
+     "Repair" checkbox on the UserBulb panel (persisted). The in-lane
+     "guarantee-manifold-on-export" from §4.
 2. **Isosurface export for true 3D fractals** — marching cubes / dual contouring
    on the DE; the headline capability FF is uniquely positioned for.
    - **MC validated + oriented (PR #423).** `MeshValidator` extended to

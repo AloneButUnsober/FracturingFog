@@ -494,6 +494,12 @@
                                         <ComboBoxItem Content="Dual contouring (sharp)" />
                                     </ComboBox>
                                  </StackPanel>
+                                 <StackPanel Grid.Column="4" Grid.Row="0" Orientation="Horizontal" VerticalAlignment="Center"
+                                             Spacing="4" Margin="10,0,4,0">
+                                    <CheckBox Content="Repair" VerticalAlignment="Center"
+                                              IsChecked="{Binding ExportRepair, Mode=TwoWay}"
+                                              ToolTip.Tip="Run an export-time manifold repair: drop degenerate / duplicate faces and make the winding consistent + outward. A safety net for pathological settings; a no-op on already-clean output. Does not fill holes." />
+                                 </StackPanel>
                              </Grid>
                         <!--<WrapPanel Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="5" Grid.RowSpan="2"
                                    Orientation="Horizontal" Margin="0,8,0,0">
