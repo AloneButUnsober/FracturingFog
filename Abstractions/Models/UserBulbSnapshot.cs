@@ -107,6 +107,9 @@ namespace FracturingFog.Models
         // Seal the mesh where the solid crosses a sample-cube face (#422). Default
         // on → a watertight, print-ready solid even when the fractal exits the box.
         public bool? ExportCapBoundary { get; set; }
+        // Isosurface mesher: Marching Cubes (smooth) or Dual contouring (sharp
+        // creases). Null → default (Marching Cubes).
+        public MeshingMode? ExportMeshingMode { get; set; }
 
         // ── Named params (UserBulbParam.Value / Min / Max) ─────────────
         public List<UserBulbParam>? Params { get; set; }

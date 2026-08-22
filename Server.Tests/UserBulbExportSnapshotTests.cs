@@ -36,5 +36,18 @@ public class UserBulbExportSnapshotTests
         // key; it must deserialize to null so the VM leaves its default (on).
         var back = JsonSerializer.Deserialize<UserBulbSnapshot>("{}")!;
         Assert.Null(back.ExportCapBoundary);
+        Assert.Null(back.ExportMeshingMode);
+    }
+
+    [Fact]
+    public void ExportMeshingMode_Round_Trips_Through_Json()
+    {
+        var snap = new UserBulbSnapshot { ExportMeshingMode = MeshingMode.DualContouring };
+        var back = JsonSerializer.Deserialize<UserBulbSnapshot>(JsonSerializer.Serialize(snap))!;
+        Assert.Equal(MeshingMode.DualContouring, back.ExportMeshingMode);
+
+        var mc = new UserBulbSnapshot { ExportMeshingMode = MeshingMode.MarchingCubes };
+        var backMc = JsonSerializer.Deserialize<UserBulbSnapshot>(JsonSerializer.Serialize(mc))!;
+        Assert.Equal(MeshingMode.MarchingCubes, backMc.ExportMeshingMode);
     }
 }

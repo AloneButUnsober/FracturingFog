@@ -893,6 +893,7 @@ public sealed class UserBulbViewModel : ViewModelBase
         ExportSuperSamples = _exportSuperSamples,
         ExportCreaseDegrees = _exportCreaseDegrees,
         ExportCapBoundary = _exportCapBoundary,
+        ExportMeshingMode = (MeshingMode)_exportMeshingModeIndex,
         Params           = _params.UserBulbParams.ConvertAll(p => p.Clone()),
     };
 
@@ -956,6 +957,7 @@ public sealed class UserBulbViewModel : ViewModelBase
         if (s.ExportSuperSamples is { } ess)     ExportSuperSamples = ess;
         if (s.ExportCreaseDegrees is { } ecd)    ExportCreaseDegrees = ecd;
         if (s.ExportCapBoundary is { } ecb)      ExportCapBoundary = ecb;
+        if (s.ExportMeshingMode is { } emm)      ExportMeshingModeIndex = (int)emm;
 
         if (s.Params is { Count: > 0 } srcParams)
         {
@@ -1224,7 +1226,7 @@ public sealed class UserBulbViewModel : ViewModelBase
         var meshArgs = new MeshExportEventArgs(
             ExportGridN, ExportRange, pathArgs.Path!, Iterations, JacobianH,
             ExportIsoScale, ExportIsoAbsolute, ExportSuperSamples, ExportCreaseDegrees,
-            ExportCapBoundary);
+            ExportCapBoundary, ExportMeshingMode);
         // The host runs the marching cubes off-thread and calls NotifyExportDone
         // when finished; gate the buttons meanwhile. Only latch busy when a host
         // is actually listening, else the flag would never clear.
@@ -1345,6 +1347,19 @@ public sealed class UserBulbViewModel : ViewModelBase
         set => this.RaiseAndSetIfChanged(ref _exportCapBoundary, value);
     }
 
+    private int _exportMeshingModeIndex = (int)MeshingMode.MarchingCubes;
+    /// <summary>Isosurface mesher for the export, as a combo index: 0 = Marching
+    /// Cubes (smooth, default), 1 = Dual contouring (keeps hard creases sharp —
+    /// Mandelbox facets, KIFS corners). <see cref="ExportMeshingMode"/> maps it.</summary>
+    public int ExportMeshingModeIndex
+    {
+        get => _exportMeshingModeIndex;
+        set => this.RaiseAndSetIfChanged(ref _exportMeshingModeIndex, Math.Clamp(value, 0, 1));
+    }
+
+    /// <summary>The chosen mesher as the enum the host switches on.</summary>
+    public MeshingMode ExportMeshingMode => (MeshingMode)_exportMeshingModeIndex;
+
     private string NextFreeName()
     {
         var used = new System.Collections.Generic.HashSet<string>();
@@ -1412,8 +1427,8 @@ public sealed class MeshExportEventArgs : EventArgs
 {
     public MeshExportEventArgs(int gridN, double range, string path, int iterations, double jacobianH,
                                double isoScale, bool isoAbsolute, int superSamples, double creaseDegrees,
-                               bool capBoundary = true)
-    { GridN = gridN; Range = range; Path = path; Iterations = iterations; JacobianH = jacobianH; IsoScale = isoScale; IsoAbsolute = isoAbsolute; SuperSamples = superSamples; CreaseDegrees = creaseDegrees; CapBoundary = capBoundary; }
+                               bool capBoundary = true, MeshingMode meshingMode = MeshingMode.MarchingCubes)
+    { GridN = gridN; Range = range; Path = path; Iterations = iterations; JacobianH = jacobianH; IsoScale = isoScale; IsoAbsolute = isoAbsolute; SuperSamples = superSamples; CreaseDegrees = creaseDegrees; CapBoundary = capBoundary; MeshingMode = meshingMode; }
     public int GridN { get; }
     public double Range { get; }
     public string Path { get; }
@@ -1431,6 +1446,8 @@ public sealed class MeshExportEventArgs : EventArgs
     // #422 — seal the mesh where the solid crosses a sample-cube face. On (default)
     // → watertight print-ready solid; off → raw open-boundary Marching Cubes.
     public bool CapBoundary { get; }
+    // #391 — isosurface mesher: Marching Cubes (smooth) or Dual contouring (sharp).
+    public MeshingMode MeshingMode { get; }
     // #112 — export-specific DE quality (independent of the render's live iter/
     // jacH) so mesh geometry can resolve detail the numerical DE otherwise
     // smooths away.
