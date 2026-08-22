@@ -387,7 +387,7 @@ Sub-items (ranked fit × payoff):
      `McVertexColorTests` lock varying colour in PLY + GLB COLOR_0 on a closed,
      outward solid. **Remaining:** a fractal-meaningful driver (orbit trap / escape)
      if derivable view-independently.
-   - **3MF LANDED.** Self-contained 3MF writer (`ThreeMfMeshWriter`) — the
+   - **3MF LANDED (PR #441).** Self-contained 3MF writer (`ThreeMfMeshWriter`) — the
      OPC ZIP ([Content_Types].xml + _rels/.rels + 3D/3dmodel.model) the colour
      slicers (PrusaSlicer/Bambu/Cura/3D Builder) prefer over STL. Carries a
      millimetre PRINT UNIT + per-vertex colour via an `<m:colorgroup>` (distinct
