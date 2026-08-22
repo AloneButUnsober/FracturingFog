@@ -27,6 +27,13 @@ on:
   pull_request:
   workflow_dispatch:
 
+# Opt out of Avalonia's build-time telemetry (transitive Avalonia.BuildServices
+# posts anonymized build stats to av-build-tel-api-v1.avaloniaui.net during
+# CoreCompile). See README "Third-party telemetry".
+env:
+  AVALONIA_TELEMETRY_OPTOUT: 1
+  DOTNET_CLI_TELEMETRY_OPTOUT: 1
+
 jobs:
   build:
     strategy:

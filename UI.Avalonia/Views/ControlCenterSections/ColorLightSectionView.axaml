@@ -41,15 +41,23 @@
         <Border Classes="group">
             <StackPanel Spacing="4">
                 <TextBlock Classes="section" Text="Post-FX" />
-                <Grid ColumnDefinitions="Auto,*,Auto" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto" Margin="0,4,0,0">
-                    <TextBlock Grid.Row="0" Grid.Column="0" Classes="fxLabel" Text="{Binding Menu.BrightnessLabel}" Margin="0,0,6,4" />
-                    <Slider    Grid.Row="0" Grid.Column="1" Value="{Binding Menu.Brightness}" Minimum="-100" Maximum="100" TickFrequency="25" Margin="0,0,6,4" ToolTip.Tip="Brightness (-100..100)" />
+                <Grid ColumnDefinitions="100,*,Auto" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto" Margin="0,4,0,0" ColumnSpacing="4">
+                    <TextBlock Grid.Row="0" Grid.Column="0" Classes="fxLabel" 
+                               Text="{Binding Menu.BrightnessLabel}" Margin="0,0,12,4"
+                               HorizontalAlignment="Left" Width="112"/>
+                    <Slider    Grid.Row="0" Grid.Column="1" Value="{Binding Menu.Brightness}" Minimum="-100" Maximum="100" 
+                               TickFrequency="25" Margin="0,6,6,4" ToolTip.Tip="Brightness (-100..100)" />
                     <CheckBox  Grid.Row="0" Grid.Column="2" IsChecked="{Binding Menu.BrightnessLocked}" ToolTip.Tip="Lock brightness" Margin="0,0,0,4" />
-                    <TextBlock Grid.Row="1" Grid.Column="0" Classes="fxLabel" Text="{Binding Menu.ContrastLabel}" Margin="0,0,6,4" />
-                    <Slider    Grid.Row="1" Grid.Column="1" Value="{Binding Menu.Contrast}" Minimum="-100" Maximum="100" TickFrequency="25" Margin="0,0,6,4" ToolTip.Tip="Contrast (-100..100)" />
+                    <TextBlock Grid.Row="1" Grid.Column="0" Classes="fxLabel" Text="{Binding Menu.ContrastLabel}" Margin="0,0,12,4"
+                               HorizontalAlignment="Left" Width="112"/>
+                    <Slider    Grid.Row="1" Grid.Column="1" Value="{Binding Menu.Contrast}" Minimum="-100" Maximum="100" 
+                               TickFrequency="25" Margin="0,6,6,4" ToolTip.Tip="Contrast (-100..100)" />
                     <CheckBox  Grid.Row="1" Grid.Column="2" IsChecked="{Binding Menu.ContrastLocked}" ToolTip.Tip="Lock contrast" Margin="0,0,0,4" />
-                    <TextBlock Grid.Row="2" Grid.Column="0" Classes="fxLabel" Text="{Binding Menu.AdaptiveLabel}" Margin="0,0,6,0" IsEnabled="{Binding Menu.AdaptiveEnabled}" />
-                    <Slider    Grid.Row="2" Grid.Column="1" Value="{Binding Menu.Adaptive}" Minimum="0" Maximum="100" TickFrequency="25" Margin="0,0,6,0" IsEnabled="{Binding Menu.AdaptiveEnabled}" ToolTip.Tip="Adaptive contrast (0=off, 100=full)" />
+                    <TextBlock Grid.Row="2" Grid.Column="0" Classes="fxLabel" Text="{Binding Menu.AdaptiveLabel}" Margin="0,0,12,0" 
+                               IsEnabled="{Binding Menu.AdaptiveEnabled}" HorizontalAlignment="Left" Width="112" />
+                    <Slider    Grid.Row="2" Grid.Column="1" Value="{Binding Menu.Adaptive}" Minimum="0" Maximum="100" 
+                               TickFrequency="25" Margin="0,12,6,0" 
+                               IsEnabled="{Binding Menu.AdaptiveEnabled}" ToolTip.Tip="Adaptive contrast (0=off, 100=full)" />
                     <CheckBox  Grid.Row="2" Grid.Column="2" IsChecked="{Binding Menu.AdaptiveLocked}" IsEnabled="{Binding Menu.AdaptiveEnabled}" ToolTip.Tip="Lock adaptive" />
                     <!-- Phase D deband (F11a/b) + alpha preview (F10.5). Mirrors
                          the FloatingMenu Post-FX rows; VM props shared via Menu. -->
@@ -64,22 +72,25 @@
                     <!-- Lock Relief 3D — right of Alpha preview. Off: relief follows
                          the region (on for relief regions, off for plain). On: relief
                          stays as the user has it regardless of the region. -->
-                    <CheckBox  Grid.Row="4" Grid.Column="2" IsChecked="{Binding Menu.ReliefLocked}" Margin="0,4,0,0"
+                    <CheckBox  Grid.Row="5" Grid.Column="0" Grid.ColumnSpan="2" Content="Auto Relief 3d On/Off"
+                               IsChecked="{Binding Menu.ReliefLocked}" Margin="0,4,0,0"
                                ToolTip.Tip="Lock Relief 3D. Off = Relief 3D turns on/off with the selected region. On = Relief 3D stays as-is regardless of the region's saved setting." />
 
                     <!-- Not fxLabel: that style fixes Width=84, which clipped
                          "Lock Lighting & FX". Inline the bold/alt-foreground and
                          let it size to content across cols 0-1. -->
-                    <TextBlock Grid.Row="5" Grid.Column="0" Grid.ColumnSpan="2" Text="Lock Lighting &amp; FX"
+                    <!--<TextBlock Grid.Row="6" Grid.Column="1" Grid.ColumnSpan="2" Text="Lock Lighting &amp; FX"
                                Foreground="#9B9B9B" FontWeight="Bold" VerticalAlignment="Center"
-                               HorizontalAlignment="Left" Margin="0,4,6,0"
-                               ToolTip.Tip="When checked, theme selection won't overwrite the active Lighting &amp; FX block (lights, AO, fog, tonemap, etc.)." />
-                    <CheckBox  Grid.Row="5" Grid.Column="2" IsChecked="{Binding Menu.LightingLocked}" ToolTip.Tip="Lock lighting — ignore theme presets" Margin="0,4,0,0" />
+                               HorizontalAlignment="Left" Margin="0,4,0,0"
+                               ToolTip.Tip="When checked, theme selection won't overwrite the active Lighting &amp; FX block (lights, AO, fog, tonemap, etc.)." />-->
+                    <CheckBox  Grid.Row="6" Grid.Column="0" Grid.ColumnSpan="3" IsChecked="{Binding Menu.LightingLocked}" 
+                               Content="Lock Lighting &amp; FX"
+                               ToolTip.Tip="Lock lighting — ignore theme presets: When checked, theme selection won't overwrite the active Lighting &amp; FX block (lights, AO, fog, tonemap, etc.)." Margin="0,4,0,0" />
 
                     <!-- Gamma — mirrored from the FloatingMenu Post-FX block. Shared
                          VM prop via Menu, so the two slots stay in lock-step. -->
-                    <TextBlock Grid.Row="6" Grid.Column="0" Classes="fxLabel" Text="{Binding Menu.GammaLabel}" Margin="0,4,6,0" />
-                    <Slider    Grid.Row="6" Grid.Column="1" Value="{Binding Menu.Gamma}" Minimum="-100" Maximum="100" TickFrequency="25" Margin="0,4,6,0"
+                    <TextBlock Grid.Row="7" Grid.Column="0" Classes="fxLabel" Text="{Binding Menu.GammaLabel}" Margin="0,4,6,0" />
+                    <Slider    Grid.Row="7" Grid.Column="1" Value="{Binding Menu.Gamma}" Minimum="-100" Maximum="100" TickFrequency="25" Margin="0,4,6,0"
                                ToolTip.Tip="Image gamma (-100 to +100, default 0). +brightens, −darkens. Compounds with a theme's baked palette gamma." />
                 </Grid>
 

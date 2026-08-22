@@ -258,7 +258,8 @@ public sealed partial class MainWindow : Window
         // controls, with everything else (Params, editors, Asset Manager,
         // ColorGen, Watermark, Mini*/Toy, Span) moved into the Control Center.
         AddItem(menu, "Control Center…",    () => shell.ShowControlCenterCommand.Execute().Subscribe());
-        AddItem(menu, "Menu (legacy)",      () => shell.IsFloatingMenuVisible = !shell.IsFloatingMenuVisible);
+        // "Menu (legacy)" removed — the FloatingMenu view is deprecated; the
+        // Control Center is the main menu form going forward.
         menu.Items.Add(new Separator());
 
         var toolbarItem = new MenuItem { Header = "Toolbar" };
@@ -1366,6 +1367,10 @@ public sealed partial class MainWindow : Window
 
     // ── Child window sync (lazy create, Show / Hide) ──────────────────────
 
+    // DEPRECATED: shows the retired FloatingMenu view. Dormant — no path sets
+    // IsFloatingMenuVisible = true anymore (Menu button + "M" hotkey open the
+    // Control Center). Retained so the field/close plumbing stays valid; do not
+    // resurrect. The Control Center is the main menu form going forward.
     private void SyncMenu()
     {
         if (_shell == null) return;

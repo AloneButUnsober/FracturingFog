@@ -15,15 +15,16 @@
                 BorderBrush="#505050"
                 BorderThickness="1"
                 Background="#1C1C1C">
+            <!-- Padding as inner Margin (see AsciiFxPanelWindow): bottom ScrollViewer
+                 Padding is not in the scroll extent, so the last block would clip. -->
             <ScrollViewer HorizontalScrollBarVisibility="Auto"
-                          VerticalScrollBarVisibility="Auto"
-                          Padding="14,10">
+                          VerticalScrollBarVisibility="Auto">
                 <!--
                   Content is a StackPanel of styled TextBlocks emitted by
                   HelpMarkdownRenderer. Avoids a third-party markdown lib
                   while still giving headings/code/paragraph distinction.
                 -->
-                <ItemsControl ItemsSource="{Binding Blocks}">
+                <ItemsControl ItemsSource="{Binding Blocks}" Margin="14,10">
                     <ItemsControl.ItemsPanel>
                         <ItemsPanelTemplate>
                             <StackPanel Spacing="4" />

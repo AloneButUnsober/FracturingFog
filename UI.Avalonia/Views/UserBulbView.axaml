@@ -406,42 +406,19 @@
                     </ComboBox>
                 </Grid>
 
-                <!-- Chain -->
-                <Grid Grid.Row="6" ColumnDefinitions="Auto" Margin="0,8,0,0" RowDefinitions="Auto,Auto" RowSpacing="4">
-                    <TextBlock Grid.Column="0" Classes="header" Text="Chain (when non-empty, overrides single source)"
-                               Margin="0,0,0,0" Grid.Row="0"/>
+                <Grid Grid.Row="6" ColumnDefinitions="*" Margin="0,8,0,0" RowDefinitions="Auto,Auto" RowSpacing="4">
                     <!-- Export -->
-                    <Grid ColumnDefinitions="110,Auto,Auto,Auto,Auto" RowDefinitions="Auto,Auto" Grid.Row="1" Grid.Column="0">
-                        <Button    Grid.Column="1" Grid.Row="0" Classes="tool" Content="+ Step"
-                                   Command="{Binding AddChainCommand}" Margin="6,0,0,0" />
-                        <Button    Grid.Column="2" Grid.Row="0" Classes="tool" Content="+ Primitive ▾" Margin="6,0,0,0"
-                                   ToolTip.Tip="Append a fold/power primitive to the chain">
-                            <Button.Flyout>
-                                <MenuFlyout ItemsSource="{Binding ChainPrimitives}">
-                                    <MenuFlyout.ItemTemplate>
-                                        <DataTemplate DataType="m:UserBulbChainPrimitive">
-                                            <MenuItem Header="{Binding DisplayName}"
-                                                      Command="{Binding $parent[Window].((vm:UserBulbViewModel)DataContext).InsertPrimitiveCommand}"
-                                                      CommandParameter="{Binding}" />
-                                        </DataTemplate>
-                                    </MenuFlyout.ItemTemplate>
-                                </MenuFlyout>
-                            </Button.Flyout>
-                        </Button>
-                        <Button Grid.Column="3" Grid.Row="0"  Classes="tool" Content="Hybrid ▾" Margin="6,0,0,0"
-                                ToolTip.Tip="Replace chain with a worked-example hybrid">
-                            <Button.Flyout>
-                                <MenuFlyout>
-                                    <MenuItem Header="Mandelbox + Mandelbulb"
-                                              Command="{Binding LoadHybridCommand}"
-                                              CommandParameter="mbox+bulb" />
-                                    <MenuItem Header="Menger + Mandelbulb"
-                                              Command="{Binding LoadHybridCommand}"
-                                              CommandParameter="menger+bulb" />
-                                </MenuFlyout>
-                            </Button.Flyout>
-                        </Button>
-                        <StackPanel Grid.Column="4" Grid.Row="0" Orientation="Horizontal" Margin="6,0,0,0"
+                    <StackPanel Grid.Column="0" Grid.Row="0" Orientation="Horizontal">
+                    <TextBlock Classes="header" Text="Export Mesh Object" Margin="0,0,12,0"/>
+                    
+                    <TextBlock Text="(uses Iterations + JacobianH)" VerticalAlignment="Center" Margin="0,0,0,4"
+                               Opacity="0.7" FontStyle="Italic"
+                               ToolTip.Tip="Mesh DE quality reuses the panel's Iterations + JacobianH. For crisp export geometry raise Iterations (native quaternion types use 11–14; the render default 8 is blobby) and/or lower JacobianH toward 1e-5." />
+                        
+                    </StackPanel>
+                             
+                    <Grid ColumnDefinitions="Auto,Auto,Auto,Auto,*" RowDefinitions="Auto,Auto,Auto" Grid.Row="1" Grid.Column="0">
+                        <StackPanel Grid.Column="0" Grid.Row="0" Orientation="Horizontal" Margin="6,0,0,0"
                                     VerticalAlignment="Center" Spacing="8">
                             <Button Classes="tool"
                                     Content="Export mesh (OBJ)…"
@@ -458,68 +435,115 @@
                              onto new lines on a narrow panel instead of crushing
                              off to the right. Each label+field is grouped so a wrap
                              never splits a pair. -->
-                        <WrapPanel Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="5"
+                             <Grid Grid.Row="1" Grid.Column="0" 
+                                   ColumnDefinitions="Auto,Auto,Auto,Auto,Auto" RowDefinitions="Auto,Auto" RowSpacing="4"
+                                   Margin="0,8,0,8">
+                                 <StackPanel Grid.Column="0" Grid.Row="0" Orientation="Horizontal" VerticalAlignment="Center" 
+                                             Spacing="4" Margin="13,0,4,0">
+                                    <TextBlock Text="Grid:" VerticalAlignment="Center" 
+                                               ToolTip.Tip="Marching-cubes resolution per axis. Higher = finer mesh (cost ~N³). 96 = native-exporter parity." />
+                                    <NumericUpDown MinWidth="140" Minimum="16" Maximum="512" Increment="16" FormatString="F0"
+                                                   Value="{Binding ExportGridN, Mode=TwoWay}" />
+                                 </StackPanel>
+                                 <StackPanel Grid.Column="0" Grid.Row="1" Orientation="Horizontal" VerticalAlignment="Center" 
+                                             Spacing="4" Margin="0,0,4,0" Grid.ColumnSpan="2">
+                                    <TextBlock Text="Range:" VerticalAlignment="Center"
+                                               ToolTip.Tip="Object-space half-extent of the sampled cube. Must enclose the fractal; too small clips it." />
+                                    <NumericUpDown MinWidth="140" Minimum="0.25" Maximum="64" Increment="0.25" FormatString="F2"
+                                                   Value="{Binding ExportRange, Mode=TwoWay}" />
+                                    <Button Classes="tool" Content="Auto" Margin="4,0,0,0"
+                                            Command="{Binding AutoRangeCommand}"
+                                            ToolTip.Tip="Probe the fractal's extent (using the export Iterations + JacobianH) and set Range to just enclose it — avoids clipping and wasted resolution." />
+                                 </StackPanel>
+                                 <StackPanel Grid.Column="1" Grid.Row="1" Orientation="Horizontal" VerticalAlignment="Center" 
+                                             Spacing="4" Margin="89,0,4,0" Grid.ColumnSpan="2">
+                                    <TextBlock Text="Iso:" VerticalAlignment="Center"
+                                               ToolTip.Tip="Surface level. As a cell fraction (abs off) 0.5 sits a half-cell OUTSIDE the true surface, so filaments inflate into fat tubes and gaps fuse into a ball; lower toward 0.1–0.25 to hug the surface and keep filament detail, raise to bridge gaps if the mesh shatters. With abs on it is an object-space distance (grid-independent)." />
+                                    <NumericUpDown MinWidth="140" Minimum="0.005" Maximum="2" Increment="0.01" FormatString="F3"
+                                                   Value="{Binding ExportIsoScale, Mode=TwoWay}" />
+                                    <CheckBox Content="abs" VerticalAlignment="Center" Margin="4,0,0,0"
+                                              IsChecked="{Binding ExportIsoAbsolute, Mode=TwoWay}"
+                                              ToolTip.Tip="Treat Iso as an absolute object-space distance (grid-independent surface level) instead of a fraction of the cell size. Change the Grid without re-tuning Iso." />
+                                 </StackPanel>
+                                 <StackPanel Grid.Column="2" Grid.Row="0" Orientation="Horizontal" VerticalAlignment="Center" 
+                                             Spacing="4" Margin="10,0,4,0">
+                                    <TextBlock Text="SS:" VerticalAlignment="Center"
+                                               ToolTip.Tip="Supersampling: box-average an s×s×s DE stencil per grid corner (1 = off). Antialiases thin sub-cell filaments into continuous surface instead of broken tubes/dots. Cost ~s³× — keep it 2–3 on fine grids." />
+                                    <NumericUpDown MinWidth="140" Minimum="1" Maximum="4" Increment="1" FormatString="F0"
+                                                   Value="{Binding ExportSuperSamples, Mode=TwoWay}" />
+                                 </StackPanel>
+                                 <StackPanel Grid.Column="1" Grid.Row="0" Orientation="Horizontal" VerticalAlignment="Center" 
+                                             Spacing="4" Margin="10,0,4,0">
+                                    <TextBlock Text="Crease°:" VerticalAlignment="Center"
+                                               ToolTip.Tip="Crease angle. Faces differing by more than this keep a hard edge (Mandelbox facets stay crisp) while curved bulb arms still smooth. 180 = smooth everything (default); ~30 preserves facets." />
+                                    <NumericUpDown MinWidth="140" Minimum="5" Maximum="180" Increment="5" FormatString="F0"
+                                                   Value="{Binding ExportCreaseDegrees, Mode=TwoWay}" />
+                                 </StackPanel>
+                             </Grid>
+                        <!--<WrapPanel Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="5" Grid.RowSpan="2"
                                    Orientation="Horizontal" Margin="0,8,0,0">
-                            <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Spacing="4" Margin="0,0,16,4">
-                                <TextBlock Text="Grid" VerticalAlignment="Center"
-                                           ToolTip.Tip="Marching-cubes resolution per axis. Higher = finer mesh (cost ~N³). 96 = native-exporter parity." />
-                                <NumericUpDown MinWidth="140" Minimum="16" Maximum="512" Increment="16" FormatString="F0"
-                                               Value="{Binding ExportGridN, Mode=TwoWay}" />
-                            </StackPanel>
-                            <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Spacing="4" Margin="0,0,16,4">
-                                <TextBlock Text="Range" VerticalAlignment="Center"
-                                           ToolTip.Tip="Object-space half-extent of the sampled cube. Must enclose the fractal; too small clips it." />
-                                <NumericUpDown MinWidth="140" Minimum="0.25" Maximum="64" Increment="0.25" FormatString="F2"
-                                               Value="{Binding ExportRange, Mode=TwoWay}" />
-                                <Button Classes="tool" Content="Auto" Margin="4,0,0,0"
-                                        Command="{Binding AutoRangeCommand}"
-                                        ToolTip.Tip="Probe the fractal's extent (using the export Iterations + JacobianH) and set Range to just enclose it — avoids clipping and wasted resolution." />
-                            </StackPanel>
-                            <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Spacing="4" Margin="0,0,16,4">
-                                <TextBlock Text="Iso" VerticalAlignment="Center"
-                                           ToolTip.Tip="Surface level. As a cell fraction (abs off) 0.5 sits a half-cell OUTSIDE the true surface, so filaments inflate into fat tubes and gaps fuse into a ball; lower toward 0.1–0.25 to hug the surface and keep filament detail, raise to bridge gaps if the mesh shatters. With abs on it is an object-space distance (grid-independent)." />
-                                <NumericUpDown MinWidth="140" Minimum="0.005" Maximum="2" Increment="0.01" FormatString="F3"
-                                               Value="{Binding ExportIsoScale, Mode=TwoWay}" />
-                                <CheckBox Content="abs" VerticalAlignment="Center" Margin="4,0,0,0"
-                                          IsChecked="{Binding ExportIsoAbsolute, Mode=TwoWay}"
-                                          ToolTip.Tip="Treat Iso as an absolute object-space distance (grid-independent surface level) instead of a fraction of the cell size. Change the Grid without re-tuning Iso." />
-                            </StackPanel>
-                            <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Spacing="4" Margin="0,0,16,4">
-                                <TextBlock Text="SS" VerticalAlignment="Center"
-                                           ToolTip.Tip="Supersampling: box-average an s×s×s DE stencil per grid corner (1 = off). Antialiases thin sub-cell filaments into continuous surface instead of broken tubes/dots. Cost ~s³× — keep it 2–3 on fine grids." />
-                                <NumericUpDown MinWidth="140" Minimum="1" Maximum="4" Increment="1" FormatString="F0"
-                                               Value="{Binding ExportSuperSamples, Mode=TwoWay}" />
-                            </StackPanel>
-                            <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Spacing="4" Margin="0,0,16,4">
-                                <TextBlock Text="Crease°" VerticalAlignment="Center"
-                                           ToolTip.Tip="Crease angle. Faces differing by more than this keep a hard edge (Mandelbox facets stay crisp) while curved bulb arms still smooth. 180 = smooth everything (default); ~30 preserves facets." />
-                                <NumericUpDown MinWidth="140" Minimum="5" Maximum="180" Increment="5" FormatString="F0"
-                                               Value="{Binding ExportCreaseDegrees, Mode=TwoWay}" />
-                            </StackPanel>
-                            <TextBlock Text="(uses Iterations + JacobianH above)" VerticalAlignment="Center" Margin="0,0,0,4"
-                                       Opacity="0.7" FontStyle="Italic"
-                                       ToolTip.Tip="Mesh DE quality reuses the panel's Iterations + JacobianH. For crisp export geometry raise Iterations (native quaternion types use 11–14; the render default 8 is blobby) and/or lower JacobianH toward 1e-5." />
-                        </WrapPanel>
+                            
+                            
+                           
+                            
+                            
+                            </WrapPanel>-->
                     </Grid>
                 </Grid>
-            <Border Grid.Row="7" BorderBrush="#5A5A5A" BorderThickness="1" Background="#232323" >
-                <ScrollViewer VerticalScrollBarVisibility="Auto"> 
-                    <ItemsControl ItemsSource="{Binding Chain}" >
-                        <ItemsControl.ItemTemplate>
-                            <DataTemplate DataType="m:UserBulbChainStep">
-                                    <Grid ColumnDefinitions="70,*,Auto" Margin="2">
-                                        <TextBox Grid.Column="0" Text="{Binding OutputName, Mode=TwoWay}" />
-                                        <TextBox Grid.Column="1" Classes="code"
-                                                 Text="{Binding Source, Mode=TwoWay}" Margin="4,0,4,0" />
-                                        <Button  Grid.Column="2" Content="X" Background="#5A3232" Foreground="White"
-                                                 Command="{Binding $parent[ItemsControl].((vm:UserBulbViewModel)DataContext).RemoveChainCommand}"
-                                                 CommandParameter="{Binding}" />
-                                    </Grid>
-                            </DataTemplate>
-                        </ItemsControl.ItemTemplate>
-                    </ItemsControl>
-                </ScrollViewer> 
-            </Border>
+                <!-- Chain -->
+                <Grid ColumnDefinitions="*" RowDefinitions="Auto,Auto,*" Grid.Row="7" RowSpacing="4">
+                    <TextBlock Grid.Column="0" Classes="header" Text="Chain (when non-empty, overrides single source)"
+                               Margin="0,0,0,0" Grid.Row="0"/>
+                    <Grid Grid.Row="1" ColumnDefinitions="Auto,Auto,Auto">
+                    <Button    Grid.Column="0" Grid.Row="0" Classes="tool" Content="+ Step"
+                                   Command="{Binding AddChainCommand}" Margin="6,0,0,0" />
+                        <Button    Grid.Column="1" Grid.Row="0" Classes="tool" Content="+ Primitive ▾" Margin="6,0,0,0"
+                                   ToolTip.Tip="Append a fold/power primitive to the chain">
+                            <Button.Flyout>
+                                <MenuFlyout ItemsSource="{Binding ChainPrimitives}">
+                                    <MenuFlyout.ItemTemplate>
+                                        <DataTemplate DataType="m:UserBulbChainPrimitive">
+                                            <MenuItem Header="{Binding DisplayName}"
+                                                      Command="{Binding $parent[Window].((vm:UserBulbViewModel)DataContext).InsertPrimitiveCommand}"
+                                                      CommandParameter="{Binding}" />
+                                        </DataTemplate>
+                                    </MenuFlyout.ItemTemplate>
+                                </MenuFlyout>
+                            </Button.Flyout>
+                        </Button>
+                        <Button Grid.Column="2" Grid.Row="0"  Classes="tool" Content="Hybrid ▾" Margin="6,0,0,0"
+                                ToolTip.Tip="Replace chain with a worked-example hybrid">
+                            <Button.Flyout>
+                                <MenuFlyout>
+                                    <MenuItem Header="Mandelbox + Mandelbulb"
+                                              Command="{Binding LoadHybridCommand}"
+                                              CommandParameter="mbox+bulb" />
+                                    <MenuItem Header="Menger + Mandelbulb"
+                                              Command="{Binding LoadHybridCommand}"
+                                              CommandParameter="menger+bulb" />
+                                </MenuFlyout>
+                            </Button.Flyout>
+                        </Button></Grid>
+
+                    <Border Grid.Row="2" Grid.Column="0" BorderBrush="#5A5A5A" BorderThickness="1" Background="#232323" >
+                            <ScrollViewer VerticalScrollBarVisibility="Auto"> 
+                            <ItemsControl ItemsSource="{Binding Chain}" >
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate DataType="m:UserBulbChainStep">
+                                            <Grid ColumnDefinitions="70,*,Auto" Margin="2">
+                                                <TextBox Grid.Column="0" Text="{Binding OutputName, Mode=TwoWay}" />
+                                                <TextBox Grid.Column="1" Classes="code"
+                                                         Text="{Binding Source, Mode=TwoWay}" Margin="4,0,4,0" />
+                                                <Button  Grid.Column="2" Content="X" Background="#5A3232" Foreground="White"
+                                                         Command="{Binding $parent[ItemsControl].((vm:UserBulbViewModel)DataContext).RemoveChainCommand}"
+                                                         CommandParameter="{Binding}" />
+                                            </Grid>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </ScrollViewer> 
+                    </Border>
+                </Grid>
         </Grid>
     </Grid>
 </UserControl>

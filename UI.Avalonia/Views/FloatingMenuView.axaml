@@ -1,3 +1,10 @@
+<!-- ═══════════════════════════════════════════════════════════════════════
+     DEPRECATED (rc3-ui-prep): the FloatingMenu VIEW is retired. The Control
+     Center (ControlCenterView) is the main menu form going forward. No UI path
+     opens this window anymore. Do NOT edit or re-wire this view; add new menu
+     surfaces to the Control Center instead. Only FloatingMenuViewModel lives on
+     (reused by the Control Center as the shared command/state hub).
+     ═══════════════════════════════════════════════════════════════════════ -->
 <Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:vm="using:FracturingFog.UI.Avalonia.ViewModels"

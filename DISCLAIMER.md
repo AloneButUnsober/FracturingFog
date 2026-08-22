@@ -42,6 +42,18 @@ identify the entity being disclaimed and to clarify the absence of any
 relationship. Their use does not imply any endorsement by, or association with,
 DPI. All trademarks are the property of their respective owners.
 
+## Third-party build-time telemetry
+
+The Fracturing Fog application itself collects **no telemetry** and makes no
+data-reporting network calls at runtime. However, a third-party dependency —
+`Avalonia.BuildServices`, pulled in transitively by the Avalonia UI framework —
+transmits anonymized **build-time** statistics to a server operated by AvaloniaUI
+(`av-build-tel-api-v1.avaloniaui.net`) during compilation. This collection is
+controlled by Avalonia, not by this project or its author, and is governed by
+[Avalonia's privacy policy](https://avaloniaui.net/legal-center/privacy-policy).
+This project's CI opts out, and instructions for opting out of local builds are
+in the [`README`](README.md#third-party-telemetry).
+
 ---
 
 *This disclaimer is informational and does not constitute legal advice. In case
