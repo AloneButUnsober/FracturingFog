@@ -430,8 +430,12 @@ Sub-items (ranked fit × payoff):
      point; `MandelbulbDe` implements it (closest the orbit passes to the origin),
      and `MakeMeshColorSource` drives the palette with the trap when the DE supports
      it, radial otherwise. So a Mandelbulb mesh carries fractal structure in its
-     colour. **Remaining:** implement `IOrbitTrapEstimator` on the other DE families
-     (Mandelbox / Julia / Kleinian / …) — they keep the radial fallback until then.
+     colour.
+   - **Orbit trap across all struct families LANDED (PR #451).** `IOrbitTrapEstimator`
+     now on Mandelbox / QuaternionJulia / QuaternionMandelbrot / BicomplexMandelbrot
+     (origin trap) + Kleinian (nearest sphere-boundary trap). Every struct-based 3D
+     family exports with fractal-structured colour; only KIFS (a delegate-adapter DE)
+     keeps the radial fallback. S9 vertex-colour is complete.
    - **3MF LANDED (PR #441).** Self-contained 3MF writer (`ThreeMfMeshWriter`) — the
      OPC ZIP ([Content_Types].xml + _rels/.rels + 3D/3dmodel.model) the colour
      slicers (PrusaSlicer/Bambu/Cura/3D Builder) prefer over STL. Carries a
