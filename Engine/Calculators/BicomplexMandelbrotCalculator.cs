@@ -297,7 +297,9 @@ public sealed class BicomplexMandelbrotCalculator : IFractalCalculator
     /// uses the symmetric bicomplex product, not the Hamilton order.
     /// </summary>
     /// <summary>P3 — concrete DE struct.</summary>
-    public readonly struct De : FracturingFog.Rendering.Lighting.IDistanceEstimator
+    public readonly struct De
+        : FracturingFog.Rendering.Lighting.IDistanceEstimator,
+          FracturingFog.Rendering.Lighting.IOrbitTrapEstimator
     {
         private readonly double _sliceW, _bailout2;
         private readonly BicomplexSliceAxis _axis;
@@ -307,6 +309,40 @@ public sealed class BicomplexMandelbrotCalculator : IFractalCalculator
         [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.AggressiveInlining)]
         public double Evaluate(double x, double y, double z)
             => BicomplexDE(x, y, z, _sliceW, _axis, _bailout2, _iter);
+
+        // Origin orbit trap (roadmap S9, #391): closest the orbit passes to the
+        // origin, normalized over the bailout radius.
+        public double OrbitTrap(double x, double y, double z)
+            => BicomplexTrap(x, y, z, _sliceW, _axis, _bailout2, _iter);
+    }
+
+    private static double BicomplexTrap(
+        double sx, double sy, double sz, double sliceW,
+        BicomplexSliceAxis axis, double bailout2, int iter)
+    {
+        double c1, c2, c3, c4;
+        switch (axis)
+        {
+            case BicomplexSliceAxis.R: c1 = sliceW; c2 = sx; c3 = sy; c4 = sz; break;
+            case BicomplexSliceAxis.I: c1 = sx; c2 = sliceW; c3 = sy; c4 = sz; break;
+            case BicomplexSliceAxis.J: c1 = sx; c2 = sy; c3 = sliceW; c4 = sz; break;
+            default:                   c1 = sx; c2 = sy; c3 = sz; c4 = sliceW; break;
+        }
+        double t1 = 0.0, t2 = 0.0, t3 = 0.0, t4 = 0.0;
+        double minR2 = double.MaxValue;
+        for (int i = 0; i < iter; i++)
+        {
+            double nt1 = t1 * t1 - t2 * t2 - t3 * t3 + t4 * t4;
+            double nt2 = 2.0 * (t1 * t2 - t3 * t4);
+            double nt3 = 2.0 * (t1 * t3 - t2 * t4);
+            double nt4 = 2.0 * (t1 * t4 + t2 * t3);
+            t1 = nt1 + c1; t2 = nt2 + c2; t3 = nt3 + c3; t4 = nt4 + c4;
+            double r2 = t1 * t1 + t2 * t2 + t3 * t3 + t4 * t4;
+            if (r2 < minR2) minR2 = r2;
+            if (r2 > bailout2) break;
+        }
+        double bail = Math.Sqrt(Math.Max(bailout2, 1e-9));
+        return Math.Clamp(Math.Sqrt(minR2) / bail, 0.0, 1.0);
     }
 
     private static double BicomplexDE(

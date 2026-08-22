@@ -288,7 +288,9 @@ public sealed class QuatMandelbrotCalculator : IFractalCalculator
     /// QuatJuliaCalculator. The "real" slot for q² is X.
     /// </summary>
     /// <summary>P3 — concrete DE struct.</summary>
-    public readonly struct De : FracturingFog.Rendering.Lighting.IDistanceEstimator
+    public readonly struct De
+        : FracturingFog.Rendering.Lighting.IDistanceEstimator,
+          FracturingFog.Rendering.Lighting.IOrbitTrapEstimator
     {
         private readonly double _sliceZ, _sliceW, _bailout2;
         private readonly int _iter;
@@ -297,6 +299,32 @@ public sealed class QuatMandelbrotCalculator : IFractalCalculator
         [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.AggressiveInlining)]
         public double Evaluate(double x, double y, double z)
             => QuatMandelDE(x, y, z, _sliceZ, _sliceW, _bailout2, _iter);
+
+        // Origin orbit trap (roadmap S9, #391): closest the orbit passes to the
+        // origin, normalized over the bailout radius.
+        public double OrbitTrap(double x, double y, double z)
+            => QuatMandelTrap(x, y, z, _sliceW, _bailout2, _iter);
+    }
+
+    private static double QuatMandelTrap(
+        double sx, double sy, double sz, double sliceW, double bailout2, int iter)
+    {
+        double cx = sx, cy = sy, cz = sz, cw = sliceW;
+        double qx = 0.0, qy = 0.0, qz = 0.0, qw = 0.0;
+        double minR2 = double.MaxValue;
+        for (int i = 0; i < iter; i++)
+        {
+            double nqx = qx * qx - qy * qy - qz * qz - qw * qw;
+            double nqy = 2.0 * qx * qy;
+            double nqz = 2.0 * qx * qz;
+            double nqw = 2.0 * qx * qw;
+            qx = nqx + cx; qy = nqy + cy; qz = nqz + cz; qw = nqw + cw;
+            double r2 = qx * qx + qy * qy + qz * qz + qw * qw;
+            if (r2 < minR2) minR2 = r2;
+            if (r2 > bailout2) break;
+        }
+        double bail = Math.Sqrt(Math.Max(bailout2, 1e-9));
+        return Math.Clamp(Math.Sqrt(minR2) / bail, 0.0, 1.0);
     }
 
     private static double QuatMandelDE(

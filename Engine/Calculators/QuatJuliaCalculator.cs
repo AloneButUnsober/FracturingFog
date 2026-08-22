@@ -289,7 +289,9 @@ public sealed class QuatJuliaCalculator : IFractalCalculator
     /// product is the standard (a + bi + cj + dk)·(e + fi + gj + hk) form.
     /// </summary>
     /// <summary>P3 — concrete DE struct.</summary>
-    public readonly struct De : FracturingFog.Rendering.Lighting.IDistanceEstimator
+    public readonly struct De
+        : FracturingFog.Rendering.Lighting.IDistanceEstimator,
+          FracturingFog.Rendering.Lighting.IOrbitTrapEstimator
     {
         private readonly double _sliceW, _cx, _cy, _cz, _cw, _bailout2;
         private readonly int _iter;
@@ -298,6 +300,33 @@ public sealed class QuatJuliaCalculator : IFractalCalculator
         [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.AggressiveInlining)]
         public double Evaluate(double x, double y, double z)
             => QuatJuliaDE(x, y, z, _sliceW, _cx, _cy, _cz, _cw, _bailout2, _iter);
+
+        // Origin orbit trap (roadmap S9, #391): closest the orbit passes to the
+        // origin, normalized over the bailout radius.
+        public double OrbitTrap(double x, double y, double z)
+            => QuatJuliaTrap(x, y, z, _sliceW, _cx, _cy, _cz, _cw, _bailout2, _iter);
+    }
+
+    private static double QuatJuliaTrap(
+        double sx, double sy, double sz, double sw,
+        double cw_x, double cw_y, double cw_z, double cw_w,
+        double bailout2, int iter)
+    {
+        double qx = sx, qy = sy, qz = sz, qw = sw;
+        double minR2 = double.MaxValue;
+        for (int i = 0; i < iter; i++)
+        {
+            double nqx = qx * qx - qy * qy - qz * qz - qw * qw;
+            double nqy = 2.0 * qx * qy;
+            double nqz = 2.0 * qx * qz;
+            double nqw = 2.0 * qx * qw;
+            qx = nqx + cw_x; qy = nqy + cw_y; qz = nqz + cw_z; qw = nqw + cw_w;
+            double r2 = qx * qx + qy * qy + qz * qz + qw * qw;
+            if (r2 < minR2) minR2 = r2;
+            if (r2 > bailout2) break;
+        }
+        double bail = Math.Sqrt(Math.Max(bailout2, 1e-9));
+        return Math.Clamp(Math.Sqrt(minR2) / bail, 0.0, 1.0);
     }
 
     private static double QuatJuliaDE(
