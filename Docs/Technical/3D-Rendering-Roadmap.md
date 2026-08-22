@@ -111,9 +111,18 @@ discarded, not that it is uncomputed.
   world-units (not 0..1) depth, raw float-channel values. NOTE: surfaced a
   pre-existing relief-prepass **static-scratch concurrency hazard** (s_compressed /
   s_prepassMaxH …) — flagged separately, independent of this work.
+- **Float geometry in the orchestrator (deep tail, landed — PR #452):** the
+  `--aov-exr` orchestrator now feeds the render's OWN float `ReliefAovBuffers`
+  (world-space unit normal + world-units depth) straight into the multi-layer EXR
+  on the relief-raymarch path — `normal.*` / `Z` are full-precision, and the two
+  8-bit Normals/Depth re-render passes are skipped. Threaded through `PosterRenderer`
+  (an optional capture on `RenderComposedBuffer` + a new `RenderToPixels` overload;
+  external capture wins over the denoise capture and forces the CPU trace) and
+  `AovExrExporter.BuildChannels`/`Write` (optional float planes that supersede the
+  8-bit geometry; null args = legacy byte-compatible). Byte-identical when AOV export
+  is off. 4 tests (`AovExrFloatGeometryTests`).
 - **Remaining:** GUI "Export AOV EXR" action, float lighting-component AOVs (diffuse/
-  specular/AO/shadow — needs a `Shade` out-param overload), wire float capture into
-  the `--aov-exr` orchestrator (replace the 8-bit normal/depth), light compositor,
+  specular/AO/shadow — needs a `Shade` out-param overload), light compositor,
   motion-vector AOV.
 
 ### S2 — Linear-light rendering + view transform (AgX / ACES / Filmic) ◐ (#396)
