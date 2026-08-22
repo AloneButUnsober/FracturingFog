@@ -39,7 +39,8 @@ public static class AovExrExporter
     /// gamma'd (normals, depth, occlusion and shadow are data, not color).</summary>
     public static IReadOnlyList<ExrChannel> BuildChannels(
         int width, int height, uint[] beauty, IReadOnlyDictionary<AovView, uint[]> aovs,
-        float[]? floatNormalXyz = null, float[]? floatDepth = null)
+        float[]? floatNormalXyz = null, float[]? floatDepth = null,
+        ShadingPipeline.ShadeComponents[]? components = null)
     {
         if (beauty == null) throw new ArgumentNullException(nameof(beauty));
         long n = (long)width * height;
@@ -89,6 +90,32 @@ public static class AovExrExporter
             channels.Add(new ExrChannel("Z", z));
         }
 
+        // S1/S7 (#389) — float lighting-component planes captured in the beauty pass.
+        // When supplied they REPLACE the 8-bit Diffuse/Specular/AO/Shadow passes with
+        // the render's own raw values (diffuse/specular byte-scale/255; AO/shadow 0..1).
+        bool haveComponents = components != null && components.Length >= n;
+        if (haveComponents)
+        {
+            var dr = new float[n]; var dg = new float[n]; var db = new float[n];
+            var sr = new float[n]; var sg = new float[n]; var sb = new float[n];
+            var ao = new float[n]; var sh = new float[n];
+            for (int i = 0; i < n; i++)
+            {
+                var c = components![i];
+                dr[i] = c.DiffR; dg[i] = c.DiffG; db[i] = c.DiffB;
+                sr[i] = c.SpecR; sg[i] = c.SpecG; sb[i] = c.SpecB;
+                ao[i] = c.Ao; sh[i] = c.Shadow;
+            }
+            channels.Add(new ExrChannel("diffuse.R", dr));
+            channels.Add(new ExrChannel("diffuse.G", dg));
+            channels.Add(new ExrChannel("diffuse.B", db));
+            channels.Add(new ExrChannel("specular.R", sr));
+            channels.Add(new ExrChannel("specular.G", sg));
+            channels.Add(new ExrChannel("specular.B", sb));
+            channels.Add(new ExrChannel("AO.V", ao));
+            channels.Add(new ExrChannel("shadow.V", sh));
+        }
+
         if (aovs != null)
         {
             foreach (var kv in aovs)
@@ -96,6 +123,8 @@ public static class AovExrExporter
                 if (kv.Key == AovView.Beauty) continue;   // beauty already emitted
                 if (haveFloatNormal && kv.Key == AovView.Normals) continue;  // float plane wins
                 if (haveFloatDepth && kv.Key == AovView.Depth) continue;     // float plane wins
+                if (haveComponents && (kv.Key == AovView.Diffuse || kv.Key == AovView.Specular
+                    || kv.Key == AovView.AmbientOcclusion || kv.Key == AovView.Shadow)) continue; // float wins
                 var buf = kv.Value;
                 if (buf == null || buf.Length < n) continue;
                 AddAovChannels(channels, kv.Key, buf, (int)n);
@@ -111,9 +140,10 @@ public static class AovExrExporter
     /// Normals/Depth passes are dropped (roadmap S1/S7, #389).</summary>
     public static void Write(string path, int width, int height,
         uint[] beauty, IReadOnlyDictionary<AovView, uint[]> aovs,
-        float[]? floatNormalXyz = null, float[]? floatDepth = null)
+        float[]? floatNormalXyz = null, float[]? floatDepth = null,
+        ShadingPipeline.ShadeComponents[]? components = null)
     {
-        var channels = BuildChannels(width, height, beauty, aovs, floatNormalXyz, floatDepth);
+        var channels = BuildChannels(width, height, beauty, aovs, floatNormalXyz, floatDepth, components);
         OpenExrWriter.WriteFile(path, width, height, channels);
     }
 

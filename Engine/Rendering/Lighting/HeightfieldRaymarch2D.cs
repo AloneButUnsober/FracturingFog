@@ -180,13 +180,25 @@ public static class HeightfieldRaymarch2D
     /// the guide buffers the À-Trous denoiser (S4) consumes.</summary>
     public sealed class ReliefAovBuffers
     {
-        public ReliefAovBuffers(int w, int h)
+        public ReliefAovBuffers(int w, int h) : this(w, h, false) { }
+
+        /// <param name="captureComponents">Also allocate <see cref="Components"/> so
+        /// the render records the float lighting components (diffuse/specular/AO/
+        /// shadow) at each primary hit (roadmap S1/S7, #389). The denoiser (S4) only
+        /// needs normal + depth and leaves this off.</param>
+        public ReliefAovBuffers(int w, int h, bool captureComponents)
         {
             NormalXyz = new float[(long)w * h * 3];
             Depth = new float[(long)w * h];
+            if (captureComponents)
+                Components = new ShadingPipeline.ShadeComponents[(long)w * h];
         }
         public float[] NormalXyz { get; }
         public float[] Depth { get; }
+
+        /// <summary>Per-pixel float lighting components from the primary hit, or null
+        /// when component capture was not requested. Populated in the beauty pass.</summary>
+        public ShadingPipeline.ShadeComponents[]? Components { get; }
     }
 
     public static void Render(uint[] albedo, float[] height, int w, int h,
@@ -371,7 +383,8 @@ public static class HeightfieldRaymarch2D
         // terrain coverage). (lensX, lensY) is a unit-disc lens sample; ignored
         // when DOF is off (aperture 0).
         (uint col, bool terrainHit, float nrmX, float nrmY, float nrmZ, float depth) SamplePixel(
-            double sxpix, double sypix, double lensX, double lensY)
+            double sxpix, double sypix, double lensX, double lensY,
+            ShadingPipeline.ShadeComponents[]? compBuf = null, int compIndex = -1)
         {
             double ndcx = 2.0 * sxpix / w - 1.0;
             double ndcy = 1.0 - 2.0 * sypix / h;
@@ -451,7 +464,10 @@ public static class HeightfieldRaymarch2D
                     var si = new ShadingInputs(
                         hx, hy, hz, nx, ny, nz, rdx, rdy, rdz,
                         totalT: tf, hitDist: d, hitStep: 0, epsilon: eps0);
-                    uint tcol = ShadingPipeline.Shade<HeightDe>(in si, alb, in fx, in de, true);
+                    // S1/S7 (#389) — capture the float lighting components at the
+                    // primary terrain hit when an AOV component buffer is supplied.
+                    uint tcol = ShadingPipeline.Shade<HeightDe>(in si, alb, in fx, in de, true,
+                        pixelIndex: compIndex, compBuf: compBuf);
 
                     // #141 — dissolve the terrain FOOTPRINT edge into whatever is
                     // behind it. The height field has a rectangular extent
@@ -497,7 +513,8 @@ public static class HeightfieldRaymarch2D
                         var sg = new ShadingInputs(
                             gx, 0.0, gz, 0.0, 1.0, 0.0, rdx, rdy, rdz,
                             totalT: tp, hitDist: 0.0, hitStep: 0, epsilon: eps0);
-                        return (ShadingPipeline.Shade<HeightDe>(in sg, FloorAlbedo, in fx, in de, true), false, 0f, 1f, 0f, (float)tp);
+                        return (ShadingPipeline.Shade<HeightDe>(in sg, FloorAlbedo, in fx, in de, true,
+                            pixelIndex: compIndex, compBuf: compBuf), false, 0f, 1f, 0f, (float)tp);
                     }
                 }
             }
@@ -559,7 +576,12 @@ public static class HeightfieldRaymarch2D
                         var (lu1, lu2) = ShadingPipeline.HashPair(px * ss + si, py * ss + sj, 0.0, 7);
                         (lensX, lensY) = CameraDof.ConcentricSampleDisk(lu1, lu2);
                     }
-                    var (col, hit, snx, sny, snz, sdepth) = SamplePixel(px + (si + 0.5) / ss, py + (sj + 0.5) / ss, lensX, lensY);
+                    // S1/S7 (#389) — capture float lighting components from the same
+                    // first (centre) tap as the normal/depth planes, iff requested.
+                    bool capFirst = aov?.Components != null && si == 0 && sj == 0;
+                    var (col, hit, snx, sny, snz, sdepth) = SamplePixel(
+                        px + (si + 0.5) / ss, py + (sj + 0.5) / ss, lensX, lensY,
+                        capFirst ? aov!.Components : null, capFirst ? py * w + px : -1);
                     aR += (col >> 16) & 0xFF;
                     aG += (col >> 8) & 0xFF;
                     aB += col & 0xFF;

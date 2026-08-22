@@ -16,12 +16,13 @@
 // Each pass is a full, deterministic re-render (no RNG), so the .exr is identical
 // live and under --batch.
 //
-// S1/S7 deep tail (#389): on the oblique relief-raymarch path the GEOMETRY passes
-// are now float-native — the relief march fills a ReliefAovBuffers (world-space
-// unit normal + world-units depth) from the primary hit in the SAME pass as the
-// beauty, so normal.* / Z carry full precision and their two 8-bit re-renders are
-// skipped. The lighting-component passes (diffuse / specular / AO / shadow /
-// stepcount) stay 8-bit-sourced until the shade pipeline emits float components.
+// S1/S7 deep tail (#389): on the oblique relief-raymarch path the GEOMETRY and
+// LIGHTING-COMPONENT passes are now float-native — the relief march fills a
+// ReliefAovBuffers (world-space unit normal + world-units depth + per-pixel float
+// diffuse/specular/AO/shadow) from the primary hit in the SAME pass as the beauty.
+// So normal.* / Z / diffuse.* / specular.* / AO.V / shadow.V carry full precision
+// and their 8-bit re-renders are skipped; only stepcount (a cost heat diagnostic
+// with no float source) stays an 8-bit pass.
 
 using System;
 using System.Collections.Generic;
@@ -70,10 +71,13 @@ public static class AovExrRenderer
             bool floatGeo = fp.Relief2DEnabled && fp.Relief2DRaymarch;
 
             // Beauty pass first — also fixes the canonical width/height every AOV
-            // pass must match.
+            // pass must match. On the relief-raymarch path also capture the float
+            // lighting components (diffuse/specular/AO/shadow), so those passes are
+            // full-precision too and don't need their own 8-bit re-renders.
             SetAov(fp, AovView.Beauty);
             var geo = floatGeo
-                ? new FracturingFog.Rendering.Lighting.HeightfieldRaymarch2D.ReliefAovBuffers(req.Width, req.Height)
+                ? new FracturingFog.Rendering.Lighting.HeightfieldRaymarch2D.ReliefAovBuffers(
+                    req.Width, req.Height, captureComponents: true)
                 : null;
             uint[] beauty = PosterRenderer.RenderToPixels(req, token, out int w, out int h, geo);
 
@@ -81,14 +85,16 @@ public static class AovExrRenderer
             foreach (var v in views)
             {
                 if (v == AovView.Beauty) continue;
-                // Float geometry replaces these — no need to re-render them 8-bit.
-                if (floatGeo && (v == AovView.Normals || v == AovView.Depth)) continue;
+                // Float geometry + components replace these — skip the 8-bit re-renders.
+                if (floatGeo && (v == AovView.Normals || v == AovView.Depth
+                    || v == AovView.Diffuse || v == AovView.Specular
+                    || v == AovView.AmbientOcclusion || v == AovView.Shadow)) continue;
                 token.ThrowIfCancellationRequested();
                 SetAov(fp, v);
                 aovs[v] = PosterRenderer.RenderToPixels(req, token, out _, out _);
             }
 
-            AovExrExporter.Write(path, w, h, beauty, aovs, geo?.NormalXyz, geo?.Depth);
+            AovExrExporter.Write(path, w, h, beauty, aovs, geo?.NormalXyz, geo?.Depth, geo?.Components);
             return (w, h);
         }
         finally
