@@ -247,7 +247,8 @@ namespace FracturingFog.Imaging
         /// the raw pass the AOV export orchestrator captures per <c>DebugAov</c>
         /// (roadmap S1, #389): grading + tonemap would corrupt data AOVs (normals /
         /// depth), so they are applied only on the file path above.</summary>
-        internal static uint[] RenderComposedBuffer(PosterRequest req, CancellationToken token, out int w, out int h)
+        internal static uint[] RenderComposedBuffer(PosterRequest req, CancellationToken token, out int w, out int h,
+            FracturingFog.Rendering.Lighting.HeightfieldRaymarch2D.ReliefAovBuffers? aovCapture = null)
         {
             uint[] buffer;
 
@@ -285,7 +286,7 @@ namespace FracturingFog.Imaging
                 // of a Relief 3D scene must apply relief here too — otherwise it
                 // silently falls back to the flat 2D themed colour. No-op when
                 // relief is off or the calc exposes no field.
-                buffer = ApplyReliefIfEnabled(buffer, alt as IHeightFieldSource, w, h, req.FractalParameters, alt?.ColorMap);
+                buffer = ApplyReliefIfEnabled(buffer, alt as IHeightFieldSource, w, h, req.FractalParameters, alt?.ColorMap, aovCapture);
             }
             else
             {
@@ -368,7 +369,7 @@ namespace FracturingFog.Imaging
                 // output dims here: a poster is already high-res, so the
                 // display-size undersampling the hi-res field works around does
                 // not apply.
-                buffer = ApplyReliefIfEnabled(buffer, calc, w, h, req.FractalParameters, calc.ColorMap);
+                buffer = ApplyReliefIfEnabled(buffer, calc, w, h, req.FractalParameters, calc.ColorMap, aovCapture);
             }
 
             }
@@ -391,6 +392,22 @@ namespace FracturingFog.Imaging
             if (req.Width <= 0 || req.Height <= 0)
                 throw new ArgumentException("Poster dimensions must be positive.", nameof(req));
             return (uint[])RenderComposedBuffer(req, token, out w, out h).Clone();
+        }
+
+        /// <summary>Render the composed scene buffer AND fill <paramref name="aovCapture"/>
+        /// (world-space float normal + world-units depth) from the SAME pass (roadmap
+        /// S1/S7, #389). Supplying a non-null capture forces the relief CPU trace (the
+        /// GPU kernel emits no AOVs), so the geometry planes are the render's own float
+        /// data. Only meaningful on the oblique relief-raymarch path; a flat / non-
+        /// raymarch render leaves the capture zero-filled.</summary>
+        public static uint[] RenderToPixels(PosterRequest req, CancellationToken token,
+            out int w, out int h,
+            FracturingFog.Rendering.Lighting.HeightfieldRaymarch2D.ReliefAovBuffers? aovCapture)
+        {
+            if (req == null) throw new ArgumentNullException(nameof(req));
+            if (req.Width <= 0 || req.Height <= 0)
+                throw new ArgumentException("Poster dimensions must be positive.", nameof(req));
+            return (uint[])RenderComposedBuffer(req, token, out w, out h, aovCapture).Clone();
         }
 
         /// <summary>Watermark + write the composed poster buffer to the request path.</summary>
@@ -433,7 +450,8 @@ namespace FracturingFog.Imaging
         // height field. Field dims == output dims (poster is hi-res).
         private static uint[] ApplyReliefIfEnabled(
             uint[] buffer, IHeightFieldSource? heightSource, int w, int h, FractalParameters p,
-            IColorMap? colorMap = null)
+            IColorMap? colorMap = null,
+            FracturingFog.Rendering.Lighting.HeightfieldRaymarch2D.ReliefAovBuffers? aovCapture = null)
         {
             if (p == null || !p.Relief2DEnabled) return buffer;
             var field = heightSource?.SmoothBuffer;
@@ -453,7 +471,12 @@ namespace FracturingFog.Imaging
                 // S4 (#389) — capture the float normal/depth AOVs and denoise iff
                 // the guided À-Trous pass is on. MakeCapture is null when off, so
                 // this is byte-identical by default (Render keeps its GPU path).
-                var aov = ReliefDenoisePass.MakeCapture(p, w, h);
+                // S1/S7 (#389) — an EXTERNAL capture target (the AOV-EXR orchestrator
+                // wanting the float normal/depth planes even with denoise off) wins;
+                // it likewise forces the CPU trace so the planes are the render's own
+                // float data. When neither denoise nor export asks, aov stays null and
+                // the GPU fast path + byte-identical beauty are preserved.
+                var aov = aovCapture ?? ReliefDenoisePass.MakeCapture(p, w, h);
                 FracturingFog.Rendering.Lighting.HeightfieldRaymarch2D.Render(
                     buffer, field, w, h, w, h, p, dst, out _, null, aov);
                 ReliefDenoisePass.Apply(dst, aov, w, h, p);

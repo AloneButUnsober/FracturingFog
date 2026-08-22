@@ -38,7 +38,8 @@ public static class AovExrExporter
     /// <paramref name="aovs"/> adds its sub-layer(s). AOV data is decoded, never
     /// gamma'd (normals, depth, occlusion and shadow are data, not color).</summary>
     public static IReadOnlyList<ExrChannel> BuildChannels(
-        int width, int height, uint[] beauty, IReadOnlyDictionary<AovView, uint[]> aovs)
+        int width, int height, uint[] beauty, IReadOnlyDictionary<AovView, uint[]> aovs,
+        float[]? floatNormalXyz = null, float[]? floatDepth = null)
     {
         if (beauty == null) throw new ArgumentNullException(nameof(beauty));
         long n = (long)width * height;
@@ -61,11 +62,40 @@ public static class AovExrExporter
         channels.Add(new ExrChannel("B", bb));
         channels.Add(new ExrChannel("A", ba));
 
+        // S1/S7 (#389) — float-native geometry planes captured in the beauty pass.
+        // When supplied they carry the render's own full-precision data (world-space
+        // unit normal + world-units depth), so they REPLACE the 8-bit Normals/Depth
+        // passes below (which are quantised n·0.5+0.5 / normalized-grey). The lighting
+        // component AOVs (diffuse/specular/AO/shadow/stepcount) stay 8-bit for now.
+        bool haveFloatNormal = floatNormalXyz != null && floatNormalXyz.Length >= n * 3;
+        bool haveFloatDepth = floatDepth != null && floatDepth.Length >= n;
+        if (haveFloatNormal)
+        {
+            var nx = new float[n]; var ny = new float[n]; var nz = new float[n];
+            for (int i = 0; i < n; i++)
+            {
+                nx[i] = floatNormalXyz![i * 3];
+                ny[i] = floatNormalXyz[i * 3 + 1];
+                nz[i] = floatNormalXyz[i * 3 + 2];
+            }
+            channels.Add(new ExrChannel("normal.R", nx));
+            channels.Add(new ExrChannel("normal.G", ny));
+            channels.Add(new ExrChannel("normal.B", nz));
+        }
+        if (haveFloatDepth)
+        {
+            var z = new float[n];
+            Array.Copy(floatDepth!, z, n);
+            channels.Add(new ExrChannel("Z", z));
+        }
+
         if (aovs != null)
         {
             foreach (var kv in aovs)
             {
                 if (kv.Key == AovView.Beauty) continue;   // beauty already emitted
+                if (haveFloatNormal && kv.Key == AovView.Normals) continue;  // float plane wins
+                if (haveFloatDepth && kv.Key == AovView.Depth) continue;     // float plane wins
                 var buf = kv.Value;
                 if (buf == null || buf.Length < n) continue;
                 AddAovChannels(channels, kv.Key, buf, (int)n);
@@ -75,11 +105,15 @@ public static class AovExrExporter
         return channels;
     }
 
-    /// <summary>Write a multi-layer AOV EXR to <paramref name="path"/>.</summary>
+    /// <summary>Write a multi-layer AOV EXR to <paramref name="path"/>. When
+    /// <paramref name="floatNormalXyz"/> / <paramref name="floatDepth"/> are supplied
+    /// the geometry passes are emitted at full float precision and the matching 8-bit
+    /// Normals/Depth passes are dropped (roadmap S1/S7, #389).</summary>
     public static void Write(string path, int width, int height,
-        uint[] beauty, IReadOnlyDictionary<AovView, uint[]> aovs)
+        uint[] beauty, IReadOnlyDictionary<AovView, uint[]> aovs,
+        float[]? floatNormalXyz = null, float[]? floatDepth = null)
     {
-        var channels = BuildChannels(width, height, beauty, aovs);
+        var channels = BuildChannels(width, height, beauty, aovs, floatNormalXyz, floatDepth);
         OpenExrWriter.WriteFile(path, width, height, channels);
     }
 

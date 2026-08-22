@@ -14,9 +14,14 @@
 // CPU-only: DebugAov is honoured by the CPU shade path (relief raymarch + the 3D
 // fractal calculators); a flat 2D render simply yields beauty-equal AOV planes.
 // Each pass is a full, deterministic re-render (no RNG), so the .exr is identical
-// live and under --batch. The channel VALUES are still 8-bit-sourced (the AovView
-// buffers are 8-bit) until the shade pipeline emits float AOVs — the deeper S1
-// slice — but the multi-pass orchestration + file layout land now.
+// live and under --batch.
+//
+// S1/S7 deep tail (#389): on the oblique relief-raymarch path the GEOMETRY passes
+// are now float-native — the relief march fills a ReliefAovBuffers (world-space
+// unit normal + world-units depth) from the primary hit in the SAME pass as the
+// beauty, so normal.* / Z carry full precision and their two 8-bit re-renders are
+// skipped. The lighting-component passes (diffuse / specular / AO / shadow /
+// stepcount) stay 8-bit-sourced until the shade pipeline emits float components.
 
 using System;
 using System.Collections.Generic;
@@ -55,21 +60,35 @@ public static class AovExrRenderer
         var savedAov = fp.Lighting.DebugAov;
         try
         {
+            // S1/S7 (#389) — the oblique relief raymarch fills float normal/depth
+            // AOVs from the PRIMARY hit in the SAME pass as the beauty. Capture them
+            // once here so the geometry passes are full-precision (world-space unit
+            // normal + world-units depth) instead of the 8-bit AovView quantisation —
+            // and so we skip re-rendering the Normals/Depth passes entirely. Only the
+            // relief-raymarch path emits the capture; other renders keep the 8-bit
+            // passes.
+            bool floatGeo = fp.Relief2DEnabled && fp.Relief2DRaymarch;
+
             // Beauty pass first — also fixes the canonical width/height every AOV
             // pass must match.
             SetAov(fp, AovView.Beauty);
-            uint[] beauty = PosterRenderer.RenderToPixels(req, token, out int w, out int h);
+            var geo = floatGeo
+                ? new FracturingFog.Rendering.Lighting.HeightfieldRaymarch2D.ReliefAovBuffers(req.Width, req.Height)
+                : null;
+            uint[] beauty = PosterRenderer.RenderToPixels(req, token, out int w, out int h, geo);
 
             var aovs = new Dictionary<AovView, uint[]>(views.Count);
             foreach (var v in views)
             {
                 if (v == AovView.Beauty) continue;
+                // Float geometry replaces these — no need to re-render them 8-bit.
+                if (floatGeo && (v == AovView.Normals || v == AovView.Depth)) continue;
                 token.ThrowIfCancellationRequested();
                 SetAov(fp, v);
                 aovs[v] = PosterRenderer.RenderToPixels(req, token, out _, out _);
             }
 
-            AovExrExporter.Write(path, w, h, beauty, aovs);
+            AovExrExporter.Write(path, w, h, beauty, aovs, geo?.NormalXyz, geo?.Depth);
             return (w, h);
         }
         finally
