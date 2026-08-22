@@ -342,8 +342,15 @@ Sub-items (ranked fit × payoff):
      actual winding (STL face normal + OBJ vn now agree, outward). Triangle count
      unchanged. Relief export now passes the FULL contract — `IsClosedManifold` with
      positive signed volume (outward); the real-export test is tightened to that as
-     the regression guard. **Remaining:** weld-based manifold repair on true-3D
-     output, validate `UserBulbMeshExporter`, export-time warn UI.
+     the regression guard.
+   - **Export-time "will this print?" check LANDED (PR #442).** The exporters now run
+     `MeshValidator` on the written solid via an optional `onReport` callback and the
+     shell shows `MeshReport.PrintReadiness()` — a plain-language verdict (PRINT-READY,
+     or NOT print-ready naming the holes / non-manifold / flipped issues + size /
+     volume / triangle count) after every mesh export. Text-only (no colour-as-signal)
+     for accessibility; zero cost + byte-identical output when the callback is unset.
+     Wired into all three export sites (generic 3D, UserBulb, relief).
+     **Remaining:** weld-based manifold auto-repair on true-3D output.
 2. **Isosurface export for true 3D fractals** — marching cubes / dual contouring
    on the DE; the headline capability FF is uniquely positioned for.
    - **MC validated + oriented (PR #423).** `MeshValidator` extended to
