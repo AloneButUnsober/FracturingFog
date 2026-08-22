@@ -121,9 +121,15 @@ discarded, not that it is uncomputed.
   `AovExrExporter.BuildChannels`/`Write` (optional float planes that supersede the
   8-bit geometry; null args = legacy byte-compatible). Byte-identical when AOV export
   is off. 4 tests (`AovExrFloatGeometryTests`).
-- **Remaining:** GUI "Export AOV EXR" action, float lighting-component AOVs (diffuse/
-  specular/AO/shadow — needs a `Shade` out-param overload), light compositor,
-  motion-vector AOV.
+- **Float lighting-component AOVs (deep tail, landed — PR #453):** the shade pipeline
+  now records the raw diffuse / specular / AO / shadow it resolves at each primary hit
+  into a `ShadingPipeline.ShadeComponents` buffer captured in the beauty pass (optional
+  `compBuf` on both `Shade` overloads; null = byte-identical), stored in
+  `ReliefAovBuffers.Components`. `AovExrExporter` emits float `diffuse.*` / `specular.*`
+  / `AO.V` / `shadow.V` that replace the 8-bit passes. A relief AOV EXR is now float for
+  every geometry + lighting layer; only `stepcount` (a cost diagnostic) stays 8-bit — 6
+  fewer 8-bit re-renders per export. 3 tests (`AovExrFloatComponentsTests`).
+- **Remaining:** GUI "Export AOV EXR" action, light compositor, motion-vector AOV.
 
 ### S2 — Linear-light rendering + view transform (AgX / ACES / Filmic) ◐ (#396)
 Render and composite in **linear light**, apply a filmic **view transform** at
