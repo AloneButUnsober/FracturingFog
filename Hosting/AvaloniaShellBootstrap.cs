@@ -2226,7 +2226,7 @@ namespace FracturingFog.Hosting
                         if (string.IsNullOrEmpty(path)) return;
                         double range = global::FracturingFog.Export.RaymarchMeshSampler.SuggestedRange(
                             vsx.FractalType, vsx.FractalParameters);
-                        var colorFn = MakeMeshColorSource(s_renderHost?.ColorMap, range);
+                        var colorFn = MakeMeshColorSource(s_renderHost?.ColorMap, range, de);
                         _ = System.Threading.Tasks.Task.Run(() =>
                         {
                             try
@@ -3190,13 +3190,26 @@ namespace FracturingFog.Hosting
         // colour map (mesh then falls back to a flat material / grey).
         private static global::FracturingFog.Export.SampleSurfaceColor? MakeMeshColorSource(
             IColorMap? map, double range)
+            => MakeMeshColorSource(map, range, null);
+
+        // Orbit-trap-aware overload (roadmap S9, #391): when the distance estimator
+        // also implements IOrbitTrapEstimator, drive the palette with its
+        // view-independent, FRACTAL-MEANINGFUL orbit trap instead of the radial
+        // fallback — the exported solid then carries the fractal's structure, not just
+        // a radial gradient. Families without a trap fall back to radial.
+        private static global::FracturingFog.Export.SampleSurfaceColor? MakeMeshColorSource(
+            IColorMap? map, double range,
+            global::FracturingFog.Rendering.Lighting.IDistanceEstimator? de)
         {
             if (map == null) return null;
             double inv = 1.0 / Math.Max(1e-9, range);
+            var trap = de as global::FracturingFog.Rendering.Lighting.IOrbitTrapEstimator;
             return (x, y, z, nx, ny, nz) =>
             {
-                double rad = Math.Sqrt(x * x + y * y + z * z) * inv;
-                float value = (float)Math.Clamp(rad, 0.0, 1.0) * 256f;
+                double driver = trap != null
+                    ? trap.OrbitTrap(x, y, z)                       // [0,1] fractal-meaningful
+                    : Math.Clamp(Math.Sqrt(x * x + y * y + z * z) * inv, 0.0, 1.0); // radial
+                float value = (float)driver * 256f;
                 // Map returns a packed 0x00RRGGBB / 0xAARRGGBB albedo; force opaque.
                 uint c = unchecked((uint)map.Map(value, 0f, 256, (float)nx, (float)ny));
                 return c | 0xFF000000u;

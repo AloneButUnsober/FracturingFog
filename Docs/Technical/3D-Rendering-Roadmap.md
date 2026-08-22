@@ -423,8 +423,15 @@ Sub-items (ranked fit × payoff):
      (`MakeMeshColorSource`). Lands in glTF COLOR_0 + a new MC binary-PLY writer
      (`.ply` dispatch added); OBJ stays colourless (byte-compat), STL can't hold it.
      `McVertexColorTests` lock varying colour in PLY + GLB COLOR_0 on a closed,
-     outward solid. **Remaining:** a fractal-meaningful driver (orbit trap / escape)
-     if derivable view-independently.
+     outward solid.
+   - **Orbit-trap driver LANDED (PR #450).** A fractal-MEANINGFUL alternative to the
+     radial fallback: the optional `IOrbitTrapEstimator` interface (companion to
+     `IDistanceEstimator`) reports a view-independent normalized orbit trap at a
+     point; `MandelbulbDe` implements it (closest the orbit passes to the origin),
+     and `MakeMeshColorSource` drives the palette with the trap when the DE supports
+     it, radial otherwise. So a Mandelbulb mesh carries fractal structure in its
+     colour. **Remaining:** implement `IOrbitTrapEstimator` on the other DE families
+     (Mandelbox / Julia / Kleinian / …) — they keep the radial fallback until then.
    - **3MF LANDED (PR #441).** Self-contained 3MF writer (`ThreeMfMeshWriter`) — the
      OPC ZIP ([Content_Types].xml + _rels/.rels + 3D/3dmodel.model) the colour
      slicers (PrusaSlicer/Bambu/Cura/3D Builder) prefer over STL. Carries a
