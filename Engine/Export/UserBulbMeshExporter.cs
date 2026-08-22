@@ -134,6 +134,8 @@ public static class UserBulbMeshExporter
             WriteGltf(filePath, verts, norms, colors, tris);
         else if (filePath.EndsWith(".ply", StringComparison.OrdinalIgnoreCase))
             WritePlyColored(filePath, verts, norms, colors, tris);
+        else if (filePath.EndsWith(".3mf", StringComparison.OrdinalIgnoreCase))
+            ThreeMfMeshWriter.Write(filePath, verts, colors, tris);
         else
             WriteObjSmooth(filePath, verts, norms, tris);
         return tris.Count;

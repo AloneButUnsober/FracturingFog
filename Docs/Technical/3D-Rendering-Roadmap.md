@@ -5,7 +5,11 @@ what to build, what to borrow from mature 3D / DCC software (Blender, Houdini,
 Arnold, the Frostbite/Hillaire volumetrics line), and — just as important — what
 **not** to build so FF stays FF and does not drift into being a worse Blender.
 
-Status legend: ☐ not started · ◐ in progress · ☑ shipped
+Status legend: ☐ not started · ◐ in progress (a first tranche has shipped with
+tests — see each slice) · ☑ slice fully closed. A slice is marked ☑ only when it is
+*entirely* done; every S1–S9 slice already has merged, tested work landed but stays
+◐ because deeper GPU / full-fidelity tails remain. **S1–S9 are all underway; S10 is
+deferred (not started).**
 
 Parent tracking issue: **#389**. Each slice below is (or becomes) its own issue;
 this doc is the canonical design and the issues are the canonical task list —
@@ -382,7 +386,17 @@ Sub-items (ranked fit × payoff):
      (`.ply` dispatch added); OBJ stays colourless (byte-compat), STL can't hold it.
      `McVertexColorTests` lock varying colour in PLY + GLB COLOR_0 on a closed,
      outward solid. **Remaining:** a fractal-meaningful driver (orbit trap / escape)
-     if derivable view-independently; 3MF colour.
+     if derivable view-independently.
+   - **3MF LANDED.** Self-contained 3MF writer (`ThreeMfMeshWriter`) — the
+     OPC ZIP ([Content_Types].xml + _rels/.rels + 3D/3dmodel.model) the colour
+     slicers (PrusaSlicer/Bambu/Cura/3D Builder) prefer over STL. Carries a
+     millimetre PRINT UNIT + per-vertex colour via an `<m:colorgroup>` (distinct
+     colours; each triangle references a colour index per corner). Wired into BOTH
+     exporters (`.3mf` dispatch) — relief bakes `Vert.C`, MC bakes the
+     `SampleSurfaceColor` albedo. `ThreeMfMeshReader` validates end-to-end
+     (unzip → parse → MeshValidator, closed + outward + mm unit). Save dialogs offer
+     `.3mf`. Completes the colour-carry matrix: STL (geometry) / PLY (colour) /
+     glTF-GLB (colour + PBR) / 3MF (colour + units).
 4. **Carry the material** — export **glTF / GLB** with the PBR material so the
    mesh lands in Blender / web dressed, not grey clay. Format discipline: STL
    (dumb slicers), PLY (vertex color), glTF/GLB (PBR), 3MF (color + material +
@@ -398,7 +412,8 @@ Sub-items (ranked fit × payoff):
      as COLOR_0; MC dresses in flat matte grey unless a colour source is supplied
      (now wired — PR #427). `GltfMeshReader` validates end-to-end (GLB/gltf →
      MeshValidator, closed + outward). Save dialogs offer `.glb` / `.gltf`.
-     **Remaining:** 3MF (colour + units); optional texture/emissive extensions.
+     **Remaining:** optional texture/emissive extensions. (3MF colour + units landed
+     separately — see the vertex-colour item above.)
 5. **Adaptive resolution** — octree-refine the DE only near the surface, seeded by
    the empty-space-skip mip FF already builds.
 6. **Print-ready units / orientation / base** — mm, centered, flat base, Z-up.
@@ -414,8 +429,10 @@ Sub-items (ranked fit × payoff):
 - **Boundary:** auto-repair *to guarantee manifold on export* is in-lane; a mesh
   repair/sculpt *workbench* is not (see §4).
 
-### S10 — PaletteBuilder as a perceptual, colorblind-first color assistant ☐ (#392)
-The home of FF's **art idiom**. Making FF *great* — not just deep-zooming — means
+### S10 — PaletteBuilder as a perceptual, colorblind-first color assistant ☐ DEFERRED (#392)
+**Deferred** — parked until the S1–S9 render/export axes mature; independent
+art-idiom axis, picked up later. The home of FF's **art idiom**. Making FF *great* —
+not just deep-zooming — means
 making PaletteBuilder a genuinely great color assistant: perceptual, **colorblind-
 first**, fractal-aware, advisory. Full design in
 [PaletteBuilder-Design.md](PaletteBuilder-Design.md).
@@ -469,7 +486,8 @@ Blender's job; *render the distance field cinematically* is FF's.
    watertight-contract + validator sub-item is the low-risk starting point (hardens
    the relief mesh FF already ships); isosurface export for true 3D fractals is the
    larger, higher-payoff follow-on.
-8. **S10 (PaletteBuilder)** — independent art-idiom axis; couples to **S2** only for
+8. **S10 (PaletteBuilder)** — **deferred** (parked until S1–S9 mature). Independent
+   art-idiom axis; couples to **S2** only for
    the shaded-gamut preview. Perceptual core → CVD-first suite (the differentiator)
    → fractal-aware preview → advisor + 3D items. See
    [PaletteBuilder-Design.md](PaletteBuilder-Design.md).
