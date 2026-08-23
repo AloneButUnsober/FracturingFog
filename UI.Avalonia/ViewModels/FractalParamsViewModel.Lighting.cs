@@ -323,6 +323,34 @@ public sealed partial class FractalParamsViewModel
         get => _p.Lighting.VolumeSteps;
         set { MutateLighting(r => r.Fx.VolumeSteps = (int)Clamp(value, 0, 64)); this.RaisePropertyChanged(); this.RaisePropertyChanged(nameof(ShowVolumeShaftHint)); Fire(); }
     }
+
+    // S6 (#408) — per-light "lights the fog" toggles (VolumeLightMask bits). Clearing
+    // a bit drops that light from the fog in-scatter ONLY (surfaces still lit). All on
+    // by default. Same mask honoured by the per-pixel march, the froxel volume and the
+    // GPU relief kernel, so toggling froxel never changes which lights fog.
+    private void SetVolumeMaskBit(int bit, bool on)
+    {
+        MutateLighting(r =>
+        {
+            if (on) r.Fx.VolumeLightMask |= bit;
+            else    r.Fx.VolumeLightMask &= ~bit;
+        });
+    }
+    public bool Light1FogsVolume
+    {
+        get => (_p.Lighting.VolumeLightMask & 0x1) != 0;
+        set { SetVolumeMaskBit(0x1, value); this.RaisePropertyChanged(); Fire(); }
+    }
+    public bool Light2FogsVolume
+    {
+        get => (_p.Lighting.VolumeLightMask & 0x2) != 0;
+        set { SetVolumeMaskBit(0x2, value); this.RaisePropertyChanged(); Fire(); }
+    }
+    public bool Light3FogsVolume
+    {
+        get => (_p.Lighting.VolumeLightMask & 0x4) != 0;
+        set { SetVolumeMaskBit(0x4, value); this.RaisePropertyChanged(); Fire(); }
+    }
     public double VolumeNoiseAmount
     {
         get => _p.Lighting.VolumeNoiseAmount;

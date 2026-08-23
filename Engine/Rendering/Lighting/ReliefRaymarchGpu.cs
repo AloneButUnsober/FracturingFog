@@ -85,6 +85,10 @@ public readonly struct ReliefUniforms
     public readonly int VolumeSteps;
     public readonly double VolumeStepsFalloff;
 
+    // S6 (#408) — bit n = light n lights the fog in-scatter. Default 0x7 = all three
+    // (byte-identical). Independent of surface lighting + shadow mask.
+    public readonly int VolumeLightMask;
+
     // #184 Slice 3 — volumetric-color parity with the CPU ShadingPipeline:
     // (B) Henyey-Greenstein phase anisotropy — 0 → isotropic (no phase);
     // (C) medium fog color (scattering albedo) — white (0xFFFFFFFF) → ×1.
@@ -181,7 +185,8 @@ public readonly struct ReliefUniforms
         double absorptionDistance = 1.0,
         int lType0 = 0, double lPos0x = 0, double lPos0y = 0, double lPos0z = 0, double lRange0 = 0, double lInner0 = 1, double lOuter0 = 1,
         int lType1 = 0, double lPos1x = 0, double lPos1y = 0, double lPos1z = 0, double lRange1 = 0, double lInner1 = 1, double lOuter1 = 1,
-        int lType2 = 0, double lPos2x = 0, double lPos2y = 0, double lPos2z = 0, double lRange2 = 0, double lInner2 = 1, double lOuter2 = 1)
+        int lType2 = 0, double lPos2x = 0, double lPos2y = 0, double lPos2z = 0, double lRange2 = 0, double lInner2 = 1, double lOuter2 = 1,
+        int volumeLightMask = 0x7)
     {
         W = w; H = h; Hw = hw; Hh = hh; Sy = sy; Aspect = aspect;
         InvLip = invLip; Bicubic = bicubic; Cam = cam;
@@ -214,6 +219,7 @@ public readonly struct ReliefUniforms
         LType0 = lType0; LPos0x = lPos0x; LPos0y = lPos0y; LPos0z = lPos0z; LRange0 = lRange0; LInner0 = lInner0; LOuter0 = lOuter0;
         LType1 = lType1; LPos1x = lPos1x; LPos1y = lPos1y; LPos1z = lPos1z; LRange1 = lRange1; LInner1 = lInner1; LOuter1 = lOuter1;
         LType2 = lType2; LPos2x = lPos2x; LPos2y = lPos2y; LPos2z = lPos2z; LRange2 = lRange2; LInner2 = lInner2; LOuter2 = lOuter2;
+        VolumeLightMask = volumeLightMask;
     }
 
     /// <summary>World-space direction of a directional light, matching
@@ -295,7 +301,8 @@ public readonly struct ReliefUniforms
             fx.Transmission, fx.Ior, fx.AbsorptionColor, fx.AbsorptionDistance,
             (int)fx.Light1.Type, fx.Light1.PosX, fx.Light1.PosY, fx.Light1.PosZ, fx.Light1.Range, Cos(fx.Light1.SpotInnerDeg), Cos(fx.Light1.SpotOuterDeg),
             (int)fx.Light2.Type, fx.Light2.PosX, fx.Light2.PosY, fx.Light2.PosZ, fx.Light2.Range, Cos(fx.Light2.SpotInnerDeg), Cos(fx.Light2.SpotOuterDeg),
-            (int)fx.Light3.Type, fx.Light3.PosX, fx.Light3.PosY, fx.Light3.PosZ, fx.Light3.Range, Cos(fx.Light3.SpotInnerDeg), Cos(fx.Light3.SpotOuterDeg));
+            (int)fx.Light3.Type, fx.Light3.PosX, fx.Light3.PosY, fx.Light3.PosZ, fx.Light3.Range, Cos(fx.Light3.SpotInnerDeg), Cos(fx.Light3.SpotOuterDeg),
+            fx.VolumeLightMask);
     }
 
     /// <summary>S3 (#389) — lens taps the GPU kernel + twin average when DOF is on.
@@ -1042,7 +1049,11 @@ public static class ReliefRaymarchGpu
         // T is per-step, shared across lights (identical to the CPU path). A light at
         // intensity 0 contributes nothing, so the single-light default stays
         // bit-identical (key light = L0, mask & 0x1).
-        double L0i = u.I0, L1i = u.I1, L2i = u.I2;
+        // S6 (#408) — VolumeLightMask gates which lights light the fog (twin of the
+        // HLSL InScatterWalk gate). Off bit → 0 intensity in the walk. Default 0x7.
+        double L0i = (u.VolumeLightMask & 0x1) != 0 ? u.I0 : 0.0;
+        double L1i = (u.VolumeLightMask & 0x2) != 0 ? u.I1 : 0.0;
+        double L2i = (u.VolumeLightMask & 0x4) != 0 ? u.I2 : 0.0;
         bool ss = u.ShadowSteps > 0;
         bool sh0On = ss && (u.ShadowLightMask & 0x1) != 0;
         bool sh1On = ss && (u.ShadowLightMask & 0x2) != 0;

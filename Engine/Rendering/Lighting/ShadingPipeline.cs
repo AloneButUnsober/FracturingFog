@@ -1354,7 +1354,12 @@ public static class ShadingPipeline
             vs = Math.Max(4, (int)(vs / (1.0 + (tEnd - 4.0) * fx.VolumeStepsFalloff)));
         double stepSize = span / vs;
 
-        double L1i = fx.Light1.Intensity, L2i = fx.Light2.Intensity, L3i = fx.Light3.Intensity;
+        // S6 (#408) — VolumeLightMask gates which lights light the FOG (independent of
+        // surface lighting + ShadowLightMask). An off bit zeroes that light's in-scatter
+        // contribution. Default 0x7 = all three → byte-identical.
+        double L1i = (fx.VolumeLightMask & 0x1) != 0 ? fx.Light1.Intensity : 0.0;
+        double L2i = (fx.VolumeLightMask & 0x2) != 0 ? fx.Light2.Intensity : 0.0;
+        double L3i = (fx.VolumeLightMask & 0x4) != 0 ? fx.Light3.Intensity : 0.0;
         bool ss = fx.ShadowSteps > 0;
         bool sh1On = ss && (fx.ShadowLightMask & 0x1) != 0;
         bool sh2On = ss && (fx.ShadowLightMask & 0x2) != 0;

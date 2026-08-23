@@ -167,7 +167,7 @@ cbuffer ReliefParams : register(b0)
     float3 gLPos1; float gLRange1;
     float3 gLPos2; float gLRange2;
 
-    float  gLInner0; float gLInner1; float gLInner2; float gPadLI;   // spot cone inner-half-angle cosines
+    float  gLInner0; float gLInner1; float gLInner2; int   gVolumeMask;   // S6 (#408) — bit n = light n lights the fog (repurposed S8 pad)
     float  gLOuter0; float gLOuter1; float gLOuter2; float gPadLO;   // spot cone outer-half-angle cosines
 };
 
@@ -998,11 +998,12 @@ void InScatterWalk(inout float br, inout float bg, inout float bb,
         if (gFogHeightFalloff > 0.0)
             density *= exp(-gFogHeightFalloff * sp.y);
         density *= VolumetricDensityMul(sp);   // 4e-ii — FBM cloud modulation
-        if (gI0 > 0.0)
+        // S6 (#408) — VolumeLightMask gates which lights light the fog.
+        if (gI0 > 0.0 && (gVolumeMask & 0x1) != 0)
             inSc += ReliefScatter(sp, gL0, rd, gC0, gI0, sh0On, T, density, stepSize);
-        if (gI1 > 0.0)
+        if (gI1 > 0.0 && (gVolumeMask & 0x2) != 0)
             inSc += ReliefScatter(sp, gL1, rd, gC1, gI1, sh1On, T, density, stepSize);
-        if (gI2 > 0.0)
+        if (gI2 > 0.0 && (gVolumeMask & 0x4) != 0)
             inSc += ReliefScatter(sp, gL2, rd, gC2, gI2, sh2On, T, density, stepSize);
         float aT = density * stepSize;
         T *= aT < 1.0 ? ExpNegSmall(aT) : exp(-aT);

@@ -1645,6 +1645,40 @@ public class ReliefGpuSeamTests
     }
 
     [Fact]
+    public void FogLightMask_ChangesPerPixelFog()
+    {
+        // S6 (#408): clearing a light's VolumeLightMask bit drops it from the fog
+        // in-scatter, so a fogged CPU render with mask 0x1 (key light only) differs
+        // from mask 0x7 (all three light the fog). Both use the CPU trace.
+        int w = 96, h = 72;
+        var (albedo, height) = Field(w, h);
+
+        var fx = FracturingFog.Rendering.Lighting.LightingFxData.CreateDefault();
+        fx.FogDensity = 0.6;
+        fx.VolumeSteps = 12;
+        fx.Light1.Intensity = 1.0;
+        fx.Light2.Intensity = 1.0;
+        fx.Light3.Intensity = 1.0;
+        fx.ShowSkyBackdrop = true;
+
+        var pAll = ReliefParams(gpu: false);
+        fx.VolumeLightMask = 0x7;
+        pAll.Lighting = fx;
+        var pKey = ReliefParams(gpu: false);
+        fx.VolumeLightMask = 0x1;
+        pKey.Lighting = fx;
+
+        var dstAll = new uint[w * h];
+        var dstKey = new uint[w * h];
+        HeightfieldRaymarch2D.Render(albedo, height, w, h, pAll, dstAll, (IReliefRaymarchKernel?)null);
+        HeightfieldRaymarch2D.Render(albedo, height, w, h, pKey, dstKey, (IReliefRaymarchKernel?)null);
+
+        bool anyDiff = false;
+        for (int i = 0; i < w * h; i++) if (dstAll[i] != dstKey[i]) { anyDiff = true; break; }
+        Assert.True(anyDiff, "fog light mask should change the in-scatter result");
+    }
+
+    [Fact]
     public void Froxel_ForcesCpuTrace()
     {
         // The froxel composite is a CPU post-pass, so it must not dispatch the GPU

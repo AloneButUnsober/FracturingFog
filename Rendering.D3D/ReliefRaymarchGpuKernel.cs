@@ -71,7 +71,7 @@ public sealed class ReliefRaymarchGpuKernel : IDisposable, FracturingFog.Renderi
         public float LPos0x, LPos0y, LPos0z, LRange0;
         public float LPos1x, LPos1y, LPos1z, LRange1;
         public float LPos2x, LPos2y, LPos2z, LRange2;
-        public float LInner0, LInner1, LInner2, PadLI;
+        public float LInner0, LInner1, LInner2; public int VolumeMask;   // S6 (#408) — fog light mask (repurposed S8 pad)
         public float LOuter0, LOuter1, LOuter2, PadLO;
     }
 
@@ -514,7 +514,7 @@ public sealed class ReliefRaymarchGpuKernel : IDisposable, FracturingFog.Renderi
             LPos0x = (float)u.LPos0x, LPos0y = (float)u.LPos0y, LPos0z = (float)u.LPos0z, LRange0 = (float)u.LRange0,
             LPos1x = (float)u.LPos1x, LPos1y = (float)u.LPos1y, LPos1z = (float)u.LPos1z, LRange1 = (float)u.LRange1,
             LPos2x = (float)u.LPos2x, LPos2y = (float)u.LPos2y, LPos2z = (float)u.LPos2z, LRange2 = (float)u.LRange2,
-            LInner0 = (float)u.LInner0, LInner1 = (float)u.LInner1, LInner2 = (float)u.LInner2, PadLI = 0f,
+            LInner0 = (float)u.LInner0, LInner1 = (float)u.LInner1, LInner2 = (float)u.LInner2, VolumeMask = u.VolumeLightMask,
             LOuter0 = (float)u.LOuter0, LOuter1 = (float)u.LOuter1, LOuter2 = (float)u.LOuter2, PadLO = 0f,
         };
     }

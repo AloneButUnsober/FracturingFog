@@ -69,24 +69,26 @@ public static class FroxelCameraVolume
             WorldExtent = extent > 0 ? extent : 1.0,
             Lights = new[]
             {
-                ToFroxelLight(in fx.Light1),
-                ToFroxelLight(in fx.Light2),
-                ToFroxelLight(in fx.Light3),
+                ToFroxelLight(in fx.Light1, (fx.VolumeLightMask & 0x1) != 0),
+                ToFroxelLight(in fx.Light2, (fx.VolumeLightMask & 0x2) != 0),
+                ToFroxelLight(in fx.Light3, (fx.VolumeLightMask & 0x4) != 0),
             },
         };
     }
 
     /// <summary>Map a scene light to a <see cref="FroxelLight"/>: resolve the
     /// direction from Theta/Phi (directional aim / spot cone axis) and convert the
-    /// spot half-angles to cosines. Point/spot carry their world position + range.</summary>
-    private static FroxelLight ToFroxelLight(in DirectionalLight d)
+    /// spot half-angles to cosines. Point/spot carry their world position + range.
+    /// <paramref name="fogsLight"/> is the light's VolumeLightMask bit — false zeroes
+    /// its intensity so it lights surfaces but not the fog (roadmap S6, #408).</summary>
+    private static FroxelLight ToFroxelLight(in DirectionalLight d, bool fogsLight)
     {
         var (lx, ly, lz) = ShadingPipeline.LightDir(d.Theta, d.Phi);
         return new FroxelLight
         {
             Type = (int)d.Type,
             Color = d.Color,
-            Intensity = d.Intensity,
+            Intensity = fogsLight ? d.Intensity : 0.0,
             Lx = lx, Ly = ly, Lz = lz,
             PosX = d.PosX, PosY = d.PosY, PosZ = d.PosZ,
             Range = d.Range,

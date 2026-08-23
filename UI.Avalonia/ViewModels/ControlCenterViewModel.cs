@@ -292,6 +292,7 @@ public sealed class ControlCenterViewModel : ViewModelBase
             ReliefDofAperture    = fp?.Relief2DDofApertureRadius ?? 0.0,   // S3 (#389)
             ReliefDofFocus       = fp?.Relief2DDofFocusDistance ?? 0.0,
             ReliefFroxel         = fp?.Relief2DFroxelVolumetrics ?? false,   // S6 (#408)
+            FogLightMask         = fp?.Lighting.VolumeLightMask ?? 0x7,      // S6 (#408)
             ReliefDenoiseIterations  = fp?.Relief2DDenoiseIterations ?? 0,   // S4 (#389)
             ReliefDenoiseColorSigma  = fp?.Relief2DDenoiseColorSigma ?? 0.10,
             ReliefDenoiseNormalSigma = fp?.Relief2DDenoiseNormalSigma ?? 0.30,
