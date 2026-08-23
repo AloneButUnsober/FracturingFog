@@ -80,9 +80,10 @@ public sealed unsafe class ReliefRaymarchVulkanKernel : IDisposable, IReliefRaym
         public float VolSelfShadow; public int VolSelfShadowSteps; public float SceneTime, VolAnisotropy;   // 4e-ii + #184 Slice 3 (B)
         public uint FogColor; public float VolPaletteStrength; public int HasPalette, PaletteLen;   // #184 Slice 3 (C) + #185 slice D
         public float DofAperture, DofFocus; public int DofSamples; public int EmitAov;   // S3 (#389) DOF + S4 (#402) AOV emit
+        public float Transmission, Ior, AbsorptionDist; public uint AbsorptionColor;   // S5 (#389/#406) glass
     }
 
-    private const int ParamBytes = 464;
+    private const int ParamBytes = 480;
 
     private struct Allocated { public Buffer Buffer; public DeviceMemory Memory; public ulong Size; }
 
@@ -360,6 +361,8 @@ public sealed unsafe class ReliefRaymarchVulkanKernel : IDisposable, IReliefRaym
             PaletteLen = u.VolPalette?.Length ?? 0,
             DofAperture = (float)u.DofAperture, DofFocus = (float)u.DofFocus, DofSamples = u.DofSamples,
             EmitAov = emitAov ? 1 : 0,
+            Transmission = (float)u.Transmission, Ior = (float)u.Ior,
+            AbsorptionDist = (float)u.AbsorptionDistance, AbsorptionColor = u.AbsorptionColor,
         };
     }
 
