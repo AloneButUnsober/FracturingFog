@@ -1685,6 +1685,32 @@ public class ReliefGpuSeamTests
     }
 
     [Fact]
+    public void GpuSeam_PositionalLight_StaysOnGpu()
+    {
+        // S8 (#389/#408) — a point / spot light is now resolved per surface point by
+        // the GPU relief kernel (LightSampler twin in ShadeFlat), so a positional
+        // light must dispatch the kernel, not force the CPU trace like it did pre-S8.
+        int w = 320, h = 240;
+        var (albedo, height) = Field(w, h);
+        var stub = new StubReliefKernel();
+        var dst = new uint[w * h];
+
+        var p = ReliefParams(gpu: true);
+        var fx = LightingFxData.CreateDefault();
+        fx.Light1.Type = LightType.Point;
+        fx.Light1.Intensity = 1.0;
+        fx.Light1.PosX = 0.3; fx.Light1.PosY = 1.1; fx.Light1.PosZ = 0.3;
+        fx.Light1.Range = 4.0;
+        p.Lighting = fx;
+        Assert.True(fx.HasPositionalLight);
+
+        HeightfieldRaymarch2D.Render(albedo, height, w, h, p, dst, stub);
+
+        Assert.Equal(1, stub.Calls);
+        Assert.True(AllSentinel(dst), "positional-light render should dispatch the GPU kernel");
+    }
+
+    [Fact]
     public void GpuSeam_FlagOn_NullKernel_FallsBackToCpu()
     {
         int w = 320, h = 240;

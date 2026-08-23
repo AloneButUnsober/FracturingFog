@@ -114,6 +114,17 @@ public readonly struct ReliefUniforms
     public readonly double Transmission, Ior, AbsorptionDistance;
     public readonly uint AbsorptionColor;
 
+    // S8 (#389/#408) — positional lights. LType n: 0 Directional (byte-identical to
+    // the pre-S8 direction-only path), 1 Point (inverse-square + soft range window),
+    // 2 Spot (+ smooth cone). Resolved per surface point in ShadeFlat via
+    // LightSampler.Sample (the same math the CPU ShadingPipeline uses), so the twin
+    // matches both the HLSL ResolveLight and production CPU shading. Directional
+    // keeps the pre-resolved L{n}x/y/z direction + attenuation 1.
+    public readonly int LType0, LType1, LType2;
+    public readonly double LPos0x, LPos0y, LPos0z, LRange0, LInner0, LOuter0;
+    public readonly double LPos1x, LPos1y, LPos1z, LRange1, LInner1, LOuter1;
+    public readonly double LPos2x, LPos2y, LPos2z, LRange2, LInner2, LOuter2;
+
     // 4f — empty-space-skip max-height grid. EmptySkip == 0 → no skip (the
     // byte-identical slow march). MipW/MipH/MipBlk describe the coarse grid the
     // twin and both kernels build from hbuf via ReliefHeightMip.
@@ -167,7 +178,10 @@ public readonly struct ReliefUniforms
         double volPaletteStrength, uint[]? volPalette,
         double dofAperture = 0.0, double dofFocus = 0.0, int dofSamples = 0,
         double transmission = 0.0, double ior = 1.5, uint absorptionColor = 0xFFFFFFFFu,
-        double absorptionDistance = 1.0)
+        double absorptionDistance = 1.0,
+        int lType0 = 0, double lPos0x = 0, double lPos0y = 0, double lPos0z = 0, double lRange0 = 0, double lInner0 = 1, double lOuter0 = 1,
+        int lType1 = 0, double lPos1x = 0, double lPos1y = 0, double lPos1z = 0, double lRange1 = 0, double lInner1 = 1, double lOuter1 = 1,
+        int lType2 = 0, double lPos2x = 0, double lPos2y = 0, double lPos2z = 0, double lRange2 = 0, double lInner2 = 1, double lOuter2 = 1)
     {
         W = w; H = h; Hw = hw; Hh = hh; Sy = sy; Aspect = aspect;
         InvLip = invLip; Bicubic = bicubic; Cam = cam;
@@ -197,6 +211,9 @@ public readonly struct ReliefUniforms
         DofAperture = dofAperture; DofFocus = dofFocus; DofSamples = dofSamples;
         Transmission = transmission; Ior = ior; AbsorptionColor = absorptionColor;
         AbsorptionDistance = absorptionDistance;
+        LType0 = lType0; LPos0x = lPos0x; LPos0y = lPos0y; LPos0z = lPos0z; LRange0 = lRange0; LInner0 = lInner0; LOuter0 = lOuter0;
+        LType1 = lType1; LPos1x = lPos1x; LPos1y = lPos1y; LPos1z = lPos1z; LRange1 = lRange1; LInner1 = lInner1; LOuter1 = lOuter1;
+        LType2 = lType2; LPos2x = lPos2x; LPos2y = lPos2y; LPos2z = lPos2z; LRange2 = lRange2; LInner2 = lInner2; LOuter2 = lOuter2;
     }
 
     /// <summary>World-space direction of a directional light, matching
@@ -247,6 +264,12 @@ public readonly struct ReliefUniforms
             dofFocus = Math.Sqrt(cam.CamX * cam.CamX + cam.CamY * cam.CamY + cam.CamZ * cam.CamZ);
         int dofSamples = dofAperture > 0.0 ? DofGpuSamples : 0;
 
+        // S8 (#389/#408) — resolve per-light kind / world position / range window /
+        // spot cone cosines from the three scene lights. Directional (default) leaves
+        // type 0 → the kernel + twin use the pre-resolved direction with attenuation 1
+        // (byte-identical to the pre-S8 render). Cosine of the half-angle in degrees.
+        static double Cos(double deg) => Math.Cos(deg * Math.PI / 180.0);
+
         return new ReliefUniforms(w, h, hw, hh, sy, aspect, invLip, p.Relief2DBicubicHeight, cam,
             d0.x, d0.y, d0.z, fx.Light1.Intensity, (fx.Light1.Color >> 16) & 0xFF, (fx.Light1.Color >> 8) & 0xFF, fx.Light1.Color & 0xFF,
             d1.x, d1.y, d1.z, fx.Light2.Intensity, (fx.Light2.Color >> 16) & 0xFF, (fx.Light2.Color >> 8) & 0xFF, fx.Light2.Color & 0xFF,
@@ -269,7 +292,10 @@ public readonly struct ReliefUniforms
             fx.VolumeAnisotropy, fx.FogColor,
             fx.VolumePaletteStrength, fx.VolumePalette,
             dofAperture, dofFocus, dofSamples,
-            fx.Transmission, fx.Ior, fx.AbsorptionColor, fx.AbsorptionDistance);
+            fx.Transmission, fx.Ior, fx.AbsorptionColor, fx.AbsorptionDistance,
+            (int)fx.Light1.Type, fx.Light1.PosX, fx.Light1.PosY, fx.Light1.PosZ, fx.Light1.Range, Cos(fx.Light1.SpotInnerDeg), Cos(fx.Light1.SpotOuterDeg),
+            (int)fx.Light2.Type, fx.Light2.PosX, fx.Light2.PosY, fx.Light2.PosZ, fx.Light2.Range, Cos(fx.Light2.SpotInnerDeg), Cos(fx.Light2.SpotOuterDeg),
+            (int)fx.Light3.Type, fx.Light3.PosX, fx.Light3.PosY, fx.Light3.PosZ, fx.Light3.Range, Cos(fx.Light3.SpotInnerDeg), Cos(fx.Light3.SpotOuterDeg));
     }
 
     /// <summary>S3 (#389) — lens taps the GPU kernel + twin average when DOF is on.
@@ -525,6 +551,18 @@ public static class ReliefRaymarchGpu
         // Origin pushed eps·4 along the normal so the first sample doesn't hit
         // the surface itself. Reuses ShadingPipeline.SoftShadow so the twin is
         // exact vs the CPU render; the HLSL SoftShadow mirrors it.
+        // S8 (#389/#408) — resolve each light to (dir-to-light, attenuation) at the
+        // surface point via LightSampler.Sample (twin of the HLSL ResolveLight; the
+        // same math the CPU ShadingPipeline uses). Directional → (dir, 1), so an
+        // all-directional scene is byte-identical. Point/Spot fold inverse-square ×
+        // range window (× cone) into the per-light intensity. The shadow-enable + spec
+        // gates stay keyed on the BASE intensity u.I{n} (range falloff must not disable
+        // a lit light's shadow).
+        var (l0x, l0y, l0z, at0) = LightSampler.Sample((LightType)u.LType0, u.L0x, u.L0y, u.L0z, u.LPos0x, u.LPos0y, u.LPos0z, u.LRange0, u.LInner0, u.LOuter0, px, py, pz);
+        var (l1x, l1y, l1z, at1) = LightSampler.Sample((LightType)u.LType1, u.L1x, u.L1y, u.L1z, u.LPos1x, u.LPos1y, u.LPos1z, u.LRange1, u.LInner1, u.LOuter1, px, py, pz);
+        var (l2x, l2y, l2z, at2) = LightSampler.Sample((LightType)u.LType2, u.L2x, u.L2y, u.L2z, u.LPos2x, u.LPos2y, u.LPos2z, u.LRange2, u.LInner2, u.LOuter2, px, py, pz);
+        double i0 = u.I0 * at0, i1 = u.I1 * at1, i2 = u.I2 * at2;
+
         double sh0 = 1.0, sh1 = 1.0, sh2 = 1.0;
         if (u.ShadowSteps > 0)
         {
@@ -533,17 +571,17 @@ public static class ReliefRaymarchGpu
             double ox = px + nx * bias, oy = py + ny * bias, oz = pz + nz * bias;
             double k = u.ShadowSoftK;
             if ((u.ShadowLightMask & 0x1) != 0 && u.I0 > 0)
-                sh0 = ShadingPipeline.SoftShadow(in de, ox, oy, oz, u.L0x, u.L0y, u.L0z, eps, 12.0, k, u.ShadowSteps);
+                sh0 = ShadingPipeline.SoftShadow(in de, ox, oy, oz, l0x, l0y, l0z, eps, 12.0, k, u.ShadowSteps);
             if ((u.ShadowLightMask & 0x2) != 0 && u.I1 > 0)
-                sh1 = ShadingPipeline.SoftShadow(in de, ox, oy, oz, u.L1x, u.L1y, u.L1z, eps, 12.0, k, u.ShadowSteps);
+                sh1 = ShadingPipeline.SoftShadow(in de, ox, oy, oz, l1x, l1y, l1z, eps, 12.0, k, u.ShadowSteps);
             if ((u.ShadowLightMask & 0x4) != 0 && u.I2 > 0)
-                sh2 = ShadingPipeline.SoftShadow(in de, ox, oy, oz, u.L2x, u.L2y, u.L2z, eps, 12.0, k, u.ShadowSteps);
+                sh2 = ShadingPipeline.SoftShadow(in de, ox, oy, oz, l2x, l2y, l2z, eps, 12.0, k, u.ShadowSteps);
         }
 
         double sR = 0, sG = 0, sB = 0;
-        Accum(u.I0 * sh0, u.C0r, u.C0g, u.C0b, u.L0x, u.L0y, u.L0z, nx, ny, nz, ref sR, ref sG, ref sB);
-        Accum(u.I1 * sh1, u.C1r, u.C1g, u.C1b, u.L1x, u.L1y, u.L1z, nx, ny, nz, ref sR, ref sG, ref sB);
-        Accum(u.I2 * sh2, u.C2r, u.C2g, u.C2b, u.L2x, u.L2y, u.L2z, nx, ny, nz, ref sR, ref sG, ref sB);
+        Accum(i0 * sh0, u.C0r, u.C0g, u.C0b, l0x, l0y, l0z, nx, ny, nz, ref sR, ref sG, ref sB);
+        Accum(i1 * sh1, u.C1r, u.C1g, u.C1b, l1x, l1y, l1z, nx, ny, nz, ref sR, ref sG, ref sB);
+        Accum(i2 * sh2, u.C2r, u.C2g, u.C2b, l2x, l2y, l2z, nx, ny, nz, ref sR, ref sG, ref sB);
 
         double aR = (albedo >> 16) & 0xFF, aG = (albedo >> 8) & 0xFF, aB = albedo & 0xFF;
 
@@ -559,9 +597,9 @@ public static class ReliefRaymarchGpu
             double F0g = 0.04 + (aG / 255.0 - 0.04) * u.Metallic;
             double F0b = 0.04 + (aB / 255.0 - 0.04) * u.Metallic;
             double NdotV = Math.Max(0.0, nx * vx + ny * vy + nz * vz);
-            SpecAccum(u.I0 * sh0, u.C0r, u.C0g, u.C0b, u.L0x, u.L0y, u.L0z, nx, ny, nz, vx, vy, vz, NdotV, a2, kg, F0r, F0g, F0b, u.SpecStrength, ref specR, ref specG, ref specB);
-            SpecAccum(u.I1 * sh1, u.C1r, u.C1g, u.C1b, u.L1x, u.L1y, u.L1z, nx, ny, nz, vx, vy, vz, NdotV, a2, kg, F0r, F0g, F0b, u.SpecStrength, ref specR, ref specG, ref specB);
-            SpecAccum(u.I2 * sh2, u.C2r, u.C2g, u.C2b, u.L2x, u.L2y, u.L2z, nx, ny, nz, vx, vy, vz, NdotV, a2, kg, F0r, F0g, F0b, u.SpecStrength, ref specR, ref specG, ref specB);
+            SpecAccum(i0 * sh0, u.C0r, u.C0g, u.C0b, l0x, l0y, l0z, nx, ny, nz, vx, vy, vz, NdotV, a2, kg, F0r, F0g, F0b, u.SpecStrength, ref specR, ref specG, ref specB);
+            SpecAccum(i1 * sh1, u.C1r, u.C1g, u.C1b, l1x, l1y, l1z, nx, ny, nz, vx, vy, vz, NdotV, a2, kg, F0r, F0g, F0b, u.SpecStrength, ref specR, ref specG, ref specB);
+            SpecAccum(i2 * sh2, u.C2r, u.C2g, u.C2b, l2x, l2y, l2z, nx, ny, nz, vx, vy, vz, NdotV, a2, kg, F0r, F0g, F0b, u.SpecStrength, ref specR, ref specG, ref specB);
             diffSuppress = 1.0 - u.Metallic;
         }
 

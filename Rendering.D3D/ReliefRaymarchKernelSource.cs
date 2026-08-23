@@ -157,6 +157,18 @@ cbuffer ReliefParams : register(b0)
     float  gIor;              // index of refraction
     float  gAbsorptionDist;   // Beer-Lambert reference distance
     uint   gAbsorptionColor;  // packed ARGB tint surviving one reference distance
+
+    int    gLType0;           // S8 (#389/#408) — light kinds: 0 Directional (byte-identical), 1 Point, 2 Spot
+    int    gLType1;
+    int    gLType2;
+    int    gPadLT;
+
+    float3 gLPos0; float gLRange0;   // per-light world position + soft range window (Point / Spot)
+    float3 gLPos1; float gLRange1;
+    float3 gLPos2; float gLRange2;
+
+    float  gLInner0; float gLInner1; float gLInner2; float gPadLI;   // spot cone inner-half-angle cosines
+    float  gLOuter0; float gLOuter1; float gLOuter2; float gPadLO;   // spot cone outer-half-angle cosines
 };
 
 static const float RELIEF_PI = 3.14159265358979;
@@ -329,6 +341,43 @@ void Accum(float intensity, float3 col, float3 L, float3 N, inout float3 s)
     if (intensity <= 0.0) return;
     float diffuse = max(0.0, dot(N, L)) * intensity;
     s += col * diffuse;
+}
+
+// S8 (#389/#408) — smooth spot cone factor: 1 at/above innerCos, 0 at/below
+// outerCos, smoothstep between. Twin of LightSampler.SmoothCone.
+float SmoothCone(float cosA, float innerCos, float outerCos)
+{
+    float denom = innerCos - outerCos;
+    if (denom <= 1e-9) return cosA >= innerCos ? 1.0 : 0.0;   // degenerate = hard edge
+    float t = saturate((cosA - outerCos) / denom);
+    return t * t * (3.0 - 2.0 * t);
+}
+
+// S8 (#389/#408) — resolve a light to (unit dir-to-light, attenuation) at surface
+// point P. Twin of LightSampler.Sample. Directional (type 0) → (toDir, 1) so an
+// all-directional scene is byte-identical to the pre-S8 kernel. Point (1) →
+// inverse-square × soft range window (Karis). Spot (2) → point × smooth cone,
+// cone axis = toDir (the light's shine direction from Theta/Phi).
+float4 ResolveLight(int type, float3 toDir, float3 pos, float range,
+                    float innerCos, float outerCos, float3 P)
+{
+    if (type == 0) return float4(toDir, 1.0);
+    float3 d = pos - P;
+    float dist2 = dot(d, d);
+    float dist = sqrt(dist2);
+    float inv = dist > 1e-12 ? 1.0 / dist : 0.0;
+    float3 L = d * inv;
+    float atten = 1.0 / max(dist2, 1e-6);
+    if (range > 0.0)
+    {
+        float t = dist / range;
+        float t4 = t * t * t * t;
+        float win = saturate(1.0 - t4);
+        atten *= win * win;
+    }
+    if (type == 2)
+        atten *= SmoothCone(dot(L, toDir), innerCos, outerCos);
+    return float4(L, atten);
 }
 
 // 4a — one directional light's Cook-Torrance GGX specular. Line-for-line twin
@@ -643,23 +692,36 @@ float3 Reflections(float3 N, float3 rd, float3 P)
 
 uint ShadeFlat(float3 N, float3 V, float3 P, uint albedo)
 {
+    // S8 (#389/#408) — resolve each light to its dir-to-light + attenuation at P.
+    // Directional keeps (gL{n}, 1) → byte-identical; Point/Spot fold inverse-square
+    // × range window (× cone) into the intensity. Direct lighting (diffuse + spec +
+    // shadow march) uses the resolved dir/intensity; the shadow-enable + spec gates
+    // stay keyed on the BASE intensity gI{n} (range attenuation must not disable a lit
+    // light's shadow). Volumetric in-scatter still treats lights by direction (an
+    // approximation; positional falloff applies to surface shading only).
+    float4 r0 = ResolveLight(gLType0, gL0, gLPos0, gLRange0, gLInner0, gLOuter0, P);
+    float4 r1 = ResolveLight(gLType1, gL1, gLPos1, gLRange1, gLInner1, gLOuter1, P);
+    float4 r2 = ResolveLight(gLType2, gL2, gLPos2, gLRange2, gLInner2, gLOuter2, P);
+    float3 Ld0 = r0.xyz, Ld1 = r1.xyz, Ld2 = r2.xyz;
+    float i0 = gI0 * r0.w, i1 = gI1 * r1.w, i2 = gI2 * r2.w;
+
     float sh0 = 1.0, sh1 = 1.0, sh2 = 1.0;
     if (gShadowSteps > 0)
     {
         float bias = gEps0 * 4.0;
         float3 o = P + N * bias;
         if ((gShadowMask & 0x1) != 0 && gI0 > 0.0)
-            sh0 = SoftShadow(o, gL0, gEps0, 12.0, gShadowSoftK, gShadowSteps);
+            sh0 = SoftShadow(o, Ld0, gEps0, 12.0, gShadowSoftK, gShadowSteps);
         if ((gShadowMask & 0x2) != 0 && gI1 > 0.0)
-            sh1 = SoftShadow(o, gL1, gEps0, 12.0, gShadowSoftK, gShadowSteps);
+            sh1 = SoftShadow(o, Ld1, gEps0, 12.0, gShadowSoftK, gShadowSteps);
         if ((gShadowMask & 0x4) != 0 && gI2 > 0.0)
-            sh2 = SoftShadow(o, gL2, gEps0, 12.0, gShadowSoftK, gShadowSteps);
+            sh2 = SoftShadow(o, Ld2, gEps0, 12.0, gShadowSoftK, gShadowSteps);
     }
 
     float3 s = float3(0, 0, 0);
-    Accum(gI0 * sh0, gC0, gL0, N, s);
-    Accum(gI1 * sh1, gC1, gL1, N, s);
-    Accum(gI2 * sh2, gC2, gL2, N, s);
+    Accum(i0 * sh0, gC0, Ld0, N, s);
+    Accum(i1 * sh1, gC1, Ld1, N, s);
+    Accum(i2 * sh2, gC2, Ld2, N, s);
 
     float3 alb = float3((albedo >> 16) & 0xFF, (albedo >> 8) & 0xFF, albedo & 0xFF);
     float3 spec = float3(0, 0, 0);
@@ -672,9 +734,9 @@ uint ShadeFlat(float3 N, float3 V, float3 P, uint albedo)
         float kg = (rough + 1.0) * (rough + 1.0) / 8.0;
         float3 F0 = 0.04 + (alb / 255.0 - 0.04) * gMetallic;
         float NdotV = max(0.0, dot(N, V));
-        SpecAccum(gI0 * sh0, gC0, gL0, N, V, NdotV, a2, kg, F0, spec);
-        SpecAccum(gI1 * sh1, gC1, gL1, N, V, NdotV, a2, kg, F0, spec);
-        SpecAccum(gI2 * sh2, gC2, gL2, N, V, NdotV, a2, kg, F0, spec);
+        SpecAccum(i0 * sh0, gC0, Ld0, N, V, NdotV, a2, kg, F0, spec);
+        SpecAccum(i1 * sh1, gC1, Ld1, N, V, NdotV, a2, kg, F0, spec);
+        SpecAccum(i2 * sh2, gC2, Ld2, N, V, NdotV, a2, kg, F0, spec);
         diffSuppress = 1.0 - gMetallic;
     }
 
