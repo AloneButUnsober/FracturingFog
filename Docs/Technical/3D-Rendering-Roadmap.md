@@ -329,10 +329,19 @@ Broadens the lighting vocabulary without a scene graph.
   untouched. Point/spot fields persist through `LightingFxPresetData` (round-trip
   tested). 7 wiring tests (`LightTypeShadingTests`) incl. inverse-square falloff +
   a full-Shade brightness check. Directional-only shading suite (74) unchanged.
+- **GPU relief kernel (landed, PR #459):** point/spot now resolve **on the GPU** +
+  parity twin. HLSL `SmoothCone`+`ResolveLight` (twin of `LightSampler`) resolve each
+  light per pixel in `ShadeFlat` (inverse-square + Karis range window + smooth cone);
+  the CPU twin `ReliefRaymarchGpu.ShadeFlat` calls `LightSampler.Sample` directly so
+  the oracle matches HLSL *and* production shading. Directional stays byte-identical.
+  cbuffer/blob +6 rows (kinds, pos+range, cone cosines); ParamBytes 480→576 D3D +
+  Vulkan. The `fx.HasPositionalLight` force-CPU clause is **lifted** — positional
+  lights render on the GPU. `--reliefgpuraymarch` gate: new `lights (point+spot)` diff
+  (mean 0.015, max 7, 0 edge px). Shadow-enable/spec gates keyed on base intensity.
 - **Remaining:** UI (LightingFx dialog: 3 lights × type/pos/range/cone) + batch
-  flags, **positional lights in the volumetric march** (fog site stays directional),
-  force-CPU on the 8 GPU 3D-fractal calculators (relief path gated; those still
-  render directional-only on GPU), area lights (couple S4).
+  flags, **positional lights in the volumetric march** (fog site stays directional,
+  GPU + CPU), force-CPU on the 8 GPU 3D-fractal calculators (relief 2D path now GPU;
+  those 3D families still render directional-only on GPU), area lights (couple S4).
 
 ### S9 — Mesh export maturation ☑ (#391)
 Mesh export is the **one place FF crosses from renderer into geometry producer** —

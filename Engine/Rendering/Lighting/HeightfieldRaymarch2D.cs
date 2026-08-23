@@ -340,9 +340,10 @@ public static class HeightfieldRaymarch2D
         // proven by the --reliefgpuraymarch gate with the aperture open), so DOF no
         // longer forces the CPU trace. The CPU fallback still integrates the lens
         // over its supersample grid; the GPU integrates over its own tap budget.
-        // S8 (#389): the GPU relief kernel resolves only directional lights from
-        // Theta/Phi, so a point/spot light forces the CPU trace (same discipline
-        // as DOF / DebugAov). Directional-only scenes stay on the GPU byte-identical.
+        // S8 (#389/#408): the GPU relief kernel now resolves point / spot lights per
+        // surface point (LightSampler twin in ShadeFlat, proven by the
+        // --reliefgpuraymarch positional-light diff), so a positional light no longer
+        // forces the CPU trace. Directional-only scenes stay byte-identical.
         // S5 (#389): the GPU kernel now applies the same env-refraction approximation
         // (DielectricOps twin in ShadeFlat, proven by the --reliefgpuraymarch glass
         // diff), so a transmissive (glass) material no longer forces the CPU trace.
@@ -355,7 +356,6 @@ public static class HeightfieldRaymarch2D
         // GPU — the kernel fills the guides and the caller runs the À-Trous filter.
         bool aovOk = aov == null || aov.Components == null;
         if (gpuKernel != null && p.Relief2DGpuRaymarch && fx.DebugAov == AovView.Beauty
-            && !fx.HasPositionalLight
             && aovOk)
         {
             var u = ReliefUniforms.Build(w, h, hw, hh, sy, aspect, invLip, maxH, p, in fx);

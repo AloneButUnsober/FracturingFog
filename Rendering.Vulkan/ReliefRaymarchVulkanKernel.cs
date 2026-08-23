@@ -81,9 +81,15 @@ public sealed unsafe class ReliefRaymarchVulkanKernel : IDisposable, IReliefRaym
         public uint FogColor; public float VolPaletteStrength; public int HasPalette, PaletteLen;   // #184 Slice 3 (C) + #185 slice D
         public float DofAperture, DofFocus; public int DofSamples; public int EmitAov;   // S3 (#389) DOF + S4 (#402) AOV emit
         public float Transmission, Ior, AbsorptionDist; public uint AbsorptionColor;   // S5 (#389/#406) glass
+        public int LType0, LType1, LType2, PadLT;   // S8 (#389/#408) light kinds
+        public float LPos0x, LPos0y, LPos0z, LRange0;
+        public float LPos1x, LPos1y, LPos1z, LRange1;
+        public float LPos2x, LPos2y, LPos2z, LRange2;
+        public float LInner0, LInner1, LInner2, PadLI;
+        public float LOuter0, LOuter1, LOuter2, PadLO;
     }
 
-    private const int ParamBytes = 480;
+    private const int ParamBytes = 576;
 
     private struct Allocated { public Buffer Buffer; public DeviceMemory Memory; public ulong Size; }
 
@@ -363,6 +369,12 @@ public sealed unsafe class ReliefRaymarchVulkanKernel : IDisposable, IReliefRaym
             EmitAov = emitAov ? 1 : 0,
             Transmission = (float)u.Transmission, Ior = (float)u.Ior,
             AbsorptionDist = (float)u.AbsorptionDistance, AbsorptionColor = u.AbsorptionColor,
+            LType0 = u.LType0, LType1 = u.LType1, LType2 = u.LType2, PadLT = 0,
+            LPos0x = (float)u.LPos0x, LPos0y = (float)u.LPos0y, LPos0z = (float)u.LPos0z, LRange0 = (float)u.LRange0,
+            LPos1x = (float)u.LPos1x, LPos1y = (float)u.LPos1y, LPos1z = (float)u.LPos1z, LRange1 = (float)u.LRange1,
+            LPos2x = (float)u.LPos2x, LPos2y = (float)u.LPos2y, LPos2z = (float)u.LPos2z, LRange2 = (float)u.LRange2,
+            LInner0 = (float)u.LInner0, LInner1 = (float)u.LInner1, LInner2 = (float)u.LInner2, PadLI = 0f,
+            LOuter0 = (float)u.LOuter0, LOuter1 = (float)u.LOuter1, LOuter2 = (float)u.LOuter2, PadLO = 0f,
         };
     }
 

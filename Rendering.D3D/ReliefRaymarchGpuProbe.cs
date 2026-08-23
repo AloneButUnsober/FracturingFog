@@ -281,7 +281,47 @@ public static class ReliefRaymarchGpuProbe
         fxGlass.AbsorptionDistance = 1.0;
         bool? okGlass = RunDiff(sb, "glass (transmission 0.6)", 160, 120, 160, 120, pGlass, fxGlass);
 
-        bool ok = (okFull ?? true) && (okDof ?? true) && (okAov ?? true) && (okGlass ?? true);
+        // S8 (#389/#408) — positional-light diff: a point light + a spot light make
+        // ShadeFlat resolve per-surface dir + attenuation (LightSampler twin) instead
+        // of the constant directional dir. Cheap (no extra march), so the GPU==twin
+        // point/spot port is validated at low cost. Light1 → point above the dome;
+        // Light2 → spot angled at it (wide cone so it catches enough surface for a
+        // meaningful diff). Shadow + AO on so the resolved dir feeds the shadow march.
+        var pLights = new FractalParameters
+        {
+            Relief2DEnabled = true,
+            Relief2DRaymarch = true,
+            Relief2DHeightScale = 1.4,
+            Relief2DCameraAzimuthDeg = 25,
+            Relief2DCameraElevationDeg = 45,
+            Relief2DCameraFovDeg = 55,
+            Relief2DGroundPlane = false,
+            Relief2DEmptySkip = true,
+        };
+        var fxLights = LightingFxData.CreateDefault();
+        fxLights.BgTopColor = 0xFF335588u;
+        fxLights.BgBottomColor = 0xFF0A0C14u;
+        fxLights.ShadowSteps = 24;
+        fxLights.ShadowSoftK = 8.0;
+        fxLights.ShadowLightMask = 0x1;
+        fxLights.AoSamples = 5;
+        fxLights.AoStrength = 1.0;
+        fxLights.ShowSkyBackdrop = true;
+        // Light1 → point light above/beside the dome, moderate range window.
+        fxLights.Light1.Type = LightType.Point;
+        fxLights.Light1.PosX = 0.4; fxLights.Light1.PosY = 1.1; fxLights.Light1.PosZ = 0.3;
+        fxLights.Light1.Range = 4.0;
+        // Light2 → spot angled at the dome; keep its default Theta/Phi as the cone axis
+        // and widen the cone so the penumbra covers a useful patch of surface.
+        fxLights.Light2.Type = LightType.Spot;
+        fxLights.Light2.Intensity = 0.8;
+        fxLights.Light2.PosX = -0.4; fxLights.Light2.PosY = 1.0; fxLights.Light2.PosZ = -0.3;
+        fxLights.Light2.Range = 4.0;
+        fxLights.Light2.SpotInnerDeg = 30.0;
+        fxLights.Light2.SpotOuterDeg = 60.0;
+        bool? okLights = RunDiff(sb, "lights (point + spot)", 160, 120, 160, 120, pLights, fxLights);
+
+        bool ok = (okFull ?? true) && (okDof ?? true) && (okAov ?? true) && (okGlass ?? true) && (okLights ?? true);
         sb.AppendLine(ok ? "RESULT: PASS" : "RESULT: FAIL");
         Finish(sb);
         return ok ? 0 : 1;
