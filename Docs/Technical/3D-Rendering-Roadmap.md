@@ -342,8 +342,22 @@ animated.
   kernel, so GPU relief + froxel composites fog on-GPU on Linux/macOS too. The
   `--vulkanfroxel` gate (same scene/oracle/tolerances as `--froxelgpu`) PASSES on real
   hardware (GT 710: mean 0.059, 0 edge px, 0 alpha). Shared HLSL + D3D kernel unchanged.
-- **Remaining:** **temporal reprojection** (Scene Engine history, additive gated) — the
-  last S6 tail.
+- **Temporal reprojection (landed, PR #467):** `FroxelHistory` holds the previous
+  frame's per-cell scatter + extinction (grid-keyed by dims + near/far) and
+  `BlendAndStore` exponentially blends the current frame into it BEFORE integration
+  (`out = current·(1-a) + history·a`), so animated fog (drifting noise, pulsing density,
+  moving lights) reads as a stable volume. `FroxelVolumePass` was refactored to fill a
+  full per-cell scatter/ext grid then integrate from it (null history / feedback 0 →
+  byte-identical). A grid-key change (camera move → near/far) re-seeds cleanly (a=0,
+  the temporal-AA disocclusion fallback). `FractalRenderHost` owns one persistent
+  history; temporal forces the CPU froxel post-pass (GPU froxel stays single-frame).
+  `Relief2DFroxelTemporal` + feedback knob (0.9) + Relief 3D dialog checkbox/slider.
+  11 tests; suite 1722/1722; --froxelgpu gate still PASS.
+- **Remaining (enhancement follow-ups):** batch-video history persistence (a
+  per-sequence `FroxelHistory` in the BatchRenderer loop — temporal is a no-op on a
+  single still); GPU temporal; sub-cell reprojection under continuous camera motion.
+  The core froxel unified-volume march (D3D + Vulkan + host wiring + temporal) is
+  complete.
 
 ### S7 — Float / multi-layer EXR export ◐ (#394)
 Enabler for S1 (AOV layers), S2 (linear/HDR intermediate) and S6 (HDR
