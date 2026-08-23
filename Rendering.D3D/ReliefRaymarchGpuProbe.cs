@@ -205,23 +205,62 @@ public static class ReliefRaymarchGpuProbe
         fx.VolumeNoiseOctaves = 3;
         fx.VolumeSelfShadow = 0.5;
         fx.VolumeSelfShadowSteps = 4;
-        // S3 (#389) — thin-lens DOF. Aperture > 0 makes the kernel average
-        // ReliefRaymarchGpu.DofGpuSamples lens taps (concentric-disc + ThinLensRay);
-        // the CPU twin runs the identical loop. Focus auto-resolves to |camera|.
-        // A modest aperture keeps the out-of-focus circle-of-confusion inside the
-        // gate's float-vs-double edge band while proving the lens port. This exits
-        // the byte-identical single-ray path on BOTH sides — the deep-GPU-DOF gate.
-        p.Relief2DDofApertureRadius = 0.05;
-        p.Relief2DDofFocusDistance = 0.0;   // auto-focus the fractal centre
+        var (hbuf, albedo, maxH) = BumpField(hw, hh, w, h);
 
+        // Main scene — pinhole, all features. The comprehensive GPU==twin diff.
+        p.Relief2DDofApertureRadius = 0.0;
+        bool? okFull = RunDiff(sb, "full (pinhole, all features)", w, h, hw, hh, p, fx);
+        if (okFull is null) { sb.AppendLine("RESULT: PASS"); Finish(sb); return 0; }  // no WARP → skip
+
+        // S3 (#389) — a small, cheap DOF diff so the thin-lens port stays guarded
+        // without the full 16-taps-on-WARP cost of the comprehensive scene. Aperture
+        // open ⇒ the kernel averages DofGpuSamples lens taps (concentric-disc +
+        // ThinLensRay) and the CPU twin runs the identical loop. Reflections / fog /
+        // HDRI / triplanar are dropped (per-trace-heavy) and the grid shrunk; Lambert
+        // + shadow + AO stay so the shaded lens average is meaningful. Focus auto-
+        // resolves to |camera|.
+        var pDof = new FractalParameters
+        {
+            Relief2DEnabled = true,
+            Relief2DRaymarch = true,
+            Relief2DHeightScale = 1.4,
+            Relief2DCameraAzimuthDeg = 25,
+            Relief2DCameraElevationDeg = 45,
+            Relief2DCameraFovDeg = 55,
+            Relief2DGroundPlane = false,
+            Relief2DEmptySkip = true,
+            Relief2DDofApertureRadius = 0.06,
+            Relief2DDofFocusDistance = 0.0,
+        };
+        var fxDof = LightingFxData.CreateDefault();
+        fxDof.BgTopColor = 0xFF335588u;
+        fxDof.BgBottomColor = 0xFF0A0C14u;
+        fxDof.ShadowSteps = 24;
+        fxDof.ShadowSoftK = 8.0;
+        fxDof.ShadowLightMask = 0x1;
+        fxDof.AoSamples = 5;
+        fxDof.AoStrength = 1.0;
+        fxDof.ShowSkyBackdrop = true;
+        bool? okDof = RunDiff(sb, "dof (aperture 0.06, cheap scene)", 160, 120, 160, 120, pDof, fxDof);
+
+        bool ok = (okFull ?? true) && (okDof ?? true);
+        sb.AppendLine(ok ? "RESULT: PASS" : "RESULT: FAIL");
+        Finish(sb);
+        return ok ? 0 : 1;
+    }
+
+    // One GPU (WARP) vs CPU-twin render + diff at the given size/scene. Returns true
+    // on pass, false on fail, null when no WARP device is available (→ skip). Appends
+    // the metrics to <paramref name="sb"/> under <paramref name="label"/>.
+    private static bool? RunDiff(StringBuilder sb, string label, int w, int h, int hw, int hh,
+        FractalParameters p, LightingFxData fx)
+    {
         var (hbuf, albedo, maxH) = BumpField(hw, hh, w, h);
         var u = BuildUniforms(w, h, hw, hh, hbuf, maxH, p, fx);
 
-        // CPU oracle.
         var cpu = new uint[w * h];
         ReliefRaymarchGpu.RenderCpuMirror(in u, hbuf, null, albedo, cpu, out double hitCpu);
 
-        // GPU on a WARP (software) device — no hardware needed.
         ID3D11Device? dev = null;
         ID3D11DeviceContext? ctx = null;
         ReliefRaymarchGpuKernel? kernel = null;
@@ -232,20 +271,16 @@ public static class ReliefRaymarchGpuProbe
                 null!, out dev, out _, out ctx);
             if (hr.Failure || dev == null || ctx == null)
             {
-                sb.AppendLine($"  SKIP: could not create a WARP D3D11 device (0x{hr.Code:X8})");
-                sb.AppendLine("RESULT: PASS");   // inconclusive → don't fail CI on a missing WARP
-                Finish(sb);
-                return 0;
+                sb.AppendLine($"  [{label}] SKIP: no WARP D3D11 device (0x{hr.Code:X8})");
+                return null;
             }
             kernel = new ReliefRaymarchGpuKernel(dev, ctx, new object());
             kernel.Run(in u, hbuf, null, albedo, gpu);
         }
         catch (Exception ex)
         {
-            sb.AppendLine($"  ERROR: GPU dispatch threw — {ex.Message}");
-            sb.AppendLine("RESULT: FAIL");
-            Finish(sb);
-            return 1;
+            sb.AppendLine($"  [{label}] ERROR: GPU dispatch threw — {ex.Message}");
+            return false;
         }
         finally
         {
@@ -254,9 +289,9 @@ public static class ReliefRaymarchGpuProbe
             dev?.Dispose();
         }
 
-        // Diff. CPU twin = double, shader = float → tolerate a small mean channel
-        // diff and a small fraction of silhouette-edge pixels (a float-vs-double
-        // ray flipping hit/miss). RGB only (alpha is 0xFF on both here).
+        // CPU twin = double, shader = float → tolerate a small mean channel diff and
+        // a small fraction of silhouette-edge pixels (a float-vs-double ray flipping
+        // hit/miss). RGB only (alpha is 0xFF on both here).
         long sumAbs = 0; int maxAbs = 0; long bad = 0; int nz = 0;
         for (int i = 0; i < w * h; i++)
         {
@@ -273,27 +308,25 @@ public static class ReliefRaymarchGpuProbe
         double meanCh = sumAbs / (3.0 * w * h);
         double badFrac = (double)bad / (w * h);
 
-        string pc = Path.Combine(AppContext.BaseDirectory, "relief-gpu-cpu.ppm");
-        string pg = Path.Combine(AppContext.BaseDirectory, "relief-gpu-gpu.ppm");
+        string safe = label.Replace(' ', '-').Replace('(', '_').Replace(')', '_').Replace(',', '_');
+        string pc = Path.Combine(AppContext.BaseDirectory, $"relief-gpu-cpu-{safe}.ppm");
+        string pg = Path.Combine(AppContext.BaseDirectory, $"relief-gpu-gpu-{safe}.ppm");
         WritePpm(pc, cpu, w, h);
         WritePpm(pg, gpu, w, h);
 
-        sb.AppendLine(string.Create(CultureInfo.InvariantCulture, $"  size               {w}x{h}"));
-        sb.AppendLine(string.Create(CultureInfo.InvariantCulture, $"  cpu hit frac       {hitCpu:0.000}"));
-        sb.AppendLine(string.Create(CultureInfo.InvariantCulture, $"  mean channel diff  {meanCh:0.000}"));
-        sb.AppendLine(string.Create(CultureInfo.InvariantCulture, $"  max channel diff   {maxAbs}"));
-        sb.AppendLine(string.Create(CultureInfo.InvariantCulture, $"  edge pixels >16    {badFrac:0.0000}  ({bad} px)"));
-        sb.AppendLine(string.Create(CultureInfo.InvariantCulture, $"  alpha mismatches   {nz}"));
-        sb.AppendLine($"  wrote              {pc}");
-        sb.AppendLine($"  wrote              {pg}");
+        sb.AppendLine(string.Create(CultureInfo.InvariantCulture, $"  [{label}]"));
+        sb.AppendLine(string.Create(CultureInfo.InvariantCulture, $"    size               {w}x{h}"));
+        sb.AppendLine(string.Create(CultureInfo.InvariantCulture, $"    cpu hit frac       {hitCpu:0.000}"));
+        sb.AppendLine(string.Create(CultureInfo.InvariantCulture, $"    mean channel diff  {meanCh:0.000}"));
+        sb.AppendLine(string.Create(CultureInfo.InvariantCulture, $"    max channel diff   {maxAbs}"));
+        sb.AppendLine(string.Create(CultureInfo.InvariantCulture, $"    edge pixels >16    {badFrac:0.0000}  ({bad} px)"));
+        sb.AppendLine(string.Create(CultureInfo.InvariantCulture, $"    alpha mismatches   {nz}"));
 
-        // Silhouette must be real (both hit + sky), and the GPU must track the
-        // CPU twin: small mean diff, few edge flips, matching cutout alpha.
-        bool ok = hitCpu > 0.10 && hitCpu < 0.90
-                  && meanCh < 2.0 && badFrac < 0.03 && nz == 0;
-        sb.AppendLine(ok ? "RESULT: PASS" : "RESULT: FAIL");
-        Finish(sb);
-        return ok ? 0 : 1;
+        // Silhouette must be real (both hit + sky), and the GPU must track the twin:
+        // small mean diff, few edge flips, matching cutout alpha.
+        bool ok = hitCpu > 0.10 && hitCpu < 0.90 && meanCh < 2.0 && badFrac < 0.03 && nz == 0;
+        sb.AppendLine($"    {(ok ? "pass" : "FAIL")}");
+        return ok;
     }
 
     private static void Finish(StringBuilder sb)

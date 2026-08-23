@@ -36,8 +36,12 @@ public static class ReliefRaymarchKernelSource
     /// <summary>Compute-shader entry point name (both compilers).</summary>
     public const string EntryPoint = "CSRelief";
 
-    /// <summary>Compose the full relief-raymarch kernel source.</summary>
-    public static string Build() => Hlsl;
+    /// <summary>Compose the full relief-raymarch kernel source. The pinhole variant
+    /// (default) omits the DOF lens loop entirely — the [loop] wrapping the heavy
+    /// TracePixel makes FXC compile pathologically slowly, so a non-DOF relief render
+    /// must never pay that cost. Pass <paramref name="dof"/> true only when the render
+    /// actually has the aperture open (the backend compiles that variant lazily).</summary>
+    public static string Build(bool dof = false) => Hlsl + (dof ? DofEntry : PinholeEntry);
 
     // Layout note for the matching C# blob (built in 3b): scalars are grouped so
     // no field straddles a 16-byte cbuffer row. Packed colours are uints.
@@ -996,19 +1000,6 @@ float EmptySkipDist(float3 P, float3 rd, float epsT)
     return skip > 0.0 ? skip : 0.0;
 }
 
-// S3 (#389) — Shirley concentric disc map. Twin of CameraDof.ConcentricSampleDisk:
-// a uniform [0,1)^2 pair → a uniform unit-disc point, low distortion.
-float2 ConcentricSampleDisk(float u1, float u2)
-{
-    float ox = 2.0 * u1 - 1.0;
-    float oy = 2.0 * u2 - 1.0;
-    if (ox == 0.0 && oy == 0.0) return float2(0.0, 0.0);
-    float r, theta;
-    if (abs(ox) > abs(oy)) { r = ox; theta = (RELIEF_PI / 4.0) * (oy / ox); }
-    else                   { r = oy; theta = (RELIEF_PI / 2.0) - (RELIEF_PI / 4.0) * (ox / oy); }
-    return float2(r * cos(theta), r * sin(theta));
-}
-
 // The per-ray trace + shade — everything downstream of ray generation, factored
 // out of CSRelief so the DOF lens loop can call it once per aperture sample.
 // Returns packed ARGB for the ray o + rd.
@@ -1101,10 +1092,10 @@ uint TracePixel(float3 o, float3 rd)
 
     return outCol;
 }
+";
 
-[numthreads(8, 8, 1)]
-void CSRelief(uint3 tid : SV_DispatchThreadID)
-{
+    // Ray generation shared by both entry variants: pixel centre → (o, rd).
+    private const string RayGen = @"
     int px = (int)tid.x;
     int py = (int)tid.y;
     if (px >= gW || py >= gH) return;
@@ -1127,18 +1118,40 @@ void CSRelief(uint3 tid : SV_DispatchThreadID)
         rd = gFwd + gRight * a + gUp * b;
         rd = normalize(rd);
     }
+";
 
-    // S3 (#389) — thin-lens depth of field. Pinhole (aperture 0) traces the centre
-    // ray once (byte-identical). Otherwise average gDofSamples lens taps: jitter the
-    // origin over the aperture disc (camera right/up) and re-aim through the focal
-    // point gCam + rd*focus — twin of CameraDof.ThinLensRay + the CPU mirror's loop.
-    // Ortho carries aperture 0 (host-resolved), so this is perspective-only.
-    if (gDofAperture <= 0.0)
-    {
-        gColor[idx] = TracePixel(o, rd);
-        return;
-    }
+    // Pinhole entry — one centre ray per pixel. No lens loop, so FXC compiles it as
+    // fast as the pre-DOF kernel; this is the variant a non-DOF relief render uses.
+    private const string PinholeEntry = @"
+[numthreads(8, 8, 1)]
+void CSRelief(uint3 tid : SV_DispatchThreadID)
+{" + RayGen + @"
+    gColor[idx] = TracePixel(o, rd);
+}
+";
 
+    // DOF entry — average gDofSamples lens taps (Shirley disc + re-aim through the
+    // focal point). COMPILED ONLY when a render actually has the aperture open,
+    // because the [loop] wrapping the heavy TracePixel makes FXC compile
+    // pathologically slowly (tens of seconds) even when the loop never runs — so it
+    // must be kept out of the default pinhole shader. Twin of CameraDof.ThinLensRay
+    // + ReliefRaymarchGpu.RenderCpuMirror's lens loop.
+    private const string DofEntry = @"
+// S3 (#389) — Shirley concentric disc map. Twin of CameraDof.ConcentricSampleDisk.
+float2 ConcentricSampleDisk(float u1, float u2)
+{
+    float ox = 2.0 * u1 - 1.0;
+    float oy = 2.0 * u2 - 1.0;
+    if (ox == 0.0 && oy == 0.0) return float2(0.0, 0.0);
+    float r, theta;
+    if (abs(ox) > abs(oy)) { r = ox; theta = (RELIEF_PI / 4.0) * (oy / ox); }
+    else                   { r = oy; theta = (RELIEF_PI / 2.0) - (RELIEF_PI / 4.0) * (ox / oy); }
+    return float2(r * cos(theta), r * sin(theta));
+}
+
+[numthreads(8, 8, 1)]
+void CSRelief(uint3 tid : SV_DispatchThreadID)
+{" + RayGen + @"
     int taps = gDofSamples > 0 ? gDofSamples : 1;
     float focus = gDofFocus;
     float3 fp = gCam + rd * focus;
