@@ -308,8 +308,25 @@ animated.
   excluded from the fog in-scatter. Honoured by the per-pixel march, the froxel volume
   and the GPU relief kernel (reused an S8 pad row, no ParamBytes change) + CPU twin;
   persisted; UI checkboxes + `--fog-light-mask`.
-- **Remaining:** **temporal reprojection** (Scene Engine history, additive gated),
-  **GPU froxel compute pass**.
+- **GPU froxel compute pass (D3D landed, PR #464):** `FroxelKernelSource` (shared
+  HLSL, two entry points) + `FroxelGpuKernel` (D3D11) reproduce the froxel pass on
+  the device: `CSFroxelIntegrate` populates + integrates each column (one thread/
+  column — noise-modulated density → extinction + multi-light HG in-scatter,
+  front-to-back), `CSFroxelComposite` composites over the fog-free beauty by per-
+  pixel world depth (one thread/pixel). The GPU twin of `FroxelVolumePass.Populate`
+  + `FroxelCameraVolume` — both driven by the SAME `FroxelGrid` + `FroxelMedium` via
+  the backend-agnostic `FroxelGpuUniforms`. Noise/HG/spot-cone/light-resolve are
+  line-for-line ports of the already-parity-proven relief-kernel helpers. Proven by
+  the `--froxelgpu` WARP gate (headless, no GPU): mean channel diff 0.000, max 1 LSB
+  (float shader vs double CPU), fog changed 100% of pixels. `IFroxelVolumeKernel`
+  seam mirrors `IReliefRaymarchKernel`. 4 uniform-seam tests. Nothing calls it in
+  the live render path yet → default byte-identical.
+- **Remaining:** **temporal reprojection** (Scene Engine history, additive gated);
+  **Vulkan froxel kernel** (the HLSL is already one-source/two-compiler-ready,
+  mirroring the relief #160→#161 split); **host wiring** (thread an
+  `IFroxelVolumeKernel` factory through `FractalRenderHost` + bootstrap so a GPU
+  relief + froxel render composites on-GPU from the relief depth AOV — lifting the
+  current force-CPU, mirroring the relief #162 seam slice).
 
 ### S7 — Float / multi-layer EXR export ◐ (#394)
 Enabler for S1 (AOV layers), S2 (linear/HDR intermediate) and S6 (HDR
