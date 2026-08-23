@@ -107,6 +107,13 @@ public readonly struct ReliefUniforms
     public readonly double DofAperture, DofFocus;
     public readonly int DofSamples;
 
+    // S5 (#389/#406) — refractive (glass) material. Transmission == 0 → opaque (the
+    // byte-identical default). Environment-refraction approximation: refract the view
+    // ray, sample the env along it, Beer-Lambert-tint, Fresnel-mix with the reflected
+    // env, blend into the surface by Transmission. Mirrors the CPU ShadingPipeline.
+    public readonly double Transmission, Ior, AbsorptionDistance;
+    public readonly uint AbsorptionColor;
+
     // 4f — empty-space-skip max-height grid. EmptySkip == 0 → no skip (the
     // byte-identical slow march). MipW/MipH/MipBlk describe the coarse grid the
     // twin and both kernels build from hbuf via ReliefHeightMip.
@@ -158,7 +165,9 @@ public readonly struct ReliefUniforms
         double volumeSelfShadow, int volumeSelfShadowSteps, double sceneTime,
         double volAnisotropy, uint fogColor,
         double volPaletteStrength, uint[]? volPalette,
-        double dofAperture = 0.0, double dofFocus = 0.0, int dofSamples = 0)
+        double dofAperture = 0.0, double dofFocus = 0.0, int dofSamples = 0,
+        double transmission = 0.0, double ior = 1.5, uint absorptionColor = 0xFFFFFFFFu,
+        double absorptionDistance = 1.0)
     {
         W = w; H = h; Hw = hw; Hh = hh; Sy = sy; Aspect = aspect;
         InvLip = invLip; Bicubic = bicubic; Cam = cam;
@@ -186,6 +195,8 @@ public readonly struct ReliefUniforms
         VolAnisotropy = volAnisotropy; FogColor = fogColor;
         VolPaletteStrength = volPaletteStrength; VolPalette = volPalette;
         DofAperture = dofAperture; DofFocus = dofFocus; DofSamples = dofSamples;
+        Transmission = transmission; Ior = ior; AbsorptionColor = absorptionColor;
+        AbsorptionDistance = absorptionDistance;
     }
 
     /// <summary>World-space direction of a directional light, matching
@@ -257,7 +268,8 @@ public readonly struct ReliefUniforms
             fx.VolumeSelfShadow, fx.VolumeSelfShadowSteps, fx.SceneTime,
             fx.VolumeAnisotropy, fx.FogColor,
             fx.VolumePaletteStrength, fx.VolumePalette,
-            dofAperture, dofFocus, dofSamples);
+            dofAperture, dofFocus, dofSamples,
+            fx.Transmission, fx.Ior, fx.AbsorptionColor, fx.AbsorptionDistance);
     }
 
     /// <summary>S3 (#389) — lens taps the GPU kernel + twin average when DOF is on.
@@ -614,6 +626,38 @@ public static class ReliefRaymarchGpu
         // height DE and add the Fresnel-weighted env-tinted contribution. rd is the
         // primary view ray = -v. No-op when ReflectionStrength == 0.
         Reflections(nx, ny, nz, -vx, -vy, -vz, px, py, pz, in de, in u, ref r, ref g, ref b);
+
+        // S5 (#389/#406) — refractive (glass) transmission. Environment-refraction
+        // approximation, twin of ShadingPipeline.Shade's refraction block: refract the
+        // view ray about N, sample the env along it (Beer-Lambert-tinted), Fresnel-mix
+        // with the reflected env, blend into the surface by Transmission. rd = -v.
+        // Transmission == 0 → skipped → byte-identical.
+        if (u.Transmission > 0.0)
+        {
+            double ior = u.Ior > 1.0 ? u.Ior : 1.0;
+            double rdx = -vx, rdy = -vy, rdz = -vz;
+            var (tx, ty, tz, tir) = DielectricOps.Refract(rdx, rdy, rdz, nx, ny, nz, 1.0 / ior);
+            double f0 = DielectricOps.F0(1.0, ior);
+            double NdotVr = Math.Max(0.0, nx * vx + ny * vy + nz * vz);
+            double Fr = tir ? 1.0 : DielectricOps.FresnelSchlick(NdotVr, f0);
+
+            uint tSky = SkyDirPacked(tx, ty, tz, u.Roughness, in u);
+            double trR = (tSky >> 16) & 0xFF, trG = (tSky >> 8) & 0xFF, trB = tSky & 0xFF;
+            var (absR, absG, absB) = DielectricOps.BeerLambert(u.AbsorptionColor, u.AbsorptionDistance, 1.0);
+            trR *= absR; trG *= absG; trB *= absB;
+
+            var (rx, ry, rz) = DielectricOps.Reflect(rdx, rdy, rdz, nx, ny, nz);
+            uint rSky = SkyDirPacked(rx, ry, rz, u.Roughness, in u);
+            double reR = (rSky >> 16) & 0xFF, reG = (rSky >> 8) & 0xFF, reB = rSky & 0xFF;
+
+            double gR = reR * Fr + trR * (1.0 - Fr);
+            double gG = reG * Fr + trG * (1.0 - Fr);
+            double gB = reB * Fr + trB * (1.0 - Fr);
+            double t = u.Transmission > 1.0 ? 1.0 : u.Transmission;
+            r = r * (1.0 - t) + gR * t;
+            g = g * (1.0 - t) + gG * t;
+            b = b * (1.0 - t) + gB * t;
+        }
 
         uint A = (albedo >> 24) & 0xFFu;
         return (A << 24)

@@ -343,8 +343,9 @@ public static class HeightfieldRaymarch2D
         // S8 (#389): the GPU relief kernel resolves only directional lights from
         // Theta/Phi, so a point/spot light forces the CPU trace (same discipline
         // as DOF / DebugAov). Directional-only scenes stay on the GPU byte-identical.
-        // S5 (#389): the GPU kernel has no refraction path either, so a transmissive
-        // (glass) material likewise forces the CPU trace.
+        // S5 (#389): the GPU kernel now applies the same env-refraction approximation
+        // (DielectricOps twin in ShadeFlat, proven by the --reliefgpuraymarch glass
+        // diff), so a transmissive (glass) material no longer forces the CPU trace.
         // S1 (#389): a float-native AOV EXR export captures the lighting COMPONENTS
         // (diffuse/spec/AO/shadow), which the GPU kernel does not emit — so a
         // component capture still forces the CPU trace.
@@ -355,7 +356,7 @@ public static class HeightfieldRaymarch2D
         bool aovOk = aov == null || aov.Components == null;
         if (gpuKernel != null && p.Relief2DGpuRaymarch && fx.DebugAov == AovView.Beauty
             && !fx.HasPositionalLight
-            && fx.Transmission <= 0.0 && aovOk)
+            && aovOk)
         {
             var u = ReliefUniforms.Build(w, h, hw, hh, sy, aspect, invLip, maxH, p, in fx);
             if (aov != null)

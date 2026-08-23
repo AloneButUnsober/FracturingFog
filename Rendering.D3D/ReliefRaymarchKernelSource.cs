@@ -152,6 +152,11 @@ cbuffer ReliefParams : register(b0)
     float  gDofFocus;         // resolved focus distance (auto = |camera| when unset)
     int    gDofSamples;       // lens taps to average when aperture > 0
     int    gEmitAov;          // S4 (#402) — write primary-hit normal+depth to u1; 0 = off
+
+    float  gTransmission;     // S5 (#389/#406) — glass transmission; 0 = opaque (byte-identical)
+    float  gIor;              // index of refraction
+    float  gAbsorptionDist;   // Beer-Lambert reference distance
+    uint   gAbsorptionColor;  // packed ARGB tint surviving one reference distance
 };
 
 static const float RELIEF_PI = 3.14159265358979;
@@ -716,7 +721,45 @@ uint ShadeFlat(float3 N, float3 V, float3 P, uint albedo)
     s = s * ao;
     // 4e-ii — N-bounce reflection probe added to the combined colour (rd = -V).
     float3 refl = Reflections(N, -V, P);
-    float3 o = clamp(alb * s + spec + refl + 0.5, 0.0, 255.0);
+    float3 comb = alb * s + spec + refl;
+
+    // S5 (#389/#406) — refractive (glass) transmission. Env-refraction approximation,
+    // twin of ShadingPipeline.Shade + ReliefRaymarchGpu.ShadeFlat: refract the view
+    // ray (rd = -V) about N, sample the env along it (Beer-Lambert-tinted), Fresnel-mix
+    // with the reflected env, blend into the surface by gTransmission. 0 = opaque.
+    if (gTransmission > 0.0)
+    {
+        float ior = gIor > 1.0 ? gIor : 1.0;
+        float3 rd = -V;
+        float3 tdir = refract(rd, N, 1.0 / ior);
+        bool tir = dot(tdir, tdir) < 1e-8;
+        if (tir) tdir = reflect(rd, N);
+        float f0 = (1.0 - ior) / (1.0 + ior); f0 = f0 * f0;
+        float NdotVr = max(0.0, dot(N, V));
+        float omc = 1.0 - NdotVr;
+        float Fr = tir ? 1.0 : f0 + (1.0 - f0) * (omc * omc * omc * omc * omc);
+
+        uint tSky = SkyDirPacked(tdir, gRoughness);
+        float3 tr = float3((tSky >> 16) & 0xFF, (tSky >> 8) & 0xFF, tSky & 0xFF);
+        float3 tint = float3((gAbsorptionColor >> 16) & 0xFF, (gAbsorptionColor >> 8) & 0xFF, gAbsorptionColor & 0xFF) / 255.0;
+        float3 absorb = float3(1.0, 1.0, 1.0);
+        if (gAbsorptionDist > 0.0)
+        {
+            float d = 1.0 / gAbsorptionDist;   // Beer-Lambert over a nominal 1-unit slab
+            absorb.r = tint.r >= 1.0 ? 1.0 : (tint.r <= 0.0 ? 0.0 : pow(tint.r, d));
+            absorb.g = tint.g >= 1.0 ? 1.0 : (tint.g <= 0.0 ? 0.0 : pow(tint.g, d));
+            absorb.b = tint.b >= 1.0 ? 1.0 : (tint.b <= 0.0 ? 0.0 : pow(tint.b, d));
+        }
+        tr *= absorb;
+
+        uint rSky = SkyDirPacked(reflect(rd, N), gRoughness);
+        float3 re = float3((rSky >> 16) & 0xFF, (rSky >> 8) & 0xFF, rSky & 0xFF);
+        float3 gcol = re * Fr + tr * (1.0 - Fr);
+        float t = min(gTransmission, 1.0);
+        comb = comb * (1.0 - t) + gcol * t;
+    }
+
+    float3 o = clamp(comb + 0.5, 0.0, 255.0);
     uint A = (albedo >> 24) & 0xFFu;
     return (A << 24) | ((uint)o.r << 16) | ((uint)o.g << 8) | (uint)o.b;
 }

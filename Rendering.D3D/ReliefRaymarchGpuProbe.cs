@@ -260,7 +260,28 @@ public static class ReliefRaymarchGpuProbe
         };
         bool? okAov = RunDiff(sb, "aov (pinhole normal+depth emit)", 160, 120, 160, 120, pAov, fxDof, emitAov: true);
 
-        bool ok = (okFull ?? true) && (okDof ?? true) && (okAov ?? true);
+        // S5 (#389/#406) — glass diff: a transmissive material makes ShadeFlat refract
+        // the view ray + Fresnel-mix the reflected/transmitted env. Cheap (env sampling,
+        // no extra march), so the GPU==twin refraction port is validated at low cost.
+        var pGlass = new FractalParameters
+        {
+            Relief2DEnabled = true,
+            Relief2DRaymarch = true,
+            Relief2DHeightScale = 1.4,
+            Relief2DCameraAzimuthDeg = 25,
+            Relief2DCameraElevationDeg = 45,
+            Relief2DCameraFovDeg = 55,
+            Relief2DGroundPlane = false,
+            Relief2DEmptySkip = true,
+        };
+        var fxGlass = fxDof;
+        fxGlass.Transmission = 0.6;
+        fxGlass.Ior = 1.5;
+        fxGlass.AbsorptionColor = 0xFFCCE6FFu;   // faint blue glass tint
+        fxGlass.AbsorptionDistance = 1.0;
+        bool? okGlass = RunDiff(sb, "glass (transmission 0.6)", 160, 120, 160, 120, pGlass, fxGlass);
+
+        bool ok = (okFull ?? true) && (okDof ?? true) && (okAov ?? true) && (okGlass ?? true);
         sb.AppendLine(ok ? "RESULT: PASS" : "RESULT: FAIL");
         Finish(sb);
         return ok ? 0 : 1;
