@@ -297,9 +297,14 @@ animated.
   the volume composites as a CPU post-pass (replacing the per-pixel background march).
   Forces the CPU trace; default off → byte-identical. 13 tests. Reachable via the
   "Froxel volumetrics" checkbox in the Relief 3D dialog + `--relief-froxel`.
-- **Remaining:** **multi-light** in the froxel populate (reuse #388) + true positional
-  falloff (today: single directional key light), **temporal reprojection** (Scene
-  Engine history, additive gated), **GPU froxel compute pass**.
+- **Multi-light + positional (landed, PR #462):** `FroxelLight` + `FroxelMedium.Lights`
+  sum all three scene lights per froxel — each with its own dir / colour / HG phase,
+  and per-cell inverse-square/range/cone falloff for point/spot (via `LightSampler`).
+  `FroxelCameraVolume.BuildMedium` fills `Lights[3]` from `fx.Light1/2/3`. Null Lights
+  keeps the legacy single directional light byte-identical. Matches the per-pixel
+  march's #388 model.
+- **Remaining:** **temporal reprojection** (Scene Engine history, additive gated),
+  **GPU froxel compute pass**.
 
 ### S7 — Float / multi-layer EXR export ◐ (#394)
 Enabler for S1 (AOV layers), S2 (linear/HDR intermediate) and S6 (HDR
