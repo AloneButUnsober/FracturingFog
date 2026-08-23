@@ -243,7 +243,24 @@ public static class ReliefRaymarchGpuProbe
         fxDof.ShowSkyBackdrop = true;
         bool? okDof = RunDiff(sb, "dof (aperture 0.06, cheap scene)", 160, 120, 160, 120, pDof, fxDof);
 
-        bool ok = (okFull ?? true) && (okDof ?? true);
+        // S4 (#402) — AOV emit diff: a cheap pinhole scene rendered with the guide
+        // buffers on, checking the GPU-emitted normal/depth track the twin's (the
+        // denoiser's inputs). Reuses the cheap DOF scene's fx (Lambert + shadow + AO,
+        // no reflections/fog) but at aperture 0.
+        var pAov = new FractalParameters
+        {
+            Relief2DEnabled = true,
+            Relief2DRaymarch = true,
+            Relief2DHeightScale = 1.4,
+            Relief2DCameraAzimuthDeg = 25,
+            Relief2DCameraElevationDeg = 45,
+            Relief2DCameraFovDeg = 55,
+            Relief2DGroundPlane = false,
+            Relief2DEmptySkip = true,
+        };
+        bool? okAov = RunDiff(sb, "aov (pinhole normal+depth emit)", 160, 120, 160, 120, pAov, fxDof, emitAov: true);
+
+        bool ok = (okFull ?? true) && (okDof ?? true) && (okAov ?? true);
         sb.AppendLine(ok ? "RESULT: PASS" : "RESULT: FAIL");
         Finish(sb);
         return ok ? 0 : 1;
@@ -253,13 +270,20 @@ public static class ReliefRaymarchGpuProbe
     // on pass, false on fail, null when no WARP device is available (→ skip). Appends
     // the metrics to <paramref name="sb"/> under <paramref name="label"/>.
     private static bool? RunDiff(StringBuilder sb, string label, int w, int h, int hw, int hh,
-        FractalParameters p, LightingFxData fx)
+        FractalParameters p, LightingFxData fx, bool emitAov = false)
     {
         var (hbuf, albedo, maxH) = BumpField(hw, hh, w, h);
         var u = BuildUniforms(w, h, hw, hh, hbuf, maxH, p, fx);
 
+        // S4 (#402) — when emitAov, also diff the GPU-emitted normal/depth guides
+        // against the twin's.
+        float[]? cpuN = emitAov ? new float[w * h * 3] : null;
+        float[]? cpuD = emitAov ? new float[w * h] : null;
+        float[]? gpuN = emitAov ? new float[w * h * 3] : null;
+        float[]? gpuD = emitAov ? new float[w * h] : null;
+
         var cpu = new uint[w * h];
-        ReliefRaymarchGpu.RenderCpuMirror(in u, hbuf, null, albedo, cpu, out double hitCpu);
+        ReliefRaymarchGpu.RenderCpuMirror(in u, hbuf, null, albedo, cpu, out double hitCpu, out _, cpuN, cpuD);
 
         ID3D11Device? dev = null;
         ID3D11DeviceContext? ctx = null;
@@ -275,7 +299,7 @@ public static class ReliefRaymarchGpuProbe
                 return null;
             }
             kernel = new ReliefRaymarchGpuKernel(dev, ctx, new object());
-            kernel.Run(in u, hbuf, null, albedo, gpu);
+            kernel.Run(in u, hbuf, null, albedo, gpu, gpuN, gpuD);
         }
         catch (Exception ex)
         {
@@ -325,6 +349,42 @@ public static class ReliefRaymarchGpuProbe
         // Silhouette must be real (both hit + sky), and the GPU must track the twin:
         // small mean diff, few edge flips, matching cutout alpha.
         bool ok = hitCpu > 0.10 && hitCpu < 0.90 && meanCh < 2.0 && badFrac < 0.03 && nz == 0;
+
+        // S4 (#402) — AOV guide diff: GPU-emitted normal/depth vs the twin's. The
+        // guides drive the À-Trous denoiser, so they must track closely. Normal via
+        // 1 − |cosine|, depth via relative error on finite (non-sky) hits.
+        if (emitAov)
+        {
+            double nErrSum = 0; double nErrMax = 0; long nCount = 0;
+            double dRelSum = 0; double dRelMax = 0; long dCount = 0;
+            for (int i = 0; i < w * h; i++)
+            {
+                double ax = cpuN![i * 3], ay = cpuN[i * 3 + 1], az = cpuN[i * 3 + 2];
+                double bx = gpuN![i * 3], by = gpuN[i * 3 + 1], bz = gpuN[i * 3 + 2];
+                double al = Math.Sqrt(ax * ax + ay * ay + az * az);
+                double bl = Math.Sqrt(bx * bx + by * by + bz * bz);
+                if (al > 1e-3 && bl > 1e-3)   // both are real (non-sky) normals
+                {
+                    double cos = Math.Abs((ax * bx + ay * by + az * bz) / (al * bl));
+                    double e = 1.0 - Math.Min(1.0, cos);
+                    nErrSum += e; if (e > nErrMax) nErrMax = e; nCount++;
+                }
+                float cd = cpuD![i], gd = gpuD![i];
+                if (cd > 0f && cd < 1e6f && gd > 0f && gd < 1e6f)
+                {
+                    double rel = Math.Abs(cd - gd) / Math.Max(1e-4, cd);
+                    dRelSum += rel; if (rel > dRelMax) dRelMax = rel; dCount++;
+                }
+            }
+            double nErrMean = nCount > 0 ? nErrSum / nCount : 0;
+            double dRelMean = dCount > 0 ? dRelSum / dCount : 0;
+            sb.AppendLine(string.Create(CultureInfo.InvariantCulture, $"    aov normal 1-|cos| mean {nErrMean:0.00000} max {nErrMax:0.0000} ({nCount} px)"));
+            sb.AppendLine(string.Create(CultureInfo.InvariantCulture, $"    aov depth rel-err  mean {dRelMean:0.00000} max {dRelMax:0.0000} ({dCount} px)"));
+            bool aovOk = nCount > 0 && dCount > 0 && nErrMean < 0.02 && dRelMean < 0.02;
+            sb.AppendLine($"    aov {(aovOk ? "pass" : "FAIL")}");
+            ok = ok && aovOk;
+        }
+
         sb.AppendLine($"    {(ok ? "pass" : "FAIL")}");
         return ok;
     }

@@ -65,7 +65,7 @@ public sealed class ReliefRaymarchGpuKernel : IDisposable, FracturingFog.Renderi
         public float VolNoiseAmount, VolNoiseScale, VolNoiseSpeed; public int VolNoiseOctaves;   // 4e-ii FBM
         public float VolSelfShadow; public int VolSelfShadowSteps; public float SceneTime, VolAnisotropy;   // 4e-ii + #184 Slice 3 (B)
         public uint FogColor; public float VolPaletteStrength; public int HasPalette, PaletteLen;   // #184 Slice 3 (C) + #185 slice D
-        public float DofAperture, DofFocus; public int DofSamples; public float PadDof;   // S3 (#389) thin-lens DOF
+        public float DofAperture, DofFocus; public int DofSamples; public int EmitAov;   // S3 (#389) DOF + S4 (#402) AOV emit
     }
 
     private const int ParamBytes = 464;
@@ -100,6 +100,10 @@ public sealed class ReliefRaymarchGpuKernel : IDisposable, FracturingFog.Renderi
     private ID3D11UnorderedAccessView? _colorUav;
     private int _outPixels;
 
+    private ID3D11Buffer? _aovBuf, _aovStaging;       // u1 — S4 (#402) normal.xyz + depth
+    private ID3D11UnorderedAccessView? _aovUav;
+    private int _aovPixels;
+
     private bool _disposed;
 
     public double LastDispatchMs { get; private set; }
@@ -119,6 +123,9 @@ public sealed class ReliefRaymarchGpuKernel : IDisposable, FracturingFog.Renderi
         _paramsBuf = _device.CreateBuffer(new BufferDescription(
             byteWidth: ParamBytes, bindFlags: BindFlags.ConstantBuffer,
             usage: ResourceUsage.Dynamic, cpuAccessFlags: CpuAccessFlags.Write));
+
+        // Bind a 1-pixel AOV stub so u1 is never dangling on colour-only dispatches.
+        EnsureAovBuffers(1);
     }
 
     // Compile one CSRelief variant (pinhole or DOF). Kept separate so the DOF
@@ -240,6 +247,39 @@ public sealed class ReliefRaymarchGpuKernel : IDisposable, FracturingFog.Renderi
         _paletteLen = count;
     }
 
+    // S4 (#402) — (re)allocate the AOV UAV (u1): 4 floats/pixel (normal.xyz + depth)
+    // + a staging buffer for readback. A 1-pixel stub is bound when not emitting so
+    // u1 is never dangling (gEmitAov gates the shader write).
+    private void EnsureAovBuffers(int pixels)
+    {
+        if (_aovBuf != null && _aovPixels == pixels) return;
+        _aovUav?.Dispose(); _aovBuf?.Dispose(); _aovStaging?.Dispose();
+        int floats = Math.Max(1, pixels) * 4;
+        _aovBuf = _device.CreateBuffer(new BufferDescription
+        {
+            ByteWidth = (uint)(floats * sizeof(float)),
+            BindFlags = BindFlags.UnorderedAccess | BindFlags.ShaderResource,
+            Usage = ResourceUsage.Default,
+            CPUAccessFlags = CpuAccessFlags.None,
+            MiscFlags = ResourceOptionFlags.BufferStructured,
+            StructureByteStride = sizeof(float),
+        });
+        _aovUav = _device.CreateUnorderedAccessView(_aovBuf, new UnorderedAccessViewDescription
+        {
+            Format = Vortice.DXGI.Format.Unknown,
+            ViewDimension = UnorderedAccessViewDimension.Buffer,
+            Buffer = new BufferUnorderedAccessView { FirstElement = 0, NumElements = (uint)floats, Flags = 0 },
+        });
+        _aovStaging = _device.CreateBuffer(new BufferDescription
+        {
+            ByteWidth = (uint)(floats * sizeof(float)),
+            Usage = ResourceUsage.Staging,
+            CPUAccessFlags = CpuAccessFlags.Read,
+            BindFlags = BindFlags.None,
+        });
+        _aovPixels = pixels;
+    }
+
     private void EnsureOutputBuffers(int n)
     {
         if (_albedoBuf != null && _outPixels == n) return;
@@ -293,7 +333,8 @@ public sealed class ReliefRaymarchGpuKernel : IDisposable, FracturingFog.Renderi
     /// optional cull mask (<paramref name="keep"/>) and albedo are uploaded to
     /// the GPU each call. The GPU twin of
     /// <see cref="ReliefRaymarchGpu.RenderCpuMirror"/>.</summary>
-    public void Run(in ReliefUniforms u, float[] hbuf, byte[]? keep, uint[] albedo, uint[] dst)
+    public void Run(in ReliefUniforms u, float[] hbuf, byte[]? keep, uint[] albedo, uint[] dst,
+        float[]? aovNormalXyz = null, float[]? aovDepth = null)
     {
         if (_disposed) throw new ObjectDisposedException(nameof(ReliefRaymarchGpuKernel));
         int w = u.W, h = u.H, hn = u.Hw * u.Hh, n = w * h;
@@ -301,11 +342,17 @@ public sealed class ReliefRaymarchGpuKernel : IDisposable, FracturingFog.Renderi
         if (hbuf.Length < hn || albedo.Length < n || dst.Length < n)
             throw new ArgumentException("relief GPU input buffer too small for the uniforms");
 
+        // S4 (#402) — emit the primary-hit normal/depth AOVs into the caller's guide
+        // buffers when both are supplied and large enough; else colour only.
+        bool emitAov = aovNormalXyz != null && aovDepth != null
+                       && aovNormalXyz.Length >= (long)n * 3 && aovDepth.Length >= n;
+
         lock (_d3dGate)
         {
             long t0 = System.Diagnostics.Stopwatch.GetTimestamp();
             EnsureFieldBuffers(hn);
             EnsureOutputBuffers(n);
+            if (emitAov) EnsureAovBuffers(n);
 
             UploadFloats(_heightBuf!, hbuf, hn);
             UploadColors(_albedoBuf!, albedo, n);
@@ -334,7 +381,7 @@ public sealed class ReliefRaymarchGpuKernel : IDisposable, FracturingFog.Renderi
                 UploadColors(_paletteBuf!, u.VolPalette, u.VolPalette.Length);
             }
 
-            var p = BuildBlob(in u, keep != null);
+            var p = BuildBlob(in u, keep != null, emitAov);
             var mapped = _ctx.Map(_paramsBuf, 0, Vortice.Direct3D11.MapMode.WriteDiscard, MapFlags.None);
             unsafe { *(ReliefParamsBlob*)mapped.DataPointer = p; }
             _ctx.Unmap(_paramsBuf, 0);
@@ -352,10 +399,12 @@ public sealed class ReliefRaymarchGpuKernel : IDisposable, FracturingFog.Renderi
             _ctx.CSSetShaderResource(4, u.HdriBuf != null ? _hdriSrv : null);
             _ctx.CSSetShaderResource(5, hasPalette ? _paletteSrv : null);
             _ctx.CSSetUnorderedAccessView(0, _colorUav);
+            _ctx.CSSetUnorderedAccessView(1, _aovUav);   // S4 — always bound (stub when not emitting)
 
             _ctx.Dispatch((uint)((w + 7) / 8), (uint)((h + 7) / 8), 1);
 
             _ctx.CSUnsetUnorderedAccessView(0);
+            _ctx.CSUnsetUnorderedAccessView(1);
             _ctx.CSSetShaderResource(0, null);
             _ctx.CSSetShaderResource(1, null);
             _ctx.CSSetShaderResource(2, null);
@@ -378,6 +427,28 @@ public sealed class ReliefRaymarchGpuKernel : IDisposable, FracturingFog.Renderi
             }
             finally { _ctx.Unmap(_colorStaging!, 0); }
 
+            // S4 (#402) — read back the AOV plane and split into normal.xyz + depth.
+            if (emitAov)
+            {
+                _ctx.CopyResource(_aovStaging!, _aovBuf!);
+                var am = _ctx.Map(_aovStaging!, 0, Vortice.Direct3D11.MapMode.Read, MapFlags.None);
+                try
+                {
+                    unsafe
+                    {
+                        float* src = (float*)am.DataPointer;
+                        for (int i = 0; i < n; i++)
+                        {
+                            aovNormalXyz![i * 3] = src[i * 4];
+                            aovNormalXyz[i * 3 + 1] = src[i * 4 + 1];
+                            aovNormalXyz[i * 3 + 2] = src[i * 4 + 2];
+                            aovDepth![i] = src[i * 4 + 3];
+                        }
+                    }
+                }
+                finally { _ctx.Unmap(_aovStaging!, 0); }
+            }
+
             long tEnd = System.Diagnostics.Stopwatch.GetTimestamp();
             double freq = System.Diagnostics.Stopwatch.Frequency;
             LastDispatchMs = (tDispatch - t0) * 1000.0 / freq;
@@ -385,7 +456,7 @@ public sealed class ReliefRaymarchGpuKernel : IDisposable, FracturingFog.Renderi
         }
     }
 
-    private static ReliefParamsBlob BuildBlob(in ReliefUniforms u, bool hasKeep)
+    private static ReliefParamsBlob BuildBlob(in ReliefUniforms u, bool hasKeep, bool emitAov)
     {
         var c = u.Cam;
         return new ReliefParamsBlob
@@ -428,7 +499,8 @@ public sealed class ReliefRaymarchGpuKernel : IDisposable, FracturingFog.Renderi
             VolPaletteStrength = (float)u.VolPaletteStrength,
             HasPalette = (u.VolPaletteStrength > 0.0 && u.VolPalette != null && u.VolPalette.Length >= 2) ? 1 : 0,
             PaletteLen = u.VolPalette?.Length ?? 0,
-            DofAperture = (float)u.DofAperture, DofFocus = (float)u.DofFocus, DofSamples = u.DofSamples, PadDof = 0f,
+            DofAperture = (float)u.DofAperture, DofFocus = (float)u.DofFocus, DofSamples = u.DofSamples,
+            EmitAov = emitAov ? 1 : 0,
         };
     }
 
@@ -487,6 +559,9 @@ public sealed class ReliefRaymarchGpuKernel : IDisposable, FracturingFog.Renderi
         try { _albedoBuf?.Dispose(); } catch { }
         try { _colorBuf?.Dispose(); } catch { }
         try { _colorStaging?.Dispose(); } catch { }
+        try { _aovUav?.Dispose(); } catch { }
+        try { _aovBuf?.Dispose(); } catch { }
+        try { _aovStaging?.Dispose(); } catch { }
         try { _paramsBuf?.Dispose(); } catch { }
         try { _cs?.Dispose(); } catch { }
         try { _csDof?.Dispose(); } catch { }

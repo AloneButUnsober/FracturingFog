@@ -32,6 +32,13 @@ public interface IReliefRaymarchKernel : IDisposable
     /// packed-ARGB result into <paramref name="dst"/> (length ≥ u.W·u.H). The
     /// compressed field (<paramref name="hbuf"/>, u.Hw·u.Hh cells), optional cull
     /// mask (<paramref name="keep"/>) and flat albedo are the same buffers the CPU
-    /// <see cref="HeightfieldRaymarch2D"/> render feeds its sphere trace.</summary>
-    void Run(in ReliefUniforms u, float[] hbuf, byte[]? keep, uint[] albedo, uint[] dst);
+    /// <see cref="HeightfieldRaymarch2D"/> render feeds its sphere trace.
+    ///
+    /// S4 (#402): when <paramref name="aovNormalXyz"/> (length ≥ 3·u.W·u.H) and
+    /// <paramref name="aovDepth"/> (length ≥ u.W·u.H) are supplied, the kernel also
+    /// emits the primary-hit world-space normal + world-units depth into them (the
+    /// À-Trous denoiser's guide buffers), so a denoised relief render no longer has
+    /// to fall back to the CPU trace. Null (the default) = colour only.</summary>
+    void Run(in ReliefUniforms u, float[] hbuf, byte[]? keep, uint[] albedo, uint[] dst,
+        float[]? aovNormalXyz = null, float[]? aovDepth = null);
 }

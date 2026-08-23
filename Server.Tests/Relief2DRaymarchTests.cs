@@ -1560,12 +1560,25 @@ public class ReliefGpuSeamTests
         public const uint Sentinel = 0xFF123456u;
         public int Calls;
         public int SeenW, SeenH, SeenHw, SeenHh;
+        public bool SeenAov;
 
-        public void Run(in ReliefUniforms u, float[] hbuf, byte[]? keep, uint[] albedo, uint[] dst)
+        public void Run(in ReliefUniforms u, float[] hbuf, byte[]? keep, uint[] albedo, uint[] dst,
+            float[]? aovNormalXyz = null, float[]? aovDepth = null)
         {
             Calls++;
             SeenW = u.W; SeenH = u.H; SeenHw = u.Hw; SeenHh = u.Hh;
+            SeenAov = aovNormalXyz != null && aovDepth != null;
             for (int i = 0; i < dst.Length; i++) dst[i] = Sentinel;
+            // S4 (#402) — fill the guides so the seam test can assert the kernel
+            // received them (a real kernel emits the primary-hit normal/depth here).
+            if (SeenAov)
+            {
+                for (int i = 0; i < u.W * u.H; i++)
+                {
+                    aovNormalXyz![i * 3 + 1] = 1f;   // up normal
+                    aovDepth![i] = 1f;
+                }
+            }
         }
 
         public void Dispose() { }
@@ -1632,6 +1645,43 @@ public class ReliefGpuSeamTests
         Assert.Equal(w, stub.SeenHw);
         Assert.Equal(h, stub.SeenHh);
         Assert.True(AllSentinel(dst), "kernel output was not written to dst");
+    }
+
+    [Fact]
+    public void GpuSeam_DenoiseCapture_StaysOnGpu_AndEmitsGuides()
+    {
+        // S4 (#402) — a normal/depth-only AOV capture (the denoiser's guides) must
+        // dispatch the GPU kernel with the guide buffers, not force the CPU trace.
+        int w = 160, h = 120;
+        var (albedo, height) = Field(w, h);
+        var stub = new StubReliefKernel();
+        var dst = new uint[w * h];
+        var aov = new HeightfieldRaymarch2D.ReliefAovBuffers(w, h);   // no Components
+
+        HeightfieldRaymarch2D.Render(albedo, height, w, h, w, h, ReliefParams(gpu: true), dst, out _, stub, aov);
+
+        Assert.Equal(1, stub.Calls);
+        Assert.True(stub.SeenAov, "kernel should receive the normal/depth guide buffers");
+        Assert.True(AllSentinel(dst), "kernel output was not written to dst");
+        Assert.Equal(1f, aov.NormalXyz[1], 5);   // stub wrote the up normal
+        Assert.Equal(1f, aov.Depth[0], 5);
+    }
+
+    [Fact]
+    public void GpuSeam_ComponentCapture_ForcesCpu()
+    {
+        // S1/S4 — a COMPONENT capture (AOV-EXR export: diffuse/spec/AO/shadow) is not
+        // GPU-emitted, so it must fall back to the CPU trace even with a kernel + flag.
+        int w = 160, h = 120;
+        var (albedo, height) = Field(w, h);
+        var stub = new StubReliefKernel();
+        var dst = new uint[w * h];
+        var aov = new HeightfieldRaymarch2D.ReliefAovBuffers(w, h, captureComponents: true);
+
+        HeightfieldRaymarch2D.Render(albedo, height, w, h, w, h, ReliefParams(gpu: true), dst, out _, stub, aov);
+
+        Assert.Equal(0, stub.Calls);
+        Assert.False(AllSentinel(dst));
     }
 
     [Fact]
