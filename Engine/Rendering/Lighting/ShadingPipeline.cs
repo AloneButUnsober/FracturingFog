@@ -254,6 +254,22 @@ public static class ShadingPipeline
         return 0xFF000000u | ((uint)R << 16) | ((uint)G << 8) | B;
     }
 
+    /// <summary>Float-native lighting components a single <see cref="Shade{TDe}"/>
+    /// call resolved at a surface hit — the same quantities <see cref="EncodeAov"/>
+    /// packs to 8-bit, but raw and unclamped (roadmap S1/S7, #389). Diffuse /
+    /// specular are byte-scale/255 (0..~1); AO and Shadow are already 0..1.
+    /// Captured in the beauty pass so the AOV EXR carries float lighting layers
+    /// without a per-view re-render.</summary>
+    public readonly struct ShadeComponents
+    {
+        public ShadeComponents(float diffR, float diffG, float diffB,
+            float specR, float specG, float specB, float ao, float shadow)
+        { DiffR = diffR; DiffG = diffG; DiffB = diffB; SpecR = specR; SpecG = specG; SpecB = specB; Ao = ao; Shadow = shadow; }
+        public float DiffR { get; } public float DiffG { get; } public float DiffB { get; }
+        public float SpecR { get; } public float SpecG { get; } public float SpecB { get; }
+        public float Ao { get; } public float Shadow { get; }
+    }
+
     // ── #317 — AOV / view-mode encoder ────────────────────────────────
     private static uint PackRgb(double r, double g, double b) => 0xFF000000u
         | ((uint)Math.Clamp(r * 255.0 + 0.5, 0, 255) << 16)
@@ -329,17 +345,18 @@ public static class ShadingPipeline
         int pixelIndex = -1,
         float[]? depthBuf = null,
         float[]? normalBuf = null,
-        float[]? hdrBuf = null)
+        float[]? hdrBuf = null,
+        ShadeComponents[]? compBuf = null)
     {
         if (de is null)
         {
             var nop = default(NullDe);
             return Shade<NullDe>(in i, albedoBgra, in fx, in nop, false,
-                pixelIndex, depthBuf, normalBuf, hdrBuf);
+                pixelIndex, depthBuf, normalBuf, hdrBuf, compBuf);
         }
         var ada = new DelegateDeAdapter(de);
         return Shade<DelegateDeAdapter>(in i, albedoBgra, in fx, in ada, true,
-            pixelIndex, depthBuf, normalBuf, hdrBuf);
+            pixelIndex, depthBuf, normalBuf, hdrBuf, compBuf);
     }
 
     /// <summary>P3 — struct-generic Shade. JIT specialises one body per
@@ -357,7 +374,8 @@ public static class ShadingPipeline
         int pixelIndex = -1,
         float[]? depthBuf = null,
         float[]? normalBuf = null,
-        float[]? hdrBuf = null)
+        float[]? hdrBuf = null,
+        ShadeComponents[]? compBuf = null)
         where TDe : struct, IDistanceEstimator
     {
         // Lights. Phase 18 — orbit theta by SceneTime · LightOrbitSpeed.
@@ -475,6 +493,18 @@ public static class ShadingPipeline
             }
             ao = Math.Clamp(1.0 - fx.AoStrength * (occl / Math.Max(w, 1)), 0, 1);
         }
+
+        // S1/S7 (#389) — float lighting-component capture. Every component is
+        // resolved by here (diffuse/specular byte-scale, AO/shadow 0..1); record
+        // the raw values so the AOV EXR carries float diffuse/specular/AO/shadow
+        // layers without a per-view re-render. compBuf null (the default) ⇒ no
+        // write ⇒ byte-identical. Captured during the beauty pass, so it runs
+        // BEFORE the DebugAov early-return below.
+        if (compBuf != null && (uint)pixelIndex < (uint)compBuf.Length)
+            compBuf[pixelIndex] = new ShadeComponents(
+                (float)(sR / 255.0), (float)(sG / 255.0), (float)(sB / 255.0),
+                (float)(specR / 255.0), (float)(specG / 255.0), (float)(specB / 255.0),
+                (float)ao, (float)sh1);
 
         // #317 — AOV / view-mode override. Every geometry + lighting component is
         // resolved by here (normal + depth + step from the hit record; shadow /
