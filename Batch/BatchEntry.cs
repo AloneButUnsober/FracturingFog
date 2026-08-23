@@ -252,6 +252,14 @@ namespace FracturingFog.Batch
             Console.WriteLine("  --relief-isolate-colors CSV Colours to drop (CSV). Implies --relief-isolate-by-color.");
             Console.WriteLine("  --relief-isolate-tolerance F  Colour match tolerance 0..1. Default 0.12.");
             Console.WriteLine();
+            Console.WriteLine("Point / spot lights (relief raymarch; N = 1, 2 or 3). Any implies --relief-raymarch:");
+            Console.WriteLine("  --lightN-type T             directional | point | spot. Point/spot add falloff.");
+            Console.WriteLine("  --lightN-intensity F        Brightness 0..4 (0 = off).");
+            Console.WriteLine("  --lightN-dir \"theta,phi\"    Aim in radians (directional / spot cone axis).");
+            Console.WriteLine("  --lightN-pos \"x,y,z\"        World position (point / spot).");
+            Console.WriteLine("  --lightN-range F            Soft cutoff 0..100 (0 = pure inverse-square).");
+            Console.WriteLine("  --lightN-cone \"inner,outer\" Spot cone half-angles in degrees.");
+            Console.WriteLine();
             Console.WriteLine("Remote rendering (uses a saved FFClient connection + render preset):");
             Console.WriteLine("  --remote                    Route this batch through a remote FracturingFog server");
             Console.WriteLine("  --connection NAME           Saved client-connection name (required with --remote)");

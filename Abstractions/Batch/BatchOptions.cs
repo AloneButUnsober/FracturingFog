@@ -9,10 +9,35 @@ using System;
 using System.Globalization;
 using FracturingFog.Imaging;
 using FracturingFog.Models;
+using FracturingFog.Rendering.Lighting;
 
 namespace FracturingFog.Batch
 {
     public enum BatchMode { Image, Video, Slideshow, Scene }
+
+    /// <summary>Per-light point / spot override parsed from the <c>--lightN-*</c>
+    /// flags (roadmap S8, #404). Every field is nullable so BatchRenderer applies
+    /// only what the user actually passed onto <c>fp.Lighting.LightN</c>; unset
+    /// fields keep the light's existing value. <see cref="HasAny"/> reports whether
+    /// this light carried any override at all.</summary>
+    public sealed class BatchLightOverride
+    {
+        public LightType? Type { get; set; }
+        public double? Intensity { get; set; }         // 0..4 (0 = off)
+        public double? Theta { get; set; }             // directional aim / spot cone axis
+        public double? Phi { get; set; }
+        public double? PosX { get; set; }              // world position (point / spot)
+        public double? PosY { get; set; }
+        public double? PosZ { get; set; }
+        public double? Range { get; set; }             // 0..100 (0 = pure inverse-square)
+        public double? SpotInnerDeg { get; set; }      // spot cone half-angles (degrees)
+        public double? SpotOuterDeg { get; set; }
+
+        public bool HasAny =>
+            Type.HasValue || Intensity.HasValue || Theta.HasValue || Phi.HasValue
+            || PosX.HasValue || PosY.HasValue || PosZ.HasValue || Range.HasValue
+            || SpotInnerDeg.HasValue || SpotOuterDeg.HasValue;
+    }
 
     /// <summary>
     /// Mirrors VideoDialog.LosslessEncodeChoice so the CL batch path offers
@@ -204,6 +229,14 @@ namespace FracturingFog.Batch
         public bool ReliefIsolateByColor { get; set; }
         public string? ReliefIsolateColors { get; set; }     // CSV hex/rgb
         public double? ReliefIsolateTolerance { get; set; }  // 0..1
+
+        // Per-light point / spot overrides (roadmap S8, #404). Index 0..2 = the
+        // three LightingFxData lights. Only the fields the user passed are set
+        // (nullable); BatchRenderer applies each non-null onto fp.Lighting.LightN.
+        // Any per-light flag implies relief + raymarch (positional lights are a
+        // relief-raymarch feature). See BatchFlags.LightFlag for the grammar.
+        public BatchLightOverride[] Lights { get; } =
+            { new BatchLightOverride(), new BatchLightOverride(), new BatchLightOverride() };
 
         // ── Phase 3 remote rendering ──────────────────────────────────────
         /// <summary>True when --remote was passed; flips dispatch into the
@@ -734,8 +767,10 @@ namespace FracturingFog.Batch
                         return false;
 
                     default:
-                        error = $"Unknown argument: {a}";
-                        return false;
+                        if (!TryConsumeLightFlag(args, ref i, a, opts, out bool matched, out error))
+                            return false;   // matched --lightN-*, but its value was invalid
+                        if (!matched) { error = $"Unknown argument: {a}"; return false; }
+                        break;
                 }
             }
 
@@ -827,6 +862,21 @@ namespace FracturingFog.Batch
             if (opts.ReliefIsolateTolerance is < 0 or > 1)
                 { error = "--relief-isolate-tolerance must be 0..1."; return false; }
 
+            // Per-light point / spot overrides (roadmap S8, #404).
+            for (int li = 0; li < opts.Lights.Length; li++)
+            {
+                var L = opts.Lights[li];
+                int n = li + 1;
+                if (L.Intensity is < 0 or > 4)
+                    { error = $"--light{n}-intensity must be 0..4."; return false; }
+                if (L.Range is < 0 or > 100)
+                    { error = $"--light{n}-range must be 0..100."; return false; }
+                if (L.SpotInnerDeg is < 0 or > 90)
+                    { error = $"--light{n}-cone inner must be 0..90 (degrees)."; return false; }
+                if (L.SpotOuterDeg is < 0 or > 90)
+                    { error = $"--light{n}-cone outer must be 0..90 (degrees)."; return false; }
+            }
+
             if (opts.Mode == BatchMode.Slideshow)
             {
                 // VideoSeconds reuses --seconds parser; mirror into slideshow.
@@ -881,6 +931,95 @@ namespace FracturingFog.Batch
                     return Enum.TryParse(s, ignoreCase: true, out vt)
                         && Enum.IsDefined(vt);
             }
+        }
+
+        /// <summary>Parse a <c>--lightN-field</c> flag (roadmap S8, #404) onto
+        /// <paramref name="opts"/>.Lights[N-1]. <paramref name="matched"/> is true
+        /// when <paramref name="a"/> was a per-light flag (whether or not the value
+        /// parsed). Returns false only when a per-light flag matched but its value
+        /// was invalid (<paramref name="err"/> set). Any per-light flag implies
+        /// relief + raymarch (positional lights are a relief-raymarch feature).</summary>
+        private static bool TryConsumeLightFlag(string[] args, ref int i, string a,
+            BatchOptions opts, out bool matched, out string? err)
+        {
+            matched = false; err = null;
+            string s = a.ToLowerInvariant();
+            // Grammar: --light<N>-<field>, N ∈ 1..3.
+            if (!s.StartsWith("--light", StringComparison.Ordinal) || s.Length < 9) return true;
+            char digit = s[7];
+            if (digit < '1' || digit > '3' || s[8] != '-') return true;
+            int idx = digit - '1';
+            string field = s.Substring(9);
+            var light = opts.Lights[idx];
+
+            switch (field)
+            {
+                case BatchFlags.LightFieldType:
+                    if (!Next(args, ref i, a, out string tv, out err)) { matched = true; return false; }
+                    matched = true;
+                    switch (tv.Trim().ToLowerInvariant())
+                    {
+                        case "directional": case "dir": light.Type = LightType.Directional; break;
+                        case "point":       light.Type = LightType.Point; break;
+                        case "spot":        light.Type = LightType.Spot; break;
+                        default: err = $"{a} expected directional|point|spot, got '{tv}'."; return false;
+                    }
+                    break;
+
+                case BatchFlags.LightFieldIntensity:
+                    if (!NextDouble(args, ref i, a, out double iv, out err)) { matched = true; return false; }
+                    matched = true; light.Intensity = iv;
+                    break;
+
+                case BatchFlags.LightFieldDir:
+                    if (!Next(args, ref i, a, out string dv, out err)) { matched = true; return false; }
+                    matched = true;
+                    if (!TryParseCsvDoubles(dv, 2, out double[] dvv)) { err = $"{a} expected \"theta,phi\", got '{dv}'."; return false; }
+                    light.Theta = dvv[0]; light.Phi = dvv[1];
+                    break;
+
+                case BatchFlags.LightFieldPos:
+                    if (!Next(args, ref i, a, out string pv, out err)) { matched = true; return false; }
+                    matched = true;
+                    if (!TryParseCsvDoubles(pv, 3, out double[] pvv)) { err = $"{a} expected \"x,y,z\", got '{pv}'."; return false; }
+                    light.PosX = pvv[0]; light.PosY = pvv[1]; light.PosZ = pvv[2];
+                    break;
+
+                case BatchFlags.LightFieldRange:
+                    if (!NextDouble(args, ref i, a, out double rv, out err)) { matched = true; return false; }
+                    matched = true; light.Range = rv;
+                    break;
+
+                case BatchFlags.LightFieldCone:
+                    if (!Next(args, ref i, a, out string cv, out err)) { matched = true; return false; }
+                    matched = true;
+                    if (!TryParseCsvDoubles(cv, 2, out double[] cvv)) { err = $"{a} expected \"inner,outer\", got '{cv}'."; return false; }
+                    light.SpotInnerDeg = cvv[0]; light.SpotOuterDeg = cvv[1];
+                    break;
+
+                default:
+                    return true;   // --lightN- prefix but unknown field → not ours
+            }
+
+            // Positional lights only render on the relief raymarch path.
+            opts.Relief = true;
+            opts.ReliefRaymarch = true;
+            return true;
+        }
+
+        /// <summary>Parse exactly <paramref name="count"/> comma-separated invariant
+        /// doubles. Returns false on the wrong count or an unparseable field.</summary>
+        private static bool TryParseCsvDoubles(string s, int count, out double[] values)
+        {
+            values = Array.Empty<double>();
+            var parts = (s ?? string.Empty).Split(',');
+            if (parts.Length != count) return false;
+            var outv = new double[count];
+            for (int k = 0; k < count; k++)
+                if (!double.TryParse(parts[k].Trim(), NumberStyles.Float, CultureInfo.InvariantCulture, out outv[k]))
+                    return false;
+            values = outv;
+            return true;
         }
 
         private static bool Next(string[] a, ref int i, string flag, out string v, out string? err)

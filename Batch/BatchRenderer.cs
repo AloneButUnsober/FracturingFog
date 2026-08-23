@@ -21,6 +21,7 @@ using FracturingFog.Imaging;
 using FracturingFog.Interefaces;
 using FracturingFog.Models;
 using FracturingFog.Rendering;
+using FracturingFog.Rendering.Lighting;
 
 namespace FracturingFog.Batch
 {
@@ -93,6 +94,18 @@ namespace FracturingFog.Batch
             if (opts.ReliefIsolateByColor)        fp.Relief2DIsolateByColor = true;
             if (!string.IsNullOrEmpty(opts.ReliefIsolateColors)) fp.Relief2DDropColorsCsv = opts.ReliefIsolateColors!;
             if (opts.ReliefIsolateTolerance.HasValue) fp.Relief2DColorTolerance = opts.ReliefIsolateTolerance.Value;
+
+            // Per-light point / spot overrides (roadmap S8, #404). Apply each
+            // non-null field onto the matching LightingFxData light; unset fields
+            // keep the default. fp.Lighting is a struct → copy, mutate, write back.
+            if (opts.Lights[0].HasAny || opts.Lights[1].HasAny || opts.Lights[2].HasAny)
+            {
+                var fxl = fp.Lighting;
+                ApplyLightOverride(ref fxl.Light1, opts.Lights[0]);
+                ApplyLightOverride(ref fxl.Light2, opts.Lights[1]);
+                ApplyLightOverride(ref fxl.Light3, opts.Lights[2]);
+                fp.Lighting = fxl;
+            }
 
             var (pfBrightness, pfContrast, pfAdaptive) = ResolvePostFx(opts, null);
 
@@ -582,6 +595,23 @@ namespace FracturingFog.Batch
         // CLI flags (when present) override the named preset's PostFx block;
         // a null flag falls back to the preset (Image/Video pass cfg = null,
         // so they read the flags only). Clamped to the interactive ranges.
+        // Apply a per-light --lightN-* override (roadmap S8, #404) onto a light,
+        // field by field. Unset (null) fields keep the light's current value.
+        private static void ApplyLightOverride(ref DirectionalLight d, BatchLightOverride o)
+        {
+            if (!o.HasAny) return;
+            if (o.Type.HasValue)         d.Type = o.Type.Value;
+            if (o.Intensity.HasValue)    d.Intensity = o.Intensity.Value;
+            if (o.Theta.HasValue)        d.Theta = o.Theta.Value;
+            if (o.Phi.HasValue)          d.Phi = o.Phi.Value;
+            if (o.PosX.HasValue)         d.PosX = o.PosX.Value;
+            if (o.PosY.HasValue)         d.PosY = o.PosY.Value;
+            if (o.PosZ.HasValue)         d.PosZ = o.PosZ.Value;
+            if (o.Range.HasValue)        d.Range = o.Range.Value;
+            if (o.SpotInnerDeg.HasValue) d.SpotInnerDeg = o.SpotInnerDeg.Value;
+            if (o.SpotOuterDeg.HasValue) d.SpotOuterDeg = o.SpotOuterDeg.Value;
+        }
+
         private static (int brightness, int contrast, int adaptive) ResolvePostFx(
             BatchOptions opts, FracturingFog.Models.SlideshowConfig? cfg)
         {

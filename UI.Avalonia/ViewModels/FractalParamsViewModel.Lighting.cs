@@ -127,6 +127,132 @@ public sealed partial class FractalParamsViewModel
         set { MutateLighting(r => r.Fx.Light3.Color = value); this.RaisePropertyChanged(); Fire(); }
     }
 
+    // ── Light type: point / spot (roadmap S8, #404) ───────────────────
+    //
+    // Directional (default) keeps Theta/Phi as a constant world direction with
+    // no attenuation — byte-identical to the pre-S8 render. Point/Spot add a
+    // world Position, an inverse-square Range window, and (Spot) a cone from the
+    // inner/outer half-angles. The engine + GPU relief kernel resolve these
+    // per surface point (LightSampler). ShowPositional / ShowSpot gate the extra
+    // controls so a directional light shows nothing new.
+
+    /// <summary>Enum source for the three light-type combos.</summary>
+    public Array LightTypes => Enum.GetValues(typeof(LightType));
+
+    public LightType Light1Type
+    {
+        get => _p.Lighting.Light1.Type;
+        set { MutateLighting(r => r.Fx.Light1.Type = value); this.RaisePropertyChanged(); this.RaisePropertyChanged(nameof(Light1ShowPositional)); this.RaisePropertyChanged(nameof(Light1ShowSpot)); Fire(); }
+    }
+    public bool Light1ShowPositional => _p.Lighting.Light1.Type != LightType.Directional;
+    public bool Light1ShowSpot => _p.Lighting.Light1.Type == LightType.Spot;
+    public double Light1PosX
+    {
+        get => _p.Lighting.Light1.PosX;
+        set { MutateLighting(r => r.Fx.Light1.PosX = Clamp(value, -100, 100)); this.RaisePropertyChanged(); Fire(); }
+    }
+    public double Light1PosY
+    {
+        get => _p.Lighting.Light1.PosY;
+        set { MutateLighting(r => r.Fx.Light1.PosY = Clamp(value, -100, 100)); this.RaisePropertyChanged(); Fire(); }
+    }
+    public double Light1PosZ
+    {
+        get => _p.Lighting.Light1.PosZ;
+        set { MutateLighting(r => r.Fx.Light1.PosZ = Clamp(value, -100, 100)); this.RaisePropertyChanged(); Fire(); }
+    }
+    public double Light1Range
+    {
+        get => _p.Lighting.Light1.Range;
+        set { MutateLighting(r => r.Fx.Light1.Range = Clamp(value, 0, 100)); this.RaisePropertyChanged(); Fire(); }
+    }
+    public double Light1SpotInnerDeg
+    {
+        get => _p.Lighting.Light1.SpotInnerDeg;
+        set { MutateLighting(r => r.Fx.Light1.SpotInnerDeg = Clamp(value, 0, 89)); this.RaisePropertyChanged(); Fire(); }
+    }
+    public double Light1SpotOuterDeg
+    {
+        get => _p.Lighting.Light1.SpotOuterDeg;
+        set { MutateLighting(r => r.Fx.Light1.SpotOuterDeg = Clamp(value, 0, 90)); this.RaisePropertyChanged(); Fire(); }
+    }
+
+    public LightType Light2Type
+    {
+        get => _p.Lighting.Light2.Type;
+        set { MutateLighting(r => r.Fx.Light2.Type = value); this.RaisePropertyChanged(); this.RaisePropertyChanged(nameof(Light2ShowPositional)); this.RaisePropertyChanged(nameof(Light2ShowSpot)); Fire(); }
+    }
+    public bool Light2ShowPositional => _p.Lighting.Light2.Type != LightType.Directional;
+    public bool Light2ShowSpot => _p.Lighting.Light2.Type == LightType.Spot;
+    public double Light2PosX
+    {
+        get => _p.Lighting.Light2.PosX;
+        set { MutateLighting(r => r.Fx.Light2.PosX = Clamp(value, -100, 100)); this.RaisePropertyChanged(); Fire(); }
+    }
+    public double Light2PosY
+    {
+        get => _p.Lighting.Light2.PosY;
+        set { MutateLighting(r => r.Fx.Light2.PosY = Clamp(value, -100, 100)); this.RaisePropertyChanged(); Fire(); }
+    }
+    public double Light2PosZ
+    {
+        get => _p.Lighting.Light2.PosZ;
+        set { MutateLighting(r => r.Fx.Light2.PosZ = Clamp(value, -100, 100)); this.RaisePropertyChanged(); Fire(); }
+    }
+    public double Light2Range
+    {
+        get => _p.Lighting.Light2.Range;
+        set { MutateLighting(r => r.Fx.Light2.Range = Clamp(value, 0, 100)); this.RaisePropertyChanged(); Fire(); }
+    }
+    public double Light2SpotInnerDeg
+    {
+        get => _p.Lighting.Light2.SpotInnerDeg;
+        set { MutateLighting(r => r.Fx.Light2.SpotInnerDeg = Clamp(value, 0, 89)); this.RaisePropertyChanged(); Fire(); }
+    }
+    public double Light2SpotOuterDeg
+    {
+        get => _p.Lighting.Light2.SpotOuterDeg;
+        set { MutateLighting(r => r.Fx.Light2.SpotOuterDeg = Clamp(value, 0, 90)); this.RaisePropertyChanged(); Fire(); }
+    }
+
+    public LightType Light3Type
+    {
+        get => _p.Lighting.Light3.Type;
+        set { MutateLighting(r => r.Fx.Light3.Type = value); this.RaisePropertyChanged(); this.RaisePropertyChanged(nameof(Light3ShowPositional)); this.RaisePropertyChanged(nameof(Light3ShowSpot)); Fire(); }
+    }
+    public bool Light3ShowPositional => _p.Lighting.Light3.Type != LightType.Directional;
+    public bool Light3ShowSpot => _p.Lighting.Light3.Type == LightType.Spot;
+    public double Light3PosX
+    {
+        get => _p.Lighting.Light3.PosX;
+        set { MutateLighting(r => r.Fx.Light3.PosX = Clamp(value, -100, 100)); this.RaisePropertyChanged(); Fire(); }
+    }
+    public double Light3PosY
+    {
+        get => _p.Lighting.Light3.PosY;
+        set { MutateLighting(r => r.Fx.Light3.PosY = Clamp(value, -100, 100)); this.RaisePropertyChanged(); Fire(); }
+    }
+    public double Light3PosZ
+    {
+        get => _p.Lighting.Light3.PosZ;
+        set { MutateLighting(r => r.Fx.Light3.PosZ = Clamp(value, -100, 100)); this.RaisePropertyChanged(); Fire(); }
+    }
+    public double Light3Range
+    {
+        get => _p.Lighting.Light3.Range;
+        set { MutateLighting(r => r.Fx.Light3.Range = Clamp(value, 0, 100)); this.RaisePropertyChanged(); Fire(); }
+    }
+    public double Light3SpotInnerDeg
+    {
+        get => _p.Lighting.Light3.SpotInnerDeg;
+        set { MutateLighting(r => r.Fx.Light3.SpotInnerDeg = Clamp(value, 0, 89)); this.RaisePropertyChanged(); Fire(); }
+    }
+    public double Light3SpotOuterDeg
+    {
+        get => _p.Lighting.Light3.SpotOuterDeg;
+        set { MutateLighting(r => r.Fx.Light3.SpotOuterDeg = Clamp(value, 0, 90)); this.RaisePropertyChanged(); Fire(); }
+    }
+
     // ── Ambient / AO ──────────────────────────────────────────────────
 
     public double AmbientStrength

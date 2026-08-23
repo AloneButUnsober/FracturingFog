@@ -338,10 +338,18 @@ Broadens the lighting vocabulary without a scene graph.
   Vulkan. The `fx.HasPositionalLight` force-CPU clause is **lifted** — positional
   lights render on the GPU. `--reliefgpuraymarch` gate: new `lights (point+spot)` diff
   (mean 0.015, max 7, 0 edge px). Shadow-enable/spec gates keyed on base intensity.
-- **Remaining:** UI (LightingFx dialog: 3 lights × type/pos/range/cone) + batch
-  flags, **positional lights in the volumetric march** (fog site stays directional,
-  GPU + CPU), force-CPU on the 8 GPU 3D-fractal calculators (relief 2D path now GPU;
-  those 3D families still render directional-only on GPU), area lights (couple S4).
+- **UI + batch (landed, PR #460):** the LightingFx dialog's new "Light Types
+  (Point / Spot)" expander exposes per-light Type + world Position + Range + spot
+  cone (positional/cone rows gated by visibility flags). Batch grammar
+  `--lightN-{type,intensity,dir,pos,range,cone}` (N=1..3; any implies
+  `--relief-raymarch`), composed by `BatchFlags.LightFlag` so parser + builder can't
+  drift; `BatchCommandBuilder` emits them for non-directional lights; round-trip +
+  validation tests. So point/spot are now fully user-reachable (GUI + CLI).
+- **Remaining:** **positional lights in the volumetric march** (fog site stays
+  directional, GPU + CPU), force-CPU on the 8 GPU 3D-fractal calculators (relief 2D
+  path now GPU; those 3D families still render directional-only on GPU), area lights
+  (couple S4). Batch: directional θ/φ/intensity/colour for the 3 raymarch lights is a
+  general (non-S8) gap — only positional lights have flags today.
 
 ### S9 — Mesh export maturation ☑ (#391)
 Mesh export is the **one place FF crosses from renderer into geometry producer** —

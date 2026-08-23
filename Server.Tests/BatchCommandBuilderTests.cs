@@ -518,5 +518,138 @@ namespace FracturingFog.Server.Tests
             var off = LightingFxData.CreateDefault();
             Assert.Equal(StereoMode.Off, off.StereoMode);
         }
+
+        // ── S8 (#404) per-light point / spot flags ────────────────────────
+
+        [Fact]
+        public void Lights_DirectionalDefaultEmitsNoLightFlags()
+        {
+            // An all-directional scene (the default) must not emit any --lightN-*.
+            var fx = LightingFxData.CreateDefault();
+            var cmd = BatchCommandBuilder.Build(new BatchCommandSnapshot
+            {
+                Fractal = FractalType.Mandelbrot,
+                CenterX = -0.5, CenterY = 0, Zoom = 1,
+                Parameters = new FractalParameters { Lighting = fx },
+            });
+            Assert.DoesNotContain("--light1-", cmd);
+            Assert.DoesNotContain("--light2-", cmd);
+            Assert.DoesNotContain("--light3-", cmd);
+        }
+
+        [Fact]
+        public void Lights_PointAndSpot_RoundTripThroughBatchOptions()
+        {
+            var fx = LightingFxData.CreateDefault();
+            fx.Light1.Type = LightType.Point;
+            fx.Light1.Intensity = 1.5;
+            fx.Light1.Theta = 0.7; fx.Light1.Phi = 1.2;
+            fx.Light1.PosX = 0.3; fx.Light1.PosY = 1.1; fx.Light1.PosZ = -0.4;
+            fx.Light1.Range = 4.0;
+            fx.Light2.Type = LightType.Spot;
+            fx.Light2.Intensity = 0.8;
+            fx.Light2.Theta = -0.3; fx.Light2.Phi = 0.9;
+            fx.Light2.PosX = -0.5; fx.Light2.PosY = 1.0; fx.Light2.PosZ = 0.2;
+            fx.Light2.Range = 6.0;
+            fx.Light2.SpotInnerDeg = 20.0; fx.Light2.SpotOuterDeg = 45.0;
+
+            var snap = new BatchCommandSnapshot
+            {
+                Fractal = FractalType.Mandelbrot,
+                CenterX = -0.5, CenterY = 0, Zoom = 1,
+                Parameters = new FractalParameters { Lighting = fx },
+            };
+            var argv = Tokenize(BatchCommandBuilder.Build(snap));
+            for (int i = 0; i < argv.Length; i++)
+                if (argv[i] == "<OUTPUT.png>") argv[i] = "out.png";
+
+            Assert.True(BatchOptions.TryParse(argv, startIndex: 2, out var opts, out var err), err);
+            // Any positional light implies relief + raymarch.
+            Assert.True(opts.Relief);
+            Assert.True(opts.ReliefRaymarch);
+
+            var l1 = opts.Lights[0];
+            Assert.Equal(LightType.Point, l1.Type);
+            Assert.Equal(1.5, l1.Intensity!.Value, 6);
+            Assert.Equal(0.7, l1.Theta!.Value, 6);
+            Assert.Equal(1.2, l1.Phi!.Value, 6);
+            Assert.Equal(0.3, l1.PosX!.Value, 6);
+            Assert.Equal(1.1, l1.PosY!.Value, 6);
+            Assert.Equal(-0.4, l1.PosZ!.Value, 6);
+            Assert.Equal(4.0, l1.Range!.Value, 6);
+
+            var l2 = opts.Lights[1];
+            Assert.Equal(LightType.Spot, l2.Type);
+            Assert.Equal(0.8, l2.Intensity!.Value, 6);
+            Assert.Equal(20.0, l2.SpotInnerDeg!.Value, 6);
+            Assert.Equal(45.0, l2.SpotOuterDeg!.Value, 6);
+
+            // Light 3 stayed directional → no override captured.
+            Assert.False(opts.Lights[2].HasAny);
+        }
+
+        [Fact]
+        public void Lights_AppliedOntoFractalParametersLighting()
+        {
+            // BatchRenderer's apply path (mirrored here): overrides land on the light.
+            string[] argv =
+            {
+                "FracturingFog", "--batch", "--fractal", "Mandelbrot",
+                "--x", "-0.5", "--y", "0", "--zoom", "1",
+                "--light1-type", "spot", "--light1-intensity", "2",
+                "--light1-pos", "0.1,2,0.3", "--light1-range", "5",
+                "--light1-cone", "15,35",
+                "--out", "out.png",
+            };
+            Assert.True(BatchOptions.TryParse(argv, startIndex: 2, out var opts, out var err), err);
+            var o = opts.Lights[0];
+            Assert.Equal(LightType.Spot, o.Type);
+            Assert.Equal(2.0, o.Intensity!.Value, 6);
+            Assert.Equal(0.1, o.PosX!.Value, 6);
+            Assert.Equal(2.0, o.PosY!.Value, 6);
+            Assert.Equal(0.3, o.PosZ!.Value, 6);
+            Assert.Equal(5.0, o.Range!.Value, 6);
+            Assert.Equal(15.0, o.SpotInnerDeg!.Value, 6);
+            Assert.Equal(35.0, o.SpotOuterDeg!.Value, 6);
+        }
+
+        [Fact]
+        public void Lights_BadTypeRejected()
+        {
+            string[] argv =
+            {
+                "FracturingFog", "--batch", "--fractal", "Mandelbrot",
+                "--x", "-0.5", "--y", "0", "--zoom", "1",
+                "--light1-type", "banana", "--out", "out.png",
+            };
+            Assert.False(BatchOptions.TryParse(argv, startIndex: 2, out _, out var err));
+            Assert.Contains("light1-type", err);
+        }
+
+        [Fact]
+        public void Lights_BadPosCsvRejected()
+        {
+            string[] argv =
+            {
+                "FracturingFog", "--batch", "--fractal", "Mandelbrot",
+                "--x", "-0.5", "--y", "0", "--zoom", "1",
+                "--light2-pos", "1,2", "--out", "out.png",   // needs x,y,z
+            };
+            Assert.False(BatchOptions.TryParse(argv, startIndex: 2, out _, out var err));
+            Assert.Contains("light2-pos", err);
+        }
+
+        [Fact]
+        public void Lights_IntensityOutOfRangeRejected()
+        {
+            string[] argv =
+            {
+                "FracturingFog", "--batch", "--fractal", "Mandelbrot",
+                "--x", "-0.5", "--y", "0", "--zoom", "1",
+                "--light3-intensity", "9", "--out", "out.png",
+            };
+            Assert.False(BatchOptions.TryParse(argv, startIndex: 2, out _, out var err));
+            Assert.Contains("light3-intensity", err);
+        }
     }
 }
