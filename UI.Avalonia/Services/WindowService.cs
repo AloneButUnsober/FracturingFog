@@ -503,5 +503,40 @@ namespace FracturingFog.UI.Avalonia.Services
             if (x != win.Position.X || y != win.Position.Y)
                 win.Position = new PixelPoint(x, y);
         }
+
+        // ── Workspace capture/restore helpers (#433 slice 3 — #471) ──────────
+
+        /// <summary>Record the monitor a window currently sits on: its index in
+        /// the screen list plus pixel bounds. Null when screens are unavailable.
+        /// Restore matches by index, then bounds, then falls back to the primary
+        /// screen (see <see cref="EnsureOnScreen"/>).</summary>
+        public static MonitorRef? CaptureMonitor(Window win)
+        {
+            try
+            {
+                var screens = win.Screens;
+                if (screens == null) return null;
+                var s = screens.ScreenFromWindow(win) ?? screens.Primary;
+                if (s == null) return null;
+
+                var all = screens.All;
+                int idx = -1;
+                for (int i = 0; i < all.Count; i++)
+                    if (ReferenceEquals(all[i], s)) { idx = i; break; }
+
+                var b = s.Bounds;
+                return new MonitorRef { Index = idx, X = b.X, Y = b.Y, Width = b.Width, Height = b.Height };
+            }
+            catch { return null; }
+        }
+
+        /// <summary>Public wrapper over the internal clamp: nudge a window fully
+        /// back onto a screen if any edge spilled off (or it landed off every
+        /// screen — <c>ScreenFromWindow</c> then falls to the primary). The
+        /// graceful-degradation net when a saved monitor is gone.</summary>
+        public static void EnsureOnScreen(Window win)
+        {
+            try { ClampIntoScreen(win); } catch { }
+        }
     }
 }

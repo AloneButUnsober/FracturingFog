@@ -50,5 +50,24 @@
                           ToolTip.Tip="Always-on-top for the render window" />
             </StackPanel>
         </Border>
+
+        <Border Classes="group">
+            <StackPanel Spacing="6">
+                <TextBlock Classes="section" Text="Workspaces" />
+                <TextBlock Text="Save the window arrangement (render window mode/size/monitor + open tool windows) as a recallable preset."
+                           TextWrapping="Wrap" Foreground="#9B9B9B" FontSize="11" />
+                <ComboBox ItemsSource="{Binding Workspaces}"
+                          SelectedItem="{Binding SelectedWorkspace}"
+                          HorizontalAlignment="Stretch"
+                          ToolTip.Tip="Saved window layouts" />
+                <UniformGrid Columns="5" Margin="0,4,0,0">
+                    <Button Classes="action neutral" Content="Save"   Command="{Binding SaveWorkspaceCommand}"   ToolTip.Tip="Save the current window arrangement as a preset (prompts for a name)" Margin="0,0,4,0" />
+                    <Button Classes="action neutral" Content="Recall" Command="{Binding ApplyWorkspaceCommand}"  ToolTip.Tip="Restore the selected layout" Margin="0,0,4,0" />
+                    <Button Classes="action neutral" Content="Delete" Command="{Binding DeleteWorkspaceCommand}" ToolTip.Tip="Delete the selected layout" Margin="0,0,4,0" />
+                    <Button Classes="action neutral" Content="Import" Command="{Binding ImportWorkspaceCommand}" ToolTip.Tip="Import a layout from a file" Margin="0,0,4,0" />
+                    <Button Classes="action neutral" Content="Export" Command="{Binding ExportWorkspaceCommand}" ToolTip.Tip="Export the selected layout to a file" />
+                </UniformGrid>
+            </StackPanel>
+        </Border>
     </StackPanel>
 </UserControl>

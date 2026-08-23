@@ -6,8 +6,12 @@ using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Linq;
 using System.Reactive;
+using System.Threading.Tasks;
 
 using ReactiveUI;
+
+using FracturingFog.Models;
+using FracturingFog.UI.Avalonia.Services;
 
 namespace FracturingFog.UI.Avalonia.ViewModels;
 
@@ -63,6 +67,15 @@ public sealed class ControlCenterViewModel : ViewModelBase
             () => DetachRequested?.Invoke(this, _selectedSection));
         GenerateCommandCommand = ReactiveCommand.Create(GenerateCommand);
         CopyCommandCommand = ReactiveCommand.Create(CopyCommand);
+
+        Workspaces = new ObservableCollection<string>();
+        SaveWorkspaceCommand   = ReactiveCommand.CreateFromTask(SaveWorkspaceAsync);
+        ApplyWorkspaceCommand  = ReactiveCommand.Create(ApplyWorkspace);
+        DeleteWorkspaceCommand = ReactiveCommand.CreateFromTask(DeleteWorkspaceAsync);
+        ImportWorkspaceCommand = ReactiveCommand.CreateFromTask(ImportWorkspaceAsync);
+        ExportWorkspaceCommand = ReactiveCommand.CreateFromTask(ExportWorkspaceAsync);
+        RefreshWorkspaces();
+
         RebuildNav();
     }
 
@@ -91,6 +104,123 @@ public sealed class ControlCenterViewModel : ViewModelBase
 
     /// <summary>The shared FloatingMenu VM most sections bind through.</summary>
     public FloatingMenuViewModel Menu { get; }
+
+    // ── Window-arrangement workspaces (#433 slice 3 — #471) ──────────────────
+    //
+    // Save the current window layout as a named preset, recall it, and
+    // import/export single-preset files. The View section binds the droplist +
+    // buttons here. The host wires the three Func delegates (name prompt + file
+    // pickers) to its AvaloniaDialogs helpers, since UI.Avalonia can't reference
+    // the Hosting layer directly.
+
+    /// <summary>Saved workspace names for the droplist.</summary>
+    public ObservableCollection<string> Workspaces { get; }
+
+    private string? _selectedWorkspace;
+    public string? SelectedWorkspace
+    {
+        get => _selectedWorkspace;
+        set => this.RaiseAndSetIfChanged(ref _selectedWorkspace, value);
+    }
+
+    public ReactiveCommand<Unit, Unit> SaveWorkspaceCommand { get; }
+    public ReactiveCommand<Unit, Unit> ApplyWorkspaceCommand { get; }
+    public ReactiveCommand<Unit, Unit> DeleteWorkspaceCommand { get; }
+    public ReactiveCommand<Unit, Unit> ImportWorkspaceCommand { get; }
+    public ReactiveCommand<Unit, Unit> ExportWorkspaceCommand { get; }
+
+    /// <summary>Host prompt for a workspace name on Save (default suggested).
+    /// Returns null on cancel.</summary>
+    public Func<string, Task<string?>>? WorkspaceNamePromptRequested;
+
+    /// <summary>Host open-file picker for Import. Returns the chosen path or null.</summary>
+    public Func<Task<string?>>? WorkspaceImportPathRequested;
+
+    /// <summary>Host save-file picker for Export (default filename). Returns the
+    /// chosen path or null.</summary>
+    public Func<string, Task<string?>>? WorkspaceExportPathRequested;
+
+    /// <summary>Host confirm dialog for Delete. Returns true to proceed.</summary>
+    public Func<string, Task<bool>>? WorkspaceDeleteConfirmRequested;
+
+    /// <summary>Reload the droplist from the library, preserving the current
+    /// selection when it still exists (else falling back to the active preset).</summary>
+    public void RefreshWorkspaces()
+    {
+        var file = WorkspaceLayoutLibrary.Load();
+        var keep = SelectedWorkspace;
+
+        Workspaces.Clear();
+        foreach (var w in file.Layouts) Workspaces.Add(w.Name);
+
+        SelectedWorkspace =
+            keep != null && Workspaces.Contains(keep) ? keep
+            : (file.ActiveName != null && Workspaces.Contains(file.ActiveName) ? file.ActiveName
+            : Workspaces.FirstOrDefault());
+    }
+
+    private async Task SaveWorkspaceAsync()
+    {
+        string suggested = SelectedWorkspace ?? $"Workspace {Workspaces.Count + 1}";
+        string? name = WorkspaceNamePromptRequested is { } prompt
+            ? await prompt(suggested)
+            : suggested;
+        if (string.IsNullOrWhiteSpace(name)) return;
+
+        var layout = WorkspaceService.Capture(name!, Shell);
+        var file = WorkspaceLayoutLibrary.Load();
+        WorkspaceLayoutLibrary.Upsert(file, layout);
+
+        RefreshWorkspaces();
+        SelectedWorkspace = name;
+    }
+
+    private void ApplyWorkspace()
+    {
+        if (string.IsNullOrWhiteSpace(SelectedWorkspace)) return;
+        var file = WorkspaceLayoutLibrary.Load();
+        var layout = WorkspaceLayoutLibrary.Get(file, SelectedWorkspace!);
+        if (layout != null) WorkspaceService.Restore(layout, Shell);
+    }
+
+    private async Task DeleteWorkspaceAsync()
+    {
+        if (string.IsNullOrWhiteSpace(SelectedWorkspace)) return;
+        string name = SelectedWorkspace!;
+
+        if (WorkspaceDeleteConfirmRequested is { } confirm && !await confirm(name))
+            return;
+
+        var file = WorkspaceLayoutLibrary.Load();
+        WorkspaceLayoutLibrary.Delete(file, name);
+        SelectedWorkspace = null;
+        RefreshWorkspaces();
+    }
+
+    private async Task ImportWorkspaceAsync()
+    {
+        if (WorkspaceImportPathRequested is not { } pick) return;
+        string? path = await pick();
+        if (string.IsNullOrWhiteSpace(path)) return;
+
+        var file = WorkspaceLayoutLibrary.Load();
+        var names = WorkspaceLayoutLibrary.Import(file, path!);
+        RefreshWorkspaces();
+        if (names.Count > 0) SelectedWorkspace = names[^1];
+    }
+
+    private async Task ExportWorkspaceAsync()
+    {
+        if (string.IsNullOrWhiteSpace(SelectedWorkspace)) return;
+        if (WorkspaceExportPathRequested is not { } pick) return;
+
+        string name = SelectedWorkspace!;
+        string? path = await pick(name + ".json");
+        if (string.IsNullOrWhiteSpace(path)) return;
+
+        var file = WorkspaceLayoutLibrary.Load();
+        WorkspaceLayoutLibrary.Export(file, name, path!);
+    }
 
     /// <summary>Nav-rail entries, filtered by <see cref="IsBeginnerMode"/>.</summary>
     public ObservableCollection<ControlCenterNavItem> Nav { get; }

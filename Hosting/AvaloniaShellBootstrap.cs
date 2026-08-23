@@ -2426,6 +2426,23 @@ namespace FracturingFog.Hosting
                     () => { if (s_renderHost != null) OpenUserBulbEditor(s_renderHost.ViewState.FractalParameters); });
             }
 
+            // Control Center workspace (#433 slice 3): wire its name-prompt +
+            // file-picker + delete-confirm delegates to the host dialogs when the
+            // VM is first created (UI.Avalonia can't reach AvaloniaDialogs).
+            shell.ControlCenterCreated += (_, cc) =>
+            {
+                cc.WorkspaceNamePromptRequested = def =>
+                    AvaloniaDialogs.ShowPromptAsync("Save Workspace", "Workspace name:", def);
+                cc.WorkspaceImportPathRequested = () =>
+                    AvaloniaDialogs.PickOpenFileAsync(
+                        "Import Workspace", "JSON (*.json)|*.json|All files (*.*)|*.*");
+                cc.WorkspaceExportPathRequested = def =>
+                    AvaloniaDialogs.PickSaveFileAsync(
+                        "Export Workspace", def, "JSON (*.json)|*.json|All files (*.*)|*.*");
+                cc.WorkspaceDeleteConfirmRequested = name =>
+                    AvaloniaDialogs.ConfirmAsync("Delete Workspace", $"Delete saved workspace \"{name}\"?");
+            };
+
             // ── Standalone Big Buttons (kid mode) ────────────────────────────
             //
             // Large, resizable dialog with three oversized buttons (Color /
