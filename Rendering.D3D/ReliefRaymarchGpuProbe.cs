@@ -205,6 +205,14 @@ public static class ReliefRaymarchGpuProbe
         fx.VolumeNoiseOctaves = 3;
         fx.VolumeSelfShadow = 0.5;
         fx.VolumeSelfShadowSteps = 4;
+        // S3 (#389) — thin-lens DOF. Aperture > 0 makes the kernel average
+        // ReliefRaymarchGpu.DofGpuSamples lens taps (concentric-disc + ThinLensRay);
+        // the CPU twin runs the identical loop. Focus auto-resolves to |camera|.
+        // A modest aperture keeps the out-of-focus circle-of-confusion inside the
+        // gate's float-vs-double edge band while proving the lens port. This exits
+        // the byte-identical single-ray path on BOTH sides — the deep-GPU-DOF gate.
+        p.Relief2DDofApertureRadius = 0.05;
+        p.Relief2DDofFocusDistance = 0.0;   // auto-focus the fractal centre
 
         var (hbuf, albedo, maxH) = BumpField(hw, hh, w, h);
         var u = BuildUniforms(w, h, hw, hh, hbuf, maxH, p, fx);

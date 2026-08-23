@@ -143,6 +143,11 @@ cbuffer ReliefParams : register(b0)
     float  gVolPaletteStrength;// #185 (slice D) — in-scatter palette cross-fade; 0 = off
     int    gHasPalette;       // #185 — theme ramp bound at t5; 0 = no palette remap
     int    gPaletteLen;       // #185 — ramp entry count (>=2 to activate)
+
+    float  gDofAperture;      // S3 (#389) — thin-lens aperture radius; 0 = pinhole (byte-identical)
+    float  gDofFocus;         // resolved focus distance (auto = |camera| when unset)
+    int    gDofSamples;       // lens taps to average when aperture > 0
+    float  gPadDof;
 };
 
 static const float RELIEF_PI = 3.14159265358979;
@@ -991,38 +996,30 @@ float EmptySkipDist(float3 P, float3 rd, float epsT)
     return skip > 0.0 ? skip : 0.0;
 }
 
-[numthreads(8, 8, 1)]
-void CSRelief(uint3 tid : SV_DispatchThreadID)
+// S3 (#389) — Shirley concentric disc map. Twin of CameraDof.ConcentricSampleDisk:
+// a uniform [0,1)^2 pair → a uniform unit-disc point, low distortion.
+float2 ConcentricSampleDisk(float u1, float u2)
 {
-    int px = (int)tid.x;
-    int py = (int)tid.y;
-    if (px >= gW || py >= gH) return;
-    int idx = py * gW + px;
+    float ox = 2.0 * u1 - 1.0;
+    float oy = 2.0 * u2 - 1.0;
+    if (ox == 0.0 && oy == 0.0) return float2(0.0, 0.0);
+    float r, theta;
+    if (abs(ox) > abs(oy)) { r = ox; theta = (RELIEF_PI / 4.0) * (oy / ox); }
+    else                   { r = oy; theta = (RELIEF_PI / 2.0) - (RELIEF_PI / 4.0) * (ox / oy); }
+    return float2(r * cos(theta), r * sin(theta));
+}
 
-    float ndcx = 2.0 * (px + 0.5) / gW - 1.0;
-    float ndcy = 1.0 - 2.0 * (py + 0.5) / gH;
-
-    float3 o, rd;
-    if (gOrtho != 0)
-    {
-        float sxo = ndcx * gAspect * gOrthoHalfV, syo = ndcy * gOrthoHalfV;
-        o = gCam + gRight * sxo + gUp * syo;
-        rd = gFwd;
-    }
-    else
-    {
-        o = gCam;
-        float a = ndcx * gAspect * gTanHalf, b = ndcy * gTanHalf;
-        rd = gFwd + gRight * a + gUp * b;
-        rd = normalize(rd);
-    }
-
+// The per-ray trace + shade — everything downstream of ray generation, factored
+// out of CSRelief so the DOF lens loop can call it once per aperture sample.
+// Returns packed ARGB for the ray o + rd.
+uint TracePixel(float3 o, float3 rd)
+{
     float t0 = 0.0, t1 = 3.4e38;
     bool inside = SlabHit(o.x, rd.x, -gB.x, gB.x, t0, t1)
                && SlabHit(o.y, rd.y, 0.0, gB.y, t0, t1)
                && SlabHit(o.z, rd.z, -gB.z, gB.z, t0, t1);
 
-    uint outCol;
+    uint outCol = 0;
     bool wrote = false;
     if (inside)
     {
@@ -1102,7 +1099,68 @@ void CSRelief(uint3 tid : SV_DispatchThreadID)
         }
     }
 
-    gColor[idx] = outCol;
+    return outCol;
+}
+
+[numthreads(8, 8, 1)]
+void CSRelief(uint3 tid : SV_DispatchThreadID)
+{
+    int px = (int)tid.x;
+    int py = (int)tid.y;
+    if (px >= gW || py >= gH) return;
+    int idx = py * gW + px;
+
+    float ndcx = 2.0 * (px + 0.5) / gW - 1.0;
+    float ndcy = 1.0 - 2.0 * (py + 0.5) / gH;
+
+    float3 o, rd;
+    if (gOrtho != 0)
+    {
+        float sxo = ndcx * gAspect * gOrthoHalfV, syo = ndcy * gOrthoHalfV;
+        o = gCam + gRight * sxo + gUp * syo;
+        rd = gFwd;
+    }
+    else
+    {
+        o = gCam;
+        float a = ndcx * gAspect * gTanHalf, b = ndcy * gTanHalf;
+        rd = gFwd + gRight * a + gUp * b;
+        rd = normalize(rd);
+    }
+
+    // S3 (#389) — thin-lens depth of field. Pinhole (aperture 0) traces the centre
+    // ray once (byte-identical). Otherwise average gDofSamples lens taps: jitter the
+    // origin over the aperture disc (camera right/up) and re-aim through the focal
+    // point gCam + rd*focus — twin of CameraDof.ThinLensRay + the CPU mirror's loop.
+    // Ortho carries aperture 0 (host-resolved), so this is perspective-only.
+    if (gDofAperture <= 0.0)
+    {
+        gColor[idx] = TracePixel(o, rd);
+        return;
+    }
+
+    int taps = gDofSamples > 0 ? gDofSamples : 1;
+    float focus = gDofFocus;
+    float3 fp = gCam + rd * focus;
+    float4 acc = float4(0.0, 0.0, 0.0, 0.0);
+    [loop]
+    for (int k = 0; k < taps; k++)
+    {
+        float u1, u2;
+        HashPair(float3((float)px, (float)py, (float)k), 9, u1, u2);
+        float2 dk = ConcentricSampleDisk(u1, u2);
+        float2 lens = dk * gDofAperture;
+        float3 lo = gCam + gRight * lens.x + gUp * lens.y;
+        float3 ld = normalize(fp - lo);
+        uint c = TracePixel(lo, ld);
+        acc += float4((c >> 16) & 0xFF, (c >> 8) & 0xFF, c & 0xFF, (c >> 24) & 0xFF);
+    }
+    float inv = 1.0 / taps;
+    uint R = (uint)(acc.x * inv + 0.5);
+    uint G = (uint)(acc.y * inv + 0.5);
+    uint B = (uint)(acc.z * inv + 0.5);
+    uint A = (uint)(acc.w * inv + 0.5);
+    gColor[idx] = (A << 24) | (R << 16) | (G << 8) | B;
 }
 ";
 }

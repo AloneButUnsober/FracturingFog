@@ -65,9 +65,10 @@ public sealed class ReliefRaymarchGpuKernel : IDisposable, FracturingFog.Renderi
         public float VolNoiseAmount, VolNoiseScale, VolNoiseSpeed; public int VolNoiseOctaves;   // 4e-ii FBM
         public float VolSelfShadow; public int VolSelfShadowSteps; public float SceneTime, VolAnisotropy;   // 4e-ii + #184 Slice 3 (B)
         public uint FogColor; public float VolPaletteStrength; public int HasPalette, PaletteLen;   // #184 Slice 3 (C) + #185 slice D
+        public float DofAperture, DofFocus; public int DofSamples; public float PadDof;   // S3 (#389) thin-lens DOF
     }
 
-    private const int ParamBytes = 448;
+    private const int ParamBytes = 464;
 
     private readonly ID3D11Device _device;
     private readonly ID3D11DeviceContext _ctx;
@@ -412,6 +413,7 @@ public sealed class ReliefRaymarchGpuKernel : IDisposable, FracturingFog.Renderi
             VolPaletteStrength = (float)u.VolPaletteStrength,
             HasPalette = (u.VolPaletteStrength > 0.0 && u.VolPalette != null && u.VolPalette.Length >= 2) ? 1 : 0,
             PaletteLen = u.VolPalette?.Length ?? 0,
+            DofAperture = (float)u.DofAperture, DofFocus = (float)u.DofFocus, DofSamples = u.DofSamples, PadDof = 0f,
         };
     }
 

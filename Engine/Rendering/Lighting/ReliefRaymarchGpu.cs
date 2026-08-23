@@ -100,6 +100,13 @@ public readonly struct ReliefUniforms
     public readonly double VolPaletteStrength;
     public readonly uint[]? VolPalette;
 
+    // S3 (#389) — thin-lens depth of field. DofAperture == 0 → pinhole (the
+    // byte-identical single-ray default). DofFocus is the RESOLVED focus distance
+    // (auto = |camera| when the caller left it ≤ 0). DofSamples lens taps are
+    // averaged when the aperture is open. Ortho carries aperture 0 (no lens).
+    public readonly double DofAperture, DofFocus;
+    public readonly int DofSamples;
+
     // 4f — empty-space-skip max-height grid. EmptySkip == 0 → no skip (the
     // byte-identical slow march). MipW/MipH/MipBlk describe the coarse grid the
     // twin and both kernels build from hbuf via ReliefHeightMip.
@@ -150,7 +157,8 @@ public readonly struct ReliefUniforms
         double volumeNoiseAmount, double volumeNoiseScale, double volumeNoiseSpeed, int volumeNoiseOctaves,
         double volumeSelfShadow, int volumeSelfShadowSteps, double sceneTime,
         double volAnisotropy, uint fogColor,
-        double volPaletteStrength, uint[]? volPalette)
+        double volPaletteStrength, uint[]? volPalette,
+        double dofAperture = 0.0, double dofFocus = 0.0, int dofSamples = 0)
     {
         W = w; H = h; Hw = hw; Hh = hh; Sy = sy; Aspect = aspect;
         InvLip = invLip; Bicubic = bicubic; Cam = cam;
@@ -177,6 +185,7 @@ public readonly struct ReliefUniforms
         SceneTime = sceneTime;
         VolAnisotropy = volAnisotropy; FogColor = fogColor;
         VolPaletteStrength = volPaletteStrength; VolPalette = volPalette;
+        DofAperture = dofAperture; DofFocus = dofFocus; DofSamples = dofSamples;
     }
 
     /// <summary>World-space direction of a directional light, matching
@@ -214,6 +223,19 @@ public readonly struct ReliefUniforms
         var d0 = LightDir(fx.Light1.Theta, fx.Light1.Phi);
         var d1 = LightDir(fx.Light2.Theta, fx.Light2.Phi);
         var d2 = LightDir(fx.Light3.Theta, fx.Light3.Phi);
+
+        // S3 (#389) — resolve thin-lens DOF for the kernel/twin. Perspective only
+        // (ortho has no lens). Focus auto-resolves to the camera distance from the
+        // world origin (the fractal centre) when the caller leaves it unset — the
+        // same rule the CPU render's SamplePixel uses. Fixed GPU tap budget (the
+        // 1-spp kernel integrates the lens over its own taps; the CPU render instead
+        // spreads them over its supersample grid).
+        double dofAperture = cam.Ortho ? 0.0 : Math.Max(0.0, p.Relief2DDofApertureRadius);
+        double dofFocus = p.Relief2DDofFocusDistance;
+        if (dofAperture > 0.0 && dofFocus <= 0.0)
+            dofFocus = Math.Sqrt(cam.CamX * cam.CamX + cam.CamY * cam.CamY + cam.CamZ * cam.CamZ);
+        int dofSamples = dofAperture > 0.0 ? DofGpuSamples : 0;
+
         return new ReliefUniforms(w, h, hw, hh, sy, aspect, invLip, p.Relief2DBicubicHeight, cam,
             d0.x, d0.y, d0.z, fx.Light1.Intensity, (fx.Light1.Color >> 16) & 0xFF, (fx.Light1.Color >> 8) & 0xFF, fx.Light1.Color & 0xFF,
             d1.x, d1.y, d1.z, fx.Light2.Intensity, (fx.Light2.Color >> 16) & 0xFF, (fx.Light2.Color >> 8) & 0xFF, fx.Light2.Color & 0xFF,
@@ -234,8 +256,14 @@ public readonly struct ReliefUniforms
             fx.VolumeNoiseAmount, fx.VolumeNoiseScale, fx.VolumeNoiseSpeed, fx.VolumeNoiseOctaves,
             fx.VolumeSelfShadow, fx.VolumeSelfShadowSteps, fx.SceneTime,
             fx.VolumeAnisotropy, fx.FogColor,
-            fx.VolumePaletteStrength, fx.VolumePalette);
+            fx.VolumePaletteStrength, fx.VolumePalette,
+            dofAperture, dofFocus, dofSamples);
     }
+
+    /// <summary>S3 (#389) — lens taps the GPU kernel + twin average when DOF is on.
+    /// The 1-spp relief kernel integrates the aperture over these taps (the CPU
+    /// render instead spreads the lens over its supersample grid).</summary>
+    public const int DofGpuSamples = 16;
 }
 
 /// <summary>#159 (Slice 3a) — scalar CPU twin of the GPU relief-raymarch
@@ -284,7 +312,31 @@ public static class ReliefRaymarchGpu
         for (int py = 0; py < h; py++)
         for (int px = 0; px < w; px++)
         {
-            var (col, hit) = SamplePixel(px + 0.5, py + 0.5, in u, in cam, in de, albedo, mip, ref steps);
+            uint col; bool hit;
+            if (u.DofAperture > 0.0)
+            {
+                // S3 (#389) — average gDofSamples lens taps, the exact loop the HLSL
+                // CSRelief runs: HashPair(px,py,tap) → concentric disc → ThinLensRay.
+                int taps = u.DofSamples > 0 ? u.DofSamples : 1;
+                double aR = 0, aG = 0, aB = 0, aA = 0;
+                bool centreHit = false;
+                for (int k = 0; k < taps; k++)
+                {
+                    var (u1, u2) = ShadingPipeline.HashPair(px, py, k, 9);
+                    var (dx, dy) = CameraDof.ConcentricSampleDisk(u1, u2);
+                    var (c, h2) = SamplePixel(px + 0.5, py + 0.5, in u, in cam, in de, albedo, mip, ref steps, dx, dy);
+                    aR += (c >> 16) & 0xFF; aG += (c >> 8) & 0xFF; aB += c & 0xFF; aA += (c >> 24) & 0xFF;
+                    if (k == 0) centreHit = h2;
+                }
+                double inv = 1.0 / taps;
+                uint R = (uint)(aR * inv + 0.5), G = (uint)(aG * inv + 0.5), B = (uint)(aB * inv + 0.5), A = (uint)(aA * inv + 0.5);
+                col = (A << 24) | (R << 16) | (G << 8) | B;
+                hit = centreHit;
+            }
+            else
+            {
+                (col, hit) = SamplePixel(px + 0.5, py + 0.5, in u, in cam, in de, albedo, mip, ref steps);
+            }
             dst[py * w + px] = col;
             if (hit) hitCount++;
         }
@@ -298,7 +350,7 @@ public static class ReliefRaymarchGpu
         double sxpix, double sypix, in ReliefUniforms u,
         in HeightfieldRaymarch2D.ReliefCamera cam,
         in HeightfieldRaymarch2D.HeightDe de, uint[] albedo,
-        float[]? mip, ref long marchSteps)
+        float[]? mip, ref long marchSteps, double lensX = 0.0, double lensY = 0.0)
     {
         int w = u.W, h = u.H;
         double aspect = u.Aspect;
@@ -323,6 +375,19 @@ public static class ReliefRaymarchGpu
             rdz = cam.FZ + cam.RZ * a + cam.UZ * b;
             double il = 1.0 / Math.Sqrt(rdx * rdx + rdy * rdy + rdz * rdz);
             rdx *= il; rdy *= il; rdz *= il;
+
+            // S3 (#389) — thin-lens DOF: displace the origin onto the aperture disc
+            // (camera right/up) and re-aim through the focal point. Twin of the HLSL
+            // CSRelief lens loop + the CPU render's ThinLensRay call. No-op when the
+            // aperture is 0 (pinhole).
+            if (u.DofAperture > 0.0)
+            {
+                var (nox, noy, noz, nrx, nry, nrz) = CameraDof.ThinLensRay(
+                    cam.CamX, cam.CamY, cam.CamZ, rdx, rdy, rdz,
+                    cam.RX, 0.0, cam.RZ, cam.UX, cam.UY, cam.UZ,
+                    u.DofFocus, u.DofAperture, lensX, lensY);
+                ox = nox; oy = noy; oz = noz; rdx = nrx; rdy = nry; rdz = nrz;
+            }
         }
 
         // Ray-slab against the terrain AABB.
