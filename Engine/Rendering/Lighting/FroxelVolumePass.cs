@@ -196,6 +196,50 @@ public sealed class FroxelVolumePass
         return outBuf;
     }
 
+    /// <summary>Composite the volume over a beauty buffer by per-pixel WORLD depth
+    /// (ray distance from the camera), the value the relief render produces. Unlike
+    /// <see cref="Composite"/> (which takes a slice-linear 0..1), this routes each
+    /// depth through the grid's exponential <see cref="FroxelGrid.DepthToSlice"/> so
+    /// the near-dense froxel distribution lands correctly. Sub-near → no fog; beyond
+    /// far (e.g. a sky-miss sentinel) → the full integrated column. Returns a new
+    /// buffer; alpha preserved (roadmap S6, #408).</summary>
+    public uint[] CompositeWorldDepth(uint[] beauty, float[] worldDepth, int w, int h)
+    {
+        if (!_populated) throw new InvalidOperationException("FroxelVolumePass: Populate() must run before CompositeWorldDepth().");
+        if (beauty == null) throw new ArgumentNullException(nameof(beauty));
+        if (worldDepth == null) throw new ArgumentNullException(nameof(worldDepth));
+        long n = (long)w * h;
+        if (beauty.Length < n || worldDepth.Length < n)
+            throw new ArgumentException("Froxel composite: buffer smaller than width*height.");
+
+        double maxSlice = _nz - 1;
+        var outBuf = new uint[beauty.Length];
+        for (int y = 0; y < h; y++)
+        {
+            int cy = (int)((y + 0.5) / h * _ny);
+            for (int x = 0; x < w; x++)
+            {
+                int idx = y * w + x;
+                uint p = beauty[idx];
+                int cx = (int)((x + 0.5) / w * _nx);
+                // Exponential depth → continuous slice, clamped to the last integrated
+                // slice (DepthToSlice returns [0, DimZ]; SampleColumn wants [0, nz-1]).
+                double slice = _grid.DepthToSlice(worldDepth[idx]);
+                if (slice > maxSlice) slice = maxSlice;
+                var (ir, ig, ib, tr) = SampleColumn(cx, cy, slice);
+
+                double r = ((p >> 16) & 0xFF) * tr + ir * 255.0;
+                double g = ((p >> 8) & 0xFF) * tr + ig * 255.0;
+                double b = (p & 0xFF) * tr + ib * 255.0;
+                uint R = (uint)(r < 0 ? 0 : (r > 255 ? 255 : r));
+                uint G = (uint)(g < 0 ? 0 : (g > 255 ? 255 : g));
+                uint B = (uint)(b < 0 ? 0 : (b > 255 ? 255 : b));
+                outBuf[idx] = (p & 0xFF000000u) | (R << 16) | (G << 8) | B;
+            }
+        }
+        return outBuf;
+    }
+
     // Normalized Henyey-Greenstein phase (g=0 → 1), matching the per-surface march.
     private static double HgPhase(double g, double cosT)
     {

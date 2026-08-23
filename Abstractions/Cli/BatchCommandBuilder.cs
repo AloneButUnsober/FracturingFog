@@ -125,6 +125,10 @@ namespace FracturingFog.Cli
         public double ReliefDofAperture { get; init; }
         public double ReliefDofFocus { get; init; }
 
+        /// <summary>Froxel volumetrics on the relief raymarch (roadmap S6, #408).
+        /// Emitted as <c>--relief-froxel</c> on the raymarch path.</summary>
+        public bool ReliefFroxel { get; init; }
+
         // Guided À-Trous denoise (S4, #389). Emitted only on the raymarch path,
         // iterations > 0. Sigmas default to the operator defaults.
         public int ReliefDenoiseIterations { get; init; }
@@ -288,6 +292,9 @@ namespace FracturingFog.Cli
                         parts.Add(BatchFlags.DofAperture); parts.Add(Num(snap.ReliefDofAperture));
                         if (snap.ReliefDofFocus > 0.0) { parts.Add(BatchFlags.DofFocus); parts.Add(Num(snap.ReliefDofFocus)); }
                     }
+
+                    // Froxel volumetrics (S6, #408).
+                    if (snap.ReliefFroxel) parts.Add(BatchFlags.ReliefFroxel);
 
                     // Guided À-Trous denoise (S4, #389) — emit only when on. The
                     // sigmas ride along only when the pass runs and they differ

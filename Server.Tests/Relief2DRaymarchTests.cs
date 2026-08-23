@@ -1614,6 +1614,59 @@ public class ReliefGpuSeamTests
     }
 
     [Fact]
+    public void Froxel_On_ChangesFogOutput()
+    {
+        // S6 (#408): with fog active, the froxel volumetrics flag composites a
+        // camera-frustum volume instead of the per-pixel march, so the CPU frame
+        // differs from the froxel-off render. Both use the CPU trace (null kernel).
+        int w = 96, h = 72;
+        var (albedo, height) = Field(w, h);
+
+        var fx = FracturingFog.Rendering.Lighting.LightingFxData.CreateDefault();
+        fx.FogDensity = 0.6;
+        fx.VolumeSteps = 12;
+        fx.Light1.Intensity = 1.0;
+        fx.ShowSkyBackdrop = true;
+
+        var pOff = ReliefParams(gpu: false);
+        pOff.Lighting = fx;
+        var pOn = ReliefParams(gpu: false);
+        pOn.Lighting = fx;
+        pOn.Relief2DFroxelVolumetrics = true;
+
+        var dstOff = new uint[w * h];
+        var dstOn = new uint[w * h];
+        HeightfieldRaymarch2D.Render(albedo, height, w, h, pOff, dstOff, (IReliefRaymarchKernel?)null);
+        HeightfieldRaymarch2D.Render(albedo, height, w, h, pOn, dstOn, (IReliefRaymarchKernel?)null);
+
+        bool anyDiff = false;
+        for (int i = 0; i < w * h; i++) if (dstOff[i] != dstOn[i]) { anyDiff = true; break; }
+        Assert.True(anyDiff, "froxel volumetrics should change the fog composite");
+    }
+
+    [Fact]
+    public void Froxel_ForcesCpuTrace()
+    {
+        // The froxel composite is a CPU post-pass, so it must not dispatch the GPU
+        // kernel even with the flag + a kernel attached.
+        int w = 64, h = 48;
+        var (albedo, height) = Field(w, h);
+        var fx = FracturingFog.Rendering.Lighting.LightingFxData.CreateDefault();
+        fx.FogDensity = 0.6;
+        fx.Light1.Intensity = 1.0;
+
+        var p = ReliefParams(gpu: true);
+        p.Lighting = fx;
+        p.Relief2DFroxelVolumetrics = true;
+
+        var stub = new StubReliefKernel();
+        var dst = new uint[w * h];
+        HeightfieldRaymarch2D.Render(albedo, height, w, h, p, dst, stub);
+        Assert.Equal(0, stub.Calls);
+        Assert.False(AllSentinel(dst));
+    }
+
+    [Fact]
     public void GpuSeam_FlagOff_RunsCpu_KernelUntouched()
     {
         int w = 320, h = 240;

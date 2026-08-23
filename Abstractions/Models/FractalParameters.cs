@@ -583,6 +583,14 @@ namespace FracturingFog.Models
         /// runtime with Ctrl+Shift+G.</summary>
         public bool Relief2DGpuRaymarch { get; set; } = true;
 
+        /// <summary>Roadmap S6 (#389/#408) — opt-in froxel (frustum-voxel) volumetrics
+        /// on the relief raymarch. When on (and fog is active), the beauty renders
+        /// fog-free and a camera-frustum froxel volume is populated + integrated once,
+        /// then composited over the frame by per-pixel depth — one depth-indexed read
+        /// per pixel instead of the per-pixel background in-scatter march. Forces the
+        /// CPU trace (the composite is a CPU post-pass). Default OFF → byte-identical.</summary>
+        public bool Relief2DFroxelVolumetrics { get; set; } = false;
+
         /// <summary>Slice 4f (#170) — empty-space-skip acceleration. Builds a
         /// coarse max-height grid over the compressed field and lets the sphere
         /// trace leap the empty air above flat interior (where the slope-limited

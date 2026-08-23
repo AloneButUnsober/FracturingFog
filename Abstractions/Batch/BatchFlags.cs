@@ -91,6 +91,10 @@ namespace FracturingFog.Batch
         public const string DofAperture           = "--dof-aperture";
         public const string DofFocus              = "--dof-focus";
 
+        // Froxel (frustum-voxel) volumetrics on the relief raymarch (roadmap S6,
+        // #408). Implies --relief-raymarch; only affects a scene with fog active.
+        public const string ReliefFroxel          = "--relief-froxel";
+
         // Guided À-Trous denoise on the relief raymarch (roadmap S4, #389). Keyed
         // on the render's own float normal/depth AOVs. Any denoise flag implies
         // --relief-raymarch (only the raymarch emits the guides). 0 passes = off.

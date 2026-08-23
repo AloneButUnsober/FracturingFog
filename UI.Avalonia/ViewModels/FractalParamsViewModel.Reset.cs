@@ -156,6 +156,7 @@ public sealed partial class FractalParamsViewModel
         _p.Relief2DHeightCurve        = d.Relief2DHeightCurve;
         _p.Relief2DBicubicHeight      = d.Relief2DBicubicHeight;
         _p.Relief2DGroundPlane        = d.Relief2DGroundPlane;
+        _p.Relief2DFroxelVolumetrics  = d.Relief2DFroxelVolumetrics;   // S6 (#408)
         _p.Relief2DAutoShade          = d.Relief2DAutoShade;
         _p.Relief2DEdgeFade           = d.Relief2DEdgeFade;
         _p.Relief2DHiResField         = d.Relief2DHiResField;
@@ -242,6 +243,7 @@ public sealed partial class FractalParamsViewModel
         nameof(Relief2DDenoiseIterations), nameof(Relief2DDenoiseColorSigma),
         nameof(Relief2DDenoiseNormalSigma), nameof(Relief2DDenoiseDepthSigma), nameof(DenoiseEnabled),
         nameof(Relief2DHeightCurve), nameof(Relief2DBicubicHeight), nameof(Relief2DGroundPlane),
+        nameof(Relief2DFroxelVolumetrics),
         nameof(Relief2DAutoShade), nameof(Relief2DEdgeFade), nameof(Relief2DHiResField),
         nameof(Relief2DFieldFloor), nameof(Relief2DIsolate), nameof(Relief2DIsolateByDetail),
         nameof(Relief2DDetailThreshold), nameof(Relief2DIsolateByColor), nameof(Relief2DDropColorsCsv),
