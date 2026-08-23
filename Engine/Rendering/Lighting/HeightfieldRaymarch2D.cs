@@ -345,14 +345,23 @@ public static class HeightfieldRaymarch2D
         // as DOF / DebugAov). Directional-only scenes stay on the GPU byte-identical.
         // S5 (#389): the GPU kernel has no refraction path either, so a transmissive
         // (glass) material likewise forces the CPU trace.
-        // S1 (#389): float-native AOV capture reads the primary hit's normal/depth
-        // from the CPU trace, so a capture request also forces the CPU path.
+        // S1 (#389): a float-native AOV EXR export captures the lighting COMPONENTS
+        // (diffuse/spec/AO/shadow), which the GPU kernel does not emit — so a
+        // component capture still forces the CPU trace.
+        // S4 (#402): a denoise capture needs only the primary-hit normal + depth,
+        // which the GPU kernel NOW emits (twinned by RenderCpuMirror, proven by the
+        // --reliefgpuraymarch AOV diff). So a normal/depth-only capture stays on the
+        // GPU — the kernel fills the guides and the caller runs the À-Trous filter.
+        bool aovOk = aov == null || aov.Components == null;
         if (gpuKernel != null && p.Relief2DGpuRaymarch && fx.DebugAov == AovView.Beauty
             && !fx.HasPositionalLight
-            && fx.Transmission <= 0.0 && aov == null)
+            && fx.Transmission <= 0.0 && aovOk)
         {
             var u = ReliefUniforms.Build(w, h, hw, hh, sy, aspect, invLip, maxH, p, in fx);
-            gpuKernel.Run(in u, hbuf, keep, albedo, dst);
+            if (aov != null)
+                gpuKernel.Run(in u, hbuf, keep, albedo, dst, aov.NormalXyz, aov.Depth);
+            else
+                gpuKernel.Run(in u, hbuf, keep, albedo, dst);
             return;
         }
 

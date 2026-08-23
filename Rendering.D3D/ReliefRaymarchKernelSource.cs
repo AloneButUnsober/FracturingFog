@@ -151,7 +151,7 @@ cbuffer ReliefParams : register(b0)
     float  gDofAperture;      // S3 (#389) — thin-lens aperture radius; 0 = pinhole (byte-identical)
     float  gDofFocus;         // resolved focus distance (auto = |camera| when unset)
     int    gDofSamples;       // lens taps to average when aperture > 0
-    float  gPadDof;
+    int    gEmitAov;          // S4 (#402) — write primary-hit normal+depth to u1; 0 = off
 };
 
 static const float RELIEF_PI = 3.14159265358979;
@@ -163,7 +163,9 @@ StructuredBuffer<float> gMip    : register(t3);   // 4f coarse max-height grid (
 StructuredBuffer<uint>  gHdri   : register(t4);   // 4d-ii flattened HDRI env (bound iff gHasHdri)
 StructuredBuffer<uint>  gPalette: register(t5);   // #185 theme ramp (bound iff gHasPalette)
 
-RWStructuredBuffer<uint> gColor : register(u0);   // packed ARGB output
+RWStructuredBuffer<uint>  gColor : register(u0);   // packed ARGB output
+RWStructuredBuffer<float> gAov   : register(u1);   // S4 (#402) primary-hit normal.xyz + depth
+                                                   // (4 floats/pixel; written iff gEmitAov, else a stub)
 
 int ClampI(int v, int lo, int hi) { return v < lo ? lo : (v > hi ? hi : v); }
 
@@ -1002,9 +1004,14 @@ float EmptySkipDist(float3 P, float3 rd, float epsT)
 
 // The per-ray trace + shade — everything downstream of ray generation, factored
 // out of CSRelief so the DOF lens loop can call it once per aperture sample.
-// Returns packed ARGB for the ray o + rd.
-uint TracePixel(float3 o, float3 rd)
+// Returns packed ARGB for the ray o + rd. Also reports the primary-hit world-space
+// normal + world-units depth (S4 #402): a terrain hit → (surface normal, tf), the
+// ground plane → ((0,1,0), tp), a sky/background miss → ((0,0,0), 1e6) — the same
+// convention the CPU capture uses, so the AOV write matches the twin.
+uint TracePixel(float3 o, float3 rd, out float3 nrm, out float dep)
 {
+    nrm = float3(0.0, 0.0, 0.0);
+    dep = 1e6;
     float t0 = 0.0, t1 = 3.4e38;
     bool inside = SlabHit(o.x, rd.x, -gB.x, gB.x, t0, t1)
                && SlabHit(o.y, rd.y, 0.0, gB.y, t0, t1)
@@ -1057,6 +1064,7 @@ uint TracePixel(float3 o, float3 rd)
                 alb = ApplyTriplanar(alb, hp, N);
             outCol = ShadeFlat(N, -rd, hp, alb);
             outCol = ApplyFogVolume(outCol, o, rd, tf);
+            nrm = N; dep = tf;
             wrote = true;
         }
     }
@@ -1074,6 +1082,7 @@ uint TracePixel(float3 o, float3 rd)
                 {
                     outCol = ShadeFlat(float3(0, 1, 0), -rd, float3(gx, 0.0, gz), gFloorAlbedo);
                     outCol = ApplyFogVolume(outCol, o, rd, tp);
+                    nrm = float3(0.0, 1.0, 0.0); dep = tp;
                     floored = true;
                 }
             }
@@ -1126,7 +1135,15 @@ uint TracePixel(float3 o, float3 rd)
 [numthreads(8, 8, 1)]
 void CSRelief(uint3 tid : SV_DispatchThreadID)
 {" + RayGen + @"
-    gColor[idx] = TracePixel(o, rd);
+    float3 nrm; float dep;
+    gColor[idx] = TracePixel(o, rd, nrm, dep);
+    if (gEmitAov != 0)
+    {
+        gAov[idx * 4 + 0] = nrm.x;
+        gAov[idx * 4 + 1] = nrm.y;
+        gAov[idx * 4 + 2] = nrm.z;
+        gAov[idx * 4 + 3] = dep;
+    }
 }
 ";
 
@@ -1156,6 +1173,7 @@ void CSRelief(uint3 tid : SV_DispatchThreadID)
     float focus = gDofFocus;
     float3 fp = gCam + rd * focus;
     float4 acc = float4(0.0, 0.0, 0.0, 0.0);
+    float3 aovN = float3(0.0, 0.0, 0.0); float aovD = 1e6;
     [loop]
     for (int k = 0; k < taps; k++)
     {
@@ -1165,8 +1183,10 @@ void CSRelief(uint3 tid : SV_DispatchThreadID)
         float2 lens = dk * gDofAperture;
         float3 lo = gCam + gRight * lens.x + gUp * lens.y;
         float3 ld = normalize(fp - lo);
-        uint c = TracePixel(lo, ld);
+        float3 nrm; float dep;
+        uint c = TracePixel(lo, ld, nrm, dep);
         acc += float4((c >> 16) & 0xFF, (c >> 8) & 0xFF, c & 0xFF, (c >> 24) & 0xFF);
+        if (k == 0) { aovN = nrm; aovD = dep; }   // S4 — emit the first tap's geometry (matches the twin)
     }
     float inv = 1.0 / taps;
     uint R = (uint)(acc.x * inv + 0.5);
@@ -1174,6 +1194,13 @@ void CSRelief(uint3 tid : SV_DispatchThreadID)
     uint B = (uint)(acc.z * inv + 0.5);
     uint A = (uint)(acc.w * inv + 0.5);
     gColor[idx] = (A << 24) | (R << 16) | (G << 8) | B;
+    if (gEmitAov != 0)
+    {
+        gAov[idx * 4 + 0] = aovN.x;
+        gAov[idx * 4 + 1] = aovN.y;
+        gAov[idx * 4 + 2] = aovN.z;
+        gAov[idx * 4 + 3] = aovD;
+    }
 }
 ";
 }

@@ -219,9 +219,14 @@ supplies the guide buffers.
   sigma` batch flags + builder round-trip. `DenoiseBatchWiringTests` +
   `ReliefDenoiseIntegrationTests` (off = byte-identical, on changes + deterministic);
   suite 1612/1612.
-- **Remaining (deep, still open on #402):** GPU AOV emit so denoise doesn't force
-  CPU; adaptive-supersample coupling (fewer samples when denoise on); full SVGF
-  variance/temporal weighting; parallelize/SIMD.
+- **GPU AOV emit (deep tail, landed — PR #457):** the relief compute kernel (D3D +
+  Vulkan) now emits the primary-hit float normal + depth into a second UAV, twinned by
+  `RenderCpuMirror` and proven by the `--reliefgpuraymarch` AOV diff (normal 1-|cos|
+  mean 0.00000, depth rel-err mean 0.00004). A normal/depth-only (denoise) capture no
+  longer forces the CPU trace — the GPU renders beauty + guides and only the À-Trous
+  filter runs on the CPU. A component capture (AOV-EXR export) still forces CPU.
+- **Remaining (deep, still open on #402):** adaptive-supersample coupling (fewer samples
+  when denoise on); full SVGF variance/temporal weighting; parallelize/SIMD.
 
 ### S5 — Refractive / transmissive materials ◐ (#406)
 Cook-Torrance GGX today is opaque. Add **transmission + IOR** → glass fractals.

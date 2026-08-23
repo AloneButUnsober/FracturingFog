@@ -284,7 +284,8 @@ public static class ReliefRaymarchGpu
     /// per march iteration) so the 4f empty-space-skip win is measurable headlessly:
     /// render with EmptySkip off and on and compare <paramref name="marchSteps"/>.</summary>
     public static void RenderCpuMirror(in ReliefUniforms u, float[] hbuf, byte[]? keep,
-                                       uint[] albedo, uint[] dst, out double hitFraction, out long marchSteps)
+                                       uint[] albedo, uint[] dst, out double hitFraction, out long marchSteps,
+                                       float[]? aovNormalXyz = null, float[]? aovDepth = null)
     {
         hitFraction = 0.0;
         marchSteps = 0;
@@ -296,6 +297,11 @@ public static class ReliefRaymarchGpu
             if (!ReferenceEquals(albedo, dst)) Array.Copy(albedo, dst, n);
             return;
         }
+
+        // S4 (#402) — twin of the GPU AOV emit: fill the primary-hit normal/depth
+        // guides when supplied (the oracle for the --reliefgpuraymarch AOV diff).
+        bool emitAov = aovNormalXyz != null && aovDepth != null
+                       && aovNormalXyz.Length >= (long)n * 3 && aovDepth.Length >= n;
 
         var de = new HeightfieldRaymarch2D.HeightDe(
             hbuf, u.Hw, u.Hh, u.Sy, u.Aspect, u.InvLip, u.Bicubic, keep);
@@ -313,6 +319,7 @@ public static class ReliefRaymarchGpu
         for (int px = 0; px < w; px++)
         {
             uint col; bool hit;
+            double anx, any, anz, adep;
             if (u.DofAperture > 0.0)
             {
                 // S3 (#389) — average gDofSamples lens taps, the exact loop the HLSL
@@ -320,13 +327,16 @@ public static class ReliefRaymarchGpu
                 int taps = u.DofSamples > 0 ? u.DofSamples : 1;
                 double aR = 0, aG = 0, aB = 0, aA = 0;
                 bool centreHit = false;
+                anx = 0.0; any = 0.0; anz = 0.0; adep = 1e6;
                 for (int k = 0; k < taps; k++)
                 {
                     var (u1, u2) = ShadingPipeline.HashPair(px, py, k, 9);
                     var (dx, dy) = CameraDof.ConcentricSampleDisk(u1, u2);
-                    var (c, h2) = SamplePixel(px + 0.5, py + 0.5, in u, in cam, in de, albedo, mip, ref steps, dx, dy);
+                    var (c, h2) = SamplePixel(px + 0.5, py + 0.5, in u, in cam, in de, albedo, mip, ref steps,
+                                              out double knx, out double kny, out double knz, out double kdep, dx, dy);
                     aR += (c >> 16) & 0xFF; aG += (c >> 8) & 0xFF; aB += c & 0xFF; aA += (c >> 24) & 0xFF;
-                    if (k == 0) centreHit = h2;
+                    // S4 — emit the first tap's geometry (matches the HLSL DOF entry).
+                    if (k == 0) { centreHit = h2; anx = knx; any = kny; anz = knz; adep = kdep; }
                 }
                 double inv = 1.0 / taps;
                 uint R = (uint)(aR * inv + 0.5), G = (uint)(aG * inv + 0.5), B = (uint)(aB * inv + 0.5), A = (uint)(aA * inv + 0.5);
@@ -335,10 +345,19 @@ public static class ReliefRaymarchGpu
             }
             else
             {
-                (col, hit) = SamplePixel(px + 0.5, py + 0.5, in u, in cam, in de, albedo, mip, ref steps);
+                (col, hit) = SamplePixel(px + 0.5, py + 0.5, in u, in cam, in de, albedo, mip, ref steps,
+                                         out anx, out any, out anz, out adep);
             }
             dst[py * w + px] = col;
             if (hit) hitCount++;
+            if (emitAov)
+            {
+                int pi = py * w + px;
+                aovNormalXyz![pi * 3] = (float)anx;
+                aovNormalXyz[pi * 3 + 1] = (float)any;
+                aovNormalXyz[pi * 3 + 2] = (float)anz;
+                aovDepth![pi] = (float)adep;
+            }
         }
         hitFraction = (double)hitCount / n;
         marchSteps = steps;
@@ -350,8 +369,13 @@ public static class ReliefRaymarchGpu
         double sxpix, double sypix, in ReliefUniforms u,
         in HeightfieldRaymarch2D.ReliefCamera cam,
         in HeightfieldRaymarch2D.HeightDe de, uint[] albedo,
-        float[]? mip, ref long marchSteps, double lensX = 0.0, double lensY = 0.0)
+        float[]? mip, ref long marchSteps,
+        out double onx, out double ony, out double onz, out double odep,
+        double lensX = 0.0, double lensY = 0.0)
     {
+        // S4 (#402) — primary-hit geometry, same convention as the HLSL TracePixel:
+        // terrain → (surface normal, tf), ground → ((0,1,0), tp), miss → ((0,0,0), 1e6).
+        onx = 0.0; ony = 0.0; onz = 0.0; odep = 1e6;
         int w = u.W, h = u.H;
         double aspect = u.Aspect;
         double ndcx = 2.0 * sxpix / w - 1.0;
@@ -444,6 +468,7 @@ public static class ReliefRaymarchGpu
                     alb = ApplyTriplanar(alb, hx, hy, hz, nx, ny, nz, in u);
                 uint shaded = ShadeFlat(nx, ny, nz, -rdx, -rdy, -rdz, hx, hy, hz, alb, in de, in u);
                 shaded = ApplyFogVolume(shaded, ox, oy, oz, rdx, rdy, rdz, tf, in de, in u);
+                onx = nx; ony = ny; onz = nz; odep = tf;
                 return (shaded, true);
             }
         }
@@ -459,6 +484,7 @@ public static class ReliefRaymarchGpu
                 {
                     uint fShaded = ShadeFlat(0.0, 1.0, 0.0, -rdx, -rdy, -rdz, gx, 0.0, gz, u.FloorAlbedo, in de, in u);
                     fShaded = ApplyFogVolume(fShaded, ox, oy, oz, rdx, rdy, rdz, tp, in de, in u);
+                    onx = 0.0; ony = 1.0; onz = 0.0; odep = tp;
                     return (fShaded, false);
                 }
             }
