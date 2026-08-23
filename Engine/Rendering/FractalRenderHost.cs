@@ -759,6 +759,12 @@ namespace FracturingFog.Rendering
         private FracturingFog.Rendering.Lighting.IFroxelVolumeKernel? _froxelKernel;
         private bool _froxelKernelTried;
 
+        // S6 (#408) — persistent froxel temporal-reprojection history (previous frame's
+        // per-cell scatter + extinction). Owned here so it survives across renders; the
+        // froxel pass blends the current frame into it when Relief2DFroxelTemporal is on.
+        // Grid-keyed, so a camera move that changes the slab re-seeds cleanly.
+        private readonly FracturingFog.Rendering.Lighting.FroxelHistory _froxelHistory = new();
+
         /// <summary>Backend-specific froxel-volume kernel factory installed by the
         /// host bootstrap, mirroring <see cref="ReliefKernelFactory"/> for the
         /// froxel compute pass (#408). Null on backends without a froxel kernel —
@@ -3374,7 +3380,11 @@ namespace FracturingFog.Rendering
                             // GPU relief path and froxel volumetrics are on; else the CPU
                             // froxel post-pass (or no fog) runs.
                             (reliefParams.Relief2DGpuRaymarch && reliefParams.Relief2DFroxelVolumetrics)
-                                ? EnsureFroxelKernel() : null);
+                                ? EnsureFroxelKernel() : null,
+                            // S6 (#408) — persistent temporal-reprojection history (used
+                            // only when Relief2DFroxelTemporal is on; forces the CPU
+                            // froxel post-pass).
+                            _froxelHistory);
                         FracturingFog.Imaging.ReliefDenoisePass.Apply(_reliefColorScratch, reliefAov, w, h, reliefParams);
                         reliefRaymarchApplied = true;
                     }

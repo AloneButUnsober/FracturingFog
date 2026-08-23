@@ -233,7 +233,8 @@ public static class HeightfieldRaymarch2D
                               FractalParameters p, uint[] dst, out double hitFraction,
                               IReliefRaymarchKernel? gpuKernel = null,
                               ReliefAovBuffers? aov = null,
-                              IFroxelVolumeKernel? froxelKernel = null)
+                              IFroxelVolumeKernel? froxelKernel = null,
+                              FroxelHistory? froxelHistory = null)
     {
         hitFraction = 0.0;
         int n = w * h;            // OUTPUT / albedo pixel count
@@ -326,6 +327,10 @@ public static class HeightfieldRaymarch2D
         // (and its god-ray branch) skip per-pixel fog. Forces the CPU trace (the
         // composite is a CPU post-pass). Default off → byte-identical.
         bool froxel = p.Relief2DFroxelVolumetrics && p.Relief2DRaymarch && fx.FogDensity > 0.0;
+        // S6 (#408) — temporal reprojection is a CPU-side blend on the froxel volume, so
+        // it needs the CPU froxel post-pass (with a persistent history). The GPU froxel
+        // kernel stays single-frame; temporal on → force the CPU froxel branch below.
+        bool froxelTemporal = froxel && p.Relief2DFroxelTemporal && froxelHistory != null;
         LightingFxData froxelFx = fx;
         if (froxel) { fx.FogDensity = 0.0; fx.VolumeSteps = 0; }
 
@@ -392,7 +397,7 @@ public static class HeightfieldRaymarch2D
         // `froxelFx` carries the original fog knobs (fx has been fog-zeroed for the
         // beauty). Composite reads `dst` as beauty and writes `dst` — safe: the kernel
         // uploads the beauty before writing its own output buffer, no CPU aliasing.
-        if (froxel && froxelKernel != null && gpuKernel != null && p.Relief2DGpuRaymarch
+        if (froxel && !froxelTemporal && froxelKernel != null && gpuKernel != null && p.Relief2DGpuRaymarch
             && fx.DebugAov == AovView.Beauty && aovOk)
         {
             var u = ReliefUniforms.Build(w, h, hw, hh, sy, aspect, invLip, maxH, p, in fx);
@@ -671,10 +676,13 @@ public static class HeightfieldRaymarch2D
         // S6 (#389/#408) — froxel volumetrics post-pass. Frame a camera-frustum froxel
         // volume from the fog snapshot, populate + integrate once, then composite over
         // the fog-free beauty by the captured per-pixel depth. Opt-in; default off left
-        // this whole block unreached (byte-identical).
+        // this whole block unreached (byte-identical). S6 (#408) temporal: when on, the
+        // per-cell scatter/ext is blended with the previous frame (via froxelHistory)
+        // before integration so animated fog stays stable.
         if (froxel && froxelDepth != null)
         {
-            var composited = FroxelCameraVolume.Apply(dst, froxelDepth, w, h, in cam, in froxelFx);
+            var composited = FroxelCameraVolume.Apply(dst, froxelDepth, w, h, in cam, in froxelFx,
+                froxelHistory, froxelTemporal, p.Relief2DFroxelTemporalFeedback);
             Array.Copy(composited, dst, n);
         }
     }

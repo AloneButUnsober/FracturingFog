@@ -202,6 +202,19 @@
                           IsChecked="{Binding Relief2DFroxelVolumetrics, Mode=TwoWay}"
                           IsEnabled="{Binding Relief2DRaymarch}"
                           ToolTip.Tip="Composite fog from a camera-frustum froxel volume built once, sampled per pixel by depth — instead of the per-pixel in-scatter march. Only affects a scene with fog (set Fog density in Lighting FX). Renders on the CPU." />
+                <CheckBox Content="Temporal reprojection (stable animated fog)"
+                          IsChecked="{Binding Relief2DFroxelTemporal, Mode=TwoWay}"
+                          IsEnabled="{Binding Relief2DFroxelVolumetrics}"
+                          ToolTip.Tip="Blend each frame's froxel volume with the previous one so drifting-noise / pulsing / moving-light fog reads as a stable volume across an animation instead of flickering. Only matters across a sequence (live animation / scene playback). Forces the CPU froxel post-pass." />
+                <StackPanel Orientation="Horizontal" Spacing="8" Margin="24,0,0,0"
+                            IsEnabled="{Binding Relief2DFroxelTemporal}">
+                    <TextBlock Text="Feedback" VerticalAlignment="Center" />
+                    <Slider Width="140" Minimum="0" Maximum="0.99"
+                            Value="{Binding Relief2DFroxelTemporalFeedback, Mode=TwoWay}"
+                            ToolTip.Tip="Fraction of the previous frame kept each frame (higher = smoother but slower to react). Default 0.9." />
+                    <TextBlock Text="{Binding Relief2DFroxelTemporalFeedback, StringFormat='{}{0:0.00}'}"
+                               VerticalAlignment="Center" Width="36" />
+                </StackPanel>
                 </StackPanel>
                 </Expander>
 
