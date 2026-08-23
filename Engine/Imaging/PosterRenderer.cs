@@ -59,6 +59,12 @@ namespace FracturingFog.Imaging
         public QualityPreset Quality { get; init; } = null!;
         public FractalParameters FractalParameters { get; init; } = new();
 
+        // S6 (#408) — optional persistent froxel temporal-reprojection history. A
+        // sequence renderer (e.g. SceneVideoRenderer) hands the SAME instance to every
+        // frame so animated fog blends across frames (needs Relief2DFroxelTemporal on).
+        // Null (the default) = single-frame froxel, byte-identical to before.
+        public FracturingFog.Rendering.Lighting.FroxelHistory? FroxelHistory { get; init; }
+
         // Post-FX (parity with the interactive ViewState sliders). Defaults =
         // identity. Brightness/Contrast are a BGRA post-pass; HistogramEq is
         // adaptive equalization strength applied on the calculator before the
@@ -286,7 +292,7 @@ namespace FracturingFog.Imaging
                 // of a Relief 3D scene must apply relief here too — otherwise it
                 // silently falls back to the flat 2D themed colour. No-op when
                 // relief is off or the calc exposes no field.
-                buffer = ApplyReliefIfEnabled(buffer, alt as IHeightFieldSource, w, h, req.FractalParameters, alt?.ColorMap, aovCapture);
+                buffer = ApplyReliefIfEnabled(buffer, alt as IHeightFieldSource, w, h, req.FractalParameters, alt?.ColorMap, aovCapture, req.FroxelHistory);
             }
             else
             {
@@ -369,7 +375,7 @@ namespace FracturingFog.Imaging
                 // output dims here: a poster is already high-res, so the
                 // display-size undersampling the hi-res field works around does
                 // not apply.
-                buffer = ApplyReliefIfEnabled(buffer, calc, w, h, req.FractalParameters, calc.ColorMap, aovCapture);
+                buffer = ApplyReliefIfEnabled(buffer, calc, w, h, req.FractalParameters, calc.ColorMap, aovCapture, req.FroxelHistory);
             }
 
             }
@@ -451,7 +457,8 @@ namespace FracturingFog.Imaging
         private static uint[] ApplyReliefIfEnabled(
             uint[] buffer, IHeightFieldSource? heightSource, int w, int h, FractalParameters p,
             IColorMap? colorMap = null,
-            FracturingFog.Rendering.Lighting.HeightfieldRaymarch2D.ReliefAovBuffers? aovCapture = null)
+            FracturingFog.Rendering.Lighting.HeightfieldRaymarch2D.ReliefAovBuffers? aovCapture = null,
+            FracturingFog.Rendering.Lighting.FroxelHistory? froxelHistory = null)
         {
             if (p == null || !p.Relief2DEnabled) return buffer;
             var field = heightSource?.SmoothBuffer;
@@ -478,7 +485,7 @@ namespace FracturingFog.Imaging
                 // the GPU fast path + byte-identical beauty are preserved.
                 var aov = aovCapture ?? ReliefDenoisePass.MakeCapture(p, w, h);
                 FracturingFog.Rendering.Lighting.HeightfieldRaymarch2D.Render(
-                    buffer, field, w, h, w, h, p, dst, out _, null, aov);
+                    buffer, field, w, h, w, h, p, dst, out _, null, aov, null, froxelHistory);
                 ReliefDenoisePass.Apply(dst, aov, w, h, p);
             }
             else

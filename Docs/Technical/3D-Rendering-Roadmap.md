@@ -353,11 +353,18 @@ animated.
   history; temporal forces the CPU froxel post-pass (GPU froxel stays single-frame).
   `Relief2DFroxelTemporal` + feedback knob (0.9) + Relief 3D dialog checkbox/slider.
   11 tests; suite 1722/1722; --froxelgpu gate still PASS.
-- **Remaining (enhancement follow-ups):** batch-video history persistence (a
-  per-sequence `FroxelHistory` in the BatchRenderer loop — temporal is a no-op on a
-  single still); GPU temporal; sub-cell reprojection under continuous camera motion.
-  The core froxel unified-volume march (D3D + Vulkan + host wiring + temporal) is
-  complete.
+- **Temporal history seam for offline renders (landed, PR #468):** `PosterRequest.FroxelHistory`
+  threads a caller-owned `FroxelHistory` through `PosterRenderer` → `ApplyReliefIfEnabled`
+  → the froxel CPU post-pass, so a sequence renderer can share one instance across frames
+  (needs `Relief2DFroxelTemporal`). Recon note: the LIVE video recording already gets
+  temporal via `FractalRenderHost`'s persistent history; the offline `SceneVideoRenderer`
+  + `--batch` video-slideshow render FLAT 2D (no Relief 3D applied at all), so the seam has
+  no consumer there yet. 2 seam tests; default null → byte-identical.
+- **Remaining (enhancement follow-ups):** render Relief 3D in `SceneVideoRenderer` / the
+  batch video loop (both flat today) so those offline sequences can consume the froxel
+  temporal seam; GPU temporal; sub-cell reprojection under continuous camera motion. The
+  core froxel unified-volume march (D3D + Vulkan + host wiring + temporal + poster seam)
+  is complete.
 
 ### S7 — Float / multi-layer EXR export ◐ (#394)
 Enabler for S1 (AOV layers), S2 (linear/HDR intermediate) and S6 (HDR
