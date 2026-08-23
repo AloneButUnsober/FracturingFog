@@ -218,6 +218,10 @@ namespace FracturingFog.Batch
         // Froxel volumetrics (roadmap S6, #408). Implies relief + raymarch.
         public bool ReliefFroxel { get; set; }
 
+        // Per-light fog contribution bitmask (roadmap S6, #408). null = leave default
+        // (all lights fog). 0..7.
+        public int? FogLightMask { get; set; }
+
         // S4 (#389) — guided À-Trous denoise on the relief raymarch.
         public int? ReliefDenoiseIterations { get; set; }  // 0 = off
         public double? ReliefDenoiseColorSigma { get; set; }
@@ -689,6 +693,11 @@ namespace FracturingFog.Batch
                         opts.Relief = true;
                         break;
 
+                    case BatchFlags.FogLightMask:
+                        if (!NextInt(args, ref i, a, out int flm, out error)) return false;
+                        opts.FogLightMask = flm;
+                        break;
+
                     case BatchFlags.Denoise:
                         if (!NextInt(args, ref i, a, out int dni, out error)) return false;
                         opts.ReliefDenoiseIterations = dni;
@@ -870,6 +879,9 @@ namespace FracturingFog.Batch
                 { error = "--relief-isolate-threshold must be 0..1."; return false; }
             if (opts.ReliefIsolateTolerance is < 0 or > 1)
                 { error = "--relief-isolate-tolerance must be 0..1."; return false; }
+
+            if (opts.FogLightMask is < 0 or > 7)
+                { error = "--fog-light-mask must be 0..7 (bit n = light n+1 lights the fog)."; return false; }
 
             // Per-light point / spot overrides (roadmap S8, #404).
             for (int li = 0; li < opts.Lights.Length; li++)

@@ -95,6 +95,11 @@ namespace FracturingFog.Batch
         // #408). Implies --relief-raymarch; only affects a scene with fog active.
         public const string ReliefFroxel          = "--relief-froxel";
 
+        // Per-light fog contribution bitmask (roadmap S6, #408). bit n = light n+1
+        // lights the fog in-scatter. 0..7; default 7 (all). Surface lighting is
+        // unaffected — a cleared bit drops the light from the fog only.
+        public const string FogLightMask          = "--fog-light-mask";
+
         // Guided À-Trous denoise on the relief raymarch (roadmap S4, #389). Keyed
         // on the render's own float normal/depth AOVs. Any denoise flag implies
         // --relief-raymarch (only the raymarch emits the guides). 0 passes = off.

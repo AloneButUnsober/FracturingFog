@@ -83,6 +83,7 @@ public sealed class LightingFxPresetData
     public double FogDensity        { get; set; } = 0.0;
     public double FogHeightFalloff  { get; set; } = 0.0;
     public int    VolumeSteps       { get; set; } = 0;
+    public int    VolumeLightMask   { get; set; } = 0x7;   // S6 (#408) — per-light fog contribution
     public double VolumeNoiseAmount { get; set; } = 0.0;
     public double VolumeNoiseScale  { get; set; } = 0.3;
     public double VolumeNoiseSpeed  { get; set; } = 0.0;
@@ -209,7 +210,8 @@ public sealed class LightingFxPresetData
         ShadowSteps = fx.ShadowSteps, ShadowSoftK = fx.ShadowSoftK, ShadowLightMask = fx.ShadowLightMask,
 
         FogDensity = fx.FogDensity, FogHeightFalloff = fx.FogHeightFalloff,
-        VolumeSteps = fx.VolumeSteps, VolumeNoiseAmount = fx.VolumeNoiseAmount,
+        VolumeSteps = fx.VolumeSteps, VolumeLightMask = fx.VolumeLightMask,
+        VolumeNoiseAmount = fx.VolumeNoiseAmount,
         VolumeNoiseScale = fx.VolumeNoiseScale, VolumeNoiseSpeed = fx.VolumeNoiseSpeed,
         VolumeNoiseOctaves = fx.VolumeNoiseOctaves,
         VolumeSelfShadow = fx.VolumeSelfShadow, VolumeSelfShadowSteps = fx.VolumeSelfShadowSteps,
@@ -281,7 +283,8 @@ public sealed class LightingFxPresetData
         ShadowSteps = ShadowSteps, ShadowSoftK = ShadowSoftK, ShadowLightMask = ShadowLightMask,
 
         FogDensity = FogDensity, FogHeightFalloff = FogHeightFalloff,
-        VolumeSteps = VolumeSteps, VolumeNoiseAmount = VolumeNoiseAmount,
+        VolumeSteps = VolumeSteps, VolumeLightMask = VolumeLightMask,
+        VolumeNoiseAmount = VolumeNoiseAmount,
         VolumeNoiseScale = VolumeNoiseScale, VolumeNoiseSpeed = VolumeNoiseSpeed,
         VolumeNoiseOctaves = VolumeNoiseOctaves,
         VolumeSelfShadow = VolumeSelfShadow, VolumeSelfShadowSteps = VolumeSelfShadowSteps,

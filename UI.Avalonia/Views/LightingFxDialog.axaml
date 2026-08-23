@@ -356,6 +356,7 @@
 
                 <!-- Fog / Volumetric -->
                 <Expander Header="Fog / Volumetric" HorizontalAlignment="Stretch">
+                  <StackPanel Spacing="6">
                     <Grid ColumnDefinitions="160,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto">
                         <TextBlock Grid.Row="0" Grid.Column="0" Text="Fog density:" VerticalAlignment="Center"
                                    ToolTip.Tip="Beer–Lambert exponential. 0 = no fog. Scales by ray distance." />
@@ -468,6 +469,17 @@
                                        Text="{Binding VolumePaletteStrength, StringFormat='F2'}" />
                         </Grid>
                     </Grid>
+
+                    <!-- S6 (#408) — per-light fog contribution. Clearing one drops that
+                         light from the fog only; surfaces stay lit. -->
+                    <TextBlock Text="Lights that colour the fog:" Margin="0,4,0,0"
+                               ToolTip.Tip="Which lights contribute to the fog in-scatter. Unchecking a light removes it from the fog only — it still lights surfaces. Applies to both the per-pixel march and the froxel volume." />
+                    <StackPanel Orientation="Horizontal" Spacing="16">
+                        <CheckBox Content="Light 1" IsChecked="{Binding Light1FogsVolume, Mode=TwoWay}" />
+                        <CheckBox Content="Light 2" IsChecked="{Binding Light2FogsVolume, Mode=TwoWay}" />
+                        <CheckBox Content="Light 3" IsChecked="{Binding Light3FogsVolume, Mode=TwoWay}" />
+                    </StackPanel>
+                  </StackPanel>
                 </Expander>
 
                 <!-- Material -->

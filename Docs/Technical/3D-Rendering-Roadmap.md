@@ -303,6 +303,11 @@ animated.
   `FroxelCameraVolume.BuildMedium` fills `Lights[3]` from `fx.Light1/2/3`. Null Lights
   keeps the legacy single directional light byte-identical. Matches the per-pixel
   march's #388 model.
+- **Per-light fog mask (landed, PR #463):** `LightingFxData.VolumeLightMask` (bit n =
+  light n+1 lights the fog; default 0x7 = all) lets a light illuminate surfaces but be
+  excluded from the fog in-scatter. Honoured by the per-pixel march, the froxel volume
+  and the GPU relief kernel (reused an S8 pad row, no ParamBytes change) + CPU twin;
+  persisted; UI checkboxes + `--fog-light-mask`.
 - **Remaining:** **temporal reprojection** (Scene Engine history, additive gated),
   **GPU froxel compute pass**.
 

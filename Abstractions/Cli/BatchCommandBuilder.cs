@@ -129,6 +129,10 @@ namespace FracturingFog.Cli
         /// Emitted as <c>--relief-froxel</c> on the raymarch path.</summary>
         public bool ReliefFroxel { get; init; }
 
+        /// <summary>Per-light fog contribution bitmask (roadmap S6, #408). 7 (all
+        /// lights fog) = default → omitted; otherwise emits <c>--fog-light-mask N</c>.</summary>
+        public int FogLightMask { get; init; } = 0x7;
+
         // Guided À-Trous denoise (S4, #389). Emitted only on the raymarch path,
         // iterations > 0. Sigmas default to the operator defaults.
         public int ReliefDenoiseIterations { get; init; }
@@ -318,6 +322,14 @@ namespace FracturingFog.Cli
                     if (!string.IsNullOrEmpty(snap.ReliefIsolateColors)) { parts.Add(BatchFlags.ReliefIsolateColors); parts.Add(Token(snap.ReliefIsolateColors)); }
                     if (snap.ReliefIsolateTolerance != 0.12) { parts.Add(BatchFlags.ReliefIsolateTolerance); parts.Add(Num(snap.ReliefIsolateTolerance)); }
                 }
+            }
+
+            // Per-light fog contribution mask (roadmap S6, #408) — only when it
+            // deviates from the all-lights-fog default (7).
+            if (snap.FogLightMask != 0x7)
+            {
+                parts.Add(BatchFlags.FogLightMask);
+                parts.Add(snap.FogLightMask.ToString(CultureInfo.InvariantCulture));
             }
 
             // Per-light point / spot lights (roadmap S8, #404). Emitted for any

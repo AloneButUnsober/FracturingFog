@@ -108,6 +108,14 @@ namespace FracturingFog.Batch
                 fp.Lighting = fxl;
             }
 
+            // S6 (#408) — per-light fog contribution mask.
+            if (opts.FogLightMask.HasValue)
+            {
+                var fxm = fp.Lighting;
+                fxm.VolumeLightMask = opts.FogLightMask.Value;
+                fp.Lighting = fxm;
+            }
+
             var (pfBrightness, pfContrast, pfAdaptive) = ResolvePostFx(opts, null);
 
             // Full-precision centre: when a Mandelbrot region is used without a
