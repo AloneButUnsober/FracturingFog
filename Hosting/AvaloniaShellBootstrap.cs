@@ -2373,6 +2373,8 @@ namespace FracturingFog.Hosting
                     };
                     win.Closed += (_, _) => s_relief3DWin = null;
                     s_relief3DWin = win;
+                    FracturingFog.UI.Avalonia.Services.WindowService.RegisterWindow(
+                        global::FracturingFog.Models.WindowRole.Relief3D, win);
 
                     var owner = AvaloniaDialogs.ActiveMainWindow;
                     if (owner != null)
@@ -2385,6 +2387,44 @@ namespace FracturingFog.Hosting
                     else win.Show();
                 });
             };
+
+            // ── Workspace restore openers (#433 slice 2/3 — #470) ────────────
+            //
+            // Register how each persistent window opens from scratch, so slice 3's
+            // restore can reopen a saved-visible window that is currently closed
+            // (WindowService.Open(role)). Satellites flip their shell visibility
+            // flag (MainWindow's property-changed sync shows the window); the
+            // source editors reuse their host open paths on the live params; ASCII
+            // FX and Relief 3D route through their existing shell commands.
+            {
+                var reg = new Action<global::FracturingFog.Models.WindowRole, Action>(
+                    FracturingFog.UI.Avalonia.Services.WindowService.RegisterOpener);
+
+                reg(global::FracturingFog.Models.WindowRole.MiniMap,
+                    () => { if (s_shell != null) s_shell.IsMiniMapVisible = true; });
+                reg(global::FracturingFog.Models.WindowRole.MiniDepth,
+                    () => { if (s_shell != null) s_shell.IsMiniDepthVisible = true; });
+                reg(global::FracturingFog.Models.WindowRole.PostFxHud,
+                    () => { if (s_shell != null) s_shell.IsPostFxHudVisible = true; });
+                reg(global::FracturingFog.Models.WindowRole.ColorThemeEditor,
+                    () => { if (s_shell != null) s_shell.IsColorThemeEditorVisible = true; });
+                reg(global::FracturingFog.Models.WindowRole.AsciiFx,
+                    () => s_shell?.ShowAsciiFxPanelCommand.Execute().Subscribe());
+                reg(global::FracturingFog.Models.WindowRole.Relief3D,
+                    () => s_shell?.ShowRelief3DCommand.Execute().Subscribe());
+                // LightingFx toggles, but Open(role) fronts an already-open window
+                // via Find() first, so the opener only fires when it is closed —
+                // where toggle == open. The VM is rebuilt from the live ViewState
+                // by the LightingFxRequested handler, same as a manual launch.
+                reg(global::FracturingFog.Models.WindowRole.LightingFx,
+                    () => s_shell?.ShowLightingFxCommand.Execute().Subscribe());
+                reg(global::FracturingFog.Models.WindowRole.UserEquation,
+                    () => { if (s_renderHost != null) OpenUserEquationEditor(s_renderHost.ViewState.FractalParameters); });
+                reg(global::FracturingFog.Models.WindowRole.Sandbox,
+                    () => { if (s_renderHost != null) OpenSandboxEditor(s_renderHost.ViewState.FractalParameters); });
+                reg(global::FracturingFog.Models.WindowRole.UserBulb,
+                    () => { if (s_renderHost != null) OpenUserBulbEditor(s_renderHost.ViewState.FractalParameters); });
+            }
 
             // ── Standalone Big Buttons (kid mode) ────────────────────────────
             //
@@ -2827,6 +2867,8 @@ namespace FracturingFog.Hosting
             };
             win.Closed += (_, _) => s_userEqWin = null;
             s_userEqWin = win;
+            FracturingFog.UI.Avalonia.Services.WindowService.RegisterWindow(
+                global::FracturingFog.Models.WindowRole.UserEquation, win);
 
             ShowEditor(win);
             vm.TriggerCompile();
@@ -2868,6 +2910,8 @@ namespace FracturingFog.Hosting
             };
             win.Closed += (_, _) => s_sandboxWin = null;
             s_sandboxWin = win;
+            FracturingFog.UI.Avalonia.Services.WindowService.RegisterWindow(
+                global::FracturingFog.Models.WindowRole.Sandbox, win);
 
             ShowEditor(win);
             vm.TriggerCompile();
@@ -3031,6 +3075,8 @@ namespace FracturingFog.Hosting
                 s_userBulbWin = null;
             };
             s_userBulbWin = win;
+            FracturingFog.UI.Avalonia.Services.WindowService.RegisterWindow(
+                global::FracturingFog.Models.WindowRole.UserBulb, win);
 
             ShowEditor(win);
             vm.TriggerCompile();
