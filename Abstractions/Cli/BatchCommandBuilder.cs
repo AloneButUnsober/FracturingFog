@@ -26,6 +26,7 @@ using System.Globalization;
 using FracturingFog.Batch;
 using FracturingFog.Imaging;
 using FracturingFog.Models;
+using FracturingFog.Rendering.Lighting;
 
 namespace FracturingFog.Cli
 {
@@ -312,6 +313,11 @@ namespace FracturingFog.Cli
                 }
             }
 
+            // Per-light point / spot lights (roadmap S8, #404). Emitted for any
+            // light whose Type is not Directional (positional lights are the only
+            // ones with batch flags). Reads the live Lighting off Parameters.
+            AppendLights(parts, snap);
+
             // Fractal-specific parameters that have batch flags. Emitted only for
             // the matching fractal type so unrelated defaults never clutter.
             AppendFractalParams(parts, snap);
@@ -333,6 +339,48 @@ namespace FracturingFog.Cli
             if (snap.StereoActive)
                 gaps.Add("Stereo / side-by-side (SBS) output");
             return gaps;
+        }
+
+        /// <summary>Emit <c>--lightN-*</c> flags (roadmap S8, #404) for any of the
+        /// three lights that is a point or spot light. Directional lights have no
+        /// batch flags (they are the default path), so an all-directional scene
+        /// emits nothing here.</summary>
+        private static void AppendLights(List<string> parts, BatchCommandSnapshot snap)
+        {
+            var p = snap.Parameters;
+            if (p == null) return;
+            AppendLight(parts, 1, p.Lighting.Light1);
+            AppendLight(parts, 2, p.Lighting.Light2);
+            AppendLight(parts, 3, p.Lighting.Light3);
+        }
+
+        private static void AppendLight(List<string> parts, int n, DirectionalLight d)
+        {
+            if (d.Type == LightType.Directional) return;
+
+            parts.Add(BatchFlags.LightFlag(n, BatchFlags.LightFieldType));
+            parts.Add(d.Type == LightType.Spot ? "spot" : "point");
+
+            parts.Add(BatchFlags.LightFlag(n, BatchFlags.LightFieldIntensity));
+            parts.Add(Num(d.Intensity));
+
+            parts.Add(BatchFlags.LightFlag(n, BatchFlags.LightFieldDir));
+            parts.Add(Num(d.Theta) + "," + Num(d.Phi));
+
+            parts.Add(BatchFlags.LightFlag(n, BatchFlags.LightFieldPos));
+            parts.Add(Num(d.PosX) + "," + Num(d.PosY) + "," + Num(d.PosZ));
+
+            if (d.Range != 0.0)
+            {
+                parts.Add(BatchFlags.LightFlag(n, BatchFlags.LightFieldRange));
+                parts.Add(Num(d.Range));
+            }
+
+            if (d.Type == LightType.Spot)
+            {
+                parts.Add(BatchFlags.LightFlag(n, BatchFlags.LightFieldCone));
+                parts.Add(Num(d.SpotInnerDeg) + "," + Num(d.SpotOuterDeg));
+            }
         }
 
         private static void AppendFractalParams(List<string> parts, BatchCommandSnapshot snap)

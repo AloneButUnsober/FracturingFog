@@ -164,6 +164,122 @@
                     </Grid>
                 </Expander>
 
+                <!-- Light Types: point / spot (roadmap S8, #404) -->
+                <Expander Header="Light Types (Point / Spot)" HorizontalAlignment="Stretch">
+                    <StackPanel Spacing="8">
+                        <TextBlock TextWrapping="Wrap" FontSize="11" Opacity="0.8"
+                                   Text="Directional (default) uses θ/φ as a fixed direction. Point adds a world position + inverse-square range falloff; Spot adds a cone. Relief 3D only." />
+
+                        <!-- Light 1 -->
+                        <TextBlock Text="Light 1" FontWeight="Bold" />
+                        <Grid ColumnDefinitions="160,*" RowDefinitions="Auto">
+                            <TextBlock Grid.Column="0" Text="Type:" VerticalAlignment="Center" />
+                            <ComboBox Grid.Column="1" HorizontalAlignment="Stretch" Margin="0,2"
+                                      ItemsSource="{Binding LightTypes}"
+                                      SelectedItem="{Binding Light1Type, Mode=TwoWay}" />
+                        </Grid>
+                        <Grid ColumnDefinitions="160,*" RowDefinitions="Auto,Auto,Auto,Auto"
+                              IsVisible="{Binding Light1ShowPositional}">
+                            <TextBlock Grid.Row="0" Grid.Column="0" Text="Position X:" VerticalAlignment="Center" />
+                            <NumericUpDown Grid.Row="0" Grid.Column="1" Minimum="-100" Maximum="100" Increment="0.1" FormatString="F2" Margin="0,2"
+                                           Value="{Binding Light1PosX, Mode=TwoWay}" />
+                            <TextBlock Grid.Row="1" Grid.Column="0" Text="Position Y:" VerticalAlignment="Center" />
+                            <NumericUpDown Grid.Row="1" Grid.Column="1" Minimum="-100" Maximum="100" Increment="0.1" FormatString="F2" Margin="0,2"
+                                           Value="{Binding Light1PosY, Mode=TwoWay}" />
+                            <TextBlock Grid.Row="2" Grid.Column="0" Text="Position Z:" VerticalAlignment="Center" />
+                            <NumericUpDown Grid.Row="2" Grid.Column="1" Minimum="-100" Maximum="100" Increment="0.1" FormatString="F2" Margin="0,2"
+                                           Value="{Binding Light1PosZ, Mode=TwoWay}" />
+                            <TextBlock Grid.Row="3" Grid.Column="0" Text="Range:" VerticalAlignment="Center"
+                                       ToolTip.Tip="Soft cutoff distance in world units. 0 = pure inverse-square (no range window)." />
+                            <NumericUpDown Grid.Row="3" Grid.Column="1" Minimum="0" Maximum="100" Increment="0.1" FormatString="F2" Margin="0,2"
+                                           Value="{Binding Light1Range, Mode=TwoWay}" />
+                        </Grid>
+                        <Grid ColumnDefinitions="160,*" RowDefinitions="Auto,Auto"
+                              IsVisible="{Binding Light1ShowSpot}">
+                            <TextBlock Grid.Row="0" Grid.Column="0" Text="Cone inner (°):" VerticalAlignment="Center"
+                                       ToolTip.Tip="Full intensity inside this half-angle." />
+                            <NumericUpDown Grid.Row="0" Grid.Column="1" Minimum="0" Maximum="89" Increment="1" FormatString="F1" Margin="0,2"
+                                           Value="{Binding Light1SpotInnerDeg, Mode=TwoWay}" />
+                            <TextBlock Grid.Row="1" Grid.Column="0" Text="Cone outer (°):" VerticalAlignment="Center"
+                                       ToolTip.Tip="Zero intensity beyond this half-angle. Inner→outer is the soft penumbra." />
+                            <NumericUpDown Grid.Row="1" Grid.Column="1" Minimum="0" Maximum="90" Increment="1" FormatString="F1" Margin="0,2"
+                                           Value="{Binding Light1SpotOuterDeg, Mode=TwoWay}" />
+                        </Grid>
+
+                        <!-- Light 2 -->
+                        <TextBlock Text="Light 2" FontWeight="Bold" />
+                        <Grid ColumnDefinitions="160,*" RowDefinitions="Auto">
+                            <TextBlock Grid.Column="0" Text="Type:" VerticalAlignment="Center" />
+                            <ComboBox Grid.Column="1" HorizontalAlignment="Stretch" Margin="0,2"
+                                      ItemsSource="{Binding LightTypes}"
+                                      SelectedItem="{Binding Light2Type, Mode=TwoWay}" />
+                        </Grid>
+                        <Grid ColumnDefinitions="160,*" RowDefinitions="Auto,Auto,Auto,Auto"
+                              IsVisible="{Binding Light2ShowPositional}">
+                            <TextBlock Grid.Row="0" Grid.Column="0" Text="Position X:" VerticalAlignment="Center" />
+                            <NumericUpDown Grid.Row="0" Grid.Column="1" Minimum="-100" Maximum="100" Increment="0.1" FormatString="F2" Margin="0,2"
+                                           Value="{Binding Light2PosX, Mode=TwoWay}" />
+                            <TextBlock Grid.Row="1" Grid.Column="0" Text="Position Y:" VerticalAlignment="Center" />
+                            <NumericUpDown Grid.Row="1" Grid.Column="1" Minimum="-100" Maximum="100" Increment="0.1" FormatString="F2" Margin="0,2"
+                                           Value="{Binding Light2PosY, Mode=TwoWay}" />
+                            <TextBlock Grid.Row="2" Grid.Column="0" Text="Position Z:" VerticalAlignment="Center" />
+                            <NumericUpDown Grid.Row="2" Grid.Column="1" Minimum="-100" Maximum="100" Increment="0.1" FormatString="F2" Margin="0,2"
+                                           Value="{Binding Light2PosZ, Mode=TwoWay}" />
+                            <TextBlock Grid.Row="3" Grid.Column="0" Text="Range:" VerticalAlignment="Center"
+                                       ToolTip.Tip="Soft cutoff distance in world units. 0 = pure inverse-square (no range window)." />
+                            <NumericUpDown Grid.Row="3" Grid.Column="1" Minimum="0" Maximum="100" Increment="0.1" FormatString="F2" Margin="0,2"
+                                           Value="{Binding Light2Range, Mode=TwoWay}" />
+                        </Grid>
+                        <Grid ColumnDefinitions="160,*" RowDefinitions="Auto,Auto"
+                              IsVisible="{Binding Light2ShowSpot}">
+                            <TextBlock Grid.Row="0" Grid.Column="0" Text="Cone inner (°):" VerticalAlignment="Center"
+                                       ToolTip.Tip="Full intensity inside this half-angle." />
+                            <NumericUpDown Grid.Row="0" Grid.Column="1" Minimum="0" Maximum="89" Increment="1" FormatString="F1" Margin="0,2"
+                                           Value="{Binding Light2SpotInnerDeg, Mode=TwoWay}" />
+                            <TextBlock Grid.Row="1" Grid.Column="0" Text="Cone outer (°):" VerticalAlignment="Center"
+                                       ToolTip.Tip="Zero intensity beyond this half-angle. Inner→outer is the soft penumbra." />
+                            <NumericUpDown Grid.Row="1" Grid.Column="1" Minimum="0" Maximum="90" Increment="1" FormatString="F1" Margin="0,2"
+                                           Value="{Binding Light2SpotOuterDeg, Mode=TwoWay}" />
+                        </Grid>
+
+                        <!-- Light 3 -->
+                        <TextBlock Text="Light 3" FontWeight="Bold" />
+                        <Grid ColumnDefinitions="160,*" RowDefinitions="Auto">
+                            <TextBlock Grid.Column="0" Text="Type:" VerticalAlignment="Center" />
+                            <ComboBox Grid.Column="1" HorizontalAlignment="Stretch" Margin="0,2"
+                                      ItemsSource="{Binding LightTypes}"
+                                      SelectedItem="{Binding Light3Type, Mode=TwoWay}" />
+                        </Grid>
+                        <Grid ColumnDefinitions="160,*" RowDefinitions="Auto,Auto,Auto,Auto"
+                              IsVisible="{Binding Light3ShowPositional}">
+                            <TextBlock Grid.Row="0" Grid.Column="0" Text="Position X:" VerticalAlignment="Center" />
+                            <NumericUpDown Grid.Row="0" Grid.Column="1" Minimum="-100" Maximum="100" Increment="0.1" FormatString="F2" Margin="0,2"
+                                           Value="{Binding Light3PosX, Mode=TwoWay}" />
+                            <TextBlock Grid.Row="1" Grid.Column="0" Text="Position Y:" VerticalAlignment="Center" />
+                            <NumericUpDown Grid.Row="1" Grid.Column="1" Minimum="-100" Maximum="100" Increment="0.1" FormatString="F2" Margin="0,2"
+                                           Value="{Binding Light3PosY, Mode=TwoWay}" />
+                            <TextBlock Grid.Row="2" Grid.Column="0" Text="Position Z:" VerticalAlignment="Center" />
+                            <NumericUpDown Grid.Row="2" Grid.Column="1" Minimum="-100" Maximum="100" Increment="0.1" FormatString="F2" Margin="0,2"
+                                           Value="{Binding Light3PosZ, Mode=TwoWay}" />
+                            <TextBlock Grid.Row="3" Grid.Column="0" Text="Range:" VerticalAlignment="Center"
+                                       ToolTip.Tip="Soft cutoff distance in world units. 0 = pure inverse-square (no range window)." />
+                            <NumericUpDown Grid.Row="3" Grid.Column="1" Minimum="0" Maximum="100" Increment="0.1" FormatString="F2" Margin="0,2"
+                                           Value="{Binding Light3Range, Mode=TwoWay}" />
+                        </Grid>
+                        <Grid ColumnDefinitions="160,*" RowDefinitions="Auto,Auto"
+                              IsVisible="{Binding Light3ShowSpot}">
+                            <TextBlock Grid.Row="0" Grid.Column="0" Text="Cone inner (°):" VerticalAlignment="Center"
+                                       ToolTip.Tip="Full intensity inside this half-angle." />
+                            <NumericUpDown Grid.Row="0" Grid.Column="1" Minimum="0" Maximum="89" Increment="1" FormatString="F1" Margin="0,2"
+                                           Value="{Binding Light3SpotInnerDeg, Mode=TwoWay}" />
+                            <TextBlock Grid.Row="1" Grid.Column="0" Text="Cone outer (°):" VerticalAlignment="Center"
+                                       ToolTip.Tip="Zero intensity beyond this half-angle. Inner→outer is the soft penumbra." />
+                            <NumericUpDown Grid.Row="1" Grid.Column="1" Minimum="0" Maximum="90" Increment="1" FormatString="F1" Margin="0,2"
+                                           Value="{Binding Light3SpotOuterDeg, Mode=TwoWay}" />
+                        </Grid>
+                    </StackPanel>
+                </Expander>
+
                 <!-- Ambient Occlusion -->
                 <Expander Header="Ambient Occlusion" HorizontalAlignment="Stretch">
                     <Grid ColumnDefinitions="160,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto">

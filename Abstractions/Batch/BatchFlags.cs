@@ -107,6 +107,29 @@ namespace FracturingFog.Batch
         public const string ReliefIsolateByColor   = "--relief-isolate-by-color";
         public const string ReliefIsolateColors    = "--relief-isolate-colors";
         public const string ReliefIsolateTolerance = "--relief-isolate-tolerance";
+
+        // Per-light point / spot lights on the relief raymarch (roadmap S8, #404).
+        // The three lights are addressed by number (1..3); LightFlag composes the
+        // canonical spelling so the parser (BatchOptions) and emitter
+        // (BatchCommandBuilder) can never disagree. Fields:
+        //   type      = directional | point | spot
+        //   intensity = double (0..4; 0 = off)
+        //   dir       = "theta,phi" radians (directional aim / spot cone axis)
+        //   pos       = "x,y,z" world position (point / spot)
+        //   range     = double (0..100 world units; 0 = pure inverse-square)
+        //   cone      = "inner,outer" spot half-angles in degrees
+        public const string LightFieldType      = "type";
+        public const string LightFieldIntensity = "intensity";
+        public const string LightFieldDir       = "dir";
+        public const string LightFieldPos       = "pos";
+        public const string LightFieldRange     = "range";
+        public const string LightFieldCone      = "cone";
+
+        /// <summary>Canonical spelling of a per-light flag, e.g.
+        /// <c>LightFlag(2, LightFieldPos)</c> → <c>"--light2-pos"</c>. Shared by the
+        /// parser and the command builder (roadmap S8, #404).</summary>
+        public static string LightFlag(int lightNumber, string field)
+            => "--light" + lightNumber.ToString(System.Globalization.CultureInfo.InvariantCulture) + "-" + field;
     }
 
     /// <summary>Default values shared between the parser (what it initialises an
