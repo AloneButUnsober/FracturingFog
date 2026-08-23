@@ -252,9 +252,13 @@ full uber-shader — add transmission, optionally clearcoat / emission).
   transmission > 0). 4 wiring tests (`RefractionShadingTests`) incl. the opaque
   byte-identical gate + a colored-absorption tint check. SCOPE: **environment-
   refraction** approximation — one interface, no internal two-surface march.
+- **GPU-kernel refraction (deep tail, landed — PR #458):** the relief kernel's
+  `ShadeFlat` (D3D + Vulkan) + its CPU twin now apply the env-refraction approximation
+  (refract view ray → env sample → Beer-Lambert → Fresnel-mix, `DielectricOps` twin),
+  so glass no longer forces the CPU trace. `--reliefgpuraymarch` glass diff GPU vs twin
+  mean channel diff 0.003; opaque stays byte-identical.
 - **Remaining:** full internal glass march (refract-and-continue through the solid,
-  CPU → twin → GPU), rough refraction (couple S4), AbsorptionColor picker + batch
-  flags, GPU-kernel refraction.
+  CPU → twin → GPU), rough refraction (couple S4), AbsorptionColor picker + batch flags.
 
 ### S6 — Froxel / unified volume march ◐ (#408)
 Today's volumetrics are per-surface single-scatter. A froxel (frustum-voxel)
