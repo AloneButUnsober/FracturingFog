@@ -185,8 +185,16 @@ code.
   Relief 3D dialog's Camera & quality expander (`FractalParamsViewModel` write-through
   `Fire()` re-render; focus greyed until aperture > 0). 8 wiring tests
   (`DofBatchWiringTests`). Pinhole (aperture 0) stays omitted = byte-identical.
-- **Remaining:** click-to-focus, GPU relief DOF (+ twin/gate), DOF on the 3D-fractal
-  cameras, in-camera exposure control, **motion blur** (own slice over Scene time).
+- **GPU relief DOF (deep tail, landed — PR #454):** thin-lens DOF ported into the
+  shared relief compute kernel (D3D + Vulkan) with a matching CPU twin. `CSRelief`
+  factors its trace+shade into `TracePixel(o, rd)` and, when the aperture is open,
+  averages `gDofSamples` lens taps (concentric-disc jitter + re-aim through the focal
+  point); `ReliefRaymarchGpu.RenderCpuMirror` runs the identical loop as the oracle.
+  DOF no longer forces the CPU trace. `--reliefgpuraymarch` gate exercises DOF (mean
+  channel diff 0.267, 0 edge pixels) — the lens averaging keeps the disc-trig float-vs-
+  double divergence inside the gate band. Pinhole stays byte-identical.
+- **Remaining:** click-to-focus, DOF on the 3D-fractal cameras, in-camera exposure
+  control, **motion blur** (own slice over Scene time).
 
 ### S4 — Guided denoiser (À-Trous / SVGF-lite) ● (#402)
 AO, soft shadow and reflections are Monte Carlo → noisy → paid for with

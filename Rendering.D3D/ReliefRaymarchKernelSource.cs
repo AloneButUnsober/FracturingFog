@@ -36,8 +36,12 @@ public static class ReliefRaymarchKernelSource
     /// <summary>Compute-shader entry point name (both compilers).</summary>
     public const string EntryPoint = "CSRelief";
 
-    /// <summary>Compose the full relief-raymarch kernel source.</summary>
-    public static string Build() => Hlsl;
+    /// <summary>Compose the full relief-raymarch kernel source. The pinhole variant
+    /// (default) omits the DOF lens loop entirely — the [loop] wrapping the heavy
+    /// TracePixel makes FXC compile pathologically slowly, so a non-DOF relief render
+    /// must never pay that cost. Pass <paramref name="dof"/> true only when the render
+    /// actually has the aperture open (the backend compiles that variant lazily).</summary>
+    public static string Build(bool dof = false) => Hlsl + (dof ? DofEntry : PinholeEntry);
 
     // Layout note for the matching C# blob (built in 3b): scalars are grouped so
     // no field straddles a 16-byte cbuffer row. Packed colours are uints.
@@ -143,6 +147,11 @@ cbuffer ReliefParams : register(b0)
     float  gVolPaletteStrength;// #185 (slice D) — in-scatter palette cross-fade; 0 = off
     int    gHasPalette;       // #185 — theme ramp bound at t5; 0 = no palette remap
     int    gPaletteLen;       // #185 — ramp entry count (>=2 to activate)
+
+    float  gDofAperture;      // S3 (#389) — thin-lens aperture radius; 0 = pinhole (byte-identical)
+    float  gDofFocus;         // resolved focus distance (auto = |camera| when unset)
+    int    gDofSamples;       // lens taps to average when aperture > 0
+    float  gPadDof;
 };
 
 static const float RELIEF_PI = 3.14159265358979;
@@ -991,38 +1000,17 @@ float EmptySkipDist(float3 P, float3 rd, float epsT)
     return skip > 0.0 ? skip : 0.0;
 }
 
-[numthreads(8, 8, 1)]
-void CSRelief(uint3 tid : SV_DispatchThreadID)
+// The per-ray trace + shade — everything downstream of ray generation, factored
+// out of CSRelief so the DOF lens loop can call it once per aperture sample.
+// Returns packed ARGB for the ray o + rd.
+uint TracePixel(float3 o, float3 rd)
 {
-    int px = (int)tid.x;
-    int py = (int)tid.y;
-    if (px >= gW || py >= gH) return;
-    int idx = py * gW + px;
-
-    float ndcx = 2.0 * (px + 0.5) / gW - 1.0;
-    float ndcy = 1.0 - 2.0 * (py + 0.5) / gH;
-
-    float3 o, rd;
-    if (gOrtho != 0)
-    {
-        float sxo = ndcx * gAspect * gOrthoHalfV, syo = ndcy * gOrthoHalfV;
-        o = gCam + gRight * sxo + gUp * syo;
-        rd = gFwd;
-    }
-    else
-    {
-        o = gCam;
-        float a = ndcx * gAspect * gTanHalf, b = ndcy * gTanHalf;
-        rd = gFwd + gRight * a + gUp * b;
-        rd = normalize(rd);
-    }
-
     float t0 = 0.0, t1 = 3.4e38;
     bool inside = SlabHit(o.x, rd.x, -gB.x, gB.x, t0, t1)
                && SlabHit(o.y, rd.y, 0.0, gB.y, t0, t1)
                && SlabHit(o.z, rd.z, -gB.z, gB.z, t0, t1);
 
-    uint outCol;
+    uint outCol = 0;
     bool wrote = false;
     if (inside)
     {
@@ -1102,7 +1090,90 @@ void CSRelief(uint3 tid : SV_DispatchThreadID)
         }
     }
 
-    gColor[idx] = outCol;
+    return outCol;
+}
+";
+
+    // Ray generation shared by both entry variants: pixel centre → (o, rd).
+    private const string RayGen = @"
+    int px = (int)tid.x;
+    int py = (int)tid.y;
+    if (px >= gW || py >= gH) return;
+    int idx = py * gW + px;
+
+    float ndcx = 2.0 * (px + 0.5) / gW - 1.0;
+    float ndcy = 1.0 - 2.0 * (py + 0.5) / gH;
+
+    float3 o, rd;
+    if (gOrtho != 0)
+    {
+        float sxo = ndcx * gAspect * gOrthoHalfV, syo = ndcy * gOrthoHalfV;
+        o = gCam + gRight * sxo + gUp * syo;
+        rd = gFwd;
+    }
+    else
+    {
+        o = gCam;
+        float a = ndcx * gAspect * gTanHalf, b = ndcy * gTanHalf;
+        rd = gFwd + gRight * a + gUp * b;
+        rd = normalize(rd);
+    }
+";
+
+    // Pinhole entry — one centre ray per pixel. No lens loop, so FXC compiles it as
+    // fast as the pre-DOF kernel; this is the variant a non-DOF relief render uses.
+    private const string PinholeEntry = @"
+[numthreads(8, 8, 1)]
+void CSRelief(uint3 tid : SV_DispatchThreadID)
+{" + RayGen + @"
+    gColor[idx] = TracePixel(o, rd);
+}
+";
+
+    // DOF entry — average gDofSamples lens taps (Shirley disc + re-aim through the
+    // focal point). COMPILED ONLY when a render actually has the aperture open,
+    // because the [loop] wrapping the heavy TracePixel makes FXC compile
+    // pathologically slowly (tens of seconds) even when the loop never runs — so it
+    // must be kept out of the default pinhole shader. Twin of CameraDof.ThinLensRay
+    // + ReliefRaymarchGpu.RenderCpuMirror's lens loop.
+    private const string DofEntry = @"
+// S3 (#389) — Shirley concentric disc map. Twin of CameraDof.ConcentricSampleDisk.
+float2 ConcentricSampleDisk(float u1, float u2)
+{
+    float ox = 2.0 * u1 - 1.0;
+    float oy = 2.0 * u2 - 1.0;
+    if (ox == 0.0 && oy == 0.0) return float2(0.0, 0.0);
+    float r, theta;
+    if (abs(ox) > abs(oy)) { r = ox; theta = (RELIEF_PI / 4.0) * (oy / ox); }
+    else                   { r = oy; theta = (RELIEF_PI / 2.0) - (RELIEF_PI / 4.0) * (ox / oy); }
+    return float2(r * cos(theta), r * sin(theta));
+}
+
+[numthreads(8, 8, 1)]
+void CSRelief(uint3 tid : SV_DispatchThreadID)
+{" + RayGen + @"
+    int taps = gDofSamples > 0 ? gDofSamples : 1;
+    float focus = gDofFocus;
+    float3 fp = gCam + rd * focus;
+    float4 acc = float4(0.0, 0.0, 0.0, 0.0);
+    [loop]
+    for (int k = 0; k < taps; k++)
+    {
+        float u1, u2;
+        HashPair(float3((float)px, (float)py, (float)k), 9, u1, u2);
+        float2 dk = ConcentricSampleDisk(u1, u2);
+        float2 lens = dk * gDofAperture;
+        float3 lo = gCam + gRight * lens.x + gUp * lens.y;
+        float3 ld = normalize(fp - lo);
+        uint c = TracePixel(lo, ld);
+        acc += float4((c >> 16) & 0xFF, (c >> 8) & 0xFF, c & 0xFF, (c >> 24) & 0xFF);
+    }
+    float inv = 1.0 / taps;
+    uint R = (uint)(acc.x * inv + 0.5);
+    uint G = (uint)(acc.y * inv + 0.5);
+    uint B = (uint)(acc.z * inv + 0.5);
+    uint A = (uint)(acc.w * inv + 0.5);
+    gColor[idx] = (A << 24) | (R << 16) | (G << 8) | B;
 }
 ";
 }

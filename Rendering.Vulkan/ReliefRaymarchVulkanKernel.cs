@@ -79,9 +79,10 @@ public sealed unsafe class ReliefRaymarchVulkanKernel : IDisposable, IReliefRaym
         public float VolNoiseAmount, VolNoiseScale, VolNoiseSpeed; public int VolNoiseOctaves;   // 4e-ii FBM
         public float VolSelfShadow; public int VolSelfShadowSteps; public float SceneTime, VolAnisotropy;   // 4e-ii + #184 Slice 3 (B)
         public uint FogColor; public float VolPaletteStrength; public int HasPalette, PaletteLen;   // #184 Slice 3 (C) + #185 slice D
+        public float DofAperture, DofFocus; public int DofSamples; public float PadDof;   // S3 (#389) thin-lens DOF
     }
 
-    private const int ParamBytes = 448;
+    private const int ParamBytes = 464;
 
     private struct Allocated { public Buffer Buffer; public DeviceMemory Memory; public ulong Size; }
 
@@ -91,10 +92,12 @@ public sealed unsafe class ReliefRaymarchVulkanKernel : IDisposable, IReliefRaym
     private readonly Device _device;
     private CommandPool _cmdPool;
 
-    private ShaderModule _module;
+    private ShaderModule _module;         // pinhole (aperture 0) — eager
+    private Pipeline _pipeline;
+    private ShaderModule _moduleDof;      // DOF variant — compiled lazily
+    private Pipeline _pipelineDof;
     private DescriptorSetLayout _dsl;
     private PipelineLayout _layout;
-    private Pipeline _pipeline;
 
     private Allocated _params;
     private Allocated _height, _keep;       // field-sized (hn)
@@ -269,8 +272,12 @@ public sealed unsafe class ReliefRaymarchVulkanKernel : IDisposable, IReliefRaym
                 SType = StructureType.CommandBufferBeginInfo,
                 Flags = CommandBufferUsageFlags.OneTimeSubmitBit,
             };
+            // Pick the variant: DOF averages lens taps (compiled on first use), else
+            // the pinhole single-ray pipeline.
+            bool dof = u.DofAperture > 0.0;
+            if (dof) EnsureDofPipeline();
             Check(_vk.BeginCommandBuffer(cmd, in begin), "vkBeginCommandBuffer");
-            _vk.CmdBindPipeline(cmd, PipelineBindPoint.Compute, _pipeline);
+            _vk.CmdBindPipeline(cmd, PipelineBindPoint.Compute, dof ? _pipelineDof : _pipeline);
             _vk.CmdBindDescriptorSets(cmd, PipelineBindPoint.Compute, _layout, 0, 1, &set, 0, null);
             _vk.CmdDispatch(cmd, (uint)((w + 7) / 8), (uint)((h + 7) / 8), 1);
             Check(_vk.EndCommandBuffer(cmd), "vkEndCommandBuffer");
@@ -341,30 +348,15 @@ public sealed unsafe class ReliefRaymarchVulkanKernel : IDisposable, IReliefRaym
             VolPaletteStrength = (float)u.VolPaletteStrength,
             HasPalette = (u.VolPaletteStrength > 0.0 && u.VolPalette != null && u.VolPalette.Length >= 2) ? 1 : 0,
             PaletteLen = u.VolPalette?.Length ?? 0,
+            DofAperture = (float)u.DofAperture, DofFocus = (float)u.DofFocus, DofSamples = u.DofSamples, PadDof = 0f,
         };
     }
 
     // ── pipeline ────────────────────────────────────────────────────────────────
     private void BuildPipeline()
     {
-        byte[] spirv = DxcCompiler.CompileToSpirv(
-            ReliefRaymarchKernelSource.Build(), ReliefRaymarchKernelSource.EntryPoint, "cs_6_0",
-            "-fvk-b-shift", BShift.ToString(), "0",
-            "-fvk-t-shift", TShift.ToString(), "0",
-            "-fvk-u-shift", UShift.ToString(), "0");
-
-        fixed (byte* code = spirv)
-        {
-            var smci = new ShaderModuleCreateInfo
-            {
-                SType = StructureType.ShaderModuleCreateInfo,
-                CodeSize = (nuint)spirv.Length, PCode = (uint*)code,
-            };
-            Check(_vk.CreateShaderModule(_device, in smci, null, out _module), "vkCreateShaderModule");
-        }
-
         // b0 UBO + t0/t1/t2/t3/t4/t5 + u0 SSBOs (t3 = 4f mip grid, t4 = 4d-ii HDRI
-        // env, t5 = #185 theme ramp).
+        // env, t5 = #185 theme ramp). Layout is variant-independent — built once.
         uint* bindNums = stackalloc uint[8] { 0, (uint)TShift, (uint)TShift + 1, (uint)TShift + 2, (uint)TShift + 3, (uint)TShift + 4, (uint)TShift + 5, (uint)UShift };
         var bindings = stackalloc DescriptorSetLayoutBinding[8];
         for (int i = 0; i < 8; i++)
@@ -389,6 +381,33 @@ public sealed unsafe class ReliefRaymarchVulkanKernel : IDisposable, IReliefRaym
         };
         Check(_vk.CreatePipelineLayout(_device, in plci, null, out _layout), "vkCreatePipelineLayout");
 
+        // Compile the pinhole variant eagerly; the DOF variant is compiled lazily on
+        // the first aperture-open dispatch (its lens loop makes SPIR-V codegen slow).
+        (_module, _pipeline) = CreateVariant(dof: false);
+    }
+
+    // Compile one CSRelief variant → (shader module, compute pipeline), reusing the
+    // shared _layout. Kept separate so the DOF variant's slow compile only happens
+    // when a render actually opens the aperture.
+    private (ShaderModule, Pipeline) CreateVariant(bool dof)
+    {
+        byte[] spirv = DxcCompiler.CompileToSpirv(
+            ReliefRaymarchKernelSource.Build(dof), ReliefRaymarchKernelSource.EntryPoint, "cs_6_0",
+            "-fvk-b-shift", BShift.ToString(), "0",
+            "-fvk-t-shift", TShift.ToString(), "0",
+            "-fvk-u-shift", UShift.ToString(), "0");
+
+        ShaderModule mod;
+        fixed (byte* code = spirv)
+        {
+            var smci = new ShaderModuleCreateInfo
+            {
+                SType = StructureType.ShaderModuleCreateInfo,
+                CodeSize = (nuint)spirv.Length, PCode = (uint*)code,
+            };
+            Check(_vk.CreateShaderModule(_device, in smci, null, out mod), "vkCreateShaderModule");
+        }
+
         nint entryPtr = SilkMarshal.StringToPtr(ReliefRaymarchKernelSource.EntryPoint);
         try
         {
@@ -399,15 +418,22 @@ public sealed unsafe class ReliefRaymarchVulkanKernel : IDisposable, IReliefRaym
                 {
                     SType = StructureType.PipelineShaderStageCreateInfo,
                     Stage = ShaderStageFlags.ComputeBit,
-                    Module = _module, PName = (byte*)entryPtr,
+                    Module = mod, PName = (byte*)entryPtr,
                 },
                 Layout = _layout,
             };
             Pipeline created;
             Check(_vk.CreateComputePipelines(_device, default, 1, &cpci, null, &created), "vkCreateComputePipelines");
-            _pipeline = created;
+            return (mod, created);
         }
         finally { SilkMarshal.Free(entryPtr); }
+    }
+
+    // Lazily compile + cache the DOF pipeline on first aperture-open dispatch.
+    private void EnsureDofPipeline()
+    {
+        if (_pipelineDof.Handle != 0) return;
+        (_moduleDof, _pipelineDof) = CreateVariant(dof: true);
     }
 
     // ── buffers ───────────────────────────────────────────────────────────────
@@ -537,9 +563,11 @@ public sealed unsafe class ReliefRaymarchVulkanKernel : IDisposable, IReliefRaym
         _disposed = true;
         try { if (_device.Handle != 0) _vk.DeviceWaitIdle(_device); } catch { }
         if (_pipeline.Handle != 0) _vk.DestroyPipeline(_device, _pipeline, null);
+        if (_pipelineDof.Handle != 0) _vk.DestroyPipeline(_device, _pipelineDof, null);
         if (_layout.Handle != 0) _vk.DestroyPipelineLayout(_device, _layout, null);
         if (_dsl.Handle != 0) _vk.DestroyDescriptorSetLayout(_device, _dsl, null);
         if (_module.Handle != 0) _vk.DestroyShaderModule(_device, _module, null);
+        if (_moduleDof.Handle != 0) _vk.DestroyShaderModule(_device, _moduleDof, null);
         FreeBuffer(ref _params);
         FreeBuffer(ref _height);
         FreeBuffer(ref _keep);

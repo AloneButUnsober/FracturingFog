@@ -335,9 +335,11 @@ public static class HeightfieldRaymarch2D
         // #317 — a non-Beauty AOV view is produced by the CPU ShadingPipeline
         // (the GPU relief kernel has no view-mode path), so force the CPU trace
         // below while a diagnostic view is active.
-        // S3 (#389) — thin-lens DOF is CPU-only in this slice (the GPU relief
-        // kernel has no lens path), so force the CPU trace when the aperture is
-        // open. GPU DOF is a follow-up; the parity gate uses aperture 0.
+        // S3 (#389) — thin-lens DOF now runs on the GPU too (the kernel averages
+        // ReliefRaymarchGpu.DofGpuSamples lens taps, twinned by RenderCpuMirror and
+        // proven by the --reliefgpuraymarch gate with the aperture open), so DOF no
+        // longer forces the CPU trace. The CPU fallback still integrates the lens
+        // over its supersample grid; the GPU integrates over its own tap budget.
         // S8 (#389): the GPU relief kernel resolves only directional lights from
         // Theta/Phi, so a point/spot light forces the CPU trace (same discipline
         // as DOF / DebugAov). Directional-only scenes stay on the GPU byte-identical.
@@ -346,7 +348,7 @@ public static class HeightfieldRaymarch2D
         // S1 (#389): float-native AOV capture reads the primary hit's normal/depth
         // from the CPU trace, so a capture request also forces the CPU path.
         if (gpuKernel != null && p.Relief2DGpuRaymarch && fx.DebugAov == AovView.Beauty
-            && p.Relief2DDofApertureRadius <= 0.0 && !fx.HasPositionalLight
+            && !fx.HasPositionalLight
             && fx.Transmission <= 0.0 && aov == null)
         {
             var u = ReliefUniforms.Build(w, h, hw, hh, sy, aspect, invLip, maxH, p, in fx);

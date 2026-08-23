@@ -65,15 +65,17 @@ public sealed class ReliefRaymarchGpuKernel : IDisposable, FracturingFog.Renderi
         public float VolNoiseAmount, VolNoiseScale, VolNoiseSpeed; public int VolNoiseOctaves;   // 4e-ii FBM
         public float VolSelfShadow; public int VolSelfShadowSteps; public float SceneTime, VolAnisotropy;   // 4e-ii + #184 Slice 3 (B)
         public uint FogColor; public float VolPaletteStrength; public int HasPalette, PaletteLen;   // #184 Slice 3 (C) + #185 slice D
+        public float DofAperture, DofFocus; public int DofSamples; public float PadDof;   // S3 (#389) thin-lens DOF
     }
 
-    private const int ParamBytes = 448;
+    private const int ParamBytes = 464;
 
     private readonly ID3D11Device _device;
     private readonly ID3D11DeviceContext _ctx;
     private readonly object _d3dGate;
 
-    private ID3D11ComputeShader _cs = null!;
+    private ID3D11ComputeShader _cs = null!;      // pinhole (aperture 0) — eager
+    private ID3D11ComputeShader? _csDof;          // DOF variant — compiled lazily
     private ID3D11Buffer _paramsBuf = null!;
 
     private ID3D11Buffer? _heightBuf, _keepBuf;   // t0, t2 — field-sized (hn)
@@ -109,8 +111,22 @@ public sealed class ReliefRaymarchGpuKernel : IDisposable, FracturingFog.Renderi
         _ctx = context ?? throw new ArgumentNullException(nameof(context));
         _d3dGate = d3dGate ?? throw new ArgumentNullException(nameof(d3dGate));
 
+        // Compile the pinhole variant eagerly. The DOF variant is compiled lazily on
+        // the first aperture-open dispatch — its lens [loop] around TracePixel makes
+        // FXC compile pathologically slowly, so a non-DOF render must never pay it.
+        _cs = CompileVariant(dof: false);
+
+        _paramsBuf = _device.CreateBuffer(new BufferDescription(
+            byteWidth: ParamBytes, bindFlags: BindFlags.ConstantBuffer,
+            usage: ResourceUsage.Dynamic, cpuAccessFlags: CpuAccessFlags.Write));
+    }
+
+    // Compile one CSRelief variant (pinhole or DOF). Kept separate so the DOF
+    // variant's slow FXC compile only happens when a render opens the aperture.
+    private ID3D11ComputeShader CompileVariant(bool dof)
+    {
         var hr = Compiler.Compile(
-            ReliefRaymarchKernelSource.Build(),
+            ReliefRaymarchKernelSource.Build(dof),
             entryPoint: ReliefRaymarchKernelSource.EntryPoint,
             sourceName: "ReliefRaymarch.hlsl",
             profile: "cs_5_0",
@@ -121,12 +137,8 @@ public sealed class ReliefRaymarchGpuKernel : IDisposable, FracturingFog.Renderi
             errBlob?.Dispose();
             throw new InvalidOperationException($"ReliefRaymarchGpuKernel: HLSL compile failed — {msg}");
         }
-        try { _cs = _device.CreateComputeShader(blob.AsSpan()); }
+        try { return _device.CreateComputeShader(blob.AsSpan()); }
         finally { blob.Dispose(); errBlob?.Dispose(); }
-
-        _paramsBuf = _device.CreateBuffer(new BufferDescription(
-            byteWidth: ParamBytes, bindFlags: BindFlags.ConstantBuffer,
-            usage: ResourceUsage.Dynamic, cpuAccessFlags: CpuAccessFlags.Write));
     }
 
     private void EnsureFieldBuffers(int cells)
@@ -327,7 +339,11 @@ public sealed class ReliefRaymarchGpuKernel : IDisposable, FracturingFog.Renderi
             unsafe { *(ReliefParamsBlob*)mapped.DataPointer = p; }
             _ctx.Unmap(_paramsBuf, 0);
 
-            _ctx.CSSetShader(_cs);
+            // Pick the variant: DOF averages lens taps, pinhole traces one ray. The
+            // DOF shader compiles on first use only (slow FXC compile of its loop).
+            bool dof = u.DofAperture > 0.0;
+            if (dof) _csDof ??= CompileVariant(dof: true);
+            _ctx.CSSetShader(dof ? _csDof! : _cs);
             _ctx.CSSetConstantBuffer(0, _paramsBuf);
             _ctx.CSSetShaderResource(0, _heightSrv);
             _ctx.CSSetShaderResource(1, _albedoSrv);
@@ -412,6 +428,7 @@ public sealed class ReliefRaymarchGpuKernel : IDisposable, FracturingFog.Renderi
             VolPaletteStrength = (float)u.VolPaletteStrength,
             HasPalette = (u.VolPaletteStrength > 0.0 && u.VolPalette != null && u.VolPalette.Length >= 2) ? 1 : 0,
             PaletteLen = u.VolPalette?.Length ?? 0,
+            DofAperture = (float)u.DofAperture, DofFocus = (float)u.DofFocus, DofSamples = u.DofSamples, PadDof = 0f,
         };
     }
 
@@ -472,5 +489,6 @@ public sealed class ReliefRaymarchGpuKernel : IDisposable, FracturingFog.Renderi
         try { _colorStaging?.Dispose(); } catch { }
         try { _paramsBuf?.Dispose(); } catch { }
         try { _cs?.Dispose(); } catch { }
+        try { _csDof?.Dispose(); } catch { }
     }
 }
