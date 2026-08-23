@@ -48,6 +48,13 @@ public static class BootstrapHooks
     /// relief raymarch runs regardless — the GPU path is opt-in).</summary>
     public static Func<IFractalRenderer, object, FracturingFog.Rendering.Lighting.IReliefRaymarchKernel?>? ReliefKernelFactoryHook { get; set; }
 
+    /// <summary>S6 (#408) — D3D11 froxel-volume kernel factory. Windows installs
+    /// the DirectXRenderer downcast → <c>FroxelGpuKernel</c> (same native handles
+    /// as the relief kernel); null elsewhere (the CPU froxel post-pass runs
+    /// regardless — the GPU froxel path is opt-in, attached only alongside a GPU
+    /// relief + froxel render).</summary>
+    public static Func<IFractalRenderer, object, FracturingFog.Rendering.Lighting.IFroxelVolumeKernel?>? FroxelKernelFactoryHook { get; set; }
+
     /// <summary>Native video writer probe. Windows installs the Media
     /// Foundation <c>Mp4Writer</c>; null elsewhere. The bootstrap falls
     /// through to ffmpeg when this returns null.</summary>

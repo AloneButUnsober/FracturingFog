@@ -91,6 +91,18 @@ public static class WindowsBootstrap
             return null;
         };
 
+        // S6 (#408): froxel-volume kernel over the SAME D3D11 device/context the
+        // relief kernel uses (shared gate serialises the froxel + relief dispatches).
+        BootstrapHooks.FroxelKernelFactoryHook = (renderer, gate) =>
+        {
+            if (renderer is FracturingFog.DirectXRenderer dx
+                && dx.TryGetD3D11(out var dev, out var ctx))
+            {
+                return new FracturingFog.Rendering.FroxelGpuKernel(dev, ctx, gate);
+            }
+            return null;
+        };
+
         BootstrapHooks.NativeVideoWriterFactoryHook = (path, w, h) =>
         {
             try { return new FracturingFog.Mp4Writer(path, w, h); }

@@ -232,7 +232,8 @@ public static class HeightfieldRaymarch2D
                               int hw, int hh,
                               FractalParameters p, uint[] dst, out double hitFraction,
                               IReliefRaymarchKernel? gpuKernel = null,
-                              ReliefAovBuffers? aov = null)
+                              ReliefAovBuffers? aov = null,
+                              IFroxelVolumeKernel? froxelKernel = null)
     {
         hitFraction = 0.0;
         int n = w * h;            // OUTPUT / albedo pixel count
@@ -365,8 +366,10 @@ public static class HeightfieldRaymarch2D
         // which the GPU kernel NOW emits (twinned by RenderCpuMirror, proven by the
         // --reliefgpuraymarch AOV diff). So a normal/depth-only capture stays on the
         // GPU — the kernel fills the guides and the caller runs the À-Trous filter.
-        // S6 (#408): froxel volumetrics composite is a CPU post-pass (it needs the
-        // per-pixel depth buffer this render fills), so it forces the CPU trace.
+        // S6 (#408): froxel volumetrics composite was a CPU post-pass (it needs the
+        // per-pixel depth buffer this render fills), so it USED to force the CPU
+        // trace. It no longer does when a GPU froxel kernel is attached — see the
+        // fully-GPU froxel branch below.
         bool aovOk = aov == null || aov.Components == null;
         if (gpuKernel != null && p.Relief2DGpuRaymarch && fx.DebugAov == AovView.Beauty
             && aovOk && !froxel)
@@ -376,6 +379,29 @@ public static class HeightfieldRaymarch2D
                 gpuKernel.Run(in u, hbuf, keep, albedo, dst, aov.NormalXyz, aov.Depth);
             else
                 gpuKernel.Run(in u, hbuf, keep, albedo, dst);
+            return;
+        }
+
+        // S6 (#408) host wiring — fully-GPU froxel path. When froxel is on AND both
+        // the relief kernel and a froxel compute kernel are attached (and the GPU
+        // relief path is otherwise eligible), render the fog-FREE beauty + depth AOV
+        // on the GPU, then composite the froxel volume over it on the GPU by that
+        // depth — no forced CPU trace. The relief kernel's depth AOV is the SAME
+        // per-pixel `sdepth` the CPU trace feeds the froxel composite (gate-proven to
+        // track the twin within ~2%), so this matches the CPU froxel path closely.
+        // `froxelFx` carries the original fog knobs (fx has been fog-zeroed for the
+        // beauty). Composite reads `dst` as beauty and writes `dst` — safe: the kernel
+        // uploads the beauty before writing its own output buffer, no CPU aliasing.
+        if (froxel && froxelKernel != null && gpuKernel != null && p.Relief2DGpuRaymarch
+            && fx.DebugAov == AovView.Beauty && aovOk)
+        {
+            var u = ReliefUniforms.Build(w, h, hw, hh, sy, aspect, invLip, maxH, p, in fx);
+            // Reuse the caller's denoise guides when present, else scratch for depth.
+            float[] gnrm = aov?.NormalXyz ?? new float[n * 3];
+            float[] gdep = aov?.Depth ?? new float[n];
+            gpuKernel.Run(in u, hbuf, keep, albedo, dst, gnrm, gdep);
+            var fu = FroxelGpuUniforms.Build(in cam, in froxelFx);
+            froxelKernel.Composite(in fu, dst, gdep, w, h, dst);
             return;
         }
 

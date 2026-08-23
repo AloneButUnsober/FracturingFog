@@ -751,6 +751,44 @@ namespace FracturingFog.Rendering
             return _reliefKernel;
         }
 
+        // S6 (#408) host wiring — GPU froxel volume kernel, constructed lazily the
+        // first time a frame requests a GPU relief + froxel render. Separate from the
+        // relief kernel: the froxel composite is a distinct compute program (populate
+        // + integrate + depth composite). Attached only alongside the relief kernel;
+        // when null the froxel volumetrics fall back to the CPU post-pass.
+        private FracturingFog.Rendering.Lighting.IFroxelVolumeKernel? _froxelKernel;
+        private bool _froxelKernelTried;
+
+        /// <summary>Backend-specific froxel-volume kernel factory installed by the
+        /// host bootstrap, mirroring <see cref="ReliefKernelFactory"/> for the
+        /// froxel compute pass (#408). Null on backends without a froxel kernel —
+        /// the CPU froxel post-pass runs regardless.</summary>
+        public Func<IFractalRenderer, object, FracturingFog.Rendering.Lighting.IFroxelVolumeKernel?>? FroxelKernelFactory { get; set; }
+
+        /// <summary>Lazily construct (once) and return the GPU froxel kernel, or null
+        /// when no factory is installed or construction fails. Called only when a GPU
+        /// relief + froxel render is requested.</summary>
+        private FracturingFog.Rendering.Lighting.IFroxelVolumeKernel? EnsureFroxelKernel()
+        {
+            if (_froxelKernel != null) return _froxelKernel;
+            if (_froxelKernelTried) return null;
+            _froxelKernelTried = true;
+            if (FroxelKernelFactory == null) return null;
+            try
+            {
+                // Share _d3dGate so the froxel dispatch serialises with the relief
+                // dispatch + renderer.Render on the immediate context.
+                _froxelKernel = FroxelKernelFactory(_renderer, _d3dGate);
+            }
+            catch (Exception ex)
+            {
+                Console.Error.WriteLine(
+                    $"[FractalRenderHost] GPU froxel kernel init failed: {ex.Message}");
+                _froxelKernel = null;
+            }
+            return _froxelKernel;
+        }
+
         /// <summary>
         /// Backend-specific video-encoder factory installed by the host
         /// bootstrap. Receives the temp file path + source width/height,
@@ -3331,7 +3369,12 @@ namespace FracturingFog.Rendering
                             src, _reliefHeight!, w, h, _reliefW, _reliefH,
                             reliefParams, _reliefColorScratch, out _,
                             reliefParams.Relief2DGpuRaymarch ? EnsureReliefKernel() : null,
-                            reliefAov);
+                            reliefAov,
+                            // S6 (#408) — attach the GPU froxel kernel only when both the
+                            // GPU relief path and froxel volumetrics are on; else the CPU
+                            // froxel post-pass (or no fog) runs.
+                            (reliefParams.Relief2DGpuRaymarch && reliefParams.Relief2DFroxelVolumetrics)
+                                ? EnsureFroxelKernel() : null);
                         FracturingFog.Imaging.ReliefDenoisePass.Apply(_reliefColorScratch, reliefAov, w, h, reliefParams);
                         reliefRaymarchApplied = true;
                     }
@@ -4352,6 +4395,8 @@ namespace FracturingFog.Rendering
                 // renderer too (D3D buffers/UAV/CS, or the Vulkan device it owns).
                 _reliefKernel?.Dispose();
                 _reliefKernel = null;
+                _froxelKernel?.Dispose();
+                _froxelKernel = null;
             }
             catch { }
 

@@ -1584,6 +1584,30 @@ public class ReliefGpuSeamTests
         public void Dispose() { }
     }
 
+    // S6 (#408) host wiring — records a froxel composite dispatch + stamps its own
+    // sentinel so a test can prove the fully-GPU froxel path (relief beauty then
+    // froxel composite) ran end-to-end.
+    private sealed class StubFroxelKernel : FracturingFog.Rendering.Lighting.IFroxelVolumeKernel
+    {
+        public const uint Sentinel = 0xFF654321u;
+        public int Calls;
+        public int SeenW, SeenH;
+        public bool SawReliefBeauty;   // dst arrived carrying the relief stub's sentinel
+        public bool SawDepth;          // depth guide arrived non-empty (relief AOV depth)
+
+        public void Composite(in FracturingFog.Rendering.Lighting.FroxelGpuUniforms u,
+            uint[] beauty, float[] worldDepth, int w, int h, uint[] dst)
+        {
+            Calls++;
+            SeenW = w; SeenH = h;
+            SawReliefBeauty = beauty.Length > 0 && beauty[0] == StubReliefKernel.Sentinel;
+            SawDepth = worldDepth.Length > 0 && worldDepth[0] != 0f;
+            for (int i = 0; i < dst.Length; i++) dst[i] = Sentinel;
+        }
+
+        public void Dispose() { }
+    }
+
     private static (uint[] albedo, float[] height) Field(int w, int h)
     {
         var calc = new MandelbrotCalculator(w, h)
@@ -1681,8 +1705,10 @@ public class ReliefGpuSeamTests
     [Fact]
     public void Froxel_ForcesCpuTrace()
     {
-        // The froxel composite is a CPU post-pass, so it must not dispatch the GPU
-        // kernel even with the flag + a kernel attached.
+        // Without a froxel kernel, the froxel composite is a CPU post-pass, so it
+        // must not dispatch the relief GPU kernel even with the flag + a relief kernel
+        // attached (the 6-arg overload passes no froxel kernel). With a froxel kernel
+        // the fully-GPU path runs instead — see Froxel_WithGpuKernel_CompositesOnGpu.
         int w = 64, h = 48;
         var (albedo, height) = Field(w, h);
         var fx = FracturingFog.Rendering.Lighting.LightingFxData.CreateDefault();
@@ -1697,6 +1723,63 @@ public class ReliefGpuSeamTests
         var dst = new uint[w * h];
         HeightfieldRaymarch2D.Render(albedo, height, w, h, p, dst, stub);
         Assert.Equal(0, stub.Calls);
+        Assert.False(AllSentinel(dst));
+    }
+
+    [Fact]
+    public void Froxel_WithGpuKernel_CompositesOnGpu()
+    {
+        // S6 (#408) host wiring — with the GPU relief path on, froxel on, fog active
+        // AND both a relief kernel + a froxel kernel attached, the render must run the
+        // fully-GPU path: relief renders the fog-free beauty + depth AOV, then the
+        // froxel kernel composites over it (no CPU trace, no forced-CPU).
+        int w = 64, h = 48;
+        var (albedo, height) = Field(w, h);
+        var fx = FracturingFog.Rendering.Lighting.LightingFxData.CreateDefault();
+        fx.FogDensity = 0.6;
+        fx.Light1.Intensity = 1.0;
+
+        var p = ReliefParams(gpu: true);
+        p.Lighting = fx;
+        p.Relief2DFroxelVolumetrics = true;
+
+        var relief = new StubReliefKernel();
+        var froxel = new StubFroxelKernel();
+        var dst = new uint[w * h];
+        HeightfieldRaymarch2D.Render(albedo, height, w, h, w, h, p, dst, out _, relief, null, froxel);
+
+        Assert.Equal(1, relief.Calls);            // relief beauty + depth rendered on GPU
+        Assert.True(relief.SeenAov, "relief kernel should receive the depth guide");
+        Assert.Equal(1, froxel.Calls);            // froxel composited on GPU
+        Assert.True(froxel.SawReliefBeauty, "froxel should composite over the relief beauty");
+        Assert.True(froxel.SawDepth, "froxel should receive the relief depth AOV");
+        Assert.Equal(w, froxel.SeenW);
+        Assert.Equal(h, froxel.SeenH);
+        // Final dst carries the froxel kernel's sentinel (its composite is last).
+        for (int i = 0; i < dst.Length; i++) Assert.Equal(StubFroxelKernel.Sentinel, dst[i]);
+    }
+
+    [Fact]
+    public void Froxel_GpuReliefOn_NoFroxelKernel_ForcesCpu()
+    {
+        // The froxel GPU path is kernel-gated: GPU relief on + froxel on but NO froxel
+        // kernel attached must fall back to the CPU trace (the relief kernel is not
+        // dispatched, since a GPU relief beauty alone can't composite the froxel).
+        int w = 64, h = 48;
+        var (albedo, height) = Field(w, h);
+        var fx = FracturingFog.Rendering.Lighting.LightingFxData.CreateDefault();
+        fx.FogDensity = 0.6;
+        fx.Light1.Intensity = 1.0;
+
+        var p = ReliefParams(gpu: true);
+        p.Lighting = fx;
+        p.Relief2DFroxelVolumetrics = true;
+
+        var relief = new StubReliefKernel();
+        var dst = new uint[w * h];
+        HeightfieldRaymarch2D.Render(albedo, height, w, h, w, h, p, dst, out _, relief, null, null);
+
+        Assert.Equal(0, relief.Calls);
         Assert.False(AllSentinel(dst));
     }
 
