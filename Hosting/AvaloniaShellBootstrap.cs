@@ -422,6 +422,11 @@ namespace FracturingFog.Hosting
                     // VulkanContext, so wire it independently of the present renderer
                     // just like the compute kernel above. Opt-in per frame.
                     s_renderHost.ReliefKernelFactory = (_, _) => ReliefRaymarchVulkanKernel.TryCreateWithOwnContext();
+                    // S6 (#408): the froxel volume kernel likewise owns its own
+                    // VulkanContext, wired independently of the present renderer. Opt-in
+                    // per frame (GPU relief + froxel both on); the CPU froxel post-pass
+                    // runs whenever construction returns null or the flags are off.
+                    s_renderHost.FroxelKernelFactory = (_, _) => FroxelVolumeVulkanKernel.TryCreateWithOwnContext();
                     RendererFactory.VulkanProbeBackend = () => $"Vulkan compute ({vkDev}) + OpenGL (present)";
                     // Default GPU compute ON for an explicit --renderer vulkan
                     // session — the setter constructs the kernel now via the

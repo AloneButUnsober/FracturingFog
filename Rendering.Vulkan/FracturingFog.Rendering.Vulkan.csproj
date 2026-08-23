@@ -44,6 +44,9 @@
     <!-- Relief 3D Slice 3c (#161): the same dependency-free relief kernel source
          FXC compiles on D3D (3b), compiled here by DXC → SPIR-V. -->
     <Compile Include="..\Rendering.D3D\ReliefRaymarchKernelSource.cs" Link="Shared\ReliefRaymarchKernelSource.cs" />
+    <!-- S6 (#408): the same dependency-free froxel kernel source FXC compiles on
+         D3D (FroxelGpuKernel), compiled here by DXC → SPIR-V. -->
+    <Compile Include="..\Rendering.D3D\FroxelKernelSource.cs" Link="Shared\FroxelKernelSource.cs" />
   </ItemGroup>
 
 </Project>
