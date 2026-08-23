@@ -45,6 +45,7 @@ namespace FracturingFog.UI.Avalonia.Services
             rw.Shape = CurrentShape(shell);
             rw.ResolutionName = shell.FloatingMenu.SelectedResolution;
             rw.Topmost = shell.IsRenderTopmost;
+            rw.AboveDialogs = shell.IsRenderAboveDialogs;
 
             var main = WindowService.ActiveMainWindow;
             if (main != null)
@@ -89,8 +90,10 @@ namespace FracturingFog.UI.Avalonia.Services
             // 1. Mode FIRST — this may mutate MainWindow geometry (Mini/Toy/Span).
             ApplyShape(shell, rw.Shape);
 
-            // 2. Always-on-top is a plain flag flip.
+            // 2. Always-on-top flags are plain flips (MainWindow mirrors them
+            //    onto Window.Topmost + WindowService.KeepRenderAboveDialogs).
             shell.IsRenderTopmost = rw.Topmost;
+            shell.IsRenderAboveDialogs = rw.AboveDialogs;
 
             // 3. Geometry after the mode transition settles.
             Dispatcher.UIThread.Post(

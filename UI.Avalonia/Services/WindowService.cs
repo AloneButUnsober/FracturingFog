@@ -242,10 +242,20 @@ namespace FracturingFog.UI.Avalonia.Services
         /// Topmost-matching in the Relief 3D / Lighting FX openers was the same
         /// fix applied one window at a time.
         /// </summary>
+        /// <summary>When true, the render window is kept above FF dialogs too, so
+        /// dialogs are NOT topmost-matched over it (#472). The shell sets this from
+        /// its "on top of FF windows and dialogues" toggle. Default false =
+        /// historical behaviour (dialogs float over a topmost render window).</summary>
+        public static bool KeepRenderAboveDialogs { get; set; }
+
         private static void MatchRenderTopmost(Window win)
         {
             try
             {
+                // With "above dialogs" on, deliberately do NOT raise the dialog:
+                // the render window is meant to stay above it.
+                if (KeepRenderAboveDialogs) return;
+
                 var main = ActiveMainWindow;
                 if (main != null && main.Topmost && !ReferenceEquals(win, main))
                     win.Topmost = true;

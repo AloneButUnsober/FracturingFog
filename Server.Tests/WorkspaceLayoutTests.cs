@@ -35,6 +35,7 @@ public sealed class WorkspaceLayoutTests
             X = 100, Y = 120, Width = 1280, Height = 720,
             ResolutionName = "1080p",
             Topmost = true,
+            AboveDialogs = true,
             Monitor = new MonitorRef { Index = 1, X = 1920, Y = 0, Width = 2560, Height = 1440 },
         },
         Satellites =
@@ -90,6 +91,7 @@ public sealed class WorkspaceLayoutTests
         Assert.Equal(RenderWindowShape.Toy, active!.RenderWindow.Shape);
         Assert.Equal(WindowDisplayState.Maximized, active.RenderWindow.DisplayState);
         Assert.True(active.RenderWindow.Topmost);
+        Assert.True(active.RenderWindow.AboveDialogs);
         Assert.Equal("1080p", active.RenderWindow.ResolutionName);
         Assert.Equal(1, active.RenderWindow.Monitor!.Index);
         Assert.Equal(2, active.Satellites.Count);

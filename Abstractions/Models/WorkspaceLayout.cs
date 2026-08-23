@@ -96,10 +96,14 @@ namespace FracturingFog.Models
         /// JSON.</summary>
         public string? ResolutionName { get; set; }
 
-        /// <summary>"Keep render window on top" — the toggle already shipped in
-        /// Control Center → View (default off). Captured so a workspace restores
-        /// it too.</summary>
+        /// <summary>"Keep render window on top" — render floats above non-FF
+        /// windows while FF dialogs may still overlay it (default off). Captured
+        /// so a workspace restores it too.</summary>
         public bool Topmost { get; set; }
+
+        /// <summary>Render window on top of FF windows and dialogues too — when on,
+        /// FF dialogs no longer float over the render window (default off, #472).</summary>
+        public bool AboveDialogs { get; set; }
 
         public MonitorRef? Monitor { get; set; }
 
@@ -110,6 +114,7 @@ namespace FracturingFog.Models
             X = X, Y = Y, Width = Width, Height = Height,
             ResolutionName = ResolutionName,
             Topmost = Topmost,
+            AboveDialogs = AboveDialogs,
             Monitor = Monitor?.Clone(),
         };
     }

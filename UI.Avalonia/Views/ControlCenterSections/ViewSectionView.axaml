@@ -19,6 +19,7 @@
                 <StackPanel Orientation="Horizontal" Spacing="14" Margin="0,4,0,0">
                     <CheckBox Content="Status" IsChecked="{Binding Menu.ShowStatusBar}" Foreground="#9B9B9B" FontWeight="Bold" />
                     <CheckBox Content="Grid"   IsChecked="{Binding Menu.ShowGrid}"      Foreground="#9B9B9B" FontWeight="Bold" ToolTip.Tip="Overlay complex-plane grid" />
+                    <TextBlock Text="Size" VerticalAlignment="Center" Foreground="#9B9B9B" FontWeight="Bold" />
                     <ComboBox ItemsSource="{Binding Menu.ResolutionNames}"
                               SelectedItem="{Binding Menu.SelectedResolution}"
                               Width="160" ToolTip.Tip="Set window dimensions" />
@@ -47,7 +48,11 @@
                 <CheckBox Content="Keep render window on top"
                           IsChecked="{Binding Shell.IsRenderTopmost, Mode=TwoWay}"
                           Foreground="#9B9B9B" FontWeight="Bold" Margin="0,4,0,0"
-                          ToolTip.Tip="Always-on-top for the render window" />
+                          ToolTip.Tip="Keep the render window above other (non-FF) apps and windows. FF dialogs can still overlay it when needed." />
+                <CheckBox Content="On top of FF windows and dialogs"
+                          IsChecked="{Binding Shell.IsRenderAboveDialogs, Mode=TwoWay}"
+                          Foreground="#9B9B9B" FontWeight="Bold" Margin="0,2,0,0"
+                          ToolTip.Tip="Also keep the render window above FracturingFog's own dialogs (they no longer float over it). Default off." />
             </StackPanel>
         </Border>
 
