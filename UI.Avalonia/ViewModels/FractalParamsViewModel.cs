@@ -411,6 +411,14 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
         get => _p.Relief2DRaymarch;
         set { if (_p.Relief2DRaymarch == value) return; _p.Relief2DRaymarch = value; this.RaisePropertyChanged(); this.RaisePropertyChanged(nameof(ShowLightingFxLauncher)); Fire(); }
     }
+    // Roadmap S6 (#408) — froxel (frustum-voxel) volumetrics. Composites a camera-
+    // frustum fog volume by per-pixel depth instead of the per-pixel march. Only
+    // affects a raymarch scene with fog active; forces the CPU trace. Default off.
+    public bool Relief2DFroxelVolumetrics
+    {
+        get => _p.Relief2DFroxelVolumetrics;
+        set { if (_p.Relief2DFroxelVolumetrics == value) return; _p.Relief2DFroxelVolumetrics = value; this.RaisePropertyChanged(); Fire(); }
+    }
     public double Relief2DCameraAzimuthDeg
     {
         get => _p.Relief2DCameraAzimuthDeg;

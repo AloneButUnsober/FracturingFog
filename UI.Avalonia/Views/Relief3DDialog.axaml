@@ -198,6 +198,10 @@
                           IsChecked="{Binding Relief2DAutoShade, Mode=TwoWay}"
                           IsEnabled="{Binding Relief2DRaymarch}"
                           ToolTip.Tip="Fills sensible ambient-occlusion, soft-shadow and specular defaults for the 3D view whenever those Lighting FX knobs are still at zero. Any value you set explicitly in the Lighting FX dialog always wins." />
+                <CheckBox Content="Froxel volumetrics (fog volume, not per-pixel march)"
+                          IsChecked="{Binding Relief2DFroxelVolumetrics, Mode=TwoWay}"
+                          IsEnabled="{Binding Relief2DRaymarch}"
+                          ToolTip.Tip="Composite fog from a camera-frustum froxel volume built once, sampled per pixel by depth — instead of the per-pixel in-scatter march. Only affects a scene with fog (set Fog density in Lighting FX). Renders on the CPU." />
                 </StackPanel>
                 </Expander>
 
