@@ -321,12 +321,21 @@ animated.
   (float shader vs double CPU), fog changed 100% of pixels. `IFroxelVolumeKernel`
   seam mirrors `IReliefRaymarchKernel`. 4 uniform-seam tests. Nothing calls it in
   the live render path yet → default byte-identical.
+- **GPU froxel host wiring (landed, PR #465):** the froxel kernel is threaded through
+  the host so a GPU relief + froxel render composites the fog entirely on the GPU —
+  lifting the previous force-CPU. `HeightfieldRaymarch2D.Render` takes an optional
+  `IFroxelVolumeKernel`; when froxel is on and both a relief kernel + froxel kernel are
+  attached, the relief kernel renders the fog-free beauty + depth AOV and the froxel
+  kernel composites over it by that depth (the AOV depth is the SAME `sdepth` the CPU
+  path feeds the composite). `FractalRenderHost.FroxelKernelFactory` + lazy
+  `EnsureFroxelKernel` mirror the relief kernel; `FroxelKernelFactoryHook` is installed
+  by `WindowsBootstrap` (DirectXRenderer → `FroxelGpuKernel`) + wired by
+  `AvaloniaShellBootstrap`. Kernel-gated (no froxel kernel → CPU post-pass) + default
+  off → byte-identical. 2 routing tests; suite 1711/1711.
 - **Remaining:** **temporal reprojection** (Scene Engine history, additive gated);
   **Vulkan froxel kernel** (the HLSL is already one-source/two-compiler-ready,
-  mirroring the relief #160→#161 split); **host wiring** (thread an
-  `IFroxelVolumeKernel` factory through `FractalRenderHost` + bootstrap so a GPU
-  relief + froxel render composites on-GPU from the relief depth AOV — lifting the
-  current force-CPU, mirroring the relief #162 seam slice).
+  mirroring the relief #160→#161 split — WindowsBootstrap installs the D3D froxel
+  factory today; the Vulkan branch leaves it null).
 
 ### S7 — Float / multi-layer EXR export ◐ (#394)
 Enabler for S1 (AOV layers), S2 (linear/HDR intermediate) and S6 (HDR

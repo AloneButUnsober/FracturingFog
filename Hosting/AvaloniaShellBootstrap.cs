@@ -398,6 +398,12 @@ namespace FracturingFog.Hosting
             if (BootstrapHooks.ReliefKernelFactoryHook != null)
                 s_renderHost.ReliefKernelFactory = BootstrapHooks.ReliefKernelFactoryHook;
 
+            // S6 (#408): install the D3D11 froxel-volume kernel factory the same way.
+            // Null off Windows (no Vulkan froxel kernel yet — that is the documented
+            // follow-up); the CPU froxel post-pass runs whenever no kernel is attached.
+            if (BootstrapHooks.FroxelKernelFactoryHook != null)
+                s_renderHost.FroxelKernelFactory = BootstrapHooks.FroxelKernelFactoryHook;
+
             // V3-GUI (#57): --renderer vulkan attaches the cross-platform Vulkan
             // compute kernel. It is independent of the present renderer (the Silk
             // GL blit) — the kernel owns its own VulkanContext — so we install it
