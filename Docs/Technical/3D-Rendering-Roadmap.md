@@ -288,10 +288,18 @@ animated.
   no-op, far>near attenuation, Beer-Lambert far transmittance, colored in-scatter
   tint, noise heterogeneity. World mapping is an axis-aligned slab (depth along the
   froxel Z).
-- **Remaining:** wire the **live camera frustum** populate + per-pixel depth into
-  the relief / 3D render (replacing the background `VolumetricInScatterSegment`
-  march), multi-light in-scatter (reuse #388), **temporal reprojection** (Scene
-  Engine history, additive gated), GPU froxel compute pass.
+- **Render wiring (landed, PR #461):** `FroxelCameraVolume` frames a `FroxelGrid`
+  over the oblique relief scene (near/far from camera + slab) + builds a
+  `FroxelMedium` from the fog knobs + key light, and
+  `FroxelVolumePass.CompositeWorldDepth` composites by per-pixel world depth through
+  the exponential `DepthToSlice`. Opt-in `FractalParameters.Relief2DFroxelVolumetrics`
+  (+ `--relief-froxel`): the relief beauty renders fog-free, depth is captured, and
+  the volume composites as a CPU post-pass (replacing the per-pixel background march).
+  Forces the CPU trace; default off → byte-identical. 13 tests.
+- **Remaining:** **multi-light** in the froxel populate (reuse #388) + true positional
+  falloff (today: single directional key light), **temporal reprojection** (Scene
+  Engine history, additive gated), **GPU froxel compute pass**, and a UI checkbox
+  (CLI + engine flag reachable now; add after visual sign-off).
 
 ### S7 — Float / multi-layer EXR export ◐ (#394)
 Enabler for S1 (AOV layers), S2 (linear/HDR intermediate) and S6 (HDR
