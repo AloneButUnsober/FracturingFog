@@ -108,6 +108,15 @@ static class Program
         if (args.Length > 0 && args[0] == "--reliefgpuraymarch")
             return FracturingFog.Rendering.ReliefRaymarchGpuProbe.RunGate();
 
+        // --froxelgpu: S6 (#408) gate — the D3D froxel compute pass
+        // (CSFroxelIntegrate + CSFroxelComposite) vs the pure-CPU froxel pass
+        // (FroxelCameraVolume.Apply) over identical inputs, on a WARP device (no
+        // GPU needed). Asserts the fog actually changes the beauty and that the
+        // GPU tracks the CPU oracle (small mean diff). Writes froxel-gpu-{cpu,gpu}.ppm
+        // + froxelgpu.out.
+        if (args.Length > 0 && args[0] == "--froxelgpu")
+            return FracturingFog.Rendering.FroxelGpuProbe.RunGate();
+
         // --meshexport: #101 gate — prove marching-cubes mesh export works for
         // every DE raymarcher (not just the User Bulb) via the shared
         // RaymarchMeshSampler factory. For each exportable type: build the
