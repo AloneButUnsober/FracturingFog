@@ -349,6 +349,45 @@ namespace FracturingFog.Assets
         }
     }
 
+    /// <summary>Window-arrangement workspaces (#433). Like
+    /// <see cref="SlideshowConfigAssetSource"/>, <see cref="WorkspaceLayoutLibrary"/>
+    /// is a static file gateway, not a live singleton list — this adapter loads
+    /// the workspace file on each call. Every workspace is user-created, so all
+    /// are deletable/exportable (no built-ins, no undeletable "Default").</summary>
+    public sealed class WorkspaceAssetSource : IAssetSource
+    {
+        public AssetKind Kind => AssetKind.Workspace;
+        public string DisplayName => "Workspaces";
+
+        public IEnumerable<AssetDescriptor> Enumerate()
+        {
+            var file = WorkspaceLayoutLibrary.Load();
+            foreach (var w in file.Layouts)
+                yield return new AssetDescriptor(w.Name, Kind, null, AssetSizing.Bytes(w), null);
+        }
+
+        public bool Delete(string name)
+        {
+            var file = WorkspaceLayoutLibrary.Load();
+            return WorkspaceLayoutLibrary.Delete(file, name);
+        }
+
+        public string? ExportJson(string name) => AssetSizing.Json(
+            WorkspaceLayoutLibrary.Load().Layouts
+                .FirstOrDefault(w => w.Name.Equals(name, System.StringComparison.OrdinalIgnoreCase)));
+
+        public AssetImportResult ImportJson(string json, bool overwrite)
+        {
+            var w = AssetSizing.Parse<WorkspaceLayout>(json);
+            if (w == null || string.IsNullOrWhiteSpace(w.Name)) return AssetImportResult.Fail;
+            var file = WorkspaceLayoutLibrary.Load();
+            bool exists = file.Layouts.Any(x => x.Name.Equals(w.Name, System.StringComparison.OrdinalIgnoreCase));
+            if (exists && !overwrite) return new AssetImportResult(AssetImportStatus.SkippedExists, w.Name);
+            WorkspaceLayoutLibrary.Upsert(file, w); // persists; also marks imported workspace active
+            return new AssetImportResult(exists ? AssetImportStatus.Replaced : AssetImportStatus.Added, w.Name);
+        }
+    }
+
     public sealed class WatermarkAssetSource : IAssetSource
     {
         public AssetKind Kind => AssetKind.Watermark;

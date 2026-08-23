@@ -27,6 +27,7 @@ namespace FracturingFog.Assets
             new SlideshowConfigAssetSource(),
             new WatermarkAssetSource(),
             new SceneAssetSource(),
+            new WorkspaceAssetSource(),
         };
     }
 }
