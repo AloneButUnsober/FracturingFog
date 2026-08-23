@@ -295,11 +295,11 @@ animated.
   the exponential `DepthToSlice`. Opt-in `FractalParameters.Relief2DFroxelVolumetrics`
   (+ `--relief-froxel`): the relief beauty renders fog-free, depth is captured, and
   the volume composites as a CPU post-pass (replacing the per-pixel background march).
-  Forces the CPU trace; default off → byte-identical. 13 tests.
+  Forces the CPU trace; default off → byte-identical. 13 tests. Reachable via the
+  "Froxel volumetrics" checkbox in the Relief 3D dialog + `--relief-froxel`.
 - **Remaining:** **multi-light** in the froxel populate (reuse #388) + true positional
   falloff (today: single directional key light), **temporal reprojection** (Scene
-  Engine history, additive gated), **GPU froxel compute pass**, and a UI checkbox
-  (CLI + engine flag reachable now; add after visual sign-off).
+  Engine history, additive gated), **GPU froxel compute pass**.
 
 ### S7 — Float / multi-layer EXR export ◐ (#394)
 Enabler for S1 (AOV layers), S2 (linear/HDR intermediate) and S6 (HDR
