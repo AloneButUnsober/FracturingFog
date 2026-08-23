@@ -27,6 +27,24 @@ using System;
 
 namespace FracturingFog.Rendering.Lighting;
 
+/// <summary>One light for the froxel in-scatter (roadmap S6 multi-light, #408).
+/// Directional (Type 0) uses the constant <see cref="Lx"/>/<see cref="Ly"/>/<see
+/// cref="Lz"/> "toward-light" direction with attenuation 1; Point (1) / Spot (2)
+/// resolve direction + inverse-square (× cone) falloff per froxel via
+/// <see cref="LightSampler"/>. Intensity 0 = off (no contribution).</summary>
+public readonly struct FroxelLight
+{
+    public int Type { get; init; }
+    public uint Color { get; init; }
+    public double Intensity { get; init; }
+    /// <summary>Unit direction toward the light (directional aim / spot cone axis).</summary>
+    public double Lx { get; init; } public double Ly { get; init; } public double Lz { get; init; }
+    /// <summary>World position (Point / Spot).</summary>
+    public double PosX { get; init; } public double PosY { get; init; } public double PosZ { get; init; }
+    /// <summary>Range window (0 = pure inverse-square) + spot cone cosines.</summary>
+    public double Range { get; init; } public double InnerCos { get; init; } public double OuterCos { get; init; }
+}
+
 /// <summary>Homogeneous-plus-noise fog medium sampled to populate a froxel volume
 /// (roadmap S6). Mirrors the knobs of the per-surface volumetric march.</summary>
 public readonly struct FroxelMedium
@@ -58,6 +76,14 @@ public readonly struct FroxelMedium
     /// <summary>Half-extent of the froxel slab in world X/Y (depth spans the grid's
     /// near..far). Only affects where the noise field is sampled.</summary>
     public double WorldExtent { get; init; }
+
+    /// <summary>Multi-light in-scatter (roadmap S6, #408). When non-null and
+    /// non-empty, EVERY light's contribution is summed per froxel (each with its own
+    /// direction / colour / phase, and per-cell positional falloff for point/spot) —
+    /// the same three-light model as the per-surface march (#388). When null, the
+    /// single <see cref="LightColor"/>/<see cref="LightIntensity"/>/<see cref="Lx"/>
+    /// key light above is used (byte-identical to the pre-multi-light populate).</summary>
+    public FroxelLight[]? Lights { get; init; }
 }
 
 /// <summary>A populated, column-integrated froxel volume + a depth-composite over a
@@ -87,11 +113,28 @@ public sealed class FroxelVolumePass
     /// each column is then integrated front-to-back via <see cref="FroxelIntegrator"/>.</summary>
     public void Populate(in FroxelMedium m)
     {
-        double lr = ((m.LightColor >> 16) & 0xFF) / 255.0;
-        double lg = ((m.LightColor >> 8) & 0xFF) / 255.0;
-        double lb = (m.LightColor & 0xFF) / 255.0;
-        double phase = HgPhase(m.Anisotropy,
-            m.ViewDx * m.Lx + m.ViewDy * m.Ly + m.ViewDz * m.Lz);
+        // Resolve the light list once. Null → a single directional key light from the
+        // legacy scalar fields (byte-identical to the pre-multi-light populate).
+        FroxelLight[] lights = (m.Lights != null && m.Lights.Length > 0)
+            ? m.Lights
+            : new[]
+            {
+                new FroxelLight
+                {
+                    Type = 0, Color = m.LightColor, Intensity = m.LightIntensity,
+                    Lx = m.Lx, Ly = m.Ly, Lz = m.Lz,
+                }
+            };
+        int nl = lights.Length;
+        // Precompute each light's colour in [0,1] once.
+        var lr = new double[nl]; var lg = new double[nl]; var lb = new double[nl];
+        for (int i = 0; i < nl; i++)
+        {
+            lr[i] = ((lights[i].Color >> 16) & 0xFF) / 255.0;
+            lg[i] = ((lights[i].Color >> 8) & 0xFF) / 255.0;
+            lb[i] = (lights[i].Color & 0xFF) / 255.0;
+        }
+
         double extent = m.WorldExtent;
         double scale = m.NoiseScale;
         int oct = m.NoiseOctaves <= 0 ? 3 : m.NoiseOctaves;
@@ -118,8 +161,27 @@ public sealed class FroxelVolumePass
                     double density = m.BaseDensity * noiseMul;
                     ext[z] = m.Extinction * density;
                     th[z] = _grid.SliceThickness(z);
-                    double sc = density * m.LightIntensity * phase;
-                    sR[z] = sc * lr; sG[z] = sc * lg; sB[z] = sc * lb;
+
+                    // #388-style multi-light in-scatter: sum every light, each with its
+                    // own direction (per-cell for point/spot), attenuation and HG phase.
+                    double accR = 0, accG = 0, accB = 0;
+                    for (int i = 0; i < nl; i++)
+                    {
+                        var L = lights[i];
+                        if (L.Intensity <= 0.0) continue;
+                        double dx = L.Lx, dy = L.Ly, dz = L.Lz, atten = 1.0;
+                        if (L.Type != 0)
+                        {
+                            var s = LightSampler.Sample(
+                                (LightType)L.Type, L.Lx, L.Ly, L.Lz, L.PosX, L.PosY, L.PosZ,
+                                L.Range, L.InnerCos, L.OuterCos, wx, wy, wz);
+                            dx = s.lx; dy = s.ly; dz = s.lz; atten = s.atten;
+                        }
+                        double phase = HgPhase(m.Anisotropy, m.ViewDx * dx + m.ViewDy * dy + m.ViewDz * dz);
+                        double sc = density * L.Intensity * atten * phase;
+                        accR += sc * lr[i]; accG += sc * lg[i]; accB += sc * lb[i];
+                    }
+                    sR[z] = accR; sG[z] = accG; sB[z] = accB;
                 }
 
                 FroxelIntegrator.IntegrateColumn(sR, sG, sB, ext, th, _nz, oR, oG, oB, oT);

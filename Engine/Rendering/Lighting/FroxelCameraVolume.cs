@@ -48,29 +48,50 @@ public static class FroxelCameraVolume
         return new FroxelGrid(DimX, DimY, DimZ, near, far);
     }
 
-    /// <summary>Build a fog medium from the lighting knobs + the key light. The key
-    /// light is resolved to a world direction from its Theta/Phi (the froxel volume
-    /// is global, so a point/spot light contributes as its nominal direction — full
-    /// positional falloff in the volume is a later tail). View direction is the
+    /// <summary>Build a fog medium from the lighting knobs + all three lights
+    /// (roadmap S6 multi-light, #408). Each light contributes its own direction,
+    /// colour, HG phase and — for point/spot — per-froxel positional falloff, the
+    /// same three-light model as the per-surface march (#388). View direction is the
     /// camera forward. Extinction is 1 per unit density so extinction == FogDensity,
     /// matching the per-surface march's density·extinction.</summary>
     public static FroxelMedium BuildMedium(in HeightfieldRaymarch2D.ReliefCamera cam, in LightingFxData fx)
     {
-        var (lx, ly, lz) = ShadingPipeline.LightDir(fx.Light1.Theta, fx.Light1.Phi);
         double extent = Math.Max(cam.Bx, Math.Max(cam.By, cam.Bz));
         return new FroxelMedium
         {
             BaseDensity = fx.FogDensity,
             Extinction = 1.0,
-            LightColor = fx.Light1.Color,
-            LightIntensity = fx.Light1.Intensity,
-            Lx = lx, Ly = ly, Lz = lz,
             ViewDx = cam.FX, ViewDy = cam.FY, ViewDz = cam.FZ,
             Anisotropy = fx.VolumeAnisotropy,
             NoiseAmount = fx.VolumeNoiseAmount,
             NoiseScale = fx.VolumeNoiseScale,
             NoiseOctaves = fx.VolumeNoiseOctaves,
             WorldExtent = extent > 0 ? extent : 1.0,
+            Lights = new[]
+            {
+                ToFroxelLight(in fx.Light1),
+                ToFroxelLight(in fx.Light2),
+                ToFroxelLight(in fx.Light3),
+            },
+        };
+    }
+
+    /// <summary>Map a scene light to a <see cref="FroxelLight"/>: resolve the
+    /// direction from Theta/Phi (directional aim / spot cone axis) and convert the
+    /// spot half-angles to cosines. Point/spot carry their world position + range.</summary>
+    private static FroxelLight ToFroxelLight(in DirectionalLight d)
+    {
+        var (lx, ly, lz) = ShadingPipeline.LightDir(d.Theta, d.Phi);
+        return new FroxelLight
+        {
+            Type = (int)d.Type,
+            Color = d.Color,
+            Intensity = d.Intensity,
+            Lx = lx, Ly = ly, Lz = lz,
+            PosX = d.PosX, PosY = d.PosY, PosZ = d.PosZ,
+            Range = d.Range,
+            InnerCos = Math.Cos(d.SpotInnerDeg * Math.PI / 180.0),
+            OuterCos = Math.Cos(d.SpotOuterDeg * Math.PI / 180.0),
         };
     }
 
