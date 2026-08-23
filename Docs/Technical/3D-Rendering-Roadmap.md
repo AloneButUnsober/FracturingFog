@@ -332,10 +332,18 @@ animated.
   by `WindowsBootstrap` (DirectXRenderer → `FroxelGpuKernel`) + wired by
   `AvaloniaShellBootstrap`. Kernel-gated (no froxel kernel → CPU post-pass) + default
   off → byte-identical. 2 routing tests; suite 1711/1711.
-- **Remaining:** **temporal reprojection** (Scene Engine history, additive gated);
-  **Vulkan froxel kernel** (the HLSL is already one-source/two-compiler-ready,
-  mirroring the relief #160→#161 split — WindowsBootstrap installs the D3D froxel
-  factory today; the Vulkan branch leaves it null).
+- **Vulkan froxel kernel (landed, PR #466):** `FroxelVolumeVulkanKernel` is the
+  cross-platform twin of the D3D `FroxelGpuKernel` — two compute pipelines from the
+  SAME shared `FroxelKernelSource` (FXC→cs_5_0 on D3D, DXC→cs_6_0 -spirv here),
+  `CSFroxelIntegrate` then `CSFroxelComposite` in one command buffer with a
+  shader-write→read barrier between; shared descriptor layout `{b0,t0..t2,u0}` with
+  two sets (integrate binds the volume at u0, composite at t2 + output at u0).
+  Bootstrap's `--renderer vulkan` branch installs the froxel factory beside the relief
+  kernel, so GPU relief + froxel composites fog on-GPU on Linux/macOS too. The
+  `--vulkanfroxel` gate (same scene/oracle/tolerances as `--froxelgpu`) PASSES on real
+  hardware (GT 710: mean 0.059, 0 edge px, 0 alpha). Shared HLSL + D3D kernel unchanged.
+- **Remaining:** **temporal reprojection** (Scene Engine history, additive gated) — the
+  last S6 tail.
 
 ### S7 — Float / multi-layer EXR export ◐ (#394)
 Enabler for S1 (AOV layers), S2 (linear/HDR intermediate) and S6 (HDR
