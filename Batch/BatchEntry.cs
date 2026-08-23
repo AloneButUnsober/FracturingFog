@@ -244,6 +244,8 @@ namespace FracturingFog.Batch
             Console.WriteLine("                              Blur integrates over --relief supersample taps.");
             Console.WriteLine("  --dof-focus F               DOF focus distance (>=0 world units; 0 = auto-focus");
             Console.WriteLine("                              the fractal centre). Only used with --dof-aperture.");
+            Console.WriteLine("  --relief-froxel             Froxel (frustum-voxel) volumetrics for fog (S6).");
+            Console.WriteLine("                              Implies --relief-raymarch; only affects a fog scene.");
             Console.WriteLine("  Isolate masking:");
             Console.WriteLine("  --relief-isolate            Isolate high-relief features (drop flat/low-detail).");
             Console.WriteLine("  --relief-isolate-no-detail  Turn OFF the default detail-based isolation.");

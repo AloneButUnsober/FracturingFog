@@ -317,6 +317,17 @@ public static class HeightfieldRaymarch2D
         var fx = p.Lighting;
         if (p.Relief2DAutoShade) FillAutoShadeDefaults(ref fx, p.Relief2DAutoShadeKeepExplicitZeros);
 
+        // S6 (#389/#408) — opt-in froxel volumetrics. When on (raymarch + fog active),
+        // the beauty renders fog-FREE and a camera-frustum froxel volume is composited
+        // over it by per-pixel depth (populate/integrate once → one depth-indexed read
+        // per pixel) instead of the per-pixel background in-scatter march. Snapshot the
+        // fog knobs for the medium, then zero fog on the shading fx so the trace below
+        // (and its god-ray branch) skip per-pixel fog. Forces the CPU trace (the
+        // composite is a CPU post-pass). Default off → byte-identical.
+        bool froxel = p.Relief2DFroxelVolumetrics && p.Relief2DRaymarch && fx.FogDensity > 0.0;
+        LightingFxData froxelFx = fx;
+        if (froxel) { fx.FogDensity = 0.0; fx.VolumeSteps = 0; }
+
         // Oblique camera + AABB + cone-epsilon. Extracted (#159 / Slice 3a) into
         // BuildObliqueCamera so the GPU relief kernel and its CPU parity twin
         // (ReliefRaymarchGpu) drive rays from byte-identical numbers. The math is
@@ -354,9 +365,11 @@ public static class HeightfieldRaymarch2D
         // which the GPU kernel NOW emits (twinned by RenderCpuMirror, proven by the
         // --reliefgpuraymarch AOV diff). So a normal/depth-only capture stays on the
         // GPU — the kernel fills the guides and the caller runs the À-Trous filter.
+        // S6 (#408): froxel volumetrics composite is a CPU post-pass (it needs the
+        // per-pixel depth buffer this render fills), so it forces the CPU trace.
         bool aovOk = aov == null || aov.Components == null;
         if (gpuKernel != null && p.Relief2DGpuRaymarch && fx.DebugAov == AovView.Beauty
-            && aovOk)
+            && aovOk && !froxel)
         {
             var u = ReliefUniforms.Build(w, h, hw, hh, sy, aspect, invLip, maxH, p, in fx);
             if (aov != null)
@@ -568,6 +581,9 @@ public static class HeightfieldRaymarch2D
         double invSS = 1.0 / (ss * ss);
 
         long hitCount = 0;
+        // S6 (#408) — per-pixel world depth (ray distance) for the froxel composite.
+        // Filled from the centre tap alongside the beauty; null when froxel is off.
+        float[]? froxelDepth = froxel ? new float[n] : null;
         // #189 — cap workers to the process-global render throttle (poster path
         // sets ~90% CPU; default -1 = unlimited, unchanged).
         var po = new ParallelOptions { MaxDegreeOfParallelism = FracturingFog.Rendering.RenderThrottle.MaxDegreeOfParallelism };
@@ -608,6 +624,11 @@ public static class HeightfieldRaymarch2D
                         aov.NormalXyz[pi * 3 + 2] = snz;
                         aov.Depth[pi] = sdepth;
                     }
+                    // S6 (#408) — capture the centre-tap world depth for the froxel
+                    // composite (terrain/ground = ray distance, sky-miss = 1e6 → full
+                    // column in front).
+                    if (froxelDepth != null && si == 0 && sj == 0)
+                        froxelDepth[py * w + px] = sdepth;
                 }
                 byte R = (byte)Math.Clamp(aR * invSS + 0.5, 0, 255);
                 byte G = (byte)Math.Clamp(aG * invSS + 0.5, 0, 255);
@@ -620,6 +641,16 @@ public static class HeightfieldRaymarch2D
         }, localHits => System.Threading.Interlocked.Add(ref hitCount, localHits));
 
         hitFraction = (double)hitCount / n;
+
+        // S6 (#389/#408) — froxel volumetrics post-pass. Frame a camera-frustum froxel
+        // volume from the fog snapshot, populate + integrate once, then composite over
+        // the fog-free beauty by the captured per-pixel depth. Opt-in; default off left
+        // this whole block unreached (byte-identical).
+        if (froxel && froxelDepth != null)
+        {
+            var composited = FroxelCameraVolume.Apply(dst, froxelDepth, w, h, in cam, in froxelFx);
+            Array.Copy(composited, dst, n);
+        }
     }
 
     /// <summary>#159 (Slice 3a) — the oblique-camera basis, domain AABB and

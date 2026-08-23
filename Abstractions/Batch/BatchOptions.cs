@@ -215,6 +215,9 @@ namespace FracturingFog.Batch
         public double? ReliefDofAperture { get; set; }     // 0..1, 0 = pinhole
         public double? ReliefDofFocus { get; set; }        // >= 0, 0 = auto-focus origin
 
+        // Froxel volumetrics (roadmap S6, #408). Implies relief + raymarch.
+        public bool ReliefFroxel { get; set; }
+
         // S4 (#389) — guided À-Trous denoise on the relief raymarch.
         public int? ReliefDenoiseIterations { get; set; }  // 0 = off
         public double? ReliefDenoiseColorSigma { get; set; }
@@ -676,6 +679,12 @@ namespace FracturingFog.Batch
                     case BatchFlags.DofFocus:
                         if (!NextDouble(args, ref i, a, out double doff, out error)) return false;
                         opts.ReliefDofFocus = doff;
+                        opts.ReliefRaymarch = true;
+                        opts.Relief = true;
+                        break;
+
+                    case BatchFlags.ReliefFroxel:
+                        opts.ReliefFroxel = true;
                         opts.ReliefRaymarch = true;
                         opts.Relief = true;
                         break;

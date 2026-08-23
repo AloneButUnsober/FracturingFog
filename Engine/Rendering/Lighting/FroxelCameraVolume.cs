@@ -1,0 +1,89 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-FileCopyrightText: 2026 Bradley Brown
+
+// Rendering/Lighting/FroxelCameraVolume.cs
+//
+// Roadmap slice S6 (3D-Rendering-Roadmap.md, parent #389 / issue #408) — the
+// missing link between the froxel PRIMITIVES (FroxelGrid + FroxelVolumePass) and
+// the live relief render. It:
+//   (1) frames a camera-aligned FroxelGrid over the relief scene (near/far derived
+//       from the oblique camera + the height-field slab it points at),
+//   (2) builds a FroxelMedium from the LightingFxData fog knobs + the key light
+//       (the same model as the per-surface march, so a froxel scene reads like the
+//       existing fog), and
+//   (3) composites the populated + integrated volume over a beauty buffer by the
+//       render's own per-pixel world depth — one depth-indexed read per pixel,
+//       replacing the per-pixel background in-scatter march.
+//
+// Pure + deterministic (no RNG, no device state) → identical live and under
+// --batch, and a twin for a future GPU froxel compute pass. Opt-in from
+// HeightfieldRaymarch2D (FractalParameters.Relief2DFroxelVolumetrics); default off
+// leaves every render byte-identical.
+
+using System;
+
+namespace FracturingFog.Rendering.Lighting;
+
+/// <summary>Frames + drives a <see cref="FroxelVolumePass"/> from a relief camera
+/// and the fog knobs, then composites it over a beauty buffer by per-pixel world
+/// depth (roadmap S6, #408).</summary>
+public static class FroxelCameraVolume
+{
+    /// <summary>Default froxel resolution — near-dense in Z (Frostbite-style),
+    /// coarse in X/Y (the volume is low-frequency). Kept modest so the single
+    /// populate/integrate stays cheap relative to the primary trace.</summary>
+    public const int DimX = 24, DimY = 24, DimZ = 48;
+
+    /// <summary>Build a froxel grid spanning the relief scene along the view ray.
+    /// Near/far bracket the height-field slab the camera points at: near clamps
+    /// just in front of the camera, far reaches past the slab's far corner.</summary>
+    public static FroxelGrid BuildGrid(in HeightfieldRaymarch2D.ReliefCamera cam)
+    {
+        double camDist = Math.Sqrt(cam.CamX * cam.CamX + cam.CamY * cam.CamY + cam.CamZ * cam.CamZ);
+        // Full slab diagonal (the AABB is [-Bx,Bx]×[0,By]×[-Bz,Bz]).
+        double diag = Math.Sqrt((2 * cam.Bx) * (2 * cam.Bx) + cam.By * cam.By + (2 * cam.Bz) * (2 * cam.Bz));
+        double near = Math.Max(1e-3, camDist - diag);
+        double far = camDist + diag;
+        if (far <= near) far = near * 100.0;
+        return new FroxelGrid(DimX, DimY, DimZ, near, far);
+    }
+
+    /// <summary>Build a fog medium from the lighting knobs + the key light. The key
+    /// light is resolved to a world direction from its Theta/Phi (the froxel volume
+    /// is global, so a point/spot light contributes as its nominal direction — full
+    /// positional falloff in the volume is a later tail). View direction is the
+    /// camera forward. Extinction is 1 per unit density so extinction == FogDensity,
+    /// matching the per-surface march's density·extinction.</summary>
+    public static FroxelMedium BuildMedium(in HeightfieldRaymarch2D.ReliefCamera cam, in LightingFxData fx)
+    {
+        var (lx, ly, lz) = ShadingPipeline.LightDir(fx.Light1.Theta, fx.Light1.Phi);
+        double extent = Math.Max(cam.Bx, Math.Max(cam.By, cam.Bz));
+        return new FroxelMedium
+        {
+            BaseDensity = fx.FogDensity,
+            Extinction = 1.0,
+            LightColor = fx.Light1.Color,
+            LightIntensity = fx.Light1.Intensity,
+            Lx = lx, Ly = ly, Lz = lz,
+            ViewDx = cam.FX, ViewDy = cam.FY, ViewDz = cam.FZ,
+            Anisotropy = fx.VolumeAnisotropy,
+            NoiseAmount = fx.VolumeNoiseAmount,
+            NoiseScale = fx.VolumeNoiseScale,
+            NoiseOctaves = fx.VolumeNoiseOctaves,
+            WorldExtent = extent > 0 ? extent : 1.0,
+        };
+    }
+
+    /// <summary>One-shot: build the grid + medium, populate/integrate the volume,
+    /// and composite it over <paramref name="beauty"/> by per-pixel world depth
+    /// (<paramref name="worldDepth"/> = ray distance from the camera, the relief
+    /// render's own depth AOV). Returns a new buffer; alpha preserved.</summary>
+    public static uint[] Apply(uint[] beauty, float[] worldDepth, int w, int h,
+        in HeightfieldRaymarch2D.ReliefCamera cam, in LightingFxData fx)
+    {
+        var grid = BuildGrid(in cam);
+        var pass = new FroxelVolumePass(grid);
+        pass.Populate(BuildMedium(in cam, in fx));
+        return pass.CompositeWorldDepth(beauty, worldDepth, w, h);
+    }
+}
