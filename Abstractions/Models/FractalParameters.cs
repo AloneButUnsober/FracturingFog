@@ -591,6 +591,23 @@ namespace FracturingFog.Models
         /// CPU trace (the composite is a CPU post-pass). Default OFF → byte-identical.</summary>
         public bool Relief2DFroxelVolumetrics { get; set; } = false;
 
+        /// <summary>Roadmap S6 (#389/#408) — opt-in temporal reprojection for the froxel
+        /// volume. When on (with froxel volumetrics), each frame's per-cell scatter +
+        /// extinction is exponentially blended with the previous frame's before
+        /// integration (feedback = <see cref="Relief2DFroxelTemporalFeedback"/>), so
+        /// animated fog (drifting FBM noise, pulsing density, moving lights) reads as a
+        /// stable volume instead of flickering. History is invalidated when the camera
+        /// grid changes (near/far), so a large camera move re-seeds cleanly. Forces the
+        /// CPU froxel post-pass (temporal is CPU-side; the GPU froxel path stays
+        /// single-frame). Default OFF → byte-identical.</summary>
+        public bool Relief2DFroxelTemporal { get; set; } = false;
+
+        /// <summary>Roadmap S6 (#389/#408) — froxel temporal feedback weight in [0,1):
+        /// the fraction of the PREVIOUS frame kept each frame (history·feedback +
+        /// current·(1-feedback)). Higher = smoother but slower to react; 0 = no history
+        /// (single-frame). Default 0.9. Ignored unless <see cref="Relief2DFroxelTemporal"/>.</summary>
+        public double Relief2DFroxelTemporalFeedback { get; set; } = 0.9;
+
         /// <summary>Slice 4f (#170) — empty-space-skip acceleration. Builds a
         /// coarse max-height grid over the compressed field and lets the sphere
         /// trace leap the empty air above flat interior (where the slope-limited

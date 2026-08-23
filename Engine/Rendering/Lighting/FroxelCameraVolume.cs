@@ -103,10 +103,26 @@ public static class FroxelCameraVolume
     /// render's own depth AOV). Returns a new buffer; alpha preserved.</summary>
     public static uint[] Apply(uint[] beauty, float[] worldDepth, int w, int h,
         in HeightfieldRaymarch2D.ReliefCamera cam, in LightingFxData fx)
+        => Apply(beauty, worldDepth, w, h, in cam, in fx, null, false, 0.0);
+
+    /// <summary>As <see cref="Apply(uint[],float[],int,int,in HeightfieldRaymarch2D.ReliefCamera,in LightingFxData)"/>,
+    /// with optional temporal reprojection (roadmap S6, #408). When
+    /// <paramref name="temporal"/> is on and a <paramref name="history"/> is supplied,
+    /// the per-cell scatter + extinction is exponentially blended with the previous
+    /// frame's (weight <paramref name="feedback"/>) before integration — animated fog
+    /// reads as a stable volume. History is keyed by the grid's dims + near/far, so a
+    /// camera move that changes the slab re-seeds cleanly. Temporal off / null history
+    /// → byte-identical to the single-frame <see cref="Apply"/>.</summary>
+    public static uint[] Apply(uint[] beauty, float[] worldDepth, int w, int h,
+        in HeightfieldRaymarch2D.ReliefCamera cam, in LightingFxData fx,
+        FroxelHistory? history, bool temporal, double feedback)
     {
         var grid = BuildGrid(in cam);
         var pass = new FroxelVolumePass(grid);
-        pass.Populate(BuildMedium(in cam, in fx));
+        if (temporal && history != null)
+            pass.Populate(BuildMedium(in cam, in fx), history, feedback, FroxelHistory.GridKey(grid));
+        else
+            pass.Populate(BuildMedium(in cam, in fx));
         return pass.CompositeWorldDepth(beauty, worldDepth, w, h);
     }
 }

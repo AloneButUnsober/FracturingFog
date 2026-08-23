@@ -95,6 +95,11 @@ public sealed class FroxelVolumePass
     // Integrated per-froxel accumulated in-scatter + transmittance, laid out
     // column-major: index = (cy*_nx + cx)*_nz + z, so a column is contiguous.
     private readonly double[] _inR, _inG, _inB, _trans;
+    // Pre-integration per-cell scatter RGB + extinction (same column-major layout).
+    // Kept as a full grid so temporal reprojection (roadmap S6, #408) can blend the
+    // current frame with history BEFORE integration; single-frame integrates straight
+    // from these (byte-identical to the pre-refactor per-column path).
+    private readonly double[] _scR, _scG, _scB, _ext;
     private bool _populated;
 
     public FroxelVolumePass(FroxelGrid grid)
@@ -104,6 +109,8 @@ public sealed class FroxelVolumePass
         int cells = _nx * _ny * _nz;
         _inR = new double[cells]; _inG = new double[cells];
         _inB = new double[cells]; _trans = new double[cells];
+        _scR = new double[cells]; _scG = new double[cells];
+        _scB = new double[cells]; _ext = new double[cells];
     }
 
     public FroxelGrid Grid => _grid;
@@ -111,7 +118,15 @@ public sealed class FroxelVolumePass
     /// <summary>Populate + integrate the volume from a fog medium. Every froxel gets
     /// noise-modulated density → extinction + single-light in-scatter (HG phase);
     /// each column is then integrated front-to-back via <see cref="FroxelIntegrator"/>.</summary>
-    public void Populate(in FroxelMedium m)
+    public void Populate(in FroxelMedium m) => Populate(in m, null, 0.0, 0L);
+
+    /// <summary>As <see cref="Populate(in FroxelMedium)"/>, with optional temporal
+    /// reprojection (roadmap S6, #408): when <paramref name="history"/> is non-null and
+    /// <paramref name="feedback"/> &gt; 0, the per-cell scatter + extinction is
+    /// exponentially blended with the previous frame's (keyed by
+    /// <paramref name="gridKey"/>) BEFORE integration, then stored as the new history.
+    /// A null history / feedback 0 is byte-identical to the single-frame populate.</summary>
+    public void Populate(in FroxelMedium m, FroxelHistory? history, double feedback, long gridKey)
     {
         // Resolve the light list once. Null → a single directional key light from the
         // legacy scalar fields (byte-identical to the pre-multi-light populate).
@@ -138,17 +153,16 @@ public sealed class FroxelVolumePass
         double extent = m.WorldExtent;
         double scale = m.NoiseScale;
         int oct = m.NoiseOctaves <= 0 ? 3 : m.NoiseOctaves;
+        int cells = _nx * _ny * _nz;
 
-        var sR = new double[_nz]; var sG = new double[_nz]; var sB = new double[_nz];
-        var ext = new double[_nz]; var th = new double[_nz];
-        var oR = new double[_nz]; var oG = new double[_nz]; var oB = new double[_nz]; var oT = new double[_nz];
-
+        // ── PASS A: fill the full per-cell scatter + extinction grid ────────────────
         for (int cy = 0; cy < _ny; cy++)
         {
             double wy = ((cy + 0.5) / _ny * 2.0 - 1.0) * extent;
             for (int cx = 0; cx < _nx; cx++)
             {
                 double wx = ((cx + 0.5) / _nx * 2.0 - 1.0) * extent;
+                int baseIdx = (cy * _nx + cx) * _nz;
                 for (int z = 0; z < _nz; z++)
                 {
                     double wz = 0.5 * (_grid.SliceDepth(z) + _grid.SliceDepth(z + 1));
@@ -159,8 +173,6 @@ public sealed class FroxelVolumePass
                         noiseMul = Math.Max(0.0, 1.0 + m.NoiseAmount * (2.0 * n - 1.0));
                     }
                     double density = m.BaseDensity * noiseMul;
-                    ext[z] = m.Extinction * density;
-                    th[z] = _grid.SliceThickness(z);
 
                     // #388-style multi-light in-scatter: sum every light, each with its
                     // own direction (per-cell for point/spot), attenuation and HG phase.
@@ -181,11 +193,35 @@ public sealed class FroxelVolumePass
                         double sc = density * L.Intensity * atten * phase;
                         accR += sc * lr[i]; accG += sc * lg[i]; accB += sc * lb[i];
                     }
-                    sR[z] = accR; sG[z] = accG; sB[z] = accB;
+                    int idx = baseIdx + z;
+                    _scR[idx] = accR; _scG[idx] = accG; _scB[idx] = accB;
+                    _ext[idx] = m.Extinction * density;
                 }
+            }
+        }
 
-                FroxelIntegrator.IntegrateColumn(sR, sG, sB, ext, th, _nz, oR, oG, oB, oT);
+        // ── PASS B: temporal blend (roadmap S6, #408) — mutate the scatter/ext grid in
+        // place toward the previous frame, then store as the new history. No-op (a=0)
+        // when no history / feedback 0, so the single-frame path stays byte-identical.
+        history?.BlendAndStore(_scR, _scG, _scB, _ext, cells, gridKey, feedback);
+
+        // ── PASS C: integrate every column front-to-back from the (blended) grid ────
+        var sR = new double[_nz]; var sG = new double[_nz]; var sB = new double[_nz];
+        var ext = new double[_nz]; var th = new double[_nz];
+        var oR = new double[_nz]; var oG = new double[_nz]; var oB = new double[_nz]; var oT = new double[_nz];
+        for (int z = 0; z < _nz; z++) th[z] = _grid.SliceThickness(z);
+
+        for (int cy = 0; cy < _ny; cy++)
+        {
+            for (int cx = 0; cx < _nx; cx++)
+            {
                 int baseIdx = (cy * _nx + cx) * _nz;
+                for (int z = 0; z < _nz; z++)
+                {
+                    int idx = baseIdx + z;
+                    sR[z] = _scR[idx]; sG[z] = _scG[idx]; sB[z] = _scB[idx]; ext[z] = _ext[idx];
+                }
+                FroxelIntegrator.IntegrateColumn(sR, sG, sB, ext, th, _nz, oR, oG, oB, oT);
                 for (int z = 0; z < _nz; z++)
                 {
                     _inR[baseIdx + z] = oR[z]; _inG[baseIdx + z] = oG[z];

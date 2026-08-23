@@ -1760,6 +1760,34 @@ public class ReliefGpuSeamTests
     }
 
     [Fact]
+    public void FroxelTemporal_ForcesCpuFroxel_EvenWithKernels()
+    {
+        // S6 (#408) temporal — temporal reprojection is a CPU-side blend, so even with
+        // GPU relief + froxel kernels attached, a temporal render must fall to the CPU
+        // froxel post-pass (neither GPU kernel dispatched).
+        int w = 64, h = 48;
+        var (albedo, height) = Field(w, h);
+        var fx = FracturingFog.Rendering.Lighting.LightingFxData.CreateDefault();
+        fx.FogDensity = 0.6;
+        fx.Light1.Intensity = 1.0;
+
+        var p = ReliefParams(gpu: true);
+        p.Lighting = fx;
+        p.Relief2DFroxelVolumetrics = true;
+        p.Relief2DFroxelTemporal = true;
+
+        var relief = new StubReliefKernel();
+        var froxel = new StubFroxelKernel();
+        var hist = new FracturingFog.Rendering.Lighting.FroxelHistory();
+        var dst = new uint[w * h];
+        HeightfieldRaymarch2D.Render(albedo, height, w, h, w, h, p, dst, out _, relief, null, froxel, hist);
+
+        Assert.Equal(0, relief.Calls);   // CPU trace, not the GPU relief kernel
+        Assert.Equal(0, froxel.Calls);   // CPU froxel post-pass, not the GPU froxel kernel
+        Assert.False(AllSentinel(dst));
+    }
+
+    [Fact]
     public void Froxel_GpuReliefOn_NoFroxelKernel_ForcesCpu()
     {
         // The froxel GPU path is kernel-gated: GPU relief on + froxel on but NO froxel

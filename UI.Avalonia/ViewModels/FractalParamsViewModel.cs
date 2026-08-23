@@ -419,6 +419,24 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
         get => _p.Relief2DFroxelVolumetrics;
         set { if (_p.Relief2DFroxelVolumetrics == value) return; _p.Relief2DFroxelVolumetrics = value; this.RaisePropertyChanged(); Fire(); }
     }
+    // S6 (#408) — temporal reprojection: blend each frame's froxel volume with the
+    // previous one so animated fog stays stable. Only meaningful across a sequence
+    // (live animation / scene playback); forces the CPU froxel post-pass.
+    public bool Relief2DFroxelTemporal
+    {
+        get => _p.Relief2DFroxelTemporal;
+        set { if (_p.Relief2DFroxelTemporal == value) return; _p.Relief2DFroxelTemporal = value; this.RaisePropertyChanged(); Fire(); }
+    }
+    public double Relief2DFroxelTemporalFeedback
+    {
+        get => _p.Relief2DFroxelTemporalFeedback;
+        set
+        {
+            double v = value < 0.0 ? 0.0 : (value > 0.99 ? 0.99 : value);
+            if (_p.Relief2DFroxelTemporalFeedback == v) return;
+            _p.Relief2DFroxelTemporalFeedback = v; this.RaisePropertyChanged(); Fire();
+        }
+    }
     public double Relief2DCameraAzimuthDeg
     {
         get => _p.Relief2DCameraAzimuthDeg;
