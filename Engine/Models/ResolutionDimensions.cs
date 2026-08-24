@@ -103,11 +103,11 @@ namespace FracturingFog.Models
                 },
                 new()
                 {
-                 Name = "160x120",
+                 Name = "200x150",
                  ResolutionType = ResolutionType.Full,
                  ResolutionRatio = ResolutionRatio.FourToThree,
-                 Width = 160,
-                 Height = 120,
+                 Width = 200,
+                 Height = 150,
                 },
                 new()
                 {

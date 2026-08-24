@@ -444,12 +444,7 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
         // Span — toggle borderless multi-monitor fullscreen. This VM owns the
         // intent + button label; the host owns the actual Window geometry
         // (WindowDecorations / position / size) and restores it on exit.
-        FloatingMenu.SpanClick += (_, _) =>
-        {
-            _isSpanning = !_isSpanning;
-            FloatingMenu.SpanButtonText = _isSpanning ? "Back" : "Span";
-            SpanToggleRequested?.Invoke(this, _isSpanning);
-        };
+        FloatingMenu.SpanClick += (_, _) => ToggleSpan();
 
         // Poster — host pops the poster-size dialog, then runs the shared
         // PosterRenderer offscreen at the chosen resolution and saves to disk.
@@ -573,12 +568,7 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
         ToggleStatusBarCommand = ReactiveCommand.Create(() => IsStatusBarVisible = !IsStatusBarVisible);
         ToggleGridCommand      = ReactiveCommand.Create(() => Main.ShowGrid = !Main.ShowGrid);
         ToggleWatermarkCommand = ReactiveCommand.Create(() => Main.ShowWatermark = !Main.ShowWatermark);
-        ToggleSpanCommand      = ReactiveCommand.Create(() =>
-        {
-            _isSpanning = !_isSpanning;
-            FloatingMenu.SpanButtonText = _isSpanning ? "Back" : "Span";
-            SpanToggleRequested?.Invoke(this, _isSpanning);
-        });
+        ToggleSpanCommand      = ReactiveCommand.Create(ToggleSpan);
         ToggleSlideshowCommand = ReactiveCommand.Create(ToggleSlideshow);
         ToggleVideoCommand     = ReactiveCommand.Create(() =>
         {
@@ -1231,9 +1221,19 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
 
     private void ShowControlCenter()
     {
-        ControlCenter ??= new ControlCenterViewModel(this);
+        if (ControlCenter == null)
+        {
+            ControlCenter = new ControlCenterViewModel(this);
+            // Let the host wire the Control Center's workspace prompt/picker
+            // delegates (#433) — UI.Avalonia can't reach the Hosting dialogs.
+            ControlCenterCreated?.Invoke(this, ControlCenter);
+        }
         IsControlCenterVisible = !IsControlCenterVisible;
     }
+
+    /// <summary>Raised once, when the Control Center VM is first created, so the
+    /// host can wire its workspace name-prompt + file-picker delegates.</summary>
+    public event EventHandler<ControlCenterViewModel>? ControlCenterCreated;
 
     /// <summary>VCR transport for the running slideshow. Shown only while
     /// <see cref="IsSlideshowVcrVisible"/> is true.</summary>
@@ -2869,6 +2869,16 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
                 ShowSceneEditor(name);
                 break;
 
+            case FracturingFog.Abstractions.Assets.AssetKind.Workspace:
+                // "Open" a workspace = recall the arrangement (there is no editor).
+                {
+                    var wf = FracturingFog.Models.WorkspaceLayoutLibrary.Load();
+                    var wl = FracturingFog.Models.WorkspaceLayoutLibrary.Get(wf, name);
+                    if (wl != null)
+                        FracturingFog.UI.Avalonia.Services.WorkspaceService.Restore(wl, this);
+                }
+                break;
+
             case FracturingFog.Abstractions.Assets.AssetKind.SlideshowConfig:
                 // Make the clicked preset active so the Slideshow Settings
                 // dialog (host-owned, opened via the shared event) opens on it.
@@ -2984,6 +2994,9 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
                 WatermarkEditor?.RefreshWatermarkNames();
                 // Imported watermarks are selectable from the main menu too.
                 FloatingMenu.SetWatermarks(UserWatermarkStore.Instance.EnumerateNames());
+                break;
+            case FracturingFog.Abstractions.Assets.AssetKind.Workspace:
+                ControlCenter?.RefreshWorkspaces();
                 break;
         }
     }
@@ -3275,6 +3288,26 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
     /// is true to enter span mode, false to restore the prior window geometry.
     /// Host owns the Avalonia Window manipulation.</summary>
     public event EventHandler<bool>? SpanToggleRequested;
+
+    /// <summary>Whether span (borderless multi-monitor) mode is currently on.
+    /// Read by the workspace-capture path (#433).</summary>
+    public bool IsSpanning => _isSpanning;
+
+    // Single owner of the span toggle — both the FloatingMenu Span button and
+    // ToggleSpanCommand route here so the state + button label + host signal
+    // stay in one place.
+    private void ToggleSpan() => SetSpanState(!_isSpanning);
+
+    /// <summary>Set span mode to an explicit state (idempotent). The workspace
+    /// restore path (#433) uses this to reach a saved span state without caring
+    /// about the current one.</summary>
+    public void SetSpanState(bool span)
+    {
+        if (_isSpanning == span) return;
+        _isSpanning = span;
+        FloatingMenu.SpanButtonText = span ? "Back" : "Span";
+        SpanToggleRequested?.Invoke(this, span);
+    }
 
     /// <summary>FloatingMenu's Dimensions combo picked a new render size.
     /// Host resizes the MainWindow to (Width, Height). No-op when the

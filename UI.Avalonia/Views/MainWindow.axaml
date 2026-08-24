@@ -9,7 +9,7 @@
         x:DataType="vm:ShellViewModel"
         Title="{Binding WindowTitle}"
         Width="1280" Height="800"
-        MinWidth="640" MinHeight="400"
+        MinWidth="200" MinHeight="150"
         Background="Black">
 
     <!--

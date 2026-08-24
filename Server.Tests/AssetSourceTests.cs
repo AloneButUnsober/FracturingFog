@@ -33,11 +33,11 @@ namespace FracturingFog.Server.Tests;
 public sealed class AssetSourceTests
 {
     [Fact]
-    public void Registry_exposes_nine_sources_in_type_tree_order()
+    public void Registry_exposes_ten_sources_in_type_tree_order()
     {
         var sources = AssetSourceRegistry.All();
 
-        Assert.Equal(9, sources.Count);
+        Assert.Equal(10, sources.Count);
 
         // Order matches the AssetKind enum / left-pane type tree.
         var expected = new[]
@@ -45,6 +45,7 @@ public sealed class AssetSourceTests
             AssetKind.Region, AssetKind.ColorTheme, AssetKind.Animation,
             AssetKind.UserEquation, AssetKind.SandboxEquation, AssetKind.UserBulb,
             AssetKind.SlideshowConfig, AssetKind.Watermark, AssetKind.Scene,
+            AssetKind.Workspace,
         };
         Assert.Equal(expected, sources.Select(s => s.Kind).ToArray());
 

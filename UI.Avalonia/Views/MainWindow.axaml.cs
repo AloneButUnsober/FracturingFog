@@ -125,6 +125,11 @@ public sealed partial class MainWindow : Window
         DataContextChanged += OnDataContextChanged;
         Closed += OnClosed;
 
+        // Workspace registry (#433 slice 2): the render window is role 0. Register
+        // once here so capture/restore (slice 3) can find its geometry + monitor.
+        FracturingFog.UI.Avalonia.Services.WindowService.RegisterWindow(
+            FracturingFog.Models.WindowRole.RenderWindow, this);
+
         // Grab keyboard focus onto the InputSponge as soon as the window
         // opens so WASD/QE pan-zoom and the 3D camera/light keys work
         // before the user's first click. A Focusable Border is not
@@ -789,6 +794,8 @@ public sealed partial class MainWindow : Window
                     ev.Cancel = true;
                     if (_shell != null) _shell.IsMiniDepthVisible = false;
                 };
+                FracturingFog.UI.Avalonia.Services.WindowService.RegisterWindow(
+                    FracturingFog.Models.WindowRole.MiniDepth, _miniDepthWin);
             }
             if (!_miniDepthWin.IsVisible)
             {
@@ -1104,6 +1111,8 @@ public sealed partial class MainWindow : Window
         {
             _asciiFxPanelWindow = new Views.AsciiFxPanelWindow { DataContext = _shell.FxPanel };
             _asciiFxPanelWindow.Closed += (_, _) => _asciiFxPanelWindow = null;
+            FracturingFog.UI.Avalonia.Services.WindowService.RegisterWindow(
+                FracturingFog.Models.WindowRole.AsciiFx, _asciiFxPanelWindow);
             _asciiFxPanelWindow.Show(this);
         }
         else
@@ -1304,6 +1313,8 @@ public sealed partial class MainWindow : Window
                     ev.Cancel = true;
                     if (_shell != null) _shell.IsPostFxHudVisible = false;
                 };
+                FracturingFog.UI.Avalonia.Services.WindowService.RegisterWindow(
+                    FracturingFog.Models.WindowRole.PostFxHud, _postFxHudWin);
             }
             if (!_postFxHudWin.IsVisible)
             {
@@ -1341,6 +1352,8 @@ public sealed partial class MainWindow : Window
                     ev.Cancel = true;
                     if (_shell != null) _shell.IsMiniMapVisible = false;
                 };
+                FracturingFog.UI.Avalonia.Services.WindowService.RegisterWindow(
+                    FracturingFog.Models.WindowRole.MiniMap, _miniMapWin);
             }
             if (!_miniMapWin.IsVisible)
             {
@@ -1452,6 +1465,8 @@ public sealed partial class MainWindow : Window
                 {
                     DataContext = _shell.ColorThemeEditor,
                 };
+                FracturingFog.UI.Avalonia.Services.WindowService.RegisterWindow(
+                    FracturingFog.Models.WindowRole.ColorThemeEditor, _editorWin);
                 _editorWin.Closing += async (_, ev) =>
                 {
                     if (_shuttingDown) return;

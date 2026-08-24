@@ -2,6 +2,7 @@
 // SPDX-FileCopyrightText: 2026 Bradley Brown
 
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
 
@@ -12,6 +13,7 @@ using Avalonia.Media;
 using Avalonia.Platform;
 using Avalonia.Threading;
 
+using FracturingFog.Models;
 using FracturingFog.UI.Avalonia.Views;
 
 namespace FracturingFog.UI.Avalonia.Services
@@ -151,6 +153,7 @@ namespace FracturingFog.UI.Avalonia.Services
                 if (ReferenceEquals(s_lightingFx, win)) s_lightingFx = null;
             };
             s_lightingFx = win;
+            RegisterWindow(WindowRole.LightingFx, win);
 
             var owner = ActiveMainWindow;
             // Prepare() gives the standard screen-fit clamp, foreground fix, and
@@ -248,6 +251,142 @@ namespace FracturingFog.UI.Avalonia.Services
                     win.Topmost = true;
             }
             catch { }
+        }
+
+        // ── Live persistent-window registry (#433 slice 2/3 — #470) ──────────
+        //
+        // WindowService owns window *opening* but historically tracked nothing
+        // live except the lone Lighting/FX instance; the satellite editors track
+        // themselves through scattered fields in MainWindow / AvaloniaShellBootstrap.
+        // The workspace feature needs one place to ask "which persistent (modeless)
+        // windows exist, where, on which monitor" (capture) and to reopen one by
+        // role (restore). This registry is that place.
+        //
+        // Windows are held by WeakReference so a closed window that the owner also
+        // dropped can be GC'd; a Closed handler prunes the entry eagerly too. The
+        // satellite windows use Show/Hide (not Close) and stay alive in their
+        // owner's field, so Find() returns them even while hidden — callers check
+        // IsVisible themselves. Modal dialogs are never registered (out of scope).
+
+        private static readonly Dictionary<WindowRole, WeakReference<Window>> s_registry = new();
+        private static readonly Dictionary<WindowRole, Action> s_openers = new();
+        private static readonly object s_regGate = new();
+
+        /// <summary>Register (or replace) the live window for a role. Idempotent:
+        /// re-registering a role swaps in the new window. Auto-unregisters when
+        /// the window closes (a window reused via Show/Hide is never closed, so it
+        /// stays registered across hide cycles — correct).</summary>
+        public static void RegisterWindow(WindowRole role, Window win)
+        {
+            if (win == null) return;
+            lock (s_regGate) s_registry[role] = new WeakReference<Window>(win);
+            win.Closed += OnRegisteredWindowClosed;
+        }
+
+        private static void OnRegisteredWindowClosed(object? sender, EventArgs e)
+        {
+            if (sender is Window w)
+            {
+                w.Closed -= OnRegisteredWindowClosed;
+                lock (s_regGate)
+                {
+                    // Only drop the entry if it still points at this window — a
+                    // role re-registered to a different window must survive an old
+                    // window's late Closed.
+                    foreach (var kv in s_registry)
+                    {
+                        if (kv.Value.TryGetTarget(out var target) && ReferenceEquals(target, w))
+                        {
+                            s_registry.Remove(kv.Key);
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+
+        /// <summary>Explicitly drop a role's registration (rarely needed — Closed
+        /// prunes automatically).</summary>
+        public static void UnregisterWindow(WindowRole role)
+        {
+            lock (s_regGate) s_registry.Remove(role);
+        }
+
+        /// <summary>The live window for a role, or null when never registered or
+        /// already collected. May be hidden — callers check <c>IsVisible</c>.</summary>
+        public static Window? Find(WindowRole role)
+        {
+            lock (s_regGate)
+            {
+                if (s_registry.TryGetValue(role, out var wr) && wr.TryGetTarget(out var w))
+                    return w;
+                s_registry.Remove(role); // prune a dead entry
+                return null;
+            }
+        }
+
+        /// <summary>Every currently-live registered window with its role, pruning
+        /// collected entries. Includes hidden windows — the caller decides what
+        /// "open" means (typically <c>Window.IsVisible</c>). Snapshot, safe to
+        /// enumerate while windows open/close.</summary>
+        public static IReadOnlyList<(WindowRole Role, Window Window)> RegisteredWindows()
+        {
+            var live = new List<(WindowRole, Window)>();
+            lock (s_regGate)
+            {
+                var dead = new List<WindowRole>();
+                foreach (var kv in s_registry)
+                {
+                    if (kv.Value.TryGetTarget(out var w)) live.Add((kv.Key, w));
+                    else dead.Add(kv.Key);
+                }
+                foreach (var role in dead) s_registry.Remove(role);
+            }
+            return live;
+        }
+
+        /// <summary>Register an opener delegate for a role — the action that opens
+        /// that window from scratch (the existing OpenUserEquationEditor /
+        /// ShowColorThemeEditor / ToggleMiniMap style entry points). Slice 3's
+        /// restore uses <see cref="Open"/> to reopen a role that was saved-visible
+        /// but is currently closed. Idempotent; last registration wins.</summary>
+        public static void RegisterOpener(WindowRole role, Action opener)
+        {
+            if (opener == null) return;
+            lock (s_regGate) s_openers[role] = opener;
+        }
+
+        /// <summary>Ensure the role's window is open and fronted. If a live window
+        /// is registered it is shown/activated; otherwise the registered opener (if
+        /// any) is invoked. Returns true when an open path existed (window or
+        /// opener), false when the role can't be opened. Must run on the UI thread.</summary>
+        public static bool Open(WindowRole role)
+        {
+            var win = Find(role);
+            if (win is { IsVisible: true })
+            {
+                try { win.Activate(); } catch { }
+                return true;
+            }
+
+            // Not visible — either closed (Find null) or merely hidden (some
+            // windows Hide() rather than Close, e.g. the Color-Theme editor).
+            // Prefer the opener so the shell visibility flag + owner wiring stay
+            // consistent (a bare win.Show() bypasses SyncEditor and leaves the
+            // flag false). Fall back to Show() only when there is no opener.
+            Action? opener;
+            lock (s_regGate) s_openers.TryGetValue(role, out opener);
+            if (opener != null)
+            {
+                try { opener(); } catch { }
+                return true;
+            }
+            if (win != null)
+            {
+                try { win.Show(); win.Activate(); } catch { }
+                return true;
+            }
+            return false;
         }
 
         // ── Screen resolution ────────────────────────────────────────────────
@@ -373,6 +512,41 @@ namespace FracturingFog.UI.Avalonia.Services
 
             if (x != win.Position.X || y != win.Position.Y)
                 win.Position = new PixelPoint(x, y);
+        }
+
+        // ── Workspace capture/restore helpers (#433 slice 3 — #471) ──────────
+
+        /// <summary>Record the monitor a window currently sits on: its index in
+        /// the screen list plus pixel bounds. Null when screens are unavailable.
+        /// Restore matches by index, then bounds, then falls back to the primary
+        /// screen (see <see cref="EnsureOnScreen"/>).</summary>
+        public static MonitorRef? CaptureMonitor(Window win)
+        {
+            try
+            {
+                var screens = win.Screens;
+                if (screens == null) return null;
+                var s = screens.ScreenFromWindow(win) ?? screens.Primary;
+                if (s == null) return null;
+
+                var all = screens.All;
+                int idx = -1;
+                for (int i = 0; i < all.Count; i++)
+                    if (ReferenceEquals(all[i], s)) { idx = i; break; }
+
+                var b = s.Bounds;
+                return new MonitorRef { Index = idx, X = b.X, Y = b.Y, Width = b.Width, Height = b.Height };
+            }
+            catch { return null; }
+        }
+
+        /// <summary>Public wrapper over the internal clamp: nudge a window fully
+        /// back onto a screen if any edge spilled off (or it landed off every
+        /// screen — <c>ScreenFromWindow</c> then falls to the primary). The
+        /// graceful-degradation net when a saved monitor is gone.</summary>
+        public static void EnsureOnScreen(Window win)
+        {
+            try { ClampIntoScreen(win); } catch { }
         }
     }
 }
