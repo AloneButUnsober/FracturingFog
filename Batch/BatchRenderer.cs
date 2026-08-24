@@ -1470,7 +1470,11 @@ namespace FracturingFog.Batch
             // synthesize a filename.
             bool isDirHint = outPath.EndsWith('/') || outPath.EndsWith('\\') || Directory.Exists(outPath);
             string ext = Path.GetExtension(outPath).ToLowerInvariant();
-            bool hasImageExt = ext is ".png" or ".tif" or ".tiff" or ".bmp";
+            // Every extension GuessImageFormat recognises counts as a file path;
+            // otherwise a typed `foo.exr` / `foo.jpg` is mistaken for a directory
+            // and a synthesized `.png` lands inside it (roadmap S7, #394).
+            bool hasImageExt = ext is ".png" or ".tif" or ".tiff" or ".bmp"
+                or ".jpg" or ".jpeg" or ".gif" or ".webp" or ".exr";
 
             if (isDirHint || !hasImageExt)
             {
