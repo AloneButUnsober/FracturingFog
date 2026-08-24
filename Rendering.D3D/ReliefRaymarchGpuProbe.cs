@@ -321,7 +321,19 @@ public static class ReliefRaymarchGpuProbe
         fxLights.Light2.SpotOuterDeg = 60.0;
         bool? okLights = RunDiff(sb, "lights (point + spot)", 160, 120, 160, 120, pLights, fxLights);
 
-        bool ok = (okFull ?? true) && (okDof ?? true) && (okAov ?? true) && (okGlass ?? true) && (okLights ?? true);
+        // S8 (#404) — positional lights lighting the VOLUMETRIC fog in-scatter.
+        // Same point + spot lights, now with fog + a single-scatter walk and both
+        // lights masked into the fog. Exercises the ReliefScatter positional path
+        // (inverse-square × cone per fog sample) against the CPU twin.
+        var fxPosFog = fxLights;
+        fxPosFog.FogDensity = 0.4;
+        fxPosFog.VolumeSteps = 16;
+        fxPosFog.VolumeLightMask = 0x3;   // both positional lights light the fog
+        fxPosFog.ShadowLightMask = 0x3;
+        bool? okPosFog = RunDiff(sb, "positional fog in-scatter", 160, 120, 160, 120, pLights, fxPosFog);
+
+        bool ok = (okFull ?? true) && (okDof ?? true) && (okAov ?? true) && (okGlass ?? true)
+               && (okLights ?? true) && (okPosFog ?? true);
         sb.AppendLine(ok ? "RESULT: PASS" : "RESULT: FAIL");
         Finish(sb);
         return ok ? 0 : 1;

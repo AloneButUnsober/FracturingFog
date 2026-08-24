@@ -697,8 +697,8 @@ uint ShadeFlat(float3 N, float3 V, float3 P, uint albedo)
     // × range window (× cone) into the intensity. Direct lighting (diffuse + spec +
     // shadow march) uses the resolved dir/intensity; the shadow-enable + spec gates
     // stay keyed on the BASE intensity gI{n} (range attenuation must not disable a lit
-    // light's shadow). Volumetric in-scatter still treats lights by direction (an
-    // approximation; positional falloff applies to surface shading only).
+    // light's shadow). The volumetric in-scatter walk resolves positional lights
+    // per fog sample too (S8, #404 — see ReliefScatter).
     float4 r0 = ResolveLight(gLType0, gL0, gLPos0, gLRange0, gLInner0, gLOuter0, P);
     float4 r1 = ResolveLight(gLType1, gL1, gLPos1, gLRange1, gLInner1, gLOuter1, P);
     float4 r2 = ResolveLight(gLType2, gL2, gLPos2, gLRange2, gLInner2, gLOuter2, P);
@@ -953,13 +953,24 @@ float3 SamplePalette(float u)
 // density · shadow · intensity · stepSize, HG-phased toward L, weighted by
 // transmittance × light colour. Returns the increment; called once per light.
 float3 ReliefScatter(float3 sp, float3 L, float3 rd, float3 Lc, float li, bool shOn,
+                     int ltype, float3 lpos, float lrange, float linner, float louter,
                      float T, float density, float stepSize)
 {
+    // S8 (#404) — positional lights attenuate the fog in-scatter per sample and
+    // relight it from the sample's direction-to-light. Twin of ShadingPipeline.
+    // AddVolumeScatter / ReliefRaymarchGpu.AddReliefScatter. Directional (type 0)
+    // → dir unchanged, atten 1 (× 1.0 no-op) → byte-identical.
+    float atten = 1.0;
+    if (ltype != 0)
+    {
+        float4 rl = ResolveLight(ltype, L, lpos, lrange, linner, louter, sp);
+        L = rl.xyz; atten = rl.w;
+    }
     float sh = 1.0;
     if (shOn)
         sh = SoftShadow(sp, L, gEps0, 12.0, gShadowSoftK, gShadowSteps);
     sh *= CloudSelfShadow(sp, L);              // 4e-ii — cloud self-shadow
-    float scatter = density * sh * li * stepSize;
+    float scatter = density * sh * li * atten * stepSize;
     // #184 Slice 3 (B) — Henyey-Greenstein phase, normalized so g=0 → 1.
     float g = gVolAnisotropy;
     if (g != 0.0)
@@ -1000,11 +1011,14 @@ void InScatterWalk(inout float br, inout float bg, inout float bb,
         density *= VolumetricDensityMul(sp);   // 4e-ii — FBM cloud modulation
         // S6 (#408) — VolumeLightMask gates which lights light the fog.
         if (gI0 > 0.0 && (gVolumeMask & 0x1) != 0)
-            inSc += ReliefScatter(sp, gL0, rd, gC0, gI0, sh0On, T, density, stepSize);
+            inSc += ReliefScatter(sp, gL0, rd, gC0, gI0, sh0On,
+                gLType0, gLPos0, gLRange0, gLInner0, gLOuter0, T, density, stepSize);
         if (gI1 > 0.0 && (gVolumeMask & 0x2) != 0)
-            inSc += ReliefScatter(sp, gL1, rd, gC1, gI1, sh1On, T, density, stepSize);
+            inSc += ReliefScatter(sp, gL1, rd, gC1, gI1, sh1On,
+                gLType1, gLPos1, gLRange1, gLInner1, gLOuter1, T, density, stepSize);
         if (gI2 > 0.0 && (gVolumeMask & 0x4) != 0)
-            inSc += ReliefScatter(sp, gL2, rd, gC2, gI2, sh2On, T, density, stepSize);
+            inSc += ReliefScatter(sp, gL2, rd, gC2, gI2, sh2On,
+                gLType2, gLPos2, gLRange2, gLInner2, gLOuter2, T, density, stepSize);
         float aT = density * stepSize;
         T *= aT < 1.0 ? ExpNegSmall(aT) : exp(-aT);
     }
