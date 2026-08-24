@@ -366,7 +366,7 @@ animated.
   core froxel unified-volume march (D3D + Vulkan + host wiring + temporal + poster seam)
   is complete.
 
-### S7 — Float / multi-layer EXR export ◐ (#394)
+### S7 — Float / multi-layer EXR export ☑ (#394)
 Enabler for S1 (AOV layers), S2 (linear/HDR intermediate) and S6 (HDR
 volumetrics). FF is 8-bit PNG/Skia today. Add OpenEXR float output with named
 layers.
@@ -427,9 +427,15 @@ Broadens the lighting vocabulary without a scene graph.
   `--relief-raymarch`), composed by `BatchFlags.LightFlag` so parser + builder can't
   drift; `BatchCommandBuilder` emits them for non-directional lights; round-trip +
   validation tests. So point/spot are now fully user-reachable (GUI + CLI).
-- **Remaining:** **positional lights in the volumetric march** (fog site stays
-  directional, GPU + CPU), force-CPU on the 8 GPU 3D-fractal calculators (relief 2D
-  path now GPU; those 3D families still render directional-only on GPU), area lights
+- **Positional volumetric in-scatter (landed, PR #482):** the legacy per-pixel
+  god-ray `VolumeSteps` walk now resolves point/spot per fog sample too
+  (inverse-square × range × cone) instead of aiming-only. `AddVolumeScatter` (CPU) +
+  `ReliefScatter` (D3D/Vulkan HLSL) + `AddReliefScatter` (CPU twin) mirror line-for-
+  line; directional stays byte-identical (atten 1). New `--reliefgpuraymarch` scene
+  `positional fog in-scatter` passes (mean 0.004, max 3, 0 edge). 3 CPU tests. The
+  froxel volumetrics (S6) already lit positionally; this closes the older march.
+- **Remaining:** force-CPU on the 8 GPU 3D-fractal calculators (relief 2D path now
+  GPU; those 3D families still render directional-only on GPU), area lights
   (couple S4). Batch: directional θ/φ/intensity/colour for the 3 raymarch lights is a
   general (non-S8) gap — only positional lights have flags today.
 
