@@ -1071,16 +1071,19 @@ public static class ReliefRaymarchGpu
 
             if (L0i > 0)
                 AddReliefScatter(ref inR, ref inG, ref inB, in de, in u, sx, sy, sz,
-                    u.L0x, u.L0y, u.L0z, rdx, rdy, rdz, u.C0r, u.C0g, u.C0b, L0i,
-                    sh0On, T, density, stepSize);
+                    u.L0x, u.L0y, u.L0z, rdx, rdy, rdz, u.C0r, u.C0g, u.C0b, L0i, sh0On,
+                    (LightType)u.LType0, u.LPos0x, u.LPos0y, u.LPos0z, u.LRange0, u.LInner0, u.LOuter0,
+                    T, density, stepSize);
             if (L1i > 0)
                 AddReliefScatter(ref inR, ref inG, ref inB, in de, in u, sx, sy, sz,
-                    u.L1x, u.L1y, u.L1z, rdx, rdy, rdz, u.C1r, u.C1g, u.C1b, L1i,
-                    sh1On, T, density, stepSize);
+                    u.L1x, u.L1y, u.L1z, rdx, rdy, rdz, u.C1r, u.C1g, u.C1b, L1i, sh1On,
+                    (LightType)u.LType1, u.LPos1x, u.LPos1y, u.LPos1z, u.LRange1, u.LInner1, u.LOuter1,
+                    T, density, stepSize);
             if (L2i > 0)
                 AddReliefScatter(ref inR, ref inG, ref inB, in de, in u, sx, sy, sz,
-                    u.L2x, u.L2y, u.L2z, rdx, rdy, rdz, u.C2r, u.C2g, u.C2b, L2i,
-                    sh2On, T, density, stepSize);
+                    u.L2x, u.L2y, u.L2z, rdx, rdy, rdz, u.C2r, u.C2g, u.C2b, L2i, sh2On,
+                    (LightType)u.LType2, u.LPos2x, u.LPos2y, u.LPos2z, u.LRange2, u.LInner2, u.LOuter2,
+                    T, density, stepSize);
 
             double aT = density * stepSize;
             T *= aT < 1.0 ? ExpNegSmall(aT) : Math.Exp(-aT);
@@ -1133,15 +1136,29 @@ public static class ReliefRaymarchGpu
         double lx, double ly, double lz,
         double rdx, double rdy, double rdz,
         double Lr, double Lg, double Lb, double li, bool shOn,
+        LightType ltype, double lpx, double lpy, double lpz,
+        double lrange, double linner, double louter,
         double T, double density, double stepSize)
     {
+        // S8 (#404) — positional lights attenuate the fog in-scatter per sample and
+        // relight it from the sample's direction-to-light. Twin of the HLSL
+        // ReliefScatter + ShadingPipeline.AddVolumeScatter. Directional → dir
+        // unchanged, atten 1 (× 1.0 no-op) → byte-identical.
+        double atten = 1.0;
+        if (ltype != LightType.Directional)
+        {
+            var sm = LightSampler.Sample(ltype, lx, ly, lz, lpx, lpy, lpz,
+                                         lrange, linner, louter, sx, sy, sz);
+            lx = sm.lx; ly = sm.ly; lz = sm.lz; atten = sm.atten;
+        }
+
         double sh = 1.0;
         if (shOn)
             sh = ShadingPipeline.SoftShadow(in de, sx, sy, sz, lx, ly, lz,
                                             u.Cam.Eps0, 12.0, u.ShadowSoftK, u.ShadowSteps);
         // 4e-ii — cloud self-shadow toward this light (1.0 when off).
         sh *= CloudSelfShadow(sx, sy, sz, lx, ly, lz, in u);
-        double scatter = density * sh * li * stepSize;
+        double scatter = density * sh * li * atten * stepSize;
         // #184 Slice 3 (B) — Henyey-Greenstein phase, normalized so g=0 → 1
         // (bit-identical). View dir = the ray dir (rd); forward-scatters toward
         // this light for g>0.

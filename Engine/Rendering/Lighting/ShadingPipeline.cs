@@ -1365,6 +1365,14 @@ public static class ShadingPipeline
         bool sh2On = ss && (fx.ShadowLightMask & 0x2) != 0;
         bool sh3On = ss && (fx.ShadowLightMask & 0x4) != 0;
 
+        // S8 (#404) — per-light positional params for the fog in-scatter. Spot
+        // cone half-angles → cosines once (hoisted out of the sample loop). All
+        // ignored when the light is Directional (AddVolumeScatter keeps atten 1).
+        var La = fx.Light1; var Lb = fx.Light2; var Lc = fx.Light3;
+        double l1In = Math.Cos(La.SpotInnerDeg * Math.PI / 180.0), l1Out = Math.Cos(La.SpotOuterDeg * Math.PI / 180.0);
+        double l2In = Math.Cos(Lb.SpotInnerDeg * Math.PI / 180.0), l2Out = Math.Cos(Lb.SpotOuterDeg * Math.PI / 180.0);
+        double l3In = Math.Cos(Lc.SpotInnerDeg * Math.PI / 180.0), l3Out = Math.Cos(Lc.SpotOuterDeg * Math.PI / 180.0);
+
         double T = 1.0, inR = 0, inG = 0, inB = 0;
         for (int s = 0; s < vs; s++)
         {
@@ -1381,15 +1389,21 @@ public static class ShadingPipeline
             if (L1i > 0)
                 AddVolumeScatter(in de, in fx, sx, sy, sz, l1.X, l1.Y, l1.Z,
                     rdx, rdy, rdz, fx.Light1.Color, L1i, sh1On, eps,
-                    T, density, stepSize, ref inR, ref inG, ref inB);
+                    T, density, stepSize,
+                    (LightType)La.Type, La.PosX, La.PosY, La.PosZ, La.Range, l1In, l1Out,
+                    ref inR, ref inG, ref inB);
             if (L2i > 0)
                 AddVolumeScatter(in de, in fx, sx, sy, sz, l2.X, l2.Y, l2.Z,
                     rdx, rdy, rdz, fx.Light2.Color, L2i, sh2On, eps,
-                    T, density, stepSize, ref inR, ref inG, ref inB);
+                    T, density, stepSize,
+                    (LightType)Lb.Type, Lb.PosX, Lb.PosY, Lb.PosZ, Lb.Range, l2In, l2Out,
+                    ref inR, ref inG, ref inB);
             if (L3i > 0)
                 AddVolumeScatter(in de, in fx, sx, sy, sz, l3.X, l3.Y, l3.Z,
                     rdx, rdy, rdz, fx.Light3.Color, L3i, sh3On, eps,
-                    T, density, stepSize, ref inR, ref inG, ref inB);
+                    T, density, stepSize,
+                    (LightType)Lc.Type, Lc.PosX, Lc.PosY, Lc.PosZ, Lc.Range, l3In, l3Out,
+                    ref inR, ref inG, ref inB);
 
             // P1: Padé(2,2) approx of exp(-x); density·stepSize stays small in
             // normal scenes. Extinction is per-step (shared across lights).
@@ -1493,19 +1507,35 @@ public static class ShadingPipeline
         double vdx, double vdy, double vdz,
         uint color, double li, bool shOn, double eps,
         double T, double density, double stepSize,
+        LightType ltype, double lposX, double lposY, double lposZ,
+        double lrange, double linnerCos, double louterCos,
         ref double inR, ref double inG, ref double inB)
         where TDe : struct, IDistanceEstimator
     {
         double lr = (color >> 16) & 0xFF;
         double lg = (color >> 8) & 0xFF;
         double lb = color & 0xFF;
+
+        // S8 (#404) — positional lights attenuate the fog in-scatter per sample
+        // (inverse-square × soft range × spot cone) and light it from the sample's
+        // own direction-to-light. Resolve BEFORE the shadow / phase terms so they
+        // use the corrected direction. Directional → dir unchanged, atten 1.0, so
+        // the whole path stays byte-identical (× 1.0 is an exact IEEE-754 no-op).
+        double atten = 1.0;
+        if (ltype != LightType.Directional)
+        {
+            var sm = LightSampler.Sample(ltype, lx, ly, lz, lposX, lposY, lposZ,
+                                         lrange, linnerCos, louterCos, sx, sy, sz);
+            lx = sm.lx; ly = sm.ly; lz = sm.lz; atten = sm.atten;
+        }
+
         double sh = shOn
             ? SoftShadow<TDe>(in de, sx, sy, sz, lx, ly, lz,
                               eps, 12.0, fx.ShadowSoftK, fx.ShadowSteps)
             : 1.0;
         // Phase 22b — cloud self-shadow toward this light. Returns 1 when off.
         sh *= CloudSelfShadow(sx, sy, sz, lx, ly, lz, fx);
-        double scatter = density * sh * li * stepSize;
+        double scatter = density * sh * li * atten * stepSize;
         // Vol-color slice B (#178) — Henyey-Greenstein phase, normalized so
         // g=0 → 1 (bit-identical). g>0 forward-scatters toward the light.
         double g = fx.VolumeAnisotropy;
