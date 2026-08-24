@@ -9,8 +9,24 @@
         <Border Classes="group">
             <StackPanel Spacing="6">
                 <TextBlock Classes="section" Text="Region Navigation" />
+                <!-- Fractal type selector — mirrors the toolbar Type combo
+                     (Main.FractalEntries / SelectedFractalEntry). Needed so a
+                     recalled workspace whose tool window is fractal-type-specific
+                     can have its type set from the Control Center (#433 follow-up). -->
+                <TextBlock Classes="label" Text="Type" />
+                <ComboBox x:Name="TypeCombo"
+                          ItemsSource="{Binding Shell.Main.FractalEntries}"
+                          SelectedItem="{Binding Shell.Main.SelectedFractalEntry}"
+                          HorizontalAlignment="Stretch" Margin="0,4,0,6">
+                    <ComboBox.ItemTemplate>
+                        <DataTemplate DataType="vm:FractalTypeEntry">
+                            <TextBlock Text="{Binding Label}" />
+                        </DataTemplate>
+                    </ComboBox.ItemTemplate>
+                </ComboBox>
                 <!-- Right-click ("Edit region…" + filter-by-fractal-type) is wired
                      in code-behind to match the toolbar Region combo (issue #51). -->
+                <TextBlock Classes="label" Text="Region" />
                 <ComboBox x:Name="RegionCombo"
                           ItemsSource="{Binding Menu.RegionNames}"
                           SelectedItem="{Binding Menu.SelectedRegion}"
