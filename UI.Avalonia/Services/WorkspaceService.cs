@@ -136,17 +136,32 @@ namespace FracturingFog.UI.Avalonia.Services
                 if (rw.X != 0 || rw.Y != 0)
                     main.Position = new PixelPoint(rw.X, rw.Y);
 
-                // Prefer the saved resolution preset (it drives the render size the
-                // host resizes to); only fall back to raw window size when no
-                // preset was captured. Both are irrelevant while maximized.
                 if (main.WindowState == WindowState.Normal)
                 {
+                    // Restore the resolution combo's SELECTION for display. This
+                    // queues an async resize to the preset (bootstrap's
+                    // ResolutionChanged handler posts it at Normal priority).
                     if (!string.IsNullOrEmpty(rw.ResolutionName))
                         shell.FloatingMenu.SelectedResolution = rw.ResolutionName;
-                    else if (rw.Width > 0 && rw.Height > 0)
+
+                    // The captured Width/Height are the AUTHORITATIVE size — they
+                    // reflect a manual resize, which differs from any preset. Apply
+                    // them in a lower-priority (Background) post so they run AFTER
+                    // the preset resize above and win, instead of being clobbered by
+                    // it (the "manual resize not saved" bug: restore used to prefer
+                    // the preset and drop the real size).
+                    if (rw.Width > 0 && rw.Height > 0)
                     {
-                        main.Width = rw.Width;
-                        main.Height = rw.Height;
+                        Dispatcher.UIThread.Post(() =>
+                        {
+                            try
+                            {
+                                main.Width = rw.Width;
+                                main.Height = rw.Height;
+                                WindowService.EnsureOnScreen(main);
+                            }
+                            catch { }
+                        }, DispatcherPriority.Background);
                     }
                 }
 
