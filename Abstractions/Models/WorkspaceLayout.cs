@@ -110,6 +110,16 @@ namespace FracturingFog.Models
         /// back-compat reason as <see cref="ToolbarVisible"/>.</summary>
         public bool StatusBarVisible { get; set; } = true;
 
+        /// <summary>Captured fractal type — the <c>FractalType</c> enum name,
+        /// stored as a string for JSON stability. Null when not captured (older
+        /// workspaces); restore then leaves the current type untouched (#476).</summary>
+        public string? FractalType { get; set; }
+
+        /// <summary>For a promoted user-equation entry, the registered fractal's
+        /// name, so restore re-selects that exact entry rather than just its base
+        /// type. Null for built-in types.</summary>
+        public string? PromotedFractalName { get; set; }
+
         public MonitorRef? Monitor { get; set; }
 
         public RenderWindowState Clone() => new()
@@ -121,6 +131,8 @@ namespace FracturingFog.Models
             Topmost = Topmost,
             ToolbarVisible = ToolbarVisible,
             StatusBarVisible = StatusBarVisible,
+            FractalType = FractalType,
+            PromotedFractalName = PromotedFractalName,
             Monitor = Monitor?.Clone(),
         };
     }

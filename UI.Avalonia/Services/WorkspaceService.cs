@@ -21,6 +21,7 @@
 
 using System;
 using System.Collections.Generic;
+using System.Linq;
 
 using Avalonia;
 using Avalonia.Controls;
@@ -48,6 +49,8 @@ namespace FracturingFog.UI.Avalonia.Services
             rw.Topmost = shell.IsRenderTopmost;
             rw.ToolbarVisible = shell.IsToolbarVisible;
             rw.StatusBarVisible = shell.IsStatusBarVisible;
+            rw.FractalType = shell.Main.ViewState.FractalType.ToString();
+            rw.PromotedFractalName = shell.Main.SelectedFractalEntry?.Promoted?.Name;
 
             var main = WindowService.ActiveMainWindow;
             if (main != null)
@@ -95,6 +98,10 @@ namespace FracturingFog.UI.Avalonia.Services
             // 2. Always-on-top is a plain flag flip (MainWindow mirrors it onto
             //    Window.Topmost).
             shell.IsRenderTopmost = rw.Topmost;
+
+            // 2b. Fractal type — apply before satellites so a type-specific tool
+            //     window (e.g. User Equation params) renders on reopen.
+            ApplyFractalType(shell, rw);
 
             // 3. Geometry after the mode transition settles.
             Dispatcher.UIThread.Post(
@@ -265,6 +272,32 @@ namespace FracturingFog.UI.Avalonia.Services
                 WindowService.EnsureOnScreen(win);
             }
             catch { }
+        }
+
+        // ── Fractal type ─────────────────────────────────────────────────────
+
+        // Re-select the saved fractal type in the toolbar/Control-Center Type combo
+        // (Main.SelectedFractalEntry setter applies the type + triggers a render).
+        // Back-compat: a workspace with no captured type leaves the current type
+        // untouched. A promoted user-equation entry is matched by name first, then
+        // any entry of the base type.
+        private static void ApplyFractalType(ShellViewModel shell, RenderWindowState rw)
+        {
+            if (string.IsNullOrWhiteSpace(rw.FractalType)) return;
+
+            var entries = shell.Main.FractalEntries;
+
+            FractalTypeEntry? match = null;
+            if (!string.IsNullOrWhiteSpace(rw.PromotedFractalName))
+                match = entries.FirstOrDefault(e =>
+                    !e.IsDivider && e.Promoted != null &&
+                    string.Equals(e.Promoted.Name, rw.PromotedFractalName, StringComparison.OrdinalIgnoreCase));
+
+            if (match == null && Enum.TryParse<FractalType>(rw.FractalType, out var ft))
+                match = entries.FirstOrDefault(e => !e.IsDivider && e.Promoted == null && e.Type == ft)
+                     ?? entries.FirstOrDefault(e => !e.IsDivider && e.Type == ft);
+
+            if (match != null) shell.Main.SelectedFractalEntry = match;
         }
 
         // ── Mode helpers ─────────────────────────────────────────────────────
