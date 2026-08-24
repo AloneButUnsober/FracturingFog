@@ -142,7 +142,10 @@ public sealed class MandelbulbCalculator : IFractalCalculator
         // preview is already fast and runs the full FX stack.
         // #320 — a non-Beauty AOV view is produced by the CPU ShadingPipeline
         // (GPU kernels have no view-mode path), so force CPU while one is active.
-        if (fx.UseGpuRender && fx.DebugAov == AovView.Beauty && !lowRes)
+        // S8 (#404) — the GPU 3D-fractal kernels resolve only DIRECTIONAL lights;
+        // a point/spot light must fall to the CPU shade path (which honours
+        // LightSampler) so positional lighting is correct, not silently directional.
+        if (fx.UseGpuRender && fx.DebugAov == AovView.Beauty && !lowRes && !fx.HasPositionalLight)
         {
             double lightX = Math.Sin(fx.Light1.Phi) * Math.Cos(fx.Light1.Theta);
             double lightY = Math.Cos(fx.Light1.Phi);

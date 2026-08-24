@@ -228,9 +228,11 @@ public struct LightingFxData
     public DirectionalLight Light3;
 
     /// <summary>True when any active (Intensity &gt; 0) light is a point or spot
-    /// light (roadmap S8, #389). The GPU relief kernel resolves only directional
-    /// lights from Theta/Phi, so the CPU shade path is forced when this is set —
-    /// keeping the all-directional default byte-identical.</summary>
+    /// light (roadmap S8, #389). Used to force the CPU shade path on the backends
+    /// whose GPU kernels resolve only directional lights (from Theta/Phi): the 8
+    /// GPU 3D-fractal calculators + UserBulb's GPU path (#404). The relief GPU
+    /// kernel resolves positional lights itself (#459), so it no longer gates on
+    /// this. Keeps the all-directional default byte-identical.</summary>
     public readonly bool HasPositionalLight =>
         (Light1.Type != LightType.Directional && Light1.Intensity > 0) ||
         (Light2.Type != LightType.Directional && Light2.Intensity > 0) ||

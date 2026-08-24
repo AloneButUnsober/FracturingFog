@@ -154,7 +154,9 @@ public sealed class BicomplexMandelbrotCalculator : IFractalCalculator
         // non-K slice-axis selections fall back to the CPU path until the
         // kernel grows an axis parameter.
         // #320 — force CPU while an AOV view is active (GPU has no view path).
-        if (fx.UseGpuRender && fx.DebugAov == AovView.Beauty && !lowRes && sliceAxis == BicomplexSliceAxis.K)
+        // S8 (#404) — GPU 3D-fractal kernels are directional-only; force the CPU
+        // shade path when a point/spot light is active (LightSampler on CPU).
+        if (fx.UseGpuRender && fx.DebugAov == AovView.Beauty && !lowRes && sliceAxis == BicomplexSliceAxis.K && !fx.HasPositionalLight)
         {
             var rp = new GpuRaymarchParams
             {

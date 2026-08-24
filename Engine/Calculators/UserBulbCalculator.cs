@@ -800,6 +800,7 @@ public sealed class UserBulbCalculator : IFractalCalculator
         if (FractalParameters.UserBulbBackend == UserBulbBackendKind.GPU
             && !lowRes
             && kifsScale <= 0.0   // scalar KIFS DE is CPU-only
+            && !fx.HasPositionalLight   // S8 (#404) — GPU path is directional-only
             && (sandboxQuatGpu || vecAnalyticGpuOk))
         {
             // Quat-mode allows analytic only when the pattern matched and
