@@ -94,7 +94,7 @@ public static class AovExrRenderer
                 aovs[v] = PosterRenderer.RenderToPixels(req, token, out _, out _);
             }
 
-            AovExrExporter.Write(path, w, h, beauty, aovs, geo?.NormalXyz, geo?.Depth, geo?.Components);
+            AovExrExporter.Write(path, w, h, beauty, aovs, geo?.NormalXyz, geo?.Depth, geo?.Components, req.ExrCompression);
             return (w, h);
         }
         finally

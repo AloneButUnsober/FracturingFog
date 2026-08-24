@@ -39,11 +39,11 @@ namespace FracturingFog.Imaging
         public static void SavePixelsToFile(
             uint[] pixels, int w, int h, string path, ImageFileFormat format,
             string watermarkText, Color fontColor, string subText = "", bool poster = false,
-            float dpi = 0f)
+            float dpi = 0f, ExrCompression exrCompression = ExrCompression.None)
         {
             // S7 — EXR routes to the float writer, not Skia. Watermark text is a
             // display-space overlay; a scene-linear HDR export has no watermark.
-            if (IsExr(format, path)) { OpenExrWriter.WriteBgra8(path, pixels, w, h); return; }
+            if (IsExr(format, path)) { OpenExrWriter.WriteBgra8(path, pixels, w, h, compression: exrCompression); return; }
 
             SaveBgraSkia(pixels, w, h, path, format, dpi);
             if (string.IsNullOrEmpty(watermarkText)) return;
@@ -59,10 +59,11 @@ namespace FracturingFog.Imaging
         /// the on-screen overlay. The parameter is retained for callers.</summary>
         public static void SavePixelsToFile(
             uint[] pixels, int w, int h, string path, ImageFileFormat format,
-            WatermarkRender? wm, bool poster = false, float dpi = 0f)
+            WatermarkRender? wm, bool poster = false, float dpi = 0f,
+            ExrCompression exrCompression = ExrCompression.None)
         {
             // S7 — EXR routes to the float writer, no watermark (see above).
-            if (IsExr(format, path)) { OpenExrWriter.WriteBgra8(path, pixels, w, h); return; }
+            if (IsExr(format, path)) { OpenExrWriter.WriteBgra8(path, pixels, w, h, compression: exrCompression); return; }
 
             SaveBgraSkia(pixels, w, h, path, format, dpi);
 

@@ -156,6 +156,11 @@ namespace FracturingFog.Batch
         /// meaningful for 3D / relief-raymarch renders (the CPU shade path).</summary>
         public bool AovExr { get; set; }
 
+        /// <summary>ZIP-compress any OpenEXR this run writes (roadmap S7, #394).
+        /// Smaller, lossless files; not byte-stable across runtimes, so opt-in.
+        /// Ignored for non-EXR output.</summary>
+        public bool ExrZip { get; set; }
+
         /// <summary>Exposure in stops applied before the view transform (roadmap
         /// S2, #389). Null = neutral (0). Only meaningful alongside a non-None
         /// <see cref="ViewTransform"/>, but honoured on its own too.</summary>
@@ -509,6 +514,10 @@ namespace FracturingFog.Batch
 
                     case BatchFlags.AovExr:
                         opts.AovExr = true;
+                        break;
+
+                    case BatchFlags.ExrZip:
+                        opts.ExrZip = true;
                         break;
 
                     case BatchFlags.BulbPower:

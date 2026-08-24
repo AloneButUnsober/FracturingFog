@@ -211,23 +211,26 @@ internal static class OpenExrReader
                 int decodedSize = rowBytes * linesInChunk;
 
                 if (decoded.Length < decodedSize) decoded = new byte[decodedSize];
-                if (comp == Compression.None)
+                // A ZIP/ZIPS chunk whose stored size equals the uncompressed size
+                // was written raw by the encoder (compression didn't shrink it, per
+                // spec) — read it verbatim and skip inflate + predictor/interleave.
+                bool storedRaw = (comp == Compression.None)
+                    || ((comp == Compression.Zip || comp == Compression.Zips) && chunkSize == decodedSize);
+
+                if (storedRaw)
                 {
                     if (chunkSize != decodedSize) return null;
                     int read = br.Read(decoded, 0, decodedSize);
                     if (read != decodedSize) return null;
                 }
-                else // Zip / Zips
+                else // Zip / Zips, genuinely compressed
                 {
                     var compressedBytes = br.ReadBytes(chunkSize);
                     if (compressedBytes.Length != chunkSize) return null;
                     if (!InflateExr(compressedBytes, decoded, decodedSize)) return null;
-                }
 
-                // EXR ZIP/ZIPS apply a per-byte predictor + interleave
-                // unscramble. NONE skips both.
-                if (comp == Compression.Zip || comp == Compression.Zips)
-                {
+                    // Compressed ZIP/ZIPS bytes carry a per-byte predictor +
+                    // interleave scramble; reverse both. Raw-stored chunks skip this.
                     Predictor(decoded, decodedSize);
                     Interleave(decoded, decodedSize);
                 }

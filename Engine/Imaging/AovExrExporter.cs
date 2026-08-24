@@ -141,10 +141,11 @@ public static class AovExrExporter
     public static void Write(string path, int width, int height,
         uint[] beauty, IReadOnlyDictionary<AovView, uint[]> aovs,
         float[]? floatNormalXyz = null, float[]? floatDepth = null,
-        ShadingPipeline.ShadeComponents[]? components = null)
+        ShadingPipeline.ShadeComponents[]? components = null,
+        ExrCompression compression = ExrCompression.None)
     {
         var channels = BuildChannels(width, height, beauty, aovs, floatNormalXyz, floatDepth, components);
-        OpenExrWriter.WriteFile(path, width, height, channels);
+        OpenExrWriter.WriteFile(path, width, height, channels, compression);
     }
 
     /// <summary>Build the channel set for a FLOAT-NATIVE AOV EXR (roadmap S1, #389):

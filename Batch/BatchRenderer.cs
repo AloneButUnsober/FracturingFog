@@ -167,6 +167,11 @@ namespace FracturingFog.Batch
                 // the poster default (None = identity, byte-identical).
                 ViewTransform = opts.ViewTransform ?? FracturingFog.Imaging.ViewTransform.None,
                 ViewExposureEv = (float)(opts.ViewExposureEv ?? 0.0),
+                // S7 (#394) — ZIP-compress the EXR when requested. Ignored for
+                // non-EXR output; honoured by both the plain and AOV writers.
+                ExrCompression = opts.ExrZip
+                    ? FracturingFog.Imaging.ExrCompression.Zip
+                    : FracturingFog.Imaging.ExrCompression.None,
             };
 
             Console.WriteLine($"Batch image render");
