@@ -17,9 +17,11 @@
 //   * Single-part scanline EXR (the format Blender / oiiotool / DJV / Nuke all
 //     read). RGB, RGBA, or any set of named channels (Z, normal.X, albedo.R …).
 //   * HALF (IEEE-754 binary16) and FLOAT (32-bit) channels, per-channel.
-//   * NONE (uncompressed) only, for now. Uncompressed output is deterministic
-//     byte-for-byte — the parity contract the roadmap names for this slice — and
-//     DeflateStream's bytes are not stable across runtimes. ZIP is a follow-up.
+//   * NONE (uncompressed, the default) or ZIP (16-line zlib blocks with the EXR
+//     predictor + interleave — the exact inverse of OpenExrReader's decode).
+//     NONE is deterministic byte-for-byte — the parity contract the roadmap
+//     names for this slice; ZIP is smaller and lossless but NOT byte-stable
+//     (DeflateStream's bytes vary across runtimes), so it is opt-in.
 //
 // What we do NOT encode: tiled, deep, multi-part, lossy codecs. Channels are
 // emitted alphabetically per spec (A < B < G < R), so OpenExrReader and every
@@ -31,9 +33,25 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.IO.Compression;
 using System.Text;
 
 namespace FracturingFog.Imaging;
+
+/// <summary>Compression codec for <see cref="OpenExrWriter"/>. Values match the
+/// EXR spec compression ids (and <c>OpenExrReader</c>'s enum).</summary>
+public enum ExrCompression
+{
+    /// <summary>Uncompressed. Deterministic byte-for-byte output — the roadmap's
+    /// byte-stability contract. The default.</summary>
+    None = 0,
+
+    /// <summary>ZIP: 16-scanline zlib(deflate) blocks with the EXR byte predictor
+    /// + interleave (spec id 3). Smaller files, but DeflateStream's bytes are not
+    /// stable across runtimes, so output is NOT byte-stable — opt-in when size
+    /// matters. Lossless; reads in Blender / oiiotool / our own reader.</summary>
+    Zip = 3,
+}
 
 /// <summary>One named channel of an <see cref="OpenExrWriter"/> image: a
 /// full-frame plane of <c>width*height</c> float samples, written as HALF or
@@ -68,8 +86,11 @@ public static class OpenExrWriter
 
     /// <summary>Write a multi-channel EXR to <paramref name="stream"/>. Channels
     /// may mix HALF and FLOAT; each must carry exactly <c>width*height</c>
-    /// samples. Output is uncompressed (NONE) and deterministic.</summary>
-    public static void Write(Stream stream, int width, int height, IReadOnlyList<ExrChannel> channels)
+    /// samples. <paramref name="compression"/> defaults to NONE (uncompressed,
+    /// deterministic); <see cref="ExrCompression.Zip"/> produces smaller,
+    /// lossless — but not byte-stable — files.</summary>
+    public static void Write(Stream stream, int width, int height, IReadOnlyList<ExrChannel> channels,
+        ExrCompression compression = ExrCompression.None)
     {
         if (width <= 0 || height <= 0) throw new ArgumentException("EXR: width/height must be positive.");
         if (channels == null || channels.Count == 0) throw new ArgumentException("EXR: at least one channel required.");
@@ -88,8 +109,9 @@ public static class OpenExrWriter
         bw.Write(MagicNumber);
         bw.Write((uint)2);   // version 2, flags 0 = single-part scanline
 
+        byte compByte = (byte)compression;
         WriteChannelsAttr(bw, ordered);
-        WriteAttr(bw, "compression", "compression", static w => w.Write((byte)0));           // NONE
+        WriteAttr(bw, "compression", "compression", w => w.Write(compByte));                  // NONE / ZIP
         WriteBox2iAttr(bw, "dataWindow", 0, 0, width - 1, height - 1);
         WriteBox2iAttr(bw, "displayWindow", 0, 0, width - 1, height - 1);
         WriteAttr(bw, "lineOrder", "lineOrder", static w => w.Write((byte)0));                // INCREASING_Y
@@ -102,21 +124,82 @@ public static class OpenExrWriter
         int rowBytes = 0;
         foreach (var c in ordered) rowBytes += width * (c.Half ? 2 : 4);
 
-        // Offset table: one i64 per scanline (NONE → chunkLines = 1). Each chunk
-        // on disk is [scanY:i32][dataSize:i32][pixels]. Offsets point at scanY.
-        long offsetTableBytes = (long)height * 8;
-        long firstChunk = bw.BaseStream.Position + offsetTableBytes;
-        long chunkStride = 8 + rowBytes;   // i32 scanY + i32 dataSize + pixels
-        for (int y = 0; y < height; y++)
-            bw.Write(firstChunk + y * chunkStride);
-
-        // Chunks. Pixel data is channel-major within each scanline, channels in
-        // the same alphabetical order as the chlist.
-        for (int y = 0; y < height; y++)
+        if (compression == ExrCompression.None)
         {
-            bw.Write(y);          // scanY (data-window-relative; ymin = 0)
-            bw.Write(rowBytes);   // uncompressed dataSize
-            int rowOffset = y * width;
+            // Offset table: one i64 per scanline (NONE → chunkLines = 1). Each
+            // chunk on disk is [scanY:i32][dataSize:i32][pixels]. Fixed stride, so
+            // offsets are computed up front. Byte-identical to the pre-ZIP writer.
+            long offsetTableBytes = (long)height * 8;
+            long firstChunk = bw.BaseStream.Position + offsetTableBytes;
+            long chunkStride = 8 + rowBytes;   // i32 scanY + i32 dataSize + pixels
+            for (int y = 0; y < height; y++)
+                bw.Write(firstChunk + y * chunkStride);
+
+            // Chunks. Pixel data is channel-major within each scanline, channels
+            // in the same alphabetical order as the chlist.
+            for (int y = 0; y < height; y++)
+            {
+                bw.Write(y);          // scanY (data-window-relative; ymin = 0)
+                bw.Write(rowBytes);   // uncompressed dataSize
+                WriteRawLines(bw, ordered, width, y, 1);
+            }
+            return;
+        }
+
+        // ── ZIP: 16-scanline blocks ──────────────────────────────────────────
+        // Chunk sizes vary, so build every chunk's on-disk payload first, then
+        // lay down the offset table from the accumulated sizes.
+        const int chunkLines = 16;
+        int chunkCount = (height + chunkLines - 1) / chunkLines;
+        var payloads = new byte[chunkCount][];
+        var scanYs = new int[chunkCount];
+        for (int ci = 0; ci < chunkCount; ci++)
+        {
+            int scanY = ci * chunkLines;
+            int lines = Math.Min(chunkLines, height - scanY);
+            scanYs[ci] = scanY;
+
+            // Raw channel-major bytes for this block (the bytes a NONE chunk holds).
+            byte[] raw;
+            using (var rm = new MemoryStream(rowBytes * lines))
+            {
+                using (var rw = new BinaryWriter(rm, Encoding.ASCII, leaveOpen: true))
+                    for (int li = 0; li < lines; li++)
+                        WriteRawLines(rw, ordered, width, scanY + li, 1);
+                raw = rm.ToArray();
+            }
+
+            byte[] zipped = ZipCompressBlock(raw);
+            // Spec rule: if the compressed block is not smaller than the raw
+            // block, store the raw bytes verbatim (chunkSize == rawSize signals
+            // this to the reader, which then skips inflate + predictor/interleave).
+            payloads[ci] = zipped.Length < raw.Length ? zipped : raw;
+        }
+
+        long offTableBytes = (long)chunkCount * 8;
+        long running = bw.BaseStream.Position + offTableBytes;
+        for (int ci = 0; ci < chunkCount; ci++)
+        {
+            bw.Write(running);
+            running += 8 + payloads[ci].Length;   // i32 scanY + i32 size + data
+        }
+        for (int ci = 0; ci < chunkCount; ci++)
+        {
+            bw.Write(scanYs[ci]);
+            bw.Write(payloads[ci].Length);
+            bw.Write(payloads[ci]);
+        }
+    }
+
+    /// <summary>Emit <paramref name="lines"/> scanlines starting at row
+    /// <paramref name="y0"/> in EXR channel-major / row-major byte order (each
+    /// channel's full row, channels in the caller's already-alphabetical order).
+    /// Shared by the NONE and ZIP paths.</summary>
+    private static void WriteRawLines(BinaryWriter bw, List<ExrChannel> ordered, int width, int y0, int lines)
+    {
+        for (int li = 0; li < lines; li++)
+        {
+            int rowOffset = (y0 + li) * width;
             foreach (var c in ordered)
             {
                 var data = c.Data;
@@ -134,11 +217,79 @@ public static class OpenExrWriter
         }
     }
 
+    // ── ZIP block codec (exact inverse of OpenExrReader's decode) ────────────
+
+    /// <summary>Compress one raw EXR scanline block to a zlib-wrapped deflate
+    /// stream, applying the EXR reorder (interleave) + delta (predictor) the
+    /// reader reverses. Encode order is the mirror of decode
+    /// (inflate → un-delta → de-interleave): interleave → delta → deflate.</summary>
+    private static byte[] ZipCompressBlock(byte[] raw)
+    {
+        int count = raw.Length;
+
+        // 1. Reorder: split into even-index bytes (first half) + odd-index bytes
+        //    (second half). Inverse of the reader's Interleave.
+        var reordered = new byte[count];
+        int t1 = 0;
+        int t2 = (count + 1) / 2;
+        int s = 0;
+        while (true)
+        {
+            if (s < count) reordered[t1++] = raw[s++]; else break;
+            if (s < count) reordered[t2++] = raw[s++]; else break;
+        }
+
+        // 2. Delta: forward difference the reordered bytes. Inverse of the
+        //    reader's Predictor (which does out[i] = out[i-1] + in[i] - 128).
+        var deltad = new byte[count];
+        if (count > 0) deltad[0] = reordered[0];
+        for (int i = 1; i < count; i++)
+            deltad[i] = (byte)(reordered[i] - reordered[i - 1] + 128);
+
+        // 3. Deflate + zlib wrap (2-byte header, 4-byte big-endian adler32 of the
+        //    UNCOMPRESSED bytes). The reader strips the header and trusts the
+        //    predictor to surface corruption, but Blender / oiiotool validate the
+        //    adler, so it must be correct.
+        byte[] deflated;
+        using (var ms = new MemoryStream())
+        {
+            using (var ds = new DeflateStream(ms, CompressionLevel.Optimal, leaveOpen: true))
+                ds.Write(deltad, 0, count);
+            deflated = ms.ToArray();
+        }
+
+        var outBuf = new byte[2 + deflated.Length + 4];
+        outBuf[0] = 0x78;   // CMF: deflate, 32K window
+        outBuf[1] = 0x01;   // FLG: (0x7801 % 31 == 0), no preset dict
+        Buffer.BlockCopy(deflated, 0, outBuf, 2, deflated.Length);
+        uint adler = Adler32(deltad, count);
+        int tp = 2 + deflated.Length;
+        outBuf[tp + 0] = (byte)(adler >> 24);
+        outBuf[tp + 1] = (byte)(adler >> 16);
+        outBuf[tp + 2] = (byte)(adler >> 8);
+        outBuf[tp + 3] = (byte)adler;
+        return outBuf;
+    }
+
+    /// <summary>Adler-32 (RFC 1950) over the first <paramref name="count"/> bytes.</summary>
+    private static uint Adler32(byte[] data, int count)
+    {
+        const uint mod = 65521;
+        uint a = 1, b = 0;
+        for (int i = 0; i < count; i++)
+        {
+            a = (a + data[i]) % mod;
+            b = (b + a) % mod;
+        }
+        return (b << 16) | a;
+    }
+
     /// <summary>Write an EXR file (creates/overwrites <paramref name="path"/>).</summary>
-    public static void WriteFile(string path, int width, int height, IReadOnlyList<ExrChannel> channels)
+    public static void WriteFile(string path, int width, int height, IReadOnlyList<ExrChannel> channels,
+        ExrCompression compression = ExrCompression.None)
     {
         using var fs = File.Create(path);
-        Write(fs, width, height, channels);
+        Write(fs, width, height, channels, compression);
     }
 
     /// <summary>Bridge: promote an 8-bit straight-alpha BGRA <c>uint[]</c> render
@@ -149,7 +300,8 @@ public static class OpenExrWriter
     /// never gamma'd. HALF channels keep files small and lossless for 8-bit
     /// sources.</summary>
     public static void WriteBgra8(string path, uint[] bgra, int width, int height,
-        bool linearize = true, bool half = true, bool includeAlpha = true)
+        bool linearize = true, bool half = true, bool includeAlpha = true,
+        ExrCompression compression = ExrCompression.None)
     {
         long n = (long)width * height;
         if (bgra.Length < n) throw new ArgumentException("EXR: BGRA buffer smaller than width*height.");
@@ -176,7 +328,7 @@ public static class OpenExrWriter
             new("B", b, half),
         };
         if (a != null) channels.Add(new ExrChannel("A", a, half));
-        WriteFile(path, width, height, channels);
+        WriteFile(path, width, height, channels, compression);
     }
 
     /// <summary>sRGB → linear (IEC 61966-2-1). Matches the standard transfer used

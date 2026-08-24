@@ -124,6 +124,11 @@ namespace FracturingFog.Imaging
         /// the user having to type a size at print time.</summary>
         public float Dpi { get; init; }
 
+        /// <summary>Compression for a <c>.exr</c> save (roadmap S7, #394).
+        /// Default None = uncompressed / byte-stable; Zip = smaller, lossless,
+        /// not byte-stable. Ignored for non-EXR formats.</summary>
+        public ExrCompression ExrCompression { get; init; } = ExrCompression.None;
+
         // ── D-6b — sub-rect rendering for cluster tile workers ─────────────
         // When non-zero, the worker renders only a sub-rect of a larger
         // image and derives per-pixel dc from the FULL image's centre +
@@ -433,7 +438,7 @@ namespace FracturingFog.Imaging
                 var wm = BuildPosterWatermark(req, fontColor);
                 ImageExport.SavePixelsToFile(
                     rotated, savedW, savedH, req.Path, req.Format,
-                    wm, poster: true, dpi: req.Dpi);
+                    wm, poster: true, dpi: req.Dpi, exrCompression: req.ExrCompression);
                 return new PosterResult(savedW, savedH, elapsedMs);
             }
             else
@@ -443,7 +448,7 @@ namespace FracturingFog.Imaging
                 var wm = BuildPosterWatermark(req, fontColor);
                 ImageExport.SavePixelsToFile(
                     buffer, w, h, req.Path, req.Format,
-                    wm, poster: true, dpi: req.Dpi);
+                    wm, poster: true, dpi: req.Dpi, exrCompression: req.ExrCompression);
                 return new PosterResult(w, h, elapsedMs);
             }
         }

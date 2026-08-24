@@ -44,6 +44,10 @@ namespace FracturingFog.Batch
         // Multi-layer AOV OpenEXR export (roadmap S1, #389). Image mode only.
         public const string AovExr         = "--aov-exr";
 
+        // ZIP-compress .exr output (roadmap S7, #394). Smaller, lossless, not
+        // byte-stable; opt-in. Applies to any EXR the run writes.
+        public const string ExrZip         = "--exr-zip";
+
         public const string MultibrotExp   = "--multibrot-exp";
         public const string BulbPower      = "--bulb-power";
         public const string LSystemPreset  = "--lsystem-preset";

@@ -223,6 +223,9 @@ namespace FracturingFog.Batch
             Console.WriteLine("                              depth / AO / diffuse / specular / shadow / stepcount)");
             Console.WriteLine("                              instead of a flat image. Forces .exr; image mode only.");
             Console.WriteLine("                              AOVs are meaningful for 3D / --relief-raymarch renders.");
+            Console.WriteLine("  --exr-zip                   ZIP-compress .exr output (smaller, lossless). Not");
+            Console.WriteLine("                              byte-stable across runtimes, so opt-in. Ignored for");
+            Console.WriteLine("                              non-EXR output.");
             Console.WriteLine();
             Console.WriteLine("2D relief (heightfield shading; any relief flag implies --relief):");
             Console.WriteLine("  --relief                    Enable the 2D heightfield relief post-pass.");
