@@ -3911,6 +3911,22 @@ namespace FracturingFog.Rendering
         /// ImageExport.SavePixelsToFile (Phase X.A / Slice A.7).
         /// </summary>
         public void SaveLastFrameToPng(string path)
+            => SaveLastFrame(path, FracturingFog.Imaging.ImageFileFormat.Png);
+
+        /// <summary>
+        /// Encode the most-recent rendered frame to <paramref name="path"/> in
+        /// <paramref name="format"/>. <see cref="FracturingFog.Imaging.ImageFileFormat.Auto"/>
+        /// (the default) infers the encoder from the file extension — including
+        /// <c>.exr</c>, which routes through the scene-linear <see cref="FracturingFog.Imaging.OpenExrWriter"/>
+        /// (roadmap S7) rather than Skia and carries no display watermark. All
+        /// other extensions go through the SkiaSharp save path with the resolved
+        /// watermark, identical to the legacy PNG screenshot. No-op before the
+        /// first frame. <see cref="SaveLastFrameToPng"/> forwards here with an
+        /// explicit PNG token for the sequence/back-compat callers.
+        /// </summary>
+        public void SaveLastFrame(
+            string path,
+            FracturingFog.Imaging.ImageFileFormat format = FracturingFog.Imaging.ImageFileFormat.Auto)
         {
             if (_disposed) return;
             if (string.IsNullOrEmpty(path)) return;
@@ -3955,7 +3971,7 @@ namespace FracturingFog.Rendering
                 defaultTextColor: defaultText);
 
             FracturingFog.Imaging.ImageExport.SavePixelsToFile(
-                buf, w, h, path, FracturingFog.Imaging.ImageFileFormat.Png,
+                buf, w, h, path, format,
                 wm);
         }
 

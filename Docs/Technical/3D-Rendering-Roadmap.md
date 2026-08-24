@@ -378,8 +378,13 @@ layers.
 - **Status:** `OpenExrWriter` landed — pure-managed scanline encoder (HALF/FLOAT,
   arbitrary named channels, uncompressed → byte-stable), an 8-bit→linear-half
   bridge so `.exr` export works now, `ImageFileFormat.Exr` + `.exr` wiring, 6
-  round-trip/byte-stability tests. **Remaining:** feed real float AOV layers (needs
-  S1), optional ZIP compression, GUI/batch format surface, Blender smoke.
+  round-trip/byte-stability tests. Real float AOV layers now feed it via S1
+  (#398/#412/#452/#453). GUI/batch surface landed (#480): the screenshot picker
+  offers PNG/JPEG/OpenEXR and `FractalRenderHost.SaveLastFrame` infers the encoder
+  from the extension (`.exr` → writer, no watermark); batch `GuessImageFormat`
+  maps `.exr` → Exr. **Remaining:** optional ZIP compression behind a flag
+  (DeflateStream not byte-stable across runtimes), Blender/oiiotool third-party
+  read smoke.
 
 ### S8 — Richer light types: point / spot / area ◐ (#404)
 Three directional lights + IBL today. Point/spot (inverse-square + cone) and area

@@ -1507,6 +1507,9 @@ namespace FracturingFog.Batch
                 ".jpg" or ".jpeg" => FracturingFog.Imaging.ImageFileFormat.Jpeg,
                 ".gif" => FracturingFog.Imaging.ImageFileFormat.Gif,
                 ".webp" => FracturingFog.Imaging.ImageFileFormat.Webp,
+                // roadmap S7: a typed `.exr` --out routes through OpenExrWriter
+                // (scene-linear HDR half RGBA) even without --aov-exr.
+                ".exr" => FracturingFog.Imaging.ImageFileFormat.Exr,
                 _ => FracturingFog.Imaging.ImageFileFormat.Png,
             };
 
