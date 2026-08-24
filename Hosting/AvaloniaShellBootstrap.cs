@@ -1422,8 +1422,11 @@ namespace FracturingFog.Hosting
                 }
             };
 
-            // Screenshot — encode the most-recent rendered frame to PNG via
-            // System.Drawing and write through a SaveFilePicker.
+            // Screenshot — encode the most-recent rendered frame and write it
+            // through a SaveFilePicker. The chosen file extension selects the
+            // encoder (ImageFileFormat.Auto): `.exr` routes through the
+            // scene-linear OpenExrWriter (roadmap S7, HDR float, no watermark);
+            // every other extension goes through the SkiaSharp PNG/JPEG/… path.
             shell.ScreenshotRequested += async (_, _) =>
             {
                 try
@@ -1432,9 +1435,12 @@ namespace FracturingFog.Hosting
                     string? path = await AvaloniaDialogs.PickSaveFileAsync(
                         "Save Screenshot",
                         suggestedName: BuildSuggestedFileName("png", isSpanning: s_spanning),
-                        filter: "PNG image (*.png)|*.png");
+                        filter: "PNG image (*.png)|*.png"
+                              + "|JPEG image (*.jpg;*.jpeg)|*.jpg;*.jpeg"
+                              + "|OpenEXR float image (*.exr)|*.exr");
                     if (string.IsNullOrEmpty(path)) return;
-                    s_renderHost.SaveLastFrameToPng(path);
+                    // Auto → infer encoder from the extension the user chose/typed.
+                    s_renderHost.SaveLastFrame(path);
                 }
                 catch (Exception ex)
                 {
