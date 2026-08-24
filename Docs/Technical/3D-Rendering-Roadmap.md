@@ -382,9 +382,13 @@ layers.
   (#398/#412/#452/#453). GUI/batch surface landed (#480): the screenshot picker
   offers PNG/JPEG/OpenEXR and `FractalRenderHost.SaveLastFrame` infers the encoder
   from the extension (`.exr` → writer, no watermark); batch `GuessImageFormat`
-  maps `.exr` → Exr. **Remaining:** optional ZIP compression behind a flag
-  (DeflateStream not byte-stable across runtimes), Blender/oiiotool third-party
-  read smoke.
+  maps `.exr` → Exr. ZIP compression landed (#481): `ExrCompression {None, Zip}`
+  on the writer — 16-line zlib blocks with the EXR predictor + interleave (exact
+  inverse of `OpenExrReader`'s decode, round-trips through our reader + Blender),
+  reader honours the spec raw-fallback, threaded via `PosterRequest.ExrCompression`
+  + batch `--exr-zip`; NONE stays default + byte-identical. **Remaining:**
+  Blender/oiiotool third-party read smoke (needs an external DCC — our reader
+  validates structure, a third-party read validates spec conformance).
 
 ### S8 — Richer light types: point / spot / area ◐ (#404)
 Three directional lights + IBL today. Point/spot (inverse-square + cone) and area
