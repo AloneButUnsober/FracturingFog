@@ -49,10 +49,6 @@
                           IsChecked="{Binding Shell.IsRenderTopmost, Mode=TwoWay}"
                           Foreground="#9B9B9B" FontWeight="Bold" Margin="0,4,0,0"
                           ToolTip.Tip="Keep the render window above other (non-FF) apps and windows. FF dialogs can still overlay it when needed." />
-                <CheckBox Content="On top of FF windows and dialogs"
-                          IsChecked="{Binding Shell.IsRenderAboveDialogs, Mode=TwoWay}"
-                          Foreground="#9B9B9B" FontWeight="Bold" Margin="0,2,0,0"
-                          ToolTip.Tip="Also keep the render window above FracturingFog's own dialogs (they no longer float over it). Default off." />
             </StackPanel>
         </Border>
 

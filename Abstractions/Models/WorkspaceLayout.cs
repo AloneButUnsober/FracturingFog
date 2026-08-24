@@ -101,9 +101,14 @@ namespace FracturingFog.Models
         /// so a workspace restores it too.</summary>
         public bool Topmost { get; set; }
 
-        /// <summary>Render window on top of FF windows and dialogues too — when on,
-        /// FF dialogs no longer float over the render window (default off, #472).</summary>
-        public bool AboveDialogs { get; set; }
+        /// <summary>Toolbar visibility (part of the captured chrome arrangement).
+        /// Defaults true so an older workspace without the field restores the
+        /// toolbar shown rather than hidden.</summary>
+        public bool ToolbarVisible { get; set; } = true;
+
+        /// <summary>Status-bar visibility. Defaults true for the same
+        /// back-compat reason as <see cref="ToolbarVisible"/>.</summary>
+        public bool StatusBarVisible { get; set; } = true;
 
         public MonitorRef? Monitor { get; set; }
 
@@ -114,7 +119,8 @@ namespace FracturingFog.Models
             X = X, Y = Y, Width = Width, Height = Height,
             ResolutionName = ResolutionName,
             Topmost = Topmost,
-            AboveDialogs = AboveDialogs,
+            ToolbarVisible = ToolbarVisible,
+            StatusBarVisible = StatusBarVisible,
             Monitor = Monitor?.Clone(),
         };
     }

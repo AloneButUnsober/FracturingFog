@@ -697,8 +697,7 @@ public sealed partial class MainWindow : Window
                 SyncControlCenter();
                 break;
             case nameof(ShellViewModel.IsRenderTopmost):
-            case nameof(ShellViewModel.IsRenderAboveDialogs):
-                ApplyRenderTopmost();
+                Topmost = _shell.IsRenderTopmost;
                 break;
             case nameof(ShellViewModel.IsColorThemeEditorVisible):
             case nameof(ShellViewModel.ColorThemeEditor):
@@ -778,18 +777,6 @@ public sealed partial class MainWindow : Window
                 }
                 break;
         }
-    }
-
-    // Render-window always-on-top. Two independent toggles fold into one
-    // Window.Topmost: "on top" (above non-FF apps; FF dialogs may still overlay)
-    // OR "above dialogs" (above FF dialogs too). The second also tells
-    // WindowService to stop topmost-matching dialogs over the render window (#472).
-    private void ApplyRenderTopmost()
-    {
-        if (_shell == null) return;
-        FracturingFog.UI.Avalonia.Services.WindowService.KeepRenderAboveDialogs =
-            _shell.IsRenderAboveDialogs;
-        Topmost = _shell.IsRenderTopmost || _shell.IsRenderAboveDialogs;
     }
 
     private void SyncMiniDepth()

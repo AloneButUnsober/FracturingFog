@@ -20,6 +20,7 @@
 // monitor is gone — it nudges an off-screen window back onto a real screen.
 
 using System;
+using System.Collections.Generic;
 
 using Avalonia;
 using Avalonia.Controls;
@@ -45,7 +46,8 @@ namespace FracturingFog.UI.Avalonia.Services
             rw.Shape = CurrentShape(shell);
             rw.ResolutionName = shell.FloatingMenu.SelectedResolution;
             rw.Topmost = shell.IsRenderTopmost;
-            rw.AboveDialogs = shell.IsRenderAboveDialogs;
+            rw.ToolbarVisible = shell.IsToolbarVisible;
+            rw.StatusBarVisible = shell.IsStatusBarVisible;
 
             var main = WindowService.ActiveMainWindow;
             if (main != null)
@@ -90,10 +92,9 @@ namespace FracturingFog.UI.Avalonia.Services
             // 1. Mode FIRST — this may mutate MainWindow geometry (Mini/Toy/Span).
             ApplyShape(shell, rw.Shape);
 
-            // 2. Always-on-top flags are plain flips (MainWindow mirrors them
-            //    onto Window.Topmost + WindowService.KeepRenderAboveDialogs).
+            // 2. Always-on-top is a plain flag flip (MainWindow mirrors it onto
+            //    Window.Topmost).
             shell.IsRenderTopmost = rw.Topmost;
-            shell.IsRenderAboveDialogs = rw.AboveDialogs;
 
             // 3. Geometry after the mode transition settles.
             Dispatcher.UIThread.Post(
@@ -102,7 +103,7 @@ namespace FracturingFog.UI.Avalonia.Services
 
             // 4. Satellites last, after the render window has taken its shape.
             Dispatcher.UIThread.Post(
-                () => RestoreSatellites(layout),
+                () => RestoreSatellites(layout, shell),
                 DispatcherPriority.Background);
         }
 
@@ -111,11 +112,15 @@ namespace FracturingFog.UI.Avalonia.Services
             var main = WindowService.ActiveMainWindow;
             if (main == null) return;
 
-            // Mini/Toy/Span own their own geometry — the mode set it. Only a
-            // Standard window takes the saved position/size/state; touching a
-            // borderless-fullscreen (Span) or compact (Mini/Toy) window here would
-            // undo the mode.
+            // Mini/Toy/Span own their own geometry AND their own toolbar/status
+            // visibility — the mode set them. Only a Standard window takes the
+            // saved position/size/state/chrome; touching a borderless-fullscreen
+            // (Span) or compact (Mini/Toy) window here would undo the mode.
             if (rw.Shape != RenderWindowShape.Standard) return;
+
+            // Chrome visibility is part of the captured arrangement.
+            shell.IsToolbarVisible = rw.ToolbarVisible;
+            shell.IsStatusBarVisible = rw.StatusBarVisible;
 
             try
             {
@@ -143,41 +148,123 @@ namespace FracturingFog.UI.Avalonia.Services
             catch { /* best-effort — a bad saved geometry must not crash restore */ }
         }
 
-        private static void RestoreSatellites(WorkspaceLayout layout)
+        // Bounded retries for placing a reopened satellite. Openers reopen a
+        // closed window via Dispatcher.Post (async), so the window often does not
+        // exist yet on the first placement attempt — retry until it appears.
+        private const int SatellitePlaceAttempts = 15;
+
+        private static void RestoreSatellites(WorkspaceLayout layout, ShellViewModel shell)
         {
-            foreach (var s in layout.Satellites)
+            // Reconcile EVERY satellite role, not just the ones in this layout —
+            // otherwise recalling workspace B leaves windows that workspace A
+            // opened still on screen (the "jumble" when switching workspaces).
+            // A role present + visible → open/place; anything else → hide.
+            var byRole = new Dictionary<WindowRole, SatelliteWindowState>();
+            foreach (var s in layout.Satellites) byRole[s.Role] = s;
+
+            foreach (WindowRole role in Enum.GetValues(typeof(WindowRole)))
             {
-                if (s.Visible)
+                if (role == WindowRole.RenderWindow) continue;
+
+                if (byRole.TryGetValue(role, out var s) && s.Visible)
                 {
                     // Ensure open (reopens via the slice-2 opener when closed), then
-                    // place after the show/position settles.
-                    WindowService.Open(s.Role);
-                    var captured = s;
-                    Dispatcher.UIThread.Post(() =>
-                    {
-                        var win = WindowService.Find(captured.Role);
-                        if (win == null) return;
-                        try
-                        {
-                            if (captured.Width > 0) win.Width = captured.Width;
-                            if (captured.Height > 0) win.Height = captured.Height;
-                            if (captured.X != 0 || captured.Y != 0)
-                                win.Position = new PixelPoint(captured.X, captured.Y);
-                            WindowService.EnsureOnScreen(win);
-                        }
-                        catch { }
-                    }, DispatcherPriority.Background);
+                    // place once the window actually exists and is shown.
+                    WindowService.Open(role);
+                    PlaceWhenReady(s, SatellitePlaceAttempts);
                 }
                 else
                 {
-                    // Saved hidden: hide it if it happens to be open now.
-                    var win = WindowService.Find(s.Role);
-                    if (win is { IsVisible: true })
-                    {
-                        try { win.Hide(); } catch { }
-                    }
+                    HideSatellite(role, shell);
                 }
             }
+        }
+
+        // Close/hide a satellite the target workspace does not want open.
+        //
+        // Flag-backed windows (MiniMap/MiniDepth/PostFxHud/ColorTheme) route through
+        // their shell visibility flag so the shell's own Sync* path Hides them and
+        // the flag stays consistent — and their re-open (flag = true) re-shows the
+        // same hidden instance correctly.
+        //
+        // The bootstrap-owned singletons (UserEquation/Sandbox/UserBulb/Relief3D/
+        // LightingFx/AsciiFx) must be CLOSED, not hidden. Their openers key off a
+        // static s_*Win singleton: a hidden-but-non-null window makes the opener
+        // Activate() a hidden window (never re-shows) or, for LightingFx, toggle it
+        // shut — the "needs two Recall clicks" / "form never displays" bugs. Closing
+        // nulls the singleton (via each window's Closed handler) so the next Open
+        // creates a fresh, visible window.
+        private static void HideSatellite(WindowRole role, ShellViewModel shell)
+        {
+            switch (role)
+            {
+                case WindowRole.MiniMap:          shell.IsMiniMapVisible = false; return;
+                case WindowRole.MiniDepth:        shell.IsMiniDepthVisible = false; return;
+                case WindowRole.PostFxHud:        shell.IsPostFxHudVisible = false; return;
+                case WindowRole.ColorThemeEditor: shell.IsColorThemeEditorVisible = false; return;
+                default:
+                    var win = WindowService.Find(role);
+                    if (win != null)
+                    {
+                        try { win.Close(); } catch { }
+                    }
+                    return;
+            }
+        }
+
+        // How many extra times to re-assert a satellite's geometry after it first
+        // becomes visible. A freshly-shown window can re-run its CenterOwner
+        // startup placement a tick or two after IsVisible flips true, which would
+        // otherwise clobber our position; re-asserting overrides that.
+        private const int SatelliteReasserts = 3;
+
+        // Applies a satellite's geometry once its window is live + visible. When
+        // the opener is still creating the window (async), re-posts up to
+        // <paramref name="attemptsLeft"/> times so a reopened Lighting/FX or
+        // Color-Theme editor lands where it was saved instead of at its default
+        // CenterOwner placement.
+        private static void PlaceWhenReady(SatelliteWindowState s, int attemptsLeft)
+        {
+            Dispatcher.UIThread.Post(() =>
+            {
+                var win = WindowService.Find(s.Role);
+                if (win == null || !win.IsVisible)
+                {
+                    if (attemptsLeft > 0) PlaceWhenReady(s, attemptsLeft - 1);
+                    return;
+                }
+                ApplyGeometry(win, s);
+                Reassert(s, SatelliteReasserts);
+            }, DispatcherPriority.Background);
+        }
+
+        // Re-apply the saved geometry on the next few UI ticks to beat any late
+        // CenterOwner re-centering the window performs after becoming visible.
+        private static void Reassert(SatelliteWindowState s, int left)
+        {
+            if (left <= 0) return;
+            Dispatcher.UIThread.Post(() =>
+            {
+                var win = WindowService.Find(s.Role);
+                if (win is { IsVisible: true }) ApplyGeometry(win, s);
+                Reassert(s, left - 1);
+            }, DispatcherPriority.Background);
+        }
+
+        private static void ApplyGeometry(Window win, SatelliteWindowState s)
+        {
+            try
+            {
+                // Manual disables the window's CenterOwner startup placement, which
+                // otherwise re-centers over the render window and clobbers X/Y.
+                win.WindowStartupLocation = WindowStartupLocation.Manual;
+                if (s.Width > 0) win.Width = s.Width;
+                if (s.Height > 0) win.Height = s.Height;
+                if (s.X != 0 || s.Y != 0)
+                    win.Position = new PixelPoint(s.X, s.Y);
+                WindowService.EnsureOnScreen(win);
+            }
+            catch { }
         }
 
         // ── Mode helpers ─────────────────────────────────────────────────────

@@ -1382,18 +1382,6 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
         set => this.RaiseAndSetIfChanged(ref _isRenderTopmost, value);
     }
 
-    /// <summary>Render window on top of FF windows and dialogues too (#472). When
-    /// on, FF dialogs no longer float over the render window. Default off = the
-    /// existing behaviour where dialogs may overlay a topmost render window.
-    /// MainWindow mirrors (IsRenderTopmost || IsRenderAboveDialogs) onto
-    /// Window.Topmost and pushes this into WindowService.KeepRenderAboveDialogs.</summary>
-    private bool _isRenderAboveDialogs;
-    public bool IsRenderAboveDialogs
-    {
-        get => _isRenderAboveDialogs;
-        set => this.RaiseAndSetIfChanged(ref _isRenderAboveDialogs, value);
-    }
-
     private bool _isColorThemeEditorVisible;
     public bool IsColorThemeEditorVisible
     {

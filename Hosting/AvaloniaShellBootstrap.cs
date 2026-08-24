@@ -2406,8 +2406,11 @@ namespace FracturingFog.Hosting
                     () => { if (s_shell != null) s_shell.IsMiniDepthVisible = true; });
                 reg(global::FracturingFog.Models.WindowRole.PostFxHud,
                     () => { if (s_shell != null) s_shell.IsPostFxHudVisible = true; });
+                // ColorTheme editor: must go through the command (it builds the VM
+                // lazily). Setting IsColorThemeEditorVisible alone leaves the VM
+                // null, so SyncEditor no-ops and nothing opens.
                 reg(global::FracturingFog.Models.WindowRole.ColorThemeEditor,
-                    () => { if (s_shell != null) s_shell.IsColorThemeEditorVisible = true; });
+                    () => s_shell?.ShowColorThemeEditorCommand.Execute().Subscribe());
                 reg(global::FracturingFog.Models.WindowRole.AsciiFx,
                     () => s_shell?.ShowAsciiFxPanelCommand.Execute().Subscribe());
                 reg(global::FracturingFog.Models.WindowRole.Relief3D,

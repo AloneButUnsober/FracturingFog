@@ -242,20 +242,10 @@ namespace FracturingFog.UI.Avalonia.Services
         /// Topmost-matching in the Relief 3D / Lighting FX openers was the same
         /// fix applied one window at a time.
         /// </summary>
-        /// <summary>When true, the render window is kept above FF dialogs too, so
-        /// dialogs are NOT topmost-matched over it (#472). The shell sets this from
-        /// its "on top of FF windows and dialogues" toggle. Default false =
-        /// historical behaviour (dialogs float over a topmost render window).</summary>
-        public static bool KeepRenderAboveDialogs { get; set; }
-
         private static void MatchRenderTopmost(Window win)
         {
             try
             {
-                // With "above dialogs" on, deliberately do NOT raise the dialog:
-                // the render window is meant to stay above it.
-                if (KeepRenderAboveDialogs) return;
-
                 var main = ActiveMainWindow;
                 if (main != null && main.Topmost && !ReferenceEquals(win, main))
                     win.Topmost = true;
@@ -373,17 +363,27 @@ namespace FracturingFog.UI.Avalonia.Services
         public static bool Open(WindowRole role)
         {
             var win = Find(role);
-            if (win != null)
+            if (win is { IsVisible: true })
             {
-                try { if (!win.IsVisible) win.Show(); win.Activate(); } catch { }
+                try { win.Activate(); } catch { }
                 return true;
             }
 
+            // Not visible — either closed (Find null) or merely hidden (some
+            // windows Hide() rather than Close, e.g. the Color-Theme editor).
+            // Prefer the opener so the shell visibility flag + owner wiring stay
+            // consistent (a bare win.Show() bypasses SyncEditor and leaves the
+            // flag false). Fall back to Show() only when there is no opener.
             Action? opener;
             lock (s_regGate) s_openers.TryGetValue(role, out opener);
             if (opener != null)
             {
                 try { opener(); } catch { }
+                return true;
+            }
+            if (win != null)
+            {
+                try { win.Show(); win.Activate(); } catch { }
                 return true;
             }
             return false;
