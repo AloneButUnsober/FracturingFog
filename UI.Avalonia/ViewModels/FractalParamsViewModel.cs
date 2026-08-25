@@ -49,6 +49,41 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
         AttractorPresets = attractorPresets ?? new[] { "Clifford", "De Jong", "Hopalong", "Lorenz" };
         FlamePresets = flamePresets ?? Array.Empty<string>();
 
+        LoadFromParams();
+
+        // #263 P4c — inline audio-reactive affordance. One row per animatable
+        // scalar of this fractal type (Complex kinds excluded — out of P4 scope),
+        // each bound to the shared app-scoped AudioModulationManager so a toggle
+        // here and the central Audio Settings matrix edit the same binding.
+        if (audioModulation != null)
+        {
+            var rows = new List<AudioBindingRowViewModel>();
+            foreach (var d in FractalAnimatableParamsMap.For(type))
+            {
+                if (d.Kind == AnimatableParamKind.Complex) continue;
+                rows.Add(new AudioBindingRowViewModel(d, audioModulation));
+            }
+            AudioDrivableParams = rows;
+        }
+
+        CloseCommand = ReactiveCommand.Create(() =>
+        {
+            StopJuliaAnimate();
+            StopLSystemSweep();
+            CloseRequested?.Invoke(this, EventArgs.Empty);
+        });
+        ToggleJuliaAnimateCommand   = ReactiveCommand.Create(ToggleJuliaAnimate);
+        ToggleLSystemSweepCommand   = ReactiveCommand.Create(ToggleLSystemSweep);
+        ExportMeshCommand           = ReactiveCommand.Create(() => ExportMeshRequested?.Invoke());
+        ExportReliefMeshCommand     = ReactiveCommand.Create(() => ExportReliefMeshRequested?.Invoke());
+        PickDropColorCommand        = ReactiveCommand.CreateFromTask(PickDropColorAsync);
+    }
+
+    // Load every cached backing field from the wrapped FractalParameters. Shared
+    // by the constructor and Refresh(); getters that read _p live don't need this,
+    // but the cached scalars (_juliaR, _bulbPower, …) do.
+    private void LoadFromParams()
+    {
         _juliaR = _p.JuliaC.Real;
         _juliaI = _p.JuliaC.Imaginary;
         _multibrotD = _p.MultibrotExponent;
@@ -159,33 +194,21 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
         _flameIterations = _p.FlameIterations;
         _flameGamma = _p.FlameGamma;
         _flameVibrancy = _p.FlameVibrancy;
+    }
 
-        // #263 P4c — inline audio-reactive affordance. One row per animatable
-        // scalar of this fractal type (Complex kinds excluded — out of P4 scope),
-        // each bound to the shared app-scoped AudioModulationManager so a toggle
-        // here and the central Audio Settings matrix edit the same binding.
-        if (audioModulation != null)
-        {
-            var rows = new List<AudioBindingRowViewModel>();
-            foreach (var d in FractalAnimatableParamsMap.For(type))
-            {
-                if (d.Kind == AnimatableParamKind.Complex) continue;
-                rows.Add(new AudioBindingRowViewModel(d, audioModulation));
-            }
-            AudioDrivableParams = rows;
-        }
-
-        CloseCommand = ReactiveCommand.Create(() =>
-        {
-            StopJuliaAnimate();
-            StopLSystemSweep();
-            CloseRequested?.Invoke(this, EventArgs.Empty);
-        });
-        ToggleJuliaAnimateCommand   = ReactiveCommand.Create(ToggleJuliaAnimate);
-        ToggleLSystemSweepCommand   = ReactiveCommand.Create(ToggleLSystemSweep);
-        ExportMeshCommand           = ReactiveCommand.Create(() => ExportMeshRequested?.Invoke());
-        ExportReliefMeshCommand     = ReactiveCommand.Create(() => ExportReliefMeshRequested?.Invoke());
-        PickDropColorCommand        = ReactiveCommand.CreateFromTask(PickDropColorAsync);
+    /// <summary>Re-read every value from the wrapped <see cref="FractalParameters"/>
+    /// and refresh all bound controls. Called when the parameters were mutated
+    /// underneath this VM (e.g. a Region jump applied new Relief 3D / lighting
+    /// settings while this window is open — #493). Getters that read <c>_p</c> live
+    /// only need the notification; the cached scalars are re-loaded first.</summary>
+    public void Refresh()
+    {
+        _suppress = true;
+        try { LoadFromParams(); }
+        finally { _suppress = false; }
+        // Empty property name = "all properties changed": Avalonia re-reads every
+        // binding on this DataContext.
+        this.RaisePropertyChanged(string.Empty);
     }
 
     /// <summary>#135 — raised when the user asks to eyedrop a drop-colour. The

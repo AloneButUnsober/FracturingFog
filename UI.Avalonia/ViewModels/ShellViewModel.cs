@@ -2263,8 +2263,18 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
             // instance + fractal type (drops params the new type can't animate).
             AudioModulation?.Rebind();
             Main.RenderHost.Trigger();
+
+            // Region jump mutated FractalParameters in place — tell any open
+            // param editors (Fractal Params / Relief 3D / Lighting & FX) to re-read
+            // so they don't show stale values (#493). Host owns those windows.
+            RegionApplied?.Invoke(this, EventArgs.Empty);
         }
     }
+
+    /// <summary>Raised after a successful region jump has mutated the live
+    /// FractalParameters, so the host can refresh any open param-editor windows
+    /// (#493).</summary>
+    public event EventHandler? RegionApplied;
 
     // Built-in animated Acid Fog theme (AcidWarpSpectrumMap.Name). Hardcoded
     // because UI.Avalonia can't reference Engine where the theme type lives;
