@@ -434,10 +434,16 @@ Broadens the lighting vocabulary without a scene graph.
   line; directional stays byte-identical (atten 1). New `--reliefgpuraymarch` scene
   `positional fog in-scatter` passes (mean 0.004, max 3, 0 edge). 3 CPU tests. The
   froxel volumetrics (S6) already lit positionally; this closes the older march.
-- **Remaining:** force-CPU on the 8 GPU 3D-fractal calculators (relief 2D path now
-  GPU; those 3D families still render directional-only on GPU), area lights
-  (couple S4). Batch: directional θ/φ/intensity/colour for the 3 raymarch lights is a
-  general (non-S8) gap — only positional lights have flags today.
+- **Force-CPU on the GPU 3D-fractal calculators (landed, PR #483):** the 8 GPU
+  3D-fractal kernels (Mandelbulb / Mandelbox / Menger + Sierpinski / QuatJulia /
+  QuatMandel / Kleinian / Bicomplex) + UserBulb's GPU path resolve only a
+  directional light and ignore world position, so each host now gates its GPU
+  branch on `!fx.HasPositionalLight` → a point/spot scene falls to the CPU shade
+  (LightSampler-correct) instead of silently directional. All-directional scenes
+  keep the GPU path, byte-identical. 1 render test (Mandelbulb point-light move).
+- **Remaining:** area lights (disc/sphere penumbra via the soft-shadow march,
+  couple S4 denoise). Batch: directional θ/φ/intensity/colour for the 3 raymarch
+  lights is a general (non-S8) gap — only positional lights have flags today.
 
 ### S9 — Mesh export maturation ☑ (#391)
 Mesh export is the **one place FF crosses from renderer into geometry producer** —

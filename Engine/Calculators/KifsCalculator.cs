@@ -166,7 +166,9 @@ public sealed class KifsCalculator : IFractalCalculator
         // Cheap-palette shading only — see MandelbulbCalculator for the
         // FX-drop trade-off + P7c lift plan.
         // #320 — force CPU while an AOV view is active (GPU has no view path).
-        if (fx.UseGpuRender && fx.DebugAov == AovView.Beauty && !lowRes && gpuEligibleFold)
+        // S8 (#404) — GPU 3D-fractal kernels (Menger + Sierpinski) are directional-
+        // only; force the CPU shade path when a point/spot light is active.
+        if (fx.UseGpuRender && fx.DebugAov == AovView.Beauty && !lowRes && gpuEligibleFold && !fx.HasPositionalLight)
         {
             var rp = new GpuRaymarchParams
             {
