@@ -21,6 +21,7 @@
 // leaves every render byte-identical.
 
 using System;
+using FracturingFog.Models;
 
 namespace FracturingFog.Rendering.Lighting;
 
@@ -31,13 +32,32 @@ public static class FroxelCameraVolume
 {
     /// <summary>Default froxel resolution — near-dense in Z (Frostbite-style),
     /// coarse in X/Y (the volume is low-frequency). Kept modest so the single
-    /// populate/integrate stays cheap relative to the primary trace.</summary>
+    /// populate/integrate stays cheap relative to the primary trace. Equal to
+    /// <see cref="FroxelQuality.Balanced"/>.</summary>
     public const int DimX = 24, DimY = 24, DimZ = 48;
+
+    /// <summary>Froxel grid dims (X, Y, Z) for a quality level (roadmap S6, #408).
+    /// <see cref="FroxelQuality.Balanced"/> == the historical const dims so a
+    /// Balanced scene is byte-identical. Both the CPU post-pass and the GPU kernel
+    /// read the dims off the built grid, so this drives both in lock-step.</summary>
+    public static (int X, int Y, int Z) Dims(FroxelQuality q) => q switch
+    {
+        FroxelQuality.Low  => (16, 16, 32),
+        FroxelQuality.High => (32, 32, 96),
+        _                  => (DimX, DimY, DimZ),   // Balanced (default)
+    };
 
     /// <summary>Build a froxel grid spanning the relief scene along the view ray.
     /// Near/far bracket the height-field slab the camera points at: near clamps
-    /// just in front of the camera, far reaches past the slab's far corner.</summary>
+    /// just in front of the camera, far reaches past the slab's far corner.
+    /// Balanced resolution (byte-identical legacy dims).</summary>
     public static FroxelGrid BuildGrid(in HeightfieldRaymarch2D.ReliefCamera cam)
+        => BuildGrid(in cam, FroxelQuality.Balanced);
+
+    /// <summary>As <see cref="BuildGrid(in HeightfieldRaymarch2D.ReliefCamera)"/>, at a
+    /// chosen <paramref name="quality"/> resolution (roadmap S6, #408). The near/far
+    /// bracket is unchanged — only the grid dims scale.</summary>
+    public static FroxelGrid BuildGrid(in HeightfieldRaymarch2D.ReliefCamera cam, FroxelQuality quality)
     {
         double camDist = Math.Sqrt(cam.CamX * cam.CamX + cam.CamY * cam.CamY + cam.CamZ * cam.CamZ);
         // Full slab diagonal (the AABB is [-Bx,Bx]×[0,By]×[-Bz,Bz]).
@@ -45,7 +65,8 @@ public static class FroxelCameraVolume
         double near = Math.Max(1e-3, camDist - diag);
         double far = camDist + diag;
         if (far <= near) far = near * 100.0;
-        return new FroxelGrid(DimX, DimY, DimZ, near, far);
+        var (dx, dy, dz) = Dims(quality);
+        return new FroxelGrid(dx, dy, dz, near, far);
     }
 
     /// <summary>Build a fog medium from the lighting knobs + all three lights
@@ -103,7 +124,7 @@ public static class FroxelCameraVolume
     /// render's own depth AOV). Returns a new buffer; alpha preserved.</summary>
     public static uint[] Apply(uint[] beauty, float[] worldDepth, int w, int h,
         in HeightfieldRaymarch2D.ReliefCamera cam, in LightingFxData fx)
-        => Apply(beauty, worldDepth, w, h, in cam, in fx, null, false, 0.0);
+        => Apply(beauty, worldDepth, w, h, in cam, in fx, null, false, 0.0, FroxelQuality.Balanced);
 
     /// <summary>As <see cref="Apply(uint[],float[],int,int,in HeightfieldRaymarch2D.ReliefCamera,in LightingFxData)"/>,
     /// with optional temporal reprojection (roadmap S6, #408). When
@@ -116,8 +137,17 @@ public static class FroxelCameraVolume
     public static uint[] Apply(uint[] beauty, float[] worldDepth, int w, int h,
         in HeightfieldRaymarch2D.ReliefCamera cam, in LightingFxData fx,
         FroxelHistory? history, bool temporal, double feedback)
+        => Apply(beauty, worldDepth, w, h, in cam, in fx, history, temporal, feedback, FroxelQuality.Balanced);
+
+    /// <summary>As the temporal <see cref="Apply(uint[],float[],int,int,in HeightfieldRaymarch2D.ReliefCamera,in LightingFxData,FroxelHistory,bool,double)"/>
+    /// overload, at a chosen <paramref name="quality"/> froxel resolution (roadmap S6,
+    /// #408). The near/far bracket is unchanged — only the grid dims scale. Balanced
+    /// → byte-identical.</summary>
+    public static uint[] Apply(uint[] beauty, float[] worldDepth, int w, int h,
+        in HeightfieldRaymarch2D.ReliefCamera cam, in LightingFxData fx,
+        FroxelHistory? history, bool temporal, double feedback, FroxelQuality quality)
     {
-        var grid = BuildGrid(in cam);
+        var grid = BuildGrid(in cam, quality);
         var pass = new FroxelVolumePass(grid);
         if (temporal && history != null)
             pass.Populate(BuildMedium(in cam, in fx), history, feedback, FroxelHistory.GridKey(grid));

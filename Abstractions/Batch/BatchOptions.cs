@@ -226,6 +226,10 @@ namespace FracturingFog.Batch
         // Froxel volumetrics (roadmap S6, #408). Implies relief + raymarch.
         public bool ReliefFroxel { get; set; }
 
+        // Froxel resolution (roadmap S6, #408). null = leave default (Balanced).
+        // Implies froxel + relief + raymarch.
+        public FracturingFog.Models.FroxelQuality? ReliefFroxelQuality { get; set; }
+
         // Per-light fog contribution bitmask (roadmap S6, #408). null = leave default
         // (all lights fog). 0..7.
         public int? FogLightMask { get; set; }
@@ -700,6 +704,19 @@ namespace FracturingFog.Batch
                         break;
 
                     case BatchFlags.ReliefFroxel:
+                        opts.ReliefFroxel = true;
+                        opts.ReliefRaymarch = true;
+                        opts.Relief = true;
+                        break;
+
+                    case BatchFlags.ReliefFroxelQuality:
+                        if (!Next(args, ref i, a, out string fq, out error)) return false;
+                        if (!Enum.TryParse<FracturingFog.Models.FroxelQuality>(fq, ignoreCase: true, out var fqv))
+                        {
+                            error = $"Unknown {BatchFlags.ReliefFroxelQuality} '{fq}'. Valid: {string.Join(", ", Enum.GetNames<FracturingFog.Models.FroxelQuality>())}";
+                            return false;
+                        }
+                        opts.ReliefFroxelQuality = fqv;
                         opts.ReliefFroxel = true;
                         opts.ReliefRaymarch = true;
                         opts.Relief = true;

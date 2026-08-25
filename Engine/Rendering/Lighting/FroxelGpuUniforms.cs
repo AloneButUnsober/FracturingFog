@@ -45,5 +45,13 @@ public readonly struct FroxelGpuUniforms
     /// makes, so the GPU pass and the CPU oracle frame the identical
     /// volume.</summary>
     public static FroxelGpuUniforms Build(in HeightfieldRaymarch2D.ReliefCamera cam, in LightingFxData fx)
-        => new(FroxelCameraVolume.BuildGrid(in cam), FroxelCameraVolume.BuildMedium(in cam, in fx));
+        => Build(in cam, in fx, FracturingFog.Models.FroxelQuality.Balanced);
+
+    /// <summary>As <see cref="Build(in HeightfieldRaymarch2D.ReliefCamera,in LightingFxData)"/>,
+    /// at a chosen <paramref name="quality"/> froxel resolution (roadmap S6, #408) — the
+    /// GPU kernel reads the dims off the grid, so it scales in lock-step with the CPU
+    /// oracle. Balanced → byte-identical.</summary>
+    public static FroxelGpuUniforms Build(in HeightfieldRaymarch2D.ReliefCamera cam, in LightingFxData fx,
+        FracturingFog.Models.FroxelQuality quality)
+        => new(FroxelCameraVolume.BuildGrid(in cam, quality), FroxelCameraVolume.BuildMedium(in cam, in fx));
 }

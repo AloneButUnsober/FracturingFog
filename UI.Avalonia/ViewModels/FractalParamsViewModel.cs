@@ -450,6 +450,12 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
         get => _p.Relief2DFroxelTemporal;
         set { if (_p.Relief2DFroxelTemporal == value) return; _p.Relief2DFroxelTemporal = value; this.RaisePropertyChanged(); Fire(); }
     }
+    public FracturingFog.Models.FroxelQuality Relief2DFroxelQuality
+    {
+        get => _p.Relief2DFroxelQuality;
+        set { if (_p.Relief2DFroxelQuality == value) return; _p.Relief2DFroxelQuality = value; this.RaisePropertyChanged(); Fire(); }
+    }
+    public Array Relief2DFroxelQualities => Enum.GetValues(typeof(FracturingFog.Models.FroxelQuality));
     public double Relief2DFroxelTemporalFeedback
     {
         get => _p.Relief2DFroxelTemporalFeedback;
