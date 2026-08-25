@@ -2110,6 +2110,7 @@ public sealed partial class MainWindow : Window
         _miniMapWin?.Close();
         _miniDepthWin?.Close();
         _postFxHudWin?.Close();
+        _statusPanelWin?.Close();
         _assetManagerWin?.Close();
 
         DetachShell();
