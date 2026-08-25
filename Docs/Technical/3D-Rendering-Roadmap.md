@@ -390,7 +390,7 @@ layers.
   Blender/oiiotool third-party read smoke (needs an external DCC — our reader
   validates structure, a third-party read validates spec conformance).
 
-### S8 — Richer light types: point / spot / area ◐ (#404)
+### S8 — Richer light types: point / spot / area ● (#404)
 Three directional lights + IBL today. Point/spot (inverse-square + cone) and area
 lights (soft realistic shadows) are cheap per-sample changes in a DE march.
 Broadens the lighting vocabulary without a scene graph.
@@ -449,12 +449,33 @@ Broadens the lighting vocabulary without a scene graph.
   (#RRGGBB / #AARRGGBB / 0x / bare hex) completes the per-light batch grammar
   (was type/intensity/dir/pos/range/cone); parser + command-builder emit (only
   when ≠ slot default), 7 tests.
-- **Remaining:** area lights (disc/sphere penumbra via the soft-shadow march,
-  couple S4 denoise). Batch follow-up: the builder emits `--lightN-*` only for
-  **positional** lights — a directional light's dir/intensity/colour is not
+- **Area lights (landed, PR #491) — the last S8 feature:** every light gains an
+  angular size `DirectionalLight.AreaAngularRadius` (deg) — its apparent emitter
+  size from the surface (sun disc ≈ 0.25°, soft panel ≈ 5–15°). `ShadingPipeline.
+  EffectiveShadowK(globalK, areaDeg)` caps the IQ soft-shadow hardness at
+  `cot(radius)` — a shadow can't be sharper than the emitter physically allows,
+  so it's the *softer* of the global `ShadowSoftK` and the physical cap. **Purely
+  analytic** (no stochastic disc sampling) → despite the original note it does
+  **not** couple S4; the noisy multi-tap disc/sphere variant that would is
+  deferred. Wired per light into both `Shade` sites + the volumetric in-scatter
+  (`AddVolumeScatter` gains `areaAngRad`, threaded at 3 sites). Punctual (radius 0)
+  → `k` unchanged, exact IEEE no-op → **byte-identical**. `LightingFxData.
+  HasAreaLight` forces the CPU trace on the GPU relief kernel + the 8 GPU
+  3D-fractal calculators + UserBulb GPU path (same cadence as #483; GPU per-light-
+  penumbra parity is a follow-up). Preset round-trip, `--lightN-area <deg>` (0..90)
+  batch flag + builder emit (positional, non-zero only), per-light "Area soft (°)"
+  UI control. 12 tests (`S8AreaLightTests`); suite 1768/1768.
+- **User doc (landed):** [Lights Guide](../User/Lights-Guide.md) — three lights,
+  directional / point / spot / area types, colour, shadows, animation, the full
+  `--lightN-*` batch grammar, and per-type performance notes. Linked from both doc
+  indexes. Closes the last S8 checkbox on #404.
+- **S8 COMPLETE ●** (point / spot / area + per-light colour + user doc). Remaining
+  follow-ups (all separate issues): the builder emits `--lightN-*` only for
+  **positional** lights — a directional light's dir/intensity/colour/area is not
   emitted because `--lightN-*` forces `--relief-raymarch` on replay; decoupling
-  that + directional-light emit is tracked at **#490**. GPU positional lighting for
-  the 3D families (retire #483's force-CPU) is tracked at #484.
+  that + directional emit is **#490**. GPU positional-light parity for the 3D
+  families (retire #483's force-CPU) is **#484** (+#485–488); GPU parity of the
+  **area penumbra** (retire #491's force-CPU) is **#492**.
 
 ### S9 — Mesh export maturation ☑ (#391)
 Mesh export is the **one place FF crosses from renderer into geometry producer** —

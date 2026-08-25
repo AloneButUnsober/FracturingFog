@@ -32,6 +32,7 @@ Highlights (full menu on the index page):
 | [ColorGen DSL Guide](User/ColorGen-UserGuide.md)                                     | One-line palettes in a tiny domain language.                         |
 | [CalcGen / User Equation Guide](User/CalcGen-UserGuide.md)                           | Author your own fractal formula in C# or DSL pseudo-code.            |
 | [User Bulb 3D Guide](User/UserBulb-Guide.md)                                         | Mandelbulb-style 3-D fractals with raymarched DEs.                   |
+| [Lights Guide](User/Lights-Guide.md)                                                 | Point / spot / area lights + soft shadows for 3-D scenes.            |
 | [Relief 3D Guide](User/Relief3D-Guide.md) + [Cookbook](User/Relief3D-Cookbook.md)    | 2-D fractals as lit relief / oblique 3-D terrain + mesh export.      |
 | [Volumetric Lighting Guide](User/Volumetric-Lighting-Guide.md) + [Cookbook](User/Volumetric-Lighting-Cookbook.md) | God rays, cinematic fog, volumetric clouds — controls + recipes.     |
 | [Client / Server Guide](User/ClientServer-UserGuide.md)                              | Drive a heavy render from a thin client over mTLS.                   |

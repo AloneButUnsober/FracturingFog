@@ -70,6 +70,18 @@ public struct DirectionalLight
     /// the inner→outer band is the smooth penumbra.</summary>
     public double SpotOuterDeg;
 
+    // ── S8 (#404) — area light ────────────────────────────────────────────
+    /// <summary>Angular radius of the emitter as seen from the surface, in
+    /// degrees — the light's apparent size (a punctual light is 0, the sun disc
+    /// ≈ 0.25°, a soft studio panel ≈ 5–15°). Larger apparent size widens the
+    /// shadow penumbra: the IQ soft-shadow hardness is capped at
+    /// <c>cot(AreaAngularRadius)</c>, so a shadow can never be sharper than the
+    /// emitter's angular size physically permits. 0 = punctual (byte-identical —
+    /// the global <see cref="LightingFxData.ShadowSoftK"/> is used unchanged).
+    /// Applies to every <see cref="LightType"/> (a directional sun disc, a point
+    /// / spot bulb of finite size). Costs nothing until shadows are enabled.</summary>
+    public double AreaAngularRadius;
+
     public DirectionalLight(double theta, double phi, double intensity, uint color)
     {
         Theta = theta; Phi = phi; Intensity = intensity; Color = color;
@@ -78,6 +90,7 @@ public struct DirectionalLight
         Range = 0.0;
         SpotInnerDeg = 15.0;
         SpotOuterDeg = 25.0;
+        AreaAngularRadius = 0.0;
     }
 }
 
@@ -237,6 +250,19 @@ public struct LightingFxData
         (Light1.Type != LightType.Directional && Light1.Intensity > 0) ||
         (Light2.Type != LightType.Directional && Light2.Intensity > 0) ||
         (Light3.Type != LightType.Directional && Light3.Intensity > 0);
+
+    /// <summary>True when any active (Intensity &gt; 0) light has a finite angular
+    /// size (<see cref="DirectionalLight.AreaAngularRadius"/> &gt; 0) — an area
+    /// light with a soft, size-driven shadow penumbra (roadmap S8, #404). Used to
+    /// force the CPU shade path on the backends whose GPU kernels resolve only the
+    /// punctual soft shadow (global <see cref="ShadowSoftK"/>): the 8 GPU 3D-fractal
+    /// calculators + UserBulb's GPU path + the GPU relief kernel. Keeps the
+    /// all-punctual default byte-identical; the CPU path caps per-light hardness at
+    /// <c>cot(radius)</c>. GPU parity of the per-light penumbra is a follow-up.</summary>
+    public readonly bool HasAreaLight =>
+        (Light1.AreaAngularRadius > 0 && Light1.Intensity > 0) ||
+        (Light2.AreaAngularRadius > 0 && Light2.Intensity > 0) ||
+        (Light3.AreaAngularRadius > 0 && Light3.Intensity > 0);
 
     // ── Ambient + AO ───────────────────────────────────────────────────
 
@@ -862,5 +888,6 @@ public struct LightingFxData
         h.Add(l.Theta); h.Add(l.Phi); h.Add(l.Intensity); h.Add(l.Color);
         h.Add(l.Type); h.Add(l.PosX); h.Add(l.PosY); h.Add(l.PosZ);
         h.Add(l.Range); h.Add(l.SpotInnerDeg); h.Add(l.SpotOuterDeg);
+        h.Add(l.AreaAngularRadius);
     }
 }

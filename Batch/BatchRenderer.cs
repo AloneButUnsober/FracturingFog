@@ -625,6 +625,7 @@ namespace FracturingFog.Batch
             if (o.SpotInnerDeg.HasValue) d.SpotInnerDeg = o.SpotInnerDeg.Value;
             if (o.SpotOuterDeg.HasValue) d.SpotOuterDeg = o.SpotOuterDeg.Value;
             if (o.Color.HasValue)        d.Color = o.Color.Value;
+            if (o.AreaAngularRadius.HasValue) d.AreaAngularRadius = o.AreaAngularRadius.Value;
         }
 
         private static (int brightness, int contrast, int adaptive) ResolvePostFx(
