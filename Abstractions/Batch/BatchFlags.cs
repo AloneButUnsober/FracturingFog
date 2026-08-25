@@ -98,6 +98,7 @@ namespace FracturingFog.Batch
         // Froxel (frustum-voxel) volumetrics on the relief raymarch (roadmap S6,
         // #408). Implies --relief-raymarch; only affects a scene with fog active.
         public const string ReliefFroxel          = "--relief-froxel";
+        public const string ReliefFroxelQuality   = "--relief-froxel-quality";
 
         // Per-light fog contribution bitmask (roadmap S6, #408). bit n = light n+1
         // lights the fog in-scatter. 0..7; default 7 (all). Surface lighting is

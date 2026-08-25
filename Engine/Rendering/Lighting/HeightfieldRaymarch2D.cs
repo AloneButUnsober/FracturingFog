@@ -409,7 +409,7 @@ public static class HeightfieldRaymarch2D
             float[] gnrm = aov?.NormalXyz ?? new float[n * 3];
             float[] gdep = aov?.Depth ?? new float[n];
             gpuKernel.Run(in u, hbuf, keep, albedo, dst, gnrm, gdep);
-            var fu = FroxelGpuUniforms.Build(in cam, in froxelFx);
+            var fu = FroxelGpuUniforms.Build(in cam, in froxelFx, p.Relief2DFroxelQuality);
             froxelKernel.Composite(in fu, dst, gdep, w, h, dst);
             return;
         }
@@ -686,7 +686,7 @@ public static class HeightfieldRaymarch2D
         if (froxel && froxelDepth != null)
         {
             var composited = FroxelCameraVolume.Apply(dst, froxelDepth, w, h, in cam, in froxelFx,
-                froxelHistory, froxelTemporal, p.Relief2DFroxelTemporalFeedback);
+                froxelHistory, froxelTemporal, p.Relief2DFroxelTemporalFeedback, p.Relief2DFroxelQuality);
             Array.Copy(composited, dst, n);
         }
     }

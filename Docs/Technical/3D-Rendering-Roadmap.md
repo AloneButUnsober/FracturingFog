@@ -360,11 +360,22 @@ animated.
   temporal via `FractalRenderHost`'s persistent history; the offline `SceneVideoRenderer`
   + `--batch` video-slideshow render FLAT 2D (no Relief 3D applied at all), so the seam has
   no consumer there yet. 2 seam tests; default null → byte-identical.
+- **Quality controls + user doc (landed, PR #TBD):** `FroxelQuality` {Low 16×16×32,
+  Balanced 24×24×48, High 32×32×96} scales the froxel grid. `FractalParameters.Relief2DFroxelQuality`
+  (default Balanced → byte-identical) threads through `FroxelCameraVolume.BuildGrid(cam, quality)`
+  + `FroxelGpuUniforms.Build(cam, fx, quality)`, so the CPU post-pass AND the GPU kernel read the
+  scaled dims off the SAME grid — lock-step, no parity break (GPU cbuffer already carried per-grid
+  dims). Only the resolution scales; the near/far bracket is quality-independent. Surface:
+  `--relief-froxel-quality Low|Balanced|High` (implies `--relief-froxel`), Relief 3D dialog Quality
+  combo, builder emits the quality flag only when non-Balanced (bare `--relief-froxel` at Balanced),
+  Reset/notify wired. **User doc:** the froxel path is documented for users in
+  `Docs/User/Volumetric-Lighting-Guide.md` §9 (what it is, quality table, temporal, batch grammar) —
+  closes the S6 "UI + batch / user doc" checkbox on #408. 10 tests (`S6FroxelQualityTests`).
 - **Remaining (enhancement follow-ups):** render Relief 3D in `SceneVideoRenderer` / the
   batch video loop (both flat today) so those offline sequences can consume the froxel
   temporal seam; GPU temporal; sub-cell reprojection under continuous camera motion. The
-  core froxel unified-volume march (D3D + Vulkan + host wiring + temporal + poster seam)
-  is complete.
+  core froxel unified-volume march (D3D + Vulkan + host wiring + temporal + poster seam +
+  quality controls + user doc) is complete.
 
 ### S7 — Float / multi-layer EXR export ☑ (#394)
 Enabler for S1 (AOV layers), S2 (linear/HDR intermediate) and S6 (HDR

@@ -129,6 +129,10 @@ namespace FracturingFog.Cli
         /// Emitted as <c>--relief-froxel</c> on the raymarch path.</summary>
         public bool ReliefFroxel { get; init; }
 
+        /// <summary>Froxel resolution (roadmap S6, #408). Balanced (default) is omitted;
+        /// otherwise emits <c>--relief-froxel-quality Q</c> (which itself implies froxel).</summary>
+        public FracturingFog.Models.FroxelQuality ReliefFroxelQuality { get; init; } = FracturingFog.Models.FroxelQuality.Balanced;
+
         /// <summary>Per-light fog contribution bitmask (roadmap S6, #408). 7 (all
         /// lights fog) = default → omitted; otherwise emits <c>--fog-light-mask N</c>.</summary>
         public int FogLightMask { get; init; } = 0x7;
@@ -297,8 +301,20 @@ namespace FracturingFog.Cli
                         if (snap.ReliefDofFocus > 0.0) { parts.Add(BatchFlags.DofFocus); parts.Add(Num(snap.ReliefDofFocus)); }
                     }
 
-                    // Froxel volumetrics (S6, #408).
-                    if (snap.ReliefFroxel) parts.Add(BatchFlags.ReliefFroxel);
+                    // Froxel volumetrics (S6, #408). A non-Balanced quality flag implies
+                    // froxel, so emit the bare --relief-froxel only at Balanced.
+                    if (snap.ReliefFroxel)
+                    {
+                        if (snap.ReliefFroxelQuality != FracturingFog.Models.FroxelQuality.Balanced)
+                        {
+                            parts.Add(BatchFlags.ReliefFroxelQuality);
+                            parts.Add(snap.ReliefFroxelQuality.ToString());
+                        }
+                        else
+                        {
+                            parts.Add(BatchFlags.ReliefFroxel);
+                        }
+                    }
 
                     // Guided À-Trous denoise (S4, #389) — emit only when on. The
                     // sigmas ride along only when the pass runs and they differ

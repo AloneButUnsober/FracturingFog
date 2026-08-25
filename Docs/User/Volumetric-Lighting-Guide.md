@@ -363,8 +363,85 @@ red↔green, and pick a yellow such as `FFFFCC00` where you'd otherwise use red.
 
 ---
 
+## 9. Froxel volumetrics (Relief 3D)
+
+Everything above describes the **per-pixel in-scatter march** — each pixel walks
+the fog behind it as it is drawn. On the **Relief 3D** raymarch (2D fractals lifted
+into a height-field, see the [Relief 3D Guide](Relief3D-Guide.md)) you can instead
+switch the fog to a **froxel volume**: a *frustum-voxel* grid (a 3D box of cells
+that fans out from the camera, near-dense so foreground fog stays crisp) is filled
+and lit **once per frame**, then each pixel just reads its fog by depth. Same
+physical model (density, colour, anisotropy, noise, all three lights) — a different
+way of computing it that scales with the volume, not the number of pixels, and that
+can be made **temporally stable** for animation.
+
+### Where the controls live
+
+Open the **Relief 3D** dialog (the same place you enable the raymarch). Under the
+volumetrics group:
+
+| Control | What it does |
+|---|---|
+| **Froxel volumetrics** | Switch fog from the per-pixel march to the froxel volume. Only affects a scene that has fog (set **Fog density** in Lighting FX). |
+| **Quality** | Froxel grid resolution — see the table below. |
+| **Temporal reprojection** | Blend each frame's volume with the previous frame's so animated fog (drifting noise, pulsing density, moving lights) reads as a stable volume instead of flickering. Only matters across a sequence. |
+| **Feedback** | How much of the previous frame temporal keeps each frame (higher = smoother, slower to react). Default `0.90`. |
+
+### When to reach for it
+
+- **Animated fog** — temporal reprojection needs the froxel path; it's the reason
+  the froxel volume exists.
+- **Heavy fog over a deep scene** — the froxel cost is fixed by the grid, so thick
+  fog doesn't get more expensive the way the per-pixel march does.
+
+For a single still with light fog, the per-pixel march is fine — froxel is opt-in
+and leaving it **off is byte-identical** to before.
+
+### Quality
+
+The **Quality** knob scales the froxel grid. Higher = finer fog detail and smoother
+depth transitions, at more populate/integrate cost. It drives **both** the CPU
+post-pass and the GPU froxel kernel from the same grid, so the look matches on
+either path.
+
+| Quality | Grid (X × Y × Z) | Use for |
+|---|---|---|
+| **Low** | 16 × 16 × 32 | Fast previews, thin fog, low-res output. |
+| **Balanced** *(default)* | 24 × 24 × 48 | The general-purpose default. Byte-identical to pre-quality-knob renders. |
+| **High** | 32 × 32 × 96 | Near-dense depth for the smoothest fog gradients on hero stills / close fog. |
+
+### Batch / CLI
+
+On the `--batch` relief path (any `--relief-froxel*` flag implies `--relief-raymarch`):
+
+| Flag | Meaning |
+|---|---|
+| `--relief-froxel` | Froxel volumetrics at **Balanced**. |
+| `--relief-froxel-quality Low\|Balanced\|High` | Froxel volumetrics at the named resolution (implies `--relief-froxel`). |
+| `--fog-light-mask N` | Which lights (bits 1/2/4) light the fog; honoured by the froxel path too. |
+
+```
+FracturingFog --batch --fractal Mandelbrot --x -0.5 --y 0 --zoom 1 \
+  --relief --relief-raymarch --relief-froxel-quality High \
+  --out fog.png
+```
+
+Set fog itself (density, colour, anisotropy, noise, lights) with the Lighting FX
+flags from §3 — the froxel flags only choose *how* that fog is computed.
+
+### Notes
+
+- **Temporal** runs on the CPU froxel post-pass; the GPU froxel path is
+  single-frame. A large camera move re-seeds the history cleanly (no smear).
+- Froxel populate/integrate has a GPU twin (D3D + Vulkan), so a GPU relief render
+  can composite the fog on-device; without a GPU froxel kernel it falls back to the
+  CPU post-pass. Either way the volume is framed from the same grid.
+
+---
+
 ## See also
 
 - [Volumetric Lighting Cookbook](Volumetric-Lighting-Cookbook.md) — copy-paste recipes.
+- [Relief 3D Guide](Relief3D-Guide.md) — the raymarch the froxel volume (§9) rides on.
 - [Volumetric Color Plan](../Technical/Volumetric-Color-Plan.md) — design/dev notes and the A–E slice history.
 - [Lighting + FX Roadmap](../Lighting-FX-Roadmap.md) — the broader lighting roadmap.

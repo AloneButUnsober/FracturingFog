@@ -202,6 +202,14 @@
                           IsChecked="{Binding Relief2DFroxelVolumetrics, Mode=TwoWay}"
                           IsEnabled="{Binding Relief2DRaymarch}"
                           ToolTip.Tip="Composite fog from a camera-frustum froxel volume built once, sampled per pixel by depth — instead of the per-pixel in-scatter march. Only affects a scene with fog (set Fog density in Lighting FX). Renders on the CPU." />
+                <StackPanel Orientation="Horizontal" Spacing="8" Margin="24,0,0,0"
+                            IsEnabled="{Binding Relief2DFroxelVolumetrics}">
+                    <TextBlock Text="Quality" VerticalAlignment="Center" />
+                    <ComboBox Width="140"
+                              ItemsSource="{Binding Relief2DFroxelQualities}"
+                              SelectedItem="{Binding Relief2DFroxelQuality, Mode=TwoWay}"
+                              ToolTip.Tip="Froxel grid resolution: Low (16x16x32), Balanced (24x24x48, default), High (32x32x96). Higher = finer fog + smoother depth transitions at more cost. Drives both the CPU post-pass and the GPU froxel kernel." />
+                </StackPanel>
                 <CheckBox Content="Temporal reprojection (stable animated fog)"
                           IsChecked="{Binding Relief2DFroxelTemporal, Mode=TwoWay}"
                           IsEnabled="{Binding Relief2DFroxelVolumetrics}"

@@ -608,6 +608,13 @@ namespace FracturingFog.Models
         /// (single-frame). Default 0.9. Ignored unless <see cref="Relief2DFroxelTemporal"/>.</summary>
         public double Relief2DFroxelTemporalFeedback { get; set; } = 0.9;
 
+        /// <summary>Roadmap S6 (#389/#408) — froxel volume resolution (see
+        /// <see cref="FroxelQuality"/>). Scales the froxel grid dims for both the
+        /// CPU post-pass and the GPU froxel kernel. Default <see cref="FroxelQuality.Balanced"/>
+        /// (24×24×48) → byte-identical to pre-quality-knob renders. Ignored unless
+        /// <see cref="Relief2DFroxelVolumetrics"/>.</summary>
+        public FroxelQuality Relief2DFroxelQuality { get; set; } = FroxelQuality.Balanced;
+
         /// <summary>Slice 4f (#170) — empty-space-skip acceleration. Builds a
         /// coarse max-height grid over the compressed field and lets the sphere
         /// trace leap the empty air above flat interior (where the slope-limited
@@ -1428,5 +1435,23 @@ namespace FracturingFog.Models
         FinalMagnitude,
         IterComponent,
         Normal,
+    }
+
+    /// <summary>Roadmap S6 (#389/#408) — froxel volume resolution. Scales the
+    /// camera-frustum froxel grid (X×Y×Z) that <c>FroxelCameraVolume.BuildGrid</c>
+    /// frames; higher = finer fog detail + smoother depth transitions at more
+    /// populate/integrate cost. Both the CPU post-pass and the GPU froxel kernel
+    /// read the grid dims from the same build, so this drives both in lock-step.
+    /// <see cref="Balanced"/> is the historical default (24×24×48) — a Balanced
+    /// scene is byte-identical to pre-quality-knob renders.</summary>
+    public enum FroxelQuality
+    {
+        /// <summary>16×16×32 — cheapest; coarser fog, faster populate/integrate.</summary>
+        Low,
+        /// <summary>24×24×48 — the historical default (byte-identical).</summary>
+        Balanced,
+        /// <summary>32×32×96 — near-dense Z for the smoothest depth transitions;
+        /// costliest.</summary>
+        High,
     }
 }

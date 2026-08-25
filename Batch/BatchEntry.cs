@@ -248,6 +248,7 @@ namespace FracturingFog.Batch
             Console.WriteLine("  --dof-focus F               DOF focus distance (>=0 world units; 0 = auto-focus");
             Console.WriteLine("                              the fractal centre). Only used with --dof-aperture.");
             Console.WriteLine("  --relief-froxel             Froxel (frustum-voxel) volumetrics for fog (S6).");
+            Console.WriteLine("  --relief-froxel-quality Q   Froxel resolution: Low | Balanced | High (implies --relief-froxel).");
             Console.WriteLine("                              Implies --relief-raymarch; only affects a fog scene.");
             Console.WriteLine("  --fog-light-mask N          Which lights colour the fog (bitmask 0..7; bit n =");
             Console.WriteLine("                              light n+1). Default 7 = all. Surfaces stay lit either way.");
