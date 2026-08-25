@@ -47,6 +47,11 @@ namespace FracturingFog.Models
         DetachedCapturePanel = 14,
         DetachedAssetsPanel = 15,
         DetachedAdvancedPanel = 16,
+
+        // Modeless singleton editors made workspace-aware (#497).
+        SceneEditor = 17,
+        AnimationEditor = 18,
+        ColorGenEditor = 19,
     }
 
     /// <summary>Render-window mode. Mirrors the Standard/Mini/Toy/Span shapes the
