@@ -445,9 +445,16 @@ Broadens the lighting vocabulary without a scene graph.
   lights themselves and retire this force-CPU — is tracked as its own fan-out
   (**#484**, slices #485–#488): shared `GpuShadingParams` + a `GpuKernelUtils.
   ResolveLight`, then a per-family kernel + CPU-twin + parity-probe pass.
+- **Per-light colour batch flag (landed, PR #489):** `--lightN-color`
+  (#RRGGBB / #AARRGGBB / 0x / bare hex) completes the per-light batch grammar
+  (was type/intensity/dir/pos/range/cone); parser + command-builder emit (only
+  when ≠ slot default), 7 tests.
 - **Remaining:** area lights (disc/sphere penumbra via the soft-shadow march,
-  couple S4 denoise). Batch: directional θ/φ/intensity/colour for the 3 raymarch
-  lights is a general (non-S8) gap — only positional lights have flags today.
+  couple S4 denoise). Batch follow-up: the builder emits `--lightN-*` only for
+  **positional** lights — a directional light's dir/intensity/colour is not
+  emitted because `--lightN-*` forces `--relief-raymarch` on replay; decoupling
+  that + directional-light emit is a separate change. GPU positional lighting for
+  the 3D families (retire #483's force-CPU) is tracked at #484.
 
 ### S9 — Mesh export maturation ☑ (#391)
 Mesh export is the **one place FF crosses from renderer into geometry producer** —
