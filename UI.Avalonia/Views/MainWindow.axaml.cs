@@ -63,6 +63,7 @@ public sealed partial class MainWindow : Window
     private MiniWindowTether? _miniDepthTether;
     private PostFxHudWindow? _postFxHudWin;
     private MiniWindowTether? _postFxHudTether;
+    private StatusPanelWindow? _statusPanelWin;
 
     // S-X8 (2026-06-27) — hold the delegates ConfigureMiniDepth subscribes
     // to RenderHost.ColorMapChanged / FrameCompleted so DetachShell can
@@ -730,6 +731,9 @@ public sealed partial class MainWindow : Window
             case nameof(ShellViewModel.IsRenderTopmost):
                 Topmost = _shell.IsRenderTopmost;
                 break;
+            case nameof(ShellViewModel.IsStatusPanelVisible):
+                SyncStatusPanel();
+                break;
             case nameof(ShellViewModel.IsColorThemeEditorVisible):
             case nameof(ShellViewModel.ColorThemeEditor):
                 SyncEditor();
@@ -807,6 +811,35 @@ public sealed partial class MainWindow : Window
                     _shell.IsSlideshowVcrVisible = false;
                 }
                 break;
+        }
+    }
+
+    // Floating standalone status panel (#499). Mirrors the docked status bar's
+    // content in a borderless, drag-to-move window, bound to the same shell so it
+    // stays live. Toggled by ShellViewModel.IsStatusPanelVisible; registered for
+    // workspace capture/restore.
+    private void SyncStatusPanel()
+    {
+        if (_shell == null) return;
+        if (_shell.IsStatusPanelVisible)
+        {
+            if (_statusPanelWin == null)
+            {
+                _statusPanelWin = new StatusPanelWindow { DataContext = _shell };
+                _statusPanelWin.Closing += (_, ev) =>
+                {
+                    if (_shuttingDown) return;
+                    ev.Cancel = true;
+                    if (_shell != null) _shell.IsStatusPanelVisible = false;
+                };
+                FracturingFog.UI.Avalonia.Services.WindowService.RegisterWindow(
+                    FracturingFog.Models.WindowRole.StatusPanel, _statusPanelWin);
+            }
+            if (!_statusPanelWin.IsVisible) _statusPanelWin.Show(this);
+        }
+        else
+        {
+            _statusPanelWin?.Hide();
         }
     }
 

@@ -1,0 +1,24 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:FracturingFog.UI.Avalonia.ViewModels"
+        xmlns:views="using:FracturingFog.UI.Avalonia.Views"
+        x:Class="FracturingFog.UI.Avalonia.Views.StatusPanelWindow"
+        x:DataType="vm:ShellViewModel"
+        Title="Status"
+        MinWidth="240" Height="30"
+        SizeToContent="Width"
+        WindowDecorations="None"
+        WindowStartupLocation="Manual"
+        CanResize="True"
+        ShowInTaskbar="False"
+        Topmost="False"
+        Background="#161616">
+    <!-- Floating standalone status bar (#499). Chromeless; click-drag anywhere
+         on the strip moves it (the Cancel button, when shown, handles its own
+         click so it never starts a drag). -->
+    <Border x:Name="DragRoot"
+            BorderBrush="#333" BorderThickness="1"
+            Padding="8,4" Cursor="SizeAll">
+        <views:StatusBarView />
+    </Border>
+</Window>
