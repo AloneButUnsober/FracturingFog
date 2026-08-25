@@ -365,10 +365,14 @@ public sealed partial class MainWindow : Window
                     var child = new MenuItem { Header = wsName };
                     child.Click += (_, _) =>
                     {
-                        var f = FracturingFog.Models.WorkspaceLayoutLibrary.Load();
-                        var layout = FracturingFog.Models.WorkspaceLayoutLibrary.Get(f, wsName);
-                        if (layout != null)
-                            FracturingFog.UI.Avalonia.Services.WorkspaceService.Restore(layout, shell);
+                        // Route through the Control Center so its droplist selection
+                        // stays in sync — otherwise a later context "Save…" defaults
+                        // to the CC's stale selection and could overwrite the wrong
+                        // preset (#506). Same Restore either way.
+                        var cc = shell.EnsureControlCenter();
+                        cc.RefreshWorkspaces();
+                        cc.SelectedWorkspace = wsName;
+                        cc.ApplyWorkspaceCommand.Execute().Subscribe();
                     };
                     workspacesItem.Items.Add(child);
                 }
