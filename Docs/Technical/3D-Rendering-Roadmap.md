@@ -465,14 +465,17 @@ Broadens the lighting vocabulary without a scene graph.
   penumbra parity is a follow-up). Preset round-trip, `--lightN-area <deg>` (0..90)
   batch flag + builder emit (positional, non-zero only), per-light "Area soft (°)"
   UI control. 12 tests (`S8AreaLightTests`); suite 1768/1768.
-- **S8 feature set complete** (point / spot / area + per-light colour). Remaining
-  follow-ups: the builder emits `--lightN-*` only for **positional** lights — a
-  directional light's dir/intensity/colour/area is not emitted because `--lightN-*`
-  forces `--relief-raymarch` on replay; decoupling that + directional emit is
-  **#490**. GPU positional-light parity for the 3D families (retire #483's
-  force-CPU) is **#484** (+#485–488); GPU parity of the **area penumbra** (relief
-  HLSL + 8 ILGPU kernels + probe) is an unfiled sibling of #484. The **User doc**
-  is the only S8 checkbox still open.
+- **User doc (landed):** [Lights Guide](../User/Lights-Guide.md) — three lights,
+  directional / point / spot / area types, colour, shadows, animation, the full
+  `--lightN-*` batch grammar, and per-type performance notes. Linked from both doc
+  indexes. Closes the last S8 checkbox on #404.
+- **S8 COMPLETE ●** (point / spot / area + per-light colour + user doc). Remaining
+  follow-ups (all separate issues): the builder emits `--lightN-*` only for
+  **positional** lights — a directional light's dir/intensity/colour/area is not
+  emitted because `--lightN-*` forces `--relief-raymarch` on replay; decoupling
+  that + directional emit is **#490**. GPU positional-light parity for the 3D
+  families (retire #483's force-CPU) is **#484** (+#485–488); GPU parity of the
+  **area penumbra** (retire #491's force-CPU) is **#492**.
 
 ### S9 — Mesh export maturation ☑ (#391)
 Mesh export is the **one place FF crosses from renderer into geometry producer** —
