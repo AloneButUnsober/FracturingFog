@@ -5,18 +5,22 @@
         x:Class="FracturingFog.UI.Avalonia.Views.StatusPanelWindow"
         x:DataType="vm:ShellViewModel"
         Title="Status"
-        Width="420" Height="30"
-        MinWidth="240" MinHeight="26"
+        Width="420" Height="38"
+        MinWidth="240" MinHeight="34"
         WindowDecorations="None"
         WindowStartupLocation="Manual"
         CanResize="True"
         ShowInTaskbar="False"
         Topmost="False"
-        Background="#161616">
-    <!-- Floating standalone status bar (#499). Chromeless; click-drag anywhere
-         on the strip moves it (the Cancel button, when shown, handles its own
-         click so it never starts a drag). -->
+        Background="#0D0D0D">
+    <!-- Floating standalone status bar (#499). Chromeless; click-drag the strip
+         moves it (the Cancel button, when shown, handles its own click so it
+         never starts a drag). The Margin leaves a gutter of window background
+         around the drag strip so the borderless edge-resize hit-test (and its
+         resize cursor) is reachable instead of being covered by the move region. -->
     <Border x:Name="DragRoot"
+            Margin="6"
+            Background="#161616"
             BorderBrush="#333" BorderThickness="1"
             Padding="8,4" Cursor="SizeAll">
         <views:StatusBarView />
