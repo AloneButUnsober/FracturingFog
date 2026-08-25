@@ -2434,6 +2434,16 @@ namespace FracturingFog.Hosting
                 reg(global::FracturingFog.Models.WindowRole.UserBulb,
                     () => { if (s_renderHost != null) OpenUserBulbEditor(s_renderHost.ViewState.FractalParameters); });
 
+                // Modeless editors made workspace-aware (#497). Each builds its VM
+                // lazily via its Show*/Open* path, so the opener must call that (a
+                // bare visibility flag would leave the VM null → no-op).
+                reg(global::FracturingFog.Models.WindowRole.SceneEditor,
+                    () => s_shell?.ShowSceneEditor());
+                reg(global::FracturingFog.Models.WindowRole.AnimationEditor,
+                    () => s_shell?.ShowAnimationEditor());
+                reg(global::FracturingFog.Models.WindowRole.ColorGenEditor,
+                    () => OpenColorGenEditor());
+
                 // Detached Control Center panels (#494): opener ensures the CC VM
                 // exists (even if the Control Center was never shown) then opens the
                 // section in its own window via the shared detach service.
@@ -3226,6 +3236,8 @@ namespace FracturingFog.Hosting
             };
             win.Closed += (_, _) => s_colorGenWin = null;
             s_colorGenWin = win;
+            FracturingFog.UI.Avalonia.Services.WindowService.RegisterWindow(
+                global::FracturingFog.Models.WindowRole.ColorGenEditor, win);
 
             ShowEditor(win);
         }

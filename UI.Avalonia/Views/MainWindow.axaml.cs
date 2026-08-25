@@ -1565,6 +1565,8 @@ public sealed partial class MainWindow : Window
                     ev.Cancel = true;
                     if (_shell != null) _shell.IsAnimationEditorVisible = false;
                 };
+                FracturingFog.UI.Avalonia.Services.WindowService.RegisterWindow(
+                    FracturingFog.Models.WindowRole.AnimationEditor, _animationEditorWin);
             }
             else if (_animationEditorWin.DataContext != _shell.AnimationEditor)
             {
@@ -1602,6 +1604,8 @@ public sealed partial class MainWindow : Window
                     ev.Cancel = true;
                     if (_shell != null) _shell.IsSceneEditorVisible = false;
                 };
+                FracturingFog.UI.Avalonia.Services.WindowService.RegisterWindow(
+                    FracturingFog.Models.WindowRole.SceneEditor, _sceneEditorWin);
             }
             else if (_sceneEditorWin.DataContext != _shell.SceneEditor)
             {
