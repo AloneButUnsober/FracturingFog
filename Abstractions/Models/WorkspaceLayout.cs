@@ -38,6 +38,15 @@ namespace FracturingFog.Models
         UserBulb = 8,
         LightingFx = 9,
         Relief3D = 10,
+
+        // Detached Control Center section panels (#494) — one role per section so a
+        // workspace can capture/restore/close each independently.
+        DetachedViewPanel = 11,
+        DetachedExplorePanel = 12,
+        DetachedColorLightPanel = 13,
+        DetachedCapturePanel = 14,
+        DetachedAssetsPanel = 15,
+        DetachedAdvancedPanel = 16,
     }
 
     /// <summary>Render-window mode. Mirrors the Standard/Mini/Toy/Span shapes the

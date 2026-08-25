@@ -1221,6 +1221,16 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
 
     private void ShowControlCenter()
     {
+        EnsureControlCenter();
+        IsControlCenterVisible = !IsControlCenterVisible;
+    }
+
+    /// <summary>Create the Control Center VM (once) without showing it, firing
+    /// <see cref="ControlCenterCreated"/> so the host wires its delegates. Returns
+    /// the live VM — used by the workspace restore opener for detached panels
+    /// (#494), which must reach the VM even if the Control Center was never shown.</summary>
+    public ControlCenterViewModel EnsureControlCenter()
+    {
         if (ControlCenter == null)
         {
             ControlCenter = new ControlCenterViewModel(this);
@@ -1228,7 +1238,7 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
             // delegates (#433) — UI.Avalonia can't reach the Hosting dialogs.
             ControlCenterCreated?.Invoke(this, ControlCenter);
         }
-        IsControlCenterVisible = !IsControlCenterVisible;
+        return ControlCenter;
     }
 
     /// <summary>Raised once, when the Control Center VM is first created, so the
