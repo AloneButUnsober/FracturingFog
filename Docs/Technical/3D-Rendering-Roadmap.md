@@ -360,7 +360,7 @@ animated.
   temporal via `FractalRenderHost`'s persistent history; the offline `SceneVideoRenderer`
   + `--batch` video-slideshow render FLAT 2D (no Relief 3D applied at all), so the seam has
   no consumer there yet. 2 seam tests; default null → byte-identical.
-- **Quality controls + user doc (landed, PR #TBD):** `FroxelQuality` {Low 16×16×32,
+- **Quality controls + user doc (landed, PR #507):** `FroxelQuality` {Low 16×16×32,
   Balanced 24×24×48, High 32×32×96} scales the froxel grid. `FractalParameters.Relief2DFroxelQuality`
   (default Balanced → byte-identical) threads through `FroxelCameraVolume.BuildGrid(cam, quality)`
   + `FroxelGpuUniforms.Build(cam, fx, quality)`, so the CPU post-pass AND the GPU kernel read the
