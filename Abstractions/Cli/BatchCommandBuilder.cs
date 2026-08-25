@@ -409,6 +409,16 @@ namespace FracturingFog.Cli
                 parts.Add(BatchFlags.LightFlag(n, BatchFlags.LightFieldColor));
                 parts.Add(HexColor(d.Color));
             }
+
+            // Area angular radius (roadmap S8, #404) — a finite emitter size that
+            // softens the shadow penumbra. Emit only when set; 0 = punctual (the
+            // parser's default), so an unchanged light stays terse. Directional
+            // area lights are covered by the directional-emit decouple (#490).
+            if (d.AreaAngularRadius != 0.0)
+            {
+                parts.Add(BatchFlags.LightFlag(n, BatchFlags.LightFieldArea));
+                parts.Add(Num(d.AreaAngularRadius));
+            }
         }
 
         /// <summary>The <see cref="LightingFxData.CreateDefault"/> colour for light

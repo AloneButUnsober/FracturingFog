@@ -145,7 +145,7 @@ public sealed class MandelbulbCalculator : IFractalCalculator
         // S8 (#404) — the GPU 3D-fractal kernels resolve only DIRECTIONAL lights;
         // a point/spot light must fall to the CPU shade path (which honours
         // LightSampler) so positional lighting is correct, not silently directional.
-        if (fx.UseGpuRender && fx.DebugAov == AovView.Beauty && !lowRes && !fx.HasPositionalLight)
+        if (fx.UseGpuRender && fx.DebugAov == AovView.Beauty && !lowRes && !fx.HasPositionalLight && !fx.HasAreaLight)
         {
             double lightX = Math.Sin(fx.Light1.Phi) * Math.Cos(fx.Light1.Theta);
             double lightY = Math.Cos(fx.Light1.Phi);

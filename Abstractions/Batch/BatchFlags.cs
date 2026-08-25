@@ -139,6 +139,7 @@ namespace FracturingFog.Batch
         public const string LightFieldRange     = "range";
         public const string LightFieldCone      = "cone";
         public const string LightFieldColor     = "color";
+        public const string LightFieldArea      = "area";
 
         /// <summary>Canonical spelling of a per-light flag, e.g.
         /// <c>LightFlag(2, LightFieldPos)</c> → <c>"--light2-pos"</c>. Shared by the

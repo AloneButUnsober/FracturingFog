@@ -145,7 +145,7 @@ public sealed class QuatJuliaCalculator : IFractalCalculator
         // #320 — force CPU while an AOV view is active (GPU has no view path).
         // S8 (#404) — GPU 3D-fractal kernels are directional-only; force the CPU
         // shade path when a point/spot light is active (LightSampler on CPU).
-        if (fx.UseGpuRender && fx.DebugAov == AovView.Beauty && !lowRes && !fx.HasPositionalLight)
+        if (fx.UseGpuRender && fx.DebugAov == AovView.Beauty && !lowRes && !fx.HasPositionalLight && !fx.HasAreaLight)
         {
             var rp = new GpuRaymarchParams
             {

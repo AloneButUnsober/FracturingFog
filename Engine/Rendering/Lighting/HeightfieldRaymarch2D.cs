@@ -375,9 +375,13 @@ public static class HeightfieldRaymarch2D
         // per-pixel depth buffer this render fills), so it USED to force the CPU
         // trace. It no longer does when a GPU froxel kernel is attached — see the
         // fully-GPU froxel branch below.
+        // S8 (#404) — an area light's per-light soft-shadow penumbra is a CPU-only
+        // path for now (the GPU relief kernel resolves only the punctual global-K
+        // soft shadow); force the CPU trace so an area light stays parity-correct.
+        // GPU parity of the penumbra is a follow-up. Punctual scenes stay on GPU.
         bool aovOk = aov == null || aov.Components == null;
         if (gpuKernel != null && p.Relief2DGpuRaymarch && fx.DebugAov == AovView.Beauty
-            && aovOk && !froxel)
+            && aovOk && !froxel && !fx.HasAreaLight)
         {
             var u = ReliefUniforms.Build(w, h, hw, hh, sy, aspect, invLip, maxH, p, in fx);
             if (aov != null)
@@ -398,7 +402,7 @@ public static class HeightfieldRaymarch2D
         // beauty). Composite reads `dst` as beauty and writes `dst` — safe: the kernel
         // uploads the beauty before writing its own output buffer, no CPU aliasing.
         if (froxel && !froxelTemporal && froxelKernel != null && gpuKernel != null && p.Relief2DGpuRaymarch
-            && fx.DebugAov == AovView.Beauty && aovOk)
+            && fx.DebugAov == AovView.Beauty && aovOk && !fx.HasAreaLight)
         {
             var u = ReliefUniforms.Build(w, h, hw, hh, sy, aspect, invLip, maxH, p, in fx);
             // Reuse the caller's denoise guides when present, else scratch for depth.

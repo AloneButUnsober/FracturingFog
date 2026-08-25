@@ -176,6 +176,13 @@ public sealed partial class FractalParamsViewModel
         get => _p.Lighting.Light1.SpotOuterDeg;
         set { MutateLighting(r => r.Fx.Light1.SpotOuterDeg = Clamp(value, 0, 90)); this.RaisePropertyChanged(); Fire(); }
     }
+    /// <summary>Area-light angular radius (deg). 0 = punctual/sharp shadow;
+    /// larger softens the penumbra (roadmap S8, #404). Applies to any light type.</summary>
+    public double Light1Area
+    {
+        get => _p.Lighting.Light1.AreaAngularRadius;
+        set { MutateLighting(r => r.Fx.Light1.AreaAngularRadius = Clamp(value, 0, 90)); this.RaisePropertyChanged(); Fire(); }
+    }
 
     public LightType Light2Type
     {
@@ -214,6 +221,11 @@ public sealed partial class FractalParamsViewModel
         get => _p.Lighting.Light2.SpotOuterDeg;
         set { MutateLighting(r => r.Fx.Light2.SpotOuterDeg = Clamp(value, 0, 90)); this.RaisePropertyChanged(); Fire(); }
     }
+    public double Light2Area
+    {
+        get => _p.Lighting.Light2.AreaAngularRadius;
+        set { MutateLighting(r => r.Fx.Light2.AreaAngularRadius = Clamp(value, 0, 90)); this.RaisePropertyChanged(); Fire(); }
+    }
 
     public LightType Light3Type
     {
@@ -251,6 +263,11 @@ public sealed partial class FractalParamsViewModel
     {
         get => _p.Lighting.Light3.SpotOuterDeg;
         set { MutateLighting(r => r.Fx.Light3.SpotOuterDeg = Clamp(value, 0, 90)); this.RaisePropertyChanged(); Fire(); }
+    }
+    public double Light3Area
+    {
+        get => _p.Lighting.Light3.AreaAngularRadius;
+        set { MutateLighting(r => r.Fx.Light3.AreaAngularRadius = Clamp(value, 0, 90)); this.RaisePropertyChanged(); Fire(); }
     }
 
     // ── Ambient / AO ──────────────────────────────────────────────────

@@ -267,6 +267,8 @@ namespace FracturingFog.Batch
             Console.WriteLine("  --lightN-range F            Soft cutoff 0..100 (0 = pure inverse-square).");
             Console.WriteLine("  --lightN-cone \"inner,outer\" Spot cone half-angles in degrees.");
             Console.WriteLine("  --lightN-color \"#RRGGBB\"    Light colour (hex; #AARRGGBB also accepted).");
+            Console.WriteLine("  --lightN-area F             Area light: emitter angular radius 0..90 deg");
+            Console.WriteLine("                              (0 = punctual/sharp; larger = softer shadow penumbra).");
             Console.WriteLine();
             Console.WriteLine("Remote rendering (uses a saved FFClient connection + render preset):");
             Console.WriteLine("  --remote                    Route this batch through a remote FracturingFog server");

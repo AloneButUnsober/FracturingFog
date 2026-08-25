@@ -205,6 +205,12 @@
                             <NumericUpDown Grid.Row="1" Grid.Column="1" Minimum="0" Maximum="90" Increment="1" FormatString="F1" Margin="0,2"
                                            Value="{Binding Light1SpotOuterDeg, Mode=TwoWay}" />
                         </Grid>
+                        <Grid ColumnDefinitions="160,*" RowDefinitions="Auto">
+                            <TextBlock Grid.Column="0" Text="Area soft (°):" VerticalAlignment="Center"
+                                       ToolTip.Tip="Emitter angular radius. 0 = punctual/sharp shadow; larger softens the shadow penumbra (area light). Needs shadows on; forces the CPU relief trace." />
+                            <NumericUpDown Grid.Column="1" Minimum="0" Maximum="90" Increment="0.5" FormatString="F1" Margin="0,2"
+                                           Value="{Binding Light1Area, Mode=TwoWay}" />
+                        </Grid>
 
                         <!-- Light 2 -->
                         <TextBlock Text="Light 2" FontWeight="Bold" />
@@ -241,6 +247,12 @@
                             <NumericUpDown Grid.Row="1" Grid.Column="1" Minimum="0" Maximum="90" Increment="1" FormatString="F1" Margin="0,2"
                                            Value="{Binding Light2SpotOuterDeg, Mode=TwoWay}" />
                         </Grid>
+                        <Grid ColumnDefinitions="160,*" RowDefinitions="Auto">
+                            <TextBlock Grid.Column="0" Text="Area soft (°):" VerticalAlignment="Center"
+                                       ToolTip.Tip="Emitter angular radius. 0 = punctual/sharp shadow; larger softens the shadow penumbra (area light). Needs shadows on; forces the CPU relief trace." />
+                            <NumericUpDown Grid.Column="1" Minimum="0" Maximum="90" Increment="0.5" FormatString="F1" Margin="0,2"
+                                           Value="{Binding Light2Area, Mode=TwoWay}" />
+                        </Grid>
 
                         <!-- Light 3 -->
                         <TextBlock Text="Light 3" FontWeight="Bold" />
@@ -276,6 +288,12 @@
                                        ToolTip.Tip="Zero intensity beyond this half-angle. Inner→outer is the soft penumbra." />
                             <NumericUpDown Grid.Row="1" Grid.Column="1" Minimum="0" Maximum="90" Increment="1" FormatString="F1" Margin="0,2"
                                            Value="{Binding Light3SpotOuterDeg, Mode=TwoWay}" />
+                        </Grid>
+                        <Grid ColumnDefinitions="160,*" RowDefinitions="Auto">
+                            <TextBlock Grid.Column="0" Text="Area soft (°):" VerticalAlignment="Center"
+                                       ToolTip.Tip="Emitter angular radius. 0 = punctual/sharp shadow; larger softens the shadow penumbra (area light). Needs shadows on; forces the CPU relief trace." />
+                            <NumericUpDown Grid.Column="1" Minimum="0" Maximum="90" Increment="0.5" FormatString="F1" Margin="0,2"
+                                           Value="{Binding Light3Area, Mode=TwoWay}" />
                         </Grid>
                     </StackPanel>
                 </Expander>

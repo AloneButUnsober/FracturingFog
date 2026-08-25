@@ -33,11 +33,13 @@ namespace FracturingFog.Batch
         public double? SpotInnerDeg { get; set; }      // spot cone half-angles (degrees)
         public double? SpotOuterDeg { get; set; }
         public uint? Color { get; set; }               // packed 0xAARRGGBB
+        public double? AreaAngularRadius { get; set; }  // 0..90 deg (0 = punctual / sharp)
 
         public bool HasAny =>
             Type.HasValue || Intensity.HasValue || Theta.HasValue || Phi.HasValue
             || PosX.HasValue || PosY.HasValue || PosZ.HasValue || Range.HasValue
-            || SpotInnerDeg.HasValue || SpotOuterDeg.HasValue || Color.HasValue;
+            || SpotInnerDeg.HasValue || SpotOuterDeg.HasValue || Color.HasValue
+            || AreaAngularRadius.HasValue;
     }
 
     /// <summary>
@@ -906,6 +908,8 @@ namespace FracturingFog.Batch
                     { error = $"--light{n}-cone inner must be 0..90 (degrees)."; return false; }
                 if (L.SpotOuterDeg is < 0 or > 90)
                     { error = $"--light{n}-cone outer must be 0..90 (degrees)."; return false; }
+                if (L.AreaAngularRadius is < 0 or > 90)
+                    { error = $"--light{n}-area must be 0..90 (angular radius, degrees; 0 = punctual)."; return false; }
             }
 
             if (opts.Mode == BatchMode.Slideshow)
@@ -1033,6 +1037,11 @@ namespace FracturingFog.Batch
                     matched = true;
                     if (!TryParseHexColor(colv, out uint colu)) { err = $"{a} expected a hex colour like \"#RRGGBB\" or \"#AARRGGBB\", got '{colv}'."; return false; }
                     light.Color = colu;
+                    break;
+
+                case BatchFlags.LightFieldArea:
+                    if (!NextDouble(args, ref i, a, out double arv, out err)) { matched = true; return false; }
+                    matched = true; light.AreaAngularRadius = arv;
                     break;
 
                 default:

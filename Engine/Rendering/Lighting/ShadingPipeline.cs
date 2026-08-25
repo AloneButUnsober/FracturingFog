@@ -176,12 +176,13 @@ public static class ShadingPipeline
             double tMax = 12.0;  // covers all default scene radii
             int steps = fx.ShadowSteps;
             double k = fx.ShadowSoftK;
+            // S8 (#404) — per-light area softness. Punctual (radius 0) → k unchanged.
             if ((fx.ShadowLightMask & 0x1) != 0 && fx.Light1.Intensity > 0)
-                sh1 = SoftShadow(de, ox, oy, oz, l1.X, l1.Y, l1.Z, tMin, tMax, k, steps);
+                sh1 = SoftShadow(de, ox, oy, oz, l1.X, l1.Y, l1.Z, tMin, tMax, EffectiveShadowK(k, fx.Light1.AreaAngularRadius), steps);
             if ((fx.ShadowLightMask & 0x2) != 0 && fx.Light2.Intensity > 0)
-                sh2 = SoftShadow(de, ox, oy, oz, l2.X, l2.Y, l2.Z, tMin, tMax, k, steps);
+                sh2 = SoftShadow(de, ox, oy, oz, l2.X, l2.Y, l2.Z, tMin, tMax, EffectiveShadowK(k, fx.Light2.AreaAngularRadius), steps);
             if ((fx.ShadowLightMask & 0x4) != 0 && fx.Light3.Intensity > 0)
-                sh3 = SoftShadow(de, ox, oy, oz, l3.X, l3.Y, l3.Z, tMin, tMax, k, steps);
+                sh3 = SoftShadow(de, ox, oy, oz, l3.X, l3.Y, l3.Z, tMin, tMax, EffectiveShadowK(k, fx.Light3.AreaAngularRadius), steps);
         }
 
         double sR = 0, sG = 0, sB = 0;
@@ -405,12 +406,13 @@ public static class ShadingPipeline
             double tMax = 12.0;  // covers all default scene radii
             int steps = fx.ShadowSteps;
             double k = fx.ShadowSoftK;
+            // S8 (#404) — per-light area softness. Punctual (radius 0) → k unchanged.
             if ((fx.ShadowLightMask & 0x1) != 0 && fx.Light1.Intensity > 0)
-                sh1 = SoftShadow<TDe>(in de, ox, oy, oz, l1.X, l1.Y, l1.Z, tMin, tMax, k, steps);
+                sh1 = SoftShadow<TDe>(in de, ox, oy, oz, l1.X, l1.Y, l1.Z, tMin, tMax, EffectiveShadowK(k, fx.Light1.AreaAngularRadius), steps);
             if ((fx.ShadowLightMask & 0x2) != 0 && fx.Light2.Intensity > 0)
-                sh2 = SoftShadow<TDe>(in de, ox, oy, oz, l2.X, l2.Y, l2.Z, tMin, tMax, k, steps);
+                sh2 = SoftShadow<TDe>(in de, ox, oy, oz, l2.X, l2.Y, l2.Z, tMin, tMax, EffectiveShadowK(k, fx.Light2.AreaAngularRadius), steps);
             if ((fx.ShadowLightMask & 0x4) != 0 && fx.Light3.Intensity > 0)
-                sh3 = SoftShadow<TDe>(in de, ox, oy, oz, l3.X, l3.Y, l3.Z, tMin, tMax, k, steps);
+                sh3 = SoftShadow<TDe>(in de, ox, oy, oz, l3.X, l3.Y, l3.Z, tMin, tMax, EffectiveShadowK(k, fx.Light3.AreaAngularRadius), steps);
         }
 
         double sR = 0, sG = 0, sB = 0;
@@ -1390,19 +1392,19 @@ public static class ShadingPipeline
                 AddVolumeScatter(in de, in fx, sx, sy, sz, l1.X, l1.Y, l1.Z,
                     rdx, rdy, rdz, fx.Light1.Color, L1i, sh1On, eps,
                     T, density, stepSize,
-                    (LightType)La.Type, La.PosX, La.PosY, La.PosZ, La.Range, l1In, l1Out,
+                    (LightType)La.Type, La.PosX, La.PosY, La.PosZ, La.Range, l1In, l1Out, La.AreaAngularRadius,
                     ref inR, ref inG, ref inB);
             if (L2i > 0)
                 AddVolumeScatter(in de, in fx, sx, sy, sz, l2.X, l2.Y, l2.Z,
                     rdx, rdy, rdz, fx.Light2.Color, L2i, sh2On, eps,
                     T, density, stepSize,
-                    (LightType)Lb.Type, Lb.PosX, Lb.PosY, Lb.PosZ, Lb.Range, l2In, l2Out,
+                    (LightType)Lb.Type, Lb.PosX, Lb.PosY, Lb.PosZ, Lb.Range, l2In, l2Out, Lb.AreaAngularRadius,
                     ref inR, ref inG, ref inB);
             if (L3i > 0)
                 AddVolumeScatter(in de, in fx, sx, sy, sz, l3.X, l3.Y, l3.Z,
                     rdx, rdy, rdz, fx.Light3.Color, L3i, sh3On, eps,
                     T, density, stepSize,
-                    (LightType)Lc.Type, Lc.PosX, Lc.PosY, Lc.PosZ, Lc.Range, l3In, l3Out,
+                    (LightType)Lc.Type, Lc.PosX, Lc.PosY, Lc.PosZ, Lc.Range, l3In, l3Out, Lc.AreaAngularRadius,
                     ref inR, ref inG, ref inB);
 
             // P1: Padé(2,2) approx of exp(-x); density·stepSize stays small in
@@ -1508,7 +1510,7 @@ public static class ShadingPipeline
         uint color, double li, bool shOn, double eps,
         double T, double density, double stepSize,
         LightType ltype, double lposX, double lposY, double lposZ,
-        double lrange, double linnerCos, double louterCos,
+        double lrange, double linnerCos, double louterCos, double areaAngRad,
         ref double inR, ref double inG, ref double inB)
         where TDe : struct, IDistanceEstimator
     {
@@ -1531,7 +1533,7 @@ public static class ShadingPipeline
 
         double sh = shOn
             ? SoftShadow<TDe>(in de, sx, sy, sz, lx, ly, lz,
-                              eps, 12.0, fx.ShadowSoftK, fx.ShadowSteps)
+                              eps, 12.0, EffectiveShadowK(fx.ShadowSoftK, areaAngRad), fx.ShadowSteps)
             : 1.0;
         // Phase 22b — cloud self-shadow toward this light. Returns 1 when off.
         sh *= CloudSelfShadow(sx, sy, sz, lx, ly, lz, fx);
@@ -1636,6 +1638,25 @@ public static class ShadingPipeline
             h ^= h >> 16;
             return (h & 0xFFFFFFu) / 16777215.0;
         }
+    }
+
+    /// <summary>S8 (#404) — per-light soft-shadow hardness for an area light.
+    /// The IQ soft shadow's <c>res = min(k·h/t)</c> term treats <paramref
+    /// name="globalK"/> as the penumbra hardness (higher = sharper). An emitter
+    /// of angular radius θ can produce a shadow no sharper than
+    /// <c>cot(θ)</c> — the umbra→penumbra falloff its finite size subtends — so
+    /// the effective hardness is the SOFTER (smaller) of the global knob and that
+    /// physical cap. <paramref name="areaAngRadDeg"/> ≤ 0 → punctual, returns
+    /// <paramref name="globalK"/> unchanged (byte-identical). Purely analytic — no
+    /// stochastic disc sampling, so no denoise dependency.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static double EffectiveShadowK(double globalK, double areaAngRadDeg)
+    {
+        if (areaAngRadDeg <= 0.0) return globalK;               // punctual — exact no-op
+        double rad = areaAngRadDeg * (Math.PI / 180.0);
+        if (rad >= Math.PI * 0.5) return 0.0;                    // hemisphere-sized → fully soft
+        double kArea = 1.0 / Math.Tan(rad);                      // cot(θ)
+        return Math.Min(globalK, kArea);
     }
 
     /// <summary>Inigo Quilez soft shadow. March from origin toward ld; min

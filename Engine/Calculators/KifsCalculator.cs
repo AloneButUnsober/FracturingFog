@@ -168,7 +168,7 @@ public sealed class KifsCalculator : IFractalCalculator
         // #320 — force CPU while an AOV view is active (GPU has no view path).
         // S8 (#404) — GPU 3D-fractal kernels (Menger + Sierpinski) are directional-
         // only; force the CPU shade path when a point/spot light is active.
-        if (fx.UseGpuRender && fx.DebugAov == AovView.Beauty && !lowRes && gpuEligibleFold && !fx.HasPositionalLight)
+        if (fx.UseGpuRender && fx.DebugAov == AovView.Beauty && !lowRes && gpuEligibleFold && !fx.HasPositionalLight && !fx.HasAreaLight)
         {
             var rp = new GpuRaymarchParams
             {
