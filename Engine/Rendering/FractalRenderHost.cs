@@ -1036,6 +1036,24 @@ namespace FracturingFog.Rendering
                 ? _calculator.MaxIterations
                 : s.Quality.ComputeIterations(s.Zoom);
 
+            // #508 — snapshot the interactive relief field so the offscreen poster /
+            // wallpaper raymarch uses the SAME field the screen does (the dedicated
+            // hi-res _reliefFieldCalc floor field when Relief2DHiResField is on, else
+            // the screen-res field). Without this the poster re-derives the
+            // calculator's coarser SmoothBuffer and the relief renders "flattened".
+            // Copy defensively (the calc thread owns _reliefHeight). Raymarch only —
+            // the emboss path is screen-space and stays on SmoothBuffer.
+            float[]? reliefField = null; int reliefFieldW = 0, reliefFieldH = 0;
+            if (s.FractalParameters.Relief2DEnabled && s.FractalParameters.Relief2DRaymarch
+                && _reliefValid && _reliefHeight != null
+                && _reliefW > 2 && _reliefH > 2
+                && _reliefHeight.Length >= _reliefW * _reliefH)
+            {
+                reliefFieldW = _reliefW; reliefFieldH = _reliefH;
+                reliefField = new float[reliefFieldW * reliefFieldH];
+                Array.Copy(_reliefHeight, reliefField, reliefField.Length);
+            }
+
             return new PosterRequest
             {
                 FractalType = s.FractalType,
@@ -1048,6 +1066,10 @@ namespace FracturingFog.Rendering
                 ColorMap = _calculator.ColorMap,
                 Quality = s.Quality,
                 FractalParameters = s.FractalParameters,
+                // #508 — the interactive hi-res relief field (raymarch WYSIWYG).
+                ReliefField = reliefField,
+                ReliefFieldW = reliefFieldW,
+                ReliefFieldH = reliefFieldH,
                 // Image post-FX parity — carry the live brightness/contrast/gamma
                 // sliders into the offscreen render so a poster/wallpaper matches
                 // what UploadProcessedBuffer shows on screen (WYSIWYG). These were

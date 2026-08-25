@@ -234,7 +234,8 @@ public static class HeightfieldRaymarch2D
                               IReliefRaymarchKernel? gpuKernel = null,
                               ReliefAovBuffers? aov = null,
                               IFroxelVolumeKernel? froxelKernel = null,
-                              FroxelHistory? froxelHistory = null)
+                              FroxelHistory? froxelHistory = null,
+                              LightingFxData? lightingOverride = null)
     {
         hitFraction = 0.0;
         int n = w * h;            // OUTPUT / albedo pixel count
@@ -316,7 +317,10 @@ public static class HeightfieldRaymarch2D
         // on — fill sensible AO / soft-shadow / specular / ambient values wherever
         // the knob is still at zero so Oblique 3D looks good out of the box.
         // Explicit non-zero user values always survive.
-        var fx = p.Lighting;
+        // #508 — a caller may supply an explicit Lighting (e.g. the poster path bakes
+        // the volume-palette LUT onto a local copy so it never mutates the shared live
+        // FractalParameters). null → read p.Lighting as before (byte-identical).
+        var fx = lightingOverride ?? p.Lighting;
         if (p.Relief2DAutoShade) FillAutoShadeDefaults(ref fx, p.Relief2DAutoShadeKeepExplicitZeros);
 
         // S6 (#389/#408) — opt-in froxel volumetrics. When on (raymarch + fog active),

@@ -65,6 +65,17 @@ namespace FracturingFog.Imaging
         // Null (the default) = single-frame froxel, byte-identical to before.
         public FracturingFog.Rendering.Lighting.FroxelHistory? FroxelHistory { get; init; }
 
+        // #508 — the interactive view's dedicated HI-RES relief field (the host's
+        // _reliefFieldCalc floor field, Relief2DHiResField). When supplied, the
+        // offscreen relief RAYMARCH uses this field instead of re-deriving the
+        // calculator's coarser SmoothBuffer, so a poster / wallpaper's Relief 3D
+        // matches the on-screen frame (WYSIWYG). Null → fall back to SmoothBuffer
+        // (batch / no host field), the pre-#508 behaviour. Dims are the FIELD grid,
+        // decoupled from the output size (HeightDe samples by normalised coords).
+        public float[]? ReliefField { get; init; }
+        public int ReliefFieldW { get; init; }
+        public int ReliefFieldH { get; init; }
+
         // Post-FX (parity with the interactive ViewState sliders). Defaults =
         // identity. Brightness/Contrast are a BGRA post-pass; HistogramEq is
         // adaptive equalization strength applied on the calculator before the
@@ -297,7 +308,7 @@ namespace FracturingFog.Imaging
                 // of a Relief 3D scene must apply relief here too — otherwise it
                 // silently falls back to the flat 2D themed colour. No-op when
                 // relief is off or the calc exposes no field.
-                buffer = ApplyReliefIfEnabled(buffer, alt as IHeightFieldSource, w, h, req.FractalParameters, alt?.ColorMap, aovCapture, req.FroxelHistory);
+                buffer = ApplyReliefIfEnabled(buffer, alt as IHeightFieldSource, w, h, req.FractalParameters, alt?.ColorMap, aovCapture, req.FroxelHistory, req.ReliefField, req.ReliefFieldW, req.ReliefFieldH);
             }
             else
             {
@@ -379,8 +390,10 @@ namespace FracturingFog.Imaging
                 // handled by the same call in the alt branch above. Field ==
                 // output dims here: a poster is already high-res, so the
                 // display-size undersampling the hi-res field works around does
-                // not apply.
-                buffer = ApplyReliefIfEnabled(buffer, calc, w, h, req.FractalParameters, calc.ColorMap, aovCapture, req.FroxelHistory);
+                // not apply — BUT the dedicated hi-res relief field is a separate,
+                // higher-quality field, not just a resolution bump, so a supplied
+                // req.ReliefField (the interactive one) is preferred (#508).
+                buffer = ApplyReliefIfEnabled(buffer, calc, w, h, req.FractalParameters, calc.ColorMap, aovCapture, req.FroxelHistory, req.ReliefField, req.ReliefFieldW, req.ReliefFieldH);
             }
 
             }
@@ -463,23 +476,43 @@ namespace FracturingFog.Imaging
             uint[] buffer, IHeightFieldSource? heightSource, int w, int h, FractalParameters p,
             IColorMap? colorMap = null,
             FracturingFog.Rendering.Lighting.HeightfieldRaymarch2D.ReliefAovBuffers? aovCapture = null,
-            FracturingFog.Rendering.Lighting.FroxelHistory? froxelHistory = null)
+            FracturingFog.Rendering.Lighting.FroxelHistory? froxelHistory = null,
+            float[]? hiResField = null, int hiResW = 0, int hiResH = 0)
         {
             if (p == null || !p.Relief2DEnabled) return buffer;
-            var field = heightSource?.SmoothBuffer;
             int n = w * h;
-            if (field == null || n <= 0 || field.Length < n || buffer.Length < n)
-                return buffer;
+            if (n <= 0 || buffer.Length < n) return buffer;
 
             var dst = new uint[n];
             if (p.Relief2DRaymarch)
             {
+                // #508 — prefer the interactive HI-RES relief field the on-screen
+                // raymarch uses; the calculator's own SmoothBuffer (output-res) is a
+                // COARSER field → a "flattened" poster. Fall back to SmoothBuffer when
+                // no hi-res field was supplied (batch / no host). The field grid dims
+                // (fw,fh) are decoupled from the output size — HeightDe samples by
+                // normalised coords.
+                float[]? field; int fw, fh;
+                if (hiResField != null && hiResW > 2 && hiResH > 2
+                    && hiResField.Length >= hiResW * hiResH)
+                {
+                    field = hiResField; fw = hiResW; fh = hiResH;
+                }
+                else
+                {
+                    field = heightSource?.SmoothBuffer; fw = w; fh = h;
+                    if (field == null || field.Length < fw * fh) return buffer;
+                }
+
                 // #185 (slice D) — bake the active theme ramp so the export's
                 // volumetric in-scatter is palette-mapped identically to the screen.
                 // No-op unless VolumePaletteStrength > 0. Runtime-only LUT.
+                // #508 — bake onto a LOCAL copy and pass it to Render as an explicit
+                // lighting override; never write it back onto the shared (live)
+                // FractalParameters — a background-thread mutation of the live params
+                // raced the render loop (the on-screen "flip" during a poster save).
                 var fx = p.Lighting;
                 FracturingFog.Rendering.Lighting.VolumePaletteBaker.Bake(ref fx, colorMap);
-                p.Lighting = fx;
                 // S4 (#389) — capture the float normal/depth AOVs and denoise iff
                 // the guided À-Trous pass is on. MakeCapture is null when off, so
                 // this is byte-identical by default (Render keeps its GPU path).
@@ -490,12 +523,19 @@ namespace FracturingFog.Imaging
                 // the GPU fast path + byte-identical beauty are preserved.
                 var aov = aovCapture ?? ReliefDenoisePass.MakeCapture(p, w, h);
                 FracturingFog.Rendering.Lighting.HeightfieldRaymarch2D.Render(
-                    buffer, field, w, h, w, h, p, dst, out _, null, aov, null, froxelHistory);
+                    buffer, field, w, h, fw, fh, p, dst, out _, null, aov, null, froxelHistory, fx);
                 ReliefDenoisePass.Apply(dst, aov, w, h, p);
             }
             else
+            {
+                // Phase-1 hillshade (emboss) is screen-space: the field must match the
+                // output grid, so it always uses the calc's SmoothBuffer (the hi-res
+                // field is a raymarch-only concern).
+                var field = heightSource?.SmoothBuffer;
+                if (field == null || field.Length < n) return buffer;
                 FracturingFog.Rendering.Lighting.HeightfieldRelief2D.Apply(
                     buffer, dst, field, w, h, p);
+            }
             return dst;
         }
 
