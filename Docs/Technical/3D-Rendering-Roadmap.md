@@ -453,7 +453,7 @@ Broadens the lighting vocabulary without a scene graph.
   couple S4 denoise). Batch follow-up: the builder emits `--lightN-*` only for
   **positional** lights — a directional light's dir/intensity/colour is not
   emitted because `--lightN-*` forces `--relief-raymarch` on replay; decoupling
-  that + directional-light emit is a separate change. GPU positional lighting for
+  that + directional-light emit is tracked at **#490**. GPU positional lighting for
   the 3D families (retire #483's force-CPU) is tracked at #484.
 
 ### S9 — Mesh export maturation ☑ (#391)
