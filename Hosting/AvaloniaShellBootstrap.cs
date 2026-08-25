@@ -2296,6 +2296,8 @@ namespace FracturingFog.Hosting
                         s_paramsWin = null;
                     };
                     s_paramsWin = win;
+                    FracturingFog.UI.Avalonia.Services.WindowService.RegisterWindow(
+                        global::FracturingFog.Models.WindowRole.FractalParams, win);
 
                     var owner = AvaloniaDialogs.ActiveMainWindow;
                     if (owner != null) win.Show(owner);
@@ -2448,6 +2450,12 @@ namespace FracturingFog.Hosting
                 // SyncStatusPanel shows/creates the window.
                 reg(global::FracturingFog.Models.WindowRole.StatusPanel,
                     () => { if (s_shell != null) s_shell.IsStatusPanelVisible = true; });
+
+                // Fractal Params editor (#504). Toggle-based like LightingFx;
+                // Open(role) fronts an already-open window via Find() first, so the
+                // command only fires when it is closed (toggle == open).
+                reg(global::FracturingFog.Models.WindowRole.FractalParams,
+                    () => s_shell?.ShowFractalParamsCommand.Execute().Subscribe());
 
                 // Detached Control Center panels (#494): opener ensures the CC VM
                 // exists (even if the Control Center was never shown) then opens the

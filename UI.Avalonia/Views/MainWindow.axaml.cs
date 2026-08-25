@@ -341,6 +341,17 @@ public sealed partial class MainWindow : Window
             // presets always reflect. Selecting one recalls it via the same
             // WorkspaceService.Restore the Control Center's Recall button uses.
             workspacesItem.Items.Clear();
+
+            // Save… at the top — same flow as the Control Center Save button
+            // (capture current arrangement + name prompt + persist). Routes
+            // through the shared ControlCenterViewModel command so the host-wired
+            // name-prompt delegate is reused.
+            var saveItem = new MenuItem { Header = "Save…" };
+            saveItem.Click += (_, _) =>
+                shell.EnsureControlCenter().SaveWorkspaceCommand.Execute().Subscribe();
+            workspacesItem.Items.Add(saveItem);
+            workspacesItem.Items.Add(new Separator());
+
             var wsFile = FracturingFog.Models.WorkspaceLayoutLibrary.Load();
             if (wsFile.Layouts.Count == 0)
             {
