@@ -864,7 +864,7 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
     public double NewtonRelaxation { get => _newtonRelaxation; set { Set(ref _newtonRelaxation, Clamp(value, 0.1, 2.0)); _p.NewtonRelaxation = _newtonRelaxation; Fire(); } }
 
     // ── IFS ──
-    private string _ifsPresetName;
+    private string _ifsPresetName = string.Empty;
     public string IfsPresetName
     {
         get => _ifsPresetName;
@@ -882,7 +882,7 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
     public int IfsIterations { get => _ifsIterations; set { Set(ref _ifsIterations, (int)Clamp(value, 100_000, 20_000_000)); _p.IFSIterations = _ifsIterations; Fire(); } }
 
     // ── LSystem ──
-    private string _lsystemPresetName;
+    private string _lsystemPresetName = string.Empty;
     public string LSystemPresetName
     {
         get => _lsystemPresetName;
@@ -1035,7 +1035,7 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
     }
 
     // ── Strange Attractor ──
-    private string _attractorPresetName;
+    private string _attractorPresetName = string.Empty;
     public string AttractorPresetName
     {
         get => _attractorPresetName;
