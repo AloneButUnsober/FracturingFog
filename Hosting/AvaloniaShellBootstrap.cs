@@ -2452,6 +2452,18 @@ namespace FracturingFog.Hosting
                     AvaloniaDialogs.ConfirmAsync("Delete Workspace", $"Delete saved workspace \"{name}\"?");
             };
 
+            // #493 — a region jump mutates FractalParameters in place; refresh any
+            // open param-editor windows so Relief 3D / Lighting & FX / Fractal
+            // Params reflect the region's saved settings instead of stale values.
+            shell.RegionApplied += (_, _) =>
+            {
+                RefreshOpenParamEditor(s_paramsWin);
+                RefreshOpenParamEditor(s_relief3DWin);
+                RefreshOpenParamEditor(
+                    FracturingFog.UI.Avalonia.Services.WindowService.Find(
+                        global::FracturingFog.Models.WindowRole.LightingFx));
+            };
+
             // ── Standalone Big Buttons (kid mode) ────────────────────────────
             //
             // Large, resizable dialog with three oversized buttons (Color /
@@ -3207,6 +3219,18 @@ namespace FracturingFog.Hosting
             var owner = AvaloniaDialogs.ActiveMainWindow;
             if (owner != null) win.Show(owner);
             else win.Show();
+        }
+
+        // #493 — refresh an open FractalParamsViewModel-backed editor window so it
+        // re-reads params mutated underneath it (e.g. after a region jump). No-op
+        // when the window is closed/hidden or not a param editor.
+        private static void RefreshOpenParamEditor(Window? win)
+        {
+            if (win is { IsVisible: true } &&
+                win.DataContext is FracturingFog.UI.Avalonia.ViewModels.FractalParamsViewModel vm)
+            {
+                try { vm.Refresh(); } catch { }
+            }
         }
 
         // ── Region save-default name ─────────────────────────────────────────
