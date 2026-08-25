@@ -2444,6 +2444,11 @@ namespace FracturingFog.Hosting
                 reg(global::FracturingFog.Models.WindowRole.ColorGenEditor,
                     () => OpenColorGenEditor());
 
+                // Floating status panel (#499) — flag-backed; the host's
+                // SyncStatusPanel shows/creates the window.
+                reg(global::FracturingFog.Models.WindowRole.StatusPanel,
+                    () => { if (s_shell != null) s_shell.IsStatusPanelVisible = true; });
+
                 // Detached Control Center panels (#494): opener ensures the CC VM
                 // exists (even if the Control Center was never shown) then opens the
                 // section in its own window via the shared detach service.

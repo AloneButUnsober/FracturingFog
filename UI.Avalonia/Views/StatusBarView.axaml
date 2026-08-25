@@ -1,0 +1,37 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:FracturingFog.UI.Avalonia.ViewModels"
+        x:Class="FracturingFog.UI.Avalonia.Views.StatusBarView"
+        x:DataType="vm:ShellViewModel">
+    <!-- Status-bar content, shared by the docked strip (MainWindow) and the
+         floating standalone panel (#499). Binds against the inherited
+         ShellViewModel DataContext. -->
+    <DockPanel LastChildFill="True">
+        <!-- Server up/down indicator on the right edge. -->
+        <TextBlock DockPanel.Dock="Right"
+                   Text="{Binding LocalServerIndicator}"
+                   Foreground="{Binding LocalServerBrush}"
+                   FontFamily="Consolas,Menlo,monospace"
+                   Margin="12,0,0,0"
+                   ToolTip.Tip="Local FracturingFog render server status" />
+        <!-- Render-busy chip (scene export, poster prints, server jobs, …).
+             Yellow dot stays legible for red/green-colorblind users. -->
+        <StackPanel DockPanel.Dock="Right" Orientation="Horizontal"
+                    IsVisible="{Binding IsRenderBusy}"
+                    Margin="12,0,0,0" Spacing="6">
+            <TextBlock Text="{Binding RenderBusyText}"
+                       Foreground="#FFCC00"
+                       FontFamily="Consolas,Menlo,monospace"
+                       VerticalAlignment="Center"
+                       ToolTip.Tip="An offline render is running" />
+            <Button Content="Cancel"
+                    IsVisible="{Binding RenderBusyCancellable}"
+                    Command="{Binding CancelRenderBusyCommand}"
+                    Padding="6,1" FontSize="11"
+                    ToolTip.Tip="Cancel the running render" />
+        </StackPanel>
+        <TextBlock Text="{Binding Main.StatusText}"
+                   Foreground="#C0C0C0"
+                   FontFamily="Consolas,Menlo,monospace" />
+    </DockPanel>
+</UserControl>

@@ -593,6 +593,7 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
         ToggleMiniMapCommand = ReactiveCommand.Create(() => IsMiniMapVisible = !IsMiniMapVisible);
         ToggleMiniDepthCommand = ReactiveCommand.Create(() => IsMiniDepthVisible = !IsMiniDepthVisible);
         TogglePostFxHudCommand = ReactiveCommand.Create(() => IsPostFxHudVisible = !IsPostFxHudVisible);
+        ToggleStatusPanelCommand = ReactiveCommand.Create(() => IsStatusPanelVisible = !IsStatusPanelVisible);
         ToggleMiniModeCommand  = ReactiveCommand.Create(() => IsMiniMode = !IsMiniMode);
         ToggleToyModeCommand   = ReactiveCommand.Create(() => IsToyMode  = !IsToyMode);
         ToggleTerminalModeCommand = ReactiveCommand.Create(() => IsTerminalMode = !IsTerminalMode);
@@ -1907,6 +1908,19 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
     }
 
     public ReactiveCommand<Unit, bool> TogglePostFxHudCommand { get; private set; } = null!;
+
+    // ── Floating standalone status panel (#499) ─────────────────────────────
+    // A borderless, drag-to-move window mirroring the docked status bar. Host
+    // creates/positions it in MainWindow.SyncStatusPanel; registered for
+    // workspace capture/restore.
+    private bool _isStatusPanelVisible;
+    public bool IsStatusPanelVisible
+    {
+        get => _isStatusPanelVisible;
+        set => this.RaiseAndSetIfChanged(ref _isStatusPanelVisible, value);
+    }
+
+    public ReactiveCommand<Unit, bool> ToggleStatusPanelCommand { get; private set; } = null!;
 
     /// <summary>Host-supplied palette sampler. Returns the packed ARGB color
     /// for a smooth-iteration index against the active IColorMap. Used by

@@ -52,6 +52,9 @@ namespace FracturingFog.Models
         SceneEditor = 17,
         AnimationEditor = 18,
         ColorGenEditor = 19,
+
+        // Floating standalone status-bar panel (#499).
+        StatusPanel = 20,
     }
 
     /// <summary>Render-window mode. Mirrors the Standard/Mini/Toy/Span shapes the
