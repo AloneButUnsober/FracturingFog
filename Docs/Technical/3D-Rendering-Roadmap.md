@@ -441,6 +441,10 @@ Broadens the lighting vocabulary without a scene graph.
   branch on `!fx.HasPositionalLight` → a point/spot scene falls to the CPU shade
   (LightSampler-correct) instead of silently directional. All-directional scenes
   keep the GPU path, byte-identical. 1 render test (Mandelbulb point-light move).
+  The #459-style upgrade — teach the 8 GPU 3D kernels to resolve positional
+  lights themselves and retire this force-CPU — is tracked as its own fan-out
+  (**#484**, slices #485–#488): shared `GpuShadingParams` + a `GpuKernelUtils.
+  ResolveLight`, then a per-family kernel + CPU-twin + parity-probe pass.
 - **Remaining:** area lights (disc/sphere penumbra via the soft-shadow march,
   couple S4 denoise). Batch: directional θ/φ/intensity/colour for the 3 raymarch
   lights is a general (non-S8) gap — only positional lights have flags today.
