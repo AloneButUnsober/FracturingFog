@@ -278,6 +278,11 @@ public sealed partial class MainWindow : Window
         onTopItem.Click += (_, _) => shell.IsRenderTopmost = !shell.IsRenderTopmost;
         menu.Items.Add(onTopItem);
         AddItem(menu, "Reset View",         () => shell.Main.ResetViewCommand.Execute().Subscribe());
+
+        // Workspaces submenu (#498) — children rebuilt each open (in the sync
+        // closure) from the saved-workspace library; selecting one recalls it.
+        var workspacesItem = new MenuItem { Header = "Workspaces" };
+        menu.Items.Add(workspacesItem);
         menu.Items.Add(new Separator());
 
         AddItem(menu, "Save Image…",        () => shell.ScreenshotCommand.Execute().Subscribe());
@@ -330,6 +335,32 @@ public sealed partial class MainWindow : Window
             // as a drag handle).
             toolbarItem.IsEnabled = !_toyModeActive && !_miniModeActive;
             statusItem.IsEnabled  = !_toyModeActive;
+
+            // Rebuild the Workspaces submenu each open so new/renamed/deleted
+            // presets always reflect. Selecting one recalls it via the same
+            // WorkspaceService.Restore the Control Center's Recall button uses.
+            workspacesItem.Items.Clear();
+            var wsFile = FracturingFog.Models.WorkspaceLayoutLibrary.Load();
+            if (wsFile.Layouts.Count == 0)
+            {
+                workspacesItem.Items.Add(new MenuItem { Header = "(none saved)", IsEnabled = false });
+            }
+            else
+            {
+                foreach (var w in wsFile.Layouts)
+                {
+                    string wsName = w.Name;
+                    var child = new MenuItem { Header = wsName };
+                    child.Click += (_, _) =>
+                    {
+                        var f = FracturingFog.Models.WorkspaceLayoutLibrary.Load();
+                        var layout = FracturingFog.Models.WorkspaceLayoutLibrary.Get(f, wsName);
+                        if (layout != null)
+                            FracturingFog.UI.Avalonia.Services.WorkspaceService.Restore(layout, shell);
+                    };
+                    workspacesItem.Items.Add(child);
+                }
+            }
         };
         menu.Opening += (_, _) => sync();
         return (menu, sync);
