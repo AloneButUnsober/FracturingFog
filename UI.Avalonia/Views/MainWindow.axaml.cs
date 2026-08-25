@@ -341,6 +341,17 @@ public sealed partial class MainWindow : Window
             // presets always reflect. Selecting one recalls it via the same
             // WorkspaceService.Restore the Control Center's Recall button uses.
             workspacesItem.Items.Clear();
+
+            // Save… at the top — same flow as the Control Center Save button
+            // (capture current arrangement + name prompt + persist). Routes
+            // through the shared ControlCenterViewModel command so the host-wired
+            // name-prompt delegate is reused.
+            var saveItem = new MenuItem { Header = "Save…" };
+            saveItem.Click += (_, _) =>
+                shell.EnsureControlCenter().SaveWorkspaceCommand.Execute().Subscribe();
+            workspacesItem.Items.Add(saveItem);
+            workspacesItem.Items.Add(new Separator());
+
             var wsFile = FracturingFog.Models.WorkspaceLayoutLibrary.Load();
             if (wsFile.Layouts.Count == 0)
             {
@@ -354,10 +365,14 @@ public sealed partial class MainWindow : Window
                     var child = new MenuItem { Header = wsName };
                     child.Click += (_, _) =>
                     {
-                        var f = FracturingFog.Models.WorkspaceLayoutLibrary.Load();
-                        var layout = FracturingFog.Models.WorkspaceLayoutLibrary.Get(f, wsName);
-                        if (layout != null)
-                            FracturingFog.UI.Avalonia.Services.WorkspaceService.Restore(layout, shell);
+                        // Route through the Control Center so its droplist selection
+                        // stays in sync — otherwise a later context "Save…" defaults
+                        // to the CC's stale selection and could overwrite the wrong
+                        // preset (#506). Same Restore either way.
+                        var cc = shell.EnsureControlCenter();
+                        cc.RefreshWorkspaces();
+                        cc.SelectedWorkspace = wsName;
+                        cc.ApplyWorkspaceCommand.Execute().Subscribe();
                     };
                     workspacesItem.Items.Add(child);
                 }
