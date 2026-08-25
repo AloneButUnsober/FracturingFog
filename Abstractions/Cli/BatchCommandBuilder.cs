@@ -400,7 +400,34 @@ namespace FracturingFog.Cli
                 parts.Add(BatchFlags.LightFlag(n, BatchFlags.LightFieldCone));
                 parts.Add(Num(d.SpotInnerDeg) + "," + Num(d.SpotOuterDeg));
             }
+
+            // Colour (roadmap S8, #404). Emit only when it deviates from this
+            // slot's default so unchanged lights stay terse; the parser keeps the
+            // slot default when the flag is absent, so this round-trips exactly.
+            if (d.Color != DefaultLightColor(n))
+            {
+                parts.Add(BatchFlags.LightFlag(n, BatchFlags.LightFieldColor));
+                parts.Add(HexColor(d.Color));
+            }
         }
+
+        /// <summary>The <see cref="LightingFxData.CreateDefault"/> colour for light
+        /// slot <paramref name="n"/> (1..3) — the parser's baseline when
+        /// <c>--lightN-color</c> is omitted.</summary>
+        private static uint DefaultLightColor(int n) => n switch
+        {
+            1 => 0xFFFFFFFFu,   // white key
+            2 => 0xFFB0C8FFu,   // cool fill
+            3 => 0xFFFFC890u,   // warm rim
+            _ => 0xFFFFFFFFu,
+        };
+
+        /// <summary>Format a packed 0xAARRGGBB colour as <c>#RRGGBB</c> (opaque) or
+        /// <c>#AARRGGBB</c> (when alpha ≠ FF), matching the parser's hex grammar.</summary>
+        private static string HexColor(uint c)
+            => ((c >> 24) & 0xFF) == 0xFF
+                ? "#" + (c & 0x00FFFFFFu).ToString("X6", System.Globalization.CultureInfo.InvariantCulture)
+                : "#" + c.ToString("X8", System.Globalization.CultureInfo.InvariantCulture);
 
         private static void AppendFractalParams(List<string> parts, BatchCommandSnapshot snap)
         {

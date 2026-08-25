@@ -651,5 +651,84 @@ namespace FracturingFog.Server.Tests
             Assert.False(BatchOptions.TryParse(argv, startIndex: 2, out _, out var err));
             Assert.Contains("light3-intensity", err);
         }
+
+        // ── S8 (#404) per-light colour flag ───────────────────────────────
+
+        [Theory]
+        [InlineData("#FF8800", 0xFFFF8800u)]   // 6-digit → opaque
+        [InlineData("FF8800", 0xFFFF8800u)]    // '#' optional
+        [InlineData("0xFF8800", 0xFFFF8800u)]  // 0x prefix
+        [InlineData("#8012AB34", 0x8012AB34u)] // 8-digit → explicit alpha
+        public void Lights_Color_ParsesHexForms(string hex, uint expected)
+        {
+            string[] argv =
+            {
+                "FracturingFog", "--batch", "--fractal", "Mandelbrot",
+                "--x", "-0.5", "--y", "0", "--zoom", "1",
+                "--light1-color", hex, "--out", "out.png",
+            };
+            Assert.True(BatchOptions.TryParse(argv, startIndex: 2, out var opts, out var err), err);
+            Assert.Equal(expected, opts.Lights[0].Color!.Value);
+        }
+
+        [Fact]
+        public void Lights_Color_BadRejected()
+        {
+            string[] argv =
+            {
+                "FracturingFog", "--batch", "--fractal", "Mandelbrot",
+                "--x", "-0.5", "--y", "0", "--zoom", "1",
+                "--light1-color", "reddish", "--out", "out.png",
+            };
+            Assert.False(BatchOptions.TryParse(argv, startIndex: 2, out _, out var err));
+            Assert.Contains("light1-color", err);
+        }
+
+        [Fact]
+        public void Lights_PointLight_CustomColor_RoundTrips()
+        {
+            var fx = LightingFxData.CreateDefault();
+            fx.Light1.Type = LightType.Point;
+            fx.Light1.Intensity = 1.5;
+            fx.Light1.PosX = 0.3; fx.Light1.PosY = 1.1; fx.Light1.PosZ = -0.4;
+            fx.Light1.Color = 0xFF3366CCu;      // non-default (slot 1 default is white)
+
+            var snap = new BatchCommandSnapshot
+            {
+                Fractal = FractalType.Mandelbrot,
+                CenterX = -0.5, CenterY = 0, Zoom = 1,
+                Parameters = new FractalParameters { Lighting = fx },
+            };
+            string cmd = BatchCommandBuilder.Build(snap);
+            Assert.Contains("--light1-color", cmd);
+
+            var argv = Tokenize(cmd);
+            for (int i = 0; i < argv.Length; i++)
+                if (argv[i] == "<OUTPUT.png>") argv[i] = "out.png";
+
+            Assert.True(BatchOptions.TryParse(argv, startIndex: 2, out var opts, out var err), err);
+            Assert.Equal(0xFF3366CCu, opts.Lights[0].Color!.Value);
+        }
+
+        [Fact]
+        public void Lights_DefaultColor_NotEmitted()
+        {
+            // A positional light left at its slot-default colour must not clutter
+            // the command with a --lightN-color flag (parser keeps the default).
+            var fx = LightingFxData.CreateDefault();
+            fx.Light1.Type = LightType.Point;   // positional so the light IS emitted
+            fx.Light1.Intensity = 1.0;
+            // Light1.Color stays the slot-1 default (white).
+
+            var snap = new BatchCommandSnapshot
+            {
+                Fractal = FractalType.Mandelbrot,
+                CenterX = -0.5, CenterY = 0, Zoom = 1,
+                Parameters = new FractalParameters { Lighting = fx },
+            };
+            string cmd = BatchCommandBuilder.Build(snap);
+            Assert.Contains("--light1-type", cmd);          // light emitted
+            Assert.DoesNotContain("--light1-color", cmd);   // but colour omitted (default)
+        }
     }
 }

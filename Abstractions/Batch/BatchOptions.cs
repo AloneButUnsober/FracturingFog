@@ -32,11 +32,12 @@ namespace FracturingFog.Batch
         public double? Range { get; set; }             // 0..100 (0 = pure inverse-square)
         public double? SpotInnerDeg { get; set; }      // spot cone half-angles (degrees)
         public double? SpotOuterDeg { get; set; }
+        public uint? Color { get; set; }               // packed 0xAARRGGBB
 
         public bool HasAny =>
             Type.HasValue || Intensity.HasValue || Theta.HasValue || Phi.HasValue
             || PosX.HasValue || PosY.HasValue || PosZ.HasValue || Range.HasValue
-            || SpotInnerDeg.HasValue || SpotOuterDeg.HasValue;
+            || SpotInnerDeg.HasValue || SpotOuterDeg.HasValue || Color.HasValue;
     }
 
     /// <summary>
@@ -1027,6 +1028,13 @@ namespace FracturingFog.Batch
                     light.SpotInnerDeg = cvv[0]; light.SpotOuterDeg = cvv[1];
                     break;
 
+                case BatchFlags.LightFieldColor:
+                    if (!Next(args, ref i, a, out string colv, out err)) { matched = true; return false; }
+                    matched = true;
+                    if (!TryParseHexColor(colv, out uint colu)) { err = $"{a} expected a hex colour like \"#RRGGBB\" or \"#AARRGGBB\", got '{colv}'."; return false; }
+                    light.Color = colu;
+                    break;
+
                 default:
                     return true;   // --lightN- prefix but unknown field → not ours
             }
@@ -1034,6 +1042,22 @@ namespace FracturingFog.Batch
             // Positional lights only render on the relief raymarch path.
             opts.Relief = true;
             opts.ReliefRaymarch = true;
+            return true;
+        }
+
+        /// <summary>Parse a hex colour to packed 0xAARRGGBB. Accepts an optional
+        /// leading '#' or "0x"; 6 digits (RRGGBB, alpha forced to FF) or 8 digits
+        /// (AARRGGBB). Returns false on any other length or a non-hex digit.</summary>
+        private static bool TryParseHexColor(string s, out uint color)
+        {
+            color = 0;
+            if (string.IsNullOrWhiteSpace(s)) return false;
+            string h = s.Trim();
+            if (h.StartsWith("#", StringComparison.Ordinal)) h = h.Substring(1);
+            else if (h.StartsWith("0x", StringComparison.OrdinalIgnoreCase)) h = h.Substring(2);
+            if (h.Length != 6 && h.Length != 8) return false;
+            if (!uint.TryParse(h, NumberStyles.HexNumber, CultureInfo.InvariantCulture, out uint v)) return false;
+            color = h.Length == 6 ? (0xFF000000u | v) : v;   // 6 digits → opaque
             return true;
         }
 

@@ -131,12 +131,14 @@ namespace FracturingFog.Batch
         //   pos       = "x,y,z" world position (point / spot)
         //   range     = double (0..100 world units; 0 = pure inverse-square)
         //   cone      = "inner,outer" spot half-angles in degrees
+        //   color     = "#RRGGBB" / "#AARRGGBB" (hex; '#' and '0x' optional)
         public const string LightFieldType      = "type";
         public const string LightFieldIntensity = "intensity";
         public const string LightFieldDir       = "dir";
         public const string LightFieldPos       = "pos";
         public const string LightFieldRange     = "range";
         public const string LightFieldCone      = "cone";
+        public const string LightFieldColor     = "color";
 
         /// <summary>Canonical spelling of a per-light flag, e.g.
         /// <c>LightFlag(2, LightFieldPos)</c> → <c>"--light2-pos"</c>. Shared by the
