@@ -812,4 +812,55 @@ public struct LightingFxData
         UseGpuPost         = false,
         UseGpuRender       = false,
     };
+
+    /// <summary>A hash over every image-affecting field, for render caches that key
+    /// on scene state (e.g. UserBulb's temporal-reuse cache). Since Phase 1c the
+    /// whole struct is the authoritative look, so a cache MUST invalidate when any
+    /// of these change — hashing individual legacy fields silently missed lighting
+    /// edits (roadmap S8, #404: switching a light to point/spot didn't repaint).
+    /// NOTE: when you add a new image-affecting field to this struct, add it here.
+    /// <see cref="VolumePalette"/> is derived from the active colour map, so it is
+    /// omitted (the map identity already keys the cache).</summary>
+    public readonly int SceneSignature()
+    {
+        var h = new HashCode();
+        AddLight(ref h, in Light1);
+        AddLight(ref h, in Light2);
+        AddLight(ref h, in Light3);
+        h.Add(AmbientStrength);
+        h.Add(AoSamples); h.Add(AoStrength);
+        h.Add(SsaoSamples); h.Add(SsaoRadius); h.Add(SsaoStrength);
+        h.Add(ShadowSteps); h.Add(ShadowSoftK); h.Add(ShadowLightMask);
+        h.Add(FogDensity); h.Add(FogHeightFalloff);
+        h.Add(VolumeSteps); h.Add(VolumeLightMask); h.Add(VolumeStepsFalloff);
+        h.Add(VolumeNoiseAmount); h.Add(VolumeNoiseScale); h.Add(VolumeNoiseSpeed);
+        h.Add(VolumeNoiseOctaves); h.Add(VolumeSelfShadow); h.Add(VolumeSelfShadowSteps);
+        h.Add(VolumeAnisotropy); h.Add(FogColor); h.Add(VolumePaletteStrength);
+        h.Add(Roughness); h.Add(Metallic); h.Add(SpecularStrength); h.Add(SubSurfaceStrength);
+        h.Add(Transmission); h.Add(Ior); h.Add(AbsorptionColor); h.Add(AbsorptionDistance);
+        h.Add(TriplanarScale); h.Add(TriplanarStrength); h.Add(TriplanarTint);
+        h.Add(SkyMode); h.Add(BgTopColor); h.Add(BgBottomColor);
+        h.Add(EnvironmentName); h.Add(IblStrength); h.Add(ShowSkyBackdrop);
+        h.Add(ToneMap); h.Add(Exposure); h.Add(BloomThreshold); h.Add(BloomStrength);
+        h.Add(ChromaticAberration); h.Add(LensDistortion); h.Add(Vignette);
+        h.Add(LensTangentialX); h.Add(LensTangentialY); h.Add(AnamorphicSqueeze);
+        h.Add(ReflectionStrength); h.Add(ReflectionSteps); h.Add(MaxBounces); h.Add(UseGgxSampling);
+        h.Add(CausticsStrength); h.Add(CausticsFloorY); h.Add(CausticsScale);
+        h.Add(CausticsColor); h.Add(CausticsAnimSpeed);
+        h.Add(EdgeStrength); h.Add(EdgeColor); h.Add(EdgeThreshold); h.Add(EdgeKernel);
+        h.Add(StereoEyeSeparation); h.Add(StereoFovDegrees); h.Add(StereoMode);
+        h.Add(StereoEyeOffset); h.Add(StereoConvergence); h.Add(StereoMaxDisparity); h.Add(StereoLayout);
+        h.Add(DofAperture); h.Add(DofFocusDistance); h.Add(DofSamples);
+        h.Add(SceneTime); h.Add(LightOrbitSpeed);
+        h.Add(DebugHudFlags); h.Add(DebugAov);
+        h.Add(UseGpuPost); h.Add(UseGpuRender);
+        return h.ToHashCode();
+    }
+
+    private static void AddLight(ref HashCode h, in DirectionalLight l)
+    {
+        h.Add(l.Theta); h.Add(l.Phi); h.Add(l.Intensity); h.Add(l.Color);
+        h.Add(l.Type); h.Add(l.PosX); h.Add(l.PosY); h.Add(l.PosZ);
+        h.Add(l.Range); h.Add(l.SpotInnerDeg); h.Add(l.SpotOuterDeg);
+    }
 }

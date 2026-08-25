@@ -1169,10 +1169,16 @@ public sealed class UserBulbCalculator : IFractalCalculator
             // Color driver inputs
             (int)p.UserBulbColorDriver, p.UserBulbOrbitTrapX, p.UserBulbOrbitTrapY, p.UserBulbOrbitTrapZ,
             p.UserBulbIterComponentAxis,
-            // 3-light + AO + fog + sky
-            p.UserBulbLightTheta, p.UserBulbLightPhi, p.UserBulbLight1Intensity, p.UserBulbLight1Color,
-            p.UserBulbLight2Theta, p.UserBulbLight2Phi, p.UserBulbLight2Intensity, p.UserBulbLight2Color,
-            p.UserBulbLight3Theta, p.UserBulbLight3Phi, p.UserBulbLight3Intensity, p.UserBulbLight3Color,
+            // Lighting + FX + sky. Since Phase 1c the LIVE `p.Lighting` struct is
+            // authoritative (3 lights incl. point/spot type + pos + cone, AO, fog,
+            // sky, tonemap, …); the legacy `p.UserBulb{Light*,AO*,Fog*,Bg*}` fields
+            // are no longer copied into it, so keying on them silently missed
+            // lighting edits — a point/spot switch didn't repaint until nav/equation
+            // changed the key (S8, #404). Key on the whole struct's signature.
+            p.Lighting.SceneSignature(),
+            // The legacy fallback fields still feed the render when the Lighting
+            // value is at its untouched default (see the AO/fog/bg fallbacks), so
+            // keep them in the key too.
             p.UserBulbAOSamples, p.UserBulbAOStrength, p.UserBulbFogDensity,
             p.UserBulbBgTopColor, p.UserBulbBgBottomColor,
             // View + clip
