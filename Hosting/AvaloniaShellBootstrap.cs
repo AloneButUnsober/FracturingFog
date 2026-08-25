@@ -2433,6 +2433,22 @@ namespace FracturingFog.Hosting
                     () => { if (s_renderHost != null) OpenSandboxEditor(s_renderHost.ViewState.FractalParameters); });
                 reg(global::FracturingFog.Models.WindowRole.UserBulb,
                     () => { if (s_renderHost != null) OpenUserBulbEditor(s_renderHost.ViewState.FractalParameters); });
+
+                // Detached Control Center panels (#494): opener ensures the CC VM
+                // exists (even if the Control Center was never shown) then opens the
+                // section in its own window via the shared detach service.
+                foreach (FracturingFog.UI.Avalonia.ViewModels.ControlCenterSection ccSection in
+                         Enum.GetValues(typeof(FracturingFog.UI.Avalonia.ViewModels.ControlCenterSection)))
+                {
+                    var sectionCopy = ccSection;
+                    reg(FracturingFog.UI.Avalonia.Services.ControlCenterDetachService.RoleFor(sectionCopy),
+                        () =>
+                        {
+                            var vm = s_shell?.EnsureControlCenter();
+                            if (vm != null)
+                                FracturingFog.UI.Avalonia.Services.ControlCenterDetachService.Open(sectionCopy, vm);
+                        });
+                }
             }
 
             // Control Center workspace (#433 slice 3): wire its name-prompt +
