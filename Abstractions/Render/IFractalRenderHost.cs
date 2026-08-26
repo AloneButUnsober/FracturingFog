@@ -257,6 +257,20 @@ namespace FracturingFog.Render
         /// into the next uploaded frame.</summary>
         bool ShowWatermark { get; set; }
 
+        /// <summary>#511 (C) — composite the export-aspect frame guide (letterbox
+        /// of <see cref="ExportAspectRatio"/>) into the next frame. Toggle then
+        /// <see cref="RepaintWithPostFx"/> to show it.</summary>
+        bool ShowExportAspectGuide { get; set; }
+
+        /// <summary>#511 (C) — export frame aspect (width / height) for the guide.
+        /// 0 = nothing drawn.</summary>
+        double ExportAspectRatio { get; set; }
+
+        /// <summary>#511 (A) — the size of the last presented frame (what Save Image
+        /// writes). Its aspect is what the on-screen view is composed in; the poster
+        /// preview renders at this aspect. (0, 0) before the first frame.</summary>
+        (int Width, int Height) LastPresentedSize { get; }
+
         /// <summary>Glyph style for the ASCII watermark (Terminal Mode + ASCII
         /// export). The resolved watermark payload (text / colour / placement) is
         /// unchanged — this only picks how the top-line is drawn into the grid.

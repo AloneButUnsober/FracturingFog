@@ -88,11 +88,13 @@ namespace FracturingFog.Rendering
             string? programName,
             string? programVersion,
             WatermarkDef? activeWatermark,
-            (int X, int Y, int W, int H)? selectionRect = null)
+            (int X, int Y, int W, int H)? selectionRect = null,
+            double exportGuideAspect = 0.0)
         {
             if (bgra == null || bgra.Length < width * height) return;
             if (width <= 1 || height <= 1) return;
-            if (!showGrid && !showWatermark && selectionRect == null) return;
+            bool showGuide = exportGuideAspect > 0.0;
+            if (!showGrid && !showWatermark && selectionRect == null && !showGuide) return;
 
             // Pick contrast colour from pre-sampled luma. Dark image → white
             // ink + black halo; light image → near-black ink + white halo.
@@ -113,7 +115,40 @@ namespace FracturingFog.Rendering
 
                 if (selectionRect is { } r && r.W > 0 && r.H > 0)
                     DrawSelectionRect(canvas, width, height, r.X, r.Y, r.W, r.H, ink, halo);
+
+                if (showGuide)
+                    DrawExportGuide(canvas, width, height, exportGuideAspect, darkBg);
             });
+        }
+
+        // ── Export-aspect frame guide (#511 C) ─────────────────────────────
+        // Draw the largest centred rectangle of the given aspect (export width /
+        // height) that fits the window, dim the area OUTSIDE it, and outline it.
+        // The export re-renders at its own aspect (relief re-frames), so this is a
+        // COMPOSITION guide for the export frame's shape — not a pixel-exact crop.
+        private static void DrawExportGuide(SKCanvas canvas, int w, int h, double aspect, bool darkBg)
+        {
+            if (aspect <= 0.0 || w <= 1 || h <= 1) return;
+            var (fx, fy, fw, fh) = FracturingFog.Rendering.ExportAspectGuide.Fit(w, h, aspect);
+            float gx = (float)fx, gy = (float)fy;
+            double gw = fw, gh = fh;
+            var rect = new SKRect(gx, gy, gx + (float)gw, gy + (float)gh);
+
+            // Dim the excluded region (outside the export frame) with a soft veil.
+            using (var veil = new SKPaint { Color = new SKColor(0, 0, 0, 96), IsAntialias = false })
+            {
+                if (gy > 0.5f)               canvas.DrawRect(0, 0, w, gy, veil);                    // top
+                if (gy + gh < h - 0.5)       canvas.DrawRect(0, (float)(gy + gh), w, (float)(h - gy - gh), veil); // bottom
+                if (gx > 0.5f)               canvas.DrawRect(0, gy, gx, (float)gh, veil);           // left
+                if (gx + gw < w - 0.5)       canvas.DrawRect((float)(gx + gw), gy, (float)(w - gx - gw), (float)gh, veil); // right
+            }
+
+            // Outline: a dark halo under a bright line for contrast on any image.
+            var lineCol = darkBg ? new SKColor(255, 255, 255, 220) : new SKColor(20, 20, 20, 220);
+            using (var haloPen = new SKPaint { Color = new SKColor(0, 0, 0, 140), IsStroke = true, StrokeWidth = 3f, IsAntialias = true })
+                canvas.DrawRect(rect, haloPen);
+            using (var pen = new SKPaint { Color = lineCol, IsStroke = true, StrokeWidth = 1.25f, IsAntialias = true })
+                canvas.DrawRect(rect, pen);
         }
 
         // Pin the BGRA buffer, wrap it as an SKBitmap, hand a canvas to the

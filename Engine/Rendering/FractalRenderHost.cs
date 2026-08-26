@@ -549,6 +549,21 @@ namespace FracturingFog.Rendering
 
         public bool ShowGrid { get; set; }
         public bool ShowWatermark { get; set; }
+
+        /// <summary>#511 (C) — when true, composite an export-aspect frame guide
+        /// (letterbox of <see cref="ExportAspectRatio"/>, dimmed exterior + outline)
+        /// into the live buffer so the user can compose within the shape the
+        /// poster / wallpaper export will use. The export re-frames at its own
+        /// aspect, so this is a composition guide, not a pixel-exact crop.</summary>
+        public bool ShowExportAspectGuide { get; set; }
+
+        /// <summary>#511 (C) — export frame aspect (width / height) drawn by
+        /// <see cref="ShowExportAspectGuide"/>. 0 = nothing to draw.</summary>
+        public double ExportAspectRatio { get; set; }
+
+        /// <summary>#511 (A) — size of the last presented frame (what Save Image
+        /// writes); the poster preview renders at this aspect.</summary>
+        public (int Width, int Height) LastPresentedSize => (_lastPresentedWidth, _lastPresentedHeight);
         public FracturingFog.Imaging.AsciiWatermarkStyle AsciiWatermarkStyle { get; set; }
             = FracturingFog.Imaging.AsciiWatermarkStyle.Block;
         /// <summary>When true, the post-FX upload composites a perf HUD
@@ -1036,6 +1051,24 @@ namespace FracturingFog.Rendering
                 ? _calculator.MaxIterations
                 : s.Quality.ComputeIterations(s.Zoom);
 
+            // #508 — snapshot the interactive relief field so the offscreen poster /
+            // wallpaper raymarch uses the SAME field the screen does (the dedicated
+            // hi-res _reliefFieldCalc floor field when Relief2DHiResField is on, else
+            // the screen-res field). Without this the poster re-derives the
+            // calculator's coarser SmoothBuffer and the relief renders "flattened".
+            // Copy defensively (the calc thread owns _reliefHeight). Raymarch only —
+            // the emboss path is screen-space and stays on SmoothBuffer.
+            float[]? reliefField = null; int reliefFieldW = 0, reliefFieldH = 0;
+            if (s.FractalParameters.Relief2DEnabled && s.FractalParameters.Relief2DRaymarch
+                && _reliefValid && _reliefHeight != null
+                && _reliefW > 2 && _reliefH > 2
+                && _reliefHeight.Length >= _reliefW * _reliefH)
+            {
+                reliefFieldW = _reliefW; reliefFieldH = _reliefH;
+                reliefField = new float[reliefFieldW * reliefFieldH];
+                Array.Copy(_reliefHeight, reliefField, reliefField.Length);
+            }
+
             return new PosterRequest
             {
                 FractalType = s.FractalType,
@@ -1048,6 +1081,10 @@ namespace FracturingFog.Rendering
                 ColorMap = _calculator.ColorMap,
                 Quality = s.Quality,
                 FractalParameters = s.FractalParameters,
+                // #508 — the interactive hi-res relief field (raymarch WYSIWYG).
+                ReliefField = reliefField,
+                ReliefFieldW = reliefFieldW,
+                ReliefFieldH = reliefFieldH,
                 // Image post-FX parity — carry the live brightness/contrast/gamma
                 // sliders into the offscreen render so a poster/wallpaper matches
                 // what UploadProcessedBuffer shows on screen (WYSIWYG). These were
@@ -3549,7 +3586,8 @@ namespace FracturingFog.Rendering
             // included, where Avalonia.Media overlays are occluded). Only
             // runs when at least one toggle is on.
             // S-X7.5 (2026-06-23) — IsWindows gate dropped; compositor is Skia.
-            if (ShowGrid || ShowWatermark || _selectionBox.HasValue)
+            double exportGuideAspect = ShowExportAspectGuide ? ExportAspectRatio : 0.0;
+            if (ShowGrid || ShowWatermark || _selectionBox.HasValue || exportGuideAspect > 0.0)
             {
                 try
                 {
@@ -3557,7 +3595,7 @@ namespace FracturingFog.Rendering
                         ShowGrid, ShowWatermark, OverlayContrastLuma,
                         RegionName, ThemeName, ProgramName, ProgramVersion,
                         ActiveWatermark,
-                        _selectionBox);
+                        _selectionBox, exportGuideAspect);
                 }
                 catch (Exception ex)
                 {

@@ -1679,6 +1679,63 @@ namespace FracturingFog.Hosting
                 }
             };
 
+            // #511 (A) — 1:1 poster/wallpaper preview. Render the current view
+            // through the EXACT export path (CreatePosterRequest → PosterRenderer)
+            // at the export aspect, capped for speed, and show it in a dedicated
+            // top-level window. Matches the saved file (same field via #508, same
+            // pipeline) so the user can predict the export from the small window.
+            shell.PosterPreviewRequested += async (_, _) =>
+            {
+                try
+                {
+                    if (s_renderHost == null) return;
+                    var win = AvaloniaDialogs.ActiveMainWindow;
+
+                    // Preview the export at the CURRENT ON-SCREEN aspect — the one the
+                    // view is composed in, and the one Save Image / Poster use. (NOT the
+                    // multi-monitor wallpaper union: a wallpaper is an ultrawide reframe,
+                    // so previewing it mispredicts a normal Poster/Save Image export.)
+                    var (rw, rh) = s_renderHost.LastPresentedSize;
+                    if (rw <= 0 || rh <= 0) { rw = 1920; rh = 1080; }
+                    double aspect = rw / (double)rh;
+
+                    // Render bigger than a small window so the preview reveals the
+                    // high-res relief detail the window under-samples (the whole point:
+                    // predict the export's fidelity). Cap the long side for speed.
+                    const int PreviewLong = 1600;
+                    int pw, ph;
+                    if (aspect >= 1.0) { pw = PreviewLong; ph = Math.Max(16, (int)Math.Round(PreviewLong / aspect)); }
+                    else               { ph = PreviewLong; pw = Math.Max(16, (int)Math.Round(PreviewLong * aspect)); }
+
+                    var customWm = shell.Main.UseCustomWatermark
+                        ? UserWatermarkStore.Instance.GetByName(shell.Main.SelectedCustomWatermarkName)
+                        : null;
+                    var req = s_renderHost.CreatePosterRequest(
+                        pw, ph, rotate: false, string.Empty,
+                        FracturingFog.Imaging.ImageFileFormat.Png, customWm);
+
+                    var busy = shell.BeginRenderBusy("Rendering preview…");
+                    (uint[] buf, int w, int h) r;
+                    try
+                    {
+                        r = await Task.Run(() =>
+                        {
+                            var b = PosterRenderer.RenderToPixels(req, CancellationToken.None, out int ww, out int hh);
+                            return (b, ww, hh);
+                        });
+                    }
+                    finally { busy.Dispose(); }
+
+                    if (r.buf == null || r.w <= 0 || r.h <= 0) return;
+                    var bmp = BgraToBitmap(r.buf, r.w, r.h);
+                    ShowPosterPreviewWindow(win, bmp, r.w, r.h);
+                }
+                catch (Exception ex)
+                {
+                    Console.Error.WriteLine($"[AvaloniaShellBootstrap] Poster preview failed: {ex.Message}");
+                }
+            };
+
             // ── New #54 wires ────────────────────────────────────────────
 
             // Export user regions — pick a path, then serialize the bundle.
@@ -3836,6 +3893,57 @@ namespace FracturingFog.Hosting
                     }
                 });
             });
+        }
+
+        // #511 (A) — the reusable poster-preview window (a plain top-level Window,
+        // not an in-render overlay, so the native GPU HWND cannot occlude it).
+        private static global::Avalonia.Controls.Window? s_posterPreviewWindow;
+        private static global::Avalonia.Controls.Image? s_posterPreviewImage;
+
+        private static void ShowPosterPreviewWindow(
+            global::Avalonia.Controls.Window? owner,
+            global::Avalonia.Media.Imaging.Bitmap bmp, int exportW, int exportH)
+        {
+            if (s_posterPreviewWindow == null)
+            {
+                s_posterPreviewImage = new global::Avalonia.Controls.Image
+                {
+                    Stretch = global::Avalonia.Media.Stretch.Uniform,   // aspect-correct letterbox
+                };
+                var border = new global::Avalonia.Controls.Border
+                {
+                    Background = global::Avalonia.Media.Brushes.Black,
+                    Child = s_posterPreviewImage,
+                };
+                s_posterPreviewWindow = new global::Avalonia.Controls.Window
+                {
+                    Title = "Poster Preview",
+                    Width = 960,
+                    Height = 600,
+                    Content = border,
+                    WindowStartupLocation = owner != null
+                        ? global::Avalonia.Controls.WindowStartupLocation.CenterOwner
+                        : global::Avalonia.Controls.WindowStartupLocation.CenterScreen,
+                };
+                // Real close (not hide) so nothing lingers; the next request rebuilds.
+                s_posterPreviewWindow.Closed += (_, _) =>
+                {
+                    s_posterPreviewWindow = null;
+                    s_posterPreviewImage = null;
+                };
+            }
+
+            s_posterPreviewImage!.Source = bmp;
+            s_posterPreviewWindow.Title = $"Poster Preview — {exportW}×{exportH} @ current view aspect (fit to window)";
+            if (!s_posterPreviewWindow.IsVisible)
+            {
+                if (owner != null) s_posterPreviewWindow.Show(owner);
+                else s_posterPreviewWindow.Show();
+            }
+            else
+            {
+                s_posterPreviewWindow.Activate();
+            }
         }
 
         private static global::Avalonia.Media.Imaging.Bitmap BgraToBitmap(uint[] bgra, int w, int h)

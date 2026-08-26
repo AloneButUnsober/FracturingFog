@@ -248,6 +248,22 @@ The panel shows a live **Estimated size** as you tune. Click **"Export mesh
   panned structure grows streaky arms at the frame edge.
 - **Shrinking the window makes needles?** Turn on **Hi-res height field** and set
   a **Field floor** (e.g. 1080) so small windows match the maximized look.
+- **Field floor is a *quality* knob, not a height knob.** Use **Height scale** (and
+  the **height curve**) to make filaments taller — not a low field floor, whose
+  "height" is an undersampling artifact that won't survive the export.
+- **Predicting the export.** A poster / wallpaper renders at far higher resolution
+  (and often a wider aspect) than the window, so it shows more of the same field.
+  Two aids:
+  - **Poster preview — `Ctrl+Shift+P`.** Renders the current view through the exact
+    export path, at the **current on-screen aspect** and a higher resolution, and
+    opens it in a preview window (fit to window). This is what **Save Image** / a
+    **Poster** at this aspect will look like — so you see the extra detail the small
+    window hides, before you save. (A *Wallpaper* spans all monitors, so it re-frames
+    to that ultrawide shape — use the frame guide below to judge that crop.)
+  - **Export frame guide — `Ctrl+Shift+F`.** Overlays the export (wallpaper /
+    multi-monitor) aspect as a letterbox on the live view, so you compose inside the
+    frame the export will actually use. (Composition guide — the export re-frames at
+    its own aspect, it is not a pixel-exact crop.)
 - **Performance:** oblique raymarch cost scales with resolution × Anti-alias²,
   plus the shading FX you enable. Tune at AA = 1, raise to 2–4 for the final
   frame. The GPU path is far faster for heavy scenes.

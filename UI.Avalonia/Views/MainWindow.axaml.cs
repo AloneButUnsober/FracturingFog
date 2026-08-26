@@ -393,6 +393,29 @@ public sealed partial class MainWindow : Window
 
     // ── Command-key routing ───────────────────────────────────────────────
 
+    // #511 (C) — the export (wallpaper) aspect = the multi-monitor virtual-screen
+    // union width/height (mirrors the wallpaper render dims), or this window's own
+    // aspect as a fallback when screens can't be enumerated.
+    private double ComputeExportAspect()
+    {
+        var screens = Screens;
+        if (screens != null && screens.All.Count > 0)
+        {
+            int minX = int.MaxValue, minY = int.MaxValue, maxX = int.MinValue, maxY = int.MinValue;
+            foreach (var s in screens.All)
+            {
+                var b = s.Bounds;
+                if (b.X < minX) minX = b.X;
+                if (b.Y < minY) minY = b.Y;
+                if (b.X + b.Width  > maxX) maxX = b.X + b.Width;
+                if (b.Y + b.Height > maxY) maxY = b.Y + b.Height;
+            }
+            if (maxX > minX && maxY > minY) return (maxX - minX) / (double)(maxY - minY);
+        }
+        double h = Bounds.Height;
+        return h > 0 ? Bounds.Width / h : 16.0 / 9.0;
+    }
+
     private void OnWindowKeyDown(object? sender, KeyEventArgs e)
     {
         if (_shell == null || e.Handled) return;
@@ -472,6 +495,26 @@ public sealed partial class MainWindow : Window
         if (e.Key == Key.G && e.KeyModifiers == ctrlShift)
         {
             _shell.ToggleReliefGpuRaymarch();
+            e.Handled = true;
+            return;
+        }
+
+        // Ctrl+Shift+P — 1:1 poster/wallpaper preview (#511 A). Renders the view
+        // through the export path and shows it in a dedicated window. Ctrl+Shift
+        // so it doesn't collide with plain P (Params dialog).
+        if (e.Key == Key.P && e.KeyModifiers == ctrlShift)
+        {
+            _shell.RequestPosterPreview();
+            e.Handled = true;
+            return;
+        }
+
+        // Ctrl+Shift+F — toggle the export-aspect frame guide (#511 C) at the
+        // wallpaper (multi-monitor union) aspect, so the user can compose within
+        // the shape the export will use.
+        if (e.Key == Key.F && e.KeyModifiers == ctrlShift)
+        {
+            _shell.Main.ToggleExportAspectGuide(ComputeExportAspect());
             e.Handled = true;
             return;
         }

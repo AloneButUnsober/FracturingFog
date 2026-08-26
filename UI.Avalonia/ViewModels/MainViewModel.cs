@@ -782,6 +782,36 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
         }
     }
 
+    private bool _showExportAspectGuide;
+    /// <summary>#511 (C) — true to composite the export-aspect frame guide into
+    /// the live buffer. Read-only VM mirror; use <see cref="SetExportAspectGuide"/>
+    /// to toggle it (the aspect is supplied by the caller, which knows the export
+    /// target — e.g. the multi-monitor union for a wallpaper).</summary>
+    public bool ShowExportAspectGuide
+    {
+        get => _showExportAspectGuide;
+        private set => this.RaiseAndSetIfChanged(ref _showExportAspectGuide, value);
+    }
+
+    /// <summary>#511 (C) — enable/disable the export frame guide at a given aspect
+    /// (export width / height). <paramref name="on"/> false clears it. Writes
+    /// through to the render host and repaints so the overlay appears immediately.</summary>
+    public void SetExportAspectGuide(bool on, double aspect)
+    {
+        _renderHost.ExportAspectRatio = aspect > 0.0 ? aspect : 0.0;
+        _renderHost.ShowExportAspectGuide = on && aspect > 0.0;
+        ShowExportAspectGuide = _renderHost.ShowExportAspectGuide;
+        _renderHost.RepaintWithPostFx();
+    }
+
+    /// <summary>#511 (C) — flip the guide on/off, reusing the last aspect when
+    /// turning on. Returns the new state.</summary>
+    public bool ToggleExportAspectGuide(double aspectWhenOn)
+    {
+        SetExportAspectGuide(!ShowExportAspectGuide, aspectWhenOn);
+        return ShowExportAspectGuide;
+    }
+
     private bool _showWatermark;
     /// <summary>True to blend the region/theme + program/version watermark
     /// into the lower-right corner of the uploaded texture.</summary>
