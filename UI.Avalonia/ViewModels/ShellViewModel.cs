@@ -3284,11 +3284,13 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
     /// Linux/GNOME where Span mode cannot overlay the shell's top bar + dock.</summary>
     public event EventHandler? WallpaperScreenshotRequested;
 
-    /// <summary>#511 (A) — open/refresh the 1:1 poster/wallpaper PREVIEW: the host
-    /// renders the current view through the exact export path (CreatePosterRequest →
-    /// PosterRenderer) at the export aspect (capped for speed) and shows it in a
-    /// dedicated top-level window, so the user can predict the saved file. Because
-    /// #508 routes the same relief field, the preview matches the export.</summary>
+    /// <summary>#511 (A) — open/refresh the poster PREVIEW: the host renders the
+    /// current view through the exact export path (CreatePosterRequest →
+    /// PosterRenderer) at the CURRENT ON-SCREEN aspect (the one Save Image / Poster
+    /// use — NOT the ultrawide wallpaper union) and higher resolution, capped for
+    /// speed, and shows it in a dedicated top-level window so the user can predict a
+    /// Poster / Save Image export. Because #508 routes the same relief field, the
+    /// preview matches the export.</summary>
     public event EventHandler? PosterPreviewRequested;
 
     /// <summary>#511 (A) — raise <see cref="PosterPreviewRequested"/> (from a

@@ -560,6 +560,10 @@ namespace FracturingFog.Rendering
         /// <summary>#511 (C) — export frame aspect (width / height) drawn by
         /// <see cref="ShowExportAspectGuide"/>. 0 = nothing to draw.</summary>
         public double ExportAspectRatio { get; set; }
+
+        /// <summary>#511 (A) — size of the last presented frame (what Save Image
+        /// writes); the poster preview renders at this aspect.</summary>
+        public (int Width, int Height) LastPresentedSize => (_lastPresentedWidth, _lastPresentedHeight);
         public FracturingFog.Imaging.AsciiWatermarkStyle AsciiWatermarkStyle { get; set; }
             = FracturingFog.Imaging.AsciiWatermarkStyle.Block;
         /// <summary>When true, the post-FX upload composites a perf HUD

@@ -1691,32 +1691,21 @@ namespace FracturingFog.Hosting
                     if (s_renderHost == null) return;
                     var win = AvaloniaDialogs.ActiveMainWindow;
 
-                    // Export dims = multi-monitor union (the wallpaper target), or
-                    // 16:9 fallback when screens can't be enumerated.
-                    int wpW = 1920, wpH = 1080;
-                    var screens = win?.Screens;
-                    if (screens != null && screens.All.Count > 0)
-                    {
-                        int minX = int.MaxValue, minY = int.MaxValue, maxX = int.MinValue, maxY = int.MinValue;
-                        foreach (var s in screens.All)
-                        {
-                            var b = s.Bounds;
-                            if (b.X < minX) minX = b.X;
-                            if (b.Y < minY) minY = b.Y;
-                            if (b.X + b.Width  > maxX) maxX = b.X + b.Width;
-                            if (b.Y + b.Height > maxY) maxY = b.Y + b.Height;
-                        }
-                        if (maxX > minX && maxY > minY) { wpW = maxX - minX; wpH = maxY - minY; }
-                    }
-                    if (wpW <= 0 || wpH <= 0) return;
+                    // Preview the export at the CURRENT ON-SCREEN aspect — the one the
+                    // view is composed in, and the one Save Image / Poster use. (NOT the
+                    // multi-monitor wallpaper union: a wallpaper is an ultrawide reframe,
+                    // so previewing it mispredicts a normal Poster/Save Image export.)
+                    var (rw, rh) = s_renderHost.LastPresentedSize;
+                    if (rw <= 0 || rh <= 0) { rw = 1920; rh = 1080; }
+                    double aspect = rw / (double)rh;
 
-                    // Cap the preview render so a huge wallpaper stays snappy; the
-                    // aspect (framing) + relief field are what predict the export,
-                    // not the exact pixel count.
-                    const int MaxLong = 1600;
-                    double sc = Math.Min(1.0, MaxLong / (double)Math.Max(wpW, wpH));
-                    int pw = Math.Max(16, (int)Math.Round(wpW * sc));
-                    int ph = Math.Max(16, (int)Math.Round(wpH * sc));
+                    // Render bigger than a small window so the preview reveals the
+                    // high-res relief detail the window under-samples (the whole point:
+                    // predict the export's fidelity). Cap the long side for speed.
+                    const int PreviewLong = 1600;
+                    int pw, ph;
+                    if (aspect >= 1.0) { pw = PreviewLong; ph = Math.Max(16, (int)Math.Round(PreviewLong / aspect)); }
+                    else               { ph = PreviewLong; pw = Math.Max(16, (int)Math.Round(PreviewLong * aspect)); }
 
                     var customWm = shell.Main.UseCustomWatermark
                         ? UserWatermarkStore.Instance.GetByName(shell.Main.SelectedCustomWatermarkName)
@@ -1739,7 +1728,7 @@ namespace FracturingFog.Hosting
 
                     if (r.buf == null || r.w <= 0 || r.h <= 0) return;
                     var bmp = BgraToBitmap(r.buf, r.w, r.h);
-                    ShowPosterPreviewWindow(win, bmp, wpW, wpH);
+                    ShowPosterPreviewWindow(win, bmp, r.w, r.h);
                 }
                 catch (Exception ex)
                 {
@@ -3945,7 +3934,7 @@ namespace FracturingFog.Hosting
             }
 
             s_posterPreviewImage!.Source = bmp;
-            s_posterPreviewWindow.Title = $"Poster Preview — export {exportW}×{exportH} (fit to window)";
+            s_posterPreviewWindow.Title = $"Poster Preview — {exportW}×{exportH} @ current view aspect (fit to window)";
             if (!s_posterPreviewWindow.IsVisible)
             {
                 if (owner != null) s_posterPreviewWindow.Show(owner);

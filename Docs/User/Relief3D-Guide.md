@@ -255,8 +255,11 @@ The panel shows a live **Estimated size** as you tune. Click **"Export mesh
   (and often a wider aspect) than the window, so it shows more of the same field.
   Two aids:
   - **Poster preview — `Ctrl+Shift+P`.** Renders the current view through the exact
-    export path and opens it in a preview window (fit to window, correct aspect).
-    It matches the saved file, so you can tune before you save.
+    export path, at the **current on-screen aspect** and a higher resolution, and
+    opens it in a preview window (fit to window). This is what **Save Image** / a
+    **Poster** at this aspect will look like — so you see the extra detail the small
+    window hides, before you save. (A *Wallpaper* spans all monitors, so it re-frames
+    to that ultrawide shape — use the frame guide below to judge that crop.)
   - **Export frame guide — `Ctrl+Shift+F`.** Overlays the export (wallpaper /
     multi-monitor) aspect as a letterbox on the live view, so you compose inside the
     frame the export will actually use. (Composition guide — the export re-frames at
