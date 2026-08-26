@@ -205,6 +205,9 @@ namespace FracturingFog.Batch
         public bool Relief { get; set; }
         public bool ReliefRaymarch { get; set; }
         public double? ReliefHeight { get; set; }          // > 0
+        public double? ReliefDetailGain { get; set; }      // #518 — 0..8, 1 = off
+        public int?    ReliefDetailRadius { get; set; }    // #518 — 0..256, 0 = auto
+        public double? ReliefHeightGamma { get; set; }     // #518 — 0.05..8, 1 = off
         public double? ReliefStrength { get; set; }        // 0..1
         public double? ReliefLightAzimuth { get; set; }    // 0..360
         public double? ReliefLightElevation { get; set; }  // -90..90
@@ -631,6 +634,24 @@ namespace FracturingFog.Batch
                         opts.Relief = true;
                         break;
 
+                    case BatchFlags.ReliefDetailGain:
+                        if (!NextDouble(args, ref i, a, out double rdg, out error)) return false;
+                        opts.ReliefDetailGain = rdg;
+                        opts.Relief = true;
+                        break;
+
+                    case BatchFlags.ReliefDetailRadius:
+                        if (!NextInt(args, ref i, a, out int rdr, out error)) return false;
+                        opts.ReliefDetailRadius = rdr;
+                        opts.Relief = true;
+                        break;
+
+                    case BatchFlags.ReliefHeightGamma:
+                        if (!NextDouble(args, ref i, a, out double rhg, out error)) return false;
+                        opts.ReliefHeightGamma = rhg;
+                        opts.Relief = true;
+                        break;
+
                     case BatchFlags.ReliefStrength:
                         if (!NextDouble(args, ref i, a, out double rsv, out error)) return false;
                         opts.ReliefStrength = rsv;
@@ -876,6 +897,12 @@ namespace FracturingFog.Batch
                 { error = $"--acid-pattern must be 0..{FractalParameters.AcidWarpPatternCount - 1}."; return false; }
             if (opts.ReliefHeight is <= 0)
                 { error = "--relief-height must be > 0."; return false; }
+            if (opts.ReliefDetailGain is < 0 or > 8)
+                { error = "--relief-detail-gain must be 0..8 (1 = off)."; return false; }
+            if (opts.ReliefDetailRadius is < 0 or > 256)
+                { error = "--relief-detail-radius must be 0..256 (0 = auto)."; return false; }
+            if (opts.ReliefHeightGamma is < 0.05 or > 8)
+                { error = "--relief-height-gamma must be 0.05..8 (1 = off)."; return false; }
             if (opts.ReliefStrength is < 0 or > 1)
                 { error = "--relief-strength must be 0..1."; return false; }
             if (opts.ReliefShadow is < 0 or > 1)

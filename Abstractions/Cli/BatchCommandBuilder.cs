@@ -104,6 +104,12 @@ namespace FracturingFog.Cli
         // Relief core knobs. Defaults mirror FractalParameters; emitted only when
         // relief is on and the value deviates from its default.
         public double ReliefHeight { get; init; } = 1.0;
+
+        /// <summary>#518 — filament detail-gain (1 = off), feature radius (0 = auto),
+        /// height gamma (1 = off). Emitted only when non-default.</summary>
+        public double ReliefDetailGain { get; init; } = 1.0;
+        public int    ReliefDetailRadius { get; init; }
+        public double ReliefHeightGamma { get; init; } = 1.0;
         public double ReliefStrength { get; init; } = 1.0;
         public double ReliefLightAzimuth { get; init; } = 135.0;
         public double ReliefLightElevation { get; init; } = 30.0;
@@ -280,6 +286,9 @@ namespace FracturingFog.Cli
                 if (snap.ReliefRaymarch) parts.Add(BatchFlags.ReliefRaymarch);
                 if (snap.ReliefAbsolute) parts.Add(BatchFlags.ReliefAbsolute);
                 if (snap.ReliefHeight != 1.0)          { parts.Add(BatchFlags.ReliefHeight);         parts.Add(Num(snap.ReliefHeight)); }
+                if (snap.ReliefDetailGain != 1.0)      { parts.Add(BatchFlags.ReliefDetailGain);     parts.Add(Num(snap.ReliefDetailGain)); }
+                if (snap.ReliefDetailRadius != 0)      { parts.Add(BatchFlags.ReliefDetailRadius);   parts.Add(snap.ReliefDetailRadius.ToString(System.Globalization.CultureInfo.InvariantCulture)); }
+                if (snap.ReliefHeightGamma != 1.0)     { parts.Add(BatchFlags.ReliefHeightGamma);    parts.Add(Num(snap.ReliefHeightGamma)); }
                 if (snap.ReliefStrength != 1.0)        { parts.Add(BatchFlags.ReliefStrength);       parts.Add(Num(snap.ReliefStrength)); }
                 if (snap.ReliefLightAzimuth != 135.0)  { parts.Add(BatchFlags.ReliefLightAzimuth);   parts.Add(Num(snap.ReliefLightAzimuth)); }
                 if (snap.ReliefLightElevation != 30.0) { parts.Add(BatchFlags.ReliefLightElevation); parts.Add(Num(snap.ReliefLightElevation)); }

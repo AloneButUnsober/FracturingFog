@@ -519,6 +519,25 @@ namespace FracturingFog.Models
         /// raymarching. Default <see cref="HeightCurve2D.Log"/> (tames boundary
         /// spikes into terrain).</summary>
         public HeightCurve2D Relief2DHeightCurve { get; set; } = HeightCurve2D.Log;
+
+        /// <summary>#518 — local filament detail gain (unsharp high-pass on the
+        /// height field). Raises/sharpens the fractal structure RELATIVE to the base
+        /// "slab" it sits on, which the global <see cref="Relief2DHeightScale"/>
+        /// (a uniform multiplier) cannot. 1.0 = off (byte-identical); higher = the
+        /// ridges grow out of the slab. Clamped 0..8.</summary>
+        public double Relief2DDetailGain { get; set; } = 1.0;
+
+        /// <summary>#518 — blur radius (field cells) for the detail-gain base. 0 =
+        /// auto (~1.5% of the field short axis). Larger = a coarser "slab" base, so
+        /// broader features count as detail. Clamped 0..256.</summary>
+        public int Relief2DDetailRadius { get; set; } = 0;
+
+        /// <summary>#518 — height gamma: exponent on the normalised height field
+        /// (h' = hmax·(h/hmax)^gamma). &gt; 1 expands the top-end (filament) contrast
+        /// against the base; &lt; 1 flattens it. 1.0 = off (byte-identical). Clamped
+        /// 0.05..8.</summary>
+        public double Relief2DHeightGamma { get; set; } = 1.0;
+
         /// <summary>Bicubic (Catmull-Rom) height sampling instead of bilinear —
         /// smoother terrain on deep zoom, at extra sample cost. Default false.</summary>
         public bool Relief2DBicubicHeight { get; set; } = false;
@@ -1110,6 +1129,9 @@ namespace FracturingFog.Models
                 Relief2DCameraOrthographic = Relief2DCameraOrthographic,
                 Relief2DSupersample = Relief2DSupersample,
                 Relief2DHeightCurve = Relief2DHeightCurve,
+                Relief2DDetailGain = Relief2DDetailGain,
+                Relief2DDetailRadius = Relief2DDetailRadius,
+                Relief2DHeightGamma = Relief2DHeightGamma,
                 Relief2DBicubicHeight = Relief2DBicubicHeight,
                 Relief2DGroundPlane = Relief2DGroundPlane,
                 Relief2DAutoShade = Relief2DAutoShade,

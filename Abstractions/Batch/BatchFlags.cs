@@ -75,6 +75,9 @@ namespace FracturingFog.Batch
         // implies relief on. Raymarch camera + isolate knobs are a follow-up.
         public const string Relief               = "--relief";
         public const string ReliefHeight         = "--relief-height";
+        public const string ReliefDetailGain     = "--relief-detail-gain";
+        public const string ReliefDetailRadius   = "--relief-detail-radius";
+        public const string ReliefHeightGamma    = "--relief-height-gamma";
         public const string ReliefStrength       = "--relief-strength";
         public const string ReliefLightAzimuth   = "--relief-light-azimuth";
         public const string ReliefLightElevation = "--relief-light-elevation";

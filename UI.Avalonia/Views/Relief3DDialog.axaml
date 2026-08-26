@@ -70,6 +70,36 @@
                 </Grid>
                 </Expander>
 
+                <!-- #518 — filament detail: raise the fractal STRUCTURE relative to
+                     the base slab (Height scale only scales both together). -->
+                <Expander Header="Filament detail (raise structure vs slab)" HorizontalAlignment="Stretch"
+                          IsExpanded="False"
+                          IsEnabled="{Binding Relief2DRaymarch}"
+                          ToolTip.Tip="Applies to the Oblique 3D raymarch path.">
+
+                <Grid ColumnDefinitions="160,*" RowDefinitions="Auto,Auto,Auto,Auto">
+                    <TextBlock Grid.Row="0" Grid.Column="0" Text="Detail exaggeration:" VerticalAlignment="Center"
+                               ToolTip.Tip="Raises and sharpens the fractal filament structure RELATIVE to the base slab it sits on (a local high-pass / unsharp on the height field). Unlike Height scale — which scales the whole slab and its detail together — this makes the ridges grow OUT of the slab. 1 = off." />
+                    <Slider Grid.Row="0" Grid.Column="1" Minimum="1" Maximum="6" Margin="0,2"
+                            Value="{Binding Relief2DDetailGain, Mode=TwoWay}" />
+
+                    <TextBlock Grid.Row="1" Grid.Column="0" Text="" VerticalAlignment="Center" />
+                    <TextBlock Grid.Row="1" Grid.Column="1" VerticalAlignment="Center" Foreground="#999"
+                               Text="{Binding Relief2DDetailGain, StringFormat='× {0:0.0}'}" />
+
+                    <TextBlock Grid.Row="2" Grid.Column="0" Text="Feature size (px):" VerticalAlignment="Center"
+                               ToolTip.Tip="Blur radius that defines the 'slab' base for Detail exaggeration. 0 = auto (~1.5% of the field). Larger = a coarser base, so broader features count as raise-able detail." />
+                    <NumericUpDown Grid.Row="2" Grid.Column="1"
+                                   Minimum="0" Maximum="256" Increment="1" FormatString="F0"
+                                   Value="{Binding Relief2DDetailRadius, Mode=TwoWay}" Margin="0,2" />
+
+                    <TextBlock Grid.Row="3" Grid.Column="0" Text="Height gamma:" VerticalAlignment="Center"
+                               ToolTip.Tip="Top-end contrast on the height field (h' = peak·(h/peak)^gamma). Above 1 pushes the high filament band up away from the base and preserves the peak; below 1 flattens it. 1 = off." />
+                    <Slider Grid.Row="3" Grid.Column="1" Minimum="0.2" Maximum="4" Margin="0,2"
+                            Value="{Binding Relief2DHeightGamma, Mode=TwoWay}" />
+                </Grid>
+                </Expander>
+
                 <!-- Phase 2 — oblique 3D raymarch -->
                 <CheckBox Content="Oblique 3D raymarch (perspective + volumetric)"
                           IsChecked="{Binding Relief2DRaymarch, Mode=TwoWay}"
