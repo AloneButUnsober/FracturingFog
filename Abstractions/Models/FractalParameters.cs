@@ -588,6 +588,16 @@ namespace FracturingFog.Models
         /// base frame. Clamped to [480, 2160]. Default 1080.</summary>
         public int Relief2DFieldFloor { get; set; } = 1080;
 
+        /// <summary>#520 — far-detail resolving power for the oblique raymarch. The
+        /// sphere-trace's cone tolerance grows with distance as
+        /// <c>eps0 + pixelAngle·t</c>; at low output resolution the far cone fattens
+        /// so thin distant filaments merge into the floor. This factor multiplies
+        /// <c>pixelAngle</c> (tighter far cone) and raises the step budget so those
+        /// far filaments resolve as tall as the near ones — the poster look, live.
+        /// 1.0 = off (byte-identical); lower = more far detail at more march cost.
+        /// Clamped [0.15, 1.0].</summary>
+        public double Relief2DFarDetail { get; set; } = 1.0;
+
         /// <summary>#162 (Slice 3d) — dispatch the oblique relief raymarch on the
         /// GPU (Rendering.D3D / Rendering.Vulkan compute kernel) instead of the CPU
         /// sphere trace, when the host has a relief kernel attached. Default ON as
@@ -1139,6 +1149,7 @@ namespace FracturingFog.Models
                 Relief2DEdgeFade = Relief2DEdgeFade,
                 Relief2DHiResField = Relief2DHiResField,
                 Relief2DFieldFloor = Relief2DFieldFloor,
+                Relief2DFarDetail = Relief2DFarDetail,
                 Relief2DGpuRaymarch = Relief2DGpuRaymarch,
                 Relief2DEmptySkip = Relief2DEmptySkip,
                 Relief2DIsolate = Relief2DIsolate,

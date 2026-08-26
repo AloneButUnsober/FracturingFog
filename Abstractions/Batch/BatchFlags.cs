@@ -92,6 +92,7 @@ namespace FracturingFog.Batch
         public const string ReliefCameraFov       = "--relief-camera-fov";
         public const string ReliefCameraZoom      = "--relief-camera-zoom";
         public const string ReliefCameraOrtho     = "--relief-camera-ortho";
+        public const string ReliefFarDetail       = "--relief-far-detail";
 
         // Depth of field on the relief raymarch camera (roadmap S3, #389). Any
         // DOF flag implies --relief-raymarch (DOF is perspective-camera only).

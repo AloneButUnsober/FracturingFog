@@ -245,6 +245,7 @@ namespace FracturingFog.Batch
             Console.WriteLine("  --relief-camera-fov F       Camera field of view 1..179. Default 50.");
             Console.WriteLine("  --relief-camera-zoom F      Camera zoom (>0). Default 1.0.");
             Console.WriteLine("  --relief-camera-ortho       Orthographic camera (vs perspective).");
+            Console.WriteLine("  --relief-far-detail F       Distant-filament detail: 0.15..1, 1=off, lower=more (slower).");
             Console.WriteLine("  --dof-aperture F            Depth-of-field lens radius 0..1 (0 = pinhole, default).");
             Console.WriteLine("                              Implies --relief-raymarch; perspective camera only.");
             Console.WriteLine("                              Blur integrates over --relief supersample taps.");

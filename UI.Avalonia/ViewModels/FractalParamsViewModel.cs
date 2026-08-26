@@ -540,6 +540,12 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
     }
     public Array Relief2DHeightCurves => Enum.GetValues(typeof(FracturingFog.HeightCurve2D));
 
+    // #520 — far-detail (tighter distance cone → distant filaments stay tall).
+    public double Relief2DFarDetail
+    {
+        get => _p.Relief2DFarDetail;
+        set { double v = Clamp(value, 0.15, 1.0); if (_p.Relief2DFarDetail == v) return; _p.Relief2DFarDetail = v; this.RaisePropertyChanged(); Fire(); }
+    }
     // #518 — filament detail shaping (raise structure vs the base slab).
     public double Relief2DDetailGain
     {

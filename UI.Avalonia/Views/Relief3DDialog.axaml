@@ -207,6 +207,19 @@
                                    Value="{Binding Relief2DDenoiseDepthSigma, Mode=TwoWay}" Margin="0,2" />
                 </Grid>
 
+                <!-- #520 — far-detail: resolve distant filaments as tall as near ones. -->
+                <Grid ColumnDefinitions="160,*,44" RowDefinitions="Auto"
+                      IsEnabled="{Binding Relief2DRaymarch}">
+                    <TextBlock Grid.Column="0" Text="Far detail:" VerticalAlignment="Center"
+                               ToolTip.Tip="Resolving power for DISTANT filament structure. On screen the raymarch keeps detail tall near the camera but lets it fall toward the floor with distance (a wider distance-cone at low resolution); the poster keeps it tall throughout. Drag LEFT (toward 0.15) to tighten the far cone so distant filaments stay tall on screen too — the poster look, live. Lower = more far detail and slower; 1.00 = off." />
+                    <!-- Slider is inverted-feel: right = MORE detail = smaller factor.
+                         Bind to the factor directly; label shows the multiplier. -->
+                    <Slider Grid.Column="1" Minimum="0.15" Maximum="1.0" Margin="0,2"
+                            Value="{Binding Relief2DFarDetail, Mode=TwoWay}" />
+                    <TextBlock Grid.Column="2" VerticalAlignment="Center" Foreground="#999"
+                               Text="{Binding Relief2DFarDetail, StringFormat='{}{0:0.00}'}" />
+                </Grid>
+
                 <CheckBox Content="Hi-res height field (window-independent quality)"
                           IsChecked="{Binding Relief2DHiResField, Mode=TwoWay}"
                           IsEnabled="{Binding Relief2DRaymarch}"

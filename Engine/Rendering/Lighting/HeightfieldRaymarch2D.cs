@@ -800,6 +800,17 @@ public static class HeightfieldRaymarch2D
             : 0.0009 * radius;
         double pixelAngle = ortho ? 0.0 : tanHalf / h;
         int maxSteps = 320;
+        // #520 — far-detail: tighten the distance cone so thin far filaments resolve
+        // (they otherwise merge into the floor at low output resolution), and raise
+        // the step budget so the now-smaller far steps still reach the surface. 1.0
+        // = unchanged (byte-identical). Ortho has no perspective cone (pixelAngle 0),
+        // so only the step budget changes there.
+        double farDetail = Math.Clamp(p.Relief2DFarDetail, 0.15, 1.0);
+        if (farDetail < 1.0)
+        {
+            pixelAngle *= farDetail;
+            maxSteps = (int)Math.Min(2000, Math.Round(maxSteps / farDetail));
+        }
         bool groundPlane = p.Relief2DGroundPlane;
         double floorBx = bx * 3.0, floorBz = bz * 3.0;   // bounded floor → horizon keeps sky
 
