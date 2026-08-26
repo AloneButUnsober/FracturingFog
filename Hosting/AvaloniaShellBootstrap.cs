@@ -2249,34 +2249,8 @@ namespace FracturingFog.Hosting
                         audioModulation: s_shell?.AudioModulation);
                     vm.ParamChanged += () => s_renderHost?.Trigger();
 
-                    // #135 — drop-colour eyedropper: route the params VM's sample
-                    // request through the same platform colour-sample bridge the
-                    // colour-theme editor uses.
-                    vm.SampleColorRequested += (_, args) =>
-                    {
-                        var bridge = BootstrapHooks.ColorSampleBridge;
-                        if (bridge == null || bridge.IsActive)
-                        {
-                            args.Completion.TrySetResult(true);
-                            return;
-                        }
-                        try
-                        {
-                            bridge.Begin(
-                                picked =>
-                                {
-                                    args.PickedR = picked.R;
-                                    args.PickedG = picked.G;
-                                    args.PickedB = picked.B;
-                                    args.Completion.TrySetResult(true);
-                                },
-                                () => args.Completion.TrySetResult(true));
-                        }
-                        catch
-                        {
-                            args.Completion.TrySetResult(true);
-                        }
-                    };
+                    // #135 — drop-colour eyedropper (shared wiring).
+                    WireDropColorEyedropper(vm);
 
                     // #101 — mesh export for the current DE raymarcher. Sampler
                     // builds straight off the live FractalType + params via the
@@ -2386,6 +2360,7 @@ namespace FracturingFog.Hosting
                         var vm = new FractalParamsViewModel(vs.FractalType, vs.FractalParameters,
                             audioModulation: s_shell?.AudioModulation);
                         vm.ParamChanged += () => s_renderHost?.Trigger();
+                        WireDropColorEyedropper(vm);
                         return vm;
                     }, "Volumetric Lighting & FX");
                 });
@@ -2424,6 +2399,10 @@ namespace FracturingFog.Hosting
                     // Fractal Params window's VM, so export was a dead no-op when
                     // launched from the independent Relief 3D window).
                     AttachReliefMeshExport(vm);
+                    // Isolation-cull "Pick" eyedropper — same gap as mesh export
+                    // above: only the Params window wired it, so Pick was a no-op
+                    // in the standalone Relief 3D dialog.
+                    WireDropColorEyedropper(vm);
 
                     var win = new PanelHostWindow(
                         new Relief3DDialog(),
@@ -3430,6 +3409,42 @@ namespace FracturingFog.Hosting
         // Fractal Params window and the standalone Relief 3D window so the
         // export button works from either host (the standalone launcher used to
         // omit this wiring, leaving the button a dead no-op).
+        // #135 — drop-colour eyedropper wiring, shared by every window that hosts
+        // a FractalParamsViewModel (Fractal Params, standalone Relief 3D, Lighting
+        // & FX). Routes the VM's SampleColorRequested through the same platform
+        // colour-sample bridge the colour-theme editor uses. Without this on a
+        // given window, the isolation-cull "Pick" button raises an unhandled event
+        // and silently no-ops (the Relief 3D regression).
+        private static void WireDropColorEyedropper(
+            FracturingFog.UI.Avalonia.ViewModels.FractalParamsViewModel vm)
+        {
+            vm.SampleColorRequested += (_, args) =>
+            {
+                var bridge = BootstrapHooks.ColorSampleBridge;
+                if (bridge == null || bridge.IsActive)
+                {
+                    args.Completion.TrySetResult(true);
+                    return;
+                }
+                try
+                {
+                    bridge.Begin(
+                        picked =>
+                        {
+                            args.PickedR = picked.R;
+                            args.PickedG = picked.G;
+                            args.PickedB = picked.B;
+                            args.Completion.TrySetResult(true);
+                        },
+                        () => args.Completion.TrySetResult(true));
+                }
+                catch
+                {
+                    args.Completion.TrySetResult(true);
+                }
+            };
+        }
+
         private static void AttachReliefMeshExport(
             FracturingFog.UI.Avalonia.ViewModels.FractalParamsViewModel vm)
         {
