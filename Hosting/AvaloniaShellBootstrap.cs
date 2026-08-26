@@ -1689,46 +1689,7 @@ namespace FracturingFog.Hosting
                 try
                 {
                     if (s_renderHost == null) return;
-                    var win = AvaloniaDialogs.ActiveMainWindow;
-
-                    // Preview the export at the CURRENT ON-SCREEN aspect — the one the
-                    // view is composed in, and the one Save Image / Poster use. (NOT the
-                    // multi-monitor wallpaper union: a wallpaper is an ultrawide reframe,
-                    // so previewing it mispredicts a normal Poster/Save Image export.)
-                    var (rw, rh) = s_renderHost.LastPresentedSize;
-                    if (rw <= 0 || rh <= 0) { rw = 1920; rh = 1080; }
-                    double aspect = rw / (double)rh;
-
-                    // Render bigger than a small window so the preview reveals the
-                    // high-res relief detail the window under-samples (the whole point:
-                    // predict the export's fidelity). Cap the long side for speed.
-                    const int PreviewLong = 1600;
-                    int pw, ph;
-                    if (aspect >= 1.0) { pw = PreviewLong; ph = Math.Max(16, (int)Math.Round(PreviewLong / aspect)); }
-                    else               { ph = PreviewLong; pw = Math.Max(16, (int)Math.Round(PreviewLong * aspect)); }
-
-                    var customWm = shell.Main.UseCustomWatermark
-                        ? UserWatermarkStore.Instance.GetByName(shell.Main.SelectedCustomWatermarkName)
-                        : null;
-                    var req = s_renderHost.CreatePosterRequest(
-                        pw, ph, rotate: false, string.Empty,
-                        FracturingFog.Imaging.ImageFileFormat.Png, customWm);
-
-                    var busy = shell.BeginRenderBusy("Rendering preview…");
-                    (uint[] buf, int w, int h) r;
-                    try
-                    {
-                        r = await Task.Run(() =>
-                        {
-                            var b = PosterRenderer.RenderToPixels(req, CancellationToken.None, out int ww, out int hh);
-                            return (b, ww, hh);
-                        });
-                    }
-                    finally { busy.Dispose(); }
-
-                    if (r.buf == null || r.w <= 0 || r.h <= 0) return;
-                    var bmp = BgraToBitmap(r.buf, r.w, r.h);
-                    ShowPosterPreviewWindow(win, bmp, r.w, r.h);
+                    await ShowPosterPreviewWindow(shell, AvaloniaDialogs.ActiveMainWindow);
                 }
                 catch (Exception ex)
                 {
@@ -3915,54 +3876,190 @@ namespace FracturingFog.Hosting
             });
         }
 
-        // #511 (A) — the reusable poster-preview window (a plain top-level Window,
-        // not an in-render overlay, so the native GPU HWND cannot occlude it).
+        // #511 (A) / #520 (2) — the reusable poster-preview window (a plain top-level
+        // Window, not an in-render overlay, so the native GPU HWND cannot occlude it).
+        // A toolbar sets the render dimensions; the image below is letterboxed
+        // (Uniform) to the window. Rendering happens only on the Render button, never
+        // automatically, so a heavy export never fires on a stray edit.
         private static global::Avalonia.Controls.Window? s_posterPreviewWindow;
         private static global::Avalonia.Controls.Image? s_posterPreviewImage;
+        private static global::Avalonia.Controls.NumericUpDown? s_previewW;
+        private static global::Avalonia.Controls.NumericUpDown? s_previewH;
+        private static global::Avalonia.Controls.TextBlock? s_previewStatus;
+        private static bool s_previewBusy;
 
-        private static void ShowPosterPreviewWindow(
-            global::Avalonia.Controls.Window? owner,
-            global::Avalonia.Media.Imaging.Bitmap bmp, int exportW, int exportH)
+        private static async global::System.Threading.Tasks.Task ShowPosterPreviewWindow(
+            ShellViewModel shell, global::Avalonia.Controls.Window? owner)
         {
+            if (s_renderHost == null) return;
+
             if (s_posterPreviewWindow == null)
             {
                 s_posterPreviewImage = new global::Avalonia.Controls.Image
                 {
                     Stretch = global::Avalonia.Media.Stretch.Uniform,   // aspect-correct letterbox
                 };
-                var border = new global::Avalonia.Controls.Border
+                var imgBorder = new global::Avalonia.Controls.Border
                 {
                     Background = global::Avalonia.Media.Brushes.Black,
                     Child = s_posterPreviewImage,
                 };
+                global::Avalonia.Controls.DockPanel.SetDock(imgBorder, global::Avalonia.Controls.Dock.Bottom);
+
+                s_previewW = new global::Avalonia.Controls.NumericUpDown
+                { Minimum = 16, Maximum = 16000, Increment = 64, FormatString = "F0", Width = 110 };
+                s_previewH = new global::Avalonia.Controls.NumericUpDown
+                { Minimum = 16, Maximum = 16000, Increment = 64, FormatString = "F0", Width = 110 };
+                var renderBtn = new global::Avalonia.Controls.Button { Content = "Render preview" };
+                var saveBtn   = new global::Avalonia.Controls.Button { Content = "Save poster…" };
+                var useWinBtn = new global::Avalonia.Controls.Button { Content = "Use window size" };
+                s_previewStatus = new global::Avalonia.Controls.TextBlock
+                { VerticalAlignment = global::Avalonia.Layout.VerticalAlignment.Center, Foreground = global::Avalonia.Media.Brushes.Gray };
+
+                renderBtn.Click += async (_, _) => await RenderPreviewIntoWindow(shell);
+                saveBtn.Click   += async (_, _) => await SavePreviewPoster(shell, s_posterPreviewWindow);
+                useWinBtn.Click += (_, _) =>
+                {
+                    var (dw, dh) = s_renderHost.LastPresentedSize;
+                    if (dw > 0 && dh > 0) { s_previewW!.Value = dw; s_previewH!.Value = dh; }
+                };
+
+                var toolbar = new global::Avalonia.Controls.StackPanel
+                {
+                    Orientation = global::Avalonia.Layout.Orientation.Horizontal,
+                    Spacing = 6,
+                    Margin = new global::Avalonia.Thickness(8),
+                };
+                toolbar.Children.Add(new global::Avalonia.Controls.TextBlock
+                { Text = "W", VerticalAlignment = global::Avalonia.Layout.VerticalAlignment.Center });
+                toolbar.Children.Add(s_previewW);
+                toolbar.Children.Add(new global::Avalonia.Controls.TextBlock
+                { Text = "H", VerticalAlignment = global::Avalonia.Layout.VerticalAlignment.Center });
+                toolbar.Children.Add(s_previewH);
+                toolbar.Children.Add(useWinBtn);
+                toolbar.Children.Add(renderBtn);
+                toolbar.Children.Add(saveBtn);
+                toolbar.Children.Add(s_previewStatus);
+                global::Avalonia.Controls.DockPanel.SetDock(toolbar, global::Avalonia.Controls.Dock.Top);
+
+                var root = new global::Avalonia.Controls.DockPanel();
+                root.Children.Add(toolbar);
+                root.Children.Add(imgBorder);
+
                 s_posterPreviewWindow = new global::Avalonia.Controls.Window
                 {
                     Title = "Poster Preview",
-                    Width = 960,
-                    Height = 600,
-                    Content = border,
+                    Width = 980,
+                    Height = 680,
+                    Content = root,
                     WindowStartupLocation = owner != null
                         ? global::Avalonia.Controls.WindowStartupLocation.CenterOwner
                         : global::Avalonia.Controls.WindowStartupLocation.CenterScreen,
                 };
-                // Real close (not hide) so nothing lingers; the next request rebuilds.
                 s_posterPreviewWindow.Closed += (_, _) =>
                 {
                     s_posterPreviewWindow = null;
                     s_posterPreviewImage = null;
+                    s_previewW = null; s_previewH = null; s_previewStatus = null;
                 };
-            }
 
-            s_posterPreviewImage!.Source = bmp;
-            s_posterPreviewWindow.Title = $"Poster Preview — {exportW}×{exportH} @ current view aspect (fit to window)";
-            if (!s_posterPreviewWindow.IsVisible)
-            {
+                // Seed the dimensions from the current render size (a sensible start;
+                // the user can bump them up for a higher-fidelity preview).
+                var (rw, rh) = s_renderHost.LastPresentedSize;
+                if (rw <= 0 || rh <= 0) { rw = 1920; rh = 1080; }
+                s_previewW.Value = rw;
+                s_previewH.Value = rh;
+
                 if (owner != null) s_posterPreviewWindow.Show(owner);
                 else s_posterPreviewWindow.Show();
+
+                // Initial render so the window isn't blank on open.
+                await RenderPreviewIntoWindow(shell);
             }
             else
             {
                 s_posterPreviewWindow.Activate();
+            }
+        }
+
+        // Render the poster path at the toolbar's W×H and show it. Manual only.
+        private static async global::System.Threading.Tasks.Task RenderPreviewIntoWindow(ShellViewModel shell)
+        {
+            if (s_renderHost == null || s_posterPreviewImage == null || s_previewW == null || s_previewH == null) return;
+            if (s_previewBusy) return;
+            int pw = (int)Math.Clamp(s_previewW.Value ?? 1920m, 16m, 16000m);
+            int ph = (int)Math.Clamp(s_previewH.Value ?? 1080m, 16m, 16000m);
+
+            s_previewBusy = true;
+            if (s_previewStatus != null) s_previewStatus.Text = $"Rendering {pw}×{ph}…";
+            var busy = shell.BeginRenderBusy("Rendering preview…");
+            try
+            {
+                var customWm = shell.Main.UseCustomWatermark
+                    ? UserWatermarkStore.Instance.GetByName(shell.Main.SelectedCustomWatermarkName)
+                    : null;
+                var req = s_renderHost.CreatePosterRequest(
+                    pw, ph, rotate: false, string.Empty,
+                    FracturingFog.Imaging.ImageFileFormat.Png, customWm);
+                var r = await Task.Run(() =>
+                {
+                    var b = PosterRenderer.RenderToPixels(req, CancellationToken.None, out int ww, out int hh);
+                    return (b, ww, hh);
+                });
+                if (r.b != null && r.ww > 0 && r.hh > 0 && s_posterPreviewImage != null)
+                {
+                    s_posterPreviewImage.Source = BgraToBitmap(r.b, r.ww, r.hh);
+                    if (s_posterPreviewWindow != null) s_posterPreviewWindow.Title = $"Poster Preview — {r.ww}×{r.hh}";
+                    if (s_previewStatus != null) s_previewStatus.Text = $"{r.ww}×{r.hh}";
+                }
+            }
+            catch (Exception ex)
+            {
+                if (s_previewStatus != null) s_previewStatus.Text = "Render failed";
+                Console.Error.WriteLine($"[AvaloniaShellBootstrap] Preview render failed: {ex.Message}");
+            }
+            finally { busy.Dispose(); s_previewBusy = false; }
+        }
+
+        // Save a poster at the toolbar's W×H to a picked file (the exact preview dims).
+        private static async global::System.Threading.Tasks.Task SavePreviewPoster(
+            ShellViewModel shell, global::Avalonia.Controls.Window? owner)
+        {
+            if (s_renderHost == null || s_previewW == null || s_previewH == null) return;
+            int pw = (int)Math.Clamp(s_previewW.Value ?? 1920m, 16m, 16000m);
+            int ph = (int)Math.Clamp(s_previewH.Value ?? 1080m, 16m, 16000m);
+            try
+            {
+                string? path = await AvaloniaDialogs.PickSaveFileAsync(
+                    "Save Poster",
+                    suggestedName: BuildSuggestedFileName("png", imageWidth: pw, imageHeight: ph, isPoster: true),
+                    filter: "PNG image (*.png)|*.png|TIFF image (*.tiff;*.tif)|*.tiff;*.tif|BMP image (*.bmp)|*.bmp");
+                if (string.IsNullOrEmpty(path)) return;
+
+                string ext = System.IO.Path.GetExtension(path).ToLowerInvariant();
+                var format = ext switch
+                {
+                    ".bmp" => FracturingFog.Imaging.ImageFileFormat.Bmp,
+                    ".tif" or ".tiff" => FracturingFog.Imaging.ImageFileFormat.Tiff,
+                    _ => FracturingFog.Imaging.ImageFileFormat.Png,
+                };
+                var customWm = shell.Main.UseCustomWatermark
+                    ? UserWatermarkStore.Instance.GetByName(shell.Main.SelectedCustomWatermarkName)
+                    : null;
+                var req = s_renderHost.CreatePosterRequest(pw, ph, rotate: false, path, format, customWm);
+
+                var busy = shell.BeginRenderBusy("Saving poster…");
+                FracturingFog.Imaging.PosterResult result;
+                try { result = await Task.Run(() => PosterRenderer.RenderToFile(req, CancellationToken.None)); }
+                finally { busy.Dispose(); }
+                await AvaloniaDialogs.ShowMessageAsync(
+                    "Poster Saved",
+                    $"Saved {result.SavedWidth}×{result.SavedHeight} px to:\n{path}\n({result.ElapsedMs} ms)",
+                    expectsConfirmation: false);
+            }
+            catch (Exception ex)
+            {
+                await AvaloniaDialogs.ShowMessageAsync("Poster", $"Save failed:\n{ex.Message}", expectsConfirmation: false);
             }
         }
 
