@@ -257,6 +257,15 @@ namespace FracturingFog.Render
         /// into the next uploaded frame.</summary>
         bool ShowWatermark { get; set; }
 
+        /// <summary>#511 (C) — composite the export-aspect frame guide (letterbox
+        /// of <see cref="ExportAspectRatio"/>) into the next frame. Toggle then
+        /// <see cref="RepaintWithPostFx"/> to show it.</summary>
+        bool ShowExportAspectGuide { get; set; }
+
+        /// <summary>#511 (C) — export frame aspect (width / height) for the guide.
+        /// 0 = nothing drawn.</summary>
+        double ExportAspectRatio { get; set; }
+
         /// <summary>Glyph style for the ASCII watermark (Terminal Mode + ASCII
         /// export). The resolved watermark payload (text / colour / placement) is
         /// unchanged — this only picks how the top-line is drawn into the grid.

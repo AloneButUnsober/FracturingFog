@@ -549,6 +549,17 @@ namespace FracturingFog.Rendering
 
         public bool ShowGrid { get; set; }
         public bool ShowWatermark { get; set; }
+
+        /// <summary>#511 (C) — when true, composite an export-aspect frame guide
+        /// (letterbox of <see cref="ExportAspectRatio"/>, dimmed exterior + outline)
+        /// into the live buffer so the user can compose within the shape the
+        /// poster / wallpaper export will use. The export re-frames at its own
+        /// aspect, so this is a composition guide, not a pixel-exact crop.</summary>
+        public bool ShowExportAspectGuide { get; set; }
+
+        /// <summary>#511 (C) — export frame aspect (width / height) drawn by
+        /// <see cref="ShowExportAspectGuide"/>. 0 = nothing to draw.</summary>
+        public double ExportAspectRatio { get; set; }
         public FracturingFog.Imaging.AsciiWatermarkStyle AsciiWatermarkStyle { get; set; }
             = FracturingFog.Imaging.AsciiWatermarkStyle.Block;
         /// <summary>When true, the post-FX upload composites a perf HUD
@@ -3571,7 +3582,8 @@ namespace FracturingFog.Rendering
             // included, where Avalonia.Media overlays are occluded). Only
             // runs when at least one toggle is on.
             // S-X7.5 (2026-06-23) — IsWindows gate dropped; compositor is Skia.
-            if (ShowGrid || ShowWatermark || _selectionBox.HasValue)
+            double exportGuideAspect = ShowExportAspectGuide ? ExportAspectRatio : 0.0;
+            if (ShowGrid || ShowWatermark || _selectionBox.HasValue || exportGuideAspect > 0.0)
             {
                 try
                 {
@@ -3579,7 +3591,7 @@ namespace FracturingFog.Rendering
                         ShowGrid, ShowWatermark, OverlayContrastLuma,
                         RegionName, ThemeName, ProgramName, ProgramVersion,
                         ActiveWatermark,
-                        _selectionBox);
+                        _selectionBox, exportGuideAspect);
                 }
                 catch (Exception ex)
                 {
