@@ -1,0 +1,41 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:FracturingFog.UI.Avalonia.ViewModels"
+        xmlns:views="using:FracturingFog.UI.Avalonia.Views"
+        x:Class="FracturingFog.UI.Avalonia.Views.ToolbarWindow"
+        x:DataType="vm:ShellViewModel"
+        Title="Toolbar"
+        Width="900" Height="60"
+        MinWidth="300" MinHeight="48"
+        WindowDecorations="None"
+        WindowStartupLocation="Manual"
+        CanResize="True"
+        ShowInTaskbar="False"
+        Topmost="False"
+        Background="#0D0D0D">
+    <!-- Floating standalone toolbar (#514). Chromeless. Drag the strip background
+         to move (buttons/combos handle their own clicks so they never start a
+         drag); the bottom-right grip resizes. Horizontal scroll for the long
+         strip; the gutter margin keeps the resize grip reachable. -->
+    <Grid>
+        <Border x:Name="DragRoot"
+                Margin="6"
+                Background="#161616"
+                BorderBrush="#333" BorderThickness="1"
+                Padding="6,4" Cursor="SizeAll">
+            <ScrollViewer HorizontalScrollBarVisibility="Auto"
+                          VerticalScrollBarVisibility="Disabled">
+                <views:ToolbarView />
+            </ScrollViewer>
+        </Border>
+        <Border x:Name="ResizeGrip"
+                Width="16" Height="16"
+                HorizontalAlignment="Right" VerticalAlignment="Bottom"
+                Background="#2A2A2A"
+                Cursor="BottomRightCorner"
+                ToolTip.Tip="Drag to resize">
+            <Path Data="M 11,15 L 15,11 M 7,15 L 15,7 M 3,15 L 15,3"
+                  Stroke="#909090" StrokeThickness="1" />
+        </Border>
+    </Grid>
+</Window>

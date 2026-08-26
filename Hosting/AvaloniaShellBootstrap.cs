@@ -2508,6 +2508,11 @@ namespace FracturingFog.Hosting
                 reg(global::FracturingFog.Models.WindowRole.StatusPanel,
                     () => { if (s_shell != null) s_shell.IsStatusPanelVisible = true; });
 
+                // Floating toolbar panel (#514) — flag-backed; SyncToolbarPanel
+                // shows/creates the window.
+                reg(global::FracturingFog.Models.WindowRole.ToolbarPanel,
+                    () => { if (s_shell != null) s_shell.IsToolbarPanelVisible = true; });
+
                 // Fractal Params editor (#504). Toggle-based like LightingFx;
                 // Open(role) fronts an already-open window via Find() first, so the
                 // command only fires when it is closed (toggle == open).
