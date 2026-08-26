@@ -13,21 +13,35 @@
         ShowInTaskbar="False"
         Topmost="False"
         Background="#0D0D0D">
-    <!-- Floating standalone toolbar (#514). Chromeless. Drag the strip background
-         to move (buttons/combos handle their own clicks so they never start a
-         drag); the bottom-right grip resizes. Horizontal scroll for the long
-         strip; the gutter margin keeps the resize grip reachable. -->
+    <!-- Floating standalone toolbar (#514). Chromeless. Move ONLY via the
+         top-right move handle (a panel-wide move region stole pointer presses
+         from the combo drop-downs so their popups never opened); the bottom-right
+         grip resizes. Toolbar content is top-anchored so extra height opens below
+         it. Horizontal scroll for the long strip. -->
     <Grid>
         <Border x:Name="DragRoot"
                 Margin="6"
                 Background="#161616"
                 BorderBrush="#333" BorderThickness="1"
-                Padding="6,4" Cursor="SizeAll">
+                Padding="6,4">
             <ScrollViewer HorizontalScrollBarVisibility="Auto"
                           VerticalScrollBarVisibility="Disabled">
-                <views:ToolbarView />
+                <views:ToolbarView VerticalAlignment="Top" />
             </ScrollViewer>
         </Border>
+
+        <!-- Move handle (top-right). -->
+        <Border x:Name="MoveHandle"
+                Width="16" Height="16"
+                HorizontalAlignment="Right" VerticalAlignment="Top"
+                Background="#2A2A2A"
+                Cursor="SizeAll"
+                ToolTip.Tip="Drag to move">
+            <Path Data="M 8,2 L 8,14 M 2,8 L 14,8 M 8,2 L 6,4 M 8,2 L 10,4 M 8,14 L 6,12 M 8,14 L 10,12 M 2,8 L 4,6 M 2,8 L 4,10 M 14,8 L 12,6 M 14,8 L 12,10"
+                  Stroke="#909090" StrokeThickness="1" />
+        </Border>
+
+        <!-- Resize handle (bottom-right). -->
         <Border x:Name="ResizeGrip"
                 Width="16" Height="16"
                 HorizontalAlignment="Right" VerticalAlignment="Bottom"

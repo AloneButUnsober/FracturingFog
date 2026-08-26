@@ -27,9 +27,9 @@ public sealed partial class ToolbarWindow : Window
         AvaloniaXamlLoader.Load(this);
         EscapeCloseBehavior.Attach(this);
 
-        var drag = this.FindControl<Border>("DragRoot");
-        if (drag != null)
-            drag.PointerPressed += OnDragPointerPressed;
+        var move = this.FindControl<Border>("MoveHandle");
+        if (move != null)
+            move.PointerPressed += OnDragPointerPressed;
 
         var grip = this.FindControl<Border>("ResizeGrip");
         if (grip != null)
