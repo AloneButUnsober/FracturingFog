@@ -217,6 +217,7 @@ namespace FracturingFog.Batch
         public double? ReliefCameraFov { get; set; }       // 1..179
         public double? ReliefCameraZoom { get; set; }      // > 0
         public bool ReliefCameraOrtho { get; set; }
+        public double? ReliefFarDetail { get; set; }       // #520 — 0.15..1, 1 = off
 
         // Depth of field on the relief raymarch camera (roadmap S3, #389). Any
         // DOF flag implies relief + raymarch (perspective camera only).
@@ -689,6 +690,12 @@ namespace FracturingFog.Batch
                         opts.Relief = true;
                         break;
 
+                    case BatchFlags.ReliefFarDetail:
+                        if (!NextDouble(args, ref i, a, out double rfd, out error)) return false;
+                        opts.ReliefFarDetail = rfd;
+                        opts.Relief = true;
+                        break;
+
                     case BatchFlags.DofAperture:
                         if (!NextDouble(args, ref i, a, out double dofa, out error)) return false;
                         opts.ReliefDofAperture = dofa;
@@ -892,6 +899,8 @@ namespace FracturingFog.Batch
                 { error = "--relief-camera-fov must be 1..179."; return false; }
             if (opts.ReliefCameraZoom is <= 0)
                 { error = "--relief-camera-zoom must be > 0."; return false; }
+            if (opts.ReliefFarDetail is < 0.15 or > 1.0)
+                { error = "--relief-far-detail must be 0.15..1 (1 = off, lower = more far detail)."; return false; }
             if (opts.ReliefDofAperture is < 0 or > 1)
                 { error = "--dof-aperture must be 0..1."; return false; }
             if (opts.ReliefDofFocus is < 0)

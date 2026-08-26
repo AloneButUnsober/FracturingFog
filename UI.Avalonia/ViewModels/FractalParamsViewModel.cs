@@ -539,6 +539,13 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
         set { if (_p.Relief2DHeightCurve == value) return; _p.Relief2DHeightCurve = value; this.RaisePropertyChanged(); Fire(); }
     }
     public Array Relief2DHeightCurves => Enum.GetValues(typeof(FracturingFog.HeightCurve2D));
+
+    // #520 — far-detail (tighter distance cone → distant filaments stay tall).
+    public double Relief2DFarDetail
+    {
+        get => _p.Relief2DFarDetail;
+        set { double v = Clamp(value, 0.15, 1.0); if (_p.Relief2DFarDetail == v) return; _p.Relief2DFarDetail = v; this.RaisePropertyChanged(); Fire(); }
+    }
     public bool Relief2DBicubicHeight
     {
         get => _p.Relief2DBicubicHeight;

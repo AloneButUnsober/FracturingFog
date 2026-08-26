@@ -164,6 +164,7 @@ public sealed partial class FractalParamsViewModel
         _p.Relief2DEdgeFade           = d.Relief2DEdgeFade;
         _p.Relief2DHiResField         = d.Relief2DHiResField;
         _p.Relief2DFieldFloor         = d.Relief2DFieldFloor;
+        _p.Relief2DFarDetail          = d.Relief2DFarDetail;          // #520
         _p.Relief2DIsolate            = d.Relief2DIsolate;
         _p.Relief2DIsolateByDetail    = d.Relief2DIsolateByDetail;
         _p.Relief2DDetailThreshold    = d.Relief2DDetailThreshold;
@@ -250,7 +251,7 @@ public sealed partial class FractalParamsViewModel
         nameof(Relief2DFroxelTemporal), nameof(Relief2DFroxelTemporalFeedback),
         nameof(Relief2DFroxelQuality),
         nameof(Relief2DAutoShade), nameof(Relief2DEdgeFade), nameof(Relief2DHiResField),
-        nameof(Relief2DFieldFloor), nameof(Relief2DIsolate), nameof(Relief2DIsolateByDetail),
+        nameof(Relief2DFieldFloor), nameof(Relief2DFarDetail), nameof(Relief2DIsolate), nameof(Relief2DIsolateByDetail),
         nameof(Relief2DDetailThreshold), nameof(Relief2DIsolateByColor), nameof(Relief2DDropColorsCsv),
         nameof(Relief2DColorTolerance), nameof(Relief2DMeshHeight), nameof(Relief2DMeshSmoothing),
         nameof(Relief2DMeshGrid), nameof(Relief2DMeshMaxMB), nameof(Relief2DMeshUnderside),

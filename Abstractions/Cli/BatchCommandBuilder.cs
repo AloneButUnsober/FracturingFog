@@ -120,6 +120,9 @@ namespace FracturingFog.Cli
         public double ReliefCameraZoom { get; init; } = 1.0;
         public bool ReliefCameraOrtho { get; init; }
 
+        /// <summary>#520 — far-detail factor (1 = off). Emitted when &lt; 1.</summary>
+        public double ReliefFarDetail { get; init; } = 1.0;
+
         // Depth of field on the relief raymarch camera (roadmap S3, #389).
         // Aperture 0 = pinhole (omit both flags). Emitted only on the raymarch path.
         public double ReliefDofAperture { get; init; }
@@ -289,6 +292,7 @@ namespace FracturingFog.Cli
                 if (snap.ReliefRaymarch)
                 {
                     if (snap.ReliefCameraOrtho) parts.Add(BatchFlags.ReliefCameraOrtho);
+                    if (snap.ReliefFarDetail != 1.0) { parts.Add(BatchFlags.ReliefFarDetail); parts.Add(Num(snap.ReliefFarDetail)); }
                     if (snap.ReliefCameraAzimuth != 0.0)    { parts.Add(BatchFlags.ReliefCameraAzimuth);   parts.Add(Num(snap.ReliefCameraAzimuth)); }
                     if (snap.ReliefCameraElevation != 45.0) { parts.Add(BatchFlags.ReliefCameraElevation); parts.Add(Num(snap.ReliefCameraElevation)); }
                     if (snap.ReliefCameraFov != 50.0)       { parts.Add(BatchFlags.ReliefCameraFov);       parts.Add(Num(snap.ReliefCameraFov)); }

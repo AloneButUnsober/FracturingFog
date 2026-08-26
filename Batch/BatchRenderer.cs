@@ -82,6 +82,7 @@ namespace FracturingFog.Batch
             if (opts.ReliefCameraFov.HasValue)    fp.Relief2DCameraFovDeg  = opts.ReliefCameraFov.Value;
             if (opts.ReliefCameraZoom.HasValue)   fp.Relief2DCameraZoom    = opts.ReliefCameraZoom.Value;
             if (opts.ReliefCameraOrtho)           fp.Relief2DCameraOrthographic = true;
+            if (opts.ReliefFarDetail.HasValue)    fp.Relief2DFarDetail     = opts.ReliefFarDetail.Value;   // #520
             if (opts.ReliefDofAperture.HasValue)  fp.Relief2DDofApertureRadius = opts.ReliefDofAperture.Value;
             if (opts.ReliefDofFocus.HasValue)     fp.Relief2DDofFocusDistance  = opts.ReliefDofFocus.Value;
             if (opts.ReliefFroxel)                fp.Relief2DFroxelVolumetrics = true;   // S6 (#408)
