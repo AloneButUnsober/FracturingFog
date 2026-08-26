@@ -58,6 +58,9 @@ namespace FracturingFog.Models
 
         // Generic per-fractal parameter editor window (#504).
         FractalParams = 21,
+
+        // Floating standalone toolbar panel (#514).
+        ToolbarPanel = 22,
     }
 
     /// <summary>Render-window mode. Mirrors the Standard/Mini/Toy/Span shapes the

@@ -594,6 +594,7 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
         ToggleMiniDepthCommand = ReactiveCommand.Create(() => IsMiniDepthVisible = !IsMiniDepthVisible);
         TogglePostFxHudCommand = ReactiveCommand.Create(() => IsPostFxHudVisible = !IsPostFxHudVisible);
         ToggleStatusPanelCommand = ReactiveCommand.Create(() => IsStatusPanelVisible = !IsStatusPanelVisible);
+        ToggleToolbarPanelCommand = ReactiveCommand.Create(() => IsToolbarPanelVisible = !IsToolbarPanelVisible);
         ToggleMiniModeCommand  = ReactiveCommand.Create(() => IsMiniMode = !IsMiniMode);
         ToggleToyModeCommand   = ReactiveCommand.Create(() => IsToyMode  = !IsToyMode);
         ToggleTerminalModeCommand = ReactiveCommand.Create(() => IsTerminalMode = !IsTerminalMode);
@@ -1921,6 +1922,19 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
     }
 
     public ReactiveCommand<Unit, bool> ToggleStatusPanelCommand { get; private set; } = null!;
+
+    // ── Floating standalone toolbar panel (#514) ────────────────────────────
+    // A borderless, drag-to-move/resize window mirroring the docked toolbar.
+    // Host creates/positions it in MainWindow.SyncToolbarPanel; registered for
+    // workspace capture/restore. Independent of the docked toolbar.
+    private bool _isToolbarPanelVisible;
+    public bool IsToolbarPanelVisible
+    {
+        get => _isToolbarPanelVisible;
+        set => this.RaiseAndSetIfChanged(ref _isToolbarPanelVisible, value);
+    }
+
+    public ReactiveCommand<Unit, bool> ToggleToolbarPanelCommand { get; private set; } = null!;
 
     /// <summary>Host-supplied palette sampler. Returns the packed ARGB color
     /// for a smooth-iteration index against the active IColorMap. Used by

@@ -227,6 +227,7 @@ namespace FracturingFog.UI.Avalonia.Services
                 case WindowRole.SceneEditor:      shell.IsSceneEditorVisible = false; return;
                 case WindowRole.AnimationEditor:  shell.IsAnimationEditorVisible = false; return;
                 case WindowRole.StatusPanel:      shell.IsStatusPanelVisible = false; return;
+                case WindowRole.ToolbarPanel:     shell.IsToolbarPanelVisible = false; return;
                 default:
                     var win = WindowService.Find(role);
                     if (win != null)

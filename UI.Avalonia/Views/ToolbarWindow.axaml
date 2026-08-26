@@ -1,0 +1,55 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:FracturingFog.UI.Avalonia.ViewModels"
+        xmlns:views="using:FracturingFog.UI.Avalonia.Views"
+        x:Class="FracturingFog.UI.Avalonia.Views.ToolbarWindow"
+        x:DataType="vm:ShellViewModel"
+        Title="Toolbar"
+        Width="900" Height="60"
+        MinWidth="300" MinHeight="48"
+        WindowDecorations="None"
+        WindowStartupLocation="Manual"
+        CanResize="True"
+        ShowInTaskbar="False"
+        Topmost="False"
+        Background="#0D0D0D">
+    <!-- Floating standalone toolbar (#514). Chromeless. Move ONLY via the
+         top-right move handle (a panel-wide move region stole pointer presses
+         from the combo drop-downs so their popups never opened); the bottom-right
+         grip resizes. Toolbar content is top-anchored so extra height opens below
+         it. Horizontal scroll for the long strip. -->
+    <Grid>
+        <Border x:Name="DragRoot"
+                Margin="6"
+                Background="#161616"
+                BorderBrush="#333" BorderThickness="1"
+                Padding="6,4">
+            <ScrollViewer HorizontalScrollBarVisibility="Auto"
+                          VerticalScrollBarVisibility="Disabled">
+                <views:ToolbarView VerticalAlignment="Top" />
+            </ScrollViewer>
+        </Border>
+
+        <!-- Move handle (top-right). -->
+        <Border x:Name="MoveHandle"
+                Width="16" Height="16"
+                HorizontalAlignment="Right" VerticalAlignment="Top"
+                Background="#2A2A2A"
+                Cursor="SizeAll"
+                ToolTip.Tip="Drag to move">
+            <Path Data="M 8,2 L 8,14 M 2,8 L 14,8 M 8,2 L 6,4 M 8,2 L 10,4 M 8,14 L 6,12 M 8,14 L 10,12 M 2,8 L 4,6 M 2,8 L 4,10 M 14,8 L 12,6 M 14,8 L 12,10"
+                  Stroke="#909090" StrokeThickness="1" />
+        </Border>
+
+        <!-- Resize handle (bottom-right). -->
+        <Border x:Name="ResizeGrip"
+                Width="16" Height="16"
+                HorizontalAlignment="Right" VerticalAlignment="Bottom"
+                Background="#2A2A2A"
+                Cursor="BottomRightCorner"
+                ToolTip.Tip="Drag to resize">
+            <Path Data="M 11,15 L 15,11 M 7,15 L 15,7 M 3,15 L 15,3"
+                  Stroke="#909090" StrokeThickness="1" />
+        </Border>
+    </Grid>
+</Window>

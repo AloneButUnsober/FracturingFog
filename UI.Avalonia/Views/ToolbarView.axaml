@@ -1,0 +1,157 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:FracturingFog.UI.Avalonia.ViewModels"
+        x:Class="FracturingFog.UI.Avalonia.Views.ToolbarView"
+        x:DataType="vm:ShellViewModel">
+    <!-- Render-window toolbar content, shared by the docked strip (MainWindow)
+         and the floating standalone panel (#514). Styles are scoped here so they
+         travel to whichever host renders the control. Binds against the inherited
+         ShellViewModel DataContext. The Type/Region/Theme combos get their
+         right-click sort/filter flyouts wired in code-behind. -->
+    <UserControl.Styles>
+        <Style Selector="Button.toolbar">
+            <Setter Property="Padding" Value="10,4" />
+            <Setter Property="Background" Value="#222" />
+            <Setter Property="Foreground" Value="#EEE" />
+            <Setter Property="BorderBrush" Value="#444" />
+        </Style>
+        <Style Selector="ComboBox.toolbar">
+            <Setter Property="Background" Value="#1E1E1E" />
+            <Setter Property="Foreground" Value="#EEE" />
+            <Setter Property="MinHeight" Value="26" />
+        </Style>
+        <Style Selector="TextBlock.label">
+            <Setter Property="Foreground" Value="#9B9B9B" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+            <Setter Property="FontWeight" Value="Bold" />
+        </Style>
+    </UserControl.Styles>
+
+    <DockPanel LastChildFill="False">
+        <StackPanel Orientation="Horizontal" Spacing="6" DockPanel.Dock="Left">
+            <Button Classes="toolbar" Content="Reset"
+                    Command="{Binding Main.ResetViewCommand}" />
+            <!-- Menu now opens the Control Center (the main menu form going
+                 forward). The legacy FloatingMenu view is deprecated. -->
+            <Button Classes="toolbar" Content="Menu"
+                    Command="{Binding ShowControlCenterCommand}"
+                    ToolTip.Tip="Open the Control Center (main menu)" />
+            <ToggleButton Classes="toolbar" Content="Terminal"
+                          IsChecked="{Binding IsTerminalMode, Mode=TwoWay}"
+                          ToolTip.Tip="Terminal Mode — show the fractal as live ASCII / text art" />
+            <ToggleButton Classes="toolbar" Content="Split"
+                          IsChecked="{Binding IsSideBySideMode, Mode=TwoWay}"
+                          ToolTip.Tip="Side-by-side — full render on the left, live ASCII on the right" />
+            <ToggleButton Classes="toolbar" Content="Ramp: FX"
+                          IsVisible="{Binding IsAsciiVisible}"
+                          IsChecked="{Binding AsciiRampFromColor, Mode=TwoWay}"
+                          ToolTip.Tip="Drive the ASCII glyph ramp from the post-FX image (adaptive / brightness / contrast) instead of the raw iteration field" />
+            <ToggleButton Classes="toolbar" Content="Hue"
+                          IsVisible="{Binding IsAsciiVisible}"
+                          IsChecked="{Binding AsciiFxHue, Mode=TwoWay}"
+                          ToolTip.Tip="ASCII FX — cycle the palette hue over time" />
+            <ToggleButton Classes="toolbar" Content="CRT"
+                          IsVisible="{Binding IsAsciiVisible}"
+                          IsChecked="{Binding AsciiFxCrt, Mode=TwoWay}"
+                          ToolTip.Tip="ASCII FX — CRT scanlines" />
+            <ToggleButton Classes="toolbar" Content="Breathe"
+                          IsVisible="{Binding IsAsciiVisible}"
+                          IsChecked="{Binding AsciiFxBreathe, Mode=TwoWay}"
+                          ToolTip.Tip="ASCII FX — pulse the glyph density over time" />
+            <ToggleButton Classes="toolbar" Content="Beat"
+                          IsVisible="{Binding IsAsciiVisible}"
+                          IsChecked="{Binding AsciiFxAudioReactive, Mode=TwoWay}"
+                          ToolTip.Tip="ASCII FX — drive breathe / bloom / hue / glitch from live audio" />
+            <ComboBox x:Name="AsciiFxPresetCombo"
+                      Classes="toolbar"
+                      MinWidth="140"
+                      IsVisible="{Binding IsAsciiVisible}"
+                      ItemsSource="{Binding AsciiFxPresetNames}"
+                      SelectedItem="{Binding SelectedAsciiFxPreset, Mode=TwoWay}"
+                      ToolTip.Tip="ASCII FX preset — a one-click curated look (Matrix, CRT, Fire, …)" />
+            <ComboBox x:Name="AsciiWatermarkStyleCombo"
+                      Classes="toolbar"
+                      MinWidth="110"
+                      IsVisible="{Binding IsAsciiVisible}"
+                      ItemsSource="{Binding AsciiWatermarkStyles}"
+                      SelectedItem="{Binding SelectedAsciiWatermarkStyle, Mode=TwoWay}"
+                      ToolTip.Tip="ASCII watermark style — how the region/theme watermark is drawn as text art (Block, Plain label, Boxed banner). Shows in Terminal Mode when Watermark is on; always on ASCII exports." />
+            <Button Classes="toolbar" Content="FX…"
+                    IsVisible="{Binding IsAsciiVisible}"
+                    Command="{Binding ShowAsciiFxPanelCommand}"
+                    ToolTip.Tip="Open the full ASCII FX panel for per-effect control" />
+            <ToggleButton Classes="toolbar" Content="● REC"
+                          IsVisible="{Binding IsAsciiVisible}"
+                          IsChecked="{Binding IsAsciiRecording, Mode=TwoWay}"
+                          ToolTip.Tip="Record the live ASCII animation to a file (zoom video / scene / slideshow / interactive). Toggle off to choose .cast / .svg / .ans / .mp4." />
+            <ToggleButton Classes="toolbar" Content="Warp"
+                          IsChecked="{Binding Main.PaletteCycleEnabled, Mode=TwoWay}"
+                          ToolTip.Tip="Warp the palette (colour cycling) over the current view — rotates the colour LUT without moving the camera. Cheap on Acid Fog / procedural types." />
+            <ToggleButton Classes="toolbar" Content="Pulse"
+                          IsChecked="{Binding Main.AudioViewBreathe, Mode=TwoWay}"
+                          ToolTip.Tip="Audio view-breathe: the view zoom-pulses with the music (kick-driven). Base centre/zoom stay exact — the wobble is render-only. Shallow zoom only. Spins up audio capture." />
+            <ToggleButton Classes="toolbar" Content="Auto-VJ"
+                          IsVisible="{Binding Main.IsAcidFogType}"
+                          IsChecked="{Binding Main.AcidFogAmbientEnabled, Mode=TwoWay}"
+                          ToolTip.Tip="Acid Fog auto-VJ ambient loop: hold each pattern while the palette cycles, then fade-to-black and advance through a shuffled, non-repeating pattern playlist (classic first)." />
+            <ToggleButton Classes="toolbar" Content="Lock"
+                          IsVisible="{Binding Main.IsAcidFogType}"
+                          IsChecked="{Binding Main.AcidFogAmbientLocked, Mode=TwoWay}"
+                          ToolTip.Tip="Lock the auto-VJ loop: freeze pattern advancement while the colour keeps cycling." />
+            <ToggleButton Classes="toolbar" Content="Beat"
+                          IsVisible="{Binding Main.IsAcidFogType}"
+                          IsChecked="{Binding Main.AcidFogAmbientBeatSync, Mode=TwoWay}"
+                          ToolTip.Tip="Beat-lock the auto-VJ loop: advance patterns on the music's downbeats and slave the palette cycle rate to the detected BPM." />
+            <Button Classes="toolbar" Content="Next ▸"
+                    IsVisible="{Binding Main.IsAcidFogType}"
+                    Command="{Binding Main.AcidFogAmbientNextCommand}"
+                    ToolTip.Tip="Auto-VJ: advance to the next pattern now (works even when locked)." />
+            <Button Classes="toolbar" Content="?"
+                    Command="{Binding ShowHelpCommand}"
+                    ToolTip.Tip="Help menu..."/>
+            <TextBlock Text="Type" Classes="label" />
+            <ComboBox x:Name="ToolbarTypeCombo"
+                      Classes="toolbar"
+                      MinWidth="150"
+                      ItemsSource="{Binding Main.FractalEntries}"
+                      SelectedItem="{Binding Main.SelectedFractalEntry}">
+                <ComboBox.ItemTemplate>
+                    <DataTemplate DataType="vm:FractalTypeEntry">
+                        <TextBlock Text="{Binding Label}" />
+                    </DataTemplate>
+                </ComboBox.ItemTemplate>
+            </ComboBox>
+            <Button Classes="toolbar" Content="Params"
+                    Command="{Binding ShowFractalParamsCommand}"
+                    ToolTip.Tip="Edit parameters for the current fractal type" />
+            <TextBlock Text="Quality" Classes="label" Margin="8,0,0,0" />
+            <ComboBox Classes="toolbar"
+                      MinWidth="130"
+                      ItemsSource="{Binding Main.QualityPresets}"
+                      SelectedItem="{Binding Main.SelectedQuality}">
+                <ComboBox.ItemTemplate>
+                    <DataTemplate>
+                        <TextBlock Text="{Binding Name}" />
+                    </DataTemplate>
+                </ComboBox.ItemTemplate>
+            </ComboBox>
+            <TextBlock Text="Region" Classes="label" Margin="8,0,0,0" />
+            <ComboBox x:Name="ToolbarRegionCombo"
+                      Classes="toolbar"
+                      MinWidth="180"
+                      ItemsSource="{Binding FloatingMenu.RegionNames}"
+                      SelectedItem="{Binding FloatingMenu.SelectedRegion}" />
+            <Button Classes="toolbar" Content="Edit"
+                    ToolTip.Tip="Edit the selected region's metadata (name, animation, curated themes)."
+                    Command="{Binding ShowRegionEditorCommand}" />
+            <TextBlock Text="Theme" Classes="label" Margin="8,0,0,0" />
+            <ComboBox x:Name="ToolbarThemeCombo"
+                      Classes="toolbar"
+                      MinWidth="180"
+                      ItemsSource="{Binding FloatingMenu.ThemeNames}"
+                      SelectedItem="{Binding FloatingMenu.SelectedTheme}" />
+            <Button Classes="toolbar" Content="Edit"
+                    Command="{Binding ShowColorThemeEditorCommand}" />
+        </StackPanel>
+    </DockPanel>
+</UserControl>

@@ -39,7 +39,6 @@ public sealed partial class MainWindow : Window
     private ShellViewModel? _shell;
     private IDisposable? _inputAdapter;
     private Border? _sponge;
-    private bool _sortMenusAttached;
 
     private FloatingMenuView? _menuWin;
     private PanelHostWindow? _controlCenterWin;
@@ -64,6 +63,7 @@ public sealed partial class MainWindow : Window
     private PostFxHudWindow? _postFxHudWin;
     private MiniWindowTether? _postFxHudTether;
     private StatusPanelWindow? _statusPanelWin;
+    private ToolbarWindow? _toolbarPanelWin;
 
     // S-X8 (2026-06-27) — hold the delegates ConfigureMiniDepth subscribes
     // to RenderHost.ColorMapChanged / FrameCompleted so DetachShell can
@@ -636,24 +636,9 @@ public sealed partial class MainWindow : Window
             AttachContextMenu(_sponge, shell);
         }
 
-        // Right-click sort menus on the toolbar Type / Region / Theme combos.
-        // The build callbacks read the live _shell so they stay correct if the
-        // DataContext is swapped; attach once so ContextRequested handlers
-        // don't stack on re-attach.
-        if (!_sortMenusAttached)
-        {
-            ComboSortMenu.Attach(this.FindControl<ComboBox>("ToolbarTypeCombo"),
-                () => _shell?.Main.BuildFractalTypeSortMenu() ?? System.Array.Empty<ComboMenuItem>());
-            // Region combo: "Edit region…" (from the Edit-Region enhancement)
-            // sits above the restored filter-by-fractal-type entries so both
-            // live in one flyout. Prepending here (rather than in the VM) keeps
-            // the ShowRegionEditor command coupling in the view layer.
-            ComboSortMenu.Attach(this.FindControl<ComboBox>("ToolbarRegionCombo"),
-                BuildRegionComboMenu);
-            ComboSortMenu.Attach(this.FindControl<ComboBox>("ToolbarThemeCombo"),
-                () => _shell?.FloatingMenu.BuildThemeSortMenu() ?? System.Array.Empty<ComboMenuItem>());
-            _sortMenusAttached = true;
-        }
+        // Toolbar Type/Region/Theme combo sort-menu wiring now lives in
+        // ToolbarView code-behind (#514) — the combos moved into that shared
+        // control, so FindControl from here would no longer resolve them.
 
         shell.PropertyChanged += OnShellPropertyChanged;
         shell.Main.PropertyChanged += OnMainPropertyChanged;
@@ -669,25 +654,6 @@ public sealed partial class MainWindow : Window
         SyncEditor();
         SyncHelp();
         SyncAsciiMode();
-    }
-
-    // Region combo right-click menu: "Edit region…" + separator, then the
-    // FloatingMenu's filter-by-fractal-type entries (RegionSortMode). Rebuilt
-    // on every open so the filter's checked state stays live. Returns just the
-    // Edit entry if the shell isn't attached yet.
-    private System.Collections.Generic.IReadOnlyList<ComboMenuItem> BuildRegionComboMenu()
-    {
-        var items = new System.Collections.Generic.List<ComboMenuItem>
-        {
-            ComboMenuItem.Item("Edit region…", false,
-                () => _shell?.ShowRegionEditorCommand.Execute().Subscribe()),
-        };
-        if (_shell != null)
-        {
-            items.Add(ComboMenuItem.Separator);
-            items.AddRange(_shell.FloatingMenu.BuildRegionSortMenu());
-        }
-        return items;
     }
 
     private void DetachShell()
@@ -791,6 +757,9 @@ public sealed partial class MainWindow : Window
                 break;
             case nameof(ShellViewModel.IsStatusPanelVisible):
                 SyncStatusPanel();
+                break;
+            case nameof(ShellViewModel.IsToolbarPanelVisible):
+                SyncToolbarPanel();
                 break;
             case nameof(ShellViewModel.IsColorThemeEditorVisible):
             case nameof(ShellViewModel.ColorThemeEditor):
@@ -898,6 +867,34 @@ public sealed partial class MainWindow : Window
         else
         {
             _statusPanelWin?.Hide();
+        }
+    }
+
+    // Floating standalone toolbar panel (#514). Mirrors the docked toolbar in a
+    // borderless, drag-to-move/resize window bound to the same shell. Toggled by
+    // ShellViewModel.IsToolbarPanelVisible; registered for workspace capture/restore.
+    private void SyncToolbarPanel()
+    {
+        if (_shell == null) return;
+        if (_shell.IsToolbarPanelVisible)
+        {
+            if (_toolbarPanelWin == null)
+            {
+                _toolbarPanelWin = new ToolbarWindow { DataContext = _shell };
+                _toolbarPanelWin.Closing += (_, ev) =>
+                {
+                    if (_shuttingDown) return;
+                    ev.Cancel = true;
+                    if (_shell != null) _shell.IsToolbarPanelVisible = false;
+                };
+                FracturingFog.UI.Avalonia.Services.WindowService.RegisterWindow(
+                    FracturingFog.Models.WindowRole.ToolbarPanel, _toolbarPanelWin);
+            }
+            if (!_toolbarPanelWin.IsVisible) _toolbarPanelWin.Show(this);
+        }
+        else
+        {
+            _toolbarPanelWin?.Hide();
         }
     }
 
@@ -2169,6 +2166,7 @@ public sealed partial class MainWindow : Window
         _miniDepthWin?.Close();
         _postFxHudWin?.Close();
         _statusPanelWin?.Close();
+        _toolbarPanelWin?.Close();
         _assetManagerWin?.Close();
 
         DetachShell();
