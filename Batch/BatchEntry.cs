@@ -231,6 +231,9 @@ namespace FracturingFog.Batch
             Console.WriteLine("  --relief                    Enable the 2D heightfield relief post-pass.");
             Console.WriteLine("  --relief-raymarch           Use the oblique raymarch path (vs default emboss).");
             Console.WriteLine("  --relief-height F           Height exaggeration (>0). Default 1.0.");
+            Console.WriteLine("  --relief-detail-gain F      Raise filament structure vs the slab (unsharp). 0..8, 1=off.");
+            Console.WriteLine("  --relief-detail-radius N    Feature size (px) for --relief-detail-gain. 0..256, 0=auto.");
+            Console.WriteLine("  --relief-height-gamma F     Top-end height contrast (h^gamma). 0.05..8, 1=off.");
             Console.WriteLine("  --relief-strength F         Blend of relief vs flat colour 0..1. Default 1.0.");
             Console.WriteLine("  --relief-light-azimuth F    Light azimuth degrees 0..360. Default 135.");
             Console.WriteLine("  --relief-light-elevation F  Light elevation degrees -90..90. Default 30.");

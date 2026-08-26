@@ -119,6 +119,26 @@ screen-space relief, but a true 3D scene.
 | **Edge fade** | 0 – 0.5 | Ramps the height to the base plane near the image edges, so structure running off-frame tapers out instead of forming streaky "arms". 0 = off. **Not** the same as the Lighting & FX panel's **Edge strength** — that is an unrelated screen-space silhouette-inking post-pass (colored strokes over edges), not a heightfield taper. |
 | **Field floor (px)** | 480 – 2160 | Short-axis resolution the height field is computed at, independent of window size. Only active with **Hi-res height field**, and only when the window is smaller than this. |
 
+### Filament detail — raise the structure *relative to* the slab
+
+**Height scale** is a single uniform multiplier: it scales the whole slab **and** the
+filament texture on it together, so the fractal ridge never grows *relative* to the
+slab it sits on. These knobs (in the **Filament detail** section; raymarch only) fix
+that — the fractal outline grows and exaggerates while the base stays put:
+
+| Control | Range | Default | What it does |
+|---|---|---|---|
+| **Detail exaggeration** | 1 – 6 | 1 (off) | Local high-pass (unsharp) on the height field: raises and sharpens the filament ridges **out of** the base slab, instead of scaling both together like Height scale. This is the main "make the structure taller and more distinct" knob. |
+| **Feature size (px)** | 0 – 256 | 0 = auto | What counts as "slab" vs "detail" for the exaggeration — the blur radius of the base. Larger = a coarser base, so broader features get raised too. Auto ≈ 1.5% of the field. |
+| **Height gamma** | 0.2 – 4 | 1 (off) | Top-end contrast on the height (`h^gamma`). Above 1 pushes the high filament band up away from the base (peak preserved); below 1 flattens it. |
+
+> [!TIP]
+> Keep the **Height curve** on **Log** (tames spikes) and reach for **Detail
+> exaggeration** to bring the structure back up — you get terrain-like relief with
+> filaments that still stand proud of the slab. Then **Height scale** sets the
+> overall vertical size. Batch: `--relief-detail-gain`, `--relief-detail-radius`,
+> `--relief-height-gamma`.
+
 ### Toggles
 
 | Toggle | What it does |

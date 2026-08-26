@@ -154,6 +154,9 @@ public sealed partial class FractalParamsViewModel
         _p.Relief2DDenoiseDepthSigma  = d.Relief2DDenoiseDepthSigma;
         _p.Relief2DSupersample        = d.Relief2DSupersample;
         _p.Relief2DHeightCurve        = d.Relief2DHeightCurve;
+        _p.Relief2DDetailGain         = d.Relief2DDetailGain;          // #518
+        _p.Relief2DDetailRadius       = d.Relief2DDetailRadius;        // #518
+        _p.Relief2DHeightGamma        = d.Relief2DHeightGamma;         // #518
         _p.Relief2DBicubicHeight      = d.Relief2DBicubicHeight;
         _p.Relief2DGroundPlane        = d.Relief2DGroundPlane;
         _p.Relief2DFroxelVolumetrics  = d.Relief2DFroxelVolumetrics;   // S6 (#408)
@@ -245,7 +248,8 @@ public sealed partial class FractalParamsViewModel
         nameof(Relief2DDofApertureRadius), nameof(Relief2DDofFocusDistance), nameof(DofEnabled),
         nameof(Relief2DDenoiseIterations), nameof(Relief2DDenoiseColorSigma),
         nameof(Relief2DDenoiseNormalSigma), nameof(Relief2DDenoiseDepthSigma), nameof(DenoiseEnabled),
-        nameof(Relief2DHeightCurve), nameof(Relief2DBicubicHeight), nameof(Relief2DGroundPlane),
+        nameof(Relief2DHeightCurve), nameof(Relief2DDetailGain), nameof(Relief2DDetailRadius),
+        nameof(Relief2DHeightGamma), nameof(Relief2DBicubicHeight), nameof(Relief2DGroundPlane),
         nameof(Relief2DFroxelVolumetrics),
         nameof(Relief2DFroxelTemporal), nameof(Relief2DFroxelTemporalFeedback),
         nameof(Relief2DFroxelQuality),

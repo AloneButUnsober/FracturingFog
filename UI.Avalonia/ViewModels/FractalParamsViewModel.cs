@@ -539,6 +539,24 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
         set { if (_p.Relief2DHeightCurve == value) return; _p.Relief2DHeightCurve = value; this.RaisePropertyChanged(); Fire(); }
     }
     public Array Relief2DHeightCurves => Enum.GetValues(typeof(FracturingFog.HeightCurve2D));
+
+    // #518 — filament detail shaping (raise structure vs the base slab).
+    public double Relief2DDetailGain
+    {
+        get => _p.Relief2DDetailGain;
+        set { double v = Clamp(value, 0.0, 8.0); if (_p.Relief2DDetailGain == v) return; _p.Relief2DDetailGain = v; this.RaisePropertyChanged(); Fire(); }
+    }
+    public int Relief2DDetailRadius
+    {
+        get => _p.Relief2DDetailRadius;
+        set { int v = (int)Clamp(value, 0, 256); if (_p.Relief2DDetailRadius == v) return; _p.Relief2DDetailRadius = v; this.RaisePropertyChanged(); Fire(); }
+    }
+    public double Relief2DHeightGamma
+    {
+        get => _p.Relief2DHeightGamma;
+        set { double v = Clamp(value, 0.05, 8.0); if (_p.Relief2DHeightGamma == v) return; _p.Relief2DHeightGamma = v; this.RaisePropertyChanged(); Fire(); }
+    }
+
     public bool Relief2DBicubicHeight
     {
         get => _p.Relief2DBicubicHeight;
