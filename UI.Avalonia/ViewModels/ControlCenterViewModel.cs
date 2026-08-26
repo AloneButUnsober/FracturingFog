@@ -409,6 +409,9 @@ public sealed class ControlCenterViewModel : ViewModelBase
             ReliefEnabled        = fp?.Relief2DEnabled ?? false,
             ReliefRaymarch       = fp?.Relief2DRaymarch ?? false,
             ReliefHeight         = fp?.Relief2DHeightScale ?? 1.0,
+            ReliefDetailGain     = fp?.Relief2DDetailGain ?? 1.0,      // #518
+            ReliefDetailRadius   = fp?.Relief2DDetailRadius ?? 0,      // #518
+            ReliefHeightGamma    = fp?.Relief2DHeightGamma ?? 1.0,     // #518
             ReliefStrength       = fp?.Relief2DStrength ?? 1.0,
             ReliefLightAzimuth   = fp?.Relief2DLightAzimuthDeg ?? 135.0,
             ReliefLightElevation = fp?.Relief2DLightElevationDeg ?? 30.0,

@@ -72,6 +72,9 @@ namespace FracturingFog.Batch
             if (opts.Relief)                      fp.Relief2DEnabled      = true;
             if (opts.ReliefRaymarch)              fp.Relief2DRaymarch     = true;
             if (opts.ReliefHeight.HasValue)       fp.Relief2DHeightScale  = opts.ReliefHeight.Value;
+            if (opts.ReliefDetailGain.HasValue)   fp.Relief2DDetailGain   = opts.ReliefDetailGain.Value;   // #518
+            if (opts.ReliefDetailRadius.HasValue) fp.Relief2DDetailRadius = opts.ReliefDetailRadius.Value;  // #518
+            if (opts.ReliefHeightGamma.HasValue)  fp.Relief2DHeightGamma  = opts.ReliefHeightGamma.Value;   // #518
             if (opts.ReliefStrength.HasValue)     fp.Relief2DStrength     = opts.ReliefStrength.Value;
             if (opts.ReliefLightAzimuth.HasValue) fp.Relief2DLightAzimuthDeg   = opts.ReliefLightAzimuth.Value;
             if (opts.ReliefLightElevation.HasValue) fp.Relief2DLightElevationDeg = opts.ReliefLightElevation.Value;

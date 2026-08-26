@@ -259,7 +259,11 @@ public static class HeightfieldRaymarch2D
         // sy / invLip stay per-call (cheap, scale-dependent).
         HeightCurve2D curve = p.Relief2DHeightCurve;
         double edgeFade = Math.Clamp(p.Relief2DEdgeFade, 0.0, 0.5);
-        ulong key = PrepassKey(height, hn, hw, hh, curve, edgeFade);
+        // #518 — local filament detail shaping (raise structure vs the base slab).
+        double detailGain = Math.Clamp(p.Relief2DDetailGain, 0.0, 8.0);
+        int detailRadius = Math.Clamp(p.Relief2DDetailRadius, 0, 256);
+        double heightGamma = Math.Clamp(p.Relief2DHeightGamma, 0.05, 8.0);
+        ulong key = PrepassKey(height, hn, hw, hh, curve, edgeFade, detailGain, detailRadius, heightGamma);
 
         // Reuse the last-published IMMUTABLE prepass when the key matches, else
         // build a fresh one into its OWN arrays (thread-safe: no two renders share
@@ -273,7 +277,7 @@ public static class HeightfieldRaymarch2D
         }
         if (pre is null)
         {
-            pre = BuildPrepass(height, hn, hw, hh, curve, edgeFade);
+            pre = BuildPrepass(height, hn, hw, hh, curve, edgeFade, detailGain, detailRadius, heightGamma);
             lock (s_prepassLock) { s_prepass = pre; s_prepassKey = key; }
         }
 
@@ -930,7 +934,8 @@ public static class HeightfieldRaymarch2D
     /// renders can build concurrently without racing (the fix for the old shared
     /// <c>s_compressed</c>). The result is immutable once returned.</summary>
     private static ReliefPrepass BuildPrepass(
-        float[] height, int hn, int hw, int hh, HeightCurve2D curve, double edgeFade)
+        float[] height, int hn, int hw, int hh, HeightCurve2D curve, double edgeFade,
+        double detailGain = 1.0, int detailRadius = 0, double heightGamma = 1.0)
     {
         var hbuf = new float[hn];
 
@@ -991,6 +996,14 @@ public static class HeightfieldRaymarch2D
         // undersampled boundary comb reads as a smooth ridge. No-op at Span.
         LowPassAdaptive(hbuf, hw, hh);
 
+        // #518 — filament detail shaping, so the fractal structure can be raised
+        // RELATIVE to the base slab (the global Height scale only scales both
+        // together). Gamma first (top-end contrast on the normalised height), then
+        // the local unsharp high-pass (grow/sharpen ridges without lifting the base).
+        // Both identity at their defaults (gamma 1 / gain 1) → byte-identical.
+        ReliefHeightDetail.Gamma(hbuf, hw, hh, heightGamma);
+        ReliefHeightDetail.Unsharp(hbuf, hw, hh, detailGain, detailRadius);
+
         // Edge fade (#137, #140) — cap tall structure near each image edge down to
         // the base plane so filaments running off-frame taper instead of extruding
         // into streaky border arms. 0 = off.
@@ -1031,7 +1044,8 @@ public static class HeightfieldRaymarch2D
     /// purpose: it enters only as sy afterwards, so a scale tweak reuses the
     /// cache.</summary>
     private static ulong PrepassKey(float[] height, int hn, int hw, int hh,
-                                    HeightCurve2D curve, double edgeFade)
+                                    HeightCurve2D curve, double edgeFade,
+                                    double detailGain, int detailRadius, double heightGamma)
     {
         unchecked
         {
@@ -1048,6 +1062,14 @@ public static class HeightfieldRaymarch2D
             ulong ef = (ulong)BitConverter.DoubleToInt64Bits(edgeFade);
             hash = (hash ^ (ef & 0xFFFFFFFFUL)) * FnvPrime;
             hash = (hash ^ (ef >> 32)) * FnvPrime;
+            // #518 — detail-gain / radius / gamma also shape the compressed field.
+            ulong dg = (ulong)BitConverter.DoubleToInt64Bits(detailGain);
+            hash = (hash ^ (dg & 0xFFFFFFFFUL)) * FnvPrime;
+            hash = (hash ^ (dg >> 32)) * FnvPrime;
+            hash = (hash ^ (uint)detailRadius) * FnvPrime;
+            ulong hg = (ulong)BitConverter.DoubleToInt64Bits(heightGamma);
+            hash = (hash ^ (hg & 0xFFFFFFFFUL)) * FnvPrime;
+            hash = (hash ^ (hg >> 32)) * FnvPrime;
             return hash;
         }
     }
