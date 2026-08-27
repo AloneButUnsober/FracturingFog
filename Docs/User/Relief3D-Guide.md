@@ -119,6 +119,7 @@ screen-space relief, but a true 3D scene.
 | **Edge fade** | 0 – 0.5 | Ramps the height to the base plane near the image edges, so structure running off-frame tapers out instead of forming streaky "arms". 0 = off. **Not** the same as the Lighting & FX panel's **Edge strength** — that is an unrelated screen-space silhouette-inking post-pass (colored strokes over edges), not a heightfield taper. |
 | **Field floor (px)** | 480 – 2160 | Short-axis resolution the height field is computed at, independent of window size. Only active with **Hi-res height field**, and only when the window is smaller than this. |
 | **Far detail** | 0.15 – 1 | Distant-filament resolving power. On screen the raymarch keeps detail tall near the camera but lets it fall toward the floor with distance (the distance-cone fattens at low resolution); the poster keeps it tall throughout. **Drag left** to tighten the far cone so distant filaments stay tall on screen too — the poster look, live. Lower = more far detail **and** slower (more marching). 1 = off / byte-identical. |
+| **Settle to full detail** | on / off | Best of both: render fast while you pan / zoom / orbit, then a moment after the view **stops**, auto re-render the relief at full far-detail (distant filaments resolve like the poster) — no fractal recompute. The next move drops back to fast. The extra render happens only while the view is idle, so interaction stays fluid. Off = the live view keeps whatever **Far detail** you set. |
 
 ### Filament detail — raise the structure *relative to* the slab
 

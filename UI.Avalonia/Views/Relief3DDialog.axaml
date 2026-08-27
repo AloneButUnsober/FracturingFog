@@ -220,6 +220,12 @@
                                Text="{Binding Relief2DFarDetail, StringFormat='{}{0:0.00}'}" />
                 </Grid>
 
+                <!-- #520 (part 3) — settle-based full detail. -->
+                <CheckBox Content="Settle to full detail when the view stops"
+                          IsChecked="{Binding Relief2DSettleDetail, Mode=TwoWay}"
+                          IsEnabled="{Binding Relief2DRaymarch}"
+                          ToolTip.Tip="Render fast while you pan / zoom / orbit, then a moment after the view stops, automatically re-render the relief at full far-detail (distant filaments resolve like the poster) — no fractal recompute. The next move drops back to the fast render. Gives predictable poster-like detail live; the extra render happens only while the view is idle." />
+
                 <CheckBox Content="Hi-res height field (window-independent quality)"
                           IsChecked="{Binding Relief2DHiResField, Mode=TwoWay}"
                           IsEnabled="{Binding Relief2DRaymarch}"

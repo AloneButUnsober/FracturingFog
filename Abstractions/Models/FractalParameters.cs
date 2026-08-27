@@ -588,6 +588,15 @@ namespace FracturingFog.Models
         /// base frame. Clamped to [480, 2160]. Default 1080.</summary>
         public int Relief2DFieldFloor { get; set; } = 1080;
 
+        /// <summary>#520 (part 3) — settle-based full detail. When on, the live
+        /// oblique raymarch renders normally during pan/zoom, then a short moment
+        /// after the view stops moving it re-renders the relief at a higher internal
+        /// supersample (more rays → tighter far cone → distant filaments resolve like
+        /// the poster) and presents that. The next interaction drops back to the fast
+        /// render. Opt-in (default false) → no change to the live loop; the settle
+        /// re-render costs extra time only while the view is idle.</summary>
+        public bool Relief2DSettleDetail { get; set; } = false;
+
         /// <summary>#520 — far-detail resolving power for the oblique raymarch. The
         /// sphere-trace's cone tolerance grows with distance as
         /// <c>eps0 + pixelAngle·t</c>; at low output resolution the far cone fattens
@@ -1149,6 +1158,7 @@ namespace FracturingFog.Models
                 Relief2DEdgeFade = Relief2DEdgeFade,
                 Relief2DHiResField = Relief2DHiResField,
                 Relief2DFieldFloor = Relief2DFieldFloor,
+                Relief2DSettleDetail = Relief2DSettleDetail,
                 Relief2DFarDetail = Relief2DFarDetail,
                 Relief2DGpuRaymarch = Relief2DGpuRaymarch,
                 Relief2DEmptySkip = Relief2DEmptySkip,
