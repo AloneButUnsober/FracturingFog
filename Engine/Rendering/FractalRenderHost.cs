@@ -2633,6 +2633,27 @@ namespace FracturingFog.Rendering
                 UploadProcessedBuffer(_calculator.ColorBuffer, _calculator.Width, _calculator.Height);
         }
 
+        // #520 (part 3) — active far-detail boost for the settle re-render. 0 = off
+        // (normal). Read on the render thread inside the relief Render wrap; set only
+        // for the duration of a synchronous RenderReliefSettleUpgrade repaint.
+        private double _reliefSettleFarDetailBoost;
+
+        /// <summary>#520 (part 3) — re-render the CURRENT frame's relief at a tighter
+        /// far-detail (poster-like distant detail) and present it, WITHOUT recomputing
+        /// the fractal. Called by the UI on a settle (view idle). Relief-raymarch only;
+        /// a no-op otherwise. Synchronous (repaint returns after present), so the boost
+        /// is scoped to this one frame. <paramref name="farDetailBoost"/> is the tighter
+        /// factor to apply (clamped 0.15..1); it only ever lowers the effective value.</summary>
+        public void RenderReliefSettleUpgrade(double farDetailBoost)
+        {
+            if (_disposed) return;
+            var p = ViewState.FractalParameters;
+            if (!p.Relief2DEnabled || !p.Relief2DRaymarch) return;
+            _reliefSettleFarDetailBoost = Math.Clamp(farDetailBoost, 0.15, 1.0);
+            try { RepaintWithPostFx(); }
+            finally { _reliefSettleFarDetailBoost = 0.0; }
+        }
+
         /// <summary>Set (or clear with null) the rubber-band rectangle drawn
         /// on top of the current frame while the user is right-drag-selecting
         /// a zoom region in 2D. Re-uploads the most recently completed frame
@@ -3408,6 +3429,16 @@ namespace FracturingFog.Rendering
                         // S4 (#389) — capture float AOVs + guided À-Trous denoise
                         // iff on; null keeps the GPU fast path (byte-identical off).
                         var reliefAov = FracturingFog.Imaging.ReliefDenoisePass.MakeCapture(reliefParams, w, h);
+                        // #520 (part 3) — settle full-detail: a settle re-render boosts
+                        // the far-detail (tighter distance cone → distant filaments stay
+                        // tall). Override the live param transiently across this single
+                        // synchronous Render (restored in finally), so no other read sees
+                        // the boost. 0 = normal render (byte-identical).
+                        double savedFarDetail = reliefParams.Relief2DFarDetail;
+                        if (_reliefSettleFarDetailBoost > 0.0 && _reliefSettleFarDetailBoost < savedFarDetail)
+                            reliefParams.Relief2DFarDetail = _reliefSettleFarDetailBoost;
+                        try
+                        {
                         FracturingFog.Rendering.Lighting.HeightfieldRaymarch2D.Render(
                             src, _reliefHeight!, w, h, _reliefW, _reliefH,
                             reliefParams, _reliefColorScratch, out _,
@@ -3422,6 +3453,8 @@ namespace FracturingFog.Rendering
                             // only when Relief2DFroxelTemporal is on; forces the CPU
                             // froxel post-pass).
                             _froxelHistory);
+                        }
+                        finally { reliefParams.Relief2DFarDetail = savedFarDetail; }
                         FracturingFog.Imaging.ReliefDenoisePass.Apply(_reliefColorScratch, reliefAov, w, h, reliefParams);
                         reliefRaymarchApplied = true;
                     }

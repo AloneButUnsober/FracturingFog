@@ -546,6 +546,13 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
         get => _p.Relief2DFarDetail;
         set { double v = Clamp(value, 0.15, 1.0); if (_p.Relief2DFarDetail == v) return; _p.Relief2DFarDetail = v; this.RaisePropertyChanged(); Fire(); }
     }
+
+    // #520 (part 3) — settle-based full detail (auto poster-detail on idle).
+    public bool Relief2DSettleDetail
+    {
+        get => _p.Relief2DSettleDetail;
+        set { if (_p.Relief2DSettleDetail == value) return; _p.Relief2DSettleDetail = value; this.RaisePropertyChanged(); Fire(); }
+    }
     // #518 — filament detail shaping (raise structure vs the base slab).
     public double Relief2DDetailGain
     {

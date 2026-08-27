@@ -91,6 +91,13 @@ namespace FracturingFog.Render
         /// calculation — used by the slider live-tune path.</summary>
         void RepaintWithPostFx();
 
+        /// <summary>#520 (part 3) — settle full detail: re-render the current relief
+        /// raymarch at a tighter far-detail (distant filaments stay tall) without
+        /// recomputing the fractal, and present it. Called by the UI when the view
+        /// settles. No-op unless relief raymarch is on. <paramref name="farDetailBoost"/>
+        /// only ever lowers the effective far-detail factor.</summary>
+        void RenderReliefSettleUpgrade(double farDetailBoost);
+
         /// <summary>Re-apply the Adaptive histogram-equalization pass at the
         /// current strength using cached escape buffers, then re-upload. No
         /// recompute — used by the live Adaptive slider so it updates with

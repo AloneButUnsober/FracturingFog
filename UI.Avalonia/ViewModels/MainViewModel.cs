@@ -1290,6 +1290,57 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
         // It now lives in the render-context overlay (RenderContextOverlay).
         _lastFrameInfo = info;
         ApplyOrDeferStatusText(text);
+
+        MaybeArmReliefSettle(info);
+    }
+
+    // ── #520 (part 3) — settle-based full detail ──────────────────────────────
+    // When Relief2DSettleDetail is on, a short idle after the view stops moving
+    // triggers a relief-only re-render at a tighter far-detail (distant filaments
+    // resolve like the poster) — no fractal recompute. The DispatcherTimer runs on
+    // the UI thread, so the host repaint it fires is on the same thread as every
+    // other user-driven repaint (safe). A (cx,cy,zoom,w,h) fingerprint gates it:
+    // upgrade once per settled view, and never re-arm off the upgrade's own frame
+    // (no feedback loop).
+    private const int ReliefSettleDelayMs = 400;
+    private const double ReliefSettleFarDetail = 0.30;
+    private DispatcherTimer? _reliefSettleTimer;
+    private (double Cx, double Cy, double Zoom, int W, int H) _settleFp;
+    private bool _settleUpgradedForFp;
+
+    private void MaybeArmReliefSettle(RenderFrameInfo info)
+    {
+        var p = _renderHost.ViewState.FractalParameters;
+        bool on = p.Relief2DEnabled && p.Relief2DRaymarch && p.Relief2DSettleDetail;
+        var fp = (info.CenterX, info.CenterY, info.Zoom, info.Width, info.Height);
+        Dispatcher.UIThread.Post(() =>
+        {
+            if (!on) { _reliefSettleTimer?.Stop(); return; }
+            if (!fp.Equals(_settleFp))          // the view moved → a new frame to settle on
+            {
+                _settleFp = fp;
+                _settleUpgradedForFp = false;
+            }
+            if (_settleUpgradedForFp) return;   // this is the upgrade's own frame — don't re-arm
+            EnsureReliefSettleTimer();
+            _reliefSettleTimer!.Stop();
+            _reliefSettleTimer.Start();
+        });
+    }
+
+    private void EnsureReliefSettleTimer()
+    {
+        if (_reliefSettleTimer != null) return;
+        _reliefSettleTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(ReliefSettleDelayMs) };
+        _reliefSettleTimer.Tick += (_, _) =>
+        {
+            _reliefSettleTimer!.Stop();
+            var p = _renderHost.ViewState.FractalParameters;
+            if (!(p.Relief2DEnabled && p.Relief2DRaymarch && p.Relief2DSettleDetail)) return;
+            if (_settleUpgradedForFp) return;
+            _settleUpgradedForFp = true;   // set BEFORE the repaint so its frame doesn't re-arm
+            _renderHost.RenderReliefSettleUpgrade(ReliefSettleFarDetail);
+        };
     }
 
     // S-X8 (2026-06-27) — RenderHost cancelled the in-flight calc (rapid
@@ -1828,6 +1879,8 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
         _acidAmbientTimer = null;
         _paletteCycleTimer?.Stop();
         _paletteCycleTimer = null;
+        _reliefSettleTimer?.Stop();
+        _reliefSettleTimer = null;
         _input.ViewChanged -= OnInputViewChanged;
         _renderHost.FrameCompleted -= OnFrameCompleted;
         _renderHost.StatusRequested -= OnRenderHostStatusRequested;
