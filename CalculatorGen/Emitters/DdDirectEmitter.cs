@@ -104,9 +104,9 @@ public sealed class DdDirectEmitter : EmitterBase
 
     protected override ComplexExpr OpFold(ComplexExpr a)
     {
-        string reAbs = $"({a.Re}.Hi < 0.0 ? -({a.Re}) : ({a.Re}))";
+        string reAbs = $"(((DD)({a.Re})).Hi < 0.0 ? -({a.Re}) : ({a.Re}))";
         if (a.ImZero) return new(reAbs, "0.0", ImZero: true);
-        string imAbs = $"({a.Im}.Hi < 0.0 ? -({a.Im}) : ({a.Im}))";
+        string imAbs = $"(((DD)({a.Im})).Hi < 0.0 ? -({a.Im}) : ({a.Im}))";
         return new(reAbs, imAbs, ImZero: false);
     }
 
@@ -131,8 +131,8 @@ public sealed class DdDirectEmitter : EmitterBase
     // as QdEmitter — accuracy ~16 digits inside the call.
     private static ComplexExpr ScalarComplex(ComplexExpr a, string opName)
     {
-        string re = $"{a.Re}.Hi";
-        string im = a.ImZero ? "0.0" : $"{a.Im}.Hi";
+        string re = $"((DD)({a.Re})).Hi";
+        string im = a.ImZero ? "0.0" : $"((DD)({a.Im})).Hi";
         // Inverse trig / hyperbolic degrade to double inside the Complex call
         // (same trade-off as sin/exp/log). Demote the (Real, Imaginary) back to DD.
         if (opName is "asin" or "acos" or "atan" or "asinh" or "acosh" or "atanh")
