@@ -316,6 +316,14 @@ public sealed class UserEquationCalculator : IFractalCalculator
         double sinA = Math.Sin(rot);
         bool skipJacobian = FractalParameters.UserEquationSkipJacobian;
 
+        // #545 — when the step map (and any seed) is holomorphic we carry an
+        // EXACT dz/dc via forward-mode duals instead of the finite-difference
+        // second trajectory. Non-holomorphic maps (abs/conj/re/im/arg/ternary…)
+        // keep the numeric Jacobian, so abs-family equations are unchanged.
+        bool useAnalytic = !skipJacobian
+                        && sbx.IsHolomorphic
+                        && (seed == null || seed.IsHolomorphic);
+
         // P5: gate orbit sampling once per render. Non-orbit themes pay nothing.
         var orbitMap = ColorMap as IOrbitAwareColorMap;
 
@@ -355,6 +363,14 @@ public sealed class UserEquationCalculator : IFractalCalculator
                 var r = cond!.EvalStep(zz, cc, it, condEnv!, pv);
                 return r.Real != 0.0 || r.Imaginary != 0.0;
             }
+            // #545 — per-row dual env for the exact forward-mode dz/dc. StepD
+            // carries (z, dz) and (prev, dprev); SeedD gives (z0, dz0/dc).
+            CxDual[]? dualEnv = useAnalytic ? sbx.NewDualEnv() : null;
+            (Complex z, Complex dz) StepD(Complex zz, Complex dzz, Complex cc, int it, Complex pv, Complex dpv)
+                => sbx.EvalStepD(zz, dzz, cc, it, dualEnv!, pv, dpv);
+            CxDual[]? seedDualEnv = (useAnalytic && seed != null) ? seed!.NewDualEnv() : null;
+            (Complex z, Complex dz) SeedD(Complex cc)
+                => seed!.EvalStepD(Complex.Zero, Complex.Zero, cc, 0, seedDualEnv!);
             for (int x = 0; x < width; x++)
             {
                 double dx = (x - width * 0.5) * scale;
@@ -387,8 +403,20 @@ public sealed class UserEquationCalculator : IFractalCalculator
                 var cP = new Complex(cx + h, cy);
                 // #542 — seed z0 (default 0). zP seeds at the perturbed cP so the
                 // numerical Jacobian stays consistent with the seeded trajectory.
-                var z = seed != null ? Seed(c) : Complex.Zero;
-                var zP = seed != null ? Seed(cP) : Complex.Zero;
+                // #545 — in analytic mode dz/dz0 come from the seed's dual; zP is
+                // unused (no second trajectory).
+                Complex z, dz = Complex.Zero, prevDz = Complex.Zero;
+                Complex zP = Complex.Zero;
+                if (useAnalytic)
+                {
+                    if (seed != null) (z, dz) = SeedD(c);
+                    else z = Complex.Zero;      // dz0 = 0: z0 is c-independent
+                }
+                else
+                {
+                    z = seed != null ? Seed(c) : Complex.Zero;
+                    zP = seed != null ? Seed(cP) : Complex.Zero;
+                }
                 Complex prevZ = Complex.Zero, prevZP = Complex.Zero;   // #543 z_{n-1}
                 bool converged = false;                                 // #544
                 OrbitAccumulator acc = default;
@@ -408,6 +436,25 @@ public sealed class UserEquationCalculator : IFractalCalculator
                             orbitMap.Sample(ref acc, z.Real, z.Imaginary, cx, cy, iter);
                         if (cond != null && Cond(z, c, iter, prevZ)) { converged = true; break; }   // #544
                         try { var zn = Step(z, c, iter, prevZ); prevZ = z; z = zn; }
+                        catch { iter = maxIt; break; }
+                    }
+                }
+                else if (useAnalytic)
+                {
+                    // #545 — single trajectory carrying the exact dz/dc dual.
+                    for (iter = 0; iter < maxIt; iter++)
+                    {
+                        double r2 = z.Real * z.Real + z.Imaginary * z.Imaginary;
+                        if (r2 >= bailout2) break;
+                        if (orbitMap != null && iter > 0)
+                            orbitMap.Sample(ref acc, z.Real, z.Imaginary, cx, cy, iter);
+                        if (cond != null && Cond(z, c, iter, prevZ)) { converged = true; break; }   // #544
+                        try
+                        {
+                            var (zn, dzn) = StepD(z, dz, c, iter, prevZ, prevDz);
+                            prevZ = z; prevDz = dz;
+                            z = zn; dz = dzn;
+                        }
                         catch { iter = maxIt; break; }
                     }
                 }
@@ -462,10 +509,12 @@ public sealed class UserEquationCalculator : IFractalCalculator
                     else
                     {
                         // Hubbard-Douady normal: u = Re(conj(z) · dz/dc),
-                        // v = -Im(conj(z) · dz/dc). dz/dc ≈ (zP − z) / h
-                        // (Cauchy-Riemann gives the Im column for free on analytic fn).
-                        double dzdcR = (zP.Real - z.Real) / h;
-                        double dzdcI = (zP.Imaginary - z.Imaginary) / h;
+                        // v = -Im(conj(z) · dz/dc). #545 — analytic mode carries
+                        // the EXACT dz/dc in `dz`; otherwise fall back to the
+                        // finite difference (zP − z) / h (Cauchy-Riemann gives the
+                        // Im column for free on the analytic fn).
+                        double dzdcR = useAnalytic ? dz.Real : (zP.Real - z.Real) / h;
+                        double dzdcI = useAnalytic ? dz.Imaginary : (zP.Imaginary - z.Imaginary) / h;
                         double u = z.Real * dzdcR + z.Imaginary * dzdcI;          // Re(z̄ · dzdc)
                         double v = -(z.Real * dzdcI - z.Imaginary * dzdcR);       // -Im(z̄ · dzdc)
                         double m = Math.Sqrt(u * u + v * v);
