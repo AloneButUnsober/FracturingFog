@@ -82,19 +82,19 @@
                    Fill="#3A3A3A"
                    Margin="0,12,0,8" />
 
-        <Grid Grid.Row="3" ColumnDefinitions="*,Auto,Auto">
-            <TextBlock Grid.Column="0"
+        <Grid Grid.Row="3" ColumnDefinitions="*,Auto,Auto" RowDefinitions="Auto,Auto">
+            <TextBlock Grid.Column="0" Grid.Row="0" Grid.ColumnSpan="2"
                        Text="Selected equation replaces the DSL editor source and re-centres the view."
                        Foreground="#808080"
                        VerticalAlignment="Center" />
-            <Button Grid.Column="1"
+            <Button Grid.Column="1" Grid.Row="1"
                     Content="Use this equation"
                     Command="{Binding AcceptCommand}"
                     IsEnabled="{Binding HasSelection}"
                     FontWeight="Bold"
                     Padding="14,4"
                     Margin="0,0,8,0" />
-            <Button Grid.Column="2"
+            <Button Grid.Column="2" Grid.Row="1"
                     Content="Cancel"
                     Command="{Binding CancelCommand}"
                     Padding="14,4" />
