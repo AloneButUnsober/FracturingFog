@@ -148,11 +148,14 @@ The recipe is identical for every equation in this guide:
 
 1. For each pixel on the screen, take the complex coordinate `c` (the
    pixel's position on the complex plane).
-2. Start with `z = 0` (or sometimes another seed — see §10).
+2. Start with `z = 0` (or another **seed** `z₀` — the live interpreter
+   takes a z₀ expression, so `z₀ = c` gives a Julia set; see §17).
 3. Apply the user equation repeatedly: `z_{n+1} = f(z_n, c)`.
 4. After each step, ask: has `|z|` exceeded the **bailout radius**? The
-   engine uses `|z|² ≥ 1024` (or `≥ 4` for the classic Mandelbrot
-   contract).
+   default is `|z|² ≥ 1024` (interpreter) / `≥ 512²` (CalcGen), `≥ 4` for
+   the classic Mandelbrot contract — and it is a **configurable knob**
+   (see §17), which matters for transcendental maps whose orbits stay
+   small.
 5. Either:
    - **Escaped**: the iteration count `n` at which it escaped tells us
      how fast the orbit blew up — color the pixel based on that count
@@ -368,11 +371,13 @@ amplified. Produces a primary Mandelbrot lobe plus secondary rational
 structure where the pole pair approaches the real axis.
 
 Note: avoid bare `1/z` constructions like `(1/z + c)²`. Because the
-engine seeds `z₀ = 0`, `1/0` immediately produces `Inf`, the orbit
-becomes `NaN` on the next step, and NaN never satisfies the bailout
-test — every pixel registers as "in set" (solid colour). Always guard
-the reciprocal with a denominator that's non-zero at z=0, e.g.
-`1/(z*z + c)` or `1/(z + 2)`.
+engine seeds `z₀ = 0` by default, `1/0` immediately produces `Inf`, the
+orbit becomes `NaN` on the next step, and NaN never satisfies the bailout
+test — every pixel registers as "in set" (solid colour). Two fixes:
+guard the reciprocal with a denominator that's non-zero at z=0
+(`1/(z*z + c)`, `1/(z + 2)`), **or** on the live interpreter set the z₀
+seed off the pole (`z₀ = c`, §17) so the orbit never starts at `1/0` —
+this is how `1/z`-style forum maps are made to render.
 
 ### Important note: gating
 
@@ -422,8 +427,11 @@ asymptote.
 
 Avoid bare `log(z) + c`: with seed z₀=0 the first step yields
 `-Inf + 0i`, the orbit becomes NaN, and the renderer produces a
-single solid colour. Always guard `log` arguments to be non-zero at
-the seed.
+single solid colour. Guard `log` arguments to be non-zero at the seed —
+or seed z₀ off the singularity (`z₀ = c`, §17). Note that `log`/`sqrt`
+of a *negative real* is **not** a problem: the interpreter promotes to
+the complex branch (`log(-5) = ln5 + iπ`), so only the value-at-`0`
+singularity needs guarding.
 
 ### 6.4 Mixed trig — "petal" pattern
 ```
@@ -602,10 +610,17 @@ the linear `z` contribution rather than entering additively.
 
 ### Important note: gating
 
-`prev` disables distance estimate and perturbation. Tracking
-`dprev/dc` properly requires a second derivative state vector (a
-future engine extension). For now, `prev` equations render at scalar
-or AVX2 escape-time only.
+On the **CalcGen** path `prev` disables distance estimate and
+perturbation: the symbolic differentiator treats `prev` as opaque
+(`∂prev = 0`), which would give a wrong `dz/dc`, so DE is gated off.
+
+The **live interpreter** now does track it. Its forward-mode automatic
+differentiation ([§17.4](#174-the-interpreters-analytic-derivative))
+carries `dprev = dz_{n-1}/dc` alongside `dz`, so a Phoenix map gets an
+*exact* `dz/dc` and lit relief in the editor. `prev` still disables
+deep-zoom perturbation on both paths (it is not part of the δ-expansion);
+`prev` equations render at scalar / AVX2 escape-time for zoom, with DE
+available on the interpreter.
 
 ---
 
@@ -851,15 +866,19 @@ chain rule still produces correct values via `Mul` (e.g.
 ## Author's pre-flight checklist — seeds, guards, and degeneracies
 
 Most "my equation renders as one solid colour" reports trace to the seed. The
-engine starts every orbit at `z₀ = 0`, so the very first step evaluates
-`f(0, c)`. If that produces `Inf` / `NaN`, or a trivially bounded cycle, the
-whole plane collapses to a single colour and there is no fractal to see. Run
-through this table before blaming the renderer.
+engine starts every orbit at `z₀ = 0` by default, so the very first step
+evaluates `f(0, c)`. If that produces `Inf` / `NaN`, or a trivially bounded
+cycle, the whole plane collapses to a single colour and there is no fractal to
+see. Run through this table before blaming the renderer — and note that the live
+interpreter's **z₀ seed** control (§17) is a second fix for every *singularity*
+row: seeding `z₀ = c` moves the orbit's start off the pole, which is exactly how
+`1/z`- and `log`-at-origin forum maps are made to render without rewriting the
+equation.
 
 | Construct                     | What happens at `z₀ = 0`                        | Guard / fix                                             |
 |-------------------------------|-------------------------------------------------|---------------------------------------------------------|
-| `1/z`, `(1/z + c)^2`          | `1/0 = Inf` → `NaN` next step; NaN never bails → everything "in set" | Guard the denominator so it is non-zero at 0: `1/(z*z + c)`, `1/(z + 2)` |
-| `log(z) + c`                  | `log(0) = −∞` → `NaN`; uniform solid            | Offset the argument off the branch point: `log(1 + z) + c` |
+| `1/z`, `(1/z + c)^2`          | `1/0 = Inf` → `NaN` next step; NaN never bails → everything "in set" | Guard the denominator non-zero at 0 (`1/(z*z + c)`, `1/(z + 2)`), **or** seed `z₀ = c` (§17) |
+| `log(z) + c`                  | `log(0) = −∞` → `NaN`; uniform solid            | Offset the argument off the branch point (`log(1 + z) + c`), **or** seed `z₀ = c` (§17) |
 | `sqrt(z)` at a pole chain     | Fine at 0 (`sqrt(0)=0`) but watch downstream `/` | Keep any following division guarded as above            |
 | `i*z + c` (linear in `z`)     | Period-4 cycle `0 → c → (1+i)c → ic → 0` — bounded for *every* `c`, so nothing escapes | Add a genuine quadratic: `i*z*z + c` |
 | `(z^2 + c)/(z + a)`           | `z₁ = c/a`, then instant fixed point `f(c/a)=c/a` | Keep polynomial feedback separate from the rational term: `z*z + c/(z + a)` |
@@ -1073,9 +1092,10 @@ acceleration features and surface-normal shading.
 |                 | "3D relief" look.                                        |
 | Holomorphic     | Complex-differentiable in the Wirtinger sense; preserves |
 |                 | the chain rule that DE needs.                            |
-| Julia set       | Slice of a fractal at fixed `c` and varying `z₀`. (The   |
-|                 | engine uses fixed `z₀ = 0` and varying `c` — the         |
-|                 | Mandelbrot parameter space.)                             |
+| Julia set       | Slice of a fractal at fixed `c` and varying `z₀`. The    |
+|                 | default render fixes `z₀ = 0` and varies `c` (Mandelbrot |
+|                 | parameter space); set the z₀ seed to `c` and write a     |
+|                 | constant for `c` in the equation to get a true Julia (§17). |
 | Non-autonomous  | Step function depends on iteration index `n` explicitly. |
 | Perturbation    | δ-expansion technique that lets the engine compute one  |
 |                 | reference orbit at high precision and propagate it to    |
@@ -1091,7 +1111,91 @@ acceleration features and surface-normal shading.
 
 ---
 
-## 17. See also
+## 17. Configurable orbit and the interpreter's analytic derivative
+
+Sections 1–16 treat the *step* `f(z, c)`. Four orbit-level controls sit around
+the step and unlock families the step alone cannot express — Julia sets,
+Newton/Magnet/Nova convergence maps, and transcendental maps that otherwise
+render solid. The user-facing walkthrough is
+[CalcGen-UserGuide §11](../User/CalcGen-UserGuide.md#11-orbit-controls--escape-radius-z-seeding-julia-convergence);
+this section is the *why*.
+
+### 17.1 Configurable escape radius
+
+The bailout test is `|z|² ≥ R²`. `R` is deliberately large by default (smooth
+gradients for quadratic maps) but is a per-render knob. It matters because escape
+speed is what the colour map bands, and a map's **dynamic range** decides the
+useful `R`:
+
+- **Polynomial** `|f|` grows super-linearly → any large `R` works; keep the
+  default.
+- **Transcendental** `log`, `sin`, and their compositions keep `|z|` *small* — a
+  bounded or slowly-growing orbit. At the large default *nothing* crosses `R`, so
+  the frame is one solid interior colour. Dropping `R` to ≈ 2 recovers the
+  banding. Empirically, `log(sin(|1/z|)) + c` escapes 0 % of a window at `R = 32`
+  and ≈ 35 % at `R = 2`.
+
+Rule of thumb: **the first thing to try on a transcendental map that renders
+solid is a smaller escape radius**, before touching the equation.
+
+### 17.2 z₀ seeding — Julia sets and singularity avoidance
+
+The orbit's start is `z₀`. Two reasons to change it from `0`:
+
+- **Julia sets.** A Julia fixes `c` and sweeps the *starting point*. This engine
+  parametrises by the pixel `c`, so a Julia is `z₀ = c` (start at the pixel) with
+  the Julia constant written into the equation where `+ c` used to be:
+  `z*z + (-0.8 + 0.156*i)` seeded at `c` is the Douady rabbit. The same recipe
+  Julia-fies any map.
+- **Critical-point seeding.** For non-quadratic families the meaningful parameter
+  image starts at the map's critical point (where `f'` vanishes), not `0`.
+- **Singularity avoidance.** Maps with a pole at the origin (`1/z`, `log`) go
+  `NaN` from `z₀ = 0`; seeding `z₀ = c` starts the orbit away from the pole (see
+  the pre-flight checklist).
+
+The seed is its own small DSL expression, evaluated once per pixel with `c` bound
+to the pixel (`z = 0`, `n = 0` at seed time).
+
+### 17.3 Convergence bailout — Newton / Magnet / Nova
+
+Escape-time colouring measures divergence. **Root-finding maps converge** — each
+pixel walks toward one of several roots and stops moving — so an escape-only test
+never fires and the image reads as solid interior. A convergence bailout is a
+boolean predicate over `z / prev / c / n / iter`; when it becomes true the orbit
+halts and the pixel is coloured by *how fast it converged* (iteration count). The
+canonical predicate is `|z − prev| < ε`: "the step barely moved, we've landed on
+a root". Newton for `z³ − 1` is `z - (z³-1)/(3z²)`, seeded at `c`, with
+`abs(z - prev) < 0.0001`. (Per-root *basin* colouring — a hue per root — is a
+future extension; today all roots share the convergence-speed ramp.)
+
+### 17.4 The interpreter's analytic derivative
+
+Distance estimate and surface normals need `dz/dc`. CalcGen builds it
+symbolically (`AstDifferentiator`) and gates DE off wherever the symbolic rule is
+unavailable or wrong — non-holomorphic ops, and `prev` (treated as opaque,
+`∂prev = 0`).
+
+The live interpreter instead uses **forward-mode automatic differentiation**:
+each holomorphic node evaluates a dual `⟨value, d/dc⟩`, and the step carries the
+pair `⟨z, dz⟩` through the iteration with the exact chain rule
+
+$$
+dz_{n+1} = \frac{\partial f}{\partial z}\,dz_n + \frac{\partial f}{\partial c},
+\qquad c\text{ seeds } dc = 1 .
+$$
+
+This is **exact** (machine precision, no finite-difference `h`) and — unlike the
+symbolic path — it carries `dprev = dz_{n-1}/dc`, so Phoenix maps get a correct
+`dz/dc`. Non-holomorphic maps (`abs`, `conj`, `re`, `im`, `arg`, `fold`, the
+per-component and real-reducer functions, and `?:` branches) are detected and
+fall back to a numerical Jacobian, exactly as before — so those renders are
+unchanged, and only holomorphic maps gain the exact normal. Truly correct normals
+for the non-holomorphic case would need Wirtinger duals (both `∂/∂c` and
+`∂/∂c̄`); that is a possible future extension.
+
+---
+
+## 18. See also
 
 - [CalcGen-UserGuide.md](CalcGen-UserGuide.md) — the precise DSL
   grammar reference, supported operators, gating rules.
