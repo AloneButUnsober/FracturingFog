@@ -95,6 +95,15 @@ namespace FracturingFog.Models
         /// families whose critical point is not 0.</summary>
         public string? UserEquationSeed { get; set; }
 
+        /// <summary>#544 — optional convergence bailout: a boolean CalcGen-DSL
+        /// condition over <c>z</c> / <c>prev</c> / <c>c</c> / <c>n</c> /
+        /// <c>iter</c>. Null/empty ⇒ escape-radius test only (legacy). When it
+        /// becomes true the orbit stops early and the pixel is classified
+        /// "converged" and coloured by convergence speed, enabling Newton /
+        /// Magnet / Nova style maps whose interesting region converges rather
+        /// than escapes. Typical form: <c>abs(z - prev) &lt; 0.0001</c>.</summary>
+        public string? UserEquationBailoutCondition { get; set; }
+
         /// <summary>
         /// Source for the Sandbox fractal — a restricted expression DSL parsed by
         /// <see cref="SandboxExpression"/>. Safe to evaluate in untrusted contexts:
@@ -1053,6 +1062,7 @@ namespace FracturingFog.Models
                 UserEquationActiveTab = UserEquationActiveTab,
                 UserEquationSkipJacobian = UserEquationSkipJacobian,
                 UserEquationSeed = UserEquationSeed,
+                UserEquationBailoutCondition = UserEquationBailoutCondition,
                 SandboxSource = SandboxSource,
                 SandboxName = SandboxName,
                 IFSPresetName = IFSPresetName,

@@ -354,6 +354,21 @@ public sealed class UserEquationViewModel : ViewModelBase
         }
     }
 
+    // ── Convergence bailout condition (#544) ──
+    // Blank = escape-radius test only. Boolean DSL over z/prev/c/n/iter.
+    public string? BailoutCondition
+    {
+        get => _params.UserEquationBailoutCondition;
+        set
+        {
+            string? next = string.IsNullOrWhiteSpace(value) ? null : value;
+            if (_params.UserEquationBailoutCondition == next) return;
+            _params.UserEquationBailoutCondition = next;
+            this.RaisePropertyChanged();
+            RenderRequested?.Invoke();
+        }
+    }
+
     // ── Skip Jacobian (Phase 11b) ──
     public bool SkipJacobian
     {

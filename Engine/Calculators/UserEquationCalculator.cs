@@ -125,6 +125,19 @@ public sealed class UserEquationCalculator : IFractalCalculator
     /// compile status.</summary>
     public string SeedError { get; private set; } = string.Empty;
 
+    // #544 — optional convergence bailout: a boolean DSL condition over z / prev
+    // / c / n / iter. Empty ⇒ escape-radius test only. When it becomes true the
+    // orbit stops early and the pixel is classified "converged" (coloured by
+    // convergence speed), enabling Newton / Magnet / Nova style maps whose
+    // interesting region converges rather than escapes. Typical form:
+    // `abs(z - prev) &lt; 0.0001`.
+    private SandboxExpression? _condSbx;
+    private string _compiledCond = string.Empty;
+
+    /// <summary>Parse error for the convergence bailout condition, or empty when
+    /// it is unset or parsed cleanly.</summary>
+    public string BailoutConditionError { get; private set; } = string.Empty;
+
     /// <summary>True when the last successful compile runs on the safe DSL
     /// interpreter. Always true after a successful compile now that the DSL is
     /// the only path; retained for callers that branch on it.</summary>
@@ -257,6 +270,21 @@ public sealed class UserEquationCalculator : IFractalCalculator
         }
         var seed = _seedSbx;
 
+        // #544 — (re)compile the convergence bailout condition lazily. Empty ⇒
+        // no early stop. Parse failure recorded; condition dropped.
+        string condSrc = FractalParameters.UserEquationBailoutCondition?.Trim() ?? string.Empty;
+        if (condSrc != _compiledCond)
+        {
+            _compiledCond = condSrc;
+            if (condSrc.Length == 0) { _condSbx = null; BailoutConditionError = string.Empty; }
+            else
+            {
+                try { _condSbx = SandboxExpression.Parse(condSrc); BailoutConditionError = string.Empty; }
+                catch (Exception ex) { _condSbx = null; BailoutConditionError = $"bailout condition: {ex.Message}"; }
+            }
+        }
+        var cond = _condSbx;
+
         ColorMap.MaxIterations = MaxIterations;
         double scale = (3.5 / Math.Max(Width, Height)) / Zoom;
         int maxIt = MaxIterations;
@@ -319,6 +347,14 @@ public sealed class UserEquationCalculator : IFractalCalculator
             // with z=0, n=0 and the pixel's c: `c` ⇒ z0 = pixel (Julia).
             SbxVal[]? seedEnv = seed?.NewEnv();
             Complex Seed(Complex cc) => seed!.EvalStep(Complex.Zero, cc, 0, seedEnv!);
+            // #544 — per-row env for the convergence bailout condition. True when
+            // the (boolean) condition fires on the current iterate.
+            SbxVal[]? condEnv = cond?.NewEnv();
+            bool Cond(Complex zz, Complex cc, int it, Complex pv)
+            {
+                var r = cond!.EvalStep(zz, cc, it, condEnv!, pv);
+                return r.Real != 0.0 || r.Imaginary != 0.0;
+            }
             for (int x = 0; x < width; x++)
             {
                 double dx = (x - width * 0.5) * scale;
@@ -354,6 +390,7 @@ public sealed class UserEquationCalculator : IFractalCalculator
                 var z = seed != null ? Seed(c) : Complex.Zero;
                 var zP = seed != null ? Seed(cP) : Complex.Zero;
                 Complex prevZ = Complex.Zero, prevZP = Complex.Zero;   // #543 z_{n-1}
+                bool converged = false;                                 // #544
                 OrbitAccumulator acc = default;
                 if (orbitMap != null) orbitMap.InitOrbit(out acc);
                 int iter;
@@ -369,6 +406,7 @@ public sealed class UserEquationCalculator : IFractalCalculator
                         if (r2 >= bailout2) break;
                         if (orbitMap != null && iter > 0)
                             orbitMap.Sample(ref acc, z.Real, z.Imaginary, cx, cy, iter);
+                        if (cond != null && Cond(z, c, iter, prevZ)) { converged = true; break; }   // #544
                         try { var zn = Step(z, c, iter, prevZ); prevZ = z; z = zn; }
                         catch { iter = maxIt; break; }
                     }
@@ -381,6 +419,7 @@ public sealed class UserEquationCalculator : IFractalCalculator
                         if (r2 >= bailout2) break;
                         if (orbitMap != null && iter > 0)
                             orbitMap.Sample(ref acc, z.Real, z.Imaginary, cx, cy, iter);
+                        if (cond != null && Cond(z, c, iter, prevZ)) { converged = true; break; }   // #544
                         try
                         {
                             var zn = Step(z, c, iter, prevZ);
@@ -397,6 +436,17 @@ public sealed class UserEquationCalculator : IFractalCalculator
                     ColorBuffer[idx] = inSet;   // #382: alpha pre-scaled above
                     NormalXBuffer[idx] = 0f;
                     NormalYBuffer[idx] = 0f;
+                }
+                else if (converged)
+                {
+                    // #544 — converged (bailout condition fired): |z| is small so
+                    // the log-log smoothing is invalid; band by convergence speed
+                    // (raw iteration). Normals are undefined here → flat.
+                    NormalXBuffer[idx] = 0f;
+                    NormalYBuffer[idx] = 0f;
+                    ColorBuffer[idx] = orbitMap != null
+                        ? (uint)orbitMap.MapWithOrbit(iter, 0f, maxIt, 0f, 0f, in acc)
+                        : (uint)ColorMap.Map(iter, 0f, maxIt, 0f, 0f);
                 }
                 else
                 {
