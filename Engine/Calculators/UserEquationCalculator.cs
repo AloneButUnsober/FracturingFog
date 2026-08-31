@@ -234,7 +234,10 @@ public sealed class UserEquationCalculator : IFractalCalculator
         double centerY = CenterY;
         int width = Width;
         int height = Height;
-        const double bailout2 = 1024.0; // generous bailout for arbitrary maps
+        // #541 — escape radius from FractalParameters (0 = legacy |z|² = 1024).
+        double bailout2 = FractalParameters.EscapeRadius > 0.0
+            ? FractalParameters.EscapeRadius * FractalParameters.EscapeRadius
+            : 1024.0; // generous default for arbitrary maps
 
         // Precision-tier selection. When the low limbs carry real data
         // (input controller is anchoring in DD or QD) the per-pixel coord

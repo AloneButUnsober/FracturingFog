@@ -322,6 +322,22 @@ public sealed class UserEquationViewModel : ViewModelBase
         }
     }
 
+    // ── Escape radius (#541) ──
+    // 0 = auto (interpreter |z|²=1024 → r=32; CalcGen r=512). >0 overrides both.
+    // Re-renders on change so the effect is immediate.
+    public double EscapeRadius
+    {
+        get => _params.EscapeRadius;
+        set
+        {
+            double clamped = value < 0.0 ? 0.0 : value;
+            if (Math.Abs(_params.EscapeRadius - clamped) < 1e-12) return;
+            _params.EscapeRadius = clamped;
+            this.RaisePropertyChanged();
+            RenderRequested?.Invoke();
+        }
+    }
+
     // ── Skip Jacobian (Phase 11b) ──
     public bool SkipJacobian
     {
@@ -825,7 +841,9 @@ public sealed class UserEquationViewModel : ViewModelBase
     {
         if (!TryGetCalcGenSource(out string equation, out string baseName)) return;
 
-        var result = CalculatorGenApi.Generate(equation, baseName, includeSelfTest: true);
+        // #541 — honour the configurable escape radius (0 = CalcGen default 512).
+        double bailoutRadius = _params.EscapeRadius > 0.0 ? _params.EscapeRadius : 512.0;
+        var result = CalculatorGenApi.Generate(equation, baseName, includeSelfTest: true, bailoutRadius);
         if (!result.Ok)
         {
             ShowError($"CalcGen: {result.Error}");

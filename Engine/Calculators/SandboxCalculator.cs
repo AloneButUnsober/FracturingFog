@@ -120,7 +120,10 @@ public sealed class SandboxCalculator : IFractalCalculator
         double centerY = CenterY;
         int width = Width;
         int height = Height;
-        const double bailout2 = 1024.0;
+        // #541 — escape radius from FractalParameters (0 = legacy |z|² = 1024).
+        double bailout2 = FractalParameters.EscapeRadius > 0.0
+            ? FractalParameters.EscapeRadius * FractalParameters.EscapeRadius
+            : 1024.0;
 
         // P5: gate orbit sampling once. Non-orbit themes pay nothing.
         var orbitMap = ColorMap as IOrbitAwareColorMap;
