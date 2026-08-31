@@ -995,6 +995,15 @@ namespace FracturingFog.Models
         /// Mandelbrot path only.</summary>
         public int InteriorAlpha { get; set; } = 255;
 
+        /// <summary>Escape radius (|z| bailout) for the DSL escape-time paths —
+        /// the User Equation interpreter, the Sandbox type, and CalcGen
+        /// Generate/Hot-Load. 0 = auto: each path keeps its legacy default
+        /// (interpreter |z|² = 1024, i.e. r = 32; CalcGen r = 512). A value &gt; 0
+        /// overrides all three (interpreter squares it for the |z|² test). Larger
+        /// r suits slow-escaping transcendental maps (log/sin) and reduces smooth-
+        /// colour banding; smaller r suits fast or near-convergent maps. #541.</summary>
+        public double EscapeRadius { get; set; } = 0.0;
+
         /// <summary>Background composited behind translucent 2D pixels.
         /// Checkerboard (default) preserves the F10.5 see-through look; Solid /
         /// Gradient paint a colour backdrop; Transparent keeps straight alpha
@@ -1279,6 +1288,7 @@ namespace FracturingFog.Models
                 UserBulbChain = UserBulbChain.ConvertAll(s => s.Clone()),
                 Lighting = Lighting, // struct value-copy; EnvironmentName is string (immutable)
                 InteriorAlpha = InteriorAlpha,
+                EscapeRadius = EscapeRadius,
                 Interior2DBackground = Interior2DBackground,
                 Interior2DBgTop = Interior2DBgTop,
                 Interior2DBgBottom = Interior2DBgBottom,
