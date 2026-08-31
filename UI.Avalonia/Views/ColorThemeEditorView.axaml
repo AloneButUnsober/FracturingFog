@@ -155,15 +155,16 @@
                     <Border Classes="group">
                         <StackPanel Spacing="6">
                             <Border BorderBrush="#2A2A2A" BorderThickness="0" Background="Transparent">
-                                <Grid ColumnDefinitions="*,Auto,Auto,Auto,Auto,Auto">
-                                    <TextBlock Grid.Column="0" Classes="section" Text="Color stops" VerticalAlignment="Center" />
-                                    <Button Grid.Column="1" Classes="action add"    Content="Add"   Command="{Binding AddStopCommand}" />
-                                    <Button Grid.Column="2" Classes="action new"    Content="🎲 Random"
+                                <Grid ColumnDefinitions="Auto,Auto,Auto,Auto,Auto,Auto" RowDefinitions="Auto,Auto">
+                                    <TextBlock Grid.Column="0" Grid.Row="0" Classes="section" Grid.ColumnSpan="2"
+                                               Text="Color stops" VerticalAlignment="Center" />
+                                    <Button Grid.Column="1"  Grid.Row="1" Classes="action add"    Content="Add"   Command="{Binding AddStopCommand}" />
+                                    <Button Grid.Column="2"  Grid.Row="1" Classes="action new"    Content="🎲 Random"
                                             Command="{Binding RandomizeCommand}"
                                             ToolTip.Tip="Generate a random theme: golden-ratio palette plus Kind-aware extras (cycle, 3D lights, PBR, In-set, Post-FX). See the toggles below. Seed recorded in Description." />
-                                    <Button Grid.Column="3" Classes="action export" Content="From image…" Command="{Binding FromImageCommand}" />
-                                    <Button Grid.Column="4" Classes="action save"   Content="Import…"     Command="{Binding ImportPaletteCommand}" />
-                                    <Button Grid.Column="5" Classes="action export" Content="Export…"     Command="{Binding ExportPaletteCommand}" />
+                                    <Button Grid.Column="3"   Grid.Row="1" Classes="action export" Content="From image…" Command="{Binding FromImageCommand}" />
+                                    <Button Grid.Column="4"  Grid.Row="1" Classes="action save"   Content="Import…"     Command="{Binding ImportPaletteCommand}" />
+                                    <Button Grid.Column="5"  Grid.Row="1" Classes="action export" Content="Export…"     Command="{Binding ExportPaletteCommand}" />
                                 </Grid>
                             </Border>
                             <!-- Randomize scope / mode toggles (#83) -->
@@ -269,6 +270,7 @@
 
                     <!-- Gradient interpolation (F1 space, F2 curve, F3 transfer) -->
                     <Border Classes="group">
+                        <StackPanel Spacing="4" Orientation="Horizontal">
                         <StackPanel Spacing="6">
                             <TextBlock Classes="section" Text="Interpolation" />
                             <Grid ColumnDefinitions="Auto,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto" Margin="0,4,0,0">
@@ -305,67 +307,7 @@
                                 </StackPanel>
                             </Grid>
                         </StackPanel>
-                    </Border>
-
-                    <!-- Cycle -->
-                    <Border Classes="group">
-                        <StackPanel Spacing="4" Orientation="Horizontal">
-                            <StackPanel Spacing="6" IsEnabled="{Binding ShowCycle}">
-                                <TextBlock Classes="section" Text="Cycle" />
-                                <StackPanel Orientation="Horizontal" Spacing="8">
-                                    <TextBlock Classes="label" Text="Speed:" Width="56" />
-                                    <NumericUpDown Value="{Binding CycleSpeed}"
-                                                   Minimum="0.0001" Maximum="10" Increment="0.001"
-                                                   FormatString="0.0000" Width="135" />
-                                </StackPanel>
-                                <StackPanel Orientation="Horizontal" Spacing="8">
-                                    <TextBlock Classes="label" Text="Offset:" Width="56" />
-                                    <NumericUpDown Value="{Binding ColorOffset}"
-                                                   Minimum="-10" Maximum="10" Increment="0.01"
-                                                   FormatString="0.000" Width="135"
-                                                   ToolTip.Tip="Additive phase — rotates the palette along the iteration axis (F4)." />
-                                </StackPanel>
-                                <StackPanel Orientation="Horizontal" Spacing="8">
-                                    <TextBlock Classes="label" Text="Density:" Width="56" />
-                                    <NumericUpDown Value="{Binding ColorDensity}"
-                                                   Minimum="0" Maximum="20" Increment="0.05"
-                                                   FormatString="0.000" Width="135"
-                                                   ToolTip.Tip="Multiplies cycling frequency — palette cycles per rhythm unit (F4)." />
-                                </StackPanel>
-                                <StackPanel Orientation="Horizontal" Spacing="8">
-                                    <TextBlock Classes="label" Text="Wrap:" Width="56" />
-                                    <ComboBox ItemsSource="{Binding WrapModeOptions}" SelectedItem="{Binding WrapMode}"
-                                              Width="135" HorizontalAlignment="Left"
-                                              ToolTip.Tip="Boundary behaviour: Repeat (modulo), PingPong (seamless mirror), Clamp (F5)." />
-                                </StackPanel>
-                                <CheckBox IsChecked="{Binding SeamlessCycle}"
-                                          Content="Seamless cycling (close the loop)"
-                                          ToolTip.Tip="#255 — nudge the palette so its last colour ramps back to the first, so palette cycling shows no seam. Opt-in: leave off to keep a deliberate hard seam." />
-                                <StackPanel Orientation="Horizontal" Spacing="8">
-                                    <TextBlock Classes="label" Text="Sparkle:" Width="56" />
-                                    <NumericUpDown Value="{Binding SparkleStride}"
-                                                   Minimum="0" Maximum="128" Increment="1"
-                                                   FormatString="0" Width="90"
-                                                   ToolTip.Tip="#254 — brighten every Nth of 256 LUT entries (glitter/lightning). 0 = off." />
-                                    <NumericUpDown Value="{Binding SparkleBoost}"
-                                                   Minimum="0" Maximum="1" Increment="0.05"
-                                                   FormatString="0.00" Width="90"
-                                                   ToolTip.Tip="Sparkle brightness boost (fraction of white). 0 = off." />
-                                </StackPanel>
-                                <StackPanel Orientation="Horizontal" Spacing="8">
-                                    <TextBlock Classes="label" Text="XOR:" Width="56" />
-                                    <NumericUpDown Value="{Binding XorLevels}"
-                                                   Minimum="0" Maximum="256" Increment="1"
-                                                   FormatString="0" Width="90"
-                                                   ToolTip.Tip="#252 — quantise the palette index to N levels then XOR, shattering the gradient into a plaid/moiré on any field. 0 = off." />
-                                    <NumericUpDown Value="{Binding XorMask}"
-                                                   Minimum="0" Maximum="255" Increment="1"
-                                                   FormatString="0" Width="90"
-                                                   ToolTip.Tip="XOR mask — different masks give different weaves." />
-                                </StackPanel>
-                            </StackPanel>
-
-                            <!-- In-set -->
+                        <!-- In-set -->
                             <StackPanel Spacing="6" Margin="8,0,0,0">
                                 <TextBlock Classes="section" Text="In-set (interior)" />
                                 <StackPanel Orientation="Horizontal" Spacing="6">
@@ -416,6 +358,89 @@
                                                  Text="{Binding Interior2DBgImagePath, Mode=TwoWay, UpdateSourceTrigger=LostFocus}"
                                                  Watermark="path\to\image.png"
                                                  ToolTip.Tip="Used when Background = Image. Stretched to fill the viewport." />
+                                    </StackPanel>
+                                </StackPanel>
+                            </StackPanel>
+                        </StackPanel>
+                    </Border>
+
+                    <!-- Cycle -->
+                    <Border Classes="group">
+                        <StackPanel Spacing="4" Orientation="Horizontal">
+                            <StackPanel Spacing="6" IsEnabled="{Binding ShowCycle}">
+                                <TextBlock Classes="section" Text="Cycle" />
+                                <StackPanel Orientation="Horizontal" Spacing="8">
+                                    <TextBlock Classes="label" Text="Speed:" Width="56" />
+                                    <NumericUpDown Value="{Binding CycleSpeed}"
+                                                   Minimum="0.0001" Maximum="10" Increment="0.001"
+                                                   FormatString="0.0000" Width="135" />
+                                </StackPanel>
+                                <StackPanel Orientation="Horizontal" Spacing="8">
+                                    <TextBlock Classes="label" Text="Offset:" Width="56" />
+                                    <NumericUpDown Value="{Binding ColorOffset}"
+                                                   Minimum="-10" Maximum="10" Increment="0.01"
+                                                   FormatString="0.000" Width="135"
+                                                   ToolTip.Tip="Additive phase — rotates the palette along the iteration axis (F4)." />
+                                </StackPanel>
+                                <StackPanel Orientation="Horizontal" Spacing="8">
+                                    <TextBlock Classes="label" Text="Density:" Width="56" />
+                                    <NumericUpDown Value="{Binding ColorDensity}"
+                                                   Minimum="0" Maximum="20" Increment="0.05"
+                                                   FormatString="0.000" Width="135"
+                                                   ToolTip.Tip="Multiplies cycling frequency — palette cycles per rhythm unit (F4)." />
+                                </StackPanel>
+                                <StackPanel Orientation="Horizontal" Spacing="8">
+                                    <TextBlock Classes="label" Text="Wrap:" Width="56" />
+                                    <ComboBox ItemsSource="{Binding WrapModeOptions}" SelectedItem="{Binding WrapMode}"
+                                              Width="135" HorizontalAlignment="Left"
+                                              ToolTip.Tip="Boundary behaviour: Repeat (modulo), PingPong (seamless mirror), Clamp (F5)." />
+                                </StackPanel>
+                                <CheckBox IsChecked="{Binding SeamlessCycle}"
+                                          Content="Seamless cycling (close the loop)"
+                                          ToolTip.Tip="#255 — nudge the palette so its last colour ramps back to the first, so palette cycling shows no seam. Opt-in: leave off to keep a deliberate hard seam." />
+                            </StackPanel>
+
+                             <!-- Sparkle/XOR -->
+                            <StackPanel Spacing="6" Margin="8,0,0,0">
+                                <TextBlock Classes="section" Text="" />
+                                <StackPanel Orientation="Vertical" Spacing="4">
+                                    <StackPanel Orientation="Horizontal" Spacing="8">
+                                        <TextBlock Classes="label" Text="Sparkle:" Width="56" />
+                                        <Slider Minimum="0" Maximum="128" Width="130" TickFrequency="1"
+                                            Value="{Binding SparkleStride, Mode=TwoWay}"
+                                            VerticalAlignment="Center"
+                                            ToolTip.Tip="Brighten every Nth of 256 LUT entries (glitter/lightning). 0 = off." />
+                                        <TextBlock Text="{Binding SparkleStride}" Foreground="#B4B4B4"
+                                               VerticalAlignment="Center" Width="30" TextAlignment="Right" />
+                                    </StackPanel>
+                                    <StackPanel Orientation="Horizontal" Spacing="8">
+                                        <TextBlock Classes="label" Text="Boost:" Width="56" />
+                                        <Slider Minimum="0" Maximum="1" Width="130" TickFrequency="0.05"
+                                            Value="{Binding SparkleBoost, Mode=TwoWay}"
+                                            VerticalAlignment="Center"
+                                            ToolTip.Tip="Sparkle brightness boost (fraction of white). 0 = off." />
+                                        <TextBlock Text="{Binding SparkleBoost}" Foreground="#B4B4B4"
+                                               VerticalAlignment="Center" Width="30" TextAlignment="Right" />
+                                    </StackPanel>
+                                </StackPanel>
+                                <StackPanel Orientation="Vertical" Spacing="4">
+                                    <StackPanel Orientation="Horizontal" Spacing="8">
+                                        <TextBlock Classes="label" Text="XOR:" Width="56" />
+                                        <Slider Minimum="0" Maximum="256" Width="130" TickFrequency="1"
+                                            Value="{Binding XorLevels, Mode=TwoWay}"
+                                            VerticalAlignment="Center"
+                                            ToolTip.Tip="Quantise the palette index to N levels then XOR, shattering the gradient into a plaid/moiré on any field. 0 = off." />
+                                        <TextBlock Text="{Binding XorLevels}" Foreground="#B4B4B4"
+                                               VerticalAlignment="Center" Width="30" TextAlignment="Right" />
+                                    </StackPanel>
+                                    <StackPanel Orientation="Horizontal" Spacing="8">
+                                        <TextBlock Classes="label" Text="Mask:" Width="56" />
+                                        <Slider Minimum="0" Maximum="255" Width="130" TickFrequency="1"
+                                            Value="{Binding XorMask, Mode=TwoWay}"
+                                            VerticalAlignment="Center"
+                                            ToolTip.Tip="XOR mask — different masks give different weaves." />
+                                        <TextBlock Text="{Binding XorMask}" Foreground="#B4B4B4"
+                                               VerticalAlignment="Center" Width="30" TextAlignment="Right" />
                                     </StackPanel>
                                 </StackPanel>
                             </StackPanel>
