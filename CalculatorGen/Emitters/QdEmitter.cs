@@ -118,9 +118,9 @@ public sealed class QdEmitter : EmitterBase
         // QD has no built-in abs; reach into Hi via explicit conversion
         // and rebuild a positive QD by negating when Hi < 0. Cheap pattern:
         // sign-flip the whole DD/QD via `x.X0 < 0 ? -x : x`.
-        string reAbs = $"({a.Re}.X0 < 0.0 ? -({a.Re}) : ({a.Re}))";
+        string reAbs = $"(((QD)({a.Re})).X0 < 0.0 ? -({a.Re}) : ({a.Re}))";
         if (a.ImZero) return new(reAbs, "0.0", ImZero: true);
-        string imAbs = $"({a.Im}.X0 < 0.0 ? -({a.Im}) : ({a.Im}))";
+        string imAbs = $"(((QD)({a.Im})).X0 < 0.0 ? -({a.Im}) : ({a.Im}))";
         return new(reAbs, imAbs, ImZero: false);
     }
 
@@ -148,8 +148,8 @@ public sealed class QdEmitter : EmitterBase
     // is a Phase D-4+ extension (DD/QD transcendental library).
     private static ComplexExpr ScalarComplex(ComplexExpr a, string opName)
     {
-        string re = a.ImZero ? $"{a.Re}.X0" : $"{a.Re}.X0";
-        string im = a.ImZero ? "0.0" : $"{a.Im}.X0";
+        string re = $"((QD)({a.Re})).X0";
+        string im = a.ImZero ? "0.0" : $"((QD)({a.Im})).X0";
         // Inverse trig / hyperbolic degrade to double inside the Complex call
         // (same trade-off as sin/exp/log). Demote (Real, Imaginary) back to QD.
         if (opName is "asin" or "acos" or "atan" or "asinh" or "acosh" or "atanh")
