@@ -313,7 +313,8 @@ public sealed class UserEquationCalculator : IFractalCalculator
             // One env per row for the DSL interpreter (holds z/c/n + let-slots;
             // mutated in place per step).
             SbxVal[] env = sbx.NewEnv();
-            Complex Step(Complex zz, Complex cc, int it) => sbx.EvalStep(zz, cc, it, env);
+            // #543 — pv is the previous iterate z_{n-1}, bound to the `prev` slot.
+            Complex Step(Complex zz, Complex cc, int it, Complex pv) => sbx.EvalStep(zz, cc, it, env, pv);
             // #542 — per-row env for the z0 seed (null when no seed). Evaluated
             // with z=0, n=0 and the pixel's c: `c` ⇒ z0 = pixel (Julia).
             SbxVal[]? seedEnv = seed?.NewEnv();
@@ -352,6 +353,7 @@ public sealed class UserEquationCalculator : IFractalCalculator
                 // numerical Jacobian stays consistent with the seeded trajectory.
                 var z = seed != null ? Seed(c) : Complex.Zero;
                 var zP = seed != null ? Seed(cP) : Complex.Zero;
+                Complex prevZ = Complex.Zero, prevZP = Complex.Zero;   // #543 z_{n-1}
                 OrbitAccumulator acc = default;
                 if (orbitMap != null) orbitMap.InitOrbit(out acc);
                 int iter;
@@ -367,7 +369,7 @@ public sealed class UserEquationCalculator : IFractalCalculator
                         if (r2 >= bailout2) break;
                         if (orbitMap != null && iter > 0)
                             orbitMap.Sample(ref acc, z.Real, z.Imaginary, cx, cy, iter);
-                        try { z = Step(z, c, iter); }
+                        try { var zn = Step(z, c, iter, prevZ); prevZ = z; z = zn; }
                         catch { iter = maxIt; break; }
                     }
                 }
@@ -379,7 +381,13 @@ public sealed class UserEquationCalculator : IFractalCalculator
                         if (r2 >= bailout2) break;
                         if (orbitMap != null && iter > 0)
                             orbitMap.Sample(ref acc, z.Real, z.Imaginary, cx, cy, iter);
-                        try { z = Step(z, c, iter); zP = Step(zP, cP, iter); }
+                        try
+                        {
+                            var zn = Step(z, c, iter, prevZ);
+                            var zpn = Step(zP, cP, iter, prevZP);
+                            prevZ = z; prevZP = zP;
+                            z = zn; zP = zpn;
+                        }
                         catch { iter = maxIt; break; }
                     }
                 }

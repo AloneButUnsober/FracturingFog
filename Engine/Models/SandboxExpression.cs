@@ -45,6 +45,8 @@
 //
 // Built-in identifiers:
 //   z, c, n               (input slots, refreshed per iteration)
+//   prev                  (previous iterate z_{n-1}; 0 before the first step)
+//   iter                  (iteration index as a real; alias of n — CalcGen parity)
 //   pi, e, i              (constants; also accepted case-insensitively as
 //                          PI / E / I so translated C# equations resolve)
 // Functions:
@@ -284,11 +286,17 @@ namespace FracturingFog.Models
         public SbxNode Root { get; }
         public int EnvSize { get; }
 
-        // Slots 0..2 reserved: z, c, n.
+        // Slots 0..4 reserved: z, c, n, prev, iter.
         public const int SlotZ = 0;
         public const int SlotC = 1;
         public const int SlotN = 2;
-        public const int ReservedSlots = 3;
+        // #543 — CalcGen-parity slots. prev = previous iterate z_{n-1} (0 before
+        // the first step, matching CalcGen's `pr = 0` init). iter = iteration
+        // index as a real, an alias of `n` kept so equations authored against the
+        // CalcGen DSL (which spells the counter `iter`) parse unchanged here.
+        public const int SlotPrev = 3;
+        public const int SlotIter = 4;
+        public const int ReservedSlots = 5;
 
         private SandboxExpression(SbxNode root, int envSize) { Root = root; EnvSize = envSize; }
 
@@ -301,12 +309,18 @@ namespace FracturingFog.Models
 
         public SbxVal[] NewEnv() => new SbxVal[EnvSize];
 
-        /// <summary>Evaluate with the given z, c, iteration; env must come from <see cref="NewEnv"/>.</summary>
-        public Complex EvalStep(Complex z, Complex c, int n, SbxVal[] env)
+        /// <summary>Evaluate with the given z, c, iteration; env must come from
+        /// <see cref="NewEnv"/>. <paramref name="prev"/> is the previous iterate
+        /// z_{n-1}, bound to the <c>prev</c> slot (#543); it defaults to 0 so
+        /// callers that don't track it stay source-compatible and equations that
+        /// don't reference <c>prev</c> are unaffected.</summary>
+        public Complex EvalStep(Complex z, Complex c, int n, SbxVal[] env, Complex prev = default)
         {
             env[SlotZ] = SbxVal.Cx(z);
             env[SlotC] = SbxVal.Cx(c);
             env[SlotN] = SbxVal.Real(n);
+            env[SlotPrev] = SbxVal.Cx(prev);   // #543
+            env[SlotIter] = SbxVal.Real(n);    // #543 — iter is an alias of n
             return Root.Eval(env).AsComplex();
         }
 
@@ -326,6 +340,8 @@ namespace FracturingFog.Models
                 _scope["z"] = SlotZ;
                 _scope["c"] = SlotC;
                 _scope["n"] = SlotN;
+                _scope["prev"] = SlotPrev;   // #543
+                _scope["iter"] = SlotIter;   // #543
                 EnvSize = ReservedSlots;
             }
 
@@ -773,7 +789,7 @@ namespace FracturingFog.Models
             }
 
             private static bool IsReservedName(string name) =>
-                name is "z" or "c" or "n" or "pi" or "e" or "i" or "let" or "in";
+                name is "z" or "c" or "n" or "prev" or "iter" or "pi" or "e" or "i" or "let" or "in";
             private static bool IsDigit(char c) => c >= '0' && c <= '9';
             private static bool IsIdentStart(char c) => (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || c == '_';
             private static bool IsIdentCont(char c) => IsIdentStart(c) || IsDigit(c);
