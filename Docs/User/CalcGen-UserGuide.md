@@ -29,13 +29,14 @@ read the technical companions:
 8. [Structure: `let`, statement blocks, and conditionals](#8-structure-let-statement-blocks-and-conditionals)
 9. [Holomorphic vs non-holomorphic — why it matters](#9-holomorphic-vs-non-holomorphic--why-it-matters)
 10. [Execution paths and what gates them](#10-execution-paths-and-what-gates-them)
-11. [Migrating C# equations to the DSL](#11-migrating-c-equations-to-the-dsl)
-12. [The Cookbook](#12-the-cookbook)
-13. [Editor workflow](#13-editor-workflow)
-14. [Command-line generation](#14-command-line-generation)
-15. [Troubleshooting](#15-troubleshooting)
-16. [Reference card](#16-reference-card)
-17. [See also](#17-see-also)
+11. [Orbit controls — escape radius, z₀ seeding (Julia), convergence](#11-orbit-controls--escape-radius-z-seeding-julia-convergence)
+12. [Migrating C# equations to the DSL](#12-migrating-c-equations-to-the-dsl)
+13. [The Cookbook](#13-the-cookbook)
+14. [Editor workflow](#14-editor-workflow)
+15. [Command-line generation](#15-command-line-generation)
+16. [Troubleshooting](#16-troubleshooting)
+17. [Reference card](#17-reference-card)
+18. [See also](#18-see-also)
 
 ---
 
@@ -85,7 +86,7 @@ render is.
 | How it runs | Interprets the equation directly, one pixel at a time | Generates typed C#, compiles it, and hot-loads a real calculator |
 | Speed | Good for authoring; scalar only | Fast: scalar **+ AVX2 SIMD + GPU** |
 | Deep zoom | Shallow (roughly to the limit of `double`) | **Deep** — perturbation, BLA, Series Approximation, DD/QD high precision |
-| Surface normals / distance estimate | No | **Yes**, where the math allows |
+| Surface normals / distance estimate | **Yes** — exact analytic `dz/dc` for holomorphic maps (numeric for the rest) | **Yes**, where the math allows |
 | Language | The DSL (this document) | The DSL (this document) |
 
 Both engines speak **the same DSL**, with two small dialect differences noted
@@ -101,7 +102,7 @@ when you want speed or a deep dive, **Compile & Load** through CalcGen.
 > Older versions accepted raw C# that was compiled with full .NET access. That
 > path has been retired for safety. The `User Equation` tab still *accepts*
 > C#-style text (`return z*z + c;`) and automatically translates it to the DSL
-> for you (see [§11](#11-migrating-c-equations-to-the-dsl)), but the DSL is now
+> for you (see [§12](#12-migrating-c-equations-to-the-dsl)), but the DSL is now
 > the real language underneath. New equations should be written directly in DSL.
 
 ---
@@ -121,6 +122,9 @@ two input tabs and a live analysis panel.
 | **Validate for CalcGen** | Parses without rendering — tells you whether the DSL compiles and what paths it will support. |
 | **Equation Guide** | Opens this document. |
 | **Rotation°** | Rotates the sampling plane for display only; the equation is unchanged. |
+| **Escape r** | The bailout radius the orbit must exceed to count as escaped (`0` = automatic default). Lower it for transcendental maps whose orbits stay small — see [§11](#11-orbit-controls--escape-radius-z-seeding-julia-convergence). |
+| **z₀ seed** | A DSL expression for the *starting* value of the orbit (blank = `0`). Set it to `c` for a **Julia** set, or to a critical point for other families. |
+| **Converge-if** | A boolean DSL condition; when it becomes true the orbit stops early and the pixel is coloured as **converged** (for Newton / Magnet / Nova maps). Blank = escape-only. |
 
 The **live analysis panel** mirrors what CalcGen deduces from your equation:
 
@@ -383,7 +387,7 @@ clamp(z, -2.0, 2.0) + c       # bounded feedback
 | `z` | Current iterate (complex) | both engines |
 | `c` | Pixel coordinate (complex) | both engines |
 | `n` / `iter` | Current iteration index (real scalar) | both engines |
-| `prev` | The previous iterate `z_{n-1}` (Phoenix coupling) | **CalcGen only** |
+| `prev` | The previous iterate `z_{n-1}` (Phoenix coupling) | both engines |
 | `pi` | π | both |
 | `e` | Euler's number | both |
 | `i` | Imaginary unit `(0, 1)` | both |
@@ -396,9 +400,12 @@ sin(pi*z) + e*c               # π and e as literals
 ```
 
 > [!NOTE]
-> `prev` is only available through the CalcGen path (it needs an extra state
-> slot the live interpreter does not carry). If you author a Phoenix equation,
-> use **Compile & Load** to see it.
+> `prev` and `iter` now run on **both** engines — the live interpreter carries
+> the extra `z_{n-1}` state slot, so a Phoenix equation (`z*z + c + 0.5*prev`)
+> renders in the editor without a Compile & Load. The one behavioural nicety of
+> the compiled path is that the live interpreter also tracks `prev` through the
+> **analytic derivative** (exact `dz/dc`), where CalcGen's symbolic
+> differentiator treats `prev` as opaque and turns the distance estimate off.
 
 ---
 
@@ -486,6 +493,14 @@ perturbation.
 The live analysis panel's **DE / normals** and **Perturbation** readouts tell
 you exactly what your current equation supports.
 
+> [!NOTE]
+> The **live interpreter now computes surface normals too.** For a holomorphic
+> map it carries an **exact** `dz/dc` alongside the orbit (forward-mode
+> automatic differentiation), so lit relief in the editor preview matches the
+> compiled engine to machine precision. A non-holomorphic map (anything from the
+> second bullet above) falls back to a numerical estimate of the normal, exactly
+> as before — the picture is unchanged, only holomorphic maps got sharper.
+
 ---
 
 ## 10. Execution paths and what gates them
@@ -520,7 +535,129 @@ Rules of thumb:
 
 ---
 
-## 11. Migrating C# equations to the DSL
+## 11. Orbit controls — escape radius, z₀ seeding (Julia), convergence
+
+An equation is only the **step**. Three editor knobs control the *orbit* around
+that step, and together they unlock whole families the bare step cannot reach —
+Julia sets, Newton/Magnet/Nova convergence maps, and transcendental maps that
+otherwise render solid. They live next to the equation box (see
+[§3](#3-the-editor-at-a-glance)) and each maps to a `FractalParameters` field for
+the command line and saved regions.
+
+### 11.1 Escape radius (`Escape r`)
+
+The orbit "escapes" when `|z|` exceeds this radius; escape speed is what the
+colour map bands. The default is deliberately large so quadratic maps get smooth
+gradients, but **transcendental maps have a tiny dynamic range** — `log`, `sin`,
+and their compositions keep `|z|` small, so at the big default *nothing escapes*
+and the frame reads as one solid interior colour. Dropping the radius makes the
+structure appear.
+
+| Value | Effect |
+|---|---|
+| `0` | Automatic default (the legacy contract — large radius). |
+| `2` | The classic Mandelbrot escape contract; a good first try for **any transcendental map that renders blank**. |
+| `4`–`32` | Middle ground; raise it for smoother banding once something is escaping. |
+
+> [!TIP]
+> **"It compiles but renders solid / blank."** Nine times in ten this is the
+> escape radius, not the equation. Set `Escape r` to `2` and re-render before
+> touching anything else. `sin`, `log`, `exp∘`-nested and `1/z`-style maps almost
+> always need a small radius.
+
+### 11.2 z₀ seed — Julia sets and critical-point seeding (`z₀ seed`)
+
+By default the orbit starts at `z₀ = 0`. The seed box is a DSL expression for a
+different start, evaluated once per pixel with `c` bound to the pixel coordinate
+(so `z = 0`, `n = 0` at seed time). Two big uses:
+
+**Julia sets.** A Julia set fixes `c` to a constant and lets the *starting point*
+sweep the plane. Fracturing Fog's `c` is always the pixel, so you make a Julia by
+**seeding `z₀ = c`** (start at the pixel) and writing the constant into the
+equation in place of `c`:
+
+```text
+Equation:  z*z + (-0.8 + 0.156*i)     ← constant instead of c
+z₀ seed:   c                          ← start the orbit at the pixel
+```
+
+That is the classic Douady rabbit. Any map becomes a Julia the same way: seed
+`c`, replace the `+ c` term with the Julia constant.
+
+**Critical-point seeding.** For non-quadratic families the interesting parameter
+image starts the orbit at the map's *critical point* (where the derivative
+vanishes), not at `0`. Put that point in the seed box (e.g. `0` for `z²+c`, or a
+solved critical value for a cubic).
+
+> [!NOTE]
+> A blank seed means `z₀ = 0` — every existing equation is unchanged. The seed is
+> its own tiny DSL expression, so `c`, `0.5*c`, `1 - c`, or a literal all work.
+
+### 11.3 Convergence bailout — Newton / Magnet / Nova (`Converge-if`)
+
+Escape-time maps colour by how fast `|z|` runs to infinity. **Root-finding maps
+converge instead** — Newton's method walks each pixel toward one of several
+roots and *stops moving*. With only an escape test those pixels never bail and
+the whole image reads as interior. The `Converge-if` box is a boolean DSL
+condition over `z / prev / c / n / iter`; when it becomes true the orbit stops
+and the pixel is coloured by **how quickly it converged** (raw iteration count).
+
+The canonical trio needs all three controls together — a seed at the pixel, the
+step, and a convergence test on successive iterates:
+
+```text
+# Newton for z³ − 1
+Equation:    z - (z*z*z - 1)/(3*z*z)
+z₀ seed:     c
+Converge-if: abs(z - prev) < 0.0001
+```
+
+`prev` (the previous iterate, [§7](#7-constants-variables-and-state)) is what
+makes `abs(z - prev) < ε` mean "the step barely moved — we've landed on a root".
+Magnet and Nova maps follow the same shape with their own step function.
+
+> [!NOTE]
+> Convergence colouring bands by iteration, so it pairs well with a cyclic
+> palette. Root-*basin* colouring (a distinct hue per root) is not wired yet;
+> today all roots share the convergence-speed ramp.
+
+### 11.4 Reproducing a fractalforums.org map (local smoke test)
+
+A worked end-to-end example, the map `z ← log(sin(|1/z|)) + c` from
+fractalforums.org. It is transcendental **and** singular at `z = 0`, so it needs
+two of the controls above; it is the canonical "why is my screen blank" case.
+
+**Mandelbrot form** (parameter plane):
+
+```text
+Equation:  log(sin(abs(1/z))) + c
+z₀ seed:   c        ← must NOT start at 0: 1/z is a pole there → all-NaN
+Escape r:  2        ← log∘sin stays small; at the default nothing escapes
+```
+
+**Julia form** (the forum's `c = (0, −1.55)`):
+
+```text
+Equation:  log(sin(abs(1/z))) - 1.55*i
+z₀ seed:   c
+Escape r:  2
+```
+
+Both render structure immediately with those two knobs set; either knob left at
+its default reproduces the original bug report (blank at default radius, all-NaN
+if seeded at `0`). `abs` is non-holomorphic, so the distance estimate stays off
+and the normals come from the numeric path — expected for this map.
+
+> [!TIP]
+> **Smoke-test drill for any pasted forum equation:** (1) paste the step into the
+> **DSL** tab; (2) if it renders solid, set `Escape r = 2`; (3) if it uses `1/z`,
+> `1/…`, or `log`/`sqrt` near the origin, set `z₀ seed = c` to move off the pole;
+> (4) if it is a Newton/root map, add `Converge-if: abs(z - prev) < 0.0001` with
+> `z₀ seed = c`. Those four steps recover the large majority of forum maps.
+
+---
+
+## 12. Migrating C# equations to the DSL
 
 The `User Equation` tab still accepts C#-style text and translates it
 automatically; the table below is the exact mapping so you can convert by hand or
@@ -567,12 +704,12 @@ z - (z*z*z - 1)/(3*z*z)
 
 ---
 
-## 12. The Cookbook
+## 13. The Cookbook
 
 Each recipe is a complete equation you can paste into the **DSL** tab. Grouped by
 family; every one is DSL (no C#).
 
-### 12.1 The Mandelbrot / Multibrot family (deep-zoomable)
+### 13.1 The Mandelbrot / Multibrot family (deep-zoomable)
 
 ```text
 z*z + c                       # classic Mandelbrot
@@ -587,7 +724,7 @@ i*z*z + c                     # complex leading coefficient
 0.5*z*z + 0.3*i*z + c         # mixed real/imaginary coefficients
 ```
 
-### 12.2 Anti-holomorphic — Burning Ship, Tricorn, hybrids
+### 13.2 Anti-holomorphic — Burning Ship, Tricorn, hybrids
 
 ```text
 fold(z)*fold(z) + c           # Burning Ship
@@ -597,7 +734,7 @@ fold(z)^3 + c                 # cubic Burning Ship
 z*z + c + 0.25*conj(z)        # Mandelbrot / Tricorn blend
 ```
 
-### 12.3 Rational maps (division; shallow-but-deep via DD/QD)
+### 13.3 Rational maps (division; shallow-but-deep via DD/QD)
 
 ```text
 (z*z - 1)/(z + 1) + c         # Mandelbrot-on-a-shell
@@ -606,7 +743,7 @@ z - (z*z*z - 1)/(3*z*z)       # Newton-shaped iteration
 1/(z*z) + c                   # inverse-square (prefer pow(z,-2)+c)
 ```
 
-### 12.4 Powers via `pow` (negative / fractional)
+### 13.4 Powers via `pow` (negative / fractional)
 
 ```text
 pow(z, -2) + c                # "Donut" inverse map (finite at z=0)
@@ -615,7 +752,7 @@ pow(z, 2.5) + c               # fractional Multibrot
 pow(z, 3) + pow(z, -1) + c    # mixed positive/negative powers
 ```
 
-### 12.5 Transcendental — exp / log / trig (lit relief works)
+### 13.5 Transcendental — exp / log / trig (lit relief works)
 
 ```text
 exp(z) + c
@@ -634,7 +771,7 @@ sin(pi*z) + c
 e*z*z + c
 ```
 
-### 12.6 Inverse trig / hyperbolic (normals on)
+### 13.6 Inverse trig / hyperbolic (normals on)
 
 ```text
 atan(z) + c                   # bounded; drive harder for banding
@@ -644,7 +781,7 @@ z*z + 0.3*atan(z) + c         # gentle inverse-tangent forcing
 acosh(z) + c
 ```
 
-### 12.7 Phoenix family (`prev`; Compile & Load)
+### 13.7 Phoenix family (`prev`; Compile & Load)
 
 ```text
 z*z + c + 0.5*prev            # classic Phoenix
@@ -653,7 +790,7 @@ z^3 + 0.4*prev + c            # cubic Phoenix
 z*z + 0.3*prev - 0.1*prev*prev + c   # two-tap Phoenix
 ```
 
-### 12.8 Component / rounding (domain warps, quantisation)
+### 13.8 Component / rounding (domain warps, quantisation)
 
 ```text
 z*z + fract(z) + c            # tiled / Kali-style warp
@@ -662,7 +799,7 @@ z*z + 0.2*sign(re(z)) + c     # sign-driven asymmetry
 z*z + round(z) - z + c        # snap-to-lattice feedback
 ```
 
-### 12.9 Argument / angle driven
+### 13.9 Argument / angle driven
 
 ```text
 z*z + 0.1*arg(z) + c          # spiral bias by orbit angle
@@ -670,7 +807,7 @@ z*z + 0.05*atan2(z, c) + c    # branch by relative angle
 if arg(z) > 0 then z*z + c else z*z - c   # phase-split map
 ```
 
-### 12.10 Real reducers — min / max / mod / clamp
+### 13.10 Real reducers — min / max / mod / clamp
 
 ```text
 min(z*z, max(z, -1.0)) + c    # clamped feedback
@@ -680,7 +817,7 @@ clamp(z, -2.0, 2.0) + c       # bounded orbit
 z*z + clamp(re(z), -1.0, 1.0)*i + c   # clamp only the real drive
 ```
 
-### 12.11 Conditional / piecewise
+### 13.11 Conditional / piecewise
 
 ```text
 if abs(z) < 1 then z*z + c else z*z - c
@@ -697,7 +834,7 @@ abs(z) < 1 ? z*z + c : z*z - c
 re(z)*im(z) > 0 ? z^3 + c : z^2 + c
 ```
 
-### 12.12 Iteration-aware (`n` / `iter`)
+### 13.12 Iteration-aware (`n` / `iter`)
 
 ```text
 z*z + c + 0.001*n             # slow drift (breaks scale invariance — by design)
@@ -706,7 +843,7 @@ sin(z + 0.01*n) + c           # phase that winds with depth
 if (n mod 4) < 2 then z*z + c else z*z - c   # alternate every few iters
 ```
 
-### 12.13 `let` and blocks (live interpreter)
+### 13.13 `let` and blocks (live interpreter)
 
 ```text
 let w = z*z in w*w + c        # z^4, computed once
@@ -719,9 +856,51 @@ var d = w*w - w;
 return d + c;
 ```
 
+### 13.14 Julia sets (`z₀ seed = c`)
+
+Each pairs an **equation** (a fixed constant where `+ c` used to be) with the
+**z₀ seed** control set to `c` — see [§11.2](#112-z-seed--julia-sets-and-critical-point-seeding).
+
+```text
+z*z + (-0.8 + 0.156*i)        # Douady rabbit           (seed: c)
+z*z + (-0.70176 - 0.3842*i)   # spiral Julia            (seed: c)
+z*z + (0.285 + 0.01*i)        # dendrite                (seed: c)
+z*z*z + (-0.4 + 0.6*i)        # cubic Julia             (seed: c)
+sin(z) + (1 + 0.2*i)          # transcendental Julia    (seed: c, Escape r: 4)
+```
+
+### 13.15 Convergence maps — Newton / Nova (`Converge-if` + `z₀ seed = c`)
+
+Each needs **z₀ seed = `c`** and a **Converge-if** condition — see
+[§11.3](#113-convergence-bailout--newton--magnet--nova).
+
+```text
+# Newton z³ − 1        Converge-if: abs(z - prev) < 0.0001
+z - (z*z*z - 1)/(3*z*z)
+
+# Newton z⁴ − 1        Converge-if: abs(z - prev) < 0.0001
+z - (z*z*z*z - 1)/(4*z*z*z)
+
+# Nova (relaxed Newton + c)   Converge-if: abs(z - prev) < 0.0001   seed: c
+z - (z*z*z - 1)/(3*z*z) + c
+```
+
+### 13.16 Transcendental-singular (forum maps; small `Escape r` + seed)
+
+Maps with a pole at the origin or a tiny dynamic range — the "renders blank by
+default" family. Set **Escape r = 2** and **z₀ seed = c**; full walkthrough in
+[§11.4](#114-reproducing-a-fractalforumsorg-map-local-smoke-test).
+
+```text
+log(sin(abs(1/z))) + c        # forum map, Mandelbrot form   (seed: c, Escape r: 2)
+log(sin(abs(1/z))) - 1.55*i   # forum map, Julia c=(0,−1.55) (seed: c, Escape r: 2)
+sin(1/z) + c                  # simpler pole map             (seed: c, Escape r: 2)
+1/(z*z) + c                   # inverse-square               (seed: c, Escape r: 2)
+```
+
 ---
 
-## 13. Editor workflow
+## 14. Editor workflow
 
 ### Authoring loop
 
@@ -753,7 +932,7 @@ stop typing. Advisory messages render in yellow (`#FFCC00`), never red.
 
 ---
 
-## 14. Command-line generation
+## 15. Command-line generation
 
 ```pwsh
 dotnet build CalculatorGen\CalculatorGen.csproj -c Release
@@ -773,10 +952,13 @@ Flags:
 - `--bailout <R>` — bailout radius (default 512; the generator squares it, so
   `--bailout 512` means "escape when `|z|² ≥ 262144`"). Raise it for smoother
   transcendental gradients; drop it to `2` for the classic Mandelbrot contract.
+  This is the compile-time twin of the editor's **Escape r** control — the same
+  radius that keeps transcendental maps from rendering solid
+  ([§11.1](#111-escape-radius-escape-r)).
 
 ---
 
-## 15. Troubleshooting
+## 16. Troubleshooting
 
 | Symptom | Likely cause / fix |
 |---|---|
@@ -789,13 +971,19 @@ Flags:
 | Deep zoom drops to scalar / DD | A non-polynomial construct disabled perturbation; only `z^d + c`-shaped maps deep-zoom with acceleration. |
 | A bounded map (`asin`, `atanh`) renders all-inside | That is correct — those orbits never escape. Add an escaping term (`z*z`). |
 | Negative-power map is blank | Use `pow(z, -k)` (zero-guarded), not `1/z^k` (NaN at `z = 0`). |
+| A **transcendental** map (`sin`/`log`/`exp∘…`) renders one solid colour | Escape radius too large for its small dynamic range. Set **Escape r = 2** — see [§11.1](#111-escape-radius-escape-r). |
+| A `1/z`-style map is all one colour / all interior | The orbit starts at the pole `z₀ = 0` (`1/0`). Set **z₀ seed = c** to start at the pixel — see [§11.2](#112-z-seed--julia-sets-and-critical-point-seeding). |
+| A Newton / root-finding map reads as solid interior | Root maps *converge*, they don't escape. Add a **Converge-if** condition and seed `z₀ = c` — see [§11.3](#113-convergence-bailout--newton--magnet--nova). |
+| A Julia set renders as the Mandelbrot instead | Put the Julia constant in the equation (replace `+ c`) and set **z₀ seed = c** — see [§11.2](#112-z-seed--julia-sets-and-critical-point-seeding). |
 
 ---
 
-## 16. Reference card
+## 17. Reference card
 
 ```text
-Variables / state   z   c   n (or iter)   prev (CalcGen)
+Variables / state   z   c   n (or iter)   prev            (all both engines)
+Orbit controls      Escape r (small for transcendental)   z0 seed (c = Julia)
+                    Converge-if (Newton/Nova: abs(z-prev) < eps)
 Constants           pi   e   i                     (i = imaginary unit (0,1))
 Operators           +  -  *  /  ^          (^ = int 0..64 in CalcGen; any exp live)
 Compare (in cond)   <  <=  >  >=  ==  !=
@@ -821,7 +1009,7 @@ Reminders:
 
 ---
 
-## 17. See also
+## 18. See also
 
 - [Fractal Equation Design Guide (technical)](../Technical/FractalEquation-DesignGuide.md) — the math of each family, deep-zoom tables, and per-family modification cookbook.
 - [CalculatorGen Authoring (technical)](../Technical/CalculatorGen-Authoring.md) — generator internals.

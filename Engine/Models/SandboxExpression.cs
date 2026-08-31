@@ -108,9 +108,35 @@ namespace FracturingFog.Models
         }
     }
 
+    /// <summary>Forward-mode complex dual: a value paired with its derivative
+    /// with respect to c (#545). Used to carry an EXACT dz/dc through the
+    /// iteration instead of the finite-difference second trajectory. Only the
+    /// holomorphic operator set implements <see cref="SbxNode.EvalD"/>; a tree
+    /// that touches a non-holomorphic op (abs/conj/re/im/arg/ternary/…) is
+    /// routed to the numeric Jacobian by <see cref="SandboxExpression.IsHolomorphic"/>.</summary>
+    public readonly struct CxDual
+    {
+        public readonly Complex V;   // value
+        public readonly Complex D;   // d/dc
+        public CxDual(Complex v, Complex d) { V = v; D = d; }
+        public static CxDual Const(Complex v) => new CxDual(v, Complex.Zero);
+    }
+
     public abstract class SbxNode
     {
         public abstract SbxVal Eval(SbxVal[] env);
+
+        /// <summary>Forward-mode dual evaluation (#545). Overridden only by the
+        /// holomorphic node/op set; the base throws so an accidental
+        /// non-holomorphic node (which <see cref="SandboxExpression.IsHolomorphic"/>
+        /// should have screened out) fails loud rather than returning a bogus
+        /// derivative.</summary>
+        public virtual CxDual EvalD(CxDual[] env)
+            => throw new NotSupportedException("non-holomorphic node has no analytic derivative");
+
+        /// <summary>True when the whole subtree is complex-differentiable
+        /// (holomorphic) so <see cref="EvalD"/> is exact end to end.</summary>
+        public abstract bool IsHolo { get; }
     }
 
     public sealed class SbxConst : SbxNode
@@ -118,6 +144,8 @@ namespace FracturingFog.Models
         public readonly SbxVal V;
         public SbxConst(SbxVal v) { V = v; }
         public override SbxVal Eval(SbxVal[] env) => V;
+        public override CxDual EvalD(CxDual[] env) => CxDual.Const(V.AsComplex());
+        public override bool IsHolo => true;
     }
 
     public sealed class SbxSlot : SbxNode
@@ -125,6 +153,8 @@ namespace FracturingFog.Models
         public readonly int Slot;
         public SbxSlot(int s) { Slot = s; }
         public override SbxVal Eval(SbxVal[] env) => env[Slot];
+        public override CxDual EvalD(CxDual[] env) => env[Slot];
+        public override bool IsHolo => true;
     }
 
     public sealed class SbxLet : SbxNode
@@ -138,6 +168,12 @@ namespace FracturingFog.Models
             env[Slot] = Value.Eval(env);
             return Body.Eval(env);
         }
+        public override CxDual EvalD(CxDual[] env)
+        {
+            env[Slot] = Value.EvalD(env);
+            return Body.EvalD(env);
+        }
+        public override bool IsHolo => Value.IsHolo && Body.IsHolo;
     }
 
     public sealed class SbxUnary : SbxNode
@@ -150,6 +186,13 @@ namespace FracturingFog.Models
             var v = A.Eval(env);
             return Op == '-' ? SbxVal.Neg(v) : SbxVal.Real(v.AsBool() ? 0.0 : 1.0);
         }
+        public override CxDual EvalD(CxDual[] env)
+        {
+            // Only unary minus is holomorphic; '!' is screened out by IsHolo.
+            var a = A.EvalD(env);
+            return new CxDual(-a.V, -a.D);
+        }
+        public override bool IsHolo => Op == '-' && A.IsHolo;
     }
 
     public sealed class SbxBinary : SbxNode
@@ -181,6 +224,37 @@ namespace FracturingFog.Models
                 _    => throw new InvalidOperationException("Unknown op " + Op)
             };
         }
+
+        public override CxDual EvalD(CxDual[] env)
+        {
+            // Only the holomorphic arithmetic ops reach here (IsHolo screens
+            // out comparisons / logicals).
+            var a = A.EvalD(env);
+            var b = B.EvalD(env);
+            switch (Op)
+            {
+                case "+": return new CxDual(a.V + b.V, a.D + b.D);
+                case "-": return new CxDual(a.V - b.V, a.D - b.D);
+                case "*": return new CxDual(a.V * b.V, a.D * b.V + a.V * b.D);  // product rule
+                case "/":
+                {
+                    Complex v = a.V / b.V;
+                    return new CxDual(v, (a.D * b.V - a.V * b.D) / (b.V * b.V));  // quotient rule
+                }
+                case "^":
+                {
+                    // d(a^b) = a^b · (b'·ln a + b·a'/a).
+                    Complex v = Complex.Pow(a.V, b.V);
+                    Complex d = v * (b.D * Complex.Log(a.V) + b.V * a.D / a.V);
+                    return new CxDual(v, d);
+                }
+                default: throw new NotSupportedException("non-holomorphic op '" + Op + "'");
+            }
+        }
+
+        public override bool IsHolo =>
+            (Op == "+" || Op == "-" || Op == "*" || Op == "/" || Op == "^")
+            && A.IsHolo && B.IsHolo;
     }
 
     public sealed class SbxTernary : SbxNode
@@ -188,6 +262,9 @@ namespace FracturingFog.Models
         public readonly SbxNode Cond, Then, Else;
         public SbxTernary(SbxNode c, SbxNode t, SbxNode e) { Cond = c; Then = t; Else = e; }
         public override SbxVal Eval(SbxVal[] env) => Cond.Eval(env).AsBool() ? Then.Eval(env) : Else.Eval(env);
+        // Data-dependent branch: derivative is discontinuous at the boundary
+        // locus, so the analytic path declines it and the numeric Jacobian runs.
+        public override bool IsHolo => false;
     }
 
     public sealed class SbxCall : SbxNode
@@ -269,6 +346,58 @@ namespace FracturingFog.Models
             }
         }
 
+        // #545 — holomorphic single-argument functions whose analytic derivative
+        // EvalD implements. Everything else (abs/conj/re/im/arg/floor/sign/fold/
+        // fract/round/ceil/trunc/min/max/clamp/atan2/mod) is non-holomorphic and
+        // routes to the numeric Jacobian via IsHolo.
+        private static readonly System.Collections.Generic.HashSet<string> HoloUnary = new(StringComparer.Ordinal)
+        {
+            "sin","cos","tan","sinh","cosh","tanh","exp","log","sqrt","sqr",
+            "asin","acos","atan","asinh","acosh","atanh",
+        };
+
+        public override CxDual EvalD(CxDual[] env)
+        {
+            // pow(a,b) is the only holomorphic multi-arg fn.
+            if (Name == "pow")
+            {
+                var a = Args[0].EvalD(env);
+                var b = Args[1].EvalD(env);
+                Complex pv = Complex.Pow(a.V, b.V);
+                Complex pd = pv * (b.D * Complex.Log(a.V) + b.V * a.D / a.V);
+                return new CxDual(pv, pd);
+            }
+
+            var u = Args[0].EvalD(env);
+            Complex v, d;
+            switch (Name)
+            {
+                case "sin":  v = Complex.Sin(u.V);  d = Complex.Cos(u.V) * u.D; break;
+                case "cos":  v = Complex.Cos(u.V);  d = -Complex.Sin(u.V) * u.D; break;
+                case "tan":  { var c = Complex.Cos(u.V); v = Complex.Tan(u.V); d = u.D / (c * c); break; }
+                case "sinh": v = Complex.Sinh(u.V); d = Complex.Cosh(u.V) * u.D; break;
+                case "cosh": v = Complex.Cosh(u.V); d = Complex.Sinh(u.V) * u.D; break;
+                case "tanh": { var ch = Complex.Cosh(u.V); v = Complex.Tanh(u.V); d = u.D / (ch * ch); break; }
+                case "exp":  v = Complex.Exp(u.V);  d = v * u.D; break;
+                case "log":  v = Complex.Log(u.V);  d = u.D / u.V; break;
+                case "sqrt": v = Complex.Sqrt(u.V); d = u.D / (2.0 * v); break;
+                case "sqr":  v = u.V * u.V;         d = 2.0 * u.V * u.D; break;
+                case "asin": v = Complex.Asin(u.V); d = u.D / Complex.Sqrt(Complex.One - u.V * u.V); break;
+                case "acos": v = Complex.Acos(u.V); d = -u.D / Complex.Sqrt(Complex.One - u.V * u.V); break;
+                case "atan": v = Complex.Atan(u.V); d = u.D / (Complex.One + u.V * u.V); break;
+                case "asinh": v = ComplexAsinh(u.V); d = u.D / Complex.Sqrt(u.V * u.V + Complex.One); break;
+                case "acosh": v = ComplexAcosh(u.V); d = u.D / Complex.Sqrt(u.V * u.V - Complex.One); break;
+                case "atanh": v = ComplexAtanh(u.V); d = u.D / (Complex.One - u.V * u.V); break;
+                default: throw new NotSupportedException("non-holomorphic function '" + Name + "'");
+            }
+            return new CxDual(v, d);
+        }
+
+        public override bool IsHolo =>
+            Name == "pow"
+                ? Args.Length == 2 && Args[0].IsHolo && Args[1].IsHolo
+                : HoloUnary.Contains(Name) && Args.Length == 1 && Args[0].IsHolo;
+
         // x - p*floor(x/p + 0.5): centered modulo into [-p/2, p/2). Matches
         // Vec3.Mod so the 2D and 3D DSLs share one 'mod' meaning.
         private static double CenteredMod(double x, double p)
@@ -322,6 +451,32 @@ namespace FracturingFog.Models
             env[SlotPrev] = SbxVal.Cx(prev);   // #543
             env[SlotIter] = SbxVal.Real(n);    // #543 — iter is an alias of n
             return Root.Eval(env).AsComplex();
+        }
+
+        /// <summary>True when the whole expression is holomorphic, so the exact
+        /// forward-mode derivative (<see cref="EvalStepD"/>) is available (#545).
+        /// A tree touching any non-holomorphic op (abs/conj/re/im/arg/ternary/…)
+        /// returns false and the caller keeps the finite-difference Jacobian.</summary>
+        public bool IsHolomorphic => Root.IsHolo;
+
+        public CxDual[] NewDualEnv() => new CxDual[EnvSize];
+
+        /// <summary>Forward-mode dual step (#545): given the current iterate
+        /// <paramref name="z"/> and its derivative <paramref name="dz"/> = dz/dc,
+        /// return the next iterate and its EXACT derivative. c seeds dc = 1,
+        /// prev carries <paramref name="dprev"/> = dz_{n-1}/dc, and n/iter are
+        /// constants (d = 0). Only valid when <see cref="IsHolomorphic"/>.</summary>
+        public (Complex z, Complex dz) EvalStepD(
+            Complex z, Complex dz, Complex c, int n, CxDual[] denv,
+            Complex prev = default, Complex dprev = default)
+        {
+            denv[SlotZ] = new CxDual(z, dz);
+            denv[SlotC] = new CxDual(c, Complex.One);
+            denv[SlotN] = CxDual.Const(n);
+            denv[SlotPrev] = new CxDual(prev, dprev);
+            denv[SlotIter] = CxDual.Const(n);
+            var r = Root.EvalD(denv);
+            return (r.V, r.D);
         }
 
         // ── Parser ────────────────────────────────────────────────────────────
