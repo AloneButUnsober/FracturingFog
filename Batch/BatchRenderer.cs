@@ -396,6 +396,9 @@ namespace FracturingFog.Batch
                     // Brightness/Contrast BGRA post-pass (parity with the
                     // interactive image); HE already baked in the frame render.
                     ApplyBrightnessContrast(buffer, outW * outH, pfBrightness, pfContrast);
+                    // S2 (#389) — view transform / tonemap, after b/c (poster order).
+                    ApplyViewTransform(buffer, outW * outH,
+                        opts.ViewTransform ?? FracturingFog.Imaging.ViewTransform.None, opts.ViewExposureEv ?? 0.0);
 
                     // --watermark bakes the region/theme + program sub-line
                     // into every emitted frame so the WMF Mp4Writer path AND
@@ -654,6 +657,17 @@ namespace FracturingFog.Batch
         // FractalRenderHost.UploadProcessedBuffer so batch output matches the
         // interactive image: contrast pivots around mid-grey (127.5), then
         // brightness offsets in 0..255 space.
+        // S2 (#389) — output-stage view transform / tonemap on a video / slideshow
+        // frame, layered on the brightness/contrast pass exactly as the poster path
+        // (PosterRenderer) does, so an offline video frame matches a still export.
+        // None short-circuits (byte-identical); exposure is only honoured with a
+        // transform selected (mirrors ViewTransformOps.Apply + the poster gate).
+        private static void ApplyViewTransform(uint[] buf, int n, FracturingFog.Imaging.ViewTransform vt, double exposureEv)
+        {
+            if (vt == FracturingFog.Imaging.ViewTransform.None) return;
+            ViewTransformOps.Apply(buf, n, vt, (float)exposureEv);
+        }
+
         private static void ApplyBrightnessContrast(uint[] buf, int n, int brightness, int contrast)
         {
             if (brightness == 0 && contrast == 0) return;
@@ -766,7 +780,8 @@ namespace FracturingFog.Batch
             int outW, int outH, int totalFrames, int legFrames,
             int regionFadeFrames, int themeFadeFrames, int themesPerLeg,
             double startZoom, bool reverse, bool watermark,
-            int pfBrightness, int pfContrast, int pfAdaptive)
+            int pfBrightness, int pfContrast, int pfAdaptive,
+            FracturingFog.Imaging.ViewTransform viewTransform, double viewExposureEv)
         {
             uint[]? prevFrame = null;
             int framesWritten = 0;
@@ -850,6 +865,7 @@ namespace FracturingFog.Batch
                     }
 
                     ApplyBrightnessContrast(frame, n, pfBrightness, pfContrast);
+                    ApplyViewTransform(frame, n, viewTransform, viewExposureEv);   // S2 (#389)
                     if (watermark)
                         ApplyWatermarkInPlace(frame, outW, outH, region.Name, legThemeNames[seg]);
 
@@ -1085,7 +1101,8 @@ namespace FracturingFog.Batch
                     outW, outH, totalFrames, videoLegFrames,
                     regionFadeFrames, themeFadeFrames, videoThemesPerLeg,
                     vStartZoom, vReverse, opts.Watermark,
-                    pfBrightness, pfContrast, pfAdaptive);
+                    pfBrightness, pfContrast, pfAdaptive,
+                    opts.ViewTransform ?? FracturingFog.Imaging.ViewTransform.None, opts.ViewExposureEv ?? 0.0);
             }
             else
             while (framesWritten < totalFrames)
@@ -1153,6 +1170,8 @@ namespace FracturingFog.Batch
                     // interactive UploadProcessedBuffer), baked before the fade
                     // so cross-fades interpolate the processed image.
                     ApplyBrightnessContrast(currFrame, outW * outH, pfBrightness, pfContrast);
+                    ApplyViewTransform(currFrame, outW * outH,
+                        opts.ViewTransform ?? FracturingFog.Imaging.ViewTransform.None, opts.ViewExposureEv ?? 0.0);   // S2 (#389)
 
                     if (opts.Watermark)
                         ApplyWatermarkInPlace(currFrame, outW, outH,
