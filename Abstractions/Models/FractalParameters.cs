@@ -86,6 +86,24 @@ namespace FracturingFog.Models
         /// </summary>
         public bool UserEquationSkipJacobian { get; set; } = false;
 
+        /// <summary>#542 — optional seed for the iteration start value z0, as a
+        /// bare CalcGen-DSL expression over <c>c</c> (the pixel) and constants.
+        /// Null/empty ⇒ z0 = 0 (Mandelbrot orbit; legacy, byte-identical).
+        /// <c>c</c> ⇒ z0 = pixel (Julia — pair with a literal constant in the
+        /// step, e.g. <c>log(sin(abs(1/z))) + (-1.55*i)</c>). A critical-point
+        /// expression gives the correct Mandelbrot set for non-polynomial
+        /// families whose critical point is not 0.</summary>
+        public string? UserEquationSeed { get; set; }
+
+        /// <summary>#544 — optional convergence bailout: a boolean CalcGen-DSL
+        /// condition over <c>z</c> / <c>prev</c> / <c>c</c> / <c>n</c> /
+        /// <c>iter</c>. Null/empty ⇒ escape-radius test only (legacy). When it
+        /// becomes true the orbit stops early and the pixel is classified
+        /// "converged" and coloured by convergence speed, enabling Newton /
+        /// Magnet / Nova style maps whose interesting region converges rather
+        /// than escapes. Typical form: <c>abs(z - prev) &lt; 0.0001</c>.</summary>
+        public string? UserEquationBailoutCondition { get; set; }
+
         /// <summary>
         /// Source for the Sandbox fractal — a restricted expression DSL parsed by
         /// <see cref="SandboxExpression"/>. Safe to evaluate in untrusted contexts:
@@ -1043,6 +1061,8 @@ namespace FracturingFog.Models
                 UserEquationDslSource = UserEquationDslSource,
                 UserEquationActiveTab = UserEquationActiveTab,
                 UserEquationSkipJacobian = UserEquationSkipJacobian,
+                UserEquationSeed = UserEquationSeed,
+                UserEquationBailoutCondition = UserEquationBailoutCondition,
                 SandboxSource = SandboxSource,
                 SandboxName = SandboxName,
                 IFSPresetName = IFSPresetName,

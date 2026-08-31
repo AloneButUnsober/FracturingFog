@@ -111,6 +111,33 @@ public sealed class UserEquationCalculator : IFractalCalculator
     private string? _dslError;
     private string _compiledSource = string.Empty;
 
+    // #542 — optional seed expression for z0. Empty ⇒ z0 = 0 (Mandelbrot orbit,
+    // legacy). A DSL expression over `c` (and constants) evaluated once per
+    // pixel before iteration: `c` ⇒ z0 = pixel (Julia), a critical-point
+    // expression ⇒ the correct Mandelbrot for non-polynomial families. Parsed
+    // as bare DSL (no C# preprocessor). A parse failure leaves it null (z0 = 0)
+    // and is recorded in <see cref="SeedError"/>.
+    private SandboxExpression? _seedSbx;
+    private string _compiledSeed = string.Empty;
+
+    /// <summary>Parse error for the z0 seed expression, or empty when the seed
+    /// is empty or parsed cleanly. Surfaced by the editor alongside the main
+    /// compile status.</summary>
+    public string SeedError { get; private set; } = string.Empty;
+
+    // #544 — optional convergence bailout: a boolean DSL condition over z / prev
+    // / c / n / iter. Empty ⇒ escape-radius test only. When it becomes true the
+    // orbit stops early and the pixel is classified "converged" (coloured by
+    // convergence speed), enabling Newton / Magnet / Nova style maps whose
+    // interesting region converges rather than escapes. Typical form:
+    // `abs(z - prev) &lt; 0.0001`.
+    private SandboxExpression? _condSbx;
+    private string _compiledCond = string.Empty;
+
+    /// <summary>Parse error for the convergence bailout condition, or empty when
+    /// it is unset or parsed cleanly.</summary>
+    public string BailoutConditionError { get; private set; } = string.Empty;
+
     /// <summary>True when the last successful compile runs on the safe DSL
     /// interpreter. Always true after a successful compile now that the DSL is
     /// the only path; retained for callers that branch on it.</summary>
@@ -227,6 +254,37 @@ public sealed class UserEquationCalculator : IFractalCalculator
             return;
         }
 
+        // #542 — (re)compile the z0 seed lazily when its source changes. Empty
+        // ⇒ no seed (z0 = 0). Parsed as bare DSL; a parse failure is recorded
+        // and the seed is dropped (falls back to z0 = 0) rather than aborting.
+        string seedSrc = FractalParameters.UserEquationSeed?.Trim() ?? string.Empty;
+        if (seedSrc != _compiledSeed)
+        {
+            _compiledSeed = seedSrc;
+            if (seedSrc.Length == 0) { _seedSbx = null; SeedError = string.Empty; }
+            else
+            {
+                try { _seedSbx = SandboxExpression.Parse(seedSrc); SeedError = string.Empty; }
+                catch (Exception ex) { _seedSbx = null; SeedError = $"z0 seed: {ex.Message}"; }
+            }
+        }
+        var seed = _seedSbx;
+
+        // #544 — (re)compile the convergence bailout condition lazily. Empty ⇒
+        // no early stop. Parse failure recorded; condition dropped.
+        string condSrc = FractalParameters.UserEquationBailoutCondition?.Trim() ?? string.Empty;
+        if (condSrc != _compiledCond)
+        {
+            _compiledCond = condSrc;
+            if (condSrc.Length == 0) { _condSbx = null; BailoutConditionError = string.Empty; }
+            else
+            {
+                try { _condSbx = SandboxExpression.Parse(condSrc); BailoutConditionError = string.Empty; }
+                catch (Exception ex) { _condSbx = null; BailoutConditionError = $"bailout condition: {ex.Message}"; }
+            }
+        }
+        var cond = _condSbx;
+
         ColorMap.MaxIterations = MaxIterations;
         double scale = (3.5 / Math.Max(Width, Height)) / Zoom;
         int maxIt = MaxIterations;
@@ -283,7 +341,20 @@ public sealed class UserEquationCalculator : IFractalCalculator
             // One env per row for the DSL interpreter (holds z/c/n + let-slots;
             // mutated in place per step).
             SbxVal[] env = sbx.NewEnv();
-            Complex Step(Complex zz, Complex cc, int it) => sbx.EvalStep(zz, cc, it, env);
+            // #543 — pv is the previous iterate z_{n-1}, bound to the `prev` slot.
+            Complex Step(Complex zz, Complex cc, int it, Complex pv) => sbx.EvalStep(zz, cc, it, env, pv);
+            // #542 — per-row env for the z0 seed (null when no seed). Evaluated
+            // with z=0, n=0 and the pixel's c: `c` ⇒ z0 = pixel (Julia).
+            SbxVal[]? seedEnv = seed?.NewEnv();
+            Complex Seed(Complex cc) => seed!.EvalStep(Complex.Zero, cc, 0, seedEnv!);
+            // #544 — per-row env for the convergence bailout condition. True when
+            // the (boolean) condition fires on the current iterate.
+            SbxVal[]? condEnv = cond?.NewEnv();
+            bool Cond(Complex zz, Complex cc, int it, Complex pv)
+            {
+                var r = cond!.EvalStep(zz, cc, it, condEnv!, pv);
+                return r.Real != 0.0 || r.Imaginary != 0.0;
+            }
             for (int x = 0; x < width; x++)
             {
                 double dx = (x - width * 0.5) * scale;
@@ -314,8 +385,12 @@ public sealed class UserEquationCalculator : IFractalCalculator
                 var c = new Complex(cx, cy);
                 const double h = 1e-6;
                 var cP = new Complex(cx + h, cy);
-                var z = Complex.Zero;
-                var zP = Complex.Zero;
+                // #542 — seed z0 (default 0). zP seeds at the perturbed cP so the
+                // numerical Jacobian stays consistent with the seeded trajectory.
+                var z = seed != null ? Seed(c) : Complex.Zero;
+                var zP = seed != null ? Seed(cP) : Complex.Zero;
+                Complex prevZ = Complex.Zero, prevZP = Complex.Zero;   // #543 z_{n-1}
+                bool converged = false;                                 // #544
                 OrbitAccumulator acc = default;
                 if (orbitMap != null) orbitMap.InitOrbit(out acc);
                 int iter;
@@ -331,7 +406,8 @@ public sealed class UserEquationCalculator : IFractalCalculator
                         if (r2 >= bailout2) break;
                         if (orbitMap != null && iter > 0)
                             orbitMap.Sample(ref acc, z.Real, z.Imaginary, cx, cy, iter);
-                        try { z = Step(z, c, iter); }
+                        if (cond != null && Cond(z, c, iter, prevZ)) { converged = true; break; }   // #544
+                        try { var zn = Step(z, c, iter, prevZ); prevZ = z; z = zn; }
                         catch { iter = maxIt; break; }
                     }
                 }
@@ -343,7 +419,14 @@ public sealed class UserEquationCalculator : IFractalCalculator
                         if (r2 >= bailout2) break;
                         if (orbitMap != null && iter > 0)
                             orbitMap.Sample(ref acc, z.Real, z.Imaginary, cx, cy, iter);
-                        try { z = Step(z, c, iter); zP = Step(zP, cP, iter); }
+                        if (cond != null && Cond(z, c, iter, prevZ)) { converged = true; break; }   // #544
+                        try
+                        {
+                            var zn = Step(z, c, iter, prevZ);
+                            var zpn = Step(zP, cP, iter, prevZP);
+                            prevZ = z; prevZP = zP;
+                            z = zn; zP = zpn;
+                        }
                         catch { iter = maxIt; break; }
                     }
                 }
@@ -353,6 +436,17 @@ public sealed class UserEquationCalculator : IFractalCalculator
                     ColorBuffer[idx] = inSet;   // #382: alpha pre-scaled above
                     NormalXBuffer[idx] = 0f;
                     NormalYBuffer[idx] = 0f;
+                }
+                else if (converged)
+                {
+                    // #544 — converged (bailout condition fired): |z| is small so
+                    // the log-log smoothing is invalid; band by convergence speed
+                    // (raw iteration). Normals are undefined here → flat.
+                    NormalXBuffer[idx] = 0f;
+                    NormalYBuffer[idx] = 0f;
+                    ColorBuffer[idx] = orbitMap != null
+                        ? (uint)orbitMap.MapWithOrbit(iter, 0f, maxIt, 0f, 0f, in acc)
+                        : (uint)ColorMap.Map(iter, 0f, maxIt, 0f, 0f);
                 }
                 else
                 {

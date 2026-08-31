@@ -338,6 +338,37 @@ public sealed class UserEquationViewModel : ViewModelBase
         }
     }
 
+    // ── z0 seed (#542) ──
+    // Blank = z0=0 (Mandelbrot). `c` = z0=pixel (Julia). Bare DSL over c.
+    // Re-renders on change; the calculator recompiles the seed lazily.
+    public string? SeedExpression
+    {
+        get => _params.UserEquationSeed;
+        set
+        {
+            string? next = string.IsNullOrWhiteSpace(value) ? null : value;
+            if (_params.UserEquationSeed == next) return;
+            _params.UserEquationSeed = next;
+            this.RaisePropertyChanged();
+            RenderRequested?.Invoke();
+        }
+    }
+
+    // ── Convergence bailout condition (#544) ──
+    // Blank = escape-radius test only. Boolean DSL over z/prev/c/n/iter.
+    public string? BailoutCondition
+    {
+        get => _params.UserEquationBailoutCondition;
+        set
+        {
+            string? next = string.IsNullOrWhiteSpace(value) ? null : value;
+            if (_params.UserEquationBailoutCondition == next) return;
+            _params.UserEquationBailoutCondition = next;
+            this.RaisePropertyChanged();
+            RenderRequested?.Invoke();
+        }
+    }
+
     // ── Skip Jacobian (Phase 11b) ──
     public bool SkipJacobian
     {

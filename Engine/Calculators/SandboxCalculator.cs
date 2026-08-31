@@ -154,6 +154,7 @@ public sealed class SandboxCalculator : IFractalCalculator
                     var cP = new Complex(cx + h, cy);
                     var z = Complex.Zero;
                     var zP = Complex.Zero;
+                    Complex prevZ = Complex.Zero, prevZP = Complex.Zero;   // #543 z_{n-1}
                     OrbitAccumulator acc = default;
                     if (orbitMap != null) orbitMap.InitOrbit(out acc);
                     int iter;
@@ -166,8 +167,12 @@ public sealed class SandboxCalculator : IFractalCalculator
                             orbitMap.Sample(ref acc, z.Real, z.Imaginary, cx, cy, iter);
                         try
                         {
-                            z = expr.EvalStep(z, c, iter, env);
-                            zP = expr.EvalStep(zP, cP, iter, env);
+                            // #543 — pass z_{n-1} to the `prev` slot; advance prev
+                            // to the current z before overwriting (CalcGen order).
+                            var zn = expr.EvalStep(z, c, iter, env, prevZ);
+                            var zpn = expr.EvalStep(zP, cP, iter, env, prevZP);
+                            prevZ = z; prevZP = zP;
+                            z = zn; zP = zpn;
                         }
                         catch { iter = maxIt; break; }
                     }

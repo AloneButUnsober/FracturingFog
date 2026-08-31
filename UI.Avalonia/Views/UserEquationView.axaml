@@ -98,9 +98,10 @@
                     Padding="10,4" />
         </Grid>
 
-        <!-- Row 2: rotation + escape radius row -->
+        <!-- Row 2: rotation + escape radius row, plus a z0 seed sub-row -->
         <Grid Grid.Row="2"
               ColumnDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,*"
+              RowDefinitions="Auto,Auto,Auto"
               Margin="0,0,0,8">
             <TextBlock Grid.Column="0" Text="Rotation°:" VerticalAlignment="Center" Margin="0,0,8,0" />
             <NumericUpDown Grid.Column="1"
@@ -122,6 +123,27 @@
                       ToolTip.Tip="Drop the parallel-perturbation trajectory used to compute Hubbard–Douady surface normals. Doubles throughput on slow equations at the cost of flat 3D Phong shading."
                       Margin="12,0,0,0"
                       VerticalAlignment="Center" />
+
+            <!-- z0 seed: blank = Mandelbrot orbit (z0=0); `c` = Julia (z0=pixel). -->
+            <Grid Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="8"
+                  ColumnDefinitions="Auto,*" Margin="0,6,0,0">
+                <TextBlock Grid.Column="0" Text="z₀ seed:" VerticalAlignment="Center" Margin="0,0,8,0" />
+                <TextBox Grid.Column="1"
+                         Text="{Binding SeedExpression, Mode=TwoWay}"
+                         Watermark="blank = Mandelbrot (z₀=0);  c = Julia (z₀=pixel);  DSL expression over c"
+                         ToolTip.Tip="Iteration start value z₀, as a bare DSL expression over c (the pixel) and constants. Blank ⇒ z₀=0 (classic Mandelbrot). c ⇒ z₀=pixel: pair with a literal constant in the equation for a Julia set, e.g. log(sin(abs(1/z))) + (-1.55*i). A critical-point expression gives the correct Mandelbrot for non-polynomial maps." />
+            </Grid>
+
+            <!-- Convergence bailout: stop early when a boolean DSL condition fires
+                 (Newton / Magnet / Nova). Blank = escape-radius test only. -->
+            <Grid Grid.Row="2" Grid.Column="0" Grid.ColumnSpan="8"
+                  ColumnDefinitions="Auto,*" Margin="0,6,0,0">
+                <TextBlock Grid.Column="0" Text="Converge if:" VerticalAlignment="Center" Margin="0,0,8,0" />
+                <TextBox Grid.Column="1"
+                         Text="{Binding BailoutCondition, Mode=TwoWay}"
+                         Watermark="blank = escape only;  e.g.  abs(z - prev) &lt; 0.0001  (Newton / Magnet / Nova)"
+                         ToolTip.Tip="Optional convergence bailout: a boolean DSL condition over z, prev, c, n, iter. When it becomes true the orbit stops early and the pixel is coloured by convergence speed instead of running to the iteration cap. Blank = escape-radius test only. Example: abs(z - prev) &lt; 0.0001." />
+            </Grid>
         </Grid>
 
         <!-- Row 3: tab control (fills) -->
