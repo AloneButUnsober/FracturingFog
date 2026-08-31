@@ -111,6 +111,20 @@ public sealed class UserEquationCalculator : IFractalCalculator
     private string? _dslError;
     private string _compiledSource = string.Empty;
 
+    // #542 — optional seed expression for z0. Empty ⇒ z0 = 0 (Mandelbrot orbit,
+    // legacy). A DSL expression over `c` (and constants) evaluated once per
+    // pixel before iteration: `c` ⇒ z0 = pixel (Julia), a critical-point
+    // expression ⇒ the correct Mandelbrot for non-polynomial families. Parsed
+    // as bare DSL (no C# preprocessor). A parse failure leaves it null (z0 = 0)
+    // and is recorded in <see cref="SeedError"/>.
+    private SandboxExpression? _seedSbx;
+    private string _compiledSeed = string.Empty;
+
+    /// <summary>Parse error for the z0 seed expression, or empty when the seed
+    /// is empty or parsed cleanly. Surfaced by the editor alongside the main
+    /// compile status.</summary>
+    public string SeedError { get; private set; } = string.Empty;
+
     /// <summary>True when the last successful compile runs on the safe DSL
     /// interpreter. Always true after a successful compile now that the DSL is
     /// the only path; retained for callers that branch on it.</summary>
@@ -227,6 +241,22 @@ public sealed class UserEquationCalculator : IFractalCalculator
             return;
         }
 
+        // #542 — (re)compile the z0 seed lazily when its source changes. Empty
+        // ⇒ no seed (z0 = 0). Parsed as bare DSL; a parse failure is recorded
+        // and the seed is dropped (falls back to z0 = 0) rather than aborting.
+        string seedSrc = FractalParameters.UserEquationSeed?.Trim() ?? string.Empty;
+        if (seedSrc != _compiledSeed)
+        {
+            _compiledSeed = seedSrc;
+            if (seedSrc.Length == 0) { _seedSbx = null; SeedError = string.Empty; }
+            else
+            {
+                try { _seedSbx = SandboxExpression.Parse(seedSrc); SeedError = string.Empty; }
+                catch (Exception ex) { _seedSbx = null; SeedError = $"z0 seed: {ex.Message}"; }
+            }
+        }
+        var seed = _seedSbx;
+
         ColorMap.MaxIterations = MaxIterations;
         double scale = (3.5 / Math.Max(Width, Height)) / Zoom;
         int maxIt = MaxIterations;
@@ -284,6 +314,10 @@ public sealed class UserEquationCalculator : IFractalCalculator
             // mutated in place per step).
             SbxVal[] env = sbx.NewEnv();
             Complex Step(Complex zz, Complex cc, int it) => sbx.EvalStep(zz, cc, it, env);
+            // #542 — per-row env for the z0 seed (null when no seed). Evaluated
+            // with z=0, n=0 and the pixel's c: `c` ⇒ z0 = pixel (Julia).
+            SbxVal[]? seedEnv = seed?.NewEnv();
+            Complex Seed(Complex cc) => seed!.EvalStep(Complex.Zero, cc, 0, seedEnv!);
             for (int x = 0; x < width; x++)
             {
                 double dx = (x - width * 0.5) * scale;
@@ -314,8 +348,10 @@ public sealed class UserEquationCalculator : IFractalCalculator
                 var c = new Complex(cx, cy);
                 const double h = 1e-6;
                 var cP = new Complex(cx + h, cy);
-                var z = Complex.Zero;
-                var zP = Complex.Zero;
+                // #542 — seed z0 (default 0). zP seeds at the perturbed cP so the
+                // numerical Jacobian stays consistent with the seeded trajectory.
+                var z = seed != null ? Seed(c) : Complex.Zero;
+                var zP = seed != null ? Seed(cP) : Complex.Zero;
                 OrbitAccumulator acc = default;
                 if (orbitMap != null) orbitMap.InitOrbit(out acc);
                 int iter;
