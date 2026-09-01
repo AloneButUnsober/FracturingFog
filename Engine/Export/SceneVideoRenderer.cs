@@ -415,6 +415,23 @@ namespace FracturingFog.Export
                 FractalParameters = p,
             };
 
+            // Relief 3D (#408, scene). When the shot's params enable the oblique
+            // raymarch (region.ApplyRelief3DTo populated them, or a global/audio
+            // track flipped it on), render the COMPOSED relief+froxel buffer via
+            // PosterRenderer.RenderToPixels instead of the flat capture calculator
+            // — the scene renderer previously dropped relief entirely here. Like
+            // the flat path (and the batch loops), RenderToPixels returns the raw
+            // composed colour buffer BEFORE b/c / view-transform / interior
+            // composite, so it slots straight into the accumulator.
+            //
+            // Froxel history is per-call (the req carries none) so froxel fog is
+            // spatial-only here: motion-blur sub-frame averaging, shot cuts, and
+            // frame-composited transitions make a single shared cross-frame
+            // temporal timeline ill-defined. Cross-frame froxel temporal
+            // reprojection for scenes is a deliberate follow-up (see roadmap S6).
+            if (p.Relief2DEnabled && p.Relief2DRaymarch)
+                return PosterRenderer.RenderToPixels(req, ct, out _, out _);
+
             IFractalCalculator? alt = PosterRenderer.BuildCaptureCalculator(req);
             if (alt != null)
             {

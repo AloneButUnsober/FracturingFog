@@ -405,8 +405,19 @@ animated.
   timeline is not double-advanced within one output frame. Relief off → the flat fast path,
   byte-identical. Verified headless: a slideshow frame renders as a true 3D raymarch (terrain,
   perspective, fog, silhouette) vs the flat 2D frame. +1 CLI-grammar test.
-- **Remaining (enhancement follow-ups):** the same for `SceneVideoRenderer` (Scene Engine, its
-  own render settings); GPU temporal; sub-cell reprojection
+- **Relief 3D in the Scene Engine renderer (landed):** `SceneVideoRenderer.RenderShotFrame`
+  built a `PosterRequest` but rendered it through the flat capture calculator, so a shot whose
+  region carried a Relief 3D snapshot (`region.ApplyRelief3DTo` DID populate the params) still
+  rendered FLAT — the oblique raymarch was dropped. It now diverts to
+  `PosterRenderer.RenderToPixels` (composed relief+froxel buffer, same rawness as the flat path —
+  before b/c / view-transform / interior composite) when the resolved params enable the raymarch
+  (`Relief2DEnabled && Relief2DRaymarch`). Froxel is spatial-only here (per-call history):
+  motion-blur sub-frame averaging, shot cuts, and frame-composited transitions make a single
+  shared cross-frame temporal timeline ill-defined. 2 Engine-side tests (`S6SceneReliefRenderTests`):
+  a relief region resolves to raymarch-enabled params, and a one-shot scene renders a frame that
+  differs from the flat render (relief actually applied, not a black wash).
+- **Remaining (enhancement follow-ups):** cross-frame froxel **temporal reprojection** for
+  scenes (deferred above); GPU temporal; sub-cell reprojection
   under continuous camera motion. The core froxel unified-volume march (D3D + Vulkan + host
   wiring + temporal + poster seam + quality controls + user doc + batch-video consumer) is
   complete.
