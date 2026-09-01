@@ -283,8 +283,18 @@ full uber-shader — add transmission, optionally clearcoat / emission).
   (refract view ray → env sample → Beer-Lambert → Fresnel-mix, `DielectricOps` twin),
   so glass no longer forces the CPU trace. `--reliefgpuraymarch` glass diff GPU vs twin
   mean channel diff 0.003; opaque stays byte-identical.
-- **Remaining:** full internal glass march (refract-and-continue through the solid,
-  CPU → twin → GPU), rough refraction (couple S4), AbsorptionColor picker + batch flags.
+- **Full internal glass march — CPU (landed — PR #573, #406):** `LightingFxData.
+  RefractInternalMarch` upgrades the env-approx to true two-surface glass: on a
+  transmissive hit the shader sphere-traces the DE from the front hit through the
+  solid to the back surface, so Beer-Lambert runs over the REAL thickness (thick
+  parts tint / darken more) and the ray refracts a SECOND time on exit
+  (`DielectricOps.Refract`, outward normal negated, `eta = ior`). TIR at the back
+  keeps the internal direction (an internal-reflection bounce is a follow-up).
+  CPU-path (forces CPU like all transmission), byte-identical off / opaque, LightingFx
+  dialog checkbox + preset-DTO persist. +3 tests.
+- **Remaining:** GPU internal-march twin, back-surface TIR internal-reflection bounce,
+  rough refraction (couple S4), AbsorptionColor picker + glass batch flags (glass has
+  no batch surface yet).
 
 ### S6 — Froxel / unified volume march ◐ (#408)
 Today's volumetrics are per-surface single-scatter. A froxel (frustum-voxel)
