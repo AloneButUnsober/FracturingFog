@@ -653,9 +653,10 @@ namespace FracturingFog.Models
         /// integration (feedback = <see cref="Relief2DFroxelTemporalFeedback"/>), so
         /// animated fog (drifting FBM noise, pulsing density, moving lights) reads as a
         /// stable volume instead of flickering. History is invalidated when the camera
-        /// grid changes (near/far), so a large camera move re-seeds cleanly. Forces the
-        /// CPU froxel post-pass (temporal is CPU-side; the GPU froxel path stays
-        /// single-frame). Default OFF → byte-identical.</summary>
+        /// grid changes (near/far), so a large camera move re-seeds cleanly. The CPU
+        /// froxel post-pass and BOTH GPU froxel kernels (D3D + Vulkan) carry their own
+        /// per-cell history, so temporal runs on-device now (#562/#563) — it no longer
+        /// forces the CPU path. Default OFF → byte-identical.</summary>
         public bool Relief2DFroxelTemporal { get; set; } = false;
 
         /// <summary>Roadmap S6 (#389/#408) — froxel temporal feedback weight in [0,1):

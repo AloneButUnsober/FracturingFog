@@ -608,6 +608,18 @@ namespace FracturingFog.Models
         public double MeshMaxMB { get; set; } = 0.0;
         public double MeshUnderside { get; set; } = 0.6;
 
+        // Froxel volumetrics (#408, S6). Carried on the region so a scene / batch /
+        // slideshow render sourced from this region can turn froxel fog — and its
+        // cross-frame temporal reprojection — ON without a live UI. All default to
+        // the froxel-off single-frame path, so a region without these stays
+        // byte-identical. FroxelTemporal only bites when FroxelVolumetrics is on.
+        public bool FroxelVolumetrics { get; set; } = false;
+        public bool FroxelTemporal { get; set; } = false;
+        public double FroxelTemporalFeedback { get; set; } = 0.9;
+
+        [JsonConverter(typeof(JsonStringEnumConverter))]
+        public FroxelQuality FroxelQuality { get; set; } = FroxelQuality.Balanced;
+
         /// <summary>Apply <paramref name="s"/> when non-null, otherwise turn
         /// relief OFF on <paramref name="p"/>. The authoritative recall path so a
         /// plain (no-relief) region clears a relief view instead of leaving it on.</summary>
@@ -617,6 +629,10 @@ namespace FracturingFog.Models
             if (s != null) { s.ApplyTo(p); return; }
             p.Relief2DEnabled = false;
             p.Relief2DRaymarch = false;
+            // Froxel is a relief-raymarch feature; clear it too so an authoritative
+            // recall of a plain region can't leave stale froxel fog armed.
+            p.Relief2DFroxelVolumetrics = false;
+            p.Relief2DFroxelTemporal = false;
         }
 
         /// <summary>Capture the relief block from a live params, or null when
@@ -658,6 +674,10 @@ namespace FracturingFog.Models
                 MeshGrid           = p.Relief2DMeshGrid,
                 MeshMaxMB          = p.Relief2DMeshMaxMB,
                 MeshUnderside      = p.Relief2DMeshUnderside,
+                FroxelVolumetrics  = p.Relief2DFroxelVolumetrics,
+                FroxelTemporal     = p.Relief2DFroxelTemporal,
+                FroxelTemporalFeedback = p.Relief2DFroxelTemporalFeedback,
+                FroxelQuality      = p.Relief2DFroxelQuality,
             };
         }
 
@@ -697,6 +717,10 @@ namespace FracturingFog.Models
             p.Relief2DMeshGrid           = MeshGrid;
             p.Relief2DMeshMaxMB          = MeshMaxMB;
             p.Relief2DMeshUnderside      = MeshUnderside;
+            p.Relief2DFroxelVolumetrics      = FroxelVolumetrics;
+            p.Relief2DFroxelTemporal         = FroxelTemporal;
+            p.Relief2DFroxelTemporalFeedback = FroxelTemporalFeedback;
+            p.Relief2DFroxelQuality          = FroxelQuality;
         }
     }
 

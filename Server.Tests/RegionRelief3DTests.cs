@@ -162,6 +162,102 @@ public sealed class RegionRelief3DTests
         Assert.True(off.Relief2DEnabled);
     }
 
+    // ── Froxel volumetrics on the region snapshot (#408, S6) ──────────────────
+    // The relief snapshot now also carries froxel fog + its cross-frame temporal
+    // reprojection so a region-sourced scene / batch / slideshow render can turn
+    // froxel on without a live UI (previously froxel was UI/CLI-only, so the whole
+    // #562/#563/#565 temporal path was unreachable offline).
+
+    [Fact]
+    public void Snapshot_CapturesFroxel_AndRoundTrips()
+    {
+        var src = new FractalParameters
+        {
+            Relief2DEnabled = true,
+            Relief2DRaymarch = true,
+            Relief2DFroxelVolumetrics = true,
+            Relief2DFroxelTemporal = true,
+            Relief2DFroxelTemporalFeedback = 0.72,
+            Relief2DFroxelQuality = FroxelQuality.High,
+        };
+
+        var snap = Relief3DSettings.Snapshot(src);
+        Assert.NotNull(snap);
+        Assert.True(snap!.FroxelVolumetrics);
+        Assert.True(snap.FroxelTemporal);
+        Assert.Equal(0.72, snap.FroxelTemporalFeedback, 12);
+        Assert.Equal(FroxelQuality.High, snap.FroxelQuality);
+
+        var dst = new FractalParameters();
+        snap.ApplyTo(dst);
+        Assert.True(dst.Relief2DFroxelVolumetrics);
+        Assert.True(dst.Relief2DFroxelTemporal);
+        Assert.Equal(0.72, dst.Relief2DFroxelTemporalFeedback, 12);
+        Assert.Equal(FroxelQuality.High, dst.Relief2DFroxelQuality);
+    }
+
+    [Fact]
+    public void Region_SerializesFroxel_AndRoundTrips()
+    {
+        var region = new FractalRegion
+        {
+            Name = "Foggy", FractalType = FractalType.Mandelbrot,
+            CenterX = -0.75, CenterY = 0.0, Zoom = 1.0,
+            Relief3D = Relief3DSettings.Snapshot(new FractalParameters
+            {
+                Relief2DEnabled = true, Relief2DRaymarch = true,
+                Relief2DFroxelVolumetrics = true,
+                Relief2DFroxelTemporal = true,
+                Relief2DFroxelTemporalFeedback = 0.65,
+                Relief2DFroxelQuality = FroxelQuality.High,
+            }),
+        };
+
+        string json = JsonSerializer.Serialize(region, new JsonSerializerOptions { WriteIndented = true });
+        Assert.Contains("\"FroxelQuality\": \"High\"", json);   // enum-as-string
+
+        var back = JsonSerializer.Deserialize<FractalRegion>(json);
+        var applied = new FractalParameters();
+        back!.ApplyRelief3DTo(applied);
+        Assert.True(applied.Relief2DFroxelVolumetrics);
+        Assert.True(applied.Relief2DFroxelTemporal);
+        Assert.Equal(0.65, applied.Relief2DFroxelTemporalFeedback, 12);
+        Assert.Equal(FroxelQuality.High, applied.Relief2DFroxelQuality);
+    }
+
+    [Fact]
+    public void Froxel_DefaultsOff_WhenReliefSnapshotHasNoFroxel()
+    {
+        // A relief snapshot from froxel-off params leaves froxel off on apply — the
+        // byte-identical default, so plain relief regions don't silently gain fog.
+        var snap = Relief3DSettings.Snapshot(new FractalParameters
+        {
+            Relief2DEnabled = true, Relief2DRaymarch = true,
+        });
+        var dst = new FractalParameters
+        {
+            Relief2DFroxelVolumetrics = true,   // pre-armed; apply must clear it
+            Relief2DFroxelTemporal = true,
+        };
+        snap!.ApplyTo(dst);
+        Assert.False(dst.Relief2DFroxelVolumetrics);
+        Assert.False(dst.Relief2DFroxelTemporal);
+    }
+
+    [Fact]
+    public void Authoritative_PlainRegion_ClearsFroxel()
+    {
+        var plain = new FractalRegion { Name = "Plain", FractalType = FractalType.Mandelbrot };
+        var live = new FractalParameters
+        {
+            Relief2DEnabled = true, Relief2DRaymarch = true,
+            Relief2DFroxelVolumetrics = true, Relief2DFroxelTemporal = true,
+        };
+        plain.ApplyRelief3DAuthoritative(live);
+        Assert.False(live.Relief2DFroxelVolumetrics);
+        Assert.False(live.Relief2DFroxelTemporal);
+    }
+
     [Fact]
     public void LegacyRegion_WithoutRelief3D_DeserializesToNull_AndApplyIsNoOp()
     {

@@ -444,6 +444,19 @@ animated.
   medium (grid fixed), the Vulkan device-history blend tracks the CPU `FroxelHistory` (GT 710: mean
   0.049 / max 11) and temporal shifts ~98% of pixels. Both backends now reach full froxel parity
   (populate + integrate + composite + temporal) against the one CPU oracle.
+- **Froxel region-configurable (landed):** froxel fog + its cross-frame temporal reprojection were
+  UI/CLI-only — the `FractalRegion` relief snapshot (`Relief3DSettings`) didn't capture them, so
+  every region-sourced offline render (`SceneVideoRenderer`, the batch relief legs) ran froxel-off
+  and the whole temporal path was unreachable offline. The snapshot now carries
+  `FroxelVolumetrics` / `FroxelTemporal` / `FroxelTemporalFeedback` / `FroxelQuality` (captured in
+  `Snapshot`, restored in `ApplyTo`, serialized as an enum string); `ApplyOrDisable`'s disable
+  branch clears froxel so a plain-region recall can't leave stale fog armed. Missing JSON →
+  froxel-off defaults (legacy + plain regions byte-identical). Since the region editor already
+  snapshots relief from live params, enabling froxel in the UI + saving a region persists it and
+  lights scene/batch froxel + temporal. `RegionRelief3DTests` +5. PR #566.
+- **Remaining (enhancement follow-ups):** cross-frame froxel **temporal reprojection** for
+  scenes (the offline `SceneVideoRenderer` deferred it above — CPU froxel there is spatial-only);
+  sub-cell reprojection under continuous camera motion. The
 - **Scene cross-frame froxel temporal (landed):** the offline `SceneVideoRenderer` no longer
   renders froxel spatial-only. It now allocates ONE shared `FroxelHistory` for the whole render
   and threads it into the shot render via `PosterRequest.FroxelHistory`, so animated fog blends
