@@ -502,7 +502,7 @@
 
                 <!-- Material -->
                 <Expander Header="Material" HorizontalAlignment="Stretch">
-                    <Grid ColumnDefinitions="160,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto">
+                    <Grid ColumnDefinitions="160,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto">
                         <TextBlock Grid.Row="0" Grid.Column="0" Text="Roughness:" VerticalAlignment="Center"
                                    ToolTip.Tip="GGX roughness. 0 = mirror, 1 = lambert." />
                         <Grid Grid.Row="0" Grid.Column="1" ColumnDefinitions="*,Auto" Margin="0,2">
@@ -568,10 +568,17 @@
                                        Text="{Binding AbsorptionDistance, StringFormat='F2'}" />
                         </Grid>
 
-                        <TextBlock Grid.Row="7" Grid.Column="0" Text="Internal march:" VerticalAlignment="Center"
+                        <TextBlock Grid.Row="7" Grid.Column="0" Text="Absorption color:" VerticalAlignment="Center"
+                                   IsEnabled="{Binding GlassEnabled}"
+                                   ToolTip.Tip="Glass tint as it thickens (Beer-Lambert). Hex #AARRGGBB (or #RRGGBB). White = clear glass; e.g. #FF66CCFF = pale blue. The transmitted colour is what SURVIVES one absorption distance, so the tint the glass shows is the inverse." />
+                        <TextBox Grid.Row="7" Grid.Column="1" Margin="0,2"
+                                 IsEnabled="{Binding GlassEnabled}"
+                                 Text="{Binding AbsorptionColorHex, Mode=TwoWay, UpdateSourceTrigger=LostFocus}" />
+
+                        <TextBlock Grid.Row="8" Grid.Column="0" Text="Internal march:" VerticalAlignment="Center"
                                    IsEnabled="{Binding GlassEnabled}"
                                    ToolTip.Tip="Full two-surface glass: march through the solid to the back surface so the tint (Absorption) builds over the REAL thickness — thick parts go darker / more saturated — and the see-through view is refracted a second time on exit. Off = the cheap single-interface approximation (a fixed one-unit slab). Only used when Transmission > 0; forces the CPU trace." />
-                        <CheckBox Grid.Row="7" Grid.Column="1" IsChecked="{Binding RefractInternalMarch, Mode=TwoWay}"
+                        <CheckBox Grid.Row="8" Grid.Column="1" IsChecked="{Binding RefractInternalMarch, Mode=TwoWay}"
                                   IsEnabled="{Binding GlassEnabled}"
                                   Content="march through the solid (real thickness)" Margin="0,2" />
                     </Grid>

@@ -131,6 +131,23 @@ namespace FracturingFog.Batch
         public const string ReliefIsolateColors    = "--relief-isolate-colors";
         public const string ReliefIsolateTolerance = "--relief-isolate-tolerance";
 
+        // Refractive / transmissive glass on the relief raymarch (roadmap S5, #406).
+        // Any glass flag implies --relief-raymarch (transmission renders on the
+        // raymarch shade path). --glass is a bare shorthand that turns transmission
+        // on at a sensible default (0.9) if no explicit --transmission is given.
+        //   transmission     = double 0..1 (0 = opaque; default look for --glass = 0.9)
+        //   ior              = double 1..3 (index of refraction; default 1.5 = glass)
+        //   absorption-dist  = double > 0 (Beer-Lambert reference distance for the tint)
+        //   absorption-color = "#RRGGBB" / "#AARRGGBB" (glass tint; default clear white)
+        //   glass-internal-march = flag (full two-surface march: real thickness + exit
+        //                          refraction vs the single-interface approximation)
+        public const string Glass               = "--glass";
+        public const string Transmission        = "--transmission";
+        public const string Ior                 = "--ior";
+        public const string AbsorptionDist      = "--absorption-dist";
+        public const string AbsorptionColor     = "--absorption-color";
+        public const string GlassInternalMarch  = "--glass-internal-march";
+
         // Per-light point / spot lights on the relief raymarch (roadmap S8, #404).
         // The three lights are addressed by number (1..3); LightFlag composes the
         // canonical spelling so the parser (BatchOptions) and emitter

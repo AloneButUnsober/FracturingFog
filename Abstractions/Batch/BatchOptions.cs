@@ -258,6 +258,15 @@ namespace FracturingFog.Batch
         public string? ReliefIsolateColors { get; set; }     // CSV hex/rgb
         public double? ReliefIsolateTolerance { get; set; }  // 0..1
 
+        // Refractive glass (roadmap S5, #406). Each is applied onto fp.Lighting when
+        // present; any of them implies relief + raymarch (transmission is a relief-
+        // raymarch shade feature). See BatchFlags for the grammar.
+        public double? Transmission { get; set; }        // 0..1, 0 = opaque
+        public double? Ior { get; set; }                 // 1..3, default look 1.5
+        public double? AbsorptionDist { get; set; }      // > 0, Beer-Lambert reference
+        public uint? AbsorptionColor { get; set; }       // packed 0xAARRGGBB glass tint
+        public bool GlassInternalMarch { get; set; }     // full two-surface march
+
         // Per-light point / spot overrides (roadmap S8, #404). Index 0..2 = the
         // three LightingFxData lights. Only the fields the user passed are set
         // (nullable); BatchRenderer applies each non-null onto fp.Lighting.LightN.
@@ -742,6 +751,52 @@ namespace FracturingFog.Batch
                         opts.Relief = true;
                         break;
 
+                    case BatchFlags.Glass:
+                        opts.Transmission ??= 0.9;   // bare shorthand → visible glass
+                        opts.ReliefRaymarch = true;
+                        opts.Relief = true;
+                        break;
+
+                    case BatchFlags.Transmission:
+                        if (!NextDouble(args, ref i, a, out double trv, out error)) return false;
+                        opts.Transmission = trv;
+                        opts.ReliefRaymarch = true;
+                        opts.Relief = true;
+                        break;
+
+                    case BatchFlags.Ior:
+                        if (!NextDouble(args, ref i, a, out double iorv, out error)) return false;
+                        opts.Ior = iorv;
+                        opts.ReliefRaymarch = true;
+                        opts.Relief = true;
+                        break;
+
+                    case BatchFlags.AbsorptionDist:
+                        if (!NextDouble(args, ref i, a, out double absv, out error)) return false;
+                        opts.AbsorptionDist = absv;
+                        opts.ReliefRaymarch = true;
+                        opts.Relief = true;
+                        break;
+
+                    case BatchFlags.AbsorptionColor:
+                        if (!Next(args, ref i, a, out string acv, out error)) return false;
+                        if (!TryParseHexColor(acv, out uint acu))
+                        {
+                            error = $"{a} expected a hex colour like \"#RRGGBB\" or \"#AARRGGBB\", got '{acv}'.";
+                            return false;
+                        }
+                        opts.AbsorptionColor = acu;
+                        opts.ReliefRaymarch = true;
+                        opts.Relief = true;
+                        break;
+
+                    case BatchFlags.GlassInternalMarch:
+                        opts.GlassInternalMarch = true;
+                        opts.Transmission ??= 0.9;   // the march only bites when glass is on
+                        opts.ReliefRaymarch = true;
+                        opts.Relief = true;
+                        break;
+
                     case BatchFlags.ReliefFroxelQuality:
                         if (!Next(args, ref i, a, out string fq, out error)) return false;
                         if (!Enum.TryParse<FracturingFog.Models.FroxelQuality>(fq, ignoreCase: true, out var fqv))
@@ -962,6 +1017,12 @@ namespace FracturingFog.Batch
                 { error = "--dof-aperture must be 0..1."; return false; }
             if (opts.ReliefDofFocus is < 0)
                 { error = "--dof-focus must be >= 0."; return false; }
+            if (opts.Transmission is < 0.0 or > 1.0)
+                { error = "--transmission must be 0..1."; return false; }
+            if (opts.Ior is < 1.0 or > 3.0)
+                { error = "--ior must be 1..3."; return false; }
+            if (opts.AbsorptionDist is <= 0.0)
+                { error = "--absorption-dist must be > 0."; return false; }
             if (opts.ReliefDenoiseIterations is < 0 or > 8)
                 { error = "--denoise must be 0..8 (passes)."; return false; }
             if (opts.ReliefDenoiseColorSigma is <= 0)

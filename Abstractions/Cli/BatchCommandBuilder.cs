@@ -134,6 +134,15 @@ namespace FracturingFog.Cli
         public double ReliefDofAperture { get; init; }
         public double ReliefDofFocus { get; init; }
 
+        // Refractive glass on the relief raymarch shade (roadmap S5, #406). Emitted
+        // only when Transmission > 0 (opaque = omit all). Ior / AbsorptionDistance /
+        // AbsorptionColor emit only when they differ from the LightingFxData defaults.
+        public double Transmission { get; init; }
+        public double Ior { get; init; } = 1.5;
+        public double AbsorptionDistance { get; init; } = 1.0;
+        public uint AbsorptionColor { get; init; } = 0xFFFFFFFFu;
+        public bool GlassInternalMarch { get; init; }
+
         /// <summary>Froxel volumetrics on the relief raymarch (roadmap S6, #408).
         /// Emitted as <c>--relief-froxel</c> on the raymarch path.</summary>
         public bool ReliefFroxel { get; init; }
@@ -313,6 +322,18 @@ namespace FracturingFog.Cli
                     {
                         parts.Add(BatchFlags.DofAperture); parts.Add(Num(snap.ReliefDofAperture));
                         if (snap.ReliefDofFocus > 0.0) { parts.Add(BatchFlags.DofFocus); parts.Add(Num(snap.ReliefDofFocus)); }
+                    }
+
+                    // Refractive glass (S5, #406) — emit only when transmissive.
+                    // --transmission carries the value (implies raymarch on replay);
+                    // ior / absorption emit only when they differ from the defaults.
+                    if (snap.Transmission > 0.0)
+                    {
+                        parts.Add(BatchFlags.Transmission); parts.Add(Num(snap.Transmission));
+                        if (snap.Ior != 1.5)                { parts.Add(BatchFlags.Ior); parts.Add(Num(snap.Ior)); }
+                        if (snap.AbsorptionDistance != 1.0) { parts.Add(BatchFlags.AbsorptionDist); parts.Add(Num(snap.AbsorptionDistance)); }
+                        if (snap.AbsorptionColor != 0xFFFFFFFFu) { parts.Add(BatchFlags.AbsorptionColor); parts.Add(HexColor(snap.AbsorptionColor)); }
+                        if (snap.GlassInternalMarch)        parts.Add(BatchFlags.GlassInternalMarch);
                     }
 
                     // Froxel volumetrics (S6, #408). A non-Balanced quality flag implies
