@@ -763,6 +763,40 @@ namespace FracturingFog.Batch
             return buf;
         }
 
+        // S6 (#408 / #468) — Relief 3D frame for a slideshow leg. Renders the
+        // region+theme through the SAME composed relief+froxel path a still
+        // export uses (PosterRenderer.RenderToPixels), carrying the region's
+        // extended-precision centre limbs so deep regions land correctly. The
+        // shared FroxelHistory (when supplied) is threaded across frames so the
+        // froxel temporal-reprojection seam animates; pass null on the throwaway
+        // sub-renders of a cross-fade so temporal accumulation stays coherent
+        // along the dominant theme timeline. Post-fx b/c + view transform +
+        // watermark run in the caller (RenderToPixels returns the composed
+        // relief buffer BEFORE those), exactly like the video loop.
+        private static uint[] RenderReliefRegionFrame(
+            FractalRegion region, int w, int h, double zoom, int iter,
+            IColorMap theme, int adaptive, FractalParameters reliefFp,
+            FracturingFog.Rendering.Lighting.FroxelHistory? history,
+            QualityPreset? quality = null)
+        {
+            var rreq = new PosterRequest
+            {
+                FractalType = FractalType.Mandelbrot, Width = w, Height = h,
+                CenterX = region.CenterX, CenterXLo = region.CenterXLo,
+                CenterX2 = region.CenterX2, CenterX3 = region.CenterX3,
+                CenterY = region.CenterY, CenterYLo = region.CenterYLo,
+                CenterY2 = region.CenterY2, CenterY3 = region.CenterY3,
+                Zoom = zoom, MaxIterations = iter,
+                ColorMap = theme,
+                Quality = quality ?? region.QualityPreset ?? QualityPreset.Standard,
+                FractalParameters = reliefFp,
+                HistogramEq = adaptive,                 // HE lives on the calc, inside the request
+                FroxelHistory = history,                // #468 shared across frames (null on fade sub-renders)
+                Path = string.Empty, Format = ImageFileFormat.Png,
+            };
+            return PosterRenderer.RenderToPixels(rreq, CancellationToken.None, out _, out _);
+        }
+
         // Cross-fade helper: write `fadeFrames` blended frames from `from` to
         // `to` into the PNG sequence, honouring the total frame budget. Returns
         // the number of frames written. Shared by region + theme boundary fades.
@@ -828,7 +862,9 @@ namespace FracturingFog.Batch
             int regionFadeFrames, int themeFadeFrames, int themesPerLeg,
             double startZoom, bool reverse, bool watermark,
             int pfBrightness, int pfContrast, int pfAdaptive,
-            FracturingFog.Imaging.ViewTransform viewTransform, double viewExposureEv)
+            FracturingFog.Imaging.ViewTransform viewTransform, double viewExposureEv,
+            FractalParameters? reliefFp,
+            FracturingFog.Rendering.Lighting.FroxelHistory? reliefHistory)
         {
             uint[]? prevFrame = null;
             int framesWritten = 0;
@@ -900,15 +936,22 @@ namespace FracturingFog.Batch
                     if (seg > 0 && intoSeg < themeFade)
                     {
                         float a = (intoSeg + 1) / (float)themeFade;
-                        var fromFrame = RenderRegionMandelFrame(
-                            region, outW, outH, frameZoom, iter, legThemeMaps[seg - 1], pfAdaptive);
-                        var toFrame = RenderRegionMandelFrame(
-                            region, outW, outH, frameZoom, iter, legThemeMaps[seg], pfAdaptive);
+                        // Cross-fade sub-renders pass null history so the shared
+                        // froxel temporal timeline is not double-advanced within
+                        // one output frame (#468).
+                        var fromFrame = reliefFp != null
+                            ? RenderReliefRegionFrame(region, outW, outH, frameZoom, iter, legThemeMaps[seg - 1], pfAdaptive, reliefFp, null)
+                            : RenderRegionMandelFrame(region, outW, outH, frameZoom, iter, legThemeMaps[seg - 1], pfAdaptive);
+                        var toFrame = reliefFp != null
+                            ? RenderReliefRegionFrame(region, outW, outH, frameZoom, iter, legThemeMaps[seg], pfAdaptive, reliefFp, null)
+                            : RenderRegionMandelFrame(region, outW, outH, frameZoom, iter, legThemeMaps[seg], pfAdaptive);
                         frame = BlendFrames(fromFrame, toFrame, a, n);
                     }
                     else
                     {
-                        frame = RenderRegionMandelFrame(region, outW, outH, frameZoom, iter, legThemeMaps[seg], pfAdaptive);
+                        frame = reliefFp != null
+                            ? RenderReliefRegionFrame(region, outW, outH, frameZoom, iter, legThemeMaps[seg], pfAdaptive, reliefFp, reliefHistory)
+                            : RenderRegionMandelFrame(region, outW, outH, frameZoom, iter, legThemeMaps[seg], pfAdaptive);
                     }
 
                     ApplyBrightnessContrast(frame, n, pfBrightness, pfContrast);
@@ -1141,6 +1184,19 @@ namespace FracturingFog.Batch
             uint[]? prevFrame = null;
             int framesWritten = 0;
 
+            // S6 (#408) — Relief 3D on the offline slideshow (both video-zoom legs
+            // and the still-image cross-fade loop rendered flat before). When any
+            // --relief flag is set, leg frames render through the composed
+            // relief+froxel path (RenderReliefRegionFrame); one shared FroxelHistory
+            // threads the froxel temporal seam (#468) across the show. Relief off →
+            // the flat fast path, byte-identical.
+            FractalParameters? reliefFp = opts.Relief ? BuildFractalParameters(opts) : null;
+            var reliefHistory = opts.Relief
+                ? new FracturingFog.Rendering.Lighting.FroxelHistory() : null;
+            if (reliefFp != null)
+                Console.WriteLine("  relief    : 3D raymarch per frame" +
+                    (opts.ReliefFroxelTemporal ? " (froxel temporal ON)" : ""));
+
             if (videoType)
             {
                 framesWritten = RenderVideoSlideshowLegs(
@@ -1149,7 +1205,8 @@ namespace FracturingFog.Batch
                     regionFadeFrames, themeFadeFrames, videoThemesPerLeg,
                     vStartZoom, vReverse, opts.Watermark,
                     pfBrightness, pfContrast, pfAdaptive,
-                    opts.ViewTransform ?? FracturingFog.Imaging.ViewTransform.None, opts.ViewExposureEv ?? 0.0);
+                    opts.ViewTransform ?? FracturingFog.Imaging.ViewTransform.None, opts.ViewExposureEv ?? 0.0,
+                    reliefFp, reliefHistory);
             }
             else
             while (framesWritten < totalFrames)
@@ -1212,6 +1269,18 @@ namespace FracturingFog.Batch
                         break;
                     }
                     if (currFrame == null) break; // no non-black theme this region
+
+                    // Relief 3D: the flat calc above only selected a non-black
+                    // theme; re-render the chosen frame through the composed
+                    // relief+froxel path (shared history threads the froxel
+                    // temporal seam across the still show). #408/#468.
+                    if (reliefFp != null && themeChosen != null)
+                    {
+                        int iterR = region.Iterations > 0 ? region.Iterations : 1000;
+                        currFrame = RenderReliefRegionFrame(
+                            region, outW, outH, region.Zoom, iterR,
+                            ResolveTheme(themeChosen), pfAdaptive, reliefFp, reliefHistory);
+                    }
 
                     // Brightness/Contrast BGRA post-pass (parity with the
                     // interactive UploadProcessedBuffer), baked before the fade

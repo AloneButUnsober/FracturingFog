@@ -61,6 +61,21 @@ public sealed class S6VideoReliefBatchTests
         Assert.Contains("relief-froxel-feedback", err);
     }
 
+    [Fact]
+    public void Slideshow_Mode_Accepts_Relief_Flags()
+    {
+        // S6 (#408) — the offline slideshow loop (both video-zoom legs and the
+        // still cross-fade loop) now carries Relief 3D via the same flags as
+        // video. Lock that slideshow mode parses them (does not reject relief).
+        var opts = Parse("--mode", "slideshow", "--seconds", "2", "--fps", "8",
+                         "--relief", "--relief-raymarch", "--relief-froxel-temporal",
+                         "--out", "outdir");
+        Assert.Equal(BatchMode.Slideshow, opts.Mode);
+        Assert.True(opts.Relief);
+        Assert.True(opts.ReliefRaymarch);
+        Assert.True(opts.ReliefFroxelTemporal);
+    }
+
     // NOTE: BatchRenderer.BuildFractalParameters lives in the WinExe assembly (not
     // referenced by this test project), so the opts→FractalParameters mapping is
     // exercised via the headless CLI (a relief video frame differs from a flat one)
