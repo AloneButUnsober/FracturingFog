@@ -103,6 +103,10 @@ namespace FracturingFog.Batch
         // #408). Implies --relief-raymarch; only affects a scene with fog active.
         public const string ReliefFroxel          = "--relief-froxel";
         public const string ReliefFroxelQuality   = "--relief-froxel-quality";
+        // Froxel temporal reprojection (stable animated fog across frames, #468).
+        // Implies --relief-froxel; only meaningful for a video/slideshow sequence.
+        public const string ReliefFroxelTemporal  = "--relief-froxel-temporal";
+        public const string ReliefFroxelFeedback  = "--relief-froxel-feedback";
 
         // Per-light fog contribution bitmask (roadmap S6, #408). bit n = light n+1
         // lights the fog in-scatter. 0..7; default 7 (all). Surface lighting is

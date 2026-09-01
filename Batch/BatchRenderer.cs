@@ -29,25 +29,12 @@ namespace FracturingFog.Batch
     {
         // ── Image ─────────────────────────────────────────────────────────────
 
-        public static int RenderImage(BatchOptions opts)
+        // Build a FractalParameters from the CLI options — the fractal-type params,
+        // relief 3D knobs, per-light overrides and fog mask. Shared by image, video
+        // and slideshow so an offline sequence carries the same Relief 3D / lighting
+        // config a still export does (S6 #408 — the video/slideshow loop was flat).
+        internal static FractalParameters BuildFractalParameters(BatchOptions opts)
         {
-            var (cx, cy, zoom, iter, frType, quality, regionDispName) = ResolveRegion(opts);
-            var theme = ResolveTheme(opts.ThemeName);
-            string outPath = ResolveImageOutputPath(opts, regionDispName, frType);
-
-            EnsureDirectoryForFile(outPath);
-
-            FracturingFog.Imaging.ImageFileFormat format = GuessImageFormat(outPath);
-
-            // AOV EXR export (roadmap S1, #389): force the .exr writer regardless
-            // of the output extension so `--aov-exr --out foo.png` still produces a
-            // multi-layer EXR (foo.exr) rather than a flat PNG.
-            if (opts.AovExr)
-            {
-                outPath = Path.ChangeExtension(outPath, ".exr");
-                format = FracturingFog.Imaging.ImageFileFormat.Exr;
-            }
-
             var fp = new FractalParameters();
             if (opts.BulbPower.HasValue)          fp.BulbPower          = opts.BulbPower.Value;
             if (opts.MultibrotExponent.HasValue)  fp.MultibrotExponent  = opts.MultibrotExponent.Value;
@@ -90,6 +77,8 @@ namespace FracturingFog.Batch
             if (opts.ReliefDofFocus.HasValue)     fp.Relief2DDofFocusDistance  = opts.ReliefDofFocus.Value;
             if (opts.ReliefFroxel)                fp.Relief2DFroxelVolumetrics = true;   // S6 (#408)
             if (opts.ReliefFroxelQuality is { } fq) fp.Relief2DFroxelQuality = fq;        // S6 (#408)
+            if (opts.ReliefFroxelTemporal)        fp.Relief2DFroxelTemporal = true;      // S6 (#468)
+            if (opts.ReliefFroxelFeedback.HasValue) fp.Relief2DFroxelTemporalFeedback = opts.ReliefFroxelFeedback.Value;
             if (opts.ReliefDenoiseIterations.HasValue)  fp.Relief2DDenoiseIterations = opts.ReliefDenoiseIterations.Value;   // S4 (#389)
             if (opts.ReliefDenoiseColorSigma.HasValue)  fp.Relief2DDenoiseColorSigma = opts.ReliefDenoiseColorSigma.Value;
             if (opts.ReliefDenoiseNormalSigma.HasValue) fp.Relief2DDenoiseNormalSigma = opts.ReliefDenoiseNormalSigma.Value;
@@ -120,6 +109,30 @@ namespace FracturingFog.Batch
                 fxm.VolumeLightMask = opts.FogLightMask.Value;
                 fp.Lighting = fxm;
             }
+
+            return fp;
+        }
+
+        public static int RenderImage(BatchOptions opts)
+        {
+            var (cx, cy, zoom, iter, frType, quality, regionDispName) = ResolveRegion(opts);
+            var theme = ResolveTheme(opts.ThemeName);
+            string outPath = ResolveImageOutputPath(opts, regionDispName, frType);
+
+            EnsureDirectoryForFile(outPath);
+
+            FracturingFog.Imaging.ImageFileFormat format = GuessImageFormat(outPath);
+
+            // AOV EXR export (roadmap S1, #389): force the .exr writer regardless
+            // of the output extension so `--aov-exr --out foo.png` still produces a
+            // multi-layer EXR (foo.exr) rather than a flat PNG.
+            if (opts.AovExr)
+            {
+                outPath = Path.ChangeExtension(outPath, ".exr");
+                format = FracturingFog.Imaging.ImageFileFormat.Exr;
+            }
+
+            var fp = BuildFractalParameters(opts);
 
             var (pfBrightness, pfContrast, pfAdaptive) = ResolvePostFx(opts, null);
 
@@ -377,6 +390,18 @@ namespace FracturingFog.Batch
             // 100-ns ticks between frames so Mp4Writer gets a monotonic clock.
             long ticksPerFrame = (long)(10_000_000L / Math.Max(opts.VideoFps, 1));
 
+            // S6 (#408) — Relief 3D on the offline video loop (flat before). When any
+            // --relief flag is set, each frame renders through the SAME composed
+            // relief+froxel path a still export uses (PosterRenderer.RenderToPixels),
+            // and ONE shared FroxelHistory is threaded across frames so animated fog
+            // consumes the froxel temporal-reprojection seam (#468). b/c + view
+            // transform + watermark still run below (RenderToPixels returns the
+            // composed relief buffer BEFORE those). Relief off → the flat fast path,
+            // byte-identical.
+            FractalParameters? reliefFp = opts.Relief ? BuildFractalParameters(opts) : null;
+            var reliefHistory = opts.Relief
+                ? new FracturingFog.Rendering.Lighting.FroxelHistory() : null;
+
             var progress = new ConsoleProgress("Frames");
             var sw = Stopwatch.StartNew();
             int framesWritten = 0;
@@ -389,9 +414,31 @@ namespace FracturingFog.Batch
                     double te = t * t * (3.0 - 2.0 * t);
                     double frameZoom = Math.Exp(logZ0 + (logZ1 - logZ0) * te);
 
-                    uint[] buffer = limbRegion != null
-                        ? RenderRegionMandelFrame(limbRegion, outW, outH, frameZoom, iter, theme, pfAdaptive, quality)
-                        : RenderOneFrame(frType, outW, outH, cx, cy, frameZoom, iter, theme, quality, pfAdaptive);
+                    uint[] buffer;
+                    if (reliefFp != null)
+                    {
+                        var rreq = new PosterRequest
+                        {
+                            FractalType = frType, Width = outW, Height = outH,
+                            CenterX = cx, CenterXLo = limbRegion?.CenterXLo ?? 0,
+                            CenterX2 = limbRegion?.CenterX2 ?? 0, CenterX3 = limbRegion?.CenterX3 ?? 0,
+                            CenterY = cy, CenterYLo = limbRegion?.CenterYLo ?? 0,
+                            CenterY2 = limbRegion?.CenterY2 ?? 0, CenterY3 = limbRegion?.CenterY3 ?? 0,
+                            Zoom = frameZoom, MaxIterations = iter,
+                            ColorMap = theme, Quality = quality,
+                            FractalParameters = reliefFp,
+                            HistogramEq = pfAdaptive,               // HE lives on the calc, inside the request
+                            FroxelHistory = reliefHistory,          // #468 shared across frames
+                            Path = string.Empty, Format = ImageFileFormat.Png,
+                        };
+                        buffer = PosterRenderer.RenderToPixels(rreq, CancellationToken.None, out _, out _);
+                    }
+                    else
+                    {
+                        buffer = limbRegion != null
+                            ? RenderRegionMandelFrame(limbRegion, outW, outH, frameZoom, iter, theme, pfAdaptive, quality)
+                            : RenderOneFrame(frType, outW, outH, cx, cy, frameZoom, iter, theme, quality, pfAdaptive);
+                    }
 
                     // Brightness/Contrast BGRA post-pass (parity with the
                     // interactive image); HE already baked in the frame render.
