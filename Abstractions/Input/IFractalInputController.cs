@@ -58,6 +58,14 @@ namespace FracturingFog.Input
         void OnPointerDoubleClick(PointerInput e);
         void OnWheel(WheelInput e);
 
+        /// <summary>S3 click-to-focus (#400) — optional host hook. When set and the
+        /// user Alt+double-clicks the render, the controller asks the host to set the
+        /// relief DOF focal plane from the clicked pixel's depth instead of
+        /// recentering. The handler returns true when it consumed the click; false /
+        /// unset falls through to the normal recenter, so the gesture is harmless off
+        /// the relief-raymarch path.</summary>
+        Func<PointerInput, bool>? ReliefFocusPickHandler { get; set; }
+
         // ── Keyboard ──────────────────────────────────────────────────────────
         /// <summary>Returns true when the controller consumed the key (so the
         /// shell adapter can set Handled=true on its KeyEventArgs).</summary>

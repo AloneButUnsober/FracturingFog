@@ -98,6 +98,18 @@ namespace FracturingFog.Render
         /// only ever lowers the effective far-detail factor.</summary>
         void RenderReliefSettleUpgrade(double farDetailBoost);
 
+        /// <summary>S3 click-to-focus (#400) — read the camera-to-surface distance the
+        /// relief oblique raymarch would see at client pixel
+        /// (<paramref name="clientX"/>,<paramref name="clientY"/>) on a render surface
+        /// of (<paramref name="clientWidth"/>×<paramref name="clientHeight"/>), ready
+        /// to drop into <c>Relief2DDofFocusDistance</c>. Read-only: maps the client
+        /// point to a render pixel and traces the live relief field's depth AOV.
+        /// Returns false (and 0) when the relief raymarch isn't active, no relief
+        /// field is ready, the point is off-surface (sky), or the click is outside the
+        /// frame — the caller then leaves the focus unchanged.</summary>
+        bool TryPickReliefDofFocus(int clientX, int clientY, int clientWidth, int clientHeight,
+                                   out double focusDistance);
+
         /// <summary>Re-apply the Adaptive histogram-equalization pass at the
         /// current strength using cached escape buffers, then re-upload. No
         /// recompute — used by the live Adaptive slider so it updates with
