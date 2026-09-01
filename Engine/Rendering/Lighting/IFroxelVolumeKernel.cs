@@ -38,4 +38,16 @@ public interface IFroxelVolumeKernel : IDisposable
     /// <paramref name="h"/>; alpha is preserved. The GPU twin of the CPU
     /// <see cref="FroxelCameraVolume.Apply"/>.</summary>
     void Composite(in FroxelGpuUniforms u, uint[] beauty, float[] worldDepth, int w, int h, uint[] dst);
+
+    /// <summary>Temporal overload (roadmap S6, #408): as <see cref="Composite(in FroxelGpuUniforms,uint[],float[],int,int,uint[])"/>,
+    /// but when <paramref name="feedback"/> &gt; 0 the pre-integration froxel volume is
+    /// exponentially blended with this kernel's persistent device-side history for the
+    /// same grid identity (the GPU twin of <see cref="FroxelHistory"/> — animated fog
+    /// reads as a stable volume instead of flickering). A grid change (camera move)
+    /// re-seeds cleanly. <paramref name="feedback"/> &lt;= 0 is byte-identical to the
+    /// single-frame composite. The default implementation ignores temporal (a backend
+    /// without device history stays single-frame).</summary>
+    void Composite(in FroxelGpuUniforms u, uint[] beauty, float[] worldDepth, int w, int h, uint[] dst,
+        double feedback)
+        => Composite(in u, beauty, worldDepth, w, h, dst);
 }

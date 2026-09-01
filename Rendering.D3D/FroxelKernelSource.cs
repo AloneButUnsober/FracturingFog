@@ -79,8 +79,8 @@ cbuffer FroxelParams : register(b0)
 
     float gViewZ;
     int   gNumLights;     // active light count (BuildMedium always fills 3)
-    float gPad0;
-    float gPad1;
+    float gFeedback;      // S6 #408 temporal: history weight in [0,0.999]; 0 = single-frame
+    int   gHistoryValid;  // 1 = gHistory holds the previous frame for THIS grid; 0 = re-seed
 
     // Light 0 — 3 rows.
     int   gType0; uint gColor0; float gI0; float gRange0;
@@ -194,6 +194,15 @@ float SliceDepth(int z)
 
 // ---- populate + integrate one column (twin of FroxelVolumePass.Populate) ----
 RWStructuredBuffer<float4> gVolume : register(u0);
+// S6 #408 temporal reprojection — persistent PRE-integration scatter(rgb)+ext(a)
+// grid from the previous frame, one float4/cell, laid out exactly like gVolume
+// (index = (cy*Nx+cx)*Nz + z). The GPU twin of FroxelHistory: the per-cell
+// scatter+extinction is exponentially blended toward this history BEFORE the
+// front-to-back integration (energy-conserving), then the blended value is
+// stored back as the next frame's history. Read+written only when temporal is
+// active (gFeedback>0); guarded so the single-frame path is untouched and the
+// buffer may be left unbound then.
+RWStructuredBuffer<float4> gHistory : register(u1);
 
 [numthreads(8, 8, 1)]
 void CSFroxelIntegrate(uint3 tid : SV_DispatchThreadID)
@@ -253,6 +262,26 @@ void CSFroxelIntegrate(uint3 tid : SV_DispatchThreadID)
                                     float3(gPos2x, gPos2y, gPos2z), gRange2, gInner2, gOuter2, P);
             float phase = HgPhase(gAnisotropy, dot(view, r.xyz));
             sc += (density * gI2 * r.w * phase) * lc2;
+        }
+
+        // S6 #408 temporal blend (twin of FroxelHistory.BlendAndStore) — blend this
+        // cell's PRE-integration scatter + extinction toward the previous frame's,
+        // then store the blended value as the new history. When no valid history
+        // exists (first frame / grid change) the current values pass through (a=0)
+        // and seed. Guarded by gFeedback>0 so the single-frame path is byte-identical
+        // and never touches the (possibly unbound) history buffer.
+        if (gFeedback > 0.0)
+        {
+            int cellIdx = baseIdx + z;
+            if (gHistoryValid != 0)
+            {
+                float a = gFeedback;          // host clamps to [0,0.999]
+                float omA = 1.0 - a;
+                float4 hp = gHistory[cellIdx];
+                sc  = sc  * omA + hp.rgb * a;
+                ext = ext * omA + hp.a   * a;
+            }
+            gHistory[cellIdx] = float4(sc, ext);
         }
 
         // Front-to-back energy-conserving integration (twin of FroxelIntegrator).

@@ -43,7 +43,7 @@ public sealed class FroxelGpuKernel : IDisposable, IFroxelVolumeKernel
         public int H; public float Near, Far, Extent;
         public float BaseDensity, Extinction, Anisotropy, NoiseAmount;
         public float NoiseScale; public int NoiseOctaves; public float ViewX, ViewY;
-        public float ViewZ; public int NumLights; public float Pad0, Pad1;
+        public float ViewZ; public int NumLights; public float Feedback; public int HistoryValid;
         public int Type0; public uint Color0; public float I0, Range0;
         public float Dir0x, Dir0y, Dir0z, Inner0;
         public float Pos0x, Pos0y, Pos0z, Outer0;
@@ -69,6 +69,16 @@ public sealed class FroxelGpuKernel : IDisposable, IFroxelVolumeKernel
     private ID3D11UnorderedAccessView? _volumeUav;
     private ID3D11ShaderResourceView? _volumeSrv;
     private int _volumeCells;
+
+    // S6 #408 temporal — persistent device-side previous-frame PRE-integration
+    // scatter+ext grid (float4/cell), the GPU twin of FroxelHistory. Survives
+    // across Composite calls (kernel is host-owned, one per render host), keyed by
+    // the grid identity so a camera move that changes the slab re-seeds cleanly.
+    private ID3D11Buffer? _historyBuf;                // float4/cell — RW (u1) in the integrate pass
+    private ID3D11UnorderedAccessView? _historyUav;
+    private int _historyCells;
+    private long _historyKey;
+    private bool _historyValid;
 
     private ID3D11Buffer? _beautyBuf, _depthBuf;      // t0, t1 — output-sized
     private ID3D11ShaderResourceView? _beautySrv, _depthSrv;
@@ -141,6 +151,32 @@ public sealed class FroxelGpuKernel : IDisposable, IFroxelVolumeKernel
         _volumeCells = cells;
     }
 
+    // S6 #408 — (re)create the temporal history buffer when the cell count changes.
+    // A size change also drops validity (the old contents no longer map), forcing a
+    // clean re-seed that frame. Returns false when no buffer could be provided.
+    private void EnsureHistoryBuffer(int cells)
+    {
+        if (_historyBuf != null && _historyCells == cells) return;
+        _historyUav?.Dispose(); _historyBuf?.Dispose();
+        _historyBuf = _device.CreateBuffer(new BufferDescription
+        {
+            ByteWidth = (uint)(cells * 4 * sizeof(float)),   // float4/cell
+            BindFlags = BindFlags.UnorderedAccess | BindFlags.ShaderResource,
+            Usage = ResourceUsage.Default,
+            CPUAccessFlags = CpuAccessFlags.None,
+            MiscFlags = ResourceOptionFlags.BufferStructured,
+            StructureByteStride = 4 * sizeof(float),
+        });
+        _historyUav = _device.CreateUnorderedAccessView(_historyBuf, new UnorderedAccessViewDescription
+        {
+            Format = Vortice.DXGI.Format.Unknown,
+            ViewDimension = UnorderedAccessViewDimension.Buffer,
+            Buffer = new BufferUnorderedAccessView { FirstElement = 0, NumElements = (uint)cells, Flags = 0 },
+        });
+        _historyCells = cells;
+        _historyValid = false;   // fresh buffer → re-seed
+    }
+
     private void EnsureOutputBuffers(int n)
     {
         if (_outBuf != null && _outPixels == n) return;
@@ -198,6 +234,17 @@ public sealed class FroxelGpuKernel : IDisposable, IFroxelVolumeKernel
     /// writing the packed-ARGB result into <paramref name="dst"/>. The GPU twin of
     /// <see cref="FroxelCameraVolume.Apply"/>.</summary>
     public void Composite(in FroxelGpuUniforms u, uint[] beauty, float[] worldDepth, int w, int h, uint[] dst)
+        => Composite(in u, beauty, worldDepth, w, h, dst, feedback: 0.0);
+
+    /// <summary>Temporal overload (roadmap S6, #408). When <paramref name="feedback"/>
+    /// &gt; 0 the pre-integration scatter + extinction is exponentially blended with
+    /// this kernel's persistent device-side history for the SAME grid identity, then
+    /// stored back — the GPU twin of <see cref="FroxelHistory.BlendAndStore"/>. The
+    /// grid key is derived from the uniforms; a change (camera move) re-seeds cleanly.
+    /// <paramref name="feedback"/> &lt;= 0 is byte-identical to the single-frame
+    /// <see cref="Composite(in FroxelGpuUniforms,uint[],float[],int,int,uint[])"/>.</summary>
+    public void Composite(in FroxelGpuUniforms u, uint[] beauty, float[] worldDepth, int w, int h, uint[] dst,
+        double feedback)
     {
         if (_disposed) throw new ObjectDisposedException(nameof(FroxelGpuKernel));
         if (beauty == null) throw new ArgumentNullException(nameof(beauty));
@@ -211,27 +258,52 @@ public sealed class FroxelGpuKernel : IDisposable, IFroxelVolumeKernel
         var g = u.Grid;
         int cells = g.DimX * g.DimY * g.DimZ;
 
+        // Clamp to match FroxelHistory.BlendAndStore (keep some current in).
+        double fb = feedback;
+        if (fb < 0.0) fb = 0.0; else if (fb > 0.999) fb = 0.999;
+        bool temporal = fb > 0.0;
+        long key = temporal ? FroxelHistory.GridKey(g) : 0;
+
         lock (_d3dGate)
         {
             long t0 = System.Diagnostics.Stopwatch.GetTimestamp();
             EnsureVolumeBuffer(cells);
             EnsureOutputBuffers(n);
 
+            // History validity: only reuse when temporal is on AND the buffer already
+            // holds the previous frame for THIS grid. EnsureHistoryBuffer drops
+            // validity on a size change; a key change invalidates here.
+            bool historyValid = false;
+            if (temporal)
+            {
+                EnsureHistoryBuffer(cells);
+                historyValid = _historyValid && _historyKey == key && _historyCells >= cells;
+            }
+
             UploadColors(_beautyBuf!, beauty, n);
             UploadFloats(_depthBuf!, worldDepth, n);
 
-            var p = BuildBlob(in u, w, h);
+            var p = BuildBlob(in u, w, h, (float)fb, historyValid ? 1 : 0);
             var mapped = _ctx.Map(_paramsBuf, 0, Vortice.Direct3D11.MapMode.WriteDiscard, MapFlags.None);
             unsafe { *(FroxelParamsBlob*)mapped.DataPointer = p; }
             _ctx.Unmap(_paramsBuf, 0);
 
             _ctx.CSSetConstantBuffer(0, _paramsBuf);
 
-            // Pass 1 — populate + integrate every column into the volume (u0).
+            // Pass 1 — populate + integrate every column into the volume (u0). When
+            // temporal, the history grid rides u1 (read previous, write blended).
             _ctx.CSSetShader(_csIntegrate);
             _ctx.CSSetUnorderedAccessView(0, _volumeUav);
+            if (temporal) _ctx.CSSetUnorderedAccessView(1, _historyUav);
             _ctx.Dispatch((uint)((g.DimX + 7) / 8), (uint)((g.DimY + 7) / 8), 1);
             _ctx.CSUnsetUnorderedAccessView(0);
+            if (temporal)
+            {
+                _ctx.CSUnsetUnorderedAccessView(1);
+                // The blended scatter+ext is now the previous frame for the next call.
+                _historyKey = key;
+                _historyValid = true;
+            }
 
             // Pass 2 — composite over the beauty by per-pixel depth. The volume is
             // now read as an SRV (t2); beauty (t0) + depth (t1) feed the blend.
@@ -269,7 +341,7 @@ public sealed class FroxelGpuKernel : IDisposable, IFroxelVolumeKernel
         }
     }
 
-    private static FroxelParamsBlob BuildBlob(in FroxelGpuUniforms u, int w, int h)
+    private static FroxelParamsBlob BuildBlob(in FroxelGpuUniforms u, int w, int h, float feedback, int historyValid)
     {
         var g = u.Grid;
         var m = u.Medium;
@@ -288,7 +360,7 @@ public sealed class FroxelGpuKernel : IDisposable, IFroxelVolumeKernel
             Anisotropy = (float)m.Anisotropy, NoiseAmount = (float)m.NoiseAmount,
             NoiseScale = (float)m.NoiseScale, NoiseOctaves = m.NoiseOctaves,
             ViewX = (float)m.ViewDx, ViewY = (float)m.ViewDy,
-            ViewZ = (float)m.ViewDz, NumLights = nl, Pad0 = 0f, Pad1 = 0f,
+            ViewZ = (float)m.ViewDz, NumLights = nl, Feedback = feedback, HistoryValid = historyValid,
             Type0 = L0.Type, Color0 = L0.Color, I0 = (float)L0.Intensity, Range0 = (float)L0.Range,
             Dir0x = (float)L0.Lx, Dir0y = (float)L0.Ly, Dir0z = (float)L0.Lz, Inner0 = (float)L0.InnerCos,
             Pos0x = (float)L0.PosX, Pos0y = (float)L0.PosY, Pos0z = (float)L0.PosZ, Outer0 = (float)L0.OuterCos,
@@ -330,6 +402,8 @@ public sealed class FroxelGpuKernel : IDisposable, IFroxelVolumeKernel
         try { _volumeUav?.Dispose(); } catch { }
         try { _volumeSrv?.Dispose(); } catch { }
         try { _volumeBuf?.Dispose(); } catch { }
+        try { _historyUav?.Dispose(); } catch { }
+        try { _historyBuf?.Dispose(); } catch { }
         try { _beautySrv?.Dispose(); } catch { }
         try { _depthSrv?.Dispose(); } catch { }
         try { _beautyBuf?.Dispose(); } catch { }

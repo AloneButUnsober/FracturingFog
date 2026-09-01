@@ -117,6 +117,16 @@ static class Program
         if (args.Length > 0 && args[0] == "--froxelgpu")
             return FracturingFog.Rendering.FroxelGpuProbe.RunGate();
 
+        // --froxelgputemporal: S6 (#408) gate — the GPU froxel kernel's temporal
+        // reprojection (device-side history) vs the CPU FroxelHistory blend, over
+        // TWO frames with a changed medium (grid identity fixed) so the temporal
+        // blend is exercised (a static scene makes the blend an identity). Asserts
+        // the GPU 2nd frame tracks the CPU oracle AND that temporal actually shifted
+        // the result vs the single-frame composite. WARP device; writes
+        // froxelgputemporal.out.
+        if (args.Length > 0 && args[0] == "--froxelgputemporal")
+            return FracturingFog.Rendering.FroxelGpuProbe.RunTemporalGate();
+
         // --meshexport: #101 gate — prove marching-cubes mesh export works for
         // every DE raymarcher (not just the User Bulb) via the shared
         // RaymarchMeshSampler factory. For each exportable type: build the

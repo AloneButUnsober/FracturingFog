@@ -62,6 +62,152 @@ public static class FroxelGpuProbe
         return (beauty, depth);
     }
 
+    // The lit fog medium used by both gates. `density` + `noise` vary per frame in
+    // the temporal gate (an animated medium); the three lights are fixed so every
+    // populate path (directional / point / spot) is exercised.
+    private static LightingFxData SceneFx(double density, double noise)
+    {
+        var fx = LightingFxData.CreateDefault();
+        fx.FogDensity = density;
+        fx.VolumeAnisotropy = 0.3;
+        fx.VolumeNoiseAmount = noise;
+        fx.VolumeNoiseScale = 0.5;
+        fx.VolumeNoiseOctaves = 3;
+        fx.Light1.Intensity = 1.0;
+        fx.Light1.Color = 0xFFFFE8C0u;
+        fx.Light2.Type = LightType.Point;
+        fx.Light2.Intensity = 0.8;
+        fx.Light2.Color = 0xFFC0D8FFu;
+        fx.Light2.PosX = 0.4; fx.Light2.PosY = 1.1; fx.Light2.PosZ = 0.3;
+        fx.Light2.Range = 4.0;
+        fx.Light3.Type = LightType.Spot;
+        fx.Light3.Intensity = 0.6;
+        fx.Light3.Color = 0xFFE0FFE0u;
+        fx.Light3.PosX = -0.4; fx.Light3.PosY = 1.0; fx.Light3.PosZ = -0.3;
+        fx.Light3.Range = 4.0;
+        fx.Light3.SpotInnerDeg = 30.0;
+        fx.Light3.SpotOuterDeg = 60.0;
+        return fx;
+    }
+
+    /// <summary>CLI entry (`--froxelgputemporal`). Two-frame temporal-reprojection
+    /// parity: the GPU kernel's device-side history vs the CPU FroxelHistory blend,
+    /// with a CHANGED medium between the frames (grid identity fixed) so the blend is
+    /// actually exercised. Also asserts the temporal result differs from the
+    /// single-frame composite (history influenced it). WARP device.</summary>
+    public static int RunTemporalGate()
+    {
+        const int w = 200, h = 150;
+        const double fb = 0.7;
+        var sb = new StringBuilder();
+        sb.AppendLine("Froxel-GPU temporal gate (#408) — GPU device history vs CPU FroxelHistory (2 frames)");
+
+        var p = new FractalParameters
+        {
+            Relief2DEnabled = true,
+            Relief2DRaymarch = true,
+            Relief2DFroxelVolumetrics = true,
+            Relief2DHeightScale = 1.4,
+            Relief2DCameraAzimuthDeg = 25,
+            Relief2DCameraElevationDeg = 45,
+            Relief2DCameraFovDeg = 55,
+        };
+        double aspect = (double)w / h;
+        var cam = HeightfieldRaymarch2D.BuildObliqueCamera(w, h, aspect, sy: 0.35, maxH: 1.0, p);
+
+        // Animated medium: frame A then a denser / noisier frame B. The camera (grid)
+        // is unchanged, so the history is reused for frame B on both paths.
+        var fxA = SceneFx(0.35, 0.15);
+        var fxB = SceneFx(0.75, 0.35);
+
+        var grid = FroxelCameraVolume.BuildGrid(in cam);
+        var (beauty, depth) = Scene(w, h, grid.Near, grid.Far);
+
+        // CPU oracle — one persistent history, two frames.
+        var hist = new FroxelHistory();
+        _ = FroxelCameraVolume.Apply(beauty, depth, w, h, in cam, in fxA, hist, temporal: true, feedback: fb);
+        var cpu2 = FroxelCameraVolume.Apply(beauty, depth, w, h, in cam, in fxB, hist, temporal: true, feedback: fb);
+        // Single-frame B (no temporal) — to prove the blend actually shifted the result.
+        var cpuSingleB = FroxelCameraVolume.Apply(beauty, depth, w, h, in cam, in fxB);
+
+        // GPU — one kernel (persistent device history), two frames.
+        var uA = FroxelGpuUniforms.Build(in cam, in fxA);
+        var uB = FroxelGpuUniforms.Build(in cam, in fxB);
+        ID3D11Device? dev = null;
+        ID3D11DeviceContext? ctx = null;
+        FroxelGpuKernel? kernel = null;
+        var gpu2 = new uint[w * h];
+        try
+        {
+            var hr = D3D11.D3D11CreateDevice(null, DriverType.Warp, DeviceCreationFlags.None,
+                null!, out dev, out _, out ctx);
+            if (hr.Failure || dev == null || ctx == null)
+            {
+                sb.AppendLine($"  SKIP: no WARP D3D11 device (0x{hr.Code:X8})");
+                sb.AppendLine("RESULT: PASS");
+                FinishNamed(sb, "froxelgputemporal.out");
+                return 0;
+            }
+            kernel = new FroxelGpuKernel(dev, ctx, new object());
+            var gpu1 = new uint[w * h];
+            kernel.Composite(in uA, beauty, depth, w, h, gpu1, fb);   // seeds history
+            kernel.Composite(in uB, beauty, depth, w, h, gpu2, fb);   // blends against frame A
+        }
+        catch (Exception ex)
+        {
+            sb.AppendLine($"  ERROR: GPU dispatch threw — {ex.Message}");
+            sb.AppendLine("RESULT: FAIL");
+            FinishNamed(sb, "froxelgputemporal.out");
+            return 1;
+        }
+        finally
+        {
+            kernel?.Dispose();
+            ctx?.Dispose();
+            dev?.Dispose();
+        }
+
+        // GPU-vs-CPU parity on the temporal 2nd frame.
+        long sumAbs = 0; int maxAbs = 0; long bad = 0; int nz = 0;
+        for (int i = 0; i < w * h; i++)
+        {
+            uint a = cpu2[i], b = gpu2[i];
+            int dr = Math.Abs((int)((a >> 16) & 0xFF) - (int)((b >> 16) & 0xFF));
+            int dg = Math.Abs((int)((a >> 8) & 0xFF) - (int)((b >> 8) & 0xFF));
+            int db = Math.Abs((int)(a & 0xFF) - (int)(b & 0xFF));
+            int m = Math.Max(dr, Math.Max(dg, db));
+            sumAbs += dr + dg + db;
+            if (m > maxAbs) maxAbs = m;
+            if (m > 16) bad++;
+            if (((a >> 24) & 0xFF) != ((b >> 24) & 0xFF)) nz++;
+        }
+        double meanCh = sumAbs / (3.0 * w * h);
+        double badFrac = (double)bad / (w * h);
+
+        // Temporal must actually shift the result: cpu2 (blended with frame A) should
+        // differ from the single-frame frame-B composite on a meaningful fraction.
+        long tempChanged = 0;
+        for (int i = 0; i < w * h; i++)
+            if (cpu2[i] != cpuSingleB[i]) tempChanged++;
+        double tempChangedFrac = (double)tempChanged / (w * h);
+
+        WritePpm(Path.Combine(AppContext.BaseDirectory, "froxel-temporal-cpu.ppm"), cpu2, w, h);
+        WritePpm(Path.Combine(AppContext.BaseDirectory, "froxel-temporal-gpu.ppm"), gpu2, w, h);
+
+        sb.AppendLine(string.Create(CultureInfo.InvariantCulture, $"  size                 {w}x{h}   feedback {fb:0.00}"));
+        sb.AppendLine(string.Create(CultureInfo.InvariantCulture, $"  grid near/far        {grid.Near:0.000} / {grid.Far:0.000}"));
+        sb.AppendLine(string.Create(CultureInfo.InvariantCulture, $"  temporal shifted frac {tempChangedFrac:0.0000}"));
+        sb.AppendLine(string.Create(CultureInfo.InvariantCulture, $"  mean channel diff    {meanCh:0.000}"));
+        sb.AppendLine(string.Create(CultureInfo.InvariantCulture, $"  max channel diff     {maxAbs}"));
+        sb.AppendLine(string.Create(CultureInfo.InvariantCulture, $"  bad pixels >16       {badFrac:0.0000}  ({bad} px)"));
+        sb.AppendLine(string.Create(CultureInfo.InvariantCulture, $"  alpha mismatches     {nz}"));
+
+        bool ok = tempChangedFrac > 0.10 && meanCh < 2.0 && badFrac < 0.03 && nz == 0;
+        sb.AppendLine(ok ? "RESULT: PASS" : "RESULT: FAIL");
+        FinishNamed(sb, "froxelgputemporal.out");
+        return ok ? 0 : 1;
+    }
+
     /// <summary>CLI entry (`--froxelgpu`).</summary>
     public static int RunGate()
     {
@@ -203,9 +349,11 @@ public static class FroxelGpuProbe
         fs.Write(rgb, 0, rgb.Length);
     }
 
-    private static void Finish(StringBuilder sb)
+    private static void Finish(StringBuilder sb) => FinishNamed(sb, "froxelgpu.out");
+
+    private static void FinishNamed(StringBuilder sb, string outFile)
     {
-        try { File.WriteAllText(Path.Combine(AppContext.BaseDirectory, "froxelgpu.out"), sb.ToString()); }
+        try { File.WriteAllText(Path.Combine(AppContext.BaseDirectory, outFile), sb.ToString()); }
         catch { }
         Console.Write(sb.ToString());
     }
