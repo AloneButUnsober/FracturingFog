@@ -402,6 +402,47 @@ namespace FracturingFog.Batch
             var reliefHistory = opts.Relief
                 ? new FracturingFog.Rendering.Lighting.FroxelHistory() : null;
 
+            // S3 (#568) — accumulation motion blur on the zoom video. MotionBlurSubframes
+            // > 1 (with a positive shutter) averages that many sub-frames per output
+            // frame, sampled across a shutter window of the inter-frame zoom step, so a
+            // fast zoom reads as motion-blurred instead of strobing. Reuses the scene
+            // controls (--motion-blur / --shutter). 1 sub-frame = the single-frame path
+            // below (byte-identical). N× render cost.
+            bool motionBlur = opts.MotionBlurSubframes > 1 && opts.ShutterFraction > 0.0;
+            int mbSamples = Math.Max(2, opts.MotionBlurSubframes);
+            double frameStep = totalFrames > 1 ? 1.0 / (totalFrames - 1) : 0.0;
+            var mbAccum = motionBlur ? new MotionBlurAccumulator(outW * outH) : null;
+            uint[]? mbBuffer = motionBlur ? new uint[outW * outH] : null;
+
+            // Render one frame of the zoom at parametric time te (already eased) → zoom.
+            // reliefHist is threaded only when supplied (froxel temporal seam); flat
+            // frames ignore it.
+            uint[] RenderZoomFrame(double teLocal, FracturingFog.Rendering.Lighting.FroxelHistory? reliefHist)
+            {
+                double fz = Math.Exp(logZ0 + (logZ1 - logZ0) * teLocal);
+                if (reliefFp != null)
+                {
+                    var rreq = new PosterRequest
+                    {
+                        FractalType = frType, Width = outW, Height = outH,
+                        CenterX = cx, CenterXLo = limbRegion?.CenterXLo ?? 0,
+                        CenterX2 = limbRegion?.CenterX2 ?? 0, CenterX3 = limbRegion?.CenterX3 ?? 0,
+                        CenterY = cy, CenterYLo = limbRegion?.CenterYLo ?? 0,
+                        CenterY2 = limbRegion?.CenterY2 ?? 0, CenterY3 = limbRegion?.CenterY3 ?? 0,
+                        Zoom = fz, MaxIterations = iter,
+                        ColorMap = theme, Quality = quality,
+                        FractalParameters = reliefFp,
+                        HistogramEq = pfAdaptive,               // HE lives on the calc, inside the request
+                        FroxelHistory = reliefHist,             // #468 shared across frames
+                        Path = string.Empty, Format = ImageFileFormat.Png,
+                    };
+                    return PosterRenderer.RenderToPixels(rreq, CancellationToken.None, out _, out _);
+                }
+                return limbRegion != null
+                    ? RenderRegionMandelFrame(limbRegion, outW, outH, fz, iter, theme, pfAdaptive, quality)
+                    : RenderOneFrame(frType, outW, outH, cx, cy, fz, iter, theme, quality, pfAdaptive);
+            }
+
             var progress = new ConsoleProgress("Frames");
             var sw = Stopwatch.StartNew();
             int framesWritten = 0;
@@ -412,32 +453,29 @@ namespace FracturingFog.Batch
                 {
                     double t = totalFrames == 1 ? 1.0 : (double)f / (totalFrames - 1);
                     double te = t * t * (3.0 - 2.0 * t);
-                    double frameZoom = Math.Exp(logZ0 + (logZ1 - logZ0) * te);
+                    double frameZoom = Math.Exp(logZ0 + (logZ1 - logZ0) * te);   // nominal (progress)
 
                     uint[] buffer;
-                    if (reliefFp != null)
+                    if (!motionBlur)
                     {
-                        var rreq = new PosterRequest
-                        {
-                            FractalType = frType, Width = outW, Height = outH,
-                            CenterX = cx, CenterXLo = limbRegion?.CenterXLo ?? 0,
-                            CenterX2 = limbRegion?.CenterX2 ?? 0, CenterX3 = limbRegion?.CenterX3 ?? 0,
-                            CenterY = cy, CenterYLo = limbRegion?.CenterYLo ?? 0,
-                            CenterY2 = limbRegion?.CenterY2 ?? 0, CenterY3 = limbRegion?.CenterY3 ?? 0,
-                            Zoom = frameZoom, MaxIterations = iter,
-                            ColorMap = theme, Quality = quality,
-                            FractalParameters = reliefFp,
-                            HistogramEq = pfAdaptive,               // HE lives on the calc, inside the request
-                            FroxelHistory = reliefHistory,          // #468 shared across frames
-                            Path = string.Empty, Format = ImageFileFormat.Png,
-                        };
-                        buffer = PosterRenderer.RenderToPixels(rreq, CancellationToken.None, out _, out _);
+                        buffer = RenderZoomFrame(te, reliefHistory);
                     }
                     else
                     {
-                        buffer = limbRegion != null
-                            ? RenderRegionMandelFrame(limbRegion, outW, outH, frameZoom, iter, theme, pfAdaptive, quality)
-                            : RenderOneFrame(frType, outW, outH, cx, cy, frameZoom, iter, theme, quality, pfAdaptive);
+                        // Average the shutter's sub-frames. The froxel temporal history
+                        // advances once per OUTPUT frame (only the first sub-frame carries
+                        // it) so accumulation motion blur doesn't over-blend the volume.
+                        mbAccum!.Reset();
+                        var samples = MotionBlurAccumulator.ShutterSamples(t, frameStep, opts.ShutterFraction, mbSamples);
+                        for (int s = 0; s < samples.Length; s++)
+                        {
+                            double ts = samples[s].t;
+                            double tse = ts * ts * (3.0 - 2.0 * ts);
+                            var hist = (reliefFp != null && s == 0) ? reliefHistory : null;
+                            mbAccum.Add(RenderZoomFrame(tse, hist), samples[s].weight);
+                        }
+                        mbAccum.Resolve(mbBuffer!);
+                        buffer = mbBuffer!;
                     }
 
                     // Brightness/Contrast BGRA post-pass (parity with the
