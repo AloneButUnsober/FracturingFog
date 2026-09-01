@@ -671,6 +671,17 @@ public struct LightingFxData
     /// <summary>Lens samples for hex-bokeh aperture. 6/12/18 typical.</summary>
     public int DofSamples;
 
+    /// <summary>S3 (#389/#400/#567) — physically-based thin-lens DoF for the 3D-fractal
+    /// raymarch cameras, replacing the screen-space gather (<c>ScreenSpacePost.ApplyHdrDof</c>)
+    /// when on. Instead of blurring the finished frame by its depth buffer, each pixel
+    /// averages <see cref="DofSamples"/> primary rays whose origin is jittered across the
+    /// aperture disc and re-aimed through the focal point (<see cref="CameraDof.ThinLensRay"/>),
+    /// so occluded geometry and silhouettes bleed correctly and the bokeh integrates the
+    /// real scene. Reuses <see cref="DofAperture"/> (lens radius) + <see cref="DofFocusDistance"/>
+    /// + <see cref="DofSamples"/>. Off (default) keeps the screen-space path; a 0 aperture is
+    /// pinhole either way → byte-identical. Perspective cameras only (raymarch families).</summary>
+    public bool DofThinLens;
+
     /// <summary>Route SSAO + (future) tonemap/bloom post-passes through the
     /// ILGPU kernel dispatcher when an accelerator is available. Falls back
     /// to the CPU path on any failure (GPU init failure, OOM, kernel throw).
@@ -828,6 +839,7 @@ public struct LightingFxData
         DofAperture        = 0.0,
         DofFocusDistance   = 3.0,
         DofSamples         = 8,
+        DofThinLens        = false,
 
         SceneTime          = 0.0,
         LightOrbitSpeed    = 0.0,
@@ -876,7 +888,7 @@ public struct LightingFxData
         h.Add(EdgeStrength); h.Add(EdgeColor); h.Add(EdgeThreshold); h.Add(EdgeKernel);
         h.Add(StereoEyeSeparation); h.Add(StereoFovDegrees); h.Add(StereoMode);
         h.Add(StereoEyeOffset); h.Add(StereoConvergence); h.Add(StereoMaxDisparity); h.Add(StereoLayout);
-        h.Add(DofAperture); h.Add(DofFocusDistance); h.Add(DofSamples);
+        h.Add(DofAperture); h.Add(DofFocusDistance); h.Add(DofSamples); h.Add(DofThinLens);
         h.Add(SceneTime); h.Add(LightOrbitSpeed);
         h.Add(DebugHudFlags); h.Add(DebugAov);
         h.Add(UseGpuPost); h.Add(UseGpuRender);

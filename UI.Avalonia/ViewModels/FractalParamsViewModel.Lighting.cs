@@ -633,6 +633,13 @@ public sealed partial class FractalParamsViewModel
         get => _p.Lighting.DofSamples;
         set { MutateLighting(r => r.Fx.DofSamples = (int)Clamp(value, 1, 32)); this.RaisePropertyChanged(); Fire(); }
     }
+    // S3 (#567) — physically-based thin-lens DoF (aperture-tap averaging) vs the
+    // screen-space gather. Reuses aperture / focus / samples above.
+    public bool DofThinLens
+    {
+        get => _p.Lighting.DofThinLens;
+        set { MutateLighting(r => r.Fx.DofThinLens = value); this.RaisePropertyChanged(); Fire(); }
+    }
     public double LightOrbitSpeed
     {
         get => _p.Lighting.LightOrbitSpeed;
