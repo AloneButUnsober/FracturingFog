@@ -451,6 +451,17 @@ public struct LightingFxData
     /// is reached. Larger = clearer glass. ≤ 0 disables absorption.</summary>
     public double AbsorptionDistance;
 
+    /// <summary>S5 (#406) — full internal glass march. The base transmission is an
+    /// environment-refraction approximation: it refracts once at the front surface
+    /// and tints the see-through view by a NOMINAL one-unit slab. When this is on
+    /// (and a distance estimator is available) the shader instead marches the DE from
+    /// the front hit through the solid to the back surface, so Beer-Lambert absorption
+    /// runs over the REAL thickness (thick parts tint / darken more) and the ray is
+    /// refracted a SECOND time on exit (true two-surface glass distortion). Off
+    /// (default) keeps the cheap single-interface approximation → byte-identical.
+    /// Forces the CPU trace, like any transmissive material.</summary>
+    public bool RefractInternalMarch;
+
     // ── Triplanar texture (Phase 14) ──────────────────────────────────
 
     /// <summary>Procedural texture selector. <see cref="TriplanarTextureKind.None"/>
@@ -778,6 +789,7 @@ public struct LightingFxData
         Ior                = 1.5,          // glass
         AbsorptionColor    = 0xFFFFFFFFu,  // clear
         AbsorptionDistance = 1.0,
+        RefractInternalMarch = false,      // env-approx (single interface)
 
         TriplanarKind      = TriplanarTextureKind.None,
         TriplanarScale     = 4.0,
@@ -863,7 +875,7 @@ public struct LightingFxData
         h.Add(VolumeNoiseOctaves); h.Add(VolumeSelfShadow); h.Add(VolumeSelfShadowSteps);
         h.Add(VolumeAnisotropy); h.Add(FogColor); h.Add(VolumePaletteStrength);
         h.Add(Roughness); h.Add(Metallic); h.Add(SpecularStrength); h.Add(SubSurfaceStrength);
-        h.Add(Transmission); h.Add(Ior); h.Add(AbsorptionColor); h.Add(AbsorptionDistance);
+        h.Add(Transmission); h.Add(Ior); h.Add(AbsorptionColor); h.Add(AbsorptionDistance); h.Add(RefractInternalMarch);
         h.Add(TriplanarScale); h.Add(TriplanarStrength); h.Add(TriplanarTint);
         h.Add(SkyMode); h.Add(BgTopColor); h.Add(BgBottomColor);
         h.Add(EnvironmentName); h.Add(IblStrength); h.Add(ShowSkyBackdrop);

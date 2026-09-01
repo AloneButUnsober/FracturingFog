@@ -721,12 +721,51 @@ public static class ShadingPipeline
             double NdotVr = Math.Max(0.0, i.Nx * -i.Rdx + i.Ny * -i.Rdy + i.Nz * -i.Rdz);
             double Fr = tir ? 1.0 : DielectricOps.FresnelSchlick(NdotVr, f0);
 
-            // Transmitted: the environment seen along the refracted ray.
-            uint tSky = SkyColorHdri(tx, ty, tz, fx.Roughness, in fx);
+            // Transmitted: the environment seen through the glass. The default is
+            // the env-refraction approximation — one interface, a nominal one-unit
+            // slab. S5 (#406) full internal march: when on, march the DE from the
+            // front hit through the solid to the back surface so Beer-Lambert runs
+            // over the REAL thickness and the ray refracts a SECOND time on exit.
+            double exDirX = tx, exDirY = ty, exDirZ = tz;   // env-approx: first refracted dir
+            double thickness = 1.0;                          // env-approx: nominal slab
+            if (fx.RefractInternalMarch && hasDe && !tir)
+            {
+                double biasR = i.Epsilon * 4.0;
+                double ox = i.Px + tx * biasR, oy = i.Py + ty * biasR, oz = i.Pz + tz * biasR;
+                const int refrSteps = 64;
+                double tInside = i.Epsilon; bool exited = false; double ex = 0, ey = 0, ez = 0;
+                for (int s = 0; s < refrSteps; s++)
+                {
+                    double px = ox + tx * tInside, py = oy + ty * tInside, pz = oz + tz * tInside;
+                    // Distance to the surface from inside the solid; sphere-trace it to
+                    // the exit (back) interface.
+                    double d = Math.Abs(de.Evaluate(px, py, pz));
+                    if (d < i.Epsilon * 2.0) { exited = true; ex = px; ey = py; ez = pz; break; }
+                    tInside += Math.Max(d, i.Epsilon);
+                    if (tInside > 12.0) break;
+                }
+                thickness = tInside;
+                if (exited)
+                {
+                    // Outward surface normal at the exit via central differences.
+                    double hN = i.Epsilon * 2.0;
+                    double nx = de.Evaluate(ex + hN, ey, ez) - de.Evaluate(ex - hN, ey, ez);
+                    double ny = de.Evaluate(ex, ey + hN, ez) - de.Evaluate(ex, ey - hN, ez);
+                    double nz = de.Evaluate(ex, ey, ez + hN) - de.Evaluate(ex, ey, ez - hN);
+                    var en = Normalize3(nx, ny, nz);
+                    // Exit interface: normal AGAINST the internal ray = -en; eta = ior
+                    // (inside→outside). On TIR keep the internal direction (a full path
+                    // would internally reflect — a follow-up).
+                    var (ex2, ey2, ez2, tir2) = DielectricOps.Refract(tx, ty, tz, -en.X, -en.Y, -en.Z, ior);
+                    if (!tir2) { exDirX = ex2; exDirY = ey2; exDirZ = ez2; }
+                }
+            }
+
+            uint tSky = SkyColorHdri(exDirX, exDirY, exDirZ, fx.Roughness, in fx);
             double trR = (tSky >> 16) & 0xFF, trG = (tSky >> 8) & 0xFF, trB = tSky & 0xFF;
-            // Beer-Lambert glass tint over a nominal one-unit slab (AbsorptionColor
-            // = the surviving tint at AbsorptionDistance).
-            var (aR, aG, aB) = DielectricOps.BeerLambert(fx.AbsorptionColor, fx.AbsorptionDistance, 1.0);
+            // Beer-Lambert glass tint over the (real or nominal) glass thickness —
+            // AbsorptionColor is the surviving tint at AbsorptionDistance.
+            var (aR, aG, aB) = DielectricOps.BeerLambert(fx.AbsorptionColor, fx.AbsorptionDistance, thickness);
             trR *= aR; trG *= aG; trB *= aB;
 
             // Reflected: the environment along the mirror direction.
