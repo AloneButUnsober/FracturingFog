@@ -168,7 +168,7 @@
 
                     <TextBlock Grid.Row="9" Grid.Column="0" Text="DOF focus dist:" VerticalAlignment="Center"
                                IsEnabled="{Binding DofEnabled}"
-                               ToolTip.Tip="World-space distance to the plane kept sharp. 0 = auto-focus on the fractal centre (the world origin). Only used when DOF aperture > 0." />
+                               ToolTip.Tip="World-space distance to the plane kept sharp. 0 = auto-focus on the fractal centre (the world origin). Only used when DOF aperture > 0. Tip: Alt+double-click the render to set this to whatever surface is under the cursor (opens the aperture if it was shut)." />
                     <NumericUpDown Grid.Row="9" Grid.Column="1"
                                    Minimum="0" Maximum="100" Increment="0.1" FormatString="F2"
                                    IsEnabled="{Binding DofEnabled}"

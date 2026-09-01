@@ -707,6 +707,43 @@ public static class HeightfieldRaymarch2D
         }
     }
 
+    /// <summary>Sentinel returned by <see cref="FocusDistanceAtPixel"/> when there is
+    /// no focusable surface under the pixel (sky miss, off-frame, or the relief
+    /// raymarch isn't active) — the caller should leave the DOF focus unchanged /
+    /// fall back to auto-focus. A real hit is always &gt; 0.</summary>
+    public const double NoFocus = 0.0;
+
+    /// <summary>S3 click-to-focus (#400): the camera-to-surface distance at output
+    /// pixel (<paramref name="px"/>,<paramref name="py"/>) — exactly the value the
+    /// thin-lens DOF wants in <see cref="FractalParameters.Relief2DDofFocusDistance"/>.
+    /// Renders the depth AOV once with the SAME oblique camera + field the on-screen
+    /// frame used (so the picked plane matches what the user clicked) and reads back
+    /// the centre-tap ray distance. Returns <see cref="NoFocus"/> (0) for a sky miss,
+    /// an off-frame pixel, or when the params don't enable the raymarch. The depth
+    /// plane is captured from the pinhole centre tap, so an already-open aperture
+    /// does not bias the pick. Runs on the CPU trace when <paramref name="gpuKernel"/>
+    /// is null (deterministic) — cheap enough for a one-shot click.</summary>
+    public static double FocusDistanceAtPixel(
+        uint[] albedo, float[] height, int w, int h, int hw, int hh,
+        FractalParameters p, int px, int py,
+        IReliefRaymarchKernel? gpuKernel = null)
+    {
+        if (albedo == null || height == null || p == null) return NoFocus;
+        if (!p.Relief2DEnabled || !p.Relief2DRaymarch) return NoFocus;
+        if (px < 0 || px >= w || py < 0 || py >= h) return NoFocus;
+        if (w <= 2 || h <= 2 || hw <= 2 || hh <= 2) return NoFocus;
+        if (albedo.Length < (long)w * h || height.Length < (long)hw * hh) return NoFocus;
+
+        var aov = new ReliefAovBuffers(w, h);          // normal + depth only
+        var scratch = new uint[(long)w * h];
+        Render(albedo, height, w, h, hw, hh, p, scratch, out _, gpuKernel, aov);
+
+        double d = aov.Depth[(long)py * w + px];
+        // Sky/background miss writes the 1e6 sentinel; treat anything near/beyond it
+        // (or non-finite / non-positive) as "no focusable surface".
+        return (double.IsFinite(d) && d > 0.0 && d < 9.9e5) ? d : NoFocus;
+    }
+
     /// <summary>#159 (Slice 3a) — the oblique-camera basis, domain AABB and
     /// cone-epsilon that <see cref="Render(uint[],float[],int,int,int,int,FractalParameters,uint[],out double)"/>
     /// marches with. A pure function of the output size, world scale (<paramref name="sy"/>),

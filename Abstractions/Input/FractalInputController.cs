@@ -361,10 +361,24 @@ namespace FracturingFog.Input
             RaiseViewChanged(RenderHint.Full);
         }
 
+        /// <summary>S3 click-to-focus (#400) — optional host hook. When set and the
+        /// user Alt+double-clicks the render, the controller asks the host to set the
+        /// relief DOF focus distance from the clicked pixel's depth instead of
+        /// recentering. The host returns true when it consumed the click (relief
+        /// raymarch + perspective + a surface under the cursor); false / unset falls
+        /// through to the normal recenter, so the gesture is harmless off the relief
+        /// path. Shell-neutral: the depth read lives in the host, not here.</summary>
+        public Func<PointerInput, bool>? ReliefFocusPickHandler { get; set; }
+
         public void OnPointerDoubleClick(PointerInput e)
         {
             if (InputSuppressed) return;
             if ((e.Buttons & PointerButton.Left) == 0) return;
+
+            // S3 click-to-focus: Alt+double-click picks the relief DOF focal plane.
+            if ((e.Modifiers & InputModifiers.Alt) != 0
+                && ReliefFocusPickHandler is { } pick && pick(e))
+                return;
 
             _panning = false;
             CursorRequested?.Invoke(this, new InputCursorRequest(InputCursor.Cross));

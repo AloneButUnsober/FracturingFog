@@ -2654,6 +2654,54 @@ namespace FracturingFog.Rendering
             finally { _reliefSettleFarDetailBoost = 0.0; }
         }
 
+        /// <summary>S3 click-to-focus (#400) — read the relief oblique-raymarch's
+        /// camera-to-surface distance at a client pixel. Read-only: mirrors the live
+        /// raymarch's albedo (<see cref="MandelbrotCalculator.ColorBuffer"/>) + field
+        /// (<c>_reliefHeight</c> at <c>_reliefW×_reliefH</c>, the same hi-res field the
+        /// screen uses) and traces the depth AOV via
+        /// <see cref="FracturingFog.Rendering.Lighting.HeightfieldRaymarch2D.FocusDistanceAtPixel"/>.
+        /// Returns false + 0 when the raymarch is off, no field is ready, or the point
+        /// is sky / off-frame.</summary>
+        public bool TryPickReliefDofFocus(int clientX, int clientY, int clientWidth, int clientHeight,
+                                          out double focusDistance)
+        {
+            focusDistance = 0.0;
+            if (_disposed) return false;
+
+            var p = ViewState.FractalParameters;
+            if (!p.Relief2DEnabled || !p.Relief2DRaymarch) return false;
+            if (!_reliefValid || _reliefHeight == null) return false;
+            if (clientWidth <= 0 || clientHeight <= 0) return false;
+
+            uint[] albedo = _calculator.ColorBuffer;
+            int w = _calculator.Width, h = _calculator.Height;
+            if (w <= 2 || h <= 2 || albedo.Length < (long)w * h) return false;
+
+            // Raymarch field-fit gate (mirror ApplyCachedRelief): the field is sampled
+            // by normalised coords, so a hi-res _reliefW×_reliefH field is fine.
+            if (_reliefW <= 2 || _reliefH <= 2 || _reliefHeight.Length < (long)_reliefW * _reliefH)
+                return false;
+
+            // Client point → render pixel. Clamp to the frame so an edge click still
+            // resolves to a valid pixel.
+            int px = (int)Math.Round((clientX + 0.5) * w / clientWidth - 0.5);
+            int py = (int)Math.Round((clientY + 0.5) * h / clientHeight - 0.5);
+            px = Math.Clamp(px, 0, w - 1);
+            py = Math.Clamp(py, 0, h - 1);
+
+            // Copy the albedo defensively — the calc thread owns ColorBuffer and may
+            // overwrite it mid-trace. Field is only read; the raymarch never mutates it.
+            var albedoCopy = new uint[(long)w * h];
+            Array.Copy(albedo, albedoCopy, albedoCopy.Length);
+
+            double d = FracturingFog.Rendering.Lighting.HeightfieldRaymarch2D.FocusDistanceAtPixel(
+                albedoCopy, _reliefHeight, w, h, _reliefW, _reliefH, p, px, py);
+            if (d <= FracturingFog.Rendering.Lighting.HeightfieldRaymarch2D.NoFocus) return false;
+
+            focusDistance = d;
+            return true;
+        }
+
         /// <summary>Set (or clear with null) the rubber-band rectangle drawn
         /// on top of the current frame while the user is right-drag-selecting
         /// a zoom region in 2D. Re-uploads the most recently completed frame

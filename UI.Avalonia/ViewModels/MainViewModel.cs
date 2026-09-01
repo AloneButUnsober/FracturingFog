@@ -104,6 +104,7 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
         _input.ViewChanged += OnInputViewChanged;
         _input.StatusRequested += (_, msg) => StatusText = msg.Text;
         _input.CursorRequested += (_, req) => CursorRequest = req;
+        _input.ReliefFocusPickHandler = OnReliefFocusPick;
         _input.SelectionBoxChanged += (_, box) =>
         {
             if (box is { } b)
@@ -1153,6 +1154,34 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
     }
 
     // ── Input plumbing ────────────────────────────────────────────────────
+
+    // S3 click-to-focus (#400) — Alt+double-click on the render sets the relief DOF
+    // focal plane to whatever surface is under the cursor. The controller routes the
+    // gesture here (via IFractalInputController.ReliefFocusPickHandler); we ask the
+    // host for the clicked pixel's camera-to-surface distance, write it into the live
+    // relief params (the params instance the Relief 3D dialog also edits by reference,
+    // so there's no desync), open a modest aperture if the lens was shut so the pull
+    // is actually visible, and re-run the relief post-pass. Returns false when there's
+    // no focusable surface (sky / off-frame / raymarch off) so the click falls through
+    // to the normal 2D recenter.
+    private const double DefaultFocusPickAperture = 0.15;
+
+    private bool OnReliefFocusPick(FracturingFog.Input.PointerInput e)
+    {
+        if (!_renderHost.TryPickReliefDofFocus(e.X, e.Y, e.ClientWidth, e.ClientHeight,
+                out double focus))
+            return false;
+
+        var p = ViewState.FractalParameters;
+        p.Relief2DDofFocusDistance = focus;
+        if (p.Relief2DDofApertureRadius <= 0.0)
+            p.Relief2DDofApertureRadius = DefaultFocusPickAperture;
+
+        // Relief DOF is a raymarch post-pass — no fractal recompute needed.
+        _renderHost.RepaintWithPostFx();
+        StatusText = $"DOF focus → {focus:0.###}";
+        return true;
+    }
 
     private void OnInputViewChanged(object? sender, ViewChangedArgs e)
     {
