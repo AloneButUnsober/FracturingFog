@@ -230,6 +230,16 @@ code.
 - **Remaining:** thin-lens DOF on the other 3D families + GPU kernels (#567; CPU
   Mandelbulb landed in PR #570), motion blur unify scene+video + live/poster (#568),
   in-camera exposure control.
+- **Thin-lens DOF on the 3D cameras — CPU Mandelbulb (landed — PR #570, #567):**
+  `LightingFxData.DofThinLens` averages `DofSamples` primary rays jittered across the
+  aperture disc + re-aimed through the focal point (`CameraDof.ThinLensRay`) — real
+  bokeh that integrates the scene, replacing the screen-space gather on that camera.
+  HDR-correct (averages in linear when tonemap/bloom is on), seeded/deterministic,
+  byte-identical off / aperture 0. SSAO + edge-ink are bypassed while it's on (they
+  need the G-buffer the lens path skips). Wired into the preset DTO + Volumetric FX
+  dialog. Remaining on #567: the other 3D families + the GPU raymarch kernels.
+- **Remaining:** thin-lens DOF on the other 3D families + GPU kernels (#567),
+  **motion blur** over Scene time (deferred → issue #568), in-camera exposure control.
 
 ### S4 — Guided denoiser (À-Trous / SVGF-lite) ● (#402)
 AO, soft shadow and reflections are Monte Carlo → noisy → paid for with

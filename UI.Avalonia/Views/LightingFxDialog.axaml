@@ -687,7 +687,7 @@
 
                 <!-- Reflection / Edge / Stereo / DoF -->
                 <Expander Header="Reflection / Edge / Stereo / DoF" HorizontalAlignment="Stretch">
-                    <Grid ColumnDefinitions="160,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto">
+                    <Grid ColumnDefinitions="160,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto">
                         <TextBlock Grid.Row="0" Grid.Column="0" Text="Reflection:" VerticalAlignment="Center"
                                    ToolTip.Tip="N-bounce DE-march along reflect(V,N). 0 = off." />
                         <Grid Grid.Row="0" Grid.Column="1" ColumnDefinitions="*,Auto" Margin="0,2">
@@ -811,9 +811,14 @@
                                        Text="{Binding DofSamples}" />
                         </Grid>
 
-                        <TextBlock Grid.Row="15" Grid.Column="0" Text="Stereo layout:" VerticalAlignment="Center"
+                        <TextBlock Grid.Row="15" Grid.Column="0" Text="Thin-lens DoF:" VerticalAlignment="Center"
+                                   ToolTip.Tip="Physically-based depth of field for the 3D-fractal raymarch camera: averages 'DoF samples' primary rays across the aperture disc, re-aimed through the focal point, so occluded geometry and silhouettes blur correctly (real bokeh) — instead of the screen-space depth gather. Uses the same aperture / focus / samples above. Off keeps the screen-space blur; aperture 0 is pinhole either way. (SSAO / edge-ink are bypassed while thin-lens is on.)" />
+                        <CheckBox Grid.Row="15" Grid.Column="1" IsChecked="{Binding DofThinLens, Mode=TwoWay}"
+                                  Content="physically-based lens (real bokeh)" Margin="0,2" />
+
+                        <TextBlock Grid.Row="16" Grid.Column="0" Text="Stereo layout:" VerticalAlignment="Center"
                                    ToolTip.Tip="FullSbs = each eye full width (2W x H). HalfSbs = each eye squeezed to W/2 (W x H, anamorphic) — mono dimensions, smaller files; the 3D TV / VR player un-squeezes per eye. Used only when Stereo mode is on." />
-                        <ComboBox Grid.Row="15" Grid.Column="1" HorizontalAlignment="Stretch"
+                        <ComboBox Grid.Row="16" Grid.Column="1" HorizontalAlignment="Stretch"
                                   ItemsSource="{Binding StereoLayouts}"
                                   SelectedItem="{Binding StereoLayout, Mode=TwoWay}"
                                   Margin="0,2" />
