@@ -405,6 +405,13 @@ public sealed partial class FractalParamsViewModel
     }
     /// <summary>IOR / absorption controls only matter once transmission is on.</summary>
     public bool GlassEnabled => _p.Lighting.Transmission > 0.0;
+    // S5 (#406) — full internal glass march (real thickness + exit refraction) vs
+    // the single-interface env approximation. Only bites when Transmission > 0.
+    public bool RefractInternalMarch
+    {
+        get => _p.Lighting.RefractInternalMarch;
+        set { MutateLighting(r => r.Fx.RefractInternalMarch = value); this.RaisePropertyChanged(); Fire(); }
+    }
     public double SpecularStrength
     {
         get => _p.Lighting.SpecularStrength;
