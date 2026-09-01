@@ -386,11 +386,20 @@ animated.
   Reset/notify wired. **User doc:** the froxel path is documented for users in
   `Docs/User/Volumetric-Lighting-Guide.md` §9 (what it is, quality table, temporal, batch grammar) —
   closes the S6 "UI + batch / user doc" checkbox on #408. 10 tests (`S6FroxelQualityTests`).
-- **Remaining (enhancement follow-ups):** render Relief 3D in `SceneVideoRenderer` / the
-  batch video loop (both flat today) so those offline sequences can consume the froxel
-  temporal seam; GPU temporal; sub-cell reprojection under continuous camera motion. The
-  core froxel unified-volume march (D3D + Vulkan + host wiring + temporal + poster seam +
-  quality controls + user doc) is complete.
+- **Relief 3D in the batch video loop (landed):** `BatchRenderer.RenderVideo` now renders
+  each frame through the composed relief+froxel path (`PosterRenderer.RenderToPixels`) when
+  any `--relief` flag is set, threading ONE shared `FroxelHistory` across frames — so the
+  froxel temporal-reprojection seam (#468) finally has a consumer. New `--relief-froxel-temporal`
+  / `--relief-froxel-feedback` batch flags make it reachable (imply `--relief-froxel`). The
+  opts→`FractalParameters` mapping was extracted to a shared `BuildFractalParameters(opts)`
+  reused by image + video (no duplication). Relief off → the flat fast path, byte-identical.
+  Verified headless: a relief video frame differs from a flat one; a temporal froxel video
+  renders clean. 3 CLI-grammar tests (`S6VideoReliefBatchTests`).
+- **Remaining (enhancement follow-ups):** the same for `SceneVideoRenderer` (Scene Engine, its
+  own render settings) + the batch **slideshow** legs; GPU temporal; sub-cell reprojection
+  under continuous camera motion. The core froxel unified-volume march (D3D + Vulkan + host
+  wiring + temporal + poster seam + quality controls + user doc + batch-video consumer) is
+  complete.
 
 ### S7 — Float / multi-layer EXR export ☑ (#394)
 Enabler for S1 (AOV layers), S2 (linear/HDR intermediate) and S6 (HDR

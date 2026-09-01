@@ -234,6 +234,10 @@ namespace FracturingFog.Batch
         // Implies froxel + relief + raymarch.
         public FracturingFog.Models.FroxelQuality? ReliefFroxelQuality { get; set; }
 
+        // Froxel temporal reprojection (#468). Implies froxel. Feedback 0..0.99.
+        public bool ReliefFroxelTemporal { get; set; }
+        public double? ReliefFroxelFeedback { get; set; }
+
         // Per-light fog contribution bitmask (roadmap S6, #408). null = leave default
         // (all lights fog). 0..7.
         public int? FogLightMask { get; set; }
@@ -750,6 +754,22 @@ namespace FracturingFog.Batch
                         opts.Relief = true;
                         break;
 
+                    case BatchFlags.ReliefFroxelTemporal:
+                        opts.ReliefFroxelTemporal = true;
+                        opts.ReliefFroxel = true;
+                        opts.ReliefRaymarch = true;
+                        opts.Relief = true;
+                        break;
+
+                    case BatchFlags.ReliefFroxelFeedback:
+                        if (!NextDouble(args, ref i, a, out double rff, out error)) return false;
+                        opts.ReliefFroxelFeedback = rff;
+                        opts.ReliefFroxelTemporal = true;
+                        opts.ReliefFroxel = true;
+                        opts.ReliefRaymarch = true;
+                        opts.Relief = true;
+                        break;
+
                     case BatchFlags.FogLightMask:
                         if (!NextInt(args, ref i, a, out int flm, out error)) return false;
                         opts.FogLightMask = flm;
@@ -928,6 +948,8 @@ namespace FracturingFog.Batch
                 { error = "--relief-camera-zoom must be > 0."; return false; }
             if (opts.ReliefFarDetail is < 0.15 or > 1.0)
                 { error = "--relief-far-detail must be 0.15..1 (1 = off, lower = more far detail)."; return false; }
+            if (opts.ReliefFroxelFeedback is < 0.0 or > 0.99)
+                { error = "--relief-froxel-feedback must be 0..0.99."; return false; }
             if (opts.ReliefDofAperture is < 0 or > 1)
                 { error = "--dof-aperture must be 0..1."; return false; }
             if (opts.ReliefDofFocus is < 0)
