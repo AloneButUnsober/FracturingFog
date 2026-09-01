@@ -431,11 +431,23 @@ animated.
   the CPU `FroxelHistory` (mean 0.000 / max 1 LSB) AND that temporal actually shifts the result
   (~98% of pixels vs the single-frame composite). Seam tests updated (`FroxelTemporal_WithKernels_
   RunsGpuFroxelWithFeedback` + a non-temporal zero-feedback lock). The shared HLSL stays
-  one-source/two-compiler for the Vulkan follow-up.
+  one-source/two-compiler for the Vulkan backend.
+- **Vulkan froxel temporal reprojection (landed):** the cross-platform `FroxelVolumeVulkanKernel`
+  (DXC → SPIR-V) matched the D3D temporal path. The shared HLSL's `gHistory` (`u1`) landed with the
+  D3D slice; the Vulkan kernel gained the matching device-side history: a 6th descriptor binding
+  (`u1` → 201 via the `-fvk-u-shift` map), a persistent `float4/cell` history buffer that survives
+  across `Composite` calls (reallocated only on a cell-count change → drops validity), grid-key
+  invalidation, and the `feedback` overload. `u1` is statically referenced by `CSFroxelIntegrate`,
+  so it is in the descriptor set layout even at feedback 0 (bound but never read/written then) —
+  the `--vulkanfroxel` gate is unregressed (GT 710: mean 0.059 / max 13, single-frame). New
+  `--vulkanfroxeltemporal` gate (the Vulkan sibling of `--froxelgputemporal`): two frames, a changed
+  medium (grid fixed), the Vulkan device-history blend tracks the CPU `FroxelHistory` (GT 710: mean
+  0.049 / max 11) and temporal shifts ~98% of pixels. Both backends now reach full froxel parity
+  (populate + integrate + composite + temporal) against the one CPU oracle.
 - **Remaining (enhancement follow-ups):** cross-frame froxel **temporal reprojection** for
   scenes (the offline `SceneVideoRenderer` deferred it above — CPU froxel there is spatial-only);
-  a cross-platform Vulkan froxel kernel; sub-cell reprojection under continuous camera motion. The
-  core froxel unified-volume march (D3D + host wiring + CPU & GPU temporal + poster seam + quality
+  sub-cell reprojection under continuous camera motion. The
+  core froxel unified-volume march (D3D + Vulkan + host wiring + CPU & GPU temporal + poster seam + quality
   controls + user doc + batch-video/slideshow/scene consumers) is complete.
 
 ### S7 — Float / multi-layer EXR export ☑ (#394)

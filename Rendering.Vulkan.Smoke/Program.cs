@@ -37,6 +37,7 @@ internal static class Program
         bool pturbSa = Array.Exists(args, a => string.Equals(a, "--vulkanpturbsa", StringComparison.OrdinalIgnoreCase));
         bool reliefProbe = Array.Exists(args, a => string.Equals(a, "--vulkanrelief", StringComparison.OrdinalIgnoreCase));
         bool froxelProbe = Array.Exists(args, a => string.Equals(a, "--vulkanfroxel", StringComparison.OrdinalIgnoreCase));
+        bool froxelTemporalProbe = Array.Exists(args, a => string.Equals(a, "--vulkanfroxeltemporal", StringComparison.OrdinalIgnoreCase));
 
         // Deep-dc recheck is pure CPU numeric (GPU runs the identical double dc) —
         // no Vulkan device required, so dispatch before instance creation.
@@ -85,6 +86,9 @@ internal static class Program
 
             if (reliefProbe)
                 return ReliefRaymarchProbe.Run(ctx);
+
+            if (froxelTemporalProbe)
+                return FroxelVolumeProbe.RunTemporal(ctx);
 
             if (froxelProbe)
                 return FroxelVolumeProbe.Run(ctx);
