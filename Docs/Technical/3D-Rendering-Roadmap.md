@@ -395,8 +395,18 @@ animated.
   reused by image + video (no duplication). Relief off → the flat fast path, byte-identical.
   Verified headless: a relief video frame differs from a flat one; a temporal froxel video
   renders clean. 3 CLI-grammar tests (`S6VideoReliefBatchTests`).
+- **Relief 3D in the batch slideshow (landed):** `BatchRenderer.RenderSlideshow` now carries
+  Relief 3D on BOTH cadences — the animated video-zoom legs (`RenderVideoSlideshowLegs`) and
+  the still-image cross-fade loop. A shared `RenderReliefRegionFrame` helper renders a
+  region+theme through the same composed relief+froxel path, carrying the region's
+  extended-precision centre limbs; ONE shared `FroxelHistory` threads the froxel temporal seam
+  (#468) across the show. Theme selection keeps the cheap flat all-black probe; only the final
+  frame re-renders in relief. Cross-fade sub-renders pass a null history so the temporal
+  timeline is not double-advanced within one output frame. Relief off → the flat fast path,
+  byte-identical. Verified headless: a slideshow frame renders as a true 3D raymarch (terrain,
+  perspective, fog, silhouette) vs the flat 2D frame. +1 CLI-grammar test.
 - **Remaining (enhancement follow-ups):** the same for `SceneVideoRenderer` (Scene Engine, its
-  own render settings) + the batch **slideshow** legs; GPU temporal; sub-cell reprojection
+  own render settings); GPU temporal; sub-cell reprojection
   under continuous camera motion. The core froxel unified-volume march (D3D + Vulkan + host
   wiring + temporal + poster seam + quality controls + user doc + batch-video consumer) is
   complete.
