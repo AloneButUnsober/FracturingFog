@@ -53,7 +53,7 @@ public sealed unsafe class FroxelVolumeVulkanKernel : IDisposable, IFroxelVolume
         public int H; public float Near, Far, Extent;
         public float BaseDensity, Extinction, Anisotropy, NoiseAmount;
         public float NoiseScale; public int NoiseOctaves; public float ViewX, ViewY;
-        public float ViewZ; public int NumLights; public float Pad0, Pad1;
+        public float ViewZ; public int NumLights; public float Feedback; public int HistoryValid;
         public int Type0; public uint Color0; public float I0, Range0;
         public float Dir0x, Dir0y, Dir0z, Inner0;
         public float Pos0x, Pos0y, Pos0z, Outer0;
@@ -82,8 +82,15 @@ public sealed unsafe class FroxelVolumeVulkanKernel : IDisposable, IFroxelVolume
 
     private Allocated _params;
     private Allocated _volume;               // float4/cell (u0 integrate / t2 composite)
+    private Allocated _history;              // float4/cell (u1 integrate) — S6 #408 temporal
     private Allocated _beauty, _depth, _out;  // output-sized (n)
-    private int _volumeCells, _outPixels;
+    private int _volumeCells, _historyCells, _outPixels;
+    // S6 #408 temporal — persistent previous-frame PRE-integration scatter+ext grid
+    // (the Vulkan twin of the D3D kernel's device history + the CPU FroxelHistory).
+    // Survives across Composite calls; keyed by grid identity so a camera move that
+    // changes the slab re-seeds cleanly.
+    private long _historyKey;
+    private bool _historyValid;
     private bool _disposed;
 
     public double LastDispatchMs { get; private set; }
@@ -117,6 +124,7 @@ public sealed unsafe class FroxelVolumeVulkanKernel : IDisposable, IFroxelVolume
         // 1-cell / 1-px stubs so a resize-before-first-dispatch path never binds a
         // zero-handle descriptor (Run reallocates to the real sizes anyway).
         EnsureVolumeBuffer(1);
+        EnsureHistoryBuffer(1);
         EnsureOutputBuffers(1);
     }
 
@@ -145,6 +153,17 @@ public sealed unsafe class FroxelVolumeVulkanKernel : IDisposable, IFroxelVolume
     /// writing the packed-ARGB result into <paramref name="dst"/>. The Vulkan twin of
     /// <see cref="FroxelCameraVolume.Apply"/>.</summary>
     public void Composite(in FroxelGpuUniforms u, uint[] beauty, float[] worldDepth, int w, int h, uint[] dst)
+        => Composite(in u, beauty, worldDepth, w, h, dst, feedback: 0.0);
+
+    /// <summary>Temporal overload (roadmap S6, #408). When <paramref name="feedback"/>
+    /// &gt; 0 the pre-integration froxel volume is exponentially blended with this
+    /// kernel's persistent device-side history for the same grid identity, then stored
+    /// back — the Vulkan twin of the D3D <c>FroxelGpuKernel</c> temporal path and the
+    /// CPU <see cref="FroxelHistory"/>. A grid change (camera move) re-seeds cleanly.
+    /// <paramref name="feedback"/> &lt;= 0 is byte-identical to the single-frame
+    /// composite (the history buffer is bound but never read/written by the shader).</summary>
+    public void Composite(in FroxelGpuUniforms u, uint[] beauty, float[] worldDepth, int w, int h, uint[] dst,
+        double feedback)
     {
         if (_disposed) throw new ObjectDisposedException(nameof(FroxelVolumeVulkanKernel));
         if (beauty == null) throw new ArgumentNullException(nameof(beauty));
@@ -158,14 +177,26 @@ public sealed unsafe class FroxelVolumeVulkanKernel : IDisposable, IFroxelVolume
         var g = u.Grid;
         int cells = g.DimX * g.DimY * g.DimZ;
 
+        // Clamp to match FroxelHistory.BlendAndStore / the D3D kernel.
+        double fb = feedback;
+        if (fb < 0.0) fb = 0.0; else if (fb > 0.999) fb = 0.999;
+        bool temporal = fb > 0.0;
+        long key = temporal ? FroxelHistory.GridKey(g) : 0;
+
         long t0 = Stopwatch.GetTimestamp();
         EnsureVolumeBuffer(cells);
+        EnsureHistoryBuffer(cells);   // persists across calls; realloc (size change) drops validity
         EnsureOutputBuffers(n);
+
+        // History validity: only reuse when temporal is on AND the buffer already holds
+        // the previous frame for THIS grid. A key change invalidates here; a size change
+        // was invalidated by EnsureHistoryBuffer.
+        bool historyValid = temporal && _historyValid && _historyKey == key && _historyCells >= cells;
 
         // Uploads.
         fixed (uint* p = beauty) WriteBytes(_beauty, p, n * sizeof(uint));
         fixed (float* p = worldDepth) WriteBytes(_depth, p, n * sizeof(float));
-        var blob = BuildBlob(in u, w, h);
+        var blob = BuildBlob(in u, w, h, (float)fb, historyValid ? 1 : 0);
         WriteBytes(_params, &blob, sizeof(FroxelParamsBlob));
 
         // Two descriptor sets from the shared layout {b0, t0, t1, t2, u0}: the
@@ -179,7 +210,8 @@ public sealed unsafe class FroxelVolumeVulkanKernel : IDisposable, IFroxelVolume
             var poolSizes = stackalloc DescriptorPoolSize[2]
             {
                 new DescriptorPoolSize { Type = DescriptorType.UniformBuffer, DescriptorCount = 2 },
-                new DescriptorPoolSize { Type = DescriptorType.StorageBuffer, DescriptorCount = 8 },
+                // 5 SSBO/set (t0,t1,t2,u0,u1) × 2 sets = 10.
+                new DescriptorPoolSize { Type = DescriptorType.StorageBuffer, DescriptorCount = 10 },
             };
             var dpci = new DescriptorPoolCreateInfo
             {
@@ -198,10 +230,12 @@ public sealed unsafe class FroxelVolumeVulkanKernel : IDisposable, IFroxelVolume
             Check(_vk.AllocateDescriptorSets(_device, in dsai, sets), "vkAllocateDescriptorSets");
             DescriptorSet integrateSet = sets[0], compositeSet = sets[1];
 
-            // Bindings per set: {0:params, 100:beauty, 101:depth, 102:volume, 200:<rw>}.
-            // Integrate's u0 (200) = volume; composite's u0 (200) = output.
-            WriteSet(integrateSet, _params.Buffer, _beauty.Buffer, _depth.Buffer, _volume.Buffer, _volume.Buffer);
-            WriteSet(compositeSet, _params.Buffer, _beauty.Buffer, _depth.Buffer, _volume.Buffer, _out.Buffer);
+            // Bindings per set: {0:params, 100:beauty, 101:depth, 102:volume, 200:<rw>,
+            // 201:history}. Integrate's u0 (200) = volume + u1 (201) = history (temporal
+            // read/write); composite's u0 (200) = output (it never touches u1, but the
+            // shared layout requires a valid buffer there → bind history harmlessly).
+            WriteSet(integrateSet, _params.Buffer, _beauty.Buffer, _depth.Buffer, _volume.Buffer, _volume.Buffer, _history.Buffer);
+            WriteSet(compositeSet, _params.Buffer, _beauty.Buffer, _depth.Buffer, _volume.Buffer, _out.Buffer, _history.Buffer);
 
             var cbai = new CommandBufferAllocateInfo
             {
@@ -251,6 +285,10 @@ public sealed unsafe class FroxelVolumeVulkanKernel : IDisposable, IFroxelVolume
             };
             Check(_vk.QueueSubmit(_ctx.ComputeQueue, 1, &submit, default), "vkQueueSubmit");
             Check(_vk.QueueWaitIdle(_ctx.ComputeQueue), "vkQueueWaitIdle");
+
+            // The integrate pass wrote the blended scatter+ext into the history buffer;
+            // it is now the previous frame for the next Composite with this grid.
+            if (temporal) { _historyKey = key; _historyValid = true; }
         }
         finally
         {
@@ -266,19 +304,20 @@ public sealed unsafe class FroxelVolumeVulkanKernel : IDisposable, IFroxelVolume
         LastReadbackMs = (tEnd - tDispatch) * 1000.0 / freq;
     }
 
-    // Update one descriptor set's five bindings {0, 100, 101, 102, 200}.
-    private void WriteSet(DescriptorSet set, Buffer b0, Buffer t0, Buffer t1, Buffer t2, Buffer u0)
+    // Update one descriptor set's six bindings {0, 100, 101, 102, 200, 201}.
+    // u1 (201) = the temporal history buffer (S6 #408).
+    private void WriteSet(DescriptorSet set, Buffer b0, Buffer t0, Buffer t1, Buffer t2, Buffer u0, Buffer u1)
     {
-        Buffer* bufs = stackalloc Buffer[5] { b0, t0, t1, t2, u0 };
-        uint* binds = stackalloc uint[5] { 0, (uint)TShift, (uint)TShift + 1, (uint)TShift + 2, (uint)UShift };
-        var types = stackalloc DescriptorType[5]
+        Buffer* bufs = stackalloc Buffer[6] { b0, t0, t1, t2, u0, u1 };
+        uint* binds = stackalloc uint[6] { 0, (uint)TShift, (uint)TShift + 1, (uint)TShift + 2, (uint)UShift, (uint)UShift + 1 };
+        var types = stackalloc DescriptorType[6]
         {
             DescriptorType.UniformBuffer, DescriptorType.StorageBuffer, DescriptorType.StorageBuffer,
-            DescriptorType.StorageBuffer, DescriptorType.StorageBuffer,
+            DescriptorType.StorageBuffer, DescriptorType.StorageBuffer, DescriptorType.StorageBuffer,
         };
-        var infos = stackalloc DescriptorBufferInfo[5];
-        var writes = stackalloc WriteDescriptorSet[5];
-        for (int i = 0; i < 5; i++)
+        var infos = stackalloc DescriptorBufferInfo[6];
+        var writes = stackalloc WriteDescriptorSet[6];
+        for (int i = 0; i < 6; i++)
         {
             infos[i] = new DescriptorBufferInfo { Buffer = bufs[i], Offset = 0, Range = Vk.WholeSize };
             writes[i] = new WriteDescriptorSet
@@ -288,10 +327,10 @@ public sealed unsafe class FroxelVolumeVulkanKernel : IDisposable, IFroxelVolume
                 DescriptorType = types[i], PBufferInfo = &infos[i],
             };
         }
-        _vk.UpdateDescriptorSets(_device, 5, writes, 0, null);
+        _vk.UpdateDescriptorSets(_device, 6, writes, 0, null);
     }
 
-    private static FroxelParamsBlob BuildBlob(in FroxelGpuUniforms u, int w, int h)
+    private static FroxelParamsBlob BuildBlob(in FroxelGpuUniforms u, int w, int h, float feedback, int historyValid)
     {
         var g = u.Grid;
         var m = u.Medium;
@@ -310,7 +349,7 @@ public sealed unsafe class FroxelVolumeVulkanKernel : IDisposable, IFroxelVolume
             Anisotropy = (float)m.Anisotropy, NoiseAmount = (float)m.NoiseAmount,
             NoiseScale = (float)m.NoiseScale, NoiseOctaves = m.NoiseOctaves,
             ViewX = (float)m.ViewDx, ViewY = (float)m.ViewDy,
-            ViewZ = (float)m.ViewDz, NumLights = nl, Pad0 = 0f, Pad1 = 0f,
+            ViewZ = (float)m.ViewDz, NumLights = nl, Feedback = feedback, HistoryValid = historyValid,
             Type0 = L0.Type, Color0 = L0.Color, I0 = (float)L0.Intensity, Range0 = (float)L0.Range,
             Dir0x = (float)L0.Lx, Dir0y = (float)L0.Ly, Dir0z = (float)L0.Lz, Inner0 = (float)L0.InnerCos,
             Pos0x = (float)L0.PosX, Pos0y = (float)L0.PosY, Pos0z = (float)L0.PosZ, Outer0 = (float)L0.OuterCos,
@@ -326,12 +365,14 @@ public sealed unsafe class FroxelVolumeVulkanKernel : IDisposable, IFroxelVolume
     // ── pipelines ───────────────────────────────────────────────────────────────
     private void BuildPipelines()
     {
-        // Shared layout {b0 UBO, t0/t1/t2 SSBO, u0 SSBO}. The integrate pipeline uses
-        // {b0, u0}; the composite pipeline uses all five. A superset layout is fine —
-        // each pipeline only touches the bindings it declares.
-        uint* binds = stackalloc uint[5] { 0, (uint)TShift, (uint)TShift + 1, (uint)TShift + 2, (uint)UShift };
-        var bindings = stackalloc DescriptorSetLayoutBinding[5];
-        for (int i = 0; i < 5; i++)
+        // Shared layout {b0 UBO, t0/t1/t2 SSBO, u0 SSBO, u1 SSBO}. The integrate pipeline
+        // uses {b0, u0, u1(temporal)}; the composite pipeline uses {b0, t0, t1, t2, u0}.
+        // A superset layout is fine — each pipeline only touches the bindings it declares.
+        // u1 (201) is the S6 #408 temporal history, statically referenced by
+        // CSFroxelIntegrate so it MUST be in the layout even when feedback is 0.
+        uint* binds = stackalloc uint[6] { 0, (uint)TShift, (uint)TShift + 1, (uint)TShift + 2, (uint)UShift, (uint)UShift + 1 };
+        var bindings = stackalloc DescriptorSetLayoutBinding[6];
+        for (int i = 0; i < 6; i++)
             bindings[i] = new DescriptorSetLayoutBinding
             {
                 Binding = binds[i],
@@ -341,7 +382,7 @@ public sealed unsafe class FroxelVolumeVulkanKernel : IDisposable, IFroxelVolume
         var dslci = new DescriptorSetLayoutCreateInfo
         {
             SType = StructureType.DescriptorSetLayoutCreateInfo,
-            BindingCount = 5, PBindings = bindings,
+            BindingCount = 6, PBindings = bindings,
         };
         Check(_vk.CreateDescriptorSetLayout(_device, in dslci, null, out _dsl), "vkCreateDescriptorSetLayout");
 
@@ -407,6 +448,19 @@ public sealed unsafe class FroxelVolumeVulkanKernel : IDisposable, IFroxelVolume
         FreeBuffer(ref _volume);
         _volume = AllocBuffer((ulong)(cells * 4 * sizeof(float)), BufferUsageFlags.StorageBufferBit);
         _volumeCells = cells;
+    }
+
+    // S6 #408 — persistent temporal history (float4/cell). A size change reallocates
+    // and drops validity so the next frame re-seeds; otherwise the buffer (and its
+    // previous-frame contents) survives across Composite calls.
+    private void EnsureHistoryBuffer(int cells)
+    {
+        if (cells < 1) cells = 1;
+        if (_history.Buffer.Handle != 0 && _historyCells == cells) return;
+        FreeBuffer(ref _history);
+        _history = AllocBuffer((ulong)(cells * 4 * sizeof(float)), BufferUsageFlags.StorageBufferBit);
+        _historyCells = cells;
+        _historyValid = false;   // fresh buffer → re-seed
     }
 
     private void EnsureOutputBuffers(int n)
@@ -493,6 +547,7 @@ public sealed unsafe class FroxelVolumeVulkanKernel : IDisposable, IFroxelVolume
         if (_compositeModule.Handle != 0) _vk.DestroyShaderModule(_device, _compositeModule, null);
         FreeBuffer(ref _params);
         FreeBuffer(ref _volume);
+        FreeBuffer(ref _history);
         FreeBuffer(ref _beauty);
         FreeBuffer(ref _depth);
         FreeBuffer(ref _out);
