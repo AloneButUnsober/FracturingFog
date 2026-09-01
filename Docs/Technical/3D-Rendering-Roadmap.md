@@ -208,8 +208,19 @@ code.
   DOF no longer forces the CPU trace. `--reliefgpuraymarch` gate exercises DOF (mean
   channel diff 0.267, 0 edge pixels) — the lens averaging keeps the disc-trig float-vs-
   double divergence inside the gate band. Pinhole stays byte-identical.
-- **Remaining:** click-to-focus, DOF on the 3D-fractal cameras, in-camera exposure
-  control, **motion blur** (own slice over Scene time).
+- **Click-to-focus (landed — PR #569):** Alt+double-click the render sets the relief
+  DOF focal plane to whatever surface is under the cursor.
+  `HeightfieldRaymarch2D.FocusDistanceAtPixel` renders the depth AOV once with the
+  same oblique camera + field the screen used and reads back the centre-tap ray
+  distance (the pinhole plane, so an open aperture doesn't bias the pick); `NoFocus`
+  (0) on a sky miss / off-frame / raymarch-off. Routed via an optional
+  `IFractalInputController.ReliefFocusPickHandler` (Alt+double-click, else normal
+  recenter) → `IFractalRenderHost.TryPickReliefDofFocus` (read-only, mirrors the live
+  albedo + `_reliefHeight`) → `MainViewModel` writes the live params (same instance
+  the Relief 3D dialog edits, no desync), opens a modest aperture if shut, re-runs the
+  relief post-pass. 8 tests (engine depth pick + controller Alt-gating).
+- **Remaining:** DOF on the 3D-fractal cameras (thin-lens, deferred → issue #567),
+  **motion blur** over Scene time (deferred → issue #568), in-camera exposure control.
 
 ### S4 — Guided denoiser (À-Trous / SVGF-lite) ● (#402)
 AO, soft shadow and reflections are Monte Carlo → noisy → paid for with
