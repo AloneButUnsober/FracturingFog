@@ -187,6 +187,12 @@ namespace FracturingFog.Export
             var frozenCache = new Dictionary<int, uint[]>();
             int framesWritten = 0;
 
+            // Cross-frame froxel temporal (#468 / roadmap S6). One history shared
+            // across the whole render; the grid-key check inside re-seeds it at each
+            // shot cut (camera grid change). Threaded only into clean continuous
+            // frames — see the guard in the sub-frame loop below.
+            var froxelHistory = new FracturingFog.Rendering.Lighting.FroxelHistory();
+
             using (var png = new PngSequenceWriter(pngFolder, w, h))
             {
                 foreach (var frame in plan.Frames)
@@ -213,6 +219,13 @@ namespace FracturingFog.Export
                     bool frozenComposite = frame.CompositeTransition
                         && (visual == SceneTransitionKind.Crossfade || visual == SceneTransitionKind.LightSweep);
 
+                    // Cross-frame froxel temporal only advances on a clean continuous
+                    // frame: exactly one motion-blur sub-frame and no frozen composite,
+                    // so there is one froxel store per output frame and "previous frame"
+                    // is unambiguous. Motion-blur (>1 sub-frame) and frozen crossfade /
+                    // light-sweep frames render froxel spatial-only (null history).
+                    bool cleanFroxelFrame = frame.SubFrames.Length == 1 && !frozenComposite;
+
                     // ── Accumulation motion blur: weighted average of sub-frames ──
                     foreach (var s in frame.SubFrames)
                     {
@@ -222,7 +235,8 @@ namespace FracturingFog.Export
                             (morphBase != null && s.OriginalIndex == frame.PrimaryOriginalIndex)
                                 ? morphBase : null;
                         uint[] buf = RenderShotFrame(resolved, s.OriginalIndex, s.LocalTime, w, h, ct,
-                            overrideBase, s.GlobalTime, globalTracks, audioSource, audioTracks);
+                            overrideBase, s.GlobalTime, globalTracks, audioSource, audioTracks,
+                            cleanFroxelFrame ? froxelHistory : null);
                         float wt = (float)s.Weight;
                         for (int i = 0; i < n; i++)
                         {
@@ -345,7 +359,8 @@ namespace FracturingFog.Export
             double globalTime = 0.0,
             IReadOnlyList<SceneGlobalTrack>? globalTracks = null,
             IAudioModulationSource? audioSource = null,
-            IReadOnlyList<SceneAudioTrack>? audioTracks = null)
+            IReadOnlyList<SceneAudioTrack>? audioTracks = null,
+            FracturingFog.Rendering.Lighting.FroxelHistory? froxelHistory = null)
         {
             if (!cache.TryGetValue(originalIndex, out var shot))
                 return BlackFrame(w, h);
@@ -413,6 +428,7 @@ namespace FracturingFog.Export
                 Quality = shot.Quality,
                 ColorMap = shot.Theme,
                 FractalParameters = p,
+                FroxelHistory = froxelHistory,   // #468 cross-frame froxel temporal (null = spatial-only)
             };
 
             // Relief 3D (#408, scene). When the shot's params enable the oblique
@@ -424,11 +440,18 @@ namespace FracturingFog.Export
             // composed colour buffer BEFORE b/c / view-transform / interior
             // composite, so it slots straight into the accumulator.
             //
-            // Froxel history is per-call (the req carries none) so froxel fog is
-            // spatial-only here: motion-blur sub-frame averaging, shot cuts, and
-            // frame-composited transitions make a single shared cross-frame
-            // temporal timeline ill-defined. Cross-frame froxel temporal
-            // reprojection for scenes is a deliberate follow-up (see roadmap S6).
+            // Cross-frame froxel temporal (#468, roadmap S6). A shared FroxelHistory
+            // is threaded here (froxelHistory) so animated fog blends toward the
+            // previous OUTPUT frame's pre-integration grid, exactly like the batch
+            // video/slideshow legs. The caller only supplies it on clean continuous
+            // frames — a single motion-blur sub-frame, no frozen composite — so the
+            // "one previous frame per store" model stays well-defined; motion-blur
+            // sub-frame averaging and frozen crossfade/light-sweep frames pass null
+            // (spatial-only) instead. Shot cuts change the camera grid, so the
+            // grid-key check in FroxelHistory re-seeds automatically at each cut with
+            // no manual reset. Feedback still rides the shot params
+            // (Relief2DFroxelTemporal); a null history or feedback 0 is byte-identical
+            // to the single-frame path.
             if (p.Relief2DEnabled && p.Relief2DRaymarch)
                 return PosterRenderer.RenderToPixels(req, ct, out _, out _);
 

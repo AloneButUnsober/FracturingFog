@@ -75,6 +75,66 @@ public sealed class S6SceneReliefRenderTests
         },
     };
 
+    // A multi-frame single-shot scene: at Fps frames-per-second over DurationSeconds
+    // it yields several output frames, all sharing one camera grid — so the shared
+    // cross-frame FroxelHistory (#468) is threaded on every (clean, single-sub-frame)
+    // frame with no shot cut to reseed it.
+    private static SceneData MultiFrameScene(string regionName) => new()
+    {
+        Name = "FF-S6-ReliefSceneMulti",
+        Shots =
+        {
+            new SceneShot
+            {
+                RegionName = regionName,
+                FractalType = FractalType.Mandelbrot,
+                DurationSeconds = 1.0,
+                Transition = SceneTransitionKind.Cut,
+            },
+        },
+    };
+
+    // Render a scene and return EVERY written frame as a decoded RGB buffer, in
+    // frame order. Frame folder is kept regardless of ffmpeg availability.
+    private static System.Collections.Generic.List<uint[]> RenderAllFrames(
+        SceneData scene, int w, int h, out int frameCount)
+    {
+        string outDir = Path.Combine(Path.GetTempPath(), "FracturingFog",
+            "s6-scene-relief-test", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(outDir);
+        var opts = new SceneVideoOptions
+        {
+            Width = w, Height = h,
+            Settings = new SceneRenderSettings { Fps = 4, MotionBlurSubframes = 1 },
+            OutputPath = outDir,
+            KeepFrames = true,
+        };
+
+        var result = SceneVideoRenderer.Render(scene, opts, null, CancellationToken.None);
+        Assert.True(result.FramesWritten > 0, result.Message);
+        Assert.NotNull(result.FrameFolder);
+        frameCount = result.FramesWritten;
+
+        var frames = new System.Collections.Generic.List<uint[]>();
+        for (int f = 1; f <= result.FramesWritten; f++)
+        {
+            string path = Path.Combine(result.FrameFolder!, $"frame_{f:000000}.png");
+            Assert.True(File.Exists(path), $"missing {path}");
+            using var bmp = SKBitmap.Decode(path);
+            Assert.NotNull(bmp);
+            var px = new uint[bmp.Width * bmp.Height];
+            for (int y = 0; y < bmp.Height; y++)
+                for (int x = 0; x < bmp.Width; x++)
+                {
+                    var c = bmp.GetPixel(x, y);
+                    px[y * bmp.Width + x] =
+                        0xFF000000u | ((uint)c.Red << 16) | ((uint)c.Green << 8) | c.Blue;
+                }
+            frames.Add(px);
+        }
+        return frames;
+    }
+
     private static uint[] RenderFirstFrame(SceneData scene, int w, int h)
     {
         string outDir = Path.Combine(Path.GetTempPath(), "FracturingFog",
@@ -156,5 +216,46 @@ public sealed class S6SceneReliefRenderTests
             Assert.True(reliefNonBlack > 0, "relief frame is all black");
         }
         finally { lib.RemoveUserRegion(flatName); lib.RemoveUserRegion(reliefName); }
+    }
+
+    // Cross-frame froxel temporal (#468 / roadmap S6): the renderer now threads ONE
+    // shared FroxelHistory across all output frames of a shot. This locks that the
+    // stateful shared history does not make a multi-frame relief scene non-
+    // deterministic or corrupt later frames: two full runs of the same multi-frame
+    // relief scene must be byte-identical frame-for-frame, every frame non-black.
+    // (Froxel volumetrics is off in a region-sourced scene today, so the history is
+    // threaded but unused — the byte-identical/no-regression contract. The froxel
+    // blend math itself is covered by FroxelTemporalSeamTests + the GPU/Vulkan gates.)
+    [Fact]
+    public void MultiFrame_Relief_Scene_Is_Deterministic_With_Shared_Froxel_History()
+    {
+        const int W = 96, H = 64;
+        var lib = FractalRegionLibrary.Instance;
+        string name = $"FF-S6ReliefMulti-{Guid.NewGuid():N}";
+        try
+        {
+            Assert.True(lib.AddUserRegion(Region(name, relief: true)));
+
+            var a = RenderAllFrames(MultiFrameScene(name), W, H, out int na);
+            var b = RenderAllFrames(MultiFrameScene(name), W, H, out int nb);
+
+            Assert.True(na >= 3, $"expected several frames, got {na}");
+            Assert.Equal(na, nb);
+            Assert.Equal(a.Count, b.Count);
+
+            for (int f = 0; f < a.Count; f++)
+            {
+                Assert.Equal(a[f].Length, b[f].Length);
+
+                int nonBlack = 0;
+                for (int i = 0; i < a[f].Length; i++)
+                {
+                    Assert.Equal(a[f][i], b[f][i]);          // deterministic across runs
+                    if ((a[f][i] & 0x00FFFFFF) != 0) nonBlack++;
+                }
+                Assert.True(nonBlack > 0, $"frame {f + 1} is all black");
+            }
+        }
+        finally { lib.RemoveUserRegion(name); }
     }
 }
