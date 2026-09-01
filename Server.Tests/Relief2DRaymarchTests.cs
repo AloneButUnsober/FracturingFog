@@ -1594,12 +1594,18 @@ public class ReliefGpuSeamTests
         public int SeenW, SeenH;
         public bool SawReliefBeauty;   // dst arrived carrying the relief stub's sentinel
         public bool SawDepth;          // depth guide arrived non-empty (relief AOV depth)
+        public double LastFeedback;    // S6 #408 — feedback the host passed (temporal weight)
 
         public void Composite(in FracturingFog.Rendering.Lighting.FroxelGpuUniforms u,
             uint[] beauty, float[] worldDepth, int w, int h, uint[] dst)
+            => Composite(in u, beauty, worldDepth, w, h, dst, 0.0);
+
+        public void Composite(in FracturingFog.Rendering.Lighting.FroxelGpuUniforms u,
+            uint[] beauty, float[] worldDepth, int w, int h, uint[] dst, double feedback)
         {
             Calls++;
             SeenW = w; SeenH = h;
+            LastFeedback = feedback;
             SawReliefBeauty = beauty.Length > 0 && beauty[0] == StubReliefKernel.Sentinel;
             SawDepth = worldDepth.Length > 0 && worldDepth[0] != 0f;
             for (int i = 0; i < dst.Length; i++) dst[i] = Sentinel;
@@ -1760,11 +1766,13 @@ public class ReliefGpuSeamTests
     }
 
     [Fact]
-    public void FroxelTemporal_ForcesCpuFroxel_EvenWithKernels()
+    public void FroxelTemporal_WithKernels_RunsGpuFroxelWithFeedback()
     {
-        // S6 (#408) temporal — temporal reprojection is a CPU-side blend, so even with
-        // GPU relief + froxel kernels attached, a temporal render must fall to the CPU
-        // froxel post-pass (neither GPU kernel dispatched).
+        // S6 (#408) temporal — the GPU froxel kernel now keeps its OWN device-side
+        // history, so a temporal render with GPU relief + froxel kernels attached runs
+        // the fully-GPU path (it no longer forces the CPU froxel post-pass). The host
+        // passes the temporal feedback weight to the froxel kernel; the GPU kernel
+        // blends against its history internally.
         int w = 64, h = 48;
         var (albedo, height) = Field(w, h);
         var fx = FracturingFog.Rendering.Lighting.LightingFxData.CreateDefault();
@@ -1775,6 +1783,7 @@ public class ReliefGpuSeamTests
         p.Lighting = fx;
         p.Relief2DFroxelVolumetrics = true;
         p.Relief2DFroxelTemporal = true;
+        p.Relief2DFroxelTemporalFeedback = 0.7;
 
         var relief = new StubReliefKernel();
         var froxel = new StubFroxelKernel();
@@ -1782,9 +1791,35 @@ public class ReliefGpuSeamTests
         var dst = new uint[w * h];
         HeightfieldRaymarch2D.Render(albedo, height, w, h, w, h, p, dst, out _, relief, null, froxel, hist);
 
-        Assert.Equal(0, relief.Calls);   // CPU trace, not the GPU relief kernel
-        Assert.Equal(0, froxel.Calls);   // CPU froxel post-pass, not the GPU froxel kernel
-        Assert.False(AllSentinel(dst));
+        Assert.Equal(1, relief.Calls);            // fog-free beauty + depth on the GPU
+        Assert.Equal(1, froxel.Calls);            // froxel composited on the GPU
+        Assert.Equal(0.7, froxel.LastFeedback, 6); // temporal feedback threaded through
+        Assert.True(froxel.SawDepth, "froxel should receive the relief depth AOV");
+        for (int i = 0; i < dst.Length; i++) Assert.Equal(StubFroxelKernel.Sentinel, dst[i]);
+    }
+
+    [Fact]
+    public void Froxel_NonTemporal_WithKernels_PassesZeroFeedback()
+    {
+        // Froxel on but temporal off → the GPU froxel path still runs, with feedback 0
+        // (single-frame, byte-identical to before temporal existed).
+        int w = 64, h = 48;
+        var (albedo, height) = Field(w, h);
+        var fx = FracturingFog.Rendering.Lighting.LightingFxData.CreateDefault();
+        fx.FogDensity = 0.6;
+        fx.Light1.Intensity = 1.0;
+
+        var p = ReliefParams(gpu: true);
+        p.Lighting = fx;
+        p.Relief2DFroxelVolumetrics = true;   // temporal left off
+
+        var relief = new StubReliefKernel();
+        var froxel = new StubFroxelKernel();
+        var dst = new uint[w * h];
+        HeightfieldRaymarch2D.Render(albedo, height, w, h, w, h, p, dst, out _, relief, null, froxel);
+
+        Assert.Equal(1, froxel.Calls);
+        Assert.Equal(0.0, froxel.LastFeedback, 6);
     }
 
     [Fact]

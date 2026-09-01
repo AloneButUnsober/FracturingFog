@@ -416,11 +416,27 @@ animated.
   shared cross-frame temporal timeline ill-defined. 2 Engine-side tests (`S6SceneReliefRenderTests`):
   a relief region resolves to raymarch-enabled params, and a one-shot scene renders a frame that
   differs from the flat render (relief actually applied, not a black wash).
+- **GPU froxel temporal reprojection (landed):** the GPU froxel kernel was single-frame —
+  turning on `Relief2DFroxelTemporal` forced the slow full-CPU froxel post-pass even with the
+  compute kernels attached. The D3D `FroxelGpuKernel` now keeps its OWN persistent device-side
+  history buffer (a `float4/cell` PRE-integration scatter+ext grid, `u1` in `CSFroxelIntegrate`):
+  each cell's scatter+extinction is exponentially blended toward the previous frame's, then stored
+  back — the exact GPU twin of `FroxelHistory.BlendAndStore`, keyed by grid identity so a camera
+  move re-seeds cleanly. `IFroxelVolumeKernel.Composite` gained a `feedback` overload (default-impl
+  ignores it, so a backend without device history stays single-frame). The host
+  (`HeightfieldRaymarch2D`) dropped the `!froxelTemporal` gate on the GPU froxel branch and threads
+  `Relief2DFroxelTemporalFeedback`. Feedback 0 (temporal off) is byte-identical to the single-frame
+  composite — the `--froxelgpu` gate is unchanged (mean 0.000 / max 1 LSB). New `--froxelgputemporal`
+  WARP gate: two frames with a changed medium (grid fixed) prove the GPU device-history blend tracks
+  the CPU `FroxelHistory` (mean 0.000 / max 1 LSB) AND that temporal actually shifts the result
+  (~98% of pixels vs the single-frame composite). Seam tests updated (`FroxelTemporal_WithKernels_
+  RunsGpuFroxelWithFeedback` + a non-temporal zero-feedback lock). The shared HLSL stays
+  one-source/two-compiler for the Vulkan follow-up.
 - **Remaining (enhancement follow-ups):** cross-frame froxel **temporal reprojection** for
-  scenes (deferred above); GPU temporal; sub-cell reprojection
-  under continuous camera motion. The core froxel unified-volume march (D3D + Vulkan + host
-  wiring + temporal + poster seam + quality controls + user doc + batch-video consumer) is
-  complete.
+  scenes (the offline `SceneVideoRenderer` deferred it above — CPU froxel there is spatial-only);
+  a cross-platform Vulkan froxel kernel; sub-cell reprojection under continuous camera motion. The
+  core froxel unified-volume march (D3D + host wiring + CPU & GPU temporal + poster seam + quality
+  controls + user doc + batch-video/slideshow/scene consumers) is complete.
 
 ### S7 — Float / multi-layer EXR export ☑ (#394)
 Enabler for S1 (AOV layers), S2 (linear/HDR intermediate) and S6 (HDR

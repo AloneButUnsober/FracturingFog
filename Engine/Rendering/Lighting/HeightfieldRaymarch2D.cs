@@ -335,9 +335,11 @@ public static class HeightfieldRaymarch2D
         // (and its god-ray branch) skip per-pixel fog. Forces the CPU trace (the
         // composite is a CPU post-pass). Default off → byte-identical.
         bool froxel = p.Relief2DFroxelVolumetrics && p.Relief2DRaymarch && fx.FogDensity > 0.0;
-        // S6 (#408) — temporal reprojection is a CPU-side blend on the froxel volume, so
-        // it needs the CPU froxel post-pass (with a persistent history). The GPU froxel
-        // kernel stays single-frame; temporal on → force the CPU froxel branch below.
+        // S6 (#408) — temporal reprojection on the froxel volume. The CPU froxel
+        // post-pass blends against the caller-supplied `froxelHistory`; the GPU froxel
+        // kernel keeps its OWN device-side history (so the GPU branch below handles
+        // temporal directly, no longer forcing the CPU path). This flag drives the CPU
+        // fallback only — it needs the caller history object to persist across frames.
         bool froxelTemporal = froxel && p.Relief2DFroxelTemporal && froxelHistory != null;
         LightingFxData froxelFx = fx;
         if (froxel) { fx.FogDensity = 0.0; fx.VolumeSteps = 0; }
@@ -409,7 +411,12 @@ public static class HeightfieldRaymarch2D
         // `froxelFx` carries the original fog knobs (fx has been fog-zeroed for the
         // beauty). Composite reads `dst` as beauty and writes `dst` — safe: the kernel
         // uploads the beauty before writing its own output buffer, no CPU aliasing.
-        if (froxel && !froxelTemporal && froxelKernel != null && gpuKernel != null && p.Relief2DGpuRaymarch
+        // S6 (#408) — temporal reprojection now runs on the GPU too: the froxel kernel
+        // keeps its OWN persistent device-side history (keyed by grid identity), so
+        // `Relief2DFroxelTemporal` no longer forces the CPU froxel branch. Feedback 0
+        // (temporal off) is the single-frame composite, byte-identical. The GPU history
+        // is kernel-owned and independent of the CPU-side `froxelHistory` object.
+        if (froxel && froxelKernel != null && gpuKernel != null && p.Relief2DGpuRaymarch
             && fx.DebugAov == AovView.Beauty && aovOk && !fx.HasAreaLight)
         {
             var u = ReliefUniforms.Build(w, h, hw, hh, sy, aspect, invLip, maxH, p, in fx);
@@ -418,7 +425,8 @@ public static class HeightfieldRaymarch2D
             float[] gdep = aov?.Depth ?? new float[n];
             gpuKernel.Run(in u, hbuf, keep, albedo, dst, gnrm, gdep);
             var fu = FroxelGpuUniforms.Build(in cam, in froxelFx, p.Relief2DFroxelQuality);
-            froxelKernel.Composite(in fu, dst, gdep, w, h, dst);
+            double froxelFb = p.Relief2DFroxelTemporal ? p.Relief2DFroxelTemporalFeedback : 0.0;
+            froxelKernel.Composite(in fu, dst, gdep, w, h, dst, froxelFb);
             return;
         }
 
