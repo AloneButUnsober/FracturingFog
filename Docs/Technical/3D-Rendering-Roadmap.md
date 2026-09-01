@@ -270,8 +270,14 @@ supplies the guide buffers.
   mean 0.00000, depth rel-err mean 0.00004). A normal/depth-only (denoise) capture no
   longer forces the CPU trace — the GPU renders beauty + guides and only the À-Trous
   filter runs on the CPU. A component capture (AOV-EXR export) still forces CPU.
-- **Remaining (deep, still open on #402):** adaptive-supersample coupling (fewer samples
-  when denoise on); full SVGF variance/temporal weighting; parallelize/SIMD.
+- **Adaptive-supersample coupling (landed — PR #572, #402):** `DenoiseSupersampleCoupling`
+  halves the CPU relief raymarch's AA supersample while the denoiser is active (SS 4→2 =
+  16→4 rays/px), so a denoised render finally casts fewer primary rays — the denoiser's
+  raison d'être. `FractalParameters.Relief2DDenoiseAdaptiveSupersample` (default OFF),
+  `--denoise-adaptive-ss` flag + CLI round-trip + Relief 3D dialog checkbox. Byte-identical
+  off / denoise-off (+10 tests). GPU relief has no screen-space SS, so CPU-path only.
+- **Remaining (deep, still open on #402):** full SVGF variance/temporal weighting;
+  parallelize/SIMD the À-Trous filter.
 
 ### S5 — Refractive / transmissive materials ◐ (#406)
 Cook-Torrance GGX today is opaque. Add **transmission + IOR** → glass fractals.

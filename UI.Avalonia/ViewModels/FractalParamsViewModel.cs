@@ -533,6 +533,12 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
     }
     /// <summary>The sigma controls only bite once at least one denoise pass runs.</summary>
     public bool DenoiseEnabled => _p.Relief2DDenoiseIterations > 0;
+    /// <summary>S4 (#402) — drop the AA supersample while denoising (fewer rays).</summary>
+    public bool Relief2DDenoiseAdaptiveSupersample
+    {
+        get => _p.Relief2DDenoiseAdaptiveSupersample;
+        set { if (_p.Relief2DDenoiseAdaptiveSupersample == value) return; _p.Relief2DDenoiseAdaptiveSupersample = value; this.RaisePropertyChanged(); Fire(); }
+    }
     public FracturingFog.HeightCurve2D Relief2DHeightCurve
     {
         get => _p.Relief2DHeightCurve;

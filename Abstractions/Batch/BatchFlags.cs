@@ -120,6 +120,7 @@ namespace FracturingFog.Batch
         public const string DenoiseColorSigma     = "--denoise-color-sigma";
         public const string DenoiseNormalSigma    = "--denoise-normal-sigma";
         public const string DenoiseDepthSigma     = "--denoise-depth-sigma";
+        public const string DenoiseAdaptiveSs     = "--denoise-adaptive-ss";
 
         // Relief isolate masking (#363 follow-up). --relief-isolate turns it on;
         // sub-knobs imply it on.

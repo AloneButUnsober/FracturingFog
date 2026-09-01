@@ -152,6 +152,7 @@ namespace FracturingFog.Cli
         public double ReliefDenoiseColorSigma { get; init; } = 0.10;
         public double ReliefDenoiseNormalSigma { get; init; } = 0.30;
         public double ReliefDenoiseDepthSigma { get; init; } = 0.20;
+        public bool ReliefDenoiseAdaptiveSupersample { get; init; }
 
         // Relief isolate masking. Emitted when relief + isolate are on.
         public bool ReliefIsolate { get; init; }
@@ -338,6 +339,7 @@ namespace FracturingFog.Cli
                         if (snap.ReliefDenoiseColorSigma != 0.10)  { parts.Add(BatchFlags.DenoiseColorSigma);  parts.Add(Num(snap.ReliefDenoiseColorSigma)); }
                         if (snap.ReliefDenoiseNormalSigma != 0.30) { parts.Add(BatchFlags.DenoiseNormalSigma); parts.Add(Num(snap.ReliefDenoiseNormalSigma)); }
                         if (snap.ReliefDenoiseDepthSigma != 0.20)  { parts.Add(BatchFlags.DenoiseDepthSigma);  parts.Add(Num(snap.ReliefDenoiseDepthSigma)); }
+                        if (snap.ReliefDenoiseAdaptiveSupersample)  parts.Add(BatchFlags.DenoiseAdaptiveSs);   // S4 (#402)
                     }
                 }
 
