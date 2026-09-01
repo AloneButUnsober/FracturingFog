@@ -129,7 +129,14 @@ discarded, not that it is uncomputed.
   / `AO.V` / `shadow.V` that replace the 8-bit passes. A relief AOV EXR is now float for
   every geometry + lighting layer; only `stepcount` (a cost diagnostic) stays 8-bit — 6
   fewer 8-bit re-renders per export. 3 tests (`AovExrFloatComponentsTests`).
-- **Remaining:** GUI "Export AOV EXR" action, light compositor, motion-vector AOV.
+- **GUI "Export AOV EXR" action (landed):** render-window menu **"Export AOV EXR…"**
+  → `ShellViewModel.AovExrCommand` → host picks a `.exr` path and runs
+  `AovExrRenderer.RenderToFile` at the current render dimensions (via the same
+  `CreatePosterRequest` a still export uses). Thin wiring over the already-tested
+  orchestrator; the AOV planes are captured from `RenderToPixels` before any
+  overlay/post pass, so they stay clean regardless of the watermark. GUI-only (no
+  headless test — the render/pack path is covered by the orchestration tests).
+- **Remaining:** light compositor, motion-vector AOV.
 
 ### S2 — Linear-light rendering + view transform (AgX / ACES / Filmic) ◐ (#396)
 Render and composite in **linear light**, apply a filmic **view transform** at
