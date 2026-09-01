@@ -24,6 +24,7 @@
 // the S1 float-AOV follow-up.
 
 using System;
+using System.Threading.Tasks;
 
 namespace FracturingFog.Imaging;
 
@@ -91,9 +92,15 @@ public static class AtrousDenoiser
         for (int it = 0; it < p.Iterations; it++)
         {
             int step = 1 << it;   // À-Trous hole size: 1, 2, 4, …
-            for (int y = 0; y < h; y++)
-            for (int x = 0; x < w; x++)
+            // Each output pixel is independent within a pass — it reads the r/g/b
+            // planes and writes only its own tr/tg/tb[pi], so rows run in parallel
+            // with byte-identical results (per-pixel accumulation order is unchanged).
+            // Parallel.For is synchronous: it completes before the ping-pong swap below
+            // reassigns the plane refs, so the closure captures never race the swap.
+            Parallel.For(0, h, y =>
             {
+                for (int x = 0; x < w; x++)
+                {
                 int pi = y * w + x;
                 float cr = r[pi], cg = g[pi], cb = b[pi];
                 double nx = 0, ny = 0, nz = 0;
@@ -139,7 +146,8 @@ public static class AtrousDenoiser
                     tb[pi] = (float)(sumB / cumW);
                 }
                 else { tr[pi] = cr; tg[pi] = cg; tb[pi] = cb; }
-            }
+                }
+            });
 
             // Ping-pong: the filtered result feeds the next (wider) pass.
             (r, tr) = (tr, r);
