@@ -158,8 +158,16 @@ benefits most. Blender's Filmic → AgX migration is the precedent.
   (no recalc), mirroring the Brightness/Contrast path. 14 wiring tests
   (`ViewTransformBatchWiringTests`). Default (None / 0 EV) stays omitted =
   byte-identical.
-- **Remaining:** video/slideshow frame path (raw-frame stage has no post-buffer
-  hook yet), the *core* true-linear/float intermediate (couples S7), default-look
+- **Video/slideshow frame path (landed):** the offline `--batch` video + slideshow
+  frame renderers now apply the view transform + exposure per frame, layered on the
+  brightness/contrast pass in the SAME order as `PosterRenderer` (byte-identical when
+  `None`, exposure only with a transform selected — matching the poster gate). Wired
+  into `BatchRenderer.RenderVideo`, `RenderSlideshow`, and the shared
+  `RenderVideoSlideshowLegs` (threaded the transform + exposure through). Scene mode
+  (`SceneVideoRenderer`) has no post-FX stage of its own and is out of scope here; the
+  LIVE recorder already captures the post-transform snapshot. Verified headless: an
+  ACES video frame differs from a `None` frame; `None` stays byte-identical.
+- **Remaining:** the *core* true-linear/float intermediate (couples S7), default-look
   validation, SIMD.
 
 ### S3 — Cinematic camera: DOF, exposure, motion blur ◐ (#400)
