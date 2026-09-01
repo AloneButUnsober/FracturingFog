@@ -529,6 +529,16 @@ namespace FracturingFog.Models
         /// Consulted via the captured world-units depth AOV.</summary>
         public double Relief2DDenoiseDepthSigma { get; set; } = 0.20;
 
+        /// <summary>S4 (#402) — adaptive-supersample coupling. When on AND the
+        /// denoiser is active (<see cref="Relief2DDenoiseIterations"/> &gt; 0), the
+        /// CPU relief raymarch drops its anti-alias supersample (the guided À-Trous
+        /// filter cleans up the extra Monte-Carlo noise), so a denoised render costs
+        /// far fewer primary rays for a comparable look — the whole point of the
+        /// denoiser. See <c>DenoiseSupersampleCoupling</c> for the SS→SS mapping.
+        /// Default OFF, and it never changes anything while denoise is off, so the
+        /// single-frame path stays byte-identical.</summary>
+        public bool Relief2DDenoiseAdaptiveSupersample { get; set; } = false;
+
         /// <summary>Anti-alias supersampling factor: N×N rays per pixel, averaged.
         /// 1 = off, 2–4 = progressively smoother silhouette/edges at N² cost.
         /// Default 2.</summary>
@@ -1174,6 +1184,7 @@ namespace FracturingFog.Models
                 Relief2DDenoiseColorSigma = Relief2DDenoiseColorSigma,
                 Relief2DDenoiseNormalSigma = Relief2DDenoiseNormalSigma,
                 Relief2DDenoiseDepthSigma = Relief2DDenoiseDepthSigma,
+                Relief2DDenoiseAdaptiveSupersample = Relief2DDenoiseAdaptiveSupersample,
                 Relief2DCameraZoom = Relief2DCameraZoom,
                 Relief2DCameraOrthographic = Relief2DCameraOrthographic,
                 Relief2DSupersample = Relief2DSupersample,

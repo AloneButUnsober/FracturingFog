@@ -432,6 +432,7 @@ public sealed class ControlCenterViewModel : ViewModelBase
             ReliefDenoiseColorSigma  = fp?.Relief2DDenoiseColorSigma ?? 0.10,
             ReliefDenoiseNormalSigma = fp?.Relief2DDenoiseNormalSigma ?? 0.30,
             ReliefDenoiseDepthSigma  = fp?.Relief2DDenoiseDepthSigma ?? 0.20,
+            ReliefDenoiseAdaptiveSupersample = fp?.Relief2DDenoiseAdaptiveSupersample ?? false,   // S4 (#402)
             ReliefIsolate        = fp?.Relief2DIsolate ?? false,
             ReliefIsolateByDetail = fp?.Relief2DIsolateByDetail ?? true,
             ReliefIsolateThreshold = fp?.Relief2DDetailThreshold ?? 0.6,

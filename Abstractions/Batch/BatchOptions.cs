@@ -247,6 +247,7 @@ namespace FracturingFog.Batch
         public double? ReliefDenoiseColorSigma { get; set; }
         public double? ReliefDenoiseNormalSigma { get; set; }
         public double? ReliefDenoiseDepthSigma { get; set; }
+        public bool? ReliefDenoiseAdaptiveSupersample { get; set; }  // S4 (#402) — drop AA SS when denoise on
 
         // Relief isolate masking (#363 follow-up). Any isolate flag implies
         // relief + isolate on. NoDetail turns OFF the default detail isolation.
@@ -799,6 +800,13 @@ namespace FracturingFog.Batch
                     case BatchFlags.DenoiseDepthSigma:
                         if (!NextDouble(args, ref i, a, out double dnds, out error)) return false;
                         opts.ReliefDenoiseDepthSigma = dnds;
+                        opts.ReliefRaymarch = true;
+                        opts.Relief = true;
+                        break;
+
+                    case BatchFlags.DenoiseAdaptiveSs:
+                        // Boolean flag — coupling only bites when --denoise > 0.
+                        opts.ReliefDenoiseAdaptiveSupersample = true;
                         opts.ReliefRaymarch = true;
                         opts.Relief = true;
                         break;
