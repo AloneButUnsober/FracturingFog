@@ -1448,6 +1448,60 @@ namespace FracturingFog.Hosting
                 }
             };
 
+            // S1 (#398) — multi-layer AOV OpenEXR export. Renders beauty + the
+            // compositor AOV set (normal / depth / AO / diffuse / specular / shadow /
+            // stepcount) at the current render dimensions via the same PosterRequest
+            // path a still export uses, and packs them into one .exr. Richest on the
+            // Relief 3D raymarch (float geometry + lighting planes); a flat 2D view
+            // yields beauty-equal planes.
+            shell.AovExrRequested += async (_, _) =>
+            {
+                try
+                {
+                    if (s_renderHost == null) return;
+                    var (rw, rh) = s_renderHost.LastPresentedSize;
+                    if (rw <= 0 || rh <= 0) { rw = 1920; rh = 1080; }
+
+                    string? path = await AvaloniaDialogs.PickSaveFileAsync(
+                        "Export AOV EXR",
+                        suggestedName: BuildSuggestedFileName("exr", imageWidth: rw, imageHeight: rh),
+                        filter: "OpenEXR multi-layer (*.exr)|*.exr");
+                    if (string.IsNullOrEmpty(path)) return;
+                    if (!path.EndsWith(".exr", StringComparison.OrdinalIgnoreCase)) path += ".exr";
+
+                    var customWm = shell.Main.UseCustomWatermark
+                        ? UserWatermarkStore.Instance.GetByName(shell.Main.SelectedCustomWatermarkName)
+                        : null;
+                    // AOV data must NOT be watermarked (a watermark would corrupt the
+                    // data planes); CreatePosterRequest composes the text but the AOV
+                    // orchestrator captures RenderToPixels BEFORE any overlay/post pass,
+                    // so the planes stay clean regardless.
+                    var req = s_renderHost.CreatePosterRequest(
+                        rw, rh, rotate: false, path,
+                        FracturingFog.Imaging.ImageFileFormat.Exr, customWm);
+
+                    var busy = shell.BeginRenderBusy("Exporting AOV EXR…");
+                    (int w, int h) dims;
+                    try
+                    {
+                        dims = await Task.Run(() =>
+                            FracturingFog.Imaging.AovExrRenderer.RenderToFile(req, path, CancellationToken.None));
+                    }
+                    finally { busy.Dispose(); }
+
+                    int layers = FracturingFog.Imaging.AovExrRenderer.DefaultViews.Count + 1;
+                    await AvaloniaDialogs.ShowMessageAsync(
+                        "AOV EXR Saved",
+                        $"Saved {dims.w}×{dims.h}, {layers} layers to:\n{path}",
+                        expectsConfirmation: false);
+                }
+                catch (Exception ex)
+                {
+                    await AvaloniaDialogs.ShowMessageAsync(
+                        "AOV EXR", $"Export failed:\n{ex.Message}", expectsConfirmation: false);
+                }
+            };
+
             // ASCII / text-art export (#226) — save the current frame as
             // character art. The chosen file extension selects the format; the
             // exporter consumes the real IColorMap-coloured buffer + smooth field
