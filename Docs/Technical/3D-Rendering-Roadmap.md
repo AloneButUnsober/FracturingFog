@@ -317,9 +317,20 @@ full uber-shader — add transmission, optionally clearcoat / emission).
   keeps the internal direction (an internal-reflection bounce is a follow-up).
   CPU-path (forces CPU like all transmission), byte-identical off / opaque, LightingFx
   dialog checkbox + preset-DTO persist. +3 tests.
+- **Glass batch flags + Absorption-colour picker (landed — PR #575, #406):** glass
+  finally has a batch surface and a UI tint picker. New `--glass` (shorthand → 0.9) /
+  `--transmission` / `--ior` / `--absorption-dist` / `--absorption-color` /
+  `--glass-internal-march` flags (mirror the `--dof-*` / `--lightN-*` cadence; all imply
+  `--relief-raymarch`), parsed + range-checked in `BatchOptions`, applied onto
+  `fp.Lighting` in `BatchRenderer.BuildFractalParameters`, emitted by
+  `BatchCommandBuilder` only on the raymarch path when transmissive (ior / absorption /
+  colour emit only off-default), and populated from live params in the Control Center
+  snapshot. UI: an "Absorption color" hex `TextBox` row in the LightingFx dialog
+  (`AbsorptionColorHex` VM accessor, mirrors `FogColorHex`, greyed until Transmission>0).
+  Opaque = byte-identical. +13 `GlassBatchWiringTests` (the WinExe apply is
+  build-verified, same boundary `S6VideoReliefBatchTests` documents).
 - **Remaining:** GPU internal-march twin, back-surface TIR internal-reflection bounce,
-  rough refraction (couple S4), AbsorptionColor picker + glass batch flags (glass has
-  no batch surface yet).
+  rough refraction (couple S4).
 
 ### S6 — Froxel / unified volume march ◐ (#408)
 Today's volumetrics are per-surface single-scatter. A froxel (frustum-voxel)
