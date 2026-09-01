@@ -411,9 +411,9 @@ animated.
   rendered FLAT — the oblique raymarch was dropped. It now diverts to
   `PosterRenderer.RenderToPixels` (composed relief+froxel buffer, same rawness as the flat path —
   before b/c / view-transform / interior composite) when the resolved params enable the raymarch
-  (`Relief2DEnabled && Relief2DRaymarch`). Froxel is spatial-only here (per-call history):
-  motion-blur sub-frame averaging, shot cuts, and frame-composited transitions make a single
-  shared cross-frame temporal timeline ill-defined. 2 Engine-side tests (`S6SceneReliefRenderTests`):
+  (`Relief2DEnabled && Relief2DRaymarch`). Froxel was spatial-only here at first (per-call
+  history) — since brought to cross-frame temporal parity (see the scene-temporal bullet below).
+  2 Engine-side tests (`S6SceneReliefRenderTests`):
   a relief region resolves to raymarch-enabled params, and a one-shot scene renders a frame that
   differs from the flat render (relief actually applied, not a black wash).
 - **GPU froxel temporal reprojection (landed):** the GPU froxel kernel was single-frame —
@@ -444,9 +444,22 @@ animated.
   medium (grid fixed), the Vulkan device-history blend tracks the CPU `FroxelHistory` (GT 710: mean
   0.049 / max 11) and temporal shifts ~98% of pixels. Both backends now reach full froxel parity
   (populate + integrate + composite + temporal) against the one CPU oracle.
-- **Remaining (enhancement follow-ups):** cross-frame froxel **temporal reprojection** for
-  scenes (the offline `SceneVideoRenderer` deferred it above — CPU froxel there is spatial-only);
-  sub-cell reprojection under continuous camera motion. The
+- **Scene cross-frame froxel temporal (landed):** the offline `SceneVideoRenderer` no longer
+  renders froxel spatial-only. It now allocates ONE shared `FroxelHistory` for the whole render
+  and threads it into the shot render via `PosterRequest.FroxelHistory`, so animated fog blends
+  toward the previous OUTPUT frame's pre-integration grid — the same model as the batch
+  video/slideshow legs. Threaded ONLY on clean continuous frames (a single motion-blur sub-frame,
+  no frozen composite) so there is exactly one froxel store per output frame; motion-blur (>1
+  sub-frame) and frozen crossfade / light-sweep frames stay spatial-only (null history). Shot cuts
+  change the camera grid, so `FroxelHistory`'s grid-key check re-seeds at each cut with no manual
+  reset. Byte-identical when froxel-temporal is off / feedback 0 / the medium is static; the
+  froxel-volumetrics *enable* is not region-carried yet, so a region-sourced scene threads the
+  history but leaves it unused today (the wiring activates the moment froxel becomes
+  scene-configurable). Locked by `MultiFrame_Relief_Scene_Is_Deterministic_With_Shared_Froxel_
+  History` (a multi-frame relief scene rendered twice is byte-identical frame-for-frame, every
+  frame non-black — the stateful shared history stays deterministic). PR #565.
+- **Remaining (enhancement follow-up):** sub-cell froxel reprojection under continuous camera
+  motion (the grid-key check currently re-seeds on any near/far change instead of resampling). The
   core froxel unified-volume march (D3D + Vulkan + host wiring + CPU & GPU temporal + poster seam + quality
   controls + user doc + batch-video/slideshow/scene consumers) is complete.
 
