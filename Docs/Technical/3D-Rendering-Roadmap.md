@@ -276,8 +276,16 @@ supplies the guide buffers.
   raison d'être. `FractalParameters.Relief2DDenoiseAdaptiveSupersample` (default OFF),
   `--denoise-adaptive-ss` flag + CLI round-trip + Relief 3D dialog checkbox. Byte-identical
   off / denoise-off (+10 tests). GPU relief has no screen-space SS, so CPU-path only.
+- **Parallel À-Trous (landed — PR #574, #402):** the denoiser's pixel loop runs its
+  rows under `Parallel.For`. Within a pass each output pixel is independent (reads the
+  r/g/b planes, writes only its own `tr/tg/tb[pi]`), so the parallel result is
+  byte-identical to the serial pass — the per-pixel accumulation order is unchanged and
+  the exact-value `AtrousDenoiserTests` lock it. No race against the ping-pong plane
+  swap (`Parallel.For` is synchronous, completing before the swap reassigns the refs).
+  +1 race-guard test (a 320×240 guided buffer denoises to identical bytes across 6 runs).
 - **Remaining (deep, still open on #402):** full SVGF variance/temporal weighting;
-  parallelize/SIMD the À-Trous filter.
+  **SIMD** the À-Trous 5×5 accumulation (left on purpose — vectorizing would reorder the
+  float sums and break byte-parity with the `--batch` oracle).
 
 ### S5 — Refractive / transmissive materials ◐ (#406)
 Cook-Torrance GGX today is opaque. Add **transmission + IOR** → glass fractals.
