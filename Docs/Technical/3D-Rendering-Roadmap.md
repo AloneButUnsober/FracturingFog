@@ -219,8 +219,17 @@ code.
   albedo + `_reliefHeight`) → `MainViewModel` writes the live params (same instance
   the Relief 3D dialog edits, no desync), opens a modest aperture if shut, re-runs the
   relief post-pass. 8 tests (engine depth pick + controller Alt-gating).
-- **Remaining:** DOF on the 3D-fractal cameras (thin-lens, deferred → issue #567),
-  **motion blur** over Scene time (deferred → issue #568), in-camera exposure control.
+- **Motion blur on the batch zoom video (landed — PR #571, #568):** the offline
+  SceneVideoRenderer already averaged sub-frames; the batch video-zoom loop strobed.
+  New reusable `MotionBlurAccumulator` (Engine/Rendering) — weighted BGRA-frame
+  averager + `ShutterSamples` (spreads an output frame's parametric time over a
+  shutter window; closed shutter → single tap = byte-identical). `RenderVideo` now
+  averages `MotionBlurSubframes` sub-frames per output frame across the inter-frame
+  zoom step (reuses `--motion-blur` / `--shutter`, scene-only before); froxel history
+  advances once/output-frame. Accumulator unit-tested (+8); batch loop build-verified.
+- **Remaining:** thin-lens DOF on the other 3D families + GPU kernels (#567; CPU
+  Mandelbulb landed in PR #570), motion blur unify scene+video + live/poster (#568),
+  in-camera exposure control.
 
 ### S4 — Guided denoiser (À-Trous / SVGF-lite) ● (#402)
 AO, soft shadow and reflections are Monte Carlo → noisy → paid for with
