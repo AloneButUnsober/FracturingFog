@@ -202,11 +202,66 @@ public sealed class MandelbulbCalculator : IFractalCalculator
             ScreenSpacePost.ClearHdrBuffer(hdrBuf);
         }
 
+        // S3 (#389/#400/#567) — physically-based thin-lens DoF for the raymarch
+        // camera. When on (and the aperture is open), each pixel averages
+        // fx.DofSamples primary rays whose origin is jittered across the aperture
+        // disc and re-aimed through the focal point (CameraDof.ThinLensRay), so
+        // occluded geometry / silhouettes bleed correctly and the bokeh integrates
+        // the real scene — replacing the screen-space depth gather (ApplyHdrDof).
+        // Off / aperture 0 → the single-ray path below, untouched (byte-identical).
+        bool thinLensDof = fx.DofThinLens && fx.DofAperture > 0.0 && fx.DofSamples > 1;
+        int dofN = thinLensDof ? Math.Max(2, fx.DofSamples) : 1;
+        double dofAperture = fx.DofAperture;
+        double dofFocus = fx.DofFocusDistance > 0.0 ? fx.DofFocusDistance : camDist;
+
+        // Trace + shade one primary ray (dir already normalized). Returns the LDR
+        // colour and, via out params, a linear HDR sample for the tap (hit → the
+        // shade's HDR from a scratch cell; sky → the backdrop colour as pseudo-
+        // linear) so thin-lens taps average correctly with or without tonemap/bloom.
+        // Thin-lens skips the depth/normal G-buffer (SSAO / edge-ink / screen-space
+        // DoF are superseded by the lens integration), so it passes pixelIndex 0 +
+        // null guides and only fills the 3-cell hdr scratch.
+        uint ShadeRayDof(double ox, double oy, double oz, double dx, double dy, double dz,
+                         float[] hdrScratch, out float hr, out float hg, out float hb)
+        {
+            double px = ox, py = oy, pz = oz, tTotal = 0; bool hit = false; int hitStep = 0;
+            for (int step = 0; step < maxSteps; step++)
+            {
+                double dist = MandelbulbDE(px, py, pz, power, deIter, out _);
+                if (dist < eps) { hit = true; hitStep = step; break; }
+                if (tTotal > 12.0) break;
+                px += dx * dist; py += dy * dist; pz += dz * dist; tTotal += dist;
+            }
+            if (!hit)
+            {
+                uint sky = fx.ShowSkyBackdrop
+                    ? ShadingPipeline.SkyColorHdri(dx, dy, dz, in fx)
+                    : ColorMap.InSetColor;
+                hr = ((sky >> 16) & 0xFF) / 255f; hg = ((sky >> 8) & 0xFF) / 255f; hb = (sky & 0xFF) / 255f;
+                return sky;
+            }
+            double hstep = eps * 2;
+            double n0 = MandelbulbDE(px + hstep, py, pz, power, deIter, out _) - MandelbulbDE(px - hstep, py, pz, power, deIter, out _);
+            double n1 = MandelbulbDE(px, py + hstep, pz, power, deIter, out _) - MandelbulbDE(px, py - hstep, pz, power, deIter, out _);
+            double n2 = MandelbulbDE(px, py, pz + hstep, power, deIter, out _) - MandelbulbDE(px, py, pz - hstep, power, deIter, out _);
+            var nrm = Normalize3(n0, n1, n2);
+            float smooth = (float)hitStep * (256f / Math.Max(1, maxSteps)) + (float)(tTotal * 4.0);
+            uint baseColor = (uint)ColorMap.Map(smooth, 0f, 256, (float)nrm[0], (float)nrm[1]);
+            var inputs = new ShadingInputs(px, py, pz, nrm[0], nrm[1], nrm[2], dx, dy, dz, tTotal, 0.0, hitStep, eps);
+            ScreenSpacePost.ClearHdrBuffer(hdrScratch);
+            uint col = ShadingPipeline.Shade<MandelbulbDe>(
+                in inputs, baseColor, in fx, in deStruct, true, 0, null, null, hdrScratch);
+            if (!float.IsNaN(hdrScratch[0])) { hr = hdrScratch[0]; hg = hdrScratch[1]; hb = hdrScratch[2]; }
+            else { hr = ((col >> 16) & 0xFF) / 255f; hg = ((col >> 8) & 0xFF) / 255f; hb = (col & 0xFF) / 255f; }
+            return col;
+        }
+
         Parallel.For(0, height, new ParallelOptions { CancellationToken = ct }, y =>
         {
             if (ct.IsCancellationRequested) return;
             double v = (1.0 - 2.0 * (y + 0.5) / height) * fovScale + panV;
             int rowBase = y * width;
+            float[]? hdrScratch = thinLensDof ? new float[3] : null;
             for (int x = 0; x < width; x++)
             {
                 double u = (2.0 * (x + 0.5) / width - 1.0) * fovScale * aspect + panU;
@@ -216,6 +271,42 @@ public sealed class MandelbulbCalculator : IFractalCalculator
                 double rdz = right[2] * u + up[2] * v + fwd[2];
                 var dn = Normalize3(rdx, rdy, rdz);
                 rdx = dn[0]; rdy = dn[1]; rdz = dn[2];
+                int idx = rowBase + x;
+
+                // ── Thin-lens DoF: average DofSamples aperture taps ──
+                if (thinLensDof)
+                {
+                    double aR = 0, aG = 0, aB = 0;   // LDR accum (no-tonemap path)
+                    double hR = 0, hG = 0, hB = 0;   // linear HDR accum (tonemap path)
+                    for (int s = 0; s < dofN; s++)
+                    {
+                        double lensX = 0.0, lensY = 0.0;
+                        if (s > 0)
+                        {
+                            var (l1, l2) = ShadingPipeline.HashPair(x, y, s, 13);
+                            (lensX, lensY) = CameraDof.ConcentricSampleDisk(l1, l2);
+                        }
+                        var (ox, oy, oz, ddx, ddy, ddz) = CameraDof.ThinLensRay(
+                            camX, camY, camZ, rdx, rdy, rdz,
+                            right[0], right[1], right[2], up[0], up[1], up[2],
+                            dofFocus, dofAperture, lensX, lensY);
+                        uint c = ShadeRayDof(ox, oy, oz, ddx, ddy, ddz, hdrScratch!,
+                                             out float hr, out float hg, out float hb);
+                        aR += (c >> 16) & 0xFF; aG += (c >> 8) & 0xFF; aB += c & 0xFF;
+                        hR += hr; hG += hg; hB += hb;
+                    }
+                    double inv = 1.0 / dofN;
+                    int R = (int)(aR * inv + 0.5), G = (int)(aG * inv + 0.5), B = (int)(aB * inv + 0.5);
+                    renderBuffer[idx] = 0xFF000000u | ((uint)Math.Clamp(R, 0, 255) << 16)
+                                      | ((uint)Math.Clamp(G, 0, 255) << 8) | (uint)Math.Clamp(B, 0, 255);
+                    if (hdrBuf is not null)
+                    {
+                        hdrBuf[idx * 3] = (float)(hR * inv);
+                        hdrBuf[idx * 3 + 1] = (float)(hG * inv);
+                        hdrBuf[idx * 3 + 2] = (float)(hB * inv);
+                    }
+                    continue;
+                }
 
                 double px = camX, py = camY, pz = camZ;
                 double tTotal = 0;
@@ -236,7 +327,6 @@ public sealed class MandelbulbCalculator : IFractalCalculator
                     tTotal += dist;
                 }
 
-                int idx = rowBase + x;
                 if (!hit)
                 {
                     // Ray-miss → sky backdrop when toggle on; flat
@@ -276,13 +366,17 @@ public sealed class MandelbulbCalculator : IFractalCalculator
         });
 
         ScreenSpacePost.BeginGpuFrame(renderBuffer, width, height, in fx);
-        if (depthBuf is not null && normalBuf is not null)
+        // Thin-lens DoF skips the depth/normal G-buffer, so the screen-space passes
+        // keyed on it (SSAO, edge-ink) and the screen-space DoF it replaces are all
+        // bypassed when thin-lens is active; tonemap/bloom still runs on the averaged
+        // HDR the lens taps wrote.
+        if (depthBuf is not null && normalBuf is not null && !thinLensDof)
             ScreenSpacePost.ApplySsao(renderBuffer, depthBuf, normalBuf, width, height, in fx);
-        if (hdrBuf is not null && depthBuf is not null)
+        if (hdrBuf is not null && depthBuf is not null && !thinLensDof)
             ScreenSpacePost.ApplyHdrDof(hdrBuf, depthBuf, width, height, in fx);
         if (hdrBuf is not null)
             ScreenSpacePost.ApplyToneMapBloom(renderBuffer, hdrBuf, width, height, in fx);
-        if (depthBuf is not null && normalBuf is not null)
+        if (depthBuf is not null && normalBuf is not null && !thinLensDof)
             ScreenSpacePost.ApplyEdgeInk(renderBuffer, depthBuf, normalBuf, width, height, in fx);
         ScreenSpacePost.EndGpuFrame(in fx);
 
