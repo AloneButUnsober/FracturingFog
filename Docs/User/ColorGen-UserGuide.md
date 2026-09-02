@@ -543,9 +543,10 @@ The §3 gallery covers the everyday palette. This section pushes the DSL
 harder — the tools that a fixed list of colour stops simply cannot express:
 **perceptually-uniform colour** (`oklab`/`oklch`/`mix_oklab`), the
 **cosine palette** (`cosine`), **derivative** and **orbit-geometry**
-inputs (`dzr`/`dzi`, `zr`/`zi`), **channel recombination** (`.r/.g/.b`),
-**boolean decision logic**, and **hash-built noise**. Every program below
-is complete — paste verbatim and Compile & Load.
+inputs (`dzr`/`dzi`, `zr`/`zi`), **whole-orbit accumulators** (§4.12+ — real
+orbit traps, stripe/TIA average, curvature, Lyapunov, …), **channel
+recombination** (`.r/.g/.b`), **boolean decision logic**, and **hash-built
+noise**. Every program below is complete — paste verbatim and Compile & Load.
 
 ### 4.1 Perceptual spectral cycler — `oklch`
 
@@ -614,6 +615,12 @@ return mix_oklab(bg, ink, saturate(glow));
 Uses the escape point `(zr, zi)` directly. Distance to the nearest axis,
 run through `exp`, lights up bright filaments that trace the fractal's
 internal structure — a classic orbit-trap look.
+
+> **This is a *single-point* trap** — it only sees `z` at escape, so it is a
+> cheap imitation, not a true orbit trap. For the real thing (minimum over the
+> **whole** orbit) use the **`trapCross`** input instead — and see
+> [§4.12](#412-real-orbit-traps--trapmin--trapcross--shape-traps) below for the
+> full orbit-accumulator family (F15).
 
 ### 4.6 Anti-aliased iso-contours
 
@@ -707,6 +714,98 @@ Samples the same palette at three slightly-offset positions and keeps only
 `.r` / `.g` / `.b` from each, then recombines. The split fringes distant
 colour edges the way a real lens does.
 
+### 4.12 Real orbit traps — `trapMin` / `trapCross` / shape traps
+
+Everything above (and §4.5) reads only the **escape point** `z`. The **orbit
+inputs (F15)** read the *whole orbit* — the host samples `z` at every iteration
+and hands you an accumulated value at escape. This is what makes a **true**
+orbit trap possible: the minimum distance from the orbit to a shape, not just
+the last point.
+
+Trap inputs (each a **raw distance** — you scale + curve it):
+
+| Input | Shape |
+|---|---|
+| `trapMin` | origin point (min `\|z\|`) |
+| `trapCross` | nearer coordinate axis |
+| `trapRing` | circle (r=0.3 at (-1,0)) |
+| `trapHyperbola` | `\|Re·Im\| = 1` |
+| `trapHexagon` | regular hexagon edges |
+
+```cg
+// True hexagon orbit trap: min over the whole orbit, response-curved.
+let t = pow(saturate(trapHexagon * 1.5), 0.4);
+return palette(t,
+  rgb(0.02, 0.02, 0.06),
+  rgb(0.80, 0.25, 0.10),
+  rgb(1.00, 0.85, 0.40),
+  rgb(1.00, 1.00, 0.95));
+```
+
+> **Orbit inputs are CPU / interpreter-only.** A program that uses any of them
+> renders on the CPU sampling path (no GPU palette), and **Generate via ColorGen**
+> (C# export) is rejected for it. They read the whole orbit, so they shine at
+> shallow zoom — like the built-in Orbit Trap / Stripe / Statistical themes.
+> Referencing an orbit input flips the theme onto the sampling path; only the
+> inputs you actually use are computed per iteration.
+
+### 4.13 Stripe Average Coloring (SAC) — `stripeAvg`
+
+```cg
+// stripeAvg is already in [0,1] — the silky Ultra-Fractal stripe look.
+let v = saturate(stripeAvg);
+return hsv(0.60 - 0.40 * v, 0.7, 0.3 + 0.7 * v);
+```
+
+The genuine article (mean of `0.5+0.5·sin(7·arg z_n)` over the orbit), not the
+single-sample `sin(arg)` fake — smooth flowing bands instead of a flat wash.
+
+### 4.14 Triangle-inequality average — `tiaAvg`
+
+```cg
+return palette(saturate(tiaAvg),
+  rgb(0.05, 0.02, 0.10), rgb(0.50, 0.10, 0.40), rgb(1.00, 0.80, 0.30));
+```
+
+### 4.15 Curvature spirals — `curvature`
+
+```cg
+// Raw mean turn angle in radians (~0..pi); normalise by pi.
+let c = saturate(curvature / 3.14159);
+return hsv(fract(0.15 + c), 0.85, 0.30 + 0.70 * c);
+```
+
+Accumulated `|Δarg|` between successive orbit segments — reveals spiral
+substructure that iteration count alone can't.
+
+### 4.16 Lyapunov exponent — `lyapunov` (deep-zoom friendly)
+
+```cg
+// lyapunov is UNBOUNDED (mean log|2 z_n|); map a sensible window yourself.
+let x = saturate((lyapunov + 1.0) / 5.5);
+return palette(x, rgb(0.0, 0.0, 0.10), rgb(0.70, 0.20, 0.40), rgb(1.0, 0.9, 0.7));
+```
+
+### 4.17 Gaussian lattice + exponential glow — `gaussian` / `expSmooth`
+
+```cg
+let lat  = saturate(gaussian * 1.4);     // → 0 near a Gaussian integer
+let glow = saturate(expSmooth * 1.5);    // bright where the orbit lingers near 0
+let base = hsv(0.55, 0.5, 0.2 + 0.8 * lat);
+return brightness(base, 0.4 * glow);
+```
+
+### 4.18 Two shape traps at once (independent channels)
+
+```cg
+// Each shape trap has its own accumulator, so they don't fight over one slot.
+let a = exp(-trapRing * 10.0);
+let b = exp(-trapHexagon * 8.0);
+let ring = rgb(0.2, 0.6, 1.0) * a;
+let hex  = rgb(1.0, 0.7, 0.2) * b;
+return ring + hex;
+```
+
 ---
 
 ## 5. Compile & Load vs Generate via ColorGen
@@ -721,6 +820,11 @@ Despite the button name, **Compile & Load does not compile anything** — it
 parses your program to an AST and runs it through the interpreter. That is
 why it is instant and why an error there is always a *parse/type* error
 (see [§7](#7-troubleshooting)), never a C# compiler error.
+
+> **Orbit inputs are Compile & Load only.** A program that uses any orbit
+> accumulator (§4.12+) works on the interpreter but **Generate via ColorGen**
+> refuses it with a message — the generated C# class and the GPU palette don't
+> yet support per-iteration sampling. Save… (DSL source) still works.
 
 **Generate via ColorGen** is the only path that emits C#. The file lands at
 `Models/ColorSchemes/Generated/{Name}Theme.cs`; a `dotnet build` of the main
