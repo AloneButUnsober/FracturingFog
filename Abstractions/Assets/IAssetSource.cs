@@ -31,6 +31,7 @@ namespace FracturingFog.Abstractions.Assets
         Watermark = 7,
         Scene = 8,
         Workspace = 9,
+        LightingFx = 10,
     }
 
     /// <summary>One row in the Asset Manager's middle list. <paramref name="SizeOnDisk"/>

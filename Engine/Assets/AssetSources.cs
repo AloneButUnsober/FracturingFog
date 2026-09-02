@@ -388,6 +388,45 @@ namespace FracturingFog.Assets
         }
     }
 
+    /// <summary>Volumetric Lighting &amp; FX presets (#580). Like
+    /// <see cref="SlideshowConfigAssetSource"/> / <see cref="WorkspaceAssetSource"/>,
+    /// <see cref="LightingFxPresetLibrary"/> is a static file gateway, not a live
+    /// singleton list — this adapter loads the preset file on each call. Every
+    /// preset is user-created, so all are deletable/exportable (no built-ins).</summary>
+    public sealed class LightingFxAssetSource : IAssetSource
+    {
+        public AssetKind Kind => AssetKind.LightingFx;
+        public string DisplayName => "Lighting & FX";
+
+        public IEnumerable<AssetDescriptor> Enumerate()
+        {
+            var file = LightingFxPresetLibrary.Load();
+            foreach (var p in file.Presets)
+                yield return new AssetDescriptor(p.Name, Kind, null, AssetSizing.Bytes(p), null);
+        }
+
+        public bool Delete(string name)
+        {
+            var file = LightingFxPresetLibrary.Load();
+            return LightingFxPresetLibrary.Delete(file, name);
+        }
+
+        public string? ExportJson(string name)
+            => LightingFxPresetLibrary.ExportJson(LightingFxPresetLibrary.Load(), name);
+
+        public AssetImportResult ImportJson(string json, bool overwrite)
+        {
+            var p = LightingFxPresetLibrary.ParseOne(json);
+            if (p == null || string.IsNullOrWhiteSpace(p.Name)) return AssetImportResult.Fail;
+
+            var file = LightingFxPresetLibrary.Load();
+            bool exists = LightingFxPresetLibrary.Get(file, p.Name) != null;
+            if (exists && !overwrite) return new AssetImportResult(AssetImportStatus.SkippedExists, p.Name);
+            LightingFxPresetLibrary.Upsert(file, p); // persists; marks imported preset active
+            return new AssetImportResult(exists ? AssetImportStatus.Replaced : AssetImportStatus.Added, p.Name);
+        }
+    }
+
     public sealed class WatermarkAssetSource : IAssetSource
     {
         public AssetKind Kind => AssetKind.Watermark;

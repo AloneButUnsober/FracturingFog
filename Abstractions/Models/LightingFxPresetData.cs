@@ -188,6 +188,14 @@ public sealed class LightingFxPresetData
     // Stereo per-eye lateral offset (separation was persisted; offset wasn't).
     public double StereoEyeOffset { get; set; } = 0.0;
 
+    // ── Clone ─────────────────────────────────────────────────────────
+
+    /// <summary>Deep copy. Every field is a value type except the immutable
+    /// <see cref="EnvironmentName"/> string, so a memberwise clone is a full
+    /// deep clone — used by the named-preset library (#580) so a stored preset
+    /// can never alias a caller's mutable instance.</summary>
+    public LightingFxPresetData Clone() => (LightingFxPresetData)MemberwiseClone();
+
     // ── Conversion ────────────────────────────────────────────────────
 
     /// <summary>Snapshot a <see cref="LightingFxData"/> into a preset DTO

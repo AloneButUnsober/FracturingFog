@@ -4,6 +4,7 @@
 using System.Collections.Generic;
 using System.IO;
 using System.Threading.Tasks;
+using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Interactivity;
 using Avalonia.Markup.Xaml;
@@ -34,10 +35,178 @@ public sealed partial class LightingFxDialog : UserControl
     public LightingFxDialog()
     {
         AvaloniaXamlLoader.Load(this);
+        // #580 — populate the "My FX preset" recall list whenever this view binds
+        // to a params VM (dialog open / region apply refresh).
+        DataContextChanged += (_, _) =>
+        {
+            if (DataContext is FractalParamsViewModel vm) vm.RefreshUserFxPresets();
+        };
     }
 
     private void OnCloseClick(object? sender, RoutedEventArgs e)
         => (TopLevel.GetTopLevel(this) as Window)?.Close();
+
+    // ── #580 — user Lighting & FX preset lifecycle (recall / save / delete /
+    // import / export). The VM owns the library work; this code-behind owns the
+    // name prompt + file pickers, matching the HDRI browse handler above. ─────
+
+    private void OnRecallFxPresetClick(object? sender, RoutedEventArgs e)
+    {
+        if (DataContext is FractalParamsViewModel vm) vm.RecallUserFxPreset();
+    }
+
+    private async void OnSaveFxPresetClick(object? sender, RoutedEventArgs e)
+    {
+        if (DataContext is not FractalParamsViewModel vm) return;
+        string suggested = vm.SelectedUserFxPreset ?? $"FX preset {vm.UserFxPresets.Count + 1}";
+        string? name = await PromptTextAsync("Save Lighting & FX Preset", "Preset name:", suggested);
+        if (string.IsNullOrWhiteSpace(name)) return;
+        vm.SaveUserFxPreset(name!);
+    }
+
+    private async void OnDeleteFxPresetClick(object? sender, RoutedEventArgs e)
+    {
+        if (DataContext is not FractalParamsViewModel vm) return;
+        string? name = vm.SelectedUserFxPreset;
+        if (string.IsNullOrWhiteSpace(name)) return;
+        if (!await ConfirmAsync("Delete Preset", $"Delete saved preset \"{name}\"?")) return;
+        vm.DeleteUserFxPreset(name!);
+    }
+
+    private async void OnImportFxPresetClick(object? sender, RoutedEventArgs e)
+    {
+        if (DataContext is not FractalParamsViewModel vm) return;
+        var top = TopLevel.GetTopLevel(this);
+        if (top == null) return;
+
+        var picked = await top.StorageProvider.OpenFilePickerAsync(new FilePickerOpenOptions
+        {
+            Title = "Import Lighting & FX preset",
+            AllowMultiple = false,
+            FileTypeFilter = new List<FilePickerFileType>
+            {
+                new("JSON") { Patterns = new[] { "*.json" } },
+                new("All files") { Patterns = new[] { "*" } },
+            },
+        });
+        if (picked is not { Count: > 0 }) return;
+        string path = picked[0].Path.LocalPath;
+        if (string.IsNullOrWhiteSpace(path)) return;
+        vm.ImportUserFxPresets(path);
+    }
+
+    private async void OnExportFxPresetClick(object? sender, RoutedEventArgs e)
+    {
+        if (DataContext is not FractalParamsViewModel vm) return;
+        string? name = vm.SelectedUserFxPreset;
+        if (string.IsNullOrWhiteSpace(name)) return;
+        var top = TopLevel.GetTopLevel(this);
+        if (top == null) return;
+
+        var file = await top.StorageProvider.SaveFilePickerAsync(new FilePickerSaveOptions
+        {
+            Title = "Export Lighting & FX preset",
+            SuggestedFileName = name + ".json",
+            DefaultExtension = "json",
+            FileTypeChoices = new List<FilePickerFileType>
+            {
+                new("JSON") { Patterns = new[] { "*.json" } },
+            },
+        });
+        if (file == null) return;
+        string path = file.Path.LocalPath;
+        if (string.IsNullOrWhiteSpace(path)) return;
+        vm.ExportUserFxPreset(name!, path);
+    }
+
+    // Minimal modal text prompt (Avalonia has no built-in). Returns the entered
+    // text, or null on cancel / empty.
+    private async Task<string?> PromptTextAsync(string title, string label, string initial)
+    {
+        var owner = TopLevel.GetTopLevel(this) as Window;
+        if (owner == null) return null;
+
+        var box = new TextBox { Text = initial, Watermark = label };
+        string? result = null;
+
+        var ok = new Button { Content = "OK", IsDefault = true, MinWidth = 72 };
+        var cancel = new Button { Content = "Cancel", IsCancel = true, MinWidth = 72 };
+
+        var dlg = new Window
+        {
+            Title = title,
+            Width = 360,
+            SizeToContent = SizeToContent.Height,
+            CanResize = false,
+            WindowStartupLocation = WindowStartupLocation.CenterOwner,
+            Content = new StackPanel
+            {
+                Margin = new Thickness(12),
+                Spacing = 8,
+                Children =
+                {
+                    new TextBlock { Text = label },
+                    box,
+                    new StackPanel
+                    {
+                        Orientation = global::Avalonia.Layout.Orientation.Horizontal,
+                        HorizontalAlignment = global::Avalonia.Layout.HorizontalAlignment.Right,
+                        Spacing = 8,
+                        Children = { cancel, ok },
+                    },
+                },
+            },
+        };
+
+        ok.Click += (_, _) => { result = box.Text; dlg.Close(); };
+        cancel.Click += (_, _) => { result = null; dlg.Close(); };
+        box.AttachedToVisualTree += (_, _) => { box.SelectAll(); box.Focus(); };
+
+        await dlg.ShowDialog(owner);
+        return string.IsNullOrWhiteSpace(result) ? null : result!.Trim();
+    }
+
+    // Minimal modal yes/no confirm.
+    private async Task<bool> ConfirmAsync(string title, string message)
+    {
+        var owner = TopLevel.GetTopLevel(this) as Window;
+        if (owner == null) return false;
+
+        bool confirmed = false;
+        var yes = new Button { Content = "Delete", MinWidth = 72 };
+        var no = new Button { Content = "Cancel", IsCancel = true, IsDefault = true, MinWidth = 72 };
+
+        var dlg = new Window
+        {
+            Title = title,
+            Width = 360,
+            SizeToContent = SizeToContent.Height,
+            CanResize = false,
+            WindowStartupLocation = WindowStartupLocation.CenterOwner,
+            Content = new StackPanel
+            {
+                Margin = new Thickness(12),
+                Spacing = 12,
+                Children =
+                {
+                    new TextBlock { Text = message, TextWrapping = TextWrapping.Wrap },
+                    new StackPanel
+                    {
+                        Orientation = global::Avalonia.Layout.Orientation.Horizontal,
+                        HorizontalAlignment = global::Avalonia.Layout.HorizontalAlignment.Right,
+                        Spacing = 8,
+                        Children = { no, yes },
+                    },
+                },
+            },
+        };
+
+        yes.Click += (_, _) => { confirmed = true; dlg.Close(); };
+        no.Click += (_, _) => { confirmed = false; dlg.Close(); };
+
+        await dlg.ShowDialog(owner);
+        return confirmed;
+    }
 
     /// <summary>Browse… handler for the HDRI preset / file row. Same flow as
     /// the original FractalParamsView handler — kept here so the dialog

@@ -28,6 +28,7 @@ namespace FracturingFog.Assets
             new WatermarkAssetSource(),
             new SceneAssetSource(),
             new WorkspaceAssetSource(),
+            new LightingFxAssetSource(),
         };
     }
 }

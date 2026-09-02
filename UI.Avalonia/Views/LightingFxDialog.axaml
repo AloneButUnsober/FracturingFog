@@ -59,6 +59,27 @@
                               SelectedItem="{Binding SelectedVolumetricPreset, Mode=TwoWay}" />
                 </Grid>
 
+                <!-- #580 — user-saved Lighting & FX presets (recall / save / delete / import / export) -->
+                <Grid ColumnDefinitions="160,*" Margin="0,0,0,4">
+                    <TextBlock Grid.Column="0" Text="My FX preset:" VerticalAlignment="Center"
+                               ToolTip.Tip="Your own saved Lighting &amp; FX looks — the full lighting/FX block. Pick one and click Recall to apply it. Save snapshots the current settings under a name. Also listed in the Asset Manager." />
+                    <ComboBox Grid.Column="1" HorizontalAlignment="Stretch"
+                              ItemsSource="{Binding UserFxPresets}"
+                              SelectedItem="{Binding SelectedUserFxPreset, Mode=TwoWay}" />
+                </Grid>
+                <StackPanel Orientation="Horizontal" Spacing="4" Margin="160,0,0,6">
+                    <Button Content="Recall" Click="OnRecallFxPresetClick"
+                            ToolTip.Tip="Apply the selected preset to the current view." />
+                    <Button Content="Save…" Click="OnSaveFxPresetClick"
+                            ToolTip.Tip="Save the current Lighting &amp; FX settings as a named preset." />
+                    <Button Content="Delete" Click="OnDeleteFxPresetClick"
+                            ToolTip.Tip="Delete the selected preset." />
+                    <Button Content="Import…" Click="OnImportFxPresetClick"
+                            ToolTip.Tip="Import preset(s) from a JSON file." />
+                    <Button Content="Export…" Click="OnExportFxPresetClick"
+                            ToolTip.Tip="Export the selected preset to a JSON file." />
+                </StackPanel>
+
                 <!-- Lights -->
                 <Expander Header="Lights" IsExpanded="True" HorizontalAlignment="Stretch">
                     <Grid ColumnDefinitions="160,*"
