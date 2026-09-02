@@ -1620,6 +1620,11 @@ public sealed class MandelbrotCalculator : Interefaces.IHeightFieldSource, Inter
         // Phase 2.1: OrbitAware honours PerRowMaxIter when supplied.
         int[]? perRow = PerRowMaxIter;
         bool useTileCap = perRow != null && perRow.Length >= Height;
+        // #590 (F14) — theme-driven interior orbit colouring. Read once (the
+        // interface member would be a virtual call per pixel otherwise). When on,
+        // in-set pixels are coloured via MapInteriorWithOrbit instead of the flat
+        // InSetColor (and the bulb early-out is skipped so the accumulator fills).
+        bool wantInterior = colorMap.WantsInteriorColor;
 
         _po.CancellationToken = ct;
         var po = _po;
@@ -1633,7 +1638,7 @@ public sealed class MandelbrotCalculator : Interefaces.IHeightFieldSource, Inter
             for (int x = 0; x < Width; x++)
             {
                 double cx = CenterX + (x - Width * 0.5) * scale;
-                ComputePixelOrbit(cx, cy, rowMaxIt, rowBase + x, colorMap);
+                ComputePixelOrbit(cx, cy, rowMaxIt, rowBase + x, colorMap, wantInterior);
             }
             // Phase 2.1 in-set rewrite (see CalculateDoublePrecision).
             if (rowMaxIt < maxIt)
@@ -1649,14 +1654,16 @@ public sealed class MandelbrotCalculator : Interefaces.IHeightFieldSource, Inter
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private void ComputePixelOrbit<TMap>(
-        double cx, double cy, int maxIter, int idx, TMap colorMap)
+        double cx, double cy, int maxIter, int idx, TMap colorMap, bool wantInterior)
         where TMap : IOrbitAwareColorMap
     {
         colorMap.InitOrbit(out var acc);
 
         // Bulb early-out: pixel guaranteed in-set, so the orbit accumulator
-        // would be unused (in-set branch below ignores acc). Skip the loop.
-        if (IsInMainCardioidOrBulb(cx, cy))
+        // would be unused (the in-set branch below ignores acc). Skip the loop.
+        // #590 (F14) — but when the theme colours the interior FROM the orbit,
+        // the accumulator IS used, so we must actually iterate: skip the early-out.
+        if (!wantInterior && IsInMainCardioidOrBulb(cx, cy))
         {
             IterationBuffer[idx] = maxIter;
             SmoothBuffer[idx] = 0f;
@@ -1739,14 +1746,31 @@ public sealed class MandelbrotCalculator : Interefaces.IHeightFieldSource, Inter
             DistanceBuffer[idx] = 0f;
             NormalXBuffer[idx] = 0f;
             NormalYBuffer[idx] = 0f;
-            TrapBuffer[idx] = 0f;
-            StripeBuffer[idx] = 0f;
-            TiaBuffer[idx] = 0f;
+            // #590 (F14) — keep the accumulated trap distance for interior pixels
+            // when the theme colours the interior; otherwise 0f (byte-identical
+            // to the historical flat path, which never populated these for in-set).
+            if (wantInterior)
+            {
+                TrapBuffer[idx] = acc.TrapMin == float.MaxValue ? 0f : acc.TrapMin;
+                StripeBuffer[idx] = acc.StripeCount > 0 ? (float)(acc.StripeSum / acc.StripeCount) : 0f;
+                TiaBuffer[idx] = acc.TiaCount > 0 ? (float)(acc.TiaSum / acc.TiaCount) : 0f;
+            }
+            else
+            {
+                TrapBuffer[idx] = 0f;
+                StripeBuffer[idx] = 0f;
+                TiaBuffer[idx] = 0f;
+            }
             FinalZrBuffer[idx] = 0f;
             FinalZiBuffer[idx] = 0f;
             FinalDrBuffer[idx] = 0f;
             FinalDiBuffer[idx] = 0f;
-            ColorBuffer[idx] = colorMap.InSetColor;
+            // #590 (F14) — colour the interior from the orbit when the theme asks
+            // (opaque; StampInteriorAlpha applies InteriorAlpha afterwards, so no
+            // double-scale here). Otherwise the historical flat interior fill.
+            ColorBuffer[idx] = wantInterior
+                ? (uint)colorMap.MapInteriorWithOrbit(maxIter, in acc)
+                : colorMap.InSetColor;
         }
     }
 
