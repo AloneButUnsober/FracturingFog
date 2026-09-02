@@ -174,6 +174,14 @@ public sealed class DataDrivenOrbitTrapTests
         Assert.True(distinct.Count >= 3, $"native orbit trap should sample + vary, saw {distinct.Count}");
     }
 
+    // The ColorThemeDefAdapter casts OrbitTrapShapeDef (Abstractions) <->
+    // OrbitTrapShape (Engine) by value, so their member order MUST match.
+    [Fact]
+    public void OrbitTrapShape_DefAndEngineEnums_MatchByValue()
+    {
+        Assert.Equal(Enum.GetNames<OrbitTrapShape>(), Enum.GetNames<OrbitTrapShapeDef>());
+    }
+
     [Fact]
     public void RoundTrip_ColorInterior()
     {

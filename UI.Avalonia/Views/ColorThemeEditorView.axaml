@@ -147,7 +147,37 @@
                                 <RadioButton Content="Cycling"  GroupName="kind" IsChecked="{Binding IsCycling}"  Foreground="#DCDCDC" />
                                 <RadioButton Content="Phong3D"  GroupName="kind" IsChecked="{Binding IsPhong}"    Foreground="#DCDCDC" />
                                 <RadioButton Content="Pbr3D"    GroupName="kind" IsChecked="{Binding IsPbr}"      Foreground="#DCDCDC" />
+                                <RadioButton Content="Orbit Trap" GroupName="kind" IsChecked="{Binding IsOrbitTrap}" Foreground="#DCDCDC"
+                                             ToolTip.Tip="Colour by the minimum distance from the orbit to a chosen shape (point / ring / hexagon / …), mapped through the gradient below. Orbit-aware." />
                             </StackPanel>
+                        </StackPanel>
+                    </Border>
+
+                    <!-- Orbit Trap (F13) -->
+                    <Border Classes="group" IsVisible="{Binding ShowOrbitTrap}">
+                        <StackPanel Spacing="6">
+                            <TextBlock Classes="section" Text="Orbit Trap" />
+                            <Grid ColumnDefinitions="Auto,*" RowDefinitions="Auto,Auto,Auto,Auto" Margin="0,4,0,0">
+                                <TextBlock Classes="label" Grid.Row="0" Grid.Column="0" Text="Shape:" Margin="0,0,8,4" />
+                                <ComboBox Grid.Row="0" Grid.Column="1"
+                                          ItemsSource="{Binding TrapShapeOptions}" SelectedItem="{Binding TrapShape}"
+                                          HorizontalAlignment="Left" Width="170" Margin="0,0,0,4"
+                                          ToolTip.Tip="Geometric shape the per-iteration orbit distance is measured against." />
+                                <TextBlock Classes="label" Grid.Row="1" Grid.Column="0" Text="Scale:" Margin="0,0,8,4" />
+                                <NumericUpDown Grid.Row="1" Grid.Column="1"
+                                               Value="{Binding TrapScale}" Minimum="0.05" Maximum="100" Increment="0.25"
+                                               FormatString="0.00" Width="135" HorizontalAlignment="Left" Margin="0,0,0,4"
+                                               ToolTip.Tip="Trap distances above this clamp to the gradient end — smaller pulls more pixels toward the bright end." />
+                                <TextBlock Classes="label" Grid.Row="2" Grid.Column="0" Text="Power:" Margin="0,0,8,4" />
+                                <NumericUpDown Grid.Row="2" Grid.Column="1"
+                                               Value="{Binding TrapPower}" Minimum="0.05" Maximum="8" Increment="0.05"
+                                               FormatString="0.00" Width="135" HorizontalAlignment="Left" Margin="0,0,0,4"
+                                               ToolTip.Tip="Response exponent — smaller expands small trap values into the gradient body (more filament detail)." />
+                                <CheckBox Grid.Row="3" Grid.Column="1"
+                                          Content="Colour interior (orbit)" IsChecked="{Binding ColorInterior}"
+                                          Foreground="#B4B4B4"
+                                          ToolTip.Tip="Colour in-set (non-escaping) pixels by their orbit instead of a flat fill. Takes effect on the User-Equation path today; the native Mandelbrot path keeps a flat interior." />
+                            </Grid>
                         </StackPanel>
                     </Border>
 

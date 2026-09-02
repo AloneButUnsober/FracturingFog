@@ -264,7 +264,7 @@ Each spec: what, surfaces, data model, algorithm, injection points, back-compat,
 
 ### F13 — Data-driven Orbit Trap theme kind
 
-- **Tracking:** [#589](https://github.com/AloneButUnsober/FracturingFog/issues/589). Status: ◐ P1 core building.
+- **Tracking:** [#589](https://github.com/AloneButUnsober/FracturingFog/issues/589). Status: ☑ P1 core + P2 editor UI shipped.
 - **What:** let the Color Theme Editor (and JSON) author **orbit-trap** themes, not
   just the ~30 hardcoded C# trap classes. Pick a trap shape (point/ring/cross/
   hexagon/hyperbola/…), supply a gradient, tune the response curve.
@@ -287,12 +287,19 @@ Each spec: what, surfaces, data model, algorithm, injection points, back-compat,
   kinds have none (out of scope, tracked separately).
 - **Test:** create-from-data renders non-uniform lace; each shape resolves;
   round-trip Export→Create.
-- **P2 (UI):** shape dropdown + TrapScale/TrapPower controls + "Orbit Trap" kind
-  in the Avalonia editor.
+- **P2 (UI) — SHIPPED:** "Orbit Trap" kind radio + an Orbit Trap section (shape
+  dropdown, TrapScale / TrapPower, "Colour interior (orbit)" checkbox) in the
+  Avalonia Color Theme Editor. Threaded through the UI-neutral `ColorThemeDef`
+  (new `OrbitTrapShapeDef` + `TrapShape`/`TrapScale`/`TrapPower`/`ColorInterior`
+  fields) and `ColorThemeDefAdapter` (Def↔Data). Live preview + save/export
+  reuse the existing `BuildColorMap`→`ToData`→`DataDrivenColorThemes.Create`
+  path (which already handles the OrbitTrap kind). 🎲 Random is Kind-aware for
+  OrbitTrap (random shape + scale/power + interior). Compiled-binding build
+  validates every new binding; enum-parity guard test locks the Def↔Engine cast.
 
 ### F14 — Interior orbit colouring in the editor
 
-- **Tracking:** [#590](https://github.com/AloneButUnsober/FracturingFog/issues/590). Status: ◐ runtime shipped; editor UI + native interior pending.
+- **Tracking:** [#590](https://github.com/AloneButUnsober/FracturingFog/issues/590). Status: ◐ runtime + editor UI shipped; native-path interior pending.
 - **What:** expose the [#583](https://github.com/AloneButUnsober/FracturingFog/issues/583)
   interior-orbit colouring (bounded pixels coloured by the accumulated orbit) to
   editor / JSON-authored themes — an interior toggle on the data-driven Orbit Trap
@@ -311,8 +318,10 @@ Each spec: what, surfaces, data model, algorithm, injection points, back-compat,
   gap: `MandelbrotCalculator`'s orbit dispatch is a concrete-type switch that
   never caught data-driven orbit maps → added an `IOrbitAwareColorMap` interface
   fallback so they sample on the native path (were rendering as a plain gradient).
-- **REMAINING:** (1) editor UI — the interior checkbox + the OrbitTrap-kind
-  authoring surface (folds into F13-P2, #589); (2) **native-path interior** orbit
+- **Editor UI — SHIPPED** with F13-P2: the "Colour interior (orbit)" checkbox
+  lives in the editor's Orbit Trap section (`ColorThemeDef.ColorInterior` →
+  adapter → `ColorThemeData.ColorInterior` → `DataDrivenOrbitTrap`).
+- **REMAINING:** **native-path interior** orbit
   colouring — `MandelbrotCalculator.ComputePixelOrbit` skips accumulation via the
   bulb + periodicity early-outs and the recolor passes (`RecolorFromBuffers` /
   histogram) rebuild in-set from buffers, so interior orbit colour there needs a
@@ -489,7 +498,7 @@ two assumptions the original phasing rested on, so the plan is re-sequenced:
    export/capture/video consumer first.
 
 **Phase E — orbit-aware colouring surfaces (new, 2026-09):**
-◐ F13 (data-driven Orbit Trap kind — P1 shipped, editor-UI P2 pending) · ◐ F14 (interior colouring — runtime shipped, editor UI + native interior pending) · ☐ F15 (ColorGen orbit inputs)
+☑ F13 (data-driven Orbit Trap kind — P1 + editor-UI P2 shipped) · ◐ F14 (interior colouring — runtime + editor UI shipped, native-path interior pending) · ☐ F15 (ColorGen orbit inputs)
 
 These extend the colour system past the gradient/palette family into **orbit-aware**
 colouring authorable outside hardcoded C#. F13 is the keystone (reuses the whole

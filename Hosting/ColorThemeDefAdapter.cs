@@ -34,6 +34,11 @@ namespace FracturingFog.Hosting
 
                 Stops = def.Stops.Select(ToData).ToList(),
 
+                TrapShape = (OrbitTrapShape)def.TrapShape,
+                TrapScale = def.TrapScale,
+                TrapPower = def.TrapPower,
+                ColorInterior = def.ColorInterior,
+
                 InterpolationSpace = (GradientColorSpace)def.InterpolationSpace,
                 InterpolationCurve = (InterpolationCurve)def.InterpolationCurve,
                 TransferFunction = (TransferFunction)def.TransferFunction,
@@ -102,10 +107,11 @@ namespace FracturingFog.Hosting
 
         private static ColorThemeKind ToKind(ColorThemeKindDef k) => k switch
         {
-            ColorThemeKindDef.Gradient => ColorThemeKind.Gradient,
-            ColorThemeKindDef.Cycling  => ColorThemeKind.Cycling,
-            ColorThemeKindDef.Phong3D  => ColorThemeKind.Phong3D,
-            ColorThemeKindDef.Pbr3D    => ColorThemeKind.Pbr3D,
+            ColorThemeKindDef.Gradient  => ColorThemeKind.Gradient,
+            ColorThemeKindDef.Cycling   => ColorThemeKind.Cycling,
+            ColorThemeKindDef.Phong3D   => ColorThemeKind.Phong3D,
+            ColorThemeKindDef.Pbr3D     => ColorThemeKind.Pbr3D,
+            ColorThemeKindDef.OrbitTrap => ColorThemeKind.OrbitTrap,
             _ => ColorThemeKind.Gradient,
         };
 
@@ -129,6 +135,11 @@ namespace FracturingFog.Hosting
                 Kind = ToKindDef(data.Kind),
 
                 Stops = (data.Stops ?? new List<ColorStopData>()).Select(ToDef).ToList(),
+
+                TrapShape = (OrbitTrapShapeDef)data.TrapShape,
+                TrapScale = data.TrapScale,
+                TrapPower = data.TrapPower,
+                ColorInterior = data.ColorInterior,
 
                 InterpolationSpace = (GradientColorSpaceDef)data.InterpolationSpace,
                 InterpolationCurve = (InterpolationCurveDef)data.InterpolationCurve,
@@ -201,10 +212,11 @@ namespace FracturingFog.Hosting
 
         private static ColorThemeKindDef ToKindDef(ColorThemeKind k) => k switch
         {
-            ColorThemeKind.Gradient => ColorThemeKindDef.Gradient,
-            ColorThemeKind.Cycling  => ColorThemeKindDef.Cycling,
-            ColorThemeKind.Phong3D  => ColorThemeKindDef.Phong3D,
-            ColorThemeKind.Pbr3D    => ColorThemeKindDef.Pbr3D,
+            ColorThemeKind.Gradient  => ColorThemeKindDef.Gradient,
+            ColorThemeKind.Cycling   => ColorThemeKindDef.Cycling,
+            ColorThemeKind.Phong3D   => ColorThemeKindDef.Phong3D,
+            ColorThemeKind.Pbr3D     => ColorThemeKindDef.Pbr3D,
+            ColorThemeKind.OrbitTrap => ColorThemeKindDef.OrbitTrap,
             _ => ColorThemeKindDef.Gradient,
         };
 
