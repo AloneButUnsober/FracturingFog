@@ -95,6 +95,35 @@ public sealed class AtrousDenoiserTests
         Assert.True(Math.Abs(lL - 128) < 90 && Math.Abs(lR - 128) < 90, $"loose edge not blurred (L={lL}, R={lR})");
     }
 
+    // The filter runs its rows in parallel (S4 tail, #402). A large guided buffer
+    // must denoise to the SAME bytes on every run — a data race across rows would
+    // make the output jitter. Also proves the pass actually ran (not the identity).
+    [Fact]
+    public void Parallel_Rows_Are_Race_Free_And_Deterministic()
+    {
+        int w = 320, h = 240, n = w * h;
+        var input = NoisyGray(w, h, 128, 40, 17);
+        var normal = new float[n * 3];
+        var depth = new float[n];
+        for (int y = 0; y < h; y++)
+        for (int x = 0; x < w; x++)
+        {
+            int i = y * w + x;
+            bool right = x >= w / 2;                       // a mid normal/depth seam
+            normal[i * 3] = right ? 1f : 0f;
+            normal[i * 3 + 1] = 0f;
+            normal[i * 3 + 2] = right ? 0f : 1f;
+            depth[i] = right ? 2.0f : 1.0f;
+        }
+        var p = new AtrousParams { Iterations = 5, ColorSigma = 0.8, NormalSigma = 0.1, DepthSigma = 0.1 };
+
+        var first = AtrousDenoiser.Denoise(input, w, h, p, normal, depth);
+        for (int run = 0; run < 6; run++)
+            Assert.Equal(first, AtrousDenoiser.Denoise(input, w, h, p, normal, depth));
+
+        Assert.NotEqual<uint[]>(input, first);            // the pass actually filtered
+    }
+
     // A normal-guide discontinuity stops the filter even when the color sigma is
     // wide: with a loose color sigma the edge blurs, but adding a normal guide
     // that flips at the same seam keeps it sharp.
