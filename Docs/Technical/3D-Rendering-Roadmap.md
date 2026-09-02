@@ -238,8 +238,18 @@ code.
   byte-identical off / aperture 0. SSAO + edge-ink are bypassed while it's on (they
   need the G-buffer the lens path skips). Wired into the preset DTO + Volumetric FX
   dialog. Remaining on #567: the other 3D families + the GPU raymarch kernels.
-- **Remaining:** thin-lens DOF on the other 3D families + GPU kernels (#567),
-  **motion blur** over Scene time (deferred → issue #568), in-camera exposure control.
+- **Thin-lens DOF on the other CPU 3D families (landed — PR #576, #567):** extended the
+  Mandelbulb camera to the five remaining families that shade through `Shade<TDe>`
+  (Mandelbox / Quat Julia / Quat Mandelbrot / Bicomplex / Kleinian). The per-pixel
+  aperture-averaging is extracted into ONE shared helper `Rendering/Lighting/ThinLensDof`
+  (`IsActive`/`SampleCount`/`FocusDistance` + `AccumulatePixel` — the exact arithmetic
+  Mandelbulb #570 shipped inline). Each family gained a per-thread `ShadeRay` closure + a
+  thin-lens branch; SSAO / screen-space DoF / edge-ink are bypassed while on, tonemap/bloom
+  still consume the averaged HDR, and each family's GPU fast-path forces CPU when thin-lens
+  is armed. Byte-identical off / aperture 0; the shared `DofThinLens` checkbox already drives
+  all families. +15 `MultiFamilyThinLensDofTests`.
+- **Remaining:** thin-lens DOF on the **GPU** raymarch kernels (all families, #567),
+  in-camera exposure control.
 
 ### S4 — Guided denoiser (À-Trous / SVGF-lite) ● (#402)
 AO, soft shadow and reflections are Monte Carlo → noisy → paid for with
