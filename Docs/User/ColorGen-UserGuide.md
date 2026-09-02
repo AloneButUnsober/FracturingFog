@@ -150,10 +150,15 @@ operands and yield `1.0` / `0.0`.
 | `isInSet`   | scalar | `1.0` if `iter >= maxIter`, else `0.0`               |
 | `pxScale`   | scalar | Complex-plane width of one pixel (1.0 if unset)      |
 | `trapMin`   | scalar | Orbit-trap distance: min `\|z_n\|` over the orbit (origin point-trap). †|
+| `trapCross` | scalar | Orbit-trap distance to the nearer coordinate axis: min `min(\|Re\|,\|Im\|)`. †|
 | `stripeAvg` | scalar | Stripe average: mean of `0.5+0.5·sin(7·arg(z_n))` (classic SAC). †|
 | `tiaAvg`    | scalar | Triangle-inequality average over the orbit. †|
+| `curvature` | scalar | Mean `\|Δarg\|` between successive orbit segments (radians, ~`[0,π]`). †|
+| `lyapunov`  | scalar | Mean `log\|2·z_n\|` — local divergence rate (unbounded; scale it). †|
+| `gaussian`  | scalar | Mean distance to the nearest Gaussian integer (`~[0, 0.71]`). †|
+| `expSmooth` | scalar | Mean `e^{−\|z_n\|}` (Kerry Mitchell) — weights orbits near the origin. †|
 
-> **† Orbit inputs (F15).** These three read the *whole orbit*, not just the
+> **† Orbit inputs (F15).** These read the *whole orbit*, not just the
 > escape point, so a program using any of them is rendered on the CPU
 > orbit-sampling path. Caveats: **interpreter-only** — *Compile & Load* works, but
 > *Generate via ColorGen* (C# export) and the **GPU palette** do not support them
@@ -752,7 +757,8 @@ ensure the JSON regenerates cleanly.
 
 ```
 Inputs    smooth dist iter maxIter t nx ny zr zi dzr dzi arg mag isInSet pxScale
-          trapMin stripeAvg tiaAvg   // orbit inputs (F15): CPU / interpreter-only
+          trapMin trapCross stripeAvg tiaAvg curvature lyapunov gaussian expSmooth
+                                     // orbit inputs (F15): CPU / interpreter-only
 Const     pi tau e phi
 Ctors     rgb(r,g,b) hsv(h,s,v) hsl(h,s,l) oklab(L,a,b) oklch(L,C,h)
 Palette   palette(t, c0, c1, …)                  // n cyclic stops

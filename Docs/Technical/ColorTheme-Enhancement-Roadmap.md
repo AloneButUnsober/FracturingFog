@@ -370,10 +370,16 @@ Each spec: what, surfaces, data model, algorithm, injection points, back-compat,
   rejects** orbit programs with a clear message (interpreter-only for now).
   `MapInteriorWithOrbit` inherits the default, so an orbit ColorGen theme also
   colours the interior when the calculator gate (F14) is on.
+- **ACCUMULATOR MENU EXPANDED (interpreter/CPU):** added `trapCross` (nearest-axis
+  trap), `curvature` (mean |Δarg|), `lyapunov` (mean log|2z|), `gaussian` (mean
+  dist to nearest Gaussian integer) and `expSmooth` (mean e^{−|z|}) — raw means,
+  the DSL scales them. `InterpretedOrbitColorMap` now takes the set of referenced
+  orbit inputs and **computes only those per iteration** (per-input flags — the
+  transcendentals aren't free), reusing the built-in themes' exact Sample maths.
 - **REMAINING:** GPU/HLSL orbit support (needs the fractal kernel to compute +
   pass the accumulators); C#-export (`ColorMap.template.cs` + `ColorGenEmitter`
-  orbit-aware generated class); the rest of the accumulator menu (curvature /
-  lyapunov / gaussian / expSmooth) and selectable trap shapes for `trapMin`.
+  orbit-aware generated class); a full **selectable trap-shape** menu for the trap
+  inputs (point + cross ship; ring / hexagon / … would follow the F13 shape set).
 
 ---
 
