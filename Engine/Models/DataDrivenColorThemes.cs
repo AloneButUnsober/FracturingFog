@@ -204,6 +204,7 @@ namespace FracturingFog.Models
                         TrapShape = trap.Shape,
                         TrapScale = trap.ExportTrapScale,
                         TrapPower = trap.ExportTrapPower,
+                        ColorInterior = trap.ExportColorInterior,
                         InterpolationSpace = trap.ExportInterpolationSpace,
                         InterpolationCurve = trap.ExportInterpolationCurve,
                         TransferFunction = trap.ExportTransferFunction,
@@ -664,7 +665,10 @@ namespace FracturingFog.Models
     /// the running minimum trap distance through the tunable
     /// <see cref="TrapScale"/> / <see cref="TrapPower"/> response.
     /// </summary>
-    public sealed class DataDrivenOrbitTrap : OrbitTrapPowerBaseMap, IColorMap, INamedColorMap, IThemePostFx
+    // Re-list IOrbitAwareColorMap (already implemented by the base) so this
+    // type's public WantsInteriorColor re-implements the interface's default
+    // member — otherwise the base's default (false) wins and F14 never engages.
+    public sealed class DataDrivenOrbitTrap : OrbitTrapPowerBaseMap, IOrbitAwareColorMap, INamedColorMap, IThemePostFx
     {
         public string DisplayName { get; }
         public string DisplayCategory { get; }
@@ -677,15 +681,21 @@ namespace FracturingFog.Models
 
         private readonly OrbitTrapBaseMap _shape;
         private readonly float _trapScale, _trapPower;
+        private readonly bool _colorInterior;
         private readonly uint _inSetColor;
 
         /// <summary>Selected trap shape (exported for round-trip).</summary>
         public OrbitTrapShape Shape { get; }
         public float ExportTrapScale => _trapScale;
         public float ExportTrapPower => _trapPower;
+        public bool ExportColorInterior => _colorInterior;
 
         protected override float TrapScale => _trapScale;
         protected override float TrapPower => _trapPower;
+
+        // F14 — theme-driven interior orbit colouring (implements the
+        // IOrbitAwareColorMap default member).
+        public bool WantsInteriorColor => _colorInterior;
 
         uint IColorMap.InSetColor => _inSetColor;
 
@@ -702,6 +712,7 @@ namespace FracturingFog.Models
             Shape = data.TrapShape;
             _trapScale = data.TrapScale > 0f ? data.TrapScale : 2f;
             _trapPower = data.TrapPower > 0f ? data.TrapPower : 0.35f;
+            _colorInterior = data.ColorInterior;
             _shape = ShapeImpl(data.TrapShape);
             _inSetColor = data.InSetColor?.ToPackedArgb() ?? 0xFF000000u;
 

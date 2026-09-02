@@ -109,6 +109,81 @@ public sealed class DataDrivenOrbitTrapTests
         Assert.NotEqual(Render(OrbitTrapShape.Hexagon), Render(OrbitTrapShape.Hyperbola));
     }
 
+    // ── F14 (#590) — theme-driven interior orbit colouring ──────────────────
+
+    private const int CenterIdx = (H / 2) * W + (W / 2);   // c = (-0.5, 0), in-set
+
+    [Fact]
+    public void ColorInterior_Capability_ReflectsData()
+    {
+        var off = (IOrbitAwareColorMap)DataDrivenColorThemes.Create(TrapData(OrbitTrapShape.Ring))!;
+        Assert.False(off.WantsInteriorColor);   // default
+
+        var data = TrapData(OrbitTrapShape.Ring);
+        data.ColorInterior = true;
+        var on = (IOrbitAwareColorMap)DataDrivenColorThemes.Create(data)!;
+        Assert.True(on.WantsInteriorColor);
+    }
+
+    [Fact]
+    public void DslPath_ColorInterior_FillsInteriorFromTheme()
+    {
+        static uint[] Render(bool colorInterior)
+        {
+            var data = TrapData(OrbitTrapShape.Ring);
+            data.ColorInterior = colorInterior;
+            var calc = new UserEquationCalculator(W, H)
+            {
+                CenterX = -0.5, CenterY = 0.0, Zoom = 1.0, MaxIterations = 120,
+                ColorMap = DataDrivenColorThemes.Create(data)!,
+                FractalParameters = new FractalParameters
+                {
+                    UserEquationSource = "z*z + c",
+                    UserCodeOrigin = UserCodeOrigin.Interactive,
+                    // NB: the User-Equation flag stays OFF — the theme itself
+                    // requests interior colouring (F14).
+                },
+            };
+            calc.Calculate(default);
+            return (uint[])calc.ColorBuffer.Clone();
+        }
+
+        uint[] off = Render(false);
+        uint[] on = Render(true);
+
+        Assert.Equal(0xFF000000u, off[CenterIdx]);          // flat interior when off
+        Assert.NotEqual(0xFF000000u, on[CenterIdx]);        // theme coloured the interior
+        Assert.Equal(0xFFu, (on[CenterIdx] >> 24) & 0xFFu); // opaque
+        Assert.NotEqual(off, on);
+    }
+
+    // The native Mandelbrot path must dispatch a data-driven orbit trap through
+    // the orbit-aware path (interface fallback) — otherwise Sample never runs
+    // and it renders as a plain iteration gradient.
+    [Fact]
+    public void NativePath_OrbitTrap_Samples_AndIsNonUniform()
+    {
+        var calc = new MandelbrotCalculator(W, H)
+        {
+            CenterX = -0.75, CenterY = 0.0, Zoom = 1.0, MaxIterations = 200,
+            ColorMap = DataDrivenColorThemes.Create(TrapData(OrbitTrapShape.Ring))!,
+        };
+        calc.Calculate(default);
+
+        var distinct = new HashSet<uint>(calc.ColorBuffer);
+        Assert.True(distinct.Count >= 3, $"native orbit trap should sample + vary, saw {distinct.Count}");
+    }
+
+    [Fact]
+    public void RoundTrip_ColorInterior()
+    {
+        var data = TrapData(OrbitTrapShape.Hexagon);
+        data.ColorInterior = true;
+        ColorThemeData? back = DataDrivenColorThemes.Export(DataDrivenColorThemes.Create(data)!);
+        Assert.NotNull(back);
+        Assert.True(back!.ColorInterior);
+    }
+
     [Fact]
     public void RoundTrip_Export_PreservesShapeAndKind()
     {
