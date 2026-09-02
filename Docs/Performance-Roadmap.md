@@ -495,3 +495,74 @@ After P0–P6 ships, you are CPU-raymarch-bound until P7 lands. After P7,
 you are GPU-shader-bound — orders of magnitude headroom for higher
 sample counts, recursive bounces, true stereo, and the remaining
 deferred Lighting/FX work.
+
+---
+
+## GPU compute-kernel path (D3D / Vulkan) — separate from ILGPU P7
+
+The P7 lift above is the **ILGPU** raymarch path (`UseGpuRender`). The 2D
+Mandelbrot escape kernel, the **Relief 3D** oblique raymarch, and the froxel
+volume pass run on a different backend — hand-written HLSL compiled to D3D11
+`cs_5_0` (FXC) or Vulkan `cs_6_0` SPIR-V (DXC), in `Rendering.D3D` /
+`Rendering.Vulkan`. Two perf notes on that path:
+
+### Compiled-shader disk cache — #456 (landed, PR #578)
+
+Those kernels were compiled from HLSL **at runtime on first use** and cached
+only for the process lifetime, so every launch paid a one-time FXC/DXC compile
+before the first GPU render appeared — a few seconds on typical hardware, longer
+on weak boxes/drivers (the relief **DOF** variant's lens-loop is the single
+slowest compile). `Abstractions/ShaderBlobCache` now persists the compiled blob
+to disk (FXC bytecode / DXC SPIR-V) and reloads it on later launches, so the
+first render is as fast as a warm one.
+
+- **Key** = SHA-256 of the exact HLSL source + entry point + profile + compiler
+  flags + a bumped format-version tag. A source/flag change ⇒ different key ⇒
+  fresh compile; never keyed on mtime, so a stale blob is never loaded.
+- **Pure accelerator.** Any miss / corruption / read failure falls back to
+  compiling from source (the old path); a driver-rejected blob is deleted and
+  recompiled. Correctness never depends on a cache hit.
+- **Scope.** Startup latency only — **per-frame dispatch cost is unchanged.**
+- **Location** `AppDataPaths.Root/ShaderCache/` (not the install dir).
+  Opt-out `FF_NO_SHADER_CACHE=1`; `ShaderBlobCache.ClearAll()` wipes it.
+- Wired through `D3DShaderCache.CompileOrLoad` (Mandelbrot base/palette/perturb,
+  relief pinhole+DOF, froxel integrate+composite) and `DxcCompiler.CompileToSpirv`
+  (relief / froxel / Mandelbrot Vulkan). 11 tests (`ShaderBlobCacheTests`).
+- A build-time precompile (ship blobs in the package) is a possible follow-on;
+  the runtime disk cache is the low-risk first slice.
+
+### Relief 3D per-frame cost — accretion, not regression
+
+Relief 3D can feel slower than it did months ago. That is **feature accretion,
+not a regression** — the relief kernel grew a per-pixel term with every roadmap
+slice (S4 AOVs, S5 glass, S6 fog mask, S8 point/spot lights, plus earlier
+shadows / AO / IBL / triplanar / reflections / FBM cloud noise / HDRI / DOF).
+Cost is multiplicative and nested; worst-case DE-evaluations per pixel:
+
+```
+DofTaps × ( MaxSteps                         primary sphere-trace
+          + 3·ShadowSteps                    soft shadow, 3 lights
+          + AoSamples                        DE-cone AO
+          + MaxBounces·ReflSteps             reflections
+          + VolSteps·(3·ShadowSteps          volumetric in-scatter, shadowed
+                      + NoiseOctaves + 16) )  + FBM + cloud self-shadow
+```
+
+Each DE-evaluation is itself the fractal's iterated estimator. Ranked hotspots:
+
+1. **Volumetric fog with shadows on** — `VolSteps × 3 × ShadowSteps` DE-evals per
+   pixel dominates everything else.
+2. **DOF** — an outer multiplier on the *entire* trace (`DofTaps×`). Already kept
+   out of the default shader (PR #454 / f6fa8b3); #456 also removes its slow
+   first-compile.
+3. Reflections × bounces, then AO, then shadows.
+
+Low-end hardware makes this worse: FP-heavy compute with no FP64 acceleration on
+consumer GPUs, and synchronous `Map` readback (PCIe / unified-memory bound on
+weak IGPs). The path is already reasonably tuned — adaptive volumetric LOD
+(`VolumeStepsFalloff`, P4), empty-space-skip max-height mip, self-shadow steps
+clamped to 16, DOF/perturb TDR row-banding, lazy DOF compile. There is **no cheap
+free lunch left in the shader itself**; cost is inherent to how many effects are
+stacked. The biggest user-facing lever is content, not code: lighter default
+presets (fewer `VolSteps` / `ShadowSteps` when both are on) or an auto-quality
+clamp on weak GPUs — feature work, tracked separately, not a bug.
