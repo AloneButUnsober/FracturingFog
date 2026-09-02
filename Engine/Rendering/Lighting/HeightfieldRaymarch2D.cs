@@ -180,18 +180,27 @@ public static class HeightfieldRaymarch2D
     /// the guide buffers the À-Trous denoiser (S4) consumes.</summary>
     public sealed class ReliefAovBuffers
     {
-        public ReliefAovBuffers(int w, int h) : this(w, h, false) { }
+        public ReliefAovBuffers(int w, int h) : this(w, h, false, false) { }
+
+        public ReliefAovBuffers(int w, int h, bool captureComponents)
+            : this(w, h, captureComponents, false) { }
 
         /// <param name="captureComponents">Also allocate <see cref="Components"/> so
         /// the render records the float lighting components (diffuse/specular/AO/
         /// shadow) at each primary hit (roadmap S1/S7, #389). The denoiser (S4) only
         /// needs normal + depth and leaves this off.</param>
-        public ReliefAovBuffers(int w, int h, bool captureComponents)
+        /// <param name="captureMotion">Also allocate <see cref="Motion"/> so the
+        /// render records the per-pixel screen-space motion vector (roadmap S1, #398)
+        /// — the guide a temporal denoiser (S4) reprojects along and per-object
+        /// motion blur integrates. Off by default (no cost, byte-identical).</param>
+        public ReliefAovBuffers(int w, int h, bool captureComponents, bool captureMotion)
         {
             NormalXyz = new float[(long)w * h * 3];
             Depth = new float[(long)w * h];
             if (captureComponents)
                 Components = new ShadingPipeline.ShadeComponents[(long)w * h];
+            if (captureMotion)
+                Motion = new float[(long)w * h * 2];
         }
         public float[] NormalXyz { get; }
         public float[] Depth { get; }
@@ -199,6 +208,13 @@ public static class HeightfieldRaymarch2D
         /// <summary>Per-pixel float lighting components from the primary hit, or null
         /// when component capture was not requested. Populated in the beauty pass.</summary>
         public ShadingPipeline.ShadeComponents[]? Components { get; }
+
+        /// <summary>Per-pixel screen-space motion vector (du, dv) interleaved
+        /// (<c>w·h·2</c>), or null when motion capture was not requested (roadmap S1,
+        /// #398). Filled by <see cref="ReliefMotionVector"/> once the render threads
+        /// its current + previous-frame camera through; a still frame (previous camera
+        /// == current) is all-zero.</summary>
+        public float[]? Motion { get; }
     }
 
     public static void Render(uint[] albedo, float[] height, int w, int h,
