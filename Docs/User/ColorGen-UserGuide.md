@@ -151,6 +151,9 @@ operands and yield `1.0` / `0.0`.
 | `pxScale`   | scalar | Complex-plane width of one pixel (1.0 if unset)      |
 | `trapMin`   | scalar | Orbit-trap distance: min `\|z_n\|` over the orbit (origin point-trap). †|
 | `trapCross` | scalar | Orbit-trap distance to the nearer coordinate axis: min `min(\|Re\|,\|Im\|)`. †|
+| `trapRing`  | scalar | Orbit-trap distance to a circle (r=0.3 at (-1,0)) — concentric ring filaments. †|
+| `trapHyperbola` | scalar | Orbit-trap distance to the curve `\|Re·Im\|=1`. †|
+| `trapHexagon` | scalar | Orbit-trap distance to a regular hexagon's edges. †|
 | `stripeAvg` | scalar | Stripe average: mean of `0.5+0.5·sin(7·arg(z_n))` (classic SAC). †|
 | `tiaAvg`    | scalar | Triangle-inequality average over the orbit. †|
 | `curvature` | scalar | Mean `\|Δarg\|` between successive orbit segments (radians, ~`[0,π]`). †|
@@ -757,7 +760,8 @@ ensure the JSON regenerates cleanly.
 
 ```
 Inputs    smooth dist iter maxIter t nx ny zr zi dzr dzi arg mag isInSet pxScale
-          trapMin trapCross stripeAvg tiaAvg curvature lyapunov gaussian expSmooth
+          trapMin trapCross trapRing trapHyperbola trapHexagon
+          stripeAvg tiaAvg curvature lyapunov gaussian expSmooth
                                      // orbit inputs (F15): CPU / interpreter-only
 Const     pi tau e phi
 Ctors     rgb(r,g,b) hsv(h,s,v) hsl(h,s,l) oklab(L,a,b) oklch(L,C,h)

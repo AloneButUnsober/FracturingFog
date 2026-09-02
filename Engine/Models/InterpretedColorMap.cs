@@ -439,8 +439,11 @@ public class InterpretedColorMap :
         "isInSet" => inp.IsInSet,
         "pxScale" => inp.PxScale,
         // F15 orbit-accumulator inputs (0 on the non-orbit path).
-        "trapMin"   => inp.TrapMin,
-        "trapCross" => inp.TrapCross,
+        "trapMin"       => inp.TrapMin,
+        "trapCross"     => inp.TrapCross,
+        "trapRing"      => inp.TrapRing,
+        "trapHyperbola" => inp.TrapHyperbola,
+        "trapHexagon"   => inp.TrapHexagon,
         "stripeAvg" => inp.StripeAvg,
         "tiaAvg"    => inp.TiaAvg,
         "curvature" => inp.Curvature,
@@ -455,7 +458,8 @@ public class InterpretedColorMap :
     {
         public double Smooth, Dist, Iter, MaxIter, T, Nx, Ny, Zr, Zi, Dzr, Dzi, Arg, Mag, IsInSet, PxScale;
         // F15 — orbit-accumulator inputs, filled by the orbit-aware subclass.
-        public double TrapMin, TrapCross, StripeAvg, TiaAvg, Curvature, Lyapunov, Gaussian, ExpSmooth;
+        public double TrapMin, TrapCross, TrapRing, TrapHyperbola, TrapHexagon;
+        public double StripeAvg, TiaAvg, Curvature, Lyapunov, Gaussian, ExpSmooth;
     }
 
     private static string ShortHash(string s)
@@ -487,7 +491,11 @@ public sealed class InterpretedOrbitColorMap : InterpretedColorMap, IOrbitAwareC
 
     // Which accumulators this program actually references — only these are
     // computed per iteration (the transcendentals in Sample are not free).
-    private readonly bool _trapMin, _trapCross, _stripe, _tia, _curvature, _lyapunov, _gaussian, _exp;
+    private readonly bool _trapMin, _trapCross, _ring, _hyperbola, _hexagon,
+                          _stripe, _tia, _curvature, _lyapunov, _gaussian, _exp;
+
+    // Ring trap geometry (matches the built-in OrbitTrapRingMap).
+    private const double RingCx = -1.0, RingCy = 0.0, RingR = 0.3;
 
     internal InterpretedOrbitColorMap(CgProgram prog, string name, string category, string description,
                                       HashSet<string> orbitInputs)
@@ -495,6 +503,9 @@ public sealed class InterpretedOrbitColorMap : InterpretedColorMap, IOrbitAwareC
     {
         _trapMin   = orbitInputs.Contains("trapMin");
         _trapCross = orbitInputs.Contains("trapCross");
+        _ring      = orbitInputs.Contains("trapRing");
+        _hyperbola = orbitInputs.Contains("trapHyperbola");
+        _hexagon   = orbitInputs.Contains("trapHexagon");
         _stripe    = orbitInputs.Contains("stripeAvg");
         _tia       = orbitInputs.Contains("tiaAvg");
         _curvature = orbitInputs.Contains("curvature");
@@ -508,6 +519,9 @@ public sealed class InterpretedOrbitColorMap : InterpretedColorMap, IOrbitAwareC
         acc = default;
         acc.TrapMin = float.MaxValue;    // trapMin  — origin point-trap
         acc.TrapMin2 = float.MaxValue;   // trapCross — nearest-axis trap
+        acc.TrapMin3 = float.MaxValue;   // trapRing
+        acc.TrapMin4 = float.MaxValue;   // trapHyperbola
+        acc.TrapMin5 = float.MaxValue;   // trapHexagon
     }
 
     public void Sample(ref OrbitAccumulator acc, double zr, double zi, double cr, double ci, int iter)
@@ -524,6 +538,41 @@ public sealed class InterpretedOrbitColorMap : InterpretedColorMap, IOrbitAwareC
         {
             double d = Math.Min(Math.Abs(zr), Math.Abs(zi));
             if ((float)d < acc.TrapMin2) acc.TrapMin2 = (float)d;
+        }
+
+        // trapRing — min distance to a circle of radius 0.3 centred at (-1, 0).
+        if (_ring)
+        {
+            double dx = zr - RingCx, dy = zi - RingCy;
+            double d = Math.Abs(Math.Sqrt(dx * dx + dy * dy) - RingR);
+            if ((float)d < acc.TrapMin3) acc.TrapMin3 = (float)d;
+        }
+
+        // trapHyperbola — min distance to the curve |zr·zi| = 1.
+        if (_hyperbola)
+        {
+            double f = Math.Abs(zr * zi) - 1.0;
+            double gradMag = Math.Sqrt(zr * zr + zi * zi);
+            if (gradMag < 1e-6) gradMag = 1e-6;
+            double d = Math.Abs(f) / gradMag;
+            if ((float)d < acc.TrapMin4) acc.TrapMin4 = (float)d;
+        }
+
+        // trapHexagon — min distance to a regular hexagon's edges (folded SDF,
+        // matches the built-in OrbitTrapHexagonMap).
+        if (_hexagon)
+        {
+            const double kx = -0.8660254037844387;   // −√3/2
+            const double ky = 0.5;
+            const double kz = 0.5773502691896257;    // tan(π/6)
+            double px = Math.Abs(zr), py = Math.Abs(zi);
+            double dot2 = 2.0 * Math.Min(kx * px + ky * py, 0.0);
+            px -= dot2 * kx;
+            py -= dot2 * ky;
+            px -= Math.Clamp(px, -kz, kz);
+            py -= 1.0;
+            double d = Math.Sqrt(px * px + py * py);
+            if ((float)d < acc.TrapMin5) acc.TrapMin5 = (float)d;
         }
 
         // stripeAvg — mean of 0.5 + 0.5·sin(density·arg(z_n)).
@@ -609,8 +658,11 @@ public sealed class InterpretedOrbitColorMap : InterpretedColorMap, IOrbitAwareC
         In inp = BuildIn(smooth, distance, iterations, nx, ny, 0f, 0f, 0f, 0f);
         // Bind the accumulated means (raw — the DSL scales them). Unreferenced
         // ones stay 0 (never accumulated); the program doesn't read them.
-        inp.TrapMin   = acc.TrapMin  == float.MaxValue ? 0.0 : acc.TrapMin;
-        inp.TrapCross = acc.TrapMin2 == float.MaxValue ? 0.0 : acc.TrapMin2;
+        inp.TrapMin       = acc.TrapMin  == float.MaxValue ? 0.0 : acc.TrapMin;
+        inp.TrapCross     = acc.TrapMin2 == float.MaxValue ? 0.0 : acc.TrapMin2;
+        inp.TrapRing      = acc.TrapMin3 == float.MaxValue ? 0.0 : acc.TrapMin3;
+        inp.TrapHyperbola = acc.TrapMin4 == float.MaxValue ? 0.0 : acc.TrapMin4;
+        inp.TrapHexagon   = acc.TrapMin5 == float.MaxValue ? 0.0 : acc.TrapMin5;
         inp.StripeAvg = acc.StripeCount    > 0 ? acc.StripeSum    / acc.StripeCount    : 0.0;
         inp.TiaAvg    = acc.TiaCount       > 0 ? acc.TiaSum       / acc.TiaCount       : 0.0;
         inp.Curvature = acc.CurvatureCount > 0 ? acc.CurvatureSum / acc.CurvatureCount : 0.0;

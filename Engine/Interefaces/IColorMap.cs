@@ -333,6 +333,13 @@ namespace FracturingFog.Interefaces
         /// <summary>Secondary trap distance (e.g. for Pickover stalks: TrapMin = min|Re|, TrapMin2 = min|Im|).</summary>
         public float TrapMin2;
 
+        /// <summary>Extra trap-shape channels (F15 — ColorGen shape-trap inputs
+        /// trapRing / trapHyperbola / trapHexagon). Initialise to
+        /// <see cref="float.MaxValue"/> when used; unused by the built-in themes.</summary>
+        public float TrapMin3;
+        public float TrapMin4;
+        public float TrapMin5;
+
         /// <summary>Location (Re, Im) of orbit point at which TrapMin was achieved.  Used by image / texture traps.</summary>
         public double TrapZr;
         public double TrapZi;

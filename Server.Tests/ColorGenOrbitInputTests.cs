@@ -45,6 +45,9 @@ public sealed class ColorGenOrbitInputTests
     [InlineData("return hsv(saturate(lyapunov * 0.2), 0.8, 1.0);")]
     [InlineData("return hsv(saturate(gaussian * 1.4), 0.8, 1.0);")]
     [InlineData("return hsv(saturate(expSmooth), 0.8, 1.0);")]
+    [InlineData("return hsv(saturate(trapRing * 3.0), 0.8, 1.0);")]
+    [InlineData("return hsv(saturate(trapHyperbola), 0.8, 1.0);")]
+    [InlineData("return hsv(saturate(trapHexagon), 0.8, 1.0);")]
     public void EachOrbitInput_TriggersOrbitAware(string src)
         => Assert.IsAssignableFrom<IOrbitAwareColorMap>(Make(src));
 
@@ -102,10 +105,23 @@ public sealed class ColorGenOrbitInputTests
     [InlineData("return hsv(saturate(gaussian * 1.4), 0.9, 1.0);")]
     [InlineData("return hsv(saturate(expSmooth), 0.9, 1.0);")]
     [InlineData("return hsv(saturate(trapCross * 3.0), 0.9, 1.0);")]
+    [InlineData("return hsv(saturate(trapRing * 3.0), 0.9, 1.0);")]
+    [InlineData("return hsv(saturate(trapHyperbola), 0.9, 1.0);")]
+    [InlineData("return hsv(saturate(trapHexagon), 0.9, 1.0);")]
     public void NativeRender_ExtendedAccumulators_AreNonUniform(string src)
     {
         var distinct = new HashSet<uint>(RenderNative(src));
         Assert.True(distinct.Count >= 3, $"accumulator should vary, saw {distinct.Count}");
+    }
+
+    // Two distinct shape traps in one program bind independently (separate
+    // accumulator slots), so they produce different images.
+    [Fact]
+    public void NativeRender_ShapeTraps_AreIndependent()
+    {
+        uint[] ring = RenderNative("return hsv(saturate(trapRing * 3.0), 0.9, 1.0);");
+        uint[] hex  = RenderNative("return hsv(saturate(trapHexagon), 0.9, 1.0);");
+        Assert.NotEqual(ring, hex);
     }
 
     // "Generate via ColorGen" (C# export) is interpreter-only for orbit inputs —
