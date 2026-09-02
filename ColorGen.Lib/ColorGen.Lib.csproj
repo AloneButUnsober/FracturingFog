@@ -34,6 +34,8 @@
              Exclude="..\ColorGen\Program.cs;..\ColorGen\Templates\**;..\ColorGen\bin\**;..\ColorGen\obj\**" />
     <None Include="..\ColorGen\Templates\ColorMap.template.cs" Link="Templates\ColorMap.template.cs" />
     <EmbeddedResource Include="..\ColorGen\Templates\ColorMap.template.cs" Link="Templates\ColorMap.template.cs" />
+    <None Include="..\ColorGen\Templates\ColorMapOrbit.template.cs" Link="Templates\ColorMapOrbit.template.cs" />
+    <EmbeddedResource Include="..\ColorGen\Templates\ColorMapOrbit.template.cs" Link="Templates\ColorMapOrbit.template.cs" />
   </ItemGroup>
 
   <ItemGroup>

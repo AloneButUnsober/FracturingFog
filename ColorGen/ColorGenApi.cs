@@ -59,15 +59,15 @@ public static class ColorGenApi
             return new GenerateResult(sanitized, "", $"Parse error: {ex.Message}");
         }
 
-        // F15 (#591) — orbit-accumulator inputs (trapMin / stripeAvg / tiaAvg)
-        // are interpreter-only for now: they need per-iteration orbit sampling
-        // that the generated C# template + HLSL palette do not provide. Reject
-        // the C# export up front rather than emit code that won't compile.
-        if (UsesOrbitInputs(prog))
-            return new GenerateResult(sanitized, "",
-                "Orbit inputs (trapMin / stripeAvg / tiaAvg) are supported by " +
-                "Compile & Load (interpreter) only — not yet by Generate via " +
-                "ColorGen (C# export) or the GPU palette.");
+        // F15 (#591) — a program referencing orbit-accumulator inputs (trapMin /
+        // stripeAvg / curvature / …) needs per-iteration orbit sampling. It gets
+        // its own template that implements IOrbitAwareColorMap (InitOrbit / Sample
+        // / MapWithOrbit) and advertises no GPU palette (the escape-only HLSL path
+        // can't compute these — CPU render). Only the referenced accumulators are
+        // sampled (const-bool gates baked from the program).
+        var orbitInputs = CollectOrbitInputs(prog);
+        if (orbitInputs.Count > 0)
+            return GenerateOrbit(prog, sanitized, source, orbitInputs, options);
 
         string body = new ColorGenEmitter(indent: "        ").EmitBody(prog);
 
@@ -97,27 +97,70 @@ public static class ColorGenApi
         return new GenerateResult(sanitized, rendered, null);
     }
 
-    // F15 — detect references to orbit-accumulator inputs (interpreter-only).
-    private static bool UsesOrbitInputs(CgProgram prog)
+    // F15 — render the orbit-aware template. Bakes const-bool gates for the
+    // referenced accumulators and emits the DSL body into both MapWithOrbit
+    // (orbit inputs bound from the accumulator) and the escape-final Map
+    // overload (orbit inputs 0 — recolour/standalone paths lack an orbit).
+    private static GenerateResult GenerateOrbit(
+        CgProgram prog, string sanitized, string source,
+        System.Collections.Generic.ISet<string> orbitInputs, GenerateOptions? options)
     {
+        // Both MapWithOrbit and the escape-final Map are method bodies at the
+        // same nesting (8-space indent), so one emit serves both insertion points.
+        string body = new ColorGenEmitter(indent: "        ").EmitBody(prog);
+
+        static string B(bool v) => v ? "true" : "false";
+
+        var opts = options ?? new GenerateOptions();
+        string template = LoadTemplate("ColorMapOrbit.template.cs");
+        string rendered = template
+            .Replace("{{CLASS_NAME}}",  sanitized)
+            .Replace("{{THEME_NAME}}",  EscapeQuotes(opts.ThemeName))
+            .Replace("{{CATEGORY}}",    EscapeQuotes(opts.Category))
+            .Replace("{{DESCRIPTION}}", EscapeQuotes(opts.Description))
+            .Replace("{{SOURCE_COMMENT}}", CommentBlock(source))
+            .Replace("{{F_TRAPMIN}}",       B(orbitInputs.Contains("trapMin")))
+            .Replace("{{F_TRAPCROSS}}",     B(orbitInputs.Contains("trapCross")))
+            .Replace("{{F_TRAPRING}}",      B(orbitInputs.Contains("trapRing")))
+            .Replace("{{F_TRAPHYPERBOLA}}", B(orbitInputs.Contains("trapHyperbola")))
+            .Replace("{{F_TRAPHEXAGON}}",   B(orbitInputs.Contains("trapHexagon")))
+            .Replace("{{F_STRIPE}}",        B(orbitInputs.Contains("stripeAvg")))
+            .Replace("{{F_TIA}}",           B(orbitInputs.Contains("tiaAvg")))
+            .Replace("{{F_CURVATURE}}",     B(orbitInputs.Contains("curvature")))
+            .Replace("{{F_LYAPUNOV}}",      B(orbitInputs.Contains("lyapunov")))
+            .Replace("{{F_GAUSSIAN}}",      B(orbitInputs.Contains("gaussian")))
+            .Replace("{{F_EXP}}",           B(orbitInputs.Contains("expSmooth")))
+            .Replace("{{BODY}}", body)
+            .Replace("{{TIMESTAMP}}",   DateTime.UtcNow.ToString("yyyy-MM-dd HH:mm:ss UTC", CultureInfo.InvariantCulture));
+
+        return new GenerateResult(sanitized, rendered, null);
+    }
+
+    // F15 — the set of orbit-accumulator inputs the program references (empty ⇒
+    // not orbit-aware). Kept in lockstep with InterpretedColorMap.CollectOrbitInputs.
+    private static System.Collections.Generic.HashSet<string> CollectOrbitInputs(CgProgram prog)
+    {
+        var found = new System.Collections.Generic.HashSet<string>(StringComparer.Ordinal);
         foreach (var s in prog.Statements)
         {
             CgNode? node = s switch { CgLet l => l.Value, CgReturn r => r.Value, _ => null };
-            if (node != null && ReferencesOrbit(node)) return true;
+            if (node != null) CollectOrbit(node, found);
         }
-        return false;
+        return found;
     }
 
-    private static bool ReferencesOrbit(CgNode n) => n switch
+    private static void CollectOrbit(CgNode n, System.Collections.Generic.HashSet<string> found)
     {
-        CgVar v      => v.IsBuiltIn && CgInputs.OrbitScalars.Contains(v.Name),
-        CgChannel ch => ReferencesOrbit(ch.Target),
-        CgUnary u    => ReferencesOrbit(u.Operand),
-        CgBinary b   => ReferencesOrbit(b.Lhs) || ReferencesOrbit(b.Rhs),
-        CgTernary t  => ReferencesOrbit(t.Cond) || ReferencesOrbit(t.IfTrue) || ReferencesOrbit(t.IfFalse),
-        CgCall c     => System.Linq.Enumerable.Any(c.Args, ReferencesOrbit),
-        _            => false,
-    };
+        switch (n)
+        {
+            case CgVar v: if (v.IsBuiltIn && CgInputs.OrbitScalars.Contains(v.Name)) found.Add(v.Name); break;
+            case CgChannel ch: CollectOrbit(ch.Target, found); break;
+            case CgUnary u: CollectOrbit(u.Operand, found); break;
+            case CgBinary b: CollectOrbit(b.Lhs, found); CollectOrbit(b.Rhs, found); break;
+            case CgTernary t: CollectOrbit(t.Cond, found); CollectOrbit(t.IfTrue, found); CollectOrbit(t.IfFalse, found); break;
+            case CgCall c: foreach (var a in c.Args) CollectOrbit(a, found); break;
+        }
+    }
 
     private static string LoadTemplate(string fileName)
     {
