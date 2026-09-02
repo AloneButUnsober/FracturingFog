@@ -2930,6 +2930,20 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
                 }
                 break;
 
+            case FracturingFog.Abstractions.Assets.AssetKind.LightingFx:
+                // "Open" a Lighting & FX preset = mark it active and open the
+                // Lighting & FX dialog, which lands on it in the recall list
+                // (the user then clicks Recall to apply). No editor of its own.
+                try
+                {
+                    var lf = FracturingFog.Models.LightingFxPresetLibrary.Load();
+                    lf.ActiveName = name;
+                    FracturingFog.Models.LightingFxPresetLibrary.Save(lf);
+                }
+                catch { /* non-fatal — dialog just opens on the prior active */ }
+                LightingFxRequested?.Invoke(this, EventArgs.Empty);
+                break;
+
             case FracturingFog.Abstractions.Assets.AssetKind.SlideshowConfig:
                 // Make the clicked preset active so the Slideshow Settings
                 // dialog (host-owned, opened via the shared event) opens on it.
