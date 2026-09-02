@@ -139,20 +139,16 @@ public sealed class ReliefRaymarchGpuKernel : IDisposable, FracturingFog.Renderi
     // variant's slow FXC compile only happens when a render opens the aperture.
     private ID3D11ComputeShader CompileVariant(bool dof)
     {
-        var hr = Compiler.Compile(
+        // #456 — load the cs_5_0 bytecode from the on-disk cache when present so
+        // the one-time FXC compile is paid once per machine. The DOF variant's
+        // slow lens-loop compile is the biggest single beneficiary.
+        return D3DShaderCache.CompileOrLoad(
+            _device,
             ReliefRaymarchKernelSource.Build(dof),
             entryPoint: ReliefRaymarchKernelSource.EntryPoint,
-            sourceName: "ReliefRaymarch.hlsl",
             profile: "cs_5_0",
-            out var blob, out var errBlob);
-        if (hr.Failure || blob == null)
-        {
-            string msg = errBlob?.AsString() ?? hr.ToString();
-            errBlob?.Dispose();
-            throw new InvalidOperationException($"ReliefRaymarchGpuKernel: HLSL compile failed — {msg}");
-        }
-        try { return _device.CreateComputeShader(blob.AsSpan()); }
-        finally { blob.Dispose(); errBlob?.Dispose(); }
+            sourceName: "ReliefRaymarch.hlsl",
+            errorLabel: "ReliefRaymarchGpuKernel");
     }
 
     private void EnsureFieldBuffers(int cells)
