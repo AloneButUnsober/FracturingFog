@@ -382,6 +382,22 @@ public sealed class UserEquationViewModel : ViewModelBase
         }
     }
 
+    // ── Interior orbit colouring (#583) ──
+    // Colour in-set (non-escaping) pixels by their accumulated orbit rather than
+    // a flat fill. Only affects orbit-aware themes (Orbit Trap / Stripe / TIA).
+    // Re-renders on change.
+    public bool ColorInterior
+    {
+        get => _params.UserEquationColorInterior;
+        set
+        {
+            if (_params.UserEquationColorInterior == value) return;
+            _params.UserEquationColorInterior = value;
+            this.RaisePropertyChanged();
+            RenderRequested?.Invoke();
+        }
+    }
+
     // ── Live preview (Wave 2.4 / D-6.24) ───────────────────────────────
     //
     // After every successful parse on either tab we re-run CalcGen's

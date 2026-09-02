@@ -327,6 +327,12 @@ public sealed class UserEquationCalculator : IFractalCalculator
         // P5: gate orbit sampling once per render. Non-orbit themes pay nothing.
         var orbitMap = ColorMap as IOrbitAwareColorMap;
 
+        // #583 — colour in-set (non-escaping) pixels by the accumulated orbit
+        // instead of a flat interior fill. Only meaningful for orbit-aware
+        // themes (they already sample the orbit every iteration, so `acc` holds
+        // a full-orbit statistic even on bounded pixels). Off ⇒ byte-identical.
+        bool colorInterior = FractalParameters.UserEquationColorInterior && orbitMap != null;
+
         // #382: pre-scale the in-set colour's alpha by the global InteriorAlpha
         // knob once (multiplies any alpha the theme's InSetColor already carries).
         // InteriorAlpha == 255 leaves the colour bit-identical.
@@ -480,9 +486,26 @@ public sealed class UserEquationCalculator : IFractalCalculator
                 int idx = rowBase + x;
                 if (iter >= maxIt)
                 {
-                    ColorBuffer[idx] = inSet;   // #382: alpha pre-scaled above
                     NormalXBuffer[idx] = 0f;
                     NormalYBuffer[idx] = 0f;
+                    if (colorInterior)
+                    {
+                        // #583 — bounded pixel: colour from the full-orbit
+                        // accumulator (trap min / stripe / TIA). Honour the
+                        // global InteriorAlpha knob for parity with the flat path.
+                        uint oc = (uint)orbitMap!.MapInteriorWithOrbit(maxIt, in acc);
+                        if (InteriorAlpha < 255)
+                        {
+                            uint a = (oc >> 24) & 0xFFu;
+                            uint na = (a * (uint)InteriorAlpha) / 255u;
+                            oc = (oc & 0x00FFFFFFu) | (na << 24);
+                        }
+                        ColorBuffer[idx] = oc;
+                    }
+                    else
+                    {
+                        ColorBuffer[idx] = inSet;   // #382: alpha pre-scaled above
+                    }
                 }
                 else if (converged)
                 {
