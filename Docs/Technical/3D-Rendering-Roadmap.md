@@ -136,7 +136,18 @@ discarded, not that it is uncomputed.
   orchestrator; the AOV planes are captured from `RenderToPixels` before any
   overlay/post pass, so they stay clean regardless of the watermark. GUI-only (no
   headless test — the render/pack path is covered by the orchestration tests).
-- **Remaining:** light compositor, motion-vector AOV.
+- **Motion-vector AOV — operator + channel (landed — PR #577, #398):** the last
+  discarded per-pixel quantity the raymarch already has the data for (world hit pos =
+  camera origin + ray dir · depth). Pure operator `Rendering/Lighting/ReliefMotionVector`
+  (operator-first, like every prior S1–S5 slice): `CameraView` captures the oblique
+  relief camera as the ray generator sees it; `Project` is the exact inverse of ray
+  generation (world point → screen pixel-centre coords + a `behind` flag); `ScreenMotion`
+  differences the previous-frame projection against the current pixel (the reprojection
+  convention SVGF uses) — identical current/previous cameras give exactly (0,0). Opt-in
+  `ReliefAovBuffers.Motion` channel (`float[w·h·2]`, interleaved du/dv) allocated only on
+  request → default byte-identical. +5 `ReliefMotionVectorTests`.
+- **Remaining:** thread the render's current + previous-frame camera into the Motion
+  channel (the wiring follow-up); the light compositor.
 
 ### S2 — Linear-light rendering + view transform (AgX / ACES / Filmic) ◐ (#396)
 Render and composite in **linear light**, apply a filmic **view transform** at
