@@ -380,11 +380,49 @@ Each spec: what, surfaces, data model, algorithm, injection points, back-compat,
   `trapHexagon` — each an independent trap channel (`OrbitAccumulator.TrapMin3/4/5`)
   reusing the built-in shape SDFs, so a program can combine several distinct
   shape traps at once. Point + cross + ring + hyperbola + hexagon ship.
-- **REMAINING:** GPU/HLSL orbit support (needs the fractal kernel to compute +
-  pass the accumulators — the big, cross-cutting one); C#-export
-  (`ColorMap.template.cs` + `ColorGenEmitter` orbit-aware generated class); the
-  remaining trap shapes (square / grid / lemniscate / … — mechanical, add per
+- **C# EXPORT SHIPPED:** `Generate via ColorGen` no longer rejects orbit
+  programs — a new embedded `ColorMapOrbit.template.cs` emits an orbit-aware class
+  (`IOrbitAwareColorMap`: `InitOrbit` + `Sample` + `MapWithOrbit`, no GPU palette)
+  with a baked `const bool F_<input>` gate per referenced accumulator.
+  `ColorGenApi.GenerateOrbit()` emits the DSL body into both `MapWithOrbit` (bound
+  from the accumulator) and the escape-final `Map` (orbit inputs 0). A parity test
+  Roslyn-compiles the export and asserts `MapWithOrbit` is bit-identical to the
+  interpreter.
+- **REMAINING:** GPU/HLSL orbit support (the big, cross-cutting one — see **F16**);
+  the remaining trap shapes (square / grid / lemniscate / … — mechanical, add per
   the F13 shape set if wanted).
+
+### F16 — ColorGen orbit inputs on the GPU (HLSL) — DEFERRED
+
+- **Tracking:** [#603](https://github.com/AloneButUnsober/FracturingFog/issues/603). Status: ○ not started (the one F15 tail that isn't CPU).
+- **What:** make orbit-accumulator ColorGen themes render on the GPU. Today an
+  orbit theme advertises **no GPU palette** (`HlslPaletteBody = ""`) so the render
+  falls to the CPU; the GPU escape-time kernel only has escape-final state at the
+  colour-write splice, not the whole orbit.
+- **Why deferred / big:** the accumulators must be computed **inside the fractal
+  iteration loop**, not in `EvalPalette` — so this reaches into the kernel, not
+  just the palette. It spans:
+  - `ColorGenHlslEmitter` — map the 11 orbit input names to new `EvalPalette`
+    params (they currently throw / are CPU-only), and emit an HLSL Sample prelude.
+  - `MandelbrotKernelSource` — accumulate the referenced traps/means per iteration
+    in **all three** loops (`HlslEntry` shallow escape, `BuildPerturb`, and the SA
+    perturbation variant — the last two reconstruct `z = Z[m] + δ`, so the orbit
+    is available but the plumbing differs), extend the `EvalPalette` signature +
+    the three colour splices (`InSet` / `Escape` / `BulbSkip`) to pass them.
+  - Per-input `#define`/const gates so a theme only pays for the accumulators it
+    reads (mirror the CPU `F_<input>` flags) — otherwise every GPU render eats the
+    per-iteration transcendentals.
+  - Both backends: `Rendering.D3D` (FXC/DXC) and `Rendering.Vulkan` (DXC→SPIR-V),
+    plus `Rendering.Silk` if it grows a DSL-palette path.
+  - The two-type split stays: only `InterpretedOrbitColorMap` (and the generated
+    orbit class) would advertise a non-empty `HlslPaletteBody`; normal themes are
+    untouched.
+- **Hazards:** float-vs-double drift on the accumulators (curvature / lyapunov use
+  transcendentals), the `tia` / `curvature` predecessor-state machine inside a GPU
+  loop, and deep-zoom perturbation parity. Some accumulators (curvature's segment
+  history) may be GPU-costly enough to keep CPU-only.
+- **Test:** extend the existing multikernel/golden CPU-vs-GPU parity harness to the
+  orbit inputs (`--colorprobe`-style), tolerance-compared (not bit-exact — float).
 
 ---
 
