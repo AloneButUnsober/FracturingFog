@@ -338,7 +338,7 @@ Each spec: what, surfaces, data model, algorithm, injection points, back-compat,
 
 ### F15 — ColorGen: orbit-accumulator inputs (route a)
 
-- **Tracking:** [#591](https://github.com/AloneButUnsober/FracturingFog/issues/591). Status: ☐.
+- **Tracking:** [#591](https://github.com/AloneButUnsober/FracturingFog/issues/591). Status: ◐ MVP shipped (trapMin / stripeAvg / tiaAvg, interpreter/CPU); GPU + C# export + more accumulators/shapes deferred.
 - **What:** ColorGen inputs are escape-final only, so true orbit traps / Stripe /
   SAC / TIA / curvature / Lyapunov / Gaussian / exp-smoothing **cannot** be
   written in it (only single-final-point fakes). Expose the engine's already-
@@ -356,6 +356,24 @@ Each spec: what, surfaces, data model, algorithm, injection points, back-compat,
   user-defined shapes would need route b.
 - **Back-compat:** additive inputs; existing programs unaffected. Larger than a
   one-file change (CPU+GPU parity + accumulator wiring).
+- **MVP SHIPPED (interpreter/CPU):** ColorGen inputs `trapMin` (origin point-trap
+  min |z_n|), `stripeAvg` (classic SAC, density 7), `tiaAvg` (triangle-inequality
+  average) added to `CgInputs.Scalars` + an `OrbitScalars` set. A program that
+  references any of them is parsed to a new `InterpretedOrbitColorMap`
+  (`: InterpretedColorMap, IOrbitAwareColorMap`) — the calculator's orbit-aware
+  path (Mandelbrot native via the interface fallback; User-Equation via
+  `as IOrbitAwareColorMap`) samples per iteration and binds the values at escape;
+  `MapWithOrbit` reuses the same interpreter body. **Normal ColorGen themes are
+  untouched** — only orbit-referencing programs pay the per-iteration path (two-
+  type split). The orbit map advertises **no GPU palette** (escape-only HLSL can't
+  produce these) so it renders on CPU; **`Generate via ColorGen` (C# export)
+  rejects** orbit programs with a clear message (interpreter-only for now).
+  `MapInteriorWithOrbit` inherits the default, so an orbit ColorGen theme also
+  colours the interior when the calculator gate (F14) is on.
+- **REMAINING:** GPU/HLSL orbit support (needs the fractal kernel to compute +
+  pass the accumulators); C#-export (`ColorMap.template.cs` + `ColorGenEmitter`
+  orbit-aware generated class); the rest of the accumulator menu (curvature /
+  lyapunov / gaussian / expSmooth) and selectable trap shapes for `trapMin`.
 
 ---
 
@@ -506,7 +524,7 @@ two assumptions the original phasing rested on, so the plan is re-sequenced:
    export/capture/video consumer first.
 
 **Phase E — orbit-aware colouring surfaces (new, 2026-09):**
-☑ F13 (data-driven Orbit Trap kind — P1 + editor-UI P2 shipped) · ☑ F14 (interior colouring — runtime + editor UI + native-path interior shipped) · ☐ F15 (ColorGen orbit inputs)
+☑ F13 (data-driven Orbit Trap kind — P1 + editor-UI P2 shipped) · ◐ F14 (interior colouring — runtime + editor UI shipped; native-path interior in flight) · ◐ F15 (ColorGen orbit inputs — trapMin/stripeAvg/tiaAvg interpreter/CPU MVP shipped; GPU + C# export deferred)
 
 These extend the colour system past the gradient/palette family into **orbit-aware**
 colouring authorable outside hardcoded C#. F13 is the keystone (reuses the whole
