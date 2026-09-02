@@ -331,7 +331,10 @@ public sealed class UserEquationCalculator : IFractalCalculator
         // instead of a flat interior fill. Only meaningful for orbit-aware
         // themes (they already sample the orbit every iteration, so `acc` holds
         // a full-orbit statistic even on bounded pixels). Off ⇒ byte-identical.
-        bool colorInterior = FractalParameters.UserEquationColorInterior && orbitMap != null;
+        // #583 flag OR #590 (F14) theme-driven request. Either turns on
+        // interior-orbit colouring for an orbit-aware theme.
+        bool colorInterior = orbitMap != null
+            && (FractalParameters.UserEquationColorInterior || orbitMap.WantsInteriorColor);
 
         // #382: pre-scale the in-set colour's alpha by the global InteriorAlpha
         // knob once (multiplies any alpha the theme's InSetColor already carries).

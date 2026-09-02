@@ -420,6 +420,19 @@ namespace FracturingFog.Interefaces
         /// </summary>
         int MapInteriorWithOrbit(int iterations, in OrbitAccumulator acc)
             => MapWithOrbit(0f, 0f, iterations, 0f, 0f, in acc);
+
+        /// <summary>
+        /// #590 (F14) — when true, the theme asks the calculator to colour
+        /// IN-SET (non-escaping) pixels via <see cref="MapInteriorWithOrbit"/>
+        /// rather than a flat <see cref="IColorMap.InSetColor"/>, on paths that
+        /// support interior-orbit colouring (the User-Equation path today).
+        /// This is the theme-driven counterpart of the User-Equation
+        /// <c>UserEquationColorInterior</c> flag: an editor / JSON-authored
+        /// orbit-trap theme can request interior colouring itself. Default
+        /// false ⇒ flat interior (unchanged), so existing orbit themes are
+        /// byte-identical.
+        /// </summary>
+        bool WantsInteriorColor => false;
     }
 
     // ─────────────────────────────────────────────────────────────────────────

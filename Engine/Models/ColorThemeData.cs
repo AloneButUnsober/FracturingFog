@@ -283,6 +283,13 @@ namespace FracturingFog.Models
         /// built-in <c>OrbitTrapPowerBaseMap</c> default).</summary>
         public float TrapPower { get; set; } = 0.35f;
 
+        /// <summary>#590 (F14) — colour in-set (non-escaping) pixels by the
+        /// accumulated orbit instead of a flat interior fill, on calculator
+        /// paths that support it (the User-Equation path today). Default false
+        /// ⇒ flat interior (byte-identical). Only meaningful for the OrbitTrap
+        /// kind.</summary>
+        public bool ColorInterior { get; set; } = false;
+
         // ── Cycling / 3D ──────────────────────────────────────────────────────
 
         public float CycleSpeed { get; set; } = 0.02f;

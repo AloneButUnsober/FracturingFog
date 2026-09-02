@@ -704,6 +704,14 @@ public sealed class MandelbrotCalculator : Interefaces.IHeightFieldSource, Inter
             case LyapunovExponentMap m: CalculateOrbitAware(m, ct); return;
             case GaussianIntegerMap m: CalculateOrbitAware(m, ct); return;
             case ExponentialSmoothingMap m: CalculateOrbitAware(m, ct); return;
+
+            // #589 (F13) — data-driven / user orbit-trap themes are not one of
+            // the enumerated concrete types, so catch any remaining orbit-aware
+            // map by interface. Not devirtualised (one virtual Sample call per
+            // iteration), but correctness beats speed for user themes — without
+            // this they would fall through to the non-orbit path and render as a
+            // plain iteration gradient (Sample never called).
+            case IOrbitAwareColorMap m: CalculateOrbitAware(m, ct); return;
         }
 
         // Pattern-match to the concrete type so the JIT sees a non-virtual call

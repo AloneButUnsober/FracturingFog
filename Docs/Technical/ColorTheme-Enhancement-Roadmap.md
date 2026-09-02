@@ -292,16 +292,32 @@ Each spec: what, surfaces, data model, algorithm, injection points, back-compat,
 
 ### F14 — Interior orbit colouring in the editor
 
-- **Tracking:** [#590](https://github.com/AloneButUnsober/FracturingFog/issues/590). Status: ☐ (depends on F13).
+- **Tracking:** [#590](https://github.com/AloneButUnsober/FracturingFog/issues/590). Status: ◐ runtime shipped; editor UI + native interior pending.
 - **What:** expose the [#583](https://github.com/AloneButUnsober/FracturingFog/issues/583)
   interior-orbit colouring (bounded pixels coloured by the accumulated orbit) to
-  editor-authored themes — an interior toggle on the data-driven Orbit Trap kind,
-  mirroring the User-Equation `UserEquationColorInterior` flag.
+  editor / JSON-authored themes — an interior toggle on the data-driven Orbit Trap
+  kind, mirroring the User-Equation `UserEquationColorInterior` flag.
 - **Surfaces:** JSON + editor UI. **Data model:** `ColorThemeData.ColorInterior`
   (bool, default false ⇒ flat interior). **Injection:** the calculators route the
   in-set branch through `MapInteriorWithOrbit` when the theme requests it (the DSL
   path already does for its own flag — generalise the gate to the theme).
 - **Back-compat:** default false = byte-identical.
+- **SHIPPED (runtime):** `IOrbitAwareColorMap.WantsInteriorColor` default member
+  (false); `DataDrivenOrbitTrap` re-lists `IOrbitAwareColorMap` so its public
+  `WantsInteriorColor` re-implements the DIM (GOTCHA: a derived class must re-list
+  the interface or the base's default wins); `ColorThemeData.ColorInterior` +
+  Export round-trip; `UserEquationCalculator` gate is now
+  `UserEquationColorInterior || orbitMap.WantsInteriorColor`. Also fixed an F13
+  gap: `MandelbrotCalculator`'s orbit dispatch is a concrete-type switch that
+  never caught data-driven orbit maps → added an `IOrbitAwareColorMap` interface
+  fallback so they sample on the native path (were rendering as a plain gradient).
+- **REMAINING:** (1) editor UI — the interior checkbox + the OrbitTrap-kind
+  authoring surface (folds into F13-P2, #589); (2) **native-path interior** orbit
+  colouring — `MandelbrotCalculator.ComputePixelOrbit` skips accumulation via the
+  bulb + periodicity early-outs and the recolor passes (`RecolorFromBuffers` /
+  histogram) rebuild in-set from buffers, so interior orbit colour there needs a
+  dedicated rework; today native in-set stays flat (exterior traps work). DSL path
+  is the full-interior home.
 
 ### F15 — ColorGen: orbit-accumulator inputs (route a)
 
@@ -473,7 +489,7 @@ two assumptions the original phasing rested on, so the plan is re-sequenced:
    export/capture/video consumer first.
 
 **Phase E — orbit-aware colouring surfaces (new, 2026-09):**
-◐ F13 (data-driven Orbit Trap kind — P1 building) · ☐ F14 (interior in editor) · ☐ F15 (ColorGen orbit inputs)
+◐ F13 (data-driven Orbit Trap kind — P1 shipped, editor-UI P2 pending) · ◐ F14 (interior colouring — runtime shipped, editor UI + native interior pending) · ☐ F15 (ColorGen orbit inputs)
 
 These extend the colour system past the gradient/palette family into **orbit-aware**
 colouring authorable outside hardcoded C#. F13 is the keystone (reuses the whole
