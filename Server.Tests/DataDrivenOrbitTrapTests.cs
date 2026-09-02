@@ -176,6 +176,35 @@ public sealed class DataDrivenOrbitTrapTests
 
     // The ColorThemeDefAdapter casts OrbitTrapShapeDef (Abstractions) <->
     // OrbitTrapShape (Engine) by value, so their member order MUST match.
+    // F14 native path (#590): a ColorInterior orbit-trap theme colours the
+    // in-set region on the native Mandelbrot path too (bulb early-out skipped so
+    // the accumulator fills; in-set branch routes through MapInteriorWithOrbit).
+    [Fact]
+    public void NativePath_ColorInterior_FillsInterior()
+    {
+        static uint[] Render(bool colorInterior)
+        {
+            var data = TrapData(OrbitTrapShape.Ring);
+            data.ColorInterior = colorInterior;
+            var calc = new MandelbrotCalculator(W, H)
+            {
+                CenterX = -0.5, CenterY = 0.0, Zoom = 1.0, MaxIterations = 200,
+                ColorMap = DataDrivenColorThemes.Create(data)!,
+            };
+            calc.Calculate(default);
+            return (uint[])calc.ColorBuffer.Clone();
+        }
+
+        uint[] off = Render(false);
+        uint[] on = Render(true);
+
+        // CenterIdx maps to c = (-0.5, 0): deep in the main cardioid ⇒ in-set.
+        Assert.Equal(0xFF000000u, off[CenterIdx]);          // flat interior when off
+        Assert.NotEqual(0xFF000000u, on[CenterIdx]);        // orbit-coloured interior
+        Assert.Equal(0xFFu, (on[CenterIdx] >> 24) & 0xFFu); // opaque (InteriorAlpha 255)
+        Assert.NotEqual(off, on);
+    }
+
     [Fact]
     public void OrbitTrapShape_DefAndEngineEnums_MatchByValue()
     {
