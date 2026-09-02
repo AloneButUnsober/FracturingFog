@@ -29,7 +29,7 @@ using FracturingFog.Interefaces;
 
 namespace FracturingFog.Models;
 
-public sealed class InterpretedColorMap :
+public class InterpretedColorMap :
     IColorMap, INamedColorMap, IColorMapWithPixelScale, IColorMapHandlesInSet, IGpuHlslPalette
 {
     private readonly CgProgram _prog;
@@ -44,7 +44,7 @@ public sealed class InterpretedColorMap :
     // threads; slots are small — one array per thread, never per pixel).
     [ThreadStatic] private static CgVal[]? _scratch;
 
-    private InterpretedColorMap(
+    protected InterpretedColorMap(
         CgProgram prog, string name, string category, string description,
         string hlslBody, string hlslPrelude, string paletteId)
     {
@@ -75,6 +75,15 @@ public sealed class InterpretedColorMap :
         try { prog = ColorGenParser.Parse(source); }
         catch (Exception ex) { error = $"Parse error: {ex.Message}"; return null; }
 
+        var opts = options ?? new GenerateOptions();
+
+        // F15 (#591) — a program referencing an orbit-accumulator input
+        // (trapMin / stripeAvg / tiaAvg) needs per-iteration orbit sampling, so
+        // it runs on the orbit-aware interpreter (CPU) and advertises NO GPU
+        // palette (the HLSL escape-only path can't produce those accumulators).
+        if (UsesOrbitInputs(prog))
+            return new InterpretedOrbitColorMap(prog, opts.ThemeName, opts.Category, opts.Description);
+
         // Same HLSL the compiled path emits (text generation — not Roslyn).
         string hlslBody, hlslPrelude, paletteId;
         try
@@ -91,9 +100,37 @@ public sealed class InterpretedColorMap :
             hlslBody = ""; hlslPrelude = ""; paletteId = "Interp_none";
         }
 
-        var opts = options ?? new GenerateOptions();
         return new InterpretedColorMap(prog, opts.ThemeName, opts.Category, opts.Description,
                                        hlslBody, hlslPrelude, paletteId);
+    }
+
+    /// <summary>F15 — true when any statement references an orbit-accumulator
+    /// input (trapMin / stripeAvg / tiaAvg), so the theme must be rendered
+    /// orbit-aware.</summary>
+    private static bool UsesOrbitInputs(CgProgram prog)
+    {
+        foreach (var s in prog.Statements)
+        {
+            CgNode? node = s switch { CgLet l => l.Value, CgReturn r => r.Value, _ => null };
+            if (node != null && ReferencesOrbit(node)) return true;
+        }
+        return false;
+    }
+
+    private static bool ReferencesOrbit(CgNode n)
+    {
+        switch (n)
+        {
+            case CgVar v: return v.IsBuiltIn && CgInputs.OrbitScalars.Contains(v.Name);
+            case CgChannel ch: return ReferencesOrbit(ch.Target);
+            case CgUnary u: return ReferencesOrbit(u.Operand);
+            case CgBinary b: return ReferencesOrbit(b.Lhs) || ReferencesOrbit(b.Rhs);
+            case CgTernary t: return ReferencesOrbit(t.Cond) || ReferencesOrbit(t.IfTrue) || ReferencesOrbit(t.IfFalse);
+            case CgCall c:
+                foreach (var a in c.Args) if (ReferencesOrbit(a)) return true;
+                return false;
+            default: return false;
+        }
     }
 
     // ── IColorMap / INamedColorMap metadata ─────────────────────────────────
@@ -126,8 +163,17 @@ public sealed class InterpretedColorMap :
                    float nx, float ny,
                    float finalZr, float finalZi, float dzdcR, float dzdcI)
     {
-        // Input adapter — identical to ColorMap.template.cs's in_* locals.
-        var inp = new In
+        In inp = BuildIn(smooth, distance, iterations, nx, ny, finalZr, finalZi, dzdcR, dzdcI);
+        return Evaluate(in inp);
+    }
+
+    /// <summary>Build the built-in input record from the escape-final Map args.
+    /// Orbit-accumulator fields (TrapMin/StripeAvg/TiaAvg) default to 0 here; the
+    /// orbit-aware subclass fills them in <c>MapWithOrbit</c>.</summary>
+    protected In BuildIn(float smooth, float distance, int iterations,
+                         float nx, float ny,
+                         float finalZr, float finalZi, float dzdcR, float dzdcI)
+        => new In
         {
             Smooth  = smooth,
             Dist    = distance,
@@ -146,6 +192,10 @@ public sealed class InterpretedColorMap :
             PxScale = _pixelScale,
         };
 
+    /// <summary>Walk the program's statements over the given inputs and pack the
+    /// returned Vec3. Shared by <see cref="Map"/> and the orbit-aware subclass.</summary>
+    protected int Evaluate(in In inp)
+    {
         var slots = _scratch;
         if (slots == null || slots.Length < _slotCount)
             slots = _scratch = new CgVal[Math.Max(_slotCount, 4)];
@@ -388,13 +438,19 @@ public sealed class InterpretedColorMap :
         "mag"     => inp.Mag,
         "isInSet" => inp.IsInSet,
         "pxScale" => inp.PxScale,
+        // F15 orbit-accumulator inputs (0 on the non-orbit path).
+        "trapMin"   => inp.TrapMin,
+        "stripeAvg" => inp.StripeAvg,
+        "tiaAvg"    => inp.TiaAvg,
         _ => throw new InvalidOperationException($"Unknown built-in input '{name}'."),
     };
 
-    // Mutable (populated via object initializer in Map), then passed by `in`.
-    private struct In
+    // Mutable (populated via object initializer in BuildIn), then passed by `in`.
+    protected struct In
     {
         public double Smooth, Dist, Iter, MaxIter, T, Nx, Ny, Zr, Zi, Dzr, Dzi, Arg, Mag, IsInSet, PxScale;
+        // F15 — orbit-accumulator inputs, filled by the orbit-aware subclass.
+        public double TrapMin, StripeAvg, TiaAvg;
     }
 
     private static string ShortHash(string s)
@@ -405,4 +461,78 @@ public sealed class InterpretedColorMap :
         for (int i = 0; i < 5; i++) sb.Append(h[i].ToString("x2"));
         return sb.ToString();
     }
+}
+
+/// <summary>
+/// F15 (#591) — orbit-aware ColorGen theme. Produced by
+/// <see cref="InterpretedColorMap.TryCreate"/> when the program references an
+/// orbit-accumulator input (trapMin / stripeAvg / tiaAvg). The calculator routes
+/// it through the per-iteration orbit-sampling path (CPU); the orbit values are
+/// bound at escape and the same interpreter body evaluates the colour.
+///
+/// Scope: exterior orbit colouring (the escaping structure). It advertises no GPU
+/// palette (the HLSL escape-only path can't compute these) so rendering falls to
+/// CPU. Trap uses the origin point-trap (min |z_n|); stripe uses the classic
+/// UF density 7; TIA is the Mandelbrot triangle-inequality average.
+/// </summary>
+public sealed class InterpretedOrbitColorMap : InterpretedColorMap, IOrbitAwareColorMap
+{
+    /// <summary>Stripe-average sin multiplier (classic Ultra Fractal default).</summary>
+    private const double StripeDensity = 7.0;
+
+    internal InterpretedOrbitColorMap(CgProgram prog, string name, string category, string description)
+        : base(prog, name, category, description, hlslBody: "", hlslPrelude: "", paletteId: "Interp_none")
+    {
+    }
+
+    public void InitOrbit(out OrbitAccumulator acc)
+    {
+        acc = default;
+        acc.TrapMin = float.MaxValue;
+    }
+
+    public void Sample(ref OrbitAccumulator acc, double zr, double zi, double cr, double ci, int iter)
+    {
+        // trapMin — distance to the origin (point trap).
+        double d = Math.Sqrt(zr * zr + zi * zi);
+        if ((float)d < acc.TrapMin) acc.TrapMin = (float)d;
+
+        // stripeAvg — mean of 0.5 + 0.5·sin(density·arg(z_n)).
+        double s = 0.5 + 0.5 * Math.Sin(StripeDensity * Math.Atan2(zi, zr));
+        acc.LastStripe = s;
+        acc.StripeSum += s;
+        acc.StripeCount++;
+
+        // tiaAvg — triangle-inequality average (needs a meaningful predecessor,
+        // valid from iter >= 2). |z_{n-1}^2| = |z_n − c| for the z²+c map.
+        if (iter >= 2)
+        {
+            double zMcR = zr - cr, zMcI = zi - ci;
+            double absZprev2 = Math.Sqrt(zMcR * zMcR + zMcI * zMcI);
+            double absC = Math.Sqrt(cr * cr + ci * ci);
+            double absZ = Math.Sqrt(zr * zr + zi * zi);
+            double m = Math.Abs(absZprev2 - absC);
+            double M = absZprev2 + absC;
+            if (M - m > 1e-12)
+            {
+                double t = (absZ - m) / (M - m);
+                acc.LastTia = t;
+                acc.TiaSum += t;
+                acc.TiaCount++;
+            }
+        }
+    }
+
+    public int MapWithOrbit(float smooth, float distance, int iterations,
+                            float nx, float ny, in OrbitAccumulator acc)
+    {
+        In inp = BuildIn(smooth, distance, iterations, nx, ny, 0f, 0f, 0f, 0f);
+        inp.TrapMin = acc.TrapMin == float.MaxValue ? 0.0 : acc.TrapMin;
+        inp.StripeAvg = acc.StripeCount > 0 ? acc.StripeSum / acc.StripeCount : 0.0;
+        inp.TiaAvg = acc.TiaCount > 0 ? acc.TiaSum / acc.TiaCount : 0.0;
+        return Evaluate(in inp);
+    }
+    // MapInteriorWithOrbit uses the IOrbitAwareColorMap default (delegates to
+    // MapWithOrbit at smooth=0) — so a theme that opts into interior colouring
+    // via the calculator gate still evaluates with the orbit inputs bound.
 }

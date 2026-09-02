@@ -149,6 +149,16 @@ operands and yield `1.0` / `0.0`.
 | `mag`       | scalar | `hypot(zr, zi)` = `|z|`                              |
 | `isInSet`   | scalar | `1.0` if `iter >= maxIter`, else `0.0`               |
 | `pxScale`   | scalar | Complex-plane width of one pixel (1.0 if unset)      |
+| `trapMin`   | scalar | Orbit-trap distance: min `\|z_n\|` over the orbit (origin point-trap). †|
+| `stripeAvg` | scalar | Stripe average: mean of `0.5+0.5·sin(7·arg(z_n))` (classic SAC). †|
+| `tiaAvg`    | scalar | Triangle-inequality average over the orbit. †|
+
+> **† Orbit inputs (F15).** These three read the *whole orbit*, not just the
+> escape point, so a program using any of them is rendered on the CPU
+> orbit-sampling path. Caveats: **interpreter-only** — *Compile & Load* works, but
+> *Generate via ColorGen* (C# export) and the **GPU palette** do not support them
+> yet (a program that uses one renders on CPU; exporting it to C# is rejected with
+> a message). Best on shallow zoom, like the built-in Orbit Trap / Stripe themes.
 
 ### 2.4 Constants
 
@@ -742,6 +752,7 @@ ensure the JSON regenerates cleanly.
 
 ```
 Inputs    smooth dist iter maxIter t nx ny zr zi dzr dzi arg mag isInSet pxScale
+          trapMin stripeAvg tiaAvg   // orbit inputs (F15): CPU / interpreter-only
 Const     pi tau e phi
 Ctors     rgb(r,g,b) hsv(h,s,v) hsl(h,s,l) oklab(L,a,b) oklch(L,C,h)
 Palette   palette(t, c0, c1, …)                  // n cyclic stops

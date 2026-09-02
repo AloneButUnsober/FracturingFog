@@ -135,6 +135,18 @@ public static class CgInputs
         "smooth", "dist", "iter", "maxIter", "t",
         "nx", "ny", "zr", "zi", "dzr", "dzi",
         "arg", "mag", "isInSet", "pxScale",
+        // F15 (#591) — orbit-accumulator inputs. A program referencing any of
+        // these becomes orbit-aware (the host samples the orbit per iteration
+        // and binds these at escape); CPU-only (the GPU palette is disabled).
+        "trapMin", "stripeAvg", "tiaAvg",
+    };
+
+    /// <summary>Subset of <see cref="Scalars"/> that require per-iteration orbit
+    /// sampling (F15). A ColorGen program referencing any of these is rendered
+    /// through the orbit-aware interpreter path.</summary>
+    public static readonly HashSet<string> OrbitScalars = new(StringComparer.Ordinal)
+    {
+        "trapMin", "stripeAvg", "tiaAvg",
     };
 
     public static readonly Dictionary<string, double> Constants = new(StringComparer.Ordinal)

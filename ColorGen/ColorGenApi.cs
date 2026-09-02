@@ -59,6 +59,16 @@ public static class ColorGenApi
             return new GenerateResult(sanitized, "", $"Parse error: {ex.Message}");
         }
 
+        // F15 (#591) — orbit-accumulator inputs (trapMin / stripeAvg / tiaAvg)
+        // are interpreter-only for now: they need per-iteration orbit sampling
+        // that the generated C# template + HLSL palette do not provide. Reject
+        // the C# export up front rather than emit code that won't compile.
+        if (UsesOrbitInputs(prog))
+            return new GenerateResult(sanitized, "",
+                "Orbit inputs (trapMin / stripeAvg / tiaAvg) are supported by " +
+                "Compile & Load (interpreter) only — not yet by Generate via " +
+                "ColorGen (C# export) or the GPU palette.");
+
         string body = new ColorGenEmitter(indent: "        ").EmitBody(prog);
 
         // T3.1 phase 2: also emit HLSL body + prelude so the generated theme
@@ -86,6 +96,28 @@ public static class ColorGenApi
 
         return new GenerateResult(sanitized, rendered, null);
     }
+
+    // F15 — detect references to orbit-accumulator inputs (interpreter-only).
+    private static bool UsesOrbitInputs(CgProgram prog)
+    {
+        foreach (var s in prog.Statements)
+        {
+            CgNode? node = s switch { CgLet l => l.Value, CgReturn r => r.Value, _ => null };
+            if (node != null && ReferencesOrbit(node)) return true;
+        }
+        return false;
+    }
+
+    private static bool ReferencesOrbit(CgNode n) => n switch
+    {
+        CgVar v      => v.IsBuiltIn && CgInputs.OrbitScalars.Contains(v.Name),
+        CgChannel ch => ReferencesOrbit(ch.Target),
+        CgUnary u    => ReferencesOrbit(u.Operand),
+        CgBinary b   => ReferencesOrbit(b.Lhs) || ReferencesOrbit(b.Rhs),
+        CgTernary t  => ReferencesOrbit(t.Cond) || ReferencesOrbit(t.IfTrue) || ReferencesOrbit(t.IfFalse),
+        CgCall c     => System.Linq.Enumerable.Any(c.Args, ReferencesOrbit),
+        _            => false,
+    };
 
     private static string LoadTemplate(string fileName)
     {
