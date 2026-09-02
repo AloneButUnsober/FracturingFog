@@ -299,7 +299,7 @@ Each spec: what, surfaces, data model, algorithm, injection points, back-compat,
 
 ### F14 — Interior orbit colouring in the editor
 
-- **Tracking:** [#590](https://github.com/AloneButUnsober/FracturingFog/issues/590). Status: ◐ runtime + editor UI shipped; native-path interior pending.
+- **Tracking:** [#590](https://github.com/AloneButUnsober/FracturingFog/issues/590). Status: ☑ runtime + editor UI + native-path interior shipped.
 - **What:** expose the [#583](https://github.com/AloneButUnsober/FracturingFog/issues/583)
   interior-orbit colouring (bounded pixels coloured by the accumulated orbit) to
   editor / JSON-authored themes — an interior toggle on the data-driven Orbit Trap
@@ -321,12 +321,20 @@ Each spec: what, surfaces, data model, algorithm, injection points, back-compat,
 - **Editor UI — SHIPPED** with F13-P2: the "Colour interior (orbit)" checkbox
   lives in the editor's Orbit Trap section (`ColorThemeDef.ColorInterior` →
   adapter → `ColorThemeData.ColorInterior` → `DataDrivenOrbitTrap`).
-- **REMAINING:** **native-path interior** orbit
-  colouring — `MandelbrotCalculator.ComputePixelOrbit` skips accumulation via the
-  bulb + periodicity early-outs and the recolor passes (`RecolorFromBuffers` /
-  histogram) rebuild in-set from buffers, so interior orbit colour there needs a
-  dedicated rework; today native in-set stays flat (exterior traps work). DSL path
-  is the full-interior home.
+- **Native-path interior — SHIPPED.** `MandelbrotCalculator.CalculateOrbitAware`
+  reads `WantsInteriorColor` once and threads it into `ComputePixelOrbit`: the
+  **bulb early-out is skipped** when on (so the accumulator actually fills), the
+  in-set branch routes through `MapInteriorWithOrbit` (opaque — `StampInteriorAlpha`
+  applies `InteriorAlpha` afterwards, no double-scale), and the trap/stripe/TIA
+  buffers are populated for in-set pixels (0f = byte-identical when off). The
+  **periodicity early-out is kept**: by the time it fires the orbit has settled, so
+  the trap minimum is already captured (stripe/TIA interior averages are then a
+  close approximation). NOTE (perf): with interior on, cardioid/bulb pixels now
+  iterate instead of early-outing — it is opt-in, so default renders are unchanged.
+  CAVEAT: the **recolor-without-recompute** paths (`RecolorFromBuffers` /
+  histogram-EQ / band-dither) rebuild colour via `Map` (not `MapWithOrbit`) and so
+  already don't reproduce ANY orbit theme (exterior or interior) — a pre-existing
+  limitation, unchanged here; the fresh render is correct.
 
 ### F15 — ColorGen: orbit-accumulator inputs (route a)
 
