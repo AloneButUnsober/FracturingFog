@@ -1033,6 +1033,15 @@ namespace FracturingFog.Models
         /// colour banding; smaller r suits fast or near-convergent maps. #541.</summary>
         public double EscapeRadius { get; set; } = 0.0;
 
+        /// <summary>#583 — colour IN-SET (non-escaping) pixels of the User-Equation
+        /// path by their accumulated orbit state instead of a flat interior fill.
+        /// Only affects orbit-aware themes (Orbit Trap / Stripe / TIA), which
+        /// sample the orbit every iteration; for those, bounded pixels get the
+        /// same trap / stripe colour the exterior does (Fragmentarium-style all-
+        /// pixel orbit colouring). Non-orbit themes are unaffected. Default false
+        /// ⇒ byte-identical flat interior.</summary>
+        public bool UserEquationColorInterior { get; set; } = false;
+
         /// <summary>Background composited behind translucent 2D pixels.
         /// Checkerboard (default) preserves the F10.5 see-through look; Solid /
         /// Gradient paint a colour backdrop; Transparent keeps straight alpha
@@ -1321,6 +1330,7 @@ namespace FracturingFog.Models
                 Lighting = Lighting, // struct value-copy; EnvironmentName is string (immutable)
                 InteriorAlpha = InteriorAlpha,
                 EscapeRadius = EscapeRadius,
+                UserEquationColorInterior = UserEquationColorInterior,
                 Interior2DBackground = Interior2DBackground,
                 Interior2DBgTop = Interior2DBgTop,
                 Interior2DBgBottom = Interior2DBgBottom,

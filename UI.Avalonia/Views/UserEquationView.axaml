@@ -113,16 +113,21 @@
             <Button Grid.Column="4" Content="Reset" Command="{Binding RotResetCommand}"  Margin="4,0,0,0" Padding="8,4" />
             <TextBlock Grid.Column="5" Text="Escape r:" VerticalAlignment="Center" Margin="16,0,8,0" />
             <NumericUpDown Grid.Column="6"
-                           Minimum="0" Maximum="100000" Increment="8" FormatString="F0"
+                           Minimum="0" Maximum="100000" Increment="0.5" FormatString="F2"
                            Value="{Binding EscapeRadius, Mode=TwoWay}"
                            Width="110"
-                           ToolTip.Tip="Escape radius |z| (0 = auto: interpreter r=32, generated r=512). Raise for slow-escaping transcendental maps like log(sin(…)) to reduce banding; lower for fast or near-convergent maps." />
-            <CheckBox Grid.Column="7"
-                      Content="Skip Jacobian (≈2× faster, flat 3D)"
-                      IsChecked="{Binding SkipJacobian, Mode=TwoWay}"
-                      ToolTip.Tip="Drop the parallel-perturbation trajectory used to compute Hubbard–Douady surface normals. Doubles throughput on slow equations at the cost of flat 3D Phong shading."
-                      Margin="12,0,0,0"
-                      VerticalAlignment="Center" />
+                           ToolTip.Tip="Escape radius |z| (0 = auto: interpreter r=32, generated r=512). Fractional values allowed. Raise for slow-escaping transcendental maps like log(sin(…)) to reduce banding; lower (e.g. 1.5) for fast, near-convergent, or tan/sin maps." />
+            <StackPanel Grid.Column="7" Orientation="Horizontal" Margin="12,0,0,0" VerticalAlignment="Center">
+                <CheckBox Content="Skip Jacobian (≈2× faster, flat 3D)"
+                          IsChecked="{Binding SkipJacobian, Mode=TwoWay}"
+                          ToolTip.Tip="Drop the parallel-perturbation trajectory used to compute Hubbard–Douady surface normals. Doubles throughput on slow equations at the cost of flat 3D Phong shading."
+                          VerticalAlignment="Center" />
+                <CheckBox Content="Colour interior (orbit)"
+                          IsChecked="{Binding ColorInterior, Mode=TwoWay}"
+                          ToolTip.Tip="Colour in-set (non-escaping) pixels by their orbit instead of a flat fill. Only affects orbit-aware themes (Orbit Trap / Stripe / TIA); pair with one of those to fill bounded regions with lace, Fragmentarium-style. No effect on other themes."
+                          Margin="16,0,0,0"
+                          VerticalAlignment="Center" />
+            </StackPanel>
 
             <!-- z0 seed: blank = Mandelbrot orbit (z0=0); `c` = Julia (z0=pixel). -->
             <Grid Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="8"

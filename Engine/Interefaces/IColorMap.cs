@@ -396,6 +396,30 @@ namespace FracturingFog.Interefaces
 
         /// <summary>Final colour produced from the standard inputs plus the accumulated orbit state.</summary>
         int MapWithOrbit(float smooth, float distance, int iterations, float nx, float ny, in OrbitAccumulator acc);
+
+        /// <summary>
+        /// Colour for an IN-SET (non-escaping) pixel from its accumulated orbit
+        /// state. On maps whose interesting region is bounded (transcendental
+        /// Julia maps, Newton / Magnet basins) the orbit is sampled for the full
+        /// iteration budget and <paramref name="acc"/> holds a full-orbit
+        /// statistic (trap minimum, stripe / TIA sums) even though the pixel
+        /// never escaped — so the interior can be coloured like Fragmentarium-
+        /// style all-pixel orbit colourings rather than a flat fill.
+        ///
+        /// Default delegates to <see cref="MapWithOrbit"/> with a zero smooth /
+        /// distance / normal (no escape data exists for an in-set pixel): orbit-
+        /// trap themes colour purely from <c>acc.TrapMin</c> so this already
+        /// yields the correct interior lace; stripe / TIA themes use their
+        /// accumulated sums. Themes wanting a distinct interior treatment
+        /// override this.
+        ///
+        /// Only invoked when the caller opts in (e.g. the User-Equation path's
+        /// <c>UserEquationColorInterior</c> flag); the default render still paints
+        /// <see cref="IColorMap.InSetColor"/>, so behaviour is unchanged unless
+        /// the flag is set.
+        /// </summary>
+        int MapInteriorWithOrbit(int iterations, in OrbitAccumulator acc)
+            => MapWithOrbit(0f, 0f, iterations, 0f, 0f, in acc);
     }
 
     // ─────────────────────────────────────────────────────────────────────────
