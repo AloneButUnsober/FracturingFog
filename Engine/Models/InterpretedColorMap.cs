@@ -77,12 +77,14 @@ public class InterpretedColorMap :
 
         var opts = options ?? new GenerateOptions();
 
-        // F15 (#591) — a program referencing an orbit-accumulator input
-        // (trapMin / stripeAvg / tiaAvg) needs per-iteration orbit sampling, so
-        // it runs on the orbit-aware interpreter (CPU) and advertises NO GPU
-        // palette (the HLSL escape-only path can't produce those accumulators).
-        if (UsesOrbitInputs(prog))
-            return new InterpretedOrbitColorMap(prog, opts.ThemeName, opts.Category, opts.Description);
+        // F15 (#591) — a program referencing an orbit-accumulator input needs
+        // per-iteration orbit sampling, so it runs on the orbit-aware interpreter
+        // (CPU) and advertises NO GPU palette (the HLSL escape-only path can't
+        // produce those accumulators). Only the referenced accumulators are
+        // actually computed per iteration (see InterpretedOrbitColorMap).
+        var orbitInputs = CollectOrbitInputs(prog);
+        if (orbitInputs.Count > 0)
+            return new InterpretedOrbitColorMap(prog, opts.ThemeName, opts.Category, opts.Description, orbitInputs);
 
         // Same HLSL the compiled path emits (text generation — not Roslyn).
         string hlslBody, hlslPrelude, paletteId;
@@ -104,32 +106,30 @@ public class InterpretedColorMap :
                                        hlslBody, hlslPrelude, paletteId);
     }
 
-    /// <summary>F15 — true when any statement references an orbit-accumulator
-    /// input (trapMin / stripeAvg / tiaAvg), so the theme must be rendered
-    /// orbit-aware.</summary>
-    private static bool UsesOrbitInputs(CgProgram prog)
+    /// <summary>F15 — the set of orbit-accumulator inputs the program actually
+    /// references (empty ⇒ not orbit-aware). Only these are computed per
+    /// iteration by the orbit-aware map.</summary>
+    private static HashSet<string> CollectOrbitInputs(CgProgram prog)
     {
+        var found = new HashSet<string>(StringComparer.Ordinal);
         foreach (var s in prog.Statements)
         {
             CgNode? node = s switch { CgLet l => l.Value, CgReturn r => r.Value, _ => null };
-            if (node != null && ReferencesOrbit(node)) return true;
+            if (node != null) CollectOrbit(node, found);
         }
-        return false;
+        return found;
     }
 
-    private static bool ReferencesOrbit(CgNode n)
+    private static void CollectOrbit(CgNode n, HashSet<string> found)
     {
         switch (n)
         {
-            case CgVar v: return v.IsBuiltIn && CgInputs.OrbitScalars.Contains(v.Name);
-            case CgChannel ch: return ReferencesOrbit(ch.Target);
-            case CgUnary u: return ReferencesOrbit(u.Operand);
-            case CgBinary b: return ReferencesOrbit(b.Lhs) || ReferencesOrbit(b.Rhs);
-            case CgTernary t: return ReferencesOrbit(t.Cond) || ReferencesOrbit(t.IfTrue) || ReferencesOrbit(t.IfFalse);
-            case CgCall c:
-                foreach (var a in c.Args) if (ReferencesOrbit(a)) return true;
-                return false;
-            default: return false;
+            case CgVar v: if (v.IsBuiltIn && CgInputs.OrbitScalars.Contains(v.Name)) found.Add(v.Name); break;
+            case CgChannel ch: CollectOrbit(ch.Target, found); break;
+            case CgUnary u: CollectOrbit(u.Operand, found); break;
+            case CgBinary b: CollectOrbit(b.Lhs, found); CollectOrbit(b.Rhs, found); break;
+            case CgTernary t: CollectOrbit(t.Cond, found); CollectOrbit(t.IfTrue, found); CollectOrbit(t.IfFalse, found); break;
+            case CgCall c: foreach (var a in c.Args) CollectOrbit(a, found); break;
         }
     }
 
@@ -440,8 +440,13 @@ public class InterpretedColorMap :
         "pxScale" => inp.PxScale,
         // F15 orbit-accumulator inputs (0 on the non-orbit path).
         "trapMin"   => inp.TrapMin,
+        "trapCross" => inp.TrapCross,
         "stripeAvg" => inp.StripeAvg,
         "tiaAvg"    => inp.TiaAvg,
+        "curvature" => inp.Curvature,
+        "lyapunov"  => inp.Lyapunov,
+        "gaussian"  => inp.Gaussian,
+        "expSmooth" => inp.ExpSmooth,
         _ => throw new InvalidOperationException($"Unknown built-in input '{name}'."),
     };
 
@@ -450,7 +455,7 @@ public class InterpretedColorMap :
     {
         public double Smooth, Dist, Iter, MaxIter, T, Nx, Ny, Zr, Zi, Dzr, Dzi, Arg, Mag, IsInSet, PxScale;
         // F15 — orbit-accumulator inputs, filled by the orbit-aware subclass.
-        public double TrapMin, StripeAvg, TiaAvg;
+        public double TrapMin, TrapCross, StripeAvg, TiaAvg, Curvature, Lyapunov, Gaussian, ExpSmooth;
     }
 
     private static string ShortHash(string s)
@@ -480,32 +485,59 @@ public sealed class InterpretedOrbitColorMap : InterpretedColorMap, IOrbitAwareC
     /// <summary>Stripe-average sin multiplier (classic Ultra Fractal default).</summary>
     private const double StripeDensity = 7.0;
 
-    internal InterpretedOrbitColorMap(CgProgram prog, string name, string category, string description)
+    // Which accumulators this program actually references — only these are
+    // computed per iteration (the transcendentals in Sample are not free).
+    private readonly bool _trapMin, _trapCross, _stripe, _tia, _curvature, _lyapunov, _gaussian, _exp;
+
+    internal InterpretedOrbitColorMap(CgProgram prog, string name, string category, string description,
+                                      HashSet<string> orbitInputs)
         : base(prog, name, category, description, hlslBody: "", hlslPrelude: "", paletteId: "Interp_none")
     {
+        _trapMin   = orbitInputs.Contains("trapMin");
+        _trapCross = orbitInputs.Contains("trapCross");
+        _stripe    = orbitInputs.Contains("stripeAvg");
+        _tia       = orbitInputs.Contains("tiaAvg");
+        _curvature = orbitInputs.Contains("curvature");
+        _lyapunov  = orbitInputs.Contains("lyapunov");
+        _gaussian  = orbitInputs.Contains("gaussian");
+        _exp       = orbitInputs.Contains("expSmooth");
     }
 
     public void InitOrbit(out OrbitAccumulator acc)
     {
         acc = default;
-        acc.TrapMin = float.MaxValue;
+        acc.TrapMin = float.MaxValue;    // trapMin  — origin point-trap
+        acc.TrapMin2 = float.MaxValue;   // trapCross — nearest-axis trap
     }
 
     public void Sample(ref OrbitAccumulator acc, double zr, double zi, double cr, double ci, int iter)
     {
-        // trapMin — distance to the origin (point trap).
-        double d = Math.Sqrt(zr * zr + zi * zi);
-        if ((float)d < acc.TrapMin) acc.TrapMin = (float)d;
+        // trapMin — min distance to the origin (point trap).
+        if (_trapMin)
+        {
+            double d = Math.Sqrt(zr * zr + zi * zi);
+            if ((float)d < acc.TrapMin) acc.TrapMin = (float)d;
+        }
+
+        // trapCross — min distance to the nearer coordinate axis.
+        if (_trapCross)
+        {
+            double d = Math.Min(Math.Abs(zr), Math.Abs(zi));
+            if ((float)d < acc.TrapMin2) acc.TrapMin2 = (float)d;
+        }
 
         // stripeAvg — mean of 0.5 + 0.5·sin(density·arg(z_n)).
-        double s = 0.5 + 0.5 * Math.Sin(StripeDensity * Math.Atan2(zi, zr));
-        acc.LastStripe = s;
-        acc.StripeSum += s;
-        acc.StripeCount++;
+        if (_stripe)
+        {
+            double s = 0.5 + 0.5 * Math.Sin(StripeDensity * Math.Atan2(zi, zr));
+            acc.LastStripe = s;
+            acc.StripeSum += s;
+            acc.StripeCount++;
+        }
 
-        // tiaAvg — triangle-inequality average (needs a meaningful predecessor,
-        // valid from iter >= 2). |z_{n-1}^2| = |z_n − c| for the z²+c map.
-        if (iter >= 2)
+        // tiaAvg — triangle-inequality average (needs a predecessor, iter >= 2).
+        // |z_{n-1}^2| = |z_n − c| for the z²+c map.
+        if (_tia && iter >= 2)
         {
             double zMcR = zr - cr, zMcI = zi - ci;
             double absZprev2 = Math.Sqrt(zMcR * zMcR + zMcI * zMcI);
@@ -521,15 +553,70 @@ public sealed class InterpretedOrbitColorMap : InterpretedColorMap, IOrbitAwareC
                 acc.TiaCount++;
             }
         }
+
+        // lyapunov — mean log|2 z_n| (local divergence rate).
+        if (_lyapunov)
+        {
+            double a = Math.Sqrt(zr * zr + zi * zi);
+            if (a > 1e-12) { acc.LyapunovSum += Math.Log(2.0 * a); acc.LyapunovCount++; }
+        }
+
+        // gaussian — mean distance to the nearest Gaussian integer.
+        if (_gaussian)
+        {
+            double dr = zr - Math.Round(zr), di = zi - Math.Round(zi);
+            acc.GaussianSum += Math.Sqrt(dr * dr + di * di);
+            acc.GaussianCount++;
+        }
+
+        // expSmooth — mean of e^{−|z_n|} (Kerry Mitchell).
+        if (_exp)
+        {
+            double a = Math.Sqrt(zr * zr + zi * zi);
+            acc.ExpSum += Math.Exp(-a);
+            acc.ExpCount++;
+        }
+
+        // curvature — mean |Δarg| between successive orbit segments. State
+        // machine: iter 1 records z₁; iter 2 the first segment; iter ≥ 3 the
+        // angle change. (Doesn't early-return — other accumulators run too.)
+        if (_curvature)
+        {
+            if (iter == 1) { acc.PrevZr = zr; acc.PrevZi = zi; }
+            else
+            {
+                double segR = zr - acc.PrevZr, segI = zi - acc.PrevZi;
+                if (iter == 2) { acc.PrevSegR = segR; acc.PrevSegI = segI; }
+                else
+                {
+                    double cross = acc.PrevSegR * segI - acc.PrevSegI * segR;
+                    double dot = acc.PrevSegR * segR + acc.PrevSegI * segI;
+                    if (cross != 0.0 || dot != 0.0)
+                    {
+                        acc.CurvatureSum += Math.Abs(Math.Atan2(cross, dot));
+                        acc.CurvatureCount++;
+                    }
+                    acc.PrevSegR = segR; acc.PrevSegI = segI;
+                }
+                acc.PrevZr = zr; acc.PrevZi = zi;
+            }
+        }
     }
 
     public int MapWithOrbit(float smooth, float distance, int iterations,
                             float nx, float ny, in OrbitAccumulator acc)
     {
         In inp = BuildIn(smooth, distance, iterations, nx, ny, 0f, 0f, 0f, 0f);
-        inp.TrapMin = acc.TrapMin == float.MaxValue ? 0.0 : acc.TrapMin;
-        inp.StripeAvg = acc.StripeCount > 0 ? acc.StripeSum / acc.StripeCount : 0.0;
-        inp.TiaAvg = acc.TiaCount > 0 ? acc.TiaSum / acc.TiaCount : 0.0;
+        // Bind the accumulated means (raw — the DSL scales them). Unreferenced
+        // ones stay 0 (never accumulated); the program doesn't read them.
+        inp.TrapMin   = acc.TrapMin  == float.MaxValue ? 0.0 : acc.TrapMin;
+        inp.TrapCross = acc.TrapMin2 == float.MaxValue ? 0.0 : acc.TrapMin2;
+        inp.StripeAvg = acc.StripeCount    > 0 ? acc.StripeSum    / acc.StripeCount    : 0.0;
+        inp.TiaAvg    = acc.TiaCount       > 0 ? acc.TiaSum       / acc.TiaCount       : 0.0;
+        inp.Curvature = acc.CurvatureCount > 0 ? acc.CurvatureSum / acc.CurvatureCount : 0.0;
+        inp.Lyapunov  = acc.LyapunovCount  > 0 ? acc.LyapunovSum  / acc.LyapunovCount  : 0.0;
+        inp.Gaussian  = acc.GaussianCount  > 0 ? acc.GaussianSum  / acc.GaussianCount  : 0.0;
+        inp.ExpSmooth = acc.ExpCount       > 0 ? acc.ExpSum       / acc.ExpCount       : 0.0;
         return Evaluate(in inp);
     }
     // MapInteriorWithOrbit uses the IOrbitAwareColorMap default (delegates to

@@ -40,6 +40,11 @@ public sealed class ColorGenOrbitInputTests
     [InlineData("return hsv(saturate(stripeAvg), 0.8, 1.0);")]
     [InlineData("return hsv(saturate(tiaAvg), 0.8, 1.0);")]
     [InlineData("let k = trapMin * 2.0; return rgb(k, k, k);")]
+    [InlineData("return hsv(saturate(trapCross * 3.0), 0.8, 1.0);")]
+    [InlineData("return hsv(saturate(curvature), 0.8, 1.0);")]
+    [InlineData("return hsv(saturate(lyapunov * 0.2), 0.8, 1.0);")]
+    [InlineData("return hsv(saturate(gaussian * 1.4), 0.8, 1.0);")]
+    [InlineData("return hsv(saturate(expSmooth), 0.8, 1.0);")]
     public void EachOrbitInput_TriggersOrbitAware(string src)
         => Assert.IsAssignableFrom<IOrbitAwareColorMap>(Make(src));
 
@@ -87,6 +92,20 @@ public sealed class ColorGenOrbitInputTests
         uint[] trap = RenderNative("return hsv(saturate(trapMin), 0.9, 1.0);");
         uint[] stripe = RenderNative("return hsv(saturate(stripeAvg), 0.9, 1.0);");
         Assert.NotEqual(trap, stripe);
+    }
+
+    // Each of the extended accumulator inputs actually binds (renders non-uniform)
+    // and drives a distinct image.
+    [Theory]
+    [InlineData("return hsv(saturate(lyapunov * 0.2), 0.9, 1.0);")]
+    [InlineData("return hsv(saturate(curvature), 0.9, 1.0);")]
+    [InlineData("return hsv(saturate(gaussian * 1.4), 0.9, 1.0);")]
+    [InlineData("return hsv(saturate(expSmooth), 0.9, 1.0);")]
+    [InlineData("return hsv(saturate(trapCross * 3.0), 0.9, 1.0);")]
+    public void NativeRender_ExtendedAccumulators_AreNonUniform(string src)
+    {
+        var distinct = new HashSet<uint>(RenderNative(src));
+        Assert.True(distinct.Count >= 3, $"accumulator should vary, saw {distinct.Count}");
     }
 
     // "Generate via ColorGen" (C# export) is interpreter-only for orbit inputs —
