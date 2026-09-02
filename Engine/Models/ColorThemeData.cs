@@ -34,7 +34,26 @@ namespace FracturingFog.Models
         /// <summary>Cycling gradient with Blinn-Phong 3D lighting.</summary>
         Phong3D,
         /// <summary>Cycling gradient with Cook-Torrance PBR lighting.</summary>
-        Pbr3D
+        Pbr3D,
+        /// <summary>Orbit-trap colouring (F13). The gradient maps the minimum
+        /// distance from the orbit to a chosen <see cref="OrbitTrapShape"/>.
+        /// Orbit-aware: rendered through the calculator's per-iteration sampling
+        /// path. Reuses all the gradient (F1-F9) knobs.</summary>
+        OrbitTrap
+    }
+
+    /// <summary>
+    /// Trap shape for a <see cref="ColorThemeKind.OrbitTrap"/> theme (F13). Each
+    /// value selects the geometric shape the per-iteration orbit distance is
+    /// measured against; the runtime delegates the distance measurement to the
+    /// matching built-in trap sampler, so no shape maths is duplicated.
+    /// </summary>
+    public enum OrbitTrapShape
+    {
+        Point, Cross, Circle, Line, Star,
+        Square, Ring, Hyperbola, Lemniscate, Cardioid,
+        DiagonalCross, Triangle, Hexagon, Heart, SineWave,
+        Concentric, Grid, Pinwheel, PolarRose
     }
 
     /// <summary>
@@ -247,6 +266,22 @@ namespace FracturingFog.Models
         /// live image-gamma slider.
         /// </summary>
         public float PaletteGamma { get; set; } = 1f;
+
+        // ── Orbit Trap (F13, Kind == OrbitTrap) ───────────────────────────────
+
+        /// <summary>Trap shape the orbit distance is measured against. Default
+        /// <see cref="OrbitTrapShape.Point"/> (distance to origin).</summary>
+        public OrbitTrapShape TrapShape { get; set; } = OrbitTrapShape.Point;
+
+        /// <summary>Trap distances above this clamp to the gradient end. Smaller
+        /// pulls more pixels toward the bright end. Default 2 (matches the
+        /// built-in <c>OrbitTrapPowerBaseMap</c> default).</summary>
+        public float TrapScale { get; set; } = 2f;
+
+        /// <summary>Exponent of the trap-distance response curve; smaller expands
+        /// small trap values into the gradient body. Default 0.35 (matches the
+        /// built-in <c>OrbitTrapPowerBaseMap</c> default).</summary>
+        public float TrapPower { get; set; } = 0.35f;
 
         // ── Cycling / 3D ──────────────────────────────────────────────────────
 

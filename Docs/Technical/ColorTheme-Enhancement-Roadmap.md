@@ -262,6 +262,68 @@ Each spec: what, surfaces, data model, algorithm, injection points, back-compat,
 - **Back-compat:** additive UI.
 - **Test:** same seed ⇒ same palette.
 
+### F13 — Data-driven Orbit Trap theme kind
+
+- **Tracking:** [#589](https://github.com/AloneButUnsober/FracturingFog/issues/589). Status: ◐ P1 core building.
+- **What:** let the Color Theme Editor (and JSON) author **orbit-trap** themes, not
+  just the ~30 hardcoded C# trap classes. Pick a trap shape (point/ring/cross/
+  hexagon/hyperbola/…), supply a gradient, tune the response curve.
+- **Surfaces:** JSON data-driven themes + editor UI (P2).
+- **Data model:** `ColorThemeKind.OrbitTrap`; new `OrbitTrapShape` enum;
+  `ColorThemeData.TrapShape` / `TrapScale` (default 2) / `TrapPower` (default 0.35).
+- **Algorithm / injection:** `DataDrivenOrbitTrap : OrbitTrapPowerBaseMap,
+  INamedColorMap, IThemePostFx` — **delegates `InitOrbit`/`Sample` to a built-in
+  shape instance** (a factory maps the shape enum → the existing concrete
+  `OrbitTrap*Map`), so no SDF is duplicated; `MapWithOrbit` (inherited) maps
+  `acc.TrapMin` through *this theme's* stops with the tunable `TrapScale`/
+  `TrapPower`. Wire into `DataDrivenColorThemes.Create` + `Export` (an `OrbitTrap`
+  case **before** the `GradientColorMap` catch-all). All the F1-F9 gradient
+  machinery (stops/interp/transfer/OkLab/gamma) reuses directly — orbit-trap maps
+  already extend `GradientColorMap`.
+- **Back-compat:** additive kind; existing themes unaffected. Orbit-aware ⇒ carry
+  a finite `MaxRecommendedZoom` (degrades at deep zoom).
+- **Runtime path:** only calculators with an orbit-sampling path feed it today
+  (`MandelbrotCalculator`, `UserEquationCalculator`); `EscapeTimeCalculator`
+  kinds have none (out of scope, tracked separately).
+- **Test:** create-from-data renders non-uniform lace; each shape resolves;
+  round-trip Export→Create.
+- **P2 (UI):** shape dropdown + TrapScale/TrapPower controls + "Orbit Trap" kind
+  in the Avalonia editor.
+
+### F14 — Interior orbit colouring in the editor
+
+- **Tracking:** [#590](https://github.com/AloneButUnsober/FracturingFog/issues/590). Status: ☐ (depends on F13).
+- **What:** expose the [#583](https://github.com/AloneButUnsober/FracturingFog/issues/583)
+  interior-orbit colouring (bounded pixels coloured by the accumulated orbit) to
+  editor-authored themes — an interior toggle on the data-driven Orbit Trap kind,
+  mirroring the User-Equation `UserEquationColorInterior` flag.
+- **Surfaces:** JSON + editor UI. **Data model:** `ColorThemeData.ColorInterior`
+  (bool, default false ⇒ flat interior). **Injection:** the calculators route the
+  in-set branch through `MapInteriorWithOrbit` when the theme requests it (the DSL
+  path already does for its own flag — generalise the gate to the theme).
+- **Back-compat:** default false = byte-identical.
+
+### F15 — ColorGen: orbit-accumulator inputs (route a)
+
+- **Tracking:** [#591](https://github.com/AloneButUnsober/FracturingFog/issues/591). Status: ☐.
+- **What:** ColorGen inputs are escape-final only, so true orbit traps / Stripe /
+  SAC / TIA / curvature / Lyapunov / Gaussian / exp-smoothing **cannot** be
+  written in it (only single-final-point fakes). Expose the engine's already-
+  computed `OrbitAccumulator` fields as new read-only inputs — `trapMin`,
+  `trapMin2`, `stripeAvg`, `tiaAvg`, `curvature`, `lyapunov`, `gaussian`,
+  `expSmooth` — plus a small fixed menu of engine-sampled trap shapes.
+- **Chosen route (a):** engine computes; ColorGen consumes. A program that
+  references any orbit input flags the theme orbit-aware so the calculator runs
+  the sampling path and binds the values. (Route b — per-iteration ColorGen
+  callback — rejected: interpreter-per-iter cost + hard HLSL translation.)
+- **Surfaces:** ColorGen CPU + HLSL (both emitters + prelude — parity required).
+- **Injection:** `ColorGenAst` input table, `ColorGenEmitter`, `ColorGenHlslPrelude`/
+  `ColorGenHlslEmitter`, and the calculator binding that fills the inputs from
+  `acc`. **Note:** trap *shape* stays engine-fixed (the menu); arbitrary
+  user-defined shapes would need route b.
+- **Back-compat:** additive inputs; existing programs unaffected. Larger than a
+  one-file change (CPU+GPU parity + accumulator wiring).
+
 ---
 
 ## 3. Risk vs ROI ranking
@@ -283,6 +345,9 @@ math/precision/compat hazard. Effort in ideal-days, rough.
 | **F12** | Randomize/seed generator | Med | Low | 1 | ★★★☆☆ |
 | **F10** | Per-stop alpha | Med | **High** | 3+ | ★★☆☆☆ |
 | **F11** | Dithering | Med | **High** | 3+ | ★★☆☆☆ |
+| **F13** | Data-driven Orbit Trap kind | High | Low-Med | 2 | ★★★★☆ |
+| **F14** | Interior orbit colouring (editor) | Med | Low | 1 | ★★★★☆ |
+| **F15** | ColorGen orbit-accumulator inputs | High | Med | 3+ | ★★★☆☆ |
 
 Rationale for the two high-risk items:
 
@@ -406,6 +471,17 @@ two assumptions the original phasing rested on, so the plan is re-sequenced:
    the opaque-ARGB assumption; it is a compositing-contract change, not a
    lane-add. Needs the `--colorprobe` gate plus a premultiply audit of every
    export/capture/video consumer first.
+
+**Phase E — orbit-aware colouring surfaces (new, 2026-09):**
+◐ F13 (data-driven Orbit Trap kind — P1 building) · ☐ F14 (interior in editor) · ☐ F15 (ColorGen orbit inputs)
+
+These extend the colour system past the gradient/palette family into **orbit-aware**
+colouring authorable outside hardcoded C#. F13 is the keystone (reuses the whole
+gradient stack via `OrbitTrapPowerBaseMap`); F14 rides on F13 + [#583](https://github.com/AloneButUnsober/FracturingFog/issues/583);
+F15 is the larger CPU+GPU-parity ColorGen extension. Motivated by user testing:
+orbit traps render well but are unauthorable in the editor/ColorGen, and
+finalZ/interior colourings were missing on the DSL path (see also
+[#588](https://github.com/AloneButUnsober/FracturingFog/issues/588)).
 
 ---
 

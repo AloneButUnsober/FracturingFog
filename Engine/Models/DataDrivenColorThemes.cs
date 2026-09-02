@@ -40,6 +40,7 @@ namespace FracturingFog.Models
                 ColorThemeKind.Cycling => new DataDrivenCyclingGradient(data),
                 ColorThemeKind.Phong3D => new DataDrivenPhong3D(data),
                 ColorThemeKind.Pbr3D => new DataDrivenPbr3D(data),
+                ColorThemeKind.OrbitTrap => new DataDrivenOrbitTrap(data),
                 _ => null,
             };
         }
@@ -186,6 +187,34 @@ namespace FracturingFog.Models
                         WrapMode = cyc.ExportWrapMode,
                         Stops = StopsToData(cyc.ExportStops),
                         CycleSpeed = cyc.ExportCycleSpeed,
+                        Brightness = bright,
+                        Contrast = contrast,
+                        Adaptive = adaptive,
+                    };
+
+                case DataDrivenOrbitTrap trap:
+                    return new ColorThemeData
+                    {
+                        Name = name,
+                        Category = category,
+                        Description = description,
+                        MaxRecommendedZoom = maxZoomField,
+                        Kind = ColorThemeKind.OrbitTrap,
+                        InSetColor = InSetFromMap(map),
+                        TrapShape = trap.Shape,
+                        TrapScale = trap.ExportTrapScale,
+                        TrapPower = trap.ExportTrapPower,
+                        InterpolationSpace = trap.ExportInterpolationSpace,
+                        InterpolationCurve = trap.ExportInterpolationCurve,
+                        TransferFunction = trap.ExportTransferFunction,
+                        TransferStrength = trap.ExportTransferStrength,
+                        PaletteGamma = trap.ExportPaletteGamma,
+                        SparkleStride = trap.ExportSparkleStride,
+                        SparkleBoost = trap.ExportSparkleBoost,
+                        SeamlessCycle = trap.ExportSeamlessCycle,
+                        XorLevels = trap.ExportXorLevels,
+                        XorMask = trap.ExportXorMask,
+                        Stops = StopsToData(trap.ExportStops),
                         Brightness = bright,
                         Contrast = contrast,
                         Adaptive = adaptive,
@@ -619,6 +648,112 @@ namespace FracturingFog.Models
             SpecG = 0f,
             SpecB = 0f,
             Shininess = 1f,
+        };
+    }
+
+    // =========================================================================
+    // 5. Orbit Trap (F13 / #589)
+    // =========================================================================
+
+    /// <summary>
+    /// Data-driven orbit-trap theme.  Reuses the whole gradient stack
+    /// (<see cref="OrbitTrapPowerBaseMap"/> : <see cref="GradientColorMap"/>) and
+    /// **delegates the per-iteration distance measurement** to the built-in trap
+    /// sampler for the chosen <see cref="OrbitTrapShape"/> — so no shape maths is
+    /// duplicated.  The gradient (this theme's own stops + the F1-F9 knobs) maps
+    /// the running minimum trap distance through the tunable
+    /// <see cref="TrapScale"/> / <see cref="TrapPower"/> response.
+    /// </summary>
+    public sealed class DataDrivenOrbitTrap : OrbitTrapPowerBaseMap, IColorMap, INamedColorMap, IThemePostFx
+    {
+        public string DisplayName { get; }
+        public string DisplayCategory { get; }
+        public string DisplayDescription { get; }
+        public double DisplayMaxRecommendedZoom { get; }
+
+        public int? ThemeBrightness { get; }
+        public int? ThemeContrast { get; }
+        public int? ThemeAdaptive { get; }
+
+        private readonly OrbitTrapBaseMap _shape;
+        private readonly float _trapScale, _trapPower;
+        private readonly uint _inSetColor;
+
+        /// <summary>Selected trap shape (exported for round-trip).</summary>
+        public OrbitTrapShape Shape { get; }
+        public float ExportTrapScale => _trapScale;
+        public float ExportTrapPower => _trapPower;
+
+        protected override float TrapScale => _trapScale;
+        protected override float TrapPower => _trapPower;
+
+        uint IColorMap.InSetColor => _inSetColor;
+
+        public DataDrivenOrbitTrap(ColorThemeData data)
+        {
+            DisplayName = data.Name;
+            DisplayCategory = data.Category;
+            DisplayDescription = data.Description;
+            DisplayMaxRecommendedZoom = data.MaxRecommendedZoom ?? double.PositiveInfinity;
+            ThemeBrightness = data.Brightness;
+            ThemeContrast = data.Contrast;
+            ThemeAdaptive = data.Adaptive;
+
+            Shape = data.TrapShape;
+            _trapScale = data.TrapScale > 0f ? data.TrapScale : 2f;
+            _trapPower = data.TrapPower > 0f ? data.TrapPower : 0.35f;
+            _shape = ShapeImpl(data.TrapShape);
+            _inSetColor = data.InSetColor?.ToPackedArgb() ?? 0xFF000000u;
+
+            InterpolationSpace = data.InterpolationSpace;
+            InterpCurve = data.InterpolationCurve;
+            Transfer = data.TransferFunction;
+            TransferStrength = data.TransferStrength;
+            PaletteGamma = data.PaletteGamma;
+            SparkleStride = data.SparkleStride;
+            SparkleBoost = data.SparkleBoost;
+            SeamlessCycle = data.SeamlessCycle;
+            XorLevels = data.XorLevels;
+            XorMask = data.XorMask;
+            foreach (var s in data.Stops)
+                Stops.Add(s.ToColorStop());
+        }
+
+        // Delegate the orbit hooks to the shape sampler; MapWithOrbit is
+        // inherited from OrbitTrapPowerBaseMap and maps acc.TrapMin through this
+        // theme's own gradient + TrapScale/TrapPower.
+        public override void InitOrbit(out OrbitAccumulator acc) => _shape.InitOrbit(out acc);
+
+        public override void Sample(ref OrbitAccumulator acc,
+                                    double zr, double zi, double cr, double ci, int iter)
+            => _shape.Sample(ref acc, zr, zi, cr, ci, iter);
+
+        /// <summary>Maps a trap shape to the built-in sampler that measures it.
+        /// Only single-channel (TrapMin) shapes are exposed — the bespoke
+        /// two-channel maps (Pickover / Biomorph) carry their own MapWithOrbit
+        /// and are not data-driven here.</summary>
+        private static OrbitTrapBaseMap ShapeImpl(OrbitTrapShape shape) => shape switch
+        {
+            OrbitTrapShape.Point         => new OrbitTrapPointMap(),
+            OrbitTrapShape.Cross         => new OrbitTrapCrossMap(),
+            OrbitTrapShape.Circle        => new OrbitTrapCircleMap(),
+            OrbitTrapShape.Line          => new OrbitTrapLineMap(),
+            OrbitTrapShape.Star          => new OrbitTrapStarMap(),
+            OrbitTrapShape.Square        => new OrbitTrapSquareMap(),
+            OrbitTrapShape.Ring          => new OrbitTrapRingMap(),
+            OrbitTrapShape.Hyperbola     => new OrbitTrapHyperbolaMap(),
+            OrbitTrapShape.Lemniscate    => new OrbitTrapLemniscateMap(),
+            OrbitTrapShape.Cardioid      => new OrbitTrapCardioidMap(),
+            OrbitTrapShape.DiagonalCross => new OrbitTrapDiagonalCrossMap(),
+            OrbitTrapShape.Triangle      => new OrbitTrapTriangleMap(),
+            OrbitTrapShape.Hexagon       => new OrbitTrapHexagonMap(),
+            OrbitTrapShape.Heart         => new OrbitTrapHeartMap(),
+            OrbitTrapShape.SineWave      => new OrbitTrapSineWaveMap(),
+            OrbitTrapShape.Concentric    => new OrbitTrapConcentricMap(),
+            OrbitTrapShape.Grid          => new OrbitTrapGridMap(),
+            OrbitTrapShape.Pinwheel      => new OrbitTrapPinwheelMap(),
+            OrbitTrapShape.PolarRose     => new OrbitTrapPolarRoseMap(),
+            _                            => new OrbitTrapPointMap(),
         };
     }
 }

@@ -523,6 +523,13 @@ public sealed class UserEquationCalculator : IFractalCalculator
                     double mag = Math.Sqrt(z.Real * z.Real + z.Imaginary * z.Imaginary);
                     float smooth = (float)(iter + 1.0 - Math.Log2(Math.Max(1e-10, Math.Log2(Math.Max(mag, 1.0 + 1e-10)))));
 
+                    // #588 — carry dz/dc out of the normal block so the escape
+                    // value AND derivative reach the nine-param Map overload.
+                    // finalZ themes (Potential, Binary/Argument Decomposition,
+                    // Iter+FinalZ, domain/field-line) were previously dead on the
+                    // interpreter path because it only ever called the 5-param
+                    // overload. 0 for the skip-Jacobian case (dz unavailable).
+                    double dzdcR = 0.0, dzdcI = 0.0;
                     float nx, ny;
                     if (skipJacobian)
                     {
@@ -536,8 +543,8 @@ public sealed class UserEquationCalculator : IFractalCalculator
                         // the EXACT dz/dc in `dz`; otherwise fall back to the
                         // finite difference (zP − z) / h (Cauchy-Riemann gives the
                         // Im column for free on the analytic fn).
-                        double dzdcR = useAnalytic ? dz.Real : (zP.Real - z.Real) / h;
-                        double dzdcI = useAnalytic ? dz.Imaginary : (zP.Imaginary - z.Imaginary) / h;
+                        dzdcR = useAnalytic ? dz.Real : (zP.Real - z.Real) / h;
+                        dzdcI = useAnalytic ? dz.Imaginary : (zP.Imaginary - z.Imaginary) / h;
                         double u = z.Real * dzdcR + z.Imaginary * dzdcI;          // Re(z̄ · dzdc)
                         double v = -(z.Real * dzdcI - z.Imaginary * dzdcR);       // -Im(z̄ · dzdc)
                         double m = Math.Sqrt(u * u + v * v);
@@ -547,9 +554,14 @@ public sealed class UserEquationCalculator : IFractalCalculator
                     NormalXBuffer[idx] = nx;
                     NormalYBuffer[idx] = ny;
 
+                    // #588 — pass finalZ (z at escape) + dz/dc to the nine-param
+                    // overload. Themes that ignore them default back to the
+                    // five-param path (byte-identical); finalZ themes light up.
                     ColorBuffer[idx] = orbitMap != null
                         ? (uint)orbitMap.MapWithOrbit(smooth, 0f, maxIt, nx, ny, in acc)
-                        : (uint)ColorMap.Map(smooth, 0f, maxIt, nx, ny);
+                        : (uint)ColorMap.Map(smooth, 0f, maxIt, nx, ny,
+                                             (float)z.Real, (float)z.Imaginary,
+                                             (float)dzdcR, (float)dzdcI);
                 }
             }
         });
