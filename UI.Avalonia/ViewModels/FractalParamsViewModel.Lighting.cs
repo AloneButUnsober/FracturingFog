@@ -403,6 +403,25 @@ public sealed partial class FractalParamsViewModel
         get => _p.Lighting.AbsorptionDistance;
         set { MutateLighting(r => r.Fx.AbsorptionDistance = Clamp(value, 0.01, 10.0)); this.RaisePropertyChanged(); Fire(); }
     }
+    /// <summary>Hex #AARRGGBB accessor for the glass tint (Beer-Lambert absorption
+    /// colour). Bound to a TextBox because Avalonia has no compact colour field here;
+    /// mirrors FogColorHex. Accepts an optional '#' or '0x' prefix.</summary>
+    public string AbsorptionColorHex
+    {
+        get => _p.Lighting.AbsorptionColor.ToString("X8", System.Globalization.CultureInfo.InvariantCulture);
+        set
+        {
+            var s = (value ?? string.Empty).Trim();
+            if (s.StartsWith("#")) s = s.Substring(1);
+            if (s.StartsWith("0x", StringComparison.OrdinalIgnoreCase)) s = s.Substring(2);
+            if (!uint.TryParse(s, System.Globalization.NumberStyles.HexNumber,
+                System.Globalization.CultureInfo.InvariantCulture, out uint u)) return;
+            if (_p.Lighting.AbsorptionColor == u) return;
+            MutateLighting(r => r.Fx.AbsorptionColor = u);
+            this.RaisePropertyChanged();
+            Fire();
+        }
+    }
     /// <summary>IOR / absorption controls only matter once transmission is on.</summary>
     public bool GlassEnabled => _p.Lighting.Transmission > 0.0;
     // S5 (#406) — full internal glass march (real thickness + exit refraction) vs
