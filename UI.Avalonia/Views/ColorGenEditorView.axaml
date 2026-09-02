@@ -9,7 +9,7 @@
 
         <!-- Row 0: hint -->
         <TextBlock Grid.Row="0"
-                   Text="ColorGen DSL — `let name = expr;` ... `return rgb|hsv|hsl(…);`. Inputs: smooth, dist, iter, maxIter, t, nx, ny, zr, zi, dzr, dzi, arg, mag, isInSet, pxScale."
+                   Text="ColorGen DSL — `let name = expr;` ... `return rgb|hsv|hsl(…);`. Inputs: smooth, dist, iter, maxIter, t, nx, ny, zr, zi, dzr, dzi, arg, mag, isInSet, pxScale. Orbit (CPU-only): trapMin, trapCross, trapRing, trapHyperbola, trapHexagon, stripeAvg, tiaAvg, curvature, lyapunov, gaussian, expSmooth."
                    Foreground="#B4B4B4"
                    TextWrapping="Wrap"
                    Margin="0,0,0,8" />

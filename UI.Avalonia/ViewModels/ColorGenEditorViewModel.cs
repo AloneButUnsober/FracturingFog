@@ -46,6 +46,8 @@ public sealed class ColorGenEditorViewModel : ViewModelBase
     private const string DefaultSource =
         "// ColorGen DSL — author an algorithmic colour theme.\n" +
         "// Inputs: smooth, dist, iter, maxIter, t, nx, ny, zr, zi, dzr, dzi, arg, mag, isInSet, pxScale\n" +
+        "// Orbit (CPU-only): trapMin, trapCross, trapRing, trapHyperbola, trapHexagon,\n" +
+        "//                   stripeAvg, tiaAvg, curvature, lyapunov, gaussian, expSmooth\n" +
         "// Funcs:  rgb(r,g,b), hsv(h,s,v), hsl(h,s,l), palette(t, c0, c1, …)\n" +
         "//         mix(a,b,t), brightness(c,s), contrast(c,s), gamma(c,g)\n" +
         "//         sin/cos/exp/log/pow/abs/clamp/smoothstep/hash/hash2 …\n" +
