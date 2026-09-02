@@ -219,6 +219,21 @@ code.
   DOF no longer forces the CPU trace. `--reliefgpuraymarch` gate exercises DOF (mean
   channel diff 0.267, 0 edge pixels) — the lens averaging keeps the disc-trig float-vs-
   double divergence inside the gate band. Pinhole stays byte-identical.
+- **Compiled-shader disk cache (landed — PR #578, Closes #456):** GPU compute shaders
+  were compiled from HLSL at runtime on first use and cached only for the process
+  lifetime, so every launch paid a one-time FXC/DXC compile before the first GPU render
+  — seconds on weak hardware, and the DOF variant's lens-loop is the slowest single
+  compile. Surfaced while fixing the S3 GPU-DOF first-render regression (#454): that fix
+  removed the *pathological* extra compile; this persists the compiled blob to disk so
+  the baseline one-time compile is paid once per machine, not once per process. Backend-
+  agnostic `Abstractions/ShaderBlobCache` (FXC bytecode + DXC SPIR-V) keyed by a SHA-256
+  of the exact source + entry + profile + flags + a format-version tag; pure accelerator
+  (any miss/corruption → compile from source; driver-reject → invalidate + recompile).
+  Covers every runtime-compiled kernel (Mandelbrot, relief pinhole+DOF, froxel) on both
+  D3D and Vulkan. Startup-latency only — per-frame dispatch is unchanged. Opt-out
+  `FF_NO_SHADER_CACHE=1`. See [Performance-Roadmap](../Performance-Roadmap.md) and the
+  [GPU-Shader-Cache](../User/GPU-Shader-Cache.md) user note. 11 tests
+  (`ShaderBlobCacheTests`).
 - **Click-to-focus (landed — PR #569):** Alt+double-click the render sets the relief
   DOF focal plane to whatever surface is under the cursor.
   `HeightfieldRaymarch2D.FocusDistanceAtPixel` renders the depth AOV once with the

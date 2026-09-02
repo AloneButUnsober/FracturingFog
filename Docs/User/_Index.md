@@ -51,6 +51,7 @@ as your imagination wants to take you.
 | Stand up a multi-machine render cluster                  | [Distributed Rendering Guide](Distributed-UserGuide.md)        |
 | Memorise the keyboard shortcuts                          | [Keyboard Shortcuts](Keyboard-Shortcuts.md)                    |
 | Measure how fast rendering is on your machine            | [Benchmarks Guide](Benchmarks-Guide.md)                        |
+| Understand why the first GPU render is slow (and speed it up) | [GPU Shader Cache](GPU-Shader-Cache.md)                    |
 
 ---
 
