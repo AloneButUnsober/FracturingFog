@@ -281,6 +281,13 @@ namespace FracturingFog.UI.Avalonia.Services
             if (win == null) return;
             lock (s_regGate) s_registry[role] = new WeakReference<Window>(win);
             win.Closed += OnRegisteredWindowClosed;
+
+            // #500 — right-drag on a workspace-aware panel moves the whole UI as
+            // one unit. Every registered window is workspace-aware EXCEPT the
+            // render window: it keeps the right button for zoom/context menu, so
+            // it may translate with the group but must never originate the drag.
+            if (role != WindowRole.RenderWindow)
+                Input.UnitDragBehavior.Attach(win);
         }
 
         private static void OnRegisteredWindowClosed(object? sender, EventArgs e)
