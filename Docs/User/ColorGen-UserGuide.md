@@ -163,10 +163,11 @@ operands and yield `1.0` / `0.0`.
 
 > **† Orbit inputs (F15).** These read the *whole orbit*, not just the
 > escape point, so a program using any of them is rendered on the CPU
-> orbit-sampling path. Caveats: **interpreter-only** — *Compile & Load* works, but
-> *Generate via ColorGen* (C# export) and the **GPU palette** do not support them
-> yet (a program that uses one renders on CPU; exporting it to C# is rejected with
-> a message). Best on shallow zoom, like the built-in Orbit Trap / Stripe themes.
+> orbit-sampling path. Both *Compile & Load* and *Generate via ColorGen* (C#
+> export) support them — the exported class implements `IOrbitAwareColorMap` and
+> samples the orbit itself. The one remaining caveat is the **GPU palette**: the
+> escape-only shader can't compute these, so an orbit theme always renders on the
+> CPU. Best on shallow zoom, like the built-in Orbit Trap / Stripe themes.
 
 ### 2.4 Constants
 
@@ -742,12 +743,13 @@ return palette(t,
   rgb(1.00, 1.00, 0.95));
 ```
 
-> **Orbit inputs are CPU / interpreter-only.** A program that uses any of them
-> renders on the CPU sampling path (no GPU palette), and **Generate via ColorGen**
-> (C# export) is rejected for it. They read the whole orbit, so they shine at
-> shallow zoom — like the built-in Orbit Trap / Stripe / Statistical themes.
-> Referencing an orbit input flips the theme onto the sampling path; only the
-> inputs you actually use are computed per iteration.
+> **Orbit inputs render on the CPU.** A program that uses any of them renders on
+> the CPU sampling path (no GPU palette). Both **Compile & Load** and **Generate
+> via ColorGen** (C# export) support them — the exported class implements
+> `IOrbitAwareColorMap` and samples the orbit itself. They read the whole orbit,
+> so they shine at shallow zoom — like the built-in Orbit Trap / Stripe /
+> Statistical themes. Referencing an orbit input flips the theme onto the
+> sampling path; only the inputs you actually use are computed per iteration.
 
 ### 4.13 Stripe Average Coloring (SAC) — `stripeAvg`
 
@@ -821,17 +823,21 @@ parses your program to an AST and runs it through the interpreter. That is
 why it is instant and why an error there is always a *parse/type* error
 (see [§7](#7-troubleshooting)), never a C# compiler error.
 
-> **Orbit inputs are Compile & Load only.** A program that uses any orbit
-> accumulator (§4.12+) works on the interpreter but **Generate via ColorGen**
-> refuses it with a message — the generated C# class and the GPU palette don't
-> yet support per-iteration sampling. Save… (DSL source) still works.
+> **Orbit inputs export too.** A program that uses any orbit accumulator
+> (§4.12+) works on **both** paths: *Compile & Load* runs it on the interpreter,
+> and *Generate via ColorGen* emits an orbit-aware C# class (it implements
+> `IOrbitAwareColorMap` and samples the orbit itself). The only path that can't
+> do orbit is the **GPU palette** — the escape-only shader has no per-iteration
+> orbit, so an orbit theme always renders on the CPU.
 
 **Generate via ColorGen** is the only path that emits C#. The file lands at
 `Models/ColorSchemes/Generated/{Name}Theme.cs`; a `dotnet build` of the main
 project picks it up via the default glob, and the theme then appears in every
 theme combo under its **Algorithmic** kind. That generated file *is* compiled
 by the build (Roslyn), which is where a C# compiler error could surface — at
-build time, never on the live render path.
+build time, never on the live render path. (An orbit theme emits a different
+class shape — no GPU palette, plus `InitOrbit` / `Sample` — but it compiles and
+loads the same way.)
 
 ---
 
@@ -866,7 +872,7 @@ ensure the JSON regenerates cleanly.
 Inputs    smooth dist iter maxIter t nx ny zr zi dzr dzi arg mag isInSet pxScale
           trapMin trapCross trapRing trapHyperbola trapHexagon
           stripeAvg tiaAvg curvature lyapunov gaussian expSmooth
-                                     // orbit inputs (F15): CPU / interpreter-only
+                                     // orbit inputs (F15): CPU only (no GPU); Compile & Load + C# export
 Const     pi tau e phi
 Ctors     rgb(r,g,b) hsv(h,s,v) hsl(h,s,l) oklab(L,a,b) oklch(L,C,h)
 Palette   palette(t, c0, c1, …)                  // n cyclic stops
