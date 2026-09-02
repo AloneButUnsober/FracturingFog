@@ -138,7 +138,8 @@ public static class CgInputs
         // F15 (#591) — orbit-accumulator inputs. A program referencing any of
         // these becomes orbit-aware (the host samples the orbit per iteration
         // and binds these at escape); CPU-only (the GPU palette is disabled).
-        "trapMin", "trapCross", "stripeAvg", "tiaAvg",
+        "trapMin", "trapCross", "trapRing", "trapHyperbola", "trapHexagon",
+        "stripeAvg", "tiaAvg",
         "curvature", "lyapunov", "gaussian", "expSmooth",
     };
 
@@ -147,7 +148,8 @@ public static class CgInputs
     /// through the orbit-aware interpreter path.</summary>
     public static readonly HashSet<string> OrbitScalars = new(StringComparer.Ordinal)
     {
-        "trapMin", "trapCross", "stripeAvg", "tiaAvg",
+        "trapMin", "trapCross", "trapRing", "trapHyperbola", "trapHexagon",
+        "stripeAvg", "tiaAvg",
         "curvature", "lyapunov", "gaussian", "expSmooth",
     };
 

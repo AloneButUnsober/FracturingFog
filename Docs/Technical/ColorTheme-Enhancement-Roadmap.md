@@ -376,10 +376,15 @@ Each spec: what, surfaces, data model, algorithm, injection points, back-compat,
   the DSL scales them. `InterpretedOrbitColorMap` now takes the set of referenced
   orbit inputs and **computes only those per iteration** (per-input flags — the
   transcendentals aren't free), reusing the built-in themes' exact Sample maths.
+- **SHAPE TRAPS ADDED (interpreter/CPU):** `trapRing`, `trapHyperbola`,
+  `trapHexagon` — each an independent trap channel (`OrbitAccumulator.TrapMin3/4/5`)
+  reusing the built-in shape SDFs, so a program can combine several distinct
+  shape traps at once. Point + cross + ring + hyperbola + hexagon ship.
 - **REMAINING:** GPU/HLSL orbit support (needs the fractal kernel to compute +
-  pass the accumulators); C#-export (`ColorMap.template.cs` + `ColorGenEmitter`
-  orbit-aware generated class); a full **selectable trap-shape** menu for the trap
-  inputs (point + cross ship; ring / hexagon / … would follow the F13 shape set).
+  pass the accumulators — the big, cross-cutting one); C#-export
+  (`ColorMap.template.cs` + `ColorGenEmitter` orbit-aware generated class); the
+  remaining trap shapes (square / grid / lemniscate / … — mechanical, add per
+  the F13 shape set if wanted).
 
 ---
 
