@@ -147,7 +147,8 @@ public sealed class QuatMandelbrotCalculator : IFractalCalculator
         // #320 — force CPU while an AOV view is active (GPU has no view path).
         // S8 (#404) — GPU 3D-fractal kernels are directional-only; force the CPU
         // shade path when a point/spot light is active (LightSampler on CPU).
-        if (fx.UseGpuRender && fx.DebugAov == AovView.Beauty && !lowRes && !fx.HasPositionalLight && !fx.HasAreaLight)
+        if (fx.UseGpuRender && fx.DebugAov == AovView.Beauty && !lowRes && !fx.HasPositionalLight && !fx.HasAreaLight
+            && !ThinLensDof.IsActive(in fx))   // thin-lens DoF is CPU-only (S3, #567)
         {
             var rp = new GpuRaymarchParams
             {
@@ -199,11 +200,58 @@ public sealed class QuatMandelbrotCalculator : IFractalCalculator
             ScreenSpacePost.ClearHdrBuffer(hdrBuf);
         }
 
+        // S3 (#389/#567) — physically-based thin-lens DoF (shared accumulator).
+        // Off / aperture 0 → the single-ray path below, untouched (byte-identical).
+        bool thinLensDof = ThinLensDof.IsActive(in fx);
+        int dofN = ThinLensDof.SampleCount(in fx);
+        double dofFocus = ThinLensDof.FocusDistance(in fx, camDist);
+        double dofAperture = fx.DofAperture;
+
         Parallel.For(0, height, new ParallelOptions { CancellationToken = ct }, y =>
         {
             if (ct.IsCancellationRequested) return;
             double v = (1.0 - 2.0 * (y + 0.5) / height) * fovScale + panV;
             int rowBase = y * width;
+            float[] hdrScratch = thinLensDof ? new float[3] : null!;
+
+            uint ShadeRay(double ox, double oy, double oz, double dx, double dy, double dz,
+                          out float hr, out float hg, out float hb)
+            {
+                double sx = ox, sy = oy, sz = oz, tT = 0; bool sHit = false; int sStep = 0;
+                for (int step = 0; step < maxSteps; step++)
+                {
+                    double dist = QuatMandelDE(sx, sy, sz, sliceZ, sliceW, bailout2, deIter);
+                    if (dist < eps) { sHit = true; sStep = step; break; }
+                    if (tT > sceneRadius) break;
+                    sx += dx * dist; sy += dy * dist; sz += dz * dist; tT += dist;
+                }
+                if (!sHit)
+                {
+                    uint sky = fx.ShowSkyBackdrop
+                        ? ShadingPipeline.SkyColorHdri(dx, dy, dz, in fx)
+                        : ColorMap.InSetColor;
+                    hr = ((sky >> 16) & 0xFF) / 255f; hg = ((sky >> 8) & 0xFF) / 255f; hb = (sky & 0xFF) / 255f;
+                    return sky;
+                }
+                double hn = eps * 2;
+                double sn0 = QuatMandelDE(sx + hn, sy, sz, sliceZ, sliceW, bailout2, deIter)
+                           - QuatMandelDE(sx - hn, sy, sz, sliceZ, sliceW, bailout2, deIter);
+                double sn1 = QuatMandelDE(sx, sy + hn, sz, sliceZ, sliceW, bailout2, deIter)
+                           - QuatMandelDE(sx, sy - hn, sz, sliceZ, sliceW, bailout2, deIter);
+                double sn2 = QuatMandelDE(sx, sy, sz + hn, sliceZ, sliceW, bailout2, deIter)
+                           - QuatMandelDE(sx, sy, sz - hn, sliceZ, sliceW, bailout2, deIter);
+                var snrm = Normalize3(sn0, sn1, sn2);
+                float ssmooth = (float)sStep * (192f / Math.Max(1, maxSteps)) + (float)(tT * 0.5);
+                uint sbase = (uint)ColorMap.Map(ssmooth, 0f, 256, (float)snrm[0], (float)snrm[1]);
+                var sinputs = new ShadingInputs(sx, sy, sz, snrm[0], snrm[1], snrm[2], dx, dy, dz, tT, 0.0, sStep, eps);
+                ScreenSpacePost.ClearHdrBuffer(hdrScratch);
+                uint col = ShadingPipeline.Shade<De>(
+                    in sinputs, sbase, in fx, in deStruct, true, 0, null, null, hdrScratch);
+                if (!float.IsNaN(hdrScratch[0])) { hr = hdrScratch[0]; hg = hdrScratch[1]; hb = hdrScratch[2]; }
+                else { hr = ((col >> 16) & 0xFF) / 255f; hg = ((col >> 8) & 0xFF) / 255f; hb = (col & 0xFF) / 255f; }
+                return col;
+            }
+
             for (int x = 0; x < width; x++)
             {
                 double u = (2.0 * (x + 0.5) / width - 1.0) * fovScale * aspect + panU;
@@ -212,6 +260,16 @@ public sealed class QuatMandelbrotCalculator : IFractalCalculator
                 double rdz = right[2] * u + up[2] * v + fwd[2];
                 var dn = Normalize3(rdx, rdy, rdz);
                 rdx = dn[0]; rdy = dn[1]; rdz = dn[2];
+
+                if (thinLensDof)
+                {
+                    ThinLensDof.AccumulatePixel(
+                        x, y, rowBase + x, dofN, 13,
+                        camPX, camPY, camPZ, rdx, rdy, rdz,
+                        right[0], right[1], right[2], up[0], up[1], up[2],
+                        dofFocus, dofAperture, renderBuffer, hdrBuf, ShadeRay);
+                    continue;
+                }
 
                 double px = camPX, py = camPY, pz = camPZ;
                 double tTotal = 0;
@@ -261,14 +319,16 @@ public sealed class QuatMandelbrotCalculator : IFractalCalculator
             }
         });
 
+        // Thin-lens DoF integrates the lens + skips the G-buffer → bypass the
+        // screen-space passes keyed on it; tonemap/bloom still consume the HDR.
         ScreenSpacePost.BeginGpuFrame(renderBuffer, width, height, in fx);
-        if (depthBuf is not null && normalBuf is not null)
+        if (depthBuf is not null && normalBuf is not null && !thinLensDof)
             ScreenSpacePost.ApplySsao(renderBuffer, depthBuf, normalBuf, width, height, in fx);
-        if (hdrBuf is not null && depthBuf is not null)
+        if (hdrBuf is not null && depthBuf is not null && !thinLensDof)
             ScreenSpacePost.ApplyHdrDof(hdrBuf, depthBuf, width, height, in fx);
         if (hdrBuf is not null)
             ScreenSpacePost.ApplyToneMapBloom(renderBuffer, hdrBuf, width, height, in fx);
-        if (depthBuf is not null && normalBuf is not null)
+        if (depthBuf is not null && normalBuf is not null && !thinLensDof)
             ScreenSpacePost.ApplyEdgeInk(renderBuffer, depthBuf, normalBuf, width, height, in fx);
         ScreenSpacePost.EndGpuFrame(in fx);
 
