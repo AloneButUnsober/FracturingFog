@@ -9,7 +9,7 @@ Status legend: ☐ not started · ◐ in progress (a first tranche has shipped w
 tests — see each slice) · ☑ slice fully closed. A slice is marked ☑ only when it is
 *entirely* done; every S1–S9 slice already has merged, tested work landed but stays
 ◐ because deeper GPU / full-fidelity tails remain. **S1–S9 are all underway; S10 is
-deferred (not started).**
+deferred (not started); S11 (orbit-trap height, #592) is new/not started.**
 
 Parent tracking issue: **#389**. Each slice below is (or becomes) its own issue;
 this doc is the canonical design and the issues are the canonical task list —
@@ -890,6 +890,27 @@ to this project.
   tint) — without becoming a material editor (see §4).
 - **Boundary:** a color/palette assistant, not an image editor / DAM / material node
   graph.
+
+### S11 — Relief height from an orbit-trap distance field ☐ (#592)
+Relief 3D extrudes a 2D fractal into a heightfield and raymarches it. Today the
+height source is **only** the smooth iteration count (`IHeightFieldSource.
+SmoothBuffer`). But an **orbit-trap min-distance** is already a per-pixel scalar
+field (`OrbitAccumulator.TrapMin`) — the same shape of data — so relief could
+raymarch *it* instead of / blended with smooth: "Orbit Trap - Ring" → concentric
+ridges, Hexagon → a hex ridge lattice, Grid → an embossed lattice. Literal 3D
+orbit-trap topography. Pure S1-thesis: **reuse a field FF already computes as a
+height AOV**, no new geometry machinery.
+- **Reuse:** the orbit-aware sampling path (already runs for trap themes), the
+  relief raymarch, the hi-res relief field (#143 `Relief2DHiResField`).
+- **Sketch:** persist a per-pixel trap-min buffer when an orbit-aware theme runs
+  (today the trap value only reaches colour, never stored as a field); extend
+  `IHeightFieldSource` with a trap field (or a height-source selector); relief
+  selects trap / smooth / blend. Hi-res relief needs a hi-res trap recompute too.
+- **Twin:** the trap field is a deterministic scalar → twinnable like `SmoothBuffer`;
+  the relief raymarch parity discipline is unchanged.
+- **Scope:** Mandelbrot path first (relief is Mandelbrot today); the DSL/Julia
+  relief gap is separate. Height-source only — colour still comes from the theme.
+- **Fit:** an AOV→height instance of S1; low risk, high novelty payoff.
 
 ## 4. Explicit non-goals (the Blender trap)
 
