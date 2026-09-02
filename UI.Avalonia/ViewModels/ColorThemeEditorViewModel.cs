@@ -322,6 +322,7 @@ public sealed class ColorThemeEditorViewModel : ViewModelBase
                 this.RaisePropertyChanged(nameof(IsCycling));
                 this.RaisePropertyChanged(nameof(IsPhong));
                 this.RaisePropertyChanged(nameof(IsPbr));
+                this.RaisePropertyChanged(nameof(IsOrbitTrap));
                 FieldChanged();
             }
         }
@@ -331,6 +332,7 @@ public sealed class ColorThemeEditorViewModel : ViewModelBase
     public bool IsCycling { get => Kind == ColorThemeKindDef.Cycling; set { if (value) Kind = ColorThemeKindDef.Cycling; } }
     public bool IsPhong { get => Kind == ColorThemeKindDef.Phong3D; set { if (value) Kind = ColorThemeKindDef.Phong3D; } }
     public bool IsPbr { get => Kind == ColorThemeKindDef.Pbr3D; set { if (value) Kind = ColorThemeKindDef.Pbr3D; } }
+    public bool IsOrbitTrap { get => Kind == ColorThemeKindDef.OrbitTrap; set { if (value) Kind = ColorThemeKindDef.OrbitTrap; } }
 
     private bool _showCycle;
     public bool ShowCycle { get => _showCycle; private set => this.RaiseAndSetIfChanged(ref _showCycle, value); }
@@ -344,12 +346,62 @@ public sealed class ColorThemeEditorViewModel : ViewModelBase
     private bool _showPbrExtras;
     public bool ShowPbrExtras { get => _showPbrExtras; private set => this.RaiseAndSetIfChanged(ref _showPbrExtras, value); }
 
+    private bool _showOrbitTrap;
+    /// <summary>F13 — the Orbit Trap section (shape + scale/power + interior) is
+    /// visible only for the OrbitTrap kind.</summary>
+    public bool ShowOrbitTrap { get => _showOrbitTrap; private set => this.RaiseAndSetIfChanged(ref _showOrbitTrap, value); }
+
     private void UpdateVisibleKindSections()
     {
-        ShowCycle = Kind != ColorThemeKindDef.Gradient;
+        // OrbitTrap is a gradient-mapped kind but NOT a cycling one — keep the
+        // cycle section hidden for it (its gradient maps trap distance, not iter).
+        ShowCycle = Kind == ColorThemeKindDef.Cycling
+                 || Kind == ColorThemeKindDef.Phong3D
+                 || Kind == ColorThemeKindDef.Pbr3D;
         Show3D = Kind == ColorThemeKindDef.Phong3D || Kind == ColorThemeKindDef.Pbr3D;
         ShowPhongExtras = Kind == ColorThemeKindDef.Phong3D;
         ShowPbrExtras = Kind == ColorThemeKindDef.Pbr3D;
+        ShowOrbitTrap = Kind == ColorThemeKindDef.OrbitTrap;
+    }
+
+    // ── Orbit Trap (F13) ──────────────────────────────────────────────────
+
+    public OrbitTrapShapeDef[] TrapShapeOptions { get; } = Enum.GetValues<OrbitTrapShapeDef>();
+
+    private OrbitTrapShapeDef _trapShape = OrbitTrapShapeDef.Point;
+    /// <summary>Trap shape the orbit distance is measured against.</summary>
+    public OrbitTrapShapeDef TrapShape
+    {
+        get => _trapShape;
+        set { this.RaiseAndSetIfChanged(ref _trapShape, value); FieldChanged(); }
+    }
+
+    private double _trapScale = 2d;
+    /// <summary>Trap distances above this clamp to the gradient end (smaller ⇒
+    /// more pixels toward the bright end).</summary>
+    public double TrapScale
+    {
+        get => _trapScale;
+        set { this.RaiseAndSetIfChanged(ref _trapScale, Math.Clamp(value, 0.05d, 100d)); FieldChanged(); }
+    }
+
+    private double _trapPower = 0.35d;
+    /// <summary>Trap-distance response exponent; smaller expands small trap
+    /// values into the gradient body.</summary>
+    public double TrapPower
+    {
+        get => _trapPower;
+        set { this.RaiseAndSetIfChanged(ref _trapPower, Math.Clamp(value, 0.05d, 8d)); FieldChanged(); }
+    }
+
+    private bool _colorInterior;
+    /// <summary>F14 — colour in-set (non-escaping) pixels by the accumulated
+    /// orbit instead of a flat interior (on paths that support it — the
+    /// User-Equation path today).</summary>
+    public bool ColorInterior
+    {
+        get => _colorInterior;
+        set { this.RaiseAndSetIfChanged(ref _colorInterior, value); FieldChanged(); }
     }
 
     // ── Gradient interpolation (Phase A F1 / Phase B F2, F3) ──────────────
@@ -617,6 +669,9 @@ public sealed class ColorThemeEditorViewModel : ViewModelBase
             if (Kind == ColorThemeKindDef.Pbr3D)
                 RandomizePbr(rng, wild);
 
+            if (Kind == ColorThemeKindDef.OrbitTrap)
+                RandomizeOrbitTrap(rng, wild);
+
             if (RandomIncludeInSet)
                 RandomizeInSet(rng, wild, pal);
 
@@ -783,6 +838,16 @@ public sealed class ColorThemeEditorViewModel : ViewModelBase
             MaterialBands.Add(new MaterialBandRowVm(
                 new PbrMaterialBandDef { UpperT = upper, Metal = metal, Roughness = rough }, this));
         }
+    }
+
+    private void RandomizeOrbitTrap(Random rng, bool wild)
+    {
+        var shapes = TrapShapeOptions;
+        TrapShape = shapes[rng.Next(shapes.Length)];
+        TrapScale = wild ? Rng(rng, 0.1, 100) : Rng(rng, 0.8, 4);
+        TrapPower = wild ? Rng(rng, 0.05, 8) : Rng(rng, 0.2, 1.2);
+        // Interior orbit colouring: artful ~30% of the time, experimental ~50%.
+        ColorInterior = rng.NextDouble() < (wild ? 0.5 : 0.3);
     }
 
     private void RandomizeInSet(Random rng, bool wild, List<(byte R, byte G, byte B)> pal)
@@ -1588,6 +1653,11 @@ public sealed class ColorThemeEditorViewModel : ViewModelBase
             foreach (var s in def.Stops.OrderBy(x => x.Position))
                 Stops.Add(new ColorStopRowVm(s, this));
 
+            TrapShape = def.TrapShape;
+            TrapScale = def.TrapScale <= 0f ? 2d : Math.Clamp((double)def.TrapScale, 0.05d, 100d);
+            TrapPower = def.TrapPower <= 0f ? 0.35d : Math.Clamp((double)def.TrapPower, 0.05d, 8d);
+            ColorInterior = def.ColorInterior;
+
             InterpSpace = def.InterpolationSpace;
             InterpCurve = def.InterpolationCurve;
             TransferFn = def.TransferFunction;
@@ -1670,6 +1740,10 @@ public sealed class ColorThemeEditorViewModel : ViewModelBase
             MaxRecommendedZoom = MaxZoomEnabled ? MaxRecommendedZoom : (double?)null,
             Kind = Kind,
             Stops = Stops.Select(r => r.ToDef()).OrderBy(s => s.Position).ToList(),
+            TrapShape = TrapShape,
+            TrapScale = (float)TrapScale,
+            TrapPower = (float)TrapPower,
+            ColorInterior = ColorInterior,
             InterpolationSpace = InterpSpace,
             InterpolationCurve = InterpCurve,
             TransferFunction = TransferFn,

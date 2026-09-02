@@ -27,6 +27,17 @@ namespace FracturingFog.Models
         Cycling,
         Phong3D,
         Pbr3D,
+        OrbitTrap,
+    }
+
+    /// <summary>UI-neutral mirror of <c>OrbitTrapShape</c> (F13). Member order
+    /// must match the Engine enum so the adapter can cast.</summary>
+    public enum OrbitTrapShapeDef
+    {
+        Point, Cross, Circle, Line, Star,
+        Square, Ring, Hyperbola, Lemniscate, Cardioid,
+        DiagonalCross, Triangle, Hexagon, Heart, SineWave,
+        Concentric, Grid, Pinwheel, PolarRose,
     }
 
     /// <summary>UI-neutral mirror of the PBR lighting profile enum.</summary>
@@ -146,6 +157,18 @@ namespace FracturingFog.Models
 
         // ── Gradient ──────────────────────────────────────────────────────
         public List<ColorStopDef> Stops { get; set; } = new();
+
+        // ── Orbit Trap (F13, Kind == OrbitTrap) ───────────────────────────
+        /// <summary>Trap shape the orbit distance is measured against. Default Point.</summary>
+        public OrbitTrapShapeDef TrapShape { get; set; } = OrbitTrapShapeDef.Point;
+        /// <summary>Trap distances above this clamp to the gradient end. Default 2.</summary>
+        public float TrapScale { get; set; } = 2f;
+        /// <summary>Trap-distance response exponent; smaller expands small trap
+        /// values into the gradient body. Default 0.35.</summary>
+        public float TrapPower { get; set; } = 0.35f;
+        /// <summary>Colour in-set (non-escaping) pixels by the accumulated orbit
+        /// (F14). Default false ⇒ flat interior.</summary>
+        public bool ColorInterior { get; set; } = false;
 
         // ── Gradient interpolation (Phase A F1 / Phase B F2, F3) ──────────
         /// <summary>Colour space the LUT blends stops in (F1). Default Srgb.</summary>
