@@ -210,31 +210,13 @@ public sealed class MandelbrotGpuKernel : IGpuKernel
     /// <summary>Compile a CS variant from a fully composed HLSL string.
     /// Caller is responsible for caching the returned shader.</summary>
     private ID3D11ComputeShader CompileShader(string hlsl, string label, string entryPoint = "CSMain")
-    {
-        var hr = Compiler.Compile(
+        => D3DShaderCache.CompileOrLoad(       // #456 — machine-cached FXC bytecode
+            _device,
             hlsl,
             entryPoint: entryPoint,
-            sourceName: $"MandelbrotGpuKernel.{label}.hlsl",
             profile: "cs_5_0",
-            out var blob,
-            out var errBlob);
-        if (hr.Failure || blob == null)
-        {
-            string msg = errBlob?.AsString() ?? hr.ToString();
-            errBlob?.Dispose();
-            throw new InvalidOperationException(
-                $"MandelbrotGpuKernel: HLSL compile failed ({label}) — {msg}");
-        }
-        try
-        {
-            return _device.CreateComputeShader(blob.AsSpan());
-        }
-        finally
-        {
-            blob.Dispose();
-            errBlob?.Dispose();
-        }
-    }
+            sourceName: $"MandelbrotGpuKernel.{label}.hlsl",
+            errorLabel: $"MandelbrotGpuKernel ({label})");
 
     /// <summary>Phase 2: switch active GPU palette. Pass null to clear; the
     /// next Run-with-color call will use the base shader (CPU palette path).

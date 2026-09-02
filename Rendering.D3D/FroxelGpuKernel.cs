@@ -106,22 +106,13 @@ public sealed class FroxelGpuKernel : IDisposable, IFroxelVolumeKernel
     }
 
     private ID3D11ComputeShader CompileEntry(string entry)
-    {
-        var hr = Compiler.Compile(
+        => D3DShaderCache.CompileOrLoad(       // #456 — machine-cached FXC bytecode
+            _device,
             FroxelKernelSource.Build(),
             entryPoint: entry,
-            sourceName: "Froxel.hlsl",
             profile: "cs_5_0",
-            out var blob, out var errBlob);
-        if (hr.Failure || blob == null)
-        {
-            string msg = errBlob?.AsString() ?? hr.ToString();
-            errBlob?.Dispose();
-            throw new InvalidOperationException($"FroxelGpuKernel: HLSL compile failed ({entry}) — {msg}");
-        }
-        try { return _device.CreateComputeShader(blob.AsSpan()); }
-        finally { blob.Dispose(); errBlob?.Dispose(); }
-    }
+            sourceName: "Froxel.hlsl",
+            errorLabel: $"FroxelGpuKernel ({entry})");
 
     private void EnsureVolumeBuffer(int cells)
     {

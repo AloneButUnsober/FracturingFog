@@ -22,8 +22,26 @@ public static class DxcCompiler
     // extraArgs passes through DXC flags verbatim (e.g. -fvk-*-shift binding
     // maps for the real kernel port). Kept before the -Fo/input so DXC parses
     // them as options.
+    // Short filename prefix for cached SPIR-V blobs on disk (see ShaderBlobCache).
+    private const string CacheKind = "spv";
+
     public static byte[] CompileToSpirv(string hlsl, string entry, string profile, params string[] extraArgs)
     {
+        // #456 — SPIR-V bytes are portable across runs on the same machine, so
+        // reuse a machine-cached blob keyed by the exact source + entry + profile
+        // + flags instead of shelling out to DXC on every launch. A pure
+        // accelerator: any miss falls through to the runtime compile below.
+        string cacheKey = FracturingFog.Abstractions.ShaderBlobCache.ComputeKey(
+            $"dxc-spirv-{profile}", hlsl, entry, profile, extraArgs);
+        byte[]? cached = FracturingFog.Abstractions.ShaderBlobCache.TryLoad(CacheKind, cacheKey);
+        if (cached != null)
+        {
+            if (LooksLikeSpirv(cached)) return cached;
+            // Corrupt/truncated blob — drop it so vkCreateShaderModule never sees
+            // it, then recompile below.
+            FracturingFog.Abstractions.ShaderBlobCache.Invalidate(CacheKind, cacheKey);
+        }
+
         string dxc = LocateDxc();
         string stem = Path.Combine(Path.GetTempPath(), "ffvk-" + Guid.NewGuid().ToString("N"));
         string inFile = stem + ".hlsl";
@@ -64,7 +82,9 @@ public static class DxcCompiler
                 if (p.ExitCode != 0 || !File.Exists(outFile))
                     throw new InvalidOperationException(
                         $"dxc failed (exit {p.ExitCode}) using '{dxc}':\n{stderr}{stdout}");
-                return File.ReadAllBytes(outFile);
+                byte[] spirv = File.ReadAllBytes(outFile);
+                FracturingFog.Abstractions.ShaderBlobCache.Store(CacheKind, cacheKey, spirv);   // #456
+                return spirv;
             }
         }
         finally
@@ -92,6 +112,16 @@ public static class DxcCompiler
             }
         }
         return exe; // fall through to PATH
+    }
+
+    // Cheap validity gate for a cached SPIR-V blob: a whole number of 32-bit
+    // words led by the SPIR-V magic (0x07230203, either endianness). Guards the
+    // #456 disk cache against a truncated/garbage entry reaching vkCreateShaderModule.
+    private static bool LooksLikeSpirv(byte[] blob)
+    {
+        if (blob.Length < 20 || (blob.Length & 3) != 0) return false;
+        uint w0 = (uint)(blob[0] | (blob[1] << 8) | (blob[2] << 16) | (blob[3] << 24));
+        return w0 == 0x07230203u || w0 == 0x03022307u;
     }
 
     private static void TryDelete(string path)
