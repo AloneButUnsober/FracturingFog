@@ -176,9 +176,17 @@ discarded, not that it is uncomputed.
   runs as a post-pass (only auto-allocating the capture when no external AOV target owns the
   buffer, so an AOV-EXR export is undisturbed). A still frame (no previous camera) stays
   byte-identical even at strength>0. +8 tests (6 operator + 2 end-to-end).
-- **Remaining:** a motion-blur batch flag + UI knob + threading the strength through the
-  `SceneVideoRenderer` capture path; SVGF temporal (the deeper #402 consumer); the light
-  compositor.
+- **Vector motion blur — user surface (landed — PR #641, #398):** the blur strength was
+  programmatic-only; now `--relief-motion-blur F` (0..4) + `--relief-motion-blur-samples N`
+  (2..64, imply the effect) batch flags (parse → `fp.Relief2DMotionBlur*`, CLI-builder emit
+  on the raymarch path only when on, Control Center snapshot) + a Motion-blur strength +
+  samples row in the Relief 3D dialog (`FractalParamsViewModel.Relief2DMotionBlur*`). The
+  scene path already carries it end-to-end (#639 threads the camera, #640 applies from the
+  shot params), so a scene with motion capture + a strength set blurs with no extra wiring.
+  Strength 0 → byte-identical. +9 `MotionBlurBatchWiringTests`. The full S1 motion-vector
+  chain: #638 (fill) → #639 (seam) → #640 (consumer) → #641 (surface).
+- **Remaining:** SVGF temporal (the deeper #402 consumer of the motion + depth + normal
+  guides); the light compositor.
 
 ### S2 — Linear-light rendering + view transform (AgX / ACES / Filmic) ◐ (#396)
 Render and composite in **linear light**, apply a filmic **view transform** at
