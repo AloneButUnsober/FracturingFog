@@ -146,6 +146,18 @@ discarded, not that it is uncomputed.
   convention SVGF uses) — identical current/previous cameras give exactly (0,0). Opt-in
   `ReliefAovBuffers.Motion` channel (`float[w·h·2]`, interleaved du/dv) allocated only on
   request → default byte-identical. +5 `ReliefMotionVectorTests`.
+- **Light compositor (landed — PR #642, #398):** `LightCompositor` (Engine/Imaging)
+  recombines the captured diffuse / specular / AO `ShadeComponents` AOV with the surface
+  albedo under per-component gains + tints (DiffuseGain / SpecularGain / AoStrength /
+  Ambient / diffuse+specular tints) to relight in post without re-rendering —
+  `lit = (Ambient + diffuse·gain·tint)·aoEff`, `out = albedo·lit + specular·gain·tint`,
+  `aoEff = 1 − (1 − AO)·AoStrength`. Pure, deterministic, parallel; composites the
+  direct-lighting layers (SSS / reflections are separate additive passes, out of scope).
+  Operator-first; a relight action over a captured render / AOV-EXR round-trip is the
+  follow-up. +7 `LightCompositorTests`.
+- **Remaining:** thread the render's current + previous-frame camera into the Motion
+  channel (the wiring follow-up — landed on the #638→#641 stack); SVGF temporal (the
+  deeper #402 consumer of the motion + depth + normal guides).
 - **Motion-vector AOV — render wiring (landed — PR #638, #398):** the relief render now
   fills the Motion channel. It exposes its perspective camera as `aov.CurrentCamera`
   (`ReliefMotionVector.CameraView` from the `ReliefCamera` basis) whenever an AOV buffer
