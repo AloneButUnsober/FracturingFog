@@ -392,9 +392,9 @@ Each spec: what, surfaces, data model, algorithm, injection points, back-compat,
   the remaining trap shapes (square / grid / lemniscate / … — mechanical, add per
   the F13 shape set if wanted).
 
-### F16 — ColorGen orbit inputs on the GPU (HLSL) — SLICE 1 SHIPPED (default off)
+### F16 — ColorGen orbit inputs on the GPU (HLSL) — COMPLETE (shippable scope)
 
-- **Tracking:** [#603](https://github.com/AloneButUnsober/FracturingFog/issues/603). Status: ◐ slice 1 shipped — shallow-escape kernel + both backends, **default OFF** (`FF_GPU_ORBIT` / `InterpretedOrbitColorMap.GpuEnabled`), dxc-validated; awaits on-device numeric parity + enable-by-default. Deep-zoom perturbation + interior + device parity gate remain.
+- **Tracking:** [#603](https://github.com/AloneButUnsober/FracturingFog/issues/603). Status: ☑ COMPLETE for its shippable scope — shallow-escape orbit kernel on **both** backends, all 11 accumulators, C# export, on-device parity confirmed (GT 710), **enabled by default**. The three formerly-listed "remaining" tails are re-scoped as deferred / non-goals (see **DEFERRED** below) — none is a parity gap.
 - **What:** make orbit-accumulator ColorGen themes render on the GPU. Today an
   orbit theme advertises **no GPU palette** (`HlslPaletteBody = ""`) so the render
   falls to the CPU; the GPU escape-time kernel only has escape-final state at the
@@ -453,8 +453,42 @@ Each spec: what, surfaces, data model, algorithm, injection points, back-compat,
   the D3D11 backend (`AvaloniaShellBootstrap` sets `UseGpuCompute = true` when the
   kernel factory is present) — both fall back to CPU on any failure and toggle
   live with **Ctrl+G**.
-- **SLICE-1 REMAINING:** deep-zoom **perturbation** loops (`BuildPerturb` / SA);
-  interior orbit on GPU; `Rendering.Silk` DSL-palette path.
+- **DEFERRED / NON-GOALS (not parity gaps).** The three tails once listed as
+  "slice-1 remaining" were re-examined against the actual CPU capability and each
+  is either net-new (beyond what the CPU does), unreachable, or a non-goal — so
+  building them buys nothing today. Key finding: **no perturbation-orbit path
+  exists on the CPU either.** Every orbit `Sample` call site
+  (`MandelbrotCalculator.ComputePixelOrbit`, `UserEquationCalculator`,
+  `SandboxCalculator`) iterates in **direct `double`**, at any zoom — orbit themes
+  past ~1e13 are already imprecise-by-design on the CPU, exactly like everything
+  else on the direct path. There is nothing to be "in lockstep" with.
+  - **Deep-zoom perturbation orbit (`BuildPerturb` / `BuildPerturbSA`)** —
+    *net-new capability the CPU lacks*, not a gap. `CalculateOrbitAware` never
+    perturbs; it runs the direct-double loop and accumulates there. Adding orbit
+    accumulation to the GPU perturbation kernels would be a speculative feature
+    with **no CPU reference to validate against**, and its only payoff (perf at
+    extreme zoom) is exactly where the GPU perturbation path already aborts to CPU
+    on weak FP64 (GT 710 / lavapipe). Orbit at extreme zoom stays on the CPU
+    direct path (shallow-GPU gate `Zoom ≤ MaxGpuZoom` in `TryRunGpuOrbit`).
+  - **Interior orbit on GPU** — *unreachable for ColorGen themes.* A ColorGen
+    `InterpretedOrbitColorMap` always has `WantsInteriorColor == false` (no DSL
+    syntax sets it — the F14 interior toggle lives on
+    `FractalParameters.UserEquationColorInterior`, i.e. the User-Equation path).
+    The calculator that *does* colour the interior from the orbit
+    (`UserEquationCalculator`) has **no GPU compute path at all**. So wiring the
+    GPU in-set branch to `MapInteriorWithOrbit` would colour nothing that isn't
+    already covered; the `if (map.WantsInteriorColor) return false;` guard in
+    `TryRunGpuOrbit` stays as correct defence-in-depth. (If a ColorGen interior
+    toggle is ever added, revisit — the shallow orbit kernel already fills the
+    accumulators for in-set pixels, so it would be a small follow-up then.)
+  - **`Rendering.Silk` DSL-palette path** — Silk has no DSL/`IGpuHlslPalette`
+    palette path, so there is nothing to extend. Explicit non-goal in #603 ("only
+    if it grows a DSL-palette path"). If Silk ever gains one, the shared
+    `MandelbrotKernelSource.BuildColorOrbit` drops straight in.
+  - [#607](https://github.com/AloneButUnsober/FracturingFog/issues/607) tracks the
+    speculative deep-zoom-orbit enhancement so it is not lost, gated behind a
+    strong-FP64 GPU **and** a CPU perturbation-orbit reference to compare against
+    (the real prerequisite — none exists today).
 
 ---
 
@@ -605,7 +639,7 @@ two assumptions the original phasing rested on, so the plan is re-sequenced:
    export/capture/video consumer first.
 
 **Phase E — orbit-aware colouring surfaces (new, 2026-09):**
-☑ F13 (data-driven Orbit Trap kind — P1 + editor-UI P2 shipped) · ◐ F14 (interior colouring — runtime + editor UI shipped; native-path interior in flight) · ◐ F15 (ColorGen orbit inputs — trapMin/stripeAvg/tiaAvg interpreter/CPU MVP shipped; GPU + C# export deferred)
+☑ F13 (data-driven Orbit Trap kind — P1 + editor-UI P2 shipped) · ◐ F14 (interior colouring — runtime + editor UI shipped; native-path interior in flight) · ☑ F15 (ColorGen orbit inputs — interpreter/CPU + native/DSL calculators + C# export shipped) · ☑ F16 (ColorGen orbit inputs on the GPU — shallow kernel both backends, C# export, on-device parity, default-on; deep-zoom/interior/Silk tails deferred as non-goals)
 
 These extend the colour system past the gradient/palette family into **orbit-aware**
 colouring authorable outside hardcoded C#. F13 is the keystone (reuses the whole
