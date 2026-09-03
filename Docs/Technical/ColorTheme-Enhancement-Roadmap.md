@@ -392,9 +392,9 @@ Each spec: what, surfaces, data model, algorithm, injection points, back-compat,
   the remaining trap shapes (square / grid / lemniscate / … — mechanical, add per
   the F13 shape set if wanted).
 
-### F16 — ColorGen orbit inputs on the GPU (HLSL) — DEFERRED
+### F16 — ColorGen orbit inputs on the GPU (HLSL) — SLICE 1 SHIPPED (default off)
 
-- **Tracking:** [#603](https://github.com/AloneButUnsober/FracturingFog/issues/603). Status: ○ not started (the one F15 tail that isn't CPU).
+- **Tracking:** [#603](https://github.com/AloneButUnsober/FracturingFog/issues/603). Status: ◐ slice 1 shipped — shallow-escape kernel + both backends, **default OFF** (`FF_GPU_ORBIT` / `InterpretedOrbitColorMap.GpuEnabled`), dxc-validated; awaits on-device numeric parity + enable-by-default. Deep-zoom perturbation + interior + device parity gate remain.
 - **What:** make orbit-accumulator ColorGen themes render on the GPU. Today an
   orbit theme advertises **no GPU palette** (`HlslPaletteBody = ""`) so the render
   falls to the CPU; the GPU escape-time kernel only has escape-final state at the
@@ -423,6 +423,27 @@ Each spec: what, surfaces, data model, algorithm, injection points, back-compat,
   history) may be GPU-costly enough to keep CPU-only.
 - **Test:** extend the existing multikernel/golden CPU-vs-GPU parity harness to the
   orbit inputs (`--colorprobe`-style), tolerance-compared (not bit-exact — float).
+- **SLICE 1 SHIPPED (default off):** the shallow-escape kernel + wiring, all 11
+  accumulators, gated behind `InterpretedOrbitColorMap.GpuEnabled` (env
+  `FF_GPU_ORBIT`, default off → production byte-identical, CPU). What landed:
+  - `IGpuOrbitPalette : IGpuHlslPalette` + `[Flags] GpuOrbitInputs` +
+    `GpuOrbitInputOrder` (canonical order shared by mask/kernel).
+  - `MandelbrotKernelSource.BuildColorOrbit(helpers, body, mask)` + `HlslEntryOrbit` —
+    a shallow-escape CSMain that declares only the mask'd accumulators, samples them
+    per iteration (pre-update RAW z, `it > 0` — matches CPU `Sample`), extends the
+    `EvalPalette` signature with the 11 orbit params, and passes the accumulated
+    means at the escape write. Shared source ⇒ **both** D3D (FXC) + Vulkan (DXC).
+  - `InterpretedOrbitColorMap` implements `IGpuOrbitPalette`: when `GpuEnabled` it
+    emits the HLSL body/prelude + the referenced-input mask (else `None` ⇒ CPU).
+  - Both backends' `SetPalette` branch to `BuildColorOrbit` for a non-None mask.
+  - `MandelbrotCalculator.TryRunGpuOrbit` — routes an orbit theme to the GPU when
+    enabled + shallow (`Zoom ≤ MaxGpuZoom`) + **exterior** (interior stays CPU: GPU
+    in-set uses the `isInSet=1` path, not `MapInteriorWithOrbit`); else CPU.
+  - Tests: opt-in behaviour, mask = referenced inputs, per-input kernel gating, and
+    **dxc compiles the generated orbit kernel to SPIR-V** for all 11 accumulators.
+- **SLICE-1 REMAINING:** on-device numeric parity (`--colorprobe`-style gate on real
+  hardware) → enable by default; deep-zoom **perturbation** loops (`BuildPerturb` /
+  SA); interior orbit on GPU; `Rendering.Silk` DSL-palette path.
 
 ---
 
