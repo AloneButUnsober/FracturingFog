@@ -74,6 +74,7 @@ namespace FracturingFog.Hosting
                 MaterialBands = def.MaterialBands.Select(ToData).ToList(),
 
                 InSetColor = ToData(def.InSetColor),
+                OutOfBoundsColor = ToData(def.OutOfBoundsColor),   // #615
 
                 Brightness = def.Brightness,
                 Contrast = def.Contrast,
@@ -176,6 +177,7 @@ namespace FracturingFog.Hosting
                 MaterialBands = (data.MaterialBands ?? new List<PbrMaterialBandData>()).Select(ToDef).ToList(),
 
                 InSetColor = ToDef(data.InSetColor),
+                OutOfBoundsColor = ToDef(data.OutOfBoundsColor),   // #615
 
                 Brightness = data.Brightness,
                 Contrast = data.Contrast,

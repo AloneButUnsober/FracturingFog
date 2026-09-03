@@ -232,6 +232,12 @@ namespace FracturingFog.Models
         // ── In-set override ──────────────────────────────────────────────
         public InSetColorDef? InSetColor { get; set; }
 
+        // ── Out-of-bounds surround override (#615) ───────────────────────
+        /// <summary>Optional dedicated colour for the beyond-escape-radius
+        /// surround (the flat disk seen when zoomed out). Null = paint the
+        /// escape gradient as before. Reuses the InSetColorDef R/G/B/A carrier.</summary>
+        public InSetColorDef? OutOfBoundsColor { get; set; }
+
         // ── Post-FX defaults (optional) ──────────────────────────────────
         public int? Brightness { get; set; }
         public int? Contrast { get; set; }
