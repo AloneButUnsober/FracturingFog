@@ -530,9 +530,20 @@ namespace FracturingFog.Imaging
                 // float data. When neither denoise nor export asks, aov stays null and
                 // the GPU fast path + byte-identical beauty are preserved.
                 var aov = aovCapture ?? ReliefDenoisePass.MakeCapture(p, w, h);
+                // S1 (#398) — vector motion blur needs the motion-vector AOV, which only
+                // fills when a previous-frame camera is supplied. Ensure a Motion-capable
+                // capture (only when no external capture target already owns the aov, so
+                // an AOV-EXR export's clean geometry planes are never disturbed).
+                bool wantMotionBlur = p.Relief2DMotionBlurStrength > 0.0 && previousCamera.HasValue;
+                if (wantMotionBlur && aovCapture == null && (aov == null || aov.Motion == null))
+                    aov = new FracturingFog.Rendering.Lighting.HeightfieldRaymarch2D.ReliefAovBuffers(
+                        w, h, aov?.Components != null, true);
                 FracturingFog.Rendering.Lighting.HeightfieldRaymarch2D.Render(
                     buffer, field, w, h, fw, fh, p, dst, out _, null, aov, null, froxelHistory, fx, previousCamera);
                 ReliefDenoisePass.Apply(dst, aov, w, h, p);
+                if (wantMotionBlur && aov?.Motion != null)
+                    dst = MotionBlurFromVectors.Apply(dst, aov.Motion, w, h,
+                        p.Relief2DMotionBlurStrength, Math.Clamp(p.Relief2DMotionBlurSamples, 2, 64));
             }
             else
             {

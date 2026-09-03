@@ -22,7 +22,7 @@ namespace FracturingFog.Server.Tests;
 public sealed class ReliefMotionVectorSequenceTests
 {
     private static PosterRequest ReliefRequest(double azimuthDeg = 25,
-        ReliefMotionVector.CameraView? previous = null)
+        ReliefMotionVector.CameraView? previous = null, double motionBlur = 0.0)
     {
         var fp = new FractalParameters
         {
@@ -33,6 +33,7 @@ public sealed class ReliefMotionVectorSequenceTests
             Relief2DCameraElevationDeg = 45,
             Relief2DCameraFovDeg = 55,
             Relief2DGroundPlane = false,   // sky background → real silhouette
+            Relief2DMotionBlurStrength = motionBlur,
         };
         return new PosterRequest
         {
@@ -96,5 +97,35 @@ public sealed class ReliefMotionVectorSequenceTests
             if (Math.Abs(aov.Motion![i * 2]) + Math.Abs(aov.Motion[i * 2 + 1]) > 0.5) moved++;
         Assert.True(moved > (96 * 72) / 100,
             $"a camera move should shift many terrain pixels through the seam, only {moved} moved");
+    }
+
+    // S1 (#398) consumer — vector motion blur end-to-end through PosterRenderer.
+    // A moved previous camera + a non-zero strength smears the beauty (output
+    // differs from the un-blurred render); with no previous camera (a still frame)
+    // the same strength changes nothing.
+    private static uint[] RenderBeauty(PosterRequest req)
+        => PosterRenderer.RenderToPixels(req, default, out _, out _);
+
+    [Fact]
+    public void MotionBlur_Changes_The_Render_When_Camera_Moved()
+    {
+        var prev = RenderCapturingMotion(ReliefRequest(azimuthDeg: 16));
+        var sharp = RenderBeauty(ReliefRequest(azimuthDeg: 25, previous: prev.CurrentCamera, motionBlur: 0.0));
+        var blurred = RenderBeauty(ReliefRequest(azimuthDeg: 25, previous: prev.CurrentCamera, motionBlur: 1.0));
+
+        Assert.Equal(sharp.Length, blurred.Length);
+        int diff = 0;
+        for (int i = 0; i < sharp.Length; i++) if (sharp[i] != blurred[i]) diff++;
+        Assert.True(diff > sharp.Length / 100, $"motion blur changed too few pixels ({diff})");
+    }
+
+    [Fact]
+    public void MotionBlur_Is_Identity_On_A_Still_Frame()
+    {
+        // No previous camera → the motion AOV is zero → the strength does nothing,
+        // and the GPU-fast-path beauty is preserved (byte-identical to strength 0).
+        var sharp = RenderBeauty(ReliefRequest(previous: null, motionBlur: 0.0));
+        var still = RenderBeauty(ReliefRequest(previous: null, motionBlur: 1.0));
+        Assert.Equal(sharp, still);
     }
 }
