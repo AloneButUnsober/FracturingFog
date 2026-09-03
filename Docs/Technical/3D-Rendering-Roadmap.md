@@ -146,8 +146,19 @@ discarded, not that it is uncomputed.
   convention SVGF uses) — identical current/previous cameras give exactly (0,0). Opt-in
   `ReliefAovBuffers.Motion` channel (`float[w·h·2]`, interleaved du/dv) allocated only on
   request → default byte-identical. +5 `ReliefMotionVectorTests`.
-- **Remaining:** thread the render's current + previous-frame camera into the Motion
-  channel (the wiring follow-up); the light compositor.
+- **Motion-vector AOV — render wiring (landed — PR #638, #398):** the relief render now
+  fills the Motion channel. It exposes its perspective camera as `aov.CurrentCamera`
+  (`ReliefMotionVector.CameraView` from the `ReliefCamera` basis) whenever an AOV buffer
+  is supplied, and a new optional `previousCamera` param drives a post-pass (after the
+  froxel composite) that reconstructs each hit's world position from the captured
+  centre-tap depth + primary ray, projects it through the previous camera
+  (`ScreenMotion`), and stores the screen-space (du, dv). Perspective only; sky-miss =
+  exactly zero; still frame (previous == current) ~zero. A Motion capture forces the CPU
+  trace (folded into the `aovOk` gate, like a Components capture). Default off (no Motion
+  buffer / no previous camera) → byte-identical. +5 `ReliefMotionVectorWiringTests`.
+- **Remaining:** thread a previous-camera source through the video / scene sequence
+  renderers so motion fills during an actual animation (SVGF is the consumer); the light
+  compositor.
 
 ### S2 — Linear-light rendering + view transform (AgX / ACES / Filmic) ◐ (#396)
 Render and composite in **linear light**, apply a filmic **view transform** at
