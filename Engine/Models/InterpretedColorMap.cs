@@ -511,17 +511,20 @@ public sealed class InterpretedOrbitColorMap : InterpretedColorMap, IOrbitAwareC
     private const double StripeDensity = 7.0;
 
     // ── F16 (#603) — GPU orbit support (opt-in). ─────────────────────────────
-    /// <summary>Master switch for GPU orbit rendering. Default follows the
-    /// <c>FF_GPU_ORBIT</c> env var (truthy = on); settable for tests. When off,
-    /// an orbit theme advertises no GPU palette and renders on the CPU exactly as
-    /// before — so production is byte-identical until on-device parity is signed
-    /// off (mirrors the UseGpuPerturbation default-off precedent).</summary>
-    public static bool GpuEnabled { get; set; } = EnvTruthy("FF_GPU_ORBIT");
+    /// <summary>Master switch for GPU orbit rendering. Default ON (on-device
+    /// parity confirmed — see F16 <c>--vulkanorbitprobe</c>); set <c>FF_GPU_ORBIT</c>
+    /// to a falsy value (0 / false / off / no) to force the CPU orbit path, or
+    /// set the property directly (tests). When off, an orbit theme advertises no
+    /// GPU palette and renders on the CPU. The GPU path itself still only engages
+    /// when GPU compute is on, the zoom is shallow, and the theme is exterior —
+    /// see <see cref="MandelbrotCalculator.TryRunGpuOrbit"/>.</summary>
+    public static bool GpuEnabled { get; set; } = ReadGpuOrbitEnv();
 
-    private static bool EnvTruthy(string name)
+    private static bool ReadGpuOrbitEnv()
     {
-        string? v = Environment.GetEnvironmentVariable(name);
-        return v is "1" or "true" or "True" or "on" or "ON" or "yes";
+        string? v = Environment.GetEnvironmentVariable("FF_GPU_ORBIT");
+        if (string.IsNullOrEmpty(v)) return true;   // default ON
+        return v is not ("0" or "false" or "False" or "off" or "OFF" or "no");
     }
 
     /// <summary>Map the referenced-input name set to the kernel's orbit mask.</summary>
