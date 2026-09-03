@@ -59,9 +59,17 @@ public static class AtrousDenoiser
     /// <paramref name="depth"/> (w*h) are optional guides; null disables that
     /// edge-stop term (a null-guide run is a color-only bilateral). Alpha is
     /// carried through from the input untouched. Returns a new buffer; the input
-    /// is not modified. Iterations ≤ 0 returns a copy unchanged.</summary>
+    /// is not modified. Iterations ≤ 0 returns a copy unchanged.
+    /// <para>SVGF variance guiding (roadmap S4, #402): when <paramref name="variance"/>
+    /// (w*h, per-pixel luminance variance) is supplied AND <paramref name="varianceScale"/>
+    /// &gt; 0, the colour edge-stop is loosened where the estimate is noisy — the effective
+    /// colour sigma scales by <c>1 + varianceScale·sqrt(variance)</c>, so high-variance
+    /// (unconverged) pixels blur MORE while low-variance (converged) detail is preserved.
+    /// A null variance or scale 0 leaves the colour weight exactly as before
+    /// (byte-identical).</para></summary>
     public static uint[] Denoise(uint[] color, int w, int h, AtrousParams p,
-        float[]? normalXyz = null, float[]? depth = null)
+        float[]? normalXyz = null, float[]? depth = null,
+        float[]? variance = null, double varianceScale = 0.0)
     {
         if (color == null) throw new ArgumentNullException(nameof(color));
         long n = (long)w * h;
@@ -88,6 +96,7 @@ public static class AtrousDenoiser
         double zSig = Math.Max(1e-6, p.DepthSigma);
         bool hasN = normalXyz != null && normalXyz.Length >= n * 3;
         bool hasZ = depth != null && depth.Length >= n;
+        bool hasVar = variance != null && variance.Length >= n && varianceScale > 0.0;
 
         for (int it = 0; it < p.Iterations; it++)
         {
@@ -106,6 +115,11 @@ public static class AtrousDenoiser
                 double nx = 0, ny = 0, nz = 0;
                 if (hasN) { nx = normalXyz![pi * 3]; ny = normalXyz[pi * 3 + 1]; nz = normalXyz[pi * 3 + 2]; }
                 double cz = hasZ ? depth![pi] : 0;
+                // SVGF variance guiding (#402): loosen the colour edge-stop where the
+                // per-pixel variance estimate is high. hasVar false → cSig unchanged.
+                double cSigPix = hasVar
+                    ? cSig * (1.0 + varianceScale * Math.Sqrt(Math.Max(0.0, variance![pi])))
+                    : cSig;
 
                 double sumR = 0, sumG = 0, sumB = 0, cumW = 0;
                 for (int ky = 0; ky < 5; ky++)
@@ -115,9 +129,9 @@ public static class AtrousDenoiser
                     int sy = Clamp(y + (ky - 2) * step, 0, h - 1);
                     int qi = sy * w + sx;
 
-                    // Color edge-stop (squared RGB distance).
+                    // Color edge-stop (squared RGB distance), variance-scaled sigma.
                     double dr = cr - r[qi], dg = cg - g[qi], db = cb - b[qi];
-                    double wCol = Math.Exp(-(dr * dr + dg * dg + db * db) / cSig);
+                    double wCol = Math.Exp(-(dr * dr + dg * dg + db * db) / cSigPix);
 
                     double wNorm = 1.0;
                     if (hasN)
