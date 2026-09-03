@@ -141,6 +141,11 @@ public static class CgInputs
         "trapMin", "trapCross", "trapRing", "trapHyperbola", "trapHexagon",
         "stripeAvg", "tiaAvg",
         "curvature", "lyapunov", "gaussian", "expSmooth",
+        // #611 — the shape-selectable primary trap. Reads slot-1 acc.TrapMin
+        // (same slot as trapMin) but the theme's TrapShape (a menu of the same
+        // 19 shapes as the Color Theme Editor) picks the SDF it is measured
+        // against. `trap` with the default Point shape == `trapMin`.
+        "trap",
     };
 
     /// <summary>Subset of <see cref="Scalars"/> that require per-iteration orbit
@@ -151,6 +156,7 @@ public static class CgInputs
         "trapMin", "trapCross", "trapRing", "trapHyperbola", "trapHexagon",
         "stripeAvg", "tiaAvg",
         "curvature", "lyapunov", "gaussian", "expSmooth",
+        "trap",   // #611 — shape-selectable primary trap (slot-1)
     };
 
     public static readonly Dictionary<string, double> Constants = new(StringComparer.Ordinal)

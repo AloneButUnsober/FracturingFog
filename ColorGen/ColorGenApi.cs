@@ -30,6 +30,13 @@ public sealed class GenerateOptions
     public string ThemeName { get; init; } = "My ColorGen Theme";
     public string Category { get; init; } = "User";
     public string Description { get; init; } = "";
+
+    /// <summary>#611 — the trap shape the DSL <c>trap</c> input is measured
+    /// against, by name (a member of <c>OrbitTrapShape</c> — "Point", "Cross",
+    /// "Star", …). String-typed to keep ColorGen.Lib dependency-free; the Engine
+    /// parses it back to its enum. Default "Point" ⇒ <c>trap</c> == <c>trapMin</c>
+    /// (byte-identical to pre-#611 themes).</summary>
+    public string TrapShape { get; init; } = "Point";
 }
 
 public static class ColorGenApi
@@ -105,6 +112,16 @@ public static class ColorGenApi
         CgProgram prog, string sanitized, string source,
         System.Collections.Generic.ISet<string> orbitInputs, GenerateOptions? options)
     {
+        // #611 — the shape-selectable `trap` input is interpreter-only for now.
+        // The C# export baked the 5 fixed-shape SDFs inline; a menu-selected shape
+        // would need the export to bake shape delegation (a follow-up). Reject
+        // clearly rather than emit a class that ignores the chosen shape.
+        if (orbitInputs.Contains("trap"))
+            return new GenerateResult(sanitized, "",
+                "The 'trap' input (selectable trap shape, #611) is not yet supported by C# export — " +
+                "use 'Compile & Load' to render it live, or the fixed-shape inputs " +
+                "(trapMin / trapCross / trapRing / trapHyperbola / trapHexagon) for export.");
+
         // Both MapWithOrbit and the escape-final Map are method bodies at the
         // same nesting (8-space indent), so one emit serves both insertion points.
         string body = new ColorGenEmitter(indent: "        ").EmitBody(prog);

@@ -5,11 +5,11 @@
         x:DataType="vm:ColorGenEditorViewModel"
         Foreground="White">
 
-    <Grid Margin="12" RowDefinitions="Auto,Auto,Auto,Auto,*,Auto">
+    <Grid Margin="12" RowDefinitions="Auto,Auto,Auto,Auto,Auto,*,Auto">
 
         <!-- Row 0: hint -->
         <TextBlock Grid.Row="0"
-                   Text="ColorGen DSL — `let name = expr;` ... `return rgb|hsv|hsl(…);`. Inputs: smooth, dist, iter, maxIter, t, nx, ny, zr, zi, dzr, dzi, arg, mag, isInSet, pxScale. Orbit (CPU-only): trapMin, trapCross, trapRing, trapHyperbola, trapHexagon, stripeAvg, tiaAvg, curvature, lyapunov, gaussian, expSmooth."
+                   Text="ColorGen DSL — `let name = expr;` ... `return rgb|hsv|hsl(…);`. Inputs: smooth, dist, iter, maxIter, t, nx, ny, zr, zi, dzr, dzi, arg, mag, isInSet, pxScale. Orbit (CPU-only): trap (shape from the menu below), trapMin, trapCross, trapRing, trapHyperbola, trapHexagon, stripeAvg, tiaAvg, curvature, lyapunov, gaussian, expSmooth."
                    Foreground="#B4B4B4"
                    TextWrapping="Wrap"
                    Margin="0,0,0,8" />
@@ -42,8 +42,23 @@
             <TextBox    Grid.Column="3" Text="{Binding Category, Mode=TwoWay}" />
         </Grid>
 
-        <!-- Row 3: compile/generate -->
-        <Grid Grid.Row="3" ColumnDefinitions="*,Auto,Auto,Auto" Margin="0,0,0,8">
+        <!-- Row 3: trap shape (#611) — same 19-shape list as the Color Theme Editor -->
+        <Grid Grid.Row="3" ColumnDefinitions="Auto,Auto,*" Margin="0,0,0,6">
+            <TextBlock Grid.Column="0" Text="Trap shape:" VerticalAlignment="Center" Margin="0,0,8,0" />
+            <ComboBox Grid.Column="1"
+                      ItemsSource="{Binding TrapShapeOptions}"
+                      SelectedItem="{Binding TrapShape, Mode=TwoWay}"
+                      MinWidth="160" />
+            <TextBlock Grid.Column="2"
+                       Text="Shape measured by the DSL `trap` input. Point = trapMin. CPU-only."
+                       Foreground="#B4B4B4"
+                       VerticalAlignment="Center"
+                       TextWrapping="Wrap"
+                       Margin="12,0,0,0" />
+        </Grid>
+
+        <!-- Row 4: compile/generate -->
+        <Grid Grid.Row="4" ColumnDefinitions="*,Auto,Auto,Auto" Margin="0,0,0,8">
             <TextBox Grid.Column="0"
                      PlaceholderText="Description (optional)"
                      Text="{Binding Description, Mode=TwoWay}" />
@@ -69,8 +84,8 @@
                     FontWeight="Bold" />
         </Grid>
 
-        <!-- Row 4: editor (fills) -->
-        <Border Grid.Row="4"
+        <!-- Row 5: editor (fills) -->
+        <Border Grid.Row="5"
                 BorderBrush="#505050"
                 BorderThickness="1"
                 Background="#1C1C1C">
@@ -87,8 +102,8 @@
                      ScrollViewer.VerticalScrollBarVisibility="Auto" />
         </Border>
 
-        <!-- Row 5: status -->
-        <TextBlock Grid.Row="5"
+        <!-- Row 6: status -->
+        <TextBlock Grid.Row="6"
                    Text="{Binding StatusText}"
                    FontFamily="Consolas, monospace"
                    FontSize="12"

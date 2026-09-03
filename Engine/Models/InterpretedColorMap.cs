@@ -91,7 +91,12 @@ public class InterpretedColorMap :
             // palette and renders on the CPU exactly as before.
             string oBody = "", oPrelude = "", oId = "Interp_none";
             var mask = FracturingFog.Interefaces.GpuOrbitInputs.None;
-            if (InterpretedOrbitColorMap.GpuEnabled)
+            // #611 — the shape-selectable `trap` input has no HLSL SDF for the 14
+            // non-legacy shapes, so a `trap` theme stays CPU-only (advertises no
+            // GPU palette) exactly as all orbit did pre-F16. GPU parity for the
+            // full shape set is a follow-up (needs the 19 SDFs in HLSL).
+            bool usesSelectableTrap = orbitInputs.Contains("trap");
+            if (InterpretedOrbitColorMap.GpuEnabled && !usesSelectableTrap)
             {
                 try
                 {
@@ -104,7 +109,8 @@ public class InterpretedColorMap :
                 catch { oBody = ""; oPrelude = ""; oId = "Interp_none"; mask = FracturingFog.Interefaces.GpuOrbitInputs.None; }
             }
             return new InterpretedOrbitColorMap(prog, opts.ThemeName, opts.Category, opts.Description,
-                                                orbitInputs, oBody, oPrelude, oId, mask);
+                                                orbitInputs, oBody, oPrelude, oId, mask,
+                                                InterpretedOrbitColorMap.ParseTrapShape(opts.TrapShape));
         }
 
         // Same HLSL the compiled path emits (text generation — not Roslyn).
@@ -460,6 +466,9 @@ public class InterpretedColorMap :
         "isInSet" => inp.IsInSet,
         "pxScale" => inp.PxScale,
         // F15 orbit-accumulator inputs (0 on the non-orbit path).
+        // #611 — shape-selectable primary trap; reads the same slot-1 value as
+        // trapMin (the shape is chosen by the theme, not the input name).
+        "trap"          => inp.TrapMin,
         "trapMin"       => inp.TrapMin,
         "trapCross"     => inp.TrapCross,
         "trapRing"      => inp.TrapRing,
@@ -546,6 +555,20 @@ public sealed class InterpretedOrbitColorMap : InterpretedColorMap, IOrbitAwareC
     // computed per iteration (the transcendentals in Sample are not free).
     private readonly bool _trapMin, _trapCross, _ring, _hyperbola, _hexagon,
                           _stripe, _tia, _curvature, _lyapunov, _gaussian, _exp;
+    // #611 — the shape-selectable primary trap. `_trap` = the DSL references the
+    // `trap` input; `TrapShape` = the theme's chosen shape; `_trapShapeImpl` = the
+    // built-in SDF sampler for a non-Point shape (null ⇒ inline point path, which
+    // stays byte-identical to pre-#611 for the default shape).
+    private readonly bool _trap;
+    private readonly OrbitTrapBaseMap? _trapShapeImpl;
+
+    /// <summary>#611 — the trap shape the <c>trap</c> input is measured against.</summary>
+    public OrbitTrapShape TrapShape { get; }
+
+    /// <summary>Parse a trap-shape name (from <c>GenerateOptions.TrapShape</c>)
+    /// to the enum; unknown / empty ⇒ Point (the byte-identical default).</summary>
+    internal static OrbitTrapShape ParseTrapShape(string? name)
+        => Enum.TryParse<OrbitTrapShape>(name, ignoreCase: true, out var s) ? s : OrbitTrapShape.Point;
 
     // Ring trap geometry (matches the built-in OrbitTrapRingMap).
     private const double RingCx = -1.0, RingCy = 0.0, RingR = 0.3;
@@ -553,10 +576,19 @@ public sealed class InterpretedOrbitColorMap : InterpretedColorMap, IOrbitAwareC
     internal InterpretedOrbitColorMap(CgProgram prog, string name, string category, string description,
                                       HashSet<string> orbitInputs,
                                       string hlslBody, string hlslPrelude, string paletteId,
-                                      GpuOrbitInputs orbitMask)
+                                      GpuOrbitInputs orbitMask,
+                                      OrbitTrapShape trapShape = OrbitTrapShape.Point)
         : base(prog, name, category, description, hlslBody: hlslBody, hlslPrelude: hlslPrelude, paletteId: paletteId)
     {
         OrbitInputs = orbitMask;
+        TrapShape  = trapShape;
+        _trap      = orbitInputs.Contains("trap");
+        // A non-Point selectable trap delegates slot-1 sampling to the built-in
+        // SDF (same factory F13 uses). Point keeps the inline path below, so an
+        // existing trapMin theme is byte-identical.
+        _trapShapeImpl = (_trap && trapShape != OrbitTrapShape.Point)
+            ? DataDrivenOrbitTrap.ShapeImpl(trapShape)
+            : null;
         _trapMin   = orbitInputs.Contains("trapMin");
         _trapCross = orbitInputs.Contains("trapCross");
         _ring      = orbitInputs.Contains("trapRing");
@@ -582,11 +614,20 @@ public sealed class InterpretedOrbitColorMap : InterpretedColorMap, IOrbitAwareC
 
     public void Sample(ref OrbitAccumulator acc, double zr, double zi, double cr, double ci, int iter)
     {
-        // trapMin — min distance to the origin (point trap).
-        if (_trapMin)
+        // trap / trapMin — slot-1 primary trap. #611: the shape is theme-selected.
+        // Point (default) uses the inline origin point-trap (byte-identical to
+        // pre-#611); any other shape delegates to the matching built-in trap SDF.
+        if (_trapMin || _trap)
         {
-            double d = Math.Sqrt(zr * zr + zi * zi);
-            if ((float)d < acc.TrapMin) acc.TrapMin = (float)d;
+            if (_trapShapeImpl != null)
+            {
+                _trapShapeImpl.Sample(ref acc, zr, zi, cr, ci, iter);
+            }
+            else
+            {
+                double d = Math.Sqrt(zr * zr + zi * zi);
+                if ((float)d < acc.TrapMin) acc.TrapMin = (float)d;
+            }
         }
 
         // trapCross — min distance to the nearer coordinate axis.
