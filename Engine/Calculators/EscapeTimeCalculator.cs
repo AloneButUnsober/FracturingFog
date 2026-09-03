@@ -180,6 +180,16 @@ public sealed class EscapeTimeCalculator : Interefaces.IFractalCalculator, Inter
         ApplyOutOfBoundsSurround(ct);
     }
 
+    // #615 — the escape radius² the GPU shader uses (radius 2). The GPU dispatch
+    // (TryDispatchGpu) hardcodes this, independent of the kernel's CPU
+    // BailoutRadius2; the out-of-bounds post-pass reads _lastBailout2 to match.
+    private const double GpuBailout2 = 4.0;
+
+    // #615 — escape radius² of the most recent render (GpuBailout2 when the GPU
+    // path ran, else the kernel's BailoutRadius2). Consumed by the out-of-bounds
+    // post-pass so the surround disk is sized for the frame actually produced.
+    private double _lastBailout2 = 512.0 * 512.0;
+
     // #615 Phase 1 — bailout radius² for the active fractal type, mirroring the
     // kernel construction in CalculateInternal. Used only by the out-of-bounds
     // post-pass; cheap to instantiate.
@@ -216,7 +226,7 @@ public sealed class EscapeTimeCalculator : Interefaces.IFractalCalculator, Inter
         bool haveNormals = NormalXBuffer.Length >= w * h && NormalYBuffer.Length >= w * h;
 
         double scale = (3.5 / Math.Max(w, h)) / Zoom;
-        double r2 = CurrentEscapeRadius2();
+        double r2 = _lastBailout2;   // #615 — radius the frame actually rendered with (GPU vs CPU)
         double cx0 = CenterX, cy0 = CenterY;
 
         _po.CancellationToken = ct;
@@ -263,7 +273,18 @@ public sealed class EscapeTimeCalculator : Interefaces.IFractalCalculator, Inter
             && Zoom <= MandelbrotCalculator.MaxGpuZoom
             && !warp
             && TryDispatchGpu(ct))
+        {
+            // #615 — the GPU shader escapes at |z|² ≥ GpuBailout2 (radius 2),
+            // NOT the kernel's CPU BailoutRadius2 (512²). The out-of-bounds
+            // post-pass must use the radius the frame actually rendered with,
+            // or the surround disk would be sized for the wrong bailout.
+            _lastBailout2 = GpuBailout2;
             return;
+        }
+
+        // #615 — CPU path escapes at the kernel's own bailout; record it so the
+        // out-of-bounds post-pass paints the disk at the matching radius.
+        _lastBailout2 = CurrentEscapeRadius2();
 
         switch (FractalType)
         {
@@ -366,7 +387,7 @@ public sealed class EscapeTimeCalculator : Interefaces.IFractalCalculator, Inter
             GpuKernel.Run(
                 Width, Height,
                 CenterX, CenterY, scale,
-                MaxIterations, 4.0,
+                MaxIterations, GpuBailout2,
                 IterationBuffer, SmoothBuffer,
                 FinalZrBuffer, FinalZiBuffer,
                 FinalDrBuffer, FinalDiBuffer,

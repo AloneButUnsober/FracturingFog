@@ -37,6 +37,13 @@ public sealed class GenerateOptions
     /// parses it back to its enum. Default "Point" ⇒ <c>trap</c> == <c>trapMin</c>
     /// (byte-identical to pre-#611 themes).</summary>
     public string TrapShape { get; init; } = "Point";
+
+    /// <summary>#615 — optional packed-ARGB colour for the beyond-escape-radius
+    /// surround (the flat disk seen when zoomed out). Null ⇒ paint the escape
+    /// gradient as before (byte-identical). Applied by the CPU calculator via
+    /// IColorMap.OutOfBoundsColor; ignored by the C#/HLSL codegen paths (GPU
+    /// parity is a follow-up).</summary>
+    public uint? OutOfBoundsColor { get; init; }
 }
 
 public static class ColorGenApi
