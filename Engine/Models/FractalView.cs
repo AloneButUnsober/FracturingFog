@@ -144,6 +144,7 @@ namespace FracturingFog.Models
             {FractalType.Flame, "Flame" },
             {FractalType.Apollonian, "Apollonian" },
             {FractalType.ChaoticBilliard, "Chaotic Billiard" },
+            {FractalType.PrecisionField, "Precision Field" },
             {FractalType.Kleinian, "Kleinian" },
             {FractalType.BicomplexMandelbrot, "Bicomplex Mandelbrot" },
             {FractalType.Dla, "DLA" },

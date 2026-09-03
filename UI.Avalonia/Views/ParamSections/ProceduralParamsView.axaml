@@ -371,5 +371,32 @@
                            ToolTip.Tip="PRNG seed for the NDisk random arrangement. Same seed + settings = identical field." />
         </Grid>
 
+        <!-- Precision Field (#628) -->
+        <Grid IsVisible="{Binding IsPrecisionField}"
+              ColumnDefinitions="160,*"
+              RowDefinitions="Auto,Auto,Auto,Auto">
+            <TextBlock Grid.Row="0" Grid.Column="0" Text="Low tier:" VerticalAlignment="Center" />
+            <ComboBox Grid.Row="0" Grid.Column="1"
+                      ItemsSource="{Binding PrecisionTiers}"
+                      SelectedItem="{Binding PrecisionLowTier, Mode=TwoWay}"
+                      Margin="0,2"
+                      ToolTip.Tip="Lower arithmetic tier. Float (32-bit) loses precision first — its disagreement with the reference is the fragility map. Float/Double/DoubleDouble/QuadDouble." />
+            <TextBlock Grid.Row="1" Grid.Column="0" Text="Reference tier:" VerticalAlignment="Center" />
+            <ComboBox Grid.Row="1" Grid.Column="1"
+                      ItemsSource="{Binding PrecisionTiers}"
+                      SelectedItem="{Binding PrecisionHighTier, Mode=TwoWay}"
+                      Margin="0,2"
+                      ToolTip.Tip="Upper (reference) tier. Use DoubleDouble / QuadDouble to probe deep-zoom fragility that Double itself cannot resolve." />
+            <TextBlock Grid.Row="2" Grid.Column="0" Text="Diff metric:" VerticalAlignment="Center" />
+            <ComboBox Grid.Row="2" Grid.Column="1"
+                      ItemsSource="{Binding PrecisionDiffMetrics}"
+                      SelectedItem="{Binding PrecisionDiffMetric, Mode=TwoWay}"
+                      Margin="0,2"
+                      ToolTip.Tip="How the two tiers' outcomes combine: L2 over (Δ iteration, Δ angle), or either channel alone." />
+            <TextBlock Grid.Row="3" Grid.Column="1"
+                       Text="Interior/agreeing pixels go dark; boundary filaments where the low tier breaks light up. Zoom in until the low tier fails."
+                       TextWrapping="Wrap" FontSize="11" Opacity="0.7" Margin="0,4" />
+        </Grid>
+
     </StackPanel>
 </UserControl>

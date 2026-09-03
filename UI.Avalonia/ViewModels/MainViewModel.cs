@@ -240,6 +240,7 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
         (FractalType.Dla,                   "DLA (Brownian Tree)"),
         (FractalType.RandomTile,            "Random Tiling (Bourke)"),
         (FractalType.ChaoticBilliard,       "Chaotic Billiard (Scatter)"),
+        (FractalType.PrecisionField,        "Precision Field (Fragility)"),
     };
 
     /// <summary>Category filter applied to the toolbar Type combo via its
