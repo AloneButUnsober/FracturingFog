@@ -725,6 +725,7 @@ namespace FracturingFog.Imaging
                 case KleinianCalculator kl:    kl.FractalParameters = req.FractalParameters; break;
                 case BicomplexMandelbrotCalculator bc: bc.FractalParameters = req.FractalParameters; break;
                 case DlaCalculator dl:         dl.FractalParameters = req.FractalParameters; break;
+                case ChaoticBilliardCalculator cb: cb.FractalParameters = req.FractalParameters; break;
                 case FlameRenderer fr:         fr.FractalParameters = req.FractalParameters; break;
                 case SandboxCalculator sb:
                     sb.FractalParameters = req.FractalParameters;

@@ -3189,6 +3189,7 @@ namespace FracturingFog.Rendering
                 case BicomplexMandelbrotCalculator bc: bc.FractalParameters = ViewState.FractalParameters; break;
                 case DlaCalculator dl: dl.FractalParameters = ViewState.FractalParameters; break;
                 case RandomTileCalculator rt: rt.FractalParameters = ViewState.FractalParameters; break;
+                case ChaoticBilliardCalculator cb: cb.FractalParameters = ViewState.FractalParameters; break;
                 case FlameRenderer fr: fr.FractalParameters = ViewState.FractalParameters; break;
                 case SandboxCalculator sb:
                     sb.FractalParameters = ViewState.FractalParameters;

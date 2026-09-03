@@ -4,6 +4,7 @@ using Xunit;
 using FracturingFog;
 using FracturingFog.Interefaces;
 using FracturingFog.Models;
+using FracturingFog.Imaging;
 
 namespace FracturingFog.Server.Tests;
 
@@ -101,6 +102,37 @@ public class ChaoticBilliardTests
             int g = gateId < 0 ? 0 : gateId + 1;
             return unchecked((int)0xFF000000 | (g & 0xFF));
         }
+    }
+
+    // Regression for the param-sync bug: the render/poster paths assign the live
+    // FractalParameters onto the active calculator by concrete type. Billiard was
+    // missing from both switches, so changing any geometry param did nothing on
+    // screen. Assert the poster path (RenderToPixels) honours a geometry change.
+    private static PosterRequest BilliardRequest(FractalParameters fp) => new()
+    {
+        FractalType = FractalType.ChaoticBilliard,
+        CenterX = 0, CenterY = 0, Zoom = 1.0,
+        MaxIterations = 256,
+        Width = 96, Height = 96,
+        ColorMap = new BilliardGatesMap(),
+        Quality = QualityPreset.Standard,
+        FractalParameters = fp,
+        Path = "unused.png",
+        Format = ImageFileFormat.Png,
+    };
+
+    [Fact]
+    public void PosterPath_Honors_Billiard_Params()
+    {
+        var a = PosterRenderer.RenderToPixels(
+            BilliardRequest(new FractalParameters { BilliardDiskRadius = 0.4, BilliardSeparation = 1.0 }),
+            default, out _, out _);
+        var b = PosterRenderer.RenderToPixels(
+            BilliardRequest(new FractalParameters { BilliardDiskRadius = 0.9, BilliardSeparation = 1.6 }),
+            default, out _, out _);
+
+        Assert.Equal(a.Length, b.Length);
+        Assert.NotEqual(a, b);   // geometry change must alter the image
     }
 
     [Fact]
