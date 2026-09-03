@@ -370,9 +370,17 @@ supplies the guide buffers.
   the exact-value `AtrousDenoiserTests` lock it. No race against the ping-pong plane
   swap (`Parallel.For` is synchronous, completing before the swap reassigns the refs).
   +1 race-guard test (a 320×240 guided buffer denoises to identical bytes across 6 runs).
-- **Remaining (deep, still open on #402):** full SVGF variance/temporal weighting;
-  **SIMD** the À-Trous 5×5 accumulation (left on purpose — vectorizing would reorder the
-  float sums and break byte-parity with the `--batch` oracle).
+- **SVGF temporal accumulation (landed — PR #644, #402):** the temporal half of SVGF.
+  `SvgfTemporal.Accumulate` reprojects the previous accumulated frame along the S1
+  motion-vector AOV (#398) and blends `out = current·(1−α) + historyReproj·α`, rejecting
+  disocclusion (off-frame reprojection / normal disagreement / relative depth jump → keep
+  the current pixel, so revealed surfaces don't ghost). Pure, deterministic, parallel;
+  null history (first frame) or α 0 → byte-identical. +8 `SvgfTemporalTests`.
+- **Remaining (deep, still open on #402):** wire the temporal pass into `ReliefDenoisePass`
+  (a persistent history + the render's motion/normal/depth AOVs); the **variance-guided**
+  À-Trous weight (the other SVGF half — scale the colour edge-stop by the temporal
+  luminance variance); **SIMD** the À-Trous 5×5 accumulation (left on purpose — vectorizing
+  would reorder the float sums and break byte-parity with the `--batch` oracle).
 
 ### S5 — Refractive / transmissive materials ◐ (#406)
 Cook-Torrance GGX today is opaque. Add **transmission + IOR** → glass fractals.
