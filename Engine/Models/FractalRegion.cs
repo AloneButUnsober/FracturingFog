@@ -414,6 +414,11 @@ namespace FracturingFog.Models
         [JsonIgnore(Condition = OmitNull)] public int? BilliardMaxBounces { get; set; }
         [JsonIgnore(Condition = OmitNull)] public int? BilliardGateCount { get; set; }
         [JsonIgnore(Condition = OmitNull)] public int? BilliardSeed { get; set; }
+        // Precision-sensitivity field (#628). Tiers/metric stored as int casts of
+        // PrecisionTier / PrecisionDiffMetric.
+        [JsonIgnore(Condition = OmitNull)] public int? PrecisionLowTier { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public int? PrecisionHighTier { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public int? PrecisionDiffMetric { get; set; }
 
         // #253 — cross-fractal domain warp. Carried for the escape-time family
         // (Julia, Burning Ship, Tricorn, Multibrot, Magnet 1/2, Glynn, Phoenix,
@@ -493,6 +498,12 @@ namespace FracturingFog.Models
                     BilliardGateCount = p.BilliardGateCount,
                     BilliardSeed = p.BilliardSeed,
                 },
+                FractalType.PrecisionField => new RegionFractalParams
+                {
+                    PrecisionLowTier = (int)p.PrecisionLowTier,
+                    PrecisionHighTier = (int)p.PrecisionHighTier,
+                    PrecisionDiffMetric = (int)p.PrecisionDiffMetric,
+                },
                 FractalType.AcidWarp => new RegionFractalParams
                 {
                     AcidWarpPattern = p.AcidWarpPattern,
@@ -565,6 +576,12 @@ namespace FracturingFog.Models
                 p.BilliardGateCount = BilliardGateCount.Value;
             if (BilliardSeed.HasValue)
                 p.BilliardSeed = BilliardSeed.Value;
+            if (PrecisionLowTier.HasValue)
+                p.PrecisionLowTier = (FracturingFog.PrecisionTier)PrecisionLowTier.Value;
+            if (PrecisionHighTier.HasValue)
+                p.PrecisionHighTier = (FracturingFog.PrecisionTier)PrecisionHighTier.Value;
+            if (PrecisionDiffMetric.HasValue)
+                p.PrecisionDiffMetric = (FracturingFog.PrecisionDiffMetric)PrecisionDiffMetric.Value;
             if (AcidWarpPattern.HasValue)
                 p.AcidWarpPattern = AcidWarpPattern.Value;
             if (AcidWarpFrequency.HasValue)

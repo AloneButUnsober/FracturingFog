@@ -84,6 +84,7 @@ namespace FracturingFog.Rendering
         private DlaCalculator _dlaCalculator;
         private RandomTileCalculator _randomTileCalculator;
         private ChaoticBilliardCalculator _billiardCalculator;
+        private PrecisionFieldCalculator _precisionFieldCalculator;
         private FlameRenderer _flameCalculator;
         private SandboxCalculator _sandboxCalculator;
         private UserBulbCalculator _userBulbCalculator;
@@ -451,6 +452,7 @@ namespace FracturingFog.Rendering
             _dlaCalculator = new DlaCalculator(w, h);
             _randomTileCalculator = new RandomTileCalculator(w, h);
             _billiardCalculator = new ChaoticBilliardCalculator(w, h);
+            _precisionFieldCalculator = new PrecisionFieldCalculator(w, h);
             _flameCalculator = new FlameRenderer(w, h);
             _sandboxCalculator = new SandboxCalculator(w, h);
             _userBulbCalculator = new UserBulbCalculator(w, h);
@@ -491,6 +493,7 @@ namespace FracturingFog.Rendering
                 _dlaCalculator.ColorMap = initialColorMap;
                 _randomTileCalculator.ColorMap = initialColorMap;
                 _billiardCalculator.ColorMap = initialColorMap;
+                _precisionFieldCalculator.ColorMap = initialColorMap;
                 _flameCalculator.ColorMap = initialColorMap;
                 _sandboxCalculator.ColorMap = initialColorMap;
                 _userBulbCalculator.ColorMap = initialColorMap;
@@ -968,6 +971,7 @@ namespace FracturingFog.Rendering
                 _dlaCalculator.ColorMap = value;
                 _randomTileCalculator.ColorMap = value;
                 _billiardCalculator.ColorMap = value;
+                _precisionFieldCalculator.ColorMap = value;
                 _flameCalculator.ColorMap = value;
                 _sandboxCalculator.ColorMap = value;
                 _userBulbCalculator.ColorMap = value;
@@ -2091,6 +2095,7 @@ namespace FracturingFog.Rendering
             FractalType.Apollonian => true,
             FractalType.RandomTile => true,
             FractalType.ChaoticBilliard => true,
+            FractalType.PrecisionField => true,
             _ => false,
         };
 
@@ -2113,6 +2118,7 @@ namespace FracturingFog.Rendering
             FractalType.Apollonian => new ApollonianCalculator(w, h),
             FractalType.RandomTile => new RandomTileCalculator(w, h),
             FractalType.ChaoticBilliard => new ChaoticBilliardCalculator(w, h),
+            FractalType.PrecisionField => new PrecisionFieldCalculator(w, h),
             _ => null,
         };
 
@@ -2613,6 +2619,7 @@ namespace FracturingFog.Rendering
             _dlaCalculator.Resize(w, h);
             _randomTileCalculator.Resize(w, h);
             _billiardCalculator.Resize(w, h);
+            _precisionFieldCalculator.Resize(w, h);
             _flameCalculator.Resize(w, h);
             _sandboxCalculator.Resize(w, h);
             _userBulbCalculator.Resize(w, h);
@@ -3190,6 +3197,7 @@ namespace FracturingFog.Rendering
                 case DlaCalculator dl: dl.FractalParameters = ViewState.FractalParameters; break;
                 case RandomTileCalculator rt: rt.FractalParameters = ViewState.FractalParameters; break;
                 case ChaoticBilliardCalculator cb: cb.FractalParameters = ViewState.FractalParameters; break;
+                case PrecisionFieldCalculator pf: pf.FractalParameters = ViewState.FractalParameters; break;
                 case FlameRenderer fr: fr.FractalParameters = ViewState.FractalParameters; break;
                 case SandboxCalculator sb:
                     sb.FractalParameters = ViewState.FractalParameters;
@@ -3345,6 +3353,7 @@ namespace FracturingFog.Rendering
             FractalType.Dla => _dlaCalculator,
             FractalType.RandomTile => _randomTileCalculator,
             FractalType.ChaoticBilliard => _billiardCalculator,
+            FractalType.PrecisionField => _precisionFieldCalculator,
             FractalType.Flame => _flameCalculator,
             FractalType.Sandbox => _sandboxCalculator,
             FractalType.UserBulb => _userBulbCalculator,

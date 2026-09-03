@@ -184,6 +184,9 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
         _billiardMaxBounces = _p.BilliardMaxBounces;
         _billiardGateCount = _p.BilliardGateCount;
         _billiardSeed = _p.BilliardSeed;
+        _precLowTier = _p.PrecisionLowTier;
+        _precHighTier = _p.PrecisionHighTier;
+        _precMetric = _p.PrecisionDiffMetric;
         _kleinIter = _p.KleinianIterations;
         _kleinScale = _p.KleinianSphereScale;
         _kleinCameraTheta = _p.KleinianCameraTheta;
@@ -295,6 +298,7 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
     public bool IsDla => FractalType == FractalType.Dla;
     public bool IsRandomTile => FractalType == FractalType.RandomTile;
     public bool IsChaoticBilliard => FractalType == FractalType.ChaoticBilliard;
+    public bool IsPrecisionField => FractalType == FractalType.PrecisionField;
     public bool IsUserEquation => FractalType == FractalType.UserEquation;
     public bool IsSandbox => FractalType == FractalType.Sandbox;
 
@@ -356,7 +360,9 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
         // Apollonian).
         || IsRandomTile
         // Chaotic billiard — bounce-count height field (#627).
-        || IsChaoticBilliard;
+        || IsChaoticBilliard
+        // Precision field — divergence-scalar height field (#628).
+        || IsPrecisionField;
 
     /// <summary>Visibility flag for the cross-fractal domain-warp section
     /// (#253 / IDEA-3). True for the 2D escape-time family routed through
@@ -374,7 +380,7 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
         !(IsJulia || IsMultibrot || IsPhoenix || IsGlynn || IsLogistic || IsSpider || IsNewtonOrNova || IsIFS
           || IsLSystem || IsStrangeAttractor || IsBuddhaBrot || IsMandelbulb || IsMandelbox || IsKifs
           || IsQuatJulia || IsQuatMandelbrot || IsPlasma || IsAcidWarp || IsFlame || IsApollonian || IsKleinian
-          || IsBicomplexMandelbrot || IsDla || IsRandomTile || IsChaoticBilliard || IsInteriorAlphaApplicable || IsRelief2DApplicable
+          || IsBicomplexMandelbrot || IsDla || IsRandomTile || IsChaoticBilliard || IsPrecisionField || IsInteriorAlphaApplicable || IsRelief2DApplicable
           || SupportsDomainWarp);
 
     // ── Interior alpha (2D) — issue #96 ──────────────────────────────────────
@@ -1354,6 +1360,19 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
     private int _billiardSeed;
     /// <summary>PRNG seed for the NDisk arrangement.</summary>
     public int BilliardSeed { get => _billiardSeed; set { Set(ref _billiardSeed, value); _p.BilliardSeed = _billiardSeed; Fire(); } }
+
+    // ── Precision Field (#628) ──
+    private PrecisionTier _precLowTier;
+    /// <summary>Lower arithmetic tier of the precision-diff pair.</summary>
+    public PrecisionTier PrecisionLowTier { get => _precLowTier; set { Set(ref _precLowTier, value); _p.PrecisionLowTier = value; Fire(); } }
+    private PrecisionTier _precHighTier;
+    /// <summary>Upper (reference) arithmetic tier of the precision-diff pair.</summary>
+    public PrecisionTier PrecisionHighTier { get => _precHighTier; set { Set(ref _precHighTier, value); _p.PrecisionHighTier = value; Fire(); } }
+    public System.Array PrecisionTiers => System.Enum.GetValues(typeof(PrecisionTier));
+    private PrecisionDiffMetric _precMetric;
+    /// <summary>How the two tiers' outcomes are combined into one divergence scalar.</summary>
+    public PrecisionDiffMetric PrecisionDiffMetric { get => _precMetric; set { Set(ref _precMetric, value); _p.PrecisionDiffMetric = value; Fire(); } }
+    public System.Array PrecisionDiffMetrics => System.Enum.GetValues(typeof(PrecisionDiffMetric));
 
     // ── DLA ──
     private int _dlaParticles;

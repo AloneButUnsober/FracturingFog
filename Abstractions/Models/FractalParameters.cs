@@ -846,6 +846,20 @@ namespace FracturingFog.Models
         /// (geometry, count, radius, seed) reproduce the same field. Default 1.</summary>
         public int BilliardSeed { get; set; } = 1;
 
+        // Precision-sensitivity field (#628). Mandelbrot z² + c iterated at two
+        // arithmetic tiers; the per-pixel divergence of the outcome is the image.
+        /// <summary>Lower arithmetic tier of the precision-diff pair. Default
+        /// Float (32-bit) — loses precision first, lighting up fragile boundary
+        /// filaments against the Double reference.</summary>
+        public PrecisionTier PrecisionLowTier { get; set; } = PrecisionTier.Float;
+        /// <summary>Upper (reference) arithmetic tier of the precision-diff pair.
+        /// Default Double (64-bit). Set to DoubleDouble / QuadDouble to probe
+        /// deep-zoom fragility that Double itself cannot resolve.</summary>
+        public PrecisionTier PrecisionHighTier { get; set; } = PrecisionTier.Double;
+        /// <summary>How the two tiers' outcomes are combined into one divergence
+        /// scalar. Default L2 over (Δ smooth-iteration, Δ escape-angle).</summary>
+        public PrecisionDiffMetric PrecisionDiffMetric { get; set; } = PrecisionDiffMetric.L2;
+
         // Kleinian limit set (3D, sphere-inversion Schottky group).
         /// <summary>Inversion-iteration cap for the Kleinian DE. Higher =
         /// sharper limit-set boundary, slower per ray sample. Default 16
@@ -1277,6 +1291,9 @@ namespace FracturingFog.Models
                 BilliardMaxBounces = BilliardMaxBounces,
                 BilliardGateCount = BilliardGateCount,
                 BilliardSeed = BilliardSeed,
+                PrecisionLowTier = PrecisionLowTier,
+                PrecisionHighTier = PrecisionHighTier,
+                PrecisionDiffMetric = PrecisionDiffMetric,
                 KleinianIterations = KleinianIterations,
                 KleinianSphereScale = KleinianSphereScale,
                 KleinianMaxSteps = KleinianMaxSteps,

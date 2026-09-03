@@ -78,6 +78,7 @@ namespace FracturingFog.Models
             FractalType.TearDrop => FractalMotionClass.Zoomable2D,
             FractalType.Apollonian => FractalMotionClass.Zoomable2D,
             FractalType.ChaoticBilliard => FractalMotionClass.Zoomable2D,
+            FractalType.PrecisionField => FractalMotionClass.Zoomable2D,
             FractalType.GeneratedMandelbrotZ2 => FractalMotionClass.Zoomable2D,
             FractalType.GeneratedMandelbrotZ3 => FractalMotionClass.Zoomable2D,
             FractalType.GeneratedMandelbrotZ4 => FractalMotionClass.Zoomable2D,

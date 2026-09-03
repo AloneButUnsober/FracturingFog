@@ -27,6 +27,29 @@ namespace FracturingFog
     /// region; <see cref="Ring"/> places the disks evenly on a circle.</summary>
     public enum BilliardGeometry { ThreeDisk, NDisk, Ring }
 
+    /// <summary>Arithmetic precision tier for the PrecisionField (#628) diff
+    /// renderer. The map z² + c is iterated at two tiers and the per-pixel
+    /// divergence of the outcome is the image. <see cref="Float"/> (32-bit) and
+    /// <see cref="Double"/> (64-bit) are the hardware types; <see cref="DoubleDouble"/>
+    /// (~31 digits, FFMath.DD) and <see cref="QuadDouble"/> (~62 digits, FFMath.QD)
+    /// are the software extended tiers. FF has no true MPFR — these fixed tiers
+    /// stand in for the scoping doc's bit-depth sweep.</summary>
+    public enum PrecisionTier { Float, Double, DoubleDouble, QuadDouble }
+
+    /// <summary>How the PrecisionField (#628) renderer combines the per-pixel
+    /// difference between the two tiers' escape outcomes into one scalar.</summary>
+    public enum PrecisionDiffMetric
+    {
+        /// <summary>L2 distance over the normalised pair (Δ smooth-iteration,
+        /// Δ escape-angle). The default — balances "escaped at a different time"
+        /// against "escaped in a different direction".</summary>
+        L2,
+        /// <summary>Absolute difference of the smooth iteration count only.</summary>
+        IterationOnly,
+        /// <summary>Absolute difference of the escape angle arg(z) only.</summary>
+        AngleOnly,
+    }
+
     /// <summary>
     /// Background composited behind translucent 2D pixels when the interior
     /// (in-set) region carries alpha &lt; 255 (issue #96). Only consulted by the
@@ -281,6 +304,19 @@ namespace FracturingFog
         /// <c>BilliardSeparation</c>, <c>BilliardMaxBounces</c>,
         /// <c>BilliardGateCount</c>, <c>BilliardSeed</c>.</summary>
         ChaoticBilliard,
+        /// <summary>Precision-sensitivity field (#628). Not a new fractal shape —
+        /// it iterates Mandelbrot z² + c at two arithmetic tiers
+        /// (<c>PrecisionLowTier</c> / <c>PrecisionHighTier</c>) and colours each
+        /// pixel by the divergence between the two outcomes (smooth iteration
+        /// count and escape angle), per <c>PrecisionDiffMetric</c>. Interior and
+        /// deep-basin pixels agree between tiers and go dark; boundary filaments
+        /// where the low tier loses precision light up — an empirical map of
+        /// where the fractal is numerically fragile. FF has no MPFR, so the tiers
+        /// are Float / Double / DoubleDouble / QuadDouble. The divergence scalar
+        /// rides the SmoothBuffer, so every existing 2D colour theme, ColorGen
+        /// theme and Relief-3D height path works unchanged. Handled by a dedicated
+        /// <c>PrecisionFieldCalculator</c>.</summary>
+        PrecisionField,
     }
 
     public enum RenderProfile { Preview, Final }
@@ -422,6 +458,7 @@ namespace FracturingFog
                 or FractalType.AcidWarp
                 or FractalType.Logistic
                 or FractalType.ChaoticBilliard
+                or FractalType.PrecisionField
                 => FractalCapabilities.SuppliesHistogram,
 
             _ => FractalCapabilities.None,
