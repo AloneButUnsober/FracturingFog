@@ -143,6 +143,7 @@ namespace FracturingFog.Models
             {FractalType.AcidWarp, "Acid Fog" },
             {FractalType.Flame, "Flame" },
             {FractalType.Apollonian, "Apollonian" },
+            {FractalType.ChaoticBilliard, "Chaotic Billiard" },
             {FractalType.Kleinian, "Kleinian" },
             {FractalType.BicomplexMandelbrot, "Bicomplex Mandelbrot" },
             {FractalType.Dla, "DLA" },

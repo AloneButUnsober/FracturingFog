@@ -813,6 +813,39 @@ namespace FracturingFog.Models
         /// relief. Non-circle shapes get a random per-tile rotation.</summary>
         public RandomTileShape RandomTileShape { get; set; } = RandomTileShape.Circle;
 
+        // Chaotic billiard scatter (#627). A geometric ray reflects specularly
+        // off a field of circular mirror disks; the pixel encodes the launch
+        // initial condition (impact parameter b along x, incoming angle φ along
+        // y) mapped through the standard pan/zoom plane. Non-escape-time — the
+        // outcome (escape-gate sector / bounce count / path length) is the pixel.
+        /// <summary>Obstacle arrangement — ThreeDisk (classic scatterer),
+        /// NDisk (seeded random field of <see cref="BilliardDiskCount"/> disks),
+        /// or Ring (disks evenly on a circle). Default ThreeDisk.</summary>
+        public BilliardGeometry BilliardGeometry { get; set; } = BilliardGeometry.ThreeDisk;
+        /// <summary>Number of mirror disks for the NDisk / Ring arrangements.
+        /// Ignored by ThreeDisk (always 3). Clamped to [1, 64]. Default 5.</summary>
+        public int BilliardDiskCount { get; set; } = 5;
+        /// <summary>Disk radius in world units. The play region spans roughly
+        /// [-2, 2]; the default 0.4 leaves escape gaps between disks so
+        /// trajectories can thread through and produce fractal basins.</summary>
+        public double BilliardDiskRadius { get; set; } = 0.4;
+        /// <summary>Centre-to-centre spacing for ThreeDisk / Ring, in world
+        /// units (radius of the circle the disk centres sit on). Larger =
+        /// wider gaps, simpler basins; smaller = tighter gaps, deeper chaos.
+        /// Default 1.0.</summary>
+        public double BilliardSeparation { get; set; } = 1.0;
+        /// <summary>Maximum reflections before a trajectory is declared trapped
+        /// (assigned the trapped gate). Higher resolves deeper trapped sets at
+        /// linear cost. Clamped to [1, 4096]. Default 256.</summary>
+        public int BilliardMaxBounces { get; set; } = 256;
+        /// <summary>Number of angular escape-gate sectors the exit direction is
+        /// bucketed into (the categorical outcome). Clamped to [2, 64].
+        /// Default 6.</summary>
+        public int BilliardGateCount { get; set; } = 6;
+        /// <summary>PRNG seed for the NDisk random arrangement. Identical
+        /// (geometry, count, radius, seed) reproduce the same field. Default 1.</summary>
+        public int BilliardSeed { get; set; } = 1;
+
         // Kleinian limit set (3D, sphere-inversion Schottky group).
         /// <summary>Inversion-iteration cap for the Kleinian DE. Higher =
         /// sharper limit-set boundary, slower per ray sample. Default 16
@@ -1237,6 +1270,13 @@ namespace FracturingFog.Models
                 RandomTileColorByIndex = RandomTileColorByIndex,
                 RandomTileRelief = RandomTileRelief,
                 RandomTileShape = RandomTileShape,
+                BilliardGeometry = BilliardGeometry,
+                BilliardDiskCount = BilliardDiskCount,
+                BilliardDiskRadius = BilliardDiskRadius,
+                BilliardSeparation = BilliardSeparation,
+                BilliardMaxBounces = BilliardMaxBounces,
+                BilliardGateCount = BilliardGateCount,
+                BilliardSeed = BilliardSeed,
                 KleinianIterations = KleinianIterations,
                 KleinianSphereScale = KleinianSphereScale,
                 KleinianMaxSteps = KleinianMaxSteps,

@@ -416,6 +416,13 @@ namespace FracturingFog.Models
             new NewtonBandedTricolorMap(),
             new NewtonBandedSpectrumMap(),
 
+            // ── Chaotic billiard (#627) — gate / bounce / path-length ─────────
+            new BilliardGatesMap(),
+            new BilliardGatesShadedMap(),
+            new BilliardPathLengthMap(),
+            new BilliardBounceCyclicMap(),
+            new BilliardTrappedSetMap(),
+
             // Entropy based
             new EntropyContrastMap(),
             new EntropyEdgeMap(),

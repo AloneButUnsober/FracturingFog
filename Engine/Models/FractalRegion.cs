@@ -404,6 +404,16 @@ namespace FracturingFog.Models
         [JsonIgnore(Condition = OmitNull)] public double? AcidWarpWarpStrength { get; set; }
         [JsonIgnore(Condition = OmitNull)] public bool? AcidWarpMorph { get; set; }
         [JsonIgnore(Condition = OmitNull)] public double? AcidWarpFlow { get; set; }
+        // Chaotic billiard (#627). Stored so a saved region reproduces the exact
+        // obstacle field and launch/outcome tuning. Geometry is the int cast of
+        // BilliardGeometry (matches the AcidWarpPattern int-enum precedent above).
+        [JsonIgnore(Condition = OmitNull)] public int? BilliardGeometry { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public int? BilliardDiskCount { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public double? BilliardDiskRadius { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public double? BilliardSeparation { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public int? BilliardMaxBounces { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public int? BilliardGateCount { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public int? BilliardSeed { get; set; }
 
         // #253 — cross-fractal domain warp. Carried for the escape-time family
         // (Julia, Burning Ship, Tricorn, Multibrot, Magnet 1/2, Glynn, Phoenix,
@@ -473,6 +483,16 @@ namespace FracturingFog.Models
                     ApollonianMinPixelRadius = p.ApollonianMinPixelRadius,
                     ApollonianColorByDepth = p.ApollonianColorByDepth,
                 },
+                FractalType.ChaoticBilliard => new RegionFractalParams
+                {
+                    BilliardGeometry = (int)p.BilliardGeometry,
+                    BilliardDiskCount = p.BilliardDiskCount,
+                    BilliardDiskRadius = p.BilliardDiskRadius,
+                    BilliardSeparation = p.BilliardSeparation,
+                    BilliardMaxBounces = p.BilliardMaxBounces,
+                    BilliardGateCount = p.BilliardGateCount,
+                    BilliardSeed = p.BilliardSeed,
+                },
                 FractalType.AcidWarp => new RegionFractalParams
                 {
                     AcidWarpPattern = p.AcidWarpPattern,
@@ -531,6 +551,20 @@ namespace FracturingFog.Models
                 p.ApollonianMinPixelRadius = ApollonianMinPixelRadius.Value;
             if (ApollonianColorByDepth.HasValue)
                 p.ApollonianColorByDepth = ApollonianColorByDepth.Value;
+            if (BilliardGeometry.HasValue)
+                p.BilliardGeometry = (FracturingFog.BilliardGeometry)BilliardGeometry.Value;
+            if (BilliardDiskCount.HasValue)
+                p.BilliardDiskCount = BilliardDiskCount.Value;
+            if (BilliardDiskRadius.HasValue)
+                p.BilliardDiskRadius = BilliardDiskRadius.Value;
+            if (BilliardSeparation.HasValue)
+                p.BilliardSeparation = BilliardSeparation.Value;
+            if (BilliardMaxBounces.HasValue)
+                p.BilliardMaxBounces = BilliardMaxBounces.Value;
+            if (BilliardGateCount.HasValue)
+                p.BilliardGateCount = BilliardGateCount.Value;
+            if (BilliardSeed.HasValue)
+                p.BilliardSeed = BilliardSeed.Value;
             if (AcidWarpPattern.HasValue)
                 p.AcidWarpPattern = AcidWarpPattern.Value;
             if (AcidWarpFrequency.HasValue)

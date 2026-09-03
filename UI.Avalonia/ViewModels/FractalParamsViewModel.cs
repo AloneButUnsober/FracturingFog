@@ -177,6 +177,13 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
         _rtColorByIndex = _p.RandomTileColorByIndex;
         _rtRelief = _p.RandomTileRelief;
         _rtShape = _p.RandomTileShape;
+        _billiardGeometry = _p.BilliardGeometry;
+        _billiardDiskCount = _p.BilliardDiskCount;
+        _billiardDiskRadius = _p.BilliardDiskRadius;
+        _billiardSeparation = _p.BilliardSeparation;
+        _billiardMaxBounces = _p.BilliardMaxBounces;
+        _billiardGateCount = _p.BilliardGateCount;
+        _billiardSeed = _p.BilliardSeed;
         _kleinIter = _p.KleinianIterations;
         _kleinScale = _p.KleinianSphereScale;
         _kleinCameraTheta = _p.KleinianCameraTheta;
@@ -287,6 +294,7 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
     public bool IsBicomplexMandelbrot => FractalType == FractalType.BicomplexMandelbrot;
     public bool IsDla => FractalType == FractalType.Dla;
     public bool IsRandomTile => FractalType == FractalType.RandomTile;
+    public bool IsChaoticBilliard => FractalType == FractalType.ChaoticBilliard;
     public bool IsUserEquation => FractalType == FractalType.UserEquation;
     public bool IsSandbox => FractalType == FractalType.Sandbox;
 
@@ -346,7 +354,9 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
         || IsApollonian
         // Random tiling — synthesised sphere-cap dome height (same path as
         // Apollonian).
-        || IsRandomTile;
+        || IsRandomTile
+        // Chaotic billiard — bounce-count height field (#627).
+        || IsChaoticBilliard;
 
     /// <summary>Visibility flag for the cross-fractal domain-warp section
     /// (#253 / IDEA-3). True for the 2D escape-time family routed through
@@ -364,7 +374,7 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
         !(IsJulia || IsMultibrot || IsPhoenix || IsGlynn || IsLogistic || IsSpider || IsNewtonOrNova || IsIFS
           || IsLSystem || IsStrangeAttractor || IsBuddhaBrot || IsMandelbulb || IsMandelbox || IsKifs
           || IsQuatJulia || IsQuatMandelbrot || IsPlasma || IsAcidWarp || IsFlame || IsApollonian || IsKleinian
-          || IsBicomplexMandelbrot || IsDla || IsRandomTile || IsInteriorAlphaApplicable || IsRelief2DApplicable
+          || IsBicomplexMandelbrot || IsDla || IsRandomTile || IsChaoticBilliard || IsInteriorAlphaApplicable || IsRelief2DApplicable
           || SupportsDomainWarp);
 
     // ── Interior alpha (2D) — issue #96 ──────────────────────────────────────
@@ -1320,6 +1330,30 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
     /// <summary>Tile shape — Circle / Square / Triangle (polygons get random rotation).</summary>
     public RandomTileShape RandomTileShape { get => _rtShape; set { Set(ref _rtShape, value); _p.RandomTileShape = value; Fire(); } }
     public System.Array RandomTileShapes => System.Enum.GetValues(typeof(RandomTileShape));
+
+    // ── Chaotic Billiard (#627) ──
+    private BilliardGeometry _billiardGeometry;
+    /// <summary>Obstacle arrangement — ThreeDisk / NDisk / Ring.</summary>
+    public BilliardGeometry BilliardGeometry { get => _billiardGeometry; set { Set(ref _billiardGeometry, value); _p.BilliardGeometry = value; Fire(); } }
+    public System.Array BilliardGeometries => System.Enum.GetValues(typeof(BilliardGeometry));
+    private int _billiardDiskCount;
+    /// <summary>Disk count for NDisk / Ring (ThreeDisk is always 3).</summary>
+    public int BilliardDiskCount { get => _billiardDiskCount; set { Set(ref _billiardDiskCount, (int)Clamp(value, 1, 64)); _p.BilliardDiskCount = _billiardDiskCount; Fire(); } }
+    private double _billiardDiskRadius;
+    /// <summary>Mirror-disk radius in world units.</summary>
+    public double BilliardDiskRadius { get => _billiardDiskRadius; set { Set(ref _billiardDiskRadius, Clamp(value, 0.05, 1.5)); _p.BilliardDiskRadius = _billiardDiskRadius; Fire(); } }
+    private double _billiardSeparation;
+    /// <summary>Centre spacing (radius of the circle the disk centres sit on).</summary>
+    public double BilliardSeparation { get => _billiardSeparation; set { Set(ref _billiardSeparation, Clamp(value, 0.1, 3.0)); _p.BilliardSeparation = _billiardSeparation; Fire(); } }
+    private int _billiardMaxBounces;
+    /// <summary>Reflection cap before a trajectory is declared trapped.</summary>
+    public int BilliardMaxBounces { get => _billiardMaxBounces; set { Set(ref _billiardMaxBounces, (int)Clamp(value, 1, 4096)); _p.BilliardMaxBounces = _billiardMaxBounces; Fire(); } }
+    private int _billiardGateCount;
+    /// <summary>Number of angular escape-gate sectors (the categorical outcome).</summary>
+    public int BilliardGateCount { get => _billiardGateCount; set { Set(ref _billiardGateCount, (int)Clamp(value, 2, 64)); _p.BilliardGateCount = _billiardGateCount; Fire(); } }
+    private int _billiardSeed;
+    /// <summary>PRNG seed for the NDisk arrangement.</summary>
+    public int BilliardSeed { get => _billiardSeed; set { Set(ref _billiardSeed, value); _p.BilliardSeed = _billiardSeed; Fire(); } }
 
     // ── DLA ──
     private int _dlaParticles;

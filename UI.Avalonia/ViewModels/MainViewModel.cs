@@ -239,6 +239,7 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
         (FractalType.BicomplexMandelbrot,   "Bicomplex Mandelbrot (3D)"),
         (FractalType.Dla,                   "DLA (Brownian Tree)"),
         (FractalType.RandomTile,            "Random Tiling (Bourke)"),
+        (FractalType.ChaoticBilliard,       "Chaotic Billiard (Scatter)"),
     };
 
     /// <summary>Category filter applied to the toolbar Type combo via its

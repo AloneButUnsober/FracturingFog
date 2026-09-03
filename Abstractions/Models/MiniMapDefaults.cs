@@ -77,6 +77,7 @@ public static class MiniMapDefaults
         FractalType.AcidWarp         => new( 0.0,  0.0, 1.0),
         FractalType.Flame            => new( 0.0,  0.0, 1.0),
         FractalType.Apollonian       => new( 0.0,  0.0, 2.0),
+        FractalType.ChaoticBilliard  => new( 0.0,  0.0, 1.0),
         FractalType.Kleinian         => new( 0.0,  0.0, 1.0),
         FractalType.BicomplexMandelbrot => new( 0.0,  0.0, 1.0),
         FractalType.Dla              => new( 0.0,  0.0, 1.0),

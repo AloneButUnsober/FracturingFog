@@ -329,5 +329,47 @@
                            ToolTip.Tip="Dome curvature for 3D (normal-mapped) themes: each shape is lit as a sphere. 0 = flat discs; 1 = full hemisphere. Ignored by flat 2D themes." />
         </Grid>
 
+        <!-- Chaotic Billiard (#627) -->
+        <Grid IsVisible="{Binding IsChaoticBilliard}"
+              ColumnDefinitions="160,*"
+              RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto">
+            <TextBlock Grid.Row="0" Grid.Column="0" Text="Geometry:" VerticalAlignment="Center" />
+            <ComboBox Grid.Row="0" Grid.Column="1"
+                      ItemsSource="{Binding BilliardGeometries}"
+                      SelectedItem="{Binding BilliardGeometry, Mode=TwoWay}"
+                      Margin="0,2"
+                      ToolTip.Tip="Obstacle arrangement. ThreeDisk = classic scatterer; Ring = disks evenly on a circle; NDisk = seeded random field." />
+            <TextBlock Grid.Row="1" Grid.Column="0" Text="Disk count:" VerticalAlignment="Center" />
+            <NumericUpDown Grid.Row="1" Grid.Column="1"
+                           Minimum="1" Maximum="64" Increment="1" FormatString="F0"
+                           Value="{Binding BilliardDiskCount, Mode=TwoWay}" Margin="0,2"
+                           ToolTip.Tip="Disk count for NDisk / Ring. ThreeDisk ignores this (always 3)." />
+            <TextBlock Grid.Row="2" Grid.Column="0" Text="Disk radius:" VerticalAlignment="Center" />
+            <NumericUpDown Grid.Row="2" Grid.Column="1"
+                           Minimum="0.05" Maximum="1.5" Increment="0.05" FormatString="F2"
+                           Value="{Binding BilliardDiskRadius, Mode=TwoWay}" Margin="0,2"
+                           ToolTip.Tip="Mirror-disk radius in world units. Larger disks narrow the escape gaps toward deeper chaos." />
+            <TextBlock Grid.Row="3" Grid.Column="0" Text="Separation:" VerticalAlignment="Center" />
+            <NumericUpDown Grid.Row="3" Grid.Column="1"
+                           Minimum="0.1" Maximum="3.0" Increment="0.05" FormatString="F2"
+                           Value="{Binding BilliardSeparation, Mode=TwoWay}" Margin="0,2"
+                           ToolTip.Tip="Centre-to-centre spacing (radius of the circle the disk centres sit on). Wider = simpler basins; tighter = deeper chaos." />
+            <TextBlock Grid.Row="4" Grid.Column="0" Text="Max bounces:" VerticalAlignment="Center" />
+            <NumericUpDown Grid.Row="4" Grid.Column="1"
+                           Minimum="1" Maximum="4096" Increment="16" FormatString="F0"
+                           Value="{Binding BilliardMaxBounces, Mode=TwoWay}" Margin="0,2"
+                           ToolTip.Tip="Reflection cap before a trajectory is declared trapped. Higher resolves the trapped (Cantor) set deeper at linear cost." />
+            <TextBlock Grid.Row="5" Grid.Column="0" Text="Gate count:" VerticalAlignment="Center" />
+            <NumericUpDown Grid.Row="5" Grid.Column="1"
+                           Minimum="2" Maximum="64" Increment="1" FormatString="F0"
+                           Value="{Binding BilliardGateCount, Mode=TwoWay}" Margin="0,2"
+                           ToolTip.Tip="Number of angular escape-gate sectors the exit direction is bucketed into — the categorical outcome that drives Billiard themes." />
+            <TextBlock Grid.Row="6" Grid.Column="0" Text="Seed:" VerticalAlignment="Center" />
+            <NumericUpDown Grid.Row="6" Grid.Column="1"
+                           Minimum="-2147483648" Maximum="2147483647" Increment="1" FormatString="F0"
+                           Value="{Binding BilliardSeed, Mode=TwoWay}" Margin="0,2"
+                           ToolTip.Tip="PRNG seed for the NDisk random arrangement. Same seed + settings = identical field." />
+        </Grid>
+
     </StackPanel>
 </UserControl>
