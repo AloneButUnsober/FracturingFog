@@ -137,6 +137,11 @@ namespace FracturingFog.Cli
         // Refractive glass on the relief raymarch shade (roadmap S5, #406). Emitted
         // only when Transmission > 0 (opaque = omit all). Ior / AbsorptionDistance /
         // AbsorptionColor emit only when they differ from the LightingFxData defaults.
+        // Vector motion blur (roadmap S1, #398). Emitted only on the raymarch path
+        // when strength > 0; samples emit only when non-default (8).
+        public double ReliefMotionBlur { get; init; }
+        public int ReliefMotionBlurSamples { get; init; } = 8;
+
         public double Transmission { get; init; }
         public double Ior { get; init; } = 1.5;
         public double AbsorptionDistance { get; init; } = 1.0;
@@ -322,6 +327,17 @@ namespace FracturingFog.Cli
                     {
                         parts.Add(BatchFlags.DofAperture); parts.Add(Num(snap.ReliefDofAperture));
                         if (snap.ReliefDofFocus > 0.0) { parts.Add(BatchFlags.DofFocus); parts.Add(Num(snap.ReliefDofFocus)); }
+                    }
+
+                    // Vector motion blur (S1, #398) — emit only when the effect is on.
+                    if (snap.ReliefMotionBlur > 0.0)
+                    {
+                        parts.Add(BatchFlags.ReliefMotionBlur); parts.Add(Num(snap.ReliefMotionBlur));
+                        if (snap.ReliefMotionBlurSamples != 8)
+                        {
+                            parts.Add(BatchFlags.ReliefMotionBlurSamples);
+                            parts.Add(snap.ReliefMotionBlurSamples.ToString(System.Globalization.CultureInfo.InvariantCulture));
+                        }
                     }
 
                     // Refractive glass (S5, #406) — emit only when transmissive.

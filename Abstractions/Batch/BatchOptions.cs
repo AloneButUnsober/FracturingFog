@@ -249,6 +249,11 @@ namespace FracturingFog.Batch
         public double? ReliefDenoiseDepthSigma { get; set; }
         public bool? ReliefDenoiseAdaptiveSupersample { get; set; }  // S4 (#402) — drop AA SS when denoise on
 
+        // Vector motion blur (roadmap S1, #398). Strength 0 = off; any flag implies
+        // relief + raymarch. Only visible in a sequence render (needs the motion AOV).
+        public double? ReliefMotionBlur { get; set; }        // strength, 0 = off
+        public int? ReliefMotionBlurSamples { get; set; }    // taps, 2..64
+
         // Relief isolate masking (#363 follow-up). Any isolate flag implies
         // relief + isolate on. NoDetail turns OFF the default detail isolation.
         public bool ReliefIsolate { get; set; }
@@ -757,6 +762,21 @@ namespace FracturingFog.Batch
                         opts.Relief = true;
                         break;
 
+                    case BatchFlags.ReliefMotionBlur:
+                        if (!NextDouble(args, ref i, a, out double mblur, out error)) return false;
+                        opts.ReliefMotionBlur = mblur;
+                        opts.ReliefRaymarch = true;
+                        opts.Relief = true;
+                        break;
+
+                    case BatchFlags.ReliefMotionBlurSamples:
+                        if (!NextInt(args, ref i, a, out int mbsamp, out error)) return false;
+                        opts.ReliefMotionBlurSamples = mbsamp;
+                        opts.ReliefMotionBlur ??= 1.0;   // samples imply the effect on
+                        opts.ReliefRaymarch = true;
+                        opts.Relief = true;
+                        break;
+
                     case BatchFlags.Transmission:
                         if (!NextDouble(args, ref i, a, out double trv, out error)) return false;
                         opts.Transmission = trv;
@@ -1023,6 +1043,10 @@ namespace FracturingFog.Batch
                 { error = "--ior must be 1..3."; return false; }
             if (opts.AbsorptionDist is <= 0.0)
                 { error = "--absorption-dist must be > 0."; return false; }
+            if (opts.ReliefMotionBlur is < 0.0 or > 4.0)
+                { error = "--relief-motion-blur must be 0..4."; return false; }
+            if (opts.ReliefMotionBlurSamples is < 2 or > 64)
+                { error = "--relief-motion-blur-samples must be 2..64."; return false; }
             if (opts.ReliefDenoiseIterations is < 0 or > 8)
                 { error = "--denoise must be 0..8 (passes)."; return false; }
             if (opts.ReliefDenoiseColorSigma is <= 0)
