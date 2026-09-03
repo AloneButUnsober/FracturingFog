@@ -774,6 +774,9 @@ public sealed class UserEquationViewModel : ViewModelBase
         finally { _loadingNamedEquation = false; }
         _params.UserEquationName = entry.Name;
 
+        // Restore (and reset) the per-equation render settings from the entry.
+        ApplyEntryRenderSettings(entry);
+
         _promote = entry.Promoted;
         this.RaisePropertyChanged(nameof(Promote));
 
@@ -781,6 +784,27 @@ public sealed class UserEquationViewModel : ViewModelBase
         _debounce.Disposable = null;
         if (entry.Kind == UserEquationKind.Dsl) ValidateDslNow();
         else CompileRequested?.Invoke();
+    }
+
+    /// <summary>Apply a saved entry's per-equation render settings (Escape r, z0
+    /// seed, convergence bailout, interior-orbit colouring) to the live params and
+    /// refresh the bound controls. Setting <c>_params</c> directly + raising the
+    /// property notifications (rather than going through the setters) both restores
+    /// the values and RESETS them when switching to an entry that lacks them
+    /// (legacy JSON ⇒ defaults), without firing a render per field — the caller's
+    /// compile/validate does the single re-render.</summary>
+    private void ApplyEntryRenderSettings(UserEquationEntry entry)
+    {
+        _params.EscapeRadius = entry.EscapeRadius;
+        _params.UserEquationSeed = string.IsNullOrWhiteSpace(entry.Seed) ? null : entry.Seed;
+        _params.UserEquationBailoutCondition =
+            string.IsNullOrWhiteSpace(entry.BailoutCondition) ? null : entry.BailoutCondition;
+        _params.UserEquationColorInterior = entry.ColorInterior;
+
+        this.RaisePropertyChanged(nameof(EscapeRadius));
+        this.RaisePropertyChanged(nameof(SeedExpression));
+        this.RaisePropertyChanged(nameof(BailoutCondition));
+        this.RaisePropertyChanged(nameof(ColorInterior));
     }
 
     private async Task OnSaveAsync()
@@ -798,7 +822,14 @@ public sealed class UserEquationViewModel : ViewModelBase
             return;
 
         var (kind, source) = ActiveSource();
-        var entry = UserEquationStore.Instance.SaveEquation(trimmed, source, kind);
+        // Persist the per-equation render settings alongside the source so a Save
+        // captures them and a later selection restores them.
+        var entry = UserEquationStore.Instance.SaveEquation(
+            trimmed, source, kind,
+            escapeRadius: _params.EscapeRadius,
+            seed: _params.UserEquationSeed,
+            bailoutCondition: _params.UserEquationBailoutCondition,
+            colorInterior: _params.UserEquationColorInterior);
         if (entry is null) return;
 
         _params.UserEquationName = entry.Name;

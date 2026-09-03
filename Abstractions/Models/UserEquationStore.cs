@@ -44,6 +44,23 @@ namespace FracturingFog.Models
         /// which tab a Load restores into. Defaults to UserEquation so
         /// pre-existing JSON entries remain valid.</summary>
         public UserEquationKind Kind { get; set; } = UserEquationKind.UserEquation;
+
+        // ── Per-equation render settings (persisted with the equation so a Save
+        // captures them and a Load/selection restores — and resets — them). All
+        // default to the FractalParameters defaults, so legacy JSON without these
+        // fields loads as "auto / blank / off" (a selection resets them). ──
+
+        /// <summary>#541 — escape radius override. 0 = auto.</summary>
+        public double EscapeRadius { get; set; }
+
+        /// <summary>#542 — z0 seed expression. Null/blank = z0 = 0 (Mandelbrot).</summary>
+        public string? Seed { get; set; }
+
+        /// <summary>#544 — convergence bailout condition. Null/blank = escape-radius only.</summary>
+        public string? BailoutCondition { get; set; }
+
+        /// <summary>#583 — colour in-set pixels from the accumulated orbit.</summary>
+        public bool ColorInterior { get; set; }
     }
 
     public sealed class UserEquationStore
@@ -103,7 +120,8 @@ namespace FracturingFog.Models
         /// Inserts or replaces an entry by Name (case-insensitive). Returns the
         /// stored entry, or null if name is blank.
         /// </summary>
-        public UserEquationEntry? SaveEquation(string name, string source, UserEquationKind kind = UserEquationKind.UserEquation)
+        public UserEquationEntry? SaveEquation(string name, string source, UserEquationKind kind = UserEquationKind.UserEquation,
+            double escapeRadius = 0.0, string? seed = null, string? bailoutCondition = null, bool colorInterior = false)
         {
             if (string.IsNullOrWhiteSpace(name)) return null;
 
@@ -113,12 +131,21 @@ namespace FracturingFog.Models
                 {
                     Equations[i].Source = source ?? string.Empty;
                     Equations[i].Kind = kind;
+                    Equations[i].EscapeRadius = escapeRadius;
+                    Equations[i].Seed = seed;
+                    Equations[i].BailoutCondition = bailoutCondition;
+                    Equations[i].ColorInterior = colorInterior;
                     Save();
                     return Equations[i];
                 }
             }
 
-            var entry = new UserEquationEntry { Name = name, Source = source ?? string.Empty, Kind = kind };
+            var entry = new UserEquationEntry
+            {
+                Name = name, Source = source ?? string.Empty, Kind = kind,
+                EscapeRadius = escapeRadius, Seed = seed,
+                BailoutCondition = bailoutCondition, ColorInterior = colorInterior,
+            };
             Equations.Add(entry);
             Save();
             return entry;
