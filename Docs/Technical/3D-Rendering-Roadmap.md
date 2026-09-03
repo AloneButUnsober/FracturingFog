@@ -166,8 +166,19 @@ discarded, not that it is uncomputed.
   continuous relief frames (same gate as the froxel history; a flat frame resets the
   baseline). Off → no AOV, no forced-CPU trace, byte-identical. +5 tests (4 seam via
   PosterRenderer + a scene determinism lock).
-- **Remaining:** a consumer for the motion vectors (SVGF temporal / vector motion blur)
-  + threading the seam through the WinExe batch video/slideshow loops; the light compositor.
+- **Vector motion blur — first motion-AOV consumer (landed — PR #640, #398):** the
+  motion-vector AOV now has a consumer. `MotionBlurFromVectors` (Engine/Imaging) — a pure,
+  deterministic, parallel gather — smears the relief beauty along each pixel's motion
+  vector (N cheap taps vs N full raymarches): a fast silhouette streaks, a static
+  background stays crisp. `FractalParameters.Relief2DMotionBlurStrength` (0 = off) +
+  `Relief2DMotionBlurSamples` (2..64), wired in `PosterRenderer.ApplyReliefIfEnabled` — when
+  strength>0 AND a previous camera is supplied the render captures a Motion AOV and the blur
+  runs as a post-pass (only auto-allocating the capture when no external AOV target owns the
+  buffer, so an AOV-EXR export is undisturbed). A still frame (no previous camera) stays
+  byte-identical even at strength>0. +8 tests (6 operator + 2 end-to-end).
+- **Remaining:** a motion-blur batch flag + UI knob + threading the strength through the
+  `SceneVideoRenderer` capture path; SVGF temporal (the deeper #402 consumer); the light
+  compositor.
 
 ### S2 — Linear-light rendering + view transform (AgX / ACES / Filmic) ◐ (#396)
 Render and composite in **linear light**, apply a filmic **view transform** at
