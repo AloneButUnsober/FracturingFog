@@ -60,6 +60,26 @@ public static class AnimationDataExtensions
                     c => prop.SetValue(target, c),
                     cost);
             }
+            else if (prop.PropertyType.IsEnum)
+            {
+                // #632 — animate an enum as a discrete ladder. The int animator
+                // integrates in double + rounds; here the rounded value is a
+                // ladder *index* into Enum.GetValues, clamped to the valid range,
+                // so it survives non-zero-based / non-contiguous enums. Used by
+                // the PrecisionField tier-sweep (Float→Double→DD→QD).
+                var enumType = prop.PropertyType;
+                var members = System.Enum.GetValues(enumType);
+                int last = members.Length - 1;
+                yield return new IntProceduralAnimator(
+                    track,
+                    idx =>
+                    {
+                        if (idx < 0) idx = 0;
+                        else if (idx > last) idx = last;
+                        prop.SetValue(target, members.GetValue(idx));
+                    },
+                    cost);
+            }
             // Unsupported CLR type → silently skip. Adding a new Kind
             // (Vec3, Color, …) means adding a concrete ProceduralAnimator
             // subclass and a branch here.

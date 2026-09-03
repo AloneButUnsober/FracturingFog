@@ -17,6 +17,13 @@ public enum AnimatableParamKind
     /// / <see cref="AnimatableParamDescriptor.Max"/> bound the modulus |c|; the
     /// animator handles polar angle / radius separately.</summary>
     Complex,
+    /// <summary>An <c>enum</c> field animated as a discrete ladder. The animator
+    /// integrates in <c>double</c>, rounds to the nearest ladder index, and
+    /// writes the enum member at that position (see #632 precision-tier sweep).
+    /// <see cref="AnimatableParamDescriptor.Min"/> / <see cref="AnimatableParamDescriptor.Max"/>
+    /// are ladder indices — <c>0</c>..<c>N-1</c> for an N-member enum. Low
+    /// Min/Max spans produce visible "step" frames per member (a coarse sweep).</summary>
+    Enum,
 }
 
 /// <summary>Rough cost class of integrating this parameter once per frame.

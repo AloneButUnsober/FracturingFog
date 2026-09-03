@@ -91,6 +91,9 @@ public static class FractalAnimatableParamsMap
         FractalType.ChaoticBilliard
             => _billiardList,
 
+        FractalType.PrecisionField
+            => _precisionFieldList,
+
         // ── 3D raymarched ─────────────────────────────────────────────────
         FractalType.Mandelbulb
             => _mandelbulbList,
@@ -269,6 +272,28 @@ public static class FractalAnimatableParamsMap
             Notes: "Disk spacing — widening opens escape gaps, simplifying basins."),
         new("BilliardDiskRadius", AnimatableParamKind.ScalarDouble, Min: 0.1, Max: 0.9,
             Notes: "Disk size — larger disks narrow the gaps toward deeper chaos."),
+    };
+
+    // PrecisionField (#632, Renderer C2). The two tiers form a precision
+    // ladder Float(0) → Double(1) → DoubleDouble(2) → QuadDouble(3). Sweeping
+    // the low tier upward while the high tier stays pinned at QuadDouble is the
+    // convergence animation: each step, the low-tier outcome agrees with the
+    // reference over more of the frame, so the divergence field dims toward
+    // black — the per-pixel *rate* at which a pixel settles is the image. Both
+    // are Expensive: every tick re-iterates the fractal at BOTH tiers (QD is
+    // the heaviest arithmetic in the codebase), so animate slowly. Enum kind →
+    // Min/Max are ladder indices, driven with a Linear ramp 0 → 3.
+    private static readonly AnimatableParamDescriptor[] _precisionFieldList =
+    {
+        new("PrecisionLowTier", AnimatableParamKind.Enum, Min: 0, Max: 3,
+            Cost: AnimatableParamCost.Expensive,
+            Notes: "Convergence sweep — ramp Float(0)→QuadDouble(3) with the "
+                 + "reference tier pinned at QuadDouble; the field dims as the "
+                 + "low tier catches up. Re-iterates both tiers each tick."),
+        new("PrecisionHighTier", AnimatableParamKind.Enum, Min: 0, Max: 3,
+            Cost: AnimatableParamCost.Expensive,
+            Notes: "Reference (ceiling) tier — usually pinned; animate only to "
+                 + "sweep the reference itself. Re-iterates both tiers each tick."),
     };
 
     private static readonly AnimatableParamDescriptor[] _dlaList =
