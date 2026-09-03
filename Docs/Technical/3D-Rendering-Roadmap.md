@@ -156,9 +156,18 @@ discarded, not that it is uncomputed.
   exactly zero; still frame (previous == current) ~zero. A Motion capture forces the CPU
   trace (folded into the `aovOk` gate, like a Components capture). Default off (no Motion
   buffer / no previous camera) → byte-identical. +5 `ReliefMotionVectorWiringTests`.
-- **Remaining:** thread a previous-camera source through the video / scene sequence
-  renderers so motion fills during an actual animation (SVGF is the consumer); the light
-  compositor.
+- **Motion-vector AOV — sequence seam (landed — PR #639, #398):** the previous-frame
+  camera now threads through the offline sequence render path. `PosterRequest.PreviousCamera`
+  → `PosterRenderer` (RenderComposedBuffer + both RenderToPixels overloads) →
+  `ApplyReliefIfEnabled` → the relief render — the shared seam every video/slideshow/scene
+  render builds through (null default → byte-identical); mirrors the PR #468 FroxelHistory
+  seam. `SceneVideoRenderer` gains an opt-in `CaptureMotionVectors` (default off) that
+  carries one persistent previous-camera + capture-motion AOV, advanced across clean
+  continuous relief frames (same gate as the froxel history; a flat frame resets the
+  baseline). Off → no AOV, no forced-CPU trace, byte-identical. +5 tests (4 seam via
+  PosterRenderer + a scene determinism lock).
+- **Remaining:** a consumer for the motion vectors (SVGF temporal / vector motion blur)
+  + threading the seam through the WinExe batch video/slideshow loops; the light compositor.
 
 ### S2 — Linear-light rendering + view transform (AgX / ACES / Filmic) ◐ (#396)
 Render and composite in **linear light**, apply a filmic **view transform** at
