@@ -180,6 +180,16 @@ operands and yield `1.0` / `0.0`.
 > inputs (`trapMin` / `trapCross` / `trapRing` / `trapHyperbola` / `trapHexagon`)
 > when you need C# export.
 
+> **Out-of-bounds colour (#615).** The **Out-of-bounds colour** toggle + picker
+> in the ColorGen editor sets a dedicated colour for the beyond-escape-radius
+> *surround* — the large flat disk you see when a 2D escape-time fractal is
+> zoomed out far enough that the set shrinks to a dot. It colours that surround
+> independently of the fractal, instead of leaving it as colour stop 0. Off by
+> default (no change); the choice is saved with the theme and applies on
+> *Compile & Load*. It is not a DSL input — it's a per-theme surround fill, so it
+> doesn't affect your `return` expression. See
+> `Docs/Technical/OutOfBounds-Surround-DesignPlan.md`.
+
 ### 2.4 Constants
 
 `pi`, `tau` (= `2π`), `e`, `phi` (golden ratio).

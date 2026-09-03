@@ -86,6 +86,7 @@ namespace FracturingFog.Models
                             MaxRecommendedZoom = maxZoomField,
                             Kind = ColorThemeKind.Pbr3D,
                             InSetColor = InSetFromMap(map),
+                            OutOfBoundsColor = OutOfBoundsFromMap(map),   // #615
                             InterpolationSpace = pbr.ExportInterpolationSpace,
                             InterpolationCurve = pbr.ExportInterpolationCurve,
                             TransferFunction = pbr.ExportTransferFunction,
@@ -133,6 +134,7 @@ namespace FracturingFog.Models
                         MaxRecommendedZoom = maxZoomField,
                         Kind = ColorThemeKind.Phong3D,
                         InSetColor = InSetFromMap(map),
+                        OutOfBoundsColor = OutOfBoundsFromMap(map),   // #615
                         InterpolationSpace = phong.ExportInterpolationSpace,
                         InterpolationCurve = phong.ExportInterpolationCurve,
                         TransferFunction = phong.ExportTransferFunction,
@@ -172,6 +174,7 @@ namespace FracturingFog.Models
                         MaxRecommendedZoom = maxZoomField,
                         Kind = ColorThemeKind.Cycling,
                         InSetColor = InSetFromMap(map),
+                        OutOfBoundsColor = OutOfBoundsFromMap(map),   // #615
                         InterpolationSpace = cyc.ExportInterpolationSpace,
                         InterpolationCurve = cyc.ExportInterpolationCurve,
                         TransferFunction = cyc.ExportTransferFunction,
@@ -201,6 +204,7 @@ namespace FracturingFog.Models
                         MaxRecommendedZoom = maxZoomField,
                         Kind = ColorThemeKind.OrbitTrap,
                         InSetColor = InSetFromMap(map),
+                        OutOfBoundsColor = OutOfBoundsFromMap(map),   // #615
                         TrapShape = trap.Shape,
                         TrapScale = trap.ExportTrapScale,
                         TrapPower = trap.ExportTrapPower,
@@ -230,6 +234,7 @@ namespace FracturingFog.Models
                         MaxRecommendedZoom = maxZoomField,
                         Kind = ColorThemeKind.Gradient,
                         InSetColor = InSetFromMap(map),
+                        OutOfBoundsColor = OutOfBoundsFromMap(map),   // #615
                         InterpolationSpace = grad.ExportInterpolationSpace,
                         InterpolationCurve = grad.ExportInterpolationCurve,
                         TransferFunction = grad.ExportTransferFunction,
@@ -265,6 +270,22 @@ namespace FracturingFog.Models
         {
             uint c = map.InSetColor;
             if (c == 0xFF000000u) return null;   // default → no override
+            return new InSetColorData(
+                (byte)((c >> 16) & 0xFF),
+                (byte)((c >> 8) & 0xFF),
+                (byte)(c & 0xFF))
+            {
+                A = (byte)((c >> 24) & 0xFF),
+            };
+        }
+
+        /// <summary>#615 — snapshots a runtime map's out-of-bounds surround colour
+        /// back into an <see cref="InSetColorData"/> carrier so an edited surround
+        /// round-trips through Export. Returns null when the map has no override
+        /// (byte-identical serialisation for themes that don't use it).</summary>
+        private static InSetColorData? OutOfBoundsFromMap(IColorMap map)
+        {
+            if (map.OutOfBoundsColor is not uint c) return null;
             return new InSetColorData(
                 (byte)((c >> 16) & 0xFF),
                 (byte)((c >> 8) & 0xFF),
