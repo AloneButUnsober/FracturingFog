@@ -174,6 +174,75 @@ public sealed class EscapeTimeCalculator : Interefaces.IFractalCalculator, Inter
 
     public void Calculate(CancellationToken ct = default)
     {
+        // #615 Phase 1 — render, then a single path-agnostic post-pass paints the
+        // beyond-escape-radius surround (opt-in via IColorMap.OutOfBoundsColor).
+        CalculateInternal(ct);
+        ApplyOutOfBoundsSurround(ct);
+    }
+
+    // #615 Phase 1 — bailout radius² for the active fractal type, mirroring the
+    // kernel construction in CalculateInternal. Used only by the out-of-bounds
+    // post-pass; cheap to instantiate.
+    private double CurrentEscapeRadius2()
+    {
+        FracturingFog.Interefaces.IFractalKernel k = FractalType switch
+        {
+            FractalType.Mandelbrot  => new MandelbrotKernel(),
+            FractalType.Julia       => new JuliaKernel(FractalParameters.JuliaC.Real, FractalParameters.JuliaC.Imaginary),
+            FractalType.BurningShip => new BurningShipKernel(),
+            FractalType.Tricorn     => new TricornKernel(),
+            FractalType.Multibrot   => new MultibrotKernel(FractalParameters.MultibrotExponent),
+            FractalType.Phoenix     => new PhoenixKernel(FractalParameters.PhoenixP.Real, FractalParameters.PhoenixP.Imaginary),
+            FractalType.Magnet1     => new MagnetOneKernel(),
+            FractalType.Magnet2     => new MagnetTwoKernel(),
+            FractalType.Glynn       => new GlynnKernel(FractalParameters.GlynnC.Real, FractalParameters.GlynnC.Imaginary),
+            FractalType.Spider      => new SpiderKernel(FractalParameters.SpiderCDecay),
+            _                       => new MandelbrotKernel(),
+        };
+        return k.BailoutRadius2;
+    }
+
+    // #615 Phase 1 — paint the flat out-of-bounds surround for the escape-time
+    // families. The pixel's varying plane coordinate is the escape variable
+    // (c for Mandelbrot-like, z0 for Julia), so |coord| ≥ escapeRadius is the
+    // visible disk boundary either way. null OutOfBoundsColor ⇒ no-op (byte-
+    // identical). No view rotation here, so the simple mapping matches the
+    // render (an active domain warp distorts the edge slightly — acceptable).
+    private void ApplyOutOfBoundsSurround(CancellationToken ct)
+    {
+        if (ColorMap.OutOfBoundsColor is not uint oob) return;
+        int w = Width, h = Height;
+        if (w <= 0 || h <= 0 || ColorBuffer.Length < w * h) return;
+        bool haveNormals = NormalXBuffer.Length >= w * h && NormalYBuffer.Length >= w * h;
+
+        double scale = (3.5 / Math.Max(w, h)) / Zoom;
+        double r2 = CurrentEscapeRadius2();
+        double cx0 = CenterX, cy0 = CenterY;
+
+        _po.CancellationToken = ct;
+        ParallelForRows(0, h, _po, y =>
+        {
+            if (ct.IsCancellationRequested) return;
+            double cy = cy0 + (y - h * 0.5) * scale;
+            int rb = y * w;
+            for (int x = 0; x < w; x++)
+            {
+                double cx = cx0 + (x - w * 0.5) * scale;
+                if (cx * cx + cy * cy >= r2)
+                {
+                    ColorBuffer[rb + x] = oob;
+                    if (haveNormals)
+                    {
+                        NormalXBuffer[rb + x] = 0f;
+                        NormalYBuffer[rb + x] = 0f;
+                    }
+                }
+            }
+        });
+    }
+
+    private void CalculateInternal(CancellationToken ct)
+    {
         ColorMap.MaxIterations = MaxIterations;
         LastPixelScale = (3.5 / Math.Max(Width, Height)) / Zoom;
         // Push the per-frame pixel span to distance-estimation themes so they

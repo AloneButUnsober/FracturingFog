@@ -628,6 +628,57 @@ public sealed class MandelbrotCalculator : Interefaces.IHeightFieldSource, Inter
     /// </summary>
     public void Calculate(CancellationToken ct = default)
     {
+        // #615 Phase 1 — the dispatch below early-returns per render path
+        // (orbit-aware, GPU palette, DD/QD/OD deep, …). Run the render, then a
+        // single path-agnostic post-pass paints the beyond-escape-radius
+        // surround, so every path is covered from one place.
+        CalculateInternal(ct);
+        ApplyOutOfBoundsSurround(ct);
+    }
+
+    // #615 Phase 1 — paint the flat "out-of-bounds" surround: the large disk
+    // seen when zoomed out, where the pixel's plane coordinate already lies
+    // outside the escape disk (|c| ≥ EscapeRadius) and the orbit escapes on the
+    // first step. Opt-in via IColorMap.OutOfBoundsColor; null ⇒ no-op (byte-
+    // identical). Self-gating: zoomed in, |c| ≈ CenterX/Y ≪ EscapeRadius, so the
+    // test never fires and the pass is a cheap read-only scan. This calculator
+    // applies no view rotation (cx = CenterX + (x−W/2)·scale), so the simple
+    // mapping here matches every shallow render path exactly.
+    private void ApplyOutOfBoundsSurround(CancellationToken ct)
+    {
+        if (ColorMap.OutOfBoundsColor is not uint oob) return;
+        int w = Width, h = Height;
+        if (w <= 0 || h <= 0 || ColorBuffer.Length < w * h) return;
+        bool haveNormals = NormalXBuffer.Length >= w * h && NormalYBuffer.Length >= w * h;
+
+        double scale = (3.5 / Math.Max(w, h)) / Zoom;
+        double r2 = EscapeRadius2;
+        double cx0 = CenterX, cy0 = CenterY;
+
+        _po.CancellationToken = ct;
+        ParallelForRows(0, h, _po, y =>
+        {
+            if (ct.IsCancellationRequested) return;
+            double cy = cy0 + (y - h * 0.5) * scale;
+            int rb = y * w;
+            for (int x = 0; x < w; x++)
+            {
+                double cx = cx0 + (x - w * 0.5) * scale;
+                if (cx * cx + cy * cy >= r2)
+                {
+                    ColorBuffer[rb + x] = oob;
+                    if (haveNormals)
+                    {
+                        NormalXBuffer[rb + x] = 0f;
+                        NormalYBuffer[rb + x] = 0f;
+                    }
+                }
+            }
+        });
+    }
+
+    private void CalculateInternal(CancellationToken ct)
+    {
 #if DEBUG
         // Stacktrace alloc + reflection. Skipped in Release so the hot
         // video/preview path does not pay for the diagnostic.

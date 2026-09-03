@@ -346,6 +346,11 @@ namespace FracturingFog.Models
         private readonly uint _inSetColor;
         uint IColorMap.InSetColor => _inSetColor;
 
+        // #615 Phase 1 — optional beyond-escape-radius surround colour. Null ⇒
+        // paint the escape gradient as before (byte-identical).
+        private readonly uint? _oobColor;
+        uint? IColorMap.OutOfBoundsColor => _oobColor;
+
         public DataDrivenGradient(ColorThemeData data)
         {
             DisplayName = data.Name;
@@ -356,6 +361,7 @@ namespace FracturingFog.Models
             ThemeContrast = data.Contrast;
             ThemeAdaptive = data.Adaptive;
             _inSetColor = data.InSetColor?.ToPackedArgb() ?? 0xFF000000u;
+            _oobColor = data.OutOfBoundsColor?.ToPackedArgb();   // #615 null ⇒ no override
             InterpolationSpace = data.InterpolationSpace;
             InterpCurve = data.InterpolationCurve;
             Transfer = data.TransferFunction;
@@ -392,6 +398,11 @@ namespace FracturingFog.Models
         private readonly uint _inSetColor;
         uint IColorMap.InSetColor => _inSetColor;
 
+        // #615 Phase 1 — optional beyond-escape-radius surround colour. Null ⇒
+        // paint the escape gradient as before (byte-identical).
+        private readonly uint? _oobColor;
+        uint? IColorMap.OutOfBoundsColor => _oobColor;
+
         public DataDrivenCyclingGradient(ColorThemeData data)
         {
             DisplayName = data.Name;
@@ -403,6 +414,7 @@ namespace FracturingFog.Models
             ThemeAdaptive = data.Adaptive;
             _cycleSpeed = data.CycleSpeed;
             _inSetColor = data.InSetColor?.ToPackedArgb() ?? 0xFF000000u;
+            _oobColor = data.OutOfBoundsColor?.ToPackedArgb();   // #615 null ⇒ no override
             InterpolationSpace = data.InterpolationSpace;
             InterpCurve = data.InterpolationCurve;
             Transfer = data.TransferFunction;
@@ -452,6 +464,11 @@ namespace FracturingFog.Models
         private readonly uint _inSetColor;
         uint IColorMap.InSetColor => _inSetColor;
 
+        // #615 Phase 1 — optional beyond-escape-radius surround colour. Null ⇒
+        // paint the escape gradient as before (byte-identical).
+        private readonly uint? _oobColor;
+        uint? IColorMap.OutOfBoundsColor => _oobColor;
+
         public DataDrivenPhong3D(ColorThemeData data)
         {
             DisplayName = data.Name;
@@ -471,6 +488,7 @@ namespace FracturingFog.Models
             _rimSpecScale = data.RimSpecScale;
             _rimDiffScale = data.RimDiffScale;
             _inSetColor = data.InSetColor?.ToPackedArgb() ?? 0xFF000000u;
+            _oobColor = data.OutOfBoundsColor?.ToPackedArgb();   // #615 null ⇒ no override
             InterpolationSpace = data.InterpolationSpace;
             InterpCurve = data.InterpolationCurve;
             Transfer = data.TransferFunction;
@@ -554,6 +572,11 @@ namespace FracturingFog.Models
         private readonly uint _inSetColor;
         uint IColorMap.InSetColor => _inSetColor;
 
+        // #615 Phase 1 — optional beyond-escape-radius surround colour. Null ⇒
+        // paint the escape gradient as before (byte-identical).
+        private readonly uint? _oobColor;
+        uint? IColorMap.OutOfBoundsColor => _oobColor;
+
         public DataDrivenPbr3D(ColorThemeData data)
         {
             DisplayName = data.Name;
@@ -571,6 +594,7 @@ namespace FracturingFog.Models
             _glowExp = data.GlowBoostExponent;
             _glowScale = data.GlowBoostScale;
             _inSetColor = data.InSetColor?.ToPackedArgb() ?? 0xFF000000u;
+            _oobColor = data.OutOfBoundsColor?.ToPackedArgb();   // #615 null ⇒ no override
             InterpolationSpace = data.InterpolationSpace;
             InterpCurve = data.InterpolationCurve;
             Transfer = data.TransferFunction;
@@ -699,6 +723,10 @@ namespace FracturingFog.Models
 
         uint IColorMap.InSetColor => _inSetColor;
 
+        // #615 Phase 1 — optional beyond-escape-radius surround colour.
+        private readonly uint? _oobColor;
+        uint? IColorMap.OutOfBoundsColor => _oobColor;
+
         public DataDrivenOrbitTrap(ColorThemeData data)
         {
             DisplayName = data.Name;
@@ -715,6 +743,7 @@ namespace FracturingFog.Models
             _colorInterior = data.ColorInterior;
             _shape = ShapeImpl(data.TrapShape);
             _inSetColor = data.InSetColor?.ToPackedArgb() ?? 0xFF000000u;
+            _oobColor = data.OutOfBoundsColor?.ToPackedArgb();   // #615 null ⇒ no override
 
             InterpolationSpace = data.InterpolationSpace;
             InterpCurve = data.InterpolationCurve;

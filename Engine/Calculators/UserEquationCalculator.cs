@@ -296,6 +296,11 @@ public sealed class UserEquationCalculator : IFractalCalculator
         double bailout2 = FractalParameters.EscapeRadius > 0.0
             ? FractalParameters.EscapeRadius * FractalParameters.EscapeRadius
             : 1024.0; // generous default for arbitrary maps
+        // #615 Phase 1 — optional dedicated colour for the beyond-escape-radius
+        // surround (the flat disk seen when zoomed out). null ⇒ paint the escape
+        // gradient as before (byte-identical). escapeRadius = sqrt(bailout2).
+        uint? oobColor = ColorMap.OutOfBoundsColor;
+        double escapeRadius = Math.Sqrt(bailout2);
 
         // Precision-tier selection. When the low limbs carry real data
         // (input controller is anchoring in DD or QD) the per-pixel coord
@@ -565,6 +570,17 @@ public sealed class UserEquationCalculator : IFractalCalculator
                         : (uint)ColorMap.Map(smooth, 0f, maxIt, nx, ny,
                                              (float)z.Real, (float)z.Imaginary,
                                              (float)dzdcR, (float)dzdcI);
+
+                    // #615 — beyond-escape-radius surround: paint the flat OOB
+                    // colour and flatten normals so downstream post-process (emboss
+                    // / AO) does not re-shade the surround.
+                    if (oobColor is uint oob &&
+                        Interefaces.IColorMap.IsOutOfBounds(cx, cy, escapeRadius))
+                    {
+                        ColorBuffer[idx] = oob;
+                        NormalXBuffer[idx] = 0f;
+                        NormalYBuffer[idx] = 0f;
+                    }
                 }
             }
         });

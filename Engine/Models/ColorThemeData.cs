@@ -395,6 +395,18 @@ namespace FracturingFog.Models
         /// </summary>
         public InSetColorData? InSetColor { get; set; }
 
+        // ── Out-of-bounds surround override (#615 Phase 1) ────────────────────
+
+        /// <summary>
+        /// Optional dedicated colour for the beyond-escape-radius surround — the
+        /// flat disk that fills the screen when a 2D escape-time fractal is zoomed
+        /// out far enough that the set shrinks to a dot. Null (default) = paint the
+        /// escape-time gradient as before (byte-identical). Reuses the R/G/B/A
+        /// carrier so JSON stays human-editable. Surfaced at runtime as
+        /// IColorMap.OutOfBoundsColor.
+        /// </summary>
+        public InSetColorData? OutOfBoundsColor { get; set; }
+
         // ── Post-FX defaults (optional) ───────────────────────────────────────
         // Nullable on purpose: null = "theme has no opinion, leave slider alone".
         // A non-null value tells the host to snap its post-FX slider to this
