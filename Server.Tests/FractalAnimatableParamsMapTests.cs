@@ -73,6 +73,21 @@ public sealed class FractalAnimatableParamsMapTests
                         Assert.Equal(c, (Complex)prop.GetValue(fp)!);
                         break;
 
+                    case AnimatableParamKind.Enum:
+                        Assert.True(prop.PropertyType.IsEnum,
+                            $"'{d.ParamName}' Kind=Enum but CLR type is {prop.PropertyType.Name}");
+                        // Min/Max are ladder indices into Enum.GetValues; they
+                        // must be in-range so the animator's clamp maps to a
+                        // real member. Round-trip each endpoint index.
+                        var members = Enum.GetValues(prop.PropertyType);
+                        Assert.True(d.Min >= 0 && d.Max <= members.Length - 1,
+                            $"'{d.ParamName}' Enum ladder [{d.Min},{d.Max}] out of range " +
+                            $"for {prop.PropertyType.Name} (0..{members.Length - 1})");
+                        var member = members.GetValue((int)Math.Round(d.Max));
+                        prop.SetValue(fp, member);
+                        Assert.Equal(member, prop.GetValue(fp));
+                        break;
+
                     default:
                         Assert.Fail($"Unhandled Kind {d.Kind}");
                         break;

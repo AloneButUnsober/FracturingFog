@@ -225,6 +225,48 @@ namespace FracturingFog.Models
                 },
                 Tags = new List<string> { "calm", "2D" },
             };
+
+            // #632 (Renderer C2) — precision-sweep convergence. Ramps the low
+            // tier up the ladder Float→QuadDouble while a Hold track pins the
+            // reference tier at QuadDouble, so the divergence field dims toward
+            // black as the low tier catches up to the reference. One "frame per
+            // tier step" falls out of the enum animator's rounding at this Min/
+            // Max span; the per-pixel rate of convergence is the image. Slow
+            // FrequencyHz — every tick re-iterates the fractal at both tiers.
+            yield return new AnimationData
+            {
+                Name = "Precision convergence sweep",
+                Category = "Built-in",
+                Description = "Ramps the low precision tier Float→QuadDouble against a "
+                            + "QuadDouble reference — the fragility field dims as each "
+                            + "tier converges. Author on a deep-zoom PrecisionField view.",
+                TargetFractalTypes = new List<FracturingFog.FractalType>
+                {
+                    FracturingFog.FractalType.PrecisionField,
+                },
+                Tracks = new List<AnimationTrack>
+                {
+                    new AnimationTrack
+                    {
+                        ParamName = "PrecisionLowTier",
+                        Mode = AnimationMode.Linear,   // sawtooth ramp 0 → 3, wraps
+                        Min = 0,
+                        Max = 3,
+                        FrequencyHz = 0.05,            // ~20 s per full ladder sweep
+                        Enabled = true,
+                    },
+                    new AnimationTrack
+                    {
+                        ParamName = "PrecisionHighTier",
+                        Mode = AnimationMode.Hold,     // pin the reference at QuadDouble
+                        Min = 3,
+                        Max = 3,
+                        FrequencyHz = 0.0,
+                        Enabled = true,
+                    },
+                },
+                Tags = new List<string> { "experimental", "2D", "precision" },
+            };
         }
     }
 }
