@@ -100,6 +100,45 @@ static class Program
         if (args.Length > 0 && args[0] == "--randomtileprobe")
             return FracturingFog.Diagnostics.RandomTileProbe.RunGate();
 
+        // --escapeanglecompare: #629 (Renderer B) — render the escape-angle
+        // 3-way compare poster (iteration-count | escape-angle | angle×iter) of
+        // a default Mandelbrot region and write it next to the exe. Demonstrates
+        // the packaged demo themes + the compare-poster preset. Writes
+        // escape-angle-compare.png + escapeanglecompare.out.
+        if (args.Length > 0 && args[0] == "--escapeanglecompare")
+        {
+            var sb = new System.Text.StringBuilder();
+            sb.AppendLine("Escape-angle compare poster (#629)");
+            string pngPath = System.IO.Path.Combine(AppContext.BaseDirectory, "escape-angle-compare.png");
+            bool ok;
+            try
+            {
+                FracturingFog.Imaging.EscapeAngleComparePoster.RenderToFile(
+                    centerX: -0.5, centerY: 0.0, zoom: 1.0, maxIterations: 500,
+                    fractalType: FracturingFog.FractalType.Mandelbrot,
+                    fractalParameters: new FracturingFog.Models.FractalParameters(),
+                    quality: FracturingFog.Models.QualityPreset.Standard,
+                    panelWidth: 640, panelHeight: 640,
+                    path: pngPath, format: FracturingFog.Imaging.ImageFileFormat.Png,
+                    token: default);
+                var panels = FracturingFog.Imaging.EscapeAngleComparePoster.DefaultPanels();
+                for (int i = 0; i < panels.Count; i++)
+                    sb.AppendLine($"  panel {i + 1}: {panels[i].Label}");
+                sb.AppendLine($"  wrote {pngPath}");
+                ok = System.IO.File.Exists(pngPath);
+            }
+            catch (Exception ex)
+            {
+                sb.AppendLine($"  FAIL: {ex.Message}");
+                ok = false;
+            }
+            sb.AppendLine(ok ? "RESULT: PASS" : "RESULT: FAIL");
+            string outPath = System.IO.Path.Combine(AppContext.BaseDirectory, "escapeanglecompare.out");
+            System.IO.File.WriteAllText(outPath, sb.ToString());
+            Console.Write(sb.ToString());
+            return ok ? 0 : 1;
+        }
+
         // --reliefgpuraymarch: #160 (Relief 3D Slice 3b) gate — the D3D relief
         // compute kernel (CSRelief) vs the CPU parity twin over identical
         // ReliefUniforms, on a WARP device (no GPU needed). Asserts a real 3D

@@ -263,6 +263,10 @@ namespace FracturingFog.Models
             new ArgDecompPinwheelMap(),
             new ArgDecompSpectralMap(),
 
+            // ── Escape Angle demo (Renderer B, #629) ──────────────────────────\
+            new EscapeAngleDemoMap(),
+            new EscapeAngleIterShadedMap(),
+
             // ── Iter + final-z combination (#69 / #358) ───────────────────────\
             new IterPlusRealMap(),
             new IterPlusImagMap(),
