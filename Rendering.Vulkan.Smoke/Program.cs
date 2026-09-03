@@ -31,6 +31,7 @@ internal static class Program
         bool colorProbe = Array.Exists(args, a => string.Equals(a, "--colorprobe", StringComparison.OrdinalIgnoreCase));
         bool colorRegen = Array.Exists(args, a => string.Equals(a, "regen", StringComparison.OrdinalIgnoreCase));
         bool renderProbe = Array.Exists(args, a => string.Equals(a, "--vulkanrenderprobe", StringComparison.OrdinalIgnoreCase));
+        bool orbitProbe = Array.Exists(args, a => string.Equals(a, "--vulkanorbitprobe", StringComparison.OrdinalIgnoreCase));
         bool pturbProbe = Array.Exists(args, a => string.Equals(a, "--vulkanpturbprobe", StringComparison.OrdinalIgnoreCase));
         bool pturbCalc = Array.Exists(args, a => string.Equals(a, "--vulkanpturbcalc", StringComparison.OrdinalIgnoreCase));
         bool pturbDc = Array.Exists(args, a => string.Equals(a, "--vulkanpturbdc", StringComparison.OrdinalIgnoreCase));
@@ -74,6 +75,9 @@ internal static class Program
 
             if (renderProbe)
                 return RealKernelRenderProbe.Run(ctx);
+
+            if (orbitProbe)
+                return OrbitColorParityProbe.Run(ctx);
 
             if (pturbProbe)
                 return PerturbSpikeProbe.Run(ctx);

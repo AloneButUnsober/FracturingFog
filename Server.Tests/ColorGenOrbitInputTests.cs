@@ -59,11 +59,23 @@ public sealed class ColorGenOrbitInputTests
         Assert.False(m is IOrbitAwareColorMap);          // no per-iteration sampling
     }
 
+    // F16 (#603) — GPU orbit is default-on now; toggling GpuEnabled flips whether
+    // an orbit theme advertises a GPU palette. (Off ⇒ CPU orbit path, no GPU body.)
     [Fact]
-    public void OrbitMap_AdvertisesNoGpuPalette()
+    public void OrbitMap_GpuPalette_FollowsToggle()
     {
-        var m = (InterpretedOrbitColorMap)Make("return rgb(saturate(trapMin), 0, 0);");
-        Assert.Equal("", m.HlslPaletteBody);             // GPU escape-only path can't do orbit
+        bool prev = InterpretedOrbitColorMap.GpuEnabled;
+        try
+        {
+            InterpretedOrbitColorMap.GpuEnabled = false;
+            var off = (InterpretedOrbitColorMap)Make("return rgb(saturate(trapMin), 0, 0);");
+            Assert.Equal("", off.HlslPaletteBody);       // disabled ⇒ CPU only
+
+            InterpretedOrbitColorMap.GpuEnabled = true;
+            var on = (InterpretedOrbitColorMap)Make("return rgb(saturate(trapMin), 0, 0);");
+            Assert.NotEqual("", on.HlslPaletteBody);     // enabled ⇒ GPU orbit body
+        }
+        finally { InterpretedOrbitColorMap.GpuEnabled = prev; }
     }
 
     private static uint[] RenderNative(string src)

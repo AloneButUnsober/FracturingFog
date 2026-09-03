@@ -387,7 +387,19 @@ namespace FracturingFog.Hosting
             // with the DirectXRenderer downcast + MandelbrotGpuKernel construct.
             // On Linux/macOS the hook is null so UseGpuCompute stays off.
             if (BootstrapHooks.GpuKernelFactoryHook != null)
+            {
                 s_renderHost.GpuKernelFactory = BootstrapHooks.GpuKernelFactoryHook;
+                // GPU compute ON by default on the D3D11 backend. The setter
+                // lazily constructs + attaches the kernel via the factory; if
+                // construction fails (or the renderer isn't D3D11) it stays off
+                // silently and the CPU SIMD path takes over. The shallow FP32
+                // path is zoom-gated (≤ MaxGpuZoom) and every frame falls back to
+                // CPU on any kernel error, so the downside is bounded — and the
+                // user can toggle it live with Ctrl+G. (Known caveat: enabling at
+                // startup dispatches GPU on the first shallow frames; if that ever
+                // races an in-flight window resize, Ctrl+G off is the workaround.)
+                s_renderHost.UseGpuCompute = true;
+            }
 
             // #162 (Slice 3d): install the D3D11 relief-raymarch kernel factory the
             // same way — WindowsBootstrap populates the hook with the DirectXRenderer
@@ -469,25 +481,17 @@ namespace FracturingFog.Hosting
             else if (BootstrapHooks.GpuKernelFactoryHook != null
                      && IsTruthyEnv("FF_GPU_PERTURB"))
             {
-                // DEEP-ONLY opt-in. Toggle UseGpuCompute on then off: the `true`
-                // assignment lazily constructs + attaches the D3D kernel via the
-                // factory; the `false` leaves the kernel attached but disables
-                // the SHALLOW (zoom ≤ 1e4) GPU dispatch. We deliberately do NOT
-                // leave the shallow path on — it is a separate, user-toggled
-                // feature, and forcing it from startup put a GPU dispatch on the
-                // very first (shallow) frames, which raced window resize. Deep
-                // perturbation gates only on UseGpuPerturbation + GpuKernel +
-                // SupportsPerturbation (not UseGpuCompute), so this is all it
-                // needs. Per-frame gate still checks the device's FP64 support,
-                // so a non-FP64 D3D device self-disables and deep zoom stays CPU.
-                s_renderHost.UseGpuCompute = true;    // constructs + attaches the kernel
-                s_renderHost.UseGpuCompute = false;   // ...then disable the shallow GPU path
+                // Deep-zoom GPU perturbation opt-in. The shallow GPU path is now
+                // default-on (above) so the D3D kernel is already attached; here we
+                // only flip the master perturbation toggle. The per-frame gate
+                // still checks UseGpuPerturbation + GpuKernel + SupportsPerturbation
+                // (device FP64), so a non-FP64 D3D device self-disables and deep
+                // zoom stays CPU.
                 FracturingFog.MandelbrotCalculator.UseGpuPerturbation = true;
                 Console.Error.WriteLine(
-                    "[D3D] FF_GPU_PERTURB set — deep-zoom GPU perturbation opted in " +
-                    "(deep-only; shallow stays CPU). The per-frame gate checks " +
-                    "DoublePrecisionFloatShaderOps, so deep zoom stays CPU if the " +
-                    "device lacks FP64 shader ops.");
+                    "[D3D] FF_GPU_PERTURB set — deep-zoom GPU perturbation opted in. " +
+                    "The per-frame gate checks DoublePrecisionFloatShaderOps, so deep " +
+                    "zoom stays CPU if the device lacks FP64 shader ops.");
             }
             // Phase X.2 / Slice 2.6 — per-OS video-writer selection.
             //   * Windows: WindowsBootstrap supplies a Media Foundation Mp4Writer
