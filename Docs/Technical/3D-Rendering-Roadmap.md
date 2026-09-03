@@ -376,11 +376,20 @@ supplies the guide buffers.
   disocclusion (off-frame reprojection / normal disagreement / relative depth jump → keep
   the current pixel, so revealed surfaces don't ghost). Pure, deterministic, parallel;
   null history (first frame) or α 0 → byte-identical. +8 `SvgfTemporalTests`.
-- **Remaining (deep, still open on #402):** wire the temporal pass into `ReliefDenoisePass`
-  (a persistent history + the render's motion/normal/depth AOVs); the **variance-guided**
-  À-Trous weight (the other SVGF half — scale the colour edge-stop by the temporal
-  luminance variance); **SIMD** the À-Trous 5×5 accumulation (left on purpose — vectorizing
-  would reorder the float sums and break byte-parity with the `--batch` oracle).
+- **Variance-guided À-Trous (landed — PR #645, #402):** the spatial half of SVGF.
+  `SvgfVariance` (Engine/Imaging) estimates a per-pixel luminance variance — `EstimateSpatial`
+  (local `(2r+1)²` variance from one frame; the no-history fallback + spatial pad) and
+  `FromMoments` (`var = E[l²] − E[l]²` from accumulated luminance moments; the temporal path).
+  `AtrousDenoiser` gained an optional `variance` guide + `varianceScale`: the colour
+  edge-stop's sigma scales per pixel by `1 + varianceScale·sqrt(variance)`, so high-variance
+  (unconverged) pixels blur more while low-variance detail is preserved. Null variance /
+  scale 0 → byte-identical (the exact-value À-Trous tests still pass). +8 `SvgfVarianceTests`.
+  Both SVGF halves now exist as operators.
+- **Remaining (deep, still open on #402):** wire the two SVGF halves into `ReliefDenoisePass`
+  in a real sequence render (a persistent history that accumulates colour + luminance moments,
+  feeding the temporal blend and the variance guide off the render's motion/normal/depth AOVs);
+  **SIMD** the À-Trous 5×5 accumulation (left on purpose — vectorizing would reorder the float
+  sums and break byte-parity with the `--batch` oracle).
 
 ### S5 — Refractive / transmissive materials ◐ (#406)
 Cook-Torrance GGX today is opaque. Add **transmission + IOR** → glass fractals.
