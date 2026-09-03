@@ -441,9 +441,16 @@ Each spec: what, surfaces, data model, algorithm, injection points, back-compat,
     in-set uses the `isInSet=1` path, not `MapInteriorWithOrbit`); else CPU.
   - Tests: opt-in behaviour, mask = referenced inputs, per-input kernel gating, and
     **dxc compiles the generated orbit kernel to SPIR-V** for all 11 accumulators.
-- **SLICE-1 REMAINING:** on-device numeric parity (`--colorprobe`-style gate on real
-  hardware) → enable by default; deep-zoom **perturbation** loops (`BuildPerturb` /
-  SA); interior orbit on GPU; `Rendering.Silk` DSL-palette path.
+- **ON-DEVICE PARITY CONFIRMED:** `--vulkanorbitprobe` (Rendering.Vulkan.Smoke,
+  `OrbitColorParityProbe`) drives the **production** path both ways —
+  MandelbrotCalculator CPU orbit (double) vs `TryRunGpuOrbit` → `BuildColorOrbit`
+  kernel (float) — and gates exterior pixels on meanDiff (≤4 channels) + disagree
+  fraction (≤6%, ±8/ch). PASS on a **GeForce GT 710** across trapMin / stripeAvg /
+  trapHexagon / curvature+lyapunov / gaussian+expSmooth: meanDiff **1.7–2.5**
+  channels, disagree **1.4–3.9 %**. In-set excluded (interior-on-GPU is later).
+- **SLICE-1 REMAINING:** flip the default on (`InterpretedOrbitColorMap.GpuEnabled`
+  → true) now parity is confirmed; deep-zoom **perturbation** loops (`BuildPerturb`
+  / SA); interior orbit on GPU; `Rendering.Silk` DSL-palette path.
 
 ---
 
