@@ -117,6 +117,45 @@ namespace FracturingFog.Interefaces
         /// </summary>
         uint InSetColor => 0xFF000000u;
 
+        /// <summary>
+        /// #615 Phase 1 — packed ARGB colour for the beyond-escape-radius
+        /// "out-of-bounds" surround: the large flat disk that fills the screen
+        /// when a 2D escape-time fractal is zoomed out far enough that the whole
+        /// set shrinks to a dot. Those pixels have <c>|plane-coordinate| ≥ escape
+        /// radius</c> and escape on the first step, so they all map to the lowest
+        /// smooth band (colour stop 0) and cannot otherwise be recoloured apart
+        /// from the fractal.
+        ///
+        /// <para><c>null</c> (the default) means "paint the escape-time gradient
+        /// as before" — byte-identical to pre-#615 behaviour. A theme (or the
+        /// Color Theme Editor / ColorGen) sets a value to override the surround
+        /// independently of the fractal coloration. Nullable so "unset" is
+        /// unambiguous — <c>0x00000000</c> is a valid transparent colour and
+        /// cannot serve as the sentinel.</para>
+        ///
+        /// <para>Escape-time calculators consult this only for <em>escaped</em>
+        /// pixels that pass the geometric out-of-bounds test
+        /// (<see cref="IsOutOfBounds"/>); in-set and converged pixels are never
+        /// affected.</para>
+        /// </summary>
+        uint? OutOfBoundsColor => null;
+
+        /// <summary>
+        /// #615 Phase 1 — geometric test for the beyond-escape-radius surround.
+        /// A pixel is "out of bounds" when its mapped plane coordinate already
+        /// lies outside the escape (bailout) disk, so its orbit escapes on the
+        /// first step and never develops fractal structure. Works for the
+        /// standard escape-time families: Mandelbrot maps the pixel to
+        /// <c>c</c> (<c>z1 ≈ c</c>, escapes when <c>|c| ≥ R</c>) and Julia maps
+        /// the pixel to <c>z0</c> (escapes when <c>|z0| ≥ R</c>) — both reduce to
+        /// <c>|pixel| ≥ R</c>. Uses squared magnitude to avoid a sqrt.
+        /// </summary>
+        /// <param name="planeX">Real part of the pixel's mapped plane coordinate.</param>
+        /// <param name="planeY">Imag part of the pixel's mapped plane coordinate.</param>
+        /// <param name="escapeRadius">Bailout radius R (not R²).</param>
+        static bool IsOutOfBounds(double planeX, double planeY, double escapeRadius)
+            => planeX * planeX + planeY * planeY >= escapeRadius * escapeRadius;
+
         // ── Core mapping — THREE-PARAMETER ────────────────────────────────────
         /// <summary>
         /// Maps fractal sample data to a packed ARGB colour.

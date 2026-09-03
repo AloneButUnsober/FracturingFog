@@ -337,6 +337,17 @@
                                 </StackPanel>
                             </Grid>
                         </StackPanel>
+                        <!-- Out-of-bounds surround (#615) -->
+                            <StackPanel Spacing="6" Margin="8,0,0,0">
+                                <TextBlock Classes="section" Text="Out-of-bounds (surround)" />
+                                <StackPanel Orientation="Horizontal" Spacing="6">
+                                    <CheckBox Content="Override" IsChecked="{Binding UseOutOfBounds}" Foreground="#B4B4B4" VerticalAlignment="Center" />
+                                    <ColorPicker Color="{Binding OutOfBoundsColor, Mode=TwoWay}"
+                                                 IsEnabled="{Binding UseOutOfBounds}" Width="130"/>
+                                </StackPanel>
+                                <TextBlock Text="Colours the flat disk seen when zoomed out (beyond the escape radius), independently of the fractal. 2D escape-time types."
+                                           Foreground="#8C8C8C" TextWrapping="Wrap" FontSize="11" />
+                            </StackPanel>
                         <!-- In-set -->
                             <StackPanel Spacing="6" Margin="8,0,0,0">
                                 <TextBlock Classes="section" Text="In-set (interior)" />

@@ -1366,6 +1366,66 @@ public sealed class ColorThemeEditorViewModel : ViewModelBase
         set { InSetR = value.R; InSetG = value.G; InSetB = value.B; this.RaisePropertyChanged(nameof(InSetColor)); }
     }
 
+    // ── Out-of-bounds surround (#615) ─────────────────────────────────────
+    // Dedicated colour for the beyond-escape-radius surround — the flat disk
+    // that fills the screen when a 2D escape-time fractal is zoomed out far
+    // enough that the set shrinks to a dot. Off (UseOutOfBounds = false) ⇒ the
+    // theme carries no OutOfBoundsColor ⇒ escape gradient as before.
+
+    private bool _useOutOfBounds;
+    public bool UseOutOfBounds
+    {
+        get => _useOutOfBounds;
+        set
+        {
+            this.RaiseAndSetIfChanged(ref _useOutOfBounds, value);
+            this.RaisePropertyChanged(nameof(OutOfBoundsSwatchBrush));
+            FieldChanged();
+        }
+    }
+
+    private byte _oobR;
+    public byte OobR
+    {
+        get => _oobR;
+        set { this.RaiseAndSetIfChanged(ref _oobR, value); this.RaisePropertyChanged(nameof(OutOfBoundsSwatchBrush)); FieldChanged(); }
+    }
+
+    private byte _oobG;
+    public byte OobG
+    {
+        get => _oobG;
+        set { this.RaiseAndSetIfChanged(ref _oobG, value); this.RaisePropertyChanged(nameof(OutOfBoundsSwatchBrush)); FieldChanged(); }
+    }
+
+    private byte _oobB;
+    public byte OobB
+    {
+        get => _oobB;
+        set { this.RaiseAndSetIfChanged(ref _oobB, value); this.RaisePropertyChanged(nameof(OutOfBoundsSwatchBrush)); FieldChanged(); }
+    }
+
+    private byte _oobA = 255;
+    /// <summary>Surround alpha. 255 = opaque (default); the surround has nothing
+    /// behind it in Phase 1, so this is normally left opaque.</summary>
+    public byte OobA
+    {
+        get => _oobA;
+        set { this.RaiseAndSetIfChanged(ref _oobA, value); this.RaisePropertyChanged(nameof(OutOfBoundsSwatchBrush)); FieldChanged(); }
+    }
+
+    /// <summary>Solid swatch brush for the out-of-bounds colour preview.</summary>
+    public IBrush OutOfBoundsSwatchBrush => UseOutOfBounds
+        ? new ImmutableSolidColorBrush(Color.FromArgb(OobA, OobR, OobG, OobB))
+        : new ImmutableSolidColorBrush(Colors.Black);
+
+    /// <summary>Composite RGB binding target for the ColorPicker control.</summary>
+    public Color OutOfBoundsColor
+    {
+        get => Color.FromRgb(OobR, OobG, OobB);
+        set { OobR = value.R; OobG = value.G; OobB = value.B; this.RaisePropertyChanged(nameof(OutOfBoundsColor)); }
+    }
+
     // ── 2D interior-alpha background (global — mirrors Params view, #96) ──────
     // These edit the shared FractalParameters (not the theme), so the backdrop
     // choice is consistent with the Params view. Only visible when the editor
@@ -1712,6 +1772,21 @@ public sealed class ColorThemeEditorViewModel : ViewModelBase
                 InSetA = 255;
             }
 
+            if (def.OutOfBoundsColor != null)   // #615
+            {
+                UseOutOfBounds = true;
+                OobR = def.OutOfBoundsColor.R;
+                OobG = def.OutOfBoundsColor.G;
+                OobB = def.OutOfBoundsColor.B;
+                OobA = def.OutOfBoundsColor.A;
+            }
+            else
+            {
+                UseOutOfBounds = false;
+                OobR = OobG = OobB = 0;
+                OobA = 255;
+            }
+
             UseBrightness = def.Brightness.HasValue;
             Brightness = def.Brightness ?? 0;
             UseContrast = def.Contrast.HasValue;
@@ -1773,6 +1848,7 @@ public sealed class ColorThemeEditorViewModel : ViewModelBase
             GlowBoostScale = (float)GlowScale,
             MaterialBands = MaterialBands.Select(r => r.ToDef()).ToList(),
             InSetColor = UseInSet ? new InSetColorDef { R = InSetR, G = InSetG, B = InSetB, A = InSetA } : null,
+            OutOfBoundsColor = UseOutOfBounds ? new InSetColorDef { R = OobR, G = OobG, B = OobB, A = OobA } : null,   // #615
             Brightness = UseBrightness ? Brightness : (int?)null,
             Contrast = UseContrast ? Contrast : (int?)null,
             Adaptive = UseAdaptive ? Adaptive : (int?)null,
