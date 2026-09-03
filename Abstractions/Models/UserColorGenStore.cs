@@ -30,6 +30,11 @@ namespace FracturingFog.Models
         /// for the DSL <c>trap</c> input. Absent / empty ⇒ "Point" (back-compat:
         /// pre-#611 themes have no shape and default to the origin point-trap).</summary>
         public string TrapShape { get; set; } = "Point";
+
+        /// <summary>#615 — optional packed-ARGB colour (8 hex digits, "AARRGGBB")
+        /// for the beyond-escape-radius surround. Absent / empty ⇒ no override
+        /// (back-compat: the escape gradient paints the surround as before).</summary>
+        public string OutOfBoundsColorArgb { get; set; } = string.Empty;
     }
 
     public sealed class UserColorGenStore
@@ -74,10 +79,11 @@ namespace FracturingFog.Models
         }
 
         /// <summary>Insert or replace by Name (case-insensitive).</summary>
-        public UserColorGenEntry? SaveEntry(string name, string source, string description = "", string trapShape = "Point")
+        public UserColorGenEntry? SaveEntry(string name, string source, string description = "", string trapShape = "Point", string outOfBoundsColorArgb = "")
         {
             if (string.IsNullOrWhiteSpace(name)) return null;
             string shape = string.IsNullOrWhiteSpace(trapShape) ? "Point" : trapShape;
+            string oob = outOfBoundsColorArgb ?? string.Empty;
             for (int i = 0; i < Entries.Count; i++)
             {
                 if (Entries[i].Name.Equals(name, StringComparison.OrdinalIgnoreCase))
@@ -85,11 +91,12 @@ namespace FracturingFog.Models
                     Entries[i].Source = source ?? string.Empty;
                     Entries[i].Description = description ?? string.Empty;
                     Entries[i].TrapShape = shape;
+                    Entries[i].OutOfBoundsColorArgb = oob;
                     Save();
                     return Entries[i];
                 }
             }
-            var entry = new UserColorGenEntry { Name = name, Source = source ?? "", Description = description ?? "", TrapShape = shape };
+            var entry = new UserColorGenEntry { Name = name, Source = source ?? "", Description = description ?? "", TrapShape = shape, OutOfBoundsColorArgb = oob };
             Entries.Add(entry);
             Save();
             return entry;

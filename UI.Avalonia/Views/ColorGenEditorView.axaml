@@ -42,20 +42,35 @@
             <TextBox    Grid.Column="3" Text="{Binding Category, Mode=TwoWay}" />
         </Grid>
 
-        <!-- Row 3: trap shape (#611) — same 19-shape list as the Color Theme Editor -->
-        <Grid Grid.Row="3" ColumnDefinitions="Auto,Auto,*" Margin="0,0,0,6">
-            <TextBlock Grid.Column="0" Text="Trap shape:" VerticalAlignment="Center" Margin="0,0,8,0" />
-            <ComboBox Grid.Column="1"
-                      ItemsSource="{Binding TrapShapeOptions}"
-                      SelectedItem="{Binding TrapShape, Mode=TwoWay}"
-                      MinWidth="160" />
-            <TextBlock Grid.Column="2"
-                       Text="Shape measured by the DSL `trap` input. Point = trapMin. CPU-only."
-                       Foreground="#B4B4B4"
-                       VerticalAlignment="Center"
-                       TextWrapping="Wrap"
-                       Margin="12,0,0,0" />
-        </Grid>
+        <!-- Row 3: trap shape (#611) + out-of-bounds surround colour (#615) -->
+        <StackPanel Grid.Row="3" Spacing="6" Margin="0,0,0,6">
+            <Grid ColumnDefinitions="Auto,Auto,*">
+                <TextBlock Grid.Column="0" Text="Trap shape:" VerticalAlignment="Center" Margin="0,0,8,0" />
+                <ComboBox Grid.Column="1"
+                          ItemsSource="{Binding TrapShapeOptions}"
+                          SelectedItem="{Binding TrapShape, Mode=TwoWay}"
+                          MinWidth="160" />
+                <TextBlock Grid.Column="2"
+                           Text="Shape measured by the DSL `trap` input. Point = trapMin. CPU-only."
+                           Foreground="#B4B4B4"
+                           VerticalAlignment="Center"
+                           TextWrapping="Wrap"
+                           Margin="12,0,0,0" />
+            </Grid>
+            <Grid ColumnDefinitions="Auto,Auto,*">
+                <CheckBox Grid.Column="0" Content="Out-of-bounds colour"
+                          IsChecked="{Binding UseOutOfBounds}" VerticalAlignment="Center" Margin="0,0,8,0" />
+                <ColorPicker Grid.Column="1"
+                             Color="{Binding OutOfBoundsColor, Mode=TwoWay}"
+                             IsEnabled="{Binding UseOutOfBounds}" />
+                <TextBlock Grid.Column="2"
+                           Text="Colours the flat disk seen when zoomed out (beyond the escape radius), apart from the fractal. CPU 2D escape-time."
+                           Foreground="#B4B4B4"
+                           VerticalAlignment="Center"
+                           TextWrapping="Wrap"
+                           Margin="12,0,0,0" />
+            </Grid>
+        </StackPanel>
 
         <!-- Row 4: compile/generate -->
         <Grid Grid.Row="4" ColumnDefinitions="*,Auto,Auto,Auto" Margin="0,0,0,8">

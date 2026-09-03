@@ -15,6 +15,8 @@ using System.Reactive;
 using System.Reactive.Linq;
 using System.Threading.Tasks;
 using System.Text.RegularExpressions;
+using Avalonia.Media;
+using Avalonia.Media.Immutable;
 using FracturingFog.ColorGen;
 using FracturingFog.Models;
 using ReactiveUI;
@@ -96,6 +98,42 @@ public sealed class ColorGenEditorViewModel : ViewModelBase
         }
     }
 
+    // ── #615 — out-of-bounds surround colour (beyond the escape radius). Off ⇒
+    // the entry carries no colour ⇒ escape gradient paints the surround. ──
+    private bool _useOutOfBounds;
+    public bool UseOutOfBounds
+    {
+        get => _useOutOfBounds;
+        set
+        {
+            this.RaiseAndSetIfChanged(ref _useOutOfBounds, value);
+            this.RaisePropertyChanged(nameof(OutOfBoundsSwatchBrush));
+            if (!_loadingNamedEntry) _selectedSavedName = null;
+        }
+    }
+
+    private Color _outOfBoundsColor = Colors.Black;
+    public Color OutOfBoundsColor
+    {
+        get => _outOfBoundsColor;
+        set
+        {
+            this.RaiseAndSetIfChanged(ref _outOfBoundsColor, value);
+            this.RaisePropertyChanged(nameof(OutOfBoundsSwatchBrush));
+            if (!_loadingNamedEntry) _selectedSavedName = null;
+        }
+    }
+
+    public IBrush OutOfBoundsSwatchBrush =>
+        new ImmutableSolidColorBrush(UseOutOfBounds ? _outOfBoundsColor : Colors.Black);
+
+    /// <summary>Packed "AARRGGBB" hex for the store entry, or "" when disabled.</summary>
+    private string OutOfBoundsArgb() => UseOutOfBounds
+        ? (((uint)_outOfBoundsColor.A << 24) | ((uint)_outOfBoundsColor.R << 16)
+           | ((uint)_outOfBoundsColor.G << 8) | _outOfBoundsColor.B)
+          .ToString("X8", System.Globalization.CultureInfo.InvariantCulture)
+        : string.Empty;
+
     // ── Saved selection ──
     private string? _selectedSavedName;
     public string? SelectedSavedName
@@ -128,9 +166,10 @@ public sealed class ColorGenEditorViewModel : ViewModelBase
 
     /// <summary>Host compiles + loads the theme via ColorGenHotLoad and swaps
     /// the result onto the active palette. Args: (source, className, themeName,
-    /// description, trapShapeName). Return value: null on success, error message
-    /// on failure.</summary>
-    public event Func<string, string, string, string, string, string?>? HotLoadRequested;
+    /// description, trapShapeName, outOfBoundsArgb). <c>outOfBoundsArgb</c> is a
+    /// packed "AARRGGBB" hex string or "" for none (#615). Return value: null on
+    /// success, error message on failure.</summary>
+    public event Func<string, string, string, string, string, string, string?>? HotLoadRequested;
 
     /// <summary>Host writes the rendered C# source to Models/ColorSchemes/Generated/
     /// (or wherever it prefers). Same args as HotLoad. Return: null on success.</summary>
@@ -152,7 +191,7 @@ public sealed class ColorGenEditorViewModel : ViewModelBase
         if (string.IsNullOrWhiteSpace(_source)) { ShowError("Source is empty."); return; }
         var handler = HotLoadRequested;
         if (handler == null) { ShowError("Hot-load not wired by host."); return; }
-        string err = handler.Invoke(_source, MakeClassName(_themeName), _themeName, _description, _trapShape.ToString()) ?? "";
+        string err = handler.Invoke(_source, MakeClassName(_themeName), _themeName, _description, _trapShape.ToString(), OutOfBoundsArgb()) ?? "";
         if (string.IsNullOrEmpty(err))
         {
             StatusText = $"✓ Hot-loaded \"{_themeName}\"";
@@ -180,7 +219,7 @@ public sealed class ColorGenEditorViewModel : ViewModelBase
         string defaultName = _selectedSavedName ?? _themeName;
         string? name = NamePromptRequested is { } prompt ? await prompt(defaultName) : null;
         if (string.IsNullOrWhiteSpace(name)) return;
-        var entry = UserColorGenStore.Instance.SaveEntry(name.Trim(), _source, _description, _trapShape.ToString());
+        var entry = UserColorGenStore.Instance.SaveEntry(name.Trim(), _source, _description, _trapShape.ToString(), OutOfBoundsArgb());
         if (entry == null) return;
         _themeName = entry.Name;
         this.RaisePropertyChanged(nameof(ThemeName));
@@ -209,6 +248,20 @@ public sealed class ColorGenEditorViewModel : ViewModelBase
             Description = entry.Description ?? "";
             TrapShape = Enum.TryParse<OrbitTrapShapeDef>(entry.TrapShape, ignoreCase: true, out var shp)
                 ? shp : OrbitTrapShapeDef.Point;
+
+            if (!string.IsNullOrWhiteSpace(entry.OutOfBoundsColorArgb) &&   // #615
+                uint.TryParse(entry.OutOfBoundsColorArgb, System.Globalization.NumberStyles.HexNumber,
+                              System.Globalization.CultureInfo.InvariantCulture, out uint packed))
+            {
+                UseOutOfBounds = true;
+                OutOfBoundsColor = Color.FromArgb(
+                    (byte)(packed >> 24), (byte)(packed >> 16), (byte)(packed >> 8), (byte)packed);
+            }
+            else
+            {
+                UseOutOfBounds = false;
+                OutOfBoundsColor = Colors.Black;
+            }
         }
         finally { _loadingNamedEntry = false; }
     }

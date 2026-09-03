@@ -3239,16 +3239,22 @@ namespace FracturingFog.Hosting
             vm.ConfirmDeleteRequested += name => ConfirmYesNoAsync($"Delete saved theme \"{name}\"?", "Delete Theme");
             vm.MessageRequested += (title, body, isErr) => ShowInfo(title, body, isErr);
 
-            vm.HotLoadRequested += (source, className, themeName, description, trapShape) =>
+            vm.HotLoadRequested += (source, className, themeName, description, trapShape, oobArgb) =>
             {
                 try
                 {
+                    uint? oob = null;   // #615 — packed "AARRGGBB" hex, or "" for none
+                    if (!string.IsNullOrWhiteSpace(oobArgb) &&
+                        uint.TryParse(oobArgb, System.Globalization.NumberStyles.HexNumber,
+                                      System.Globalization.CultureInfo.InvariantCulture, out uint packed))
+                        oob = packed;
                     var opts = new FracturingFog.ColorGen.GenerateOptions
                     {
                         ThemeName = themeName,
                         Category = "User",
                         Description = description ?? "",
                         TrapShape = trapShape ?? "Point",   // #611
+                        OutOfBoundsColor = oob,             // #615
                     };
                     // #27 Phase 4 — the theme runs on the safe DSL INTERPRETER
                     // (InterpretedColorMap), not Roslyn codegen + AssemblyLoadContext.

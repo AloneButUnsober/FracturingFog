@@ -63,6 +63,13 @@ public class InterpretedColorMap :
         _slotCount = _localSlot.Count;
     }
 
+    // #615 Phase 1 — optional beyond-escape-radius surround colour for the
+    // ColorGen theme. Packed ARGB; null ⇒ paint the escape gradient as before
+    // (byte-identical). Set from GenerateOptions.OutOfBoundsColor in TryCreate;
+    // inherited by InterpretedOrbitColorMap so both interpreter paths carry it.
+    public uint? OutOfBoundsColorOverride { get; init; }
+    uint? IColorMap.OutOfBoundsColor => OutOfBoundsColorOverride;
+
     /// <summary>Parse + prepare a theme for interpretation. Returns null map +
     /// an error string on a DSL parse error (no exception thrown).</summary>
     public static InterpretedColorMap? TryCreate(
@@ -110,7 +117,10 @@ public class InterpretedColorMap :
             }
             return new InterpretedOrbitColorMap(prog, opts.ThemeName, opts.Category, opts.Description,
                                                 orbitInputs, oBody, oPrelude, oId, mask,
-                                                InterpretedOrbitColorMap.ParseTrapShape(opts.TrapShape));
+                                                InterpretedOrbitColorMap.ParseTrapShape(opts.TrapShape))
+            {
+                OutOfBoundsColorOverride = opts.OutOfBoundsColor,   // #615
+            };
         }
 
         // Same HLSL the compiled path emits (text generation — not Roslyn).
@@ -130,7 +140,10 @@ public class InterpretedColorMap :
         }
 
         return new InterpretedColorMap(prog, opts.ThemeName, opts.Category, opts.Description,
-                                       hlslBody, hlslPrelude, paletteId);
+                                       hlslBody, hlslPrelude, paletteId)
+        {
+            OutOfBoundsColorOverride = opts.OutOfBoundsColor,   // #615
+        };
     }
 
     /// <summary>F15 — the set of orbit-accumulator inputs the program actually
