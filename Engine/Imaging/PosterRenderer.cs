@@ -681,6 +681,7 @@ namespace FracturingFog.Imaging
                 FractalType.Plasma           => new PlasmaCalculator(w, h),
                 FractalType.AcidWarp         => new AcidWarpCalculator(w, h),
                 FractalType.Apollonian       => new ApollonianCalculator(w, h),
+                FractalType.ChaoticBilliard  => new ChaoticBilliardCalculator(w, h),
                 FractalType.Kleinian         => new KleinianCalculator(w, h),
                 FractalType.BicomplexMandelbrot => new BicomplexMandelbrotCalculator(w, h),
                 FractalType.Dla              => new DlaCalculator(w, h),

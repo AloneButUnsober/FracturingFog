@@ -88,6 +88,9 @@ public static class FractalAnimatableParamsMap
         FractalType.RandomTile
             => _randomTileList,
 
+        FractalType.ChaoticBilliard
+            => _billiardList,
+
         // ── 3D raymarched ─────────────────────────────────────────────────
         FractalType.Mandelbulb
             => _mandelbulbList,
@@ -256,6 +259,16 @@ public static class FractalAnimatableParamsMap
         new("ApollonianDepth", AnimatableParamKind.ScalarInt, Min: 2, Max: 36,
             Notes: "Recursive — high values cost cubic-ish."),
         new("ApollonianMinPixelRadius", AnimatableParamKind.ScalarDouble, Min: 0.25, Max: 4.0),
+    };
+
+    // Chaotic billiard (#627). Both continuous geometry knobs morph the basin
+    // structure smoothly — animate the gap opening/closing for a scatter reveal.
+    private static readonly AnimatableParamDescriptor[] _billiardList =
+    {
+        new("BilliardSeparation", AnimatableParamKind.ScalarDouble, Min: 0.5, Max: 2.5,
+            Notes: "Disk spacing — widening opens escape gaps, simplifying basins."),
+        new("BilliardDiskRadius", AnimatableParamKind.ScalarDouble, Min: 0.1, Max: 0.9,
+            Notes: "Disk size — larger disks narrow the gaps toward deeper chaos."),
     };
 
     private static readonly AnimatableParamDescriptor[] _dlaList =

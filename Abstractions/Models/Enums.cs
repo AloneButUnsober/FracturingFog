@@ -19,6 +19,14 @@ namespace FracturingFog
     /// carry the same radial-dome relief; only the paint mask differs.</summary>
     public enum RandomTileShape { Circle, Square, Triangle }
 
+    /// <summary>Obstacle arrangement for the ChaoticBilliard (#627) scatterer.
+    /// All arrangements are circular mirror disks; only the placement differs.
+    /// <see cref="ThreeDisk"/> is the classic well-studied three-disk scatterer
+    /// (Cantor set of trapped trajectories); <see cref="NDisk"/> scatters
+    /// <c>BilliardDiskCount</c> disks pseudo-randomly (seeded) inside the play
+    /// region; <see cref="Ring"/> places the disks evenly on a circle.</summary>
+    public enum BilliardGeometry { ThreeDisk, NDisk, Ring }
+
     /// <summary>
     /// Background composited behind translucent 2D pixels when the interior
     /// (in-set) region carries alpha &lt; 255 (issue #96). Only consulted by the
@@ -255,6 +263,24 @@ namespace FracturingFog
         /// <c>RandomTileMinPixelRadius</c>, <c>RandomTileColorByIndex</c>,
         /// <c>RandomTileRelief</c>.</summary>
         RandomTile,
+        /// <summary>Chaotic billiard scatter (#627). A geometric ray is launched
+        /// into a 2D field of circular mirror obstacles; each pixel encodes an
+        /// initial condition (impact parameter b along x, incoming angle φ along
+        /// y, both mapped through the standard pan/zoom plane), and the ray
+        /// reflects specularly off disks until it escapes the play region or
+        /// exceeds the bounce cap. The recorded outcome — escape-gate sector
+        /// (categorical), bounce count, and total path length — is the pixel
+        /// value; the map from initial condition to outcome is fractal, so
+        /// zooming any 1D slice of parameter space reveals structure at all
+        /// scales. Not escape-time — handled by a dedicated
+        /// <c>ChaoticBilliardCalculator</c>. Categorical gate colouring goes
+        /// through <c>IBilliardColorMap</c> (Newton-basin precedent); the
+        /// smooth/height buffer carries bounce count for Relief 3D. Tunables on
+        /// <c>FractalParameters</c>: <c>BilliardGeometry</c>,
+        /// <c>BilliardDiskCount</c>, <c>BilliardDiskRadius</c>,
+        /// <c>BilliardSeparation</c>, <c>BilliardMaxBounces</c>,
+        /// <c>BilliardGateCount</c>, <c>BilliardSeed</c>.</summary>
+        ChaoticBilliard,
     }
 
     public enum RenderProfile { Preview, Final }
@@ -395,6 +421,7 @@ namespace FracturingFog
                 or FractalType.Plasma
                 or FractalType.AcidWarp
                 or FractalType.Logistic
+                or FractalType.ChaoticBilliard
                 => FractalCapabilities.SuppliesHistogram,
 
             _ => FractalCapabilities.None,
