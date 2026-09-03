@@ -64,6 +64,14 @@ namespace FracturingFog.Export
         /// <summary>Keep the intermediate PNG sequence after a successful encode.</summary>
         public bool KeepFrames { get; set; }
 
+        /// <summary>S1 (#398) — capture per-frame screen-space motion vectors during a
+        /// relief animation. When set, the render carries one persistent previous-frame
+        /// camera and fills the motion-vector AOV on each clean continuous relief frame
+        /// (the guide a temporal denoiser / vector motion blur consumes). Default false:
+        /// no motion capture, byte-identical and no forced-CPU cost. Only meaningful for
+        /// a Relief 3D scene.</summary>
+        public bool CaptureMotionVectors { get; set; }
+
         /// <summary>Deterministic, seekable audio source for the scene's
         /// <see cref="SceneData.AudioTracks"/> (Audio-Reactive Phase 7 / #266). When
         /// set and <see cref="IAudioModulationSource.IsActive"/>, each sub-frame
@@ -193,6 +201,18 @@ namespace FracturingFog.Export
             // frames — see the guard in the sub-frame loop below.
             var froxelHistory = new FracturingFog.Rendering.Lighting.FroxelHistory();
 
+            // S1 (#398) — motion-vector capture. Opt-in: one persistent capture-motion
+            // AOV + previous-frame camera advanced across CLEAN continuous relief frames
+            // (same gate as the froxel history). Off by default → no AOV, no forced CPU
+            // trace, byte-identical. The render fills the AOV's CurrentCamera on a relief
+            // frame; a flat frame leaves it null, so prevReliefCam resets and the next
+            // relief frame starts from zero motion (a clean disocclusion fallback).
+            bool captureMotion = options.CaptureMotionVectors;
+            var motionAov = captureMotion
+                ? new FracturingFog.Rendering.Lighting.HeightfieldRaymarch2D.ReliefAovBuffers(w, h, false, true)
+                : null;
+            FracturingFog.Rendering.Lighting.ReliefMotionVector.CameraView? prevReliefCam = null;
+
             using (var png = new PngSequenceWriter(pngFolder, w, h))
             {
                 foreach (var frame in plan.Frames)
@@ -226,6 +246,13 @@ namespace FracturingFog.Export
                     // light-sweep frames render froxel spatial-only (null history).
                     bool cleanFroxelFrame = frame.SubFrames.Length == 1 && !frozenComposite;
 
+                    // S1 (#398) — motion capture runs on the same clean-continuous-frame
+                    // gate as the froxel history. Clear CurrentCamera first so a flat
+                    // frame (which never touches the AOV) leaves it null → prevReliefCam
+                    // resets below.
+                    bool motionFrame = captureMotion && cleanFroxelFrame;
+                    if (motionFrame) motionAov!.CurrentCamera = null;
+
                     // ── Accumulation motion blur: weighted average of sub-frames ──
                     foreach (var s in frame.SubFrames)
                     {
@@ -236,7 +263,9 @@ namespace FracturingFog.Export
                                 ? morphBase : null;
                         uint[] buf = RenderShotFrame(resolved, s.OriginalIndex, s.LocalTime, w, h, ct,
                             overrideBase, s.GlobalTime, globalTracks, audioSource, audioTracks,
-                            cleanFroxelFrame ? froxelHistory : null);
+                            cleanFroxelFrame ? froxelHistory : null,
+                            motionFrame ? prevReliefCam : null,
+                            motionFrame ? motionAov : null);
                         float wt = (float)s.Weight;
                         for (int i = 0; i < n; i++)
                         {
@@ -250,6 +279,11 @@ namespace FracturingFog.Export
                             accum[j + 2] += b * wt;
                         }
                     }
+
+                    // S1 (#398) — advance the previous-frame camera to this frame's
+                    // relief camera (set by the render on a relief frame; null after a
+                    // flat frame, which resets the motion baseline).
+                    if (motionFrame) prevReliefCam = motionAov!.CurrentCamera;
 
                     // ── Frame-composited transition (Crossfade uniform / LightSweep wipe) ──
                     if (frozenComposite)
@@ -360,7 +394,9 @@ namespace FracturingFog.Export
             IReadOnlyList<SceneGlobalTrack>? globalTracks = null,
             IAudioModulationSource? audioSource = null,
             IReadOnlyList<SceneAudioTrack>? audioTracks = null,
-            FracturingFog.Rendering.Lighting.FroxelHistory? froxelHistory = null)
+            FracturingFog.Rendering.Lighting.FroxelHistory? froxelHistory = null,
+            FracturingFog.Rendering.Lighting.ReliefMotionVector.CameraView? previousCamera = null,
+            FracturingFog.Rendering.Lighting.HeightfieldRaymarch2D.ReliefAovBuffers? motionAov = null)
         {
             if (!cache.TryGetValue(originalIndex, out var shot))
                 return BlackFrame(w, h);
@@ -429,6 +465,7 @@ namespace FracturingFog.Export
                 ColorMap = shot.Theme,
                 FractalParameters = p,
                 FroxelHistory = froxelHistory,   // #468 cross-frame froxel temporal (null = spatial-only)
+                PreviousCamera = previousCamera, // S1 (#398) motion-vector previous-frame camera (null = zero motion)
             };
 
             // Relief 3D (#408, scene). When the shot's params enable the oblique
@@ -453,7 +490,7 @@ namespace FracturingFog.Export
             // (Relief2DFroxelTemporal); a null history or feedback 0 is byte-identical
             // to the single-frame path.
             if (p.Relief2DEnabled && p.Relief2DRaymarch)
-                return PosterRenderer.RenderToPixels(req, ct, out _, out _);
+                return PosterRenderer.RenderToPixels(req, ct, out _, out _, motionAov);
 
             IFractalCalculator? alt = PosterRenderer.BuildCaptureCalculator(req);
             if (alt != null)

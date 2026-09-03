@@ -65,6 +65,13 @@ namespace FracturingFog.Imaging
         // Null (the default) = single-frame froxel, byte-identical to before.
         public FracturingFog.Rendering.Lighting.FroxelHistory? FroxelHistory { get; init; }
 
+        // S1 (#398) — optional previous-frame relief camera for the motion-vector AOV.
+        // A sequence renderer captures frame N's camera (the aovCapture's CurrentCamera,
+        // set by the render) and hands it back here on frame N+1 so the render fills the
+        // Motion channel of a supplied capture-motion aovCapture. Null (the default) =
+        // no motion fill (byte-identical); only meaningful with a motion-capturing AOV.
+        public FracturingFog.Rendering.Lighting.ReliefMotionVector.CameraView? PreviousCamera { get; init; }
+
         // #508 — the interactive view's dedicated HI-RES relief field (the host's
         // _reliefFieldCalc floor field, Relief2DHiResField). When supplied, the
         // offscreen relief RAYMARCH uses this field instead of re-deriving the
@@ -308,7 +315,7 @@ namespace FracturingFog.Imaging
                 // of a Relief 3D scene must apply relief here too — otherwise it
                 // silently falls back to the flat 2D themed colour. No-op when
                 // relief is off or the calc exposes no field.
-                buffer = ApplyReliefIfEnabled(buffer, alt as IHeightFieldSource, w, h, req.FractalParameters, alt?.ColorMap, aovCapture, req.FroxelHistory, req.ReliefField, req.ReliefFieldW, req.ReliefFieldH);
+                buffer = ApplyReliefIfEnabled(buffer, alt as IHeightFieldSource, w, h, req.FractalParameters, alt?.ColorMap, aovCapture, req.FroxelHistory, req.ReliefField, req.ReliefFieldW, req.ReliefFieldH, req.PreviousCamera);
             }
             else
             {
@@ -393,7 +400,7 @@ namespace FracturingFog.Imaging
                 // not apply — BUT the dedicated hi-res relief field is a separate,
                 // higher-quality field, not just a resolution bump, so a supplied
                 // req.ReliefField (the interactive one) is preferred (#508).
-                buffer = ApplyReliefIfEnabled(buffer, calc, w, h, req.FractalParameters, calc.ColorMap, aovCapture, req.FroxelHistory, req.ReliefField, req.ReliefFieldW, req.ReliefFieldH);
+                buffer = ApplyReliefIfEnabled(buffer, calc, w, h, req.FractalParameters, calc.ColorMap, aovCapture, req.FroxelHistory, req.ReliefField, req.ReliefFieldW, req.ReliefFieldH, req.PreviousCamera);
             }
 
             }
@@ -477,7 +484,8 @@ namespace FracturingFog.Imaging
             IColorMap? colorMap = null,
             FracturingFog.Rendering.Lighting.HeightfieldRaymarch2D.ReliefAovBuffers? aovCapture = null,
             FracturingFog.Rendering.Lighting.FroxelHistory? froxelHistory = null,
-            float[]? hiResField = null, int hiResW = 0, int hiResH = 0)
+            float[]? hiResField = null, int hiResW = 0, int hiResH = 0,
+            FracturingFog.Rendering.Lighting.ReliefMotionVector.CameraView? previousCamera = null)
         {
             if (p == null || !p.Relief2DEnabled) return buffer;
             int n = w * h;
@@ -522,9 +530,20 @@ namespace FracturingFog.Imaging
                 // float data. When neither denoise nor export asks, aov stays null and
                 // the GPU fast path + byte-identical beauty are preserved.
                 var aov = aovCapture ?? ReliefDenoisePass.MakeCapture(p, w, h);
+                // S1 (#398) — vector motion blur needs the motion-vector AOV, which only
+                // fills when a previous-frame camera is supplied. Ensure a Motion-capable
+                // capture (only when no external capture target already owns the aov, so
+                // an AOV-EXR export's clean geometry planes are never disturbed).
+                bool wantMotionBlur = p.Relief2DMotionBlurStrength > 0.0 && previousCamera.HasValue;
+                if (wantMotionBlur && aovCapture == null && (aov == null || aov.Motion == null))
+                    aov = new FracturingFog.Rendering.Lighting.HeightfieldRaymarch2D.ReliefAovBuffers(
+                        w, h, aov?.Components != null, true);
                 FracturingFog.Rendering.Lighting.HeightfieldRaymarch2D.Render(
-                    buffer, field, w, h, fw, fh, p, dst, out _, null, aov, null, froxelHistory, fx);
+                    buffer, field, w, h, fw, fh, p, dst, out _, null, aov, null, froxelHistory, fx, previousCamera);
                 ReliefDenoisePass.Apply(dst, aov, w, h, p);
+                if (wantMotionBlur && aov?.Motion != null)
+                    dst = MotionBlurFromVectors.Apply(dst, aov.Motion, w, h,
+                        p.Relief2DMotionBlurStrength, Math.Clamp(p.Relief2DMotionBlurSamples, 2, 64));
             }
             else
             {

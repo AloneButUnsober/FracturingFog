@@ -555,6 +555,20 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
         get => _p.Relief2DDenoiseAdaptiveSupersample;
         set { if (_p.Relief2DDenoiseAdaptiveSupersample == value) return; _p.Relief2DDenoiseAdaptiveSupersample = value; this.RaisePropertyChanged(); Fire(); }
     }
+    // Vector motion blur (roadmap S1, #398). Strength 0 = off (byte-identical). Only
+    // visible in a sequence render (needs the motion-vector AOV from a previous frame).
+    public double Relief2DMotionBlurStrength
+    {
+        get => _p.Relief2DMotionBlurStrength;
+        set { double v = Clamp(value, 0.0, 4.0); if (_p.Relief2DMotionBlurStrength == v) return; _p.Relief2DMotionBlurStrength = v; this.RaisePropertyChanged(); this.RaisePropertyChanged(nameof(MotionBlurEnabled)); Fire(); }
+    }
+    public int Relief2DMotionBlurSamples
+    {
+        get => _p.Relief2DMotionBlurSamples;
+        set { int v = (int)Clamp(value, 2, 64); if (_p.Relief2DMotionBlurSamples == v) return; _p.Relief2DMotionBlurSamples = v; this.RaisePropertyChanged(); Fire(); }
+    }
+    /// <summary>The sample count only bites once the motion-blur strength is non-zero.</summary>
+    public bool MotionBlurEnabled => _p.Relief2DMotionBlurStrength > 0.0;
     public FracturingFog.HeightCurve2D Relief2DHeightCurve
     {
         get => _p.Relief2DHeightCurve;

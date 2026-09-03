@@ -211,10 +211,16 @@ public static class HeightfieldRaymarch2D
 
         /// <summary>Per-pixel screen-space motion vector (du, dv) interleaved
         /// (<c>w·h·2</c>), or null when motion capture was not requested (roadmap S1,
-        /// #398). Filled by <see cref="ReliefMotionVector"/> once the render threads
-        /// its current + previous-frame camera through; a still frame (previous camera
+        /// #398). Filled by <see cref="ReliefMotionVector"/> from the captured depth +
+        /// the render's current + previous-frame camera; a still frame (previous camera
         /// == current) is all-zero.</summary>
         public float[]? Motion { get; }
+
+        /// <summary>This render's own camera as a <see cref="ReliefMotionVector.CameraView"/>
+        /// (perspective framing), set by the render whenever an AOV buffer is supplied so a
+        /// sequence caller can capture it and feed it back as the next frame's previous
+        /// camera for the motion-vector fill (roadmap S1, #398). Null until a render sets it.</summary>
+        public ReliefMotionVector.CameraView? CurrentCamera { get; set; }
     }
 
     public static void Render(uint[] albedo, float[] height, int w, int h,
@@ -251,7 +257,8 @@ public static class HeightfieldRaymarch2D
                               ReliefAovBuffers? aov = null,
                               IFroxelVolumeKernel? froxelKernel = null,
                               FroxelHistory? froxelHistory = null,
-                              LightingFxData? lightingOverride = null)
+                              LightingFxData? lightingOverride = null,
+                              ReliefMotionVector.CameraView? previousCamera = null)
     {
         hitFraction = 0.0;
         int n = w * h;            // OUTPUT / albedo pixel count
@@ -405,7 +412,10 @@ public static class HeightfieldRaymarch2D
         // path for now (the GPU relief kernel resolves only the punctual global-K
         // soft shadow); force the CPU trace so an area light stays parity-correct.
         // GPU parity of the penumbra is a follow-up. Punctual scenes stay on GPU.
-        bool aovOk = aov == null || aov.Components == null;
+        // S1 (#398) — a motion-vector capture reads back the CPU depth in a post-pass;
+        // the GPU kernel emits no motion, so (like a Components capture) it forces the
+        // CPU trace.
+        bool aovOk = aov == null || (aov.Components == null && aov.Motion == null);
         if (gpuKernel != null && p.Relief2DGpuRaymarch && fx.DebugAov == AovView.Beauty
             && aovOk && !froxel && !fx.HasAreaLight)
         {
@@ -459,6 +469,12 @@ public static class HeightfieldRaymarch2D
         int maxSteps = cam.MaxSteps;
         bool groundPlane = cam.GroundPlane;
         double floorBx = cam.FloorBx, floorBz = cam.FloorBz;
+
+        // S1 (#398) — expose this frame's perspective camera so a sequence caller can
+        // capture it and pass it back as the next frame's previousCamera (motion AOV).
+        if (aov != null)
+            aov.CurrentCamera = new ReliefMotionVector.CameraView(
+                camX, camY, camZ, rX, rY, rZ, uX, uY, uZ, fX, fY, fZ, tanHalf, aspect, 0.0, 0.0);
         bool showSky = fx.ShowSkyBackdrop;               // #133 — honour the toggle
         bool isolate = p.Relief2DIsolate;                // #135 — transparent bg
 
@@ -724,6 +740,46 @@ public static class HeightfieldRaymarch2D
             var composited = FroxelCameraVolume.Apply(dst, froxelDepth, w, h, in cam, in froxelFx,
                 froxelHistory, froxelTemporal, p.Relief2DFroxelTemporalFeedback, p.Relief2DFroxelQuality);
             Array.Copy(composited, dst, n);
+        }
+
+        // S1 (#398) — motion-vector AOV fill. Reconstruct each hit's world position
+        // from the captured centre-tap depth + this pixel's primary ray, project it
+        // through the PREVIOUS frame's camera, and store the screen-space displacement
+        // (du, dv) — the guide a temporal denoiser reprojects along. Perspective only
+        // (Project assumes a pinhole); a still frame (previous == current) is all-zero;
+        // sky-miss pixels (the 1e6 depth sentinel) get zero motion. Default off (no
+        // Motion buffer / no previous camera) leaves this unreached → byte-identical.
+        if (aov?.Motion != null && previousCamera.HasValue && !ortho)
+        {
+            var prevCam = previousCamera.Value;
+            var motion = aov.Motion;
+            var depth = aov.Depth;
+            System.Threading.Tasks.Parallel.For(0, h, y =>
+            {
+                for (int x = 0; x < w; x++)
+                {
+                    int idx = y * w + x;
+                    double dpt = depth[idx];
+                    if (!(dpt > 0.0 && dpt < 9.9e5))   // sky miss / no surface → no motion
+                    {
+                        motion[idx * 2] = 0f; motion[idx * 2 + 1] = 0f;
+                        continue;
+                    }
+                    double sxpix = x + 0.5, sypix = y + 0.5;
+                    double ndcx = 2.0 * sxpix / w - 1.0;
+                    double ndcy = 1.0 - 2.0 * sypix / h;
+                    double a = ndcx * aspect * tanHalf, b = ndcy * tanHalf;
+                    double rdx = fX + rX * a + uX * b;
+                    double rdy = fY + rY * a + uY * b;
+                    double rdz = fZ + rZ * a + uZ * b;
+                    double il = 1.0 / Math.Sqrt(rdx * rdx + rdy * rdy + rdz * rdz);
+                    rdx *= il; rdy *= il; rdz *= il;
+                    double wx = camX + rdx * dpt, wy = camY + rdy * dpt, wz = camZ + rdz * dpt;
+                    var (du, dv) = ReliefMotionVector.ScreenMotion(wx, wy, wz, sxpix, sypix, in prevCam, w, h);
+                    motion[idx * 2] = (float)du;
+                    motion[idx * 2 + 1] = (float)dv;
+                }
+            });
         }
     }
 

@@ -84,6 +84,8 @@ namespace FracturingFog.Batch
             if (opts.ReliefDenoiseNormalSigma.HasValue) fp.Relief2DDenoiseNormalSigma = opts.ReliefDenoiseNormalSigma.Value;
             if (opts.ReliefDenoiseDepthSigma.HasValue)  fp.Relief2DDenoiseDepthSigma = opts.ReliefDenoiseDepthSigma.Value;
             if (opts.ReliefDenoiseAdaptiveSupersample.HasValue) fp.Relief2DDenoiseAdaptiveSupersample = opts.ReliefDenoiseAdaptiveSupersample.Value;   // S4 (#402)
+            if (opts.ReliefMotionBlur.HasValue)        fp.Relief2DMotionBlurStrength = opts.ReliefMotionBlur.Value;      // S1 (#398)
+            if (opts.ReliefMotionBlurSamples.HasValue) fp.Relief2DMotionBlurSamples  = opts.ReliefMotionBlurSamples.Value;
             if (opts.ReliefIsolate)               fp.Relief2DIsolate       = true;
             if (opts.ReliefIsolateNoDetail)       fp.Relief2DIsolateByDetail = false;
             if (opts.ReliefIsolateThreshold.HasValue) fp.Relief2DDetailThreshold = opts.ReliefIsolateThreshold.Value;

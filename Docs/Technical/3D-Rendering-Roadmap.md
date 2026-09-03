@@ -158,6 +158,47 @@ discarded, not that it is uncomputed.
 - **Remaining:** thread the render's current + previous-frame camera into the Motion
   channel (the wiring follow-up — landed on the #638→#641 stack); SVGF temporal (the
   deeper #402 consumer of the motion + depth + normal guides).
+- **Motion-vector AOV — render wiring (landed — PR #638, #398):** the relief render now
+  fills the Motion channel. It exposes its perspective camera as `aov.CurrentCamera`
+  (`ReliefMotionVector.CameraView` from the `ReliefCamera` basis) whenever an AOV buffer
+  is supplied, and a new optional `previousCamera` param drives a post-pass (after the
+  froxel composite) that reconstructs each hit's world position from the captured
+  centre-tap depth + primary ray, projects it through the previous camera
+  (`ScreenMotion`), and stores the screen-space (du, dv). Perspective only; sky-miss =
+  exactly zero; still frame (previous == current) ~zero. A Motion capture forces the CPU
+  trace (folded into the `aovOk` gate, like a Components capture). Default off (no Motion
+  buffer / no previous camera) → byte-identical. +5 `ReliefMotionVectorWiringTests`.
+- **Motion-vector AOV — sequence seam (landed — PR #639, #398):** the previous-frame
+  camera now threads through the offline sequence render path. `PosterRequest.PreviousCamera`
+  → `PosterRenderer` (RenderComposedBuffer + both RenderToPixels overloads) →
+  `ApplyReliefIfEnabled` → the relief render — the shared seam every video/slideshow/scene
+  render builds through (null default → byte-identical); mirrors the PR #468 FroxelHistory
+  seam. `SceneVideoRenderer` gains an opt-in `CaptureMotionVectors` (default off) that
+  carries one persistent previous-camera + capture-motion AOV, advanced across clean
+  continuous relief frames (same gate as the froxel history; a flat frame resets the
+  baseline). Off → no AOV, no forced-CPU trace, byte-identical. +5 tests (4 seam via
+  PosterRenderer + a scene determinism lock).
+- **Vector motion blur — first motion-AOV consumer (landed — PR #640, #398):** the
+  motion-vector AOV now has a consumer. `MotionBlurFromVectors` (Engine/Imaging) — a pure,
+  deterministic, parallel gather — smears the relief beauty along each pixel's motion
+  vector (N cheap taps vs N full raymarches): a fast silhouette streaks, a static
+  background stays crisp. `FractalParameters.Relief2DMotionBlurStrength` (0 = off) +
+  `Relief2DMotionBlurSamples` (2..64), wired in `PosterRenderer.ApplyReliefIfEnabled` — when
+  strength>0 AND a previous camera is supplied the render captures a Motion AOV and the blur
+  runs as a post-pass (only auto-allocating the capture when no external AOV target owns the
+  buffer, so an AOV-EXR export is undisturbed). A still frame (no previous camera) stays
+  byte-identical even at strength>0. +8 tests (6 operator + 2 end-to-end).
+- **Vector motion blur — user surface (landed — PR #641, #398):** the blur strength was
+  programmatic-only; now `--relief-motion-blur F` (0..4) + `--relief-motion-blur-samples N`
+  (2..64, imply the effect) batch flags (parse → `fp.Relief2DMotionBlur*`, CLI-builder emit
+  on the raymarch path only when on, Control Center snapshot) + a Motion-blur strength +
+  samples row in the Relief 3D dialog (`FractalParamsViewModel.Relief2DMotionBlur*`). The
+  scene path already carries it end-to-end (#639 threads the camera, #640 applies from the
+  shot params), so a scene with motion capture + a strength set blurs with no extra wiring.
+  Strength 0 → byte-identical. +9 `MotionBlurBatchWiringTests`. The full S1 motion-vector
+  chain: #638 (fill) → #639 (seam) → #640 (consumer) → #641 (surface).
+- **Remaining:** SVGF temporal (the deeper #402 consumer of the motion + depth + normal
+  guides); the light compositor.
 
 ### S2 — Linear-light rendering + view transform (AgX / ACES / Filmic) ◐ (#396)
 Render and composite in **linear light**, apply a filmic **view transform** at

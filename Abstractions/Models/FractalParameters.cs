@@ -539,6 +539,19 @@ namespace FracturingFog.Models
         /// single-frame path stays byte-identical.</summary>
         public bool Relief2DDenoiseAdaptiveSupersample { get; set; } = false;
 
+        /// <summary>S1 (#398) — per-pixel vector motion blur strength. 0 (default) = off.
+        /// &gt;0 smears the relief beauty along the motion-vector AOV, scaled by this
+        /// factor (1 = the full inter-frame screen displacement). Only bites when the
+        /// motion AOV is populated (a sequence render supplying a previous-frame camera),
+        /// so a still frame stays crisp; forces the CPU relief trace (motion capture)
+        /// when &gt;0. Default 0 → byte-identical.</summary>
+        public double Relief2DMotionBlurStrength { get; set; } = 0.0;
+
+        /// <summary>Number of taps averaged along each pixel's motion vector for
+        /// <see cref="Relief2DMotionBlurStrength"/> (more = smoother streak). Clamped to
+        /// [2, 64]. Ignored while the strength is 0.</summary>
+        public int Relief2DMotionBlurSamples { get; set; } = 8;
+
         /// <summary>Anti-alias supersampling factor: N×N rays per pixel, averaged.
         /// 1 = off, 2–4 = progressively smoother silhouette/edges at N² cost.
         /// Default 2.</summary>
@@ -1241,6 +1254,8 @@ namespace FracturingFog.Models
                 Relief2DDenoiseNormalSigma = Relief2DDenoiseNormalSigma,
                 Relief2DDenoiseDepthSigma = Relief2DDenoiseDepthSigma,
                 Relief2DDenoiseAdaptiveSupersample = Relief2DDenoiseAdaptiveSupersample,
+                Relief2DMotionBlurStrength = Relief2DMotionBlurStrength,
+                Relief2DMotionBlurSamples = Relief2DMotionBlurSamples,
                 Relief2DCameraZoom = Relief2DCameraZoom,
                 Relief2DCameraOrthographic = Relief2DCameraOrthographic,
                 Relief2DSupersample = Relief2DSupersample,

@@ -109,7 +109,7 @@
                           IsExpanded="{Binding Relief2DRaymarch, Mode=OneWay}"
                           IsEnabled="{Binding Relief2DRaymarch}">
                 <StackPanel Spacing="6">
-                <Grid ColumnDefinitions="160,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto">
+                <Grid ColumnDefinitions="160,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto">
                     <TextBlock Grid.Row="0" Grid.Column="0" Text="Camera azimuth (°):" VerticalAlignment="Center"
                                ToolTip.Tip="Orbit the terrain around the up axis. 0 = looking straight at the scene." />
                     <NumericUpDown Grid.Row="0" Grid.Column="1"
@@ -212,6 +212,23 @@
                     <CheckBox Grid.Row="14" Grid.Column="1" IsChecked="{Binding Relief2DDenoiseAdaptiveSupersample, Mode=TwoWay}"
                               IsEnabled="{Binding DenoiseEnabled}"
                               Content="fewer rays while denoising" Margin="0,2" />
+
+                    <!-- Vector motion blur (roadmap S1, #398). Smears the beauty along the
+                         per-pixel motion-vector AOV. Only visible in a sequence render (a
+                         moving camera between frames); 0 = off (byte-identical still). -->
+                    <TextBlock Grid.Row="15" Grid.Column="0" Text="Motion blur:" VerticalAlignment="Center"
+                               ToolTip.Tip="Per-pixel motion blur that smears the relief along each pixel's screen motion vector — a fast alternative to rendering extra sub-frames. Only visible in a sequence render where the camera moves between frames (a still frame has no motion and stays crisp); 0 = off. Scales the inter-frame displacement (1 = the full move). Forces the CPU relief trace when on." />
+                    <NumericUpDown Grid.Row="15" Grid.Column="1"
+                                   Minimum="0" Maximum="4" Increment="0.1" FormatString="F2"
+                                   Value="{Binding Relief2DMotionBlurStrength, Mode=TwoWay}" Margin="0,2" />
+
+                    <TextBlock Grid.Row="16" Grid.Column="0" Text="Motion blur samples:" VerticalAlignment="Center"
+                               IsEnabled="{Binding MotionBlurEnabled}"
+                               ToolTip.Tip="Taps averaged along each pixel's motion vector — more = a smoother streak, at a little more cost. Only used when Motion blur > 0." />
+                    <NumericUpDown Grid.Row="16" Grid.Column="1"
+                                   Minimum="2" Maximum="64" Increment="1" FormatString="F0"
+                                   IsEnabled="{Binding MotionBlurEnabled}"
+                                   Value="{Binding Relief2DMotionBlurSamples, Mode=TwoWay}" Margin="0,2" />
                 </Grid>
 
                 <!-- #520 — far-detail: resolve distant filaments as tall as near ones. -->

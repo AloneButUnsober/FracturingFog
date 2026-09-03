@@ -122,6 +122,13 @@ namespace FracturingFog.Batch
         public const string DenoiseDepthSigma     = "--denoise-depth-sigma";
         public const string DenoiseAdaptiveSs     = "--denoise-adaptive-ss";
 
+        // Per-pixel vector motion blur driven by the S1 motion-vector AOV (roadmap S1,
+        // #398). Smears the relief beauty along each pixel's screen motion vector. Only
+        // bites when the motion AOV is populated (a sequence render with a previous-frame
+        // camera). Implies --relief-raymarch; strength 0 = off. Samples imply strength on.
+        public const string ReliefMotionBlur        = "--relief-motion-blur";
+        public const string ReliefMotionBlurSamples = "--relief-motion-blur-samples";
+
         // Relief isolate masking (#363 follow-up). --relief-isolate turns it on;
         // sub-knobs imply it on.
         public const string ReliefIsolate          = "--relief-isolate";

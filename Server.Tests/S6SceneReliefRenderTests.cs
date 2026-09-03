@@ -97,7 +97,7 @@ public sealed class S6SceneReliefRenderTests
     // Render a scene and return EVERY written frame as a decoded RGB buffer, in
     // frame order. Frame folder is kept regardless of ffmpeg availability.
     private static System.Collections.Generic.List<uint[]> RenderAllFrames(
-        SceneData scene, int w, int h, out int frameCount)
+        SceneData scene, int w, int h, out int frameCount, bool captureMotion = false)
     {
         string outDir = Path.Combine(Path.GetTempPath(), "FracturingFog",
             "s6-scene-relief-test", Guid.NewGuid().ToString("N"));
@@ -108,6 +108,7 @@ public sealed class S6SceneReliefRenderTests
             Settings = new SceneRenderSettings { Fps = 4, MotionBlurSubframes = 1 },
             OutputPath = outDir,
             KeepFrames = true,
+            CaptureMotionVectors = captureMotion,   // S1 (#398)
         };
 
         var result = SceneVideoRenderer.Render(scene, opts, null, CancellationToken.None);
@@ -251,6 +252,44 @@ public sealed class S6SceneReliefRenderTests
                 for (int i = 0; i < a[f].Length; i++)
                 {
                     Assert.Equal(a[f][i], b[f][i]);          // deterministic across runs
+                    if ((a[f][i] & 0x00FFFFFF) != 0) nonBlack++;
+                }
+                Assert.True(nonBlack > 0, $"frame {f + 1} is all black");
+            }
+        }
+        finally { lib.RemoveUserRegion(name); }
+    }
+
+    // S1 (#398) — motion-vector capture opt-in on the scene renderer. When
+    // CaptureMotionVectors is on, the renderer carries a persistent previous-frame
+    // camera and fills the motion AOV on each clean continuous relief frame (via the
+    // PosterRequest.PreviousCamera seam). The motion buffer has no consumer here yet,
+    // so this locks the no-regression contract: a multi-frame relief scene with motion
+    // capture on still renders deterministically frame-for-frame, every frame non-black.
+    [Fact]
+    public void MultiFrame_Relief_Scene_With_Motion_Capture_Is_Deterministic()
+    {
+        const int W = 96, H = 64;
+        var lib = FractalRegionLibrary.Instance;
+        string name = $"FF-S6ReliefMotion-{Guid.NewGuid():N}";
+        try
+        {
+            Assert.True(lib.AddUserRegion(Region(name, relief: true)));
+
+            var a = RenderAllFrames(MultiFrameScene(name), W, H, out int na, captureMotion: true);
+            var b = RenderAllFrames(MultiFrameScene(name), W, H, out int nb, captureMotion: true);
+
+            Assert.True(na >= 3, $"expected several frames, got {na}");
+            Assert.Equal(na, nb);
+            Assert.Equal(a.Count, b.Count);
+
+            for (int f = 0; f < a.Count; f++)
+            {
+                Assert.Equal(a[f].Length, b[f].Length);
+                int nonBlack = 0;
+                for (int i = 0; i < a[f].Length; i++)
+                {
+                    Assert.Equal(a[f][i], b[f][i]);          // deterministic with motion capture on
                     if ((a[f][i] & 0x00FFFFFF) != 0) nonBlack++;
                 }
                 Assert.True(nonBlack > 0, $"frame {f + 1} is all black");
