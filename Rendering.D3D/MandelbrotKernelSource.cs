@@ -188,6 +188,261 @@ float3 EvalPalette(
             + HlslEntry(emitColor: true, InSetColorSplice, EscapeColorSplice, BulbSkipColorSplice);
     }
 
+    // ── F16 (#603) — orbit-accumulator colour variant ────────────────────────
+    //
+    // An orbit ColorGen theme reads per-iteration accumulators the escape-only
+    // kernel never computes. This variant splices a per-iteration sampling loop
+    // (accumulating ONLY the mask'd inputs) into CSMain, extends EvalPalette with
+    // the 11 orbit params, and passes the accumulated means at the escape write.
+    // Mirrors the CPU InterpretedOrbitColorMap.Sample maths in float. Scope: the
+    // shallow-escape kernel, exterior pixels; in-set uses the normal isInSet=1
+    // path (orbit params 0) and deep-zoom perturbation is unchanged (a separate
+    // slice). Mask bit order matches GpuOrbitInputOrder / GpuOrbitInputs.
+    public const int OrbTrapMin = 1 << 0, OrbTrapCross = 1 << 1, OrbTrapRing = 1 << 2,
+                     OrbTrapHyperbola = 1 << 3, OrbTrapHexagon = 1 << 4, OrbStripe = 1 << 5,
+                     OrbTia = 1 << 6, OrbCurvature = 1 << 7, OrbLyapunov = 1 << 8,
+                     OrbGaussian = 1 << 9, OrbExp = 1 << 10;
+
+    /// <summary>The 11 orbit params, always appended to EvalPalette (unused ones
+    /// are passed 0 at the call site — HLSL tolerates unused params, and only the
+    /// mask'd accumulators are actually computed in the loop).</summary>
+    private const string OrbitParams =
+        "    float in_trapMin, float in_trapCross, float in_trapRing, float in_trapHyperbola, float in_trapHexagon,\n" +
+        "    float in_stripeAvg, float in_tiaAvg, float in_curvature, float in_lyapunov, float in_gaussian, float in_expSmooth)";
+
+    /// <summary>ColorPreludeHead with the 11 orbit params spliced into the
+    /// EvalPalette signature (before the closing paren).</summary>
+    private static string OrbitPreludeHead() =>
+        ColorPreludeHead.Replace(
+            "    float in_isInSet, float in_pxScale)",
+            "    float in_isInSet, float in_pxScale,\n" + OrbitParams);
+
+    /// <summary>Compose the orbit colour kernel: header + helpers + orbit
+    /// EvalPalette + CSMain with per-iteration accumulation for the mask'd
+    /// inputs. Shared by D3D (FXC) and Vulkan (DXC) exactly like BuildColor.</summary>
+    public static string BuildColorOrbit(string? paletteHelpers, string? paletteBody, int mask)
+    {
+        string helpers = string.IsNullOrEmpty(paletteHelpers) ? "" : paletteHelpers + "\n";
+        string body = string.IsNullOrEmpty(paletteBody) ? "    return float3(0.0, 0.0, 0.0);" : paletteBody;
+        return HlslBase
+            + helpers
+            + OrbitPreludeHead()
+            + body + "\n"
+            + ColorPreludeTail + "\n"
+            + HlslEntryOrbit(mask);
+    }
+
+    /// <summary>CSMain for the orbit colour kernel — a copy of HlslEntry with
+    /// accumulator declarations before the loop, a per-iteration Sample block
+    /// (it &gt; 0, after the escape break, on the RAW z — Mandelbrot orbit), and
+    /// the accumulated means passed to EvalPalette on the escape branch.</summary>
+    public static string HlslEntryOrbit(int mask)
+    {
+        bool On(int bit) => (mask & bit) != 0;
+
+        // Accumulator declarations (only what the mask needs).
+        var decl = new System.Text.StringBuilder();
+        if (On(OrbTrapMin))       decl.Append("    float acc_trapMin = 3.0e38;\n");
+        if (On(OrbTrapCross))     decl.Append("    float acc_trapCross = 3.0e38;\n");
+        if (On(OrbTrapRing))      decl.Append("    float acc_trapRing = 3.0e38;\n");
+        if (On(OrbTrapHyperbola)) decl.Append("    float acc_trapHyperbola = 3.0e38;\n");
+        if (On(OrbTrapHexagon))   decl.Append("    float acc_trapHexagon = 3.0e38;\n");
+        if (On(OrbStripe))        decl.Append("    float acc_stripeSum = 0.0; int acc_stripeCount = 0;\n");
+        if (On(OrbTia))           decl.Append("    float acc_tiaSum = 0.0; int acc_tiaCount = 0;\n");
+        if (On(OrbLyapunov))      decl.Append("    float acc_lyaSum = 0.0; int acc_lyaCount = 0;\n");
+        if (On(OrbGaussian))      decl.Append("    float acc_gauSum = 0.0; int acc_gauCount = 0;\n");
+        if (On(OrbExp))           decl.Append("    float acc_expSum = 0.0; int acc_expCount = 0;\n");
+        if (On(OrbCurvature))     decl.Append(
+            "    float cvPrevZr = 0.0, cvPrevZi = 0.0, cvPrevSegR = 0.0, cvPrevSegI = 0.0;\n" +
+            "    float acc_cvSum = 0.0; int acc_cvCount = 0;\n");
+
+        // Per-iteration sample block (mirrors InterpretedOrbitColorMap.Sample).
+        // zr, zi = pre-update z_it (RAW); cIterR, cIterI = c; it = iteration index.
+        var samp = new System.Text.StringBuilder();
+        if (On(OrbTrapMin))
+            samp.Append("            { float d = sqrt(zr*zr + zi*zi); acc_trapMin = min(acc_trapMin, d); }\n");
+        if (On(OrbTrapCross))
+            samp.Append("            { float d = min(abs(zr), abs(zi)); acc_trapCross = min(acc_trapCross, d); }\n");
+        if (On(OrbTrapRing))
+            samp.Append("            { float dx = zr + 1.0; float dy = zi; float d = abs(sqrt(dx*dx + dy*dy) - 0.3); acc_trapRing = min(acc_trapRing, d); }\n");
+        if (On(OrbTrapHyperbola))
+            samp.Append("            { float f = abs(zr*zi) - 1.0; float g = max(sqrt(zr*zr + zi*zi), 1e-6); float d = abs(f) / g; acc_trapHyperbola = min(acc_trapHyperbola, d); }\n");
+        if (On(OrbTrapHexagon))
+            samp.Append(
+                "            {\n" +
+                "                const float kx = -0.8660254037844387; const float ky = 0.5; const float kz = 0.5773502691896257;\n" +
+                "                float px = abs(zr); float py = abs(zi);\n" +
+                "                float dot2 = 2.0 * min(kx*px + ky*py, 0.0);\n" +
+                "                px -= dot2*kx; py -= dot2*ky;\n" +
+                "                px -= clamp(px, -kz, kz); py -= 1.0;\n" +
+                "                acc_trapHexagon = min(acc_trapHexagon, sqrt(px*px + py*py));\n" +
+                "            }\n");
+        if (On(OrbStripe))
+            samp.Append("            { float s = 0.5 + 0.5*sin(7.0*atan2(zi, zr)); acc_stripeSum += s; acc_stripeCount += 1; }\n");
+        if (On(OrbTia))
+            samp.Append(
+                "            if (it >= 2) {\n" +
+                "                float zMcR = zr - cIterR; float zMcI = zi - cIterI;\n" +
+                "                float absZprev2 = sqrt(zMcR*zMcR + zMcI*zMcI);\n" +
+                "                float absC = sqrt(cIterR*cIterR + cIterI*cIterI);\n" +
+                "                float absZ = sqrt(zr*zr + zi*zi);\n" +
+                "                float mlo = abs(absZprev2 - absC); float mhi = absZprev2 + absC;\n" +
+                "                if (mhi - mlo > 1e-12) { acc_tiaSum += (absZ - mlo) / (mhi - mlo); acc_tiaCount += 1; }\n" +
+                "            }\n");
+        if (On(OrbLyapunov))
+            samp.Append("            { float a = sqrt(zr*zr + zi*zi); if (a > 1e-12) { acc_lyaSum += log(2.0*a); acc_lyaCount += 1; } }\n");
+        if (On(OrbGaussian))
+            samp.Append("            { float dgr = zr - round(zr); float dgi = zi - round(zi); acc_gauSum += sqrt(dgr*dgr + dgi*dgi); acc_gauCount += 1; }\n");
+        if (On(OrbExp))
+            samp.Append("            { float a = sqrt(zr*zr + zi*zi); acc_expSum += exp(-a); acc_expCount += 1; }\n");
+        if (On(OrbCurvature))
+            samp.Append(
+                "            if (it == 1) { cvPrevZr = zr; cvPrevZi = zi; }\n" +
+                "            else {\n" +
+                "                float segR = zr - cvPrevZr; float segI = zi - cvPrevZi;\n" +
+                "                if (it == 2) { cvPrevSegR = segR; cvPrevSegI = segI; }\n" +
+                "                else {\n" +
+                "                    float crs = cvPrevSegR*segI - cvPrevSegI*segR;\n" +
+                "                    float dt  = cvPrevSegR*segR + cvPrevSegI*segI;\n" +
+                "                    if (crs != 0.0 || dt != 0.0) { acc_cvSum += abs(atan2(crs, dt)); acc_cvCount += 1; }\n" +
+                "                    cvPrevSegR = segR; cvPrevSegI = segI;\n" +
+                "                }\n" +
+                "                cvPrevZr = zr; cvPrevZi = zi;\n" +
+                "            }\n");
+
+        // Post-loop means → in_* locals (all 11; unmask'd ones are 0.0).
+        var means = new System.Text.StringBuilder();
+        means.Append("        float in_trapMin = ").Append(On(OrbTrapMin) ? "(acc_trapMin < 3.0e38 ? acc_trapMin : 0.0)" : "0.0").Append(";\n");
+        means.Append("        float in_trapCross = ").Append(On(OrbTrapCross) ? "(acc_trapCross < 3.0e38 ? acc_trapCross : 0.0)" : "0.0").Append(";\n");
+        means.Append("        float in_trapRing = ").Append(On(OrbTrapRing) ? "(acc_trapRing < 3.0e38 ? acc_trapRing : 0.0)" : "0.0").Append(";\n");
+        means.Append("        float in_trapHyperbola = ").Append(On(OrbTrapHyperbola) ? "(acc_trapHyperbola < 3.0e38 ? acc_trapHyperbola : 0.0)" : "0.0").Append(";\n");
+        means.Append("        float in_trapHexagon = ").Append(On(OrbTrapHexagon) ? "(acc_trapHexagon < 3.0e38 ? acc_trapHexagon : 0.0)" : "0.0").Append(";\n");
+        means.Append("        float in_stripeAvg = ").Append(On(OrbStripe) ? "(acc_stripeCount > 0 ? acc_stripeSum / acc_stripeCount : 0.0)" : "0.0").Append(";\n");
+        means.Append("        float in_tiaAvg = ").Append(On(OrbTia) ? "(acc_tiaCount > 0 ? acc_tiaSum / acc_tiaCount : 0.0)" : "0.0").Append(";\n");
+        means.Append("        float in_curvature = ").Append(On(OrbCurvature) ? "(acc_cvCount > 0 ? acc_cvSum / acc_cvCount : 0.0)" : "0.0").Append(";\n");
+        means.Append("        float in_lyapunov = ").Append(On(OrbLyapunov) ? "(acc_lyaCount > 0 ? acc_lyaSum / acc_lyaCount : 0.0)" : "0.0").Append(";\n");
+        means.Append("        float in_gaussian = ").Append(On(OrbGaussian) ? "(acc_gauCount > 0 ? acc_gauSum / acc_gauCount : 0.0)" : "0.0").Append(";\n");
+        means.Append("        float in_expSmooth = ").Append(On(OrbExp) ? "(acc_expCount > 0 ? acc_expSum / acc_expCount : 0.0)" : "0.0").Append(";\n");
+
+        const string orbitArgs = ",\n            in_trapMin, in_trapCross, in_trapRing, in_trapHyperbola, in_trapHexagon,\n" +
+                                 "            in_stripeAvg, in_tiaAvg, in_curvature, in_lyapunov, in_gaussian, in_expSmooth";
+        const string zeroArgs  = ", 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0";
+
+        string inSetColor = @"
+        gColor[idx] = cg_pack_bgra(EvalPalette(
+            0.0, 0.0, (float)gMaxIter, (float)gMaxIter,
+            0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0" + zeroArgs + @"), x, y);
+";
+        string bulbSkipColor = @"
+        gColor[idx] = cg_pack_bgra(EvalPalette(
+            0.0, 0.0, (float)gMaxIter, (float)gMaxIter,
+            0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0, 0.0" + zeroArgs + @"), x, y);
+";
+        string escapeColor =
+            "        float t_iter = gMaxIter > 0 ? sm / (float)gMaxIter : 0.0;\n" +
+            "        float in_arg = atan2(zi, zr);\n" +
+            "        float in_mag = sqrt(zr * zr + zi * zi);\n" +
+            "        float de_dz = sqrt(dr * dr + di * di);\n" +
+            "        float in_dist = de_dz > 1e-10 ? in_mag * log(in_mag) / de_dz : 0.0;\n" +
+            means.ToString() +
+            "        gColor[idx] = cg_pack_bgra(EvalPalette(\n" +
+            "            sm, in_dist, (float)it, (float)gMaxIter,\n" +
+            "            t_iter, 0.0, 0.0, zr, zi, dr, di, in_arg, in_mag, 0.0, 0.0" + orbitArgs + "), x, y);\n";
+
+        return $@"
+[numthreads(8, 8, 1)]
+void CSMain(uint3 tid : SV_DispatchThreadID)
+{{
+    uint x = tid.x;
+    uint y = tid.y;
+    if ((int)x >= gWidth || (int)y >= gHeight) return;
+
+    int idx = (int)y * gWidth + (int)x;
+
+    float fx = (float)x - 0.5 * gWidth;
+    float fy = (float)y - 0.5 * gHeight;
+    float cx = gCXHi + fx * gScaleHi + gCXLo + fx * gScaleLo;
+    float cy = gCYHi + fy * gScaleHi + gCYLo + fy * gScaleLo;
+
+    int rowMaxIt = gMaxIter;
+    if (gUsePerRow != 0)
+    {{
+        uint rc = gPerRow[y];
+        if (rc > 0) rowMaxIt = (int)rc;
+    }}
+
+    if (gFractalKind == 0 && (InCardioid(cx, cy) || InPeriod2Bulb(cx, cy)))
+    {{
+        gIter[idx]    = (uint)gMaxIter;
+        gSmooth[idx]  = 0.0;
+        gFinalZD[idx] = float4(0.0, 0.0, 1.0, 0.0);
+        {bulbSkipColor}
+        return;
+    }}
+
+    float zr, zi;
+    float cIterR, cIterI;
+    if (gFractalKind == 1)
+    {{
+        zr = cx;     zi = cy;
+        cIterR = gParam0; cIterI = gParam1;
+    }}
+    else
+    {{
+        zr = 0.0;    zi = 0.0;
+        cIterR = cx; cIterI = cy;
+    }}
+    float dr = 1.0;
+    float di = 0.0;
+    int   it = 0;
+{decl}    [loop]
+    for (; it < rowMaxIt; it++)
+    {{
+        float fzr = zr;
+        float fzi = zi;
+        if (gFractalKind == 2)      {{ fzr = abs(zr); fzi = abs(zi); }}
+        else if (gFractalKind == 3) {{ fzi = -zi; }}
+
+        float zr2 = fzr * fzr;
+        float zi2 = fzi * fzi;
+        float mag2 = zr2 + zi2;
+        if (mag2 >= gBailout2) break;
+
+        // F16 orbit sample — pre-update RAW z, it > 0 (matches CPU Sample).
+        if (it > 0)
+        {{
+{samp}        }}
+
+        float newDr = 2.0 * (fzr * dr - fzi * di) + 1.0;
+        float newDi = 2.0 * (fzr * di + fzi * dr);
+        dr = newDr;
+        di = newDi;
+
+        float zrNew = zr2 - zi2 + cIterR;
+        float zi_new_unscaled = fzr * fzi;
+        zi = zi_new_unscaled + zi_new_unscaled + cIterI;
+        zr = zrNew;
+    }}
+
+    gFinalZD[idx] = float4(zr, zi, dr, di);
+    if (it >= rowMaxIt)
+    {{
+        gIter[idx]   = (uint)gMaxIter;
+        gSmooth[idx] = 0.0;
+        {inSetColor}
+    }}
+    else
+    {{
+        gIter[idx] = (uint)it;
+        float mag = sqrt(zr * zr + zi * zi);
+        float nu = log(log(max(mag, 1.001))) / log(2.0);
+        float sm = (float)it + 1.0 - nu;
+        gSmooth[idx] = sm;
+{escapeColor}    }}
+}}
+";
+    }
+
     // ── Perturbation variant (V6, issue #82) ─────────────────────────────────
     //
     // Deep-zoom (Zoom ≫ MaxGpuZoom) escape-time by PERTURBATION over a

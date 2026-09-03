@@ -84,7 +84,28 @@ public class InterpretedColorMap :
         // actually computed per iteration (see InterpretedOrbitColorMap).
         var orbitInputs = CollectOrbitInputs(prog);
         if (orbitInputs.Count > 0)
-            return new InterpretedOrbitColorMap(prog, opts.ThemeName, opts.Category, opts.Description, orbitInputs);
+        {
+            // F16 (#603) — GPU orbit is opt-in (default off): only when enabled do
+            // we emit HLSL + a non-None orbit mask so the kernel builds the
+            // orbit-accumulating variant; otherwise the map advertises no GPU
+            // palette and renders on the CPU exactly as before.
+            string oBody = "", oPrelude = "", oId = "Interp_none";
+            var mask = FracturingFog.Interefaces.GpuOrbitInputs.None;
+            if (InterpretedOrbitColorMap.GpuEnabled)
+            {
+                try
+                {
+                    var hlsl = new ColorGenHlslEmitter(indent: "    ");
+                    oBody = hlsl.EmitBody(prog);
+                    oPrelude = ColorGenHlslPrelude.Build(hlsl.PaletteArities);
+                    mask = InterpretedOrbitColorMap.MaskFrom(orbitInputs);
+                    oId = "InterpOrbit_" + ShortHash(oBody + "\0" + oPrelude + "\0" + (int)mask);
+                }
+                catch { oBody = ""; oPrelude = ""; oId = "Interp_none"; mask = FracturingFog.Interefaces.GpuOrbitInputs.None; }
+            }
+            return new InterpretedOrbitColorMap(prog, opts.ThemeName, opts.Category, opts.Description,
+                                                orbitInputs, oBody, oPrelude, oId, mask);
+        }
 
         // Same HLSL the compiled path emits (text generation — not Roslyn).
         string hlslBody, hlslPrelude, paletteId;
@@ -484,10 +505,39 @@ public class InterpretedColorMap :
 /// CPU. Trap uses the origin point-trap (min |z_n|); stripe uses the classic
 /// UF density 7; TIA is the Mandelbrot triangle-inequality average.
 /// </summary>
-public sealed class InterpretedOrbitColorMap : InterpretedColorMap, IOrbitAwareColorMap
+public sealed class InterpretedOrbitColorMap : InterpretedColorMap, IOrbitAwareColorMap, IGpuOrbitPalette
 {
     /// <summary>Stripe-average sin multiplier (classic Ultra Fractal default).</summary>
     private const double StripeDensity = 7.0;
+
+    // ── F16 (#603) — GPU orbit support (opt-in). ─────────────────────────────
+    /// <summary>Master switch for GPU orbit rendering. Default follows the
+    /// <c>FF_GPU_ORBIT</c> env var (truthy = on); settable for tests. When off,
+    /// an orbit theme advertises no GPU palette and renders on the CPU exactly as
+    /// before — so production is byte-identical until on-device parity is signed
+    /// off (mirrors the UseGpuPerturbation default-off precedent).</summary>
+    public static bool GpuEnabled { get; set; } = EnvTruthy("FF_GPU_ORBIT");
+
+    private static bool EnvTruthy(string name)
+    {
+        string? v = Environment.GetEnvironmentVariable(name);
+        return v is "1" or "true" or "True" or "on" or "ON" or "yes";
+    }
+
+    /// <summary>Map the referenced-input name set to the kernel's orbit mask.</summary>
+    internal static GpuOrbitInputs MaskFrom(HashSet<string> orbitInputs)
+    {
+        var m = GpuOrbitInputs.None;
+        var names = GpuOrbitInputOrder.DslNames;
+        var bits = GpuOrbitInputOrder.Bits;
+        for (int i = 0; i < names.Length; i++)
+            if (orbitInputs.Contains(names[i])) m |= bits[i];
+        return m;
+    }
+
+    /// <summary>F16 — the orbit accumulators the HLSL body reads. None when GPU
+    /// orbit is disabled (⇒ CPU render).</summary>
+    public GpuOrbitInputs OrbitInputs { get; }
 
     // Which accumulators this program actually references — only these are
     // computed per iteration (the transcendentals in Sample are not free).
@@ -498,9 +548,12 @@ public sealed class InterpretedOrbitColorMap : InterpretedColorMap, IOrbitAwareC
     private const double RingCx = -1.0, RingCy = 0.0, RingR = 0.3;
 
     internal InterpretedOrbitColorMap(CgProgram prog, string name, string category, string description,
-                                      HashSet<string> orbitInputs)
-        : base(prog, name, category, description, hlslBody: "", hlslPrelude: "", paletteId: "Interp_none")
+                                      HashSet<string> orbitInputs,
+                                      string hlslBody, string hlslPrelude, string paletteId,
+                                      GpuOrbitInputs orbitMask)
+        : base(prog, name, category, description, hlslBody: hlslBody, hlslPrelude: hlslPrelude, paletteId: paletteId)
     {
+        OrbitInputs = orbitMask;
         _trapMin   = orbitInputs.Contains("trapMin");
         _trapCross = orbitInputs.Contains("trapCross");
         _ring      = orbitInputs.Contains("trapRing");

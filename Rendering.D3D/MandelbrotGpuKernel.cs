@@ -234,7 +234,13 @@ public sealed class MandelbrotGpuKernel : IGpuKernel
         }
         try
         {
-            string hlsl = BuildHlsl(palette.HlslPaletteBody, palette.HlslPrelude, emitColor: true);
+            // F16 (#603) — an orbit palette with a non-None mask builds the
+            // orbit-accumulating kernel; every other palette uses the plain
+            // escape-only colour kernel.
+            string hlsl = palette is FracturingFog.Interefaces.IGpuOrbitPalette o
+                          && o.OrbitInputs != FracturingFog.Interefaces.GpuOrbitInputs.None
+                ? MandelbrotKernelSource.BuildColorOrbit(palette.HlslPrelude, palette.HlslPaletteBody, (int)o.OrbitInputs)
+                : BuildHlsl(palette.HlslPaletteBody, palette.HlslPrelude, emitColor: true);
             var cs = CompileShader(hlsl, label: id);
             _csByPaletteId[id] = cs;
             _activePaletteId = id;

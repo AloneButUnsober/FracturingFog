@@ -711,7 +711,12 @@ public sealed class MandelbrotCalculator : Interefaces.IHeightFieldSource, Inter
             // iteration), but correctness beats speed for user themes — without
             // this they would fall through to the non-orbit path and render as a
             // plain iteration gradient (Sample never called).
-            case IOrbitAwareColorMap m: CalculateOrbitAware(m, ct); return;
+            case IOrbitAwareColorMap m:
+                // F16 (#603) — try the GPU orbit kernel first (opt-in + shallow +
+                // exterior); otherwise the scalar CPU orbit path.
+                if (TryRunGpuOrbit(m, ct)) return;
+                CalculateOrbitAware(m, ct);
+                return;
         }
 
         // Pattern-match to the concrete type so the JIT sees a non-virtual call
@@ -1959,6 +1964,53 @@ public sealed class MandelbrotCalculator : Interefaces.IHeightFieldSource, Inter
                 $"SA : {_saAppliedTotal:N0} applied, {_saIterSkippedTotal:N0} iter saved " +
                 $"(avg {(_saAppliedTotal == 0 ? 0 : _saIterSkippedTotal / (double)_saAppliedTotal):F1}/apply), " +
                 $"safeMax={_sa.SafeMax}");
+    }
+
+    /// <summary>
+    /// F16 (#603) — run an orbit ColorGen theme on the GPU shallow-escape kernel
+    /// when it's enabled and viable, colouring the buffer end-to-end (the orbit
+    /// kernel accumulates the trap/stripe/… inputs per iteration). Returns false —
+    /// so the caller runs the scalar CPU <see cref="CalculateOrbitAware"/> — when
+    /// GPU orbit is off (mask None ⇒ default off via
+    /// <see cref="InterpretedOrbitColorMap.GpuEnabled"/>), the theme colours the
+    /// interior (GPU in-set uses the isInSet=1 path, not MapInteriorWithOrbit),
+    /// the zoom is past <see cref="MaxGpuZoom"/> (perturbation is a later slice),
+    /// or no kernel / palette compile. Exterior, shallow-zoom scope.
+    /// </summary>
+    private bool TryRunGpuOrbit(IOrbitAwareColorMap map, CancellationToken ct)
+    {
+        if (map is not FracturingFog.Interefaces.IGpuOrbitPalette orbit
+            || orbit.OrbitInputs == FracturingFog.Interefaces.GpuOrbitInputs.None)
+            return false;
+        if (!UseGpuCompute || GpuKernel == null || Zoom > MaxGpuZoom) return false;
+        // GPU colours in-set via EvalPalette(isInSet=1); the CPU interior path uses
+        // MapInteriorWithOrbit. Keep interior-colouring themes on the CPU.
+        if (map.WantsInteriorColor) return false;
+
+        double scale = (3.5 / Math.Max(Width, Height)) / Zoom;
+        int maxIt = MaxIterations;
+        int[]? perRow = PerRowMaxIter;
+        bool useTileCap = perRow != null && perRow.Length >= Height;
+
+        try
+        {
+            GpuKernel.SetPalette((FracturingFog.Interefaces.IGpuHlslPalette)map);
+            if (!GpuKernel.HasGpuPalette) return false; // compile failed → CPU
+            GpuKernel.Run(
+                Width, Height,
+                CenterX, CenterY, scale,
+                maxIt, EscapeRadius2,
+                IterationBuffer, SmoothBuffer,
+                FinalZrBuffer, FinalZiBuffer,
+                FinalDrBuffer, FinalDiBuffer,
+                useTileCap ? perRow : null,
+                colorDst: ColorBuffer);
+            return true;
+        }
+        catch
+        {
+            return false; // any GPU failure → fall back to the CPU orbit path
+        }
     }
 
     /// <summary>

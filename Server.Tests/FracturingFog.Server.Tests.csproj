@@ -35,6 +35,11 @@
       parity. Engine is the smallest superset that exposes MandelbrotCalculator.
     -->
     <ProjectReference Include="..\Engine\FracturingFog.Engine.csproj" />
+    <!-- F16 (#603): cross-platform Rendering.Vulkan carries the shared,
+         dependency-free MandelbrotKernelSource + DxcCompiler, so the GPU orbit
+         kernel-generation tests can build it and (when dxc is present) compile
+         it — without pulling the Windows-only Rendering.D3D closure. -->
+    <ProjectReference Include="..\Rendering.Vulkan\FracturingFog.Rendering.Vulkan.csproj" />
     <!--
       #27 Phase 3c — ColorGen.Lib ref so the "no user text reaches Roslyn"
       audit can drive ColorGenApi.Generate and assert injection-shaped sources

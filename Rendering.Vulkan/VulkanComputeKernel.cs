@@ -226,7 +226,11 @@ public sealed unsafe class VulkanComputeKernel : IGpuKernel
         if (_colorById.ContainsKey(id)) { _activePaletteId = id; return; }
         try
         {
-            string hlsl = MandelbrotKernelSource.BuildColor(palette.HlslPrelude, palette.HlslPaletteBody);
+            // F16 (#603) — orbit palette (non-None mask) → orbit-accumulating
+            // kernel; otherwise the plain escape-only colour kernel.
+            string hlsl = palette is IGpuOrbitPalette o && o.OrbitInputs != GpuOrbitInputs.None
+                ? MandelbrotKernelSource.BuildColorOrbit(palette.HlslPrelude, palette.HlslPaletteBody, (int)o.OrbitInputs)
+                : MandelbrotKernelSource.BuildColor(palette.HlslPrelude, palette.HlslPaletteBody);
             _colorById[id] = BuildProgram(hlsl, MandelbrotKernelSource.EntryPoint,
                 0u, (uint)TShift, (uint)UShift, (uint)UShift + 1, (uint)UShift + 2, (uint)ColorBinding);
             _activePaletteId = id;
