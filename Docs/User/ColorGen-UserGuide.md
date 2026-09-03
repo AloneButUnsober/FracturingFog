@@ -149,6 +149,7 @@ operands and yield `1.0` / `0.0`.
 | `mag`       | scalar | `hypot(zr, zi)` = `|z|`                              |
 | `isInSet`   | scalar | `1.0` if `iter >= maxIter`, else `0.0`               |
 | `pxScale`   | scalar | Complex-plane width of one pixel (1.0 if unset)      |
+| `trap`      | scalar | Orbit-trap distance measured against the **shape you pick from the Trap-shape menu** (same 19 shapes as the Color Theme Editor: Point, Cross, Circle, Line, Star, Square, Ring, Hyperbola, Lemniscate, Cardioid, DiagonalCross, Triangle, Hexagon, Heart, SineWave, Concentric, Grid, Pinwheel, PolarRose). Point (default) ⇒ identical to `trapMin`. †‡ |
 | `trapMin`   | scalar | Orbit-trap distance: min `\|z_n\|` over the orbit (origin point-trap). †|
 | `trapCross` | scalar | Orbit-trap distance to the nearer coordinate axis: min `min(\|Re\|,\|Im\|)`. †|
 | `trapRing`  | scalar | Orbit-trap distance to a circle (r=0.3 at (-1,0)) — concentric ring filaments. †|
@@ -168,6 +169,16 @@ operands and yield `1.0` / `0.0`.
 > samples the orbit itself. The one remaining caveat is the **GPU palette**: the
 > escape-only shader can't compute these, so an orbit theme always renders on the
 > CPU. Best on shallow zoom, like the built-in Orbit Trap / Stripe themes.
+>
+> **‡ `trap` (selectable shape, #611).** The **Trap shape** dropdown in the
+> ColorGen editor picks the SDF the `trap` input is measured against — the same
+> 19-shape list as the Color Theme Editor. The choice is saved with the theme.
+> `trap` with the default **Point** shape is exactly `trapMin`. Because the 14
+> non-legacy shapes have no GPU shader yet, a program using `trap` always renders
+> on the CPU, and **C# export (*Generate via ColorGen*) of a `trap` theme is not
+> supported yet** — use *Compile & Load* to render it live, or the fixed-shape
+> inputs (`trapMin` / `trapCross` / `trapRing` / `trapHyperbola` / `trapHexagon`)
+> when you need C# export.
 
 ### 2.4 Constants
 

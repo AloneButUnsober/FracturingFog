@@ -742,8 +742,9 @@ namespace FracturingFog.Models
         /// <summary>Maps a trap shape to the built-in sampler that measures it.
         /// Only single-channel (TrapMin) shapes are exposed — the bespoke
         /// two-channel maps (Pickover / Biomorph) carry their own MapWithOrbit
-        /// and are not data-driven here.</summary>
-        private static OrbitTrapBaseMap ShapeImpl(OrbitTrapShape shape) => shape switch
+        /// and are not data-driven here. Internal so the ColorGen `trap` input
+        /// (#611) reuses the same factory — one source of truth for shape→SDF.</summary>
+        internal static OrbitTrapBaseMap ShapeImpl(OrbitTrapShape shape) => shape switch
         {
             OrbitTrapShape.Point         => new OrbitTrapPointMap(),
             OrbitTrapShape.Cross         => new OrbitTrapCrossMap(),

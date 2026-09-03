@@ -48,6 +48,8 @@ public sealed class ColorGenEditorViewModel : ViewModelBase
         "// Inputs: smooth, dist, iter, maxIter, t, nx, ny, zr, zi, dzr, dzi, arg, mag, isInSet, pxScale\n" +
         "// Orbit (CPU-only): trapMin, trapCross, trapRing, trapHyperbola, trapHexagon,\n" +
         "//                   stripeAvg, tiaAvg, curvature, lyapunov, gaussian, expSmooth\n" +
+        "//         trap   — primary trap; its shape is picked from the Trap shape menu\n" +
+        "//                  (same 19 shapes as the Color Theme Editor). Point == trapMin.\n" +
         "// Funcs:  rgb(r,g,b), hsv(h,s,v), hsl(h,s,l), palette(t, c0, c1, …)\n" +
         "//         mix(a,b,t), brightness(c,s), contrast(c,s), gamma(c,g)\n" +
         "//         sin/cos/exp/log/pow/abs/clamp/smoothstep/hash/hash2 …\n" +
@@ -77,6 +79,22 @@ public sealed class ColorGenEditorViewModel : ViewModelBase
 
     private string _description = "";
     public string Description { get => _description; set => this.RaiseAndSetIfChanged(ref _description, value); }
+
+    // ── #611 — selectable trap shape (same 19-shape list as the Color Theme
+    // Editor). Drives the DSL `trap` input's SDF. Point (default) ⇒ trap==trapMin.
+    public OrbitTrapShapeDef[] TrapShapeOptions { get; } = Enum.GetValues<OrbitTrapShapeDef>();
+
+    private OrbitTrapShapeDef _trapShape = OrbitTrapShapeDef.Point;
+    /// <summary>Trap shape the DSL <c>trap</c> input is measured against.</summary>
+    public OrbitTrapShapeDef TrapShape
+    {
+        get => _trapShape;
+        set
+        {
+            this.RaiseAndSetIfChanged(ref _trapShape, value);
+            if (!_loadingNamedEntry) _selectedSavedName = null;
+        }
+    }
 
     // ── Saved selection ──
     private string? _selectedSavedName;
@@ -110,12 +128,13 @@ public sealed class ColorGenEditorViewModel : ViewModelBase
 
     /// <summary>Host compiles + loads the theme via ColorGenHotLoad and swaps
     /// the result onto the active palette. Args: (source, className, themeName,
-    /// description). Return value: null on success, error message on failure.</summary>
-    public event Func<string, string, string, string, string?>? HotLoadRequested;
+    /// description, trapShapeName). Return value: null on success, error message
+    /// on failure.</summary>
+    public event Func<string, string, string, string, string, string?>? HotLoadRequested;
 
     /// <summary>Host writes the rendered C# source to Models/ColorSchemes/Generated/
     /// (or wherever it prefers). Same args as HotLoad. Return: null on success.</summary>
-    public event Func<string, string, string, string, string?>? GenerateRequested;
+    public event Func<string, string, string, string, string, string?>? GenerateRequested;
 
     /// <summary>Host shows an informational message box (eg "Saved").</summary>
     public event Action<string, string, bool>? MessageRequested;
@@ -133,7 +152,7 @@ public sealed class ColorGenEditorViewModel : ViewModelBase
         if (string.IsNullOrWhiteSpace(_source)) { ShowError("Source is empty."); return; }
         var handler = HotLoadRequested;
         if (handler == null) { ShowError("Hot-load not wired by host."); return; }
-        string err = handler.Invoke(_source, MakeClassName(_themeName), _themeName, _description) ?? "";
+        string err = handler.Invoke(_source, MakeClassName(_themeName), _themeName, _description, _trapShape.ToString()) ?? "";
         if (string.IsNullOrEmpty(err))
         {
             StatusText = $"✓ Hot-loaded \"{_themeName}\"";
@@ -147,7 +166,7 @@ public sealed class ColorGenEditorViewModel : ViewModelBase
         if (string.IsNullOrWhiteSpace(_source)) { ShowError("Source is empty."); return; }
         var handler = GenerateRequested;
         if (handler == null) { ShowError("Generate not wired by host."); return; }
-        string err = handler.Invoke(_source, MakeClassName(_themeName), _themeName, _description) ?? "";
+        string err = handler.Invoke(_source, MakeClassName(_themeName), _themeName, _description, _trapShape.ToString()) ?? "";
         if (string.IsNullOrEmpty(err))
         {
             StatusText = $"✓ Generated {MakeClassName(_themeName)}.cs (rebuild to pick up)";
@@ -161,7 +180,7 @@ public sealed class ColorGenEditorViewModel : ViewModelBase
         string defaultName = _selectedSavedName ?? _themeName;
         string? name = NamePromptRequested is { } prompt ? await prompt(defaultName) : null;
         if (string.IsNullOrWhiteSpace(name)) return;
-        var entry = UserColorGenStore.Instance.SaveEntry(name.Trim(), _source, _description);
+        var entry = UserColorGenStore.Instance.SaveEntry(name.Trim(), _source, _description, _trapShape.ToString());
         if (entry == null) return;
         _themeName = entry.Name;
         this.RaisePropertyChanged(nameof(ThemeName));
@@ -188,6 +207,8 @@ public sealed class ColorGenEditorViewModel : ViewModelBase
             Source = entry.Source;
             ThemeName = entry.Name;
             Description = entry.Description ?? "";
+            TrapShape = Enum.TryParse<OrbitTrapShapeDef>(entry.TrapShape, ignoreCase: true, out var shp)
+                ? shp : OrbitTrapShapeDef.Point;
         }
         finally { _loadingNamedEntry = false; }
     }

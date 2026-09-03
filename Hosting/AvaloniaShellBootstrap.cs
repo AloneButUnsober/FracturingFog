@@ -3239,7 +3239,7 @@ namespace FracturingFog.Hosting
             vm.ConfirmDeleteRequested += name => ConfirmYesNoAsync($"Delete saved theme \"{name}\"?", "Delete Theme");
             vm.MessageRequested += (title, body, isErr) => ShowInfo(title, body, isErr);
 
-            vm.HotLoadRequested += (source, className, themeName, description) =>
+            vm.HotLoadRequested += (source, className, themeName, description, trapShape) =>
             {
                 try
                 {
@@ -3248,6 +3248,7 @@ namespace FracturingFog.Hosting
                         ThemeName = themeName,
                         Category = "User",
                         Description = description ?? "",
+                        TrapShape = trapShape ?? "Point",   // #611
                     };
                     // #27 Phase 4 — the theme runs on the safe DSL INTERPRETER
                     // (InterpretedColorMap), not Roslyn codegen + AssemblyLoadContext.
@@ -3269,7 +3270,7 @@ namespace FracturingFog.Hosting
                 }
             };
 
-            vm.GenerateRequested += (source, className, themeName, description) =>
+            vm.GenerateRequested += (source, className, themeName, description, trapShape) =>
             {
                 try
                 {
@@ -3278,6 +3279,7 @@ namespace FracturingFog.Hosting
                         ThemeName = themeName,
                         Category = "User",
                         Description = description ?? "",
+                        TrapShape = trapShape ?? "Point",   // #611
                     };
                     var gen = FracturingFog.ColorGen.ColorGenApi.Generate(source, className, opts);
                     if (!gen.Ok) return gen.Error;

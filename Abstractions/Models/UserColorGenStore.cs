@@ -25,6 +25,11 @@ namespace FracturingFog.Models
         /// <summary>Free-text description embedded in generated C# class
         /// header + INamedColorMap.DisplayDescription. Optional.</summary>
         public string Description { get; set; } = string.Empty;
+
+        /// <summary>#611 — the selected trap shape (an OrbitTrapShape member name)
+        /// for the DSL <c>trap</c> input. Absent / empty ⇒ "Point" (back-compat:
+        /// pre-#611 themes have no shape and default to the origin point-trap).</summary>
+        public string TrapShape { get; set; } = "Point";
     }
 
     public sealed class UserColorGenStore
@@ -69,20 +74,22 @@ namespace FracturingFog.Models
         }
 
         /// <summary>Insert or replace by Name (case-insensitive).</summary>
-        public UserColorGenEntry? SaveEntry(string name, string source, string description = "")
+        public UserColorGenEntry? SaveEntry(string name, string source, string description = "", string trapShape = "Point")
         {
             if (string.IsNullOrWhiteSpace(name)) return null;
+            string shape = string.IsNullOrWhiteSpace(trapShape) ? "Point" : trapShape;
             for (int i = 0; i < Entries.Count; i++)
             {
                 if (Entries[i].Name.Equals(name, StringComparison.OrdinalIgnoreCase))
                 {
                     Entries[i].Source = source ?? string.Empty;
                     Entries[i].Description = description ?? string.Empty;
+                    Entries[i].TrapShape = shape;
                     Save();
                     return Entries[i];
                 }
             }
-            var entry = new UserColorGenEntry { Name = name, Source = source ?? "", Description = description ?? "" };
+            var entry = new UserColorGenEntry { Name = name, Source = source ?? "", Description = description ?? "", TrapShape = shape };
             Entries.Add(entry);
             Save();
             return entry;

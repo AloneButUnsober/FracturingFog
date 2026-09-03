@@ -388,9 +388,22 @@ Each spec: what, surfaces, data model, algorithm, injection points, back-compat,
   from the accumulator) and the escape-final `Map` (orbit inputs 0). A parity test
   Roslyn-compiles the export and asserts `MapWithOrbit` is bit-identical to the
   interpreter.
+- **SELECTABLE TRAP-SHAPE MENU SHIPPED ([#611](https://github.com/AloneButUnsober/FracturingFog/issues/611)):**
+  rather than adding 14 more fixed-shape inputs, a single **`trap`** input reads the
+  slot-1 orbit-trap minimum and the theme picks its shape from the **same 19-shape
+  list as the Color Theme Editor** (`OrbitTrapShape`: Point … PolarRose). The
+  ColorGen editor gains a "Trap shape" ComboBox; the choice persists on the saved
+  theme (`UserColorGenStore.TrapShape`) and threads through `GenerateOptions` →
+  `InterpretedColorMap.TryCreate` → `InterpretedOrbitColorMap`. Non-Point shapes
+  **delegate to the built-in `OrbitTrap*Map` SDFs** (the exact `DataDrivenOrbitTrap`
+  factory — one source of truth), so no shape maths is duplicated. **Point is the
+  default ⇒ `trap` == `trapMin`, byte-identical to pre-#611 themes.** CPU/interpreter
+  only for now (the 14 non-legacy shapes have no HLSL SDF) — a `trap` theme
+  advertises no GPU palette; the 5 legacy fixed-shape inputs keep their GPU path.
 - **REMAINING:** GPU/HLSL orbit support (the big, cross-cutting one — see **F16**);
-  the remaining trap shapes (square / grid / lemniscate / … — mechanical, add per
-  the F13 shape set if wanted).
+  GPU parity for the full `trap` shape set (needs the 19 SDFs in HLSL) + C# export
+  of a `trap` theme (currently rejected with a clear message — bake shape delegation
+  later).
 
 ### F16 — ColorGen orbit inputs on the GPU (HLSL) — COMPLETE (shippable scope)
 
