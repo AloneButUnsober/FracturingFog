@@ -555,6 +555,28 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
         get => _p.Relief2DDenoiseAdaptiveSupersample;
         set { if (_p.Relief2DDenoiseAdaptiveSupersample == value) return; _p.Relief2DDenoiseAdaptiveSupersample = value; this.RaisePropertyChanged(); Fire(); }
     }
+    // SVGF temporal denoise (roadmap S4, #402). Accumulates the noisy signal across
+    // frames (reproject prev frame along the motion AOV) + variance-guides the filter.
+    // Only visible in a sequence render (a moving camera); a still frame denoises
+    // spatially. Off = the plain single-frame À-Trous (byte-identical).
+    public bool Relief2DDenoiseTemporal
+    {
+        get => _p.Relief2DDenoiseTemporal;
+        set { if (_p.Relief2DDenoiseTemporal == value) return; _p.Relief2DDenoiseTemporal = value; this.RaisePropertyChanged(); this.RaisePropertyChanged(nameof(DenoiseTemporalEnabled)); Fire(); }
+    }
+    public double Relief2DDenoiseTemporalFeedback
+    {
+        get => _p.Relief2DDenoiseTemporalFeedback;
+        set { double v = Clamp(value, 0.0, 0.98); if (_p.Relief2DDenoiseTemporalFeedback == v) return; _p.Relief2DDenoiseTemporalFeedback = v; this.RaisePropertyChanged(); Fire(); }
+    }
+    public double Relief2DDenoiseVarianceScale
+    {
+        get => _p.Relief2DDenoiseVarianceScale;
+        set { double v = Clamp(value, 0.0, 16.0); if (_p.Relief2DDenoiseVarianceScale == v) return; _p.Relief2DDenoiseVarianceScale = v; this.RaisePropertyChanged(); Fire(); }
+    }
+    /// <summary>The SVGF feedback / variance controls only bite once the temporal
+    /// toggle is on (which itself needs at least one denoise pass).</summary>
+    public bool DenoiseTemporalEnabled => _p.Relief2DDenoiseIterations > 0 && _p.Relief2DDenoiseTemporal;
     // Vector motion blur (roadmap S1, #398). Strength 0 = off (byte-identical). Only
     // visible in a sequence render (needs the motion-vector AOV from a previous frame).
     public double Relief2DMotionBlurStrength

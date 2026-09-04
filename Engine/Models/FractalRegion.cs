@@ -671,6 +671,20 @@ namespace FracturingFog.Models
         [JsonConverter(typeof(JsonStringEnumConverter))]
         public FroxelQuality FroxelQuality { get; set; } = FroxelQuality.Balanced;
 
+        // Guided À-Trous denoise + SVGF temporal (#402, S4). Carried on the region so a
+        // scene / batch / slideshow render sourced from it can enable the denoise — and
+        // its cross-frame SVGF temporal accumulation + variance guiding — without a live
+        // UI. All default off / neutral, so a region without these is byte-identical.
+        // DenoiseTemporal only bites when DenoiseIterations > 0.
+        public int DenoiseIterations { get; set; } = 0;
+        public double DenoiseColorSigma { get; set; } = 0.10;
+        public double DenoiseNormalSigma { get; set; } = 0.30;
+        public double DenoiseDepthSigma { get; set; } = 0.20;
+        public bool DenoiseAdaptiveSupersample { get; set; } = false;
+        public bool DenoiseTemporal { get; set; } = false;
+        public double DenoiseTemporalFeedback { get; set; } = 0.8;
+        public double DenoiseVarianceScale { get; set; } = 4.0;
+
         /// <summary>Apply <paramref name="s"/> when non-null, otherwise turn
         /// relief OFF on <paramref name="p"/>. The authoritative recall path so a
         /// plain (no-relief) region clears a relief view instead of leaving it on.</summary>
@@ -684,6 +698,10 @@ namespace FracturingFog.Models
             // recall of a plain region can't leave stale froxel fog armed.
             p.Relief2DFroxelVolumetrics = false;
             p.Relief2DFroxelTemporal = false;
+            // Denoise (S4) is likewise a relief feature — clear it so a plain-region
+            // recall can't leave the À-Trous / SVGF pass armed on a flat view.
+            p.Relief2DDenoiseIterations = 0;
+            p.Relief2DDenoiseTemporal = false;
         }
 
         /// <summary>Capture the relief block from a live params, or null when
@@ -729,6 +747,14 @@ namespace FracturingFog.Models
                 FroxelTemporal     = p.Relief2DFroxelTemporal,
                 FroxelTemporalFeedback = p.Relief2DFroxelTemporalFeedback,
                 FroxelQuality      = p.Relief2DFroxelQuality,
+                DenoiseIterations  = p.Relief2DDenoiseIterations,
+                DenoiseColorSigma  = p.Relief2DDenoiseColorSigma,
+                DenoiseNormalSigma = p.Relief2DDenoiseNormalSigma,
+                DenoiseDepthSigma  = p.Relief2DDenoiseDepthSigma,
+                DenoiseAdaptiveSupersample = p.Relief2DDenoiseAdaptiveSupersample,
+                DenoiseTemporal    = p.Relief2DDenoiseTemporal,
+                DenoiseTemporalFeedback = p.Relief2DDenoiseTemporalFeedback,
+                DenoiseVarianceScale = p.Relief2DDenoiseVarianceScale,
             };
         }
 
@@ -772,6 +798,14 @@ namespace FracturingFog.Models
             p.Relief2DFroxelTemporal         = FroxelTemporal;
             p.Relief2DFroxelTemporalFeedback = FroxelTemporalFeedback;
             p.Relief2DFroxelQuality          = FroxelQuality;
+            p.Relief2DDenoiseIterations      = DenoiseIterations;
+            p.Relief2DDenoiseColorSigma      = DenoiseColorSigma;
+            p.Relief2DDenoiseNormalSigma     = DenoiseNormalSigma;
+            p.Relief2DDenoiseDepthSigma      = DenoiseDepthSigma;
+            p.Relief2DDenoiseAdaptiveSupersample = DenoiseAdaptiveSupersample;
+            p.Relief2DDenoiseTemporal        = DenoiseTemporal;
+            p.Relief2DDenoiseTemporalFeedback = DenoiseTemporalFeedback;
+            p.Relief2DDenoiseVarianceScale   = DenoiseVarianceScale;
         }
     }
 
