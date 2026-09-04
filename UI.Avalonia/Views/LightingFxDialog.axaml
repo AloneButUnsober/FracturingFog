@@ -50,6 +50,19 @@
                            Foreground="#FFCC00"
                            Margin="0,0,0,4" />
 
+                <!-- Relief 3D context banner. Relief shares stage-1 per-hit shading
+                     (lights / shadow / AO / fog / volumetrics / material / reflections)
+                     but skips the stage-2 whole-buffer post chain the 3D calculators
+                     run, so Tone Map / Bloom / Lens / SSAO / Edge / Stereo / DoF are
+                     no-ops here — disabled below. #FFCC00 = colorblind-safe advisory.
+                     See Docs/Technical/Lighting-FX-3D-vs-Relief3D.md. -->
+                <Border IsVisible="{Binding IsReliefLightingContext}"
+                        Background="#33FFCC00" BorderBrush="#FFCC00" BorderThickness="1"
+                        CornerRadius="3" Padding="8" Margin="0,0,0,6">
+                    <TextBlock TextWrapping="Wrap" Foreground="#FFCC00"
+                               Text="Relief 3D: lights, shadows, AO, fog and volumetrics below all apply. The post-process effects — Tone Map, Bloom, Lens, SSAO, Edge ink, Stereo, and this dialog's DoF — are 3D-fractal only and are disabled here. For Relief tonemapping, use View ▸ View Transform (and its Exposure EV); for Relief depth-of-field, use the Relief 3D dialog's own aperture / focus." />
+                </Border>
+
                 <!-- #306 — volumetric preset droplist (artistic starting points) -->
                 <Grid ColumnDefinitions="160,*" Margin="0,0,0,4">
                     <TextBlock Grid.Column="0" Text="Volumetric preset:" VerticalAlignment="Center"
@@ -340,9 +353,14 @@
                                        Text="{Binding AoStrength, StringFormat='F2'}" />
                         </Grid>
 
+                        <!-- SSAO is a stage-2 screen-space post pass (needs the depth
+                             G-buffer); 3D-fractal only. DE-cone AO above is shared and
+                             stays enabled on Relief 3D. -->
                         <TextBlock Grid.Row="2" Grid.Column="0" Text="SSAO samples:" VerticalAlignment="Center"
-                                   ToolTip.Tip="Screen-space AO (macro neighbor occlusion). Hemisphere sample count. 0 = off. 8–16 typical." />
-                        <Grid Grid.Row="2" Grid.Column="1" ColumnDefinitions="*,Auto" Margin="0,2">
+                                   IsEnabled="{Binding Stage2PostFxApplies}"
+                                   ToolTip.Tip="Screen-space AO (macro neighbor occlusion). Hemisphere sample count. 0 = off. 8–16 typical. 3D-fractal only — not applied to Relief 3D." />
+                        <Grid Grid.Row="2" Grid.Column="1" ColumnDefinitions="*,Auto" Margin="0,2"
+                              IsEnabled="{Binding Stage2PostFxApplies}">
                             <Slider Classes="knob" Grid.Column="0" Minimum="0" Maximum="64"
                                     IsSnapToTickEnabled="True" TickFrequency="1"
                                     Value="{Binding SsaoSamples, Mode=TwoWay}" />
@@ -351,16 +369,20 @@
                         </Grid>
 
                         <TextBlock Grid.Row="3" Grid.Column="0" Text="SSAO radius:" VerticalAlignment="Center"
+                                   IsEnabled="{Binding Stage2PostFxApplies}"
                                    ToolTip.Tip="Hemisphere radius in world units. Smaller = crevice detail; larger = soft global shadow." />
-                        <Grid Grid.Row="3" Grid.Column="1" ColumnDefinitions="*,Auto" Margin="0,2">
+                        <Grid Grid.Row="3" Grid.Column="1" ColumnDefinitions="*,Auto" Margin="0,2"
+                              IsEnabled="{Binding Stage2PostFxApplies}">
                             <Slider Classes="knob" Grid.Column="0" Minimum="0.001" Maximum="4"
                                     Value="{Binding SsaoRadius, Mode=TwoWay}" />
                             <TextBlock Classes="knobValue" Grid.Column="1"
                                        Text="{Binding SsaoRadius, StringFormat='F3'}" />
                         </Grid>
 
-                        <TextBlock Grid.Row="4" Grid.Column="0" Text="SSAO strength:" VerticalAlignment="Center" />
-                        <Grid Grid.Row="4" Grid.Column="1" ColumnDefinitions="*,Auto" Margin="0,2">
+                        <TextBlock Grid.Row="4" Grid.Column="0" Text="SSAO strength:" VerticalAlignment="Center"
+                                   IsEnabled="{Binding Stage2PostFxApplies}" />
+                        <Grid Grid.Row="4" Grid.Column="1" ColumnDefinitions="*,Auto" Margin="0,2"
+                              IsEnabled="{Binding Stage2PostFxApplies}">
                             <Slider Classes="knob" Grid.Column="0" Minimum="0" Maximum="1"
                                     Value="{Binding SsaoStrength, Mode=TwoWay}" />
                             <TextBlock Classes="knobValue" Grid.Column="1"
@@ -641,9 +663,11 @@
                     </Grid>
                 </Expander>
 
-                <!-- Tone Map / Bloom / Lens -->
+                <!-- Tone Map / Bloom / Lens — entirely stage-2 post; 3D-fractal only.
+                     Disabled on Relief 3D (IsReliefLightingContext); use View Transform. -->
                 <Expander Header="Tone Map / Bloom / Lens" HorizontalAlignment="Stretch">
-                    <Grid ColumnDefinitions="160,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto">
+                    <Grid ColumnDefinitions="160,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto"
+                          IsEnabled="{Binding Stage2PostFxApplies}">
                         <TextBlock Grid.Row="0" Grid.Column="0" Text="Tone map:" VerticalAlignment="Center" />
                         <ComboBox  Grid.Row="0" Grid.Column="1" HorizontalAlignment="Stretch"
                                    ItemsSource="{Binding ToneMapOperators}"
@@ -751,9 +775,14 @@
                                        Text="{Binding MaxBounces}" />
                         </Grid>
 
+                        <!-- Edge ink / Stereo / DoF below are stage-2 post; 3D-fractal
+                             only (Relief supersedes DoF with its own Relief2DDof* knobs).
+                             Disabled on Relief 3D. Reflection above IS shared (stays on). -->
                         <TextBlock Grid.Row="3" Grid.Column="0" Text="Edge contour:" VerticalAlignment="Center"
-                                   ToolTip.Tip="Sobel-on-normal ink overlay. 0 = off." />
-                        <Grid Grid.Row="3" Grid.Column="1" ColumnDefinitions="*,Auto" Margin="0,2">
+                                   IsEnabled="{Binding Stage2PostFxApplies}"
+                                   ToolTip.Tip="Sobel-on-normal ink overlay. 0 = off. 3D-fractal only — not applied to Relief 3D." />
+                        <Grid Grid.Row="3" Grid.Column="1" ColumnDefinitions="*,Auto" Margin="0,2"
+                              IsEnabled="{Binding Stage2PostFxApplies}">
                             <Slider Classes="knob" Grid.Column="0" Minimum="0" Maximum="1"
                                     Value="{Binding EdgeStrength, Mode=TwoWay}" />
                             <TextBlock Classes="knobValue" Grid.Column="1"
@@ -761,8 +790,10 @@
                         </Grid>
 
                         <TextBlock Grid.Row="4" Grid.Column="0" Text="Edge threshold:" VerticalAlignment="Center"
+                                   IsEnabled="{Binding Stage2PostFxApplies}"
                                    ToolTip.Tip="Sobel magnitude below which no ink is drawn (0..2.83). Default 0.4." />
-                        <Grid Grid.Row="4" Grid.Column="1" ColumnDefinitions="*,Auto" Margin="0,2">
+                        <Grid Grid.Row="4" Grid.Column="1" ColumnDefinitions="*,Auto" Margin="0,2"
+                              IsEnabled="{Binding Stage2PostFxApplies}">
                             <Slider Classes="knob" Grid.Column="0" Minimum="0" Maximum="2.83"
                                     Value="{Binding EdgeThreshold, Mode=TwoWay}" />
                             <TextBlock Classes="knobValue" Grid.Column="1"
@@ -770,34 +801,44 @@
                         </Grid>
 
                         <TextBlock Grid.Row="5" Grid.Column="0" Text="Edge kernel:" VerticalAlignment="Center"
+                                   IsEnabled="{Binding Stage2PostFxApplies}"
                                    ToolTip.Tip="Sobel = fast, isotropic-ish. FreiChen = 9-tap edge subspace, more uniform on diagonals." />
                         <ComboBox Grid.Row="5" Grid.Column="1" HorizontalAlignment="Stretch"
+                                  IsEnabled="{Binding Stage2PostFxApplies}"
                                   ItemsSource="{Binding EdgeKernels}"
                                   SelectedItem="{Binding EdgeKernel, Mode=TwoWay}"
                                   Margin="0,2" />
 
                         <TextBlock Grid.Row="6" Grid.Column="0" Text="Edge color (BGRA hex):" VerticalAlignment="Center"
+                                   IsEnabled="{Binding Stage2PostFxApplies}"
                                    ToolTip.Tip="Ink color in AARRGGBB hex (FF000000 = opaque black, FFFFCC00 = colorblind-safe yellow)." />
                         <TextBox Grid.Row="6" Grid.Column="1"
+                                 IsEnabled="{Binding Stage2PostFxApplies}"
                                  Text="{Binding EdgeColorHex, Mode=TwoWay, UpdateSourceTrigger=LostFocus}"
                                  Margin="0,2" />
 
                         <TextBlock Grid.Row="7" Grid.Column="0" Text="Stereo mode:" VerticalAlignment="Center"
-                                   ToolTip.Tip="Off = mono. Fake = single render + depth-parallax warp (cheap). True = two real per-eye renders (Phase 20b — 2x cost, real parallax on close objects)." />
+                                   IsEnabled="{Binding Stage2PostFxApplies}"
+                                   ToolTip.Tip="Off = mono. Fake = single render + depth-parallax warp (cheap). True = two real per-eye renders (Phase 20b — 2x cost, real parallax on close objects). 3D-fractal only — not wired for Relief 3D." />
                         <ComboBox Grid.Row="7" Grid.Column="1" HorizontalAlignment="Stretch"
+                                  IsEnabled="{Binding Stage2PostFxApplies}"
                                   ItemsSource="{Binding StereoModes}"
                                   SelectedItem="{Binding StereoMode, Mode=TwoWay}"
                                   Margin="0,2" />
 
                         <TextBlock Grid.Row="8" Grid.Column="0" Text="Stereo eye sep:" VerticalAlignment="Center"
+                                   IsEnabled="{Binding Stage2PostFxApplies}"
                                    ToolTip.Tip="Side-by-side stereo IPD in world units. 0 = mono. Doubles output width." />
                         <NumericUpDown Grid.Row="8" Grid.Column="1"
+                                       IsEnabled="{Binding Stage2PostFxApplies}"
                                        Minimum="0" Maximum="0.25" Increment="0.005" FormatString="F4"
                                        Value="{Binding StereoEyeSeparation, Mode=TwoWay}" Margin="0,2" />
 
                         <TextBlock Grid.Row="9" Grid.Column="0" Text="Stereo FOV°:" VerticalAlignment="Center"
+                                   IsEnabled="{Binding Stage2PostFxApplies}"
                                    ToolTip.Tip="Per-eye horizontal field-of-view in degrees. Default 60°. Used only when eye-sep > 0." />
-                        <Grid Grid.Row="9" Grid.Column="1" ColumnDefinitions="*,Auto" Margin="0,2">
+                        <Grid Grid.Row="9" Grid.Column="1" ColumnDefinitions="*,Auto" Margin="0,2"
+                              IsEnabled="{Binding Stage2PostFxApplies}">
                             <Slider Classes="knob" Grid.Column="0" Minimum="20" Maximum="120"
                                     IsSnapToTickEnabled="True" TickFrequency="1"
                                     Value="{Binding StereoFovDegrees, Mode=TwoWay}" />
@@ -806,8 +847,10 @@
                         </Grid>
 
                         <TextBlock Grid.Row="10" Grid.Column="0" Text="Stereo convergence:" VerticalAlignment="Center"
+                                   IsEnabled="{Binding Stage2PostFxApplies}"
                                    ToolTip.Tip="Zero-parallax plane via horizontal image translation, as a fraction of eye width. 0 = parallel (whole scene behind the screen). Positive = pull the subject toward the screen plane so nearer detail floats in front. Typical +/-0.05." />
-                        <Grid Grid.Row="10" Grid.Column="1" ColumnDefinitions="*,Auto" Margin="0,2">
+                        <Grid Grid.Row="10" Grid.Column="1" ColumnDefinitions="*,Auto" Margin="0,2"
+                              IsEnabled="{Binding Stage2PostFxApplies}">
                             <Slider Classes="knob" Grid.Column="0" Minimum="-0.2" Maximum="0.2"
                                     Value="{Binding StereoConvergence, Mode=TwoWay}" />
                             <TextBlock Classes="knobValue" Grid.Column="1"
@@ -815,8 +858,10 @@
                         </Grid>
 
                         <TextBlock Grid.Row="11" Grid.Column="0" Text="Max disparity:" VerticalAlignment="Center"
+                                   IsEnabled="{Binding Stage2PostFxApplies}"
                                    ToolTip.Tip="Parallax comfort guard — largest on-screen eye-to-eye disparity, as a fraction of width. Caps the Fake-warp shift so near hits stay fusable (no divergence / eye strain). Default 0.03 (1/30 rule). 0 = off." />
-                        <Grid Grid.Row="11" Grid.Column="1" ColumnDefinitions="*,Auto" Margin="0,2">
+                        <Grid Grid.Row="11" Grid.Column="1" ColumnDefinitions="*,Auto" Margin="0,2"
+                              IsEnabled="{Binding Stage2PostFxApplies}">
                             <Slider Classes="knob" Grid.Column="0" Minimum="0" Maximum="0.15"
                                     Value="{Binding StereoMaxDisparity, Mode=TwoWay}" />
                             <TextBlock Classes="knobValue" Grid.Column="1"
@@ -824,21 +869,27 @@
                         </Grid>
 
                         <TextBlock Grid.Row="12" Grid.Column="0" Text="DoF aperture:" VerticalAlignment="Center"
-                                   ToolTip.Tip="Hex bokeh radius (world units). 0 = pinhole." />
-                        <Grid Grid.Row="12" Grid.Column="1" ColumnDefinitions="*,Auto" Margin="0,2">
+                                   IsEnabled="{Binding Stage2PostFxApplies}"
+                                   ToolTip.Tip="Hex bokeh radius (world units). 0 = pinhole. 3D-fractal only — Relief 3D has its own DoF on the Relief 3D dialog (aperture / focus)." />
+                        <Grid Grid.Row="12" Grid.Column="1" ColumnDefinitions="*,Auto" Margin="0,2"
+                              IsEnabled="{Binding Stage2PostFxApplies}">
                             <Slider Classes="knob" Grid.Column="0" Minimum="0" Maximum="0.5"
                                     Value="{Binding DofAperture, Mode=TwoWay}" />
                             <TextBlock Classes="knobValue" Grid.Column="1"
                                        Text="{Binding DofAperture, StringFormat='F3'}" />
                         </Grid>
 
-                        <TextBlock Grid.Row="13" Grid.Column="0" Text="DoF focus dist:" VerticalAlignment="Center" />
+                        <TextBlock Grid.Row="13" Grid.Column="0" Text="DoF focus dist:" VerticalAlignment="Center"
+                                   IsEnabled="{Binding Stage2PostFxApplies}" />
                         <NumericUpDown Grid.Row="13" Grid.Column="1"
+                                       IsEnabled="{Binding Stage2PostFxApplies}"
                                        Minimum="0.1" Maximum="100" Increment="0.1" FormatString="F2"
                                        Value="{Binding DofFocusDistance, Mode=TwoWay}" Margin="0,2" />
 
-                        <TextBlock Grid.Row="14" Grid.Column="0" Text="DoF samples:" VerticalAlignment="Center" />
-                        <Grid Grid.Row="14" Grid.Column="1" ColumnDefinitions="*,Auto" Margin="0,2">
+                        <TextBlock Grid.Row="14" Grid.Column="0" Text="DoF samples:" VerticalAlignment="Center"
+                                   IsEnabled="{Binding Stage2PostFxApplies}" />
+                        <Grid Grid.Row="14" Grid.Column="1" ColumnDefinitions="*,Auto" Margin="0,2"
+                              IsEnabled="{Binding Stage2PostFxApplies}">
                             <Slider Classes="knob" Grid.Column="0" Minimum="1" Maximum="32"
                                     IsSnapToTickEnabled="True" TickFrequency="1"
                                     Value="{Binding DofSamples, Mode=TwoWay}" />
@@ -847,13 +898,17 @@
                         </Grid>
 
                         <TextBlock Grid.Row="15" Grid.Column="0" Text="Thin-lens DoF:" VerticalAlignment="Center"
+                                   IsEnabled="{Binding Stage2PostFxApplies}"
                                    ToolTip.Tip="Physically-based depth of field for the 3D-fractal raymarch camera: averages 'DoF samples' primary rays across the aperture disc, re-aimed through the focal point, so occluded geometry and silhouettes blur correctly (real bokeh) — instead of the screen-space depth gather. Uses the same aperture / focus / samples above. Off keeps the screen-space blur; aperture 0 is pinhole either way. (SSAO / edge-ink are bypassed while thin-lens is on.)" />
                         <CheckBox Grid.Row="15" Grid.Column="1" IsChecked="{Binding DofThinLens, Mode=TwoWay}"
+                                  IsEnabled="{Binding Stage2PostFxApplies}"
                                   Content="physically-based lens (real bokeh)" Margin="0,2" />
 
                         <TextBlock Grid.Row="16" Grid.Column="0" Text="Stereo layout:" VerticalAlignment="Center"
+                                   IsEnabled="{Binding Stage2PostFxApplies}"
                                    ToolTip.Tip="FullSbs = each eye full width (2W x H). HalfSbs = each eye squeezed to W/2 (W x H, anamorphic) — mono dimensions, smaller files; the 3D TV / VR player un-squeezes per eye. Used only when Stereo mode is on." />
                         <ComboBox Grid.Row="16" Grid.Column="1" HorizontalAlignment="Stretch"
+                                  IsEnabled="{Binding Stage2PostFxApplies}"
                                   ItemsSource="{Binding StereoLayouts}"
                                   SelectedItem="{Binding StereoLayout, Mode=TwoWay}"
                                   Margin="0,2" />
