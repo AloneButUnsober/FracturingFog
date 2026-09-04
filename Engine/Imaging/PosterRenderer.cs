@@ -72,6 +72,13 @@ namespace FracturingFog.Imaging
         // no motion fill (byte-identical); only meaningful with a motion-capturing AOV.
         public FracturingFog.Rendering.Lighting.ReliefMotionVector.CameraView? PreviousCamera { get; init; }
 
+        // S4 (#402) — optional persistent SVGF denoise history. A sequence renderer hands
+        // the SAME instance to every frame so the relief denoise accumulates temporally
+        // (reproject + variance-guided À-Trous) when Relief2DDenoiseTemporal is on. The
+        // pass updates the history's PrevCamera each frame, which the caller threads back
+        // as PreviousCamera. Null (the default) = the plain single-frame denoise.
+        public SvgfHistory? SvgfHistory { get; init; }
+
         // #508 — the interactive view's dedicated HI-RES relief field (the host's
         // _reliefFieldCalc floor field, Relief2DHiResField). When supplied, the
         // offscreen relief RAYMARCH uses this field instead of re-deriving the
@@ -315,7 +322,7 @@ namespace FracturingFog.Imaging
                 // of a Relief 3D scene must apply relief here too — otherwise it
                 // silently falls back to the flat 2D themed colour. No-op when
                 // relief is off or the calc exposes no field.
-                buffer = ApplyReliefIfEnabled(buffer, alt as IHeightFieldSource, w, h, req.FractalParameters, alt?.ColorMap, aovCapture, req.FroxelHistory, req.ReliefField, req.ReliefFieldW, req.ReliefFieldH, req.PreviousCamera);
+                buffer = ApplyReliefIfEnabled(buffer, alt as IHeightFieldSource, w, h, req.FractalParameters, alt?.ColorMap, aovCapture, req.FroxelHistory, req.ReliefField, req.ReliefFieldW, req.ReliefFieldH, req.PreviousCamera, req.SvgfHistory);
             }
             else
             {
@@ -400,7 +407,7 @@ namespace FracturingFog.Imaging
                 // not apply — BUT the dedicated hi-res relief field is a separate,
                 // higher-quality field, not just a resolution bump, so a supplied
                 // req.ReliefField (the interactive one) is preferred (#508).
-                buffer = ApplyReliefIfEnabled(buffer, calc, w, h, req.FractalParameters, calc.ColorMap, aovCapture, req.FroxelHistory, req.ReliefField, req.ReliefFieldW, req.ReliefFieldH, req.PreviousCamera);
+                buffer = ApplyReliefIfEnabled(buffer, calc, w, h, req.FractalParameters, calc.ColorMap, aovCapture, req.FroxelHistory, req.ReliefField, req.ReliefFieldW, req.ReliefFieldH, req.PreviousCamera, req.SvgfHistory);
             }
 
             }
@@ -485,7 +492,8 @@ namespace FracturingFog.Imaging
             FracturingFog.Rendering.Lighting.HeightfieldRaymarch2D.ReliefAovBuffers? aovCapture = null,
             FracturingFog.Rendering.Lighting.FroxelHistory? froxelHistory = null,
             float[]? hiResField = null, int hiResW = 0, int hiResH = 0,
-            FracturingFog.Rendering.Lighting.ReliefMotionVector.CameraView? previousCamera = null)
+            FracturingFog.Rendering.Lighting.ReliefMotionVector.CameraView? previousCamera = null,
+            SvgfHistory? svgfHistory = null)
         {
             if (p == null || !p.Relief2DEnabled) return buffer;
             int n = w * h;
@@ -540,7 +548,13 @@ namespace FracturingFog.Imaging
                         w, h, aov?.Components != null, true);
                 FracturingFog.Rendering.Lighting.HeightfieldRaymarch2D.Render(
                     buffer, field, w, h, fw, fh, p, dst, out _, null, aov, null, froxelHistory, fx, previousCamera);
-                ReliefDenoisePass.Apply(dst, aov, w, h, p);
+                // S4 (#402) — SVGF temporal denoise when a persistent history is supplied
+                // and the temporal toggle is on; else the plain single-frame denoise. Both
+                // are no-ops when the denoise is off, so this stays byte-identical by default.
+                if (svgfHistory != null && ReliefDenoisePass.EnabledTemporal(p))
+                    ReliefDenoisePass.ApplySvgf(dst, aov, w, h, p, svgfHistory);
+                else
+                    ReliefDenoisePass.Apply(dst, aov, w, h, p);
                 if (wantMotionBlur && aov?.Motion != null)
                     dst = MotionBlurFromVectors.Apply(dst, aov.Motion, w, h,
                         p.Relief2DMotionBlurStrength, Math.Clamp(p.Relief2DMotionBlurSamples, 2, 64));
