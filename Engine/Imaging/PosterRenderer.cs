@@ -254,7 +254,13 @@ namespace FracturingFog.Imaging
             // equals the raw beauty, so terrain-HDR and sky-fallback pixels stay
             // consistent. Any other case falls through to the unchanged 8-bit path.
             bool neutralGrade = req.Brightness == 0 && req.Contrast == 0 && req.Gamma == 0;
-            bool wantHdr = req.ViewTransform != ViewTransform.None && neutralGrade
+            // S12.1 (#652) — relief stage-2 Tone Map / Bloom consume the same HDR beauty,
+            // so capture it when an FX tonemap/bloom is active too, not just a view
+            // transform (exposure alone is a pre-tonemap multiply, inert on its own).
+            bool fxTonemap = req.FractalParameters is not null
+                && (req.FractalParameters.Lighting.ToneMap != FracturingFog.Rendering.Lighting.ToneMapOperator.None
+                    || req.FractalParameters.Lighting.BloomStrength > 0.0);
+            bool wantHdr = (req.ViewTransform != ViewTransform.None || fxTonemap) && neutralGrade
                 && req.FractalParameters is { Relief2DEnabled: true, Relief2DRaymarch: true }
                 // The HDR plane is the PRE-denoise beauty; tonemapping it would drop a
                 // guided denoise, so the HDR headroom path is used only when denoise is
@@ -265,9 +271,19 @@ namespace FracturingFog.Imaging
                 // froxel is active, keep the 8-bit transform on the composited buffer.
                 && !(req.FractalParameters.Relief2DFroxelVolumetrics
                      && req.FractalParameters.Lighting.FogDensity > 0.0);
-            var hdrAov = wantHdr
+            // S12.3/S12.4 (#652) — SSAO + edge ink key on the relief normal + depth
+            // G-buffer (always allocated on any capture; the GPU kernel emits it, so it
+            // doesn't force the CPU trace). Capture whenever either is active, even if
+            // the HDR gate is off (geometry needs no headroom / froxel-free beauty).
+            bool wantGeom = false;
+            if (req.FractalParameters is { Relief2DEnabled: true, Relief2DRaymarch: true })
+            {
+                var geomFx = req.FractalParameters.Lighting;
+                wantGeom = ReliefScreenSpacePost.WantsGeom(in geomFx);
+            }
+            var hdrAov = (wantHdr || wantGeom)
                 ? new FracturingFog.Rendering.Lighting.HeightfieldRaymarch2D.ReliefAovBuffers(
-                    req.Width, req.Height, false, false, true)
+                    req.Width, req.Height, false, false, captureHdr: wantHdr)
                 : null;
 
             uint[] buffer = RenderComposedBuffer(req, token, out int w, out int h, hdrAov);
@@ -278,6 +294,19 @@ namespace FracturingFog.Imaging
             // Alpha is PRESERVED here (F10.3) so the interior-alpha composite below
             // still sees the authored coverage byte.
             ApplyBrightnessContrastGamma(buffer, w * h, req.Brightness, req.Contrast, req.Gamma);
+
+            // S12 (#652) — relief STAGE-2 post chain, matching the live path
+            // (FractalRenderHost): Tone Map + Exposure + Bloom (S12.1, over the captured
+            // HDR beauty) + Lens (S12.2) + SSAO (S12.4) + Edge ink (S12.3, over the
+            // normal+depth G-buffer). When any pass runs the HDR view-transform path is
+            // dropped (it would overwrite these display-space passes) — the view
+            // transform below then stacks on the 8-bit buffer.
+            bool reliefStage2Applied = false;
+            if (req.FractalParameters is { Relief2DEnabled: true, Relief2DRaymarch: true })
+            {
+                var reliefFx = req.FractalParameters.Lighting;
+                reliefStage2Applied = ReliefScreenSpacePost.ApplyStage2(buffer, hdrAov, w, h, in reliefFx);
+            }
 
             // S2 (#389/#396) — output-stage view transform (tonemap), layered on the
             // b/c/gamma post-pass exactly as the live path does, so a poster matches
@@ -291,7 +320,7 @@ namespace FracturingFog.Imaging
             bool linearComposited = false;
             if (req.ViewTransform != ViewTransform.None)
             {
-                if (hdrAov?.HdrBeauty != null && hdrAov.HdrBeauty.Length == (long)w * h * 3)
+                if (!reliefStage2Applied && hdrAov?.HdrBeauty != null && hdrAov.HdrBeauty.Length == (long)w * h * 3)
                     buffer = LinearFloatImage
                         .FromHdrByteScale(hdrAov.HdrBeauty, buffer, w, h)
                         .ApplyViewTransform(req.ViewTransform, req.ViewExposureEv)
