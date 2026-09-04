@@ -1062,6 +1062,42 @@ height AOV**, no new geometry machinery.
   relief gap is separate. Height-source only — colour still comes from the theme.
 - **Fit:** an AOV→height instance of S1; low risk, high novelty payoff.
 
+### S12 — Relief 3D stage-2 post-chain parity ◐ (#652)
+FF's lighting/FX runs in **two stages**. Stage 1 (`ShadingPipeline.Shade<TDe>`) is
+shared by the 3D raymarchers **and** the Relief raymarch, so Relief already gets
+lights, shadows, DE-cone AO, fog + volumetric in-scatter, PBR, glass, reflections,
+triplanar and sky/IBL at parity. Stage 2 is the **whole-buffer post chain**
+(`ScreenSpacePost.*`: `ApplySsao → ApplyHdrDof → ApplyToneMapBloom → ApplyEdgeInk`)
+run only by the true-3D *calculators*; Relief renders through
+`HeightfieldRaymarch2D` (not a calculator), so it never runs them —
+`FractalRenderHost` re-adds only the S2 `ViewTransform` + the debug HUD. Net effect:
+the **Volumetric Lighting & FX** dialog exposes Tone Map / Bloom / Lens / SSAO / Edge
+/ Stereo to Relief but they are silent no-ops, which users repeatedly hit (the Tone
+Map surprise). Relief already captures the pre-clamp HDR beauty
+(`ReliefAovBuffers.HdrBeauty`, S2/#396) — the exact input the post chain wants — so
+this is plumbing, not new physics. Analysis doc: `Docs/Technical/Lighting-FX-3D-vs-Relief3D.md`.
+- **Shipped (UI mitigation, PR #653):** the FX dialog gates the stage-2-only controls
+  when the context is Relief 3D (`FractalParamsViewModel.Stage2PostFxApplies` /
+  `IsReliefLightingContext`) with a `#FFCC00` banner pointing at View ▸ View Transform;
+  and the Relief 3D dialog now surfaces the S2 **View transform + Exposure** directly
+  (the control that actually tonemaps relief), with a **Ctrl+H** shortcut for the
+  Post-FX HUD.
+- **Follow-up slices (each independently shippable):**
+  1. **Tone Map + Exposure + Bloom** on Relief via `ApplyToneMapBloom` over the captured
+     HDR beauty — define the interaction with the global `ViewTransform` (replace-when-set
+     vs composed order); this is where the two tonemap paths finally reconcile.
+  2. **Lens post** (chromatic aberration / distortion / vignette / anamorphic) — a byte-buffer pass.
+  3. **Edge ink** — reuse the Relief depth+normal G-buffer.
+  4. **SSAO** — same G-buffer.
+  5. **Stereo** for Relief — larger; needs per-eye Relief camera orchestration.
+  6. Flip the UI gate per feature as each lands.
+- **Not in scope — DoF stays parallel:** Relief has its own `Relief2DDof*` knobs on the
+  Relief 3D dialog; the FX-dialog DoF remains 3D-only by design.
+- **Reuse:** the HDR beauty AOV (#396), the Relief normal/depth G-buffer (#398), the
+  existing `ScreenSpacePost` operators (byte-buffer, twin-safe).
+- **Fit:** the natural consumer of the S2 HDR intermediate — closes the "why is Tone
+  Map dead on relief" gap the S2 producer work exposed.
+
 ## 4. Explicit non-goals (the Blender trap)
 
 Holding this boundary is as important as shipping the slices. FF exports **mesh

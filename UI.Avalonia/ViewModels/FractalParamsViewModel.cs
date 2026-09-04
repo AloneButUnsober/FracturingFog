@@ -1502,6 +1502,70 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
     public event Action? ExportReliefMeshRequested;
     public ReactiveCommand<Unit, Unit> ExportReliefMeshCommand { get; }
 
+    // ── S2 (#396) view transform + exposure — mirror of the Post-FX HUD ────────
+    // These edit the GLOBAL output view state (ViewState.ViewTransform /
+    // ViewExposureEv), NOT FractalParameters. The Relief 3D dialog surfaces them so
+    // the relief HDR tonemap is reachable where the user actually works (the common
+    // "why doesn't Tone Map do anything" confusion — that dialog's Tone Map is the
+    // 3D-only stage-2 path; THIS is the one that lights relief). The host seeds these
+    // from the live ViewState and routes changes back through MainViewModel, which
+    // does the write-through + RepaintWithPostFx exactly like the HUD. Other VM
+    // instances (Fractal Params, Lighting FX) leave the events unsubscribed and never
+    // show the controls, so the block is inert there.
+    public FracturingFog.Imaging.ViewTransform[] ViewTransformOptions { get; } =
+        (FracturingFog.Imaging.ViewTransform[])System.Enum.GetValues(typeof(FracturingFog.Imaging.ViewTransform));
+
+    private FracturingFog.Imaging.ViewTransform _viewTransform;
+    /// <summary>Output-stage view transform. Fires <see cref="ViewTransformChanged"/>
+    /// so the host writes it through to the shared ViewState + repaints.</summary>
+    public FracturingFog.Imaging.ViewTransform ViewTransform
+    {
+        get => _viewTransform;
+        set
+        {
+            if (_viewTransform == value) return;
+            this.RaiseAndSetIfChanged(ref _viewTransform, value);
+            this.RaisePropertyChanged(nameof(ViewExposureEnabled));
+            ViewTransformChanged?.Invoke(this, value);
+        }
+    }
+
+    /// <summary>Exposure only bites once a transform is active (None ignores it).</summary>
+    public bool ViewExposureEnabled => _viewTransform != FracturingFog.Imaging.ViewTransform.None;
+
+    private double _viewExposure;
+    /// <summary>Exposure in stops before the transform, -16..16; 0 = neutral.</summary>
+    public double ViewExposure
+    {
+        get => _viewExposure;
+        set
+        {
+            double v = Clamp(value, -16.0, 16.0);
+            if (_viewExposure == v) return;
+            this.RaiseAndSetIfChanged(ref _viewExposure, v);
+            this.RaisePropertyChanged(nameof(ViewExposureLabel));
+            ViewExposureChanged?.Invoke(this, v);
+        }
+    }
+
+    public string ViewExposureLabel => $"Exposure: {_viewExposure:+0.#;-0.#;0} EV";
+
+    public event EventHandler<FracturingFog.Imaging.ViewTransform>? ViewTransformChanged;
+    public event EventHandler<double>? ViewExposureChanged;
+
+    /// <summary>Seed the view-transform controls from the live ViewState WITHOUT
+    /// raising the change events (the host wires the events after seeding, so seeding
+    /// never echoes back into a redundant repaint).</summary>
+    public void SeedViewPostFx(FracturingFog.Imaging.ViewTransform vt, double exposureEv)
+    {
+        _viewTransform = vt;
+        _viewExposure = Clamp(exposureEv, -16.0, 16.0);
+        this.RaisePropertyChanged(nameof(ViewTransform));
+        this.RaisePropertyChanged(nameof(ViewExposure));
+        this.RaisePropertyChanged(nameof(ViewExposureEnabled));
+        this.RaisePropertyChanged(nameof(ViewExposureLabel));
+    }
+
     private void Fire()
     {
         if (_suppress) return;

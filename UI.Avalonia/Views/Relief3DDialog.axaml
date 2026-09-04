@@ -31,6 +31,32 @@
                           IsChecked="{Binding Relief2DEnabled, Mode=TwoWay}"
                           ToolTip.Tip="Treats the escape potential as a height field and adds real raised relief + horizon cast shadows on top of the active theme. Reads best on smooth (non-noisy) themes and when zoomed into filament structure." />
 
+                <!-- S2 (#396) — View transform + Exposure. The SAME global output
+                     tonemap the Post-FX HUD exposes (View ▸ View Transform), surfaced
+                     here because it is the control that tonemaps the relief HDR beauty
+                     (the FX dialog's Tone Map / Bloom is the 3D-only stage-2 path and
+                     is a no-op on relief — #652). None = unchanged. -->
+                <Expander Header="View transform (tonemap)" HorizontalAlignment="Stretch" IsExpanded="False">
+                    <Grid ColumnDefinitions="160,*" RowDefinitions="Auto,Auto,Auto">
+                        <TextBlock Grid.Row="0" Grid.Column="0" Text="View:" VerticalAlignment="Center"
+                                   ToolTip.Tip="Output view transform / tonemap applied at display encode. None = unchanged. AgX / ACES / Filmic roll off relief highlights with real HDR headroom." />
+                        <ComboBox Grid.Row="0" Grid.Column="1" HorizontalAlignment="Stretch" Margin="0,2"
+                                  ItemsSource="{Binding ViewTransformOptions}"
+                                  SelectedItem="{Binding ViewTransform, Mode=TwoWay}" />
+
+                        <TextBlock Grid.Row="1" Grid.Column="0" Text="{Binding ViewExposureLabel}" VerticalAlignment="Center"
+                                   IsEnabled="{Binding ViewExposureEnabled}"
+                                   ToolTip.Tip="Exposure in stops applied before the view transform (-16..16). Only active once a transform is selected." />
+                        <Slider Grid.Row="1" Grid.Column="1" Minimum="-16" Maximum="16" TickFrequency="4" Margin="0,2"
+                                Value="{Binding ViewExposure, Mode=TwoWay}"
+                                IsEnabled="{Binding ViewExposureEnabled}" />
+
+                        <TextBlock Grid.Row="2" Grid.Column="0" Grid.ColumnSpan="2" Margin="0,2,0,0"
+                                   TextWrapping="Wrap" FontSize="11" Foreground="#9B9B9B"
+                                   Text="Same control as the Post-FX HUD (X, or Ctrl+H). Global — applies to the whole view, not just relief." />
+                    </Grid>
+                </Expander>
+
                 <Expander Header="Relief lighting" HorizontalAlignment="Stretch"
                           IsExpanded="{Binding Relief2DEnabled, Mode=OneWay}"
                           IsEnabled="{Binding Relief2DEnabled}">
