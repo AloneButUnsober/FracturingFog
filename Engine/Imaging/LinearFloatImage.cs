@@ -90,6 +90,50 @@ public sealed class LinearFloatImage
         return img;
     }
 
+    /// <summary>Build a linear-light image directly from an interleaved linear-RGB
+    /// float buffer (3 floats / pixel, row-major, unbounded ≥0 — the layout an EXR
+    /// read-back and other float producers hand over). Values above 1.0 are carried
+    /// with full headroom; apply a view transform to roll them off. Alpha comes from
+    /// <paramref name="alpha"/> (one straight value per pixel) or defaults to opaque
+    /// when it is null.</summary>
+    public static LinearFloatImage FromLinearRgb(float[] linearRgb, int width, int height, float[]? alpha = null)
+    {
+        if (linearRgb == null) throw new ArgumentNullException(nameof(linearRgb));
+        long n = (long)width * height;
+        if (linearRgb.Length < n * 3) throw new ArgumentException("LinearFloatImage.FromLinearRgb: buffer smaller than width*height*3.");
+        if (alpha != null && alpha.Length < n) throw new ArgumentException("LinearFloatImage.FromLinearRgb: alpha buffer smaller than width*height.");
+        var img = new LinearFloatImage(width, height);
+        Array.Copy(linearRgb, img.Rgb, n * 3);
+        if (alpha != null) Array.Copy(alpha, img.Alpha, n);
+        else Array.Fill(img.Alpha, 1f);
+        return img;
+    }
+
+    /// <summary>Decode a scene-linear OpenEXR stream into the intermediate — the S2
+    /// (#396) EXR READ-BACK producer. The EXR's RGB is already linear light with real
+    /// headroom (values &gt; 1.0 survive), so a rendered <c>.exr</c> can be regraded /
+    /// tonemapped after the fact (apply a view transform, then <see cref="ToBgra"/>)
+    /// WITHOUT re-rendering — the render-pass compositor superpower (roadmap S1/S2).
+    /// Alpha is opaque (the reader keeps RGB only, per the HDRI convention). Returns
+    /// <c>null</c> when the stream is not a supported EXR (the reader's own contract:
+    /// half/float, uncompressed or ZIP, single-part scanline).</summary>
+    public static LinearFloatImage? FromExr(System.IO.Stream stream)
+    {
+        if (stream == null) throw new ArgumentNullException(nameof(stream));
+        var img = FracturingFog.Rendering.Lighting.OpenExrReader.Parse(stream);
+        if (img == null) return null;
+        return FromLinearRgb(img.Data, img.Width, img.Height);
+    }
+
+    /// <summary>Open <paramref name="path"/> and decode it as a scene-linear OpenEXR
+    /// (see the stream overload). Returns <c>null</c> for an unsupported EXR.</summary>
+    public static LinearFloatImage? FromExr(string path)
+    {
+        if (string.IsNullOrEmpty(path)) throw new ArgumentException("LinearFloatImage.FromExr: path is null or empty.", nameof(path));
+        using var fs = System.IO.File.OpenRead(path);
+        return FromExr(fs);
+    }
+
     /// <summary>Build a linear-light image from the engine's PRE-CLAMP HDR beauty
     /// buffer (byte-scale 0..∞, 3 floats / pixel — <see cref="FracturingFog.Rendering.Lighting.HeightfieldRaymarch2D.ReliefAovBuffers.HdrBeauty"/>
     /// and the <c>ScreenSpacePost</c> convention) plus the 8-bit fallback beauty for
