@@ -77,6 +77,50 @@ public sealed class LinearFloatImage
         return img;
     }
 
+    /// <summary>Build a linear-light image from the engine's PRE-CLAMP HDR beauty
+    /// buffer (byte-scale 0..∞, 3 floats / pixel — <see cref="FracturingFog.Rendering.Lighting.HeightfieldRaymarch2D.ReliefAovBuffers.HdrBeauty"/>
+    /// and the <c>ScreenSpacePost</c> convention) plus the 8-bit fallback beauty for
+    /// the pixels that carry no HDR sample. A channel of <c>NaN</c> is that sentinel
+    /// (sky / ray-miss): those pixels decode the fallback BGRA (sRGB → linear), so a
+    /// buffer with NO captured HDR reduces EXACTLY to <see cref="FromBgra"/> and the
+    /// view transform matches the plain 8-bit path byte-for-byte. Written pixels use
+    /// <c>value / 255</c> as their linear value — the same free-form byte-scale ⇒
+    /// linear mapping the existing HDR tonemap path uses — so a highlight above 255
+    /// (linear > 1.0) survives into the intermediate with real headroom instead of
+    /// the clamp the 8-bit beauty already applied. Alpha always comes from the
+    /// fallback (the HDR plane carries none).</summary>
+    public static LinearFloatImage FromHdrByteScale(float[] hdrByteScale, uint[] fallbackBgra, int width, int height)
+    {
+        if (hdrByteScale == null) throw new ArgumentNullException(nameof(hdrByteScale));
+        if (fallbackBgra == null) throw new ArgumentNullException(nameof(fallbackBgra));
+        long n = (long)width * height;
+        if (hdrByteScale.Length < n * 3) throw new ArgumentException("LinearFloatImage.FromHdrByteScale: HDR buffer smaller than width*height*3.");
+        if (fallbackBgra.Length < n) throw new ArgumentException("LinearFloatImage.FromHdrByteScale: fallback buffer smaller than width*height.");
+        var img = new LinearFloatImage(width, height);
+        for (int i = 0; i < n; i++)
+        {
+            int j = i * 3;
+            float hr = hdrByteScale[j];
+            uint p = fallbackBgra[i];
+            img.Alpha[i] = ((p >> 24) & 0xFF) / 255f;
+            if (float.IsNaN(hr))
+            {
+                // No HDR sample here → decode the 8-bit fallback, so no-HDR pixels
+                // land identically to the plain 8-bit view-transform path.
+                img.Rgb[j] = ViewTransformOps.SrgbToLinear(((p >> 16) & 0xFF) / 255f);
+                img.Rgb[j + 1] = ViewTransformOps.SrgbToLinear(((p >> 8) & 0xFF) / 255f);
+                img.Rgb[j + 2] = ViewTransformOps.SrgbToLinear((p & 0xFF) / 255f);
+            }
+            else
+            {
+                img.Rgb[j] = hr / 255f;
+                img.Rgb[j + 1] = hdrByteScale[j + 1] / 255f;
+                img.Rgb[j + 2] = hdrByteScale[j + 2] / 255f;
+            }
+        }
+        return img;
+    }
+
     /// <summary>Encode this linear image back to 8-bit straight-alpha BGRA (sRGB
     /// OETF per channel via <see cref="ViewTransformOps.Encode"/>, alpha rounded).
     /// Highlights above 1.0 are saturated by the encode — apply a view transform

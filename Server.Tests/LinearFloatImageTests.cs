@@ -141,4 +141,80 @@ public sealed class LinearFloatImageTests
         var b = LinearFloatImage.FromBgra(buf, buf.Length, 1).ApplyViewTransform(ViewTransform.AgX, 1.5f).ToBgra();
         Assert.Equal(a, b);
     }
+
+    // ── FromHdrByteScale: the relief HDR producer bridge ──────────────────────
+
+    private static float[] AllNaN(int pixels)
+    {
+        var h = new float[pixels * 3];
+        Array.Fill(h, float.NaN);
+        return h;
+    }
+
+    // No HDR sample anywhere (all-NaN) → every pixel decodes the 8-bit fallback,
+    // so the bridge reduces EXACTLY to FromBgra: the round-trip is byte-identical.
+    [Fact]
+    public void FromHdrByteScale_AllNaN_Equals_FromBgra_RoundTrip()
+    {
+        var buf = SampleBuffer();
+        var viaHdr = LinearFloatImage.FromHdrByteScale(AllNaN(buf.Length), buf, buf.Length, 1).ToBgra();
+        Assert.Equal(buf, viaHdr);
+    }
+
+    // With no captured HDR, the transform over the bridge matches the plain 8-bit
+    // view-transform path byte-for-byte — a non-relief / sky pixel never regresses.
+    [Fact]
+    public void FromHdrByteScale_NoHdr_Matches_8bit_Transform()
+    {
+        float[] evs = { -1f, 0f, 2f };
+        foreach (var op in Operators)
+        foreach (var ev in evs)
+        {
+            var buf = SampleBuffer();
+            var eightBit = (uint[])buf.Clone();
+            ViewTransformOps.Apply(eightBit, eightBit.Length, op, ev);
+
+            var viaHdr = LinearFloatImage.FromHdrByteScale(AllNaN(buf.Length), buf, buf.Length, 1)
+                .ApplyViewTransform(op, ev).ToBgra();
+
+            Assert.Equal(eightBit, viaHdr);
+        }
+    }
+
+    // A byte-scale HDR value above 255 (linear > 1.0) is recovered: it tonemaps to a
+    // higher byte than a clamped 255 sample, which the 8-bit buffer cannot represent.
+    [Fact]
+    public void FromHdrByteScale_Above255_Recovers_Highlight()
+    {
+        foreach (var op in Operators)
+        {
+            // Two pixels: [0] a 4×-white highlight (1020 byte-scale), [1] exactly white.
+            var hdr = new float[] { 1020f, 1020f, 1020f, 255f, 255f, 255f };
+            var fallback = new uint[] { 0xFFFFFFFFu, 0xFFFFFFFFu };   // both clip to white at 8-bit
+            var outp = LinearFloatImage.FromHdrByteScale(hdr, fallback, 2, 1)
+                .ApplyViewTransform(op, 0f).ToBgra();
+            int hiV = (int)(outp[0] & 0xFF);
+            int oneV = (int)(outp[1] & 0xFF);
+            Assert.True(hiV > oneV, $"{op}: byte-scale headroom not recovered ({hiV} !> {oneV})");
+        }
+    }
+
+    // Sky (NaN) and terrain (captured HDR) coexist: the sky pixel decodes the
+    // fallback and matches the 8-bit path; the terrain pixel uses the captured value.
+    [Fact]
+    public void FromHdrByteScale_Mixes_Sky_Fallback_And_Terrain_Hdr()
+    {
+        // pixel 0 = terrain (captured 300 byte-scale), pixel 1 = sky (NaN → fallback).
+        var hdr = new float[] { 300f, 300f, 300f, float.NaN, float.NaN, float.NaN };
+        var fallback = new uint[] { 0xFF808080u, 0xFF204060u };
+        var outp = LinearFloatImage.FromHdrByteScale(hdr, fallback, 2, 1)
+            .ApplyViewTransform(ViewTransform.AcesFilmic, 0f).ToBgra();
+
+        // Sky pixel == the plain 8-bit path on that same fallback pixel.
+        uint skyRef = ViewTransformOps.ApplyToBgra(0xFF204060u, ViewTransform.AcesFilmic, 1f);
+        Assert.Equal(skyRef, outp[1]);
+        // Terrain pixel used the >255 capture → brighter than its clamped fallback would give.
+        uint terrClamp = ViewTransformOps.ApplyToBgra(0xFF808080u, ViewTransform.AcesFilmic, 1f);
+        Assert.True((outp[0] & 0xFF) > (terrClamp & 0xFF), "terrain HDR not applied");
+    }
 }

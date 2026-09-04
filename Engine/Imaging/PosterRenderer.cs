@@ -245,7 +245,23 @@ namespace FracturingFog.Imaging
 
             var sw = System.Diagnostics.Stopwatch.StartNew();
 
-            uint[] buffer = RenderComposedBuffer(req, token, out int w, out int h);
+            // S2 (#396) — CORE true-linear intermediate producer wiring. When a view
+            // transform is active on a relief-RAYMARCH poster with a NEUTRAL grade,
+            // capture the render's pre-clamp HDR beauty so the transform tonemaps real
+            // highlight headroom instead of the clamped 8-bit buffer. Gated on a
+            // neutral brightness/contrast/gamma because that grade is applied to the
+            // 8-bit buffer BEFORE the transform — with it neutral the fallback buffer
+            // equals the raw beauty, so terrain-HDR and sky-fallback pixels stay
+            // consistent. Any other case falls through to the unchanged 8-bit path.
+            bool neutralGrade = req.Brightness == 0 && req.Contrast == 0 && req.Gamma == 0;
+            bool wantHdr = req.ViewTransform != ViewTransform.None && neutralGrade
+                && req.FractalParameters is { Relief2DEnabled: true, Relief2DRaymarch: true };
+            var hdrAov = wantHdr
+                ? new FracturingFog.Rendering.Lighting.HeightfieldRaymarch2D.ReliefAovBuffers(
+                    req.Width, req.Height, false, false, true)
+                : null;
+
+            uint[] buffer = RenderComposedBuffer(req, token, out int w, out int h, hdrAov);
 
             sw.Stop();
 
@@ -254,11 +270,23 @@ namespace FracturingFog.Imaging
             // still sees the authored coverage byte.
             ApplyBrightnessContrastGamma(buffer, w * h, req.Brightness, req.Contrast, req.Gamma);
 
-            // S2 (#389) — output-stage view transform (tonemap), layered on the
+            // S2 (#389/#396) — output-stage view transform (tonemap), layered on the
             // b/c/gamma post-pass exactly as the live path does, so a poster matches
-            // the on-screen frame. None = no-op (byte-identical).
+            // the on-screen frame. None = no-op (byte-identical). When the relief HDR
+            // beauty was captured (wantHdr above), tonemap the true-linear intermediate
+            // (headroom recovered); else the plain 8-bit path. A buffer with no HDR
+            // sample decodes identically to the 8-bit path (FromHdrByteScale contract),
+            // so the HDR branch never regresses a non-relief pixel.
             if (req.ViewTransform != ViewTransform.None)
-                ViewTransformOps.Apply(buffer, w * h, req.ViewTransform, req.ViewExposureEv);
+            {
+                if (hdrAov?.HdrBeauty != null && hdrAov.HdrBeauty.Length == (long)w * h * 3)
+                    buffer = LinearFloatImage
+                        .FromHdrByteScale(hdrAov.HdrBeauty, buffer, w, h)
+                        .ApplyViewTransform(req.ViewTransform, req.ViewExposureEv)
+                        .ToBgra();
+                else
+                    ViewTransformOps.Apply(buffer, w * h, req.ViewTransform, req.ViewExposureEv);
+            }
 
             // Interior-alpha composite — the SAME shared helper the live path
             // (FractalRenderHost.UploadProcessedBuffer) calls, so a poster/wallpaper
