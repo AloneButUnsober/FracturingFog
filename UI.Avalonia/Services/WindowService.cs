@@ -9,6 +9,7 @@ using System.Threading.Tasks;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.ApplicationLifetimes;
+using Avalonia.Interactivity;
 using Avalonia.Media;
 using Avalonia.Platform;
 using Avalonia.Threading;
@@ -215,6 +216,7 @@ namespace FracturingFog.UI.Avalonia.Services
             ApplyScreenFit(win, screen, fitFraction);
             ApplyPlacement(win, owner, screen, placement);
             MatchRenderTopmost(win);
+            SuppressActivationScrollSnap(win);
 
             // Centralized nested-modal foreground fix. A modal-of-a-modal on
             // Win32 (with ShowInTaskbar=false) does not reliably front; forcing
@@ -226,6 +228,47 @@ namespace FracturingFog.UI.Avalonia.Services
                 try { win.Activate(); } catch { }
                 try { ClampIntoScreen(win); } catch { }
             };
+        }
+
+        // ── Scroll snap-back on activation (#657) ────────────────────────────
+
+        /// <summary>
+        /// Kills the "clicking an inactive dialog snaps its ScrollViewer back to
+        /// the pre-scroll position" bug (#657).
+        ///
+        /// Stock Avalonia behaviour: while a dialog is inactive you can still
+        /// mouse-wheel its <c>ScrollViewer</c> (offset moves), but focus stays on
+        /// whatever control X was focused at the *original* offset. The click that
+        /// activates the window makes Avalonia restore focus to X, X raises
+        /// <see cref="Control.RequestBringIntoViewEvent"/>, and the ScrollViewer
+        /// dutifully scrolls X back into view — undoing the wheel scroll and
+        /// forcing the user to re-scroll and re-click.
+        ///
+        /// We swallow <c>RequestBringIntoView</c> for exactly one input cycle
+        /// following <see cref="WindowBase.Activated"/> — the focus-restore burst.
+        /// Genuine bring-into-view (keyboard navigation, explicit
+        /// <c>BringIntoView()</c> from list selection, etc.) fires outside that
+        /// window and is untouched. The flag is a per-window closure so multiple
+        /// open dialogs never interfere.
+        /// </summary>
+        private static void SuppressActivationScrollSnap(Window win)
+        {
+            bool suppress = false;
+
+            win.Activated += (_, _) =>
+            {
+                suppress = true;
+                // Clear after the current input burst drains; focus-restore +
+                // its RequestBringIntoView run synchronously within activation,
+                // so Input priority is late enough to have caught them.
+                Dispatcher.UIThread.Post(() => suppress = false, DispatcherPriority.Input);
+            };
+
+            win.AddHandler(
+                Control.RequestBringIntoViewEvent,
+                (_, e) => { if (suppress) e.Handled = true; },
+                RoutingStrategies.Tunnel | RoutingStrategies.Bubble,
+                handledEventsToo: true);
         }
 
         // ── Topmost inheritance ──────────────────────────────────────────────
