@@ -385,9 +385,20 @@ supplies the guide buffers.
   (unconverged) pixels blur more while low-variance detail is preserved. Null variance /
   scale 0 → byte-identical (the exact-value À-Trous tests still pass). +8 `SvgfVarianceTests`.
   Both SVGF halves now exist as operators.
-- **Remaining (deep, still open on #402):** wire the two SVGF halves into `ReliefDenoisePass`
-  in a real sequence render (a persistent history that accumulates colour + luminance moments,
-  feeding the temporal blend and the variance guide off the render's motion/normal/depth AOVs);
+- **SVGF united in `ReliefDenoisePass` (landed — PR #646, #402):** both halves now run in one
+  pass. `SvgfHistory` holds the per-render persistent state (previous denoised colour + normal /
+  depth + camera + valid flag); `ReliefDenoisePass.ApplySvgf` reprojects the previous denoised
+  frame along the motion AOV and blends (`SvgfTemporal`, disocclusion-rejected), estimates the
+  variance from the accumulated frame (`SvgfVariance`), runs the variance-guided À-Trous
+  (`AtrousDenoiser`), and stores the result back into the history. The first frame falls back to
+  the plain spatial denoise + seeds the history; the temporal toggle off defers to `Apply`.
+  `Relief2DDenoiseTemporal` / `TemporalFeedback` / `VarianceScale`; `MakeCapture` adds the motion
+  AOV only when temporal. Default off → byte-identical. +6 `ReliefSvgfIntegrationTests`.
+- **Remaining (deep, still open on #402):** wire `ApplySvgf` into the sequence renderers (a
+  persistent `SvgfHistory` across frames + threading `history.PrevCamera` as the render's
+  `previousCamera` in `SceneVideoRenderer` / the batch loops), so SVGF runs in an actual
+  animation; temporal luminance MOMENTS in the history (currently the variance is estimated
+  spatially from the accumulated frame — a fuller SVGF tracks E[l]/E[l²] across frames);
   **SIMD** the À-Trous 5×5 accumulation (left on purpose — vectorizing would reorder the float
   sums and break byte-parity with the `--batch` oracle).
 
