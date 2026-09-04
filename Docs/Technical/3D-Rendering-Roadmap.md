@@ -1148,11 +1148,21 @@ this is plumbing, not new physics. Analysis doc: `Docs/Technical/Lighting-FX-3D-
      updated. Byte-identical default; +3 tests, suite 2231/2231. **Froxel follow-up:** when
      froxel is active the HDR beauty is fog-free so the capture is gated off (FX Tone Map a
      no-op on froxel relief) — the deeper fix composes froxel fog IN HDR (also noted #655).
-  2. **Lens post** (chromatic aberration / distortion / vignette / anamorphic) — a byte-buffer pass.
-  3. **Edge ink** — reuse the Relief depth+normal G-buffer.
-  4. **SSAO** — same G-buffer.
-  5. **Stereo** for Relief — larger; needs per-eye Relief camera orchestration.
-  6. Flip the UI gate per feature as each lands.
+  2. **Lens post** (chromatic aberration / distortion / vignette / anamorphic) — **LANDED
+     (PR #664).** A byte-buffer pass (`ApplyLensPost`) needing no AOV, so it runs even
+     under froxel.
+  3. **Edge ink** — **LANDED (PR #664).** `ApplyEdgeInk` over the relief normal+depth
+     G-buffer (#398/#416); the relief sky sentinel (1e6) is remapped to +Infinity.
+  4. **SSAO** — **LANDED (PR #664).** `ApplySsao` over the same depth G-buffer.
+     2–4 share the new `ReliefScreenSpacePost.ApplyStage2` choke point (live + poster);
+     SSAO/edge arm a normal+depth capture (`WantsGeom` / `MakeCapture(captureGeom)`) that
+     does NOT force the CPU trace (the GPU relief kernel emits it). UI: the gate renamed
+     `ReliefStage2Applies` now enables Tone Map / Bloom / Lens / SSAO / Edge on relief.
+     +5 tests; suite 2236/2236.
+  5. **Stereo** for Relief — larger; needs per-eye Relief camera orchestration. (Only
+     Stereo + the FX-dialog DoF remain 3D-only now.)
+  6. Flip the UI gate per feature as each lands — done for Tone Map / Bloom / Lens /
+     SSAO / Edge; Stereo pending.
 - **Not in scope — DoF stays parallel:** Relief has its own `Relief2DDof*` knobs on the
   Relief 3D dialog; the FX-dialog DoF remains 3D-only by design.
 - **Reuse:** the HDR beauty AOV (#396), the Relief normal/depth G-buffer (#398), the
