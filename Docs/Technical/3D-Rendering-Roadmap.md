@@ -236,7 +236,21 @@ benefits most. Blender's Filmic → AgX migration is the precedent.
   (`SceneVideoRenderer`) has no post-FX stage of its own and is out of scope here; the
   LIVE recorder already captures the post-transform snapshot. Verified headless: an
   ACES video frame differs from a `None` frame; `None` stays byte-identical.
-- **Remaining:** the *core* true-linear/float intermediate (couples S7), default-look
+- **Core true-linear/float intermediate (landed — PR #651):** `LinearFloatImage`
+  is the linear-light HDR intermediate the view transform was designed for —
+  interleaved straight linear RGB with unbounded headroom (values > 1.0 survive) +
+  a passthrough alpha plane + `FromBgra`/`ToBgra` encode-decode. `ViewTransformOps`
+  factored its operator switch into a shared `Tonemap()` core and gained
+  `ApplyLinear()` over a linear float buffer (plus a public `Encode()`), so the
+  8-bit `ApplyToBgra` and the float path route through the SAME operator + encode.
+  Result: `FromBgra → transform → ToBgra` reproduces the existing 8-bit path
+  BYTE-FOR-BYTE (parity anchor, tested across every operator × 5 exposures) while a
+  producer supplying linear values above 1.0 gets highlight roll-off instead of the
+  hard clip the 8-bit path is stuck with. Byte-identical by default (`None` no-op,
+  8-bit round-trip unchanged); +7 tests, suite 2182/2182. Seam before consumer —
+  the producers below wire in next.
+- **Remaining:** producer wiring (relief HDR scratch, a full-float 2D composite,
+  EXR read-back → feed `LinearFloatImage` instead of the 8-bit buffer), default-look
   validation, SIMD.
 
 ### S3 — Cinematic camera: DOF, exposure, motion blur ◐ (#400)
