@@ -62,10 +62,21 @@ public static class ReliefDenoisePass
     /// capture is allocated whenever the denoise OR the HDR plane is wanted; either
     /// forces the CPU trace. Null only when neither is needed (byte-identical).</summary>
     public static HeightfieldRaymarch2D.ReliefAovBuffers? MakeCapture(FractalParameters? p, int w, int h, bool captureHdr)
+        => MakeCapture(p, w, h, captureHdr, captureGeom: false);
+
+    /// <summary>As the <paramref name="captureHdr"/> overload, but
+    /// <paramref name="captureGeom"/> also forces a (normal + depth) capture target
+    /// even with the denoise and HDR off — the S12 relief stage-2 SSAO / edge-ink
+    /// passes (#652) key on that G-buffer. Normal + depth are always allocated on any
+    /// capture and the GPU relief kernel emits them, so a geom-only capture does NOT
+    /// force the CPU trace (unlike an HDR / motion / component capture). Null only when
+    /// nothing at all is wanted (byte-identical).</summary>
+    public static HeightfieldRaymarch2D.ReliefAovBuffers? MakeCapture(
+        FractalParameters? p, int w, int h, bool captureHdr, bool captureGeom)
     {
         if (w <= 0 || h <= 0) return null;
         bool denoise = Enabled(p);
-        if (!denoise && !captureHdr) return null;
+        if (!denoise && !captureHdr && !captureGeom) return null;
         // SVGF temporal also needs the motion-vector AOV (to reproject the history);
         // the plain denoise needs only normal + depth. Motion capture forces the CPU
         // trace either way, so a denoise already runs on the CPU.

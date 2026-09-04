@@ -3468,6 +3468,9 @@ namespace FracturingFog.Rendering
             // transform is armed with a neutral grade (else null → the plain 8-bit
             // transform). Read at the view-transform stage below.
             float[]? reliefHdrBeauty = null;
+            // S12 (#652) — the captured relief AOV (HDR beauty + normal/depth G-buffer),
+            // carried to the relief stage-2 post chain below.
+            FracturingFog.Rendering.Lighting.HeightfieldRaymarch2D.ReliefAovBuffers? reliefPostAov = null;
             {
                 var reliefParams = ViewState.FractalParameters;
                 bool raymarch = reliefParams.Relief2DRaymarch;
@@ -3524,10 +3527,16 @@ namespace FracturingFog.Rendering
                             && liveNeutralGrade
                             && !FracturingFog.Imaging.ReliefDenoisePass.Enabled(reliefParams)
                             && !liveFroxel;
+                        // S12.3/S12.4 (#652) — SSAO + edge ink key on the relief float
+                        // normal + depth G-buffer. Capture it whenever either is active
+                        // (independent of the HDR gate — geometry needs no headroom and
+                        // the GPU relief kernel emits normal+depth, so this alone doesn't
+                        // force the CPU trace).
+                        bool liveFxGeom = FracturingFog.Imaging.ReliefScreenSpacePost.WantsGeom(in liveReliefFx);
                         // S4 (#389) — capture float AOVs + guided À-Trous denoise
                         // iff on; null keeps the GPU fast path (byte-identical off).
                         // S2 (#396) — the HDR flag ORs an HDR-beauty plane into the same capture.
-                        var reliefAov = FracturingFog.Imaging.ReliefDenoisePass.MakeCapture(reliefParams, w, h, wantHdr);
+                        var reliefAov = FracturingFog.Imaging.ReliefDenoisePass.MakeCapture(reliefParams, w, h, wantHdr, liveFxGeom);
                         // #520 (part 3) — settle full-detail: a settle re-render boosts
                         // the far-detail (tighter distance cone → distant filaments stay
                         // tall). Override the live param transiently across this single
@@ -3558,6 +3567,9 @@ namespace FracturingFog.Rendering
                         reliefRaymarchApplied = true;
                         // S2 (#396) — carry the captured HDR beauty to the transform stage.
                         if (wantHdr) reliefHdrBeauty = reliefAov?.HdrBeauty;
+                        // S12 (#652) — carry the whole AOV (HDR + normal/depth) to the
+                        // relief stage-2 post chain.
+                        reliefPostAov = reliefAov;
                     }
                     else
                         // Phase 1 — screen-space hillshade + cast-shadow post-pass.
@@ -3643,28 +3655,24 @@ namespace FracturingFog.Rendering
                 Array.Copy(src, dst, n);
             }
 
-            // S12.1 (#652) — relief STAGE-2 tone map + exposure + bloom. Relief renders
-            // through HeightfieldRaymarch2D (not a calculator), so it never ran the
-            // whole-buffer post chain the true-3D calculators do; the FX-dialog Tone Map
-            // / Bloom were silent no-ops. Now, when the pre-clamp HDR beauty was captured
-            // (armed above whenever an FX tonemap/bloom or a view transform is on), run
-            // the SAME ScreenSpacePost.ApplyToneMapBloom the 3D calculators run over it —
-            // real HDR headroom, sky (NaN) pixels keep their byte. It CONSUMES the HDR
-            // beauty (dst becomes display-referred), so the S2 view transform below then
-            // stacks on the 8-bit result exactly as it does on a 3D calculator's buffer
-            // (the two tonemap paths reconciled: FX ToneMap owns HDR→display, the global
-            // ViewTransform is a secondary look on top). Skipped on froxel / denoise /
-            // graded frames (no HDR beauty) — same gate as the transform's HDR path.
-            if (reliefRaymarchApplied && reliefHdrBeauty != null && reliefHdrBeauty.Length == (long)n * 3)
+            // S12 (#652) — relief STAGE-2 post chain. Relief renders through
+            // HeightfieldRaymarch2D (not a calculator), so it never ran the whole-buffer
+            // post passes the true-3D calculators do; the FX dialog exposed Tone Map /
+            // Bloom / Lens / SSAO / Edge but they were silent no-ops. Run the SAME
+            // ScreenSpacePost passes over the relief buffer + its captured AOVs (HDR
+            // beauty for tone map/bloom #663; normal+depth G-buffer for SSAO/edge): Tone
+            // Map + Exposure + Bloom (S12.1) consume the HDR (dst → display-referred);
+            // Lens (S12.2); SSAO (S12.4) + Edge ink (S12.3) on the display-referred dst.
+            // When ANY pass ran, drop the HDR view-transform path (it would rebuild dst
+            // from the beauty and overwrite these display-space passes) — the S2 view
+            // transform below then stacks on the 8-bit dst, as it does on a 3D
+            // calculator's buffer. Froxel keeps tone map gated (no HDR beauty); lens /
+            // SSAO / edge still run there (they need no headroom).
+            if (reliefRaymarchApplied)
             {
                 var reliefFx = ViewState.FractalParameters.Lighting;
-                if (reliefFx.ToneMap != FracturingFog.Rendering.Lighting.ToneMapOperator.None
-                    || reliefFx.BloomStrength > 0.0)
-                {
-                    FracturingFog.Rendering.Lighting.ScreenSpacePost.ApplyToneMapBloom(
-                        dst, reliefHdrBeauty, w, h, in reliefFx);
-                    reliefHdrBeauty = null; // consumed → view transform stacks on 8-bit
-                }
+                if (FracturingFog.Imaging.ReliefScreenSpacePost.ApplyStage2(dst, reliefPostAov, w, h, in reliefFx))
+                    reliefHdrBeauty = null;
             }
 
             // S2 (#389/#396) — output-stage view transform (tonemap). The final display

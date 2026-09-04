@@ -52,15 +52,15 @@
 
                 <!-- Relief 3D context banner. Relief shares stage-1 per-hit shading
                      (lights / shadow / AO / fog / volumetrics / material / reflections)
-                     runs Tone Map / Exposure / Bloom (S12.1, #652) over its HDR beauty,
-                     but the remaining stage-2 passes — Lens / SSAO / Edge / Stereo / DoF —
-                     are still 3D-fractal only and disabled below. #FFCC00 = colorblind-safe
+                     runs Tone Map / Exposure / Bloom / Lens / SSAO / Edge ink (S12.1-4, #652) over
+                     its HDR beauty + normal/depth G-buffer; only Stereo / DoF stay
+                     3D-fractal only and disabled below. #FFCC00 = colorblind-safe
                      advisory. See Docs/Technical/Lighting-FX-3D-vs-Relief3D.md. -->
                 <Border IsVisible="{Binding IsReliefLightingContext}"
                         Background="#33FFCC00" BorderBrush="#FFCC00" BorderThickness="1"
                         CornerRadius="3" Padding="8" Margin="0,0,0,6">
                     <TextBlock TextWrapping="Wrap" Foreground="#FFCC00"
-                               Text="Relief 3D: lights, shadows, AO, fog and volumetrics below all apply — and Tone Map, Exposure and Bloom now apply too (over the relief HDR beauty). Still 3D-fractal only, disabled here: Lens, SSAO, Edge ink, Stereo, and this dialog's DoF. The FX Tone Map and the View ▸ View Transform stack (Tone Map maps HDR to display; View Transform is a look on top); for Relief depth-of-field, use the Relief 3D dialog's own aperture / focus." />
+                               Text="Relief 3D: lights, shadows, AO, fog and volumetrics below all apply — and Tone Map, Exposure, Bloom, Lens, SSAO and Edge ink now apply too (over the relief HDR beauty + G-buffer). Still 3D-fractal only, disabled here: Stereo and this dialog's DoF. The FX Tone Map and the View ▸ View Transform stack (Tone Map maps HDR to display; View Transform is a look on top); for Relief depth-of-field, use the Relief 3D dialog's own aperture / focus." />
                 </Border>
 
                 <!-- #306 — volumetric preset droplist (artistic starting points) -->
@@ -354,13 +354,14 @@
                         </Grid>
 
                         <!-- SSAO is a stage-2 screen-space post pass (needs the depth
-                             G-buffer); 3D-fractal only. DE-cone AO above is shared and
-                             stays enabled on Relief 3D. -->
+                             G-buffer). S12.4 (#652): now runs on Relief 3D too (the
+                             relief raymarch emits the same normal+depth AOV). DE-cone
+                             AO above is shared and stays enabled everywhere. -->
                         <TextBlock Grid.Row="2" Grid.Column="0" Text="SSAO samples:" VerticalAlignment="Center"
-                                   IsEnabled="{Binding Stage2PostFxApplies}"
-                                   ToolTip.Tip="Screen-space AO (macro neighbor occlusion). Hemisphere sample count. 0 = off. 8–16 typical. 3D-fractal only — not applied to Relief 3D." />
+                                   IsEnabled="{Binding ReliefStage2Applies}"
+                                   ToolTip.Tip="Screen-space AO (macro neighbor occlusion). Hemisphere sample count. 0 = off. 8–16 typical." />
                         <Grid Grid.Row="2" Grid.Column="1" ColumnDefinitions="*,Auto" Margin="0,2"
-                              IsEnabled="{Binding Stage2PostFxApplies}">
+                              IsEnabled="{Binding ReliefStage2Applies}">
                             <Slider Classes="knob" Grid.Column="0" Minimum="0" Maximum="64"
                                     IsSnapToTickEnabled="True" TickFrequency="1"
                                     Value="{Binding SsaoSamples, Mode=TwoWay}" />
@@ -369,10 +370,10 @@
                         </Grid>
 
                         <TextBlock Grid.Row="3" Grid.Column="0" Text="SSAO radius:" VerticalAlignment="Center"
-                                   IsEnabled="{Binding Stage2PostFxApplies}"
+                                   IsEnabled="{Binding ReliefStage2Applies}"
                                    ToolTip.Tip="Hemisphere radius in world units. Smaller = crevice detail; larger = soft global shadow." />
                         <Grid Grid.Row="3" Grid.Column="1" ColumnDefinitions="*,Auto" Margin="0,2"
-                              IsEnabled="{Binding Stage2PostFxApplies}">
+                              IsEnabled="{Binding ReliefStage2Applies}">
                             <Slider Classes="knob" Grid.Column="0" Minimum="0.001" Maximum="4"
                                     Value="{Binding SsaoRadius, Mode=TwoWay}" />
                             <TextBlock Classes="knobValue" Grid.Column="1"
@@ -380,9 +381,9 @@
                         </Grid>
 
                         <TextBlock Grid.Row="4" Grid.Column="0" Text="SSAO strength:" VerticalAlignment="Center"
-                                   IsEnabled="{Binding Stage2PostFxApplies}" />
+                                   IsEnabled="{Binding ReliefStage2Applies}" />
                         <Grid Grid.Row="4" Grid.Column="1" ColumnDefinitions="*,Auto" Margin="0,2"
-                              IsEnabled="{Binding Stage2PostFxApplies}">
+                              IsEnabled="{Binding ReliefStage2Applies}">
                             <Slider Classes="knob" Grid.Column="0" Minimum="0" Maximum="1"
                                     Value="{Binding SsaoStrength, Mode=TwoWay}" />
                             <TextBlock Classes="knobValue" Grid.Column="1"
@@ -665,10 +666,10 @@
 
                 <!-- Tone Map / Bloom apply on 3D AND Relief 3D (S12.1, #652 — relief runs
                      ScreenSpacePost.ApplyToneMapBloom over its captured HDR beauty). Lens
-                     rows below stay 3D-fractal only (Stage2PostFxApplies) until S12.2. -->
+                     / Lens / SSAO / Edge below now apply on Relief too (S12.1-4, #652). -->
                 <Expander Header="Tone Map / Bloom / Lens" HorizontalAlignment="Stretch">
                     <Grid ColumnDefinitions="160,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto"
-                          IsEnabled="{Binding ToneMapBloomApplies}">
+                          IsEnabled="{Binding ReliefStage2Applies}">
                         <TextBlock Grid.Row="0" Grid.Column="0" Text="Tone map:" VerticalAlignment="Center" />
                         <ComboBox  Grid.Row="0" Grid.Column="1" HorizontalAlignment="Stretch"
                                    ItemsSource="{Binding ToneMapOperators}"
@@ -699,7 +700,7 @@
                                    ToolTip.Tip="Radial RGB channel offset (pixels). 0 = off." />
                         <Grid Grid.Row="4" Grid.Column="1" ColumnDefinitions="*,Auto" Margin="0,2">
                             <Slider Classes="knob" Grid.Column="0" Minimum="0" Maximum="16"
-                                    Value="{Binding ChromaticAberration, Mode=TwoWay}" IsEnabled="{Binding Stage2PostFxApplies}" />
+                                    Value="{Binding ChromaticAberration, Mode=TwoWay}" IsEnabled="{Binding ReliefStage2Applies}" />
                             <TextBlock Classes="knobValue" Grid.Column="1"
                                        Text="{Binding ChromaticAberration, StringFormat='F2'}" />
                         </Grid>
@@ -708,7 +709,7 @@
                                    ToolTip.Tip="Barrel (positive) / pincushion (negative). 0 = none." />
                         <Grid Grid.Row="5" Grid.Column="1" ColumnDefinitions="*,Auto" Margin="0,2">
                             <Slider Classes="knob" Grid.Column="0" Minimum="-0.5" Maximum="0.5"
-                                    Value="{Binding LensDistortion, Mode=TwoWay}" IsEnabled="{Binding Stage2PostFxApplies}" />
+                                    Value="{Binding LensDistortion, Mode=TwoWay}" IsEnabled="{Binding ReliefStage2Applies}" />
                             <TextBlock Classes="knobValue" Grid.Column="1"
                                        Text="{Binding LensDistortion, StringFormat='F3'}" />
                         </Grid>
@@ -717,7 +718,7 @@
                                    ToolTip.Tip="Corner falloff [0..1]. 0 = uniform. Applied after lens warp." />
                         <Grid Grid.Row="6" Grid.Column="1" ColumnDefinitions="*,Auto" Margin="0,2">
                             <Slider Classes="knob" Grid.Column="0" Minimum="0" Maximum="1"
-                                    Value="{Binding Vignette, Mode=TwoWay}" IsEnabled="{Binding Stage2PostFxApplies}" />
+                                    Value="{Binding Vignette, Mode=TwoWay}" IsEnabled="{Binding ReliefStage2Applies}" />
                             <TextBlock Classes="knobValue" Grid.Column="1"
                                        Text="{Binding Vignette, StringFormat='F2'}" />
                         </Grid>
@@ -726,19 +727,19 @@
                                    ToolTip.Tip="Brown decentring p1 (X coefficient). Simulates lens shift." />
                         <NumericUpDown Grid.Row="7" Grid.Column="1"
                                        Minimum="-0.1" Maximum="0.1" Increment="0.005" FormatString="F4"
-                                       Value="{Binding LensTangentialX, Mode=TwoWay}" Margin="0,2" IsEnabled="{Binding Stage2PostFxApplies}" />
+                                       Value="{Binding LensTangentialX, Mode=TwoWay}" Margin="0,2" IsEnabled="{Binding ReliefStage2Applies}" />
 
                         <TextBlock Grid.Row="8" Grid.Column="0" Text="Tangential p2:" VerticalAlignment="Center"
                                    ToolTip.Tip="Brown decentring p2 (Y coefficient). Simulates lens shift." />
                         <NumericUpDown Grid.Row="8" Grid.Column="1"
                                        Minimum="-0.1" Maximum="0.1" Increment="0.005" FormatString="F4"
-                                       Value="{Binding LensTangentialY, Mode=TwoWay}" Margin="0,2" IsEnabled="{Binding Stage2PostFxApplies}" />
+                                       Value="{Binding LensTangentialY, Mode=TwoWay}" Margin="0,2" IsEnabled="{Binding ReliefStage2Applies}" />
 
                         <TextBlock Grid.Row="9" Grid.Column="0" Text="Anamorphic squeeze:" VerticalAlignment="Center"
                                    ToolTip.Tip="Vertical-to-horizontal aspect ratio [0.25..4]. 1 = isotropic. >1 = scope/wide look." />
                         <Grid Grid.Row="9" Grid.Column="1" ColumnDefinitions="*,Auto" Margin="0,2">
                             <Slider Classes="knob" Grid.Column="0" Minimum="0.25" Maximum="4"
-                                    Value="{Binding AnamorphicSqueeze, Mode=TwoWay}" IsEnabled="{Binding Stage2PostFxApplies}" />
+                                    Value="{Binding AnamorphicSqueeze, Mode=TwoWay}" IsEnabled="{Binding ReliefStage2Applies}" />
                             <TextBlock Classes="knobValue" Grid.Column="1"
                                        Text="{Binding AnamorphicSqueeze, StringFormat='F2'}" />
                         </Grid>
@@ -776,14 +777,14 @@
                                        Text="{Binding MaxBounces}" />
                         </Grid>
 
-                        <!-- Edge ink / Stereo / DoF below are stage-2 post; 3D-fractal
-                             only (Relief supersedes DoF with its own Relief2DDof* knobs).
-                             Disabled on Relief 3D. Reflection above IS shared (stays on). -->
+                        <!-- Edge ink now runs on Relief 3D too (S12.3, #652, over the relief
+                             normal+depth G-buffer). Stereo + DoF stay 3D-fractal only
+                             (Relief has its own Relief2DDof* knobs). Reflection above IS shared. -->
                         <TextBlock Grid.Row="3" Grid.Column="0" Text="Edge contour:" VerticalAlignment="Center"
-                                   IsEnabled="{Binding Stage2PostFxApplies}"
-                                   ToolTip.Tip="Sobel-on-normal ink overlay. 0 = off. 3D-fractal only — not applied to Relief 3D." />
+                                   IsEnabled="{Binding ReliefStage2Applies}"
+                                   ToolTip.Tip="Sobel-on-normal ink overlay. 0 = off." />
                         <Grid Grid.Row="3" Grid.Column="1" ColumnDefinitions="*,Auto" Margin="0,2"
-                              IsEnabled="{Binding Stage2PostFxApplies}">
+                              IsEnabled="{Binding ReliefStage2Applies}">
                             <Slider Classes="knob" Grid.Column="0" Minimum="0" Maximum="1"
                                     Value="{Binding EdgeStrength, Mode=TwoWay}" />
                             <TextBlock Classes="knobValue" Grid.Column="1"
@@ -791,10 +792,10 @@
                         </Grid>
 
                         <TextBlock Grid.Row="4" Grid.Column="0" Text="Edge threshold:" VerticalAlignment="Center"
-                                   IsEnabled="{Binding Stage2PostFxApplies}"
+                                   IsEnabled="{Binding ReliefStage2Applies}"
                                    ToolTip.Tip="Sobel magnitude below which no ink is drawn (0..2.83). Default 0.4." />
                         <Grid Grid.Row="4" Grid.Column="1" ColumnDefinitions="*,Auto" Margin="0,2"
-                              IsEnabled="{Binding Stage2PostFxApplies}">
+                              IsEnabled="{Binding ReliefStage2Applies}">
                             <Slider Classes="knob" Grid.Column="0" Minimum="0" Maximum="2.83"
                                     Value="{Binding EdgeThreshold, Mode=TwoWay}" />
                             <TextBlock Classes="knobValue" Grid.Column="1"
@@ -802,19 +803,19 @@
                         </Grid>
 
                         <TextBlock Grid.Row="5" Grid.Column="0" Text="Edge kernel:" VerticalAlignment="Center"
-                                   IsEnabled="{Binding Stage2PostFxApplies}"
+                                   IsEnabled="{Binding ReliefStage2Applies}"
                                    ToolTip.Tip="Sobel = fast, isotropic-ish. FreiChen = 9-tap edge subspace, more uniform on diagonals." />
                         <ComboBox Grid.Row="5" Grid.Column="1" HorizontalAlignment="Stretch"
-                                  IsEnabled="{Binding Stage2PostFxApplies}"
+                                  IsEnabled="{Binding ReliefStage2Applies}"
                                   ItemsSource="{Binding EdgeKernels}"
                                   SelectedItem="{Binding EdgeKernel, Mode=TwoWay}"
                                   Margin="0,2" />
 
                         <TextBlock Grid.Row="6" Grid.Column="0" Text="Edge color (BGRA hex):" VerticalAlignment="Center"
-                                   IsEnabled="{Binding Stage2PostFxApplies}"
+                                   IsEnabled="{Binding ReliefStage2Applies}"
                                    ToolTip.Tip="Ink color in AARRGGBB hex (FF000000 = opaque black, FFFFCC00 = colorblind-safe yellow)." />
                         <TextBox Grid.Row="6" Grid.Column="1"
-                                 IsEnabled="{Binding Stage2PostFxApplies}"
+                                 IsEnabled="{Binding ReliefStage2Applies}"
                                  Text="{Binding EdgeColorHex, Mode=TwoWay, UpdateSourceTrigger=LostFocus}"
                                  Margin="0,2" />
 
