@@ -236,8 +236,53 @@ benefits most. Blender's Filmic → AgX migration is the precedent.
   (`SceneVideoRenderer`) has no post-FX stage of its own and is out of scope here; the
   LIVE recorder already captures the post-transform snapshot. Verified headless: an
   ACES video frame differs from a `None` frame; `None` stays byte-identical.
-- **Remaining:** the *core* true-linear/float intermediate (couples S7), default-look
-  validation, SIMD.
+- **Core true-linear/float intermediate (landed — PR #651):** `LinearFloatImage`
+  is the linear-light HDR intermediate the view transform was designed for —
+  interleaved straight linear RGB with unbounded headroom (values > 1.0 survive) +
+  a passthrough alpha plane + `FromBgra`/`ToBgra` encode-decode. `ViewTransformOps`
+  factored its operator switch into a shared `Tonemap()` core and gained
+  `ApplyLinear()` over a linear float buffer (plus a public `Encode()`), so the
+  8-bit `ApplyToBgra` and the float path route through the SAME operator + encode.
+  Result: `FromBgra → transform → ToBgra` reproduces the existing 8-bit path
+  BYTE-FOR-BYTE (parity anchor, tested across every operator × 5 exposures) while a
+  producer supplying linear values above 1.0 gets highlight roll-off instead of the
+  hard clip the 8-bit path is stuck with. Byte-identical by default (`None` no-op,
+  8-bit round-trip unchanged); +7 tests, suite 2182/2182. Seam before consumer —
+  the producers below wire in next.
+- **Producer wiring — relief HDR beauty (landed — PR #651):** the relief RAYMARCH
+  is the first producer. `ReliefAovBuffers` gained an `HdrBeauty` plane (pre-clamp
+  linear-light beauty, byte-scale 0..∞, NaN = sky/miss sentinel) filled from
+  `ShadingPipeline`'s existing HDR write at the primary hit; an HDR capture forces
+  the CPU trace via the `aovOk` gate (like Components/Motion). `LinearFloatImage.FromHdrByteScale(hdr, fallback, w, h)`
+  bridges it into the intermediate — a NaN channel decodes the 8-bit fallback so a
+  buffer with no captured HDR reduces EXACTLY to `FromBgra` (transform matches the
+  plain 8-bit path byte-for-byte), captured pixels use `value/255` as linear so a
+  highlight above 255 keeps real headroom. `PosterRenderer` consumes it when a view
+  transform is active on a relief-raymarch poster with a NEUTRAL grade; every other
+  case is the unchanged 8-bit path. Byte-identical by default; +6 tests, suite
+  2188/2188.
+- **Producer wiring — live relief HDR (landed — PR #651):** the on-screen relief
+  view now mirrors the poster. `ReliefDenoisePass.MakeCapture` gained a `captureHdr`
+  overload (ORs the HDR-beauty plane into the same capture the denoise guides use),
+  and `FractalRenderHost.UploadProcessedBuffer` arms it when a view transform is
+  active with a NEUTRAL grade + denoise off, then tonemaps the true-linear
+  intermediate via `FromHdrByteScale` at the view-transform stage — the SAME
+  producer→consumer path the poster uses, so **screen and poster match**. The HDR
+  gate on both paths excludes an enabled denoise (the HDR plane is pre-denoise, so a
+  guided denoise keeps the 8-bit tonemap). Byte-identical by default.
+- **Producer wiring — offline video + slideshow relief (landed — PR #651):** the
+  batch relief frame paths now match the poster + live view. `ApplyViewTransform`
+  (BatchRenderer) is HDR-aware — given a captured relief HDR beauty it tonemaps the
+  true-linear intermediate via `FromHdrByteScale`, else the plain 8-bit path — and
+  `RenderReliefRegionFrame` / the zoom loop's `RenderZoomFrame` capture the HDR plane
+  on the steady relief frames (zoom video single-frame, slideshow-leg zoom, still-
+  slideshow re-render). Gated by `ReliefHdrWanted` (transform + neutral b/c +
+  relief-raymarch + denoise off); cross-fade / motion-blur / flat frames keep the
+  8-bit path. Byte-identical by default. (BatchRenderer is WinExe-only, so the batch
+  wiring is build-verified; the shared `FromHdrByteScale` + relief capture are
+  Engine-tested.)
+- **Remaining:** the last producers (a full-float 2D composite, EXR read-back — both
+  bigger, beyond the relief path), default-look validation, SIMD.
 
 ### S3 — Cinematic camera: DOF, exposure, motion blur ◐ (#400)
 Depth of field is nearly free in a raymarcher — jitter the ray origin across an

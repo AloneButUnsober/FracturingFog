@@ -63,6 +63,21 @@ public static class ViewTransformOps
         float g = SrgbToLinear(((bgra >> 8) & 0xFF) / 255f) * expMul;
         float b = SrgbToLinear((bgra & 0xFF) / 255f) * expMul;
 
+        Tonemap(transform, ref r, ref g, ref b);
+
+        byte R = Encode(r), G = Encode(g), B = Encode(b);
+        return (a << 24) | ((uint)R << 16) | ((uint)G << 8) | B;
+    }
+
+    /// <summary>Run the chosen operator on a single LINEAR-light RGB triple in
+    /// place (linear in → linear display-referred [0,1] out). This is the shared
+    /// tonemap core — <see cref="ApplyToBgra"/> and the float-intermediate
+    /// <see cref="LinearFloatImage"/> path both route through it, so an 8-bit
+    /// buffer and a linear-float buffer carrying the same value produce the same
+    /// look, byte-for-byte, once encoded. <see cref="ViewTransform.None"/> is a
+    /// no-op. Exposure is the caller's job (multiply before calling).</summary>
+    public static void Tonemap(ViewTransform transform, ref float r, ref float g, ref float b)
+    {
         switch (transform)
         {
             case ViewTransform.Reinhard: Reinhard(ref r, ref g, ref b); break;
@@ -70,9 +85,32 @@ public static class ViewTransformOps
             case ViewTransform.AgX: Agx(ref r, ref g, ref b); break;
             case ViewTransform.Filmic: Filmic(ref r, ref g, ref b); break;
         }
+    }
 
-        byte R = Encode(r), G = Encode(g), B = Encode(b);
-        return (a << 24) | ((uint)R << 16) | ((uint)G << 8) | B;
+    /// <summary>Apply <paramref name="transform"/> to an interleaved LINEAR-light
+    /// float RGB buffer (<c>rgb[3i+0..2]</c>, unbounded ≥0 — the S2 core
+    /// intermediate with real highlight headroom) in place, leaving linear
+    /// display-referred RGB in [0,1] ready for <see cref="LinearToSrgb"/> encode.
+    /// <paramref name="exposureEv"/> is stops applied in linear light before the
+    /// operator. <see cref="ViewTransform.None"/> returns immediately (byte-
+    /// identical to no call), matching the 8-bit <see cref="Apply"/> gate — so the
+    /// default look is preserved until the user opts into a transform. Unlike the
+    /// 8-bit <see cref="ApplyToBgra"/>, the input is NOT clamped to [0,1]: values
+    /// above 1.0 are rolled off by the tonemap instead of hard-clipped, which is
+    /// the whole point of the linear intermediate.</summary>
+    public static void ApplyLinear(float[] rgb, int pixelCount, ViewTransform transform, float exposureEv = 0f)
+    {
+        if (transform == ViewTransform.None) return;
+        if (rgb == null) throw new ArgumentNullException(nameof(rgb));
+        pixelCount = Math.Min(pixelCount, rgb.Length / 3);
+        float expMul = MathF.Pow(2f, exposureEv);
+        for (int i = 0; i < pixelCount; i++)
+        {
+            int j = i * 3;
+            float r = rgb[j] * expMul, g = rgb[j + 1] * expMul, b = rgb[j + 2] * expMul;
+            Tonemap(transform, ref r, ref g, ref b);
+            rgb[j] = r; rgb[j + 1] = g; rgb[j + 2] = b;
+        }
     }
 
     // ── operators (linear in → linear display-referred [0,1] out) ─────────
@@ -155,7 +193,11 @@ public static class ViewTransformOps
     public static float LinearToSrgb(float c) =>
         c <= 0.0031308f ? c * 12.92f : 1.055f * MathF.Pow(c, 1f / 2.4f) - 0.055f;
 
-    private static byte Encode(float linear) =>
+    /// <summary>Encode one LINEAR display-referred channel to an 8-bit sRGB byte
+    /// (saturate → sRGB OETF → round). The single encode used by every view-
+    /// transform output path, so the 8-bit and float intermediates land on the
+    /// same byte.</summary>
+    public static byte Encode(float linear) =>
         (byte)Math.Clamp(LinearToSrgb(Saturate(linear)) * 255f + 0.5f, 0f, 255f);
 
     private static float Saturate(float x) => x < 0f ? 0f : (x > 1f ? 1f : x);

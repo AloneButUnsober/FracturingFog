@@ -185,6 +185,9 @@ public static class HeightfieldRaymarch2D
         public ReliefAovBuffers(int w, int h, bool captureComponents)
             : this(w, h, captureComponents, false) { }
 
+        public ReliefAovBuffers(int w, int h, bool captureComponents, bool captureMotion)
+            : this(w, h, captureComponents, captureMotion, false) { }
+
         /// <param name="captureComponents">Also allocate <see cref="Components"/> so
         /// the render records the float lighting components (diffuse/specular/AO/
         /// shadow) at each primary hit (roadmap S1/S7, #389). The denoiser (S4) only
@@ -193,7 +196,15 @@ public static class HeightfieldRaymarch2D
         /// render records the per-pixel screen-space motion vector (roadmap S1, #398)
         /// — the guide a temporal denoiser (S4) reprojects along and per-object
         /// motion blur integrates. Off by default (no cost, byte-identical).</param>
-        public ReliefAovBuffers(int w, int h, bool captureComponents, bool captureMotion)
+        /// <param name="captureHdr">Also allocate <see cref="HdrBeauty"/> so the
+        /// render records the PRE-CLAMP linear-light beauty (byte-scale 0..∞) at each
+        /// primary hit — the S2 (#396) true-linear intermediate the view transform
+        /// tonemaps with real highlight headroom instead of the clamped 8-bit buffer.
+        /// Off by default (no cost, byte-identical). Initialised to NaN so unwritten
+        /// (sky / ray-miss) pixels are the "no HDR sample" sentinel a consumer falls
+        /// back to the 8-bit beauty for, matching the existing ScreenSpacePost HDR
+        /// convention.</param>
+        public ReliefAovBuffers(int w, int h, bool captureComponents, bool captureMotion, bool captureHdr)
         {
             NormalXyz = new float[(long)w * h * 3];
             Depth = new float[(long)w * h];
@@ -201,9 +212,22 @@ public static class HeightfieldRaymarch2D
                 Components = new ShadingPipeline.ShadeComponents[(long)w * h];
             if (captureMotion)
                 Motion = new float[(long)w * h * 2];
+            if (captureHdr)
+            {
+                HdrBeauty = new float[(long)w * h * 3];
+                Array.Fill(HdrBeauty, float.NaN);   // unwritten = sky/miss sentinel
+            }
         }
         public float[] NormalXyz { get; }
         public float[] Depth { get; }
+
+        /// <summary>Per-pixel PRE-CLAMP linear-light beauty (byte-scale 0..∞, 3 floats /
+        /// pixel), or null when HDR capture was not requested (roadmap S2, #396). Filled
+        /// at the primary hit from <see cref="ShadingPipeline"/>'s HDR write; unwritten
+        /// (sky / ray-miss) pixels stay NaN — the sentinel a consumer reads as "use the
+        /// 8-bit beauty here". Captured from the centre supersample tap, like the other
+        /// float AOV planes.</summary>
+        public float[]? HdrBeauty { get; }
 
         /// <summary>Per-pixel float lighting components from the primary hit, or null
         /// when component capture was not requested. Populated in the beauty pass.</summary>
@@ -415,7 +439,9 @@ public static class HeightfieldRaymarch2D
         // S1 (#398) — a motion-vector capture reads back the CPU depth in a post-pass;
         // the GPU kernel emits no motion, so (like a Components capture) it forces the
         // CPU trace.
-        bool aovOk = aov == null || (aov.Components == null && aov.Motion == null);
+        // S2 (#396) — an HDR-beauty capture reads the shade's pre-clamp value, which
+        // the GPU kernel does not emit, so it too forces the CPU trace.
+        bool aovOk = aov == null || (aov.Components == null && aov.Motion == null && aov.HdrBeauty == null);
         if (gpuKernel != null && p.Relief2DGpuRaymarch && fx.DebugAov == AovView.Beauty
             && aovOk && !froxel && !fx.HasAreaLight)
         {
@@ -492,7 +518,8 @@ public static class HeightfieldRaymarch2D
         // when DOF is off (aperture 0).
         (uint col, bool terrainHit, float nrmX, float nrmY, float nrmZ, float depth) SamplePixel(
             double sxpix, double sypix, double lensX, double lensY,
-            ShadingPipeline.ShadeComponents[]? compBuf = null, int compIndex = -1)
+            ShadingPipeline.ShadeComponents[]? compBuf = null, int compIndex = -1,
+            float[]? hdrBuf = null)
         {
             double ndcx = 2.0 * sxpix / w - 1.0;
             double ndcy = 1.0 - 2.0 * sypix / h;
@@ -575,7 +602,7 @@ public static class HeightfieldRaymarch2D
                     // S1/S7 (#389) — capture the float lighting components at the
                     // primary terrain hit when an AOV component buffer is supplied.
                     uint tcol = ShadingPipeline.Shade<HeightDe>(in si, alb, in fx, in de, true,
-                        pixelIndex: compIndex, compBuf: compBuf);
+                        pixelIndex: compIndex, hdrBuf: hdrBuf, compBuf: compBuf);
 
                     // #141 — dissolve the terrain FOOTPRINT edge into whatever is
                     // behind it. The height field has a rectangular extent
@@ -622,7 +649,7 @@ public static class HeightfieldRaymarch2D
                             gx, 0.0, gz, 0.0, 1.0, 0.0, rdx, rdy, rdz,
                             totalT: tp, hitDist: 0.0, hitStep: 0, epsilon: eps0);
                         return (ShadingPipeline.Shade<HeightDe>(in sg, FloorAlbedo, in fx, in de, true,
-                            pixelIndex: compIndex, compBuf: compBuf), false, 0f, 1f, 0f, (float)tp);
+                            pixelIndex: compIndex, hdrBuf: hdrBuf, compBuf: compBuf), false, 0f, 1f, 0f, (float)tp);
                     }
                 }
             }
@@ -691,12 +718,14 @@ public static class HeightfieldRaymarch2D
                         var (lu1, lu2) = ShadingPipeline.HashPair(px * ss + si, py * ss + sj, 0.0, 7);
                         (lensX, lensY) = CameraDof.ConcentricSampleDisk(lu1, lu2);
                     }
-                    // S1/S7 (#389) — capture float lighting components from the same
-                    // first (centre) tap as the normal/depth planes, iff requested.
-                    bool capFirst = aov?.Components != null && si == 0 && sj == 0;
+                    // S1/S7 (#389) + S2 (#396) — capture the float lighting components
+                    // and/or the pre-clamp HDR beauty from the same first (centre) tap
+                    // as the normal/depth planes, iff requested.
+                    bool capCentre = (aov?.Components != null || aov?.HdrBeauty != null) && si == 0 && sj == 0;
                     var (col, hit, snx, sny, snz, sdepth) = SamplePixel(
                         px + (si + 0.5) / ss, py + (sj + 0.5) / ss, lensX, lensY,
-                        capFirst ? aov!.Components : null, capFirst ? py * w + px : -1);
+                        capCentre ? aov!.Components : null, capCentre ? py * w + px : -1,
+                        capCentre ? aov!.HdrBeauty : null);
                     aR += (col >> 16) & 0xFF;
                     aG += (col >> 8) & 0xFF;
                     aB += col & 0xFF;
