@@ -408,11 +408,17 @@ supplies the guide buffers.
   denoise + a new **"Temporal (SVGF)"** checkbox (+ feedback / variance rows) in the Relief 3D
   dialog + saving a region persists it — and an offline scene / batch render of that region runs
   SVGF end-to-end. Default off → byte-identical. +4 `RegionRelief3DTests`.
-- **Remaining (deep, still open on #402):** temporal luminance MOMENTS in the history (the
-  variance is estimated spatially from the accumulated frame today — a fuller SVGF tracks
-  E[l]/E[l²] across frames, `SvgfVariance.FromMoments` is ready); **SIMD** the À-Trous 5×5
-  accumulation (left on purpose — vectorizing would reorder the float sums and break byte-parity
-  with the `--batch` oracle).
+- **Temporal luminance moments (landed — PR #649, #402):** the last SVGF fidelity step.
+  `SvgfMoments` accumulates E[l]/E[l²] across frames with the SAME motion reprojection +
+  disocclusion the colour history uses, plus a per-pixel history length; `SvgfHistory` carries
+  `Moment1`/`Moment2`/`Length`; `ApplySvgf` derives the temporal variance (E[l²]−E[l]²) and blends
+  it from the spatial estimate toward the temporal one by history length (fresh/disoccluded →
+  spatial, converged → temporal). Default off → byte-identical. +7 tests. **SVGF is now feature-
+  complete** (temporal #644 + variance #645 + unite #646 + sequence wiring #647 + UI #648 +
+  temporal moments #649).
+- **Remaining (deep, still open on #402):** **SIMD** the À-Trous 5×5 accumulation (left on
+  purpose — vectorizing would reorder the float sums and break byte-parity with the `--batch`
+  oracle).
 
 ### S5 — Refractive / transmissive materials ◐ (#406)
 Cook-Torrance GGX today is opaque. Add **transmission + IOR** → glass fractals.
