@@ -28,6 +28,7 @@
 // sRGB output encode. Alpha is passed through untouched (never tonemapped).
 
 using System;
+using System.Numerics;
 
 namespace FracturingFog.Imaging;
 
@@ -104,14 +105,69 @@ public static class ViewTransformOps
         if (rgb == null) throw new ArgumentNullException(nameof(rgb));
         pixelCount = Math.Min(pixelCount, rgb.Length / 3);
         float expMul = MathF.Pow(2f, exposureEv);
-        for (int i = 0; i < pixelCount; i++)
+
+        // AgX mixes the three channels through an inset / outset matrix (plus a
+        // log2 encode), so it can NOT be processed as independent channels — keep
+        // the per-pixel scalar path.
+        if (transform == ViewTransform.AgX)
         {
-            int j = i * 3;
-            float r = rgb[j] * expMul, g = rgb[j + 1] * expMul, b = rgb[j + 2] * expMul;
-            Tonemap(transform, ref r, ref g, ref b);
-            rgb[j] = r; rgb[j + 1] = g; rgb[j + 2] = b;
+            for (int i = 0; i < pixelCount; i++)
+            {
+                int j = i * 3;
+                float r = rgb[j] * expMul, g = rgb[j + 1] * expMul, b = rgb[j + 2] * expMul;
+                Agx(ref r, ref g, ref b);
+                rgb[j] = r; rgb[j + 1] = g; rgb[j + 2] = b;
+            }
+            return;
         }
+
+        // Reinhard / ACES / Filmic are per-channel functions of only *, +, / (no
+        // transcendentals), so a Vector<float> pass over the FLAT channel array is
+        // BYTE-IDENTICAL to the scalar loop — the same IEEE ops run per lane in the
+        // same order. So this fast path is always on (no opt-in), unlike the
+        // not-byte-identical SIMD À-Trous (#650, which uses a poly exp). The scalar
+        // tail finishes the channels that don't fill a vector.
+        int n = pixelCount * 3;
+        int c = 0;
+        if (Vector.IsHardwareAccelerated && Vector<float>.Count > 1 && n >= Vector<float>.Count)
+            c = ApplyLinearChannelsSimd(rgb, n, transform, expMul);
+        for (; c < n; c++)
+            rgb[c] = PerChannel(transform, rgb[c] * expMul);
     }
+
+    /// <summary>Vectorized per-channel tonemap over the flat linear-RGB array for
+    /// the per-channel operators (Reinhard / ACES / Filmic). Processes
+    /// <c>Vector&lt;float&gt;.Count</c> channels at a time; returns the channel index
+    /// where the scalar tail must resume. Byte-identical to the scalar path.</summary>
+    private static int ApplyLinearChannelsSimd(float[] rgb, int n, ViewTransform transform, float expMul)
+    {
+        int w = Vector<float>.Count;
+        var exp = new Vector<float>(expMul);
+        int c = 0;
+        for (; c + w <= n; c += w)
+        {
+            var v = new Vector<float>(rgb, c) * exp;
+            switch (transform)
+            {
+                case ViewTransform.Reinhard: v = ReinhardV(v); break;
+                case ViewTransform.AcesFilmic: v = AcesV(v); break;
+                case ViewTransform.Filmic: v = FilmicV(v); break;
+            }
+            v.CopyTo(rgb, c);
+        }
+        return c;
+    }
+
+    /// <summary>Scalar per-channel tonemap for the per-channel operators — the exact
+    /// arithmetic <see cref="Tonemap"/> applies to one channel, factored out so the
+    /// SIMD path's scalar tail matches it byte-for-byte.</summary>
+    private static float PerChannel(ViewTransform transform, float x) => transform switch
+    {
+        ViewTransform.Reinhard => x / (1f + x),
+        ViewTransform.AcesFilmic => AcesChannel(x),
+        ViewTransform.Filmic => FilmicChannel(x),
+        _ => x,
+    };
 
     // ── operators (linear in → linear display-referred [0,1] out) ─────────
 
@@ -135,14 +191,14 @@ public static class ViewTransformOps
     }
 
     // Hable / Uncharted 2 filmic curve, normalized to a white point.
+    private static readonly float FilmicWhiteInv = 1f / Hable(11.2f);
+
     private static void Filmic(ref float r, ref float g, ref float b)
     {
-        const float white = 11.2f;
-        float inv = 1f / Hable(white);
-        r = Saturate(Hable(r) * inv);
-        g = Saturate(Hable(g) * inv);
-        b = Saturate(Hable(b) * inv);
+        r = FilmicChannel(r); g = FilmicChannel(g); b = FilmicChannel(b);
     }
+
+    private static float FilmicChannel(float x) => Saturate(Hable(x) * FilmicWhiteInv);
 
     private static float Hable(float x)
     {
@@ -181,6 +237,38 @@ public static class ViewTransformOps
         float x4 = x2 * x2;
         return 15.5f * x4 * x2 - 40.14f * x4 * x + 31.96f * x4 - 6.868f * x2 * x
              + 0.4298f * x2 + 0.1191f * x - 0.00232f;
+    }
+
+    // ── vectorized per-channel operators (byte-identical to the scalar ops
+    //    above — same IEEE *, +, / per lane, same constants) ─────────────────
+
+    private static Vector<float> SaturateV(Vector<float> v) =>
+        Vector.Min(Vector.Max(v, Vector<float>.Zero), Vector<float>.One);
+
+    private static Vector<float> ReinhardV(Vector<float> v) =>
+        v / (Vector<float>.One + v);
+
+    private static Vector<float> AcesV(Vector<float> v)
+    {
+        var a = new Vector<float>(2.51f); var b = new Vector<float>(0.03f);
+        var c = new Vector<float>(2.43f); var d = new Vector<float>(0.59f); var e = new Vector<float>(0.14f);
+        var num = v * (a * v + b);
+        var den = v * (c * v + d) + e;
+        return SaturateV(num / den);
+    }
+
+    private static Vector<float> FilmicV(Vector<float> v) =>
+        SaturateV(HableV(v) * new Vector<float>(FilmicWhiteInv));
+
+    private static Vector<float> HableV(Vector<float> x)
+    {
+        const float A = 0.15f, B = 0.50f, C = 0.10f, D = 0.20f, E = 0.02f, F = 0.30f;
+        var Av = new Vector<float>(A); var Bv = new Vector<float>(B);
+        var CBv = new Vector<float>(C * B); var DEv = new Vector<float>(D * E);
+        var DFv = new Vector<float>(D * F); var EFv = new Vector<float>(E / F);
+        var num = x * (Av * x + CBv) + DEv;
+        var den = x * (Av * x + Bv) + DFv;
+        return num / den - EFv;
     }
 
     // ── color transfer ────────────────────────────────────────────────────
