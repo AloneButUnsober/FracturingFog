@@ -270,8 +270,19 @@ benefits most. Blender's Filmic → AgX migration is the precedent.
   producer→consumer path the poster uses, so **screen and poster match**. The HDR
   gate on both paths excludes an enabled denoise (the HDR plane is pre-denoise, so a
   guided denoise keeps the 8-bit tonemap). Byte-identical by default.
-- **Remaining:** more producers (a full-float 2D composite, EXR read-back, the
-  batch/video relief frame path), default-look validation, SIMD.
+- **Producer wiring — offline video + slideshow relief (landed — PR #651):** the
+  batch relief frame paths now match the poster + live view. `ApplyViewTransform`
+  (BatchRenderer) is HDR-aware — given a captured relief HDR beauty it tonemaps the
+  true-linear intermediate via `FromHdrByteScale`, else the plain 8-bit path — and
+  `RenderReliefRegionFrame` / the zoom loop's `RenderZoomFrame` capture the HDR plane
+  on the steady relief frames (zoom video single-frame, slideshow-leg zoom, still-
+  slideshow re-render). Gated by `ReliefHdrWanted` (transform + neutral b/c +
+  relief-raymarch + denoise off); cross-fade / motion-blur / flat frames keep the
+  8-bit path. Byte-identical by default. (BatchRenderer is WinExe-only, so the batch
+  wiring is build-verified; the shared `FromHdrByteScale` + relief capture are
+  Engine-tested.)
+- **Remaining:** the last producers (a full-float 2D composite, EXR read-back — both
+  bigger, beyond the relief path), default-look validation, SIMD.
 
 ### S3 — Cinematic camera: DOF, exposure, motion blur ◐ (#400)
 Depth of field is nearly free in a raymarcher — jitter the ray origin across an
