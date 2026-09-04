@@ -416,9 +416,17 @@ supplies the guide buffers.
   spatial, converged → temporal). Default off → byte-identical. +7 tests. **SVGF is now feature-
   complete** (temporal #644 + variance #645 + unite #646 + sequence wiring #647 + UI #648 +
   temporal moments #649).
-- **Remaining (deep, still open on #402):** **SIMD** the À-Trous 5×5 accumulation (left on
-  purpose — vectorizing would reorder the float sums and break byte-parity with the `--batch`
-  oracle).
+- **SIMD À-Trous (landed — PR #650, #402):** an opt-in `AtrousParams.UseSimd` vectorizes the
+  guided gather over `Vector<float>.Count` pixels with a shared 2^f poly-exp (`SFExp`/`VExp`),
+  de-interleaving the normal guide to planar arrays and vectorizing each row's fully-interior
+  span (scalar borders + remainder). It is NOT byte-identical (float32 + reordered sums +
+  poly-exp) so it is off by default and the scalar path stays the `--batch` oracle; it
+  auto-falls-back when SIMD isn't hardware-accelerated. +4 tests (SIMD within ≤4/5 LSB of scalar,
+  deterministic, off = exact scalar). Wiring `UseSimd` through a params / batch surface is a thin
+  follow-up.
+- **S4 (#402) is fully addressed** ● — guided À-Trous + integration + GPU AOV emit + adaptive
+  supersample + the full SVGF pipeline (temporal #644 / variance #645 / unite #646 / sequence
+  wiring #647 / UI #648 / temporal moments #649) + the opt-in SIMD fast path (#650).
 
 ### S5 — Refractive / transmissive materials ◐ (#406)
 Cook-Torrance GGX today is opaque. Add **transmission + IOR** → glass fractals.
