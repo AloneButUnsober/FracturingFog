@@ -47,6 +47,7 @@ system. The codebase is a single .NET 10 solution.
 | Building the cross-asset Asset Manager (Sub-goal A, deferred) | [Asset Manager Dev Plan](AssetManager-DevPlan.md) |
 | Working on cinematic Scenes — camera track, timeline, offline render | [Scene Engine Architecture](SceneEngine-Architecture.md) |
 | Planning FF's move deeper into 3D — AOV passes, linear/tonemap, camera, denoise | [3D Rendering Roadmap](3D-Rendering-Roadmap.md) (parent issue #389) |
+| Understanding why a lighting/FX knob works on a 3D fractal but not Relief 3D | [Lighting & FX — 3D vs Relief 3D](Lighting-FX-3D-vs-Relief3D.md) |
 | Growing PaletteBuilder into a perceptual, colorblind-first color assistant | [PaletteBuilder Design](PaletteBuilder-Design.md) (roadmap S10, issue #392) |
 | Adding the Acid Warp palette-cycling mode + color-motion ideas | [Acid Warp Mode Design](AcidWarp-Mode-Design.md) |
 | Building the distributed master/worker rendering cluster   | [Distributed Rendering Development Plan](DistributedRendering-DevelopmentPlan.md) — phase notes: [D-1](D-1-Session-Notes.md), [D-2](D-2-Session-Notes.md) |
