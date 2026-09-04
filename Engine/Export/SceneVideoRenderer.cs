@@ -213,6 +213,15 @@ namespace FracturingFog.Export
                 : null;
             FracturingFog.Rendering.Lighting.ReliefMotionVector.CameraView? prevReliefCam = null;
 
+            // S4 (#402) — one persistent SVGF denoise history for the whole render,
+            // threaded into clean continuous relief frames (same gate as the froxel /
+            // motion histories). The relief denoise pass accumulates temporally + updates
+            // the history's PrevCamera when a shot has Relief2DDenoiseTemporal on; when it
+            // does not, the history stays empty and the plain single-frame denoise runs —
+            // so threading it is byte-identical when SVGF is off. A shot cut changes the
+            // camera; the pass's own reprojection re-seeds on the resulting disocclusion.
+            var svgfHistory = new FracturingFog.Imaging.SvgfHistory();
+
             using (var png = new PngSequenceWriter(pngFolder, w, h))
             {
                 foreach (var frame in plan.Frames)
@@ -265,7 +274,8 @@ namespace FracturingFog.Export
                             overrideBase, s.GlobalTime, globalTracks, audioSource, audioTracks,
                             cleanFroxelFrame ? froxelHistory : null,
                             motionFrame ? prevReliefCam : null,
-                            motionFrame ? motionAov : null);
+                            motionFrame ? motionAov : null,
+                            cleanFroxelFrame ? svgfHistory : null);
                         float wt = (float)s.Weight;
                         for (int i = 0; i < n; i++)
                         {
@@ -396,7 +406,8 @@ namespace FracturingFog.Export
             IReadOnlyList<SceneAudioTrack>? audioTracks = null,
             FracturingFog.Rendering.Lighting.FroxelHistory? froxelHistory = null,
             FracturingFog.Rendering.Lighting.ReliefMotionVector.CameraView? previousCamera = null,
-            FracturingFog.Rendering.Lighting.HeightfieldRaymarch2D.ReliefAovBuffers? motionAov = null)
+            FracturingFog.Rendering.Lighting.HeightfieldRaymarch2D.ReliefAovBuffers? motionAov = null,
+            FracturingFog.Imaging.SvgfHistory? svgfHistory = null)
         {
             if (!cache.TryGetValue(originalIndex, out var shot))
                 return BlackFrame(w, h);
@@ -465,7 +476,10 @@ namespace FracturingFog.Export
                 ColorMap = shot.Theme,
                 FractalParameters = p,
                 FroxelHistory = froxelHistory,   // #468 cross-frame froxel temporal (null = spatial-only)
-                PreviousCamera = previousCamera, // S1 (#398) motion-vector previous-frame camera (null = zero motion)
+                // S4 (#402) — SVGF temporal denoise history; the pass carries the previous
+                // frame's camera on it, so it takes precedence over the motion-blur camera.
+                PreviousCamera = svgfHistory?.PrevCamera ?? previousCamera,
+                SvgfHistory = svgfHistory,
             };
 
             // Relief 3D (#408, scene). When the shot's params enable the oblique
