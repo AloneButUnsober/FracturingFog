@@ -109,9 +109,24 @@ public static class ReliefDenoisePass
                 aov.NormalXyz, history.Normal, aov.Depth, history.Depth)
             : (uint[])beauty.Clone();
 
-        // 2. Variance from the accumulated frame — converged regions read low (tight
-        //    colour edge-stop, detail preserved), fresh/noisy regions read high (wide).
-        var variance = SvgfVariance.EstimateSpatial(acc, w, h, 1);
+        // 2. Variance. Accumulate the luminance moments (E[l], E[l²]) of the noisy
+        //    beauty across frames with the SAME reprojection + disocclusion the colour
+        //    uses, and derive the TEMPORAL variance (E[l²] − E[l]²). Blend from the
+        //    SPATIAL estimate toward the temporal one by the per-pixel history length,
+        //    so a fresh / disoccluded pixel (few samples) still filters wide while a
+        //    converged one trusts its settled temporal variance.
+        var (m1, m2, len) = SvgfMoments.Accumulate(beauty,
+            reuse ? history.Moment1 : null, reuse ? history.Moment2 : null,
+            reuse ? history.Length : null, aov.Motion, w, h, feedback,
+            aov.NormalXyz, history.Normal, aov.Depth, history.Depth);
+        var spatial = SvgfVariance.EstimateSpatial(acc, w, h, 1);
+        var temporal = SvgfVariance.FromMoments(m1, m2, w, h);
+        var variance = new float[n];
+        System.Threading.Tasks.Parallel.For(0, (int)n, i =>
+        {
+            double t = Math.Min((int)len[i], 4) / 4.0;   // 4 samples → fully temporal
+            variance[i] = (float)(spatial[i] * (1.0 - t) + temporal[i] * t);
+        });
 
         // 3. Variance-guided À-Trous, guided by the geometry AOVs.
         var denoised = AtrousDenoiser.Denoise(acc, w, h, atrous, aov.NormalXyz, aov.Depth, variance, varScale);
@@ -121,6 +136,7 @@ public static class ReliefDenoisePass
         history.Color = (uint[])denoised.Clone();
         history.Normal = aov.NormalXyz != null ? (float[])aov.NormalXyz.Clone() : null;
         history.Depth = aov.Depth != null ? (float[])aov.Depth.Clone() : null;
+        history.Moment1 = m1; history.Moment2 = m2; history.Length = len;
         history.PrevCamera = aov.CurrentCamera;
         history.W = w; history.H = h; history.Valid = true;
     }

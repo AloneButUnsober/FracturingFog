@@ -84,6 +84,24 @@ public sealed class ReliefSvgfIntegrationTests
     }
 
     [Fact]
+    public void Applies_And_Grows_The_Temporal_Moments()
+    {
+        var history = new SvgfHistory();
+        var p = Params(temporal: true);
+        var aov = FlatAov();
+
+        var f1 = NoisyGray(21);
+        ReliefDenoisePass.ApplySvgf(f1, aov, W, H, p, history);
+        Assert.NotNull(history.Moment1);
+        Assert.NotNull(history.Length);
+        Assert.Equal(1, history.Length![0]);   // first frame → single sample
+
+        var f2 = NoisyGray(21);
+        ReliefDenoisePass.ApplySvgf(f2, aov, W, H, p, history);
+        Assert.Equal(2, history.Length![0]);    // second frame accumulates (motion 0)
+    }
+
+    [Fact]
     public void Second_Frame_Accumulates_Smoother_Than_The_First()
     {
         var history = new SvgfHistory();

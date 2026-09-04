@@ -31,6 +31,14 @@ public sealed class SvgfHistory
     /// <summary>Previous frame's world-units depth AOV (w*h) for disocclusion.</summary>
     public float[]? Depth { get; set; }
 
+    /// <summary>Accumulated first / second luminance moments (E[l], E[l²], each w*h) for
+    /// the SVGF TEMPORAL variance (var = E[l²] − E[l]²), and the per-pixel history length
+    /// (samples accumulated) used to ramp from the spatial estimate to the temporal one
+    /// (roadmap S4, #402). Null until the moments have accumulated a frame.</summary>
+    public float[]? Moment1 { get; set; }
+    public float[]? Moment2 { get; set; }
+    public byte[]? Length { get; set; }
+
     /// <summary>Previous frame's camera — the caller threads it as the render's
     /// <c>previousCamera</c> so this frame's motion AOV fills.</summary>
     public FracturingFog.Rendering.Lighting.ReliefMotionVector.CameraView? PrevCamera { get; set; }
@@ -52,6 +60,9 @@ public sealed class SvgfHistory
         Color = null;
         Normal = null;
         Depth = null;
+        Moment1 = null;
+        Moment2 = null;
+        Length = null;
         PrevCamera = null;
     }
 }
