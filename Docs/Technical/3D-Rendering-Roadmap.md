@@ -1137,9 +1137,17 @@ this is plumbing, not new physics. Analysis doc: `Docs/Technical/Lighting-FX-3D-
   (the control that actually tonemaps relief), with a **Ctrl+H** shortcut for the
   Post-FX HUD.
 - **Follow-up slices (each independently shippable):**
-  1. **Tone Map + Exposure + Bloom** on Relief via `ApplyToneMapBloom` over the captured
-     HDR beauty — define the interaction with the global `ViewTransform` (replace-when-set
-     vs composed order); this is where the two tonemap paths finally reconcile.
+  1. **Tone Map + Exposure + Bloom** on Relief — **LANDED (PR #663).** `FractalRenderHost`
+     + `PosterRenderer` run the SAME `ScreenSpacePost.ApplyToneMapBloom` the 3D calculators
+     run over the captured HDR beauty when an FX tonemap/bloom is set; it consumes the HDR
+     (dst → display-referred, NaN sky keeps its byte) so the global `ViewTransform` then
+     **stacks** on the 8-bit result — the reconcile: FX Tone Map owns HDR→display, View
+     Transform is a secondary look (matches the 3D-calculator order). HDR-capture arm
+     (`wantHdr`) broadened to fire on an FX tonemap/bloom too. UI: `ToneMapBloomApplies`
+     enables Tone Map / Exposure / Bloom on relief (Lens stays 3D-only pending #2); banner
+     updated. Byte-identical default; +3 tests, suite 2231/2231. **Froxel follow-up:** when
+     froxel is active the HDR beauty is fog-free so the capture is gated off (FX Tone Map a
+     no-op on froxel relief) — the deeper fix composes froxel fog IN HDR (also noted #655).
   2. **Lens post** (chromatic aberration / distortion / vignette / anamorphic) — a byte-buffer pass.
   3. **Edge ink** — reuse the Relief depth+normal G-buffer.
   4. **SSAO** — same G-buffer.
