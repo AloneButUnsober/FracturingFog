@@ -52,15 +52,15 @@
 
                 <!-- Relief 3D context banner. Relief shares stage-1 per-hit shading
                      (lights / shadow / AO / fog / volumetrics / material / reflections)
-                     but skips the stage-2 whole-buffer post chain the 3D calculators
-                     run, so Tone Map / Bloom / Lens / SSAO / Edge / Stereo / DoF are
-                     no-ops here — disabled below. #FFCC00 = colorblind-safe advisory.
-                     See Docs/Technical/Lighting-FX-3D-vs-Relief3D.md. -->
+                     runs Tone Map / Exposure / Bloom (S12.1, #652) over its HDR beauty,
+                     but the remaining stage-2 passes — Lens / SSAO / Edge / Stereo / DoF —
+                     are still 3D-fractal only and disabled below. #FFCC00 = colorblind-safe
+                     advisory. See Docs/Technical/Lighting-FX-3D-vs-Relief3D.md. -->
                 <Border IsVisible="{Binding IsReliefLightingContext}"
                         Background="#33FFCC00" BorderBrush="#FFCC00" BorderThickness="1"
                         CornerRadius="3" Padding="8" Margin="0,0,0,6">
                     <TextBlock TextWrapping="Wrap" Foreground="#FFCC00"
-                               Text="Relief 3D: lights, shadows, AO, fog and volumetrics below all apply. The post-process effects — Tone Map, Bloom, Lens, SSAO, Edge ink, Stereo, and this dialog's DoF — are 3D-fractal only and are disabled here. For Relief tonemapping, use View ▸ View Transform (and its Exposure EV); for Relief depth-of-field, use the Relief 3D dialog's own aperture / focus." />
+                               Text="Relief 3D: lights, shadows, AO, fog and volumetrics below all apply — and Tone Map, Exposure and Bloom now apply too (over the relief HDR beauty). Still 3D-fractal only, disabled here: Lens, SSAO, Edge ink, Stereo, and this dialog's DoF. The FX Tone Map and the View ▸ View Transform stack (Tone Map maps HDR to display; View Transform is a look on top); for Relief depth-of-field, use the Relief 3D dialog's own aperture / focus." />
                 </Border>
 
                 <!-- #306 — volumetric preset droplist (artistic starting points) -->
@@ -663,11 +663,12 @@
                     </Grid>
                 </Expander>
 
-                <!-- Tone Map / Bloom / Lens — entirely stage-2 post; 3D-fractal only.
-                     Disabled on Relief 3D (IsReliefLightingContext); use View Transform. -->
+                <!-- Tone Map / Bloom apply on 3D AND Relief 3D (S12.1, #652 — relief runs
+                     ScreenSpacePost.ApplyToneMapBloom over its captured HDR beauty). Lens
+                     rows below stay 3D-fractal only (Stage2PostFxApplies) until S12.2. -->
                 <Expander Header="Tone Map / Bloom / Lens" HorizontalAlignment="Stretch">
                     <Grid ColumnDefinitions="160,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto"
-                          IsEnabled="{Binding Stage2PostFxApplies}">
+                          IsEnabled="{Binding ToneMapBloomApplies}">
                         <TextBlock Grid.Row="0" Grid.Column="0" Text="Tone map:" VerticalAlignment="Center" />
                         <ComboBox  Grid.Row="0" Grid.Column="1" HorizontalAlignment="Stretch"
                                    ItemsSource="{Binding ToneMapOperators}"
@@ -698,7 +699,7 @@
                                    ToolTip.Tip="Radial RGB channel offset (pixels). 0 = off." />
                         <Grid Grid.Row="4" Grid.Column="1" ColumnDefinitions="*,Auto" Margin="0,2">
                             <Slider Classes="knob" Grid.Column="0" Minimum="0" Maximum="16"
-                                    Value="{Binding ChromaticAberration, Mode=TwoWay}" />
+                                    Value="{Binding ChromaticAberration, Mode=TwoWay}" IsEnabled="{Binding Stage2PostFxApplies}" />
                             <TextBlock Classes="knobValue" Grid.Column="1"
                                        Text="{Binding ChromaticAberration, StringFormat='F2'}" />
                         </Grid>
@@ -707,7 +708,7 @@
                                    ToolTip.Tip="Barrel (positive) / pincushion (negative). 0 = none." />
                         <Grid Grid.Row="5" Grid.Column="1" ColumnDefinitions="*,Auto" Margin="0,2">
                             <Slider Classes="knob" Grid.Column="0" Minimum="-0.5" Maximum="0.5"
-                                    Value="{Binding LensDistortion, Mode=TwoWay}" />
+                                    Value="{Binding LensDistortion, Mode=TwoWay}" IsEnabled="{Binding Stage2PostFxApplies}" />
                             <TextBlock Classes="knobValue" Grid.Column="1"
                                        Text="{Binding LensDistortion, StringFormat='F3'}" />
                         </Grid>
@@ -716,7 +717,7 @@
                                    ToolTip.Tip="Corner falloff [0..1]. 0 = uniform. Applied after lens warp." />
                         <Grid Grid.Row="6" Grid.Column="1" ColumnDefinitions="*,Auto" Margin="0,2">
                             <Slider Classes="knob" Grid.Column="0" Minimum="0" Maximum="1"
-                                    Value="{Binding Vignette, Mode=TwoWay}" />
+                                    Value="{Binding Vignette, Mode=TwoWay}" IsEnabled="{Binding Stage2PostFxApplies}" />
                             <TextBlock Classes="knobValue" Grid.Column="1"
                                        Text="{Binding Vignette, StringFormat='F2'}" />
                         </Grid>
@@ -725,19 +726,19 @@
                                    ToolTip.Tip="Brown decentring p1 (X coefficient). Simulates lens shift." />
                         <NumericUpDown Grid.Row="7" Grid.Column="1"
                                        Minimum="-0.1" Maximum="0.1" Increment="0.005" FormatString="F4"
-                                       Value="{Binding LensTangentialX, Mode=TwoWay}" Margin="0,2" />
+                                       Value="{Binding LensTangentialX, Mode=TwoWay}" Margin="0,2" IsEnabled="{Binding Stage2PostFxApplies}" />
 
                         <TextBlock Grid.Row="8" Grid.Column="0" Text="Tangential p2:" VerticalAlignment="Center"
                                    ToolTip.Tip="Brown decentring p2 (Y coefficient). Simulates lens shift." />
                         <NumericUpDown Grid.Row="8" Grid.Column="1"
                                        Minimum="-0.1" Maximum="0.1" Increment="0.005" FormatString="F4"
-                                       Value="{Binding LensTangentialY, Mode=TwoWay}" Margin="0,2" />
+                                       Value="{Binding LensTangentialY, Mode=TwoWay}" Margin="0,2" IsEnabled="{Binding Stage2PostFxApplies}" />
 
                         <TextBlock Grid.Row="9" Grid.Column="0" Text="Anamorphic squeeze:" VerticalAlignment="Center"
                                    ToolTip.Tip="Vertical-to-horizontal aspect ratio [0.25..4]. 1 = isotropic. >1 = scope/wide look." />
                         <Grid Grid.Row="9" Grid.Column="1" ColumnDefinitions="*,Auto" Margin="0,2">
                             <Slider Classes="knob" Grid.Column="0" Minimum="0.25" Maximum="4"
-                                    Value="{Binding AnamorphicSqueeze, Mode=TwoWay}" />
+                                    Value="{Binding AnamorphicSqueeze, Mode=TwoWay}" IsEnabled="{Binding Stage2PostFxApplies}" />
                             <TextBlock Classes="knobValue" Grid.Column="1"
                                        Text="{Binding AnamorphicSqueeze, StringFormat='F2'}" />
                         </Grid>

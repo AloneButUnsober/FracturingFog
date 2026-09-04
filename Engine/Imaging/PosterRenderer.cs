@@ -254,7 +254,13 @@ namespace FracturingFog.Imaging
             // equals the raw beauty, so terrain-HDR and sky-fallback pixels stay
             // consistent. Any other case falls through to the unchanged 8-bit path.
             bool neutralGrade = req.Brightness == 0 && req.Contrast == 0 && req.Gamma == 0;
-            bool wantHdr = req.ViewTransform != ViewTransform.None && neutralGrade
+            // S12.1 (#652) — relief stage-2 Tone Map / Bloom consume the same HDR beauty,
+            // so capture it when an FX tonemap/bloom is active too, not just a view
+            // transform (exposure alone is a pre-tonemap multiply, inert on its own).
+            bool fxTonemap = req.FractalParameters is not null
+                && (req.FractalParameters.Lighting.ToneMap != FracturingFog.Rendering.Lighting.ToneMapOperator.None
+                    || req.FractalParameters.Lighting.BloomStrength > 0.0);
+            bool wantHdr = (req.ViewTransform != ViewTransform.None || fxTonemap) && neutralGrade
                 && req.FractalParameters is { Relief2DEnabled: true, Relief2DRaymarch: true }
                 // The HDR plane is the PRE-denoise beauty; tonemapping it would drop a
                 // guided denoise, so the HDR headroom path is used only when denoise is
@@ -279,6 +285,28 @@ namespace FracturingFog.Imaging
             // still sees the authored coverage byte.
             ApplyBrightnessContrastGamma(buffer, w * h, req.Brightness, req.Contrast, req.Gamma);
 
+            // S12.1 (#652) — relief STAGE-2 tone map + exposure + bloom, matching the
+            // live path (FractalRenderHost). Relief is not a calculator so it never ran
+            // the whole-buffer post chain; run the SAME ScreenSpacePost.ApplyToneMapBloom
+            // the 3D calculators run over the captured pre-clamp HDR beauty. It CONSUMES
+            // the HDR (buffer becomes display-referred, sky NaN pixels keep their byte),
+            // so the view transform below stacks on the 8-bit result — exactly as it does
+            // on a 3D calculator's buffer (FX ToneMap owns HDR→display; the global
+            // ViewTransform is a secondary look). Only fires with an FX tonemap/bloom set
+            // and an HDR beauty captured (relief, neutral grade, no denoise/froxel).
+            bool reliefStage2Applied = false;
+            if (hdrAov?.HdrBeauty != null && hdrAov.HdrBeauty.Length == (long)w * h * 3)
+            {
+                var reliefFx = req.FractalParameters!.Lighting;
+                if (reliefFx.ToneMap != FracturingFog.Rendering.Lighting.ToneMapOperator.None
+                    || reliefFx.BloomStrength > 0.0)
+                {
+                    FracturingFog.Rendering.Lighting.ScreenSpacePost.ApplyToneMapBloom(
+                        buffer, hdrAov.HdrBeauty, w, h, in reliefFx);
+                    reliefStage2Applied = true; // consumed → view transform stacks on 8-bit
+                }
+            }
+
             // S2 (#389/#396) — output-stage view transform (tonemap), layered on the
             // b/c/gamma post-pass exactly as the live path does, so a poster matches
             // the on-screen frame. None = no-op (byte-identical). When the relief HDR
@@ -291,7 +319,7 @@ namespace FracturingFog.Imaging
             bool linearComposited = false;
             if (req.ViewTransform != ViewTransform.None)
             {
-                if (hdrAov?.HdrBeauty != null && hdrAov.HdrBeauty.Length == (long)w * h * 3)
+                if (!reliefStage2Applied && hdrAov?.HdrBeauty != null && hdrAov.HdrBeauty.Length == (long)w * h * 3)
                     buffer = LinearFloatImage
                         .FromHdrByteScale(hdrAov.HdrBeauty, buffer, w, h)
                         .ApplyViewTransform(req.ViewTransform, req.ViewExposureEv)

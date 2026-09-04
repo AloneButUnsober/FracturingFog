@@ -339,6 +339,13 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
     /// calculators. True = enable those controls; false (Relief) = grey them.</summary>
     public bool Stage2PostFxApplies => IsAny3DRaymarcher;
 
+    /// <summary>S12.1 (#652) — Tone Map / Exposure / Bloom now run on Relief 3D too
+    /// (via <c>ScreenSpacePost.ApplyToneMapBloom</c> over the captured HDR beauty),
+    /// not just the true 3D calculators. So these controls enable on BOTH a 3D
+    /// raymarcher and a Relief 3D raymarch context — unlike the still-3D-only lens /
+    /// SSAO / edge / stereo passes (<see cref="Stage2PostFxApplies"/>).</summary>
+    public bool ToneMapBloomApplies => IsAny3DRaymarcher || IsReliefLightingContext;
+
     /// <summary>Visibility flag for the 2D interior-alpha section (issue #96,
     /// #382). True for the canonical Mandelbrot path plus the DSL escape-time
     /// families (UserEquation, Sandbox), which share the <c>iter &gt;= maxIt</c>
@@ -425,7 +432,7 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
     public bool Relief2DEnabled
     {
         get => _p.Relief2DEnabled;
-        set { if (_p.Relief2DEnabled == value) return; _p.Relief2DEnabled = value; this.RaisePropertyChanged(); this.RaisePropertyChanged(nameof(ShowLightingFxLauncher)); this.RaisePropertyChanged(nameof(IsReliefLightingContext)); this.RaisePropertyChanged(nameof(Stage2PostFxApplies)); Fire(); }
+        set { if (_p.Relief2DEnabled == value) return; _p.Relief2DEnabled = value; this.RaisePropertyChanged(); this.RaisePropertyChanged(nameof(ShowLightingFxLauncher)); this.RaisePropertyChanged(nameof(IsReliefLightingContext)); this.RaisePropertyChanged(nameof(Stage2PostFxApplies)); this.RaisePropertyChanged(nameof(ToneMapBloomApplies)); Fire(); }
     }
     public double Relief2DHeightScale
     {
@@ -465,7 +472,7 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
     public bool Relief2DRaymarch
     {
         get => _p.Relief2DRaymarch;
-        set { if (_p.Relief2DRaymarch == value) return; _p.Relief2DRaymarch = value; this.RaisePropertyChanged(); this.RaisePropertyChanged(nameof(ShowLightingFxLauncher)); this.RaisePropertyChanged(nameof(IsReliefLightingContext)); this.RaisePropertyChanged(nameof(Stage2PostFxApplies)); Fire(); }
+        set { if (_p.Relief2DRaymarch == value) return; _p.Relief2DRaymarch = value; this.RaisePropertyChanged(); this.RaisePropertyChanged(nameof(ShowLightingFxLauncher)); this.RaisePropertyChanged(nameof(IsReliefLightingContext)); this.RaisePropertyChanged(nameof(Stage2PostFxApplies)); this.RaisePropertyChanged(nameof(ToneMapBloomApplies)); Fire(); }
     }
     // Roadmap S6 (#408) — froxel (frustum-voxel) volumetrics. Composites a camera-
     // frustum fog volume by per-pixel depth instead of the per-pixel march. Only

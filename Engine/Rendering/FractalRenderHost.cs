@@ -3510,7 +3510,17 @@ namespace FracturingFog.Rendering
                         // so when froxel is active, keep the 8-bit transform on the fully
                         // composited buffer (headroom yielded; fog preserved).
                         bool liveFroxel = reliefParams.Relief2DFroxelVolumetrics && reliefParams.Lighting.FogDensity > 0.0;
-                        bool wantHdr = ViewState.ViewTransform != FracturingFog.Imaging.ViewTransform.None
+                        // S12.1 (#652) — the FX-dialog Tone Map / Bloom now run on relief
+                        // too (over this same HDR beauty). So arm the HDR capture when a
+                        // view transform OR an FX tonemap/bloom is active, not just the
+                        // view transform. (Exposure alone is a pre-tonemap multiply, inert
+                        // without an operator, so it doesn't arm on its own.)
+                        var liveReliefFx = reliefParams.Lighting;
+                        bool liveFxTonemap =
+                            liveReliefFx.ToneMap != FracturingFog.Rendering.Lighting.ToneMapOperator.None
+                            || liveReliefFx.BloomStrength > 0.0;
+                        bool wantHdr = (ViewState.ViewTransform != FracturingFog.Imaging.ViewTransform.None
+                                        || liveFxTonemap)
                             && liveNeutralGrade
                             && !FracturingFog.Imaging.ReliefDenoisePass.Enabled(reliefParams)
                             && !liveFroxel;
@@ -3631,6 +3641,30 @@ namespace FracturingFog.Rendering
             else
             {
                 Array.Copy(src, dst, n);
+            }
+
+            // S12.1 (#652) — relief STAGE-2 tone map + exposure + bloom. Relief renders
+            // through HeightfieldRaymarch2D (not a calculator), so it never ran the
+            // whole-buffer post chain the true-3D calculators do; the FX-dialog Tone Map
+            // / Bloom were silent no-ops. Now, when the pre-clamp HDR beauty was captured
+            // (armed above whenever an FX tonemap/bloom or a view transform is on), run
+            // the SAME ScreenSpacePost.ApplyToneMapBloom the 3D calculators run over it —
+            // real HDR headroom, sky (NaN) pixels keep their byte. It CONSUMES the HDR
+            // beauty (dst becomes display-referred), so the S2 view transform below then
+            // stacks on the 8-bit result exactly as it does on a 3D calculator's buffer
+            // (the two tonemap paths reconciled: FX ToneMap owns HDR→display, the global
+            // ViewTransform is a secondary look on top). Skipped on froxel / denoise /
+            // graded frames (no HDR beauty) — same gate as the transform's HDR path.
+            if (reliefRaymarchApplied && reliefHdrBeauty != null && reliefHdrBeauty.Length == (long)n * 3)
+            {
+                var reliefFx = ViewState.FractalParameters.Lighting;
+                if (reliefFx.ToneMap != FracturingFog.Rendering.Lighting.ToneMapOperator.None
+                    || reliefFx.BloomStrength > 0.0)
+                {
+                    FracturingFog.Rendering.Lighting.ScreenSpacePost.ApplyToneMapBloom(
+                        dst, reliefHdrBeauty, w, h, in reliefFx);
+                    reliefHdrBeauty = null; // consumed → view transform stacks on 8-bit
+                }
             }
 
             // S2 (#389/#396) — output-stage view transform (tonemap). The final display
