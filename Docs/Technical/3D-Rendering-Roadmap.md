@@ -200,7 +200,7 @@ discarded, not that it is uncomputed.
 - **Remaining:** SVGF temporal (the deeper #402 consumer of the motion + depth + normal
   guides); the light compositor.
 
-### S2 — Linear-light rendering + view transform (AgX / ACES / Filmic) ◐ (#396)
+### S2 — Linear-light rendering + view transform (AgX / ACES / Filmic) ● (#396)
 Render and composite in **linear light**, apply a filmic **view transform** at
 output. FF composites in sRGB-ish 8-bit today; that is the root cause of
 volumetric fog highlight blowouts and banded gradients. Lowest risk (pipeline
@@ -321,9 +321,22 @@ benefits most. Blender's Filmic → AgX migration is the precedent.
   **"Regrade EXR…"** (beside Export AOV EXR…) → `ShellViewModel.RegradeExrCommand` → host
   picks an input `.exr` + output image and tonemaps with the current live ViewState
   transform + exposure. +5 batch-grammar tests, suite 2209/2209.
-- **Remaining:** default-look validation, SIMD. **All S2 producer/consumer work is done**
-  — producers relief HDR live/poster/batch (#651), full-float 2D composite (#659), EXR
-  read-back (#660); read-back user surface (#661).
+- **SIMD + default-look validation (landed — PR #662):** the S2 tails.
+  **SIMD:** `ViewTransformOps.ApplyLinear` vectorizes Reinhard / ACES / Filmic over a
+  `Vector<float>` pass on the flat linear-RGB array — per-channel functions of only
+  `*`,`+`,`/`, so it is **byte-identical** to scalar (same IEEE ops per lane) and always
+  on, no opt-in (unlike the not-byte-identical SIMD À-Trous #650). AgX (channel-mixing
+  matrix + log2) keeps the scalar per-pixel path. +9 tests assert exact bit-for-bit
+  equality vs a scalar oracle. **Default-look validation:** a `--viewtransformprobe` gate
+  (`ViewTransformProbe.RunGate`) + `S2DefaultLookTests` render through the real
+  `PosterRenderer` and prove `ViewTransform.None` is byte-identical across runs, exposure
+  is inert without a transform, and each transform reaches the output — opaque + the
+  full-float translucent-composite scene. Probe RESULT: PASS. +10 tests.
+- **S2 is feature-complete** — view transform + wiring (#397/#410), video/slideshow frame
+  path, core true-linear intermediate (#651), producers (relief HDR live/poster/batch
+  #651, full-float 2D composite #659, EXR read-back #660), regrade surface (#661), SIMD +
+  default-look validation (#662). Deeper tails that remain optional: SIMD of the sRGB
+  encode/decode (`FromBgra`/`ToBgra`, needs a poly pow → opt-in like #650) and AgX.
 
 ### S3 — Cinematic camera: DOF, exposure, motion blur ◐ (#400)
 Depth of field is nearly free in a raymarcher — jitter the ray origin across an
