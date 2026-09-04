@@ -3503,9 +3503,17 @@ namespace FracturingFog.Rendering
                         // beauty, so a guided denoise keeps the 8-bit tonemap. Forces the
                         // CPU trace like any AOV capture; default (no transform) unchanged.
                         bool liveNeutralGrade = ViewState.Brightness == 0 && ViewState.Contrast == 0 && ViewState.Gamma == 0;
+                        // Froxel volumetrics composites fog as a POST-Shade pass on the
+                        // 8-bit buffer, and the beauty renders fog-free (HeightfieldRaymarch2D
+                        // zeroes FogDensity when froxel is on), so the captured HDR beauty
+                        // carries no froxel fog. Tonemapping it would drop the fog entirely —
+                        // so when froxel is active, keep the 8-bit transform on the fully
+                        // composited buffer (headroom yielded; fog preserved).
+                        bool liveFroxel = reliefParams.Relief2DFroxelVolumetrics && reliefParams.Lighting.FogDensity > 0.0;
                         bool wantHdr = ViewState.ViewTransform != FracturingFog.Imaging.ViewTransform.None
                             && liveNeutralGrade
-                            && !FracturingFog.Imaging.ReliefDenoisePass.Enabled(reliefParams);
+                            && !FracturingFog.Imaging.ReliefDenoisePass.Enabled(reliefParams)
+                            && !liveFroxel;
                         // S4 (#389) — capture float AOVs + guided À-Trous denoise
                         // iff on; null keeps the GPU fast path (byte-identical off).
                         // S2 (#396) — the HDR flag ORs an HDR-beauty plane into the same capture.
@@ -3634,7 +3642,12 @@ namespace FracturingFog.Rendering
             // same producer→consumer path the poster uses, so screen and poster match.
             // Otherwise the plain 8-bit path. Applied before the debug HUD and the
             // interior-alpha composite.
-            if (ViewState.ViewTransform != FracturingFog.Imaging.ViewTransform.None)
+            // Skip when srcAlreadyProcessed — a re-uploaded snapshot (selection box,
+            // stale-frame present, recording leg) already has the transform baked in,
+            // exactly like the brightness/contrast/gamma pass above; re-applying it
+            // would double-tonemap (visible darken / oversaturate on right-click and
+            // other snapshot re-uploads).
+            if (!srcAlreadyProcessed && ViewState.ViewTransform != FracturingFog.Imaging.ViewTransform.None)
             {
                 if (reliefHdrBeauty != null && reliefHdrBeauty.Length == (long)n * 3)
                 {
