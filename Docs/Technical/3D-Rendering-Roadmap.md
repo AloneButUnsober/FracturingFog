@@ -298,8 +298,25 @@ benefits most. Blender's Filmic → AgX migration is the precedent.
   no-backdrop → the `FromBgra → transform → ToBgra` parity anchor, 8-bit composite a
   trailing no-op); only a transform-active + translucent 2D frame changes, to the
   correct linear result. +8 tests, suite 2198/2198.
-- **Remaining:** the last producer (EXR read-back — bigger, feeds real >1 values into
-  the intermediate), default-look validation, SIMD.
+- **Producer wiring — EXR read-back (landed — PR #660):** the last S2 producer, and
+  the first to feed genuine linear values **above 1.0** (relief HDR was byte-scale, the
+  2D composite 8-bit-sourced). FF writes a scene-linear OpenEXR (S7) that keeps real
+  highlight headroom; this reads one back into `LinearFloatImage` and applies a view
+  transform + exposure at output, so a rendered `.exr` can be **regraded / tonemapped
+  after the fact — without re-rendering** (the render-pass compositor superpower). New
+  `LinearFloatImage.FromLinearRgb(linearRgb, w, h, alpha?)` (generic float producer —
+  copies an interleaved 3f/px linear-RGB buffer straight in, headroom carried) +
+  `FromExr(Stream)` / `FromExr(string)` (decode via the existing `OpenExrReader`,
+  `null` on an unsupported EXR). The consumer is `ExrRegrade` (Engine/Imaging):
+  `ToneMapToBgra` reads → transform → 8-bit; `RenderToFile` saves via `ImageExport`.
+  Pure/headless, same `ViewTransformOps` operator as every other producer (a regraded
+  EXR matches a live/poster render at the same transform); a non-EXR input fails
+  cleanly (null/false, no throw, no file). New capability — no existing path changes.
+  +6 tests, suite 2204/2204.
+- **Remaining:** default-look validation, SIMD, and a batch/GUI regrade surface for
+  `ExrRegrade` (a thin follow-up — the Engine capability is landed + tested). **All S2
+  producers are now in** (relief HDR live/poster/batch #651, full-float 2D composite
+  #659, EXR read-back #660).
 
 ### S3 — Cinematic camera: DOF, exposure, motion blur ◐ (#400)
 Depth of field is nearly free in a raymarcher — jitter the ray origin across an
