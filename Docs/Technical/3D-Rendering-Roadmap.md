@@ -249,8 +249,20 @@ benefits most. Blender's Filmic → AgX migration is the precedent.
   hard clip the 8-bit path is stuck with. Byte-identical by default (`None` no-op,
   8-bit round-trip unchanged); +7 tests, suite 2182/2182. Seam before consumer —
   the producers below wire in next.
-- **Remaining:** producer wiring (relief HDR scratch, a full-float 2D composite,
-  EXR read-back → feed `LinearFloatImage` instead of the 8-bit buffer), default-look
+- **Producer wiring — relief HDR beauty (landed — PR #651):** the relief RAYMARCH
+  is the first producer. `ReliefAovBuffers` gained an `HdrBeauty` plane (pre-clamp
+  linear-light beauty, byte-scale 0..∞, NaN = sky/miss sentinel) filled from
+  `ShadingPipeline`'s existing HDR write at the primary hit; an HDR capture forces
+  the CPU trace via the `aovOk` gate (like Components/Motion). `LinearFloatImage.FromHdrByteScale(hdr, fallback, w, h)`
+  bridges it into the intermediate — a NaN channel decodes the 8-bit fallback so a
+  buffer with no captured HDR reduces EXACTLY to `FromBgra` (transform matches the
+  plain 8-bit path byte-for-byte), captured pixels use `value/255` as linear so a
+  highlight above 255 keeps real headroom. `PosterRenderer` consumes it when a view
+  transform is active on a relief-raymarch poster with a NEUTRAL grade; every other
+  case is the unchanged 8-bit path. Byte-identical by default; +6 tests, suite
+  2188/2188.
+- **Remaining:** more producers (a full-float 2D composite, EXR read-back, the live
+  `FractalRenderHost` relief path → feed `LinearFloatImage`), default-look
   validation, SIMD.
 
 ### S3 — Cinematic camera: DOF, exposure, motion blur ◐ (#400)
