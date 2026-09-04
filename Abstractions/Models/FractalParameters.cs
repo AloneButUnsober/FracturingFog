@@ -529,6 +529,25 @@ namespace FracturingFog.Models
         /// Consulted via the captured world-units depth AOV.</summary>
         public double Relief2DDenoiseDepthSigma { get; set; } = 0.20;
 
+        /// <summary>S4 (#402) — SVGF temporal denoise. When true (and the denoise is on),
+        /// the relief denoise pass accumulates the noisy signal across frames — reproject
+        /// the previous denoised frame along the motion-vector AOV and blend — then drives
+        /// the À-Trous colour edge-stop by the per-pixel variance, so noise averages down
+        /// over time and unconverged pixels filter wider. Needs a sequence render carrying
+        /// a persistent SvgfHistory + a previous-frame camera; a single still (no history)
+        /// falls back to the plain spatial denoise. Default false → byte-identical.</summary>
+        public bool Relief2DDenoiseTemporal { get; set; } = false;
+
+        /// <summary>History weight for <see cref="Relief2DDenoiseTemporal"/> (0..0.98) — how
+        /// much of the reprojected previous frame to retain each frame. Higher = a longer,
+        /// smoother trail (more temporal lag). Default 0.8.</summary>
+        public double Relief2DDenoiseTemporalFeedback { get; set; } = 0.8;
+
+        /// <summary>Variance-guiding strength for <see cref="Relief2DDenoiseTemporal"/> — how
+        /// hard the per-pixel variance loosens the À-Trous colour edge-stop (0 = variance
+        /// ignored). Default 4.</summary>
+        public double Relief2DDenoiseVarianceScale { get; set; } = 4.0;
+
         /// <summary>S4 (#402) — adaptive-supersample coupling. When on AND the
         /// denoiser is active (<see cref="Relief2DDenoiseIterations"/> &gt; 0), the
         /// CPU relief raymarch drops its anti-alias supersample (the guided À-Trous
@@ -1253,6 +1272,9 @@ namespace FracturingFog.Models
                 Relief2DDenoiseColorSigma = Relief2DDenoiseColorSigma,
                 Relief2DDenoiseNormalSigma = Relief2DDenoiseNormalSigma,
                 Relief2DDenoiseDepthSigma = Relief2DDenoiseDepthSigma,
+                Relief2DDenoiseTemporal = Relief2DDenoiseTemporal,
+                Relief2DDenoiseTemporalFeedback = Relief2DDenoiseTemporalFeedback,
+                Relief2DDenoiseVarianceScale = Relief2DDenoiseVarianceScale,
                 Relief2DDenoiseAdaptiveSupersample = Relief2DDenoiseAdaptiveSupersample,
                 Relief2DMotionBlurStrength = Relief2DMotionBlurStrength,
                 Relief2DMotionBlurSamples = Relief2DMotionBlurSamples,
