@@ -261,9 +261,17 @@ benefits most. Blender's Filmic → AgX migration is the precedent.
   transform is active on a relief-raymarch poster with a NEUTRAL grade; every other
   case is the unchanged 8-bit path. Byte-identical by default; +6 tests, suite
   2188/2188.
-- **Remaining:** more producers (a full-float 2D composite, EXR read-back, the live
-  `FractalRenderHost` relief path → feed `LinearFloatImage`), default-look
-  validation, SIMD.
+- **Producer wiring — live relief HDR (landed — PR #651):** the on-screen relief
+  view now mirrors the poster. `ReliefDenoisePass.MakeCapture` gained a `captureHdr`
+  overload (ORs the HDR-beauty plane into the same capture the denoise guides use),
+  and `FractalRenderHost.UploadProcessedBuffer` arms it when a view transform is
+  active with a NEUTRAL grade + denoise off, then tonemaps the true-linear
+  intermediate via `FromHdrByteScale` at the view-transform stage — the SAME
+  producer→consumer path the poster uses, so **screen and poster match**. The HDR
+  gate on both paths excludes an enabled denoise (the HDR plane is pre-denoise, so a
+  guided denoise keeps the 8-bit tonemap). Byte-identical by default.
+- **Remaining:** more producers (a full-float 2D composite, EXR read-back, the
+  batch/video relief frame path), default-look validation, SIMD.
 
 ### S3 — Cinematic camera: DOF, exposure, motion blur ◐ (#400)
 Depth of field is nearly free in a raymarcher — jitter the ray origin across an
