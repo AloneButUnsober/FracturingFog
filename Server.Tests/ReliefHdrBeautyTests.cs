@@ -72,6 +72,37 @@ public sealed class ReliefHdrBeautyTests
         Assert.True(nan > 0, "sky/miss pixels should stay NaN (the fallback sentinel)");
     }
 
+    // The live path (FractalRenderHost) arms the HDR plane through the same
+    // MakeCapture the denoise uses — the captureHdr flag ORs an HDR-beauty plane in.
+    [Fact]
+    public void MakeCapture_Hdr_Flag_Allocates_The_Hdr_Plane_Even_With_Denoise_Off()
+    {
+        var noDenoise = new FractalParameters { Relief2DEnabled = true, Relief2DRaymarch = true };
+        // No denoise, no HDR → null (byte-identical, keeps the GPU fast path).
+        Assert.Null(ReliefDenoisePass.MakeCapture(noDenoise, 32, 24));
+        Assert.Null(ReliefDenoisePass.MakeCapture(noDenoise, 32, 24, captureHdr: false));
+        // No denoise, HDR wanted → an HDR-only capture (no normal-denoise motive).
+        var hdrOnly = ReliefDenoisePass.MakeCapture(noDenoise, 32, 24, captureHdr: true);
+        Assert.NotNull(hdrOnly);
+        Assert.NotNull(hdrOnly!.HdrBeauty);
+        Assert.Null(hdrOnly.Motion);
+        Assert.Null(hdrOnly.Components);
+    }
+
+    [Fact]
+    public void MakeCapture_Hdr_Flag_Coexists_With_Denoise_Capture()
+    {
+        var denoise = new FractalParameters
+        {
+            Relief2DEnabled = true, Relief2DRaymarch = true, Relief2DDenoiseIterations = 3,
+        };
+        var aov = ReliefDenoisePass.MakeCapture(denoise, 32, 24, captureHdr: true);
+        Assert.NotNull(aov);
+        Assert.NotNull(aov!.HdrBeauty);          // HDR plane present
+        Assert.NotEmpty(aov.NormalXyz);          // denoise guides still allocated
+        Assert.NotEmpty(aov.Depth);
+    }
+
     [Fact]
     public void Hdr_Path_Reprocesses_Terrain_But_Leaves_Sky_Identical_To_8bit()
     {

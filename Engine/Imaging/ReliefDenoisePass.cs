@@ -54,13 +54,24 @@ public static class ReliefDenoisePass
     /// null keeps the raymarch's GPU fast path, non-null forces the CPU trace and
     /// fills the guides.</summary>
     public static HeightfieldRaymarch2D.ReliefAovBuffers? MakeCapture(FractalParameters? p, int w, int h)
-        => Enabled(p) && w > 0 && h > 0
-            // SVGF temporal also needs the motion-vector AOV (to reproject the history);
-            // the plain denoise needs only normal + depth. Motion capture forces the CPU
-            // trace either way, so a denoise already runs on the CPU.
-            ? new HeightfieldRaymarch2D.ReliefAovBuffers(w, h, captureComponents: false,
-                captureMotion: EnabledTemporal(p))
-            : null;
+        => MakeCapture(p, w, h, captureHdr: false);
+
+    /// <summary>As <see cref="MakeCapture(FractalParameters,int,int)"/>, but also
+    /// requests the S2 (#396) HDR-beauty plane when <paramref name="captureHdr"/> is
+    /// set — so the view transform can tonemap the true-linear intermediate. The
+    /// capture is allocated whenever the denoise OR the HDR plane is wanted; either
+    /// forces the CPU trace. Null only when neither is needed (byte-identical).</summary>
+    public static HeightfieldRaymarch2D.ReliefAovBuffers? MakeCapture(FractalParameters? p, int w, int h, bool captureHdr)
+    {
+        if (w <= 0 || h <= 0) return null;
+        bool denoise = Enabled(p);
+        if (!denoise && !captureHdr) return null;
+        // SVGF temporal also needs the motion-vector AOV (to reproject the history);
+        // the plain denoise needs only normal + depth. Motion capture forces the CPU
+        // trace either way, so a denoise already runs on the CPU.
+        return new HeightfieldRaymarch2D.ReliefAovBuffers(w, h, captureComponents: false,
+            captureMotion: denoise && EnabledTemporal(p), captureHdr: captureHdr);
+    }
 
     /// <summary>Denoise <paramref name="beauty"/> in place using the captured
     /// normal + depth guides. No-op when <paramref name="aov"/> is null or the

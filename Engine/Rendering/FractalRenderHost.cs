@@ -3464,6 +3464,10 @@ namespace FracturingFog.Rendering
             // carry relief. Writes to a scratch so the calculator's ColorBuffer
             // stays flat (idempotent across re-uploads).
             bool reliefRaymarchApplied = false;
+            // S2 (#396) — the live relief HDR-beauty plane, captured when a view
+            // transform is armed with a neutral grade (else null → the plain 8-bit
+            // transform). Read at the view-transform stage below.
+            float[]? reliefHdrBeauty = null;
             {
                 var reliefParams = ViewState.FractalParameters;
                 bool raymarch = reliefParams.Relief2DRaymarch;
@@ -3492,9 +3496,20 @@ namespace FracturingFog.Rendering
                         // built lazily only when the flag is on, so a non-relief GPU
                         // session never constructs it.
                         BakeReliefVolumePalette(reliefParams);   // #185 slice D
+                        // S2 (#396) — live relief HDR: when a view transform is armed
+                        // with a NEUTRAL grade, also capture the pre-clamp HDR beauty so
+                        // the on-screen transform tonemaps real headroom (screen↔poster
+                        // parity). Denoise off only — the HDR plane is the pre-denoise
+                        // beauty, so a guided denoise keeps the 8-bit tonemap. Forces the
+                        // CPU trace like any AOV capture; default (no transform) unchanged.
+                        bool liveNeutralGrade = ViewState.Brightness == 0 && ViewState.Contrast == 0 && ViewState.Gamma == 0;
+                        bool wantHdr = ViewState.ViewTransform != FracturingFog.Imaging.ViewTransform.None
+                            && liveNeutralGrade
+                            && !FracturingFog.Imaging.ReliefDenoisePass.Enabled(reliefParams);
                         // S4 (#389) — capture float AOVs + guided À-Trous denoise
                         // iff on; null keeps the GPU fast path (byte-identical off).
-                        var reliefAov = FracturingFog.Imaging.ReliefDenoisePass.MakeCapture(reliefParams, w, h);
+                        // S2 (#396) — the HDR flag ORs an HDR-beauty plane into the same capture.
+                        var reliefAov = FracturingFog.Imaging.ReliefDenoisePass.MakeCapture(reliefParams, w, h, wantHdr);
                         // #520 (part 3) — settle full-detail: a settle re-render boosts
                         // the far-detail (tighter distance cone → distant filaments stay
                         // tall). Override the live param transiently across this single
@@ -3523,6 +3538,8 @@ namespace FracturingFog.Rendering
                         finally { reliefParams.Relief2DFarDetail = savedFarDetail; }
                         FracturingFog.Imaging.ReliefDenoisePass.Apply(_reliefColorScratch, reliefAov, w, h, reliefParams);
                         reliefRaymarchApplied = true;
+                        // S2 (#396) — carry the captured HDR beauty to the transform stage.
+                        if (wantHdr) reliefHdrBeauty = reliefAov?.HdrBeauty;
                     }
                     else
                         // Phase 1 — screen-space hillshade + cast-shadow post-pass.
@@ -3608,14 +3625,29 @@ namespace FracturingFog.Rendering
                 Array.Copy(src, dst, n);
             }
 
-            // S2 (#389) — output-stage view transform (tonemap). The final display
+            // S2 (#389/#396) — output-stage view transform (tonemap). The final display
             // encode, layered on top of brightness/contrast/gamma. None = no-op, so
             // the buffer is byte-identical to the pre-S2 pipeline until the user
-            // selects a transform. Applied to the beauty buffer before the debug HUD
-            // and the interior-alpha composite.
+            // selects a transform. When the live relief HDR beauty was captured
+            // (reliefHdrBeauty, armed above), tonemap the true-linear intermediate so
+            // highlights get real headroom instead of the clamped 8-bit buffer — the
+            // same producer→consumer path the poster uses, so screen and poster match.
+            // Otherwise the plain 8-bit path. Applied before the debug HUD and the
+            // interior-alpha composite.
             if (ViewState.ViewTransform != FracturingFog.Imaging.ViewTransform.None)
-                FracturingFog.Imaging.ViewTransformOps.Apply(
-                    dst, n, ViewState.ViewTransform, ViewState.ViewExposureEv);
+            {
+                if (reliefHdrBeauty != null && reliefHdrBeauty.Length == (long)n * 3)
+                {
+                    var tone = FracturingFog.Imaging.LinearFloatImage
+                        .FromHdrByteScale(reliefHdrBeauty, dst, w, h)
+                        .ApplyViewTransform(ViewState.ViewTransform, ViewState.ViewExposureEv)
+                        .ToBgra();
+                    Array.Copy(tone, dst, n);
+                }
+                else
+                    FracturingFog.Imaging.ViewTransformOps.Apply(
+                        dst, n, ViewState.ViewTransform, ViewState.ViewExposureEv);
+            }
 
             // Lighting-FX debug HUD (Phase 19) for Relief 3D. The 3D raymarcher
             // calculators bake the HUD into their ColorBuffer as the last step;

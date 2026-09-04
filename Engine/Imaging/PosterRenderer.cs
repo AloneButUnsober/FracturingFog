@@ -255,7 +255,11 @@ namespace FracturingFog.Imaging
             // consistent. Any other case falls through to the unchanged 8-bit path.
             bool neutralGrade = req.Brightness == 0 && req.Contrast == 0 && req.Gamma == 0;
             bool wantHdr = req.ViewTransform != ViewTransform.None && neutralGrade
-                && req.FractalParameters is { Relief2DEnabled: true, Relief2DRaymarch: true };
+                && req.FractalParameters is { Relief2DEnabled: true, Relief2DRaymarch: true }
+                // The HDR plane is the PRE-denoise beauty; tonemapping it would drop a
+                // guided denoise, so the HDR headroom path is used only when denoise is
+                // off. Denoise + transform keeps the (denoised) 8-bit tonemap.
+                && !ReliefDenoisePass.Enabled(req.FractalParameters);
             var hdrAov = wantHdr
                 ? new FracturingFog.Rendering.Lighting.HeightfieldRaymarch2D.ReliefAovBuffers(
                     req.Width, req.Height, false, false, true)
