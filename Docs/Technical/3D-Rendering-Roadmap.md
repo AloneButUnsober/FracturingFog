@@ -281,8 +281,25 @@ benefits most. Blender's Filmic → AgX migration is the precedent.
   8-bit path. Byte-identical by default. (BatchRenderer is WinExe-only, so the batch
   wiring is build-verified; the shared `FromHdrByteScale` + relief capture are
   Engine-tested.)
-- **Remaining:** the last producers (a full-float 2D composite, EXR read-back — both
-  bigger, beyond the relief path), default-look validation, SIMD.
+- **Producer wiring — full-float 2D composite (landed — PR #659):** the first
+  producer beyond the relief path. FF composited the interior-alpha backdrop (F10.5 /
+  #96) in **8-bit sRGB AFTER** the view transform, so with a transform active the
+  backdrop was injected **untonemapped** (popped at the wrong brightness) and the
+  alpha edge was a **gamma-space** blend. The 2D output now routes through
+  `LinearFloatImage`: decode the graded buffer to linear, composite the backdrop **in
+  linear light**, then tonemap the fractal AND the backdrop together as one linear
+  image. `Interior2DBackgroundCompositor` factored its gate + mode/backdrop selection
+  into a shared `TryResolveBackdrop`, so the 8-bit `Composite` (the tested oracle,
+  unchanged) and the new linear `CompositeLinear` can't disagree on which pixels
+  composite over what; `LinearFloatImage.FromBgra(color, coverage, …)` splits RGB
+  (graded `dst`) from coverage (`src`, whose alpha the post-FX pass preserved). Wired
+  in `PosterRenderer` + `FractalRenderHost`; the trailing 8-bit composite is skipped
+  when the linear one ran. Byte-identical by default (transform `None` / opaque /
+  no-backdrop → the `FromBgra → transform → ToBgra` parity anchor, 8-bit composite a
+  trailing no-op); only a transform-active + translucent 2D frame changes, to the
+  correct linear result. +8 tests, suite 2198/2198.
+- **Remaining:** the last producer (EXR read-back — bigger, feeds real >1 values into
+  the intermediate), default-look validation, SIMD.
 
 ### S3 — Cinematic camera: DOF, exposure, motion blur ◐ (#400)
 Depth of field is nearly free in a raymarcher — jitter the ray origin across an
