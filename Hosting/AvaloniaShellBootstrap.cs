@@ -2413,6 +2413,16 @@ namespace FracturingFog.Hosting
                     var vm = new FractalParamsViewModel(vs.FractalType, vs.FractalParameters,
                         audioModulation: s_shell?.AudioModulation);
                     vm.ParamChanged += () => s_renderHost?.Trigger();
+                    // S2 (#396) — surface the global View transform + Exposure in the
+                    // Relief 3D dialog (same knobs as the Post-FX HUD). Seed from the
+                    // live ViewState, then route changes through MainViewModel so they
+                    // write ViewState + RepaintWithPostFx exactly like the HUD path.
+                    vm.SeedViewPostFx(vs.ViewTransform, vs.ViewExposureEv);
+                    if (s_shell != null)
+                    {
+                        vm.ViewTransformChanged += (_, t) => s_shell.Main.ViewTransform = t;
+                        vm.ViewExposureChanged  += (_, ev) => s_shell.Main.ViewExposure = ev;
+                    }
                     // #147 fix — the mesh-export button lives in this standalone
                     // dialog; wire its handler here too (it was only wired on the
                     // Fractal Params window's VM, so export was a dead no-op when

@@ -464,6 +464,18 @@ public sealed partial class MainWindow : Window
             return;
         }
 
+        // Ctrl+H = toggle the Post-FX HUD (View transform / Exposure / brightness /
+        // contrast). A second binding alongside plain X — Ctrl+H is discoverable
+        // (mirrors the "H = HUD" mnemonic) and was previously unbound (plain H =
+        // Perf HUD, Shift+H = reset perf stats, Ctrl+H free). Handled before the
+        // unmodified switch so it never falls through to plain H.
+        if (e.Key == Key.H && e.KeyModifiers == KeyModifiers.Control)
+        {
+            _shell.TogglePostFxHudCommand.Execute().Subscribe();
+            e.Handled = true;
+            return;
+        }
+
         // Ctrl+Shift+A / Ctrl+Shift+S — diagnostic toggles for the legacy
         // MandelbrotCalculator HP path. Bare A/S are reserved for WASD 3D
         // camera input, so the unblocked diagnostic combo is Ctrl+Shift.
