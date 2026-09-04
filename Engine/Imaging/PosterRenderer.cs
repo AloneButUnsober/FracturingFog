@@ -259,7 +259,12 @@ namespace FracturingFog.Imaging
                 // The HDR plane is the PRE-denoise beauty; tonemapping it would drop a
                 // guided denoise, so the HDR headroom path is used only when denoise is
                 // off. Denoise + transform keeps the (denoised) 8-bit tonemap.
-                && !ReliefDenoisePass.Enabled(req.FractalParameters);
+                && !ReliefDenoisePass.Enabled(req.FractalParameters)
+                // Froxel fog composites AFTER the (fog-free) beauty, so the captured HDR
+                // beauty carries no froxel fog — tonemapping it would drop the fog. When
+                // froxel is active, keep the 8-bit transform on the composited buffer.
+                && !(req.FractalParameters.Relief2DFroxelVolumetrics
+                     && req.FractalParameters.Lighting.FogDensity > 0.0);
             var hdrAov = wantHdr
                 ? new FracturingFog.Rendering.Lighting.HeightfieldRaymarch2D.ReliefAovBuffers(
                     req.Width, req.Height, false, false, true)
