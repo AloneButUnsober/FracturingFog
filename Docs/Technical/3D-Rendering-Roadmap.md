@@ -313,10 +313,17 @@ benefits most. Blender's Filmic → AgX migration is the precedent.
   EXR matches a live/poster render at the same transform); a non-EXR input fails
   cleanly (null/false, no throw, no file). New capability — no existing path changes.
   +6 tests, suite 2204/2204.
-- **Remaining:** default-look validation, SIMD, and a batch/GUI regrade surface for
-  `ExrRegrade` (a thin follow-up — the Engine capability is landed + tested). **All S2
-  producers are now in** (relief HDR live/poster/batch #651, full-float 2D composite
-  #659, EXR read-back #660).
+- **EXR regrade surface (landed — PR #661):** the read-back (#660) now has a user
+  surface. Batch `--regrade-exr IN.exr --out graded.png [--view-transform … --exposure …]`
+  — a new `BatchMode.Regrade` (`BatchRenderer.RenderRegrade` → `ExrRegrade.RenderToFile`)
+  that needs no `--region`/coords (no fractal render); validation bypasses the
+  region/size gate and requires only an input + `--out`. GUI: a render-window context-menu
+  **"Regrade EXR…"** (beside Export AOV EXR…) → `ShellViewModel.RegradeExrCommand` → host
+  picks an input `.exr` + output image and tonemaps with the current live ViewState
+  transform + exposure. +5 batch-grammar tests, suite 2209/2209.
+- **Remaining:** default-look validation, SIMD. **All S2 producer/consumer work is done**
+  — producers relief HDR live/poster/batch (#651), full-float 2D composite (#659), EXR
+  read-back (#660); read-back user surface (#661).
 
 ### S3 — Cinematic camera: DOF, exposure, motion blur ◐ (#400)
 Depth of field is nearly free in a raymarcher — jitter the ray origin across an

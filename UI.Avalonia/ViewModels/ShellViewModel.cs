@@ -582,6 +582,8 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
             () => AsciiArtRequested?.Invoke(this, EventArgs.Empty));
         AovExrCommand          = ReactiveCommand.Create(
             () => AovExrRequested?.Invoke(this, EventArgs.Empty));
+        RegradeExrCommand      = ReactiveCommand.Create(
+            () => RegradeExrRequested?.Invoke(this, EventArgs.Empty));
         RecordAsciiCommand     = ReactiveCommand.Create(
             () => RecordAsciiRequested?.Invoke(this, EventArgs.Empty));
 
@@ -1821,6 +1823,7 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
     public ReactiveCommand<Unit, Unit> ScreenshotCommand { get; }
     public ReactiveCommand<Unit, Unit> AsciiArtCommand { get; }
     public ReactiveCommand<Unit, Unit> AovExrCommand { get; }
+    public ReactiveCommand<Unit, Unit> RegradeExrCommand { get; }
     public ReactiveCommand<Unit, Unit> RecordAsciiCommand { get; }
     public ReactiveCommand<Unit, Unit> ToggleSlideshowLockRegionCommand { get; }
     public ReactiveCommand<Unit, Unit> ToggleSlideshowFocusCommand { get; }
@@ -3309,6 +3312,12 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
     /// current render dimensions. Richest on the Relief 3D raymarch (float geometry
     /// + lighting planes); a flat 2D view yields beauty-equal planes.</summary>
     public event EventHandler? AovExrRequested;
+
+    /// <summary>S2 (#396) — EXR read-back / regrade. Host picks a scene-linear input
+    /// <c>.exr</c> + an output image path, then runs <c>ExrRegrade.RenderToFile</c>
+    /// with the current View transform + Exposure — tonemap a rendered EXR without
+    /// re-rendering.</summary>
+    public event EventHandler? RegradeExrRequested;
 
     /// <summary>Record the current frame's ASCII FX animation to a shareable file
     /// (#230). Host pops a SaveFilePicker (.cast / .svg / .ans) and calls

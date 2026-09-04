@@ -73,6 +73,7 @@ namespace FracturingFog.Batch
                     BatchMode.Video => BatchRenderer.RenderVideo(opts),
                     BatchMode.Slideshow => BatchRenderer.RenderSlideshow(opts),
                     BatchMode.Scene => BatchRenderer.RenderScene(opts),
+                    BatchMode.Regrade => BatchRenderer.RenderRegrade(opts),
                     _ => 2,
                 };
             }
@@ -226,6 +227,9 @@ namespace FracturingFog.Batch
             Console.WriteLine("  --exr-zip                   ZIP-compress .exr output (smaller, lossless). Not");
             Console.WriteLine("                              byte-stable across runtimes, so opt-in. Ignored for");
             Console.WriteLine("                              non-EXR output.");
+            Console.WriteLine("  --regrade-exr IN.exr        Regrade a scene-linear OpenEXR (no fractal render):");
+            Console.WriteLine("                              read IN.exr, apply --view-transform + --exposure, and");
+            Console.WriteLine("                              write to --out. Grade a rendered .exr without re-render.");
             Console.WriteLine();
             Console.WriteLine("2D relief (heightfield shading; any relief flag implies --relief):");
             Console.WriteLine("  --relief                    Enable the 2D heightfield relief post-pass.");

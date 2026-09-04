@@ -245,6 +245,42 @@ namespace FracturingFog.Batch
             return 0;
         }
 
+        // ── EXR read-back / regrade (roadmap S2, #396) ─────────────────────────
+
+        /// <summary>Regrade a scene-linear OpenEXR: read it back into the
+        /// LinearFloatImage intermediate, apply --view-transform + --exposure, and
+        /// write the tonemapped result to --out — no fractal render. The headless
+        /// surface for the render-pass compositor superpower (grade a rendered .exr
+        /// without re-rendering). Output format is inferred from --out's extension
+        /// (e.g. .png); .exr re-encodes the display-referred result.</summary>
+        public static int RenderRegrade(BatchOptions opts)
+        {
+            string inPath = opts.RegradeExrInput ?? "";
+            if (!File.Exists(inPath))
+            {
+                Console.Error.WriteLine($"batch: --regrade-exr input not found: {inPath}");
+                return 2;
+            }
+
+            string outPath = opts.OutputPath;
+            EnsureDirectoryForFile(outPath);
+            FracturingFog.Imaging.ImageFileFormat format = GuessImageFormat(outPath);
+
+            var vt = opts.ViewTransform ?? FracturingFog.Imaging.ViewTransform.None;
+            float ev = (float)(opts.ViewExposureEv ?? 0.0);
+
+            bool ok = FracturingFog.Imaging.ExrRegrade.RenderToFile(inPath, outPath, vt, ev, format);
+            if (!ok)
+            {
+                Console.Error.WriteLine($"batch: could not read '{inPath}' as a supported OpenEXR " +
+                    "(half/float, uncompressed or ZIP, single-part scanline).");
+                return 1;
+            }
+
+            Console.WriteLine($"Regraded {inPath} -> {outPath} (view={vt}, exposure={ev:0.###}).");
+            return 0;
+        }
+
         // ── Video ─────────────────────────────────────────────────────────────
 
         public static int RenderVideo(BatchOptions opts)

@@ -13,7 +13,7 @@ using FracturingFog.Rendering.Lighting;
 
 namespace FracturingFog.Batch
 {
-    public enum BatchMode { Image, Video, Slideshow, Scene }
+    public enum BatchMode { Image, Video, Slideshow, Scene, Regrade }
 
     /// <summary>Per-light point / spot override parsed from the <c>--lightN-*</c>
     /// flags (roadmap S8, #404). Every field is nullable so BatchRenderer applies
@@ -168,6 +168,14 @@ namespace FracturingFog.Batch
         /// S2, #389). Null = neutral (0). Only meaningful alongside a non-None
         /// <see cref="ViewTransform"/>, but honoured on its own too.</summary>
         public double? ViewExposureEv { get; set; }
+
+        /// <summary>EXR read-back / regrade input (roadmap S2, #396). When set,
+        /// <see cref="Mode"/> is <see cref="BatchMode.Regrade"/>: the batch reads this
+        /// scene-linear OpenEXR, applies the <see cref="ViewTransform"/> +
+        /// <see cref="ViewExposureEv"/>, and writes the tonemapped result to
+        /// <see cref="OutputPath"/> — no fractal render, so no region/coord is
+        /// required. Regrade a rendered <c>.exr</c> without re-rendering.</summary>
+        public string? RegradeExrInput { get; set; }
 
         /// <summary>Global interior (in-set) alpha, 0..255 (#96). 255 = opaque
         /// (default, legacy pixel-identical); below 255 the interior turns
@@ -540,6 +548,12 @@ namespace FracturingFog.Batch
                     case BatchFlags.Exposure:
                         if (!NextDouble(args, ref i, a, out double exv, out error)) return false;
                         opts.ViewExposureEv = exv;
+                        break;
+
+                    case BatchFlags.RegradeExr:
+                        if (!Next(args, ref i, a, out string rgv, out error)) return false;
+                        opts.RegradeExrInput = rgv;
+                        opts.Mode = BatchMode.Regrade;
                         break;
 
                     case BatchFlags.AovExr:
@@ -963,6 +977,20 @@ namespace FracturingFog.Batch
                     { error = "--remote requires --out PATH for the returned bytes"; return false; }
                 // All other render-shape validation is owned by the saved preset
                 // + the server's RequestLimits; nothing more to check here.
+                return true;
+            }
+
+            // Regrade (EXR read-back, #396) is a standalone utility mode: read an
+            // .exr, tonemap it, write it. No fractal render → no region/coord/size
+            // requirement (output dims come from the EXR). Just an input + an output.
+            if (opts.Mode == BatchMode.Regrade)
+            {
+                if (string.IsNullOrWhiteSpace(opts.RegradeExrInput))
+                    { error = "--regrade-exr requires an input .exr path."; return false; }
+                if (string.IsNullOrWhiteSpace(opts.OutputPath))
+                    { error = "--regrade-exr requires --out PATH."; return false; }
+                if (opts.ViewExposureEv is < -16.0 or > 16.0)
+                    { error = "--exposure must be -16..16 (stops)."; return false; }
                 return true;
             }
 
