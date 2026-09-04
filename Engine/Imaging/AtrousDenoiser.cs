@@ -24,6 +24,7 @@
 // the S1 float-AOV follow-up.
 
 using System;
+using System.Numerics;
 using System.Threading.Tasks;
 
 namespace FracturingFog.Imaging;
@@ -46,6 +47,13 @@ public sealed class AtrousParams
     /// <summary>Depth edge-stop (consulted only when a depth guide is given).
     /// Smaller = sharper silhouettes preserved.</summary>
     public double DepthSigma { get; set; } = 0.20;
+
+    /// <summary>Opt-in SIMD path (roadmap S4, #402). Vectorizes the per-pass gather
+    /// over 8 pixels at a time with a fast poly-exp. NOT byte-identical to the scalar
+    /// oracle — it works in float32 and reorders the accumulation — so it is off by
+    /// default and the scalar path stays the <c>--batch</c> parity reference. Falls
+    /// back to scalar automatically when SIMD isn't hardware-accelerated.</summary>
+    public bool UseSimd { get; set; }
 }
 
 /// <summary>Guided edge-avoiding À-Trous wavelet denoiser (roadmap S4).</summary>
@@ -98,9 +106,28 @@ public static class AtrousDenoiser
         bool hasZ = depth != null && depth.Length >= n;
         bool hasVar = variance != null && variance.Length >= n && varianceScale > 0.0;
 
+        // Opt-in SIMD path (#402). float32 + reordered accumulation → not byte-identical,
+        // so it is gated and the scalar path below stays the parity oracle. The normal
+        // guide is interleaved xyz per pixel, which a contiguous vector load can't read,
+        // so de-interleave it into three planar arrays once (amortised over the passes).
+        bool useSimd = p.UseSimd && Vector.IsHardwareAccelerated && Vector<float>.Count >= 4;
+        float[]? nX = null, nY = null, nZ = null;
+        if (useSimd && hasN)
+        {
+            nX = new float[n]; nY = new float[n]; nZ = new float[n];
+            for (long i = 0; i < n; i++) { nX[i] = normalXyz![i * 3]; nY[i] = normalXyz[i * 3 + 1]; nZ[i] = normalXyz[i * 3 + 2]; }
+        }
+
         for (int it = 0; it < p.Iterations; it++)
         {
             int step = 1 << it;   // À-Trous hole size: 1, 2, 4, …
+            if (useSimd)
+            {
+                SimdPass(step, w, h, r, g, b, tr, tg, tb, hasN, nX, nY, nZ, hasZ, depth,
+                    hasVar, variance, cSig, nSig, zSig, varianceScale);
+                (r, tr) = (tr, r); (g, tg) = (tg, g); (b, tb) = (tb, b);
+                continue;
+            }
             // Each output pixel is independent within a pass — it reads the r/g/b
             // planes and writes only its own tr/tg/tb[pi], so rows run in parallel
             // with byte-identical results (per-pixel accumulation order is unchanged).
@@ -180,4 +207,129 @@ public static class AtrousDenoiser
     }
 
     private static int Clamp(int v, int lo, int hi) => v < lo ? lo : (v > hi ? hi : v);
+
+    // ── SIMD path (#402) — opt-in, not byte-identical (float32 + poly-exp) ──────
+
+    // Fast 2^f polynomial exp for x ≤ 0 (all À-Trous weight args are ≤ 0). Scalar
+    // and vector share the SAME approximation so the SIMD interior + its scalar
+    // borders are self-consistent.
+    private const float Log2eF = 1.442695041f;
+    private const float PC1 = 0.6931472f, PC2 = 0.2402265f, PC3 = 0.0555041f;
+
+    private static float SFExp(float x)
+    {
+        if (x < -60f) x = -60f;
+        float t = x * Log2eF;
+        float fl = MathF.Floor(t);
+        float f = t - fl;
+        float poly = 1f + f * (PC1 + f * (PC2 + f * PC3));
+        int e = (int)fl + 127;
+        return poly * BitConverter.Int32BitsToSingle(e << 23);
+    }
+
+    private static Vector<float> VExp(Vector<float> x)
+    {
+        x = Vector.Max(x, new Vector<float>(-60f));
+        var t = x * new Vector<float>(Log2eF);
+        var fl = Vector.Floor(t);
+        var f = t - fl;
+        var poly = Vector<float>.One + f * (new Vector<float>(PC1) + f * (new Vector<float>(PC2) + f * new Vector<float>(PC3)));
+        var e = Vector.ConvertToInt32(fl) + new Vector<int>(127);
+        var pow2 = Vector.AsVectorSingle(Vector.ShiftLeft(e, 23));
+        return poly * pow2;
+    }
+
+    private static void SimdPass(int step, int w, int h,
+        float[] r, float[] g, float[] b, float[] tr, float[] tg, float[] tb,
+        bool hasN, float[]? nX, float[]? nY, float[]? nZ,
+        bool hasZ, float[]? depth, bool hasVar, float[]? variance,
+        double cSig, double nSig, double zSig, double varianceScale)
+    {
+        int lanes = Vector<float>.Count;
+        float cSigF = (float)cSig, invNSig = (float)(1.0 / nSig), invZSig = (float)(1.0 / zSig), varScaleF = (float)varianceScale;
+
+        Parallel.For(0, h, y =>
+        {
+            void PixelScalar(int x)
+            {
+                int pi = y * w + x;
+                float cr = r[pi], cg = g[pi], cb = b[pi];
+                float nx = 0, ny = 0, nz = 0;
+                if (hasN) { nx = nX![pi]; ny = nY![pi]; nz = nZ![pi]; }
+                float cz = hasZ ? depth![pi] : 0f;
+                float invCSig = hasVar ? 1f / (cSigF * (1f + varScaleF * MathF.Sqrt(MathF.Max(0f, variance![pi])))) : 1f / cSigF;
+
+                float sumR = 0, sumG = 0, sumB = 0, cumW = 0;
+                for (int ky = 0; ky < 5; ky++)
+                {
+                    int sy = Clamp(y + (ky - 2) * step, 0, h - 1);
+                    for (int kx = 0; kx < 5; kx++)
+                    {
+                        int sx = Clamp(x + (kx - 2) * step, 0, w - 1);
+                        int qi = sy * w + sx;
+                        float dr = cr - r[qi], dg = cg - g[qi], db = cb - b[qi];
+                        float wCol = SFExp(-(dr * dr + dg * dg + db * db) * invCSig);
+                        float wNorm = 1f;
+                        if (hasN) { float dot = nx * nX![qi] + ny * nY![qi] + nz * nZ![qi]; if (dot < 0f) dot = 0f; wNorm = SFExp((dot - 1f) * invNSig); }
+                        float wDepth = 1f;
+                        if (hasZ) { float dz = cz - depth![qi]; wDepth = SFExp(-MathF.Abs(dz) * invZSig); }
+                        float wgt = (float)(Kernel[kx] * Kernel[ky]) * wCol * wNorm * wDepth;
+                        sumR += r[qi] * wgt; sumG += g[qi] * wgt; sumB += b[qi] * wgt; cumW += wgt;
+                    }
+                }
+                if (cumW > 0f) { tr[pi] = sumR / cumW; tg[pi] = sumG / cumW; tb[pi] = sumB / cumW; }
+                else { tr[pi] = cr; tg[pi] = cg; tb[pi] = cb; }
+            }
+
+            void PixelVector(int x)
+            {
+                int pi = y * w + x;
+                var cr = new Vector<float>(r, pi); var cg = new Vector<float>(g, pi); var cb = new Vector<float>(b, pi);
+                Vector<float> nx = default, ny = default, nz = default;
+                if (hasN) { nx = new Vector<float>(nX!, pi); ny = new Vector<float>(nY!, pi); nz = new Vector<float>(nZ!, pi); }
+                var cz = hasZ ? new Vector<float>(depth!, pi) : Vector<float>.Zero;
+                Vector<float> invCSig = hasVar
+                    ? Vector<float>.One / (new Vector<float>(cSigF) * (Vector<float>.One + new Vector<float>(varScaleF) * Vector.SquareRoot(Vector.Max(Vector<float>.Zero, new Vector<float>(variance!, pi)))))
+                    : new Vector<float>(1f / cSigF);
+                var vInvN = new Vector<float>(invNSig);
+                var vInvZ = new Vector<float>(invZSig);
+
+                Vector<float> sumR = default, sumG = default, sumB = default, cumW = default;
+                for (int ky = 0; ky < 5; ky++)
+                {
+                    int sy = Clamp(y + (ky - 2) * step, 0, h - 1);
+                    int rowBase = sy * w + x;
+                    for (int kx = 0; kx < 5; kx++)
+                    {
+                        int qb = rowBase + (kx - 2) * step;   // interior → all lanes in-bounds
+                        var qr = new Vector<float>(r, qb); var qg = new Vector<float>(g, qb); var qbv = new Vector<float>(b, qb);
+                        var dr = cr - qr; var dg = cg - qg; var db = cb - qbv;
+                        var wCol = VExp(-(dr * dr + dg * dg + db * db) * invCSig);
+                        var wNorm = Vector<float>.One;
+                        if (hasN)
+                        {
+                            var dot = nx * new Vector<float>(nX!, qb) + ny * new Vector<float>(nY!, qb) + nz * new Vector<float>(nZ!, qb);
+                            dot = Vector.Max(Vector<float>.Zero, dot);
+                            wNorm = VExp((dot - Vector<float>.One) * vInvN);
+                        }
+                        var wDepth = Vector<float>.One;
+                        if (hasZ) { var dz = cz - new Vector<float>(depth!, qb); wDepth = VExp(-Vector.Abs(dz) * vInvZ); }
+                        var wgt = new Vector<float>((float)(Kernel[kx] * Kernel[ky])) * wCol * wNorm * wDepth;
+                        sumR += qr * wgt; sumG += qg * wgt; sumB += qbv * wgt; cumW += wgt;
+                    }
+                }
+                var pos = Vector.GreaterThan(cumW, Vector<float>.Zero);
+                var invW = Vector<float>.One / cumW;
+                Vector.ConditionalSelect(pos, sumR * invW, cr).CopyTo(tr, pi);
+                Vector.ConditionalSelect(pos, sumG * invW, cg).CopyTo(tg, pi);
+                Vector.ConditionalSelect(pos, sumB * invW, cb).CopyTo(tb, pi);
+            }
+
+            int loInt = 2 * step, hiInt = w - 2 * step;
+            for (int bx = 0; bx < Math.Min(loInt, w); bx++) PixelScalar(bx);
+            int x = loInt;
+            for (; x >= loInt && x + lanes <= hiInt; x += lanes) PixelVector(x);
+            for (; x < w; x++) PixelScalar(x);
+        });
+    }
 }
