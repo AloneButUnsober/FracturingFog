@@ -258,6 +258,103 @@ public sealed class RegionRelief3DTests
         Assert.False(live.Relief2DFroxelTemporal);
     }
 
+    // ── Guided denoise + SVGF temporal on the region snapshot (#402, S4) ──────
+    // The relief snapshot now also carries the À-Trous denoise + its SVGF temporal
+    // accumulation / variance guiding, so a region-sourced scene / batch render can
+    // turn SVGF on without a live UI (the offline sequence seam is already wired).
+
+    [Fact]
+    public void Snapshot_CapturesDenoiseSvgf_AndRoundTrips()
+    {
+        var src = new FractalParameters
+        {
+            Relief2DEnabled = true,
+            Relief2DRaymarch = true,
+            Relief2DDenoiseIterations = 4,
+            Relief2DDenoiseColorSigma = 0.08,
+            Relief2DDenoiseNormalSigma = 0.25,
+            Relief2DDenoiseDepthSigma = 0.15,
+            Relief2DDenoiseAdaptiveSupersample = true,
+            Relief2DDenoiseTemporal = true,
+            Relief2DDenoiseTemporalFeedback = 0.72,
+            Relief2DDenoiseVarianceScale = 6.0,
+        };
+
+        var snap = Relief3DSettings.Snapshot(src);
+        Assert.NotNull(snap);
+        Assert.Equal(4, snap!.DenoiseIterations);
+        Assert.True(snap.DenoiseTemporal);
+        Assert.Equal(0.72, snap.DenoiseTemporalFeedback, 12);
+        Assert.Equal(6.0, snap.DenoiseVarianceScale, 12);
+
+        var dst = new FractalParameters();
+        snap.ApplyTo(dst);
+        Assert.Equal(4, dst.Relief2DDenoiseIterations);
+        Assert.Equal(0.08, dst.Relief2DDenoiseColorSigma, 12);
+        Assert.True(dst.Relief2DDenoiseAdaptiveSupersample);
+        Assert.True(dst.Relief2DDenoiseTemporal);
+        Assert.Equal(0.72, dst.Relief2DDenoiseTemporalFeedback, 12);
+        Assert.Equal(6.0, dst.Relief2DDenoiseVarianceScale, 12);
+    }
+
+    [Fact]
+    public void Region_SerializesDenoiseSvgf_AndRoundTrips()
+    {
+        var region = new FractalRegion
+        {
+            Name = "Denoised", FractalType = FractalType.Mandelbrot,
+            CenterX = -0.75, CenterY = 0.0, Zoom = 1.0,
+            Relief3D = Relief3DSettings.Snapshot(new FractalParameters
+            {
+                Relief2DEnabled = true, Relief2DRaymarch = true,
+                Relief2DDenoiseIterations = 3,
+                Relief2DDenoiseTemporal = true,
+                Relief2DDenoiseTemporalFeedback = 0.6,
+                Relief2DDenoiseVarianceScale = 5.0,
+            }),
+        };
+
+        string json = JsonSerializer.Serialize(region, new JsonSerializerOptions { WriteIndented = true });
+        var back = JsonSerializer.Deserialize<FractalRegion>(json);
+        var applied = new FractalParameters();
+        back!.ApplyRelief3DTo(applied);
+        Assert.Equal(3, applied.Relief2DDenoiseIterations);
+        Assert.True(applied.Relief2DDenoiseTemporal);
+        Assert.Equal(0.6, applied.Relief2DDenoiseTemporalFeedback, 12);
+        Assert.Equal(5.0, applied.Relief2DDenoiseVarianceScale, 12);
+    }
+
+    [Fact]
+    public void Denoise_DefaultsOff_WhenReliefSnapshotHasNoDenoise()
+    {
+        var snap = Relief3DSettings.Snapshot(new FractalParameters
+        {
+            Relief2DEnabled = true, Relief2DRaymarch = true,
+        });
+        var dst = new FractalParameters
+        {
+            Relief2DDenoiseIterations = 5,   // pre-armed; apply must clear it
+            Relief2DDenoiseTemporal = true,
+        };
+        snap!.ApplyTo(dst);
+        Assert.Equal(0, dst.Relief2DDenoiseIterations);
+        Assert.False(dst.Relief2DDenoiseTemporal);
+    }
+
+    [Fact]
+    public void Authoritative_PlainRegion_ClearsDenoise()
+    {
+        var plain = new FractalRegion { Name = "Plain", FractalType = FractalType.Mandelbrot };
+        var live = new FractalParameters
+        {
+            Relief2DEnabled = true, Relief2DRaymarch = true,
+            Relief2DDenoiseIterations = 4, Relief2DDenoiseTemporal = true,
+        };
+        plain.ApplyRelief3DAuthoritative(live);
+        Assert.Equal(0, live.Relief2DDenoiseIterations);
+        Assert.False(live.Relief2DDenoiseTemporal);
+    }
+
     [Fact]
     public void LegacyRegion_WithoutRelief3D_DeserializesToNull_AndApplyIsNoOp()
     {

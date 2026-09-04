@@ -109,7 +109,7 @@
                           IsExpanded="{Binding Relief2DRaymarch, Mode=OneWay}"
                           IsEnabled="{Binding Relief2DRaymarch}">
                 <StackPanel Spacing="6">
-                <Grid ColumnDefinitions="160,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto">
+                <Grid ColumnDefinitions="160,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto">
                     <TextBlock Grid.Row="0" Grid.Column="0" Text="Camera azimuth (°):" VerticalAlignment="Center"
                                ToolTip.Tip="Orbit the terrain around the up axis. 0 = looking straight at the scene." />
                     <NumericUpDown Grid.Row="0" Grid.Column="1"
@@ -229,6 +229,31 @@
                                    Minimum="2" Maximum="64" Increment="1" FormatString="F0"
                                    IsEnabled="{Binding MotionBlurEnabled}"
                                    Value="{Binding Relief2DMotionBlurSamples, Mode=TwoWay}" Margin="0,2" />
+
+                    <!-- SVGF temporal denoise (roadmap S4, #402). Accumulates the noisy
+                         signal across frames + variance-guides the À-Trous. Sequence-only. -->
+                    <TextBlock Grid.Row="17" Grid.Column="0" Text="Temporal (SVGF):" VerticalAlignment="Center"
+                               IsEnabled="{Binding DenoiseEnabled}"
+                               ToolTip.Tip="Spatiotemporal denoise: accumulate the noisy signal across frames — reproject the previous denoised frame along the motion-vector AOV and blend — then drive the À-Trous colour edge-stop by the per-pixel variance, so noise averages down over time and unconverged pixels filter wider. Only visible in a sequence render where the camera moves between frames (a still frame denoises spatially). Off = the plain single-frame À-Trous. Needs Denoise passes > 0." />
+                    <CheckBox Grid.Row="17" Grid.Column="1" IsChecked="{Binding Relief2DDenoiseTemporal, Mode=TwoWay}"
+                              IsEnabled="{Binding DenoiseEnabled}"
+                              Content="accumulate + variance-guide across frames" Margin="0,2" />
+
+                    <TextBlock Grid.Row="18" Grid.Column="0" Text="Temporal feedback:" VerticalAlignment="Center"
+                               IsEnabled="{Binding DenoiseTemporalEnabled}"
+                               ToolTip.Tip="How much of the reprojected previous frame to retain each frame — higher = a longer, smoother trail (more temporal lag). Only used when Temporal (SVGF) is on." />
+                    <NumericUpDown Grid.Row="18" Grid.Column="1"
+                                   Minimum="0" Maximum="0.98" Increment="0.02" FormatString="F2"
+                                   IsEnabled="{Binding DenoiseTemporalEnabled}"
+                                   Value="{Binding Relief2DDenoiseTemporalFeedback, Mode=TwoWay}" Margin="0,2" />
+
+                    <TextBlock Grid.Row="19" Grid.Column="0" Text="Variance strength:" VerticalAlignment="Center"
+                               IsEnabled="{Binding DenoiseTemporalEnabled}"
+                               ToolTip.Tip="How hard the per-pixel variance loosens the colour edge-stop where the signal is still noisy (0 = variance ignored). Only used when Temporal (SVGF) is on." />
+                    <NumericUpDown Grid.Row="19" Grid.Column="1"
+                                   Minimum="0" Maximum="16" Increment="0.5" FormatString="F1"
+                                   IsEnabled="{Binding DenoiseTemporalEnabled}"
+                                   Value="{Binding Relief2DDenoiseVarianceScale, Mode=TwoWay}" Margin="0,2" />
                 </Grid>
 
                 <!-- #520 — far-detail: resolve distant filaments as tall as near ones. -->
