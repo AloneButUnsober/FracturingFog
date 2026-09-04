@@ -434,7 +434,10 @@ namespace FracturingFog.Batch
             // Render one frame of the zoom at parametric time te (already eased) → zoom.
             // reliefHist is threaded only when supplied (froxel temporal seam); flat
             // frames ignore it.
-            uint[] RenderZoomFrame(double teLocal, FracturingFog.Rendering.Lighting.FroxelHistory? reliefHist)
+            // S2 (#396) — the single-frame relief HDR beauty, captured into this
+            // enclosing local when armed (null on the flat / motion-blur paths).
+            float[]? zoomHdr = null;
+            uint[] RenderZoomFrame(double teLocal, FracturingFog.Rendering.Lighting.FroxelHistory? reliefHist, bool captureHdr)
             {
                 double fz = Math.Exp(logZ0 + (logZ1 - logZ0) * teLocal);
                 if (reliefFp != null)
@@ -453,6 +456,13 @@ namespace FracturingFog.Batch
                         FroxelHistory = reliefHist,             // #468 shared across frames
                         Path = string.Empty, Format = ImageFileFormat.Png,
                     };
+                    if (captureHdr)
+                    {
+                        var aov = FracturingFog.Imaging.ReliefDenoisePass.MakeCapture(reliefFp, outW, outH, captureHdr: true);
+                        var buf = PosterRenderer.RenderToPixels(rreq, CancellationToken.None, out _, out _, aov);
+                        zoomHdr = aov?.HdrBeauty;
+                        return buf;
+                    }
                     return PosterRenderer.RenderToPixels(rreq, CancellationToken.None, out _, out _);
                 }
                 return limbRegion != null
@@ -473,9 +483,13 @@ namespace FracturingFog.Batch
                     double frameZoom = Math.Exp(logZ0 + (logZ1 - logZ0) * te);   // nominal (progress)
 
                     uint[] buffer;
+                    zoomHdr = null;
                     if (!motionBlur)
                     {
-                        buffer = RenderZoomFrame(te, reliefHistory);
+                        // S2 (#396) — capture HDR on the single-frame relief path when armed.
+                        bool zoomWantHdr = ReliefHdrWanted(reliefFp,
+                            opts.ViewTransform ?? FracturingFog.Imaging.ViewTransform.None, pfBrightness, pfContrast);
+                        buffer = RenderZoomFrame(te, reliefHistory, zoomWantHdr);
                     }
                     else
                     {
@@ -489,7 +503,7 @@ namespace FracturingFog.Batch
                             double ts = samples[s].t;
                             double tse = ts * ts * (3.0 - 2.0 * ts);
                             var hist = (reliefFp != null && s == 0) ? reliefHistory : null;
-                            mbAccum.Add(RenderZoomFrame(tse, hist), samples[s].weight);
+                            mbAccum.Add(RenderZoomFrame(tse, hist, captureHdr: false), samples[s].weight);
                         }
                         mbAccum.Resolve(mbBuffer!);
                         buffer = mbBuffer!;
@@ -498,9 +512,12 @@ namespace FracturingFog.Batch
                     // Brightness/Contrast BGRA post-pass (parity with the
                     // interactive image); HE already baked in the frame render.
                     ApplyBrightnessContrast(buffer, outW * outH, pfBrightness, pfContrast);
-                    // S2 (#389) — view transform / tonemap, after b/c (poster order).
+                    // S2 (#389/#396) — view transform / tonemap, after b/c (poster order).
+                    // zoomHdr non-null on the single-frame relief path when armed → the
+                    // true-linear intermediate; else the plain 8-bit path.
                     ApplyViewTransform(buffer, outW * outH,
-                        opts.ViewTransform ?? FracturingFog.Imaging.ViewTransform.None, opts.ViewExposureEv ?? 0.0);
+                        opts.ViewTransform ?? FracturingFog.Imaging.ViewTransform.None, opts.ViewExposureEv ?? 0.0,
+                        motionBlur ? null : zoomHdr, outW, outH);
 
                     // --watermark bakes the region/theme + program sub-line
                     // into every emitted frame so the WMF Mp4Writer path AND
@@ -764,10 +781,37 @@ namespace FracturingFog.Batch
         // (PosterRenderer) does, so an offline video frame matches a still export.
         // None short-circuits (byte-identical); exposure is only honoured with a
         // transform selected (mirrors ViewTransformOps.Apply + the poster gate).
-        private static void ApplyViewTransform(uint[] buf, int n, FracturingFog.Imaging.ViewTransform vt, double exposureEv)
+        // S2 (#396) — true when an offline relief frame should capture its pre-clamp
+        // HDR beauty so the view transform tonemaps real headroom (the same
+        // producer→consumer path the poster + live paths use). Gated exactly like
+        // those: a transform selected, a NEUTRAL b/c grade (b/c is applied to the
+        // 8-bit frame BEFORE the transform), a relief-RAYMARCH scene, and denoise off
+        // (the HDR plane is pre-denoise, so a guided denoise keeps the 8-bit tonemap).
+        private static bool ReliefHdrWanted(
+            FractalParameters? reliefFp, FracturingFog.Imaging.ViewTransform vt, int brightness, int contrast)
+            => vt != FracturingFog.Imaging.ViewTransform.None
+               && brightness == 0 && contrast == 0
+               && reliefFp is { Relief2DEnabled: true, Relief2DRaymarch: true }
+               && !FracturingFog.Imaging.ReliefDenoisePass.Enabled(reliefFp);
+
+        // S2 (#396) — when a captured relief HDR beauty is supplied, tonemap the
+        // true-linear intermediate (FromHdrByteScale) so highlights above 1.0 survive
+        // instead of the clamped 8-bit buffer; a no-HDR pixel decodes the fallback and
+        // matches the 8-bit path byte-for-byte. hdrBeauty null → the plain 8-bit path.
+        private static void ApplyViewTransform(uint[] buf, int n, FracturingFog.Imaging.ViewTransform vt,
+            double exposureEv, float[]? hdrBeauty = null, int w = 0, int h = 0)
         {
             if (vt == FracturingFog.Imaging.ViewTransform.None) return;
-            ViewTransformOps.Apply(buf, n, vt, (float)exposureEv);
+            if (hdrBeauty != null && w > 0 && h > 0 && hdrBeauty.Length == (long)w * h * 3)
+            {
+                var tone = FracturingFog.Imaging.LinearFloatImage
+                    .FromHdrByteScale(hdrBeauty, buf, w, h)
+                    .ApplyViewTransform(vt, (float)exposureEv)
+                    .ToBgra();
+                Array.Copy(tone, buf, Math.Min(buf.Length, tone.Length));
+            }
+            else
+                ViewTransformOps.Apply(buf, n, vt, (float)exposureEv);
         }
 
         private static void ApplyBrightnessContrast(uint[] buf, int n, int brightness, int contrast)
@@ -833,6 +877,20 @@ namespace FracturingFog.Batch
             IColorMap theme, int adaptive, FractalParameters reliefFp,
             FracturingFog.Rendering.Lighting.FroxelHistory? history,
             QualityPreset? quality = null)
+            => RenderReliefRegionFrame(region, w, h, zoom, iter, theme, adaptive, reliefFp,
+                history, captureHdr: false, out _, quality);
+
+        // S2 (#396) — as above, but with an optional HDR-beauty capture: when
+        // <paramref name="captureHdr"/> is set the relief render fills the pre-clamp
+        // linear beauty into <paramref name="hdrBeauty"/> so the caller's view
+        // transform tonemaps the true-linear intermediate. Off → hdrBeauty null and
+        // the GPU fast path is kept (byte-identical), exactly like the 10-arg overload.
+        private static uint[] RenderReliefRegionFrame(
+            FractalRegion region, int w, int h, double zoom, int iter,
+            IColorMap theme, int adaptive, FractalParameters reliefFp,
+            FracturingFog.Rendering.Lighting.FroxelHistory? history,
+            bool captureHdr, out float[]? hdrBeauty,
+            QualityPreset? quality = null)
         {
             var rreq = new PosterRequest
             {
@@ -849,6 +907,14 @@ namespace FracturingFog.Batch
                 FroxelHistory = history,                // #468 shared across frames (null on fade sub-renders)
                 Path = string.Empty, Format = ImageFileFormat.Png,
             };
+            if (captureHdr)
+            {
+                var aov = FracturingFog.Imaging.ReliefDenoisePass.MakeCapture(reliefFp, w, h, captureHdr: true);
+                var buf = PosterRenderer.RenderToPixels(rreq, CancellationToken.None, out _, out _, aov);
+                hdrBeauty = aov?.HdrBeauty;
+                return buf;
+            }
+            hdrBeauty = null;
             return PosterRenderer.RenderToPixels(rreq, CancellationToken.None, out _, out _);
         }
 
@@ -988,12 +1054,13 @@ namespace FracturingFog.Batch
                     // theme renders.
                     int intoSeg = f - seg * segLen;         // frames into this segment
                     uint[] frame;
+                    float[]? legHdr = null;                 // S2 (#396) — steady-frame HDR beauty, null on fades
                     if (seg > 0 && intoSeg < themeFade)
                     {
                         float a = (intoSeg + 1) / (float)themeFade;
                         // Cross-fade sub-renders pass null history so the shared
                         // froxel temporal timeline is not double-advanced within
-                        // one output frame (#468).
+                        // one output frame (#468). A blended 8-bit fade carries no HDR.
                         var fromFrame = reliefFp != null
                             ? RenderReliefRegionFrame(region, outW, outH, frameZoom, iter, legThemeMaps[seg - 1], pfAdaptive, reliefFp, null)
                             : RenderRegionMandelFrame(region, outW, outH, frameZoom, iter, legThemeMaps[seg - 1], pfAdaptive);
@@ -1004,13 +1071,15 @@ namespace FracturingFog.Batch
                     }
                     else
                     {
+                        // S2 (#396) — capture the steady relief frame's HDR beauty when armed.
+                        bool legWantHdr = ReliefHdrWanted(reliefFp, viewTransform, pfBrightness, pfContrast);
                         frame = reliefFp != null
-                            ? RenderReliefRegionFrame(region, outW, outH, frameZoom, iter, legThemeMaps[seg], pfAdaptive, reliefFp, reliefHistory)
+                            ? RenderReliefRegionFrame(region, outW, outH, frameZoom, iter, legThemeMaps[seg], pfAdaptive, reliefFp, reliefHistory, legWantHdr, out legHdr)
                             : RenderRegionMandelFrame(region, outW, outH, frameZoom, iter, legThemeMaps[seg], pfAdaptive);
                     }
 
                     ApplyBrightnessContrast(frame, n, pfBrightness, pfContrast);
-                    ApplyViewTransform(frame, n, viewTransform, viewExposureEv);   // S2 (#389)
+                    ApplyViewTransform(frame, n, viewTransform, viewExposureEv, legHdr, outW, outH);   // S2 (#389/#396)
                     if (watermark)
                         ApplyWatermarkInPlace(frame, outW, outH, region.Name, legThemeNames[seg]);
 
@@ -1329,12 +1398,16 @@ namespace FracturingFog.Batch
                     // theme; re-render the chosen frame through the composed
                     // relief+froxel path (shared history threads the froxel
                     // temporal seam across the still show). #408/#468.
+                    float[]? ssHdr = null;
                     if (reliefFp != null && themeChosen != null)
                     {
                         int iterR = region.Iterations > 0 ? region.Iterations : 1000;
+                        // S2 (#396) — capture the relief still's HDR beauty when armed.
+                        bool ssWantHdr = ReliefHdrWanted(reliefFp,
+                            opts.ViewTransform ?? FracturingFog.Imaging.ViewTransform.None, pfBrightness, pfContrast);
                         currFrame = RenderReliefRegionFrame(
                             region, outW, outH, region.Zoom, iterR,
-                            ResolveTheme(themeChosen), pfAdaptive, reliefFp, reliefHistory);
+                            ResolveTheme(themeChosen), pfAdaptive, reliefFp, reliefHistory, ssWantHdr, out ssHdr);
                     }
 
                     // Brightness/Contrast BGRA post-pass (parity with the
@@ -1342,7 +1415,8 @@ namespace FracturingFog.Batch
                     // so cross-fades interpolate the processed image.
                     ApplyBrightnessContrast(currFrame, outW * outH, pfBrightness, pfContrast);
                     ApplyViewTransform(currFrame, outW * outH,
-                        opts.ViewTransform ?? FracturingFog.Imaging.ViewTransform.None, opts.ViewExposureEv ?? 0.0);   // S2 (#389)
+                        opts.ViewTransform ?? FracturingFog.Imaging.ViewTransform.None, opts.ViewExposureEv ?? 0.0,
+                        ssHdr, outW, outH);   // S2 (#389/#396)
 
                     if (opts.Watermark)
                         ApplyWatermarkInPlace(currFrame, outW, outH,
