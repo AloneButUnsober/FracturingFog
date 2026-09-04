@@ -48,6 +48,11 @@ namespace FracturingFog.Batch
         // byte-stable; opt-in. Applies to any EXR the run writes.
         public const string ExrZip         = "--exr-zip";
 
+        // EXR read-back / regrade (roadmap S2, #396). Value = input .exr path;
+        // selects Regrade mode — read it, apply --view-transform/--exposure, write
+        // to --out. No fractal render (regrade a rendered EXR without re-rendering).
+        public const string RegradeExr     = "--regrade-exr";
+
         public const string MultibrotExp   = "--multibrot-exp";
         public const string BulbPower      = "--bulb-power";
         public const string LSystemPreset  = "--lsystem-preset";

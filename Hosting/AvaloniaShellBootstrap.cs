@@ -1506,6 +1506,55 @@ namespace FracturingFog.Hosting
                 }
             };
 
+            // S2 (#396) — EXR read-back / regrade. Pick a scene-linear input .exr +
+            // an output image path, then tonemap the EXR with the CURRENT View
+            // transform + Exposure via ExrRegrade — grade a rendered .exr without
+            // re-rendering. No render host needed (pure file → file); uses the live
+            // ViewState so the result matches what the on-screen transform would give.
+            shell.RegradeExrRequested += async (_, _) =>
+            {
+                try
+                {
+                    string? inPath = await AvaloniaDialogs.PickOpenFileAsync(
+                        "Regrade EXR — choose input",
+                        filter: "OpenEXR (*.exr)|*.exr");
+                    if (string.IsNullOrEmpty(inPath)) return;
+
+                    string? outPath = await AvaloniaDialogs.PickSaveFileAsync(
+                        "Regrade EXR — save tonemapped image",
+                        suggestedName: System.IO.Path.GetFileNameWithoutExtension(inPath) + "_regrade.png",
+                        filter: "PNG (*.png)|*.png|JPEG (*.jpg)|*.jpg|OpenEXR (*.exr)|*.exr");
+                    if (string.IsNullOrEmpty(outPath)) return;
+
+                    var vs = s_shell?.Main?.ViewState;
+                    var vt = vs?.ViewTransform ?? FracturingFog.Imaging.ViewTransform.None;
+                    float ev = (float)(vs?.ViewExposureEv ?? 0.0);
+
+                    var busy = shell.BeginRenderBusy("Regrading EXR…");
+                    bool ok;
+                    try
+                    {
+                        ok = await Task.Run(() =>
+                            FracturingFog.Imaging.ExrRegrade.RenderToFile(
+                                inPath, outPath, vt, ev));
+                    }
+                    finally { busy.Dispose(); }
+
+                    await AvaloniaDialogs.ShowMessageAsync(
+                        ok ? "Regrade EXR Saved" : "Regrade EXR",
+                        ok
+                            ? $"Tonemapped (view={vt}, exposure={ev:0.###}) and saved to:\n{outPath}"
+                            : $"Could not read a supported OpenEXR from:\n{inPath}\n" +
+                              "(half/float, uncompressed or ZIP, single-part scanline.)",
+                        expectsConfirmation: false);
+                }
+                catch (Exception ex)
+                {
+                    await AvaloniaDialogs.ShowMessageAsync(
+                        "Regrade EXR", $"Regrade failed:\n{ex.Message}", expectsConfirmation: false);
+                }
+            };
+
             // ASCII / text-art export (#226) — save the current frame as
             // character art. The chosen file extension selects the format; the
             // exporter consumes the real IColorMap-coloured buffer + smooth field

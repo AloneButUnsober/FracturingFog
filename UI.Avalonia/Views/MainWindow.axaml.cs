@@ -289,6 +289,7 @@ public sealed partial class MainWindow : Window
         AddItem(menu, "Save Image…",        () => shell.ScreenshotCommand.Execute().Subscribe());
         AddItem(menu, "Save Text Art…",     () => shell.AsciiArtCommand.Execute().Subscribe());
         AddItem(menu, "Export AOV EXR…",    () => shell.AovExrCommand.Execute().Subscribe());
+        AddItem(menu, "Regrade EXR…",       () => shell.RegradeExrCommand.Execute().Subscribe());
         AddItem(menu, "Save Current Region",() => shell.SaveRegionCommand.Execute().Subscribe());
         menu.Items.Add(new Separator());
 
