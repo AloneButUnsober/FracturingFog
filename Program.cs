@@ -100,6 +100,13 @@ static class Program
         if (args.Length > 0 && args[0] == "--randomtileprobe")
             return FracturingFog.Diagnostics.RandomTileProbe.RunGate();
 
+        // --viewtransformprobe: S2 (#396) default-look validation — renders through
+        // the real PosterRenderer and asserts ViewTransform.None is byte-identical
+        // (exposure inert without a transform) while each transform reaches output.
+        // Writes viewtransformprobe.out.
+        if (args.Length > 0 && args[0] == "--viewtransformprobe")
+            return FracturingFog.Diagnostics.ViewTransformProbe.RunGate();
+
         // --escapeanglecompare: #629 (Renderer B) — render the escape-angle
         // 3-way compare poster (iteration-count | escape-angle | angle×iter) of
         // a default Mandelbrot region and write it next to the exe. Demonstrates
