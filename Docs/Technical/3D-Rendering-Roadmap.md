@@ -394,13 +394,20 @@ supplies the guide buffers.
   the plain spatial denoise + seeds the history; the temporal toggle off defers to `Apply`.
   `Relief2DDenoiseTemporal` / `TemporalFeedback` / `VarianceScale`; `MakeCapture` adds the motion
   AOV only when temporal. Default off → byte-identical. +6 `ReliefSvgfIntegrationTests`.
-- **Remaining (deep, still open on #402):** wire `ApplySvgf` into the sequence renderers (a
-  persistent `SvgfHistory` across frames + threading `history.PrevCamera` as the render's
-  `previousCamera` in `SceneVideoRenderer` / the batch loops), so SVGF runs in an actual
-  animation; temporal luminance MOMENTS in the history (currently the variance is estimated
-  spatially from the accumulated frame — a fuller SVGF tracks E[l]/E[l²] across frames);
-  **SIMD** the À-Trous 5×5 accumulation (left on purpose — vectorizing would reorder the float
-  sums and break byte-parity with the `--batch` oracle).
+- **SVGF wired into the sequence render path (landed — same PR #646, #402):** `ApplySvgf` now
+  runs in an actual sequence. `PosterRequest.SvgfHistory` threads through `PosterRenderer` (both
+  `ApplyReliefIfEnabled` sites) → `ApplySvgf` when a history is supplied and the temporal toggle
+  is on, else the plain `Apply`. `SceneVideoRenderer` owns one persistent `SvgfHistory` for the
+  render, threaded into clean continuous relief frames; the request's `previousCamera` is taken
+  from `history.PrevCamera` (the pass carries the camera on the history). Byte-identical off (the
+  S6 scene tests, now threading the history unused, still pass). +3 `ReliefSvgfSequenceTests`.
+- **Remaining (deep, still open on #402):** a UI / batch surface + the region relief snapshot
+  (`Relief3DSettings`) denoise fields so a region-sourced scene can actually enable SVGF from the
+  UI (a #566-style follow-up — the offline seam is already live); temporal luminance MOMENTS in
+  the history (the variance is estimated spatially from the accumulated frame today — a fuller
+  SVGF tracks E[l]/E[l²] across frames, `SvgfVariance.FromMoments` is ready); **SIMD** the À-Trous
+  5×5 accumulation (left on purpose — vectorizing would reorder the float sums and break
+  byte-parity with the `--batch` oracle).
 
 ### S5 — Refractive / transmissive materials ◐ (#406)
 Cook-Torrance GGX today is opaque. Add **transmission + IOR** → glass fractals.
