@@ -286,6 +286,9 @@ namespace FracturingFog.Imaging
             // (headroom recovered); else the plain 8-bit path. A buffer with no HDR
             // sample decodes identically to the 8-bit path (FromHdrByteScale contract),
             // so the HDR branch never regresses a non-relief pixel.
+            // When a linear composite runs below the interior backdrop is folded in
+            // there (in linear light) and the trailing 8-bit composite is skipped.
+            bool linearComposited = false;
             if (req.ViewTransform != ViewTransform.None)
             {
                 if (hdrAov?.HdrBeauty != null && hdrAov.HdrBeauty.Length == (long)w * h * 3)
@@ -294,7 +297,23 @@ namespace FracturingFog.Imaging
                         .ApplyViewTransform(req.ViewTransform, req.ViewExposureEv)
                         .ToBgra();
                 else
-                    ViewTransformOps.Apply(buffer, w * h, req.ViewTransform, req.ViewExposureEv);
+                {
+                    // S2 (#396) — FULL-FLOAT 2D composite. Decode the graded buffer to
+                    // a linear-light image, composite the interior backdrop IN LINEAR
+                    // (so the backdrop is tonemapped with the fractal, not injected
+                    // untonemapped after), then apply the view transform on the whole
+                    // composited image. Opaque / no-backdrop frames leave the image
+                    // untouched, so this reduces to FromBgra → transform → ToBgra,
+                    // byte-identical to the old 8-bit ViewTransformOps.Apply (parity
+                    // anchor), and the 8-bit composite below still runs as a no-op.
+                    var img = LinearFloatImage.FromBgra(buffer, w, h);
+                    linearComposited = FracturingFog.Rendering.Interior2DBackgroundCompositor.CompositeLinear(
+                        img, buffer, req.FractalParameters,
+                        req.ColorMap?.InSetColor ?? 0xFF000000u, alphaPreview: false);
+                    buffer = img
+                        .ApplyViewTransform(req.ViewTransform, req.ViewExposureEv)
+                        .ToBgra();
+                }
             }
 
             // Interior-alpha composite — the SAME shared helper the live path
@@ -306,10 +325,12 @@ namespace FracturingFog.Imaging
             // alpha PNG that washed out over a viewer's white background. In-place:
             // the b/c/gamma pass above preserved the coverage byte, so the same buffer
             // supplies both RGB and coverage. Transparent mode keeps straight alpha.
-            FracturingFog.Rendering.Interior2DBackgroundCompositor.Composite(
-                buffer, buffer, w, h, req.FractalParameters,
-                req.ColorMap?.InSetColor ?? 0xFF000000u,
-                alphaPreview: false, srcAlreadyProcessed: false);
+            // Skipped when the full-float path above already composited in linear.
+            if (!linearComposited)
+                FracturingFog.Rendering.Interior2DBackgroundCompositor.Composite(
+                    buffer, buffer, w, h, req.FractalParameters,
+                    req.ColorMap?.InSetColor ?? 0xFF000000u,
+                    alphaPreview: false, srcAlreadyProcessed: false);
 
             return WritePoster(req, buffer, w, h, sw.ElapsedMilliseconds);
         }

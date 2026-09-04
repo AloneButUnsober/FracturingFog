@@ -3647,6 +3647,9 @@ namespace FracturingFog.Rendering
             // exactly like the brightness/contrast/gamma pass above; re-applying it
             // would double-tonemap (visible darken / oversaturate on right-click and
             // other snapshot re-uploads).
+            // When the full-float 2D path composites the interior backdrop in linear
+            // (below), the trailing 8-bit interior composite is skipped.
+            bool linearComposited = false;
             if (!srcAlreadyProcessed && ViewState.ViewTransform != FracturingFog.Imaging.ViewTransform.None)
             {
                 if (reliefHdrBeauty != null && reliefHdrBeauty.Length == (long)n * 3)
@@ -3658,8 +3661,26 @@ namespace FracturingFog.Rendering
                     Array.Copy(tone, dst, n);
                 }
                 else
-                    FracturingFog.Imaging.ViewTransformOps.Apply(
-                        dst, n, ViewState.ViewTransform, ViewState.ViewExposureEv);
+                {
+                    // S2 (#396) — FULL-FLOAT 2D composite. Decode the graded dst to a
+                    // linear-light image (coverage from src, whose alpha the post-FX
+                    // pass preserved), composite the interior backdrop IN LINEAR so it
+                    // is tonemapped together with the fractal instead of injected
+                    // untonemapped after, then apply the view transform on the whole
+                    // composited image. Opaque / no-backdrop frames leave the image
+                    // untouched → FromBgra → transform → ToBgra, byte-identical to the
+                    // old 8-bit ViewTransformOps.Apply (parity anchor); the 8-bit
+                    // composite below then runs as a no-op. Matches the poster path so
+                    // screen and saved PNG stay pixel-for-pixel identical.
+                    var img = FracturingFog.Imaging.LinearFloatImage.FromBgra(dst, src, w, h);
+                    linearComposited = FracturingFog.Rendering.Interior2DBackgroundCompositor.CompositeLinear(
+                        img, src, ViewState.FractalParameters,
+                        _calculator?.ColorMap?.InSetColor ?? 0xFF000000u, ViewState.AlphaPreview);
+                    var tone = img
+                        .ApplyViewTransform(ViewState.ViewTransform, ViewState.ViewExposureEv)
+                        .ToBgra();
+                    Array.Copy(tone, dst, n);
+                }
             }
 
             // Lighting-FX debug HUD (Phase 19) for Relief 3D. The 3D raymarcher
@@ -3695,10 +3716,12 @@ namespace FracturingFog.Rendering
             // srcAlreadyProcessed are no-ops inside the helper. Shared with the
             // offscreen export path (PosterRenderer) so the window and the saved PNG
             // match pixel-for-pixel.
-            FracturingFog.Rendering.Interior2DBackgroundCompositor.Composite(
-                dst, src, w, h, ViewState.FractalParameters,
-                _calculator?.ColorMap?.InSetColor ?? 0xFF000000u,
-                ViewState.AlphaPreview, srcAlreadyProcessed);
+            // Skipped when the full-float path above already composited in linear.
+            if (!linearComposited)
+                FracturingFog.Rendering.Interior2DBackgroundCompositor.Composite(
+                    dst, src, w, h, ViewState.FractalParameters,
+                    _calculator?.ColorMap?.InSetColor ?? 0xFF000000u,
+                    ViewState.AlphaPreview, srcAlreadyProcessed);
 
             // Snapshot pre-overlay buffer so SaveLastFrameToPng can render a fresh
             // watermark via ImageExport (instead of relying on whatever the on-screen

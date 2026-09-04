@@ -60,19 +60,32 @@ public sealed class LinearFloatImage
     /// no-op — this is the parity anchor for putting the intermediate in front of
     /// an existing 8-bit render.</summary>
     public static LinearFloatImage FromBgra(uint[] bgra, int width, int height)
+        => FromBgra(bgra, bgra, width, height);
+
+    /// <summary>Decode an 8-bit straight-alpha BGRA buffer into a linear-light float
+    /// image, taking the RGB from <paramref name="color"/> but the straight alpha
+    /// (coverage) byte from a SEPARATE <paramref name="coverage"/> buffer. The live
+    /// path (FractalRenderHost) grades into a <c>dst</c> whose alpha was force-set to
+    /// 0xFF, so the true authored coverage lives in the source buffer — this mirrors
+    /// the coverage/rgb split <see cref="FracturingFog.Rendering.Interior2DBackgroundCompositor.Composite"/>
+    /// takes. Passing the same array for both (the export path) reads alpha from the
+    /// colour buffer, exactly like the single-argument overload.</summary>
+    public static LinearFloatImage FromBgra(uint[] color, uint[] coverage, int width, int height)
     {
-        if (bgra == null) throw new ArgumentNullException(nameof(bgra));
+        if (color == null) throw new ArgumentNullException(nameof(color));
+        if (coverage == null) throw new ArgumentNullException(nameof(coverage));
         long n = (long)width * height;
-        if (bgra.Length < n) throw new ArgumentException("LinearFloatImage.FromBgra: buffer smaller than width*height.");
+        if (color.Length < n) throw new ArgumentException("LinearFloatImage.FromBgra: colour buffer smaller than width*height.");
+        if (coverage.Length < n) throw new ArgumentException("LinearFloatImage.FromBgra: coverage buffer smaller than width*height.");
         var img = new LinearFloatImage(width, height);
         for (int i = 0; i < n; i++)
         {
-            uint p = bgra[i];
+            uint p = color[i];
             int j = i * 3;
             img.Rgb[j] = ViewTransformOps.SrgbToLinear(((p >> 16) & 0xFF) / 255f);
             img.Rgb[j + 1] = ViewTransformOps.SrgbToLinear(((p >> 8) & 0xFF) / 255f);
             img.Rgb[j + 2] = ViewTransformOps.SrgbToLinear((p & 0xFF) / 255f);
-            img.Alpha[i] = ((p >> 24) & 0xFF) / 255f;
+            img.Alpha[i] = ((coverage[i] >> 24) & 0xFF) / 255f;
         }
         return img;
     }
