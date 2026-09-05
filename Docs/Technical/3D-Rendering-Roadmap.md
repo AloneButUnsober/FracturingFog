@@ -9,8 +9,8 @@ Status legend: ☐ not started · ◐ in progress (a first tranche has shipped w
 tests — see each slice) · ☑ slice fully closed. A slice is marked ☑ only when it is
 *entirely* done; every S1–S9 slice already has merged, tested work landed but stays
 ◐ because deeper GPU / full-fidelity tails remain. **S1–S9 are all underway; S10 is
-deferred (not started); S11 (orbit-trap height, #592) has its first tranche shipped
-(◐, hi-res trap tail remains); S12 (relief stage-2 parity, #652) is fully closed (●).**
+deferred (not started); S11 (orbit-trap height, #592) is fully closed (●, incl. the
+hi-res trap tail); S12 (relief stage-2 parity, #652) is fully closed (●).**
 
 Parent tracking issue: **#389**. Each slice below is (or becomes) its own issue;
 this doc is the canonical design and the issues are the canonical task list —
@@ -1096,7 +1096,7 @@ to this project.
 - **Boundary:** a color/palette assistant, not an image editor / DAM / material node
   graph.
 
-### S11 — Relief height from an orbit-trap distance field ◐ (#592)
+### S11 — Relief height from an orbit-trap distance field ● (#592)
 Relief 3D extrudes a 2D fractal into a heightfield and raymarches it. Today the
 height source is **only** the smooth iteration count (`IHeightFieldSource.
 SmoothBuffer`). But an **orbit-trap min-distance** is already a per-pixel scalar
@@ -1129,10 +1129,16 @@ height AOV**, no new geometry machinery.
   Relief 3D dialog (`Relief2DHeightSources` / `Relief2DHeightBlendApplies`). Trap / Blend
   need an orbit-trap theme active; with none the trap field is empty → Smooth fallback.
   +6 tests; byte-identical default; suite 2254/2254; probe PASS.
-- **Remaining (follow-up):** the **hi-res relief field** (#143) twin does not recompute
-  the trap field, so a trap/blend source uses the display-res field (smooth still gets
-  the hi-res floor); recompute trap on the hi-res twin (run its orbit path) for a crisper
-  trap relief. Non-Mandelbrot (DSL/Julia) relief + trap is a separate gap.
+- **Hi-res trap — LANDED (PR #669).** The hi-res relief field (#143) twin now recomputes
+  the trap field too: when the height source needs trap, the twin runs the SAME
+  orbit-trap theme (`rc.ColorMap = live orbit map`) with the GPU **forced off** — the GPU
+  orbit path (`TryRunGpuOrbit`) emits iter / smooth / finalZ / colour but NOT `TrapBuffer`,
+  so trap must come from the CPU orbit path — filling `TrapBuffer` at the hi-res floor;
+  smooth source keeps the fast default-map + GPU twin. So trap / blend now get the hi-res
+  floor like smooth. (The twin's default escape-time map is remembered and restored for a
+  smooth-source render.)
+- **Remaining (separate gap):** non-Mandelbrot (DSL / Julia) relief + trap — relief is
+  Mandelbrot-only today.
 
 ### S12 — Relief 3D stage-2 post-chain parity ● (#652)
 FF's lighting/FX runs in **two stages**. Stage 1 (`ShadingPipeline.Shade<TDe>`) is

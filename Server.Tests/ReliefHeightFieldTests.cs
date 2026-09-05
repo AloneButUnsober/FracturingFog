@@ -47,6 +47,33 @@ public sealed class ReliefHeightFieldTests
     }
 
     [Fact]
+    public void HiResTrap_Twin_Config_Fills_TrapBuffer_CpuForced()
+    {
+        // S11 hi-res trap tail (#592): the hi-res field twin runs the orbit-trap theme
+        // with GPU forced OFF (the GPU orbit path does not emit TrapBuffer), so a
+        // CPU-forced MandelbrotCalculator at a hi-res-floor size fills TrapBuffer and
+        // yields a distinct trap height — the exact config the twin uses.
+        int w = 320, h = 240;   // stand-in for a hi-res field-floor render
+        var calc = new MandelbrotCalculator(w, h)
+        {
+            CenterX = -0.75, CenterY = 0.0, Zoom = 1.0, MaxIterations = 300,
+            ColorMap = new OrbitTrapCircleMap(),
+            UseGpuCompute = false,   // GPU orbit path fills no TrapBuffer → force CPU
+        };
+        calc.Calculate(default);
+
+        bool anyTrap = false;
+        foreach (var t in calc.TrapBuffer) if (t > 0f) { anyTrap = true; break; }
+        Assert.True(anyTrap, "CPU orbit path must fill TrapBuffer at hi-res size");
+
+        var eff = ReliefHeightField.Build(
+            calc.SmoothBuffer, calc.TrapBuffer, w * h, ReliefHeightSource.Trap, 1.0);
+        int diff = 0;
+        for (int i = 0; i < w * h; i++) if (eff[i] != calc.SmoothBuffer[i]) diff++;
+        Assert.True(diff > (w * h) / 10, $"hi-res trap height should differ from smooth ({diff} px)");
+    }
+
+    [Fact]
     public void Smooth_Source_Returns_Same_Reference()
     {
         var smooth = new[] { 1f, 2f, 3f, 4f };
