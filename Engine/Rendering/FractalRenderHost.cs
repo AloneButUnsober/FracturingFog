@@ -2159,6 +2159,9 @@ namespace FracturingFog.Rendering
             try
             {
                 Interefaces.IHeightFieldSource? fieldSrc;
+                // S11 (#592) — the orbit-trap height field captured on the twin (null =
+                // smooth-only, the default). Only the Mandelbrot twin fills it.
+                float[]? trapField = null;
                 if (type == FractalType.Mandelbrot)
                 {
                     // Mandelbrot: dedicated MandelbrotCalculator twin. Copy view +
@@ -2171,12 +2174,33 @@ namespace FracturingFog.Rendering
                     // two calcs share the one kernel sequentially (no concurrent
                     // dispatch). Shallow uses the FP32 escape-time kernel; deep uses
                     // the perturbation kernel, exactly as the main calc chooses.
+                    bool firstCreate = _reliefFieldCalc == null;
                     var rc = _reliefFieldCalc ??= new MandelbrotCalculator(fw, fh);
+                    if (firstCreate) _reliefFieldSmoothMap = rc.ColorMap;   // default escape-time map
                     if (rc.Width != fw || rc.Height != fh) rc.Resize(fw, fh);
                     MirrorMandelbrotState(_calculator, rc);
-                    rc.UseGpuCompute = _calculator.UseGpuCompute;
-                    rc.GpuKernel = _calculator.GpuKernel;
+                    // S11 (#592) — hi-res trap. The twin normally renders smooth-only via
+                    // its default map (GPU ok). When the height source needs the orbit-trap
+                    // field, run the SAME orbit-trap theme on the twin so it fills TrapBuffer
+                    // at the hi-res floor — and force CPU, because the GPU orbit path does
+                    // NOT emit TrapBuffer (TryRunGpuOrbit fills iter/smooth/finalZ/colour
+                    // only). Smooth source keeps the fast default-map + GPU path.
+                    bool needTrap = p.Relief2DHeightSource != FracturingFog.ReliefHeightSource.Smooth
+                        && _calculator.ColorMap is Interefaces.IOrbitAwareColorMap;
+                    if (needTrap)
+                    {
+                        rc.ColorMap = _calculator.ColorMap;
+                        rc.UseGpuCompute = false;
+                        rc.GpuKernel = null;
+                    }
+                    else
+                    {
+                        if (_reliefFieldSmoothMap != null) rc.ColorMap = _reliefFieldSmoothMap;
+                        rc.UseGpuCompute = _calculator.UseGpuCompute;
+                        rc.GpuKernel = _calculator.GpuKernel;
+                    }
                     rc.Calculate(token);
+                    if (needTrap) trapField = rc.TrapBuffer;
                     fieldSrc = rc;
                 }
                 else
@@ -2208,9 +2232,14 @@ namespace FracturingFog.Rendering
                 var field = fieldSrc?.SmoothBuffer;
                 int hn = fw * fh;
                 if (field == null || field.Length < hn) return false;
+                // S11 (#592) — build the height field from the chosen source. trapField is
+                // the twin's hi-res orbit-trap field (Mandelbrot + orbit theme), else null
+                // → Build returns smooth unchanged (byte-identical smooth path).
+                var eff = FracturingFog.Rendering.Lighting.ReliefHeightField.Build(
+                    field, trapField, hn, p.Relief2DHeightSource, p.Relief2DHeightBlend);
                 if (_reliefHeight == null || _reliefHeight.Length < hn)
                     _reliefHeight = new float[hn];
-                Array.Copy(field, _reliefHeight, hn);
+                Array.Copy(eff, _reliefHeight, hn);
                 _reliefW = fw; _reliefH = fh; _reliefValid = true;
                 return true;
             }
@@ -2439,14 +2468,12 @@ namespace FracturingFog.Rendering
                         // cases — all of which fall back to the display-res
                         // SmoothBuffer below.
                         var rp = ViewState.FractalParameters;
-                        // S11 (#592) — the orbit-trap height source reads the calc's
-                        // display-res TrapBuffer (filled by the active orbit-trap theme),
-                        // which the hi-res field twin does not yet recompute, so a trap /
-                        // blend source uses the display-res field. Hi-res trap is a
-                        // follow-up; smooth still gets the hi-res floor.
-                        bool smoothSource = rp.Relief2DHeightSource == FracturingFog.ReliefHeightSource.Smooth;
+                        // S11 (#592) — the hi-res field twin now fills the orbit-trap field
+                        // too (runs the orbit theme on the twin, CPU-forced), so trap / blend
+                        // sources also get the hi-res floor; the display-res fallback below
+                        // still builds the effective field for the non-hi-res cases.
                         if (rp.Relief2DEnabled && rp.Relief2DRaymarch
-                            && rp.Relief2DHiResField && smoothSource
+                            && rp.Relief2DHiResField
                             && TryCaptureHiResReliefField(ViewState.FractalType, rp, hw, hh, token))
                         {
                             // _reliefHeight / _reliefW / _reliefH / _reliefValid
@@ -3458,6 +3485,10 @@ namespace FracturingFog.Rendering
         // types (EscapeTime family, Newton/Nova, Halley, Apollonian): a fresh
         // instance of the active type, rebuilt when the type changes.
         private MandelbrotCalculator? _reliefFieldCalc;
+        // S11 (#592) — the twin's default (escape-time) colour map, captured on first
+        // create. The hi-res trap path swaps in the live orbit-trap theme to fill the
+        // twin's TrapBuffer, then restores this for a smooth-source render.
+        private IColorMap? _reliefFieldSmoothMap;
         private IFractalCalculator? _reliefFieldAltCalc;
         private FractalType _reliefFieldAltType = FractalType.Mandelbrot;
 
