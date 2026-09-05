@@ -82,7 +82,7 @@ ramps are simply better.
   ΔE, monotonic luminance, endpoints). UI + the remaining slices (S10.2 CVD suite next)
   build on this core.
 
-### S10.2 — CVD-first suite ☐ (the differentiator)
+### S10.2 — CVD-first suite ◐ (the differentiator; core LANDED — PR #671)
 - **Live CVD simulation** — deutan / protan / tritan / monochromacy, side-by-side,
   on the palette **and** the fractal preview. Use **Machado 2009** (or
   Brettel–Viénot) — the accepted models.
@@ -96,6 +96,17 @@ ramps are simply better.
   meaning never rides on hue alone.
 - **Contract:** CVD sim + ΔE are deterministic → assert in tests (the color analog
   of the render parity twin).
+- **Landed (core):** `Engine/Imaging/CvdAnalysis.cs` — `CvdSimulation.Simulate`
+  (Machado 2009 matrices in linear RGB, severity-lerp from identity; monochromacy =
+  Rec.709 luminance grey) + `PaletteLint`: `Confusables` (ΔE in CVD-simulated OkLab
+  below a threshold, per type, worst-first), `IsLuminanceMonotonic` (the luminance-lock
+  check; the generator itself is S10.1's `UniformLuminanceRamp`), and the **Okabe-Ito**
+  8-colour CVD-safe categorical set. +7 `CvdAnalysisTests` (severity-0 identity,
+  monochromacy grey, determinism, red/green deutan collapse vs normal, confusables flag
+  red/green but not black/white, Okabe-Ito clears a JND, luminance-monotonic detection).
+  **Remaining:** live side-by-side CVD preview UI (on palette + fractal); the
+  continuous CVD-ΔE-maximising ramp generator; redundant-encoding hints — the UI + the
+  advisor surfacing (S10.6). Deterministic core is in; suite 2270/2270.
 
 ### S10.3 — Fractal-aware preview ☐
 - Palette live **on the real fractal** (2D + 3D), not a gradient bar.
