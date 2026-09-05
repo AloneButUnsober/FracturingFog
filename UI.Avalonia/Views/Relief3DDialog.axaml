@@ -126,6 +126,30 @@
                 </Grid>
                 </Expander>
 
+                <!-- S11 (#592) — relief height SOURCE: smooth iteration count (the
+                     original) / orbit-trap min-distance / blend. Trap + Blend need an
+                     orbit-trap theme active (which fills the trap field); colour still
+                     comes from the theme. -->
+                <Expander Header="Height source (smooth / orbit-trap)" HorizontalAlignment="Stretch"
+                          IsExpanded="False"
+                          IsEnabled="{Binding Relief2DEnabled}"
+                          ToolTip.Tip="Which per-pixel field the relief height is built from. Smooth = the iteration count (original). Trap = the orbit-trap min-distance field, for literal 3D orbit-trap topography (Ring -> concentric ridges, Hexagon -> a hex lattice). Blend = a mix. Trap / Blend require an orbit-trap colour theme active; with none, relief falls back to Smooth. Mandelbrot only. (Hi-res field floor uses Smooth; trap uses the display-res field for now.)">
+                <Grid ColumnDefinitions="160,*" RowDefinitions="Auto,Auto">
+                    <TextBlock Grid.Row="0" Grid.Column="0" Text="Height from:" VerticalAlignment="Center"
+                               ToolTip.Tip="Smooth = iteration count. Trap = orbit-trap min-distance (needs an orbit-trap theme). Blend = mix of the two." />
+                    <ComboBox Grid.Row="0" Grid.Column="1" Margin="0,2" HorizontalAlignment="Stretch"
+                              ItemsSource="{Binding Relief2DHeightSources}"
+                              SelectedItem="{Binding Relief2DHeightSource, Mode=TwoWay}" />
+
+                    <TextBlock Grid.Row="1" Grid.Column="0" Text="Blend (smooth↔trap):" VerticalAlignment="Center"
+                               IsEnabled="{Binding Relief2DHeightBlendApplies}"
+                               ToolTip.Tip="Blend weight for the Blend source: 0 = all smooth, 1 = all trap." />
+                    <Slider Grid.Row="1" Grid.Column="1" Minimum="0" Maximum="1" Margin="0,2"
+                            IsEnabled="{Binding Relief2DHeightBlendApplies}"
+                            Value="{Binding Relief2DHeightBlend, Mode=TwoWay}" />
+                </Grid>
+                </Expander>
+
                 <!-- Phase 2 — oblique 3D raymarch -->
                 <CheckBox Content="Oblique 3D raymarch (perspective + volumetric)"
                           IsChecked="{Binding Relief2DRaymarch, Mode=TwoWay}"

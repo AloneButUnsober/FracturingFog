@@ -580,6 +580,18 @@ namespace FracturingFog.Models
         /// spikes into terrain).</summary>
         public HeightCurve2D Relief2DHeightCurve { get; set; } = HeightCurve2D.Log;
 
+        /// <summary>S11 (#592) — which per-pixel field the relief height is built from:
+        /// the smooth iteration count (default, the original source), the orbit-trap
+        /// min-distance field, or a blend. <see cref="ReliefHeightSource.Trap"/> /
+        /// <see cref="ReliefHeightSource.Blend"/> require an orbit-trap theme active
+        /// (which populates <c>MandelbrotCalculator.TrapBuffer</c>); with none the trap
+        /// field is empty and relief falls back to Smooth. Mandelbrot only for now.</summary>
+        public ReliefHeightSource Relief2DHeightSource { get; set; } = ReliefHeightSource.Smooth;
+        /// <summary>S11 (#592) — blend weight for <see cref="ReliefHeightSource.Blend"/>:
+        /// 0 = all smooth, 1 = all trap. Ignored for the pure Smooth / Trap sources.
+        /// Default 0.5.</summary>
+        public double Relief2DHeightBlend { get; set; } = 0.5;
+
         /// <summary>#518 — local filament detail gain (unsharp high-pass on the
         /// height field). Raises/sharpens the fractal structure RELATIVE to the base
         /// "slab" it sits on, which the global <see cref="Relief2DHeightScale"/>
@@ -1282,6 +1294,8 @@ namespace FracturingFog.Models
                 Relief2DCameraOrthographic = Relief2DCameraOrthographic,
                 Relief2DSupersample = Relief2DSupersample,
                 Relief2DHeightCurve = Relief2DHeightCurve,
+                Relief2DHeightSource = Relief2DHeightSource,
+                Relief2DHeightBlend = Relief2DHeightBlend,
                 Relief2DDetailGain = Relief2DDetailGain,
                 Relief2DDetailRadius = Relief2DDetailRadius,
                 Relief2DHeightGamma = Relief2DHeightGamma,

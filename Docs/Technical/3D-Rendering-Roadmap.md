@@ -9,7 +9,8 @@ Status legend: ☐ not started · ◐ in progress (a first tranche has shipped w
 tests — see each slice) · ☑ slice fully closed. A slice is marked ☑ only when it is
 *entirely* done; every S1–S9 slice already has merged, tested work landed but stays
 ◐ because deeper GPU / full-fidelity tails remain. **S1–S9 are all underway; S10 is
-deferred (not started); S11 (orbit-trap height, #592) is new/not started.**
+deferred (not started); S11 (orbit-trap height, #592) has its first tranche shipped
+(◐, hi-res trap tail remains); S12 (relief stage-2 parity, #652) is fully closed (●).**
 
 Parent tracking issue: **#389**. Each slice below is (or becomes) its own issue;
 this doc is the canonical design and the issues are the canonical task list —
@@ -1095,7 +1096,7 @@ to this project.
 - **Boundary:** a color/palette assistant, not an image editor / DAM / material node
   graph.
 
-### S11 — Relief height from an orbit-trap distance field ☐ (#592)
+### S11 — Relief height from an orbit-trap distance field ◐ (#592)
 Relief 3D extrudes a 2D fractal into a heightfield and raymarches it. Today the
 height source is **only** the smooth iteration count (`IHeightFieldSource.
 SmoothBuffer`). But an **orbit-trap min-distance** is already a per-pixel scalar
@@ -1115,6 +1116,23 @@ height AOV**, no new geometry machinery.
 - **Scope:** Mandelbrot path first (relief is Mandelbrot today); the DSL/Julia
   relief gap is separate. Height-source only — colour still comes from the theme.
 - **Fit:** an AOV→height instance of S1; low risk, high novelty payoff.
+- **Slice-1 — LANDED (PR #668).** `TrapBuffer` already persists per pixel whenever an
+  orbit-trap theme runs (`MandelbrotCalculator.TrapBuffer` ← `OrbitAccumulator.TrapMin`),
+  so no new capture was needed. New `ReliefHeightField.Build(smooth, trap, n, source,
+  blend)` selects/blends the field: `Smooth` (default) returns the smooth array
+  UNCHANGED (byte-identical); `Trap` normalises the trap min-distance into smooth's raw
+  range **inverted** (near-trap → high ridge), in-set (trap 0) flat; `Blend` lerps. The
+  raymarch's existing `Relief2DHeightCurve` applies downstream unchanged. Params
+  `Relief2DHeightSource` + `Relief2DHeightBlend` (FractalParameters, cloned + reset);
+  wired at the live display-res capture, the pan preview, and the poster (all read the
+  calc that already ran the theme → trap is free). UI: a "Height source" expander on the
+  Relief 3D dialog (`Relief2DHeightSources` / `Relief2DHeightBlendApplies`). Trap / Blend
+  need an orbit-trap theme active; with none the trap field is empty → Smooth fallback.
+  +6 tests; byte-identical default; suite 2254/2254; probe PASS.
+- **Remaining (follow-up):** the **hi-res relief field** (#143) twin does not recompute
+  the trap field, so a trap/blend source uses the display-res field (smooth still gets
+  the hi-res floor); recompute trap on the hi-res twin (run its orbit path) for a crisper
+  trap relief. Non-Mandelbrot (DSL/Julia) relief + trap is a separate gap.
 
 ### S12 — Relief 3D stage-2 post-chain parity ● (#652)
 FF's lighting/FX runs in **two stages**. Stage 1 (`ShadingPipeline.Shade<TDe>`) is
