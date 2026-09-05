@@ -387,6 +387,12 @@ namespace FracturingFog.Imaging
             try
             {
 
+            // #656 — resolve an aspect-correct relief field ONCE (the caller snapshot
+            // when its aspect matches the output, else a field recomputed at the output
+            // aspect); shared by the alt and Mandelbrot relief calls below. null → the
+            // relief path uses the height source's own (output-dims) SmoothBuffer.
+            float[]? reliefField = ResolveReliefField(req, req.Width, req.Height, token, out int reliefFw, out int reliefFh);
+
             IFractalCalculator? alt = BuildCaptureCalculator(req);
             if (alt != null)
             {
@@ -409,7 +415,7 @@ namespace FracturingFog.Imaging
                 // of a Relief 3D scene must apply relief here too — otherwise it
                 // silently falls back to the flat 2D themed colour. No-op when
                 // relief is off or the calc exposes no field.
-                buffer = ApplyReliefIfEnabled(buffer, alt as IHeightFieldSource, w, h, req.FractalParameters, alt?.ColorMap, aovCapture, req.FroxelHistory, req.ReliefField, req.ReliefFieldW, req.ReliefFieldH, req.PreviousCamera, req.SvgfHistory);
+                buffer = ApplyReliefIfEnabled(buffer, alt as IHeightFieldSource, w, h, req.FractalParameters, alt?.ColorMap, aovCapture, req.FroxelHistory, reliefField, reliefFw, reliefFh, req.PreviousCamera, req.SvgfHistory);
             }
             else
             {
@@ -494,7 +500,7 @@ namespace FracturingFog.Imaging
                 // not apply — BUT the dedicated hi-res relief field is a separate,
                 // higher-quality field, not just a resolution bump, so a supplied
                 // req.ReliefField (the interactive one) is preferred (#508).
-                buffer = ApplyReliefIfEnabled(buffer, calc, w, h, req.FractalParameters, calc.ColorMap, aovCapture, req.FroxelHistory, req.ReliefField, req.ReliefFieldW, req.ReliefFieldH, req.PreviousCamera, req.SvgfHistory);
+                buffer = ApplyReliefIfEnabled(buffer, calc, w, h, req.FractalParameters, calc.ColorMap, aovCapture, req.FroxelHistory, reliefField, reliefFw, reliefFh, req.PreviousCamera, req.SvgfHistory);
             }
 
             }
@@ -659,6 +665,114 @@ namespace FracturingFog.Imaging
             return dst;
         }
 
+        /// <summary>#656 — resolve the relief height FIELD to raymarch for this output,
+        /// guaranteeing the field and the (recomputed) albedo cover the SAME complex
+        /// view at ANY aspect. The calculator maps the complex plane by pixel aspect
+        /// (scale = 3.5/max(W,H)/Zoom), so a poster/wallpaper at a different aspect than
+        /// the on-screen window covers a different complex rectangle. The caller's
+        /// snapshot field (<see cref="PosterRequest.ReliefField"/>) is at the ON-SCREEN
+        /// aspect; reusing it here stretches the field vs the albedo and desyncs colour
+        /// from relief (the reported bug). Resolution:
+        /// <list type="bullet">
+        /// <item>Snapshot aspect ≈ output aspect → honour the snapshot (WYSIWYG poster at
+        /// the on-screen aspect, e.g. the same-dims preview) — byte-identical to #508.</item>
+        /// <item>Otherwise recompute an aspect-correct field at the OUTPUT aspect. At/above
+        /// the field floor the albedo calc's own <c>SmoothBuffer</c> (output dims) already
+        /// IS a hi-res, aspect-correct field, so return null to let
+        /// <see cref="ApplyReliefIfEnabled"/> use the height source.</item>
+        /// <item>Below the floor (small output), upsample a DEDICATED field calc at the
+        /// output aspect so a small cross-aspect poster keeps the on-screen hi-res look.</item>
+        /// </list>
+        /// Returns the field to use (snapshot or freshly computed), or null to fall back
+        /// to the height source's SmoothBuffer.</summary>
+        public static float[]? ResolveReliefField(
+            PosterRequest req, int w, int h, CancellationToken token, out int fw, out int fh)
+        {
+            fw = 0; fh = 0;
+            var p = req.FractalParameters;
+            if (p == null || !p.Relief2DEnabled || !p.Relief2DRaymarch) return null;
+            if (w <= 2 || h <= 2) return null;
+
+            double outAspect = (double)w / h;
+
+            // Honour the caller snapshot only when its aspect matches the output.
+            if (req.ReliefField is { } snap && req.ReliefFieldW > 2 && req.ReliefFieldH > 2
+                && snap.Length >= (long)req.ReliefFieldW * req.ReliefFieldH)
+            {
+                double snapAspect = (double)req.ReliefFieldW / req.ReliefFieldH;
+                if (Math.Abs(snapAspect - outAspect) <= 0.01 * outAspect)
+                {
+                    fw = req.ReliefFieldW; fh = req.ReliefFieldH;
+                    return snap;
+                }
+            }
+
+            // Aspect mismatch (or no snapshot). At/above the floor the output-dims
+            // SmoothBuffer is already an aspect-correct hi-res field.
+            int floor = Math.Clamp(p.Relief2DFieldFloor, 480, 2160);
+            if (Math.Min(w, h) >= floor) return null;
+            if (!FracturingFog.Rendering.FractalRenderHost.SupportsHiResReliefField(req.FractalType))
+                return null;
+
+            // Below the floor — upsample a dedicated field at the OUTPUT aspect (mirror
+            // FractalRenderHost.TryCaptureHiResReliefField: short axis → floor, long axis
+            // capped so a wide span doesn't blow the field render up).
+            double s = floor / (double)Math.Min(w, h);
+            int nfw = (int)Math.Round(w * s), nfh = (int)Math.Round(h * s);
+            const int MaxLong = 3840;
+            if (Math.Max(nfw, nfh) > MaxLong)
+            {
+                double s2 = MaxLong / (double)Math.Max(nfw, nfh);
+                nfw = (int)Math.Round(nfw * s2); nfh = (int)Math.Round(nfh * s2);
+            }
+            nfw = Math.Max(4, nfw); nfh = Math.Max(4, nfh);
+
+            var fieldSrc = BuildFieldCalculator(req, nfw, nfh, token);
+            token.ThrowIfCancellationRequested();
+            var sb = fieldSrc?.SmoothBuffer;
+            if (sb == null || sb.Length < (long)nfw * nfh) return null;
+
+            // Copy — own the field independent of the transient field calc.
+            var outF = new float[nfw * nfh];
+            Array.Copy(sb, outF, outF.Length);
+            fw = nfw; fh = nfh;
+            return outF;
+        }
+
+        /// <summary>#656 — build a dedicated relief-FIELD calculator at an explicit grid
+        /// (decoupled from the output size) matching the request's view + params. Its
+        /// <c>SmoothBuffer</c> is the aspect-correct height field. Mandelbrot uses its own
+        /// calculator twin (it is not an <see cref="IFractalCalculator"/>, only an
+        /// <see cref="IHeightFieldSource"/>); every other supported family routes through
+        /// <see cref="BuildCaptureCalculator(PosterRequest,int,int)"/>. The calculator is
+        /// run here and returned as its height-field source, or null when the type has no
+        /// supersamplable field.</summary>
+        private static IHeightFieldSource? BuildFieldCalculator(PosterRequest req, int fw, int fh, CancellationToken token)
+        {
+            if (req.FractalType == FractalType.Mandelbrot)
+            {
+                var m = new MandelbrotCalculator(fw, fh)
+                {
+                    CenterX = req.CenterX, CenterXLo = req.CenterXLo, CenterX2 = req.CenterX2, CenterX3 = req.CenterX3,
+                    CenterX4 = req.CenterX4, CenterX5 = req.CenterX5, CenterX6 = req.CenterX6, CenterX7 = req.CenterX7,
+                    CenterY = req.CenterY, CenterYLo = req.CenterYLo, CenterY2 = req.CenterY2, CenterY3 = req.CenterY3,
+                    CenterY4 = req.CenterY4, CenterY5 = req.CenterY5, CenterY6 = req.CenterY6, CenterY7 = req.CenterY7,
+                    Zoom = req.Zoom,
+                    MaxIterations = req.MaxIterations,
+                    ColorMap = req.ColorMap,
+                    Quality = req.Quality,
+                    InteriorAlpha = req.FractalParameters.InteriorAlpha,
+                };
+                m.Calculate(token);
+                return m;
+            }
+
+            var alt = BuildCaptureCalculator(req, fw, fh);
+            if (alt == null) return null;
+            alt.Calculate(token);
+            return alt as IHeightFieldSource;
+        }
+
         // In-place brightness/contrast/gamma BGRA post-pass. Same math as
         // FractalRenderHost.UploadProcessedBuffer so poster output matches the
         // interactive image: contrast pivots around mid-grey (127.5), then
@@ -764,8 +878,14 @@ namespace FracturingFog.Imaging
         /// Mirrors the legacy MainForm.BuildAltCalculatorForCapture switch.
         /// </summary>
         public static IFractalCalculator? BuildCaptureCalculator(PosterRequest req)
+            => BuildCaptureCalculator(req, req.Width, req.Height);
+
+        /// <summary>As <see cref="BuildCaptureCalculator(PosterRequest)"/> but at an
+        /// explicit grid size — used by the #656 aspect-correct relief-field recompute
+        /// to build a dedicated FIELD calculator (its <c>SmoothBuffer</c>) at the
+        /// output aspect, decoupled from the albedo/output resolution.</summary>
+        public static IFractalCalculator? BuildCaptureCalculator(PosterRequest req, int w, int h)
         {
-            int w = req.Width, h = req.Height;
             FractalType type = req.FractalType;
 
             IFractalCalculator? c = type switch
