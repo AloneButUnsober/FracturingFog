@@ -766,8 +766,14 @@ public static class HeightfieldRaymarch2D
         // before integration so animated fog stays stable.
         if (froxel && froxelDepth != null)
         {
+            // S12 (#655/#652) — when the HDR beauty plane was captured (an FX tone map /
+            // bloom / view transform is active), compose the froxel fog into it too so
+            // the fog survives the tonemap. Beauty renders fog-FREE, so the fog-free
+            // HdrBeauty would otherwise tonemap without fog; the same populated volume is
+            // composited onto both dst (byte) and HdrBeauty (float) in one Apply call.
             var composited = FroxelCameraVolume.Apply(dst, froxelDepth, w, h, in cam, in froxelFx,
-                froxelHistory, froxelTemporal, p.Relief2DFroxelTemporalFeedback, p.Relief2DFroxelQuality);
+                froxelHistory, froxelTemporal, p.Relief2DFroxelTemporalFeedback, p.Relief2DFroxelQuality,
+                aov?.HdrBeauty);
             Array.Copy(composited, dst, n);
         }
 

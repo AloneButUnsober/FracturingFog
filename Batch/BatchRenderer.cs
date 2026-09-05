@@ -828,10 +828,10 @@ namespace FracturingFog.Batch
             => vt != FracturingFog.Imaging.ViewTransform.None
                && brightness == 0 && contrast == 0
                && reliefFp is { Relief2DEnabled: true, Relief2DRaymarch: true }
-               && !FracturingFog.Imaging.ReliefDenoisePass.Enabled(reliefFp)
-               // Froxel fog composites after the (fog-free) beauty → not in the HDR
-               // beauty; tonemapping it would drop the fog. Keep the 8-bit path then.
-               && !(reliefFp.Relief2DFroxelVolumetrics && reliefFp.Lighting.FogDensity > 0.0);
+               && !FracturingFog.Imaging.ReliefDenoisePass.Enabled(reliefFp);
+               // S12 (#655/#652) — froxel-in-HDR: the froxel post-pass now composites its
+               // volume into the captured HDR beauty too, so froxel fog survives the tonemap
+               // and HDR capture is no longer gated off under froxel.
 
         // S2 (#396) — when a captured relief HDR beauty is supplied, tonemap the
         // true-linear intermediate (FromHdrByteScale) so highlights above 1.0 survive

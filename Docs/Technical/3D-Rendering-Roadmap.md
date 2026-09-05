@@ -1116,7 +1116,7 @@ height AOV**, no new geometry machinery.
   relief gap is separate. Height-source only — colour still comes from the theme.
 - **Fit:** an AOV→height instance of S1; low risk, high novelty payoff.
 
-### S12 — Relief 3D stage-2 post-chain parity ◐ (#652)
+### S12 — Relief 3D stage-2 post-chain parity ● (#652)
 FF's lighting/FX runs in **two stages**. Stage 1 (`ShadingPipeline.Shade<TDe>`) is
 shared by the 3D raymarchers **and** the Relief raymarch, so Relief already gets
 lights, shadows, DE-cone AO, fog + volumetric in-scatter, PBR, glass, reflections,
@@ -1145,9 +1145,16 @@ this is plumbing, not new physics. Analysis doc: `Docs/Technical/Lighting-FX-3D-
      Transform is a secondary look (matches the 3D-calculator order). HDR-capture arm
      (`wantHdr`) broadened to fire on an FX tonemap/bloom too. UI: `ToneMapBloomApplies`
      enables Tone Map / Exposure / Bloom on relief (Lens stays 3D-only pending #2); banner
-     updated. Byte-identical default; +3 tests, suite 2231/2231. **Froxel follow-up:** when
-     froxel is active the HDR beauty is fog-free so the capture is gated off (FX Tone Map a
-     no-op on froxel relief) — the deeper fix composes froxel fog IN HDR (also noted #655).
+     updated. Byte-identical default; +3 tests, suite 2231/2231. **Froxel follow-up —
+     LANDED (PR #667, #655):** froxel renders the beauty fog-free + composites fog as a
+     post-Shade pass, so the captured HDR beauty was fog-free and HDR capture was gated
+     off under froxel (FX Tone Map/Bloom a no-op there). Fix: the froxel post-pass now
+     composites the SAME populated volume into the captured HDR beauty too
+     (`FroxelVolumePass.CompositeWorldDepthHdr`, in place, byte-scale, NaN sky left to the
+     8-bit fallback), so tonemapping the HDR beauty keeps the fog. HDR arming no longer
+     excludes froxel at all three sites (host / poster / batch). The froxel + HDR combo
+     forces the CPU trace (as any HDR capture does; the GPU froxel path stays for the
+     no-HDR case). +4 tests; byte-identical default; probe PASS.
   2. **Lens post** (chromatic aberration / distortion / vignette / anamorphic) — **LANDED
      (PR #664).** A byte-buffer pass (`ApplyLensPost`) needing no AOV, so it runs even
      under froxel.
@@ -1159,10 +1166,22 @@ this is plumbing, not new physics. Analysis doc: `Docs/Technical/Lighting-FX-3D-
      does NOT force the CPU trace (the GPU relief kernel emits it). UI: the gate renamed
      `ReliefStage2Applies` now enables Tone Map / Bloom / Lens / SSAO / Edge on relief.
      +5 tests; suite 2236/2236.
-  5. **Stereo** for Relief — larger; needs per-eye Relief camera orchestration. (Only
-     Stereo + the FX-dialog DoF remain 3D-only now.)
+  5. **Stereo** for Relief — **LANDED (PR #667).** Relief renders through a single
+     oblique camera with no per-eye offset (the 3D true-stereo `RenderTrueStereo` path
+     keys on `ViewState.Is3D`), so — like every other S12 relief pass — it reuses the
+     render it already has: `ReliefScreenSpacePost.ApplyStereo` feeds the fully composited
+     display buffer + the captured depth AOV to `StereoRender.ApplyStereoSideBySide` (the
+     depth-parallax "Fake" warp; relief sky sentinel 1e6 → +Infinity). Both `Fake` and
+     `True` map to the warp on relief. Runs LAST (after tone map / lens / SSAO / edge /
+     view transform / interior composite) since it changes the buffer dims; the doubled
+     Full-SBS (or squeezed Half-SBS) buffer then flows through the overlay + upload tail
+     at the SBS dims, exactly as the 3D true-stereo path uploads its own SBS buffer.
+     Stereo arms the same normal+depth capture SSAO/edge use (`WantsStereo`), which the
+     GPU relief kernel emits (no CPU trace forced). Live + poster wired. +5 tests; byte-
+     identical default; probe PASS.
   6. Flip the UI gate per feature as each lands — done for Tone Map / Bloom / Lens /
-     SSAO / Edge; Stereo pending.
+     SSAO / Edge / Stereo. Only the FX-dialog DoF stays 3D-only (by design — Relief has
+     its own `Relief2DDof*` knobs).
 - **Not in scope — DoF stays parallel:** Relief has its own `Relief2DDof*` knobs on the
   Relief 3D dialog; the FX-dialog DoF remains 3D-only by design.
 - **Reuse:** the HDR beauty AOV (#396), the Relief normal/depth G-buffer (#398), the

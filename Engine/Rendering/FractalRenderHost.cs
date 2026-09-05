@@ -3506,13 +3506,14 @@ namespace FracturingFog.Rendering
                         // beauty, so a guided denoise keeps the 8-bit tonemap. Forces the
                         // CPU trace like any AOV capture; default (no transform) unchanged.
                         bool liveNeutralGrade = ViewState.Brightness == 0 && ViewState.Contrast == 0 && ViewState.Gamma == 0;
-                        // Froxel volumetrics composites fog as a POST-Shade pass on the
-                        // 8-bit buffer, and the beauty renders fog-free (HeightfieldRaymarch2D
-                        // zeroes FogDensity when froxel is on), so the captured HDR beauty
-                        // carries no froxel fog. Tonemapping it would drop the fog entirely —
-                        // so when froxel is active, keep the 8-bit transform on the fully
-                        // composited buffer (headroom yielded; fog preserved).
-                        bool liveFroxel = reliefParams.Relief2DFroxelVolumetrics && reliefParams.Lighting.FogDensity > 0.0;
+                        // S12 (#655/#652) — froxel-in-HDR. Froxel renders the beauty fog-FREE
+                        // and composites the camera-frustum fog as a post-Shade pass; that
+                        // pass now composites the SAME volume into the captured HDR beauty too
+                        // (HeightfieldRaymarch2D → FroxelCameraVolume.Apply(..., aov.HdrBeauty)),
+                        // so tonemapping the HDR beauty keeps the fog. HDR capture is therefore
+                        // no longer gated off under froxel (the froxel + HDR combo forces the
+                        // CPU trace, as any HDR capture does). Sky fog still arrives via the
+                        // 8-bit fallback (NaN sky pixels decode from the byte buffer).
                         // S12.1 (#652) — the FX-dialog Tone Map / Bloom now run on relief
                         // too (over this same HDR beauty). So arm the HDR capture when a
                         // view transform OR an FX tonemap/bloom is active, not just the
@@ -3525,14 +3526,16 @@ namespace FracturingFog.Rendering
                         bool wantHdr = (ViewState.ViewTransform != FracturingFog.Imaging.ViewTransform.None
                                         || liveFxTonemap)
                             && liveNeutralGrade
-                            && !FracturingFog.Imaging.ReliefDenoisePass.Enabled(reliefParams)
-                            && !liveFroxel;
+                            && !FracturingFog.Imaging.ReliefDenoisePass.Enabled(reliefParams);
                         // S12.3/S12.4 (#652) — SSAO + edge ink key on the relief float
                         // normal + depth G-buffer. Capture it whenever either is active
                         // (independent of the HDR gate — geometry needs no headroom and
                         // the GPU relief kernel emits normal+depth, so this alone doesn't
                         // force the CPU trace).
-                        bool liveFxGeom = FracturingFog.Imaging.ReliefScreenSpacePost.WantsGeom(in liveReliefFx);
+                        // S12.5 (#652) — relief stereo (depth-parallax SBS) reads the same
+                        // depth G-buffer, so arm the geom capture when stereo is wanted too.
+                        bool liveFxGeom = FracturingFog.Imaging.ReliefScreenSpacePost.WantsGeom(in liveReliefFx)
+                            || FracturingFog.Imaging.ReliefScreenSpacePost.WantsStereo(in liveReliefFx);
                         // S4 (#389) — capture float AOVs + guided À-Trous denoise
                         // iff on; null keeps the GPU fast path (byte-identical off).
                         // S2 (#396) — the HDR flag ORs an HDR-beauty plane into the same capture.
@@ -3764,6 +3767,32 @@ namespace FracturingFog.Rendering
                     dst, src, w, h, ViewState.FractalParameters,
                     _calculator?.ColorMap?.InSetColor ?? 0xFF000000u,
                     ViewState.AlphaPreview, srcAlreadyProcessed);
+
+            // S12.5 (#652) — relief STEREO (side-by-side). Relief has no per-eye camera
+            // (the 3D true-stereo path keys on ViewState.Is3D), so it reuses the single
+            // composited mono buffer + its captured depth AOV for a depth-parallax warp
+            // (StereoRender's "Fake" path) — the same "reuse the render we already have"
+            // pattern as every other S12 relief pass. Runs LAST, on the fully composited
+            // display buffer (after tone map / lens / SSAO / edge / view transform /
+            // interior alpha), matching StereoRender's "call after ApplyToneMapBloom"
+            // contract. The doubled SBS buffer then flows through the overlay + upload
+            // tail below at the SBS dims — exactly as the 3D true-stereo path uploads its
+            // own composited SBS buffer — so grid / watermark / HUD / present all size to
+            // the wider frame. Skipped for snapshots (srcAlreadyProcessed), which already
+            // carry whatever they need.
+            if (reliefRaymarchApplied && !srcAlreadyProcessed)
+            {
+                var stereoFx = ViewState.FractalParameters.Lighting;
+                var sbs = FracturingFog.Imaging.ReliefScreenSpacePost.ApplyStereo(
+                    dst, reliefPostAov, w, h, in stereoFx, out int stereoW, out int stereoH);
+                if (sbs != null)
+                {
+                    dst = sbs;
+                    w = stereoW;
+                    h = stereoH;
+                    n = w * h;
+                }
+            }
 
             // Snapshot pre-overlay buffer so SaveLastFrameToPng can render a fresh
             // watermark via ImageExport (instead of relying on whatever the on-screen

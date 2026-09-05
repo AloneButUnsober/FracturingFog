@@ -265,12 +265,11 @@ namespace FracturingFog.Imaging
                 // The HDR plane is the PRE-denoise beauty; tonemapping it would drop a
                 // guided denoise, so the HDR headroom path is used only when denoise is
                 // off. Denoise + transform keeps the (denoised) 8-bit tonemap.
-                && !ReliefDenoisePass.Enabled(req.FractalParameters)
-                // Froxel fog composites AFTER the (fog-free) beauty, so the captured HDR
-                // beauty carries no froxel fog — tonemapping it would drop the fog. When
-                // froxel is active, keep the 8-bit transform on the composited buffer.
-                && !(req.FractalParameters.Relief2DFroxelVolumetrics
-                     && req.FractalParameters.Lighting.FogDensity > 0.0);
+                && !ReliefDenoisePass.Enabled(req.FractalParameters);
+                // S12 (#655/#652) — froxel-in-HDR: the froxel post-pass now composites its
+                // volume into the captured HDR beauty too (HeightfieldRaymarch2D →
+                // FroxelCameraVolume.Apply(..., aov.HdrBeauty)), so froxel fog survives the
+                // tonemap and HDR capture is no longer gated off under froxel.
             // S12.3/S12.4 (#652) — SSAO + edge ink key on the relief normal + depth
             // G-buffer (always allocated on any capture; the GPU kernel emits it, so it
             // doesn't force the CPU trace). Capture whenever either is active, even if
@@ -279,7 +278,10 @@ namespace FracturingFog.Imaging
             if (req.FractalParameters is { Relief2DEnabled: true, Relief2DRaymarch: true })
             {
                 var geomFx = req.FractalParameters.Lighting;
-                wantGeom = ReliefScreenSpacePost.WantsGeom(in geomFx);
+                // S12.5 (#652) — relief stereo (depth-parallax SBS) reads the same depth
+                // G-buffer, so arm the geom capture when stereo is wanted too.
+                wantGeom = ReliefScreenSpacePost.WantsGeom(in geomFx)
+                    || ReliefScreenSpacePost.WantsStereo(in geomFx);
             }
             var hdrAov = (wantHdr || wantGeom)
                 ? new FracturingFog.Rendering.Lighting.HeightfieldRaymarch2D.ReliefAovBuffers(
@@ -360,6 +362,17 @@ namespace FracturingFog.Imaging
                     buffer, buffer, w, h, req.FractalParameters,
                     req.ColorMap?.InSetColor ?? 0xFF000000u,
                     alphaPreview: false, srcAlreadyProcessed: false);
+
+            // S12.5 (#652) — relief STEREO (depth-parallax side-by-side), matching the
+            // live path (FractalRenderHost). Runs LAST, on the fully composited display
+            // buffer, and doubles the poster dims (Full-SBS) or keeps them (Half-SBS).
+            if (req.FractalParameters is { Relief2DEnabled: true, Relief2DRaymarch: true })
+            {
+                var stereoFx = req.FractalParameters.Lighting;
+                var sbs = ReliefScreenSpacePost.ApplyStereo(buffer, hdrAov, w, h, in stereoFx,
+                    out int stereoW, out int stereoH);
+                if (sbs != null) { buffer = sbs; w = stereoW; h = stereoH; }
+            }
 
             return WritePoster(req, buffer, w, h, sw.ElapsedMilliseconds);
         }
