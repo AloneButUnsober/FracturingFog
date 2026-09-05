@@ -19,9 +19,12 @@
 //   * S12.2: Lens post (chromatic aberration / distortion / vignette / anamorphic).
 //   * S12.3: Edge ink (ApplyEdgeInk over the normal + depth G-buffer).
 //   * S12.4: SSAO (ApplySsao over the depth G-buffer).
+//   * S12.5: Stereo (StereoRender depth-parallax SBS over the depth G-buffer).
 //
 // The global S2 ViewTransform still runs AFTER this on the (now display-referred)
-// 8-bit buffer, exactly as it stacks on a 3D calculator's buffer.
+// 8-bit buffer, exactly as it stacks on a 3D calculator's buffer. Stereo (S12.5)
+// is the sole exception — it runs LAST of all (after the view transform + interior
+// composite, on the finished display buffer) since it changes the buffer dims.
 
 using System;
 
@@ -111,6 +114,51 @@ public static class ReliefScreenSpacePost
     /// this does not force the CPU trace on its own).</summary>
     public static bool WantsGeom(in LightingFxData fx)
         => fx.SsaoSamples > 0 || fx.EdgeStrength > 0.0;
+
+    /// <summary>True when relief stereo output is wanted (any stereo mode + a positive
+    /// eye separation). Relief has no per-eye camera (the 3D true-stereo path keys on
+    /// ViewState.Is3D), so both Fake and True map to the depth-parallax warp in
+    /// <see cref="ApplyStereo"/>, which reads the captured depth G-buffer — so stereo
+    /// arms the same normal + depth capture SSAO / edge do (GPU-emitted, no CPU
+    /// trace forced).</summary>
+    public static bool WantsStereo(in LightingFxData fx)
+        => fx.StereoMode != StereoMode.Off && fx.StereoEyeSeparation > 0.0;
+
+    /// <summary>Relief STEREO (roadmap S12.5, #652). Synthesize a side-by-side buffer
+    /// from the fully composited display-referred relief buffer <paramref name="dst"/>
+    /// + the captured depth AOV, via <see cref="StereoRender.ApplyStereoSideBySide"/>
+    /// (the depth-parallax "Fake" path). Relief renders through a single oblique camera
+    /// with no per-eye offset, so — like every other S12 relief pass — this reuses the
+    /// render it already has plus a captured AOV rather than re-rendering per eye.
+    /// Returns the doubled-width Full-SBS (or squeezed Half-SBS) buffer with its dims
+    /// in <paramref name="outW"/> / <paramref name="outH"/>, or <c>null</c> when stereo
+    /// is off / no depth was captured (the caller keeps the mono buffer). Must run LAST,
+    /// on the finished display buffer (matching StereoRender's "call after
+    /// ApplyToneMapBloom" contract), because it changes the buffer dimensions.</summary>
+    public static uint[]? ApplyStereo(
+        uint[] dst,
+        HeightfieldRaymarch2D.ReliefAovBuffers? aov,
+        int w, int h,
+        in LightingFxData fx,
+        out int outW, out int outH)
+    {
+        outW = w; outH = h;
+        if (dst == null) return null;
+        int n = w * h;
+        if (n <= 0 || dst.Length < n) return null;
+        if (!WantsStereo(in fx)) return null;
+
+        float[]? depth = aov?.Depth;
+        if (depth == null || depth.Length < n) return null;
+
+        // The warp detects sky as +Infinity; relief's depth uses a large finite
+        // sentinel, so remap it once (same convention as the SSAO / edge path).
+        float[] d = DepthForPost(depth, n);
+        uint[]? sbs = StereoRender.ApplyStereoSideBySide(dst, d, w, h, in fx);
+        if (sbs == null) return null;
+        (outW, outH) = StereoRender.OutputDims(w, h, fx.StereoLayout);
+        return sbs;
+    }
 
     private static float[] DepthForPost(float[] reliefDepth, int n)
     {

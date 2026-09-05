@@ -341,10 +341,11 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
 
     /// <summary>S12 (#652) — the stage-2 post passes now wired onto Relief 3D run on
     /// BOTH a true 3D raymarcher and a Relief 3D raymarch context: Tone Map / Exposure
-    /// / Bloom (S12.1, over the captured HDR beauty), Lens (S12.2), SSAO (S12.4) and
-    /// Edge ink (S12.3, over the relief normal + depth G-buffer). Only Stereo and the
-    /// FX-dialog DoF stay 3D-fractal only (<see cref="Stage2PostFxApplies"/>) — Stereo
-    /// needs per-eye relief camera orchestration; Relief has its own DoF knobs.</summary>
+    /// / Bloom (S12.1, over the captured HDR beauty), Lens (S12.2), SSAO (S12.4),
+    /// Edge ink (S12.3, over the relief normal + depth G-buffer) and Stereo (S12.5,
+    /// depth-parallax SBS over the depth G-buffer). Only the FX-dialog DoF stays
+    /// 3D-fractal only (<see cref="Stage2PostFxApplies"/>) — Relief has its own DoF
+    /// knobs on the Relief 3D dialog.</summary>
     public bool ReliefStage2Applies => IsAny3DRaymarcher || IsReliefLightingContext;
 
     /// <summary>Visibility flag for the 2D interior-alpha section (issue #96,

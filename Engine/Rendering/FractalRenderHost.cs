@@ -3532,7 +3532,10 @@ namespace FracturingFog.Rendering
                         // (independent of the HDR gate — geometry needs no headroom and
                         // the GPU relief kernel emits normal+depth, so this alone doesn't
                         // force the CPU trace).
-                        bool liveFxGeom = FracturingFog.Imaging.ReliefScreenSpacePost.WantsGeom(in liveReliefFx);
+                        // S12.5 (#652) — relief stereo (depth-parallax SBS) reads the same
+                        // depth G-buffer, so arm the geom capture when stereo is wanted too.
+                        bool liveFxGeom = FracturingFog.Imaging.ReliefScreenSpacePost.WantsGeom(in liveReliefFx)
+                            || FracturingFog.Imaging.ReliefScreenSpacePost.WantsStereo(in liveReliefFx);
                         // S4 (#389) — capture float AOVs + guided À-Trous denoise
                         // iff on; null keeps the GPU fast path (byte-identical off).
                         // S2 (#396) — the HDR flag ORs an HDR-beauty plane into the same capture.
@@ -3764,6 +3767,32 @@ namespace FracturingFog.Rendering
                     dst, src, w, h, ViewState.FractalParameters,
                     _calculator?.ColorMap?.InSetColor ?? 0xFF000000u,
                     ViewState.AlphaPreview, srcAlreadyProcessed);
+
+            // S12.5 (#652) — relief STEREO (side-by-side). Relief has no per-eye camera
+            // (the 3D true-stereo path keys on ViewState.Is3D), so it reuses the single
+            // composited mono buffer + its captured depth AOV for a depth-parallax warp
+            // (StereoRender's "Fake" path) — the same "reuse the render we already have"
+            // pattern as every other S12 relief pass. Runs LAST, on the fully composited
+            // display buffer (after tone map / lens / SSAO / edge / view transform /
+            // interior alpha), matching StereoRender's "call after ApplyToneMapBloom"
+            // contract. The doubled SBS buffer then flows through the overlay + upload
+            // tail below at the SBS dims — exactly as the 3D true-stereo path uploads its
+            // own composited SBS buffer — so grid / watermark / HUD / present all size to
+            // the wider frame. Skipped for snapshots (srcAlreadyProcessed), which already
+            // carry whatever they need.
+            if (reliefRaymarchApplied && !srcAlreadyProcessed)
+            {
+                var stereoFx = ViewState.FractalParameters.Lighting;
+                var sbs = FracturingFog.Imaging.ReliefScreenSpacePost.ApplyStereo(
+                    dst, reliefPostAov, w, h, in stereoFx, out int stereoW, out int stereoH);
+                if (sbs != null)
+                {
+                    dst = sbs;
+                    w = stereoW;
+                    h = stereoH;
+                    n = w * h;
+                }
+            }
 
             // Snapshot pre-overlay buffer so SaveLastFrameToPng can render a fresh
             // watermark via ImageExport (instead of relying on whatever the on-screen

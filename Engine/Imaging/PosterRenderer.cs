@@ -279,7 +279,10 @@ namespace FracturingFog.Imaging
             if (req.FractalParameters is { Relief2DEnabled: true, Relief2DRaymarch: true })
             {
                 var geomFx = req.FractalParameters.Lighting;
-                wantGeom = ReliefScreenSpacePost.WantsGeom(in geomFx);
+                // S12.5 (#652) — relief stereo (depth-parallax SBS) reads the same depth
+                // G-buffer, so arm the geom capture when stereo is wanted too.
+                wantGeom = ReliefScreenSpacePost.WantsGeom(in geomFx)
+                    || ReliefScreenSpacePost.WantsStereo(in geomFx);
             }
             var hdrAov = (wantHdr || wantGeom)
                 ? new FracturingFog.Rendering.Lighting.HeightfieldRaymarch2D.ReliefAovBuffers(
@@ -360,6 +363,17 @@ namespace FracturingFog.Imaging
                     buffer, buffer, w, h, req.FractalParameters,
                     req.ColorMap?.InSetColor ?? 0xFF000000u,
                     alphaPreview: false, srcAlreadyProcessed: false);
+
+            // S12.5 (#652) — relief STEREO (depth-parallax side-by-side), matching the
+            // live path (FractalRenderHost). Runs LAST, on the fully composited display
+            // buffer, and doubles the poster dims (Full-SBS) or keeps them (Half-SBS).
+            if (req.FractalParameters is { Relief2DEnabled: true, Relief2DRaymarch: true })
+            {
+                var stereoFx = req.FractalParameters.Lighting;
+                var sbs = ReliefScreenSpacePost.ApplyStereo(buffer, hdrAov, w, h, in stereoFx,
+                    out int stereoW, out int stereoH);
+                if (sbs != null) { buffer = sbs; w = stereoW; h = stereoH; }
+            }
 
             return WritePoster(req, buffer, w, h, sw.ElapsedMilliseconds);
         }

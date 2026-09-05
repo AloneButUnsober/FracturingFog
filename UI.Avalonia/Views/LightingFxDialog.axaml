@@ -52,15 +52,15 @@
 
                 <!-- Relief 3D context banner. Relief shares stage-1 per-hit shading
                      (lights / shadow / AO / fog / volumetrics / material / reflections)
-                     runs Tone Map / Exposure / Bloom / Lens / SSAO / Edge ink (S12.1-4, #652) over
-                     its HDR beauty + normal/depth G-buffer; only Stereo / DoF stay
-                     3D-fractal only and disabled below. #FFCC00 = colorblind-safe
-                     advisory. See Docs/Technical/Lighting-FX-3D-vs-Relief3D.md. -->
+                     runs Tone Map / Exposure / Bloom / Lens / SSAO / Edge ink / Stereo
+                     (S12.1-5, #652) over its HDR beauty + normal/depth G-buffer; only
+                     this dialog's DoF stays 3D-fractal only and disabled below. #FFCC00 =
+                     colorblind-safe advisory. See Docs/Technical/Lighting-FX-3D-vs-Relief3D.md. -->
                 <Border IsVisible="{Binding IsReliefLightingContext}"
                         Background="#33FFCC00" BorderBrush="#FFCC00" BorderThickness="1"
                         CornerRadius="3" Padding="8" Margin="0,0,0,6">
                     <TextBlock TextWrapping="Wrap" Foreground="#FFCC00"
-                               Text="Relief 3D: lights, shadows, AO, fog and volumetrics below all apply — and Tone Map, Exposure, Bloom, Lens, SSAO and Edge ink now apply too (over the relief HDR beauty + G-buffer). Still 3D-fractal only, disabled here: Stereo and this dialog's DoF. The FX Tone Map and the View ▸ View Transform stack (Tone Map maps HDR to display; View Transform is a look on top); for Relief depth-of-field, use the Relief 3D dialog's own aperture / focus." />
+                               Text="Relief 3D: lights, shadows, AO, fog and volumetrics below all apply — and Tone Map, Exposure, Bloom, Lens, SSAO, Edge ink and Stereo now apply too (over the relief HDR beauty + G-buffer; Stereo uses the depth-parallax warp). Still 3D-fractal only, disabled here: this dialog's DoF. The FX Tone Map and the View ▸ View Transform stack (Tone Map maps HDR to display; View Transform is a look on top); for Relief depth-of-field, use the Relief 3D dialog's own aperture / focus." />
                 </Border>
 
                 <!-- #306 — volumetric preset droplist (artistic starting points) -->
@@ -778,8 +778,10 @@
                         </Grid>
 
                         <!-- Edge ink now runs on Relief 3D too (S12.3, #652, over the relief
-                             normal+depth G-buffer). Stereo + DoF stay 3D-fractal only
-                             (Relief has its own Relief2DDof* knobs). Reflection above IS shared. -->
+                             normal+depth G-buffer). Stereo also runs on Relief (S12.5, #652,
+                             depth-parallax warp over the depth G-buffer). Only this dialog's
+                             DoF stays 3D-fractal only (Relief has its own Relief2DDof* knobs).
+                             Reflection above IS shared. -->
                         <TextBlock Grid.Row="3" Grid.Column="0" Text="Edge contour:" VerticalAlignment="Center"
                                    IsEnabled="{Binding ReliefStage2Applies}"
                                    ToolTip.Tip="Sobel-on-normal ink overlay. 0 = off." />
@@ -820,27 +822,27 @@
                                  Margin="0,2" />
 
                         <TextBlock Grid.Row="7" Grid.Column="0" Text="Stereo mode:" VerticalAlignment="Center"
-                                   IsEnabled="{Binding Stage2PostFxApplies}"
-                                   ToolTip.Tip="Off = mono. Fake = single render + depth-parallax warp (cheap). True = two real per-eye renders (Phase 20b — 2x cost, real parallax on close objects). 3D-fractal only — not wired for Relief 3D." />
+                                   IsEnabled="{Binding ReliefStage2Applies}"
+                                   ToolTip.Tip="Off = mono. Fake = single render + depth-parallax warp (cheap). True = two real per-eye renders (3D fractals only — 2x cost, real parallax on close objects). On Relief 3D both Fake and True use the depth-parallax warp (Relief has one oblique camera, no per-eye render)." />
                         <ComboBox Grid.Row="7" Grid.Column="1" HorizontalAlignment="Stretch"
-                                  IsEnabled="{Binding Stage2PostFxApplies}"
+                                  IsEnabled="{Binding ReliefStage2Applies}"
                                   ItemsSource="{Binding StereoModes}"
                                   SelectedItem="{Binding StereoMode, Mode=TwoWay}"
                                   Margin="0,2" />
 
                         <TextBlock Grid.Row="8" Grid.Column="0" Text="Stereo eye sep:" VerticalAlignment="Center"
-                                   IsEnabled="{Binding Stage2PostFxApplies}"
+                                   IsEnabled="{Binding ReliefStage2Applies}"
                                    ToolTip.Tip="Side-by-side stereo IPD in world units. 0 = mono. Doubles output width." />
                         <NumericUpDown Grid.Row="8" Grid.Column="1"
-                                       IsEnabled="{Binding Stage2PostFxApplies}"
+                                       IsEnabled="{Binding ReliefStage2Applies}"
                                        Minimum="0" Maximum="0.25" Increment="0.005" FormatString="F4"
                                        Value="{Binding StereoEyeSeparation, Mode=TwoWay}" Margin="0,2" />
 
                         <TextBlock Grid.Row="9" Grid.Column="0" Text="Stereo FOV°:" VerticalAlignment="Center"
-                                   IsEnabled="{Binding Stage2PostFxApplies}"
+                                   IsEnabled="{Binding ReliefStage2Applies}"
                                    ToolTip.Tip="Per-eye horizontal field-of-view in degrees. Default 60°. Used only when eye-sep > 0." />
                         <Grid Grid.Row="9" Grid.Column="1" ColumnDefinitions="*,Auto" Margin="0,2"
-                              IsEnabled="{Binding Stage2PostFxApplies}">
+                              IsEnabled="{Binding ReliefStage2Applies}">
                             <Slider Classes="knob" Grid.Column="0" Minimum="20" Maximum="120"
                                     IsSnapToTickEnabled="True" TickFrequency="1"
                                     Value="{Binding StereoFovDegrees, Mode=TwoWay}" />
@@ -849,10 +851,10 @@
                         </Grid>
 
                         <TextBlock Grid.Row="10" Grid.Column="0" Text="Stereo convergence:" VerticalAlignment="Center"
-                                   IsEnabled="{Binding Stage2PostFxApplies}"
+                                   IsEnabled="{Binding ReliefStage2Applies}"
                                    ToolTip.Tip="Zero-parallax plane via horizontal image translation, as a fraction of eye width. 0 = parallel (whole scene behind the screen). Positive = pull the subject toward the screen plane so nearer detail floats in front. Typical +/-0.05." />
                         <Grid Grid.Row="10" Grid.Column="1" ColumnDefinitions="*,Auto" Margin="0,2"
-                              IsEnabled="{Binding Stage2PostFxApplies}">
+                              IsEnabled="{Binding ReliefStage2Applies}">
                             <Slider Classes="knob" Grid.Column="0" Minimum="-0.2" Maximum="0.2"
                                     Value="{Binding StereoConvergence, Mode=TwoWay}" />
                             <TextBlock Classes="knobValue" Grid.Column="1"
@@ -860,10 +862,10 @@
                         </Grid>
 
                         <TextBlock Grid.Row="11" Grid.Column="0" Text="Max disparity:" VerticalAlignment="Center"
-                                   IsEnabled="{Binding Stage2PostFxApplies}"
+                                   IsEnabled="{Binding ReliefStage2Applies}"
                                    ToolTip.Tip="Parallax comfort guard — largest on-screen eye-to-eye disparity, as a fraction of width. Caps the Fake-warp shift so near hits stay fusable (no divergence / eye strain). Default 0.03 (1/30 rule). 0 = off." />
                         <Grid Grid.Row="11" Grid.Column="1" ColumnDefinitions="*,Auto" Margin="0,2"
-                              IsEnabled="{Binding Stage2PostFxApplies}">
+                              IsEnabled="{Binding ReliefStage2Applies}">
                             <Slider Classes="knob" Grid.Column="0" Minimum="0" Maximum="0.15"
                                     Value="{Binding StereoMaxDisparity, Mode=TwoWay}" />
                             <TextBlock Classes="knobValue" Grid.Column="1"
@@ -907,10 +909,10 @@
                                   Content="physically-based lens (real bokeh)" Margin="0,2" />
 
                         <TextBlock Grid.Row="16" Grid.Column="0" Text="Stereo layout:" VerticalAlignment="Center"
-                                   IsEnabled="{Binding Stage2PostFxApplies}"
+                                   IsEnabled="{Binding ReliefStage2Applies}"
                                    ToolTip.Tip="FullSbs = each eye full width (2W x H). HalfSbs = each eye squeezed to W/2 (W x H, anamorphic) — mono dimensions, smaller files; the 3D TV / VR player un-squeezes per eye. Used only when Stereo mode is on." />
                         <ComboBox Grid.Row="16" Grid.Column="1" HorizontalAlignment="Stretch"
-                                  IsEnabled="{Binding Stage2PostFxApplies}"
+                                  IsEnabled="{Binding ReliefStage2Applies}"
                                   ItemsSource="{Binding StereoLayouts}"
                                   SelectedItem="{Binding StereoLayout, Mode=TwoWay}"
                                   Margin="0,2" />

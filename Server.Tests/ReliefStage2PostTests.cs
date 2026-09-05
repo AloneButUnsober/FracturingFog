@@ -141,4 +141,93 @@ public sealed class ReliefStage2PostTests
         var lens = LightingFxData.CreateDefault(); lens.ChromaticAberration = 3;
         Assert.True(ReliefScreenSpacePost.WantsLens(in lens));
     }
+
+    // ── S12.5: Stereo on Relief (depth-parallax SBS over the depth G-buffer) ──
+
+    [Fact]
+    public void WantsStereo_Predicate()
+    {
+        var off = LightingFxData.CreateDefault();
+        Assert.False(ReliefScreenSpacePost.WantsStereo(in off));
+
+        // Mode set but zero separation → still off (no parallax).
+        var noSep = LightingFxData.CreateDefault();
+        noSep.StereoMode = StereoMode.Fake; noSep.StereoEyeSeparation = 0.0;
+        Assert.False(ReliefScreenSpacePost.WantsStereo(in noSep));
+
+        var fake = LightingFxData.CreateDefault();
+        fake.StereoMode = StereoMode.Fake; fake.StereoEyeSeparation = 0.05;
+        Assert.True(ReliefScreenSpacePost.WantsStereo(in fake));
+
+        // Relief has no per-eye camera, so True also routes through the warp → wanted.
+        var tru = LightingFxData.CreateDefault();
+        tru.StereoMode = StereoMode.True; tru.StereoEyeSeparation = 0.05;
+        Assert.True(ReliefScreenSpacePost.WantsStereo(in tru));
+    }
+
+    [Fact]
+    public void Stereo_FullSbs_DoublesWidth_And_Warps_From_Depth()
+    {
+        var (dst, aov, w, h) = RenderRelief();
+
+        var fx = LightingFxData.CreateDefault();
+        fx.StereoMode = StereoMode.Fake;
+        fx.StereoEyeSeparation = 0.06;
+        fx.StereoLayout = StereoLayout.FullSbs;
+
+        var sbs = ReliefScreenSpacePost.ApplyStereo(dst, aov, w, h, in fx, out int oW, out int oH);
+
+        Assert.NotNull(sbs);
+        Assert.Equal(w * 2, oW);
+        Assert.Equal(h, oH);
+        Assert.Equal(oW * oH, sbs!.Length);
+        // Left eye = the original mono buffer, unchanged.
+        for (int y = 0; y < h; y++)
+            for (int x = 0; x < w; x++)
+                Assert.Equal(dst[y * w + x], sbs[y * oW + x]);
+        // Right eye = the parallax warp — must differ from a straight copy of the
+        // left eye somewhere (near hits shift, sky stays put).
+        bool anyShift = false;
+        for (int y = 0; y < h && !anyShift; y++)
+            for (int x = 0; x < w; x++)
+                if (sbs[y * oW + w + x] != dst[y * w + x]) { anyShift = true; break; }
+        Assert.True(anyShift, "right eye must show parallax vs the left/mono view");
+    }
+
+    [Fact]
+    public void Stereo_HalfSbs_KeepsMonoDims()
+    {
+        var (dst, aov, w, h) = RenderRelief();
+
+        var fx = LightingFxData.CreateDefault();
+        fx.StereoMode = StereoMode.Fake;
+        fx.StereoEyeSeparation = 0.06;
+        fx.StereoLayout = StereoLayout.HalfSbs;
+
+        var sbs = ReliefScreenSpacePost.ApplyStereo(dst, aov, w, h, in fx, out int oW, out int oH);
+
+        Assert.NotNull(sbs);
+        Assert.Equal(w, oW);   // anamorphic squeeze → mono dims
+        Assert.Equal(h, oH);
+        Assert.Equal(oW * oH, sbs!.Length);
+    }
+
+    [Fact]
+    public void Stereo_Off_ReturnsNull()
+    {
+        var (dst, aov, w, h) = RenderRelief();
+        var fx = LightingFxData.CreateDefault(); // StereoMode.Off
+        Assert.Null(ReliefScreenSpacePost.ApplyStereo(dst, aov, w, h, in fx, out _, out _));
+    }
+
+    [Fact]
+    public void Stereo_NoDepthCapture_ReturnsNull()
+    {
+        var (dst, _, w, h) = RenderRelief();
+        var fx = LightingFxData.CreateDefault();
+        fx.StereoMode = StereoMode.Fake;
+        fx.StereoEyeSeparation = 0.06;
+        // No AOV → no depth → the warp has no parallax source, so stereo is skipped.
+        Assert.Null(ReliefScreenSpacePost.ApplyStereo(dst, null, w, h, in fx, out _, out _));
+    }
 }
