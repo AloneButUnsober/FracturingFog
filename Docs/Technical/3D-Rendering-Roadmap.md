@@ -1145,9 +1145,16 @@ this is plumbing, not new physics. Analysis doc: `Docs/Technical/Lighting-FX-3D-
      Transform is a secondary look (matches the 3D-calculator order). HDR-capture arm
      (`wantHdr`) broadened to fire on an FX tonemap/bloom too. UI: `ToneMapBloomApplies`
      enables Tone Map / Exposure / Bloom on relief (Lens stays 3D-only pending #2); banner
-     updated. Byte-identical default; +3 tests, suite 2231/2231. **Froxel follow-up:** when
-     froxel is active the HDR beauty is fog-free so the capture is gated off (FX Tone Map a
-     no-op on froxel relief) — the deeper fix composes froxel fog IN HDR (also noted #655).
+     updated. Byte-identical default; +3 tests, suite 2231/2231. **Froxel follow-up —
+     LANDED (PR #667, #655):** froxel renders the beauty fog-free + composites fog as a
+     post-Shade pass, so the captured HDR beauty was fog-free and HDR capture was gated
+     off under froxel (FX Tone Map/Bloom a no-op there). Fix: the froxel post-pass now
+     composites the SAME populated volume into the captured HDR beauty too
+     (`FroxelVolumePass.CompositeWorldDepthHdr`, in place, byte-scale, NaN sky left to the
+     8-bit fallback), so tonemapping the HDR beauty keeps the fog. HDR arming no longer
+     excludes froxel at all three sites (host / poster / batch). The froxel + HDR combo
+     forces the CPU trace (as any HDR capture does; the GPU froxel path stays for the
+     no-HDR case). +4 tests; byte-identical default; probe PASS.
   2. **Lens post** (chromatic aberration / distortion / vignette / anamorphic) — **LANDED
      (PR #664).** A byte-buffer pass (`ApplyLensPost`) needing no AOV, so it runs even
      under froxel.

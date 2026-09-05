@@ -145,7 +145,8 @@ public static class FroxelCameraVolume
     /// → byte-identical.</summary>
     public static uint[] Apply(uint[] beauty, float[] worldDepth, int w, int h,
         in HeightfieldRaymarch2D.ReliefCamera cam, in LightingFxData fx,
-        FroxelHistory? history, bool temporal, double feedback, FroxelQuality quality)
+        FroxelHistory? history, bool temporal, double feedback, FroxelQuality quality,
+        float[]? hdrBeauty = null)
     {
         var grid = BuildGrid(in cam, quality);
         var pass = new FroxelVolumePass(grid);
@@ -153,6 +154,12 @@ public static class FroxelCameraVolume
             pass.Populate(BuildMedium(in cam, in fx), history, feedback, FroxelHistory.GridKey(grid));
         else
             pass.Populate(BuildMedium(in cam, in fx));
+        // S12 (#655/#652) — when a float HDR beauty plane is captured, composite the
+        // SAME populated volume onto it too (in place) so an FX tone map / bloom / view
+        // transform tonemaps fog-ful highlights instead of the fog-free beauty. Built
+        // once, composited to both byte + HDR. Null → the byte-only path (unchanged).
+        if (hdrBeauty != null)
+            pass.CompositeWorldDepthHdr(hdrBeauty, worldDepth, w, h);
         return pass.CompositeWorldDepth(beauty, worldDepth, w, h);
     }
 }

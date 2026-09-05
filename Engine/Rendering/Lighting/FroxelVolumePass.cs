@@ -338,6 +338,45 @@ public sealed class FroxelVolumePass
         return outBuf;
     }
 
+    /// <summary>Roadmap S12 (#655/#652) — composite the populated volume onto a
+    /// float HDR beauty plane (byte-scale linear, 3f/px, r,g,b — the S2 #396
+    /// <c>ReliefAovBuffers.HdrBeauty</c> contract) IN PLACE, by per-pixel world depth,
+    /// using the SAME transmittance + in-scatter the 8-bit <see cref="CompositeWorldDepth"/>
+    /// applies (<c>out = beauty·tr + inscatter·255</c>) so the fog reads identically to
+    /// the byte path for in-range values and extends above 255 for HDR. NaN (sky / ray
+    /// miss) pixels are LEFT UNTOUCHED: the HDR view transform decodes those from the
+    /// 8-bit fallback (which already carries the byte-composited froxel fog), so sky fog
+    /// comes through that path — never double-applied here.</summary>
+    public void CompositeWorldDepthHdr(float[] hdr, float[] worldDepth, int w, int h)
+    {
+        if (!_populated) throw new InvalidOperationException("FroxelVolumePass: Populate() must run before CompositeWorldDepthHdr().");
+        if (hdr == null) throw new ArgumentNullException(nameof(hdr));
+        if (worldDepth == null) throw new ArgumentNullException(nameof(worldDepth));
+        long n = (long)w * h;
+        if (hdr.Length < n * 3 || worldDepth.Length < n)
+            throw new ArgumentException("Froxel HDR composite: buffer smaller than width*height(*3).");
+
+        double maxSlice = _nz - 1;
+        for (int y = 0; y < h; y++)
+        {
+            int cy = (int)((y + 0.5) / h * _ny);
+            for (int x = 0; x < w; x++)
+            {
+                int idx = y * w + x;
+                int j = idx * 3;
+                // Sky / ray-miss (NaN sentinel) → leave for the 8-bit fallback path.
+                if (float.IsNaN(hdr[j])) continue;
+                int cx = (int)((x + 0.5) / w * _nx);
+                double slice = _grid.DepthToSlice(worldDepth[idx]);
+                if (slice > maxSlice) slice = maxSlice;
+                var (ir, ig, ib, tr) = SampleColumn(cx, cy, slice);
+                hdr[j]     = (float)(hdr[j]     * tr + ir * 255.0);
+                hdr[j + 1] = (float)(hdr[j + 1] * tr + ig * 255.0);
+                hdr[j + 2] = (float)(hdr[j + 2] * tr + ib * 255.0);
+            }
+        }
+    }
+
     // Normalized Henyey-Greenstein phase (g=0 → 1), matching the per-surface march.
     private static double HgPhase(double g, double cosT)
     {

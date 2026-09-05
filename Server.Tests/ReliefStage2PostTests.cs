@@ -230,4 +230,49 @@ public sealed class ReliefStage2PostTests
         // No AOV → no depth → the warp has no parallax source, so stereo is skipped.
         Assert.Null(ReliefScreenSpacePost.ApplyStereo(dst, null, w, h, in fx, out _, out _));
     }
+
+    // ── S12 froxel-in-HDR (#655/#652): froxel fog composites into the HDR beauty ──
+
+    // Render the relief scene with a captured HDR beauty plane, optionally with froxel
+    // volumetrics + fog active. Returns the HDR beauty (byte-scale, 3f/px, NaN = sky).
+    private static (float[] hdr, int w, int h) RenderReliefHdr(bool froxel)
+    {
+        int w = 160, h = 120;
+        var (albedo, height) = Mandelbrot(w, h);
+        var p = Relief();
+        var fx = LightingFxData.CreateDefault();
+        fx.FogDensity = 0.7;         // the froxel medium density
+        fx.Light1.Intensity = 1.2;   // give the fog something to in-scatter
+        p.Lighting = fx;
+        if (froxel) p.Relief2DFroxelVolumetrics = true;
+
+        var dst = new uint[w * h];
+        var aov = new HeightfieldRaymarch2D.ReliefAovBuffers(w, h, false, false, captureHdr: true);
+        HeightfieldRaymarch2D.Render(albedo, height, w, h, w, h, p, dst, out double hitFrac, null, aov);
+        Assert.True(hitFrac > 0.05 && hitFrac < 0.95, $"need a mixed hit/sky frame (hitFrac={hitFrac})");
+        Assert.NotNull(aov.HdrBeauty);
+        return (aov.HdrBeauty!, w, h);
+    }
+
+    [Fact]
+    public void FroxelInHdr_FogReaches_HdrBeauty_On_Terrain()
+    {
+        var (off, w, h) = RenderReliefHdr(froxel: false);
+        var (on, _, _) = RenderReliefHdr(froxel: true);
+
+        // Count terrain pixels (non-NaN in BOTH captures) whose HDR beauty the froxel
+        // fog changed. Sky (NaN) is left to the 8-bit fallback, so it's excluded here.
+        int terrain = 0, changed = 0;
+        for (int i = 0; i < w * h; i++)
+        {
+            int j = i * 3;
+            if (float.IsNaN(off[j]) || float.IsNaN(on[j])) continue;
+            terrain++;
+            if (off[j] != on[j] || off[j + 1] != on[j + 1] || off[j + 2] != on[j + 2]) changed++;
+        }
+        Assert.True(terrain > 0, "need terrain pixels captured in the HDR beauty");
+        // Fog must reach most of the terrain (before #655 it reached NONE of the HDR beauty).
+        Assert.True(changed > terrain / 2,
+            $"froxel fog should change most terrain HDR pixels ({changed}/{terrain})");
+    }
 }

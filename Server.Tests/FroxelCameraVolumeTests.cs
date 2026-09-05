@@ -209,6 +209,110 @@ namespace FracturingFog.Server.Tests
             Assert.Equal((int)LightType.Spot, m.Lights[2].Type);
         }
 
+        // ── S12 froxel-in-HDR (#655/#652): compose the fog into the float HDR beauty ──
+
+        [Fact]
+        public void CompositeWorldDepthHdr_MatchesByteComposite_ForInRangeValues()
+        {
+            // The HDR composite uses the SAME arithmetic as the byte path
+            // (out = beauty·tr + inscatter·255). So a float HDR plane seeded with the
+            // exact byte channel values must land within rounding of the byte result.
+            var grid = new FroxelGrid(4, 4, 24, near: 1.0, far: 20.0);
+            var pass = new FroxelVolumePass(grid);
+            pass.Populate(new FroxelMedium
+            {
+                BaseDensity = 0.4, Extinction = 1.0, WorldExtent = 1.0,
+                ViewDx = 0, ViewDy = 0, ViewDz = 1, Anisotropy = 0.0,
+                Lights = new[] { WhiteDir(1.0) },
+            });
+
+            int w = 3, h = 1;
+            var beauty = new uint[] { 0xFF406080u, 0xFF406080u, 0xFF406080u };
+            var depth = new float[] { 3.0f, 9.0f, 18.0f };
+            var byteOut = pass.CompositeWorldDepth(beauty, depth, w, h);
+
+            var hdr = new float[w * h * 3];
+            for (int i = 0; i < w * h; i++)
+            {
+                uint p = beauty[i];
+                hdr[i * 3]     = (p >> 16) & 0xFF;   // r = 0x40
+                hdr[i * 3 + 1] = (p >> 8) & 0xFF;    // g = 0x60
+                hdr[i * 3 + 2] = p & 0xFF;           // b = 0x80
+            }
+            pass.CompositeWorldDepthHdr(hdr, depth, w, h);
+
+            for (int i = 0; i < w * h; i++)
+            {
+                int br = (int)((byteOut[i] >> 16) & 0xFF);
+                int bg = (int)((byteOut[i] >> 8) & 0xFF);
+                int bb = (int)(byteOut[i] & 0xFF);
+                // Byte path clamps to [0,255] + rounds; HDR is unclamped float → within 1.
+                Assert.True(System.Math.Abs(hdr[i * 3]     - br) <= 1.0f, $"r px{i}: hdr {hdr[i*3]} vs byte {br}");
+                Assert.True(System.Math.Abs(hdr[i * 3 + 1] - bg) <= 1.0f, $"g px{i}: hdr {hdr[i*3+1]} vs byte {bg}");
+                Assert.True(System.Math.Abs(hdr[i * 3 + 2] - bb) <= 1.0f, $"b px{i}: hdr {hdr[i*3+2]} vs byte {bb}");
+            }
+        }
+
+        [Fact]
+        public void CompositeWorldDepthHdr_LeavesNaNSkyUntouched()
+        {
+            // Sky / ray-miss pixels are NaN in the HDR plane; the HDR composite must NOT
+            // touch them (the view transform decodes them from the fog-carrying 8-bit
+            // fallback instead), so they stay NaN.
+            var grid = new FroxelGrid(4, 4, 16, near: 1.0, far: 10.0);
+            var pass = new FroxelVolumePass(grid);
+            pass.Populate(new FroxelMedium
+            {
+                BaseDensity = 0.6, Extinction = 1.0, WorldExtent = 1.0,
+                Lights = new[] { WhiteDir(1.0) },
+            });
+
+            int w = 2, h = 1;
+            var hdr = new float[w * h * 3];
+            // px0 = terrain (64,64,64); px1 = sky (NaN).
+            hdr[0] = 64; hdr[1] = 64; hdr[2] = 64;
+            hdr[3] = float.NaN; hdr[4] = float.NaN; hdr[5] = float.NaN;
+            var depth = new float[] { 5.0f, 1e6f };
+
+            pass.CompositeWorldDepthHdr(hdr, depth, w, h);
+
+            Assert.False(float.IsNaN(hdr[0]), "terrain pixel should be composited");
+            Assert.NotEqual(64f, hdr[0]);
+            Assert.True(float.IsNaN(hdr[3]) && float.IsNaN(hdr[4]) && float.IsNaN(hdr[5]),
+                "sky pixel must stay NaN (handled by the 8-bit fallback)");
+        }
+
+        [Fact]
+        public void Apply_WithHdr_ComposesByteAndHdrTogether()
+        {
+            var p = ReliefParams();
+            var cam = HeightfieldRaymarch2D.BuildObliqueCamera(320, 240, 320.0 / 240, sy: 0.35, maxH: 1.0, p);
+            var fx = LightingFxData.CreateDefault();
+            fx.FogDensity = 0.6;
+            fx.Light1.Intensity = 1.0;
+
+            int w = 8, h = 8;
+            var beauty = new uint[w * h];
+            var depth = new float[w * h];
+            var hdr = new float[w * h * 3];
+            for (int i = 0; i < w * h; i++)
+            {
+                beauty[i] = 0xFF404040u;
+                depth[i] = 3.0f;
+                hdr[i * 3] = 64; hdr[i * 3 + 1] = 64; hdr[i * 3 + 2] = 64;
+            }
+            var hdrBefore = (float[])hdr.Clone();
+
+            var outb = FroxelCameraVolume.Apply(beauty, depth, w, h, in cam, in fx,
+                null, false, 0.0, FroxelQuality.Balanced, hdr);
+
+            bool byteChanged = false, hdrChanged = false;
+            for (int i = 0; i < w * h; i++) if (outb[i] != beauty[i]) { byteChanged = true; break; }
+            for (int i = 0; i < hdr.Length; i++) if (hdr[i] != hdrBefore[i]) { hdrChanged = true; break; }
+            Assert.True(byteChanged, "byte beauty should get fog");
+            Assert.True(hdrChanged, "HDR beauty should get fog in the same Apply call");
+        }
+
         private static FractalParameters ReliefParams() => new()
         {
             Relief2DEnabled = true,
