@@ -2274,6 +2274,13 @@ namespace FracturingFog.Rendering
                             // per-hit FX (AO/SSAO/reflections/volumetric) dropped,
                             // cheap depth cues kept identical to the final frame.
                             var prp = FracturingFog.Rendering.Lighting.HeightfieldRaymarch2D.MakePreviewParams(rp);
+                            // S11 (#592) — honour the height source in the preview too, so a
+                            // trap-relief scene doesn't pop from smooth (preview) to trap
+                            // (settle). The preview MandelbrotCalculator ran the same theme,
+                            // so its TrapBuffer is filled when an orbit-trap theme is active.
+                            phs = FracturingFog.Rendering.Lighting.ReliefHeightField.Build(
+                                phs, (preview as MandelbrotCalculator)?.TrapBuffer, pn,
+                                rp.Relief2DHeightSource, rp.Relief2DHeightBlend);
                             if (_reliefPreviewScratch == null || _reliefPreviewScratch.Length < pn)
                                 _reliefPreviewScratch = new uint[pn];
                             if (prp.Relief2DRaymarch)
@@ -2432,8 +2439,14 @@ namespace FracturingFog.Rendering
                         // cases — all of which fall back to the display-res
                         // SmoothBuffer below.
                         var rp = ViewState.FractalParameters;
+                        // S11 (#592) — the orbit-trap height source reads the calc's
+                        // display-res TrapBuffer (filled by the active orbit-trap theme),
+                        // which the hi-res field twin does not yet recompute, so a trap /
+                        // blend source uses the display-res field. Hi-res trap is a
+                        // follow-up; smooth still gets the hi-res floor.
+                        bool smoothSource = rp.Relief2DHeightSource == FracturingFog.ReliefHeightSource.Smooth;
                         if (rp.Relief2DEnabled && rp.Relief2DRaymarch
-                            && rp.Relief2DHiResField
+                            && rp.Relief2DHiResField && smoothSource
                             && TryCaptureHiResReliefField(ViewState.FractalType, rp, hw, hh, token))
                         {
                             // _reliefHeight / _reliefW / _reliefH / _reliefValid
@@ -2444,7 +2457,15 @@ namespace FracturingFog.Rendering
                             int hn = hw * hh;
                             if (_reliefHeight == null || _reliefHeight.Length < hn)
                                 _reliefHeight = new float[hn];
-                            Array.Copy(srcH, _reliefHeight, Math.Min(srcH.Length, hn));
+                            // S11 (#592) — build the height field from the chosen source
+                            // (smooth / orbit-trap min-distance / blend). Trap = the
+                            // Mandelbrot calc's TrapBuffer (empty for non-Mandelbrot or a
+                            // non-orbit theme → smooth fallback inside Build).
+                            float[]? trap = useAlt ? null : (calc as MandelbrotCalculator)?.TrapBuffer;
+                            var eff = FracturingFog.Rendering.Lighting.ReliefHeightField.Build(
+                                srcH, trap, Math.Min(srcH.Length, hn),
+                                rp.Relief2DHeightSource, rp.Relief2DHeightBlend);
+                            Array.Copy(eff, _reliefHeight, Math.Min(eff.Length, hn));
                             _reliefW = hw; _reliefH = hh; _reliefValid = true;
                         }
                     }

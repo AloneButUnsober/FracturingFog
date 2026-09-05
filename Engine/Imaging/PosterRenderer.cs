@@ -615,15 +615,25 @@ namespace FracturingFog.Imaging
                 // (fw,fh) are decoupled from the output size — HeightDe samples by
                 // normalised coords.
                 float[]? field; int fw, fh;
-                if (hiResField != null && hiResW > 2 && hiResH > 2
+                // S11 (#592) — the orbit-trap height source reads the calc's display-res
+                // TrapBuffer, which the hi-res field does not carry, so a trap / blend
+                // source uses the display-res smooth+trap field (hi-res trap is a
+                // follow-up). Smooth still prefers the hi-res field for WYSIWYG.
+                bool trapSource = p.Relief2DHeightSource != ReliefHeightSource.Smooth;
+                if (!trapSource && hiResField != null && hiResW > 2 && hiResH > 2
                     && hiResField.Length >= hiResW * hiResH)
                 {
                     field = hiResField; fw = hiResW; fh = hiResH;
                 }
                 else
                 {
-                    field = heightSource?.SmoothBuffer; fw = w; fh = h;
-                    if (field == null || field.Length < fw * fh) return buffer;
+                    var smooth = heightSource?.SmoothBuffer; fw = w; fh = h;
+                    if (smooth == null || smooth.Length < fw * fh) return buffer;
+                    // Trap = the Mandelbrot calc's TrapBuffer (null for non-Mandelbrot or
+                    // a non-orbit theme → Build returns smooth unchanged).
+                    float[]? trap = trapSource ? (heightSource as MandelbrotCalculator)?.TrapBuffer : null;
+                    field = FracturingFog.Rendering.Lighting.ReliefHeightField.Build(
+                        smooth, trap, fw * fh, p.Relief2DHeightSource, p.Relief2DHeightBlend);
                 }
 
                 // #185 (slice D) — bake the active theme ramp so the export's

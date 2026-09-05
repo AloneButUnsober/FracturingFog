@@ -624,6 +624,22 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
     }
     public Array Relief2DHeightCurves => Enum.GetValues(typeof(FracturingFog.HeightCurve2D));
 
+    // S11 (#592) — relief height SOURCE: smooth iteration count / orbit-trap
+    // min-distance / blend. Trap / Blend need an orbit-trap theme active.
+    public FracturingFog.ReliefHeightSource Relief2DHeightSource
+    {
+        get => _p.Relief2DHeightSource;
+        set { if (_p.Relief2DHeightSource == value) return; _p.Relief2DHeightSource = value; this.RaisePropertyChanged(); this.RaisePropertyChanged(nameof(Relief2DHeightBlendApplies)); Fire(); }
+    }
+    public Array Relief2DHeightSources => Enum.GetValues(typeof(FracturingFog.ReliefHeightSource));
+    /// <summary>The blend weight only bites for the Blend source.</summary>
+    public bool Relief2DHeightBlendApplies => _p.Relief2DHeightSource == FracturingFog.ReliefHeightSource.Blend;
+    public double Relief2DHeightBlend
+    {
+        get => _p.Relief2DHeightBlend;
+        set { double v = Clamp(value, 0.0, 1.0); if (_p.Relief2DHeightBlend == v) return; _p.Relief2DHeightBlend = v; this.RaisePropertyChanged(); Fire(); }
+    }
+
     // #520 — far-detail (tighter distance cone → distant filaments stay tall).
     public double Relief2DFarDetail
     {

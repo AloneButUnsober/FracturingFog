@@ -14,6 +14,16 @@ namespace FracturingFog
     /// (heaviest compression); <see cref="Linear"/> is the un-tamed original.</summary>
     public enum HeightCurve2D { Linear, Sqrt, Log }
 
+    /// <summary>Which per-pixel scalar field drives the 2D relief height (roadmap
+    /// S11, #592). <see cref="Smooth"/> (default) = the smooth iteration count, the
+    /// original relief source. <see cref="Trap"/> = the orbit-trap min-distance field
+    /// (<c>MandelbrotCalculator.TrapBuffer</c>, populated when an orbit-trap theme is
+    /// active) — literal 3D orbit-trap topography (Ring → concentric ridges, Hexagon →
+    /// a hex lattice). <see cref="Blend"/> = a lerp of the two by
+    /// <c>Relief2DHeightBlend</c>. Trap / Blend need an orbit-trap theme active; with
+    /// none the trap field is empty and relief falls back to Smooth.</summary>
+    public enum ReliefHeightSource { Smooth, Trap, Blend }
+
     /// <summary>Tile shape for the RandomTile (Bourke random space-filling)
     /// calculator. All shapes are inscribed in the placement circumradius and
     /// carry the same radial-dome relief; only the paint mask differs.</summary>
