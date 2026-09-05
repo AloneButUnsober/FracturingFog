@@ -8,9 +8,10 @@ Arnold, the Frostbite/Hillaire volumetrics line), and — just as important — 
 Status legend: ☐ not started · ◐ in progress (a first tranche has shipped with
 tests — see each slice) · ☑ slice fully closed. A slice is marked ☑ only when it is
 *entirely* done; every S1–S9 slice already has merged, tested work landed but stays
-◐ because deeper GPU / full-fidelity tails remain. **S1–S9 are all underway; S10 is
-deferred (not started); S11 (orbit-trap height, #592) is fully closed (●, incl. the
-hi-res trap tail); S12 (relief stage-2 parity, #652) is fully closed (●).**
+◐ because deeper GPU / full-fidelity tails remain. **S1–S9 are all underway; S10
+(PaletteBuilder, #392) is now underway (◐) — S10.1 perceptual core landed; S11
+(orbit-trap height, #592) is fully closed (●, incl. the hi-res trap tail); S12 (relief
+stage-2 parity, #652) is fully closed (●).**
 
 Parent tracking issue: **#389**. Each slice below is (or becomes) its own issue;
 this doc is the canonical design and the issues are the canonical task list —
@@ -1069,9 +1070,10 @@ Sub-items (ranked fit × payoff):
 - **Boundary:** auto-repair *to guarantee manifold on export* is in-lane; a mesh
   repair/sculpt *workbench* is not (see §4).
 
-### S10 — PaletteBuilder as a perceptual, colorblind-first color assistant ☐ DEFERRED (#392)
-**Deferred** — parked until the S1–S9 render/export axes mature; independent
-art-idiom axis, picked up later. The home of FF's **art idiom**. Making FF *great* —
+### S10 — PaletteBuilder as a perceptual, colorblind-first color assistant ◐ (#392)
+**Underway** (was deferred until the S1–S9 axes matured). **S10.1 perceptual core
+LANDED (PR #670)** — see [PaletteBuilder-Design.md](PaletteBuilder-Design.md) §4. The
+home of FF's **art idiom**. Making FF *great* —
 not just deep-zooming — means
 making PaletteBuilder a genuinely great color assistant: perceptual, **colorblind-
 first**, fractal-aware, advisory. Full design in

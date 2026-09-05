@@ -63,7 +63,7 @@ ramps flow into the render.
 
 ## 4. Slices
 
-### S10.1 — Perceptual core ☐
+### S10.1 — Perceptual core ◐ (LANDED — PR #670)
 Author, interpolate and measure ΔE in **OKLCH / OkLab**, not sRGB; emit
 perceptually-even ramps to the render. Ship the **viridis / cividis** family
 (cividis is CVD-optimized) and a generator for uniform, CVD-safe ramps. The
@@ -71,6 +71,16 @@ viridis lesson from scientific viz: perceptually-uniform + monotonic-luminance
 ramps are simply better.
 - **Reuse:** existing OkLab extraction math.
 - **Contract:** sRGB↔OkLab↔OKLCH round-trips get epsilon-stable tests.
+- **Landed:** `Engine/Imaging/PerceptualRamp.cs` — OkLab ⇄ OKLCH, OkLab ΔE
+  (`DeltaEOk`), perceptually-even multi-stop sampling (`SampleOkLab`, interpolates IN
+  OkLab), the viridis / cividis built-ins (`Viridis`/`Cividis`, sampled in OkLab), a
+  luminance-monotonic (CVD-safe) ramp generator (`UniformLuminanceRamp`), and `Emit`
+  (N sRGB stops → the render). Placed in Engine (not the PaletteBuilder-only extraction
+  lib) so perceptually-even ramps reach the render **and** the headless tests. Shipped
+  the **Cividis** render theme (`CividisColorMap`, registered in `ColorPalette.BuiltIns`)
+  — the colourblind-first sibling of Viridis. +8 `PerceptualRampTests` (round-trips,
+  ΔE, monotonic luminance, endpoints). UI + the remaining slices (S10.2 CVD suite next)
+  build on this core.
 
 ### S10.2 — CVD-first suite ☐ (the differentiator)
 - **Live CVD simulation** — deutan / protan / tritan / monochromacy, side-by-side,
