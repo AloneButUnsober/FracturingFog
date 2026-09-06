@@ -1071,8 +1071,11 @@ Sub-items (ranked fit × payoff):
   repair/sculpt *workbench* is not (see §4).
 
 ### S10 — PaletteBuilder as a perceptual, colorblind-first color assistant ◐ (#392)
-**Underway** (was deferred until the S1–S9 axes matured). **S10.1 perceptual core
-LANDED (PR #670)** — see [PaletteBuilder-Design.md](PaletteBuilder-Design.md) §4. The
+**Underway** (was deferred until the S1–S9 axes matured). **Analysis cores all LANDED**
+— S10.1 perceptual (PR #670), S10.2 CVD suite (#671), S10.3 fractal-aware preview (#673),
+S10.4 harmony/generation (#674), S10.5 extraction upgrades (#676), S10.6 advisor (#675) —
+see [PaletteBuilder-Design.md](PaletteBuilder-Design.md) §4. Remaining: S10.7–S10.10 3D
+items + the deferred UI surfacing of all cores. The
 home of FF's **art idiom**. Making FF *great* —
 not just deep-zooming — means
 making PaletteBuilder a genuinely great color assistant: perceptual, **colorblind-
