@@ -792,6 +792,59 @@
                                 </ScrollViewer>
                             </Grid>
                         </TabItem>
+                        <TabItem Header="Looks" FontSize="14">
+                            <!-- Roadmap S10.10 (#392) — scene "looks": a ramp paired with
+                                 a material preset + palette-drawn key/sky tints, saved as
+                                 one unit. A look derived from the current palette, then the
+                                 built-in catalog. (Apply-to-render is a later host-wiring
+                                 slice; this surfaces the looks for now.) -->
+                            <ScrollViewer HorizontalScrollBarVisibility="Disabled"
+                                          VerticalScrollBarVisibility="Auto">
+                                <ItemsControl ItemsSource="{Binding Looks}">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate>
+                                            <Border Margin="0,0,0,8" Padding="8,6" CornerRadius="4"
+                                                    Background="#1A1A1A"
+                                                    BorderBrush="#3C3C3C" BorderThickness="1">
+                                                <StackPanel Orientation="Vertical" Spacing="4">
+                                                    <TextBlock Text="{Binding Name}"
+                                                               Foreground="#DCDCA0" FontWeight="Bold" />
+                                                    <ItemsControl ItemsSource="{Binding Ramp}" Height="24">
+                                                        <ItemsControl.ItemsPanel>
+                                                            <ItemsPanelTemplate><StackPanel Orientation="Horizontal" /></ItemsPanelTemplate>
+                                                        </ItemsControl.ItemsPanel>
+                                                        <ItemsControl.ItemTemplate>
+                                                            <DataTemplate>
+                                                                <Border Width="30" Height="24" Background="{Binding}"
+                                                                        BorderBrush="#3C3C3C" BorderThickness="1" />
+                                                            </DataTemplate>
+                                                        </ItemsControl.ItemTemplate>
+                                                    </ItemsControl>
+                                                    <StackPanel Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
+                                                        <TextBlock Text="{Binding MaterialText}"
+                                                                   Foreground="#B4B4B4" VerticalAlignment="Center" FontSize="11" />
+                                                        <TextBlock Text="key" Foreground="#B4B4B4"
+                                                                   VerticalAlignment="Center" FontSize="11" />
+                                                        <Border Width="18" Height="18" Background="{Binding KeyBrush}"
+                                                                BorderBrush="#3C3C3C" BorderThickness="1" />
+                                                        <TextBlock Text="sky" Foreground="#B4B4B4"
+                                                                   VerticalAlignment="Center" FontSize="11" />
+                                                        <Border Width="18" Height="18" Background="{Binding SkyBrush}"
+                                                                BorderBrush="#3C3C3C" BorderThickness="1" />
+                                                        <TextBlock Text="glow" Foreground="#B4B4B4"
+                                                                   VerticalAlignment="Center" FontSize="11"
+                                                                   IsVisible="{Binding HasEmission}" />
+                                                        <Border Width="18" Height="18" Background="{Binding EmissionBrush}"
+                                                                BorderBrush="#3C3C3C" BorderThickness="1"
+                                                                IsVisible="{Binding HasEmission}" />
+                                                    </StackPanel>
+                                                </StackPanel>
+                                            </Border>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                            </ScrollViewer>
+                        </TabItem>
                     </TabControl>
                     <!--<TextBlock Grid.Row="1" Grid.Column="0" Classes="label"
                     Text="Method:" Margin="0,2,4,0" HorizontalAlignment="Right"/>
