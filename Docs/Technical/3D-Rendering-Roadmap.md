@@ -9,7 +9,8 @@ Status legend: ☐ not started · ◐ in progress (a first tranche has shipped w
 tests — see each slice) · ☑ slice fully closed. A slice is marked ☑ only when it is
 *entirely* done; every S1–S9 slice already has merged, tested work landed but stays
 ◐ because deeper GPU / full-fidelity tails remain. **S1–S9 are all underway; S10
-(PaletteBuilder, #392) is now underway (◐) — S10.1 perceptual core landed; S11
+(PaletteBuilder, #392) is underway (◐) — all ten analysis + generation cores landed,
+only the deferred UI surfacing remains; S11
 (orbit-trap height, #592) is fully closed (●, incl. the hi-res trap tail); S12 (relief
 stage-2 parity, #652) is fully closed (●).**
 
@@ -1076,8 +1077,10 @@ Sub-items (ranked fit × payoff):
 S10.4 harmony/generation (#674), S10.5 extraction upgrades (#676), S10.6 advisor (#675),
 S10.7 shaded-gamut preview (#677),
 S10.8 fog/volumetric palette preview (#678),
-S10.9 relief=luminance-is-form (#679) — see [PaletteBuilder-Design.md](PaletteBuilder-Design.md)
-§4. Remaining: S10.10 ("looks") + the deferred UI surfacing of all cores. The
+S10.9 relief=luminance-is-form (#679),
+S10.10 "looks"/scene-colour-scripts (#680) — see [PaletteBuilder-Design.md](PaletteBuilder-Design.md)
+§4. **All ten S10 analysis + generation cores are now landed**; the only remaining S10
+work is the deferred UI surfacing of the cores in the PaletteBuilder shell. The
 home of FF's **art idiom**. Making FF *great* —
 not just deep-zooming — means
 making PaletteBuilder a genuinely great color assistant: perceptual, **colorblind-
