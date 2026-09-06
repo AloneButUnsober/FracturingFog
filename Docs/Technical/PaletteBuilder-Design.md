@@ -398,7 +398,12 @@ That turns the big rock from "inject a render engine" into "expose a `float[] t`
     service is present) adopts the look's ramp (the LW.4a path) *and* writes its material +
     lights. Emission is omitted — `LightingFxData` has no emission field (the Look's
     `EmissionTint` stays the S5 forward-hook).
-  - **LW.4c (remaining) — save / recall custom looks.** *Independent of LW.1.*
+  - **LW.4c — save / recall custom looks. LANDED (PR #704).** `LookStore` (UI.Avalonia)
+    persists user looks to `palette-looks.json` under `AppDataPaths.Root` (via a primitive
+    DTO — Look's colour tuples don't round-trip through `System.Text.Json`). The Looks tab
+    gains a name box + **"Save current as look"** (`SaveLookCommand` → `SceneLooks.FromRamp`
+    over the current palette → store); saved looks list above the catalog with a **Delete**
+    button (`DeleteLookCommand`, gated on `LookRowVm.CanDelete`). *Independent of LW.1.*
 - **LW.5 (#691) — perceptual k-means as an extraction method. LANDED (PR #700).**
   `PerceptualKMeansExtractor : IPaletteExtractor` (in `Imaging/PaletteExtraction/`) wraps
   `PaletteExtractionCore.KMeansOkLab` — clusters the sampled image pixels in **OkLab**
@@ -416,6 +421,13 @@ That turns the big rock from "inject a render engine" into "expose a `float[] t`
 Recommended order: **LW.1 → LW.2, LW.3**; **LW.5, LW.6, LW.4** any time (LW.5 is the
 quickest standalone win). Boundary unchanged (design §6): still a colour assistant — LW.4
 writes a *material preset + light tints*, not a material node graph.
+
+**Live-host-wiring track COMPLETE** (PRs #697, #699, #698, #700, #702, #701, #703, #704).
+With it, **S10 is fully delivered**: ten analysis + generation cores, six per-core UI
+surfaces, and the live-render integration (view-param provider, on-fractal palette + CVD
+preview, histogram redistribute, perceptual k-means extraction, cosine editor, apply
+generated ramp / look to palette + render, save/recall looks). Remaining nice-to-haves are
+minor tails noted per slice (Bézier control-colour editing; emission when S5 lands).
 
 ## 6. Non-goals (not a worse Photoshop)
 

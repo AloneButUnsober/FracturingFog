@@ -836,7 +836,15 @@
                                  one unit. A look derived from the current palette, then the
                                  built-in catalog. "Apply to render" (S10-LW.4b, #695) adopts
                                  the ramp + writes material/lights into the live render. -->
-                            <ScrollViewer HorizontalScrollBarVisibility="Disabled"
+                            <Grid RowDefinitions="Auto,*">
+                              <StackPanel Grid.Row="0" Orientation="Horizontal" Spacing="6" Margin="0,0,0,8">
+                                <TextBox PlaceholderText="Name this look…" Width="200"
+                                         Text="{Binding SaveLookName}" />
+                                <Button Content="Save current as look" Padding="8,2"
+                                        Command="{Binding SaveLookCommand}"
+                                        ToolTip.Tip="Derive a look from the current palette and save it" />
+                              </StackPanel>
+                              <ScrollViewer Grid.Row="1" HorizontalScrollBarVisibility="Disabled"
                                           VerticalScrollBarVisibility="Auto">
                                 <ItemsControl ItemsSource="{Binding Looks}">
                                     <ItemsControl.ItemTemplate>
@@ -845,15 +853,21 @@
                                                     Background="#1A1A1A"
                                                     BorderBrush="#3C3C3C" BorderThickness="1">
                                                 <StackPanel Orientation="Vertical" Spacing="4">
-                                                    <Grid ColumnDefinitions="*,Auto">
+                                                    <Grid ColumnDefinitions="*,Auto,Auto">
                                                         <TextBlock Grid.Column="0" Text="{Binding Name}"
                                                                    Foreground="#DCDCA0" FontWeight="Bold"
                                                                    VerticalAlignment="Center" />
                                                         <Button Grid.Column="1" Content="Apply to render" Padding="8,2"
+                                                                Margin="0,0,6,0"
                                                                 Command="{Binding #Root.((ffvm:ImagePaletteViewModel)DataContext).ApplyLookCommand}"
                                                                 CommandParameter="{Binding}"
                                                                 IsVisible="{Binding #Root.((ffvm:ImagePaletteViewModel)DataContext).HasLookApply}"
                                                                 ToolTip.Tip="Adopt this look's ramp + write its material and lights to the live render" />
+                                                        <Button Grid.Column="2" Content="Delete" Padding="8,2"
+                                                                Command="{Binding #Root.((ffvm:ImagePaletteViewModel)DataContext).DeleteLookCommand}"
+                                                                CommandParameter="{Binding}"
+                                                                IsVisible="{Binding CanDelete}"
+                                                                ToolTip.Tip="Delete this saved look" />
                                                     </Grid>
                                                     <ItemsControl ItemsSource="{Binding Ramp}" Height="24">
                                                         <ItemsControl.ItemsPanel>
@@ -889,7 +903,8 @@
                                         </DataTemplate>
                                     </ItemsControl.ItemTemplate>
                                 </ItemsControl>
-                            </ScrollViewer>
+                              </ScrollViewer>
+                            </Grid>
                         </TabItem>
                         <TabItem Header="Live Fractal" FontSize="14">
                             <!-- Roadmap S10-LW.3 (#392/#694) — the palette live on the real

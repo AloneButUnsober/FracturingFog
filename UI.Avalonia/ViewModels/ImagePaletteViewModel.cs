@@ -27,6 +27,7 @@ using Avalonia.Media;
 using Avalonia.Media.Imaging;
 using Avalonia.Platform;
 using FracturingFog.Imaging;
+using FracturingFog.UI.Avalonia.Services;
 using ReactiveUI;
 
 namespace FracturingFog.UI.Avalonia.ViewModels;
@@ -57,6 +58,8 @@ public class ImagePaletteViewModel : ViewModelBase
         UseCosineRampCommand = ReactiveCommand.Create(() => UseBrushesAsPalette("Cosine rainbow", CosineRamp));
         UseBezierRampCommand = ReactiveCommand.Create(() => UseBrushesAsPalette("Bezier (palette)", BezierPaletteRamp));
         ApplyLookCommand = ReactiveCommand.Create<LookRowVm>(ApplyLook);
+        SaveLookCommand = ReactiveCommand.Create(SaveCurrentAsLook);
+        DeleteLookCommand = ReactiveCommand.Create<LookRowVm>(DeleteSavedLook);
     }
 
     // ── Image state ────────────────────────────────────────────────────
@@ -620,6 +623,47 @@ public class ImagePaletteViewModel : ViewModelBase
             row.Source.Lighting.KeyTint, row.Source.Lighting.SkyTint);
     }
 
+    // ── Save / recall custom looks (roadmap S10-LW.4c, #392/#695) ──
+
+    private LookStore? _lookStore;
+    private LookStore LookStore => _lookStore ??= new LookStore();
+
+    private string _saveLookName = "";
+    /// <summary>Name for the "save current palette as a look" action.</summary>
+    public string SaveLookName
+    {
+        get => _saveLookName;
+        set => this.RaiseAndSetIfChanged(ref _saveLookName, value);
+    }
+
+    /// <summary>Derive a look from the current palette and persist it under
+    /// <see cref="SaveLookName"/> (roadmap S10-LW.4c).</summary>
+    public ReactiveCommand<Unit, Unit> SaveLookCommand { get; }
+
+    /// <summary>Delete a saved custom look.</summary>
+    public ReactiveCommand<LookRowVm, Unit> DeleteLookCommand { get; }
+
+    private void SaveCurrentAsLook()
+    {
+        var eff = _selectedResult?.EffectiveStops;
+        string name = (_saveLookName ?? "").Trim();
+        if (eff is not { Count: >= 2 } || name.Length == 0) return;
+
+        var stops = new List<(byte r, byte g, byte b)>(eff.Count);
+        foreach (var s in eff) stops.Add((s.R, s.G, s.B));
+        LookStore.Save(SceneLooks.FromRamp(name, stops));
+        SaveLookName = "";
+        RecomputeLooks();
+        StatusMessage = $"Saved look: {name}.";
+    }
+
+    private void DeleteSavedLook(LookRowVm row)
+    {
+        if (row is null || !row.CanDelete) return;
+        LookStore.Delete(row.Name);
+        RecomputeLooks();
+    }
+
     private void RecomputeLooks()
     {
         Looks.Clear();
@@ -632,6 +676,10 @@ public class ImagePaletteViewModel : ViewModelBase
             foreach (var s in eff) stops.Add((s.R, s.G, s.B));
             Looks.Add(new LookRowVm(SceneLooks.FromRamp("From this palette", stops)));
         }
+
+        // Saved custom looks (deletable), then the built-in catalog.
+        foreach (var look in LookStore.Load())
+            Looks.Add(new LookRowVm(look, canDelete: true));
 
         foreach (var look in SceneLooks.Catalog)
             Looks.Add(new LookRowVm(look));
@@ -1518,9 +1566,10 @@ public sealed class LabeledImage
 /// brushes.</summary>
 public sealed class LookRowVm
 {
-    public LookRowVm(Look look)
+    public LookRowVm(Look look, bool canDelete = false)
     {
         Source = look;
+        CanDelete = canDelete;
         Name = look.Name;
         var ramp = new ISolidColorBrush[look.Ramp.Count];
         for (int i = 0; i < look.Ramp.Count; i++)
@@ -1541,6 +1590,9 @@ public sealed class LookRowVm
     /// <summary>The underlying look — carried so the apply path can read its material +
     /// lights (roadmap S10-LW.4b).</summary>
     public Look Source { get; }
+    /// <summary>True for a user-saved look (shows a Delete affordance); false for the
+    /// derived "From this palette" row and the built-in catalog.</summary>
+    public bool CanDelete { get; }
     public string Name { get; }
     public IReadOnlyList<ISolidColorBrush> Ramp { get; }
     public string MaterialText { get; }
