@@ -238,11 +238,31 @@ luminance-lock that helps colorblind readers.
   **Remaining:** show the relief preview + the flatten warning in the PaletteBuilder UI
   (with the other S10 UI tails).
 
-### S10.10 — "Looks" (scene color scripts) ☐
+### S10.10 — "Looks" (scene color scripts) ◐ (core LANDED — PR #680)
 Pair a ramp with **material presets** (gold = warm ramp + low roughness + metallic)
 and key-light / sky tint, saved as one unit — a scene color script. The on-brand
 way the palette tool reaches into 3D **without becoming a material editor**.
 Forward-hook: drives emission / transmission color when roadmap **S5** lands.
+- **Landed (core):** `Engine/Imaging/SceneLooks.cs` — a `Look` record (name + ramp +
+  `LookMaterial` {roughness, metallic} + `LookLighting` {key tint, sky tint} + nullable
+  `EmissionTint` / `TransmissionTint` reserved for **S5**) is a tiny descriptor, *not* a
+  node graph (design §6). `SceneLooks.FromRamp(name, stops)` composes a coherent look
+  from any ramp: mean OKLCH chroma → material (high chroma → metallic + glossy, like gold
+  / copper; flat / desaturated → rough dielectric, like stone / ash), and the lights are
+  DRAWN FROM THE PALETTE — key = the ramp's brightest stop, sky = its darkest — so they
+  stay on-brand. `Recolor(look, newStops)` re-skins a look with a new ramp while keeping
+  its material identity (re-deriving only the palette-drawn lights). A built-in `Catalog`
+  ships six hand-authored looks (Gold, Copper, Ice, Ember [authored emission], Jade,
+  Obsidian). Reuses `PerceptualRamp` (OKLCH); pure + deterministic. +7 `SceneLooksTests`.
+  **Remaining:** surface the look picker + save/recall + apply-to-render (write material /
+  `LightingFxData`) in the PaletteBuilder UI (with the other S10 UI tails).
+
+**S10 analysis + generation cores COMPLETE (all `Engine/Imaging/`, all tested):**
+PerceptualRamp (S10.1) · CvdAnalysis (S10.2) · PaletteHistogram (S10.3) · ColorHarmony
+(S10.4) · PaletteExtractionCore (S10.5) · ColorAdvisor (S10.6) · ShadedGamut (S10.7) ·
+FogPalettePreview (S10.8) · ReliefLegibility (S10.9) · SceneLooks (S10.10). The only S10
+work left is the **UI pass** — surfacing every core in the PaletteBuilder shell (deferred
+throughout S10 per the "leave UI to the end" call).
 
 ## 6. Non-goals (not a worse Photoshop)
 
