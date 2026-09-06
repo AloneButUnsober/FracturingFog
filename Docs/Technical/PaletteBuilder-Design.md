@@ -125,11 +125,19 @@ ramps are simply better.
   +5 `PaletteHistogramTests`. **Remaining:** wire it live on the real fractal preview
   (feed the view's per-pixel t; the "redistribute?" + cycle preview UI) — the UI slice.
 
-### S10.4 — Harmony + generation in perceptual space ☐
+### S10.4 — Harmony + generation in perceptual space ◐ (core LANDED — PR #674)
 Adobe-Color harmony rules (complementary / triadic / analogous / split) computed
 in **OKLCH**; an **IQ cosine-palette** editor (`a+b·cos(2π(c·t+d))`, matches the
 ColorGen idiom) with live coefficients; **chroma.js**-style bezier-through-Lab +
 lightness correction for high-quality ramps.
+- **Landed (core):** `Engine/Imaging/ColorHarmony.cs` — `ColorHarmony` (OKLCH hue
+  rotation keeping L+C; `Harmony` sets: complementary / triadic / analogous /
+  split-complementary / tetradic, base first), `CosinePalette` (IQ `a+b·cos(2π(c·t+d))`
+  per channel + `Rainbow` default + `Emit`), and `BezierRamp` (De Casteljau **in OkLab**
+  through control colours, optional **lightness correction** that re-times the curve so
+  OkLab lightness rises evenly / monotonically end-to-end). +6 `ColorHarmonyTests`.
+  **Remaining:** the live-coefficient editors + harmony picker UI (the PaletteBuilder UI
+  slice, deferred with the other S10 UI tails).
 
 ### S10.5 — Extraction upgrades ☐
 Perceptual **k-means in OkLab**; extract an *ordered ramp* (by lightness), not just
