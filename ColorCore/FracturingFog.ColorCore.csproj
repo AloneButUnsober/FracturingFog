@@ -1,0 +1,32 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <!--
+      Shared perceptual-colour core (roadmap S10 / PaletteBuilder-Design.md, #392).
+      A tiny, UI-free, platform-free leaf library holding the pure colour math the
+      S10 slices produced: OkLab / OKLCH conversions, ΔE, perceptual ramps, CVD
+      simulation, palette histograms, harmony / cosine / Bézier generation,
+      perceptual extraction, the colour advisor, the shaded-gamut / fog / relief
+      previews, scene "looks", and the view-transform (tonemap) operators.
+
+      Why its own assembly: these cores were authored in the Engine so the render
+      and the headless tests could reach them, but the PaletteBuilder UI (which
+      references neither Engine nor its render machinery) needs them too. Pulling
+      Engine into the standalone palette tool would drag the whole render engine +
+      codegen along. Instead the cores live here — a leaf that references ONLY
+      Abstractions (for the ViewTransform enum) — so Engine, Server.Tests AND the
+      Avalonia UI / PaletteBuilder.Lib can all reference this ONE copy. Namespace
+      stays FracturingFog.Imaging, so no consuming code changes.
+    -->
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <LangVersion>latest</LangVersion>
+    <RootNamespace>FracturingFog.Imaging</RootNamespace>
+    <AssemblyName>FracturingFog.ColorCore</AssemblyName>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Abstractions\FracturingFog.Abstractions.csproj" />
+  </ItemGroup>
+
+</Project>

@@ -257,12 +257,35 @@ Forward-hook: drives emission / transmission color when roadmap **S5** lands.
   **Remaining:** surface the look picker + save/recall + apply-to-render (write material /
   `LightingFxData`) in the PaletteBuilder UI (with the other S10 UI tails).
 
-**S10 analysis + generation cores COMPLETE (all `Engine/Imaging/`, all tested):**
+**S10 analysis + generation cores COMPLETE (all tested):**
 PerceptualRamp (S10.1) · CvdAnalysis (S10.2) · PaletteHistogram (S10.3) · ColorHarmony
 (S10.4) · PaletteExtractionCore (S10.5) · ColorAdvisor (S10.6) · ShadedGamut (S10.7) ·
 FogPalettePreview (S10.8) · ReliefLegibility (S10.9) · SceneLooks (S10.10). The only S10
 work left is the **UI pass** — surfacing every core in the PaletteBuilder shell (deferred
 throughout S10 per the "leave UI to the end" call).
+
+### S10 UI pass ◐ (started — PR #681)
+Surface the ten cores in the PaletteBuilder UI, one core per slice.
+- **Plumbing (LANDED, PR #681):** the cores were authored in the Engine so the render +
+  headless tests could reach them, but the PaletteBuilder UI references neither Engine nor
+  its render machinery, and pulling Engine into the standalone tool would drag the whole
+  render engine + codegen along. So the ten cores + the `ViewTransformOps` tonemap
+  operators moved into a new leaf assembly **`FracturingFog.ColorCore`** (net10.0, refs
+  only Abstractions for the `ViewTransform` enum; namespace stays `FracturingFog.Imaging`
+  so no consuming code changed). Engine, `Server.Tests` (via Engine) and
+  `UI.Avalonia` / `PaletteBuilder.Lib` now all reference this **one** copy — the WinExe
+  root glob gains a `Compile Remove="ColorCore\**"`. Byte-identical: the full suite
+  (2320/2320) and `--viewtransformprobe` pass unchanged with the cores compiled from the
+  new assembly.
+- **First core surfaced — S10.6 advisor (LANDED, PR #681):** `ImagePaletteViewModel` now
+  runs `ColorAdvisor.Review` on the selected palette (recomputed on selection change and
+  on live stop edits via `StopsChanged`) into an `Advisories` collection + `AdvisorySummary`;
+  the standalone PaletteBuilder `MainWindow` gains an **"Advisor" tab** that lists them —
+  painted `#FFCC00` with a neutral severity glyph (never red / green). CVD-first help lands
+  in the UI first, on-brand.
+- **Remaining:** the other nine cores' UI surfaces (CVD side-by-side preview, histogram
+  redistribute, harmony/generation, extraction dominant/accent, shaded-gamut + fog + relief
+  previews, the "looks" picker + apply-to-render), one slice at a time.
 
 ## 6. Non-goals (not a worse Photoshop)
 

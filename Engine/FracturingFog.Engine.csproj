@@ -21,6 +21,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\Abstractions\FracturingFog.Abstractions.csproj" />
+    <ProjectReference Include="..\ColorCore\FracturingFog.ColorCore.csproj" />
     <!--
       #27 Phase 1b — CalculatorGen.Lib supplies EquationPreprocessor, the
       C# `Complex.*` → DSL translator. UserEquationCalculator uses it to run

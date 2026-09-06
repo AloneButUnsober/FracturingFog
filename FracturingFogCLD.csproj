@@ -116,6 +116,7 @@
       the excludes stay in place as the file-move slices populate them.
     -->
     <Compile Remove="Engine\**" />
+    <Compile Remove="ColorCore\**" />
     <Compile Remove="Rendering.D3D\**" />
     <!-- Rendering.Vulkan (V3 lib) + Rendering.Vulkan.Smoke (gate harness) are
          their own net10.0 projects (Silk.NET.Vulkan); keep their sources out of
