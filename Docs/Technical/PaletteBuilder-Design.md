@@ -365,9 +365,14 @@ That turns the big rock from "inject a render engine" into "expose a `float[] t`
   `HostPaletteViewParamService` (Hosting) composes them; exposed as
   `AvaloniaShellBootstrap.PaletteViewParamService`, set once the render host exists.
   Injected like `PaletteService`. *Consumer UI deferred to LW.2 / LW.3.* *Blocks LW.2, LW.3.*
-- **LW.2 (#693) — histogram-redistribute UI (S10.3).** Feed the LW.1 `t` buffer to
-  `PaletteHistogram.Build`; show `WastedFraction` ("this view never hits X% of the ramp")
-  and a **Redistribute** action using `EqualizeStopPositions`. *Depends LW.1.*
+- **LW.2 (#693) — histogram-redistribute UI (S10.3). LANDED (PR #699).**
+  `ImagePaletteViewModel` builds the view's palette-parameter histogram from the LW.1 `t`
+  buffer (`PaletteHistogram.Build`, 32 bins) into `HistogramBarHeights` + a `ViewFitSummary`
+  (`WastedFraction` → "this view never hits X% of the palette range"), and a
+  `RedistributeCommand` repositions the selected palette's stops via `EqualizeStopPositions`
+  (CDF-inverse, writes `EditableStops` positions). The PaletteBuilder "View Fit" tab shows
+  the histogram strip, the wasted-range readout (`#FFCC00`) and the Redistribute button;
+  empty when no live view. *Depends LW.1.*
 - **LW.3 (#694) — palette + CVD preview on the live fractal (S10.2/S10.3). LANDED (PR #698).**
   `ImagePaletteViewModel` gained a settable `ViewParamService` (LW.1) and `LiveFractalViews`:
   when the host supplies the service, it re-tints the view's `t` buffer through the selected

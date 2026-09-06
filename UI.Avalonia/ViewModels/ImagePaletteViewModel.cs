@@ -52,6 +52,7 @@ public class ImagePaletteViewModel : ViewModelBase
         CompareAllCommand = ReactiveCommand.Create(RunCompareAll);
         ApplyCommand = ReactiveCommand.Create(OnApply);
         CancelCommand = ReactiveCommand.Create(OnCancel);
+        RedistributeCommand = ReactiveCommand.Create(RedistributeStops);
     }
 
     // ── Image state ────────────────────────────────────────────────────
@@ -389,6 +390,73 @@ public class ImagePaletteViewModel : ViewModelBase
         Recompute3DPreview();
         RecomputeLooks();
         RecomputeLiveFractal();
+        RecomputeViewHistogram();
+    }
+
+    // ── View-fit histogram + redistribute (roadmap S10-LW.2, #392/#693) ──
+
+    private const int ViewHistBins = 32;
+    private int[]? _viewHistogram;
+
+    /// <summary>True when the live view's palette-parameter histogram is available
+    /// (needs the LW.1 view-param service + a compatible view).</summary>
+    public bool HasViewHistogram => _viewHistogram is not null;
+
+    private string _viewFitSummary = "";
+    /// <summary>How much of the palette range this view actually uses (roadmap S10.3).</summary>
+    public string ViewFitSummary
+    {
+        get => _viewFitSummary;
+        private set => this.RaiseAndSetIfChanged(ref _viewFitSummary, value);
+    }
+
+    /// <summary>Per-bin bar heights (px) for the view's palette-parameter histogram —
+    /// where THIS view's pixels land on the ramp.</summary>
+    public ObservableCollection<double> HistogramBarHeights { get; } = new();
+
+    /// <summary>Repositions the selected palette's stops to pack them where this view's
+    /// pixels actually land (CDF-inverse, roadmap S10.3).</summary>
+    public ReactiveCommand<Unit, Unit> RedistributeCommand { get; }
+
+    private void RecomputeViewHistogram()
+    {
+        _viewHistogram = null;
+        HistogramBarHeights.Clear();
+        ViewFitSummary = "";
+
+        var svc = _viewParamService;
+        if (svc is not null && svc.TryGetViewParam(out var sample) && sample.HasData)
+        {
+            var hist = PaletteHistogram.Build(sample.T, ViewHistBins);
+            _viewHistogram = hist;
+
+            int max = 1;
+            foreach (var c in hist) if (c > max) max = c;
+            const double MaxPx = 56.0;
+            foreach (var c in hist) HistogramBarHeights.Add(Math.Max(1.0, c / (double)max * MaxPx));
+
+            double wasted = PaletteHistogram.WastedFraction(hist);
+            ViewFitSummary = wasted <= 0.001
+                ? "This view spreads across the whole palette range."
+                : $"This view never hits {wasted * 100:0}% of the palette range — redistribute to fit.";
+        }
+        this.RaisePropertyChanged(nameof(HasViewHistogram));
+    }
+
+    private void RedistributeStops()
+    {
+        var result = _selectedResult;
+        var hist = _viewHistogram;
+        if (result is null || hist is null) return;
+
+        // Redistribute writes stop positions → operate on the mutable EditableStops.
+        result.IsEditing = true;
+        var stops = result.EditableStops;
+        if (stops.Count < 2) return;
+
+        var pos = PaletteHistogram.EqualizeStopPositions(hist, stops.Count);
+        int n = Math.Min(pos.Length, stops.Count);
+        for (int i = 0; i < n; i++) stops[i].Position = pos[i];
     }
 
     // ── Palette + CVD preview on the LIVE fractal (roadmap S10-LW.3, #392/#694) ──
