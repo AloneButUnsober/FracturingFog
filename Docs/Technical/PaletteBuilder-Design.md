@@ -139,9 +139,22 @@ lightness correction for high-quality ramps.
   **Remaining:** the live-coefficient editors + harmony picker UI (the PaletteBuilder UI
   slice, deferred with the other S10 UI tails).
 
-### S10.5 — Extraction upgrades ☐
+### S10.5 — Extraction upgrades ◐ (core LANDED — PR #676)
 Perceptual **k-means in OkLab**; extract an *ordered ramp* (by lightness), not just
 a swatch set; dominant + accent detection.
+- **Landed (core):** `Engine/Imaging/PaletteExtractionCore.cs` — `PaletteExtractionCore`
+  clusters an sRGB colour bag with **Lloyd's k-means in OkLab** (k-means++ seeded, so
+  distances are perceptual and degenerate bags don't collapse), then `Extract(samples,
+  k, seed)` returns an `ExtractedPalette`: the survivors as a **lightness-ordered ramp**
+  (ascending OkLab L — a ramp is a curve, not a swatch bag), plus **`Dominant`** (the
+  heaviest cluster — the workhorse) and **`Accent`** (the most chromatic non-dominant
+  cluster — the pop colour). Cluster swatches are the mean sRGB of the assigned samples;
+  empty clusters are dropped (so `k` is an upper bound). Reuses `PerceptualRamp` for the
+  OkLab primitives. Placed in Engine (not the PaletteBuilder extraction lib, which the
+  render + headless tests can't reach) — an extracted ramp flows into the render. +7
+  `PaletteExtractionCoreTests` (separation, lightness order, dominant/accent, determinism,
+  k-clamp, empty bag). **Remaining:** wire the core into the PaletteBuilder extraction UI
+  (feed it the sampled image pixels; surface dominant/accent) with the other S10 UI tails.
 
 ### S10.6 — Color advisor ◐ (the artist-*assistant* framing; core LANDED — PR #675)
 The parity-twin discipline applied to color: automated checks that *guide*, not
