@@ -389,9 +389,15 @@ That turns the big rock from "inject a render engine" into "expose a `float[] t`
     existing select → Apply / live-preview / advisor path applies it unchanged. "Use"
     buttons in the Harmony tab (`UseSwatchRowCommand` per scheme, `UseCosineRampCommand`,
     `UseBezierRampCommand`). No render-state risk — reuses the stops accept flow.
-  - **LW.4b (remaining) — Look → render.** Write a Look's `Roughness` / `Metallic` /
-    key-sky-emission tints into `LightingFxData` via a host apply-hook (widens the picker
-    payload beyond stops; touches render state).
+  - **LW.4b — Look → render. LANDED (PR #703).** `IPaletteLookApplyService` (Abstractions,
+    primitives-only) → `HostPaletteLookApplyService` writes a look's `Roughness` / `Metallic`
+    into `ViewState.FractalParameters.Lighting`, tints `Light1.Color` (key) + `BgTop/BgBottom`
+    (sky), and re-renders via `FractalRenderHost.Trigger`. Injected as
+    `AvaloniaShellBootstrap.PaletteLookApplyService` (wired into the picker by `AvaloniaDialogs`).
+    The Looks tab's **"Apply to render"** button (`ApplyLookCommand`, shown only when the
+    service is present) adopts the look's ramp (the LW.4a path) *and* writes its material +
+    lights. Emission is omitted — `LightingFxData` has no emission field (the Look's
+    `EmissionTint` stays the S5 forward-hook).
   - **LW.4c (remaining) — save / recall custom looks.** *Independent of LW.1.*
 - **LW.5 (#691) — perceptual k-means as an extraction method. LANDED (PR #700).**
   `PerceptualKMeansExtractor : IPaletteExtractor` (in `Imaging/PaletteExtraction/`) wraps
