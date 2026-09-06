@@ -383,6 +383,108 @@ public class ImagePaletteViewModel : ViewModelBase
         RecomputeCvdPreview();
         RecomputeKeyColors();
         RecomputeHarmony();
+        Recompute3DPreview();
+    }
+
+    // ── 3D-facing previews: shaded gamut / fog / relief (roadmap S10.7–S10.9, #392) ──
+
+    /// <summary>Shaded-gamut rows (roadmap S10.7): each palette colour swept full-shadow →
+    /// lit → specular, so the artist sees how it reads once 3D lighting hits it.</summary>
+    public ObservableCollection<LabeledSwatchRow> ShadedGamutRows { get; } = new();
+
+    private string _shadedGamutSummary = "";
+    public string ShadedGamutSummary
+    {
+        get => _shadedGamutSummary;
+        private set => this.RaiseAndSetIfChanged(ref _shadedGamutSummary, value);
+    }
+
+    /// <summary>The palette as volumetric fog / god-rays over a dark backdrop (S10.8).</summary>
+    public ObservableCollection<ISolidColorBrush> FogRamp { get; } = new();
+
+    /// <summary>A fog-optimised sub-ramp — the palette's brighter reach, luminance-ascending (S10.8).</summary>
+    public ObservableCollection<ISolidColorBrush> FogSubRamp { get; } = new();
+
+    private string _fogSummary = "";
+    public string FogSummary
+    {
+        get => _fogSummary;
+        private set => this.RaiseAndSetIfChanged(ref _fogSummary, value);
+    }
+
+    private string _reliefSummary = "";
+    /// <summary>Relief-legibility verdict (S10.9): does the ramp's lightness read as raised 3D?</summary>
+    public string ReliefSummary
+    {
+        get => _reliefSummary;
+        private set => this.RaiseAndSetIfChanged(ref _reliefSummary, value);
+    }
+
+    /// <summary>The luminance-locked repair ramp (S10.9): hue/chroma kept, lightness made
+    /// monotonic so relief reads as form.</summary>
+    public ObservableCollection<ISolidColorBrush> ReliefLockedRamp { get; } = new();
+
+    public bool Has3DPreview => ShadedGamutRows.Count > 0;
+
+    private void Recompute3DPreview()
+    {
+        ShadedGamutRows.Clear();
+        FogRamp.Clear();
+        FogSubRamp.Clear();
+        ReliefLockedRamp.Clear();
+        ShadedGamutSummary = "";
+        FogSummary = "";
+        ReliefSummary = "";
+
+        var result = _selectedResult;
+        var eff = result?.EffectiveStops;
+        if (eff is { Count: >= 2 })
+        {
+            var stops = new List<(byte r, byte g, byte b)>(eff.Count);
+            foreach (var s in eff) stops.Add((s.R, s.G, s.B));
+
+            // S10.7 — shaded gamut (shadow → lit → specular), one row per stop.
+            int crush = 0, blow = 0;
+            foreach (var sw in ShadedGamut.AnalyzeRamp(stops, 7))
+            {
+                var brushes = new ISolidColorBrush[sw.Sweep.Length];
+                for (int i = 0; i < sw.Sweep.Length; i++)
+                    brushes[i] = new SolidColorBrush(Color.FromRgb(sw.Sweep[i].r, sw.Sweep[i].g, sw.Sweep[i].b));
+                string flags = (sw.CrushesInShadow ? "  crushes in shadow" : "") + (sw.BlowsInSpecular ? "  blows in specular" : "");
+                ShadedGamutRows.Add(new LabeledSwatchRow(
+                    $"#{sw.Albedo.r:X2}{sw.Albedo.g:X2}{sw.Albedo.b:X2}{flags}", brushes));
+                if (sw.CrushesInShadow) crush++;
+                if (sw.BlowsInSpecular) blow++;
+            }
+            ShadedGamutSummary = crush == 0 && blow == 0
+                ? "Every colour holds its separation shadow to specular."
+                : $"{crush} stop(s) crush in shadow, {blow} blow in specular under 3D lighting.";
+
+            // S10.8 — fog / god-rays over a dark backdrop + a fog-optimised sub-ramp.
+            foreach (var (r, g, b) in FogPalettePreview.FogSweep(stops, 24, 10, 10, 20))
+                FogRamp.Add(new SolidColorBrush(Color.FromRgb(r, g, b)));
+            foreach (var packed in FogPalettePreview.FogOptimizedSubRamp(stops, 16))
+                FogSubRamp.Add(BrushFromPacked(packed));
+            bool washes = FogPalettePreview.WashesOut(stops, 10, 10, 20, out float span);
+            FogSummary = washes
+                ? $"Washes out as fog — no visible haze gradient (ΔE {span:0.###}). Try the fog sub-ramp."
+                : $"Reads as fog / god-rays (haze ΔE span {span:0.###}).";
+
+            // S10.9 — relief legibility + the luminance-locked repair.
+            var rep = ReliefLegibility.Analyze(stops);
+            ReliefSummary = rep.ReadsAsRelief
+                ? $"Reads as raised 3D relief (lightness monotonic, spread {rep.LuminanceSpread:0.###})."
+                : rep.NonMonotonic
+                    ? $"Flattens relief — lightness reverses {rep.Reversals} time(s). Use the luminance-locked ramp."
+                    : $"Flattens relief — too little lightness range (spread {rep.LuminanceSpread:0.###}). Use the luminance-locked ramp.";
+            foreach (var packed in ReliefLegibility.LockLuminance(stops, 24))
+                ReliefLockedRamp.Add(BrushFromPacked(packed));
+        }
+
+        this.RaisePropertyChanged(nameof(Has3DPreview));
+
+        static ISolidColorBrush BrushFromPacked(uint p) =>
+            new SolidColorBrush(Color.FromRgb((byte)((p >> 16) & 0xFF), (byte)((p >> 8) & 0xFF), (byte)(p & 0xFF)));
     }
 
     // ── Harmony + generation in perceptual space (roadmap S10.4, #392) ──

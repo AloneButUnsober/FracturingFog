@@ -706,6 +706,92 @@
                                 </ScrollViewer>
                             </Grid>
                         </TabItem>
+                        <TabItem Header="3D Preview" FontSize="14">
+                            <!-- Roadmap S10.7-S10.9 (#392) — the 3D-facing previews:
+                                 shaded gamut (shadow->lit->specular), fog / god-rays, and
+                                 relief legibility (luminance is form). Warnings paint
+                                 #FFCC00, never red (colourblind-safe convention). -->
+                            <Grid RowDefinitions="Auto,*">
+                                <TextBlock Grid.Row="0" Classes="label"
+                                           Margin="0,2,0,6" TextWrapping="Wrap"
+                                           IsVisible="{Binding !Has3DPreview}"
+                                           Text="Select a palette to preview it under 3D lighting, fog and relief." />
+                                <ScrollViewer Grid.Row="1"
+                                              HorizontalScrollBarVisibility="Disabled"
+                                              VerticalScrollBarVisibility="Auto"
+                                              IsVisible="{Binding Has3DPreview}">
+                                    <StackPanel Orientation="Vertical" Spacing="6">
+                                        <!-- Shaded gamut (S10.7) -->
+                                        <TextBlock Text="Shaded gamut (shadow → lit → specular)"
+                                                   Foreground="#DCDCA0" FontWeight="Bold" />
+                                        <TextBlock Text="{Binding ShadedGamutSummary}"
+                                                   Foreground="#FFCC00" TextWrapping="Wrap" />
+                                        <ItemsControl ItemsSource="{Binding ShadedGamutRows}">
+                                            <ItemsControl.ItemTemplate>
+                                                <DataTemplate>
+                                                    <StackPanel Orientation="Horizontal" Spacing="8" Margin="0,0,0,2">
+                                                        <ItemsControl ItemsSource="{Binding Swatches}" Height="18"
+                                                                      VerticalAlignment="Center">
+                                                            <ItemsControl.ItemsPanel>
+                                                                <ItemsPanelTemplate>
+                                                                    <StackPanel Orientation="Horizontal" />
+                                                                </ItemsPanelTemplate>
+                                                            </ItemsControl.ItemsPanel>
+                                                            <ItemsControl.ItemTemplate>
+                                                                <DataTemplate>
+                                                                    <Border Width="18" Height="18" Background="{Binding}" />
+                                                                </DataTemplate>
+                                                            </ItemsControl.ItemTemplate>
+                                                        </ItemsControl>
+                                                        <TextBlock Text="{Binding Label}"
+                                                                   Foreground="#B4B4B4" VerticalAlignment="Center"
+                                                                   FontSize="11" />
+                                                    </StackPanel>
+                                                </DataTemplate>
+                                            </ItemsControl.ItemTemplate>
+                                        </ItemsControl>
+
+                                        <!-- Fog / god-rays (S10.8) -->
+                                        <TextBlock Text="Fog / god-rays" Foreground="#DCDCA0"
+                                                   FontWeight="Bold" Margin="0,6,0,0" />
+                                        <TextBlock Text="{Binding FogSummary}"
+                                                   Foreground="#FFCC00" TextWrapping="Wrap" />
+                                        <ItemsControl ItemsSource="{Binding FogRamp}" Height="22">
+                                            <ItemsControl.ItemsPanel>
+                                                <ItemsPanelTemplate><StackPanel Orientation="Horizontal" /></ItemsPanelTemplate>
+                                            </ItemsControl.ItemsPanel>
+                                            <ItemsControl.ItemTemplate>
+                                                <DataTemplate><Border Width="14" Height="22" Background="{Binding}" /></DataTemplate>
+                                            </ItemsControl.ItemTemplate>
+                                        </ItemsControl>
+                                        <TextBlock Text="Fog-optimized sub-ramp" Foreground="#B4B4B4" FontSize="11" />
+                                        <ItemsControl ItemsSource="{Binding FogSubRamp}" Height="18">
+                                            <ItemsControl.ItemsPanel>
+                                                <ItemsPanelTemplate><StackPanel Orientation="Horizontal" /></ItemsPanelTemplate>
+                                            </ItemsControl.ItemsPanel>
+                                            <ItemsControl.ItemTemplate>
+                                                <DataTemplate><Border Width="20" Height="18" Background="{Binding}" /></DataTemplate>
+                                            </ItemsControl.ItemTemplate>
+                                        </ItemsControl>
+
+                                        <!-- Relief legibility (S10.9) -->
+                                        <TextBlock Text="Relief (luminance is form)" Foreground="#DCDCA0"
+                                                   FontWeight="Bold" Margin="0,6,0,0" />
+                                        <TextBlock Text="{Binding ReliefSummary}"
+                                                   Foreground="#FFCC00" TextWrapping="Wrap" />
+                                        <TextBlock Text="Luminance-locked repair" Foreground="#B4B4B4" FontSize="11" />
+                                        <ItemsControl ItemsSource="{Binding ReliefLockedRamp}" Height="18">
+                                            <ItemsControl.ItemsPanel>
+                                                <ItemsPanelTemplate><StackPanel Orientation="Horizontal" /></ItemsPanelTemplate>
+                                            </ItemsControl.ItemsPanel>
+                                            <ItemsControl.ItemTemplate>
+                                                <DataTemplate><Border Width="14" Height="18" Background="{Binding}" /></DataTemplate>
+                                            </ItemsControl.ItemTemplate>
+                                        </ItemsControl>
+                                    </StackPanel>
+                                </ScrollViewer>
+                            </Grid>
+                        </TabItem>
                     </TabControl>
                     <!--<TextBlock Grid.Row="1" Grid.Column="0" Classes="label"
                     Text="Method:" Margin="0,2,4,0" HorizontalAlignment="Right"/>
