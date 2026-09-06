@@ -333,12 +333,53 @@ public class ImagePaletteViewModel : ViewModelBase
         get => _selectedResult;
         set
         {
+            if (_selectedResult is not null)
+                _selectedResult.StopsChanged -= RecomputeAdvisories;
             this.RaiseAndSetIfChanged(ref _selectedResult, value);
+            if (_selectedResult is not null)
+                _selectedResult.StopsChanged += RecomputeAdvisories;
             this.RaisePropertyChanged(nameof(CanApply));
+            RecomputeAdvisories();
         }
     }
 
     public bool CanApply => _selectedResult?.Stops.Count >= 2;
+
+    // ── Colour advisor (roadmap S10.6, #392 — the first S10 core surfaced) ──
+
+    /// <summary>Gentle, dismissible colour advisories for the selected palette —
+    /// CVD-collapse, shadow-crush, histogram-waste, cycle-seam — from
+    /// <see cref="ColorAdvisor.Review"/>. The view paints these #FFCC00 (never red,
+    /// the colourblind-safe advisory convention). Recomputed whenever the selection
+    /// changes or its stops are edited.</summary>
+    public ObservableCollection<PaletteAdviceItem> Advisories { get; } = new();
+
+    /// <summary>True when the selected palette has at least one advisory.</summary>
+    public bool HasAdvisories => Advisories.Count > 0;
+
+    /// <summary>Header line for the advisor panel — a count, or an all-clear.</summary>
+    public string AdvisorySummary => _selectedResult is null
+        ? "Select a palette to review."
+        : Advisories.Count == 0
+            ? "No colour issues found."
+            : $"{Advisories.Count} advisory{(Advisories.Count == 1 ? "" : "(s)")} for this palette.";
+
+    private void RecomputeAdvisories()
+    {
+        Advisories.Clear();
+        var result = _selectedResult;
+        if (result is not null)
+        {
+            var eff = result.EffectiveStops;
+            var stops = new List<(byte r, byte g, byte b)>(eff.Count);
+            foreach (var s in eff) stops.Add((s.R, s.G, s.B));
+            if (stops.Count >= 2)
+                foreach (var advice in ColorAdvisor.Review(stops))
+                    Advisories.Add(new PaletteAdviceItem(advice));
+        }
+        this.RaisePropertyChanged(nameof(HasAdvisories));
+        this.RaisePropertyChanged(nameof(AdvisorySummary));
+    }
 
     private string? _statusMessage;
     public string? StatusMessage
@@ -817,4 +858,26 @@ public sealed class PaletteResultViewModel : ViewModelBase
             if (value && ExclusiveSelect) _parent?.SelectResult(this);
         }
     }
+}
+
+/// <summary>One colour advisory row for binding (roadmap S10.6, #392). Wraps a
+/// <see cref="ColorAdvice"/> as display-friendly text; the view paints every row the
+/// same colourblind-safe advisory colour (#FFCC00), so <see cref="IsWarn"/> only drives
+/// weight / an optional glyph, never a red/green cue.</summary>
+public sealed class PaletteAdviceItem
+{
+    public PaletteAdviceItem(ColorAdvice advice)
+    {
+        Kind = advice.Kind.ToString();
+        Message = advice.Message;
+        IsWarn = advice.Severity == AdviceSeverity.Warn;
+    }
+
+    public string Kind { get; }
+    public string Message { get; }
+    public bool IsWarn { get; }
+
+    /// <summary>A neutral severity glyph (never a colour cue): a filled dot for a
+    /// warning, a hollow one for info.</summary>
+    public string Glyph => IsWarn ? "◆" : "◇";
 }

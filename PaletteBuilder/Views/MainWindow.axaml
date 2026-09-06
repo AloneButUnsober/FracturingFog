@@ -495,6 +495,47 @@
                                                HorizontalAlignment="Left" MinWidth="135" />
                             </Grid>
                         </TabItem>
+                        <TabItem Header="Advisor" FontSize="14">
+                            <!-- Roadmap S10.6 (#392) — the colour advisor, surfaced.
+                                 CVD-collapse / shadow-crush / histogram-waste / cycle-seam
+                                 advisories for the selected palette. Painted #FFCC00
+                                 (never red — the colourblind-safe advisory convention). -->
+                            <Grid RowDefinitions="Auto,*">
+                                <TextBlock Grid.Row="0" Classes="label"
+                                           Margin="0,2,0,6"
+                                           TextWrapping="Wrap"
+                                           Text="{Binding AdvisorySummary}" />
+                                <ScrollViewer Grid.Row="1"
+                                              HorizontalScrollBarVisibility="Disabled"
+                                              VerticalScrollBarVisibility="Auto">
+                                    <ItemsControl ItemsSource="{Binding Advisories}">
+                                        <ItemsControl.ItemTemplate>
+                                            <DataTemplate>
+                                                <Border Margin="0,0,0,6" Padding="8,6"
+                                                        CornerRadius="4"
+                                                        Background="#22FFCC00"
+                                                        BorderBrush="#FFCC00"
+                                                        BorderThickness="1">
+                                                    <StackPanel Orientation="Vertical" Spacing="2">
+                                                        <StackPanel Orientation="Horizontal" Spacing="6">
+                                                            <TextBlock Text="{Binding Glyph}"
+                                                                       Foreground="#FFCC00"
+                                                                       FontWeight="Bold" />
+                                                            <TextBlock Text="{Binding Kind}"
+                                                                       Foreground="#FFCC00"
+                                                                       FontWeight="Bold" />
+                                                        </StackPanel>
+                                                        <TextBlock Text="{Binding Message}"
+                                                                   Foreground="#E6E0C8"
+                                                                   TextWrapping="Wrap" />
+                                                    </StackPanel>
+                                                </Border>
+                                            </DataTemplate>
+                                        </ItemsControl.ItemTemplate>
+                                    </ItemsControl>
+                                </ScrollViewer>
+                            </Grid>
+                        </TabItem>
                     </TabControl>
                     <!--<TextBlock Grid.Row="1" Grid.Column="0" Classes="label"
                     Text="Method:" Margin="0,2,4,0" HorizontalAlignment="Right"/>
