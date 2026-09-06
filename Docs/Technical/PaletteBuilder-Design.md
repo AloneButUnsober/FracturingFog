@@ -143,11 +143,21 @@ lightness correction for high-quality ramps.
 Perceptual **k-means in OkLab**; extract an *ordered ramp* (by lightness), not just
 a swatch set; dominant + accent detection.
 
-### S10.6 — Color advisor ☐ (the artist-*assistant* framing)
+### S10.6 — Color advisor ◐ (the artist-*assistant* framing; core LANDED — PR #675)
 The parity-twin discipline applied to color: automated checks that *guide*, not
 just tools that sit there. Surface CVD-collapse, **shadow-crush** ("the low third
 of this ramp crushes to black under 3D shading"), histogram-waste and cycle-seam
 breaks as gentle, dismissible `#FFCC00` advisories. A **linter for color**.
+- **Landed (core):** `Engine/Imaging/ColorAdvisor.cs` — `ColorAdvisor.Review(stops,
+  viewHistogram?, cycling)` composes the S10.1–S10.4 cores into a list of typed
+  `ColorAdvice` (`Kind` ∈ CvdCollapse / ShadowCrush / HistogramWaste / CycleSeam +
+  `Severity` + a plain-text message the UI paints `#FFCC00`): CVD-collapse via
+  `PaletteLint.Confusables` (S10.2), histogram-waste via `PaletteHistogram.WastedFraction`
+  + cycle-seam via `IsSeamlessCycle` (S10.3), and a new `ShadowCrushes` check (attenuate
+  the low-third colours in linear light and flag when their OkLab spread collapses — the
+  dark tail losing separation under 3D shading). +6 `ColorAdvisorTests` (each check fires
+  correctly; a clean palette yields no advice). **Remaining:** surface the advisories in
+  the PaletteBuilder UI (with the other S10 UI tails).
 
 ## 5. Enhancing the 3D artist experience
 
