@@ -386,9 +386,13 @@ That turns the big rock from "inject a render engine" into "expose a `float[] t`
   payload beyond stops: a chosen harmony/cosine/Bézier ramp replaces the stops; a **Look**
   also writes `Roughness` / `Metallic` / key-sky-emission tints into `LightingFxData` via a
   host apply-hook. Plus save/recall of custom looks. *Independent of LW.1.*
-- **LW.5 (#691) — perceptual k-means as an extraction method.** Add a `PaletteExtractionCore`
-  (`KMeansOkLab`)-backed method to `HostPaletteExtractionService`'s method list — feed it
-  the sampled image pixels. *Independent; smallest.*
+- **LW.5 (#691) — perceptual k-means as an extraction method. LANDED (PR #700).**
+  `PerceptualKMeansExtractor : IPaletteExtractor` (in `Imaging/PaletteExtraction/`) wraps
+  `PaletteExtractionCore.KMeansOkLab` — clusters the sampled image pixels in **OkLab**
+  (perceptual, k-means++), a thin adapter over the tested core. Registered in both extractor
+  lists — `HostPaletteExtractionService` (main-app picker) and the standalone tool's
+  `PaletteExtractionService` — so "Perceptual K-Means (OkLab)" appears as a selectable
+  method everywhere. *Independent; smallest.*
 - **LW.6 (#692) — live cosine / Bézier coefficient editing (S10.4).** Sliders for the IQ cosine
   `a/b/c/d` and the Bézier controls, live-updating the generated ramp on the existing
   cores. *Independent; pure UI.*

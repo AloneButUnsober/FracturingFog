@@ -33,6 +33,7 @@ namespace PaletteBuilder.Services
         private static readonly IPaletteExtractor[] s_extractors =
         {
             new KMeansExtractor(),
+            new PerceptualKMeansExtractor(),
             new MedianCutExtractor(),
             new OctreeExtractor(),
             new HistogramExtractor(),
