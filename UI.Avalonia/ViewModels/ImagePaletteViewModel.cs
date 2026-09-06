@@ -21,8 +21,11 @@ using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Reactive;
+using System.Runtime.InteropServices;
+using global::Avalonia;
 using Avalonia.Media;
 using Avalonia.Media.Imaging;
+using Avalonia.Platform;
 using FracturingFog.Imaging;
 using ReactiveUI;
 
@@ -385,6 +388,84 @@ public class ImagePaletteViewModel : ViewModelBase
         RecomputeHarmony();
         Recompute3DPreview();
         RecomputeLooks();
+        RecomputeLiveFractal();
+    }
+
+    // ── Palette + CVD preview on the LIVE fractal (roadmap S10-LW.3, #392/#694) ──
+
+    private IPaletteViewParamService? _viewParamService;
+    /// <summary>Optional host service exposing the current fractal view's per-pixel
+    /// palette parameter (roadmap S10-LW.1, #690). Set by the host after construction;
+    /// null in the standalone tool (no live render) — the live-fractal preview then stays
+    /// empty. Re-tinting is local, so no re-render is triggered.</summary>
+    public IPaletteViewParamService? ViewParamService
+    {
+        get => _viewParamService;
+        set { _viewParamService = value; RecomputeLiveFractal(); }
+    }
+
+    /// <summary>The current fractal view re-tinted through the selected palette, and the
+    /// same view under each colour-vision deficiency — the palette live on the real
+    /// fractal (roadmap S10-LW.3). Empty when no view-param service / view is available.</summary>
+    public ObservableCollection<LabeledImage> LiveFractalViews { get; } = new();
+
+    public bool HasLiveFractal => LiveFractalViews.Count > 0;
+
+    private void RecomputeLiveFractal()
+    {
+        LiveFractalViews.Clear();
+
+        var svc = _viewParamService;
+        var eff = _selectedResult?.EffectiveStops;
+        if (svc is not null && eff is { Count: >= 2 } && svc.TryGetViewParam(out var sample) && sample.HasData)
+        {
+            // Anchor stops (ascending position) for perceptual re-tint.
+            var anchors = new PerceptualRamp.Stop[eff.Count];
+            for (int i = 0; i < eff.Count; i++)
+                anchors[i] = new PerceptualRamp.Stop(eff[i].Position, eff[i].R, eff[i].G, eff[i].B);
+
+            // Downsample so the preview grid is cheap regardless of render resolution.
+            const int TargetMax = 200;
+            int stride = Math.Max(1, (Math.Max(sample.Width, sample.Height) + TargetMax - 1) / TargetMax);
+
+            LiveFractalViews.Add(new LabeledImage("This palette", Retint(sample, anchors, stride, null)));
+            LiveFractalViews.Add(new LabeledImage("Deuteranopia", Retint(sample, anchors, stride, CvdType.Deutan)));
+            LiveFractalViews.Add(new LabeledImage("Protanopia", Retint(sample, anchors, stride, CvdType.Protan)));
+            LiveFractalViews.Add(new LabeledImage("Tritanopia", Retint(sample, anchors, stride, CvdType.Tritan)));
+            LiveFractalViews.Add(new LabeledImage("Monochromacy", Retint(sample, anchors, stride, CvdType.Monochromacy)));
+        }
+
+        this.RaisePropertyChanged(nameof(HasLiveFractal));
+    }
+
+    /// <summary>Re-tint the view's per-pixel parameter through the palette (perceptually,
+    /// in OkLab), optionally CVD-simulating each pixel, into a downsampled bitmap. No
+    /// re-render — a palette change never changes geometry.</summary>
+    private static WriteableBitmap Retint(
+        PaletteViewSample sample, PerceptualRamp.Stop[] anchors, int stride, CvdType? cvd)
+    {
+        int ow = Math.Max(1, sample.Width / stride);
+        int oh = Math.Max(1, sample.Height / stride);
+        var buf = new int[ow * oh];
+        for (int oy = 0; oy < oh; oy++)
+        {
+            int sy = Math.Min(oy * stride, sample.Height - 1);
+            for (int ox = 0; ox < ow; ox++)
+            {
+                int sx = Math.Min(ox * stride, sample.Width - 1);
+                float t = sample.T[sy * sample.Width + sx];
+                var (r, g, b) = PerceptualRamp.SampleOkLab(anchors, t);
+                if (cvd is { } type) (r, g, b) = CvdSimulation.Simulate(r, g, b, type);
+                buf[oy * ow + ox] = unchecked((int)(0xFF000000u | ((uint)r << 16) | ((uint)g << 8) | b));
+            }
+        }
+
+        var bmp = new WriteableBitmap(new PixelSize(ow, oh), new Vector(96, 96),
+            PixelFormat.Bgra8888, AlphaFormat.Premul);
+        using (var fb = bmp.Lock())
+            for (int y = 0; y < oh; y++)
+                Marshal.Copy(buf, y * ow, IntPtr.Add(fb.Address, y * fb.RowBytes), ow);
+        return bmp;
     }
 
     // ── "Looks" — scene colour scripts (roadmap S10.10, #392) ──
@@ -1248,6 +1329,20 @@ public sealed class LabeledSwatchRow
 
     public string Label { get; }
     public IReadOnlyList<ISolidColorBrush> Swatches { get; }
+}
+
+/// <summary>A labelled preview image for binding (roadmap S10-LW.3, #694) — the live
+/// fractal re-tinted through the palette, under one vision type.</summary>
+public sealed class LabeledImage
+{
+    public LabeledImage(string label, Bitmap image)
+    {
+        Label = label;
+        Image = image;
+    }
+
+    public string Label { get; }
+    public Bitmap Image { get; }
 }
 
 /// <summary>One scene "look" for binding (roadmap S10.10, #392): the ramp as swatches,

@@ -368,9 +368,15 @@ That turns the big rock from "inject a render engine" into "expose a `float[] t`
 - **LW.2 (#693) — histogram-redistribute UI (S10.3).** Feed the LW.1 `t` buffer to
   `PaletteHistogram.Build`; show `WastedFraction` ("this view never hits X% of the ramp")
   and a **Redistribute** action using `EqualizeStopPositions`. *Depends LW.1.*
-- **LW.3 (#694) — palette + CVD preview on the live fractal (S10.2/S10.3).** Re-tint the LW.1
-  `t` buffer through the current gradient into a preview bitmap (no re-render); run the CVD
-  swatch preview on the **real image** too. *Depends LW.1.*
+- **LW.3 (#694) — palette + CVD preview on the live fractal (S10.2/S10.3). LANDED (PR #698).**
+  `ImagePaletteViewModel` gained a settable `ViewParamService` (LW.1) and `LiveFractalViews`:
+  when the host supplies the service, it re-tints the view's `t` buffer through the selected
+  palette **in OkLab** (perceptual `SampleOkLab`) into a downsampled `WriteableBitmap` — the
+  palette on the real fractal, no re-render — and the same view under deutan / protan /
+  tritan / monochromacy (`CvdSimulation` per pixel). The PaletteBuilder "Live Fractal" tab
+  shows the five as a `LabeledImage` grid; `AvaloniaDialogs` wires
+  `AvaloniaShellBootstrap.PaletteViewParamService` into the picker (null / empty in the
+  standalone tool — no live render). *Depends LW.1.*
 - **LW.4 (#695) — apply scheme / ramp / look back (S10.4/S10.10).** Widen the picker's return
   payload beyond stops: a chosen harmony/cosine/Bézier ramp replaces the stops; a **Look**
   also writes `Roughness` / `Metallic` / key-sky-emission tints into `LightingFxData` via a

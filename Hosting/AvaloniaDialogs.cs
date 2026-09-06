@@ -2014,6 +2014,10 @@ namespace FracturingFog.Hosting
             // subclass of ImagePaletteViewModel) and assigns it as the
             // DataContext. The cast is safe by construction.
             var vm = (ImagePaletteViewModel)win.DataContext!;
+            // Roadmap S10-LW.3 (#694): give the picker the live view's palette parameter
+            // so its "Live Fractal" tab can preview the palette (and its CVD variants) on
+            // the real fractal without a re-render. Null on headless / no render host.
+            vm.ViewParamService = AvaloniaShellBootstrap.PaletteViewParamService;
 
             IReadOnlyList<PaletteStop>? accepted = null;
             var tcs = new TaskCompletionSource<bool>();

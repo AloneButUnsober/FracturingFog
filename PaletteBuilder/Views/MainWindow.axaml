@@ -845,6 +845,42 @@
                                 </ItemsControl>
                             </ScrollViewer>
                         </TabItem>
+                        <TabItem Header="Live Fractal" FontSize="14">
+                            <!-- Roadmap S10-LW.3 (#392/#694) — the palette live on the real
+                                 fractal + its CVD variants, re-tinting the current view's
+                                 per-pixel parameter (IPaletteViewParamService, LW.1) with no
+                                 re-render. Empty in the standalone tool (no live render). -->
+                            <Grid RowDefinitions="Auto,*">
+                                <TextBlock Grid.Row="0" Classes="label"
+                                           Margin="0,2,0,6" TextWrapping="Wrap"
+                                           IsVisible="{Binding !HasLiveFractal}"
+                                           Text="No live fractal view available (open the palette tool from the app over a 2D Mandelbrot view)." />
+                                <ScrollViewer Grid.Row="1"
+                                              HorizontalScrollBarVisibility="Disabled"
+                                              VerticalScrollBarVisibility="Auto"
+                                              IsVisible="{Binding HasLiveFractal}">
+                                    <ItemsControl ItemsSource="{Binding LiveFractalViews}">
+                                        <ItemsControl.ItemsPanel>
+                                            <ItemsPanelTemplate>
+                                                <WrapPanel Orientation="Horizontal" />
+                                            </ItemsPanelTemplate>
+                                        </ItemsControl.ItemsPanel>
+                                        <ItemsControl.ItemTemplate>
+                                            <DataTemplate>
+                                                <StackPanel Orientation="Vertical" Spacing="2" Margin="0,0,8,8">
+                                                    <TextBlock Text="{Binding Label}"
+                                                               Foreground="#DCDCA0" FontWeight="Bold" />
+                                                    <Border BorderBrush="#3C3C3C" BorderThickness="1">
+                                                        <Image Source="{Binding Image}" Width="200"
+                                                               Stretch="Uniform" />
+                                                    </Border>
+                                                </StackPanel>
+                                            </DataTemplate>
+                                        </ItemsControl.ItemTemplate>
+                                    </ItemsControl>
+                                </ScrollViewer>
+                            </Grid>
+                        </TabItem>
                     </TabControl>
                     <!--<TextBlock Grid.Row="1" Grid.Column="0" Classes="label"
                     Text="Method:" Margin="0,2,4,0" HorizontalAlignment="Right"/>
