@@ -17,9 +17,16 @@
 namespace FracturingFog.Imaging
 {
     /// <summary>Host service that writes a look's material + light tints into the live
-    /// render (roadmap S10-LW.4b, #695).</summary>
+    /// render (roadmap S10-LW.4b, #695), and applies a palette (gradient) to the live
+    /// render's colour map.</summary>
     public interface IPaletteLookApplyService
     {
+        /// <summary>Apply a gradient to the LIVE render's colour map and re-render, so a
+        /// generated ramp / adopted look changes the fractal immediately — not only after
+        /// the picker's Apply. <paramref name="stops"/> are the ordered gradient stops
+        /// (position + RGB). Fewer than two stops is a no-op.</summary>
+        void ApplyPalette(System.Collections.Generic.IReadOnlyList<PaletteStop> stops);
+
         /// <summary>Apply a look's material preset + palette-drawn lights to the current
         /// view and re-render: <paramref name="roughness"/> / <paramref name="metallic"/>
         /// (each [0,1]) set the surface material; <paramref name="keyTint"/> tints the key
