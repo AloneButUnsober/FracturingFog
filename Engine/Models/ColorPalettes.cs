@@ -165,6 +165,7 @@ namespace FracturingFog.Models
 
             // ── Scientific / perceptual ───────────────────────────────────────
             new ViridisColorMap(),
+            new CividisColorMap(),
             new PlasmaColorMap(),
 
             // ── Psychedelic (Acid Warp) ───────────────────────────────────────

@@ -63,7 +63,7 @@ ramps flow into the render.
 
 ## 4. Slices
 
-### S10.1 — Perceptual core ☐
+### S10.1 — Perceptual core ◐ (LANDED — PR #670)
 Author, interpolate and measure ΔE in **OKLCH / OkLab**, not sRGB; emit
 perceptually-even ramps to the render. Ship the **viridis / cividis** family
 (cividis is CVD-optimized) and a generator for uniform, CVD-safe ramps. The
@@ -71,8 +71,18 @@ viridis lesson from scientific viz: perceptually-uniform + monotonic-luminance
 ramps are simply better.
 - **Reuse:** existing OkLab extraction math.
 - **Contract:** sRGB↔OkLab↔OKLCH round-trips get epsilon-stable tests.
+- **Landed:** `Engine/Imaging/PerceptualRamp.cs` — OkLab ⇄ OKLCH, OkLab ΔE
+  (`DeltaEOk`), perceptually-even multi-stop sampling (`SampleOkLab`, interpolates IN
+  OkLab), the viridis / cividis built-ins (`Viridis`/`Cividis`, sampled in OkLab), a
+  luminance-monotonic (CVD-safe) ramp generator (`UniformLuminanceRamp`), and `Emit`
+  (N sRGB stops → the render). Placed in Engine (not the PaletteBuilder-only extraction
+  lib) so perceptually-even ramps reach the render **and** the headless tests. Shipped
+  the **Cividis** render theme (`CividisColorMap`, registered in `ColorPalette.BuiltIns`)
+  — the colourblind-first sibling of Viridis. +8 `PerceptualRampTests` (round-trips,
+  ΔE, monotonic luminance, endpoints). UI + the remaining slices (S10.2 CVD suite next)
+  build on this core.
 
-### S10.2 — CVD-first suite ☐ (the differentiator)
+### S10.2 — CVD-first suite ◐ (the differentiator; core LANDED — PR #671)
 - **Live CVD simulation** — deutan / protan / tritan / monochromacy, side-by-side,
   on the palette **and** the fractal preview. Use **Machado 2009** (or
   Brettel–Viénot) — the accepted models.
@@ -86,6 +96,17 @@ ramps are simply better.
   meaning never rides on hue alone.
 - **Contract:** CVD sim + ΔE are deterministic → assert in tests (the color analog
   of the render parity twin).
+- **Landed (core):** `Engine/Imaging/CvdAnalysis.cs` — `CvdSimulation.Simulate`
+  (Machado 2009 matrices in linear RGB, severity-lerp from identity; monochromacy =
+  Rec.709 luminance grey) + `PaletteLint`: `Confusables` (ΔE in CVD-simulated OkLab
+  below a threshold, per type, worst-first), `IsLuminanceMonotonic` (the luminance-lock
+  check; the generator itself is S10.1's `UniformLuminanceRamp`), and the **Okabe-Ito**
+  8-colour CVD-safe categorical set. +7 `CvdAnalysisTests` (severity-0 identity,
+  monochromacy grey, determinism, red/green deutan collapse vs normal, confusables flag
+  red/green but not black/white, Okabe-Ito clears a JND, luminance-monotonic detection).
+  **Remaining:** live side-by-side CVD preview UI (on palette + fractal); the
+  continuous CVD-ΔE-maximising ramp generator; redundant-encoding hints — the UI + the
+  advisor surfacing (S10.6). Deterministic core is in; suite 2270/2270.
 
 ### S10.3 — Fractal-aware preview ☐
 - Palette live **on the real fractal** (2D + 3D), not a gradient bar.
