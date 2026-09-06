@@ -331,11 +331,55 @@ Surface the ten cores in the PaletteBuilder UI, one core per slice.
   built-in `Catalog`, each wrapped as a `LookRowVm` (ramp swatches + material text + key /
   sky / glow tint brushes). The PaletteBuilder `MainWindow` gains a **"Looks" tab** listing
   them. **All ten S10 cores now have a self-contained UI surface.**
-- **Remaining (a distinct, bigger track — live host wiring, not a per-core display slice):**
-  the histogram-redistribute UI (S10.3, needs the view's per-pixel t); the CVD/palette
-  preview on the *live fractal*; perceptual k-means as an extraction method; live
-  cosine/Bézier coefficient editing; and applying a chosen scheme / ramp / look back onto
-  the palette or the render (save/recall + material / `LightingFxData` writes).
+- **Remaining — the live-host-wiring track (§4a below):** the per-core *display* surfaces
+  are all done; what's left couples the palette tool to the render host and is scoped
+  separately.
+
+### S10 §4a — Live-host-wiring track ◐ (scoped — sub-issues under #392)
+
+The per-core UI surfaces above all run **inside** the palette tool on the selected
+palette — no render dependency. The remaining work reaches **across the host boundary**
+to the live render, and follows one architectural spine, already proven by
+`IPaletteExtractionService`:
+
+> The palette tool references neither Engine nor the render. Every render-facing
+> capability is a **service interface in Abstractions**, **implemented in `Hosting`**
+> (which has Engine access), and **injected into the VM** — the VM consumes the
+> interface and stays render-free. New capabilities follow that exact shape.
+
+**Keystone insight:** a palette change never changes geometry. So "preview on the live
+fractal" does **not** need the tool to re-render — it needs the current view's **per-pixel
+palette parameter** (the smooth-iteration / trap `t` the render already computes). Given
+that buffer once, the tool re-tints locally through any candidate gradient (and CVD-sims
+each pixel) with the ColorCore it already has, and builds the S10.3 histogram for free.
+That turns the big rock from "inject a render engine" into "expose a `float[] t` + dims".
+
+**Slices (dependencies stated; the repo has no auto-blocking — see the sub-issues):**
+
+- **LW.1 (#690) — view-parameter provider (keystone).** New `IPaletteViewParamService` in
+  Abstractions: return the current view's per-pixel palette parameter `t∈[0,1]` + width/
+  height (host reads the render's smooth/trap buffer). Injected like `PaletteService`.
+  *Blocks LW.2, LW.3.*
+- **LW.2 (#693) — histogram-redistribute UI (S10.3).** Feed the LW.1 `t` buffer to
+  `PaletteHistogram.Build`; show `WastedFraction` ("this view never hits X% of the ramp")
+  and a **Redistribute** action using `EqualizeStopPositions`. *Depends LW.1.*
+- **LW.3 (#694) — palette + CVD preview on the live fractal (S10.2/S10.3).** Re-tint the LW.1
+  `t` buffer through the current gradient into a preview bitmap (no re-render); run the CVD
+  swatch preview on the **real image** too. *Depends LW.1.*
+- **LW.4 (#695) — apply scheme / ramp / look back (S10.4/S10.10).** Widen the picker's return
+  payload beyond stops: a chosen harmony/cosine/Bézier ramp replaces the stops; a **Look**
+  also writes `Roughness` / `Metallic` / key-sky-emission tints into `LightingFxData` via a
+  host apply-hook. Plus save/recall of custom looks. *Independent of LW.1.*
+- **LW.5 (#691) — perceptual k-means as an extraction method.** Add a `PaletteExtractionCore`
+  (`KMeansOkLab`)-backed method to `HostPaletteExtractionService`'s method list — feed it
+  the sampled image pixels. *Independent; smallest.*
+- **LW.6 (#692) — live cosine / Bézier coefficient editing (S10.4).** Sliders for the IQ cosine
+  `a/b/c/d` and the Bézier controls, live-updating the generated ramp on the existing
+  cores. *Independent; pure UI.*
+
+Recommended order: **LW.1 → LW.2, LW.3**; **LW.5, LW.6, LW.4** any time (LW.5 is the
+quickest standalone win). Boundary unchanged (design §6): still a colour assistant — LW.4
+writes a *material preset + light tints*, not a material node graph.
 
 ## 6. Non-goals (not a worse Photoshop)
 
