@@ -331,18 +331,44 @@ public sealed partial class MainWindow : Window
             }
             // Preview shows first image; VM SetImage no-ops the service call
             // because the path is already loaded as part of the batch.
-            Bitmap? preview = null;
-            try { preview = new Bitmap(paths[0]); } catch { }
+            Bitmap? preview = LoadFittedBitmap(paths[0]);
             _vm.SetImage(paths[0], preview);
             foreach (var p in paths) _vm.NotifyImageLoaded(p);
             return;
         }
 
         var single = paths[0];
-        Bitmap? singlePreview = null;
-        try { singlePreview = new Bitmap(single); } catch { /* service will surface */ }
+        Bitmap? singlePreview = LoadFittedBitmap(single);
         _vm.SetImage(single, singlePreview);
         _vm.NotifyImageLoaded(single);
+    }
+
+    // Decode a preview bitmap scaled down to fit the viewer (roadmap-adjacent usability
+    // fix): source images are commonly far larger than the preview pane, so a full-res
+    // decode wastes memory and overflows the layout. Peek the dimensions cheaply via
+    // SkiaSharp, then decode preserving aspect so the larger side is at most MaxPreviewDim.
+    // Extraction is unaffected — the service does its own downsample from the file.
+    private const int MaxPreviewDim = 1280;
+
+    private static Bitmap? LoadFittedBitmap(string path)
+    {
+        try
+        {
+            int w = 0, h = 0;
+            using (var codec = SkiaSharp.SKCodec.Create(path))
+            {
+                if (codec != null) { w = codec.Info.Width; h = codec.Info.Height; }
+            }
+            int max = System.Math.Max(w, h);
+            if (max <= 0) return new Bitmap(path);           // couldn't peek — full decode
+            if (max <= MaxPreviewDim) return new Bitmap(path);
+
+            double scale = MaxPreviewDim / (double)max;
+            int targetW = System.Math.Max(1, (int)System.Math.Round(w * scale));
+            using var fs = File.OpenRead(path);
+            return Bitmap.DecodeToWidth(fs, targetW);        // preserves aspect → both sides ≤ cap
+        }
+        catch { return null; }
     }
 
     private async System.Threading.Tasks.Task<string?> PickImageFileAsync()
