@@ -266,8 +266,11 @@ Forward-hook: drives emission / transmission color when roadmap **S5** lands.
   its material identity (re-deriving only the palette-drawn lights). A built-in `Catalog`
   ships six hand-authored looks (Gold, Copper, Ice, Ember [authored emission], Jade,
   Obsidian). Reuses `PerceptualRamp` (OKLCH); pure + deterministic. +7 `SceneLooksTests`.
-  **Remaining:** surface the look picker + save/recall + apply-to-render (write material /
-  `LightingFxData`) in the PaletteBuilder UI (with the other S10 UI tails).
+  **Look picker UI LANDED (PR #689)** — the PaletteBuilder "Looks" tab shows a look
+  derived from the current palette (`FromRamp`) plus the built-in catalog, each with its
+  ramp, material (roughness/metallic) and key/sky/glow tints. **Remaining:** save/recall
+  of custom looks + apply-to-render (writing material / `LightingFxData`) — a host-wiring
+  slice (the standalone tool has no live render to apply into).
 
 **S10 analysis + generation cores COMPLETE (all tested):**
 PerceptualRamp (S10.1) · CvdAnalysis (S10.2) · PaletteHistogram (S10.3) · ColorHarmony
@@ -276,7 +279,7 @@ FogPalettePreview (S10.8) · ReliefLegibility (S10.9) · SceneLooks (S10.10). Th
 work left is the **UI pass** — surfacing every core in the PaletteBuilder shell (deferred
 throughout S10 per the "leave UI to the end" call).
 
-### S10 UI pass ◐ (started — PR #681, #685, #686, #687, #688)
+### S10 UI pass ◐ (per-core surfaces done — PR #681, #685, #686, #687, #688, #689)
 Surface the ten cores in the PaletteBuilder UI, one core per slice.
 - **Plumbing (LANDED, PR #681):** the cores were authored in the Engine so the render +
   headless tests could reach them, but the PaletteBuilder UI references neither Engine nor
@@ -323,10 +326,16 @@ Surface the ten cores in the PaletteBuilder UI, one core per slice.
   verdict + luminance-locked repair ramp (`ReliefLegibility`). The PaletteBuilder
   `MainWindow` gains a **"3D Preview" tab** with all three sections; the warning lines
   paint `#FFCC00` (never red).
-- **Remaining:** the "looks" picker + apply-to-render (S10.10); the histogram-redistribute
-  UI (S10.3, needs the view's per-pixel t); the CVD/palette preview on the live fractal;
-  perceptual k-means as an extraction method; live cosine/Bézier coefficient editing +
-  applying a generated ramp back onto the palette.
+- **Sixth surface — S10.10 "looks" picker (LANDED, PR #689):** `ImagePaletteViewModel`
+  builds `Looks` — a look derived from the current palette (`SceneLooks.FromRamp`) plus the
+  built-in `Catalog`, each wrapped as a `LookRowVm` (ramp swatches + material text + key /
+  sky / glow tint brushes). The PaletteBuilder `MainWindow` gains a **"Looks" tab** listing
+  them. **All ten S10 cores now have a self-contained UI surface.**
+- **Remaining (a distinct, bigger track — live host wiring, not a per-core display slice):**
+  the histogram-redistribute UI (S10.3, needs the view's per-pixel t); the CVD/palette
+  preview on the *live fractal*; perceptual k-means as an extraction method; live
+  cosine/Bézier coefficient editing; and applying a chosen scheme / ramp / look back onto
+  the palette or the render (save/recall + material / `LightingFxData` writes).
 
 ## 6. Non-goals (not a worse Photoshop)
 

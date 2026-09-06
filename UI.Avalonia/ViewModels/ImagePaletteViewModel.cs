@@ -384,6 +384,36 @@ public class ImagePaletteViewModel : ViewModelBase
         RecomputeKeyColors();
         RecomputeHarmony();
         Recompute3DPreview();
+        RecomputeLooks();
+    }
+
+    // ── "Looks" — scene colour scripts (roadmap S10.10, #392) ──
+
+    /// <summary>The scene "looks": a look derived from the current palette
+    /// (<see cref="SceneLooks.FromRamp"/>) followed by the built-in
+    /// <see cref="SceneLooks.Catalog"/>. Each pairs a ramp with a material preset and
+    /// palette-drawn lights — the on-brand way the palette reaches into 3D.</summary>
+    public ObservableCollection<LookRowVm> Looks { get; } = new();
+
+    public bool HasLooks => Looks.Count > 0;
+
+    private void RecomputeLooks()
+    {
+        Looks.Clear();
+
+        // A look derived from the current palette, first (when one is selected).
+        var eff = _selectedResult?.EffectiveStops;
+        if (eff is { Count: >= 1 })
+        {
+            var stops = new List<(byte r, byte g, byte b)>(eff.Count);
+            foreach (var s in eff) stops.Add((s.R, s.G, s.B));
+            Looks.Add(new LookRowVm(SceneLooks.FromRamp("From this palette", stops)));
+        }
+
+        foreach (var look in SceneLooks.Catalog)
+            Looks.Add(new LookRowVm(look));
+
+        this.RaisePropertyChanged(nameof(HasLooks));
     }
 
     // ── 3D-facing previews: shaded gamut / fog / relief (roadmap S10.7–S10.9, #392) ──
@@ -1218,4 +1248,37 @@ public sealed class LabeledSwatchRow
 
     public string Label { get; }
     public IReadOnlyList<ISolidColorBrush> Swatches { get; }
+}
+
+/// <summary>One scene "look" for binding (roadmap S10.10, #392): the ramp as swatches,
+/// the material preset as text, and the key / sky (and optional emission) tints as
+/// brushes.</summary>
+public sealed class LookRowVm
+{
+    public LookRowVm(Look look)
+    {
+        Name = look.Name;
+        var ramp = new ISolidColorBrush[look.Ramp.Count];
+        for (int i = 0; i < look.Ramp.Count; i++)
+        {
+            var (r, g, b) = look.Ramp[i];
+            ramp[i] = new SolidColorBrush(Color.FromRgb(r, g, b));
+        }
+        Ramp = ramp;
+        MaterialText = $"roughness {look.Material.Roughness:0.00}  ·  metallic {look.Material.Metallic:0.00}";
+        KeyBrush = Brush(look.Lighting.KeyTint);
+        SkyBrush = Brush(look.Lighting.SkyTint);
+        EmissionBrush = look.EmissionTint is { } e ? Brush(e) : null;
+        HasEmission = EmissionBrush is not null;
+
+        static ISolidColorBrush Brush((byte r, byte g, byte b) c) => new SolidColorBrush(Color.FromRgb(c.r, c.g, c.b));
+    }
+
+    public string Name { get; }
+    public IReadOnlyList<ISolidColorBrush> Ramp { get; }
+    public string MaterialText { get; }
+    public ISolidColorBrush KeyBrush { get; }
+    public ISolidColorBrush SkyBrush { get; }
+    public ISolidColorBrush? EmissionBrush { get; }
+    public bool HasEmission { get; }
 }
