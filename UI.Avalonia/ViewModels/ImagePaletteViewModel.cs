@@ -53,6 +53,9 @@ public class ImagePaletteViewModel : ViewModelBase
         ApplyCommand = ReactiveCommand.Create(OnApply);
         CancelCommand = ReactiveCommand.Create(OnCancel);
         RedistributeCommand = ReactiveCommand.Create(RedistributeStops);
+        UseSwatchRowCommand = ReactiveCommand.Create<LabeledSwatchRow>(r => UseBrushesAsPalette(r.Label, r.Swatches));
+        UseCosineRampCommand = ReactiveCommand.Create(() => UseBrushesAsPalette("Cosine rainbow", CosineRamp));
+        UseBezierRampCommand = ReactiveCommand.Create(() => UseBrushesAsPalette("Bezier (palette)", BezierPaletteRamp));
     }
 
     // ── Image state ────────────────────────────────────────────────────
@@ -457,6 +460,50 @@ public class ImagePaletteViewModel : ViewModelBase
         var pos = PaletteHistogram.EqualizeStopPositions(hist, stops.Count);
         int n = Math.Min(pos.Length, stops.Count);
         for (int i = 0; i < n; i++) stops[i].Position = pos[i];
+    }
+
+    // ── Apply a generated ramp as the palette (roadmap S10-LW.4a, #392/#695) ──
+
+    /// <summary>Adopt a harmony scheme's swatches as a new palette (roadmap S10-LW.4a).</summary>
+    public ReactiveCommand<LabeledSwatchRow, Unit> UseSwatchRowCommand { get; }
+    /// <summary>Adopt the IQ cosine rainbow as a new palette.</summary>
+    public ReactiveCommand<Unit, Unit> UseCosineRampCommand { get; }
+    /// <summary>Adopt the Bézier-through-palette ramp as a new palette.</summary>
+    public ReactiveCommand<Unit, Unit> UseBezierRampCommand { get; }
+
+    private void UseBrushesAsPalette(string name, IReadOnlyList<ISolidColorBrush> brushes)
+    {
+        if (brushes is null || brushes.Count < 2) return;
+        var colors = new List<(byte r, byte g, byte b)>(brushes.Count);
+        foreach (var br in brushes)
+        {
+            var c = br.Color;
+            colors.Add((c.R, c.G, c.B));
+        }
+        AddGeneratedRamp(name, colors);
+    }
+
+    /// <summary>Turn an ordered colour list into a new selectable palette result (evenly
+    /// spaced stops) and select it — so the existing Apply / live-preview / advisor path
+    /// works on a generated ramp exactly as on an extracted one.</summary>
+    public void AddGeneratedRamp(string name, IReadOnlyList<(byte r, byte g, byte b)> colors)
+    {
+        if (colors is null || colors.Count < 2) return;
+        int n = colors.Count;
+        var stops = new PaletteStop[n];
+        var swatches = new PaletteSwatch[n];
+        for (int i = 0; i < n; i++)
+        {
+            float pos = (float)i / (n - 1);
+            var (r, g, b) = colors[i];
+            stops[i] = new PaletteStop(pos, r, g, b);
+            swatches[i] = new PaletteSwatch(r, g, b, 1);
+        }
+        var result = new PaletteExtractionResult { MethodName = name, Palette = swatches, Stops = stops };
+        var row = new PaletteResultViewModel(result, exclusiveSelect: false, parent: this) { IsSelected = true };
+        Results.Add(row);
+        SelectedResult = row;
+        StatusMessage = $"Added generated palette: {name}.";
     }
 
     // ── Palette + CVD preview on the LIVE fractal (roadmap S10-LW.3, #392/#694) ──

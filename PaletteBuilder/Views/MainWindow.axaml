@@ -5,6 +5,7 @@
         xmlns:c="using:FracturingFog.UI.Avalonia.Controls"
         xmlns:local="using:PaletteBuilder.Views"
         x:Class="PaletteBuilder.Views.MainWindow"
+        x:Name="Root"
         x:DataType="vm:PaletteBuilderViewModel"
         Title="Palette Builder"
         Width="900"
@@ -654,27 +655,40 @@
                                                     <StackPanel Orientation="Vertical" Spacing="2">
                                                         <TextBlock Text="{Binding Label}"
                                                                    Foreground="#DCDCA0" FontWeight="Bold" />
-                                                        <ItemsControl ItemsSource="{Binding Swatches}" Height="30">
-                                                            <ItemsControl.ItemsPanel>
-                                                                <ItemsPanelTemplate>
-                                                                    <StackPanel Orientation="Horizontal" />
-                                                                </ItemsPanelTemplate>
-                                                            </ItemsControl.ItemsPanel>
-                                                            <ItemsControl.ItemTemplate>
-                                                                <DataTemplate>
-                                                                    <Border Width="30" Height="30"
-                                                                            Background="{Binding}"
-                                                                            BorderBrush="#3C3C3C" BorderThickness="1" />
-                                                                </DataTemplate>
-                                                            </ItemsControl.ItemTemplate>
-                                                        </ItemsControl>
+                                                        <StackPanel Orientation="Horizontal" Spacing="8">
+                                                            <ItemsControl ItemsSource="{Binding Swatches}" Height="30"
+                                                                          VerticalAlignment="Center">
+                                                                <ItemsControl.ItemsPanel>
+                                                                    <ItemsPanelTemplate>
+                                                                        <StackPanel Orientation="Horizontal" />
+                                                                    </ItemsPanelTemplate>
+                                                                </ItemsControl.ItemsPanel>
+                                                                <ItemsControl.ItemTemplate>
+                                                                    <DataTemplate>
+                                                                        <Border Width="30" Height="30"
+                                                                                Background="{Binding}"
+                                                                                BorderBrush="#3C3C3C" BorderThickness="1" />
+                                                                    </DataTemplate>
+                                                                </ItemsControl.ItemTemplate>
+                                                            </ItemsControl>
+                                                            <Button Content="Use"
+                                                                    Padding="8,2" VerticalAlignment="Center"
+                                                                    Command="{Binding #Root.((ffvm:ImagePaletteViewModel)DataContext).UseSwatchRowCommand}"
+                                                                    CommandParameter="{Binding}"
+                                                                    ToolTip.Tip="Add this scheme as a new palette" />
+                                                        </StackPanel>
                                                     </StackPanel>
                                                 </DataTemplate>
                                             </ItemsControl.ItemTemplate>
                                         </ItemsControl>
 
-                                        <TextBlock Text="Cosine (IQ rainbow)"
-                                                   Foreground="#DCDCA0" FontWeight="Bold" Margin="0,4,0,0" />
+                                        <StackPanel Orientation="Horizontal" Spacing="8" Margin="0,4,0,0">
+                                            <TextBlock Text="Cosine (IQ rainbow)"
+                                                       Foreground="#DCDCA0" FontWeight="Bold" VerticalAlignment="Center" />
+                                            <Button Content="Use" Padding="8,2"
+                                                    Command="{Binding UseCosineRampCommand}"
+                                                    ToolTip.Tip="Add the cosine rainbow as a new palette" />
+                                        </StackPanel>
                                         <ItemsControl ItemsSource="{Binding CosineRamp}" Height="22">
                                             <ItemsControl.ItemsPanel>
                                                 <ItemsPanelTemplate>
@@ -688,8 +702,13 @@
                                             </ItemsControl.ItemTemplate>
                                         </ItemsControl>
 
-                                        <TextBlock Text="Bezier through palette (lightness-corrected)"
-                                                   Foreground="#DCDCA0" FontWeight="Bold" Margin="0,4,0,0" />
+                                        <StackPanel Orientation="Horizontal" Spacing="8" Margin="0,4,0,0">
+                                            <TextBlock Text="Bezier through palette (lightness-corrected)"
+                                                       Foreground="#DCDCA0" FontWeight="Bold" VerticalAlignment="Center" />
+                                            <Button Content="Use" Padding="8,2"
+                                                    Command="{Binding UseBezierRampCommand}"
+                                                    ToolTip.Tip="Add the Bezier ramp as a new palette" />
+                                        </StackPanel>
                                         <ItemsControl ItemsSource="{Binding BezierPaletteRamp}" Height="22">
                                             <ItemsControl.ItemsPanel>
                                                 <ItemsPanelTemplate>

@@ -382,10 +382,17 @@ That turns the big rock from "inject a render engine" into "expose a `float[] t`
   shows the five as a `LabeledImage` grid; `AvaloniaDialogs` wires
   `AvaloniaShellBootstrap.PaletteViewParamService` into the picker (null / empty in the
   standalone tool — no live render). *Depends LW.1.*
-- **LW.4 (#695) — apply scheme / ramp / look back (S10.4/S10.10).** Widen the picker's return
-  payload beyond stops: a chosen harmony/cosine/Bézier ramp replaces the stops; a **Look**
-  also writes `Roughness` / `Metallic` / key-sky-emission tints into `LightingFxData` via a
-  host apply-hook. Plus save/recall of custom looks. *Independent of LW.1.*
+- **LW.4 (#695) — apply scheme / ramp / look back (S10.4/S10.10).** *Split into 4a/4b/4c.*
+  - **LW.4a — apply a generated ramp. LANDED (PR #701).** A harmony scheme / cosine rainbow
+    / Bézier ramp is adopted as a new **selectable palette result** (`AddGeneratedRamp` →
+    even-spaced `PaletteStop`s → a `PaletteResultViewModel` row, auto-selected), so the
+    existing select → Apply / live-preview / advisor path applies it unchanged. "Use"
+    buttons in the Harmony tab (`UseSwatchRowCommand` per scheme, `UseCosineRampCommand`,
+    `UseBezierRampCommand`). No render-state risk — reuses the stops accept flow.
+  - **LW.4b (remaining) — Look → render.** Write a Look's `Roughness` / `Metallic` /
+    key-sky-emission tints into `LightingFxData` via a host apply-hook (widens the picker
+    payload beyond stops; touches render state).
+  - **LW.4c (remaining) — save / recall custom looks.** *Independent of LW.1.*
 - **LW.5 (#691) — perceptual k-means as an extraction method. LANDED (PR #700).**
   `PerceptualKMeansExtractor : IPaletteExtractor` (in `Imaging/PaletteExtraction/`) wraps
   `PaletteExtractionCore.KMeansOkLab` — clusters the sampled image pixels in **OkLab**
