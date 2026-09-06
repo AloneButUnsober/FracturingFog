@@ -382,6 +382,79 @@ public class ImagePaletteViewModel : ViewModelBase
         this.RaisePropertyChanged(nameof(AdvisorySummary));
         RecomputeCvdPreview();
         RecomputeKeyColors();
+        RecomputeHarmony();
+    }
+
+    // ── Harmony + generation in perceptual space (roadmap S10.4, #392) ──
+
+    /// <summary>Harmony schemes (complementary / triadic / analogous / split / tetradic,
+    /// computed in OKLCH) around the palette's most chromatic stop — one row of swatches
+    /// per scheme, base colour first.</summary>
+    public ObservableCollection<LabeledSwatchRow> HarmonySchemes { get; } = new();
+
+    /// <summary>The IQ cosine "rainbow" ramp (<see cref="CosinePalette"/>) — the compact,
+    /// GPU-friendly generator the ColorGen DSL uses.</summary>
+    public ObservableCollection<ISolidColorBrush> CosineRamp { get; } = new();
+
+    /// <summary>A chroma.js-style Bézier ramp threaded through the palette's own stops in
+    /// OkLab, lightness-corrected so lightness rises monotonically (<see cref="BezierRamp"/>).</summary>
+    public ObservableCollection<ISolidColorBrush> BezierPaletteRamp { get; } = new();
+
+    public bool HasHarmony => HarmonySchemes.Count > 0;
+
+    private void RecomputeHarmony()
+    {
+        HarmonySchemes.Clear();
+        CosineRamp.Clear();
+        BezierPaletteRamp.Clear();
+
+        var result = _selectedResult;
+        var eff = result?.EffectiveStops;
+        if (eff is { Count: >= 2 })
+        {
+            // Harmony base = the palette's most chromatic stop (the colour worth
+            // building a scheme around).
+            var baseStop = eff[0];
+            float bestC = -1f;
+            foreach (var s in eff)
+            {
+                var (L, a, b2) = PerceptualRamp.RgbToOkLab(s.R, s.G, s.B);
+                float c = PerceptualRamp.OkLabToOklch(L, a, b2).C;
+                if (c > bestC) { bestC = c; baseStop = s; }
+            }
+
+            foreach (var (name, scheme) in new[]
+            {
+                ("Complementary", ColorHarmony.Scheme.Complementary),
+                ("Triadic", ColorHarmony.Scheme.Triadic),
+                ("Analogous", ColorHarmony.Scheme.Analogous),
+                ("Split-complementary", ColorHarmony.Scheme.SplitComplementary),
+                ("Tetradic", ColorHarmony.Scheme.Tetradic),
+            })
+            {
+                var set = ColorHarmony.Harmony(baseStop.R, baseStop.G, baseStop.B, scheme);
+                var brushes = new ISolidColorBrush[set.Length];
+                for (int i = 0; i < set.Length; i++)
+                    brushes[i] = new SolidColorBrush(Color.FromRgb(set[i].r, set[i].g, set[i].b));
+                HarmonySchemes.Add(new LabeledSwatchRow(name, brushes));
+            }
+
+            // IQ cosine rainbow (fixed coefficients — the ColorGen idiom).
+            var (ca, cb, cc, cd) = CosinePalette.Rainbow;
+            foreach (var packed in CosinePalette.Emit(ca, cb, cc, cd, 24))
+                CosineRamp.Add(BrushFromPacked(packed));
+
+            // Bézier through the palette's stops, lightness-corrected.
+            var controls = new (byte, byte, byte)[eff.Count];
+            for (int i = 0; i < eff.Count; i++) controls[i] = (eff[i].R, eff[i].G, eff[i].B);
+            foreach (var packed in BezierRamp.Emit(controls, 24, lightnessCorrect: true))
+                BezierPaletteRamp.Add(BrushFromPacked(packed));
+        }
+
+        this.RaisePropertyChanged(nameof(HasHarmony));
+
+        static ISolidColorBrush BrushFromPacked(uint p) =>
+            new SolidColorBrush(Color.FromRgb((byte)((p >> 16) & 0xFF), (byte)((p >> 8) & 0xFF), (byte)(p & 0xFF)));
     }
 
     // ── Key colours: dominant / accent + lightness ramp (roadmap S10.5, #392) ──
@@ -1022,6 +1095,20 @@ public sealed class PaletteAdviceItem
 public sealed class CvdPreviewRow
 {
     public CvdPreviewRow(string label, IReadOnlyList<ISolidColorBrush> swatches)
+    {
+        Label = label;
+        Swatches = swatches;
+    }
+
+    public string Label { get; }
+    public IReadOnlyList<ISolidColorBrush> Swatches { get; }
+}
+
+/// <summary>A labelled swatch row for binding (roadmap S10.4, #392) — a scheme name plus
+/// its generated colours as brushes. Used by the harmony panel.</summary>
+public sealed class LabeledSwatchRow
+{
+    public LabeledSwatchRow(string label, IReadOnlyList<ISolidColorBrush> swatches)
     {
         Label = label;
         Swatches = swatches;

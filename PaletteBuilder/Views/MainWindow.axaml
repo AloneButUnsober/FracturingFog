@@ -632,6 +632,80 @@
                                 </ItemsControl>
                             </Grid>
                         </TabItem>
+                        <TabItem Header="Harmony" FontSize="14">
+                            <!-- Roadmap S10.4 (#392) — harmony + generation in perceptual
+                                 space: OKLCH harmony schemes around the palette's most
+                                 chromatic stop, the IQ cosine rainbow, and a Bezier ramp
+                                 threaded through the palette's stops (lightness-corrected). -->
+                            <Grid RowDefinitions="Auto,*">
+                                <TextBlock Grid.Row="0" Classes="label"
+                                           Margin="0,2,0,6"
+                                           TextWrapping="Wrap"
+                                           IsVisible="{Binding !HasHarmony}"
+                                           Text="Select a palette to generate harmony schemes and ramps." />
+                                <ScrollViewer Grid.Row="1"
+                                              HorizontalScrollBarVisibility="Disabled"
+                                              VerticalScrollBarVisibility="Auto"
+                                              IsVisible="{Binding HasHarmony}">
+                                    <StackPanel Orientation="Vertical" Spacing="8">
+                                        <ItemsControl ItemsSource="{Binding HarmonySchemes}">
+                                            <ItemsControl.ItemTemplate>
+                                                <DataTemplate>
+                                                    <StackPanel Orientation="Vertical" Spacing="2">
+                                                        <TextBlock Text="{Binding Label}"
+                                                                   Foreground="#DCDCA0" FontWeight="Bold" />
+                                                        <ItemsControl ItemsSource="{Binding Swatches}" Height="30">
+                                                            <ItemsControl.ItemsPanel>
+                                                                <ItemsPanelTemplate>
+                                                                    <StackPanel Orientation="Horizontal" />
+                                                                </ItemsPanelTemplate>
+                                                            </ItemsControl.ItemsPanel>
+                                                            <ItemsControl.ItemTemplate>
+                                                                <DataTemplate>
+                                                                    <Border Width="30" Height="30"
+                                                                            Background="{Binding}"
+                                                                            BorderBrush="#3C3C3C" BorderThickness="1" />
+                                                                </DataTemplate>
+                                                            </ItemsControl.ItemTemplate>
+                                                        </ItemsControl>
+                                                    </StackPanel>
+                                                </DataTemplate>
+                                            </ItemsControl.ItemTemplate>
+                                        </ItemsControl>
+
+                                        <TextBlock Text="Cosine (IQ rainbow)"
+                                                   Foreground="#DCDCA0" FontWeight="Bold" Margin="0,4,0,0" />
+                                        <ItemsControl ItemsSource="{Binding CosineRamp}" Height="22">
+                                            <ItemsControl.ItemsPanel>
+                                                <ItemsPanelTemplate>
+                                                    <StackPanel Orientation="Horizontal" />
+                                                </ItemsPanelTemplate>
+                                            </ItemsControl.ItemsPanel>
+                                            <ItemsControl.ItemTemplate>
+                                                <DataTemplate>
+                                                    <Border Width="14" Height="22" Background="{Binding}" />
+                                                </DataTemplate>
+                                            </ItemsControl.ItemTemplate>
+                                        </ItemsControl>
+
+                                        <TextBlock Text="Bezier through palette (lightness-corrected)"
+                                                   Foreground="#DCDCA0" FontWeight="Bold" Margin="0,4,0,0" />
+                                        <ItemsControl ItemsSource="{Binding BezierPaletteRamp}" Height="22">
+                                            <ItemsControl.ItemsPanel>
+                                                <ItemsPanelTemplate>
+                                                    <StackPanel Orientation="Horizontal" />
+                                                </ItemsPanelTemplate>
+                                            </ItemsControl.ItemsPanel>
+                                            <ItemsControl.ItemTemplate>
+                                                <DataTemplate>
+                                                    <Border Width="14" Height="22" Background="{Binding}" />
+                                                </DataTemplate>
+                                            </ItemsControl.ItemTemplate>
+                                        </ItemsControl>
+                                    </StackPanel>
+                                </ScrollViewer>
+                            </Grid>
+                        </TabItem>
                     </TabControl>
                     <!--<TextBlock Grid.Row="1" Grid.Column="0" Classes="label"
                     Text="Method:" Margin="0,2,4,0" HorizontalAlignment="Right"/>
