@@ -206,8 +206,8 @@ specular. Author in **linear** and preview through the tonemap (ties to roadmap
   `AnalyzeRamp` does a whole ramp (the shaded-gamut grid). Reuses `ViewTransformOps`
   (S2 tonemap + transfer) and `PerceptualRamp` (OkLab ΔE). +7 `ShadedGamutTests`
   (rise shadow→specular, crush/blow classification, AgX rolls off what None clips,
-  exposure brightens, determinism). **Remaining:** draw the shaded-gamut grid in the
-  PaletteBuilder preview (with the other S10 UI tails).
+  exposure brightens, determinism). **UI LANDED (PR #688)** — the shaded-gamut grid +
+  crush/blow summary in the PaletteBuilder "3D Preview" tab.
 
 ### S10.8 — Fog / volumetric palette preview ◐ (core LANDED — PR #678)
 The palette now colors the **fog** via optical-depth remap (shipped in #185).
@@ -226,8 +226,8 @@ Preview the ramp as god-rays / haze and offer a fog-optimized sub-ramp.
   luminance-ASCENDING (thicker fog reads as *more*); an all-dark source is lifted toward
   white so the result is never empty. Reuses `PerceptualRamp` (OkLab sampling + ΔE) and
   the same sRGB↔linear transfer the render composites in. +6 `FogPalettePreviewTests`.
-  **Remaining:** draw the god-ray/haze strip + offer the sub-ramp in the PaletteBuilder
-  UI (with the other S10 UI tails).
+  **UI LANDED (PR #688)** — the god-ray/haze strip + fog-optimised sub-ramp + wash-out
+  warning in the "3D Preview" tab.
 
 ### S10.9 — Relief = luminance is form ◐ (core LANDED — PR #679)
 Restate §2 as a 3D tool: a luminance-monotonic ramp makes relief read as raised
@@ -247,8 +247,8 @@ luminance-lock that helps colorblind readers.
   reads as form again. This is the **same luminance-lock** that keeps a ramp legible
   under CVD (S10.2 — luminance is the channel that survives when hue collapses): one
   discipline, two payoffs. Reuses `PerceptualRamp` (OkLab / OKLCH). +6 `ReliefLegibilityTests`.
-  **Remaining:** show the relief preview + the flatten warning in the PaletteBuilder UI
-  (with the other S10 UI tails).
+  **UI LANDED (PR #688)** — the relief verdict + flatten warning + luminance-locked
+  repair ramp in the "3D Preview" tab.
 
 ### S10.10 — "Looks" (scene color scripts) ◐ (core LANDED — PR #680)
 Pair a ramp with **material presets** (gold = warm ramp + low roughness + metallic)
@@ -276,7 +276,7 @@ FogPalettePreview (S10.8) · ReliefLegibility (S10.9) · SceneLooks (S10.10). Th
 work left is the **UI pass** — surfacing every core in the PaletteBuilder shell (deferred
 throughout S10 per the "leave UI to the end" call).
 
-### S10 UI pass ◐ (started — PR #681, #685, #686, #687)
+### S10 UI pass ◐ (started — PR #681, #685, #686, #687, #688)
 Surface the ten cores in the PaletteBuilder UI, one core per slice.
 - **Plumbing (LANDED, PR #681):** the cores were authored in the Engine so the render +
   headless tests could reach them, but the PaletteBuilder UI references neither Engine nor
@@ -316,10 +316,17 @@ Surface the ten cores in the PaletteBuilder UI, one core per slice.
   lightness-corrected), recomputed with the rest on selection / stop edits. The
   PaletteBuilder `MainWindow` gains a **"Harmony" tab** stacking the scheme rows + the two
   generated ramps.
-- **Remaining:** the other cores' UI surfaces (histogram redistribute, shaded-gamut + fog +
-  relief previews, the "looks" picker + apply-to-render; the CVD/palette preview on the
-  live fractal; perceptual k-means as an extraction method; live cosine/Bézier coefficient
-  editing + applying a generated ramp back onto the palette), one slice at a time.
+- **Fifth surface — S10.7–S10.9 3D preview trio (LANDED, PR #688):** `ImagePaletteViewModel`
+  builds, recomputed with the rest, the shaded-gamut rows (`ShadedGamut.AnalyzeRamp` —
+  each stop swept shadow → lit → specular + a crush/blow summary), the fog / god-ray strip
+  and fog-optimised sub-ramp (`FogPalettePreview` + a wash-out warning), and the relief
+  verdict + luminance-locked repair ramp (`ReliefLegibility`). The PaletteBuilder
+  `MainWindow` gains a **"3D Preview" tab** with all three sections; the warning lines
+  paint `#FFCC00` (never red).
+- **Remaining:** the "looks" picker + apply-to-render (S10.10); the histogram-redistribute
+  UI (S10.3, needs the view's per-pixel t); the CVD/palette preview on the live fractal;
+  perceptual k-means as an extraction method; live cosine/Bézier coefficient editing +
+  applying a generated ramp back onto the palette.
 
 ## 6. Non-goals (not a worse Photoshop)
 
