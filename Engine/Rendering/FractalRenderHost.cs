@@ -3020,6 +3020,37 @@ namespace FracturingFog.Rendering
         /// fall back to a hard cut. The live colour map is updated so the
         /// post-fade state is consistent. Used by the slideshow theme cross-fade.
         /// </summary>
+        /// <summary>Roadmap S10-LW.1 (#690) — snapshot the active view's per-pixel smooth
+        /// iteration field for the palette tool's view-parameter service. Copies the live
+        /// Mandelbrot calculator's <see cref="IHeightFieldSource.SmoothBuffer"/> (in-set
+        /// pixels read 0), its <c>MaxIterations</c>, and its dimensions. Returns false
+        /// when the active view is not a 2D Mandelbrot escape-time view, or nothing has
+        /// been computed yet — a first-cut scope (escape-time alts / relief can extend it).
+        /// The buffer is copied so the caller never races the render thread's next frame.</summary>
+        public bool TryGetActiveSmoothField(out float[] smooth, out int maxIterations, out int width, out int height)
+        {
+            smooth = System.Array.Empty<float>();
+            maxIterations = 0;
+            width = 0;
+            height = 0;
+            if (_disposed) return false;
+            if (ViewState.FractalType != FractalType.Mandelbrot) return false;
+            if (_calculator is not IHeightFieldSource hfs) return false;
+
+            int w = _calculator.Width, h = _calculator.Height;
+            if (w <= 0 || h <= 0) return false;
+            var field = hfs.SmoothBuffer;
+            if (field is null || field.Length < w * h) return false;
+
+            var copy = new float[w * h];
+            System.Array.Copy(field, copy, copy.Length);
+            smooth = copy;
+            maxIterations = _calculator.MaxIterations;
+            width = w;
+            height = h;
+            return true;
+        }
+
         public uint[]? RecolorActiveToBuffer(IColorMap map)
             => RecolorActiveToBuffer(map, _currentTargetWidth, _currentTargetHeight);
 

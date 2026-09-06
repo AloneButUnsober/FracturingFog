@@ -356,10 +356,15 @@ That turns the big rock from "inject a render engine" into "expose a `float[] t`
 
 **Slices (dependencies stated; the repo has no auto-blocking — see the sub-issues):**
 
-- **LW.1 (#690) — view-parameter provider (keystone).** New `IPaletteViewParamService` in
-  Abstractions: return the current view's per-pixel palette parameter `t∈[0,1]` + width/
-  height (host reads the render's smooth/trap buffer). Injected like `PaletteService`.
-  *Blocks LW.2, LW.3.*
+- **LW.1 (#690) — view-parameter provider (keystone). LANDED (PR #697).**
+  `IPaletteViewParamService` + `PaletteViewSample(T, Width, Height)` in Abstractions;
+  the pure `ViewParamNormalizer.NormalizeSmooth(smooth, maxIters, count)` (→ t∈[0,1],
+  in-set/negative/non-finite → 0) in ColorCore (+4 tests); `FractalRenderHost.
+  TryGetActiveSmoothField` snapshots the live Mandelbrot calc's `SmoothBuffer` +
+  `MaxIterations` + dims (Mandelbrot-first; escape-time alts / relief can extend);
+  `HostPaletteViewParamService` (Hosting) composes them; exposed as
+  `AvaloniaShellBootstrap.PaletteViewParamService`, set once the render host exists.
+  Injected like `PaletteService`. *Consumer UI deferred to LW.2 / LW.3.* *Blocks LW.2, LW.3.*
 - **LW.2 (#693) — histogram-redistribute UI (S10.3).** Feed the LW.1 `t` buffer to
   `PaletteHistogram.Build`; show `WastedFraction` ("this view never hits X% of the ramp")
   and a **Redistribute** action using `EqualizeStopPositions`. *Depends LW.1.*
