@@ -56,6 +56,7 @@ public class ImagePaletteViewModel : ViewModelBase
         UseSwatchRowCommand = ReactiveCommand.Create<LabeledSwatchRow>(r => UseBrushesAsPalette(r.Label, r.Swatches));
         UseCosineRampCommand = ReactiveCommand.Create(() => UseBrushesAsPalette("Cosine rainbow", CosineRamp));
         UseBezierRampCommand = ReactiveCommand.Create(() => UseBrushesAsPalette("Bezier (palette)", BezierPaletteRamp));
+        ApplyLookCommand = ReactiveCommand.Create<LookRowVm>(ApplyLook);
     }
 
     // ── Image state ────────────────────────────────────────────────────
@@ -592,6 +593,32 @@ public class ImagePaletteViewModel : ViewModelBase
     public ObservableCollection<LookRowVm> Looks { get; } = new();
 
     public bool HasLooks => Looks.Count > 0;
+
+    private IPaletteLookApplyService? _lookApplyService;
+    /// <summary>Optional host service that writes a look's material + light tints into the
+    /// live render (roadmap S10-LW.4b, #695). Set by the host; null in the standalone tool
+    /// (no live render) — the "Apply to render" affordance then hides.</summary>
+    public IPaletteLookApplyService? LookApplyService
+    {
+        get => _lookApplyService;
+        set { _lookApplyService = value; this.RaisePropertyChanged(nameof(HasLookApply)); }
+    }
+
+    /// <summary>True when a look can be applied to the live render.</summary>
+    public bool HasLookApply => _lookApplyService is not null;
+
+    /// <summary>Apply a look to the render: adopt its ramp as the palette (the LW.4a path)
+    /// and write its material + light tints into the live render (LW.4b).</summary>
+    public ReactiveCommand<LookRowVm, Unit> ApplyLookCommand { get; }
+
+    private void ApplyLook(LookRowVm row)
+    {
+        if (row?.Source is null) return;
+        AddGeneratedRamp($"{row.Name} (look)", row.Source.Ramp);
+        _lookApplyService?.ApplyLook(
+            row.Source.Material.Roughness, row.Source.Material.Metallic,
+            row.Source.Lighting.KeyTint, row.Source.Lighting.SkyTint);
+    }
 
     private void RecomputeLooks()
     {
@@ -1493,6 +1520,7 @@ public sealed class LookRowVm
 {
     public LookRowVm(Look look)
     {
+        Source = look;
         Name = look.Name;
         var ramp = new ISolidColorBrush[look.Ramp.Count];
         for (int i = 0; i < look.Ramp.Count; i++)
@@ -1510,6 +1538,9 @@ public sealed class LookRowVm
         static ISolidColorBrush Brush((byte r, byte g, byte b) c) => new SolidColorBrush(Color.FromRgb(c.r, c.g, c.b));
     }
 
+    /// <summary>The underlying look — carried so the apply path can read its material +
+    /// lights (roadmap S10-LW.4b).</summary>
+    public Look Source { get; }
     public string Name { get; }
     public IReadOnlyList<ISolidColorBrush> Ramp { get; }
     public string MaterialText { get; }

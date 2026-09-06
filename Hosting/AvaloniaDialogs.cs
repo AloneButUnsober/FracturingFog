@@ -2018,6 +2018,8 @@ namespace FracturingFog.Hosting
             // so its "Live Fractal" tab can preview the palette (and its CVD variants) on
             // the real fractal without a re-render. Null on headless / no render host.
             vm.ViewParamService = AvaloniaShellBootstrap.PaletteViewParamService;
+            // Roadmap S10-LW.4b (#695): let the picker apply a look to the live render.
+            vm.LookApplyService = AvaloniaShellBootstrap.PaletteLookApplyService;
 
             IReadOnlyList<PaletteStop>? accepted = null;
             var tcs = new TaskCompletionSource<bool>();

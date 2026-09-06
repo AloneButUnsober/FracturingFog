@@ -157,6 +157,11 @@ namespace FracturingFog.Hosting
         /// host exists (see <see cref="OnSurfaceReady"/>); null until then / on headless.</summary>
         public static IPaletteViewParamService? PaletteViewParamService { get; set; }
 
+        /// <summary>Palette look-apply service (roadmap S10-LW.4b, #695) — writes a look's
+        /// material + light tints into the live render. Set once the render host exists;
+        /// null until then / on headless.</summary>
+        public static IPaletteLookApplyService? PaletteLookApplyService { get; set; }
+
         // Phase 2.4 cross-platform: registers the Silk.NET OpenGL backend as
         // RendererFactory.NonWin32Backend so X11 / CAMetalLayer / Wayland
         // surfaces can be served when the DX path is unavailable. Kept in a
@@ -384,6 +389,9 @@ namespace FracturingFog.Hosting
             // Roadmap S10-LW.1 (#690): expose the live render's view parameter to the
             // palette tool now that the render host exists.
             PaletteViewParamService = new HostPaletteViewParamService(s_renderHost);
+            // Roadmap S10-LW.4b (#695): let the palette tool apply a look's material +
+            // light tints to the live render.
+            PaletteLookApplyService = new HostPaletteLookApplyService(s_renderHost);
             // Phase X.0 / Slice 0.1c: install the D3D11-backed IGpuKernel
             // factory. Engine cannot construct the kernel itself because
             // MandelbrotGpuKernel lives in Rendering.D3D and owns Vortice
