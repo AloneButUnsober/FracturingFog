@@ -108,7 +108,7 @@ ramps are simply better.
   continuous CVD-ΔE-maximising ramp generator; redundant-encoding hints — the UI + the
   advisor surfacing (S10.6). Deterministic core is in; suite 2270/2270.
 
-### S10.3 — Fractal-aware preview ☐
+### S10.3 — Fractal-aware preview ◐ (core LANDED — PR #673)
 - Palette live **on the real fractal** (2D + 3D), not a gradient bar.
 - **Histogram-aware stop mapping** — show where stops land on *this view's*
   iteration density (reuse `HistogramEqualizer`); let the artist redistribute to
@@ -117,6 +117,13 @@ ramps are simply better.
 - **Seamless-cycle guarantee** — for palette cycling (`CyclingGradientColorMap`),
   endpoint = startpoint in perceptual space; preview the cycle.
 - **Reuse:** render engine + iteration histogram.
+- **Landed (core):** `Engine/Imaging/PaletteHistogram.cs` — `Build` (histogram over the
+  view's palette-parameter t), `WastedFraction` (the "this view never hits X% of your
+  palette" metric), `EqualizeStopPositions` (CDF-inverse redistribution that packs stops
+  where the pixels are — the render's histogram-EQ idiom, #145, on the t-domain), and
+  `CycleSeamDeltaE` / `IsSeamlessCycle` (the cycle-join gap in OkLab ΔE, reusing S10.1).
+  +5 `PaletteHistogramTests`. **Remaining:** wire it live on the real fractal preview
+  (feed the view's per-pixel t; the "redistribute?" + cycle preview UI) — the UI slice.
 
 ### S10.4 — Harmony + generation in perceptual space ☐
 Adobe-Color harmony rules (complementary / triadic / analogous / split) computed
