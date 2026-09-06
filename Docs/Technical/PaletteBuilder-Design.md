@@ -104,9 +104,12 @@ ramps are simply better.
   8-colour CVD-safe categorical set. +7 `CvdAnalysisTests` (severity-0 identity,
   monochromacy grey, determinism, red/green deutan collapse vs normal, confusables flag
   red/green but not black/white, Okabe-Ito clears a JND, luminance-monotonic detection).
-  **Remaining:** live side-by-side CVD preview UI (on palette + fractal); the
-  continuous CVD-ΔE-maximising ramp generator; redundant-encoding hints — the UI + the
-  advisor surfacing (S10.6). Deterministic core is in; suite 2270/2270.
+  **Side-by-side CVD preview UI LANDED (PR #685)** — the standalone PaletteBuilder
+  "Colorblind" tab shows the selected palette as it reads to normal vision and under
+  deutan / protan / tritan / full monochromacy (a swatch row per type, simulated through
+  `CvdSimulation.Simulate`), recomputed on selection + live stop edits. **Remaining:** the
+  same preview on the live fractal (needs the S10.3 fractal-preview wiring); the continuous
+  CVD-ΔE-maximising ramp generator; redundant-encoding hints. Deterministic core is in.
 
 ### S10.3 — Fractal-aware preview ◐ (core LANDED — PR #673)
 - Palette live **on the real fractal** (2D + 3D), not a gradient bar.
@@ -264,7 +267,7 @@ FogPalettePreview (S10.8) · ReliefLegibility (S10.9) · SceneLooks (S10.10). Th
 work left is the **UI pass** — surfacing every core in the PaletteBuilder shell (deferred
 throughout S10 per the "leave UI to the end" call).
 
-### S10 UI pass ◐ (started — PR #681)
+### S10 UI pass ◐ (started — PR #681, #685)
 Surface the ten cores in the PaletteBuilder UI, one core per slice.
 - **Plumbing (LANDED, PR #681):** the cores were authored in the Engine so the render +
   headless tests could reach them, but the PaletteBuilder UI references neither Engine nor
@@ -283,9 +286,16 @@ Surface the ten cores in the PaletteBuilder UI, one core per slice.
   the standalone PaletteBuilder `MainWindow` gains an **"Advisor" tab** that lists them —
   painted `#FFCC00` with a neutral severity glyph (never red / green). CVD-first help lands
   in the UI first, on-brand.
-- **Remaining:** the other nine cores' UI surfaces (CVD side-by-side preview, histogram
-  redistribute, harmony/generation, extraction dominant/accent, shaded-gamut + fog + relief
-  previews, the "looks" picker + apply-to-render), one slice at a time.
+- **Second core surfaced — S10.2 CVD side-by-side preview (LANDED, PR #685):**
+  `ImagePaletteViewModel` builds a `CvdPreview` (a `CvdPreviewRow` per vision type —
+  normal + deutan / protan / tritan / monochromacy — each the selected palette's stops
+  simulated through `CvdSimulation.Simulate`, as bound swatch brushes), recomputed with
+  the advisor on selection / stop edits. The standalone PaletteBuilder `MainWindow` gains
+  a **"Colorblind" tab** stacking the rows so the artist sees the palette collapse (or
+  survive) under CVD directly — the CVD-first differentiator.
+- **Remaining:** the other cores' UI surfaces (histogram redistribute, harmony/generation,
+  extraction dominant/accent, shaded-gamut + fog + relief previews, the "looks" picker +
+  apply-to-render; and the CVD/palette preview on the live fractal), one slice at a time.
 
 ## 6. Non-goals (not a worse Photoshop)
 

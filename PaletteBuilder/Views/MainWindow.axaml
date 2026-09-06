@@ -536,6 +536,49 @@
                                 </ScrollViewer>
                             </Grid>
                         </TabItem>
+                        <TabItem Header="Colorblind" FontSize="14">
+                            <!-- Roadmap S10.2 (#392) — CVD side-by-side preview. The
+                                 selected palette as it reads to normal vision and under
+                                 each colour-vision deficiency (Machado 2009, via
+                                 CvdSimulation.Simulate). The CVD-first differentiator. -->
+                            <Grid RowDefinitions="Auto,*">
+                                <TextBlock Grid.Row="0" Classes="label"
+                                           Margin="0,2,0,6"
+                                           TextWrapping="Wrap"
+                                           IsVisible="{Binding !HasCvdPreview}"
+                                           Text="Select a palette to preview it under colour-vision deficiency." />
+                                <ScrollViewer Grid.Row="1"
+                                              HorizontalScrollBarVisibility="Disabled"
+                                              VerticalScrollBarVisibility="Auto">
+                                    <ItemsControl ItemsSource="{Binding CvdPreview}">
+                                        <ItemsControl.ItemTemplate>
+                                            <DataTemplate>
+                                                <StackPanel Orientation="Vertical" Spacing="2" Margin="0,0,0,8">
+                                                    <TextBlock Text="{Binding Label}"
+                                                               Foreground="#DCDCA0"
+                                                               FontWeight="Bold" />
+                                                    <ItemsControl ItemsSource="{Binding Swatches}" Height="26">
+                                                        <ItemsControl.ItemsPanel>
+                                                            <ItemsPanelTemplate>
+                                                                <StackPanel Orientation="Horizontal" />
+                                                            </ItemsPanelTemplate>
+                                                        </ItemsControl.ItemsPanel>
+                                                        <ItemsControl.ItemTemplate>
+                                                            <DataTemplate>
+                                                                <Border Width="26" Height="26"
+                                                                        Background="{Binding}"
+                                                                        BorderBrush="#3C3C3C"
+                                                                        BorderThickness="1" />
+                                                            </DataTemplate>
+                                                        </ItemsControl.ItemTemplate>
+                                                    </ItemsControl>
+                                                </StackPanel>
+                                            </DataTemplate>
+                                        </ItemsControl.ItemTemplate>
+                                    </ItemsControl>
+                                </ScrollViewer>
+                            </Grid>
+                        </TabItem>
                     </TabControl>
                     <!--<TextBlock Grid.Row="1" Grid.Column="0" Classes="label"
                     Text="Method:" Margin="0,2,4,0" HorizontalAlignment="Right"/>

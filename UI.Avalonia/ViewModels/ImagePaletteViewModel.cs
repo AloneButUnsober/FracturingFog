@@ -21,6 +21,7 @@ using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Reactive;
+using Avalonia.Media;
 using Avalonia.Media.Imaging;
 using FracturingFog.Imaging;
 using ReactiveUI;
@@ -379,6 +380,55 @@ public class ImagePaletteViewModel : ViewModelBase
         }
         this.RaisePropertyChanged(nameof(HasAdvisories));
         this.RaisePropertyChanged(nameof(AdvisorySummary));
+        RecomputeCvdPreview();
+    }
+
+    // ── Colourblind side-by-side preview (roadmap S10.2, #392) ──────────
+
+    /// <summary>The selected palette rendered as it appears to normal vision and
+    /// under each colour-vision deficiency (deutan / protan / tritan / full
+    /// monochromacy), via <see cref="CvdSimulation.Simulate"/> — the CVD-first
+    /// differentiator, side by side. Recomputed with the advisor on selection /
+    /// stop edits.</summary>
+    public ObservableCollection<CvdPreviewRow> CvdPreview { get; } = new();
+
+    /// <summary>True once a palette with ≥2 stops is selected (drives the preview
+    /// panel's empty-state text).</summary>
+    public bool HasCvdPreview => CvdPreview.Count > 0;
+
+    private void RecomputeCvdPreview()
+    {
+        CvdPreview.Clear();
+        var result = _selectedResult;
+        if (result is not null)
+        {
+            var eff = result.EffectiveStops;
+            if (eff.Count >= 2)
+            {
+                // Normal vision first, then each deficiency at full severity.
+                CvdPreview.Add(BuildCvdRow("Normal vision", eff, null));
+                CvdPreview.Add(BuildCvdRow("Deuteranopia (green-weak)", eff, CvdType.Deutan));
+                CvdPreview.Add(BuildCvdRow("Protanopia (red-weak)", eff, CvdType.Protan));
+                CvdPreview.Add(BuildCvdRow("Tritanopia (blue-weak)", eff, CvdType.Tritan));
+                CvdPreview.Add(BuildCvdRow("Monochromacy", eff, CvdType.Monochromacy));
+            }
+        }
+        this.RaisePropertyChanged(nameof(HasCvdPreview));
+    }
+
+    private static CvdPreviewRow BuildCvdRow(
+        string label, IReadOnlyList<PaletteStop> stops, CvdType? type)
+    {
+        var brushes = new ISolidColorBrush[stops.Count];
+        for (int i = 0; i < stops.Count; i++)
+        {
+            var s = stops[i];
+            var (r, g, b) = type is null
+                ? (s.R, s.G, s.B)
+                : CvdSimulation.Simulate(s.R, s.G, s.B, type.Value);
+            brushes[i] = new SolidColorBrush(Color.FromRgb(r, g, b));
+        }
+        return new CvdPreviewRow(label, brushes);
     }
 
     private string? _statusMessage;
@@ -875,4 +925,19 @@ public sealed class PaletteAdviceItem
     /// <summary>A neutral severity glyph (never a colour cue): a filled dot for a
     /// warning, a hollow one for info.</summary>
     public string Glyph => IsWarn ? "◆" : "◇";
+}
+
+/// <summary>One row of the colourblind side-by-side preview (roadmap S10.2, #392):
+/// a label plus the palette's swatches as they appear under one vision type. The view
+/// binds each brush straight onto a swatch cell's background.</summary>
+public sealed class CvdPreviewRow
+{
+    public CvdPreviewRow(string label, IReadOnlyList<ISolidColorBrush> swatches)
+    {
+        Label = label;
+        Swatches = swatches;
+    }
+
+    public string Label { get; }
+    public IReadOnlyList<ISolidColorBrush> Swatches { get; }
 }
