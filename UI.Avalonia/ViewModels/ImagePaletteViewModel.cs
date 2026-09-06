@@ -767,10 +767,8 @@ public class ImagePaletteViewModel : ViewModelBase
                 HarmonySchemes.Add(new LabeledSwatchRow(name, brushes));
             }
 
-            // IQ cosine rainbow (fixed coefficients — the ColorGen idiom).
-            var (ca, cb, cc, cd) = CosinePalette.Rainbow;
-            foreach (var packed in CosinePalette.Emit(ca, cb, cc, cd, 24))
-                CosineRamp.Add(BrushFromPacked(packed));
+            // IQ cosine ramp from the live coefficients (roadmap S10-LW.6).
+            RebuildCosineRamp();
 
             // Bézier through the palette's stops, lightness-corrected.
             var controls = new (byte, byte, byte)[eff.Count];
@@ -783,6 +781,34 @@ public class ImagePaletteViewModel : ViewModelBase
 
         static ISolidColorBrush BrushFromPacked(uint p) =>
             new SolidColorBrush(Color.FromRgb((byte)((p >> 16) & 0xFF), (byte)((p >> 8) & 0xFF), (byte)(p & 0xFF)));
+    }
+
+    // ── Live IQ cosine-palette editor (roadmap S10-LW.6, #392/#692) ──
+
+    private double _cosineA = 0.5;   // brightness (a)
+    private double _cosineB = 0.5;   // contrast (b)
+    private double _cosineC = 1.0;   // frequency (c)
+    private double _cosinePhase;     // phase offset added to the rainbow's per-channel d
+
+    /// <summary>IQ cosine brightness term a (colour = a + b·cos(2π(c·t + d))).</summary>
+    public double CosineA { get => _cosineA; set { this.RaiseAndSetIfChanged(ref _cosineA, value); RebuildCosineRamp(); } }
+    /// <summary>IQ cosine contrast term b.</summary>
+    public double CosineB { get => _cosineB; set { this.RaiseAndSetIfChanged(ref _cosineB, value); RebuildCosineRamp(); } }
+    /// <summary>IQ cosine frequency term c (cycles across the ramp).</summary>
+    public double CosineC { get => _cosineC; set { this.RaiseAndSetIfChanged(ref _cosineC, value); RebuildCosineRamp(); } }
+    /// <summary>Phase offset added to the rainbow's per-channel d (0 / ⅓ / ⅔) — rotates the hue sweep.</summary>
+    public double CosinePhase { get => _cosinePhase; set { this.RaiseAndSetIfChanged(ref _cosinePhase, value); RebuildCosineRamp(); } }
+
+    private void RebuildCosineRamp()
+    {
+        CosineRamp.Clear();
+        float a = (float)_cosineA, b = (float)_cosineB, c = (float)_cosineC, ph = (float)_cosinePhase;
+        // Keep the rainbow's per-channel phase spread (0 / ⅓ / ⅔) so hues stay separated;
+        // the slider offsets all three, rotating the sweep.
+        var da = (ph, ph + 0.3333f, ph + 0.6667f);
+        foreach (var packed in CosinePalette.Emit((a, a, a), (b, b, b), (c, c, c), da, 24))
+            CosineRamp.Add(new SolidColorBrush(Color.FromRgb(
+                (byte)((packed >> 16) & 0xFF), (byte)((packed >> 8) & 0xFF), (byte)(packed & 0xFF))));
     }
 
     // ── Key colours: dominant / accent + lightness ramp (roadmap S10.5, #392) ──
