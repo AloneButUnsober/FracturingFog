@@ -139,8 +139,12 @@ lightness correction for high-quality ramps.
   per channel + `Rainbow` default + `Emit`), and `BezierRamp` (De Casteljau **in OkLab**
   through control colours, optional **lightness correction** that re-times the curve so
   OkLab lightness rises evenly / monotonically end-to-end). +6 `ColorHarmonyTests`.
-  **Remaining:** the live-coefficient editors + harmony picker UI (the PaletteBuilder UI
-  slice, deferred with the other S10 UI tails).
+  **Harmony + generation UI LANDED (PR #687)** — the PaletteBuilder "Harmony" tab shows
+  the five OKLCH schemes around the palette's most chromatic stop, the IQ cosine rainbow,
+  and a Bézier ramp threaded through the palette's own stops (lightness-corrected).
+  **Remaining:** live-coefficient editing (today the cosine ramp is the fixed rainbow and
+  the Bézier controls are the palette stops — a later editor slice), and applying a chosen
+  scheme / generated ramp back onto the palette.
 
 ### S10.5 — Extraction upgrades ◐ (core LANDED — PR #676)
 Perceptual **k-means in OkLab**; extract an *ordered ramp* (by lightness), not just
@@ -272,7 +276,7 @@ FogPalettePreview (S10.8) · ReliefLegibility (S10.9) · SceneLooks (S10.10). Th
 work left is the **UI pass** — surfacing every core in the PaletteBuilder shell (deferred
 throughout S10 per the "leave UI to the end" call).
 
-### S10 UI pass ◐ (started — PR #681, #685, #686)
+### S10 UI pass ◐ (started — PR #681, #685, #686, #687)
 Surface the ten cores in the PaletteBuilder UI, one core per slice.
 - **Plumbing (LANDED, PR #681):** the cores were authored in the Engine so the render +
   headless tests could reach them, but the PaletteBuilder UI references neither Engine nor
@@ -305,10 +309,17 @@ Surface the ten cores in the PaletteBuilder UI, one core per slice.
   (`Palette`, not the weight-1 `EffectivePalette`) into `DominantBrush` / `AccentBrush`
   (+ hex + pixel-share labels) and a `LightnessRamp`; the PaletteBuilder `MainWindow`
   gains a **"Key Colors" tab** showing the two picks and the lightness-ordered strip.
-- **Remaining:** the other cores' UI surfaces (histogram redistribute, harmony/generation,
-  shaded-gamut + fog + relief previews, the "looks" picker + apply-to-render; the
-  CVD/palette preview on the live fractal; and perceptual k-means as an extraction method),
-  one slice at a time.
+- **Fourth core surfaced — S10.4 harmony + generation (LANDED, PR #687):**
+  `ImagePaletteViewModel` builds `HarmonySchemes` (the five OKLCH schemes around the
+  palette's most chromatic stop, as `LabeledSwatchRow`s), a `CosineRamp` (the IQ cosine
+  rainbow), and a `BezierPaletteRamp` (Bézier through the palette's stops in OkLab,
+  lightness-corrected), recomputed with the rest on selection / stop edits. The
+  PaletteBuilder `MainWindow` gains a **"Harmony" tab** stacking the scheme rows + the two
+  generated ramps.
+- **Remaining:** the other cores' UI surfaces (histogram redistribute, shaded-gamut + fog +
+  relief previews, the "looks" picker + apply-to-render; the CVD/palette preview on the
+  live fractal; perceptual k-means as an extraction method; live cosine/Bézier coefficient
+  editing + applying a generated ramp back onto the palette), one slice at a time.
 
 ## 6. Non-goals (not a worse Photoshop)
 
