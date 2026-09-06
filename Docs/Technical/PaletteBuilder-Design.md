@@ -427,7 +427,8 @@ With it, **S10 is fully delivered**: ten analysis + generation cores, six per-co
 surfaces, and the live-render integration (view-param provider, on-fractal palette + CVD
 preview, histogram redistribute, perceptual k-means extraction, cosine editor, apply
 generated ramp / look to palette + render, save/recall looks). Remaining nice-to-haves are
-minor tails noted per slice (Bézier control-colour editing; emission when S5 lands).
+minor tails, now filed: Bézier control-colour editing (#705); apply a look's emission
+tint to the render when roadmap S5 lands (#706).
 
 ## 6. Non-goals (not a worse Photoshop)
 
