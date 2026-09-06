@@ -128,4 +128,35 @@ public sealed class PaletteExtractionCoreTests
         Assert.True(clusters.Count <= 2);
         Assert.All(clusters, c => Assert.True(c.Weight >= 1));
     }
+
+    [Fact]
+    public void Classify_Reuses_Dominant_Accent_Ramp_On_PreWeighted_Clusters()
+    {
+        // Callers that already hold weighted clusters (a palette's swatches with pixel
+        // counts) get the same dominant / accent / lightness-order rules without k-means.
+        var clusters = new List<PaletteCluster>
+        {
+            new(130, 130, 130, 400),   // heaviest, achromatic → dominant
+            new(90, 110, 150, 60),     // muted blue (low chroma)
+            new(245, 120, 10, 60),     // vivid orange (high chroma) → accent
+        };
+        var pal = PaletteExtractionCore.Classify(clusters);
+
+        Assert.Equal(clusters[0], pal.Dominant);
+        Assert.Equal(clusters[2], pal.Accent);
+        Assert.NotEqual(pal.Dominant, pal.Accent);
+
+        // Ramp holds every cluster, ascending OkLab lightness.
+        Assert.Equal(3, pal.Ramp.Count);
+        float prev = -1f;
+        foreach (var c in pal.Ramp)
+        {
+            float l = PerceptualRamp.RgbToOkLab(c.R, c.G, c.B).L;
+            Assert.True(l >= prev - 1e-4f);
+            prev = l;
+        }
+
+        // Extract routes through Classify → identical result on the same clusters.
+        Assert.Empty(PaletteExtractionCore.Classify(new List<PaletteCluster>()).Ramp);
+    }
 }

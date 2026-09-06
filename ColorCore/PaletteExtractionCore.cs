@@ -72,9 +72,17 @@ public static class PaletteExtractionCore
     /// <param name="seed">k-means++ RNG seed (fixed default keeps runs reproducible).</param>
     public static ExtractedPalette Extract(
         IReadOnlyList<(byte r, byte g, byte b)> samples, int k, int seed = 1337)
+        => Classify(KMeansOkLab(samples, k, seed));
+
+    /// <summary>Turn a set of weighted colour clusters into an <see cref="ExtractedPalette"/>:
+    /// the lightness-ordered ramp plus the dominant (heaviest) and accent (most chromatic
+    /// non-dominant) picks. Split out from <see cref="Extract"/> so callers that ALREADY
+    /// hold weighted clusters — e.g. a palette's extracted swatches carrying their pixel
+    /// counts — can reuse the exact same dominant / accent / ordering rules without
+    /// re-running k-means.</summary>
+    public static ExtractedPalette Classify(IReadOnlyList<PaletteCluster> clusters)
     {
-        var clusters = KMeansOkLab(samples, k, seed);
-        if (clusters.Count == 0)
+        if (clusters == null || clusters.Count == 0)
         {
             var empty = new PaletteCluster(0, 0, 0, 0);
             return new ExtractedPalette(Array.Empty<PaletteCluster>(), empty, empty);
