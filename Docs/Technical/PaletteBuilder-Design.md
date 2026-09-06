@@ -197,9 +197,25 @@ specular. Author in **linear** and preview through the tonemap (ties to roadmap
   exposure brightens, determinism). **Remaining:** draw the shaded-gamut grid in the
   PaletteBuilder preview (with the other S10 UI tails).
 
-### S10.8 — Fog / volumetric palette preview ☐
+### S10.8 — Fog / volumetric palette preview ◐ (core LANDED — PR #678)
 The palette now colors the **fog** via optical-depth remap (shipped in #185).
 Preview the ramp as god-rays / haze and offer a fog-optimized sub-ramp.
+- **Landed (core):** `Engine/Imaging/FogPalettePreview.cs` — mirrors the render's
+  #180/#185 optical-depth fog remap (`ShadingPipeline.VolumetricInScatterSegment`):
+  `FogSweep(fogStops, steps, bg, density, maxDepth)` composites the ramp over a backdrop
+  across optical depth **in linear light** — τ = s·maxDepth, T = exp(−τ) (Beer–Lambert),
+  in-scatter = ramp sampled at (1−T) (the render's fog key), `out = bg·T + inscatter·(1−T)`
+  — so a thin sample is nearly pure backdrop and a thick one nearly pure fog (the
+  god-ray/haze read). `FogInscatter` exposes the optical-depth-keyed sample directly.
+  `WashesOut` flags a ramp that produces no visible haze gradient (composited sweep's
+  max OkLab ΔE below threshold — too close to the backdrop, or too flat). `FogOptimizedSubRamp`
+  derives a fog sub-ramp: fog in-scatter *adds* light, so the ramp's dark reach
+  (OkLab L < a floor) contributes nothing and is culled, and the survivors are re-emitted
+  luminance-ASCENDING (thicker fog reads as *more*); an all-dark source is lifted toward
+  white so the result is never empty. Reuses `PerceptualRamp` (OkLab sampling + ΔE) and
+  the same sRGB↔linear transfer the render composites in. +6 `FogPalettePreviewTests`.
+  **Remaining:** draw the god-ray/haze strip + offer the sub-ramp in the PaletteBuilder
+  UI (with the other S10 UI tails).
 
 ### S10.9 — Relief = luminance is form ☐
 Restate §2 as a 3D tool: a luminance-monotonic ramp makes relief read as raised
