@@ -217,10 +217,26 @@ Preview the ramp as god-rays / haze and offer a fog-optimized sub-ramp.
   **Remaining:** draw the god-ray/haze strip + offer the sub-ramp in the PaletteBuilder
   UI (with the other S10 UI tails).
 
-### S10.9 — Relief = luminance is form ☐
+### S10.9 — Relief = luminance is form ◐ (core LANDED — PR #679)
 Restate §2 as a 3D tool: a luminance-monotonic ramp makes relief read as raised
 3D. Show the relief preview; warn when a ramp flattens it — the *same*
 luminance-lock that helps colorblind readers.
+- **Landed (core):** `Engine/Imaging/ReliefLegibility.cs` — relief extrudes a 2D
+  fractal and shades it, so apparent form *is* luminance: a slope that climbs should
+  brighten. `Analyze(stops, minSpread)` → a `ReliefReport` (`ReadsAsRelief`, `Flat`,
+  `NonMonotonic`, `LuminanceSpread`, `Reversals`): it walks the ramp's OkLab-lightness
+  sequence, counts direction reversals (ignoring sub-JND flat steps), and measures the
+  end-to-end spread — a ramp reads as relief only when its lightness is monotonic AND
+  spans enough range; a reversal (bright→dark→bright makes a rising slope read as
+  up-then-down) or a too-flat spread flattens it. `LockLuminance(stops, count, minSpread)`
+  is the repair: keep each stop's **hue + chroma** (OKLCH C, H) but overwrite lightness
+  with a monotonic spine (respecting the ramp's overall dark→light / light→dark sense,
+  widened to a readable range) — the artist's colour progression survives while relief
+  reads as form again. This is the **same luminance-lock** that keeps a ramp legible
+  under CVD (S10.2 — luminance is the channel that survives when hue collapses): one
+  discipline, two payoffs. Reuses `PerceptualRamp` (OkLab / OKLCH). +6 `ReliefLegibilityTests`.
+  **Remaining:** show the relief preview + the flatten warning in the PaletteBuilder UI
+  (with the other S10 UI tails).
 
 ### S10.10 — "Looks" (scene color scripts) ☐
 Pair a ramp with **material presets** (gold = warm ramp + low roughness + metallic)
