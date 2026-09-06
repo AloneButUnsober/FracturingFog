@@ -742,25 +742,20 @@ public sealed class PaletteResultViewModel : ViewModelBase
     {
         get
         {
-            if (!_isEditing || _editableStops is null)
+            // Project the swatch strip from EffectiveStops so it shows the SAME
+            // colours, in the SAME order, whether or not the editor is open — the
+            // deduped, position-sorted stop set that also feeds the gradient strip
+            // directly below and the export. Previously the non-edit strip rendered
+            // the raw extraction-order Palette (a different order, and with the
+            // pre-dedup duplicates), so toggling Edit visibly reordered the swatches
+            // and confused the artist. EffectiveStops already applies the parent's
+            // display adjustment in both states, so don't re-apply it here.
+            var stops = EffectiveStops;
+            var arr = new PaletteSwatch[stops.Count];
+            for (int i = 0; i < stops.Count; i++)
             {
-                if (_parent is null) return Palette;
-                var raw = Palette;
-                var outArr = new PaletteSwatch[raw.Count];
-                for (int i = 0; i < raw.Count; i++)
-                {
-                    var s = raw[i];
-                    var (r, g, b) = _parent.AdjustForDisplay((s.R, s.G, s.B));
-                    outArr[i] = new PaletteSwatch(r, g, b, s.Weight);
-                }
-                return outArr;
-            }
-            var arr = new PaletteSwatch[_editableStops.Count];
-            for (int i = 0; i < _editableStops.Count; i++)
-            {
-                var e = _editableStops[i];
-                var (r, g, b) = _parent?.AdjustForDisplay((e.R, e.G, e.B)) ?? (e.R, e.G, e.B);
-                arr[i] = new PaletteSwatch(r, g, b, 1);
+                var s = stops[i];
+                arr[i] = new PaletteSwatch(s.R, s.G, s.B, 1);
             }
             return arr;
         }
