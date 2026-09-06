@@ -689,6 +689,25 @@
                                                     Command="{Binding UseCosineRampCommand}"
                                                     ToolTip.Tip="Add the cosine rainbow as a new palette" />
                                         </StackPanel>
+                                        <Grid ColumnDefinitions="70,*" RowDefinitions="Auto,Auto,Auto,Auto"
+                                              Margin="0,0,0,2">
+                                            <TextBlock Grid.Row="0" Grid.Column="0" Text="Brightness"
+                                                       Foreground="#B4B4B4" FontSize="11" VerticalAlignment="Center" />
+                                            <Slider Grid.Row="0" Grid.Column="1" Minimum="0" Maximum="1"
+                                                    Value="{Binding CosineA}" />
+                                            <TextBlock Grid.Row="1" Grid.Column="0" Text="Contrast"
+                                                       Foreground="#B4B4B4" FontSize="11" VerticalAlignment="Center" />
+                                            <Slider Grid.Row="1" Grid.Column="1" Minimum="0" Maximum="1"
+                                                    Value="{Binding CosineB}" />
+                                            <TextBlock Grid.Row="2" Grid.Column="0" Text="Frequency"
+                                                       Foreground="#B4B4B4" FontSize="11" VerticalAlignment="Center" />
+                                            <Slider Grid.Row="2" Grid.Column="1" Minimum="0.25" Maximum="4"
+                                                    Value="{Binding CosineC}" />
+                                            <TextBlock Grid.Row="3" Grid.Column="0" Text="Phase"
+                                                       Foreground="#B4B4B4" FontSize="11" VerticalAlignment="Center" />
+                                            <Slider Grid.Row="3" Grid.Column="1" Minimum="0" Maximum="1"
+                                                    Value="{Binding CosinePhase}" />
+                                        </Grid>
                                         <ItemsControl ItemsSource="{Binding CosineRamp}" Height="22">
                                             <ItemsControl.ItemsPanel>
                                                 <ItemsPanelTemplate>

@@ -400,9 +400,12 @@ That turns the big rock from "inject a render engine" into "expose a `float[] t`
   lists — `HostPaletteExtractionService` (main-app picker) and the standalone tool's
   `PaletteExtractionService` — so "Perceptual K-Means (OkLab)" appears as a selectable
   method everywhere. *Independent; smallest.*
-- **LW.6 (#692) — live cosine / Bézier coefficient editing (S10.4).** Sliders for the IQ cosine
-  `a/b/c/d` and the Bézier controls, live-updating the generated ramp on the existing
-  cores. *Independent; pure UI.*
+- **LW.6 (#692) — live cosine coefficient editing (S10.4). LANDED (PR #702).** The Harmony
+  tab's cosine ramp gains four live sliders — brightness `a`, contrast `b`, frequency `c`,
+  and a phase offset (added to the rainbow's per-channel d 0/⅓/⅔, so hues stay separated
+  while the sweep rotates) — bound to `CosineA/B/C/Phase`; each setter calls
+  `RebuildCosineRamp` so the strip (and its "Use as palette", LW.4a) update live. Seeded
+  from the IQ rainbow defaults. *Bézier control-colour editing left as a follow-up.*
 
 Recommended order: **LW.1 → LW.2, LW.3**; **LW.5, LW.6, LW.4** any time (LW.5 is the
 quickest standalone win). Boundary unchanged (design §6): still a colour assistant — LW.4
