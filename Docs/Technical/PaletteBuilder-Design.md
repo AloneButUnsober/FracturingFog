@@ -177,11 +177,25 @@ breaks as gentle, dismissible `#FFCC00` advisories. A **linter for color**.
 Color in 3D collides with light, shadow, fog and material — PaletteBuilder should
 design for that, not for flat iteration coloring alone.
 
-### S10.7 — Preview under 3D lighting ☐
+### S10.7 — Preview under 3D lighting ◐ (core LANDED — PR #677)
 A ramp that sings flat can muddy under shading (shadow crushes the low end, spec
 blows the high end). Show the palette's **shaded gamut** — full-shadow → lit →
 specular. Author in **linear** and preview through the tonemap (ties to roadmap
 **S2**).
+- **Landed (core):** `Engine/Imaging/ShadedGamut.cs` — `ShadedGamut.Sweep(rgb, steps,
+  transform, exposureEv, ambient, specularStrength)` shades one albedo across the
+  lighting sweep **in linear light** (diffuse ambient→1 over the first 70%, additive
+  white specular over the last 30%) and previews it **through the render's view
+  transform** (`ViewTransformOps`, S2) before the single sRGB encode — so a tonemap
+  rolls the highlights off while `ViewTransform.None` hard-clips them. `Analyze`
+  returns a `ShadedSwatch` with the sweep plus two warnings: **`CrushesInShadow`** (the
+  shadow end lands within a JND of black — detail vanishes in shade) and
+  **`BlowsInSpecular`** (the specular end washes to white — hue lost in highlights);
+  `AnalyzeRamp` does a whole ramp (the shaded-gamut grid). Reuses `ViewTransformOps`
+  (S2 tonemap + transfer) and `PerceptualRamp` (OkLab ΔE). +7 `ShadedGamutTests`
+  (rise shadow→specular, crush/blow classification, AgX rolls off what None clips,
+  exposure brightens, determinism). **Remaining:** draw the shaded-gamut grid in the
+  PaletteBuilder preview (with the other S10 UI tails).
 
 ### S10.8 — Fog / volumetric palette preview ☐
 The palette now colors the **fog** via optical-depth remap (shipped in #185).
