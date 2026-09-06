@@ -156,8 +156,13 @@ a swatch set; dominant + accent detection.
   OkLab primitives. Placed in Engine (not the PaletteBuilder extraction lib, which the
   render + headless tests can't reach) — an extracted ramp flows into the render. +7
   `PaletteExtractionCoreTests` (separation, lightness order, dominant/accent, determinism,
-  k-clamp, empty bag). **Remaining:** wire the core into the PaletteBuilder extraction UI
-  (feed it the sampled image pixels; surface dominant/accent) with the other S10 UI tails.
+  k-clamp, empty bag, `Classify`). **Dominant/accent + lightness-ramp UI LANDED (PR #686)** —
+  the extraction step factored out as `PaletteExtractionCore.Classify(clusters)` (dominant /
+  accent / lightness order over already-weighted clusters, no re-clustering), which the
+  PaletteBuilder "Key Colors" tab feeds with the palette's weighted swatches to show the
+  dominant + accent swatches (hex + pixel share) and the palette re-ordered by lightness.
+  **Remaining:** running perceptual k-means directly on the sampled image pixels as an
+  extraction *method* (today it reuses the existing extractor's swatches) — a later slice.
 
 ### S10.6 — Color advisor ◐ (the artist-*assistant* framing; core LANDED — PR #675)
 The parity-twin discipline applied to color: automated checks that *guide*, not
@@ -267,7 +272,7 @@ FogPalettePreview (S10.8) · ReliefLegibility (S10.9) · SceneLooks (S10.10). Th
 work left is the **UI pass** — surfacing every core in the PaletteBuilder shell (deferred
 throughout S10 per the "leave UI to the end" call).
 
-### S10 UI pass ◐ (started — PR #681, #685)
+### S10 UI pass ◐ (started — PR #681, #685, #686)
 Surface the ten cores in the PaletteBuilder UI, one core per slice.
 - **Plumbing (LANDED, PR #681):** the cores were authored in the Engine so the render +
   headless tests could reach them, but the PaletteBuilder UI references neither Engine nor
@@ -293,9 +298,17 @@ Surface the ten cores in the PaletteBuilder UI, one core per slice.
   the advisor on selection / stop edits. The standalone PaletteBuilder `MainWindow` gains
   a **"Colorblind" tab** stacking the rows so the artist sees the palette collapse (or
   survive) under CVD directly — the CVD-first differentiator.
+- **Third core surfaced — S10.5 extraction dominant/accent (LANDED, PR #686):** the
+  extraction classification factored out as `PaletteExtractionCore.Classify(clusters)`
+  (so `Extract` and the UI share the exact dominant / accent / lightness-order rules).
+  `ImagePaletteViewModel` runs it over the selected palette's raw **weighted** swatches
+  (`Palette`, not the weight-1 `EffectivePalette`) into `DominantBrush` / `AccentBrush`
+  (+ hex + pixel-share labels) and a `LightnessRamp`; the PaletteBuilder `MainWindow`
+  gains a **"Key Colors" tab** showing the two picks and the lightness-ordered strip.
 - **Remaining:** the other cores' UI surfaces (histogram redistribute, harmony/generation,
-  extraction dominant/accent, shaded-gamut + fog + relief previews, the "looks" picker +
-  apply-to-render; and the CVD/palette preview on the live fractal), one slice at a time.
+  shaded-gamut + fog + relief previews, the "looks" picker + apply-to-render; the
+  CVD/palette preview on the live fractal; and perceptual k-means as an extraction method),
+  one slice at a time.
 
 ## 6. Non-goals (not a worse Photoshop)
 

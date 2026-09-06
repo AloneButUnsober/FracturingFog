@@ -381,6 +381,95 @@ public class ImagePaletteViewModel : ViewModelBase
         this.RaisePropertyChanged(nameof(HasAdvisories));
         this.RaisePropertyChanged(nameof(AdvisorySummary));
         RecomputeCvdPreview();
+        RecomputeKeyColors();
+    }
+
+    // ── Key colours: dominant / accent + lightness ramp (roadmap S10.5, #392) ──
+
+    private ISolidColorBrush? _dominantBrush;
+    /// <summary>The selected palette's dominant (heaviest) swatch as a brush, or null
+    /// when nothing is selected. From <see cref="PaletteExtractionCore.Classify"/> over
+    /// the extraction's weighted swatches.</summary>
+    public ISolidColorBrush? DominantBrush
+    {
+        get => _dominantBrush;
+        private set => this.RaiseAndSetIfChanged(ref _dominantBrush, value);
+    }
+
+    private string _dominantLabel = "";
+    public string DominantLabel
+    {
+        get => _dominantLabel;
+        private set => this.RaiseAndSetIfChanged(ref _dominantLabel, value);
+    }
+
+    private ISolidColorBrush? _accentBrush;
+    /// <summary>The most chromatic non-dominant swatch — the pop colour to pair with the
+    /// dominant workhorse.</summary>
+    public ISolidColorBrush? AccentBrush
+    {
+        get => _accentBrush;
+        private set => this.RaiseAndSetIfChanged(ref _accentBrush, value);
+    }
+
+    private string _accentLabel = "";
+    public string AccentLabel
+    {
+        get => _accentLabel;
+        private set => this.RaiseAndSetIfChanged(ref _accentLabel, value);
+    }
+
+    /// <summary>The palette's swatches re-ordered by ascending OkLab lightness — a ramp
+    /// reads as a curve, not a bag (roadmap S10.5).</summary>
+    public ObservableCollection<ISolidColorBrush> LightnessRamp { get; } = new();
+
+    /// <summary>True once a palette is selected (drives the panel's empty state).</summary>
+    public bool HasKeyColors => _dominantBrush is not null;
+
+    private void RecomputeKeyColors()
+    {
+        LightnessRamp.Clear();
+        var result = _selectedResult;
+        // Dominant/accent are extraction characteristics — read the raw, weighted
+        // extraction swatches (EffectivePalette drops weights to 1), not the edited stops.
+        var swatches = result?.Palette;
+        if (swatches is null || swatches.Count == 0)
+        {
+            DominantBrush = null;
+            AccentBrush = null;
+            DominantLabel = "";
+            AccentLabel = "";
+            this.RaisePropertyChanged(nameof(HasKeyColors));
+            return;
+        }
+
+        var clusters = new List<PaletteCluster>(swatches.Count);
+        long total = 0;
+        foreach (var s in swatches)
+        {
+            clusters.Add(new PaletteCluster(s.R, s.G, s.B, s.Weight));
+            total += s.Weight;
+        }
+
+        var pal = PaletteExtractionCore.Classify(clusters);
+        DominantBrush = Brush(pal.Dominant);
+        AccentBrush = Brush(pal.Accent);
+        DominantLabel = Label("Dominant", pal.Dominant, total);
+        AccentLabel = Label("Accent", pal.Accent, total);
+        foreach (var c in pal.Ramp)
+            LightnessRamp.Add(new SolidColorBrush(Color.FromRgb(c.R, c.G, c.B)));
+
+        this.RaisePropertyChanged(nameof(HasKeyColors));
+
+        static ISolidColorBrush Brush(PaletteCluster c) => new SolidColorBrush(Color.FromRgb(c.R, c.G, c.B));
+
+        static string Label(string role, PaletteCluster c, long total)
+        {
+            string hex = $"#{c.R:X2}{c.G:X2}{c.B:X2}";
+            return total > 0
+                ? $"{role}  {hex}  ·  {100.0 * c.Weight / total:0.#}%"
+                : $"{role}  {hex}";
+        }
     }
 
     // ── Colourblind side-by-side preview (roadmap S10.2, #392) ──────────
