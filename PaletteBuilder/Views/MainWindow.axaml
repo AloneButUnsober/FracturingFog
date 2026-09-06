@@ -881,6 +881,44 @@
                                 </ScrollViewer>
                             </Grid>
                         </TabItem>
+                        <TabItem Header="View Fit" FontSize="14">
+                            <!-- Roadmap S10-LW.2 (#392/#693) — where THIS view's pixels land
+                                 on the palette parameter (PaletteHistogram over the LW.1 t
+                                 buffer), the wasted-range readout, and Redistribute (CDF-
+                                 inverse EqualizeStopPositions). No live view → empty. -->
+                            <Grid RowDefinitions="Auto,Auto,Auto,Auto,*">
+                                <TextBlock Grid.Row="0" Classes="label"
+                                           Margin="0,2,0,6" TextWrapping="Wrap"
+                                           IsVisible="{Binding !HasViewHistogram}"
+                                           Text="No live fractal view available (open the palette tool from the app over a 2D Mandelbrot view)." />
+                                <TextBlock Grid.Row="1" TextWrapping="Wrap"
+                                           Foreground="#FFCC00" Margin="0,0,0,6"
+                                           IsVisible="{Binding HasViewHistogram}"
+                                           Text="{Binding ViewFitSummary}" />
+                                <Border Grid.Row="2" Height="60" Background="#141414"
+                                        BorderBrush="#3C3C3C" BorderThickness="1" Padding="2"
+                                        IsVisible="{Binding HasViewHistogram}">
+                                    <ItemsControl ItemsSource="{Binding HistogramBarHeights}">
+                                        <ItemsControl.ItemsPanel>
+                                            <ItemsPanelTemplate>
+                                                <StackPanel Orientation="Horizontal" Spacing="1"
+                                                            VerticalAlignment="Bottom" />
+                                            </ItemsPanelTemplate>
+                                        </ItemsControl.ItemsPanel>
+                                        <ItemsControl.ItemTemplate>
+                                            <DataTemplate>
+                                                <Border Width="7" Height="{Binding}"
+                                                        Background="#6FA8DC" VerticalAlignment="Bottom" />
+                                            </DataTemplate>
+                                        </ItemsControl.ItemTemplate>
+                                    </ItemsControl>
+                                </Border>
+                                <Button Grid.Row="3" Content="Redistribute stops to fit this view"
+                                        Command="{Binding RedistributeCommand}"
+                                        Margin="0,8,0,0" HorizontalAlignment="Left"
+                                        IsVisible="{Binding HasViewHistogram}" />
+                            </Grid>
+                        </TabItem>
                     </TabControl>
                     <!--<TextBlock Grid.Row="1" Grid.Column="0" Classes="label"
                     Text="Method:" Margin="0,2,4,0" HorizontalAlignment="Right"/>
