@@ -12,7 +12,9 @@
 // FracturingFog.Imaging interface.
 
 using System;
+using System.Collections.Generic;
 using FracturingFog.Imaging;
+using FracturingFog.Models;
 using FracturingFog.Rendering;
 
 namespace FracturingFog.Hosting
@@ -54,5 +56,30 @@ namespace FracturingFog.Hosting
 
         private static uint Pack((byte r, byte g, byte b) c)
             => 0xFF000000u | ((uint)c.r << 16) | ((uint)c.g << 8) | c.b;
+
+        /// <inheritdoc/>
+        public void ApplyPalette(IReadOnlyList<PaletteStop> stops)
+        {
+            var host = _renderHost;
+            if (host is null || stops is null || stops.Count < 2) return;
+
+            // Build an ad-hoc gradient theme from the stops and push it to the live
+            // render's colour map (the same path the Color Theme Editor uses), then
+            // re-render — so an adopted ramp / look changes the fractal immediately.
+            var def = new ColorThemeDef
+            {
+                Name = "PaletteBuilder (live)",
+                Category = "User",
+                Kind = ColorThemeKindDef.Gradient,
+                Stops = new List<ColorStopDef>(stops.Count),
+            };
+            foreach (var s in stops)
+                def.Stops.Add(new ColorStopDef { Position = s.Position, R = s.R, G = s.G, B = s.B });
+
+            var map = HostColorThemeService.BuildColorMap(def);
+            if (map is null) return;
+            host.ApplyColorMap(map);
+            host.Trigger();
+        }
     }
 }

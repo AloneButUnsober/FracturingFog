@@ -490,9 +490,9 @@ public class ImagePaletteViewModel : ViewModelBase
     /// <summary>Turn an ordered colour list into a new selectable palette result (evenly
     /// spaced stops) and select it — so the existing Apply / live-preview / advisor path
     /// works on a generated ramp exactly as on an extracted one.</summary>
-    public void AddGeneratedRamp(string name, IReadOnlyList<(byte r, byte g, byte b)> colors)
+    public IReadOnlyList<PaletteStop> AddGeneratedRamp(string name, IReadOnlyList<(byte r, byte g, byte b)> colors)
     {
-        if (colors is null || colors.Count < 2) return;
+        if (colors is null || colors.Count < 2) return System.Array.Empty<PaletteStop>();
         int n = colors.Count;
         var stops = new PaletteStop[n];
         var swatches = new PaletteSwatch[n];
@@ -508,6 +508,7 @@ public class ImagePaletteViewModel : ViewModelBase
         Results.Add(row);
         SelectedResult = row;
         StatusMessage = $"Added generated palette: {name}.";
+        return stops;
     }
 
     // ── Palette + CVD preview on the LIVE fractal (roadmap S10-LW.3, #392/#694) ──
@@ -617,7 +618,11 @@ public class ImagePaletteViewModel : ViewModelBase
     private void ApplyLook(LookRowVm row)
     {
         if (row?.Source is null) return;
-        AddGeneratedRamp($"{row.Name} (look)", row.Source.Ramp);
+        // Adopt the ramp as an editable palette result AND push it to the live render's
+        // colour map immediately, plus the material + lights — so "Apply to render"
+        // actually changes the fractal now, not only after the picker's Apply.
+        var stops = AddGeneratedRamp($"{row.Name} (look)", row.Source.Ramp);
+        _lookApplyService?.ApplyPalette(stops);
         _lookApplyService?.ApplyLook(
             row.Source.Material.Roughness, row.Source.Material.Metallic,
             row.Source.Lighting.KeyTint, row.Source.Lighting.SkyTint);
