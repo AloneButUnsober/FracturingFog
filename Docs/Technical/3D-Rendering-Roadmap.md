@@ -9,8 +9,9 @@ Status legend: ☐ not started · ◐ in progress (a first tranche has shipped w
 tests — see each slice) · ☑ slice fully closed. A slice is marked ☑ only when it is
 *entirely* done; every S1–S9 slice already has merged, tested work landed but stays
 ◐ because deeper GPU / full-fidelity tails remain. **S1–S9 are all underway; S10
-(PaletteBuilder, #392) is underway (◐) — all ten analysis + generation cores landed,
-only the deferred UI surfacing remains; S11
+(PaletteBuilder, #392) is fully closed (●) — ten analysis + generation cores, six
+per-core UI surfaces, and the live-host-wiring track all landed (only minor tails
+filed: #705 Bézier control editing, #706 emission when S5 lands); S11
 (orbit-trap height, #592) is fully closed (●, incl. the hi-res trap tail); S12 (relief
 stage-2 parity, #652) is fully closed (●).**
 
@@ -1071,16 +1072,20 @@ Sub-items (ranked fit × payoff):
 - **Boundary:** auto-repair *to guarantee manifold on export* is in-lane; a mesh
   repair/sculpt *workbench* is not (see §4).
 
-### S10 — PaletteBuilder as a perceptual, colorblind-first color assistant ◐ (#392)
-**Underway** (was deferred until the S1–S9 axes matured). **Analysis cores all LANDED**
-— S10.1 perceptual (PR #670), S10.2 CVD suite (#671), S10.3 fractal-aware preview (#673),
+### S10 — PaletteBuilder as a perceptual, colorblind-first color assistant ● (#392)
+**Fully closed** (was deferred until the S1–S9 axes matured). **Ten analysis + generation
+cores** — S10.1 perceptual (PR #670), S10.2 CVD suite (#671), S10.3 fractal-aware preview (#673),
 S10.4 harmony/generation (#674), S10.5 extraction upgrades (#676), S10.6 advisor (#675),
 S10.7 shaded-gamut preview (#677),
 S10.8 fog/volumetric palette preview (#678),
 S10.9 relief=luminance-is-form (#679),
 S10.10 "looks"/scene-colour-scripts (#680) — see [PaletteBuilder-Design.md](PaletteBuilder-Design.md)
-§4. **All ten S10 analysis + generation cores are now landed**; the only remaining S10
-work is the deferred UI surfacing of the cores in the PaletteBuilder shell. The
+§4. **Six per-core UI surfaces** (Advisor / Colorblind / Key Colors / Harmony / 3D Preview /
+Looks tabs — PRs #681, #685–689) and the **live-host-wiring track** (view-param provider,
+palette + CVD preview on the live fractal, histogram redistribute, k-means extraction method,
+cosine editor, apply generated ramp / look to palette + render, save/recall looks, load current
+theme for round-trip editing — PRs #697–704, #707, #711) all landed. Only minor tails remain,
+filed: #705 (Bézier control-colour editing) and #706 (emission tint when S5 lands). The
 home of FF's **art idiom**. Making FF *great* —
 not just deep-zooming — means
 making PaletteBuilder a genuinely great color assistant: perceptual, **colorblind-
