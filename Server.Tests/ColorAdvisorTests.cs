@@ -37,6 +37,11 @@ public sealed class ColorAdvisorTests
         var rg = new List<(byte, byte, byte)> { (255, 0, 0), (0, 255, 0) };
         var advice = ColorAdvisor.Review(rg, cvdThreshold: 0.3f);
         Assert.True(Has(advice, ColorAdviceKind.CvdCollapse));
+
+        // Stop numbers are 1-based in the message (the two stops read as 1 & 2, not 0 & 1).
+        var msg = advice.First(a => a.Kind == ColorAdviceKind.CvdCollapse).Message;
+        Assert.Contains("stops 1&2", msg);
+        Assert.DoesNotContain("stops 0", msg);
     }
 
     [Fact]
