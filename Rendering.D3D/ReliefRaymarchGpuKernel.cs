@@ -67,7 +67,7 @@ public sealed class ReliefRaymarchGpuKernel : IDisposable, FracturingFog.Renderi
         public uint FogColor; public float VolPaletteStrength; public int HasPalette, PaletteLen;   // #184 Slice 3 (C) + #185 slice D
         public float DofAperture, DofFocus; public int DofSamples; public int EmitAov;   // S3 (#389) DOF + S4 (#402) AOV emit
         public float Transmission, Ior, AbsorptionDist; public uint AbsorptionColor;   // S5 (#389/#406) glass
-        public int LType0, LType1, LType2, PadLT;   // S8 (#389/#408) light kinds
+        public int LType0, LType1, LType2, RefrIntBounces;   // S8 (#389/#408) light kinds; RefrIntBounces = S5 (#406) glass internal-march budget (repurposed pad)
         public float LPos0x, LPos0y, LPos0z, LRange0;
         public float LPos1x, LPos1y, LPos1z, LRange1;
         public float LPos2x, LPos2y, LPos2z, LRange2;
@@ -506,7 +506,7 @@ public sealed class ReliefRaymarchGpuKernel : IDisposable, FracturingFog.Renderi
             EmitAov = emitAov ? 1 : 0,
             Transmission = (float)u.Transmission, Ior = (float)u.Ior,
             AbsorptionDist = (float)u.AbsorptionDistance, AbsorptionColor = u.AbsorptionColor,
-            LType0 = u.LType0, LType1 = u.LType1, LType2 = u.LType2, PadLT = 0,
+            LType0 = u.LType0, LType1 = u.LType1, LType2 = u.LType2, RefrIntBounces = u.RefractInternalBounces,
             LPos0x = (float)u.LPos0x, LPos0y = (float)u.LPos0y, LPos0z = (float)u.LPos0z, LRange0 = (float)u.LRange0,
             LPos1x = (float)u.LPos1x, LPos1y = (float)u.LPos1y, LPos1z = (float)u.LPos1z, LRange1 = (float)u.LRange1,
             LPos2x = (float)u.LPos2x, LPos2y = (float)u.LPos2y, LPos2z = (float)u.LPos2z, LRange2 = (float)u.LRange2,

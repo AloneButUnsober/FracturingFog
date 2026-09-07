@@ -594,8 +594,23 @@ full uber-shader — add transmission, optionally clearcoat / emission).
   batch flag (implies the march; emits only above the default 1). +7 tests
   (`RefractionInternalBounceTests` render locks incl. diamond-IOR grazing change +
   clamp, `GlassBatchWiringTests` parse/emit). Opaque = byte-identical.
-- **Remaining:** GPU internal-march twin (+ its TIR-bounce port), rough refraction
-  (couple S4).
+- **GPU internal-march twin (landed — #406):** the relief kernel's `ShadeFlat` (D3D +
+  Vulkan, shared HLSL) + its CPU parity twin (`ReliefRaymarchGpu.ShadeFlat`) now run the
+  same internal march + back-face TIR bounce the CPU `ShadingPipeline` does — glass with
+  the internal march no longer falls back to the env-approx on the GPU path. The march
+  reuses the kernel's own heightfield DE (`Evaluate` = `(y − SampleHeight)·invLip`, `abs`
+  = distance-from-inside), central-differences the exit normal, refracts out with HLSL
+  `refract`/`reflect` (TIR via the zero-vector return), and Beer-Lambert's over the real
+  accumulated thickness. Carried by a single repurposed cbuffer int `gRefrIntBounces`
+  (`ReliefUniforms.RefractInternalBounces`; 0 = env-approx, N≥1 = march with N segments —
+  no ParamBytes change, reused the S8 `gPadLT`), encoded at build as
+  `RefractInternalMarch ? clamp(bounces,1,6) : 0`. Proven by the `--reliefgpuraymarch`
+  WARP probe scene *glass internal march + TIR bounce (ior 2.4, 4 bounces)*: GPU vs CPU
+  twin mean channel diff 0.004, 0 edge pixels; the env-approx glass scene stays 0.003
+  and opaque byte-identical. +8 tests (`Relief2DRaymarchTests` twin render locks via
+  `RenderCpuMirror` + the `gRefrIntBounces` encoding theory).
+- **Remaining:** rough refraction — GGX-importance-sampled transmission for frosted
+  glass (couples S4 denoise; it will be noisy).
 
 ### S6 — Froxel / unified volume march ◐ (#408)
 Today's volumetrics are per-surface single-scatter. A froxel (frustum-voxel)

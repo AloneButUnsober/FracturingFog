@@ -117,6 +117,12 @@ public readonly struct ReliefUniforms
     // env, blend into the surface by Transmission. Mirrors the CPU ShadingPipeline.
     public readonly double Transmission, Ior, AbsorptionDistance;
     public readonly uint AbsorptionColor;
+    // S5 (#406) — full internal glass march + back-face TIR bounce budget, encoded as
+    // ONE int: 0 = env-refraction approximation (single interface, nominal 1-unit slab,
+    // the byte-identical default); N ≥ 1 = march the DE through the solid to the back
+    // surface (real thickness for Beer-Lambert + a second refraction on exit), allowing
+    // up to N internal-reflection segments on back-face TIR (clamped [1,6] at build).
+    public readonly int RefractInternalBounces;
 
     // S8 (#389/#408) — positional lights. LType n: 0 Directional (byte-identical to
     // the pre-S8 direction-only path), 1 Point (inverse-square + soft range window),
@@ -182,7 +188,7 @@ public readonly struct ReliefUniforms
         double volPaletteStrength, uint[]? volPalette,
         double dofAperture = 0.0, double dofFocus = 0.0, int dofSamples = 0,
         double transmission = 0.0, double ior = 1.5, uint absorptionColor = 0xFFFFFFFFu,
-        double absorptionDistance = 1.0,
+        double absorptionDistance = 1.0, int refractInternalBounces = 0,
         int lType0 = 0, double lPos0x = 0, double lPos0y = 0, double lPos0z = 0, double lRange0 = 0, double lInner0 = 1, double lOuter0 = 1,
         int lType1 = 0, double lPos1x = 0, double lPos1y = 0, double lPos1z = 0, double lRange1 = 0, double lInner1 = 1, double lOuter1 = 1,
         int lType2 = 0, double lPos2x = 0, double lPos2y = 0, double lPos2z = 0, double lRange2 = 0, double lInner2 = 1, double lOuter2 = 1,
@@ -215,7 +221,7 @@ public readonly struct ReliefUniforms
         VolPaletteStrength = volPaletteStrength; VolPalette = volPalette;
         DofAperture = dofAperture; DofFocus = dofFocus; DofSamples = dofSamples;
         Transmission = transmission; Ior = ior; AbsorptionColor = absorptionColor;
-        AbsorptionDistance = absorptionDistance;
+        AbsorptionDistance = absorptionDistance; RefractInternalBounces = refractInternalBounces;
         LType0 = lType0; LPos0x = lPos0x; LPos0y = lPos0y; LPos0z = lPos0z; LRange0 = lRange0; LInner0 = lInner0; LOuter0 = lOuter0;
         LType1 = lType1; LPos1x = lPos1x; LPos1y = lPos1y; LPos1z = lPos1z; LRange1 = lRange1; LInner1 = lInner1; LOuter1 = lOuter1;
         LType2 = lType2; LPos2x = lPos2x; LPos2y = lPos2y; LPos2z = lPos2z; LRange2 = lRange2; LInner2 = lInner2; LOuter2 = lOuter2;
@@ -299,6 +305,7 @@ public readonly struct ReliefUniforms
             fx.VolumePaletteStrength, fx.VolumePalette,
             dofAperture, dofFocus, dofSamples,
             fx.Transmission, fx.Ior, fx.AbsorptionColor, fx.AbsorptionDistance,
+            fx.RefractInternalMarch ? (fx.RefractInternalBounces < 1 ? 1 : (fx.RefractInternalBounces > 6 ? 6 : fx.RefractInternalBounces)) : 0,
             (int)fx.Light1.Type, fx.Light1.PosX, fx.Light1.PosY, fx.Light1.PosZ, fx.Light1.Range, Cos(fx.Light1.SpotInnerDeg), Cos(fx.Light1.SpotOuterDeg),
             (int)fx.Light2.Type, fx.Light2.PosX, fx.Light2.PosY, fx.Light2.PosZ, fx.Light2.Range, Cos(fx.Light2.SpotInnerDeg), Cos(fx.Light2.SpotOuterDeg),
             (int)fx.Light3.Type, fx.Light3.PosX, fx.Light3.PosY, fx.Light3.PosZ, fx.Light3.Range, Cos(fx.Light3.SpotInnerDeg), Cos(fx.Light3.SpotOuterDeg),
@@ -686,9 +693,55 @@ public static class ReliefRaymarchGpu
             double NdotVr = Math.Max(0.0, nx * vx + ny * vy + nz * vz);
             double Fr = tir ? 1.0 : DielectricOps.FresnelSchlick(NdotVr, f0);
 
-            uint tSky = SkyDirPacked(tx, ty, tz, u.Roughness, in u);
+            // S5 (#406) — full internal glass march + back-face TIR bounce. Twin of
+            // the HLSL kernel + ShadingPipeline.Shade: when the budget is on and the
+            // front interface transmits, march the DE through the solid to the back
+            // surface (real thickness for Beer-Lambert + a second refraction on exit),
+            // reflecting internally on a back-face TIR up to the budget. 0 (env-approx)
+            // → exDir = the first refracted dir, thickness = a nominal 1-unit slab.
+            double exDirX = tx, exDirY = ty, exDirZ = tz;
+            double thickness = 1.0;
+            if (u.RefractInternalBounces > 0 && !tir)
+            {
+                const int refrSteps = 64;
+                double eps = u.Cam.Eps0;
+                int bounceBudget = u.RefractInternalBounces > 6 ? 6 : u.RefractInternalBounces;
+                double idx = tx, idy = ty, idz = tz;
+                double curX = px, curY = py, curZ = pz;
+                double accumThick = 0.0;
+                for (int bnc = 0; bnc < bounceBudget; bnc++)
+                {
+                    exDirX = idx; exDirY = idy; exDirZ = idz;
+                    double biasR = eps * 4.0;
+                    double ox = curX + idx * biasR, oy = curY + idy * biasR, oz = curZ + idz * biasR;
+                    double tInside = eps; bool exited = false; double ex = 0, ey = 0, ez = 0;
+                    for (int s = 0; s < refrSteps; s++)
+                    {
+                        double ipx = ox + idx * tInside, ipy = oy + idy * tInside, ipz = oz + idz * tInside;
+                        double d = Math.Abs(de.Evaluate(ipx, ipy, ipz));
+                        if (d < eps * 2.0) { exited = true; ex = ipx; ey = ipy; ez = ipz; break; }
+                        tInside += Math.Max(d, eps);
+                        if (tInside > 12.0) break;
+                    }
+                    accumThick += tInside;
+                    if (!exited) break;
+                    double hN = eps * 2.0;
+                    double enx = de.Evaluate(ex + hN, ey, ez) - de.Evaluate(ex - hN, ey, ez);
+                    double eny = de.Evaluate(ex, ey + hN, ez) - de.Evaluate(ex, ey - hN, ez);
+                    double enz = de.Evaluate(ex, ey, ez + hN) - de.Evaluate(ex, ey, ez - hN);
+                    var en = ShadingPipeline.Normalize3(enx, eny, enz);
+                    var (ex2, ey2, ez2, tir2) = DielectricOps.Refract(idx, idy, idz, -en.X, -en.Y, -en.Z, ior);
+                    if (!tir2) { exDirX = ex2; exDirY = ey2; exDirZ = ez2; break; }
+                    var (bx2, by2, bz2) = DielectricOps.Reflect(idx, idy, idz, -en.X, -en.Y, -en.Z);
+                    idx = bx2; idy = by2; idz = bz2;
+                    curX = ex; curY = ey; curZ = ez;
+                }
+                thickness = accumThick;
+            }
+
+            uint tSky = SkyDirPacked(exDirX, exDirY, exDirZ, u.Roughness, in u);
             double trR = (tSky >> 16) & 0xFF, trG = (tSky >> 8) & 0xFF, trB = tSky & 0xFF;
-            var (absR, absG, absB) = DielectricOps.BeerLambert(u.AbsorptionColor, u.AbsorptionDistance, 1.0);
+            var (absR, absG, absB) = DielectricOps.BeerLambert(u.AbsorptionColor, u.AbsorptionDistance, thickness);
             trR *= absR; trG *= absG; trB *= absB;
 
             var (rx, ry, rz) = DielectricOps.Reflect(rdx, rdy, rdz, nx, ny, nz);
