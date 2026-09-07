@@ -318,6 +318,13 @@
                                   ToolTip.Tip="Re-extract automatically when an option changes"
                                   IsChecked="{Binding AutoExtract, Mode=TwoWay}"
                                   VerticalAlignment="Center" />
+                        <!-- Feature #709: pull the live view's current theme in for editing.
+                             Hidden in the standalone tool (no live render). -->
+                        <Button Classes="secondary"
+                                Content="Load current theme"
+                                Command="{Binding LoadCurrentThemeCommand}"
+                                IsVisible="{Binding HasThemeSource}"
+                                ToolTip.Tip="Load the current fractal's theme palette into the viewer to refine it" />
                     </StackPanel>
 
                     <TabControl Grid.Row="1" TabStripPlacement="Top"
