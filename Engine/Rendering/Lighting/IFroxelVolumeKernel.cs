@@ -50,4 +50,16 @@ public interface IFroxelVolumeKernel : IDisposable
     void Composite(in FroxelGpuUniforms u, uint[] beauty, float[] worldDepth, int w, int h, uint[] dst,
         double feedback)
         => Composite(in u, beauty, worldDepth, w, h, dst);
+
+    /// <summary>Sub-cell reprojection overload (roadmap S6, #408): as the temporal
+    /// <see cref="Composite(in FroxelGpuUniforms,uint[],float[],int,int,uint[],double)"/>,
+    /// but when <paramref name="reproject"/> is on the device history is resampled in
+    /// WORLD space (each cell mapped through the current + previous camera bases) instead
+    /// of blended same-cell, so animated fog stays anchored under continuous camera
+    /// motion — the GPU twin of <see cref="FroxelHistory.BlendAndStoreReproject"/>.
+    /// Reproject off is identical to the temporal overload. The default implementation
+    /// ignores reprojection (a backend without it stays same-cell).</summary>
+    void Composite(in FroxelGpuUniforms u, uint[] beauty, float[] worldDepth, int w, int h, uint[] dst,
+        double feedback, bool reproject)
+        => Composite(in u, beauty, worldDepth, w, h, dst, feedback);
 }
