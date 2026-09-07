@@ -422,6 +422,14 @@ Recommended order: **LW.1 → LW.2, LW.3**; **LW.5, LW.6, LW.4** any time (LW.5 
 quickest standalone win). Boundary unchanged (design §6): still a colour assistant — LW.4
 writes a *material preset + light tints*, not a material node graph.
 
+**Round-trip editing (#709) — LANDED (PR #711):** `IPaletteThemeSourceService` (Abstractions)
+→ `HostPaletteThemeSourceService` reads the live render's active gradient theme
+(`FractalRenderHost.ColorMap` as `GradientColorMap.ExportStops` + `ThemeName`). The picker's
+**"Load current theme"** button (`LoadCurrentThemeCommand`, shown when the service is present)
+loads it via `AddResultFromStops` (preserves the theme's real stop positions) as an editable
+result — refine with the advisor / CVD / harmony / redistribute, then apply back live
+(`ApplyPalette`, PR #707). Non-gradient (procedural) themes / standalone tool → no-op / hidden.
+
 **Live-host-wiring track COMPLETE** (PRs #697, #699, #698, #700, #702, #701, #703, #704).
 With it, **S10 is fully delivered**: ten analysis + generation cores, six per-core UI
 surfaces, and the live-render integration (view-param provider, on-fractal palette + CVD

@@ -60,6 +60,7 @@ public class ImagePaletteViewModel : ViewModelBase
         ApplyLookCommand = ReactiveCommand.Create<LookRowVm>(ApplyLook);
         SaveLookCommand = ReactiveCommand.Create(SaveCurrentAsLook);
         DeleteLookCommand = ReactiveCommand.Create<LookRowVm>(DeleteSavedLook);
+        LoadCurrentThemeCommand = ReactiveCommand.Create(LoadCurrentTheme);
     }
 
     // ── Image state ────────────────────────────────────────────────────
@@ -509,6 +510,50 @@ public class ImagePaletteViewModel : ViewModelBase
         SelectedResult = row;
         StatusMessage = $"Added generated palette: {name}.";
         return stops;
+    }
+
+    // ── Load the current theme into the viewer (feature #709) ──
+
+    private IPaletteThemeSourceService? _themeSourceService;
+    /// <summary>Optional host service exposing the live render's active gradient theme
+    /// (feature #709). Set by the host; null in the standalone tool (no live render) — the
+    /// "Load current theme" affordance then hides.</summary>
+    public IPaletteThemeSourceService? ThemeSourceService
+    {
+        get => _themeSourceService;
+        set { _themeSourceService = value; this.RaisePropertyChanged(nameof(HasThemeSource)); }
+    }
+
+    /// <summary>True when the current theme can be loaded into the viewer.</summary>
+    public bool HasThemeSource => _themeSourceService is not null;
+
+    /// <summary>Load the live render's active theme into the viewer as an editable result
+    /// (feature #709) — refine it, then apply back via the render-apply hook.</summary>
+    public ReactiveCommand<Unit, Unit> LoadCurrentThemeCommand { get; }
+
+    private void LoadCurrentTheme()
+    {
+        if (_themeSourceService is null) return;
+        if (_themeSourceService.TryGetActiveTheme(out var stops, out var name))
+            AddResultFromStops(name, stops);
+        else
+            StatusMessage = "The current view has no gradient theme to load.";
+    }
+
+    /// <summary>Add a result from EXISTING stops, preserving their positions (unlike
+    /// <see cref="AddGeneratedRamp"/>, which spaces evenly) — used to load a theme's own
+    /// gradient. Selects it so the edit / preview / advisor path picks it up.</summary>
+    public void AddResultFromStops(string name, IReadOnlyList<PaletteStop> stops)
+    {
+        if (stops is null || stops.Count < 2) return;
+        var swatches = new PaletteSwatch[stops.Count];
+        for (int i = 0; i < stops.Count; i++)
+            swatches[i] = new PaletteSwatch(stops[i].R, stops[i].G, stops[i].B, 1);
+        var result = new PaletteExtractionResult { MethodName = name, Palette = swatches, Stops = stops };
+        var row = new PaletteResultViewModel(result, exclusiveSelect: false, parent: this) { IsSelected = true };
+        Results.Add(row);
+        SelectedResult = row;
+        StatusMessage = $"Loaded theme: {name}.";
     }
 
     // ── Palette + CVD preview on the LIVE fractal (roadmap S10-LW.3, #392/#694) ──

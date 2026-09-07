@@ -2020,6 +2020,8 @@ namespace FracturingFog.Hosting
             vm.ViewParamService = AvaloniaShellBootstrap.PaletteViewParamService;
             // Roadmap S10-LW.4b (#695): let the picker apply a look to the live render.
             vm.LookApplyService = AvaloniaShellBootstrap.PaletteLookApplyService;
+            // Feature #709: let the picker load the current theme's palette for refinement.
+            vm.ThemeSourceService = AvaloniaShellBootstrap.PaletteThemeSourceService;
 
             IReadOnlyList<PaletteStop>? accepted = null;
             var tcs = new TaskCompletionSource<bool>();
