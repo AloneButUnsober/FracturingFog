@@ -114,7 +114,14 @@
             </MenuItem>
         </Menu>
 
-        <Grid Grid.Row="1" Margin="12,12,12,4" RowDefinitions="Auto,Auto,5,*,Auto,Auto">
+        <!-- Wrap the main content in a scroll region so a large preview / many
+             expanded panels can't push the controls off-screen on a short window;
+             MinHeight keeps the normal fill-layout at typical sizes, and the scroll
+             bar only appears when the content genuinely exceeds the viewport. -->
+        <ScrollViewer Grid.Row="1"
+                      VerticalScrollBarVisibility="Auto"
+                      HorizontalScrollBarVisibility="Disabled">
+        <Grid Margin="12,12,12,4" MinHeight="560" RowDefinitions="Auto,Auto,5,*,Auto,Auto">
 
             <TextBlock Grid.Row="0"
                        Classes="section"
@@ -1330,6 +1337,7 @@
                 </StackPanel>
             </Grid>
         </Grid>
+        </ScrollViewer>
 
         <!-- Status bar — standalone-only. The picker dialog has no need
         for elapsed-extract telemetry; the host owns its own status
