@@ -245,6 +245,8 @@ namespace FracturingFog.Batch
         // Froxel temporal reprojection (#468). Implies froxel. Feedback 0..0.99.
         public bool ReliefFroxelTemporal { get; set; }
         public double? ReliefFroxelFeedback { get; set; }
+        // Sub-cell froxel reprojection under camera motion (#408). Implies froxel temporal.
+        public bool ReliefFroxelReproject { get; set; }
 
         // Per-light fog contribution bitmask (roadmap S6, #408). null = leave default
         // (all lights fog). 0..7.
@@ -861,6 +863,14 @@ namespace FracturingFog.Batch
 
                     case BatchFlags.ReliefFroxelTemporal:
                         opts.ReliefFroxelTemporal = true;
+                        opts.ReliefFroxel = true;
+                        opts.ReliefRaymarch = true;
+                        opts.Relief = true;
+                        break;
+
+                    case BatchFlags.ReliefFroxelReproject:
+                        opts.ReliefFroxelReproject = true;
+                        opts.ReliefFroxelTemporal = true;   // reprojection is a temporal sub-mode
                         opts.ReliefFroxel = true;
                         opts.ReliefRaymarch = true;
                         opts.Relief = true;

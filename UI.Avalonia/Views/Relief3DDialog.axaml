@@ -371,6 +371,10 @@
                     <TextBlock Text="{Binding Relief2DFroxelTemporalFeedback, StringFormat='{}{0:0.00}'}"
                                VerticalAlignment="Center" Width="36" />
                 </StackPanel>
+                <CheckBox Content="Sub-cell reprojection (stable under camera motion)" Margin="24,0,0,0"
+                          IsChecked="{Binding Relief2DFroxelReproject, Mode=TwoWay}"
+                          IsEnabled="{Binding Relief2DFroxelTemporal}"
+                          ToolTip.Tip="Resample the previous frame's fog in WORLD space so it stays anchored as the camera pans / orbits / dollies, instead of reusing the same froxel cell (which ghosts under motion and re-seeds on a depth change). Only matters with temporal on and a moving camera." />
                 </StackPanel>
                 </Expander>
 

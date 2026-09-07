@@ -163,6 +163,7 @@ public sealed partial class FractalParamsViewModel
         _p.Relief2DGroundPlane        = d.Relief2DGroundPlane;
         _p.Relief2DFroxelVolumetrics  = d.Relief2DFroxelVolumetrics;   // S6 (#408)
         _p.Relief2DFroxelTemporal     = d.Relief2DFroxelTemporal;      // S6 (#408)
+        _p.Relief2DFroxelReproject    = d.Relief2DFroxelReproject;      // S6 (#408)
         _p.Relief2DFroxelTemporalFeedback = d.Relief2DFroxelTemporalFeedback;
         _p.Relief2DFroxelQuality      = d.Relief2DFroxelQuality;         // S6 (#408)
         _p.Relief2DAutoShade          = d.Relief2DAutoShade;

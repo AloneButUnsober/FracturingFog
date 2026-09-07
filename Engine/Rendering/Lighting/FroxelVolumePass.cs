@@ -127,6 +127,17 @@ public sealed class FroxelVolumePass
     /// <paramref name="gridKey"/>) BEFORE integration, then stored as the new history.
     /// A null history / feedback 0 is byte-identical to the single-frame populate.</summary>
     public void Populate(in FroxelMedium m, FroxelHistory? history, double feedback, long gridKey)
+        => Populate(in m, history, feedback, gridKey, false, default, 0.0);
+
+    /// <summary>As <see cref="Populate(in FroxelMedium,FroxelHistory,double,long)"/>, with
+    /// sub-cell temporal reprojection (roadmap S6, #408). When <paramref name="reproject"/>
+    /// is on, the history is resampled in WORLD space using the current camera basis
+    /// <paramref name="cur"/> + lateral <paramref name="extent"/> (mapping each cell to the
+    /// previous frame's froxel coordinates) instead of blending same-cell, so animated fog
+    /// stays anchored in the world under continuous camera motion. Reproject off → the
+    /// same-cell path (byte-identical).</summary>
+    public void Populate(in FroxelMedium m, FroxelHistory? history, double feedback, long gridKey,
+        bool reproject, in FroxelHistory.CamBasis cur, double reprojExtent)
     {
         // Resolve the light list once. Null → a single directional key light from the
         // legacy scalar fields (byte-identical to the pre-multi-light populate).
@@ -203,7 +214,13 @@ public sealed class FroxelVolumePass
         // ── PASS B: temporal blend (roadmap S6, #408) — mutate the scatter/ext grid in
         // place toward the previous frame, then store as the new history. No-op (a=0)
         // when no history / feedback 0, so the single-frame path stays byte-identical.
-        history?.BlendAndStore(_scR, _scG, _scB, _ext, cells, gridKey, feedback);
+        if (history != null)
+        {
+            if (reproject)
+                history.BlendAndStoreReproject(_scR, _scG, _scB, _ext, _nx, _ny, _nz, _grid, in cur, reprojExtent, feedback, gridKey);
+            else
+                history.BlendAndStore(_scR, _scG, _scB, _ext, cells, gridKey, feedback);
+        }
 
         // ── PASS C: integrate every column front-to-back from the (blended) grid ────
         var sR = new double[_nz]; var sG = new double[_nz]; var sB = new double[_nz];

@@ -492,6 +492,14 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
         get => _p.Relief2DFroxelTemporal;
         set { if (_p.Relief2DFroxelTemporal == value) return; _p.Relief2DFroxelTemporal = value; this.RaisePropertyChanged(); Fire(); }
     }
+    // S6 (#408) — sub-cell froxel reprojection: resample the history in world space so
+    // animated fog stays anchored as the camera moves (vs the same-cell re-seed). Only
+    // meaningful with temporal on.
+    public bool Relief2DFroxelReproject
+    {
+        get => _p.Relief2DFroxelReproject;
+        set { if (_p.Relief2DFroxelReproject == value) return; _p.Relief2DFroxelReproject = value; this.RaisePropertyChanged(); Fire(); }
+    }
     public FracturingFog.Models.FroxelQuality Relief2DFroxelQuality
     {
         get => _p.Relief2DFroxelQuality;

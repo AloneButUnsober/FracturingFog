@@ -38,6 +38,19 @@ public sealed class S6VideoReliefBatchTests
     }
 
     [Fact]
+    public void FroxelReproject_Flag_Implies_Temporal_Froxel_Relief_Raymarch()
+    {
+        var opts = Parse("--fractal", "Mandelbrot", "--x", "-0.5", "--y", "0", "--zoom", "1",
+                         "--mode", "video", "--seconds", "1", "--fps", "10",
+                         "--relief-froxel-reproject", "--out", "outdir");
+        Assert.True(opts.ReliefFroxelReproject);
+        Assert.True(opts.ReliefFroxelTemporal);   // reprojection is a temporal sub-mode
+        Assert.True(opts.ReliefFroxel);
+        Assert.True(opts.ReliefRaymarch);
+        Assert.True(opts.Relief);
+    }
+
+    [Fact]
     public void FroxelFeedback_Parses_And_Implies_Temporal()
     {
         var opts = Parse("--fractal", "Mandelbrot", "--x", "-0.5", "--y", "0", "--zoom", "1",

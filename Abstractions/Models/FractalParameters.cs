@@ -719,6 +719,17 @@ namespace FracturingFog.Models
         /// (single-frame). Default 0.9. Ignored unless <see cref="Relief2DFroxelTemporal"/>.</summary>
         public double Relief2DFroxelTemporalFeedback { get; set; } = 0.9;
 
+        /// <summary>Roadmap S6 (#389/#408) — sub-cell froxel temporal reprojection.
+        /// The base temporal blend reuses the previous frame's SAME cell, which is only
+        /// correct for a static camera (it ghosts / smears under continuous camera
+        /// motion, and a near/far change re-seeds the whole volume). When this is on,
+        /// each current cell's WORLD position is transformed into the previous frame's
+        /// froxel coordinates and the history is trilinearly resampled there, so animated
+        /// fog stays anchored in the world as the camera pans / orbits / dollies. Off
+        /// (default) keeps the same-cell blend → byte-identical. Ignored unless
+        /// <see cref="Relief2DFroxelTemporal"/> is also on.</summary>
+        public bool Relief2DFroxelReproject { get; set; } = false;
+
         /// <summary>Roadmap S6 (#389/#408) — froxel volume resolution (see
         /// <see cref="FroxelQuality"/>). Scales the froxel grid dims for both the
         /// CPU post-pass and the GPU froxel kernel. Default <see cref="FroxelQuality.Balanced"/>
