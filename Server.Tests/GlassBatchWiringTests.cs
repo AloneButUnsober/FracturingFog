@@ -88,6 +88,33 @@ namespace FracturingFog.Server.Tests
         }
 
         [Fact]
+        public void InternalBounces_Flag_Parses_Arms_March_And_RangeChecks()
+        {
+            Assert.True(BatchOptions.TryParse(BaseArgs("--glass-internal-bounces", "4"), 2, out var opts, out var err), err);
+            Assert.Equal(4, opts.GlassInternalBounces!.Value);
+            Assert.True(opts.GlassInternalMarch);              // bounces imply the internal march
+            Assert.Equal(0.9, opts.Transmission!.Value, 6);
+            Assert.True(opts.ReliefRaymarch);
+
+            Assert.False(BatchOptions.TryParse(BaseArgs("--glass-internal-bounces", "9"), 2, out _, out var err2));
+            Assert.Contains("glass-internal-bounces", err2);
+        }
+
+        [Fact]
+        public void Builder_Emits_InternalBounces_Only_Above_Default()
+        {
+            string Emit(int bounces) => BatchCommandBuilder.Build(new BatchCommandSnapshot
+            {
+                CenterX = 0, CenterY = 0, Zoom = 1,
+                ReliefEnabled = true, ReliefRaymarch = true,
+                Transmission = 0.8, GlassInternalMarch = true,
+                GlassInternalBounces = bounces,
+            });
+            Assert.DoesNotContain("--glass-internal-bounces", Emit(1));   // default omitted
+            Assert.Contains("--glass-internal-bounces", Emit(3));
+        }
+
+        [Fact]
         public void Transmission_RangeChecked()
         {
             Assert.False(BatchOptions.TryParse(BaseArgs("--transmission", "1.5"), 2, out _, out var err));

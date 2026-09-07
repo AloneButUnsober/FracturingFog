@@ -546,7 +546,7 @@
 
                 <!-- Material -->
                 <Expander Header="Material" HorizontalAlignment="Stretch">
-                    <Grid ColumnDefinitions="160,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto">
+                    <Grid ColumnDefinitions="160,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto">
                         <TextBlock Grid.Row="0" Grid.Column="0" Text="Roughness:" VerticalAlignment="Center"
                                    ToolTip.Tip="GGX roughness. 0 = mirror, 1 = lambert." />
                         <Grid Grid.Row="0" Grid.Column="1" ColumnDefinitions="*,Auto" Margin="0,2">
@@ -625,6 +625,16 @@
                         <CheckBox Grid.Row="8" Grid.Column="1" IsChecked="{Binding RefractInternalMarch, Mode=TwoWay}"
                                   IsEnabled="{Binding GlassEnabled}"
                                   Content="march through the solid (real thickness)" Margin="0,2" />
+
+                        <TextBlock Grid.Row="9" Grid.Column="0" Text="Internal bounces:" VerticalAlignment="Center"
+                                   IsEnabled="{Binding RefractInternalMarch}"
+                                   ToolTip.Tip="Internal-reflection bounces for the full internal march. 1 = single front-to-back attempt (a back-face total-internal-reflection keeps the internal direction). Higher lets a ray that can't leave the back surface reflect inside and seek another exit — brighter, more faceted glass (e.g. gem-like caustic corners), at extra cost. Range 1-6. Only used with Internal march on." />
+                        <Grid Grid.Row="9" Grid.Column="1" ColumnDefinitions="*,Auto" Margin="0,2" IsEnabled="{Binding RefractInternalMarch}">
+                            <Slider Classes="knob" Grid.Column="0" Minimum="1" Maximum="6" TickFrequency="1" IsSnapToTickEnabled="True"
+                                    Value="{Binding RefractInternalBounces, Mode=TwoWay}" />
+                            <TextBlock Classes="knobValue" Grid.Column="1"
+                                       Text="{Binding RefractInternalBounces}" />
+                        </Grid>
                     </Grid>
                 </Expander>
 

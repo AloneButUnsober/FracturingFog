@@ -431,6 +431,14 @@ public sealed partial class FractalParamsViewModel
         get => _p.Lighting.RefractInternalMarch;
         set { MutateLighting(r => r.Fx.RefractInternalMarch = value); this.RaisePropertyChanged(); Fire(); }
     }
+    // S5 (#406) — internal-reflection bounce budget for the full internal march.
+    // 1 = single front->back attempt (legacy TIR fallback); N>1 lets a back-face
+    // TIR reflect inside and seek another exit. Clamped [1, 6].
+    public int RefractInternalBounces
+    {
+        get => _p.Lighting.RefractInternalBounces;
+        set { MutateLighting(r => r.Fx.RefractInternalBounces = (int)Clamp(value, 1, 6)); this.RaisePropertyChanged(); Fire(); }
+    }
     public double SpecularStrength
     {
         get => _p.Lighting.SpecularStrength;

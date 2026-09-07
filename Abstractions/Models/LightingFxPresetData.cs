@@ -111,6 +111,7 @@ public sealed class LightingFxPresetData
     public uint   AbsorptionColor    { get; set; } = 0xFFFFFFFFu;
     public double AbsorptionDistance { get; set; } = 1.0;
     public bool   RefractInternalMarch { get; set; } = false;
+    public int    RefractInternalBounces { get; set; } = 1;
 
     // ── Sky / IBL ─────────────────────────────────────────────────────
 
@@ -239,6 +240,7 @@ public sealed class LightingFxPresetData
         Transmission = fx.Transmission, Ior = fx.Ior,
         AbsorptionColor = fx.AbsorptionColor, AbsorptionDistance = fx.AbsorptionDistance,
         RefractInternalMarch = fx.RefractInternalMarch,
+        RefractInternalBounces = fx.RefractInternalBounces,
 
         SkyMode = fx.SkyMode, BgTopColor = fx.BgTopColor, BgBottomColor = fx.BgBottomColor,
         EnvironmentName = fx.EnvironmentName, IblStrength = fx.IblStrength,
@@ -317,6 +319,7 @@ public sealed class LightingFxPresetData
         Transmission = Transmission, Ior = Ior,
         AbsorptionColor = AbsorptionColor, AbsorptionDistance = AbsorptionDistance,
         RefractInternalMarch = RefractInternalMarch,
+        RefractInternalBounces = RefractInternalBounces,
 
         SkyMode = SkyMode, BgTopColor = BgTopColor, BgBottomColor = BgBottomColor,
         EnvironmentName = EnvironmentName, IblStrength = IblStrength,
