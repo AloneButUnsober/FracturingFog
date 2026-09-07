@@ -161,7 +161,7 @@ cbuffer ReliefParams : register(b0)
     int    gLType0;           // S8 (#389/#408) — light kinds: 0 Directional (byte-identical), 1 Point, 2 Spot
     int    gLType1;
     int    gLType2;
-    int    gPadLT;
+    int    gRefrIntBounces;   // S5 (#406) — glass internal-march bounce budget (repurposed S8 pad); 0 = env-approx, N>=1 = internal march w/ N TIR segments
 
     float3 gLPos0; float gLRange0;   // per-light world position + soft range window (Point / Spot)
     float3 gLPos1; float gLRange1;
@@ -801,13 +801,59 @@ uint ShadeFlat(float3 N, float3 V, float3 P, uint albedo)
         float omc = 1.0 - NdotVr;
         float Fr = tir ? 1.0 : f0 + (1.0 - f0) * (omc * omc * omc * omc * omc);
 
-        uint tSky = SkyDirPacked(tdir, gRoughness);
+        // S5 (#406) — full internal glass march + back-face TIR bounce (twin of the CPU
+        // ShadingPipeline / ReliefRaymarchGpu.ShadeFlat). gRefrIntBounces == 0 keeps the
+        // env-refraction approximation (single interface, nominal 1-unit slab). N >= 1
+        // marches the DE from the front hit through the solid to the back surface, so
+        // Beer-Lambert runs over the REAL thickness and the ray refracts a second time on
+        // exit; on a back-face TIR the ray reflects internally and seeks another exit, up
+        // to N segments, accumulating the multi-segment path length.
+        float3 exDir = tdir;
+        float thickness = 1.0;
+        if (gRefrIntBounces > 0 && !tir)
+        {
+            int budget = min(gRefrIntBounces, 6);
+            float3 idir = tdir;
+            float3 cur = P;
+            float accumThick = 0.0;
+            [loop]
+            for (int bnc = 0; bnc < budget; bnc++)
+            {
+                exDir = idir;
+                float biasR = gEps0 * 4.0;
+                float3 o = cur + idir * biasR;
+                float tInside = gEps0; bool exited = false; float3 ep = float3(0, 0, 0);
+                [loop]
+                for (int s = 0; s < 64; s++)
+                {
+                    float3 pp = o + idir * tInside;
+                    float d = abs(Evaluate(pp.x, pp.y, pp.z));
+                    if (d < gEps0 * 2.0) { exited = true; ep = pp; break; }
+                    tInside += max(d, gEps0);
+                    if (tInside > 12.0) break;
+                }
+                accumThick += tInside;
+                if (!exited) break;
+                float hN = gEps0 * 2.0;
+                float3 en = normalize(float3(
+                    Evaluate(ep.x + hN, ep.y, ep.z) - Evaluate(ep.x - hN, ep.y, ep.z),
+                    Evaluate(ep.x, ep.y + hN, ep.z) - Evaluate(ep.x, ep.y - hN, ep.z),
+                    Evaluate(ep.x, ep.y, ep.z + hN) - Evaluate(ep.x, ep.y, ep.z - hN)));
+                float3 outRay = refract(idir, -en, ior);
+                if (dot(outRay, outRay) >= 1e-8) { exDir = outRay; break; }   // refracted OUT
+                idir = reflect(idir, -en);   // back-face TIR — reflect internally
+                cur = ep;
+            }
+            thickness = accumThick;
+        }
+
+        uint tSky = SkyDirPacked(exDir, gRoughness);
         float3 tr = float3((tSky >> 16) & 0xFF, (tSky >> 8) & 0xFF, tSky & 0xFF);
         float3 tint = float3((gAbsorptionColor >> 16) & 0xFF, (gAbsorptionColor >> 8) & 0xFF, gAbsorptionColor & 0xFF) / 255.0;
         float3 absorb = float3(1.0, 1.0, 1.0);
         if (gAbsorptionDist > 0.0)
         {
-            float d = 1.0 / gAbsorptionDist;   // Beer-Lambert over a nominal 1-unit slab
+            float d = thickness / gAbsorptionDist;   // Beer-Lambert over the real (or nominal) thickness
             absorb.r = tint.r >= 1.0 ? 1.0 : (tint.r <= 0.0 ? 0.0 : pow(tint.r, d));
             absorb.g = tint.g >= 1.0 ? 1.0 : (tint.g <= 0.0 ? 0.0 : pow(tint.g, d));
             absorb.b = tint.b >= 1.0 ? 1.0 : (tint.b <= 0.0 ? 0.0 : pow(tint.b, d));

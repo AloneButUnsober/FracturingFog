@@ -712,6 +712,92 @@ public class ReliefRaymarchGpuTests
         Assert.Equal(a, b);
     }
 
+    // S5 (#406) — the GPU-parity twin's full internal glass march + back-face TIR
+    // bounce. The --reliefgpuraymarch probe proves the twin == the D3D/Vulkan kernel
+    // to the LSB; these headless locks pin the twin's own behaviour: the internal
+    // march (real thickness + exit refraction + internal reflections) changes the
+    // glass vs the env-refraction approximation, stays deterministic, and never moves
+    // the silhouette; opaque is byte-identical regardless of the budget.
+    [Fact]
+    public void CpuMirror_GlassInternalMarch_Changes_Glass_And_Is_Deterministic()
+    {
+        int w = 320, h = 240, hw = 320, hh = 240;
+        var p = ReliefParams();
+        var (hbuf, albedo, maxH) = BumpField(hw, hh, w, h);
+
+        // Env-refraction approximation (budget 0).
+        var fxEnv = LightingFxData.CreateDefault();
+        fxEnv.ShowSkyBackdrop = true;
+        fxEnv.Transmission = 0.9; fxEnv.Ior = 2.4;
+        fxEnv.AbsorptionColor = 0xFF66CCFFu; fxEnv.AbsorptionDistance = 0.6;
+        fxEnv.RefractInternalMarch = false;
+        var uEnv = BuildUniforms(w, h, hw, hh, hbuf, maxH, p, fxEnv);
+        var env = new uint[w * h];
+        ReliefRaymarchGpu.RenderCpuMirror(in uEnv, hbuf, null, albedo, env, out double hitEnv);
+
+        // Full internal march + TIR bounces (diamond IOR → grazing back-face TIR).
+        var fxMarch = fxEnv;
+        fxMarch.RefractInternalMarch = true; fxMarch.RefractInternalBounces = 4;
+        var uM1 = BuildUniforms(w, h, hw, hh, hbuf, maxH, p, fxMarch);
+        var m1 = new uint[w * h];
+        ReliefRaymarchGpu.RenderCpuMirror(in uM1, hbuf, null, albedo, m1, out double hitM1);
+        var uM2 = BuildUniforms(w, h, hw, hh, hbuf, maxH, p, fxMarch);
+        var m2 = new uint[w * h];
+        ReliefRaymarchGpu.RenderCpuMirror(in uM2, hbuf, null, albedo, m2, out _);
+
+        Assert.Equal(hitEnv, hitM1);   // glass never moves geometry
+        Assert.Equal(m1, m2);          // deterministic DE march
+
+        int diff = 0;
+        for (int i = 0; i < env.Length; i++) if (env[i] != m1[i]) diff++;
+        Assert.True(diff > 50, $"internal march should change the glass vs env-approx ({diff} px)");
+    }
+
+    [Fact]
+    public void CpuMirror_GlassInternalMarch_Opaque_Is_ByteIdentical()
+    {
+        int w = 200, h = 160, hw = 200, hh = 160;
+        var p = ReliefParams();
+        var (hbuf, albedo, maxH) = BumpField(hw, hh, w, h);
+
+        var fxOff = LightingFxData.CreateDefault();   // Transmission 0 = opaque
+        fxOff.RefractInternalMarch = false;
+        var uOff = BuildUniforms(w, h, hw, hh, hbuf, maxH, p, fxOff);
+        var off = new uint[w * h];
+        ReliefRaymarchGpu.RenderCpuMirror(in uOff, hbuf, null, albedo, off, out _);
+
+        var fxOn = LightingFxData.CreateDefault();
+        fxOn.RefractInternalMarch = true; fxOn.RefractInternalBounces = 5;
+        var uOn = BuildUniforms(w, h, hw, hh, hbuf, maxH, p, fxOn);
+        var on = new uint[w * h];
+        ReliefRaymarchGpu.RenderCpuMirror(in uOn, hbuf, null, albedo, on, out _);
+
+        Assert.Equal(off, on);   // opaque → glass block skipped → budget can't matter
+    }
+
+    // The one int the cbuffer carries encodes BOTH the march toggle and the bounce
+    // budget: 0 = env-approx (march off), else the clamped [1,6] budget. This is what
+    // the D3D/Vulkan upload + the twin both read, so the encoding is the contract.
+    [Theory]
+    [InlineData(false, 1, 0)]   // march off → env-approx regardless of the stored budget
+    [InlineData(false, 4, 0)]
+    [InlineData(true, 1, 1)]    // march on → the clamped budget
+    [InlineData(true, 4, 4)]
+    [InlineData(true, 0, 1)]    // clamp below 1
+    [InlineData(true, 99, 6)]   // clamp above 6
+    public void ReliefUniforms_Encodes_InternalMarch_Budget(bool march, int bounces, int expected)
+    {
+        int w = 64, h = 48, hw = 64, hh = 48;
+        var p = ReliefParams();
+        var (hbuf, _, maxH) = BumpField(hw, hh, w, h);
+        var fx = LightingFxData.CreateDefault();
+        fx.Transmission = 0.8;
+        fx.RefractInternalMarch = march;
+        fx.RefractInternalBounces = bounces;
+        var u = BuildUniforms(w, h, hw, hh, hbuf, maxH, p, fx);
+        Assert.Equal(expected, u.RefractInternalBounces);
+    }
+
     // #388 — multi-light volumetric in-scatter on the relief twin. With the key
     // light OFF, the ONLY path that can light the fog is the #388 multi-light
     // in-scatter loop, so a pure-blue fill (Light2) makes fog-lit pixels bluer than

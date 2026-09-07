@@ -281,6 +281,22 @@ public static class ReliefRaymarchGpuProbe
         fxGlass.AbsorptionDistance = 1.0;
         bool? okGlass = RunDiff(sb, "glass (transmission 0.6)", 160, 120, 160, 120, pGlass, fxGlass);
 
+        // S5 (#406) — full internal glass march + back-face TIR bounce: the kernel now
+        // sphere-traces the DE from the front hit through the solid to the back surface
+        // (real thickness for Beer-Lambert + a second refraction on exit), reflecting
+        // internally on a back-face TIR up to the budget. Diamond IOR (2.4) so grazing
+        // back faces produce plentiful TIR → the bounce path is actually exercised.
+        // Validates GPU == CPU-twin for the internal march (the added DE evals + the
+        // reflect-and-continue loop), not just the env approximation.
+        var fxMarch = fxGlass;
+        fxMarch.Transmission = 0.9;
+        fxMarch.Ior = 2.4;
+        fxMarch.AbsorptionColor = 0xFF66CCFFu;
+        fxMarch.AbsorptionDistance = 0.6;
+        fxMarch.RefractInternalMarch = true;
+        fxMarch.RefractInternalBounces = 4;
+        bool? okMarch = RunDiff(sb, "glass internal march + TIR bounce (ior 2.4, 4 bounces)", 160, 120, 160, 120, pGlass, fxMarch);
+
         // S8 (#389/#408) — positional-light diff: a point light + a spot light make
         // ShadeFlat resolve per-surface dir + attenuation (LightSampler twin) instead
         // of the constant directional dir. Cheap (no extra march), so the GPU==twin
@@ -333,7 +349,7 @@ public static class ReliefRaymarchGpuProbe
         bool? okPosFog = RunDiff(sb, "positional fog in-scatter", 160, 120, 160, 120, pLights, fxPosFog);
 
         bool ok = (okFull ?? true) && (okDof ?? true) && (okAov ?? true) && (okGlass ?? true)
-               && (okLights ?? true) && (okPosFog ?? true);
+               && (okMarch ?? true) && (okLights ?? true) && (okPosFog ?? true);
         sb.AppendLine(ok ? "RESULT: PASS" : "RESULT: FAIL");
         Finish(sb);
         return ok ? 0 : 1;
