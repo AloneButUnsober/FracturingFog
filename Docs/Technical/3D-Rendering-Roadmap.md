@@ -75,7 +75,7 @@ times *visible payoff*. The top trio (S1–S3) is the strategic core: it moves
 FF's 3D output a full tier while reusing data FF already produces and adding zero
 mesh machinery.
 
-### S1 — AOV / render-pass output + light compositor ◐ (#398)
+### S1 — AOV / render-pass output + light compositor ● (#398)
 Promote the per-pixel data the raymarch already resolves — depth, normal, world
 position, albedo, AO, material id, motion — to **first-class render passes**, and
 export them as a multi-layer **EXR** (see S7). Then relight / DOF / denoise /
@@ -157,11 +157,26 @@ discarded, not that it is uncomputed.
   `lit = (Ambient + diffuse·gain·tint)·aoEff`, `out = albedo·lit + specular·gain·tint`,
   `aoEff = 1 − (1 − AO)·AoStrength`. Pure, deterministic, parallel; composites the
   direct-lighting layers (SSS / reflections are separate additive passes, out of scope).
-  Operator-first; a relight action over a captured render / AOV-EXR round-trip is the
-  follow-up. +7 `LightCompositorTests`.
-- **Remaining:** thread the render's current + previous-frame camera into the Motion
-  channel (the wiring follow-up — landed on the #638→#641 stack); SVGF temporal (the
-  deeper #402 consumer of the motion + depth + normal guides).
+  Operator-first; +7 `LightCompositorTests`.
+- **Relight surfaced — live post-pass (landed, #398, closes S1):** the compositor is now
+  user-reachable. `FractalParameters.Relief2DRelight` + gains (diffuse / specular / AO /
+  ambient) drive a relief post-pass: on the primary beauty render `HeightfieldRaymarch2D`
+  captures the `ShadeComponents` AOV (forcing the CPU trace) and rebuilds the beauty via
+  `LightCompositor.Composite(albedo, components, gains)` BEFORE the froxel fog composites
+  over it — retune the lighting look without re-tracing the geometry. Off (default) leaves
+  the aov untouched → byte-identical; only the beauty-only path is intercepted (an
+  AOV/denoise/motion render owns its own aov and is skipped). Relief 3D dialog *Relight
+  (post)* expander + `--relight` / `--relight-diffuse|specular|ao|ambient` batch flags
+  (imply `--relief-raymarch`); user doc in `Docs/User/Relief3D-Guide.md` §10a. +4 tests
+  (`ReliefRelightTests`: off byte-identical, silhouette preserved, gain changes render,
+  batch parse). The AOV-EXR **round-trip** relight (read the exported multi-layer float
+  passes back to relight a saved render) needs a multi-layer float EXR reader — filed as a
+  separate follow-up.
+- **S1 complete.** Every per-pixel quantity the raymarch computes is promoted to a pass,
+  emitted as multi-layer float EXR, threaded through the sequence renderers, and consumed
+  (motion-vector chain → vector motion blur #638→#641; the light compositor → live relight).
+- **Remaining (follow-up):** SVGF temporal (the deeper #402 consumer of the motion + depth
+  + normal guides); the AOV-EXR round-trip relight reader (#718).
 - **Motion-vector AOV — render wiring (landed — PR #638, #398):** the relief render now
   fills the Motion channel. It exposes its perspective camera as `aov.CurrentCamera`
   (`ReliefMotionVector.CameraView` from the `ReliefCamera` basis) whenever an AOV buffer

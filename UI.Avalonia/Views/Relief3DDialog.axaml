@@ -378,6 +378,36 @@
                 </StackPanel>
                 </Expander>
 
+                <!-- S1 (#398) — relight in post from the captured lighting passes -->
+                <Expander Header="Relight (post)" IsExpanded="False">
+                <StackPanel Spacing="4">
+                    <CheckBox Content="Relight from lighting passes (no re-trace)"
+                              IsChecked="{Binding Relief2DRelight, Mode=TwoWay}"
+                              IsEnabled="{Binding Relief2DRaymarch}"
+                              ToolTip.Tip="Rebuild the beauty by recombining the per-pixel diffuse / specular / AO the raymarch already resolves with the surface albedo, under the gains below — retune the lighting look without re-tracing the geometry. Recombines the DIRECT lighting only (subsurface / reflections are not included); fog still layers over the relit surface. Forces the CPU relief trace." />
+                    <StackPanel Orientation="Horizontal" Spacing="8" Margin="24,0,0,0" IsEnabled="{Binding Relief2DRelight}">
+                        <TextBlock Text="Diffuse" VerticalAlignment="Center" Width="64" />
+                        <Slider Width="130" Minimum="0" Maximum="8" Value="{Binding Relief2DRelightDiffuseGain, Mode=TwoWay}" />
+                        <TextBlock Text="{Binding Relief2DRelightDiffuseGain, StringFormat='{}{0:0.00}'}" VerticalAlignment="Center" Width="36" />
+                    </StackPanel>
+                    <StackPanel Orientation="Horizontal" Spacing="8" Margin="24,0,0,0" IsEnabled="{Binding Relief2DRelight}">
+                        <TextBlock Text="Specular" VerticalAlignment="Center" Width="64" />
+                        <Slider Width="130" Minimum="0" Maximum="8" Value="{Binding Relief2DRelightSpecularGain, Mode=TwoWay}" />
+                        <TextBlock Text="{Binding Relief2DRelightSpecularGain, StringFormat='{}{0:0.00}'}" VerticalAlignment="Center" Width="36" />
+                    </StackPanel>
+                    <StackPanel Orientation="Horizontal" Spacing="8" Margin="24,0,0,0" IsEnabled="{Binding Relief2DRelight}">
+                        <TextBlock Text="AO" VerticalAlignment="Center" Width="64" />
+                        <Slider Width="130" Minimum="0" Maximum="4" Value="{Binding Relief2DRelightAoStrength, Mode=TwoWay}" />
+                        <TextBlock Text="{Binding Relief2DRelightAoStrength, StringFormat='{}{0:0.00}'}" VerticalAlignment="Center" Width="36" />
+                    </StackPanel>
+                    <StackPanel Orientation="Horizontal" Spacing="8" Margin="24,0,0,0" IsEnabled="{Binding Relief2DRelight}">
+                        <TextBlock Text="Ambient" VerticalAlignment="Center" Width="64" />
+                        <Slider Width="130" Minimum="0" Maximum="4" Value="{Binding Relief2DRelightAmbient, Mode=TwoWay}" />
+                        <TextBlock Text="{Binding Relief2DRelightAmbient, StringFormat='{}{0:0.00}'}" VerticalAlignment="Center" Width="36" />
+                    </StackPanel>
+                </StackPanel>
+                </Expander>
+
                 <!-- #135 — isolate filaments as a standalone 3D object -->
                 <CheckBox Content="Isolate object (drop background → transparent)"
                           IsChecked="{Binding Relief2DIsolate, Mode=TwoWay}"
