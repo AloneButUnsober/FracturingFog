@@ -468,8 +468,12 @@ public static class HeightfieldRaymarch2D
         // `Relief2DFroxelTemporal` no longer forces the CPU froxel branch. Feedback 0
         // (temporal off) is the single-frame composite, byte-identical. The GPU history
         // is kernel-owned and independent of the CPU-side `froxelHistory` object.
+        // S6 (#408) — sub-cell froxel reprojection lives only in the CPU froxel post-pass
+        // (the GPU froxel kernel keeps its own same-cell device history); force the CPU
+        // froxel path when it is on so the flag takes effect. GPU reproject is a follow-up.
+        bool froxelReproject = froxelTemporal && p.Relief2DFroxelReproject;
         if (froxel && froxelKernel != null && gpuKernel != null && p.Relief2DGpuRaymarch
-            && fx.DebugAov == AovView.Beauty && aovOk && !fx.HasAreaLight)
+            && fx.DebugAov == AovView.Beauty && aovOk && !fx.HasAreaLight && !froxelReproject)
         {
             var u = ReliefUniforms.Build(w, h, hw, hh, sy, aspect, invLip, maxH, p, in fx);
             // Reuse the caller's denoise guides when present, else scratch for depth.
@@ -773,7 +777,7 @@ public static class HeightfieldRaymarch2D
             // composited onto both dst (byte) and HdrBeauty (float) in one Apply call.
             var composited = FroxelCameraVolume.Apply(dst, froxelDepth, w, h, in cam, in froxelFx,
                 froxelHistory, froxelTemporal, p.Relief2DFroxelTemporalFeedback, p.Relief2DFroxelQuality,
-                aov?.HdrBeauty);
+                aov?.HdrBeauty, p.Relief2DFroxelReproject);
             Array.Copy(composited, dst, n);
         }
 

@@ -827,10 +827,25 @@ animated.
   scene-configurable). Locked by `MultiFrame_Relief_Scene_Is_Deterministic_With_Shared_Froxel_
   History` (a multi-frame relief scene rendered twice is byte-identical frame-for-frame, every
   frame non-black — the stateful shared history stays deterministic). PR #565.
-- **Remaining (enhancement follow-up):** sub-cell froxel reprojection under continuous camera
-  motion (the grid-key check currently re-seeds on any near/far change instead of resampling). The
-  core froxel unified-volume march (D3D + Vulkan + host wiring + CPU & GPU temporal + poster seam + quality
-  controls + user doc + batch-video/slideshow/scene consumers) is complete.
+- **Sub-cell temporal reprojection — CPU (landed, #408):** the base temporal blend reused the
+  previous frame's SAME froxel cell (correct only for a static camera — it ghosts under motion,
+  and any near/far change re-seeded the whole volume). `FroxelHistory.BlendAndStoreReproject`
+  now resamples the history in WORLD space: each current cell's world position (from the current
+  camera basis + grid + lateral extent, stored per frame) maps into the previous frame's
+  camera-local froxel coordinates and the stored scatter/extinction is trilinearly sampled there
+  before the exponential blend; cells whose reprojection lands outside the previous frustum are
+  disoccluded (pass current through). A near/far dolly no longer re-seeds — the depth remaps
+  through the previous grid's `DepthToSlice`. Opt-in `FractalParameters.Relief2DFroxelReproject`
+  (default off → the same-cell blend, byte-identical); requires temporal. Forces the CPU froxel
+  post-pass (the GPU froxel kernel keeps its own same-cell device history). Reachable via the
+  Relief 3D dialog "Sub-cell reprojection" checkbox + `--relief-froxel-reproject` (implies
+  `--relief-froxel-temporal`). +5 tests (`FroxelReprojectTests` first-frame pass-through/seed,
+  static ≈ same-cell, moving-camera history shift, determinism; `S6VideoReliefBatchTests` parse).
+- **Remaining (enhancement follow-up):** the GPU froxel sub-cell reprojection twin (D3D + Vulkan
+  device history resamples same-cell today; reproject forces the CPU froxel post-pass). The core
+  froxel unified-volume march (D3D + Vulkan + host wiring + CPU & GPU temporal + CPU sub-cell
+  reprojection + poster seam + quality controls + user doc + batch-video/slideshow/scene
+  consumers) is complete.
 
 ### S7 — Float / multi-layer EXR export ☑ (#394)
 Enabler for S1 (AOV layers), S2 (linear/HDR intermediate) and S6 (HDR

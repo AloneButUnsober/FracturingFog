@@ -146,12 +146,25 @@ public static class FroxelCameraVolume
     public static uint[] Apply(uint[] beauty, float[] worldDepth, int w, int h,
         in HeightfieldRaymarch2D.ReliefCamera cam, in LightingFxData fx,
         FroxelHistory? history, bool temporal, double feedback, FroxelQuality quality,
-        float[]? hdrBeauty = null)
+        float[]? hdrBeauty = null, bool reproject = false)
     {
         var grid = BuildGrid(in cam, quality);
         var pass = new FroxelVolumePass(grid);
         if (temporal && history != null)
-            pass.Populate(BuildMedium(in cam, in fx), history, feedback, FroxelHistory.GridKey(grid));
+        {
+            // S6 (#408) sub-cell reprojection: pass the current camera basis + lateral
+            // extent so the history resamples in world space under continuous camera
+            // motion. Reproject off → the same-cell blend (byte-identical).
+            var cur = new FroxelHistory.CamBasis(
+                cam.CamX, cam.CamY, cam.CamZ,
+                cam.RX, 0.0, cam.RZ,          // relief right vector has RY == 0
+                cam.UX, cam.UY, cam.UZ,
+                cam.FX, cam.FY, cam.FZ);
+            double extent = Math.Max(cam.Bx, Math.Max(cam.By, cam.Bz));
+            if (extent <= 0.0) extent = 1.0;
+            pass.Populate(BuildMedium(in cam, in fx), history, feedback,
+                FroxelHistory.GridKey(grid), reproject, in cur, extent);
+        }
         else
             pass.Populate(BuildMedium(in cam, in fx));
         // S12 (#655/#652) — when a float HDR beauty plane is captured, composite the

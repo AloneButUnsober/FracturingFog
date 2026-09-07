@@ -112,6 +112,10 @@ namespace FracturingFog.Batch
         // Implies --relief-froxel; only meaningful for a video/slideshow sequence.
         public const string ReliefFroxelTemporal  = "--relief-froxel-temporal";
         public const string ReliefFroxelFeedback  = "--relief-froxel-feedback";
+        // Sub-cell froxel reprojection under continuous camera motion (#408). Implies
+        // --relief-froxel-temporal; keeps animated fog anchored in the world as the
+        // camera moves (vs the same-cell re-seed).
+        public const string ReliefFroxelReproject = "--relief-froxel-reproject";
 
         // Per-light fog contribution bitmask (roadmap S6, #408). bit n = light n+1
         // lights the fog in-scatter. 0..7; default 7 (all). Surface lighting is
