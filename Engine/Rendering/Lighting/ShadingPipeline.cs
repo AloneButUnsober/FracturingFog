@@ -730,23 +730,41 @@ public static class ShadingPipeline
             double thickness = 1.0;                          // env-approx: nominal slab
             if (fx.RefractInternalMarch && hasDe && !tir)
             {
-                double biasR = i.Epsilon * 4.0;
-                double ox = i.Px + tx * biasR, oy = i.Py + ty * biasR, oz = i.Pz + tz * biasR;
                 const int refrSteps = 64;
-                double tInside = i.Epsilon; bool exited = false; double ex = 0, ey = 0, ez = 0;
-                for (int s = 0; s < refrSteps; s++)
+                // Internal-reflection bounce budget (#406). 1 = single front→back
+                // attempt (on back-face TIR the internal dir is kept — legacy,
+                // byte-identical). N>1: reflect the internal ray about the back
+                // normal and re-march to the next surface, accumulating the real
+                // path length for Beer-Lambert. Clamped [1, 6].
+                int bounceBudget = fx.RefractInternalBounces < 1 ? 1
+                                 : (fx.RefractInternalBounces > 6 ? 6 : fx.RefractInternalBounces);
+                double idx = tx, idy = ty, idz = tz;         // current internal dir
+                double curX = i.Px, curY = i.Py, curZ = i.Pz;
+                double accumThick = 0.0;
+                for (int b = 0; b < bounceBudget; b++)
                 {
-                    double px = ox + tx * tInside, py = oy + ty * tInside, pz = oz + tz * tInside;
-                    // Distance to the surface from inside the solid; sphere-trace it to
-                    // the exit (back) interface.
-                    double d = Math.Abs(de.Evaluate(px, py, pz));
-                    if (d < i.Epsilon * 2.0) { exited = true; ex = px; ey = py; ez = pz; break; }
-                    tInside += Math.Max(d, i.Epsilon);
-                    if (tInside > 12.0) break;
-                }
-                thickness = tInside;
-                if (exited)
-                {
+                    // Fallback exit dir for this segment = the current internal dir;
+                    // overwritten below only if the ray refracts OUT here. On the
+                    // last budgeted bounce a TIR leaves this as the pre-reflection
+                    // internal dir (the legacy single-attempt behaviour).
+                    exDirX = idx; exDirY = idy; exDirZ = idz;
+
+                    double biasR = i.Epsilon * 4.0;
+                    double ox = curX + idx * biasR, oy = curY + idy * biasR, oz = curZ + idz * biasR;
+                    double tInside = i.Epsilon; bool exited = false; double ex = 0, ey = 0, ez = 0;
+                    for (int s = 0; s < refrSteps; s++)
+                    {
+                        double px = ox + idx * tInside, py = oy + idy * tInside, pz = oz + idz * tInside;
+                        // Distance to the surface from inside the solid; sphere-trace
+                        // it to the exit (back) interface.
+                        double d = Math.Abs(de.Evaluate(px, py, pz));
+                        if (d < i.Epsilon * 2.0) { exited = true; ex = px; ey = py; ez = pz; break; }
+                        tInside += Math.Max(d, i.Epsilon);
+                        if (tInside > 12.0) break;
+                    }
+                    accumThick += tInside;
+                    if (!exited) break;   // ran off the solid — keep the internal dir
+
                     // Outward surface normal at the exit via central differences.
                     double hN = i.Epsilon * 2.0;
                     double nx = de.Evaluate(ex + hN, ey, ez) - de.Evaluate(ex - hN, ey, ez);
@@ -754,11 +772,18 @@ public static class ShadingPipeline
                     double nz = de.Evaluate(ex, ey, ez + hN) - de.Evaluate(ex, ey, ez - hN);
                     var en = Normalize3(nx, ny, nz);
                     // Exit interface: normal AGAINST the internal ray = -en; eta = ior
-                    // (inside→outside). On TIR keep the internal direction (a full path
-                    // would internally reflect — a follow-up).
-                    var (ex2, ey2, ez2, tir2) = DielectricOps.Refract(tx, ty, tz, -en.X, -en.Y, -en.Z, ior);
-                    if (!tir2) { exDirX = ex2; exDirY = ey2; exDirZ = ez2; }
+                    // (inside→outside).
+                    var (ex2, ey2, ez2, tir2) = DielectricOps.Refract(idx, idy, idz, -en.X, -en.Y, -en.Z, ior);
+                    if (!tir2) { exDirX = ex2; exDirY = ey2; exDirZ = ez2; break; }   // refracted OUT
+
+                    // Total internal reflection at the back face — the ray cannot
+                    // leave here. Reflect it about the exit normal and march on to
+                    // the next surface (if the bounce budget allows).
+                    var (bx, by, bz) = DielectricOps.Reflect(idx, idy, idz, -en.X, -en.Y, -en.Z);
+                    idx = bx; idy = by; idz = bz;
+                    curX = ex; curY = ey; curZ = ez;
                 }
+                thickness = accumThick;
             }
 
             uint tSky = SkyColorHdri(exDirX, exDirY, exDirZ, fx.Roughness, in fx);

@@ -433,6 +433,7 @@ public sealed class ControlCenterViewModel : ViewModelBase
             AbsorptionDistance   = fp?.Lighting.AbsorptionDistance ?? 1.0,
             AbsorptionColor      = fp?.Lighting.AbsorptionColor ?? 0xFFFFFFFFu,
             GlassInternalMarch   = fp?.Lighting.RefractInternalMarch ?? false,
+            GlassInternalBounces = fp?.Lighting.RefractInternalBounces ?? 1,
             ReliefDenoiseIterations  = fp?.Relief2DDenoiseIterations ?? 0,   // S4 (#389)
             ReliefDenoiseColorSigma  = fp?.Relief2DDenoiseColorSigma ?? 0.10,
             ReliefDenoiseNormalSigma = fp?.Relief2DDenoiseNormalSigma ?? 0.30,

@@ -116,7 +116,7 @@ namespace FracturingFog.Batch
             // S5 (#406) — refractive glass. Any glass flag set → copy/mutate/write
             // fp.Lighting. Unset fields keep the default (opaque when nothing given).
             if (opts.Transmission.HasValue || opts.Ior.HasValue || opts.AbsorptionDist.HasValue
-                || opts.AbsorptionColor.HasValue || opts.GlassInternalMarch)
+                || opts.AbsorptionColor.HasValue || opts.GlassInternalMarch || opts.GlassInternalBounces.HasValue)
             {
                 var fxg = fp.Lighting;
                 if (opts.Transmission.HasValue)    fxg.Transmission        = opts.Transmission.Value;
@@ -124,6 +124,7 @@ namespace FracturingFog.Batch
                 if (opts.AbsorptionDist.HasValue)  fxg.AbsorptionDistance  = opts.AbsorptionDist.Value;
                 if (opts.AbsorptionColor.HasValue) fxg.AbsorptionColor     = opts.AbsorptionColor.Value;
                 if (opts.GlassInternalMarch)       fxg.RefractInternalMarch = true;
+                if (opts.GlassInternalBounces.HasValue) fxg.RefractInternalBounces = opts.GlassInternalBounces.Value;
                 fp.Lighting = fxg;
             }
 

@@ -147,6 +147,7 @@ namespace FracturingFog.Cli
         public double AbsorptionDistance { get; init; } = 1.0;
         public uint AbsorptionColor { get; init; } = 0xFFFFFFFFu;
         public bool GlassInternalMarch { get; init; }
+        public int GlassInternalBounces { get; init; } = 1;
 
         /// <summary>Froxel volumetrics on the relief raymarch (roadmap S6, #408).
         /// Emitted as <c>--relief-froxel</c> on the raymarch path.</summary>
@@ -350,6 +351,10 @@ namespace FracturingFog.Cli
                         if (snap.AbsorptionDistance != 1.0) { parts.Add(BatchFlags.AbsorptionDist); parts.Add(Num(snap.AbsorptionDistance)); }
                         if (snap.AbsorptionColor != 0xFFFFFFFFu) { parts.Add(BatchFlags.AbsorptionColor); parts.Add(HexColor(snap.AbsorptionColor)); }
                         if (snap.GlassInternalMarch)        parts.Add(BatchFlags.GlassInternalMarch);
+                        // Internal-reflection bounces emit only when set past the
+                        // default 1 (and only meaningful with the internal march on).
+                        if (snap.GlassInternalMarch && snap.GlassInternalBounces > 1)
+                        { parts.Add(BatchFlags.GlassInternalBounces); parts.Add(snap.GlassInternalBounces.ToString(CultureInfo.InvariantCulture)); }
                     }
 
                     // Froxel volumetrics (S6, #408). A non-Balanced quality flag implies

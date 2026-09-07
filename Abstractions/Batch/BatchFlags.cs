@@ -159,6 +159,7 @@ namespace FracturingFog.Batch
         public const string AbsorptionDist      = "--absorption-dist";
         public const string AbsorptionColor     = "--absorption-color";
         public const string GlassInternalMarch  = "--glass-internal-march";
+        public const string GlassInternalBounces = "--glass-internal-bounces";
 
         // Per-light point / spot lights on the relief raymarch (roadmap S8, #404).
         // The three lights are addressed by number (1..3); LightFlag composes the

@@ -462,6 +462,18 @@ public struct LightingFxData
     /// Forces the CPU trace, like any transmissive material.</summary>
     public bool RefractInternalMarch;
 
+    /// <summary>S5 (#406) — internal-reflection bounce budget for the full internal
+    /// glass march. When <see cref="RefractInternalMarch"/> marches to the back
+    /// surface and the exit interface is beyond the critical angle (total internal
+    /// reflection), the ray has no way out there: physical glass reflects it back
+    /// inside and it seeks another exit. This is how many internal segments the
+    /// march may take — 1 (default) is the single front→back attempt (on back-face
+    /// TIR the internal direction is kept, the legacy behaviour → byte-identical);
+    /// N &gt; 1 reflects the internal ray about the back normal and re-marches to the
+    /// next surface, up to N segments, accumulating the real path length for
+    /// Beer-Lambert. Clamped [1, 6]. Only meaningful with RefractInternalMarch on.</summary>
+    public int RefractInternalBounces;
+
     // ── Triplanar texture (Phase 14) ──────────────────────────────────
 
     /// <summary>Procedural texture selector. <see cref="TriplanarTextureKind.None"/>
@@ -801,6 +813,7 @@ public struct LightingFxData
         AbsorptionColor    = 0xFFFFFFFFu,  // clear
         AbsorptionDistance = 1.0,
         RefractInternalMarch = false,      // env-approx (single interface)
+        RefractInternalBounces = 1,        // single front->back attempt (legacy TIR fallback)
 
         TriplanarKind      = TriplanarTextureKind.None,
         TriplanarScale     = 4.0,
@@ -887,7 +900,7 @@ public struct LightingFxData
         h.Add(VolumeNoiseOctaves); h.Add(VolumeSelfShadow); h.Add(VolumeSelfShadowSteps);
         h.Add(VolumeAnisotropy); h.Add(FogColor); h.Add(VolumePaletteStrength);
         h.Add(Roughness); h.Add(Metallic); h.Add(SpecularStrength); h.Add(SubSurfaceStrength);
-        h.Add(Transmission); h.Add(Ior); h.Add(AbsorptionColor); h.Add(AbsorptionDistance); h.Add(RefractInternalMarch);
+        h.Add(Transmission); h.Add(Ior); h.Add(AbsorptionColor); h.Add(AbsorptionDistance); h.Add(RefractInternalMarch); h.Add(RefractInternalBounces);
         h.Add(TriplanarScale); h.Add(TriplanarStrength); h.Add(TriplanarTint);
         h.Add(SkyMode); h.Add(BgTopColor); h.Add(BgBottomColor);
         h.Add(EnvironmentName); h.Add(IblStrength); h.Add(ShowSkyBackdrop);

@@ -581,8 +581,21 @@ full uber-shader — add transmission, optionally clearcoat / emission).
   (`AbsorptionColorHex` VM accessor, mirrors `FogColorHex`, greyed until Transmission>0).
   Opaque = byte-identical. +13 `GlassBatchWiringTests` (the WinExe apply is
   build-verified, same boundary `S6VideoReliefBatchTests` documents).
-- **Remaining:** GPU internal-march twin, back-surface TIR internal-reflection bounce,
-  rough refraction (couple S4).
+- **Back-surface TIR internal-reflection bounce (landed — #406):** the full internal
+  march no longer dead-ends when the back interface is beyond the critical angle
+  (total internal reflection). `LightingFxData.RefractInternalBounces` (default 1 →
+  byte-identical single front→back attempt, keeping the internal dir on a back-face
+  TIR) turns the exit into a bounce loop [1, 6]: on TIR the internal ray reflects
+  about the back normal (`DielectricOps.Reflect`) and re-marches to the next surface,
+  accumulating the REAL multi-segment path length for Beer-Lambert, until it refracts
+  out or the budget runs out — faceted, gem-like glass with brighter internal caustic
+  corners. CPU-path (like all transmission); persisted (preset DTO + hash); LightingFx
+  dialog "Internal bounces" slider (gated on Internal march); `--glass-internal-bounces N`
+  batch flag (implies the march; emits only above the default 1). +7 tests
+  (`RefractionInternalBounceTests` render locks incl. diamond-IOR grazing change +
+  clamp, `GlassBatchWiringTests` parse/emit). Opaque = byte-identical.
+- **Remaining:** GPU internal-march twin (+ its TIR-bounce port), rough refraction
+  (couple S4).
 
 ### S6 — Froxel / unified volume march ◐ (#408)
 Today's volumetrics are per-surface single-scatter. A froxel (frustum-voxel)

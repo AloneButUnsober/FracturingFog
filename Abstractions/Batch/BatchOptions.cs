@@ -279,6 +279,7 @@ namespace FracturingFog.Batch
         public double? AbsorptionDist { get; set; }      // > 0, Beer-Lambert reference
         public uint? AbsorptionColor { get; set; }       // packed 0xAARRGGBB glass tint
         public bool GlassInternalMarch { get; set; }     // full two-surface march
+        public int? GlassInternalBounces { get; set; }   // internal-reflection budget [1,6]
 
         // Per-light point / spot overrides (roadmap S8, #404). Index 0..2 = the
         // three LightingFxData lights. Only the fields the user passed are set
@@ -827,6 +828,20 @@ namespace FracturingFog.Batch
                     case BatchFlags.GlassInternalMarch:
                         opts.GlassInternalMarch = true;
                         opts.Transmission ??= 0.9;   // the march only bites when glass is on
+                        opts.ReliefRaymarch = true;
+                        opts.Relief = true;
+                        break;
+
+                    case BatchFlags.GlassInternalBounces:
+                        if (!NextInt(args, ref i, a, out int gib, out error)) return false;
+                        if (gib < 1 || gib > 6)
+                        {
+                            error = $"{a} expected an integer 1-6, got '{gib}'.";
+                            return false;
+                        }
+                        opts.GlassInternalBounces = gib;
+                        opts.GlassInternalMarch = true;   // bounces only bite with the internal march
+                        opts.Transmission ??= 0.9;
                         opts.ReliefRaymarch = true;
                         opts.Relief = true;
                         break;
