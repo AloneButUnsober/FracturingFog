@@ -548,7 +548,7 @@
                 <Expander Header="Material" HorizontalAlignment="Stretch">
                     <Grid ColumnDefinitions="160,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto">
                         <TextBlock Grid.Row="0" Grid.Column="0" Text="Roughness:" VerticalAlignment="Center"
-                                   ToolTip.Tip="GGX roughness. 0 = mirror, 1 = lambert." />
+                                   ToolTip.Tip="GGX roughness. 0 = mirror, 1 = lambert. With GGX sampling on it also frosts glass (Transmission &gt; 0): rougher = more scattered see-through." />
                         <Grid Grid.Row="0" Grid.Column="1" ColumnDefinitions="*,Auto" Margin="0,2">
                             <Slider Classes="knob" Grid.Column="0" Minimum="0" Maximum="1"
                                     Value="{Binding Roughness, Mode=TwoWay}" />
@@ -584,7 +584,7 @@
 
                         <!-- Glass / refraction (roadmap S5, #389). -->
                         <TextBlock Grid.Row="4" Grid.Column="0" Text="Transmission:" VerticalAlignment="Center"
-                                   ToolTip.Tip="Glass transparency. 0 = opaque; 1 = fully see-through (refracts the environment). Forces the CPU relief trace when > 0." />
+                                   ToolTip.Tip="Glass transparency. 0 = opaque; 1 = fully see-through (refracts the environment). Forces the CPU relief trace when > 0. Tip: turn on GGX sampling (Reflections) with a rough surface to FROST the glass — the transmitted view scatters (noisy; pair with the denoise)." />
                         <Grid Grid.Row="4" Grid.Column="1" ColumnDefinitions="*,Auto" Margin="0,2">
                             <Slider Classes="knob" Grid.Column="0" Minimum="0" Maximum="1"
                                     Value="{Binding Transmission, Mode=TwoWay}" />
