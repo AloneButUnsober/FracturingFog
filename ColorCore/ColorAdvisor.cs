@@ -71,9 +71,11 @@ public static class ColorAdvisor
         {
             var worst = collapses[0];
             var sev = collapses.Count >= 2 ? AdviceSeverity.Warn : AdviceSeverity.Info;
+            // Stop numbers are 1-based in user-facing text (the Confusable indices are
+            // 0-based) — artists count stops from 1.
             outp.Add(new ColorAdvice(ColorAdviceKind.CvdCollapse, sev,
                 $"{collapses.Count} stop pair(s) collapse under colour-vision deficiency " +
-                $"(worst: stops {worst.I}&{worst.J} under {worst.Type}). Nudge hue or lightness."));
+                $"(worst: stops {worst.I + 1}&{worst.J + 1} under {worst.Type}). Nudge hue or lightness."));
         }
 
         // Shadow-crush.
