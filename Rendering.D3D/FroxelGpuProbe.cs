@@ -208,6 +208,119 @@ public static class FroxelGpuProbe
         return ok ? 0 : 1;
     }
 
+    /// <summary>CLI entry (`--froxelgpureproject`). Two-frame SUB-CELL reprojection
+    /// parity (roadmap S6, #408): the camera moves between the frames (azimuth, same
+    /// distance → the grid identity is unchanged so history is reused, not re-seeded),
+    /// and both the GPU kernel and the CPU <see cref="FroxelHistory.BlendAndStoreReproject"/>
+    /// resample the history in world space. Asserts GPU == CPU on the reprojected frame,
+    /// and that reprojection actually differs from the same-cell temporal blend (the
+    /// history was resampled, not read straight through). WARP device.</summary>
+    public static int RunReprojectGate()
+    {
+        const int w = 200, h = 150;
+        const double fb = 0.7;
+        var sb = new StringBuilder();
+        sb.AppendLine("Froxel-GPU reproject gate (#408) — GPU vs CPU sub-cell reprojection (2 frames, moving camera)");
+
+        FractalParameters Params(double az) => new()
+        {
+            Relief2DEnabled = true,
+            Relief2DRaymarch = true,
+            Relief2DFroxelVolumetrics = true,
+            Relief2DHeightScale = 1.4,
+            Relief2DCameraAzimuthDeg = az,
+            Relief2DCameraElevationDeg = 45,
+            Relief2DCameraFovDeg = 55,
+        };
+        double aspect = (double)w / h;
+        // Frame A at azimuth 25, frame B orbited to 35 — same distance, so BuildGrid's
+        // near/far bracket (and the grid key) is unchanged → the history is reused.
+        var camA = HeightfieldRaymarch2D.BuildObliqueCamera(w, h, aspect, sy: 0.35, maxH: 1.0, Params(25));
+        var camB = HeightfieldRaymarch2D.BuildObliqueCamera(w, h, aspect, sy: 0.35, maxH: 1.0, Params(35));
+        var fx = SceneFx(0.6, 0.3);
+
+        var grid = FroxelCameraVolume.BuildGrid(in camA);
+        var (beauty, depth) = Scene(w, h, grid.Near, grid.Far);
+
+        // CPU oracle — one persistent history, two frames, reprojection on.
+        var hist = new FroxelHistory();
+        _ = FroxelCameraVolume.Apply(beauty, depth, w, h, in camA, in fx, hist, true, fb, FroxelQuality.Balanced, null, true);
+        var cpu2 = FroxelCameraVolume.Apply(beauty, depth, w, h, in camB, in fx, hist, true, fb, FroxelQuality.Balanced, null, true);
+        // Same-cell temporal frame B (no reprojection) — to prove reprojection shifted it.
+        var histSame = new FroxelHistory();
+        _ = FroxelCameraVolume.Apply(beauty, depth, w, h, in camA, in fx, histSame, true, fb);
+        var cpuSameB = FroxelCameraVolume.Apply(beauty, depth, w, h, in camB, in fx, histSame, true, fb);
+
+        var uA = FroxelGpuUniforms.Build(in camA, in fx);
+        var uB = FroxelGpuUniforms.Build(in camB, in fx);
+        ID3D11Device? dev = null;
+        ID3D11DeviceContext? ctx = null;
+        FroxelGpuKernel? kernel = null;
+        var gpu2 = new uint[w * h];
+        try
+        {
+            var hr = D3D11.D3D11CreateDevice(null, DriverType.Warp, DeviceCreationFlags.None,
+                null!, out dev, out _, out ctx);
+            if (hr.Failure || dev == null || ctx == null)
+            {
+                sb.AppendLine($"  SKIP: no WARP D3D11 device (0x{hr.Code:X8})");
+                sb.AppendLine("RESULT: PASS");
+                FinishNamed(sb, "froxelgpureproject.out");
+                return 0;
+            }
+            kernel = new FroxelGpuKernel(dev, ctx, new object());
+            var gpu1 = new uint[w * h];
+            kernel.Composite(in uA, beauty, depth, w, h, gpu1, fb, reproject: true);   // seeds history + prev cam
+            kernel.Composite(in uB, beauty, depth, w, h, gpu2, fb, reproject: true);   // reprojects frame A
+        }
+        catch (Exception ex)
+        {
+            sb.AppendLine($"  ERROR: GPU dispatch threw — {ex.Message}");
+            sb.AppendLine("RESULT: FAIL");
+            FinishNamed(sb, "froxelgpureproject.out");
+            return 1;
+        }
+        finally
+        {
+            kernel?.Dispose();
+            ctx?.Dispose();
+            dev?.Dispose();
+        }
+
+        long sumAbs = 0; int maxAbs = 0; long bad = 0; int nz = 0;
+        for (int i = 0; i < w * h; i++)
+        {
+            uint a = cpu2[i], b = gpu2[i];
+            int dr = Math.Abs((int)((a >> 16) & 0xFF) - (int)((b >> 16) & 0xFF));
+            int dg = Math.Abs((int)((a >> 8) & 0xFF) - (int)((b >> 8) & 0xFF));
+            int db = Math.Abs((int)(a & 0xFF) - (int)(b & 0xFF));
+            int m = Math.Max(dr, Math.Max(dg, db));
+            sumAbs += dr + dg + db;
+            if (m > maxAbs) maxAbs = m;
+            if (m > 16) bad++;
+            if (((a >> 24) & 0xFF) != ((b >> 24) & 0xFF)) nz++;
+        }
+        double meanCh = sumAbs / (3.0 * w * h);
+        double badFrac = (double)bad / (w * h);
+
+        long reproChanged = 0;
+        for (int i = 0; i < w * h; i++)
+            if (cpu2[i] != cpuSameB[i]) reproChanged++;
+        double reproChangedFrac = (double)reproChanged / (w * h);
+
+        sb.AppendLine(string.Create(CultureInfo.InvariantCulture, $"  size                 {w}x{h}   feedback {fb:0.00}"));
+        sb.AppendLine(string.Create(CultureInfo.InvariantCulture, $"  reproject shifted frac {reproChangedFrac:0.0000}"));
+        sb.AppendLine(string.Create(CultureInfo.InvariantCulture, $"  mean channel diff    {meanCh:0.000}"));
+        sb.AppendLine(string.Create(CultureInfo.InvariantCulture, $"  max channel diff     {maxAbs}"));
+        sb.AppendLine(string.Create(CultureInfo.InvariantCulture, $"  bad pixels >16       {badFrac:0.0000}  ({bad} px)"));
+        sb.AppendLine(string.Create(CultureInfo.InvariantCulture, $"  alpha mismatches     {nz}"));
+
+        bool ok = reproChangedFrac > 0.02 && meanCh < 2.5 && badFrac < 0.05 && nz == 0;
+        sb.AppendLine(ok ? "RESULT: PASS" : "RESULT: FAIL");
+        FinishNamed(sb, "froxelgpureproject.out");
+        return ok ? 0 : 1;
+    }
+
     /// <summary>CLI entry (`--froxelgpu`).</summary>
     public static int RunGate()
     {

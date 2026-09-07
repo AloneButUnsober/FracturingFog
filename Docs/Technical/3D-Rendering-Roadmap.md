@@ -631,7 +631,7 @@ full uber-shader — add transmission, optionally clearcoat / emission).
   declared non-goals remain out of scope: full spectral dispersion (chromatic glass) and
   participating-media caustics (the volumetric axis, S6).
 
-### S6 — Froxel / unified volume march ◐ (#408)
+### S6 — Froxel / unified volume march ● (#408)
 Today's volumetrics are per-surface single-scatter. A froxel (frustum-voxel)
 volume LUT à la Frostbite/Hillaire unifies fog across all 3D types and — crucially
 — gives **temporal stability**, which becomes necessary the moment the Scene
@@ -841,11 +841,27 @@ animated.
   Relief 3D dialog "Sub-cell reprojection" checkbox + `--relief-froxel-reproject` (implies
   `--relief-froxel-temporal`). +5 tests (`FroxelReprojectTests` first-frame pass-through/seed,
   static ≈ same-cell, moving-camera history shift, determinism; `S6VideoReliefBatchTests` parse).
-- **Remaining (enhancement follow-up):** the GPU froxel sub-cell reprojection twin (D3D + Vulkan
-  device history resamples same-cell today; reproject forces the CPU froxel post-pass). The core
-  froxel unified-volume march (D3D + Vulkan + host wiring + CPU & GPU temporal + CPU sub-cell
-  reprojection + poster seam + quality controls + user doc + batch-video/slideshow/scene
-  consumers) is complete.
+- **Sub-cell temporal reprojection — GPU twin (landed, #408, closes S6):** the reproject now
+  runs on the device too, so a GPU relief + froxel render no longer force-falls-back to the CPU
+  froxel post-pass when reprojection is on. The shared HLSL `CSFroxelIntegrate` resamples the
+  history in world space (current cell → world via the current camera basis + grid → previous
+  camera-local froxel coords → trilinear sample), reading a **read-only snapshot** of the previous
+  frame's history (`gHistoryPrev`, copied from the live history before the dispatch) so a thread
+  never races the in-place history writes when it samples neighbour columns. Carried by 7 new
+  cbuffer rows (current cam pos/right/up + previous cam pos/right/up/forward + previous
+  near/far/extent + a reproject flag; forward reuses `gViewX/Y/Z`); `FroxelGpuUniforms` gains the
+  current `CamBasis`, and each kernel (D3D `FroxelGpuKernel` + Vulkan `FroxelVolumeVulkanKernel`)
+  stores the previous frame's basis + grid bracket. Reproject off is byte-identical to the temporal
+  path (the snapshot buffer is unbound-of-effect and the same-cell branch is unchanged). Proven by
+  the new `--froxelgpureproject` WARP gate (GPU vs CPU reproject, camera orbited between two frames:
+  mean channel diff 0.000, 0 edge px, reprojection shifted 76% of pixels vs the same-cell blend) and
+  the `--vulkanfroxelreproject` gate on real hardware (GT 710: mean 0.059, 0 edge px). `--froxelgpu`
+  / `--froxelgputemporal` / `--vulkanfroxel` / `--vulkanfroxeltemporal` all unregressed.
+- **S6 complete.** The froxel unified-volume march — grid + integration primitives, populate +
+  composite, CPU & GPU temporal, **CPU & GPU sub-cell reprojection**, all three backends (CPU
+  oracle + D3D + Vulkan), host wiring, poster/scene/slideshow/batch-video consumers, quality
+  controls and the user doc — is fully landed. Out of scope by declared non-goal: multiple-
+  scattering / full RTE and adaptive/sparse froxel structures.
 
 ### S7 — Float / multi-layer EXR export ☑ (#394)
 Enabler for S1 (AOV layers), S2 (linear/HDR intermediate) and S6 (HDR

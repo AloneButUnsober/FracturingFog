@@ -168,6 +168,92 @@ internal static class FroxelVolumeProbe
         return ok ? 0 : 1;
     }
 
+    /// <summary>CLI entry (`--vulkanfroxelreproject`). The Vulkan sibling of the D3D
+    /// --froxelgpureproject gate: two frames with the camera orbited between them (grid
+    /// identity fixed → history reused), diffing the Vulkan kernel's world-space history
+    /// reprojection against the CPU <see cref="FroxelHistory.BlendAndStoreReproject"/>,
+    /// and asserting reprojection differs from the same-cell temporal blend.</summary>
+    public static int RunReproject(VulkanContext ctx)
+    {
+        const int w = 200, h = 150;
+        const double fb = 0.7;
+
+        FractalParameters Params(double az) => new()
+        {
+            Relief2DEnabled = true,
+            Relief2DRaymarch = true,
+            Relief2DFroxelVolumetrics = true,
+            Relief2DHeightScale = 1.4,
+            Relief2DCameraAzimuthDeg = az,
+            Relief2DCameraElevationDeg = 45,
+            Relief2DCameraFovDeg = 55,
+        };
+        double aspect = (double)w / h;
+        var camA = HeightfieldRaymarch2D.BuildObliqueCamera(w, h, aspect, sy: 0.35, maxH: 1.0, Params(25));
+        var camB = HeightfieldRaymarch2D.BuildObliqueCamera(w, h, aspect, sy: 0.35, maxH: 1.0, Params(35));
+        var fx = SceneFx(0.6, 0.3);
+        var grid = FroxelCameraVolume.BuildGrid(in camA);
+        var (beauty, depth) = Scene(w, h, grid.Near, grid.Far);
+
+        var hist = new FroxelHistory();
+        _ = FroxelCameraVolume.Apply(beauty, depth, w, h, in camA, in fx, hist, true, fb, FroxelQuality.Balanced, null, true);
+        var cpu2 = FroxelCameraVolume.Apply(beauty, depth, w, h, in camB, in fx, hist, true, fb, FroxelQuality.Balanced, null, true);
+        var histSame = new FroxelHistory();
+        _ = FroxelCameraVolume.Apply(beauty, depth, w, h, in camA, in fx, histSame, true, fb);
+        var cpuSameB = FroxelCameraVolume.Apply(beauty, depth, w, h, in camB, in fx, histSame, true, fb);
+
+        var uA = FroxelGpuUniforms.Build(in camA, in fx);
+        var uB = FroxelGpuUniforms.Build(in camB, in fx);
+        var gpu2 = new uint[w * h];
+        try
+        {
+            using var kernel = new FroxelVolumeVulkanKernel(ctx);
+            var gpu1 = new uint[w * h];
+            kernel.Composite(in uA, beauty, depth, w, h, gpu1, fb, reproject: true);
+            kernel.Composite(in uB, beauty, depth, w, h, gpu2, fb, reproject: true);
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"vulkanfroxelreproject FAIL: GPU dispatch threw — {ex.GetType().Name}: {ex.Message}");
+            return 1;
+        }
+
+        long sumAbs = 0; int maxAbs = 0; long bad = 0; int nz = 0; long reproChanged = 0;
+        for (int i = 0; i < w * h; i++)
+        {
+            uint a = cpu2[i], b = gpu2[i];
+            int dr = Math.Abs((int)((a >> 16) & 0xFF) - (int)((b >> 16) & 0xFF));
+            int dg = Math.Abs((int)((a >> 8) & 0xFF) - (int)((b >> 8) & 0xFF));
+            int db = Math.Abs((int)(a & 0xFF) - (int)(b & 0xFF));
+            int m = Math.Max(dr, Math.Max(dg, db));
+            sumAbs += dr + dg + db;
+            if (m > maxAbs) maxAbs = m;
+            if (m > 16) bad++;
+            if (((a >> 24) & 0xFF) != ((b >> 24) & 0xFF)) nz++;
+            if (cpu2[i] != cpuSameB[i]) reproChanged++;
+        }
+        double meanCh = sumAbs / (3.0 * w * h);
+        double badFrac = (double)bad / (w * h);
+        double reproChangedFrac = (double)reproChanged / (w * h);
+
+        WritePpm(Path.Combine(AppContext.BaseDirectory, "froxel-vk-reproject-cpu.ppm"), cpu2, w, h);
+        WritePpm(Path.Combine(AppContext.BaseDirectory, "froxel-vk-reproject-gpu.ppm"), gpu2, w, h);
+
+        Console.WriteLine(string.Create(CultureInfo.InvariantCulture,
+            $"vulkanfroxelreproject {w}x{h} feedback={fb:0.00} dev={ctx.PickedType}:{ctx.PickedName}:"));
+        Console.WriteLine(string.Create(CultureInfo.InvariantCulture, $"  reproject shifted frac {reproChangedFrac:0.0000}"));
+        Console.WriteLine(string.Create(CultureInfo.InvariantCulture, $"  mean channel diff     {meanCh:0.000}"));
+        Console.WriteLine(string.Create(CultureInfo.InvariantCulture, $"  max channel diff      {maxAbs}"));
+        Console.WriteLine(string.Create(CultureInfo.InvariantCulture, $"  bad pixels >16        {badFrac:0.0000}  ({bad} px)"));
+        Console.WriteLine(string.Create(CultureInfo.InvariantCulture, $"  alpha mismatches      {nz}"));
+
+        bool ok = reproChangedFrac > 0.02 && meanCh < 2.5 && badFrac < 0.05 && nz == 0;
+        Console.WriteLine(ok
+            ? $"vulkanfroxelreproject OK: {ctx.PickedType} {ctx.PickedName}"
+            : "vulkanfroxelreproject FAIL: outside band (reproject shifted>2%, mean<2.5, edge<5%, alpha exact).");
+        return ok ? 0 : 1;
+    }
+
     /// <summary>CLI entry (`--vulkanfroxel`).</summary>
     public static int Run(VulkanContext ctx)
     {

@@ -94,6 +94,18 @@ cbuffer FroxelParams : register(b0)
     int   gType2; uint gColor2; float gI2; float gRange2;
     float gDir2x; float gDir2y; float gDir2z; float gInner2;
     float gPos2x; float gPos2y; float gPos2z; float gOuter2;
+
+    // S6 #408 sub-cell reprojection — current + previous camera bases so the history
+    // resamples in world space under continuous camera motion. gReproject != 0 (and a
+    // valid previous frame) switches the temporal blend from same-cell to reprojected.
+    // Current forward is gViewX/Y/Z; previous grid near/far/extent bracket its depth.
+    int   gReproject; float gCamPx; float gCamPy; float gCamPz;
+    float gCamRx; float gCamRy; float gCamRz; float gCamUx;
+    float gCamUy; float gCamUz; float gPrevPx; float gPrevPy;
+    float gPrevPz; float gPrevRx; float gPrevRy; float gPrevRz;
+    float gPrevUx; float gPrevUy; float gPrevUz; float gPrevFx;
+    float gPrevFy; float gPrevFz; float gPrevNear; float gPrevFar;
+    float gPrevExtent; float gRPad0; float gRPad1; float gRPad2;
 };
 
 // ---- integer value-noise FBM (twin of ReliefRaymarchKernelSource / ShadingPipeline) ----
@@ -204,6 +216,47 @@ RWStructuredBuffer<float4> gVolume : register(u0);
 // buffer may be left unbound then.
 RWStructuredBuffer<float4> gHistory : register(u1);
 
+// S6 #408 sub-cell reprojection — a READ-ONLY snapshot of the previous frame's
+// history (the host copies gHistory into it before the dispatch), so a thread can
+// safely trilinearly resample NEIGHBOUR columns without racing the in-place writes
+// to gHistory. Bound (t3) only when reprojecting.
+StructuredBuffer<float4> gHistoryPrev : register(t3);
+
+// Continuous slice index of a world depth in the PREVIOUS frame's grid (twin of
+// FroxelGrid.DepthToSlice with gPrevNear/gPrevFar). Used to reproject the history.
+float PrevDepthToSlice(float depth)
+{
+    if (depth <= gPrevNear) return 0.0;
+    return (float)gNz * log(depth / gPrevNear) / log(gPrevFar / gPrevNear);
+}
+
+// Trilinear sample of gHistoryPrev at fractional cell coords. Returns false when the
+// centre falls outside the grid (disocclusion → keep the current value). Corners are
+// clamped so an in-bounds centre near an edge still resamples.
+bool SampleHistoryPrev(float cxf, float cyf, float zf, out float3 sc, out float ext)
+{
+    sc = float3(0.0, 0.0, 0.0); ext = 0.0;
+    if (cxf < -0.5 || cxf > gNx - 0.5 || cyf < -0.5 || cyf > gNy - 0.5
+        || zf < -0.5 || zf > gNz - 0.5) return false;
+
+    int x0 = (int)floor(cxf), y0 = (int)floor(cyf), z0 = (int)floor(zf);
+    float fx = cxf - x0, fy = cyf - y0, fz = zf - z0;
+    int x1 = clamp(x0 + 1, 0, gNx - 1), y1 = clamp(y0 + 1, 0, gNy - 1), z1 = clamp(z0 + 1, 0, gNz - 1);
+    x0 = clamp(x0, 0, gNx - 1); y0 = clamp(y0, 0, gNy - 1); z0 = clamp(z0, 0, gNz - 1);
+
+    float4 acc = float4(0, 0, 0, 0);
+    acc += gHistoryPrev[(y0 * gNx + x0) * gNz + z0] * ((1 - fx) * (1 - fy) * (1 - fz));
+    acc += gHistoryPrev[(y0 * gNx + x1) * gNz + z0] * (fx * (1 - fy) * (1 - fz));
+    acc += gHistoryPrev[(y1 * gNx + x0) * gNz + z0] * ((1 - fx) * fy * (1 - fz));
+    acc += gHistoryPrev[(y1 * gNx + x1) * gNz + z0] * (fx * fy * (1 - fz));
+    acc += gHistoryPrev[(y0 * gNx + x0) * gNz + z1] * ((1 - fx) * (1 - fy) * fz);
+    acc += gHistoryPrev[(y0 * gNx + x1) * gNz + z1] * (fx * (1 - fy) * fz);
+    acc += gHistoryPrev[(y1 * gNx + x0) * gNz + z1] * ((1 - fx) * fy * fz);
+    acc += gHistoryPrev[(y1 * gNx + x1) * gNz + z1] * (fx * fy * fz);
+    sc = acc.rgb; ext = acc.a;
+    return true;
+}
+
 [numthreads(8, 8, 1)]
 void CSFroxelIntegrate(uint3 tid : SV_DispatchThreadID)
 {
@@ -277,9 +330,36 @@ void CSFroxelIntegrate(uint3 tid : SV_DispatchThreadID)
             {
                 float a = gFeedback;          // host clamps to [0,0.999]
                 float omA = 1.0 - a;
-                float4 hp = gHistory[cellIdx];
-                sc  = sc  * omA + hp.rgb * a;
-                ext = ext * omA + hp.a   * a;
+                if (gReproject != 0)
+                {
+                    // Sub-cell reprojection (twin of FroxelHistory.BlendAndStoreReproject):
+                    // current cell -> world -> previous camera-local froxel coords, then
+                    // trilinearly resample the read-only history snapshot there.
+                    float3 fwd = view;   // current forward == gViewX/Y/Z
+                    float3 P = float3(gCamPx, gCamPy, gCamPz) + fwd * wz
+                             + float3(gCamRx, gCamRy, gCamRz) * wx
+                             + float3(gCamUx, gCamUy, gCamUz) * wy;
+                    float3 rel = P - float3(gPrevPx, gPrevPy, gPrevPz);
+                    float d2  = dot(rel, float3(gPrevFx, gPrevFy, gPrevFz));
+                    float wx2 = dot(rel, float3(gPrevRx, gPrevRy, gPrevRz));
+                    float wy2 = dot(rel, float3(gPrevUx, gPrevUy, gPrevUz));
+                    float cxf = (wx2 / gPrevExtent + 1.0) * 0.5 * gNx - 0.5;
+                    float cyf = (wy2 / gPrevExtent + 1.0) * 0.5 * gNy - 0.5;
+                    float zf  = PrevDepthToSlice(d2) - 0.5;
+                    float3 hsc; float hext;
+                    if (SampleHistoryPrev(cxf, cyf, zf, hsc, hext))
+                    {
+                        sc  = sc  * omA + hsc  * a;
+                        ext = ext * omA + hext * a;
+                    }
+                    // else disoccluded → keep the current value.
+                }
+                else
+                {
+                    float4 hp = gHistory[cellIdx];
+                    sc  = sc  * omA + hp.rgb * a;
+                    ext = ext * omA + hp.a   * a;
+                }
             }
             gHistory[cellIdx] = float4(sc, ext);
         }

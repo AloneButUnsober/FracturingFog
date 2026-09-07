@@ -63,9 +63,17 @@ public sealed unsafe class FroxelVolumeVulkanKernel : IDisposable, IFroxelVolume
         public int Type2; public uint Color2; public float I2, Range2;
         public float Dir2x, Dir2y, Dir2z, Inner2;
         public float Pos2x, Pos2y, Pos2z, Outer2;
+        // S6 #408 sub-cell reprojection (7 float4 rows).
+        public int Reproject; public float CamPx, CamPy, CamPz;
+        public float CamRx, CamRy, CamRz, CamUx;
+        public float CamUy, CamUz, PrevPx, PrevPy;
+        public float PrevPz, PrevRx, PrevRy, PrevRz;
+        public float PrevUx, PrevUy, PrevUz, PrevFx;
+        public float PrevFy, PrevFz, PrevNear, PrevFar;
+        public float PrevExtent, RPad0, RPad1, RPad2;
     }
 
-    private const int ParamBytes = 224;
+    private const int ParamBytes = 336;
 
     private struct Allocated { public Buffer Buffer; public DeviceMemory Memory; public ulong Size; }
 
@@ -83,8 +91,14 @@ public sealed unsafe class FroxelVolumeVulkanKernel : IDisposable, IFroxelVolume
     private Allocated _params;
     private Allocated _volume;               // float4/cell (u0 integrate / t2 composite)
     private Allocated _history;              // float4/cell (u1 integrate) — S6 #408 temporal
+    private Allocated _historyPrev;          // float4/cell (t3 integrate) — S6 #408 reproject snapshot
     private Allocated _beauty, _depth, _out;  // output-sized (n)
-    private int _volumeCells, _historyCells, _outPixels;
+    private int _volumeCells, _historyCells, _historyPrevCells, _outPixels;
+    // S6 #408 sub-cell reprojection — previous frame's camera basis + grid bracket, so
+    // the world reprojection maps back into the frame the history was stored from.
+    private FroxelHistory.CamBasis _prevCam;
+    private double _prevNear, _prevFar, _prevExtent;
+    private bool _hasPrevCam;
     // S6 #408 temporal — persistent previous-frame PRE-integration scatter+ext grid
     // (the Vulkan twin of the D3D kernel's device history + the CPU FroxelHistory).
     // Survives across Composite calls; keyed by grid identity so a camera move that
@@ -125,6 +139,7 @@ public sealed unsafe class FroxelVolumeVulkanKernel : IDisposable, IFroxelVolume
         // zero-handle descriptor (Run reallocates to the real sizes anyway).
         EnsureVolumeBuffer(1);
         EnsureHistoryBuffer(1);
+        EnsureHistoryPrevBuffer(1);
         EnsureOutputBuffers(1);
     }
 
@@ -164,6 +179,15 @@ public sealed unsafe class FroxelVolumeVulkanKernel : IDisposable, IFroxelVolume
     /// composite (the history buffer is bound but never read/written by the shader).</summary>
     public void Composite(in FroxelGpuUniforms u, uint[] beauty, float[] worldDepth, int w, int h, uint[] dst,
         double feedback)
+        => Composite(in u, beauty, worldDepth, w, h, dst, feedback, reproject: false);
+
+    /// <summary>Sub-cell reprojection overload (roadmap S6, #408). When
+    /// <paramref name="reproject"/> is on (with a valid previous frame + camera basis)
+    /// the device history is resampled in world space through the current + previous
+    /// camera bases instead of blended same-cell — the Vulkan twin of the D3D
+    /// <c>FroxelGpuKernel</c> reproject path and <see cref="FroxelHistory.BlendAndStoreReproject"/>.</summary>
+    public void Composite(in FroxelGpuUniforms u, uint[] beauty, float[] worldDepth, int w, int h, uint[] dst,
+        double feedback, bool reproject)
     {
         if (_disposed) throw new ObjectDisposedException(nameof(FroxelVolumeVulkanKernel));
         if (beauty == null) throw new ArgumentNullException(nameof(beauty));
@@ -186,17 +210,21 @@ public sealed unsafe class FroxelVolumeVulkanKernel : IDisposable, IFroxelVolume
         long t0 = Stopwatch.GetTimestamp();
         EnsureVolumeBuffer(cells);
         EnsureHistoryBuffer(cells);   // persists across calls; realloc (size change) drops validity
+        EnsureHistoryPrevBuffer(cells);
         EnsureOutputBuffers(n);
 
         // History validity: only reuse when temporal is on AND the buffer already holds
         // the previous frame for THIS grid. A key change invalidates here; a size change
         // was invalidated by EnsureHistoryBuffer.
         bool historyValid = temporal && _historyValid && _historyKey == key && _historyCells >= cells;
+        // S6 #408 sub-cell reprojection: only with a valid previous frame + camera basis
+        // + the current camera in the uniforms.
+        bool reprojectNow = reproject && historyValid && _hasPrevCam && u.HasCamera;
 
         // Uploads.
         fixed (uint* p = beauty) WriteBytes(_beauty, p, n * sizeof(uint));
         fixed (float* p = worldDepth) WriteBytes(_depth, p, n * sizeof(float));
-        var blob = BuildBlob(in u, w, h, (float)fb, historyValid ? 1 : 0);
+        var blob = BuildBlob(in u, w, h, (float)fb, historyValid ? 1 : 0, reprojectNow);
         WriteBytes(_params, &blob, sizeof(FroxelParamsBlob));
 
         // Two descriptor sets from the shared layout {b0, t0, t1, t2, u0}: the
@@ -210,8 +238,8 @@ public sealed unsafe class FroxelVolumeVulkanKernel : IDisposable, IFroxelVolume
             var poolSizes = stackalloc DescriptorPoolSize[2]
             {
                 new DescriptorPoolSize { Type = DescriptorType.UniformBuffer, DescriptorCount = 2 },
-                // 5 SSBO/set (t0,t1,t2,u0,u1) × 2 sets = 10.
-                new DescriptorPoolSize { Type = DescriptorType.StorageBuffer, DescriptorCount = 10 },
+                // 6 SSBO/set (t0,t1,t2,t3,u0,u1) × 2 sets = 12.
+                new DescriptorPoolSize { Type = DescriptorType.StorageBuffer, DescriptorCount = 12 },
             };
             var dpci = new DescriptorPoolCreateInfo
             {
@@ -234,8 +262,8 @@ public sealed unsafe class FroxelVolumeVulkanKernel : IDisposable, IFroxelVolume
             // 201:history}. Integrate's u0 (200) = volume + u1 (201) = history (temporal
             // read/write); composite's u0 (200) = output (it never touches u1, but the
             // shared layout requires a valid buffer there → bind history harmlessly).
-            WriteSet(integrateSet, _params.Buffer, _beauty.Buffer, _depth.Buffer, _volume.Buffer, _volume.Buffer, _history.Buffer);
-            WriteSet(compositeSet, _params.Buffer, _beauty.Buffer, _depth.Buffer, _volume.Buffer, _out.Buffer, _history.Buffer);
+            WriteSet(integrateSet, _params.Buffer, _beauty.Buffer, _depth.Buffer, _volume.Buffer, _historyPrev.Buffer, _volume.Buffer, _history.Buffer);
+            WriteSet(compositeSet, _params.Buffer, _beauty.Buffer, _depth.Buffer, _volume.Buffer, _historyPrev.Buffer, _out.Buffer, _history.Buffer);
 
             var cbai = new CommandBufferAllocateInfo
             {
@@ -250,6 +278,24 @@ public sealed unsafe class FroxelVolumeVulkanKernel : IDisposable, IFroxelVolume
                 Flags = CommandBufferUsageFlags.OneTimeSubmitBit,
             };
             Check(_vk.BeginCommandBuffer(cmd, in begin), "vkBeginCommandBuffer");
+
+            // S6 #408 reproject: snapshot the live history into the read-only copy the
+            // integrate pass resamples, so neighbour reads don't race the in-place
+            // history writes. Barrier: transfer-write → shader-read.
+            if (reprojectNow)
+            {
+                var region = new BufferCopy { SrcOffset = 0, DstOffset = 0, Size = (ulong)(cells * 4 * sizeof(float)) };
+                _vk.CmdCopyBuffer(cmd, _history.Buffer, _historyPrev.Buffer, 1, &region);
+                var copyBarrier = new MemoryBarrier
+                {
+                    SType = StructureType.MemoryBarrier,
+                    SrcAccessMask = AccessFlags.TransferWriteBit,
+                    DstAccessMask = AccessFlags.ShaderReadBit,
+                };
+                _vk.CmdPipelineBarrier(cmd,
+                    PipelineStageFlags.TransferBit, PipelineStageFlags.ComputeShaderBit,
+                    0, 1, &copyBarrier, 0, null, 0, null);
+            }
 
             // Pass 1 — populate + integrate every column into the volume.
             var iSet = integrateSet;
@@ -288,7 +334,13 @@ public sealed unsafe class FroxelVolumeVulkanKernel : IDisposable, IFroxelVolume
 
             // The integrate pass wrote the blended scatter+ext into the history buffer;
             // it is now the previous frame for the next Composite with this grid.
-            if (temporal) { _historyKey = key; _historyValid = true; }
+            if (temporal)
+            {
+                _historyKey = key; _historyValid = true;
+                _prevCam = u.Camera;
+                _prevNear = g.Near; _prevFar = g.Far; _prevExtent = u.Medium.WorldExtent;
+                _hasPrevCam = u.HasCamera;
+            }
         }
         finally
         {
@@ -306,18 +358,19 @@ public sealed unsafe class FroxelVolumeVulkanKernel : IDisposable, IFroxelVolume
 
     // Update one descriptor set's six bindings {0, 100, 101, 102, 200, 201}.
     // u1 (201) = the temporal history buffer (S6 #408).
-    private void WriteSet(DescriptorSet set, Buffer b0, Buffer t0, Buffer t1, Buffer t2, Buffer u0, Buffer u1)
+    private void WriteSet(DescriptorSet set, Buffer b0, Buffer t0, Buffer t1, Buffer t2, Buffer t3, Buffer u0, Buffer u1)
     {
-        Buffer* bufs = stackalloc Buffer[6] { b0, t0, t1, t2, u0, u1 };
-        uint* binds = stackalloc uint[6] { 0, (uint)TShift, (uint)TShift + 1, (uint)TShift + 2, (uint)UShift, (uint)UShift + 1 };
-        var types = stackalloc DescriptorType[6]
+        Buffer* bufs = stackalloc Buffer[7] { b0, t0, t1, t2, t3, u0, u1 };
+        uint* binds = stackalloc uint[7] { 0, (uint)TShift, (uint)TShift + 1, (uint)TShift + 2, (uint)TShift + 3, (uint)UShift, (uint)UShift + 1 };
+        var types = stackalloc DescriptorType[7]
         {
             DescriptorType.UniformBuffer, DescriptorType.StorageBuffer, DescriptorType.StorageBuffer,
             DescriptorType.StorageBuffer, DescriptorType.StorageBuffer, DescriptorType.StorageBuffer,
+            DescriptorType.StorageBuffer,
         };
-        var infos = stackalloc DescriptorBufferInfo[6];
-        var writes = stackalloc WriteDescriptorSet[6];
-        for (int i = 0; i < 6; i++)
+        var infos = stackalloc DescriptorBufferInfo[7];
+        var writes = stackalloc WriteDescriptorSet[7];
+        for (int i = 0; i < 7; i++)
         {
             infos[i] = new DescriptorBufferInfo { Buffer = bufs[i], Offset = 0, Range = Vk.WholeSize };
             writes[i] = new WriteDescriptorSet
@@ -327,10 +380,10 @@ public sealed unsafe class FroxelVolumeVulkanKernel : IDisposable, IFroxelVolume
                 DescriptorType = types[i], PBufferInfo = &infos[i],
             };
         }
-        _vk.UpdateDescriptorSets(_device, 6, writes, 0, null);
+        _vk.UpdateDescriptorSets(_device, 7, writes, 0, null);
     }
 
-    private static FroxelParamsBlob BuildBlob(in FroxelGpuUniforms u, int w, int h, float feedback, int historyValid)
+    private FroxelParamsBlob BuildBlob(in FroxelGpuUniforms u, int w, int h, float feedback, int historyValid, bool reproject)
     {
         var g = u.Grid;
         var m = u.Medium;
@@ -359,6 +412,17 @@ public sealed unsafe class FroxelVolumeVulkanKernel : IDisposable, IFroxelVolume
             Type2 = L2.Type, Color2 = L2.Color, I2 = (float)L2.Intensity, Range2 = (float)L2.Range,
             Dir2x = (float)L2.Lx, Dir2y = (float)L2.Ly, Dir2z = (float)L2.Lz, Inner2 = (float)L2.InnerCos,
             Pos2x = (float)L2.PosX, Pos2y = (float)L2.PosY, Pos2z = (float)L2.PosZ, Outer2 = (float)L2.OuterCos,
+
+            // S6 #408 sub-cell reprojection — current cam basis + stored previous frame.
+            Reproject = reproject ? 1 : 0,
+            CamPx = (float)u.Camera.PosX, CamPy = (float)u.Camera.PosY, CamPz = (float)u.Camera.PosZ,
+            CamRx = (float)u.Camera.Rx, CamRy = (float)u.Camera.Ry, CamRz = (float)u.Camera.Rz,
+            CamUx = (float)u.Camera.Ux, CamUy = (float)u.Camera.Uy, CamUz = (float)u.Camera.Uz,
+            PrevPx = (float)_prevCam.PosX, PrevPy = (float)_prevCam.PosY, PrevPz = (float)_prevCam.PosZ,
+            PrevRx = (float)_prevCam.Rx, PrevRy = (float)_prevCam.Ry, PrevRz = (float)_prevCam.Rz,
+            PrevUx = (float)_prevCam.Ux, PrevUy = (float)_prevCam.Uy, PrevUz = (float)_prevCam.Uz,
+            PrevFx = (float)_prevCam.Fx, PrevFy = (float)_prevCam.Fy, PrevFz = (float)_prevCam.Fz,
+            PrevNear = (float)_prevNear, PrevFar = (float)_prevFar, PrevExtent = (float)_prevExtent,
         };
     }
 
@@ -370,9 +434,12 @@ public sealed unsafe class FroxelVolumeVulkanKernel : IDisposable, IFroxelVolume
         // A superset layout is fine — each pipeline only touches the bindings it declares.
         // u1 (201) is the S6 #408 temporal history, statically referenced by
         // CSFroxelIntegrate so it MUST be in the layout even when feedback is 0.
-        uint* binds = stackalloc uint[6] { 0, (uint)TShift, (uint)TShift + 1, (uint)TShift + 2, (uint)UShift, (uint)UShift + 1 };
-        var bindings = stackalloc DescriptorSetLayoutBinding[6];
-        for (int i = 0; i < 6; i++)
+        // {b0, t0, t1, t2, t3(reproject history snapshot), u0, u1(temporal history)}.
+        // t3 (103) is statically referenced by CSFroxelIntegrate so it MUST be in the
+        // layout even when not reprojecting.
+        uint* binds = stackalloc uint[7] { 0, (uint)TShift, (uint)TShift + 1, (uint)TShift + 2, (uint)TShift + 3, (uint)UShift, (uint)UShift + 1 };
+        var bindings = stackalloc DescriptorSetLayoutBinding[7];
+        for (int i = 0; i < 7; i++)
             bindings[i] = new DescriptorSetLayoutBinding
             {
                 Binding = binds[i],
@@ -382,7 +449,7 @@ public sealed unsafe class FroxelVolumeVulkanKernel : IDisposable, IFroxelVolume
         var dslci = new DescriptorSetLayoutCreateInfo
         {
             SType = StructureType.DescriptorSetLayoutCreateInfo,
-            BindingCount = 6, PBindings = bindings,
+            BindingCount = 7, PBindings = bindings,
         };
         Check(_vk.CreateDescriptorSetLayout(_device, in dslci, null, out _dsl), "vkCreateDescriptorSetLayout");
 
@@ -458,9 +525,24 @@ public sealed unsafe class FroxelVolumeVulkanKernel : IDisposable, IFroxelVolume
         if (cells < 1) cells = 1;
         if (_history.Buffer.Handle != 0 && _historyCells == cells) return;
         FreeBuffer(ref _history);
-        _history = AllocBuffer((ulong)(cells * 4 * sizeof(float)), BufferUsageFlags.StorageBufferBit);
+        // TransferSrcBit so the reproject snapshot can vkCmdCopyBuffer from it.
+        _history = AllocBuffer((ulong)(cells * 4 * sizeof(float)),
+            BufferUsageFlags.StorageBufferBit | BufferUsageFlags.TransferSrcBit);
         _historyCells = cells;
         _historyValid = false;   // fresh buffer → re-seed
+    }
+
+    // S6 #408 — read-only snapshot of the previous frame's history (t3), copied from
+    // _history before the integrate dispatch so a thread can trilinearly resample
+    // neighbour columns without racing the in-place history writes.
+    private void EnsureHistoryPrevBuffer(int cells)
+    {
+        if (cells < 1) cells = 1;
+        if (_historyPrev.Buffer.Handle != 0 && _historyPrevCells == cells) return;
+        FreeBuffer(ref _historyPrev);
+        _historyPrev = AllocBuffer((ulong)(cells * 4 * sizeof(float)),
+            BufferUsageFlags.StorageBufferBit | BufferUsageFlags.TransferDstBit);
+        _historyPrevCells = cells;
     }
 
     private void EnsureOutputBuffers(int n)
@@ -548,6 +630,7 @@ public sealed unsafe class FroxelVolumeVulkanKernel : IDisposable, IFroxelVolume
         FreeBuffer(ref _params);
         FreeBuffer(ref _volume);
         FreeBuffer(ref _history);
+        FreeBuffer(ref _historyPrev);
         FreeBuffer(ref _beauty);
         FreeBuffer(ref _depth);
         FreeBuffer(ref _out);

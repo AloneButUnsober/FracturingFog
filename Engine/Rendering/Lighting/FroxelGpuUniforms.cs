@@ -33,10 +33,22 @@ public readonly struct FroxelGpuUniforms
     /// <see cref="FroxelCameraVolume.BuildMedium"/>.</summary>
     public FroxelMedium Medium { get; }
 
-    private FroxelGpuUniforms(FroxelGrid grid, FroxelMedium medium)
+    /// <summary>S6 (#408) — the current camera basis (world position + right / up unit
+    /// vectors; forward is <see cref="FroxelMedium.ViewDx"/>…) the grid was framed from,
+    /// so the GPU kernel can reproject the temporal history in world space under
+    /// continuous camera motion. <see cref="HasCamera"/> is false for callers that don't
+    /// supply it (sub-cell reprojection then falls back to the same-cell blend).</summary>
+    public FroxelHistory.CamBasis Camera { get; }
+
+    /// <summary>Whether <see cref="Camera"/> was populated (roadmap S6, #408).</summary>
+    public bool HasCamera { get; }
+
+    private FroxelGpuUniforms(FroxelGrid grid, FroxelMedium medium, FroxelHistory.CamBasis cam, bool hasCam)
     {
         Grid = grid;
         Medium = medium;
+        Camera = cam;
+        HasCamera = hasCam;
     }
 
     /// <summary>Build the uniforms for a relief scene: frame the grid over the
@@ -53,5 +65,15 @@ public readonly struct FroxelGpuUniforms
     /// oracle. Balanced → byte-identical.</summary>
     public static FroxelGpuUniforms Build(in HeightfieldRaymarch2D.ReliefCamera cam, in LightingFxData fx,
         FracturingFog.Models.FroxelQuality quality)
-        => new(FroxelCameraVolume.BuildGrid(in cam, quality), FroxelCameraVolume.BuildMedium(in cam, in fx));
+    {
+        // Current camera basis for sub-cell temporal reprojection (#408). Relief right
+        // vector has RY == 0; forward is carried in the medium's ViewD*.
+        var basis = new FroxelHistory.CamBasis(
+            cam.CamX, cam.CamY, cam.CamZ,
+            cam.RX, 0.0, cam.RZ,
+            cam.UX, cam.UY, cam.UZ,
+            cam.FX, cam.FY, cam.FZ);
+        return new(FroxelCameraVolume.BuildGrid(in cam, quality),
+                   FroxelCameraVolume.BuildMedium(in cam, in fx), basis, true);
+    }
 }

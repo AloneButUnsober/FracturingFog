@@ -11,7 +11,7 @@
 // --froxelgpu gate diffs a dispatch of this against that CPU pass over identical
 // inputs (both driven by the SAME FroxelGrid + FroxelMedium via FroxelGpuUniforms).
 //
-// Buffers — b0 = FroxelParams cbuffer (224 B, 14 float4 rows); the volume buffer
+// Buffers — b0 = FroxelParams cbuffer (336 B, 21 float4 rows); the volume buffer
 // (float4/cell) is written as u0 by the integrate pass then read as t2 by the
 // composite pass; t0 = beauty (uint/pixel), t1 = worldDepth (float/pixel),
 // u0 = output (uint/pixel) in the composite pass.
@@ -53,9 +53,17 @@ public sealed class FroxelGpuKernel : IDisposable, IFroxelVolumeKernel
         public int Type2; public uint Color2; public float I2, Range2;
         public float Dir2x, Dir2y, Dir2z, Inner2;
         public float Pos2x, Pos2y, Pos2z, Outer2;
+        // S6 #408 sub-cell reprojection (7 float4 rows).
+        public int Reproject; public float CamPx, CamPy, CamPz;
+        public float CamRx, CamRy, CamRz, CamUx;
+        public float CamUy, CamUz, PrevPx, PrevPy;
+        public float PrevPz, PrevRx, PrevRy, PrevRz;
+        public float PrevUx, PrevUy, PrevUz, PrevFx;
+        public float PrevFy, PrevFz, PrevNear, PrevFar;
+        public float PrevExtent, RPad0, RPad1, RPad2;
     }
 
-    private const int ParamBytes = 224;
+    private const int ParamBytes = 336;
 
     private readonly ID3D11Device _device;
     private readonly ID3D11DeviceContext _ctx;
@@ -79,6 +87,18 @@ public sealed class FroxelGpuKernel : IDisposable, IFroxelVolumeKernel
     private int _historyCells;
     private long _historyKey;
     private bool _historyValid;
+
+    // S6 #408 sub-cell reprojection — a read-only snapshot of the previous frame's
+    // history (t3), copied from _historyBuf before the integrate dispatch so a thread
+    // can resample neighbour columns without racing the in-place history writes. Plus
+    // the previous frame's camera basis + grid bracket so the world reprojection maps
+    // back into that frame's froxel space.
+    private ID3D11Buffer? _historyPrevBuf;
+    private ID3D11ShaderResourceView? _historyPrevSrv;
+    private int _historyPrevCells;
+    private FroxelHistory.CamBasis _prevCam;
+    private double _prevNear, _prevFar, _prevExtent;
+    private bool _hasPrevCam;
 
     private ID3D11Buffer? _beautyBuf, _depthBuf;      // t0, t1 — output-sized
     private ID3D11ShaderResourceView? _beautySrv, _depthSrv;
@@ -168,6 +188,30 @@ public sealed class FroxelGpuKernel : IDisposable, IFroxelVolumeKernel
         _historyValid = false;   // fresh buffer → re-seed
     }
 
+    // S6 #408 — (re)create the read-only history snapshot buffer (SRV, t3) used by the
+    // reprojection resample. Sized like the history grid.
+    private void EnsureHistoryPrevBuffer(int cells)
+    {
+        if (_historyPrevBuf != null && _historyPrevCells == cells) return;
+        _historyPrevSrv?.Dispose(); _historyPrevBuf?.Dispose();
+        _historyPrevBuf = _device.CreateBuffer(new BufferDescription
+        {
+            ByteWidth = (uint)(cells * 4 * sizeof(float)),
+            BindFlags = BindFlags.ShaderResource,
+            Usage = ResourceUsage.Default,
+            CPUAccessFlags = CpuAccessFlags.None,
+            MiscFlags = ResourceOptionFlags.BufferStructured,
+            StructureByteStride = 4 * sizeof(float),
+        });
+        _historyPrevSrv = _device.CreateShaderResourceView(_historyPrevBuf, new ShaderResourceViewDescription
+        {
+            Format = Vortice.DXGI.Format.Unknown,
+            ViewDimension = Vortice.Direct3D.ShaderResourceViewDimension.Buffer,
+            Buffer = new BufferShaderResourceView { FirstElement = 0, NumElements = (uint)cells },
+        });
+        _historyPrevCells = cells;
+    }
+
     private void EnsureOutputBuffers(int n)
     {
         if (_outBuf != null && _outPixels == n) return;
@@ -236,6 +280,16 @@ public sealed class FroxelGpuKernel : IDisposable, IFroxelVolumeKernel
     /// <see cref="Composite(in FroxelGpuUniforms,uint[],float[],int,int,uint[])"/>.</summary>
     public void Composite(in FroxelGpuUniforms u, uint[] beauty, float[] worldDepth, int w, int h, uint[] dst,
         double feedback)
+        => Composite(in u, beauty, worldDepth, w, h, dst, feedback, reproject: false);
+
+    /// <summary>Sub-cell reprojection overload (roadmap S6, #408). When
+    /// <paramref name="reproject"/> is on (with a valid previous frame + camera basis),
+    /// the device history is resampled in world space through the current + previous
+    /// camera bases instead of blended same-cell — the GPU twin of
+    /// <see cref="FroxelHistory.BlendAndStoreReproject"/>. Reproject off matches the
+    /// temporal <see cref="Composite(in FroxelGpuUniforms,uint[],float[],int,int,uint[],double)"/>.</summary>
+    public void Composite(in FroxelGpuUniforms u, uint[] beauty, float[] worldDepth, int w, int h, uint[] dst,
+        double feedback, bool reproject)
     {
         if (_disposed) throw new ObjectDisposedException(nameof(FroxelGpuKernel));
         if (beauty == null) throw new ArgumentNullException(nameof(beauty));
@@ -271,10 +325,21 @@ public sealed class FroxelGpuKernel : IDisposable, IFroxelVolumeKernel
                 historyValid = _historyValid && _historyKey == key && _historyCells >= cells;
             }
 
+            // S6 #408 sub-cell reprojection: only when asked AND we hold a valid previous
+            // frame with a camera basis AND this call carries the current camera. The
+            // read-only snapshot is copied from the live history so neighbour resamples
+            // don't race the in-place history writes.
+            bool reprojectNow = temporal && reproject && historyValid && _hasPrevCam && u.HasCamera;
+            if (reprojectNow)
+            {
+                EnsureHistoryPrevBuffer(cells);
+                _ctx.CopyResource(_historyPrevBuf!, _historyBuf!);
+            }
+
             UploadColors(_beautyBuf!, beauty, n);
             UploadFloats(_depthBuf!, worldDepth, n);
 
-            var p = BuildBlob(in u, w, h, (float)fb, historyValid ? 1 : 0);
+            var p = BuildBlob(in u, w, h, (float)fb, historyValid ? 1 : 0, reprojectNow);
             var mapped = _ctx.Map(_paramsBuf, 0, Vortice.Direct3D11.MapMode.WriteDiscard, MapFlags.None);
             unsafe { *(FroxelParamsBlob*)mapped.DataPointer = p; }
             _ctx.Unmap(_paramsBuf, 0);
@@ -282,18 +347,26 @@ public sealed class FroxelGpuKernel : IDisposable, IFroxelVolumeKernel
             _ctx.CSSetConstantBuffer(0, _paramsBuf);
 
             // Pass 1 — populate + integrate every column into the volume (u0). When
-            // temporal, the history grid rides u1 (read previous, write blended).
+            // temporal, the history grid rides u1 (read previous, write blended); when
+            // reprojecting, the read-only prev snapshot rides t3.
             _ctx.CSSetShader(_csIntegrate);
             _ctx.CSSetUnorderedAccessView(0, _volumeUav);
             if (temporal) _ctx.CSSetUnorderedAccessView(1, _historyUav);
+            if (reprojectNow) _ctx.CSSetShaderResource(3, _historyPrevSrv);
             _ctx.Dispatch((uint)((g.DimX + 7) / 8), (uint)((g.DimY + 7) / 8), 1);
             _ctx.CSUnsetUnorderedAccessView(0);
+            if (reprojectNow) _ctx.CSSetShaderResource(3, null);
             if (temporal)
             {
                 _ctx.CSUnsetUnorderedAccessView(1);
                 // The blended scatter+ext is now the previous frame for the next call.
                 _historyKey = key;
                 _historyValid = true;
+                // Record this frame's camera basis + grid bracket so the NEXT frame can
+                // reproject the history we just stored.
+                _prevCam = u.Camera;
+                _prevNear = g.Near; _prevFar = g.Far; _prevExtent = u.Medium.WorldExtent;
+                _hasPrevCam = u.HasCamera;
             }
 
             // Pass 2 — composite over the beauty by per-pixel depth. The volume is
@@ -332,7 +405,7 @@ public sealed class FroxelGpuKernel : IDisposable, IFroxelVolumeKernel
         }
     }
 
-    private static FroxelParamsBlob BuildBlob(in FroxelGpuUniforms u, int w, int h, float feedback, int historyValid)
+    private FroxelParamsBlob BuildBlob(in FroxelGpuUniforms u, int w, int h, float feedback, int historyValid, bool reproject)
     {
         var g = u.Grid;
         var m = u.Medium;
@@ -361,6 +434,18 @@ public sealed class FroxelGpuKernel : IDisposable, IFroxelVolumeKernel
             Type2 = L2.Type, Color2 = L2.Color, I2 = (float)L2.Intensity, Range2 = (float)L2.Range,
             Dir2x = (float)L2.Lx, Dir2y = (float)L2.Ly, Dir2z = (float)L2.Lz, Inner2 = (float)L2.InnerCos,
             Pos2x = (float)L2.PosX, Pos2y = (float)L2.PosY, Pos2z = (float)L2.PosZ, Outer2 = (float)L2.OuterCos,
+
+            // S6 #408 sub-cell reprojection — current cam basis from the uniforms +
+            // this kernel's stored previous-frame basis / grid bracket.
+            Reproject = reproject ? 1 : 0,
+            CamPx = (float)u.Camera.PosX, CamPy = (float)u.Camera.PosY, CamPz = (float)u.Camera.PosZ,
+            CamRx = (float)u.Camera.Rx, CamRy = (float)u.Camera.Ry, CamRz = (float)u.Camera.Rz,
+            CamUx = (float)u.Camera.Ux, CamUy = (float)u.Camera.Uy, CamUz = (float)u.Camera.Uz,
+            PrevPx = (float)_prevCam.PosX, PrevPy = (float)_prevCam.PosY, PrevPz = (float)_prevCam.PosZ,
+            PrevRx = (float)_prevCam.Rx, PrevRy = (float)_prevCam.Ry, PrevRz = (float)_prevCam.Rz,
+            PrevUx = (float)_prevCam.Ux, PrevUy = (float)_prevCam.Uy, PrevUz = (float)_prevCam.Uz,
+            PrevFx = (float)_prevCam.Fx, PrevFy = (float)_prevCam.Fy, PrevFz = (float)_prevCam.Fz,
+            PrevNear = (float)_prevNear, PrevFar = (float)_prevFar, PrevExtent = (float)_prevExtent,
         };
     }
 
@@ -395,6 +480,8 @@ public sealed class FroxelGpuKernel : IDisposable, IFroxelVolumeKernel
         try { _volumeBuf?.Dispose(); } catch { }
         try { _historyUav?.Dispose(); } catch { }
         try { _historyBuf?.Dispose(); } catch { }
+        try { _historyPrevSrv?.Dispose(); } catch { }
+        try { _historyPrevBuf?.Dispose(); } catch { }
         try { _beautySrv?.Dispose(); } catch { }
         try { _depthSrv?.Dispose(); } catch { }
         try { _beautyBuf?.Dispose(); } catch { }
