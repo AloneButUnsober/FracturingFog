@@ -531,7 +531,7 @@ supplies the guide buffers.
   supersample + the full SVGF pipeline (temporal #644 / variance #645 / unite #646 / sequence
   wiring #647 / UI #648 / temporal moments #649) + the opt-in SIMD fast path (#650).
 
-### S5 — Refractive / transmissive materials ◐ (#406)
+### S5 — Refractive / transmissive materials ● (#406)
 Cook-Torrance GGX today is opaque. Add **transmission + IOR** → glass fractals.
 Fits DE raymarching natively: at the surface, refract the ray and keep marching.
 The Principled-BSDF lesson taken *only as far as FF's primitive allows* (skip the
@@ -609,8 +609,27 @@ full uber-shader — add transmission, optionally clearcoat / emission).
   twin mean channel diff 0.004, 0 edge pixels; the env-approx glass scene stays 0.003
   and opaque byte-identical. +8 tests (`Relief2DRaymarchTests` twin render locks via
   `RenderCpuMirror` + the `gRefrIntBounces` encoding theory).
-- **Remaining:** rough refraction — GGX-importance-sampled transmission for frosted
-  glass (couples S4 denoise; it will be noisy).
+- **Rough refraction — frosted glass (landed — #406, closes S5):** a rough dielectric
+  now scatters what it *transmits*, not just what it reflects. When `UseGgxSampling` is
+  on and the surface is rough, the transmitted ray refracts about a GGX-VNDF-sampled
+  microfacet normal H (the reflection path's `SampleGgxHalfVector`, extracted so both
+  share it) instead of the geometric N; Fresnel stays on N. One `HashPair`-seeded tap
+  per pixel (seed 5, decorrelated from the reflection lobe) → noisy, meant to be cleaned
+  by the **S4** denoise (the coupling the slice always anticipated). Reuses the existing
+  `UseGgxSampling` toggle + `Roughness` — no new field or control; `UseGgxSampling` off or
+  roughness 0 → H = N → sharp, byte-identical. Landed across all three backends together:
+  CPU `ShadingPipeline`, the relief kernel HLSL (`SampleGgxHalfVector` shared by D3D +
+  Vulkan) and its CPU parity twin. Proven by the `--reliefgpuraymarch` scene *frosted
+  glass (rough refraction, ggx)*: GPU vs twin mean channel diff 0.037 (higher than a
+  sharp scene, as a stochastic single-tap is expected to be — the twin is the noise
+  oracle), still 0 edge pixels. +4 tests (`RefractionRoughTests` production-path locks +
+  a `Relief2DRaymarchTests` twin frost lock). LightingFx dialog Transmission / Roughness
+  tooltips point at the frost recipe.
+- **S5 complete.** Dielectric math + material model, env-refraction (CPU + GPU), full
+  internal glass march (CPU + GPU), back-face TIR internal-reflection bounce, glass batch
+  surface + absorption-colour picker, and rough (frosted) refraction all landed. Only the
+  declared non-goals remain out of scope: full spectral dispersion (chromatic glass) and
+  participating-media caustics (the volumetric axis, S6).
 
 ### S6 — Froxel / unified volume march ◐ (#408)
 Today's volumetrics are per-surface single-scatter. A froxel (frustum-voxel)

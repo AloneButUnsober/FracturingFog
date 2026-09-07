@@ -297,6 +297,18 @@ public static class ReliefRaymarchGpuProbe
         fxMarch.RefractInternalBounces = 4;
         bool? okMarch = RunDiff(sb, "glass internal march + TIR bounce (ior 2.4, 4 bounces)", 160, 120, 160, 120, pGlass, fxMarch);
 
+        // S5 (#406) — rough refraction (frosted glass): GGX sampling on + a rough
+        // surface perturbs the transmit normal by a VNDF microfacet sample, so the
+        // transmitted ray scatters. Validates GPU == CPU-twin for the GGX-perturbed
+        // transmit direction (the shared SampleGgxHalfVector + HashPair seed 5), a
+        // single noisy tap per pixel — the twin is the oracle for the noise pattern.
+        var fxFrost = fxGlass;
+        fxFrost.Transmission = 0.85;
+        fxFrost.Ior = 1.5;
+        fxFrost.UseGgxSampling = true;
+        fxFrost.Roughness = 0.5;
+        bool? okFrost = RunDiff(sb, "frosted glass (rough refraction, ggx)", 160, 120, 160, 120, pGlass, fxFrost);
+
         // S8 (#389/#408) — positional-light diff: a point light + a spot light make
         // ShadeFlat resolve per-surface dir + attenuation (LightSampler twin) instead
         // of the constant directional dir. Cheap (no extra march), so the GPU==twin
@@ -349,7 +361,7 @@ public static class ReliefRaymarchGpuProbe
         bool? okPosFog = RunDiff(sb, "positional fog in-scatter", 160, 120, 160, 120, pLights, fxPosFog);
 
         bool ok = (okFull ?? true) && (okDof ?? true) && (okAov ?? true) && (okGlass ?? true)
-               && (okMarch ?? true) && (okLights ?? true) && (okPosFog ?? true);
+               && (okMarch ?? true) && (okFrost ?? true) && (okLights ?? true) && (okPosFog ?? true);
         sb.AppendLine(ok ? "RESULT: PASS" : "RESULT: FAIL");
         Finish(sb);
         return ok ? 0 : 1;

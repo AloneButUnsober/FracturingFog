@@ -688,7 +688,19 @@ public static class ReliefRaymarchGpu
         {
             double ior = u.Ior > 1.0 ? u.Ior : 1.0;
             double rdx = -vx, rdy = -vy, rdz = -vz;
-            var (tx, ty, tz, tir) = DielectricOps.Refract(rdx, rdy, rdz, nx, ny, nz, 1.0 / ior);
+            // S5 (#406) — rough refraction (frosted glass): GGX-VNDF-perturb the transmit
+            // normal when GGX sampling is on + the surface is rough (twin of the HLSL
+            // kernel / ShadingPipeline). Fresnel stays on the geometric normal. GGX off
+            // or roughness 0 → refractN = N → sharp, byte-identical.
+            double rnx = nx, rny = ny, rnz = nz;
+            if (u.UseGgxSampling && u.Roughness > 1e-4)
+            {
+                var (ru1, ru2) = ShadingPipeline.HashPair(px, py, pz, 5);
+                var h = ShadingPipeline.SampleGgxHalfVector(vx, vy, vz, nx, ny, nz, u.Roughness, ru1, ru2);
+                var hn = ShadingPipeline.Normalize3(h.X, h.Y, h.Z);
+                if (hn.X * vx + hn.Y * vy + hn.Z * vz > 0.0) { rnx = hn.X; rny = hn.Y; rnz = hn.Z; }
+            }
+            var (tx, ty, tz, tir) = DielectricOps.Refract(rdx, rdy, rdz, rnx, rny, rnz, 1.0 / ior);
             double f0 = DielectricOps.F0(1.0, ior);
             double NdotVr = Math.Max(0.0, nx * vx + ny * vy + nz * vz);
             double Fr = tir ? 1.0 : DielectricOps.FresnelSchlick(NdotVr, f0);

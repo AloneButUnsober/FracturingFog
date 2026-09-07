@@ -798,6 +798,45 @@ public class ReliefRaymarchGpuTests
         Assert.Equal(expected, u.RefractInternalBounces);
     }
 
+    // S5 (#406) — rough refraction (frosted glass) on the GPU-parity twin. GGX
+    // sampling on + a rough surface perturbs the transmit normal (VNDF microfacet
+    // sample) so the transmitted ray scatters vs the sharp refraction. The
+    // --reliefgpuraymarch frost scene proves the twin == the kernel; this locks the
+    // twin's own behaviour: frost changes the glass, stays deterministic, never moves
+    // the silhouette; GGX-off is byte-identical to sharp.
+    [Fact]
+    public void CpuMirror_FrostedGlass_Changes_Glass_And_Is_Deterministic()
+    {
+        int w = 320, h = 240, hw = 320, hh = 240;
+        var p = ReliefParams();
+        var (hbuf, albedo, maxH) = BumpField(hw, hh, w, h);
+
+        var fxSharp = LightingFxData.CreateDefault();
+        fxSharp.ShowSkyBackdrop = true;
+        fxSharp.Transmission = 0.85; fxSharp.Ior = 1.5;
+        fxSharp.AbsorptionColor = 0xFF66CCFFu; fxSharp.AbsorptionDistance = 0.6;
+        fxSharp.UseGgxSampling = false; fxSharp.Roughness = 0.5;
+        var uSharp = BuildUniforms(w, h, hw, hh, hbuf, maxH, p, fxSharp);
+        var sharp = new uint[w * h];
+        ReliefRaymarchGpu.RenderCpuMirror(in uSharp, hbuf, null, albedo, sharp, out double hitSharp);
+
+        var fxFrost = fxSharp;
+        fxFrost.UseGgxSampling = true;
+        var uF1 = BuildUniforms(w, h, hw, hh, hbuf, maxH, p, fxFrost);
+        var f1 = new uint[w * h];
+        ReliefRaymarchGpu.RenderCpuMirror(in uF1, hbuf, null, albedo, f1, out double hitFrost);
+        var uF2 = BuildUniforms(w, h, hw, hh, hbuf, maxH, p, fxFrost);
+        var f2 = new uint[w * h];
+        ReliefRaymarchGpu.RenderCpuMirror(in uF2, hbuf, null, albedo, f2, out _);
+
+        Assert.Equal(hitSharp, hitFrost);   // frost never moves geometry
+        Assert.Equal(f1, f2);               // HashPair-seeded → deterministic
+
+        int diff = 0;
+        for (int i = 0; i < sharp.Length; i++) if (sharp[i] != f1[i]) diff++;
+        Assert.True(diff > 50, $"frosted glass should scatter the transmit vs sharp ({diff} px)");
+    }
+
     // #388 — multi-light volumetric in-scatter on the relief twin. With the key
     // light OFF, the ONLY path that can light the fog is the #388 multi-light
     // in-scatter loop, so a pure-blue fill (Light2) makes fog-lit pixels bluer than

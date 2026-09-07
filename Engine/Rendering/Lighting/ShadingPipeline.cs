@@ -713,9 +713,25 @@ public static class ShadingPipeline
         if (fx.Transmission > 0.0)
         {
             double ior = fx.Ior > 1.0 ? fx.Ior : 1.0;
+            // S5 (#406) — rough refraction (frosted glass). When GGX sampling is on
+            // and the surface is rough, the transmitted ray refracts about a
+            // GGX-VNDF-sampled microfacet normal H instead of the geometric normal N,
+            // so a rough dielectric scatters what it transmits (like it scatters what
+            // it reflects). One sample per pixel, decorrelated by HashPair → noisy,
+            // meant to be cleaned by the S4 denoise. UseGgxSampling off or roughness 0
+            // → H = N → sharp refraction (byte-identical). Fresnel stays on N.
+            double rnx = i.Nx, rny = i.Ny, rnz = i.Nz;
+            if (fx.UseGgxSampling && fx.Roughness > 1e-4)
+            {
+                var (ru1, ru2) = HashPair(i.Px, i.Py, i.Pz, 5);
+                var h = SampleGgxHalfVector(-i.Rdx, -i.Rdy, -i.Rdz, i.Nx, i.Ny, i.Nz, fx.Roughness, ru1, ru2);
+                var hn = Normalize3(h.X, h.Y, h.Z);
+                // Keep the perturbed normal on the same side as the ray (facing it).
+                if (hn.X * -i.Rdx + hn.Y * -i.Rdy + hn.Z * -i.Rdz > 0.0) { rnx = hn.X; rny = hn.Y; rnz = hn.Z; }
+            }
             // Incident ray into the surface; N is outward (against the ray).
             var (tx, ty, tz, tir) = DielectricOps.Refract(
-                i.Rdx, i.Rdy, i.Rdz, i.Nx, i.Ny, i.Nz, 1.0 / ior);
+                i.Rdx, i.Rdy, i.Rdz, rnx, rny, rnz, 1.0 / ior);
 
             double f0 = DielectricOps.F0(1.0, ior);
             double NdotVr = Math.Max(0.0, i.Nx * -i.Rdx + i.Ny * -i.Rdy + i.Nz * -i.Rdz);
@@ -1823,6 +1839,27 @@ public static class ShadingPipeline
         double roughness,
         double u1, double u2)
     {
+        var (Hx, Hy, Hz) = SampleGgxHalfVector(vx, vy, vz, nx, ny, nz, roughness, u1, u2);
+        // L = reflect(-V, H) = 2·(V·H)·H − V. (We have V toward viewer; ray
+        // direction = −V. Standard mirror-around-H gives reflected ray dir.)
+        double VdotH = vx * Hx + vy * Hy + vz * Hz;
+        double Lx = 2.0 * VdotH * Hx - vx;
+        double Ly = 2.0 * VdotH * Hy - vy;
+        double Lz = 2.0 * VdotH * Hz - vz;
+        return Normalize3(Lx, Ly, Lz);
+    }
+
+    /// <summary>S5 (#406) — the GGX VNDF-sampled microfacet normal H itself
+    /// (Heitz 2018), shared by rough reflection (reflect about H) and rough
+    /// refraction / frosted glass (refract about H). Isotropic roughness
+    /// alpha = roughness²; alpha → 0 collapses toward the geometric normal N.
+    /// One sample per call — <see cref="HashPair"/> decorrelates the lobe.</summary>
+    internal static (double X, double Y, double Z) SampleGgxHalfVector(
+        double vx, double vy, double vz,
+        double nx, double ny, double nz,
+        double roughness,
+        double u1, double u2)
+    {
         // Build orthonormal TBN. Frisvad 2012 — branchless basis from normal.
         double sign = ny >= 0 ? 1.0 : -1.0;
         double a = -1.0 / (sign + ny);
@@ -1889,18 +1926,11 @@ public static class ShadingPipeline
         if (Hlen < 1e-10) Hlen = 1e-10;
         Hx_t /= Hlen; Hy_t /= Hlen; Hz_t /= Hlen;
 
-        // Transform H back to world.
+        // Transform H back to world (already ~unit from the orthonormal transform;
+        // returned RAW so the reflection path stays byte-identical to the original).
         double Hx = Hx_t * t1x + Hy_t * t2x + Hz_t * nx;
         double Hy = Hx_t * t1y + Hy_t * t2y + Hz_t * ny;
         double Hz = Hx_t * t1z + Hy_t * t2z + Hz_t * nz;
-
-        // L = reflect(-V, H) = 2·(V·H)·H − V. (We have V toward viewer; ray
-        // direction = −V. Standard mirror-around-H gives reflected ray dir.)
-        double VdotH = vx * Hx + vy * Hy + vz * Hz;
-        double Lx = 2.0 * VdotH * Hx - vx;
-        double Ly = 2.0 * VdotH * Hy - vy;
-        double Lz = 2.0 * VdotH * Hz - vz;
-        var nrm = Normalize3(Lx, Ly, Lz);
-        return nrm;
+        return (Hx, Hy, Hz);
     }
 }

@@ -556,9 +556,11 @@ void HashPair(float3 p, int bounce, out float u1, out float u2)
     u2 = (h2 & 0xFFFFFFu) / 16777216.0;
 }
 
-// 4e-ii — GGX VNDF importance-sampled reflection dir (Heitz 2018). Twin of
-// ShadingPipeline.SampleGgxReflect. V is toward the viewer; returns L = reflect(-V,H).
-float3 SampleGgxReflect(float3 V, float3 N, float roughness, float u1, float u2)
+// 4e-ii / S5 (#406) — the GGX VNDF-sampled microfacet normal H (Heitz 2018), shared
+// by rough reflection (reflect about H) and rough refraction / frosted glass (refract
+// about H). Twin of ShadingPipeline.SampleGgxHalfVector. V is toward the viewer; H is
+// returned RAW (already ~unit) so the reflection path stays bit-for-bit as before.
+float3 SampleGgxHalfVector(float3 V, float3 N, float roughness, float u1, float u2)
 {
     float sign = N.y >= 0.0 ? 1.0 : -1.0;
     float a = -1.0 / (sign + N.y);
@@ -597,7 +599,14 @@ float3 SampleGgxReflect(float3 V, float3 N, float roughness, float u1, float u2)
     if (Hlen < 1e-10) Hlen = 1e-10;
     Ht /= Hlen;
 
-    float3 H = Ht.x * t1 + Ht.y * t2 + Ht.z * N;
+    return Ht.x * t1 + Ht.y * t2 + Ht.z * N;
+}
+
+// 4e-ii — GGX VNDF importance-sampled reflection dir (Heitz 2018). Twin of
+// ShadingPipeline.SampleGgxReflect. V is toward the viewer; returns L = reflect(-V,H).
+float3 SampleGgxReflect(float3 V, float3 N, float roughness, float u1, float u2)
+{
+    float3 H = SampleGgxHalfVector(V, N, roughness, u1, u2);
     float VdotH = dot(V, H);
     float3 L = 2.0 * VdotH * H - V;
     float ll = length(L);
@@ -793,9 +802,20 @@ uint ShadeFlat(float3 N, float3 V, float3 P, uint albedo)
     {
         float ior = gIor > 1.0 ? gIor : 1.0;
         float3 rd = -V;
-        float3 tdir = refract(rd, N, 1.0 / ior);
+        // S5 (#406) — rough refraction (frosted glass). GGX-VNDF-perturb the transmit
+        // normal when GGX sampling is on and the surface is rough, so the transmitted
+        // ray scatters (twin of ShadingPipeline). Fresnel stays on the geometric N.
+        // gUseGgx off / roughness 0 → refractN = N → sharp (byte-identical).
+        float3 refractN = N;
+        if (gUseGgx != 0 && gRoughness > 1e-4)
+        {
+            float ru1, ru2; HashPair(P, 5, ru1, ru2);
+            float3 h = normalize(SampleGgxHalfVector(V, N, gRoughness, ru1, ru2));
+            if (dot(h, V) > 0.0) refractN = h;
+        }
+        float3 tdir = refract(rd, refractN, 1.0 / ior);
         bool tir = dot(tdir, tdir) < 1e-8;
-        if (tir) tdir = reflect(rd, N);
+        if (tir) tdir = reflect(rd, refractN);
         float f0 = (1.0 - ior) / (1.0 + ior); f0 = f0 * f0;
         float NdotVr = max(0.0, dot(N, V));
         float omc = 1.0 - NdotVr;
