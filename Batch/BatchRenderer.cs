@@ -79,6 +79,7 @@ namespace FracturingFog.Batch
             if (opts.ReliefFroxelQuality is { } fq) fp.Relief2DFroxelQuality = fq;        // S6 (#408)
             if (opts.ReliefFroxelTemporal)        fp.Relief2DFroxelTemporal = true;      // S6 (#468)
             if (opts.ReliefFroxelReproject)       fp.Relief2DFroxelReproject = true;     // S6 (#408)
+            if (opts.CameraExposureEv.HasValue)   fp.Relief2DCameraExposureEv = opts.CameraExposureEv.Value;   // S3 (#400)
             if (opts.ReliefFroxelFeedback.HasValue) fp.Relief2DFroxelTemporalFeedback = opts.ReliefFroxelFeedback.Value;
             if (opts.ReliefDenoiseIterations.HasValue)  fp.Relief2DDenoiseIterations = opts.ReliefDenoiseIterations.Value;   // S4 (#389)
             if (opts.ReliefDenoiseColorSigma.HasValue)  fp.Relief2DDenoiseColorSigma = opts.ReliefDenoiseColorSigma.Value;

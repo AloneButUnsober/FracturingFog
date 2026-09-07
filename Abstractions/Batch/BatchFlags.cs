@@ -138,6 +138,9 @@ namespace FracturingFog.Batch
         public const string ReliefMotionBlur        = "--relief-motion-blur";
         public const string ReliefMotionBlurSamples = "--relief-motion-blur-samples";
 
+        // S3 (#400) — in-camera exposure (stops). Implies --relief-raymarch.
+        public const string CameraExposure          = "--camera-exposure";
+
         // Relief isolate masking (#363 follow-up). --relief-isolate turns it on;
         // sub-knobs imply it on.
         public const string ReliefIsolate          = "--relief-isolate";

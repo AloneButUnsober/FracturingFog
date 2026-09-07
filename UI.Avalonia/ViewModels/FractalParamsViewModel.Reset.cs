@@ -148,6 +148,7 @@ public sealed partial class FractalParamsViewModel
         _p.Relief2DCameraOrthographic = d.Relief2DCameraOrthographic;
         _p.Relief2DDofApertureRadius  = d.Relief2DDofApertureRadius;
         _p.Relief2DDofFocusDistance   = d.Relief2DDofFocusDistance;
+        _p.Relief2DCameraExposureEv   = d.Relief2DCameraExposureEv;    // S3 (#400)
         _p.Relief2DDenoiseIterations  = d.Relief2DDenoiseIterations;   // S4 (#389)
         _p.Relief2DDenoiseColorSigma  = d.Relief2DDenoiseColorSigma;
         _p.Relief2DDenoiseNormalSigma = d.Relief2DDenoiseNormalSigma;

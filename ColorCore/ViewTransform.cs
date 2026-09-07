@@ -53,6 +53,30 @@ public static class ViewTransformOps
             pixels[i] = ApplyToBgra(pixels[i], transform, expMul);
     }
 
+    /// <summary>S3 (#400) — apply an in-camera exposure (stops) to a BGRA
+    /// <c>uint[]</c> buffer in place, in LINEAR light, with NO tonemap: decode →
+    /// ×2^EV → encode. Unlike <see cref="Apply"/> this is independent of any output
+    /// view transform (the camera exposes the scene; the S2 transform still tonemaps
+    /// the result afterwards), so it is always active. <paramref name="exposureEv"/>
+    /// == 0 returns immediately, leaving the buffer byte-identical.</summary>
+    public static void ApplyExposureOnly(uint[] pixels, int count, float exposureEv)
+    {
+        if (exposureEv == 0f) return;
+        if (pixels == null) throw new ArgumentNullException(nameof(pixels));
+        count = Math.Min(count, pixels.Length);
+        float expMul = MathF.Pow(2f, exposureEv);
+        for (int i = 0; i < count; i++)
+        {
+            uint bgra = pixels[i];
+            uint a = (bgra >> 24) & 0xFF;
+            float r = SrgbToLinear(((bgra >> 16) & 0xFF) / 255f) * expMul;
+            float g = SrgbToLinear(((bgra >> 8) & 0xFF) / 255f) * expMul;
+            float b = SrgbToLinear((bgra & 0xFF) / 255f) * expMul;
+            byte R = Encode(r), G = Encode(g), B = Encode(b);
+            pixels[i] = (a << 24) | ((uint)R << 16) | ((uint)G << 8) | B;
+        }
+    }
+
     /// <summary>Transform a single straight-alpha BGRA pixel. Exposed for tests
     /// and for callers that composite pixel-by-pixel.</summary>
     public static uint ApplyToBgra(uint bgra, ViewTransform transform, float expMul)
