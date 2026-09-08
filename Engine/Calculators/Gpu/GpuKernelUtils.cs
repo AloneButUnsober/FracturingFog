@@ -138,6 +138,66 @@ internal static class GpuKernelUtils
         return (true, tEn, tEx);
     }
 
+    /// <summary>S3 (#389/#567) — origin-parameterised sphere clip for the thin-lens
+    /// DOF tap loop (the lens jitters the ray origin off the camera). Identical to
+    /// <see cref="SphereClip"/> but takes the ray origin explicitly; passing the
+    /// camera position reproduces <see cref="SphereClip"/> exactly.</summary>
+    public static (bool hit, double tEn, double tEx) SphereClipFrom(
+        double ox, double oy, double oz,
+        double rdx, double rdy, double rdz, in GpuRaymarchParams p)
+    {
+        if (p.CullRadiusSq <= 0.0) return (true, 0.0, double.MaxValue);
+        double ocx = ox - p.TargetX;
+        double ocy = oy - p.TargetY;
+        double ocz = oz - p.TargetZ;
+        double bS = ocx * rdx + ocy * rdy + ocz * rdz;
+        double cS = ocx * ocx + ocy * ocy + ocz * ocz - p.CullRadiusSq;
+        double disc = bS * bS - cS;
+        if (disc < 0) return (false, 0.0, 0.0);
+        double sq = Math.Sqrt(disc);
+        double tEx = -bS + sq;
+        if (tEx < 0) return (false, 0.0, 0.0);
+        double tEn = Math.Max(0.0, -bS - sq);
+        return (true, tEn, tEx);
+    }
+
+    /// <summary>S3 (#389/#567) — deterministic hash → two [0,1) reals for the
+    /// thin-lens aperture sample. Kernel-side twin of
+    /// <c>ShadingPipeline.HashPair</c>; seed the disc jitter with pixel coords +
+    /// the tap index so the DOF render is --batch-stable.</summary>
+    public static (double u1, double u2) HashPair(double x, double y, double z, int bounce)
+    {
+        unchecked
+        {
+            uint a = (uint)(int)(x * 1024.0) ^ 0x9E3779B1u;
+            uint b = (uint)(int)(y * 1024.0) ^ 0x85EBCA77u;
+            uint c = (uint)(int)(z * 1024.0) ^ 0xC2B2AE3Du;
+            uint d = (uint)bounce ^ 0x27D4EB2Fu;
+            uint h = a;
+            h = (h ^ b) * 0x85EBCA6Bu;
+            h = (h ^ c) * 0xC2B2AE35u;
+            h = (h ^ d) * 0x27D4EB2Du;
+            h ^= h >> 16;
+            uint h2 = h * 0x85EBCA6Bu; h2 ^= h2 >> 13;
+            return ((h & 0xFFFFFFu) / (double)0x1000000u,
+                    (h2 & 0xFFFFFFu) / (double)0x1000000u);
+        }
+    }
+
+    /// <summary>S3 (#389/#567) — Shirley concentric-disc map: a uniform [0,1)² pair
+    /// → a uniform point in the unit disc. Kernel-side twin of
+    /// <c>CameraDof.ConcentricSampleDisk</c>; places the lens sample.</summary>
+    public static (double x, double y) ConcentricSampleDisk(double u1, double u2)
+    {
+        double ox = 2.0 * u1 - 1.0;
+        double oy = 2.0 * u2 - 1.0;
+        if (ox == 0.0 && oy == 0.0) return (0.0, 0.0);
+        double r, theta;
+        if (Math.Abs(ox) > Math.Abs(oy)) { r = ox; theta = (Math.PI / 4.0) * (oy / ox); }
+        else { r = oy; theta = (Math.PI / 2.0) - (Math.PI / 4.0) * (ox / oy); }
+        return (r * Math.Cos(theta), r * Math.Sin(theta));
+    }
+
     /// <summary>Ray-miss color picker. Reads <see cref="GpuShadingParams.ShowSkyBackdrop"/>:
     /// 1 → gradient sky from BgTop/BgBot, 0 → flat
     /// <see cref="GpuRaymarchParams.InSetColor"/>. Used by every per-fractal

@@ -67,4 +67,14 @@ public struct GpuRaymarchParams
 
     /// <summary>Color written for miss / in-set / sphere-clipped pixels.</summary>
     public uint InSetColor;
+
+    // S3 (#389/#567) — physically-based thin-lens depth of field. DofAperture 0 →
+    // pinhole (single centre ray, byte-identical). When >0 and DofSamples>1 the
+    // kernel averages DofSamples primary rays whose origin is jittered across the
+    // aperture disc (Shirley concentric-disc, HashPair-seeded) and re-aimed through
+    // the focal point at DofFocus (the resolved distance; auto = |camera| CPU-side).
+    // Mirrors CameraDof.ThinLensRay / ThinLensDof; the camera basis (Right/Up/Fwd +
+    // Cam) already on this struct supplies the lens plane + focal point.
+    public double DofAperture, DofFocus;
+    public int DofSamples;
 }
