@@ -443,6 +443,23 @@ code.
   still consume the averaged HDR, and each family's GPU fast-path forces CPU when thin-lens
   is armed. Byte-identical off / aperture 0; the shared `DofThinLens` checkbox already drives
   all families. +15 `MultiFamilyThinLensDofTests`.
+- **Thin-lens DOF on the GPU 3D kernels — foundation + Mandelbulb (landed — PR #<TBD>, #567):**
+  the GPU 3D-fractal kernels used to ignore thin-lens DOF (Mandelbulb/KIFS ran the single
+  centre ray regardless; the other families force CPU when it is armed). This ports the
+  aperture-tap lens loop onto the GPU, flagship first. `GpuRaymarchParams` gains
+  `DofAperture` / `DofFocus` / `DofSamples`; `GpuKernelUtils` gains kernel-side twins
+  `SphereClipFrom` (origin-parameterised clip), `HashPair` + `ConcentricSampleDisk`
+  (twins of `ShadingPipeline.HashPair` / `CameraDof.ConcentricSampleDisk`). The Mandelbulb
+  kernel's trace+shade is extracted into `ShadeBulbRay(origin, dir)` and `BulbKernel` wraps
+  it in a `DofSamples` lens loop (jitter the origin across the aperture disc, re-aim through
+  the focal point, average — every tap jittered, matching the relief GPU DOF pattern; there
+  is no bit-exact 3D twin, so the GPU DOF need only be deterministic + `--batch`-stable, not
+  LSB-identical to the CPU DOF). `MandelbulbCalculator` fills the DOF fields via `ThinLensDof`
+  (aperture 0 / one sample → the single centre ray → **byte-identical**). +3 tests
+  (`S8Gpu3DThinLensDofTests`: pinhole-identical + open-aperture blurs + deterministic).
+  **Remaining on #567:** fan the same `ShadeXRay` + lens-loop extraction across the other 7
+  GPU kernels (Mandelbox / Menger / Sierpinski / QuatJulia / QuatMandel / Kleinian / Bicomplex)
+  and lift their `!ThinLensDof.IsActive` GPU gates.
 - **In-camera exposure (landed, #400, closes S3):** `FractalParameters.Relief2DCameraExposureEv`
   — a camera-stage exposure in stops applied to the relief beauty in LINEAR light
   (`ViewTransformOps.ApplyExposureOnly`: decode → ×2^EV → encode, no tonemap), so the camera
