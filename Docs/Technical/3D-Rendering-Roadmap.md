@@ -169,14 +169,24 @@ discarded, not that it is uncomputed.
   (post)* expander + `--relight` / `--relight-diffuse|specular|ao|ambient` batch flags
   (imply `--relief-raymarch`); user doc in `Docs/User/Relief3D-Guide.md` §10a. +4 tests
   (`ReliefRelightTests`: off byte-identical, silhouette preserved, gain changes render,
-  batch parse). The AOV-EXR **round-trip** relight (read the exported multi-layer float
-  passes back to relight a saved render) needs a multi-layer float EXR reader — filed as a
-  separate follow-up.
+  batch parse).
+- **AOV-EXR round-trip relight (landed — #718):** the offline half of the compositor.
+  `OpenExrReader.ParseLayers` (promoted to public) reads arbitrary named float channels back
+  (`diffuse.*` / `specular.*` / `AO.V` / `albedo.*`), not just R/G/B; the AOV export now emits
+  a bare `albedo.R/.G/.B` layer (straight-encoded, captured into `ReliefAovBuffers.Albedo`
+  alongside the float components) so the base colour the compositor multiplies survives; and
+  `ExrRelight` + batch `--relight-from IN.exr --out OUT.png` (reusing `--relight-diffuse|specular|ao|ambient`)
+  reads a saved AOV EXR and recombines it through the SAME `LightCompositor` the live path uses —
+  relight a saved render with no re-trace. Requires an `--aov-exr` export of a `--relief-raymarch`
+  render (needs the albedo + diffuse layers). +9 `S1AovExrRelightRoundTripTests` (albedo layer,
+  ParseLayers multi-channel read, offline == direct composite on half-exact inputs, beauty-only
+  reject, batch grammar). Additive → byte-identical.
 - **S1 complete.** Every per-pixel quantity the raymarch computes is promoted to a pass,
   emitted as multi-layer float EXR, threaded through the sequence renderers, and consumed
-  (motion-vector chain → vector motion blur #638→#641; the light compositor → live relight).
+  (motion-vector chain → vector motion blur #638→#641; the light compositor → live relight
+  + offline round-trip #718).
 - **Remaining (follow-up):** SVGF temporal (the deeper #402 consumer of the motion + depth
-  + normal guides); the AOV-EXR round-trip relight reader (#718).
+  + normal guides).
 - **Motion-vector AOV — render wiring (landed — PR #638, #398):** the relief render now
   fills the Motion channel. It exposes its perspective camera as `aov.CurrentCamera`
   (`ReliefMotionVector.CameraView` from the `ReliefCamera` basis) whenever an AOV buffer

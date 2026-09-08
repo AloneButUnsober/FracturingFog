@@ -53,6 +53,12 @@ namespace FracturingFog.Batch
         // to --out. No fractal render (regrade a rendered EXR without re-rendering).
         public const string RegradeExr     = "--regrade-exr";
 
+        // AOV-EXR relight round-trip (roadmap S1, #718). Value = input multi-layer AOV
+        // .exr path; selects Relight mode — read the captured albedo/diffuse/specular/AO
+        // layers, recombine via LightCompositor under the --relight-* gains, write to
+        // --out. No fractal render (relight a saved render without re-tracing geometry).
+        public const string RelightFrom   = "--relight-from";
+
         public const string MultibrotExp   = "--multibrot-exp";
         public const string BulbPower      = "--bulb-power";
         public const string LSystemPreset  = "--lsystem-preset";

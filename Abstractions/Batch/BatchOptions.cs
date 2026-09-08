@@ -13,7 +13,7 @@ using FracturingFog.Rendering.Lighting;
 
 namespace FracturingFog.Batch
 {
-    public enum BatchMode { Image, Video, Slideshow, Scene, Regrade }
+    public enum BatchMode { Image, Video, Slideshow, Scene, Regrade, Relight }
 
     /// <summary>Per-light point / spot override parsed from the <c>--lightN-*</c>
     /// flags (roadmap S8, #404). Every field is nullable so BatchRenderer applies
@@ -176,6 +176,14 @@ namespace FracturingFog.Batch
         /// <see cref="OutputPath"/> — no fractal render, so no region/coord is
         /// required. Regrade a rendered <c>.exr</c> without re-rendering.</summary>
         public string? RegradeExrInput { get; set; }
+
+        /// <summary>AOV-EXR relight round-trip input (roadmap S1, #718). When set,
+        /// <see cref="Mode"/> is <see cref="BatchMode.Relight"/>: the batch reads this
+        /// multi-layer AOV OpenEXR, recombines its captured albedo/diffuse/specular/AO
+        /// layers via the light compositor under the <c>--relight-*</c> gains, and writes
+        /// the relit result to <see cref="OutputPath"/> — no fractal render, so no
+        /// region/coord is required. Relight a saved render without re-tracing.</summary>
+        public string? RelightFromInput { get; set; }
 
         /// <summary>Global interior (in-set) alpha, 0..255 (#96). 255 = opaque
         /// (default, legacy pixel-identical); below 255 the interior turns
@@ -565,6 +573,12 @@ namespace FracturingFog.Batch
                         if (!Next(args, ref i, a, out string rgv, out error)) return false;
                         opts.RegradeExrInput = rgv;
                         opts.Mode = BatchMode.Regrade;
+                        break;
+
+                    case BatchFlags.RelightFrom:
+                        if (!Next(args, ref i, a, out string rlf, out error)) return false;
+                        opts.RelightFromInput = rlf;
+                        opts.Mode = BatchMode.Relight;
                         break;
 
                     case BatchFlags.AovExr:
@@ -1061,6 +1075,27 @@ namespace FracturingFog.Batch
                     { error = "--regrade-exr requires --out PATH."; return false; }
                 if (opts.ViewExposureEv is < -16.0 or > 16.0)
                     { error = "--exposure must be -16..16 (stops)."; return false; }
+                return true;
+            }
+
+            // Relight round-trip (AOV-EXR read-back, #718) is a standalone utility mode:
+            // read a multi-layer AOV .exr, recombine its lighting passes, write it. No
+            // fractal render → no region/coord/size requirement (dims come from the EXR).
+            // The --relight-* gains are range-checked below (shared with the live path).
+            if (opts.Mode == BatchMode.Relight)
+            {
+                if (string.IsNullOrWhiteSpace(opts.RelightFromInput))
+                    { error = "--relight-from requires an input .exr path."; return false; }
+                if (string.IsNullOrWhiteSpace(opts.OutputPath))
+                    { error = "--relight-from requires --out PATH."; return false; }
+                if (opts.RelightDiffuse is < 0.0 or > 8.0)
+                    { error = "--relight-diffuse must be 0..8."; return false; }
+                if (opts.RelightSpecular is < 0.0 or > 8.0)
+                    { error = "--relight-specular must be 0..8."; return false; }
+                if (opts.RelightAo is < 0.0 or > 4.0)
+                    { error = "--relight-ao must be 0..4."; return false; }
+                if (opts.RelightAmbient is < 0.0 or > 4.0)
+                    { error = "--relight-ambient must be 0..4."; return false; }
                 return true;
             }
 

@@ -51,7 +51,10 @@ using System.Text;
 
 namespace FracturingFog.Rendering.Lighting;
 
-internal static class OpenExrReader
+// #718 — promoted from internal to public: the multi-layer float reader
+// (ParseLayers) is now a first-class round-trip API the AOV-EXR relight consumer
+// (and its tests) read arbitrary named lighting channels back through.
+public static class OpenExrReader
 {
     private const uint MagicNumber = 0x01312f76;
 
@@ -274,6 +277,182 @@ internal static class OpenExrReader
             }
 
             return new HdriImage(width, height, outBuf);
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    /// <summary>Multi-layer read result: every named float channel decoded to its
+    /// own w·h plane (row-major, data-window-relative). Unlike <see cref="Parse"/>
+    /// this keeps ARBITRARY channel names (<c>diffuse.R</c>, <c>AO.V</c>,
+    /// <c>albedo.B</c> …) so the AOV-EXR round-trip compositor (#718) can pull the
+    /// lighting passes back out.</summary>
+    public sealed class ExrLayeredImage
+    {
+        public int Width { get; }
+        public int Height { get; }
+        /// <summary>Channel name → w·h float plane. Names are exactly as stored.</summary>
+        public IReadOnlyDictionary<string, float[]> Channels { get; }
+
+        public ExrLayeredImage(int width, int height, IReadOnlyDictionary<string, float[]> channels)
+        { Width = width; Height = height; Channels = channels; }
+
+        /// <summary>Fetch a named plane, or null when the channel is absent.</summary>
+        public float[]? Plane(string name) => Channels.TryGetValue(name, out var p) ? p : null;
+    }
+
+    /// <summary>Parse a single-part scanline EXR keeping EVERY float channel as its
+    /// own plane (the AOV round-trip reader, #718). Same format envelope as
+    /// <see cref="Parse"/> (single-part scanline, HALF/FLOAT, NONE/ZIP/ZIPS) — the
+    /// only difference is it does not project down to R/G/B, so custom AOV channels
+    /// survive. Returns null on any unsupported feature or malformed input.</summary>
+    public static ExrLayeredImage? ParseLayers(Stream stream)
+    {
+        try
+        {
+            using var br = new BinaryReader(stream, Encoding.ASCII, leaveOpen: true);
+            if (br.ReadUInt32() != MagicNumber) return null;
+            uint version = br.ReadUInt32();
+            if ((int)(version & 0xFF) != 2) return null;
+            uint flags = version & 0xFFFFFF00u;
+            if ((flags & (0x200u | 0x800u | 0x1000u)) != 0) return null; // tiled / multi-part / deep
+
+            int dwXmin = 0, dwYmin = 0, dwXmax = 0, dwYmax = 0;
+            bool gotDataWindow = false;
+            Compression comp = Compression.None;
+            bool gotCompression = false;
+            var channels = new List<Channel>();
+            bool gotChannels = false;
+
+            while (true)
+            {
+                string? name = ReadNullString(br, 256);
+                if (name == null) return null;
+                if (name.Length == 0) break;
+                string? type = ReadNullString(br, 256);
+                if (type == null) return null;
+                int size = br.ReadInt32();
+                if (size < 0 || size > (1 << 24)) return null;
+                long endPos = br.BaseStream.Position + size;
+
+                switch (name)
+                {
+                    case "dataWindow" when type == "box2i" && size == 16:
+                        dwXmin = br.ReadInt32(); dwYmin = br.ReadInt32();
+                        dwXmax = br.ReadInt32(); dwYmax = br.ReadInt32();
+                        gotDataWindow = true;
+                        break;
+                    case "compression" when type == "compression" && size == 1:
+                        comp = (Compression)br.ReadByte();
+                        gotCompression = true;
+                        break;
+                    case "channels" when type == "chlist":
+                        if (!ReadChannelList(br, size, channels)) return null;
+                        gotChannels = true;
+                        break;
+                    default:
+                        br.BaseStream.Seek(size, SeekOrigin.Current);
+                        break;
+                }
+                if (br.BaseStream.Position != endPos)
+                    br.BaseStream.Seek(endPos, SeekOrigin.Begin);
+            }
+
+            if (!gotDataWindow || !gotCompression || !gotChannels || channels.Count == 0) return null;
+
+            int width = dwXmax - dwXmin + 1;
+            int height = dwYmax - dwYmin + 1;
+            if (width <= 0 || height <= 0 || width > 16384 || height > 16384) return null;
+
+            foreach (var ch in channels)
+            {
+                if (ch.PixelType != PixelTypeT.Half && ch.PixelType != PixelTypeT.Float) return null;
+                if (ch.XSampling != 1 || ch.YSampling != 1) return null;
+            }
+
+            int chunkLines = comp switch
+            {
+                Compression.None => 1,
+                Compression.Zips => 1,
+                Compression.Zip  => 16,
+                _ => -1,
+            };
+            if (chunkLines < 0) return null; // RLE / PIZ / Pxr24 / B44 / DWA unsupported
+
+            int chunkCount = (height + chunkLines - 1) / chunkLines;
+            var offsets = new long[chunkCount];
+            for (int i = 0; i < chunkCount; i++) offsets[i] = br.ReadInt64();
+
+            int channelCount = channels.Count;
+            int[] chBytesPerSample = new int[channelCount];
+            int[] chRowBytes = new int[channelCount];
+            int rowBytes = 0;
+            for (int i = 0; i < channelCount; i++)
+            {
+                chBytesPerSample[i] = channels[i].PixelType == PixelTypeT.Half ? 2 : 4;
+                chRowBytes[i] = width * chBytesPerSample[i];
+                rowBytes += chRowBytes[i];
+            }
+
+            // One float plane per channel, indexed by the channel's list position.
+            var planes = new float[channelCount][];
+            for (int i = 0; i < channelCount; i++) planes[i] = new float[(long)width * height];
+
+            byte[] decoded = Array.Empty<byte>();
+            for (int ci = 0; ci < chunkCount; ci++)
+            {
+                br.BaseStream.Position = offsets[ci];
+                int scanY = br.ReadInt32();
+                int chunkSize = br.ReadInt32();
+                if (chunkSize < 0 || chunkSize > (rowBytes * chunkLines * 4)) return null;
+
+                int linesInChunk = Math.Min(chunkLines, dwYmax - scanY + 1);
+                if (linesInChunk <= 0) return null;
+                int decodedSize = rowBytes * linesInChunk;
+
+                if (decoded.Length < decodedSize) decoded = new byte[decodedSize];
+                bool storedRaw = (comp == Compression.None)
+                    || ((comp == Compression.Zip || comp == Compression.Zips) && chunkSize == decodedSize);
+
+                if (storedRaw)
+                {
+                    if (chunkSize != decodedSize) return null;
+                    if (br.Read(decoded, 0, decodedSize) != decodedSize) return null;
+                }
+                else
+                {
+                    var compressedBytes = br.ReadBytes(chunkSize);
+                    if (compressedBytes.Length != chunkSize) return null;
+                    if (!InflateExr(compressedBytes, decoded, decodedSize)) return null;
+                    Predictor(decoded, decodedSize);
+                    Interleave(decoded, decodedSize);
+                }
+
+                for (int li = 0; li < linesInChunk; li++)
+                {
+                    int yAbs = scanY + li - dwYmin;
+                    if ((uint)yAbs >= (uint)height) continue;
+                    int chBase = li * rowBytes;
+                    int dstRow = yAbs * width;
+                    for (int i = 0; i < channelCount; i++)
+                    {
+                        int type = (int)channels[i].PixelType;
+                        int baseI = chBase;
+                        float[] plane = planes[i];
+                        for (int x = 0; x < width; x++)
+                            plane[dstRow + x] = ReadSample(decoded, baseI, x, type);
+                        chBase += chRowBytes[i];
+                    }
+                }
+            }
+
+            // Last-writer-wins on a duplicate channel name (spec forbids duplicates;
+            // be lenient rather than fail the whole read).
+            var map = new Dictionary<string, float[]>(channelCount, StringComparer.Ordinal);
+            for (int i = 0; i < channelCount; i++) map[channels[i].Name] = planes[i];
+            return new ExrLayeredImage(width, height, map);
         }
         catch
         {
