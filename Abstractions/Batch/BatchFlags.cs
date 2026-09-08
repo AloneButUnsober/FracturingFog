@@ -140,6 +140,13 @@ namespace FracturingFog.Batch
 
         // S3 (#400) — in-camera exposure (stops). Implies --relief-raymarch.
         public const string CameraExposure          = "--camera-exposure";
+        // S1 (#398) — relight in post from the captured lighting passes. --relight
+        // enables it; the gains scale each recombined layer. All imply --relief-raymarch.
+        public const string Relight               = "--relight";
+        public const string RelightDiffuse       = "--relight-diffuse";
+        public const string RelightSpecular      = "--relight-specular";
+        public const string RelightAo            = "--relight-ao";
+        public const string RelightAmbient       = "--relight-ambient";
 
         // Relief isolate masking (#363 follow-up). --relief-isolate turns it on;
         // sub-knobs imply it on.

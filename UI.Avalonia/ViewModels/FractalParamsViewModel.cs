@@ -633,6 +633,33 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
     }
     /// <summary>The sample count only bites once the motion-blur strength is non-zero.</summary>
     public bool MotionBlurEnabled => _p.Relief2DMotionBlurStrength > 0.0;
+
+    // S1 (#398) — relight in post from the captured lighting passes.
+    public bool Relief2DRelight
+    {
+        get => _p.Relief2DRelight;
+        set { if (_p.Relief2DRelight == value) return; _p.Relief2DRelight = value; this.RaisePropertyChanged(); Fire(); }
+    }
+    public double Relief2DRelightDiffuseGain
+    {
+        get => _p.Relief2DRelightDiffuseGain;
+        set { double v = Clamp(value, 0.0, 8.0); if (_p.Relief2DRelightDiffuseGain == v) return; _p.Relief2DRelightDiffuseGain = v; this.RaisePropertyChanged(); Fire(); }
+    }
+    public double Relief2DRelightSpecularGain
+    {
+        get => _p.Relief2DRelightSpecularGain;
+        set { double v = Clamp(value, 0.0, 8.0); if (_p.Relief2DRelightSpecularGain == v) return; _p.Relief2DRelightSpecularGain = v; this.RaisePropertyChanged(); Fire(); }
+    }
+    public double Relief2DRelightAoStrength
+    {
+        get => _p.Relief2DRelightAoStrength;
+        set { double v = Clamp(value, 0.0, 4.0); if (_p.Relief2DRelightAoStrength == v) return; _p.Relief2DRelightAoStrength = v; this.RaisePropertyChanged(); Fire(); }
+    }
+    public double Relief2DRelightAmbient
+    {
+        get => _p.Relief2DRelightAmbient;
+        set { double v = Clamp(value, 0.0, 4.0); if (_p.Relief2DRelightAmbient == v) return; _p.Relief2DRelightAmbient = v; this.RaisePropertyChanged(); Fire(); }
+    }
     public FracturingFog.HeightCurve2D Relief2DHeightCurve
     {
         get => _p.Relief2DHeightCurve;

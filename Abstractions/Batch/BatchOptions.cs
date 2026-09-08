@@ -265,6 +265,13 @@ namespace FracturingFog.Batch
         public int? ReliefMotionBlurSamples { get; set; }    // taps, 2..64
         public double? CameraExposureEv { get; set; }        // S3 (#400) in-camera exposure, stops (-16..16)
 
+        // S1 (#398) relight in post. Enable + per-layer gains (imply --relief-raymarch).
+        public bool Relight { get; set; }
+        public double? RelightDiffuse { get; set; }          // diffuse gain, >= 0
+        public double? RelightSpecular { get; set; }         // specular gain, >= 0
+        public double? RelightAo { get; set; }               // AO strength, >= 0
+        public double? RelightAmbient { get; set; }          // flat ambient, >= 0
+
         // Relief isolate masking (#363 follow-up). Any isolate flag implies
         // relief + isolate on. NoDetail turns OFF the default detail isolation.
         public bool ReliefIsolate { get; set; }
@@ -802,6 +809,36 @@ namespace FracturingFog.Batch
                         opts.Relief = true;
                         break;
 
+                    case BatchFlags.Relight:
+                        opts.Relight = true;
+                        opts.ReliefRaymarch = true;
+                        opts.Relief = true;
+                        break;
+
+                    case BatchFlags.RelightDiffuse:
+                        if (!NextDouble(args, ref i, a, out double rlD, out error)) return false;
+                        opts.RelightDiffuse = rlD; opts.Relight = true;
+                        opts.ReliefRaymarch = true; opts.Relief = true;
+                        break;
+
+                    case BatchFlags.RelightSpecular:
+                        if (!NextDouble(args, ref i, a, out double rlS, out error)) return false;
+                        opts.RelightSpecular = rlS; opts.Relight = true;
+                        opts.ReliefRaymarch = true; opts.Relief = true;
+                        break;
+
+                    case BatchFlags.RelightAo:
+                        if (!NextDouble(args, ref i, a, out double rlAo, out error)) return false;
+                        opts.RelightAo = rlAo; opts.Relight = true;
+                        opts.ReliefRaymarch = true; opts.Relief = true;
+                        break;
+
+                    case BatchFlags.RelightAmbient:
+                        if (!NextDouble(args, ref i, a, out double rlAmb, out error)) return false;
+                        opts.RelightAmbient = rlAmb; opts.Relight = true;
+                        opts.ReliefRaymarch = true; opts.Relief = true;
+                        break;
+
                     case BatchFlags.Transmission:
                         if (!NextDouble(args, ref i, a, out double trv, out error)) return false;
                         opts.Transmission = trv;
@@ -1110,6 +1147,14 @@ namespace FracturingFog.Batch
                 { error = "--relief-motion-blur-samples must be 2..64."; return false; }
             if (opts.CameraExposureEv is < -16.0 or > 16.0)
                 { error = "--camera-exposure must be -16..16 (stops)."; return false; }
+            if (opts.RelightDiffuse is < 0.0 or > 8.0)
+                { error = "--relight-diffuse must be 0..8."; return false; }
+            if (opts.RelightSpecular is < 0.0 or > 8.0)
+                { error = "--relight-specular must be 0..8."; return false; }
+            if (opts.RelightAo is < 0.0 or > 4.0)
+                { error = "--relight-ao must be 0..4."; return false; }
+            if (opts.RelightAmbient is < 0.0 or > 4.0)
+                { error = "--relight-ambient must be 0..4."; return false; }
             if (opts.ReliefDenoiseIterations is < 0 or > 8)
                 { error = "--denoise must be 0..8 (passes)."; return false; }
             if (opts.ReliefDenoiseColorSigma is <= 0)

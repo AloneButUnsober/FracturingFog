@@ -80,6 +80,11 @@ namespace FracturingFog.Batch
             if (opts.ReliefFroxelTemporal)        fp.Relief2DFroxelTemporal = true;      // S6 (#468)
             if (opts.ReliefFroxelReproject)       fp.Relief2DFroxelReproject = true;     // S6 (#408)
             if (opts.CameraExposureEv.HasValue)   fp.Relief2DCameraExposureEv = opts.CameraExposureEv.Value;   // S3 (#400)
+            if (opts.Relight)                     fp.Relief2DRelight = true;             // S1 (#398)
+            if (opts.RelightDiffuse.HasValue)     fp.Relief2DRelightDiffuseGain = opts.RelightDiffuse.Value;
+            if (opts.RelightSpecular.HasValue)    fp.Relief2DRelightSpecularGain = opts.RelightSpecular.Value;
+            if (opts.RelightAo.HasValue)          fp.Relief2DRelightAoStrength = opts.RelightAo.Value;
+            if (opts.RelightAmbient.HasValue)     fp.Relief2DRelightAmbient = opts.RelightAmbient.Value;
             if (opts.ReliefFroxelFeedback.HasValue) fp.Relief2DFroxelTemporalFeedback = opts.ReliefFroxelFeedback.Value;
             if (opts.ReliefDenoiseIterations.HasValue)  fp.Relief2DDenoiseIterations = opts.ReliefDenoiseIterations.Value;   // S4 (#389)
             if (opts.ReliefDenoiseColorSigma.HasValue)  fp.Relief2DDenoiseColorSigma = opts.ReliefDenoiseColorSigma.Value;
