@@ -40,7 +40,8 @@ public static class AovExrExporter
     public static IReadOnlyList<ExrChannel> BuildChannels(
         int width, int height, uint[] beauty, IReadOnlyDictionary<AovView, uint[]> aovs,
         float[]? floatNormalXyz = null, float[]? floatDepth = null,
-        ShadingPipeline.ShadeComponents[]? components = null)
+        ShadingPipeline.ShadeComponents[]? components = null,
+        uint[]? albedo = null)
     {
         if (beauty == null) throw new ArgumentNullException(nameof(beauty));
         long n = (long)width * height;
@@ -62,6 +63,26 @@ public static class AovExrExporter
         channels.Add(new ExrChannel("G", bg));
         channels.Add(new ExrChannel("B", bb));
         channels.Add(new ExrChannel("A", ba));
+
+        // S1 (#718) — bare surface albedo layer for the relight round-trip. The live
+        // relight (LightCompositor) multiplies the captured diffuse/specular against
+        // this base colour; the offline round-trip needs it read back out of the EXR.
+        // Stored straight (channel/255, NOT sRGB-linearized) so it round-trips into the
+        // same space the compositor works in (matching the diffuse/specular AOV encode).
+        if (albedo != null && albedo.Length >= n)
+        {
+            var alR = new float[n]; var alG = new float[n]; var alB = new float[n];
+            for (int i = 0; i < n; i++)
+            {
+                uint p = albedo[i];
+                alR[i] = ((p >> 16) & 0xFF) / 255f;
+                alG[i] = ((p >> 8) & 0xFF) / 255f;
+                alB[i] = (p & 0xFF) / 255f;
+            }
+            channels.Add(new ExrChannel("albedo.R", alR));
+            channels.Add(new ExrChannel("albedo.G", alG));
+            channels.Add(new ExrChannel("albedo.B", alB));
+        }
 
         // S1/S7 (#389) — float-native geometry planes captured in the beauty pass.
         // When supplied they carry the render's own full-precision data (world-space
@@ -142,9 +163,10 @@ public static class AovExrExporter
         uint[] beauty, IReadOnlyDictionary<AovView, uint[]> aovs,
         float[]? floatNormalXyz = null, float[]? floatDepth = null,
         ShadingPipeline.ShadeComponents[]? components = null,
-        ExrCompression compression = ExrCompression.None)
+        ExrCompression compression = ExrCompression.None,
+        uint[]? albedo = null)
     {
-        var channels = BuildChannels(width, height, beauty, aovs, floatNormalXyz, floatDepth, components);
+        var channels = BuildChannels(width, height, beauty, aovs, floatNormalXyz, floatDepth, components, albedo);
         OpenExrWriter.WriteFile(path, width, height, channels, compression);
     }
 

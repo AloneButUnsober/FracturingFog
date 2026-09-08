@@ -329,9 +329,21 @@ Batch: `--relight` with `--relight-diffuse F` / `--relight-specular F` /
 `--relight-ao F` / `--relight-ambient F` (each implies `--relief-raymarch`). Relight
 forces the CPU relief trace (the lighting passes are captured on the CPU path).
 
-> Loading the exported multi-layer AOV EXR back in to relight a saved render
-> (rather than the live scene) is a separate compositor workflow — tracked as a
-> follow-up.
+**Relight a *saved* render (offline round-trip).** The live relight above retunes
+the current scene; you can also relight a render you saved earlier, with no
+re-trace. First export the lighting passes: render with `--relief-raymarch` and
+`--aov-exr` (or the render-window **Export AOV EXR…** action) — the resulting
+multi-layer `.exr` carries the albedo + diffuse/specular/AO layers. Then:
+
+```
+--batch --relight-from scene.exr --out relit.png \
+        --relight-diffuse 1.4 --relight-ambient 0.1 --relight-specular 0.7
+```
+
+reads those passes back and recombines them under the same gains as the live
+Relight (post), writing the relit image. No region, coordinate or size is needed
+— the dimensions come from the EXR. The input must be an AOV EXR of a relief-
+raymarch render (a plain beauty EXR has no albedo/diffuse layers to relight from).
 
 ---
 

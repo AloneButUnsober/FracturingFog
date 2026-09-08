@@ -289,6 +289,46 @@ namespace FracturingFog.Batch
             return 0;
         }
 
+        /// <summary>AOV-EXR relight round-trip (roadmap S1, #718). Read a saved multi-
+        /// layer AOV EXR, recombine its captured albedo/diffuse/specular/AO layers via
+        /// the light compositor under the <c>--relight-*</c> gains, write the relit
+        /// result. No fractal render — relight a saved render without re-tracing.</summary>
+        public static int RenderRelight(BatchOptions opts)
+        {
+            string inPath = opts.RelightFromInput ?? "";
+            if (!File.Exists(inPath))
+            {
+                Console.Error.WriteLine($"batch: --relight-from input not found: {inPath}");
+                return 2;
+            }
+
+            string outPath = opts.OutputPath;
+            EnsureDirectoryForFile(outPath);
+            FracturingFog.Imaging.ImageFileFormat format = GuessImageFormat(outPath);
+
+            var lp = new FracturingFog.Imaging.LightCompositeParams
+            {
+                DiffuseGain  = opts.RelightDiffuse ?? 1.0,
+                SpecularGain = opts.RelightSpecular ?? 1.0,
+                AoStrength   = opts.RelightAo ?? 1.0,
+                Ambient      = opts.RelightAmbient ?? 0.0,
+            };
+
+            bool ok = FracturingFog.Imaging.ExrRelight.RenderToFile(inPath, outPath, lp, format);
+            if (!ok)
+            {
+                Console.Error.WriteLine($"batch: could not relight '{inPath}' — not a supported OpenEXR " +
+                    "(half/float, uncompressed or ZIP, single-part scanline) carrying the albedo + " +
+                    "diffuse AOV layers. Export it with --aov-exr on a relief-raymarch render.");
+                return 1;
+            }
+
+            Console.WriteLine($"Relit {inPath} -> {outPath} " +
+                $"(diffuse={lp.DiffuseGain:0.###}, specular={lp.SpecularGain:0.###}, " +
+                $"ao={lp.AoStrength:0.###}, ambient={lp.Ambient:0.###}).");
+            return 0;
+        }
+
         // ── Video ─────────────────────────────────────────────────────────────
 
         public static int RenderVideo(BatchOptions opts)

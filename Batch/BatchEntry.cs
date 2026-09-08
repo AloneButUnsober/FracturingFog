@@ -74,6 +74,7 @@ namespace FracturingFog.Batch
                     BatchMode.Slideshow => BatchRenderer.RenderSlideshow(opts),
                     BatchMode.Scene => BatchRenderer.RenderScene(opts),
                     BatchMode.Regrade => BatchRenderer.RenderRegrade(opts),
+                    BatchMode.Relight => BatchRenderer.RenderRelight(opts),
                     _ => 2,
                 };
             }
@@ -230,6 +231,10 @@ namespace FracturingFog.Batch
             Console.WriteLine("  --regrade-exr IN.exr        Regrade a scene-linear OpenEXR (no fractal render):");
             Console.WriteLine("                              read IN.exr, apply --view-transform + --exposure, and");
             Console.WriteLine("                              write to --out. Grade a rendered .exr without re-render.");
+            Console.WriteLine("  --relight-from IN.exr       Relight a saved AOV OpenEXR (no fractal render): read the");
+            Console.WriteLine("                              captured albedo/diffuse/specular/AO layers, recombine under");
+            Console.WriteLine("                              --relight-diffuse/-specular/-ao/-ambient, write to --out.");
+            Console.WriteLine("                              Input must be an --aov-exr export of a --relief-raymarch render.");
             Console.WriteLine();
             Console.WriteLine("2D relief (heightfield shading; any relief flag implies --relief):");
             Console.WriteLine("  --relief                    Enable the 2D heightfield relief post-pass.");

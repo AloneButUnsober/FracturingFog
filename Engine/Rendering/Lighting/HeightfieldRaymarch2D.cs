@@ -209,7 +209,13 @@ public static class HeightfieldRaymarch2D
             NormalXyz = new float[(long)w * h * 3];
             Depth = new float[(long)w * h];
             if (captureComponents)
+            {
                 Components = new ShadingPipeline.ShadeComponents[(long)w * h];
+                // S1 (#718) — the flat themed albedo the compositor multiplies. Captured
+                // alongside the components so the AOV EXR carries every input the offline
+                // relight round-trip (LightCompositor) needs.
+                Albedo = new uint[(long)w * h];
+            }
             if (captureMotion)
                 Motion = new float[(long)w * h * 2];
             if (captureHdr)
@@ -232,6 +238,13 @@ public static class HeightfieldRaymarch2D
         /// <summary>Per-pixel float lighting components from the primary hit, or null
         /// when component capture was not requested. Populated in the beauty pass.</summary>
         public ShadingPipeline.ShadeComponents[]? Components { get; }
+
+        /// <summary>Per-pixel flat themed albedo (straight-alpha ARGB), or null when
+        /// component capture was not requested (roadmap S1, #718). A verbatim copy of
+        /// the render's albedo input — the base colour <see cref="FracturingFog.Imaging.LightCompositor"/>
+        /// multiplies the captured diffuse/specular against, so the offline relight
+        /// round-trip can recombine from the EXR alone.</summary>
+        public uint[]? Albedo { get; }
 
         /// <summary>Per-pixel screen-space motion vector (du, dv) interleaved
         /// (<c>w·h·2</c>), or null when motion capture was not requested (roadmap S1,
@@ -303,6 +316,13 @@ public static class HeightfieldRaymarch2D
         bool relight = p.Relief2DRelight && p.Relief2DRaymarch && aov == null;
         if (relight)
             aov = new ReliefAovBuffers(w, h, captureComponents: true);
+
+        // S1 (#718) — snapshot the flat themed albedo the compositor multiplies, for
+        // any component-capturing aov (the live relight buffer above OR a caller's AOV
+        // export buffer). The march never mutates the albedo input, so one copy here is
+        // the true base colour the offline relight round-trip recombines from.
+        if (aov?.Albedo is { } albCap && albCap.Length >= n)
+            Array.Copy(albedo, albCap, n);
 
         // ── #155 pre-pass cache ───────────────────────────────────────────
         // Everything from the tone-curve through the grid-slope reduction is a
