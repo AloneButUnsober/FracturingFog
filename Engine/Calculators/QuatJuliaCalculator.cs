@@ -147,8 +147,7 @@ public sealed class QuatJuliaCalculator : IFractalCalculator
         // (GpuKernelUtils.ResolveLight); the !HasPositionalLight gate is lifted.
         // #492 added a per-light area-capped shadow hardness (sp.ShadowK1/2/3),
         // so area lights also render on the GPU now (punctual = byte-identical).
-        if (fx.UseGpuRender && fx.DebugAov == AovView.Beauty && !lowRes
-            && !ThinLensDof.IsActive(in fx))   // thin-lens DoF is CPU-only (S3, #567)
+        if (fx.UseGpuRender && fx.DebugAov == AovView.Beauty && !lowRes)
         {
             var rp = new GpuRaymarchParams
             {
@@ -164,6 +163,12 @@ public sealed class QuatJuliaCalculator : IFractalCalculator
                 MaxSteps = maxSteps, Eps = eps,
                 CullRadiusSq = 0.0,
                 InSetColor = ColorMap.InSetColor,
+                // S3 (#567) — thin-lens DOF on the GPU kernel. Inactive (aperture 0 /
+                // one sample) -> the single centre ray -> byte-identical. Focus auto-
+                // resolves to the camera distance when unset.
+                DofAperture = ThinLensDof.IsActive(in fx) ? fx.DofAperture : 0.0,
+                DofFocus = ThinLensDof.FocusDistance(in fx, camDist),
+                DofSamples = ThinLensDof.SampleCount(in fx),
             };
             var qp = new QJuliaGpuParams
             {

@@ -457,9 +457,16 @@ code.
   LSB-identical to the CPU DOF). `MandelbulbCalculator` fills the DOF fields via `ThinLensDof`
   (aperture 0 / one sample → the single centre ray → **byte-identical**). +3 tests
   (`S8Gpu3DThinLensDofTests`: pinhole-identical + open-aperture blurs + deterministic).
-  **Remaining on #567:** fan the same `ShadeXRay` + lens-loop extraction across the other 7
-  GPU kernels (Mandelbox / Menger / Sierpinski / QuatJulia / QuatMandel / Kleinian / Bicomplex)
-  and lift their `!ThinLensDof.IsActive` GPU gates.
+- **Thin-lens DOF on the GPU 3D kernels — the other 7, CLOSES #567 (landed — PR #<TBD>):** the
+  same `ShadeRay(origin, dir)` extraction + `DofSamples` lens loop fanned across Mandelbox,
+  Menger, Sierpinski, QuatJulia, QuatMandelbrot, Kleinian and Bicomplex; each calculator fills
+  the `DofAperture` / `DofFocus` / `DofSamples` fields via `ThinLensDof`. The 5 families that had
+  a `!ThinLensDof.IsActive` GPU gate (Mandelbox / QuatJulia / QuatMandel / Kleinian / Bicomplex)
+  drop it; Menger + Sierpinski (KIFS) had no gate — like Mandelbulb they were silently ignoring
+  DOF, now fixed. KIFS has no CPU thin-lens fallback, so its GPU DOF is on-device-smoke-only;
+  the other five blur through their CPU fallback on a GPU-less CI. Aperture 0 → byte-identical.
+  `S8Gpu3DThinLensDofFamiliesTests` (open-aperture blur on the 5 CPU-DOF families + determinism
+  across all 7). **#567 CLOSED — thin-lens DOF renders on every 3D-fractal camera, CPU and GPU.**
 - **In-camera exposure (landed, #400, closes S3):** `FractalParameters.Relief2DCameraExposureEv`
   — a camera-stage exposure in stops applied to the relief beauty in LINEAR light
   (`ViewTransformOps.ApplyExposureOnly`: decode → ×2^EV → encode, no tonemap), so the camera

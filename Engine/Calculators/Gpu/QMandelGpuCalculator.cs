@@ -96,13 +96,46 @@ public sealed class QMandelGpuCalculator : IDisposable
         int y = idx / r.Width;
         if (y >= r.Height) return;
 
-        var (rdx, rdy, rdz) = GpuKernelUtils.BuildPrimaryRay(x, y, in r);
-        var (sphereHit, tEn, _) = GpuKernelUtils.SphereClip(rdx, rdy, rdz, in r);
-        if (!sphereHit) { output[idx] = GpuKernelUtils.MissColor(rdy, in r, in sp); return; }
+        var (cdx, cdy, cdz) = GpuKernelUtils.BuildPrimaryRay(x, y, in r);
 
-        double px = r.CamX + rdx * tEn;
-        double py = r.CamY + rdy * tEn;
-        double pz = r.CamZ + rdz * tEn;
+        // S3 (#567) — thin-lens DOF. Aperture 0 / one sample -> the single centre
+        // ray (byte-identical). Otherwise average DofSamples taps whose origin is
+        // jittered across the aperture disc, re-aimed through the focal point.
+        int dofN = (r.DofSamples > 1 && r.DofAperture > 0.0) ? r.DofSamples : 1;
+        if (dofN <= 1) { output[idx] = ShadeRay(r.CamX, r.CamY, r.CamZ, cdx, cdy, cdz, in r, in sp, in p, palette); return; }
+        double fpx = r.CamX + cdx * r.DofFocus, fpy = r.CamY + cdy * r.DofFocus, fpz = r.CamZ + cdz * r.DofFocus;
+        double aR = 0, aG = 0, aB = 0, aA = 0;
+        for (int k = 0; k < dofN; k++)
+        {
+            var (u1, u2) = GpuKernelUtils.HashPair(x, y, k, 9);
+            var (dkx, dky) = GpuKernelUtils.ConcentricSampleDisk(u1, u2);
+            double lx = dkx * r.DofAperture, ly = dky * r.DofAperture;
+            double lox = r.CamX + r.RightX * lx + r.UpX * ly;
+            double loy = r.CamY + r.RightY * lx + r.UpY * ly;
+            double loz = r.CamZ + r.RightZ * lx + r.UpZ * ly;
+            double ddx = fpx - lox, ddy = fpy - loy, ddz = fpz - loz;
+            double il = 1.0 / Math.Sqrt(ddx * ddx + ddy * ddy + ddz * ddz);
+            uint c = ShadeRay(lox, loy, loz, ddx * il, ddy * il, ddz * il, in r, in sp, in p, palette);
+            aR += (c >> 16) & 0xFF; aG += (c >> 8) & 0xFF; aB += c & 0xFF; aA += (c >> 24) & 0xFF;
+        }
+        double inv = 1.0 / dofN;
+        output[idx] = ((uint)(aA * inv + 0.5) << 24) | ((uint)(aR * inv + 0.5) << 16)
+                    | ((uint)(aG * inv + 0.5) << 8) | (uint)(aB * inv + 0.5);
+    }
+
+    // S3 (#567) — trace + shade one primary ray from (rox,roy,roz) along (rdx,rdy,rdz).
+    // Extracted so the DOF lens loop calls it once per aperture tap; the pinhole path
+    // passes the camera position + centre ray -> byte-identical.
+    private static uint ShadeRay(
+        double rox, double roy, double roz, double rdx, double rdy, double rdz,
+        in GpuRaymarchParams r, in GpuShadingParams sp, in QMandelGpuParams p, ArrayView<uint> palette)
+    {
+        var (sphereHit, tEn, _) = GpuKernelUtils.SphereClipFrom(rox, roy, roz, rdx, rdy, rdz, in r);
+        if (!sphereHit) return GpuKernelUtils.MissColor(rdy, in r, in sp);
+
+        double px = rox + rdx * tEn;
+        double py = roy + rdy * tEn;
+        double pz = roz + rdz * tEn;
         double tT = tEn;
         bool hit = false;
         int hitStep = 0;
@@ -116,7 +149,7 @@ public sealed class QMandelGpuCalculator : IDisposable
             tT += d;
         }
 
-        if (!hit) { output[idx] = GpuKernelUtils.MissColor(rdy, in r, in sp); return; }
+        if (!hit) return GpuKernelUtils.MissColor(rdy, in r, in sp);
 
         double h = r.Eps * 2;
         double n0 = QMandelDE(px + h, py, pz, p.SliceW, p.Bailout2, p.DEIter)
@@ -327,7 +360,7 @@ public sealed class QMandelGpuCalculator : IDisposable
             (br, bg, bb) = GpuKernelUtils.ApplyScalarFog(in spL, br, bg, bb, rdy, tT);
         }
 
-        output[idx] = GpuKernelUtils.PackBgra(br, bg, bb);
+        return GpuKernelUtils.PackBgra(br, bg, bb);
     }
 
     private static double SoftShadow(
