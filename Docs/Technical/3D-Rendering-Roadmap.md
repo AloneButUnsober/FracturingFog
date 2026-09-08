@@ -987,6 +987,16 @@ Broadens the lighting vocabulary without a scene graph.
   bridge tests (`S8Gpu3DPositionalTests`, mirroring the on-device-smoke pattern of
   `GpuVolumetricColorParityTests`) + on-device Mandelbulb smoke. #486/#487/#488
   fan the same pattern across the remaining families.
+- **GPU 3D positional — slice 2 Mandelbox + KIFS (landed, PR #<TBD>, #486):** the
+  `spL` resolve from #485 fans across the **Mandelbox**, **Menger** and **Sierpinski**
+  kernels verbatim (each resolves L1/L2/L3 at the surface hit → local `spL`, shade /
+  shadow / volumetric through it; directional → byte-identical). `MandelboxCalculator`
+  and `KifsCalculator` (Menger + Sierpinski, keeps `gpuEligibleFold`) drop
+  `!HasPositionalLight` from their GPU gates, keeping `!HasAreaLight` (→ #492). No new
+  shared code — foundation was #485. Locks: `S8Gpu3DPositionalFamiliesTests`
+  (point-light-position-changes-image + determinism per family) + on-device smoke.
+  Remaining: #487 QuatJulia/QuatMandel/Kleinian/Bicomplex, #488 UserBulb + retire
+  force-CPU + sign-off.
 - **Per-light colour batch flag (landed, PR #489):** `--lightN-color`
   (#RRGGBB / #AARRGGBB / 0x / bare hex) completes the per-light batch grammar
   (was type/intensity/dir/pos/range/cone); parser + command-builder emit (only
