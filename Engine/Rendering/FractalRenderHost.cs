@@ -2239,6 +2239,14 @@ namespace FracturingFog.Rendering
                     SyncAltStateFromMandel(rc);
                     rc.Calculate(token);
                     fieldSrc = rc as Interefaces.IHeightFieldSource;
+                    // #726 (orbit-trap) — the alt twin ran with the live ColorMap
+                    // (SyncAltStateFromMandel copies it), so an orbit-trap theme fills the
+                    // twin's TrapBuffer at the hi-res floor. Pull it for a trap / blend
+                    // source (User Equation / DSL). These alt calcs are CPU → no GPU-orbit
+                    // TrapBuffer gap. Smooth source leaves trapField null (Build → smooth).
+                    if (p.Relief2DHeightSource != FracturingFog.ReliefHeightSource.Smooth
+                        && _calculator.ColorMap is Interefaces.IOrbitAwareColorMap)
+                        trapField = (rc as Interefaces.ITrapFieldSource)?.TrapBuffer;
                 }
 
                 if (token.IsCancellationRequested) return false;
@@ -2502,7 +2510,12 @@ namespace FracturingFog.Rendering
                             // (smooth / orbit-trap min-distance / blend). Trap = the
                             // Mandelbrot calc's TrapBuffer (empty for non-Mandelbrot or a
                             // non-orbit theme → smooth fallback inside Build).
-                            float[]? trap = useAlt ? null : (calc as MandelbrotCalculator)?.TrapBuffer;
+                            // #592 / #726 — orbit-trap height comes from any ITrapFieldSource
+                            // (Mandelbrot on the native path, User Equation / DSL on the alt
+                            // path); Build ignores it for the smooth source / empty trap.
+                            float[]? trap = useAlt
+                                ? (altCalc as Interefaces.ITrapFieldSource)?.TrapBuffer
+                                : (calc as Interefaces.ITrapFieldSource)?.TrapBuffer;
                             var eff = FracturingFog.Rendering.Lighting.ReliefHeightField.Build(
                                 srcH, trap, Math.Min(srcH.Length, hn),
                                 rp.Relief2DHeightSource, rp.Relief2DHeightBlend);

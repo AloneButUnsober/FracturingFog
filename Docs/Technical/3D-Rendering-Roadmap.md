@@ -1413,11 +1413,21 @@ height AOV**, no new geometry machinery.
   display-res field (a fresh interpreted twin could diverge from the compiled `SmoothBuffer` and
   mismatch the compiled albedo). +4 tests (type-policy theories + non-degenerate hi-res field).
   Additive → byte-identical.
-- **Remaining (each its own slice):** (1) **orbit-trap / blend source** — UserEquation has an
-  orbit path (`MapInteriorWithOrbit`, #583) but persists no `TrapBuffer`; exposing it + relaxing
-  the Mandelbrot-only trap gate is a distinct slice. (2) **interactive preview relief** —
-  Mandelbrot-only + `useAlt`-gated, folded into #327 (relief appears on settle, not during
-  pan/zoom).
+- **Orbit-trap / blend source (landed — #726 slice 3):** the actual S11 tie-in. New
+  `ITrapFieldSource { float[] TrapBuffer }` interface (Engine/Interefaces), implemented by
+  `MandelbrotCalculator` **and** `UserEquationCalculator`; the DSL calc now persists
+  `OrbitAccumulator.TrapMin` per pixel (escaped always; in-set / converged only when the theme
+  colours the interior; OOB-surround 0 — the Mandelbrot convention). The Mandelbrot-only trap
+  gates now resolve generically off `ITrapFieldSource`: `FractalRenderHost` display-res
+  (`calc/altCalc as ITrapFieldSource`) + the hi-res **alt** twin (fills `trapField` from the
+  twin's `TrapBuffer` when the source is Trap/Blend and an orbit theme is active — the twin runs
+  the live orbit map, CPU, so no GPU-orbit-TrapBuffer gap), and `PosterRenderer`. So User Equation
+  Trap/Blend relief works interactive + poster, display-res + hi-res. `ReliefHeightField.Build`
+  was already source-agnostic (no change). +2 tests (orbit theme fills TrapBuffer + drives a
+  distinct non-degenerate trap field; non-orbit theme leaves it empty → smooth fallback).
+  Additive → byte-identical (trap is null unless the source is Trap/Blend).
+- **Remaining (folded into #327):** **interactive preview relief** — Mandelbrot-only + `useAlt`-
+  gated, so DSL relief appears on settle, not during pan/zoom.
 
 ### S12 — Relief 3D stage-2 post-chain parity ● (#652)
 FF's lighting/FX runs in **two stages**. Stage 1 (`ShadingPipeline.Shade<TDe>`) is

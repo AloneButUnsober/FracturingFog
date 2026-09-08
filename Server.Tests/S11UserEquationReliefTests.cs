@@ -114,6 +114,51 @@ public sealed class S11UserEquationReliefTests
         Assert.True(interior > 0, "hi-res twin field has no base plane (view missed the set)");
     }
 
+    // #726 (orbit-trap slice) — with an orbit-trap theme the DSL calc fills a
+    // TrapBuffer (ITrapFieldSource), and the Trap height source builds a DIFFERENT,
+    // non-degenerate relief field from it (literal 3D orbit-trap topography), not the
+    // smooth count.
+    [Fact]
+    public void OrbitTrap_Theme_Fills_TrapBuffer_And_Drives_Trap_Relief()
+    {
+        var calc = new UserEquationCalculator(W, H)
+        {
+            CenterX = -0.5, CenterY = 0.0, Zoom = 1.0, MaxIterations = 120,
+            ColorMap = new OrbitTrapPointMap(),
+            FractalParameters = new FractalParameters
+            {
+                UserEquationSource = "z*z + c",
+                UserCodeOrigin = UserCodeOrigin.Interactive,
+            },
+        };
+        calc.Calculate(default);
+
+        Assert.IsAssignableFrom<ITrapFieldSource>(calc);
+        var trap = calc.TrapBuffer;
+        Assert.Equal(W * H, trap.Length);
+        Assert.Contains(trap, t => t > 0f);   // orbit-trap distances captured
+
+        int n = W * H;
+        var trapField = ReliefHeightField.Build(calc.SmoothBuffer, trap, n, ReliefHeightSource.Trap, 0.0);
+        // Trap source must NOT be the smooth field (it is a distinct topography) and
+        // must be non-degenerate (some raised ridges).
+        Assert.NotSame(calc.SmoothBuffer, trapField);
+        Assert.NotEqual(calc.SmoothBuffer, trapField);
+        Assert.Contains(trapField, h => h > 0f);
+    }
+
+    // A non-orbit theme leaves TrapBuffer all-zero, so the Trap source falls back to
+    // the smooth field (same reference) — byte-identical, no spurious relief.
+    [Fact]
+    public void NonOrbit_Theme_Leaves_TrapBuffer_Empty_TrapFallsBackToSmooth()
+    {
+        var calc = Render();   // MonoBandMap — not orbit-aware
+        Assert.All(calc.TrapBuffer, t => Assert.Equal(0f, t));
+        var built = ReliefHeightField.Build(calc.SmoothBuffer, calc.TrapBuffer,
+            W * H, ReliefHeightSource.Trap, 0.0);
+        Assert.Same(calc.SmoothBuffer, built);   // empty trap → smooth reference
+    }
+
     // (c) Contract + determinism: the smooth field is stable run-to-run, and
     // reading it never perturbs the flat colour render (byte-identical gate — the
     // buffer is populated alongside, not instead of, the colour path).
