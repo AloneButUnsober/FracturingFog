@@ -442,10 +442,12 @@ public static class HeightfieldRaymarch2D
         // per-pixel depth buffer this render fills), so it USED to force the CPU
         // trace. It no longer does when a GPU froxel kernel is attached — see the
         // fully-GPU froxel branch below.
-        // S8 (#404) — an area light's per-light soft-shadow penumbra is a CPU-only
-        // path for now (the GPU relief kernel resolves only the punctual global-K
-        // soft shadow); force the CPU trace so an area light stays parity-correct.
-        // GPU parity of the penumbra is a follow-up. Punctual scenes stay on GPU.
+        // S8 (#404/#492) — an area light's soft-shadow penumbra now renders on the
+        // GPU: the relief kernel + twin take a per-light area-capped shadow hardness
+        // (ShadowK0/1/2, EffectiveShadowK precomputed in ReliefUniforms.Build), so
+        // the `!HasAreaLight` force-CPU gate is lifted. Punctual scenes stay
+        // byte-identical (EffectiveShadowK returns the global k). The froxel fog
+        // composite does no DE soft-shadow, so it is unaffected by the area radius.
         // S1 (#398) — a motion-vector capture reads back the CPU depth in a post-pass;
         // the GPU kernel emits no motion, so (like a Components capture) it forces the
         // CPU trace.
@@ -453,7 +455,7 @@ public static class HeightfieldRaymarch2D
         // the GPU kernel does not emit, so it too forces the CPU trace.
         bool aovOk = aov == null || (aov.Components == null && aov.Motion == null && aov.HdrBeauty == null);
         if (gpuKernel != null && p.Relief2DGpuRaymarch && fx.DebugAov == AovView.Beauty
-            && aovOk && !froxel && !fx.HasAreaLight)
+            && aovOk && !froxel)
         {
             var u = ReliefUniforms.Build(w, h, hw, hh, sy, aspect, invLip, maxH, p, in fx);
             if (aov != null)
@@ -484,7 +486,7 @@ public static class HeightfieldRaymarch2D
         // previous camera bases), so it no longer forces the CPU froxel post-pass.
         bool froxelReproject = froxelTemporal && p.Relief2DFroxelReproject;
         if (froxel && froxelKernel != null && gpuKernel != null && p.Relief2DGpuRaymarch
-            && fx.DebugAov == AovView.Beauty && aovOk && !fx.HasAreaLight)
+            && fx.DebugAov == AovView.Beauty && aovOk)
         {
             var u = ReliefUniforms.Build(w, h, hw, hh, sy, aspect, invLip, maxH, p, in fx);
             // Reuse the caller's denoise guides when present, else scratch for depth.

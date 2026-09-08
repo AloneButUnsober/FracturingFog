@@ -1042,6 +1042,26 @@ Broadens the lighting vocabulary without a scene graph.
   positional lights keep full emission. Round-trips a custom directional light on a
   non-relief Mandelbulb with `Relief` staying false; all-default emits nothing. Help +
   4 tests.
+- **GPU area-light penumbra — relief kernel (landed, PR #<TBD>, #492 part 1):** the
+  area soft-shadow penumbra (#491) now renders on the GPU **relief** path, lifting its
+  `!HasAreaLight` force-CPU gate. `EffectiveShadowK(globalK, areaDeg)` is a **constant
+  per light per frame** (it depends only on the uniform `ShadowSoftK` and the area
+  radius), so it is precomputed CPU-side in `ReliefUniforms.Build` and threaded as
+  three uniforms `ShadowK0/1/2` — no `cot`/`tan` in-kernel, no float/double parity
+  landmine. Reused the spare per-light-row pad (`gPad0/1/2` → `gShadowK0/1/2`, blob
+  `Pad0/1/2` → `ShadowK0/1/2`) so ParamBytes is unchanged. Threaded into every relief
+  `SoftShadow`: the three surface lights in `ShadeFlat` + the per-light `ReliefScatter`
+  fog shadow (twin + HLSL). Punctual lights → `EffectiveShadowK` returns the global k →
+  byte-identical. Both relief GPU gates in `HeightfieldRaymarch2D` lifted (the froxel
+  composite does no DE soft-shadow, so the area radius doesn't touch it). New
+  `--reliefgpuraymarch` scene "area soft shadow (directional, 12°)" diffs GPU vs the CPU
+  twin; unit test `S8ReliefAreaShadowKTests` locks the Build bridge. **Also fixed a
+  #490 regression:** `S8AreaLightTests.Batch_Area_Flag_Parses_And_Forces_Relief` still
+  asserted `--lightN-area` forced relief; #490 correctly decoupled it (area is a
+  per-light shadow property, not positional) — the test now asserts it does NOT force
+  relief. **Remaining for #492:** the 8 GPU 3D-fractal kernels + UserBulb (ride #484's
+  `GpuShadingParams` rails — per-light `ShadowK` + `GpuKernelUtils.EffectiveShadowK`),
+  then lift their area gates.
 - **Area lights (landed, PR #491) — the last S8 feature:** every light gains an
   angular size `DirectionalLight.AreaAngularRadius` (deg) — its apparent emitter
   size from the surface (sun disc ≈ 0.25°, soft panel ≈ 5–15°). `ShadingPipeline.

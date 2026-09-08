@@ -135,6 +135,14 @@ public readonly struct ReliefUniforms
     public readonly double LPos1x, LPos1y, LPos1z, LRange1, LInner1, LOuter1;
     public readonly double LPos2x, LPos2y, LPos2z, LRange2, LInner2, LOuter2;
 
+    // S8 (#389/#404/#492) — per-light effective soft-shadow hardness, already
+    // capped by each light's AreaAngularRadius via ShadingPipeline.EffectiveShadowK
+    // (softer of ShadowSoftK and cot(radius)). Punctual lights (radius 0) → k ==
+    // ShadowSoftK → byte-identical. Precomputed CPU-side (constant per light per
+    // frame) and threaded into every SoftShadow call, so the kernel/twin need no
+    // cot/tan and the area penumbra no longer forces the CPU trace.
+    public readonly double ShadowK0, ShadowK1, ShadowK2;
+
     // 4f — empty-space-skip max-height grid. EmptySkip == 0 → no skip (the
     // byte-identical slow march). MipW/MipH/MipBlk describe the coarse grid the
     // twin and both kernels build from hbuf via ReliefHeightMip.
@@ -192,7 +200,8 @@ public readonly struct ReliefUniforms
         int lType0 = 0, double lPos0x = 0, double lPos0y = 0, double lPos0z = 0, double lRange0 = 0, double lInner0 = 1, double lOuter0 = 1,
         int lType1 = 0, double lPos1x = 0, double lPos1y = 0, double lPos1z = 0, double lRange1 = 0, double lInner1 = 1, double lOuter1 = 1,
         int lType2 = 0, double lPos2x = 0, double lPos2y = 0, double lPos2z = 0, double lRange2 = 0, double lInner2 = 1, double lOuter2 = 1,
-        int volumeLightMask = 0x7)
+        int volumeLightMask = 0x7,
+        double shadowK0 = double.NaN, double shadowK1 = double.NaN, double shadowK2 = double.NaN)
     {
         W = w; H = h; Hw = hw; Hh = hh; Sy = sy; Aspect = aspect;
         InvLip = invLip; Bicubic = bicubic; Cam = cam;
@@ -226,6 +235,11 @@ public readonly struct ReliefUniforms
         LType1 = lType1; LPos1x = lPos1x; LPos1y = lPos1y; LPos1z = lPos1z; LRange1 = lRange1; LInner1 = lInner1; LOuter1 = lOuter1;
         LType2 = lType2; LPos2x = lPos2x; LPos2y = lPos2y; LPos2z = lPos2z; LRange2 = lRange2; LInner2 = lInner2; LOuter2 = lOuter2;
         VolumeLightMask = volumeLightMask;
+        // #492 — NaN sentinel = "no area cap" → fall back to the global k, keeping
+        // any non-Build caller byte-identical.
+        ShadowK0 = double.IsNaN(shadowK0) ? shadowSoftK : shadowK0;
+        ShadowK1 = double.IsNaN(shadowK1) ? shadowSoftK : shadowK1;
+        ShadowK2 = double.IsNaN(shadowK2) ? shadowSoftK : shadowK2;
     }
 
     /// <summary>World-space direction of a directional light, matching
@@ -309,7 +323,12 @@ public readonly struct ReliefUniforms
             (int)fx.Light1.Type, fx.Light1.PosX, fx.Light1.PosY, fx.Light1.PosZ, fx.Light1.Range, Cos(fx.Light1.SpotInnerDeg), Cos(fx.Light1.SpotOuterDeg),
             (int)fx.Light2.Type, fx.Light2.PosX, fx.Light2.PosY, fx.Light2.PosZ, fx.Light2.Range, Cos(fx.Light2.SpotInnerDeg), Cos(fx.Light2.SpotOuterDeg),
             (int)fx.Light3.Type, fx.Light3.PosX, fx.Light3.PosY, fx.Light3.PosZ, fx.Light3.Range, Cos(fx.Light3.SpotInnerDeg), Cos(fx.Light3.SpotOuterDeg),
-            fx.VolumeLightMask);
+            fx.VolumeLightMask,
+            // S8 (#492) — per-light soft-shadow hardness capped by the area radius.
+            // Punctual (radius 0) → EffectiveShadowK returns ShadowSoftK → byte-identical.
+            ShadingPipeline.EffectiveShadowK(fx.ShadowSoftK, fx.Light1.AreaAngularRadius),
+            ShadingPipeline.EffectiveShadowK(fx.ShadowSoftK, fx.Light2.AreaAngularRadius),
+            ShadingPipeline.EffectiveShadowK(fx.ShadowSoftK, fx.Light3.AreaAngularRadius));
     }
 
     /// <summary>S3 (#389) — lens taps the GPU kernel + twin average when DOF is on.
@@ -583,13 +602,13 @@ public static class ReliefRaymarchGpu
             double eps = u.Cam.Eps0;
             double bias = eps * 4.0;
             double ox = px + nx * bias, oy = py + ny * bias, oz = pz + nz * bias;
-            double k = u.ShadowSoftK;
+            // #492 — per-light hardness (area-capped in Build); punctual → ShadowSoftK.
             if ((u.ShadowLightMask & 0x1) != 0 && u.I0 > 0)
-                sh0 = ShadingPipeline.SoftShadow(in de, ox, oy, oz, l0x, l0y, l0z, eps, 12.0, k, u.ShadowSteps);
+                sh0 = ShadingPipeline.SoftShadow(in de, ox, oy, oz, l0x, l0y, l0z, eps, 12.0, u.ShadowK0, u.ShadowSteps);
             if ((u.ShadowLightMask & 0x2) != 0 && u.I1 > 0)
-                sh1 = ShadingPipeline.SoftShadow(in de, ox, oy, oz, l1x, l1y, l1z, eps, 12.0, k, u.ShadowSteps);
+                sh1 = ShadingPipeline.SoftShadow(in de, ox, oy, oz, l1x, l1y, l1z, eps, 12.0, u.ShadowK1, u.ShadowSteps);
             if ((u.ShadowLightMask & 0x4) != 0 && u.I2 > 0)
-                sh2 = ShadingPipeline.SoftShadow(in de, ox, oy, oz, l2x, l2y, l2z, eps, 12.0, k, u.ShadowSteps);
+                sh2 = ShadingPipeline.SoftShadow(in de, ox, oy, oz, l2x, l2y, l2z, eps, 12.0, u.ShadowK2, u.ShadowSteps);
         }
 
         double sR = 0, sG = 0, sB = 0;
@@ -1138,17 +1157,17 @@ public static class ReliefRaymarchGpu
                 AddReliefScatter(ref inR, ref inG, ref inB, in de, in u, sx, sy, sz,
                     u.L0x, u.L0y, u.L0z, rdx, rdy, rdz, u.C0r, u.C0g, u.C0b, L0i, sh0On,
                     (LightType)u.LType0, u.LPos0x, u.LPos0y, u.LPos0z, u.LRange0, u.LInner0, u.LOuter0,
-                    T, density, stepSize);
+                    T, density, stepSize, u.ShadowK0);
             if (L1i > 0)
                 AddReliefScatter(ref inR, ref inG, ref inB, in de, in u, sx, sy, sz,
                     u.L1x, u.L1y, u.L1z, rdx, rdy, rdz, u.C1r, u.C1g, u.C1b, L1i, sh1On,
                     (LightType)u.LType1, u.LPos1x, u.LPos1y, u.LPos1z, u.LRange1, u.LInner1, u.LOuter1,
-                    T, density, stepSize);
+                    T, density, stepSize, u.ShadowK1);
             if (L2i > 0)
                 AddReliefScatter(ref inR, ref inG, ref inB, in de, in u, sx, sy, sz,
                     u.L2x, u.L2y, u.L2z, rdx, rdy, rdz, u.C2r, u.C2g, u.C2b, L2i, sh2On,
                     (LightType)u.LType2, u.LPos2x, u.LPos2y, u.LPos2z, u.LRange2, u.LInner2, u.LOuter2,
-                    T, density, stepSize);
+                    T, density, stepSize, u.ShadowK2);
 
             double aT = density * stepSize;
             T *= aT < 1.0 ? ExpNegSmall(aT) : Math.Exp(-aT);
@@ -1203,7 +1222,7 @@ public static class ReliefRaymarchGpu
         double Lr, double Lg, double Lb, double li, bool shOn,
         LightType ltype, double lpx, double lpy, double lpz,
         double lrange, double linner, double louter,
-        double T, double density, double stepSize)
+        double T, double density, double stepSize, double areaK)
     {
         // S8 (#404) — positional lights attenuate the fog in-scatter per sample and
         // relight it from the sample's direction-to-light. Twin of the HLSL
@@ -1220,7 +1239,7 @@ public static class ReliefRaymarchGpu
         double sh = 1.0;
         if (shOn)
             sh = ShadingPipeline.SoftShadow(in de, sx, sy, sz, lx, ly, lz,
-                                            u.Cam.Eps0, 12.0, u.ShadowSoftK, u.ShadowSteps);
+                                            u.Cam.Eps0, 12.0, areaK, u.ShadowSteps);
         // 4e-ii — cloud self-shadow toward this light (1.0 when off).
         sh *= CloudSelfShadow(sx, sy, sz, lx, ly, lz, in u);
         double scatter = density * sh * li * atten * stepSize;

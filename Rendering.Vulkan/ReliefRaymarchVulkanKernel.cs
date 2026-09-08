@@ -62,9 +62,10 @@ public sealed unsafe class ReliefRaymarchVulkanKernel : IDisposable, IReliefRaym
         public float UpX, UpY, UpZ, PixelAngle;
         public float Bx, By, Bz; public int MaxSteps;
         public int GroundPlane, ShowSky, Isolate, HasKeep;
-        public float L0x, L0y, L0z, I0; public float C0r, C0g, C0b, Pad0;
-        public float L1x, L1y, L1z, I1; public float C1r, C1g, C1b, Pad1;
-        public float L2x, L2y, L2z, I2; public float C2r, C2g, C2b, Pad2;
+        // #492 — Pad0/1/2 repurposed as per-light area-capped soft-shadow hardness.
+        public float L0x, L0y, L0z, I0; public float C0r, C0g, C0b, ShadowK0;
+        public float L1x, L1y, L1z, I1; public float C1r, C1g, C1b, ShadowK1;
+        public float L2x, L2y, L2z, I2; public float C2r, C2g, C2b, ShadowK2;
         public float Ambient, FloorBx, FloorBz, Pad3;
         public uint BgTop, BgBottom, FloorAlbedo, DropColor;
         public float SpecStrength, Roughness, Metallic, PadS;   // 4a
@@ -338,11 +339,11 @@ public sealed unsafe class ReliefRaymarchVulkanKernel : IDisposable, IReliefRaym
             GroundPlane = c.GroundPlane ? 1 : 0,
             ShowSky = u.ShowSky ? 1 : 0, Isolate = u.Isolate ? 1 : 0, HasKeep = hasKeep ? 1 : 0,
             L0x = (float)u.L0x, L0y = (float)u.L0y, L0z = (float)u.L0z, I0 = (float)u.I0,
-            C0r = (float)u.C0r, C0g = (float)u.C0g, C0b = (float)u.C0b, Pad0 = 0f,
+            C0r = (float)u.C0r, C0g = (float)u.C0g, C0b = (float)u.C0b, ShadowK0 = (float)u.ShadowK0,
             L1x = (float)u.L1x, L1y = (float)u.L1y, L1z = (float)u.L1z, I1 = (float)u.I1,
-            C1r = (float)u.C1r, C1g = (float)u.C1g, C1b = (float)u.C1b, Pad1 = 0f,
+            C1r = (float)u.C1r, C1g = (float)u.C1g, C1b = (float)u.C1b, ShadowK1 = (float)u.ShadowK1,
             L2x = (float)u.L2x, L2y = (float)u.L2y, L2z = (float)u.L2z, I2 = (float)u.I2,
-            C2r = (float)u.C2r, C2g = (float)u.C2g, C2b = (float)u.C2b, Pad2 = 0f,
+            C2r = (float)u.C2r, C2g = (float)u.C2g, C2b = (float)u.C2b, ShadowK2 = (float)u.ShadowK2,
             Ambient = (float)u.Ambient, FloorBx = (float)c.FloorBx, FloorBz = (float)c.FloorBz, Pad3 = 0f,
             BgTop = u.BgTop, BgBottom = u.BgBottom, FloorAlbedo = u.FloorAlbedo, DropColor = u.DropColor,
             SpecStrength = (float)u.SpecStrength, Roughness = (float)u.Roughness, Metallic = (float)u.Metallic, PadS = 0f,

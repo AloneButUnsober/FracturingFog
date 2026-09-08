@@ -74,9 +74,9 @@ cbuffer ReliefParams : register(b0)
     int    gIsolate;
     int    gHasKeep;
 
-    float3 gL0; float gI0; float3 gC0; float gPad0;   // light 0 dir / intensity / colour(0-255)
-    float3 gL1; float gI1; float3 gC1; float gPad1;
-    float3 gL2; float gI2; float3 gC2; float gPad2;
+    float3 gL0; float gI0; float3 gC0; float gShadowK0;   // light 0 dir / intensity / colour(0-255); #492 per-light area-capped shadow k
+    float3 gL1; float gI1; float3 gC1; float gShadowK1;
+    float3 gL2; float gI2; float3 gC2; float gShadowK2;
 
     float  gAmbient;
     float  gFloorBx;
@@ -720,11 +720,11 @@ uint ShadeFlat(float3 N, float3 V, float3 P, uint albedo)
         float bias = gEps0 * 4.0;
         float3 o = P + N * bias;
         if ((gShadowMask & 0x1) != 0 && gI0 > 0.0)
-            sh0 = SoftShadow(o, Ld0, gEps0, 12.0, gShadowSoftK, gShadowSteps);
+            sh0 = SoftShadow(o, Ld0, gEps0, 12.0, gShadowK0, gShadowSteps);
         if ((gShadowMask & 0x2) != 0 && gI1 > 0.0)
-            sh1 = SoftShadow(o, Ld1, gEps0, 12.0, gShadowSoftK, gShadowSteps);
+            sh1 = SoftShadow(o, Ld1, gEps0, 12.0, gShadowK1, gShadowSteps);
         if ((gShadowMask & 0x4) != 0 && gI2 > 0.0)
-            sh2 = SoftShadow(o, Ld2, gEps0, 12.0, gShadowSoftK, gShadowSteps);
+            sh2 = SoftShadow(o, Ld2, gEps0, 12.0, gShadowK2, gShadowSteps);
     }
 
     float3 s = float3(0, 0, 0);
@@ -1020,7 +1020,7 @@ float3 SamplePalette(float u)
 // transmittance × light colour. Returns the increment; called once per light.
 float3 ReliefScatter(float3 sp, float3 L, float3 rd, float3 Lc, float li, bool shOn,
                      int ltype, float3 lpos, float lrange, float linner, float louter,
-                     float T, float density, float stepSize)
+                     float T, float density, float stepSize, float areaK)
 {
     // S8 (#404) — positional lights attenuate the fog in-scatter per sample and
     // relight it from the sample's direction-to-light. Twin of ShadingPipeline.
@@ -1034,7 +1034,7 @@ float3 ReliefScatter(float3 sp, float3 L, float3 rd, float3 Lc, float li, bool s
     }
     float sh = 1.0;
     if (shOn)
-        sh = SoftShadow(sp, L, gEps0, 12.0, gShadowSoftK, gShadowSteps);
+        sh = SoftShadow(sp, L, gEps0, 12.0, areaK, gShadowSteps);
     sh *= CloudSelfShadow(sp, L);              // 4e-ii — cloud self-shadow
     float scatter = density * sh * li * atten * stepSize;
     // #184 Slice 3 (B) — Henyey-Greenstein phase, normalized so g=0 → 1.
@@ -1078,13 +1078,13 @@ void InScatterWalk(inout float br, inout float bg, inout float bb,
         // S6 (#408) — VolumeLightMask gates which lights light the fog.
         if (gI0 > 0.0 && (gVolumeMask & 0x1) != 0)
             inSc += ReliefScatter(sp, gL0, rd, gC0, gI0, sh0On,
-                gLType0, gLPos0, gLRange0, gLInner0, gLOuter0, T, density, stepSize);
+                gLType0, gLPos0, gLRange0, gLInner0, gLOuter0, T, density, stepSize, gShadowK0);
         if (gI1 > 0.0 && (gVolumeMask & 0x2) != 0)
             inSc += ReliefScatter(sp, gL1, rd, gC1, gI1, sh1On,
-                gLType1, gLPos1, gLRange1, gLInner1, gLOuter1, T, density, stepSize);
+                gLType1, gLPos1, gLRange1, gLInner1, gLOuter1, T, density, stepSize, gShadowK1);
         if (gI2 > 0.0 && (gVolumeMask & 0x4) != 0)
             inSc += ReliefScatter(sp, gL2, rd, gC2, gI2, sh2On,
-                gLType2, gLPos2, gLRange2, gLInner2, gLOuter2, T, density, stepSize);
+                gLType2, gLPos2, gLRange2, gLInner2, gLOuter2, T, density, stepSize, gShadowK2);
         float aT = density * stepSize;
         T *= aT < 1.0 ? ExpNegSmall(aT) : exp(-aT);
     }

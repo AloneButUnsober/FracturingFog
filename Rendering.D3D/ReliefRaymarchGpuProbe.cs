@@ -360,8 +360,26 @@ public static class ReliefRaymarchGpuProbe
         fxPosFog.ShadowLightMask = 0x3;
         bool? okPosFog = RunDiff(sb, "positional fog in-scatter", 160, 120, 160, 120, pLights, fxPosFog);
 
+        // S8 (#492) — area-light soft-shadow penumbra. A directional key light with a
+        // finite angular radius (~12°) caps the soft-shadow hardness via
+        // EffectiveShadowK (softer of ShadowSoftK and cot(radius)), widening the
+        // penumbra. Global k is deliberately sharp (24) so the area cap actually bites
+        // (cot(12°) ≈ 4.7 < 24). Exercises the per-light ShadowK0..2 path GPU-vs-twin.
+        var fxArea = LightingFxData.CreateDefault();
+        fxArea.BgTopColor = 0xFF335588u;
+        fxArea.BgBottomColor = 0xFF0A0C14u;
+        fxArea.ShadowSteps = 24;
+        fxArea.ShadowSoftK = 24.0;
+        fxArea.ShadowLightMask = 0x1;
+        fxArea.AoSamples = 5;
+        fxArea.AoStrength = 1.0;
+        fxArea.ShowSkyBackdrop = true;
+        fxArea.Light1.AreaAngularRadius = 12.0;
+        bool? okArea = RunDiff(sb, "area soft shadow (directional, 12 deg)", 160, 120, 160, 120, pLights, fxArea);
+
         bool ok = (okFull ?? true) && (okDof ?? true) && (okAov ?? true) && (okGlass ?? true)
-               && (okMarch ?? true) && (okFrost ?? true) && (okLights ?? true) && (okPosFog ?? true);
+               && (okMarch ?? true) && (okFrost ?? true) && (okLights ?? true) && (okPosFog ?? true)
+               && (okArea ?? true);
         sb.AppendLine(ok ? "RESULT: PASS" : "RESULT: FAIL");
         Finish(sb);
         return ok ? 0 : 1;

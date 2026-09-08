@@ -147,7 +147,7 @@ public sealed class S8AreaLightTests
     // ── Batch parse + validation ────────────────────────────────────────────
 
     [Fact]
-    public void Batch_Area_Flag_Parses_And_Forces_Relief()
+    public void Batch_Area_Flag_Parses_Without_Forcing_Relief()
     {
         string[] argv =
         {
@@ -157,9 +157,11 @@ public sealed class S8AreaLightTests
         };
         Assert.True(BatchOptions.TryParse(argv, startIndex: 2, out var opts, out var err), err);
         Assert.Equal(8.5, opts.Lights[0].AreaAngularRadius!.Value, 6);
-        // Any --lightN-* implies the relief raymarch path (area shadows are 3D).
-        Assert.True(opts.Relief);
-        Assert.True(opts.ReliefRaymarch);
+        // #490 — area is a per-light shadow-softness property valid on any light
+        // type and every 3D path (relief + the 3D-fractal families), so it does NOT
+        // force relief-raymarch. Only positional type / pos / range / cone do.
+        Assert.False(opts.Relief);
+        Assert.False(opts.ReliefRaymarch);
     }
 
     [Fact]
