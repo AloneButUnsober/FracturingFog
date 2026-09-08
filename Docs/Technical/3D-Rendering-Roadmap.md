@@ -1029,6 +1029,19 @@ Broadens the lighting vocabulary without a scene graph.
   (#RRGGBB / #AARRGGBB / 0x / bare hex) completes the per-light batch grammar
   (was type/intensity/dir/pos/range/cone); parser + command-builder emit (only
   when ≠ slot default), 7 tests.
+- **Directional lights in batch without forcing relief (landed, PR #<TBD>, #490):**
+  `--lightN-*` used to force `--relief-raymarch` for *any* field, and the command
+  builder refused to emit directional lights (so aim / intensity / colour were
+  unreachable from batch without corrupting the scene type). Now `TryConsumeLightFlag`
+  forces relief only for a **positional** type (`point`/`spot`) or the positional-only
+  fields (`pos` / `range` / `cone`); directional `dir` / `intensity` / `color` / `area`
+  (and `type directional`) leave the render path alone — lights apply to every 3D
+  family and the 2D shade path. `BatchCommandBuilder.AppendLight` drops its directional
+  early-return and emits the directional fields that deviate from the slot's
+  `CreateDefault` baseline (`DefaultLightDir` / `DefaultLightIntensity` / `DefaultLightColor`);
+  positional lights keep full emission. Round-trips a custom directional light on a
+  non-relief Mandelbulb with `Relief` staying false; all-default emits nothing. Help +
+  4 tests.
 - **Area lights (landed, PR #491) — the last S8 feature:** every light gains an
   angular size `DirectionalLight.AreaAngularRadius` (deg) — its apparent emitter
   size from the surface (sun disc ≈ 0.25°, soft panel ≈ 5–15°). `ShadingPipeline.
