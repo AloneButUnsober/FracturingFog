@@ -997,6 +997,17 @@ Broadens the lighting vocabulary without a scene graph.
   (point-light-position-changes-image + determinism per family) + on-device smoke.
   Remaining: #487 QuatJulia/QuatMandel/Kleinian/Bicomplex, #488 UserBulb + retire
   force-CPU + sign-off.
+- **GPU 3D positional — slice 3 QuatJulia + QuatMandel + Kleinian + Bicomplex
+  (landed, PR #<TBD>, #487):** the `spL` resolve fans across the last four built-in
+  per-fractal kernels (QJulia / QMandel / Kleinian / Bicomplex — Kleinian's
+  `SoftShadow` takes the param `in p`, otherwise identical). `QuatJuliaCalculator`,
+  `QuatMandelbrotCalculator`, `KleinianCalculator` drop `!HasPositionalLight`;
+  `BicomplexMandelbrotCalculator` drops it too but keeps `sliceAxis == K` (its GPU
+  path is K-slice-only). All keep `!HasAreaLight` (→ #492). Locks:
+  `S8Gpu3DPositionalQuatKleinTests` (point-light-position-changes-image +
+  determinism per family) + on-device smoke. **All eight built-in 3D-fractal
+  families now shade positional lights on the GPU; only UserBulb (#488) remains
+  force-CPU.**
 - **Per-light colour batch flag (landed, PR #489):** `--lightN-color`
   (#RRGGBB / #AARRGGBB / 0x / bare hex) completes the per-light batch grammar
   (was type/intensity/dir/pos/range/cone); parser + command-builder emit (only
