@@ -17,6 +17,7 @@ using System.Linq;
 using FracturingFog;
 using FracturingFog.Interefaces;
 using FracturingFog.Models;
+using FracturingFog.Rendering;
 using FracturingFog.Rendering.Lighting;
 using FracturingFog.Security;
 using Xunit;
@@ -82,6 +83,35 @@ public sealed class S11UserEquationReliefTests
             (float[])calc.SmoothBuffer.Clone(), W, H, p, dst, out double hitFraction);
 
         Assert.True(hitFraction > 0.0, "raymarch found no surface — relief did not extrude");
+    }
+
+    // #726 slice 2 — hi-res field twin. CreateReliefFieldCalc now builds a fresh
+    // UserEquationCalculator; parameterised the way SyncAltStateFromMandel does (view
+    // + source via FractalParameters), it recompiles the same DSL equation and yields
+    // a non-degenerate smooth field at the hi-res floor — so small windows get sharper
+    // DSL terrain, not the display-res field.
+    [Fact]
+    public void HiRes_Twin_Produces_NonDegenerate_Field()
+    {
+        Assert.True(FractalRenderHost.SupportsHiResReliefField(FractalType.UserEquation));
+
+        var twin = FractalRenderHost.CreateReliefFieldCalc(FractalType.UserEquation, 96, 72);
+        var u = Assert.IsType<UserEquationCalculator>(twin);
+        u.CenterX = -0.5; u.CenterY = 0.0; u.Zoom = 1.0; u.MaxIterations = 200;
+        u.ColorMap = new MonoBandMap();
+        u.FractalParameters = new FractalParameters
+        {
+            UserEquationSource = "z*z + c",
+            UserCodeOrigin = UserCodeOrigin.Interactive,
+        };
+        u.Calculate(default);
+
+        var field = ((IHeightFieldSource)u).SmoothBuffer;
+        Assert.Equal(96 * 72, field.Length);
+        int exterior = 0, interior = 0;
+        foreach (float v in field) { if (v > 0f) exterior++; else interior++; }
+        Assert.True(exterior > 0, "hi-res twin field has no raised (escaped) pixels");
+        Assert.True(interior > 0, "hi-res twin field has no base plane (view missed the set)");
     }
 
     // (c) Contract + determinism: the smooth field is stable run-to-run, and

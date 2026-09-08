@@ -1402,15 +1402,22 @@ height AOV**, no new geometry machinery.
   Mandelbrot-only `TrapBuffer` gate leaves trap null → smooth source. +3 `S11UserEquationReliefTests`
   (structured height source, raymarch surface fraction > 0, deterministic + colour-stable).
   Additive → byte-identical.
-- **Remaining (each its own slice):** (1) **hi-res field twin** — `CreateReliefFieldCalc` does
-  `new XxxCalculator(w,h)`, but a UserEquation calc is hot-loaded / parameterised by the user's
-  compiled equation and can't be `new`'d generically, so it is on neither hi-res whitelist and
-  falls through to the display-res field (softer terrain in small windows); a clone/factory to
-  render the field at `Relief2DFieldFloor` is a distinct slice. (2) **orbit-trap / blend source**
-  — UserEquation has an orbit path (`MapInteriorWithOrbit`, #583) but persists no `TrapBuffer`;
-  exposing it + relaxing the Mandelbrot-only trap gate is a distinct slice. (3) **interactive
-  preview relief** — Mandelbrot-only + `useAlt`-gated, folded into #327 (relief appears on settle,
-  not during pan/zoom).
+- **Hi-res field twin (landed — #726 slice 2):** the concern that a UserEquation calc "can't be
+  `new`'d generically" holds only for the *hot-load* compiled path; the **interpreted**
+  `UserEquationCalculator` recompiles the same DSL source from `FractalParameters` on `Calculate`,
+  so a fresh twin reproduces the field. Added `FractalType.UserEquation` to both
+  `SupportsHiResReliefField` + `CreateReliefFieldCalc`; `SyncAltStateFromMandel` already copies the
+  source + view onto the twin, and `PosterRenderer.BuildCaptureCalculator` already builds one — so
+  interactive **and** poster hi-res relief both light up. `TryCaptureHiResReliefField` guards the
+  interactive **hot-load** case (`_dynamicAltCalculator != null`) back to the self-consistent
+  display-res field (a fresh interpreted twin could diverge from the compiled `SmoothBuffer` and
+  mismatch the compiled albedo). +4 tests (type-policy theories + non-degenerate hi-res field).
+  Additive → byte-identical.
+- **Remaining (each its own slice):** (1) **orbit-trap / blend source** — UserEquation has an
+  orbit path (`MapInteriorWithOrbit`, #583) but persists no `TrapBuffer`; exposing it + relaxing
+  the Mandelbrot-only trap gate is a distinct slice. (2) **interactive preview relief** —
+  Mandelbrot-only + `useAlt`-gated, folded into #327 (relief appears on settle, not during
+  pan/zoom).
 
 ### S12 — Relief 3D stage-2 post-chain parity ● (#652)
 FF's lighting/FX runs in **two stages**. Stage 1 (`ShadingPipeline.Shade<TDe>`) is
