@@ -1324,9 +1324,23 @@ namespace FracturingFog.Batch
                     return true;   // --lightN- prefix but unknown field → not ours
             }
 
-            // Positional lights only render on the relief raymarch path.
-            opts.Relief = true;
-            opts.ReliefRaymarch = true;
+            // #490 — force the relief raymarch path ONLY when the flag actually
+            // implies it: a positional light TYPE (point/spot), or the
+            // positional-only fields (pos / range / cone). Plain directional
+            // fields (type directional, dir, intensity, color, area) must NOT flip
+            // replay to relief — lights apply to every 3D family and the 2D shade
+            // path, not just relief. (Was: any --lightN-* forced relief, which
+            // silently switched a Mandelbulb / flat-2D scene to relief-raymarch.)
+            bool positionalImplied =
+                field == BatchFlags.LightFieldPos ||
+                field == BatchFlags.LightFieldRange ||
+                field == BatchFlags.LightFieldCone ||
+                (field == BatchFlags.LightFieldType && light.Type != LightType.Directional);
+            if (positionalImplied)
+            {
+                opts.Relief = true;
+                opts.ReliefRaymarch = true;
+            }
             return true;
         }
 

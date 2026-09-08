@@ -405,9 +405,11 @@ namespace FracturingFog.Cli
                 parts.Add(snap.FogLightMask.ToString(CultureInfo.InvariantCulture));
             }
 
-            // Per-light point / spot lights (roadmap S8, #404). Emitted for any
-            // light whose Type is not Directional (positional lights are the only
-            // ones with batch flags). Reads the live Lighting off Parameters.
+            // Per-light flags (roadmap S8, #404/#490). Positional lights emit their
+            // full type/pos/range/cone set (implying relief on replay); directional
+            // lights emit only the fields that deviate from their slot default
+            // (aim / intensity / colour / area) and do NOT force relief. Reads the
+            // live Lighting off Parameters.
             AppendLights(parts, snap);
 
             // Fractal-specific parameters that have batch flags. Emitted only for
@@ -433,10 +435,11 @@ namespace FracturingFog.Cli
             return gaps;
         }
 
-        /// <summary>Emit <c>--lightN-*</c> flags (roadmap S8, #404) for any of the
-        /// three lights that is a point or spot light. Directional lights have no
-        /// batch flags (they are the default path), so an all-directional scene
-        /// emits nothing here.</summary>
+        /// <summary>Emit <c>--lightN-*</c> flags (roadmap S8, #404/#490) for the
+        /// three lights. Positional (point/spot) lights emit their full field set;
+        /// directional lights emit only the fields that deviate from their slot
+        /// <see cref="LightingFxData.CreateDefault"/> baseline (aim / intensity /
+        /// colour / area). An all-default lighting set emits nothing.</summary>
         private static void AppendLights(List<string> parts, BatchCommandSnapshot snap)
         {
             var p = snap.Parameters;
@@ -448,8 +451,41 @@ namespace FracturingFog.Cli
 
         private static void AppendLight(List<string> parts, int n, DirectionalLight d)
         {
-            if (d.Type == LightType.Directional) return;
+            // #490 — directional lights are expressible in batch WITHOUT forcing
+            // relief. Emit only the fields that deviate from this slot's
+            // CreateDefault baseline so untouched lights stay terse and an
+            // all-default set emits nothing. Type is omitted (directional is the
+            // slot default — the parser keeps it when --lightN-type is absent, and
+            // emitting `type directional` is unnecessary; positional emission below
+            // is what implies relief on replay).
+            if (d.Type == LightType.Directional)
+            {
+                var (dth, dph) = DefaultLightDir(n);
+                if (d.Theta != dth || d.Phi != dph)
+                {
+                    parts.Add(BatchFlags.LightFlag(n, BatchFlags.LightFieldDir));
+                    parts.Add(Num(d.Theta) + "," + Num(d.Phi));
+                }
+                if (d.Intensity != DefaultLightIntensity(n))
+                {
+                    parts.Add(BatchFlags.LightFlag(n, BatchFlags.LightFieldIntensity));
+                    parts.Add(Num(d.Intensity));
+                }
+                if (d.Color != DefaultLightColor(n))
+                {
+                    parts.Add(BatchFlags.LightFlag(n, BatchFlags.LightFieldColor));
+                    parts.Add(HexColor(d.Color));
+                }
+                if (d.AreaAngularRadius != 0.0)
+                {
+                    parts.Add(BatchFlags.LightFlag(n, BatchFlags.LightFieldArea));
+                    parts.Add(Num(d.AreaAngularRadius));
+                }
+                return;
+            }
 
+            // Positional (point / spot) — full emission; the type flag implies
+            // relief-raymarch on replay (#490 keeps this coupling intentional).
             parts.Add(BatchFlags.LightFlag(n, BatchFlags.LightFieldType));
             parts.Add(d.Type == LightType.Spot ? "spot" : "point");
 
@@ -504,6 +540,23 @@ namespace FracturingFog.Cli
             3 => 0xFFFFC890u,   // warm rim
             _ => 0xFFFFFFFFu,
         };
+
+        /// <summary>The <see cref="LightingFxData.CreateDefault"/> aim (theta, phi
+        /// in radians) for light slot <paramref name="n"/> (1..3) — the parser's
+        /// baseline when <c>--lightN-dir</c> is omitted (#490 directional emit).</summary>
+        private static (double theta, double phi) DefaultLightDir(int n) => n switch
+        {
+            1 => (Math.PI * 0.25, Math.PI * 0.45),
+            2 => (Math.PI * 1.25, Math.PI * 0.55),
+            3 => (Math.PI * 0.75, Math.PI * 0.30),
+            _ => (Math.PI * 0.25, Math.PI * 0.45),
+        };
+
+        /// <summary>The <see cref="LightingFxData.CreateDefault"/> intensity for
+        /// light slot <paramref name="n"/> — 1.0 for the key (slot 1), 0 for the
+        /// fill / rim (slots 2/3) — the parser's baseline when
+        /// <c>--lightN-intensity</c> is omitted (#490 directional emit).</summary>
+        private static double DefaultLightIntensity(int n) => n == 1 ? 1.0 : 0.0;
 
         /// <summary>Format a packed 0xAARRGGBB colour as <c>#RRGGBB</c> (opaque) or
         /// <c>#AARRGGBB</c> (when alpha ≠ FF), matching the parser's hex grammar.</summary>

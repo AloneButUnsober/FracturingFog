@@ -730,5 +730,109 @@ namespace FracturingFog.Server.Tests
             Assert.Contains("--light1-type", cmd);          // light emitted
             Assert.DoesNotContain("--light1-color", cmd);   // but colour omitted (default)
         }
+
+        // ── #490 — directional lights expressible without forcing relief ──────
+
+        [Fact]
+        public void Lights_CustomDirectional_RoundTrips_WithoutForcingRelief()
+        {
+            // A customised DIRECTIONAL light (aim + intensity + colour) must be
+            // expressible in batch and round-trip on a NON-relief fractal without
+            // flipping replay to relief-raymarch.
+            var fx = LightingFxData.CreateDefault();
+            fx.Light1.Type = LightType.Directional;   // stays directional
+            fx.Light1.Theta = 0.9; fx.Light1.Phi = 1.3;
+            fx.Light1.Intensity = 2.2;
+            fx.Light1.Color = 0xFF3366CCu;
+            fx.Light2.Intensity = 0.6;                // enable the (directional) fill
+
+            var snap = new BatchCommandSnapshot
+            {
+                Fractal = FractalType.Mandelbulb,
+                CenterX = 0, CenterY = 0, Zoom = 1,
+                Parameters = new FractalParameters { Lighting = fx },
+            };
+            string cmd = BatchCommandBuilder.Build(snap);
+            Assert.Contains("--light1-dir", cmd);
+            Assert.Contains("--light1-intensity", cmd);
+            Assert.Contains("--light1-color", cmd);
+            Assert.Contains("--light2-intensity", cmd);
+            Assert.DoesNotContain("--light1-type", cmd);       // directional = default type, omitted
+            Assert.DoesNotContain("--relief-raymarch", cmd);   // #490 — no relief forced
+
+            var argv = Tokenize(cmd);
+            for (int i = 0; i < argv.Length; i++)
+                if (argv[i] == "<OUTPUT.png>") argv[i] = "out.png";
+            Assert.True(BatchOptions.TryParse(argv, startIndex: 2, out var opts, out var err), err);
+            Assert.False(opts.Relief);          // #490 — directional must not force relief
+            Assert.False(opts.ReliefRaymarch);
+
+            var l1 = opts.Lights[0];
+            Assert.Equal(0.9, l1.Theta!.Value, 6);
+            Assert.Equal(1.3, l1.Phi!.Value, 6);
+            Assert.Equal(2.2, l1.Intensity!.Value, 6);
+            Assert.Equal(0xFF3366CCu, l1.Color!.Value);
+            Assert.Equal(0.6, opts.Lights[1].Intensity!.Value, 6);
+        }
+
+        [Fact]
+        public void Lights_AllDefaultDirectional_EmitsNothing_OnNonReliefFractal()
+        {
+            // The default lighting set is all-directional at slot defaults → no
+            // --lightN-* deviation to emit.
+            var snap = new BatchCommandSnapshot
+            {
+                Fractal = FractalType.Mandelbulb,
+                CenterX = 0, CenterY = 0, Zoom = 1,
+                Parameters = new FractalParameters { Lighting = LightingFxData.CreateDefault() },
+            };
+            string cmd = BatchCommandBuilder.Build(snap);
+            Assert.DoesNotContain("--light1-", cmd);
+            Assert.DoesNotContain("--light2-", cmd);
+            Assert.DoesNotContain("--light3-", cmd);
+        }
+
+        [Fact]
+        public void Lights_ReliefForcing_IsPositionalFieldsOnly()
+        {
+            // #490 — directional dir/intensity/colour leave Relief off...
+            Assert.True(BatchOptions.TryParse(new[]
+            {
+                "FracturingFog", "--batch", "--fractal", "Mandelbulb",
+                "--x", "0", "--y", "0", "--zoom", "1",
+                "--light1-dir", "0.5,1.0", "--light1-intensity", "1.5",
+                "--light1-color", "#3366CC", "--out", "out.png",
+            }, startIndex: 2, out var dopts, out var derr), derr);
+            Assert.False(dopts.Relief);
+            Assert.False(dopts.ReliefRaymarch);
+
+            // ...`type directional` also does not force relief...
+            Assert.True(BatchOptions.TryParse(new[]
+            {
+                "FracturingFog", "--batch", "--fractal", "Mandelbulb",
+                "--x", "0", "--y", "0", "--zoom", "1",
+                "--light1-type", "directional", "--out", "out.png",
+            }, startIndex: 2, out var dtopts, out _));
+            Assert.False(dtopts.ReliefRaymarch);
+
+            // ...but a positional field (pos) forces it...
+            Assert.True(BatchOptions.TryParse(new[]
+            {
+                "FracturingFog", "--batch", "--fractal", "Mandelbulb",
+                "--x", "0", "--y", "0", "--zoom", "1",
+                "--light1-pos", "1,2,3", "--out", "out.png",
+            }, startIndex: 2, out var popts, out var perr), perr);
+            Assert.True(popts.Relief);
+            Assert.True(popts.ReliefRaymarch);
+
+            // ...and so does a positional type (point).
+            Assert.True(BatchOptions.TryParse(new[]
+            {
+                "FracturingFog", "--batch", "--fractal", "Mandelbulb",
+                "--x", "0", "--y", "0", "--zoom", "1",
+                "--light1-type", "point", "--out", "out.png",
+            }, startIndex: 2, out var topts, out _));
+            Assert.True(topts.ReliefRaymarch);
+        }
     }
 }
