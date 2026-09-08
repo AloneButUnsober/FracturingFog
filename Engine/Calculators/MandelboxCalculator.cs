@@ -150,8 +150,8 @@ public sealed class MandelboxCalculator : IFractalCalculator
         // #320 — force CPU while an AOV view is active (GPU has no view path).
         // S8 (#404/#486) — the Mandelbox kernel now resolves point/spot lights on
         // the GPU (GpuKernelUtils.ResolveLight), so the !HasPositionalLight gate is
-        // lifted. Area lights still fall to CPU until #492 ports the penumbra.
-        if (fx.UseGpuRender && fx.DebugAov == AovView.Beauty && !lowRes && !fx.HasAreaLight
+        // lifted. #492 added a per-light area-capped shadow hardness, so area lights render on the GPU now too.
+        if (fx.UseGpuRender && fx.DebugAov == AovView.Beauty && !lowRes
             && !ThinLensDof.IsActive(in fx))   // thin-lens DoF is CPU-only (S3, #567)
         {
             var rp = new GpuRaymarchParams

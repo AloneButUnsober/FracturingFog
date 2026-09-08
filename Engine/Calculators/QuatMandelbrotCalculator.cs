@@ -147,8 +147,9 @@ public sealed class QuatMandelbrotCalculator : IFractalCalculator
         // #320 — force CPU while an AOV view is active (GPU has no view path).
         // S8 (#404/#487) — this kernel now resolves point/spot lights on the GPU
         // (GpuKernelUtils.ResolveLight); the !HasPositionalLight gate is lifted.
-        // Area lights still fall to CPU until #492 ports the penumbra.
-        if (fx.UseGpuRender && fx.DebugAov == AovView.Beauty && !lowRes && !fx.HasAreaLight
+        // #492 added a per-light area-capped shadow hardness (sp.ShadowK1/2/3),
+        // so area lights also render on the GPU now (punctual = byte-identical).
+        if (fx.UseGpuRender && fx.DebugAov == AovView.Beauty && !lowRes
             && !ThinLensDof.IsActive(in fx))   // thin-lens DoF is CPU-only (S3, #567)
         {
             var rp = new GpuRaymarchParams

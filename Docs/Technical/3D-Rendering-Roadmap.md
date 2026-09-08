@@ -1059,9 +1059,21 @@ Broadens the lighting vocabulary without a scene graph.
   #490 regression:** `S8AreaLightTests.Batch_Area_Flag_Parses_And_Forces_Relief` still
   asserted `--lightN-area` forced relief; #490 correctly decoupled it (area is a
   per-light shadow property, not positional) — the test now asserts it does NOT force
-  relief. **Remaining for #492:** the 8 GPU 3D-fractal kernels + UserBulb (ride #484's
-  `GpuShadingParams` rails — per-light `ShadowK` + `GpuKernelUtils.EffectiveShadowK`),
-  then lift their area gates.
+  relief.
+- **GPU area-light penumbra — 3D kernels + UserBulb, CLOSES #492 (landed, PR #<TBD>):**
+  part 2 of the area penumbra. `GpuShadingParams` gains `ShadowK1/2/3` (per-light
+  area-capped hardness, filled in `Build` via `EffectiveShadowK` — same constant-per-
+  frame precompute as the relief part), threaded into every one of the 8 ILGPU
+  3D-fractal kernels' `SoftShadow` calls (3 surface + 3 volumetric each) in place of
+  `ShadowSoftK`. Their `!HasAreaLight` force-CPU gates are lifted (Mandelbulb /
+  Mandelbox / KIFS Menger+Sierpinski / QuatJulia / QuatMandel / Kleinian / Bicomplex).
+  **UserBulb**: its GPU shade is a cheap ambient+diffuse path with NO soft shadow at
+  all, so an area radius is a no-op there — the gate is simply lifted (no kernel
+  change). Punctual lights → `EffectiveShadowK` returns the global k → byte-identical.
+  Locks: `S8Gpu3DAreaShadowKTests` (Build bridge + a Mandelbulb area-vs-punctual render
+  responds). **#492 CLOSED. S8 (#404) is now FULLY COMPLETE on the GPU: positional
+  (#484) + area (#492) penumbra render on the GPU across relief and every 3D family;
+  no `!HasPositionalLight` / `!HasAreaLight` force-CPU clause remains.**
 - **Area lights (landed, PR #491) — the last S8 feature:** every light gains an
   angular size `DirectionalLight.AreaAngularRadius` (deg) — its apparent emitter
   size from the surface (sun disc ≈ 0.25°, soft panel ≈ 5–15°). `ShadingPipeline.

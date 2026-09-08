@@ -194,9 +194,10 @@ FracturingFog --batch --fractal Mandelbulb --zoom 1 \
   (Menger, Sierpinski), quaternion Julia / Mandelbrot, Kleinian, bicomplex and
   UserBulb (custom-equation). UserBulb's GPU shade is single-light: it resolves
   the primary light (Light 1); fills from Lights 2 / 3 are a CPU-shade feature.
-- **Area** softness needs shadows on. It currently renders on the CPU trace for the
-  lit 3D paths (a GPU upgrade is planned); for still images and video this is
-  transparent, only slower than a punctual light.
+- **Area** softness needs shadows on. It now renders on the GPU across relief and
+  the 3D-fractal families (the per-light shadow hardness is capped by the emitter's
+  angular size); a punctual light stays byte-identical. UserBulb's GPU shade has no
+  soft shadow, so area softness there only appears on its CPU render.
 
 ---
 

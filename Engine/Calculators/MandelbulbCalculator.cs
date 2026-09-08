@@ -145,9 +145,10 @@ public sealed class MandelbulbCalculator : IFractalCalculator
         // S8 (#404) — a non-directional light used to force CPU here. #485 taught
         // the Mandelbulb kernel to resolve point/spot lights on the GPU
         // (GpuKernelUtils.ResolveLight, twin of LightSampler), so the
-        // !HasPositionalLight gate is lifted. Area lights (soft-shadow penumbra)
-        // still fall to CPU until #492 ports the per-light shadow-k cap to the GPU.
-        if (fx.UseGpuRender && fx.DebugAov == AovView.Beauty && !lowRes && !fx.HasAreaLight)
+        // !HasPositionalLight gate is lifted (#485). #492 taught the kernel a
+        // per-light area-capped shadow hardness (sp.ShadowK1/2/3), so the area gate
+        // is lifted too — punctual lights stay byte-identical.
+        if (fx.UseGpuRender && fx.DebugAov == AovView.Beauty && !lowRes)
         {
             double lightX = Math.Sin(fx.Light1.Phi) * Math.Cos(fx.Light1.Theta);
             double lightY = Math.Cos(fx.Light1.Phi);

@@ -800,11 +800,12 @@ public sealed class UserBulbCalculator : IFractalCalculator
         if (FractalParameters.UserBulbBackend == UserBulbBackendKind.GPU
             && !lowRes
             && kifsScale <= 0.0   // scalar KIFS DE is CPU-only
-            // S8 (#404/#488) — the UserBulb GPU shade now resolves a point/spot
-            // Light1 on the GPU (position + range + spot cone), so the
-            // !HasPositionalLight guard is lifted. Area lights (soft-shadow
-            // penumbra) still fall to CPU until #492 ports the penumbra.
-            && !fx.HasAreaLight
+            // S8 (#404/#488/#492) — the UserBulb GPU shade resolves point/spot
+            // Light1 on the GPU (#488), and area lights no longer force CPU (#492):
+            // the UserBulb GPU shade is a cheap ambient+diffuse path with NO soft
+            // shadow at all, so an area radius (which only softens the shadow k) is
+            // a no-op here — same as it is for a punctual light on this shadowless
+            // path. Both the positional and area force-CPU guards are lifted.
             && (sandboxQuatGpu || vecAnalyticGpuOk))
         {
             // Quat-mode allows analytic only when the pattern matched and

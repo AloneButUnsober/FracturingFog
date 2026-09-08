@@ -101,6 +101,13 @@ public struct GpuShadingParams
     /// <summary>Soft-shadow penumbra constant — higher = sharper. Mirrors
     /// LightingFxData.ShadowSoftK.</summary>
     public double ShadowSoftK;
+    /// <summary>S8 (#492) — per-light soft-shadow hardness, already capped by each
+    /// light's AreaAngularRadius via ShadingPipeline.EffectiveShadowK (softer of
+    /// ShadowSoftK and cot(radius)). Constant per light per frame, so precomputed
+    /// CPU-side in <see cref="Build"/> and used in place of ShadowSoftK at each
+    /// kernel's per-light SoftShadow call — no cot/tan in-kernel. Punctual lights
+    /// (radius 0) → k == ShadowSoftK → byte-identical.</summary>
+    public double ShadowK1, ShadowK2, ShadowK3;
     /// <summary>Bit 0 = light 1, bit 1 = light 2, bit 2 = light 3. Mirrors
     /// LightingFxData.ShadowLightMask.</summary>
     public int ShadowLightMask;
@@ -313,6 +320,10 @@ public struct GpuShadingParams
 
             ShadowSteps     = fx.ShadowSteps,
             ShadowSoftK     = fx.ShadowSoftK,
+            // S8 (#492) — per-light area-capped hardness (punctual → ShadowSoftK).
+            ShadowK1        = ShadingPipeline.EffectiveShadowK(fx.ShadowSoftK, fx.Light1.AreaAngularRadius),
+            ShadowK2        = ShadingPipeline.EffectiveShadowK(fx.ShadowSoftK, fx.Light2.AreaAngularRadius),
+            ShadowK3        = ShadingPipeline.EffectiveShadowK(fx.ShadowSoftK, fx.Light3.AreaAngularRadius),
             ShadowLightMask = fx.ShadowLightMask,
             ShadowTMax      = shadowTMax,
 
