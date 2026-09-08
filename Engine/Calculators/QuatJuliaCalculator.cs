@@ -143,9 +143,10 @@ public sealed class QuatJuliaCalculator : IFractalCalculator
         // P7b — opt-in GPU raymarch path (cheap-palette shading). See
         // MandelbulbCalculator for the FX-drop trade-off + P7c lift plan.
         // #320 — force CPU while an AOV view is active (GPU has no view path).
-        // S8 (#404) — GPU 3D-fractal kernels are directional-only; force the CPU
-        // shade path when a point/spot light is active (LightSampler on CPU).
-        if (fx.UseGpuRender && fx.DebugAov == AovView.Beauty && !lowRes && !fx.HasPositionalLight && !fx.HasAreaLight
+        // S8 (#404/#487) — this kernel now resolves point/spot lights on the GPU
+        // (GpuKernelUtils.ResolveLight); the !HasPositionalLight gate is lifted.
+        // Area lights still fall to CPU until #492 ports the penumbra.
+        if (fx.UseGpuRender && fx.DebugAov == AovView.Beauty && !lowRes && !fx.HasAreaLight
             && !ThinLensDof.IsActive(in fx))   // thin-lens DoF is CPU-only (S3, #567)
         {
             var rp = new GpuRaymarchParams
