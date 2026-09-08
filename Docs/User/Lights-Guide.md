@@ -190,10 +190,10 @@ FracturingFog --batch --fractal Mandelbulb --zoom 1 \
 - **Point / spot** lighting is a cheap per-sample calculation. On the **Relief 3D**
   path and the 8 GPU 3D-fractal renderers, directional scenes stay on the GPU;
   positional (point/spot) scenes are correct everywhere and run on the GPU for
-  relief and every built-in 3D-fractal family — Mandelbulb, Mandelbox, the KIFS
-  solids (Menger, Sierpinski), quaternion Julia / Mandelbrot, Kleinian and
-  bicomplex. Only **UserBulb** (custom-equation) still drops to the CPU shade for
-  positional light; a GPU upgrade for it is the last step of the roll-out.
+  relief and every 3D-fractal family — Mandelbulb, Mandelbox, the KIFS solids
+  (Menger, Sierpinski), quaternion Julia / Mandelbrot, Kleinian, bicomplex and
+  UserBulb (custom-equation). UserBulb's GPU shade is single-light: it resolves
+  the primary light (Light 1); fills from Lights 2 / 3 are a CPU-shade feature.
 - **Area** softness needs shadows on. It currently renders on the CPU trace for the
   lit 3D paths (a GPU upgrade is planned); for still images and video this is
   transparent, only slower than a punctual light.

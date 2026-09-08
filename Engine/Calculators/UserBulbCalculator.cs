@@ -800,13 +800,30 @@ public sealed class UserBulbCalculator : IFractalCalculator
         if (FractalParameters.UserBulbBackend == UserBulbBackendKind.GPU
             && !lowRes
             && kifsScale <= 0.0   // scalar KIFS DE is CPU-only
-            && !fx.HasPositionalLight   // S8 (#404) — GPU path is directional-only
-            && !fx.HasAreaLight         // S8 (#404) — area penumbra is CPU-only for now
+            // S8 (#404/#488) — the UserBulb GPU shade now resolves a point/spot
+            // Light1 on the GPU (position + range + spot cone), so the
+            // !HasPositionalLight guard is lifted. Area lights (soft-shadow
+            // penumbra) still fall to CPU until #492 ports the penumbra.
+            && !fx.HasAreaLight
             && (sandboxQuatGpu || vecAnalyticGpuOk))
         {
             // Quat-mode allows analytic only when the pattern matched and
             // we're not in Julia mode — matches the CPU `useAnalytic` gate.
             bool gpuUseAnalytic = !juliaMode && _analyticPattern.Kind != AnalyticDEKind.None;
+
+            // S8 (#484/#488) — the GPU shade is single-light. When Light1 is a
+            // point/spot light, feed its authoritative shine direction (the spot
+            // cone axis) + world position / range / cone so the kernel resolves
+            // it per surface point; directional keeps the legacy `light` vector →
+            // byte-identical. Light2/3 stay unlit on the GPU path (long-standing
+            // single-light limitation), positional or not.
+            bool l1Positional = fx.Light1.Type != LightType.Directional && fx.Light1.Intensity > 0;
+            var lightVec = l1Positional
+                ? Normalize3(
+                    Math.Sin(fx.Light1.Phi) * Math.Cos(fx.Light1.Theta),
+                    Math.Cos(fx.Light1.Phi),
+                    Math.Sin(fx.Light1.Phi) * Math.Sin(fx.Light1.Theta))
+                : light;
             var gp = new GpuRenderParams
             {
                 Width = width, Height = height,
@@ -816,7 +833,7 @@ public sealed class UserBulbCalculator : IFractalCalculator
                 RightX = right.X, RightY = right.Y, RightZ = right.Z,
                 UpX = up.X, UpY = up.Y, UpZ = up.Z,
                 FovScale = fovScale, Aspect = aspect,
-                LightX = light.X, LightY = light.Y, LightZ = light.Z,
+                LightX = lightVec.X, LightY = lightVec.Y, LightZ = lightVec.Z,
                 DEIter = deIter, MaxSteps = maxSteps,
                 Eps = eps, Bailout = bailout, CullRadiusSq = cullRadiusSq,
                 Power = analyticPower,
@@ -827,6 +844,12 @@ public sealed class UserBulbCalculator : IFractalCalculator
                 JuliaCW = jcW, JuliaCX = jcX, JuliaCY = jcY, JuliaCZ = jcZ,
                 JacH = jacH,
                 UseAnalyticDE = gpuUseAnalytic ? 1 : 0,
+                // S8 (#484/#488) — primary-light positional resolve.
+                L1Type = l1Positional ? (int)fx.Light1.Type : 0,
+                L1PX = fx.Light1.PosX, L1PY = fx.Light1.PosY, L1PZ = fx.Light1.PosZ,
+                L1Range = fx.Light1.Range,
+                L1InnerCos = Math.Cos(fx.Light1.SpotInnerDeg * Math.PI / 180.0),
+                L1OuterCos = Math.Cos(fx.Light1.SpotOuterDeg * Math.PI / 180.0),
             };
 
             // (a) Sandbox path: vec + quat. Wave 4.5 — chain mode now compiles

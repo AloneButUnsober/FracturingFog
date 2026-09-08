@@ -49,6 +49,18 @@ public struct GpuRenderParams
     public double JuliaCW, JuliaCX, JuliaCY, JuliaCZ;
     public double JacH;                         // Jacobian forward-diff step (numerical DE only)
     public int UseAnalyticDE;                   // 1 = power-DE; 0 = 5-trajectory numerical Jacobian
+
+    // S8 (#484/#488) — primary-light positional resolve. The UserBulb GPU shade
+    // is single-light cheap Lambert; when Light1 is a point/spot light this
+    // carries its world position + range + spot cone cosines so the kernel can
+    // resolve a surface-relative direction + attenuation (twin of LightSampler).
+    // L1Type 0 = Directional → LightX/Y/Z is used unchanged, atten 1 →
+    // byte-identical with the pre-S8 GPU path. When non-zero, LightX/Y/Z carries
+    // the light's shine direction (the spot cone axis).
+    public int L1Type;                          // 0 Directional, 1 Point, 2 Spot
+    public double L1PX, L1PY, L1PZ;             // light world position (point/spot)
+    public double L1Range;                      // Karis range window; ≤0 = pure 1/d²
+    public double L1InnerCos, L1OuterCos;       // precomputed spot cone half-angle cosines
 }
 
 public sealed class UserBulbGpuCalculator : IDisposable
@@ -155,7 +167,38 @@ public sealed class UserBulbGpuCalculator : IDisposable
         double nl = 1.0 / Math.Sqrt(n0 * n0 + n1 * n1 + n2 * n2 + 1e-20);
         double nx = n0 * nl, ny = n1 * nl, nz = n2 * nl;
 
-        double diffuse = Math.Max(0.0, nx * p.LightX + ny * p.LightY + nz * p.LightZ);
+        // S8 (#484/#488) — resolve a point/spot Light1 at the surface point
+        // (inline twin of LightSampler.Sample; inlined rather than calling the
+        // internal GpuKernelUtils so the identical code also compiles in the
+        // sandbox-emitted kernel). L1Type 0 → the baked directional dir, atten 1
+        // → byte-identical.
+        double llx = p.LightX, lly = p.LightY, llz = p.LightZ, latten = 1.0;
+        if (p.L1Type != 0)
+        {
+            double ldx = p.L1PX - px, ldy = p.L1PY - py, ldz = p.L1PZ - pz;
+            double ld2 = ldx * ldx + ldy * ldy + ldz * ldz;
+            double ld = Math.Sqrt(ld2);
+            double linv = ld > 1e-12 ? 1.0 / ld : 0.0;
+            llx = ldx * linv; lly = ldy * linv; llz = ldz * linv;
+            latten = 1.0 / Math.Max(ld2, 1e-6);
+            if (p.L1Range > 0.0)
+            {
+                double lt = ld / p.L1Range;
+                double lt4 = lt * lt * lt * lt;
+                double lwin = lt4 < 1.0 ? 1.0 - lt4 : 0.0;
+                latten *= lwin * lwin;
+            }
+            if (p.L1Type == 2)
+            {
+                double lcos = llx * p.LightX + lly * p.LightY + llz * p.LightZ;
+                double ldenom = p.L1InnerCos - p.L1OuterCos;
+                double lcone;
+                if (ldenom <= 1e-9) lcone = lcos >= p.L1InnerCos ? 1.0 : 0.0;
+                else { double ltc = (lcos - p.L1OuterCos) / ldenom; if (ltc < 0.0) ltc = 0.0; else if (ltc > 1.0) ltc = 1.0; lcone = ltc * ltc * (3.0 - 2.0 * ltc); }
+                latten *= lcone;
+            }
+        }
+        double diffuse = Math.Max(0.0, nx * llx + ny * lly + nz * llz) * latten;
         double ambient = 0.15;
         double shade = ambient + diffuse * (1.0 - ambient);
 
