@@ -9,6 +9,7 @@ using System.Threading.Tasks;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.ApplicationLifetimes;
+using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.Media;
 using Avalonia.Platform;
@@ -244,25 +245,38 @@ namespace FracturingFog.UI.Avalonia.Services
         /// dutifully scrolls X back into view — undoing the wheel scroll and
         /// forcing the user to re-scroll and re-click.
         ///
-        /// We swallow <c>RequestBringIntoView</c> for exactly one input cycle
-        /// following <see cref="WindowBase.Activated"/> — the focus-restore burst.
-        /// Genuine bring-into-view (keyboard navigation, explicit
-        /// <c>BringIntoView()</c> from list selection, etc.) fires outside that
-        /// window and is untouched. The flag is a per-window closure so multiple
-        /// open dialogs never interfere.
+        /// We arm suppression on <see cref="WindowBase.Activated"/> and swallow the
+        /// focus-restore <c>RequestBringIntoView</c> that fires during the
+        /// activating click, then disarm on the first real user input that follows
+        /// (the released click, a key, or a wheel tick). Genuine bring-into-view
+        /// (keyboard navigation, explicit <c>BringIntoView()</c> from list
+        /// selection, etc.) happens after that first input and is untouched. The
+        /// flag is a per-window closure so multiple open dialogs never interfere.
+        ///
+        /// The activation snap lands between the activating <c>PointerPressed</c>
+        /// and its release, while focus is restored, so clearing on release still
+        /// covers the snap. An earlier attempt (PR #658) cleared via a one-shot
+        /// <c>Dispatcher.Post(Input)</c>: that raced the bring-into-view and only
+        /// caught it on the first activation, letting the snap return on every
+        /// re-activation (#657 reopen). Event-driven disarm re-arms on every
+        /// Activated, so it holds for the life of the window.
         /// </summary>
         private static void SuppressActivationScrollSnap(Window win)
         {
             bool suppress = false;
 
-            win.Activated += (_, _) =>
-            {
-                suppress = true;
-                // Clear after the current input burst drains; focus-restore +
-                // its RequestBringIntoView run synchronously within activation,
-                // so Input priority is late enough to have caught them.
-                Dispatcher.UIThread.Post(() => suppress = false, DispatcherPriority.Input);
-            };
+            win.Activated += (_, _) => suppress = true;
+
+            // Disarm on the first input after activation. Pointer release covers
+            // the activating click (the snap fires before release, still caught);
+            // key/wheel cover keyboard-activated or already-active navigation so a
+            // legitimate bring-into-view is never blocked.
+            win.AddHandler(InputElement.PointerReleasedEvent, (_, _) => suppress = false,
+                RoutingStrategies.Tunnel | RoutingStrategies.Bubble, handledEventsToo: true);
+            win.AddHandler(InputElement.KeyDownEvent, (_, _) => suppress = false,
+                RoutingStrategies.Tunnel | RoutingStrategies.Bubble, handledEventsToo: true);
+            win.AddHandler(InputElement.PointerWheelChangedEvent, (_, _) => suppress = false,
+                RoutingStrategies.Tunnel | RoutingStrategies.Bubble, handledEventsToo: true);
 
             win.AddHandler(
                 Control.RequestBringIntoViewEvent,
