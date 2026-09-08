@@ -36,6 +36,8 @@
 // kernel doesn't bit-unpack uint per pixel; sky colors split into top/bot
 // RGB doubles for the same reason. Blittable, padding-safe, no managed refs.
 
+using System;
+
 using FracturingFog.Rendering.Lighting;
 
 namespace FracturingFog.Calculators.Gpu;
@@ -65,6 +67,29 @@ public struct GpuShadingParams
     public double L3X, L3Y, L3Z;
     public double L3R, L3G, L3B;
     public double L3I;
+
+    // ── S8 (#484/#485) per-light type + positional resolve ─────────────────
+    /// <summary>Light type cast from <see cref="LightType"/>: 0 = Directional
+    /// (LnX/Y/Z is the baked world direction, atten 1 → byte-identical legacy),
+    /// 1 = Point (inverse-square × range window), 2 = Spot (point × cone). When
+    /// non-zero the kernel resolves the per-surface direction + attenuation via
+    /// <see cref="GpuKernelUtils.ResolveLight"/> (the twin of
+    /// <see cref="FracturingFog.Rendering.Lighting.LightSampler.Sample"/>).</summary>
+    public int L1Type, L2Type, L3Type;
+    /// <summary>Light world position (only read when the light is point/spot).
+    /// Mirrors <see cref="DirectionalLight.PosX"/>…</summary>
+    public double L1PX, L1PY, L1PZ;
+    public double L2PX, L2PY, L2PZ;
+    public double L3PX, L3PY, L3PZ;
+    /// <summary>Range for the Karis/UE4 soft window. ≤0 = pure 1/d². Mirrors
+    /// <see cref="DirectionalLight.Range"/>.</summary>
+    public double L1Range, L2Range, L3Range;
+    /// <summary>Cosine of the spot inner/outer half-angle (cos(inner) ≥
+    /// cos(outer)), precomputed CPU-side from SpotInnerDeg/SpotOuterDeg so the
+    /// kernel doesn't call Cos per pixel. Only read for Spot lights.</summary>
+    public double L1InnerCos, L1OuterCos;
+    public double L2InnerCos, L2OuterCos;
+    public double L3InnerCos, L3OuterCos;
 
     /// <summary>Scalar ambient floor. 1.0 = fully ambient (no diffuse).
     /// Matches LightingFxData.AmbientStrength.</summary>
@@ -261,6 +286,28 @@ public struct GpuShadingParams
             L3G = (fx.Light3.Color >>  8) & 0xFF,
             L3B =  fx.Light3.Color        & 0xFF,
             L3I = fx.Light3.Intensity,
+
+            // S8 (#484/#485) — per-light type/position/range + precomputed spot
+            // cone cosines. Directional (Type 0) leaves the baked LnX/Y/Z dir +
+            // atten 1 in force → the kernel resolve is a no-op, byte-identical.
+            // Cos of the inner/outer half-angle matches ShadingPipeline.ResolveLight.
+            L1Type = (int)fx.Light1.Type,
+            L1PX = fx.Light1.PosX, L1PY = fx.Light1.PosY, L1PZ = fx.Light1.PosZ,
+            L1Range = fx.Light1.Range,
+            L1InnerCos = Math.Cos(fx.Light1.SpotInnerDeg * Math.PI / 180.0),
+            L1OuterCos = Math.Cos(fx.Light1.SpotOuterDeg * Math.PI / 180.0),
+
+            L2Type = (int)fx.Light2.Type,
+            L2PX = fx.Light2.PosX, L2PY = fx.Light2.PosY, L2PZ = fx.Light2.PosZ,
+            L2Range = fx.Light2.Range,
+            L2InnerCos = Math.Cos(fx.Light2.SpotInnerDeg * Math.PI / 180.0),
+            L2OuterCos = Math.Cos(fx.Light2.SpotOuterDeg * Math.PI / 180.0),
+
+            L3Type = (int)fx.Light3.Type,
+            L3PX = fx.Light3.PosX, L3PY = fx.Light3.PosY, L3PZ = fx.Light3.PosZ,
+            L3Range = fx.Light3.Range,
+            L3InnerCos = Math.Cos(fx.Light3.SpotInnerDeg * Math.PI / 180.0),
+            L3OuterCos = Math.Cos(fx.Light3.SpotOuterDeg * Math.PI / 180.0),
 
             AmbientStrength = fx.AmbientStrength,
 

@@ -972,6 +972,21 @@ Broadens the lighting vocabulary without a scene graph.
   lights themselves and retire this force-CPU — is tracked as its own fan-out
   (**#484**, slices #485–#488): shared `GpuShadingParams` + a `GpuKernelUtils.
   ResolveLight`, then a per-family kernel + CPU-twin + parity-probe pass.
+- **GPU 3D positional — slice 1 foundation + Mandelbulb (landed, PR #<TBD>, #485):**
+  `GpuShadingParams` gains per-light `LnType` + world `LnP{X,Y,Z}` + `LnRange` +
+  precomputed spot cone cosines `Ln{Inner,Outer}Cos` (filled by `Build` from
+  `LightingFxData`, matching `ShadingPipeline.ResolveLight`). New
+  `GpuKernelUtils.ResolveLight(type, toDir, pos, range, innerCos, outerCos, sx,sy,sz)`
+  is the kernel-side twin of `LightSampler.Sample` (directional → passthrough
+  atten 1; point → inverse-square × Karis range window; spot → × smooth cone).
+  The Mandelbulb kernel resolves all three lights at the surface hit into a local
+  `spL` copy (dir overwritten, atten folded into effective intensity), then shades
+  / shadow-marches / volumetric-scatters through `spL`; directional scenes leave
+  `spL == sp` → **byte-identical**. `MandelbulbCalculator` drops `!HasPositionalLight`
+  from its GPU gate (keeps `!HasAreaLight` until #492). Validated by the CPU→GPU
+  bridge tests (`S8Gpu3DPositionalTests`, mirroring the on-device-smoke pattern of
+  `GpuVolumetricColorParityTests`) + on-device Mandelbulb smoke. #486/#487/#488
+  fan the same pattern across the remaining families.
 - **Per-light colour batch flag (landed, PR #489):** `--lightN-color`
   (#RRGGBB / #AARRGGBB / 0x / bare hex) completes the per-light batch grammar
   (was type/intensity/dir/pos/range/cone); parser + command-builder emit (only
