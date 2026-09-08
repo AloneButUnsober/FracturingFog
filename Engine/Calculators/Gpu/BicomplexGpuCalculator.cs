@@ -155,11 +155,11 @@ public sealed class BicomplexGpuCalculator : IDisposable
         if (spL.ShadowSteps > 0)
         {
             if ((spL.ShadowLightMask & 0x1) != 0 && spL.L1I > 0)
-                sh1 = SoftShadow(ox, oy, oz, spL.L1X, spL.L1Y, spL.L1Z, r.Eps, spL.ShadowTMax, spL.ShadowSoftK, spL.ShadowSteps, p);
+                sh1 = SoftShadow(ox, oy, oz, spL.L1X, spL.L1Y, spL.L1Z, r.Eps, spL.ShadowTMax, spL.ShadowK1, spL.ShadowSteps, p);
             if ((spL.ShadowLightMask & 0x2) != 0 && spL.L2I > 0)
-                sh2 = SoftShadow(ox, oy, oz, spL.L2X, spL.L2Y, spL.L2Z, r.Eps, spL.ShadowTMax, spL.ShadowSoftK, spL.ShadowSteps, p);
+                sh2 = SoftShadow(ox, oy, oz, spL.L2X, spL.L2Y, spL.L2Z, r.Eps, spL.ShadowTMax, spL.ShadowK2, spL.ShadowSteps, p);
             if ((spL.ShadowLightMask & 0x4) != 0 && spL.L3I > 0)
-                sh3 = SoftShadow(ox, oy, oz, spL.L3X, spL.L3Y, spL.L3Z, r.Eps, spL.ShadowTMax, spL.ShadowSoftK, spL.ShadowSteps, p);
+                sh3 = SoftShadow(ox, oy, oz, spL.L3X, spL.L3Y, spL.L3Z, r.Eps, spL.ShadowTMax, spL.ShadowK3, spL.ShadowSteps, p);
         }
 
         double ao = 1.0;
@@ -277,7 +277,7 @@ public sealed class BicomplexGpuCalculator : IDisposable
                 if (spL.L1I > 0)
                 {
                     double sh = sh1On ? SoftShadow(sx, sy, sz, spL.L1X, spL.L1Y, spL.L1Z,
-                        r.Eps, spL.ShadowTMax, spL.ShadowSoftK, spL.ShadowSteps, p) : 1.0;
+                        r.Eps, spL.ShadowTMax, spL.ShadowK1, spL.ShadowSteps, p) : 1.0;
                     var (dR, dG, dB) = GpuKernelUtils.VolumeScatterLight(in spL,
                         sx, sy, sz, spL.L1X, spL.L1Y, spL.L1Z, rdx, rdy, rdz,
                         spL.L1R, spL.L1G, spL.L1B, spL.L1I, sh, T, density, stepSize);
@@ -286,7 +286,7 @@ public sealed class BicomplexGpuCalculator : IDisposable
                 if (spL.L2I > 0)
                 {
                     double sh = sh2On ? SoftShadow(sx, sy, sz, spL.L2X, spL.L2Y, spL.L2Z,
-                        r.Eps, spL.ShadowTMax, spL.ShadowSoftK, spL.ShadowSteps, p) : 1.0;
+                        r.Eps, spL.ShadowTMax, spL.ShadowK2, spL.ShadowSteps, p) : 1.0;
                     var (dR, dG, dB) = GpuKernelUtils.VolumeScatterLight(in spL,
                         sx, sy, sz, spL.L2X, spL.L2Y, spL.L2Z, rdx, rdy, rdz,
                         spL.L2R, spL.L2G, spL.L2B, spL.L2I, sh, T, density, stepSize);
@@ -295,7 +295,7 @@ public sealed class BicomplexGpuCalculator : IDisposable
                 if (spL.L3I > 0)
                 {
                     double sh = sh3On ? SoftShadow(sx, sy, sz, spL.L3X, spL.L3Y, spL.L3Z,
-                        r.Eps, spL.ShadowTMax, spL.ShadowSoftK, spL.ShadowSteps, p) : 1.0;
+                        r.Eps, spL.ShadowTMax, spL.ShadowK3, spL.ShadowSteps, p) : 1.0;
                     var (dR, dG, dB) = GpuKernelUtils.VolumeScatterLight(in spL,
                         sx, sy, sz, spL.L3X, spL.L3Y, spL.L3Z, rdx, rdy, rdz,
                         spL.L3R, spL.L3G, spL.L3B, spL.L3I, sh, T, density, stepSize);
