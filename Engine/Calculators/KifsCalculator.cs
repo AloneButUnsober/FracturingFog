@@ -185,6 +185,12 @@ public sealed class KifsCalculator : IFractalCalculator
                 MaxSteps = maxSteps, Eps = eps,
                 CullRadiusSq = 0.0,
                 InSetColor = ColorMap.InSetColor,
+                // S3 (#567) — thin-lens DOF on the GPU kernel. Inactive (aperture 0 /
+                // one sample) -> the single centre ray -> byte-identical. Focus auto-
+                // resolves to the camera distance when unset.
+                DofAperture = ThinLensDof.IsActive(in fx) ? fx.DofAperture : 0.0,
+                DofFocus = ThinLensDof.FocusDistance(in fx, camDist),
+                DofSamples = ThinLensDof.SampleCount(in fx),
             };
             var sp = GpuShadingParams.Build(in fx);
             if (sierp)

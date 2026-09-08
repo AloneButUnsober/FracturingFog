@@ -151,8 +151,7 @@ public sealed class MandelboxCalculator : IFractalCalculator
         // S8 (#404/#486) — the Mandelbox kernel now resolves point/spot lights on
         // the GPU (GpuKernelUtils.ResolveLight), so the !HasPositionalLight gate is
         // lifted. #492 added a per-light area-capped shadow hardness, so area lights render on the GPU now too.
-        if (fx.UseGpuRender && fx.DebugAov == AovView.Beauty && !lowRes
-            && !ThinLensDof.IsActive(in fx))   // thin-lens DoF is CPU-only (S3, #567)
+        if (fx.UseGpuRender && fx.DebugAov == AovView.Beauty && !lowRes)
         {
             var rp = new GpuRaymarchParams
             {
@@ -168,6 +167,12 @@ public sealed class MandelboxCalculator : IFractalCalculator
                 MaxSteps = maxSteps, Eps = eps,
                 CullRadiusSq = 0.0,
                 InSetColor = ColorMap.InSetColor,
+                // S3 (#567) — thin-lens DOF on the GPU kernel. Inactive (aperture 0 /
+                // one sample) -> the single centre ray -> byte-identical. Focus auto-
+                // resolves to the camera distance when unset.
+                DofAperture = ThinLensDof.IsActive(in fx) ? fx.DofAperture : 0.0,
+                DofFocus = ThinLensDof.FocusDistance(in fx, camDist),
+                DofSamples = ThinLensDof.SampleCount(in fx),
             };
             var bp = new MandelboxGpuParams
             {
