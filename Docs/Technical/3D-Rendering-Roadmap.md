@@ -1008,6 +1008,23 @@ Broadens the lighting vocabulary without a scene graph.
   determinism per family) + on-device smoke. **All eight built-in 3D-fractal
   families now shade positional lights on the GPU; only UserBulb (#488) remains
   force-CPU.**
+- **GPU 3D positional — slice 4 UserBulb + retire force-CPU (landed, PR #<TBD>, #488):**
+  the UserBulb GPU shade is a single-light cheap Lambert on a separate path
+  (`GpuRenderParams`, not `GpuShadingParams`; two kernels — the legacy
+  `UserBulbGpuCalculator` and the sandbox-emitted `KernelBodySource` string reused by
+  single-step + chain). Added `L1Type` / `L1P{X,Y,Z}` / `L1Range` / `L1{Inner,Outer}Cos`
+  to `GpuRenderParams` and an **inline** positional resolve in both shade epilogues
+  (inlined, not a `GpuKernelUtils` call, because the sandbox assembly can't see the
+  internal helper). `UserBulbCalculator` fills them from the **authoritative** `fx.Light1`
+  (not the dead legacy `UserBulbLight*` fields the GPU dir is otherwise baked from) —
+  when Light1 is point/spot, `LightX/Y/Z` carries its shine dir (the spot cone axis) and
+  the kernel resolves the position; directional keeps the legacy `light` vector →
+  byte-identical. The last `!HasPositionalLight` GPU gate is lifted (area lights still
+  CPU → #492). Locks: `S8Gpu3DPositionalUserBulbTests`. **Sign-off: no
+  `!fx.HasPositionalLight` force-CPU clause remains in any host calculator — the #483
+  stopgap is fully retired and positional lights render on the GPU across relief + all
+  eight 3D-fractal families.** #484 positional sub-track CLOSED; #490 (batch
+  directional-emit) + #492 (GPU area penumbra) remain for full S8.
 - **Per-light colour batch flag (landed, PR #489):** `--lightN-color`
   (#RRGGBB / #AARRGGBB / 0x / bare hex) completes the per-light batch grammar
   (was type/intensity/dir/pos/range/cone); parser + command-builder emit (only
