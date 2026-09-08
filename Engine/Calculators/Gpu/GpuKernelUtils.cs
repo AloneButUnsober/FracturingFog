@@ -56,6 +56,63 @@ internal static class GpuKernelUtils
         return (rdx * rl, rdy * rl, rdz * rl);
     }
 
+    /// <summary>S8 (#484/#485) — resolve a light's per-surface direction +
+    /// scalar attenuation. Kernel-side twin of
+    /// <see cref="FracturingFog.Rendering.Lighting.LightSampler.Sample"/>, so the
+    /// GPU 3D-fractal kernels shade point / spot lights exactly as the CPU pipe
+    /// does. <paramref name="type"/> is the <see cref="FracturingFog.Rendering.Lighting.LightType"/>
+    /// int (0 = Directional, 1 = Point, 2 = Spot). Directional returns the baked
+    /// "toward light" direction unchanged with atten 1 → a scene of directional
+    /// lights is byte-identical. Point adds inverse-square × the Karis/UE4 range
+    /// window; Spot multiplies that by the smooth cone. <paramref name="innerCos"/>/
+    /// <paramref name="outerCos"/> are the precomputed cone half-angle cosines.</summary>
+    public static (double lx, double ly, double lz, double atten) ResolveLight(
+        int type,
+        double toDirX, double toDirY, double toDirZ,
+        double posX, double posY, double posZ,
+        double range, double innerCos, double outerCos,
+        double sx, double sy, double sz)
+    {
+        if (type == 0) return (toDirX, toDirY, toDirZ, 1.0);   // Directional
+
+        double dx = posX - sx, dy = posY - sy, dz = posZ - sz;
+        double dist2 = dx * dx + dy * dy + dz * dz;
+        double dist = Math.Sqrt(dist2);
+        double inv = dist > 1e-12 ? 1.0 / dist : 0.0;
+        double lx = dx * inv, ly = dy * inv, lz = dz * inv;
+
+        double atten = 1.0 / Math.Max(dist2, 1e-6);
+        if (range > 0.0)
+        {
+            double t = dist / range;
+            double t4 = t * t * t * t;
+            double win = t4 < 1.0 ? 1.0 - t4 : 0.0;   // Saturate(1 - t^4)
+            if (win < 0.0) win = 0.0;
+            atten *= win * win;
+        }
+
+        if (type == 2)   // Spot
+        {
+            double cosA = lx * toDirX + ly * toDirY + lz * toDirZ;
+            atten *= SmoothCone(cosA, innerCos, outerCos);
+        }
+
+        return (lx, ly, lz, atten);
+    }
+
+    /// <summary>S8 (#484/#485) — smooth spot cone factor. Kernel-side twin of
+    /// <see cref="FracturingFog.Rendering.Lighting.LightSampler.SmoothCone"/>: 1
+    /// at/above <paramref name="innerCos"/>, 0 at/below <paramref name="outerCos"/>,
+    /// smoothstep between.</summary>
+    public static double SmoothCone(double cosA, double innerCos, double outerCos)
+    {
+        double denom = innerCos - outerCos;
+        if (denom <= 1e-9) return cosA >= innerCos ? 1.0 : 0.0;   // degenerate = hard edge
+        double t = (cosA - outerCos) / denom;
+        if (t < 0.0) t = 0.0; else if (t > 1.0) t = 1.0;
+        return t * t * (3.0 - 2.0 * t);
+    }
+
     /// <summary>Sphere-clip the primary ray against the cull radius in
     /// <paramref name="p"/>. Returns <c>hit = false</c> when the ray misses
     /// the bounding sphere (caller writes <see cref="GpuRaymarchParams.InSetColor"/>);

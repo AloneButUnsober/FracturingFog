@@ -190,8 +190,9 @@ FracturingFog --batch --fractal Mandelbulb --zoom 1 \
 - **Point / spot** lighting is a cheap per-sample calculation. On the **Relief 3D**
   path and the 8 GPU 3D-fractal renderers, directional scenes stay on the GPU;
   positional (point/spot) scenes are correct everywhere and run on the GPU for
-  relief, on the CPU for the 3D-fractal families (a GPU upgrade for those is
-  planned).
+  relief and the **Mandelbulb** (the rest of the 3D-fractal families still drop to
+  the CPU shade for positional light — a GPU upgrade for those is rolling out
+  family by family).
 - **Area** softness needs shadows on. It currently renders on the CPU trace for the
   lit 3D paths (a GPU upgrade is planned); for still images and video this is
   transparent, only slower than a punctual light.
