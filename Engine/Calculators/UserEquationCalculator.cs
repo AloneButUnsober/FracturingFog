@@ -26,7 +26,7 @@ using FracturingFog.Models;
 
 namespace FracturingFog;
 
-public sealed class UserEquationCalculator : IFractalCalculator
+public sealed class UserEquationCalculator : IFractalCalculator, IHeightFieldSource
 {
     public int Width { get; private set; }
     public int Height { get; private set; }
@@ -54,6 +54,14 @@ public sealed class UserEquationCalculator : IFractalCalculator
     /// <summary>Y component of the escape-potential gradient. See
     /// <see cref="NormalXBuffer"/>.</summary>
     public float[] NormalYBuffer { get; private set; } = Array.Empty<float>();
+
+    /// <summary>#726 — per-pixel smooth (continuous) iteration count, satisfying
+    /// <see cref="IHeightFieldSource"/> so Relief 3D can extrude a User Equation
+    /// fractal as a heightfield (the last mainstream 2D family that had no relief
+    /// path). Escaped pixels carry the same smooth value the colour map receives;
+    /// in-set / converged / out-of-bounds-surround pixels read 0 (no relief), matching
+    /// the flattened-normal convention. Same length / layout as <see cref="ColorBuffer"/>.</summary>
+    public float[] SmoothBuffer { get; private set; } = Array.Empty<float>();
 
     public double CenterX { get; set; } = 0.0;
     public double CenterY { get; set; } = 0.0;
@@ -153,6 +161,7 @@ public sealed class UserEquationCalculator : IFractalCalculator
         ColorBuffer = new uint[n];
         NormalXBuffer = new float[n];
         NormalYBuffer = new float[n];
+        SmoothBuffer = new float[n];   // #726 — relief height source
     }
 
     /// <summary>
@@ -496,6 +505,7 @@ public sealed class UserEquationCalculator : IFractalCalculator
                 {
                     NormalXBuffer[idx] = 0f;
                     NormalYBuffer[idx] = 0f;
+                    SmoothBuffer[idx] = 0f;   // #726 — in-set = no relief
                     if (colorInterior)
                     {
                         // #583 — bounded pixel: colour from the full-orbit
@@ -522,6 +532,7 @@ public sealed class UserEquationCalculator : IFractalCalculator
                     // (raw iteration). Normals are undefined here → flat.
                     NormalXBuffer[idx] = 0f;
                     NormalYBuffer[idx] = 0f;
+                    SmoothBuffer[idx] = 0f;   // #726 — converged (small |z|) = no relief
                     ColorBuffer[idx] = orbitMap != null
                         ? (uint)orbitMap.MapWithOrbit(iter, 0f, maxIt, 0f, 0f, in acc)
                         : (uint)ColorMap.Map(iter, 0f, maxIt, 0f, 0f);
@@ -561,6 +572,7 @@ public sealed class UserEquationCalculator : IFractalCalculator
                     }
                     NormalXBuffer[idx] = nx;
                     NormalYBuffer[idx] = ny;
+                    SmoothBuffer[idx] = smooth;   // #726 — escaped = relief height
 
                     // #588 — pass finalZ (z at escape) + dz/dc to the nine-param
                     // overload. Themes that ignore them default back to the
@@ -580,6 +592,7 @@ public sealed class UserEquationCalculator : IFractalCalculator
                         ColorBuffer[idx] = oob;
                         NormalXBuffer[idx] = 0f;
                         NormalYBuffer[idx] = 0f;
+                        SmoothBuffer[idx] = 0f;   // #726 — OOB surround = no relief
                     }
                 }
             }

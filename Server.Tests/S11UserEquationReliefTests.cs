@@ -1,0 +1,98 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-FileCopyrightText: 2026 Bradley Brown
+
+// Roadmap S11 add-on (#726 slice 1) — Relief 3D for User Equation / DSL fractals.
+// UserEquationCalculator (the interpreted DSL path) was the last mainstream 2D
+// family with no relief path: it computed a smooth value per pixel but discarded
+// it and did not implement IHeightFieldSource, so FractalRenderHost's display-res
+// relief fallback (calc as IHeightFieldSource) resolved null and skipped relief.
+// Slice 1 persists the smooth field into SmoothBuffer + implements the interface;
+// no host change is needed (the fallback picks it up generically). These lock:
+// (a) the calc is now a height-field source with real structure, (b) that field
+// extrudes a surface under the raymarch, (c) the smooth field matches the escape
+// contract (in-set = 0) and is deterministic.
+
+using System;
+using System.Linq;
+using FracturingFog;
+using FracturingFog.Interefaces;
+using FracturingFog.Models;
+using FracturingFog.Rendering.Lighting;
+using FracturingFog.Security;
+using Xunit;
+
+namespace FracturingFog.Server.Tests;
+
+public sealed class S11UserEquationReliefTests
+{
+    private const int W = 160, H = 120;
+
+    private static UserEquationCalculator Render(string source = "z*z + c")
+    {
+        var calc = new UserEquationCalculator(W, H)
+        {
+            CenterX = -0.5, CenterY = 0.0, Zoom = 1.0, MaxIterations = 200,
+            ColorMap = new MonoBandMap(),
+            FractalParameters = new FractalParameters
+            {
+                UserEquationSource = source,
+                UserCodeOrigin = UserCodeOrigin.Interactive,
+            },
+        };
+        calc.Calculate(default);
+        return calc;
+    }
+
+    // (a) The DSL calc now exposes a real height field — the gap #726 closes.
+    [Fact]
+    public void Exposes_Structured_HeightField_Source()
+    {
+        var calc = Render();
+        Assert.IsAssignableFrom<IHeightFieldSource>(calc);
+
+        var sb = calc.SmoothBuffer;
+        Assert.Equal(W * H, sb.Length);
+        Assert.True(sb.Max() > 1f, "smooth height never rises (no escaped structure)");
+
+        // A real terrain has many distinct heights (a smooth gradient), not a step.
+        int distinct = sb.Where(h => h > 0f).Select(h => (int)(h * 4)).Distinct().Count();
+        Assert.True(distinct > 8, $"height field too flat (distinct={distinct})");
+
+        // The big in-set lobe around c=-0.5 must read 0 (no relief), and escaped
+        // pixels must read > 0 — the IHeightFieldSource contract.
+        Assert.Contains(sb, h => h == 0f);
+        Assert.Contains(sb, h => h > 0f);
+    }
+
+    // (b) That field extrudes a surface: the raymarch reports a non-zero hit
+    // fraction (the "relief renders" acceptance in #726).
+    [Fact]
+    public void HeightField_Raymarch_Produces_Surface()
+    {
+        var calc = Render();
+        var p = new FractalParameters
+        {
+            Relief2DEnabled = true,
+            Relief2DRaymarch = true,
+            Relief2DHeightScale = 1.4,
+            Relief2DCameraElevationDeg = 45,
+        };
+        var dst = new uint[W * H];
+        HeightfieldRaymarch2D.Render((uint[])calc.ColorBuffer.Clone(),
+            (float[])calc.SmoothBuffer.Clone(), W, H, p, dst, out double hitFraction);
+
+        Assert.True(hitFraction > 0.0, "raymarch found no surface — relief did not extrude");
+    }
+
+    // (c) Contract + determinism: the smooth field is stable run-to-run, and
+    // reading it never perturbs the flat colour render (byte-identical gate — the
+    // buffer is populated alongside, not instead of, the colour path).
+    [Fact]
+    public void SmoothField_Is_Deterministic_And_Color_Stable()
+    {
+        var a = Render();
+        var b = Render();
+        Assert.Equal(a.SmoothBuffer, b.SmoothBuffer);
+        Assert.Equal(a.ColorBuffer, b.ColorBuffer);   // colour path unchanged by the field
+    }
+}

@@ -1392,8 +1392,25 @@ height AOV**, no new geometry machinery.
   smooth source keeps the fast default-map + GPU twin. So trap / blend now get the hi-res
   floor like smooth. (The twin's default escape-time map is remembered and restored for a
   smooth-source render.)
-- **Remaining (separate gap):** non-Mandelbrot (DSL / Julia) relief + trap — relief is
-  Mandelbrot-only today.
+- **User Equation / DSL smooth-source relief (landed — #726 slice 1):** `UserEquationCalculator`
+  (the interpreted DSL path) was the last mainstream 2D family with no relief — it computed a
+  smooth value per pixel but discarded it and did not implement `IHeightFieldSource`, so the
+  display-res fallback (`calc as IHeightFieldSource`) resolved null. It now persists the smooth
+  field into `SmoothBuffer` (escaped = smooth height; in-set / converged / OOB-surround = 0,
+  matching the flattened-normal convention) and implements the interface. **No host change** —
+  `FractalRenderHost.cs:2451/2446` picks it up generically; the calc is on the alt path, so the
+  Mandelbrot-only `TrapBuffer` gate leaves trap null → smooth source. +3 `S11UserEquationReliefTests`
+  (structured height source, raymarch surface fraction > 0, deterministic + colour-stable).
+  Additive → byte-identical.
+- **Remaining (each its own slice):** (1) **hi-res field twin** — `CreateReliefFieldCalc` does
+  `new XxxCalculator(w,h)`, but a UserEquation calc is hot-loaded / parameterised by the user's
+  compiled equation and can't be `new`'d generically, so it is on neither hi-res whitelist and
+  falls through to the display-res field (softer terrain in small windows); a clone/factory to
+  render the field at `Relief2DFieldFloor` is a distinct slice. (2) **orbit-trap / blend source**
+  — UserEquation has an orbit path (`MapInteriorWithOrbit`, #583) but persists no `TrapBuffer`;
+  exposing it + relaxing the Mandelbrot-only trap gate is a distinct slice. (3) **interactive
+  preview relief** — Mandelbrot-only + `useAlt`-gated, folded into #327 (relief appears on settle,
+  not during pan/zoom).
 
 ### S12 — Relief 3D stage-2 post-chain parity ● (#652)
 FF's lighting/FX runs in **two stages**. Stage 1 (`ShadingPipeline.Shade<TDe>`) is
