@@ -14,6 +14,7 @@ using Avalonia.Interactivity;
 using Avalonia.Media;
 using Avalonia.Platform;
 using Avalonia.Threading;
+using Avalonia.VisualTree;
 
 using FracturingFog.Models;
 using FracturingFog.UI.Avalonia.Views;
@@ -239,48 +240,77 @@ namespace FracturingFog.UI.Avalonia.Services
         ///
         /// Stock Avalonia behaviour: while a dialog is inactive you can still
         /// mouse-wheel its <c>ScrollViewer</c> (offset moves), but focus stays on
-        /// whatever control X was focused at the *original* offset. The click that
-        /// activates the window makes Avalonia restore focus to X, X raises
-        /// <see cref="Control.RequestBringIntoViewEvent"/>, and the ScrollViewer
-        /// dutifully scrolls X back into view — undoing the wheel scroll and
+        /// whatever control was focused at the *original* offset. The click that
+        /// activates the window makes Avalonia restore focus to that control, which
+        /// raises <see cref="Control.RequestBringIntoViewEvent"/>, and the
+        /// ScrollViewer scrolls it back into view — undoing the wheel scroll and
         /// forcing the user to re-scroll and re-click.
         ///
-        /// We arm suppression on <see cref="WindowBase.Activated"/> and swallow the
-        /// focus-restore <c>RequestBringIntoView</c> that fires during the
-        /// activating click, then disarm on the first real user input that follows
-        /// (the released click, a key, or a wheel tick). Genuine bring-into-view
-        /// (keyboard navigation, explicit <c>BringIntoView()</c> from list
-        /// selection, etc.) happens after that first input and is untouched. The
-        /// flag is a per-window closure so multiple open dialogs never interfere.
+        /// This is timing-hostile: the focus-restore bring-into-view does not fire
+        /// at a fixed point relative to the activating click. The first activation
+        /// of a window fires it synchronously (early), but every re-activation
+        /// defers it to a later frame — so any "suppress between Activated and the
+        /// next input event" flag (PRs #658 / first cut of #721) worked once per
+        /// window and then leaked. So we do not race it.
         ///
-        /// The activation snap lands between the activating <c>PointerPressed</c>
-        /// and its release, while focus is restored, so clearing on release still
-        /// covers the snap. An earlier attempt (PR #658) cleared via a one-shot
-        /// <c>Dispatcher.Post(Input)</c>: that raced the bring-into-view and only
-        /// caught it on the first activation, letting the snap return on every
-        /// re-activation (#657 reopen). Event-driven disarm re-arms on every
-        /// Activated, so it holds for the life of the window.
+        /// Instead, on every <see cref="WindowBase.Activated"/> we snapshot the
+        /// offset of every ScrollViewer in the window — at that instant it is still
+        /// the offset the user scrolled to — and <em>hold</em> it: block the
+        /// focus-restore bring-into-view (no flicker in the synchronous case) and,
+        /// as a backstop for the deferred case, re-assert the snapshot on any
+        /// <see cref="ScrollViewer.ScrollChangedEvent"/> that moves off it. The
+        /// hold ends the moment the user actually scrolls again (a real wheel tick
+        /// is their intent, not the snap) or after a short timeout, whichever comes
+        /// first, and re-arms on the next activation. All state is per-window
+        /// closure, so concurrently open dialogs never interfere.
         /// </summary>
         private static void SuppressActivationScrollSnap(Window win)
         {
-            bool suppress = false;
+            var desired = new Dictionary<ScrollViewer, Vector>();
+            bool holding = false;
 
-            win.Activated += (_, _) => suppress = true;
+            win.Activated += (_, _) =>
+            {
+                desired.Clear();
+                foreach (var sv in win.GetVisualDescendants().OfType<ScrollViewer>())
+                    desired[sv] = sv.Offset;
+                if (desired.Count == 0) return;
 
-            // Disarm on the first input after activation. Pointer release covers
-            // the activating click (the snap fires before release, still caught);
-            // key/wheel cover keyboard-activated or already-active navigation so a
-            // legitimate bring-into-view is never blocked.
-            win.AddHandler(InputElement.PointerReleasedEvent, (_, _) => suppress = false,
-                RoutingStrategies.Tunnel | RoutingStrategies.Bubble, handledEventsToo: true);
-            win.AddHandler(InputElement.KeyDownEvent, (_, _) => suppress = false,
-                RoutingStrategies.Tunnel | RoutingStrategies.Bubble, handledEventsToo: true);
-            win.AddHandler(InputElement.PointerWheelChangedEvent, (_, _) => suppress = false,
-                RoutingStrategies.Tunnel | RoutingStrategies.Bubble, handledEventsToo: true);
+                holding = true;
+                // Release after the activation burst settles (generous — the
+                // deferred snap lands within a few frames). A real user scroll
+                // ends it sooner via the wheel handler below.
+                DispatcherTimer.RunOnce(() => holding = false, TimeSpan.FromMilliseconds(500));
+            };
 
+            // Block the focus-restore bring-into-view outright while holding — this
+            // is the no-flicker path for the synchronous (first-activation) case.
             win.AddHandler(
                 Control.RequestBringIntoViewEvent,
-                (_, e) => { if (suppress) e.Handled = true; },
+                (_, e) => { if (holding) e.Handled = true; },
+                RoutingStrategies.Tunnel | RoutingStrategies.Bubble,
+                handledEventsToo: true);
+
+            // Backstop for the deferred case: if the snap slips past (offset set
+            // directly, or bring-into-view fired after a frame), put the offset
+            // back to what the user had. Forcing it raises ScrollChanged again but
+            // then Offset == desired, so it settles without looping.
+            win.AddHandler(
+                ScrollViewer.ScrollChangedEvent,
+                (s, _) =>
+                {
+                    if (!holding || s is not ScrollViewer sv) return;
+                    if (desired.TryGetValue(sv, out var want) && sv.Offset != want)
+                        sv.Offset = want;
+                },
+                RoutingStrategies.Tunnel | RoutingStrategies.Bubble,
+                handledEventsToo: true);
+
+            // A wheel tick after activation is genuine user intent — stop holding
+            // immediately so the user stays in control of the scroll.
+            win.AddHandler(
+                InputElement.PointerWheelChangedEvent,
+                (_, _) => holding = false,
                 RoutingStrategies.Tunnel | RoutingStrategies.Bubble,
                 handledEventsToo: true);
         }
