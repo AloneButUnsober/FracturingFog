@@ -357,7 +357,7 @@ benefits most. Blender's Filmic → AgX migration is the precedent.
   default-look validation (#662). Deeper tails that remain optional: SIMD of the sRGB
   encode/decode (`FromBgra`/`ToBgra`, needs a poly pow → opt-in like #650) and AgX.
 
-### S3 — Cinematic camera: DOF, exposure, motion blur ◐ (#400)
+### S3 — Cinematic camera: DOF, exposure, motion blur ● (#400)
 Depth of field is nearly free in a raymarcher — jitter the ray origin across an
 aperture disc. Motion blur samples over Scene-Engine time (keyframes already
 exist). Exposure / tonemap piggybacks on S2. Highest visible "wow" per line of
@@ -443,8 +443,23 @@ code.
   still consume the averaged HDR, and each family's GPU fast-path forces CPU when thin-lens
   is armed. Byte-identical off / aperture 0; the shared `DofThinLens` checkbox already drives
   all families. +15 `MultiFamilyThinLensDofTests`.
-- **Remaining:** thin-lens DOF on the **GPU** raymarch kernels (all families, #567),
-  in-camera exposure control.
+- **In-camera exposure (landed, #400, closes S3):** `FractalParameters.Relief2DCameraExposureEv`
+  — a camera-stage exposure in stops applied to the relief beauty in LINEAR light
+  (`ViewTransformOps.ApplyExposureOnly`: decode → ×2^EV → encode, no tonemap), so the camera
+  exposes the scene independently of the S2 output view transform (which still tonemaps the
+  result afterwards). Part of the cinematic camera, so it Clones + saves + animates with the
+  camera. Applied at all three relief exits (GPU relief-only, GPU relief+froxel, CPU) so it
+  works on every path; raymarch-only; EV 0 early-returns → byte-identical (the S2 `None`-ignores-
+  exposure gate is untouched — this is a separate always-on op). Relief 3D dialog *Camera
+  exposure (EV)* slider + `--camera-exposure EV` batch flag; user doc `Relief3D-Guide.md` §5a.
+  +5 tests (`CameraExposureTests`: operator 0-EV byte-identical / brighten / darken; relief
+  wiring 0-EV byte-identical / +EV brightens with silhouette unmoved; batch parse + range).
+- **S3 complete.** Depth of field (CPU + GPU relief, all six CPU 3D families, click-to-focus),
+  motion blur (vector + scene-time sub-frame accumulation), and in-camera exposure all landed;
+  exposure piggybacks the S2 view transform as designed. Roadmap header ◐ → ●.
+- **Remaining (follow-up):** thin-lens DOF on the **GPU** raymarch kernels for the 3D fractal
+  families (tracked as its own issue #567) — a large multi-backend port, independent of the
+  cinematic-camera core closed here.
 
 ### S4 — Guided denoiser (À-Trous / SVGF-lite) ● (#402)
 AO, soft shadow and reflections are Monte Carlo → noisy → paid for with

@@ -153,6 +153,22 @@ that — the fractal outline grows and exaggerates while the base stays put:
 
 ---
 
+## 5a. Camera exposure (EV)
+
+**Camera exposure (EV)** in the Camera & quality section exposes the relief image
+the way a camera does — brighten (+) or darken (−) in **stops**, applied in linear
+light. It's part of the camera, so it saves and animates with your view.
+
+It's **separate from** the View transform's exposure (§ the "View transform"
+expander / Post-FX HUD): the camera exposes the **scene**, then the output view
+transform tonemaps the result. Use the camera EV to set the working brightness of a
+shot; use the view transform + its exposure to grade the final look. 0 = unchanged.
+
+Batch: `--camera-exposure EV` (−16..16; implies `--relief-raymarch`; distinct from
+the global `--exposure`, which is the output-stage view-transform exposure).
+
+---
+
 ## 5. Isolate object (standalone 3D cutout)
 
 **"Isolate object (drop background → transparent)"** keeps only the fractal

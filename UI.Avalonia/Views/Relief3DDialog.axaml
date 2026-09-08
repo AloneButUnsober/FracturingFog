@@ -306,6 +306,18 @@
                                    Value="{Binding Relief2DDenoiseVarianceScale, Mode=TwoWay}" Margin="0,2" />
                 </Grid>
 
+                <!-- S3 (#400) — in-camera exposure (stops). Camera-stage exposure on the
+                     relief beauty in linear light, independent of the output view transform. -->
+                <Grid ColumnDefinitions="160,*,44" RowDefinitions="Auto"
+                      IsEnabled="{Binding Relief2DRaymarch}">
+                    <TextBlock Grid.Column="0" Text="Camera exposure (EV):" VerticalAlignment="Center"
+                               ToolTip.Tip="In-camera exposure in stops. Brightens (+) or darkens (-) the relief image in linear light as the camera exposes the scene — separate from the output View transform's exposure, and part of the camera so it saves + animates with it. 0 = unchanged. Raymarch only." />
+                    <Slider Grid.Column="1" Minimum="-16" Maximum="16" TickFrequency="4" Margin="0,2"
+                            Value="{Binding Relief2DCameraExposureEv, Mode=TwoWay}" />
+                    <TextBlock Grid.Column="2" VerticalAlignment="Center" Foreground="#999"
+                               Text="{Binding Relief2DCameraExposureEv, StringFormat='{}{0:0.0}'}" />
+                </Grid>
+
                 <!-- #520 — far-detail: resolve distant filaments as tall as near ones. -->
                 <Grid ColumnDefinitions="160,*,44" RowDefinitions="Auto"
                       IsEnabled="{Binding Relief2DRaymarch}">

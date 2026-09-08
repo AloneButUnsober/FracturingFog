@@ -506,6 +506,14 @@ namespace FracturingFog.Models
         /// Only consulted when <see cref="Relief2DDofApertureRadius"/> &gt; 0.</summary>
         public double Relief2DDofFocusDistance { get; set; } = 0.0;
 
+        /// <summary>Roadmap S3 (#389/#400) — in-camera exposure in STOPS (EV). A
+        /// camera-stage exposure applied to the relief beauty in linear light (×2^EV),
+        /// independent of the S2 output view transform (the camera exposes the scene;
+        /// the view transform still tonemaps the result afterwards). Part of the
+        /// cinematic camera so it saves + animates with the camera. 0 (default) →
+        /// byte-identical. Only the relief-raymarch path.</summary>
+        public double Relief2DCameraExposureEv { get; set; } = 0.0;
+
         // ── Roadmap S4 (#389) — guided À-Trous denoise ────────────────────────
         // AO / soft shadow / reflections are Monte Carlo (noisy); the raymarch
         // now emits float normal + depth AOVs (#416), so an edge-avoiding À-Trous
@@ -1315,6 +1323,7 @@ namespace FracturingFog.Models
                 Relief2DCameraFovDeg = Relief2DCameraFovDeg,
                 Relief2DDofApertureRadius = Relief2DDofApertureRadius,
                 Relief2DDofFocusDistance = Relief2DDofFocusDistance,
+                Relief2DCameraExposureEv = Relief2DCameraExposureEv,
                 Relief2DDenoiseIterations = Relief2DDenoiseIterations,
                 Relief2DDenoiseColorSigma = Relief2DDenoiseColorSigma,
                 Relief2DDenoiseNormalSigma = Relief2DDenoiseNormalSigma,

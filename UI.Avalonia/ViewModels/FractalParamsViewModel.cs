@@ -560,6 +560,14 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
     /// <summary>Focus-distance control is only meaningful once the lens is open.</summary>
     public bool DofEnabled => _p.Relief2DDofApertureRadius > 0.0;
 
+    // S3 (#400) — in-camera exposure (stops). Camera-stage exposure on the relief
+    // beauty in linear light, independent of the S2 output view transform.
+    public double Relief2DCameraExposureEv
+    {
+        get => _p.Relief2DCameraExposureEv;
+        set { double v = Clamp(value, -16.0, 16.0); if (_p.Relief2DCameraExposureEv == v) return; _p.Relief2DCameraExposureEv = v; this.RaisePropertyChanged(); Fire(); }
+    }
+
     // Guided À-Trous denoise (roadmap S4, #389). Iterations 0 = off (byte-identical).
     public int Relief2DDenoiseIterations
     {

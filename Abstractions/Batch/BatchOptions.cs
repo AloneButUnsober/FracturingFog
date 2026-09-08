@@ -263,6 +263,7 @@ namespace FracturingFog.Batch
         // relief + raymarch. Only visible in a sequence render (needs the motion AOV).
         public double? ReliefMotionBlur { get; set; }        // strength, 0 = off
         public int? ReliefMotionBlurSamples { get; set; }    // taps, 2..64
+        public double? CameraExposureEv { get; set; }        // S3 (#400) in-camera exposure, stops (-16..16)
 
         // S1 (#398) relight in post. Enable + per-layer gains (imply --relief-raymarch).
         public bool Relight { get; set; }
@@ -793,6 +794,13 @@ namespace FracturingFog.Batch
                         opts.Relief = true;
                         break;
 
+                    case BatchFlags.CameraExposure:
+                        if (!NextDouble(args, ref i, a, out double camEv, out error)) return false;
+                        opts.CameraExposureEv = camEv;
+                        opts.ReliefRaymarch = true;
+                        opts.Relief = true;
+                        break;
+
                     case BatchFlags.ReliefMotionBlurSamples:
                         if (!NextInt(args, ref i, a, out int mbsamp, out error)) return false;
                         opts.ReliefMotionBlurSamples = mbsamp;
@@ -1137,6 +1145,8 @@ namespace FracturingFog.Batch
                 { error = "--relief-motion-blur must be 0..4."; return false; }
             if (opts.ReliefMotionBlurSamples is < 2 or > 64)
                 { error = "--relief-motion-blur-samples must be 2..64."; return false; }
+            if (opts.CameraExposureEv is < -16.0 or > 16.0)
+                { error = "--camera-exposure must be -16..16 (stops)."; return false; }
             if (opts.RelightDiffuse is < 0.0 or > 8.0)
                 { error = "--relight-diffuse must be 0..8."; return false; }
             if (opts.RelightSpecular is < 0.0 or > 8.0)

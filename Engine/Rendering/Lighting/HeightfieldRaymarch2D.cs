@@ -460,6 +460,7 @@ public static class HeightfieldRaymarch2D
                 gpuKernel.Run(in u, hbuf, keep, albedo, dst, aov.NormalXyz, aov.Depth);
             else
                 gpuKernel.Run(in u, hbuf, keep, albedo, dst);
+            ApplyCameraExposure(p, dst, n);
             return;
         }
 
@@ -493,6 +494,7 @@ public static class HeightfieldRaymarch2D
             var fu = FroxelGpuUniforms.Build(in cam, in froxelFx, p.Relief2DFroxelQuality);
             double froxelFb = p.Relief2DFroxelTemporal ? p.Relief2DFroxelTemporalFeedback : 0.0;
             froxelKernel.Composite(in fu, dst, gdep, w, h, dst, froxelFb, froxelReproject);
+            ApplyCameraExposure(p, dst, n);
             return;
         }
 
@@ -811,6 +813,12 @@ public static class HeightfieldRaymarch2D
             Array.Copy(composited, dst, n);
         }
 
+        // S3 (#400) — in-camera exposure. The camera exposes the final relief beauty
+        // in linear light (independent of the S2 output view transform, which tonemaps
+        // afterwards). Applied on the CPU path here; the GPU fast-paths apply it at
+        // their own returns above. EV 0 → byte-identical.
+        ApplyCameraExposure(p, dst, n);
+
         // S1 (#398) — motion-vector AOV fill. Reconstruct each hit's world position
         // from the captured centre-tap depth + this pixel's primary ray, project it
         // through the PREVIOUS frame's camera, and store the screen-space displacement
@@ -896,6 +904,15 @@ public static class HeightfieldRaymarch2D
     /// albedo or field content. Extracted so the GPU relief kernel and its CPU
     /// parity twin (<see cref="ReliefRaymarchGpu"/>) generate rays from the exact
     /// same numbers as the CPU render. rY of the camera right vector is always 0.</summary>
+    // S3 (#400) — apply the cinematic camera's in-camera exposure (stops) to the
+    // final relief beauty in linear light. Raymarch-only; EV 0 → byte-identical
+    // (ApplyExposureOnly early-returns). Independent of the S2 output view transform.
+    private static void ApplyCameraExposure(FractalParameters p, uint[] dst, int n)
+    {
+        if (p.Relief2DRaymarch && p.Relief2DCameraExposureEv != 0.0)
+            FracturingFog.Imaging.ViewTransformOps.ApplyExposureOnly(dst, n, (float)p.Relief2DCameraExposureEv);
+    }
+
     public readonly struct ReliefCamera
     {
         public readonly double CamX, CamY, CamZ;

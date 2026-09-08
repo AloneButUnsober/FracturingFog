@@ -138,6 +138,8 @@ namespace FracturingFog.Batch
         public const string ReliefMotionBlur        = "--relief-motion-blur";
         public const string ReliefMotionBlurSamples = "--relief-motion-blur-samples";
 
+        // S3 (#400) — in-camera exposure (stops). Implies --relief-raymarch.
+        public const string CameraExposure          = "--camera-exposure";
         // S1 (#398) — relight in post from the captured lighting passes. --relight
         // enables it; the gains scale each recombined layer. All imply --relief-raymarch.
         public const string Relight               = "--relight";
