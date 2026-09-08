@@ -292,6 +292,33 @@ The panel shows a live **Estimated size** as you tune. Click **"Export mesh
 
 ---
 
+## 10a. Relight (post) — retune the lighting without re-tracing
+
+The raymarch already resolves a **diffuse**, **specular** and **ambient-occlusion**
+value at every surface pixel. **Relight (post)** in the Relief 3D dialog rebuilds
+the image from those captured passes and the surface colour under your own gains,
+so you can push the lighting look **without re-tracing the geometry** — the
+compositor idea, built in:
+
+- **Relight from lighting passes** — turn it on (needs the raymarch path).
+- **Diffuse** / **Specular** gains — scale each lit layer (0 = drop it, >1 = boost).
+- **AO** — how strongly ambient occlusion darkens the diffuse + ambient term.
+- **Ambient** — a flat fill added to the shadows.
+
+It recombines the **direct** lighting only — subsurface and reflections aren't part
+of the relit result — and any fog still layers over the relit surface. Off (the
+default) leaves the fully shaded beauty untouched.
+
+Batch: `--relight` with `--relight-diffuse F` / `--relight-specular F` /
+`--relight-ao F` / `--relight-ambient F` (each implies `--relief-raymarch`). Relight
+forces the CPU relief trace (the lighting passes are captured on the CPU path).
+
+> Loading the exported multi-layer AOV EXR back in to relight a saved render
+> (rather than the live scene) is a separate compositor workflow — tracked as a
+> follow-up.
+
+---
+
 ## 11. Accessibility note
 
 Relief reads through **light and shadow**, not hue — it's a strong choice if you

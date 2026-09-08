@@ -737,6 +737,30 @@ namespace FracturingFog.Models
         /// <see cref="Relief2DFroxelVolumetrics"/>.</summary>
         public FroxelQuality Relief2DFroxelQuality { get; set; } = FroxelQuality.Balanced;
 
+        /// <summary>Roadmap S1 (#389/#398) — relight in post from the captured lighting
+        /// passes. When on, the relief beauty is REBUILT by recombining the per-pixel
+        /// diffuse / specular / AO the raymarch already resolves (the ShadeComponents
+        /// AOV) with the surface albedo under the gains + tints below — the compositor
+        /// payoff without a re-trace of the geometry. It recombines the DIRECT lighting
+        /// layers only (SSS / reflections are out of scope); fog still composites over
+        /// the relit surface. Forces the CPU trace (the components AOV is CPU-captured).
+        /// Off (default) → the full shaded beauty, byte-identical.</summary>
+        public bool Relief2DRelight { get; set; } = false;
+
+        /// <summary>S1 (#398) relight — diffuse contribution gain. Default 1.</summary>
+        public double Relief2DRelightDiffuseGain { get; set; } = 1.0;
+        /// <summary>S1 (#398) relight — specular contribution gain. Default 1.</summary>
+        public double Relief2DRelightSpecularGain { get; set; } = 1.0;
+        /// <summary>S1 (#398) relight — ambient-occlusion strength on the diffuse +
+        /// ambient term. Default 1.</summary>
+        public double Relief2DRelightAoStrength { get; set; } = 1.0;
+        /// <summary>S1 (#398) relight — flat ambient added to the diffuse term. Default 0.</summary>
+        public double Relief2DRelightAmbient { get; set; } = 0.0;
+        /// <summary>S1 (#398) relight — diffuse tint (0xAARRGGBB, white = none).</summary>
+        public uint Relief2DRelightDiffuseTint { get; set; } = 0xFFFFFFFFu;
+        /// <summary>S1 (#398) relight — specular tint (0xAARRGGBB, white = none).</summary>
+        public uint Relief2DRelightSpecularTint { get; set; } = 0xFFFFFFFFu;
+
         /// <summary>Slice 4f (#170) — empty-space-skip acceleration. Builds a
         /// coarse max-height grid over the compressed field and lets the sphere
         /// trace leap the empty air above flat interior (where the slope-limited
@@ -1301,6 +1325,13 @@ namespace FracturingFog.Models
                 Relief2DDenoiseAdaptiveSupersample = Relief2DDenoiseAdaptiveSupersample,
                 Relief2DMotionBlurStrength = Relief2DMotionBlurStrength,
                 Relief2DMotionBlurSamples = Relief2DMotionBlurSamples,
+                Relief2DRelight = Relief2DRelight,
+                Relief2DRelightDiffuseGain = Relief2DRelightDiffuseGain,
+                Relief2DRelightSpecularGain = Relief2DRelightSpecularGain,
+                Relief2DRelightAoStrength = Relief2DRelightAoStrength,
+                Relief2DRelightAmbient = Relief2DRelightAmbient,
+                Relief2DRelightDiffuseTint = Relief2DRelightDiffuseTint,
+                Relief2DRelightSpecularTint = Relief2DRelightSpecularTint,
                 Relief2DCameraZoom = Relief2DCameraZoom,
                 Relief2DCameraOrthographic = Relief2DCameraOrthographic,
                 Relief2DSupersample = Relief2DSupersample,

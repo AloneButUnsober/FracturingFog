@@ -294,6 +294,16 @@ public static class HeightfieldRaymarch2D
             return;
         }
 
+        // S1 (#398) — relight in post. On the primary beauty render (no caller-supplied
+        // AOV), capture the per-pixel lighting components so the shaded beauty can be
+        // rebuilt from them + the albedo under the relight gains below. Forces the CPU
+        // trace (components are CPU-only, via the aovOk gate). Only intercepts the
+        // beauty-only path; an AOV/denoise/motion render already owns its aov and is
+        // left alone. Off → aov unchanged → byte-identical.
+        bool relight = p.Relief2DRelight && p.Relief2DRaymarch && aov == null;
+        if (relight)
+            aov = new ReliefAovBuffers(w, h, captureComponents: true);
+
         // ── #155 pre-pass cache ───────────────────────────────────────────
         // Everything from the tone-curve through the grid-slope reduction is a
         // deterministic function of the raw field content plus (hw, hh, height
@@ -761,6 +771,26 @@ public static class HeightfieldRaymarch2D
         }, localHits => System.Threading.Interlocked.Add(ref hitCount, localHits));
 
         hitFraction = (double)hitCount / n;
+
+        // S1 (#398) — relight post-pass. Rebuild the shaded beauty from the captured
+        // per-pixel lighting components + the albedo under the relight gains / tints,
+        // BEFORE the froxel fog composites over it (so fog still layers on the relit
+        // surface). Recombines the direct-lighting layers only (SSS / reflections out
+        // of scope). Runs only on the intercepted beauty-only render.
+        if (relight && aov?.Components != null)
+        {
+            var recol = FracturingFog.Imaging.LightCompositor.Composite(
+                albedo, aov.Components, w, h, new FracturingFog.Imaging.LightCompositeParams
+                {
+                    DiffuseGain = p.Relief2DRelightDiffuseGain,
+                    SpecularGain = p.Relief2DRelightSpecularGain,
+                    AoStrength = p.Relief2DRelightAoStrength,
+                    Ambient = p.Relief2DRelightAmbient,
+                    DiffuseTint = p.Relief2DRelightDiffuseTint,
+                    SpecularTint = p.Relief2DRelightSpecularTint,
+                });
+            Array.Copy(recol, dst, n);
+        }
 
         // S6 (#389/#408) — froxel volumetrics post-pass. Frame a camera-frustum froxel
         // volume from the fog snapshot, populate + integrate once, then composite over

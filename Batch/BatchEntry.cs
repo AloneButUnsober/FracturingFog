@@ -260,6 +260,11 @@ namespace FracturingFog.Batch
             Console.WriteLine("  --relief-froxel-temporal    Stable animated fog across frames (video/slideshow; implies --relief-froxel).");
             Console.WriteLine("  --relief-froxel-feedback F  Temporal blend 0..0.99 (default 0.9; implies --relief-froxel-temporal).");
             Console.WriteLine("  --relief-froxel-reproject   Sub-cell froxel reprojection: keep animated fog anchored under camera motion (implies --relief-froxel-temporal).");
+            Console.WriteLine("  --relight                   Relight in post from the captured lighting passes (implies --relief-raymarch).");
+            Console.WriteLine("  --relight-diffuse F         Relight diffuse gain 0..8 (implies --relight).");
+            Console.WriteLine("  --relight-specular F        Relight specular gain 0..8 (implies --relight).");
+            Console.WriteLine("  --relight-ao F              Relight AO strength 0..4 (implies --relight).");
+            Console.WriteLine("  --relight-ambient F         Relight flat ambient 0..4 (implies --relight).");
             Console.WriteLine("                              Implies --relief-raymarch; only affects a fog scene.");
             Console.WriteLine("  --fog-light-mask N          Which lights colour the fog (bitmask 0..7; bit n =");
             Console.WriteLine("                              light n+1). Default 7 = all. Surfaces stay lit either way.");
