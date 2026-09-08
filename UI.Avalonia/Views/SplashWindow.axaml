@@ -1,0 +1,79 @@
+<!-- SPDX-License-Identifier: AGPL-3.0-or-later -->
+<!-- SPDX-FileCopyrightText: 2026 Bradley Brown -->
+
+<!--
+    Views/SplashWindow.axaml
+
+    Lightweight startup splash shown from App.OnFrameworkInitializationCompleted
+    while the MainWindow's GPU surface comes up and the render host / view-model
+    tree is built (AvaloniaShellBootstrap.OnSurfaceReady). Borderless, topmost,
+    centered, no taskbar entry. Dismissed by App once the first frame lands (or
+    after a timeout fallback). Self-contained: no Engine / VM references, so it
+    stays cheap to construct before anything else is wired.
+-->
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="FracturingFog.UI.Avalonia.Views.SplashWindow"
+        Width="480" Height="300"
+        CanResize="False"
+        ShowInTaskbar="False"
+        Topmost="True"
+        WindowDecorations="None"
+        TransparencyLevelHint="Transparent"
+        Background="Transparent"
+        WindowStartupLocation="CenterScreen"
+        Title="Fracturing Fog">
+
+    <Window.Transitions>
+        <Transitions>
+            <DoubleTransition Property="Opacity" Duration="0:0:0.25" />
+        </Transitions>
+    </Window.Transitions>
+
+    <Border CornerRadius="10"
+            BorderThickness="1"
+            BorderBrush="{StaticResource BrushGroupBorder}"
+            ClipToBounds="True">
+        <Border.Background>
+            <LinearGradientBrush StartPoint="0%,0%" EndPoint="100%,100%">
+                <GradientStop Offset="0" Color="#1C1C22" />
+                <GradientStop Offset="1" Color="#101014" />
+            </LinearGradientBrush>
+        </Border.Background>
+
+        <Grid RowDefinitions="*,Auto,Auto,Auto,*,Auto" Margin="36,28">
+            <!-- Wordmark -->
+            <StackPanel Grid.Row="1" Spacing="2">
+                <TextBlock Text="Fracturing Fog"
+                           FontSize="34" FontWeight="Light"
+                           Foreground="{StaticResource BrushAccent}" />
+                <TextBlock Text="Deep-zoom fractal explorer"
+                           FontSize="13"
+                           Foreground="{StaticResource BrushTextLabel}" />
+            </StackPanel>
+
+            <!-- Progress -->
+            <ProgressBar Grid.Row="3"
+                         Margin="0,26,0,0"
+                         IsIndeterminate="True"
+                         MinHeight="3"
+                         Foreground="{StaticResource BrushAccent}" />
+
+            <!-- Status line + version footer -->
+            <Grid Grid.Row="5" ColumnDefinitions="*,Auto">
+                <TextBlock x:Name="StatusText"
+                           Grid.Column="0"
+                           Text="Starting…"
+                           FontSize="12"
+                           VerticalAlignment="Center"
+                           Foreground="{StaticResource BrushTextLabelAlt}" />
+                <TextBlock x:Name="VersionText"
+                           Grid.Column="1"
+                           Text=""
+                           FontSize="12"
+                           VerticalAlignment="Center"
+                           Foreground="{StaticResource BrushTextLabel}" />
+            </Grid>
+        </Grid>
+    </Border>
+</Window>
