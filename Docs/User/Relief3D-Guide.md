@@ -49,6 +49,13 @@ Relief 3D applies to **2D fractal families**, each with a natural height source:
 | Newton, Nova, Halley (root-finding) | **Iteration count** to convergence |
 | Buddhabrot family | **Orbit density** |
 | Apollonian gasket | **Synthesised dome** (sphere-cap height per disc) |
+| User Equation / DSL | **Escape potential** (smooth iteration count) |
+
+> User Equation relief renders a higher-resolution height twin like the
+> escape-time families, so terrain stays crisp in small windows. (A
+> **Compile & Load** hot-loaded equation uses the display-resolution field
+> instead, to stay consistent with its compiled colour.) Relief appears when the
+> view settles, not during pan/zoom.
 
 3D ray-marched fractals (Mandelbulb, Mandelbox, Quaternion, Kleinian, …) are
 **already** 3D and don't use Relief 3D — they have their own camera and lighting.

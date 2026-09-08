@@ -2096,6 +2096,11 @@ namespace FracturingFog.Rendering
             FractalType.RandomTile => true,
             FractalType.ChaoticBilliard => true,
             FractalType.PrecisionField => true,
+            // #726 slice 2 — interpreted User Equation / DSL: a fresh
+            // UserEquationCalculator recompiles the same DSL source from
+            // FractalParameters, so it CAN be built + parameterised generically
+            // (the hot-load compiled path is guarded out inside the capture).
+            FractalType.UserEquation => true,
             _ => false,
         };
 
@@ -2119,6 +2124,9 @@ namespace FracturingFog.Rendering
             FractalType.RandomTile => new RandomTileCalculator(w, h),
             FractalType.ChaoticBilliard => new ChaoticBilliardCalculator(w, h),
             FractalType.PrecisionField => new PrecisionFieldCalculator(w, h),
+            // #726 slice 2 — interpreted DSL twin; SyncAltStateFromMandel copies the
+            // UserEquationSource + view so it recompiles the same equation at hi-res.
+            FractalType.UserEquation => new UserEquationCalculator(w, h),
             _ => null,
         };
 
@@ -2138,6 +2146,12 @@ namespace FracturingFog.Rendering
         {
             if (dispW <= 2 || dispH <= 2) return false;
             if (!SupportsHiResReliefField(type)) return false;
+            // #726 slice 2 — when a Compile & Load hot-load calc is the active
+            // UserEquation renderer, its display field is the COMPILED SmoothBuffer;
+            // a fresh interpreted twin could diverge from it, mismatching the height
+            // vs the compiled albedo. Keep the hot-load path on its self-consistent
+            // display-res field; the hi-res twin serves the interpreted path only.
+            if (type == FractalType.UserEquation && _dynamicAltCalculator != null) return false;
             int floor = Math.Clamp(p.Relief2DFieldFloor, 480, 2160);
             int shortAxis = Math.Min(dispW, dispH);
             if (shortAxis >= floor) return false;   // display already ≥ floor — no gain
