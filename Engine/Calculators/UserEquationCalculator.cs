@@ -26,7 +26,7 @@ using FracturingFog.Models;
 
 namespace FracturingFog;
 
-public sealed class UserEquationCalculator : IFractalCalculator, IHeightFieldSource
+public sealed class UserEquationCalculator : IFractalCalculator, IHeightFieldSource, ITrapFieldSource
 {
     public int Width { get; private set; }
     public int Height { get; private set; }
@@ -62,6 +62,15 @@ public sealed class UserEquationCalculator : IFractalCalculator, IHeightFieldSou
     /// in-set / converged / out-of-bounds-surround pixels read 0 (no relief), matching
     /// the flattened-normal convention. Same length / layout as <see cref="ColorBuffer"/>.</summary>
     public float[] SmoothBuffer { get; private set; } = Array.Empty<float>();
+
+    /// <summary>#726 (orbit-trap slice) — per-pixel orbit-trap min-distance
+    /// (<see cref="OrbitAccumulator.TrapMin"/>), satisfying <see cref="ITrapFieldSource"/>
+    /// so Relief 3D can extrude the DSL fractal's orbit-trap topography (Trap / Blend
+    /// height source), not just the smooth count. Filled only when an orbit-trap theme
+    /// runs (<c>ColorMap is IOrbitAwareColorMap</c>); 0 otherwise and for in-set pixels
+    /// unless the theme colours the interior — matching the Mandelbrot convention. Same
+    /// length / layout as <see cref="ColorBuffer"/>.</summary>
+    public float[] TrapBuffer { get; private set; } = Array.Empty<float>();
 
     public double CenterX { get; set; } = 0.0;
     public double CenterY { get; set; } = 0.0;
@@ -162,6 +171,7 @@ public sealed class UserEquationCalculator : IFractalCalculator, IHeightFieldSou
         NormalXBuffer = new float[n];
         NormalYBuffer = new float[n];
         SmoothBuffer = new float[n];   // #726 — relief height source
+        TrapBuffer = new float[n];     // #726 — orbit-trap relief height source
     }
 
     /// <summary>
@@ -506,6 +516,10 @@ public sealed class UserEquationCalculator : IFractalCalculator, IHeightFieldSou
                     NormalXBuffer[idx] = 0f;
                     NormalYBuffer[idx] = 0f;
                     SmoothBuffer[idx] = 0f;   // #726 — in-set = no relief
+                    // #726 (trap) — keep the accumulated trap distance for in-set
+                    // pixels only when the theme colours the interior (Mandelbrot
+                    // convention); otherwise flat 0.
+                    TrapBuffer[idx] = colorInterior && acc.TrapMin != float.MaxValue ? acc.TrapMin : 0f;
                     if (colorInterior)
                     {
                         // #583 — bounded pixel: colour from the full-orbit
@@ -533,6 +547,7 @@ public sealed class UserEquationCalculator : IFractalCalculator, IHeightFieldSou
                     NormalXBuffer[idx] = 0f;
                     NormalYBuffer[idx] = 0f;
                     SmoothBuffer[idx] = 0f;   // #726 — converged (small |z|) = no relief
+                    TrapBuffer[idx] = colorInterior && acc.TrapMin != float.MaxValue ? acc.TrapMin : 0f;   // #726 (trap)
                     ColorBuffer[idx] = orbitMap != null
                         ? (uint)orbitMap.MapWithOrbit(iter, 0f, maxIt, 0f, 0f, in acc)
                         : (uint)ColorMap.Map(iter, 0f, maxIt, 0f, 0f);
@@ -573,6 +588,9 @@ public sealed class UserEquationCalculator : IFractalCalculator, IHeightFieldSou
                     NormalXBuffer[idx] = nx;
                     NormalYBuffer[idx] = ny;
                     SmoothBuffer[idx] = smooth;   // #726 — escaped = relief height
+                    // #726 (trap) — escaped pixels always carry the trap min-distance
+                    // when an orbit-trap theme ran (else 0), the orbit-trap relief source.
+                    TrapBuffer[idx] = orbitMap != null && acc.TrapMin != float.MaxValue ? acc.TrapMin : 0f;
 
                     // #588 — pass finalZ (z at escape) + dz/dc to the nine-param
                     // overload. Themes that ignore them default back to the
@@ -593,6 +611,7 @@ public sealed class UserEquationCalculator : IFractalCalculator, IHeightFieldSou
                         NormalXBuffer[idx] = 0f;
                         NormalYBuffer[idx] = 0f;
                         SmoothBuffer[idx] = 0f;   // #726 — OOB surround = no relief
+                        TrapBuffer[idx] = 0f;     // #726 (trap) — OOB surround = no relief
                     }
                 }
             }

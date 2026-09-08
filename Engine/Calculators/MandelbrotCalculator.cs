@@ -62,7 +62,7 @@ using System.Diagnostics;
 
 namespace FracturingFog;
 
-public sealed class MandelbrotCalculator : Interefaces.IHeightFieldSource, Interefaces.ISupportsHistogramEq
+public sealed class MandelbrotCalculator : Interefaces.IHeightFieldSource, Interefaces.ITrapFieldSource, Interefaces.ISupportsHistogramEq
 {
     // ── Public state ──────────────────────────────────────────────────────────
 

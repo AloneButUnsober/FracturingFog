@@ -48,4 +48,17 @@ namespace FracturingFog.Interefaces
         /// read 0. Same length/layout as <c>ColorBuffer</c>.</summary>
         float[] SmoothBuffer { get; }
     }
+
+    /// <summary>Implemented by calculators that fill a per-pixel orbit-trap
+    /// min-distance field when an orbit-trap theme runs — the alternative relief
+    /// height source (roadmap S11, #592 / #726). <c>TrapBuffer</c> holds
+    /// <c>OrbitAccumulator.TrapMin</c> per pixel (0 = no trap sampled / in set).
+    /// <see cref="FracturingFog.Rendering.Lighting.ReliefHeightField.Build"/> reads it
+    /// generically, so any trap source (Mandelbrot, User Equation, …) drives orbit-trap
+    /// relief without a Mandelbrot-only gate. Same length / layout as <c>ColorBuffer</c>.</summary>
+    public interface ITrapFieldSource
+    {
+        /// <summary>Per-pixel orbit-trap min-distance; 0 for in-set / no-trap pixels.</summary>
+        float[] TrapBuffer { get; }
+    }
 }

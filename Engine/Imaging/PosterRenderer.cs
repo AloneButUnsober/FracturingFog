@@ -629,9 +629,10 @@ namespace FracturingFog.Imaging
                 {
                     var smooth = heightSource?.SmoothBuffer; fw = w; fh = h;
                     if (smooth == null || smooth.Length < fw * fh) return buffer;
-                    // Trap = the Mandelbrot calc's TrapBuffer (null for non-Mandelbrot or
-                    // a non-orbit theme → Build returns smooth unchanged).
-                    float[]? trap = trapSource ? (heightSource as MandelbrotCalculator)?.TrapBuffer : null;
+                    // Trap = any ITrapFieldSource's TrapBuffer (Mandelbrot or User
+                    // Equation / DSL; null for a non-trap source or a non-orbit theme →
+                    // Build returns smooth unchanged). #592 / #726.
+                    float[]? trap = trapSource ? (heightSource as ITrapFieldSource)?.TrapBuffer : null;
                     field = FracturingFog.Rendering.Lighting.ReliefHeightField.Build(
                         smooth, trap, fw * fh, p.Relief2DHeightSource, p.Relief2DHeightBlend);
                 }
