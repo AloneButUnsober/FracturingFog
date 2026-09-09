@@ -2180,16 +2180,20 @@ namespace FracturingFog.Rendering
         /// view + FractalParameters via <see cref="SyncAltStateFromMandel"/>).</summary>
         /// <summary>#327 — should the active ALT render get the low-res 3D relief
         /// preview? Gated on relief enabled + raymarch + a supersamplable height-field
-        /// type. #741: this now includes the UserEquation hot-load (Compile &amp; Load)
-        /// path — it builds the interpreted twin like PosterRenderer does, so screen and
-        /// poster agree on the relief field (both interpreted hi-res). The interpreted
-        /// field + the compiled albedo describe the same equation, so they align.
+        /// type, and NOT the UserEquation hot-load (Compile &amp; Load) path (#738): a
+        /// hot-loaded equation's field must come from the COMPILED calc itself
+        /// (<see cref="_dynamicAltCalculator"/>), not a fresh interpreted UserEquationCalculator
+        /// twin — the twin reads <c>UserEquationSource</c> (C# form), which is stale/empty for
+        /// a DSL Compile &amp; Load (its source lives in <c>UserEquationDslSource</c>), so it
+        /// renders the wrong equation or nothing. Hot-load falls back to the display-res
+        /// field off the compiled calc (below).
         /// When false the alt render keeps its existing single full-res path
         /// (byte-identical) — this only ADDS a preview for relief-eligible alt types.</summary>
         private bool AltReliefPreviewEligible(bool useAlt)
         {
             if (!useAlt) return false;
             var type = ViewState.FractalType;
+            if (type == FractalType.UserEquation && _dynamicAltCalculator != null) return false;
             var rp = ViewState.FractalParameters;
             return rp.Relief2DEnabled && rp.Relief2DRaymarch && SupportsHiResReliefField(type);
         }
@@ -2228,12 +2232,14 @@ namespace FracturingFog.Rendering
         {
             if (dispW <= 2 || dispH <= 2) return false;
             if (!SupportsHiResReliefField(type)) return false;
-            // #741 — the UserEquation hot-load (Compile & Load) path now takes the hi-res
-            // twin too. Previously it fell back to the display-res compiled SmoothBuffer to
-            // avoid an interpreted-field / compiled-albedo seam on screen, but PosterRenderer
-            // ALWAYS builds the interpreted hi-res twin, so that made the poster sharper than
-            // the screen (WYSIWYG break). The interpreted field and the compiled albedo are
-            // the same equation → they align; matching poster is the correct behaviour.
+            // #738 — a UserEquation hot-load (Compile & Load) must NOT use the interpreted
+            // hi-res twin: CreateReliefFieldCalc builds a fresh UserEquationCalculator that
+            // reads UserEquationSource (C# form), but a DSL Compile & Load's source lives in
+            // UserEquationDslSource — so the twin renders a stale/empty equation (previous
+            // relief, or none). The hot-loaded calc (_dynamicAltCalculator) is the ONLY thing
+            // that computes the right field; fall back to its display-res SmoothBuffer (the
+            // caller's else branch). (#741's guard removal was wrong for this case; reverted.)
+            if (type == FractalType.UserEquation && _dynamicAltCalculator != null) return false;
             int floor = Math.Clamp(p.Relief2DFieldFloor, 480, 2160);
             int shortAxis = Math.Min(dispW, dispH);
             if (shortAxis >= floor) return false;   // display already ≥ floor — no gain
@@ -3350,7 +3356,32 @@ namespace FracturingFog.Rendering
                 alt.Resize(_calculator.Width, _calculator.Height);
                 alt.ColorMap = _calculator.ColorMap;
             }
+            // #738 — installing / dropping a Compile & Load hot-load flips which calc the
+            // relief height field is captured from (compiled hot-load ↔ interpreted twin /
+            // display calc), but the relief sidecars are keyed only by FractalType
+            // (UserEquation both ways) and _reliefHeight/_reliefValid persist — so a stale
+            // twin + stale captured field survived the transition ("relief frozen / 2D
+            // painted on old relief"). Invalidate so the next render rebuilds the height
+            // from the current calc.
+            InvalidateReliefFieldCache();
             Trigger();
+        }
+
+        /// <summary>#738 — drop the captured relief height + the cached relief-field /
+        /// preview twins so the next render rebuilds the field from scratch. Called when
+        /// the active calculator identity changes under a fixed FractalType (Compile &amp;
+        /// Load install / drop), which the type-keyed twin caches would otherwise miss.</summary>
+        private void InvalidateReliefFieldCache()
+        {
+            _reliefValid = false;
+            (_reliefFieldAltCalc as IDisposable)?.Dispose();
+            _reliefFieldAltCalc = null;
+            _reliefFieldAltType = FractalType.Mandelbrot;
+            (_altPreviewCalcQuarter as IDisposable)?.Dispose();
+            (_altPreviewCalcHalf as IDisposable)?.Dispose();
+            _altPreviewCalcQuarter = null;
+            _altPreviewCalcHalf = null;
+            _altPreviewType = (FractalType)(-1);
         }
 
         // Common alt-calc state sync: pull centre/zoom/iter/quality/colormap
