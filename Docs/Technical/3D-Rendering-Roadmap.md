@@ -1426,8 +1426,18 @@ height AOV**, no new geometry machinery.
   was already source-agnostic (no change). +2 tests (orbit theme fills TrapBuffer + drives a
   distinct non-degenerate trap field; non-orbit theme leaves it empty → smooth fallback).
   Additive → byte-identical (trap is null unless the source is Trap/Blend).
-- **Remaining (folded into #327):** **interactive preview relief** — Mandelbrot-only + `useAlt`-
-  gated, so DSL relief appears on settle, not during pan/zoom.
+- **Interactive preview relief (landed — #327):** the Mandelbrot-only low-res preview relief
+  (#131) now covers relief-eligible **alt** height-field types (EscapeTime family, Newton/Nova,
+  Halley, Apollonian, RandomTile, ChaoticBilliard, PrecisionField, **User Equation / DSL**). Added
+  dedicated alt preview sidecars (`_altPreviewCalcQuarter/Half`, resolved by type via
+  `CreateReliefFieldCalc`, configured with `SyncAltStateFromMandel`); the progressive stage +
+  upload branch are generalised off `IFractalCalculator` / `IHeightFieldSource` / `ITrapFieldSource`
+  (the relief apply was already generic). Gated by `AltReliefPreviewEligible` (relief enabled +
+  raymarch + supersamplable type; the UserEquation hot-load compiled path is excluded like the
+  hi-res twin), so every non-relief alt render keeps its single full-res path (byte-identical). So
+  a relief-eligible alt fractal now gets the same low-res 3D preview during pan/zoom instead of a
+  flat held frame → 3D snap. +7 tests (preview-twin factory coverage + alt/DSL preview-relief
+  extrudes + deterministic). **#726 fully complete** (slices 1–3 + this preview generalisation).
 
 ### S12 — Relief 3D stage-2 post-chain parity ● (#652)
 FF's lighting/FX runs in **two stages**. Stage 1 (`ShadingPipeline.Shade<TDe>`) is

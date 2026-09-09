@@ -58,6 +58,14 @@ namespace FracturingFog.Rendering
         // LOH on top of the main calc's ~80 MB.
         private MandelbrotCalculator _previewCalcQuarter;
         private MandelbrotCalculator _previewCalcHalf;
+        // #327 — dedicated ALT (non-Mandelbrot) relief-preview sidecars, resolved by
+        // FractalType (via CreateReliefFieldCalc) and configured with SyncAltStateFromMandel.
+        // Give relief-eligible alt height-field types the same low-res 3D preview during
+        // interaction the Mandelbrot path gets, instead of a flat held frame → 3D snap.
+        // Lazily created / resized in the progressive branch; rebuilt on type change.
+        private IFractalCalculator? _altPreviewCalcQuarter;
+        private IFractalCalculator? _altPreviewCalcHalf;
+        private FractalType _altPreviewType = (FractalType)(-1);
         private EscapeTimeCalculator _escapeCalculator;
         private IFSCalculator _ifsCalculator;
         private LSystemCalculator _lsystemCalculator;
@@ -1376,12 +1384,14 @@ namespace FracturingFog.Rendering
                 staleW = staleH = 0;
             }
 
-            // Wave 2.5 — progressive only on the canonical Mandelbrot path
-            // and only when the dynamic alt slot is empty. Alt calcs run a
-            // single full render as before. Tiny windows (W*H < 256 px) skip
-            // progressive too — overhead exceeds the win.
-            int progressiveStage = (progressive && !useAlt && _dynamicAltCalculator == null
-                                     && calcW * calcH >= 256 * 256)
+            // Wave 2.5 — progressive on the canonical Mandelbrot path (dynamic alt
+            // slot empty), plus (#327) relief-eligible ALT height-field types so they
+            // get the same low-res 3D preview during interaction. Non-relief alt calcs
+            // still run a single full render as before. Tiny windows (W*H < 256 px)
+            // skip progressive — overhead exceeds the win.
+            bool altReliefPreview = AltReliefPreviewEligible(useAlt);
+            int progressiveStage = (progressive && calcW * calcH >= 256 * 256
+                                     && ((!useAlt && _dynamicAltCalculator == null) || altReliefPreview))
                 ? 4
                 : 0;
 
@@ -1453,23 +1463,50 @@ namespace FracturingFog.Rendering
             // schedule the next stage. Skips TAA / MSAA / SSAO / CDF rebuild
             // / FrameCompleted — those apply only to the final full-res
             // frame.
-            if (job.ProgressiveStage >= 2 && !useAlt)
+            if (job.ProgressiveStage >= 2)
             {
                 long pCalcStart = Stopwatch.GetTimestamp();
-                MandelbrotCalculator preview = job.ProgressiveStage >= 4
-                    ? _previewCalcQuarter
-                    : _previewCalcHalf;
-                MirrorMandelbrotState(calc, preview);
-                // SM-11b — let the preview reuse its cached reference orbit across
-                // a drag so consecutive preview frames share one reference (no
-                // per-move recompute → no deep-zoom "jumping"). Only the transient
-                // preview; the committed full-res calc below stays fresh/exact.
-                preview.AllowRecycleThisRender = RecyclePreviewOrbit;
-                try { preview.Calculate(token); }
-                catch (OperationCanceledException)
+                bool quarter = job.ProgressiveStage >= 4;
+                if (useAlt)
                 {
-                    AnimationFrameUploaded?.Invoke(this, EventArgs.Empty);
-                    return;
+                    // #327 — alt relief preview: resolve a dedicated low-res twin for the
+                    // active height-field type at the same quarter/half dims the Mandelbrot
+                    // sidecars use, configure it exactly like the live alt render, and
+                    // Calculate. Its SmoothBuffer / TrapBuffer drive the relief apply on the
+                    // upload tail (which reads the same _altPreviewCalc* slots).
+                    int apw = Math.Max(64, quarter ? job.CalcW / 4 : job.CalcW / 2);
+                    int aph = Math.Max(64, quarter ? job.CalcH / 4 : job.CalcH / 2);
+                    var altPreview = EnsureAltPreviewCalc(quarter, apw, aph);
+                    if (altPreview == null)   // type has no twin → abandon preview stage
+                    {
+                        AnimationFrameUploaded?.Invoke(this, EventArgs.Empty);
+                        return;
+                    }
+                    SyncAltStateFromMandel(altPreview);
+                    try { altPreview.Calculate(token); }
+                    catch (OperationCanceledException)
+                    {
+                        AnimationFrameUploaded?.Invoke(this, EventArgs.Empty);
+                        return;
+                    }
+                }
+                else
+                {
+                    MandelbrotCalculator preview = quarter
+                        ? _previewCalcQuarter
+                        : _previewCalcHalf;
+                    MirrorMandelbrotState(calc, preview);
+                    // SM-11b — let the preview reuse its cached reference orbit across
+                    // a drag so consecutive preview frames share one reference (no
+                    // per-move recompute → no deep-zoom "jumping"). Only the transient
+                    // preview; the committed full-res calc below stays fresh/exact.
+                    preview.AllowRecycleThisRender = RecyclePreviewOrbit;
+                    try { preview.Calculate(token); }
+                    catch (OperationCanceledException)
+                    {
+                        AnimationFrameUploaded?.Invoke(this, EventArgs.Empty);
+                        return;
+                    }
                 }
                 long pCalcEnd = Stopwatch.GetTimestamp();
                 if (ShowPerfHud)
@@ -2141,6 +2178,50 @@ namespace FracturingFog.Rendering
         /// twin mirrors the active view via the same state-sync the main render
         /// uses (Mandelbrot: view + precision incl. deep-zoom limbs; alt types:
         /// view + FractalParameters via <see cref="SyncAltStateFromMandel"/>).</summary>
+        /// <summary>#327 — should the active ALT render get the low-res 3D relief
+        /// preview? Gated on relief enabled + raymarch + a supersamplable height-field
+        /// type, and (like the hi-res twin) NOT the UserEquation hot-load compiled path
+        /// (a fresh interpreted preview twin could diverge from the compiled display).
+        /// When false the alt render keeps its existing single full-res path
+        /// (byte-identical) — this only ADDS a preview for relief-eligible alt types.</summary>
+        private bool AltReliefPreviewEligible(bool useAlt)
+        {
+            if (!useAlt) return false;
+            var type = ViewState.FractalType;
+            if (type == FractalType.UserEquation && _dynamicAltCalculator != null) return false;
+            var rp = ViewState.FractalParameters;
+            return rp.Relief2DEnabled && rp.Relief2DRaymarch && SupportsHiResReliefField(type);
+        }
+
+        /// <summary>#327 — resolve (create / resize / rebuild-on-type-change) the alt
+        /// relief-preview sidecar for the current <see cref="ViewState.FractalType"/> at
+        /// the given preview dims. <paramref name="quarter"/> selects the quarter- vs
+        /// half-res slot (mirrors the Mandelbrot <c>_previewCalcQuarter/Half</c>). Returns
+        /// null when the type has no supersamplable twin.</summary>
+        private IFractalCalculator? EnsureAltPreviewCalc(bool quarter, int pw, int ph)
+        {
+            var type = ViewState.FractalType;
+            if (_altPreviewType != type)
+            {
+                (_altPreviewCalcQuarter as IDisposable)?.Dispose();
+                (_altPreviewCalcHalf as IDisposable)?.Dispose();
+                _altPreviewCalcQuarter = null;
+                _altPreviewCalcHalf = null;
+                _altPreviewType = type;
+            }
+            if (quarter)
+            {
+                _altPreviewCalcQuarter ??= CreateReliefFieldCalc(type, pw, ph);
+                var q = _altPreviewCalcQuarter;
+                if (q != null && (q.Width != pw || q.Height != ph)) q.Resize(pw, ph);
+                return q;
+            }
+            _altPreviewCalcHalf ??= CreateReliefFieldCalc(type, pw, ph);
+            var h = _altPreviewCalcHalf;
+            if (h != null && (h.Width != pw || h.Height != ph)) h.Resize(pw, ph);
+            return h;
+        }
+
         private bool TryCaptureHiResReliefField(FractalType type,
             FractalParameters p, int dispW, int dispH, CancellationToken token)
         {
@@ -2282,7 +2363,7 @@ namespace FracturingFog.Rendering
             // overlay composite, no TAA, no FrameCompleted, no perf-HUD
             // frame timing (still records calc ms above). After upload,
             // enqueue the next stage (4 → 2 → 0 final).
-            if (job.ProgressiveStage >= 2 && !useAlt)
+            if (job.ProgressiveStage >= 2)
             {
                 if (token.IsCancellationRequested || _disposed)
                 {
@@ -2294,30 +2375,48 @@ namespace FracturingFog.Rendering
                     RenderCancelled?.Invoke(this, EventArgs.Empty);
                     return;
                 }
-                MandelbrotCalculator preview = job.ProgressiveStage >= 4
-                    ? _previewCalcQuarter
-                    : _previewCalcHalf;
+                bool quarter = job.ProgressiveStage >= 4;
+                // #327 — the preview sidecar is the Mandelbrot _previewCalc* on the
+                // canonical path, or the alt relief-preview twin (same slot the calc
+                // branch filled) for a relief-eligible alt type. Both expose ColorBuffer /
+                // Width / Height + IHeightFieldSource / ITrapFieldSource, so the relief
+                // apply below is source-agnostic.
+                uint[]? previewSrc; int pw, ph;
+                float[]? previewSmooth; float[]? previewTrap;
+                if (useAlt)
+                {
+                    var ap = quarter ? _altPreviewCalcQuarter : _altPreviewCalcHalf;
+                    if (ap == null) { AnimationFrameUploaded?.Invoke(this, EventArgs.Empty); return; }
+                    previewSrc = ap.ColorBuffer; pw = ap.Width; ph = ap.Height;
+                    previewSmooth = (ap as Interefaces.IHeightFieldSource)?.SmoothBuffer;
+                    previewTrap = (ap as Interefaces.ITrapFieldSource)?.TrapBuffer;
+                }
+                else
+                {
+                    MandelbrotCalculator preview = quarter ? _previewCalcQuarter : _previewCalcHalf;
+                    previewSrc = preview.ColorBuffer; pw = preview.Width; ph = preview.Height;
+                    previewSmooth = preview.SmoothBuffer; previewTrap = preview.TrapBuffer;
+                }
                 lock (_uploadGate)
                 {
                     // #86 — a later stage / newer trigger that already presented
                     // outranks this preview; drop it so it can't paint a stale,
                     // lower-res image over the newer frame.
                     bool claimedP = TryClaimPresent(job.Seq);
-                    Dbg86($"PREVIEW  seq={job.Seq} stage={job.ProgressiveStage} claimed={claimedP} lastSeq={_lastPresentedUploadSeq} {preview.Width}x{preview.Height}");
+                    Dbg86($"PREVIEW  seq={job.Seq} stage={job.ProgressiveStage} claimed={claimedP} lastSeq={_lastPresentedUploadSeq} {pw}x{ph}");
                     if (claimedP)
                     {
                     // #131 — apply the heightfield relief to the PREVIEW buffer at
                     // preview dims too. Without this a pan flashes between the flat
                     // low-res 2D preview (uploaded here) and the 3D relief final
-                    // frame. The preview is a MandelbrotCalculator, so it exposes
-                    // its own SmoothBuffer at preview resolution; the raymarch is
+                    // frame. The preview calc (Mandelbrot #131, or #327's alt twin)
+                    // exposes its own SmoothBuffer at preview resolution; the raymarch is
                     // cheap at quarter/half and frames identically (aspect-based),
                     // so the 3D preview lines up with the final — no flash, no jump.
-                    uint[] previewSrc = preview.ColorBuffer;
-                    int pw = preview.Width, ph = preview.Height, pn = pw * ph;
+                    int pn = pw * ph;
                     {
                         var rp = ViewState.FractalParameters;
-                        var phs = (preview as Interefaces.IHeightFieldSource)?.SmoothBuffer;
+                        var phs = previewSmooth;
                         if (rp.Relief2DEnabled && phs != null && pn > 0
                             && phs.Length >= pn && previewSrc != null && previewSrc.Length >= pn)
                         {
@@ -2327,10 +2426,11 @@ namespace FracturingFog.Rendering
                             var prp = FracturingFog.Rendering.Lighting.HeightfieldRaymarch2D.MakePreviewParams(rp);
                             // S11 (#592) — honour the height source in the preview too, so a
                             // trap-relief scene doesn't pop from smooth (preview) to trap
-                            // (settle). The preview MandelbrotCalculator ran the same theme,
-                            // so its TrapBuffer is filled when an orbit-trap theme is active.
+                            // (settle). The preview calc ran the same theme, so its TrapBuffer
+                            // is filled when an orbit-trap theme is active (#726 — any
+                            // ITrapFieldSource: Mandelbrot or User Equation / DSL).
                             phs = FracturingFog.Rendering.Lighting.ReliefHeightField.Build(
-                                phs, (preview as MandelbrotCalculator)?.TrapBuffer, pn,
+                                phs, previewTrap, pn,
                                 rp.Relief2DHeightSource, rp.Relief2DHeightBlend);
                             if (_reliefPreviewScratch == null || _reliefPreviewScratch.Length < pn)
                                 _reliefPreviewScratch = new uint[pn];
@@ -2370,8 +2470,12 @@ namespace FracturingFog.Rendering
                 AnimationFrameUploaded?.Invoke(this, EventArgs.Empty);
 
                 int nextStage = job.ProgressiveStage >= 4 ? 2 : 0;
+                // #327 — carry the alt calc forward so the alt preview chain
+                // (stage 4→2→0) stays on the alt path: the intermediate stage runs the
+                // alt preview twin again, and the stage-0 final renders the full alt frame
+                // (relief applied by the type-agnostic core path). Mandelbrot passes null.
                 var nextJob = new FrameJob(
-                    job.Token, calc, altCalc: null, sw: job.Sw,
+                    job.Token, calc, altCalc: useAlt ? altCalc : null, sw: job.Sw,
                     staleBuf: null, staleW: 0, staleH: 0,
                     calcW: job.CalcW, calcH: job.CalcH,
                     seq: System.Threading.Interlocked.Increment(ref _uploadSeq),
