@@ -495,6 +495,30 @@ code.
 - **Remaining (follow-up):** thin-lens DOF on the **GPU** raymarch kernels for the 3D fractal
   families (tracked as its own issue #567) — a large multi-backend port, independent of the
   cinematic-camera core closed here.
+- **GPU/CPU drift bound for the 3D families (#742) — option B, landed:** the 3D-fractal
+  kernels (Mandelbulb et al.) have **no bit-exact GPU/CPU twin**, only CPU→GPU Build-bridge
+  unit tests + on-device smoke, so a scene previewed on a GPU and exported on a GPU-less host
+  (ILGPU CPU accelerator, or `UseGpuRender` off → CPU `ShadingPipeline`) can drift — a surface
+  S8/S3 widened (positional lights #484-488, area penumbra #492, thin-lens DOF #567 all added
+  per-hit math to both paths). Rather than the large bit-exact twin (option A), a **drift-bound
+  golden test** (`S742Gpu3DDriftBoundTests`) pins the Mandelbulb kernel to specific ILGPU
+  devices via `GpuAcceleratorHost.SetTestOverride` (test-only) and asserts (1) the **same
+  kernel across accelerator classes** (discrete GPU vs ILGPU CPU) agrees within a tight
+  per-channel tolerance — the WYSIWYG guarantee for same-kernel export — and (2) the **kernel
+  vs the CPU pipeline** stays under a loose regression ceiling (the two paths differ by design:
+  step-hash albedo + P7c effect gaps). Both detect **CPU fallback** (a render byte-identical to
+  the pipeline = the kernel failed to JIT on that device) and only bound the *drift* on renders
+  that actually ran the kernel, so the test is correct where the kernel does not load (all paths
+  fall back → identical → parity holds) and a live guard where it does.
+- **WYSIWYG note:** 3D-fractal poster/batch is WYSIWYG only within the **same accelerator class**
+  as the preview. On a GPU-less export host the frame renders via the CPU `ShadingPipeline`
+  (`UseGpuRender` off, or the kernel not JIT-ing) rather than the GPU kernel; those two paths
+  are not bit-identical.
+- **Observed side-finding (separate issue):** the Mandelbulb GPU kernel currently **fails to
+  JIT** on the dev host across the ILGPU CPU (`internal compiler error`), OpenCL and Cuda
+  backends, so the whole 3D GPU render path silently falls back to the CPU pipeline there and
+  the 3D GPU test family is presently exercising fallback, not the kernel. Filed as **#749**;
+  independent of the drift-bound work.
 
 ### S4 — Guided denoiser (À-Trous / SVGF-lite) ● (#402)
 AO, soft shadow and reflections are Monte Carlo → noisy → paid for with
