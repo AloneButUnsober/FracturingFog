@@ -2232,14 +2232,12 @@ namespace FracturingFog.Rendering
         {
             if (dispW <= 2 || dispH <= 2) return false;
             if (!SupportsHiResReliefField(type)) return false;
-            // #738 — a UserEquation hot-load (Compile & Load) must NOT use the interpreted
-            // hi-res twin: CreateReliefFieldCalc builds a fresh UserEquationCalculator that
-            // reads UserEquationSource (C# form), but a DSL Compile & Load's source lives in
-            // UserEquationDslSource — so the twin renders a stale/empty equation (previous
-            // relief, or none). The hot-loaded calc (_dynamicAltCalculator) is the ONLY thing
-            // that computes the right field; fall back to its display-res SmoothBuffer (the
-            // caller's else branch). (#741's guard removal was wrong for this case; reverted.)
-            if (type == FractalType.UserEquation && _dynamicAltCalculator != null) return false;
+            // #745 — a UserEquation hot-load (Compile & Load) can't use the interpreted
+            // CreateReliefFieldCalc twin (it reads UserEquationSource / C# form, wrong for a
+            // DSL or CalcGen hot-load — #738). Instead the alt branch builds a hi-res twin of
+            // the COMPILED hot-load type itself (EnsureReliefHotLoadTwin); if that can't be
+            // instantiated it returns false and the caller falls back to the compiled calc's
+            // display-res SmoothBuffer (the correct #738 behaviour).
             int floor = Math.Clamp(p.Relief2DFieldFloor, 480, 2160);
             int shortAxis = Math.Min(dispW, dispH);
             if (shortAxis >= floor) return false;   // display already ≥ floor — no gain
@@ -2308,15 +2306,28 @@ namespace FracturingFog.Rendering
                 else
                 {
                     // #328 — alt height-field type. Rebuild the twin when the active
-                    // type changes (the cached instance is type-specific).
-                    if (_reliefFieldAltCalc != null && _reliefFieldAltType != type)
+                    // type changes (the cached instance is type-specific). #745 — for a
+                    // UserEquation hot-load, the twin is a fresh instance of the COMPILED
+                    // hot-load TYPE (not the interpreted CreateReliefFieldCalc), so a DSL /
+                    // CalcGen Compile & Load gets a correct hi-res field. Null (no (w,h)
+                    // ctor) → return false → caller uses the compiled calc's display-res field.
+                    IFractalCalculator? rc;
+                    if (type == FractalType.UserEquation && _dynamicAltCalculator != null)
                     {
-                        (_reliefFieldAltCalc as IDisposable)?.Dispose();
-                        _reliefFieldAltCalc = null;
+                        rc = EnsureReliefHotLoadTwin(fw, fh);
+                        if (rc == null) return false;
                     }
-                    var rc = _reliefFieldAltCalc ??= CreateReliefFieldCalc(type, fw, fh);
-                    if (rc == null) return false;
-                    _reliefFieldAltType = type;
+                    else
+                    {
+                        if (_reliefFieldAltCalc != null && _reliefFieldAltType != type)
+                        {
+                            (_reliefFieldAltCalc as IDisposable)?.Dispose();
+                            _reliefFieldAltCalc = null;
+                        }
+                        rc = _reliefFieldAltCalc ??= CreateReliefFieldCalc(type, fw, fh);
+                        if (rc == null) return false;
+                        _reliefFieldAltType = type;
+                    }
                     if (rc.Width != fw || rc.Height != fh) rc.Resize(fw, fh);
                     // SyncAltStateFromMandel reads the primary calc's view (kept in
                     // lock-step with ViewState by ApplyView) + the active FractalType
@@ -3382,6 +3393,11 @@ namespace FracturingFog.Rendering
             _altPreviewCalcQuarter = null;
             _altPreviewCalcHalf = null;
             _altPreviewType = (FractalType)(-1);
+            // #745 — drop the hot-load hi-res twin too, so the next Compile & Load rebuilds
+            // it from the new compiled type.
+            (_reliefHotLoadTwin as IDisposable)?.Dispose();
+            _reliefHotLoadTwin = null;
+            _reliefHotLoadTwinType = null;
         }
 
         // Common alt-calc state sync: pull centre/zoom/iter/quality/colormap
@@ -3685,6 +3701,36 @@ namespace FracturingFog.Rendering
         private IColorMap? _reliefFieldSmoothMap;
         private IFractalCalculator? _reliefFieldAltCalc;
         private FractalType _reliefFieldAltType = FractalType.Mandelbrot;
+
+        // #745 — hi-res relief twin for a Compile & Load hot-load equation: a fresh
+        // instance of the COMPILED hot-load type (keyed by that type), so a DSL / CalcGen
+        // hot-load gets a correct hi-res field instead of the interpreted CreateReliefFieldCalc.
+        private IFractalCalculator? _reliefHotLoadTwin;
+        private Type? _reliefHotLoadTwinType;
+
+        /// <summary>#745 — resolve (create / rebuild-on-type-change) the hi-res relief twin
+        /// for the active hot-load calc: a fresh instance of <c>_dynamicAltCalculator</c>'s
+        /// concrete type at the field-floor size. Returns null when there is no hot-load calc
+        /// or its type has no <c>(int,int)</c> ctor — the caller then falls back to the
+        /// compiled calc's display-res field.</summary>
+        private IFractalCalculator? EnsureReliefHotLoadTwin(int fw, int fh)
+        {
+            var src = _dynamicAltCalculator;
+            if (src == null) return null;
+            var t = src.GetType();
+            if (_reliefHotLoadTwinType != t)
+            {
+                (_reliefHotLoadTwin as IDisposable)?.Dispose();
+                _reliefHotLoadTwin = null;
+                _reliefHotLoadTwinType = t;
+            }
+            if (_reliefHotLoadTwin == null)
+            {
+                try { _reliefHotLoadTwin = (IFractalCalculator?)Activator.CreateInstance(t, fw, fh); }
+                catch { _reliefHotLoadTwin = null; _reliefHotLoadTwinType = null; }
+            }
+            return _reliefHotLoadTwin;
+        }
 
         private void UploadProcessedBuffer(uint[] src, int w, int h, bool srcAlreadyProcessed = false)
         {
