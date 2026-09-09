@@ -10,8 +10,9 @@ tests — see each slice) · ☑ slice fully closed. A slice is marked ☑ only 
 *entirely* done; every S1–S9 slice already has merged, tested work landed but stays
 ◐ because deeper GPU / full-fidelity tails remain. **S1–S9 are all underway; S10
 (PaletteBuilder, #392) is fully closed (●) — ten analysis + generation cores, six
-per-core UI surfaces, and the live-host-wiring track all landed (only minor tails
-filed: #705 Bézier control editing, #706 emission when S5 lands); S11
+per-core UI surfaces, and the live-host-wiring track all landed (#705 Bézier
+control-colour editing now landed too; the last tail #706 emission stays blocked on a
+render emission field); S11
 (orbit-trap height, #592) is fully closed (●, incl. the hi-res trap tail); S12 (relief
 stage-2 parity, #652) is fully closed (●).**
 
@@ -1324,8 +1325,11 @@ S10.10 "looks"/scene-colour-scripts (#680) — see [PaletteBuilder-Design.md](Pa
 Looks tabs — PRs #681, #685–689) and the **live-host-wiring track** (view-param provider,
 palette + CVD preview on the live fractal, histogram redistribute, k-means extraction method,
 cosine editor, apply generated ramp / look to palette + render, save/recall looks, load current
-theme for round-trip editing — PRs #697–704, #707, #711) all landed. Only minor tails remain,
-filed: #705 (Bézier control-colour editing) and #706 (emission tint when S5 lands). The
+theme for round-trip editing — PRs #697–704, #707, #711) all landed. #705 (Bézier
+control-colour editing) landed as a live editor in the Harmony tab (add / remove / recolour
+control points → BezierPaletteRamp rebuilds, mirroring the LW.6 cosine editor); the last tail
+#706 (emission tint) stays blocked — there is no emission field in the render (S5 delivered
+refraction/transmission, not emission). The
 home of FF's **art idiom**. Making FF *great* —
 not just deep-zooming — means
 making PaletteBuilder a genuinely great color assistant: perceptual, **colorblind-

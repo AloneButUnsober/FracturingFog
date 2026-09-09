@@ -736,12 +736,50 @@
                                         </ItemsControl>
 
                                         <StackPanel Orientation="Horizontal" Spacing="8" Margin="0,4,0,0">
-                                            <TextBlock Text="Bezier through palette (lightness-corrected)"
+                                            <TextBlock Text="Bezier through control colours"
                                                        Foreground="#DCDCA0" FontWeight="Bold" VerticalAlignment="Center" />
                                             <Button Content="Use" Padding="8,2"
                                                     Command="{Binding UseBezierRampCommand}"
                                                     ToolTip.Tip="Add the Bezier ramp as a new palette" />
                                         </StackPanel>
+                                        <!-- S10-LW.6 tail (#705): live-editable Bézier control colours.
+                                             Add / remove / recolour points → BezierPaletteRamp rebuilds live. -->
+                                        <StackPanel Orientation="Horizontal" Spacing="10" Margin="0,0,0,2">
+                                            <Button Content="+ Add point" Padding="8,2"
+                                                    Command="{Binding AddBezierControlCommand}"
+                                                    ToolTip.Tip="Append a Bézier control colour" />
+                                            <CheckBox Content="Lightness-correct"
+                                                      IsChecked="{Binding BezierLightnessCorrect}"
+                                                      Foreground="#B4B4B4" VerticalAlignment="Center"
+                                                      ToolTip.Tip="Correct OkLab lightness so it rises monotonically" />
+                                        </StackPanel>
+                                        <ItemsControl ItemsSource="{Binding BezierControls}" Margin="0,0,0,4">
+                                            <ItemsControl.ItemsPanel>
+                                                <ItemsPanelTemplate>
+                                                    <WrapPanel Orientation="Horizontal" />
+                                                </ItemsPanelTemplate>
+                                            </ItemsControl.ItemsPanel>
+                                            <ItemsControl.ItemTemplate>
+                                                <DataTemplate>
+                                                    <Border BorderBrush="#3C3C3C" BorderThickness="1"
+                                                            Margin="0,0,4,4" Padding="3" CornerRadius="3">
+                                                        <StackPanel Orientation="Vertical" Spacing="2">
+                                                            <ColorPicker Color="{Binding Color, Mode=TwoWay}"
+                                                                         Width="52" Height="26"
+                                                                         HorizontalAlignment="Center" />
+                                                            <StackPanel Orientation="Horizontal" Spacing="2">
+                                                                <TextBox Text="{Binding Hex, Mode=TwoWay}"
+                                                                         Width="66" FontSize="10" Padding="2,0" />
+                                                                <Button Content="✕" FontSize="10" Padding="4,0"
+                                                                        Command="{Binding #Root.((ffvm:ImagePaletteViewModel)DataContext).RemoveBezierControlCommand}"
+                                                                        CommandParameter="{Binding}"
+                                                                        ToolTip.Tip="Remove this control colour" />
+                                                            </StackPanel>
+                                                        </StackPanel>
+                                                    </Border>
+                                                </DataTemplate>
+                                            </ItemsControl.ItemTemplate>
+                                        </ItemsControl>
                                         <ItemsControl ItemsSource="{Binding BezierPaletteRamp}" Height="22">
                                             <ItemsControl.ItemsPanel>
                                                 <ItemsPanelTemplate>
