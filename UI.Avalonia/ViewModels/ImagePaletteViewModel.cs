@@ -906,9 +906,6 @@ public class ImagePaletteViewModel : ViewModelBase
         }
 
         this.RaisePropertyChanged(nameof(HasHarmony));
-
-        static ISolidColorBrush BrushFromPacked(uint p) =>
-            new SolidColorBrush(Color.FromRgb((byte)((p >> 16) & 0xFF), (byte)((p >> 8) & 0xFF), (byte)(p & 0xFF)));
     }
 
     // ── Live IQ cosine-palette editor (roadmap S10-LW.6, #392/#692) ──
@@ -966,7 +963,7 @@ public class ImagePaletteViewModel : ViewModelBase
 
     private void SeedBezierControls(System.Collections.Generic.IReadOnlyList<PaletteStop> eff)
     {
-        foreach (var vm in BezierControls) vm.Changed -= RebuildBezierRamp;
+        foreach (var vm in BezierControls) vm.ColorChanged -= RebuildBezierRamp;
         BezierControls.Clear();
         foreach (var s in eff)
             AddBezierControlWithHook(new BezierControlColorViewModel(s.R, s.G, s.B));
@@ -974,7 +971,7 @@ public class ImagePaletteViewModel : ViewModelBase
 
     private void AddBezierControlWithHook(BezierControlColorViewModel vm)
     {
-        vm.Changed += RebuildBezierRamp;
+        vm.ColorChanged += RebuildBezierRamp;
         BezierControls.Add(vm);
     }
 
@@ -990,7 +987,7 @@ public class ImagePaletteViewModel : ViewModelBase
     private void RemoveBezierControl(BezierControlColorViewModel vm)
     {
         if (vm == null || !BezierControls.Contains(vm)) return;
-        vm.Changed -= RebuildBezierRamp;
+        vm.ColorChanged -= RebuildBezierRamp;
         BezierControls.Remove(vm);
         RebuildBezierRamp();
     }
@@ -1335,8 +1332,9 @@ public sealed class BezierControlColorViewModel : ViewModelBase
     public byte G => _g;
     public byte B => _b;
 
-    /// <summary>Raised whenever the colour changes so the parent can rebuild the ramp.</summary>
-    public event System.Action? Changed;
+    /// <summary>Raised whenever the colour changes so the parent can rebuild the ramp.
+    /// Named ColorChanged (not Changed) to avoid hiding ReactiveObject.Changed.</summary>
+    public event System.Action? ColorChanged;
 
     /// <summary>Control colour as an Avalonia Color — bound TwoWay by a ColorPicker.</summary>
     public global::Avalonia.Media.Color Color
@@ -1380,7 +1378,7 @@ public sealed class BezierControlColorViewModel : ViewModelBase
         this.RaisePropertyChanged(nameof(Color));
         this.RaisePropertyChanged(nameof(Hex));
         this.RaisePropertyChanged(nameof(PreviewBrush));
-        Changed?.Invoke();
+        ColorChanged?.Invoke();
     }
 }
 
