@@ -78,15 +78,20 @@ public sealed class UserBulbGpuCalculator : IDisposable
         try
         {
             _context = Context.Create(b => b.Default());
-            // Prefer CPU accelerator if no GPU device (still JITs the kernel
-            // and runs multi-threaded — faster than uncompiled C# loop).
-            _accelerator = _context.GetPreferredDevice(preferCPU: false).CreateAccelerator(_context);
+            // Pick a Float64-capable device: the kernel is all-double, so an
+            // fp64-less OpenCL iGPU throws at JIT (#749). Prefer a real GPU with
+            // fp64, else the CPU accelerator (always fp64 — still JITs the kernel
+            // and runs multi-threaded, faster than UserBulb's uncompiled C# loop,
+            // so CPU is an accepted fallback here unlike the 3D-fractal families).
+            var dev = Gpu.GpuAcceleratorHost.SelectFloat64Device(_context, allowCpu: true)
+                      ?? throw new NotSupportedException("no Float64-capable ILGPU device");
+            _accelerator = dev.CreateAccelerator(_context);
             _kernel = _accelerator.LoadAutoGroupedStreamKernel<Index1D, ArrayView<uint>, GpuRenderParams>(BulbKernel);
             return true;
         }
         catch (Exception ex)
         {
-            LastError = $"GPU init failed: {ex.Message}";
+            LastError = $"GPU init failed: {ex.GetBaseException().Message}";
             _initFailed = true;
             return false;
         }

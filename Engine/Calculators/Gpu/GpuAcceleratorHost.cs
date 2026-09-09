@@ -21,6 +21,7 @@ using System;
 
 using ILGPU;
 using ILGPU.Runtime;
+using ILGPU.Runtime.OpenCL;
 
 namespace FracturingFog.Calculators.Gpu;
 
@@ -39,11 +40,18 @@ public static class GpuAcceleratorHost
     private static bool _initFailed;
 
     // Test-only override. When set, TryAcquire returns this accelerator instead
-    // of the lazily-probed process default, letting the #742 drift-bound test
-    // pin the GPU 3D kernels to a specific device (ILGPU CPU vs a discrete GPU)
-    // and compare the same kernel across accelerator classes. The test owns the
-    // accelerator's lifetime; Clear resets so later callers re-probe normally.
+    // of the lazily-probed process default, letting the #742/#749 tests pin the
+    // GPU 3D kernels to a specific device (ILGPU CPU vs a discrete GPU). The test
+    // owns the accelerator's lifetime; Clear resets so later callers re-probe.
     // Never set on any production path.
+    //
+    // [ThreadStatic] so the override is scoped to the test thread that set it:
+    // xUnit runs test classes in parallel, and a process-global override would
+    // bleed into concurrent GPU tests on other threads, forcing them to JIT +
+    // run the heavy kernels on the CPU accelerator (wedging the suite). The
+    // override tests call the calculators synchronously on their own thread, so
+    // thread-scoping still delivers the override where it is needed.
+    [ThreadStatic]
     private static Accelerator? _testOverride;
 
     /// <summary>Last init failure message, empty when no failure has been
@@ -84,7 +92,20 @@ public static class GpuAcceleratorHost
             try
             {
                 _context = Context.Create(b => b.Default());
-                _accelerator = _context.GetPreferredDevice(preferCPU: false).CreateAccelerator(_context);
+                // Real fp64 GPU only. No such device -> fail so callers use the
+                // CPU ShadingPipeline instead of JIT-ing the kernels on the CPU
+                // accelerator (#749 — too slow, lower quality than the pipeline).
+                var dev = SelectFloat64Device(_context, allowCpu: false);
+                if (dev == null)
+                {
+                    LastError = "no Float64-capable GPU device; using CPU pipeline";
+                    _initFailed = true;
+                    _context.Dispose();
+                    _context = null;
+                    accelerator = null!;
+                    return false;
+                }
+                _accelerator = dev.CreateAccelerator(_context);
                 accelerator = _accelerator;
                 return true;
             }
@@ -99,6 +120,42 @@ public static class GpuAcceleratorHost
                 return false;
             }
         }
+    }
+
+    /// <summary>True when <paramref name="d"/> can run our double-precision
+    /// kernels. Every GPU 3D-fractal kernel is Float64 (double); an OpenCL device
+    /// that lacks fp64 (integrated Intel/AMD iGPUs) throws
+    /// <c>CapabilityNotSupportedException: Float64 … not supported</c> at JIT and
+    /// the whole GPU path silently falls back to the CPU (#749). CPU and CUDA
+    /// devices always provide fp64 — only OpenCL advertises it as optional, so
+    /// only that backend is gated.</summary>
+    internal static bool SupportsFloat64(Device d)
+    {
+        try { return d.Capabilities is not CLCapabilityContext cl || cl.Float64; }
+        catch { return true; } // CPU device: Capabilities not populated, fp64 always available.
+    }
+
+    /// <summary>Pick the accelerator device our fp64 kernels can actually run on.
+    /// Prefers a Float64-capable non-CPU device — a real GPU. Never returns an
+    /// fp64-less device (the #749 bug that let <c>GetPreferredDevice(preferCPU:false)</c>
+    /// choose an Intel iGPU without double support). When <paramref name="allowCpu"/>
+    /// is true the CPU device (always fp64) is an accepted fallback; when false
+    /// the method returns <c>null</c> so the caller can drop to its own CPU code
+    /// path instead of JIT-ing these heavy raymarch kernels on the ILGPU CPU
+    /// accelerator — for the 3D-fractal families that CPU path is the full CPU
+    /// <c>ShadingPipeline</c>, which is both faster (no per-kernel JIT) and higher
+    /// quality than the GPU kernel would be on a CPU accelerator.</summary>
+    internal static Device? SelectFloat64Device(Context ctx, bool allowCpu)
+    {
+        Device? cpu = null;
+        Device? gpu = null;
+        foreach (var d in ctx.Devices)
+        {
+            if (!SupportsFloat64(d)) continue;
+            if (d.AcceleratorType == AcceleratorType.CPU) cpu ??= d;
+            else gpu ??= d;
+        }
+        return gpu ?? (allowCpu ? cpu : null);
     }
 
     /// <summary>Test-only. Pin <see cref="TryAcquire"/> to <paramref name="acc"/>
