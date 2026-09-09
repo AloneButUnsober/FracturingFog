@@ -252,14 +252,22 @@ public sealed class UserEquationCalculator : IFractalCalculator, IHeightFieldSou
 
     public void Calculate(CancellationToken ct = default)
     {
-        if (_sbx == null)
+        // Lazily (re)compile from FractalParameters.UserEquationSource whenever it
+        // differs from what is currently compiled — NOT only when nothing is compiled
+        // yet. #726 / #327: the relief-field twin (_reliefFieldAltCalc) and preview
+        // sidecars (_altPreviewCalc*) only ever get FractalParameters + Calculate (no
+        // explicit Compile() like the UI drives on the display calc), and every saved
+        // equation shares FractalType.UserEquation, so the by-type twin cache is reused
+        // across a switch. Gating this on `_sbx == null` left the twin stuck on the
+        // first equation's compiled delegate — relief "frozen" on one render while the
+        // 2D colour (display calc, recompiled by the UI) kept updating. Recompiling on
+        // source change here fixes it and makes Calculate self-healing for any consumer.
+        // Compile sets _compiledSource, so an unchanged source is a no-op (the display
+        // path stays byte-identical — the UI already keeps _compiledSource in sync).
+        if (!string.IsNullOrWhiteSpace(FractalParameters.UserEquationSource)
+            && FractalParameters.UserEquationSource != _compiledSource)
         {
-            // Try compiling from FractalParameters.UserEquationSource lazily.
-            if (!string.IsNullOrWhiteSpace(FractalParameters.UserEquationSource)
-                && FractalParameters.UserEquationSource != _compiledSource)
-            {
-                Compile(FractalParameters.UserEquationSource);
-            }
+            Compile(FractalParameters.UserEquationSource);
         }
 
         var sbx = _sbx;   // #27 Phase 3 — safe DSL interpreter is the only path
