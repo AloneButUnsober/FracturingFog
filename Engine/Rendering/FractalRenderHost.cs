@@ -2180,15 +2180,16 @@ namespace FracturingFog.Rendering
         /// view + FractalParameters via <see cref="SyncAltStateFromMandel"/>).</summary>
         /// <summary>#327 — should the active ALT render get the low-res 3D relief
         /// preview? Gated on relief enabled + raymarch + a supersamplable height-field
-        /// type, and (like the hi-res twin) NOT the UserEquation hot-load compiled path
-        /// (a fresh interpreted preview twin could diverge from the compiled display).
+        /// type. #741: this now includes the UserEquation hot-load (Compile &amp; Load)
+        /// path — it builds the interpreted twin like PosterRenderer does, so screen and
+        /// poster agree on the relief field (both interpreted hi-res). The interpreted
+        /// field + the compiled albedo describe the same equation, so they align.
         /// When false the alt render keeps its existing single full-res path
         /// (byte-identical) — this only ADDS a preview for relief-eligible alt types.</summary>
         private bool AltReliefPreviewEligible(bool useAlt)
         {
             if (!useAlt) return false;
             var type = ViewState.FractalType;
-            if (type == FractalType.UserEquation && _dynamicAltCalculator != null) return false;
             var rp = ViewState.FractalParameters;
             return rp.Relief2DEnabled && rp.Relief2DRaymarch && SupportsHiResReliefField(type);
         }
@@ -2227,12 +2228,12 @@ namespace FracturingFog.Rendering
         {
             if (dispW <= 2 || dispH <= 2) return false;
             if (!SupportsHiResReliefField(type)) return false;
-            // #726 slice 2 — when a Compile & Load hot-load calc is the active
-            // UserEquation renderer, its display field is the COMPILED SmoothBuffer;
-            // a fresh interpreted twin could diverge from it, mismatching the height
-            // vs the compiled albedo. Keep the hot-load path on its self-consistent
-            // display-res field; the hi-res twin serves the interpreted path only.
-            if (type == FractalType.UserEquation && _dynamicAltCalculator != null) return false;
+            // #741 — the UserEquation hot-load (Compile & Load) path now takes the hi-res
+            // twin too. Previously it fell back to the display-res compiled SmoothBuffer to
+            // avoid an interpreted-field / compiled-albedo seam on screen, but PosterRenderer
+            // ALWAYS builds the interpreted hi-res twin, so that made the poster sharper than
+            // the screen (WYSIWYG break). The interpreted field and the compiled albedo are
+            // the same equation → they align; matching poster is the correct behaviour.
             int floor = Math.Clamp(p.Relief2DFieldFloor, 480, 2160);
             int shortAxis = Math.Min(dispW, dispH);
             if (shortAxis >= floor) return false;   // display already ≥ floor — no gain
