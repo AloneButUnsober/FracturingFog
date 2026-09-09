@@ -57,6 +57,9 @@ public class ImagePaletteViewModel : ViewModelBase
         UseSwatchRowCommand = ReactiveCommand.Create<LabeledSwatchRow>(r => UseBrushesAsPalette(r.Label, r.Swatches));
         UseCosineRampCommand = ReactiveCommand.Create(() => UseBrushesAsPalette("Cosine rainbow", CosineRamp));
         UseBezierRampCommand = ReactiveCommand.Create(() => UseBrushesAsPalette("Bezier (palette)", BezierPaletteRamp));
+        // S10-LW.6 tail (#705) — live Bézier control-colour editing.
+        AddBezierControlCommand = ReactiveCommand.Create(AddBezierControl);
+        RemoveBezierControlCommand = ReactiveCommand.Create<BezierControlColorViewModel>(RemoveBezierControl);
         ApplyLookCommand = ReactiveCommand.Create<LookRowVm>(ApplyLook);
         SaveLookCommand = ReactiveCommand.Create(SaveCurrentAsLook);
         DeleteLookCommand = ReactiveCommand.Create<LookRowVm>(DeleteSavedLook);
@@ -895,17 +898,14 @@ public class ImagePaletteViewModel : ViewModelBase
             // IQ cosine ramp from the live coefficients (roadmap S10-LW.6).
             RebuildCosineRamp();
 
-            // Bézier through the palette's stops, lightness-corrected.
-            var controls = new (byte, byte, byte)[eff.Count];
-            for (int i = 0; i < eff.Count; i++) controls[i] = (eff[i].R, eff[i].G, eff[i].B);
-            foreach (var packed in BezierRamp.Emit(controls, 24, lightnessCorrect: true))
-                BezierPaletteRamp.Add(BrushFromPacked(packed));
+            // Bézier control colours — seeded from the palette's stops, then live-editable
+            // (roadmap S10-LW.6 tail, #705). Rebuilding emits the ramp from whatever the
+            // control list currently holds; "Use as palette" (LW.4a) adopts the strip.
+            SeedBezierControls(eff);
+            RebuildBezierRamp();
         }
 
         this.RaisePropertyChanged(nameof(HasHarmony));
-
-        static ISolidColorBrush BrushFromPacked(uint p) =>
-            new SolidColorBrush(Color.FromRgb((byte)((p >> 16) & 0xFF), (byte)((p >> 8) & 0xFF), (byte)(p & 0xFF)));
     }
 
     // ── Live IQ cosine-palette editor (roadmap S10-LW.6, #392/#692) ──
@@ -933,6 +933,77 @@ public class ImagePaletteViewModel : ViewModelBase
         var da = (ph, ph + 0.3333f, ph + 0.6667f);
         foreach (var packed in CosinePalette.Emit((a, a, a), (b, b, b), (c, c, c), da, 24))
             CosineRamp.Add(new SolidColorBrush(Color.FromRgb(
+                (byte)((packed >> 16) & 0xFF), (byte)((packed >> 8) & 0xFF), (byte)(packed & 0xFF))));
+    }
+
+    // ── Live Bézier control-colour editor (roadmap S10-LW.6 tail, #705) ──
+    //
+    // The Bézier ramp was fixed to the palette's own stops as control colours. Now the
+    // control list is editable — add / remove / recolour points — and BezierPaletteRamp
+    // rebuilds live, mirroring the cosine editor's RebuildCosineRamp. ColorCore's
+    // BezierRamp already supports arbitrary control lists + lightnessCorrect; UI-only.
+
+    /// <summary>Editable Bézier control colours (seeded from the palette's stops). Add /
+    /// remove / recolour rebuilds <see cref="BezierPaletteRamp"/> live.</summary>
+    public ObservableCollection<BezierControlColorViewModel> BezierControls { get; } = new();
+
+    private bool _bezierLightnessCorrect = true;
+    /// <summary>OkLab lightness-correct the Bézier ramp so lightness rises monotonically
+    /// (chroma.js "bezier + lightness" trick). Rebuilds on change.</summary>
+    public bool BezierLightnessCorrect
+    {
+        get => _bezierLightnessCorrect;
+        set { this.RaiseAndSetIfChanged(ref _bezierLightnessCorrect, value); RebuildBezierRamp(); }
+    }
+
+    /// <summary>Append a Bézier control colour (duplicates the last, or mid-grey).</summary>
+    public ReactiveCommand<Unit, Unit> AddBezierControlCommand { get; }
+    /// <summary>Remove a Bézier control colour.</summary>
+    public ReactiveCommand<BezierControlColorViewModel, Unit> RemoveBezierControlCommand { get; }
+
+    private void SeedBezierControls(System.Collections.Generic.IReadOnlyList<PaletteStop> eff)
+    {
+        foreach (var vm in BezierControls) vm.ColorChanged -= RebuildBezierRamp;
+        BezierControls.Clear();
+        foreach (var s in eff)
+            AddBezierControlWithHook(new BezierControlColorViewModel(s.R, s.G, s.B));
+    }
+
+    private void AddBezierControlWithHook(BezierControlColorViewModel vm)
+    {
+        vm.ColorChanged += RebuildBezierRamp;
+        BezierControls.Add(vm);
+    }
+
+    private void AddBezierControl()
+    {
+        var last = BezierControls.Count > 0 ? BezierControls[BezierControls.Count - 1] : null;
+        AddBezierControlWithHook(last != null
+            ? new BezierControlColorViewModel(last.R, last.G, last.B)
+            : new BezierControlColorViewModel(128, 128, 128));
+        RebuildBezierRamp();
+    }
+
+    private void RemoveBezierControl(BezierControlColorViewModel vm)
+    {
+        if (vm == null || !BezierControls.Contains(vm)) return;
+        vm.ColorChanged -= RebuildBezierRamp;
+        BezierControls.Remove(vm);
+        RebuildBezierRamp();
+    }
+
+    private void RebuildBezierRamp()
+    {
+        BezierPaletteRamp.Clear();
+        if (BezierControls.Count < 2) return;   // Bézier needs ≥ 2 control colours
+        var controls = new (byte, byte, byte)[BezierControls.Count];
+        for (int i = 0; i < BezierControls.Count; i++)
+        {
+            var v = BezierControls[i];
+            controls[i] = (v.R, v.G, v.B);
+        }
+        foreach (var packed in BezierRamp.Emit(controls, 24, lightnessCorrect: _bezierLightnessCorrect))
+            BezierPaletteRamp.Add(new SolidColorBrush(Color.FromRgb(
                 (byte)((packed >> 16) & 0xFF), (byte)((packed >> 8) & 0xFF), (byte)(packed & 0xFF))));
     }
 
@@ -1249,6 +1320,68 @@ public class ImagePaletteViewModel : ViewModelBase
 /// IsLocked is advisory — present so the UI can render a pin icon, but
 /// reorder/edit commands intentionally ignore it (semantics are "visual lock").
 /// </summary>
+/// <summary>One editable Bézier control colour (roadmap S10-LW.6 tail, #705). Recolour
+/// via the bound <see cref="Color"/> (ColorPicker) or <see cref="Hex"/> text; the parent
+/// rebuilds the Bézier ramp on <see cref="Changed"/>.</summary>
+public sealed class BezierControlColorViewModel : ViewModelBase
+{
+    public BezierControlColorViewModel(byte r, byte g, byte b) { _r = r; _g = g; _b = b; }
+
+    private byte _r, _g, _b;
+    public byte R => _r;
+    public byte G => _g;
+    public byte B => _b;
+
+    /// <summary>Raised whenever the colour changes so the parent can rebuild the ramp.
+    /// Named ColorChanged (not Changed) to avoid hiding ReactiveObject.Changed.</summary>
+    public event System.Action? ColorChanged;
+
+    /// <summary>Control colour as an Avalonia Color — bound TwoWay by a ColorPicker.</summary>
+    public global::Avalonia.Media.Color Color
+    {
+        get => global::Avalonia.Media.Color.FromArgb(255, _r, _g, _b);
+        set
+        {
+            if (_r == value.R && _g == value.G && _b == value.B) return;
+            _r = value.R; _g = value.G; _b = value.B;
+            RaiseColorRelated();
+        }
+    }
+
+    /// <summary>Hex "#RRGGBB" — settable (parses; ignores malformed input).</summary>
+    public string Hex
+    {
+        get => $"#{_r:X2}{_g:X2}{_b:X2}";
+        set
+        {
+            var s = value?.Trim().TrimStart('#');
+            if (s is { Length: 6 }
+                && byte.TryParse(s.Substring(0, 2), System.Globalization.NumberStyles.HexNumber, null, out byte r)
+                && byte.TryParse(s.Substring(2, 2), System.Globalization.NumberStyles.HexNumber, null, out byte g)
+                && byte.TryParse(s.Substring(4, 2), System.Globalization.NumberStyles.HexNumber, null, out byte b)
+                && (r != _r || g != _g || b != _b))
+            {
+                _r = r; _g = g; _b = b;
+                RaiseColorRelated();
+            }
+        }
+    }
+
+    public global::Avalonia.Media.IBrush PreviewBrush
+        => new global::Avalonia.Media.SolidColorBrush(global::Avalonia.Media.Color.FromArgb(255, _r, _g, _b));
+
+    private void RaiseColorRelated()
+    {
+        this.RaisePropertyChanged(nameof(R));
+        this.RaisePropertyChanged(nameof(G));
+        this.RaisePropertyChanged(nameof(B));
+        this.RaisePropertyChanged(nameof(Color));
+        this.RaisePropertyChanged(nameof(Hex));
+        this.RaisePropertyChanged(nameof(PreviewBrush));
+        ColorChanged?.Invoke();
+    }
+}
+
 public sealed class EditableStopViewModel : ViewModelBase
 {
     public EditableStopViewModel(float position, byte r, byte g, byte b)
