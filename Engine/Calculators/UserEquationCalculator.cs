@@ -264,10 +264,19 @@ public sealed class UserEquationCalculator : IFractalCalculator, IHeightFieldSou
         // source change here fixes it and makes Calculate self-healing for any consumer.
         // Compile sets _compiledSource, so an unchanged source is a no-op (the display
         // path stays byte-identical — the UI already keeps _compiledSource in sync).
-        if (!string.IsNullOrWhiteSpace(FractalParameters.UserEquationSource)
-            && FractalParameters.UserEquationSource != _compiledSource)
+        // #745 — pick the source for the ACTIVE editor tab: the DSL tab (index 1) stores
+        // its equation in UserEquationDslSource, the C# tab in UserEquationSource. Both are
+        // DSL-parseable (Compile → EquationPreprocessor → SandboxExpression; the C# form is
+        // translated, raw DSL passes through), so the interpreter can render either. This
+        // gives a DSL "Compile & Load" equation a headless interpreted path — previously it
+        // rendered ONLY via the compiled hot-load calc, so poster / batch (which build a
+        // plain UserEquationCalculator) drew the wrong/empty equation.
+        string? effSource = FractalParameters.UserEquationActiveTab == 1
+            ? FractalParameters.UserEquationDslSource
+            : FractalParameters.UserEquationSource;
+        if (!string.IsNullOrWhiteSpace(effSource) && effSource != _compiledSource)
         {
-            Compile(FractalParameters.UserEquationSource);
+            Compile(effSource);
         }
 
         var sbx = _sbx;   // #27 Phase 3 — safe DSL interpreter is the only path
