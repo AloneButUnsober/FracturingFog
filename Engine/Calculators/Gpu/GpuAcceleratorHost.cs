@@ -38,6 +38,14 @@ public static class GpuAcceleratorHost
     private static bool _initAttempted;
     private static bool _initFailed;
 
+    // Test-only override. When set, TryAcquire returns this accelerator instead
+    // of the lazily-probed process default, letting the #742 drift-bound test
+    // pin the GPU 3D kernels to a specific device (ILGPU CPU vs a discrete GPU)
+    // and compare the same kernel across accelerator classes. The test owns the
+    // accelerator's lifetime; Clear resets so later callers re-probe normally.
+    // Never set on any production path.
+    private static Accelerator? _testOverride;
+
     /// <summary>Last init failure message, empty when no failure has been
     /// recorded.</summary>
     public static string LastError { get; private set; } = string.Empty;
@@ -51,6 +59,11 @@ public static class GpuAcceleratorHost
     {
         lock (_lock)
         {
+            if (_testOverride != null)
+            {
+                accelerator = _testOverride;
+                return true;
+            }
             if (_accelerator != null)
             {
                 accelerator = _accelerator;
@@ -86,6 +99,15 @@ public static class GpuAcceleratorHost
                 return false;
             }
         }
+    }
+
+    /// <summary>Test-only. Pin <see cref="TryAcquire"/> to <paramref name="acc"/>
+    /// (or clear with null) so the #742 drift-bound test can run the GPU 3D
+    /// kernels on a chosen device. The caller owns the accelerator's lifetime.
+    /// Not for production use.</summary>
+    public static void SetTestOverride(Accelerator? acc)
+    {
+        lock (_lock) _testOverride = acc;
     }
 
     /// <summary>True when the accelerator was acquired successfully at least
