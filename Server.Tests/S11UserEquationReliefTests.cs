@@ -44,6 +44,41 @@ public sealed class S11UserEquationReliefTests
         return calc;
     }
 
+    // Regression — relief "stuck" on one render when switching saved User Equations.
+    // The relief-field twin / preview sidecars only ever get FractalParameters +
+    // Calculate (no explicit Compile() like the UI drives on the display calc), and
+    // every saved equation shares FractalType.UserEquation → the by-type twin cache is
+    // reused. Calculate must (re)compile when the SOURCE changes, not only when nothing
+    // is compiled yet, or the twin stays frozen on the first equation's field.
+    [Fact]
+    public void Recompiles_On_Source_Change_Without_Explicit_Compile()
+    {
+        var calc = new UserEquationCalculator(W, H)
+        {
+            CenterX = -0.5, CenterY = 0.0, Zoom = 1.0, MaxIterations = 200,
+            ColorMap = new MonoBandMap(),
+            FractalParameters = new FractalParameters
+            {
+                UserEquationSource = "z*z + c",
+                UserCodeOrigin = UserCodeOrigin.Interactive,
+            },
+        };
+        calc.Calculate(default);
+        var fieldA = (float[])calc.SmoothBuffer.Clone();
+
+        // Switch equation the way SyncAltStateFromMandel configures the twin: replace
+        // FractalParameters (new source), then Calculate — NO explicit Compile().
+        calc.FractalParameters = new FractalParameters
+        {
+            UserEquationSource = "z*z*z + c",   // cubic — a genuinely different field
+            UserCodeOrigin = UserCodeOrigin.Interactive,
+        };
+        calc.Calculate(default);
+        var fieldB = (float[])calc.SmoothBuffer.Clone();
+
+        Assert.NotEqual(fieldA, fieldB);   // twin followed the switch (was frozen on A)
+    }
+
     // (a) The DSL calc now exposes a real height field — the gap #726 closes.
     [Fact]
     public void Exposes_Structured_HeightField_Source()
