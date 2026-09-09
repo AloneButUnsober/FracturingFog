@@ -3350,7 +3350,32 @@ namespace FracturingFog.Rendering
                 alt.Resize(_calculator.Width, _calculator.Height);
                 alt.ColorMap = _calculator.ColorMap;
             }
+            // #738 — installing / dropping a Compile & Load hot-load flips which calc the
+            // relief height field is captured from (compiled hot-load ↔ interpreted twin),
+            // but the relief sidecars are keyed only by FractalType (UserEquation both
+            // ways), so a stale cached twin + a stale _reliefHeight/_reliefValid could
+            // persist across the transition — the reported "relief frozen while 2D colour
+            // keeps changing". Invalidate the captured field + drop the cached relief /
+            // preview twins so the next render rebuilds the height from the current source.
+            InvalidateReliefFieldCache();
             Trigger();
+        }
+
+        /// <summary>#738 — drop the captured relief height + the cached relief-field /
+        /// preview twins so the next render rebuilds the field from scratch. Called when
+        /// the active calculator identity changes under a fixed FractalType (Compile &amp;
+        /// Load install / drop), which the type-keyed twin caches would otherwise miss.</summary>
+        private void InvalidateReliefFieldCache()
+        {
+            _reliefValid = false;
+            (_reliefFieldAltCalc as IDisposable)?.Dispose();
+            _reliefFieldAltCalc = null;
+            _reliefFieldAltType = FractalType.Mandelbrot;
+            (_altPreviewCalcQuarter as IDisposable)?.Dispose();
+            (_altPreviewCalcHalf as IDisposable)?.Dispose();
+            _altPreviewCalcQuarter = null;
+            _altPreviewCalcHalf = null;
+            _altPreviewType = (FractalType)(-1);
         }
 
         // Common alt-calc state sync: pull centre/zoom/iter/quality/colormap
