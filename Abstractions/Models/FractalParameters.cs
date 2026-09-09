@@ -1355,6 +1355,14 @@ namespace FracturingFog.Models
                 Relief2DAutoShade = Relief2DAutoShade,
                 Relief2DAutoShadeKeepExplicitZeros = Relief2DAutoShadeKeepExplicitZeros,
                 Relief2DEdgeFade = Relief2DEdgeFade,
+                // #510 — froxel (frustum-voxel) volumetrics fields were omitted from Clone,
+                // so a cloned params (region/preset/scene snapshot, batch copy) silently
+                // dropped froxel fog + its temporal settings.
+                Relief2DFroxelVolumetrics = Relief2DFroxelVolumetrics,
+                Relief2DFroxelTemporal = Relief2DFroxelTemporal,
+                Relief2DFroxelTemporalFeedback = Relief2DFroxelTemporalFeedback,
+                Relief2DFroxelReproject = Relief2DFroxelReproject,
+                Relief2DFroxelQuality = Relief2DFroxelQuality,
                 Relief2DHiResField = Relief2DHiResField,
                 Relief2DFieldFloor = Relief2DFieldFloor,
                 Relief2DSettleDetail = Relief2DSettleDetail,
