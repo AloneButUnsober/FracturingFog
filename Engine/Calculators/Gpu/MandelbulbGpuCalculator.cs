@@ -74,7 +74,7 @@ public sealed class MandelbulbGpuCalculator : IDisposable
         }
         catch (Exception ex)
         {
-            LastError = $"Mandelbulb GPU kernel load failed: {ex.Message}";
+            LastError = $"Mandelbulb GPU kernel load failed: {ex.GetBaseException().Message}";
             _initFailed = true;
             return false;
         }
@@ -254,7 +254,7 @@ public sealed class MandelbulbGpuCalculator : IDisposable
                 occl += Math.Max(0.0, d - sd) / d;
                 w += 1.0;
             }
-            ao = Math.Clamp(1.0 - sp.AoStrength * (occl / Math.Max(w, 1.0)), 0.0, 1.0);
+            ao = GpuKernelUtils.Clamp(1.0 - sp.AoStrength * (occl / Math.Max(w, 1.0)), 0.0, 1.0);
         }
 
         var (aR, aG, aB) = GpuKernelUtils.CheapAlbedo(hitStep, r.MaxSteps, tT);
@@ -446,7 +446,7 @@ public sealed class MandelbulbGpuCalculator : IDisposable
             t += h;
             if (t >= tMax) break;
         }
-        return Math.Clamp(res, 0.0, 1.0);
+        return GpuKernelUtils.Clamp(res, 0.0, 1.0);
     }
 
     /// <summary>Triplex Mandelbulb distance estimator. Mirrors the CPU

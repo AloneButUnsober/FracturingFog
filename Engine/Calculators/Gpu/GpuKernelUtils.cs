@@ -287,7 +287,7 @@ internal static class GpuKernelUtils
         double topR, double topG, double topB,
         double botR, double botG, double botB)
     {
-        double t = Math.Clamp(0.5 * (rdy + 1.0), 0, 1);
+        double t = Clamp(0.5 * (rdy + 1.0), 0, 1);
         return (
             (1.0 - t) * botR + t * topR,
             (1.0 - t) * botG + t * topG,
@@ -337,9 +337,9 @@ internal static class GpuKernelUtils
     /// <summary>P7c.2 — pack 0..255 doubles into a BGRA uint with clamp.</summary>
     public static uint PackBgra(double br, double bg, double bb)
     {
-        uint R = (uint)Math.Clamp(br, 0.0, 255.0);
-        uint G = (uint)Math.Clamp(bg, 0.0, 255.0);
-        uint B = (uint)Math.Clamp(bb, 0.0, 255.0);
+        uint R = (uint)Clamp(br, 0.0, 255.0);
+        uint G = (uint)Clamp(bg, 0.0, 255.0);
+        uint B = (uint)Clamp(bb, 0.0, 255.0);
         return 0xFF000000u | (R << 16) | (G << 8) | B;
     }
 
@@ -362,6 +362,18 @@ internal static class GpuKernelUtils
             bg * (1.0 - fogF) + skyG * fogF,
             bb * (1.0 - fogF) + skyB * fogF);
     }
+
+    /// <summary>ILGPU-safe scalar clamp. <see cref="System.Clamp(double,double,double)"/>
+    /// lowers to a call to <c>ThrowMinMaxException</c>, and ILGPU cannot compile
+    /// the <c>Throw</c> IL that leaves in the kernel graph ("Not supported IL
+    /// instruction of type 'Throw'") — so every GPU kernel that used
+    /// <c>Math.Clamp</c> silently failed to JIT and fell back to the CPU
+    /// (#749). This branch-only form is byte-identical for ordered bounds
+    /// (lo ≤ hi) — the throw path Math.Clamp guards is never taken at runtime
+    /// here — and carries no throw for ILGPU to reject. NaN passes through, as
+    /// with Math.Clamp.</summary>
+    public static double Clamp(double v, double lo, double hi)
+        => v < lo ? lo : (v > hi ? hi : v);
 
     /// <summary>P7c.2 — Padé(2,2) approximation of exp(-x). ~1e-4 accuracy on
     /// x ∈ [0, 1]; caller falls back to <c>Math.Exp</c> outside the trust band.
@@ -511,7 +523,7 @@ internal static class GpuKernelUtils
         double g = sp.VolumeAnisotropy;
         if (g != 0.0)
         {
-            g = Math.Clamp(g, -0.99, 0.99);
+            g = Clamp(g, -0.99, 0.99);
             double cosT = vdx * lx + vdy * ly + vdz * lz;
             double denom = 1.0 + g * g - 2.0 * g * cosT;
             scatter *= (1.0 - g * g) / (denom * Math.Sqrt(denom));
@@ -709,7 +721,7 @@ internal static class GpuKernelUtils
         {
             double a = Math.Sin(u * 12.9898 + v * 78.233) * 43758.5453;
             double n = a - Math.Floor(a);
-            return Math.Clamp(0.3 + 0.7 * n, 0, 1);
+            return Clamp(0.3 + 0.7 * n, 0, 1);
         }
         if (kind == 4)
         {
@@ -741,7 +753,7 @@ internal static class GpuKernelUtils
         double txX = TriplanarSample2D(kind, px * s, pz * s);
         double txZ = TriplanarSample2D(kind, px * s, py * s);
         double v = wx * txY + wy * txX + wz * txZ;
-        v = Math.Clamp(v, 0, 1);
+        v = Clamp(v, 0, 1);
         double Tr = sp.TriplanarTintR / 255.0;
         double Tg = sp.TriplanarTintG / 255.0;
         double Tb = sp.TriplanarTintB / 255.0;
@@ -981,9 +993,9 @@ internal static class GpuKernelUtils
             bb = bb * (1.0 - fogF) + skyB * fogF;
         }
 
-        uint R = (uint)Math.Clamp(br, 0.0, 255.0);
-        uint G = (uint)Math.Clamp(bg, 0.0, 255.0);
-        uint B = (uint)Math.Clamp(bb, 0.0, 255.0);
+        uint R = (uint)Clamp(br, 0.0, 255.0);
+        uint G = (uint)Clamp(bg, 0.0, 255.0);
+        uint B = (uint)Clamp(bb, 0.0, 255.0);
         return 0xFF000000u | (R << 16) | (G << 8) | B;
     }
 }

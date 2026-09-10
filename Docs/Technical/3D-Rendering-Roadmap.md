@@ -514,11 +514,26 @@ code.
   as the preview. On a GPU-less export host the frame renders via the CPU `ShadingPipeline`
   (`UseGpuRender` off, or the kernel not JIT-ing) rather than the GPU kernel; those two paths
   are not bit-identical.
-- **Observed side-finding (separate issue):** the Mandelbulb GPU kernel currently **fails to
-  JIT** on the dev host across the ILGPU CPU (`internal compiler error`), OpenCL and Cuda
-  backends, so the whole 3D GPU render path silently falls back to the CPU pipeline there and
-  the 3D GPU test family is presently exercising fallback, not the kernel. Filed as **#749**;
-  independent of the drift-bound work.
+- **3D GPU kernels failed to JIT — FIXED (#749):** the side-finding from the #742 work turned
+  out to affect **all eight 3D-fractal families** (not just the Mandelbulb) plus UserBulb, with
+  a single root cause: every kernel called `System.Math.Clamp(double,…)`, which lowers to a call
+  to `Math.ThrowMinMaxException`, and ILGPU **cannot compile the `Throw` IL** left in the kernel
+  graph (`Not supported IL instruction of type 'Throw'`). `LoadAutoGroupedStreamKernel` threw for
+  every family → the calculators silently fell back to the CPU `ShadingPipeline` → the whole 3D
+  GPU test family was passing trivially via fallback, never exercising the kernel. Fixed by
+  `GpuKernelUtils.Clamp` (a branch-only, throw-free clamp; byte-identical for ordered bounds)
+  replacing all 28 device-path `Math.Clamp` calls, matching the "no exception throw" rule the
+  `GpuKernelUtils` header already stated. A second bug rode alongside: device selection
+  (`GetPreferredDevice(preferCPU:false)`) could pick an **fp64-less OpenCL iGPU** (Intel UHD →
+  `Float64 not supported`); `GpuAcceleratorHost.SelectFloat64Device` now requires Float64 and the
+  shared singleton acquires a **real fp64 GPU only** — no GPU ⇒ TryAcquire fails ⇒ the CPU
+  pipeline handles it (faster + higher quality than JIT-ing these heavy kernels on the CPU
+  accelerator). Regression guard: `S749Gpu3DKernelJitTests` JIT-loads each family kernel on the
+  ILGPU CPU accelerator (via the test-only `SetTestOverride`, now `[ThreadStatic]` so it does not
+  bleed across xUnit's parallel classes) and asserts the load succeeds.
+- **Known unsupported hardware:** a Float64-capable but ancient GPU (e.g. Cuda SM_35 / GeForce
+  GT 710) can still fail a specific intrinsic at JIT (`LogF` has no intrinsic there); that latches
+  the init-failed flag and the calculator falls back to the CPU pipeline — graceful, no crash.
 
 ### S4 — Guided denoiser (À-Trous / SVGF-lite) ● (#402)
 AO, soft shadow and reflections are Monte Carlo → noisy → paid for with
