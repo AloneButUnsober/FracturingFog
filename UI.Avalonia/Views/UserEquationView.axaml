@@ -19,7 +19,17 @@
         Tab 1  DSL            — bare CalcGen DSL (validate-on-type, no live render)
       Save/Compile/Generate route by the currently active tab via the VM.
     -->
-    <Grid Margin="12" RowDefinitions="Auto,Auto,Auto,*,Auto,Auto">
+    <!-- Whole form scrolls when the window is too short to show it all (e.g.
+         the Live preview expander open on a non-maximised window). Binding the
+         inner Grid's MinHeight to the scroll viewport makes it FILL the window
+         when there's room (so the editor grows as before) and SCROLL only when
+         content exceeds the viewport — the standard Avalonia idiom. -->
+    <ScrollViewer x:Name="RootScroll"
+                  Padding="12"
+                  VerticalScrollBarVisibility="Auto"
+                  HorizontalScrollBarVisibility="Disabled">
+    <Grid RowDefinitions="Auto,Auto,Auto,*,Auto,Auto"
+          MinHeight="{Binding #RootScroll.Viewport.Height}">
 
         <!-- Row 0: saved equations row -->
         <Grid Grid.Row="0"
@@ -151,8 +161,10 @@
             </Grid>
         </Grid>
 
-        <!-- Row 3: tab control (fills) -->
+        <!-- Row 3: tab control (fills). MinHeight keeps the editor usable even
+             when the form is scrolling on a short window. -->
         <TabControl Grid.Row="3"
+                    MinHeight="180"
                     SelectedIndex="{Binding ActiveTabIndex, Mode=TwoWay}"
                     Background="Transparent">
 
@@ -340,5 +352,6 @@
         </Grid>
 
     </Grid>
+    </ScrollViewer>
 
 </UserControl>
