@@ -37,6 +37,7 @@ public readonly record struct GenerateResult(
 /// </summary>
 public readonly record struct PreviewResult(
     string AstText,
+    string LatexText,
     string DpDzText,
     string DpDcText,
     int SaFastDegree,
@@ -568,6 +569,7 @@ public static class CalculatorGenApi
 
         return new PreviewResult(
             AstText: AstPrinter.Print(root),
+            LatexText: AstLatexPrinter.Print(root),
             DpDzText: AstPrinter.Print(dpdz),
             DpDcText: AstPrinter.Print(dpdc),
             SaFastDegree: saFastOn ? saFast : 0,

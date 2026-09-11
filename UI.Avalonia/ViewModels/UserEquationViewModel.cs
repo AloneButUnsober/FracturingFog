@@ -408,6 +408,7 @@ public sealed class UserEquationViewModel : ViewModelBase
     // the previous valid equation produced; PreviewError surfaces the
     // current state in red separately if desired.
     private string _previewAstText = string.Empty;
+    private string _previewLatexText = string.Empty;
     private string _previewDpDzText = string.Empty;
     private string _previewDpDcText = string.Empty;
     private string _previewSaText = "off";
@@ -417,6 +418,12 @@ public sealed class UserEquationViewModel : ViewModelBase
     private bool _hasPreview;
 
     public string PreviewAstText { get => _previewAstText; private set => this.RaiseAndSetIfChanged(ref _previewAstText, value); }
+    /// <summary>The equation as interpreted by the DSL engine, rendered to a
+    /// standard, portable LaTeX math string (#754). Copyable for paste/import
+    /// into Overleaf / KaTeX / MathJax / Word. <see cref="HasLatex"/> gates the
+    /// row + copy button.</summary>
+    public string PreviewLatexText { get => _previewLatexText; private set { this.RaiseAndSetIfChanged(ref _previewLatexText, value); this.RaisePropertyChanged(nameof(HasLatex)); } }
+    public bool HasLatex => !string.IsNullOrEmpty(_previewLatexText);
     public string PreviewDpDzText { get => _previewDpDzText; private set => this.RaiseAndSetIfChanged(ref _previewDpDzText, value); }
     public string PreviewDpDcText { get => _previewDpDcText; private set => this.RaiseAndSetIfChanged(ref _previewDpDcText, value); }
     public string PreviewSaText { get => _previewSaText; private set => this.RaiseAndSetIfChanged(ref _previewSaText, value); }
@@ -436,6 +443,7 @@ public sealed class UserEquationViewModel : ViewModelBase
         var p = CalculatorGenApi.Preview(equation);
         if (!p.Ok) return;
         PreviewAstText = p.AstText;
+        PreviewLatexText = p.LatexText;
         PreviewDpDzText = p.DpDzText;
         PreviewDpDcText = p.DpDcText;
         PreviewSaText = p.SaFastDegree >= 2
@@ -560,6 +568,14 @@ public sealed class UserEquationViewModel : ViewModelBase
         // ExternalFile stamp left by a previously-viewed imported region.
         _params.UserCodeOrigin = FracturingFog.Security.UserCodeOrigin.Interactive;
         CompileRequested?.Invoke();
+    }
+
+    /// <summary>Set a transient status-bar message (e.g. copy confirmation from
+    /// the view code-behind, which owns the clipboard call).</summary>
+    public void ShowStatus(string text, bool isError = false)
+    {
+        StatusText = text;
+        StatusIsError = isError;
     }
 
     /// <summary>Host calls this with compile result. Empty error => success.</summary>
