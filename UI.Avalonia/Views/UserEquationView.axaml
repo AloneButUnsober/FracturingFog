@@ -19,7 +19,17 @@
         Tab 1  DSL            — bare CalcGen DSL (validate-on-type, no live render)
       Save/Compile/Generate route by the currently active tab via the VM.
     -->
-    <Grid Margin="12" RowDefinitions="Auto,Auto,Auto,*,Auto,Auto">
+    <!-- Whole form scrolls when the window is too short to show it all (e.g.
+         the Live preview expander open on a non-maximised window). Binding the
+         inner Grid's MinHeight to the scroll viewport makes it FILL the window
+         when there's room (so the editor grows as before) and SCROLL only when
+         content exceeds the viewport — the standard Avalonia idiom. -->
+    <ScrollViewer x:Name="RootScroll"
+                  Padding="12"
+                  VerticalScrollBarVisibility="Auto"
+                  HorizontalScrollBarVisibility="Disabled">
+    <Grid RowDefinitions="Auto,Auto,Auto,*,Auto,Auto"
+          MinHeight="{Binding #RootScroll.Viewport.Height}">
 
         <!-- Row 0: saved equations row -->
         <Grid Grid.Row="0"
@@ -151,8 +161,10 @@
             </Grid>
         </Grid>
 
-        <!-- Row 3: tab control (fills) -->
+        <!-- Row 3: tab control (fills). MinHeight keeps the editor usable even
+             when the form is scrolling on a short window. -->
         <TabControl Grid.Row="3"
+                    MinHeight="180"
                     SelectedIndex="{Binding ActiveTabIndex, Mode=TwoWay}"
                     Background="Transparent">
 
@@ -265,6 +277,19 @@
                   Margin="0,8,0,0"
                   Background="#1C1C1C"
                   Foreground="#B4B4B4">
+          <StackPanel Orientation="Vertical" Margin="0,0,0,0">
+            <!-- Typeset math (#755) — self-rendered from the same parsed AST.
+                 Uniform + DownOnly scales the whole equation to fit the panel
+                 width (never clipped / cut short); small equations show at
+                 natural size. MaxHeight caps tall fractions / cases. Hidden
+                 when the render failed. -->
+            <Border IsVisible="{Binding HasMathImage}"
+                    Background="#161616" CornerRadius="3"
+                    Margin="6,4,6,2" Padding="8,6">
+                <Image Source="{Binding MathImage}"
+                       Stretch="Uniform" StretchDirection="DownOnly"
+                       MaxHeight="160" HorizontalAlignment="Center" />
+            </Border>
             <Grid ColumnDefinitions="Auto,*"
                   RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto"
                   Margin="6,4,6,6">
@@ -298,6 +323,7 @@
                 <TextBlock Grid.Row="7" Grid.Column="0" Text="Flags: "        Foreground="#909090" Margin="0,0,8,0" />
                 <SelectableTextBlock Grid.Row="7" Grid.Column="1" Text="{Binding PreviewFlagsText}"   FontFamily="Consolas, monospace" Foreground="#DCDCDC" />
             </Grid>
+          </StackPanel>
         </Expander>
 
         <!-- Row 5: status / error + Apply Fix button (Ctrl+.) -->
@@ -326,5 +352,6 @@
         </Grid>
 
     </Grid>
+    </ScrollViewer>
 
 </UserControl>
