@@ -3,6 +3,9 @@
 
 using System;
 using Avalonia.Controls;
+using Avalonia.Input;
+using Avalonia.Input.Platform;
+using Avalonia.Interactivity;
 using Avalonia.Markup.Xaml;
 
 using FracturingFog.UI.Avalonia.Input;
@@ -98,6 +101,29 @@ public sealed partial class UserEquationView : UserControl
         _pendingStart = start;
         _pendingEnd = end;
         if (!editor.IsFocused) FlushPending(editor);
+    }
+
+    // Copy the interpreted-math LaTeX (#754) to the clipboard. The view owns
+    // the clipboard call (TopLevel.Clipboard is a UI-layer accessor, like the
+    // ErrorSpan selection handling above); the VM only supplies the string and
+    // the confirmation status. Fire-and-forget — a copy failure logs and shows
+    // a status note but never throws a modal.
+    private async void OnCopyLatex(object? sender, RoutedEventArgs e)
+    {
+        if (_vm == null) return;
+        string latex = _vm.PreviewLatexText ?? string.Empty;
+        if (string.IsNullOrEmpty(latex)) return;
+        var clipboard = TopLevel.GetTopLevel(this)?.Clipboard;
+        if (clipboard == null) return;
+        try
+        {
+            await clipboard.SetValueAsync(DataFormat.Text, latex);
+            _vm.ShowStatus("✓ LaTeX copied");
+        }
+        catch (Exception ex)
+        {
+            _vm.ShowStatus($"Copy failed: {ex.Message}", isError: true);
+        }
     }
 
     private void FlushPending(TextBox editor)
