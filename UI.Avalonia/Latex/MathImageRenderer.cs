@@ -93,14 +93,17 @@ public static class MathImageRenderer
         }
     }
 
-    // Copy the Skia bitmap into a WriteableBitmap tagged at Ss× dpi so Avalonia
-    // downsamples it to the logical size (same BGRA/premul layout, so it's a
-    // straight per-row copy — mirrors the LiveFractal bitmap path).
+    // Copy the Skia bitmap into a WriteableBitmap. dpi is left at the default 96
+    // so Bitmap.Size == PixelSize: a >96 dpi WriteableBitmap makes the Image lay
+    // out at the DIP size (½ the pixels) while still painting the full raster,
+    // which shows only the top-left corner (the "cut short" bug). The Ss×
+    // supersample is instead resolved by the view's Stretch="Uniform" downscale,
+    // which keeps the glyphs crisp.
     private static Bitmap ToAvaloniaBitmap(SKBitmap src)
     {
         int w = src.Width, h = src.Height;
         var wb = new WriteableBitmap(
-            new PixelSize(w, h), new Vector(96 * Ss, 96 * Ss),
+            new PixelSize(w, h), new Vector(96, 96),
             PixelFormat.Bgra8888, AlphaFormat.Premul);
         using (var fb = wb.Lock())
         {

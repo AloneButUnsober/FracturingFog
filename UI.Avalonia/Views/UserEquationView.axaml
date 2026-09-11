@@ -267,13 +267,16 @@
                   Foreground="#B4B4B4">
           <StackPanel Orientation="Vertical" Margin="0,0,0,0">
             <!-- Typeset math (#755) — self-rendered from the same parsed AST.
-                 Horizontal scroll for wide equations; hidden when render failed. -->
+                 Uniform + DownOnly scales the whole equation to fit the panel
+                 width (never clipped / cut short); small equations show at
+                 natural size. MaxHeight caps tall fractions / cases. Hidden
+                 when the render failed. -->
             <Border IsVisible="{Binding HasMathImage}"
                     Background="#161616" CornerRadius="3"
                     Margin="6,4,6,2" Padding="8,6">
-                <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled">
-                    <Image Source="{Binding MathImage}" Stretch="None" HorizontalAlignment="Left" />
-                </ScrollViewer>
+                <Image Source="{Binding MathImage}"
+                       Stretch="Uniform" StretchDirection="DownOnly"
+                       MaxHeight="160" HorizontalAlignment="Center" />
             </Border>
             <Grid ColumnDefinitions="Auto,*"
                   RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto"
