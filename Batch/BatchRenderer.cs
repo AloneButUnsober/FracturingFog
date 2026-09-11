@@ -351,8 +351,8 @@ namespace FracturingFog.Batch
             int totalFrames = (int)Math.Round(opts.VideoSeconds * opts.VideoFps);
             if (totalFrames < 2) totalFrames = 2;
 
-            double startZoom = Math.Max(opts.VideoStartZoom, 1e-12);
-            double endZoom = Math.Max(targetZoom, 1e-12);
+            double startZoom = Math.Max(opts.VideoStartZoom, QualityPreset.DefaultZoomMin);
+            double endZoom = Math.Max(targetZoom, QualityPreset.DefaultZoomMin);
             if (opts.VideoReverse)
             {
                 // Reverse: start at target, end at the start-zoom (full view).
@@ -1087,7 +1087,7 @@ namespace FracturingFog.Batch
                 if (region == null) break;
 
                 int iter = region.Iterations > 0 ? region.Iterations : 1000;
-                double target = Math.Max(region.Zoom, 1e-12);
+                double target = Math.Max(region.Zoom, QualityPreset.DefaultZoomMin);
                 double z0 = reverse ? target : startZoom;
                 double z1 = reverse ? startZoom : target;
                 double logZ0 = Math.Log(z0), logZ1 = Math.Log(z1);
@@ -1354,7 +1354,7 @@ namespace FracturingFog.Batch
             double legSeconds = cfg.Video?.SecondsPerLeg > 0 ? cfg.Video.SecondsPerLeg : 8.0;
             int videoLegFrames = Math.Max(2, (int)Math.Round(legSeconds * fps));
             int videoThemesPerLeg = Math.Clamp(cfg.Video?.ThemesPerLeg ?? 3, 1, 8);
-            double vStartZoom = Math.Max(opts.VideoStartZoom, 1e-12);
+            double vStartZoom = Math.Max(opts.VideoStartZoom, QualityPreset.DefaultZoomMin);
             bool vReverse = opts.VideoReverse || (cfg.Video?.Reverse ?? false);
 
             // Post-FX: CLI flags override the preset's PostFx block.
