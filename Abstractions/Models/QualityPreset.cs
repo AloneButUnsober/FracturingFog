@@ -68,13 +68,26 @@ namespace FracturingFog.Models
 
         // ── Zoom control ──────────────────────────────────────────────────────
 
-        /// <summary>Minimum allowed zoom. Default 1e-6 lets the user pull the
+        /// <summary>Deepest reverse-zoom (zoom-out) floor, shared by every tier
+        /// and the batch/video reverse-zoom clamp. Below this the fractal is a
+        /// sub-pixel dot; the floor exists only to keep <c>Zoom</c> a
+        /// well-conditioned positive double (span ≈ 3.5 / Zoom, so 1e-18 ⇒ a
+        /// 3.5e18 plane — far past any useful structure but still finite).
+        /// Zoom-OUT is numerically cheap — unlike deep zoom-IN it needs no
+        /// extended precision — so the old empirical walls (1e-6 interactive,
+        /// 1e-12 video/batch) were conservative UI caps, not precision limits.
+        /// Lowered to give headroom for fractal types whose structure lives far
+        /// outside the Mandelbrot box (#564).</summary>
+        public const double DefaultZoomMin = 1e-18;
+
+        /// <summary>Minimum allowed zoom (deepest reverse zoom-out). Defaults to
+        /// <see cref="DefaultZoomMin"/> for every tier, letting the user pull the
         /// view well outside the standard Mandelbrot box (span ≈ 3.5 / Zoom),
         /// which is necessary for fractal types whose interesting structure
         /// extends far beyond the [-2, 2] range — User Equation Sandbox,
         /// User Bulb 3D, strange attractors, etc. The classical 0.13 wall
         /// was tuned for the Mandelbrot set only.</summary>
-        public double ZoomMin { get; init; } = 1e-6;
+        public double ZoomMin { get; init; } = DefaultZoomMin;
 
         /// <summary>Maximum allowed zoom for this tier.</summary>
         public double ZoomMax { get; init; }
@@ -175,7 +188,7 @@ namespace FracturingFog.Models
             Tier = QualityTier.Draft,
             Name = "Draft",
             Description = "Fast preview — shallow zoom (max 10⁵), low iteration cap (256).",
-            ZoomMin = 1e-6,
+            ZoomMin = DefaultZoomMin,
             ZoomMax = 1e5,
             WheelZoomFactor = 1.40,     // large steps: 40% per detent
             IterBase = 64,
@@ -193,7 +206,7 @@ namespace FracturingFog.Models
             Tier = QualityTier.Standard,
             Name = "Standard",
             Description = "Balanced quality — zoom to 10¹³ (DD above 10¹²), up to 2048 iterations.",
-            ZoomMin = 1e-6,
+            ZoomMin = DefaultZoomMin,
             ZoomMax = 1e13,
             WheelZoomFactor = 1.20,     // 20% per detent
             IterBase = 256,
@@ -213,7 +226,7 @@ namespace FracturingFog.Models
             Tier = QualityTier.High,
             Name = "High",
             Description = "Extended precision (double-double) — zoom to 10²², up to 16384 iterations. 2×2 anti-aliasing + 8-sample TAA. Slower at depth.",
-            ZoomMin = 1e-6,
+            ZoomMin = DefaultZoomMin,
             ZoomMax = 1e22,
             WheelZoomFactor = 1.12,     // 12% per detent — finer control at depth
             IterBase = 512,
@@ -234,7 +247,7 @@ namespace FracturingFog.Models
             Tier = QualityTier.Ultra,
             Name = "Ultra",
             Description = "Maximum detail — double-double zoom to 5×10²⁷, up to 65536 iterations. 4×4 anti-aliasing + 16-sample TAA. Slow at extreme depth.",
-            ZoomMin = 1e-6,
+            ZoomMin = DefaultZoomMin,
             ZoomMax = 5e27,
             WheelZoomFactor = 1.08,     // 8% per detent — very fine control
             IterBase = 1024,
@@ -257,7 +270,7 @@ namespace FracturingFog.Models
             Tier = QualityTier.Extreme,
             Name = "Extreme",
             Description = "Octuple-double precision — zoom to 1×10¹⁰⁰, up to 131072 iterations. 4×4 anti-aliasing + 32-sample TAA. Slow.",
-            ZoomMin = 1e-6,
+            ZoomMin = DefaultZoomMin,
             // Above 1e50 both the reference orbit and per-pixel coordinates use OD
             // (octuple-double, ~124 digits — MandelbrotCalculator.ODZoomThreshold).
             // --qdfloorsweep measures OD coordinate separation at 128/128 through
