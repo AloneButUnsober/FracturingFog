@@ -265,6 +265,16 @@
                   Margin="0,8,0,0"
                   Background="#1C1C1C"
                   Foreground="#B4B4B4">
+          <StackPanel Orientation="Vertical" Margin="0,0,0,0">
+            <!-- Typeset math (#755) — self-rendered from the same parsed AST.
+                 Horizontal scroll for wide equations; hidden when render failed. -->
+            <Border IsVisible="{Binding HasMathImage}"
+                    Background="#161616" CornerRadius="3"
+                    Margin="6,4,6,2" Padding="8,6">
+                <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled">
+                    <Image Source="{Binding MathImage}" Stretch="None" HorizontalAlignment="Left" />
+                </ScrollViewer>
+            </Border>
             <Grid ColumnDefinitions="Auto,*"
                   RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto"
                   Margin="6,4,6,6">
@@ -298,6 +308,7 @@
                 <TextBlock Grid.Row="7" Grid.Column="0" Text="Flags: "        Foreground="#909090" Margin="0,0,8,0" />
                 <SelectableTextBlock Grid.Row="7" Grid.Column="1" Text="{Binding PreviewFlagsText}"   FontFamily="Consolas, monospace" Foreground="#DCDCDC" />
             </Grid>
+          </StackPanel>
         </Expander>
 
         <!-- Row 5: status / error + Apply Fix button (Ctrl+.) -->
