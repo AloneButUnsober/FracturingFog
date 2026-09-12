@@ -288,7 +288,7 @@
                     Margin="6,4,6,2" Padding="8,6">
                 <Image Source="{Binding MathImage}"
                        Stretch="Uniform" StretchDirection="DownOnly"
-                       MaxHeight="160" HorizontalAlignment="Center" />
+                       MaxHeight="112" HorizontalAlignment="Center" />
             </Border>
             <Grid ColumnDefinitions="Auto,*"
                   RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto"
