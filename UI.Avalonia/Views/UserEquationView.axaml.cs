@@ -103,22 +103,26 @@ public sealed partial class UserEquationView : UserControl
         if (!editor.IsFocused) FlushPending(editor);
     }
 
-    // Copy the interpreted-math LaTeX (#754) to the clipboard. The view owns
-    // the clipboard call (TopLevel.Clipboard is a UI-layer accessor, like the
-    // ErrorSpan selection handling above); the VM only supplies the string and
-    // the confirmation status. Fire-and-forget — a copy failure logs and shows
-    // a status note but never throws a modal.
-    private async void OnCopyLatex(object? sender, RoutedEventArgs e)
+    // Copy the interpreted-math LaTeX (#754) / MathML (#756) to the clipboard.
+    // The view owns the clipboard call (TopLevel.Clipboard is a UI-layer
+    // accessor, like the ErrorSpan selection handling above); the VM only
+    // supplies the string and the confirmation status. Fire-and-forget — a copy
+    // failure shows a status note but never throws a modal.
+    private void OnCopyLatex(object? sender, RoutedEventArgs e)
+        => _ = CopyToClipboard(_vm?.PreviewLatexText, "LaTeX");
+
+    private void OnCopyMathml(object? sender, RoutedEventArgs e)
+        => _ = CopyToClipboard(_vm?.PreviewMathmlText, "MathML");
+
+    private async System.Threading.Tasks.Task CopyToClipboard(string? text, string label)
     {
-        if (_vm == null) return;
-        string latex = _vm.PreviewLatexText ?? string.Empty;
-        if (string.IsNullOrEmpty(latex)) return;
+        if (_vm == null || string.IsNullOrEmpty(text)) return;
         var clipboard = TopLevel.GetTopLevel(this)?.Clipboard;
         if (clipboard == null) return;
         try
         {
-            await clipboard.SetValueAsync(DataFormat.Text, latex);
-            _vm.ShowStatus("✓ LaTeX copied");
+            await clipboard.SetValueAsync(DataFormat.Text, text);
+            _vm.ShowStatus($"✓ {label} copied");
         }
         catch (Exception ex)
         {

@@ -300,9 +300,12 @@
                 <TextBlock Grid.Row="1" Grid.Column="0" Text="LaTeX: "     Foreground="#909090" Margin="0,0,8,2" />
                 <Grid Grid.Row="1" Grid.Column="1" ColumnDefinitions="*,Auto" IsVisible="{Binding HasLatex}">
                     <SelectableTextBlock Grid.Column="0" Text="{Binding PreviewLatexText}" FontFamily="Consolas, monospace" Foreground="#DCDCDC" TextWrapping="Wrap" />
-                    <Button Grid.Column="1" Content="Copy" Click="OnCopyLatex"
-                            VerticalAlignment="Top" Margin="8,0,0,0" Padding="8,2"
-                            ToolTip.Tip="Copy the interpreted equation as portable LaTeX (Overleaf / KaTeX / MathJax / Word)." />
+                    <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Top" Margin="8,0,0,0">
+                        <Button Content="Copy" Click="OnCopyLatex" Padding="8,2"
+                                ToolTip.Tip="Copy the interpreted equation as portable LaTeX (Overleaf / KaTeX / MathJax / Word)." />
+                        <Button Content="Copy MathML" Click="OnCopyMathml" Margin="6,0,0,0" Padding="8,2"
+                                ToolTip.Tip="Copy the interpreted equation as presentation MathML — paste/import into Word or LibreOffice as an editable equation (#756)." />
+                    </StackPanel>
                 </Grid>
 
                 <TextBlock Grid.Row="2" Grid.Column="0" Text="dz/dc: "      Foreground="#909090" Margin="0,0,8,2" />
