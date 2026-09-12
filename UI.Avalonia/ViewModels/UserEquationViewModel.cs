@@ -585,6 +585,26 @@ public sealed class UserEquationViewModel : ViewModelBase
         StatusIsError = false;
     }
 
+    /// <summary>#764 — import pasted presentation MathML into the DSL editor.
+    /// On success replaces the DSL source (which drives validate + the #754-#756
+    /// preview so the user immediately sees the interpreted result), switches to
+    /// the DSL tab, and confirms. On failure the reason goes to the status bar,
+    /// same channel as parse errors. The view supplies the clipboard text.</summary>
+    public void ImportMathmlFromText(string? mathml)
+    {
+        var r = MathmlImporter.Import(mathml);
+        if (!r.Ok)
+        {
+            ShowStatus($"MathML import: {r.Error}", isError: true);
+            return;
+        }
+        DslSource = r.Dsl;
+        ActiveTabIndex = 1;
+        _debounce.Disposable = null;
+        ValidateDslNow();               // update preview now, don't wait for debounce
+        ShowStatus("✓ Imported MathML");
+    }
+
     /// <summary>Force an immediate compile (cancel pending debounce).
     /// Only meaningful on the User Equation tab — DSL tab does not feed
     /// the Roslyn pipeline.</summary>
