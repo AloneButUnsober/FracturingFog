@@ -1188,6 +1188,19 @@ float EmptySkipDist(float3 P, float3 rd, float epsT)
     return skip > 0.0 ? skip : 0.0;
 }
 
+// #455 — per-channel lerp of two packed ARGB colours by t (0 = a, 1 = b), alpha
+// included so the terrain can dissolve toward a transparent background. Twin of
+// HeightfieldRaymarch2D.BlendArgb / ReliefRaymarchGpu.BlendArgb (round on +0.5).
+uint BlendArgb(uint a, uint b, float t)
+{
+    float it = 1.0 - t;
+    uint A = (uint)(((a >> 24) & 0xFFu) * it + ((b >> 24) & 0xFFu) * t + 0.5);
+    uint R = (uint)(((a >> 16) & 0xFFu) * it + ((b >> 16) & 0xFFu) * t + 0.5);
+    uint G = (uint)(((a >>  8) & 0xFFu) * it + ((b >>  8) & 0xFFu) * t + 0.5);
+    uint B = (uint)(( a        & 0xFFu) * it + ( b        & 0xFFu) * t + 0.5);
+    return (A << 24) | (R << 16) | (G << 8) | B;
+}
+
 // The per-ray trace + shade — everything downstream of ray generation, factored
 // out of CSRelief so the DOF lens loop can call it once per aperture sample.
 // Returns packed ARGB for the ray o + rd. Also reports the primary-hit world-space
@@ -1250,6 +1263,30 @@ uint TracePixel(float3 o, float3 rd, out float3 nrm, out float dep)
                 alb = ApplyTriplanar(alb, hp, N);
             outCol = ShadeFlat(N, -rd, hp, alb);
             outCol = ApplyFogVolume(outCol, o, rd, tf);
+
+            // #455 — dissolve the terrain FOOTPRINT edge into whatever is behind
+            // it (the floor when the ground plane is on — coplanar, seamless —
+            // else sky / drop), so the rectangular field boundary fades instead of
+            // drawing a hard rectangle. Twin of HeightfieldRaymarch2D.SamplePixel's
+            // #141 block; smoothstep(0.72,1) == the CPU Smoothstep((edgeT-0.72)/0.28).
+            float edgeT = max(abs(hp.x) / gB.x, abs(hp.z) / gB.z);
+            if (edgeT > 0.72)
+            {
+                float fade = smoothstep(0.72, 1.0, edgeT);
+                uint behind;
+                if (gGroundPlane != 0)
+                {
+                    behind = ShadeFlat(float3(0, 1, 0), -rd, float3(hp.x, 0.0, hp.z), gFloorAlbedo);
+                }
+                else
+                {
+                    behind = gShowSky != 0
+                        ? (gHasHdri != 0 ? HdriSkyPacked(rd) : GradientSky(rd.y))
+                        : gDropColor;
+                    if (gIsolate != 0) behind = behind & 0x00FFFFFFu;
+                }
+                outCol = BlendArgb(outCol, behind, fade);
+            }
             nrm = N; dep = tf;
             wrote = true;
         }

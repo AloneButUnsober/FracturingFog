@@ -18,7 +18,9 @@
 //     Slice 4 (shader-side ShadingPipeline).
 //   • a simple two-colour vertical gradient sky (BgBottom→BgTop by ray.y) —
 //     NOT the full HDRI SkyColorHdri (also Slice 4).
-//   • the #141 footprint-edge dissolve is omitted (cosmetic; Slice 4).
+//   • the #141 footprint-edge dissolve is now PORTED (#455) — SamplePixel fades
+//     the terrain footprint edge toward the behind-surface (floor / sky / drop),
+//     byte-locked to the HLSL TracePixel #455 block.
 // Everything geometric IS faithful: perspective + ortho ray-gen, the AABB
 // slab, the sphere trace over the bilinear/bicubic height field + cull mask,
 // cone-epsilon growth, the 5-step bisection refine, the analytic bilinear-patch
@@ -539,6 +541,29 @@ public static class ReliefRaymarchGpu
                     alb = ApplyTriplanar(alb, hx, hy, hz, nx, ny, nz, in u);
                 uint shaded = ShadeFlat(nx, ny, nz, -rdx, -rdy, -rdz, hx, hy, hz, alb, in de, in u);
                 shaded = ApplyFogVolume(shaded, ox, oy, oz, rdx, rdy, rdz, tf, in de, in u);
+
+                // #455 — dissolve the terrain FOOTPRINT edge into what is behind
+                // it (floor when the ground plane is on, else sky / drop). Twin of
+                // the HLSL TracePixel #455 block + HeightfieldRaymarch2D's #141
+                // dissolve; keep byte-locked to the kernel (the parity moat).
+                double edgeT = Math.Max(Math.Abs(hx) / cam.Bx, Math.Abs(hz) / cam.Bz);
+                if (edgeT > 0.72)
+                {
+                    double fade = Smoothstep((edgeT - 0.72) / 0.28);
+                    uint behind;
+                    if (cam.GroundPlane)
+                    {
+                        behind = ShadeFlat(0.0, 1.0, 0.0, -rdx, -rdy, -rdz, hx, 0.0, hz, u.FloorAlbedo, in de, in u);
+                    }
+                    else
+                    {
+                        behind = u.ShowSky
+                            ? (u.HdriBuf is not null ? HdriSky(rdx, rdy, rdz, in u) : GradientSky(rdy, in u))
+                            : u.DropColor;
+                        if (u.Isolate) behind &= 0x00FFFFFFu;
+                    }
+                    shaded = BlendArgb(shaded, behind, fade);
+                }
                 onx = nx; ony = ny; onz = nz; odep = tf;
                 return (shaded, true);
             }
@@ -1309,6 +1334,28 @@ public static class ReliefRaymarchGpu
         double num = 12.0 - 6.0 * x + x * x;
         double den = 12.0 + 6.0 * x + x * x;
         return num / den;
+    }
+
+    /// <summary>#455 — smoothstep on [0,1] (3t²−2t³). Twin of the HLSL
+    /// <c>smoothstep(0.72,1,edgeT)</c> and HeightfieldRaymarch2D.Smoothstep, used
+    /// by the footprint-edge dissolve.</summary>
+    private static double Smoothstep(double t)
+    {
+        t = Math.Clamp(t, 0.0, 1.0);
+        return t * t * (3.0 - 2.0 * t);
+    }
+
+    /// <summary>#455 — per-channel lerp of two packed ARGB colours by t (0 = a,
+    /// 1 = b), alpha included. Twin of the HLSL <c>BlendArgb</c> and
+    /// HeightfieldRaymarch2D.BlendArgb (round on +0.5).</summary>
+    private static uint BlendArgb(uint a, uint b, double t)
+    {
+        double it = 1.0 - t;
+        uint A = (uint)(((a >> 24) & 0xFF) * it + ((b >> 24) & 0xFF) * t + 0.5);
+        uint R = (uint)(((a >> 16) & 0xFF) * it + ((b >> 16) & 0xFF) * t + 0.5);
+        uint G = (uint)(((a >> 8) & 0xFF) * it + ((b >> 8) & 0xFF) * t + 0.5);
+        uint B = (uint)((a & 0xFF) * it + (b & 0xFF) * t + 0.5);
+        return (A << 24) | (R << 16) | (G << 8) | B;
     }
 
     /// <summary>Two-colour vertical gradient sky (BgBottom at the horizon, BgTop
