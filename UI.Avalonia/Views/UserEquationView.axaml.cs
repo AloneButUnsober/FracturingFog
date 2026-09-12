@@ -130,25 +130,35 @@ public sealed partial class UserEquationView : UserControl
         }
     }
 
-    // #764 — read presentation MathML off the clipboard and import it into the
+    // #764 / #765 — read MathML / LaTeX off the clipboard and import it into the
     // DSL editor. The view owns the clipboard read (UI-layer accessor); the VM
-    // owns the MathML→DSL conversion and status reporting.
+    // owns the conversion and status reporting.
     private async void OnPasteMathml(object? sender, RoutedEventArgs e)
     {
-        if (_vm == null) return;
+        string? text = await ReadClipboardText();
+        if (text != null) _vm?.ImportMathmlFromText(text);
+    }
+
+    private async void OnPasteLatex(object? sender, RoutedEventArgs e)
+    {
+        string? text = await ReadClipboardText();
+        if (text != null) _vm?.ImportLatexFromText(text);
+    }
+
+    private async System.Threading.Tasks.Task<string?> ReadClipboardText()
+    {
+        if (_vm == null) return null;
         var clipboard = TopLevel.GetTopLevel(this)?.Clipboard;
-        if (clipboard == null) return;
-        string? text;
+        if (clipboard == null) return null;
         try
         {
-            text = await clipboard.TryGetTextAsync();
+            return await clipboard.TryGetTextAsync() ?? string.Empty;
         }
         catch (Exception ex)
         {
             _vm.ShowStatus($"Clipboard read failed: {ex.Message}", isError: true);
-            return;
+            return null;
         }
-        _vm.ImportMathmlFromText(text);
     }
 
     private void FlushPending(TextBox editor)
