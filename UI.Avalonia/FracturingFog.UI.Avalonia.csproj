@@ -51,6 +51,12 @@
       <PrivateAssets>analyzers</PrivateAssets>
     </PackageReference>
     <PackageReference Include="ReactiveUI.Avalonia" Version="12.0.3" />
+    <!-- #755 — self-render typeset math for the User Equation LaTeX preview.
+         Skia 3.119.4 matches the Engine pin; off-the-shelf LaTeX controls
+         (CSharpMath.Avalonia → Av11, CSharpMath.SkiaSharp → Skia 2.88) do NOT
+         bind against Avalonia 12 / Skia 3, so MathImageRenderer lays the parsed
+         AST out to an SKBitmap here instead. -->
+    <PackageReference Include="SkiaSharp" Version="3.119.4" />
   </ItemGroup>
 
   <ItemGroup>

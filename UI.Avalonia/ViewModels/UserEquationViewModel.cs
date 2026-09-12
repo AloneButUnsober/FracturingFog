@@ -409,6 +409,7 @@ public sealed class UserEquationViewModel : ViewModelBase
     // current state in red separately if desired.
     private string _previewAstText = string.Empty;
     private string _previewLatexText = string.Empty;
+    private string _previewMathmlText = string.Empty;
     private string _previewDpDzText = string.Empty;
     private string _previewDpDcText = string.Empty;
     private string _previewSaText = "off";
@@ -424,6 +425,30 @@ public sealed class UserEquationViewModel : ViewModelBase
     /// row + copy button.</summary>
     public string PreviewLatexText { get => _previewLatexText; private set { this.RaiseAndSetIfChanged(ref _previewLatexText, value); this.RaisePropertyChanged(nameof(HasLatex)); } }
     public bool HasLatex => !string.IsNullOrEmpty(_previewLatexText);
+
+    /// <summary>The equation as interpreted by the DSL engine, as presentation
+    /// MathML (#756). Word / LibreOffice import math natively as MathML, so this
+    /// pastes/imports there as an editable equation. Not shown as text (verbose
+    /// XML) — surfaced via the "Copy MathML" button. Shares <see cref="HasLatex"/>
+    /// for visibility (both are produced from the same successful parse).</summary>
+    public string PreviewMathmlText { get => _previewMathmlText; private set => this.RaiseAndSetIfChanged(ref _previewMathmlText, value); }
+
+    // ── Typeset math image (#755) ──
+    // Self-rendered from the SAME parsed AST via MathImageRenderer (SkiaSharp).
+    // Null when the equation didn't parse/lay out; HasMathImage gates the row.
+    private global::Avalonia.Media.Imaging.Bitmap? _mathImage;
+    public global::Avalonia.Media.Imaging.Bitmap? MathImage
+    {
+        get => _mathImage;
+        private set
+        {
+            var old = _mathImage;
+            this.RaiseAndSetIfChanged(ref _mathImage, value);
+            this.RaisePropertyChanged(nameof(HasMathImage));
+            if (!ReferenceEquals(old, value)) old?.Dispose();
+        }
+    }
+    public bool HasMathImage => _mathImage != null;
     public string PreviewDpDzText { get => _previewDpDzText; private set => this.RaiseAndSetIfChanged(ref _previewDpDzText, value); }
     public string PreviewDpDcText { get => _previewDpDcText; private set => this.RaiseAndSetIfChanged(ref _previewDpDcText, value); }
     public string PreviewSaText { get => _previewSaText; private set => this.RaiseAndSetIfChanged(ref _previewSaText, value); }
@@ -444,6 +469,10 @@ public sealed class UserEquationViewModel : ViewModelBase
         if (!p.Ok) return;
         PreviewAstText = p.AstText;
         PreviewLatexText = p.LatexText;
+        PreviewMathmlText = p.MathmlText;
+        // #755 — typeset the interpreted equation. 0xFFDCDCDC matches the
+        // preview panel's foreground; renderer returns null on any failure.
+        MathImage = Latex.MathImageRenderer.TryRender(equation, 0xFFDCDCDCu);
         PreviewDpDzText = p.DpDzText;
         PreviewDpDcText = p.DpDcText;
         PreviewSaText = p.SaFastDegree >= 2
