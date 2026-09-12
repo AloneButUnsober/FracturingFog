@@ -37,7 +37,7 @@ namespace FracturingFog.UI.Avalonia.Latex;
 public static class MathImageRenderer
 {
     private const int Ss = 2;              // supersample factor (crisp on hi-DPI)
-    private const float BaseSizeLogical = 22f;
+    private const float BaseSizeLogical = 15f;   // ~30% smaller than the original 22 so the preview doesn't dominate the expander on large equations
     private const float BaseSize = BaseSizeLogical * Ss;
     private const int MaxDim = 4096;       // guard against pathological widths
 
