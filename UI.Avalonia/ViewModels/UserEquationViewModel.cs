@@ -605,6 +605,24 @@ public sealed class UserEquationViewModel : ViewModelBase
         ShowStatus("✓ Imported MathML");
     }
 
+    /// <summary>#765 — import pasted LaTeX (constrained subset) into the DSL
+    /// editor. Same flow as <see cref="ImportMathmlFromText"/>; best-effort — the
+    /// importer reports a specific reason for anything outside the subset.</summary>
+    public void ImportLatexFromText(string? latex)
+    {
+        var r = LatexImporter.Import(latex);
+        if (!r.Ok)
+        {
+            ShowStatus($"LaTeX import: {r.Error}", isError: true);
+            return;
+        }
+        DslSource = r.Dsl;
+        ActiveTabIndex = 1;
+        _debounce.Disposable = null;
+        ValidateDslNow();
+        ShowStatus("✓ Imported LaTeX");
+    }
+
     /// <summary>Force an immediate compile (cancel pending debounce).
     /// Only meaningful on the User Equation tab — DSL tab does not feed
     /// the Roslyn pipeline.</summary>

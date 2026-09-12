@@ -221,7 +221,7 @@
             <!-- Tab 2: DSL (bare CalcGen DSL, validate-on-type) -->
             <TabItem Header="DSL">
                 <Grid RowDefinitions="Auto,*">
-                    <Grid Grid.Row="0" ColumnDefinitions="*,Auto,Auto" Margin="0,6,0,6">
+                    <Grid Grid.Row="0" ColumnDefinitions="*,Auto,Auto,Auto" Margin="0,6,0,6">
                         <TextBlock Grid.Column="0"
                                    Foreground="#B4B4B4"
                                    TextWrapping="Wrap">
@@ -230,13 +230,20 @@
                             <Run Text="Example:  z*z + c" />
                         </TextBlock>
                         <Button Grid.Column="1"
+                                Content="Paste LaTeX…"
+                                Click="OnPasteLatex"
+                                ToolTip.Tip="Convert LaTeX math on the clipboard into the DSL (best-effort subset) (#765)."
+                                Margin="8,0,0,0"
+                                Padding="10,4"
+                                VerticalAlignment="Top" />
+                        <Button Grid.Column="2"
                                 Content="Paste MathML…"
                                 Click="OnPasteMathml"
                                 ToolTip.Tip="Convert presentation MathML on the clipboard (e.g. from Word / LibreOffice) into the DSL (#764)."
                                 Margin="8,0,0,0"
                                 Padding="10,4"
                                 VerticalAlignment="Top" />
-                        <Button Grid.Column="2"
+                        <Button Grid.Column="3"
                                 Content="?"
                                 Command="{Binding OpenDslHelpCommand}"
                                 ToolTip.Tip="Help for the DSL tab — grammar at a glance"
