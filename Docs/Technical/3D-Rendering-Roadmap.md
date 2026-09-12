@@ -399,6 +399,19 @@ code.
   DOF no longer forces the CPU trace. `--reliefgpuraymarch` gate exercises DOF (mean
   channel diff 0.267, 0 edge pixels) — the lens averaging keeps the disc-trig float-vs-
   double divergence inside the gate band. Pinhole stays byte-identical.
+- **Footprint-edge dissolve on the GPU relief kernel (landed — Closes #455):** the #141
+  dissolve (fade the terrain's rectangular footprint edge toward what is behind it — the
+  coplanar floor when the ground plane is on, else sky / drop — so the boundary dissolves
+  instead of drawing a hard rectangle) ran only on the CPU relief path; the GPU kernel drew
+  a hard edge, so the same scene looked different by backend. Ported to the shared HLSL
+  `TracePixel` (D3D + Vulkan) and its CPU twin `ReliefRaymarchGpu.RenderCpuMirror` in
+  lockstep: after the terrain shade, `edgeT = max(|hx|/gB.x, |hz|/gB.z)`, and for
+  `edgeT > 0.72` a `smoothstep(0.72,1)` fade blends toward the behind-surface (reusing the
+  kernel's existing ground/sky/drop shade) — the exact `Smoothstep((edgeT-0.72)/0.28)` +
+  `BlendArgb` the CPU `SamplePixel` uses. New HLSL `BlendArgb` twin of the CPU per-channel
+  round. `--reliefgpuraymarch` gate stays PASS (mean channel diff ≤ 0.012, dissolve band
+  within the edge threshold) — GPU==twin holds. Cosmetic only; geometry/lighting already
+  twinned.
 - **Compiled-shader disk cache (landed — PR #578, Closes #456):** GPU compute shaders
   were compiled from HLSL at runtime on first use and cached only for the process
   lifetime, so every launch paid a one-time FXC/DXC compile before the first GPU render
