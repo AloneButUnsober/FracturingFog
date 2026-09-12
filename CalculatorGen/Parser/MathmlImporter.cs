@@ -73,9 +73,9 @@ public static class MathmlImporter
     /// <summary>Convert a presentation-MathML string to a CalcGen DSL string.</summary>
     public static MathmlImportResult Import(string? mathml)
     {
-        if (string.IsNullOrWhiteSpace(mathml))
+        string source = mathml ?? string.Empty;   // non-null for LoadMathRoot below
+        if (string.IsNullOrWhiteSpace(source))
             return new MathmlImportResult(false, string.Empty, "Clipboard has no text to import.");
-        string source = mathml;   // non-null after the guard above
 
         string dsl;
         try

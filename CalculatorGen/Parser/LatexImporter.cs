@@ -52,9 +52,9 @@ public static class LatexImporter
 
     public static MathmlImportResult Import(string? latex)
     {
-        if (string.IsNullOrWhiteSpace(latex))
+        string source = latex ?? string.Empty;   // non-null for the parser below
+        if (string.IsNullOrWhiteSpace(source))
             return new MathmlImportResult(false, string.Empty, "Clipboard has no text to import.");
-        string source = latex;   // non-null after the guard
 
         string dsl;
         try
