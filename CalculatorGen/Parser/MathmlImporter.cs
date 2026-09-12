@@ -75,11 +75,12 @@ public static class MathmlImporter
     {
         if (string.IsNullOrWhiteSpace(mathml))
             return new MathmlImportResult(false, string.Empty, "Clipboard has no text to import.");
+        string source = mathml;   // non-null after the guard above
 
         string dsl;
         try
         {
-            XElement root = LoadMathRoot(mathml);
+            XElement root = LoadMathRoot(source);
             dsl = ConvertRow(Meaningful(root.Elements()));
             if (string.IsNullOrWhiteSpace(dsl))
                 throw new ImportException("no convertible math content found.");
