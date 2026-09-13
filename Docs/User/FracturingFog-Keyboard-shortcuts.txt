@@ -7,12 +7,35 @@ Keyboard-Shortcuts.md.
 
 GLOBAL (any fractal, any mode)
 ------------------------------
-M       Toggle Floating Menu
+M       Open the Control Center (the main menu). The old Floating
+        Menu window was retired; the toolbar Menu button, M, and a
+        right-click on the render surface all open it now.
 T       Toggle Color Theme Editor
 R       Reset view to default for active fractal
 V       Save current view as a region
+Backspace  Back — return to the previous view in nav history
 Esc     Exit Span mode / stop slideshow / stop video zoom /
         close active sub-dialog
+
+OVERLAYS & EXPORT PREVIEW
+-------------------------
+G       Toggle coordinate grid overlay
+K       Toggle watermark overlay
+H       Toggle performance HUD   (Shift+H resets its averages)
+X       Toggle Post-FX HUD overlay
+Ctrl+H  Toggle Post-FX HUD overlay (second binding for X)
+P       Open Fractal Parameters dialog
+F1      Open Help window
+Ctrl+Shift+P  1:1 poster / wallpaper preview window
+Ctrl+Shift+F  Toggle export-aspect frame guide overlay
+
+DEEP-ZOOM DIAGNOSTICS (title shows a suffix while engaged)
+----------------------------------------------------------
+Ctrl+G        Toggle GPU compute (single-precision Mandelbrot)
+Ctrl+Shift+A  Toggle Mandelbrot acceleration (perturbation/BLA)
+Ctrl+Shift+S  Toggle Series Approximation
+Ctrl+Shift+D  Toggle double-double (DD) BLA precision
+Ctrl+Shift+G  Toggle GPU relief-raymarch (off = CPU parity oracle)
 
 2-D NAVIGATION (Mandelbrot, Julia, Burning Ship, ...)
 -----------------------------------------------------
@@ -50,6 +73,8 @@ Left-click drag     Pan (fast pass mid-drag; 300 ms debounced full
 Double-click        Center on point + zoom in one step
 Right-click drag    Highlight-to-zoom — marquee box; release centers
                     + zooms to fill rectangle (v0.6 feature)
+Alt+double-click    Relief DOF focus pick (Relief 3D raymarch with
+                    perspective + depth of field only; recenter else)
 
 MOUSE — 3-D
 -----------
@@ -57,6 +82,8 @@ Wheel up/down       Camera closer/farther
 Left-click drag     Pan in screen space
 Right-click drag X  Orbit theta (azimuth)
 Right-click drag Y  Orbit phi (elevation, inverted for natural feel)
+Middle-click drag   Marquee zoom (3-D equivalent of the 2-D right-drag
+                    box; right-drag stays camera-orbit in 3-D)
 
 FOCUS BEHAVIOR
 --------------
@@ -84,4 +111,5 @@ Ctrl+S        Save (Color Theme Editor, equation editors)
 Ctrl+Shift+S  Save As (equation editors)
 F5            Force recompile (equation editors)
 Esc           Close any sub-dialog
-Enter         Apply / Go (CX/CY/Zoom/Iter textboxes in Floating Menu)
+Enter         Apply / Go (CX/CY/Zoom/Iter fields in the Control
+              Center's Explore section)

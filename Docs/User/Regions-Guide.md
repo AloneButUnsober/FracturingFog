@@ -25,7 +25,7 @@ Two kinds of regions live in that dropdown:
 > [!TIP]
 > Right-click the Region dropdown to sort: **Default** (built-ins first, then yours), or
 > **By Fractal Type** (Mandelbrot bookmarks together, Julia bookmarks together, etc.). The setting
-> persists per dropdown — toolbar and Floating Menu remember independently.
+> persists per dropdown — toolbar and Control Center remember independently.
 
 ### Worked example — "Bookmark something deep, come back tomorrow"
 
@@ -43,10 +43,10 @@ Tomorrow:
 
 ### Worked example — "Share a region with a friend"
 
-1. Open Floating Menu → Region Navigation → **Exp…** (Export).
+1. Open Control Center → Explore → Region Navigation → **Exp…** (Export).
 2. Pick a `.json` filename and save it. The file is text — a few KB.
 3. Email / DM / Discord that file to your friend.
-4. They open Floating Menu → Region Navigation → **Imp…** (Import) and pick the file. Done — the
+4. They open Control Center → Explore → Region Navigation → **Imp…** (Import) and pick the file. Done — the
    region appears in their Region dropdown like any other.
 
 > [!IMPORTANT]
@@ -64,7 +64,7 @@ When deep-zoom enthusiasts swap coordinates online, they paste pipe-separated *l
 Those four numbers are the high-precision representation of one axis. Fracturing Fog reads them
 natively:
 
-1. Open Floating Menu → Region Navigation.
+1. Open Control Center → Explore → Region Navigation.
 2. Click into the **CX** textbox and paste the line above. Repeat for **CY** with the imaginary half.
 3. Type your zoom into **Zoom** and your iteration count into **Iter**.
 4. Click **Go**. The view jumps.
@@ -112,7 +112,7 @@ Applying a built-in works; deleting one does not — the Delete button only acts
 ## 3. Save Workflow
 
 1. Pan / zoom / type-switch to the view you want.
-2. Press `V`, or click Floating Menu → Region Navigation → **Save**.
+2. Press `V`, or click Control Center → Explore → Region Navigation → **Save**.
 3. The name prompt opens, pre-filled with a suggested name based on the active fractal + region area.
 4. Type a final name and confirm.
 5. **If the name already exists in the user library**, an overwrite confirmation prompt appears (added in v0.6.2). Confirm to replace, Cancel to back out.
@@ -159,11 +159,11 @@ A non-selectable `— select region —` header is injected at the top of the fi
 
 ### Export
 
-Floating Menu → Region Navigation → **Exp…** opens a Save File dialog. The exported JSON contains your entire user region library (built-ins are not exported — they're already in the recipient's EXE).
+Control Center → Explore → Region Navigation → **Exp…** opens a Save File dialog. The exported JSON contains your entire user region library (built-ins are not exported — they're already in the recipient's EXE).
 
 ### Import
 
-Floating Menu → Region Navigation → **Imp…** opens an Open File dialog and merges the loaded regions into your library.
+Control Center → Explore → Region Navigation → **Imp…** opens an Open File dialog and merges the loaded regions into your library.
 
 **Name-collision handling** (per-entry prompt):
 
@@ -173,6 +173,19 @@ Floating Menu → Region Navigation → **Imp…** opens an Open File dialog and
 | Overwrite | Replace your entry with the imported version |
 | Rename | Append a numeric suffix to the imported entry's name |
 | Skip All / Overwrite All | Apply the choice to remaining collisions silently |
+
+### Bundles (regions alongside your other assets)
+
+Regions are one of the asset kinds the **Asset Manager** can pack into a `.zip`
+bundle with your themes, equations, workspaces and the rest. Two extra paths:
+
+- **Asset Manager → Export ▾** — *Selected…*, *All in this Type…* (every region),
+  or *Everything…*. Handy when you want to move a whole setup, not just regions.
+- **Drag a bundle `.zip` onto the render window** — imports everything inside it,
+  including any regions, after a single overwrite prompt. The Region dropdowns
+  refresh in place.
+
+Bundle import applies the same name-collision handling as the JSON path above.
 
 ---
 
@@ -247,7 +260,7 @@ The CX / CY textboxes accept a special **pipe-separated limb format** for paste-
 
 Single-double paste-back drops the low limbs. Three- or four-limb paste-back round-trips DD / QD precision so a region saved at zoom 10²⁵ can be reproduced bit-exact across machines.
 
-The Floating Menu's **Copy** button emits the limb format for CX and CY, plain values for Zoom and Iter.
+The Explore section's **Copy** button (Control Center) emits the limb format for CX and CY, plain values for Zoom and Iter.
 
 ---
 
@@ -272,7 +285,7 @@ Shift+click the Slideshow button is a shortcut for ""lock the current region"" �
 
 **Save before exploring.** Pan + zoom doesn't undo. Save the current view as a region before chasing a new direction — if you lose the spot, the region is still in the library.
 
-**Edit JSON by hand.** The file is plain JSON. Tweaking a stored zoom, iteration count, or theme name in your editor of choice and re-launching the shell picks up the change. Reload from the Floating Menu pulls the file without a restart.
+**Edit JSON by hand.** The file is plain JSON. Tweaking a stored zoom, iteration count, or theme name in your editor of choice and re-launching the shell picks up the change.
 
 **Don't manually edit the limbs.** The Lo₁/Lo₂/Lo₃ fields are arithmetic residuals. Editing one value without the others produces a non-normalized DD/QD number that may render as visual noise.
 

@@ -8,11 +8,17 @@ Every keyboard binding in the Fracturing Fog Avalonia shell.
 
 | Key | Action |
 |---|---|
-| `M` | Toggle Floating Menu |
+| `M` | Open the **Control Center** (the main menu) |
 | `T` | Toggle Color Theme Editor |
 | `R` | Reset view to default for the active fractal |
 | `V` | Save current view as a new region |
+| `Backspace` | **Back** — pop the most recent view off the navigation history and return to it |
 | `Esc` | Exit Span mode / stop running slideshow / stop video zoom / close active sub-dialog |
+
+> [!NOTE]
+> `M` opens the Control Center — the single main menu. The old Floating Menu
+> window was retired; the toolbar **Menu** button, `M`, and a right-click on the
+> render surface all open the Control Center now.
 
 ---
 
@@ -28,8 +34,21 @@ ignored while a text box has focus (see [Focus Behavior](#focus-behavior)).
 | `H` | Toggle the **performance HUD** (frame time, iteration budget, precision tier) |
 | `Shift + H` | **Reset** the performance HUD's rolling averages — do this before timing a fresh region or video capture |
 | `X` | Toggle the **Post-FX HUD** overlay (live brightness / contrast / adaptive readout) |
+| `Ctrl + H` | Toggle the **Post-FX HUD** — a second, discoverable binding for the same overlay as `X` (mnemonic: *H = HUD*) |
 | `P` | Open the **Fractal Parameters** dialog |
 | `F1` | Open the **Help** window |
+
+---
+
+## Composition & Export Preview
+
+Aids for framing a shot the way the poster / wallpaper export will crop it
+(see the [poster / wallpaper export](Capture-Guide.md) flow).
+
+| Combo | Action |
+|---|---|
+| `Ctrl + Shift + P` | Open the **1:1 poster / wallpaper preview** — renders the current view through the export path in its own window so you see exactly what will be written. |
+| `Ctrl + Shift + F` | Toggle the **export-aspect frame guide** — an overlay at the wallpaper (multi-monitor union) aspect, so you can compose inside the shape the export will use. |
 
 ---
 
@@ -47,6 +66,7 @@ a suffix such as `[ACCEL OFF]` or `[SA OFF]` so you never forget it is engaged.
 | `Ctrl + Shift + A` | Toggle Mandelbrot **acceleration** (perturbation / BLA fast path). Off = plain per-pixel iteration. |
 | `Ctrl + Shift + S` | Toggle **Series Approximation** — the polynomial skip that fast-forwards the first thousands of iterations near the reference orbit. |
 | `Ctrl + Shift + D` | Toggle **double-double (DD) BLA** precision on the bilinear-approximation step. |
+| `Ctrl + Shift + G` | Toggle the **GPU relief-raymarch** path (default ON). Off forces the CPU sphere-trace — the parity oracle. The title gains `[RELIEF GPU OFF]` while it is off. |
 
 > [!TIP]
 > Chasing pixelation or smearing that only appears past a very deep zoom? Turn
@@ -108,6 +128,7 @@ a suffix such as `[ACCEL OFF]` or `[SA OFF]` so you never forget it is engaged.
 | Left-click drag | Pan (fast pass mid-drag; full re-render 300 ms after release) |
 | Double-click | Center on point + zoom in one step |
 | **Right-click drag** | **Highlight-to-zoom** — marquee box; release centers + zooms to fill rectangle |
+| `Alt` + double-click | **Relief DOF focus pick** — sets the depth-of-field focal plane from the clicked pixel's depth. Only on the Relief 3D raymarch with perspective + depth of field; a normal recenter otherwise. |
 
 ---
 
@@ -120,6 +141,7 @@ a suffix such as `[ACCEL OFF]` or `[SA OFF]` so you never forget it is engaged.
 | Left-click drag | Pan in screen space |
 | Right-click drag X | Orbit theta (azimuth) |
 | Right-click drag Y | Orbit phi (elevation, **inverted** for natural ""tilt up"" feel) |
+| **Middle-click drag** | **Marquee zoom** — the 3-D equivalent of the 2-D right-drag box; release recenters the camera target and zooms to fill the rectangle (right-drag stays camera-orbit in 3-D) |
 
 ---
 
@@ -168,12 +190,12 @@ Visible only while the slideshow is running.
 | `F5` | Force recompile |
 | `Esc` | Close |
 
-### Floating Menu
+### Control Center (main menu)
 
 | Key | Action |
 |---|---|
-| `Esc` | Close (does not exit the program) |
-| `Enter` (inside CX/CY/Zoom/Iter) | Apply (same as Go button) |
+| `Esc` | Close the pop-out / detached section window (does not exit the program) |
+| `Enter` (inside the Explore section's CX/CY/Zoom/Iter fields) | Apply (same as the **Go** button) |
 
 ### Floating Help
 
@@ -193,8 +215,8 @@ Visible only while the slideshow is running.
 
 | Combo | Right-click options |
 |---|---|
-| Region (toolbar OR menu) | Default · By Fractal Type → \<type\> |
-| Theme (toolbar OR menu) | Default · All A–Z · per-kind filter (Cycling / Phong3D / Pbr3D / …) |
+| Region (toolbar OR Control Center → Explore) | Default · By Fractal Type → \<type\> |
+| Theme (toolbar OR Control Center) | Default · All A–Z · per-kind filter (Cycling / Phong3D / Pbr3D / …) |
 
 The selected sort persists until changed (per-shell, not on disk).
 
