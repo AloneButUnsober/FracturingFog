@@ -33,6 +33,7 @@ using Avalonia.Media.Imaging;
 using Avalonia.Platform.Storage;
 using Avalonia.Threading;
 
+using FracturingFog;
 using FracturingFog.Audio;
 using FracturingFog.Imaging;
 using FracturingFog.UI.Avalonia.Services;
@@ -880,14 +881,15 @@ namespace FracturingFog.Hosting
         /// let the caller swap in the matching <c>WatermarkDef</c> from
         /// <c>UserWatermarkStore</c> before submitting the poster render.
         /// </summary>
-        public static Task<(int Width, int Height, bool Portrait, bool UseCustomWatermark, string? WatermarkName)?> ShowPosterAsync(
+        public static Task<(int Width, int Height, bool Portrait, bool UseCustomWatermark, string? WatermarkName, PosterAspectMode Maintain)?> ShowPosterAsync(
             System.Collections.Generic.IEnumerable<string> watermarkNames,
             bool customWatermarkDefault,
             string? watermarkNameDefault,
-            Action? onEditWatermark)
+            Action? onEditWatermark,
+            PosterAspectMode maintainDefault = PosterAspectMode.Aspect)
         {
             var owner = ActiveMainWindow;
-            var tcs = new TaskCompletionSource<(int, int, bool, bool, string?)?>();
+            var tcs = new TaskCompletionSource<(int, int, bool, bool, string?, PosterAspectMode)?>();
 
             void Run()
             {
@@ -903,6 +905,19 @@ namespace FracturingFog.Hosting
                 var pxHeightTx = new TextBox { Text = "10800", MinWidth = 70 };
 
                 var portrait = new CheckBox { Content = "Portrait orientation", IsChecked = true, Foreground = Brushes.White };
+
+                // #610 — "Maintain" mode: reconcile a cross-aspect export with the
+                // on-screen framing (Aspect = crop like today; View = fit + reveal
+                // more; Letterbox = fit + surround bars).
+                var maintainAspect = new RadioButton { Content = "Aspect", GroupName = "maintain", Foreground = Brushes.White, IsChecked = maintainDefault == PosterAspectMode.Aspect };
+                var maintainView = new RadioButton { Content = "View", GroupName = "maintain", Foreground = Brushes.White, IsChecked = maintainDefault == PosterAspectMode.View };
+                var maintainLetterbox = new RadioButton { Content = "Letterbox", GroupName = "maintain", Foreground = Brushes.White, IsChecked = maintainDefault == PosterAspectMode.Letterbox };
+                if (maintainAspect.IsChecked != true && maintainView.IsChecked != true && maintainLetterbox.IsChecked != true)
+                    maintainAspect.IsChecked = true;
+                PosterAspectMode MaintainNow() =>
+                    maintainView.IsChecked == true ? PosterAspectMode.View
+                    : maintainLetterbox.IsChecked == true ? PosterAspectMode.Letterbox
+                    : PosterAspectMode.Aspect;
 
                 // #189 feature 1 — Inches / Centimeters unit toggle.
                 var inchesRb = new RadioButton { Content = "Inches", GroupName = "units", IsChecked = true, Foreground = Brushes.White };
@@ -1040,7 +1055,7 @@ namespace FracturingFog.Hosting
                 {
                     Margin = new Thickness(16),
                     ColumnDefinitions = new ColumnDefinitions("Auto,*"),
-                    RowDefinitions = new RowDefinitions("Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto"),
+                    RowDefinitions = new RowDefinitions("Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto"),
                 };
                 void Place(Control c, int row, int col) { Grid.SetRow(c, row); Grid.SetColumn(c, col); grid.Children.Add(c); }
                 void PlaceSpan(Control c, int row) { Grid.SetRow(c, row); Grid.SetColumn(c, 0); Grid.SetColumnSpan(c, 2); grid.Children.Add(c); }
@@ -1080,6 +1095,14 @@ namespace FracturingFog.Hosting
 
                 PlaceSpan(portrait, row++);
 
+                // #610 — Maintain mode row.
+                var maintainRow = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 12, Margin = new Thickness(0, 0, 0, 4) };
+                maintainRow.Children.Add(new TextBlock { Text = "Maintain:", Foreground = Brushes.White, VerticalAlignment = VerticalAlignment.Center });
+                maintainRow.Children.Add(maintainAspect);
+                maintainRow.Children.Add(maintainView);
+                maintainRow.Children.Add(maintainLetterbox);
+                PlaceSpan(maintainRow, row++);
+
                 // Replaces the old "Output" line; keeps the px + MP readout.
                 PlaceSpan(pixelLabel, row++);
 
@@ -1097,8 +1120,8 @@ namespace FracturingFog.Hosting
 
                 var ok = new Button { Content = "OK", MinWidth = 80, IsDefault = true };
                 var cancel = new Button { Content = "Cancel", MinWidth = 80, IsCancel = true };
-                (int, int, bool, bool, string?)? pending = null;
-                void Close((int, int, bool, bool, string?)? r) { pending = r; win.Close(); }
+                (int, int, bool, bool, string?, PosterAspectMode)? pending = null;
+                void Close((int, int, bool, bool, string?, PosterAspectMode)? r) { pending = r; win.Close(); }
                 ok.Click += (_, _) =>
                 {
                     var (pw, ph) = PixelsNow();
@@ -1110,7 +1133,8 @@ namespace FracturingFog.Hosting
                     }
                     Close((pw, ph, portrait.IsChecked == true,
                         useWatermark.IsChecked == true,
-                        wmCombo.SelectedItem as string));
+                        wmCombo.SelectedItem as string,
+                        MaintainNow()));
                 };
                 cancel.Click += (_, _) => Close(null);
 
