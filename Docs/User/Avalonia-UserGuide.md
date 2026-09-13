@@ -219,6 +219,7 @@ Pick the region in any combo. The view jumps with full precision, iter count res
 
 - **Exp…** writes your user library to a JSON file.
 - **Imp…** merges a region JSON into your library. Name collisions prompt per-region: Skip / Overwrite / Rename.
+- **Drag-and-drop an asset bundle** (#531): drop a `.zip` asset bundle (exported from the Asset Manager's **Export ▾**) anywhere on the render window to import it. One overwrite prompt appears, then every asset in the bundle is merged and the affected lists refresh — no need to open the Asset Manager first. Multiple `.zip`s dropped at once are all imported; non-zip files are ignored.
 
 ### Built-in tour
 
