@@ -669,44 +669,110 @@ public sealed class ColorThemeEditorViewModel : ViewModelBase
                     && userSeed > 0)
             ? userSeed
             : System.Random.Shared.Next(1, 1_000_000);
-        var rng = new Random(seed);
         bool wild = RandomExperimental;
         bool sceneLightsChanged = false;   // #524 — raise SceneLightingChanged after
+
+        // #777 — single source of truth: the theme sections come from the shared
+        // headless generator (same one the slideshow uses). The editor keeps only
+        // its extras — Post-FX and the live SCENE lights (#524) — which the core
+        // does not touch; those draw from a separate rng seeded off the same seed
+        // so the whole result stays reproducible.
+        var def = FracturingFog.Imaging.RandomThemeGenerator.Generate(Kind, seed, wild);
+        var extrasRng = new Random(seed);
 
         _suppressChange = true;
         try
         {
-            var pal = RandomizeStops(rng, wild);
+            // Stops always. Build a palette list for the scene-light extra below.
+            var pal = new List<(byte R, byte G, byte B)>(def.Stops.Count);
+            Stops.Clear();
+            foreach (var s in def.Stops)
+            {
+                Stops.Add(new ColorStopRowVm(
+                    new ColorStopDef { Position = s.Position, R = s.R, G = s.G, B = s.B }, this));
+                pal.Add((s.R, s.G, s.B));
+            }
 
             if (RandomIncludeInterpolation)
-                RandomizeInterpolation(rng, wild);
+            {
+                InterpSpace = def.InterpolationSpace;
+                InterpCurve = def.InterpolationCurve;
+                TransferFn = def.TransferFunction;
+                TransferStrength = def.TransferStrength;
+                PaletteGamma = def.PaletteGamma;
+            }
 
             if (Kind != ColorThemeKindDef.Gradient)
-                RandomizeCycle(rng, wild);
+            {
+                ColorOffset = (decimal)def.ColorOffset;
+                ColorDensity = (decimal)def.ColorDensity;
+                CycleSpeed = (decimal)def.CycleSpeed;
+                WrapMode = def.WrapMode;
+                SeamlessCycle = def.SeamlessCycle;
+                SparkleStride = def.SparkleStride;
+                SparkleBoost = def.SparkleBoost;
+                XorLevels = def.XorLevels;
+                XorMask = def.XorMask;
+            }
 
             if (Kind == ColorThemeKindDef.Phong3D || Kind == ColorThemeKindDef.Pbr3D)
-                Randomize3DLights(rng, wild, pal);
+            {
+                Steepness = (decimal)def.Steepness;
+                Ambient = (decimal)def.Ambient;
+                // #524 — light COLOUR is an opt-out scope; when off keep the current
+                // colours but still take the generated placement + shininess.
+                bool colour = RandomInclude3DLightColor;
+                if (def.KeyLight != null) ApplyLightFromDef(KeyLight, def.KeyLight, colour);
+                if (def.FillLight != null) ApplyLightFromDef(FillLight, def.FillLight, colour);
+                UseRim = def.RimLight != null;
+                if (UseRim) ApplyLightFromDef(RimLight, def.RimLight!, colour);
+            }
 
             if (Kind == ColorThemeKindDef.Phong3D)
-                RandomizePhongExtras(rng, wild);
+            {
+                KeySpec = (decimal)def.KeySpecScale;
+                FillSpec = (decimal)def.FillSpecScale;
+                FillDiff = (decimal)def.FillDiffScale;
+                RimSpec = (decimal)def.RimSpecScale;
+                RimDiff = (decimal)def.RimDiffScale;
+            }
 
             if (Kind == ColorThemeKindDef.Pbr3D)
-                RandomizePbr(rng, wild);
+            {
+                PbrLightingMode = def.PbrLightingMode;
+                GlowExponent = (decimal)def.GlowBoostExponent;
+                GlowScale = (decimal)def.GlowBoostScale;
+                MaterialBands.Clear();
+                foreach (var b in def.MaterialBands)
+                    MaterialBands.Add(new MaterialBandRowVm(
+                        new PbrMaterialBandDef { UpperT = b.UpperT, Metal = b.Metal, Roughness = b.Roughness }, this));
+            }
 
             if (Kind == ColorThemeKindDef.OrbitTrap)
-                RandomizeOrbitTrap(rng, wild);
+            {
+                TrapShape = def.TrapShape;
+                TrapScale = def.TrapScale;
+                TrapPower = def.TrapPower;
+                ColorInterior = def.ColorInterior;
+            }
 
-            if (RandomIncludeInSet)
-                RandomizeInSet(rng, wild, pal);
+            if (RandomIncludeInSet && def.InSetColor != null)
+            {
+                UseInSet = true;
+                InSetR = def.InSetColor.R;
+                InSetG = def.InSetColor.G;
+                InSetB = def.InSetColor.B;
+                InSetA = def.InSetColor.A;
+            }
 
             if (RandomIncludePostFx)
-                RandomizePostFx(rng, wild);
+                RandomizePostFx(extrasRng, wild);
 
             // #524 — the SCENE 3D lighting colours (live Lighting-FX directional
             // lights, independent of the theme Kind). Only when the editor has a
             // live params instance and the scope toggle is on.
             if (RandomIncludeSceneLightColor && _viewParams != null)
-                sceneLightsChanged = RandomizeSceneLightColors(rng, wild, pal);
+                sceneLightsChanged = RandomizeSceneLightColors(extrasRng, wild, pal);
         }
         finally { _suppressChange = false; }
 
@@ -728,132 +794,23 @@ public sealed class ColorThemeEditorViewModel : ViewModelBase
     private static double Rng(Random r, double lo, double hi) => Lerp(lo, hi, r.NextDouble());
     private static byte RandByte(Random r) => (byte)r.Next(0, 256);
 
-    /// <summary>Golden-ratio hue walk. Returns the generated stop colours so
-    /// lights / in-set can stay in relation to the palette (artful mode).</summary>
-    private List<(byte R, byte G, byte B)> RandomizeStops(Random rng, bool wild)
+    // #777 — copy one generated light (LightSourceDef, 0..1 float colours) onto a
+    // VM light row. Placement + shininess always; colours only when includeColour
+    // (the #524 opt-out keeps hand-picked light colours while re-rolling the rig).
+    private static void ApplyLightFromDef(LightSourceRowVm light, LightSourceDef d, bool includeColour)
     {
-        const double golden = 0.6180339887498949;
-        int n = wild ? rng.Next(3, 9) : 5;
-        double hue = rng.NextDouble();
-        double satLo = wild ? 0.10 : 0.55, satHi = wild ? 1.00 : 0.95;
-        double valLo = wild ? 0.20 : 0.65, valHi = 1.00;
-
-        var pal = new List<(byte, byte, byte)>(n);
-        Stops.Clear();
-        for (int i = 0; i < n; i++)
-        {
-            hue = (hue + golden) % 1.0;
-            double sat = Rng(rng, satLo, satHi);
-            double val = Rng(rng, valLo, valHi);
-            var c = new HsvColor(1.0, hue * 360.0, sat, val).ToRgb();
-            float pos = i / (float)(n - 1);
-            Stops.Add(new ColorStopRowVm(
-                new ColorStopDef { Position = pos, R = c.R, G = c.G, B = c.B }, this));
-            pal.Add((c.R, c.G, c.B));
-        }
-        return pal;
-    }
-
-    private void RandomizeInterpolation(Random rng, bool wild)
-    {
-        InterpSpace = ColorSpaceOptions[rng.Next(ColorSpaceOptions.Length)];
-        InterpCurve = CurveOptions[rng.Next(CurveOptions.Length)];
-        TransferFn  = TransferOptions[rng.Next(TransferOptions.Length)];
-        // Strength clamps to 0..1; artful leans toward the stronger end.
-        TransferStrength = wild ? Rng(rng, 0, 1) : Rng(rng, 0.3, 1.0);
-        // Gamma clamps to 0.2..3; artful stays near neutral.
-        PaletteGamma = wild ? Rng(rng, 0.2, 3.0) : Rng(rng, 0.7, 1.6);
-    }
-
-    private void RandomizeCycle(Random rng, bool wild)
-    {
-        ColorOffset  = (decimal)(wild ? Rng(rng, -10, 10)   : Rng(rng, -1, 1));
-        ColorDensity = (decimal)(wild ? Rng(rng, 0, 20)     : Rng(rng, 0.5, 4));
-        CycleSpeed   = (decimal)(wild ? Rng(rng, 0.0001, 10): Rng(rng, 0.005, 0.1));
-        var wraps = WrapModeOptions;
-        WrapMode = wraps[rng.Next(wraps.Length)];
-
-        // #255 — artful cycling wants no seam; wild is a coin-flip for variety.
-        SeamlessCycle = wild ? rng.NextDouble() < 0.5 : true;
-
-        // #254 — sparkle is an experimental accent: wild-only, ~30% of the time.
-        if (wild && rng.NextDouble() < 0.3)
-        {
-            SparkleStride = rng.Next(4, 25);
-            SparkleBoost = Rng(rng, 0.3, 0.8);
-        }
-        else
-        {
-            SparkleStride = 0;
-            SparkleBoost = 0d;
-        }
-
-        // #252 — XOR moiré is a strong effect: wild-only, ~15% of the time.
-        if (wild && rng.NextDouble() < 0.15)
-        {
-            XorLevels = rng.Next(4, 33);
-            XorMask = rng.Next(1, XorLevels);
-        }
-        else
-        {
-            XorLevels = 0;
-            XorMask = 0;
-        }
-    }
-
-    private void Randomize3DLights(Random rng, bool wild, List<(byte R, byte G, byte B)> pal)
-    {
-        Steepness = (decimal)(wild ? Rng(rng, 0.1, 10) : Rng(rng, 0.8, 3.0));
-        Ambient   = (decimal)(wild ? Rng(rng, 0, 1)    : Rng(rng, 0.05, 0.30));
-
-        // #524 — light COLOUR is an opt-out scope (default on). When off the rig
-        // is still re-placed + intensity/shininess re-rolled, but each light keeps
-        // its current colour.
-        bool colour = RandomInclude3DLightColor;
-        ApplyLight(KeyLight,  rng, wild, pal, shinLo: 16, shinHi: 128, colour);
-        ApplyLight(FillLight, rng, wild, pal, shinLo: 8,  shinHi: 64,  colour);
-
-        // Rim: artful ~40% of the time, experimental ~70%.
-        UseRim = rng.NextDouble() < (wild ? 0.70 : 0.40);
-        if (UseRim)
-            ApplyLight(RimLight, rng, wild, pal, shinLo: 64, shinHi: 256, colour);
-    }
-
-    private void ApplyLight(LightSourceRowVm light, Random rng, bool wild,
-                            List<(byte R, byte G, byte B)> pal, int shinLo, int shinHi,
-                            bool includeColour = true)
-    {
-        // Placement: artful keeps Lz positive (light in front of the surface);
-        // experimental lets it come from anywhere.
-        light.Lx = (float)Rng(rng, -1, 1);
-        light.Ly = (float)Rng(rng, -1, 1);
-        light.Lz = (float)(wild ? Rng(rng, -1, 1) : Rng(rng, 0.3, 1.0));
-
-        // #524 — only touch the light colours when the scope toggle is on. Skipping
-        // consumes no rng, so the placement/shininess stream below is unaffected by
-        // the colour that would otherwise have been rolled here.
+        light.Lx = d.Lx;
+        light.Ly = d.Ly;
+        light.Lz = d.Lz;
         if (includeColour)
         {
-            if (wild)
-            {
-                light.DiffR = RandByte(rng); light.DiffG = RandByte(rng); light.DiffB = RandByte(rng);
-                light.SpecR = RandByte(rng); light.SpecG = RandByte(rng); light.SpecB = RandByte(rng);
-            }
-            else
-            {
-                // Diffuse pulled from a palette stop, blended toward white so the
-                // lit surface reads in the theme's colour family. Specular near white.
-                var (r, g, b) = pal.Count > 0 ? pal[rng.Next(pal.Count)] : ((byte)255, (byte)255, (byte)255);
-                light.DiffR = (byte)Lerp(r, 255, 0.35);
-                light.DiffG = (byte)Lerp(g, 255, 0.35);
-                light.DiffB = (byte)Lerp(b, 255, 0.35);
-                byte s = (byte)rng.Next(200, 256);
-                light.SpecR = s; light.SpecG = s; light.SpecB = s;
-            }
+            light.DiffR = ToByte(d.DiffR); light.DiffG = ToByte(d.DiffG); light.DiffB = ToByte(d.DiffB);
+            light.SpecR = ToByte(d.SpecR); light.SpecG = ToByte(d.SpecG); light.SpecB = ToByte(d.SpecB);
         }
-
-        light.Shininess = wild ? rng.Next(1, 513) : rng.Next(shinLo, shinHi + 1);
+        light.Shininess = (int)Math.Clamp(d.Shininess, 1f, 512f);
     }
+
+    private static byte ToByte(float unit01) => (byte)Math.Clamp((int)Math.Round(unit01 * 255f), 0, 255);
 
     // #524 — roll the SCENE 3D lighting colours (the live Lighting-FX directional
     // lights, distinct from the theme's Phong rig above). Structs are copy-modify-
@@ -890,64 +847,11 @@ public sealed class ColorThemeEditorViewModel : ViewModelBase
         return 0xFF000000u | ((uint)r << 16) | ((uint)g << 8) | b;
     }
 
-    private void RandomizePhongExtras(Random rng, bool wild)
-    {
-        KeySpec  = (decimal)(wild ? Rng(rng, 0, 10) : Rng(rng, 0.4, 1.2));
-        FillSpec = (decimal)(wild ? Rng(rng, 0, 10) : Rng(rng, 0.1, 0.5));
-        FillDiff = (decimal)(wild ? Rng(rng, 0, 10) : Rng(rng, 0.2, 0.6));
-        RimSpec  = (decimal)(wild ? Rng(rng, 0, 10) : Rng(rng, 0.5, 1.5));
-        RimDiff  = (decimal)(wild ? Rng(rng, 0, 10) : Rng(rng, 0.1, 0.4));
-    }
-
-    private void RandomizePbr(Random rng, bool wild)
-    {
-        var modes = PbrLightingModes;
-        if (modes.Count > 0) PbrLightingMode = modes[rng.Next(modes.Count)];
-        GlowExponent = (decimal)(wild ? Rng(rng, 0, 50) : Rng(rng, 2, 16));
-        GlowScale    = (decimal)(wild ? Rng(rng, 0, 10) : Rng(rng, 0, 2));
-
-        int bandCount = wild ? rng.Next(1, 9) : rng.Next(2, 5);
-        MaterialBands.Clear();
-        for (int i = 0; i < bandCount; i++)
-        {
-            // UpperT rises across the bands, last band = 1.0 (catch-all).
-            float upper = (i == bandCount - 1) ? 1f : (i + 1) / (float)bandCount;
-            float metal = (float)(wild ? rng.NextDouble() : Rng(rng, 0, 1));
-            float rough = (float)(wild ? rng.NextDouble() : Rng(rng, 0.2, 0.9));
-            MaterialBands.Add(new MaterialBandRowVm(
-                new PbrMaterialBandDef { UpperT = upper, Metal = metal, Roughness = rough }, this));
-        }
-    }
-
-    private void RandomizeOrbitTrap(Random rng, bool wild)
-    {
-        var shapes = TrapShapeOptions;
-        TrapShape = shapes[rng.Next(shapes.Length)];
-        TrapScale = wild ? Rng(rng, 0.1, 100) : Rng(rng, 0.8, 4);
-        TrapPower = wild ? Rng(rng, 0.05, 8) : Rng(rng, 0.2, 1.2);
-        // Interior orbit colouring: artful ~30% of the time, experimental ~50%.
-        ColorInterior = rng.NextDouble() < (wild ? 0.5 : 0.3);
-    }
-
-    private void RandomizeInSet(Random rng, bool wild, List<(byte R, byte G, byte B)> pal)
-    {
-        UseInSet = true;
-        if (wild)
-        {
-            InSetR = RandByte(rng); InSetG = RandByte(rng); InSetB = RandByte(rng);
-            InSetA = RandByte(rng);
-        }
-        else
-        {
-            // Artful: a dark member of the palette family so the interior reads
-            // as a recessed pocket rather than clashing with the exterior bands.
-            var (r, g, b) = pal.Count > 0 ? pal[rng.Next(pal.Count)] : ((byte)0, (byte)0, (byte)0);
-            InSetR = (byte)Lerp(r, 0, 0.75);
-            InSetG = (byte)Lerp(g, 0, 0.75);
-            InSetB = (byte)Lerp(b, 0, 0.75);
-            InSetA = 255;
-        }
-    }
+    // #777 — the per-section theme randomizers (stops / interpolation / cycle /
+    // 3D lights / Phong extras / PBR / orbit-trap / in-set) were folded into the
+    // shared FracturingFog.Imaging.RandomThemeGenerator and are applied from its
+    // ColorThemeDef in RandomizePalette above. Only the editor-only extras remain
+    // here: Post-FX (below) and the live SCENE lights (#524).
 
     private void RandomizePostFx(Random rng, bool wild)
     {
