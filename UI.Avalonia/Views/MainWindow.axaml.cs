@@ -26,6 +26,7 @@ using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.Markup.Xaml;
 using Avalonia.Media;
+using Avalonia.Platform.Storage;
 using FracturingFog.Input;
 using FracturingFog.UI.Avalonia.Controls;
 using FracturingFog.UI.Avalonia.Input;
@@ -648,6 +649,13 @@ public sealed partial class MainWindow : Window
             // rendered image area, matching legacy MainForm where the
             // ContextMenuStrip lived on _renderPanel.
             AttachContextMenu(_sponge, shell);
+
+            // #531 — drop an asset .zip bundle on the render area to import it.
+            // The sponge overlays the native D3D HWND (which can't be an Avalonia
+            // drop target), so it is the correct surface to accept the drop.
+            DragDrop.SetAllowDrop(_sponge, true);
+            DragDrop.AddDragOverHandler(_sponge, OnAssetDragOver);
+            DragDrop.AddDropHandler(_sponge, OnAssetDrop);
         }
 
         // Toolbar Type/Region/Theme combo sort-menu wiring now lives in
@@ -697,7 +705,50 @@ public sealed partial class MainWindow : Window
             _miniDepthColorMapHandler = null;
             _miniDepthFrameCompletedHandler = null;
         }
+
+        // #531 — detach the asset-drop handlers off the persistent sponge.
+        if (_sponge != null)
+        {
+            DragDrop.RemoveDragOverHandler(_sponge, OnAssetDragOver);
+            DragDrop.RemoveDropHandler(_sponge, OnAssetDrop);
+        }
         _shell = null;
+    }
+
+    // #531 — accept the drag only when it carries at least one .zip file, so the
+    // copy cursor lights up for asset bundles and nothing else.
+    private void OnAssetDragOver(object? sender, DragEventArgs e)
+    {
+        e.DragEffects = HasZipFile(e) ? DragDropEffects.Copy : DragDropEffects.None;
+        e.Handled = true;
+    }
+
+    private void OnAssetDrop(object? sender, DragEventArgs e)
+    {
+        e.Handled = true;
+        if (_shell == null) return;
+
+        var paths = ZipPaths(e);
+        if (paths.Count > 0)
+            _shell.RaiseAssetFilesDropped(paths.ToArray());
+    }
+
+    private static bool HasZipFile(DragEventArgs e) => ZipPaths(e).Count > 0;
+
+    // Avalonia 12 DnD: files come off e.DataTransfer.TryGetFiles() as IStorageItem[].
+    private static System.Collections.Generic.List<string> ZipPaths(DragEventArgs e)
+    {
+        var paths = new System.Collections.Generic.List<string>();
+        var files = e.DataTransfer?.TryGetFiles();
+        if (files == null) return paths;
+        foreach (var item in files)
+        {
+            string? p = item.TryGetLocalPath();
+            if (!string.IsNullOrEmpty(p) &&
+                p!.EndsWith(".zip", StringComparison.OrdinalIgnoreCase))
+                paths.Add(p);
+        }
+        return paths;
     }
 
     // Picking a fractal type / quality from a toolbar combo leaves keyboard

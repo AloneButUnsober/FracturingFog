@@ -2995,12 +2995,75 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
     /// <see cref="ImportAssetBundle"/> back with the result.</summary>
     public event EventHandler? AssetBundleImportRequested;
 
-    /// <summary>Host entry point for bundle import: hands the read bytes to the
-    /// live Asset Manager VM (which owns the source roster + the zip parse) and
-    /// returns the per-entry tally for the host to report. No-op tally when the
-    /// manager isn't open.</summary>
+    /// <summary>Host entry point for bundle import. Parses the zip against the
+    /// shell's own asset-source roster (so it works whether or not the Asset
+    /// Manager window is open — needed for the #531 drag-drop path), routes each
+    /// <c>&lt;Kind&gt;/&lt;name&gt;.json</c> entry to its source, then refreshes the
+    /// editor lists of the kinds that changed plus the Asset Manager if visible.</summary>
     public AssetImportSummary ImportAssetBundle(byte[] zipBytes, bool overwrite)
-        => AssetManager?.ImportBundle(zipBytes, overwrite) ?? new AssetImportSummary();
+    {
+        var summary = new AssetImportSummary();
+        if (zipBytes == null || zipBytes.Length == 0) return summary;
+
+        var touched = new System.Collections.Generic.HashSet<FracturingFog.Abstractions.Assets.AssetKind>();
+        try
+        {
+            using var ms = new System.IO.MemoryStream(zipBytes, writable: false);
+            using var zip = new System.IO.Compression.ZipArchive(ms, System.IO.Compression.ZipArchiveMode.Read);
+            foreach (var entry in zip.Entries)
+            {
+                if (string.IsNullOrEmpty(entry.Name)) continue;
+                if (!entry.FullName.EndsWith(".json", StringComparison.OrdinalIgnoreCase)) continue;
+                if (!TryAssetKindFromPath(entry.FullName, out var kind)) { summary.Failed++; continue; }
+
+                FracturingFog.Abstractions.Assets.IAssetSource? src = null;
+                foreach (var s in _assetSources)
+                    if (s.Kind == kind) { src = s; break; }
+                if (src == null) { summary.Failed++; continue; }
+
+                string json;
+                using (var r = new System.IO.StreamReader(entry.Open(), System.Text.Encoding.UTF8))
+                    json = r.ReadToEnd();
+
+                summary.Tally(src.ImportJson(json, overwrite).Status);
+                touched.Add(kind);
+            }
+        }
+        catch (Exception)
+        {
+            summary.Unreadable = true;
+        }
+
+        foreach (var k in touched) RefreshEditorListFor(k);
+        RefreshAssetManagerIfVisible();
+        return summary;
+    }
+
+    // First path segment ("Region/Foo.json" → "Region") is the AssetKind name the
+    // export wrote. Case-insensitive; tolerates back-slash separators.
+    private static bool TryAssetKindFromPath(
+        string fullName, out FracturingFog.Abstractions.Assets.AssetKind kind)
+    {
+        kind = default;
+        int slash = fullName.IndexOf('/');
+        if (slash <= 0) slash = fullName.IndexOf('\\');
+        if (slash <= 0) return false;
+        return Enum.TryParse(fullName.Substring(0, slash), ignoreCase: true, out kind);
+    }
+
+    /// <summary>#531 — raised when asset bundle file(s) are dropped on the render
+    /// window. The host shows one overwrite prompt, reads each <c>.zip</c>, calls
+    /// <see cref="ImportAssetBundle"/>, and reports the combined summary. Payload
+    /// is the dropped local file paths (already filtered to existing files by the
+    /// view; the host filters to <c>.zip</c>).</summary>
+    public event EventHandler<string[]>? AssetFilesDropped;
+
+    /// <summary>View entry point: the render window dropped these file paths.</summary>
+    public void RaiseAssetFilesDropped(string[] paths)
+    {
+        if (paths != null && paths.Length > 0)
+            AssetFilesDropped?.Invoke(this, paths);
+    }
 
     /// <summary>Raised when an editor wants to import assets of its own kind
     /// from a JSON file. The host shows an open picker + overwrite prompt,
@@ -3055,6 +3118,12 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
     {
         switch (kind)
         {
+            case FracturingFog.Abstractions.Assets.AssetKind.Region:
+                RefreshRegionListsFromService();
+                break;
+            case FracturingFog.Abstractions.Assets.AssetKind.ColorTheme:
+                RefreshThemeListsFromService();
+                break;
             case FracturingFog.Abstractions.Assets.AssetKind.Scene:
                 SceneEditor?.RefreshSceneNames();
                 break;

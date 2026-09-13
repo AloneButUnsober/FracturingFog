@@ -2805,6 +2805,52 @@ namespace FracturingFog.Hosting
                 });
             };
 
+            // #531 — asset bundle .zip(s) dropped on the render window. Same shape
+            // as the bundle import above (one overwrite prompt, then import), but
+            // the file(s) come from the drop payload instead of a picker.
+            shell.AssetFilesDropped += (_, paths) =>
+            {
+                Dispatcher.UIThread.Post(async () =>
+                {
+                    try
+                    {
+                        var zips = (paths ?? System.Array.Empty<string>())
+                            .Where(p => p.EndsWith(".zip", StringComparison.OrdinalIgnoreCase)
+                                        && System.IO.File.Exists(p))
+                            .ToList();
+                        if (zips.Count == 0) return;
+
+                        var choice = await AvaloniaDialogs.ShowMessageAsync(
+                            "Import Asset Bundle",
+                            $"Import {zips.Count} dropped asset bundle{(zips.Count == 1 ? "" : "s")}?\n\n" +
+                            "Overwrite assets that already exist?\n\n" +
+                            "Yes — replace matching saved assets with the bundle's.\n" +
+                            "No — keep your existing assets and skip those names.",
+                            expectsConfirmation: true);
+                        bool overwrite = choice == AvaloniaDialogs.MessageResult.Yes;
+
+                        var total = new FracturingFog.UI.Avalonia.ViewModels.AssetImportSummary();
+                        foreach (var z in zips)
+                        {
+                            byte[] bytes = await System.IO.File.ReadAllBytesAsync(z);
+                            var s = shell.ImportAssetBundle(bytes, overwrite);
+                            total.Added += s.Added; total.Replaced += s.Replaced;
+                            total.Skipped += s.Skipped; total.Failed += s.Failed;
+                            total.Unreadable |= s.Unreadable && s.Total == 0;
+                        }
+
+                        await AvaloniaDialogs.ShowMessageAsync(
+                            "Import Asset Bundle", total.Describe(), expectsConfirmation: false);
+                    }
+                    catch (Exception ex)
+                    {
+                        Console.Error.WriteLine($"[AvaloniaShellBootstrap] Asset drop import failed: {ex.Message}");
+                        await AvaloniaDialogs.ShowMessageAsync(
+                            "Import Asset Bundle", "Import failed:\n" + ex.Message, expectsConfirmation: false);
+                    }
+                });
+            };
+
             // Per-editor JSON import (Scenes / Animations / Watermarks). Same
             // shape as the bundle import above — picker, one up-front overwrite
             // prompt, then the shell routes every entry through the kind's own
