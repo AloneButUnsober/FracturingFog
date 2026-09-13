@@ -3825,8 +3825,10 @@ namespace FracturingFog.Hosting
                         expectsConfirmation: false);
                     return;
                 }
+                // #435 — attach the audio file (File source) to the encoded video.
+                bool muxed = await TryMuxAudioIntoVideoAsync(outPath);
                 try { System.IO.Directory.Delete(pngFolder, recursive: true); } catch { }
-                SetStatus($"Slideshow video saved: {System.IO.Path.GetFileName(outPath)}");
+                SetStatus($"Slideshow video saved{(muxed ? " (with audio)" : "")}: {System.IO.Path.GetFileName(outPath)}");
             }
             catch (Exception ex)
             {
@@ -3834,6 +3836,57 @@ namespace FracturingFog.Hosting
                     "Convert Slideshow",
                     $"ffmpeg encode crashed:\n{ex.Message}\n\nThe PNG sequence is still in:\n{pngFolder}",
                     expectsConfirmation: false);
+            }
+        }
+
+        /// <summary>#435 Slice A — after a video / slideshow container is written,
+        /// mux the audio FILE (when AudioSettings is enabled with Source == File)
+        /// into it so an audio-reactive export actually carries its music. Reuses
+        /// <see cref="FfmpegEncoder.MuxAudioAsync"/> (AAC, <c>-shortest</c>) — the
+        /// same path the Scene Engine export uses — and syncs for free because the
+        /// offline analysis and the mux both start from the file at t=0 at constant
+        /// fps. Non-fatal: on any failure the (silent) video is kept. Streamed
+        /// sources (loopback / mic) are out of scope here — see #773. Returns true
+        /// when the container was replaced with an audio-muxed copy.</summary>
+        private static async Task<bool> TryMuxAudioIntoVideoAsync(string videoPath)
+        {
+            try
+            {
+                if (string.IsNullOrEmpty(videoPath) || !System.IO.File.Exists(videoPath)) return false;
+                if (!FfmpegEncoder.IsEnabledForUser()) return false;
+
+                var audio = AudioSettingsStore.Load();
+                if (audio is not { Enabled: true, Source: AudioSourceKind.File }) return false;
+                string? audioPath = audio.FilePath;
+                if (string.IsNullOrWhiteSpace(audioPath) || !System.IO.File.Exists(audioPath)) return false;
+
+                SetStatus("Muxing audio into video…");
+                string ext = System.IO.Path.GetExtension(videoPath);
+                string muxed = videoPath + ".audio" + ext;
+                var (ok, log) = await FfmpegEncoder.MuxAudioAsync(videoPath, audioPath!, muxed);
+                if (!ok)
+                {
+                    try { System.IO.File.Delete(muxed); } catch { /* best effort */ }
+                    Console.Error.WriteLine("[AvaloniaShellBootstrap] audio mux failed: " + log);
+                    return false;
+                }
+                try
+                {
+                    System.IO.File.Delete(videoPath);
+                    System.IO.File.Move(muxed, videoPath);
+                    return true;
+                }
+                catch (Exception ex)
+                {
+                    try { System.IO.File.Delete(muxed); } catch { /* best effort */ }
+                    Console.Error.WriteLine("[AvaloniaShellBootstrap] audio mux swap failed: " + ex.Message);
+                    return false;
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.Error.WriteLine("[AvaloniaShellBootstrap] audio mux error: " + ex.Message);
+                return false;
             }
         }
 
@@ -3854,7 +3907,9 @@ namespace FracturingFog.Hosting
             try
             {
                 System.IO.File.Move(tempPath, path, overwrite: true);
-                SetStatus($"Video saved: {System.IO.Path.GetFileName(path)}");
+                // #435 — mux the audio file (File source) into the saved video.
+                bool muxed = await TryMuxAudioIntoVideoAsync(path);
+                SetStatus($"Video saved{(muxed ? " (with audio)" : "")}: {System.IO.Path.GetFileName(path)}");
             }
             catch (Exception ex)
             {
@@ -3937,7 +3992,11 @@ namespace FracturingFog.Hosting
                             Dispatcher.UIThread.Post(() => SetStatus($"ffmpeg: {line.Trim()}"));
                     });
                 if (ok)
-                    SetStatus($"Encoded: {System.IO.Path.GetFileName(outPath)}");
+                {
+                    // #435 — mux the audio file (File source) into the encoded video.
+                    bool muxed = await TryMuxAudioIntoVideoAsync(outPath);
+                    SetStatus($"Encoded{(muxed ? " (with audio)" : "")}: {System.IO.Path.GetFileName(outPath)}");
+                }
                 else
                     await AvaloniaDialogs.ShowMessageAsync(
                         "Save Lossless", "ffmpeg encode failed.\n\n" + log, expectsConfirmation: false);
