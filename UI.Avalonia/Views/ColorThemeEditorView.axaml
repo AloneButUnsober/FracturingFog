@@ -210,6 +210,9 @@
                                         <CheckBox Content="Post-FX" IsChecked="{Binding RandomIncludePostFx}"
                                                   Foreground="#DCDCDC" VerticalAlignment="Center"
                                                   ToolTip.Tip="Include random Post-FX defaults (Brightness / Contrast / Adaptive-HE) when generating a random theme." />
+                                        <CheckBox Content="3D light colour" IsChecked="{Binding RandomInclude3DLightColor}"
+                                                  Foreground="#DCDCDC" VerticalAlignment="Center"
+                                                  ToolTip.Tip="For Phong3D / PBR3D themes: include random diffuse + specular light COLOURS. Off keeps each light's current colour while still re-placing the rig + re-rolling intensity/shininess (#524)." />
                                     </StackPanel>
                                     <StackPanel Orientation="Horizontal" Spacing="14">
                                         <TextBlock Text="Seed:" Foreground="#DCDCDC" VerticalAlignment="Center" />

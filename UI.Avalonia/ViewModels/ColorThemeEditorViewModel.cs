@@ -618,6 +618,18 @@ public sealed class ColorThemeEditorViewModel : ViewModelBase
         set => this.RaiseAndSetIfChanged(ref _randomIncludeInterpolation, value);
     }
 
+    private bool _randomInclude3DLightColor = true;
+    /// <summary>On (default): Randomize also picks the 3D lights' diffuse +
+    /// specular COLOURS (Phong3D / Pbr3D). Off: the random 3D light rig still
+    /// re-places lights + rolls intensity/shininess, but each light KEEPS its
+    /// current colour — so you can re-roll the rig without losing hand-picked
+    /// light colours (#524). No effect on non-3D Kinds.</summary>
+    public bool RandomInclude3DLightColor
+    {
+        get => _randomInclude3DLightColor;
+        set => this.RaiseAndSetIfChanged(ref _randomInclude3DLightColor, value);
+    }
+
     private string _randomSeedText = "";
     /// <summary>The seed field. Only consulted when <see cref="UseRandomSeed"/>
     /// is on. After each Randomize it is set to the seed actually used so a
@@ -773,17 +785,22 @@ public sealed class ColorThemeEditorViewModel : ViewModelBase
         Steepness = (decimal)(wild ? Rng(rng, 0.1, 10) : Rng(rng, 0.8, 3.0));
         Ambient   = (decimal)(wild ? Rng(rng, 0, 1)    : Rng(rng, 0.05, 0.30));
 
-        ApplyLight(KeyLight,  rng, wild, pal, shinLo: 16, shinHi: 128);
-        ApplyLight(FillLight, rng, wild, pal, shinLo: 8,  shinHi: 64);
+        // #524 — light COLOUR is an opt-out scope (default on). When off the rig
+        // is still re-placed + intensity/shininess re-rolled, but each light keeps
+        // its current colour.
+        bool colour = RandomInclude3DLightColor;
+        ApplyLight(KeyLight,  rng, wild, pal, shinLo: 16, shinHi: 128, colour);
+        ApplyLight(FillLight, rng, wild, pal, shinLo: 8,  shinHi: 64,  colour);
 
         // Rim: artful ~40% of the time, experimental ~70%.
         UseRim = rng.NextDouble() < (wild ? 0.70 : 0.40);
         if (UseRim)
-            ApplyLight(RimLight, rng, wild, pal, shinLo: 64, shinHi: 256);
+            ApplyLight(RimLight, rng, wild, pal, shinLo: 64, shinHi: 256, colour);
     }
 
     private void ApplyLight(LightSourceRowVm light, Random rng, bool wild,
-                            List<(byte R, byte G, byte B)> pal, int shinLo, int shinHi)
+                            List<(byte R, byte G, byte B)> pal, int shinLo, int shinHi,
+                            bool includeColour = true)
     {
         // Placement: artful keeps Lz positive (light in front of the surface);
         // experimental lets it come from anywhere.
@@ -791,21 +808,27 @@ public sealed class ColorThemeEditorViewModel : ViewModelBase
         light.Ly = (float)Rng(rng, -1, 1);
         light.Lz = (float)(wild ? Rng(rng, -1, 1) : Rng(rng, 0.3, 1.0));
 
-        if (wild)
+        // #524 — only touch the light colours when the scope toggle is on. Skipping
+        // consumes no rng, so the placement/shininess stream below is unaffected by
+        // the colour that would otherwise have been rolled here.
+        if (includeColour)
         {
-            light.DiffR = RandByte(rng); light.DiffG = RandByte(rng); light.DiffB = RandByte(rng);
-            light.SpecR = RandByte(rng); light.SpecG = RandByte(rng); light.SpecB = RandByte(rng);
-        }
-        else
-        {
-            // Diffuse pulled from a palette stop, blended toward white so the
-            // lit surface reads in the theme's colour family. Specular near white.
-            var (r, g, b) = pal.Count > 0 ? pal[rng.Next(pal.Count)] : ((byte)255, (byte)255, (byte)255);
-            light.DiffR = (byte)Lerp(r, 255, 0.35);
-            light.DiffG = (byte)Lerp(g, 255, 0.35);
-            light.DiffB = (byte)Lerp(b, 255, 0.35);
-            byte s = (byte)rng.Next(200, 256);
-            light.SpecR = s; light.SpecG = s; light.SpecB = s;
+            if (wild)
+            {
+                light.DiffR = RandByte(rng); light.DiffG = RandByte(rng); light.DiffB = RandByte(rng);
+                light.SpecR = RandByte(rng); light.SpecG = RandByte(rng); light.SpecB = RandByte(rng);
+            }
+            else
+            {
+                // Diffuse pulled from a palette stop, blended toward white so the
+                // lit surface reads in the theme's colour family. Specular near white.
+                var (r, g, b) = pal.Count > 0 ? pal[rng.Next(pal.Count)] : ((byte)255, (byte)255, (byte)255);
+                light.DiffR = (byte)Lerp(r, 255, 0.35);
+                light.DiffG = (byte)Lerp(g, 255, 0.35);
+                light.DiffB = (byte)Lerp(b, 255, 0.35);
+                byte s = (byte)rng.Next(200, 256);
+                light.SpecR = s; light.SpecG = s; light.SpecB = s;
+            }
         }
 
         light.Shininess = wild ? rng.Next(1, 513) : rng.Next(shinLo, shinHi + 1);
