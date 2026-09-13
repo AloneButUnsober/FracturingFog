@@ -199,7 +199,8 @@ The **🎲 Random** button (top of the Color Stops section) generates a complete
 | Colour stops | Always. |
 | Interpolation (Space / Curve / Transfer / Strength / Gamma) | When **Interpolation** is ticked (default on). |
 | Cycle settings (offset / density / speed / wrap mode) | Every Kind **except** Gradient. |
-| 3D light rig + shared Steepness / Ambient | Phong3D and Pbr3D. |
+| 3D light rig + shared Steepness / Ambient | Phong3D and Pbr3D. Light **colours** only when **Theme light colour** is ticked (default on). |
+| Scene 3D lighting colours (Lighting-FX Light 1/2/3) | When **Scene light colour** is ticked (default on) and the editor is over a live view. Independent of Kind. |
 | Phong extras (key/fill/rim spec + diff scales) | Phong3D only. |
 | PBR lighting mode, glow, and material bands | Pbr3D only. |
 | In-set (interior) colour | When **In-set** is ticked (default on). |
@@ -213,6 +214,8 @@ The **🎲 Random** button (top of the Color Stops section) generates a complete
 | **In-set** | on | Include a random interior colour. Artful mode picks a dark member of the palette family (opaque) so the in-set reads as a recessed pocket; experimental mode allows any colour and any alpha. |
 | **Post-FX** | off | Include random Post-FX defaults. Ticking this also ticks the Brightness / Contrast / Adaptive *Use* checkboxes to match (and unticking clears them) so you never have to flip them by hand. Artful mode keeps Brightness/Contrast within ±20 and Adaptive-HE under 50; experimental mode uses the full slider ranges. |
 | **Interpolation** | on | Include random Space / Curve / Transfer / Transfer-strength / Palette-gamma. Artful keeps strength and gamma near neutral; experimental spans their full ranges. |
+| **Theme light colour** | on | Phong3D / Pbr3D only. Include random diffuse + specular colours for the theme's Key/Fill/Rim light rig. Off keeps each light's current colour while still re-placing the rig and re-rolling intensity/shininess — so you can re-roll the lighting without losing hand-picked light colours. No effect on non-3D Kinds. |
+| **Scene light colour** | on | Also randomize the **scene** 3D lighting colours — the live Lighting-FX directional lights (Relief3D / Volumetric), independent of the theme Kind. Off leaves the scene lights' current colours untouched. Only shown when the editor is opened over a live view. |
 
 ### Seed and reproducibility
 
@@ -224,7 +227,7 @@ The **🎲 Random** button (top of the Color Stops section) generates a complete
 > Found a random theme you like? Its seed is already in the Seed field and the Description. Tick **Use Seed**, then flip **Random Experimental** on and off (or switch Kind) to explore controlled variations around the same starting point.
 
 > [!NOTE]
-> Randomize replaces the current stops and the settings it covers. Untick a scope toggle (In-set, Post-FX, Interpolation) to protect those sections from being overwritten.
+> Randomize replaces the current stops and the settings it covers. Untick a scope toggle (In-set, Post-FX, Interpolation, Theme light colour, Scene light colour) to protect those sections from being overwritten.
 
 ---
 
