@@ -463,22 +463,30 @@ namespace FracturingFog.UI.Avalonia.Slideshow
 
         // ── #434 — random theme generation ─────────────────────────────────
 
-        // Kinds the slideshow randomiser draws from. Restricted to 2D-friendly
-        // kinds so a random theme never lands a 3D lighting rig on a flat 2D
-        // fractal (which just emboss-muddies it). Fractal-type-aware Kind
-        // selection is the #434 slice-4 follow-up.
-        private static readonly ColorThemeKindDef[] RandomKinds =
+        // #434 slice 4 — the theme Kinds that make sense for a region's fractal
+        // type, from the same capability map the rest of the app uses for
+        // theme/fractal compatibility. Gradient + Cycling always apply; OrbitTrap
+        // needs the orbit path (SuppliesOrbit); Phong3D / Pbr3D need surface
+        // normals to emboss (SuppliesNormals). This keeps a random theme "sane
+        // for the given type" — no orbit-trap on a point-cloud, no 3D rig on a
+        // flat histogram fractal.
+        private ColorThemeKindDef[] KindsForRegion(string regionName)
         {
-            ColorThemeKindDef.Gradient,
-            ColorThemeKindDef.Cycling,
-            ColorThemeKindDef.OrbitTrap,
-        };
+            var caps = FractalCapabilities.None;
+            string? typeName = _service.GetRegionFractalTypeName(regionName);
+            if (!string.IsNullOrEmpty(typeName)
+                && Enum.TryParse<FractalType>(typeName, ignoreCase: true, out var ft))
+                caps = FractalCapabilityMap.For(ft);
+            return FracturingFog.Imaging.RandomThemeGenerator.KindsFor(caps);
+        }
 
-        // Generate one random theme def for a slot. Seed is drawn from the theme
-        // RNG so a fixed SlideshowSettings.RandomSeed reproduces the sequence.
-        private ColorThemeDef GenerateRandomTheme()
+        // Generate one random theme def for a slot, picking a Kind sane for the
+        // region's fractal type (slice 4). Seed is drawn from the theme RNG so a
+        // fixed SlideshowSettings.RandomSeed reproduces the sequence.
+        private ColorThemeDef GenerateRandomTheme(string regionName)
         {
-            var kind = RandomKinds[_rng.Next(RandomKinds.Length)];
+            var kinds = KindsForRegion(regionName);
+            var kind = kinds[_rng.Next(kinds.Length)];
             int seed = _rng.Next(1, int.MaxValue);
             return FracturingFog.Imaging.RandomThemeGenerator.Generate(
                 kind, seed, _settings.RandomizeThemesExperimental, name: $"Random {kind}");
@@ -488,7 +496,7 @@ namespace FracturingFog.UI.Avalonia.Slideshow
         // it; regenerate (new seed/kind) if the region comes out a solid colour.
         private ColorThemeDef PickNonSolidRandomTheme(string regionName, CancellationToken ct)
         {
-            ColorThemeDef def = GenerateRandomTheme();
+            ColorThemeDef def = GenerateRandomTheme(regionName);
             const int budget = 6;
             for (int i = 0; i < budget; i++)
             {
@@ -498,7 +506,7 @@ namespace FracturingFog.UI.Avalonia.Slideshow
                 catch { probe = null; }
                 if (probe == null || !IsAllOneColor(probe)) return def;   // null = non-Mandelbrot peek, accept
                 StatusChanged?.Invoke(this, $"Slideshow: skipping solid random theme on {regionName}");
-                def = GenerateRandomTheme();
+                def = GenerateRandomTheme(regionName);
             }
             return def;
         }
