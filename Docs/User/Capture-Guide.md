@@ -55,6 +55,16 @@ want to *do* with it, and the rest follows:
 > install folder, then `Tools\`, then your `PATH`. If it cannot find a working ffmpeg the render
 > exits with a friendly error explaining what to do.
 
+> [!NOTE]
+> **Audio in exports (#435).** When Audio settings are **Enabled** with **Source = File**, the
+> chosen audio file is muxed into the exported video after encoding — Video Zoom, the image
+> Slideshow's *Convert*, and the lossless *encode* paths all attach it (AAC, trimmed to the shorter
+> of video/audio). Because the audio-reactive analysis and the mux both start from the file at
+> `t = 0` at a constant frame rate, the result is frame-accurate. Streamed sources (System Loopback /
+> Microphone) are not muxed yet — capturing a live stream to a file for later render is tracked
+> separately (#773). The status line shows "(with audio)" when a track was attached; a mux failure
+> is non-fatal and keeps the silent video.
+
 ---
 
 ## Table of Contents
