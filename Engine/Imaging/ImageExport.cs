@@ -221,14 +221,21 @@ namespace FracturingFog.Imaging
         // are DECODE-ONLY: SKImage.Encode returns a null SKData for them, which
         // NRE'd at data.SaveTo (the "object reference not set" crash on Save-as-
         // BMP). BMP has a trivial uncompressed layout so we write it by hand;
-        // any other unsupported format falls back to a PNG encode so the save
-        // still succeeds instead of throwing.
+        // GIF routes through the hand-rolled GifEncoder (median-cut quantize +
+        // GIF-LZW, #68 slice 2). Any other decode-only format falls back to a
+        // PNG encode so the save still succeeds instead of throwing.
         public static void EncodeImageToFile(
             SKImage image, SKEncodedImageFormat skFmt, int quality, string path)
         {
             if (skFmt == SKEncodedImageFormat.Bmp)
             {
                 WriteBmp32(image, path);
+                return;
+            }
+
+            if (skFmt == SKEncodedImageFormat.Gif)
+            {
+                WriteGif(image, path);
                 return;
             }
 
@@ -242,11 +249,24 @@ namespace FracturingFog.Imaging
                 }
             }
 
-            // Decode-only format (e.g. GIF) — Skia handed back null. Save PNG.
+            // Decode-only format — Skia handed back null. Save PNG.
             using (var png = image.Encode(SKEncodedImageFormat.Png, 100))
             using (var fs = File.Create(path))
                 png.SaveTo(fs);
             Debug.WriteLine($"EncodeImageToFile: {skFmt} unsupported by SkiaSharp encode; saved {path} as PNG.");
+        }
+
+        // Read the image's BGRA pixels and hand them to the portable GIF encoder
+        // (#68 slice 2). SkiaSharp cannot encode GIF; GifEncoder quantizes to a
+        // 256-colour palette (median cut), preserves 1-bit transparency, and
+        // LZW-compresses the index stream.
+        private static void WriteGif(SKImage image, string path)
+        {
+            int w = image.Width, h = image.Height;
+            var info = new SKImageInfo(w, h, SKColorType.Bgra8888, SKAlphaType.Unpremul);
+            using var bmp = new SKBitmap(info);
+            image.ReadPixels(info, bmp.GetPixels(), info.RowBytes, 0, 0);
+            GifEncoder.Write(path, bmp.GetPixelSpan(), w, h);
         }
 
         // Hand-rolled 32-bpp bottom-up BI_RGB BMP writer. SkiaSharp cannot

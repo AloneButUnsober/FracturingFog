@@ -88,24 +88,39 @@ public sealed class ImageExportBmpTests
     }
 
     [Fact]
-    public void SaveGif_FallsBackToPng_NoThrow()
+    public void SaveGif_WritesRealDecodableGif()
     {
         int w = 8, h = 8;
-        var px = MakeBuffer(w, h, 0xFF00FF00u);
+        const uint green = 0xFF00FF00u;
+        var px = MakeBuffer(w, h, green);
         string path = Path.Combine(Path.GetTempPath(),
             $"ff-gif-{Guid.NewGuid():N}.gif");
         try
         {
-            // GIF is decode-only in SkiaSharp too — must fall back to PNG bytes
-            // instead of NRE. File still lands at the requested path.
+            // #68 slice 2 — SkiaSharp cannot encode GIF; ImageExport now routes
+            // to GifEncoder for a real GIF (was a PNG-in-.gif fallback before).
             ImageExport.SavePixelsToFile(px, w, h, path, ImageFileFormat.Gif,
                 (WatermarkRender?)null);
 
             Assert.True(File.Exists(path));
+
+            // Real GIF magic, not PNG bytes.
+            byte[] head = File.ReadAllBytes(path);
+            Assert.True(head.Length > 13);
+            Assert.Equal((byte)'G', head[0]);
+            Assert.Equal((byte)'I', head[1]);
+            Assert.Equal((byte)'F', head[2]);
+
             using var decoded = SKBitmap.Decode(path);
             Assert.NotNull(decoded);
             Assert.Equal(w, decoded!.Width);
             Assert.Equal(h, decoded.Height);
+
+            // Single-colour source round-trips exactly through the palette.
+            var c = decoded.GetPixel(3, 3);
+            Assert.Equal(0, c.Red);
+            Assert.Equal(255, c.Green);
+            Assert.Equal(0, c.Blue);
         }
         finally { if (File.Exists(path)) File.Delete(path); }
     }

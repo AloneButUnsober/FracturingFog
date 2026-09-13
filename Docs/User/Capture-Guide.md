@@ -88,7 +88,7 @@ The Image button in the Control Center's Capture section saves the current view 
 
 | Behavior | Description |
 |---|---|
-| Format | PNG (default), JPEG, BMP, TIFF, **ICO**, **EXR** — chosen by file extension |
+| Format | PNG (default), JPEG, BMP, TIFF, **GIF**, **ICO**, **EXR** — chosen by file extension |
 | Resolution | Current panel resolution, OR full virtual desktop when Span is active |
 | Post-FX | Live brightness / contrast / adaptive applied |
 | Watermark | Embedded if the Watermark toggle is on. Contrast-aware text color. |
@@ -110,7 +110,14 @@ The file dialog defaults to your Pictures folder; switch to any path before conf
 > to a square and written as a multi-resolution set (16 / 32 / 48 / 256,
 > capped to the cropped side) so the OS can pick the size it needs — handy for
 > turning a favourite view into an app or shortcut icon. Watermarks are skipped
-> (an icon-sized overlay is meaningless). Animated `.gif` is tracked separately.
+> (an icon-sized overlay is meaningless).
+
+> [!NOTE]
+> **Name the file `.gif`** to save a GIF. The frame is quantized to a 256-colour
+> palette (median cut) with 1-bit transparency, so smooth fractal gradients will
+> band — PNG stays the better choice for stills. GIF is handy for small,
+> few-colour images and for pasting where only GIF is accepted. This is a single
+> still; **animated** GIF (from a slideshow or zoom) is tracked separately.
 
 ---
 

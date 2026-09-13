@@ -1464,6 +1464,7 @@ namespace FracturingFog.Hosting
                         suggestedName: BuildSuggestedFileName("png", isSpanning: s_spanning),
                         filter: "PNG image (*.png)|*.png"
                               + "|JPEG image (*.jpg;*.jpeg)|*.jpg;*.jpeg"
+                              + "|GIF image (*.gif)|*.gif"
                               + "|Windows icon (*.ico)|*.ico"
                               + "|OpenEXR float image (*.exr)|*.exr");
                     if (string.IsNullOrEmpty(path)) return;
