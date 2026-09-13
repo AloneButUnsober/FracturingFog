@@ -123,4 +123,64 @@ public sealed class RandomThemeGeneratorTests
         var (gr, gg, gb) = RandomThemeGenerator.HsvToRgb(h, 1.0, 1.0);
         Assert.Equal((r, g, b), (gr, gg, gb));
     }
+
+    // ── #434 slice 4 — capability-driven Kind selection ─────────────────────
+
+    [Fact]
+    public void KindsFor_None_IsGradientAndCyclingOnly()
+    {
+        var kinds = RandomThemeGenerator.KindsFor(FractalCapabilities.None);
+        Assert.Equal(
+            new[] { ColorThemeKindDef.Gradient, ColorThemeKindDef.Cycling },
+            kinds);
+    }
+
+    [Fact]
+    public void KindsFor_Orbit_AddsOrbitTrap_NotThreeD()
+    {
+        var kinds = RandomThemeGenerator.KindsFor(FractalCapabilities.SuppliesOrbit);
+        Assert.Contains(ColorThemeKindDef.OrbitTrap, kinds);
+        Assert.DoesNotContain(ColorThemeKindDef.Phong3D, kinds);
+        Assert.DoesNotContain(ColorThemeKindDef.Pbr3D, kinds);
+    }
+
+    [Fact]
+    public void KindsFor_Normals_AddsPhongAndPbr_NotOrbitTrap()
+    {
+        var kinds = RandomThemeGenerator.KindsFor(FractalCapabilities.SuppliesNormals);
+        Assert.Contains(ColorThemeKindDef.Phong3D, kinds);
+        Assert.Contains(ColorThemeKindDef.Pbr3D, kinds);
+        Assert.DoesNotContain(ColorThemeKindDef.OrbitTrap, kinds);
+    }
+
+    [Fact]
+    public void KindsFor_OrbitAndNormals_HasAllFive()
+    {
+        var kinds = RandomThemeGenerator.KindsFor(
+            FractalCapabilities.SuppliesOrbit | FractalCapabilities.SuppliesNormals);
+        Assert.Contains(ColorThemeKindDef.Gradient, kinds);
+        Assert.Contains(ColorThemeKindDef.Cycling, kinds);
+        Assert.Contains(ColorThemeKindDef.OrbitTrap, kinds);
+        Assert.Contains(ColorThemeKindDef.Phong3D, kinds);
+        Assert.Contains(ColorThemeKindDef.Pbr3D, kinds);
+    }
+
+    [Fact]
+    public void KindsFor_Mandelbrot_IncludesOrbitTrapAndThreeD()
+    {
+        // Mandelbrot runs the full pipeline (orbit + normals) → the richest set.
+        var kinds = RandomThemeGenerator.KindsFor(FractalCapabilityMap.For(FractalType.Mandelbrot));
+        Assert.Contains(ColorThemeKindDef.OrbitTrap, kinds);
+        Assert.Contains(ColorThemeKindDef.Phong3D, kinds);
+    }
+
+    [Fact]
+    public void KindsFor_HistogramType_IsGradientCyclingOnly()
+    {
+        // A histogram/point-cloud family (no orbit, no normals) → safe 2D kinds.
+        var kinds = RandomThemeGenerator.KindsFor(FractalCapabilityMap.For(FractalType.BuddhaBrot));
+        Assert.DoesNotContain(ColorThemeKindDef.OrbitTrap, kinds);
+        Assert.DoesNotContain(ColorThemeKindDef.Phong3D, kinds);
+        Assert.DoesNotContain(ColorThemeKindDef.Pbr3D, kinds);
+    }
 }

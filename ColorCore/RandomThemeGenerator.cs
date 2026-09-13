@@ -68,6 +68,31 @@ namespace FracturingFog.Imaging
             return def;
         }
 
+        /// <summary>#434 slice 4 — the theme Kinds that make sense for a fractal
+        /// with the given capabilities. Gradient + Cycling always apply; OrbitTrap
+        /// needs the orbit path (<see cref="FractalCapabilities.SuppliesOrbit"/>);
+        /// Phong3D / Pbr3D need surface normals to emboss
+        /// (<see cref="FractalCapabilities.SuppliesNormals"/>). Callers pair this
+        /// with <c>FractalCapabilityMap.For(type)</c> to keep a random theme sane
+        /// for the fractal — no orbit-trap on a point-cloud, no 3D rig on a flat
+        /// histogram fractal.</summary>
+        public static ColorThemeKindDef[] KindsFor(FractalCapabilities caps)
+        {
+            var kinds = new List<ColorThemeKindDef>(5)
+            {
+                ColorThemeKindDef.Gradient,
+                ColorThemeKindDef.Cycling,
+            };
+            if ((caps & FractalCapabilities.SuppliesOrbit) != 0)
+                kinds.Add(ColorThemeKindDef.OrbitTrap);
+            if ((caps & FractalCapabilities.SuppliesNormals) != 0)
+            {
+                kinds.Add(ColorThemeKindDef.Phong3D);
+                kinds.Add(ColorThemeKindDef.Pbr3D);
+            }
+            return kinds.ToArray();
+        }
+
         // ── Section builders (mirror ColorThemeEditorViewModel.Randomize*) ──────
 
         private static List<(byte R, byte G, byte B)> BuildStops(ColorThemeDef def, Random rng, bool wild)
