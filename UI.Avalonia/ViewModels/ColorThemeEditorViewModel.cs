@@ -2489,6 +2489,8 @@ public sealed class LightSourceRowVm : ReactiveObject
         this.RaisePropertyChanged(nameof(Shininess));
         this.RaisePropertyChanged(nameof(DiffSwatchBrush));
         this.RaisePropertyChanged(nameof(SpecSwatchBrush));
+        this.RaisePropertyChanged(nameof(DiffColor));
+        this.RaisePropertyChanged(nameof(SpecColor));
     }
 
     private bool _isEnabled = true;
@@ -2507,23 +2509,27 @@ public sealed class LightSourceRowVm : ReactiveObject
     private float _lz;
     public float Lz { get => _lz; set { this.RaiseAndSetIfChanged(ref _lz, value); _parent.NotifyRowChanged(); } }
 
+    // #524 — each channel setter also raises the composite DiffColor/SpecColor so
+    // the bound ColorPicker swatch refreshes when Randomize (or any code path) sets
+    // the channels programmatically. Without the composite raise the ColorPicker,
+    // bound to DiffColor, never saw the change and the swatch stayed put.
     private byte _diffR;
-    public byte DiffR { get => _diffR; set { this.RaiseAndSetIfChanged(ref _diffR, value); this.RaisePropertyChanged(nameof(DiffSwatchBrush)); _parent.NotifyRowChanged(); } }
+    public byte DiffR { get => _diffR; set { this.RaiseAndSetIfChanged(ref _diffR, value); this.RaisePropertyChanged(nameof(DiffSwatchBrush)); this.RaisePropertyChanged(nameof(DiffColor)); _parent.NotifyRowChanged(); } }
 
     private byte _diffG;
-    public byte DiffG { get => _diffG; set { this.RaiseAndSetIfChanged(ref _diffG, value); this.RaisePropertyChanged(nameof(DiffSwatchBrush)); _parent.NotifyRowChanged(); } }
+    public byte DiffG { get => _diffG; set { this.RaiseAndSetIfChanged(ref _diffG, value); this.RaisePropertyChanged(nameof(DiffSwatchBrush)); this.RaisePropertyChanged(nameof(DiffColor)); _parent.NotifyRowChanged(); } }
 
     private byte _diffB;
-    public byte DiffB { get => _diffB; set { this.RaiseAndSetIfChanged(ref _diffB, value); this.RaisePropertyChanged(nameof(DiffSwatchBrush)); _parent.NotifyRowChanged(); } }
+    public byte DiffB { get => _diffB; set { this.RaiseAndSetIfChanged(ref _diffB, value); this.RaisePropertyChanged(nameof(DiffSwatchBrush)); this.RaisePropertyChanged(nameof(DiffColor)); _parent.NotifyRowChanged(); } }
 
     private byte _specR;
-    public byte SpecR { get => _specR; set { this.RaiseAndSetIfChanged(ref _specR, value); this.RaisePropertyChanged(nameof(SpecSwatchBrush)); _parent.NotifyRowChanged(); } }
+    public byte SpecR { get => _specR; set { this.RaiseAndSetIfChanged(ref _specR, value); this.RaisePropertyChanged(nameof(SpecSwatchBrush)); this.RaisePropertyChanged(nameof(SpecColor)); _parent.NotifyRowChanged(); } }
 
     private byte _specG;
-    public byte SpecG { get => _specG; set { this.RaiseAndSetIfChanged(ref _specG, value); this.RaisePropertyChanged(nameof(SpecSwatchBrush)); _parent.NotifyRowChanged(); } }
+    public byte SpecG { get => _specG; set { this.RaiseAndSetIfChanged(ref _specG, value); this.RaisePropertyChanged(nameof(SpecSwatchBrush)); this.RaisePropertyChanged(nameof(SpecColor)); _parent.NotifyRowChanged(); } }
 
     private byte _specB;
-    public byte SpecB { get => _specB; set { this.RaiseAndSetIfChanged(ref _specB, value); this.RaisePropertyChanged(nameof(SpecSwatchBrush)); _parent.NotifyRowChanged(); } }
+    public byte SpecB { get => _specB; set { this.RaiseAndSetIfChanged(ref _specB, value); this.RaisePropertyChanged(nameof(SpecSwatchBrush)); this.RaisePropertyChanged(nameof(SpecColor)); _parent.NotifyRowChanged(); } }
 
     private int _shininess;
     public int Shininess { get => _shininess; set { this.RaiseAndSetIfChanged(ref _shininess, Math.Clamp(value, 1, 512)); _parent.NotifyRowChanged(); } }
