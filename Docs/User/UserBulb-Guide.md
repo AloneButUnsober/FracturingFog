@@ -537,10 +537,12 @@ Two toolbar buttons make composing 3D hybrids one click:
 
 | Button | Action |
 |---|---|
-| **+ Primitive ▾** | Appends one named fold/power step to the chain. Options: Mandelbox fold (box+sphere+scale), KIFS Menger fold, KIFS Sierpinski tetra fold, Mandelbulb power. |
+| **+ Primitive ▾** | Appends one named fold/power step to the chain. Built-in options: Mandelbox fold (box+sphere+scale), KIFS Menger fold, KIFS Sierpinski tetra fold, Mandelbulb power — plus any of your own equations promoted to the list (see below). |
 | **Hybrid ▾** | Replaces the chain with a worked-example two-step hybrid: Mandelbox + Mandelbulb, or Menger + Mandelbulb. |
 
 Each primitive is plain `Vec3` source you can edit after dropping it in — change the box-fold limit, the sphere-fold radii, the Mandelbulb power, or the KIFS scale to taste. Output names auto-uniquify on insertion so duplicate primitives compose cleanly.
+
+**Promote your own equation to a primitive (#535).** Select a saved single-source equation, then tick **Promote to primitive list**. It then appears in the **+ Primitive ▾** menu (below the built-ins) so you can drop it into any chain. The editor validates suitability first — the equation must be single-source (not itself a chain), must parse, and must reference `z` so it can compose with the prior step. A chain-bearing entry disables the checkbox. Any saved KIFS scale is carried over, so a promoted fold still auto-engages the scalar-KIFS DE when inserted.
 
 The two built-in hybrid examples (`Hybrid: Mandelbox + Mandelbulb` and `Hybrid: Menger + Mandelbulb`) are also seeded in the saved-equation dropdown, so you can recall them by name later.
 

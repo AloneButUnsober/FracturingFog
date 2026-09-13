@@ -128,6 +128,82 @@ namespace FracturingFog.Models
             return null;
         }
 
+        /// <summary>#535 — turn a saved single-source bulb entry into a chain
+        /// primitive so the "+ Primitive" menu can offer user equations. Returns
+        /// null for a chain-bearing or blank-source entry (a primitive is one Vec3
+        /// step). The output-name id is derived from the entry name; the KIFS scale
+        /// is carried from the entry's saved settings so a promoted fold still
+        /// auto-engages the scalar-KIFS DE.</summary>
+        public static UserBulbChainPrimitive? FromEntry(UserBulbEntry entry)
+        {
+            if (entry == null || entry.Chain is { Count: > 0 }) return null;
+            if (string.IsNullOrWhiteSpace(entry.Source)) return null;
+            return new UserBulbChainPrimitive
+            {
+                DisplayName = entry.Name,
+                DefaultOutputName = SanitizeId(entry.Name),
+                Source = entry.Source,
+                Description = "User equation promoted to a primitive (#535).",
+                KifsScale = entry.Settings?.KifsScale ?? 0.0,
+            };
+        }
+
+        /// <summary>#535 — the chain primitives contributed by the user's saved
+        /// bulb equations flagged <see cref="UserBulbEntry.ChainPrimitive"/>, in
+        /// store order.</summary>
+        public static IReadOnlyList<UserBulbChainPrimitive> UserPrimitives(IEnumerable<UserBulbEntry>? entries)
+        {
+            var list = new List<UserBulbChainPrimitive>();
+            if (entries == null) return list;
+            foreach (var e in entries)
+            {
+                if (e is not { ChainPrimitive: true }) continue;
+                var p = FromEntry(e);
+                if (p != null) list.Add(p);
+            }
+            return list;
+        }
+
+        /// <summary>#535 — the built-in primitives followed by the user-promoted
+        /// ones. The menu binds to this so a newly-promoted equation appears
+        /// without a hardcoded axaml edit.</summary>
+        public static IReadOnlyList<UserBulbChainPrimitive> AllWithUser(IEnumerable<UserBulbEntry>? entries)
+        {
+            var list = new List<UserBulbChainPrimitive>(_all);
+            list.AddRange(UserPrimitives(entries));
+            return list;
+        }
+
+        /// <summary>#535 — structural suitability of an entry as a chain primitive
+        /// (independent of the DSL parse, which the editor runs separately). Returns
+        /// an error string, or null when structurally OK.</summary>
+        public static string? PrimitiveStructuralError(UserBulbEntry? entry)
+        {
+            if (entry == null) return "No equation selected.";
+            if (entry.Chain is { Count: > 0 })
+                return "A multi-step chain can't be a primitive — a primitive is a single step.";
+            if (string.IsNullOrWhiteSpace(entry.Source))
+                return "The equation has no source body.";
+            if (!Regex.IsMatch(entry.Source, @"\bz\b"))
+                return "The equation never references z, so it can't compose in a chain.";
+            return null;
+        }
+
+        /// <summary>Derive a short, lowercase, alphanumeric chain output-name from
+        /// an entry name (for the primitive's default step name). Capped at 12
+        /// chars; falls back to "prim" when the name has no usable characters.</summary>
+        private static string SanitizeId(string name)
+        {
+            if (string.IsNullOrWhiteSpace(name)) return "prim";
+            var sb = new System.Text.StringBuilder();
+            foreach (char ch in name)
+            {
+                if (char.IsLetterOrDigit(ch)) sb.Append(char.ToLowerInvariant(ch));
+                if (sb.Length >= 12) break;
+            }
+            return sb.Length == 0 ? "prim" : sb.ToString();
+        }
+
         /// <summary>
         /// Rewrites a primitive's source so every standalone `z` identifier
         /// becomes a reference to <paramref name="priorName"/>. Used when a
