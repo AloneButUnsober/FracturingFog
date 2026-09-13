@@ -31,9 +31,9 @@ public sealed partial class AssetManagerView : UserControl
         (DataContext as AssetManagerViewModel)?.RaiseOpen();
     }
 
-    // Bulk export (A3): gather the middle list's multi-selection and hand it to
-    // the VM, which builds the zip and raises ExportRequested for the host.
-    private void OnExportBundle(object? sender, global::Avalonia.Interactivity.RoutedEventArgs e)
+    // #79A — Export ▾ menu. Selected exports the middle-list multi-selection;
+    // the other two enumerate the current type / every type in the VM.
+    private void OnExportSelected(object? sender, global::Avalonia.Interactivity.RoutedEventArgs e)
     {
         if (DataContext is not AssetManagerViewModel vm) return;
         var list = this.FindControl<ListBox>("AssetsList");
@@ -44,6 +44,12 @@ public sealed partial class AssetManagerView : UserControl
             .ToList() ?? new System.Collections.Generic.List<AssetRowViewModel>();
         vm.ExportBundle(rows);
     }
+
+    private void OnExportCurrentType(object? sender, global::Avalonia.Interactivity.RoutedEventArgs e)
+        => (DataContext as AssetManagerViewModel)?.ExportAllOfCurrentType();
+
+    private void OnExportEverything(object? sender, global::Avalonia.Interactivity.RoutedEventArgs e)
+        => (DataContext as AssetManagerViewModel)?.ExportEverything();
 
     // Bulk import (A3 import): the VM raises ImportRequested, which the shell
     // bubbles to the host (open picker + overwrite prompt + file read + report).

@@ -210,8 +210,33 @@ public sealed class AssetManagerViewModel : ViewModelBase
     /// middle-list's current multi-selection, passed from the view. No-op when
     /// empty or when nothing serializes.</summary>
     public void ExportBundle(IReadOnlyList<AssetRowViewModel> rows)
+        => ExportDescriptors(
+            rows == null
+                ? System.Array.Empty<AssetDescriptor>()
+                : rows.Select(r => r.Descriptor).ToList());
+
+    /// <summary>#79A — export every asset of the currently-selected type as a
+    /// bundle (no manual select-all needed).</summary>
+    public void ExportAllOfCurrentType()
+        => ExportDescriptors(SelectedType?.Source?.Enumerate().ToList()
+            ?? (IReadOnlyList<AssetDescriptor>)System.Array.Empty<AssetDescriptor>());
+
+    /// <summary>#79A — export every saved asset across every type as one bundle.</summary>
+    public void ExportEverything()
     {
-        if (rows == null || rows.Count == 0) return;
+        var all = new List<AssetDescriptor>();
+        foreach (var s in _sources)
+            all.AddRange(s.Enumerate());
+        ExportDescriptors(all);
+    }
+
+    // Shared export core: zip the given descriptors' JSON (each resolved to its
+    // own source, so a mixed-kind set bundles correctly) and raise the export
+    // event. No-op when empty or when nothing serializes (e.g. read-only
+    // built-ins whose ExportJson returns null).
+    private void ExportDescriptors(IReadOnlyList<AssetDescriptor> descriptors)
+    {
+        if (descriptors == null || descriptors.Count == 0) return;
 
         byte[] bytes;
         int written = 0;
@@ -220,13 +245,13 @@ public sealed class AssetManagerViewModel : ViewModelBase
             using (var zip = new ZipArchive(ms, ZipArchiveMode.Create, leaveOpen: true))
             {
                 var used = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-                foreach (var row in rows)
+                foreach (var d in descriptors)
                 {
-                    var src = SourceFor(row.Descriptor.Kind);
-                    string? json = src?.ExportJson(row.Descriptor.Name);
+                    var src = SourceFor(d.Kind);
+                    string? json = src?.ExportJson(d.Name);
                     if (json == null) continue;
 
-                    var entry = zip.CreateEntry(EntryPath(row.Descriptor, used), CompressionLevel.Optimal);
+                    var entry = zip.CreateEntry(EntryPath(d, used), CompressionLevel.Optimal);
                     using var w = new StreamWriter(entry.Open(), new UTF8Encoding(false));
                     w.Write(json);
                     written++;
