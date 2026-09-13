@@ -27,7 +27,7 @@ namespace FracturingFog.Imaging
     /// <summary>Immutable description of a poster/high-res capture job. Carries
     /// the full quad-precision centre (Hi + 3 low limbs) so a Mandelbrot deep
     /// zoom survives the offscreen re-render at poster resolution.</summary>
-    public sealed class PosterRequest
+    public sealed record PosterRequest
     {
         // Quad-precision centre — only the Mandelbrot path consumes the low
         // limbs; alt calculators read the Hi halves (CenterX / CenterY) only.
@@ -130,6 +130,22 @@ namespace FracturingFog.Imaging
         /// <summary>Rotate the landscape render 90° clockwise before saving
         /// (portrait output / explicit rotate request).</summary>
         public bool Rotate { get; init; }
+
+        // ── #610 letterbox padding ─────────────────────────────────────────
+        /// <summary>#610 — when both are &gt; 0 and smaller than <see cref="Width"/>
+        /// / <see cref="Height"/>, the scene is rendered into this INNER rect
+        /// (matching the on-screen aspect) and centred on the full Width×Height
+        /// canvas, the surround bars filled with <see cref="SurroundColor"/>. 0
+        /// (the default) = no letterbox — the Aspect / View modes fill the whole
+        /// output. Set only by <see cref="PosterAspectMode.Letterbox"/>.</summary>
+        public int LetterboxInnerW { get; init; }
+        public int LetterboxInnerH { get; init; }
+
+        /// <summary>#610 — ARGB fill for the letterbox bars: the active theme's
+        /// out-of-bounds surround colour (#615), else its in-set colour, else
+        /// opaque black. Only consulted when the LetterboxInner* dims engage a
+        /// letterbox render.</summary>
+        public uint SurroundColor { get; init; } = 0xFF000000u;
 
         public string Path { get; init; } = "";
         public ImageFileFormat Format { get; init; } = ImageFileFormat.Png;
@@ -243,6 +259,38 @@ namespace FracturingFog.Imaging
             if (req.Width <= 0 || req.Height <= 0)
                 throw new ArgumentException("Poster dimensions must be positive.", nameof(req));
 
+            // #610 letterbox — render the scene into the INNER rect (matching the
+            // on-screen aspect) and centre it on the full canvas, padding the bars
+            // with the surround colour. The inner render runs the full display
+            // pipeline; the rotate (portrait) still happens in WritePoster over the
+            // padded canvas, so a portrait letterbox composes correctly.
+            if (req.LetterboxInnerW > 0 && req.LetterboxInnerH > 0
+                && (req.LetterboxInnerW < req.Width || req.LetterboxInnerH < req.Height))
+            {
+                int iw = Math.Min(req.LetterboxInnerW, req.Width);
+                int ih = Math.Min(req.LetterboxInnerH, req.Height);
+                var innerReq = req with
+                {
+                    Width = iw, Height = ih, Rotate = false,
+                    LetterboxInnerW = 0, LetterboxInnerH = 0,
+                };
+                uint[] innerBuf = RenderDisplayBuffer(innerReq, token, out int rw, out int rh, out long innerMs);
+                uint[] padded = PadCentred(innerBuf, rw, rh, req.Width, req.Height, req.SurroundColor);
+                return WritePoster(req, padded, req.Width, req.Height, innerMs);
+            }
+
+            uint[] display = RenderDisplayBuffer(req, token, out int dw, out int dh, out long ms);
+            return WritePoster(req, display, dw, dh, ms);
+        }
+
+        /// <summary>Render + grade + tonemap + composite the poster into its final
+        /// display buffer — everything <see cref="RenderToFile"/> does except the
+        /// watermark + file write. Split out for the #610 letterbox path, which
+        /// renders this at the inner rect then pads the result onto the full
+        /// canvas. The non-letterbox path is byte-identical to the pre-#610 body.</summary>
+        private static uint[] RenderDisplayBuffer(PosterRequest req, CancellationToken token,
+            out int w, out int h, out long elapsedMs)
+        {
             var sw = System.Diagnostics.Stopwatch.StartNew();
 
             // S2 (#396) — CORE true-linear intermediate producer wiring. When a view
@@ -288,7 +336,7 @@ namespace FracturingFog.Imaging
                     req.Width, req.Height, false, false, captureHdr: wantHdr)
                 : null;
 
-            uint[] buffer = RenderComposedBuffer(req, token, out int w, out int h, hdrAov);
+            uint[] buffer = RenderComposedBuffer(req, token, out w, out h, hdrAov);
 
             sw.Stop();
 
@@ -374,7 +422,57 @@ namespace FracturingFog.Imaging
                 if (sbs != null) { buffer = sbs; w = stereoW; h = stereoH; }
             }
 
-            return WritePoster(req, buffer, w, h, sw.ElapsedMilliseconds);
+            elapsedMs = sw.ElapsedMilliseconds;
+            return buffer;
+        }
+
+        /// <summary>#610 — centre a <paramref name="sw"/>×<paramref name="sh"/> source
+        /// buffer in a fresh <paramref name="dw"/>×<paramref name="dh"/> canvas, filling
+        /// the surround with <paramref name="fill"/> (ARGB). Used to letterbox a
+        /// cross-aspect poster/wallpaper: the fractal keeps the on-screen framing and
+        /// the extra output area becomes solid bars instead of revealing more fractal.</summary>
+        public static uint[] PadCentred(uint[] src, int sw, int sh, int dw, int dh, uint fill)
+        {
+            var dst = new uint[dw * dh];
+            if (fill != 0) { for (int i = 0; i < dst.Length; i++) dst[i] = fill; }
+            int cw = Math.Min(sw, dw);
+            int ch = Math.Min(sh, dh);
+            int ox = Math.Max(0, (dw - sw) / 2);
+            int oy = Math.Max(0, (dh - sh) / 2);
+            for (int y = 0; y < ch; y++)
+                Array.Copy(src, y * sw, dst, (oy + y) * dw + ox, cw);
+            return dst;
+        }
+
+        /// <summary>#610 — the Zoom multiplier that makes a poster/wallpaper of
+        /// <paramref name="ow"/>×<paramref name="oh"/> CONTAIN the whole on-screen
+        /// (<paramref name="sw"/>×<paramref name="sh"/>) complex view. Because the
+        /// calculator maps by the longest axis (<c>3.5/max(W,H)/Zoom</c>), the factor
+        /// preserves the on-screen span on the limiting axis and reveals more fractal
+        /// on the other. Returns 1.0 (byte-identical) when the aspects match or any
+        /// dimension is non-positive.</summary>
+        public static double ViewZoomFactor(int sw, int sh, int ow, int oh)
+        {
+            if (sw <= 0 || sh <= 0 || ow <= 0 || oh <= 0) return 1.0;
+            double maxS = Math.Max(sw, sh);
+            double maxO = Math.Max(ow, oh);
+            double axis = Math.Max((double)sw / ow, (double)sh / oh);
+            if (maxO <= 0 || axis <= 0) return 1.0;
+            return (maxS / maxO) / axis;
+        }
+
+        /// <summary>#610 — the largest rect inside <paramref name="ow"/>×<paramref name="oh"/>
+        /// whose aspect matches the on-screen <paramref name="sw"/>×<paramref name="sh"/>
+        /// window (the letterbox inner rect). One axis equals the output; the other is
+        /// reduced, and the difference becomes the surround bars.</summary>
+        public static (int W, int H) LetterboxInner(int sw, int sh, int ow, int oh)
+        {
+            if (sw <= 0 || sh <= 0 || ow <= 0 || oh <= 0) return (ow, oh);
+            double onAspect = (double)sw / sh;
+            double outAspect = (double)ow / oh;
+            if (onAspect > outAspect)
+                return (ow, Math.Max(1, (int)Math.Round(ow / onAspect)));
+            return (Math.Max(1, (int)Math.Round(oh * onAspect)), oh);
         }
 
         /// <summary>Render the composed scene buffer — calculator colour + #102

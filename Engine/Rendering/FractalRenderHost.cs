@@ -1056,7 +1056,8 @@ namespace FracturingFog.Rendering
         public PosterRequest CreatePosterRequest(
             int width, int height, bool rotate,
             string path, FracturingFog.Imaging.ImageFileFormat format,
-            FracturingFog.Models.WatermarkDef? customWatermark = null)
+            FracturingFog.Models.WatermarkDef? customWatermark = null,
+            PosterAspectMode aspectMode = PosterAspectMode.Aspect)
         {
             string watermark = FracturingFog.Imaging.WatermarkResolver.ComposeDefaultTopText(
                 RegionName, ThemeName);
@@ -1066,6 +1067,36 @@ namespace FracturingFog.Rendering
             int effIters = _calculator.MaxIterations > 0
                 ? _calculator.MaxIterations
                 : s.Quality.ComputeIterations(s.Zoom);
+
+            // #610 — reconcile a cross-aspect export with the on-screen framing. The
+            // calculator maps the complex plane by the longest pixel axis
+            // (3.5/max(W,H)/Zoom), so an output at a different aspect than the
+            // on-screen window (Aspect mode) crops the short axis. View rescales Zoom
+            // so the whole on-screen view stays inside the output; Letterbox renders
+            // the on-screen view into an inner rect and pads the surround bars with
+            // the theme out-of-bounds colour (#615). Aspect = unchanged (byte-identical).
+            double posterZoom = s.Zoom;
+            int lbInnerW = 0, lbInnerH = 0;
+            uint surroundColor = _calculator.ColorMap?.OutOfBoundsColor
+                ?? _calculator.ColorMap?.InSetColor ?? 0xFF000000u;
+            if (aspectMode != PosterAspectMode.Aspect)
+            {
+                int screenW = _calculator.Width, screenH = _calculator.Height;
+                if (aspectMode == PosterAspectMode.View)
+                {
+                    posterZoom = s.Zoom * FracturingFog.Imaging.PosterRenderer.ViewZoomFactor(
+                        screenW, screenH, width, height);
+                }
+                else // Letterbox
+                {
+                    (lbInnerW, lbInnerH) = FracturingFog.Imaging.PosterRenderer.LetterboxInner(
+                        screenW, screenH, width, height);
+                    // The inner rect matches the on-screen aspect, so the View factor
+                    // computed at the inner dims is a pure scale that fills it exactly.
+                    posterZoom = s.Zoom * FracturingFog.Imaging.PosterRenderer.ViewZoomFactor(
+                        screenW, screenH, lbInnerW, lbInnerH);
+                }
+            }
 
             // #508 — snapshot the interactive relief field so the offscreen poster /
             // wallpaper raymarch uses the SAME field the screen does (the dedicated
@@ -1092,7 +1123,7 @@ namespace FracturingFog.Rendering
                 Height = height,
                 CenterX = s.CenterX, CenterXLo = s.CenterXLo, CenterX2 = s.CenterX2, CenterX3 = s.CenterX3,
                 CenterY = s.CenterY, CenterYLo = s.CenterYLo, CenterY2 = s.CenterY2, CenterY3 = s.CenterY3,
-                Zoom = s.Zoom,
+                Zoom = posterZoom,
                 MaxIterations = effIters,
                 ColorMap = _calculator.ColorMap,
                 Quality = s.Quality,
@@ -1119,6 +1150,10 @@ namespace FracturingFog.Rendering
                 BandDither = s.BandDither,
                 BandDitherStrength = s.BandDitherStrength,
                 Rotate = rotate,
+                // #610 — letterbox padding (Letterbox mode only; 0/0 otherwise).
+                LetterboxInnerW = lbInnerW,
+                LetterboxInnerH = lbInnerH,
+                SurroundColor = surroundColor,
                 Path = path,
                 Format = format,
                 Watermark = watermark,

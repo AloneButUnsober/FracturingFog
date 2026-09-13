@@ -1783,8 +1783,19 @@ namespace FracturingFog.Hosting
                         ? UserWatermarkStore.Instance.GetByName(shell.Main.SelectedCustomWatermarkName)
                         : null;
 
+                    // #610 — wallpaper Maintain mode from the Capture-section combo
+                    // (defaults to View). The virtual-screen union is almost always a
+                    // different (ultrawide) aspect than the on-screen window, so Aspect
+                    // would crop the top/bottom; View reveals more on the wide axis and
+                    // Letterbox pads the surround.
+                    var maintain = (shell.FloatingMenu?.WallpaperMaintainMode) switch
+                    {
+                        "Aspect"    => global::FracturingFog.PosterAspectMode.Aspect,
+                        "Letterbox" => global::FracturingFog.PosterAspectMode.Letterbox,
+                        _           => global::FracturingFog.PosterAspectMode.View,
+                    };
                     var req = s_renderHost.CreatePosterRequest(
-                        wpW, wpH, rotate: false, path, format, customWm);
+                        wpW, wpH, rotate: false, path, format, customWm, maintain);
 
                     try
                     {
@@ -2194,7 +2205,7 @@ namespace FracturingFog.Hosting
                         : null;
                     var req = s_renderHost.CreatePosterRequest(
                         renderW, renderH, rotate: dims.Value.Portrait,
-                        path, format, customWm);
+                        path, format, customWm, dims.Value.Maintain);
 
                     // #189 feature 5 — memory pre-flight. A print-resolution
                     // poster can need gigabytes; warn (and let the user back out)

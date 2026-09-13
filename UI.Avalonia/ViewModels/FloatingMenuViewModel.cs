@@ -89,6 +89,20 @@ public sealed class FloatingMenuViewModel : ViewModelBase
     public ObservableCollection<string> QualityNames { get; } = new();
     public ObservableCollection<string> WatermarkNames { get; } = new();
 
+    // #610 — Wallpaper "Maintain" mode (Capture section combo). The Poster button
+    // carries its own in-dialog radio; the Wallpaper button has no size dialog, so
+    // this persists the choice for it. Defaults to "View" — the virtual-screen union
+    // is almost always a different aspect than the on-screen window, and "Aspect"
+    // would crop the top/bottom. String-only here (UI.Avalonia stays enum-agnostic);
+    // the host maps it to PosterAspectMode.
+    public ObservableCollection<string> WallpaperMaintainModes { get; } = new() { "Aspect", "View", "Letterbox" };
+    private string _wallpaperMaintainMode = "View";
+    public string WallpaperMaintainMode
+    {
+        get => _wallpaperMaintainMode;
+        set => this.RaiseAndSetIfChanged(ref _wallpaperMaintainMode, value);
+    }
+
     private bool _suppressWatermarkChange;
 
     /// <summary>Repopulate the watermark dropdown (host calls after startup load

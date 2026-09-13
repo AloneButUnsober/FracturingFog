@@ -7,6 +7,21 @@ namespace FracturingFog
 {
     public enum QualityLevel { Fast, Normal, High, Ultra }
 
+    /// <summary>#610 — how a poster / wallpaper render at an aspect different from
+    /// the on-screen window reconciles the framing. The calculator maps the complex
+    /// plane by the longest pixel axis (<c>scale = 3.5/max(W,H)/Zoom</c>), so a
+    /// cross-aspect export otherwise crops the short axis (top/bottom for an
+    /// ultrawide wallpaper, sides for a portrait poster).
+    /// <list type="bullet">
+    /// <item><see cref="Aspect"/> (default) — carry the on-screen Zoom through
+    /// unchanged; the short axis is cropped. Byte-identical to the pre-#610 export.</item>
+    /// <item><see cref="View"/> — rescale Zoom so the whole on-screen view stays
+    /// inside the output; the wider axis reveals MORE fractal instead of cropping.</item>
+    /// <item><see cref="Letterbox"/> — contain the on-screen view exactly (no extra
+    /// fractal), padding the surround bars with the out-of-bounds colour (#615).</item>
+    /// </list></summary>
+    public enum PosterAspectMode { Aspect, View, Letterbox }
+
     /// <summary>Tone curve applied to the raw smooth-iteration count before it
     /// is used as a 3D height field by the Oblique 3D raymarch (#130). The raw
     /// count is unbounded at the fractal boundary; the curve tames boundary
