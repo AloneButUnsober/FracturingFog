@@ -84,11 +84,11 @@ want to *do* with it, and the rest follows:
 
 ## 1. Screenshot (Image button)
 
-The Image button in the Floating Menu saves the current view as a single still.
+The Image button in the Control Center's Capture section saves the current view as a single still.
 
 | Behavior | Description |
 |---|---|
-| Format | PNG (default), TIFF, BMP, **EXR** — chosen by file extension |
+| Format | PNG (default), JPEG, BMP, TIFF, **ICO**, **EXR** — chosen by file extension |
 | Resolution | Current panel resolution, OR full virtual desktop when Span is active |
 | Post-FX | Live brightness / contrast / adaptive applied |
 | Watermark | Embedded if the Watermark toggle is on. Contrast-aware text color. |
@@ -104,6 +104,13 @@ The file dialog defaults to your Pictures folder; switch to any path before conf
 > alpha is preserved. (Watermarks are skipped on EXR — they are a display-space
 > overlay.) Today the source is the same 8-bit render promoted to float;
 > true high-dynamic-range AOV layers land with the render-pass work (roadmap S1).
+
+> [!NOTE]
+> **Name the file `.ico`** to save a Windows icon. The frame is center-cropped
+> to a square and written as a multi-resolution set (16 / 32 / 48 / 256,
+> capped to the cropped side) so the OS can pick the size it needs — handy for
+> turning a favourite view into an app or shortcut icon. Watermarks are skipped
+> (an icon-sized overlay is meaningless). Animated `.gif` is tracked separately.
 
 ---
 

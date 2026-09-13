@@ -45,6 +45,10 @@ namespace FracturingFog.Imaging
             // display-space overlay; a scene-linear HDR export has no watermark.
             if (IsExr(format, path)) { OpenExrWriter.WriteBgra8(path, pixels, w, h, compression: exrCompression); return; }
 
+            // #68 — ICO is a multi-res icon container, not a Skia format, and an
+            // icon-sized watermark is meaningless — write it and return.
+            if (IsIco(format, path)) { WriteIco(pixels, w, h, path); return; }
+
             SaveBgraSkia(pixels, w, h, path, format, dpi);
             if (string.IsNullOrEmpty(watermarkText)) return;
             CompositeWatermarkSkia(path, format,
@@ -65,6 +69,9 @@ namespace FracturingFog.Imaging
             // S7 — EXR routes to the float writer, no watermark (see above).
             if (IsExr(format, path)) { OpenExrWriter.WriteBgra8(path, pixels, w, h, compression: exrCompression); return; }
 
+            // #68 — ICO container, no watermark (see above).
+            if (IsIco(format, path)) { WriteIco(pixels, w, h, path); return; }
+
             SaveBgraSkia(pixels, w, h, path, format, dpi);
 
             bool hasWm = wm != null && (!string.IsNullOrEmpty(wm.TopText) || !string.IsNullOrEmpty(wm.SubText));
@@ -80,6 +87,14 @@ namespace FracturingFog.Imaging
             format == ImageFileFormat.Exr
             || (format == ImageFileFormat.Auto
                 && Path.GetExtension(path).Equals(".exr", StringComparison.OrdinalIgnoreCase));
+
+        /// <summary>True when the save should produce a Windows ICO file — either
+        /// the explicit <see cref="ImageFileFormat.Ico"/> token or an <c>.ico</c>
+        /// extension under <see cref="ImageFileFormat.Auto"/>.</summary>
+        private static bool IsIco(ImageFileFormat format, string path) =>
+            format == ImageFileFormat.Ico
+            || (format == ImageFileFormat.Auto
+                && Path.GetExtension(path).Equals(".ico", StringComparison.OrdinalIgnoreCase));
 
         // ── SkiaSharp save path ───────────────────────────────────────────
         //
@@ -272,6 +287,90 @@ namespace FracturingFog.Imaging
             // Pixel data — source is top-down, BMP bottom-up: emit last row first.
             for (int y = h - 1; y >= 0; y--)
                 bw.Write(px.Slice(y * rowBytes, rowBytes));
+        }
+
+        // ── ICO writer (#68 slice 1) ──────────────────────────────────────
+        //
+        // Windows .ico is a small container: an ICONDIR header + one
+        // ICONDIRENTRY per image + the image blobs. Modern icons embed a full
+        // PNG per entry (Vista+), which keeps 32-bit alpha and avoids the
+        // legacy AND-mask. We center-crop the frame to a square (icons are
+        // square) and emit a multi-resolution set (16 / 32 / 48 / 256, capped
+        // to the cropped side) so the OS can pick the size it needs.
+        private static readonly int[] IcoSizes = { 16, 32, 48, 256 };
+
+        private static void WriteIco(uint[] pixels, int w, int h, string path)
+        {
+            // Source bitmap over the BGRA buffer (straight alpha, matches
+            // SaveBgraSkia's Unpremul declaration).
+            var info = new SKImageInfo(w, h, SKColorType.Bgra8888, SKAlphaType.Unpremul);
+            using var full = new SKBitmap(info);
+            unsafe
+            {
+                fixed (uint* src = pixels)
+                {
+                    Buffer.MemoryCopy(src, (void*)full.GetPixels(),
+                        (long)w * h * 4, (long)w * h * 4);
+                }
+            }
+            using var srcImage = SKImage.FromBitmap(full);
+
+            // Center-crop to the shorter side so the icon is square with no
+            // stretch. The largest entry is the cropped side, capped at 256
+            // (the ICO format's maximum single-frame dimension).
+            int side = Math.Min(w, h);
+            int ox = (w - side) / 2;
+            int oy = (h - side) / 2;
+            var srcRect = SKRect.Create(ox, oy, side, side);
+
+            // Distinct target sizes ≤ side, plus min(side, 256) as the top
+            // resolution so a large frame still yields a crisp 256 icon.
+            var sizeSet = new System.Collections.Generic.SortedSet<int>();
+            foreach (int s in IcoSizes) if (s <= side) sizeSet.Add(s);
+            sizeSet.Add(Math.Min(side, 256));
+
+            var sampling = new SKSamplingOptions(SKCubicResampler.Mitchell);
+            var blobs = new System.Collections.Generic.List<(int size, byte[] png)>();
+            foreach (int size in sizeSet)
+            {
+                var di = new SKImageInfo(size, size, SKColorType.Bgra8888, SKAlphaType.Unpremul);
+                using var surface = SKSurface.Create(di);
+                surface.Canvas.Clear(SKColors.Transparent);
+                surface.Canvas.DrawImage(srcImage, srcRect,
+                    SKRect.Create(0, 0, size, size), sampling, paint: null);
+                using var snap = surface.Snapshot();
+                using var data = snap.Encode(SKEncodedImageFormat.Png, 100);
+                if (data != null) blobs.Add((size, data.ToArray()));
+            }
+
+            // Assemble the container: ICONDIR (6) + ICONDIRENTRY×N (16 each) +
+            // the PNG blobs back to back.
+            int n = blobs.Count;
+            int offset = 6 + 16 * n;
+
+            using var fs = File.Create(path);
+            using var bw = new BinaryWriter(fs);
+            // ICONDIR
+            bw.Write((ushort)0);          // idReserved
+            bw.Write((ushort)1);          // idType = 1 (icon)
+            bw.Write((ushort)n);          // idCount
+            // ICONDIRENTRY[]
+            foreach (var (size, png) in blobs)
+            {
+                // Width/height of 0 encodes 256 (the byte field maxes at 255).
+                bw.Write((byte)(size >= 256 ? 0 : size));
+                bw.Write((byte)(size >= 256 ? 0 : size));
+                bw.Write((byte)0);        // bColorCount (0 = truecolor)
+                bw.Write((byte)0);        // bReserved
+                bw.Write((ushort)1);      // wPlanes
+                bw.Write((ushort)32);     // wBitCount
+                bw.Write((uint)png.Length); // dwBytesInRes
+                bw.Write((uint)offset);   // dwImageOffset
+                offset += png.Length;
+            }
+            // Image blobs
+            foreach (var (_, png) in blobs)
+                bw.Write(png);
         }
 
         // ── Contrast picker ───────────────────────────────────────────────

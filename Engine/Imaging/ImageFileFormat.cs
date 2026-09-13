@@ -34,5 +34,11 @@ namespace FracturingFog.Imaging
         /// <see cref="OpenExrWriter"/>, not Skia — scene-linear HDR + multi-layer
         /// AOVs. The 8-bit save path promotes BGRA to linear half RGBA.</summary>
         Exr,
+        /// <summary>Windows icon container (#68 slice 1). Written by the
+        /// hand-rolled ICO writer in <see cref="ImageExport"/>, not Skia — a
+        /// multi-resolution set of PNG-encoded frames (center-cropped square,
+        /// downscaled to 16/32/48/256) packed into one <c>.ico</c>. No watermark
+        /// (an icon-sized overlay is meaningless).</summary>
+        Ico,
     }
 }

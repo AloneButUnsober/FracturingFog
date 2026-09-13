@@ -1464,6 +1464,7 @@ namespace FracturingFog.Hosting
                         suggestedName: BuildSuggestedFileName("png", isSpanning: s_spanning),
                         filter: "PNG image (*.png)|*.png"
                               + "|JPEG image (*.jpg;*.jpeg)|*.jpg;*.jpeg"
+                              + "|Windows icon (*.ico)|*.ico"
                               + "|OpenEXR float image (*.exr)|*.exr");
                     if (string.IsNullOrEmpty(path)) return;
                     // Auto → infer encoder from the extension the user chose/typed.
