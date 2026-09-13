@@ -497,6 +497,28 @@ namespace FracturingFog.Hosting
             return true;
         }
 
+        // ── #434 — transient theme-def apply (slideshow randomization) ──────────
+
+        /// <inheritdoc/>
+        public bool ApplyThemeDef(ColorThemeDef def)
+        {
+            if (def == null || _renderHost == null) return false;
+            var map = BuildColorMap(def);
+            if (map == null) return false;
+            _renderHost.ApplyColorMap(map);
+            return true;
+        }
+
+        /// <inheritdoc/>
+        public bool ApplyThemeDefSilent(ColorThemeDef def)
+        {
+            if (def == null || _renderHost == null) return false;
+            var map = BuildColorMap(def);
+            if (map == null) return false;
+            _renderHost.ColorMap = map;
+            return true;
+        }
+
         /// <inheritdoc/>
         /// <inheritdoc/>
         public WatermarkDef? GetRegionEmbeddedWatermark(string regionName)
@@ -1180,20 +1202,49 @@ namespace FracturingFog.Hosting
         }
 
         /// <inheritdoc/>
+        public uint[]? RenderThemeOffscreenDef(ColorThemeDef def, int width, int height)
+        {
+            if (_renderHost == null || def == null) return null;
+            var map = BuildColorMap(def);
+            if (map == null) return null;
+            return _renderHost.RecolorActiveToBuffer(map, width, height);
+        }
+
+        /// <inheritdoc/>
+        public uint[]? RenderRegionOffscreenDef(string regionName, ColorThemeDef def, int width, int height)
+        {
+            var region = ResolveRegion(regionName);
+            if (region == null || def == null || width <= 0 || height <= 0) return null;
+            var map = BuildColorMap(def);
+            if (map == null) return null;
+            return RenderRegionOffscreenWithMap(regionName, region, map, width, height);
+        }
+
+        /// <inheritdoc/>
         public uint[]? RenderRegionOffscreen(string regionName, string themeName, int width, int height)
         {
-            if (string.IsNullOrEmpty(regionName) || width <= 0 || height <= 0) return null;
-
-            FractalRegion? region = null;
-            foreach (var r in FractalRegionLibrary.Instance.All)
-                if (string.Equals(r.Name, regionName, StringComparison.Ordinal)) { region = r; break; }
-            if (region == null)
-                foreach (var r in FractalRegionLibrary.Instance.AllSlideshowRegions)
-                    if (string.Equals(r.Name, regionName, StringComparison.Ordinal)) { region = r; break; }
-            if (region == null) return null;
-
+            var region = ResolveRegion(regionName);
+            if (region == null || width <= 0 || height <= 0) return null;
             var map = ColorPalette.GetPaletteByName(themeName);
             if (map == null) return null;
+            return RenderRegionOffscreenWithMap(regionName, region, map, width, height);
+        }
+
+        // #434 — resolve a region by exact name across the main + slideshow libs.
+        private static FractalRegion? ResolveRegion(string regionName)
+        {
+            if (string.IsNullOrEmpty(regionName)) return null;
+            foreach (var r in FractalRegionLibrary.Instance.All)
+                if (string.Equals(r.Name, regionName, StringComparison.Ordinal)) return r;
+            foreach (var r in FractalRegionLibrary.Instance.AllSlideshowRegions)
+                if (string.Equals(r.Name, regionName, StringComparison.Ordinal)) return r;
+            return null;
+        }
+
+        // #434 — the map-based core shared by the name and def region-render paths.
+        private uint[]? RenderRegionOffscreenWithMap(string regionName, FractalRegion region, IColorMap map, int width, int height)
+        {
+            if (region == null || map == null || width <= 0 || height <= 0) return null;
 
             // Non-Mandelbrot: render through the live alt-calculator fleet so
             // the slideshow cross-fade has a real incoming buffer (instead of

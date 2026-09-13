@@ -260,19 +260,32 @@ namespace FracturingFog.UI.Avalonia.Slideshow
                         int themesPerRegion = FocusRegion ? 3 : 8;
                         if (t >= themesPerRegion) break;
 
-                        string? themeName = PickTheme(themes, ref lastTheme);
+                        // #434 — when RandomizeThemes is on, generate a fresh random
+                        // theme def for this slot instead of picking a library name;
+                        // the transitions apply it through the def-based service path.
+                        string? themeName;
+                        ColorThemeDef? themeDef = null;
+                        if (_settings.RandomizeThemes)
+                        {
+                            themeDef = PickNonSolidRandomTheme(regionName, ct);
+                            themeName = themeDef?.Name;
+                        }
+                        else
+                        {
+                            themeName = PickTheme(themes, ref lastTheme);
 
-                        // Solid-frame skip: peek-render the candidate region/theme
-                        // at a tiny thumbnail. If every pixel is the same color —
-                        // in-set black, in-set flat color, or iter depth too low
-                        // at extreme zoom — retry up to one pass through the
-                        // theme pool before giving up.
-                        themeName = PickNonSolidTheme(regionName, themeName, themes, ref lastTheme, ct);
+                            // Solid-frame skip: peek-render the candidate region/theme
+                            // at a tiny thumbnail. If every pixel is the same color —
+                            // in-set black, in-set flat color, or iter depth too low
+                            // at extreme zoom — retry up to one pass through the
+                            // theme pool before giving up.
+                            themeName = PickNonSolidTheme(regionName, themeName, themes, ref lastTheme, ct);
+                        }
 
                         if (t == 0)
-                            await RegionTransitionAsync(regionName, themeName, fadeSteps, regionStepMs, ct);
+                            await RegionTransitionAsync(regionName, themeName, themeDef, fadeSteps, regionStepMs, ct);
                         else
-                            await ThemeTransitionAsync(themeName, fadeSteps, themeStepMs, ct);
+                            await ThemeTransitionAsync(themeName, themeDef, fadeSteps, themeStepMs, ct);
 
                         StatusChanged?.Invoke(this,
                             $"Slideshow: {regionName}{(themeName != null ? " / " + themeName : "")}");
@@ -448,6 +461,48 @@ namespace FracturingFog.UI.Avalonia.Slideshow
             return themeName;
         }
 
+        // ── #434 — random theme generation ─────────────────────────────────
+
+        // Kinds the slideshow randomiser draws from. Restricted to 2D-friendly
+        // kinds so a random theme never lands a 3D lighting rig on a flat 2D
+        // fractal (which just emboss-muddies it). Fractal-type-aware Kind
+        // selection is the #434 slice-4 follow-up.
+        private static readonly ColorThemeKindDef[] RandomKinds =
+        {
+            ColorThemeKindDef.Gradient,
+            ColorThemeKindDef.Cycling,
+            ColorThemeKindDef.OrbitTrap,
+        };
+
+        // Generate one random theme def for a slot. Seed is drawn from the theme
+        // RNG so a fixed SlideshowSettings.RandomSeed reproduces the sequence.
+        private ColorThemeDef GenerateRandomTheme()
+        {
+            var kind = RandomKinds[_rng.Next(RandomKinds.Length)];
+            int seed = _rng.Next(1, int.MaxValue);
+            return FracturingFog.Imaging.RandomThemeGenerator.Generate(
+                kind, seed, _settings.RandomizeThemesExperimental, name: $"Random {kind}");
+        }
+
+        // Random-theme analogue of PickNonSolidTheme: generate a def and peek-render
+        // it; regenerate (new seed/kind) if the region comes out a solid colour.
+        private ColorThemeDef PickNonSolidRandomTheme(string regionName, CancellationToken ct)
+        {
+            ColorThemeDef def = GenerateRandomTheme();
+            const int budget = 6;
+            for (int i = 0; i < budget; i++)
+            {
+                if (ct.IsCancellationRequested) return def;
+                uint[]? probe;
+                try { probe = _service.RenderRegionOffscreenDef(regionName, def, PeekW, PeekH); }
+                catch { probe = null; }
+                if (probe == null || !IsAllOneColor(probe)) return def;   // null = non-Mandelbrot peek, accept
+                StatusChanged?.Invoke(this, $"Slideshow: skipping solid random theme on {regionName}");
+                def = GenerateRandomTheme();
+            }
+            return def;
+        }
+
         // ── Animation leg (Animation Roadmap Phase 4) ─────────────────────
         //
         // Resolve the animation for a region leg via the pure AnimationLegPicker
@@ -522,12 +577,14 @@ namespace FracturingFog.UI.Avalonia.Slideshow
         }
 
         /// <summary>Region change: offscreen-render incoming, cross-fade, commit live.</summary>
-        private async Task RegionTransitionAsync(string regionName, string? themeName, int steps, int stepMs, CancellationToken ct)
+        private async Task RegionTransitionAsync(string regionName, string? themeName, ColorThemeDef? themeDef, int steps, int stepMs, CancellationToken ct)
         {
             var (old, w, h) = await SnapshotAsync(ct);
 
             uint[]? incoming = (w > 0 && h > 0)
-                ? await Task.Run(() => _service.RenderRegionOffscreen(regionName, themeName ?? string.Empty, w, h), ct)
+                ? await Task.Run(() => themeDef != null
+                    ? _service.RenderRegionOffscreenDef(regionName, themeDef, w, h)
+                    : _service.RenderRegionOffscreen(regionName, themeName ?? string.Empty, w, h), ct)
                 : null;
 
             if (old.Length > 0 && incoming != null && incoming.Length == old.Length)
@@ -564,12 +621,12 @@ namespace FracturingFog.UI.Avalonia.Slideshow
             // region, whose smooth buffer is still live), then apply the region
             // and recompute. Wait for that recompute to actually land so a late
             // frame can't flash during the following theme transition.
-            await CommitRegionAsync(regionName, themeName, ct);
+            await CommitRegionAsync(regionName, themeName, themeDef, ct);
         }
 
         /// <summary>Apply region + theme to the live view and wait for the
         /// recompute to present (or a timeout) before returning.</summary>
-        private async Task CommitRegionAsync(string regionName, string? themeName, CancellationToken ct)
+        private async Task CommitRegionAsync(string regionName, string? themeName, ColorThemeDef? themeDef, CancellationToken ct)
         {
             var tcs = new TaskCompletionSource();
             EventHandler? handler = null;
@@ -581,7 +638,8 @@ namespace FracturingFog.UI.Avalonia.Slideshow
 
             await OnUiAsync(() =>
             {
-                if (themeName != null) _service.ApplyThemeSilent(themeName);
+                if (themeDef != null) _service.ApplyThemeDefSilent(themeDef);
+                else if (themeName != null) _service.ApplyThemeSilent(themeName);
                 _service.ApplyRegion(regionName, _host.ViewState);
                 // Push the new labels onto the render host BEFORE Trigger so
                 // the very first composited frame already carries the right
@@ -606,15 +664,16 @@ namespace FracturingFog.UI.Avalonia.Slideshow
         }
 
         /// <summary>Theme change (same region): recolour offscreen, cross-fade.</summary>
-        private async Task ThemeTransitionAsync(string? themeName, int steps, int stepMs, CancellationToken ct)
+        private async Task ThemeTransitionAsync(string? themeName, ColorThemeDef? themeDef, int steps, int stepMs, CancellationToken ct)
         {
-            if (themeName == null) return;
+            if (themeName == null && themeDef == null) return;
+            string label = themeName ?? themeDef!.Name;
 
             var (old, w, h) = await SnapshotAsync(ct);
 
             // Stamp the new theme label onto the render host BEFORE the recolour
             // so the next composited frame's watermark reflects the new theme.
-            await OnUiAsync(() => { _host.ThemeName = themeName; return 0; }, ct);
+            await OnUiAsync(() => { _host.ThemeName = label; return 0; }, ct);
 
             // Recolour returns the new buffer; null when the active fractal
             // has no cheap recolor → fall back to a plain apply. Runs on a
@@ -628,12 +687,19 @@ namespace FracturingFog.UI.Avalonia.Slideshow
             // pre-fix UI-thread path looked fine, masking the bug for
             // Mandel themes.
             uint[]? incoming = await Task.Run(
-                () => _service.RenderThemeOffscreen(themeName!, w, h), ct);
+                () => themeDef != null
+                    ? _service.RenderThemeOffscreenDef(themeDef, w, h)
+                    : _service.RenderThemeOffscreen(themeName!, w, h), ct);
 
             if (incoming == null)
             {
-                await OnUiAsync(() => { _service.ApplyTheme(themeName!); return 0; }, ct);
-                ThemeApplied?.Invoke(this, themeName);
+                await OnUiAsync(() =>
+                {
+                    if (themeDef != null) _service.ApplyThemeDef(themeDef);
+                    else _service.ApplyTheme(themeName!);
+                    return 0;
+                }, ct);
+                ThemeApplied?.Invoke(this, label);
                 return;
             }
 
@@ -651,7 +717,7 @@ namespace FracturingFog.UI.Avalonia.Slideshow
             // updated theme name in the watermark.
             await OnUiAsync(() => { _host.RepaintWithPostFx(); return 0; }, ct);
 
-            ThemeApplied?.Invoke(this, themeName);
+            ThemeApplied?.Invoke(this, label);
         }
 
         /// <summary>Per-pixel CPU lerp from <paramref name="from"/> to

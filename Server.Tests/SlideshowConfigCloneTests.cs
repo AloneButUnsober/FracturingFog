@@ -31,6 +31,8 @@ public sealed class SlideshowConfigCloneTests
             UseRegionWatermark = true,
             RecordSlideshow = true,
             RecordEncodePreset = "Ffv1Mkv",
+            RandomizeThemes = true,                 // #434
+            RandomizeThemesExperimental = true,     // #434
         },
         AudioReactive = true,
         IncludedRegions = new() { "R1", "R2" },
@@ -63,6 +65,8 @@ public sealed class SlideshowConfigCloneTests
         Assert.True(c.Timing.UseRegionWatermark);
         Assert.True(c.Timing.RecordSlideshow);
         Assert.Equal("Ffv1Mkv", c.Timing.RecordEncodePreset);
+        Assert.True(c.Timing.RandomizeThemes);                 // #434
+        Assert.True(c.Timing.RandomizeThemesExperimental);     // #434
 
         Assert.True(c.AudioReactive);
         Assert.Equal(new[] { "R1", "R2" }, c.IncludedRegions);

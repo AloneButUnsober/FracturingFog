@@ -411,6 +411,32 @@ namespace FracturingFog.Models
         /// </summary>
         uint[]? RenderRegionOffscreen(string regionName, string themeName, int width, int height);
 
+        // ── #434 — transient (unsaved) theme apply for slideshow randomization ──
+        // The slideshow generates a random ColorThemeDef per theme-slot
+        // (RandomThemeGenerator) that is not in the library, so these mirror the
+        // name-based ApplyTheme* / Render*Offscreen but take the def directly and
+        // build the runtime colour map from it. Default implementations are inert
+        // (Abstractions can't build an IColorMap); the host overrides them.
+
+        /// <summary>Apply a transient theme def to the live view (recolour +
+        /// present), the def analogue of <see cref="ApplyTheme(string)"/>.</summary>
+        bool ApplyThemeDef(ColorThemeDef def) => false;
+
+        /// <summary>Set the live colour map from a transient theme def without
+        /// presenting (the next recompute paints it), the def analogue of
+        /// <see cref="ApplyThemeSilent(string)"/>.</summary>
+        bool ApplyThemeDefSilent(ColorThemeDef def) => false;
+
+        /// <summary>Recolour the active frame with a transient theme def into a
+        /// fresh offscreen buffer, the def analogue of
+        /// <see cref="RenderThemeOffscreen(string,int,int)"/>.</summary>
+        uint[]? RenderThemeOffscreenDef(ColorThemeDef def, int width, int height) => null;
+
+        /// <summary>Render the named region with a transient theme def to a fresh
+        /// offscreen buffer, the def analogue of
+        /// <see cref="RenderRegionOffscreen(string,string,int,int)"/>.</summary>
+        uint[]? RenderRegionOffscreenDef(string regionName, ColorThemeDef def, int width, int height) => null;
+
         /// <summary>
         /// JSON-serialize the named theme into a string suitable for inline
         /// transport over the client/server protocol. Returns null when the
