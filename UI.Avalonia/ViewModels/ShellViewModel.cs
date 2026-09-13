@@ -2356,6 +2356,9 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
             // Global 2D interior-alpha background edits (mode / colours / image)
             // mutate the shared FractalParameters in place — just repaint.
             vm.InteriorBackgroundChanged += (_, _) => Main.RenderHost.Trigger();
+            // #524 — Randomize rolled the scene 3D lighting colours in the shared
+            // FractalParameters in place; just repaint.
+            vm.SceneLightingChanged += (_, _) => Main.RenderHost.Trigger();
             vm.ThemeSavedToLibrary    += (_, _)    => { RefreshThemeListsFromService(); RefreshAssetManagerIfVisible(); };
             vm.HelpRequested          += (_, _)    => ShowHelp();
             // Preview pipe-through: ColorThemeEditor produces a ColorThemeDef,

@@ -210,9 +210,13 @@
                                         <CheckBox Content="Post-FX" IsChecked="{Binding RandomIncludePostFx}"
                                                   Foreground="#DCDCDC" VerticalAlignment="Center"
                                                   ToolTip.Tip="Include random Post-FX defaults (Brightness / Contrast / Adaptive-HE) when generating a random theme." />
-                                        <CheckBox Content="3D light colour" IsChecked="{Binding RandomInclude3DLightColor}"
+                                        <CheckBox Content="Theme light colour" IsChecked="{Binding RandomInclude3DLightColor}"
                                                   Foreground="#DCDCDC" VerticalAlignment="Center"
-                                                  ToolTip.Tip="For Phong3D / PBR3D themes: include random diffuse + specular light COLOURS. Off keeps each light's current colour while still re-placing the rig + re-rolling intensity/shininess (#524)." />
+                                                  ToolTip.Tip="For Phong3D / PBR3D themes: include random diffuse + specular colours for the theme's Key/Fill/Rim light rig. Off keeps each light's current colour while still re-placing the rig + re-rolling intensity/shininess (#524)." />
+                                        <CheckBox Content="Scene light colour" IsChecked="{Binding RandomIncludeSceneLightColor}"
+                                                  IsVisible="{Binding HasViewParams}"
+                                                  Foreground="#DCDCDC" VerticalAlignment="Center"
+                                                  ToolTip.Tip="Also randomize the SCENE 3D lighting colours — the live Lighting-FX directional lights (Relief3D / Volumetric). Off leaves the scene lights' current colours untouched (#524)." />
                                     </StackPanel>
                                     <StackPanel Orientation="Horizontal" Spacing="14">
                                         <TextBlock Text="Seed:" Foreground="#DCDCDC" VerticalAlignment="Center" />

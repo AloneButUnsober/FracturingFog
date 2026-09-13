@@ -619,15 +619,26 @@ public sealed class ColorThemeEditorViewModel : ViewModelBase
     }
 
     private bool _randomInclude3DLightColor = true;
-    /// <summary>On (default): Randomize also picks the 3D lights' diffuse +
-    /// specular COLOURS (Phong3D / Pbr3D). Off: the random 3D light rig still
-    /// re-places lights + rolls intensity/shininess, but each light KEEPS its
-    /// current colour — so you can re-roll the rig without losing hand-picked
-    /// light colours (#524). No effect on non-3D Kinds.</summary>
+    /// <summary>On (default): Randomize also picks the THEME's Phong/PBR light-rig
+    /// diffuse + specular COLOURS (Key / Fill / Rim, Phong3D / Pbr3D). Off: the
+    /// random rig still re-places lights + rolls intensity/shininess, but each
+    /// light KEEPS its current colour (#524). No effect on non-3D Kinds.</summary>
     public bool RandomInclude3DLightColor
     {
         get => _randomInclude3DLightColor;
         set => this.RaiseAndSetIfChanged(ref _randomInclude3DLightColor, value);
+    }
+
+    private bool _randomIncludeSceneLightColor = true;
+    /// <summary>On (default): Randomize also rolls the SCENE 3D lighting colours —
+    /// the live Lighting-FX directional lights (Relief3D / Volumetric), i.e.
+    /// <c>FractalParameters.Lighting.Light1/2/3.Color</c> — so a random theme also
+    /// re-colours the 3D scene lights. Off: the scene lights keep their current
+    /// colour. Only meaningful when the editor has a live view (#524).</summary>
+    public bool RandomIncludeSceneLightColor
+    {
+        get => _randomIncludeSceneLightColor;
+        set => this.RaiseAndSetIfChanged(ref _randomIncludeSceneLightColor, value);
     }
 
     private string _randomSeedText = "";
@@ -660,6 +671,7 @@ public sealed class ColorThemeEditorViewModel : ViewModelBase
             : System.Random.Shared.Next(1, 1_000_000);
         var rng = new Random(seed);
         bool wild = RandomExperimental;
+        bool sceneLightsChanged = false;   // #524 — raise SceneLightingChanged after
 
         _suppressChange = true;
         try
@@ -689,6 +701,12 @@ public sealed class ColorThemeEditorViewModel : ViewModelBase
 
             if (RandomIncludePostFx)
                 RandomizePostFx(rng, wild);
+
+            // #524 — the SCENE 3D lighting colours (live Lighting-FX directional
+            // lights, independent of the theme Kind). Only when the editor has a
+            // live params instance and the scope toggle is on.
+            if (RandomIncludeSceneLightColor && _viewParams != null)
+                sceneLightsChanged = RandomizeSceneLightColors(rng, wild, pal);
         }
         finally { _suppressChange = false; }
 
@@ -697,6 +715,9 @@ public sealed class ColorThemeEditorViewModel : ViewModelBase
         FieldChanged();
         RaiseLightsChanged();
         PushPreview();
+        // Raised after PushPreview so the theme preview + scene-light repaint land
+        // together (the host just retriggers the render).
+        if (sceneLightsChanged) SceneLightingChanged?.Invoke(this, EventArgs.Empty);
     }
 
     // ── Randomize helpers (#83) ───────────────────────────────────────────
@@ -832,6 +853,41 @@ public sealed class ColorThemeEditorViewModel : ViewModelBase
         }
 
         light.Shininess = wild ? rng.Next(1, 513) : rng.Next(shinLo, shinHi + 1);
+    }
+
+    // #524 — roll the SCENE 3D lighting colours (the live Lighting-FX directional
+    // lights, distinct from the theme's Phong rig above). Structs are copy-modify-
+    // assign. Returns true when a live params instance was present and updated so
+    // the caller raises SceneLightingChanged for a repaint.
+    private bool RandomizeSceneLightColors(Random rng, bool wild, List<(byte R, byte G, byte B)> pal)
+    {
+        if (_viewParams == null) return false;
+        var fx = _viewParams.Lighting;
+        fx.Light1.Color = PickLightColor(rng, wild, pal);
+        fx.Light2.Color = PickLightColor(rng, wild, pal);
+        fx.Light3.Color = PickLightColor(rng, wild, pal);
+        _viewParams.Lighting = fx;
+        return true;
+    }
+
+    // Pick an opaque ARGB light colour: experimental = full-range; artful = a
+    // palette stop blended toward white so the lit scene reads in the theme's
+    // colour family (mirrors the Phong-rig diffuse choice in ApplyLight).
+    private static uint PickLightColor(Random rng, bool wild, List<(byte R, byte G, byte B)> pal)
+    {
+        byte r, g, b;
+        if (wild || pal.Count == 0)
+        {
+            r = RandByte(rng); g = RandByte(rng); b = RandByte(rng);
+        }
+        else
+        {
+            var (pr, pg, pb) = pal[rng.Next(pal.Count)];
+            r = (byte)Lerp(pr, 255, 0.35);
+            g = (byte)Lerp(pg, 255, 0.35);
+            b = (byte)Lerp(pb, 255, 0.35);
+        }
+        return 0xFF000000u | ((uint)r << 16) | ((uint)g << 8) | b;
     }
 
     private void RandomizePhongExtras(Random rng, bool wild)
@@ -1462,6 +1518,12 @@ public sealed class ColorThemeEditorViewModel : ViewModelBase
     /// <summary>Raised when a global 2D background field changes so the host can
     /// repaint. Distinct from PreviewRequested (which carries the theme def).</summary>
     public event EventHandler? InteriorBackgroundChanged;
+
+    /// <summary>#524 — raised when Randomize rolled the scene 3D lighting colours
+    /// (<c>FractalParameters.Lighting.Light1/2/3.Color</c>) so the host can
+    /// retrigger a render. Only fires when the editor has a live params instance
+    /// and the scene-light scope toggle is on.</summary>
+    public event EventHandler? SceneLightingChanged;
 
     public Array Interior2DBackgroundModes => Enum.GetValues(typeof(Interior2DBackgroundMode));
 
