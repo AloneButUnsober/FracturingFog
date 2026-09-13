@@ -3175,6 +3175,14 @@ namespace FracturingFog.Hosting
                 if (ok) s_renderHost.Trigger();
             };
             vm.RenderRequested += (_, _) => s_renderHost!.Trigger();
+            // #535 — validate a candidate primitive source (compiles as a UserBulb
+            // Vec3 step). The VM re-issues CompileRequested afterwards to restore the
+            // live kernel, so clobbering the compiled state here is harmless.
+            vm.PrimitiveValidator = src =>
+            {
+                var (ok, error) = s_renderHost!.CompileUserBulb(src ?? string.Empty);
+                return ok ? null : (error ?? "The equation does not compile.");
+            };
             vm.NamePromptRequested += async e => e.Result = await PromptNameAsync(e.Caption, "Enter a name:", e.DefaultValue);
             vm.ConfirmDeleteRequested += async e => e.Result = await ConfirmYesNoAsync(e.Message, "Confirm");
             vm.ConfirmOverwriteRequested += async e => e.Result = await ConfirmYesNoAsync(e.Message, "Overwrite Bulb Equation");

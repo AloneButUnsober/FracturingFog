@@ -273,6 +273,74 @@ public sealed class UserBulbViewModel : ViewModelBase
         private set => this.RaiseAndSetIfChanged(ref _promoteEnabled, value);
     }
 
+    // ── #535 — promote a saved equation to a chain primitive ────────────
+
+    /// <summary>Host-injected DSL validator. Returns an error string when the
+    /// source does not compile as a UserBulb Vec3 step, or null when it is
+    /// valid. Null delegate = skip the parse check (structural check still runs).</summary>
+    public Func<string, string?>? PrimitiveValidator { get; set; }
+
+    private bool _asPrimitive;
+    /// <summary>Bound to the "Promote to primitive list" checkbox. Setting it on
+    /// validates the selected saved equation for suitability (single-source,
+    /// references z, parses); on failure the flag reverts and an error is shown.</summary>
+    public bool AsPrimitive
+    {
+        get => _asPrimitive;
+        set
+        {
+            if (!this.RaiseAndSetIfChangedReturnsChanged(ref _asPrimitive, value)) return;
+            if (string.IsNullOrEmpty(_selectedSavedName)) return;
+
+            if (value)
+            {
+                var entry = UserBulbStore.Instance.GetByName(_selectedSavedName!);
+                string? err = UserBulbChainPrimitives.PrimitiveStructuralError(entry)
+                    ?? PrimitiveValidator?.Invoke(entry!.Source);
+                if (err != null)
+                {
+                    // Revert the checkbox and report why. Yellow status (colour-blind
+                    // safe) is the view's job; the VM just flags IsError.
+                    _asPrimitive = false;
+                    this.RaisePropertyChanged(nameof(AsPrimitive));
+                    StatusMessage = "Can't promote to a primitive: " + err;
+                    StatusIsError = true;
+                    // The validator compiled the candidate into the live kernel; put
+                    // the editor's own source back so the render stays consistent.
+                    CompileRequested?.Invoke(this, EventArgs.Empty);
+                    return;
+                }
+            }
+
+            if (UserBulbStore.Instance.SetChainPrimitive(_selectedSavedName!, value))
+            {
+                RefreshChainPrimitives();
+                StatusMessage = value
+                    ? $"'{_selectedSavedName}' added to the + Primitive menu."
+                    : $"'{_selectedSavedName}' removed from the + Primitive menu.";
+                StatusIsError = false;
+            }
+            // Restore the live kernel (the validator may have compiled the candidate).
+            if (value) CompileRequested?.Invoke(this, EventArgs.Empty);
+        }
+    }
+
+    private bool _asPrimitiveEnabled;
+    public bool AsPrimitiveEnabled
+    {
+        get => _asPrimitiveEnabled;
+        private set => this.RaiseAndSetIfChanged(ref _asPrimitiveEnabled, value);
+    }
+
+    /// <summary>Rebuild the "+ Primitive" menu = built-ins + user-promoted
+    /// equations. Called on ctor, save, load, and after a promote toggle.</summary>
+    public void RefreshChainPrimitives()
+    {
+        ChainPrimitives.Clear();
+        foreach (var p in UserBulbChainPrimitives.AllWithUser(UserBulbStore.Instance.Equations))
+            ChainPrimitives.Add(p);
+    }
+
     // ── Camera ─────────────────────────────────────────────────────────
 
     private double _camDistance;
@@ -591,8 +659,11 @@ public sealed class UserBulbViewModel : ViewModelBase
     public ReactiveCommand<UserBulbParam, Unit> RemoveParamCommand { get; }
     public ReactiveCommand<UserBulbChainStep, Unit> RemoveChainCommand { get; }
 
-    /// <summary>Catalog surfaced in the chain editor's "+ Primitive" menu.</summary>
-    public IReadOnlyList<UserBulbChainPrimitive> ChainPrimitives => UserBulbChainPrimitives.All;
+    /// <summary>Catalog surfaced in the chain editor's "+ Primitive" menu:
+    /// built-in folds/powers followed by user equations promoted via
+    /// <see cref="AsPrimitive"/> (#535). Observable so a promote refreshes the
+    /// menu live without a hardcoded axaml edit.</summary>
+    public ObservableCollection<UserBulbChainPrimitive> ChainPrimitives { get; } = new();
     public ReactiveCommand<Unit, Unit> TogglePlayCommand { get; }
     public ReactiveCommand<Unit, Unit> ExportMeshCommand { get; }
     public ReactiveCommand<Unit, Unit> AutoRangeCommand { get; }
@@ -714,6 +785,7 @@ public sealed class UserBulbViewModel : ViewModelBase
             this.RaisePropertyChanged(nameof(SelectedSavedName));
         }
         SyncPromote();
+        RefreshChainPrimitives();   // #535 — save/delete/import may change the promoted set
     }
 
     // ── Internals ──────────────────────────────────────────────────────
@@ -725,12 +797,21 @@ public sealed class UserBulbViewModel : ViewModelBase
             PromoteEnabled = false;
             _promote = false;
             this.RaisePropertyChanged(nameof(Promote));
+            AsPrimitiveEnabled = false;
+            _asPrimitive = false;
+            this.RaisePropertyChanged(nameof(AsPrimitive));
             return;
         }
         var entry = UserBulbStore.Instance.GetByName(_selectedSavedName!);
         PromoteEnabled = entry is not null;
         _promote = entry?.Promoted ?? false;
         this.RaisePropertyChanged(nameof(Promote));
+
+        // #535 — only a single-source entry can be a chain primitive; a chain-
+        // bearing entry disables the checkbox (it can't nest as one step).
+        AsPrimitiveEnabled = entry is not null && entry.Chain is not { Count: > 0 };
+        _asPrimitive = entry?.ChainPrimitive ?? false;
+        this.RaisePropertyChanged(nameof(AsPrimitive));
     }
 
     private void SetCam(ref double field, double value, Action apply)

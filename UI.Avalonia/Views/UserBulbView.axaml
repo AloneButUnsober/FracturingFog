@@ -80,6 +80,14 @@
                     <Button    Grid.Column="3" Classes="tool" Content="Export…"
                                Command="{Binding ExportCommand}" />
                 </Grid>
+                <!-- #535 — promote the selected single-source equation to the chain
+                     "+ Primitive" menu. Disabled for chain-bearing entries. -->
+                <Grid ColumnDefinitions="50,*">
+                    <CheckBox  Grid.Column="1" Content="Promote to primitive list"
+                               IsChecked="{Binding AsPrimitive, Mode=TwoWay}"
+                               IsEnabled="{Binding AsPrimitiveEnabled}"
+                               ToolTip.Tip="Offer this saved equation in the Chain '+ Primitive' menu so it can be dropped into a chain. Only single-source equations that parse and reference z can be promoted." />
+                </Grid>
 
                 <!-- Source editor -->
                 <Border BorderBrush="#5A5A5A" BorderThickness="1" Background="#1C1C1C">

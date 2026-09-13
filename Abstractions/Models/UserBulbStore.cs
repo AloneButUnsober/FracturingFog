@@ -33,6 +33,16 @@ namespace FracturingFog.Models
         public bool Promoted { get; set; }
 
         /// <summary>
+        /// #535 — when true, this (single-source) entry is offered in the User
+        /// Bulb chain "+ Primitive" menu alongside the built-in folds/powers, so
+        /// the user can drop their own equation into a chain. Only meaningful for
+        /// a chain-free entry (a primitive is one step); the editor validates
+        /// suitability before setting it. Defaults false; missing in legacy JSON
+        /// deserialises to false.
+        /// </summary>
+        public bool ChainPrimitive { get; set; }
+
+        /// <summary>
         /// Optional multi-step chain. When non-empty, the runtime uses the
         /// chain in preference to <see cref="Source"/> — see
         /// <c>FractalParameters.UserBulbChain</c>. Null/empty on legacy
@@ -626,6 +636,26 @@ namespace FracturingFog.Models
                 if (!e.Name.Equals(name, StringComparison.OrdinalIgnoreCase)) continue;
                 if (e.Promoted == promoted) return false;
                 e.Promoted = promoted;
+                Save();
+                return true;
+            }
+            return false;
+        }
+
+        /// <summary>
+        /// #535 — sets the <see cref="UserBulbEntry.ChainPrimitive"/> flag on the
+        /// named entry and persists. Returns true when the entry exists and the
+        /// state changed; false when no such entry or already in target state.
+        /// Suitability (single-source, parses as a Vec3 step) is the caller's job.
+        /// </summary>
+        public bool SetChainPrimitive(string name, bool chainPrimitive)
+        {
+            if (string.IsNullOrWhiteSpace(name)) return false;
+            foreach (var e in Equations)
+            {
+                if (!e.Name.Equals(name, StringComparison.OrdinalIgnoreCase)) continue;
+                if (e.ChainPrimitive == chainPrimitive) return false;
+                e.ChainPrimitive = chainPrimitive;
                 Save();
                 return true;
             }
