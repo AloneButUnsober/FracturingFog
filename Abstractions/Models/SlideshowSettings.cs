@@ -53,5 +53,16 @@ namespace FracturingFog.Models
         /// run so ordering varies. The engine cycles regions via a shuffle-bag
         /// (every region shown once before any repeat) seeded from this.</summary>
         public int RandomSeed { get; set; }
+
+        /// <summary>#434 — when true, the slideshow generates a fresh random colour
+        /// theme (<c>RandomThemeGenerator</c>) for every theme slot instead of
+        /// picking a named library theme. Off (default) = the classic library
+        /// theme rotation.</summary>
+        public bool RandomizeThemes { get; set; }
+
+        /// <summary>#434 — when <see cref="RandomizeThemes"/> is on, controls the
+        /// generator's mode: false (default) = "artful" (clamped, coherent
+        /// ranges), true = "experimental" (full-range, wilder).</summary>
+        public bool RandomizeThemesExperimental { get; set; }
     }
 }

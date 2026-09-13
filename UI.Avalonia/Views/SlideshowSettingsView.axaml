@@ -161,14 +161,25 @@
                    Margin="0,6,0,4"
                    IsVisible="{Binding TimingNoteVisible}" />
 
-        <!-- Row 11: per-region watermark toggle -->
-        <CheckBox Grid.Row="11" Grid.ColumnSpan="2"
-                  Content="Use each region's embedded watermark"
-                  IsChecked="{Binding UseRegionWatermark, Mode=TwoWay}"
-                  Foreground="#B4DCB4"
-                  FontWeight="Bold"
-                  Margin="0,4,0,0"
-                  ToolTip.Tip="When on, each region that carries an embedded watermark drives its own branding during the slideshow." />
+        <!-- Row 11: per-region watermark toggle + #434 theme randomization -->
+        <StackPanel Grid.Row="11" Grid.ColumnSpan="2" Spacing="4" Margin="0,4,0,0">
+            <CheckBox Content="Use each region's embedded watermark"
+                      IsChecked="{Binding UseRegionWatermark, Mode=TwoWay}"
+                      Foreground="#B4DCB4"
+                      FontWeight="Bold"
+                      ToolTip.Tip="When on, each region that carries an embedded watermark drives its own branding during the slideshow." />
+            <CheckBox Content="Randomize color themes"
+                      IsChecked="{Binding RandomizeThemes, Mode=TwoWay}"
+                      Foreground="#B4DCB4"
+                      FontWeight="Bold"
+                      ToolTip.Tip="When on, the slideshow generates a fresh random colour theme for every theme slot instead of rotating named library themes (#434)." />
+            <CheckBox Content="Experimental (wilder random themes)"
+                      IsChecked="{Binding RandomizeThemesExperimental, Mode=TwoWay}"
+                      IsEnabled="{Binding RandomizeThemes}"
+                      Foreground="#969696"
+                      Margin="20,0,0,0"
+                      ToolTip.Tip="Off = artful (clamped, coherent). On = experimental (full-range, wilder) random themes." />
+        </StackPanel>
 
         <!-- Row 11: Record-Slideshow block — capture every fade step to a PNG
              sequence and prompt Convert / Save / Cancel on Stop. -->

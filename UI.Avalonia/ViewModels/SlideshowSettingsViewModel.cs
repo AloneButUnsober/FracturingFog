@@ -44,6 +44,8 @@ public sealed class SlideshowSettingsViewModel : ViewModelBase
     private int _randomSeed;
     private bool _useRegionWatermark;
     private bool _recordSlideshow;
+    private bool _randomizeThemes;
+    private bool _randomizeThemesExperimental;
     private string _recordEncodePreset = "HighQualityH264Mp4";
     private SlideshowType _type;
     private string _activeName = "Default";
@@ -528,6 +530,22 @@ public sealed class SlideshowSettingsViewModel : ViewModelBase
     public IReadOnlyList<string> AllRecordEncodePresets { get; } =
         new[] { "HighQualityH264Mp4", "LosslessH264Mp4", "Ffv1Mkv" };
 
+    /// <summary>#434 — generate a fresh random colour theme for every theme slot
+    /// instead of rotating named library themes.</summary>
+    public bool RandomizeThemes
+    {
+        get => _randomizeThemes;
+        set { this.RaiseAndSetIfChanged(ref _randomizeThemes, value); MarkDirty(); }
+    }
+
+    /// <summary>#434 — when <see cref="RandomizeThemes"/> is on: artful (off,
+    /// default) vs experimental (on, wilder) generator mode.</summary>
+    public bool RandomizeThemesExperimental
+    {
+        get => _randomizeThemesExperimental;
+        set { this.RaiseAndSetIfChanged(ref _randomizeThemesExperimental, value); MarkDirty(); }
+    }
+
     public bool IsDirty
     {
         get => _isDirty;
@@ -660,6 +678,8 @@ public sealed class SlideshowSettingsViewModel : ViewModelBase
         _working.Timing.UseRegionWatermark = _useRegionWatermark;
         _working.Timing.RecordSlideshow = _recordSlideshow;
         _working.Timing.RecordEncodePreset = _recordEncodePreset;
+        _working.Timing.RandomizeThemes = _randomizeThemes;
+        _working.Timing.RandomizeThemesExperimental = _randomizeThemesExperimental;
         _working.AudioReactive = _audioReactive;
 
         _working.IncludedRegions = AvailableRegions.Where(i => i.IsChecked).Select(i => i.Name).ToList();
@@ -697,6 +717,8 @@ public sealed class SlideshowSettingsViewModel : ViewModelBase
         _randomSeed = _working.Timing.RandomSeed;
         _useRegionWatermark = _working.Timing.UseRegionWatermark;
         _recordSlideshow = _working.Timing.RecordSlideshow;
+        _randomizeThemes = _working.Timing.RandomizeThemes;
+        _randomizeThemesExperimental = _working.Timing.RandomizeThemesExperimental;
         _recordEncodePreset = string.IsNullOrWhiteSpace(_working.Timing.RecordEncodePreset)
             ? "HighQualityH264Mp4" : _working.Timing.RecordEncodePreset;
         _sweepEnabled = _working.AdaptiveSweep.Enabled;
@@ -745,6 +767,8 @@ public sealed class SlideshowSettingsViewModel : ViewModelBase
         this.RaisePropertyChanged(nameof(UseRegionWatermark));
         this.RaisePropertyChanged(nameof(RecordSlideshow));
         this.RaisePropertyChanged(nameof(RecordEncodePreset));
+        this.RaisePropertyChanged(nameof(RandomizeThemes));
+        this.RaisePropertyChanged(nameof(RandomizeThemesExperimental));
         this.RaisePropertyChanged(nameof(AdaptiveSweepEnabled));
         this.RaisePropertyChanged(nameof(AdaptiveSweepStart));
         this.RaisePropertyChanged(nameof(AdaptiveSweepEnd));

@@ -228,6 +228,10 @@ The shell ships a curated tour: cardioid valley, period-bulbs, seahorse valley, 
 
 Slideshow Settings has an `Include extreme regions` checkbox. Off by default — gives a calmer rotation.
 
+### Randomize color themes (#434)
+
+Slideshow Settings has a **Randomize color themes** checkbox. When on, the slideshow generates a fresh random colour theme for every theme slot (via the same engine as the Color Theme Editor's 🎲) instead of rotating named library themes. **Experimental** (indented, enabled only when Randomize is on) switches the generator from *artful* (clamped, coherent) to *wilder* full-range output. A fixed **Random Seed** reproduces the whole sequence — themes included. Generated themes draw from 2D-friendly kinds (Gradient / Cycling / Orbit-Trap); fractal-type-aware kind selection is a planned follow-up.
+
 See [Regions-Guide.md](Regions-Guide.md) for the complete JSON schema.
 
 ---
