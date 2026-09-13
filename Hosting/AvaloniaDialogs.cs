@@ -1271,6 +1271,11 @@ namespace FracturingFog.Hosting
                     Content = "Save lossless (PNG sequence — single-shot only)",
                     Foreground = Brushes.LightGray,
                 };
+                var chkSaveGif = new CheckBox
+                {
+                    Content = "Save animated GIF (single-shot only — 256 colours, large files)",
+                    Foreground = Brushes.LightGray,
+                };
 
                 var encodeCombo = new ComboBox { MinWidth = 280, HorizontalAlignment = HorizontalAlignment.Stretch, IsEnabled = false };
                 encodeCombo.Items.Add("Keep PNG sequence only");
@@ -1559,6 +1564,7 @@ namespace FracturingFog.Hosting
                         IsReverse = chkReverse.IsChecked == true,
                         IsSaveVideo = chkSaveVideo.IsChecked == true,
                         IsSaveLossless = chkSaveLossless.IsChecked == true,
+                        IsSaveGif = chkSaveGif.IsChecked == true,
                         LosslessEncode = MapEncode(),
                         TaaSmoothing = (int)Math.Round(taaSlider.Value),
                         BandDither = chkBandDither.IsChecked == true,
@@ -1622,6 +1628,7 @@ namespace FracturingFog.Hosting
                 root.Children.Add(chkSaveVideo);
                 root.Children.Add(chkSaveLossless);
                 root.Children.Add(LabeledRow("Post-encode:", encodeCombo));
+                root.Children.Add(chkSaveGif);
                 root.Children.Add(chkReverse);
                 root.Children.Add(LabeledRow("Adaptive iter cap:", iterCapCombo));
                 root.Children.Add(smoothBox);

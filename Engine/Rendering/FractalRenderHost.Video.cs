@@ -166,6 +166,12 @@ namespace FracturingFog.Rendering
         private string? _videoPngFolder;
         private VideoLosslessEncode _videoLosslessEncode = VideoLosslessEncode.None;
 
+        // #784 — animated GIF recorder (single-shot only), independent of MP4 /
+        // PNG so any combination can run in one zoom.
+        private FracturingFog.Imaging.GifSequenceWriter? _videoGifWriter;
+        private string? _videoGifTempPath;
+        private Stopwatch? _videoGifSw;
+
         // ── Per-leg histogram-equalization CDF lock ────────────────────────
         private double[]? _videoLegCdf;
         private int _videoLegCdfBins;
@@ -345,6 +351,7 @@ namespace FracturingFog.Rendering
             // disposing all on the same MTA loop thread avoids the marshal.
             bool wantMp4 = request.IsSaveVideo;
             bool wantPng = request.IsSaveLossless;
+            bool wantGif = request.IsSaveGif;
             var pngEncode = request.LosslessEncode;
 
             _videoRunning = true;
@@ -355,7 +362,7 @@ namespace FracturingFog.Rendering
             try { _renderer.VSync = false; } catch { }
             // Suppress the pre-overlay snapshot copy in UploadProcessedBuffer
             // while recording — SaveLastFrameToPng is user-action only.
-            _recordingActive = wantMp4 || wantPng;
+            _recordingActive = wantMp4 || wantPng || wantGif;
             // Reset adaptive iter cap so each video run starts at full quality.
             _videoIterCap = 1.0;
             _videoLastFrameMs = 0.0;
@@ -419,6 +426,7 @@ namespace FracturingFog.Rendering
                     _videoLosslessEncode = pngEncode;
                     TryStartLosslessRecording();
                 }
+                if (wantGif) TryStartGifRecording();
                 VideoLoop(startCX, startCY, startZoom, targetCX, targetCY, targetZoom, seconds, cts.Token, reverse);
             }, cts.Token)
                 .ContinueWith(t => FinishSingleShot(t), TaskScheduler.Default);
@@ -532,6 +540,9 @@ namespace FracturingFog.Rendering
             try { writer?.Dispose(); } catch { }
             var (pngWriter, pngFolder) = TakeLosslessRecordingState();
             try { pngWriter?.Dispose(); } catch { }
+            var (gifWriter, gifPath) = TakeGifRecordingState();
+            try { gifWriter?.Dispose(); }
+            catch (Exception ex) { RaiseStatus($"Animated GIF finalise failed: {ex.Message}"); gifPath = null; }
             var encode = _videoLosslessEncode;
             _videoLosslessEncode = VideoLosslessEncode.None;
 
@@ -542,12 +553,13 @@ namespace FracturingFog.Rendering
 
             // Raise the recording result only when a recorder was active so the
             // shell can prompt (or, on cancel/fault, discard the temp files).
-            if (tempPath != null || pngFolder != null)
+            if (tempPath != null || pngFolder != null || gifPath != null)
             {
                 RecordingFinished?.Invoke(this, new VideoRecordingResult
                 {
                     Mp4TempPath = tempPath,
                     PngFolder = pngFolder,
+                    GifTempPath = gifPath,
                     Encode = encode,
                     Cancelled = cancelled,
                 });
@@ -673,6 +685,47 @@ namespace FracturingFog.Rendering
                 try { Directory.Delete(f, recursive: true); } catch { }
         }
 
+        // #784 — animated GIF recorder. Streams frames to a background encoder
+        // (GifSequenceWriter), so init failure just disables it and the zoom
+        // proceeds, matching the MP4 / PNG recorders.
+        private void TryStartGifRecording()
+        {
+            int w = _calculator.Width, h = _calculator.Height;
+            if (w < 16 || h < 16) return;
+            if (VideoStereoActive(out var stLayout))
+                (w, h) = FracturingFog.Rendering.Lighting.StereoRender.OutputDims(w, h, stLayout);
+            try
+            {
+                string tempPath = Path.Combine(Path.GetTempPath(), $"fracturingfog_{Guid.NewGuid():N}.gif");
+                _videoGifWriter = new FracturingFog.Imaging.GifSequenceWriter(tempPath, w, h);
+                _videoGifTempPath = tempPath;
+                _videoGifSw = Stopwatch.StartNew();
+            }
+            catch (Exception ex)
+            {
+                RaiseStatus($"Animated GIF recording disabled — init failed: {ex.Message}");
+                ClearGifRecordingState(deleteTempFile: true);
+            }
+        }
+
+        private (FracturingFog.Imaging.GifSequenceWriter? Writer, string? TempPath) TakeGifRecordingState()
+        {
+            var w = _videoGifWriter;
+            var p = _videoGifTempPath;
+            _videoGifWriter = null;
+            _videoGifTempPath = null;
+            _videoGifSw = null;
+            return (w, p);
+        }
+
+        private void ClearGifRecordingState(bool deleteTempFile)
+        {
+            var (w, p) = TakeGifRecordingState();
+            try { w?.Dispose(); } catch { }
+            if (deleteTempFile && p != null && File.Exists(p))
+                try { File.Delete(p); } catch { }
+        }
+
         // Feeds the post-FX buffer (what was just uploaded) to any active
         // recorders. A write failure disables that recorder but does not
         // interrupt the zoom or affect the other recorder.
@@ -706,6 +759,19 @@ namespace FracturingFog.Rendering
                     Debug.WriteLine($"PNG frame write failed: {ex.Message}");
                     ClearLosslessRecordingState(deleteFolder: true);
                     RaiseStatus("Lossless recording disabled (PNG write error).");
+                }
+            }
+
+            var gif = _videoGifWriter;
+            var gifSw = _videoGifSw;
+            if (gif != null && gifSw != null)
+            {
+                try { gif.WriteFrame(buf, gifSw.Elapsed.Ticks); }
+                catch (Exception ex)
+                {
+                    Debug.WriteLine($"GIF frame write failed: {ex.Message}");
+                    ClearGifRecordingState(deleteTempFile: true);
+                    RaiseStatus("Animated GIF recording disabled (frame write error).");
                 }
             }
         }
