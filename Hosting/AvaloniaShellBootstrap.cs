@@ -1994,7 +1994,11 @@ namespace FracturingFog.Hosting
                             if (choice != AvaloniaDialogs.MessageResult.Yes) return;
                         }
 
-                        shell.StartPlannedTravel(plan.Ordered.Select(w => w.Name).ToList());
+                        var course = plan.Ordered.Select(w => w.Name).ToList();
+                        if (req.AsVideo)
+                            shell.StartPlannedVideoTravel(course, req.SecondsPerLeg);
+                        else
+                            shell.StartPlannedTravel(course);
                     }
                     catch (Exception ex)
                     {

@@ -240,6 +240,13 @@ namespace FracturingFog.Render
         /// cross-faded, looping until stopped).</summary>
         void StartSlideshow(VideoZoomRequest request);
 
+        /// <summary>#789 slice C — a continuous video "travel": fly through the
+        /// planned <paramref name="regionNames"/> in order, one region→region
+        /// zoom leg at a time (the far/deep dolly handles the motion between
+        /// stops). Plays the journey once, then stops. All regions must share a
+        /// video-zoomable fractal type (the CoursePlanner guarantees one type).</summary>
+        void StartVideoTravel(System.Collections.Generic.IReadOnlyList<string> regionNames, double secondsPerLeg);
+
         /// <summary>Stop the running zoom / slideshow.</summary>
         void Stop();
 

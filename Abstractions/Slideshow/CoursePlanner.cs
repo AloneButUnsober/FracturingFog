@@ -68,6 +68,14 @@ namespace FracturingFog.Slideshow
         /// <summary>0 = keep every same-type region; &gt; 0 restricts to a
         /// corridor around the start→end line.</summary>
         public double CorridorRadius { get; set; }
+
+        /// <summary>#789 slice C — run the course as a continuous video zoom
+        /// (fly stop-to-stop) instead of an image slideshow.</summary>
+        public bool AsVideo { get; set; }
+
+        /// <summary>Seconds per region→region leg when <see cref="AsVideo"/> is
+        /// set. Ignored for the image slideshow.</summary>
+        public double SecondsPerLeg { get; set; } = 8.0;
     }
 
     /// <summary>Ordered route + any advisory note.</summary>
