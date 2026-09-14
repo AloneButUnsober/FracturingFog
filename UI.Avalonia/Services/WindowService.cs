@@ -214,6 +214,11 @@ namespace FracturingFog.UI.Avalonia.Services
             Placement placement = Placement.CenterOwner,
             double fitFraction = DefaultFitFraction)
         {
+            // Global UI-scale wrap (#809 / S2 #811). Done first so the scaled
+            // declared Width/Height feed the placement/centering below. No-op for
+            // the render window and splash, and idempotent on re-Prepare.
+            AttachUiScale(win);
+
             var screen = ResolveScreen(win, owner, placement);
             ApplyScreenFit(win, screen, fitFraction);
             ApplyPlacement(win, owner, screen, placement);
@@ -230,6 +235,74 @@ namespace FracturingFog.UI.Avalonia.Services
                 try { win.Activate(); } catch { }
                 try { ClampIntoScreen(win); } catch { }
             };
+        }
+
+        // ── Global UI scale (#809 / S2 #811) ─────────────────────────────────
+
+        /// <summary>
+        /// Wraps a window's content in a <see cref="LayoutTransformControl"/>
+        /// driven by <see cref="UiScaleService.Scale"/>, so the whole dialog —
+        /// text, fields, padding — grows/shrinks with the global UI-scale setting.
+        /// A layout transform (not a render transform) re-measures the content, so
+        /// a <c>SizeToContent</c> window resizes and a fixed-size window's declared
+        /// Width/Height/Min are scaled to match; the existing screen-fit clamp then
+        /// keeps a scaled-up window on-screen (with the inner ScrollViewer taking
+        /// any overflow).
+        ///
+        /// Excluded per epic scope: the render window (<see cref="MainWindow"/>)
+        /// and <see cref="SplashWindow"/> — both bypass <see cref="Prepare"/>
+        /// anyway, so the type guard is defence-in-depth. Idempotent: a window
+        /// re-run through <see cref="Prepare"/> is not wrapped twice (and its
+        /// change subscription is not duplicated).
+        ///
+        /// KNOWN LIMIT (S3 #812 addresses it): popups/flyouts/combobox dropdowns/
+        /// tooltips render as separate top-levels outside this control and are not
+        /// scaled here; a global base font-size token covers their text.
+        /// </summary>
+        private static void AttachUiScale(Window win)
+        {
+            // Never scale the render surface or the splash.
+            if (win is MainWindow or SplashWindow) return;
+
+            // Content must be a Control and not already wrapped (idempotent).
+            if (win.Content is not Control body || body is LayoutTransformControl)
+                return;
+
+            var transform = new ScaleTransform(1, 1);
+            win.Content = null;                 // detach before reparenting
+            var host = new LayoutTransformControl
+            {
+                LayoutTransform = transform,
+                Child = body,
+            };
+            win.Content = host;
+
+            // Design (unscaled) sizes captured once. NaN Width/Height means the
+            // window is SizeToContent on that axis — leave it to the transform's
+            // re-measure rather than pinning a scaled pixel size. MinWidth/MinHeight
+            // default to 0, which scales harmlessly.
+            double baseW = win.Width, baseH = win.Height;
+            double baseMinW = win.MinWidth, baseMinH = win.MinHeight;
+
+            void Apply(double s)
+            {
+                transform.ScaleX = s;
+                transform.ScaleY = s;
+                if (!double.IsNaN(baseW)) win.Width = baseW * s;
+                if (!double.IsNaN(baseH)) win.Height = baseH * s;
+                win.MinWidth = baseMinW * s;
+                win.MinHeight = baseMinH * s;
+                // Growth can push a window off-screen; nudge it back (no-op before
+                // the window is shown — Bounds is empty then, and the Opened clamp
+                // handles the first show).
+                try { ClampIntoScreen(win); } catch { }
+            }
+
+            Apply(UiScaleService.Scale);
+
+            void OnScaleChanged(double s) => Apply(s);
+            UiScaleService.ScaleChanged += OnScaleChanged;
+            win.Closed += (_, _) => UiScaleService.ScaleChanged -= OnScaleChanged;
         }
 
         // ── Scroll snap-back on activation (#657) ────────────────────────────
