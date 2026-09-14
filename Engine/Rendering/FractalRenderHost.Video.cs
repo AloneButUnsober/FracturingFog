@@ -2046,12 +2046,12 @@ namespace FracturingFog.Rendering
             var svc = _videoThemeService;
             if (svc == null) return;
 
-            // Multi-type pool (#91): admit every zoomable-2D, non-user-code
-            // family — the region now snapshots its per-family params
-            // (RegionFractalParams), so Julia/Newton/Glynn/Apollonian/… legs
-            // reconstruct the exact look. Raymarch3D (P3/#93) and NonSpatial
-            // (P4/#94) families still fall out here until their leg motion
-            // models land. Excluding Extreme tier + near-classic zoom too.
+            // Multi-type pool (#91, #93): admit every zoomable-2D (P1) and
+            // raymarched-3D (P3) non-user-code family — the region snapshots its
+            // per-family params + 3D camera baseline (RegionFractalParams), so
+            // Julia/Newton/Glynn/… and Mandelbulb/Mandelbox/KIFS/Quaternion/
+            // Kleinian/Bicomplex legs reconstruct the authored look. NonSpatial
+            // (P4/#94) families still fall out here. Excluding Extreme tier too.
             const double SlideshowMinRegionZoom = 5.0;
 
             // Preset restrictions (#45). A restriction that is present but
@@ -2069,10 +2069,14 @@ namespace FracturingFog.Rendering
             var regions = new List<FractalRegion>();
             foreach (var r in FractalRegionLibrary.Instance.AllSlideshowRegions)
             {
-                if (!FractalMotionCapabilities.SupportsVideoZoomLeg(r.FractalType)
-                    || r.QualityPreset?.Tier == QualityTier.Extreme
-                    || r.Zoom <= SlideshowMinRegionZoom)
-                    continue;
+                bool zoom2D = FractalMotionCapabilities.SupportsVideoZoomLeg(r.FractalType);
+                bool camera3D = FractalMotionCapabilities.SupportsVideoCameraLeg(r.FractalType);
+                if (!zoom2D && !camera3D) continue;
+                if (r.QualityPreset?.Tier == QualityTier.Extreme) continue;
+                // 2D legs need real plane depth to be worth a zoom; 3D camera-fly
+                // legs (P3) dolly the camera regardless of the region's plane
+                // zoom, so they skip the min-zoom floor.
+                if (zoom2D && r.Zoom <= SlideshowMinRegionZoom) continue;
                 if (incRegions != null && !incRegions.Contains(r.Name)) continue;
                 if (incFractal != null && !incFractal.Contains(r.FractalType.ToString())) continue;
                 if (incQuality != null && !incQuality.Contains(r.QualityPreset?.Name ?? string.Empty)) continue;
@@ -2133,6 +2137,23 @@ namespace FracturingFog.Rendering
 
                 double tz = Math.Clamp(region.Zoom, draftMin, ultraMax);
 
+                // #93 (P3) — raymarched-3D camera-fly leg. Every 3D calculator
+                // derives its camera distance as CameraDistance / Zoom, so a
+                // log-lerp of Zoom flies the camera. The leg dollies from a wide
+                // establishing shot (camera CameraLegEstablishingFactor× farther)
+                // to the authored framing. The region's plane zoom is meaningless
+                // for the dolly, so use a fixed authored floor (max with tz honours
+                // any real push a region saved). No plane pan — center is pinned.
+                const double CameraLegEstablishingFactor = 6.0;
+                const double CameraLegAuthoredZoomFloor = 1.0;
+                bool isCameraLeg = FractalMotionCapabilities.SupportsVideoCameraLeg(region.FractalType);
+                double camAuthoredZoom = 0.0, camWideZoom = 0.0;
+                if (isCameraLeg)
+                {
+                    camAuthoredZoom = Math.Max(tz, CameraLegAuthoredZoomFloor);
+                    camWideZoom = camAuthoredZoom / CameraLegEstablishingFactor;
+                }
+
                 // Per-leg palette pool capped at the leg's deep endpoint, then
                 // narrowed to the preset's included themes (#45). Empty after
                 // filtering ⇒ fall back to the run's full (already-filtered) pool.
@@ -2146,7 +2167,7 @@ namespace FracturingFog.Rendering
                 string theme = legThemes[ti];
 
                 double legSeconds = seconds;
-                if (constantRate)
+                if (constantRate && !isCameraLeg)
                 {
                     double logRange = Math.Log(tz) - logStart;
                     if (logRange > 0) legSeconds = seconds * (logRange / minLogRange);
@@ -2169,7 +2190,32 @@ namespace FracturingFog.Rendering
                 region.Relief3D?.ApplyTo(ViewState.FractalParameters);
                 _videoTargetIterations = region.Iterations;
 
-                if (reverse)
+                if (isCameraLeg)
+                {
+                    // #93 — camera-fly leg: plane center is pinned to the region's
+                    // (raymarch ignores plane pan), and the start zoom is the wide
+                    // establishing value (forward) or the authored framing (reverse
+                    // ends wide). region.Params.ApplyTo above already restored the
+                    // 3D camera baseline (distance/theta/phi + slice) that Zoom
+                    // dollies against. Quality = authored preset, floored to the
+                    // natural-for-authored-zoom tier.
+                    ViewState.CenterX = region.CenterX; ViewState.CenterXLo = region.CenterXLo;
+                    ViewState.CenterX2 = region.CenterX2; ViewState.CenterX3 = region.CenterX3;
+                    ViewState.CenterY = region.CenterY; ViewState.CenterYLo = region.CenterYLo;
+                    ViewState.CenterY2 = region.CenterY2; ViewState.CenterY3 = region.CenterY3;
+                    ViewState.Zoom = reverse ? camAuthoredZoom : camWideZoom;
+
+                    QualityPreset natural = QualityPreset.Standard;
+                    foreach (var p in QualityPreset.All)
+                    {
+                        if (p.Tier == QualityTier.Extreme) continue;
+                        if (p.ZoomMax >= camAuthoredZoom) { natural = p; break; }
+                    }
+                    QualityPreset authored = region.QualityPreset ?? natural;
+                    if (authored.Tier == QualityTier.Extreme) authored = natural;
+                    _videoQuality = authored.Tier > natural.Tier ? authored : natural;
+                }
+                else if (reverse)
                 {
                     ViewState.CenterX = region.CenterX; ViewState.CenterXLo = region.CenterXLo;
                     ViewState.CenterX2 = region.CenterX2; ViewState.CenterX3 = region.CenterX3;
@@ -2334,7 +2380,19 @@ namespace FracturingFog.Rendering
 
                 QDCoord legStartCX, legStartCY, legTargetCX, legTargetCY;
                 double legStartZoom, legTargetZoom;
-                if (reverse)
+                if (isCameraLeg)
+                {
+                    // #93 — pure camera dolly: plane center pinned to the region's,
+                    // Zoom lerps wide↔authored (VideoLoop log-lerps it, easing the
+                    // dolly in log-distance). No pan.
+                    var camCX = new QDCoord(region.CenterX, region.CenterXLo, region.CenterX2, region.CenterX3);
+                    var camCY = new QDCoord(region.CenterY, region.CenterYLo, region.CenterY2, region.CenterY3);
+                    legStartCX = legTargetCX = camCX;
+                    legStartCY = legTargetCY = camCY;
+                    legStartZoom = reverse ? camAuthoredZoom : camWideZoom;
+                    legTargetZoom = reverse ? camWideZoom : camAuthoredZoom;
+                }
+                else if (reverse)
                 {
                     legStartCX = new QDCoord(region.CenterX, region.CenterXLo, region.CenterX2, region.CenterX3);
                     legStartCY = new QDCoord(region.CenterY, region.CenterYLo, region.CenterY2, region.CenterY3);

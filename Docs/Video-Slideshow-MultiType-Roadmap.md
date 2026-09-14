@@ -1,11 +1,12 @@
 # Multi-Type Video Slideshow — Feasibility &amp; Roadmap
 
 Status: **P1 shipped** (2026-07-22, [#91]); **P2 shipped** (2026-09-14, [#92]).
-P3–P4 planned. Spun out of the [Animation Roadmap](Animation-Roadmap.md) open
-follow-ups (2026-07-03) as its own project because the fix is real engine work,
-not an animation follow-up patch.
+**P3 shipped** (2026-09-14, [#93]). P4 planned. Spun out of the
+[Animation Roadmap](Animation-Roadmap.md) open follow-ups (2026-07-03) as its own
+project because the fix is real engine work, not an animation follow-up patch.
 
-Tracking issues: [#91] (P1, done) · [#92] (P2, done) · [#93] (P3) · [#94] (P4).
+Tracking issues: [#91] (P1, done) · [#92] (P2, done) · [#93] (P3, done) ·
+[#94] (P4).
 
 [#91]: https://github.com/AloneButUnsober/FracturingFog/issues/91
 [#92]: https://github.com/AloneButUnsober/FracturingFog/issues/92
@@ -131,11 +132,44 @@ Flags: `VaryConstantStart` / `VaryConstantSpeed` (`VideoZoomRequest` /
   authored `c`-tracks still win and play as before.
 - `Arc` ends off the authored constant; the leg cross-fade covers the seam.
 
+## P3 — shipped ([#93])
+
+Raymarched-3D families (Mandelbulb, Mandelbox, KIFS, Quaternion Julia +
+Mandelbrot, Kleinian, Bicomplex) play **camera-fly** legs: the camera dollies
+from a wide establishing shot to the region's authored framing.
+
+**Key realisation — the dolly is free.** Every 3D calculator derives its camera
+distance as `CameraDistance / Zoom`. So the existing `VideoLoop` zoom
+interpolation (log-lerp, smoothstep-eased) *is* a log-distance camera dolly — no
+new motion engine needed. P3 just had to snapshot/restore the camera and feed
+the leg the right zoom endpoints.
+
+1. **3D camera snapshot.** `RegionFractalParams` gains a generic camera block —
+   `Cam3DFamily` (the int `FractalType` discriminator), `Cam3DDistance/Theta/Phi`
+   and `Cam3DSliceW` (Quaternion/Bicomplex). `Snapshot()` captures it for the six
+   non-user-code raymarch families; `ApplyTo()` routes it back to the right
+   per-family fields via the discriminator (so `ApplyTo` stays type-free).
+   Round-trips both interactive save/recall (`HostColorThemeService`) and each
+   slideshow leg. UserBulb keeps its own dedicated camera fields (user code).
+2. **Capability.** `FractalMotionCapabilities.SupportsVideoCameraLeg` = Raymarch3D
+   and not user code; `SupportsVideoLeg` = zoom-leg ∪ camera-leg.
+3. **Pool + leg.** `VideoSlideshowLoop` admits `SupportsVideoCameraLeg` regions
+   (exempt from the 2D min-plane-zoom floor). A camera leg pins the plane center,
+   skips constant-rate scaling, and lerps Zoom from
+   `authored / EstablishingFactor` (camera wide) to the authored framing
+   (`max(region.Zoom, 1.0)`), reversed for reverse runs. Pre-render + per-frame
+   already route through the 3D alt calculators (`SelectAltCalculatorByType`).
+
+### P3 limitations (deliberate)
+
+- **Dolly only** — no camera orbit (theta/phi are restored to the authored angles
+  and held). An orbit sweep is a natural follow-up.
+- UserBulb/Sandbox/UserEquation stay out of the pool (user code — RCE gate).
+- Establishing factor + authored-zoom floor are fixed constants (6× / 1.0), not
+  yet per-run options.
+
 ## Remaining scope
 
-- **P3** ([#93]) — 3D raymarch camera-fly legs (Mandelbulb / Mandelbox / KIFS /
-  Quaternion / Bicomplex / Kleinian). Needs a 3D-camera snapshot on the region
-  and a camera-path motion model. Admits `Raymarch3D`.
 - **P4** ([#94]) — Non-spatial families (Plasma, Flame, DLA, Logistic, IFS,
   L-System, attractors, Buddhabrot) via static-hold / param-sweep legs. Admits
   `NonSpatial`.
