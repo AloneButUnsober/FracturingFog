@@ -162,6 +162,13 @@ to the next in coordinate space — start first, end last. The slideshow then
 walks that course in order (looping the journey) with all the normal timing,
 theme and recording behaviour.
 
+Tick **As continuous video zoom** to fly the course instead: the zoom engine
+dives into the first stop, then travels stop-to-stop as one continuous
+animation — pulling back, panning, and diving in again between far-apart deep
+regions (the same dolly the single-shot Video Zoom uses). Set **Seconds / leg**
+for the pace. Unlike the image journey, the video travel plays **once** and then
+stops at the destination.
+
 > [!NOTE]
 > Only regions matching the **start region's fractal type** are eligible — X/Y
 > coordinates aren't comparable across different fractals. If the start and end

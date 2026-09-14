@@ -508,6 +508,62 @@ namespace FracturingFog.Rendering
         }
 
         /// <inheritdoc/>
+        public void StartVideoTravel(
+            System.Collections.Generic.IReadOnlyList<string> regionNames, double secondsPerLeg)
+        {
+            if (_disposed || regionNames == null || IsRunning) return;
+
+            // Resolve the course to concrete regions (skip unknown names), then
+            // keep only video-zoomable, non-extreme types (the planner already
+            // groups by one type, so this is a guard, not a mixer).
+            var course = new List<FractalRegion>();
+            foreach (var n in regionNames)
+            {
+                var r = FractalRegionLibrary.Instance.FindByName(n);
+                if (r == null) continue;
+                if (!FractalMotionCapabilities.SupportsVideoZoomLeg(r.FractalType)) continue;
+                if (r.QualityPreset?.Tier == QualityTier.Extreme) continue;
+                course.Add(r);
+            }
+            if (course.Count < 1)
+            {
+                RaiseStatus("Video travel: no video-zoomable regions in the course.");
+                return;
+            }
+
+            double legSecs = secondsPerLeg > 0 ? secondsPerLeg : 8.0;
+
+            IterCapMode = FracturingFog.Models.VideoIterCapMode.Global;
+            _bandStatsValid = false;
+            _calculator.PerRowMaxIter = null;
+
+            _videoSlideshowRunning = true;
+            RaiseStatus($"Video travel: {course.Count} stops…");
+
+            CancellationTokenSource cts;
+            lock (_videoSlideshowLock)
+            {
+                _videoSlideshowCts?.Cancel();
+                _videoSlideshowCts = new CancellationTokenSource();
+                cts = _videoSlideshowCts;
+            }
+
+            Task.Run(() => VideoTravelLoop(course, legSecs, cts.Token), cts.Token)
+                .ContinueWith(t =>
+                {
+                    _videoSlideshowRunning = false;
+                    _videoTargetIterations = 0;
+                    _calculator.PerRowMaxIter = null;
+                    _bandStatsValid = false;
+                    if (t.IsFaulted)
+                        RaiseStatus($"Video travel error: {t.Exception?.InnerException?.Message}");
+                    else
+                        RaiseStatus("Video travel complete.");
+                    Stopped?.Invoke(this, EventArgs.Empty);
+                }, TaskScheduler.Default);
+        }
+
+        /// <inheritdoc/>
         public void Stop()
         {
             lock (_videoLock) _videoCts?.Cancel();
@@ -2285,6 +2341,142 @@ namespace FracturingFog.Rendering
                     if (ct.IsCancellationRequested) break;
                     // leg cancel — fall through to next iteration
                 }
+            }
+        }
+
+        // ── Video travel (#789 slice C) ───────────────────────────────────
+        //
+        // Fly through a planned course one region→region leg at a time. The
+        // first leg dives in from the classic view to course[0]; each later leg
+        // runs from the previous stop to the next, and VideoLoop's dolly (#788)
+        // zooms out / pans / zooms in when two deep stops sit far apart. Plays
+        // once, then the ContinueWith in StartVideoTravel fires Stopped.
+        //
+        // Themes are left as-is (the current live palette) — travel is a camera
+        // journey, not a theme show; there is no per-leg theme rotation here.
+        private void VideoTravelLoop(List<FractalRegion> course, double legSeconds, CancellationToken ct)
+        {
+            lock (_calcLock) _calcCts?.Cancel();
+
+            double ultraMax = QualityPreset.Ultra.ZoomMax;
+            double draftMin = QualityPreset.Draft.ZoomMin;
+            double defZoom = FractalViewState.DefaultZoom;
+
+            // Previous leg's endpoint (classic view before the first leg).
+            var prevCX = new QDCoord(FractalViewState.DefaultCenterX, 0.0, 0.0, 0.0);
+            var prevCY = new QDCoord(FractalViewState.DefaultCenterY, 0.0, 0.0, 0.0);
+            double prevZoom = defZoom;
+
+            for (int i = 0; i < course.Count; i++)
+            {
+                if (ct.IsCancellationRequested) break;
+                var region = course[i];
+                double tz = Math.Clamp(region.Zoom, draftMin, ultraMax);
+
+                // Leg target region supplies type + per-family params + quality.
+                ViewState.FractalType = region.FractalType;
+                region.Params?.ApplyTo(ViewState.FractalParameters);
+                region.Relief3D?.ApplyTo(ViewState.FractalParameters);
+                _videoTargetIterations = region.Iterations;
+
+                QualityPreset natural = QualityPreset.Standard;
+                foreach (var p in QualityPreset.All)
+                {
+                    if (p.Tier == QualityTier.Extreme) continue;
+                    if (p.ZoomMax >= tz) { natural = p; break; }
+                }
+                QualityPreset authored = region.QualityPreset ?? natural;
+                if (authored.Tier == QualityTier.Extreme) authored = natural;
+                _videoQuality = authored.Tier > natural.Tier ? authored : natural;
+                ViewState.Quality = _videoQuality;
+
+                // No per-leg theme schedule for travel.
+                _videoLegThemeSchedule = null;
+                _videoLegThemeIdx = 0;
+
+                // Snapshot the on-screen frame to cross-fade into the leg start.
+                var oldBuf = SnapshotFrame(out int snapW, out int snapH);
+
+                var legStartCX = prevCX;
+                var legStartCY = prevCY;
+                double legStartZoom = prevZoom;
+                var legTargetCX = new QDCoord(region.CenterX, region.CenterXLo, region.CenterX2, region.CenterX3);
+                var legTargetCY = new QDCoord(region.CenterY, region.CenterYLo, region.CenterY2, region.CenterY3);
+                double legTargetZoom = tz;
+
+                // Push the leg's START view into ViewState + calculator, then
+                // pre-render the start frame so we can cross-fade into it.
+                ViewState.CenterX = legStartCX.Hi; ViewState.CenterXLo = legStartCX.Lo;
+                ViewState.CenterX2 = legStartCX.X2; ViewState.CenterX3 = legStartCX.X3;
+                ViewState.CenterY = legStartCY.Hi; ViewState.CenterYLo = legStartCY.Lo;
+                ViewState.CenterY2 = legStartCY.X2; ViewState.CenterY3 = legStartCY.X3;
+                ViewState.Zoom = legStartZoom;
+
+                _calculator.CenterX = ViewState.CenterX; _calculator.CenterXLo = ViewState.CenterXLo;
+                _calculator.CenterX2 = ViewState.CenterX2; _calculator.CenterX3 = ViewState.CenterX3;
+                _calculator.CenterY = ViewState.CenterY; _calculator.CenterYLo = ViewState.CenterYLo;
+                _calculator.CenterY2 = ViewState.CenterY2; _calculator.CenterY3 = ViewState.CenterY3;
+                _calculator.Zoom = legStartZoom;
+                _calculator.Quality = _videoQuality;
+                _calculator.MaxIterations = ViewState.IterLocked
+                    ? ViewState.LockedIterations
+                    : _videoQuality.ComputeIterations(legStartZoom);
+
+                RegionName = region.Name;
+
+                int eqSnapshot = ViewState.HistogramEq;
+                double ditherStr = _videoBandDitherEnabled ? _videoBandDitherStrength : 0.0;
+                uint[] newBuf;
+                try
+                {
+                    IFractalCalculator? altPre = SelectAltCalculator(ViewState.FractalType);
+                    if (altPre != null)
+                    {
+                        SyncAltCalculatorForVideoFrame(altPre);
+                        altPre.Calculate(ct);
+                        if (eqSnapshot > 0 && altPre is FracturingFog.Interefaces.ISupportsHistogramEq hePre)
+                            hePre.ApplyHistogramEqualization(eqSnapshot / 100.0);
+                        var cb = altPre.ColorBuffer;
+                        newBuf = new uint[cb.Length];
+                        Array.Copy(cb, newBuf, cb.Length);
+                    }
+                    else
+                    {
+                        _calculator.Calculate(ct);
+                        if (eqSnapshot > 0) _calculator.ApplyHistogramEqualization(eqSnapshot / 100.0);
+                        if (ditherStr > 0.0) _calculator.ApplyBandDitherRecolor(ditherStr);
+                        var cb = _calculator.ColorBuffer;
+                        newBuf = new uint[cb.Length];
+                        Array.Copy(cb, newBuf, cb.Length);
+                    }
+                }
+                catch (OperationCanceledException) { break; }
+                if (ct.IsCancellationRequested) break;
+
+                if (oldBuf.Length == newBuf.Length && oldBuf.Length > 0
+                    && snapW == _calculator.Width && snapH == _calculator.Height)
+                {
+                    const int legFadeSteps = 24;
+                    const int legFadeStepMs = 80;
+                    VideoCrossFade(oldBuf, newBuf, legFadeSteps, legFadeStepMs, ct);
+                }
+                else
+                {
+                    PresentBuffer(newBuf, _calculator.Width, _calculator.Height);
+                }
+                if (ct.IsCancellationRequested) break;
+
+                RaiseStatus($"Video travel: {region.Name}  ({i + 1}/{course.Count})");
+
+                // The forward VideoLoop dollies between far/deep stops (#788).
+                VideoLoop(legStartCX, legStartCY, legStartZoom,
+                          legTargetCX, legTargetCY, legTargetZoom,
+                          legSeconds, ct, reverse: false);
+
+                // Next leg begins where this one ended.
+                prevCX = legTargetCX;
+                prevCY = legTargetCY;
+                prevZoom = legTargetZoom;
             }
         }
 

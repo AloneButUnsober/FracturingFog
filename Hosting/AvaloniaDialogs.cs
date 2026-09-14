@@ -1717,6 +1717,19 @@ namespace FracturingFog.Hosting
                 var wZoom = MakeSlider(0, 2, 1);
                 var corridor = MakeSlider(0, 1, 0);
 
+                // #789 slice C — run the course as a continuous video zoom.
+                var chkAsVideo = new CheckBox
+                {
+                    Content = "As continuous video zoom (fly stop-to-stop)",
+                    Foreground = Brushes.LightGray,
+                };
+                var secsPerLeg = new NumericUpDown
+                {
+                    Minimum = 1, Maximum = 60, Increment = 1, Value = 8,
+                    MinWidth = 100, IsEnabled = false,
+                };
+                chkAsVideo.IsCheckedChanged += (_, _) => secsPerLeg.IsEnabled = chkAsVideo.IsChecked == true;
+
                 var err = new TextBlock { Foreground = new SolidColorBrush(Color.FromRgb(255, 204, 0)), IsVisible = false, TextWrapping = TextWrapping.Wrap };
 
                 TextBlock Lbl(string t) => new() { Text = t, Foreground = Brushes.LightGray, VerticalAlignment = VerticalAlignment.Center, Width = 130 };
@@ -1748,6 +1761,8 @@ namespace FracturingFog.Hosting
                         WeightXY = wXY.Value,
                         WeightZoom = wZoom.Value,
                         CorridorRadius = corridor.Value,
+                        AsVideo = chkAsVideo.IsChecked == true,
+                        SecondsPerLeg = (double)(secsPerLeg.Value ?? 8m),
                     };
                     win.Close();
                 };
@@ -1772,6 +1787,8 @@ namespace FracturingFog.Hosting
                 root.Children.Add(Row("Plane weight:", wXY));
                 root.Children.Add(Row("Zoom weight:", wZoom));
                 root.Children.Add(Row("Corridor (0=off):", corridor));
+                root.Children.Add(chkAsVideo);
+                root.Children.Add(Row("Seconds / leg:", secsPerLeg));
                 root.Children.Add(err);
                 root.Children.Add(buttonRow);
 

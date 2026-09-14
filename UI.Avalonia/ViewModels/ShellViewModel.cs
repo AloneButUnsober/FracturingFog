@@ -842,6 +842,21 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
         Main.SetStatus($"Travel: {courseNames.Count} stops, {courseNames[0]} → {courseNames[courseNames.Count - 1]}.");
     }
 
+    /// <summary>#789 slice C — run a pre-planned course as a continuous video
+    /// journey (fly stop-to-stop) on the zoom engine instead of the image
+    /// slideshow. No-op for fewer than two stops or when video is unavailable.</summary>
+    public void StartPlannedVideoTravel(IReadOnlyList<string> courseNames, double secondsPerLeg)
+    {
+        if (_video == null || courseNames == null || courseNames.Count < 2) return;
+        if (_video.IsRunning) return;
+
+        FloatingMenu.VideoButtonText = "Stop";
+        SlideshowVcr.SetPaused(false);
+        IsSlideshowVcrVisible = true;
+        _video.StartVideoTravel(courseNames, secondsPerLeg);
+        Main.SetStatus($"Video travel: {courseNames.Count} stops, {courseNames[0]} → {courseNames[courseNames.Count - 1]}.");
+    }
+
     private void StartSlideshowWithConfig(SlideshowConfig activeConfig)
     {
         var settings = activeConfig.Timing;
