@@ -167,6 +167,22 @@ namespace FracturingFog.Models
         public static bool SupportsVideoHoldLeg(FractalType type)
             => MotionClass(type) == FractalMotionClass.NonSpatial && !IsUserCode(type);
 
+        /// <summary>
+        /// True for the non-spatial families whose static-hold leg can instead
+        /// run a smooth, cheap mid-leg param sweep (#806): Logistic (pan the
+        /// r-window along the plane X = r axis) and AcidWarp (morph the flow
+        /// position). These re-render per frame, so only families whose per-frame
+        /// calc is cheap and whose sweep is visually smooth qualify — the slow or
+        /// non-smooth generators (Flame, DLA, Plasma, Buddhabrot) stay static-hold
+        /// / Ken-Burns. Requires <see cref="SupportsVideoHoldLeg"/>.
+        /// </summary>
+        public static bool SupportsVideoParamSweep(FractalType type) => type switch
+        {
+            FractalType.Logistic => true,
+            FractalType.AcidWarp => true,
+            _ => false,
+        };
+
         /// <summary>True when a region of this type gets any motion leg in the
         /// video slideshow — a 2D zoom leg (P1), a 3D camera-fly leg (P3), or a
         /// non-spatial static-hold leg (P4). Only user-code families (excluded

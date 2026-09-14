@@ -247,6 +247,10 @@ namespace FracturingFog.Models
         /// Default off.</summary>
         public bool KenBurnsOnHold { get; set; }
 
+        /// <summary>Mid-leg param sweep on sweepable non-spatial hold families
+        /// (#806): Logistic r-window pan, AcidWarp flow morph. Default off.</summary>
+        public bool SweepParamsOnHold { get; set; }
+
         /// <summary>Adaptive-sweep block. Drives the Adaptive slider per leg.</summary>
         public AdaptiveSweepConfig AdaptiveSweep { get; set; } = new();
 

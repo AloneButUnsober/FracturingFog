@@ -68,6 +68,7 @@ public sealed class SlideshowSettingsViewModel : ViewModelBase
     private bool _varyConstantStart;
     private bool _varyConstantSpeed;
     private bool _kenBurnsOnHold;
+    private bool _sweepParamsOnHold;
 
     private const string PostFxKeyBrightness = "brightness";
     private const string PostFxKeyContrast   = "contrast";
@@ -384,6 +385,14 @@ public sealed class SlideshowSettingsViewModel : ViewModelBase
     /// <summary>Show the Ken-Burns toggle — only for a Video slideshow (hold
     /// legs are a video-slideshow concept; #806). Independent of animations.</summary>
     public bool ShowKenBurnsOnHoldToggle => IsVideo;
+
+    /// <summary>Mid-leg param sweep on sweepable non-spatial hold families
+    /// (#806): Logistic r-window pan, AcidWarp flow morph.</summary>
+    public bool SweepParamsOnHold
+    {
+        get => _sweepParamsOnHold;
+        set { this.RaiseAndSetIfChanged(ref _sweepParamsOnHold, value); MarkDirty(); }
+    }
 
     /// <summary>Show the "Enable animations" opt-in toggle — only for Image /
     /// Video. Animation type animates unconditionally, so the toggle is
@@ -753,6 +762,7 @@ public sealed class SlideshowSettingsViewModel : ViewModelBase
         _working.VaryConstantStart = _varyConstantStart;
         _working.VaryConstantSpeed = _varyConstantSpeed;
         _working.KenBurnsOnHold = _kenBurnsOnHold;
+        _working.SweepParamsOnHold = _sweepParamsOnHold;
 
         _working.AdaptiveSweep.Enabled = _sweepEnabled;
         _working.AdaptiveSweep.Start = _sweepStart;
@@ -804,6 +814,7 @@ public sealed class SlideshowSettingsViewModel : ViewModelBase
         _varyConstantStart = _working.VaryConstantStart;
         _varyConstantSpeed = _working.VaryConstantSpeed;
         _kenBurnsOnHold = _working.KenBurnsOnHold;
+        _sweepParamsOnHold = _working.SweepParamsOnHold;
 
         // Refresh per-config filter checkmarks. CheckableItem.IsChecked fires
         // Owner.OnFilterItemChanged → MarkDirty, which is guarded by
@@ -832,6 +843,7 @@ public sealed class SlideshowSettingsViewModel : ViewModelBase
         this.RaisePropertyChanged(nameof(ShowConstantDriftVarianceToggles));
         this.RaisePropertyChanged(nameof(KenBurnsOnHold));
         this.RaisePropertyChanged(nameof(ShowKenBurnsOnHoldToggle));
+        this.RaisePropertyChanged(nameof(SweepParamsOnHold));
         this.RaisePropertyChanged(nameof(RandomizeAnimationsByFractalType));
         this.RaisePropertyChanged(nameof(UseExtremeRegions));
         this.RaisePropertyChanged(nameof(TotalDisplaySec));

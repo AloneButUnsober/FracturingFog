@@ -199,6 +199,13 @@ namespace FracturingFog.Render
         /// instead of sitting still. Default off ⇒ the P4 static hold.</summary>
         public bool KenBurnsOnHold { get; set; }
 
+        /// <summary>Mid-leg param sweep on the sweepable non-spatial hold families
+        /// (#806): Logistic pans its r-window, AcidWarp morphs its flow. These
+        /// re-render per frame (cheap families only). Takes precedence over
+        /// <see cref="KenBurnsOnHold"/> for those families; other hold families
+        /// are unaffected. Default off ⇒ static hold / Ken-Burns.</summary>
+        public bool SweepParamsOnHold { get; set; }
+
         // ── Region / theme restrictions (video slideshow) ─────────────────
         // Mirror the image slideshow's include/filter sets so a saved Video
         // preset that pins one region + one theme actually plays just that,

@@ -168,6 +168,31 @@ public sealed class FractalCapabilitiesTests
     public void SupportsVideoLeg_SpansAllThreeMotionKinds(FractalType t, bool expected)
         => Assert.Equal(expected, FractalMotionCapabilities.SupportsVideoLeg(t));
 
+    // #806 param-sweep — the sweepable hold families (smooth + cheap).
+    [Theory]
+    [InlineData(FractalType.Logistic, true)]
+    [InlineData(FractalType.AcidWarp, true)]
+    // Non-smooth / slow hold families are NOT sweepable (stay static / Ken-Burns).
+    [InlineData(FractalType.Plasma, false)]
+    [InlineData(FractalType.Flame, false)]
+    [InlineData(FractalType.Dla, false)]
+    [InlineData(FractalType.BuddhaBrot, false)]
+    // Non-hold families are never sweepable.
+    [InlineData(FractalType.Mandelbrot, false)]
+    [InlineData(FractalType.Mandelbulb, false)]
+    public void SupportsVideoParamSweep_MatchesPolicy(FractalType t, bool expected)
+        => Assert.Equal(expected, FractalMotionCapabilities.SupportsVideoParamSweep(t));
+
+    // Sweepable ⊆ hold: a param sweep only ever applies to a static-hold family.
+    [Fact]
+    public void ParamSweep_IsSubsetOfHold()
+    {
+        foreach (FractalType t in Enum.GetValues(typeof(FractalType)))
+            if (FractalMotionCapabilities.SupportsVideoParamSweep(t))
+                Assert.True(FractalMotionCapabilities.SupportsVideoHoldLeg(t),
+                    $"{t} is sweepable but not a hold leg");
+    }
+
     // The three leg kinds partition the non-user-code families exactly (each gets
     // exactly one leg kind; user code gets none).
     [Fact]
