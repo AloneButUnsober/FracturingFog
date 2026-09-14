@@ -458,7 +458,7 @@
                             </DataTemplate>
                         </ListBox.ItemTemplate>
                     </ListBox>
-                    <TextBlock Text="Each leg plays the region's attached animation, or a random compatible one when none is attached. Video legs now play every zoomable-2D family (Julia, Newton, Glynn, Apollonian, …), not just Mandelbrot; a Julia / Phoenix / Glynn leg with no attached animation can still drift its constant (see above). Regions with no motion play static."
+                    <TextBlock Text="Each leg plays the region's attached animation, or a random compatible one when none is attached. Video legs now play every family: 2D zoom (Julia, Newton, Glynn, Apollonian, …), 3D camera-fly (Mandelbulb, Mandelbox, KIFS, Quaternion, …) and non-spatial static-hold (Plasma, Flame, DLA, Logistic, …). A Julia / Phoenix / Glynn leg with no attached animation can still drift its constant (see above)."
                                Foreground="#969696" FontStyle="Italic" TextWrapping="Wrap" />
                 </StackPanel>
             </StackPanel>

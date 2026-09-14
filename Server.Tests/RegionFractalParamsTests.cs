@@ -253,4 +253,80 @@ public sealed class RegionFractalParamsTests
     [Fact]
     public void UserBulb_NotCapturedIntoGenericCamera()
         => Assert.Null(RegionFractalParams.Snapshot(FractalType.UserBulb, new FractalParameters()));
+
+    // ── #94 (P4) — non-spatial static-hold params round-trip ───────────────
+
+    [Fact]
+    public void PlasmaSnapshot_RoundTripsSeedAndRoughness()
+    {
+        var p = new FractalParameters { PlasmaSeed = 987, PlasmaRoughness = 0.72 };
+        var rp = RegionFractalParams.Snapshot(FractalType.Plasma, p);
+        Assert.NotNull(rp);
+        var applied = new FractalParameters();
+        rp!.ApplyTo(applied);
+        Assert.Equal(987, applied.PlasmaSeed);
+        Assert.Equal(0.72, applied.PlasmaRoughness, 12);
+    }
+
+    [Fact]
+    public void FlameSnapshot_RoundTripsPresetAndGamma()
+    {
+        var p = new FractalParameters { FlamePresetName = "Swirl", FlameGamma = 1.8 };
+        var rp = RegionFractalParams.Snapshot(FractalType.Flame, p);
+        var applied = new FractalParameters();
+        rp!.ApplyTo(applied);
+        Assert.Equal("Swirl", applied.FlamePresetName);
+        Assert.Equal(1.8, applied.FlameGamma, 12);
+    }
+
+    [Fact]
+    public void DlaSnapshot_RoundTripsParticlesAndSeed()
+    {
+        var p = new FractalParameters { DlaParticles = 20000, DlaSeed = 42 };
+        var rp = RegionFractalParams.Snapshot(FractalType.Dla, p);
+        var applied = new FractalParameters();
+        rp!.ApplyTo(applied);
+        Assert.Equal(20000, applied.DlaParticles);
+        Assert.Equal(42, applied.DlaSeed);
+    }
+
+    [Fact]
+    public void LogisticSnapshot_RoundTripsSeedAndBurnIn()
+    {
+        var p = new FractalParameters { LogisticSeed = 0.31, LogisticBurnIn = 2500 };
+        var rp = RegionFractalParams.Snapshot(FractalType.Logistic, p);
+        var applied = new FractalParameters();
+        rp!.ApplyTo(applied);
+        Assert.Equal(0.31, applied.LogisticSeed, 12);
+        Assert.Equal(2500, applied.LogisticBurnIn);
+    }
+
+    [Fact]
+    public void PlasmaParams_SerializeLean_AndSurviveJsonRoundTrip()
+    {
+        var region = new FractalRegion
+        {
+            Name = "Clouds",
+            FractalType = FractalType.Plasma,
+            Zoom = 0.13,
+            Params = RegionFractalParams.Snapshot(FractalType.Plasma,
+                new FractalParameters { PlasmaSeed = 555, PlasmaRoughness = 0.6 }),
+        };
+        string json = JsonSerializer.Serialize(region);
+        Assert.Contains("PlasmaSeed", json);
+        Assert.DoesNotContain("Cam3DFamily", json); // 3D fields omitted when null
+
+        var back = JsonSerializer.Deserialize<FractalRegion>(json);
+        var applied = new FractalParameters();
+        back!.Params!.ApplyTo(applied);
+        Assert.Equal(555, applied.PlasmaSeed);
+    }
+
+    // StrangeAttractor / Buddhabrot have no snapshot block (hold uses live
+    // defaults) — Snapshot returns null, no empty block bloats the JSON.
+    [Theory]
+    [InlineData(FractalType.StrangeAttractor)]
+    [InlineData(FractalType.BuddhaBrot)]
+    public void NonSnapshottedNonSpatial_ReturnsNull(FractalType t)
+        => Assert.Null(RegionFractalParams.Snapshot(t, new FractalParameters()));
 }

@@ -444,6 +444,22 @@ namespace FracturingFog.Models
         [JsonIgnore(Condition = OmitNull)] public double? Cam3DPhi { get; set; }
         [JsonIgnore(Condition = OmitNull)] public double? Cam3DSliceW { get; set; }
 
+        // #94 (P4) — non-spatial family params. These families ignore plane
+        // zoom, so the video slideshow renders them as a static-hold leg; the
+        // generated image is defined by a seed / preset / roughness rather than a
+        // viewport, so snapshot those here to reproduce the authored look.
+        [JsonIgnore(Condition = OmitNull)] public int? PlasmaSeed { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public double? PlasmaRoughness { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public string? FlamePresetName { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public double? FlameGamma { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public int? DlaParticles { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public int? DlaSeed { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public double? LogisticSeed { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public int? LogisticBurnIn { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public int? RandomTileSeed { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public string? IFSPresetName { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public string? LSystemPresetName { get; set; }
+
         /// <summary>
         /// Capture the P1-relevant parameters for <paramref name="type"/> from a
         /// live <paramref name="p"/>. Returns null when the family needs nothing
@@ -582,6 +598,40 @@ namespace FracturingFog.Models
                     Cam3DPhi = p.BicomplexCameraPhi,
                     Cam3DSliceW = p.BicomplexSliceW,
                 },
+                // #94 (P4) — non-spatial families. Static-hold legs reproduce the
+                // authored generated image from its seed / preset / roughness.
+                FractalType.Plasma => new RegionFractalParams
+                {
+                    PlasmaSeed = p.PlasmaSeed,
+                    PlasmaRoughness = p.PlasmaRoughness,
+                },
+                FractalType.Flame => new RegionFractalParams
+                {
+                    FlamePresetName = p.FlamePresetName,
+                    FlameGamma = p.FlameGamma,
+                },
+                FractalType.Dla => new RegionFractalParams
+                {
+                    DlaParticles = p.DlaParticles,
+                    DlaSeed = p.DlaSeed,
+                },
+                FractalType.Logistic => new RegionFractalParams
+                {
+                    LogisticSeed = p.LogisticSeed,
+                    LogisticBurnIn = p.LogisticBurnIn,
+                },
+                FractalType.RandomTile => new RegionFractalParams
+                {
+                    RandomTileSeed = p.RandomTileSeed,
+                },
+                FractalType.IFS => new RegionFractalParams
+                {
+                    IFSPresetName = p.IFSPresetName,
+                },
+                FractalType.LSystem => new RegionFractalParams
+                {
+                    LSystemPresetName = p.LSystemPresetName,
+                },
                 // Mandelbrot, Tricorn, BurningShip, Magnet1/2, TearDrop and the
                 // generated families need no extra params — defaults suffice.
                 // UserBulb keeps its own dedicated camera fields (user code).
@@ -707,6 +757,19 @@ namespace FracturingFog.Models
                         break;
                 }
             }
+
+            // #94 (P4) — non-spatial family params (static-hold legs).
+            if (PlasmaSeed.HasValue) p.PlasmaSeed = PlasmaSeed.Value;
+            if (PlasmaRoughness.HasValue) p.PlasmaRoughness = PlasmaRoughness.Value;
+            if (!string.IsNullOrEmpty(FlamePresetName)) p.FlamePresetName = FlamePresetName;
+            if (FlameGamma.HasValue) p.FlameGamma = FlameGamma.Value;
+            if (DlaParticles.HasValue) p.DlaParticles = DlaParticles.Value;
+            if (DlaSeed.HasValue) p.DlaSeed = DlaSeed.Value;
+            if (LogisticSeed.HasValue) p.LogisticSeed = LogisticSeed.Value;
+            if (LogisticBurnIn.HasValue) p.LogisticBurnIn = LogisticBurnIn.Value;
+            if (RandomTileSeed.HasValue) p.RandomTileSeed = RandomTileSeed.Value;
+            if (!string.IsNullOrEmpty(IFSPresetName)) p.IFSPresetName = IFSPresetName;
+            if (!string.IsNullOrEmpty(LSystemPresetName)) p.LSystemPresetName = LSystemPresetName;
         }
     }
 
