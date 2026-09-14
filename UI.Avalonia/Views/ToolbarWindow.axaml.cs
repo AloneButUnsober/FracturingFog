@@ -26,6 +26,9 @@ public sealed partial class ToolbarWindow : Window
     {
         AvaloniaXamlLoader.Load(this);
         EscapeCloseBehavior.Attach(this);
+        // Global UI scale (#821). Same manual-resize edge as StatusPanelWindow: a
+        // scale change after a grip-resize resets to (designWidth × scale).
+        Services.WindowService.AttachUiScale(this);
 
         var move = this.FindControl<Border>("MoveHandle");
         if (move != null)

@@ -24,6 +24,10 @@ public sealed partial class MiniMapWindow : Window
     {
         AvaloniaXamlLoader.Load(this);
         EscapeCloseBehavior.Attach(this);
+        // Global UI scale (#821). MiniWindowTether reads Width/Height to re-anchor
+        // to its render-window corner, so scaling the window size keeps the tether
+        // correct (it re-hugs the corner on the resulting bounds change).
+        Services.WindowService.AttachUiScale(this);
 
         var handle = this.FindControl<Border>("DragHandle");
         if (handle != null)

@@ -25,6 +25,10 @@ public sealed partial class StatusPanelWindow : Window
     {
         AvaloniaXamlLoader.Load(this);
         EscapeCloseBehavior.Attach(this);
+        // Global UI scale (#821). Known edge: changing the UI scale AFTER a manual
+        // grip-resize resets the window to (designWidth × scale); the manual size
+        // is not preserved across a scale change. Acceptable for a first pass.
+        Services.WindowService.AttachUiScale(this);
 
         var drag = this.FindControl<Border>("DragRoot");
         if (drag != null)
