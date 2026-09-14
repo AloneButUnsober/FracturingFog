@@ -201,11 +201,24 @@ bilinear resample of a moving sub-rect), driven by `RunVideoHold`. No fractal
 recompute, so it's safe even for the slow generators. Frame 0 is the full frame,
 so it's continuous with the cross-fade.
 
+**Param-sweep hold ([#806], shipped 2026-09-14).** Opt-in `SweepParamsOnHold`
+(default off): the *sweepable* non-spatial families animate a smooth, cheap
+parameter over the leg instead of holding — **Logistic** scrolls its r-window
+(plane X = r; pan CenterX half a window), **AcidWarp** morphs its flow
+(`AcidWarpFlow` + blend). `RunVideoSweepHold` re-renders each frame with the
+param eased (start = authored, so frame 0 matches the pre-render); the per-frame
+`Calculate` catches OCE (skip/stop). `SupportsVideoParamSweep` gates the family
+set — only the smooth + cheap ones qualify, so the slow / non-smooth generators
+(Flame, DLA, Plasma, Buddhabrot) stay static-hold / Ken-Burns. Sweep wins over
+Ken-Burns for a sweepable family.
+
 ### P4 limitations (deliberate)
 
-- **No mid-leg param sweep** — Logistic r-window, Flame/Plasma/DLA seed drift,
-  Buddhabrot progressive accumulation are still a follow-up ([#806] tracks the
-  param-sweep + Buddhabrot-accumulation tracks; Ken-Burns of that issue shipped).
+- **Buddhabrot progressive accumulation** — the one remaining [#806] track: a
+  Buddhabrot hold leg could re-present its sample buffer as it accumulates rather
+  than rendering once. Not yet implemented.
+- Only Logistic + AcidWarp are param-swept; Plasma/Flame/DLA have no smooth cheap
+  scalar, so they hold (optionally Ken-Burns).
 - Strange Attractor / Buddhabrot family carry no snapshot block yet, so a held
   leg uses their live/default params (still renders, just not authored-exact).
 - Buddhabrot-family legs render once but can be slow at Standard tier; exclude

@@ -81,6 +81,7 @@ namespace FracturingFog.Rendering
         private bool _videoVaryConstantStart;
         private bool _videoVaryConstantSpeed;
         private bool _videoKenBurnsOnHold;
+        private bool _videoSweepParamsOnHold;
 
         // ── Region / theme restrictions (video slideshow) ─────────────────
         // Set per-run from VideoZoomRequest so a saved Video preset that pins
@@ -474,6 +475,7 @@ namespace FracturingFog.Rendering
             _videoVaryConstantStart = request.VaryConstantStart;
             _videoVaryConstantSpeed = request.VaryConstantSpeed;
             _videoKenBurnsOnHold = request.KenBurnsOnHold;
+            _videoSweepParamsOnHold = request.SweepParamsOnHold;
             _videoLegAnimators.Clear();
 
             // Region / theme restrictions for this run (#45).
@@ -2416,7 +2418,14 @@ namespace FracturingFog.Rendering
                     // recompute; RunVideoHold keeps the recorders fed with the held
                     // frame so a recorded slideshow gets a proper held segment, and
                     // (Ken-Burns on, #806) pans/zooms that frame in image space.
-                    RunVideoHold(newLegBuf, _calculator.Width, _calculator.Height, legSeconds, legCt);
+                    // #806 param-sweep: a sweepable family (Logistic r-window,
+                    // AcidWarp flow) re-renders a smooth mid-leg param sweep — this
+                    // wins over Ken-Burns for those families.
+                    if (_videoSweepParamsOnHold
+                        && FractalMotionCapabilities.SupportsVideoParamSweep(region.FractalType))
+                        RunVideoSweepHold(region, legSeconds, legCt);
+                    else
+                        RunVideoHold(newLegBuf, _calculator.Width, _calculator.Height, legSeconds, legCt);
                 }
                 else
                 {
@@ -2800,6 +2809,75 @@ namespace FracturingFog.Rendering
                 // Wait one frame; WaitOne returns true when the token is
                 // cancelled (skip/stop) → end the hold immediately.
                 if (ct.WaitHandle.WaitOne(frameMs)) break;
+            }
+        }
+
+        // #806 (param-sweep) — a sweepable non-spatial hold family renders a
+        // smooth mid-leg param sweep by re-computing each frame with the param
+        // advanced (eased). Cheap families only (Logistic, AcidWarp), gated by
+        // FractalMotionCapabilities.SupportsVideoParamSweep. Frame 0 uses the
+        // authored value, so it's continuous with the leg pre-render / cross-fade.
+        // Cancellation (skip/stop) ends the leg immediately — the per-frame
+        // Calculate catches OCE (matches the RenderVideoFrame fix, #803).
+        private void RunVideoSweepHold(FractalRegion region, double seconds, CancellationToken ct)
+        {
+            if (seconds <= 0.0) return;
+            var alt = SelectAltCalculator(region.FractalType);
+            if (alt == null) { RunVideoHold(null, 0, 0, seconds, ct); return; }
+
+            var p = ViewState.FractalParameters;
+            var type = region.FractalType;
+
+            // Sweep endpoints. Start = authored (so frame 0 matches the pre-render).
+            double logStartX = _calculator.CenterX, logEndX = logStartX;
+            double awStart = 0.0, awEnd = 0.0;
+            bool awMorphOrig = false;
+            if (type == FractalType.Logistic)
+            {
+                // Plane X = r axis; the visible r-window width is 3.5 / Zoom
+                // (LogisticCalculator, W ≥ H). Scroll the window half its width.
+                double span = 3.5 / Math.Max(1e-6, _calculator.Zoom);
+                logEndX = logStartX + 0.5 * span;
+            }
+            else if (type == FractalType.AcidWarp)
+            {
+                awMorphOrig = p.AcidWarpMorph;
+                p.AcidWarpMorph = true; // blend adjacent patterns → smooth morph
+                awStart = p.AcidWarpFlow;
+                awEnd = awStart + 1.5;  // ~1.5 pattern lengths over the leg
+            }
+
+            try
+            {
+                var sw = Stopwatch.StartNew();
+                int frameMs = (int)Math.Max(1.0, VideoFrameBudgetMs);
+                while (!ct.IsCancellationRequested && sw.Elapsed.TotalSeconds < seconds)
+                {
+                    double t = sw.Elapsed.TotalSeconds / seconds;
+                    if (t > 1.0) t = 1.0;
+                    double e = t * t * t * (t * (t * 6.0 - 15.0) + 10.0); // smootherstep
+
+                    if (type == FractalType.Logistic)
+                    {
+                        double cx = logStartX + (logEndX - logStartX) * e;
+                        _calculator.CenterX = cx; ViewState.CenterX = cx;
+                    }
+                    else if (type == FractalType.AcidWarp)
+                    {
+                        p.AcidWarpFlow = awStart + (awEnd - awStart) * e;
+                    }
+
+                    SyncAltCalculatorForVideoFrame(alt);
+                    try { alt.Calculate(ct); }
+                    catch (OperationCanceledException) { return; }
+                    UploadProcessedBuffer(alt.ColorBuffer, alt.Width, alt.Height);
+                    CaptureVideoFrame();
+                    if (ct.WaitHandle.WaitOne(frameMs)) break;
+                }
+            }
+            finally
+            {
+                if (type == FractalType.AcidWarp) p.AcidWarpMorph = awMorphOrig;
             }
         }
 
