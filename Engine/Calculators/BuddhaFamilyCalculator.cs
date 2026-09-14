@@ -81,6 +81,19 @@ public abstract class BuddhaFamilyCalculator : IFractalCalculator, IHeightFieldS
 
     public FractalParameters FractalParameters { get; set; } = new();
 
+    /// <summary>#806 — override the progressive batch count for this render (null
+    /// = the default <see cref="ProgressiveBatches"/>). The video-slideshow
+    /// Buddhabrot accumulation leg raises it so the "developing" progression has
+    /// more, finer steps. Only takes effect when BuddhaProgressive is on.</summary>
+    public int? ProgressiveBatchesOverride { get; set; }
+
+    /// <summary>#806 — invoked after each progressive batch is composited into
+    /// <see cref="ColorBuffer"/>, as (completedBatch, totalBatches). Lets the
+    /// video Buddhabrot hold present + pace the accumulation as it builds. Runs on
+    /// the Calculate() thread, between batches; null = no callback (the normal
+    /// interactive path). Never fired in single-pass (non-progressive) mode.</summary>
+    public Action<int, int>? OnBatchComposited { get; set; }
+
     /// <summary>Record orbits that DO NOT escape (in-set) when true;
     /// orbits that DO escape (classic Buddhabrot) when false.</summary>
     protected abstract bool IsInSet { get; }
@@ -140,7 +153,7 @@ public abstract class BuddhaFamilyCalculator : IFractalCalculator, IHeightFieldS
         double midY = CenterY;
 
         int threads = Math.Max(1, Environment.ProcessorCount);
-        int batches = progressive ? ProgressiveBatches : 1;
+        int batches = progressive ? Math.Max(1, ProgressiveBatchesOverride ?? ProgressiveBatches) : 1;
         int samplesPerBatch = Math.Max(1, samples / batches);
         int perThreadPerBatch = Math.Max(1, samplesPerBatch / threads);
 
@@ -230,6 +243,11 @@ public abstract class BuddhaFamilyCalculator : IFractalCalculator, IHeightFieldS
             // so a mid-render cancel still yields a usable image; single-pass
             // mode does it once after the only batch.
             Composite();
+
+            // #806 — let the video Buddhabrot hold present + pace the growing
+            // accumulation. Progressive only; skipped in single-pass.
+            if (progressive)
+                OnBatchComposited?.Invoke(batch + 1, batches);
         }
     }
 

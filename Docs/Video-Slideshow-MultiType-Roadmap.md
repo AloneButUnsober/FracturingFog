@@ -212,15 +212,21 @@ set — only the smooth + cheap ones qualify, so the slow / non-smooth generator
 (Flame, DLA, Plasma, Buddhabrot) stay static-hold / Ken-Burns. Sweep wins over
 Ken-Burns for a sweepable family.
 
+**Buddhabrot progressive accumulation ([#806], shipped 2026-09-14 — completes
+the issue).** Under the same `SweepParamsOnHold` opt-in, a Buddhabrot-family hold
+leg develops progressively: the leg fades into black (skipping the usual full
+pre-render) and `RunVideoBuddhaHold` presents the growing hit histogram batch by
+batch as samples accumulate, paced across the leg. `BuddhaFamilyCalculator` gained
+an `OnBatchComposited` hook + `ProgressiveBatchesOverride` (batch count scales
+with leg length, 16–60); `SupportsVideoBuddhaAccumulation` gates the four family
+types. Any leg time left after sampling holds the settled image.
+
 ### P4 limitations (deliberate)
 
-- **Buddhabrot progressive accumulation** — the one remaining [#806] track: a
-  Buddhabrot hold leg could re-present its sample buffer as it accumulates rather
-  than rendering once. Not yet implemented.
 - Only Logistic + AcidWarp are param-swept; Plasma/Flame/DLA have no smooth cheap
   scalar, so they hold (optionally Ken-Burns).
-- Strange Attractor / Buddhabrot family carry no snapshot block yet, so a held
-  leg uses their live/default params (still renders, just not authored-exact).
+- Strange Attractor carries no snapshot block yet, so a held leg uses its
+  live/default params (still renders, just not authored-exact).
 - Buddhabrot-family legs render once but can be slow at Standard tier; exclude
   them via the region/type filters if a run needs to stay snappy.
 
