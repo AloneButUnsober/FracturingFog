@@ -64,6 +64,7 @@ public sealed class SlideshowSettingsViewModel : ViewModelBase
     private double _postFxAdaptive;
     private bool _randomizeAnimByType;
     private bool _enableAnimations;
+    private bool _autoConstantDrift = true;
 
     private const string PostFxKeyBrightness = "brightness";
     private const string PostFxKeyContrast   = "contrast";
@@ -324,9 +325,24 @@ public sealed class SlideshowSettingsViewModel : ViewModelBase
         {
             this.RaiseAndSetIfChanged(ref _enableAnimations, value);
             this.RaisePropertyChanged(nameof(AnimationsExpanded));
+            this.RaisePropertyChanged(nameof(ShowAutoConstantDriftToggle));
             MarkDirty();
         }
     }
+
+    /// <summary>When animations are enabled, a zoomable-2D Video leg whose
+    /// family carries a natural complex constant (Julia c, Phoenix p, Glynn c)
+    /// that no authored animation drives gets a gentle default constant-path
+    /// drift instead of a plain point-zoom (#92 / P2). Default on.</summary>
+    public bool AutoConstantDrift
+    {
+        get => _autoConstantDrift;
+        set { this.RaiseAndSetIfChanged(ref _autoConstantDrift, value); MarkDirty(); }
+    }
+
+    /// <summary>Show the default-constant-drift toggle — only for a Video
+    /// slideshow with animations enabled (the drift rides the Phase-5 hooks).</summary>
+    public bool ShowAutoConstantDriftToggle => IsVideo && _enableAnimations;
 
     /// <summary>Show the "Enable animations" opt-in toggle — only for Image /
     /// Video. Animation type animates unconditionally, so the toggle is
@@ -444,6 +460,7 @@ public sealed class SlideshowSettingsViewModel : ViewModelBase
             this.RaisePropertyChanged(nameof(IsVideo));
             this.RaisePropertyChanged(nameof(IsAnimation));
             this.RaisePropertyChanged(nameof(ShowEnableAnimationsToggle));
+            this.RaisePropertyChanged(nameof(ShowAutoConstantDriftToggle));
             this.RaisePropertyChanged(nameof(AnimationsExpanded));
             MarkDirty();
         }
@@ -689,6 +706,7 @@ public sealed class SlideshowSettingsViewModel : ViewModelBase
         _working.IncludedAnimations = AvailableAnimations.Where(i => i.IsChecked).Select(i => i.Name).ToList();
         _working.RandomizeAnimationsByFractalType = _randomizeAnimByType;
         _working.EnableAnimations = _enableAnimations;
+        _working.AutoConstantDrift = _autoConstantDrift;
 
         _working.AdaptiveSweep.Enabled = _sweepEnabled;
         _working.AdaptiveSweep.Start = _sweepStart;
@@ -736,6 +754,7 @@ public sealed class SlideshowSettingsViewModel : ViewModelBase
         _postFxAdaptive = pv != null && pv.TryGetValue(PostFxKeyAdaptive, out var ad) ? ad : 0.0;
         _randomizeAnimByType = _working.RandomizeAnimationsByFractalType;
         _enableAnimations = _working.EnableAnimations;
+        _autoConstantDrift = _working.AutoConstantDrift;
 
         // Refresh per-config filter checkmarks. CheckableItem.IsChecked fires
         // Owner.OnFilterItemChanged → MarkDirty, which is guarded by
@@ -757,6 +776,8 @@ public sealed class SlideshowSettingsViewModel : ViewModelBase
         this.RaisePropertyChanged(nameof(ShowEnableAnimationsToggle));
         this.RaisePropertyChanged(nameof(EnableAnimations));
         this.RaisePropertyChanged(nameof(AnimationsExpanded));
+        this.RaisePropertyChanged(nameof(AutoConstantDrift));
+        this.RaisePropertyChanged(nameof(ShowAutoConstantDriftToggle));
         this.RaisePropertyChanged(nameof(RandomizeAnimationsByFractalType));
         this.RaisePropertyChanged(nameof(UseExtremeRegions));
         this.RaisePropertyChanged(nameof(TotalDisplaySec));
