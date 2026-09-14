@@ -61,7 +61,13 @@
                 Background="#161616"
                 BorderBrush="#333" BorderThickness="0,0,0,1"
                 IsVisible="{Binding IsToolbarVisible}">
-            <views:ToolbarView />
+            <!-- Global UI scale (#822). Only the FF toolbar content is scaled —
+                 the render Grid (row 1) + GpuSurfaceControl + InputSponge are
+                 left untransformed so the native HWND placement and the
+                 sponge→complex-plane input mapping stay 1:1. See #809 analysis. -->
+            <LayoutTransformControl x:Name="ToolbarScale">
+                <views:ToolbarView />
+            </LayoutTransformControl>
         </Border>
 
         <!-- Render surface + input sponge ─────────────────────────────────
@@ -113,7 +119,10 @@
                 Background="#161616"
                 BorderBrush="#333" BorderThickness="0,1,0,0"
                 IsVisible="{Binding IsStatusBarVisible}">
-            <views:StatusBarView />
+            <!-- Global UI scale (#822) — FF status bar content only (see toolbar). -->
+            <LayoutTransformControl x:Name="StatusScale">
+                <views:StatusBarView />
+            </LayoutTransformControl>
         </Border>
     </Grid>
 

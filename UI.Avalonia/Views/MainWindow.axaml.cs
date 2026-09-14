@@ -66,6 +66,12 @@ public sealed partial class MainWindow : Window
     private StatusPanelWindow? _statusPanelWin;
     private ToolbarWindow? _toolbarPanelWin;
 
+    // FF toolbar + status-bar scale wrappers (#822). Only these two chrome
+    // Borders' content is scaled by the global UI scale; the render surface and
+    // input sponge are deliberately left untransformed.
+    private LayoutTransformControl? _toolbarScale;
+    private LayoutTransformControl? _statusScale;
+
     // S-X8 (2026-06-27) — hold the delegates ConfigureMiniDepth subscribes
     // to RenderHost.ColorMapChanged / FrameCompleted so DetachShell can
     // remove them. Without the field, the lambda capture pinned the window
@@ -123,6 +129,18 @@ public sealed partial class MainWindow : Window
                 AvaloniaShell.OnSurfaceReady?.Invoke(surface.Surface);
             };
         }
+
+        // FF chrome scaling (#822). The render window itself is excluded from the
+        // global UI-scale wrap (native HWND placement + sponge→complex-plane input
+        // both assume 1:1 pixels), but its own FF toolbar and status bar CAN scale
+        // safely because they live in their own LayoutTransformControls, leaving
+        // the render Grid + InputSponge untransformed. The Auto-height chrome rows
+        // grow/shrink with scale → row 1 (render) resizes → one re-render, the same
+        // path as toggling toolbar/status visibility.
+        _toolbarScale = this.FindControl<LayoutTransformControl>("ToolbarScale");
+        _statusScale = this.FindControl<LayoutTransformControl>("StatusScale");
+        ApplyChromeScale(UiScaleService.Scale);
+        UiScaleService.ScaleChanged += ApplyChromeScale;
 
         DataContextChanged += OnDataContextChanged;
         Closed += OnClosed;
@@ -2193,9 +2211,17 @@ public sealed partial class MainWindow : Window
         }
     }
 
+    // FF toolbar + status-bar scale (#822). Never touches the render surface.
+    private void ApplyChromeScale(double scale)
+    {
+        if (_toolbarScale != null) _toolbarScale.LayoutTransform = new ScaleTransform(scale, scale);
+        if (_statusScale != null) _statusScale.LayoutTransform = new ScaleTransform(scale, scale);
+    }
+
     private void OnClosed(object? sender, EventArgs e)
     {
         _shuttingDown = true;
+        UiScaleService.ScaleChanged -= ApplyChromeScale;
         AvaloniaShell.ContextMenuRequested = null;
         AvaloniaShell.RenderSurfaceFocusRequested = null;
         AvaloniaShell.LeftDragWindowHook = null;
