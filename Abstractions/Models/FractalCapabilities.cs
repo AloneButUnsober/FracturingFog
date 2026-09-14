@@ -144,5 +144,23 @@ namespace FracturingFog.Models
         /// </summary>
         public static bool SupportsVideoZoomLeg(FractalType type)
             => MotionClass(type) == FractalMotionClass.Zoomable2D && !IsUserCode(type);
+
+        /// <summary>
+        /// True when a region of this type is eligible for a camera-fly leg in
+        /// the video slideshow (P3, #93): raymarched-3D and not user code. The
+        /// camera dolly rides the same VideoLoop zoom interpolation the 2D legs
+        /// use — every 3D calculator derives its camera distance as
+        /// <c>CameraDistance / Zoom</c>, so a log-lerp of Zoom from a wide
+        /// establishing value to the authored framing flies the camera in.
+        /// UserBulb is raymarched-3D but excluded (user code).
+        /// </summary>
+        public static bool SupportsVideoCameraLeg(FractalType type)
+            => MotionClass(type) == FractalMotionClass.Raymarch3D && !IsUserCode(type);
+
+        /// <summary>True when a region of this type gets any motion leg in the
+        /// video slideshow today — a 2D zoom leg (P1) or a 3D camera-fly leg
+        /// (P3). NonSpatial (P4) and user-code families return false.</summary>
+        public static bool SupportsVideoLeg(FractalType type)
+            => SupportsVideoZoomLeg(type) || SupportsVideoCameraLeg(type);
     }
 }

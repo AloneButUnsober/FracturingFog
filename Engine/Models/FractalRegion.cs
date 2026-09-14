@@ -429,6 +429,21 @@ namespace FracturingFog.Models
         [JsonIgnore(Condition = OmitNull)] public double? DomainWarpStrength { get; set; }
         [JsonIgnore(Condition = OmitNull)] public double? DomainWarpFrequency { get; set; }
 
+        // #93 (P3) — raymarched-3D camera baseline. One generic camera triple
+        // (orbit distance + azimuth/elevation) plus an optional 4D-slice offset,
+        // tagged with the family it belongs to (Cam3DFamily = the int FractalType)
+        // so ApplyTo can route it back to the right per-family fields without
+        // needing the region's type. Captured for Mandelbulb / Mandelbox / KIFS /
+        // Quaternion Julia+Mandelbrot / Kleinian / Bicomplex so a saved region —
+        // and each video-slideshow camera-fly leg (#93) — reproduces the authored
+        // framing. UserBulb keeps its own dedicated camera fields (user code, out
+        // of the slideshow pool). Light angles are left at their live values.
+        [JsonIgnore(Condition = OmitNull)] public int? Cam3DFamily { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public double? Cam3DDistance { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public double? Cam3DTheta { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public double? Cam3DPhi { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public double? Cam3DSliceW { get; set; }
+
         /// <summary>
         /// Capture the P1-relevant parameters for <paramref name="type"/> from a
         /// live <paramref name="p"/>. Returns null when the family needs nothing
@@ -512,8 +527,64 @@ namespace FracturingFog.Models
                     AcidWarpMorph = p.AcidWarpMorph ? true : null,
                     AcidWarpFlow = p.AcidWarpMorph ? p.AcidWarpFlow : null,
                 },
+                // #93 (P3) — raymarched-3D camera baseline. Each family stores its
+                // orbit camera under its own fields; capture into the generic
+                // Cam3D* block tagged with the family.
+                FractalType.Mandelbulb => new RegionFractalParams
+                {
+                    Cam3DFamily = (int)type,
+                    Cam3DDistance = p.BulbCameraDistance,
+                    Cam3DTheta = p.BulbCameraTheta,
+                    Cam3DPhi = p.BulbCameraPhi,
+                },
+                FractalType.Mandelbox => new RegionFractalParams
+                {
+                    Cam3DFamily = (int)type,
+                    Cam3DDistance = p.MandelboxCameraDistance,
+                    Cam3DTheta = p.MandelboxCameraTheta,
+                    Cam3DPhi = p.MandelboxCameraPhi,
+                },
+                FractalType.Kifs => new RegionFractalParams
+                {
+                    Cam3DFamily = (int)type,
+                    Cam3DDistance = p.KifsCameraDistance,
+                    Cam3DTheta = p.KifsCameraTheta,
+                    Cam3DPhi = p.KifsCameraPhi,
+                },
+                FractalType.QuaternionJulia => new RegionFractalParams
+                {
+                    Cam3DFamily = (int)type,
+                    Cam3DDistance = p.QJuliaCameraDistance,
+                    Cam3DTheta = p.QJuliaCameraTheta,
+                    Cam3DPhi = p.QJuliaCameraPhi,
+                    Cam3DSliceW = p.QJuliaSliceW,
+                },
+                FractalType.QuaternionMandelbrot => new RegionFractalParams
+                {
+                    Cam3DFamily = (int)type,
+                    Cam3DDistance = p.QMandelCameraDistance,
+                    Cam3DTheta = p.QMandelCameraTheta,
+                    Cam3DPhi = p.QMandelCameraPhi,
+                    Cam3DSliceW = p.QMandelSliceW,
+                },
+                FractalType.Kleinian => new RegionFractalParams
+                {
+                    Cam3DFamily = (int)type,
+                    Cam3DDistance = p.KleinianCameraDistance,
+                    Cam3DTheta = p.KleinianCameraTheta,
+                    Cam3DPhi = p.KleinianCameraPhi,
+                },
+                FractalType.BicomplexMandelbrot => new RegionFractalParams
+                {
+                    Cam3DFamily = (int)type,
+                    Cam3DDistance = p.BicomplexCameraDistance,
+                    Cam3DTheta = p.BicomplexCameraTheta,
+                    Cam3DPhi = p.BicomplexCameraPhi,
+                    Cam3DSliceW = p.BicomplexSliceW,
+                },
                 // Mandelbrot, Tricorn, BurningShip, Magnet1/2, TearDrop and the
                 // generated families need no extra params — defaults suffice.
+                // UserBulb keeps its own dedicated camera fields (user code).
                 _ => null,
             };
 
@@ -601,6 +672,41 @@ namespace FracturingFog.Models
                 p.DomainWarpStrength = DomainWarpStrength.Value;
             if (DomainWarpFrequency.HasValue)
                 p.DomainWarpFrequency = DomainWarpFrequency.Value;
+
+            // #93 (P3) — route the generic 3D camera baseline back to the family
+            // it was captured from. No-op when Cam3DFamily is absent (2D regions).
+            if (Cam3DFamily.HasValue && Cam3DDistance.HasValue
+                && Cam3DTheta.HasValue && Cam3DPhi.HasValue)
+            {
+                double d = Cam3DDistance.Value, th = Cam3DTheta.Value, ph = Cam3DPhi.Value;
+                switch ((FractalType)Cam3DFamily.Value)
+                {
+                    case FractalType.Mandelbulb:
+                        p.BulbCameraDistance = d; p.BulbCameraTheta = th; p.BulbCameraPhi = ph;
+                        break;
+                    case FractalType.Mandelbox:
+                        p.MandelboxCameraDistance = d; p.MandelboxCameraTheta = th; p.MandelboxCameraPhi = ph;
+                        break;
+                    case FractalType.Kifs:
+                        p.KifsCameraDistance = d; p.KifsCameraTheta = th; p.KifsCameraPhi = ph;
+                        break;
+                    case FractalType.QuaternionJulia:
+                        p.QJuliaCameraDistance = d; p.QJuliaCameraTheta = th; p.QJuliaCameraPhi = ph;
+                        if (Cam3DSliceW.HasValue) p.QJuliaSliceW = Cam3DSliceW.Value;
+                        break;
+                    case FractalType.QuaternionMandelbrot:
+                        p.QMandelCameraDistance = d; p.QMandelCameraTheta = th; p.QMandelCameraPhi = ph;
+                        if (Cam3DSliceW.HasValue) p.QMandelSliceW = Cam3DSliceW.Value;
+                        break;
+                    case FractalType.Kleinian:
+                        p.KleinianCameraDistance = d; p.KleinianCameraTheta = th; p.KleinianCameraPhi = ph;
+                        break;
+                    case FractalType.BicomplexMandelbrot:
+                        p.BicomplexCameraDistance = d; p.BicomplexCameraTheta = th; p.BicomplexCameraPhi = ph;
+                        if (Cam3DSliceW.HasValue) p.BicomplexSliceW = Cam3DSliceW.Value;
+                        break;
+                }
+            }
         }
     }
 

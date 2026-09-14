@@ -169,4 +169,88 @@ public sealed class RegionFractalParamsTests
         Assert.NotNull(back);
         Assert.Null(back!.Params);
     }
+
+    // ── #93 (P3) — raymarched-3D camera baseline round-trip ────────────────
+
+    [Fact]
+    public void MandelbulbSnapshot_RoundTripsCamera()
+    {
+        var p = new FractalParameters
+        {
+            BulbCameraDistance = 5.5, BulbCameraTheta = 1.1, BulbCameraPhi = 0.9,
+        };
+        var rp = RegionFractalParams.Snapshot(FractalType.Mandelbulb, p);
+        Assert.NotNull(rp);
+        Assert.Equal((int)FractalType.Mandelbulb, rp!.Cam3DFamily);
+
+        var applied = new FractalParameters();
+        rp.ApplyTo(applied);
+        Assert.Equal(5.5, applied.BulbCameraDistance, 12);
+        Assert.Equal(1.1, applied.BulbCameraTheta, 12);
+        Assert.Equal(0.9, applied.BulbCameraPhi, 12);
+    }
+
+    [Fact]
+    public void QuatMandelSnapshot_RoundTripsCameraAndSlice()
+    {
+        var p = new FractalParameters
+        {
+            QMandelCameraDistance = 3.3, QMandelCameraTheta = 0.7, QMandelCameraPhi = 0.4,
+            QMandelSliceW = 0.5,
+        };
+        var rp = RegionFractalParams.Snapshot(FractalType.QuaternionMandelbrot, p);
+        Assert.NotNull(rp);
+        Assert.Equal(0.5, rp!.Cam3DSliceW!.Value, 12);
+
+        var applied = new FractalParameters();
+        rp.ApplyTo(applied);
+        Assert.Equal(3.3, applied.QMandelCameraDistance, 12);
+        Assert.Equal(0.5, applied.QMandelSliceW, 12);
+    }
+
+    // ApplyTo routes to the family the camera was captured from and leaves other
+    // families' camera fields untouched.
+    [Fact]
+    public void CameraApply_RoutesToCorrectFamily_LeavesOthers()
+    {
+        var rp = RegionFractalParams.Snapshot(FractalType.Kifs,
+            new FractalParameters { KifsCameraDistance = 7.0, KifsCameraTheta = 0.2, KifsCameraPhi = 0.3 });
+        var applied = new FractalParameters(); // defaults
+        double bulbBefore = applied.BulbCameraDistance;
+        rp!.ApplyTo(applied);
+        Assert.Equal(7.0, applied.KifsCameraDistance, 12);
+        Assert.Equal(bulbBefore, applied.BulbCameraDistance, 12); // untouched
+    }
+
+    [Fact]
+    public void BicomplexCamera_SerializesLean_AndRoundTrips()
+    {
+        var region = new FractalRegion
+        {
+            Name = "Tessarine",
+            FractalType = FractalType.BicomplexMandelbrot,
+            Zoom = 1.0,
+            Params = RegionFractalParams.Snapshot(FractalType.BicomplexMandelbrot,
+                new FractalParameters
+                {
+                    BicomplexCameraDistance = 4.2, BicomplexCameraTheta = 0.6,
+                    BicomplexCameraPhi = 0.5, BicomplexSliceW = 0.4,
+                }),
+        };
+        string json = JsonSerializer.Serialize(region);
+        Assert.Contains("Cam3DFamily", json);
+        Assert.DoesNotContain("JuliaCRe", json); // 2D fields omitted when null
+
+        var back = JsonSerializer.Deserialize<FractalRegion>(json);
+        var applied = new FractalParameters();
+        back!.Params!.ApplyTo(applied);
+        Assert.Equal(4.2, applied.BicomplexCameraDistance, 12);
+        Assert.Equal(0.4, applied.BicomplexSliceW, 12);
+    }
+
+    // UserBulb is raymarched-3D but user code — Snapshot doesn't capture it into
+    // the generic Cam3D block (it keeps its own dedicated region fields).
+    [Fact]
+    public void UserBulb_NotCapturedIntoGenericCamera()
+        => Assert.Null(RegionFractalParams.Snapshot(FractalType.UserBulb, new FractalParameters()));
 }
