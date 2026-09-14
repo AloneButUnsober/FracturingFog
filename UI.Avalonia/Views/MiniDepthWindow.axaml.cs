@@ -26,6 +26,8 @@ public sealed partial class MiniDepthWindow : Window
     {
         AvaloniaXamlLoader.Load(this);
         EscapeCloseBehavior.Attach(this);
+        // Global UI scale (#821) — tether re-anchors on the resulting size change.
+        Services.WindowService.AttachUiScale(this);
         Inner = this.FindControl<MiniDepthControl>("Depth")
             ?? throw new InvalidOperationException("MiniDepthControl x:Name=Depth missing");
 

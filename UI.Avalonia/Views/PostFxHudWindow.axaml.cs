@@ -26,6 +26,10 @@ public sealed partial class PostFxHudWindow : Window
     {
         AvaloniaXamlLoader.Load(this);
         EscapeCloseBehavior.Attach(this);
+        // Global UI scale (#821). Width is fixed + Height is SizeToContent, so the
+        // wrap scales the fixed width and lets height follow the scaled content;
+        // the tether re-anchors on the size change.
+        Services.WindowService.AttachUiScale(this);
 
         var handle = this.FindControl<Border>("DragHandle");
         if (handle != null)

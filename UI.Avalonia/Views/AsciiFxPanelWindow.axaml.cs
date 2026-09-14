@@ -14,5 +14,7 @@ public sealed partial class AsciiFxPanelWindow : Window
     public AsciiFxPanelWindow()
     {
         AvaloniaXamlLoader.Load(this);
+        // Global UI scale (#821).
+        Services.WindowService.AttachUiScale(this);
     }
 }
