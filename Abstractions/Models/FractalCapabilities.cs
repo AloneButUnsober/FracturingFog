@@ -157,10 +157,23 @@ namespace FracturingFog.Models
         public static bool SupportsVideoCameraLeg(FractalType type)
             => MotionClass(type) == FractalMotionClass.Raymarch3D && !IsUserCode(type);
 
+        /// <summary>
+        /// True when a region of this type plays a static-hold leg in the video
+        /// slideshow (P4, #94): non-spatial and not user code. Plane zoom is a
+        /// no-op or wrong-axis for these, so the leg renders the authored frame
+        /// once and holds it (cross-fading in/out like a zoom leg) instead of a
+        /// broken zoom.
+        /// </summary>
+        public static bool SupportsVideoHoldLeg(FractalType type)
+            => MotionClass(type) == FractalMotionClass.NonSpatial && !IsUserCode(type);
+
         /// <summary>True when a region of this type gets any motion leg in the
-        /// video slideshow today — a 2D zoom leg (P1) or a 3D camera-fly leg
-        /// (P3). NonSpatial (P4) and user-code families return false.</summary>
+        /// video slideshow — a 2D zoom leg (P1), a 3D camera-fly leg (P3), or a
+        /// non-spatial static-hold leg (P4). Only user-code families (excluded
+        /// for RCE safety) return false.</summary>
         public static bool SupportsVideoLeg(FractalType type)
-            => SupportsVideoZoomLeg(type) || SupportsVideoCameraLeg(type);
+            => SupportsVideoZoomLeg(type)
+            || SupportsVideoCameraLeg(type)
+            || SupportsVideoHoldLeg(type);
     }
 }

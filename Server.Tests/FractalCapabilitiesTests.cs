@@ -112,17 +112,19 @@ public sealed class FractalCapabilitiesTests
     public void SupportsVideoCameraLeg_MatchesP3Policy(FractalType t, bool expected)
         => Assert.Equal(expected, FractalMotionCapabilities.SupportsVideoCameraLeg(t));
 
-    // SupportsVideoLeg = 2D zoom (P1) OR 3D camera (P3); NonSpatial + user code out.
+    // SupportsVideoLeg spans 2D zoom (P1), 3D camera (P3) and non-spatial hold
+    // (P4); only user-code families are out. (P4 flipped Plasma/BuddhaBrot to
+    // true — they now play static-hold legs.)
     [Theory]
     [InlineData(FractalType.Mandelbrot, true)]   // 2D zoom
     [InlineData(FractalType.Glynn, true)]        // 2D zoom
     [InlineData(FractalType.Mandelbulb, true)]   // 3D camera
     [InlineData(FractalType.Kleinian, true)]     // 3D camera
+    [InlineData(FractalType.Plasma, true)]       // non-spatial hold (P4)
+    [InlineData(FractalType.BuddhaBrot, true)]   // non-spatial hold (P4)
     [InlineData(FractalType.UserBulb, false)]    // user code
     [InlineData(FractalType.UserEquation, false)]// user code
-    [InlineData(FractalType.Plasma, false)]      // NonSpatial (P4)
-    [InlineData(FractalType.BuddhaBrot, false)]  // NonSpatial (P4)
-    public void SupportsVideoLeg_UnionOfP1AndP3(FractalType t, bool expected)
+    public void SupportsVideoLeg_UnionOfAllMotionKinds(FractalType t, bool expected)
         => Assert.Equal(expected, FractalMotionCapabilities.SupportsVideoLeg(t));
 
     // Camera-leg and zoom-leg sets are disjoint (a family is never both).
@@ -134,6 +136,54 @@ public sealed class FractalCapabilitiesTests
                 FractalMotionCapabilities.SupportsVideoZoomLeg(t)
                 && FractalMotionCapabilities.SupportsVideoCameraLeg(t),
                 $"{t} classified as both zoom and camera leg");
+    }
+
+    // P4 (#94): eligible for a static-hold leg iff non-spatial and not user code.
+    [Theory]
+    [InlineData(FractalType.Plasma, true)]
+    [InlineData(FractalType.Flame, true)]
+    [InlineData(FractalType.Dla, true)]
+    [InlineData(FractalType.Logistic, true)]
+    [InlineData(FractalType.IFS, true)]
+    [InlineData(FractalType.LSystem, true)]
+    [InlineData(FractalType.StrangeAttractor, true)]
+    [InlineData(FractalType.BuddhaBrot, true)]
+    [InlineData(FractalType.RandomTile, true)]
+    // 2D + 3D families are not hold legs.
+    [InlineData(FractalType.Mandelbrot, false)]
+    [InlineData(FractalType.Mandelbulb, false)]
+    public void SupportsVideoHoldLeg_MatchesP4Policy(FractalType t, bool expected)
+        => Assert.Equal(expected, FractalMotionCapabilities.SupportsVideoHoldLeg(t));
+
+    // SupportsVideoLeg now spans all three: 2D zoom, 3D camera, non-spatial hold.
+    // Only user-code families are excluded outright.
+    [Theory]
+    [InlineData(FractalType.Mandelbrot, true)]   // 2D zoom
+    [InlineData(FractalType.Mandelbulb, true)]   // 3D camera
+    [InlineData(FractalType.Plasma, true)]       // hold
+    [InlineData(FractalType.BuddhaBrot, true)]   // hold
+    [InlineData(FractalType.UserBulb, false)]    // user code
+    [InlineData(FractalType.UserEquation, false)]// user code
+    [InlineData(FractalType.Sandbox, false)]     // user code
+    public void SupportsVideoLeg_SpansAllThreeMotionKinds(FractalType t, bool expected)
+        => Assert.Equal(expected, FractalMotionCapabilities.SupportsVideoLeg(t));
+
+    // The three leg kinds partition the non-user-code families exactly (each gets
+    // exactly one leg kind; user code gets none).
+    [Fact]
+    public void LegKinds_PartitionNonUserCodeFamilies()
+    {
+        foreach (FractalType t in Enum.GetValues(typeof(FractalType)))
+        {
+            int kinds =
+                (FractalMotionCapabilities.SupportsVideoZoomLeg(t) ? 1 : 0)
+                + (FractalMotionCapabilities.SupportsVideoCameraLeg(t) ? 1 : 0)
+                + (FractalMotionCapabilities.SupportsVideoHoldLeg(t) ? 1 : 0);
+            if (FractalMotionCapabilities.IsUserCode(t))
+                Assert.Equal(0, kinds);
+            else
+                Assert.Equal(1, kinds);
+        }
     }
 
     // Every enum value returns a defined motion class — a new family added to

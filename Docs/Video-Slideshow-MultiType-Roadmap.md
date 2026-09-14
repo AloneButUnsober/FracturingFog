@@ -1,12 +1,13 @@
 # Multi-Type Video Slideshow — Feasibility &amp; Roadmap
 
 Status: **P1 shipped** (2026-07-22, [#91]); **P2 shipped** (2026-09-14, [#92]).
-**P3 shipped** (2026-09-14, [#93]). P4 planned. Spun out of the
+**Epic complete** — P1–P4 all shipped (2026-09-14). Spun out of the
 [Animation Roadmap](Animation-Roadmap.md) open follow-ups (2026-07-03) as its own
 project because the fix is real engine work, not an animation follow-up patch.
 
 Tracking issues: [#91] (P1, done) · [#92] (P2, done) · [#93] (P3, done) ·
-[#94] (P4).
+[#94] (P4, done). The video slideshow now plays every non-user-code family: 2D
+zoom legs, 3D camera-fly legs, and non-spatial static-hold legs.
 
 [#91]: https://github.com/AloneButUnsober/FracturingFog/issues/91
 [#92]: https://github.com/AloneButUnsober/FracturingFog/issues/92
@@ -168,11 +169,45 @@ the leg the right zoom endpoints.
 - Establishing factor + authored-zoom floor are fixed constants (6× / 1.0), not
   yet per-run options.
 
-## Remaining scope
+## P4 — shipped ([#94])
 
-- **P4** ([#94]) — Non-spatial families (Plasma, Flame, DLA, Logistic, IFS,
-  L-System, attractors, Buddhabrot) via static-hold / param-sweep legs. Admits
-  `NonSpatial`.
+Non-spatial families (Plasma, Flame, DLA, Logistic, IFS, L-System, Strange
+Attractor, Buddhabrot family, AcidWarp, Random Tile) play **static-hold** legs:
+the authored frame renders once and holds, cross-fading in/out like a zoom leg,
+instead of a broken plane zoom.
+
+1. **Non-spatial param snapshot.** `RegionFractalParams` gains the seed / preset /
+   roughness fields that define these generated images — Plasma (seed,
+   roughness), Flame (preset name, gamma), DLA (particles, seed), Logistic (seed,
+   burn-in), Random Tile (seed), IFS / L-System (preset name). `Snapshot()`
+   captures them; `ApplyTo()` restores them, so the held frame reproduces the
+   authored look. (AcidWarp already had its own param block from P1.)
+2. **Capability.** `SupportsVideoHoldLeg` = NonSpatial and not user code;
+   `SupportsVideoLeg` now spans zoom ∪ camera ∪ hold.
+3. **Pool + leg.** `VideoSlideshowLoop` admits `SupportsVideoHoldLeg` regions
+   (exempt from the 2D min-plane-zoom floor). A hold leg renders the authored
+   frame in the existing per-leg pre-render (through the family's alt calculator),
+   cross-fades it in, then `RunVideoHold` holds it for the leg — **no per-frame
+   recompute**, so slow generators (Flame, DLA, Buddhabrot) render once. The hold
+   still ticks the recorders at frame cadence so a recorded slideshow gets a
+   proper held segment; interruptible by skip / stop.
+
+### P4 limitations (deliberate)
+
+- **Static hold only** — no Ken-Burns pan/zoom and no mid-leg param sweep
+  (Logistic r-window, Flame/Plasma/DLA seed drift, Buddhabrot progressive
+  accumulation). These need image-space motion or per-frame recompute; a natural
+  follow-up.
+- Strange Attractor / Buddhabrot family carry no snapshot block yet, so a held
+  leg uses their live/default params (still renders, just not authored-exact).
+- Buddhabrot-family legs render once but can be slow at Standard tier; exclude
+  them via the region/type filters if a run needs to stay snappy.
+
+## Epic complete
+
+All four slices shipped. The video slideshow is no longer Mandelbrot-only — every
+non-user-code family plays an appropriate leg: 2D zoom (P1), Julia/Phoenix/Glynn
+constant drift (P2), 3D camera-fly (P3), non-spatial static-hold (P4).
 
 ## Security
 

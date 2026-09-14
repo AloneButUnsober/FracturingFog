@@ -2071,11 +2071,12 @@ namespace FracturingFog.Rendering
             {
                 bool zoom2D = FractalMotionCapabilities.SupportsVideoZoomLeg(r.FractalType);
                 bool camera3D = FractalMotionCapabilities.SupportsVideoCameraLeg(r.FractalType);
-                if (!zoom2D && !camera3D) continue;
+                bool hold = FractalMotionCapabilities.SupportsVideoHoldLeg(r.FractalType);
+                if (!zoom2D && !camera3D && !hold) continue;
                 if (r.QualityPreset?.Tier == QualityTier.Extreme) continue;
                 // 2D legs need real plane depth to be worth a zoom; 3D camera-fly
-                // legs (P3) dolly the camera regardless of the region's plane
-                // zoom, so they skip the min-zoom floor.
+                // (P3) and non-spatial static-hold (P4) legs don't zoom the plane,
+                // so they skip the min-zoom floor.
                 if (zoom2D && r.Zoom <= SlideshowMinRegionZoom) continue;
                 if (incRegions != null && !incRegions.Contains(r.Name)) continue;
                 if (incFractal != null && !incFractal.Contains(r.FractalType.ToString())) continue;
@@ -2154,6 +2155,13 @@ namespace FracturingFog.Rendering
                     camWideZoom = camAuthoredZoom / CameraLegEstablishingFactor;
                 }
 
+                // #94 (P4) — non-spatial static-hold leg. Plane zoom is a no-op
+                // for these families, so render the authored frame once and hold
+                // it (cross-fading in/out like a zoom leg) instead of a broken
+                // zoom. No per-frame recompute — safe for the slow generators
+                // (Flame, DLA, Buddhabrot).
+                bool isHoldLeg = FractalMotionCapabilities.SupportsVideoHoldLeg(region.FractalType);
+
                 // Per-leg palette pool capped at the leg's deep endpoint, then
                 // narrowed to the preset's included themes (#45). Empty after
                 // filtering ⇒ fall back to the run's full (already-filtered) pool.
@@ -2190,7 +2198,28 @@ namespace FracturingFog.Rendering
                 region.Relief3D?.ApplyTo(ViewState.FractalParameters);
                 _videoTargetIterations = region.Iterations;
 
-                if (isCameraLeg)
+                if (isHoldLeg)
+                {
+                    // #94 — static-hold leg: render at the region's authored view
+                    // and hold; no zoom/pan. Quality = authored preset floored to
+                    // the natural-for-authored-zoom tier (same rule as reverse).
+                    ViewState.CenterX = region.CenterX; ViewState.CenterXLo = region.CenterXLo;
+                    ViewState.CenterX2 = region.CenterX2; ViewState.CenterX3 = region.CenterX3;
+                    ViewState.CenterY = region.CenterY; ViewState.CenterYLo = region.CenterYLo;
+                    ViewState.CenterY2 = region.CenterY2; ViewState.CenterY3 = region.CenterY3;
+                    ViewState.Zoom = tz;
+
+                    QualityPreset natural = QualityPreset.Standard;
+                    foreach (var p in QualityPreset.All)
+                    {
+                        if (p.Tier == QualityTier.Extreme) continue;
+                        if (p.ZoomMax >= tz) { natural = p; break; }
+                    }
+                    QualityPreset authored = region.QualityPreset ?? natural;
+                    if (authored.Tier == QualityTier.Extreme) authored = natural;
+                    _videoQuality = authored.Tier > natural.Tier ? authored : natural;
+                }
+                else if (isCameraLeg)
                 {
                     // #93 — camera-fly leg: plane center is pinned to the region's
                     // (raymarch ignores plane pan), and the start zoom is the wide
@@ -2378,44 +2407,55 @@ namespace FracturingFog.Rendering
                 if (ct.IsCancellationRequested) break;
                 if (legCt.IsCancellationRequested) continue;
 
-                QDCoord legStartCX, legStartCY, legTargetCX, legTargetCY;
-                double legStartZoom, legTargetZoom;
-                if (isCameraLeg)
+                if (isHoldLeg)
                 {
-                    // #93 — pure camera dolly: plane center pinned to the region's,
-                    // Zoom lerps wide↔authored (VideoLoop log-lerps it, easing the
-                    // dolly in log-distance). No pan.
-                    var camCX = new QDCoord(region.CenterX, region.CenterXLo, region.CenterX2, region.CenterX3);
-                    var camCY = new QDCoord(region.CenterY, region.CenterYLo, region.CenterY2, region.CenterY3);
-                    legStartCX = legTargetCX = camCX;
-                    legStartCY = legTargetCY = camCY;
-                    legStartZoom = reverse ? camAuthoredZoom : camWideZoom;
-                    legTargetZoom = reverse ? camWideZoom : camAuthoredZoom;
-                }
-                else if (reverse)
-                {
-                    legStartCX = new QDCoord(region.CenterX, region.CenterXLo, region.CenterX2, region.CenterX3);
-                    legStartCY = new QDCoord(region.CenterY, region.CenterYLo, region.CenterY2, region.CenterY3);
-                    legStartZoom = tz;
-                    legTargetCX = new QDCoord(FractalViewState.DefaultCenterX, 0.0, 0.0, 0.0);
-                    legTargetCY = new QDCoord(FractalViewState.DefaultCenterY, 0.0, 0.0, 0.0);
-                    legTargetZoom = defZoom;
+                    // #94 — non-spatial static-hold: the authored frame is already
+                    // on screen (cross-faded in above). Hold it for the leg, no
+                    // recompute; RunVideoHold keeps the recorders fed with the held
+                    // frame so a recorded slideshow gets a proper held segment.
+                    RunVideoHold(legSeconds, legCt);
                 }
                 else
                 {
-                    legStartCX = new QDCoord(FractalViewState.DefaultCenterX, 0.0, 0.0, 0.0);
-                    legStartCY = new QDCoord(FractalViewState.DefaultCenterY, 0.0, 0.0, 0.0);
-                    legStartZoom = defZoom;
-                    legTargetCX = new QDCoord(region.CenterX, region.CenterXLo, region.CenterX2, region.CenterX3);
-                    legTargetCY = new QDCoord(region.CenterY, region.CenterYLo, region.CenterY2, region.CenterY3);
-                    legTargetZoom = tz;
-                }
+                    QDCoord legStartCX, legStartCY, legTargetCX, legTargetCY;
+                    double legStartZoom, legTargetZoom;
+                    if (isCameraLeg)
+                    {
+                        // #93 — pure camera dolly: plane center pinned to the region's,
+                        // Zoom lerps wide↔authored (VideoLoop log-lerps it, easing the
+                        // dolly in log-distance). No pan.
+                        var camCX = new QDCoord(region.CenterX, region.CenterXLo, region.CenterX2, region.CenterX3);
+                        var camCY = new QDCoord(region.CenterY, region.CenterYLo, region.CenterY2, region.CenterY3);
+                        legStartCX = legTargetCX = camCX;
+                        legStartCY = legTargetCY = camCY;
+                        legStartZoom = reverse ? camAuthoredZoom : camWideZoom;
+                        legTargetZoom = reverse ? camWideZoom : camAuthoredZoom;
+                    }
+                    else if (reverse)
+                    {
+                        legStartCX = new QDCoord(region.CenterX, region.CenterXLo, region.CenterX2, region.CenterX3);
+                        legStartCY = new QDCoord(region.CenterY, region.CenterYLo, region.CenterY2, region.CenterY3);
+                        legStartZoom = tz;
+                        legTargetCX = new QDCoord(FractalViewState.DefaultCenterX, 0.0, 0.0, 0.0);
+                        legTargetCY = new QDCoord(FractalViewState.DefaultCenterY, 0.0, 0.0, 0.0);
+                        legTargetZoom = defZoom;
+                    }
+                    else
+                    {
+                        legStartCX = new QDCoord(FractalViewState.DefaultCenterX, 0.0, 0.0, 0.0);
+                        legStartCY = new QDCoord(FractalViewState.DefaultCenterY, 0.0, 0.0, 0.0);
+                        legStartZoom = defZoom;
+                        legTargetCX = new QDCoord(region.CenterX, region.CenterXLo, region.CenterX2, region.CenterX3);
+                        legTargetCY = new QDCoord(region.CenterY, region.CenterYLo, region.CenterY2, region.CenterY3);
+                        legTargetZoom = tz;
+                    }
 
-                using var sweepCts = StartVideoLegSweep(legSeconds, legCt);
-                VideoLoop(legStartCX, legStartCY, legStartZoom,
-                          legTargetCX, legTargetCY, legTargetZoom,
-                          legSeconds, legCt, reverse);
-                sweepCts.Cancel();
+                    using var sweepCts = StartVideoLegSweep(legSeconds, legCt);
+                    VideoLoop(legStartCX, legStartCY, legStartZoom,
+                              legTargetCX, legTargetCY, legTargetZoom,
+                              legSeconds, legCt, reverse);
+                    sweepCts.Cancel();
+                }
 
                 if (ct.IsCancellationRequested) break;
 
@@ -2701,6 +2741,25 @@ namespace FracturingFog.Rendering
             if (dt > 0.25) dt = 0.25;
             for (int i = 0; i < _videoLegAnimators.Count; i++)
                 _videoLegAnimators[i].Tick(dt);
+        }
+
+        // #94 (P4) — hold the already-presented frame for a static-hold leg.
+        // No recompute: the last-uploaded buffer stays on screen; we just tick at
+        // the video frame cadence so any active recorders (MP4/GIF/PNG) capture a
+        // proper held segment with advancing timestamps. Interruptible by leg
+        // skip / stop.
+        private void RunVideoHold(double seconds, CancellationToken ct)
+        {
+            if (seconds <= 0.0) return;
+            var sw = Stopwatch.StartNew();
+            int frameMs = (int)Math.Max(1.0, VideoFrameBudgetMs);
+            while (!ct.IsCancellationRequested && sw.Elapsed.TotalSeconds < seconds)
+            {
+                CaptureVideoFrame();
+                // Wait one frame; WaitOne returns true when the token is
+                // cancelled (skip/stop) → end the hold immediately.
+                if (ct.WaitHandle.WaitOne(frameMs)) break;
+            }
         }
 
         // Per-pixel CPU dissolve from from→to over steps, presenting each.
