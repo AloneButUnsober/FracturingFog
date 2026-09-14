@@ -82,7 +82,7 @@ Now press **`V`** to bookmark it so you do not have to paste again next time.
 5. [Sort + Filter](#5-sort--filter)
 6. [Export + Import](#6-export--import)
 7. [JSON Schema](#7-json-schema)
-8. [Pipe-Separated Limb Format](#8-pipe-separated-limb-format)
+8. [Coordinate Notation (single-value vs pipe limbs)](#8-coordinate-notation-single-value-vs-pipe-limbs)
 9. [Slideshow Integration](#9-slideshow-integration)
 10. [Tips](#10-tips)
 
@@ -243,9 +243,22 @@ JSON is indented (System.Text.Json) — easy to diff and share. Field omission f
 
 ---
 
-## 8. Pipe-Separated Limb Format
+## 8. Coordinate Notation (single-value vs pipe limbs)
 
-The CX / CY textboxes accept a special **pipe-separated limb format** for paste-back of high-precision coordinates without loss:
+By **default the CX / CY boxes show a single decimal value** — the notation
+every other fractal program uses. A **Pipe notation (FF-native limbs)** checkbox
+in Control Center → Explore switches the display **and** the **Copy** output to
+pipe-delimited limbs for lossless deep-zoom precision. Either way, the boxes
+**accept both notations on paste**, so an FF-native `Hi|Lo|…` value from a
+forum post still pastes correctly whichever mode you are in.
+
+> [!NOTE]
+> Single-value notation carries about 29 significant digits. That is exact for
+> everyday views; a pure region jump stays lossless (the box isn't re-parsed
+> unless you edit it). To hand off the **full** DD/QD/OD precision of a very deep
+> coordinate by copy-paste, tick **Pipe notation** first.
+
+The pipe **limb format** looks like:
 
 ```
 -0.7548409391432949 | 1.2e-17 | 0 | 0
@@ -260,7 +273,9 @@ The CX / CY textboxes accept a special **pipe-separated limb format** for paste-
 
 Single-double paste-back drops the low limbs. Three- or four-limb paste-back round-trips DD / QD precision so a region saved at zoom 10²⁵ can be reproduced bit-exact across machines.
 
-The Explore section's **Copy** button (Control Center) emits the limb format for CX and CY, plain values for Zoom and Iter.
+The Explore section's **Copy** button (Control Center) emits CX/CY in the current
+notation (single-value by default, or pipe limbs when the checkbox is on), with
+plain values for Zoom and Iter.
 
 ---
 

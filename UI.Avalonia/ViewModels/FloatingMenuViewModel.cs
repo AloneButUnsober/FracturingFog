@@ -461,6 +461,24 @@ public sealed class FloatingMenuViewModel : ViewModelBase
     private string _cx = "";
     public string CX { get => _cx; set => this.RaiseAndSetIfChanged(ref _cx, value); }
 
+    private bool _usePipeNotation = FracturingFog.ViewState.CoordNotation.DefaultUsePipe;
+    /// <summary>#791 — CX/CY coordinate notation toggle. Default is single-value
+    /// (<see cref="FracturingFog.ViewState.CoordNotation.DefaultUsePipe"/> = false);
+    /// checked shows / copies pipe-delimited limbs (FF-native lossless form).
+    /// Paste always accepts either. Raises <see cref="NotationChanged"/> so the
+    /// shell can re-format the on-screen CX/CY immediately.</summary>
+    public bool UsePipeNotation
+    {
+        get => _usePipeNotation;
+        set
+        {
+            this.RaiseAndSetIfChanged(ref _usePipeNotation, value);
+            NotationChanged?.Invoke(this, EventArgs.Empty);
+        }
+    }
+    /// <summary>#791 — raised when <see cref="UsePipeNotation"/> flips.</summary>
+    public event EventHandler? NotationChanged;
+
     private string _cy = "";
     public string CY { get => _cy; set => this.RaiseAndSetIfChanged(ref _cy, value); }
 
