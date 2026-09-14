@@ -68,6 +68,15 @@ public sealed class ControlCenterViewModel : ViewModelBase
         GenerateCommandCommand = ReactiveCommand.Create(GenerateCommand);
         CopyCommandCommand = ReactiveCommand.Create(CopyCommand);
 
+        // Global UI-scale controls (#809 / S4 #813) — bound by the View section
+        // next to the Size combo. Commands drive the static UiScaleService; the
+        // percent label tracks it live. This VM is the app-lifetime shell VM, so
+        // the static-event subscription lives as long as the app (no leak).
+        UiScaleUpCommand    = ReactiveCommand.Create(UiScaleService.Increase);
+        UiScaleDownCommand  = ReactiveCommand.Create(UiScaleService.Decrease);
+        UiScaleResetCommand = ReactiveCommand.Create(UiScaleService.Reset);
+        UiScaleService.ScaleChanged += _ => this.RaisePropertyChanged(nameof(UiScalePercent));
+
         Workspaces = new ObservableCollection<string>();
         SaveWorkspaceCommand   = ReactiveCommand.CreateFromTask(SaveWorkspaceAsync);
         ApplyWorkspaceCommand  = ReactiveCommand.Create(ApplyWorkspace);
@@ -104,6 +113,21 @@ public sealed class ControlCenterViewModel : ViewModelBase
 
     /// <summary>The shared FloatingMenu VM most sections bind through.</summary>
     public FloatingMenuViewModel Menu { get; }
+
+    // ── Global UI scale (#809 / S4 #813) ──────────────────────────────────────
+
+    /// <summary>Enlarge the UI one step (also Ctrl+=).</summary>
+    public ReactiveCommand<Unit, Unit> UiScaleUpCommand { get; }
+
+    /// <summary>Shrink the UI one step (also Ctrl+-).</summary>
+    public ReactiveCommand<Unit, Unit> UiScaleDownCommand { get; }
+
+    /// <summary>Reset the UI to 100% (also Ctrl+0).</summary>
+    public ReactiveCommand<Unit, Unit> UiScaleResetCommand { get; }
+
+    /// <summary>Current UI scale as a percent label (e.g. "120%"), tracked live
+    /// via <see cref="UiScaleService.ScaleChanged"/>.</summary>
+    public string UiScalePercent => $"{Math.Round(UiScaleService.Scale * 100)}%";
 
     // ── Window-arrangement workspaces (#433 slice 3 — #471) ──────────────────
     //

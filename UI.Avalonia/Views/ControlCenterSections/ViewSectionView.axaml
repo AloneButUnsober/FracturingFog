@@ -23,6 +23,21 @@
                     <ComboBox ItemsSource="{Binding Menu.ResolutionNames}"
                               SelectedItem="{Binding Menu.SelectedResolution}"
                               Width="160" ToolTip.Tip="Set window dimensions" />
+                    <!-- Global UI scale (#809 / S4 #813): shrink / percent / enlarge /
+                         reset. Scales all dialogs + windows (not the render window).
+                         Shortcuts: Ctrl+-, Ctrl+=, Ctrl+0. -->
+                    <TextBlock Text="UI" VerticalAlignment="Center" Foreground="#9B9B9B" FontWeight="Bold" />
+                    <Button Content="A−" Padding="8,2" VerticalAlignment="Center"
+                            Command="{Binding UiScaleDownCommand}"
+                            ToolTip.Tip="Make the UI (all dialogs/windows) smaller — Ctrl+-" />
+                    <TextBlock Text="{Binding UiScalePercent}" Width="44" TextAlignment="Center"
+                               VerticalAlignment="Center" Foreground="#DCDCDC" FontWeight="Bold" />
+                    <Button Content="A+" Padding="8,2" VerticalAlignment="Center"
+                            Command="{Binding UiScaleUpCommand}"
+                            ToolTip.Tip="Make the UI (all dialogs/windows) larger — Ctrl+=" />
+                    <Button Content="100%" Padding="6,2" VerticalAlignment="Center"
+                            Command="{Binding UiScaleResetCommand}"
+                            ToolTip.Tip="Reset UI size to 100% — Ctrl+0" />
                 </StackPanel>
                 <!-- Big Buttons (kid mode): opens the standalone three-button kid
                      dialog and auto-closes the Control Center. -->

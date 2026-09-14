@@ -259,7 +259,7 @@ namespace FracturingFog.UI.Avalonia.Services
         /// tooltips render as separate top-levels outside this control and are not
         /// scaled here; a global base font-size token covers their text.
         /// </summary>
-        private static void AttachUiScale(Window win)
+        internal static void AttachUiScale(Window win)
         {
             // Never scale the render surface or the splash.
             if (win is MainWindow or SplashWindow) return;
@@ -303,6 +303,38 @@ namespace FracturingFog.UI.Avalonia.Services
             void OnScaleChanged(double s) => Apply(s);
             UiScaleService.ScaleChanged += OnScaleChanged;
             win.Closed += (_, _) => UiScaleService.ScaleChanged -= OnScaleChanged;
+
+            // Ctrl+= / Ctrl+- / Ctrl+0 shortcuts (#809 / S4 #813). Attached to
+            // every scaled window (i.e. all non-render/splash windows — the same
+            // exclusion the wrap uses), so the shortcuts work from any dialog. The
+            // render window is intentionally left out, per epic scope. Bubbling +
+            // handledEventsToo so a focused control's own key handling doesn't mask
+            // the accelerator.
+            win.AddHandler(InputElement.KeyDownEvent, OnUiScaleKey,
+                RoutingStrategies.Bubble, handledEventsToo: true);
+        }
+
+        private static void OnUiScaleKey(object? sender, KeyEventArgs e)
+        {
+            if (!e.KeyModifiers.HasFlag(KeyModifiers.Control)) return;
+            switch (e.Key)
+            {
+                case Key.OemPlus:
+                case Key.Add:
+                    UiScaleService.Increase();
+                    e.Handled = true;
+                    break;
+                case Key.OemMinus:
+                case Key.Subtract:
+                    UiScaleService.Decrease();
+                    e.Handled = true;
+                    break;
+                case Key.D0:
+                case Key.NumPad0:
+                    UiScaleService.Reset();
+                    e.Handled = true;
+                    break;
+            }
         }
 
         // ── Scroll snap-back on activation (#657) ────────────────────────────
