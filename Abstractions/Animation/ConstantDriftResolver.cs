@@ -41,9 +41,18 @@ public static class ConstantDriftResolver
     /// no drift-able constant. <paramref name="rng"/> adds per-leg variety
     /// (shape, entry angle, direction); pass <c>null</c> for a deterministic
     /// orbit (used by tests).
+    ///
+    /// <paramref name="varyStart"/> (#801) begins each leg at a small bounded
+    /// random offset from the authored constant (≤ the drift amplitude) instead
+    /// of on it — the caller must render the leg pre-render at the animator's
+    /// <see cref="ConstantPathLegAnimator.StartValue"/> to avoid a first-frame
+    /// jump. <paramref name="varySpeed"/> (#801) randomises the traversal speed
+    /// within a tasteful band. Both require <paramref name="rng"/> (no RNG ⇒ the
+    /// deterministic single-orbit-on-the-constant P2 default).
     /// </summary>
     public static ConstantPathLegAnimator? TryBuild(
-        FractalType type, FractalParameters? p, double legSeconds, Random? rng = null)
+        FractalType type, FractalParameters? p, double legSeconds, Random? rng = null,
+        bool varyStart = false, bool varySpeed = false)
     {
         if (p == null) return null;
         string? name = ConstantParamName(type);
@@ -73,6 +82,8 @@ public static class ConstantDriftResolver
         // (orbit, zero angles) when no RNG is supplied.
         ConstantPathShape shape = ConstantPathShape.Orbit;
         double startAngle = 0.0, lineAngle = 0.0;
+        Complex startOffset = default;
+        double speed = 1.0;
         if (rng != null)
         {
             int roll = rng.Next(4); // 0,1 = Orbit, 2 = Arc, 3 = Line
@@ -84,10 +95,28 @@ public static class ConstantDriftResolver
             };
             startAngle = rng.NextDouble() * 2.0 * System.Math.PI;
             lineAngle = rng.NextDouble() * 2.0 * System.Math.PI;
+
+            // #801 — per-leg start-position variance: a bounded random offset
+            // (30–100% of amplitude, random direction) so successive legs of the
+            // same region begin at a different c. Stays ≤ amplitude, so the set
+            // keeps its shape.
+            if (varyStart)
+            {
+                double mag = amp * (0.3 + 0.7 * rng.NextDouble());
+                double ang = rng.NextDouble() * 2.0 * System.Math.PI;
+                startOffset = new Complex(mag * System.Math.Cos(ang), mag * System.Math.Sin(ang));
+            }
+
+            // #801 — per-leg speed variance within a tasteful band (0.75×–1.75×
+            // one traversal) so leg-to-leg constant motion differs without
+            // strobing.
+            if (varySpeed)
+                speed = 0.75 + rng.NextDouble();
         }
 
         return new ConstantPathLegAnimator(
             name, baseValue, amp, shape, legSeconds, setter,
-            startAngle: startAngle, lineAngle: lineAngle);
+            startAngle: startAngle, lineAngle: lineAngle,
+            startOffset: startOffset, speed: speed);
     }
 }

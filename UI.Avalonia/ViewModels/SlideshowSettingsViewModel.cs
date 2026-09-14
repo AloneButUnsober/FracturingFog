@@ -65,6 +65,8 @@ public sealed class SlideshowSettingsViewModel : ViewModelBase
     private bool _randomizeAnimByType;
     private bool _enableAnimations;
     private bool _autoConstantDrift = true;
+    private bool _varyConstantStart;
+    private bool _varyConstantSpeed;
 
     private const string PostFxKeyBrightness = "brightness";
     private const string PostFxKeyContrast   = "contrast";
@@ -326,6 +328,7 @@ public sealed class SlideshowSettingsViewModel : ViewModelBase
             this.RaiseAndSetIfChanged(ref _enableAnimations, value);
             this.RaisePropertyChanged(nameof(AnimationsExpanded));
             this.RaisePropertyChanged(nameof(ShowAutoConstantDriftToggle));
+            this.RaisePropertyChanged(nameof(ShowConstantDriftVarianceToggles));
             MarkDirty();
         }
     }
@@ -337,12 +340,37 @@ public sealed class SlideshowSettingsViewModel : ViewModelBase
     public bool AutoConstantDrift
     {
         get => _autoConstantDrift;
-        set { this.RaiseAndSetIfChanged(ref _autoConstantDrift, value); MarkDirty(); }
+        set
+        {
+            this.RaiseAndSetIfChanged(ref _autoConstantDrift, value);
+            this.RaisePropertyChanged(nameof(ShowConstantDriftVarianceToggles));
+            MarkDirty();
+        }
     }
 
     /// <summary>Show the default-constant-drift toggle — only for a Video
     /// slideshow with animations enabled (the drift rides the Phase-5 hooks).</summary>
     public bool ShowAutoConstantDriftToggle => IsVideo && _enableAnimations;
+
+    /// <summary>Begin each constant-drift leg at a small random offset from the
+    /// authored constant so repeated legs of a region differ (#801).</summary>
+    public bool VaryConstantStart
+    {
+        get => _varyConstantStart;
+        set { this.RaiseAndSetIfChanged(ref _varyConstantStart, value); MarkDirty(); }
+    }
+
+    /// <summary>Randomise each constant-drift leg's speed within a tasteful band
+    /// (#801).</summary>
+    public bool VaryConstantSpeed
+    {
+        get => _varyConstantSpeed;
+        set { this.RaiseAndSetIfChanged(ref _varyConstantSpeed, value); MarkDirty(); }
+    }
+
+    /// <summary>Show the per-leg drift-variance toggles — only when the default
+    /// constant drift itself is available and on (#801).</summary>
+    public bool ShowConstantDriftVarianceToggles => ShowAutoConstantDriftToggle && _autoConstantDrift;
 
     /// <summary>Show the "Enable animations" opt-in toggle — only for Image /
     /// Video. Animation type animates unconditionally, so the toggle is
@@ -461,6 +489,7 @@ public sealed class SlideshowSettingsViewModel : ViewModelBase
             this.RaisePropertyChanged(nameof(IsAnimation));
             this.RaisePropertyChanged(nameof(ShowEnableAnimationsToggle));
             this.RaisePropertyChanged(nameof(ShowAutoConstantDriftToggle));
+            this.RaisePropertyChanged(nameof(ShowConstantDriftVarianceToggles));
             this.RaisePropertyChanged(nameof(AnimationsExpanded));
             MarkDirty();
         }
@@ -707,6 +736,8 @@ public sealed class SlideshowSettingsViewModel : ViewModelBase
         _working.RandomizeAnimationsByFractalType = _randomizeAnimByType;
         _working.EnableAnimations = _enableAnimations;
         _working.AutoConstantDrift = _autoConstantDrift;
+        _working.VaryConstantStart = _varyConstantStart;
+        _working.VaryConstantSpeed = _varyConstantSpeed;
 
         _working.AdaptiveSweep.Enabled = _sweepEnabled;
         _working.AdaptiveSweep.Start = _sweepStart;
@@ -755,6 +786,8 @@ public sealed class SlideshowSettingsViewModel : ViewModelBase
         _randomizeAnimByType = _working.RandomizeAnimationsByFractalType;
         _enableAnimations = _working.EnableAnimations;
         _autoConstantDrift = _working.AutoConstantDrift;
+        _varyConstantStart = _working.VaryConstantStart;
+        _varyConstantSpeed = _working.VaryConstantSpeed;
 
         // Refresh per-config filter checkmarks. CheckableItem.IsChecked fires
         // Owner.OnFilterItemChanged → MarkDirty, which is guarded by
@@ -778,6 +811,9 @@ public sealed class SlideshowSettingsViewModel : ViewModelBase
         this.RaisePropertyChanged(nameof(AnimationsExpanded));
         this.RaisePropertyChanged(nameof(AutoConstantDrift));
         this.RaisePropertyChanged(nameof(ShowAutoConstantDriftToggle));
+        this.RaisePropertyChanged(nameof(VaryConstantStart));
+        this.RaisePropertyChanged(nameof(VaryConstantSpeed));
+        this.RaisePropertyChanged(nameof(ShowConstantDriftVarianceToggles));
         this.RaisePropertyChanged(nameof(RandomizeAnimationsByFractalType));
         this.RaisePropertyChanged(nameof(UseExtremeRegions));
         this.RaisePropertyChanged(nameof(TotalDisplaySec));

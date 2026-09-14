@@ -78,6 +78,8 @@ namespace FracturingFog.Rendering
         private IReadOnlyList<string>? _videoAnimFilter;
         private bool _videoAnimRandomize;
         private bool _videoAutoConstantDrift = true;
+        private bool _videoVaryConstantStart;
+        private bool _videoVaryConstantSpeed;
 
         // ── Region / theme restrictions (video slideshow) ─────────────────
         // Set per-run from VideoZoomRequest so a saved Video preset that pins
@@ -468,6 +470,8 @@ namespace FracturingFog.Rendering
             _videoAnimFilter = request.FilterAnimations;
             _videoAnimRandomize = request.RandomizeAnimationsByFractalType;
             _videoAutoConstantDrift = request.AutoConstantDrift;
+            _videoVaryConstantStart = request.VaryConstantStart;
+            _videoVaryConstantSpeed = request.VaryConstantSpeed;
             _videoLegAnimators.Clear();
 
             // Region / theme restrictions for this run (#45).
@@ -1211,7 +1215,16 @@ namespace FracturingFog.Rendering
                     return;
                 }
 
-                alt.Calculate(ct);
+                // A per-frame skip (SkipLeg) or Stop cancels ct mid-Calculate;
+                // the alt calculators run Parallel.For with the token, which
+                // throws OCE. Swallow it and abandon the frame — VideoLoop's
+                // next ct check exits the leg and the slideshow loop continues
+                // to the next leg. Without this, the OCE propagates out and
+                // faults the whole slideshow task (abrupt stop) — the bug was
+                // reachable whenever a Julia/Phoenix/Glynn (alt-path) leg was
+                // skipped, e.g. with constant-drift on (#801 smoke test).
+                try { alt.Calculate(ct); }
+                catch (OperationCanceledException) { return; }
                 if (ShowPerfHud)
                     _perfStats.RecordCalc((Stopwatch.GetTimestamp() - calcStartA) * 1000.0 / Stopwatch.Frequency);
                 if (ct.IsCancellationRequested) return;
@@ -1252,7 +1265,10 @@ namespace FracturingFog.Rendering
             }
 
             long calcStart = ShowPerfHud ? Stopwatch.GetTimestamp() : 0;
-            _calculator.Calculate(ct);
+            // As above: swallow a mid-Calculate cancel (skip / stop) so it
+            // abandons the frame instead of faulting the slideshow task.
+            try { _calculator.Calculate(ct); }
+            catch (OperationCanceledException) { return; }
             if (ShowPerfHud)
             {
                 _perfStats.RecordCalc((Stopwatch.GetTimestamp() - calcStart) * 1000.0 / Stopwatch.Frequency);
@@ -2564,8 +2580,15 @@ namespace FracturingFog.Rendering
                     return;
 
             var drift = ConstantDriftResolver.TryBuild(
-                region.FractalType, ViewState.FractalParameters, legSeconds, _videoRng);
+                region.FractalType, ViewState.FractalParameters, legSeconds, _videoRng,
+                varyStart: _videoVaryConstantStart, varySpeed: _videoVaryConstantSpeed);
             if (drift == null) return;
+
+            // #801 — when the leg starts off the authored constant, write its
+            // start value into the live params NOW so the leg pre-render (fade
+            // target, taken before the first Tick) renders at that constant and
+            // frame 0 doesn't jump.
+            if (drift.HasStartOffset) drift.ApplyStartValue();
 
             _videoLegAnimators.Add(drift);
             _videoAnimLastTicks = Stopwatch.GetTimestamp();

@@ -142,4 +142,110 @@ public sealed class ConstantPathLegAnimatorTests
         a!.Tick(2.0); // mid-leg
         Assert.NotEqual(new Complex(0.56667, 0.0), p.PhoenixP);
     }
+
+    // ── #801 — per-leg start-position + speed variance ─────────────────────
+
+    // Default: no start offset, leg begins on the authored constant.
+    [Fact]
+    public void StartValue_Default_IsBase()
+    {
+        var baseC = new Complex(-0.7, 0.27015);
+        var a = new ConstantPathLegAnimator("JuliaC", baseC, 0.05,
+            ConstantPathShape.Orbit, 1.0, _ => { });
+        Assert.False(a.HasStartOffset);
+        Assert.Equal(baseC, a.StartValue);
+    }
+
+    // A start offset shifts StartValue but the path offset is still zero at u=0
+    // (the offset is added on top, not folded into Offset()).
+    [Fact]
+    public void StartOffset_ShiftsStartValue_ButOffsetStillZeroAtStart()
+    {
+        var baseC = new Complex(0.1, 0.2);
+        var off = new Complex(0.03, -0.01);
+        var a = new ConstantPathLegAnimator("JuliaC", baseC, 0.05,
+            ConstantPathShape.Orbit, 1.0, _ => { }, startOffset: off);
+        Assert.True(a.HasStartOffset);
+        Assert.Equal(baseC + off, a.StartValue);
+        Assert.True(a.Offset(0.0).Magnitude < Eps);
+    }
+
+    // ApplyStartValue writes StartValue into the bound param (used to sync the
+    // leg pre-render before the first Tick).
+    [Fact]
+    public void ApplyStartValue_WritesStartValue()
+    {
+        var baseC = new Complex(-0.8, 0.156);
+        var off = new Complex(0.02, 0.02);
+        Complex current = Complex.Zero;
+        var a = new ConstantPathLegAnimator("JuliaC", baseC, 0.05,
+            ConstantPathShape.Line, 1.0, c => current = c, startOffset: off);
+        a.ApplyStartValue();
+        Assert.Equal(baseC + off, current);
+    }
+
+    // First tick begins at (near) StartValue when there's a start offset.
+    [Fact]
+    public void Tick_BeginsNearStartValue_WithOffset()
+    {
+        var baseC = new Complex(0.0, 0.0);
+        var off = new Complex(0.04, 0.0);
+        Complex current = Complex.Zero;
+        var a = new ConstantPathLegAnimator("JuliaC", baseC, 0.05,
+            ConstantPathShape.Orbit, legSeconds: 100.0, setter: c => current = c,
+            startOffset: off);
+        a.Tick(0.001); // u ≈ 0
+        Assert.True((current - a.StartValue).Magnitude < 1e-3);
+    }
+
+    // Integer speed still closes an orbit (returns to base); a fractional speed
+    // ends off-base.
+    [Fact]
+    public void Speed_IntegerOrbit_ClosesToBase_FractionalDoesNot()
+    {
+        var closed = new ConstantPathLegAnimator("JuliaC", Complex.Zero, 0.05,
+            ConstantPathShape.Orbit, 1.0, _ => { }, speed: 2.0);
+        Assert.True(closed.Offset(1.0).Magnitude < Eps);
+
+        var open = new ConstantPathLegAnimator("JuliaC", Complex.Zero, 0.05,
+            ConstantPathShape.Orbit, 1.0, _ => { }, speed: 1.5);
+        Assert.True(open.Offset(1.0).Magnitude > 1e-3);
+    }
+
+    // Higher speed travels farther by mid-leg (more of the orbit covered).
+    [Fact]
+    public void Speed_MovesFartherByMidLeg()
+    {
+        var slow = new ConstantPathLegAnimator("JuliaC", Complex.Zero, 0.05,
+            ConstantPathShape.Line, 1.0, _ => { }, speed: 0.5);
+        var fast = new ConstantPathLegAnimator("JuliaC", Complex.Zero, 0.05,
+            ConstantPathShape.Line, 1.0, _ => { }, speed: 1.0);
+        // At u=0.5: slow = sin(π·0.5·0.5)=sin(π/4); fast = sin(π·0.5)=1 → farther.
+        Assert.True(fast.Offset(0.5).Magnitude > slow.Offset(0.5).Magnitude);
+    }
+
+    // Resolver: varyStart produces a bounded start offset (≤ amplitude); default
+    // leaves the leg on the authored constant.
+    [Fact]
+    public void Resolver_VaryStart_BoundedOffset()
+    {
+        var p = new FractalParameters { JuliaC = new Complex(-0.7, 0.27015) };
+        var rng = new Random(1234);
+        var a = ConstantDriftResolver.TryBuild(FractalType.Julia, p, 8.0, rng, varyStart: true);
+        Assert.NotNull(a);
+        Assert.True(a!.HasStartOffset);
+        double amp = System.Math.Clamp(0.045 * (0.5 + p.JuliaC.Magnitude), 0.02, 0.12);
+        double offMag = (a.StartValue - p.JuliaC).Magnitude;
+        Assert.True(offMag > 0.0 && offMag <= amp + Eps, $"offset {offMag} out of (0, {amp}]");
+    }
+
+    [Fact]
+    public void Resolver_NoVaryStart_StartsOnConstant()
+    {
+        var p = new FractalParameters { JuliaC = new Complex(-0.7, 0.27015) };
+        var a = ConstantDriftResolver.TryBuild(FractalType.Julia, p, 8.0, new Random(1), varyStart: false);
+        Assert.NotNull(a);
+        Assert.False(a!.HasStartOffset);
+        Assert.Equal(p.JuliaC, a.StartValue);
+    }
 }

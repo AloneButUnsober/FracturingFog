@@ -3566,6 +3566,8 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
             FilterAnimations = config.FilterAnimations,
             RandomizeAnimationsByFractalType = config.RandomizeAnimationsByFractalType,
             AutoConstantDrift = config.AutoConstantDrift,
+            VaryConstantStart = config.VaryConstantStart,
+            VaryConstantSpeed = config.VaryConstantSpeed,
             // Region / theme restrictions — without these the video slideshow
             // cycled the whole library, ignoring a preset that pinned one
             // region + one theme (#45).

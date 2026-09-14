@@ -11,6 +11,7 @@ Tracking issues: [#91] (P1, done) · [#92] (P2, done) · [#93] (P3) · [#94] (P4
 [#92]: https://github.com/AloneButUnsober/FracturingFog/issues/92
 [#93]: https://github.com/AloneButUnsober/FracturingFog/issues/93
 [#94]: https://github.com/AloneButUnsober/FracturingFog/issues/94
+[#801]: https://github.com/AloneButUnsober/FracturingFog/issues/801
 
 ## Problem (original)
 
@@ -107,6 +108,20 @@ Gated by `EnableAnimations` **and** the new `AutoConstantDrift` flag
 (`VideoZoomRequest` / `SlideshowConfig`, default on; Slideshow Settings toggle
 "Drift the constant on Julia / Phoenix / Glynn legs"). Off ⇒ static point-zoom,
 so the proven path is unchanged.
+
+**Per-leg variance ([#801], shipped 2026-09-14).** Two opt-in knobs on the
+default drift, under `AutoConstantDrift` (default off):
+- **Vary start position** — each leg begins at a small bounded random offset
+  (≤ amplitude) from the authored constant. `ConstantPathLegAnimator.StartValue`
+  + `ApplyStartValue()` let `MaybeAddDefaultConstantDrift` write the leg's start
+  constant into the live params *before* the leg pre-render, so the fade target
+  matches frame 0 (no jump).
+- **Vary speed** — a per-leg traversal multiplier (~0.75×–1.75×): Orbit loops,
+  Line oscillations, Arc sweep scale. Integer speeds still close an orbit;
+  fractional ones end off-base (the cross-fade covers it).
+
+Flags: `VaryConstantStart` / `VaryConstantSpeed` (`VideoZoomRequest` /
+`SlideshowConfig`; Slideshow Settings sub-toggles).
 
 ### P2 limitations (deliberate)
 
