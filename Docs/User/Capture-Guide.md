@@ -199,6 +199,28 @@ Use TAA Alpha around 0.3 – 0.6 for cinematic smoothing without ghost trails.
 
 Regions may carry a stored iteration target. During the video leg, MaxIterations is raised to at least that value so the deep target doesn't render as all-in-set black just because the quality preset's iter formula produced a smaller number.
 
+### Start point
+
+By default a forward zoom begins at the classic full view. The **Start from**
+picker changes where it begins:
+
+| Choice | Zoom begins at |
+|---|---|
+| Classic full view (default) | The whole-set overview, as before |
+| Current view | Wherever you are right now (centre + zoom) |
+| *(a saved region)* | That region's coordinates + zoom |
+
+A start **region** must be the **same fractal type** as the target (its X/Y are
+meaningless otherwise) — a mismatch falls back to the classic view with a status
+note. The picker is ignored for a **reverse** zoom (which already starts at the
+target).
+
+> [!NOTE]
+> When the start and target are both **deep** and **far apart** on the plane, a
+> straight pan would fly sideways at high zoom. The zoom automatically inserts a
+> **dolly** — zoom out to a level where both fit, pan across, then zoom back in —
+> so the motion stays watchable. Near or shallow starts pan directly, unchanged.
+
 ### Recording outputs
 
 The Video Zoom dialog offers three independent recorders — tick any combination:
