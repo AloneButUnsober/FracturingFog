@@ -3764,6 +3764,8 @@ namespace FracturingFog.Hosting
                     try { System.IO.File.Delete(result.Mp4TempPath); } catch { }
                 if (!string.IsNullOrEmpty(result.PngFolder) && System.IO.Directory.Exists(result.PngFolder))
                     try { System.IO.Directory.Delete(result.PngFolder, recursive: true); } catch { }
+                if (!string.IsNullOrEmpty(result.GifTempPath) && System.IO.File.Exists(result.GifTempPath))
+                    try { System.IO.File.Delete(result.GifTempPath); } catch { }
                 return;
             }
 
@@ -3775,6 +3777,10 @@ namespace FracturingFog.Hosting
             //    optionally encode with ffmpeg.
             if (!string.IsNullOrEmpty(result.PngFolder) && System.IO.Directory.Exists(result.PngFolder))
                 await PromptSaveLossless(result.PngFolder!, result.Encode);
+
+            // 3. Animated GIF — SaveFileDialog then move the temp file into place.
+            if (!string.IsNullOrEmpty(result.GifTempPath) && System.IO.File.Exists(result.GifTempPath))
+                await PromptSaveGif(result.GifTempPath!);
         }
 
         // Recorded image-slideshow stopped. The engine handed us a temp PNG
@@ -3964,6 +3970,33 @@ namespace FracturingFog.Hosting
                 try { System.IO.File.Delete(tempPath); } catch { }
                 await AvaloniaDialogs.ShowMessageAsync(
                     "Save Video", $"Failed to save video:\n{ex.Message}", expectsConfirmation: false);
+            }
+        }
+
+        private static async Task PromptSaveGif(string tempPath)
+        {
+            string? path = await AvaloniaDialogs.PickSaveFileAsync(
+                "Save Animated GIF",
+                suggestedName: $"FracturingFog_Zoom_{DateTime.Now:yyyyMMdd_HHmmss}.gif",
+                filter: "GIF image (*.gif)|*.gif");
+
+            if (string.IsNullOrEmpty(path))
+            {
+                try { System.IO.File.Delete(tempPath); } catch { }
+                SetStatus("Recorded animated GIF discarded.");
+                return;
+            }
+
+            try
+            {
+                System.IO.File.Move(tempPath, path, overwrite: true);
+                SetStatus($"Animated GIF saved: {System.IO.Path.GetFileName(path)}");
+            }
+            catch (Exception ex)
+            {
+                try { System.IO.File.Delete(tempPath); } catch { }
+                await AvaloniaDialogs.ShowMessageAsync(
+                    "Save Animated GIF", $"Failed to save GIF:\n{ex.Message}", expectsConfirmation: false);
             }
         }
 

@@ -97,6 +97,11 @@ namespace FracturingFog.Render
         public bool IsSaveLossless { get; set; }
         public VideoLosslessEncode LosslessEncode { get; set; } = VideoLosslessEncode.None;
 
+        /// <summary>Record an animated GIF alongside playback (#784, single-shot
+        /// only). Independent of the MP4 / PNG recorders — any combination can
+        /// run in one zoom.</summary>
+        public bool IsSaveGif { get; set; }
+
         // ── Smoothing ─────────────────────────────────────────────────────
 
         /// <summary>Temporal (TAA-lite) blend strength, 0..100 %.</summary>
@@ -187,6 +192,9 @@ namespace FracturingFog.Render
 
         /// <summary>Temp folder of the PNG sequence to keep/encode, or null.</summary>
         public string? PngFolder { get; init; }
+
+        /// <summary>Temp .gif path (animated) to move into place, or null.</summary>
+        public string? GifTempPath { get; init; }
 
         /// <summary>Encode to apply to the PNG sequence after the user picks a
         /// destination folder.</summary>

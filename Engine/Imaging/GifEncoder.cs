@@ -18,8 +18,9 @@
 //      Control Extension for transparency + image descriptor + trailer).
 //
 // No System.Drawing / Skia dependency — operates on a raw BGRA span so it is
-// unit-testable headless. Animated GIF (multi-frame) is tracked separately
-// (#784); this is stills only.
+// unit-testable headless. The quantize / table-geometry / LZW steps are shared
+// (internal) with GifSequenceWriter, which packs many frames with per-frame
+// local colour tables into one animated GIF (#784).
 
 using System;
 using System.Collections.Generic;
@@ -32,7 +33,23 @@ namespace FracturingFog.Imaging
     {
         // Pixels with alpha below this become the transparent index (GIF has
         // only 1-bit transparency — no partial alpha).
-        private const int AlphaThreshold = 128;
+        internal const int AlphaThreshold = 128;
+
+        /// <summary>One quantized frame: palette + per-pixel indices, ready to
+        /// LZW-compress. <see cref="TransparentIndex"/> is -1 when the frame has
+        /// no transparent pixels.</summary>
+        internal readonly struct QuantizedFrame
+        {
+            public readonly byte[] PalR, PalG, PalB;
+            public readonly int TransparentIndex;
+            public readonly byte[] Indices;
+            public int ColorCount => PalR.Length;
+
+            public QuantizedFrame(byte[] r, byte[] g, byte[] b, int transparentIndex, byte[] indices)
+            {
+                PalR = r; PalG = g; PalB = b; TransparentIndex = transparentIndex; Indices = indices;
+            }
+        }
 
         /// <summary>Encode a straight-alpha BGRA buffer (row-major, 4 bytes /
         /// pixel, B,G,R,A order — the render buffer's native layout) to a GIF89a
@@ -42,10 +59,95 @@ namespace FracturingFog.Imaging
             if (w <= 0 || h <= 0) throw new ArgumentException("Non-positive dimensions.");
             if (bgra.Length < (long)w * h * 4) throw new ArgumentException("Buffer too small.");
 
-            // ── 1. Histogram of opaque colours + transparency probe ──────────
+            QuantizedFrame frame = Quantize(bgra, w, h);
+            bool hasTransparent = frame.TransparentIndex >= 0;
+            int usedEntries = frame.ColorCount + (hasTransparent ? 1 : 0);
+            ComputeTableGeometry(usedEntries, out int tableSize, out int sizeField, out int minCodeSize);
+            byte[] lzw = LzwCompress(frame.Indices, minCodeSize);
+
+            using var fs = File.Create(path);
+            using var bw = new BinaryWriter(fs);
+
+            // Header + Logical Screen Descriptor (with a global colour table).
+            WriteSignature(bw);
+            WriteU16(bw, w);
+            WriteU16(bw, h);
+            bw.Write((byte)(0x80 | (sizeField << 4) | sizeField)); // GCT present
+            bw.Write((byte)0); // background colour index
+            bw.Write((byte)0); // pixel aspect ratio
+            WriteColorTable(bw, frame, tableSize);
+
+            if (hasTransparent) WriteGraphicControl(bw, delayCs: 0, transparentIndex: frame.TransparentIndex);
+
+            // Image descriptor (no local colour table — uses the global one).
+            bw.Write((byte)0x2C);
+            WriteU16(bw, 0); WriteU16(bw, 0); // left, top
+            WriteU16(bw, w); WriteU16(bw, h);
+            bw.Write((byte)0x00);
+            WriteImageData(bw, minCodeSize, lzw);
+
+            bw.Write((byte)0x3B); // trailer
+        }
+
+        // ── Shared container helpers (used by GifSequenceWriter too) ─────────
+
+        internal static void WriteSignature(BinaryWriter bw) =>
+            bw.Write(new[] { (byte)'G', (byte)'I', (byte)'F', (byte)'8', (byte)'9', (byte)'a' });
+
+        internal static void WriteColorTable(BinaryWriter bw, in QuantizedFrame frame, int tableSize)
+        {
+            for (int i = 0; i < tableSize; i++)
+            {
+                if (i < frame.ColorCount) { bw.Write(frame.PalR[i]); bw.Write(frame.PalG[i]); bw.Write(frame.PalB[i]); }
+                else { bw.Write((byte)0); bw.Write((byte)0); bw.Write((byte)0); }
+            }
+        }
+
+        internal static void WriteGraphicControl(BinaryWriter bw, int delayCs, int transparentIndex)
+        {
+            bw.Write((byte)0x21); // extension introducer
+            bw.Write((byte)0xF9); // graphic control label
+            bw.Write((byte)0x04); // block size
+            bw.Write((byte)(transparentIndex >= 0 ? 0x01 : 0x00)); // packed: transparent flag
+            WriteU16(bw, delayCs);
+            bw.Write((byte)(transparentIndex >= 0 ? transparentIndex : 0));
+            bw.Write((byte)0x00); // block terminator
+        }
+
+        internal static void WriteImageData(BinaryWriter bw, int minCodeSize, byte[] lzw)
+        {
+            bw.Write((byte)minCodeSize);
+            for (int off = 0; off < lzw.Length;)
+            {
+                int chunk = Math.Min(255, lzw.Length - off);
+                bw.Write((byte)chunk);
+                bw.Write(lzw, off, chunk);
+                off += chunk;
+            }
+            bw.Write((byte)0x00); // block terminator
+        }
+
+        // Global/local colour-table size must be a power of two, 2..256; the LZW
+        // minimum code size is >= 2 (a GIF requirement) even for tiny palettes.
+        internal static void ComputeTableGeometry(
+            int usedEntries, out int tableSize, out int sizeField, out int minCodeSize)
+        {
+            if (usedEntries < 1) usedEntries = 1;
+            tableSize = 2;
+            while (tableSize < usedEntries) tableSize <<= 1;
+            sizeField = Log2(tableSize) - 1;
+            minCodeSize = Math.Max(2, Log2(tableSize));
+        }
+
+        // ── Quantization ─────────────────────────────────────────────────────
+
+        internal static QuantizedFrame Quantize(ReadOnlySpan<byte> bgra, int w, int h)
+        {
+            int px = w * h;
+
+            // Histogram of opaque colours + transparency probe.
             var hist = new Dictionary<int, int>();
             bool hasTransparent = false;
-            int px = w * h;
             for (int i = 0; i < px; i++)
             {
                 int o = i * 4;
@@ -56,24 +158,10 @@ namespace FracturingFog.Imaging
             }
 
             int maxColors = hasTransparent ? 255 : 256;
-
-            // ── 2. Palette (median cut, or the distinct colours directly) ────
-            byte[] palR, palG, palB;
-            BuildPalette(hist, maxColors, out palR, out palG, out palB);
+            BuildPalette(hist, maxColors, out byte[] palR, out byte[] palG, out byte[] palB);
             int colorCount = palR.Length;
-
-            // Transparent index sits just past the real colours.
             int transparentIndex = hasTransparent ? colorCount : -1;
-            int usedEntries = colorCount + (hasTransparent ? 1 : 0);
-            if (usedEntries < 1) usedEntries = 1;
 
-            // Global colour table size must be a power of two, 2..256.
-            int tableSize = 2;
-            while (tableSize < usedEntries) tableSize <<= 1;
-            int sizeField = Log2(tableSize) - 1;          // 0..7
-            int minCodeSize = Math.Max(2, Log2(tableSize)); // GIF requires >= 2
-
-            // ── 3. Map every pixel to a palette index ────────────────────────
             var indices = new byte[px];
             var memo = new Dictionary<int, byte>();
             for (int i = 0; i < px; i++)
@@ -87,67 +175,14 @@ namespace FracturingFog.Imaging
                 int rgb = (bgra[o + 2] << 16) | (bgra[o + 1] << 8) | bgra[o];
                 if (!memo.TryGetValue(rgb, out byte idx))
                 {
-                    idx = NearestIndex((byte)(rgb >> 16), (byte)(rgb >> 8), (byte)rgb,
-                                       palR, palG, palB);
+                    idx = NearestIndex((byte)(rgb >> 16), (byte)(rgb >> 8), (byte)rgb, palR, palG, palB);
                     memo[rgb] = idx;
                 }
                 indices[i] = idx;
             }
 
-            // ── 4. LZW compress + assemble the file ──────────────────────────
-            byte[] lzw = LzwCompress(indices, minCodeSize);
-
-            using var fs = File.Create(path);
-            using var bw = new BinaryWriter(fs);
-
-            // Header
-            bw.Write(new[] { (byte)'G', (byte)'I', (byte)'F', (byte)'8', (byte)'9', (byte)'a' });
-            // Logical Screen Descriptor
-            WriteU16(bw, w);
-            WriteU16(bw, h);
-            // packed: GCT present | colour resolution | sort=0 | GCT size
-            bw.Write((byte)(0x80 | (sizeField << 4) | sizeField));
-            bw.Write((byte)0); // background colour index
-            bw.Write((byte)0); // pixel aspect ratio
-            // Global Colour Table (tableSize entries, RGB; unused entries zeroed)
-            for (int i = 0; i < tableSize; i++)
-            {
-                if (i < colorCount) { bw.Write(palR[i]); bw.Write(palG[i]); bw.Write(palB[i]); }
-                else { bw.Write((byte)0); bw.Write((byte)0); bw.Write((byte)0); }
-            }
-            // Graphic Control Extension (only needed for transparency)
-            if (hasTransparent)
-            {
-                bw.Write((byte)0x21); // extension introducer
-                bw.Write((byte)0xF9); // graphic control label
-                bw.Write((byte)0x04); // block size
-                bw.Write((byte)0x01); // packed: transparent colour flag = 1
-                WriteU16(bw, 0);      // delay time
-                bw.Write((byte)transparentIndex);
-                bw.Write((byte)0x00); // block terminator
-            }
-            // Image Descriptor
-            bw.Write((byte)0x2C);
-            WriteU16(bw, 0); // left
-            WriteU16(bw, 0); // top
-            WriteU16(bw, w);
-            WriteU16(bw, h);
-            bw.Write((byte)0x00); // no local colour table, not interlaced
-            // Image data: min code size + LZW sub-blocks + terminator
-            bw.Write((byte)minCodeSize);
-            for (int off = 0; off < lzw.Length;)
-            {
-                int chunk = Math.Min(255, lzw.Length - off);
-                bw.Write((byte)chunk);
-                bw.Write(lzw, off, chunk);
-                off += chunk;
-            }
-            bw.Write((byte)0x00); // block terminator
-            // Trailer
-            bw.Write((byte)0x3B);
+            return new QuantizedFrame(palR, palG, palB, transparentIndex, indices);
         }
-
-        // ── Palette construction ─────────────────────────────────────────────
 
         private static void BuildPalette(
             Dictionary<int, int> hist, int maxColors,
@@ -156,12 +191,10 @@ namespace FracturingFog.Imaging
             int d = hist.Count;
             if (d == 0)
             {
-                // Fully transparent (or empty) image — one dummy entry.
                 palR = new byte[] { 0 }; palG = new byte[] { 0 }; palB = new byte[] { 0 };
                 return;
             }
 
-            // Distinct colours + counts as parallel arrays.
             var cr = new byte[d]; var cg = new byte[d]; var cb = new byte[d];
             var cnt = new long[d];
             int k = 0;
@@ -180,14 +213,12 @@ namespace FracturingFog.Imaging
                 return;
             }
 
-            // Median cut over an index array we partition into boxes.
             var order = new int[d];
             for (int i = 0; i < d; i++) order[i] = i;
 
             var boxes = new List<(int lo, int hi)> { (0, d) };
             while (boxes.Count < maxColors)
             {
-                // Pick the splittable box with the largest colour volume.
                 int best = -1; long bestVol = -1;
                 for (int b = 0; b < boxes.Count; b++)
                 {
@@ -196,7 +227,7 @@ namespace FracturingFog.Imaging
                     long vol = BoxVolume(order, lo, hi, cr, cg, cb);
                     if (vol > bestVol) { bestVol = vol; best = b; }
                 }
-                if (best < 0) break; // nothing left to split
+                if (best < 0) break;
 
                 var (blo, bhi) = boxes[best];
                 int channel = WidestChannel(order, blo, bhi, cr, cg, cb);
@@ -237,8 +268,7 @@ namespace FracturingFog.Imaging
             }
         }
 
-        private static long BoxVolume(int[] order, int lo, int hi,
-            byte[] cr, byte[] cg, byte[] cb)
+        private static long BoxVolume(int[] order, int lo, int hi, byte[] cr, byte[] cg, byte[] cb)
         {
             byte rmin = 255, rmax = 0, gmin = 255, gmax = 0, bmin = 255, bmax = 0;
             for (int i = lo; i < hi; i++)
@@ -251,8 +281,7 @@ namespace FracturingFog.Imaging
             return (long)(rmax - rmin + 1) * (gmax - gmin + 1) * (bmax - bmin + 1);
         }
 
-        private static int WidestChannel(int[] order, int lo, int hi,
-            byte[] cr, byte[] cg, byte[] cb)
+        private static int WidestChannel(int[] order, int lo, int hi, byte[] cr, byte[] cg, byte[] cb)
         {
             byte rmin = 255, rmax = 0, gmin = 255, gmax = 0, bmin = 255, bmax = 0;
             for (int i = lo; i < hi; i++)
@@ -267,15 +296,13 @@ namespace FracturingFog.Imaging
             return dg >= db ? 1 : 2;
         }
 
-        private static void SortRangeByChannel(int[] order, int lo, int hi,
-            int channel, byte[] cr, byte[] cg, byte[] cb)
+        private static void SortRangeByChannel(int[] order, int lo, int hi, int channel, byte[] cr, byte[] cg, byte[] cb)
         {
             byte[] key = channel == 0 ? cr : channel == 1 ? cg : cb;
             Array.Sort(order, lo, hi - lo, Comparer<int>.Create((a, b) => key[a] - key[b]));
         }
 
-        private static byte NearestIndex(byte r, byte g, byte b,
-            byte[] palR, byte[] palG, byte[] palB)
+        private static byte NearestIndex(byte r, byte g, byte b, byte[] palR, byte[] palG, byte[] palB)
         {
             int best = 0; long bestD = long.MaxValue;
             for (int i = 0; i < palR.Length; i++)
@@ -289,7 +316,7 @@ namespace FracturingFog.Imaging
 
         // ── GIF-variant LZW ──────────────────────────────────────────────────
 
-        private static byte[] LzwCompress(byte[] indices, int minCodeSize)
+        internal static byte[] LzwCompress(byte[] indices, int minCodeSize)
         {
             int clearCode = 1 << minCodeSize;
             int endCode = clearCode + 1;
@@ -324,7 +351,6 @@ namespace FracturingFog.Imaging
 
                 if (runningCode >= 4095)
                 {
-                    // Table full — reset (no early change; matches giflib).
                     bits.Write(clearCode, runningBits);
                     runningBits = minCodeSize + 1;
                     maxCode = 1 << runningBits;
@@ -379,7 +405,7 @@ namespace FracturingFog.Imaging
 
         // ── Small helpers ────────────────────────────────────────────────────
 
-        private static void WriteU16(BinaryWriter bw, int v)
+        internal static void WriteU16(BinaryWriter bw, int v)
         {
             bw.Write((byte)(v & 0xFF));
             bw.Write((byte)((v >> 8) & 0xFF));

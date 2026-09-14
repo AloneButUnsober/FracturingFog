@@ -17,7 +17,7 @@ want to *do* with it, and the rest follows:
 |------------------------------------------------|---------------------|-------------------------|
 | Post a screenshot to social media              | **Image**           | One PNG, ~1-3 MB        |
 | Print a wall-sized poster, or send to a printer | **Poster**         | One huge TIFF/PNG       |
-| Share a smooth zoom-in video                   | **Video**           | One MP4 (or lossless)   |
+| Share a smooth zoom-in video                   | **Video**           | One MP4 (or lossless / animated GIF) |
 | Loop endlessly between favourite views         | **Video Slideshow** | One long MP4            |
 
 > [!TIP]
@@ -117,7 +117,8 @@ The file dialog defaults to your Pictures folder; switch to any path before conf
 > palette (median cut) with 1-bit transparency, so smooth fractal gradients will
 > band — PNG stays the better choice for stills. GIF is handy for small,
 > few-colour images and for pasting where only GIF is accepted. This is a single
-> still; **animated** GIF (from a slideshow or zoom) is tracked separately.
+> still; for an **animated** GIF see the Video Zoom dialog's *Save animated GIF*
+> option ([§3](#3-video-zoom-single-shot)).
 
 ---
 
@@ -197,6 +198,25 @@ Use TAA Alpha around 0.3 – 0.6 for cinematic smoothing without ghost trails.
 ### Per-region iter override
 
 Regions may carry a stored iteration target. During the video leg, MaxIterations is raised to at least that value so the deep target doesn't render as all-in-set black just because the quality preset's iter formula produced a smaller number.
+
+### Recording outputs
+
+The Video Zoom dialog offers three independent recorders — tick any combination:
+
+| Option | Output | Notes |
+|---|---|---|
+| Save video as MP4 | one `.mp4` | Media Foundation H.264; the default quick export |
+| Save lossless (PNG sequence) | a folder of PNGs | optionally re-encoded with ffmpeg (H.264 / FFV1) |
+| **Save animated GIF** | one looping `.gif` | 256-colour per-frame palette; no encoder needed |
+
+> [!NOTE]
+> **Animated GIF** needs no ffmpeg — it is written by the built-in encoder. Each
+> frame is quantized to its own 256-colour palette (median cut) and the per-frame
+> delay follows the real capture cadence; the GIF loops forever. Expect **large
+> files and visible banding** on smooth gradients — GIF is best for short zooms,
+> stickers and chat/embeds where MP4 is not accepted. For quality or length,
+> prefer MP4. Frames are encoded on a background thread, so a long zoom keeps
+> writing after the animation ends; the save prompt appears when it finishes.
 
 ---
 
