@@ -43,6 +43,10 @@ namespace FracturingFog.UI.Avalonia.Services
         {
             var layout = new WorkspaceLayout { Name = name ?? string.Empty };
 
+            // Global UI scale (#809 / S5 #814) — a whole-UI property, captured on
+            // the layout itself.
+            layout.UiScale = UiScaleService.Scale;
+
             var rw = layout.RenderWindow;
             rw.Shape = CurrentShape(shell);
             rw.ResolutionName = shell.FloatingMenu.SelectedResolution;
@@ -91,6 +95,15 @@ namespace FracturingFog.UI.Avalonia.Services
         {
             if (layout?.RenderWindow == null) return;
             var rw = layout.RenderWindow;
+
+            // 0. UI scale FIRST — set it before any window is reopened/placed so a
+            //    reopened satellite/dialog sizes to the restored scale, and its
+            //    saved pixel Width/Height (captured at that same scale) line up.
+            //    Back-compat: an older workspace with no captured scale (0) leaves
+            //    the current scale untouched rather than forcing 100% (mirrors the
+            //    ApplyFractalType behaviour). The render window is unscaled, so this
+            //    does not interact with the mode/geometry steps below.
+            if (layout.UiScale > 0) UiScaleService.Set(layout.UiScale);
 
             // 1. Mode FIRST — this may mutate MainWindow geometry (Mini/Toy/Span).
             ApplyShape(shell, rw.Shape);

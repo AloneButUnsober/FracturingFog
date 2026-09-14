@@ -200,11 +200,21 @@ namespace FracturingFog.Models
 
         public List<SatelliteWindowState> Satellites { get; set; } = new();
 
+        /// <summary>Global UI scale in effect at capture (#809 / S5 #814). A
+        /// whole-UI property (it scales every dialog/window, not just the render
+        /// window), so it lives on the layout rather than <see cref="RenderWindow"/>.
+        /// <c>0</c> means "not captured" — an older workspace — which restore reads
+        /// as "leave the current scale untouched" (mirrors the <see
+        /// cref="RenderWindowState.FractalType"/> back-compat behaviour). Capture
+        /// always writes a positive value.</summary>
+        public double UiScale { get; set; }
+
         public WorkspaceLayout Clone() => new()
         {
             Name = Name,
             RenderWindow = RenderWindow?.Clone() ?? new RenderWindowState(),
             Satellites = Satellites?.Select(s => s.Clone()).ToList() ?? new List<SatelliteWindowState>(),
+            UiScale = UiScale,
         };
     }
 }

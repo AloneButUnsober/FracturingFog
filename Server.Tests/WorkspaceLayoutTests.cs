@@ -28,6 +28,7 @@ public sealed class WorkspaceLayoutTests
     private static WorkspaceLayout SampleLayout(string name) => new()
     {
         Name = name,
+        UiScale = 1.5,
         RenderWindow = new RenderWindowState
         {
             Shape = RenderWindowShape.Toy,
@@ -97,6 +98,7 @@ public sealed class WorkspaceLayoutTests
         Assert.False(active.RenderWindow.ToolbarVisible);
         Assert.False(active.RenderWindow.StatusBarVisible);
         Assert.Equal("1080p", active.RenderWindow.ResolutionName);
+        Assert.Equal(1.5, active.UiScale);   // #814 — UI scale round-trips
         Assert.Equal(1, active.RenderWindow.Monitor!.Index);
         Assert.Equal(2, active.Satellites.Count);
         Assert.Equal(WindowRole.UserBulb, active.Satellites[0].Role);
