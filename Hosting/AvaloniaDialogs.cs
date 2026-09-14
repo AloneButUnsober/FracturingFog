@@ -468,7 +468,7 @@ namespace FracturingFog.Hosting
                     var result = await WindowService.ShowPanelDialogAsync(
                         panel,
                         new PanelHostOptions(
-                            "Audio-Reactive Settings",
+                            "Fractured Waves Reactive Audio",
                             Width: 520, MinWidth: 420,
                             Background: new SolidColorBrush(Color.FromRgb(0x1C, 0x1C, 0x1C))),
                         owner);

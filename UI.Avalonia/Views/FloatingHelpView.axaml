@@ -101,7 +101,7 @@
                     <TabItem Header="Theme Editor">
                         <TextBox Classes="helpBody" Text="{Binding EditorText}" />
                     </TabItem>
-                    <TabItem Header="Audio-Reactive">
+                    <TabItem Header="Fractured Waves">
                         <TextBox Classes="helpBody" Text="{Binding AudioText}" />
                     </TabItem>
                 </TabControl>

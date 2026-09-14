@@ -1,6 +1,6 @@
-# Slideshow + Audio-Reactive Guide
+# Slideshow + Fractured Waves Reactive Audio Guide
 
-How to use Fracturing Fog's hands-free guided-tour mode, including the audio-reactive engine that lands transitions on detected beats.
+How to use Fracturing Fog's hands-free guided-tour mode, including **Fractured Waves Reactive Audio** — the engine that lands transitions on detected beats. *(Fractured Waves Reactive Audio was previously called "Audio Reactive".)*
 
 > Companion pages: [User Index](_Index.md) · [Regions Guide](Regions-Guide.md) · [Capture Guide](Capture-Guide.md)
 
@@ -37,7 +37,7 @@ The app cycles themes every ~10 seconds and regions every ~30 seconds by default
 4. **Sensitivity** = `50%` (default — raise it if the music has no strong drums).
 5. **Beats per Theme** = `8` (about 2 bars in 4/4).
 6. **Beats per Region** = `32` (about 8 bars).
-7. **Audio-Reactive** checkbox → tick it.
+7. **Fractured Waves Reactive Audio** checkbox → tick it.
 8. Click **OK**.
 9. Floating Menu → **Slideshow**.
 
@@ -59,7 +59,7 @@ quiet, raise sensitivity; if every cymbal triggers a change, lower it.
    frame, and writes the video.
 
 > [!IMPORTANT]
-> Audio-reactive timing of *recorded* slideshows uses the live timing from when the recording
+> Fractured Waves timing of *recorded* slideshows uses the live timing from when the recording
 > started. Re-running the same audio source on a different day produces a different video — that
 > is by design (real-time response). If you want frame-exact reproducibility, record once and keep
 > the file.
@@ -75,7 +75,7 @@ quiet, raise sensitivity; if every cymbal triggers a change, lower it.
 4. [Single-Shot Video Zoom](#4-single-shot-video-zoom)
 5. [Video Slideshow Loop](#5-video-slideshow-loop)
 6. [Recording](#6-recording)
-7. [Audio-Reactive Engine](#7-audio-reactive-engine)
+7. [Fractured Waves Reactive Audio](#7-fractured-waves-reactive-audio)
 8. [Worked Audio Scenarios](#8-worked-audio-scenarios)
 9. [Troubleshooting](#9-troubleshooting)
 
@@ -246,13 +246,13 @@ Two-phase workflow when ffmpeg is engaged:
 
 ---
 
-## 7. Audio-Reactive Engine
+## 7. Fractured Waves Reactive Audio
 
 The audio-reactive engine replaces fixed-duration timers with a **beat counter** driven by spectral-flux onset detection. Open via Slideshow Settings → Audio tab, or Floating Menu → Audio Settings…
 
 ### Master enable
 
-The **Audio-Reactive** checkbox is the master switch. OFF = fixed-duration timing. ON = beat-driven, even if the dialog is closed.
+The **Fractured Waves Reactive Audio** checkbox is the master switch. OFF = fixed-duration timing. ON = beat-driven, even if the dialog is closed.
 
 State persists between launches via `%APPDATA%\FracturingFog\audio-settings.json`.
 
@@ -384,4 +384,4 @@ Use this when recording a video — the synth deterministically produces the sam
 
 ---
 
-*Slideshow + Audio-Reactive Guide · Fracturing Fog · © 2026*
+*Slideshow + Fractured Waves Reactive Audio Guide · Fracturing Fog · © 2026*

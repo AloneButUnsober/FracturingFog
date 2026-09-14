@@ -226,7 +226,7 @@
             <Button Grid.Column="1"
                     Content="?"
                     Click="OnHelpClick"
-                    ToolTip.Tip="Open the Audio-Reactive Slideshow guide"
+                    ToolTip.Tip="Open the Fractured Waves Reactive Audio guide"
                     Padding="10,6"
                     Margin="6,0,0,0"
                     Background="#283C50"

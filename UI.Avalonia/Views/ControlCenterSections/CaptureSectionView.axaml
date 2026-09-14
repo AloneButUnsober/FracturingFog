@@ -34,7 +34,7 @@
                 </UniformGrid>
                 <UniformGrid Columns="2" Margin="0,4,0,0">
                     <Button Classes="action slideshow" Content="Travel to location…" Command="{Binding Menu.TravelCommand}" ToolTip.Tip="Plan a coordinate-ordered slideshow course from a start region to an end region" Margin="0,0,4,0" />
-                    <Button Classes="action slideshow" Content="Audio Settings…" Command="{Binding Menu.AudioSettingsCommand}" ToolTip.Tip="Audio-reactive settings: source, sensitivity, band weights, live meter" />
+                    <Button Classes="action slideshow" Content="Audio Settings…" Command="{Binding Menu.AudioSettingsCommand}" ToolTip.Tip="Fractured Waves Reactive Audio settings: source, sensitivity, band weights, live meter" />
                 </UniformGrid>
                 <UniformGrid Columns="2" Margin="0,4,0,0">
                     <Button Classes="action slideshow" Content="Lock Region" Command="{Binding Shell.ToggleSlideshowLockRegionCommand}" IsEnabled="{Binding Shell.IsSlideshowRunning}" Margin="0,0,4,0" ToolTip.Tip="Pin the running slideshow to the current region (only while a slideshow is running)" />

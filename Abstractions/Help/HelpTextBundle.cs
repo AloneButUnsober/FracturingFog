@@ -48,8 +48,9 @@ view-state, color pipeline, and capture suite.
 • 3D:         Mandelbulb plus User Bulb 3D — Vec3 / Quat raymarched
               escape-time engine with analytic + numerical DE,
               animated time parameter, OBJ mesh export.
-• Audio:      Audio-reactive slideshow (loopback / file / microphone /
-              fractal-synth) with on-beat region + theme transitions.
+• Audio:      Fractured Waves Reactive Audio slideshow (loopback /
+              file / microphone / fractal-synth) with on-beat region +
+              theme transitions.
 • Capture:    Single-frame PNG, multi-tile Poster, MP4 / lossless
               FFV1 / lossless H.264 video, PNG sequence.
 • Client/Svr: Mutual-TLS render server + sealed-vault client. Render
@@ -238,7 +239,7 @@ view-state, color pipeline, and capture suite.
   Cross-fade      ~3 s linear blend between outgoing and incoming
                   buffers; falls to ~0.75 × beat when audio-reactive
                   is enabled.
-  Audio-reactive  Beat counter from system loopback / file / mic /
+  Fractured Waves Beat counter from system loopback / file / mic /
                   fractal-synth — see the Audio tab.
   VCR transport   ◀◀  ◀  ▮▮  ▶  ▶▶  bar at the bottom of the
                   MainWindow lets you pause, skip backward /
@@ -285,7 +286,7 @@ view-state, color pipeline, and capture suite.
     userequations.json        User Equation source library
     sandboxequations.json     Sandbox DSL source library
     userbulbs.json            User Bulb 3D source + chain library
-    audio-settings.json       Audio-reactive slideshow config
+    audio-settings.json       Fractured Waves Reactive Audio config
     client-connections.json   Sealed (AES-GCM) server connections
     client-render-presets.json    Client render presets
     server-config.json        Local server settings
@@ -508,7 +509,9 @@ cannot be located, batch mode exits 3 with a hint.
 ";
 
         public const string AudioText =
-@"=== Audio-Reactive Slideshow ===
+@"=== Fractured Waves Reactive Audio ===
+
+(Formerly ""Audio Reactive"".)
 
 The slideshow can be driven by music or any audio source so that
 color-theme and region transitions land on the beat. When enabled,
@@ -526,7 +529,7 @@ applied only when you click OK; clicking Cancel discards changes.
 
 === Master Enable ===
 
-The Audio-Reactive checkbox in the Floating Menu (above the
+The Fractured Waves checkbox in Slideshow Settings (next to the
 ""Audio Settings…"" button) is the master switch. When OFF the
 slideshow uses fixed-duration timing. When ON the engine is
 started automatically whenever the slideshow runs (or remains
@@ -4053,11 +4056,11 @@ While the slideshow runs, region name + theme name are drawn into
 the live frame. Toggleable from the toolbar (Watermark) — the same
 toggle that controls the static watermark.
 
-=== Audio-reactive mode ===
+=== Fractured Waves Reactive Audio ===
 
-Enable from Slideshow Settings → ""Audio-reactive"" or from the
-floating Audio Settings dialog. When ON, transitions land on the
-detected beat instead of a fixed timer. See the Audio tab.
+Enable from Slideshow Settings → ""Fractured Waves Reactive Audio""
+or from the Audio Settings dialog. When ON, transitions land on the
+detected beat instead of a fixed timer. See the Fractured Waves tab.
 
 === Video Zoom (single shot) ===
 

@@ -70,7 +70,7 @@ You are now operating Fracturing Fog. Everything else in this guide is just expa
 8. [Post-FX](#8-post-fx)
 9. [Adaptive Sweep](#9-adaptive-sweep)
 10. [Slideshow + Video](#10-slideshow--video)
-11. [Audio-Reactive Mode](#11-audio-reactive-mode)
+11. [Fractured Waves Reactive Audio](#11-fractured-waves-reactive-audio)
 12. [Screenshot + Poster](#12-screenshot--poster)
 13. [Fractal Families](#13-fractal-families)
 14. [User Equation + Sandbox + User Bulb](#14-user-equation--sandbox--user-bulb)
@@ -414,7 +414,7 @@ See [Slideshow-AudioReactive-Guide.md](Slideshow-AudioReactive-Guide.md).
 
 ---
 
-## 11. Audio-Reactive Mode
+## 11. Fractured Waves Reactive Audio
 
 Enable from Slideshow Settings → Audio tab or from the menu's **Audio Settings…**. The dialog is modeless; settings commit on OK.
 
