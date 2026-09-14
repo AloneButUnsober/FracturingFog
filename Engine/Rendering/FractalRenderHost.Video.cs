@@ -295,6 +295,13 @@ namespace FracturingFog.Rendering
                 if (authored.Tier == QualityTier.Extreme) authored = natural;
                 _videoQuality = authored.Tier > natural.Tier ? authored : natural;
             }
+            else if (TryResolveForwardStart(request, out startCX, out startCY, out startZoom))
+            {
+                // #788 slices A/B — forward zoom that begins at the live view or a
+                // chosen start region instead of the classic full view.
+                targetCX = tCX; targetCY = tCY; targetZoom = tz;
+                SeedForwardStartQuality(startZoom);
+            }
             else
             {
                 // Forward: classic → target. ApplyVideoFrameState promotes the
@@ -853,6 +860,24 @@ namespace FracturingFog.Rendering
             }
             else
             {
+                // #788 slice C — 3-phase dolly for far-apart, deep endpoints.
+                // A straight pan at deep zoom flies sideways; instead zoom out to
+                // a bridge level, pan across, then zoom back in. Auto-detected —
+                // a classic (shallow) start never separates far enough to trigger
+                // it, so ordinary forward zooms are unchanged.
+                if (centerMoves && TryPlanDolly(cx0, cy0, z0, cx1, cy1, z1, out double zBridge))
+                {
+                    double outSecs = seconds * 0.30;
+                    double panBridgeSecs = seconds * 0.40;
+                    double inSecs = seconds - outSecs - panBridgeSecs;
+                    RunZoomPhaseFrames(cx0, cy0, z0, zBridge, outSecs, seconds, ct);
+                    if (!ct.IsCancellationRequested)
+                        RunPanPhaseFrames(cx0, cy0, cx1, cy1, zBridge, panBridgeSecs, seconds, ct);
+                    if (!ct.IsCancellationRequested)
+                        RunZoomPhaseFrames(cx1, cy1, zBridge, z1, inSecs, seconds, ct);
+                    return;
+                }
+
                 var sw = Stopwatch.StartNew();
                 // Phase 1: pan to target CX/CY at the current zoom.
                 if (panSecs > 0.0)
@@ -888,6 +913,81 @@ namespace FracturingFog.Rendering
                         if (last) break;
                     }
                 }
+            }
+        }
+
+        // #788 slice C — decide whether a forward zoom needs a 3-phase dolly and,
+        // if so, at what bridge zoom to pan. Returns false (straight pan-then-zoom)
+        // when the endpoints already fit within ~one view width at the shallower
+        // end — which is always true for a classic (shallow) start.
+        private static bool TryPlanDolly(
+            QDCoord cx0, QDCoord cy0, double z0,
+            QDCoord cx1, QDCoord cy1, double z1, out double zBridge)
+        {
+            zBridge = 0.0;
+            // Planar separation; the Hi limb suffices for a coarse bridge level.
+            double dx = cx1.Hi - cx0.Hi, dy = cy1.Hi - cy0.Hi;
+            double dist = Math.Sqrt(dx * dx + dy * dy);
+            if (dist <= 0.0) return false;
+
+            double shallow = Math.Min(z0, z1);
+            if (shallow <= 0.0) return false;
+
+            // World width visible at zoom z ≈ 3.5 / z (matches CurrentScale). If the
+            // centres already fit within ~FitWidths view widths at the shallower
+            // endpoint, a straight pan is fine.
+            const double FitWidths = 1.2;
+            if (dist <= FitWidths * (3.5 / shallow)) return false;
+
+            // Bridge zoom where the separation spans ~FitWidths view widths.
+            zBridge = Math.Clamp(3.5 * FitWidths / dist,
+                QualityPreset.Draft.ZoomMin, shallow);
+            return zBridge < shallow * 0.95;
+        }
+
+        // Eased zoom phase (zFrom → zTo) at a fixed centre, mirroring VideoLoop's
+        // inline zoom loop. Used by the slice-C dolly.
+        private void RunZoomPhaseFrames(
+            QDCoord cx, QDCoord cy, double zFrom, double zTo,
+            double phaseSecs, double legSeconds, CancellationToken ct)
+        {
+            if (phaseSecs <= 0.0 || ct.IsCancellationRequested) return;
+            double logFrom = Math.Log(Math.Max(zFrom, 1e-12));
+            double logTo = Math.Log(Math.Max(zTo, 1e-12));
+            var sw = Stopwatch.StartNew();
+            while (!ct.IsCancellationRequested)
+            {
+                double t = sw.Elapsed.TotalSeconds / phaseSecs;
+                bool last = t >= 1.0;
+                if (last) t = 1.0;
+                double te = t * t * (3.0 - 2.0 * t);
+                double zoom = Math.Exp(logFrom + (logTo - logFrom) * te);
+                TryRunScheduledThemeFade(legSeconds, ct);
+                if (ct.IsCancellationRequested) break;
+                RenderVideoFrame(cx, cy, zoom, ct);
+                if (last) break;
+            }
+        }
+
+        // Eased pan phase at a fixed zoom, mirroring VideoLoop's inline pan loop.
+        private void RunPanPhaseFrames(
+            QDCoord cxFrom, QDCoord cyFrom, QDCoord cxTo, QDCoord cyTo,
+            double zoom, double phaseSecs, double legSeconds, CancellationToken ct)
+        {
+            if (phaseSecs <= 0.0 || ct.IsCancellationRequested) return;
+            var sw = Stopwatch.StartNew();
+            while (!ct.IsCancellationRequested)
+            {
+                double t = sw.Elapsed.TotalSeconds / phaseSecs;
+                bool last = t >= 1.0;
+                if (last) t = 1.0;
+                double te = t * t * (3.0 - 2.0 * t);
+                QDCoord cx = QDLerp(cxFrom, cxTo, te);
+                QDCoord cy = QDLerp(cyFrom, cyTo, te);
+                TryRunScheduledThemeFade(legSeconds, ct);
+                if (ct.IsCancellationRequested) break;
+                RenderVideoFrame(cx, cy, zoom, ct);
+                if (last) break;
             }
         }
 
@@ -1631,6 +1731,79 @@ namespace FracturingFog.Rendering
             region.Params?.ApplyTo(p);
             // Relief 3D snapshot (null = leave current relief alone).
             region.Relief3D?.ApplyTo(p);
+        }
+
+        // #788 slices A/B — resolve the start point of a forward zoom. A chosen
+        // start region (slice B) wins over "current view" (slice A); either falls
+        // back to the classic full view (returns false) on a miss / type mismatch.
+        // Runs on the UI thread inside StartVideo, before LoadTargetRegionForVideo
+        // mutates ViewState, so the current-view capture is the live framing.
+        private bool TryResolveForwardStart(
+            VideoZoomRequest request, out QDCoord startCX, out QDCoord startCY, out double startZoom)
+        {
+            startCX = default; startCY = default; startZoom = 0.0;
+
+            if (!string.IsNullOrEmpty(request.StartRegionName))
+            {
+                var region = FractalRegionLibrary.Instance.FindByName(request.StartRegionName);
+                if (region == null)
+                {
+                    RaiseStatus($"Start region '{request.StartRegionName}' not found — starting from the classic view.");
+                    return false;
+                }
+                // The zoom renders one fractal (the target's); a start region of a
+                // different type has meaningless coordinates here.
+                FractalType targetType = ResolveTargetFractalType(request);
+                if (region.FractalType != targetType)
+                {
+                    RaiseStatus($"Start region '{region.Name}' is {region.FractalType}, target is {targetType} — starting from the classic view.");
+                    return false;
+                }
+                startCX = new QDCoord(region.CenterX, region.CenterXLo, region.CenterX2, region.CenterX3);
+                startCY = new QDCoord(region.CenterY, region.CenterYLo, region.CenterY2, region.CenterY3);
+                startZoom = region.Zoom > 0 ? region.Zoom : FractalViewState.DefaultZoom;
+                return true;
+            }
+
+            if (request.StartFromCurrentView)
+            {
+                startCX = new QDCoord(ViewState.CenterX, ViewState.CenterXLo, ViewState.CenterX2, ViewState.CenterX3);
+                startCY = new QDCoord(ViewState.CenterY, ViewState.CenterYLo, ViewState.CenterY2, ViewState.CenterY3);
+                startZoom = ViewState.Zoom;
+                return true;
+            }
+
+            return false;
+        }
+
+        // Target type = the picked target region's type, or the live fractal when
+        // the zoom was driven from raw coords. Used by the start-region guard.
+        private FractalType ResolveTargetFractalType(VideoZoomRequest request)
+        {
+            if (!string.IsNullOrEmpty(request.TargetRegionName))
+            {
+                var tr = FractalRegionLibrary.Instance.FindByName(request.TargetRegionName);
+                if (tr != null) return tr.FractalType;
+            }
+            return ViewState.FractalType;
+        }
+
+        // Seed the tier from the start depth (as reverse does) so a deep starting
+        // view/region doesn't begin at Standard and pop upward; honour the live
+        // calculator's tier when it is already richer.
+        private void SeedForwardStartQuality(double startZoom)
+        {
+            QualityPreset natural = QualityPreset.Standard;
+            foreach (var p in QualityPreset.All)
+            {
+                if (p.Tier == QualityTier.Extreme) continue;
+                if (p.ZoomMax >= startZoom) { natural = p; break; }
+            }
+            _videoQuality = natural;
+            if (_calculator?.Quality != null
+                && _calculator.Quality.Tier > _videoQuality.Tier
+                && _calculator.Quality.Tier != QualityTier.Extreme)
+                _videoQuality = _calculator.Quality;
         }
 
         private void ApplyVideoFrameState(QDCoord cx, QDCoord cy, double zoom)

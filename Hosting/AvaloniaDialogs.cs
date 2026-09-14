@@ -1298,6 +1298,21 @@ namespace FracturingFog.Hosting
                     Content = "Reverse zoom (start at target, end at classic view)",
                     Foreground = Brushes.LightGray,
                 };
+                // #788 slices A/B — forward-zoom start point: classic full view
+                // (default), the current on-screen view, or any saved region.
+                var startCombo = new ComboBox { MinWidth = 280, HorizontalAlignment = HorizontalAlignment.Stretch };
+                startCombo.Items.Add("Classic full view (default)");
+                startCombo.Items.Add("Current view");
+                foreach (var r in global::FracturingFog.Models.FractalRegionLibrary.Instance.All
+                             .OrderBy(r => r.IsBuiltIn ? 0 : 1).ThenBy(r => r.Name))
+                    startCombo.Items.Add(r.Name);
+                startCombo.SelectedIndex = 0;
+                ToolTip.SetTip(startCombo,
+                    "Where a forward zoom begins. A start region must match the target's fractal type. Ignored for a reverse zoom.");
+                // Reverse already starts at the target, so the start picker is
+                // mutually exclusive — grey it out while reverse is ticked.
+                chkReverse.IsCheckedChanged += (_, _) =>
+                    startCombo.IsEnabled = chkReverse.IsChecked != true;
 
                 // Adaptive iter cap mode — Off / Global / PerTile.
                 // Default Global preserves the prior auto-adaptive behaviour.
@@ -1562,6 +1577,10 @@ namespace FracturingFog.Hosting
                         Seconds = seconds,
                         IsSlideshow = false,
                         IsReverse = chkReverse.IsChecked == true,
+                        StartFromCurrentView = chkReverse.IsChecked != true && startCombo.SelectedIndex == 1,
+                        StartRegionName = chkReverse.IsChecked != true && startCombo.SelectedIndex >= 2
+                            ? startCombo.SelectedItem as string
+                            : null,
                         IsSaveVideo = chkSaveVideo.IsChecked == true,
                         IsSaveLossless = chkSaveLossless.IsChecked == true,
                         IsSaveGif = chkSaveGif.IsChecked == true,
@@ -1630,6 +1649,7 @@ namespace FracturingFog.Hosting
                 root.Children.Add(LabeledRow("Post-encode:", encodeCombo));
                 root.Children.Add(chkSaveGif);
                 root.Children.Add(chkReverse);
+                root.Children.Add(LabeledRow("Start from:", startCombo));
                 root.Children.Add(LabeledRow("Adaptive iter cap:", iterCapCombo));
                 root.Children.Add(smoothBox);
                 root.Children.Add(chkUseRegionWatermark);
