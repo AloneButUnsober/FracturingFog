@@ -242,6 +242,11 @@ namespace FracturingFog.Models
         /// band. Requires <see cref="AutoConstantDrift"/>. Default off.</summary>
         public bool VaryConstantSpeed { get; set; }
 
+        /// <summary>Ken-Burns motion on non-spatial static-hold legs (#806): pan +
+        /// gently zoom the held frame in image space instead of sitting still.
+        /// Default off.</summary>
+        public bool KenBurnsOnHold { get; set; }
+
         /// <summary>Adaptive-sweep block. Drives the Adaptive slider per leg.</summary>
         public AdaptiveSweepConfig AdaptiveSweep { get; set; } = new();
 

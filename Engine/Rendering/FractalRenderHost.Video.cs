@@ -80,6 +80,7 @@ namespace FracturingFog.Rendering
         private bool _videoAutoConstantDrift = true;
         private bool _videoVaryConstantStart;
         private bool _videoVaryConstantSpeed;
+        private bool _videoKenBurnsOnHold;
 
         // ── Region / theme restrictions (video slideshow) ─────────────────
         // Set per-run from VideoZoomRequest so a saved Video preset that pins
@@ -472,6 +473,7 @@ namespace FracturingFog.Rendering
             _videoAutoConstantDrift = request.AutoConstantDrift;
             _videoVaryConstantStart = request.VaryConstantStart;
             _videoVaryConstantSpeed = request.VaryConstantSpeed;
+            _videoKenBurnsOnHold = request.KenBurnsOnHold;
             _videoLegAnimators.Clear();
 
             // Region / theme restrictions for this run (#45).
@@ -2412,8 +2414,9 @@ namespace FracturingFog.Rendering
                     // #94 — non-spatial static-hold: the authored frame is already
                     // on screen (cross-faded in above). Hold it for the leg, no
                     // recompute; RunVideoHold keeps the recorders fed with the held
-                    // frame so a recorded slideshow gets a proper held segment.
-                    RunVideoHold(legSeconds, legCt);
+                    // frame so a recorded slideshow gets a proper held segment, and
+                    // (Ken-Burns on, #806) pans/zooms that frame in image space.
+                    RunVideoHold(newLegBuf, _calculator.Width, _calculator.Height, legSeconds, legCt);
                 }
                 else
                 {
@@ -2743,18 +2746,56 @@ namespace FracturingFog.Rendering
                 _videoLegAnimators[i].Tick(dt);
         }
 
-        // #94 (P4) — hold the already-presented frame for a static-hold leg.
-        // No recompute: the last-uploaded buffer stays on screen; we just tick at
-        // the video frame cadence so any active recorders (MP4/GIF/PNG) capture a
-        // proper held segment with advancing timestamps. Interruptible by leg
-        // skip / stop.
-        private void RunVideoHold(double seconds, CancellationToken ct)
+        // #94 (P4) / #806 — hold a non-spatial leg's frame.
+        //
+        // Static hold (Ken-Burns off): the already-presented buffer stays on
+        // screen; we just tick at the video frame cadence so any active recorders
+        // (MP4/GIF/PNG) capture a proper held segment with advancing timestamps.
+        //
+        // Ken-Burns hold (#806): pan + gently zoom the ALREADY-RENDERED frame as a
+        // pure image-space transform — resample a slowly-moving sub-rect of
+        // heldBuf each frame. No fractal recompute, so this is safe even for the
+        // slow generators (Flame, DLA, Buddhabrot). Frame 0 is the full frame, so
+        // it's continuous with the cross-fade that just presented it.
+        //
+        // Interruptible by leg skip / stop.
+        private void RunVideoHold(uint[] heldBuf, int w, int h, double seconds, CancellationToken ct)
         {
             if (seconds <= 0.0) return;
+            int n = w * h;
+            bool kenBurns = _videoKenBurnsOnHold && heldBuf != null && heldBuf.Length >= n && n > 0;
+
+            // Per-leg Ken-Burns path: zoom in to a random factor, drifting toward
+            // a random point. Eased so it starts/ends gently. Amplitudes small so
+            // the framing stays recognisable.
+            double zEnd = 1.0, endFracX = 0.5, endFracY = 0.5;
+            uint[]? outBuf = null;
+            if (kenBurns)
+            {
+                zEnd = 1.08 + 0.06 * _videoRng.NextDouble();      // 1.08–1.14× zoom
+                endFracX = _videoRng.NextDouble();                 // drift target in [0,1]²
+                endFracY = _videoRng.NextDouble();
+                outBuf = new uint[n];
+            }
+
             var sw = Stopwatch.StartNew();
             int frameMs = (int)Math.Max(1.0, VideoFrameBudgetMs);
             while (!ct.IsCancellationRequested && sw.Elapsed.TotalSeconds < seconds)
             {
+                if (kenBurns)
+                {
+                    double t = sw.Elapsed.TotalSeconds / seconds;
+                    if (t > 1.0) t = 1.0;
+                    double e = t * t * t * (t * (t * 6.0 - 15.0) + 10.0); // smootherstep
+                    double z = 1.0 + (zEnd - 1.0) * e;
+                    double viewW = w / z, viewH = h / z;
+                    double marginX = w - viewW, marginY = h - viewH;
+                    double sx = marginX * (0.5 + (endFracX - 0.5) * e);
+                    double sy = marginY * (0.5 + (endFracY - 0.5) * e);
+                    FracturingFog.Abstractions.Imaging.ImageResampler
+                        .ResampleRectBilinear(heldBuf!, w, h, sx, sy, viewW, viewH, outBuf!);
+                    PresentBuffer(outBuf!, w, h);
+                }
                 CaptureVideoFrame();
                 // Wait one frame; WaitOne returns true when the token is
                 // cancelled (skip/stop) → end the hold immediately.

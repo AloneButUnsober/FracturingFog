@@ -13,7 +13,7 @@
       4K display at 200% scaling with a 12pt UI font) cannot crop labels.
     -->
     <ScrollViewer VerticalScrollBarVisibility="Auto" MaxHeight="780">
-    <Grid Margin="14" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto"
+    <Grid Margin="14" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto"
           ColumnDefinitions="*,Auto">
 
         <!-- Row 0: Saved-config name combo + Type droplist (library mode only) -->
@@ -464,8 +464,21 @@
             </StackPanel>
         </Expander>
 
-        <!-- Row 16: Start / OK / Cancel buttons -->
-        <StackPanel Grid.Row="17" Grid.ColumnSpan="2"
+        <!-- Row 17: Non-spatial static-hold leg options (#806). Video slideshow
+             only; independent of the animations panel above. -->
+        <Border Grid.Row="17" Grid.ColumnSpan="2"
+                IsVisible="{Binding ShowKenBurnsOnHoldToggle}"
+                Margin="0,8,0,0">
+            <StackPanel Spacing="4">
+                <CheckBox Content="Ken-Burns on static-hold legs"
+                          IsChecked="{Binding KenBurnsOnHold, Mode=TwoWay}"
+                          FontWeight="Bold" Foreground="#B4DCB4"
+                          ToolTip.Tip="For non-spatial families (Plasma, Flame, DLA, Logistic, …) that play a static-hold leg, slowly pan and gently zoom the held frame in image space (no fractal recompute) instead of sitting still. Off = a plain static hold." />
+            </StackPanel>
+        </Border>
+
+        <!-- Row 18: Start / OK / Cancel buttons -->
+        <StackPanel Grid.Row="18" Grid.ColumnSpan="2"
                     Orientation="Horizontal"
                     HorizontalAlignment="Right"
                     Spacing="8"
