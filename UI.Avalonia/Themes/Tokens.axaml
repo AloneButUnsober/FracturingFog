@@ -68,4 +68,16 @@
     <x:Double x:Key="FieldWidthWide">150</x:Double>
     <Thickness x:Key="GroupPadding">8</Thickness>
     <Thickness x:Key="FieldMargin">0,0,0,4</Thickness>
+
+    <!-- ── UI-scale font tokens (#809 / S3 #812) ─────────────────────────────
+         Popups (tooltips, combobox dropdowns, menus, flyouts) render as
+         separate top-levels OUTSIDE the per-window LayoutTransform (S2), so
+         they are not scaled by it. SizeFontPopup is the popup text size that
+         UiScalePopupFont keeps at SizeFontBase × current UI scale, applied to
+         popup-leaf controls only (never in-window controls — those already
+         scale via the LayoutTransform, so bumping their font too would
+         double-scale). SizeFontPopup below is the neutral 1.0 seed; the live
+         value is pushed into Application.Resources at runtime. -->
+    <x:Double x:Key="SizeFontBase">14</x:Double>
+    <x:Double x:Key="SizeFontPopup">14</x:Double>
 </ResourceDictionary>

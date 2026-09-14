@@ -70,4 +70,33 @@
         <Setter Property="FontFamily" Value="Consolas, monospace" />
         <Setter Property="TextAlignment" Value="Right" />
     </Style>
+
+    <!-- ── Popup text scaling (#809 / S3 #812) ───────────────────────────────
+         Popups render in their own top-level, OUTSIDE the per-window
+         LayoutTransform (S2), so they are the one surface the transform never
+         scales. These selectors size popup-leaf text to SizeFontPopup, which
+         UiScalePopupFont holds at SizeFontBase × the current UI scale.
+
+         Scope is deliberately the popup LEAVES only — ToolTip, ComboBoxItem,
+         MenuItem (covers MenuFlyout + ContextMenu items), plus FlyoutPresenter
+         / ContextMenu roots whose plain-text children inherit the size. NOT
+         ListBoxItem: a ListBox also lives inside windows, where it is already
+         scaled by the LayoutTransform, and a global item-font bump would
+         double-scale it. FontSize is a DynamicResource so a live scale change
+         reflows open popups. -->
+    <Style Selector="ToolTip">
+        <Setter Property="FontSize" Value="{DynamicResource SizeFontPopup}" />
+    </Style>
+    <Style Selector="ComboBoxItem">
+        <Setter Property="FontSize" Value="{DynamicResource SizeFontPopup}" />
+    </Style>
+    <Style Selector="MenuItem">
+        <Setter Property="FontSize" Value="{DynamicResource SizeFontPopup}" />
+    </Style>
+    <Style Selector="FlyoutPresenter">
+        <Setter Property="FontSize" Value="{DynamicResource SizeFontPopup}" />
+    </Style>
+    <Style Selector="ContextMenu">
+        <Setter Property="FontSize" Value="{DynamicResource SizeFontPopup}" />
+    </Style>
 </Styles>
