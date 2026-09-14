@@ -2166,6 +2166,13 @@ namespace FracturingFog.Rendering
                 // (Flame, DLA, Buddhabrot).
                 bool isHoldLeg = FractalMotionCapabilities.SupportsVideoHoldLeg(region.FractalType);
 
+                // #806 — Buddhabrot progressive-accumulation leg develops from
+                // black instead of the usual full pre-render, so skip the (full,
+                // expensive) pre-render Calculate below and fade into black; the
+                // accumulation then builds the image up batch by batch.
+                bool isBuddhaAccumLeg = isHoldLeg && _videoSweepParamsOnHold
+                    && FractalMotionCapabilities.SupportsVideoBuddhaAccumulation(region.FractalType);
+
                 // Per-leg palette pool capped at the leg's deep endpoint, then
                 // narrowed to the preset's included themes (#45). Empty after
                 // filtering ⇒ fall back to the run's full (already-filtered) pool.
@@ -2361,8 +2368,15 @@ namespace FracturingFog.Rendering
                 uint[] newLegBuf;
                 try
                 {
-                    IFractalCalculator? altPre = SelectAltCalculator(ViewState.FractalType);
-                    if (altPre != null)
+                    IFractalCalculator? altPre = isBuddhaAccumLeg ? null : SelectAltCalculator(ViewState.FractalType);
+                    if (isBuddhaAccumLeg)
+                    {
+                        // Fade into black; RunVideoBuddhaHold develops the image up.
+                        int nn = _calculator.Width * _calculator.Height;
+                        newLegBuf = new uint[nn];
+                        for (int i = 0; i < nn; i++) newLegBuf[i] = 0xFF000000u;
+                    }
+                    else if (altPre != null)
                     {
                         SyncAltCalculatorForVideoFrame(altPre);
                         altPre.Calculate(legCt);
@@ -2424,6 +2438,9 @@ namespace FracturingFog.Rendering
                     if (_videoSweepParamsOnHold
                         && FractalMotionCapabilities.SupportsVideoParamSweep(region.FractalType))
                         RunVideoSweepHold(region, legSeconds, legCt);
+                    else if (_videoSweepParamsOnHold
+                        && FractalMotionCapabilities.SupportsVideoBuddhaAccumulation(region.FractalType))
+                        RunVideoBuddhaHold(region, legSeconds, legCt);
                     else
                         RunVideoHold(newLegBuf, _calculator.Width, _calculator.Height, legSeconds, legCt);
                 }
@@ -2878,6 +2895,62 @@ namespace FracturingFog.Rendering
             finally
             {
                 if (type == FractalType.AcidWarp) p.AcidWarpMorph = awMorphOrig;
+            }
+        }
+
+        // #806 (Buddhabrot accumulation) — a Buddhabrot-family hold leg renders as
+        // a progressive accumulation: the calculator's per-batch composite hook
+        // presents the growing hit histogram so the image visibly "develops" from
+        // black over the leg, rather than a single render + static hold. Batch
+        // count scales with the leg length; each batch is paced to spread the
+        // accumulation across the leg. Cancellation ends the leg (Calculate's
+        // batch loop checks the token). After the samples land, any remaining time
+        // holds the settled image.
+        private void RunVideoBuddhaHold(FractalRegion region, double seconds, CancellationToken ct)
+        {
+            if (seconds <= 0.0) return;
+            var alt = SelectAltCalculator(region.FractalType) as BuddhaFamilyCalculator;
+            if (alt == null) { RunVideoHold(null, 0, 0, seconds, ct); return; }
+
+            var p = ViewState.FractalParameters;
+            bool progOrig = p.BuddhaProgressive;
+            p.BuddhaProgressive = true;
+
+            int batches = Math.Clamp((int)(seconds * 6.0), 16, 60);
+            double perBatch = seconds / batches;
+            var sw = Stopwatch.StartNew();
+
+            SyncAltCalculatorForVideoFrame(alt);
+            alt.ProgressiveBatchesOverride = batches;
+            alt.OnBatchComposited = (done, total) =>
+            {
+                PresentBuffer(alt.ColorBuffer, alt.Width, alt.Height);
+                CaptureVideoFrame();
+                // Pace: spread the batches across the leg (interruptible).
+                double target = done * perBatch;
+                double now = sw.Elapsed.TotalSeconds;
+                if (now < target)
+                    ct.WaitHandle.WaitOne((int)((target - now) * 1000.0));
+            };
+
+            try { alt.Calculate(ct); }
+            catch (OperationCanceledException) { }
+            finally
+            {
+                alt.OnBatchComposited = null;
+                alt.ProgressiveBatchesOverride = null;
+                p.BuddhaProgressive = progOrig;
+            }
+
+            if (ct.IsCancellationRequested) return;
+
+            // Hold the settled image for any remaining leg time.
+            double remaining = seconds - sw.Elapsed.TotalSeconds;
+            if (remaining > 0.2 && alt.ColorBuffer.Length > 0)
+            {
+                var finalBuf = new uint[alt.ColorBuffer.Length];
+                Array.Copy(alt.ColorBuffer, finalBuf, finalBuf.Length);
+                RunVideoHold(finalBuf, alt.Width, alt.Height, remaining, ct);
             }
         }
 

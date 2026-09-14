@@ -193,6 +193,33 @@ public sealed class FractalCapabilitiesTests
                     $"{t} is sweepable but not a hold leg");
     }
 
+    // #806 Buddhabrot progressive accumulation — the four Buddhabrot-family types.
+    [Theory]
+    [InlineData(FractalType.BuddhaBrot, true)]
+    [InlineData(FractalType.Nebulabrot, true)]
+    [InlineData(FractalType.AntiBuddhabrot, true)]
+    [InlineData(FractalType.AntiNebulabrot, true)]
+    [InlineData(FractalType.Logistic, false)]
+    [InlineData(FractalType.Plasma, false)]
+    [InlineData(FractalType.Mandelbrot, false)]
+    public void SupportsVideoBuddhaAccumulation_MatchesPolicy(FractalType t, bool expected)
+        => Assert.Equal(expected, FractalMotionCapabilities.SupportsVideoBuddhaAccumulation(t));
+
+    // Buddha-accumulation ⊆ hold, and disjoint from param-sweep (different hold
+    // animation paths).
+    [Fact]
+    public void BuddhaAccumulation_SubsetOfHold_DisjointFromSweep()
+    {
+        foreach (FractalType t in Enum.GetValues(typeof(FractalType)))
+        {
+            if (!FractalMotionCapabilities.SupportsVideoBuddhaAccumulation(t)) continue;
+            Assert.True(FractalMotionCapabilities.SupportsVideoHoldLeg(t),
+                $"{t} accumulates but isn't a hold leg");
+            Assert.False(FractalMotionCapabilities.SupportsVideoParamSweep(t),
+                $"{t} is both param-sweep and Buddha-accumulation");
+        }
+    }
+
     // The three leg kinds partition the non-user-code families exactly (each gets
     // exactly one leg kind; user code gets none).
     [Fact]

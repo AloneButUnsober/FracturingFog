@@ -183,6 +183,22 @@ namespace FracturingFog.Models
             _ => false,
         };
 
+        /// <summary>
+        /// True for the Buddhabrot-family hold legs that can render as a
+        /// progressive accumulation (#806): re-present the sample buffer as it
+        /// builds over the leg (the image "develops") instead of a single render.
+        /// Requires <see cref="SupportsVideoHoldLeg"/>. Shares the
+        /// "animate hold legs" opt-in with <see cref="SupportsVideoParamSweep"/>.
+        /// </summary>
+        public static bool SupportsVideoBuddhaAccumulation(FractalType type) => type switch
+        {
+            FractalType.BuddhaBrot => true,
+            FractalType.Nebulabrot => true,
+            FractalType.AntiBuddhabrot => true,
+            FractalType.AntiNebulabrot => true,
+            _ => false,
+        };
+
         /// <summary>True when a region of this type gets any motion leg in the
         /// video slideshow — a 2D zoom leg (P1), a 3D camera-fly leg (P3), or a
         /// non-spatial static-hold leg (P4). Only user-code families (excluded

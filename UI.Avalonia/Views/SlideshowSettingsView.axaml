@@ -474,10 +474,10 @@
                           IsChecked="{Binding KenBurnsOnHold, Mode=TwoWay}"
                           FontWeight="Bold" Foreground="#B4DCB4"
                           ToolTip.Tip="For non-spatial families (Plasma, Flame, DLA, Logistic, …) that play a static-hold leg, slowly pan and gently zoom the held frame in image space (no fractal recompute) instead of sitting still. Off = a plain static hold." />
-                <CheckBox Content="Sweep params on hold legs (Logistic / Acid Warp)"
+                <CheckBox Content="Animate hold legs (Logistic / Acid Warp / Buddhabrot)"
                           IsChecked="{Binding SweepParamsOnHold, Mode=TwoWay}"
                           FontWeight="Bold" Foreground="#B4DCB4"
-                          ToolTip.Tip="For the sweepable non-spatial families, animate a parameter over the leg instead of holding: Logistic scrolls its r-window, Acid Warp morphs its flow. Re-renders per frame (these families are cheap). Wins over Ken-Burns for those families; others are unaffected. Off = static hold." />
+                          ToolTip.Tip="For the animatable non-spatial families, move over the leg instead of holding: Logistic scrolls its r-window, Acid Warp morphs its flow, and the Buddhabrot family develops progressively (the image builds up from black as samples accumulate). Re-renders per frame; wins over Ken-Burns for those families. Others are unaffected. Off = static hold." />
             </StackPanel>
         </Border>
 
