@@ -3568,6 +3568,7 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
             AutoConstantDrift = config.AutoConstantDrift,
             VaryConstantStart = config.VaryConstantStart,
             VaryConstantSpeed = config.VaryConstantSpeed,
+            KenBurnsOnHold = config.KenBurnsOnHold,
             // Region / theme restrictions — without these the video slideshow
             // cycled the whole library, ignoring a preset that pinned one
             // region + one theme (#45).

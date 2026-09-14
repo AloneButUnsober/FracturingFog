@@ -14,6 +14,7 @@ zoom legs, 3D camera-fly legs, and non-spatial static-hold legs.
 [#93]: https://github.com/AloneButUnsober/FracturingFog/issues/93
 [#94]: https://github.com/AloneButUnsober/FracturingFog/issues/94
 [#801]: https://github.com/AloneButUnsober/FracturingFog/issues/801
+[#806]: https://github.com/AloneButUnsober/FracturingFog/issues/806
 
 ## Problem (original)
 
@@ -192,12 +193,19 @@ instead of a broken plane zoom.
    still ticks the recorders at frame cadence so a recorded slideshow gets a
    proper held segment; interruptible by skip / stop.
 
+**Ken-Burns hold ([#806], shipped 2026-09-14).** Opt-in `KenBurnsOnHold`
+(`VideoZoomRequest` / `SlideshowConfig`; Slideshow Settings toggle, default off):
+a hold leg slowly pans + gently zooms the already-rendered frame as a pure
+image-space transform (`ImageResampler.ResampleRectBilinear` in Abstractions —
+bilinear resample of a moving sub-rect), driven by `RunVideoHold`. No fractal
+recompute, so it's safe even for the slow generators. Frame 0 is the full frame,
+so it's continuous with the cross-fade.
+
 ### P4 limitations (deliberate)
 
-- **Static hold only** — no Ken-Burns pan/zoom and no mid-leg param sweep
-  (Logistic r-window, Flame/Plasma/DLA seed drift, Buddhabrot progressive
-  accumulation). These need image-space motion or per-frame recompute; a natural
-  follow-up.
+- **No mid-leg param sweep** — Logistic r-window, Flame/Plasma/DLA seed drift,
+  Buddhabrot progressive accumulation are still a follow-up ([#806] tracks the
+  param-sweep + Buddhabrot-accumulation tracks; Ken-Burns of that issue shipped).
 - Strange Attractor / Buddhabrot family carry no snapshot block yet, so a held
   leg uses their live/default params (still renders, just not authored-exact).
 - Buddhabrot-family legs render once but can be slow at Standard tier; exclude

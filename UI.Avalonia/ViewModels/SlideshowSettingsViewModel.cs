@@ -67,6 +67,7 @@ public sealed class SlideshowSettingsViewModel : ViewModelBase
     private bool _autoConstantDrift = true;
     private bool _varyConstantStart;
     private bool _varyConstantSpeed;
+    private bool _kenBurnsOnHold;
 
     private const string PostFxKeyBrightness = "brightness";
     private const string PostFxKeyContrast   = "contrast";
@@ -372,6 +373,18 @@ public sealed class SlideshowSettingsViewModel : ViewModelBase
     /// constant drift itself is available and on (#801).</summary>
     public bool ShowConstantDriftVarianceToggles => ShowAutoConstantDriftToggle && _autoConstantDrift;
 
+    /// <summary>Ken-Burns motion on non-spatial static-hold legs (#806): pan +
+    /// gently zoom the held frame instead of sitting still.</summary>
+    public bool KenBurnsOnHold
+    {
+        get => _kenBurnsOnHold;
+        set { this.RaiseAndSetIfChanged(ref _kenBurnsOnHold, value); MarkDirty(); }
+    }
+
+    /// <summary>Show the Ken-Burns toggle — only for a Video slideshow (hold
+    /// legs are a video-slideshow concept; #806). Independent of animations.</summary>
+    public bool ShowKenBurnsOnHoldToggle => IsVideo;
+
     /// <summary>Show the "Enable animations" opt-in toggle — only for Image /
     /// Video. Animation type animates unconditionally, so the toggle is
     /// hidden there.</summary>
@@ -490,6 +503,7 @@ public sealed class SlideshowSettingsViewModel : ViewModelBase
             this.RaisePropertyChanged(nameof(ShowEnableAnimationsToggle));
             this.RaisePropertyChanged(nameof(ShowAutoConstantDriftToggle));
             this.RaisePropertyChanged(nameof(ShowConstantDriftVarianceToggles));
+            this.RaisePropertyChanged(nameof(ShowKenBurnsOnHoldToggle));
             this.RaisePropertyChanged(nameof(AnimationsExpanded));
             MarkDirty();
         }
@@ -738,6 +752,7 @@ public sealed class SlideshowSettingsViewModel : ViewModelBase
         _working.AutoConstantDrift = _autoConstantDrift;
         _working.VaryConstantStart = _varyConstantStart;
         _working.VaryConstantSpeed = _varyConstantSpeed;
+        _working.KenBurnsOnHold = _kenBurnsOnHold;
 
         _working.AdaptiveSweep.Enabled = _sweepEnabled;
         _working.AdaptiveSweep.Start = _sweepStart;
@@ -788,6 +803,7 @@ public sealed class SlideshowSettingsViewModel : ViewModelBase
         _autoConstantDrift = _working.AutoConstantDrift;
         _varyConstantStart = _working.VaryConstantStart;
         _varyConstantSpeed = _working.VaryConstantSpeed;
+        _kenBurnsOnHold = _working.KenBurnsOnHold;
 
         // Refresh per-config filter checkmarks. CheckableItem.IsChecked fires
         // Owner.OnFilterItemChanged → MarkDirty, which is guarded by
@@ -814,6 +830,8 @@ public sealed class SlideshowSettingsViewModel : ViewModelBase
         this.RaisePropertyChanged(nameof(VaryConstantStart));
         this.RaisePropertyChanged(nameof(VaryConstantSpeed));
         this.RaisePropertyChanged(nameof(ShowConstantDriftVarianceToggles));
+        this.RaisePropertyChanged(nameof(KenBurnsOnHold));
+        this.RaisePropertyChanged(nameof(ShowKenBurnsOnHoldToggle));
         this.RaisePropertyChanged(nameof(RandomizeAnimationsByFractalType));
         this.RaisePropertyChanged(nameof(UseExtremeRegions));
         this.RaisePropertyChanged(nameof(TotalDisplaySec));

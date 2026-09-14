@@ -193,6 +193,12 @@ namespace FracturingFog.Render
         /// exactly one traversal per leg (P2 behaviour).</summary>
         public bool VaryConstantSpeed { get; set; }
 
+        /// <summary>Ken-Burns motion on non-spatial static-hold legs (#806).
+        /// When on, a hold leg (Plasma, Flame, DLA, Logistic, …) slowly pans +
+        /// zooms the already-rendered frame in image space (no fractal recompute)
+        /// instead of sitting still. Default off ⇒ the P4 static hold.</summary>
+        public bool KenBurnsOnHold { get; set; }
+
         // ── Region / theme restrictions (video slideshow) ─────────────────
         // Mirror the image slideshow's include/filter sets so a saved Video
         // preset that pins one region + one theme actually plays just that,
