@@ -2768,7 +2768,7 @@ namespace FracturingFog.Rendering
         // it's continuous with the cross-fade that just presented it.
         //
         // Interruptible by leg skip / stop.
-        private void RunVideoHold(uint[] heldBuf, int w, int h, double seconds, CancellationToken ct)
+        private void RunVideoHold(uint[]? heldBuf, int w, int h, double seconds, CancellationToken ct)
         {
             if (seconds <= 0.0) return;
             int n = w * h;
