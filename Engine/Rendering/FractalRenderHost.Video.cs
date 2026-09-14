@@ -1215,7 +1215,16 @@ namespace FracturingFog.Rendering
                     return;
                 }
 
-                alt.Calculate(ct);
+                // A per-frame skip (SkipLeg) or Stop cancels ct mid-Calculate;
+                // the alt calculators run Parallel.For with the token, which
+                // throws OCE. Swallow it and abandon the frame — VideoLoop's
+                // next ct check exits the leg and the slideshow loop continues
+                // to the next leg. Without this, the OCE propagates out and
+                // faults the whole slideshow task (abrupt stop) — the bug was
+                // reachable whenever a Julia/Phoenix/Glynn (alt-path) leg was
+                // skipped, e.g. with constant-drift on (#801 smoke test).
+                try { alt.Calculate(ct); }
+                catch (OperationCanceledException) { return; }
                 if (ShowPerfHud)
                     _perfStats.RecordCalc((Stopwatch.GetTimestamp() - calcStartA) * 1000.0 / Stopwatch.Frequency);
                 if (ct.IsCancellationRequested) return;
@@ -1256,7 +1265,10 @@ namespace FracturingFog.Rendering
             }
 
             long calcStart = ShowPerfHud ? Stopwatch.GetTimestamp() : 0;
-            _calculator.Calculate(ct);
+            // As above: swallow a mid-Calculate cancel (skip / stop) so it
+            // abandons the frame instead of faulting the slideshow task.
+            try { _calculator.Calculate(ct); }
+            catch (OperationCanceledException) { return; }
             if (ShowPerfHud)
             {
                 _perfStats.RecordCalc((Stopwatch.GetTimestamp() - calcStart) * 1000.0 / Stopwatch.Frequency);
