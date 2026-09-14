@@ -42,7 +42,9 @@ public enum ConstantPathShape
 public sealed class ConstantPathLegAnimator : IParameterAnimator
 {
     private readonly Complex _base;
+    private readonly Complex _startOffset; // fixed per-leg shift of the whole path (#801)
     private readonly double _amplitude;
+    private readonly double _speed;        // traversal multiplier: loops (Orbit) / cycles (Line) (#801)
     private readonly ConstantPathShape _shape;
     private readonly double _legSeconds;
     private readonly double _startAngle;   // radians — orbit/arc entry angle
@@ -63,6 +65,15 @@ public sealed class ConstantPathLegAnimator : IParameterAnimator
     /// <param name="startAngle">Orbit/arc entry angle in radians.</param>
     /// <param name="lineAngle">Line direction in radians.</param>
     /// <param name="arcSpan">Arc sweep in radians (ignored for other shapes).</param>
+    /// <param name="startOffset">Fixed per-leg shift of the whole path (#801). The
+    /// leg begins at <see cref="StartValue"/> = <paramref name="baseValue"/> +
+    /// this, so the leg pre-render must render at <see cref="StartValue"/> to
+    /// avoid a first-frame jump. Default zero ⇒ leg starts on the authored
+    /// constant (P2 behaviour).</param>
+    /// <param name="speed">Traversal multiplier (#801): Orbit loop count, Line
+    /// oscillation count, Arc sweep scale. Default 1 ⇒ exactly one traversal per
+    /// leg (P2 behaviour). Non-integer values end the path off-base; the leg
+    /// cross-fade covers the seam.</param>
     public ConstantPathLegAnimator(
         string paramName,
         Complex baseValue,
@@ -72,11 +83,15 @@ public sealed class ConstantPathLegAnimator : IParameterAnimator
         Action<Complex> setter,
         double startAngle = 0.0,
         double lineAngle = 0.0,
-        double arcSpan = System.Math.PI)
+        double arcSpan = System.Math.PI,
+        Complex startOffset = default,
+        double speed = 1.0)
     {
         Name = paramName ?? throw new ArgumentNullException(nameof(paramName));
         _base = baseValue;
+        _startOffset = startOffset;
         _amplitude = System.Math.Max(0.0, amplitude);
+        _speed = speed > 0.0 ? speed : 1.0;
         _shape = shape;
         _legSeconds = legSeconds > 0.0 ? legSeconds : 1.0;
         _setter = setter ?? throw new ArgumentNullException(nameof(setter));
@@ -92,6 +107,22 @@ public sealed class ConstantPathLegAnimator : IParameterAnimator
     /// <summary>2D escape-time constant — the cheapest animated-param class.</summary>
     public AnimatableParamCost Cost => AnimatableParamCost.Cheap;
 
+    /// <summary>The constant this leg starts on (frame 0). With a zero start
+    /// offset this equals the authored constant; with a per-leg start offset
+    /// (#801) it is shifted, and the leg pre-render must render here so the
+    /// first animated frame matches the fade target.</summary>
+    public Complex StartValue => _base + _startOffset;
+
+    /// <summary>Whether this leg begins off the authored constant (#801) — i.e.
+    /// the caller must pre-render at <see cref="StartValue"/> so the leg's fade
+    /// target matches frame 0.</summary>
+    public bool HasStartOffset => _startOffset != Complex.Zero;
+
+    /// <summary>Write <see cref="StartValue"/> into the bound parameter now, so a
+    /// leg pre-render taken before the first <see cref="Tick"/> renders at the
+    /// leg's actual start constant rather than the authored one (#801).</summary>
+    public void ApplyStartValue() => _setter(StartValue);
+
     public void Tick(double dt)
     {
         if (!IsEnabled || dt <= 0.0) return;
@@ -99,11 +130,13 @@ public sealed class ConstantPathLegAnimator : IParameterAnimator
         double u = _elapsed / _legSeconds;
         if (u < 0.0) u = 0.0;
         else if (u > 1.0) u = 1.0;
-        _setter(_base + Offset(u));
+        _setter(_base + _startOffset + Offset(u));
     }
 
     /// <summary>The path offset at normalised leg progress <paramref name="u"/>
-    /// in <c>[0,1]</c>. Zero at <c>u = 0</c> for every shape.</summary>
+    /// in <c>[0,1]</c>, relative to <see cref="StartValue"/>. Zero at
+    /// <c>u = 0</c> for every shape (the per-leg start offset is added on top in
+    /// <see cref="Tick"/> / <see cref="StartValue"/>, not here).</summary>
     public Complex Offset(double u)
     {
         double s = Smoother(u);
@@ -111,19 +144,20 @@ public sealed class ConstantPathLegAnimator : IParameterAnimator
         {
             case ConstantPathShape.Line:
             {
-                // Out-and-back: 0 → amplitude at mid → 0. sin(π·s) is already
-                // velocity-zero at both ends after the smootherstep on u.
-                double mag = _amplitude * System.Math.Sin(System.Math.PI * s);
+                // Out-and-back: 0 → amplitude at mid → 0 for speed 1. sin() is
+                // velocity-zero at u=0 after the smootherstep; higher speed adds
+                // whole oscillations along the line.
+                double mag = _amplitude * System.Math.Sin(System.Math.PI * _speed * s);
                 return new Complex(mag * System.Math.Cos(_lineAngle), mag * System.Math.Sin(_lineAngle));
             }
             case ConstantPathShape.Orbit:
             {
-                double delta = 2.0 * System.Math.PI * s;
+                double delta = 2.0 * System.Math.PI * _speed * s;
                 return CirclePoint(_startAngle + delta) - CirclePoint(_startAngle);
             }
             case ConstantPathShape.Arc:
             {
-                double delta = _arcSpan * s;
+                double delta = _arcSpan * _speed * s;
                 return CirclePoint(_startAngle + delta) - CirclePoint(_startAngle);
             }
             default:

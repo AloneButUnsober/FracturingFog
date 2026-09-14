@@ -435,6 +435,17 @@
                               IsVisible="{Binding ShowAutoConstantDriftToggle}"
                               FontWeight="Bold" Foreground="#B4DCB4"
                               ToolTip.Tip="Video slideshow only. When a Julia / Phoenix / Glynn leg has no authored animation of its own, gently sweep its complex constant along an eased path during the leg (the set keeps its shape while filaments breathe) instead of a plain point-zoom. Off = static point-zoom." />
+                    <StackPanel Spacing="4" Margin="20,0,0,0"
+                                IsVisible="{Binding ShowConstantDriftVarianceToggles}">
+                        <CheckBox Content="Vary start position each leg"
+                                  IsChecked="{Binding VaryConstantStart, Mode=TwoWay}"
+                                  Foreground="#B4DCB4"
+                                  ToolTip.Tip="Begin each drift leg at a small random offset from the region's authored constant (bounded, so the set keeps its shape), so repeated legs of the same region don't look identical. The leg pre-render tracks the offset, so the first frame doesn't jump." />
+                        <CheckBox Content="Vary drift speed each leg"
+                                  IsChecked="{Binding VaryConstantSpeed, Mode=TwoWay}"
+                                  Foreground="#B4DCB4"
+                                  ToolTip.Tip="Randomise how far/fast the constant travels each leg, within a tasteful band (about 0.75×–1.75× one traversal), so leg-to-leg motion differs without strobing." />
+                    </StackPanel>
                     <TextBlock Text="Included Animations  (unchecked all = all eligible)"
                                Foreground="#B4DCB4" FontWeight="Bold" Margin="0,6,0,0" />
                     <ListBox ItemsSource="{Binding AvailableAnimations}"

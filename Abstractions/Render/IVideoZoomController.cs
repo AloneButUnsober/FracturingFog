@@ -180,6 +180,19 @@ namespace FracturingFog.Render
         /// un-animated constant legs as static point-zooms.</summary>
         public bool AutoConstantDrift { get; set; } = true;
 
+        /// <summary>Per-leg variance of the default constant drift (#801). When
+        /// on, each leg begins at a small bounded random offset from the authored
+        /// constant instead of on it (the leg pre-render tracks the offset, so no
+        /// first-frame jump). Requires <see cref="AutoConstantDrift"/>; default
+        /// off ⇒ every leg starts on the authored constant (P2 behaviour).</summary>
+        public bool VaryConstantStart { get; set; }
+
+        /// <summary>Per-leg variance of the default constant-drift speed (#801).
+        /// When on, each leg's constant travels at a randomised speed within a
+        /// tasteful band. Requires <see cref="AutoConstantDrift"/>; default off ⇒
+        /// exactly one traversal per leg (P2 behaviour).</summary>
+        public bool VaryConstantSpeed { get; set; }
+
         // ── Region / theme restrictions (video slideshow) ─────────────────
         // Mirror the image slideshow's include/filter sets so a saved Video
         // preset that pins one region + one theme actually plays just that,

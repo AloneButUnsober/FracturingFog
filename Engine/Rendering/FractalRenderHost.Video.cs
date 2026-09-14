@@ -78,6 +78,8 @@ namespace FracturingFog.Rendering
         private IReadOnlyList<string>? _videoAnimFilter;
         private bool _videoAnimRandomize;
         private bool _videoAutoConstantDrift = true;
+        private bool _videoVaryConstantStart;
+        private bool _videoVaryConstantSpeed;
 
         // ── Region / theme restrictions (video slideshow) ─────────────────
         // Set per-run from VideoZoomRequest so a saved Video preset that pins
@@ -468,6 +470,8 @@ namespace FracturingFog.Rendering
             _videoAnimFilter = request.FilterAnimations;
             _videoAnimRandomize = request.RandomizeAnimationsByFractalType;
             _videoAutoConstantDrift = request.AutoConstantDrift;
+            _videoVaryConstantStart = request.VaryConstantStart;
+            _videoVaryConstantSpeed = request.VaryConstantSpeed;
             _videoLegAnimators.Clear();
 
             // Region / theme restrictions for this run (#45).
@@ -2564,8 +2568,15 @@ namespace FracturingFog.Rendering
                     return;
 
             var drift = ConstantDriftResolver.TryBuild(
-                region.FractalType, ViewState.FractalParameters, legSeconds, _videoRng);
+                region.FractalType, ViewState.FractalParameters, legSeconds, _videoRng,
+                varyStart: _videoVaryConstantStart, varySpeed: _videoVaryConstantSpeed);
             if (drift == null) return;
+
+            // #801 — when the leg starts off the authored constant, write its
+            // start value into the live params NOW so the leg pre-render (fade
+            // target, taken before the first Tick) renders at that constant and
+            // frame 0 doesn't jump.
+            if (drift.HasStartOffset) drift.ApplyStartValue();
 
             _videoLegAnimators.Add(drift);
             _videoAnimLastTicks = Stopwatch.GetTimestamp();

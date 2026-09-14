@@ -232,6 +232,16 @@ namespace FracturingFog.Models
         /// animated.</summary>
         public bool AutoConstantDrift { get; set; } = true;
 
+        /// <summary>Per-leg variance of the default constant drift (#801): begin
+        /// each leg at a small bounded random offset from the authored constant.
+        /// Requires <see cref="AutoConstantDrift"/>. Default off.</summary>
+        public bool VaryConstantStart { get; set; }
+
+        /// <summary>Per-leg variance of the default constant-drift speed (#801):
+        /// randomise how fast the constant travels each leg, within a tasteful
+        /// band. Requires <see cref="AutoConstantDrift"/>. Default off.</summary>
+        public bool VaryConstantSpeed { get; set; }
+
         /// <summary>Adaptive-sweep block. Drives the Adaptive slider per leg.</summary>
         public AdaptiveSweepConfig AdaptiveSweep { get; set; } = new();
 
