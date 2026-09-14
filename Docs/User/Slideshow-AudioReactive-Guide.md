@@ -165,9 +165,11 @@ theme and recording behaviour.
 > [!NOTE]
 > Only regions matching the **start region's fractal type** are eligible — X/Y
 > coordinates aren't comparable across different fractals. If the start and end
-> are different types you get a direct two-stop hop, and the status bar says so.
-> Raise the **Zoom weight** to favour a route that changes depth gradually;
-> raise the **Corridor** to skip regions that sit far off the direct line.
+> are different types (or the corridor removes every region in between), the
+> route degrades to a direct two-stop hop and a **confirmation dialog** asks
+> whether to run it anyway. Raise the **Zoom weight** to favour a route that
+> changes depth gradually; raise the **Corridor** to skip regions that sit far
+> off the direct line.
 
 ---
 

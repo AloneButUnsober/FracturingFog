@@ -1969,9 +1969,32 @@ namespace FracturingFog.Hosting
                     {
                         var req = await AvaloniaDialogs.ShowTravelToDialogAsync(shell.Main.SelectedRegion);
                         if (req == null) return;
-                        string err = shell.StartTravelSlideshow(req);
-                        if (!string.IsNullOrEmpty(err))
-                            await AvaloniaDialogs.ShowMessageAsync("Travel to location", err, expectsConfirmation: false);
+
+                        var plan = shell.PlanTravel(req);
+
+                        // Hard failure (missing start/end, start == end, nothing
+                        // to visit): explain and stop.
+                        if (plan.Ordered.Count < 2)
+                        {
+                            await AvaloniaDialogs.ShowMessageAsync(
+                                "Travel to location",
+                                plan.Warning ?? "Could not plan a course between those regions.",
+                                expectsConfirmation: false);
+                            return;
+                        }
+
+                        // Planned but degraded (cross-type direct hop, or the
+                        // corridor removed every intermediate): confirm first.
+                        if (!string.IsNullOrEmpty(plan.Warning))
+                        {
+                            var choice = await AvaloniaDialogs.ShowMessageAsync(
+                                "Travel to location",
+                                plan.Warning + "\n\nRun this route anyway?",
+                                expectsConfirmation: true);
+                            if (choice != AvaloniaDialogs.MessageResult.Yes) return;
+                        }
+
+                        shell.StartPlannedTravel(plan.Ordered.Select(w => w.Name).ToList());
                     }
                     catch (Exception ex)
                     {

@@ -795,33 +795,42 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
     /// dialog (the host owns the dialog UI + region library access).</summary>
     public void RaiseTravelToRequested() => TravelToRequested?.Invoke(this, EventArgs.Empty);
 
-    /// <summary>Plan a coordinate-ordered course between two regions and start the
-    /// image slideshow walking it in order. An empty start region means "the
-    /// current view's region". Returns an empty string on success, or a message
-    /// describing why no course could be planned.</summary>
-    public string StartTravelSlideshow(TravelPlanRequest req)
+    /// <summary>Plan a coordinate-ordered course between two regions WITHOUT
+    /// starting anything (so the host can confirm a warning first). An empty
+    /// start region means "the current view's region". A result with fewer than
+    /// two stops carries the reason in <see cref="CoursePlanResult.Warning"/>; a
+    /// two-plus-stop result with a non-null Warning planned, but degraded (type
+    /// mismatch → direct hop, or the corridor emptied the middle).</summary>
+    public CoursePlanResult PlanTravel(TravelPlanRequest req)
     {
-        if (req == null) return "No travel request.";
-        if (_slideshow is { IsRunning: true }) _slideshow.Stop();
+        if (req == null) return new CoursePlanResult { Warning = "No travel request." };
 
         string startName = string.IsNullOrEmpty(req.StartRegion)
             ? (Main.SelectedRegion ?? string.Empty)
             : req.StartRegion;
-        if (string.IsNullOrEmpty(startName)) return "No start region — select a region first.";
-        if (string.IsNullOrEmpty(req.EndRegion)) return "No end region chosen.";
+        if (string.IsNullOrEmpty(startName))
+            return new CoursePlanResult { Warning = "No start region — select a region first." };
+        if (string.IsNullOrEmpty(req.EndRegion))
+            return new CoursePlanResult { Warning = "No end region chosen." };
 
         var waypoints = _themeService.GetRegionWaypoints();
-        var result = CoursePlanner.Plan(waypoints, startName, req.EndRegion, new CoursePlanOptions
+        return CoursePlanner.Plan(waypoints, startName, req.EndRegion, new CoursePlanOptions
         {
             WeightXY = req.WeightXY,
             WeightZoom = req.WeightZoom,
             CorridorRadius = req.CorridorRadius,
         });
-        if (result.Ordered.Count < 2)
-            return result.Warning ?? "Could not plan a course between those regions.";
+    }
 
-        int stops = result.Ordered.Count;
-        _pendingTravelCourse = result.Ordered.Select(w => w.Name).ToList();
+    /// <summary>Start the image slideshow walking a pre-planned course in order.
+    /// The host calls this after <see cref="PlanTravel"/> (and any warning
+    /// confirmation). No-op for fewer than two stops.</summary>
+    public void StartPlannedTravel(IReadOnlyList<string> courseNames)
+    {
+        if (courseNames == null || courseNames.Count < 2) return;
+        if (_slideshow is { IsRunning: true }) _slideshow.Stop();
+
+        _pendingTravelCourse = courseNames;
 
         SlideshowConfig active;
         try { active = SlideshowConfigLibrary.GetActive(SlideshowConfigLibrary.Load()); }
@@ -830,9 +839,7 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
         if (active.Type == SlideshowType.Video) active.Type = SlideshowType.Image;
         StartSlideshowWithConfig(active);
 
-        string note = string.IsNullOrEmpty(result.Warning) ? "" : $" ({result.Warning})";
-        Main.SetStatus($"Travel: {stops} stops, {startName} → {req.EndRegion}{note}");
-        return string.Empty;
+        Main.SetStatus($"Travel: {courseNames.Count} stops, {courseNames[0]} → {courseNames[courseNames.Count - 1]}.");
     }
 
     private void StartSlideshowWithConfig(SlideshowConfig activeConfig)
