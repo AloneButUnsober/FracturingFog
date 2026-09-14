@@ -1959,6 +1959,27 @@ namespace FracturingFog.Hosting
             // write back on OK. The Avalonia shell doesn't run the slideshow
             // engine yet (legacy Slideshow.cs stays intact per scope), but the
             // settings round-trip so the values persist for when it lands.
+            // #789 slice B — "Travel to location…": collect endpoints + weights,
+            // then let the shell plan the course and start the ordered slideshow.
+            shell.TravelToRequested += (_, _) =>
+            {
+                Dispatcher.UIThread.Post(async () =>
+                {
+                    try
+                    {
+                        var req = await AvaloniaDialogs.ShowTravelToDialogAsync(shell.Main.SelectedRegion);
+                        if (req == null) return;
+                        string err = shell.StartTravelSlideshow(req);
+                        if (!string.IsNullOrEmpty(err))
+                            await AvaloniaDialogs.ShowMessageAsync("Travel to location", err, expectsConfirmation: false);
+                    }
+                    catch (Exception ex)
+                    {
+                        Console.Error.WriteLine($"[AvaloniaShellBootstrap] Travel failed: {ex.Message}");
+                    }
+                });
+            };
+
             shell.SlideshowSettingsRequested += async (_, _) =>
             {
                 try

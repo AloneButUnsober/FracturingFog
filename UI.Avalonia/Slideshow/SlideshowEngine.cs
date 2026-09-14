@@ -150,12 +150,27 @@ namespace FracturingFog.UI.Avalonia.Slideshow
         /// which theme is currently rendering.</summary>
         public event EventHandler<string>? ThemeApplied;
 
+        /// <summary>#789 slice B — when set to a non-empty ordered list, the
+        /// region cycler walks it in order (looping) instead of drawing random
+        /// regions from the shuffle bag. Set by the "travel to location" flow
+        /// before <see cref="Start"/>; cleared (null) for an ordinary slideshow.
+        /// Region/theme filters are not applied to a travel course (the planner
+        /// already curated it).</summary>
+        public IReadOnlyList<string>? TravelCourse { get; set; }
+        private IReadOnlyList<string>? _travelCourse;
+        private int _travelIdx;
+
         public void Start()
         {
             if (IsRunning) return;
             _paused = false;
             _skipRegion = false;
             _skipTheme = false;
+
+            // Snapshot the travel course for this run so a mid-run property
+            // change can't reorder the journey underneath the loop.
+            _travelCourse = TravelCourse is { Count: > 0 } ? TravelCourse : null;
+            _travelIdx = 0;
 
             // Reseed per run so a fixed RandomSeed reproduces the same order
             // from the top, and 0 draws fresh entropy. The engine instance is
@@ -224,6 +239,14 @@ namespace FracturingFog.UI.Avalonia.Slideshow
                     if (LockRegion && heldRegion != null)
                     {
                         regionName = heldRegion;
+                    }
+                    else if (_travelCourse != null)
+                    {
+                        // #789 slice B — travel mode: walk the planned course in
+                        // order, looping back to the start when the journey ends.
+                        regionName = _travelCourse[_travelIdx % _travelCourse.Count];
+                        _travelIdx++;
+                        heldRegion = regionName;
                     }
                     else
                     {

@@ -67,6 +67,7 @@ public sealed class FloatingMenuViewModel : ViewModelBase
         SaveLightingToThemeCommand = MakeCmd(
             () => SaveLightingToThemeClick?.Invoke(this, SelectedTheme ?? string.Empty));
         SlideshowSettingsCommand= MakeCmd(() => SlideshowSettingsClick?.Invoke(this, EventArgs.Empty));
+        TravelCommand           = MakeCmd(() => TravelClick?.Invoke(this, EventArgs.Empty));
         AppSettingsCommand      = MakeCmd(() => AppSettingsClick?.Invoke(this, EventArgs.Empty));
         AudioSettingsCommand    = MakeCmd(() => AudioSettingsClick?.Invoke(this, EventArgs.Empty));
         ServerCommand           = MakeCmd(() => ServerClick?.Invoke(this, EventArgs.Empty));
@@ -1093,6 +1094,8 @@ public sealed class FloatingMenuViewModel : ViewModelBase
     public ReactiveCommand<Unit, Unit> EditThemeCommand { get; }
     public ReactiveCommand<Unit, Unit> SaveLightingToThemeCommand { get; }
     public ReactiveCommand<Unit, Unit> SlideshowSettingsCommand { get; }
+    /// <summary>#789 slice B — "Travel to location…" (plan a course + start).</summary>
+    public ReactiveCommand<Unit, Unit> TravelCommand { get; }
     public ReactiveCommand<Unit, Unit> AppSettingsCommand { get; }
     public ReactiveCommand<Unit, Unit> AudioSettingsCommand { get; }
     public ReactiveCommand<Unit, Unit> ServerCommand { get; }
@@ -1142,6 +1145,8 @@ public sealed class FloatingMenuViewModel : ViewModelBase
     /// </summary>
     public event EventHandler<string>? SaveLightingToThemeClick;
     public event EventHandler? SlideshowSettingsClick;
+    /// <summary>#789 slice B — raised by <see cref="TravelCommand"/>.</summary>
+    public event EventHandler? TravelClick;
     /// <summary>Open the general application-settings dialog (animated-param
     /// ceiling override, and future app-global settings).</summary>
     public event EventHandler? AppSettingsClick;
