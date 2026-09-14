@@ -67,6 +67,15 @@ namespace FracturingFog.UI.Avalonia.Services
             // render MainWindow) so floating/detached panels click into alignment.
             EdgeSnapBehavior.Attach(this);
 
+            // Global UI scale (#809 / S4 #813). Many pop-out panels — the Control
+            // Center and the satellite editors especially — are shown via
+            // MainWindow.Sync* → Show(this), which bypasses WindowService.Prepare,
+            // so wrapping only in Prepare left them unscaled. Wrapping here in the
+            // shared host covers every PanelHostWindow regardless of open path; the
+            // AttachUiScale idempotency guard makes the double-cover (host ctor +
+            // any later Prepare) a no-op.
+            WindowService.AttachUiScale(this);
+
             // The close signal comes from an IClosableDialog. Most views expose
             // it on their VM (DataContext); some (code-behind close via Click
             // handlers) expose it on the control itself. Prefer the control,
