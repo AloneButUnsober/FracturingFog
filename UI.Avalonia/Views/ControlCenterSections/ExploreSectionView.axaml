@@ -51,6 +51,7 @@
                     <TextBox   Classes="coord" Grid.Row="4" Grid.Column="1" Text="{Binding Menu.Iter, UpdateSourceTrigger=PropertyChanged}" />
                 </Grid>
                 <CheckBox Content="Lock Iterations" IsChecked="{Binding Menu.IterLocked}" Foreground="#C8C878" FontWeight="Bold" Margin="80,4,0,0" ToolTip.Tip="Lock iteration count — pan/zoom won't recalc" />
+                <CheckBox Content="Pipe notation (FF-native limbs)" IsChecked="{Binding Menu.UsePipeNotation}" Margin="80,4,0,0" ToolTip.Tip="Off (default): show/copy CX/CY as a single decimal value. On: show/copy pipe-delimited limbs (Hi|Lo|…) for lossless deep-zoom precision. Paste accepts either." />
                 <UniformGrid Columns="3" Margin="80,6,0,0">
                     <Button Classes="action go" Content="Go"     Command="{Binding Menu.GoCommand}"         Margin="0,0,4,0" />
                     <Button Classes="action go" Content="Flip Y" Command="{Binding Menu.FlipCommand}"       Margin="0,0,4,0" />

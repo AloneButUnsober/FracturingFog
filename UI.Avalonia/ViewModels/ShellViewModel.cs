@@ -41,6 +41,7 @@ using FracturingFog.Input;
 using FracturingFog.Models;
 using FracturingFog.Render;
 using FracturingFog.Slideshow;
+using FracturingFog.ViewState;
 using FracturingFog.UI.Avalonia.Slideshow;
 using FracturingFog.UI.Avalonia.ViewModels.Animation;
 using ReactiveUI;
@@ -311,9 +312,13 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
         // UI.Avalonia stays free of TopLevel.Clipboard plumbing here.
         FloatingMenu.CopyCoordsClick   += (_, _) =>
         {
-            string text = FormatCoords(Main.ViewState);
+            string text = FormatCoords(Main.ViewState, FloatingMenu.UsePipeNotation);
             CopyToClipboardRequested?.Invoke(this, text);
         };
+
+        // #791 — re-render the CX/CY boxes immediately when the notation toggle
+        // flips (otherwise the display only updates on the next frame).
+        FloatingMenu.NotationChanged += (_, _) => RefreshCoordDisplay();
 
         // Save / Delete current region: bubble up so the host can pop a
         // small name-prompt + confirmation modal, then ask IColorThemeService
@@ -525,15 +530,17 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
         // consumers in the View layer; for now we just always overwrite.
         Main.RenderHost.FrameCompleted += (_, info) =>
         {
-            // Surface DD/QD limbs in the menu as Hi|Lo[|Lo2|Lo3] when the
-            // view state carries any non-zero low limb. The textbox already
-            // accepts the same format for input, so copy-paste round-trips
-            // a deep-zoom region without losing precision.
+            // #791 — CX/CY display honours the notation toggle: single-value by
+            // default, pipe-delimited limbs when the user opts in. The textbox
+            // parser accepts BOTH on paste, so an FF-native pipe value still
+            // round-trips; a pure navigation jump stays lossless via the
+            // "skip re-parse of an untouched box" guard in the Go handler.
             var s = Main.ViewState;
+            bool pipe = FloatingMenu.UsePipeNotation;
             FloatingMenu.UpdateCoords(
-                FormatLimbs(s.CenterX, s.CenterXLo, s.CenterX2, s.CenterX3,
+                CoordNotation.Format(pipe, s.CenterX, s.CenterXLo, s.CenterX2, s.CenterX3,
                             s.CenterX4, s.CenterX5, s.CenterX6, s.CenterX7),
-                FormatLimbs(s.CenterY, s.CenterYLo, s.CenterY2, s.CenterY3,
+                CoordNotation.Format(pipe, s.CenterY, s.CenterYLo, s.CenterY2, s.CenterY3,
                             s.CenterY4, s.CenterY5, s.CenterY6, s.CenterY7),
                 info.Zoom.ToString("G6", CultureInfo.InvariantCulture),
                 info.Iterations.ToString(CultureInfo.InvariantCulture),
@@ -650,19 +657,32 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
         });
     }
 
-    private static string FormatCoords(FracturingFog.ViewState.FractalViewState s)
+    // #791 — re-push CX/CY from the live view state in the current notation.
+    // Called when the notation toggle flips so the display flips at once.
+    private void RefreshCoordDisplay()
     {
-        // Emit full multi-limb centre in the same pipe form the menu textbox
-        // already accepts on paste. Past zoom ~1e15 the Hi limb alone is
-        // below pixel scale, so emitting only Hi would collapse adjacent
-        // pixels to identical coords on round-trip → user-visible block
-        // pixelation when pasting the copied value back. Pipe form keeps
-        // every DD/QD/OD limb intact through clipboard.
+        var s = Main.ViewState;
+        bool pipe = FloatingMenu.UsePipeNotation;
+        FloatingMenu.UpdateCoords(
+            CoordNotation.Format(pipe, s.CenterX, s.CenterXLo, s.CenterX2, s.CenterX3,
+                        s.CenterX4, s.CenterX5, s.CenterX6, s.CenterX7),
+            CoordNotation.Format(pipe, s.CenterY, s.CenterYLo, s.CenterY2, s.CenterY3,
+                        s.CenterY4, s.CenterY5, s.CenterY6, s.CenterY7),
+            FloatingMenu.Zoom, FloatingMenu.Iter, FloatingMenu.ActiveCoordField);
+    }
+
+    private static string FormatCoords(FracturingFog.ViewState.FractalViewState s, bool pipe)
+    {
+        // #791 — Copy honours the notation toggle: single-value by default,
+        // pipe-delimited limbs when the user opts in. Note single-value carries
+        // ~29 digits; past ~1e15 zoom that is below pixel scale, so a user who
+        // needs to hand off full DD/QD/OD precision (deep coord swaps) flips the
+        // toggle to pipe, which the textbox parser accepts back verbatim.
         return string.Format(CultureInfo.InvariantCulture,
             "CX = {0}\nCY = {1}\nZoom = {2:G6}",
-            FormatLimbs(s.CenterX, s.CenterXLo, s.CenterX2, s.CenterX3,
+            CoordNotation.Format(pipe, s.CenterX, s.CenterXLo, s.CenterX2, s.CenterX3,
                         s.CenterX4, s.CenterX5, s.CenterX6, s.CenterX7),
-            FormatLimbs(s.CenterY, s.CenterYLo, s.CenterY2, s.CenterY3,
+            CoordNotation.Format(pipe, s.CenterY, s.CenterYLo, s.CenterY2, s.CenterY3,
                         s.CenterY4, s.CenterY5, s.CenterY6, s.CenterY7),
             s.Zoom);
     }
@@ -1160,82 +1180,10 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
         if (changed) Main.RenderHost.Trigger();
     }
 
-    // Display DD/QD limbs as a single high-precision decimal string by
-    // default (UI-gap #16) — far more readable than the pipe-delimited limb
-    // format, and round-trips through `TryParseLimbs` because that parser
-    // still accepts long decimals. Pipe-delimited input remains supported on
-    // paste / manual entry, so external tools that emit "Hi|Lo|Lo2|Lo3" keep
-    // working.
-    //
-    // Sum limbs in `decimal` (~28-29 sig digits, exact double conversion).
-    // This covers a full DD limb pair (Hi+Lo, ~31 digits) reliably; the L2/L3
-    // tail is still summed but precision past 28 digits is lost — the same
-    // limit that bounds the pipe-format paste path. Falls back to the limb
-    // string when any limb is outside decimal range (e.g. denormals beyond
-    // ±7.9e28) so we never lose information silently.
-    private static string FormatLimbs(double hi, double lo, double l2, double l3,
-                                       double l4 = 0.0, double l5 = 0.0,
-                                       double l6 = 0.0, double l7 = 0.0)
-    {
-        // Pick the highest non-zero limb so the format never carries trailing
-        // zero limbs (avoids surfacing meaningless precision for shallow zooms).
-        // Wave 2.11 — OD limbs 4..7 join the same scan; the format scales
-        // automatically when zoom > 1e50 once the pan-zoom path populates them.
-        int n = 1;
-        if (l7 != 0.0) n = 8;
-        else if (l6 != 0.0) n = 7;
-        else if (l5 != 0.0) n = 6;
-        else if (l4 != 0.0) n = 5;
-        else if (l3 != 0.0) n = 4;
-        else if (l2 != 0.0) n = 3;
-        else if (lo != 0.0) n = 2;
-
-        // Any-extra-limb path (n >= 2): the Lo (and L2..L7) limbs carry
-        // precision past decimal's ~29-digit cap. DD pair is ~31 digits,
-        // QD chain is ~62 digits, OD chain is ~124 digits; any case loses
-        // bottom limb data through the G29 sum + textbox round-trip and
-        // collapses the centre to ~29 digits permanently on the next Go.
-        // Emit pipe-delimited limbs whenever any low limb is non-zero so
-        // every limb survives the display + parse.
-        //
-        // Pipe form is uglier than a single decimal string but is the
-        // only honest representation of multi-limb precision in a UI
-        // textbox. Shallow (n=1) coords keep the readable decimal form.
-        if (n >= 2)
-        {
-            var limbs = new double[] { hi, lo, l2, l3, l4, l5, l6, l7 };
-            var sb = new System.Text.StringBuilder();
-            for (int i = 0; i < n; i++)
-            {
-                if (i > 0) sb.Append('|');
-                sb.Append(limbs[i].ToString("G17", CultureInfo.InvariantCulture));
-            }
-            return sb.ToString();
-        }
-
-        try
-        {
-            decimal acc = (decimal)hi;
-            // Single limb (n == 1) — plain "G29" prints up to decimal's
-            // full 29-digit precision without scientific notation for
-            // everyday Mandelbrot coords. No precision loss possible
-            // because Hi alone fits well inside decimal's range.
-            return acc.ToString("G29", CultureInfo.InvariantCulture);
-        }
-        catch (OverflowException)
-        {
-            // Fall through to the pipe-delimited path so no precision is lost.
-        }
-
-        string h = hi.ToString("G17", CultureInfo.InvariantCulture);
-        if (n == 1) return h;
-        string p1 = lo.ToString("G17", CultureInfo.InvariantCulture);
-        if (n == 2) return $"{h}|{p1}";
-        string p2 = l2.ToString("G17", CultureInfo.InvariantCulture);
-        if (n == 3) return $"{h}|{p1}|{p2}";
-        string p3 = l3.ToString("G17", CultureInfo.InvariantCulture);
-        return $"{h}|{p1}|{p2}|{p3}";
-    }
+    // #791 — CX/CY notation (single-value default + pipe toggle) + parsing now
+    // live in the pure, unit-tested FracturingFog.ViewState.CoordNotation so the
+    // "single-value by default" contract can't be silently stomped again. The
+    // Go handler below still calls TryParseLimbs, kept as a thin delegator.
 
     // Parse a coordinate field. Accepts three input shapes (UI-gap #16):
     //   1. Pipe-delimited limbs:  "Hi|Lo|Lo2|Lo3"  (any 1–4 segments)
@@ -1247,53 +1195,15 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
     //      covers a full DD limb pair (Hi+Lo, ~31 digits) reliably; Lo2/Lo3
     //      capture whatever precision is still in the decimal residual.
     // Missing limbs default to zero. Returns true when at least Hi parsed.
+    // Thin delegators to the pure CoordNotation.TryParse (#791) — accepts both
+    // pipe-delimited limbs and a single decimal string on paste / manual entry.
     private static bool TryParseLimbs(string? s, out double hi, out double lo, out double l2, out double l3)
-        => TryParseLimbs(s, out hi, out lo, out l2, out l3, out _, out _, out _, out _);
+        => CoordNotation.TryParse(s, out hi, out lo, out l2, out l3);
 
     private static bool TryParseLimbs(string? s,
         out double hi, out double lo, out double l2, out double l3,
         out double l4, out double l5, out double l6, out double l7)
-    {
-        hi = lo = l2 = l3 = l4 = l5 = l6 = l7 = 0.0;
-        if (string.IsNullOrWhiteSpace(s)) return false;
-        var parts = s.Split('|');
-        if (parts.Length > 1)
-        {
-            // Pipe-delimited (legacy) — each segment is a plain double.
-            // Wave 2.11 — accept up to 8 limbs for OD precision past zoom 1e50.
-            if (!double.TryParse(parts[0].Trim(), NumberStyles.Float, CultureInfo.InvariantCulture, out hi))
-                return false;
-            if (parts.Length > 1) double.TryParse(parts[1].Trim(), NumberStyles.Float, CultureInfo.InvariantCulture, out lo);
-            if (parts.Length > 2) double.TryParse(parts[2].Trim(), NumberStyles.Float, CultureInfo.InvariantCulture, out l2);
-            if (parts.Length > 3) double.TryParse(parts[3].Trim(), NumberStyles.Float, CultureInfo.InvariantCulture, out l3);
-            if (parts.Length > 4) double.TryParse(parts[4].Trim(), NumberStyles.Float, CultureInfo.InvariantCulture, out l4);
-            if (parts.Length > 5) double.TryParse(parts[5].Trim(), NumberStyles.Float, CultureInfo.InvariantCulture, out l5);
-            if (parts.Length > 6) double.TryParse(parts[6].Trim(), NumberStyles.Float, CultureInfo.InvariantCulture, out l6);
-            if (parts.Length > 7) double.TryParse(parts[7].Trim(), NumberStyles.Float, CultureInfo.InvariantCulture, out l7);
-            return true;
-        }
-
-        string single = parts[0].Trim();
-
-        // Long high-precision string path: peel into limbs via `decimal`.
-        // `decimal` parsing rounds at ~28-29 sig digits rather than failing,
-        // so even strings longer than that produce a sensible Hi/Lo split.
-        if (decimal.TryParse(single, NumberStyles.Float, CultureInfo.InvariantCulture, out decimal m))
-        {
-            hi = (double)m;
-            try { m -= (decimal)hi; } catch (OverflowException) { return true; }
-            lo = (double)m;
-            try { m -= (decimal)lo; } catch (OverflowException) { return true; }
-            l2 = (double)m;
-            try { m -= (decimal)l2; } catch (OverflowException) { return true; }
-            l3 = (double)m;
-            return true;
-        }
-
-        // Fallback: plain double for inputs outside `decimal` range
-        // (NaN, infinity, magnitudes above 7.9e28, etc.).
-        return double.TryParse(single, NumberStyles.Float, CultureInfo.InvariantCulture, out hi);
-    }
+        => CoordNotation.TryParse(s, out hi, out lo, out l2, out l3, out l4, out l5, out l6, out l7);
 
     public MainViewModel Main { get; }
     public FloatingMenuViewModel FloatingMenu { get; }
