@@ -77,6 +77,7 @@ namespace FracturingFog.Rendering
         private IReadOnlyList<string>? _videoAnimIncluded;
         private IReadOnlyList<string>? _videoAnimFilter;
         private bool _videoAnimRandomize;
+        private bool _videoAutoConstantDrift = true;
 
         // ── Region / theme restrictions (video slideshow) ─────────────────
         // Set per-run from VideoZoomRequest so a saved Video preset that pins
@@ -466,6 +467,7 @@ namespace FracturingFog.Rendering
             _videoAnimIncluded = request.IncludedAnimations;
             _videoAnimFilter = request.FilterAnimations;
             _videoAnimRandomize = request.RandomizeAnimationsByFractalType;
+            _videoAutoConstantDrift = request.AutoConstantDrift;
             _videoLegAnimators.Clear();
 
             // Region / theme restrictions for this run (#45).
@@ -2217,6 +2219,14 @@ namespace FracturingFog.Rendering
                 // when EnableAnimations is off or nothing is compatible).
                 BuildVideoLegAnimators(svc, region);
 
+                // P2 (#92) — for a zoomable-2D leg whose family carries a
+                // natural complex constant (Julia c, Phoenix p, Glynn c) that
+                // no authored animation is already driving, synthesise a gentle
+                // default constant-path drift so the leg breathes instead of a
+                // plain point-zoom. No-op for Mandelbrot / other families and
+                // when the constant is already animated.
+                MaybeAddDefaultConstantDrift(region, legSeconds);
+
                 // Build the in-leg theme-fade schedule from the user's
                 // ThemeFadeEnabled checkbox + ThemesPerLeg setting. Schedule
                 // swaps fire at t = k / themesPerLeg for k = 1..N-1. Disabled
@@ -2529,6 +2539,37 @@ namespace FracturingFog.Rendering
                 _videoAnimLastTicks = Stopwatch.GetTimestamp();
                 RaiseStatus($"Video slideshow: animating {region.Name} with \"{chosen}\"");
             }
+        }
+
+        // P2 (#92) — synthesise a default constant-path drift for a zoomable-2D
+        // leg whose family carries a natural complex constant (Julia c, Phoenix
+        // p, Glynn c), unless the feature is off or that constant is already
+        // being animated by an authored track resolved in BuildVideoLegAnimators
+        // (authored wins). Centres on the constant the leg already restored from
+        // the region (ViewState.FractalParameters), so u=0 reproduces the
+        // pre-rendered leg-start frame exactly. Adding an animator here also
+        // makes _videoLegAnimators non-empty, which disables TAA reprojection +
+        // the leg-locked histogram CDF for the leg — both assume only pan/zoom
+        // moves, so animating c without this would ghost.
+        private void MaybeAddDefaultConstantDrift(FractalRegion region, double legSeconds)
+        {
+            if (!_videoAnimEnabled || !_videoAutoConstantDrift || region == null) return;
+
+            string? name = ConstantDriftResolver.ConstantParamName(region.FractalType);
+            if (name == null) return;
+
+            // Authored animation targeting this constant wins — don't double-drive.
+            foreach (var a in _videoLegAnimators)
+                if (string.Equals(a.Name, name, StringComparison.Ordinal))
+                    return;
+
+            var drift = ConstantDriftResolver.TryBuild(
+                region.FractalType, ViewState.FractalParameters, legSeconds, _videoRng);
+            if (drift == null) return;
+
+            _videoLegAnimators.Add(drift);
+            _videoAnimLastTicks = Stopwatch.GetTimestamp();
+            RaiseStatus($"Video slideshow: drifting {region.FractalType} constant on {region.Name}");
         }
 
         // Enforce the animated-param ceiling on the video leg. Unlike the

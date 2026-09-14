@@ -172,6 +172,14 @@ namespace FracturingFog.Render
         /// type-compatible library animation instead.</summary>
         public bool RandomizeAnimationsByFractalType { get; set; }
 
+        /// <summary>When animations are enabled (<see cref="EnableAnimations"/>)
+        /// and a zoomable-2D leg carries a natural complex constant (Julia c,
+        /// Phoenix p, Glynn c) that no authored animation already drives,
+        /// synthesise a gentle default constant-path drift for the leg (#92 /
+        /// P2) instead of a plain point-zoom. Default on; turn off to keep
+        /// un-animated constant legs as static point-zooms.</summary>
+        public bool AutoConstantDrift { get; set; } = true;
+
         // ── Region / theme restrictions (video slideshow) ─────────────────
         // Mirror the image slideshow's include/filter sets so a saved Video
         // preset that pins one region + one theme actually plays just that,

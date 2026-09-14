@@ -1,11 +1,11 @@
 # Multi-Type Video Slideshow — Feasibility &amp; Roadmap
 
-Status: **P1 shipped** (2026-07-22, [#91]). P2–P4 planned. Spun out of the
-[Animation Roadmap](Animation-Roadmap.md) open follow-ups (2026-07-03) as
-its own project because the fix is real engine work, not an animation
-follow-up patch.
+Status: **P1 shipped** (2026-07-22, [#91]); **P2 shipped** (2026-09-14, [#92]).
+P3–P4 planned. Spun out of the [Animation Roadmap](Animation-Roadmap.md) open
+follow-ups (2026-07-03) as its own project because the fix is real engine work,
+not an animation follow-up patch.
 
-Tracking issues: [#91] (P1, done) · [#92] (P2) · [#93] (P3) · [#94] (P4).
+Tracking issues: [#91] (P1, done) · [#92] (P2, done) · [#93] (P3) · [#94] (P4).
 
 [#91]: https://github.com/AloneButUnsober/FracturingFog/issues/91
 [#92]: https://github.com/AloneButUnsober/FracturingFog/issues/92
@@ -66,8 +66,6 @@ zoom legs in the video slideshow.
 
 ### P1 limitations (deliberate)
 
-- No **motion model** beyond point-zoom yet (a Julia leg zooms into a point; it
-  does not sweep the constant — that's P2).
 - `NewtonPolyCoeffs` custom polynomials are not snapshotted (default-exponent
   path only).
 - Deep-zoom on the alt path is double-precision (`EscapeTimeCalculator` sets the
@@ -76,10 +74,50 @@ zoom legs in the video slideshow.
   live (no built-in non-Mandelbrot regions hit this; user regions always
   snapshot).
 
+## P2 — shipped ([#92])
+
+Julia (and its cheap 2D escape-time cousins Phoenix, Glynn) get a **motion model
+beyond point-zoom**: the complex constant sweeps along an eased path during the
+leg while the set keeps its recognisable shape.
+
+1. **`ConstantPathLegAnimator`**
+   ([`Abstractions/Animation/ConstantPathLegAnimator.cs`](../Abstractions/Animation/ConstantPathLegAnimator.cs))
+   — an `IParameterAnimator` with a finite, leg-length timeline (integrates its
+   own elapsed time from the per-frame `dt`), offset-*relative* so `u = 0`
+   reproduces the authored constant exactly (matches the pre-rendered leg-start
+   frame). Shapes: `Orbit` (full circle, returns to base), `Line` (out-and-back),
+   `Arc` (partial sweep). Smootherstep easing → zero velocity/acceleration at the
+   ends, no visible jerk. Amplitude scales gently with `|c|`, clamped to a
+   tasteful band, so a near-origin constant isn't flung across the plane.
+2. **`ConstantDriftResolver`**
+   ([`Abstractions/Animation/ConstantDriftResolver.cs`](../Abstractions/Animation/ConstantDriftResolver.cs))
+   — maps `Julia → JuliaC`, `Phoenix → PhoenixP`, `Glynn → GlynnC` (else null)
+   and builds a default drift centred on the constant the leg already restored,
+   with per-leg variety (shape/angle) from the video RNG. Deterministic orbit
+   when no RNG is supplied (tests).
+3. **Reuse of the Phase-5 hooks.** `VideoSlideshowLoop` calls
+   `MaybeAddDefaultConstantDrift(region, legSeconds)` right after
+   `BuildVideoLegAnimators`: an **authored** animation targeting the constant
+   wins (no double-drive); otherwise the default drift is synthesised. Adding an
+   animator makes `_videoLegAnimators` non-empty, which already disables TAA
+   reprojection + the leg-locked histogram CDF for the leg — both assume only
+   pan/zoom moves between frames, so animating `c` without this would ghost.
+
+Gated by `EnableAnimations` **and** the new `AutoConstantDrift` flag
+(`VideoZoomRequest` / `SlideshowConfig`, default on; Slideshow Settings toggle
+"Drift the constant on Julia / Phoenix / Glynn legs"). Off ⇒ static point-zoom,
+so the proven path is unchanged.
+
+### P2 limitations (deliberate)
+
+- Default drift is **Julia / Phoenix / Glynn** only (families with one natural
+  complex constant). Multibrot power, Newton exponent, etc. are not swept.
+- The drift is a *default* synth when no authored animation drives the constant;
+  authored `c`-tracks still win and play as before.
+- `Arc` ends off the authored constant; the leg cross-fade covers the seam.
+
 ## Remaining scope
 
-- **P2** ([#92]) — Julia constant-path animated legs (animate `c` along a path).
-  Cheapest striking win; reuses the Phase-5 leg-animator hooks.
 - **P3** ([#93]) — 3D raymarch camera-fly legs (Mandelbulb / Mandelbox / KIFS /
   Quaternion / Bicomplex / Kleinian). Needs a 3D-camera snapshot on the region
   and a camera-path motion model. Admits `Raymarch3D`.

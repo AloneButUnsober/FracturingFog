@@ -223,6 +223,15 @@ namespace FracturingFog.Models
         /// (Animation Roadmap Phase 5).</summary>
         public bool EnableAnimations { get; set; }
 
+        /// <summary>When animations are enabled, give a zoomable-2D video leg
+        /// whose family carries a natural complex constant (Julia c, Phoenix p,
+        /// Glynn c) that no authored animation drives a gentle default
+        /// constant-path drift instead of a plain point-zoom (#92 / P2).
+        /// Default on. No effect when <see cref="EnableAnimations"/> is off, on
+        /// families without such a constant, or when the constant is already
+        /// animated.</summary>
+        public bool AutoConstantDrift { get; set; } = true;
+
         /// <summary>Adaptive-sweep block. Drives the Adaptive slider per leg.</summary>
         public AdaptiveSweepConfig AdaptiveSweep { get; set; } = new();
 

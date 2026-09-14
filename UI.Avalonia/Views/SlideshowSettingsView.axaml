@@ -430,6 +430,11 @@
                               IsChecked="{Binding RandomizeAnimationsByFractalType, Mode=TwoWay}"
                               FontWeight="Bold" Foreground="#B4DCB4"
                               ToolTip.Tip="When on, ignore each region's attached animation and draw a random library animation whose target fractal types include the region's type." />
+                    <CheckBox Content="Drift the constant on Julia / Phoenix / Glynn legs"
+                              IsChecked="{Binding AutoConstantDrift, Mode=TwoWay}"
+                              IsVisible="{Binding ShowAutoConstantDriftToggle}"
+                              FontWeight="Bold" Foreground="#B4DCB4"
+                              ToolTip.Tip="Video slideshow only. When a Julia / Phoenix / Glynn leg has no authored animation of its own, gently sweep its complex constant along an eased path during the leg (the set keeps its shape while filaments breathe) instead of a plain point-zoom. Off = static point-zoom." />
                     <TextBlock Text="Included Animations  (unchecked all = all eligible)"
                                Foreground="#B4DCB4" FontWeight="Bold" Margin="0,6,0,0" />
                     <ListBox ItemsSource="{Binding AvailableAnimations}"
@@ -442,7 +447,7 @@
                             </DataTemplate>
                         </ListBox.ItemTemplate>
                     </ListBox>
-                    <TextBlock Text="Each leg plays the region's attached animation, or a random compatible one when none is attached. Regions with no compatible animation play static. (Video slideshow legs are Mandelbrot-only.)"
+                    <TextBlock Text="Each leg plays the region's attached animation, or a random compatible one when none is attached. Video legs now play every zoomable-2D family (Julia, Newton, Glynn, Apollonian, …), not just Mandelbrot; a Julia / Phoenix / Glynn leg with no attached animation can still drift its constant (see above). Regions with no motion play static."
                                Foreground="#969696" FontStyle="Italic" TextWrapping="Wrap" />
                 </StackPanel>
             </StackPanel>
