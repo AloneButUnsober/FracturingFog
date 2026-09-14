@@ -295,31 +295,12 @@ namespace FracturingFog.Rendering
                 if (authored.Tier == QualityTier.Extreme) authored = natural;
                 _videoQuality = authored.Tier > natural.Tier ? authored : natural;
             }
-            else if (request.StartFromCurrentView)
+            else if (TryResolveForwardStart(request, out startCX, out startCY, out startZoom))
             {
-                // #788 slice A — forward zoom that begins at the live on-screen
-                // view instead of the classic full view. Capture the current
-                // centre (full QD limbs) + zoom BEFORE any target-region load
-                // (which happens later in this method) mutates ViewState.
-                startCX = new QDCoord(ViewState.CenterX, ViewState.CenterXLo, ViewState.CenterX2, ViewState.CenterX3);
-                startCY = new QDCoord(ViewState.CenterY, ViewState.CenterYLo, ViewState.CenterY2, ViewState.CenterY3);
-                startZoom = ViewState.Zoom;
+                // #788 slices A/B — forward zoom that begins at the live view or a
+                // chosen start region instead of the classic full view.
                 targetCX = tCX; targetCY = tCY; targetZoom = tz;
-
-                // Seed the tier from the start depth (as reverse does) so a deep
-                // starting view doesn't begin at Standard and pop upward. Honour
-                // the live calculator's tier when it is already richer.
-                QualityPreset natural = QualityPreset.Standard;
-                foreach (var p in QualityPreset.All)
-                {
-                    if (p.Tier == QualityTier.Extreme) continue;
-                    if (p.ZoomMax >= startZoom) { natural = p; break; }
-                }
-                _videoQuality = natural;
-                if (_calculator?.Quality != null
-                    && _calculator.Quality.Tier > _videoQuality.Tier
-                    && _calculator.Quality.Tier != QualityTier.Extreme)
-                    _videoQuality = _calculator.Quality;
+                SeedForwardStartQuality(startZoom);
             }
             else
             {
@@ -1657,6 +1638,79 @@ namespace FracturingFog.Rendering
             region.Params?.ApplyTo(p);
             // Relief 3D snapshot (null = leave current relief alone).
             region.Relief3D?.ApplyTo(p);
+        }
+
+        // #788 slices A/B — resolve the start point of a forward zoom. A chosen
+        // start region (slice B) wins over "current view" (slice A); either falls
+        // back to the classic full view (returns false) on a miss / type mismatch.
+        // Runs on the UI thread inside StartVideo, before LoadTargetRegionForVideo
+        // mutates ViewState, so the current-view capture is the live framing.
+        private bool TryResolveForwardStart(
+            VideoZoomRequest request, out QDCoord startCX, out QDCoord startCY, out double startZoom)
+        {
+            startCX = default; startCY = default; startZoom = 0.0;
+
+            if (!string.IsNullOrEmpty(request.StartRegionName))
+            {
+                var region = FractalRegionLibrary.Instance.FindByName(request.StartRegionName);
+                if (region == null)
+                {
+                    RaiseStatus($"Start region '{request.StartRegionName}' not found — starting from the classic view.");
+                    return false;
+                }
+                // The zoom renders one fractal (the target's); a start region of a
+                // different type has meaningless coordinates here.
+                FractalType targetType = ResolveTargetFractalType(request);
+                if (region.FractalType != targetType)
+                {
+                    RaiseStatus($"Start region '{region.Name}' is {region.FractalType}, target is {targetType} — starting from the classic view.");
+                    return false;
+                }
+                startCX = new QDCoord(region.CenterX, region.CenterXLo, region.CenterX2, region.CenterX3);
+                startCY = new QDCoord(region.CenterY, region.CenterYLo, region.CenterY2, region.CenterY3);
+                startZoom = region.Zoom > 0 ? region.Zoom : FractalViewState.DefaultZoom;
+                return true;
+            }
+
+            if (request.StartFromCurrentView)
+            {
+                startCX = new QDCoord(ViewState.CenterX, ViewState.CenterXLo, ViewState.CenterX2, ViewState.CenterX3);
+                startCY = new QDCoord(ViewState.CenterY, ViewState.CenterYLo, ViewState.CenterY2, ViewState.CenterY3);
+                startZoom = ViewState.Zoom;
+                return true;
+            }
+
+            return false;
+        }
+
+        // Target type = the picked target region's type, or the live fractal when
+        // the zoom was driven from raw coords. Used by the start-region guard.
+        private FractalType ResolveTargetFractalType(VideoZoomRequest request)
+        {
+            if (!string.IsNullOrEmpty(request.TargetRegionName))
+            {
+                var tr = FractalRegionLibrary.Instance.FindByName(request.TargetRegionName);
+                if (tr != null) return tr.FractalType;
+            }
+            return ViewState.FractalType;
+        }
+
+        // Seed the tier from the start depth (as reverse does) so a deep starting
+        // view/region doesn't begin at Standard and pop upward; honour the live
+        // calculator's tier when it is already richer.
+        private void SeedForwardStartQuality(double startZoom)
+        {
+            QualityPreset natural = QualityPreset.Standard;
+            foreach (var p in QualityPreset.All)
+            {
+                if (p.Tier == QualityTier.Extreme) continue;
+                if (p.ZoomMax >= startZoom) { natural = p; break; }
+            }
+            _videoQuality = natural;
+            if (_calculator?.Quality != null
+                && _calculator.Quality.Tier > _videoQuality.Tier
+                && _calculator.Quality.Tier != QualityTier.Extreme)
+                _videoQuality = _calculator.Quality;
         }
 
         private void ApplyVideoFrameState(QDCoord cx, QDCoord cy, double zoom)

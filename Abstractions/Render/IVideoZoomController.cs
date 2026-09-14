@@ -98,6 +98,13 @@ namespace FracturingFog.Render
         /// starts at the target) and for the slideshow.</summary>
         public bool StartFromCurrentView { get; set; }
 
+        /// <summary>Forward single-shot only (#788 slice B): name of a saved region
+        /// to begin the zoom from (its centre + zoom become the start). Takes
+        /// precedence over <see cref="StartFromCurrentView"/>. Honoured only when
+        /// the start region's fractal type matches the target's; otherwise the
+        /// engine falls back to the classic view. Null/empty = not used.</summary>
+        public string? StartRegionName { get; set; }
+
         // ── Recording (single-shot only) ──────────────────────────────────
         public bool IsSaveVideo { get; set; }
         public bool IsSaveLossless { get; set; }
