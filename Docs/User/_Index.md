@@ -37,7 +37,7 @@ as your imagination wants to take you.
 | Get the lay of the land — every menu and button          | [Avalonia User Guide](Avalonia-UserGuide.md)                   |
 | Save and recall favourite views                          | [Regions Guide](Regions-Guide.md)                              |
 | Take a screenshot, print a poster, or record a video     | [Capture Guide](Capture-Guide.md)                              |
-| Run an automatic slideshow with music                    | [Slideshow + Audio-Reactive Guide](Slideshow-AudioReactive-Guide.md) |
+| Run an automatic slideshow with music                    | [Slideshow + Fractured Waves Guide](Slideshow-AudioReactive-Guide.md) |
 | Direct a cinematic Scene — timeline, flying camera, video | [Scene Engine Guide](SceneEngine-UserGuide.md)                |
 | Recolour what you see, or invent a new palette           | [Colour Theme Editor Guide](ColorThemeEditor-Guide.md)         |
 | Write a one-line palette in a tiny domain language       | [ColorGen User Guide](ColorGen-UserGuide.md)                   |

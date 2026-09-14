@@ -475,7 +475,7 @@ settings, not the Scene Editor.
 ## See also
 
 - [Regions Guide](Regions-Guide.md) — the saved views shots point at.
-- [Slideshow + Audio-Reactive Guide](Slideshow-AudioReactive-Guide.md) — the
+- [Slideshow + Fractured Waves Guide](Slideshow-AudioReactive-Guide.md) — the
   cross-fade machinery Scenes build on.
 - [User Bulb 3D Guide](UserBulb-Guide.md) — the 3-D fractals the camera flies
   around.

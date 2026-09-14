@@ -25,6 +25,6 @@ public sealed partial class AudioSettingsView : UserControl
         => HelpViewerLauncher.Show(
             TopLevel.GetTopLevel(this) as Window,
             "User/Slideshow-AudioReactive-Guide.md",
-            "Audio-Reactive Engine",
-            "Audio-Reactive Slideshow — Help");
+            "Fractured Waves Reactive Audio",
+            "Fractured Waves — Help");
 }

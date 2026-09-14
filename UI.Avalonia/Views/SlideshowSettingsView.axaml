@@ -71,9 +71,9 @@
                        VerticalAlignment="Center" />
         </StackPanel>
 
-        <!-- Row 2: Audio-Reactive toggle + Audio… button -->
+        <!-- Row 2: Fractured Waves toggle + Audio… button -->
         <DockPanel Grid.Row="2" Grid.ColumnSpan="2" Margin="0,0,0,10" LastChildFill="False">
-            <ToggleButton Content="Audio-Reactive Slideshow"
+            <ToggleButton Content="Fractured Waves Reactive Audio"
                           IsChecked="{Binding AudioReactive, Mode=TwoWay}"
                           FontWeight="Bold"
                           Padding="12,6"
@@ -95,7 +95,7 @@
 
         <!-- Row 4: Timing group header -->
         <TextBlock Grid.Row="4" Grid.ColumnSpan="2"
-                   Text="Timing (used when Audio-Reactive is OFF)"
+                   Text="Timing (used when Fractured Waves is OFF)"
                    Foreground="#B4DCB4"
                    FontWeight="Bold"
                    Margin="0,4,0,6" />
@@ -155,7 +155,7 @@
 
         <!-- Row 10: timing note, visibility bound to AudioReactive -->
         <TextBlock Grid.Row="10" Grid.ColumnSpan="2"
-                   Text="(Disabled while Audio-Reactive is on — beats drive timing.)"
+                   Text="(Disabled while Fractured Waves is on — beats drive timing.)"
                    FontStyle="Italic"
                    Foreground="#969696"
                    Margin="0,6,0,4"
@@ -351,7 +351,7 @@
                                VerticalAlignment="Center" Margin="6,0,0,0"
                                Foreground="#969696" FontStyle="Italic" />
                 </Grid>
-                <TextBlock Text="Beat-driven sweep active only when Audio-Reactive is on. Sweep loops automatically for slideshow duration."
+                <TextBlock Text="Beat-driven sweep active only when Fractured Waves is on. Sweep loops automatically for slideshow duration."
                            Foreground="#969696" FontStyle="Italic" TextWrapping="Wrap"
                            IsEnabled="{Binding AdaptiveSweepEnabled}" />
             </StackPanel>
@@ -462,7 +462,7 @@
                     Foreground="White" />
             <Button Content="?"
                     Click="OnHelpClick"
-                    ToolTip.Tip="Open the Slideshow + Audio-Reactive guide"
+                    ToolTip.Tip="Open the Slideshow + Fractured Waves guide"
                     Padding="10,6"
                     Background="#283C50"
                     Foreground="#FFCC00"
