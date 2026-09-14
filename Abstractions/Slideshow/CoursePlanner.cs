@@ -51,6 +51,25 @@ namespace FracturingFog.Slideshow
         public bool Refine { get; set; } = true;
     }
 
+    /// <summary>What the "Travel to…" dialog collects, flattened for transport
+    /// from the host dialog to the shell that runs the plan (#789 slice B).</summary>
+    public sealed class TravelPlanRequest
+    {
+        /// <summary>Region to start the journey from (empty = the current view's
+        /// region, resolved by the shell).</summary>
+        public string StartRegion { get; set; } = string.Empty;
+
+        /// <summary>Region to end the journey at.</summary>
+        public string EndRegion { get; set; } = string.Empty;
+
+        public double WeightXY { get; set; } = 1.0;
+        public double WeightZoom { get; set; } = 1.0;
+
+        /// <summary>0 = keep every same-type region; &gt; 0 restricts to a
+        /// corridor around the start→end line.</summary>
+        public double CorridorRadius { get; set; }
+    }
+
     /// <summary>Ordered route + any advisory note.</summary>
     public sealed class CoursePlanResult
     {

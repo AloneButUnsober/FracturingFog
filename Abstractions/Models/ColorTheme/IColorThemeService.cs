@@ -365,6 +365,11 @@ namespace FracturingFog.Models
         /// filter the theme pool to themes recommended at that depth.</summary>
         double GetRegionZoom(string regionName);
 
+        /// <summary>Every saved region reduced to a planner waypoint (name,
+        /// centre, zoom, fractal type). Consumed by the "travel to location"
+        /// course planner (<see cref="FracturingFog.Slideshow.CoursePlanner"/>).</summary>
+        System.Collections.Generic.IReadOnlyList<FracturingFog.Slideshow.RegionWaypoint> GetRegionWaypoints();
+
         /// <summary>Fractal-type of the named region as a serialized enum name
         /// (e.g. "Mandelbrot"). Returns empty when the region is unknown.
         /// Used by the slideshow engine to apply the

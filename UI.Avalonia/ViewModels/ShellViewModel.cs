@@ -28,6 +28,7 @@
 // it talks only to the interfaces above + the child VMs.
 
 using System;
+using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
 using System.Reactive;
@@ -39,6 +40,7 @@ using FracturingFog.Imaging;
 using FracturingFog.Input;
 using FracturingFog.Models;
 using FracturingFog.Render;
+using FracturingFog.Slideshow;
 using FracturingFog.UI.Avalonia.Slideshow;
 using FracturingFog.UI.Avalonia.ViewModels.Animation;
 using ReactiveUI;
@@ -62,6 +64,14 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
 
     /// <summary>Avalonia slideshow cycler. Lazily created on first Start.</summary>
     private SlideshowEngine? _slideshow;
+
+    /// <summary>#789 slice B — ordered "travel to location" course consumed by
+    /// the next slideshow start, then cleared. Null = ordinary random slideshow.</summary>
+    private IReadOnlyList<string>? _pendingTravelCourse;
+
+    /// <summary>Raised when the user asks to plan a travel course (the host shows
+    /// the "Travel to…" dialog, then calls <see cref="StartTravelSlideshow"/>).</summary>
+    public event EventHandler? TravelToRequested;
 
     /// <summary>Live recorder when the active slideshow config has
     /// <c>RecordSlideshow</c> on. Null otherwise. Disposed (and the folder
@@ -418,6 +428,9 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
         // Slideshow settings — host pops the ported Avalonia dialog seeded
         // from the persisted SlideshowSettings, then writes back on OK.
         FloatingMenu.SlideshowSettingsClick += (_, _) => SlideshowSettingsRequested?.Invoke(this, EventArgs.Empty);
+
+        // #789 slice B — "Travel to location…" opens the host's travel dialog.
+        FloatingMenu.TravelClick += (_, _) => TravelToRequested?.Invoke(this, EventArgs.Empty);
 
         // General application settings — host pops the Avalonia AppSettings
         // dialog seeded from persisted AnimationSettings, saves on OK.
@@ -778,6 +791,57 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
         StartSlideshowWithConfig(config);
     }
 
+    /// <summary>#789 slice B — host asks the shell to open the "Travel to…"
+    /// dialog (the host owns the dialog UI + region library access).</summary>
+    public void RaiseTravelToRequested() => TravelToRequested?.Invoke(this, EventArgs.Empty);
+
+    /// <summary>Plan a coordinate-ordered course between two regions WITHOUT
+    /// starting anything (so the host can confirm a warning first). An empty
+    /// start region means "the current view's region". A result with fewer than
+    /// two stops carries the reason in <see cref="CoursePlanResult.Warning"/>; a
+    /// two-plus-stop result with a non-null Warning planned, but degraded (type
+    /// mismatch → direct hop, or the corridor emptied the middle).</summary>
+    public CoursePlanResult PlanTravel(TravelPlanRequest req)
+    {
+        if (req == null) return new CoursePlanResult { Warning = "No travel request." };
+
+        string startName = string.IsNullOrEmpty(req.StartRegion)
+            ? (Main.SelectedRegion ?? string.Empty)
+            : req.StartRegion;
+        if (string.IsNullOrEmpty(startName))
+            return new CoursePlanResult { Warning = "No start region — select a region first." };
+        if (string.IsNullOrEmpty(req.EndRegion))
+            return new CoursePlanResult { Warning = "No end region chosen." };
+
+        var waypoints = _themeService.GetRegionWaypoints();
+        return CoursePlanner.Plan(waypoints, startName, req.EndRegion, new CoursePlanOptions
+        {
+            WeightXY = req.WeightXY,
+            WeightZoom = req.WeightZoom,
+            CorridorRadius = req.CorridorRadius,
+        });
+    }
+
+    /// <summary>Start the image slideshow walking a pre-planned course in order.
+    /// The host calls this after <see cref="PlanTravel"/> (and any warning
+    /// confirmation). No-op for fewer than two stops.</summary>
+    public void StartPlannedTravel(IReadOnlyList<string> courseNames)
+    {
+        if (courseNames == null || courseNames.Count < 2) return;
+        if (_slideshow is { IsRunning: true }) _slideshow.Stop();
+
+        _pendingTravelCourse = courseNames;
+
+        SlideshowConfig active;
+        try { active = SlideshowConfigLibrary.GetActive(SlideshowConfigLibrary.Load()); }
+        catch { active = new SlideshowConfig(); }
+        // Travel is an image journey — never route to the video engine.
+        if (active.Type == SlideshowType.Video) active.Type = SlideshowType.Image;
+        StartSlideshowWithConfig(active);
+
+        Main.SetStatus($"Travel: {courseNames.Count} stops, {courseNames[0]} → {courseNames[courseNames.Count - 1]}.");
+    }
+
     private void StartSlideshowWithConfig(SlideshowConfig activeConfig)
     {
         var settings = activeConfig.Timing;
@@ -901,6 +965,11 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
         {
             _slideshow.BeatSource = null;
         }
+
+        // #789 slice B — hand the planned course (if any) to the engine, then
+        // clear it so the following ordinary Start reverts to random order.
+        _slideshow.TravelCourse = _pendingTravelCourse;
+        _pendingTravelCourse = null;
 
         SlideshowVcr.SetPaused(false);
         IsSlideshowVcrVisible = true;

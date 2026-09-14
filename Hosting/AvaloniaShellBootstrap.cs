@@ -1959,6 +1959,50 @@ namespace FracturingFog.Hosting
             // write back on OK. The Avalonia shell doesn't run the slideshow
             // engine yet (legacy Slideshow.cs stays intact per scope), but the
             // settings round-trip so the values persist for when it lands.
+            // #789 slice B — "Travel to location…": collect endpoints + weights,
+            // then let the shell plan the course and start the ordered slideshow.
+            shell.TravelToRequested += (_, _) =>
+            {
+                Dispatcher.UIThread.Post(async () =>
+                {
+                    try
+                    {
+                        var req = await AvaloniaDialogs.ShowTravelToDialogAsync(shell.Main.SelectedRegion);
+                        if (req == null) return;
+
+                        var plan = shell.PlanTravel(req);
+
+                        // Hard failure (missing start/end, start == end, nothing
+                        // to visit): explain and stop.
+                        if (plan.Ordered.Count < 2)
+                        {
+                            await AvaloniaDialogs.ShowMessageAsync(
+                                "Travel to location",
+                                plan.Warning ?? "Could not plan a course between those regions.",
+                                expectsConfirmation: false);
+                            return;
+                        }
+
+                        // Planned but degraded (cross-type direct hop, or the
+                        // corridor removed every intermediate): confirm first.
+                        if (!string.IsNullOrEmpty(plan.Warning))
+                        {
+                            var choice = await AvaloniaDialogs.ShowMessageAsync(
+                                "Travel to location",
+                                plan.Warning + "\n\nRun this route anyway?",
+                                expectsConfirmation: true);
+                            if (choice != AvaloniaDialogs.MessageResult.Yes) return;
+                        }
+
+                        shell.StartPlannedTravel(plan.Ordered.Select(w => w.Name).ToList());
+                    }
+                    catch (Exception ex)
+                    {
+                        Console.Error.WriteLine($"[AvaloniaShellBootstrap] Travel failed: {ex.Message}");
+                    }
+                });
+            };
+
             shell.SlideshowSettingsRequested += async (_, _) =>
             {
                 try

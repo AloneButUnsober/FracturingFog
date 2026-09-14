@@ -1670,6 +1670,122 @@ namespace FracturingFog.Hosting
             return tcs.Task;
         }
 
+        // ── Travel to location (#789 slice B) ─────────────────────────────────
+
+        /// <summary>Collect a "travel to location" plan: a start region (default
+        /// the current one), an end region, and distance weights. Returns null on
+        /// cancel. The shell runs the CoursePlanner over the result.</summary>
+        public static Task<global::FracturingFog.Slideshow.TravelPlanRequest?> ShowTravelToDialogAsync(
+            string? currentRegionName)
+        {
+            var owner = ActiveMainWindow;
+            var tcs = new TaskCompletionSource<global::FracturingFog.Slideshow.TravelPlanRequest?>();
+
+            void Run()
+            {
+                var win = new Window
+                {
+                    Title = "Travel to Location",
+                    Width = 460,
+                    MinWidth = 360,
+                    SizeToContent = SizeToContent.Height,
+                    WindowStartupLocation = WindowStartupLocation.CenterOwner,
+                    CanResize = false,
+                    ShowInTaskbar = false,
+                    Background = Brushes.Black,
+                };
+
+                var names = global::FracturingFog.Models.FractalRegionLibrary.Instance.All
+                    .OrderBy(r => r.IsBuiltIn ? 0 : 1).ThenBy(r => r.Name)
+                    .Select(r => r.Name).ToList();
+
+                var startCombo = new ComboBox { MinWidth = 300, HorizontalAlignment = HorizontalAlignment.Stretch };
+                startCombo.Items.Add(string.IsNullOrEmpty(currentRegionName)
+                    ? "(Current region)"
+                    : $"(Current region — {currentRegionName})");
+                foreach (var n in names) startCombo.Items.Add(n);
+                startCombo.SelectedIndex = 0;
+
+                var endCombo = new ComboBox { MinWidth = 300, HorizontalAlignment = HorizontalAlignment.Stretch };
+                endCombo.Items.Add("— select end region —");
+                foreach (var n in names) endCombo.Items.Add(n);
+                endCombo.SelectedIndex = 0;
+
+                Slider MakeSlider(double min, double max, double val)
+                    => new() { Minimum = min, Maximum = max, Value = val, MinWidth = 220 };
+                var wXY = MakeSlider(0, 2, 1);
+                var wZoom = MakeSlider(0, 2, 1);
+                var corridor = MakeSlider(0, 1, 0);
+
+                var err = new TextBlock { Foreground = new SolidColorBrush(Color.FromRgb(255, 204, 0)), IsVisible = false, TextWrapping = TextWrapping.Wrap };
+
+                TextBlock Lbl(string t) => new() { Text = t, Foreground = Brushes.LightGray, VerticalAlignment = VerticalAlignment.Center, Width = 130 };
+                Grid Row(string label, Control field)
+                {
+                    var g = new Grid { ColumnDefinitions = new ColumnDefinitions("130,*") };
+                    var l = Lbl(label); Grid.SetColumn(l, 0); Grid.SetColumn(field, 1);
+                    g.Children.Add(l); g.Children.Add(field);
+                    return g;
+                }
+
+                var startBtn = new Button { Content = "Plan & Start", MinWidth = 100, IsDefault = true, Background = new SolidColorBrush(Color.FromRgb(60, 80, 60)), Foreground = Brushes.White };
+                var cancelBtn = new Button { Content = "Cancel", MinWidth = 80, IsCancel = true, Background = new SolidColorBrush(Color.FromRgb(60, 60, 60)), Foreground = Brushes.White };
+
+                global::FracturingFog.Slideshow.TravelPlanRequest? pending = null;
+
+                startBtn.Click += (_, _) =>
+                {
+                    if (endCombo.SelectedIndex <= 0)
+                    {
+                        err.Text = "Choose an end region.";
+                        err.IsVisible = true;
+                        return;
+                    }
+                    pending = new global::FracturingFog.Slideshow.TravelPlanRequest
+                    {
+                        StartRegion = startCombo.SelectedIndex > 0 ? (startCombo.SelectedItem as string ?? "") : "",
+                        EndRegion = endCombo.SelectedItem as string ?? "",
+                        WeightXY = wXY.Value,
+                        WeightZoom = wZoom.Value,
+                        CorridorRadius = corridor.Value,
+                    };
+                    win.Close();
+                };
+                cancelBtn.Click += (_, _) => win.Close();
+
+                var buttonRow = new StackPanel
+                {
+                    Orientation = Orientation.Horizontal,
+                    HorizontalAlignment = HorizontalAlignment.Right,
+                    Spacing = 8,
+                    Children = { startBtn, cancelBtn },
+                };
+
+                var root = new StackPanel { Margin = new Thickness(14), Spacing = 8 };
+                root.Children.Add(new TextBlock
+                {
+                    Text = "Plot a slideshow course between two regions. Regions of the start's fractal type are ordered by coordinate proximity, start → end.",
+                    Foreground = Brushes.LightGray, TextWrapping = TextWrapping.Wrap,
+                });
+                root.Children.Add(Row("Start:", startCombo));
+                root.Children.Add(Row("End:", endCombo));
+                root.Children.Add(Row("Plane weight:", wXY));
+                root.Children.Add(Row("Zoom weight:", wZoom));
+                root.Children.Add(Row("Corridor (0=off):", corridor));
+                root.Children.Add(err);
+                root.Children.Add(buttonRow);
+
+                win.Content = root;
+                win.Closed += (_, _) => { if (!tcs.Task.IsCompleted) tcs.TrySetResult(pending); };
+                _ = WindowService.ShowDialogAsync(win, owner);
+            }
+
+            if (Dispatcher.UIThread.CheckAccess()) Run();
+            else Dispatcher.UIThread.Post(Run);
+
+            return tcs.Task;
+        }
+
         // ── MessageBox ───────────────────────────────────────────────────────
 
         public enum MessageResult { Ok, Yes, No, Cancelled }

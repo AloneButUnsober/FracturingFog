@@ -71,6 +71,7 @@ quiet, raise sensitivity; if every cymbal triggers a change, lower it.
 1. [Basic Slideshow](#1-basic-slideshow)
 2. [Slideshow Settings Dialog](#2-slideshow-settings-dialog)
 3. [VCR Transport](#3-vcr-transport)
+3a. [Travel to Location](#3a-travel-to-location)
 4. [Single-Shot Video Zoom](#4-single-shot-video-zoom)
 5. [Video Slideshow Loop](#5-video-slideshow-loop)
 6. [Recording](#6-recording)
@@ -138,6 +139,37 @@ The slideshow VCR row sits at the bottom of MainWindow, between the render surfa
 | ▶▶ | Skip forward to the next region |
 
 The VCR row is in its own layout band — never occluded by the GPU swap-chain HWND.
+
+---
+
+## 3a. Travel to Location
+
+Instead of the usual random region order, **travel** plays your regions as a
+*journey* from one point to another. Control Center → Capture → **Travel to
+location…** opens a small dialog:
+
+| Field | Meaning |
+|---|---|
+| Start | Where the journey begins (defaults to your current region) |
+| End | Where it ends |
+| Plane weight | How much the plane (X/Y) distance matters when ordering |
+| Zoom weight | How much the depth (zoom) distance matters |
+| Corridor (0 = off) | Keep only regions near the straight start→end line |
+
+**Plan & Start** analyzes every saved region **of the start's fractal type**,
+positions each by its coordinates + zoom, and orders them so each region leads
+to the next in coordinate space — start first, end last. The slideshow then
+walks that course in order (looping the journey) with all the normal timing,
+theme and recording behaviour.
+
+> [!NOTE]
+> Only regions matching the **start region's fractal type** are eligible — X/Y
+> coordinates aren't comparable across different fractals. If the start and end
+> are different types (or the corridor removes every region in between), the
+> route degrades to a direct two-stop hop and a **confirmation dialog** asks
+> whether to run it anyway. Raise the **Zoom weight** to favour a route that
+> changes depth gradually; raise the **Corridor** to skip regions that sit far
+> off the direct line.
 
 ---
 

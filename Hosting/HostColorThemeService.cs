@@ -460,6 +460,22 @@ namespace FracturingFog.Hosting
         }
 
         /// <inheritdoc/>
+        public System.Collections.Generic.IReadOnlyList<FracturingFog.Slideshow.RegionWaypoint> GetRegionWaypoints()
+        {
+            var list = new System.Collections.Generic.List<FracturingFog.Slideshow.RegionWaypoint>();
+            var seen = new System.Collections.Generic.HashSet<string>(StringComparer.Ordinal);
+            void Add(FractalRegion r)
+            {
+                if (r == null || string.IsNullOrEmpty(r.Name) || !seen.Add(r.Name)) return;
+                list.Add(new FracturingFog.Slideshow.RegionWaypoint(
+                    r.Name, r.CenterX, r.CenterY, r.Zoom, r.FractalType));
+            }
+            foreach (var r in FractalRegionLibrary.Instance.All) Add(r);
+            foreach (var r in FractalRegionLibrary.Instance.AllSlideshowRegions) Add(r);
+            return list;
+        }
+
+        /// <inheritdoc/>
         public bool TryGetRegionLightingOverride(
             string regionName, out FracturingFog.Rendering.Lighting.LightingFxData lighting)
         {
