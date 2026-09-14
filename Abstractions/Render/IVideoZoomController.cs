@@ -92,6 +92,12 @@ namespace FracturingFog.Render
         /// (instead of zooming from classic into the target).</summary>
         public bool IsReverse { get; set; }
 
+        /// <summary>Forward single-shot only (#788 slice A): begin the zoom at the
+        /// current on-screen view (its centre + zoom) instead of the classic full
+        /// view, then animate to the target. Ignored for reverse (which already
+        /// starts at the target) and for the slideshow.</summary>
+        public bool StartFromCurrentView { get; set; }
+
         // ── Recording (single-shot only) ──────────────────────────────────
         public bool IsSaveVideo { get; set; }
         public bool IsSaveLossless { get; set; }

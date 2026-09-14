@@ -1298,6 +1298,16 @@ namespace FracturingFog.Hosting
                     Content = "Reverse zoom (start at target, end at classic view)",
                     Foreground = Brushes.LightGray,
                 };
+                var chkStartHere = new CheckBox
+                {
+                    Content = "Start from current view (forward zoom begins where you are)",
+                    Foreground = Brushes.LightGray,
+                    [ToolTip.TipProperty] = "Forward single-shot only. Ignored for a reverse zoom.",
+                };
+                // Reverse already starts at the target, so the two are mutually
+                // exclusive — grey "start here" out while reverse is ticked.
+                chkReverse.IsCheckedChanged += (_, _) =>
+                    chkStartHere.IsEnabled = chkReverse.IsChecked != true;
 
                 // Adaptive iter cap mode — Off / Global / PerTile.
                 // Default Global preserves the prior auto-adaptive behaviour.
@@ -1562,6 +1572,7 @@ namespace FracturingFog.Hosting
                         Seconds = seconds,
                         IsSlideshow = false,
                         IsReverse = chkReverse.IsChecked == true,
+                        StartFromCurrentView = chkReverse.IsChecked != true && chkStartHere.IsChecked == true,
                         IsSaveVideo = chkSaveVideo.IsChecked == true,
                         IsSaveLossless = chkSaveLossless.IsChecked == true,
                         IsSaveGif = chkSaveGif.IsChecked == true,
@@ -1630,6 +1641,7 @@ namespace FracturingFog.Hosting
                 root.Children.Add(LabeledRow("Post-encode:", encodeCombo));
                 root.Children.Add(chkSaveGif);
                 root.Children.Add(chkReverse);
+                root.Children.Add(chkStartHere);
                 root.Children.Add(LabeledRow("Adaptive iter cap:", iterCapCombo));
                 root.Children.Add(smoothBox);
                 root.Children.Add(chkUseRegionWatermark);

@@ -295,6 +295,32 @@ namespace FracturingFog.Rendering
                 if (authored.Tier == QualityTier.Extreme) authored = natural;
                 _videoQuality = authored.Tier > natural.Tier ? authored : natural;
             }
+            else if (request.StartFromCurrentView)
+            {
+                // #788 slice A — forward zoom that begins at the live on-screen
+                // view instead of the classic full view. Capture the current
+                // centre (full QD limbs) + zoom BEFORE any target-region load
+                // (which happens later in this method) mutates ViewState.
+                startCX = new QDCoord(ViewState.CenterX, ViewState.CenterXLo, ViewState.CenterX2, ViewState.CenterX3);
+                startCY = new QDCoord(ViewState.CenterY, ViewState.CenterYLo, ViewState.CenterY2, ViewState.CenterY3);
+                startZoom = ViewState.Zoom;
+                targetCX = tCX; targetCY = tCY; targetZoom = tz;
+
+                // Seed the tier from the start depth (as reverse does) so a deep
+                // starting view doesn't begin at Standard and pop upward. Honour
+                // the live calculator's tier when it is already richer.
+                QualityPreset natural = QualityPreset.Standard;
+                foreach (var p in QualityPreset.All)
+                {
+                    if (p.Tier == QualityTier.Extreme) continue;
+                    if (p.ZoomMax >= startZoom) { natural = p; break; }
+                }
+                _videoQuality = natural;
+                if (_calculator?.Quality != null
+                    && _calculator.Quality.Tier > _videoQuality.Tier
+                    && _calculator.Quality.Tier != QualityTier.Extreme)
+                    _videoQuality = _calculator.Quality;
+            }
             else
             {
                 // Forward: classic → target. ApplyVideoFrameState promotes the
