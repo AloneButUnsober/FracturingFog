@@ -19,6 +19,12 @@ public sealed class App : Application
 
     public override void OnFrameworkInitializationCompleted()
     {
+        // Drive the popup text-scale resource from the global UI scale (#812).
+        // Popups render outside the per-window LayoutTransform (S2), so their
+        // text is scaled via the SizeFontPopup resource instead. Seed it before
+        // any window/popup is shown.
+        Services.UiScalePopupFont.Install();
+
         if (ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
         {
             var main = new Views.MainWindow();
