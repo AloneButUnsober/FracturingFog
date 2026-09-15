@@ -1177,7 +1177,9 @@ namespace FracturingFog.Hosting
         /// FfmpegEncoder availability — that the Avalonia assembly cannot see.
         /// </summary>
         public static Task<global::FracturingFog.Render.VideoZoomRequest?> ShowVideoAsync(
-            double currentCX, double currentCY, double currentZoom)
+            double currentCX, double currentCXLo, double currentCX2, double currentCX3,
+            double currentCY, double currentCYLo, double currentCY2, double currentCY3,
+            double currentZoom)
         {
             var owner = ActiveMainWindow;
             var tcs = new TaskCompletionSource<global::FracturingFog.Render.VideoZoomRequest?>();
@@ -1195,10 +1197,14 @@ namespace FracturingFog.Hosting
                 // it from the FloatingMenu FFmpeg setup dialog.
                 bool ffmpegHere = global::FracturingFog.FfmpegEncoder.IsEnabledForUser();
 
-                // Cached QD limbs for the picked region (folded into the parsed
-                // textbox value when the textbox carries only the Hi limb).
-                double targetCXLo = 0, targetCX2 = 0, targetCX3 = 0;
-                double targetCYLo = 0, targetCY2 = 0, targetCY3 = 0;
+                // Cached QD low limbs for the target center (folded into the
+                // parsed textbox value when the textbox carries only the Hi
+                // limb). Seeded from the current view so the default target
+                // keeps the live location's full deep-zoom precision — passing
+                // the Hi limb alone lost the low limbs and made deep targets
+                // drift / overshoot (#827). Region pick overwrites these.
+                double targetCXLo = currentCXLo, targetCX2 = currentCX2, targetCX3 = currentCX3;
+                double targetCYLo = currentCYLo, targetCY2 = currentCY2, targetCY3 = currentCY3;
                 int targetIterations = 0;
                 string? targetQualityPresetName = null;
                 bool suppressRegionPick = false;
@@ -1213,17 +1219,23 @@ namespace FracturingFog.Hosting
 
                 var txCX = new TextBox
                 {
-                    Text = global::FracturingFog.Abstractions.Math.QdCoordCodec.FormatCoordSingle(currentCX, 0, 0, 0),
+                    Text = global::FracturingFog.Abstractions.Math.QdCoordCodec.FormatCoordSingle(
+                        currentCX, currentCXLo, currentCX2, currentCX3),
                     FontFamily = new FontFamily("Consolas"),
                 };
                 var txCY = new TextBox
                 {
-                    Text = global::FracturingFog.Abstractions.Math.QdCoordCodec.FormatCoordSingle(currentCY, 0, 0, 0),
+                    Text = global::FracturingFog.Abstractions.Math.QdCoordCodec.FormatCoordSingle(
+                        currentCY, currentCYLo, currentCY2, currentCY3),
                     FontFamily = new FontFamily("Consolas"),
                 };
                 var txZoom = new TextBox
                 {
-                    Text = Math.Max(currentZoom * 10.0, 100.0).ToString("G6", ic),
+                    // Default the target to the current zoom — not one order
+                    // deeper — so the video lands on the live location instead
+                    // of overshooting it by ×10 (#827). Floor at 100 for a
+                    // sensible default from the classic view; clamp to Ultra.
+                    Text = Math.Min(Math.Max(currentZoom, 100.0), ultraCap).ToString("G6", ic),
                     FontFamily = new FontFamily("Consolas"),
                 };
 
