@@ -306,13 +306,20 @@ namespace FracturingFog.UI.Avalonia.Services
 
             // Ctrl+= / Ctrl+- / Ctrl+0 shortcuts (#809 / S4 #813). Attached to
             // every scaled window (i.e. all non-render/splash windows — the same
-            // exclusion the wrap uses), so the shortcuts work from any dialog. The
-            // render window is intentionally left out, per epic scope. Bubbling +
-            // handledEventsToo so a focused control's own key handling doesn't mask
-            // the accelerator.
+            // exclusion the wrap uses), so the shortcuts work from any dialog.
+            AttachUiScaleShortcuts(win);
+        }
+
+        /// <summary>#841 — attach ONLY the Ctrl+= / Ctrl+- / Ctrl+0 UI-scale
+        /// accelerators, without the LayoutTransform wrap that
+        /// <see cref="AttachUiScale"/> applies. Used for the render window
+        /// (<c>MainWindow</c>), which is excluded from visual scaling but should
+        /// still let the user drive the global UI scale from the keyboard rather
+        /// than having to focus a dialog first. Bubbling + handledEventsToo so a
+        /// focused control's own key handling doesn't mask the accelerator.</summary>
+        internal static void AttachUiScaleShortcuts(Window win) =>
             win.AddHandler(InputElement.KeyDownEvent, OnUiScaleKey,
                 RoutingStrategies.Bubble, handledEventsToo: true);
-        }
 
         private static void OnUiScaleKey(object? sender, KeyEventArgs e)
         {

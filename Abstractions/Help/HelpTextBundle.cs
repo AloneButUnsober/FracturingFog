@@ -80,12 +80,19 @@ view-state, color pipeline, and capture suite.
 === Navigation — Keyboard ===
 
   Commands (any fractal)
-    M       Toggle the Floating Menu.
+    M       Open the Control Center (the main menu).
     T       Toggle the Color Theme Editor.
     R       Reset the view to the default for the current fractal.
     V       Save the current view as a named region.
     Esc     Exit borderless multi-monitor Span; stop a running
             slideshow / video zoom; close a modal sub-dialog.
+
+  UI scale (accessibility)
+    Ctrl++  Increase the global UI scale one step (Ctrl+= also).
+    Ctrl+-  Decrease the global UI scale one step.
+    Ctrl+0  Reset the UI scale to 100%.
+            Works from any window incl. the render window; the
+            fractal surface itself is not scaled, only the UI chrome.
 
   2-D pan & zoom
     W / S   Zoom in / out (centred).

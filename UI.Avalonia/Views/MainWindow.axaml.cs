@@ -171,6 +171,13 @@ public sealed partial class MainWindow : Window
         // EscapeCloseBehavior / FfmpegSetupDialog. All other command keys stay
         // on KeyDown.
         KeyUp += OnWindowKeyUp;
+
+        // #841 — the render window is excluded from the LayoutTransform UI
+        // scaling (#809), but the Ctrl+= / Ctrl+- / Ctrl+0 accessibility
+        // accelerators still work here so the user can resize every dialog
+        // without first focusing one. Same handler dialogs use; the render
+        // surface itself is unaffected.
+        FracturingFog.UI.Avalonia.Services.WindowService.AttachUiScaleShortcuts(this);
     }
 
     private void OnOpened(object? sender, EventArgs e)
