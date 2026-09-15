@@ -274,6 +274,13 @@ namespace FracturingFog.Batch
             Console.WriteLine("                              Implies --relief-raymarch; only affects a fog scene.");
             Console.WriteLine("  --fog-light-mask N          Which lights colour the fog (bitmask 0..7; bit n =");
             Console.WriteLine("                              light n+1). Default 7 = all. Surfaces stay lit either way.");
+            Console.WriteLine("  Volumetric lighting (3D fractals + relief raymarch):");
+            Console.WriteLine("  --fog-density F             Beer-Lambert fog density 0..10 (0 = off).");
+            Console.WriteLine("  --fog-height-falloff F      Ground-hugging falloff 0..10 (0 = uniform fog).");
+            Console.WriteLine("  --volume-steps N            In-scatter step count 0..256 (0 = exp fog only; 16-48 typical).");
+            Console.WriteLine("  --volume-anisotropy F       Henyey-Greenstein phase g -1..1 (0 = isotropic; >0 forward god-rays).");
+            Console.WriteLine("  --fog-color \"#RRGGBB\"       Medium tint (default white). \"#AARRGGBB\" also accepted.");
+            Console.WriteLine("  --volume-palette-strength F Cross-fade fog toward the 3D theme gradient 0..1 (0 = off).");
             Console.WriteLine("  Isolate masking:");
             Console.WriteLine("  --relief-isolate            Isolate high-relief features (drop flat/low-detail).");
             Console.WriteLine("  --relief-isolate-no-detail  Turn OFF the default detail-based isolation.");

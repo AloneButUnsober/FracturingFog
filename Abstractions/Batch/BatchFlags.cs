@@ -128,6 +128,19 @@ namespace FracturingFog.Batch
         // unaffected — a cleared bit drops the light from the fog only.
         public const string FogLightMask          = "--fog-light-mask";
 
+        // Curated volumetric-lighting knobs (#373, slice of #363). Write to
+        // FractalParameters.Lighting; reproduced by the poster path for the 3D
+        // raymarchers + the Relief 3D raymarch (both run ShadingPipeline
+        // volumetric in-scatter). Non-3D fractals keep the defaults, so these
+        // only bite on a scene that actually has fog. Key light dir/intensity,
+        // per-light fog mask, LOD/noise/self-shadow knobs stay at sane defaults.
+        public const string FogDensity            = "--fog-density";
+        public const string FogHeightFalloff      = "--fog-height-falloff";
+        public const string VolumeSteps           = "--volume-steps";
+        public const string VolumeAnisotropy      = "--volume-anisotropy";
+        public const string FogColor              = "--fog-color";
+        public const string VolumePaletteStrength = "--volume-palette-strength";
+
         // Guided À-Trous denoise on the relief raymarch (roadmap S4, #389). Keyed
         // on the render's own float normal/depth AOVs. Any denoise flag implies
         // --relief-raymarch (only the raymarch emits the guides). 0 passes = off.
