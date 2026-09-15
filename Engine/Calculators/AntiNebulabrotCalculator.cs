@@ -9,11 +9,16 @@
 // a pseudo-length derived from the final |z|² (deeper interior → high band,
 // near-boundary → low band).
 
+using FracturingFog.Models;
+
 namespace FracturingFog;
 
 public sealed class AntiNebulabrotCalculator : BuddhaFamilyCalculator
 {
     protected override bool IsInSet => true;
+
+    // #836 — RGB iteration-band composite.
+    protected override BuddhaColorMode? ForcedColorMode => BuddhaColorMode.NebulabrotBands;
 
     public AntiNebulabrotCalculator(int width, int height) : base(width, height) { }
 }

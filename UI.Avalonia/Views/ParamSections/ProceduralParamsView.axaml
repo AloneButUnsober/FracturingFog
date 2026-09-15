@@ -124,11 +124,19 @@
             <NumericUpDown Grid.Row="3" Grid.Column="1"
                            Minimum="500" Maximum="500000" Increment="500" FormatString="F0"
                            Value="{Binding BuddhaIterHigh, Mode=TwoWay}" Margin="0,2" />
-            <TextBlock Grid.Row="4" Grid.Column="0" Text="Color mode:" VerticalAlignment="Center" />
+            <!-- #836 — Color mode is now decided by the fractal TYPE
+                 (Buddhabrot/AntiBuddhabrot = single-channel ColorMap;
+                 Nebulabrot/AntiNebulabrot = RGB NebulabrotBands), so the four
+                 types cover the whole escape×composite matrix and this override
+                 combo is redundant. Hidden to avoid an inert control; the
+                 binding stays so nothing else breaks. -->
+            <TextBlock Grid.Row="4" Grid.Column="0" Text="Color mode:" VerticalAlignment="Center"
+                       IsVisible="False" />
             <ComboBox  Grid.Row="4" Grid.Column="1"
                        ItemsSource="{Binding BuddhaColorModes}"
                        SelectedItem="{Binding BuddhaColorMode, Mode=TwoWay}"
-                       Margin="0,2" />
+                       Margin="0,2"
+                       IsVisible="False" />
             <TextBlock Grid.Row="5" Grid.Column="0" Text="Quality:" VerticalAlignment="Center" />
             <ComboBox  Grid.Row="5" Grid.Column="1"
                        ItemsSource="{Binding BuddhaQualityModes}"

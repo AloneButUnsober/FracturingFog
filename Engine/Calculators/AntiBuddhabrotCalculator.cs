@@ -12,11 +12,16 @@
 // through the active IColorMap). Switch to NebulabrotBands for the
 // channel-split look.
 
+using FracturingFog.Models;
+
 namespace FracturingFog;
 
 public sealed class AntiBuddhabrotCalculator : BuddhaFamilyCalculator
 {
     protected override bool IsInSet => true;
+
+    // #836 — single-channel density routed through the ColorMap.
+    protected override BuddhaColorMode? ForcedColorMode => BuddhaColorMode.ColorMap;
 
     public AntiBuddhabrotCalculator(int width, int height) : base(width, height) { }
 }
