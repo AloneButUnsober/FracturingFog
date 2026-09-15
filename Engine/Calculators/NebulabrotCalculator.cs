@@ -8,11 +8,16 @@
 // BuddhaColorMode.NebulabrotBands without the user having to flip the
 // composite mode manually. Same shared core as BuddhaFamilyCalculator.
 
+using FracturingFog.Models;
+
 namespace FracturingFog;
 
 public sealed class NebulabrotCalculator : BuddhaFamilyCalculator
 {
     protected override bool IsInSet => false;
+
+    // #836 — RGB iteration-band composite (the classic Nebulabrot look).
+    protected override BuddhaColorMode? ForcedColorMode => BuddhaColorMode.NebulabrotBands;
 
     public NebulabrotCalculator(int width, int height) : base(width, height) { }
 }

@@ -98,6 +98,16 @@ public abstract class BuddhaFamilyCalculator : IFractalCalculator, IHeightFieldS
     /// orbits that DO escape (classic Buddhabrot) when false.</summary>
     protected abstract bool IsInSet { get; }
 
+    /// <summary>#836 — the composite this fractal TYPE mandates, independent of
+    /// the shared <see cref="FractalParameters.BuddhaColorMode"/> UI toggle.
+    /// Buddhabrot / AntiBuddhabrot force single-channel <c>ColorMap</c>;
+    /// Nebulabrot / AntiNebulabrot force RGB <c>NebulabrotBands</c>. Null =
+    /// honour the param (no type forces it). Without this the four types
+    /// collapsed to two — Buddhabrot rendered identically to Nebulabrot because
+    /// nothing tied the type to a composite, so both used the default
+    /// NebulabrotBands (#65).</summary>
+    protected virtual BuddhaColorMode? ForcedColorMode => null;
+
     private uint[] _hitsR = Array.Empty<uint>();
     private uint[] _hitsG = Array.Empty<uint>();
     private uint[] _hitsB = Array.Empty<uint>();
@@ -264,7 +274,10 @@ public abstract class BuddhaFamilyCalculator : IFractalCalculator, IHeightFieldS
     /// by Calculate() (per batch) and Recolor().</summary>
     private void Composite()
     {
-        if (FractalParameters.BuddhaColorMode == BuddhaColorMode.ColorMap)
+        // #836 — the type's mandated composite wins over the shared param so
+        // Buddhabrot ≠ Nebulabrot (and Anti pair) regardless of the UI toggle.
+        var mode = ForcedColorMode ?? FractalParameters.BuddhaColorMode;
+        if (mode == BuddhaColorMode.ColorMap)
             RenderColorMap();
         else
             RenderBands();

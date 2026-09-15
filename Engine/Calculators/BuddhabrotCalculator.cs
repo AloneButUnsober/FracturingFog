@@ -12,11 +12,16 @@
 // look. FractalType.Nebulabrot uses NebulabrotCalculator with the band
 // composite enabled by default.
 
+using FracturingFog.Models;
+
 namespace FracturingFog;
 
 public sealed class BuddhabrotCalculator : BuddhaFamilyCalculator
 {
     protected override bool IsInSet => false;
+
+    // #836 — pure single-channel density routed through the ColorMap.
+    protected override BuddhaColorMode? ForcedColorMode => BuddhaColorMode.ColorMap;
 
     public BuddhabrotCalculator(int width, int height) : base(width, height) { }
 }
