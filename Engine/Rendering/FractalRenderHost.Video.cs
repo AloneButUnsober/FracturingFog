@@ -320,15 +320,26 @@ namespace FracturingFog.Rendering
 
             // Honour the authored region iter count as a floor. When the dialog
             // was driven from raw coords (no region pick), fall back to the
-            // calculator's current MaxIterations so a reverse zoom from a
-            // hand-tuned deep view doesn't drop iterations below what the
-            // user is already seeing on screen.
+            // calculator's current MaxIterations so the zoom doesn't drop
+            // iterations below what the user is already seeing on screen. This
+            // applies to a forward zoom too (#827): a forward zoom seeded from
+            // the current view — the common "zoom to where I'm looking" case —
+            // carries no TargetIterations, so its destination frame otherwise
+            // renders at the tier formula count, well under the authored/live
+            // iterations, and the target collapses into blobby under-detail
+            // that reads as "landed somewhere else". The live count is a floor
+            // for every frame, matching the region-pick path.
             int reqIters = request.TargetIterations;
-            if (reqIters <= 0 && request.IsReverse && _calculator != null)
+            if (reqIters <= 0 && _calculator != null)
                 reqIters = _calculator.MaxIterations;
             _videoTargetIterations = reqIters;
 
-            // Same fallback for the authored Quality preset.
+            // Same fallback for the authored Quality preset. Reverse only: a
+            // reverse zoom begins at the target, so its base tier must be rich
+            // from frame 0. A forward zoom starts shallow and lets
+            // ApplyVideoFrameState promote the tier upward by zoom, so the
+            // destination frame already lands on the correct tier without
+            // over-qualitying the early shallow frames.
             if (request.IsReverse
                 && string.IsNullOrEmpty(request.TargetQualityPresetName)
                 && _calculator?.Quality != null
