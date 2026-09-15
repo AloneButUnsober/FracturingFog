@@ -161,6 +161,11 @@ operands and yield `1.0` / `0.0`.
 | `lyapunov`  | scalar | Mean `log\|2·z_n\|` — local divergence rate (unbounded; scale it). †|
 | `gaussian`  | scalar | Mean distance to the nearest Gaussian integer (`~[0, 0.71]`). †|
 | `expSmooth` | scalar | Mean `e^{−\|z_n\|}` (Kerry Mitchell) — weights orbits near the origin. †|
+| `gateId`      | scalar | **Billiard** — index of the escape gate the trajectory left through (`0 … gateCount-1`); `-1` = trapped. §|
+| `gateCount`   | scalar | **Billiard** — total number of escape gates this frame. §|
+| `bounceCount` | scalar | **Billiard** — reflections before escape (or the bounce cap if trapped). §|
+| `maxBounces`  | scalar | **Billiard** — bounce cap for the frame. §|
+| `pathLength`  | scalar | **Billiard** — total path length travelled, normalised to ~`[0, 1]`. §|
 
 > **† Orbit inputs (F15).** These read the *whole orbit*, not just the
 > escape point, so a program using any of them is rendered on the CPU
@@ -179,6 +184,17 @@ operands and yield `1.0` / `0.0`.
 > supported yet** — use *Compile & Load* to render it live, or the fixed-shape
 > inputs (`trapMin` / `trapCross` / `trapRing` / `trapHyperbola` / `trapHexagon`)
 > when you need C# export.
+
+> **§ Billiard inputs (#633).** These describe the outcome of a **Chaotic
+> Billiard** trajectory — which escape gate it left through (`gateId`, `-1` when
+> trapped), how many `bounceCount` reflections it took, and its `pathLength`.
+> They are meaningful **only** for the Chaotic Billiard fractal; on any other
+> fractal they read `0`. A program using any billiard input renders on the CPU
+> interpreter path (there is no GPU/HLSL or escape-time representation for a
+> billiard pixel), so **C# export (*Generate via ColorGen*) of a billiard theme
+> is not supported** — use *Compile & Load* to render it live and save it to your
+> library. This mirrors the hand-written *Billiard - …* themes in the Color
+> Theme Editor, but lets you author the mapping in the DSL.
 
 > **Out-of-bounds colour (#615).** The **Out-of-bounds colour** toggle + picker
 > in the ColorGen editor sets a dedicated colour for the beyond-escape-radius
@@ -829,6 +845,24 @@ let hex  = rgb(1.0, 0.7, 0.2) * b;
 return ring + hex;
 ```
 
+### 4.19 Chaotic billiard — `gateId` / `bounceCount` / `pathLength`
+
+For the **Chaotic Billiard** fractal only (§ inputs). Hue per escape gate,
+darkened by how long the trajectory bounced; the trapped set (`gateId < 0`) goes
+black. CPU interpreter only — *Compile & Load* to render it live.
+
+```cg
+// gateId < 0 is the trapped set. Otherwise: hue per gate, dim with bounces.
+let trapped = gateId < 0;
+let hue = gateId / gateCount;
+let shade = 1.0 - min(bounceCount / maxBounces * 4.0, 0.8);
+return trapped ? rgb(0, 0, 0) : hsv(hue, 0.9, shade);
+```
+
+Swap the secondary drive by keying on `pathLength` instead — e.g.
+`return hsv(gateId / gateCount, 0.9, 1.0) * (0.3 + 0.7 * pathLength);` glows the
+long-wandering trajectories near the fractal set.
+
 ---
 
 ## 5. Compile & Load vs Generate via ColorGen
@@ -850,6 +884,12 @@ why it is instant and why an error there is always a *parse/type* error
 > `IOrbitAwareColorMap` and samples the orbit itself). The only path that can't
 > do orbit is the **GPU palette** — the escape-only shader has no per-iteration
 > orbit, so an orbit theme always renders on the CPU.
+
+> **Billiard inputs are interpreter-only.** A program that uses a billiard input
+> (`gateId` / `gateCount` / `bounceCount` / `maxBounces` / `pathLength`, §2.3 §)
+> runs on *Compile & Load* only. There is no C# template or GPU/HLSL shape for a
+> billiard pixel, so *Generate via ColorGen* refuses it with a clear message —
+> *Save…* the DSL source instead to keep the theme.
 
 **Generate via ColorGen** is the only path that emits C#. The file lands at
 `Models/ColorSchemes/Generated/{Name}Theme.cs`; a `dotnet build` of the main
@@ -894,6 +934,8 @@ Inputs    smooth dist iter maxIter t nx ny zr zi dzr dzi arg mag isInSet pxScale
           trapMin trapCross trapRing trapHyperbola trapHexagon
           stripeAvg tiaAvg curvature lyapunov gaussian expSmooth
                                      // orbit inputs (F15): CPU only (no GPU); Compile & Load + C# export
+          gateId gateCount bounceCount maxBounces pathLength
+                                     // billiard inputs (#633): Chaotic Billiard only; interpreter only (no C# export)
 Const     pi tau e phi
 Ctors     rgb(r,g,b) hsv(h,s,v) hsl(h,s,l) oklab(L,a,b) oklch(L,C,h)
 Palette   palette(t, c0, c1, …)                  // n cyclic stops
