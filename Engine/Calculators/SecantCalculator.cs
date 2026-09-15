@@ -27,11 +27,21 @@ using FracturingFog.Models;
 
 namespace FracturingFog;
 
-public sealed class SecantCalculator : IFractalCalculator
+public sealed class SecantCalculator : IFractalCalculator, ISupportsHistogramEq
 {
     public int Width { get; private set; }
     public int Height { get; private set; }
     public uint[] ColorBuffer { get; private set; } = Array.Empty<uint>();
+
+    // #146 — per-pixel fields for the basin histogram-equalizer. Secant is not
+    // an IHeightFieldSource (no relief), so it carries its own convergence-count
+    // buffer as the HE scalar rather than reusing a SmoothBuffer.
+    public float[] IterBuffer { get; private set; } = Array.Empty<float>();
+    public int[] BasinBuffer { get; private set; } = Array.Empty<int>();
+    public float[] FinalZrBuffer { get; private set; } = Array.Empty<float>();
+    public float[] FinalZiBuffer { get; private set; } = Array.Empty<float>();
+
+    private int _basins = 2;   // polynomial degree d, cached for the HE recolor
 
     public double CenterX { get; set; } = 0.0;
     public double CenterY { get; set; } = 0.0;
@@ -56,7 +66,12 @@ public sealed class SecantCalculator : IFractalCalculator
     {
         Width = width;
         Height = height;
-        ColorBuffer = new uint[width * height];
+        int n = width * height;
+        ColorBuffer = new uint[n];
+        IterBuffer = new float[n];
+        BasinBuffer = new int[n];
+        FinalZrBuffer = new float[n];
+        FinalZiBuffer = new float[n];
     }
 
     public void Calculate(CancellationToken ct = default)
@@ -65,6 +80,7 @@ public sealed class SecantCalculator : IFractalCalculator
         double R = FractalParameters.NewtonRelaxation;
         int maxIter = MaxIterations;
         if (maxIter < 8) maxIter = 64;
+        _basins = d;   // #146 — cache for the HE recolor path
         Complex off = FractalParameters.SecantInitialOffset;
         double offR = off.Real;
         double offI = off.Imaginary;
@@ -142,26 +158,55 @@ public sealed class SecantCalculator : IFractalCalculator
                 }
             converged:
                 int idx = rowBase + x;
-                if (newtonMap != null)
+                IterBuffer[idx] = iter;            // #146 HE scalar
+                BasinBuffer[idx] = basin;
+                FinalZrBuffer[idx] = (float)zr;
+                FinalZiBuffer[idx] = (float)zi;
+                if (basin >= 0)
                 {
-                    int rgb = newtonMap.MapNewton(basin, d, iter, maxIter, zr, zi);
-                    uint c = unchecked((uint)rgb);
-                    if (basin < 0) c = InteriorAlphaStamp.ScaleArgbAlpha(c, InteriorAlpha);  // #830
-                    ColorBuffer[idx] = c;
+                    ColorBuffer[idx] = NewtonBasinColoring.ConvergedColor(
+                        newtonMap, basin, d, iter, maxIter, zr, zi);
                 }
-                else if (basin < 0)
+                else if (newtonMap != null)
                 {
-                    ColorBuffer[idx] = InteriorAlphaStamp.ScaleArgbAlpha(ColorMap.InSetColor, InteriorAlpha);  // #830
+                    uint c = unchecked((uint)newtonMap.MapNewton(basin, d, iter, maxIter, zr, zi));
+                    ColorBuffer[idx] = InteriorAlphaStamp.ScaleArgbAlpha(c, InteriorAlpha);  // #830
                 }
                 else
                 {
-                    float hue = (float)basin / d;
-                    float shade = 1.0f - Math.Min(iter / (float)maxIter, 0.9f);
-                    int rgb = HsvToArgb(hue, 1.0f, shade);
-                    ColorBuffer[idx] = unchecked((uint)rgb);
+                    ColorBuffer[idx] = InteriorAlphaStamp.ScaleArgbAlpha(ColorMap.InSetColor, InteriorAlpha);  // #830
                 }
             }
         });
+    }
+
+    // ── #146 histogram equalization (basin families) — see NewtonCalculator ────
+
+    public bool BuildHistogramCdf(out double[]? cdf, out int bins, out int sourceMaxIter)
+    {
+        sourceMaxIter = MaxIterations;
+        return NewtonBasinColoring.BuildCdf(
+            Width * Height, MaxIterations, BasinBuffer, IterBuffer, out cdf, out bins);
+    }
+
+    public void ApplyHistogramEqualization(double strength)
+    {
+        if (!BuildHistogramCdf(out double[]? cdf, out int bins, out int sourceMaxIter)) return;
+        ApplyHistogramEqualizationWithCdf(cdf!, bins, sourceMaxIter, strength);
+    }
+
+    public void ApplyHistogramEqualizationWithCdf(double[] cdf, int bins, int sourceMaxIter, double strength)
+        => ApplyHistogramEqualizationWithCdf(cdf, bins, sourceMaxIter, strength, 0.0, out _, out _);
+
+    public void ApplyHistogramEqualizationWithCdf(
+        double[] cdf, int bins, int sourceMaxIter, double strength, double ditherIterStrength,
+        out long escapedCount, out long saturatedCount)
+    {
+        NewtonBasinColoring.ApplyWithCdf(
+            ColorBuffer, Width, Height, BasinBuffer, IterBuffer, FinalZrBuffer, FinalZiBuffer,
+            _basins, MaxIterations, ColorMap as INewtonColorMap,
+            cdf, bins, sourceMaxIter, strength, ditherIterStrength,
+            out escapedCount, out saturatedCount);
     }
 
     private static void ComputeZd(double zr, double zi, int d, out double outR, out double outI)
@@ -173,30 +218,5 @@ public sealed class SecantCalculator : IFractalCalculator
         double rPowD = Math.Pow(r, d);
         outR = rPowD * Math.Cos(d * theta);
         outI = rPowD * Math.Sin(d * theta);
-    }
-
-    private static int HsvToArgb(float h, float s, float v)
-    {
-        h = h * 6f;
-        int i = (int)Math.Floor(h);
-        float f = h - i;
-        float p = v * (1 - s);
-        float q = v * (1 - s * f);
-        float t = v * (1 - s * (1 - f));
-        float rF, gF, bF;
-        switch (i % 6)
-        {
-            case 0: rF = v; gF = t; bF = p; break;
-            case 1: rF = q; gF = v; bF = p; break;
-            case 2: rF = p; gF = v; bF = t; break;
-            case 3: rF = p; gF = q; bF = v; break;
-            case 4: rF = t; gF = p; bF = v; break;
-            case 5: rF = v; gF = p; bF = q; break;
-            default: rF = gF = bF = 0; break;
-        }
-        int r = (int)(rF * 255);
-        int g = (int)(gF * 255);
-        int b = (int)(bF * 255);
-        return unchecked((int)0xFF000000 | (r << 16) | (g << 8) | b);
     }
 }
