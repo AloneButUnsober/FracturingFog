@@ -55,6 +55,12 @@ public abstract class BuddhaFamilyCalculator : IFractalCalculator, IHeightFieldS
     // in-set render would allocate ~512 MB just for orbit scratch.
     private const int MaxOrbitCap = 200_000;
 
+    // #837 — zoom-detail compensation thresholds. Below the threshold zoom the
+    // compensation is a no-op (byte-identical to before the feature); at/above
+    // it the effective sample budget scales with zoom, capped at the factor.
+    private const double BuddhaZoomCompThreshold = 1.2;
+    private const double BuddhaZoomCompMaxSampleFactor = 8.0;
+
     // Progressive batch count. 8 gives ~12.5% increments — frequent enough for
     // perceived live preview, infrequent enough that composite overhead stays
     // negligible relative to sampling.
@@ -154,6 +160,21 @@ public abstract class BuddhaFamilyCalculator : IFractalCalculator, IHeightFieldS
         bool hd = FractalParameters.BuddhaQualityMode == BuddhaQualityMode.HighDefinition;
         bool mh = FractalParameters.BuddhaMetropolis;
         bool progressive = FractalParameters.BuddhaProgressive;
+
+        // #837 — zoom-detail compensation. A zoomed viewport catches far fewer
+        // of the fixed-domain sample orbits, so coverage collapses and the frame
+        // reads dark/grainy (sparse hits, not under-normalisation). Past the
+        // threshold, scale the effective sample budget with zoom (capped) and
+        // auto-enable Metropolis-Hastings, which concentrates samples on c
+        // values whose orbits reach the visible pixels. No-op below the
+        // threshold, so zoomed-out renders stay byte-identical.
+        if (FractalParameters.BuddhaZoomCompensation && Zoom > BuddhaZoomCompThreshold)
+        {
+            double factor = Math.Clamp(Zoom, 1.0, BuddhaZoomCompMaxSampleFactor);
+            long scaled = (long)(samples * factor);
+            samples = (int)Math.Min(scaled, int.MaxValue);
+            mh = true;
+        }
 
         int maxOrbit = IsInSet ? Math.Max(high, MaxIterations) : high;
         if (maxOrbit > MaxOrbitCap) maxOrbit = MaxOrbitCap;

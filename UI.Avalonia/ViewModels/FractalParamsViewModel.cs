@@ -116,6 +116,7 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
         _buddhaQualityMode = _p.BuddhaQualityMode;
         _buddhaMetropolis = _p.BuddhaMetropolis;
         _buddhaProgressive = _p.BuddhaProgressive;
+        _buddhaZoomCompensation = _p.BuddhaZoomCompensation;
         _buddhaSeed = _p.BuddhaSeed;
         _bulbPower = _p.BulbPower;
         _bulbIterations = _p.BulbIterations;
@@ -1320,6 +1321,15 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
     {
         get => _buddhaProgressive;
         set { Set(ref _buddhaProgressive, value); _p.BuddhaProgressive = value; Fire(); }
+    }
+
+    // #837 — auto zoom-detail compensation (scale samples with zoom +
+    // auto-Metropolis past the zoom threshold).
+    private bool _buddhaZoomCompensation;
+    public bool BuddhaZoomCompensation
+    {
+        get => _buddhaZoomCompensation;
+        set { Set(ref _buddhaZoomCompensation, value); _p.BuddhaZoomCompensation = value; Fire(); }
     }
 
     // #193 — deterministic Monte Carlo seed. Changing it draws a different but
