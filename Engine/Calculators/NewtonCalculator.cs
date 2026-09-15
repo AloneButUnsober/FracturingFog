@@ -17,7 +17,7 @@ using FracturingFog.Models;
 
 namespace FracturingFog;
 
-public sealed class NewtonCalculator : IFractalCalculator, IHeightFieldSource
+public sealed class NewtonCalculator : IFractalCalculator, IHeightFieldSource, ISupportsHistogramEq
 {
     public int Width { get; private set; }
     public int Height { get; private set; }
@@ -27,7 +27,19 @@ public sealed class NewtonCalculator : IFractalCalculator, IHeightFieldSource
     // relief height is the iteration count to convergence: fast-converging basin
     // interiors are low, the fractal boundaries (slow/non-converging) rise into
     // ridges. Fed to HeightfieldRelief2D / HeightfieldRaymarch2D via the host.
+    // Also the HE scalar (#146) — per-pixel convergence step count.
     public float[] SmoothBuffer { get; private set; } = Array.Empty<float>();
+
+    // #146 — per-pixel fields the basin histogram-equalizer needs to recolor:
+    // basin index (root converged to; -1 = non-convergent interior) and the
+    // final iterate position (some Newton themes hue by root angle/offset).
+    public int[] BasinBuffer { get; private set; } = Array.Empty<int>();
+    public float[] FinalZrBuffer { get; private set; } = Array.Empty<float>();
+    public float[] FinalZiBuffer { get; private set; } = Array.Empty<float>();
+
+    // Polynomial degree d = number of basins, cached from the last Calculate so
+    // the ISupportsHistogramEq recolor can pass totalBasins to MapNewton.
+    private int _basins = 2;
 
     public double CenterX { get; set; } = 0.0;
     public double CenterY { get; set; } = 0.0;
@@ -55,8 +67,12 @@ public sealed class NewtonCalculator : IFractalCalculator, IHeightFieldSource
     {
         Width = width;
         Height = height;
-        ColorBuffer = new uint[width * height];
-        SmoothBuffer = new float[width * height];
+        int n = width * height;
+        ColorBuffer = new uint[n];
+        SmoothBuffer = new float[n];
+        BasinBuffer = new int[n];
+        FinalZrBuffer = new float[n];
+        FinalZiBuffer = new float[n];
     }
 
     public void Calculate(CancellationToken ct = default)
@@ -65,6 +81,7 @@ public sealed class NewtonCalculator : IFractalCalculator, IHeightFieldSource
         double R = FractalParameters.NewtonRelaxation;
         int maxIter = MaxIterations;
         if (maxIter < 8) maxIter = 64;
+        _basins = d;   // #146 — cache for the HE recolor path
 
         // Roots of z^d = 1 are unit roots e^(2π·k/d).
         var rootsR = new double[d];
@@ -137,54 +154,59 @@ public sealed class NewtonCalculator : IFractalCalculator, IHeightFieldSource
                 }
             converged:
                 int idx = rowBase + x;
-                // Relief height = iterations to convergence (boundaries rise).
+                // Relief height / HE scalar = iterations to convergence.
                 SmoothBuffer[idx] = iter;
-                if (newtonMap != null)
+                BasinBuffer[idx] = basin;               // #146 — HE + recolor source
+                FinalZrBuffer[idx] = (float)zr;
+                FinalZiBuffer[idx] = (float)zi;
+                if (basin >= 0)
                 {
-                    int rgb = newtonMap.MapNewton(basin, d, iter, maxIter, zr, zi);
-                    uint c = unchecked((uint)rgb);
-                    // #830 — non-converged (in-set) pixels scale by the knob.
-                    if (basin < 0) c = InteriorAlphaStamp.ScaleArgbAlpha(c, InteriorAlpha);
-                    ColorBuffer[idx] = c;
+                    // Converged: shared dispatch (MapNewton theme or HSV fallback).
+                    ColorBuffer[idx] = NewtonBasinColoring.ConvergedColor(
+                        newtonMap, basin, d, iter, maxIter, zr, zi);
                 }
-                else if (basin < 0)
+                else if (newtonMap != null)
                 {
-                    ColorBuffer[idx] = InteriorAlphaStamp.ScaleArgbAlpha(ColorMap.InSetColor, InteriorAlpha);  // #830
+                    // #830 — non-converged (in-set) pixels scale by the knob.
+                    uint c = unchecked((uint)newtonMap.MapNewton(basin, d, iter, maxIter, zr, zi));
+                    ColorBuffer[idx] = InteriorAlphaStamp.ScaleArgbAlpha(c, InteriorAlpha);
                 }
                 else
                 {
-                    // Hue per basin, shade by iteration count.
-                    float hue = (float)basin / d;
-                    float shade = 1.0f - Math.Min(iter / (float)maxIter, 0.9f);
-                    int rgb = HsvToArgb(hue, 1.0f, shade);
-                    ColorBuffer[idx] = unchecked((uint)rgb);
+                    ColorBuffer[idx] = InteriorAlphaStamp.ScaleArgbAlpha(ColorMap.InSetColor, InteriorAlpha);  // #830
                 }
             }
         });
     }
 
-    private static int HsvToArgb(float h, float s, float v)
+    // ── #146 histogram equalization (basin families) ───────────────────────────
+    // Delegates to the shared NewtonBasinColoring core. The host / poster / batch
+    // / video paths pick this up via `calc is ISupportsHistogramEq` (wired #145).
+
+    public bool BuildHistogramCdf(out double[]? cdf, out int bins, out int sourceMaxIter)
     {
-        h = h * 6f;
-        int i = (int)Math.Floor(h);
-        float f = h - i;
-        float p = v * (1 - s);
-        float q = v * (1 - s * f);
-        float t = v * (1 - s * (1 - f));
-        float rF, gF, bF;
-        switch (i % 6)
-        {
-            case 0: rF = v; gF = t; bF = p; break;
-            case 1: rF = q; gF = v; bF = p; break;
-            case 2: rF = p; gF = v; bF = t; break;
-            case 3: rF = p; gF = q; bF = v; break;
-            case 4: rF = t; gF = p; bF = v; break;
-            case 5: rF = v; gF = p; bF = q; break;
-            default: rF = gF = bF = 0; break;
-        }
-        int r = (int)(rF * 255);
-        int g = (int)(gF * 255);
-        int b = (int)(bF * 255);
-        return unchecked((int)0xFF000000 | (r << 16) | (g << 8) | b);
+        sourceMaxIter = MaxIterations;
+        return NewtonBasinColoring.BuildCdf(
+            Width * Height, MaxIterations, BasinBuffer, SmoothBuffer, out cdf, out bins);
+    }
+
+    public void ApplyHistogramEqualization(double strength)
+    {
+        if (!BuildHistogramCdf(out double[]? cdf, out int bins, out int sourceMaxIter)) return;
+        ApplyHistogramEqualizationWithCdf(cdf!, bins, sourceMaxIter, strength);
+    }
+
+    public void ApplyHistogramEqualizationWithCdf(double[] cdf, int bins, int sourceMaxIter, double strength)
+        => ApplyHistogramEqualizationWithCdf(cdf, bins, sourceMaxIter, strength, 0.0, out _, out _);
+
+    public void ApplyHistogramEqualizationWithCdf(
+        double[] cdf, int bins, int sourceMaxIter, double strength, double ditherIterStrength,
+        out long escapedCount, out long saturatedCount)
+    {
+        NewtonBasinColoring.ApplyWithCdf(
+            ColorBuffer, Width, Height, BasinBuffer, SmoothBuffer, FinalZrBuffer, FinalZiBuffer,
+            _basins, MaxIterations, ColorMap as INewtonColorMap,
+            cdf, bins, sourceMaxIter, strength, ditherIterStrength,
+            out escapedCount, out saturatedCount);
     }
 }
