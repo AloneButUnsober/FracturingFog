@@ -28,6 +28,26 @@ namespace FracturingFog.Models
         Phong3D,
         Pbr3D,
         OrbitTrap,
+        // #630 — categorical billiard/scatter authoring: Stops are per-gate
+        // colours, InSetColor is the trapped colour, BilliardDrive selects the
+        // secondary modulation. Adapts to an IBilliardColorMap at runtime.
+        Categorical,
+    }
+
+    /// <summary>UI-neutral mirror of <c>BilliardDrive</c> (#630). Selects how the
+    /// categorical billiard theme's secondary channel (bounce count / path
+    /// length) modulates the per-gate colour. Member order must match the Engine
+    /// enum so the adapter can cast.</summary>
+    public enum BilliardDriveDef
+    {
+        /// <summary>Flat per-gate colour, no secondary modulation.</summary>
+        Flat,
+        /// <summary>Per-gate hue, brightness fades with bounce count.</summary>
+        BounceShade,
+        /// <summary>Ignore the gate; ramp the stops as a gradient by path length.</summary>
+        PathLength,
+        /// <summary>Cycle the gate palette by bounce count (concentric bands).</summary>
+        BounceCyclic,
     }
 
     /// <summary>UI-neutral mirror of <c>OrbitTrapShape</c> (F13). Member order
@@ -169,6 +189,12 @@ namespace FracturingFog.Models
         /// <summary>Colour in-set (non-escaping) pixels by the accumulated orbit
         /// (F14). Default false ⇒ flat interior.</summary>
         public bool ColorInterior { get; set; } = false;
+
+        // ── Categorical / Billiard (#630, Kind == Categorical) ────────────
+        /// <summary>Secondary modulation for a categorical billiard theme. The
+        /// gate palette is <see cref="Stops"/> (index = gate), the trapped
+        /// colour is <see cref="InSetColor"/>. Default Flat.</summary>
+        public BilliardDriveDef BilliardDrive { get; set; } = BilliardDriveDef.Flat;
 
         // ── Gradient interpolation (Phase A F1 / Phase B F2, F3) ──────────
         /// <summary>Colour space the LUT blends stops in (F1). Default Srgb.</summary>

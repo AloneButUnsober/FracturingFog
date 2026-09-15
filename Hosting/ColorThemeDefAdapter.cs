@@ -39,6 +39,8 @@ namespace FracturingFog.Hosting
                 TrapPower = def.TrapPower,
                 ColorInterior = def.ColorInterior,
 
+                BilliardDrive = (BilliardDrive)def.BilliardDrive,   // #630
+
                 InterpolationSpace = (GradientColorSpace)def.InterpolationSpace,
                 InterpolationCurve = (InterpolationCurve)def.InterpolationCurve,
                 TransferFunction = (TransferFunction)def.TransferFunction,
@@ -113,6 +115,7 @@ namespace FracturingFog.Hosting
             ColorThemeKindDef.Phong3D   => ColorThemeKind.Phong3D,
             ColorThemeKindDef.Pbr3D     => ColorThemeKind.Pbr3D,
             ColorThemeKindDef.OrbitTrap => ColorThemeKind.OrbitTrap,
+            ColorThemeKindDef.Categorical => ColorThemeKind.Categorical,   // #630
             _ => ColorThemeKind.Gradient,
         };
 
@@ -141,6 +144,8 @@ namespace FracturingFog.Hosting
                 TrapScale = data.TrapScale,
                 TrapPower = data.TrapPower,
                 ColorInterior = data.ColorInterior,
+
+                BilliardDrive = (BilliardDriveDef)data.BilliardDrive,   // #630
 
                 InterpolationSpace = (GradientColorSpaceDef)data.InterpolationSpace,
                 InterpolationCurve = (InterpolationCurveDef)data.InterpolationCurve,
@@ -219,6 +224,7 @@ namespace FracturingFog.Hosting
             ColorThemeKind.Phong3D   => ColorThemeKindDef.Phong3D,
             ColorThemeKind.Pbr3D     => ColorThemeKindDef.Pbr3D,
             ColorThemeKind.OrbitTrap => ColorThemeKindDef.OrbitTrap,
+            ColorThemeKind.Categorical => ColorThemeKindDef.Categorical,   // #630
             _ => ColorThemeKindDef.Gradient,
         };
 

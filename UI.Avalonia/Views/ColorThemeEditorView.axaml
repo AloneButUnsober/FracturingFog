@@ -149,6 +149,8 @@
                                 <RadioButton Content="Pbr3D"    GroupName="kind" IsChecked="{Binding IsPbr}"      Foreground="#DCDCDC" />
                                 <RadioButton Content="Orbit Trap" GroupName="kind" IsChecked="{Binding IsOrbitTrap}" Foreground="#DCDCDC"
                                              ToolTip.Tip="Colour by the minimum distance from the orbit to a chosen shape (point / ring / hexagon / …), mapped through the gradient below. Orbit-aware." />
+                                <RadioButton Content="Categorical" GroupName="kind" IsChecked="{Binding IsCategorical}" Foreground="#DCDCDC"
+                                             ToolTip.Tip="Per-gate categorical colouring for the chaotic-billiard scatterer. Colour stops below are the per-gate palette; the In-set colour is the trapped set." />
                             </StackPanel>
                         </StackPanel>
                     </Border>
@@ -178,6 +180,22 @@
                                           Foreground="#B4B4B4"
                                           ToolTip.Tip="Colour in-set (non-escaping) pixels by their orbit instead of a flat fill. Takes effect on the User-Equation path today; the native Mandelbrot path keeps a flat interior." />
                             </Grid>
+                        </StackPanel>
+                    </Border>
+
+                    <!-- Categorical / Billiard (#630) -->
+                    <Border Classes="group" IsVisible="{Binding ShowCategorical}">
+                        <StackPanel Spacing="6">
+                            <TextBlock Classes="section" Text="Categorical / Billiard" />
+                            <Grid ColumnDefinitions="Auto,*" RowDefinitions="Auto" Margin="0,4,0,0">
+                                <TextBlock Classes="label" Grid.Row="0" Grid.Column="0" Text="Secondary:" Margin="0,0,8,4" />
+                                <ComboBox Grid.Row="0" Grid.Column="1"
+                                          ItemsSource="{Binding BilliardDriveOptions}" SelectedItem="{Binding BilliardDrive}"
+                                          HorizontalAlignment="Left" Width="170" Margin="0,0,0,4"
+                                          ToolTip.Tip="How the escape outcome modulates the per-gate colour: Flat (gate only), BounceShade (darken with bounce count), PathLength (ramp the stops as a gradient by path length), BounceCyclic (cycle the palette by bounce count)." />
+                            </Grid>
+                            <TextBlock TextWrapping="Wrap" Foreground="#B4B4B4" FontSize="11"
+                                       Text="Colour stops below are the per-gate palette (stop order = escape gate). The In-set colour is the trapped set. For a colour-blind-safe base, seed from a built-in &quot;Billiard - …&quot; theme." />
                         </StackPanel>
                     </Border>
 
