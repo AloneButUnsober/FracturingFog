@@ -44,18 +44,23 @@ public static class MiniMapDefaults
     /// </summary>
     public static ViewBounds For(FractalType t) => t switch
     {
-        FractalType.Mandelbrot       => new(-0.5,  0.0, 1.5),
+        // #29 — Zoom retuned so the FULL canonical fractal fits the 220×180
+        // thumbnail with a ~15% margin (span = 3.5/Zoom). The old values were
+        // zoomed in (e.g. Mandelbrot 1.5 → 2.33-unit span vs the 3.5-wide set)
+        // so the antenna / tips were clipped inside the bitmap; no display-side
+        // letterbox can recover content the render never drew.
+        FractalType.Mandelbrot       => new(-0.5,  0.0, 0.85),
         FractalType.Julia            => new( 0.0,  0.0, 1.0),
         FractalType.BurningShip      => new(-0.5, -0.5, 1.0),
-        FractalType.Tricorn          => new(-0.5,  0.0, 1.5),
-        FractalType.Multibrot        => new( 0.0,  0.0, 1.2),
-        FractalType.Phoenix          => new( 0.0,  0.0, 1.2),
+        FractalType.Tricorn          => new(-0.5,  0.0, 0.85),
+        FractalType.Multibrot        => new( 0.0,  0.0, 1.0),
+        FractalType.Phoenix          => new( 0.0,  0.0, 1.0),
         FractalType.Newton           => new( 0.0,  0.0, 0.9),
         FractalType.Nova             => new( 1.0,  0.0, 0.8),
-        FractalType.BuddhaBrot       => new(-0.5,  0.0, 1.5),
-        FractalType.Nebulabrot       => new(-0.5,  0.0, 1.5),
-        FractalType.AntiBuddhabrot   => new(-0.5,  0.0, 1.5),
-        FractalType.AntiNebulabrot   => new(-0.5,  0.0, 1.5),
+        FractalType.BuddhaBrot       => new(-0.5,  0.0, 0.85),
+        FractalType.Nebulabrot       => new(-0.5,  0.0, 0.85),
+        FractalType.AntiBuddhabrot   => new(-0.5,  0.0, 0.85),
+        FractalType.AntiNebulabrot   => new(-0.5,  0.0, 0.85),
         FractalType.IFS              => new( 0.0,  0.0, 1.0),
         FractalType.LSystem          => new( 0.0,  0.0, 1.0),
         FractalType.StrangeAttractor => new( 0.0,  0.0, 1.0),
@@ -68,7 +73,7 @@ public static class MiniMapDefaults
         FractalType.Logistic         => new( 3.5,  0.5, 2.0),
         FractalType.Halley           => new( 0.0,  0.0, 0.9),
         FractalType.Secant           => new( 0.0,  0.0, 0.9),
-        FractalType.Spider           => new( 0.0,  0.0, 1.2),
+        FractalType.Spider           => new( 0.0,  0.0, 1.0),
         FractalType.Mandelbox        => new( 0.0,  0.0, 1.0),
         FractalType.Kifs             => new( 0.0,  0.0, 1.0),
         FractalType.QuaternionJulia  => new( 0.0,  0.0, 1.0),

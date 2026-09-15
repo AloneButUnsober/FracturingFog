@@ -32,6 +32,14 @@ namespace FracturingFog.UI.Avalonia.Controls;
 
 public sealed class MiniMapControl : Control
 {
+    // Display letterbox: the thumbnail is drawn into this centred fraction of
+    // the control so the reticle (which extends past the fractal box) has room
+    // and doesn't butt against the border. This is a DISPLAY inset only —
+    // fractal framing/margin lives in the render extent (MiniMapDefaults), so
+    // this value does not affect clipping. Restored to 0.88 (#29): the earlier
+    // drop to 0.80 was a misdirected attempt to fix render-level clipping.
+    private const double LetterboxFactor = 0.88;
+
     private MiniMapViewModel? _attachedVm;
 
     public MiniMapControl()
@@ -73,7 +81,11 @@ public sealed class MiniMapControl : Control
     {
         if (Vm is null || !Vm.IsSupported) return;
         var pos = e.GetPosition(this);
-        Vm.RaiseNavigationFromPixel(pos.X, pos.Y, Bounds.Width, Bounds.Height);
+        // Map into the SAME letterboxed image rect the bitmap + reticle use, so
+        // a click lands on the fractal point under the cursor. Passing the full
+        // control bounds (pre-#29) put nav off by the letterbox shrink + offset.
+        var imgRect = ShrinkCentered(new Rect(0, 0, Bounds.Width, Bounds.Height), LetterboxFactor);
+        Vm.RaiseNavigationFromPixel(pos.X - imgRect.X, pos.Y - imgRect.Y, imgRect.Width, imgRect.Height);
     }
 
     public override void Render(DrawingContext g)
@@ -98,11 +110,10 @@ public sealed class MiniMapControl : Control
             return;
         }
 
-        // Bitmap fill — letterboxed at 80% so the indicator reticle has
-        // breathing room against the window edge and the fractal doesn't
-        // butt up against the border. (Issue #29: the fractal read too large
-        // in the window at 88%; scaled down slightly for more margin.)
-        var imgRect = ShrinkCentered(rect, 0.80);
+        // Bitmap fill — letterboxed so the indicator reticle has breathing
+        // room against the window edge. (Issue #29: framing margin now lives in
+        // the render extent, so this is a pure display inset — see LetterboxFactor.)
+        var imgRect = ShrinkCentered(rect, LetterboxFactor);
         if (vm.Thumbnail is Bitmap bmp)
         {
             g.DrawImage(bmp, new Rect(0, 0, bmp.PixelSize.Width, bmp.PixelSize.Height), imgRect);
@@ -137,9 +148,13 @@ public sealed class MiniMapControl : Control
         double maxDim = Math.Max(rect.Width, rect.Height);
         double scale = (3.5 / maxDim) / bounds.Zoom;
 
-        // Host centre relative to canonical centre, in pixels.
-        double pxCenter = rect.Width * 0.5 + (vm.CenterX - bounds.CenterX) / scale;
-        double pyCenter = rect.Height * 0.5 + (vm.CenterY - bounds.CenterY) / scale;
+        // Host centre relative to canonical centre, in pixels. rect is the
+        // letterboxed imgRect, offset from the control origin by (rect.X,
+        // rect.Y); the DrawingContext is in control coordinates, so the reticle
+        // centre MUST include that offset. Omitting it drew the reticle up and
+        // to the left by the letterbox margin (#29).
+        double pxCenter = rect.X + rect.Width * 0.5 + (vm.CenterX - bounds.CenterX) / scale;
+        double pyCenter = rect.Y + rect.Height * 0.5 + (vm.CenterY - bounds.CenterY) / scale;
 
         // Indicator radius — small dot when zoomed in close, larger ring when
         // the host view roughly matches the thumbnail's framing.
