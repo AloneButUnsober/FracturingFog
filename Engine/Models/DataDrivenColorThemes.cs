@@ -41,6 +41,7 @@ namespace FracturingFog.Models
                 ColorThemeKind.Phong3D => new DataDrivenPhong3D(data),
                 ColorThemeKind.Pbr3D => new DataDrivenPbr3D(data),
                 ColorThemeKind.OrbitTrap => new DataDrivenOrbitTrap(data),
+                ColorThemeKind.Categorical => new DataDrivenBilliard(data),   // #630
                 _ => null,
             };
         }
@@ -220,6 +221,22 @@ namespace FracturingFog.Models
                         XorLevels = trap.ExportXorLevels,
                         XorMask = trap.ExportXorMask,
                         Stops = StopsToData(trap.ExportStops),
+                        Brightness = bright,
+                        Contrast = contrast,
+                        Adaptive = adaptive,
+                    };
+
+                case DataDrivenBilliard bil:   // #630
+                    return new ColorThemeData
+                    {
+                        Name = name,
+                        Category = category,
+                        Description = description,
+                        MaxRecommendedZoom = maxZoomField,
+                        Kind = ColorThemeKind.Categorical,
+                        InSetColor = InSetFromMap(map),
+                        BilliardDrive = bil.Drive,
+                        Stops = bil.ExportStops,
                         Brightness = bright,
                         Contrast = contrast,
                         Adaptive = adaptive,
@@ -817,5 +834,162 @@ namespace FracturingFog.Models
             OrbitTrapShape.PolarRose     => new OrbitTrapPolarRoseMap(),
             _                            => new OrbitTrapPointMap(),
         };
+    }
+
+    // =========================================================================
+    // 6. Categorical billiard / scatter (#630)
+    // =========================================================================
+
+    /// <summary>
+    /// User-authored categorical colouring for the chaotic-billiard scatterer
+    /// (#630). Unlike the gradient-derived data-driven maps this is standalone:
+    /// the billiard outcome is a categorical escape-gate id plus two continuous
+    /// secondaries (bounce count, path length), routed through
+    /// <see cref="IBilliardColorMap.MapBilliard"/> — the same contract the
+    /// built-in <c>BilliardThemes</c> use. The authored theme reuses the theme
+    /// <see cref="ColorThemeData.Stops"/> as the per-gate palette (index = gate),
+    /// <see cref="ColorThemeData.InSetColor"/> as the trapped colour, and
+    /// <see cref="ColorThemeData.BilliardDrive"/> as the secondary modulation.
+    /// </summary>
+    public sealed class DataDrivenBilliard : IBilliardColorMap, INamedColorMap, IThemePostFx
+    {
+        public string DisplayName { get; }
+        public string DisplayCategory { get; }
+        public string DisplayDescription { get; }
+        public double DisplayMaxRecommendedZoom { get; }
+
+        public int? ThemeBrightness { get; }
+        public int? ThemeContrast { get; }
+        public int? ThemeAdaptive { get; }
+
+        public ColorPaletteType Type => ColorPaletteType.Algorithmic;
+        public int MaxIterations { get; set; } = 256;
+
+        /// <summary>Secondary modulation (exposed for Export round-trip).</summary>
+        public BilliardDrive Drive { get; }
+
+        // Per-gate palette (packed 0xAARRGGBB) in stop order, the trapped colour,
+        // a 256-entry gradient LUT (PathLength drive + non-billiard fallback), and
+        // the source stop list for Export.
+        private readonly int[] _gate;
+        private readonly uint _trapped;
+        private readonly int[] _lut;
+        private readonly List<ColorStopData> _stops;
+
+        uint IColorMap.InSetColor => _trapped;
+
+        /// <summary>Source stops, copied, so Export can round-trip the palette.</summary>
+        public List<ColorStopData> ExportStops
+        {
+            get
+            {
+                var copy = new List<ColorStopData>(_stops.Count);
+                foreach (var s in _stops)
+                    copy.Add(new ColorStopData { Position = s.Position, R = s.R, G = s.G, B = s.B, A = s.A, Midpoint = s.Midpoint });
+                return copy;
+            }
+        }
+
+        public DataDrivenBilliard(ColorThemeData data)
+        {
+            DisplayName = data.Name;
+            DisplayCategory = data.Category;
+            DisplayDescription = data.Description;
+            DisplayMaxRecommendedZoom = data.MaxRecommendedZoom ?? double.PositiveInfinity;
+            ThemeBrightness = data.Brightness;
+            ThemeContrast = data.Contrast;
+            ThemeAdaptive = data.Adaptive;
+            Drive = data.BilliardDrive;
+            _trapped = data.InSetColor?.ToPackedArgb() ?? 0xFF000000u;
+
+            _stops = new List<ColorStopData>(data.Stops ?? new List<ColorStopData>());
+            // Gate palette follows stop position order (BuildDef sorts on save).
+            _stops.Sort((a, b) => a.Position.CompareTo(b.Position));
+
+            int n = Math.Max(1, _stops.Count);
+            _gate = new int[n];
+            for (int i = 0; i < _stops.Count; i++)
+            {
+                var s = _stops[i];
+                _gate[i] = unchecked((int)(((uint)s.A << 24) | ((uint)s.R << 16) | ((uint)s.G << 8) | s.B));
+            }
+            if (_stops.Count == 0) _gate[0] = unchecked((int)0xFF808080u);
+
+            _lut = BuildLut(_stops);
+        }
+
+        // Non-billiard fallback (e.g. the editor swatch preview) — sample the
+        // palette as a gradient so the theme still shows something defensible.
+        public int Map(float smooth, float distance, int iterations)
+        {
+            float t = iterations > 0 ? smooth / iterations : 0f;
+            t = Math.Clamp(t, 0f, 0.999999f);
+            return _lut[(int)(t * 256) & 255];
+        }
+
+        public int MapBilliard(int gateId, int gateCount, int bounces, int maxBounces, float pathLength)
+        {
+            if (gateId < 0) return unchecked((int)_trapped);   // trapped set
+
+            int n = _gate.Length;
+            switch (Drive)
+            {
+                case BilliardDrive.PathLength:
+                {
+                    float t = Math.Clamp(pathLength, 0f, 0.999999f);
+                    return _lut[(int)(t * 256) & 255];
+                }
+                case BilliardDrive.BounceCyclic:
+                    return _gate[((bounces % n) + n) % n];
+                case BilliardDrive.BounceShade:
+                {
+                    int baseCol = _gate[gateId % n];
+                    float shade = 1f - MathF.Min(MathF.Log2(bounces + 1) / 8f, 0.8f);
+                    return BilliardColorHelper.Shade(baseCol, shade);
+                }
+                default: // Flat
+                    return _gate[gateId % n];
+            }
+        }
+
+        // Builds a 256-entry sRGB gradient LUT from the (position-sorted) stops.
+        private static int[] BuildLut(List<ColorStopData> stops)
+        {
+            var lut = new int[256];
+            if (stops.Count == 0)
+            {
+                for (int i = 0; i < 256; i++) lut[i] = unchecked((int)0xFF808080u);
+                return lut;
+            }
+            if (stops.Count == 1)
+            {
+                int c = unchecked((int)(0xFF000000u | ((uint)stops[0].R << 16) | ((uint)stops[0].G << 8) | stops[0].B));
+                for (int i = 0; i < 256; i++) lut[i] = c;
+                return lut;
+            }
+            for (int i = 0; i < 256; i++)
+            {
+                float t = i / 255f;
+                // Find the segment [a,b] with a.Position <= t <= b.Position.
+                ColorStopData a = stops[0], b = stops[^1];
+                for (int k = 0; k < stops.Count - 1; k++)
+                {
+                    if (t >= stops[k].Position && t <= stops[k + 1].Position)
+                    {
+                        a = stops[k]; b = stops[k + 1]; break;
+                    }
+                    if (t < stops[0].Position) { a = b = stops[0]; break; }
+                    if (t > stops[^1].Position) { a = b = stops[^1]; break; }
+                }
+                float span = b.Position - a.Position;
+                float f = span > 1e-6f ? (t - a.Position) / span : 0f;
+                f = Math.Clamp(f, 0f, 1f);
+                byte r = (byte)(a.R + (b.R - a.R) * f);
+                byte g = (byte)(a.G + (b.G - a.G) * f);
+                byte bl = (byte)(a.B + (b.B - a.B) * f);
+                lut[i] = unchecked((int)(0xFF000000u | ((uint)r << 16) | ((uint)g << 8) | bl));
+            }
+            return lut;
+        }
     }
 }

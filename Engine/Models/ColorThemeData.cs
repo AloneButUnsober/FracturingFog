@@ -39,7 +39,28 @@ namespace FracturingFog.Models
         /// distance from the orbit to a chosen <see cref="OrbitTrapShape"/>.
         /// Orbit-aware: rendered through the calculator's per-iteration sampling
         /// path. Reuses all the gradient (F1-F9) knobs.</summary>
-        OrbitTrap
+        OrbitTrap,
+        /// <summary>#630 — categorical billiard/scatter colouring. Stops are the
+        /// per-gate palette, InSetColor is the trapped colour, and
+        /// <see cref="ColorThemeData.BilliardDrive"/> selects the secondary
+        /// modulation. Instantiates <c>DataDrivenBilliard</c>
+        /// (an <c>IBilliardColorMap</c>).</summary>
+        Categorical
+    }
+
+    /// <summary>#630 — how a categorical billiard theme's secondary channel
+    /// modulates the per-gate colour. Member order must match
+    /// <c>BilliardDriveDef</c> so the host adapter can cast.</summary>
+    public enum BilliardDrive
+    {
+        /// <summary>Flat per-gate colour, no secondary modulation.</summary>
+        Flat,
+        /// <summary>Per-gate hue, brightness fades with bounce count.</summary>
+        BounceShade,
+        /// <summary>Ignore the gate; ramp the stops as a gradient by path length.</summary>
+        PathLength,
+        /// <summary>Cycle the gate palette by bounce count.</summary>
+        BounceCyclic
     }
 
     /// <summary>
@@ -289,6 +310,13 @@ namespace FracturingFog.Models
         /// ⇒ flat interior (byte-identical). Only meaningful for the OrbitTrap
         /// kind.</summary>
         public bool ColorInterior { get; set; } = false;
+
+        // ── Categorical / Billiard (#630) ─────────────────────────────────────
+        /// <summary>#630 — secondary modulation for a categorical billiard theme
+        /// (Kind == Categorical). Stops are the per-gate palette (index = gate),
+        /// InSetColor is the trapped colour. Default Flat. Ignored by every other
+        /// kind, so it round-trips harmlessly.</summary>
+        public BilliardDrive BilliardDrive { get; set; } = BilliardDrive.Flat;
 
         // ── Cycling / 3D ──────────────────────────────────────────────────────
 

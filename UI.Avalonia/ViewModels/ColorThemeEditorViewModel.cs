@@ -323,6 +323,7 @@ public sealed class ColorThemeEditorViewModel : ViewModelBase
                 this.RaisePropertyChanged(nameof(IsPhong));
                 this.RaisePropertyChanged(nameof(IsPbr));
                 this.RaisePropertyChanged(nameof(IsOrbitTrap));
+                this.RaisePropertyChanged(nameof(IsCategorical));
                 FieldChanged();
             }
         }
@@ -333,6 +334,7 @@ public sealed class ColorThemeEditorViewModel : ViewModelBase
     public bool IsPhong { get => Kind == ColorThemeKindDef.Phong3D; set { if (value) Kind = ColorThemeKindDef.Phong3D; } }
     public bool IsPbr { get => Kind == ColorThemeKindDef.Pbr3D; set { if (value) Kind = ColorThemeKindDef.Pbr3D; } }
     public bool IsOrbitTrap { get => Kind == ColorThemeKindDef.OrbitTrap; set { if (value) Kind = ColorThemeKindDef.OrbitTrap; } }
+    public bool IsCategorical { get => Kind == ColorThemeKindDef.Categorical; set { if (value) Kind = ColorThemeKindDef.Categorical; } }
 
     private bool _showCycle;
     public bool ShowCycle { get => _showCycle; private set => this.RaiseAndSetIfChanged(ref _showCycle, value); }
@@ -351,6 +353,11 @@ public sealed class ColorThemeEditorViewModel : ViewModelBase
     /// visible only for the OrbitTrap kind.</summary>
     public bool ShowOrbitTrap { get => _showOrbitTrap; private set => this.RaiseAndSetIfChanged(ref _showOrbitTrap, value); }
 
+    private bool _showCategorical;
+    /// <summary>#630 — the Categorical / Billiard section (secondary-drive picker
+    /// + "stops are gates" hint) is visible only for the Categorical kind.</summary>
+    public bool ShowCategorical { get => _showCategorical; private set => this.RaiseAndSetIfChanged(ref _showCategorical, value); }
+
     private void UpdateVisibleKindSections()
     {
         // OrbitTrap is a gradient-mapped kind but NOT a cycling one — keep the
@@ -362,6 +369,19 @@ public sealed class ColorThemeEditorViewModel : ViewModelBase
         ShowPhongExtras = Kind == ColorThemeKindDef.Phong3D;
         ShowPbrExtras = Kind == ColorThemeKindDef.Pbr3D;
         ShowOrbitTrap = Kind == ColorThemeKindDef.OrbitTrap;
+        ShowCategorical = Kind == ColorThemeKindDef.Categorical;   // #630
+    }
+
+    // ── Categorical / Billiard (#630) ───────────────────────────────────────
+    public BilliardDriveDef[] BilliardDriveOptions { get; } = Enum.GetValues<BilliardDriveDef>();
+
+    private BilliardDriveDef _billiardDrive = BilliardDriveDef.Flat;
+    /// <summary>Secondary modulation for a categorical billiard theme. The stops
+    /// list doubles as the per-gate palette (index = gate).</summary>
+    public BilliardDriveDef BilliardDrive
+    {
+        get => _billiardDrive;
+        set { this.RaiseAndSetIfChanged(ref _billiardDrive, value); FieldChanged(); }
     }
 
     // ── Orbit Trap (F13) ──────────────────────────────────────────────────
@@ -1707,6 +1727,8 @@ public sealed class ColorThemeEditorViewModel : ViewModelBase
             TrapPower = def.TrapPower <= 0f ? 0.35d : Math.Clamp((double)def.TrapPower, 0.05d, 8d);
             ColorInterior = def.ColorInterior;
 
+            BilliardDrive = def.BilliardDrive;   // #630
+
             InterpSpace = def.InterpolationSpace;
             InterpCurve = def.InterpolationCurve;
             TransferFn = def.TransferFunction;
@@ -1808,6 +1830,7 @@ public sealed class ColorThemeEditorViewModel : ViewModelBase
             TrapScale = (float)TrapScale,
             TrapPower = (float)TrapPower,
             ColorInterior = ColorInterior,
+            BilliardDrive = BilliardDrive,   // #630
             InterpolationSpace = InterpSpace,
             InterpolationCurve = InterpCurve,
             TransferFunction = TransferFn,
