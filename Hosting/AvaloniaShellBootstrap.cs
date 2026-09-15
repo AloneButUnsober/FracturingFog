@@ -2340,7 +2340,10 @@ namespace FracturingFog.Hosting
                 {
                     if (s_renderHost == null) return;
                     var vs = s_renderHost.ViewState;
-                    var req = await AvaloniaDialogs.ShowVideoAsync(vs.CenterX, vs.CenterY, vs.Zoom);
+                    var req = await AvaloniaDialogs.ShowVideoAsync(
+                        vs.CenterX, vs.CenterXLo, vs.CenterX2, vs.CenterX3,
+                        vs.CenterY, vs.CenterYLo, vs.CenterY2, vs.CenterY3,
+                        vs.Zoom);
                     if (req == null) return;
                     Dispatcher.UIThread.Post(() => s_shell?.StartVideoFromRequest(req));
                 }
