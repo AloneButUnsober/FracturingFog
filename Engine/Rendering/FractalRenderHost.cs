@@ -1125,7 +1125,10 @@ namespace FracturingFog.Rendering
                 CenterY = s.CenterY, CenterYLo = s.CenterYLo, CenterY2 = s.CenterY2, CenterY3 = s.CenterY3,
                 Zoom = posterZoom,
                 MaxIterations = effIters,
-                ColorMap = _calculator.ColorMap,
+                // _calculator.ColorMap is always initialised (ctor sets it, and
+                // ApplyColorMap only ever assigns non-null); the ! silences the
+                // nullable-oblivious IColorMap read from MandelbrotCalculator.
+                ColorMap = _calculator.ColorMap!,
                 Quality = s.Quality,
                 FractalParameters = s.FractalParameters,
                 // #508 — the interactive hi-res relief field (raymarch WYSIWYG).
@@ -1217,6 +1220,7 @@ namespace FracturingFog.Rendering
             // InteriorAlpha line above only flow-narrows it. Assert non-null here.
             _escapeCalculator.FractalParameters = ViewState.FractalParameters!;
             _escapeCalculator.ColorMap = _calculator.ColorMap;
+            _escapeCalculator.InteriorAlpha = ViewState.FractalParameters?.InteriorAlpha ?? 255;  // #97
 
             _tearDropCalculator.CenterX = ViewState.CenterX;
             _tearDropCalculator.CenterXLo = ViewState.CenterXLo;
@@ -1231,6 +1235,7 @@ namespace FracturingFog.Rendering
             _tearDropCalculator.MaxIterations = _calculator.MaxIterations;
             _tearDropCalculator.FractalParameters = ViewState.FractalParameters!;
             _tearDropCalculator.ColorMap = _calculator.ColorMap;
+            _tearDropCalculator.InteriorAlpha = ViewState.FractalParameters?.InteriorAlpha ?? 255;  // #97
         }
 
         // ── Trigger ───────────────────────────────────────────────────────────
@@ -3454,12 +3459,20 @@ namespace FracturingFog.Rendering
                 case EscapeTimeCalculator e:
                     e.FractalType = ViewState.FractalType;
                     e.FractalParameters = ViewState.FractalParameters;
+                    e.InteriorAlpha = ViewState.FractalParameters?.InteriorAlpha ?? 255;  // #97
+                    break;
+                case TearDropCalculator td:
+                    td.FractalParameters = ViewState.FractalParameters;
+                    td.InteriorAlpha = ViewState.FractalParameters?.InteriorAlpha ?? 255;  // #97
                     break;
                 case IFSCalculator ifs: ifs.FractalParameters = ViewState.FractalParameters; break;
                 case LSystemCalculator ls: ls.FractalParameters = ViewState.FractalParameters; break;
                 case AttractorCalculator a: a.FractalParameters = ViewState.FractalParameters; break;
                 case BuddhaFamilyCalculator b: b.FractalParameters = ViewState.FractalParameters; break;
-                case NewtonCalculator n: n.FractalParameters = ViewState.FractalParameters; break;
+                case NewtonCalculator n:
+                    n.FractalParameters = ViewState.FractalParameters;
+                    n.InteriorAlpha = ViewState.FractalParameters?.InteriorAlpha ?? 255;  // #830
+                    break;
                 case UserEquationCalculator u:
                     u.FractalParameters = ViewState.FractalParameters;
                     // #382: global interior alpha (parity with the Mandelbrot
@@ -3498,8 +3511,14 @@ namespace FracturingFog.Rendering
                     break;
                 case UserBulbCalculator ub: ub.FractalParameters = ViewState.FractalParameters; break;
                 case LogisticCalculator lg: lg.FractalParameters = ViewState.FractalParameters; break;
-                case HalleyCalculator hc: hc.FractalParameters = ViewState.FractalParameters; break;
-                case SecantCalculator sc: sc.FractalParameters = ViewState.FractalParameters; break;
+                case HalleyCalculator hc:
+                    hc.FractalParameters = ViewState.FractalParameters;
+                    hc.InteriorAlpha = ViewState.FractalParameters?.InteriorAlpha ?? 255;  // #830
+                    break;
+                case SecantCalculator sc:
+                    sc.FractalParameters = ViewState.FractalParameters;
+                    sc.InteriorAlpha = ViewState.FractalParameters?.InteriorAlpha ?? 255;  // #830
+                    break;
             }
         }
 

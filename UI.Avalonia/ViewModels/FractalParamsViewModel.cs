@@ -348,12 +348,35 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
     /// knobs on the Relief 3D dialog.</summary>
     public bool ReliefStage2Applies => IsAny3DRaymarcher || IsReliefLightingContext;
 
-    /// <summary>Visibility flag for the 2D interior-alpha section (issue #96,
-    /// #382). True for the canonical Mandelbrot path plus the DSL escape-time
-    /// families (UserEquation, Sandbox), which share the <c>iter &gt;= maxIt</c>
-    /// in-set invariant and now scale their in-set alpha by the global knob and
-    /// composite over <c>Interior2DBackground</c>.</summary>
-    public bool IsInteriorAlphaApplicable => IsMandelbrot || IsUserEquation || IsSandbox;
+    /// <summary>Native escape-time families (via <c>EscapeTimeCalculator</c>)
+    /// plus <c>TearDrop</c> that share the <c>iter &gt;= maxIt</c> in-set
+    /// invariant and now carry the global interior-alpha knob (#97). Julia /
+    /// BurningShip / Tricorn / Multibrot / Phoenix / Magnet1 / Magnet2 / Glynn /
+    /// Spider / TearDrop. (Newton-family basin coloring and the generated
+    /// polynomial calcs are follow-up slices.)</summary>
+    public bool IsAny2DInteriorEscapeTime =>
+        FractalType is FractalType.Julia
+            or FractalType.BurningShip
+            or FractalType.Tricorn
+            or FractalType.Multibrot
+            or FractalType.Phoenix
+            or FractalType.Magnet1
+            or FractalType.Magnet2
+            or FractalType.Glynn
+            or FractalType.Spider
+            or FractalType.TearDrop;
+
+    /// <summary>Visibility flag for the 2D interior-alpha section (issues #96,
+    /// #382, #97, #830). True for the canonical Mandelbrot path, the DSL
+    /// escape-time families (UserEquation, Sandbox), the native escape-time
+    /// fleet + TearDrop (<see cref="IsAny2DInteriorEscapeTime"/>), and the
+    /// Newton family (<see cref="IsNewtonOrNova"/> — Newton / Nova / Halley /
+    /// Secant, whose in-set is basin non-convergence). All scale their in-set
+    /// alpha by the global knob and composite over
+    /// <c>Interior2DBackground</c>.</summary>
+    public bool IsInteriorAlphaApplicable =>
+        IsMandelbrot || IsUserEquation || IsSandbox
+        || IsAny2DInteriorEscapeTime || IsNewtonOrNova;
 
     /// <summary>Visibility flag for the 2D heightfield-relief section (#102, #139).
     /// True for every 2D family that exposes an <c>IHeightFieldSource</c> the

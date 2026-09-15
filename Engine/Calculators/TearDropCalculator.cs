@@ -105,6 +105,11 @@ public sealed class TearDropCalculator : IFractalCalculator
     public float[] FinalDrBuffer { get; private set; } = Array.Empty<float>();
     public float[] FinalDiBuffer { get; private set; } = Array.Empty<float>();
 
+    /// <summary>Global interior-alpha knob (#97): 0..255, copied from
+    /// <c>FractalParameters.InteriorAlpha</c> by the render host. 255 = opaque
+    /// (byte-identical to before the feature).</summary>
+    public int InteriorAlpha { get; set; } = 255;
+
     // ── Reference orbit cache (Hi limbs for PT delta math) ───────────────────
 
     private double[] _refZr = Array.Empty<double>();
@@ -137,6 +142,19 @@ public sealed class TearDropCalculator : IFractalCalculator
     // ── Top-level dispatch ───────────────────────────────────────────────────
 
     public void Calculate(CancellationToken ct = default)
+    {
+        CalculateCore(ct);
+        // #97 — global interior-alpha post-pass over whichever core path ran.
+        // Every path fills IterationBuffer with maxIt at in-set pixels, so one
+        // stamp covers SP/DD/QD/PT. No fast-recolor path — a theme switch
+        // re-runs Calculate — so the stamp always re-applies.
+        if (InteriorAlpha < 255)
+            InteriorAlphaStamp.Apply(
+                ColorBuffer, IterationBuffer, Width, Height, MaxIterations, InteriorAlpha,
+                new ParallelOptions(), ct);
+    }
+
+    private void CalculateCore(CancellationToken ct)
     {
         ColorMap.MaxIterations = MaxIterations;
         bool needsHp = Quality.NeedsHighPrecision(Zoom);
