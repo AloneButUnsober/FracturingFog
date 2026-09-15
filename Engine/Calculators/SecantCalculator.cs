@@ -38,6 +38,11 @@ public sealed class SecantCalculator : IFractalCalculator
     public double Zoom { get; set; } = 1.0;
     public int MaxIterations { get; set; } = 64;
 
+    /// <summary>Global interior-alpha knob (#830): basin non-convergence
+    /// (basin &lt; 0) is the in-set; scaled inline at the write site. 255 =
+    /// opaque (byte-identical). See <see cref="NewtonCalculator.InteriorAlpha"/>.</summary>
+    public int InteriorAlpha { get; set; } = 255;
+
     public QualityPreset Quality { get; set; } = QualityPreset.Standard;
     public IColorMap ColorMap { get; set; } = new HsvPalette();
 
@@ -140,11 +145,13 @@ public sealed class SecantCalculator : IFractalCalculator
                 if (newtonMap != null)
                 {
                     int rgb = newtonMap.MapNewton(basin, d, iter, maxIter, zr, zi);
-                    ColorBuffer[idx] = unchecked((uint)rgb);
+                    uint c = unchecked((uint)rgb);
+                    if (basin < 0) c = InteriorAlphaStamp.ScaleArgbAlpha(c, InteriorAlpha);  // #830
+                    ColorBuffer[idx] = c;
                 }
                 else if (basin < 0)
                 {
-                    ColorBuffer[idx] = ColorMap.InSetColor;
+                    ColorBuffer[idx] = InteriorAlphaStamp.ScaleArgbAlpha(ColorMap.InSetColor, InteriorAlpha);  // #830
                 }
                 else
                 {

@@ -367,13 +367,16 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
             or FractalType.TearDrop;
 
     /// <summary>Visibility flag for the 2D interior-alpha section (issues #96,
-    /// #382, #97). True for the canonical Mandelbrot path, the DSL escape-time
-    /// families (UserEquation, Sandbox), and the native escape-time fleet +
-    /// TearDrop (<see cref="IsAny2DInteriorEscapeTime"/>) — all sharing the
-    /// <c>iter &gt;= maxIt</c> in-set invariant, scaling their in-set alpha by
-    /// the global knob and compositing over <c>Interior2DBackground</c>.</summary>
+    /// #382, #97, #830). True for the canonical Mandelbrot path, the DSL
+    /// escape-time families (UserEquation, Sandbox), the native escape-time
+    /// fleet + TearDrop (<see cref="IsAny2DInteriorEscapeTime"/>), and the
+    /// Newton family (<see cref="IsNewtonOrNova"/> — Newton / Nova / Halley /
+    /// Secant, whose in-set is basin non-convergence). All scale their in-set
+    /// alpha by the global knob and composite over
+    /// <c>Interior2DBackground</c>.</summary>
     public bool IsInteriorAlphaApplicable =>
-        IsMandelbrot || IsUserEquation || IsSandbox || IsAny2DInteriorEscapeTime;
+        IsMandelbrot || IsUserEquation || IsSandbox
+        || IsAny2DInteriorEscapeTime || IsNewtonOrNova;
 
     /// <summary>Visibility flag for the 2D heightfield-relief section (#102, #139).
     /// True for every 2D family that exposes an <c>IHeightFieldSource</c> the

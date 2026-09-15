@@ -53,7 +53,6 @@ internal static class InteriorAlphaStamp
         if (w <= 0 || h <= 0) return;
 
         uint ia = (uint)clamped;
-        int count = h;
         po.CancellationToken = ct;
         Parallel.ForEach(Partitioner.Create(0, h), po, range =>
         {
@@ -72,5 +71,20 @@ internal static class InteriorAlphaStamp
                 }
             }
         });
+    }
+
+    /// <summary>Scale the alpha byte of a single 0xAARRGGBB pixel by
+    /// <paramref name="interiorAlpha"/>/255, leaving RGB untouched. For calcs
+    /// with no <c>IterationBuffer</c> to key a post-pass on (the Newton family,
+    /// whose in-set is basin non-convergence detected only at the write site,
+    /// #830): scale the colour inline as it is written. Fully-opaque
+    /// (255) returns the pixel unchanged.</summary>
+    public static uint ScaleArgbAlpha(uint argb, int interiorAlpha)
+    {
+        int clamped = Math.Clamp(interiorAlpha, 0, 255);
+        if (clamped >= 255) return argb;
+        uint a = (argb >> 24) & 0xFFu;
+        uint na = (a * (uint)clamped) / 255u;
+        return (argb & 0x00FFFFFFu) | (na << 24);
     }
 }

@@ -3469,7 +3469,10 @@ namespace FracturingFog.Rendering
                 case LSystemCalculator ls: ls.FractalParameters = ViewState.FractalParameters; break;
                 case AttractorCalculator a: a.FractalParameters = ViewState.FractalParameters; break;
                 case BuddhaFamilyCalculator b: b.FractalParameters = ViewState.FractalParameters; break;
-                case NewtonCalculator n: n.FractalParameters = ViewState.FractalParameters; break;
+                case NewtonCalculator n:
+                    n.FractalParameters = ViewState.FractalParameters;
+                    n.InteriorAlpha = ViewState.FractalParameters?.InteriorAlpha ?? 255;  // #830
+                    break;
                 case UserEquationCalculator u:
                     u.FractalParameters = ViewState.FractalParameters;
                     // #382: global interior alpha (parity with the Mandelbrot
@@ -3508,8 +3511,14 @@ namespace FracturingFog.Rendering
                     break;
                 case UserBulbCalculator ub: ub.FractalParameters = ViewState.FractalParameters; break;
                 case LogisticCalculator lg: lg.FractalParameters = ViewState.FractalParameters; break;
-                case HalleyCalculator hc: hc.FractalParameters = ViewState.FractalParameters; break;
-                case SecantCalculator sc: sc.FractalParameters = ViewState.FractalParameters; break;
+                case HalleyCalculator hc:
+                    hc.FractalParameters = ViewState.FractalParameters;
+                    hc.InteriorAlpha = ViewState.FractalParameters?.InteriorAlpha ?? 255;  // #830
+                    break;
+                case SecantCalculator sc:
+                    sc.FractalParameters = ViewState.FractalParameters;
+                    sc.InteriorAlpha = ViewState.FractalParameters?.InteriorAlpha ?? 255;  // #830
+                    break;
             }
         }
 

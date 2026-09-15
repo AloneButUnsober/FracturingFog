@@ -34,6 +34,14 @@ public sealed class NewtonCalculator : IFractalCalculator, IHeightFieldSource
     public double Zoom { get; set; } = 1.0;
     public int MaxIterations { get; set; } = 64;
 
+    /// <summary>Global interior-alpha knob (#830): 0..255, copied from
+    /// <c>FractalParameters.InteriorAlpha</c> by the render host. The Newton
+    /// "interior" is basin non-convergence (basin &lt; 0); with no
+    /// <c>IterationBuffer</c> to key a post-pass on, the in-set colour's alpha
+    /// is scaled inline at the write site so it composites over
+    /// Interior2DBackground. 255 = opaque (byte-identical).</summary>
+    public int InteriorAlpha { get; set; } = 255;
+
     public QualityPreset Quality { get; set; } = QualityPreset.Standard;
     public IColorMap ColorMap { get; set; } = new HsvPalette();
 
@@ -134,11 +142,14 @@ public sealed class NewtonCalculator : IFractalCalculator, IHeightFieldSource
                 if (newtonMap != null)
                 {
                     int rgb = newtonMap.MapNewton(basin, d, iter, maxIter, zr, zi);
-                    ColorBuffer[idx] = unchecked((uint)rgb);
+                    uint c = unchecked((uint)rgb);
+                    // #830 — non-converged (in-set) pixels scale by the knob.
+                    if (basin < 0) c = InteriorAlphaStamp.ScaleArgbAlpha(c, InteriorAlpha);
+                    ColorBuffer[idx] = c;
                 }
                 else if (basin < 0)
                 {
-                    ColorBuffer[idx] = ColorMap.InSetColor;
+                    ColorBuffer[idx] = InteriorAlphaStamp.ScaleArgbAlpha(ColorMap.InSetColor, InteriorAlpha);  // #830
                 }
                 else
                 {

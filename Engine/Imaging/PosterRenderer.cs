@@ -1073,7 +1073,18 @@ namespace FracturingFog.Imaging
                 case LSystemCalculator ls:     ls.FractalParameters = req.FractalParameters; break;
                 case AttractorCalculator a:    a.FractalParameters = req.FractalParameters; break;
                 case BuddhaFamilyCalculator b: b.FractalParameters = req.FractalParameters; break;
-                case NewtonCalculator n:       n.FractalParameters = req.FractalParameters; break;
+                case NewtonCalculator n:
+                    n.FractalParameters = req.FractalParameters;
+                    n.InteriorAlpha = req.FractalParameters?.InteriorAlpha ?? 255;  // #830
+                    break;
+                case HalleyCalculator hc:
+                    hc.FractalParameters = req.FractalParameters;
+                    hc.InteriorAlpha = req.FractalParameters?.InteriorAlpha ?? 255;  // #830
+                    break;
+                case SecantCalculator sc:
+                    sc.FractalParameters = req.FractalParameters;
+                    sc.InteriorAlpha = req.FractalParameters?.InteriorAlpha ?? 255;  // #830
+                    break;
                 case UserEquationCalculator u:
                     u.FractalParameters = req.FractalParameters;
                     u.InteriorAlpha = req.FractalParameters?.InteriorAlpha ?? 255;  // #382
