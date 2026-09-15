@@ -161,6 +161,15 @@ namespace FracturingFog.Cli
         /// lights fog) = default → omitted; otherwise emits <c>--fog-light-mask N</c>.</summary>
         public int FogLightMask { get; init; } = 0x7;
 
+        // Curated volumetric knobs (#373). Each emits only when it deviates from
+        // the LightingFxData default, so a scene with no fog produces no flags.
+        public double FogDensity { get; init; }
+        public double FogHeightFalloff { get; init; }
+        public int VolumeSteps { get; init; }
+        public double VolumeAnisotropy { get; init; }
+        public uint FogColor { get; init; } = 0xFFFFFFFFu;
+        public double VolumePaletteStrength { get; init; }
+
         // Guided À-Trous denoise (S4, #389). Emitted only on the raymarch path,
         // iterations > 0. Sigmas default to the operator defaults.
         public int ReliefDenoiseIterations { get; init; }
@@ -404,6 +413,15 @@ namespace FracturingFog.Cli
                 parts.Add(BatchFlags.FogLightMask);
                 parts.Add(snap.FogLightMask.ToString(CultureInfo.InvariantCulture));
             }
+
+            // Curated volumetric knobs (#373) — each only when it deviates from the
+            // LightingFxData default (a scene with no fog emits nothing).
+            if (snap.FogDensity != 0.0)            { parts.Add(BatchFlags.FogDensity);            parts.Add(Num(snap.FogDensity)); }
+            if (snap.FogHeightFalloff != 0.0)      { parts.Add(BatchFlags.FogHeightFalloff);      parts.Add(Num(snap.FogHeightFalloff)); }
+            if (snap.VolumeSteps != 0)             { parts.Add(BatchFlags.VolumeSteps);           parts.Add(snap.VolumeSteps.ToString(CultureInfo.InvariantCulture)); }
+            if (snap.VolumeAnisotropy != 0.0)      { parts.Add(BatchFlags.VolumeAnisotropy);      parts.Add(Num(snap.VolumeAnisotropy)); }
+            if (snap.FogColor != 0xFFFFFFFFu)      { parts.Add(BatchFlags.FogColor);              parts.Add(HexColor(snap.FogColor)); }
+            if (snap.VolumePaletteStrength != 0.0) { parts.Add(BatchFlags.VolumePaletteStrength); parts.Add(Num(snap.VolumePaletteStrength)); }
 
             // Per-light flags (roadmap S8, #404/#490). Positional lights emit their
             // full type/pos/range/cone set (implying relief on replay); directional

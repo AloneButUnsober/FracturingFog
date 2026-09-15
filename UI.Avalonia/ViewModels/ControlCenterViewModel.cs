@@ -452,6 +452,12 @@ public sealed class ControlCenterViewModel : ViewModelBase
             ReliefFroxel         = fp?.Relief2DFroxelVolumetrics ?? false,   // S6 (#408)
             ReliefFroxelQuality  = fp?.Relief2DFroxelQuality ?? FracturingFog.Models.FroxelQuality.Balanced,   // S6 (#408)
             FogLightMask         = fp?.Lighting.VolumeLightMask ?? 0x7,      // S6 (#408)
+            FogDensity           = fp?.Lighting.FogDensity ?? 0.0,           // #373
+            FogHeightFalloff     = fp?.Lighting.FogHeightFalloff ?? 0.0,
+            VolumeSteps          = fp?.Lighting.VolumeSteps ?? 0,
+            VolumeAnisotropy     = fp?.Lighting.VolumeAnisotropy ?? 0.0,
+            FogColor             = fp?.Lighting.FogColor ?? 0xFFFFFFFFu,
+            VolumePaletteStrength = fp?.Lighting.VolumePaletteStrength ?? 0.0,
             Transmission         = fp?.Lighting.Transmission ?? 0.0,        // S5 (#406)
             Ior                  = fp?.Lighting.Ior ?? 1.5,
             AbsorptionDistance   = fp?.Lighting.AbsorptionDistance ?? 1.0,

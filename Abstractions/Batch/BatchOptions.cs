@@ -260,6 +260,15 @@ namespace FracturingFog.Batch
         // (all lights fog). 0..7.
         public int? FogLightMask { get; set; }
 
+        // Curated volumetric-lighting knobs (#373). null = leave the LightingFxData
+        // default. Applied to FractalParameters.Lighting by BatchRenderer.
+        public double? FogDensity { get; set; }            // Beer-Lambert density, >= 0
+        public double? FogHeightFalloff { get; set; }      // ground-hugging falloff, >= 0
+        public int? VolumeSteps { get; set; }              // in-scatter step count, 0..256
+        public double? VolumeAnisotropy { get; set; }      // HG phase g, -1..1
+        public uint? FogColor { get; set; }                // medium tint, packed 0x??RRGGBB
+        public double? VolumePaletteStrength { get; set; } // palette-map cross-fade, 0..1
+
         // S4 (#389) — guided À-Trous denoise on the relief raymarch.
         public int? ReliefDenoiseIterations { get; set; }  // 0 = off
         public double? ReliefDenoiseColorSigma { get; set; }
@@ -949,6 +958,45 @@ namespace FracturingFog.Batch
                         opts.FogLightMask = flm;
                         break;
 
+                    // Curated volumetric knobs (#373). No relief implication — they
+                    // set FractalParameters.Lighting, honoured by the 3D raymarchers
+                    // and (when the user also enables --relief-raymarch) the relief
+                    // volumetric path.
+                    case BatchFlags.FogDensity:
+                        if (!NextDouble(args, ref i, a, out double fgd, out error)) return false;
+                        opts.FogDensity = fgd;
+                        break;
+
+                    case BatchFlags.FogHeightFalloff:
+                        if (!NextDouble(args, ref i, a, out double fhf, out error)) return false;
+                        opts.FogHeightFalloff = fhf;
+                        break;
+
+                    case BatchFlags.VolumeSteps:
+                        if (!NextInt(args, ref i, a, out int vst, out error)) return false;
+                        opts.VolumeSteps = vst;
+                        break;
+
+                    case BatchFlags.VolumeAnisotropy:
+                        if (!NextDouble(args, ref i, a, out double van, out error)) return false;
+                        opts.VolumeAnisotropy = van;
+                        break;
+
+                    case BatchFlags.FogColor:
+                        if (!Next(args, ref i, a, out string fcv, out error)) return false;
+                        if (!TryParseHexColor(fcv, out uint fcu))
+                        {
+                            error = $"{a} expected a hex colour like \"#RRGGBB\" or \"#AARRGGBB\", got '{fcv}'.";
+                            return false;
+                        }
+                        opts.FogColor = fcu;
+                        break;
+
+                    case BatchFlags.VolumePaletteStrength:
+                        if (!NextDouble(args, ref i, a, out double vps, out error)) return false;
+                        opts.VolumePaletteStrength = vps;
+                        break;
+
                     case BatchFlags.Denoise:
                         if (!NextInt(args, ref i, a, out int dni, out error)) return false;
                         opts.ReliefDenoiseIterations = dni;
@@ -1205,6 +1253,18 @@ namespace FracturingFog.Batch
 
             if (opts.FogLightMask is < 0 or > 7)
                 { error = "--fog-light-mask must be 0..7 (bit n = light n+1 lights the fog)."; return false; }
+
+            // Curated volumetric knobs (#373).
+            if (opts.FogDensity is < 0 or > 10)
+                { error = "--fog-density must be 0..10."; return false; }
+            if (opts.FogHeightFalloff is < 0 or > 10)
+                { error = "--fog-height-falloff must be 0..10."; return false; }
+            if (opts.VolumeSteps is < 0 or > 256)
+                { error = "--volume-steps must be 0..256 (in-scatter step count; 0 = exp fog only)."; return false; }
+            if (opts.VolumeAnisotropy is < -1 or > 1)
+                { error = "--volume-anisotropy must be -1..1 (Henyey-Greenstein phase g)."; return false; }
+            if (opts.VolumePaletteStrength is < 0 or > 1)
+                { error = "--volume-palette-strength must be 0..1."; return false; }
 
             // Per-light point / spot overrides (roadmap S8, #404).
             for (int li = 0; li < opts.Lights.Length; li++)

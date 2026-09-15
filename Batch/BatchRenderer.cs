@@ -120,6 +120,22 @@ namespace FracturingFog.Batch
                 fp.Lighting = fxm;
             }
 
+            // #373 — curated volumetric knobs. Any set → copy/mutate/write
+            // fp.Lighting. Honoured by the 3D raymarchers + the relief raymarch.
+            if (opts.FogDensity.HasValue || opts.FogHeightFalloff.HasValue
+                || opts.VolumeSteps.HasValue || opts.VolumeAnisotropy.HasValue
+                || opts.FogColor.HasValue || opts.VolumePaletteStrength.HasValue)
+            {
+                var fxv = fp.Lighting;
+                if (opts.FogDensity.HasValue)            fxv.FogDensity            = opts.FogDensity.Value;
+                if (opts.FogHeightFalloff.HasValue)      fxv.FogHeightFalloff      = opts.FogHeightFalloff.Value;
+                if (opts.VolumeSteps.HasValue)           fxv.VolumeSteps           = opts.VolumeSteps.Value;
+                if (opts.VolumeAnisotropy.HasValue)      fxv.VolumeAnisotropy      = opts.VolumeAnisotropy.Value;
+                if (opts.FogColor.HasValue)              fxv.FogColor              = opts.FogColor.Value;
+                if (opts.VolumePaletteStrength.HasValue) fxv.VolumePaletteStrength = opts.VolumePaletteStrength.Value;
+                fp.Lighting = fxv;
+            }
+
             // S5 (#406) — refractive glass. Any glass flag set → copy/mutate/write
             // fp.Lighting. Unset fields keep the default (opaque when nothing given).
             if (opts.Transmission.HasValue || opts.Ior.HasValue || opts.AbsorptionDist.HasValue
