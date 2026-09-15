@@ -146,6 +146,19 @@ public static class CgInputs
         // 19 shapes as the Color Theme Editor) picks the SDF it is measured
         // against. `trap` with the default Point shape == `trapMin`.
         "trap",
+        // #633 — chaotic-billiard outcome inputs. A program referencing any of
+        // these renders through the billiard-aware interpreter path, which binds
+        // them from the calculator's per-pixel outcome (there is no escape-time /
+        // orbit data for a billiard pixel). CPU-only (no GPU/HLSL billiard path).
+        "gateId", "gateCount", "bounceCount", "maxBounces", "pathLength",
+    };
+
+    /// <summary>#633 — subset of <see cref="Scalars"/> that are chaotic-billiard
+    /// outcome inputs. A ColorGen program referencing any of these is rendered
+    /// through the billiard-aware interpreter path (<c>IBilliardColorMap</c>).</summary>
+    public static readonly HashSet<string> BilliardScalars = new(StringComparer.Ordinal)
+    {
+        "gateId", "gateCount", "bounceCount", "maxBounces", "pathLength",
     };
 
     /// <summary>Subset of <see cref="Scalars"/> that require per-iteration orbit

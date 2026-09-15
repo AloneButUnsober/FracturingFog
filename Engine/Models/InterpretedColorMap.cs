@@ -84,6 +84,19 @@ public class InterpretedColorMap :
 
         var opts = options ?? new GenerateOptions();
 
+        // #633 — a program referencing a chaotic-billiard outcome input renders
+        // through the billiard-aware interpreter (CPU): its inputs come from the
+        // calculator's per-pixel outcome (gate / bounce / path), not escape-time
+        // or orbit data, and there is no GPU/HLSL billiard palette path.
+        var billiardInputs = CollectBilliardInputs(prog);
+        if (billiardInputs.Count > 0)
+        {
+            return new InterpretedBilliardColorMap(prog, opts.ThemeName, opts.Category, opts.Description)
+            {
+                OutOfBoundsColorOverride = opts.OutOfBoundsColor,   // #615
+            };
+        }
+
         // F15 (#591) — a program referencing an orbit-accumulator input needs
         // per-iteration orbit sampling, so it runs on the orbit-aware interpreter
         // (CPU) and advertises NO GPU palette (the HLSL escape-only path can't
@@ -170,6 +183,32 @@ public class InterpretedColorMap :
             case CgBinary b: CollectOrbit(b.Lhs, found); CollectOrbit(b.Rhs, found); break;
             case CgTernary t: CollectOrbit(t.Cond, found); CollectOrbit(t.IfTrue, found); CollectOrbit(t.IfFalse, found); break;
             case CgCall c: foreach (var a in c.Args) CollectOrbit(a, found); break;
+        }
+    }
+
+    /// <summary>#633 — the set of chaotic-billiard outcome inputs the program
+    /// references (empty ⇒ not a billiard theme).</summary>
+    private static HashSet<string> CollectBilliardInputs(CgProgram prog)
+    {
+        var found = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var s in prog.Statements)
+        {
+            CgNode? node = s switch { CgLet l => l.Value, CgReturn r => r.Value, _ => null };
+            if (node != null) CollectBilliard(node, found);
+        }
+        return found;
+    }
+
+    private static void CollectBilliard(CgNode n, HashSet<string> found)
+    {
+        switch (n)
+        {
+            case CgVar v: if (v.IsBuiltIn && CgInputs.BilliardScalars.Contains(v.Name)) found.Add(v.Name); break;
+            case CgChannel ch: CollectBilliard(ch.Target, found); break;
+            case CgUnary u: CollectBilliard(u.Operand, found); break;
+            case CgBinary b: CollectBilliard(b.Lhs, found); CollectBilliard(b.Rhs, found); break;
+            case CgTernary t: CollectBilliard(t.Cond, found); CollectBilliard(t.IfTrue, found); CollectBilliard(t.IfFalse, found); break;
+            case CgCall c: foreach (var a in c.Args) CollectBilliard(a, found); break;
         }
     }
 
@@ -493,6 +532,12 @@ public class InterpretedColorMap :
         "lyapunov"  => inp.Lyapunov,
         "gaussian"  => inp.Gaussian,
         "expSmooth" => inp.ExpSmooth,
+        // #633 chaotic-billiard outcome inputs (0 on the non-billiard path).
+        "gateId"      => inp.GateId,
+        "gateCount"   => inp.GateCount,
+        "bounceCount" => inp.BounceCount,
+        "maxBounces"  => inp.MaxBounces,
+        "pathLength"  => inp.PathLength,
         _ => throw new InvalidOperationException($"Unknown built-in input '{name}'."),
     };
 
@@ -503,6 +548,8 @@ public class InterpretedColorMap :
         // F15 — orbit-accumulator inputs, filled by the orbit-aware subclass.
         public double TrapMin, TrapCross, TrapRing, TrapHyperbola, TrapHexagon;
         public double StripeAvg, TiaAvg, Curvature, Lyapunov, Gaussian, ExpSmooth;
+        // #633 — chaotic-billiard outcome inputs, filled by the billiard-aware subclass.
+        public double GateId, GateCount, BounceCount, MaxBounces, PathLength;
     }
 
     private static string ShortHash(string s)
@@ -784,4 +831,35 @@ public sealed class InterpretedOrbitColorMap : InterpretedColorMap, IOrbitAwareC
     // MapInteriorWithOrbit uses the IOrbitAwareColorMap default (delegates to
     // MapWithOrbit at smooth=0) — so a theme that opts into interior colouring
     // via the calculator gate still evaluates with the orbit inputs bound.
+}
+
+/// <summary>
+/// #633 — chaotic-billiard ColorGen theme. Produced by
+/// <see cref="InterpretedColorMap.TryCreate"/> when the program references a
+/// billiard outcome input (gateId / gateCount / bounceCount / maxBounces /
+/// pathLength). <see cref="ChaoticBilliardCalculator"/> routes it through
+/// <see cref="IBilliardColorMap.MapBilliard"/>: the per-pixel outcome is bound
+/// and the same interpreter body evaluates the colour. CPU-only — a billiard
+/// pixel has no escape-time / orbit data and there is no GPU/HLSL billiard
+/// palette path, so it advertises no GPU palette (empty HLSL body).
+/// </summary>
+public sealed class InterpretedBilliardColorMap : InterpretedColorMap, IBilliardColorMap
+{
+    internal InterpretedBilliardColorMap(CgProgram prog, string name, string category, string description)
+        : base(prog, name, category, description, hlslBody: "", hlslPrelude: "", paletteId: "Interp_none")
+    {
+    }
+
+    public int MapBilliard(int gateId, int gateCount, int bounces, int maxBounces, float pathLength)
+    {
+        // Escape-time / orbit inputs are meaningless for a billiard pixel — leave
+        // them at 0. Bind the billiard outcome and evaluate the DSL body.
+        In inp = BuildIn(0f, 0f, 0, 0f, 0f, 0f, 0f, 0f, 0f);
+        inp.GateId      = gateId;
+        inp.GateCount   = gateCount;
+        inp.BounceCount = bounces;
+        inp.MaxBounces  = maxBounces;
+        inp.PathLength  = pathLength;
+        return Evaluate(in inp);
+    }
 }
