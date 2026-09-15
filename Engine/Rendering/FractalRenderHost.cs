@@ -3519,6 +3519,21 @@ namespace FracturingFog.Rendering
                     sc.FractalParameters = ViewState.FractalParameters;
                     sc.InteriorAlpha = ViewState.FractalParameters?.InteriorAlpha ?? 255;  // #830
                     break;
+                // #831 — generated polynomial calcs (Z2..Z5 / Tricorn / BurningShip).
+                // They carry no FractalParameters (pure polynomial) but share the
+                // IterationBuffer + >= maxIt in-set invariant, so they take the knob.
+                case FracturingFog.Calculators.Generated.MandelbrotZ2Calculator gz2a:
+                    gz2a.InteriorAlpha = ViewState.FractalParameters?.InteriorAlpha ?? 255; break;
+                case FracturingFog.Calculators.Generated.MandelbrotZ3Calculator gz3a:
+                    gz3a.InteriorAlpha = ViewState.FractalParameters?.InteriorAlpha ?? 255; break;
+                case FracturingFog.Calculators.Generated.MandelbrotZ4Calculator gz4a:
+                    gz4a.InteriorAlpha = ViewState.FractalParameters?.InteriorAlpha ?? 255; break;
+                case FracturingFog.Calculators.Generated.MandelbrotZ5Calculator gz5a:
+                    gz5a.InteriorAlpha = ViewState.FractalParameters?.InteriorAlpha ?? 255; break;
+                case FracturingFog.Calculators.Generated.TricornCalculator gtc:
+                    gtc.InteriorAlpha = ViewState.FractalParameters?.InteriorAlpha ?? 255; break;
+                case FracturingFog.Calculators.Generated.BurningShipCalculator gbs:
+                    gbs.InteriorAlpha = ViewState.FractalParameters?.InteriorAlpha ?? 255; break;
             }
         }
 
