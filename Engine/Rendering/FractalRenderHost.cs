@@ -1125,7 +1125,10 @@ namespace FracturingFog.Rendering
                 CenterY = s.CenterY, CenterYLo = s.CenterYLo, CenterY2 = s.CenterY2, CenterY3 = s.CenterY3,
                 Zoom = posterZoom,
                 MaxIterations = effIters,
-                ColorMap = _calculator.ColorMap,
+                // _calculator.ColorMap is always initialised (ctor sets it, and
+                // ApplyColorMap only ever assigns non-null); the ! silences the
+                // nullable-oblivious IColorMap read from MandelbrotCalculator.
+                ColorMap = _calculator.ColorMap!,
                 Quality = s.Quality,
                 FractalParameters = s.FractalParameters,
                 // #508 — the interactive hi-res relief field (raymarch WYSIWYG).
