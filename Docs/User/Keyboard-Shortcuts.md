@@ -40,6 +40,25 @@ ignored while a text box has focus (see [Focus Behavior](#focus-behavior)).
 
 ---
 
+## Accessibility — UI Scale
+
+Resize the whole interface — every dialog, menu, and companion window — up or
+down along a fixed ladder. The choice is remembered between sessions.
+
+| Combo | Action |
+|---|---|
+| `Ctrl` + `+` | **Increase** the global UI scale one step (`Ctrl` + `=` also works, and the numeric-keypad `+`) |
+| `Ctrl` + `-` | **Decrease** the global UI scale one step |
+| `Ctrl` + `0` | **Reset** the UI scale to 100% |
+
+> [!NOTE]
+> These work from **any** window, including the main render window, so you can
+> resize the dialogs without first clicking into one. The render surface itself
+> is deliberately **not** scaled — only the surrounding UI chrome — so the
+> fractal view keeps its exact pixel framing.
+
+---
+
 ## Composition & Export Preview
 
 Aids for framing a shot the way the poster / wallpaper export will crop it

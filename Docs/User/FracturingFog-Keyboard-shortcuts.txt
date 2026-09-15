@@ -29,6 +29,13 @@ F1      Open Help window
 Ctrl+Shift+P  1:1 poster / wallpaper preview window
 Ctrl+Shift+F  Toggle export-aspect frame guide overlay
 
+UI SCALE (accessibility) — works from any window incl. the render window
+------------------------------------------------------------------------
+Ctrl++  Increase global UI scale one step (Ctrl+= / keypad + also)
+Ctrl+-  Decrease global UI scale one step
+Ctrl+0  Reset UI scale to 100%
+        (the fractal surface is not scaled, only the UI chrome)
+
 DEEP-ZOOM DIAGNOSTICS (title shows a suffix while engaged)
 ----------------------------------------------------------
 Ctrl+G        Toggle GPU compute (single-precision Mandelbrot)
