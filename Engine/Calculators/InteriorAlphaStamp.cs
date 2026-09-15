@@ -29,7 +29,11 @@ using System.Threading.Tasks;
 
 namespace FracturingFog;
 
-internal static class InteriorAlphaStamp
+// Public (not internal): the CalcGen DSL hot-load path compiles
+// Calculator.template.cs — which calls this helper — into a SEPARATE runtime
+// assembly that references Engine, so an internal helper would be inaccessible
+// and every hot-loaded user equation would fail to compile (#831).
+public static class InteriorAlphaStamp
 {
     /// <summary>Scale the alpha byte of every in-set pixel
     /// (<paramref name="iterationBuffer"/>[idx] &gt;= <paramref name="maxIterations"/>)

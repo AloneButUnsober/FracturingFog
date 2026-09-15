@@ -352,8 +352,7 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
     /// plus <c>TearDrop</c> that share the <c>iter &gt;= maxIt</c> in-set
     /// invariant and now carry the global interior-alpha knob (#97). Julia /
     /// BurningShip / Tricorn / Multibrot / Phoenix / Magnet1 / Magnet2 / Glynn /
-    /// Spider / TearDrop. (Newton-family basin coloring and the generated
-    /// polynomial calcs are follow-up slices.)</summary>
+    /// Spider / TearDrop.</summary>
     public bool IsAny2DInteriorEscapeTime =>
         FractalType is FractalType.Julia
             or FractalType.BurningShip
@@ -366,17 +365,28 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
             or FractalType.Spider
             or FractalType.TearDrop;
 
+    /// <summary>Generated polynomial calcs (source-gen'd, via the shared
+    /// Calculator.template): Z2..Z5 / Tricorn / BurningShip. Same
+    /// <c>iter &gt;= maxIt</c> in-set invariant → interior-alpha knob (#831).</summary>
+    public bool IsGeneratedPolynomial =>
+        FractalType is FractalType.GeneratedMandelbrotZ2
+            or FractalType.GeneratedMandelbrotZ3
+            or FractalType.GeneratedMandelbrotZ4
+            or FractalType.GeneratedMandelbrotZ5
+            or FractalType.GeneratedTricorn
+            or FractalType.GeneratedBurningShip;
+
     /// <summary>Visibility flag for the 2D interior-alpha section (issues #96,
-    /// #382, #97, #830). True for the canonical Mandelbrot path, the DSL
+    /// #382, #97, #830, #831). True for the canonical Mandelbrot path, the DSL
     /// escape-time families (UserEquation, Sandbox), the native escape-time
-    /// fleet + TearDrop (<see cref="IsAny2DInteriorEscapeTime"/>), and the
-    /// Newton family (<see cref="IsNewtonOrNova"/> — Newton / Nova / Halley /
-    /// Secant, whose in-set is basin non-convergence). All scale their in-set
-    /// alpha by the global knob and composite over
+    /// fleet + TearDrop (<see cref="IsAny2DInteriorEscapeTime"/>), the Newton
+    /// family (<see cref="IsNewtonOrNova"/> — basin non-convergence), and the
+    /// generated polynomial calcs (<see cref="IsGeneratedPolynomial"/>). All
+    /// scale their in-set alpha by the global knob and composite over
     /// <c>Interior2DBackground</c>.</summary>
     public bool IsInteriorAlphaApplicable =>
         IsMandelbrot || IsUserEquation || IsSandbox
-        || IsAny2DInteriorEscapeTime || IsNewtonOrNova;
+        || IsAny2DInteriorEscapeTime || IsNewtonOrNova || IsGeneratedPolynomial;
 
     /// <summary>Visibility flag for the 2D heightfield-relief section (#102, #139).
     /// True for every 2D family that exposes an <c>IHeightFieldSource</c> the

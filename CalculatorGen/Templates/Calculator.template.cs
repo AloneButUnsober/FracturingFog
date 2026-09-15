@@ -94,6 +94,14 @@ public sealed class {{CLASS_NAME}} : IFractalCalculator, IHeightFieldSource, IDi
     public double Zoom    { get; set; } = 1.0;
     public int MaxIterations { get; set; } = 512;
 
+    /// <summary>Global interior-alpha knob (#831): 0..255, copied from
+    /// <c>FractalParameters.InteriorAlpha</c> by the render host. Scales the
+    /// alpha byte of every in-set pixel (IterationBuffer[idx] &gt;=
+    /// MaxIterations) so the interior composites over Interior2DBackground,
+    /// via the shared <c>InteriorAlphaStamp</c> post-pass. 255 = opaque
+    /// (byte-identical to before the feature).</summary>
+    public int InteriorAlpha { get; set; } = 255;
+
     // ── Extended-precision centre limbs (Big+) ──────────────────────────────
     //
     // The IFractalCalculator contract carries only a double-precision centre,
@@ -389,6 +397,20 @@ public sealed class {{CLASS_NAME}} : IFractalCalculator, IHeightFieldSource, IDi
 
     public void Calculate(CancellationToken ct = default)
     {
+        CalculateCore(ct);
+        // #831 — global interior-alpha post-pass over whichever core path ran
+        // (GPU / perturbation / HP-direct / SP). Every path fills IterationBuffer
+        // with maxIt at in-set pixels, so one stamp covers them all. No fast
+        // recolor path exists (a theme switch re-runs Calculate), so the stamp
+        // always re-applies; the histogram-EQ recolor stamps separately.
+        if (InteriorAlpha < 255)
+            InteriorAlphaStamp.Apply(
+                ColorBuffer, IterationBuffer, Width, Height, MaxIterations, InteriorAlpha,
+                new ParallelOptions(), ct);
+    }
+
+    private void CalculateCore(CancellationToken ct = default)
+    {
         ColorMap.MaxIterations = MaxIterations;
         double scale = (3.5 / Math.Max(Width, Height)) / Zoom;
         _lastPixelScale = scale;
@@ -652,6 +674,12 @@ public sealed class {{CLASS_NAME}} : IFractalCalculator, IHeightFieldSource, IDi
             {
                 if (ct.IsCancellationRequested) return;
                 var rp = raw[i];
+                // #831 — the interior-alpha post-pass keys on IterationBuffer,
+                // which the CPU paths fill but the GPU readback previously did
+                // not; record it here (rp.Iter == MaxIterations for in-set) so
+                // the stamp's in-set mask is valid for GPU renders too. Does
+                // not affect ColorBuffer, so InteriorAlpha=255 stays identical.
+                IterationBuffer[i] = rp.Iter;
                 ColorBuffer[i] = ColorFor(rp.Iter, rp.Zr, rp.Zi, rp.Dr, rp.Di, MaxIterations, i);
             });
             return true;
@@ -3186,5 +3214,13 @@ public sealed class {{CLASS_NAME}} : IFractalCalculator, IHeightFieldSource, IDi
                     smoothEq, 0f, maxIt, 0f, 0f, 0f, 0f, 0f, 0f);
             }
         });
+
+        // #831 — this recolor rewrites in-set pixels as opaque InSetColor, so
+        // re-apply the interior-alpha stamp (mirrors the Mandelbrot recolor
+        // paths from #96). No-op at InteriorAlpha == 255.
+        if (InteriorAlpha < 255)
+            InteriorAlphaStamp.Apply(
+                ColorBuffer, IterationBuffer, w, h, maxIt, InteriorAlpha,
+                new ParallelOptions(), CancellationToken.None);
     }
 }
