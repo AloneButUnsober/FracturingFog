@@ -18,11 +18,20 @@ using FracturingFog.Models;
 
 namespace FracturingFog;
 
-public sealed class SandboxCalculator : IFractalCalculator
+public sealed class SandboxCalculator : IFractalCalculator, ISupportsHistogramEq
 {
     public int Width { get; private set; }
     public int Height { get; private set; }
     public uint[] ColorBuffer { get; private set; } = Array.Empty<uint>();
+
+    // #845 — histogram-equalization buffers. SmoothBuffer holds the per-pixel
+    // smooth (continuous) iteration count of escaped pixels (0 for in-set);
+    // IterationBuffer stamps escaped pixels with their iter and in-set pixels
+    // with MaxIterations so HE recolors only the escaped population. Sandbox
+    // colours escaped pixels via the five-parameter ColorMap.Map (no final-Z /
+    // derivative), so the equalizer is fed null final-Z buffers.
+    public float[] SmoothBuffer { get; private set; } = Array.Empty<float>();
+    public int[] IterationBuffer { get; private set; } = Array.Empty<int>();
 
     // Phase 11 — surface normals via numerical Jacobian. Same pattern as
     // UserEquationCalculator (parallel-perturbation trajectory + Hubbard-
@@ -69,6 +78,8 @@ public sealed class SandboxCalculator : IFractalCalculator
         ColorBuffer = new uint[n];
         NormalXBuffer = new float[n];
         NormalYBuffer = new float[n];
+        SmoothBuffer = new float[n];     // #845 — HE smooth source
+        IterationBuffer = new int[n];    // #845 — HE escaped-pixel classifier
     }
 
     public void Compile(string source)
@@ -110,6 +121,7 @@ public sealed class SandboxCalculator : IFractalCalculator
             Array.Clear(ColorBuffer);
             uint bg = ColorMap.InSetColor;
             for (int i = 0; i < ColorBuffer.Length; i++) ColorBuffer[i] = bg;
+            Array.Fill(IterationBuffer, MaxIterations);   // #845 — nothing escaped
             return;
         }
 
@@ -180,6 +192,8 @@ public sealed class SandboxCalculator : IFractalCalculator
                     if (iter >= maxIt)
                     {
                         ColorBuffer[idx] = inSet;   // #382: alpha pre-scaled above
+                        IterationBuffer[idx] = maxIt;   // #845 — in-set: HE skips
+                        SmoothBuffer[idx] = 0f;
                         NormalXBuffer[idx] = 0f;
                         NormalYBuffer[idx] = 0f;
                     }
@@ -199,6 +213,8 @@ public sealed class SandboxCalculator : IFractalCalculator
                         else { nx = 0f; ny = 0f; }
                         NormalXBuffer[idx] = nx;
                         NormalYBuffer[idx] = ny;
+                        IterationBuffer[idx] = iter;      // #845 — escaped: HE-eligible
+                        SmoothBuffer[idx] = smooth;
 
                         ColorBuffer[idx] = orbitMap != null
                             ? (uint)orbitMap.MapWithOrbit(smooth, 0f, maxIt, nx, ny, in acc)
@@ -208,5 +224,38 @@ public sealed class SandboxCalculator : IFractalCalculator
                 return env;
             },
             _ => { });
+    }
+
+    // ── #845 histogram equalization (DSL escape-time) — see UserEquationCalculator ──
+    // Recolours only plain smooth-escaped pixels; inert under orbit-trap themes.
+
+    public bool BuildHistogramCdf(out double[]? cdf, out int bins, out int sourceMaxIter)
+    {
+        sourceMaxIter = MaxIterations;
+        if (ColorMap is IOrbitAwareColorMap) { cdf = null; bins = 0; return false; }
+        return HistogramEqualizer.BuildCdf(
+            Width, Height, MaxIterations, IterationBuffer, SmoothBuffer, out cdf, out bins);
+    }
+
+    public void ApplyHistogramEqualization(double strength)
+    {
+        if (!BuildHistogramCdf(out double[]? cdf, out int bins, out int sourceMaxIter)) return;
+        ApplyHistogramEqualizationWithCdf(cdf!, bins, sourceMaxIter, strength);
+    }
+
+    public void ApplyHistogramEqualizationWithCdf(double[] cdf, int bins, int sourceMaxIter, double strength)
+        => ApplyHistogramEqualizationWithCdf(cdf, bins, sourceMaxIter, strength, 0.0, out _, out _);
+
+    public void ApplyHistogramEqualizationWithCdf(
+        double[] cdf, int bins, int sourceMaxIter, double strength, double ditherIterStrength,
+        out long escapedCount, out long saturatedCount)
+    {
+        if (ColorMap is IOrbitAwareColorMap) { escapedCount = 0; saturatedCount = 0; return; }
+        DslHistogramEqualizer.ApplyWithCdf(
+            ColorBuffer, Width, Height, MaxIterations, ColorMap,
+            IterationBuffer, SmoothBuffer, NormalXBuffer, NormalYBuffer,
+            null, null, null, null,
+            cdf, bins, sourceMaxIter, strength, ditherIterStrength,
+            out escapedCount, out saturatedCount);
     }
 }

@@ -26,7 +26,7 @@ using FracturingFog.Models;
 
 namespace FracturingFog;
 
-public sealed class UserEquationCalculator : IFractalCalculator, IHeightFieldSource, ITrapFieldSource
+public sealed class UserEquationCalculator : IFractalCalculator, IHeightFieldSource, ITrapFieldSource, ISupportsHistogramEq
 {
     public int Width { get; private set; }
     public int Height { get; private set; }
@@ -71,6 +71,17 @@ public sealed class UserEquationCalculator : IFractalCalculator, IHeightFieldSou
     /// unless the theme colours the interior — matching the Mandelbrot convention. Same
     /// length / layout as <see cref="ColorBuffer"/>.</summary>
     public float[] TrapBuffer { get; private set; } = Array.Empty<float>();
+
+    // #845 — per-pixel fields for the histogram-equalization recolor. Only plain
+    // smooth-escaped pixels carry IterationBuffer < MaxIterations; in-set /
+    // converged (#544) / OOB-surround (#615) pixels are stamped MaxIterations so
+    // HE skips them (and BuildCdf excludes them). FinalZ / dz-dc reproduce the
+    // nine-parameter ColorMap.Map call escaped pixels are coloured through.
+    public int[] IterationBuffer { get; private set; } = Array.Empty<int>();
+    public float[] FinalZrBuffer { get; private set; } = Array.Empty<float>();
+    public float[] FinalZiBuffer { get; private set; } = Array.Empty<float>();
+    public float[] FinalDrBuffer { get; private set; } = Array.Empty<float>();
+    public float[] FinalDiBuffer { get; private set; } = Array.Empty<float>();
 
     public double CenterX { get; set; } = 0.0;
     public double CenterY { get; set; } = 0.0;
@@ -172,6 +183,11 @@ public sealed class UserEquationCalculator : IFractalCalculator, IHeightFieldSou
         NormalYBuffer = new float[n];
         SmoothBuffer = new float[n];   // #726 — relief height source
         TrapBuffer = new float[n];     // #726 — orbit-trap relief height source
+        IterationBuffer = new int[n];  // #845 — HE escaped-pixel classifier
+        FinalZrBuffer = new float[n];
+        FinalZiBuffer = new float[n];
+        FinalDrBuffer = new float[n];
+        FinalDiBuffer = new float[n];
     }
 
     /// <summary>
@@ -287,6 +303,7 @@ public sealed class UserEquationCalculator : IFractalCalculator, IHeightFieldSou
             Array.Clear(ColorBuffer);
             uint bg = ColorMap.InSetColor;
             for (int i = 0; i < ColorBuffer.Length; i++) ColorBuffer[i] = bg;
+            Array.Fill(IterationBuffer, MaxIterations);   // #845 — nothing escaped
             return;
         }
 
@@ -530,6 +547,7 @@ public sealed class UserEquationCalculator : IFractalCalculator, IHeightFieldSou
                 int idx = rowBase + x;
                 if (iter >= maxIt)
                 {
+                    IterationBuffer[idx] = maxIt;   // #845 — in-set: HE skips
                     NormalXBuffer[idx] = 0f;
                     NormalYBuffer[idx] = 0f;
                     SmoothBuffer[idx] = 0f;   // #726 — in-set = no relief
@@ -561,6 +579,7 @@ public sealed class UserEquationCalculator : IFractalCalculator, IHeightFieldSou
                     // #544 — converged (bailout condition fired): |z| is small so
                     // the log-log smoothing is invalid; band by convergence speed
                     // (raw iteration). Normals are undefined here → flat.
+                    IterationBuffer[idx] = maxIt;   // #845 — converged: HE skips (raw-iter coloured)
                     NormalXBuffer[idx] = 0f;
                     NormalYBuffer[idx] = 0f;
                     SmoothBuffer[idx] = 0f;   // #726 — converged (small |z|) = no relief
@@ -605,6 +624,14 @@ public sealed class UserEquationCalculator : IFractalCalculator, IHeightFieldSou
                     NormalXBuffer[idx] = nx;
                     NormalYBuffer[idx] = ny;
                     SmoothBuffer[idx] = smooth;   // #726 — escaped = relief height
+                    // #845 — plain smooth-escaped pixel: HE-eligible. Store the
+                    // iter + the nine-param Map inputs so the equalizer reproduces
+                    // this pixel's colour exactly (strength 0) / recolours it (>0).
+                    IterationBuffer[idx] = iter;
+                    FinalZrBuffer[idx] = (float)z.Real;
+                    FinalZiBuffer[idx] = (float)z.Imaginary;
+                    FinalDrBuffer[idx] = (float)dzdcR;
+                    FinalDiBuffer[idx] = (float)dzdcI;
                     // #726 (trap) — escaped pixels always carry the trap min-distance
                     // when an orbit-trap theme ran (else 0), the orbit-trap relief source.
                     TrapBuffer[idx] = orbitMap != null && acc.TrapMin != float.MaxValue ? acc.TrapMin : 0f;
@@ -625,6 +652,7 @@ public sealed class UserEquationCalculator : IFractalCalculator, IHeightFieldSou
                         Interefaces.IColorMap.IsOutOfBounds(cx, cy, escapeRadius))
                     {
                         ColorBuffer[idx] = oob;
+                        IterationBuffer[idx] = maxIt;   // #845 — OOB surround: HE skips (flat colour)
                         NormalXBuffer[idx] = 0f;
                         NormalYBuffer[idx] = 0f;
                         SmoothBuffer[idx] = 0f;   // #726 — OOB surround = no relief
@@ -633,5 +661,43 @@ public sealed class UserEquationCalculator : IFractalCalculator, IHeightFieldSou
                 }
             }
         });
+    }
+
+    // ── #845 histogram equalization (DSL escape-time) ─────────────────────────
+    // Reuses the shared CDF (HistogramEqualizer.BuildCdf) but recolours through
+    // DslHistogramEqualizer so only plain smooth-escaped pixels change; in-set /
+    // #544 converged / #615 OOB-surround pixels are left as Calculate wrote them.
+    // Inert under orbit-trap themes — escaped pixels there are coloured via
+    // MapWithOrbit, which the CDF remap cannot reproduce. Picked up by the
+    // display alt-path / poster / batch / video via `alt is ISupportsHistogramEq`.
+
+    public bool BuildHistogramCdf(out double[]? cdf, out int bins, out int sourceMaxIter)
+    {
+        sourceMaxIter = MaxIterations;
+        if (ColorMap is IOrbitAwareColorMap) { cdf = null; bins = 0; return false; }
+        return HistogramEqualizer.BuildCdf(
+            Width, Height, MaxIterations, IterationBuffer, SmoothBuffer, out cdf, out bins);
+    }
+
+    public void ApplyHistogramEqualization(double strength)
+    {
+        if (!BuildHistogramCdf(out double[]? cdf, out int bins, out int sourceMaxIter)) return;
+        ApplyHistogramEqualizationWithCdf(cdf!, bins, sourceMaxIter, strength);
+    }
+
+    public void ApplyHistogramEqualizationWithCdf(double[] cdf, int bins, int sourceMaxIter, double strength)
+        => ApplyHistogramEqualizationWithCdf(cdf, bins, sourceMaxIter, strength, 0.0, out _, out _);
+
+    public void ApplyHistogramEqualizationWithCdf(
+        double[] cdf, int bins, int sourceMaxIter, double strength, double ditherIterStrength,
+        out long escapedCount, out long saturatedCount)
+    {
+        if (ColorMap is IOrbitAwareColorMap) { escapedCount = 0; saturatedCount = 0; return; }
+        DslHistogramEqualizer.ApplyWithCdf(
+            ColorBuffer, Width, Height, MaxIterations, ColorMap,
+            IterationBuffer, SmoothBuffer, NormalXBuffer, NormalYBuffer,
+            FinalZrBuffer, FinalZiBuffer, FinalDrBuffer, FinalDiBuffer,
+            cdf, bins, sourceMaxIter, strength, ditherIterStrength,
+            out escapedCount, out saturatedCount);
     }
 }
