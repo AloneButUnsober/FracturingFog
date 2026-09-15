@@ -1217,6 +1217,7 @@ namespace FracturingFog.Rendering
             // InteriorAlpha line above only flow-narrows it. Assert non-null here.
             _escapeCalculator.FractalParameters = ViewState.FractalParameters!;
             _escapeCalculator.ColorMap = _calculator.ColorMap;
+            _escapeCalculator.InteriorAlpha = ViewState.FractalParameters?.InteriorAlpha ?? 255;  // #97
 
             _tearDropCalculator.CenterX = ViewState.CenterX;
             _tearDropCalculator.CenterXLo = ViewState.CenterXLo;
@@ -1231,6 +1232,7 @@ namespace FracturingFog.Rendering
             _tearDropCalculator.MaxIterations = _calculator.MaxIterations;
             _tearDropCalculator.FractalParameters = ViewState.FractalParameters!;
             _tearDropCalculator.ColorMap = _calculator.ColorMap;
+            _tearDropCalculator.InteriorAlpha = ViewState.FractalParameters?.InteriorAlpha ?? 255;  // #97
         }
 
         // ── Trigger ───────────────────────────────────────────────────────────
@@ -3454,6 +3456,11 @@ namespace FracturingFog.Rendering
                 case EscapeTimeCalculator e:
                     e.FractalType = ViewState.FractalType;
                     e.FractalParameters = ViewState.FractalParameters;
+                    e.InteriorAlpha = ViewState.FractalParameters?.InteriorAlpha ?? 255;  // #97
+                    break;
+                case TearDropCalculator td:
+                    td.FractalParameters = ViewState.FractalParameters;
+                    td.InteriorAlpha = ViewState.FractalParameters?.InteriorAlpha ?? 255;  // #97
                     break;
                 case IFSCalculator ifs: ifs.FractalParameters = ViewState.FractalParameters; break;
                 case LSystemCalculator ls: ls.FractalParameters = ViewState.FractalParameters; break;

@@ -87,6 +87,14 @@ public sealed class EscapeTimeCalculator : Interefaces.IFractalCalculator, Inter
     public float[] FinalDrBuffer { get; private set; } = Array.Empty<float>();
     public float[] FinalDiBuffer { get; private set; } = Array.Empty<float>();
 
+    /// <summary>Global interior-alpha knob (#97): 0..255, copied from
+    /// <c>FractalParameters.InteriorAlpha</c> by the render host. Scales the
+    /// alpha byte of every in-set pixel so the interior of these escape-time
+    /// families (Julia / BurningShip / Tricorn / Multibrot / Phoenix / Magnet /
+    /// Glynn / Spider) composites over the chosen Interior2DBackground. 255 =
+    /// opaque, byte-identical to before the feature.</summary>
+    public int InteriorAlpha { get; set; } = 255;
+
     public static double LastPixelScale { get; private set; } = 1.0;
 
     // Cached ParallelOptions — see MandelbrotCalculator._po notes.
@@ -178,6 +186,13 @@ public sealed class EscapeTimeCalculator : Interefaces.IFractalCalculator, Inter
         // beyond-escape-radius surround (opt-in via IColorMap.OutOfBoundsColor).
         CalculateInternal(ct);
         ApplyOutOfBoundsSurround(ct);
+        // #97 — global interior-alpha post-pass. Last, so it scales the final
+        // in-set colour (after the surround pass). No fast-recolor path exists
+        // for this family — a theme switch re-runs Calculate — so the stamp
+        // always re-applies and the #96 opaque-until-navigate bug cannot recur.
+        if (InteriorAlpha < 255)
+            InteriorAlphaStamp.Apply(
+                ColorBuffer, IterationBuffer, Width, Height, MaxIterations, InteriorAlpha, _po, ct);
     }
 
     // #615 — the escape radius² the GPU shader uses (radius 2). The GPU dispatch

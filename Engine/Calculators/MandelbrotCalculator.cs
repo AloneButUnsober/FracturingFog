@@ -950,31 +950,12 @@ public sealed class MandelbrotCalculator : Interefaces.IHeightFieldSource, Inter
     // rather than be clobbered. RGB is left untouched.
     // ─────────────────────────────────────────────────────────────────────────
 
-    private void StampInteriorAlpha(CancellationToken ct)
-    {
-        int maxIt = MaxIterations;
-        if (maxIt <= 0) return;
-
-        uint ia = (uint)Math.Clamp(InteriorAlpha, 0, 255);
-        int w = Width, h = Height;
-
-        _po.CancellationToken = ct;
-        var po = _po;
-        ParallelForRows(0, h, po, y =>
-        {
-            if (ct.IsCancellationRequested) return;
-            int rowBase = y * w;
-            for (int x = 0; x < w; x++)
-            {
-                int idx = rowBase + x;
-                if (IterationBuffer[idx] < maxIt) continue;   // exterior pixel
-                uint c = ColorBuffer[idx];
-                uint a = (c >> 24) & 0xFFu;
-                uint na = (a * ia) / 255u;                     // scale authored alpha
-                ColorBuffer[idx] = (c & 0x00FFFFFFu) | (na << 24);
-            }
-        });
-    }
+    // Delegates to the shared InteriorAlphaStamp helper (#97) so every in-scope
+    // escape-time family reuses one implementation. Behaviour is unchanged from
+    // the original private pass (#96).
+    private void StampInteriorAlpha(CancellationToken ct) =>
+        InteriorAlphaStamp.Apply(
+            ColorBuffer, IterationBuffer, Width, Height, MaxIterations, InteriorAlpha, _po, ct);
 
     // ─────────────────────────────────────────────────────────────────────────
     // Phase 4 — Interior orbit / attracting-cycle detection

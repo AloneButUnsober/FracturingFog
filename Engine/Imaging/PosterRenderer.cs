@@ -1067,6 +1067,7 @@ namespace FracturingFog.Imaging
                 case EscapeTimeCalculator e:
                     e.FractalType = type;
                     e.FractalParameters = req.FractalParameters;
+                    e.InteriorAlpha = req.FractalParameters?.InteriorAlpha ?? 255;  // #97
                     break;
                 case IFSCalculator ifs:        ifs.FractalParameters = req.FractalParameters; break;
                 case LSystemCalculator ls:     ls.FractalParameters = req.FractalParameters; break;
