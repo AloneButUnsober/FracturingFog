@@ -315,6 +315,20 @@ namespace FracturingFog.Models
         /// (but reproducible) sampling of the same fractal. (#193)</summary>
         public int BuddhaSeed { get; set; } = 12345;
 
+        /// <summary>#837 — automatic zoom-detail compensation for the Buddhabrot
+        /// family. A zoomed viewport catches far fewer of the fixed-domain
+        /// sample orbits, so per-pixel hit counts collapse and the frame goes
+        /// dark/grainy (sparse coverage, not under-normalisation). When true and
+        /// the view is zoomed past <see cref="BuddhaZoomCompensationThreshold"/>,
+        /// the sampler scales the effective sample budget with zoom (capped) and
+        /// auto-enables Metropolis-Hastings importance sampling, which
+        /// concentrates samples on c values whose orbits reach the visible
+        /// pixels. Below the threshold this is a no-op, so zoomed-out renders are
+        /// byte-identical to before. The structural change on zoom (a density
+        /// plot re-populates as the contributing orbit set changes) is
+        /// algorithm-inherent and unaffected.</summary>
+        public bool BuddhaZoomCompensation { get; set; } = true;
+
         // Mandelbox (Tom Lowe, 2010). Box-fold + sphere-fold + scale DE.
         /// <summary>Mandelbox scale parameter. Per iter:
         /// z = scale · sphereFold(boxFold(z)) + c. Default 2.0;
@@ -1259,6 +1273,7 @@ namespace FracturingFog.Models
                 BuddhaMetropolis = BuddhaMetropolis,
                 BuddhaProgressive = BuddhaProgressive,
                 BuddhaSeed = BuddhaSeed,
+                BuddhaZoomCompensation = BuddhaZoomCompensation,
                 MandelboxScale = MandelboxScale,
                 MandelboxFixedRadius = MandelboxFixedRadius,
                 MandelboxMinRadius = MandelboxMinRadius,
