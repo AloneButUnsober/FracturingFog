@@ -1671,6 +1671,20 @@ public sealed class MandelbrotCalculator : Interefaces.IHeightFieldSource, Inter
         bool useHP = Quality.NeedsHighPrecision(Zoom);
         IsHighPrecisionActive = useHP;
 
+        // #609 — past the direct-double precision floor (~1e12, HPZoomThreshold)
+        // the direct z²+c orbit below iterates a wrong/mushy orbit, so the trap /
+        // stripe / TIA accumulators sample garbage. Route to the perturbation-orbit
+        // path, which reconstructs z = Z[m] + δ from the shared reference orbit each
+        // iteration (glitch-free Zhuoran rebasing) and samples the accumulator on
+        // that reconstructed full value — mirroring ComputePixelOrbit's convention
+        // so the crossover is continuous. Shallow stays on the direct loop (correct
+        // and faster there).
+        if (useHP)
+        {
+            CalculateOrbitAwarePerturbation(colorMap, ct);
+            return;
+        }
+
         double scale = (3.5 / Math.Max(Width, Height)) / Zoom;
         int maxIt = MaxIterations;
         // Phase 2.1: OrbitAware honours PerRowMaxIter when supplied.
@@ -1769,6 +1783,21 @@ public sealed class MandelbrotCalculator : Interefaces.IHeightFieldSource, Inter
                 if (snapInterval < PeriodicitySnapshotMax) snapInterval <<= 1;
             }
         }
+        FinalizeOrbitPixel(idx, iter, maxIter, zr, zi, dr, di, ref acc, colorMap, wantInterior);
+    }
+
+    // Shared aux/colour writeback for both orbit paths — the direct
+    // ComputePixelOrbit above and the deep-zoom ComputePixelOrbitPerturbation
+    // below (#609). Extracted verbatim so the crossover between the two is
+    // byte-identical for a fixed (iter, zr, zi, dr, di, acc): zr/zi is the
+    // escape (or final) full-value z, dr/di the dz/dc derivative.
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private void FinalizeOrbitPixel<TMap>(
+        int idx, int iter, int maxIter,
+        double zr, double zi, double dr, double di,
+        ref OrbitAccumulator acc, TMap colorMap, bool wantInterior)
+        where TMap : IOrbitAwareColorMap
+    {
         IterationBuffer[idx] = iter;
 
         if (iter < maxIter)
@@ -1828,6 +1857,199 @@ public sealed class MandelbrotCalculator : Interefaces.IHeightFieldSource, Inter
                 ? (uint)colorMap.MapInteriorWithOrbit(maxIter, in acc)
                 : colorMap.InSetColor;
         }
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // PATH C-deep (#609) — orbit-aware PERTURBATION path.
+    //
+    // Past HPZoomThreshold (~1e12) the direct-double orbit in ComputePixelOrbit
+    // loses precision, so its trap/stripe/TIA accumulators sample a wrong orbit.
+    // This path builds ONE reference orbit at the view centre (DD/QD/OD centre,
+    // stored as double Z[n]) and, per pixel, iterates only the double δ-chain,
+    // reconstructing the full value z = Z[m] + δ each step (Zhuoran rebasing,
+    // glitch-free at any zoom — the same maths as ComputePixelPTRebased). The
+    // accumulator is sampled on that reconstructed z, matching ComputePixelOrbit's
+    // convention (pre-update RAW z, iter > 0), so shallow↔deep is continuous.
+    //
+    // No SA/BLA skipping here: an orbit theme needs EVERY iteration's z, and a
+    // skipped range would drop samples. Issue #609 option (a) — correct first cut;
+    // perf note: deep orbit renders iterate the full δ-chain per pixel (no skips).
+    // ─────────────────────────────────────────────────────────────────────────
+
+    private void CalculateOrbitAwarePerturbation<TMap>(TMap colorMap, CancellationToken ct)
+        where TMap : IOrbitAwareColorMap
+    {
+        int effImgW = EffectiveImageWidth;
+        int effImgH = EffectiveImageHeight;
+        double scale = (3.5 / Math.Max(effImgW, effImgH)) / Zoom;
+        int maxIt = MaxIterations;
+
+        // Build the shared reference orbit at the view centre (fresh — the orbit
+        // path opts out of Wave 3.5 recycle so every pixel sees an exact anchor).
+        if (Zoom > ODZoomThreshold)
+        {
+            var cxOD = new OD(CenterX, CenterXLo, CenterX2, CenterX3,
+                              CenterX4, CenterX5, CenterX6, CenterX7);
+            var cyOD = new OD(CenterY, CenterYLo, CenterY2, CenterY3,
+                              CenterY4, CenterY5, CenterY6, CenterY7);
+            ComputeReferenceOrbitOD(cxOD, cyOD, maxIt);
+        }
+        else if (Zoom > QDZoomThreshold)
+        {
+            var cxQD = new QD(CenterX, CenterXLo, CenterX2, CenterX3);
+            var cyQD = new QD(CenterY, CenterYLo, CenterY2, CenterY3);
+            ComputeReferenceOrbitQD(cxQD, cyQD, maxIt);
+        }
+        else
+        {
+            ComputeReferenceOrbit(new DD(CenterX, CenterXLo), new DD(CenterY, CenterYLo), maxIt);
+        }
+
+        // dc geometry mirrors ComputeRowPTScalar (sub-rect aware; collapses to the
+        // legacy (x - Width*0.5)*scale formula when sub-rect mode is inactive).
+        double halfH = effImgH * 0.5;
+        double halfW = effImgW * 0.5;
+        int offX = SubRectOffsetX;
+        int offY = SubRectOffsetY;
+
+        int[]? perRow = PerRowMaxIter;
+        bool useTileCap = perRow != null && perRow.Length >= Height;
+        bool wantInterior = colorMap.WantsInteriorColor;
+
+        _po.CancellationToken = ct;
+        var po = _po;
+        ParallelForRows(0, Height, po, y =>
+        {
+            if (ct.IsCancellationRequested) return;
+            int rowMaxIt = useTileCap ? perRow![y] : maxIt;
+            if (rowMaxIt <= 0) rowMaxIt = maxIt;
+            double rowOffsetY = offY + y - halfH;
+            double dcY = rowOffsetY * scale;
+            double cy = CenterY + dcY;
+            int rowBase = y * Width;
+            for (int x = 0; x < Width; x++)
+            {
+                double dcX = (offX + x - halfW) * scale;
+                double cx = CenterX + dcX;
+                ComputePixelOrbitPerturbation(dcX, dcY, cx, cy, rowMaxIt, rowBase + x, colorMap, wantInterior);
+            }
+            // Phase 2.1 in-set rewrite (see CalculateOrbitAware / CalculateDoublePrecision).
+            if (rowMaxIt < maxIt)
+            {
+                for (int x = 0; x < Width; x++)
+                {
+                    if (IterationBuffer[rowBase + x] >= rowMaxIt)
+                        IterationBuffer[rowBase + x] = maxIt;
+                }
+            }
+        });
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private void ComputePixelOrbitPerturbation<TMap>(
+        double dcR, double dcI, double cx, double cy,
+        int maxIter, int idx, TMap colorMap, bool wantInterior)
+        where TMap : IOrbitAwareColorMap
+    {
+        colorMap.InitOrbit(out var acc);
+
+        // Bulb early-out (mirrors ComputePixelOrbit): guaranteed in-set, orbit
+        // accumulator unused unless the theme colours the interior from it.
+        if (!wantInterior && IsInMainCardioidOrBulb(cx, cy))
+        {
+            IterationBuffer[idx] = maxIter;
+            SmoothBuffer[idx] = 0f;
+            DistanceBuffer[idx] = 0f;
+            NormalXBuffer[idx] = 0f;
+            NormalYBuffer[idx] = 0f;
+            TrapBuffer[idx] = 0f;
+            StripeBuffer[idx] = 0f;
+            TiaBuffer[idx] = 0f;
+            FinalZrBuffer[idx] = 0f;
+            FinalZiBuffer[idx] = 0f;
+            FinalDrBuffer[idx] = 0f;
+            FinalDiBuffer[idx] = 0f;
+            ColorBuffer[idx] = colorMap.InSetColor;
+            return;
+        }
+
+        int refLen = _refOrbitLen;
+        if (refLen < 1)
+        {
+            // Degenerate reference (interior centre) — colour flat, matching the
+            // ComputePixelPTRebased refLen<1 guard.
+            FinalizeOrbitPixel(idx, maxIter, maxIter, 0, 0, 1, 0, ref acc, colorMap, wantInterior);
+            return;
+        }
+
+        // δ-chain in plain double + Zhuoran rebasing (see ComputePixelPTRebased).
+        double dr = 0.0, di = 0.0;    // δ_0 = 0
+        double drv = 1.0, div = 0.0;  // dz/dc derivative (IQ convention), full orbit
+        int m = 0;                    // reference-orbit index (independent of iter)
+        double zr = 0.0, zi = 0.0;    // reconstructed full value z = Z[m] + δ
+        double zrSnap = 0, ziSnap = 0;
+        int snapInterval = PeriodicitySnapshotStart;
+        int snapCounter = 0;
+
+        int iter;
+        for (iter = 0; iter < maxIter; iter++)
+        {
+            double Zr = _refZr[m];
+            double Zi = _refZi[m];
+            zr = Zr + dr;
+            zi = Zi + di;
+
+            double zmag2 = zr * zr + zi * zi;
+            if (zmag2 >= EscapeRadius2) break;
+
+            // Sample the accumulator on the reconstructed full value z BEFORE the
+            // δ/reference advance, iter > 0 (z_0 = 0 has no arg) — identical
+            // indexing to ComputePixelOrbit so the crossover is continuous. The
+            // sample sees the TRUE orbit z, not the rebased δ (z is captured above,
+            // before any rebase below touches dr/di).
+            if (iter > 0) colorMap.Sample(ref acc, zr, zi, cx, cy, iter);
+
+            // Derivative of the FULL orbit — independent of rebasing.
+            double newDrv = 2.0 * (zr * drv - zi * div) + 1.0;
+            double newDiv = 2.0 * (zr * div + zi * drv);
+            drv = newDrv; div = newDiv;
+
+            // Rebase when the reference no longer anchors this pixel (full value
+            // below the perturbation magnitude) or the reference is exhausted.
+            double dmag2 = dr * dr + di * di;
+            if (zmag2 < dmag2 || m + 1 >= refLen)
+            {
+                dr = zr; di = zi;      // δ := z, relative to restarted Z[0]=0
+                Zr = 0.0; Zi = 0.0;
+                m = 0;
+            }
+
+            // δ_{n+1} = (2·Z[m] + δ)·δ + dc  (Z[m]=0 right after a rebase).
+            double a = 2.0 * Zr + dr;
+            double b = 2.0 * Zi + di;
+            double newDr = a * dr - b * di + dcR;
+            double newDi = a * di + b * dr + dcI;
+            dr = newDr; di = newDi;
+            m++;
+
+            // Periodicity early-out on the reconstructed z (continuous across a
+            // rebase). Skip iter 0: the reconstructed z there is exactly 0, which
+            // would collide with the initial (0,0) snapshot and falsely flag every
+            // pixel as periodic. The direct path avoids this by snapshotting the
+            // POST-update z (= c ≠ 0 at iter 0); here z is the pre-update value.
+            if (iter > 0)
+            {
+                if (zr == zrSnap && zi == ziSnap) { iter = maxIter; break; }
+                if (++snapCounter >= snapInterval)
+                {
+                    zrSnap = zr; ziSnap = zi;
+                    snapCounter = 0;
+                    if (snapInterval < PeriodicitySnapshotMax) snapInterval <<= 1;
+                }
+            }
+        }
+
+        FinalizeOrbitPixel(idx, iter, maxIter, zr, zi, drv, div, ref acc, colorMap, wantInterior);
     }
 
     // ─────────────────────────────────────────────────────────────────────────
