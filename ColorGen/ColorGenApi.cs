@@ -83,6 +83,18 @@ public static class ColorGenApi
         if (orbitInputs.Count > 0)
             return GenerateOrbit(prog, sanitized, source, orbitInputs, options);
 
+        // #633 — chaotic-billiard outcome inputs have no escape-time / HLSL
+        // representation and no C# template (the outcome is supplied per-pixel by
+        // the calculator through IBilliardColorMap.MapBilliard). These themes run
+        // on the interpreter only; reject C# export with a clear message rather
+        // than emit a class that references undefined inputs.
+        var billiardInputs = CollectBilliardInputs(prog);
+        if (billiardInputs.Count > 0)
+            return new GenerateResult(sanitized, "",
+                "Chaotic-billiard themes (gateId / bounceCount / pathLength) run on " +
+                "the interpreter only and cannot be exported to C#. Save the theme " +
+                "to your library to use it.");
+
         string body = new ColorGenEmitter(indent: "        ").EmitBody(prog);
 
         // T3.1 phase 2: also emit HLSL body + prelude so the generated theme
@@ -183,6 +195,33 @@ public static class ColorGenApi
             case CgBinary b: CollectOrbit(b.Lhs, found); CollectOrbit(b.Rhs, found); break;
             case CgTernary t: CollectOrbit(t.Cond, found); CollectOrbit(t.IfTrue, found); CollectOrbit(t.IfFalse, found); break;
             case CgCall c: foreach (var a in c.Args) CollectOrbit(a, found); break;
+        }
+    }
+
+    // #633 — the set of chaotic-billiard outcome inputs the program references
+    // (empty ⇒ not a billiard theme). Kept in lockstep with
+    // InterpretedColorMap.CollectBilliardInputs.
+    private static System.Collections.Generic.HashSet<string> CollectBilliardInputs(CgProgram prog)
+    {
+        var found = new System.Collections.Generic.HashSet<string>(StringComparer.Ordinal);
+        foreach (var s in prog.Statements)
+        {
+            CgNode? node = s switch { CgLet l => l.Value, CgReturn r => r.Value, _ => null };
+            if (node != null) CollectBilliard(node, found);
+        }
+        return found;
+    }
+
+    private static void CollectBilliard(CgNode n, System.Collections.Generic.HashSet<string> found)
+    {
+        switch (n)
+        {
+            case CgVar v: if (v.IsBuiltIn && CgInputs.BilliardScalars.Contains(v.Name)) found.Add(v.Name); break;
+            case CgChannel ch: CollectBilliard(ch.Target, found); break;
+            case CgUnary u: CollectBilliard(u.Operand, found); break;
+            case CgBinary b: CollectBilliard(b.Lhs, found); CollectBilliard(b.Rhs, found); break;
+            case CgTernary t: CollectBilliard(t.Cond, found); CollectBilliard(t.IfTrue, found); CollectBilliard(t.IfFalse, found); break;
+            case CgCall c: foreach (var a in c.Args) CollectBilliard(a, found); break;
         }
     }
 
