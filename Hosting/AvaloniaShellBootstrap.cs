@@ -4147,9 +4147,18 @@ namespace FracturingFog.Hosting
         // resulting Avalonia Bitmap into the ShellViewModel's MiniMap VM.
         // Mandelbrot only for now; other types render a placeholder via the
         // MiniMapViewModel.IsSupported path.
+        // #29 — monotonic render token. Each MiniMap render request increments
+        // it; a completing background render only publishes its thumbnail if it
+        // is still the latest request. Without this, fire-and-forget Task.Run
+        // renders raced — a slow prior type finishing after a fast new one
+        // overwrote it, so the thumbnail sporadically showed a stale type
+        // ("switch back to Mandelbrot doesn't change").
+        private static int s_miniMapRenderGen;
+
         private static void RenderMiniMapAsync(ShellViewModel shell)
         {
             if (shell == null) return;
+            int gen = System.Threading.Interlocked.Increment(ref s_miniMapRenderGen);
             // Read the committed combo selection, NOT ViewState.FractalType.
             // This handler is invoked synchronously from the
             // SelectedFractalType PropertyChanged, which RaiseAndSetIfChanged
@@ -4221,10 +4230,17 @@ namespace FracturingFog.Hosting
                 if (bgra == null) return;
                 Dispatcher.UIThread.Post(() =>
                 {
+                    // Stale-render guard: a newer request superseded this one.
+                    if (gen != System.Threading.Volatile.Read(ref s_miniMapRenderGen)) return;
                     try
                     {
                         var bmp = BgraToBitmap(bgra, W, H);
                         shell.MiniMap.SetThumbnail(bmp);
+                        // Publish the type this thumbnail was rendered for so the
+                        // reticle framing (MiniMapDefaults.For(ActiveType)) matches
+                        // the bitmap immediately, instead of lagging until the next
+                        // main-view FrameCompleted sets ActiveType (#29).
+                        shell.MiniMap.ActiveType = type;
                     }
                     catch (Exception ex)
                     {
