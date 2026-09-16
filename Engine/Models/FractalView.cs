@@ -148,6 +148,7 @@ namespace FracturingFog.Models
             {FractalType.PrecisionField, "Precision Field" },
             {FractalType.Kleinian, "Kleinian" },
             {FractalType.BicomplexMandelbrot, "Bicomplex Mandelbrot" },
+            {FractalType.Coquaternion, "Coquaternion" },
             {FractalType.Dla, "DLA" },
             {FractalType.RandomTile, "Random Tiling" }
         };

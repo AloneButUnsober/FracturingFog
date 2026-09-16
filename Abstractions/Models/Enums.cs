@@ -300,6 +300,19 @@ namespace FracturingFog
         /// renderings. Tunables: <c>BicomplexSliceW</c>, plus shared iter /
         /// bailout / camera / light fields.</summary>
         BicomplexMandelbrot,
+        /// <summary>Coquaternion (split-quaternion) Mandelbrot (#853). Iteration
+        /// t := t² + c in the 4D split algebra (1, i, j, k) under i² = −1,
+        /// j² = k² = +1, ij = k = −ji — the non-commutative "swapped product
+        /// table" sibling of the quaternion (all −1) and bicomplex (commutative)
+        /// sets. Renderer raymarches a 3D slice (c = (x, y, z,
+        /// <c>CoquaternionSliceW</c>)) with the same Hubbard–Douady DE. Two
+        /// imaginary units squaring to +1 give an indefinite metric and a
+        /// distinct silhouette. NOTE the pure split-complex 2D set degenerates
+        /// to a filled square (idempotent split), so the coquaternion is the
+        /// structured member of the split-algebra family. CPU-only first cut.
+        /// Tunables: <c>CoquaternionSliceW</c> + shared iter / bailout / camera
+        /// / light fields.</summary>
+        Coquaternion,
         /// <summary>Diffusion-Limited Aggregation (Witten–Sander 1981).
         /// Stochastic 2D fractal: a seed cell sits at the grid centre;
         /// particles spawn on a launch circle just outside the current
@@ -457,6 +470,7 @@ namespace FracturingFog
                 or FractalType.QuaternionMandelbrot
                 or FractalType.Kifs
                 or FractalType.BicomplexMandelbrot
+                or FractalType.Coquaternion
                 or FractalType.UserBulb
                 => FractalCapabilities.SuppliesNormals
                  | FractalCapabilities.SuppliesDE,

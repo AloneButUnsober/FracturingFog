@@ -42,6 +42,7 @@ namespace FracturingFog.Render
                 [FractalType.QuaternionMandelbrot] = ("QMandelCameraDistance",   "QMandelCameraTheta",   "QMandelCameraPhi"),
                 [FractalType.Kleinian]             = ("KleinianCameraDistance",  "KleinianCameraTheta",  "KleinianCameraPhi"),
                 [FractalType.BicomplexMandelbrot]  = ("BicomplexCameraDistance", "BicomplexCameraTheta", "BicomplexCameraPhi"),
+                [FractalType.Coquaternion]         = ("CoquaternionCameraDistance", "CoquaternionCameraTheta", "CoquaternionCameraPhi"),
                 [FractalType.UserBulb]             = ("UserBulbCameraDistance",  "UserBulbCameraTheta",  "UserBulbCameraPhi"),
             };
 

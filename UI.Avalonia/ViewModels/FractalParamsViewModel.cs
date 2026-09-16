@@ -203,6 +203,11 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
         _bcCameraTheta = _p.BicomplexCameraTheta;
         _bcCameraPhi = _p.BicomplexCameraPhi;
         _bcCameraDistance = _p.BicomplexCameraDistance;
+        _cqSliceW = _p.CoquaternionSliceW;
+        _cqIterations = _p.CoquaternionIterations;
+        _cqCameraTheta = _p.CoquaternionCameraTheta;
+        _cqCameraPhi = _p.CoquaternionCameraPhi;
+        _cqCameraDistance = _p.CoquaternionCameraDistance;
         _flamePresetName = _p.FlamePresetName;
         _flameIterations = _p.FlameIterations;
         _flameGamma = _p.FlameGamma;
@@ -299,6 +304,7 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
     public bool IsApollonian => FractalType == FractalType.Apollonian;
     public bool IsKleinian => FractalType == FractalType.Kleinian;
     public bool IsBicomplexMandelbrot => FractalType == FractalType.BicomplexMandelbrot;
+    public bool IsCoquaternion => FractalType == FractalType.Coquaternion;
     public bool IsDla => FractalType == FractalType.Dla;
     public bool IsRandomTile => FractalType == FractalType.RandomTile;
     public bool IsChaoticBilliard => FractalType == FractalType.ChaoticBilliard;
@@ -315,7 +321,7 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
     public bool IsAny3DRaymarcher =>
         IsMandelbulb || IsMandelbox || IsKifs
         || IsQuatJulia || IsQuatMandelbrot
-        || IsBicomplexMandelbrot || IsKleinian
+        || IsBicomplexMandelbrot || IsCoquaternion || IsKleinian
         || FractalType == FractalType.UserBulb;
 
     /// <summary>Show the "Open Lighting &amp; FX" launcher when the full shading
@@ -443,7 +449,7 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
         !(IsJulia || IsMultibrot || IsPhoenix || IsGlynn || IsLogistic || IsLyapunov || IsSpider || IsNewtonOrNova || IsIFS
           || IsLSystem || IsStrangeAttractor || IsBuddhaBrot || IsMandelbulb || IsMandelbox || IsKifs
           || IsQuatJulia || IsQuatMandelbrot || IsPlasma || IsAcidWarp || IsFlame || IsApollonian || IsKleinian
-          || IsBicomplexMandelbrot || IsDla || IsRandomTile || IsChaoticBilliard || IsPrecisionField || IsInteriorAlphaApplicable || IsRelief2DApplicable
+          || IsBicomplexMandelbrot || IsCoquaternion || IsDla || IsRandomTile || IsChaoticBilliard || IsPrecisionField || IsInteriorAlphaApplicable || IsRelief2DApplicable
           || SupportsDomainWarp);
 
     // ── Interior alpha (2D) — issue #96 ──────────────────────────────────────
@@ -1568,6 +1574,18 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
     private double _bcCameraDistance;
     public double BicomplexCameraDistance { get => _bcCameraDistance; set { Set(ref _bcCameraDistance, Clamp(value, 0.1, 500)); _p.BicomplexCameraDistance = _bcCameraDistance; Fire(); } }
 
+    // ── Coquaternion (split-quaternion) Mandelbrot ──
+    private double _cqSliceW;
+    public double CoquaternionSliceW { get => _cqSliceW; set { Set(ref _cqSliceW, Clamp(value, -2, 2)); _p.CoquaternionSliceW = _cqSliceW; Fire(); } }
+    private int _cqIterations;
+    public int CoquaternionIterations { get => _cqIterations; set { Set(ref _cqIterations, (int)Clamp(value, 2, 32)); _p.CoquaternionIterations = _cqIterations; Fire(); } }
+    private double _cqCameraTheta;
+    public double CoquaternionCameraTheta { get => _cqCameraTheta; set { Set(ref _cqCameraTheta, Clamp(value, -10, 10)); _p.CoquaternionCameraTheta = _cqCameraTheta; Fire(); } }
+    private double _cqCameraPhi;
+    public double CoquaternionCameraPhi { get => _cqCameraPhi; set { Set(ref _cqCameraPhi, Clamp(value, 0.01, 3.13)); _p.CoquaternionCameraPhi = _cqCameraPhi; Fire(); } }
+    private double _cqCameraDistance;
+    public double CoquaternionCameraDistance { get => _cqCameraDistance; set { Set(ref _cqCameraDistance, Clamp(value, 0.1, 500)); _p.CoquaternionCameraDistance = _cqCameraDistance; Fire(); } }
+
     // ── Kleinian ──
     private int _kleinIter;
     public int KleinianIterations { get => _kleinIter; set { Set(ref _kleinIter, (int)Clamp(value, 2, 64)); _p.KleinianIterations = _kleinIter; Fire(); } }
@@ -1612,7 +1630,7 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
     public bool CanExportMesh =>
         IsMandelbulb || IsMandelbox || IsKifs
         || IsQuatJulia || IsQuatMandelbrot
-        || IsKleinian || IsBicomplexMandelbrot;
+        || IsKleinian || IsBicomplexMandelbrot || IsCoquaternion;
 
     public ReactiveCommand<Unit, Unit> ExportMeshCommand { get; }
     public ReactiveCommand<Unit, Unit> PickDropColorCommand { get; }

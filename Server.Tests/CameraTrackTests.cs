@@ -190,7 +190,8 @@ public sealed class CameraTrackTests
     {
         FractalType.Mandelbulb, FractalType.Mandelbox, FractalType.Kifs,
         FractalType.QuaternionJulia, FractalType.QuaternionMandelbrot,
-        FractalType.Kleinian, FractalType.BicomplexMandelbrot, FractalType.UserBulb,
+        FractalType.Kleinian, FractalType.BicomplexMandelbrot, FractalType.Coquaternion,
+        FractalType.UserBulb,
     };
 
     [Fact]

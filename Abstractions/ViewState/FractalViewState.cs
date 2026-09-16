@@ -288,6 +288,7 @@ namespace FracturingFog.ViewState
                 FractalType.PrecisionField        => (-0.5,  0.0, 1.0),
                 FractalType.Kleinian              => ( 0.0,  0.0, 1.0),
                 FractalType.BicomplexMandelbrot   => ( 0.0,  0.0, 1.0),
+                FractalType.Coquaternion          => ( 0.0,  0.0, 1.0),
                 FractalType.Dla                   => ( 0.0,  0.0, 1.0),
                 _                            => (-0.5,  0.0, 1.0),
             };
@@ -328,6 +329,7 @@ namespace FracturingFog.ViewState
             || t == FractalType.QuaternionMandelbrot
             || t == FractalType.Kleinian
             || t == FractalType.BicomplexMandelbrot
+            || t == FractalType.Coquaternion
             || t == FractalType.UserBulb;
     }
 }

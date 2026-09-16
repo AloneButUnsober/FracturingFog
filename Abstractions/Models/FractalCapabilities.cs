@@ -102,6 +102,7 @@ namespace FracturingFog.Models
             FractalType.QuaternionMandelbrot => FractalMotionClass.Raymarch3D,
             FractalType.Kleinian => FractalMotionClass.Raymarch3D,
             FractalType.BicomplexMandelbrot => FractalMotionClass.Raymarch3D,
+            FractalType.Coquaternion => FractalMotionClass.Raymarch3D,
             FractalType.UserBulb => FractalMotionClass.Raymarch3D,
 
             // ── Non-spatial — zoom is a no-op or addresses the wrong axis ────
