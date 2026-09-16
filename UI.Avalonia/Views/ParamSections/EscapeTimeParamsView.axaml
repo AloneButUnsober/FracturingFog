@@ -124,6 +124,30 @@
                            Value="{Binding LyapunovWarmup, Mode=TwoWay}" Margin="0,2" />
         </Grid>
 
+        <!-- Transcendental Julia -->
+        <Grid IsVisible="{Binding IsTranscendentalJulia}"
+              ColumnDefinitions="160,*" RowDefinitions="Auto,Auto,Auto,Auto">
+            <TextBlock Grid.Row="0" Grid.Column="0" Text="Map f(z):" VerticalAlignment="Center"
+                       ToolTip.Tip="Entire transcendental map z → λ·f(z). sin/cos bail on |Im z|; exp bails on Re z (no escape radius)." />
+            <ComboBox  Grid.Row="0" Grid.Column="1"
+                       ItemsSource="{Binding TranscendentalMaps}"
+                       SelectedItem="{Binding TranscendentalMap, Mode=TwoWay}" Margin="0,2" />
+            <TextBlock Grid.Row="1" Grid.Column="0" Text="λ real:" VerticalAlignment="Center"
+                       ToolTip.Tip="Real part of the multiplier λ. For λ·exp z, |λ| &lt; 0.37 gives a Cantor bouquet; larger explodes the set." />
+            <NumericUpDown Grid.Row="1" Grid.Column="1"
+                           Minimum="-4" Maximum="4" Increment="0.01" FormatString="F3"
+                           Value="{Binding TranscendentalLambdaRe, Mode=TwoWay}" Margin="0,2" />
+            <TextBlock Grid.Row="2" Grid.Column="0" Text="λ imag:" VerticalAlignment="Center" />
+            <NumericUpDown Grid.Row="2" Grid.Column="1"
+                           Minimum="-4" Maximum="4" Increment="0.01" FormatString="F3"
+                           Value="{Binding TranscendentalLambdaIm, Mode=TwoWay}" Margin="0,2" />
+            <TextBlock Grid.Row="3" Grid.Column="0" Text="Bailout R (axis):" VerticalAlignment="Center"
+                       ToolTip.Tip="Non-modulus bailout threshold on the escape axis (|Im z| for sin/cos, Re z for exp)." />
+            <NumericUpDown Grid.Row="3" Grid.Column="1"
+                           Minimum="4" Maximum="1000" Increment="5" FormatString="F0"
+                           Value="{Binding TranscendentalBailout, Mode=TwoWay}" Margin="0,2" />
+        </Grid>
+
         <!-- Newton / Nova / Halley / Secant — shared d + R -->
         <Grid IsVisible="{Binding IsNewtonOrNova}"
               ColumnDefinitions="160,*" RowDefinitions="Auto,Auto">

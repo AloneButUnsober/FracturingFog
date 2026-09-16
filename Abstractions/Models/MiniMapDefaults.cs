@@ -73,6 +73,7 @@ public static class MiniMapDefaults
         FractalType.Glynn            => new(-0.2,  0.0, 0.7),
         FractalType.Logistic         => new( 3.5,  0.5, 2.0),
         FractalType.Lyapunov         => new( 2.9,  3.0, 1.7),
+        FractalType.TranscendentalJulia => new( 0.0,  0.0, 0.5),
         FractalType.Halley           => new( 0.0,  0.0, 0.9),
         FractalType.Secant           => new( 0.0,  0.0, 0.9),
         FractalType.Spider           => new( 0.0,  0.0, 1.0),

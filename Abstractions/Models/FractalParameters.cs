@@ -52,6 +52,20 @@ namespace FracturingFog.Models
         /// Plot count = MaxIterations − LyapunovWarmup (clamped ≥ 1).</summary>
         public int LyapunovWarmup { get; set; } = 200;
 
+        /// <summary>Transcendental Julia (#854) map selector: z → λ·f(z) with
+        /// f ∈ {sin, cos, exp}.</summary>
+        public TranscendentalMap TranscendentalMap { get; set; } = TranscendentalMap.Sine;
+        /// <summary>Real part of the multiplier λ. Default 1.0 (structured
+        /// exploding sine). For λ·exp z, |λ| &lt; 1/e ≈ 0.37 gives a Cantor
+        /// bouquet; larger λ explodes the Julia set to the whole plane.</summary>
+        public double TranscendentalLambdaRe { get; set; } = 1.0;
+        /// <summary>Imaginary part of the multiplier λ.</summary>
+        public double TranscendentalLambdaIm { get; set; } = 0.0;
+        /// <summary>Non-modulus bailout R for the escape axis (|Im z| for
+        /// sin/cos, Re z for exp). Entire maps have no escape radius, so this is
+        /// the axis threshold, not a magnitude. Default 50.</summary>
+        public double TranscendentalBailout { get; set; } = 50.0;
+
         public Complex[]? NewtonPolyCoeffs { get; set; }
 
         public List<AffineMap>? IFSMaps { get; set; }
@@ -1273,6 +1287,10 @@ namespace FracturingFog.Models
                 LogisticSeed = LogisticSeed,
                 LyapunovSequence = LyapunovSequence,
                 LyapunovWarmup = LyapunovWarmup,
+                TranscendentalMap = TranscendentalMap,
+                TranscendentalLambdaRe = TranscendentalLambdaRe,
+                TranscendentalLambdaIm = TranscendentalLambdaIm,
+                TranscendentalBailout = TranscendentalBailout,
                 NewtonPolyCoeffs = NewtonPolyCoeffs is null ? null : (Complex[])NewtonPolyCoeffs.Clone(),
                 IFSMaps = IFSMaps is null ? null : new List<AffineMap>(IFSMaps),
                 UserEquationSource = UserEquationSource,

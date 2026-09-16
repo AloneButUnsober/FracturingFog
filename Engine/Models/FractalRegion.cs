@@ -458,6 +458,10 @@ namespace FracturingFog.Models
         [JsonIgnore(Condition = OmitNull)] public int? LogisticBurnIn { get; set; }
         [JsonIgnore(Condition = OmitNull)] public string? LyapunovSequence { get; set; }
         [JsonIgnore(Condition = OmitNull)] public int? LyapunovWarmup { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public int? TranscendentalMap { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public double? TranscendentalLambdaRe { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public double? TranscendentalLambdaIm { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public double? TranscendentalBailout { get; set; }
         [JsonIgnore(Condition = OmitNull)] public bool? MagnetConvergence { get; set; }
         [JsonIgnore(Condition = OmitNull)] public double? MagnetConvergenceEpsilon { get; set; }
         [JsonIgnore(Condition = OmitNull)] public int? RandomTileSeed { get; set; }
@@ -649,6 +653,13 @@ namespace FracturingFog.Models
                     LyapunovSequence = p.LyapunovSequence,
                     LyapunovWarmup = p.LyapunovWarmup,
                 },
+                FractalType.TranscendentalJulia => new RegionFractalParams
+                {
+                    TranscendentalMap = (int)p.TranscendentalMap,
+                    TranscendentalLambdaRe = p.TranscendentalLambdaRe,
+                    TranscendentalLambdaIm = p.TranscendentalLambdaIm,
+                    TranscendentalBailout = p.TranscendentalBailout,
+                },
                 FractalType.RandomTile => new RegionFractalParams
                 {
                     RandomTileSeed = p.RandomTileSeed,
@@ -802,6 +813,10 @@ namespace FracturingFog.Models
             if (LogisticBurnIn.HasValue) p.LogisticBurnIn = LogisticBurnIn.Value;
             if (!string.IsNullOrEmpty(LyapunovSequence)) p.LyapunovSequence = LyapunovSequence;
             if (LyapunovWarmup.HasValue) p.LyapunovWarmup = LyapunovWarmup.Value;
+            if (TranscendentalMap.HasValue) p.TranscendentalMap = (FracturingFog.TranscendentalMap)TranscendentalMap.Value;
+            if (TranscendentalLambdaRe.HasValue) p.TranscendentalLambdaRe = TranscendentalLambdaRe.Value;
+            if (TranscendentalLambdaIm.HasValue) p.TranscendentalLambdaIm = TranscendentalLambdaIm.Value;
+            if (TranscendentalBailout.HasValue) p.TranscendentalBailout = TranscendentalBailout.Value;
             if (MagnetConvergence.HasValue) p.MagnetConvergence = MagnetConvergence.Value;
             if (MagnetConvergenceEpsilon.HasValue) p.MagnetConvergenceEpsilon = MagnetConvergenceEpsilon.Value;
             if (RandomTileSeed.HasValue) p.RandomTileSeed = RandomTileSeed.Value;

@@ -133,6 +133,7 @@ namespace FracturingFog.Models
             {FractalType.Glynn, "Glynn" },
             {FractalType.Logistic, "Logistic" },
             {FractalType.Lyapunov, "Lyapunov" },
+            {FractalType.TranscendentalJulia, "Transcendental Julia" },
             {FractalType.Halley, "Halley" },
             {FractalType.Secant, "Secant" },
             {FractalType.Spider, "Spider" },

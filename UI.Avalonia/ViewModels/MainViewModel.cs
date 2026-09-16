@@ -227,6 +227,7 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
         (FractalType.Glynn,                 "Glynn"),
         (FractalType.Logistic,              "Logistic Bifurcation"),
         (FractalType.Lyapunov,              "Lyapunov"),
+        (FractalType.TranscendentalJulia,   "Transcendental Julia"),
         (FractalType.Halley,                "Halley"),
         (FractalType.Secant,                "Secant"),
         (FractalType.Spider,                "Spider"),

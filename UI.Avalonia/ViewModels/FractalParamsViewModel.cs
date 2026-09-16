@@ -95,6 +95,10 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
         _logisticSeed = _p.LogisticSeed;
         _lyapunovSequence = _p.LyapunovSequence;
         _lyapunovWarmup = _p.LyapunovWarmup;
+        _transMap = _p.TranscendentalMap;
+        _transLambdaRe = _p.TranscendentalLambdaRe;
+        _transLambdaIm = _p.TranscendentalLambdaIm;
+        _transBailout = _p.TranscendentalBailout;
         _secantOffsetR = _p.SecantInitialOffset.Real;
         _secantOffsetI = _p.SecantInitialOffset.Imaginary;
         _spiderCDecay = _p.SpiderCDecay;
@@ -283,6 +287,7 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
     public bool IsGlynn => FractalType == FractalType.Glynn;
     public bool IsLogistic => FractalType == FractalType.Logistic;
     public bool IsLyapunov => FractalType == FractalType.Lyapunov;
+    public bool IsTranscendentalJulia => FractalType == FractalType.TranscendentalJulia;
     public bool IsNewtonOrNova => FractalType is FractalType.Newton or FractalType.Nova or FractalType.Halley or FractalType.Secant;
     public bool IsSecant => FractalType == FractalType.Secant;
     public bool IsSpider => FractalType == FractalType.Spider;
@@ -446,7 +451,7 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
         || FractalType == FractalType.Magnet2;
 
     public bool HasNoParams =>
-        !(IsJulia || IsMultibrot || IsPhoenix || IsGlynn || IsLogistic || IsLyapunov || IsSpider || IsNewtonOrNova || IsIFS
+        !(IsJulia || IsMultibrot || IsPhoenix || IsGlynn || IsLogistic || IsLyapunov || IsTranscendentalJulia || IsSpider || IsNewtonOrNova || IsIFS
           || IsLSystem || IsStrangeAttractor || IsBuddhaBrot || IsMandelbulb || IsMandelbox || IsKifs
           || IsQuatJulia || IsQuatMandelbrot || IsPlasma || IsAcidWarp || IsFlame || IsApollonian || IsKleinian
           || IsBicomplexMandelbrot || IsCoquaternion || IsDla || IsRandomTile || IsChaoticBilliard || IsPrecisionField || IsInteriorAlphaApplicable || IsRelief2DApplicable
@@ -966,6 +971,17 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
     public string LyapunovSequence { get => _lyapunovSequence; set { Set(ref _lyapunovSequence, string.IsNullOrEmpty(value) ? "AB" : value); _p.LyapunovSequence = _lyapunovSequence; Fire(); } }
     private int _lyapunovWarmup;
     public int LyapunovWarmup { get => _lyapunovWarmup; set { Set(ref _lyapunovWarmup, Math.Max(0, value)); _p.LyapunovWarmup = _lyapunovWarmup; Fire(); } }
+
+    // ── Transcendental Julia ──
+    private TranscendentalMap _transMap;
+    public TranscendentalMap TranscendentalMap { get => _transMap; set { Set(ref _transMap, value); _p.TranscendentalMap = value; Fire(); } }
+    public Array TranscendentalMaps => Enum.GetValues(typeof(TranscendentalMap));
+    private double _transLambdaRe;
+    public double TranscendentalLambdaRe { get => _transLambdaRe; set { Set(ref _transLambdaRe, Clamp(value, -4, 4)); _p.TranscendentalLambdaRe = _transLambdaRe; Fire(); } }
+    private double _transLambdaIm;
+    public double TranscendentalLambdaIm { get => _transLambdaIm; set { Set(ref _transLambdaIm, Clamp(value, -4, 4)); _p.TranscendentalLambdaIm = _transLambdaIm; Fire(); } }
+    private double _transBailout;
+    public double TranscendentalBailout { get => _transBailout; set { Set(ref _transBailout, Clamp(value, 4, 1000)); _p.TranscendentalBailout = _transBailout; Fire(); } }
 
     // ── Secant ──
     private double _secantOffsetR;

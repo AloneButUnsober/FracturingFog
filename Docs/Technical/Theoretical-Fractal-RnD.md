@@ -188,25 +188,32 @@ theme + an optional per-axis bailout toggle on `FractalParameters`, no new calcu
 Real published theory, near-zero faithful renders. Implementation risk is *correctness* — few images
 to validate against.
 
-### 3.1 Transcendental / entire-function dynamics — `λ·sin z`, `λ·exp z`, `λ·cos z`
+### 3.1 Transcendental / entire-function dynamics — `λ·sin z`, `λ·cos z`, `λ·exp z` — **#854, SHIPPED**
 
-**Math.** Julia sets of entire transcendental maps. Rich Fatou/Julia theory (Baker domains, Cantor
-bouquets / "hairs"), but **no escape radius** — the essential singularity at ∞ means `|z|` is not a
-membership test. Bound instead by **imaginary part** (for `exp`/`sin`) or a fast-escaping-set
-criterion.
+**Math.** Julia sets of entire transcendental maps `z → λ·f(z)`, `z₀ = pixel`. Rich Fatou/Julia
+theory (Baker domains, Cantor bouquets / "hairs"), but **no escape radius** — the essential
+singularity at ∞ means `|z|` is not a membership test. Bound instead on a single **axis**: `|Im z| > R`
+for `sin`/`cos` (they grow like `e^{|Im z|}/2`), `Re z > R` for `exp` (`|exp| = e^{Re z}`).
+
+**Implementation.** `TranscendentalJuliaCalculator` (dedicated 2D calc, `FractalType.TranscendentalJulia`).
+Per-map non-modulus bailout on the escape axis; chain-rule derivative `d := λ·f'(z)·d` fills
+DE/normal/final-z so 2D + Relief + Phong themes work; continuous escape count = log-space crossing of
+the bail axis. NaN/Inf guarded (double-exponential growth). Params: `TranscendentalMap`
+(Sine/Cosine/Exp), `TranscendentalLambdaRe/Im`, `TranscendentalBailout`. Smoke: `λ·sin z` at λ=1
+gives the textbook 2π-periodic bounded lobes + Cantor-bouquet hairs.
 
 **Toolchain reach:**
-- *CalcGen/DSL:* the User Equation DSL already parses `sin`/`exp`/`cos`; memory notes transcendental
-  maps "want a SMALL escape radius." The genuine extension is a **non-modulus bailout** (bail on
-  `|Im z| > R`) selectable in the DSL/generator — a new escape-criterion primitive reusable across
-  transcendental maps. This is the single most reusable piece of work in this bucket.
-- *ColorGen/Color Theme:* the "hairs" are thin — benefits from the same escape-angle / decomposition
-  themes already shipped; no new input strictly needed, but a `fastEscaping` boolean input would let
-  themes paint the escaping-set structure directly.
+- *CalcGen/DSL:* the genuine extension — a **non-modulus bailout primitive** (bail on `|Im z| > R` or
+  `Re z > R`) selectable in the DSL/generator — is now realised in a dedicated calculator; lifting it
+  into CalcGen (a per-map escape-axis selector) is the reusable follow-up that unlocks *any*
+  transcendental map from the DSL. Highest-leverage remaining piece.
+- *ColorGen/Color Theme:* the "hairs" are thin — benefit from the shipped escape-angle / decomposition
+  themes; a `fastEscaping` boolean input would let themes paint the escaping-set structure directly.
 
 **Sources:** Devaney's work on `λ exp z`, `λ sin z` (1984–1990s); Fatou 1926 (entire maps). §7.
 
-**Status:** open. Strong "new here" candidate; the non-modulus-bailout work is the crux.
+**Status:** **SHIPPED** — `FractalType.TranscendentalJulia` (#854). Sine/Cosine/Exp; CPU. Follow-up:
+lift the non-modulus bailout into CalcGen/DSL as a reusable escape-axis primitive.
 
 ### 3.2 Higher/hypercomplex & split algebras — coquaternion Mandelbrot — **#853, SHIPPED**
 

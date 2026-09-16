@@ -73,6 +73,7 @@ namespace FracturingFog.Rendering
         private BuddhabrotCalculator _buddhabrotCalculator;
         private LogisticCalculator _logisticCalculator;
         private LyapunovCalculator _lyapunovCalculator;
+        private TranscendentalJuliaCalculator _transcendentalCalculator;
         private HalleyCalculator _halleyCalculator;
         private SecantCalculator _secantCalculator;
         private NebulabrotCalculator _nebulabrotCalculator;
@@ -443,6 +444,7 @@ namespace FracturingFog.Rendering
             _buddhabrotCalculator = new BuddhabrotCalculator(w, h);
             _logisticCalculator = new LogisticCalculator(w, h);
             _lyapunovCalculator = new LyapunovCalculator(w, h);
+            _transcendentalCalculator = new TranscendentalJuliaCalculator(w, h);
             _halleyCalculator = new HalleyCalculator(w, h);
             _secantCalculator = new SecantCalculator(w, h);
             _nebulabrotCalculator = new NebulabrotCalculator(w, h);
@@ -486,6 +488,7 @@ namespace FracturingFog.Rendering
                 _buddhabrotCalculator.ColorMap = initialColorMap;
                 _logisticCalculator.ColorMap = initialColorMap;
                 _lyapunovCalculator.ColorMap = initialColorMap;
+                _transcendentalCalculator.ColorMap = initialColorMap;
                 _halleyCalculator.ColorMap = initialColorMap;
                 _secantCalculator.ColorMap = initialColorMap;
                 _nebulabrotCalculator.ColorMap = initialColorMap;
@@ -966,6 +969,7 @@ namespace FracturingFog.Rendering
                 _buddhabrotCalculator.ColorMap = value;
                 _logisticCalculator.ColorMap = value;
                 _lyapunovCalculator.ColorMap = value;
+                _transcendentalCalculator.ColorMap = value;
                 _halleyCalculator.ColorMap = value;
                 _secantCalculator.ColorMap = value;
                 _nebulabrotCalculator.ColorMap = value;
@@ -2845,6 +2849,7 @@ namespace FracturingFog.Rendering
             _buddhabrotCalculator.Resize(w, h);
             _logisticCalculator.Resize(w, h);
             _lyapunovCalculator.Resize(w, h);
+            _transcendentalCalculator.Resize(w, h);
             _halleyCalculator.Resize(w, h);
             _secantCalculator.Resize(w, h);
             _nebulabrotCalculator.Resize(w, h);
@@ -3523,6 +3528,10 @@ namespace FracturingFog.Rendering
                 case UserBulbCalculator ub: ub.FractalParameters = ViewState.FractalParameters; break;
                 case LogisticCalculator lg: lg.FractalParameters = ViewState.FractalParameters; break;
                 case LyapunovCalculator ly: ly.FractalParameters = ViewState.FractalParameters; break;
+                case TranscendentalJuliaCalculator tj:
+                    tj.FractalParameters = ViewState.FractalParameters;
+                    tj.InteriorAlpha = ViewState.FractalParameters?.InteriorAlpha ?? 255;
+                    break;
                 case HalleyCalculator hc:
                     hc.FractalParameters = ViewState.FractalParameters;
                     hc.InteriorAlpha = ViewState.FractalParameters?.InteriorAlpha ?? 255;  // #830
@@ -3668,6 +3677,7 @@ namespace FracturingFog.Rendering
             FractalType.Spider => _escapeCalculator,
             FractalType.Logistic => _logisticCalculator,
             FractalType.Lyapunov => _lyapunovCalculator,
+            FractalType.TranscendentalJulia => _transcendentalCalculator,
             FractalType.Halley => _halleyCalculator,
             FractalType.Secant => _secantCalculator,
             FractalType.IFS => _ifsCalculator,

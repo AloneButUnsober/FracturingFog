@@ -101,6 +101,19 @@ namespace FracturingFog
         Transparent,
     }
 
+    /// <summary>Entire transcendental map for the TranscendentalJulia (#854)
+    /// family: z → λ·f(z). Each has an essential singularity at ∞ (no escape
+    /// radius) so the bailout is on a single axis, not the modulus.</summary>
+    public enum TranscendentalMap
+    {
+        /// <summary>λ·sin z. Bail on |Im z| &gt; R.</summary>
+        Sine,
+        /// <summary>λ·cos z. Bail on |Im z| &gt; R.</summary>
+        Cosine,
+        /// <summary>λ·exp z. Bail on Re z &gt; R.</summary>
+        Exp,
+    }
+
     public enum FractalType
     {
         Mandelbrot,
@@ -182,6 +195,16 @@ namespace FracturingFog
         /// <c>FractalParameters</c>: <c>LyapunovSequence</c>,
         /// <c>LyapunovWarmup</c>.</summary>
         Lyapunov,
+        /// <summary>Julia set of an entire transcendental map (#854):
+        /// z → λ·f(z) with f ∈ {sin, cos, exp} and z₀ = the pixel. Entire maps
+        /// have an essential singularity at ∞ — NO escape radius — so the
+        /// bailout is non-modulus: |Im z| &gt; R for sin/cos, Re z &gt; R for
+        /// exp. Devaney "exploding Julia sets" (Cantor bouquets / hairs).
+        /// Dedicated <c>TranscendentalJuliaCalculator</c>; the signed derivative
+        /// fills DE/normal/final-z so 2D + Relief + Phong themes work. Tunables:
+        /// <c>TranscendentalMap</c>, <c>TranscendentalLambdaRe/Im</c>,
+        /// <c>TranscendentalBailout</c>.</summary>
+        TranscendentalJulia,
         /// <summary>Halley basins for f(z) = z^d − 1. Cubic-convergence
         /// root-finding (z := z − 2 f f' / (2 f'² − f f'')). Reuses
         /// <c>NewtonExponent</c> + <c>NewtonRelaxation</c>; basin
@@ -450,6 +473,15 @@ namespace FracturingFog
                 => FractalCapabilities.SuppliesNormals
                  | FractalCapabilities.SuppliesDE
                  | FractalCapabilities.SuppliesOrbit
+                 | FractalCapabilities.SuppliesFinalZ
+                 | FractalCapabilities.SuppliesHistogram,
+
+            // Entire transcendental Julia (#854). Tracks a chain-rule derivative
+            // (DE / normal / final-z) but no per-iteration orbit sampling, so
+            // SuppliesOrbit is withheld.
+            FractalType.TranscendentalJulia
+                => FractalCapabilities.SuppliesNormals
+                 | FractalCapabilities.SuppliesDE
                  | FractalCapabilities.SuppliesFinalZ
                  | FractalCapabilities.SuppliesHistogram,
 
