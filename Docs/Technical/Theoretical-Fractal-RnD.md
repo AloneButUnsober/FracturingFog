@@ -202,18 +202,23 @@ the bail axis. NaN/Inf guarded (double-exponential growth). Params: `Transcenden
 (Sine/Cosine/Exp), `TranscendentalLambdaRe/Im`, `TranscendentalBailout`. Smoke: `λ·sin z` at λ=1
 gives the textbook 2π-periodic bounded lobes + Cantor-bouquet hairs.
 
-**Toolchain reach:**
-- *CalcGen/DSL:* the genuine extension — a **non-modulus bailout primitive** (bail on `|Im z| > R` or
-  `Re z > R`) selectable in the DSL/generator — is now realised in a dedicated calculator; lifting it
-  into CalcGen (a per-map escape-axis selector) is the reusable follow-up that unlocks *any*
-  transcendental map from the DSL. Highest-leverage remaining piece.
+**Toolchain reach — DELIVERED in the live DSL (#859):**
+- *CalcGen/DSL:* **FINDING** — the non-modulus bailout primitive *already existed*. `SandboxExpression`
+  supports `< > <= >= == != && ||` + ternary + `re()/im()/abs()`, and `UserEquationCalculator` (#544)
+  already evaluates a per-equation **bailout condition** (`Cond` non-zero ⇒ bail). So `abs(im(z)) > 50`
+  (transcendental) / `abs(z-1) < 0.001` (convergence) parse and run. **#859** made it first-class: a
+  **condition-replaces-modulus** mode (the condition becomes the SOLE escape, modulus disabled,
+  non-finite guard) in BOTH `UserEquationCalculator` and `SandboxCalculator`, condition-trigger routed
+  through the full smooth+normal+DE exterior path, `FractalParameters.UserEquationBailoutReplacesModulus`
+  + editor toggle + per-entry persistence + cookbook demonstrator presets (`sin(z)+c`, `cos(z)+c`,
+  `exp(z)+c`). **CalcGen "Compile & Load" codegen** support (deep-zoom/SIMD) is deferred → **#860**.
 - *ColorGen/Color Theme:* the "hairs" are thin — benefit from the shipped escape-angle / decomposition
   themes; a `fastEscaping` boolean input would let themes paint the escaping-set structure directly.
 
 **Sources:** Devaney's work on `λ exp z`, `λ sin z` (1984–1990s); Fatou 1926 (entire maps). §7.
 
-**Status:** **SHIPPED** — `FractalType.TranscendentalJulia` (#854). Sine/Cosine/Exp; CPU. Follow-up:
-lift the non-modulus bailout into CalcGen/DSL as a reusable escape-axis primitive.
+**Status:** **SHIPPED** — `FractalType.TranscendentalJulia` (#854, dedicated calc) + the DSL
+non-modulus bailout (#859, author-your-own in the equation editor). CalcGen codegen deferred (#860).
 
 ### 3.2 Higher/hypercomplex & split algebras — coquaternion Mandelbrot — **#853, SHIPPED**
 
@@ -304,7 +309,11 @@ The generalization directions the above cluster into. Each is a *capability* tha
 
 The two highest-leverage *toolchain* investments (each unlocks multiple types):
 1. **Non-modulus / convergence bailout primitive** in CalcGen/DSL → transcendental + Magnet + Newton-ish.
+   **DONE in the live DSL (#859)** — condition-replaces-modulus in `UserEquation` + `Sandbox` (the
+   primitive already existed via #544 + `SandboxExpression` comparisons; #859 made it first-class).
+   CalcGen codegen deferred (#860).
 2. **Pluggable algebra/product-table descriptor** in CalcGen → every hypercomplex variant from one path.
+   (Reinforced by the #853 coquaternion clone — two calculators differ only in the product table.)
 
 ---
 

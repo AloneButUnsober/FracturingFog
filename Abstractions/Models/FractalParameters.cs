@@ -129,6 +129,20 @@ namespace FracturingFog.Models
         /// than escapes. Typical form: <c>abs(z - prev) &lt; 0.0001</c>.</summary>
         public string? UserEquationBailoutCondition { get; set; }
 
+        /// <summary>#859 — when true AND a bailout condition is set, that
+        /// condition becomes the SOLE escape test: the modulus bailout
+        /// (<c>|z|² ≥ R²</c>) is disabled so a non-modulus condition like
+        /// <c>abs(im(z)) &gt; 50</c> (entire transcendental maps: λ·sin/exp z)
+        /// or <c>re(z) &gt; 50</c> controls escape without being shadowed by the
+        /// modulus test. A non-finite guard stops runaway overflow (exp). In
+        /// this mode the condition-trigger is coloured through the EXTERIOR
+        /// smooth+normal+DE path (full theming) rather than the raw-iter
+        /// "converged" path. Default false = legacy behaviour (modulus + the
+        /// #544 converged path), byte-identical. Honoured by the live DSL
+        /// calculators (UserEquation + Sandbox); CalcGen codegen support is
+        /// deferred (#860).</summary>
+        public bool UserEquationBailoutReplacesModulus { get; set; } = false;
+
         /// <summary>
         /// Source for the Sandbox fractal — a restricted expression DSL parsed by
         /// <see cref="SandboxExpression"/>. Safe to evaluate in untrusted contexts:
@@ -1301,6 +1315,7 @@ namespace FracturingFog.Models
                 UserEquationSkipJacobian = UserEquationSkipJacobian,
                 UserEquationSeed = UserEquationSeed,
                 UserEquationBailoutCondition = UserEquationBailoutCondition,
+                UserEquationBailoutReplacesModulus = UserEquationBailoutReplacesModulus,
                 SandboxSource = SandboxSource,
                 SandboxName = SandboxName,
                 IFSPresetName = IFSPresetName,

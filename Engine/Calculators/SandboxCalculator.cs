@@ -68,6 +68,11 @@ public sealed class SandboxCalculator : IFractalCalculator, ISupportsHistogramEq
     private SandboxExpression? _compiled;
     private string _compiledSource = string.Empty;
 
+    // #859 — optional non-modulus bailout condition (shared FractalParameters
+    // field with the User Equation path). Parsed/cached lazily.
+    private SandboxExpression? _condSbx;
+    private string _condSource = string.Empty;
+
     public SandboxCalculator(int width, int height) => Resize(width, height);
 
     public void Resize(int width, int height)
@@ -137,6 +142,20 @@ public sealed class SandboxCalculator : IFractalCalculator, ISupportsHistogramEq
             ? FractalParameters.EscapeRadius * FractalParameters.EscapeRadius
             : 1024.0;
 
+        // #859 — non-modulus bailout condition (parity with the User Equation
+        // path). Parsed lazily from the shared FractalParameters field. When
+        // "replaces modulus" is set the condition is the SOLE escape test.
+        string condSrc = FractalParameters.UserEquationBailoutCondition?.Trim() ?? string.Empty;
+        if (condSrc != _condSource)
+        {
+            _condSource = condSrc;
+            if (condSrc.Length == 0) _condSbx = null;
+            else { try { _condSbx = SandboxExpression.Parse(condSrc); } catch { _condSbx = null; } }
+        }
+        var cond = _condSbx;
+        bool replacesModulus = FractalParameters.UserEquationBailoutReplacesModulus && cond != null;
+        double effBailout2 = replacesModulus ? double.PositiveInfinity : bailout2;
+
         // P5: gate orbit sampling once. Non-orbit themes pay nothing.
         var orbitMap = ColorMap as IOrbitAwareColorMap;
 
@@ -158,6 +177,14 @@ public sealed class SandboxCalculator : IFractalCalculator, ISupportsHistogramEq
                 if (ct.IsCancellationRequested) return env;
                 double cy = centerY + (y - height * 0.5) * scale;
                 int rowBase = y * width;
+                // #859 — per-row scratch env for the bailout condition (only
+                // allocated when a condition is set).
+                var condEnv = cond?.NewEnv();
+                bool Cond(Complex zz, Complex cc, int it, Complex pv)
+                {
+                    var r = cond!.EvalStep(zz, cc, it, condEnv!, pv);
+                    return r.Real != 0.0 || r.Imaginary != 0.0;
+                }
                 for (int x = 0; x < width; x++)
                 {
                     double cx = centerX + (x - width * 0.5) * scale;
@@ -173,10 +200,13 @@ public sealed class SandboxCalculator : IFractalCalculator, ISupportsHistogramEq
                     for (iter = 0; iter < maxIt; iter++)
                     {
                         double r2 = z.Real * z.Real + z.Imaginary * z.Imaginary;
-                        if (r2 >= bailout2) break;
+                        if (r2 >= effBailout2 || (replacesModulus && double.IsNaN(r2))) break;
                         // Sample BEFORE update; skip iter==0 (z_0 = 0 has no arg).
                         if (orbitMap != null && iter > 0)
                             orbitMap.Sample(ref acc, z.Real, z.Imaginary, cx, cy, iter);
+                        // #859 — non-modulus/convergence bailout condition. Sandbox
+                        // has no interior path, so a trigger is an exterior escape.
+                        if (cond != null && Cond(z, c, iter, prevZ)) break;
                         try
                         {
                             // #543 — pass z_{n-1} to the `prev` slot; advance prev

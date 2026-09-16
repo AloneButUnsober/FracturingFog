@@ -26,7 +26,14 @@ public readonly record struct CookbookEntry(
     string DslSource,
     double CenterX,
     double CenterY,
-    double Zoom);
+    double Zoom,
+    // #859 — optional non-modulus / convergence bailout metadata. When
+    // BailoutCondition is set the entry is dropped into the live User Equation
+    // tab (the interpreter honours the condition; CalcGen codegen does not yet,
+    // #860) with these settings applied.
+    string? BailoutCondition = null,
+    bool BailoutReplacesModulus = false,
+    double EscapeRadius = 0.0);
 
 public static class EquationCookbook
 {
@@ -115,5 +122,32 @@ public static class EquationCookbook
             "z² + c². Mandelbrot with squared-c forcing — distorted bulb.",
             "z*z + c*c",
             0.0, 0.0, 1.0),
+
+        // #859 — non-modulus bailout demonstrators. Entire transcendental maps
+        // have no escape radius, so they set a per-axis bailout condition and
+        // "replaces modulus". These drop into the live User Equation tab.
+        new CookbookEntry(
+            "Transcendental — sin(z) + c",
+            "λ·sin z family. No escape radius: bails on |Im z| > 50 (replaces modulus). Cantor-bouquet hairs.",
+            "sin(z) + c",
+            0.0, 0.0, 0.5,
+            BailoutCondition: "abs(im(z)) > 50",
+            BailoutReplacesModulus: true),
+
+        new CookbookEntry(
+            "Transcendental — cos(z) + c",
+            "λ·cos z family. Bails on |Im z| > 50 (replaces modulus).",
+            "cos(z) + c",
+            0.0, 0.0, 0.5,
+            BailoutCondition: "abs(im(z)) > 50",
+            BailoutReplacesModulus: true),
+
+        new CookbookEntry(
+            "Transcendental — exp(z) + c",
+            "λ·exp z family. |exp| = e^Re z: bails on re(z) > 50 (replaces modulus).",
+            "exp(z) + c",
+            -2.0, 0.0, 0.45,
+            BailoutCondition: "re(z) > 50",
+            BailoutReplacesModulus: true),
     };
 }
