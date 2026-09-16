@@ -1024,6 +1024,7 @@ namespace FracturingFog.Imaging
                 FractalType.Spider           => new EscapeTimeCalculator(w, h),
                 FractalType.Logistic         => new LogisticCalculator(w, h),
                 FractalType.Lyapunov         => new LyapunovCalculator(w, h),
+                FractalType.TranscendentalJulia => new TranscendentalJuliaCalculator(w, h),
                 FractalType.Halley           => new HalleyCalculator(w, h),
                 FractalType.Secant           => new SecantCalculator(w, h),
                 FractalType.IFS              => new IFSCalculator(w, h),
@@ -1111,6 +1112,11 @@ namespace FracturingFog.Imaging
                     sb.InteriorAlpha = req.FractalParameters?.InteriorAlpha ?? 255;  // #382
                     break;
                 case UserBulbCalculator ub:    ub.FractalParameters = req.FractalParameters; break;
+                case LyapunovCalculator lyp:   lyp.FractalParameters = req.FractalParameters; break;
+                case TranscendentalJuliaCalculator tj:
+                    tj.FractalParameters = req.FractalParameters;
+                    tj.InteriorAlpha = req.FractalParameters?.InteriorAlpha ?? 255;
+                    break;
             }
             return c;
         }

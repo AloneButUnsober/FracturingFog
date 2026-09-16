@@ -63,6 +63,9 @@ public static class FractalAnimatableParamsMap
         FractalType.Lyapunov
             => _lyapunovList,
 
+        FractalType.TranscendentalJulia
+            => _transcendentalList,
+
         // ── Procedural / chaos-game ───────────────────────────────────────
         FractalType.IFS
             => _ifsList,
@@ -198,6 +201,14 @@ public static class FractalAnimatableParamsMap
         new("NewtonExponent", AnimatableParamKind.ScalarInt, Min: 2, Max: 8),
         new("NewtonRelaxation", AnimatableParamKind.ScalarDouble, Min: 0.1, Max: 2.0),
         new("SecantInitialOffset", AnimatableParamKind.Complex, Min: 0.05, Max: 1.5),
+    };
+
+    private static readonly AnimatableParamDescriptor[] _transcendentalList =
+    {
+        new("TranscendentalLambdaRe", AnimatableParamKind.ScalarDouble, Min: -2.0, Max: 2.0,
+            Notes: "Real part of λ — morphs the exploding Julia set."),
+        new("TranscendentalLambdaIm", AnimatableParamKind.ScalarDouble, Min: -2.0, Max: 2.0,
+            Notes: "Imaginary part of λ — rotates the hairs / bouquet."),
     };
 
     private static readonly AnimatableParamDescriptor[] _lyapunovList =

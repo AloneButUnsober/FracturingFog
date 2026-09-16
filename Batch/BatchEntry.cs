@@ -117,7 +117,8 @@ namespace FracturingFog.Batch
             Console.WriteLine("                              Newton|Nova|BuddhaBrot|Nebulabrot|AntiBuddhabrot|");
             Console.WriteLine("                              AntiNebulabrot|IFS|LSystem|StrangeAttractor|");
             Console.WriteLine("                              UserEquation|Mandelbulb|Mandelbox|Kifs|Sandbox|UserBulb|");
-            Console.WriteLine("                              TearDrop|Magnet1|Magnet2|Glynn|Logistic|Lyapunov|Halley|");
+            Console.WriteLine("                              TearDrop|Magnet1|Magnet2|Glynn|Logistic|Lyapunov|");
+            Console.WriteLine("                              TranscendentalJulia|Halley|");
             Console.WriteLine("                              Secant|Spider|QuaternionJulia|QuaternionMandelbrot|");
             Console.WriteLine("                              Plasma|Flame|Apollonian|Kleinian|");
             Console.WriteLine("                              BicomplexMandelbrot|Coquaternion|Dla|");

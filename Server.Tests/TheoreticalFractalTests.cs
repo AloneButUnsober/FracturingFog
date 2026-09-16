@@ -178,4 +178,73 @@ public class TheoreticalFractalTests
         bike.Calculate(default);
         Assert.False(RenderCoquaternion(0.0).AsSpan().SequenceEqual(bike.ColorBuffer));
     }
+
+    // ── Transcendental Julia (#854) ──────────────────────────────────────────
+
+    private static TranscendentalJuliaCalculator RenderTranscendental(
+        TranscendentalMap map = TranscendentalMap.Sine,
+        double lr = 1.0, double li = 0.0, double zoom = 0.5, int maxIt = 200)
+    {
+        var calc = new TranscendentalJuliaCalculator(W, H)
+        {
+            CenterX = 0, CenterY = 0, Zoom = zoom, MaxIterations = maxIt,
+            ColorMap = new HsvPalette(),
+            FractalParameters = new FractalParameters
+            {
+                TranscendentalMap = map,
+                TranscendentalLambdaRe = lr,
+                TranscendentalLambdaIm = li,
+                TranscendentalBailout = 50.0,
+            },
+        };
+        calc.Calculate(default);
+        return calc;
+    }
+
+    [Fact]
+    public void Transcendental_Deterministic()
+    {
+        Assert.True(RenderTranscendental().ColorBuffer.AsSpan()
+            .SequenceEqual(RenderTranscendental().ColorBuffer));
+    }
+
+    [Fact]
+    public void Transcendental_ProducesStructure()
+    {
+        int distinct = RenderTranscendental().ColorBuffer.Distinct().Count();
+        Assert.True(distinct > 20, $"expected structured image, got {distinct} colours");
+    }
+
+    [Fact]
+    public void Transcendental_SineVsExp_Differ()
+    {
+        var sine = RenderTranscendental(TranscendentalMap.Sine);
+        var exp = RenderTranscendental(TranscendentalMap.Exp, lr: 0.3);
+        Assert.False(sine.ColorBuffer.AsSpan().SequenceEqual(exp.ColorBuffer));
+    }
+
+    [Fact]
+    public void Transcendental_LambdaChangesTheSet()
+    {
+        var a = RenderTranscendental(lr: 1.0);
+        var b = RenderTranscendental(lr: 1.0, li: 0.4);
+        Assert.False(a.ColorBuffer.AsSpan().SequenceEqual(b.ColorBuffer));
+    }
+
+    [Fact]
+    public void Transcendental_SmoothBuffer_FeedsRelief()
+    {
+        Assert.Contains(RenderTranscendental().SmoothBuffer, v => v > 0f);
+    }
+
+    [Fact]
+    public void Transcendental_NoNaNOrInf_InFloatBuffers()
+    {
+        // Non-modulus bailout + double-exponential growth must never leak a
+        // NaN/Inf into the smooth / final-z channels (guarded escape).
+        var calc = RenderTranscendental(TranscendentalMap.Exp, lr: 0.5);
+        Assert.All(calc.SmoothBuffer, v => Assert.True(float.IsFinite(v)));
+        Assert.All(calc.FinalZrBuffer, v => Assert.True(float.IsFinite(v)));
+        Assert.All(calc.DistanceBuffer, v => Assert.True(float.IsFinite(v)));
+    }
 }

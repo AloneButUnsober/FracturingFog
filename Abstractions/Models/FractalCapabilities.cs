@@ -83,6 +83,7 @@ namespace FracturingFog.Models
             // point-zoom into (a, b) reveals structure at all scales (unlike the
             // 1D-stretched Logistic bifurcation, which stays NonSpatial).
             FractalType.Lyapunov => FractalMotionClass.Zoomable2D,
+            FractalType.TranscendentalJulia => FractalMotionClass.Zoomable2D,
             FractalType.GeneratedMandelbrotZ2 => FractalMotionClass.Zoomable2D,
             FractalType.GeneratedMandelbrotZ3 => FractalMotionClass.Zoomable2D,
             FractalType.GeneratedMandelbrotZ4 => FractalMotionClass.Zoomable2D,
