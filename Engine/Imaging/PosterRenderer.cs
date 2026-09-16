@@ -1023,6 +1023,7 @@ namespace FracturingFog.Imaging
                 FractalType.Glynn            => new EscapeTimeCalculator(w, h),
                 FractalType.Spider           => new EscapeTimeCalculator(w, h),
                 FractalType.Logistic         => new LogisticCalculator(w, h),
+                FractalType.Lyapunov         => new LyapunovCalculator(w, h),
                 FractalType.Halley           => new HalleyCalculator(w, h),
                 FractalType.Secant           => new SecantCalculator(w, h),
                 FractalType.IFS              => new IFSCalculator(w, h),

@@ -46,7 +46,60 @@ are flagged for fixing in [Documentation Plan → Citation maintenance](Document
   <https://www.bugman123.com/Hypercomplex/>. Companion to White's Mandelbulb explorations.
 - **Melinda Green.** *Buddhabrot rendering technique.* <http://superliminal.com/fractals/bbrot/>, 1993.
 - **Clifford A. Pickover.** *Computers, Pattern, Chaos, and Beauty.* St. Martin's Press, 1990. Source
-  of the Clifford / De Jong attractor formulae used by the Strange Attractor family.
+  of the Clifford / De Jong attractor formulae used by the Strange Attractor family, the Magnet 1 / 2
+  rational maps (renormalization of the Ising partition function), and the biomorph escape variant.
+- **Clifford A. Pickover.** *Biomorphs: computer displays of biological forms generated from
+  mathematical feedback loops.* Computers and the Imagination, 1986. The per-axis (`|Re z|` OR `|Im z|`)
+  escape test behind biomorphs.
+
+### Frontier & theoretical fractal R&D
+
+Research-frontier references backing [Technical → Theoretical & Frontier Fractal R&D](Technical/Theoretical-Fractal-RnD.md).
+Several are theory pointers (little concrete reference imagery); citations here are load-bearing
+because frontier claims cannot be sanity-checked against existing renders.
+
+<a id="markus-hess-lyapunov"></a>
+
+- **Mario Markus, Benno Hess.** *Lyapunov exponents of the logistic map with periodic forcing.*
+  Computers & Graphics 13(4), 1989. Origin of the Lyapunov ("Zircon Zity") fractal — a periodic
+  A/B string schedules the logistic growth rate and each pixel is coloured by the Lyapunov exponent
+  λ = lim (1/N) Σ ln|r_n(1 − 2x_n)|. Implemented by the `LyapunovCalculator`.
+- **A. K. Dewdney.** *Leaping into Lyapunov space.* Scientific American, September 1991. Popularised
+  the A/B-string Lyapunov images and the parameter-plane convention.
+- **Robert L. Devaney.** *Work on entire transcendental dynamics — `λ exp z`, `λ sin z`, exploding
+  Julia sets*, 1984–1990s. Julia sets of entire maps (no escape radius; Cantor bouquets / "hairs";
+  imaginary-part / fast-escaping-set bailout).
+- **Dominic Rochon.** *A generalized Mandelbrot set for bicomplex numbers.* Fractals 8(4), 2000.
+  Basis for hypercomplex / split-algebra iteration (bicomplex, split-complex, coquaternion) via a
+  pluggable product table.
+- **David Mumford, Caroline Series, David Wright.** *Indra's Pearls: The Vision of Felix Klein.*
+  Cambridge University Press, 2002. Kleinian-group limit sets — Grandma's recipe, the Maskit slice,
+  breadth-first word enumeration. Backs both the 2D Indra's Pearls renderer and the 3D Kleinian
+  generalization.
+- **Michael F. Barnsley.** *Superfractals.* Cambridge University Press, 2006. V-variable IFS
+  (condensation / code-tree selection among a finite fractal set) and fractal tops (address-map
+  colouring of an IFS attractor).
+- **Xavier Buff, Arnaud Chéritat.** *Quadratic Julia sets with positive area.* Annals of Mathematics
+  176(2), 2012. Positive-Lebesgue-measure Julia sets, constructed via controlled near-parabolic
+  perturbation — adjacent to parabolic implosion.
+- **Benoit Mandelbrot.** *Intermittent turbulence in self-similar cascades.* J. Fluid Mechanics 62,
+  1974. Multiplicative cascades / canonical multifractal measures.
+- **Oded Schramm.** *Scaling limits of loop-erased random walks and uniform spanning trees.* Israel
+  Journal of Mathematics 118, 2000. Schramm–Loewner Evolution (SLE).
+- **Bertrand Duplantier, Scott Sheffield.** *Liouville quantum gravity and KPZ.* Inventiones
+  Mathematicae 185, 2011. LQG random surfaces.
+
+<a id="parabolic-implosion"></a>
+
+- **Adrien Douady.** *Does a Julia set depend continuously on the polynomial?* (parabolic implosion),
+  Proc. Symp. Applied Math. 49, 1994. The discontinuity of Julia sets at parabolic parameters — the
+  flagship far-future R&D target.
+- **Pierre Lavaurs.** *Systèmes dynamiques holomorphes: explosion de points périodiques paraboliques.*
+  Thèse, Université Paris-Sud, 1989. Lavaurs maps / the limit of the imploding family.
+- **Mitsuhiro Shishikura.** *The Hausdorff dimension of the boundary of the Mandelbrot set and Julia
+  sets.* Annals of Mathematics 147(2), 1998. Parabolic renormalization; dim ∂M = 2.
+- **Jean Écalle.** *Les fonctions résurgentes.* Publ. Math. Orsay, 1981–1985. Résurgence theory
+  underlying the Écalle–Voronin horn-map invariants used by parabolic renormalization.
 
 <a id="bourke-random-tile"></a>
 

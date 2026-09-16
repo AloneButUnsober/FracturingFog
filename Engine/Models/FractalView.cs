@@ -132,6 +132,7 @@ namespace FracturingFog.Models
             {FractalType.Magnet2, "Magnet 2" },
             {FractalType.Glynn, "Glynn" },
             {FractalType.Logistic, "Logistic" },
+            {FractalType.Lyapunov, "Lyapunov" },
             {FractalType.Halley, "Halley" },
             {FractalType.Secant, "Secant" },
             {FractalType.Spider, "Spider" },

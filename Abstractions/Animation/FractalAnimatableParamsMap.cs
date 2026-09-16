@@ -60,6 +60,9 @@ public static class FractalAnimatableParamsMap
         FractalType.Logistic
             => _logisticList,
 
+        FractalType.Lyapunov
+            => _lyapunovList,
+
         // ── Procedural / chaos-game ───────────────────────────────────────
         FractalType.IFS
             => _ifsList,
@@ -192,6 +195,13 @@ public static class FractalAnimatableParamsMap
         new("NewtonExponent", AnimatableParamKind.ScalarInt, Min: 2, Max: 8),
         new("NewtonRelaxation", AnimatableParamKind.ScalarDouble, Min: 0.1, Max: 2.0),
         new("SecantInitialOffset", AnimatableParamKind.Complex, Min: 0.05, Max: 1.5),
+    };
+
+    private static readonly AnimatableParamDescriptor[] _lyapunovList =
+    {
+        new("LyapunovWarmup", AnimatableParamKind.ScalarInt, Min: 0, Max: 5000,
+            Cost: AnimatableParamCost.Expensive,
+            Notes: "Re-runs the full per-pixel forced orbit each tick — animate slowly."),
     };
 
     private static readonly AnimatableParamDescriptor[] _logisticList =

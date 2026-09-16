@@ -339,10 +339,16 @@ public sealed class EscapeTimeCalculator : Interefaces.IFractalCalculator, Inter
                 CalculatePhoenix(new PhoenixKernel(FractalParameters.PhoenixP.Real, FractalParameters.PhoenixP.Imaginary), ct);
                 break;
             case FractalType.Magnet1:
-                DispatchByColorMap(new MagnetOneKernel(), ct);
+                if (FractalParameters.MagnetConvergence)
+                    CalculateMagnet(new MagnetOneKernel(), ct);
+                else
+                    DispatchByColorMap(new MagnetOneKernel(), ct);
                 break;
             case FractalType.Magnet2:
-                DispatchByColorMap(new MagnetTwoKernel(), ct);
+                if (FractalParameters.MagnetConvergence)
+                    CalculateMagnet(new MagnetTwoKernel(), ct);
+                else
+                    DispatchByColorMap(new MagnetTwoKernel(), ct);
                 break;
             case FractalType.Glynn:
                 DispatchByColorMap(new GlynnKernel(FractalParameters.GlynnC.Real, FractalParameters.GlynnC.Imaginary), ct);
@@ -1091,6 +1097,139 @@ public sealed class EscapeTimeCalculator : Interefaces.IFractalCalculator, Inter
 
     private void CalculateSpider(SpiderKernel kernel, CancellationToken ct)
         => CalculateSpider(kernel, ColorMap, ct);
+
+    // ── Magnet convergence path (#852) ───────────────────────────────────────
+    //
+    // Magnet 1 / 2 (Pickover) are renormalizations of the Ising partition
+    // function with TWO attractors: the fixed point z = 1 and infinity. Plain
+    // escape-time colouring (the generic CalculateCore path) only records the
+    // → ∞ basin; every pixel in the z = 1 basin never trips the bailout, runs
+    // to maxIter, and is painted flat InSetColor — throwing away the basin
+    // boundary that is the family's whole visual interest.
+    //
+    // This path adds a per-iteration convergence test |z − 1| < ε alongside the
+    // escape test and shades converged pixels by a smooth convergence count
+    // (log-interpolated crossing of ε) through the SAME active palette as the
+    // escaped pixels — the classic Magnet look, visible with every theme, no
+    // interior-aware theme required. Escaped pixels keep standard escape-time
+    // colouring; a pixel that neither escapes nor converges within maxIter is
+    // the only true in-set case and stays InSetColor.
+    //
+    // Generic over the kernel so Magnet1 (MagnetOneKernel) and Magnet2
+    // (MagnetTwoKernel) share one JIT-specialised loop; both maps attract to
+    // z = 1 so the same target works for both. No closed-form dz/dc is tracked
+    // (the kernels leave dr/di at 0), so distance/normal are flat — matching
+    // the pre-#852 Magnet behaviour.
+    private void CalculateMagnet<TKernel, TMap>(TKernel kernel, TMap colorMap, CancellationToken ct)
+        where TKernel : struct, IFractalKernel
+        where TMap : IColorMap
+    {
+        double scale = (3.5 / Math.Max(Width, Height)) / Zoom;
+        int maxIt = MaxIterations;
+        int[]? perRow = PerRowMaxIter;
+        bool useTileCap = perRow != null && perRow.Length >= Height;
+        double centerX = CenterX;
+        double centerY = CenterY;
+        int width = Width;
+        int height = Height;
+        double bailout2 = kernel.BailoutRadius2;
+        double convEps = Math.Max(1e-12, FractalParameters.MagnetConvergenceEpsilon);
+        double logEps = Math.Log(convEps);
+        var warp = MakeWarp(scale, width, height);
+
+        _po.CancellationToken = ct;
+        var po = _po;
+        ParallelForRows(0, height, po, y =>
+        {
+            if (ct.IsCancellationRequested) return;
+            int rowMaxIt = useTileCap ? perRow![y] : maxIt;
+            if (rowMaxIt <= 0) rowMaxIt = maxIt;
+            double cyRow = centerY + (y - height * 0.5) * scale;
+            int rowBase = y * width;
+            for (int x = 0; x < width; x++)
+            {
+                double ox = (x - width * 0.5) * scale;
+                double cx = centerX + ox;
+                double cy = cyRow;
+                if (warp.Active)
+                {
+                    double oy = (y - height * 0.5) * scale;
+                    FractalDomainWarp.Apply(ref ox, ref oy, warp.HalfSpan, warp.Strength, warp.Frequency);
+                    cx = centerX + ox;
+                    cy = centerY + oy;
+                }
+                int idx = rowBase + x;
+
+                kernel.InitState(cx, cy, out double zr, out double zi, out double dr, out double di);
+
+                // d = |z − 1| tracked across steps for the log-interp crossing.
+                double dCur = Math.Sqrt((zr - 1.0) * (zr - 1.0) + zi * zi);
+                double dPrev = dCur;
+                int iter;
+                bool converged = false;
+                for (iter = 0; iter < rowMaxIt; iter++)
+                {
+                    if (zr * zr + zi * zi >= bailout2) break;         // → ∞ basin
+                    if (dCur <= convEps) { converged = true; break; } // → 1 basin
+                    kernel.Step(ref zr, ref zi, ref dr, ref di, cx, cy);
+                    dPrev = dCur;
+                    dCur = Math.Sqrt((zr - 1.0) * (zr - 1.0) + zi * zi);
+                }
+
+                if (converged)
+                {
+                    // Smooth convergence count: log-interpolate where the orbit
+                    // crossed ε between step iter−1 (dPrev > ε) and iter (dCur ≤ ε).
+                    float smooth = iter;
+                    if (iter > 0 && dPrev > convEps)
+                    {
+                        double logPrev = Math.Log(dPrev);
+                        double logCur = Math.Log(Math.Max(dCur, 1e-300));
+                        double denom = logPrev - logCur;
+                        double frac = denom > 1e-12 ? (logPrev - logEps) / denom : 0.0;
+                        if (frac < 0.0) frac = 0.0; else if (frac > 1.0) frac = 1.0;
+                        smooth = (float)((iter - 1) + frac);
+                    }
+                    IterationBuffer[idx] = iter;
+                    SmoothBuffer[idx] = smooth;
+                    DistanceBuffer[idx] = 0f;
+                    NormalXBuffer[idx] = 0f;
+                    NormalYBuffer[idx] = 0f;
+                    float fzr = (float)zr, fzi = (float)zi;
+                    FinalZrBuffer[idx] = fzr;
+                    FinalZiBuffer[idx] = fzi;
+                    FinalDrBuffer[idx] = 0f;
+                    FinalDiBuffer[idx] = 0f;
+                    if (GradientColorMap.DitherEnabled)
+                    {
+                        int dy = idx / Width;
+                        GradientColorMap.SetDitherForPixel(idx - dy * Width, dy);
+                    }
+                    ColorBuffer[idx] = (uint)colorMap.Map(smooth, 0f, maxIt, 0f, 0f, fzr, fzi, 0f, 0f);
+                }
+                else
+                {
+                    // Escaped (iter < maxIt) or true in-set (iter == maxIt) —
+                    // standard escape-time handling. No closed-form dz/dc.
+                    IterationBuffer[idx] = iter;
+                    FillAuxAndColor(idx, iter, maxIt, zr, zi, 0, 0, colorMap);
+                }
+            }
+            // Phase 2.1 in-set rewrite.
+            if (rowMaxIt < maxIt)
+            {
+                for (int xx = 0; xx < width; xx++)
+                {
+                    if (IterationBuffer[rowBase + xx] >= rowMaxIt)
+                        IterationBuffer[rowBase + xx] = maxIt;
+                }
+            }
+        });
+    }
+
+    private void CalculateMagnet<TKernel>(TKernel kernel, CancellationToken ct)
+        where TKernel : struct, IFractalKernel
+        => CalculateMagnet(kernel, ColorMap, ct);
 
     // ── Shared aux + color fill ──────────────────────────────────────────────
 

@@ -1,0 +1,396 @@
+# Theoretical & Frontier Fractal R&D
+
+**Status:** living research document. **Owner:** ABUDev. **Started:** 2026-09-15.
+
+This is the standing tracking doc for *research-frontier* fractal mathematics — types and
+techniques that are **under-rendered** (the math is known but rendering is hard), **theoretical**
+(little concrete reference imagery, so implementation is a validation challenge), or represent an
+**envelope** worth pushing past what Fracturing Fog already does.
+
+It is deliberately separate from [Fractal-Expansion-Roadmap.md](../Fractal-Expansion-Roadmap.md),
+which tracked the *mainstream* expansion set (Magnet, Glynn, Halley, Mandelbox, KIFS, quaternion,
+Apollonian, DLA, Flame, …) — all **19 slices of that roadmap are shipped**. This doc picks up where
+that one stops: the stuff nobody renders well, or renders at all.
+
+Canonical task list lives in the **GitHub issues**, per project convention
+([CLAUDE.md](../../CLAUDE.md)). This doc is the design/bibliography backing; issues are the truth for
+status. Link both ways.
+
+- Epic (best-bets slice): **#850**. Children: Lyapunov **#851**, Magnet convergence colour **#852**,
+  split-complex/coquaternion **#853**, transcendental Julia **#854**, Kleinian generalization design
+  doc **#855**.
+- Kleinian generalization **requires its own design doc + tracking issue (#855)** before any code
+  (see §5.4).
+
+---
+
+## 0. Two standing rules for this document
+
+### Rule A — every candidate gets a *toolchain reach* analysis
+
+Whenever an entry here is researched, analyzed, or considered for implementation, it MUST also record
+**how the two authoring DSLs could be extended to reach it**:
+
+1. **CalcGen / DSL** (`CalculatorGen/`, User Equation, Sandbox) — can the *fractal iteration* be
+   expressed or the generator extended? Note the shape the map must fit (`f(z, c)`), what new
+   primitives/number-types/escape-criteria would be needed, and whether it is
+   scalar-only or can ride the 5-path pipeline (scalar / AVX2 / perturbation / BLA / ILGPU).
+   See [CalculatorGen-Architecture.md](CalculatorGen-Architecture.md),
+   [CalculatorGen-Authoring.md](CalculatorGen-Authoring.md).
+2. **ColorGen / Color Theme Editor** (`ColorGen/`, `UI.Avalonia/.../ColorGenEditor*`,
+   the theme editor) — can the *colouring* the type needs be authored as a theme? Note what new
+   per-pixel **inputs** the calculator must surface (mirroring the billiard `gateId`/`bounceCount`
+   split, or the orbit two-type split), whether a new `ColorThemeKind` (Categorical, Orbit, …) is
+   implied, and whether it is interpreter-only or can generate a GPU palette.
+   See [ColorTheme-Enhancement-Roadmap.md](ColorTheme-Enhancement-Roadmap.md).
+
+A candidate with no toolchain-reach analysis is **not ready to schedule**. The point: new math should,
+wherever possible, *widen the authoring surface* — not just add one more hardcoded calculator.
+
+### Rule B — sources are load-bearing
+
+Every formula, algorithm, and claim traces to a citation in
+[Resources-Bibliography.md](../Resources-Bibliography.md). Frontier math is exactly where an
+unverifiable claim does the most damage (few reference images to sanity-check against). If a source
+is not yet in the bibliography, add a one-line stub there and cite it — the cost of a stub is zero.
+New bibliography anchors introduced by this doc are collected in §7.
+
+---
+
+## 1. Reconciliation — what already exists (do not re-scope)
+
+Frontier ideas keep colliding with things FF *already ships*. Checked against the code
+2026-09-15:
+
+| Idea | State in FF | Where |
+|---|---|---|
+| Magnet M1 / M2 (Pickover rational maps) | **Shipped** (escape-time colour) | `MagnetOneKernel`/`MagnetTwoKernel`, `EscapeTimeCalculator` |
+| Glynn (z^1.5 + c) | **Shipped** | `GlynnKernel` |
+| Logistic / Feigenbaum bifurcation | **Shipped** (density histogram) | `LogisticCalculator` |
+| Halley / Secant / Nova / Spider | **Shipped** | respective kernels |
+| Kleinian 3D limit set | **Shipped, fixed tetrahedral 4-sphere preset** | `KleinianCalculator` (+GPU, +orbit-trap) |
+| Quaternion Julia / Mandelbrot | **Shipped** | `QuatJulia`/`QuatMandelbrot` |
+| Bicomplex (tessarine) Mandelbrot | **Shipped** | `BicomplexMandelbrotCalculator` |
+| Pickover stalks / orbit traps | **Shipped as colouring** (F13 OrbitTrap kind) | theme system, not a fractal |
+| Escape-angle / Böttcher / binary decomposition | **Shipped as colouring** | `ArgumentDecomposition`/`FieldLines`/`BinaryDecomposition` themes |
+| Precision-sensitivity field | **Shipped** | `PrecisionFieldCalculator` (#628) |
+
+**Implication:** the genuinely-open frontier is narrower than a naïve list suggests. The live gaps are
+catalogued in §2–§4. Magnet exists but is coloured as plain escape-time — a real *colouring* gap
+(§2.2). Kleinian exists but only as one fixed group — a real *generalization* gap (§5.3).
+
+---
+
+## 2. Bucket I — Under-rendered (math known, rendering is the barrier)
+
+These have solid published math but are rare in the wild because the renderer is not a standard
+escape-time loop, or the natural colouring differs from iteration count.
+
+### 2.1 Lyapunov (Markus–Lyapunov) fractals — **#1 best-bet, in progress**
+
+**Math.** Fix a periodic string over {A, B} (e.g. `AABAB`). At each pixel `(a, b)` iterate the
+logistic map `x_{n+1} = r_n · x_n · (1 − x_n)`, where `r_n` cycles A→a, B→b through the string. Colour
+by the **Lyapunov exponent**
+
+  λ = lim (1/N) Σ ln | r_n · (1 − 2·x_n) |.
+
+λ < 0 → stable/periodic (the "Zircon Zity" ridged solids); λ > 0 → chaotic. The image is in the
+`(a, b) ∈ [0,4]²` parameter plane, *not* dynamical z-space.
+
+**Render approach.** Per-pixel: warm-up ~`MaxIter/2` to settle onto the attractor, then accumulate
+the log-derivative sum over the plot window. Cheap, embarrassingly parallel, SP double is plenty. The
+[`LogisticCalculator`](../../Engine/Calculators/LogisticCalculator.cs) is the structural template
+(same map, per-column iteration) but Lyapunov is 2D-per-pixel and emits a *signed scalar*, not a
+density histogram.
+
+**Why under-rendered:** not escape-time; needs a signed-exponent colour axis (diverging palette
+around λ=0), and long warm-up for convergence. Almost nobody ships an interactive one.
+
+**Toolchain reach (Rule A):**
+- *CalcGen/DSL:* poor fit for the **iteration** generator (the map is a 1D real recurrence with a
+  string-scheduled parameter, not `f(z, c)` over ℂ). Ships as a dedicated calculator like Logistic.
+  A *future* DSL angle: expose the {A,B}-string and the base map (`logistic`, `sine`, `Gauss`) as a
+  small parameter grammar so users can author variant Lyapunov sequences without code — track
+  separately, not a blocker.
+- *ColorGen/Color Theme:* **this is where the interesting reach is.** Lyapunov needs a new per-pixel
+  input — the **signed Lyapunov exponent λ** — surfaced to the colour map (mirrors how billiard
+  surfaced `gateId`; how PrecisionField rode `SmoothBuffer`). Cleanest first cut: **map λ onto the
+  existing `SmoothBuffer`** (negative→one end, positive→other) so *every* existing 2D theme + Relief
+  works unchanged, exactly like PrecisionField did. Then a follow-up ColorGen input `lyapunov`
+  (signed) unlocks purpose-built diverging themes (stable ridges vs chaotic sea). Register the
+  signed-λ field in `FractalCapabilities` (histogram-friendly).
+
+**Sources:** Markus & Hess 1989; Dewdney *Scientific American* 1991 (Mario Markus's images);
+A. Dewdney "Leaping into Lyapunov space." See §7 for anchors.
+
+**Status:** implementing this session. Tracking issue: **#851**.
+
+### 2.2 Magnet fractals — proper convergence colouring — **#2 best-bet, in progress**
+
+**Gap.** `Magnet1`/`Magnet2` render (rational Pickover maps, pole-clamped) but are coloured as **plain
+escape-time**. The mathematically-honest Magnet image colours by **convergence to the fixed point
+z = 1** (the renormalization-of-Ising fixed point), not by escape. The two attractors (→1 and →∞) mean
+standard escape colouring throws away half the structure — the basin boundary around z=1.
+
+**Render approach.** Add a per-iteration convergence test `|z − 1| < ε` alongside the `|z|² > bailout`
+escape test. Emit a distinct outcome (converged-to-1 vs escaped vs max-iter) + a smooth convergence
+count. This is the natural interior treatment the capability map already advertises
+(`SuppliesInterior` is set for Magnet1/2).
+
+**Toolchain reach (Rule A):**
+- *CalcGen/DSL:* the map already fits the kernel shape; the *convergence-to-a-root* test is a new
+  escape-criterion primitive. If generalized (arbitrary target, arbitrary ε) it becomes reusable for
+  any rational/Newton-like map in the generator — worth a `ConvergenceBailout` concept in CalcGen.
+- *ColorGen/Color Theme:* needs a **convergence** colouring path analogous to Newton basins. The
+  clean design: emit "converged" as an interior outcome and route it through the existing
+  interior-aware colour map (`IInteriorAwareColorMap.MapInterior`) with the smooth convergence count
+  as the shade — no new theme kind required, reuses the Newton/interior machinery. A ColorGen input
+  `convergedTo`/`convergenceCount` would let themes distinguish the two attractors explicitly.
+
+**Sources:** Pickover *Computers, Pattern, Chaos and Beauty* 1990; the Magnet maps derive from the
+renormalization of the Ising model partition function (Yang–Lee). See §7.
+
+**Status:** implementing this session (colouring enhancement, not a new type). Tracking issue: **#852**.
+
+### 2.3 Kleinian / Schottky limit sets in **2D** (Indra's Pearls)
+
+**Math.** Limit set of a Kleinian group generated by Möbius transforms — the classic *Indra's Pearls*
+imagery. Not escape-time: enumerate group words breadth-first with a depth/tiling stop, plot the
+limit-set points (fixed points of long words, or forward orbits under the generators).
+
+**Render approach.** Combinatorial word enumeration (DFS/BFS over the generator alphabet) with
+repetition/backtracking avoidance; the Maskit/Riley/Grandma's-recipe parameterization picks the
+group. Rare because the renderer is *combinatorial*, not iterative — no per-pixel loop.
+
+**Toolchain reach:** neither DSL reaches this today (both assume per-pixel iteration). Would need a
+new "generator-word" renderer path (closest existing analogue: the IFS chaos-game / L-system path).
+Colouring: by word length / generator parity — a Categorical `ColorThemeKind` (billiard precedent).
+
+**Sources:** Mumford, Series & Wright *Indra's Pearls* 2002. See §7.
+
+**Status:** open. Candidate for the epic. **Relates to** the 3D Kleinian generalization (§5.3).
+
+### 2.4 Biomorphs (Pickover) — colouring, ships as a theme not a type
+
+**Math.** Escape test on `|Re(z)|` **OR** `|Im(z)|` separately (rather than modulus), producing
+organism-like "biomorphs." Pure colouring/bailout variant on any existing escape-time family.
+
+**Toolchain reach:** *ColorGen* territory — it is a **bailout-shape** decision, exactly the kind of
+thing a ColorGen input (`finalZr`, `finalZi`, already surfaced) can express. Likely shippable as a
+theme + an optional per-axis bailout toggle on `FractalParameters`, no new calculator.
+
+**Sources:** Pickover 1986 (*Computers and the Imagination*). See §7. **Status:** open, cheap.
+
+---
+
+## 3. Bucket II — Theoretical (thin reference imagery, validation is the risk)
+
+Real published theory, near-zero faithful renders. Implementation risk is *correctness* — few images
+to validate against.
+
+### 3.1 Transcendental / entire-function dynamics — `λ·sin z`, `λ·exp z`, `λ·cos z`
+
+**Math.** Julia sets of entire transcendental maps. Rich Fatou/Julia theory (Baker domains, Cantor
+bouquets / "hairs"), but **no escape radius** — the essential singularity at ∞ means `|z|` is not a
+membership test. Bound instead by **imaginary part** (for `exp`/`sin`) or a fast-escaping-set
+criterion.
+
+**Toolchain reach:**
+- *CalcGen/DSL:* the User Equation DSL already parses `sin`/`exp`/`cos`; memory notes transcendental
+  maps "want a SMALL escape radius." The genuine extension is a **non-modulus bailout** (bail on
+  `|Im z| > R`) selectable in the DSL/generator — a new escape-criterion primitive reusable across
+  transcendental maps. This is the single most reusable piece of work in this bucket.
+- *ColorGen/Color Theme:* the "hairs" are thin — benefits from the same escape-angle / decomposition
+  themes already shipped; no new input strictly needed, but a `fastEscaping` boolean input would let
+  themes paint the escaping-set structure directly.
+
+**Sources:** Devaney's work on `λ exp z`, `λ sin z` (1984–1990s); Fatou 1926 (entire maps). §7.
+
+**Status:** open. Strong "new here" candidate; the non-modulus-bailout work is the crux.
+
+### 3.2 Higher/hypercomplex & split algebras — split-complex / coquaternion Mandelbrot
+
+**Math.** Iterate `z² + c` in algebras beyond ℂ/ℍ/tessarine. **Split-complex** (`j² = +1`) gives a
+hyperbolic-rotation "Mandelbrot"; **coquaternion** (split-quaternion) swaps the product table. Almost
+no reference imagery for split algebras specifically → genuine novelty, but validation is by
+construction (invariants: zero-divisor null-cone seams).
+
+**Toolchain reach:**
+- *CalcGen/DSL:* needs a pluggable **number type / product table** in the generator. Today Bicomplex
+  is inlined in its calculator; a generalized "hypercomplex algebra descriptor" (basis signature +
+  product table) would let CalcGen emit *any* of these from one code path — high-leverage.
+- *ColorGen:* rides the existing 3D DE/normal themes (same as Bicomplex). No new colouring input.
+
+**Sources:** Rochon (bicomplex dynamics) 2000s; Norton (quaternion) 1982. §7. Roadmap
+[Fractal-Expansion-Roadmap.md](../Fractal-Expansion-Roadmap.md) §C.3 already flags the
+split-complex/coquaternion variant as deferred follow-up — this doc adopts it.
+
+**Status:** open, reuses the Bicomplex raymarcher with a swapped product table. Epic candidate.
+
+### 3.3 Positive-area Julia sets & near-parabolic explosions (Buff–Chéritat)
+
+**Math.** Julia sets of positive Lebesgue measure exist (Buff–Chéritat 2012) — a landmark theorem.
+Faithful rendering is essentially unattempted because the fine structure is measure-theoretic, not
+geometric; the sets are built via *near-parabolic* perturbations. Directly adjacent to §5 (parabolic
+implosion).
+
+**Toolchain reach:** far beyond current DSLs (needs controlled near-parabolic perturbation +
+Écalle–Voronin machinery — see §5). Documented here as a *theory pointer*, not a schedulable item.
+
+**Sources:** Buff & Chéritat, *Annals of Math* 2012. §7. **Status:** theory pointer only.
+
+### 3.4 IFS with condensation / V-variable superfractals & fractal tops
+
+**Math.** Barnsley's *superfractals* (V-variable: random selection among a finite set of fractals) and
+**fractal tops** (colour an IFS attractor by the *address map* — the deterministic itinerary — rather
+than chaos-game density). Solid theory, near-zero renders because tops need the address function, not
+the chaos game.
+
+**Toolchain reach:** extends the existing IFS/Flame chaos-game path with (a) a code-tree of maps
+(V-variable) and (b) a top-function accumulator. *ColorGen:* the address string is a natural
+**Categorical** colouring input (billiard precedent).
+
+**Sources:** Barnsley *Superfractals* 2006; Barnsley "Fractal tops." §7. **Status:** open, niche.
+
+### 3.5 Statistical / random-conformal — multifractal cascades, SLE, LQG
+
+**Math.** Multiplicative cascades / canonical multifractal measures (Mandelbrot), Schramm–Loewner
+Evolution curves, Liouville Quantum Gravity surfaces. Current research math, gorgeous, almost no
+*artistic* renders. Biggest "show the world something new" payoff, highest math cost.
+
+**Toolchain reach:** entirely new renderers (measure accumulation for cascades; stochastic ODE
+integration for SLE). No DSL reach. *ColorGen:* density/measure themes (Buddhabrot-like).
+
+**Sources:** Mandelbrot (cascades) 1974; Schramm (SLE) 2000; Duplantier–Sheffield (LQG) 2011. §7.
+**Status:** long-horizon research pointers.
+
+---
+
+## 4. Bucket III — Envelopes to push (axes, not single types)
+
+The generalization directions the above cluster into. Each is a *capability* that unlocks a family.
+
+| Envelope | Current FF ceiling | Push to |
+|---|---|---|
+| **Algebra** | ℂ, ℍ, tessarine (inlined) | split-complex, coquaternion, octonion, dual numbers — via a pluggable **product-table descriptor** (§3.2) |
+| **Map class** | polynomial + a few rational (Magnet) | transcendental (§3.1), meromorphic — via a **non-modulus / convergence bailout** primitive (§2.2, §3.1) |
+| **Colouring target** | escape count, orbit trap, escape angle, basins | **Lyapunov exponent** (§2.1), convergence-to-root (§2.2), address maps / fractal tops (§3.4), distance-to-limit-set |
+| **Object type** | attractors + parameter sets | **limit sets** (§2.3/§5.3), parameter-space puzzles (MLC), measures (§3.5) |
+| **Precision regime** | deep-zoom perturbation (accuracy) | **near-parabolic implosion**, where perturbation theory breaks *by design* (§5) |
+
+The two highest-leverage *toolchain* investments (each unlocks multiple types):
+1. **Non-modulus / convergence bailout primitive** in CalcGen/DSL → transcendental + Magnet + Newton-ish.
+2. **Pluggable algebra/product-table descriptor** in CalcGen → every hypercomplex variant from one path.
+
+---
+
+## 5. Flagship far-future endeavour — **Parabolic implosion**
+
+> User's explicit long-horizon interest. This section is the north star, not a near-term slice.
+
+### 5.1 What it is
+
+At a **parabolic parameter** (e.g. `c = 1/4`, the root of the main cardioid, where the fixed point has
+multiplier exactly 1), the Julia set is *discontinuous* under perturbation: nudge `c` off the
+parabolic value and the Julia set **explodes** — it does not vary continuously. Rendering the
+*implosion* means animating `c → c₀ + εe^{iθ}` and watching the set discontinuously reorganize. The
+controlling objects are the **Écalle–Voronin horn maps** and **Lavaurs maps** (parabolic
+renormalization); Lavaurs's theorem describes the limits.
+
+### 5.2 Why it is a genuine frontier for FF
+
+- Every FF deep-zoom tool is built to make perturbation theory *accurate* (perturbation + series
+  approximation + rebasing, DD/QD). Parabolic implosion is the regime where linear perturbation
+  **fails by design** — the interesting content is precisely the breakdown. It inverts the engine's
+  usual goal ([[project_detail_depth_limit]], [[project_wave214_qdfloor]] are about *avoiding* this;
+  here we *want* it).
+- Near-zero faithful artistic renders exist → maximum novelty.
+- Directly adjacent to positive-area Julia sets (§3.3), which are *constructed* via near-parabolic
+  perturbation — a shared machinery.
+
+### 5.3 What it would take (research spikes, not a slice yet)
+
+1. **High-accuracy near-parabolic orbit integration** — the whole point is behaviour as the
+   multiplier → 1; needs careful accuracy near the parabolic fixed point (FF has DD/QD, a real asset).
+2. **Écalle–Voronin / horn-map** implementation — the analytic invariants; steep math, essentially a
+   research project. Validate against Lavaurs's limit theorem.
+3. **Implosion animation hook** — animate `ε, θ` and render the set family; the scene/animation engine
+   already supports parameter animation (enum-param hook precedent, #632), so the *animation* plumbing
+   largely exists; the *math* is the cost.
+
+**Toolchain reach (Rule A):**
+- *CalcGen/DSL:* out of reach — this is not an `f(z, c)` per-pixel loop but renormalization-operator
+  machinery. It would ship as a bespoke research calculator, possibly in its own module.
+- *ColorGen/Color Theme:* the *output* (a Julia set at a perturbed parameter) colours with existing
+  Julia themes; the novelty is temporal (the implosion animation), so the reach is into the
+  **animation/scene** system, not ColorGen. A "phase θ" input could drive a cyclic palette.
+
+**Sources:** Douady (parabolic implosion) 1994; Lavaurs 1989 (thesis); Shishikura (parabolic
+renormalization, Hausdorff dimension of ∂M = 2) 1998; Écalle (résurgence). §7.
+
+**Status:** **far-future.** Not scheduled. Captured so the research thread survives across sessions.
+Any move here starts with a **dedicated design doc + spike issue**, never a direct implementation.
+
+### 5.4 Kleinian 3D generalization (near-term epic item) — **design doc required**
+
+Distinct from §2.3 (2D Indra's Pearls). The shipped `KleinianCalculator` is **one fixed tetrahedral
+4-sphere group**. Generalizing it (user-editable inversion-sphere list, alternate Schottky
+configurations, full Möbius-group composition, true analytic DE vs the inversion-scale heuristic — the
+follow-ups already logged in [Fractal-Expansion-Roadmap.md](../Fractal-Expansion-Roadmap.md) §B.4) is
+an epic item **gated on its own design doc + tracking issue** before any code, given the combinatorial
+group-parameterization surface. Do not extend `KleinianCalculator` ad hoc.
+
+---
+
+## 6. Working method (per candidate, before it becomes an issue)
+
+1. Confirm it is **not already shipped** (§1 — check the code, not memory).
+2. Write the **math + render approach** with citations (Rule B).
+3. Write the **toolchain-reach analysis** (Rule A: CalcGen/DSL *and* ColorGen/Color Theme).
+4. Decide: dedicated calculator vs DSL/generator extension vs colouring-only.
+5. File the **GitHub issue(s)**; link doc ↔ issue both ways; if it is Kleinian-generalization or
+   parabolic-implosion class, the issue is a **design-doc/spike**, not an implementation.
+6. Follow the **new-2D-calculator registration checklist** (~13 sites; template = RandomTile /
+   ChaoticBilliard) when a new `FractalType` is genuinely warranted.
+
+---
+
+## 7. Bibliography anchors introduced by this doc
+
+These are added as stubs to [Resources-Bibliography.md](../Resources-Bibliography.md) under the
+appropriate sections; flesh out on the next pass. Cite inline from the sections above.
+
+- **Markus & Hess 1989** — Mario Markus, Benno Hess. *Lyapunov exponents of the logistic map with
+  periodic forcing.* Computers & Graphics 13(4), 1989. Origin of the Lyapunov/"Zircon Zity" fractal.
+- **Dewdney 1991** — A. K. Dewdney. *Leaping into Lyapunov space.* Scientific American, Sept 1991.
+  Popularized the A/B-string Lyapunov images.
+- **Pickover 1990** — Clifford A. Pickover. *Computers, Pattern, Chaos and Beauty.* St. Martin's, 1990.
+  Magnet maps + biomorphs (already partly cited for attractors).
+- **Pickover 1986 (biomorphs)** — C. A. Pickover. *Biomorphs: computer displays of biological forms
+  generated from mathematical feedback loops.* Computers and the Imagination.
+- **Mumford, Series & Wright 2002** — *Indra's Pearls: The Vision of Felix Klein.* Cambridge UP.
+  Kleinian-group limit sets (Grandma's recipe, Maskit slice).
+- **Devaney (transcendental)** — Robert L. Devaney. *Exploding Julia sets* / work on `λ exp z`,
+  `λ sin z`, 1984–1990s. Entire-map Julia sets, Cantor bouquets.
+- **Rochon (bicomplex)** — Dominic Rochon. *A generalized Mandelbrot set for bicomplex numbers.*
+  Fractals, 2000. Basis for hypercomplex/split-algebra iteration.
+- **Barnsley 2006** — Michael Barnsley. *Superfractals.* Cambridge UP. V-variable IFS + fractal tops.
+- **Buff & Chéritat 2012** — X. Buff, A. Chéritat. *Quadratic Julia sets with positive area.* Annals
+  of Mathematics 176(2), 2012.
+- **Mandelbrot 1974 (cascades)** — B. Mandelbrot. *Intermittent turbulence…* J. Fluid Mech.
+  Multiplicative cascades / multifractal measures.
+- **Schramm 2000 (SLE)** — Oded Schramm. *Scaling limits of loop-erased random walks…* Israel J.
+  Math. Schramm–Loewner Evolution.
+- **Duplantier & Sheffield 2011 (LQG)** — *Liouville quantum gravity and KPZ.* Inventiones.
+- **Douady 1994 / Lavaurs 1989 / Shishikura 1998** — parabolic implosion, Lavaurs maps, and the
+  Hausdorff dimension of ∂M = 2 (parabolic renormalization). The parabolic-implosion literature.
+- **Écalle** — Jean Écalle. *Les fonctions résurgentes.* Résurgence theory underlying horn maps.
+
+---
+
+## 8. Change log
+
+- **2026-09-15** — Doc created. Reconciled frontier ideas against shipped code (§1); catalogued
+  Buckets I–III; set Lyapunov (§2.1) + Magnet convergence-colour (§2.2) as the two in-progress
+  best-bets; flagged parabolic implosion (§5) as flagship far-future; recorded Kleinian-generalization
+  design-doc requirement (§5.4). Bibliography stubs (§7) queued for `Resources-Bibliography.md`.

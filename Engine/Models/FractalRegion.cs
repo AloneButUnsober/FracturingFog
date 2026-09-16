@@ -456,6 +456,10 @@ namespace FracturingFog.Models
         [JsonIgnore(Condition = OmitNull)] public int? DlaSeed { get; set; }
         [JsonIgnore(Condition = OmitNull)] public double? LogisticSeed { get; set; }
         [JsonIgnore(Condition = OmitNull)] public int? LogisticBurnIn { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public string? LyapunovSequence { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public int? LyapunovWarmup { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public bool? MagnetConvergence { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public double? MagnetConvergenceEpsilon { get; set; }
         [JsonIgnore(Condition = OmitNull)] public int? RandomTileSeed { get; set; }
         [JsonIgnore(Condition = OmitNull)] public string? IFSPresetName { get; set; }
         [JsonIgnore(Condition = OmitNull)] public string? LSystemPresetName { get; set; }
@@ -501,6 +505,18 @@ namespace FracturingFog.Models
                 {
                     SpiderCDecay = p.SpiderCDecay,
                 },
+                // Magnet 1/2 (#852): persist the convergence-colouring toggle +
+                // epsilon only when they differ from the defaults (on / 1e-4),
+                // so a default-look region still snapshots to null (base block
+                // stays lean; the #253 warp can still ride along below).
+                FractalType.Magnet1 or FractalType.Magnet2
+                    when !p.MagnetConvergence || p.MagnetConvergenceEpsilon != 1e-4
+                    => new RegionFractalParams
+                    {
+                        MagnetConvergence = p.MagnetConvergence ? null : (bool?)false,
+                        MagnetConvergenceEpsilon = p.MagnetConvergenceEpsilon != 1e-4
+                            ? p.MagnetConvergenceEpsilon : (double?)null,
+                    },
                 // Newton-family basins share NewtonExponent + NewtonRelaxation.
                 FractalType.Newton or FractalType.Nova or FractalType.Halley => new RegionFractalParams
                 {
@@ -619,6 +635,11 @@ namespace FracturingFog.Models
                 {
                     LogisticSeed = p.LogisticSeed,
                     LogisticBurnIn = p.LogisticBurnIn,
+                },
+                FractalType.Lyapunov => new RegionFractalParams
+                {
+                    LyapunovSequence = p.LyapunovSequence,
+                    LyapunovWarmup = p.LyapunovWarmup,
                 },
                 FractalType.RandomTile => new RegionFractalParams
                 {
@@ -767,6 +788,10 @@ namespace FracturingFog.Models
             if (DlaSeed.HasValue) p.DlaSeed = DlaSeed.Value;
             if (LogisticSeed.HasValue) p.LogisticSeed = LogisticSeed.Value;
             if (LogisticBurnIn.HasValue) p.LogisticBurnIn = LogisticBurnIn.Value;
+            if (!string.IsNullOrEmpty(LyapunovSequence)) p.LyapunovSequence = LyapunovSequence;
+            if (LyapunovWarmup.HasValue) p.LyapunovWarmup = LyapunovWarmup.Value;
+            if (MagnetConvergence.HasValue) p.MagnetConvergence = MagnetConvergence.Value;
+            if (MagnetConvergenceEpsilon.HasValue) p.MagnetConvergenceEpsilon = MagnetConvergenceEpsilon.Value;
             if (RandomTileSeed.HasValue) p.RandomTileSeed = RandomTileSeed.Value;
             if (!string.IsNullOrEmpty(IFSPresetName)) p.IFSPresetName = IFSPresetName;
             if (!string.IsNullOrEmpty(LSystemPresetName)) p.LSystemPresetName = LSystemPresetName;
