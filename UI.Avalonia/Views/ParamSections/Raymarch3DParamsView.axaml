@@ -219,6 +219,33 @@
                            Value="{Binding BicomplexCameraDistance, Mode=TwoWay}" Margin="0,2" />
         </Grid>
 
+        <!-- Coquaternion (split-quaternion) Mandelbrot -->
+        <Grid IsVisible="{Binding IsCoquaternion}"
+              ColumnDefinitions="160,*"
+              RowDefinitions="Auto,Auto,Auto,Auto,Auto">
+            <TextBlock Grid.Row="0" Grid.Column="0" Text="Slice w (k):" VerticalAlignment="Center" />
+            <NumericUpDown Grid.Row="0" Grid.Column="1"
+                           Minimum="-2" Maximum="2" Increment="0.01" FormatString="F3"
+                           Value="{Binding CoquaternionSliceW, Mode=TwoWay}" Margin="0,2"
+                           ToolTip.Tip="k-axis slice constant of the 4D split-quaternion set (i²=−1, j²=k²=+1). 0 extrudes the (1, i, j) slice." />
+            <TextBlock Grid.Row="1" Grid.Column="0" Text="DE iterations:" VerticalAlignment="Center" />
+            <NumericUpDown Grid.Row="1" Grid.Column="1"
+                           Minimum="2" Maximum="32" Increment="1" FormatString="F0"
+                           Value="{Binding CoquaternionIterations, Mode=TwoWay}" Margin="0,2" />
+            <TextBlock Grid.Row="2" Grid.Column="0" Text="Cam θ (azim):" VerticalAlignment="Center" />
+            <NumericUpDown Grid.Row="2" Grid.Column="1"
+                           Minimum="-10" Maximum="10" Increment="0.05" FormatString="F3"
+                           Value="{Binding CoquaternionCameraTheta, Mode=TwoWay}" Margin="0,2" />
+            <TextBlock Grid.Row="3" Grid.Column="0" Text="Cam φ (elev):" VerticalAlignment="Center" />
+            <NumericUpDown Grid.Row="3" Grid.Column="1"
+                           Minimum="0.01" Maximum="3.13" Increment="0.05" FormatString="F3"
+                           Value="{Binding CoquaternionCameraPhi, Mode=TwoWay}" Margin="0,2" />
+            <TextBlock Grid.Row="4" Grid.Column="0" Text="Cam dist:" VerticalAlignment="Center" />
+            <NumericUpDown Grid.Row="4" Grid.Column="1"
+                           Minimum="0.1" Maximum="500" Increment="0.1" FormatString="F2"
+                           Value="{Binding CoquaternionCameraDistance, Mode=TwoWay}" Margin="0,2" />
+        </Grid>
+
         <!-- Kleinian -->
         <Grid IsVisible="{Binding IsKleinian}"
               ColumnDefinitions="160,*"

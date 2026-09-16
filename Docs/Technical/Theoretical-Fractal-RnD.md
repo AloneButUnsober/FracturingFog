@@ -208,24 +208,41 @@ criterion.
 
 **Status:** open. Strong "new here" candidate; the non-modulus-bailout work is the crux.
 
-### 3.2 Higher/hypercomplex & split algebras — split-complex / coquaternion Mandelbrot
+### 3.2 Higher/hypercomplex & split algebras — coquaternion Mandelbrot — **#853, SHIPPED**
 
-**Math.** Iterate `z² + c` in algebras beyond ℂ/ℍ/tessarine. **Split-complex** (`j² = +1`) gives a
-hyperbolic-rotation "Mandelbrot"; **coquaternion** (split-quaternion) swaps the product table. Almost
-no reference imagery for split algebras specifically → genuine novelty, but validation is by
-construction (invariants: zero-divisor null-cone seams).
+**Math.** Iterate `z² + c` in algebras beyond ℂ/ℍ/tessarine. **Coquaternion** (split-quaternion):
+`i² = −1, j² = k² = +1, ij = k = −ji` (non-commutative). Because squaring is `t·t`, the off-diagonal
+cross terms cancel against their anticommuting partners, so the square reduces to the clean diagonal
+form — identical to the quaternion square except the real-part signs from `j² = k² = +1`
+(`t²_R = t1² − t2² + t3² + t4²`, imag `= 2 t1·(t2,t3,t4)`). The non-commutative derivative
+`d(t²) = t·dt + dt·t` symmetrises to the same clean diagonal. Two imaginary units squaring to `+1`
+give an **indefinite metric** → hyperbolic spike/wing extensions absent from the compact
+quaternion/bicomplex sets.
+
+**GOTCHA (finding):** the pure **split-complex 2D** Mandelbrot (`j² = +1`) is **not worth rendering**
+— the idempotents `e± = (1 ± j)/2` split the iteration into two independent real quadratic
+recurrences, so the "set" is a filled square. The coquaternion is the structured member of the family;
+`SplitComplexMandelbrotCalculator` was therefore never built.
+
+**Implementation.** `CoquaternionMandelbrotCalculator` = a clone of the Bicomplex CPU raymarcher with
+the swapped squaring/derivative table (all the camera / lighting / DoF / SSAO / tonemap / HUD infra
+reused verbatim). New `FractalType.Coquaternion`, full 3D registration (render host, camera input
+routing, Cam3D region persistence, motion class Raymarch3D, animatable slice-W, params UI). **CPU-only
+first cut** — no GPU kernel yet; slice fixed to the k-axis. Known limitation: the DE uses the Euclidean
+`|t|²` (not the true indefinite metric), so thin hyperbolic sheets speckle under raymarch — a
+follow-up could carry a metric-aware DE + GPU kernel.
 
 **Toolchain reach:**
-- *CalcGen/DSL:* needs a pluggable **number type / product table** in the generator. Today Bicomplex
-  is inlined in its calculator; a generalized "hypercomplex algebra descriptor" (basis signature +
-  product table) would let CalcGen emit *any* of these from one code path — high-leverage.
+- *CalcGen/DSL:* still wants the pluggable **algebra / product-table descriptor** (basis signature +
+  product table) so CalcGen emits *any* hypercomplex variant from one path — the coquaternion clone
+  reinforces the case (two near-identical calculators now differ only in the table). High-leverage
+  envelope work, tracked separately.
 - *ColorGen:* rides the existing 3D DE/normal themes (same as Bicomplex). No new colouring input.
 
-**Sources:** Rochon (bicomplex dynamics) 2000s; Norton (quaternion) 1982. §7. Roadmap
-[Fractal-Expansion-Roadmap.md](../Fractal-Expansion-Roadmap.md) §C.3 already flags the
-split-complex/coquaternion variant as deferred follow-up — this doc adopts it.
+**Sources:** Rochon (bicomplex dynamics) 2000s; Norton (quaternion) 1982. §7.
 
-**Status:** open, reuses the Bicomplex raymarcher with a swapped product table. Epic candidate.
+**Status:** **SHIPPED** — `FractalType.Coquaternion` (#853). CPU-only; GPU kernel + metric-aware DE +
+split-complex-square-confirmation are follow-ups.
 
 ### 3.3 Positive-area Julia sets & near-parabolic explosions (Buff–Chéritat)
 

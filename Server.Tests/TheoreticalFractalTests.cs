@@ -130,4 +130,52 @@ public class TheoreticalFractalTests
         var buf = RenderMagnet(convergence: false);
         Assert.Contains(buf, p => p == inSet);
     }
+
+    // ── Coquaternion (split-quaternion) Mandelbrot (#853) ────────────────────
+
+    private static uint[] RenderCoquaternion(double sliceW = 0.0)
+    {
+        var calc = new CoquaternionMandelbrotCalculator(W, H)
+        {
+            ColorMap = new HsvPalette(),
+            FractalParameters = new FractalParameters { CoquaternionSliceW = sliceW },
+        };
+        calc.Calculate(default);
+        return (uint[])calc.ColorBuffer.Clone();
+    }
+
+    [Fact]
+    public void Coquaternion_Deterministic()
+    {
+        Assert.True(RenderCoquaternion().AsSpan().SequenceEqual(RenderCoquaternion()));
+    }
+
+    [Fact]
+    public void Coquaternion_RendersSolidBody_NotEmpty()
+    {
+        uint sky = ((IColorMap)new HsvPalette()).InSetColor;
+        var buf = RenderCoquaternion();
+        int surface = buf.Count(p => p != sky);
+        // The raymarcher must hit the set body for a healthy fraction of pixels.
+        Assert.True(surface > buf.Length / 20, $"only {surface}/{buf.Length} surface pixels");
+    }
+
+    [Fact]
+    public void Coquaternion_SliceW_ChangesTheSet()
+    {
+        Assert.False(RenderCoquaternion(0.0).AsSpan().SequenceEqual(RenderCoquaternion(0.6)));
+    }
+
+    [Fact]
+    public void Coquaternion_DiffersFromBicomplex_SameView()
+    {
+        // Swapped product table → a genuinely different set, not a rename.
+        var bike = new BicomplexMandelbrotCalculator(W, H)
+        {
+            ColorMap = new HsvPalette(),
+            FractalParameters = new FractalParameters { BicomplexSliceW = 0.0 },
+        };
+        bike.Calculate(default);
+        Assert.False(RenderCoquaternion(0.0).AsSpan().SequenceEqual(bike.ColorBuffer));
+    }
 }

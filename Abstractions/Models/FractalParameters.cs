@@ -1034,6 +1034,27 @@ namespace FracturingFog.Models
         public int BicomplexMaxSteps { get; set; } = 160;
         public double BicomplexEpsilon { get; set; } = 0.0012;
 
+        // Coquaternion (split-quaternion) Mandelbrot (#853). Split 4D algebra
+        // i² = −1, j² = k² = +1, ij = k = −ji (non-commutative). Raymarched 3D
+        // slice; pixel (x, y, z) routes to (c.1, c.i, c.j) with c.k pinned to
+        // CoquaternionSliceW. Mirrors the Bicomplex tunables (first cut is
+        // CPU-only, k-axis slice only).
+        /// <summary>k-component slice constant for the coquaternion Mandelbrot.
+        /// 0 extrudes the (1, i, j) slice; non-zero rotates through the split
+        /// metric.</summary>
+        public double CoquaternionSliceW { get; set; } = 0.0;
+        /// <summary>DE inner iteration count. Default 11.</summary>
+        public int CoquaternionIterations { get; set; } = 11;
+        /// <summary>|t|² escape threshold. 16 = canonical Hart bailout.</summary>
+        public double CoquaternionBailout { get; set; } = 16.0;
+        public double CoquaternionCameraDistance { get; set; } = 4.0;
+        public double CoquaternionCameraTheta { get; set; } = Math.PI * 0.25;
+        public double CoquaternionCameraPhi { get; set; } = Math.PI * 0.35;
+        public double CoquaternionLightTheta { get; set; } = Math.PI * 0.25;
+        public double CoquaternionLightPhi { get; set; } = Math.PI * 0.45;
+        public int CoquaternionMaxSteps { get; set; } = 160;
+        public double CoquaternionEpsilon { get; set; } = 0.0012;
+
         // Mandelbulb camera + DE settings.
         public double BulbPower { get; set; } = 8.0;
         public int BulbIterations { get; set; } = 8;
@@ -1472,6 +1493,16 @@ namespace FracturingFog.Models
                 BicomplexLightPhi = BicomplexLightPhi,
                 BicomplexMaxSteps = BicomplexMaxSteps,
                 BicomplexEpsilon = BicomplexEpsilon,
+                CoquaternionSliceW = CoquaternionSliceW,
+                CoquaternionIterations = CoquaternionIterations,
+                CoquaternionBailout = CoquaternionBailout,
+                CoquaternionCameraDistance = CoquaternionCameraDistance,
+                CoquaternionCameraTheta = CoquaternionCameraTheta,
+                CoquaternionCameraPhi = CoquaternionCameraPhi,
+                CoquaternionLightTheta = CoquaternionLightTheta,
+                CoquaternionLightPhi = CoquaternionLightPhi,
+                CoquaternionMaxSteps = CoquaternionMaxSteps,
+                CoquaternionEpsilon = CoquaternionEpsilon,
                 BulbPower = BulbPower,
                 BulbIterations = BulbIterations,
                 BulbCameraDistance = BulbCameraDistance,

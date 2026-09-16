@@ -120,7 +120,7 @@ namespace FracturingFog.Batch
             Console.WriteLine("                              TearDrop|Magnet1|Magnet2|Glynn|Logistic|Lyapunov|Halley|");
             Console.WriteLine("                              Secant|Spider|QuaternionJulia|QuaternionMandelbrot|");
             Console.WriteLine("                              Plasma|Flame|Apollonian|Kleinian|");
-            Console.WriteLine("                              BicomplexMandelbrot|Dla|");
+            Console.WriteLine("                              BicomplexMandelbrot|Coquaternion|Dla|");
             Console.WriteLine("                              GeneratedMandelbrotZ2..Z5|");
             Console.WriteLine("                              GeneratedTricorn|GeneratedBurningShip");
             Console.WriteLine("  --theme NAME, -t NAME       Color theme name (default: HSV)");

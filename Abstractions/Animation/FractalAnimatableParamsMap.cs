@@ -122,6 +122,9 @@ public static class FractalAnimatableParamsMap
         FractalType.BicomplexMandelbrot
             => _bicomplexList,
 
+        FractalType.Coquaternion
+            => _coquaternionList,
+
         // ── User-defined 2D ───────────────────────────────────────────────
         FractalType.UserEquation
             => _userEquationList,
@@ -422,6 +425,13 @@ public static class FractalAnimatableParamsMap
         new("BicomplexSliceW", AnimatableParamKind.ScalarDouble, Min: -1.0, Max: 1.0,
             Cost: AnimatableParamCost.Moderate,
             Notes: "Slices through the 4D bicomplex set."),
+    };
+
+    private static readonly AnimatableParamDescriptor[] _coquaternionList =
+    {
+        new("CoquaternionSliceW", AnimatableParamKind.ScalarDouble, Min: -1.0, Max: 1.0,
+            Cost: AnimatableParamCost.Moderate,
+            Notes: "Slices through the 4D coquaternion (split-quaternion) set."),
     };
 
     private static readonly AnimatableParamDescriptor[] _userEquationList =

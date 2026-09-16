@@ -614,6 +614,14 @@ namespace FracturingFog.Models
                     Cam3DPhi = p.BicomplexCameraPhi,
                     Cam3DSliceW = p.BicomplexSliceW,
                 },
+                FractalType.Coquaternion => new RegionFractalParams
+                {
+                    Cam3DFamily = (int)type,
+                    Cam3DDistance = p.CoquaternionCameraDistance,
+                    Cam3DTheta = p.CoquaternionCameraTheta,
+                    Cam3DPhi = p.CoquaternionCameraPhi,
+                    Cam3DSliceW = p.CoquaternionSliceW,
+                },
                 // #94 (P4) — non-spatial families. Static-hold legs reproduce the
                 // authored generated image from its seed / preset / roughness.
                 FractalType.Plasma => new RegionFractalParams
@@ -775,6 +783,10 @@ namespace FracturingFog.Models
                     case FractalType.BicomplexMandelbrot:
                         p.BicomplexCameraDistance = d; p.BicomplexCameraTheta = th; p.BicomplexCameraPhi = ph;
                         if (Cam3DSliceW.HasValue) p.BicomplexSliceW = Cam3DSliceW.Value;
+                        break;
+                    case FractalType.Coquaternion:
+                        p.CoquaternionCameraDistance = d; p.CoquaternionCameraTheta = th; p.CoquaternionCameraPhi = ph;
+                        if (Cam3DSliceW.HasValue) p.CoquaternionSliceW = Cam3DSliceW.Value;
                         break;
                 }
             }
