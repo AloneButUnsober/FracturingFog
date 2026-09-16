@@ -349,6 +349,15 @@ public sealed class UserEquationCalculator : IFractalCalculator, IHeightFieldSou
         double bailout2 = FractalParameters.EscapeRadius > 0.0
             ? FractalParameters.EscapeRadius * FractalParameters.EscapeRadius
             : 1024.0; // generous default for arbitrary maps
+        // #859 — condition-replaces-modulus: when set (and a bailout condition
+        // exists) the modulus test is disabled so the DSL condition is the sole
+        // escape (non-modulus / transcendental / convergence maps). effBailout2
+        // = +∞ never trips on a finite |z|² but DOES trip on an overflow to
+        // +Infinity, so exp-style runaway still terminates; a NaN guard covers
+        // the rest. The condition-trigger is then coloured as a normal exterior
+        // escape (converged=false) → full smooth/normal/DE theming.
+        bool replacesModulus = FractalParameters.UserEquationBailoutReplacesModulus && cond != null;
+        double effBailout2 = replacesModulus ? double.PositiveInfinity : bailout2;
         // #615 Phase 1 — optional dedicated colour for the beyond-escape-radius
         // surround (the flat disk seen when zoomed out). null ⇒ paint the escape
         // gradient as before (byte-identical). escapeRadius = sqrt(bailout2).
@@ -498,10 +507,10 @@ public sealed class UserEquationCalculator : IFractalCalculator, IHeightFieldSou
                     for (iter = 0; iter < maxIt; iter++)
                     {
                         double r2 = z.Real * z.Real + z.Imaginary * z.Imaginary;
-                        if (r2 >= bailout2) break;
+                        if (r2 >= effBailout2 || (replacesModulus && double.IsNaN(r2))) break;
                         if (orbitMap != null && iter > 0)
                             orbitMap.Sample(ref acc, z.Real, z.Imaginary, cx, cy, iter);
-                        if (cond != null && Cond(z, c, iter, prevZ)) { converged = true; break; }   // #544
+                        if (cond != null && Cond(z, c, iter, prevZ)) { converged = !replacesModulus; break; }   // #544/#859
                         try { var zn = Step(z, c, iter, prevZ); prevZ = z; z = zn; }
                         catch { iter = maxIt; break; }
                     }
@@ -512,10 +521,10 @@ public sealed class UserEquationCalculator : IFractalCalculator, IHeightFieldSou
                     for (iter = 0; iter < maxIt; iter++)
                     {
                         double r2 = z.Real * z.Real + z.Imaginary * z.Imaginary;
-                        if (r2 >= bailout2) break;
+                        if (r2 >= effBailout2 || (replacesModulus && double.IsNaN(r2))) break;
                         if (orbitMap != null && iter > 0)
                             orbitMap.Sample(ref acc, z.Real, z.Imaginary, cx, cy, iter);
-                        if (cond != null && Cond(z, c, iter, prevZ)) { converged = true; break; }   // #544
+                        if (cond != null && Cond(z, c, iter, prevZ)) { converged = !replacesModulus; break; }   // #544/#859
                         try
                         {
                             var (zn, dzn) = StepD(z, dz, c, iter, prevZ, prevDz);
@@ -530,10 +539,10 @@ public sealed class UserEquationCalculator : IFractalCalculator, IHeightFieldSou
                     for (iter = 0; iter < maxIt; iter++)
                     {
                         double r2 = z.Real * z.Real + z.Imaginary * z.Imaginary;
-                        if (r2 >= bailout2) break;
+                        if (r2 >= effBailout2 || (replacesModulus && double.IsNaN(r2))) break;
                         if (orbitMap != null && iter > 0)
                             orbitMap.Sample(ref acc, z.Real, z.Imaginary, cx, cy, iter);
-                        if (cond != null && Cond(z, c, iter, prevZ)) { converged = true; break; }   // #544
+                        if (cond != null && Cond(z, c, iter, prevZ)) { converged = !replacesModulus; break; }   // #544/#859
                         try
                         {
                             var zn = Step(z, c, iter, prevZ);

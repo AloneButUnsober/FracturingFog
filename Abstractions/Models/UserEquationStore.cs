@@ -59,6 +59,11 @@ namespace FracturingFog.Models
         /// <summary>#544 — convergence bailout condition. Null/blank = escape-radius only.</summary>
         public string? BailoutCondition { get; set; }
 
+        /// <summary>#859 — when true (and a bailout condition is set) the
+        /// condition replaces the modulus escape (non-modulus / transcendental
+        /// maps). Default false.</summary>
+        public bool BailoutReplacesModulus { get; set; }
+
         /// <summary>#583 — colour in-set pixels from the accumulated orbit.</summary>
         public bool ColorInterior { get; set; }
     }
@@ -121,7 +126,8 @@ namespace FracturingFog.Models
         /// stored entry, or null if name is blank.
         /// </summary>
         public UserEquationEntry? SaveEquation(string name, string source, UserEquationKind kind = UserEquationKind.UserEquation,
-            double escapeRadius = 0.0, string? seed = null, string? bailoutCondition = null, bool colorInterior = false)
+            double escapeRadius = 0.0, string? seed = null, string? bailoutCondition = null, bool colorInterior = false,
+            bool bailoutReplacesModulus = false)
         {
             if (string.IsNullOrWhiteSpace(name)) return null;
 
@@ -135,6 +141,7 @@ namespace FracturingFog.Models
                     Equations[i].Seed = seed;
                     Equations[i].BailoutCondition = bailoutCondition;
                     Equations[i].ColorInterior = colorInterior;
+                    Equations[i].BailoutReplacesModulus = bailoutReplacesModulus;
                     Save();
                     return Equations[i];
                 }
@@ -145,6 +152,7 @@ namespace FracturingFog.Models
                 Name = name, Source = source ?? string.Empty, Kind = kind,
                 EscapeRadius = escapeRadius, Seed = seed,
                 BailoutCondition = bailoutCondition, ColorInterior = colorInterior,
+                BailoutReplacesModulus = bailoutReplacesModulus,
             };
             Equations.Add(entry);
             Save();

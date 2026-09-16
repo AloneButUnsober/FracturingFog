@@ -152,12 +152,17 @@
             <!-- Convergence bailout: stop early when a boolean DSL condition fires
                  (Newton / Magnet / Nova). Blank = escape-radius test only. -->
             <Grid Grid.Row="2" Grid.Column="0" Grid.ColumnSpan="8"
-                  ColumnDefinitions="Auto,*" Margin="0,6,0,0">
-                <TextBlock Grid.Column="0" Text="Converge if:" VerticalAlignment="Center" Margin="0,0,8,0" />
-                <TextBox Grid.Column="1"
+                  ColumnDefinitions="Auto,*" RowDefinitions="Auto,Auto" Margin="0,6,0,0">
+                <TextBlock Grid.Row="0" Grid.Column="0" Text="Bail if:" VerticalAlignment="Center" Margin="0,0,8,0" />
+                <TextBox Grid.Row="0" Grid.Column="1"
                          Text="{Binding BailoutCondition, Mode=TwoWay}"
-                         Watermark="blank = escape only;  e.g.  abs(z - prev) &lt; 0.0001  (Newton / Magnet / Nova)"
-                         ToolTip.Tip="Optional convergence bailout: a boolean DSL condition over z, prev, c, n, iter. When it becomes true the orbit stops early and the pixel is coloured by convergence speed instead of running to the iteration cap. Blank = escape-radius test only. Example: abs(z - prev) &lt; 0.0001." />
+                         Watermark="blank = escape only;  abs(z - prev) &lt; 0.0001 (converge);  abs(im(z)) &gt; 50 (transcendental)"
+                         ToolTip.Tip="Optional bailout: a boolean DSL condition over z, prev, c, n, iter. When true the orbit stops early. Converge form abs(z - prev) &lt; 0.0001 (Newton / Magnet / Nova) colours by convergence speed. Non-modulus form abs(im(z)) &gt; 50 or re(z) &gt; 50 escapes entire transcendental maps (needs 'replaces modulus' below). Blank = escape-radius test only." />
+                <CheckBox Grid.Row="1" Grid.Column="1"
+                          Content="Bailout replaces modulus (non-modulus / transcendental)"
+                          IsChecked="{Binding BailoutReplacesModulus, Mode=TwoWay}"
+                          Margin="0,4,0,0"
+                          ToolTip.Tip="#859 — when on (and a condition is set) the condition is the SOLE escape test: the |z| modulus bailout is disabled. Author entire transcendental maps like sin(z)+c with 'Bail if: abs(im(z)) > 50', or exp(z)+c with 're(z) > 50', without cranking the escape radius. The condition-trigger is coloured through the full smooth+normal+3D theme path." />
             </Grid>
         </Grid>
 

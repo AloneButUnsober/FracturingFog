@@ -369,6 +369,22 @@ public sealed class UserEquationViewModel : ViewModelBase
         }
     }
 
+    // ── Bailout replaces modulus (#859) ──
+    // When on (and a bailout condition is set), the condition is the SOLE escape
+    // test — the modulus |z|² bailout is disabled. Enables non-modulus /
+    // transcendental maps (e.g. sin(z)+c with condition abs(im(z)) > 50).
+    public bool BailoutReplacesModulus
+    {
+        get => _params.UserEquationBailoutReplacesModulus;
+        set
+        {
+            if (_params.UserEquationBailoutReplacesModulus == value) return;
+            _params.UserEquationBailoutReplacesModulus = value;
+            this.RaisePropertyChanged();
+            RenderRequested?.Invoke();
+        }
+    }
+
     // ── Skip Jacobian (Phase 11b) ──
     public bool SkipJacobian
     {
@@ -578,8 +594,23 @@ public sealed class UserEquationViewModel : ViewModelBase
     /// the host to re-centre.</summary>
     public void ApplyCookbookEntry(CookbookEntry entry)
     {
-        DslSource = entry.DslSource;
-        ActiveTabIndex = 1;
+        // #859 — entries carrying a bailout condition (non-modulus / transcendental
+        // maps) run on the live interpreter, which honours the condition; CalcGen
+        // codegen (the DSL "Compile & Load" tab) does not yet (#860). Drop those
+        // into the live User Equation tab with the bailout settings applied.
+        if (!string.IsNullOrWhiteSpace(entry.BailoutCondition))
+        {
+            EscapeRadius = entry.EscapeRadius;
+            BailoutCondition = entry.BailoutCondition;
+            BailoutReplacesModulus = entry.BailoutReplacesModulus;
+            Source = entry.DslSource;   // triggers the live compile + render
+            ActiveTabIndex = 0;
+        }
+        else
+        {
+            DslSource = entry.DslSource;
+            ActiveTabIndex = 1;
+        }
         CookbookCentreRequested?.Invoke(entry.CenterX, entry.CenterY, entry.Zoom);
         StatusText = $"Loaded \"{entry.Name}\" from cookbook.";
         StatusIsError = false;
@@ -883,10 +914,12 @@ public sealed class UserEquationViewModel : ViewModelBase
         _params.UserEquationBailoutCondition =
             string.IsNullOrWhiteSpace(entry.BailoutCondition) ? null : entry.BailoutCondition;
         _params.UserEquationColorInterior = entry.ColorInterior;
+        _params.UserEquationBailoutReplacesModulus = entry.BailoutReplacesModulus;
 
         this.RaisePropertyChanged(nameof(EscapeRadius));
         this.RaisePropertyChanged(nameof(SeedExpression));
         this.RaisePropertyChanged(nameof(BailoutCondition));
+        this.RaisePropertyChanged(nameof(BailoutReplacesModulus));
         this.RaisePropertyChanged(nameof(ColorInterior));
     }
 
@@ -912,7 +945,8 @@ public sealed class UserEquationViewModel : ViewModelBase
             escapeRadius: _params.EscapeRadius,
             seed: _params.UserEquationSeed,
             bailoutCondition: _params.UserEquationBailoutCondition,
-            colorInterior: _params.UserEquationColorInterior);
+            colorInterior: _params.UserEquationColorInterior,
+            bailoutReplacesModulus: _params.UserEquationBailoutReplacesModulus);
         if (entry is null) return;
 
         _params.UserEquationName = entry.Name;
