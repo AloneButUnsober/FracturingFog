@@ -1,0 +1,133 @@
+using System;
+using System.Linq;
+using Xunit;
+using FracturingFog;
+using FracturingFog.Interefaces;
+using FracturingFog.Models;
+
+namespace FracturingFog.Server.Tests;
+
+// Frontier fractal R&D (epic #850): Lyapunov (#851) calculator + Magnet
+// convergence colouring (#852). See Docs/Technical/Theoretical-Fractal-RnD.md.
+public class TheoreticalFractalTests
+{
+    private const int W = 160, H = 120;
+
+    // ── Lyapunov (#851) ──────────────────────────────────────────────────────
+
+    private static LyapunovCalculator RenderLyapunov(
+        string seq = "AB", int warmup = 100, int maxIt = 300,
+        double cx = 3.5, double cy = 3.5, double zoom = 1.0)
+    {
+        var calc = new LyapunovCalculator(W, H)
+        {
+            CenterX = cx, CenterY = cy, Zoom = zoom, MaxIterations = maxIt,
+            ColorMap = new HsvPalette(),
+            FractalParameters = new FractalParameters
+            {
+                LyapunovSequence = seq,
+                LyapunovWarmup = warmup,
+            },
+        };
+        calc.Calculate(default);
+        return calc;
+    }
+
+    [Fact]
+    public void Lyapunov_SameParams_AreDeterministic()
+    {
+        var a = RenderLyapunov();
+        var b = RenderLyapunov();
+        Assert.True(a.ColorBuffer.AsSpan().SequenceEqual(b.ColorBuffer));
+    }
+
+    [Fact]
+    public void Lyapunov_ProducesStructure_NotFlat()
+    {
+        var calc = RenderLyapunov();
+        int distinct = calc.ColorBuffer.Distinct().Count();
+        // A structured parameter-plane image has many shades, not one flat fill.
+        Assert.True(distinct > 20, $"expected structured image, got {distinct} colours");
+    }
+
+    [Fact]
+    public void Lyapunov_DifferentSequence_DiffersFromAB()
+    {
+        var ab = RenderLyapunov(seq: "AB");
+        var bbbaaa = RenderLyapunov(seq: "BBBAAA");
+        Assert.False(ab.ColorBuffer.AsSpan().SequenceEqual(bbbaaa.ColorBuffer));
+    }
+
+    [Fact]
+    public void Lyapunov_OutOfRangeView_IsAllInSet()
+    {
+        // (a, b) far outside the valid (0, 4] logistic-rate window → every pixel
+        // is invalid and painted InSetColor.
+        var calc = RenderLyapunov(cx: 100.0, cy: 100.0, zoom: 1.0);
+        uint inSet = calc.ColorMap.InSetColor;
+        Assert.All(calc.ColorBuffer, p => Assert.Equal(inSet, p));
+    }
+
+    [Fact]
+    public void Lyapunov_SmoothBuffer_FeedsRelief()
+    {
+        var calc = RenderLyapunov();
+        // SmoothBuffer must carry the mapped λ field (IHeightFieldSource) — non-zero
+        // somewhere so Relief-3D / SmoothBuffer themes have a height signal.
+        Assert.Contains(calc.SmoothBuffer, v => v > 0f);
+    }
+
+    // ── Magnet convergence colouring (#852) ──────────────────────────────────
+
+    private static uint[] RenderMagnet(bool convergence, FractalType type = FractalType.Magnet1)
+    {
+        var calc = new EscapeTimeCalculator(W, H)
+        {
+            FractalType = type,
+            CenterX = 0.0, CenterY = 0.0, Zoom = 0.35, MaxIterations = 256,
+            ColorMap = new HsvPalette(),
+            FractalParameters = new FractalParameters
+            {
+                MagnetConvergence = convergence,
+                MagnetConvergenceEpsilon = 1e-4,
+            },
+        };
+        calc.Calculate(default);
+        return (uint[])calc.ColorBuffer.Clone();
+    }
+
+    private static int Painted(uint[] buf, uint inSet) => buf.Count(p => p != inSet);
+
+    [Fact]
+    public void Magnet1_Convergence_ShadesTheFixedPointBasin()
+    {
+        uint inSet = ((IColorMap)new HsvPalette()).InSetColor;
+        int withConv = Painted(RenderMagnet(convergence: true), inSet);
+        int without = Painted(RenderMagnet(convergence: false), inSet);
+        // Convergence colouring paints the z=1 basin that plain escape-time left
+        // flat InSetColor, so strictly more pixels carry colour.
+        Assert.True(withConv > without,
+            $"convergence-on painted {withConv} vs escape-time {without}");
+    }
+
+    [Fact]
+    public void Magnet2_Convergence_ShadesTheFixedPointBasin()
+    {
+        uint inSet = ((IColorMap)new HsvPalette()).InSetColor;
+        int withConv = Painted(RenderMagnet(convergence: true, FractalType.Magnet2), inSet);
+        int without = Painted(RenderMagnet(convergence: false, FractalType.Magnet2), inSet);
+        Assert.True(withConv > without,
+            $"convergence-on painted {withConv} vs escape-time {without}");
+    }
+
+    [Fact]
+    public void Magnet_ConvergenceOff_IsLegacyEscapeTime()
+    {
+        // With convergence disabled the path must match the pre-#852 dispatch
+        // (DispatchByColorMap) — asserted indirectly: it renders without throwing
+        // and leaves at least some in-set (unconverged, non-escaped) pixels.
+        uint inSet = ((IColorMap)new HsvPalette()).InSetColor;
+        var buf = RenderMagnet(convergence: false);
+        Assert.Contains(buf, p => p == inSet);
+    }
+}

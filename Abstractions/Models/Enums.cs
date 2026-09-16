@@ -171,6 +171,17 @@ namespace FracturingFog
         /// escape-time — handled by a dedicated <c>LogisticCalculator</c>
         /// alongside the Buddhabrot histogram path.</summary>
         Logistic,
+        /// <summary>Markus–Lyapunov fractal (#851). A periodic {A,B} string
+        /// schedules the logistic growth rate r_n between the pixel's two
+        /// coordinates (a, b) ∈ (0,4]²; each pixel is coloured by the Lyapunov
+        /// exponent λ = (1/N)·Σ ln|r_n·(1−2x_n)| of the forced orbit (λ&lt;0 →
+        /// stable "Zircon Zity" ridges, λ&gt;0 → chaotic). Not escape-time —
+        /// dedicated <c>LyapunovCalculator</c>. The signed λ rides the
+        /// SmoothBuffer (PrecisionField precedent), so every 2D colour theme,
+        /// ColorGen theme and Relief-3D height path works unchanged. Tunables on
+        /// <c>FractalParameters</c>: <c>LyapunovSequence</c>,
+        /// <c>LyapunovWarmup</c>.</summary>
+        Lyapunov,
         /// <summary>Halley basins for f(z) = z^d − 1. Cubic-convergence
         /// root-finding (z := z − 2 f f' / (2 f'² − f f'')). Reuses
         /// <c>NewtonExponent</c> + <c>NewtonRelaxation</c>; basin
@@ -482,6 +493,7 @@ namespace FracturingFog
                 or FractalType.Plasma
                 or FractalType.AcidWarp
                 or FractalType.Logistic
+                or FractalType.Lyapunov
                 or FractalType.ChaoticBilliard
                 or FractalType.PrecisionField
                 => FractalCapabilities.SuppliesHistogram,

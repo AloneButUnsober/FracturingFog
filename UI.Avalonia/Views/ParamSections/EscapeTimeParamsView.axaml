@@ -110,6 +110,20 @@
                            Value="{Binding LogisticSeed, Mode=TwoWay}" Margin="0,2" />
         </Grid>
 
+        <!-- Lyapunov -->
+        <Grid IsVisible="{Binding IsLyapunov}"
+              ColumnDefinitions="160,*" RowDefinitions="Auto,Auto">
+            <TextBlock Grid.Row="0" Grid.Column="0" Text="A/B sequence:" VerticalAlignment="Center"
+                       ToolTip.Tip="Periodic string over A/B scheduling the logistic growth rate between the two pixel axes (A → a, anything else → b). E.g. AB, AABAB, BBBBBBAAAAAA." />
+            <TextBox Grid.Row="0" Grid.Column="1"
+                     Text="{Binding LyapunovSequence, Mode=TwoWay}" Margin="0,2" />
+            <TextBlock Grid.Row="1" Grid.Column="0" Text="Warm-up iters:" VerticalAlignment="Center"
+                       ToolTip.Tip="Iterations discarded before the Lyapunov-exponent sum starts, so the forced orbit settles onto its attractor. Plot count = MaxIterations − warm-up." />
+            <NumericUpDown Grid.Row="1" Grid.Column="1"
+                           Minimum="0" Maximum="100000" Increment="50" FormatString="F0"
+                           Value="{Binding LyapunovWarmup, Mode=TwoWay}" Margin="0,2" />
+        </Grid>
+
         <!-- Newton / Nova / Halley / Secant — shared d + R -->
         <Grid IsVisible="{Binding IsNewtonOrNova}"
               ColumnDefinitions="160,*" RowDefinitions="Auto,Auto">

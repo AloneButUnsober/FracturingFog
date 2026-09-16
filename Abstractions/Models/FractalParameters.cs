@@ -41,6 +41,17 @@ namespace FracturingFog.Models
         /// transient.</summary>
         public double LogisticSeed { get; set; } = 0.5;
 
+        /// <summary>Markus–Lyapunov (#851) forcing string over {A, B}. Each
+        /// character selects which pixel axis supplies the logistic growth rate
+        /// that iteration (A → a / x-axis, anything else → b / y-axis). Classic
+        /// examples: "AB", "AABAB", "BBBBBBAAAAAA". Empty falls back to "AB".</summary>
+        public string LyapunovSequence { get; set; } = "AB";
+
+        /// <summary>Markus–Lyapunov warm-up iterations discarded before the
+        /// exponent sum starts, so the orbit settles onto its attractor first.
+        /// Plot count = MaxIterations − LyapunovWarmup (clamped ≥ 1).</summary>
+        public int LyapunovWarmup { get; set; } = 200;
+
         public Complex[]? NewtonPolyCoeffs { get; set; }
 
         public List<AffineMap>? IFSMaps { get; set; }
@@ -270,6 +281,24 @@ namespace FracturingFog.Models
         /// Mandelbrot); decay = 0 reseeds c to z each step
         /// (heavy chaos). Clamped to [0, 1] in the calculator.</summary>
         public double SpiderCDecay { get; set; } = 0.5;
+
+        /// <summary>Magnet 1 / 2 (#852): colour the basin of the attracting
+        /// fixed point z = 1 by *convergence rate* rather than leaving it flat
+        /// InSetColor. The Magnet maps are renormalizations of the Ising model
+        /// with two attractors (z → 1 and z → ∞); plain escape-time colouring
+        /// captures only the → ∞ basin. When true (default — the
+        /// mathematically-honest look), the calculator also breaks on
+        /// |z − 1| &lt; <see cref="MagnetConvergenceEpsilon"/> and shades those
+        /// pixels by a smooth convergence count through the active palette.
+        /// When false the family renders as plain escape-time (byte-identical
+        /// to before #852). Only consulted for Magnet1 / Magnet2.</summary>
+        public bool MagnetConvergence { get; set; } = true;
+
+        /// <summary>Distance threshold |z − 1| below which a Magnet orbit is
+        /// treated as converged to the z = 1 fixed point (see
+        /// <see cref="MagnetConvergence"/>). Smaller = tighter basins / more
+        /// iterations before a pixel counts as converged. Default 1e-4.</summary>
+        public double MagnetConvergenceEpsilon { get; set; } = 1e-4;
 
         public int BuddhaSamples { get; set; } = 500_000;
         public int BuddhaIterLow { get; set; } = 500;
@@ -1221,6 +1250,8 @@ namespace FracturingFog.Models
                 GlynnC = GlynnC,
                 LogisticBurnIn = LogisticBurnIn,
                 LogisticSeed = LogisticSeed,
+                LyapunovSequence = LyapunovSequence,
+                LyapunovWarmup = LyapunovWarmup,
                 NewtonPolyCoeffs = NewtonPolyCoeffs is null ? null : (Complex[])NewtonPolyCoeffs.Clone(),
                 IFSMaps = IFSMaps is null ? null : new List<AffineMap>(IFSMaps),
                 UserEquationSource = UserEquationSource,
@@ -1264,6 +1295,8 @@ namespace FracturingFog.Models
                 NewtonRelaxation = NewtonRelaxation,
                 SecantInitialOffset = SecantInitialOffset,
                 SpiderCDecay = SpiderCDecay,
+                MagnetConvergence = MagnetConvergence,
+                MagnetConvergenceEpsilon = MagnetConvergenceEpsilon,
                 BuddhaSamples = BuddhaSamples,
                 BuddhaIterLow = BuddhaIterLow,
                 BuddhaIterMid = BuddhaIterMid,
