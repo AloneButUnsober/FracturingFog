@@ -295,6 +295,54 @@ integration for SLE). No DSL reach. *ColorGen:* density/measure themes (Buddhabr
 
 ---
 
+### 3.6 Dual-orbit escape-geometry map (parameter→escape-space scattering) — **original construction**
+
+**Math.** FF-original construction (session notes 2026-09-17), *not* a named-literature set — treat
+validation as the risk (Bucket II). Per parameter-space sample `s=(s_x,s_y[,s_z])`, iterate **two**
+orbits under one shared nonlinear map, differing only in initial condition:
+
+- `u_{z,0}=0`, `u_{c,0}=(x_c,y_c,0)`, both `u_{n+1}=f(u_n)+s`.
+
+Run each to escape radius `R`; capture escape locations `E_z,E_c`, escape counts `n_z,n_c`, and the
+previous state (approx escape trajectory). Derived **escape-space geometry**: midpoint
+`M=(E_z+E_c)/2`, separation `D=E_c−E_z`, residual `|M−s|`, dual-orbit angle `∠(E_z−s,E_c−s)`,
+scattering angles `∠(s,E−s)`, `Δn=n_c−n_z`. The object rendered is a **field over parameter space**
+`F(s)=(chosen derived scalar)` — the calc→field→render split is the doc's central architectural claim
+(FF already does exactly this for scalar fields via `SmoothBuffer`/`TrapBuffer`).
+
+Map `f` choices: **complex-plane** square (XY-coupled), **radial** `|u|u`, **quaternion** `q²+S`
+(`S` pure-imaginary). Component-wise `(x²,y²,z²)` is the **control only** — with both z-inits `=0` the
+third coordinate is degenerate (`E_{z,z}=E_{c,z}`, separation confined to XY), and the zero-init
+quaternion orbit collapses to the 2D subalgebra along `ŝ`. Richness lives in the **c-orbit + quaternion**;
+skip the component-wise baseline as a deliverable.
+
+**Render.** First cut = select one derived scalar → `SmoothBuffer` (**PrecisionField #628 precedent** —
+dual *tier* there, dual *init* here) → every 2D theme + Relief-3D height + S9 mesh export works
+unchanged. Escape-*space* deposition variant (render at `E`, not at `s`) rides the Buddhabrot
+accumulation buffer. Vector-field/glyph mode (arrow = `M−s`) is a **genuinely new render path** (defer).
+Multiresolution tile-cache is **redundant** with FF's fast recompute + deep-zoom perturbation (skip).
+
+**Toolchain reach.**
+- **CalcGen/DSL:** the iteration *is* `f(u)+s` — it fits the existing map grammar. The novelty is the
+  **dual initial condition** + **escape-space state capture**, not the map. DSL reach = an *orbit-pair
+  wrapper* (run any authored map twice, differing init) + an *escape-state capture* primitive (partly
+  present: previous-state, escape-angle). Radial/quaternion `f` want the pluggable algebra/product-table
+  descriptor (§4). Scalar path first; AVX2 lane-divergence identical to any escape-time map.
+- **ColorGen/Color Theme:** surface the derived scalars as per-pixel **inputs** (mirror the billiard
+  `gateId`/`bounceCount` split): `escapeSeparation`, `midpointResidual`, `dualOrbitAngle`,
+  `escapeAngleZ/C`, `deltaN`. First cut maps one onto `SmoothBuffer` (every 2D theme + Relief free);
+  follow-up ColorGen inputs enable diverging scattering-angle themes. Register in `FractalCapabilities`.
+
+**Fit.** Reuses the #626 chaotic-scattering framework (billiard / PrecisionField / escape-angle),
+`IHeightFieldSource`/`ReliefHeightField`, S9 mesh export, and the Quat calculators. It is a new
+**control-map + measurement framework**, not a new engine.
+
+**Sources:** Ott & Tél 1993 (chaotic scattering); Norton 1982 (quaternion Julia rendering); Green
+(Buddhabrot / escape-space deposition). §7.
+**Status:** ready to schedule — tracking issue + slices **S1–S3 (MVP, ~1 wk)**, **S4–S6 optional**.
+
+---
+
 ## 4. Bucket III — Envelopes to push (axes, not single types)
 
 The generalization directions the above cluster into. Each is a *capability* that unlocks a family.
@@ -418,6 +466,12 @@ appropriate sections; flesh out on the next pass. Cite inline from the sections 
 - **Douady 1994 / Lavaurs 1989 / Shishikura 1998** — parabolic implosion, Lavaurs maps, and the
   Hausdorff dimension of ∂M = 2 (parabolic renormalization). The parabolic-implosion literature.
 - **Écalle** — Jean Écalle. *Les fonctions résurgentes.* Résurgence theory underlying horn maps.
+- **Ott & Tél 1993** — Edward Ott, Tamás Tél. *Chaotic scattering: An introduction.* Chaos 3(4), 1993.
+  Escape time, exit basins, angular observables — the scattering vocabulary §3.6 borrows.
+- **Norton 1982** — Alan Norton. *Generation and display of geometric fractals in 3-D.* Computer
+  Graphics (SIGGRAPH) 16(3), 1982. Quaternion Julia rendering — basis for §3.6's 4D→3D projection.
+- **Green (Buddhabrot)** — Melinda Green. *The Buddhabrot technique*, c. 1993 (web). Escape-space
+  orbit deposition — the accumulation model §3.6's escape-space render variant reuses.
 
 ---
 
@@ -427,3 +481,8 @@ appropriate sections; flesh out on the next pass. Cite inline from the sections 
   Buckets I–III; set Lyapunov (§2.1) + Magnet convergence-colour (§2.2) as the two in-progress
   best-bets; flagged parabolic implosion (§5) as flagship far-future; recorded Kleinian-generalization
   design-doc requirement (§5.4). Bibliography stubs (§7) queued for `Resources-Bibliography.md`.
+- **2026-09-17** — Added §3.6 dual-orbit escape-geometry map (FF-original construction, from session
+  notes). Feasibility = high (rides #628 PrecisionField dual-scalar precedent + #626 scattering +
+  Relief/mesh). Filed tracking issue #863 with slices #864 (S1 calc) / #865 (S2 field selector) /
+  #866 (S3 quaternion) = MVP ~1 wk; #867 (S4 deposition) / #868 (S5 glyphs, design-gated) optional;
+  #869 (S6 tile-cache) deferred. Bibliography stubs added (§7): Ott–Tél 1993, Norton 1982, Green.
