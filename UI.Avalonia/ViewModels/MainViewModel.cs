@@ -244,6 +244,7 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
         (FractalType.RandomTile,            "Random Tiling (Bourke)"),
         (FractalType.ChaoticBilliard,       "Chaotic Billiard (Scatter)"),
         (FractalType.PrecisionField,        "Precision Field (Fragility)"),
+        (FractalType.DualOrbitEscape,       "Dual-Orbit Escape (Scattering)"),
         (FractalType.IndrasPearls,          "Indra's Pearls (2D Kleinian)"),
     };
 

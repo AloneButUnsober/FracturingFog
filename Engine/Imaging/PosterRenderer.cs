@@ -1048,6 +1048,7 @@ namespace FracturingFog.Imaging
                 FractalType.IndrasPearls     => new IndrasPearlsCalculator(w, h),
                 FractalType.ChaoticBilliard  => new ChaoticBilliardCalculator(w, h),
                 FractalType.PrecisionField   => new PrecisionFieldCalculator(w, h),
+                FractalType.DualOrbitEscape  => new DualOrbitEscapeCalculator(w, h),
                 FractalType.Kleinian         => new KleinianCalculator(w, h),
                 FractalType.BicomplexMandelbrot => new BicomplexMandelbrotCalculator(w, h),
                 FractalType.Coquaternion => new CoquaternionMandelbrotCalculator(w, h),
@@ -1108,6 +1109,7 @@ namespace FracturingFog.Imaging
                 case DlaCalculator dl:         dl.FractalParameters = req.FractalParameters; break;
                 case ChaoticBilliardCalculator cb: cb.FractalParameters = req.FractalParameters; break;
                 case PrecisionFieldCalculator pf: pf.FractalParameters = req.FractalParameters; break;
+                case DualOrbitEscapeCalculator du: du.FractalParameters = req.FractalParameters; break;
                 case FlameRenderer fr:         fr.FractalParameters = req.FractalParameters; break;
                 case SandboxCalculator sb:
                     sb.FractalParameters = req.FractalParameters;

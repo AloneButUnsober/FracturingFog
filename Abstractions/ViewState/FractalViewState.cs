@@ -287,6 +287,7 @@ namespace FracturingFog.ViewState
                 FractalType.Apollonian            => ( 0.0,  0.0, 2.0),
                 FractalType.ChaoticBilliard       => ( 0.0,  0.0, 1.0),
                 FractalType.PrecisionField        => (-0.5,  0.0, 1.0),
+                FractalType.DualOrbitEscape       => (-0.5,  0.0, 1.0),
                 FractalType.Kleinian              => ( 0.0,  0.0, 1.0),
                 FractalType.BicomplexMandelbrot   => ( 0.0,  0.0, 1.0),
                 FractalType.Coquaternion          => ( 0.0,  0.0, 1.0),

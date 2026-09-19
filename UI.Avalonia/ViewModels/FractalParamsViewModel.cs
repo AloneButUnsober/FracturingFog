@@ -201,6 +201,11 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
         _precLowTier = _p.PrecisionLowTier;
         _precHighTier = _p.PrecisionHighTier;
         _precMetric = _p.PrecisionDiffMetric;
+        // #864 — Dual-orbit escape-geometry.
+        _dualField = _p.DualOrbitField;
+        _dualCSeedX = _p.DualOrbitCSeedX;
+        _dualCSeedY = _p.DualOrbitCSeedY;
+        _dualCEqualsS = _p.DualOrbitCEqualsS;
         // #893 — Indra's Pearls 2D group.
         _indrasFamily = _p.IndrasFamily;
         _indrasMuRe = _p.IndrasMaskitMuRe;
@@ -344,6 +349,7 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
     public bool IsRandomTile => FractalType == FractalType.RandomTile;
     public bool IsChaoticBilliard => FractalType == FractalType.ChaoticBilliard;
     public bool IsPrecisionField => FractalType == FractalType.PrecisionField;
+    public bool IsDualOrbitEscape => FractalType == FractalType.DualOrbitEscape;
     // Indra's Pearls (#892). S1 has no user-facing params yet — the group /
     // trace / depth / render-mode controls land in S2 (#893); this flag exists
     // so the type is a known procedural family (no "unknown type" fallback).
@@ -470,7 +476,10 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
         // Chaotic billiard — bounce-count height field (#627).
         || IsChaoticBilliard
         // Precision field — divergence-scalar height field (#628).
-        || IsPrecisionField;
+        || IsPrecisionField
+        // Dual-orbit escape-geometry (#864) — the derived scalar rides the
+        // SmoothBuffer, so Relief 3D height works like PrecisionField.
+        || IsDualOrbitEscape;
 
     /// <summary>Visibility flag for the cross-fractal domain-warp section
     /// (#253 / IDEA-3). True for the 2D escape-time family routed through
@@ -488,7 +497,7 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
         !(IsJulia || IsMultibrot || IsPhoenix || IsGlynn || IsLogistic || IsLyapunov || IsTranscendentalJulia || IsSpider || IsNewtonOrNova || IsIFS
           || IsLSystem || IsStrangeAttractor || IsBuddhaBrot || IsMandelbulb || IsMandelbox || IsKifs
           || IsQuatJulia || IsQuatMandelbrot || IsPlasma || IsAcidWarp || IsFlame || IsApollonian || IsKleinian
-          || IsBicomplexMandelbrot || IsCoquaternion || IsDla || IsRandomTile || IsChaoticBilliard || IsPrecisionField || IsIndrasPearls || IsInteriorAlphaApplicable || IsRelief2DApplicable
+          || IsBicomplexMandelbrot || IsCoquaternion || IsDla || IsRandomTile || IsChaoticBilliard || IsPrecisionField || IsDualOrbitEscape || IsIndrasPearls || IsInteriorAlphaApplicable || IsRelief2DApplicable
           || SupportsDomainWarp);
 
     // ── Interior alpha (2D) — issue #96 ──────────────────────────────────────
@@ -1637,6 +1646,20 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
     public double CoquaternionCameraDistance { get => _cqCameraDistance; set { Set(ref _cqCameraDistance, Clamp(value, 0.1, 500)); _p.CoquaternionCameraDistance = _cqCameraDistance; Fire(); } }
 
     // ── Kleinian ──
+    // ── Dual-orbit escape-geometry (#864) ──
+    private DualOrbitField _dualField;
+    /// <summary>Which derived escape-space scalar the field renders.</summary>
+    public DualOrbitField DualOrbitField { get => _dualField; set { Set(ref _dualField, value); _p.DualOrbitField = value; Fire(); } }
+    public Array DualOrbitFields => Enum.GetValues(typeof(DualOrbitField));
+    private double _dualCSeedX;
+    /// <summary>Decoupled c-orbit seed (real). Keep ≠ s; c = s is the control.</summary>
+    public double DualOrbitCSeedX { get => _dualCSeedX; set { Set(ref _dualCSeedX, Clamp(value, -2.0, 2.0)); _p.DualOrbitCSeedX = _dualCSeedX; Fire(); } }
+    private double _dualCSeedY;
+    public double DualOrbitCSeedY { get => _dualCSeedY; set { Set(ref _dualCSeedY, Clamp(value, -2.0, 2.0)); _p.DualOrbitCSeedY = _dualCSeedY; Fire(); } }
+    private bool _dualCEqualsS;
+    /// <summary>Mandelbrot-control mode (c = s; degenerate — labelled).</summary>
+    public bool DualOrbitCEqualsS { get => _dualCEqualsS; set { Set(ref _dualCEqualsS, value); _p.DualOrbitCEqualsS = value; Fire(); } }
+
     // ── Indra's Pearls 2D (#893) ──
     private IndrasGroupFamily _indrasFamily;
     /// <summary>Two-generator family (Maskit / Grandma / Riley). Switching it

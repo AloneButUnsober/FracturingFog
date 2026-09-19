@@ -1018,6 +1018,22 @@ namespace FracturingFog.Models
         /// scalar. Default L2 over (Δ smooth-iteration, Δ escape-angle).</summary>
         public PrecisionDiffMetric PrecisionDiffMetric { get; set; } = PrecisionDiffMetric.L2;
 
+        // Dual-orbit escape-geometry field (#863/#864). Two orbits per parameter
+        // sample s under u→u²+s, from the critical seed 0 and a fixed decoupled c;
+        // a derived escape-space scalar goes to the SmoothBuffer.
+        /// <summary>Which derived escape-space scalar is rendered. Default
+        /// EscapeSeparation |E_c − E_z|.</summary>
+        public DualOrbitField DualOrbitField { get; set; } = DualOrbitField.EscapeSeparation;
+        /// <summary>The fixed, independent c-orbit seed (real part). MUST stay
+        /// decoupled from s — c = s collapses to a Mandelbrot control.</summary>
+        public double DualOrbitCSeedX { get; set; } = 0.5;
+        /// <summary>The fixed c-orbit seed (imaginary part).</summary>
+        public double DualOrbitCSeedY { get; set; } = 0.0;
+        /// <summary>Mandelbrot-control mode: seed the c-orbit from s itself. The
+        /// degenerate case (dual fields collapse to a plain Mandelbrot exterior) —
+        /// exposed only for comparison. Default off.</summary>
+        public bool DualOrbitCEqualsS { get; set; } = false;
+
         // Indra's Pearls (#892/#893, epic #850) — 2D complex-Möbius Kleinian
         // group limit set. The generator matrices are DERIVED from these scalar
         // parameters (Maskit μ / Grandma traces / Riley c) by the family
@@ -1579,6 +1595,10 @@ namespace FracturingFog.Models
                 PrecisionLowTier = PrecisionLowTier,
                 PrecisionHighTier = PrecisionHighTier,
                 PrecisionDiffMetric = PrecisionDiffMetric,
+                DualOrbitField = DualOrbitField,
+                DualOrbitCSeedX = DualOrbitCSeedX,
+                DualOrbitCSeedY = DualOrbitCSeedY,
+                DualOrbitCEqualsS = DualOrbitCEqualsS,
                 IndrasFamily = IndrasFamily,
                 IndrasMaskitMuRe = IndrasMaskitMuRe,
                 IndrasMaskitMuIm = IndrasMaskitMuIm,

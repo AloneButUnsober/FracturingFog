@@ -160,6 +160,28 @@ namespace FracturingFog
         LastGenerator,
     }
 
+    /// <summary>Which derived escape-space scalar the DualOrbitEscape (#864)
+    /// field renders. Per parameter sample <c>s</c> two orbits run under
+    /// <c>u→u²+s</c> from decoupled seeds (0 and the fixed <c>c</c>); the escape
+    /// geometry of the pair (locations E_z/E_c, counts n_z/n_c) yields these
+    /// scalars, written to the SmoothBuffer. See
+    /// Docs/Technical/Theoretical-Fractal-RnD.md §3.6.</summary>
+    public enum DualOrbitField
+    {
+        /// <summary>|E_c − E_z| — the escape-location separation of the two orbits
+        /// (the default; 0 where they escape together).</summary>
+        EscapeSeparation,
+        /// <summary>|M − s|, M = (E_z + E_c)/2 — residual of the escape midpoint
+        /// from the parameter point.</summary>
+        MidpointResidual,
+        /// <summary>∠(E_z − s, E_c − s) — the dual-orbit angle (0..π) between the
+        /// two escape directions seen from s.</summary>
+        DualOrbitAngle,
+        /// <summary>n_c − n_z — the escape-count difference (predictability-horizon
+        /// / exit-channel field; a basin-boundary fractal).</summary>
+        DeltaN,
+    }
+
     public enum FractalType
     {
         Mandelbrot,
@@ -435,6 +457,19 @@ namespace FracturingFog
         /// theme and Relief-3D height path works unchanged. Handled by a dedicated
         /// <c>PrecisionFieldCalculator</c>.</summary>
         PrecisionField,
+        /// <summary>Dual-orbit escape-geometry field (#863/#864, epic #850) — an
+        /// FF-original construction. Per parameter-space sample <c>s</c>, two
+        /// orbits run under one shared map <c>u→u²+s</c> from decoupled seeds
+        /// (the critical seed 0 and a fixed, independent <c>c</c>); the escape
+        /// geometry of the pair — separation, midpoint residual, dual-orbit angle
+        /// or Δn (<c>DualOrbitField</c>) — is written to the SmoothBuffer, so every
+        /// 2D theme, ColorGen theme and Relief-3D height path applies unchanged
+        /// (PrecisionField precedent: dual tier there, dual init here). The
+        /// c-seed MUST be decoupled from <c>s</c> — the <c>c = s</c> case collapses
+        /// to a plain Mandelbrot (kept only as a labelled control). Handled by a
+        /// dedicated <c>DualOrbitEscapeCalculator</c>. See
+        /// Docs/Technical/Theoretical-Fractal-RnD.md §3.6.</summary>
+        DualOrbitEscape,
         /// <summary>Indra's Pearls (#892, epic #850) — the limit set of a
         /// two-generator complex-Möbius Kleinian group, rendered as a 2D plane
         /// fractal. NOT the 3D <c>Kleinian</c> sphere-inversion solid: here the
@@ -601,6 +636,9 @@ namespace FracturingFog
                 or FractalType.Lyapunov
                 or FractalType.ChaoticBilliard
                 or FractalType.PrecisionField
+                // Dual-orbit escape-geometry (#864) — a derived escape-space scalar
+                // over the SmoothBuffer (PrecisionField precedent).
+                or FractalType.DualOrbitEscape
                 // Indra's Pearls (#892) — combinatorial word-enumeration point
                 // cloud coloured by log-density; no normals / orbit / DE surfaced.
                 or FractalType.IndrasPearls
