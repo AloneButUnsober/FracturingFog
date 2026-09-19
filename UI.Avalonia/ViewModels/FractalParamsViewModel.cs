@@ -1654,7 +1654,7 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
     private KleinianSphereRow NewSphereRow(double cx, double cy, double cz, double r)
     {
         var row = new KleinianSphereRow(cx, cy, cz, r);
-        row.Changed = SyncKleinianSpheres;
+        row.OnChanged = SyncKleinianSpheres;
         row.Remove = RemoveKleinianSphere;
         return row;
     }
@@ -1866,8 +1866,10 @@ public sealed class KleinianSphereRow : ViewModelBase
 {
     private double _cx, _cy, _cz, _r;
 
-    /// <summary>Set by the owner to a resync callback; invoked on every edit.</summary>
-    public Action? Changed;
+    /// <summary>Set by the owner to a resync callback; invoked on every edit.
+    /// Named <c>OnChanged</c> (not <c>Changed</c>) to avoid hiding
+    /// <see cref="ReactiveObject"/>'s <c>Changed</c> observable.</summary>
+    public Action? OnChanged;
     /// <summary>Set by the owner to the remove-this-row handler.</summary>
     public Action<KleinianSphereRow>? Remove;
 
@@ -1880,8 +1882,8 @@ public sealed class KleinianSphereRow : ViewModelBase
     /// <summary>Bound by the per-row delete button (row-owned, codebase idiom).</summary>
     public ReactiveCommand<Unit, Unit> RemoveCommand { get; }
 
-    public double Cx { get => _cx; set { if (_cx == value) return; _cx = value; this.RaisePropertyChanged(); Changed?.Invoke(); } }
-    public double Cy { get => _cy; set { if (_cy == value) return; _cy = value; this.RaisePropertyChanged(); Changed?.Invoke(); } }
-    public double Cz { get => _cz; set { if (_cz == value) return; _cz = value; this.RaisePropertyChanged(); Changed?.Invoke(); } }
-    public double R  { get => _r;  set { double v = value < 0.0 ? 0.0 : value; if (_r == v) return; _r = v; this.RaisePropertyChanged(); Changed?.Invoke(); } }
+    public double Cx { get => _cx; set { if (_cx == value) return; _cx = value; this.RaisePropertyChanged(); OnChanged?.Invoke(); } }
+    public double Cy { get => _cy; set { if (_cy == value) return; _cy = value; this.RaisePropertyChanged(); OnChanged?.Invoke(); } }
+    public double Cz { get => _cz; set { if (_cz == value) return; _cz = value; this.RaisePropertyChanged(); OnChanged?.Invoke(); } }
+    public double R  { get => _r;  set { double v = value < 0.0 ? 0.0 : value; if (_r == v) return; _r = v; this.RaisePropertyChanged(); OnChanged?.Invoke(); } }
 }
