@@ -150,6 +150,31 @@ public readonly struct Mobius : IEquatable<Mobius>
         return new[] { r1, r2 };
     }
 
+    /// <summary>The repelling fixed point (MSW p. 84), returned first of the two
+    /// so the special-words curve tracer walks Λ consistently. Ordered by the
+    /// multiplier magnitude |k| (k = n², n = ½(tr + √(tr(m²) − 4))): |k| &gt; 1
+    /// ⇒ z₊ repels, else z₋. Falls back to the naive root when C ≈ 0 (fixes ∞).
+    /// Mirrors <c>get_mobius_fixed_points(...)[0]</c> in the reference
+    /// implementation.</summary>
+    public Complex RepellingFixedPoint()
+    {
+        Mobius m = Normalized();
+        if (m.C.Magnitude < 1e-15)
+        {
+            var fp = FixedPoints();
+            return fp.Length > 0 ? fp[0] : Complex.Zero;
+        }
+        Complex trT = m.A + m.D;
+        Mobius m2 = m.Multiply(m);
+        Complex trT2 = m2.A + m2.D;
+        Complex n = (trT + Complex.Sqrt(trT2 - 4.0)) * 0.5;
+        Complex k = n * n;
+        Complex st2p4 = Complex.Sqrt(trT * trT - 4.0);
+        Complex zPlus = ((m.A - m.D) + st2p4) / (2.0 * m.C);
+        Complex zMinus = ((m.A - m.D) - st2p4) / (2.0 * m.C);
+        return k.Magnitude > 1.0 ? zPlus : zMinus;
+    }
+
     public bool Equals(Mobius other) => A == other.A && B == other.B && C == other.C && D == other.D;
     public override bool Equals(object? obj) => obj is Mobius m && Equals(m);
     public override int GetHashCode() => HashCode.Combine(A, B, C, D);
@@ -181,6 +206,11 @@ public sealed class IndrasGroup
 
     /// <summary>The inverse letter index (0↔1, 2↔3).</summary>
     public static int InverseLetter(int letter) => letter ^ 1;
+
+    /// <summary>Generator <c>a</c> (before inversion).</summary>
+    public Mobius GenA => Letters[0];
+    /// <summary>Generator <c>b</c>.</summary>
+    public Mobius GenB => Letters[2];
 
     /// <summary>Maskit slice (MSW p. 259): a: z ↦ μ + 1/z = (μ·z + 1)/z,
     /// b: z ↦ z + 2. The shipped default is μ = 2i (the "apple" limit set, where
