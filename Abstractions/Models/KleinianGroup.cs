@@ -133,4 +133,78 @@ public sealed class KleinianGroup
         };
         return new KleinianGroup(gens, maxWordLength);
     }
+
+    /// <summary>Six inversion spheres at the ±axis face centres (±s,0,0),
+    /// (0,±s,0), (0,0,±s), radius s/√2 so each sphere is tangent to its four
+    /// neighbours (adjacent centre distance s·√2 = 2r). Octahedral-symmetry
+    /// Schottky group — a denser cocoon than the tetrahedral preset.</summary>
+    public static KleinianGroup Octahedral6(double scale, int maxWordLength)
+    {
+        double s = scale;
+        double r = s / Math.Sqrt(2.0);
+        var gens = new[]
+        {
+            KleinianGenerator.Inversion(+s, 0, 0, r),
+            KleinianGenerator.Inversion(-s, 0, 0, r),
+            KleinianGenerator.Inversion(0, +s, 0, r),
+            KleinianGenerator.Inversion(0, -s, 0, r),
+            KleinianGenerator.Inversion(0, 0, +s, r),
+            KleinianGenerator.Inversion(0, 0, -s, r),
+        };
+        return new KleinianGroup(gens, maxWordLength);
+    }
+
+    /// <summary>Eight inversion spheres at all ±s cube corners, radius s so each
+    /// sphere is tangent to its three edge-neighbours (edge centre distance 2s =
+    /// 2r); face-diagonal and body-diagonal pairs stay disjoint. Cubic-symmetry
+    /// Schottky group.</summary>
+    public static KleinianGroup CubeCorner8(double scale, int maxWordLength)
+    {
+        double s = scale;
+        double r = s;
+        var gens = new[]
+        {
+            KleinianGenerator.Inversion(+s, +s, +s, r),
+            KleinianGenerator.Inversion(+s, +s, -s, r),
+            KleinianGenerator.Inversion(+s, -s, +s, r),
+            KleinianGenerator.Inversion(+s, -s, -s, r),
+            KleinianGenerator.Inversion(-s, +s, +s, r),
+            KleinianGenerator.Inversion(-s, +s, -s, r),
+            KleinianGenerator.Inversion(-s, -s, +s, r),
+            KleinianGenerator.Inversion(-s, -s, -s, r),
+        };
+        return new KleinianGroup(gens, maxWordLength);
+    }
+
+    /// <summary>A planar ring of <paramref name="count"/> inversion spheres on a
+    /// circle of radius <paramref name="scale"/> in the z = 0 plane, each tangent
+    /// to its two neighbours (neighbour distance 2·scale·sin(π/N) = 2r). The
+    /// Indra's-Pearls "necklace" group (Mumford–Series–Wright); its limit set is a
+    /// closed fractal loop threading the tangency points. <paramref name="count"/>
+    /// is clamped to [3, 24].</summary>
+    public static KleinianGroup Necklace(double scale, int count, int maxWordLength)
+    {
+        int n = Math.Clamp(count, 3, 24);
+        double a = scale;
+        double r = a * Math.Sin(Math.PI / n);
+        var gens = new KleinianGenerator[n];
+        for (int k = 0; k < n; k++)
+        {
+            double ang = 2.0 * Math.PI * k / n;
+            gens[k] = KleinianGenerator.Inversion(a * Math.Cos(ang), a * Math.Sin(ang), 0.0, r);
+        }
+        return new KleinianGroup(gens, maxWordLength);
+    }
+
+    /// <summary>Build the group for a preset. <paramref name="count"/> is used
+    /// only by <see cref="KleinianPreset.NecklaceN"/>.</summary>
+    public static KleinianGroup FromPreset(
+        KleinianPreset preset, double scale, int count, int maxWordLength)
+        => preset switch
+        {
+            KleinianPreset.Octahedral6 => Octahedral6(scale, maxWordLength),
+            KleinianPreset.CubeCorner8 => CubeCorner8(scale, maxWordLength),
+            KleinianPreset.NecklaceN => Necklace(scale, count, maxWordLength),
+            _ => Tetrahedral(scale, maxWordLength),
+        };
 }

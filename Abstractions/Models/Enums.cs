@@ -114,6 +114,29 @@ namespace FracturingFog
         Exp,
     }
 
+    /// <summary>Kleinian group preset — which Schottky sphere configuration the
+    /// limit-set renderer inverts through (#875, epic #850). Each is a discrete
+    /// group of sphere inversions; the calculator builds the generator list from
+    /// the preset + <c>KleinianSphereScale</c> (+ <c>KleinianNecklaceCount</c> for
+    /// the necklace). See Docs/Technical/Kleinian-Generalization-DesignPlan.md
+    /// §3.6.</summary>
+    public enum KleinianPreset
+    {
+        /// <summary>Four spheres of radius √2·s at the even-parity ±s cube corners
+        /// — the shipped default (Tier 0, byte-identical to pre-#874).</summary>
+        Tetrahedral,
+        /// <summary>Six spheres of radius s/√2 at the ±axis face centres; each is
+        /// tangent to its four neighbours (octahedral symmetry).</summary>
+        Octahedral6,
+        /// <summary>Eight spheres of radius s at all ±s cube corners; each is
+        /// tangent to its three edge-neighbours (cubic symmetry).</summary>
+        CubeCorner8,
+        /// <summary>A planar ring of <c>KleinianNecklaceCount</c> spheres, each
+        /// tangent to its two neighbours — the Indra's-Pearls "necklace" group
+        /// (Mumford–Series–Wright).</summary>
+        NecklaceN,
+    }
+
     public enum FractalType
     {
         Mandelbrot,

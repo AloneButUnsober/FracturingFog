@@ -467,6 +467,9 @@ namespace FracturingFog.Models
         [JsonIgnore(Condition = OmitNull)] public int? RandomTileSeed { get; set; }
         [JsonIgnore(Condition = OmitNull)] public string? IFSPresetName { get; set; }
         [JsonIgnore(Condition = OmitNull)] public string? LSystemPresetName { get; set; }
+        // #875 — Kleinian group preset + necklace ring size (omitted at defaults).
+        [JsonIgnore(Condition = OmitNull)] public int? KleinianPreset { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public int? KleinianNecklaceCount { get; set; }
 
         /// <summary>
         /// Capture the P1-relevant parameters for <paramref name="type"/> from a
@@ -609,6 +612,10 @@ namespace FracturingFog.Models
                     Cam3DDistance = p.KleinianCameraDistance,
                     Cam3DTheta = p.KleinianCameraTheta,
                     Cam3DPhi = p.KleinianCameraPhi,
+                    KleinianPreset = p.KleinianPreset != FracturingFog.KleinianPreset.Tetrahedral
+                        ? (int)p.KleinianPreset : null,
+                    KleinianNecklaceCount = p.KleinianNecklaceCount != 6
+                        ? p.KleinianNecklaceCount : (int?)null,
                 },
                 FractalType.BicomplexMandelbrot => new RegionFractalParams
                 {
@@ -790,6 +797,8 @@ namespace FracturingFog.Models
                         break;
                     case FractalType.Kleinian:
                         p.KleinianCameraDistance = d; p.KleinianCameraTheta = th; p.KleinianCameraPhi = ph;
+                        if (KleinianPreset.HasValue) p.KleinianPreset = (FracturingFog.KleinianPreset)KleinianPreset.Value;
+                        if (KleinianNecklaceCount.HasValue) p.KleinianNecklaceCount = KleinianNecklaceCount.Value;
                         break;
                     case FractalType.BicomplexMandelbrot:
                         p.BicomplexCameraDistance = d; p.BicomplexCameraTheta = th; p.BicomplexCameraPhi = ph;

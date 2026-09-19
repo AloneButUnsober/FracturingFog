@@ -96,7 +96,10 @@ public sealed class KleinianCalculator : IFractalCalculator
         // the render/shade stack. At scale 1 the four spheres overlap at the
         // origin (limit set = the cocoon between them); smaller scales separate
         // them into discrete shells.
-        var group = KleinianGroup.Tetrahedral(scaleK, deIter);
+        // #875 (S2) — the preset selects the Schottky sphere configuration.
+        var group = KleinianGroup.FromPreset(
+            FractalParameters.KleinianPreset, scaleK,
+            FractalParameters.KleinianNecklaceCount, deIter);
         KleinianGenerator[] gens = group.ToArray();
         double r = Math.Sqrt(2.0) * scaleK;     // tangent radius (camera framing)
 
