@@ -212,10 +212,15 @@ framed and coloured). S3 = the marquee animation. S4+ = breadth and polish.
   preset families render distinctly (visual smoke). — **the Indra's Pearls MVP is
   now user-drivable.**
 
-- **S3 — [#894](https://github.com/AloneButUnsober/FracturingFog/issues/894) — DFS "special words" curve tracer.**
+- **S3 — [#894](https://github.com/AloneButUnsober/FracturingFog/issues/894) — DFS "special words" curve tracer. ✅ SHIPPED.**
   The MSW ch. 9 boundary-tracing algorithm (fixed-point-separation stop) → the
   crisp limit-*curve* renders (vs S1's point cloud). `RenderMode.CurveTrace`.
-  *(deps: S1)*
+  `Mobius.RepellingFixedPoint()` (MSW p. 84, repelling-first ordering); alphabet
+  {a, b, A, B} with inverse = (i+2) mod 4; per-letter special-word repetends;
+  ε = one pixel branch-convergence stop; Bresenham line raster; graceful
+  degradation (disconnected/Cantor Λ → points at the depth cap; non-discrete →
+  abort → point-cloud fallback). +5 tests. Algorithm verified against Tim
+  Hutton's reference implementation. *(deps: S1)*
 
 - **S4 — [#895](https://github.com/AloneButUnsober/FracturingFog/issues/895) — Maskit-slice / trace animation (the marquee; re-homed #879).**
   Animate `μ` (or Grandma's `tab`) toward the slice boundary → the classic
@@ -271,6 +276,18 @@ framed and coloured). S3 = the marquee animation. S4+ = breadth and polish.
 
 ## 9. Change log
 
+- **2026-09-19** — **S3 (#894) shipped — the crisp limit-curve tracer.** The MSW
+  ch. 9 special-words DFS: `Mobius.RepellingFixedPoint()` (p. 84 ordering), the
+  {a, b, A, B} alphabet (inverse = (i+2) mod 4), per-letter special-word repetends
+  (bABa/a/BAba, ABab/b/aBAb, BabA/A/baBA, abAB/B/AbaB), a one-pixel
+  branch-convergence stop (ε = pixel pitch, so zoom auto-refines), and a Bresenham
+  segment raster into the colour buffer (coloured by depth). Wired to
+  `IndrasRenderMode.CurveTrace`; the S2 render-mode combo already exposes it.
+  Graceful degradation: a disconnected (Cantor) limit set plots its fixed points
+  at the depth cap; a non-discrete group aborts and falls back to the S1 point
+  cloud. Node-budget capped. +5 tests, suite 2842 green. Connected groups (apple /
+  quasi-Fuchsian / cusp) render as clean curves — the iconic MSW line drawings —
+  verified against the reference implementation.
 - **2026-09-19** — **S2 (#893) shipped — MVP complete.** Group family +
   parameters on `FractalParameters` (`IndrasFamily`, Maskit `μ`, Grandma
   `ta`/`tb` + second-root, Riley `c`, `IndrasMaxWordDepth`, `IndrasRenderMode`;

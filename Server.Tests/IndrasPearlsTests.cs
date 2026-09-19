@@ -195,6 +195,70 @@ public sealed class IndrasPearlsTests
     public void HasDisplayName()
         => Assert.Equal("Indra's Pearls", Fractals.FractalNameByNameType[FractalType.IndrasPearls]);
 
+    // ── S3 curve tracer (#894) ───────────────────────────────────────────────
+
+    [Fact]
+    public void RepellingFixedPoint_IsFixed()
+    {
+        var m = new Mobius(new(2, 0), new(1, 0), new(1, 0), new(0, 0)); // z -> 2 + 1/z
+        var fp = m.RepellingFixedPoint();
+        Assert.True(m.TryApply(fp, out var img));
+        Assert.True(Close(img, fp, 1e-7), $"fp={fp} img={img}");
+    }
+
+    private static IndrasPearlsCalculator MakeCalc(int w, int h, FractalParameters p, double cx, double cy, double z)
+        => new(w, h) { CenterX = cx, CenterY = cy, Zoom = z, FractalParameters = p };
+
+    [Fact]
+    public void CurveTrace_PlotsNonEmpty_ForAppleGroup()
+    {
+        var p = new FractalParameters { IndrasFamily = IndrasGroupFamily.Maskit, IndrasMaskitMuIm = 2.0, IndrasRenderMode = IndrasRenderMode.CurveTrace };
+        var calc = MakeCalc(256, 256, p, 0, 1, 0.6);
+        calc.Calculate();
+        int nonZero = 0;
+        foreach (var px in calc.ColorBuffer) if (px != 0) nonZero++;
+        Assert.True(nonZero > 200, $"only {nonZero} pixels");
+    }
+
+    [Fact]
+    public void CurveTrace_DiffersFromPointCloud()
+    {
+        var cloud = new FractalParameters { IndrasFamily = IndrasGroupFamily.GrandmaRecipe, IndrasRenderMode = IndrasRenderMode.PointCloud };
+        var curve = new FractalParameters { IndrasFamily = IndrasGroupFamily.GrandmaRecipe, IndrasRenderMode = IndrasRenderMode.CurveTrace };
+        var a = MakeCalc(220, 220, cloud, 0, 0, 1.0);
+        var b = MakeCalc(220, 220, curve, 0, 0, 1.0);
+        a.Calculate();
+        b.Calculate();
+        Assert.NotEqual(a.ColorBuffer, b.ColorBuffer);
+    }
+
+    [Fact]
+    public void CurveTrace_IsDeterministic()
+    {
+        var p = new FractalParameters { IndrasFamily = IndrasGroupFamily.GrandmaRecipe, IndrasRenderMode = IndrasRenderMode.CurveTrace };
+        var a = MakeCalc(200, 200, p, 0, 0, 1.0);
+        var b = MakeCalc(200, 200, p, 0, 0, 1.0);
+        a.Calculate();
+        b.Calculate();
+        Assert.Equal(a.ColorBuffer, b.ColorBuffer);
+    }
+
+    [Fact]
+    public void CurveTrace_CantorGroup_FallsBackToPoints_StillPlots()
+    {
+        // A Cantor (disconnected) group never converges to a curve; the tracer
+        // plots the fixed points at the depth cap instead of aborting — output
+        // is still non-empty.
+        var p = new FractalParameters { IndrasFamily = IndrasGroupFamily.GrandmaRecipe,
+            IndrasGrandmaTaRe = 2.5, IndrasGrandmaTaIm = 1.5, IndrasGrandmaTbRe = 2.5, IndrasGrandmaTbIm = -1.5,
+            IndrasRenderMode = IndrasRenderMode.CurveTrace };
+        var calc = MakeCalc(256, 256, p, 0, 0, 0.8);
+        calc.Calculate();
+        int nonZero = 0;
+        foreach (var px in calc.ColorBuffer) if (px != 0) nonZero++;
+        Assert.True(nonZero > 50, $"only {nonZero} pixels");
+    }
+
     // ── S2 params / presets / persistence (#893) ─────────────────────────────
 
     [Fact]
