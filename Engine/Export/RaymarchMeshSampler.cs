@@ -86,12 +86,12 @@ public static class RaymarchMeshSampler
 
             case FractalType.Kleinian:
             {
+                // #874 (S1) — build the group via the shared factory (byte-identical
+                // tetrahedral preset) so the mesh DE and the render DE cannot drift.
                 double scaleK = Math.Max(0.25, p.KleinianSphereScale);
-                double r = Math.Sqrt(2.0) * scaleK;
-                double[] cx = { +scaleK, +scaleK, -scaleK, -scaleK };
-                double[] cy = { +scaleK, -scaleK, +scaleK, -scaleK };
-                double[] cz = { +scaleK, -scaleK, -scaleK, +scaleK };
-                return new KleinianCalculator.De(cx, cy, cz, r, Math.Max(2, p.KleinianIterations));
+                int deIter = Math.Max(2, p.KleinianIterations);
+                var group = KleinianGroup.Tetrahedral(scaleK, deIter);
+                return new KleinianCalculator.De(group.ToArray(), deIter);
             }
 
             case FractalType.Kifs:
