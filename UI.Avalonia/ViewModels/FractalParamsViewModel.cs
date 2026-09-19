@@ -204,6 +204,10 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
         _kleinPreset = _p.KleinianPreset;
         _kleinNecklace = _p.KleinianNecklaceCount;
         InitKleinianSpheres();   // #876 — repopulate the editor from the reloaded params
+        _kleinRotAngle = _p.KleinianRotationAngle;
+        _kleinRotAxisX = _p.KleinianRotationAxisX;
+        _kleinRotAxisY = _p.KleinianRotationAxisY;
+        _kleinRotAxisZ = _p.KleinianRotationAxisZ;
         _kleinIter = _p.KleinianIterations;
         _kleinScale = _p.KleinianSphereScale;
         _kleinCameraTheta = _p.KleinianCameraTheta;
@@ -1639,6 +1643,16 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
     public bool IsKleinianCustom => IsKleinian && _kleinPreset == KleinianPreset.Custom;
     private int _kleinNecklace;
     public int KleinianNecklaceCount { get => _kleinNecklace; set { Set(ref _kleinNecklace, (int)Clamp(value, 3, 24)); _p.KleinianNecklaceCount = _kleinNecklace; Fire(); } }
+
+    // #877 — rotation fold (twists the limit set; applies to every preset/custom).
+    private double _kleinRotAngle;
+    public double KleinianRotationAngle { get => _kleinRotAngle; set { Set(ref _kleinRotAngle, Clamp(value, -180.0, 180.0)); _p.KleinianRotationAngle = _kleinRotAngle; Fire(); } }
+    private double _kleinRotAxisX;
+    public double KleinianRotationAxisX { get => _kleinRotAxisX; set { Set(ref _kleinRotAxisX, Clamp(value, -1.0, 1.0)); _p.KleinianRotationAxisX = _kleinRotAxisX; Fire(); } }
+    private double _kleinRotAxisY;
+    public double KleinianRotationAxisY { get => _kleinRotAxisY; set { Set(ref _kleinRotAxisY, Clamp(value, -1.0, 1.0)); _p.KleinianRotationAxisY = _kleinRotAxisY; Fire(); } }
+    private double _kleinRotAxisZ;
+    public double KleinianRotationAxisZ { get => _kleinRotAxisZ; set { Set(ref _kleinRotAxisZ, Clamp(value, -1.0, 1.0)); _p.KleinianRotationAxisZ = _kleinRotAxisZ; Fire(); } }
 
     // #876 — Kleinian custom inversion-sphere editor.
     /// <summary>Editable rows backing <c>FractalParameters.KleinianCustomSpheres</c>.</summary>

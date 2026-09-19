@@ -63,6 +63,37 @@ public readonly struct KleinianGenerator
         => new(KleinianGeneratorKind.Inversion, cx, cy, cz, r);
 }
 
+/// <summary>An optional rotation fold applied to the descent point after each
+/// inversion step (#877). Composing a fixed rotation into every group step
+/// twists the limit set — the Fragmentarium / Knighty "rotated pseudo-Kleinian"
+/// construction — turning the symmetric sphere-inversion cocoon into spiral /
+/// twisted solids. The rotation is orthogonal (unit Jacobian), so the
+/// sphere-tracing distance estimate stays valid; a zero angle is
+/// <see cref="Has"/> = false and the DE is byte-identical to the un-rotated
+/// group.</summary>
+public readonly struct KleinianRotation
+{
+    public readonly bool Has;
+    public readonly double Ax, Ay, Az;   // normalized axis
+    public readonly double Sin, Cos;     // precomputed for the angle
+
+    public KleinianRotation(double angleRad, double ax, double ay, double az)
+    {
+        double len = Math.Sqrt(ax * ax + ay * ay + az * az);
+        if (angleRad == 0.0 || len < 1e-12)
+        {
+            Has = false; Ax = 0; Ay = 1; Az = 0; Sin = 0; Cos = 1;
+            return;
+        }
+        Ax = ax / len; Ay = ay / len; Az = az / len;
+        Sin = Math.Sin(angleRad); Cos = Math.Cos(angleRad);
+        Has = true;
+    }
+
+    /// <summary>No rotation (identity) — the byte-identical default.</summary>
+    public static KleinianRotation None => default;
+}
+
 /// <summary>A user-editable / serializable inversion sphere — the mutable
 /// authoring form of an inversion <see cref="KleinianGenerator"/> (#876). The
 /// custom-group editor edits a list of these; the calculator converts them to
@@ -111,12 +142,24 @@ public sealed class KleinianGroup
     /// first generator's radius (or 0 for an empty group).</summary>
     public double SphereRadius { get; }
 
+    /// <summary>Optional rotation fold applied after each inversion step (#877).
+    /// <see cref="KleinianRotation.None"/> by default (byte-identical).</summary>
+    public KleinianRotation Rotation { get; }
+
+    /// <summary>True when a non-trivial rotation fold is set — gates the CPU
+    /// descent (the GPU 4-sphere kernel has no rotation path).</summary>
+    public bool HasRotation => Rotation.Has;
+
     public KleinianGroup(IReadOnlyList<KleinianGenerator> generators, int maxWordLength)
+        : this(generators, maxWordLength, KleinianRotation.None) { }
+
+    public KleinianGroup(IReadOnlyList<KleinianGenerator> generators, int maxWordLength, KleinianRotation rotation)
     {
         if (generators is null) throw new ArgumentNullException(nameof(generators));
         _generators = new KleinianGenerator[generators.Count];
         for (int i = 0; i < _generators.Length; i++) _generators[i] = generators[i];
 
+        Rotation = rotation;
         MaxWordLength = Math.Max(2, maxWordLength);
 
         bool allInv = true, uniform = true;
@@ -134,6 +177,11 @@ public sealed class KleinianGroup
     /// <summary>The generator array (internal representation) for the hot DE
     /// loop. Returns the backing array directly — callers must not mutate it.</summary>
     public KleinianGenerator[] ToArray() => _generators;
+
+    /// <summary>Return this group with a rotation fold set (#877). A rotation with
+    /// <see cref="KleinianRotation.Has"/> = false returns the group unchanged.</summary>
+    public KleinianGroup WithRotation(KleinianRotation rotation)
+        => rotation.Has ? new KleinianGroup(_generators, MaxWordLength, rotation) : this;
 
     /// <summary>The generators as editable sphere defs — used to seed the custom
     /// editor from a built-in preset (#876). Non-inversion generators are

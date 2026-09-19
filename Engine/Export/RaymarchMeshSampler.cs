@@ -93,7 +93,10 @@ public static class RaymarchMeshSampler
                 var group = p.KleinianPreset == KleinianPreset.Custom
                     ? KleinianGroup.FromSpheres(p.KleinianCustomSpheres, deIter)
                     : KleinianGroup.FromPreset(p.KleinianPreset, scaleK, p.KleinianNecklaceCount, deIter);
-                return new KleinianCalculator.De(group.ToArray(), deIter);
+                group = group.WithRotation(new KleinianRotation(
+                    p.KleinianRotationAngle * (Math.PI / 180.0),
+                    p.KleinianRotationAxisX, p.KleinianRotationAxisY, p.KleinianRotationAxisZ));
+                return new KleinianCalculator.De(group.ToArray(), deIter, group.Rotation);
             }
 
             case FractalType.Kifs:

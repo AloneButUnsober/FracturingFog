@@ -359,4 +359,77 @@ public class KleinianGroupTests
         Assert.Equal(4.0, dst.KleinianCustomSpheres[0].R);
         Assert.Equal(-3.0, dst.KleinianCustomSpheres[1].Cz);
     }
+
+    // ── #877 rotation fold ────────────────────────────────────────────────────
+
+    [Fact]
+    public void KleinianRotation_ZeroAngle_IsNone_NonZero_IsNormalized()
+    {
+        Assert.False(new KleinianRotation(0.0, 0, 1, 0).Has);
+        Assert.False(KleinianRotation.None.Has);
+        var r = new KleinianRotation(Math.PI / 4, 0, 2, 0);   // axis not unit
+        Assert.True(r.Has);
+        Assert.Equal(1.0, Math.Sqrt(r.Ax * r.Ax + r.Ay * r.Ay + r.Az * r.Az), 12);
+    }
+
+    [Fact]
+    public void WithRotation_Zero_ReturnsSame_NonZero_SetsFlag()
+    {
+        var g = KleinianGroup.Tetrahedral(1.0, 16);
+        Assert.Same(g, g.WithRotation(KleinianRotation.None));
+        var gr = g.WithRotation(new KleinianRotation(0.5, 0, 1, 0));
+        Assert.True(gr.HasRotation);
+        Assert.False(g.HasRotation);
+    }
+
+    [Fact]
+    public void KleinianDE_NoneRotation_MatchesNoRotOverload()
+    {
+        var gens = KleinianGroup.Tetrahedral(1.0, 16).ToArray();
+        var none = KleinianRotation.None;
+        var rng = new Random(99);
+        for (int i = 0; i < 2000; i++)
+        {
+            double x = rng.NextDouble() * 6 - 3, y = rng.NextDouble() * 6 - 3, z = rng.NextDouble() * 6 - 3;
+            Assert.Equal(
+                KleinianCalculator.KleinianDE(x, y, z, gens, 16),
+                KleinianCalculator.KleinianDE(x, y, z, gens, 16, in none));
+        }
+    }
+
+    [Fact]
+    public void Calculator_Rotation_ChangesOutput()
+    {
+        KleinianCalculator Render(double angle)
+        {
+            var c = new KleinianCalculator(96, 72)
+            {
+                ColorMap = new HsvPalette(),
+                FractalParameters = new FractalParameters { KleinianRotationAngle = angle },
+            };
+            c.Calculate(default);
+            return c;
+        }
+        var a = Render(0.0);
+        var b = Render(35.0);
+        Assert.False(a.ColorBuffer.AsSpan().SequenceEqual(b.ColorBuffer)); // rotation is visible
+        Assert.True(b.ColorBuffer.Distinct().Count() > 4);                 // still structured
+    }
+
+    [Fact]
+    public void Region_RoundTrips_Rotation()
+    {
+        var src = new FractalParameters
+        {
+            KleinianRotationAngle = 42.0,
+            KleinianRotationAxisX = 1.0, KleinianRotationAxisY = 0.0, KleinianRotationAxisZ = 0.5,
+        };
+        var snap = RegionFractalParams.Snapshot(FractalType.Kleinian, src);
+        Assert.NotNull(snap);
+        var dst = new FractalParameters();
+        snap!.ApplyTo(dst);
+        Assert.Equal(42.0, dst.KleinianRotationAngle);
+        Assert.Equal(1.0, dst.KleinianRotationAxisX);
+        Assert.Equal(0.5, dst.KleinianRotationAxisZ);
+    }
 }

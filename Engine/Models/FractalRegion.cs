@@ -472,6 +472,11 @@ namespace FracturingFog.Models
         [JsonIgnore(Condition = OmitNull)] public int? KleinianNecklaceCount { get; set; }
         // #876 — user-authored custom inversion sphere list (omitted when empty).
         [JsonIgnore(Condition = OmitNull)] public List<KleinianSphereDef>? KleinianCustomSpheres { get; set; }
+        // #877 — rotation-fold angle (deg) + axis (omitted when angle is 0).
+        [JsonIgnore(Condition = OmitNull)] public double? KleinianRotationAngle { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public double? KleinianRotationAxisX { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public double? KleinianRotationAxisY { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public double? KleinianRotationAxisZ { get; set; }
 
         /// <summary>
         /// Capture the P1-relevant parameters for <paramref name="type"/> from a
@@ -620,6 +625,10 @@ namespace FracturingFog.Models
                         ? p.KleinianNecklaceCount : (int?)null,
                     KleinianCustomSpheres = p.KleinianCustomSpheres.Count > 0
                         ? p.KleinianCustomSpheres.ConvertAll(s => s.Clone()) : null,
+                    KleinianRotationAngle = p.KleinianRotationAngle != 0.0 ? p.KleinianRotationAngle : (double?)null,
+                    KleinianRotationAxisX = p.KleinianRotationAngle != 0.0 ? p.KleinianRotationAxisX : (double?)null,
+                    KleinianRotationAxisY = p.KleinianRotationAngle != 0.0 ? p.KleinianRotationAxisY : (double?)null,
+                    KleinianRotationAxisZ = p.KleinianRotationAngle != 0.0 ? p.KleinianRotationAxisZ : (double?)null,
                 },
                 FractalType.BicomplexMandelbrot => new RegionFractalParams
                 {
@@ -804,6 +813,10 @@ namespace FracturingFog.Models
                         if (KleinianPreset.HasValue) p.KleinianPreset = (FracturingFog.KleinianPreset)KleinianPreset.Value;
                         if (KleinianNecklaceCount.HasValue) p.KleinianNecklaceCount = KleinianNecklaceCount.Value;
                         if (KleinianCustomSpheres != null) p.KleinianCustomSpheres = KleinianCustomSpheres.ConvertAll(s => s.Clone());
+                        if (KleinianRotationAngle.HasValue) p.KleinianRotationAngle = KleinianRotationAngle.Value;
+                        if (KleinianRotationAxisX.HasValue) p.KleinianRotationAxisX = KleinianRotationAxisX.Value;
+                        if (KleinianRotationAxisY.HasValue) p.KleinianRotationAxisY = KleinianRotationAxisY.Value;
+                        if (KleinianRotationAxisZ.HasValue) p.KleinianRotationAxisZ = KleinianRotationAxisZ.Value;
                         break;
                     case FractalType.BicomplexMandelbrot:
                         p.BicomplexCameraDistance = d; p.BicomplexCameraTheta = th; p.BicomplexCameraPhi = ph;

@@ -174,6 +174,19 @@ Two families of algorithm, and the design must pick per-generator-kind:
 the pure-inversion descent recovered as the fast path when all generators are
 inversions (preserving today's output byte-for-byte at the tetrahedral preset).
 
+**Finding (2026-09-19, revises the above for the 3-D path).** The general
+Möbius-word DE is worth building *for 3-D conformal generators that keep a solid
+limit set* — inversions plus **rotations/translations** (the rotation fold shipped
+in S4/#877 is the first, tractable instance). But the **complex-Möbius**
+2-generator families (Grandma's recipe, Maskit slice — §3.6 preset row) act on the
+Riemann sphere Ĉ; their limit set is a fractal **curve** (Hausdorff dim < 2) on a
+2-sphere, *not* a 3-D solid. A 3-D distance-estimator that sphere-traces a solid
+cannot render a 1-D curve-on-a-sphere without a different construction (tube/curve
+DE) — it is a category mismatch. Those families belong to the **2-D Indra's-Pearls
+point-plotter** (§2.3 of the R&D doc), a separate render path. So the 3-D epic's S4
+delivers rotation/translation-augmented inversion groups; Grandma's-recipe + the
+Maskit animation are **re-homed** to the 2-D track.
+
 ### 3.5 Analytic DE (axis 4)
 
 The current DE tracks only `|J|` (scalar). The **analytic DE** tracks the full
@@ -393,9 +406,18 @@ polish.
   script" import (§6.1). Avalonia-only, Control Center section (not FloatingMenu —
   deprecated). *Deps: S1, S2.* — **MVP completes here.**
 
-- **S4 — [#877](https://github.com/AloneButUnsober/FracturingFog/issues/877) — Möbius/rotation generators + general word-descent DE (Tier 2).**
-  Sphere-pair Schottky + rotation generators; the general Möbius-word DE (§3.4).
-  Grandma's-recipe two-generator factory (trace-parameterized). *Deps: S1.*
+- **S4 — [#877](https://github.com/AloneButUnsober/FracturingFog/issues/877) — rotation-augmented 3D inversion groups.**
+  **SHIPPED** as a **rotation fold** (`KleinianRotation`: axis + angle applied after
+  each inversion step; orthogonal → DE stays valid, angle 0 = byte-identical) — the
+  Fragmentarium/Knighty "rotated pseudo-Kleinian", producing twisted/spiral 3-D
+  limit-set solids. Exposed as params (`KleinianRotationAngle` + axis) on every
+  preset/Custom; region-persisted; GPU-gated to CPU when rotating. *Deps: S1.*
+  **Scope correction (finding, 2026-09-19):** the originally-planned *Grandma's-recipe
+  two-generator + general Möbius-word DE* is a **complex-Möbius (2-D) construction** —
+  its limit set is a fractal *curve* on the Riemann sphere Ĉ, not a 3-D solid, so it
+  does **not** fit this 3-D distance-estimator (see §3.4 note). It is **re-homed** to a
+  new **2-D Indra's-Pearls renderer** track ([#888](https://github.com/AloneButUnsober/FracturingFog/issues/888), relates §2.3); the
+  Maskit animation (S6) rides that, not this.
 
 - **S5 — [#878](https://github.com/AloneButUnsober/FracturingFog/issues/878) — Colour drivers (ColorGen/Theme reach, §6.2).**
   `wordLength` / `lastGenerator` integer AOV + new **Categorical `ColorThemeKind`**;
@@ -404,7 +426,10 @@ polish.
 
 - **S6 — [#879](https://github.com/AloneButUnsober/FracturingFog/issues/879) — Maskit-slice / trace animation hook (§6.5).**
   Animate Grandma's-recipe `tab`; scene-engine track. The marquee animation.
-  *Deps: S4.*
+  **RE-HOMED (2026-09-19):** rides the **2-D Indra's-Pearls renderer** track
+  ([#888](https://github.com/AloneButUnsober/FracturingFog/issues/888)), not the 3-D
+  DE path (Grandma's recipe is a 2-D construction — see S4 finding + §3.4). Depends on
+  #888, not #877.
 
 - **S7 — [#880](https://github.com/AloneButUnsober/FracturingFog/issues/880) — GPU parity for variable generator lists (§6.4).**
   Structured-buffer generators in `KleinianGpuCalculator`. *Deps: S1 (+S2 presets,
@@ -476,3 +501,10 @@ win, S1-only) → S4 → S6 → S8 → S7 (GPU last, largest, CPU-authoritative)
   out of reach (no per-pixel hook); ColorGen/Theme in reach (categorical word-length
   kind + generalized orbit-trap). Sliced S1–S8 (S1–S3 = MVP). Sub-issues filed and
   cross-linked from this doc + #855.
+- **2026-09-19** — **MVP shipped** (S1 #874 descriptor + S2 #875 presets + S3 #876
+  editor). **S4 #877 shipped** as a **rotation fold** (rotated pseudo-Kleinian) after a
+  scope finding: the planned Grandma's-recipe + general Möbius-word DE is a
+  complex-Möbius **2-D** construction (limit set = a curve on Ĉ, not a 3-D solid) and
+  does not fit the 3-D distance-estimator (§3.4 finding). Grandma's recipe + the Maskit
+  animation (S6 #879) **re-homed** to a new **2-D Indra's-Pearls renderer** track
+  (#888). Remaining 3-D slices: S5 #878 colour, S7 #880 GPU, S8 #881 analytic DE.
