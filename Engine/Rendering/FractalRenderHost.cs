@@ -96,6 +96,7 @@ namespace FracturingFog.Rendering
         private RandomTileCalculator _randomTileCalculator;
         private ChaoticBilliardCalculator _billiardCalculator;
         private PrecisionFieldCalculator _precisionFieldCalculator;
+        private IndrasPearlsCalculator _indrasPearlsCalculator;
         private FlameRenderer _flameCalculator;
         private SandboxCalculator _sandboxCalculator;
         private UserBulbCalculator _userBulbCalculator;
@@ -467,6 +468,7 @@ namespace FracturingFog.Rendering
             _randomTileCalculator = new RandomTileCalculator(w, h);
             _billiardCalculator = new ChaoticBilliardCalculator(w, h);
             _precisionFieldCalculator = new PrecisionFieldCalculator(w, h);
+            _indrasPearlsCalculator = new IndrasPearlsCalculator(w, h);
             _flameCalculator = new FlameRenderer(w, h);
             _sandboxCalculator = new SandboxCalculator(w, h);
             _userBulbCalculator = new UserBulbCalculator(w, h);
@@ -511,6 +513,7 @@ namespace FracturingFog.Rendering
                 _randomTileCalculator.ColorMap = initialColorMap;
                 _billiardCalculator.ColorMap = initialColorMap;
                 _precisionFieldCalculator.ColorMap = initialColorMap;
+                _indrasPearlsCalculator.ColorMap = initialColorMap;
                 _flameCalculator.ColorMap = initialColorMap;
                 _sandboxCalculator.ColorMap = initialColorMap;
                 _userBulbCalculator.ColorMap = initialColorMap;
@@ -992,6 +995,7 @@ namespace FracturingFog.Rendering
                 _randomTileCalculator.ColorMap = value;
                 _billiardCalculator.ColorMap = value;
                 _precisionFieldCalculator.ColorMap = value;
+                _indrasPearlsCalculator.ColorMap = value;
                 _flameCalculator.ColorMap = value;
                 _sandboxCalculator.ColorMap = value;
                 _userBulbCalculator.ColorMap = value;
@@ -2872,6 +2876,7 @@ namespace FracturingFog.Rendering
             _randomTileCalculator.Resize(w, h);
             _billiardCalculator.Resize(w, h);
             _precisionFieldCalculator.Resize(w, h);
+            _indrasPearlsCalculator.Resize(w, h);
             _flameCalculator.Resize(w, h);
             _sandboxCalculator.Resize(w, h);
             _userBulbCalculator.Resize(w, h);
@@ -3513,6 +3518,7 @@ namespace FracturingFog.Rendering
                 case PlasmaCalculator pl: pl.FractalParameters = ViewState.FractalParameters; break;
                 case AcidWarpCalculator aw: aw.FractalParameters = ViewState.FractalParameters; break;
                 case ApollonianCalculator ap: ap.FractalParameters = ViewState.FractalParameters; break;
+                case IndrasPearlsCalculator ip: ip.FractalParameters = ViewState.FractalParameters; break;
                 case KleinianCalculator kl: kl.FractalParameters = ViewState.FractalParameters; break;
                 case BicomplexMandelbrotCalculator bc: bc.FractalParameters = ViewState.FractalParameters; break;
                 case CoquaternionMandelbrotCalculator cq: cq.FractalParameters = ViewState.FractalParameters; break;
@@ -3705,6 +3711,7 @@ namespace FracturingFog.Rendering
             FractalType.RandomTile => _randomTileCalculator,
             FractalType.ChaoticBilliard => _billiardCalculator,
             FractalType.PrecisionField => _precisionFieldCalculator,
+            FractalType.IndrasPearls => _indrasPearlsCalculator,
             FractalType.Flame => _flameCalculator,
             FractalType.Sandbox => _sandboxCalculator,
             FractalType.UserBulb => _userBulbCalculator,

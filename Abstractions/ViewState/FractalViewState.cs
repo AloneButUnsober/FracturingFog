@@ -291,6 +291,9 @@ namespace FracturingFog.ViewState
                 FractalType.BicomplexMandelbrot   => ( 0.0,  0.0, 1.0),
                 FractalType.Coquaternion          => ( 0.0,  0.0, 1.0),
                 FractalType.Dla                   => ( 0.0,  0.0, 1.0),
+                // Indra's Pearls (#892) — Maskit μ = 2i limit set above the real
+                // axis; centre (0, 1), wide zoom (matches MiniMapDefaults).
+                FractalType.IndrasPearls          => ( 0.0,  1.0, 0.6),
                 _                            => (-0.5,  0.0, 1.0),
             };
             CenterXLo = CenterX2 = CenterX3 = 0;
