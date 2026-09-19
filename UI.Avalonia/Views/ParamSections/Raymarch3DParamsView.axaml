@@ -249,7 +249,7 @@
         <!-- Kleinian -->
         <Grid IsVisible="{Binding IsKleinian}"
               ColumnDefinitions="160,*"
-              RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto">
+              RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto">
             <TextBlock Grid.Row="0" Grid.Column="0" Text="Group preset:" VerticalAlignment="Center" />
             <ComboBox Grid.Row="0" Grid.Column="1" HorizontalAlignment="Stretch" Margin="0,2"
                       ItemsSource="{Binding KleinianPresets}"
@@ -298,6 +298,11 @@
                 <NumericUpDown Width="72" Minimum="-1" Maximum="1" Increment="0.1" FormatString="F2"
                                Value="{Binding KleinianRotationAxisZ, Mode=TwoWay}" />
             </StackPanel>
+            <TextBlock Grid.Row="9" Grid.Column="0" Text="Colour by:" VerticalAlignment="Center" />
+            <ComboBox Grid.Row="9" Grid.Column="1" HorizontalAlignment="Stretch" Margin="0,2"
+                      ItemsSource="{Binding KleinianColorSources}"
+                      SelectedItem="{Binding KleinianColorSource, Mode=TwoWay}"
+                      ToolTip.Tip="What drives the surface colour. WordLength bands by inversion-descent depth (responds to Inversion iter); LastGenerator gives one band per sphere." />
         </Grid>
 
         <!-- Kleinian custom sphere-list editor (#876). Shown for the Custom preset. -->

@@ -114,6 +114,7 @@ public sealed class KleinianCalculator : IFractalCalculator
             FractalParameters.KleinianRotationAxisZ));
         KleinianGenerator[] gens = group.ToArray();
         KleinianRotation rot = group.Rotation;
+        var colorSrc = FractalParameters.KleinianColorSource;   // #878
         double r = Math.Sqrt(2.0) * scaleK;     // tangent radius (camera framing)
 
         double setRadius = scaleK * Math.Sqrt(3.0) + r;
@@ -186,7 +187,8 @@ public sealed class KleinianCalculator : IFractalCalculator
         // preset). Any other group (>4 spheres, mixed radii, non-inversion
         // generators) falls to the general CPU descent below.
         bool gpuEligible = group.AllInversions && group.UniformRadius && gens.Length == 4
-                           && !group.HasRotation;   // #877 — rotation fold is CPU-only
+                           && !group.HasRotation                              // #877 — rotation fold is CPU-only
+                           && colorSrc == KleinianColorSource.Smooth;          // #878 — word colouring is CPU-only
         if (fx.UseGpuRender && fx.DebugAov == AovView.Beauty && !lowRes && gpuEligible)
         {
             var rp = new GpuRaymarchParams
@@ -291,6 +293,8 @@ public sealed class KleinianCalculator : IFractalCalculator
                            - KleinianDE(sx, sy, sz - hn, gens, deIter, in rot);
                 var snrm = Normalize3(sn0, sn1, sn2);
                 float ssmooth = (float)sStep * (192f / Math.Max(1, maxSteps)) + (float)(tT * 0.5);
+                if (colorSrc != KleinianColorSource.Smooth)   // #878 — sample the word just inside the surface
+                    ssmooth = KleinianColorScalar(colorSrc, sx + dx * eps * 4, sy + dy * eps * 4, sz + dz * eps * 4, gens, deIter, in rot);
                 uint sbase = (uint)ColorMap.Map(ssmooth, 0f, 256, (float)snrm[0], (float)snrm[1]);
                 var sinputs = new ShadingInputs(sx, sy, sz, snrm[0], snrm[1], snrm[2], dx, dy, dz, tT, 0.0, sStep, eps);
                 ScreenSpacePost.ClearHdrBuffer(hdrScratch);
@@ -355,6 +359,8 @@ public sealed class KleinianCalculator : IFractalCalculator
 
                 float smooth = (float)hitStep * (192f / Math.Max(1, maxSteps))
                              + (float)(tTotal * 0.5);
+                if (colorSrc != KleinianColorSource.Smooth)   // #878 — sample the word just inside the surface
+                    smooth = KleinianColorScalar(colorSrc, px + rdx * eps * 4, py + rdy * eps * 4, pz + rdz * eps * 4, gens, deIter, in rot);
                 uint baseColor = (uint)ColorMap.Map(smooth, 0f, 256, (float)nrm[0], (float)nrm[1]);
 
                 // Phase 2 — shading via shared pipeline.
@@ -546,6 +552,58 @@ public sealed class KleinianCalculator : IFractalCalculator
         }
         if (scale < 1e-30) return 0.0;
         return nearest / scale;
+    }
+
+    /// <summary>#878 — run the inversion descent at a point and report the word:
+    /// <paramref name="depth"/> = number of inversion steps executed before escape,
+    /// <paramref name="lastGen"/> = index of the last generator applied (−1 if none).
+    /// Mirrors <see cref="KleinianDE"/>'s loop; drives WordLength / LastGenerator
+    /// colouring, and makes <c>KleinianIterations</c> visible (#53).</summary>
+    public static void KleinianWord(
+        double px, double py, double pz,
+        KleinianGenerator[] gens, int iter, in KleinianRotation rot,
+        out int depth, out int lastGen)
+    {
+        int n = gens.Length;
+        depth = 0; lastGen = -1;
+        for (int i = 0; i < iter; i++)
+        {
+            int bestK = -1;
+            double bestDeep = 0.0;
+            for (int k = 0; k < n; k++)
+            {
+                var g = gens[k];
+                double dx = px - g.Cx, dy = py - g.Cy, dz = pz - g.Cz;
+                double d = Math.Sqrt(dx * dx + dy * dy + dz * dz) - g.R;
+                if (d < bestDeep) { bestDeep = d; bestK = k; }
+            }
+            if (bestK < 0) break;
+            var b = gens[bestK];
+            double ex = px - b.Cx, ey = py - b.Cy, ez = pz - b.Cz;
+            double e2 = ex * ex + ey * ey + ez * ez;
+            if (e2 < 1e-30) break;
+            double f = (b.R * b.R) / e2;
+            px = b.Cx + ex * f; py = b.Cy + ey * f; pz = b.Cz + ez * f;
+            if (rot.Has) RotateInPlace(in rot, ref px, ref py, ref pz);
+            depth++; lastGen = bestK;
+        }
+    }
+
+    // #878 — the palette scalar [0,256) for the selected colour source at a hit.
+    private static float KleinianColorScalar(
+        KleinianColorSource src, double px, double py, double pz,
+        KleinianGenerator[] gens, int iter, in KleinianRotation rot)
+    {
+        KleinianWord(px, py, pz, gens, iter, in rot, out int depth, out int lastGen);
+        if (src == KleinianColorSource.LastGenerator)
+        {
+            int n = Math.Max(1, gens.Length);
+            int g = lastGen < 0 ? 0 : lastGen;
+            return (float)((g + 0.5) / n * 256.0);
+        }
+        // WordLength — band by descent depth over the iteration cap.
+        float wl = (float)depth / Math.Max(1, iter);
+        return wl * 255.0f;
     }
 
     private static double[] Normalize3(double x, double y, double z)

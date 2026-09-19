@@ -1041,6 +1041,10 @@ namespace FracturingFog.Models
         public double KleinianRotationAxisX { get; set; } = 0.0;
         public double KleinianRotationAxisY { get; set; } = 1.0;
         public double KleinianRotationAxisZ { get; set; } = 0.0;
+        /// <summary>What drives the Kleinian surface base colour (#878). Smooth =
+        /// the shipped default (byte-identical). WordLength / LastGenerator colour
+        /// by the descent word.</summary>
+        public KleinianColorSource KleinianColorSource { get; set; } = KleinianColorSource.Smooth;
         /// <summary>Inversion-iteration cap for the Kleinian DE. Higher =
         /// sharper limit-set boundary, slower per ray sample. Default 16
         /// covers the visible boundary; deep cusps need 24+.</summary>
@@ -1535,6 +1539,7 @@ namespace FracturingFog.Models
                 KleinianRotationAxisX = KleinianRotationAxisX,
                 KleinianRotationAxisY = KleinianRotationAxisY,
                 KleinianRotationAxisZ = KleinianRotationAxisZ,
+                KleinianColorSource = KleinianColorSource,
                 KleinianIterations = KleinianIterations,
                 KleinianSphereScale = KleinianSphereScale,
                 KleinianMaxSteps = KleinianMaxSteps,

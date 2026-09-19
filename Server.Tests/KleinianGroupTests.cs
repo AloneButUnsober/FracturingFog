@@ -432,4 +432,62 @@ public class KleinianGroupTests
         Assert.Equal(1.0, dst.KleinianRotationAxisX);
         Assert.Equal(0.5, dst.KleinianRotationAxisZ);
     }
+
+    // ── #878 colour drivers (word length / last generator) ────────────────────
+
+    [Fact]
+    public void KleinianWord_ReportsDepthAndGenerator()
+    {
+        var gens = KleinianGroup.Tetrahedral(1.0, 16).ToArray();
+        var none = KleinianRotation.None;
+        // A point inside a sphere (near, not exactly at, its centre) → descent runs.
+        KleinianCalculator.KleinianWord(0.8, 0.8, 0.8, gens, 16, in none, out int depth, out int lastGen);
+        Assert.True(depth > 0);
+        Assert.InRange(lastGen, 0, 3);
+        // A far point escapes immediately → no descent.
+        KleinianCalculator.KleinianWord(10, 10, 10, gens, 16, in none, out int d2, out int g2);
+        Assert.Equal(0, d2);
+        Assert.Equal(-1, g2);
+    }
+
+    private static KleinianCalculator RenderKlein(KleinianColorSource src, int iter = 16)
+    {
+        var c = new KleinianCalculator(96, 72)
+        {
+            ColorMap = new HsvPalette(),
+            FractalParameters = new FractalParameters { KleinianColorSource = src, KleinianIterations = iter },
+        };
+        c.Calculate(default);
+        return c;
+    }
+
+    [Theory]
+    [InlineData(KleinianColorSource.WordLength)]
+    [InlineData(KleinianColorSource.LastGenerator)]
+    public void Calculator_ColorSource_RendersStructure_AndDiffersFromSmooth(KleinianColorSource src)
+    {
+        var wordish = RenderKlein(src);
+        var smooth = RenderKlein(KleinianColorSource.Smooth);
+        Assert.True(wordish.ColorBuffer.Distinct().Count() > 4);
+        Assert.False(wordish.ColorBuffer.AsSpan().SequenceEqual(smooth.ColorBuffer));
+    }
+
+    [Fact]
+    public void WordLengthColour_RespondsToInversionIterations()  // the #53 answer
+    {
+        var lo = RenderKlein(KleinianColorSource.WordLength, iter: 6);
+        var hi = RenderKlein(KleinianColorSource.WordLength, iter: 40);
+        Assert.False(lo.ColorBuffer.AsSpan().SequenceEqual(hi.ColorBuffer));
+    }
+
+    [Fact]
+    public void Region_RoundTrips_ColorSource()
+    {
+        var src = new FractalParameters { KleinianColorSource = KleinianColorSource.LastGenerator };
+        var snap = RegionFractalParams.Snapshot(FractalType.Kleinian, src);
+        Assert.NotNull(snap);
+        var dst = new FractalParameters();
+        snap!.ApplyTo(dst);
+        Assert.Equal(KleinianColorSource.LastGenerator, dst.KleinianColorSource);
+    }
 }
