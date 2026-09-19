@@ -7,65 +7,88 @@
     <!-- ═══ Explore ═══ (extracted from ControlCenterView for detach/pop-out) -->
     <StackPanel Spacing="0">
         <Border Classes="group">
-            <StackPanel Spacing="6">
+            <StackPanel Spacing="6" MaxWidth="425" HorizontalAlignment="Left">
                 <TextBlock Classes="section" Text="Region Navigation" />
                 <!-- Fractal type selector — mirrors the toolbar Type combo
                      (Main.FractalEntries / SelectedFractalEntry). Needed so a
                      recalled workspace whose tool window is fractal-type-specific
                      can have its type set from the Control Center (#433 follow-up). -->
-                <TextBlock Classes="label" Text="Type" />
-                <ComboBox x:Name="TypeCombo"
+                <TextBlock Classes="label" Text="Type" HorizontalAlignment="Left" Margin="0,4,0,0"/>
+                <!--<StackPanel Orientation="Horizontal" Spacing="6">
+                       
+                </StackPanel>-->
+                <Grid ColumnDefinitions="*,Auto" 
+                        Margin="0,0,8,0" ColumnSpacing="6">
+                    <ComboBox Grid.Column="0" x:Name="TypeCombo"
                           ItemsSource="{Binding Shell.Main.FractalEntries}"
                           SelectedItem="{Binding Shell.Main.SelectedFractalEntry}"
-                          HorizontalAlignment="Stretch" Margin="0,4,0,6">
-                    <ComboBox.ItemTemplate>
-                        <DataTemplate DataType="vm:FractalTypeEntry">
-                            <TextBlock Text="{Binding Label}" />
-                        </DataTemplate>
-                    </ComboBox.ItemTemplate>
-                </ComboBox>
+                          MinWidth="215" MaxWidth="305" HorizontalAlignment="Stretch" Margin="0,4,0,6">
+                        <ComboBox.ItemTemplate>
+                            <DataTemplate DataType="vm:FractalTypeEntry">
+                                <TextBlock Text="{Binding Label}" />
+                            </DataTemplate>
+                        </ComboBox.ItemTemplate>
+                    </ComboBox>
+                    <Button Grid.Column="1" Classes="action help" Content="Params…" 
+                        Command="{Binding Shell.ShowFractalParamsCommand}" 
+                        Width="83" HorizontalAlignment="Stretch" 
+                        ToolTip.Tip="Open the per-fractal parameter editor"/> 
+                </Grid>
+
                 <!-- Right-click ("Edit region…" + filter-by-fractal-type) is wired
                      in code-behind to match the toolbar Region combo (issue #51). -->
-                <TextBlock Classes="label" Text="Region" />
+                <TextBlock Classes="label" Text="Region" HorizontalAlignment="Left" />
                 <ComboBox x:Name="RegionCombo"
                           ItemsSource="{Binding Menu.RegionNames}"
                           SelectedItem="{Binding Menu.SelectedRegion}"
-                          HorizontalAlignment="Stretch" Margin="0,4,0,0" />
-                <UniformGrid Columns="4">
-                    <Button Classes="action neutral" Content="Save"   Command="{Binding Menu.SaveViewCommand}"      ToolTip.Tip="Save current view as a region" Margin="0,0,4,0" />
-                    <Button Classes="action danger"  Content="Delete" Command="{Binding Menu.DeleteRegionCommand}"  ToolTip.Tip="Delete selected region" Margin="0,0,4,0" />
-                    <Button Classes="action neutral" Content="Exp…"   Command="{Binding Menu.ExportRegionsCommand}" ToolTip.Tip="Export regions to JSON" Margin="0,0,4,0" />
-                    <Button Classes="action neutral" Content="Imp…"   Command="{Binding Menu.ImportRegionsCommand}" ToolTip.Tip="Import regions from JSON" />
-                </UniformGrid>
-
-                <Grid ColumnDefinitions="80,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto" Margin="0,8,0,0">
-                    <TextBlock Classes="label" Grid.Row="0" Grid.Column="0" Text="CX:" Margin="0,0,8,4" />
-                    <TextBox   Classes="coord" Grid.Row="0" Grid.Column="1" Text="{Binding Menu.CX, UpdateSourceTrigger=PropertyChanged}" Margin="0,0,0,4" />
-                    <TextBlock Classes="label" Grid.Row="1" Grid.Column="0" Text="CY:" Margin="0,0,8,4" />
-                    <TextBox   Classes="coord" Grid.Row="1" Grid.Column="1" Text="{Binding Menu.CY, UpdateSourceTrigger=PropertyChanged}" Margin="0,0,0,4" />
-                    <TextBlock Classes="label" Grid.Row="2" Grid.Column="0" Text="Quality:" Margin="0,0,8,4" />
-                    <ComboBox Grid.Row="2" Grid.Column="1" ItemsSource="{Binding Menu.QualityNames}" SelectedItem="{Binding Menu.SelectedQuality}" HorizontalAlignment="Stretch" Margin="0,0,0,4" />
-                    <TextBlock Classes="label" Grid.Row="3" Grid.Column="0" Text="Zoom:" Margin="0,0,8,4" />
-                    <TextBox   Classes="coord" Grid.Row="3" Grid.Column="1" Text="{Binding Menu.Zoom, UpdateSourceTrigger=PropertyChanged}" Margin="0,0,0,4" />
-                    <TextBlock Classes="label" Grid.Row="4" Grid.Column="0" Text="Iterations:" Margin="0,0,8,0" />
-                    <TextBox   Classes="coord" Grid.Row="4" Grid.Column="1" Text="{Binding Menu.Iter, UpdateSourceTrigger=PropertyChanged}" />
+                          MinWidth="305" MaxWidth="395" HorizontalAlignment="Stretch" Margin="0,4,0,0" />
+                <Grid ColumnDefinitions="Auto,Auto,Auto,Auto">
+                    <Button Grid.Column="0" Classes="action neutral" Content="Save"   Command="{Binding Menu.SaveViewCommand}"      ToolTip.Tip="Save current view as a region" Margin="0,0,4,0" />
+                    <Button Grid.Column="1" Classes="action danger"  Content="Delete" Command="{Binding Menu.DeleteRegionCommand}"  ToolTip.Tip="Delete selected region" Margin="0,0,4,0" />
+                    <Button Grid.Column="2" Classes="action neutral" Content="Export…"   Command="{Binding Menu.ExportRegionsCommand}" ToolTip.Tip="Export regions to JSON" Margin="0,0,4,0" />
+                    <Button Grid.Column="3" Classes="action neutral" Content="Import…"   Command="{Binding Menu.ImportRegionsCommand}" ToolTip.Tip="Import regions from JSON" />
                 </Grid>
-                <CheckBox Content="Lock Iterations" IsChecked="{Binding Menu.IterLocked}" Foreground="#C8C878" FontWeight="Bold" Margin="80,4,0,0" ToolTip.Tip="Lock iteration count — pan/zoom won't recalc" />
-                <CheckBox Content="Pipe notation (FF-native limbs)" IsChecked="{Binding Menu.UsePipeNotation}" Margin="80,4,0,0" ToolTip.Tip="Off (default): show/copy CX/CY as a single decimal value. On: show/copy pipe-delimited limbs (Hi|Lo|…) for lossless deep-zoom precision. Paste accepts either." />
-                <UniformGrid Columns="3" Margin="80,6,0,0">
-                    <Button Classes="action go" Content="Go"     Command="{Binding Menu.GoCommand}"         Margin="0,0,4,0" />
-                    <Button Classes="action go" Content="Flip Y" Command="{Binding Menu.FlipCommand}"       Margin="0,0,4,0" />
-                    <Button Classes="action go" Content="Copy"   Command="{Binding Menu.CopyCoordsCommand}" ToolTip.Tip="Copy CX/CY/Zoom/Iter to clipboard" />
-                </UniformGrid>
+
+                <CheckBox Content="Pipe notation (FF-native limbs)" IsChecked="{Binding Menu.UsePipeNotation}" Margin="80,8,0,0"
+                          ToolTip.Tip="Off (default): show/copy CX/CY as a single decimal value. On: show/copy pipe-delimited limbs (Hi|Lo|…) for lossless deep-zoom precision. Paste accepts either." />
+                <Grid ColumnDefinitions="80,*" RowDefinitions="Auto,*,Auto,Auto,Auto" >
+                    <TextBlock Classes="label" Grid.Row="0" Grid.Column="0" Text="CX:" Margin="0,0,8,4" />
+                    <TextBox   Classes="coord" Grid.Row="0" Grid.Column="1" Text="{Binding Menu.CX, UpdateSourceTrigger=PropertyChanged}" Margin="0,0,0,4"
+                               MinWidth="225" MaxWidth="315" HorizontalAlignment="Stretch"/>
+                    <TextBlock Classes="label" Grid.Row="1" Grid.Column="0" Text="CY:" Margin="0,0,8,4" />
+                    <TextBox   Classes="coord" Grid.Row="1" Grid.Column="1" Text="{Binding Menu.CY, UpdateSourceTrigger=PropertyChanged}" Margin="0,0,0,4"
+                               MinWidth="225" MaxWidth="315" HorizontalAlignment="Stretch" />
+                    <TextBlock Classes="label" Grid.Row="2" Grid.Column="0" Text="Quality:" Margin="0,0,8,4" />
+                    <ComboBox Grid.Row="2" Grid.Column="1" ItemsSource="{Binding Menu.QualityNames}" SelectedItem="{Binding Menu.SelectedQuality}"
+                               MinWidth="225" MaxWidth="315" HorizontalAlignment="Stretch" Margin="0,0,0,4" />
+                    <TextBlock Classes="label" Grid.Row="3" Grid.Column="0" Text="Zoom:" Margin="0,0,8,4" />
+                    <TextBox   Classes="coord" Grid.Row="3" Grid.Column="1" Text="{Binding Menu.Zoom, UpdateSourceTrigger=PropertyChanged}" Margin="0,0,0,4"
+                               MinWidth="225" MaxWidth="315" HorizontalAlignment="Stretch" />
+                    <TextBlock Classes="label" Grid.Row="4" Grid.Column="0" Text="Iterations:" Margin="0,0,8,0" />
+                    <TextBox   Classes="coord" Grid.Row="4" Grid.Column="1" Text="{Binding Menu.Iter, UpdateSourceTrigger=PropertyChanged}"
+                               MinWidth="225" MaxWidth="315" HorizontalAlignment="Stretch" />
+                </Grid>
+
+                    <CheckBox Content="Lock Iterations" IsChecked="{Binding Menu.IterLocked}" Margin="80,0,0,0"
+                              Foreground="#C8C878" FontWeight="Bold" ToolTip.Tip="Lock iteration count — pan/zoom won't recalc" />
+                
+                <Grid ColumnDefinitions="Auto,Auto,Auto" Margin="80,6,0,0">
+                    <Button Grid.Column="0" Classes="action go" Content="Go"     Command="{Binding Menu.GoCommand}"         Margin="0,0,4,0" />
+                    <Button Grid.Column="1" Classes="action go" Content="Flip Y" Command="{Binding Menu.FlipCommand}"       Margin="0,0,4,0" />
+                    <Button Grid.Column="2" Classes="action go" Content="Copy"   Command="{Binding Menu.CopyCoordsCommand}" ToolTip.Tip="Copy CX/CY/Zoom/Iter to clipboard" />
+                </Grid>
             </StackPanel>
         </Border>
 
-        <Border Classes="group">
+        <!--<Border Classes="group">
             <StackPanel Spacing="6">
                 <TextBlock Classes="section" Text="Parameters" />
-                <Button Classes="action help" Content="Fractal Params…" Command="{Binding Shell.ShowFractalParamsCommand}" HorizontalAlignment="Stretch" ToolTip.Tip="Open the per-fractal parameter editor" />
+                <Button Classes="action help" Content="Fractal Params…" 
+                        Command="{Binding Shell.ShowFractalParamsCommand}" 
+                        Width="135" HorizontalAlignment="Left" 
+                        ToolTip.Tip="Open the per-fractal parameter editor" />
             </StackPanel>
-        </Border>
+        </Border>-->
 
         <!-- Deep-zoom diagnostics — power mode only -->
         <Border Classes="group" IsVisible="{Binding IsPowerMode}">

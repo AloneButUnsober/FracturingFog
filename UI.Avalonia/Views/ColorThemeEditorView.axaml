@@ -6,7 +6,7 @@
              xmlns:views="using:FracturingFog.UI.Avalonia.Views"
              x:Class="FracturingFog.UI.Avalonia.Views.ColorThemeEditorView"
              x:DataType="vm:ColorThemeEditorViewModel"
-             Foreground="#DCDCDC">
+             Foreground="#DCDCDC" >
 
     <UserControl.Styles>
         <Style Selector="TextBlock.section">
@@ -44,7 +44,7 @@
         </Style>
     </UserControl.Styles>
 
-    <Grid RowDefinitions="Auto,Auto,*,Auto" Margin="10">
+    <Grid RowDefinitions="Auto,Auto,*,Auto" Margin="10" MinWidth="1000" MaxWidth="1400">
 
         <!-- Title row -->
         <Grid Grid.Row="0" ColumnDefinitions="*,Auto">
@@ -83,7 +83,7 @@
 
         <!-- Main two-column content -->
         <ScrollViewer Grid.Row="2" HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
-            <Grid ColumnDefinitions="*,12,*">
+            <Grid ColumnDefinitions="Auto,8,*">
 
                 <!-- LEFT COLUMN -->
                 <StackPanel Grid.Column="0" Orientation="Vertical">
@@ -92,7 +92,7 @@
                     <Border Classes="group">
                         <StackPanel Spacing="6">
                             <TextBlock Classes="section" Text="Target" />
-                            <Grid ColumnDefinitions="Auto,*" RowDefinitions="Auto,Auto" Margin="0,4,0,0">
+                            <Grid ColumnDefinitions="90,*" RowDefinitions="Auto,Auto" Margin="0,4,0,0">
                                 <TextBlock Classes="label" Grid.Row="0" Grid.Column="0" Text="Region:" Margin="0,0,8,4" />
                                 <ComboBox x:Name="RegionCombo"
                                           Grid.Row="0" Grid.Column="1"
@@ -119,20 +119,27 @@
                     <Border Classes="group">
                         <StackPanel Spacing="6">
                             <TextBlock Classes="section" Text="Identity" />
-                            <Grid ColumnDefinitions="Auto,*" RowDefinitions="Auto,Auto,Auto,Auto" Margin="0,4,0,0">
-                                <TextBlock Classes="label" Grid.Row="0" Grid.Column="0" Text="Name:"     Margin="0,0,8,4" />
-                                <TextBox   x:Name="NameField" Grid.Row="0" Grid.Column="1" Text="{Binding Name}"        Margin="0,0,0,4" />
-                                <TextBlock Classes="label" Grid.Row="1" Grid.Column="0" Text="Category:" Margin="0,0,8,4" />
+                            <Grid ColumnDefinitions="90,*" RowDefinitions="Auto,Auto,Auto,Auto" Margin="0,4,0,0">
+                                <TextBlock Classes="label" Grid.Row="0" Grid.Column="0" Text="Name:" 
+                                           Margin="0,0,8,4" MaxWidth="90" MinWidth="0"/>
+                                <TextBox   x:Name="NameField" Grid.Row="0" Grid.Column="1" Text="{Binding Name}" 
+                                           Margin="0,0,0,4"  />
+                                <TextBlock Classes="label" Grid.Row="1" Grid.Column="0" Text="Category:" 
+                                           Margin="0,0,8,4" MaxWidth="90"/>
                                 <TextBox   Grid.Row="1" Grid.Column="1" Text="{Binding Category}"    Margin="0,0,0,4" />
-                                <TextBlock Classes="label" Grid.Row="2" Grid.Column="0" Text="Desc:"     Margin="0,0,8,4" />
+                                <TextBlock Classes="label" Grid.Row="2" Grid.Column="0" Text="Desc:" 
+                                           Margin="0,0,8,4" MaxWidth="50"/>
                                 <TextBox   Grid.Row="2" Grid.Column="1" Text="{Binding Description}" Margin="0,0,0,4" />
-                                <TextBlock Classes="label" Grid.Row="3" Grid.Column="0" Text="Max zoom:" Margin="0,0,8,0" />
-                                <StackPanel Grid.Row="3" Grid.Column="1" Orientation="Horizontal" Spacing="8">
+                                <TextBlock Classes="label" Grid.Row="3" Grid.Column="0" Text="Max zoom:" 
+                                           Margin="0,0,8,0" MaxWidth="90"/>
+                                <StackPanel Grid.Row="3" Grid.Column="1" Orientation="Horizontal" Spacing="8" MinWidth="0">
                                     <NumericUpDown Value="{Binding MaxRecommendedZoom}"
                                                    Minimum="0" Maximum="1000000000"
                                                    FormatString="0" Width="160"
-                                                   IsEnabled="{Binding MaxZoomEnabled}" />
-                                    <CheckBox Content="Limited" IsChecked="{Binding MaxZoomEnabled}" Foreground="#B4B4B4" VerticalAlignment="Center" />
+                                                   IsEnabled="{Binding MaxZoomEnabled}"
+                                                   MinWidth="0"/>
+                                    <CheckBox Content="Limited" IsChecked="{Binding MaxZoomEnabled}" Foreground="#B4B4B4" 
+                                              VerticalAlignment="Center" MinWidth="0"/>
                                 </StackPanel>
                             </Grid>
                         </StackPanel>
@@ -142,16 +149,22 @@
                     <Border Classes="group">
                         <StackPanel Spacing="6">
                             <TextBlock Classes="section" Text="Kind" />
-                            <StackPanel Orientation="Horizontal" Spacing="14">
-                                <RadioButton Content="Gradient" GroupName="kind" IsChecked="{Binding IsGradient}" Foreground="#DCDCDC" />
-                                <RadioButton Content="Cycling"  GroupName="kind" IsChecked="{Binding IsCycling}"  Foreground="#DCDCDC" />
-                                <RadioButton Content="Phong3D"  GroupName="kind" IsChecked="{Binding IsPhong}"    Foreground="#DCDCDC" />
-                                <RadioButton Content="Pbr3D"    GroupName="kind" IsChecked="{Binding IsPbr}"      Foreground="#DCDCDC" />
-                                <RadioButton Content="Orbit Trap" GroupName="kind" IsChecked="{Binding IsOrbitTrap}" Foreground="#DCDCDC"
+                            <Grid ColumnDefinitions="Auto,Auto,Auto" RowDefinitions="Auto,Auto">
+                                <RadioButton Grid.Column="0" Grid.Row="0" Margin="0,0,8,0"
+                                             Content="Gradient" GroupName="kind" IsChecked="{Binding IsGradient}" Foreground="#DCDCDC" />
+                                <RadioButton Grid.Column="1" Grid.Row="0" Margin="0,0,8,0"
+                                             Content="Cycling"  GroupName="kind" IsChecked="{Binding IsCycling}"  Foreground="#DCDCDC" />
+                                <RadioButton Grid.Column="2" Grid.Row="0" Margin="0,0,8,0"
+                                             Content="Phong3D"  GroupName="kind" IsChecked="{Binding IsPhong}"    Foreground="#DCDCDC" />
+                                <RadioButton Grid.Column="0" Grid.Row="1" Margin="0,0,8,0"
+                                             Content="Pbr3D"    GroupName="kind" IsChecked="{Binding IsPbr}"      Foreground="#DCDCDC" />
+                                <RadioButton Grid.Column="1" Grid.Row="1" Margin="0,0,8,0"
+                                             Content="Orbit Trap" GroupName="kind" IsChecked="{Binding IsOrbitTrap}" Foreground="#DCDCDC"
                                              ToolTip.Tip="Colour by the minimum distance from the orbit to a chosen shape (point / ring / hexagon / …), mapped through the gradient below. Orbit-aware." />
-                                <RadioButton Content="Categorical" GroupName="kind" IsChecked="{Binding IsCategorical}" Foreground="#DCDCDC"
+                                <RadioButton Grid.Column="2" Grid.Row="1" Margin="0,0,8,0"
+                                             Content="Categorical" GroupName="kind" IsChecked="{Binding IsCategorical}" Foreground="#DCDCDC"
                                              ToolTip.Tip="Per-gate categorical colouring for the chaotic-billiard scatterer. Colour stops below are the per-gate palette; the In-set colour is the trapped set." />
-                            </StackPanel>
+                            </Grid>
                         </StackPanel>
                     </Border>
 
@@ -194,7 +207,8 @@
                                           HorizontalAlignment="Left" Width="170" Margin="0,0,0,4"
                                           ToolTip.Tip="How the escape outcome modulates the per-gate colour: Flat (gate only), BounceShade (darken with bounce count), PathLength (ramp the stops as a gradient by path length), BounceCyclic (cycle the palette by bounce count)." />
                             </Grid>
-                            <TextBlock TextWrapping="Wrap" Foreground="#B4B4B4" FontSize="11"
+                            <TextBlock TextWrapping="Wrap" Foreground="#B4B4B4" FontSize="11" 
+                                       MaxWidth="475" HorizontalAlignment="Left"
                                        Text="Colour stops below are the per-gate palette (stop order = escape gate). The In-set colour is the trapped set. For a colour-blind-safe base, seed from a built-in &quot;Billiard - …&quot; theme." />
                         </StackPanel>
                     </Border>
@@ -205,51 +219,14 @@
                             <Border BorderBrush="#2A2A2A" BorderThickness="0" Background="Transparent">
                                 <Grid ColumnDefinitions="Auto,Auto,Auto,Auto,Auto,Auto" RowDefinitions="Auto,Auto">
                                     <TextBlock Grid.Column="0" Grid.Row="0" Classes="section" Grid.ColumnSpan="2"
-                                               Text="Color stops" VerticalAlignment="Center" />
-                                    <Button Grid.Column="1"  Grid.Row="1" Classes="action add"    Content="Add"   Command="{Binding AddStopCommand}" />
-                                    <Button Grid.Column="2"  Grid.Row="1" Classes="action new"    Content="🎲 Random"
-                                            Command="{Binding RandomizeCommand}"
-                                            ToolTip.Tip="Generate a random theme: golden-ratio palette plus Kind-aware extras (cycle, 3D lights, PBR, In-set, Post-FX). See the toggles below. Seed recorded in Description." />
-                                    <Button Grid.Column="3"   Grid.Row="1" Classes="action export" Content="From image…" Command="{Binding FromImageCommand}" />
-                                    <Button Grid.Column="4"  Grid.Row="1" Classes="action save"   Content="Import…"     Command="{Binding ImportPaletteCommand}" />
-                                    <Button Grid.Column="5"  Grid.Row="1" Classes="action export" Content="Export…"     Command="{Binding ExportPaletteCommand}" />
+                                               Text="Color stops" VerticalAlignment="Center" Margin="0,0,0,8"/>
+                                    <StackPanel Orientation="Horizontal" Grid.Column="0" Grid.Row="1" Grid.RowSpan="4">
+                                        <Button Grid.Column="1"  Grid.Row="1" Classes="action add"    Content="Add"   Command="{Binding AddStopCommand}" />
+                                    <Button Grid.Column="2"   Grid.Row="1" Classes="action export" Content="From image…" Command="{Binding FromImageCommand}" />
+                                    <Button Grid.Column="3"  Grid.Row="1" Classes="action save"   Content="Import…"     Command="{Binding ImportPaletteCommand}" />
+                                    <Button Grid.Column="4"  Grid.Row="1" Classes="action export" Content="Export…"     Command="{Binding ExportPaletteCommand}" />
+                                    </StackPanel>
                                 </Grid>
-                            </Border>
-                            <!-- Randomize scope / mode toggles (#83) -->
-                            <Border BorderBrush="#2A2A2A" BorderThickness="0" Background="Transparent">
-                                <StackPanel Spacing="6">
-                                    <StackPanel Orientation="Horizontal" Spacing="18">
-                                        <CheckBox Content="Random Experimental" IsChecked="{Binding RandomExperimental}"
-                                                  Foreground="#DCDCDC" VerticalAlignment="Center"
-                                                  ToolTip.Tip="Off: keep random values in artful, logical ranges. On: remove caps and go wild." />
-                                        <CheckBox Content="In-set" IsChecked="{Binding RandomIncludeInSet}"
-                                                  Foreground="#DCDCDC" VerticalAlignment="Center"
-                                                  ToolTip.Tip="Include a random In-set (interior) colour when generating a random theme." />
-                                        <CheckBox Content="Post-FX" IsChecked="{Binding RandomIncludePostFx}"
-                                                  Foreground="#DCDCDC" VerticalAlignment="Center"
-                                                  ToolTip.Tip="Include random Post-FX defaults (Brightness / Contrast / Adaptive-HE) when generating a random theme." />
-                                        <CheckBox Content="Theme light colour" IsChecked="{Binding RandomInclude3DLightColor}"
-                                                  Foreground="#DCDCDC" VerticalAlignment="Center"
-                                                  ToolTip.Tip="For Phong3D / PBR3D themes: include random diffuse + specular colours for the theme's Key/Fill/Rim light rig. Off keeps each light's current colour while still re-placing the rig + re-rolling intensity/shininess (#524)." />
-                                        <CheckBox Content="Scene light colour" IsChecked="{Binding RandomIncludeSceneLightColor}"
-                                                  IsVisible="{Binding HasViewParams}"
-                                                  Foreground="#DCDCDC" VerticalAlignment="Center"
-                                                  ToolTip.Tip="Also randomize the SCENE 3D lighting colours — the live Lighting-FX directional lights (Relief3D / Volumetric). Off leaves the scene lights' current colours untouched (#524)." />
-                                    </StackPanel>
-                                    <StackPanel Orientation="Horizontal" Spacing="14">
-                                        <TextBlock Text="Seed:" Foreground="#DCDCDC" VerticalAlignment="Center" />
-                                        <TextBox Width="130" Text="{Binding RandomSeedText}"
-                                                 IsEnabled="{Binding UseRandomSeed}"
-                                                 PlaceholderText="(random)"
-                                                 ToolTip.Tip="When 'Use Seed' is on, enter a positive integer here and click Random to reproduce a theme. The seed used is always shown here afterward." />
-                                        <CheckBox Content="Use Seed" IsChecked="{Binding UseRandomSeed}"
-                                                  Foreground="#DCDCDC" VerticalAlignment="Center"
-                                                  ToolTip.Tip="Off: ignore the Seed field, use a fresh random seed each click. On: use the Seed field value for the next Random click." />
-                                        <CheckBox Content="Interpolation" IsChecked="{Binding RandomIncludeInterpolation}"
-                                                  Foreground="#DCDCDC" VerticalAlignment="Center"
-                                                  ToolTip.Tip="Include random Interpolation settings (Space / Curve / Transfer / Strength / Gamma) when generating a random theme." />
-                                    </StackPanel>
-                                </StackPanel>
                             </Border>
                             <Border BorderBrush="#2A2A2A" BorderThickness="0" Background="Transparent">
                             <Grid ColumnDefinitions="Auto,Auto,*">
@@ -328,8 +305,8 @@
                         <StackPanel Spacing="4" Orientation="Horizontal">
                         <StackPanel Spacing="6">
                             <TextBlock Classes="section" Text="Interpolation" />
-                            <Grid ColumnDefinitions="Auto,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto" Margin="0,4,0,0">
-                                <TextBlock Classes="label" Grid.Row="0" Grid.Column="0" Text="Space:" Margin="0,0,8,4" />
+                            <Grid ColumnDefinitions="Auto,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto" Margin="0,4,0,0">
+                                <TextBlock Classes="label" Grid.Row="0" Grid.Column="0" Text="Space:" Margin="0,0,8,4"/>
                                 <ComboBox Grid.Row="0" Grid.Column="1"
                                           ItemsSource="{Binding ColorSpaceOptions}" SelectedItem="{Binding InterpSpace}"
                                           HorizontalAlignment="Left" Width="170" Margin="0,0,0,4"
@@ -361,9 +338,8 @@
                                                Foreground="#9B9B9B" Width="36" VerticalAlignment="Center" />
                                 </StackPanel>
                             </Grid>
-                        </StackPanel>
-                        <!-- Out-of-bounds surround (#615) -->
-                            <StackPanel Spacing="6" Margin="8,0,0,0">
+                            
+                                <StackPanel Spacing="6" Margin="8,0,0,0">
                                 <TextBlock Classes="section" Text="Out-of-bounds (surround)" />
                                 <StackPanel Orientation="Horizontal" Spacing="6">
                                     <CheckBox Content="Override" IsChecked="{Binding UseOutOfBounds}" Foreground="#B4B4B4" VerticalAlignment="Center" />
@@ -371,8 +347,10 @@
                                                  IsEnabled="{Binding UseOutOfBounds}" Width="130"/>
                                 </StackPanel>
                                 <TextBlock Text="Colours the flat disk seen when zoomed out (beyond the escape radius), independently of the fractal. 2D escape-time types."
-                                           Foreground="#8C8C8C" TextWrapping="Wrap" FontSize="11" />
+                                           Foreground="#8C8C8C" TextWrapping="Wrap" FontSize="11" 
+                                           MaxWidth="255"/>
                             </StackPanel>
+                        </StackPanel>
                         <!-- In-set -->
                             <StackPanel Spacing="6" Margin="8,0,0,0">
                                 <TextBlock Classes="section" Text="In-set (interior)" />
@@ -537,28 +515,84 @@
                         </StackPanel>
                     </Border>
                 </StackPanel>
-                <GridSplitter Grid.Column="1"
+                <!--<GridSplitter Grid.Column="1"
                               ResizeDirection="Columns"
                               Classes="splitter"
                               HorizontalAlignment="Center"
                               Margin="4,0,4,0"
-                              Width="4"/>
+                              Width="4"/>-->
                 <!-- RIGHT COLUMN -->
                 <StackPanel Grid.Column="2" Orientation="Vertical">
-
+                    <!-- Randomize scope / mode toggles (#83) -->
+                            <Border Classes="group">
+                                <StackPanel Spacing="6">
+                                    <TextBlock Classes="section" Text="Random Color Theme" />
+                                    
+                                    <StackPanel Orientation="Horizontal" Spacing="8">
+                                        <Button Grid.Column="2"  Grid.Row="1" Classes="action new"    Content="🎲 Random"
+                                            Command="{Binding RandomizeCommand}"
+                                            ToolTip.Tip="Generate a random theme: golden-ratio palette plus Kind-aware extras (cycle, 3D lights, PBR, In-set, Post-FX). See the toggles below. Seed recorded in Description." />
+                                        <TextBlock Text="Seed:" Foreground="#DCDCDC" VerticalAlignment="Center"/>
+                                        <TextBox Width="130" Text="{Binding RandomSeedText}"
+                                                 IsEnabled="{Binding UseRandomSeed}"
+                                                 PlaceholderText="(random)"
+                                                 ToolTip.Tip="When 'Use Seed' is on, enter a positive integer here and click Random to reproduce a theme. The seed used is always shown here afterward." />
+                                        <CheckBox Content="Use Seed" IsChecked="{Binding UseRandomSeed}"
+                                                  Foreground="#DCDCDC" VerticalAlignment="Center"
+                                                  ToolTip.Tip="Off: ignore the Seed field, use a fresh random seed each click. On: use the Seed field value for the next Random click." />
+                                        
+                                    </StackPanel>
+                                    <Grid ColumnDefinitions="Auto,*" RowDefinitions="Auto,Auto,Auto" Margin="4,0,0,0">
+                                        
+                                        <CheckBox Grid.Column="0" Grid.Row="0"
+                                                  Content="Experimental" IsChecked="{Binding RandomExperimental}"
+                                                  Foreground="#DCDCDC" VerticalAlignment="Center"
+                                                  ToolTip.Tip="Off: keep random values in artful, logical ranges. On: remove caps and go wild." 
+                                                  Margin="0,0,8,0"/>
+                                       <CheckBox Grid.Column="1" Grid.Row="0"
+                                                 Content="Interpolation" IsChecked="{Binding RandomIncludeInterpolation}"
+                                                  Foreground="#DCDCDC" VerticalAlignment="Center"
+                                                  ToolTip.Tip="Include random Interpolation settings (Space / Curve / Transfer / Strength / Gamma) when generating a random theme." />                                        
+                                        
+                                    
+                                        <CheckBox Grid.Column="0" Grid.Row="1"
+                                                  Content="Post-FX" IsChecked="{Binding RandomIncludePostFx}"
+                                                  Foreground="#DCDCDC" VerticalAlignment="Center"
+                                                  ToolTip.Tip="Include random Post-FX defaults (Brightness / Contrast / Adaptive-HE) when generating a random theme." />
+                                       <CheckBox Grid.Column="1" Grid.Row="1"
+                                                 Content="Theme light colour" IsChecked="{Binding RandomInclude3DLightColor}"
+                                                  Foreground="#DCDCDC" VerticalAlignment="Center"
+                                                  ToolTip.Tip="For Phong3D / PBR3D themes: include random diffuse + specular colours for the theme's Key/Fill/Rim light rig. Off keeps each light's current colour while still re-placing the rig + re-rolling intensity/shininess (#524)." />
+                                        
+                                    
+                                        <CheckBox Grid.Column="0" Grid.Row="2"
+                                                  Content="In-set" IsChecked="{Binding RandomIncludeInSet}"
+                                                  Foreground="#DCDCDC" VerticalAlignment="Center"
+                                                  ToolTip.Tip="Include a random In-set (interior) colour when generating a random theme." />
+                                        <CheckBox Grid.Column="1" Grid.Row="2"
+                                                  Content="Scene light colour" IsChecked="{Binding RandomIncludeSceneLightColor}"
+                                                  IsVisible="{Binding HasViewParams}"
+                                                  Foreground="#DCDCDC" VerticalAlignment="Center"
+                                                  ToolTip.Tip="Also randomize the SCENE 3D lighting colours — the live Lighting-FX directional lights (Relief3D / Volumetric). Off leaves the scene lights' current colours untouched (#524)." />
+                                    </Grid>
+                                </StackPanel>
+                            </Border>
                     <!-- 3D shared -->
                     <Border Classes="group" IsVisible="{Binding Show3D}">
                         <StackPanel Spacing="6">
                             <TextBlock Classes="section" Text="3D lighting (Phong / PBR)" />
-                            <Grid ColumnDefinitions="Auto,*,Auto,*" RowDefinitions="Auto,Auto" Margin="0,4,0,0">
-                                <TextBlock Classes="label" Grid.Row="0" Grid.Column="0" Text="Steepness:" Margin="0,0,2,0" />
+                            <Grid ColumnDefinitions="*,*,*,*" RowDefinitions="Auto,Auto" Margin="0,4,0,0" HorizontalAlignment="Left">
+                                <TextBlock Classes="label" Grid.Row="0" Grid.Column="0" Text="Steepness:" Margin="0,0,8,0" 
+                                           HorizontalAlignment="Left"/>
                                 <NumericUpDown Grid.Row="0" Grid.Column="1" Value="{Binding Steepness}"
                                                Minimum="0.1" Maximum="10" Increment="0.05"
-                                               FormatString="0.00" Width="130" Margin="0,0,16,0" />
-                                <TextBlock Classes="label" Grid.Row="0" Grid.Column="2" Text="Ambient:" Margin="0,0,2,0" />
+                                               FormatString="0.00" Width="130"  HorizontalAlignment="Left"/>
+                                <TextBlock Classes="label" Grid.Row="0" Grid.Column="2" Text="Ambient:" Margin="16,0,8,0" 
+                                           HorizontalAlignment="Left"/>
                                 <NumericUpDown Grid.Row="0" Grid.Column="3" Value="{Binding Ambient}"
                                                Minimum="0" Maximum="1" Increment="0.01"
-                                               FormatString="0.000" Width="130" />
+                                               FormatString="0.000" Width="130" 
+                                               HorizontalAlignment="Left"/>
                                 <CheckBox Grid.Row="1" Grid.Column="1"
                                           Content="Inspect"
                                           IsChecked="{Binding Inspect3DActive}"
@@ -798,16 +832,17 @@
                                                Increment="0.05" FormatString="0.000" Width="130" HorizontalAlignment="Left" />
                             </Grid>
 
-                            <Grid ColumnDefinitions="*,Auto" Margin="0,4,0,0">
+                            <Grid ColumnDefinitions="Auto,Auto,*" Margin="16,4,0,0" HorizontalAlignment="Left">
                                 <TextBlock Grid.Column="0" Classes="label" Text="Material bands (UpperT / Metal / Rough):" VerticalAlignment="Center" />
-                                <Button Grid.Column="1" Classes="action add" Content="+ Add band" Command="{Binding AddBandCommand}" />
-                            </Grid>
-                            <CheckBox Content="Inspect"
+                                <Button Grid.Column="1" Classes="action add" Content="+ Add band" Command="{Binding AddBandCommand}" 
+                                        Margin="4"/>
+                                <CheckBox Content="Inspect" Grid.Column="2"
                                       IsChecked="{Binding InspectBandActive}"
                                       IsEnabled="{Binding InspectBandEnabled}"
                                       Foreground="#C8C878" FontWeight="Bold"
                                       Margin="0,2,0,2"
                                       ToolTip.Tip="Single-click the rendered fractal to highlight the material band whose UpperT range covers the sampled stop position." />
+                            </Grid>
                             <Border BorderBrush="#2A2A2A" BorderThickness="1" Background="#1A1A1A" MaxHeight="200">
                                 <ScrollViewer VerticalScrollBarVisibility="Auto">
                                     <ItemsControl x:Name="BandsItems" ItemsSource="{Binding MaterialBands}">

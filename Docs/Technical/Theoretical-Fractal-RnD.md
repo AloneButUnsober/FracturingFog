@@ -417,6 +417,8 @@ pictures" hook.
 basin boundaries); Aurell et al. 1997 (FSLE); Haller 2015 (Lagrangian coherent structures); Pickover
 (biomorphs / orbit traps); Norton 1982 (quaternion Julia rendering); Green (Buddhabrot / escape-space
 deposition). §7.
+**Sources:** Ott & Tél 1993 (chaotic scattering); Norton 1982 (quaternion Julia rendering); Green
+(Buddhabrot / escape-space deposition). §7.
 **Status:** ready to schedule — tracking issue + slices **S1–S3 (MVP, ~1 wk)**, **S4–S6 optional**.
 
 ---

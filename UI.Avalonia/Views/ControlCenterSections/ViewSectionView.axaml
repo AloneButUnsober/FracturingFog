@@ -9,13 +9,12 @@
         <Border Classes="group">
             <StackPanel Spacing="6">
                 <TextBlock Classes="section" Text="View" />
-                <UniformGrid Columns="5" Margin="0,4,0,0">
-                    <Button Classes="action neutral" Content="Reset"  Command="{Binding Menu.ResetCommand}"      ToolTip.Tip="Reset view to default center and zoom" Margin="0,0,4,4" />
-                    <Button Classes="action neutral" Content="{Binding Menu.SpanButtonText}" Command="{Binding Menu.SpanCommand}" ToolTip.Tip="Span across all monitors" Margin="0,0,4,4" />
-                    <Button Classes="action neutral" Content="Wall"   Command="{Binding Menu.WallpaperCommand}"  ToolTip.Tip="Render a wallpaper-sized image at the virtual-screen union of every monitor" Margin="0,0,4,4" />
-                    <Button Classes="action neutral" Content="Image"  Command="{Binding Menu.ScreenshotCommand}" ToolTip.Tip="High-resolution screenshot" Margin="0,0,4,4" />
-                    <Button Classes="action neutral" Content="{Binding Menu.PosterButtonText}" Command="{Binding Menu.PosterCommand}"     ToolTip.Tip="Print-ready poster image (click again while rendering to cancel)" Margin="0,0,0,4" />
-                </UniformGrid>
+                <Grid ColumnDefinitions="Auto,Auto,Auto,Auto" ColumnSpacing="6">
+                    <Button Grid.Column="0" Classes="action neutral" Content="Reset"  Command="{Binding Menu.ResetCommand}"      ToolTip.Tip="Reset view to default center and zoom" Margin="0,0,4,4" />
+                    <Button Grid.Column="1" Classes="action neutral" Content="{Binding Menu.SpanButtonText}" Command="{Binding Menu.SpanCommand}" ToolTip.Tip="Span across all monitors" Margin="0,0,4,4" />
+                    <Button Grid.Column="2" Classes="action neutral" Content="Mini Mode"   Command="{Binding Shell.ToggleMiniModeCommand}"  Margin="0,0,4,4" ToolTip.Tip="Shrink to a compact drag-handle window" />
+                    <Button Grid.Column="3" Classes="action neutral" Content="Toy Mode"    Command="{Binding Shell.ToggleToyModeCommand}"   Margin="0,0,0,4" ToolTip.Tip="Hide toolbar + status for a clean canvas" />
+                </Grid>
                 <StackPanel Orientation="Horizontal" Spacing="14" Margin="0,4,0,0">
                     <CheckBox Content="Status" IsChecked="{Binding Menu.ShowStatusBar}" Foreground="#9B9B9B" FontWeight="Bold" />
                     <CheckBox Content="Grid"   IsChecked="{Binding Menu.ShowGrid}"      Foreground="#9B9B9B" FontWeight="Bold" ToolTip.Tip="Overlay complex-plane grid" />
@@ -23,45 +22,53 @@
                     <ComboBox ItemsSource="{Binding Menu.ResolutionNames}"
                               SelectedItem="{Binding Menu.SelectedResolution}"
                               Width="160" ToolTip.Tip="Set window dimensions" />
-                    <!-- Global UI scale (#809 / S4 #813): shrink / percent / enlarge /
+                </StackPanel>    
+                     <Grid ColumnDefinitions="Auto,Auto,Auto,Auto,Auto">
+                         <!-- Global UI scale (#809 / S4 #813): shrink / percent / enlarge /
                          reset. Scales all dialogs + windows (not the render window).
                          Shortcuts: Ctrl+-, Ctrl+=, Ctrl+0. -->
-                    <TextBlock Text="UI" VerticalAlignment="Center" Foreground="#9B9B9B" FontWeight="Bold" />
-                    <Button Content="A−" Padding="8,2" VerticalAlignment="Center"
+                    <TextBlock Grid.Column="0" Text="Scale (UI &amp; Text)" VerticalAlignment="Center" Foreground="#9B9B9B" FontWeight="Bold"
+                               Width="115" HorizontalAlignment="Left"/>
+                    <Button Grid.Column="1" Content="A−" Padding="8,2" 
                             Command="{Binding UiScaleDownCommand}"
-                            ToolTip.Tip="Make the UI (all dialogs/windows) smaller — Ctrl+-" />
-                    <TextBlock Text="{Binding UiScalePercent}" Width="44" TextAlignment="Center"
+                            ToolTip.Tip="Make the UI (all dialogs/windows) smaller — Ctrl+-"
+                            HorizontalAlignment="Left"/>
+                    <TextBlock Grid.Column="2" Text="{Binding UiScalePercent}" Width="44" TextAlignment="Center"
                                VerticalAlignment="Center" Foreground="#DCDCDC" FontWeight="Bold" />
-                    <Button Content="A+" Padding="8,2" VerticalAlignment="Center"
+                    <Button Grid.Column="3" Content="A+" Padding="8,2" VerticalAlignment="Center"
                             Command="{Binding UiScaleUpCommand}"
                             ToolTip.Tip="Make the UI (all dialogs/windows) larger — Ctrl+=" />
-                    <Button Content="100%" Padding="6,2" VerticalAlignment="Center"
+                    <Button Grid.Column="4" Content="100%" Padding="6,2" VerticalAlignment="Center"
                             Command="{Binding UiScaleResetCommand}"
                             ToolTip.Tip="Reset UI size to 100% — Ctrl+0" />
-                </StackPanel>
-                <!-- Big Buttons (kid mode): opens the standalone three-button kid
-                     dialog and auto-closes the Control Center. -->
-                <Button Content="Big Buttons (Kids)"
-                        Command="{Binding Shell.ShowBigButtonsCommand}"
-                        HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"
-                        FontWeight="Bold" Padding="0,8" Margin="0,8,0,0"
-                        Background="#8E44AD" Foreground="White"
-                        ToolTip.Tip="Open the big three-button dialog for kids (Color / Place / Show) — closes the Control Center" />
+                     </Grid>
             </StackPanel>
         </Border>
 
         <Border Classes="group">
             <StackPanel Spacing="6">
                 <TextBlock Classes="section" Text="Display" />
-                <UniformGrid Columns="2">
-                    <Button Classes="action neutral" Content="Mini Map"    Command="{Binding Shell.ToggleMiniMapCommand}"   Margin="0,0,4,4" ToolTip.Tip="Toggle the mini map overlay window" />
-                    <Button Classes="action neutral" Content="Mini Depth"  Command="{Binding Shell.ToggleMiniDepthCommand}" Margin="0,0,0,4" ToolTip.Tip="Toggle the mini depth histogram window" />
-                    <Button Classes="action neutral" Content="Mini Mode"   Command="{Binding Shell.ToggleMiniModeCommand}"  Margin="0,0,4,4" ToolTip.Tip="Shrink to a compact drag-handle window" />
-                    <Button Classes="action neutral" Content="Toy Mode"    Command="{Binding Shell.ToggleToyModeCommand}"   Margin="0,0,0,4" ToolTip.Tip="Hide toolbar + status for a clean canvas" />
-                    <Button Classes="action neutral" Content="Post-FX HUD" Command="{Binding Shell.TogglePostFxHudCommand}" ToolTip.Tip="Toggle the on-canvas brightness/contrast/adaptive overlay, tethered to the render window (shortcut: X)" />
-                    <Button Classes="action neutral" Content="Status Panel" Command="{Binding Shell.ToggleStatusPanelCommand}" ToolTip.Tip="Toggle a floating, drag-to-move copy of the status bar" />
-                    <Button Classes="action neutral" Content="Toolbar Panel" Command="{Binding Shell.ToggleToolbarPanelCommand}" ToolTip.Tip="Toggle a floating, drag-to-move/resize copy of the toolbar" />
-                </UniformGrid>
+                <Grid ColumnDefinitions="Auto,Auto" RowDefinitions="Auto,Auto,Auto" ColumnSpacing="6" RowSpacing="4">
+                    <Button Grid.Row="0" Grid.Column="0" Classes="action neutral" Content="Mini Map"    Command="{Binding Shell.ToggleMiniMapCommand}" ToolTip.Tip="Toggle the mini map overlay window"
+                            HorizontalAlignment="Stretch" VerticalAlignment="Stretch" />
+                    <Button Grid.Row="0" Grid.Column="1" Classes="action neutral" Content="Mini Depth"  Command="{Binding Shell.ToggleMiniDepthCommand}" ToolTip.Tip="Toggle the mini depth histogram window"
+                            HorizontalAlignment="Stretch" VerticalAlignment="Stretch" />
+                    <Button Grid.Row="1" Grid.Column="0" Classes="action neutral" Content="Post-FX HUD" Command="{Binding Shell.TogglePostFxHudCommand}" ToolTip.Tip="Toggle the on-canvas brightness/contrast/adaptive overlay, tethered to the render window (shortcut: X)"
+                            HorizontalAlignment="Stretch" VerticalAlignment="Stretch" VerticalContentAlignment="Center" />
+                    <!-- Big Buttons (kid mode): opens the standalone three-button kid
+                     dialog and auto-closes the Control Center. -->
+                    <Button Content="Big Buttons (Kids)"
+                            Grid.Row="1" Grid.Column="1"
+                        Command="{Binding Shell.ShowBigButtonsCommand}"
+                        HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"
+                        Classes="action neutral" 
+                        ToolTip.Tip="Open the big three-button dialog for kids (Color / Place / Show) — closes the Control Center" />
+                     
+                    <Button Grid.Row="2" Grid.Column="0" Classes="action neutral" Content="Status Panel" Command="{Binding Shell.ToggleStatusPanelCommand}" ToolTip.Tip="Toggle a floating, drag-to-move copy of the status bar"
+                            HorizontalAlignment="Stretch" VerticalAlignment="Stretch" />
+                    <Button Grid.Row="2" Grid.Column="1" Classes="action neutral" Content="Toolbar Panel" Command="{Binding Shell.ToggleToolbarPanelCommand}" ToolTip.Tip="Toggle a floating, drag-to-move/resize copy of the toolbar"
+                            HorizontalAlignment="Stretch" VerticalAlignment="Stretch" />
+                </Grid>
                 <CheckBox Content="Keep render window on top"
                           IsChecked="{Binding Shell.IsRenderTopmost, Mode=TwoWay}"
                           Foreground="#9B9B9B" FontWeight="Bold" Margin="0,4,0,0"
@@ -73,18 +80,21 @@
             <StackPanel Spacing="6">
                 <TextBlock Classes="section" Text="Workspaces" />
                 <TextBlock Text="Save the window arrangement (render window mode/size/monitor + open tool windows) as a recallable preset."
-                           TextWrapping="Wrap" Foreground="#9B9B9B" FontSize="11" />
+                           TextWrapping="Wrap" Foreground="#9B9B9B" FontSize="11" 
+                           Width="250"
+                           HorizontalAlignment="Left"/>
                 <ComboBox ItemsSource="{Binding Workspaces}"
                           SelectedItem="{Binding SelectedWorkspace}"
-                          HorizontalAlignment="Stretch"
-                          ToolTip.Tip="Saved window layouts" />
-                <UniformGrid Columns="5" Margin="0,4,0,0">
-                    <Button Classes="action neutral" Content="Save"   Command="{Binding SaveWorkspaceCommand}"   ToolTip.Tip="Save the current window arrangement as a preset (prompts for a name)" Margin="0,0,4,0" />
-                    <Button Classes="action neutral" Content="Recall" Command="{Binding ApplyWorkspaceCommand}"  ToolTip.Tip="Restore the selected layout" Margin="0,0,4,0" />
-                    <Button Classes="action neutral" Content="Delete" Command="{Binding DeleteWorkspaceCommand}" ToolTip.Tip="Delete the selected layout" Margin="0,0,4,0" />
-                    <Button Classes="action neutral" Content="Import" Command="{Binding ImportWorkspaceCommand}" ToolTip.Tip="Import a layout from a file" Margin="0,0,4,0" />
-                    <Button Classes="action neutral" Content="Export" Command="{Binding ExportWorkspaceCommand}" ToolTip.Tip="Export the selected layout to a file" />
-                </UniformGrid>
+                          HorizontalAlignment="Left"
+                          ToolTip.Tip="Saved window layouts" 
+                          Width="350"/>
+                <Grid ColumnDefinitions="Auto,Auto,Auto,Auto,Auto">
+                    <Button Grid.Column="0" Classes="action neutral" Content="Save"   Command="{Binding SaveWorkspaceCommand}"   ToolTip.Tip="Save the current window arrangement as a preset (prompts for a name)" Margin="0,0,4,0" />
+                    <Button Grid.Column="1" Classes="action neutral" Content="Recall" Command="{Binding ApplyWorkspaceCommand}"  ToolTip.Tip="Restore the selected layout" Margin="0,0,4,0" />
+                    <Button Grid.Column="2" Classes="action neutral" Content="Delete" Command="{Binding DeleteWorkspaceCommand}" ToolTip.Tip="Delete the selected layout" Margin="0,0,4,0" />
+                    <Button Grid.Column="3" Classes="action neutral" Content="Import" Command="{Binding ImportWorkspaceCommand}" ToolTip.Tip="Import a layout from a file" Margin="0,0,4,0" />
+                    <Button Grid.Column="4" Classes="action neutral" Content="Export" Command="{Binding ExportWorkspaceCommand}" ToolTip.Tip="Export the selected layout to a file" />
+                </Grid>
             </StackPanel>
         </Border>
     </StackPanel>
