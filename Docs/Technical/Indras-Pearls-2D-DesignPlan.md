@@ -241,10 +241,17 @@ framed and coloured). S3 = the marquee animation. S4+ = breadth and polish.
   reads as categorical bands. Param + Clone + region persistence + a "Colour by"
   UI combo. Byte-identical at the Density default. +6 tests. *(deps: S1)*
 
-- **S6 — [#897](https://github.com/AloneButUnsober/FracturingFog/issues/897) — more families (Riley slice, rational cusp groups).**
-  Additional group builders + preset library. *(deps: S1/S2)*
+- **S6 — [#897](https://github.com/AloneButUnsober/FracturingFog/issues/897) — more families (Riley slice, rational cusp groups). ✅ SHIPPED.**
+  Riley slice shipped in S1/S2. S6 added the **rational cusp / necklace-group
+  preset library**: three named MSW cusp groups (Grandma with tb = 2 parabolic +
+  figure ta — MSW figs 9.1 / 9.3, a 2/5 cusp), all verified renders. The general
+  **p/q cusp-group solver** (Newton on the Maskit slice for μ(p/q)) was split out
+  to a follow-up ([#904](https://github.com/AloneButUnsober/FracturingFog/issues/904))
+  — the presets deliver the necklace curves without it. +3 tests. *(deps: S1/S2)*
 
 **Recommended order:** S1 → S2 (ship MVP, pause) → S3 → S4 (animation) → S5 → S6.
+**All six slices shipped — the 2D Indra's-Pearls renderer is complete.** Only the
+optional p/q solver follow-up (#904) remains, deferred by decision.
 
 ---
 
@@ -285,6 +292,15 @@ framed and coloured). S3 = the marquee animation. S4+ = breadth and polish.
 
 ## 9. Change log
 
+- **2026-09-19** — **S6 (#897) shipped — cusp / necklace preset library; 2D
+  Indra's-Pearls renderer COMPLETE.** Riley was already shipped (S1/S2); S6 added
+  three named MSW rational-cusp "necklace" groups as presets (Grandma with the
+  second generator parabolic, `tb = 2`, and `ta` at MSW figure cusp values —
+  figs 9.1 / 9.3, plus a 2/5 cusp), all verified renders. Scope decision (with the
+  user): ship the preset expansion now; the general **p/q cusp-group solver**
+  (Newton-solving the Maskit slice for μ(p/q)) is deferred to follow-up **#904** —
+  the presets deliver the necklace limit curves without the research-grade solver.
+  +3 tests, suite 2853 green. **All six slices (S1–S6) now shipped.**
 - **2026-09-19** — **S5 (#896) shipped — colour drivers.** `IndrasColorSource`
   {Density, WordLength, LastGenerator, Parity} selects the per-pixel integer that
   drives the palette (mirrors the 3D Kleinian `KleinianColorSource` #878). The

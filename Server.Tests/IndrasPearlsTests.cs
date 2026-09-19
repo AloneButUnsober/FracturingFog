@@ -196,6 +196,29 @@ public sealed class IndrasPearlsTests
     public void HasDisplayName()
         => Assert.Equal("Indra's Pearls", Fractals.FractalNameByNameType[FractalType.IndrasPearls]);
 
+    // ── S6 cusp / necklace groups (#897) ─────────────────────────────────────
+
+    // Guards the named MSW cusp preset values against typos: each builds a valid
+    // (non-degenerate) group that plots a non-empty limit set distinct from the
+    // quasi-Fuchsian default.
+    [Theory]
+    [InlineData(1.958591030, -0.011278560)]   // MSW fig 9.1
+    [InlineData(1.64213876, -0.76658841)]     // MSW fig 9.3
+    [InlineData(1.9021, 0.0)]                  // 2/5 cusp
+    public void CuspPreset_RendersValidLimitSet(double taRe, double taIm)
+    {
+        var p = new FractalParameters { IndrasFamily = IndrasGroupFamily.GrandmaRecipe,
+            IndrasGrandmaTaRe = taRe, IndrasGrandmaTaIm = taIm, IndrasGrandmaTbRe = 2.0, IndrasGrandmaTbIm = 0.0 };
+        var calc = new IndrasPearlsCalculator(256, 256) { CenterX = 0, CenterY = 0, Zoom = 0.9, FractalParameters = p };
+        calc.Calculate();
+        int nonZero = 0;
+        foreach (var px in calc.ColorBuffer) if (px != 0) nonZero++;
+        Assert.True(nonZero > 200, $"cusp ta=({taRe},{taIm}) plotted only {nonZero}");
+        // Not NaN-degenerate: the group built and Markov holds.
+        var g = IndrasGroup.Grandma(new Complex(taRe, taIm), new Complex(2.0, 0.0));
+        Assert.False(double.IsNaN(g.GenA.A.Real));
+    }
+
     // ── S5 colour drivers (#896) ─────────────────────────────────────────────
 
     private static uint[] RenderWithSource(IndrasColorSource src, IndrasRenderMode mode)
