@@ -76,6 +76,25 @@ because frontier claims cannot be sanity-checked against existing renders.
   Cambridge University Press, 2002. Kleinian-group limit sets — Grandma's recipe, the Maskit slice,
   breadth-first word enumeration. Backs both the 2D Indra's Pearls renderer and the 3D Kleinian
   generalization.
+
+<a id="kleinian-generalization"></a>
+
+- **Bernard Maskit.** *Kleinian Groups.* Springer Grundlehren der mathematischen Wissenschaften 287,
+  1988. Fundamental domains, the Maskit slice, discreteness criteria — the reference for the 3D
+  Kleinian-generalization design (`Docs/Technical/Kleinian-Generalization-DesignPlan.md`).
+- **Lars V. Ahlfors.** *Möbius transformations in several dimensions* (Univ. Minnesota, 1981) and
+  *Möbius transformations and Clifford numbers* (in *Differential Geometry and Complex Analysis*,
+  Springer 1985). Vahlen-matrix / Clifford-algebra representation of the conformal group `Möb(Ŝⁿ)` —
+  basis for the Kleinian analytic distance estimator (full-Jacobian form).
+- **John C. Hart, Daniel J. Sandin, Louis H. Kauffman.** *Ray tracing deterministic 3-D fractals.*
+  ACM SIGGRAPH Computer Graphics 23(3), 1989. The distance-estimator sphere-tracing method underlying
+  every FF 3D raymarcher (Mandelbulb, Mandelbox, Kleinian).
+- **Frederick Soddy** (*The kiss precise*, Nature 137, 1936) and **R. L. Graham, J. C. Lagarias, C. L.
+  Mallows, A. R. Wilks, C. H. Yan** (*Apollonian circle packings: number theory*, J. Number Theory 100,
+  2003). Descartes circle theorem and Apollonian packing — basis for the Kleinian Apollonian-extrusion
+  preset.
+- **Karl Theodor Vahlen.** *Über Bewegungen und complexe Zahlen.* Mathematische Annalen 55, 1902.
+  Clifford-matrix representation of Möbius transformations — historical origin of the Ahlfors form.
 - **Michael F. Barnsley.** *Superfractals.* Cambridge University Press, 2006. V-variable IFS
   (condensation / code-tree selection among a finite fractal set) and fractal tops (address-map
   colouring of an IFS attractor).
@@ -100,6 +119,29 @@ because frontier claims cannot be sanity-checked against existing renders.
   sets.* Annals of Mathematics 147(2), 1998. Parabolic renormalization; dim ∂M = 2.
 - **Jean Écalle.** *Les fonctions résurgentes.* Publ. Math. Orsay, 1981–1985. Résurgence theory
   underlying the Écalle–Voronin horn-map invariants used by parabolic renormalization.
+
+<a id="escape-geometry-scattering"></a>
+
+The dual-orbit escape-geometry map (`Docs/Technical/Theoretical-Fractal-RnD.md` §3.6, epic #863) is an
+FF-original construction with no proper name; it sits in the chaotic-scattering / fractal-basin-boundary /
+finite-size-Lyapunov literature, which these entries anchor.
+
+- **Edward Ott, Tamás Tél.** *Chaotic scattering: an introduction.* Chaos 3(4), 1993. Scattering
+  functions, escape time, exit basins, angular observables — the vocabulary §3.6's derived scalars
+  (`dualOrbitAngle`, `scatteringAngle`, `Δn`) borrow.
+- **Celso Grebogi, Edward Ott, James A. Yorke.** *Fractal basin boundaries, long-lived chaotic
+  transients, and unstable-unstable pair bifurcation.* Physical Review Letters 50, 1983. Fractal basin
+  boundaries — the §3.6 `Δn` / exit-channel structure.
+- **Helena E. Nusse, James A. Yorke.** *Wada basin boundaries and basin cells.* Physica D 90, 1996.
+  Wada (three-or-more-way) exit basins.
+- **E. Aurell, G. Boffetta, A. Crisanti, G. Paladin, A. Vulpiani.** *Predictability in the large: an
+  extension of the concept of Lyapunov exponent.* Journal of Physics A 30, 1997. Finite-size Lyapunov
+  exponent (FSLE) — the finite-separation reading of `D = E_c − E_z`.
+- **George Haller.** *Lagrangian coherent structures.* Annual Review of Fluid Mechanics 47, 2015. FTLE
+  ridges / transport barriers — the applied twin of the §3.6 separation field (fluid mixing, dispersal,
+  predictability).
+- **Alan Norton.** *Generation and display of geometric fractals in 3-D.* Computer Graphics (SIGGRAPH)
+  16(3), 1982. Quaternion Julia rendering — basis for §3.6's quaternion variant and 4D→3D projection.
 
 <a id="bourke-random-tile"></a>
 

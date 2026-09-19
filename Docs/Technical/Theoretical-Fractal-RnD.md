@@ -316,11 +316,52 @@ third coordinate is degenerate (`E_{z,z}=E_{c,z}`, separation confined to XY), a
 quaternion orbit collapses to the 2D subalgebra along `ŝ`. Richness lives in the **c-orbit + quaternion**;
 skip the component-wise baseline as a deliverable.
 
+**Seed-decoupling degeneracy (load-bearing — drives S1/S3 scope).** Every square map here has
+`f(0)=0`, so the seed-0 orbit satisfies `z_1 = 0²+s = s`. **If the c-seed is set equal to `s`** (the
+naïve "per-pixel parameter is both the added constant and the c-init" reading), then the c-orbit is the
+z-orbit advanced by exactly one step (`c_n = z_{n+1}`): the two orbits are a **one-iteration shift**, so
+`E_c = E_z`, `D ≡ 0`, `Δn ≡ −1`, dual angle `≡ 0`. Every *dual*-orbit field collapses to a constant and
+only single-orbit scalars survive — reproducing the **plain Mandelbrot/Julia** exterior (escape-time /
+external-angle / exterior-distance). The pure-complex `c=s` case is therefore a **control**, not the
+deliverable. The dual construction is non-degenerate **only when the c-seed is decoupled from `s`**, via
+any of: (a) a **fixed independent c-seed** `k` (image plane = the c-seed plane → a Julia-type set of the
+fixed-`s` map, seed-0 critical orbit as reference); (b) **`s_z ≠ 0`** so `(x_c,y_c,0)` is not parallel to
+`s` (notes §8); (c) the **quaternion** map, where the seed-0 orbit is trapped in the 2D subalgebra along
+`ŝ` while the c-orbit explores a different plane (notes §7). **S1 (#864) must specify the c-seed
+decoupled** — expose `c` as an independent parameter (see §3.6 design Qs), never hard-wire `c=s`.
+
 **Render.** First cut = select one derived scalar → `SmoothBuffer` (**PrecisionField #628 precedent** —
 dual *tier* there, dual *init* here) → every 2D theme + Relief-3D height + S9 mesh export works
 unchanged. Escape-*space* deposition variant (render at `E`, not at `s`) rides the Buddhabrot
 accumulation buffer. Vector-field/glyph mode (arrow = `M−s`) is a **genuinely new render path** (defer).
 Multiresolution tile-cache is **redundant** with FF's fast recompute + deep-zoom perturbation (skip).
+
+**Design parameters (`c`, `s`, map) and their visual roles.**
+- **`c` is an independent user parameter** (`FractalParameters`, animatable — Julia c-drift #92 precedent),
+  never hard-wired to `s` (see degeneracy note). Two modes: *parameter-space* (image = `s`-plane, `c` a
+  fixed global seed knob) and *Julia-space* (image = `c`-plane, `s` the knob). First cut = parameter-space
+  with editable `c`.
+- **Role split:** **`s` selects the dynamical regime — the *set*; `c` selects the probe within it — the
+  *texture on that set*.** Varying `c` leaves the silhouette (the seed-0 escape set) fixed and re-textures
+  the dual fields (`c→0` → toward degenerate/low-contrast; `c` near a fixed/periodic point → long-transient
+  ridges; `c` in another exit channel → the `Δn`/angle field re-patterns). A `c`-sweep animates texture on a
+  stationary body. Varying the fixed `s_z` is a **decoupling / phase dial** (flat control → rich scattering;
+  a literal "turning-on" animation); `s_x` panning travels across the set.
+- **Map is a first-class enum** (`ComponentWise` control / `ComplexPlane` / `Radial |u|u` / `Quaternion q²+S`
+  — the notes' `IOrbitMap` + §4 pluggable-algebra envelope). Toggling is not a tweak: it changes the
+  **dimensionality + symmetry class** of the output (complex = planar 2-D field / Relief terrain, cheap;
+  quaternion = rounded Norton-lobe 3-D solid / mesh, showcase; radial = spherical shells). The map
+  comparison is itself a research goal (notes §13).
+
+**Render contexts — one calc, several projections (canonical-field principle).** Compute the canonical
+per-sample field **once** (`s, E_z, E_c, n_z, n_c`, prev-state) and project it several ways with no
+re-iterate (notes §22/§31): **(1) parameter-space field** (render at `s` → `SmoothBuffer` → themes / Relief
+/ mesh; deterministic, boundary-hugging; wants **one `s`/pixel**); **(2) escape-space deposition** (render
+at `E` → Buddhabrot accumulation → density cloud in *output* space; **wants many `s`**, converges — the
+opposite sampling regime); **(3) vector/glyph displacement field** (`M−s`; genuinely new render path,
+design-gated). These are **complementary, not redundant** — same dataset, different questions — and the
+calc→field→render split makes building all three cheap-incremental. Ordering unchanged: field (S1–S3) first,
+deposition (#867) after MVP, glyph (#868) gated.
 
 **Toolchain reach.**
 - **CalcGen/DSL:** the iteration *is* `f(u)+s` — it fits the existing map grammar. The novelty is the
@@ -333,10 +374,49 @@ Multiresolution tile-cache is **redundant** with FF's fast recompute + deep-zoom
   `escapeAngleZ/C`, `deltaN`. First cut maps one onto `SmoothBuffer` (every 2D theme + Relief free);
   follow-up ColorGen inputs enable diverging scattering-angle themes. Register in `FractalCapabilities`.
 
+**Research context (what this relates to — no proper name of its own).** The construction is a novel
+*combination*, but it sits in known territory and should be described that way (Rule B):
+- **Chaotic scattering** (Ott & Tél 1993) — the closest fit. A *scattering function* maps an input
+  parameter → an output observable (deflection angle, dwell time); `dualOrbitAngle`, `scatteringAngle`,
+  `Δn` **are** scattering observables, with fractal exit-basin boundaries + sensitive dependence. This is
+  the escape-**geometry** (where/how the orbit leaves) view, vs FF's usual escape-**time**.
+- **Fractal basin boundaries / exit basins** (Grebogi–Ott–Yorke 1983; Wada basins, Nusse–Yorke) — the
+  `Δn` / exit-channel field is a basin-boundary fractal.
+- **Critical-orbit comparison.** The `z`-orbit (seed 0) is exactly the **critical orbit** of `z²+s`
+  (`f'=0 ⇒ z=0`), the orbit that governs the dynamics (Fatou); the construction measures an arbitrary
+  orbit `c` *relative to the critical orbit* — a principled reference, not an arbitrary one.
+- **Finite-size/finite-time Lyapunov & Lagrangian coherent structures** (Aurell et al. 1997 FSLE;
+  Haller 2015 LCS) — `D=E_c−E_z` is the finite separation of two trajectories differing in initial
+  condition; as a field over parameter space it is the aesthetic twin of an FTLE/FSLE map (the object
+  fluid dynamics renders to find transport barriers).
+- **Biomorphs / orbit traps** (Pickover) — measuring orbit *geometry* at bailout rather than modulus;
+  this generalizes that to escape *location + angle*.
+
+**Applications this render style lends itself to** (the picture — a field over parameter/initial-condition
+space of an escape or separation observable — is what these fields already visualize; the calc→field→
+height-field/mesh split means FF could render genuine such fields if fed real systems):
+- **Fluid mixing / transport** — FTLE ridges = Lagrangian coherent structures: ocean/atmosphere mixing,
+  spill/pollutant/aerosol dispersal, transport barriers (biggest sci-viz crossover).
+- **Predictability / ensemble forecasting** — finite-time divergence of nearby ICs = error-growth /
+  predictability-horizon maps (`Δn` ~ time-to-divergence).
+- **Chaotic-scattering physics** — three-body escape/ejection, particle scattering, reaction dynamics /
+  transition-state theory, billiards.
+- **Multistability & tipping points** — basin-of-attraction / safe-operating-region maps: power-grid and
+  structural stability, ecology regime shifts, neuroscience attractor states.
+- **Astronomy** — orbital-stability / ejection maps (cluster dynamics, planetary stability).
+- **Numerical analysis** — Newton/root-finding basins; `M−s` = a solver-behaviour vector field.
+This **sci-viz crossover** is unique to §3.6 among the theoretical roadmap items (the pure-aesthetic
+types — Kleinian, transcendental, coquaternion — have no applied twin) — a "why it matters beyond pretty
+pictures" hook.
+
 **Fit.** Reuses the #626 chaotic-scattering framework (billiard / PrecisionField / escape-angle),
 `IHeightFieldSource`/`ReliefHeightField`, S9 mesh export, and the Quat calculators. It is a new
 **control-map + measurement framework**, not a new engine.
 
+**Sources:** Ott & Tél 1993 (chaotic scattering); Grebogi–Ott–Yorke 1983 + Nusse–Yorke (fractal / Wada
+basin boundaries); Aurell et al. 1997 (FSLE); Haller 2015 (Lagrangian coherent structures); Pickover
+(biomorphs / orbit traps); Norton 1982 (quaternion Julia rendering); Green (Buddhabrot / escape-space
+deposition). §7.
 **Sources:** Ott & Tél 1993 (chaotic scattering); Norton 1982 (quaternion Julia rendering); Green
 (Buddhabrot / escape-space deposition). §7.
 **Status:** ready to schedule — tracking issue + slices **S1–S3 (MVP, ~1 wk)**, **S4–S6 optional**.
@@ -421,6 +501,15 @@ follow-ups already logged in [Fractal-Expansion-Roadmap.md](../Fractal-Expansion
 an epic item **gated on its own design doc + tracking issue** before any code, given the combinatorial
 group-parameterization surface. Do not extend `KleinianCalculator` ad hoc.
 
+**Design doc LANDED (2026-09-19):** [Kleinian-Generalization-DesignPlan.md](Kleinian-Generalization-DesignPlan.md)
+(issue #855). Decision: extend `FractalType.Kleinian` **param-driven** (not a new type) via a
+serializable `KleinianGroup` descriptor + three-tier DE (Tier 0 tetrahedral = byte-identical).
+Toolchain reach — DSL/CalcGen **out of reach** (no per-pixel hook for group-word/3D-inversion DE);
+ColorGen/Theme **in reach** (categorical word-length kind + generalized orbit-trap). Sliced **S1–S8**:
+**#874** descriptor+inversion-DE / **#875** preset library / **#876** editor UI = **MVP**; **#877**
+Möbius-word DE / **#878** colour drivers / **#879** Maskit animation / **#880** GPU parity / **#881**
+analytic DE. Marquee = Grandma's-recipe trace animation along the Maskit slice (#879).
+
 ---
 
 ## 6. Working method (per candidate, before it becomes an issue)
@@ -472,6 +561,29 @@ appropriate sections; flesh out on the next pass. Cite inline from the sections 
   Graphics (SIGGRAPH) 16(3), 1982. Quaternion Julia rendering — basis for §3.6's 4D→3D projection.
 - **Green (Buddhabrot)** — Melinda Green. *The Buddhabrot technique*, c. 1993 (web). Escape-space
   orbit deposition — the accumulation model §3.6's escape-space render variant reuses.
+- **Maskit 1988** — Bernard Maskit. *Kleinian Groups.* Springer Grundlehren 287. Fundamental domains,
+  the Maskit slice, discreteness — the Kleinian-generalization design doc (§5.4).
+- **Ahlfors 1981/1985** — Lars V. Ahlfors. *Möbius transformations in several dimensions* (1981) /
+  *Möbius transformations and Clifford numbers* (1985). Vahlen-matrix / Clifford representation of
+  `Möb(Ŝⁿ)` — basis for the Kleinian analytic-DE form (design doc §3.5/§4.2).
+- **Hart, Sandin & Kauffman 1989** — J. C. Hart, D. J. Sandin, L. H. Kauffman. *Ray tracing
+  deterministic 3-D fractals.* SIGGRAPH Computer Graphics 23(3). The distance-estimator ray-tracing
+  method the 3D raymarchers use.
+- **Soddy 1936 / Graham, Lagarias, Mallows, Wilks & Yan 2003** — F. Soddy, *The kiss precise* (Nature)
+  / *Apollonian circle packings: number theory* (J. Number Theory). Descartes circle theorem — basis
+  for the Kleinian Apollonian-extrusion preset.
+- **Vahlen 1902** — K. Th. Vahlen. *Über Bewegungen und complexe Zahlen* (Math. Ann.). Clifford-matrix
+  Möbius representation (historical origin of the Ahlfors form).
+- **Grebogi, Ott & Yorke 1983** — C. Grebogi, E. Ott, J. A. Yorke. *Fractal basin boundaries,
+  long-lived chaotic transients, and unstable-unstable pair bifurcation.* Phys. Rev. Lett. 50. Fractal
+  basin boundaries — the §3.6 `Δn` / exit-channel structure.
+- **Nusse & Yorke 1996** — H. E. Nusse, J. A. Yorke. *Wada basin boundaries and basin cells.* Physica D
+  90. Wada (three-or-more-way) exit basins.
+- **Aurell, Boffetta, Crisanti, Paladin & Vulpiani 1997** — *Predictability in the large: an extension
+  of the concept of Lyapunov exponent.* J. Phys. A 30. Finite-size Lyapunov exponent (FSLE) — the
+  finite-separation reading of `D=E_c−E_z` (§3.6).
+- **Haller 2015** — George Haller. *Lagrangian coherent structures.* Annual Review of Fluid Mechanics
+  47. FTLE ridges / transport barriers — the applied twin of the §3.6 separation field.
 
 ---
 
@@ -486,3 +598,18 @@ appropriate sections; flesh out on the next pass. Cite inline from the sections 
   Relief/mesh). Filed tracking issue #863 with slices #864 (S1 calc) / #865 (S2 field selector) /
   #866 (S3 quaternion) = MVP ~1 wk; #867 (S4 deposition) / #868 (S5 glyphs, design-gated) optional;
   #869 (S6 tile-cache) deferred. Bibliography stubs added (§7): Ott–Tél 1993, Norton 1982, Green.
+- **2026-09-19** — Kleinian generalization (§5.4) **design doc landed**:
+  [Kleinian-Generalization-DesignPlan.md](Kleinian-Generalization-DesignPlan.md) (issue #855). Decision:
+  param-driven extension of `FractalType.Kleinian` via a `KleinianGroup` descriptor + three-tier DE
+  (Tier 0 byte-identical). Sliced S1–S8 (#874–#881); S1–S3 = MVP (arbitrary inversion groups + presets
+  + editor). Toolchain reach recorded (DSL out of reach; ColorGen/Theme categorical word-length kind in
+  reach). Bibliography additions (§7): Maskit 1988, Ahlfors 1981/1985, Hart–Sandin–Kauffman 1989,
+  Soddy 1936 / Graham et al. 2003, Vahlen 1902.
+- **2026-09-19** — Dual-orbit escape-geometry (§3.6) fleshed out: **seed-decoupling degeneracy** note
+  (`c=s` → plain Mandelbrot control; #864), **design-parameter** note (`c` independent/animatable,
+  `s`=regime vs `c`=probe, `s_z` phase dial, orbit-map enum), **render-context** note (one canonical
+  field → parameter-space / escape-space / glyph), and a **research-context + applications** note placing
+  it in the chaotic-scattering / fractal-basin-boundary / FSLE–LCS literature (sci-viz crossover:
+  fluid mixing, predictability, multistability, scattering physics). Encoded to #863/#864/#865.
+  Bibliography additions (§7 + `Resources-Bibliography.md`): Grebogi–Ott–Yorke 1983, Nusse–Yorke 1996,
+  Aurell et al. 1997 (FSLE), Haller 2015 (LCS).
