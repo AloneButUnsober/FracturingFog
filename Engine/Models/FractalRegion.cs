@@ -479,6 +479,8 @@ namespace FracturingFog.Models
         [JsonIgnore(Condition = OmitNull)] public double? KleinianRotationAxisZ { get; set; }
         // #878 — surface colour source (omitted at the Smooth default).
         [JsonIgnore(Condition = OmitNull)] public int? KleinianColorSource { get; set; }
+        // #881 — sphere-trace under-relaxation factor (omitted at the 1.0 default).
+        [JsonIgnore(Condition = OmitNull)] public double? KleinianDeFactor { get; set; }
 
         /// <summary>
         /// Capture the P1-relevant parameters for <paramref name="type"/> from a
@@ -633,6 +635,7 @@ namespace FracturingFog.Models
                     KleinianRotationAxisZ = p.KleinianRotationAngle != 0.0 ? p.KleinianRotationAxisZ : (double?)null,
                     KleinianColorSource = p.KleinianColorSource != FracturingFog.KleinianColorSource.Smooth
                         ? (int)p.KleinianColorSource : (int?)null,
+                    KleinianDeFactor = p.KleinianDeFactor != 1.0 ? p.KleinianDeFactor : (double?)null,
                 },
                 FractalType.BicomplexMandelbrot => new RegionFractalParams
                 {
@@ -822,6 +825,7 @@ namespace FracturingFog.Models
                         if (KleinianRotationAxisY.HasValue) p.KleinianRotationAxisY = KleinianRotationAxisY.Value;
                         if (KleinianRotationAxisZ.HasValue) p.KleinianRotationAxisZ = KleinianRotationAxisZ.Value;
                         if (KleinianColorSource.HasValue) p.KleinianColorSource = (FracturingFog.KleinianColorSource)KleinianColorSource.Value;
+                        if (KleinianDeFactor.HasValue) p.KleinianDeFactor = KleinianDeFactor.Value;
                         break;
                     case FractalType.BicomplexMandelbrot:
                         p.BicomplexCameraDistance = d; p.BicomplexCameraTheta = th; p.BicomplexCameraPhi = ph;

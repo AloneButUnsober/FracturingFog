@@ -490,4 +490,48 @@ public class KleinianGroupTests
         snap!.ApplyTo(dst);
         Assert.Equal(KleinianColorSource.LastGenerator, dst.KleinianColorSource);
     }
+
+    // ── #881 DE relaxation factor ─────────────────────────────────────────────
+
+    private static KleinianCalculator RenderDeFactor(double f)
+    {
+        var c = new KleinianCalculator(96, 72)
+        {
+            ColorMap = new HsvPalette(),
+            FractalParameters = new FractalParameters { KleinianDeFactor = f },
+        };
+        c.Calculate(default);
+        return c;
+    }
+
+    [Fact]
+    public void DeFactor_One_IsDefault_And_HalfChangesOutput()
+    {
+        var full = RenderDeFactor(1.0);
+        var half = RenderDeFactor(0.5);
+        Assert.True(full.ColorBuffer.Distinct().Count() > 4);
+        Assert.False(full.ColorBuffer.AsSpan().SequenceEqual(half.ColorBuffer)); // under-relaxation is visible
+    }
+
+    [Fact]
+    public void DeFactor_ClampedAboveOne_EqualsOne()
+    {
+        var clamped = RenderDeFactor(5.0);   // clamped to 1.0 in the calculator
+        var one = RenderDeFactor(1.0);
+        Assert.True(clamped.ColorBuffer.AsSpan().SequenceEqual(one.ColorBuffer));
+    }
+
+    [Fact]
+    public void Region_RoundTrips_DeFactor()
+    {
+        var src = new FractalParameters { KleinianDeFactor = 0.4 };
+        var snap = RegionFractalParams.Snapshot(FractalType.Kleinian, src);
+        Assert.NotNull(snap);
+        var dst = new FractalParameters();
+        snap!.ApplyTo(dst);
+        Assert.Equal(0.4, dst.KleinianDeFactor);
+        // Default 1.0 is omitted from the snapshot.
+        var snapDefault = RegionFractalParams.Snapshot(FractalType.Kleinian, new FractalParameters());
+        Assert.Null(snapDefault!.KleinianDeFactor);
+    }
 }
