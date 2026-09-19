@@ -208,6 +208,7 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
         _kleinRotAxisX = _p.KleinianRotationAxisX;
         _kleinRotAxisY = _p.KleinianRotationAxisY;
         _kleinRotAxisZ = _p.KleinianRotationAxisZ;
+        _kleinColorSrc = _p.KleinianColorSource;
         _kleinIter = _p.KleinianIterations;
         _kleinScale = _p.KleinianSphereScale;
         _kleinCameraTheta = _p.KleinianCameraTheta;
@@ -1653,6 +1654,10 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
     public double KleinianRotationAxisY { get => _kleinRotAxisY; set { Set(ref _kleinRotAxisY, Clamp(value, -1.0, 1.0)); _p.KleinianRotationAxisY = _kleinRotAxisY; Fire(); } }
     private double _kleinRotAxisZ;
     public double KleinianRotationAxisZ { get => _kleinRotAxisZ; set { Set(ref _kleinRotAxisZ, Clamp(value, -1.0, 1.0)); _p.KleinianRotationAxisZ = _kleinRotAxisZ; Fire(); } }
+    // #878 — surface colour source (Smooth / WordLength / LastGenerator).
+    private KleinianColorSource _kleinColorSrc;
+    public KleinianColorSource KleinianColorSource { get => _kleinColorSrc; set { Set(ref _kleinColorSrc, value); _p.KleinianColorSource = value; Fire(); } }
+    public Array KleinianColorSources => Enum.GetValues(typeof(KleinianColorSource));
 
     // #876 — Kleinian custom inversion-sphere editor.
     /// <summary>Editable rows backing <c>FractalParameters.KleinianCustomSpheres</c>.</summary>

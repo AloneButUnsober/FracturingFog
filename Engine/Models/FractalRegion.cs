@@ -477,6 +477,8 @@ namespace FracturingFog.Models
         [JsonIgnore(Condition = OmitNull)] public double? KleinianRotationAxisX { get; set; }
         [JsonIgnore(Condition = OmitNull)] public double? KleinianRotationAxisY { get; set; }
         [JsonIgnore(Condition = OmitNull)] public double? KleinianRotationAxisZ { get; set; }
+        // #878 — surface colour source (omitted at the Smooth default).
+        [JsonIgnore(Condition = OmitNull)] public int? KleinianColorSource { get; set; }
 
         /// <summary>
         /// Capture the P1-relevant parameters for <paramref name="type"/> from a
@@ -629,6 +631,8 @@ namespace FracturingFog.Models
                     KleinianRotationAxisX = p.KleinianRotationAngle != 0.0 ? p.KleinianRotationAxisX : (double?)null,
                     KleinianRotationAxisY = p.KleinianRotationAngle != 0.0 ? p.KleinianRotationAxisY : (double?)null,
                     KleinianRotationAxisZ = p.KleinianRotationAngle != 0.0 ? p.KleinianRotationAxisZ : (double?)null,
+                    KleinianColorSource = p.KleinianColorSource != FracturingFog.KleinianColorSource.Smooth
+                        ? (int)p.KleinianColorSource : (int?)null,
                 },
                 FractalType.BicomplexMandelbrot => new RegionFractalParams
                 {
@@ -817,6 +821,7 @@ namespace FracturingFog.Models
                         if (KleinianRotationAxisX.HasValue) p.KleinianRotationAxisX = KleinianRotationAxisX.Value;
                         if (KleinianRotationAxisY.HasValue) p.KleinianRotationAxisY = KleinianRotationAxisY.Value;
                         if (KleinianRotationAxisZ.HasValue) p.KleinianRotationAxisZ = KleinianRotationAxisZ.Value;
+                        if (KleinianColorSource.HasValue) p.KleinianColorSource = (FracturingFog.KleinianColorSource)KleinianColorSource.Value;
                         break;
                     case FractalType.BicomplexMandelbrot:
                         p.BicomplexCameraDistance = d; p.BicomplexCameraTheta = th; p.BicomplexCameraPhi = ph;

@@ -141,6 +141,25 @@ namespace FracturingFog
         Custom,
     }
 
+    /// <summary>What drives the Kleinian surface base colour (#878). The 3D
+    /// distance-estimator maps a scalar through the palette; this selects that
+    /// scalar. <see cref="WordLength"/> and <see cref="LastGenerator"/> expose the
+    /// descent word as colour — and make the inversion-iteration count visible
+    /// (the long-open question #53).</summary>
+    public enum KleinianColorSource
+    {
+        /// <summary>Sphere-trace step count + depth (the shipped default;
+        /// byte-identical to pre-#878).</summary>
+        Smooth,
+        /// <summary>Number of inversion steps the descent ran at the hit point —
+        /// bands the surface by how deep in the fundamental-domain tiling it sits.
+        /// Directly responds to <c>KleinianIterations</c>.</summary>
+        WordLength,
+        /// <summary>Index of the last generator applied at the hit point — a
+        /// distinct band per sphere (generator basins / parity).</summary>
+        LastGenerator,
+    }
+
     public enum FractalType
     {
         Mandelbrot,
