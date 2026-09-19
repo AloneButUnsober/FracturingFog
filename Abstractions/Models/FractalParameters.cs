@@ -1019,6 +1019,15 @@ namespace FracturingFog.Models
         public PrecisionDiffMetric PrecisionDiffMetric { get; set; } = PrecisionDiffMetric.L2;
 
         // Kleinian limit set (3D, sphere-inversion Schottky group).
+        /// <summary>Which Schottky sphere configuration the limit-set renderer
+        /// inverts through (#875). Tetrahedral = the shipped default (byte-
+        /// identical to pre-#874). The calculator builds the generator list from
+        /// this + <c>KleinianSphereScale</c> (+ <c>KleinianNecklaceCount</c>).</summary>
+        public KleinianPreset KleinianPreset { get; set; } = KleinianPreset.Tetrahedral;
+        /// <summary>Sphere count for the <see cref="KleinianPreset.NecklaceN"/>
+        /// preset — the planar Indra's-Pearls ring size. Ignored by other presets.
+        /// Default 6; clamped to [3, 24].</summary>
+        public int KleinianNecklaceCount { get; set; } = 6;
         /// <summary>Inversion-iteration cap for the Kleinian DE. Higher =
         /// sharper limit-set boundary, slower per ray sample. Default 16
         /// covers the visible boundary; deep cusps need 24+.</summary>
@@ -1506,6 +1515,8 @@ namespace FracturingFog.Models
                 PrecisionLowTier = PrecisionLowTier,
                 PrecisionHighTier = PrecisionHighTier,
                 PrecisionDiffMetric = PrecisionDiffMetric,
+                KleinianPreset = KleinianPreset,
+                KleinianNecklaceCount = KleinianNecklaceCount,
                 KleinianIterations = KleinianIterations,
                 KleinianSphereScale = KleinianSphereScale,
                 KleinianMaxSteps = KleinianMaxSteps,

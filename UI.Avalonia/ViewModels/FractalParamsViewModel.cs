@@ -194,6 +194,8 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
         _precLowTier = _p.PrecisionLowTier;
         _precHighTier = _p.PrecisionHighTier;
         _precMetric = _p.PrecisionDiffMetric;
+        _kleinPreset = _p.KleinianPreset;
+        _kleinNecklace = _p.KleinianNecklaceCount;
         _kleinIter = _p.KleinianIterations;
         _kleinScale = _p.KleinianSphereScale;
         _kleinCameraTheta = _p.KleinianCameraTheta;
@@ -1603,6 +1605,19 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
     public double CoquaternionCameraDistance { get => _cqCameraDistance; set { Set(ref _cqCameraDistance, Clamp(value, 0.1, 500)); _p.CoquaternionCameraDistance = _cqCameraDistance; Fire(); } }
 
     // ── Kleinian ──
+    private KleinianPreset _kleinPreset;
+    // #875 — Schottky group preset selector. Changing it rebuilds the generator
+    // list in the calculator; NecklaceN also reads KleinianNecklaceCount.
+    public KleinianPreset KleinianPreset
+    {
+        get => _kleinPreset;
+        set { Set(ref _kleinPreset, value); _p.KleinianPreset = value; this.RaisePropertyChanged(nameof(IsKleinianNecklace)); Fire(); }
+    }
+    public Array KleinianPresets => Enum.GetValues(typeof(KleinianPreset));
+    /// <summary>Necklace ring size — only meaningful for the NecklaceN preset.</summary>
+    public bool IsKleinianNecklace => IsKleinian && _kleinPreset == KleinianPreset.NecklaceN;
+    private int _kleinNecklace;
+    public int KleinianNecklaceCount { get => _kleinNecklace; set { Set(ref _kleinNecklace, (int)Clamp(value, 3, 24)); _p.KleinianNecklaceCount = _kleinNecklace; Fire(); } }
     private int _kleinIter;
     public int KleinianIterations { get => _kleinIter; set { Set(ref _kleinIter, (int)Clamp(value, 2, 64)); _p.KleinianIterations = _kleinIter; Fire(); } }
     private double _kleinScale;

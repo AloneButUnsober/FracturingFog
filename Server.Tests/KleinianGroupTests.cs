@@ -188,4 +188,88 @@ public class KleinianGroupTests
         var b = RenderDefault();
         Assert.True(a.ColorBuffer.AsSpan().SequenceEqual(b.ColorBuffer));
     }
+
+    // ── #875 preset library ──────────────────────────────────────────────────
+
+    private static double Dist(KleinianGenerator a, KleinianGenerator b)
+        => Math.Sqrt((a.Cx - b.Cx) * (a.Cx - b.Cx)
+                   + (a.Cy - b.Cy) * (a.Cy - b.Cy)
+                   + (a.Cz - b.Cz) * (a.Cz - b.Cz));
+
+    [Fact]
+    public void Octahedral6_SixSpheres_AdjacentTangent()
+    {
+        var g = KleinianGroup.Octahedral6(1.0, 16);
+        var gens = g.Generators;
+        Assert.Equal(6, gens.Count);
+        Assert.True(g.UniformRadius);
+        double r = 1.0 / Math.Sqrt(2.0);
+        Assert.Equal(r, g.SphereRadius, 12);
+        // (+x) and (+y) are adjacent → centre distance == 2r (externally tangent).
+        Assert.Equal(2.0 * r, Dist(gens[0], gens[2]), 12);
+        // (+x) and (-x) are opposite → distance 2 > 2r (disjoint).
+        Assert.True(Dist(gens[0], gens[1]) > 2.0 * r + 1e-9);
+    }
+
+    [Fact]
+    public void CubeCorner8_EightSpheres_EdgeTangent()
+    {
+        var g = KleinianGroup.CubeCorner8(1.0, 16);
+        var gens = g.Generators;
+        Assert.Equal(8, gens.Count);
+        Assert.Equal(1.0, g.SphereRadius, 12);
+        // (+,+,+) and (+,+,-) share an edge → distance 2 == 2r.
+        Assert.Equal(2.0, Dist(gens[0], gens[1]), 12);
+        // (+,+,+) and (-,-,-) are body-diagonal → 2√3 > 2r.
+        Assert.True(Dist(gens[0], gens[7]) > 2.0 + 1e-9);
+    }
+
+    [Theory]
+    [InlineData(3)]
+    [InlineData(6)]
+    [InlineData(12)]
+    public void Necklace_NeighboursTangent_AndPlanar(int n)
+    {
+        var g = KleinianGroup.Necklace(1.0, n, 16);
+        var gens = g.Generators;
+        Assert.Equal(n, gens.Count);
+        double r = Math.Sin(Math.PI / n);
+        Assert.Equal(r, g.SphereRadius, 12);
+        for (int k = 0; k < n; k++)
+        {
+            Assert.Equal(0.0, gens[k].Cz, 12);                 // planar (z = 0)
+            var next = gens[(k + 1) % n];
+            Assert.Equal(2.0 * r, Dist(gens[k], next), 12);    // neighbour tangent
+        }
+    }
+
+    [Fact]
+    public void Necklace_ClampsCountToValidRange()
+    {
+        Assert.Equal(3, KleinianGroup.Necklace(1.0, 1, 16).Generators.Count);
+        Assert.Equal(24, KleinianGroup.Necklace(1.0, 999, 16).Generators.Count);
+    }
+
+    [Theory]
+    [InlineData(KleinianPreset.Tetrahedral, 4)]
+    [InlineData(KleinianPreset.Octahedral6, 6)]
+    [InlineData(KleinianPreset.CubeCorner8, 8)]
+    public void FromPreset_DispatchesToCorrectFactory(KleinianPreset preset, int count)
+        => Assert.Equal(count, KleinianGroup.FromPreset(preset, 1.0, 6, 16).Generators.Count);
+
+    [Theory]
+    [InlineData(KleinianPreset.Octahedral6)]
+    [InlineData(KleinianPreset.CubeCorner8)]
+    [InlineData(KleinianPreset.NecklaceN)]
+    public void Calculator_EachPreset_RendersStructure(KleinianPreset preset)
+    {
+        var calc = new KleinianCalculator(96, 72)
+        {
+            ColorMap = new HsvPalette(),
+            FractalParameters = new FractalParameters { KleinianPreset = preset, KleinianNecklaceCount = 8 },
+        };
+        calc.Calculate(default);
+        int distinct = calc.ColorBuffer.Distinct().Count();
+        Assert.True(distinct > 4, $"{preset}: expected varied output, got {distinct}");
+    }
 }
