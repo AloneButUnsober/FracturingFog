@@ -316,6 +316,20 @@ third coordinate is degenerate (`E_{z,z}=E_{c,z}`, separation confined to XY), a
 quaternion orbit collapses to the 2D subalgebra along `ŝ`. Richness lives in the **c-orbit + quaternion**;
 skip the component-wise baseline as a deliverable.
 
+**Seed-decoupling degeneracy (load-bearing — drives S1/S3 scope).** Every square map here has
+`f(0)=0`, so the seed-0 orbit satisfies `z_1 = 0²+s = s`. **If the c-seed is set equal to `s`** (the
+naïve "per-pixel parameter is both the added constant and the c-init" reading), then the c-orbit is the
+z-orbit advanced by exactly one step (`c_n = z_{n+1}`): the two orbits are a **one-iteration shift**, so
+`E_c = E_z`, `D ≡ 0`, `Δn ≡ −1`, dual angle `≡ 0`. Every *dual*-orbit field collapses to a constant and
+only single-orbit scalars survive — reproducing the **plain Mandelbrot/Julia** exterior (escape-time /
+external-angle / exterior-distance). The pure-complex `c=s` case is therefore a **control**, not the
+deliverable. The dual construction is non-degenerate **only when the c-seed is decoupled from `s`**, via
+any of: (a) a **fixed independent c-seed** `k` (image plane = the c-seed plane → a Julia-type set of the
+fixed-`s` map, seed-0 critical orbit as reference); (b) **`s_z ≠ 0`** so `(x_c,y_c,0)` is not parallel to
+`s` (notes §8); (c) the **quaternion** map, where the seed-0 orbit is trapped in the 2D subalgebra along
+`ŝ` while the c-orbit explores a different plane (notes §7). **S1 (#864) must specify the c-seed
+decoupled** — expose `c` as an independent parameter (see §3.6 design Qs), never hard-wire `c=s`.
+
 **Render.** First cut = select one derived scalar → `SmoothBuffer` (**PrecisionField #628 precedent** —
 dual *tier* there, dual *init* here) → every 2D theme + Relief-3D height + S9 mesh export works
 unchanged. Escape-*space* deposition variant (render at `E`, not at `s`) rides the Buddhabrot
