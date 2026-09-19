@@ -5,6 +5,7 @@ using System;
 using System.Collections.Generic;
 using System.Numerics;
 using FracturingFog;
+using FracturingFog.Abstractions.Animation;
 using FracturingFog.Models;
 using Xunit;
 
@@ -194,6 +195,42 @@ public sealed class IndrasPearlsTests
     [Fact]
     public void HasDisplayName()
         => Assert.Equal("Indra's Pearls", Fractals.FractalNameByNameType[FractalType.IndrasPearls]);
+
+    // ── S4 marquee animation (#895) ──────────────────────────────────────────
+
+    [Fact]
+    public void AnimatableMap_ExposesMaskitMu()
+    {
+        var names = new HashSet<string>();
+        foreach (var d in FracturingFog.Abstractions.Animation.FractalAnimatableParamsMap.For(FractalType.IndrasPearls))
+            names.Add(d.ParamName);
+        Assert.Contains("IndrasMaskitMuRe", names);
+        Assert.Contains("IndrasMaskitMuIm", names);
+        Assert.Contains("IndrasGrandmaTaRe", names);
+    }
+
+    [Fact]
+    public void Animator_DrivesMaskitMu()
+    {
+        var data = new FracturingFog.Abstractions.Animation.AnimationData
+        {
+            Name = "t",
+            Tracks = new System.Collections.Generic.List<FracturingFog.Abstractions.Animation.AnimationTrack>
+            {
+                new() { ParamName = "IndrasMaskitMuRe",
+                        Mode = FracturingFog.Abstractions.Animation.AnimationMode.Triangle,
+                        Min = -1.0, Max = 1.0, FrequencyHz = 0.5, Enabled = true },
+            },
+        };
+        var p = new FractalParameters { IndrasMaskitMuRe = 99.0 };   // outside [-1,1]
+        var animators = new System.Collections.Generic.List<IParameterAnimator>(data.ToAnimators(p));
+        Assert.NotEmpty(animators);
+        foreach (var a in animators) a.Tick(0.3);
+        // The reflection setter pulled it from the out-of-range sentinel into the
+        // track's [Min, Max] band — proves the animator drives the property.
+        Assert.True(p.IndrasMaskitMuRe >= -1.0 && p.IndrasMaskitMuRe <= 1.0,
+            $"μRe = {p.IndrasMaskitMuRe}");
+    }
 
     // ── S3 curve tracer (#894) ───────────────────────────────────────────────
 
