@@ -2,6 +2,7 @@
 // SPDX-FileCopyrightText: 2026 Bradley Brown
 
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using Xunit;
 using FracturingFog;
@@ -271,5 +272,91 @@ public class KleinianGroupTests
         calc.Calculate(default);
         int distinct = calc.ColorBuffer.Distinct().Count();
         Assert.True(distinct > 4, $"{preset}: expected varied output, got {distinct}");
+    }
+
+    // ── #876 custom sphere list ───────────────────────────────────────────────
+
+    [Fact]
+    public void FromSpheres_BuildsGroupFromList()
+    {
+        var spheres = new List<KleinianSphereDef>
+        {
+            new(1, 0, 0, 1.0),
+            new(-1, 0, 0, 1.5),
+            new(0, 2, 0, 0.5),
+        };
+        var g = KleinianGroup.FromSpheres(spheres, 16);
+        Assert.Equal(3, g.Generators.Count);
+        Assert.False(g.UniformRadius);
+        Assert.Equal(1.5, g.Generators[1].R);
+    }
+
+    [Fact]
+    public void FromSpheres_EmptyOrNull_FallsBackToTetrahedral()
+    {
+        Assert.Equal(4, KleinianGroup.FromSpheres(new List<KleinianSphereDef>(), 16).Generators.Count);
+        Assert.Equal(4, KleinianGroup.FromSpheres(null, 16).Generators.Count);
+    }
+
+    [Fact]
+    public void ToSphereDefs_RoundTripsAPreset()
+    {
+        var g = KleinianGroup.Octahedral6(1.0, 16);
+        var defs = g.ToSphereDefs();
+        var g2 = KleinianGroup.FromSpheres(defs, 16);
+        Assert.Equal(g.Generators.Count, g2.Generators.Count);
+        for (int i = 0; i < g.Generators.Count; i++)
+        {
+            Assert.Equal(g.Generators[i].Cx, g2.Generators[i].Cx);
+            Assert.Equal(g.Generators[i].R, g2.Generators[i].R);
+        }
+    }
+
+    [Fact]
+    public void Clone_DeepCopiesCustomSpheres()
+    {
+        var p = new FractalParameters();
+        p.KleinianCustomSpheres.Add(new KleinianSphereDef(1, 2, 3, 4));
+        var q = p.Clone();
+        q.KleinianCustomSpheres[0].R = 99;
+        Assert.Equal(4, p.KleinianCustomSpheres[0].R); // original unchanged
+    }
+
+    [Fact]
+    public void Calculator_CustomPreset_RendersStructure()
+    {
+        var p = new FractalParameters { KleinianPreset = KleinianPreset.Custom };
+        // A tetrahedral-like custom group authored by hand.
+        double r = Math.Sqrt(2.0);
+        p.KleinianCustomSpheres.AddRange(new[]
+        {
+            new KleinianSphereDef(1, 1, 1, r),
+            new KleinianSphereDef(1, -1, -1, r),
+            new KleinianSphereDef(-1, 1, -1, r),
+            new KleinianSphereDef(-1, -1, 1, r),
+        });
+        var calc = new KleinianCalculator(96, 72) { ColorMap = new HsvPalette(), FractalParameters = p };
+        calc.Calculate(default);
+        Assert.True(calc.ColorBuffer.Distinct().Count() > 4);
+    }
+
+    [Fact]
+    public void Region_RoundTrips_CustomPresetAndSpheres()
+    {
+        var src = new FractalParameters { KleinianPreset = KleinianPreset.Custom };
+        src.KleinianCustomSpheres.AddRange(new[]
+        {
+            new KleinianSphereDef(1, 2, 3, 4),
+            new KleinianSphereDef(-1, -2, -3, 0.5),
+        });
+        var snap = RegionFractalParams.Snapshot(FractalType.Kleinian, src);
+        Assert.NotNull(snap);
+
+        var dst = new FractalParameters();
+        snap!.ApplyTo(dst);
+        Assert.Equal(KleinianPreset.Custom, dst.KleinianPreset);
+        Assert.Equal(2, dst.KleinianCustomSpheres.Count);
+        Assert.Equal(4.0, dst.KleinianCustomSpheres[0].R);
+        Assert.Equal(-3.0, dst.KleinianCustomSpheres[1].Cz);
     }
 }

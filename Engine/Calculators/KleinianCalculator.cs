@@ -97,9 +97,14 @@ public sealed class KleinianCalculator : IFractalCalculator
         // origin (limit set = the cocoon between them); smaller scales separate
         // them into discrete shells.
         // #875 (S2) — the preset selects the Schottky sphere configuration.
-        var group = KleinianGroup.FromPreset(
-            FractalParameters.KleinianPreset, scaleK,
-            FractalParameters.KleinianNecklaceCount, deIter);
+        // #876 (S3) — Custom builds the group from the user-authored sphere list
+        // (absolute coordinates, not scaled by KleinianSphereScale); an empty list
+        // falls back to the tetrahedral group.
+        var group = FractalParameters.KleinianPreset == KleinianPreset.Custom
+            ? KleinianGroup.FromSpheres(FractalParameters.KleinianCustomSpheres, deIter)
+            : KleinianGroup.FromPreset(
+                FractalParameters.KleinianPreset, scaleK,
+                FractalParameters.KleinianNecklaceCount, deIter);
         KleinianGenerator[] gens = group.ToArray();
         double r = Math.Sqrt(2.0) * scaleK;     // tangent radius (camera framing)
 

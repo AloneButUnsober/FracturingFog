@@ -63,6 +63,26 @@ public readonly struct KleinianGenerator
         => new(KleinianGeneratorKind.Inversion, cx, cy, cz, r);
 }
 
+/// <summary>A user-editable / serializable inversion sphere — the mutable
+/// authoring form of an inversion <see cref="KleinianGenerator"/> (#876). The
+/// custom-group editor edits a list of these; the calculator converts them to
+/// generators. Public settable props + parameterless ctor so it round-trips
+/// through the region JSON.</summary>
+public sealed class KleinianSphereDef
+{
+    public double Cx { get; set; }
+    public double Cy { get; set; }
+    public double Cz { get; set; }
+    public double R { get; set; } = 1.0;
+
+    public KleinianSphereDef() { }
+    public KleinianSphereDef(double cx, double cy, double cz, double r)
+    { Cx = cx; Cy = cy; Cz = cz; R = r; }
+
+    public KleinianSphereDef Clone() => new(Cx, Cy, Cz, R);
+    public KleinianGenerator ToGenerator() => KleinianGenerator.Inversion(Cx, Cy, Cz, R);
+}
+
 /// <summary>Immutable descriptor of a Kleinian group: the generator list plus
 /// cached fast-path flags. Consumed by the calculator's distance estimator in
 /// place of the previously hard-coded 4-sphere arrays. Lives in Abstractions
@@ -114,6 +134,29 @@ public sealed class KleinianGroup
     /// <summary>The generator array (internal representation) for the hot DE
     /// loop. Returns the backing array directly — callers must not mutate it.</summary>
     public KleinianGenerator[] ToArray() => _generators;
+
+    /// <summary>The generators as editable sphere defs — used to seed the custom
+    /// editor from a built-in preset (#876). Non-inversion generators are
+    /// skipped (none exist in S1–S2).</summary>
+    public List<KleinianSphereDef> ToSphereDefs()
+    {
+        var list = new List<KleinianSphereDef>(_generators.Length);
+        foreach (var g in _generators)
+            if (g.Kind == KleinianGeneratorKind.Inversion)
+                list.Add(new KleinianSphereDef(g.Cx, g.Cy, g.Cz, g.R));
+        return list;
+    }
+
+    /// <summary>Build a group from a user-authored inversion sphere list (#876).
+    /// Empty / null falls back to the tetrahedral preset so the renderer always
+    /// has a valid group.</summary>
+    public static KleinianGroup FromSpheres(IReadOnlyList<KleinianSphereDef>? spheres, int maxWordLength)
+    {
+        if (spheres is null || spheres.Count == 0) return Tetrahedral(1.0, maxWordLength);
+        var gens = new KleinianGenerator[spheres.Count];
+        for (int i = 0; i < gens.Length; i++) gens[i] = spheres[i].ToGenerator();
+        return new KleinianGroup(gens, maxWordLength);
+    }
 
     /// <summary>The shipped fixed tetrahedral 4-sphere preset: spheres of radius
     /// √2·scale centred at the four even-parity ±scale cube corners, in the exact
