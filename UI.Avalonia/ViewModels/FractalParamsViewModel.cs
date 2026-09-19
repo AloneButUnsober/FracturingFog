@@ -330,6 +330,10 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
     public bool IsRandomTile => FractalType == FractalType.RandomTile;
     public bool IsChaoticBilliard => FractalType == FractalType.ChaoticBilliard;
     public bool IsPrecisionField => FractalType == FractalType.PrecisionField;
+    // Indra's Pearls (#892). S1 has no user-facing params yet — the group /
+    // trace / depth / render-mode controls land in S2 (#893); this flag exists
+    // so the type is a known procedural family (no "unknown type" fallback).
+    public bool IsIndrasPearls => FractalType == FractalType.IndrasPearls;
     public bool IsUserEquation => FractalType == FractalType.UserEquation;
     public bool IsSandbox => FractalType == FractalType.Sandbox;
 

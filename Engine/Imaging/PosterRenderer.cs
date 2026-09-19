@@ -1045,6 +1045,7 @@ namespace FracturingFog.Imaging
                 FractalType.Plasma           => new PlasmaCalculator(w, h),
                 FractalType.AcidWarp         => new AcidWarpCalculator(w, h),
                 FractalType.Apollonian       => new ApollonianCalculator(w, h),
+                FractalType.IndrasPearls     => new IndrasPearlsCalculator(w, h),
                 FractalType.ChaoticBilliard  => new ChaoticBilliardCalculator(w, h),
                 FractalType.PrecisionField   => new PrecisionFieldCalculator(w, h),
                 FractalType.Kleinian         => new KleinianCalculator(w, h),
@@ -1100,6 +1101,7 @@ namespace FracturingFog.Imaging
                 case PlasmaCalculator pl:      pl.FractalParameters = req.FractalParameters; break;
                 case AcidWarpCalculator aw:    aw.FractalParameters = req.FractalParameters; break;
                 case ApollonianCalculator ap:  ap.FractalParameters = req.FractalParameters; break;
+                case IndrasPearlsCalculator ip: ip.FractalParameters = req.FractalParameters; break;
                 case KleinianCalculator kl:    kl.FractalParameters = req.FractalParameters; break;
                 case BicomplexMandelbrotCalculator bc: bc.FractalParameters = req.FractalParameters; break;
                 case CoquaternionMandelbrotCalculator cq: cq.FractalParameters = req.FractalParameters; break;

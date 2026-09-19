@@ -151,7 +151,8 @@ namespace FracturingFog.Models
             {FractalType.BicomplexMandelbrot, "Bicomplex Mandelbrot" },
             {FractalType.Coquaternion, "Coquaternion" },
             {FractalType.Dla, "DLA" },
-            {FractalType.RandomTile, "Random Tiling" }
+            {FractalType.RandomTile, "Random Tiling" },
+            {FractalType.IndrasPearls, "Indra's Pearls" }
         };
     }
 

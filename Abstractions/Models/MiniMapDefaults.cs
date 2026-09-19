@@ -91,6 +91,9 @@ public static class MiniMapDefaults
         FractalType.BicomplexMandelbrot => new( 0.0,  0.0, 1.0),
         FractalType.Coquaternion => new( 0.0,  0.0, 1.0),
         FractalType.Dla              => new( 0.0,  0.0, 1.0),
+        // Indra's Pearls (#892) — Maskit μ = 2i limit set sits above the real
+        // axis (period-2 in x); frame it centred at (0, 1) with a wide zoom.
+        FractalType.IndrasPearls     => new( 0.0,  1.0, 0.6),
         _                            => new( 0.0,  0.0, 1.0)
     };
 

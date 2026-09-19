@@ -435,6 +435,19 @@ namespace FracturingFog
         /// theme and Relief-3D height path works unchanged. Handled by a dedicated
         /// <c>PrecisionFieldCalculator</c>.</summary>
         PrecisionField,
+        /// <summary>Indra's Pearls (#892, epic #850) — the limit set of a
+        /// two-generator complex-Möbius Kleinian group, rendered as a 2D plane
+        /// fractal. NOT the 3D <c>Kleinian</c> sphere-inversion solid: here the
+        /// limit set Λ is a fractal *curve* on the Riemann sphere, plotted
+        /// combinatorially by enumerating reduced group words over the alphabet
+        /// {a, A, b, B} and accumulating their images of on-Λ seed points into a
+        /// density buffer, coloured by log-density (design doc §3–§4). S1 ships
+        /// the Maskit slice at μ = 2i (Mumford–Series–Wright p. 259, the "apple");
+        /// Grandma's-recipe / Riley families, params UI, the curve tracer and the
+        /// trace animation follow in S2–S6. Zoomable2D — deeper words auto-reveal
+        /// on zoom (Apollonian contract). Handled by a dedicated
+        /// <c>IndrasPearlsCalculator</c>.</summary>
+        IndrasPearls,
     }
 
     public enum RenderProfile { Preview, Final }
@@ -588,6 +601,9 @@ namespace FracturingFog
                 or FractalType.Lyapunov
                 or FractalType.ChaoticBilliard
                 or FractalType.PrecisionField
+                // Indra's Pearls (#892) — combinatorial word-enumeration point
+                // cloud coloured by log-density; no normals / orbit / DE surfaced.
+                or FractalType.IndrasPearls
                 => FractalCapabilities.SuppliesHistogram,
 
             _ => FractalCapabilities.None,

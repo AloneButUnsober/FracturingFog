@@ -27,6 +27,7 @@ public sealed class FractalCapabilitiesTests
     [InlineData(FractalType.Spider)]
     [InlineData(FractalType.TearDrop)]
     [InlineData(FractalType.Apollonian)]
+    [InlineData(FractalType.IndrasPearls)]
     [InlineData(FractalType.GeneratedMandelbrotZ2)]
     [InlineData(FractalType.GeneratedTricorn)]
     [InlineData(FractalType.GeneratedBurningShip)]

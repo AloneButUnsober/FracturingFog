@@ -192,11 +192,15 @@ point to a pixel, write the colour buffer. Colour by word length / last generato
 Dependencies stated inline. **S1–S2 = MVP** (a Maskit-slice limit set on screen,
 framed and coloured). S3 = the marquee animation. S4+ = breadth and polish.
 
-- **S1 — [#892](https://github.com/AloneButUnsober/FracturingFog/issues/892) — core Möbius group + Maskit family + BFS point-cloud plotter.**
+- **S1 — [#892](https://github.com/AloneButUnsober/FracturingFog/issues/892) — core Möbius group + Maskit family + BFS point-cloud plotter. ✅ SHIPPED.**
   `Mobius` primitive (multiply/inverse/normalize/apply/fixed-points), Grandma's
-  recipe + Maskit-slice group builders, BFS depth-capped word enumeration → point
-  buffer, new `FractalType.IndrasPearls` (2D registration checklist), Zoomable2D.
-  Default framing on the Maskit `μ = 2` group. *(no deps)* — **MVP core.**
+  recipe + Maskit-slice (+ Riley) group builders, BFS depth-capped word enumeration
+  → density buffer, new `FractalType.IndrasPearls` (2D registration checklist),
+  Zoomable2D. Default framing on the Maskit `μ = 2i` group (the MSW p. 259
+  "apple"). *(no deps)* — **MVP core.** `IndrasGroup.cs` (Abstractions) +
+  `IndrasPearlsCalculator.cs` (Engine) + `IndrasPearlsTests.cs` (18 tests). Visual
+  smoke matches the reference plate. Exact matrix formulas source-verified against
+  MSW (p. 259 Maskit, p. 227 Grandma, p. 258 Riley); see §8.
 
 - **S2 — [#893](https://github.com/AloneButUnsober/FracturingFog/issues/893) — params + presets + UI + region persistence.**
   `IndrasGroupFamily` + trace/`μ` params + `MaxWordDepth` + `RenderMode`; params
@@ -262,6 +266,16 @@ framed and coloured). S3 = the marquee animation. S4+ = breadth and polish.
 
 ## 9. Change log
 
+- **2026-09-19** — **S1 (#892) shipped.** `Mobius` value type + `IndrasGroup`
+  builders (Maskit p. 259 / Grandma p. 227 / Riley p. 258) in Abstractions;
+  `IndrasPearlsCalculator` (BFS depth-12 reduced-word enumeration → log-density
+  buffer, Zoomable2D) in Engine; `FractalType.IndrasPearls` wired through the
+  new-2D-calculator checklist (Enums + capabilities + motion class Zoomable2D +
+  mini-map/view defaults centre (0,1) zoom 0.6 + render host + poster + name map +
+  dropdown + `IsIndrasPearls`). 18 tests; full suite 2832 green. Default Maskit
+  μ = 2i render matches the MSW plate. Matrix formulas cross-checked against Tim
+  Hutton's reference implementation of the book. Params UI / presets / persistence
+  deferred to S2 (#893) per the slice plan.
 - **2026-09-19** — Doc created (issue #888), split from the 3D Kleinian epic after
   the §3.4 finding (Grandma's-recipe/Maskit are 2D constructions). Decision: a new
   2D `FractalType.IndrasPearls`, modeled on `ApollonianCalculator` (Zoomable2D,
