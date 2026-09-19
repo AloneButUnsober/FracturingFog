@@ -374,12 +374,49 @@ deposition (#867) after MVP, glyph (#868) gated.
   `escapeAngleZ/C`, `deltaN`. First cut maps one onto `SmoothBuffer` (every 2D theme + Relief free);
   follow-up ColorGen inputs enable diverging scattering-angle themes. Register in `FractalCapabilities`.
 
+**Research context (what this relates to — no proper name of its own).** The construction is a novel
+*combination*, but it sits in known territory and should be described that way (Rule B):
+- **Chaotic scattering** (Ott & Tél 1993) — the closest fit. A *scattering function* maps an input
+  parameter → an output observable (deflection angle, dwell time); `dualOrbitAngle`, `scatteringAngle`,
+  `Δn` **are** scattering observables, with fractal exit-basin boundaries + sensitive dependence. This is
+  the escape-**geometry** (where/how the orbit leaves) view, vs FF's usual escape-**time**.
+- **Fractal basin boundaries / exit basins** (Grebogi–Ott–Yorke 1983; Wada basins, Nusse–Yorke) — the
+  `Δn` / exit-channel field is a basin-boundary fractal.
+- **Critical-orbit comparison.** The `z`-orbit (seed 0) is exactly the **critical orbit** of `z²+s`
+  (`f'=0 ⇒ z=0`), the orbit that governs the dynamics (Fatou); the construction measures an arbitrary
+  orbit `c` *relative to the critical orbit* — a principled reference, not an arbitrary one.
+- **Finite-size/finite-time Lyapunov & Lagrangian coherent structures** (Aurell et al. 1997 FSLE;
+  Haller 2015 LCS) — `D=E_c−E_z` is the finite separation of two trajectories differing in initial
+  condition; as a field over parameter space it is the aesthetic twin of an FTLE/FSLE map (the object
+  fluid dynamics renders to find transport barriers).
+- **Biomorphs / orbit traps** (Pickover) — measuring orbit *geometry* at bailout rather than modulus;
+  this generalizes that to escape *location + angle*.
+
+**Applications this render style lends itself to** (the picture — a field over parameter/initial-condition
+space of an escape or separation observable — is what these fields already visualize; the calc→field→
+height-field/mesh split means FF could render genuine such fields if fed real systems):
+- **Fluid mixing / transport** — FTLE ridges = Lagrangian coherent structures: ocean/atmosphere mixing,
+  spill/pollutant/aerosol dispersal, transport barriers (biggest sci-viz crossover).
+- **Predictability / ensemble forecasting** — finite-time divergence of nearby ICs = error-growth /
+  predictability-horizon maps (`Δn` ~ time-to-divergence).
+- **Chaotic-scattering physics** — three-body escape/ejection, particle scattering, reaction dynamics /
+  transition-state theory, billiards.
+- **Multistability & tipping points** — basin-of-attraction / safe-operating-region maps: power-grid and
+  structural stability, ecology regime shifts, neuroscience attractor states.
+- **Astronomy** — orbital-stability / ejection maps (cluster dynamics, planetary stability).
+- **Numerical analysis** — Newton/root-finding basins; `M−s` = a solver-behaviour vector field.
+This **sci-viz crossover** is unique to §3.6 among the theoretical roadmap items (the pure-aesthetic
+types — Kleinian, transcendental, coquaternion — have no applied twin) — a "why it matters beyond pretty
+pictures" hook.
+
 **Fit.** Reuses the #626 chaotic-scattering framework (billiard / PrecisionField / escape-angle),
 `IHeightFieldSource`/`ReliefHeightField`, S9 mesh export, and the Quat calculators. It is a new
 **control-map + measurement framework**, not a new engine.
 
-**Sources:** Ott & Tél 1993 (chaotic scattering); Norton 1982 (quaternion Julia rendering); Green
-(Buddhabrot / escape-space deposition). §7.
+**Sources:** Ott & Tél 1993 (chaotic scattering); Grebogi–Ott–Yorke 1983 + Nusse–Yorke (fractal / Wada
+basin boundaries); Aurell et al. 1997 (FSLE); Haller 2015 (Lagrangian coherent structures); Pickover
+(biomorphs / orbit traps); Norton 1982 (quaternion Julia rendering); Green (Buddhabrot / escape-space
+deposition). §7.
 **Status:** ready to schedule — tracking issue + slices **S1–S3 (MVP, ~1 wk)**, **S4–S6 optional**.
 
 ---
@@ -535,6 +572,16 @@ appropriate sections; flesh out on the next pass. Cite inline from the sections 
   for the Kleinian Apollonian-extrusion preset.
 - **Vahlen 1902** — K. Th. Vahlen. *Über Bewegungen und complexe Zahlen* (Math. Ann.). Clifford-matrix
   Möbius representation (historical origin of the Ahlfors form).
+- **Grebogi, Ott & Yorke 1983** — C. Grebogi, E. Ott, J. A. Yorke. *Fractal basin boundaries,
+  long-lived chaotic transients, and unstable-unstable pair bifurcation.* Phys. Rev. Lett. 50. Fractal
+  basin boundaries — the §3.6 `Δn` / exit-channel structure.
+- **Nusse & Yorke 1996** — H. E. Nusse, J. A. Yorke. *Wada basin boundaries and basin cells.* Physica D
+  90. Wada (three-or-more-way) exit basins.
+- **Aurell, Boffetta, Crisanti, Paladin & Vulpiani 1997** — *Predictability in the large: an extension
+  of the concept of Lyapunov exponent.* J. Phys. A 30. Finite-size Lyapunov exponent (FSLE) — the
+  finite-separation reading of `D=E_c−E_z` (§3.6).
+- **Haller 2015** — George Haller. *Lagrangian coherent structures.* Annual Review of Fluid Mechanics
+  47. FTLE ridges / transport barriers — the applied twin of the §3.6 separation field.
 
 ---
 
@@ -556,3 +603,11 @@ appropriate sections; flesh out on the next pass. Cite inline from the sections 
   + editor). Toolchain reach recorded (DSL out of reach; ColorGen/Theme categorical word-length kind in
   reach). Bibliography additions (§7): Maskit 1988, Ahlfors 1981/1985, Hart–Sandin–Kauffman 1989,
   Soddy 1936 / Graham et al. 2003, Vahlen 1902.
+- **2026-09-19** — Dual-orbit escape-geometry (§3.6) fleshed out: **seed-decoupling degeneracy** note
+  (`c=s` → plain Mandelbrot control; #864), **design-parameter** note (`c` independent/animatable,
+  `s`=regime vs `c`=probe, `s_z` phase dial, orbit-map enum), **render-context** note (one canonical
+  field → parameter-space / escape-space / glyph), and a **research-context + applications** note placing
+  it in the chaotic-scattering / fractal-basin-boundary / FSLE–LCS literature (sci-viz crossover:
+  fluid mixing, predictability, multistability, scattering physics). Encoded to #863/#864/#865.
+  Bibliography additions (§7 + `Resources-Bibliography.md`): Grebogi–Ott–Yorke 1983, Nusse–Yorke 1996,
+  Aurell et al. 1997 (FSLE), Haller 2015 (LCS).

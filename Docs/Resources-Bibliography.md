@@ -120,6 +120,29 @@ because frontier claims cannot be sanity-checked against existing renders.
 - **Jean Écalle.** *Les fonctions résurgentes.* Publ. Math. Orsay, 1981–1985. Résurgence theory
   underlying the Écalle–Voronin horn-map invariants used by parabolic renormalization.
 
+<a id="escape-geometry-scattering"></a>
+
+The dual-orbit escape-geometry map (`Docs/Technical/Theoretical-Fractal-RnD.md` §3.6, epic #863) is an
+FF-original construction with no proper name; it sits in the chaotic-scattering / fractal-basin-boundary /
+finite-size-Lyapunov literature, which these entries anchor.
+
+- **Edward Ott, Tamás Tél.** *Chaotic scattering: an introduction.* Chaos 3(4), 1993. Scattering
+  functions, escape time, exit basins, angular observables — the vocabulary §3.6's derived scalars
+  (`dualOrbitAngle`, `scatteringAngle`, `Δn`) borrow.
+- **Celso Grebogi, Edward Ott, James A. Yorke.** *Fractal basin boundaries, long-lived chaotic
+  transients, and unstable-unstable pair bifurcation.* Physical Review Letters 50, 1983. Fractal basin
+  boundaries — the §3.6 `Δn` / exit-channel structure.
+- **Helena E. Nusse, James A. Yorke.** *Wada basin boundaries and basin cells.* Physica D 90, 1996.
+  Wada (three-or-more-way) exit basins.
+- **E. Aurell, G. Boffetta, A. Crisanti, G. Paladin, A. Vulpiani.** *Predictability in the large: an
+  extension of the concept of Lyapunov exponent.* Journal of Physics A 30, 1997. Finite-size Lyapunov
+  exponent (FSLE) — the finite-separation reading of `D = E_c − E_z`.
+- **George Haller.** *Lagrangian coherent structures.* Annual Review of Fluid Mechanics 47, 2015. FTLE
+  ridges / transport barriers — the applied twin of the §3.6 separation field (fluid mixing, dispersal,
+  predictability).
+- **Alan Norton.** *Generation and display of geometric fractals in 3-D.* Computer Graphics (SIGGRAPH)
+  16(3), 1982. Quaternion Julia rendering — basis for §3.6's quaternion variant and 4D→3D projection.
+
 <a id="bourke-random-tile"></a>
 
 - **Paul Bourke.** *Random space filling of the plane.*
