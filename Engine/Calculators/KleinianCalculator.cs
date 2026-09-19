@@ -89,15 +89,16 @@ public sealed class KleinianCalculator : IFractalCalculator
         double eps   = Math.Max(1e-5, FractalParameters.KleinianEpsilon);
         double scaleK = Math.Max(0.25, FractalParameters.KleinianSphereScale);
 
-        // Tetrahedral 4-sphere centres scaled by KleinianSphereScale so the
-        // limit set can be "loosened" — at scale 1 the spheres overlap at the
-        // origin and the limit set is the cocoon between them; at smaller
-        // scales the spheres separate and the limit set splits into discrete
-        // shells.
-        double r = Math.Sqrt(2.0) * scaleK;     // tangent radius at scale 1
-        double[] cx = { +1 * scaleK, +1 * scaleK, -1 * scaleK, -1 * scaleK };
-        double[] cy = { +1 * scaleK, -1 * scaleK, +1 * scaleK, -1 * scaleK };
-        double[] cz = { +1 * scaleK, -1 * scaleK, -1 * scaleK, +1 * scaleK };
+        // #874 (S1) — the group is now data. The tetrahedral factory reproduces
+        // the previously hard-coded 4-sphere centres byte-for-byte (Tier 0), so
+        // the DE loops over `gens` instead of a fixed array; future slices vary
+        // the group (presets, user spheres, Möbius generators) without touching
+        // the render/shade stack. At scale 1 the four spheres overlap at the
+        // origin (limit set = the cocoon between them); smaller scales separate
+        // them into discrete shells.
+        var group = KleinianGroup.Tetrahedral(scaleK, deIter);
+        KleinianGenerator[] gens = group.ToArray();
+        double r = Math.Sqrt(2.0) * scaleK;     // tangent radius (camera framing)
 
         double setRadius = scaleK * Math.Sqrt(3.0) + r;
         double camDistFloor = setRadius + 0.5;
@@ -151,7 +152,7 @@ public sealed class KleinianCalculator : IFractalCalculator
         // Vol-color slice D (#180) — bake the active theme gradient for the
         // volumetric palette remap (no-op unless VolumePaletteStrength > 0).
         VolumePaletteBaker.Bake(ref fx, ColorMap);
-        var deStruct = new De(cx, cy, cz, r, deIter);
+        var deStruct = new De(gens, deIter);
 
         // Hoisted for shared use by GPU dispatch + CPU path.
         double sceneRadius = camDist + setRadius * 2.0 + 4.0;
@@ -164,7 +165,12 @@ public sealed class KleinianCalculator : IFractalCalculator
         // (GpuKernelUtils.ResolveLight); the !HasPositionalLight gate is lifted.
         // #492 added a per-light area-capped shadow hardness (sp.ShadowK1/2/3),
         // so area lights also render on the GPU now (punctual = byte-identical).
-        if (fx.UseGpuRender && fx.DebugAov == AovView.Beauty && !lowRes)
+        // #874 (S1) — the GPU kernel passes exactly four centres + one radius, so
+        // it only serves the uniform 4-sphere inversion group (the tetrahedral
+        // preset). Any other group (>4 spheres, mixed radii, non-inversion
+        // generators) falls to the general CPU descent below.
+        bool gpuEligible = group.AllInversions && group.UniformRadius && gens.Length == 4;
+        if (fx.UseGpuRender && fx.DebugAov == AovView.Beauty && !lowRes && gpuEligible)
         {
             var rp = new GpuRaymarchParams
             {
@@ -189,11 +195,11 @@ public sealed class KleinianCalculator : IFractalCalculator
             };
             var kp = new KleinianGpuParams
             {
-                C0X = cx[0], C0Y = cy[0], C0Z = cz[0],
-                C1X = cx[1], C1Y = cy[1], C1Z = cz[1],
-                C2X = cx[2], C2Y = cy[2], C2Z = cz[2],
-                C3X = cx[3], C3Y = cy[3], C3Z = cz[3],
-                Radius = r,
+                C0X = gens[0].Cx, C0Y = gens[0].Cy, C0Z = gens[0].Cz,
+                C1X = gens[1].Cx, C1Y = gens[1].Cy, C1Z = gens[1].Cz,
+                C2X = gens[2].Cx, C2Y = gens[2].Cy, C2Z = gens[2].Cz,
+                C3X = gens[3].Cx, C3Y = gens[3].Cy, C3Z = gens[3].Cz,
+                Radius = group.SphereRadius,
                 DEIter = deIter,
                 SceneRadius = sceneRadius,
             };
@@ -246,7 +252,7 @@ public sealed class KleinianCalculator : IFractalCalculator
                 double sx = ox, sy = oy, sz = oz, tT = 0; bool sHit = false; int sStep = 0;
                 for (int step = 0; step < maxSteps; step++)
                 {
-                    double dist = KleinianDE(sx, sy, sz, cx, cy, cz, r, deIter);
+                    double dist = KleinianDE(sx, sy, sz, gens, deIter);
                     if (dist < eps) { sHit = true; sStep = step; break; }
                     if (tT > sceneRadius) break;
                     sx += dx * dist; sy += dy * dist; sz += dz * dist; tT += dist;
@@ -260,12 +266,12 @@ public sealed class KleinianCalculator : IFractalCalculator
                     return sky;
                 }
                 double hn = eps * 2;
-                double sn0 = KleinianDE(sx + hn, sy, sz, cx, cy, cz, r, deIter)
-                           - KleinianDE(sx - hn, sy, sz, cx, cy, cz, r, deIter);
-                double sn1 = KleinianDE(sx, sy + hn, sz, cx, cy, cz, r, deIter)
-                           - KleinianDE(sx, sy - hn, sz, cx, cy, cz, r, deIter);
-                double sn2 = KleinianDE(sx, sy, sz + hn, cx, cy, cz, r, deIter)
-                           - KleinianDE(sx, sy, sz - hn, cx, cy, cz, r, deIter);
+                double sn0 = KleinianDE(sx + hn, sy, sz, gens, deIter)
+                           - KleinianDE(sx - hn, sy, sz, gens, deIter);
+                double sn1 = KleinianDE(sx, sy + hn, sz, gens, deIter)
+                           - KleinianDE(sx, sy - hn, sz, gens, deIter);
+                double sn2 = KleinianDE(sx, sy, sz + hn, gens, deIter)
+                           - KleinianDE(sx, sy, sz - hn, gens, deIter);
                 var snrm = Normalize3(sn0, sn1, sn2);
                 float ssmooth = (float)sStep * (192f / Math.Max(1, maxSteps)) + (float)(tT * 0.5);
                 uint sbase = (uint)ColorMap.Map(ssmooth, 0f, 256, (float)snrm[0], (float)snrm[1]);
@@ -304,7 +310,7 @@ public sealed class KleinianCalculator : IFractalCalculator
 
                 for (int step = 0; step < maxSteps; step++)
                 {
-                    double dist = KleinianDE(px, py, pz, cx, cy, cz, r, deIter);
+                    double dist = KleinianDE(px, py, pz, gens, deIter);
                     if (dist < eps) { hit = true; hitStep = step; break; }
                     if (tTotal > sceneRadius) break;
                     px += rdx * dist; py += rdy * dist; pz += rdz * dist;
@@ -322,12 +328,12 @@ public sealed class KleinianCalculator : IFractalCalculator
                 }
 
                 double h = eps * 2;
-                double n0 = KleinianDE(px + h, py, pz, cx, cy, cz, r, deIter)
-                          - KleinianDE(px - h, py, pz, cx, cy, cz, r, deIter);
-                double n1 = KleinianDE(px, py + h, pz, cx, cy, cz, r, deIter)
-                          - KleinianDE(px, py - h, pz, cx, cy, cz, r, deIter);
-                double n2 = KleinianDE(px, py, pz + h, cx, cy, cz, r, deIter)
-                          - KleinianDE(px, py, pz - h, cx, cy, cz, r, deIter);
+                double n0 = KleinianDE(px + h, py, pz, gens, deIter)
+                          - KleinianDE(px - h, py, pz, gens, deIter);
+                double n1 = KleinianDE(px, py + h, pz, gens, deIter)
+                          - KleinianDE(px, py - h, pz, gens, deIter);
+                double n2 = KleinianDE(px, py, pz + h, gens, deIter)
+                          - KleinianDE(px, py, pz - h, gens, deIter);
                 var nrm = Normalize3(n0, n1, n2);
 
                 float smooth = (float)hitStep * (192f / Math.Max(1, maxSteps))
@@ -380,28 +386,32 @@ public sealed class KleinianCalculator : IFractalCalculator
         : FracturingFog.Rendering.Lighting.IDistanceEstimator,
           FracturingFog.Rendering.Lighting.IOrbitTrapEstimator
     {
-        private readonly double[] _cx, _cy, _cz;
-        private readonly double _r;
+        private readonly KleinianGenerator[] _gens;
         private readonly int _iter;
-        public De(double[] cx, double[] cy, double[] cz, double r, int iter)
-        { _cx = cx; _cy = cy; _cz = cz; _r = r; _iter = iter; }
+        public De(KleinianGenerator[] gens, int iter)
+        { _gens = gens; _iter = iter; }
         [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.AggressiveInlining)]
         public double Evaluate(double x, double y, double z)
-            => KleinianDE(x, y, z, _cx, _cy, _cz, _r, _iter);
+            => KleinianDE(x, y, z, _gens, _iter);
 
         // Orbit trap (roadmap S9, #391): closest the inversion orbit passes to a
         // sphere boundary, normalized by the sphere radius. The natural trap for a
         // sphere-inversion IFS; view-independent mesh colour driver.
         public double OrbitTrap(double x, double y, double z)
-            => KleinianTrap(x, y, z, _cx, _cy, _cz, _r, _iter);
+            => KleinianTrap(x, y, z, _gens, _iter);
     }
 
-    private static double KleinianTrap(
+    /// <summary>Orbit-trap measure over an inversion-generator list — closest the
+    /// descent orbit passes to any generator's sphere boundary, normalized by the
+    /// first sphere's radius. #874 (S1) generalizes this from the fixed 4-sphere
+    /// array to <see cref="KleinianGenerator"/>[]; byte-identical for the
+    /// tetrahedral group (uniform radius).</summary>
+    public static double KleinianTrap(
         double px, double py, double pz,
-        double[] cx, double[] cy, double[] cz, double r, int iter)
+        KleinianGenerator[] gens, int iter)
     {
-        double r2 = r * r;
-        int n = cx.Length;
+        int n = gens.Length;
+        double normR = n > 0 ? gens[0].R : 1.0;
         double minBoundary = double.MaxValue;
         for (int i = 0; i < iter; i++)
         {
@@ -409,30 +419,37 @@ public sealed class KleinianCalculator : IFractalCalculator
             double bestDeep = 0.0;
             for (int k = 0; k < n; k++)
             {
-                double dx = px - cx[k], dy = py - cy[k], dz = pz - cz[k];
-                double d = Math.Sqrt(dx * dx + dy * dy + dz * dz) - r;
+                var g = gens[k];
+                double dx = px - g.Cx, dy = py - g.Cy, dz = pz - g.Cz;
+                double d = Math.Sqrt(dx * dx + dy * dy + dz * dz) - g.R;
                 double a = Math.Abs(d);
                 if (a < minBoundary) minBoundary = a;
                 if (d < bestDeep) { bestDeep = d; bestK = k; }
             }
             if (bestK < 0) break;
-            double ex = px - cx[bestK], ey = py - cy[bestK], ez = pz - cz[bestK];
+            var b = gens[bestK];
+            double ex = px - b.Cx, ey = py - b.Cy, ez = pz - b.Cz;
             double e2 = ex * ex + ey * ey + ez * ez;
             if (e2 < 1e-30) break;
-            double f = r2 / e2;
-            px = cx[bestK] + ex * f; py = cy[bestK] + ey * f; pz = cz[bestK] + ez * f;
+            double f = (b.R * b.R) / e2;
+            px = b.Cx + ex * f; py = b.Cy + ey * f; pz = b.Cz + ez * f;
         }
-        return Math.Clamp(minBoundary / Math.Max(r, 1e-9), 0.0, 1.0);
+        return Math.Clamp(minBoundary / Math.Max(normR, 1e-9), 0.0, 1.0);
     }
 
-    private static double KleinianDE(
+    /// <summary>Sphere-inversion distance estimator over an inversion-generator
+    /// list: iterate "invert through the deepest containing sphere" until the
+    /// sample point escapes every sphere, tracking the scalar inversion-scale
+    /// product as the chain-rule derivative magnitude; DE = nearest sphere
+    /// boundary / accumulated scale. #874 (S1) generalizes this from the fixed
+    /// 4-sphere array to <see cref="KleinianGenerator"/>[] (each generator carries
+    /// its own radius); byte-identical for the tetrahedral group.</summary>
+    public static double KleinianDE(
         double px, double py, double pz,
-        double[] cx, double[] cy, double[] cz, double r,
-        int iter)
+        KleinianGenerator[] gens, int iter)
     {
-        double r2 = r * r;
         double scale = 1.0;
-        int n = cx.Length;
+        int n = gens.Length;
 
         for (int i = 0; i < iter; i++)
         {
@@ -443,24 +460,26 @@ public sealed class KleinianCalculator : IFractalCalculator
             double bestDeep = 0.0;          // most-negative signed distance
             for (int k = 0; k < n; k++)
             {
-                double dx = px - cx[k];
-                double dy = py - cy[k];
-                double dz = pz - cz[k];
-                double d = Math.Sqrt(dx * dx + dy * dy + dz * dz) - r;
+                var g = gens[k];
+                double dx = px - g.Cx;
+                double dy = py - g.Cy;
+                double dz = pz - g.Cz;
+                double d = Math.Sqrt(dx * dx + dy * dy + dz * dz) - g.R;
                 if (d < bestDeep) { bestDeep = d; bestK = k; }
             }
             if (bestK < 0) break;
 
-            double ex = px - cx[bestK];
-            double ey = py - cy[bestK];
-            double ez = pz - cz[bestK];
+            var b = gens[bestK];
+            double ex = px - b.Cx;
+            double ey = py - b.Cy;
+            double ez = pz - b.Cz;
             double e2 = ex * ex + ey * ey + ez * ez;
             if (e2 < 1e-30) break;
-            double f = r2 / e2;
+            double f = (b.R * b.R) / e2;
             scale *= f;
-            px = cx[bestK] + ex * f;
-            py = cy[bestK] + ey * f;
-            pz = cz[bestK] + ez * f;
+            px = b.Cx + ex * f;
+            py = b.Cy + ey * f;
+            pz = b.Cz + ez * f;
         }
 
         // After escape, return distance to the nearest sphere boundary in
@@ -469,10 +488,11 @@ public sealed class KleinianCalculator : IFractalCalculator
         double nearest = double.PositiveInfinity;
         for (int k = 0; k < n; k++)
         {
-            double dx = px - cx[k];
-            double dy = py - cy[k];
-            double dz = pz - cz[k];
-            double d = Math.Sqrt(dx * dx + dy * dy + dz * dz) - r;
+            var g = gens[k];
+            double dx = px - g.Cx;
+            double dy = py - g.Cy;
+            double dz = pz - g.Cz;
+            double d = Math.Sqrt(dx * dx + dy * dy + dz * dz) - g.R;
             double a = Math.Abs(d);
             if (a < nearest) nearest = a;
         }
