@@ -1033,6 +1033,14 @@ namespace FracturingFog.Models
         /// panel; each entry is one inversion generator. Empty falls back to the
         /// tetrahedral group.</summary>
         public List<KleinianSphereDef> KleinianCustomSpheres { get; set; } = new();
+        /// <summary>Rotation-fold angle in degrees applied after each inversion
+        /// step (#877) — twists the limit set (rotated pseudo-Kleinian). 0 =
+        /// un-rotated / byte-identical; applies to every preset + Custom.</summary>
+        public double KleinianRotationAngle { get; set; } = 0.0;
+        /// <summary>Rotation-fold axis (need not be normalized). Default +Y.</summary>
+        public double KleinianRotationAxisX { get; set; } = 0.0;
+        public double KleinianRotationAxisY { get; set; } = 1.0;
+        public double KleinianRotationAxisZ { get; set; } = 0.0;
         /// <summary>Inversion-iteration cap for the Kleinian DE. Higher =
         /// sharper limit-set boundary, slower per ray sample. Default 16
         /// covers the visible boundary; deep cusps need 24+.</summary>
@@ -1523,6 +1531,10 @@ namespace FracturingFog.Models
                 KleinianPreset = KleinianPreset,
                 KleinianNecklaceCount = KleinianNecklaceCount,
                 KleinianCustomSpheres = KleinianCustomSpheres.ConvertAll(s => s.Clone()),
+                KleinianRotationAngle = KleinianRotationAngle,
+                KleinianRotationAxisX = KleinianRotationAxisX,
+                KleinianRotationAxisY = KleinianRotationAxisY,
+                KleinianRotationAxisZ = KleinianRotationAxisZ,
                 KleinianIterations = KleinianIterations,
                 KleinianSphereScale = KleinianSphereScale,
                 KleinianMaxSteps = KleinianMaxSteps,

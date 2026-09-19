@@ -249,7 +249,7 @@
         <!-- Kleinian -->
         <Grid IsVisible="{Binding IsKleinian}"
               ColumnDefinitions="160,*"
-              RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto">
+              RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto">
             <TextBlock Grid.Row="0" Grid.Column="0" Text="Group preset:" VerticalAlignment="Center" />
             <ComboBox Grid.Row="0" Grid.Column="1" HorizontalAlignment="Stretch" Margin="0,2"
                       ItemsSource="{Binding KleinianPresets}"
@@ -284,6 +284,20 @@
             <NumericUpDown Grid.Row="6" Grid.Column="1"
                            Minimum="0.1" Maximum="500" Increment="0.1" FormatString="F2"
                            Value="{Binding KleinianCameraDistance, Mode=TwoWay}" Margin="0,2" />
+            <TextBlock Grid.Row="7" Grid.Column="0" Text="Rotate fold (°):" VerticalAlignment="Center" />
+            <NumericUpDown Grid.Row="7" Grid.Column="1"
+                           Minimum="-180" Maximum="180" Increment="1" FormatString="F1"
+                           Value="{Binding KleinianRotationAngle, Mode=TwoWay}" Margin="0,2"
+                           ToolTip.Tip="Rotation applied after each inversion step — twists the limit set (rotated pseudo-Kleinian). 0 = un-rotated." />
+            <TextBlock Grid.Row="8" Grid.Column="0" Text="Rot axis (x,y,z):" VerticalAlignment="Center" />
+            <StackPanel Grid.Row="8" Grid.Column="1" Orientation="Horizontal" Spacing="4" Margin="0,2">
+                <NumericUpDown Width="72" Minimum="-1" Maximum="1" Increment="0.1" FormatString="F2"
+                               Value="{Binding KleinianRotationAxisX, Mode=TwoWay}" />
+                <NumericUpDown Width="72" Minimum="-1" Maximum="1" Increment="0.1" FormatString="F2"
+                               Value="{Binding KleinianRotationAxisY, Mode=TwoWay}" />
+                <NumericUpDown Width="72" Minimum="-1" Maximum="1" Increment="0.1" FormatString="F2"
+                               Value="{Binding KleinianRotationAxisZ, Mode=TwoWay}" />
+            </StackPanel>
         </Grid>
 
         <!-- Kleinian custom sphere-list editor (#876). Shown for the Custom preset. -->

@@ -105,7 +105,15 @@ public sealed class KleinianCalculator : IFractalCalculator
             : KleinianGroup.FromPreset(
                 FractalParameters.KleinianPreset, scaleK,
                 FractalParameters.KleinianNecklaceCount, deIter);
+        // #877 (S4) — optional rotation fold twists the limit set (pseudo-Kleinian
+        // "rotated" construction). Angle 0 → KleinianRotation.None → byte-identical.
+        group = group.WithRotation(new KleinianRotation(
+            FractalParameters.KleinianRotationAngle * (Math.PI / 180.0),
+            FractalParameters.KleinianRotationAxisX,
+            FractalParameters.KleinianRotationAxisY,
+            FractalParameters.KleinianRotationAxisZ));
         KleinianGenerator[] gens = group.ToArray();
+        KleinianRotation rot = group.Rotation;
         double r = Math.Sqrt(2.0) * scaleK;     // tangent radius (camera framing)
 
         double setRadius = scaleK * Math.Sqrt(3.0) + r;
@@ -160,7 +168,7 @@ public sealed class KleinianCalculator : IFractalCalculator
         // Vol-color slice D (#180) — bake the active theme gradient for the
         // volumetric palette remap (no-op unless VolumePaletteStrength > 0).
         VolumePaletteBaker.Bake(ref fx, ColorMap);
-        var deStruct = new De(gens, deIter);
+        var deStruct = new De(gens, deIter, rot);
 
         // Hoisted for shared use by GPU dispatch + CPU path.
         double sceneRadius = camDist + setRadius * 2.0 + 4.0;
@@ -177,7 +185,8 @@ public sealed class KleinianCalculator : IFractalCalculator
         // it only serves the uniform 4-sphere inversion group (the tetrahedral
         // preset). Any other group (>4 spheres, mixed radii, non-inversion
         // generators) falls to the general CPU descent below.
-        bool gpuEligible = group.AllInversions && group.UniformRadius && gens.Length == 4;
+        bool gpuEligible = group.AllInversions && group.UniformRadius && gens.Length == 4
+                           && !group.HasRotation;   // #877 — rotation fold is CPU-only
         if (fx.UseGpuRender && fx.DebugAov == AovView.Beauty && !lowRes && gpuEligible)
         {
             var rp = new GpuRaymarchParams
@@ -260,7 +269,7 @@ public sealed class KleinianCalculator : IFractalCalculator
                 double sx = ox, sy = oy, sz = oz, tT = 0; bool sHit = false; int sStep = 0;
                 for (int step = 0; step < maxSteps; step++)
                 {
-                    double dist = KleinianDE(sx, sy, sz, gens, deIter);
+                    double dist = KleinianDE(sx, sy, sz, gens, deIter, in rot);
                     if (dist < eps) { sHit = true; sStep = step; break; }
                     if (tT > sceneRadius) break;
                     sx += dx * dist; sy += dy * dist; sz += dz * dist; tT += dist;
@@ -274,12 +283,12 @@ public sealed class KleinianCalculator : IFractalCalculator
                     return sky;
                 }
                 double hn = eps * 2;
-                double sn0 = KleinianDE(sx + hn, sy, sz, gens, deIter)
-                           - KleinianDE(sx - hn, sy, sz, gens, deIter);
-                double sn1 = KleinianDE(sx, sy + hn, sz, gens, deIter)
-                           - KleinianDE(sx, sy - hn, sz, gens, deIter);
-                double sn2 = KleinianDE(sx, sy, sz + hn, gens, deIter)
-                           - KleinianDE(sx, sy, sz - hn, gens, deIter);
+                double sn0 = KleinianDE(sx + hn, sy, sz, gens, deIter, in rot)
+                           - KleinianDE(sx - hn, sy, sz, gens, deIter, in rot);
+                double sn1 = KleinianDE(sx, sy + hn, sz, gens, deIter, in rot)
+                           - KleinianDE(sx, sy - hn, sz, gens, deIter, in rot);
+                double sn2 = KleinianDE(sx, sy, sz + hn, gens, deIter, in rot)
+                           - KleinianDE(sx, sy, sz - hn, gens, deIter, in rot);
                 var snrm = Normalize3(sn0, sn1, sn2);
                 float ssmooth = (float)sStep * (192f / Math.Max(1, maxSteps)) + (float)(tT * 0.5);
                 uint sbase = (uint)ColorMap.Map(ssmooth, 0f, 256, (float)snrm[0], (float)snrm[1]);
@@ -318,7 +327,7 @@ public sealed class KleinianCalculator : IFractalCalculator
 
                 for (int step = 0; step < maxSteps; step++)
                 {
-                    double dist = KleinianDE(px, py, pz, gens, deIter);
+                    double dist = KleinianDE(px, py, pz, gens, deIter, in rot);
                     if (dist < eps) { hit = true; hitStep = step; break; }
                     if (tTotal > sceneRadius) break;
                     px += rdx * dist; py += rdy * dist; pz += rdz * dist;
@@ -336,12 +345,12 @@ public sealed class KleinianCalculator : IFractalCalculator
                 }
 
                 double h = eps * 2;
-                double n0 = KleinianDE(px + h, py, pz, gens, deIter)
-                          - KleinianDE(px - h, py, pz, gens, deIter);
-                double n1 = KleinianDE(px, py + h, pz, gens, deIter)
-                          - KleinianDE(px, py - h, pz, gens, deIter);
-                double n2 = KleinianDE(px, py, pz + h, gens, deIter)
-                          - KleinianDE(px, py, pz - h, gens, deIter);
+                double n0 = KleinianDE(px + h, py, pz, gens, deIter, in rot)
+                          - KleinianDE(px - h, py, pz, gens, deIter, in rot);
+                double n1 = KleinianDE(px, py + h, pz, gens, deIter, in rot)
+                          - KleinianDE(px, py - h, pz, gens, deIter, in rot);
+                double n2 = KleinianDE(px, py, pz + h, gens, deIter, in rot)
+                          - KleinianDE(px, py, pz - h, gens, deIter, in rot);
                 var nrm = Normalize3(n0, n1, n2);
 
                 float smooth = (float)hitStep * (192f / Math.Max(1, maxSteps))
@@ -396,17 +405,34 @@ public sealed class KleinianCalculator : IFractalCalculator
     {
         private readonly KleinianGenerator[] _gens;
         private readonly int _iter;
+        private readonly KleinianRotation _rot;
         public De(KleinianGenerator[] gens, int iter)
-        { _gens = gens; _iter = iter; }
+        { _gens = gens; _iter = iter; _rot = KleinianRotation.None; }
+        public De(KleinianGenerator[] gens, int iter, KleinianRotation rot)
+        { _gens = gens; _iter = iter; _rot = rot; }
         [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.AggressiveInlining)]
         public double Evaluate(double x, double y, double z)
-            => KleinianDE(x, y, z, _gens, _iter);
+            => KleinianDE(x, y, z, _gens, _iter, in _rot);
 
         // Orbit trap (roadmap S9, #391): closest the inversion orbit passes to a
         // sphere boundary, normalized by the sphere radius. The natural trap for a
         // sphere-inversion IFS; view-independent mesh colour driver.
         public double OrbitTrap(double x, double y, double z)
-            => KleinianTrap(x, y, z, _gens, _iter);
+            => KleinianTrap(x, y, z, _gens, _iter, in _rot);
+    }
+
+    // #877 — Rodrigues rotation of the descent point about the fold axis.
+    [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.AggressiveInlining)]
+    private static void RotateInPlace(in KleinianRotation rot, ref double px, ref double py, ref double pz)
+    {
+        double kv = rot.Ax * px + rot.Ay * py + rot.Az * pz;
+        double kxx = rot.Ay * pz - rot.Az * py;
+        double kxy = rot.Az * px - rot.Ax * pz;
+        double kxz = rot.Ax * py - rot.Ay * px;
+        double om = 1.0 - rot.Cos;
+        px = px * rot.Cos + kxx * rot.Sin + rot.Ax * kv * om;
+        py = py * rot.Cos + kxy * rot.Sin + rot.Ay * kv * om;
+        pz = pz * rot.Cos + kxz * rot.Sin + rot.Az * kv * om;
     }
 
     /// <summary>Orbit-trap measure over an inversion-generator list — closest the
@@ -417,6 +443,11 @@ public sealed class KleinianCalculator : IFractalCalculator
     public static double KleinianTrap(
         double px, double py, double pz,
         KleinianGenerator[] gens, int iter)
+        => KleinianTrap(px, py, pz, gens, iter, KleinianRotation.None);
+
+    public static double KleinianTrap(
+        double px, double py, double pz,
+        KleinianGenerator[] gens, int iter, in KleinianRotation rot)
     {
         int n = gens.Length;
         double normR = n > 0 ? gens[0].R : 1.0;
@@ -441,6 +472,7 @@ public sealed class KleinianCalculator : IFractalCalculator
             if (e2 < 1e-30) break;
             double f = (b.R * b.R) / e2;
             px = b.Cx + ex * f; py = b.Cy + ey * f; pz = b.Cz + ez * f;
+            if (rot.Has) RotateInPlace(in rot, ref px, ref py, ref pz);   // #877
         }
         return Math.Clamp(minBoundary / Math.Max(normR, 1e-9), 0.0, 1.0);
     }
@@ -455,6 +487,11 @@ public sealed class KleinianCalculator : IFractalCalculator
     public static double KleinianDE(
         double px, double py, double pz,
         KleinianGenerator[] gens, int iter)
+        => KleinianDE(px, py, pz, gens, iter, KleinianRotation.None);
+
+    public static double KleinianDE(
+        double px, double py, double pz,
+        KleinianGenerator[] gens, int iter, in KleinianRotation rot)
     {
         double scale = 1.0;
         int n = gens.Length;
@@ -488,6 +525,9 @@ public sealed class KleinianCalculator : IFractalCalculator
             px = b.Cx + ex * f;
             py = b.Cy + ey * f;
             pz = b.Cz + ez * f;
+            // #877 — rotation fold (orthogonal → no scale change). Skipped when
+            // rot.Has is false, keeping the un-rotated DE byte-identical.
+            if (rot.Has) RotateInPlace(in rot, ref px, ref py, ref pz);
         }
 
         // After escape, return distance to the nearest sphere boundary in
