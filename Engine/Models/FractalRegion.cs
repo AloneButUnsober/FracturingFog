@@ -470,6 +470,8 @@ namespace FracturingFog.Models
         // #875 — Kleinian group preset + necklace ring size (omitted at defaults).
         [JsonIgnore(Condition = OmitNull)] public int? KleinianPreset { get; set; }
         [JsonIgnore(Condition = OmitNull)] public int? KleinianNecklaceCount { get; set; }
+        // #876 — user-authored custom inversion sphere list (omitted when empty).
+        [JsonIgnore(Condition = OmitNull)] public List<KleinianSphereDef>? KleinianCustomSpheres { get; set; }
 
         /// <summary>
         /// Capture the P1-relevant parameters for <paramref name="type"/> from a
@@ -616,6 +618,8 @@ namespace FracturingFog.Models
                         ? (int)p.KleinianPreset : null,
                     KleinianNecklaceCount = p.KleinianNecklaceCount != 6
                         ? p.KleinianNecklaceCount : (int?)null,
+                    KleinianCustomSpheres = p.KleinianCustomSpheres.Count > 0
+                        ? p.KleinianCustomSpheres.ConvertAll(s => s.Clone()) : null,
                 },
                 FractalType.BicomplexMandelbrot => new RegionFractalParams
                 {
@@ -799,6 +803,7 @@ namespace FracturingFog.Models
                         p.KleinianCameraDistance = d; p.KleinianCameraTheta = th; p.KleinianCameraPhi = ph;
                         if (KleinianPreset.HasValue) p.KleinianPreset = (FracturingFog.KleinianPreset)KleinianPreset.Value;
                         if (KleinianNecklaceCount.HasValue) p.KleinianNecklaceCount = KleinianNecklaceCount.Value;
+                        if (KleinianCustomSpheres != null) p.KleinianCustomSpheres = KleinianCustomSpheres.ConvertAll(s => s.Clone());
                         break;
                     case FractalType.BicomplexMandelbrot:
                         p.BicomplexCameraDistance = d; p.BicomplexCameraTheta = th; p.BicomplexCameraPhi = ph;

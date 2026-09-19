@@ -3,6 +3,9 @@
 
 using System;
 using System.Collections.Generic;
+using System.Collections.ObjectModel;
+using System.Globalization;
+using System.Linq;
 using System.Numerics;
 using System.Reactive;
 using System.Runtime.CompilerServices;
@@ -77,6 +80,10 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
         ExportMeshCommand           = ReactiveCommand.Create(() => ExportMeshRequested?.Invoke());
         ExportReliefMeshCommand     = ReactiveCommand.Create(() => ExportReliefMeshRequested?.Invoke());
         PickDropColorCommand        = ReactiveCommand.CreateFromTask(PickDropColorAsync);
+        // #876 — Kleinian custom sphere-list editor commands.
+        AddKleinianSphereCommand        = ReactiveCommand.Create(AddKleinianSphere);
+        LoadKleinianPresetSpheresCommand = ReactiveCommand.Create(LoadKleinianPresetSpheres);
+        ImportKleinianSpheresCommand    = ReactiveCommand.Create(ImportKleinianSpheres);
     }
 
     // Load every cached backing field from the wrapped FractalParameters. Shared
@@ -196,6 +203,7 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
         _precMetric = _p.PrecisionDiffMetric;
         _kleinPreset = _p.KleinianPreset;
         _kleinNecklace = _p.KleinianNecklaceCount;
+        InitKleinianSpheres();   // #876 — repopulate the editor from the reloaded params
         _kleinIter = _p.KleinianIterations;
         _kleinScale = _p.KleinianSphereScale;
         _kleinCameraTheta = _p.KleinianCameraTheta;
@@ -1611,13 +1619,108 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
     public KleinianPreset KleinianPreset
     {
         get => _kleinPreset;
-        set { Set(ref _kleinPreset, value); _p.KleinianPreset = value; this.RaisePropertyChanged(nameof(IsKleinianNecklace)); Fire(); }
+        set
+        {
+            Set(ref _kleinPreset, value);
+            _p.KleinianPreset = value;
+            // #876 — seed the custom list from the tetrahedral group the first time
+            // the user switches to Custom, so the editor is never empty.
+            if (value == KleinianPreset.Custom && KleinianSpheres.Count == 0)
+                LoadKleinianPresetSpheres();
+            this.RaisePropertyChanged(nameof(IsKleinianNecklace));
+            this.RaisePropertyChanged(nameof(IsKleinianCustom));
+            Fire();
+        }
     }
     public Array KleinianPresets => Enum.GetValues(typeof(KleinianPreset));
     /// <summary>Necklace ring size — only meaningful for the NecklaceN preset.</summary>
     public bool IsKleinianNecklace => IsKleinian && _kleinPreset == KleinianPreset.NecklaceN;
+    /// <summary>True when the Custom sphere-list editor should show (#876).</summary>
+    public bool IsKleinianCustom => IsKleinian && _kleinPreset == KleinianPreset.Custom;
     private int _kleinNecklace;
     public int KleinianNecklaceCount { get => _kleinNecklace; set { Set(ref _kleinNecklace, (int)Clamp(value, 3, 24)); _p.KleinianNecklaceCount = _kleinNecklace; Fire(); } }
+
+    // #876 — Kleinian custom inversion-sphere editor.
+    /// <summary>Editable rows backing <c>FractalParameters.KleinianCustomSpheres</c>.</summary>
+    public ObservableCollection<KleinianSphereRow> KleinianSpheres { get; } = new();
+    private string _kleinImport = "";
+    /// <summary>Free-text import buffer: one sphere per line as
+    /// <c>[invert] cx cy cz r</c>.</summary>
+    public string KleinianImportText { get => _kleinImport; set { Set(ref _kleinImport, value); } }
+    public ReactiveCommand<Unit, Unit> AddKleinianSphereCommand { get; }
+    public ReactiveCommand<Unit, Unit> LoadKleinianPresetSpheresCommand { get; }
+    public ReactiveCommand<Unit, Unit> ImportKleinianSpheresCommand { get; }
+
+    private KleinianSphereRow NewSphereRow(double cx, double cy, double cz, double r)
+    {
+        var row = new KleinianSphereRow(cx, cy, cz, r);
+        row.Changed = SyncKleinianSpheres;
+        row.Remove = RemoveKleinianSphere;
+        return row;
+    }
+
+    private void InitKleinianSpheres()
+    {
+        KleinianSpheres.Clear();
+        foreach (var s in _p.KleinianCustomSpheres)
+            KleinianSpheres.Add(NewSphereRow(s.Cx, s.Cy, s.Cz, s.R));
+    }
+
+    // Rebuild the parameter list from the editor rows and re-render.
+    private void SyncKleinianSpheres()
+    {
+        _p.KleinianCustomSpheres = KleinianSpheres
+            .Select(rw => new KleinianSphereDef(rw.Cx, rw.Cy, rw.Cz, rw.R)).ToList();
+        Fire();
+    }
+
+    private void AddKleinianSphere()
+    {
+        KleinianSpheres.Add(NewSphereRow(0.0, 0.0, 0.0, 1.0));
+        SyncKleinianSpheres();
+    }
+
+    private void RemoveKleinianSphere(KleinianSphereRow? row)
+    {
+        if (row is null) return;
+        KleinianSpheres.Remove(row);
+        SyncKleinianSpheres();
+    }
+
+    // Populate the custom list from a built-in preset (the current non-Custom one,
+    // else tetrahedral) so the user has a starting configuration to tweak.
+    private void LoadKleinianPresetSpheres()
+    {
+        var basis = _kleinPreset == KleinianPreset.Custom ? KleinianPreset.Tetrahedral : _kleinPreset;
+        var g = KleinianGroup.FromPreset(basis, Clamp(_kleinScale, 0.25, 4.0), _kleinNecklace, 16);
+        KleinianSpheres.Clear();
+        foreach (var s in g.ToSphereDefs())
+            KleinianSpheres.Add(NewSphereRow(s.Cx, s.Cy, s.Cz, s.R));
+        SyncKleinianSpheres();
+    }
+
+    // Parse the import buffer: one sphere per line, "[invert] cx cy cz r".
+    private void ImportKleinianSpheres()
+    {
+        var rows = new List<KleinianSphereRow>();
+        foreach (var raw in _kleinImport.Split('\n'))
+        {
+            var line = raw.Trim();
+            if (line.Length == 0 || line.StartsWith("#")) continue;
+            var parts = line.Split(new[] { ' ', '\t', ',', '(', ')' }, StringSplitOptions.RemoveEmptyEntries);
+            var nums = new List<double>(4);
+            foreach (var tok in parts)
+                if (double.TryParse(tok, NumberStyles.Float, CultureInfo.InvariantCulture, out var v))
+                    nums.Add(v);
+            if (nums.Count >= 4)
+                rows.Add(NewSphereRow(nums[0], nums[1], nums[2], nums[3]));
+        }
+        if (rows.Count == 0) return;
+        KleinianSpheres.Clear();
+        foreach (var r in rows) KleinianSpheres.Add(r);
+        SyncKleinianSpheres();
+    }
+
     private int _kleinIter;
     public int KleinianIterations { get => _kleinIter; set { Set(ref _kleinIter, (int)Clamp(value, 2, 64)); _p.KleinianIterations = _kleinIter; Fire(); } }
     private double _kleinScale;
@@ -1754,4 +1857,31 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
     }
 
     private static double Clamp(double v, double min, double max) => v < min ? min : (v > max ? max : v);
+}
+
+/// <summary>One editable row of the Kleinian custom sphere-list editor (#876).
+/// Each coordinate edit fires <see cref="Changed"/> so the owning view model can
+/// rebuild <c>FractalParameters.KleinianCustomSpheres</c> and re-render.</summary>
+public sealed class KleinianSphereRow : ViewModelBase
+{
+    private double _cx, _cy, _cz, _r;
+
+    /// <summary>Set by the owner to a resync callback; invoked on every edit.</summary>
+    public Action? Changed;
+    /// <summary>Set by the owner to the remove-this-row handler.</summary>
+    public Action<KleinianSphereRow>? Remove;
+
+    public KleinianSphereRow(double cx, double cy, double cz, double r)
+    {
+        _cx = cx; _cy = cy; _cz = cz; _r = r;
+        RemoveCommand = ReactiveCommand.Create(() => Remove?.Invoke(this));
+    }
+
+    /// <summary>Bound by the per-row delete button (row-owned, codebase idiom).</summary>
+    public ReactiveCommand<Unit, Unit> RemoveCommand { get; }
+
+    public double Cx { get => _cx; set { if (_cx == value) return; _cx = value; this.RaisePropertyChanged(); Changed?.Invoke(); } }
+    public double Cy { get => _cy; set { if (_cy == value) return; _cy = value; this.RaisePropertyChanged(); Changed?.Invoke(); } }
+    public double Cz { get => _cz; set { if (_cz == value) return; _cz = value; this.RaisePropertyChanged(); Changed?.Invoke(); } }
+    public double R  { get => _r;  set { double v = value < 0.0 ? 0.0 : value; if (_r == v) return; _r = v; this.RaisePropertyChanged(); Changed?.Invoke(); } }
 }

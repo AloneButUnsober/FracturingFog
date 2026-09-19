@@ -135,6 +135,10 @@ namespace FracturingFog
         /// tangent to its two neighbours — the Indra's-Pearls "necklace" group
         /// (Mumford–Series–Wright).</summary>
         NecklaceN,
+        /// <summary>A user-authored inversion sphere list
+        /// (<c>KleinianCustomSpheres</c>), edited in the params panel (#876).
+        /// Empty falls back to the tetrahedral group.</summary>
+        Custom,
     }
 
     public enum FractalType

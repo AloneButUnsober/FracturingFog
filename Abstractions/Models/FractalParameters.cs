@@ -1028,6 +1028,11 @@ namespace FracturingFog.Models
         /// preset — the planar Indra's-Pearls ring size. Ignored by other presets.
         /// Default 6; clamped to [3, 24].</summary>
         public int KleinianNecklaceCount { get; set; } = 6;
+        /// <summary>User-authored inversion sphere list for the
+        /// <see cref="KleinianPreset.Custom"/> preset (#876). Edited in the params
+        /// panel; each entry is one inversion generator. Empty falls back to the
+        /// tetrahedral group.</summary>
+        public List<KleinianSphereDef> KleinianCustomSpheres { get; set; } = new();
         /// <summary>Inversion-iteration cap for the Kleinian DE. Higher =
         /// sharper limit-set boundary, slower per ray sample. Default 16
         /// covers the visible boundary; deep cusps need 24+.</summary>
@@ -1517,6 +1522,7 @@ namespace FracturingFog.Models
                 PrecisionDiffMetric = PrecisionDiffMetric,
                 KleinianPreset = KleinianPreset,
                 KleinianNecklaceCount = KleinianNecklaceCount,
+                KleinianCustomSpheres = KleinianCustomSpheres.ConvertAll(s => s.Clone()),
                 KleinianIterations = KleinianIterations,
                 KleinianSphereScale = KleinianSphereScale,
                 KleinianMaxSteps = KleinianMaxSteps,

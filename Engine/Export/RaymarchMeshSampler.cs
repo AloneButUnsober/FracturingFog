@@ -90,8 +90,9 @@ public static class RaymarchMeshSampler
                 // tetrahedral preset) so the mesh DE and the render DE cannot drift.
                 double scaleK = Math.Max(0.25, p.KleinianSphereScale);
                 int deIter = Math.Max(2, p.KleinianIterations);
-                var group = KleinianGroup.FromPreset(
-                    p.KleinianPreset, scaleK, p.KleinianNecklaceCount, deIter);
+                var group = p.KleinianPreset == KleinianPreset.Custom
+                    ? KleinianGroup.FromSpheres(p.KleinianCustomSpheres, deIter)
+                    : KleinianGroup.FromPreset(p.KleinianPreset, scaleK, p.KleinianNecklaceCount, deIter);
                 return new KleinianCalculator.De(group.ToArray(), deIter);
             }
 

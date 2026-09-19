@@ -286,6 +286,46 @@
                            Value="{Binding KleinianCameraDistance, Mode=TwoWay}" Margin="0,2" />
         </Grid>
 
+        <!-- Kleinian custom sphere-list editor (#876). Shown for the Custom preset. -->
+        <StackPanel IsVisible="{Binding IsKleinianCustom}" Margin="0,4,0,0" Spacing="4">
+            <TextBlock Text="Custom inversion spheres (centre x,y,z + radius):"
+                       FontWeight="Bold" />
+            <ItemsControl ItemsSource="{Binding KleinianSpheres}">
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate x:DataType="vm:KleinianSphereRow">
+                        <Grid ColumnDefinitions="Auto,64,Auto,64,Auto,64,Auto,64,Auto" Margin="0,1">
+                            <TextBlock Grid.Column="0" Text="x" VerticalAlignment="Center" Margin="0,0,3,0" />
+                            <NumericUpDown Grid.Column="1" Increment="0.05" FormatString="F3"
+                                           Value="{Binding Cx, Mode=TwoWay}" />
+                            <TextBlock Grid.Column="2" Text="y" VerticalAlignment="Center" Margin="4,0,3,0" />
+                            <NumericUpDown Grid.Column="3" Increment="0.05" FormatString="F3"
+                                           Value="{Binding Cy, Mode=TwoWay}" />
+                            <TextBlock Grid.Column="4" Text="z" VerticalAlignment="Center" Margin="4,0,3,0" />
+                            <NumericUpDown Grid.Column="5" Increment="0.05" FormatString="F3"
+                                           Value="{Binding Cz, Mode=TwoWay}" />
+                            <TextBlock Grid.Column="6" Text="r" VerticalAlignment="Center" Margin="4,0,3,0" />
+                            <NumericUpDown Grid.Column="7" Increment="0.05" FormatString="F3" Minimum="0"
+                                           Value="{Binding R, Mode=TwoWay}" />
+                            <Button Grid.Column="8" Content="✕" Margin="4,0,0,0" Padding="6,0"
+                                    ToolTip.Tip="Remove this sphere"
+                                    Command="{Binding RemoveCommand}" />
+                        </Grid>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+            <StackPanel Orientation="Horizontal" Spacing="6">
+                <Button Content="Add sphere" Command="{Binding AddKleinianSphereCommand}" />
+                <Button Content="Load from preset" Command="{Binding LoadKleinianPresetSpheresCommand}"
+                        ToolTip.Tip="Replace the list with the current built-in preset's spheres (tetrahedral when already Custom)." />
+            </StackPanel>
+            <TextBlock Text="Import (one sphere per line: x y z r):" Margin="0,4,0,0" />
+            <TextBox Text="{Binding KleinianImportText, Mode=TwoWay}" AcceptsReturn="True"
+                     MinHeight="52" FontFamily="Consolas,monospace"
+                     Watermark="1 1 1 1.414&#x0a;1 -1 -1 1.414" />
+            <Button Content="Import spheres" HorizontalAlignment="Left"
+                    Command="{Binding ImportKleinianSpheresCommand}" />
+        </StackPanel>
+
         <!-- Mesh export (#101). Any DE raymarcher → marching-cubes OBJ/STL. -->
         <Border IsVisible="{Binding CanExportMesh}"
                 BorderBrush="#404040" BorderThickness="0,1,0,0"
