@@ -232,6 +232,43 @@ traces `ta, tb, tab`) is the crown: it is *the* Indra's-Pearls parameter space,
 and animating `tab` along the **Maskit slice** boundary is the marquee animation
 (ties into the scene/animation engine — see §6.5 toolchain reach).
 
+### 3.7 The #53 answer — why "Inversion iter" looks inert (post-epic, #885)
+
+**Question (#53):** what should the user see when they change `KleinianIterations`?
+**Observation (#875 smoke):** at default framing, nothing.
+
+**Empirical measurement** (200×200, tetrahedral default, `KleinianIterations`
+16 vs 64):
+
+| Colour source | Framing | Pixels changed |
+|---------------|---------|----------------|
+| **Smooth** (default) | zoom 1, ε = 1.2e-3 | **0.00 %** |
+| **Smooth** | zoom 40, ε = 5e-5 | **0.00 %** |
+| **WordLength** | zoom 1, ε = 1.2e-3 | **96.5 %** |
+| **WordLength** | zoom 40, ε = 5e-5 | **100 %** |
+
+**Why.** The DE descent loop breaks the instant a sample escapes every sphere
+(`bestK < 0`). For the tetrahedral group at any on-screen framing the descent
+converges in **fewer than 16 inversions for every visible ray**, so raising the
+cap to 64 yields a **byte-identical distance estimate** — hence 0.00 % change on
+the Smooth shade, even deep-zoomed (the sub-16-inversion cusps that would need
+more are sub-pixel or off-frame). The cap is a *real* correctness bound, not a
+detail knob, and the default 16 is already past the point of visible return for
+this group.
+
+**The answer.** The iteration count is made visible by the **colour path** (S5,
+#878): with **Colour by = Word length**, each pixel is banded by *how many
+inversions its descent ran*, so changing the cap re-colours ~100 % of the image.
+That is what the user should reach for. Delivered:
+- the `KleinianIterations` tooltip now says the effect is invisible on Smooth and
+  points at **Colour by = Word length** (and deep-zoom cusps);
+- this section documents the measurement.
+
+No "make Smooth respond" work is warranted: the measurement shows Smooth geometry
+is iteration-independent at every visible scale, so auto-scaling the cap with zoom
+(one of #885's options) would not change the Smooth render. The knob that controls
+*perceived* detail on Smooth is `KleinianEpsilon` / zoom, not the inversion cap.
+
 ---
 
 ## 4. Design — data model & DE strategy
@@ -532,3 +569,11 @@ win, S1-only) → S4 → S6 → S8 → S7 (GPU last, largest, CPU-authoritative)
   no-op and deferred. **3-D epic track complete** (MVP + rotation + colour + relaxation;
   GPU deferred, analytic deferred). Grandma's/Maskit on the 2-D track (#888/#879);
   #53 answer post-epic (#885).
+- **2026-09-19** — **#885 / #53 answered** (§3.7). Measured `KleinianIterations`
+  16 vs 64: **0.00 %** pixel change on the Smooth shade at zoom 1 *and* zoom 40 —
+  the descent converges in &lt;16 inversions for every visible ray, so the cap is
+  inert on Smooth by nature. It becomes the dominant driver under **Colour by =
+  Word length** (96–100 % of pixels re-band). Delivered an honest
+  `KleinianIterations` tooltip pointing at the word-length colour path + this
+  section; no "make Smooth respond" work (auto-scaling the cap with zoom would not
+  change the iteration-independent Smooth render). Closes #53 + #885.

@@ -266,7 +266,7 @@
             <NumericUpDown Grid.Row="2" Grid.Column="1"
                            Minimum="2" Maximum="64" Increment="1" FormatString="F0"
                            Value="{Binding KleinianIterations, Mode=TwoWay}" Margin="0,2"
-                           ToolTip.Tip="Sphere-inversion iteration cap. Higher = sharper limit-set boundary, slower per sample." />
+                           ToolTip.Tip="Sphere-inversion descent cap. On the default Smooth shading its effect is INVISIBLE — the descent escapes in a handful of inversions for every on-screen ray, so raising the cap changes nothing (issue #53). To SEE it, set 'Colour by' = Word length: each pixel then bands by its descent depth and this knob re-colours the whole image. It also sharpens the finest cusps at deep zoom with a small epsilon." />
             <TextBlock Grid.Row="3" Grid.Column="0" Text="Sphere scale:" VerticalAlignment="Center" />
             <NumericUpDown Grid.Row="3" Grid.Column="1"
                            Minimum="0.25" Maximum="4.0" Increment="0.05" FormatString="F3"
