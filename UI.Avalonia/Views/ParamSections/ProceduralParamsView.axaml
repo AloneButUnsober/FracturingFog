@@ -432,6 +432,34 @@
             </Grid>
         </StackPanel>
 
+        <!-- Dual-Orbit Escape (#864) -->
+        <Grid IsVisible="{Binding IsDualOrbitEscape}"
+              ColumnDefinitions="160,*"
+              RowDefinitions="Auto,Auto,Auto,Auto">
+            <TextBlock Grid.Row="0" Grid.Column="0" Text="Field:" VerticalAlignment="Center" />
+            <ComboBox Grid.Row="0" Grid.Column="1"
+                      ItemsSource="{Binding DualOrbitFields}"
+                      SelectedItem="{Binding DualOrbitField, Mode=TwoWay}"
+                      Margin="0,2"
+                      ToolTip.Tip="Derived escape-space scalar: EscapeSeparation |E_c−E_z|, MidpointResidual |M−s|, DualOrbitAngle, or ΔN." />
+            <TextBlock Grid.Row="1" Grid.Column="0" Text="c-seed real:" VerticalAlignment="Center" />
+            <NumericUpDown Grid.Row="1" Grid.Column="1"
+                           Minimum="-2" Maximum="2" Increment="0.02" FormatString="F3"
+                           Value="{Binding DualOrbitCSeedX, Mode=TwoWay}" Margin="0,2"
+                           IsEnabled="{Binding !DualOrbitCEqualsS}"
+                           ToolTip.Tip="Fixed, independent c-orbit seed (real). s selects the set; c textures it. Keep decoupled from s — c = s is degenerate." />
+            <TextBlock Grid.Row="2" Grid.Column="0" Text="c-seed imag:" VerticalAlignment="Center" />
+            <NumericUpDown Grid.Row="2" Grid.Column="1"
+                           Minimum="-2" Maximum="2" Increment="0.02" FormatString="F3"
+                           Value="{Binding DualOrbitCSeedY, Mode=TwoWay}" Margin="0,2"
+                           IsEnabled="{Binding !DualOrbitCEqualsS}"
+                           ToolTip.Tip="Fixed c-orbit seed (imaginary)." />
+            <TextBlock Grid.Row="3" Grid.Column="0" Text="Mandelbrot control:" VerticalAlignment="Center" />
+            <CheckBox Grid.Row="3" Grid.Column="1"
+                      IsChecked="{Binding DualOrbitCEqualsS, Mode=TwoWay}" Margin="0,2"
+                      ToolTip.Tip="Seed the c-orbit from s (c = s). Degenerate — the dual fields collapse to a plain Mandelbrot exterior. For comparison only." />
+        </Grid>
+
         <!-- Chaotic Billiard (#627) -->
         <Grid IsVisible="{Binding IsChaoticBilliard}"
               ColumnDefinitions="160,*"

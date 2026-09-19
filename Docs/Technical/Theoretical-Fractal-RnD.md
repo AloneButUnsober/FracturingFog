@@ -616,5 +616,15 @@ appropriate sections; flesh out on the next pass. Cite inline from the sections 
   field → parameter-space / escape-space / glyph), and a **research-context + applications** note placing
   it in the chaotic-scattering / fractal-basin-boundary / FSLE–LCS literature (sci-viz crossover:
   fluid mixing, predictability, multistability, scattering physics). Encoded to #863/#864/#865.
+- **2026-09-19** — **S1 (#864) shipped** — `DualOrbitEscapeCalculator` (complex-plane `u→u²+s`, two
+  orbits from the critical seed 0 and a fixed decoupled `c`, escape geometry → SmoothBuffer). New
+  `FractalType.DualOrbitEscape` (Zoomable2D, `IHeightFieldSource`), `DualOrbitField` selector
+  {EscapeSeparation, MidpointResidual, DualOrbitAngle, DeltaN}, editable c-seed + labelled
+  `DualOrbitCEqualsS` Mandelbrot control; new-2D-calc checklist + region persistence + params panel.
+  **Validation (Bucket II): the `c=s` degeneracy is confirmed empirically** — separation ≡ 0 (D≡0, flat
+  render), while the decoupled c yields rich escape-separation / angle / Δn fields around the Mandelbrot
+  body (the angle field is the showcase). +11 tests, suite 2867 green. Free on arrival: 2D themes,
+  ColorGen, Relief-3D height, S9 mesh (all read SmoothBuffer). Next: S2 #865 (field UI — done inline
+  here), S3 #866 (quaternion `q²+S`).
   Bibliography additions (§7 + `Resources-Bibliography.md`): Grebogi–Ott–Yorke 1983, Nusse–Yorke 1996,
   Aurell et al. 1997 (FSLE), Haller 2015 (LCS).
