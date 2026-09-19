@@ -336,6 +336,33 @@ unchanged. Escape-*space* deposition variant (render at `E`, not at `s`) rides t
 accumulation buffer. Vector-field/glyph mode (arrow = `M−s`) is a **genuinely new render path** (defer).
 Multiresolution tile-cache is **redundant** with FF's fast recompute + deep-zoom perturbation (skip).
 
+**Design parameters (`c`, `s`, map) and their visual roles.**
+- **`c` is an independent user parameter** (`FractalParameters`, animatable — Julia c-drift #92 precedent),
+  never hard-wired to `s` (see degeneracy note). Two modes: *parameter-space* (image = `s`-plane, `c` a
+  fixed global seed knob) and *Julia-space* (image = `c`-plane, `s` the knob). First cut = parameter-space
+  with editable `c`.
+- **Role split:** **`s` selects the dynamical regime — the *set*; `c` selects the probe within it — the
+  *texture on that set*.** Varying `c` leaves the silhouette (the seed-0 escape set) fixed and re-textures
+  the dual fields (`c→0` → toward degenerate/low-contrast; `c` near a fixed/periodic point → long-transient
+  ridges; `c` in another exit channel → the `Δn`/angle field re-patterns). A `c`-sweep animates texture on a
+  stationary body. Varying the fixed `s_z` is a **decoupling / phase dial** (flat control → rich scattering;
+  a literal "turning-on" animation); `s_x` panning travels across the set.
+- **Map is a first-class enum** (`ComponentWise` control / `ComplexPlane` / `Radial |u|u` / `Quaternion q²+S`
+  — the notes' `IOrbitMap` + §4 pluggable-algebra envelope). Toggling is not a tweak: it changes the
+  **dimensionality + symmetry class** of the output (complex = planar 2-D field / Relief terrain, cheap;
+  quaternion = rounded Norton-lobe 3-D solid / mesh, showcase; radial = spherical shells). The map
+  comparison is itself a research goal (notes §13).
+
+**Render contexts — one calc, several projections (canonical-field principle).** Compute the canonical
+per-sample field **once** (`s, E_z, E_c, n_z, n_c`, prev-state) and project it several ways with no
+re-iterate (notes §22/§31): **(1) parameter-space field** (render at `s` → `SmoothBuffer` → themes / Relief
+/ mesh; deterministic, boundary-hugging; wants **one `s`/pixel**); **(2) escape-space deposition** (render
+at `E` → Buddhabrot accumulation → density cloud in *output* space; **wants many `s`**, converges — the
+opposite sampling regime); **(3) vector/glyph displacement field** (`M−s`; genuinely new render path,
+design-gated). These are **complementary, not redundant** — same dataset, different questions — and the
+calc→field→render split makes building all three cheap-incremental. Ordering unchanged: field (S1–S3) first,
+deposition (#867) after MVP, glyph (#868) gated.
+
 **Toolchain reach.**
 - **CalcGen/DSL:** the iteration *is* `f(u)+s` — it fits the existing map grammar. The novelty is the
   **dual initial condition** + **escape-space state capture**, not the map. DSL reach = an *orbit-pair
