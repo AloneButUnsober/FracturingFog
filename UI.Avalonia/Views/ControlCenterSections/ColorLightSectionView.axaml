@@ -11,30 +11,38 @@
                 <TextBlock Classes="section" Text="Color Themes" />
                 <!-- Right-click sort menu wired in code-behind to match the
                      toolbar Theme combo (issue #51). -->
-                <ComboBox x:Name="ThemeCombo" ItemsSource="{Binding Menu.ThemeNames}" SelectedItem="{Binding Menu.SelectedTheme}" HorizontalAlignment="Stretch" Margin="0,4,0,0" />
-                <UniformGrid Columns="4">
-                    <Button Classes="action neutral" Content="Exp…"   Command="{Binding Menu.ExportThemeCommand}"  ToolTip.Tip="Export current theme to JSON" Margin="0,0,4,0" />
-                    <Button Classes="action neutral" Content="Imp…"   Command="{Binding Menu.ImportThemeCommand}"  ToolTip.Tip="Import themes from JSON" Margin="0,0,4,0" />
-                    <Button Classes="action danger"  Content="Delete" Command="{Binding Menu.DeleteThemeCommand}"  ToolTip.Tip="Delete selected user theme" Margin="0,0,4,0" />
-                    <Button Classes="action neutral" Content="Reload" Command="{Binding Menu.ReloadThemesCommand}" ToolTip.Tip="Reload themes from disk" />
-                </UniformGrid>
-                <Button Classes="action help" Content="Edit Theme…" Command="{Binding Menu.EditThemeCommand}" HorizontalAlignment="Stretch" Margin="0,4,0,0" ToolTip.Tip="Open the Color Theme Editor" />
-                <Button Classes="action neutral" Content="Save Lighting → Theme" Command="{Binding Menu.SaveLightingToThemeCommand}" HorizontalAlignment="Stretch" Margin="0,4,0,0" ToolTip.Tip="Snapshot the active Lighting &amp; FX block as the selected user theme's bundled preset" />
+                <ComboBox x:Name="ThemeCombo" ItemsSource="{Binding Menu.ThemeNames}" 
+                          SelectedItem="{Binding Menu.SelectedTheme}" 
+                          Width="315" HorizontalAlignment="Left" Margin="0,4,0,0" />
+                <Grid ColumnDefinitions="Auto,Auto,Auto,Auto">
+                    <Button Grid.Column="0" Classes="action neutral" Content="Export…"   Command="{Binding Menu.ExportThemeCommand}"  ToolTip.Tip="Export current theme to JSON" Margin="0,0,4,0" />
+                    <Button Grid.Column="1" Classes="action neutral" Content="Import…"   Command="{Binding Menu.ImportThemeCommand}"  ToolTip.Tip="Import themes from JSON" Margin="0,0,4,0" />
+                    <Button Grid.Column="2" Classes="action danger"  Content="Delete" Command="{Binding Menu.DeleteThemeCommand}"  ToolTip.Tip="Delete selected user theme" Margin="0,0,4,0" />
+                    <Button Grid.Column="3" Classes="action neutral" Content="Reload" Command="{Binding Menu.ReloadThemesCommand}" ToolTip.Tip="Reload themes from disk" />
+                </Grid>
+                <StackPanel Orientation="Horizontal" Spacing="8">
+                    <Button Classes="action help" Content="Edit Theme…" Command="{Binding Menu.EditThemeCommand}" HorizontalAlignment="Stretch" ToolTip.Tip="Open the Color Theme Editor" />
+                    <Button Classes="action neutral" Content="Save Lighting → Theme" Command="{Binding Menu.SaveLightingToThemeCommand}" HorizontalAlignment="Stretch" ToolTip.Tip="Snapshot the active Lighting &amp; FX block as the selected user theme's bundled preset" />
+                </StackPanel>
             </StackPanel>
         </Border>
 
         <Border Classes="group">
             <StackPanel Spacing="6">
                 <TextBlock Classes="section" Text="Lighting &amp; FX" />
-                <Button Classes="action help" Content="Relief 3D…" Command="{Binding Shell.ShowRelief3DCommand}" HorizontalAlignment="Stretch"
-                        ToolTip.Tip="Opens the standalone Relief 3D panel (2D heightfield → raised relief / oblique 3D raymarch, mesh export). Independent of Fractal Params — stays open when you close Params." />
+                <StackPanel Orientation="Horizontal" Spacing="8">
+                    <Button Classes="action help" Content="Relief 3D…" Command="{Binding Shell.ShowRelief3DCommand}" HorizontalAlignment="Stretch"
+                        ToolTip.Tip="Opens the standalone Relief 3D panel (2D heightfield → raised relief / oblique 3D raymarch, mesh export). Independent of Fractal Params — stays open when you close Params." />                    
+                    <Button Classes="action help" Content="Volumetric Lighting &amp; FX…" Command="{Binding Shell.ShowLightingFxCommand}" HorizontalAlignment="Stretch"
+                        ToolTip.Tip="Opens the standalone Lighting &amp; FX panel (lights, ambient occlusion, fog, tonemap, HDRI/IBL) — no longer buried inside Fractal Params. Stays open across fractal-type changes." />
+                </StackPanel>
+                
                 <!-- Mirrors the Ctrl+Shift+G hotkey. On = GPU sphere-trace (default,
                      full ShadingPipeline FX parity); off = CPU sphere-trace (the
                      parity oracle). Only affects Relief 3D raymarch mode. -->
                 <CheckBox Content="GPU relief raymarch" IsChecked="{Binding Shell.ReliefGpuRaymarch, Mode=TwoWay}" Margin="0,4,0,0"
                           ToolTip.Tip="GPU sphere-trace for Relief 3D (Ctrl+Shift+G). On (default) = GPU with full ShadingPipeline FX parity. Off = CPU sphere-trace (the parity oracle). Inert unless Relief 3D raymarch mode is active." />
-                <Button Classes="action help" Content="Volumetric Lighting &amp; FX…" Command="{Binding Shell.ShowLightingFxCommand}" HorizontalAlignment="Stretch" Margin="0,4,0,0"
-                        ToolTip.Tip="Opens the standalone Lighting &amp; FX panel (lights, ambient occlusion, fog, tonemap, HDRI/IBL) — no longer buried inside Fractal Params. Stays open across fractal-type changes." />
+                
             </StackPanel>
         </Border>
 
@@ -42,37 +50,51 @@
             <StackPanel Spacing="4">
                 <TextBlock Classes="section" Text="Post-FX" />
                 <Grid ColumnDefinitions="100,*,Auto" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto" Margin="0,4,0,0" ColumnSpacing="4">
-                    <TextBlock Grid.Row="0" Grid.Column="0" Classes="fxLabel" 
+                    <CheckBox  Grid.Row="0" Grid.Column="0" Grid.ColumnSpan="3" IsChecked="{Binding Menu.LightingLocked}" 
+                               Content="Lock Lighting &amp; FX"
+                               ToolTip.Tip="Lock lighting — ignore theme presets: When checked, theme selection won't overwrite the active Lighting &amp; FX block (lights, AO, fog, tonemap, etc.)." Margin="0,4,0,0" />
+
+                    <TextBlock Grid.Row="1" Grid.Column="0" Classes="fxLabel" 
                                Text="{Binding Menu.BrightnessLabel}" Margin="0,0,12,4"
                                HorizontalAlignment="Left" Width="112"/>
-                    <Slider    Grid.Row="0" Grid.Column="1" Value="{Binding Menu.Brightness}" Minimum="-100" Maximum="100" 
+                    <Slider    Grid.Row="1" Grid.Column="1" Value="{Binding Menu.Brightness}" Minimum="-100" Maximum="100" 
                                TickFrequency="25" Margin="0,6,6,4" ToolTip.Tip="Brightness (-100..100)" />
-                    <CheckBox  Grid.Row="0" Grid.Column="2" IsChecked="{Binding Menu.BrightnessLocked}" ToolTip.Tip="Lock brightness" Margin="0,0,0,4" />
-                    <TextBlock Grid.Row="1" Grid.Column="0" Classes="fxLabel" Text="{Binding Menu.ContrastLabel}" Margin="0,0,12,4"
+                    <CheckBox  Grid.Row="1" Grid.Column="2" IsChecked="{Binding Menu.BrightnessLocked}" ToolTip.Tip="Lock brightness" Margin="0,0,0,4" />
+                    <TextBlock Grid.Row="2" Grid.Column="0" Classes="fxLabel" Text="{Binding Menu.ContrastLabel}" Margin="0,0,12,4"
                                HorizontalAlignment="Left" Width="112"/>
-                    <Slider    Grid.Row="1" Grid.Column="1" Value="{Binding Menu.Contrast}" Minimum="-100" Maximum="100" 
+                    <Slider    Grid.Row="2" Grid.Column="1" Value="{Binding Menu.Contrast}" Minimum="-100" Maximum="100" 
                                TickFrequency="25" Margin="0,6,6,4" ToolTip.Tip="Contrast (-100..100)" />
-                    <CheckBox  Grid.Row="1" Grid.Column="2" IsChecked="{Binding Menu.ContrastLocked}" ToolTip.Tip="Lock contrast" Margin="0,0,0,4" />
-                    <TextBlock Grid.Row="2" Grid.Column="0" Classes="fxLabel" Text="{Binding Menu.AdaptiveLabel}" Margin="0,0,12,0" 
+                    <CheckBox  Grid.Row="2" Grid.Column="2" IsChecked="{Binding Menu.ContrastLocked}" ToolTip.Tip="Lock contrast" Margin="0,0,0,4" />
+
+                    <!-- Adaptive HE -->
+                    <TextBlock Grid.Row="3" Grid.Column="0" Classes="fxLabel" Text="{Binding Menu.AdaptiveLabel}" Margin="0,0,12,0" 
                                IsEnabled="{Binding Menu.AdaptiveEnabled}" HorizontalAlignment="Left" Width="112" />
-                    <Slider    Grid.Row="2" Grid.Column="1" Value="{Binding Menu.Adaptive}" Minimum="0" Maximum="100" 
+                    <Slider    Grid.Row="3" Grid.Column="1" Value="{Binding Menu.Adaptive}" Minimum="0" Maximum="100" 
                                TickFrequency="25" Margin="0,12,6,0" 
                                IsEnabled="{Binding Menu.AdaptiveEnabled}" ToolTip.Tip="Adaptive contrast (0=off, 100=full)" />
-                    <CheckBox  Grid.Row="2" Grid.Column="2" IsChecked="{Binding Menu.AdaptiveLocked}" IsEnabled="{Binding Menu.AdaptiveEnabled}" ToolTip.Tip="Lock adaptive" />
+                    <CheckBox  Grid.Row="3" Grid.Column="2" IsChecked="{Binding Menu.AdaptiveLocked}" IsEnabled="{Binding Menu.AdaptiveEnabled}" ToolTip.Tip="Lock adaptive" />
+
+                    <!-- Gamma — mirrored from the FloatingMenu Post-FX block. Shared
+                         VM prop via Menu, so the two slots stay in lock-step. -->
+                    <TextBlock Grid.Row="4" Grid.Column="0" Classes="fxLabel" Text="{Binding Menu.GammaLabel}" Margin="0,4,6,0" />
+                    <Slider    Grid.Row="4" Grid.Column="1" Value="{Binding Menu.Gamma}" Minimum="-100" Maximum="100" TickFrequency="25" Margin="0,4,6,0"
+                               ToolTip.Tip="Image gamma (-100 to +100, default 0). +brightens, −darkens. Compounds with a theme's baked palette gamma." />
+                
+
                     <!-- Phase D deband (F11a/b) + alpha preview (F10.5). Mirrors
                          the FloatingMenu Post-FX rows; VM props shared via Menu. -->
-                    <CheckBox  Grid.Row="3" Grid.Column="0" Content="Deband" IsChecked="{Binding Menu.BandDither}" Margin="0,4,6,0"
+                    <CheckBox  Grid.Row="5" Grid.Column="0" Content="Deband" IsChecked="{Binding Menu.BandDither}" Margin="0,4,6,0"
                                ToolTip.Tip="Ordered dither before the palette float→byte quantise — smooths gradient banding (CPU + GPU). Off by default." />
-                    <Slider    Grid.Row="3" Grid.Column="1" Value="{Binding Menu.BandDitherStrength}" Minimum="0" Maximum="100"
+                    <Slider    Grid.Row="5" Grid.Column="1" Value="{Binding Menu.BandDitherStrength}" Minimum="0" Maximum="100"
                                TickFrequency="25" Margin="0,4,6,0"
                                IsEnabled="{Binding Menu.BandDither}"
                                ToolTip.Tip="Deband strength (0–100, default 100 = full ±0.5-LSB spread)." />
-                    <CheckBox  Grid.Row="4" Grid.Column="0" Grid.ColumnSpan="2" Content="Alpha preview" IsChecked="{Binding Menu.AlphaPreview}" Margin="0,4,6,0"
+                    <CheckBox  Grid.Row="6" Grid.Column="0" Grid.ColumnSpan="2" Content="Alpha preview" IsChecked="{Binding Menu.AlphaPreview}" Margin="0,0,6,0"
                                ToolTip.Tip="Preview per-stop alpha over a checkerboard so translucent theme stops read as see-through on screen. Display-only — saved PNGs keep straight alpha. Off by default." />
                     <!-- Lock Relief 3D — right of Alpha preview. Off: relief follows
                          the region (on for relief regions, off for plain). On: relief
                          stays as the user has it regardless of the region. -->
-                    <CheckBox  Grid.Row="5" Grid.Column="0" Grid.ColumnSpan="2" Content="Auto Relief 3d On/Off"
+                    <CheckBox  Grid.Row="7" Grid.Column="0" Grid.ColumnSpan="2" Content="Auto Relief 3d On/Off"
                                IsChecked="{Binding Menu.ReliefLocked}" Margin="0,4,0,0"
                                ToolTip.Tip="Lock Relief 3D. Off = Relief 3D turns on/off with the selected region. On = Relief 3D stays as-is regardless of the region's saved setting." />
 
@@ -83,19 +105,11 @@
                                Foreground="#9B9B9B" FontWeight="Bold" VerticalAlignment="Center"
                                HorizontalAlignment="Left" Margin="0,4,0,0"
                                ToolTip.Tip="When checked, theme selection won't overwrite the active Lighting &amp; FX block (lights, AO, fog, tonemap, etc.)." />-->
-                    <CheckBox  Grid.Row="6" Grid.Column="0" Grid.ColumnSpan="3" IsChecked="{Binding Menu.LightingLocked}" 
-                               Content="Lock Lighting &amp; FX"
-                               ToolTip.Tip="Lock lighting — ignore theme presets: When checked, theme selection won't overwrite the active Lighting &amp; FX block (lights, AO, fog, tonemap, etc.)." Margin="0,4,0,0" />
-
-                    <!-- Gamma — mirrored from the FloatingMenu Post-FX block. Shared
-                         VM prop via Menu, so the two slots stay in lock-step. -->
-                    <TextBlock Grid.Row="7" Grid.Column="0" Classes="fxLabel" Text="{Binding Menu.GammaLabel}" Margin="0,4,6,0" />
-                    <Slider    Grid.Row="7" Grid.Column="1" Value="{Binding Menu.Gamma}" Minimum="-100" Maximum="100" TickFrequency="25" Margin="0,4,6,0"
-                               ToolTip.Tip="Image gamma (-100 to +100, default 0). +brightens, −darkens. Compounds with a theme's baked palette gamma." />
-                </Grid>
+                    
+                    </Grid>
 
                 <!-- Adaptive sweep (mirrors the main menu) -->
-                <Grid ColumnDefinitions="*,Auto,Auto" Margin="0,6,0,0">
+                <Grid ColumnDefinitions="115,Auto,Auto,Auto" Margin="0,6,0,0">
                     <Button Grid.Column="0"
                             Classes="action neutral"
                             Content="{Binding Menu.AdaptiveSweepButtonLabel}"
@@ -111,18 +125,22 @@
                                    Width="120"
                                    IsEnabled="{Binding Menu.AdaptiveEnabled}"
                                    ToolTip.Tip="Sweep duration in seconds (default 5)" />
-                    <TextBlock Grid.Column="2" Classes="fxLabel" Text="s" VerticalAlignment="Center" Margin="4,0,0,0" />
-                </Grid>
-                <UniformGrid Columns="3" Margin="0,6,0,0">
-                    <RadioButton GroupName="CcAdaptiveSweepMode" Content="Forward"   IsChecked="{Binding Menu.IsForwardMode, Mode=TwoWay}"  IsEnabled="{Binding Menu.AdaptiveEnabled}" Foreground="#B4B4B4" ToolTip.Tip="0 → 100" />
-                    <RadioButton GroupName="CcAdaptiveSweepMode" Content="Reverse"   IsChecked="{Binding Menu.IsReverseMode, Mode=TwoWay}"  IsEnabled="{Binding Menu.AdaptiveEnabled}" Foreground="#B4B4B4" ToolTip.Tip="100 → 0" />
-                    <RadioButton GroupName="CcAdaptiveSweepMode" Content="Ping-Pong" IsChecked="{Binding Menu.IsPingPongMode, Mode=TwoWay}" IsEnabled="{Binding Menu.AdaptiveEnabled}" Foreground="#B4B4B4" ToolTip.Tip="0 → 100 → 0 within the duration (split in half)" />
-                </UniformGrid>
-                <CheckBox Content="Loop"
+                    <TextBlock Grid.Column="2" Classes="fxLabel" Text="s" VerticalAlignment="Center" Margin="4,0,8,0" Width="12" />
+                    
+                <CheckBox Grid.Column="3" HorizontalAlignment="Left"
+                          Content="Loop"
                           IsChecked="{Binding Menu.AdaptiveSweepLoop, Mode=TwoWay}"
                           IsEnabled="{Binding Menu.AdaptiveEnabled}"
                           Foreground="#B4B4B4" Margin="0,4,0,0"
                           ToolTip.Tip="Repeat the selected sweep mode indefinitely until stopped" />
+                </Grid>
+                <Grid ColumnDefinitions="Auto,Auto,Auto" ColumnSpacing="6">
+                    <RadioButton Grid.Column="0" GroupName="CcAdaptiveSweepMode" Content="Forward"   IsChecked="{Binding Menu.IsForwardMode, Mode=TwoWay}"  IsEnabled="{Binding Menu.AdaptiveEnabled}" Foreground="#B4B4B4" ToolTip.Tip="0 → 100" />
+                    <RadioButton Grid.Column="1" GroupName="CcAdaptiveSweepMode" Content="Reverse"   IsChecked="{Binding Menu.IsReverseMode, Mode=TwoWay}"  IsEnabled="{Binding Menu.AdaptiveEnabled}" Foreground="#B4B4B4" ToolTip.Tip="100 → 0" />
+                    <RadioButton Grid.Column="2" GroupName="CcAdaptiveSweepMode" Content="Ping-Pong" IsChecked="{Binding Menu.IsPingPongMode, Mode=TwoWay}" IsEnabled="{Binding Menu.AdaptiveEnabled}" Foreground="#B4B4B4" ToolTip.Tip="0 → 100 → 0 within the duration (split in half)" />
+                </Grid>
+                <UniformGrid Columns="3" Margin="0,6,0,0">
+                    </UniformGrid>
             </StackPanel>
         </Border>
     </StackPanel>

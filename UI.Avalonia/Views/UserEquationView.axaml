@@ -28,13 +28,13 @@
                   Padding="12"
                   VerticalScrollBarVisibility="Auto"
                   HorizontalScrollBarVisibility="Disabled">
-    <Grid RowDefinitions="Auto,Auto,Auto,*,Auto,Auto"
+    <Grid RowDefinitions="Auto,Auto,Auto,Auto,*,Auto,Auto"
           MinHeight="{Binding #RootScroll.Viewport.Height}">
 
         <!-- Row 0: saved equations row -->
         <Grid Grid.Row="0"
               ColumnDefinitions="Auto,*,Auto,Auto,Auto"
-              Margin="0,0,0,6">
+              Margin="0,0,18,6">
             <TextBlock Grid.Column="0" Text="Saved:" VerticalAlignment="Center" Margin="0,0,8,0" />
             <ComboBox Grid.Column="1"
                       ItemsSource="{Binding SavedNames}"
@@ -60,11 +60,13 @@
         </Grid>
 
         <!-- Row 1: promote toggle + Cookbook + Morph + Compile & Load + Compile + Save + Generate via CalcGen + Equation Guide + CalcGen Help -->
-        <Grid Grid.Row="1" ColumnDefinitions="*,Auto,Auto,Auto,Auto,Auto,Auto,Auto" Margin="0,0,0,6">
+        <Grid Grid.Row="1" ColumnDefinitions="*" Margin="0,0,0,26">
+            <Grid Grid.Row="0" ColumnDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto">
             <CheckBox Grid.Column="0"
                       Content="Promote to fractal list"
                       IsChecked="{Binding Promote, Mode=TwoWay}"
-                      IsEnabled="{Binding PromoteEnabled}" />
+                      IsEnabled="{Binding PromoteEnabled}"
+                      Margin="0,0,6,0"/>
             <Button Grid.Column="1"
                     Content="Cookbook…"
                     Command="{Binding OpenCookbookCommand}"
@@ -78,85 +80,75 @@
                     Margin="0,0,6,0"
                     Padding="10,4" />
             <Button Grid.Column="3"
-                    Content="Compile &amp; Load"
-                    Command="{Binding HotLoadViaCalcGenCommand}"
-                    ToolTip.Tip="Generate, Roslyn-compile, and load the active tab's equation as a hot calculator. No rebuild required — replaces the active calc immediately."
-                    Margin="0,0,6,0"
-                    Padding="14,4" />
-            <Button Grid.Column="4"
-                    Content="Compile + Save"
-                    Command="{Binding HotLoadAndPersistCommand}"
-                    ToolTip.Tip="Same as Compile &amp; Load, but also writes the generated source under %LOCALAPPDATA%/FracturingFog/UserCalculators/. The calculator is re-loaded automatically on next launch."
-                    Margin="0,0,6,0"
-                    Padding="14,4" />
-            <Button Grid.Column="5"
-                    Content="Generate via CalcGen"
-                    Command="{Binding GenerateViaCalcGenCommand}"
-                    ToolTip.Tip="Run the active tab's equation through CalculatorGen and write a generated calculator to Calculators/Generated/. Rebuild the app to pick it up."
-                    Padding="14,4" />
-            <Button Grid.Column="6"
                     Content="Equation Guide"
                     Command="{Binding OpenEquationGuideCommand}"
                     ToolTip.Tip="Open the Fractal Equation Design Guide — how equations work, what to change for which result, extensive worked examples across every CalcGen-supported family."
-                    Margin="6,0,0,0"
+                    Margin="0,0,6,0"
                     Padding="10,4" />
-            <Button Grid.Column="7"
+            <Button Grid.Column="4"
                     Content="CalcGen Help"
                     Command="{Binding OpenCalcGenHelpCommand}"
                     ToolTip.Tip="Open the CalcGen User Guide — grammar, operators, examples, gating rules."
-                    Margin="6,0,0,0"
+                    Margin="0,0,6,0"
                     Padding="10,4" />
+                </Grid>
         </Grid>
 
         <!-- Row 2: rotation + escape radius row, plus a z0 seed sub-row -->
         <Grid Grid.Row="2"
               ColumnDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,*"
-              RowDefinitions="Auto,Auto,Auto"
+              RowDefinitions="Auto,Auto,Auto,Auto,Auto"
               Margin="0,0,0,8">
-            <TextBlock Grid.Column="0" Text="Rotation°:" VerticalAlignment="Center" Margin="0,0,8,0" />
+            <TextBlock Grid.Column="0" Grid.Row="0" Text="Rotation°:" VerticalAlignment="Center" 
+                       Margin="0,0,8,0" />
             <NumericUpDown Grid.Column="1"
                            Minimum="-360" Maximum="360" Increment="1" FormatString="F1"
                            Value="{Binding RotationDegrees, Mode=TwoWay}"
-                           Width="100" />
-            <Button Grid.Column="2" Content="+90°" Command="{Binding RotPlus90Command}"  Margin="6,0,0,0" Padding="8,4" />
-            <Button Grid.Column="3" Content="-90°" Command="{Binding RotMinus90Command}" Margin="4,0,0,0" Padding="8,4" />
-            <Button Grid.Column="4" Content="Reset" Command="{Binding RotResetCommand}"  Margin="4,0,0,0" Padding="8,4" />
-            <TextBlock Grid.Column="5" Text="Escape r:" VerticalAlignment="Center" Margin="16,0,8,0" />
+                           Width="150" />
+            <Button Grid.Column="2" Grid.Row="0" Content="+90°" Command="{Binding RotPlus90Command}"  Margin="6,0,0,0" Padding="8,4" />
+            <Button Grid.Column="3" Grid.Row="0" Content="-90°" Command="{Binding RotMinus90Command}" Margin="4,0,0,0" Padding="8,4" />
+            <Button Grid.Column="4" Grid.Row="0" Content="Reset" Command="{Binding RotResetCommand}"  Margin="4,0,0,0" Padding="8,4" />
+            <TextBlock Grid.Column="5" Grid.Row="0" Text="Escape r:" VerticalAlignment="Center" Margin="16,0,8,0" />
             <NumericUpDown Grid.Column="6"
+                           Grid.Row="0"
                            Minimum="0" Maximum="100000" Increment="0.5" FormatString="F2"
                            Value="{Binding EscapeRadius, Mode=TwoWay}"
-                           Width="110"
+                           Width="150"
                            ToolTip.Tip="Escape radius |z| (0 = auto: interpreter r=32, generated r=512). Fractional values allowed. Raise for slow-escaping transcendental maps like log(sin(…)) to reduce banding; lower (e.g. 1.5) for fast, near-convergent, or tan/sin maps." />
-            <StackPanel Grid.Column="7" Orientation="Horizontal" Margin="12,0,0,0" VerticalAlignment="Center">
-                <CheckBox Content="Skip Jacobian (≈2× faster, flat 3D)"
+            <Grid Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="7" ColumnDefinitions="Auto,Auto"
+                  Margin="72,0,0,0">
+                <CheckBox Grid.Column="0"
+                          Content="Skip Jacobian (≈2× faster, flat 3D)"
                           IsChecked="{Binding SkipJacobian, Mode=TwoWay}"
                           ToolTip.Tip="Drop the parallel-perturbation trajectory used to compute Hubbard–Douady surface normals. Doubles throughput on slow equations at the cost of flat 3D Phong shading."
                           VerticalAlignment="Center" />
-                <CheckBox Content="Colour interior (orbit)"
+                <CheckBox Grid.Column="3"
+                          Content="Colour interior (orbit)"
                           IsChecked="{Binding ColorInterior, Mode=TwoWay}"
                           ToolTip.Tip="Colour in-set (non-escaping) pixels by their orbit instead of a flat fill. Only affects orbit-aware themes (Orbit Trap / Stripe / TIA); pair with one of those to fill bounded regions with lace, Fragmentarium-style. No effect on other themes."
                           Margin="16,0,0,0"
                           VerticalAlignment="Center" />
-            </StackPanel>
+            </Grid>
 
             <!-- z0 seed: blank = Mandelbrot orbit (z0=0); `c` = Julia (z0=pixel). -->
-            <Grid Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="8"
+            <Grid Grid.Row="2" Grid.Column="0" Grid.ColumnSpan="8"
                   ColumnDefinitions="Auto,*" Margin="0,6,0,0">
-                <TextBlock Grid.Column="0" Text="z₀ seed:" VerticalAlignment="Center" Margin="0,0,8,0" />
-                <TextBox Grid.Column="1"
+                <TextBlock Grid.Column="0" Text="z₀ seed:" VerticalAlignment="Center" Margin="9,0,8,0" />
+                <TextBox Grid.Column="1" Margin="0,0,18,0" Width="700" HorizontalAlignment="Left"
                          Text="{Binding SeedExpression, Mode=TwoWay}"
-                         Watermark="blank = Mandelbrot (z₀=0);  c = Julia (z₀=pixel);  DSL expression over c"
+                         PlaceholderText="blank = Mandelbrot (z₀=0);  c = Julia (z₀=pixel);  DSL expression over c"
                          ToolTip.Tip="Iteration start value z₀, as a bare DSL expression over c (the pixel) and constants. Blank ⇒ z₀=0 (classic Mandelbrot). c ⇒ z₀=pixel: pair with a literal constant in the equation for a Julia set, e.g. log(sin(abs(1/z))) + (-1.55*i). A critical-point expression gives the correct Mandelbrot for non-polynomial maps." />
             </Grid>
 
             <!-- Convergence bailout: stop early when a boolean DSL condition fires
                  (Newton / Magnet / Nova). Blank = escape-radius test only. -->
-            <Grid Grid.Row="2" Grid.Column="0" Grid.ColumnSpan="8"
-                  ColumnDefinitions="Auto,*" RowDefinitions="Auto,Auto" Margin="0,6,0,0">
-                <TextBlock Grid.Row="0" Grid.Column="0" Text="Bail if:" VerticalAlignment="Center" Margin="0,0,8,0" />
-                <TextBox Grid.Row="0" Grid.Column="1"
+            <Grid Grid.Row="3" Grid.Column="0" Grid.ColumnSpan="8"
+                  ColumnDefinitions="Auto,*" RowDefinitions="Auto,Auto" Margin="23,6,18,0">
+                <TextBlock Grid.Row="0" Grid.Column="0" Text="Bail if:" VerticalAlignment="Center" 
+                           Margin="0,0,9,0" />
+                <TextBox Grid.Row="0" Grid.Column="1" Width="700" HorizontalAlignment="Left"
                          Text="{Binding BailoutCondition, Mode=TwoWay}"
-                         Watermark="blank = escape only;  abs(z - prev) &lt; 0.0001 (converge);  abs(im(z)) &gt; 50 (transcendental)"
+                         PlaceholderText="blank = escape only;  abs(z - prev) &lt; 0.0001 (converge);  abs(im(z)) &gt; 50 (transcendental)"
                          ToolTip.Tip="Optional bailout: a boolean DSL condition over z, prev, c, n, iter. When true the orbit stops early. Converge form abs(z - prev) &lt; 0.0001 (Newton / Magnet / Nova) colours by convergence speed. Non-modulus form abs(im(z)) &gt; 50 or re(z) &gt; 50 escapes entire transcendental maps (needs 'replaces modulus' below). Blank = escape-radius test only." />
                 <CheckBox Grid.Row="1" Grid.Column="1"
                           Content="Bailout replaces modulus (non-modulus / transcendental)"
@@ -168,36 +160,38 @@
 
         <!-- Row 3: tab control (fills). MinHeight keeps the editor usable even
              when the form is scrolling on a short window. -->
-        <TabControl Grid.Row="3"
+        <TabControl Grid.Row="4"
                     MinHeight="180"
                     SelectedIndex="{Binding ActiveTabIndex, Mode=TwoWay}"
-                    Background="Transparent">
+                    Background="Transparent"
+                    Margin="0,0,8,0">
 
             <!-- Tab 1: User Equation (C# style, Roslyn live-compile) -->
             <TabItem Header="User Equation">
-                <Grid RowDefinitions="Auto,Auto,*">
-                    <Grid Grid.Row="0" ColumnDefinitions="*,Auto" Margin="0,6,0,6">
-                        <TextBlock Grid.Column="0"
+                <Grid RowDefinitions="Auto,*,*">
+                    <!-- <Grid Grid.Row="0" ColumnDefinitions="400,Auto" Margin="0,6,0,6"> -->
+                        <!--<TextBlock Grid.Column="0"
                                    Foreground="#B4B4B4"
                                    TextWrapping="Wrap">
                             <Run Text="C# expression body. Roslyn-compiled. Use System.Numerics.Complex syntax (Complex.Sin, Complex.Pow, etc.)." />
                             <LineBreak />
                             <Run Text="Example:  return z*z + c;" />
-                        </TextBlock>
+                        </TextBlock>-->
                         <Button Grid.Column="1"
                                 Content="?"
                                 Command="{Binding OpenUserEquationHelpCommand}"
                                 ToolTip.Tip="Help for the User Equation tab"
-                                Margin="8,0,0,0"
+                                Margin="8,0,8,0"
                                 Width="28" Height="28"
-                                VerticalAlignment="Top" />
-                    </Grid>
-                    <CheckBox Grid.Row="1"
+                                VerticalAlignment="Top"
+                                HorizontalAlignment="Right"/>
+                    <!-- </Grid> -->
+                    <CheckBox Grid.Row="0"
                               Content="Validate for CalcGen"
                               IsChecked="{Binding ValidateForCalcGen, Mode=TwoWay}"
                               ToolTip.Tip="Flag C# constructs the CalcGen DSL can't accept (Complex.ImaginaryOne, Complex.Abs, new Complex(...), unsupported Complex.* members). Roslyn-compiles independently — leave on if you plan to Generate or hot-load via CalcGen."
                               Margin="0,0,0,6" />
-                    <Border Grid.Row="2"
+                    <Border Grid.Row="1"
                             BorderBrush="#505050"
                             BorderThickness="1"
                             Background="#1C1C1C"
@@ -217,6 +211,7 @@
                                  Background="#1C1C1C"
                                  Foreground="White"
                                  BorderThickness="0"
+                                 Margin="0,0,8,0"
                                  ScrollViewer.HorizontalScrollBarVisibility="Auto"
                                  ScrollViewer.VerticalScrollBarVisibility="Auto" />
                     </Border>
@@ -226,14 +221,36 @@
             <!-- Tab 2: DSL (bare CalcGen DSL, validate-on-type) -->
             <TabItem Header="DSL">
                 <Grid RowDefinitions="Auto,*">
-                    <Grid Grid.Row="0" ColumnDefinitions="*,Auto,Auto,Auto" Margin="0,6,0,6">
-                        <TextBlock Grid.Column="0"
+                    <Grid Grid.Row="0" ColumnDefinitions="*,Auto,Auto,Auto"
+                          RowDefinitions="Auto,Auto" Margin="0,0,0,6">
+                        <!--<TextBlock Grid.Column="0"
                                    Foreground="#B4B4B4"
-                                   TextWrapping="Wrap">
+                                   TextWrapping="Wrap"
+                                   Width="400">
                             <Run Text="Bare CalcGen DSL — lowercase keywords, no 'Complex.' prefix, no 'return'. Allowed: z c sin cos tan sinh cosh tanh exp log sqrt arg atan2 min max mod conj fold sqr abs re im prev iter pi e i, + - * / ^Int." />
                             <LineBreak />
                             <Run Text="Example:  z*z + c" />
-                        </TextBlock>
+                        </TextBlock>-->
+                        <!-- Row 1.5: promote toggle + Cookbook + Morph + Compile & Load + Compile + Save + Generate via CalcGen + Equation Guide + CalcGen Help -->
+                        <Grid Grid.Row="1" ColumnDefinitions="Auto,Auto,Auto">
+                            <Button Grid.Column="0"
+                                    Content="Compile &amp; Load"
+                                    Command="{Binding HotLoadViaCalcGenCommand}"
+                                    ToolTip.Tip="Generate, Roslyn-compile, and load the active tab's equation as a hot calculator. No rebuild required — replaces the active calc immediately."
+                                    Margin="0,0,6,0"
+                                    Padding="14,4" />
+                            <Button Grid.Column="1"
+                                    Content="Compile + Save"
+                                    Command="{Binding HotLoadAndPersistCommand}"
+                                    ToolTip.Tip="Same as Compile &amp; Load, but also writes the generated source under %LOCALAPPDATA%/FracturingFog/UserCalculators/. The calculator is re-loaded automatically on next launch."
+                                    Margin="0,0,6,0"
+                                    Padding="14,4" />
+                            <Button Grid.Column="2"
+                                    Content="Generate via CalcGen"
+                                    Command="{Binding GenerateViaCalcGenCommand}"
+                                    ToolTip.Tip="Run the active tab's equation through CalculatorGen and write a generated calculator to Calculators/Generated/. Rebuild the app to pick it up."
+                                    Padding="14,4" />
+                        </Grid>
                         <Button Grid.Column="1"
                                 Content="Paste LaTeX…"
                                 Click="OnPasteLatex"
@@ -252,7 +269,7 @@
                                 Content="?"
                                 Command="{Binding OpenDslHelpCommand}"
                                 ToolTip.Tip="Help for the DSL tab — grammar at a glance"
-                                Margin="8,0,0,0"
+                                Margin="8,0,8,0"
                                 Width="28" Height="28"
                                 VerticalAlignment="Top" />
                     </Grid>
@@ -260,7 +277,7 @@
                             BorderBrush="#505050"
                             BorderThickness="1"
                             Background="#1C1C1C"
-                            Classes.error="{Binding StatusIsError}">
+                            Classes.error="{Binding StatusIsError}" >
                         <Border.Styles>
                             <Style Selector="Border.error">
                                 <Setter Property="BorderBrush" Value="#FFCC00" />
@@ -276,6 +293,7 @@
                                  Background="#1C1C1C"
                                  Foreground="White"
                                  BorderThickness="0"
+                                 Margin="0,0,8,0"
                                  ScrollViewer.HorizontalScrollBarVisibility="Auto"
                                  ScrollViewer.VerticalScrollBarVisibility="Auto" />
                     </Border>
@@ -289,11 +307,11 @@
              straight from AstDifferentiator; SA / Perturbation / DE / Flags
              mirror the gates CalcGen emits into the generated calculator,
              so what the user sees here is exactly what will be compiled. -->
-        <Expander Grid.Row="4"
+        <Expander Grid.Row="5"
                   Header="Live preview (AST / dz/dc / SA / Perturbation / DE)"
                   IsExpanded="True"
                   IsVisible="{Binding HasPreview}"
-                  Margin="0,8,0,0"
+                  Margin="11,8,0,0"
                   Background="#1C1C1C"
                   Foreground="#B4B4B4">
           <StackPanel Orientation="Vertical" Margin="0,0,0,0">
@@ -349,7 +367,7 @@
         </Expander>
 
         <!-- Row 5: status / error + Apply Fix button (Ctrl+.) -->
-        <Grid Grid.Row="5" ColumnDefinitions="*,Auto" Margin="0,8,0,0">
+        <Grid Grid.Row="6" ColumnDefinitions="*,Auto" Margin="0,8,0,0">
             <TextBlock Grid.Column="0"
                        Text="{Binding StatusText}"
                        FontFamily="Consolas, monospace"

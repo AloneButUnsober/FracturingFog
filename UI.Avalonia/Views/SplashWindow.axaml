@@ -47,7 +47,7 @@
                 <TextBlock Text="Fracturing Fog"
                            FontSize="34" FontWeight="Light"
                            Foreground="{StaticResource BrushAccent}" />
-                <TextBlock Text="Deep-zoom fractal explorer"
+                <TextBlock Text="Fractal exploration, art and entertainment"
                            FontSize="13"
                            Foreground="{StaticResource BrushTextLabel}" />
             </StackPanel>
