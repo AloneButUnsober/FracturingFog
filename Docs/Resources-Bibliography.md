@@ -76,6 +76,25 @@ because frontier claims cannot be sanity-checked against existing renders.
   Cambridge University Press, 2002. Kleinian-group limit sets — Grandma's recipe, the Maskit slice,
   breadth-first word enumeration. Backs both the 2D Indra's Pearls renderer and the 3D Kleinian
   generalization.
+
+<a id="kleinian-generalization"></a>
+
+- **Bernard Maskit.** *Kleinian Groups.* Springer Grundlehren der mathematischen Wissenschaften 287,
+  1988. Fundamental domains, the Maskit slice, discreteness criteria — the reference for the 3D
+  Kleinian-generalization design (`Docs/Technical/Kleinian-Generalization-DesignPlan.md`).
+- **Lars V. Ahlfors.** *Möbius transformations in several dimensions* (Univ. Minnesota, 1981) and
+  *Möbius transformations and Clifford numbers* (in *Differential Geometry and Complex Analysis*,
+  Springer 1985). Vahlen-matrix / Clifford-algebra representation of the conformal group `Möb(Ŝⁿ)` —
+  basis for the Kleinian analytic distance estimator (full-Jacobian form).
+- **John C. Hart, Daniel J. Sandin, Louis H. Kauffman.** *Ray tracing deterministic 3-D fractals.*
+  ACM SIGGRAPH Computer Graphics 23(3), 1989. The distance-estimator sphere-tracing method underlying
+  every FF 3D raymarcher (Mandelbulb, Mandelbox, Kleinian).
+- **Frederick Soddy** (*The kiss precise*, Nature 137, 1936) and **R. L. Graham, J. C. Lagarias, C. L.
+  Mallows, A. R. Wilks, C. H. Yan** (*Apollonian circle packings: number theory*, J. Number Theory 100,
+  2003). Descartes circle theorem and Apollonian packing — basis for the Kleinian Apollonian-extrusion
+  preset.
+- **Karl Theodor Vahlen.** *Über Bewegungen und complexe Zahlen.* Mathematische Annalen 55, 1902.
+  Clifford-matrix representation of Möbius transformations — historical origin of the Ahlfors form.
 - **Michael F. Barnsley.** *Superfractals.* Cambridge University Press, 2006. V-variable IFS
   (condensation / code-tree selection among a finite fractal set) and fractal tops (address-map
   colouring of an IFS attractor).

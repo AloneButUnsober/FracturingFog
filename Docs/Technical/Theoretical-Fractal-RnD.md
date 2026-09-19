@@ -421,6 +421,15 @@ follow-ups already logged in [Fractal-Expansion-Roadmap.md](../Fractal-Expansion
 an epic item **gated on its own design doc + tracking issue** before any code, given the combinatorial
 group-parameterization surface. Do not extend `KleinianCalculator` ad hoc.
 
+**Design doc LANDED (2026-09-19):** [Kleinian-Generalization-DesignPlan.md](Kleinian-Generalization-DesignPlan.md)
+(issue #855). Decision: extend `FractalType.Kleinian` **param-driven** (not a new type) via a
+serializable `KleinianGroup` descriptor + three-tier DE (Tier 0 tetrahedral = byte-identical).
+Toolchain reach — DSL/CalcGen **out of reach** (no per-pixel hook for group-word/3D-inversion DE);
+ColorGen/Theme **in reach** (categorical word-length kind + generalized orbit-trap). Sliced **S1–S8**:
+**#874** descriptor+inversion-DE / **#875** preset library / **#876** editor UI = **MVP**; **#877**
+Möbius-word DE / **#878** colour drivers / **#879** Maskit animation / **#880** GPU parity / **#881**
+analytic DE. Marquee = Grandma's-recipe trace animation along the Maskit slice (#879).
+
 ---
 
 ## 6. Working method (per candidate, before it becomes an issue)
@@ -472,6 +481,19 @@ appropriate sections; flesh out on the next pass. Cite inline from the sections 
   Graphics (SIGGRAPH) 16(3), 1982. Quaternion Julia rendering — basis for §3.6's 4D→3D projection.
 - **Green (Buddhabrot)** — Melinda Green. *The Buddhabrot technique*, c. 1993 (web). Escape-space
   orbit deposition — the accumulation model §3.6's escape-space render variant reuses.
+- **Maskit 1988** — Bernard Maskit. *Kleinian Groups.* Springer Grundlehren 287. Fundamental domains,
+  the Maskit slice, discreteness — the Kleinian-generalization design doc (§5.4).
+- **Ahlfors 1981/1985** — Lars V. Ahlfors. *Möbius transformations in several dimensions* (1981) /
+  *Möbius transformations and Clifford numbers* (1985). Vahlen-matrix / Clifford representation of
+  `Möb(Ŝⁿ)` — basis for the Kleinian analytic-DE form (design doc §3.5/§4.2).
+- **Hart, Sandin & Kauffman 1989** — J. C. Hart, D. J. Sandin, L. H. Kauffman. *Ray tracing
+  deterministic 3-D fractals.* SIGGRAPH Computer Graphics 23(3). The distance-estimator ray-tracing
+  method the 3D raymarchers use.
+- **Soddy 1936 / Graham, Lagarias, Mallows, Wilks & Yan 2003** — F. Soddy, *The kiss precise* (Nature)
+  / *Apollonian circle packings: number theory* (J. Number Theory). Descartes circle theorem — basis
+  for the Kleinian Apollonian-extrusion preset.
+- **Vahlen 1902** — K. Th. Vahlen. *Über Bewegungen und complexe Zahlen* (Math. Ann.). Clifford-matrix
+  Möbius representation (historical origin of the Ahlfors form).
 
 ---
 
@@ -486,3 +508,10 @@ appropriate sections; flesh out on the next pass. Cite inline from the sections 
   Relief/mesh). Filed tracking issue #863 with slices #864 (S1 calc) / #865 (S2 field selector) /
   #866 (S3 quaternion) = MVP ~1 wk; #867 (S4 deposition) / #868 (S5 glyphs, design-gated) optional;
   #869 (S6 tile-cache) deferred. Bibliography stubs added (§7): Ott–Tél 1993, Norton 1982, Green.
+- **2026-09-19** — Kleinian generalization (§5.4) **design doc landed**:
+  [Kleinian-Generalization-DesignPlan.md](Kleinian-Generalization-DesignPlan.md) (issue #855). Decision:
+  param-driven extension of `FractalType.Kleinian` via a `KleinianGroup` descriptor + three-tier DE
+  (Tier 0 byte-identical). Sliced S1–S8 (#874–#881); S1–S3 = MVP (arbitrary inversion groups + presets
+  + editor). Toolchain reach recorded (DSL out of reach; ColorGen/Theme categorical word-length kind in
+  reach). Bibliography additions (§7): Maskit 1988, Ahlfors 1981/1985, Hart–Sandin–Kauffman 1989,
+  Soddy 1936 / Graham et al. 2003, Vahlen 1902.
