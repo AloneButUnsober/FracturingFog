@@ -481,6 +481,20 @@ namespace FracturingFog.Models
         [JsonIgnore(Condition = OmitNull)] public int? KleinianColorSource { get; set; }
         // #881 — sphere-trace under-relaxation factor (omitted at the 1.0 default).
         [JsonIgnore(Condition = OmitNull)] public double? KleinianDeFactor { get; set; }
+        // #893 — Indra's Pearls 2D group: family + μ / traces / c + depth + mode
+        // (each omitted at its default). The generator matrices derive from these.
+        [JsonIgnore(Condition = OmitNull)] public int? IndrasFamily { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public double? IndrasMaskitMuRe { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public double? IndrasMaskitMuIm { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public double? IndrasGrandmaTaRe { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public double? IndrasGrandmaTaIm { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public double? IndrasGrandmaTbRe { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public double? IndrasGrandmaTbIm { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public bool? IndrasGrandmaSecondSolution { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public double? IndrasRileyCRe { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public double? IndrasRileyCIm { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public int? IndrasMaxWordDepth { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public int? IndrasRenderMode { get; set; }
 
         /// <summary>
         /// Capture the P1-relevant parameters for <paramref name="type"/> from a
@@ -699,6 +713,23 @@ namespace FracturingFog.Models
                 {
                     LSystemPresetName = p.LSystemPresetName,
                 },
+                // #893 — Indra's Pearls 2D group. Family + the family's parameter
+                // (μ / traces / c) + depth + mode, each omitted at its default.
+                FractalType.IndrasPearls => new RegionFractalParams
+                {
+                    IndrasFamily = p.IndrasFamily != IndrasGroupFamily.Maskit ? (int)p.IndrasFamily : (int?)null,
+                    IndrasMaskitMuRe = p.IndrasMaskitMuRe != 0.0 ? p.IndrasMaskitMuRe : (double?)null,
+                    IndrasMaskitMuIm = p.IndrasMaskitMuIm != 2.0 ? p.IndrasMaskitMuIm : (double?)null,
+                    IndrasGrandmaTaRe = p.IndrasGrandmaTaRe != 1.87 ? p.IndrasGrandmaTaRe : (double?)null,
+                    IndrasGrandmaTaIm = p.IndrasGrandmaTaIm != 0.1 ? p.IndrasGrandmaTaIm : (double?)null,
+                    IndrasGrandmaTbRe = p.IndrasGrandmaTbRe != 1.87 ? p.IndrasGrandmaTbRe : (double?)null,
+                    IndrasGrandmaTbIm = p.IndrasGrandmaTbIm != -0.1 ? p.IndrasGrandmaTbIm : (double?)null,
+                    IndrasGrandmaSecondSolution = p.IndrasGrandmaSecondSolution ? true : (bool?)null,
+                    IndrasRileyCRe = p.IndrasRileyCRe != 0.1 ? p.IndrasRileyCRe : (double?)null,
+                    IndrasRileyCIm = p.IndrasRileyCIm != 0.93 ? p.IndrasRileyCIm : (double?)null,
+                    IndrasMaxWordDepth = p.IndrasMaxWordDepth != 12 ? p.IndrasMaxWordDepth : (int?)null,
+                    IndrasRenderMode = p.IndrasRenderMode != FracturingFog.Models.IndrasRenderMode.PointCloud ? (int)p.IndrasRenderMode : (int?)null,
+                },
                 // Mandelbrot, Tricorn, BurningShip, Magnet1/2, TearDrop and the
                 // generated families need no extra params — defaults suffice.
                 // UserBulb keeps its own dedicated camera fields (user code).
@@ -858,6 +889,20 @@ namespace FracturingFog.Models
             if (RandomTileSeed.HasValue) p.RandomTileSeed = RandomTileSeed.Value;
             if (!string.IsNullOrEmpty(IFSPresetName)) p.IFSPresetName = IFSPresetName;
             if (!string.IsNullOrEmpty(LSystemPresetName)) p.LSystemPresetName = LSystemPresetName;
+            // #893 — Indra's Pearls 2D group.
+            if (IndrasFamily.HasValue) p.IndrasFamily = (IndrasGroupFamily)IndrasFamily.Value;
+            if (IndrasMaskitMuRe.HasValue) p.IndrasMaskitMuRe = IndrasMaskitMuRe.Value;
+            if (IndrasMaskitMuIm.HasValue) p.IndrasMaskitMuIm = IndrasMaskitMuIm.Value;
+            if (IndrasGrandmaTaRe.HasValue) p.IndrasGrandmaTaRe = IndrasGrandmaTaRe.Value;
+            if (IndrasGrandmaTaIm.HasValue) p.IndrasGrandmaTaIm = IndrasGrandmaTaIm.Value;
+            if (IndrasGrandmaTbRe.HasValue) p.IndrasGrandmaTbRe = IndrasGrandmaTbRe.Value;
+            if (IndrasGrandmaTbIm.HasValue) p.IndrasGrandmaTbIm = IndrasGrandmaTbIm.Value;
+            if (IndrasGrandmaSecondSolution.HasValue) p.IndrasGrandmaSecondSolution = IndrasGrandmaSecondSolution.Value;
+            if (IndrasRileyCRe.HasValue) p.IndrasRileyCRe = IndrasRileyCRe.Value;
+            if (IndrasRileyCIm.HasValue) p.IndrasRileyCIm = IndrasRileyCIm.Value;
+            if (IndrasMaxWordDepth.HasValue) p.IndrasMaxWordDepth = IndrasMaxWordDepth.Value;
+            if (this.IndrasRenderMode.HasValue)
+                p.IndrasRenderMode = (FracturingFog.Models.IndrasRenderMode)this.IndrasRenderMode.Value;
         }
     }
 

@@ -201,6 +201,19 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
         _precLowTier = _p.PrecisionLowTier;
         _precHighTier = _p.PrecisionHighTier;
         _precMetric = _p.PrecisionDiffMetric;
+        // #893 — Indra's Pearls 2D group.
+        _indrasFamily = _p.IndrasFamily;
+        _indrasMuRe = _p.IndrasMaskitMuRe;
+        _indrasMuIm = _p.IndrasMaskitMuIm;
+        _indrasTaRe = _p.IndrasGrandmaTaRe;
+        _indrasTaIm = _p.IndrasGrandmaTaIm;
+        _indrasTbRe = _p.IndrasGrandmaTbRe;
+        _indrasTbIm = _p.IndrasGrandmaTbIm;
+        _indrasSecondSol = _p.IndrasGrandmaSecondSolution;
+        _indrasCRe = _p.IndrasRileyCRe;
+        _indrasCIm = _p.IndrasRileyCIm;
+        _indrasDepth = _p.IndrasMaxWordDepth;
+        _indrasRenderMode = _p.IndrasRenderMode;
         _kleinPreset = _p.KleinianPreset;
         _kleinNecklace = _p.KleinianNecklaceCount;
         InitKleinianSpheres();   // #876 — repopulate the editor from the reloaded params
@@ -474,7 +487,7 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
         !(IsJulia || IsMultibrot || IsPhoenix || IsGlynn || IsLogistic || IsLyapunov || IsTranscendentalJulia || IsSpider || IsNewtonOrNova || IsIFS
           || IsLSystem || IsStrangeAttractor || IsBuddhaBrot || IsMandelbulb || IsMandelbox || IsKifs
           || IsQuatJulia || IsQuatMandelbrot || IsPlasma || IsAcidWarp || IsFlame || IsApollonian || IsKleinian
-          || IsBicomplexMandelbrot || IsCoquaternion || IsDla || IsRandomTile || IsChaoticBilliard || IsPrecisionField || IsInteriorAlphaApplicable || IsRelief2DApplicable
+          || IsBicomplexMandelbrot || IsCoquaternion || IsDla || IsRandomTile || IsChaoticBilliard || IsPrecisionField || IsIndrasPearls || IsInteriorAlphaApplicable || IsRelief2DApplicable
           || SupportsDomainWarp);
 
     // ── Interior alpha (2D) — issue #96 ──────────────────────────────────────
@@ -1623,6 +1636,119 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
     public double CoquaternionCameraDistance { get => _cqCameraDistance; set { Set(ref _cqCameraDistance, Clamp(value, 0.1, 500)); _p.CoquaternionCameraDistance = _cqCameraDistance; Fire(); } }
 
     // ── Kleinian ──
+    // ── Indra's Pearls 2D (#893) ──
+    private IndrasGroupFamily _indrasFamily;
+    /// <summary>Two-generator family (Maskit / Grandma / Riley). Switching it
+    /// changes which parameter row is live.</summary>
+    public IndrasGroupFamily IndrasFamily
+    {
+        get => _indrasFamily;
+        set
+        {
+            Set(ref _indrasFamily, value);
+            _p.IndrasFamily = value;
+            this.RaisePropertyChanged(nameof(IsIndrasMaskit));
+            this.RaisePropertyChanged(nameof(IsIndrasGrandma));
+            this.RaisePropertyChanged(nameof(IsIndrasRiley));
+            Fire();
+        }
+    }
+    public Array IndrasFamilies => Enum.GetValues(typeof(IndrasGroupFamily));
+    public bool IsIndrasMaskit => IsIndrasPearls && _indrasFamily == IndrasGroupFamily.Maskit;
+    public bool IsIndrasGrandma => IsIndrasPearls && _indrasFamily == IndrasGroupFamily.GrandmaRecipe;
+    public bool IsIndrasRiley => IsIndrasPearls && _indrasFamily == IndrasGroupFamily.Riley;
+
+    private double _indrasMuRe;
+    public double IndrasMaskitMuRe { get => _indrasMuRe; set { Set(ref _indrasMuRe, Clamp(value, -8.0, 8.0)); _p.IndrasMaskitMuRe = _indrasMuRe; Fire(); } }
+    private double _indrasMuIm;
+    public double IndrasMaskitMuIm { get => _indrasMuIm; set { Set(ref _indrasMuIm, Clamp(value, -8.0, 8.0)); _p.IndrasMaskitMuIm = _indrasMuIm; Fire(); } }
+
+    private double _indrasTaRe;
+    public double IndrasGrandmaTaRe { get => _indrasTaRe; set { Set(ref _indrasTaRe, Clamp(value, -4.0, 4.0)); _p.IndrasGrandmaTaRe = _indrasTaRe; Fire(); } }
+    private double _indrasTaIm;
+    public double IndrasGrandmaTaIm { get => _indrasTaIm; set { Set(ref _indrasTaIm, Clamp(value, -4.0, 4.0)); _p.IndrasGrandmaTaIm = _indrasTaIm; Fire(); } }
+    private double _indrasTbRe;
+    public double IndrasGrandmaTbRe { get => _indrasTbRe; set { Set(ref _indrasTbRe, Clamp(value, -4.0, 4.0)); _p.IndrasGrandmaTbRe = _indrasTbRe; Fire(); } }
+    private double _indrasTbIm;
+    public double IndrasGrandmaTbIm { get => _indrasTbIm; set { Set(ref _indrasTbIm, Clamp(value, -4.0, 4.0)); _p.IndrasGrandmaTbIm = _indrasTbIm; Fire(); } }
+    private bool _indrasSecondSol;
+    /// <summary>Pick the second root of the Markov quadratic for tab.</summary>
+    public bool IndrasGrandmaSecondSolution { get => _indrasSecondSol; set { Set(ref _indrasSecondSol, value); _p.IndrasGrandmaSecondSolution = value; Fire(); } }
+
+    private double _indrasCRe;
+    public double IndrasRileyCRe { get => _indrasCRe; set { Set(ref _indrasCRe, Clamp(value, -4.0, 4.0)); _p.IndrasRileyCRe = _indrasCRe; Fire(); } }
+    private double _indrasCIm;
+    public double IndrasRileyCIm { get => _indrasCIm; set { Set(ref _indrasCIm, Clamp(value, -4.0, 4.0)); _p.IndrasRileyCIm = _indrasCIm; Fire(); } }
+
+    private int _indrasDepth;
+    /// <summary>Reduced-word enumeration depth cap (2–16).</summary>
+    public int IndrasMaxWordDepth { get => _indrasDepth; set { Set(ref _indrasDepth, (int)Clamp(value, 2, 16)); _p.IndrasMaxWordDepth = _indrasDepth; Fire(); } }
+
+    private IndrasRenderMode _indrasRenderMode;
+    /// <summary>Point cloud (BFS density) vs curve trace (DFS; S3 #894 — falls
+    /// back to point cloud until then).</summary>
+    public IndrasRenderMode IndrasRenderMode { get => _indrasRenderMode; set { Set(ref _indrasRenderMode, value); _p.IndrasRenderMode = value; Fire(); } }
+    public Array IndrasRenderModes => Enum.GetValues(typeof(IndrasRenderMode));
+
+    /// <summary>Named group presets. Selecting one writes the family + its
+    /// parameter values into the live fields (a convenience seed, not persisted
+    /// separately). See design doc §3.5.</summary>
+    public string[] IndrasPresets { get; } =
+    {
+        "Maskit apple (μ = 2i)",
+        "Grandma quasi-Fuchsian",
+        "Grandma Cantor set",
+        "Double-cusp group",
+        "Riley slice",
+    };
+    private string? _indrasSelectedPreset;
+    public string? SelectedIndrasPreset
+    {
+        get => _indrasSelectedPreset;
+        set
+        {
+            Set(ref _indrasSelectedPreset, value);
+            if (value is null) return;
+            ApplyIndrasPreset(value);
+        }
+    }
+
+    private void ApplyIndrasPreset(string name)
+    {
+        switch (name)
+        {
+            case "Maskit apple (μ = 2i)":
+                IndrasFamily = IndrasGroupFamily.Maskit;
+                IndrasMaskitMuRe = 0.0; IndrasMaskitMuIm = 2.0;
+                break;
+            case "Grandma quasi-Fuchsian":
+                IndrasFamily = IndrasGroupFamily.GrandmaRecipe;
+                IndrasGrandmaTaRe = 1.87; IndrasGrandmaTaIm = 0.1;
+                IndrasGrandmaTbRe = 1.87; IndrasGrandmaTbIm = -0.1;
+                IndrasGrandmaSecondSolution = false;
+                break;
+            case "Grandma Cantor set":
+                // Traces past the quasi-Fuchsian boundary ⇒ Schottky group ⇒
+                // totally-disconnected Cantor-dust Λ (verified render).
+                IndrasFamily = IndrasGroupFamily.GrandmaRecipe;
+                IndrasGrandmaTaRe = 2.5; IndrasGrandmaTaIm = 1.5;
+                IndrasGrandmaTbRe = 2.5; IndrasGrandmaTbIm = -1.5;
+                IndrasGrandmaSecondSolution = false;
+                break;
+            case "Double-cusp group":
+                // ta = tb = 2 ⇒ both generators parabolic (the (1,1) double cusp).
+                IndrasFamily = IndrasGroupFamily.GrandmaRecipe;
+                IndrasGrandmaTaRe = 2.0; IndrasGrandmaTaIm = 0.0;
+                IndrasGrandmaTbRe = 2.0; IndrasGrandmaTbIm = 0.0;
+                IndrasGrandmaSecondSolution = false;
+                break;
+            case "Riley slice":
+                IndrasFamily = IndrasGroupFamily.Riley;
+                IndrasRileyCRe = 0.1; IndrasRileyCIm = 0.93;
+                break;
+        }
+    }
+
     private KleinianPreset _kleinPreset;
     // #875 — Schottky group preset selector. Changing it rebuilds the generator
     // list in the calculator; NecklaceN also reads KleinianNecklaceCount.

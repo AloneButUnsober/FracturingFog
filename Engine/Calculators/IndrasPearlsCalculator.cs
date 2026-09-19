@@ -54,15 +54,27 @@ public sealed class IndrasPearlsCalculator : IFractalCalculator
 
     public FractalParameters FractalParameters { get; set; } = new();
 
-    // S1 defaults (become FractalParameters fields + a UI panel in S2 / #893).
-    // Maskit μ = 2i is the MSW p. 259 "apple" — a is parabolic, fixed point i.
-    private static readonly Complex DefaultMaskitMu = new(0, 2);
-    // Word-tree depth cap. Reduced-word count grows ~4·3^(d−1); a full BFS to
-    // depth 12 is ~1M nodes — even coverage of Λ, bounded cost.
-    private const int DefaultMaxWordDepth = 12;
     // Safety ceiling on enumerated words (a level that would exceed it is not
-    // expanded further) so an unexpected group can't run unbounded.
+    // expanded further) so an unexpected group can't run unbounded. Word count
+    // grows ~4·3^(d−1); a full BFS to depth 12 is ~1M nodes.
     private const int NodeBudget = 4_000_000;
+
+    /// <summary>Builds the group from the active FractalParameters (S2, #893).
+    /// The generator matrices are derived from the scalar μ / traces / c.</summary>
+    private IndrasGroup BuildGroup()
+    {
+        var p = FractalParameters;
+        return p.IndrasFamily switch
+        {
+            IndrasGroupFamily.GrandmaRecipe => IndrasGroup.Grandma(
+                new Complex(p.IndrasGrandmaTaRe, p.IndrasGrandmaTaIm),
+                new Complex(p.IndrasGrandmaTbRe, p.IndrasGrandmaTbIm),
+                p.IndrasGrandmaSecondSolution),
+            IndrasGroupFamily.Riley => IndrasGroup.Riley(
+                new Complex(p.IndrasRileyCRe, p.IndrasRileyCIm)),
+            _ => IndrasGroup.Maskit(new Complex(p.IndrasMaskitMuRe, p.IndrasMaskitMuIm)),
+        };
+    }
 
     public IndrasPearlsCalculator(int width, int height) => Resize(width, height);
 
@@ -78,8 +90,10 @@ public sealed class IndrasPearlsCalculator : IFractalCalculator
         Array.Clear(ColorBuffer, 0, ColorBuffer.Length);
         if (Width <= 0 || Height <= 0) return;
 
-        // Build the default group and the seed points (fixed points on Λ).
-        IndrasGroup group = IndrasGroup.Maskit(DefaultMaskitMu);
+        // Build the group from the params and the seed points (fixed points on Λ).
+        // (RenderMode.CurveTrace falls back to the point cloud until S3 / #894.)
+        IndrasGroup group = BuildGroup();
+        int maxDepth = Math.Clamp(FractalParameters.IndrasMaxWordDepth, 2, 16);
         var seeds = new List<Complex>(group.SeedPoints());
         if (seeds.Count == 0) return;
 
@@ -117,7 +131,7 @@ public sealed class IndrasPearlsCalculator : IFractalCalculator
         // depth cap. Periodic renormalisation keeps long products well-scaled.
         var frontier = new List<(Mobius M, int Last)> { (Mobius.Identity, -1) };
         Plot(Mobius.Identity);
-        for (int depth = 1; depth <= DefaultMaxWordDepth; depth++)
+        for (int depth = 1; depth <= maxDepth; depth++)
         {
             if (ct.IsCancellationRequested) return;
             var next = new List<(Mobius, int)>(frontier.Count * 3);
