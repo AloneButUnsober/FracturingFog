@@ -267,6 +267,47 @@ namespace FracturingFog.Models
                 },
                 Tags = new List<string> { "experimental", "2D", "precision" },
             };
+
+            // #895 — the Indra's Pearls marquee. Walk the Maskit parameter μ along
+            // the slice (μ real triangle-sweep across cusp groups) while holding
+            // the imaginary part just inside the boundary, so the two-generator
+            // group is seen "degenerating into a limit curve" and reforming. Best
+            // on a Maskit-family view in CurveTrace render mode.
+            yield return new AnimationData
+            {
+                Name = "Maskit slice sweep",
+                Category = "Built-in",
+                Description = "Sweeps the Maskit parameter μ along the slice — the "
+                            + "group degenerates through successive cusp limit curves "
+                            + "and reforms. Author on an Indra's Pearls (Maskit family) "
+                            + "view; CurveTrace render mode gives the crisp line look.",
+                TargetFractalTypes = new List<FracturingFog.FractalType>
+                {
+                    FracturingFog.FractalType.IndrasPearls,
+                },
+                Tracks = new List<AnimationTrack>
+                {
+                    new AnimationTrack
+                    {
+                        ParamName = "IndrasMaskitMuRe",
+                        Mode = AnimationMode.Triangle,  // walk μ real across the slice
+                        Min = -1.0,
+                        Max = 1.0,
+                        FrequencyHz = 0.03,             // ~33 s per full there-and-back
+                        Enabled = true,
+                    },
+                    new AnimationTrack
+                    {
+                        ParamName = "IndrasMaskitMuIm",
+                        Mode = AnimationMode.Hold,      // just inside the boundary
+                        Min = 1.9,
+                        Max = 1.9,
+                        FrequencyHz = 0.0,
+                        Enabled = true,
+                    },
+                },
+                Tags = new List<string> { "experimental", "2D", "indras", "kleinian" },
+            };
         }
     }
 }

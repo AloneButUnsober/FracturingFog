@@ -100,6 +100,9 @@ public static class FractalAnimatableParamsMap
         FractalType.PrecisionField
             => _precisionFieldList,
 
+        FractalType.IndrasPearls
+            => _indrasList,
+
         // ── 3D raymarched ─────────────────────────────────────────────────
         FractalType.Mandelbulb
             => _mandelbulbList,
@@ -352,6 +355,33 @@ public static class FractalAnimatableParamsMap
         new("RandomTileMinPixelRadius", AnimatableParamKind.ScalarDouble, Min: 0.5, Max: 8.0,
             Cost: AnimatableParamCost.Expensive,
             Notes: "Regenerates the packing each tick (boil) — deliberate effect, not a tween."),
+    };
+
+    // Indra's Pearls (#895) — the marquee "group degenerating into a limit curve"
+    // animation. Sweeping the group parameter toward the Maskit-slice boundary
+    // walks through cusp groups. Every tick rebuilds the two-generator group and
+    // re-enumerates the limit set, so each is Expensive.
+    private static readonly AnimatableParamDescriptor[] _indrasList =
+    {
+        new("IndrasMaskitMuRe", AnimatableParamKind.ScalarDouble, Min: -3.0, Max: 3.0,
+            Cost: AnimatableParamCost.Expensive,
+            Notes: "Maskit μ real part — a horizontal sweep along the slice crosses successive cusp groups (the marquee)."),
+        new("IndrasMaskitMuIm", AnimatableParamKind.ScalarDouble, Min: 0.5, Max: 3.0,
+            Cost: AnimatableParamCost.Expensive,
+            Notes: "Maskit μ imag part — approach 2i (the parabolic 'apple' cusp) to watch the group degenerate onto a limit curve."),
+        new("IndrasGrandmaTaRe", AnimatableParamKind.ScalarDouble, Min: -3.0, Max: 3.0,
+            Cost: AnimatableParamCost.Expensive,
+            Notes: "Grandma trace ta real — morphs the quasi-Fuchsian group."),
+        new("IndrasGrandmaTaIm", AnimatableParamKind.ScalarDouble, Min: -3.0, Max: 3.0,
+            Cost: AnimatableParamCost.Expensive),
+        new("IndrasGrandmaTbRe", AnimatableParamKind.ScalarDouble, Min: -3.0, Max: 3.0,
+            Cost: AnimatableParamCost.Expensive),
+        new("IndrasGrandmaTbIm", AnimatableParamKind.ScalarDouble, Min: -3.0, Max: 3.0,
+            Cost: AnimatableParamCost.Expensive),
+        new("IndrasRileyCRe", AnimatableParamKind.ScalarDouble, Min: -2.0, Max: 2.0,
+            Cost: AnimatableParamCost.Expensive),
+        new("IndrasRileyCIm", AnimatableParamKind.ScalarDouble, Min: -2.0, Max: 2.0,
+            Cost: AnimatableParamCost.Expensive),
     };
 
     private static readonly AnimatableParamDescriptor[] _mandelbulbList =

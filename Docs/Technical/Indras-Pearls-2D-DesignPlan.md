@@ -222,11 +222,14 @@ framed and coloured). S3 = the marquee animation. S4+ = breadth and polish.
   abort → point-cloud fallback). +5 tests. Algorithm verified against Tim
   Hutton's reference implementation. *(deps: S1)*
 
-- **S4 — [#895](https://github.com/AloneButUnsober/FracturingFog/issues/895) — Maskit-slice / trace animation (the marquee; re-homed #879).**
-  Animate `μ` (or Grandma's `tab`) toward the slice boundary → the classic
-  "group degenerating into a limit curve" animation; scene-engine scalar-param
-  track. *(deps: S1; S3 for the curve look)*
-  → fulfills [#879](https://github.com/AloneButUnsober/FracturingFog/issues/879).
+- **S4 — [#895](https://github.com/AloneButUnsober/FracturingFog/issues/895) — Maskit-slice / trace animation (the marquee; re-homed #879). ✅ SHIPPED.**
+  Animate `μ` (or Grandma's traces / Riley `c`) → the classic "group degenerating
+  into a limit curve" animation; scene-engine scalar-param track. All eight group
+  scalars registered in `FractalAnimatableParamsMap` (reflection-driven double
+  animators, #632 precedent); a built-in **"Maskit slice sweep"** animation
+  (μ real triangle-sweep, μ imag held just inside the boundary). +2 tests.
+  *(deps: S1; S3 for the curve look)*
+  → **fulfills [#879](https://github.com/AloneButUnsober/FracturingFog/issues/879).**
 
 - **S5 — [#896](https://github.com/AloneButUnsober/FracturingFog/issues/896) — colour drivers (Categorical word-length / parity, §5).**
   Per-point word-length / last-generator AOV + Categorical `ColorThemeKind`.
@@ -276,6 +279,15 @@ framed and coloured). S3 = the marquee animation. S4+ = breadth and polish.
 
 ## 9. Change log
 
+- **2026-09-19** — **S4 (#895) shipped — the marquee animation (fulfills #879).**
+  All eight group scalars (Maskit μ re/im, Grandma ta/tb re/im, Riley c re/im)
+  registered in `FractalAnimatableParamsMap` as Expensive ScalarDouble tracks;
+  the existing reflection-based scalar animator (`AnimationDataExtensions`) drives
+  them, so no per-property code was needed. A built-in **"Maskit slice sweep"** in
+  `AnimationLibrary` walks μ real (−1→1→−1 triangle) with μ imag held at 1.9 just
+  inside the boundary — the two-generator group is seen degenerating through cusp
+  limit curves and reforming. +2 tests, suite green. The animation was re-homed
+  here from the 3D Kleinian epic (Maskit is a 2D construction, #877 finding).
 - **2026-09-19** — **S3 (#894) shipped — the crisp limit-curve tracer.** The MSW
   ch. 9 special-words DFS: `Mobius.RepellingFixedPoint()` (p. 84 ordering), the
   {a, b, A, B} alphabet (inverse = (i+2) mod 4), per-letter special-word repetends
