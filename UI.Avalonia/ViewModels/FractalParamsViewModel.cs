@@ -1706,6 +1706,9 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
         "Grandma quasi-Fuchsian",
         "Grandma Cantor set",
         "Double-cusp group",
+        "Cusp necklace (MSW fig 9.1)",
+        "Cusp necklace (MSW fig 9.3)",
+        "Cusp necklace (2/5)",
         "Riley slice",
     };
     private string? _indrasSelectedPreset;
@@ -1746,6 +1749,27 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
                 // ta = tb = 2 ⇒ both generators parabolic (the (1,1) double cusp).
                 IndrasFamily = IndrasGroupFamily.GrandmaRecipe;
                 IndrasGrandmaTaRe = 2.0; IndrasGrandmaTaIm = 0.0;
+                IndrasGrandmaTbRe = 2.0; IndrasGrandmaTbIm = 0.0;
+                IndrasGrandmaSecondSolution = false;
+                break;
+            // Rational cusp / necklace groups (#897) — one generator parabolic
+            // (tb = 2), ta at an MSW cusp value → the "necklace" limit curves
+            // (Mumford–Series–Wright ch. 9). Verified renders.
+            case "Cusp necklace (MSW fig 9.1)":
+                IndrasFamily = IndrasGroupFamily.GrandmaRecipe;
+                IndrasGrandmaTaRe = 1.958591030; IndrasGrandmaTaIm = -0.011278560;
+                IndrasGrandmaTbRe = 2.0; IndrasGrandmaTbIm = 0.0;
+                IndrasGrandmaSecondSolution = false;
+                break;
+            case "Cusp necklace (MSW fig 9.3)":
+                IndrasFamily = IndrasGroupFamily.GrandmaRecipe;
+                IndrasGrandmaTaRe = 1.64213876; IndrasGrandmaTaIm = -0.76658841;
+                IndrasGrandmaTbRe = 2.0; IndrasGrandmaTbIm = 0.0;
+                IndrasGrandmaSecondSolution = false;
+                break;
+            case "Cusp necklace (2/5)":
+                IndrasFamily = IndrasGroupFamily.GrandmaRecipe;
+                IndrasGrandmaTaRe = 1.9021; IndrasGrandmaTaIm = 0.0;
                 IndrasGrandmaTbRe = 2.0; IndrasGrandmaTbIm = 0.0;
                 IndrasGrandmaSecondSolution = false;
                 break;
