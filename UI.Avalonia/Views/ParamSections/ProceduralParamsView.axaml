@@ -345,6 +345,87 @@
                            ToolTip.Tip="Dome curvature for 3D (normal-mapped) themes: each shape is lit as a sphere. 0 = flat discs; 1 = full hemisphere. Ignored by flat 2D themes." />
         </Grid>
 
+        <!-- Indra's Pearls (2D Möbius-group limit set, #893) -->
+        <StackPanel IsVisible="{Binding IsIndrasPearls}" Spacing="4">
+            <Grid ColumnDefinitions="160,*" RowDefinitions="Auto,Auto,Auto,Auto">
+                <TextBlock Grid.Row="0" Grid.Column="0" Text="Preset:" VerticalAlignment="Center" />
+                <ComboBox Grid.Row="0" Grid.Column="1"
+                          ItemsSource="{Binding IndrasPresets}"
+                          SelectedItem="{Binding SelectedIndrasPreset, Mode=TwoWay}"
+                          Margin="0,2"
+                          ToolTip.Tip="Canned group. Selecting one fills the family + parameters below (the apple, a Cantor set, a double-cusp group, …). MSW plates." />
+                <TextBlock Grid.Row="1" Grid.Column="0" Text="Family:" VerticalAlignment="Center" />
+                <ComboBox Grid.Row="1" Grid.Column="1"
+                          ItemsSource="{Binding IndrasFamilies}"
+                          SelectedItem="{Binding IndrasFamily, Mode=TwoWay}"
+                          Margin="0,2"
+                          ToolTip.Tip="Two-generator family: Maskit slice (single μ), Grandma's recipe (traces ta, tb), or Riley slice (single c)." />
+                <TextBlock Grid.Row="2" Grid.Column="0" Text="Word depth:" VerticalAlignment="Center" />
+                <NumericUpDown Grid.Row="2" Grid.Column="1"
+                               Minimum="2" Maximum="16" Increment="1" FormatString="F0"
+                               Value="{Binding IndrasMaxWordDepth, Mode=TwoWay}" Margin="0,2"
+                               ToolTip.Tip="Reduced-word enumeration depth. Higher = finer limit set; word count grows ~3× per level." />
+                <TextBlock Grid.Row="3" Grid.Column="0" Text="Render mode:" VerticalAlignment="Center" />
+                <ComboBox Grid.Row="3" Grid.Column="1"
+                          ItemsSource="{Binding IndrasRenderModes}"
+                          SelectedItem="{Binding IndrasRenderMode, Mode=TwoWay}"
+                          Margin="0,2"
+                          ToolTip.Tip="PointCloud = BFS density plot (this build). CurveTrace = crisp limit curve (S3, #894) — falls back to point cloud until then." />
+            </Grid>
+
+            <!-- Maskit μ -->
+            <Grid IsVisible="{Binding IsIndrasMaskit}" ColumnDefinitions="160,*" RowDefinitions="Auto,Auto">
+                <TextBlock Grid.Row="0" Grid.Column="0" Text="Maskit μ (real):" VerticalAlignment="Center" />
+                <NumericUpDown Grid.Row="0" Grid.Column="1"
+                               Minimum="-8" Maximum="8" Increment="0.05" FormatString="F3"
+                               Value="{Binding IndrasMaskitMuRe, Mode=TwoWay}" Margin="0,2"
+                               ToolTip.Tip="Real part of the Maskit parameter μ. a: z ↦ μ + 1/z." />
+                <TextBlock Grid.Row="1" Grid.Column="0" Text="Maskit μ (imag):" VerticalAlignment="Center" />
+                <NumericUpDown Grid.Row="1" Grid.Column="1"
+                               Minimum="-8" Maximum="8" Increment="0.05" FormatString="F3"
+                               Value="{Binding IndrasMaskitMuIm, Mode=TwoWay}" Margin="0,2"
+                               ToolTip.Tip="Imag part of μ. μ = 2i is the classic 'apple' (a parabolic)." />
+            </Grid>
+
+            <!-- Grandma traces -->
+            <Grid IsVisible="{Binding IsIndrasGrandma}" ColumnDefinitions="160,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto">
+                <TextBlock Grid.Row="0" Grid.Column="0" Text="tr(a) real:" VerticalAlignment="Center" />
+                <NumericUpDown Grid.Row="0" Grid.Column="1"
+                               Minimum="-4" Maximum="4" Increment="0.01" FormatString="F3"
+                               Value="{Binding IndrasGrandmaTaRe, Mode=TwoWay}" Margin="0,2"
+                               ToolTip.Tip="Real part of trace ta. tb is set separately; tab derives from the Markov identity." />
+                <TextBlock Grid.Row="1" Grid.Column="0" Text="tr(a) imag:" VerticalAlignment="Center" />
+                <NumericUpDown Grid.Row="1" Grid.Column="1"
+                               Minimum="-4" Maximum="4" Increment="0.01" FormatString="F3"
+                               Value="{Binding IndrasGrandmaTaIm, Mode=TwoWay}" Margin="0,2" />
+                <TextBlock Grid.Row="2" Grid.Column="0" Text="tr(b) real:" VerticalAlignment="Center" />
+                <NumericUpDown Grid.Row="2" Grid.Column="1"
+                               Minimum="-4" Maximum="4" Increment="0.01" FormatString="F3"
+                               Value="{Binding IndrasGrandmaTbRe, Mode=TwoWay}" Margin="0,2" />
+                <TextBlock Grid.Row="3" Grid.Column="0" Text="tr(b) imag:" VerticalAlignment="Center" />
+                <NumericUpDown Grid.Row="3" Grid.Column="1"
+                               Minimum="-4" Maximum="4" Increment="0.01" FormatString="F3"
+                               Value="{Binding IndrasGrandmaTbIm, Mode=TwoWay}" Margin="0,2" />
+                <TextBlock Grid.Row="4" Grid.Column="0" Text="Second tab root:" VerticalAlignment="Center" />
+                <CheckBox Grid.Row="4" Grid.Column="1"
+                          IsChecked="{Binding IndrasGrandmaSecondSolution, Mode=TwoWay}" Margin="0,2"
+                          ToolTip.Tip="Pick the other root of the Markov quadratic for tab — a different (often mirror) group." />
+            </Grid>
+
+            <!-- Riley c -->
+            <Grid IsVisible="{Binding IsIndrasRiley}" ColumnDefinitions="160,*" RowDefinitions="Auto,Auto">
+                <TextBlock Grid.Row="0" Grid.Column="0" Text="Riley c (real):" VerticalAlignment="Center" />
+                <NumericUpDown Grid.Row="0" Grid.Column="1"
+                               Minimum="-4" Maximum="4" Increment="0.01" FormatString="F3"
+                               Value="{Binding IndrasRileyCRe, Mode=TwoWay}" Margin="0,2"
+                               ToolTip.Tip="Real part of the Riley parameter c. a: z ↦ z/(cz+1) (parabolic)." />
+                <TextBlock Grid.Row="1" Grid.Column="0" Text="Riley c (imag):" VerticalAlignment="Center" />
+                <NumericUpDown Grid.Row="1" Grid.Column="1"
+                               Minimum="-4" Maximum="4" Increment="0.01" FormatString="F3"
+                               Value="{Binding IndrasRileyCIm, Mode=TwoWay}" Margin="0,2" />
+            </Grid>
+        </StackPanel>
+
         <!-- Chaotic Billiard (#627) -->
         <Grid IsVisible="{Binding IsChaoticBilliard}"
               ColumnDefinitions="160,*"
