@@ -694,7 +694,7 @@ public sealed partial class MainWindow : Window
         shell.TerminalModeToggleRequested += OnTerminalModeToggleRequested;
         shell.SideBySideModeToggleRequested += OnSideBySideModeToggleRequested;
         shell.AsciiFxPanelRequested += OnAsciiFxPanelRequested;
-        shell.FxPanel.Changed += OnAsciiFxPanelChanged;
+        shell.FxPanel.SettingsChanged += OnAsciiFxPanelChanged;
 
         // Initial sync in case the shell already has flags set.
         SyncMenu();
@@ -717,7 +717,7 @@ public sealed partial class MainWindow : Window
             _shell.TerminalModeToggleRequested -= OnTerminalModeToggleRequested;
             _shell.SideBySideModeToggleRequested -= OnSideBySideModeToggleRequested;
             _shell.AsciiFxPanelRequested -= OnAsciiFxPanelRequested;
-            _shell.FxPanel.Changed -= OnAsciiFxPanelChanged;
+            _shell.FxPanel.SettingsChanged -= OnAsciiFxPanelChanged;
             StopAsciiPump();
 
             // S-X8 (2026-06-27) — drop MiniDepth handlers off the long-lived

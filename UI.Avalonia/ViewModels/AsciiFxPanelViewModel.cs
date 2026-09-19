@@ -6,7 +6,7 @@
 // View-model for the full ASCII FX panel (#229) — a reactive property per
 // effect toggle plus its primary tunable(s), grouped by family in the view.
 // Snapshot() materialises an Engine-consumable AsciiFxSettings; LoadFrom() pulls
-// a preset back into the controls. Any edit raises Changed so the shell can
+// a preset back into the controls. Any edit raises SettingsChanged so the shell can
 // repaint the live ASCII view and re-evaluate the animation timer.
 
 using System;
@@ -21,8 +21,10 @@ namespace FracturingFog.UI.Avalonia.ViewModels;
 /// <summary>Full per-effect control surface for the ASCII FX chain.</summary>
 public sealed class AsciiFxPanelViewModel : ReactiveObject
 {
-    /// <summary>Raised whenever any effect value changes (toggle or slider).</summary>
-    public event EventHandler? Changed;
+    /// <summary>Raised whenever any effect value changes (toggle or slider).
+    /// Named <c>SettingsChanged</c> (not <c>Changed</c>) so it does not hide
+    /// <see cref="ReactiveObject"/>'s <c>Changed</c> observable.</summary>
+    public event EventHandler? SettingsChanged;
 
     public AsciiFxPanelViewModel()
     {
@@ -37,7 +39,7 @@ public sealed class AsciiFxPanelViewModel : ReactiveObject
     private T Set<T>(ref T field, T value)
     {
         this.RaiseAndSetIfChanged(ref field, value);
-        if (!_suppress) Changed?.Invoke(this, EventArgs.Empty);
+        if (!_suppress) SettingsChanged?.Invoke(this, EventArgs.Empty);
         return value;
     }
 
@@ -167,7 +169,7 @@ public sealed class AsciiFxPanelViewModel : ReactiveObject
     };
 
     /// <summary>Overwrite the panel from an FX settings (e.g. a chosen preset).
-    /// Raises <see cref="Changed"/> once for the whole bulk apply.</summary>
+    /// Raises <see cref="SettingsChanged"/> once for the whole bulk apply.</summary>
     public void LoadFrom(AsciiFxSettings fx)
     {
         if (fx is null) return;
@@ -200,7 +202,7 @@ public sealed class AsciiFxPanelViewModel : ReactiveObject
             TransitionSeconds = fx.TransitionSeconds;
         }
         finally { _suppress = false; }
-        Changed?.Invoke(this, EventArgs.Empty);
+        SettingsChanged?.Invoke(this, EventArgs.Empty);
     }
 
     /// <summary>Turn every effect off.</summary>
