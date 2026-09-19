@@ -196,6 +196,57 @@ public sealed class IndrasPearlsTests
     public void HasDisplayName()
         => Assert.Equal("Indra's Pearls", Fractals.FractalNameByNameType[FractalType.IndrasPearls]);
 
+    // ── S5 colour drivers (#896) ─────────────────────────────────────────────
+
+    private static uint[] RenderWithSource(IndrasColorSource src, IndrasRenderMode mode)
+    {
+        var p = new FractalParameters { IndrasFamily = IndrasGroupFamily.Maskit, IndrasMaskitMuIm = 2.0,
+            IndrasColorSource = src, IndrasRenderMode = mode };
+        var c = new IndrasPearlsCalculator(200, 200) { CenterX = 0, CenterY = 1, Zoom = 0.6, FractalParameters = p };
+        c.Calculate();
+        return (uint[])c.ColorBuffer.Clone();
+    }
+
+    [Theory]
+    [InlineData(IndrasColorSource.WordLength)]
+    [InlineData(IndrasColorSource.LastGenerator)]
+    [InlineData(IndrasColorSource.Parity)]
+    public void ColorSource_DiffersFromDensity_PointCloud(IndrasColorSource src)
+    {
+        var density = RenderWithSource(IndrasColorSource.Density, IndrasRenderMode.PointCloud);
+        var other = RenderWithSource(src, IndrasRenderMode.PointCloud);
+        Assert.NotEqual(density, other);
+    }
+
+    [Fact]
+    public void ColorSource_LastGeneratorDiffersFromWordLength_PointCloud()
+    {
+        var wl = RenderWithSource(IndrasColorSource.WordLength, IndrasRenderMode.PointCloud);
+        var lg = RenderWithSource(IndrasColorSource.LastGenerator, IndrasRenderMode.PointCloud);
+        Assert.NotEqual(wl, lg);
+    }
+
+    [Fact]
+    public void ColorSource_LastGeneratorDiffersFromDensity_CurveTrace()
+    {
+        var density = RenderWithSource(IndrasColorSource.Density, IndrasRenderMode.CurveTrace);
+        var lg = RenderWithSource(IndrasColorSource.LastGenerator, IndrasRenderMode.CurveTrace);
+        Assert.NotEqual(density, lg);
+    }
+
+    [Fact]
+    public void ColorSource_ClonesAndPersists()
+    {
+        var p = new FractalParameters { IndrasColorSource = IndrasColorSource.LastGenerator };
+        Assert.Equal(IndrasColorSource.LastGenerator, p.Clone().IndrasColorSource);
+
+        var pp = new FractalParameters { IndrasFamily = IndrasGroupFamily.Maskit, IndrasColorSource = IndrasColorSource.Parity };
+        var snap = RegionFractalParams.Snapshot(FractalType.IndrasPearls, pp);
+        var restored = new FractalParameters();
+        snap!.ApplyTo(restored);
+        Assert.Equal(IndrasColorSource.Parity, restored.IndrasColorSource);
+    }
+
     // ── S4 marquee animation (#895) ──────────────────────────────────────────
 
     [Fact]

@@ -347,7 +347,7 @@
 
         <!-- Indra's Pearls (2D Möbius-group limit set, #893) -->
         <StackPanel IsVisible="{Binding IsIndrasPearls}" Spacing="4">
-            <Grid ColumnDefinitions="160,*" RowDefinitions="Auto,Auto,Auto,Auto">
+            <Grid ColumnDefinitions="160,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto">
                 <TextBlock Grid.Row="0" Grid.Column="0" Text="Preset:" VerticalAlignment="Center" />
                 <ComboBox Grid.Row="0" Grid.Column="1"
                           ItemsSource="{Binding IndrasPresets}"
@@ -370,7 +370,13 @@
                           ItemsSource="{Binding IndrasRenderModes}"
                           SelectedItem="{Binding IndrasRenderMode, Mode=TwoWay}"
                           Margin="0,2"
-                          ToolTip.Tip="PointCloud = BFS density plot (this build). CurveTrace = crisp limit curve (S3, #894) — falls back to point cloud until then." />
+                          ToolTip.Tip="PointCloud = BFS density plot. CurveTrace = crisp limit curve (S3)." />
+                <TextBlock Grid.Row="4" Grid.Column="0" Text="Colour by:" VerticalAlignment="Center" />
+                <ComboBox Grid.Row="4" Grid.Column="1"
+                          ItemsSource="{Binding IndrasColorSources}"
+                          SelectedItem="{Binding IndrasColorSource, Mode=TwoWay}"
+                          Margin="0,2"
+                          ToolTip.Tip="What drives the palette: Density (hit count), WordLength (enumeration depth), LastGenerator (a/A/b/B bands) or Parity (generator vs inverse)." />
             </Grid>
 
             <!-- Maskit μ -->

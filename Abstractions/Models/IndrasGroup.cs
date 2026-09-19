@@ -67,6 +67,27 @@ public enum IndrasRenderMode
     CurveTrace,
 }
 
+/// <summary>What per-pixel integer drives the palette (S5, #896; the 2D sibling
+/// of the 3D Kleinian <c>KleinianColorSource</c> #878). The chosen scalar is
+/// mapped through the active <c>IColorMap</c> unchanged, so any palette — built-in
+/// or ColorGen — applies. Small-cardinality sources (generator / parity) read as
+/// distinct categorical bands.</summary>
+public enum IndrasColorSource
+{
+    /// <summary>Point cloud: log hit-density (S1 default, byte-identical). Curve
+    /// trace: word depth (its natural per-segment colour).</summary>
+    Density,
+    /// <summary>The word length (enumeration depth) that plotted the point — bands
+    /// the limit set by how deep in the group tree each part sits.</summary>
+    WordLength,
+    /// <summary>The last generator letter applied (a / A / b / B) — a distinct band
+    /// per generator (generator basins).</summary>
+    LastGenerator,
+    /// <summary>Generator vs its inverse (two bands) — the coarsest categorical
+    /// split.</summary>
+    Parity,
+}
+
 /// <summary>A Möbius transformation of the Riemann sphere Ĉ = ℂ ∪ {∞},
 /// <c>z ↦ (A·z + B)/(C·z + D)</c>, stored as its 2×2 complex matrix
 /// <c>[[A, B], [C, D]]</c>. Composition is matrix multiplication; the group

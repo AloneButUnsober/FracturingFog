@@ -1051,6 +1051,10 @@ namespace FracturingFog.Models
         /// Curve trace lands in S3 (#894); until then it renders as the point
         /// cloud.</summary>
         public IndrasRenderMode IndrasRenderMode { get; set; } = IndrasRenderMode.PointCloud;
+        /// <summary>What per-pixel integer drives the palette (#896): Density
+        /// (default, byte-identical), WordLength, LastGenerator or Parity. Mapped
+        /// through the active IColorMap, so any palette applies.</summary>
+        public IndrasColorSource IndrasColorSource { get; set; } = IndrasColorSource.Density;
 
         // Kleinian limit set (3D, sphere-inversion Schottky group).
         /// <summary>Which Schottky sphere configuration the limit-set renderer
@@ -1587,6 +1591,7 @@ namespace FracturingFog.Models
                 IndrasRileyCIm = IndrasRileyCIm,
                 IndrasMaxWordDepth = IndrasMaxWordDepth,
                 IndrasRenderMode = IndrasRenderMode,
+                IndrasColorSource = IndrasColorSource,
                 KleinianPreset = KleinianPreset,
                 KleinianNecklaceCount = KleinianNecklaceCount,
                 KleinianCustomSpheres = KleinianCustomSpheres.ConvertAll(s => s.Clone()),
