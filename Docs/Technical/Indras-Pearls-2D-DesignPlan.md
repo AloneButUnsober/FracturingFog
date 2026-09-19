@@ -202,10 +202,15 @@ framed and coloured). S3 = the marquee animation. S4+ = breadth and polish.
   smoke matches the reference plate. Exact matrix formulas source-verified against
   MSW (p. 259 Maskit, p. 227 Grandma, p. 258 Riley); see §8.
 
-- **S2 — [#893](https://github.com/AloneButUnsober/FracturingFog/issues/893) — params + presets + UI + region persistence.**
-  `IndrasGroupFamily` + trace/`μ` params + `MaxWordDepth` + `RenderMode`; params
-  panel; presets (Maskit `μ = 2`, a Grandma's-recipe Cantor set, a cusp group);
-  region persistence (3 sites). *(deps: S1)* — **MVP completes here.**
+- **S2 — [#893](https://github.com/AloneButUnsober/FracturingFog/issues/893) — params + presets + UI + region persistence. ✅ SHIPPED.**
+  `IndrasGroupFamily` + Maskit `μ` / Grandma traces (ta, tb + second-root toggle) /
+  Riley `c` params + `MaxWordDepth` + `IndrasRenderMode` on `FractalParameters`
+  (+ Clone); params panel (`ProceduralParamsView`, family-gated rows); five
+  presets (Maskit apple, Grandma quasi-Fuchsian, Grandma Cantor set, double-cusp,
+  Riley); region persistence (nullable DTO + Snapshot + ApplyTo). *(deps: S1)* —
+  **MVP completes here.** +5 tests; suite 2836 green. All four Grandma/Riley
+  preset families render distinctly (visual smoke). — **the Indra's Pearls MVP is
+  now user-drivable.**
 
 - **S3 — [#894](https://github.com/AloneButUnsober/FracturingFog/issues/894) — DFS "special words" curve tracer.**
   The MSW ch. 9 boundary-tracing algorithm (fixed-point-separation stop) → the
@@ -266,6 +271,17 @@ framed and coloured). S3 = the marquee animation. S4+ = breadth and polish.
 
 ## 9. Change log
 
+- **2026-09-19** — **S2 (#893) shipped — MVP complete.** Group family +
+  parameters on `FractalParameters` (`IndrasFamily`, Maskit `μ`, Grandma
+  `ta`/`tb` + second-root, Riley `c`, `IndrasMaxWordDepth`, `IndrasRenderMode`;
+  all cloned). Params panel in `ProceduralParamsView` (preset combo → seeds the
+  fields; family combo → gates the live parameter row). Five presets: Maskit
+  apple (μ = 2i), Grandma quasi-Fuchsian, Grandma Cantor set (Schottky dust, past
+  the QF boundary), double-cusp (ta = tb = 2), Riley slice. Region persistence at
+  the three editor-store sites (nullable DTO omitted-at-default + Snapshot arm +
+  ApplyTo). `IndrasPearlsCalculator` reads the params via a family switch + depth
+  clamp. +5 tests, suite 2836 green; all four Grandma/Riley families render
+  distinctly. Animation hook stays S4 (#895); curve tracer S3 (#894).
 - **2026-09-19** — **S1 (#892) shipped.** `Mobius` value type + `IndrasGroup`
   builders (Maskit p. 259 / Grandma p. 227 / Riley p. 258) in Abstractions;
   `IndrasPearlsCalculator` (BFS depth-12 reduced-word enumeration → log-density

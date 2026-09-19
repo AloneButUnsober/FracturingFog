@@ -52,6 +52,21 @@ public enum IndrasGroupFamily
     Riley,
 }
 
+/// <summary>How the limit set is drawn (design doc §3.4). <see cref="PointCloud"/>
+/// (S1/S2) enumerates reduced words breadth-first and plots the images of on-Λ
+/// seed points into a density buffer — robust, slightly blurry.
+/// <see cref="CurveTrace"/> (the MSW ch. 9 "special words" algorithm) walks the
+/// word tree depth-first tracking fixed-point separation to draw Λ as an ordered
+/// crisp curve — lands in S3 (#894); until then it falls back to the point
+/// cloud.</summary>
+public enum IndrasRenderMode
+{
+    /// <summary>BFS word enumeration → density point cloud (S1/S2).</summary>
+    PointCloud,
+    /// <summary>DFS "special words" curve tracer (S3, #894).</summary>
+    CurveTrace,
+}
+
 /// <summary>A Möbius transformation of the Riemann sphere Ĉ = ℂ ∪ {∞},
 /// <c>z ↦ (A·z + B)/(C·z + D)</c>, stored as its 2×2 complex matrix
 /// <c>[[A, B], [C, D]]</c>. Composition is matrix multiplication; the group

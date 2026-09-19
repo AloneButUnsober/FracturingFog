@@ -195,6 +195,85 @@ public sealed class IndrasPearlsTests
     public void HasDisplayName()
         => Assert.Equal("Indra's Pearls", Fractals.FractalNameByNameType[FractalType.IndrasPearls]);
 
+    // ── S2 params / presets / persistence (#893) ─────────────────────────────
+
+    [Fact]
+    public void Clone_RoundTripsIndrasFields()
+    {
+        var p = new FractalParameters
+        {
+            IndrasFamily = IndrasGroupFamily.GrandmaRecipe,
+            IndrasMaskitMuRe = 0.3, IndrasMaskitMuIm = 1.7,
+            IndrasGrandmaTaRe = 2.1, IndrasGrandmaTaIm = -0.2,
+            IndrasGrandmaTbRe = 1.9, IndrasGrandmaTbIm = 0.4,
+            IndrasGrandmaSecondSolution = true,
+            IndrasRileyCRe = 0.25, IndrasRileyCIm = 0.8,
+            IndrasMaxWordDepth = 9,
+            IndrasRenderMode = IndrasRenderMode.CurveTrace,
+        };
+        var c = p.Clone();
+        Assert.Equal(IndrasGroupFamily.GrandmaRecipe, c.IndrasFamily);
+        Assert.Equal(1.7, c.IndrasMaskitMuIm);
+        Assert.Equal(2.1, c.IndrasGrandmaTaRe);
+        Assert.True(c.IndrasGrandmaSecondSolution);
+        Assert.Equal(0.8, c.IndrasRileyCIm);
+        Assert.Equal(9, c.IndrasMaxWordDepth);
+        Assert.Equal(IndrasRenderMode.CurveTrace, c.IndrasRenderMode);
+    }
+
+    [Fact]
+    public void Region_RoundTripsNonDefaultIndrasGroup()
+    {
+        var p = new FractalParameters
+        {
+            IndrasFamily = IndrasGroupFamily.GrandmaRecipe,
+            IndrasGrandmaTaRe = 3.0, IndrasGrandmaTaIm = 0.0,
+            IndrasGrandmaTbRe = 3.0, IndrasGrandmaTbIm = 0.0,
+            IndrasMaxWordDepth = 10,
+        };
+        var snap = RegionFractalParams.Snapshot(FractalType.IndrasPearls, p);
+        Assert.NotNull(snap);
+        var restored = new FractalParameters();   // defaults (Maskit)
+        snap!.ApplyTo(restored);
+        Assert.Equal(IndrasGroupFamily.GrandmaRecipe, restored.IndrasFamily);
+        Assert.Equal(3.0, restored.IndrasGrandmaTaRe);
+        Assert.Equal(3.0, restored.IndrasGrandmaTbRe);
+        Assert.Equal(10, restored.IndrasMaxWordDepth);
+    }
+
+    [Fact]
+    public void Region_OmitsIndrasFieldsAtDefault()
+    {
+        var p = new FractalParameters();   // all Indras defaults
+        var snap = RegionFractalParams.Snapshot(FractalType.IndrasPearls, p);
+        // Block may exist but every Indras field is omitted (null) at default.
+        Assert.Null(snap?.IndrasFamily);
+        Assert.Null(snap?.IndrasMaskitMuIm);
+        Assert.Null(snap?.IndrasMaxWordDepth);
+    }
+
+    [Fact]
+    public void Calculate_RespondsToFamilySwitch()
+    {
+        var maskit = new IndrasPearlsCalculator(200, 200) { CenterX = 0, CenterY = 1, Zoom = 0.6 };
+        var grandma = new IndrasPearlsCalculator(200, 200) { CenterX = 0, CenterY = 1, Zoom = 0.6 };
+        grandma.FractalParameters = new FractalParameters { IndrasFamily = IndrasGroupFamily.GrandmaRecipe };
+        maskit.Calculate();
+        grandma.Calculate();
+        Assert.NotEqual(maskit.ColorBuffer, grandma.ColorBuffer);
+    }
+
+    [Fact]
+    public void Calculate_RespondsToMaskitMu()
+    {
+        var a = new IndrasPearlsCalculator(200, 200) { CenterX = 0, CenterY = 1, Zoom = 0.6 };
+        var b = new IndrasPearlsCalculator(200, 200) { CenterX = 0, CenterY = 1, Zoom = 0.6 };
+        b.FractalParameters = new FractalParameters { IndrasMaskitMuRe = 0.4, IndrasMaskitMuIm = 1.6 };
+        a.Calculate();
+        b.Calculate();
+        Assert.NotEqual(a.ColorBuffer, b.ColorBuffer);
+    }
+
     // ── Framing probe (not an assertion of intent — reports the limit-set
     // bounding box so MiniMapDefaults / FractalViewState can frame it). ────────
     [Fact]

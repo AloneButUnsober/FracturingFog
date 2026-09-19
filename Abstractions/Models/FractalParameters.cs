@@ -1018,6 +1018,40 @@ namespace FracturingFog.Models
         /// scalar. Default L2 over (Δ smooth-iteration, Δ escape-angle).</summary>
         public PrecisionDiffMetric PrecisionDiffMetric { get; set; } = PrecisionDiffMetric.L2;
 
+        // Indra's Pearls (#892/#893, epic #850) — 2D complex-Möbius Kleinian
+        // group limit set. The generator matrices are DERIVED from these scalar
+        // parameters (Maskit μ / Grandma traces / Riley c) by the family
+        // factories in IndrasGroup.cs; the matrices themselves are never stored.
+        /// <summary>Which two-generator family the limit set is built from
+        /// (Maskit slice / Grandma's recipe / Riley slice). Default Maskit — the
+        /// μ = 2i "apple" (MSW p. 259).</summary>
+        public IndrasGroupFamily IndrasFamily { get; set; } = IndrasGroupFamily.Maskit;
+        /// <summary>Maskit slice parameter μ (real / imaginary). Default 2i — a is
+        /// parabolic, the classic "apple" limit set.</summary>
+        public double IndrasMaskitMuRe { get; set; } = 0.0;
+        public double IndrasMaskitMuIm { get; set; } = 2.0;
+        /// <summary>Grandma's-recipe traces ta, tb (each complex). tab is derived
+        /// from the Markov identity. Default (1.87 ± 0.1 i) — a quasi-Fuchsian
+        /// group.</summary>
+        public double IndrasGrandmaTaRe { get; set; } = 1.87;
+        public double IndrasGrandmaTaIm { get; set; } = 0.1;
+        public double IndrasGrandmaTbRe { get; set; } = 1.87;
+        public double IndrasGrandmaTbIm { get; set; } = -0.1;
+        /// <summary>Grandma's recipe: pick the second root of the Markov quadratic
+        /// for tab (the two solutions give different — often mirror — groups).</summary>
+        public bool IndrasGrandmaSecondSolution { get; set; } = false;
+        /// <summary>Riley slice parameter c (real / imaginary). Two parabolic
+        /// generators; default (0.1, 0.93).</summary>
+        public double IndrasRileyCRe { get; set; } = 0.1;
+        public double IndrasRileyCIm { get; set; } = 0.93;
+        /// <summary>Reduced-word enumeration depth cap. Word count grows ~4·3^(d−1);
+        /// deeper = finer limit set at higher cost. Default 12.</summary>
+        public int IndrasMaxWordDepth { get; set; } = 12;
+        /// <summary>Point-cloud (BFS density) vs curve-trace (DFS special words).
+        /// Curve trace lands in S3 (#894); until then it renders as the point
+        /// cloud.</summary>
+        public IndrasRenderMode IndrasRenderMode { get; set; } = IndrasRenderMode.PointCloud;
+
         // Kleinian limit set (3D, sphere-inversion Schottky group).
         /// <summary>Which Schottky sphere configuration the limit-set renderer
         /// inverts through (#875). Tetrahedral = the shipped default (byte-
@@ -1541,6 +1575,18 @@ namespace FracturingFog.Models
                 PrecisionLowTier = PrecisionLowTier,
                 PrecisionHighTier = PrecisionHighTier,
                 PrecisionDiffMetric = PrecisionDiffMetric,
+                IndrasFamily = IndrasFamily,
+                IndrasMaskitMuRe = IndrasMaskitMuRe,
+                IndrasMaskitMuIm = IndrasMaskitMuIm,
+                IndrasGrandmaTaRe = IndrasGrandmaTaRe,
+                IndrasGrandmaTaIm = IndrasGrandmaTaIm,
+                IndrasGrandmaTbRe = IndrasGrandmaTbRe,
+                IndrasGrandmaTbIm = IndrasGrandmaTbIm,
+                IndrasGrandmaSecondSolution = IndrasGrandmaSecondSolution,
+                IndrasRileyCRe = IndrasRileyCRe,
+                IndrasRileyCIm = IndrasRileyCIm,
+                IndrasMaxWordDepth = IndrasMaxWordDepth,
+                IndrasRenderMode = IndrasRenderMode,
                 KleinianPreset = KleinianPreset,
                 KleinianNecklaceCount = KleinianNecklaceCount,
                 KleinianCustomSpheres = KleinianCustomSpheres.ConvertAll(s => s.Clone()),
