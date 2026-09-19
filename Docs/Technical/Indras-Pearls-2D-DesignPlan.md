@@ -231,9 +231,15 @@ framed and coloured). S3 = the marquee animation. S4+ = breadth and polish.
   *(deps: S1; S3 for the curve look)*
   → **fulfills [#879](https://github.com/AloneButUnsober/FracturingFog/issues/879).**
 
-- **S5 — [#896](https://github.com/AloneButUnsober/FracturingFog/issues/896) — colour drivers (Categorical word-length / parity, §5).**
-  Per-point word-length / last-generator AOV + Categorical `ColorThemeKind`.
-  *(deps: S1)*
+- **S5 — [#896](https://github.com/AloneButUnsober/FracturingFog/issues/896) — colour drivers (word-length / generator / parity, §5). ✅ SHIPPED.**
+  `IndrasColorSource` {Density, WordLength, LastGenerator, Parity} — the per-pixel
+  integer AOV that drives the palette scalar (the 2D sibling of the 3D Kleinian
+  `KleinianColorSource` #878). Point cloud carries a per-pixel attribute buffer;
+  curve trace colours segments by depth or letter. Any palette (built-in or
+  ColorGen) maps the scalar unchanged, so the heavier billiard-style
+  `DataDrivenColorTheme` kind is not needed — the small-cardinality AOV already
+  reads as categorical bands. Param + Clone + region persistence + a "Colour by"
+  UI combo. Byte-identical at the Density default. +6 tests. *(deps: S1)*
 
 - **S6 — [#897](https://github.com/AloneButUnsober/FracturingFog/issues/897) — more families (Riley slice, rational cusp groups).**
   Additional group builders + preset library. *(deps: S1/S2)*
@@ -279,6 +285,18 @@ framed and coloured). S3 = the marquee animation. S4+ = breadth and polish.
 
 ## 9. Change log
 
+- **2026-09-19** — **S5 (#896) shipped — colour drivers.** `IndrasColorSource`
+  {Density, WordLength, LastGenerator, Parity} selects the per-pixel integer that
+  drives the palette (mirrors the 3D Kleinian `KleinianColorSource` #878). The
+  point cloud keeps a per-pixel attribute buffer (last word depth / last letter);
+  the curve tracer colours each segment by depth or generator. The scalar is
+  mapped through the active `IColorMap`, so every palette — including
+  ColorGen-generated ones — applies unchanged (Rule A: ColorGen "categorical in
+  reach", delivered by the palette-scalar path, no ColorGen code). The heavier
+  billiard-style Categorical `ColorThemeKind` is **not** needed: the
+  small-cardinality generator / parity AOV already reads as distinct bands.
+  Param + Clone + region persistence + "Colour by" combo. Byte-identical at the
+  Density default. +6 tests, suite 2850 green.
 - **2026-09-19** — **S4 (#895) shipped — the marquee animation (fulfills #879).**
   All eight group scalars (Maskit μ re/im, Grandma ta/tb re/im, Riley c re/im)
   registered in `FractalAnimatableParamsMap` as Expensive ScalarDouble tracks;

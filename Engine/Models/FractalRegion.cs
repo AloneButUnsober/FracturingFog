@@ -495,6 +495,7 @@ namespace FracturingFog.Models
         [JsonIgnore(Condition = OmitNull)] public double? IndrasRileyCIm { get; set; }
         [JsonIgnore(Condition = OmitNull)] public int? IndrasMaxWordDepth { get; set; }
         [JsonIgnore(Condition = OmitNull)] public int? IndrasRenderMode { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public int? IndrasColorSource { get; set; }
 
         /// <summary>
         /// Capture the P1-relevant parameters for <paramref name="type"/> from a
@@ -729,6 +730,7 @@ namespace FracturingFog.Models
                     IndrasRileyCIm = p.IndrasRileyCIm != 0.93 ? p.IndrasRileyCIm : (double?)null,
                     IndrasMaxWordDepth = p.IndrasMaxWordDepth != 12 ? p.IndrasMaxWordDepth : (int?)null,
                     IndrasRenderMode = p.IndrasRenderMode != FracturingFog.Models.IndrasRenderMode.PointCloud ? (int)p.IndrasRenderMode : (int?)null,
+                    IndrasColorSource = p.IndrasColorSource != FracturingFog.Models.IndrasColorSource.Density ? (int)p.IndrasColorSource : (int?)null,
                 },
                 // Mandelbrot, Tricorn, BurningShip, Magnet1/2, TearDrop and the
                 // generated families need no extra params — defaults suffice.
@@ -903,6 +905,8 @@ namespace FracturingFog.Models
             if (IndrasMaxWordDepth.HasValue) p.IndrasMaxWordDepth = IndrasMaxWordDepth.Value;
             if (this.IndrasRenderMode.HasValue)
                 p.IndrasRenderMode = (FracturingFog.Models.IndrasRenderMode)this.IndrasRenderMode.Value;
+            if (this.IndrasColorSource.HasValue)
+                p.IndrasColorSource = (FracturingFog.Models.IndrasColorSource)this.IndrasColorSource.Value;
         }
     }
 

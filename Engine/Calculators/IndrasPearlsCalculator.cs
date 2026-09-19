@@ -119,14 +119,27 @@ public sealed class IndrasPearlsCalculator : IFractalCalculator
         double halfW, double halfH, CancellationToken ct)
     {
         int maxDepth = Math.Clamp(FractalParameters.IndrasMaxWordDepth, 2, 16);
+        IndrasColorSource src = FractalParameters.IndrasColorSource;
         var seeds = new List<Complex>(group.SeedPoints());
         if (seeds.Count == 0) return;
 
         var density = new int[Width * Height];
+        // Per-pixel categorical AOV (#896): last word depth / last letter, kept for
+        // the WordLength / LastGenerator / Parity colour sources. +1 = "unset".
+        var attrib = src == IndrasColorSource.Density ? null : new int[Width * Height];
         int maxCount = 0;
         Mobius[] letters = group.Letters;
 
-        void Plot(in Mobius m)
+        // Attribute of a plotting word: word depth, or the last letter (0..3).
+        int AttrOf(int depth, int lastLetter) => src switch
+        {
+            IndrasColorSource.WordLength => depth,
+            IndrasColorSource.LastGenerator => lastLetter < 0 ? 0 : lastLetter,
+            IndrasColorSource.Parity => lastLetter < 0 ? 0 : (lastLetter & 1),
+            _ => 0,
+        };
+
+        void Plot(in Mobius m, int depth, int lastLetter)
         {
             for (int s = 0; s < seeds.Count; s++)
             {
@@ -139,12 +152,13 @@ public sealed class IndrasPearlsCalculator : IFractalCalculator
                 int idx = py * Width + px;
                 int c = ++density[idx];
                 if (c > maxCount) maxCount = c;
+                if (attrib != null) attrib[idx] = AttrOf(depth, lastLetter);   // last-wins
             }
         }
 
         // BFS over the reduced-word tree, level by level (even coverage of Λ).
         var frontier = new List<(Mobius M, int Last)> { (Mobius.Identity, -1) };
-        Plot(Mobius.Identity);
+        Plot(Mobius.Identity, 0, -1);
         for (int depth = 1; depth <= maxDepth; depth++)
         {
             if (ct.IsCancellationRequested) return;
@@ -156,7 +170,7 @@ public sealed class IndrasPearlsCalculator : IFractalCalculator
                 {
                     if (letter == forbidden) continue;
                     Mobius child = m.Multiply(letters[letter]).Normalized();
-                    Plot(child);
+                    Plot(child, depth, letter);
                     next.Add((child, letter));
                 }
             }
@@ -165,13 +179,33 @@ public sealed class IndrasPearlsCalculator : IFractalCalculator
         }
         if (ct.IsCancellationRequested) return;
 
-        double logMax = Math.Log(1.0 + Math.Max(1, maxCount));
-        double invLogMax = logMax > 0 ? 1.0 / logMax : 0.0;
+        // Colour pass — the source picks the palette scalar (#896).
+        if (src == IndrasColorSource.Density)
+        {
+            double logMax = Math.Log(1.0 + Math.Max(1, maxCount));
+            double invLogMax = logMax > 0 ? 1.0 / logMax : 0.0;
+            for (int i = 0; i < density.Length; i++)
+            {
+                int c = density[i];
+                if (c == 0) continue;
+                float t = (float)(Math.Log(1.0 + c) * invLogMax * 255.0);
+                ColorBuffer[i] = (uint)ColorMap.Map(t, 0f, 256);
+            }
+            return;
+        }
+
+        // WordLength → depth ramp; LastGenerator / Parity → discrete category bands.
+        double scale = src switch
+        {
+            IndrasColorSource.WordLength => 255.0 / Math.Max(1, maxDepth),
+            IndrasColorSource.LastGenerator => 255.0 / 4.0,   // 4 bands
+            IndrasColorSource.Parity => 255.0 / 2.0,          // 2 bands
+            _ => 1.0,
+        };
         for (int i = 0; i < density.Length; i++)
         {
-            int c = density[i];
-            if (c == 0) continue;
-            float t = (float)(Math.Log(1.0 + c) * invLogMax * 255.0);
+            if (density[i] == 0) continue;
+            float t = (float)(attrib![i] * scale);
             ColorBuffer[i] = (uint)ColorMap.Map(t, 0f, 256);
         }
     }
@@ -221,6 +255,16 @@ public sealed class IndrasPearlsCalculator : IFractalCalculator
         var z = new Complex[3];
         int nodes = 0;
         const int NodeCap = 4_000_000;              // keeps a slow group bounded
+        IndrasColorSource src = FractalParameters.IndrasColorSource;
+
+        // Segment colour scalar for the active source (#896). Density / WordLength
+        // ramp by depth; LastGenerator / Parity map the letter to category bands.
+        float SegColor(int level, int iTag) => src switch
+        {
+            IndrasColorSource.LastGenerator => iTag * (255f / 4f),
+            IndrasColorSource.Parity => (iTag / 2) * (255f / 2f),   // generator vs inverse
+            _ => level * 8 % 256,
+        };
 
         // explore_tree; returns false to abort the whole trace (non-discrete group).
         bool Explore(in Mobius x, int prev, int level)
@@ -249,7 +293,7 @@ public sealed class IndrasPearlsCalculator : IFractalCalculator
                 {
                     if (closeEnough)
                     {
-                        uint col = (uint)ColorMap.Map(level * 8 % 256, 0f, 256);
+                        uint col = (uint)ColorMap.Map(SegColor(level, iTag), 0f, 256);
                         for (int i = 0; i < 2; i++)
                             DrawLine(z[i], z[i + 1], invPitch, halfW, halfH, col);
                     }
@@ -257,7 +301,9 @@ public sealed class IndrasPearlsCalculator : IFractalCalculator
                     {
                         // At the depth cap without convergence — plot the points
                         // (a dust component of Λ, e.g. a Cantor set).
-                        uint col = (uint)ColorMap.Map(200f, 0f, 256);
+                        uint col = (uint)ColorMap.Map(
+                            src is IndrasColorSource.LastGenerator or IndrasColorSource.Parity
+                                ? SegColor(level, iTag) : 200f, 0f, 256);
                         for (int i = 0; i < 3; i++) PlotPoint(z[i], invPitch, halfW, halfH, col);
                     }
                 }

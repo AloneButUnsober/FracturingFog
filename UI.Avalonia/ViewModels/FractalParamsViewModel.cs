@@ -214,6 +214,7 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
         _indrasCIm = _p.IndrasRileyCIm;
         _indrasDepth = _p.IndrasMaxWordDepth;
         _indrasRenderMode = _p.IndrasRenderMode;
+        _indrasColorSource = _p.IndrasColorSource;
         _kleinPreset = _p.KleinianPreset;
         _kleinNecklace = _p.KleinianNecklaceCount;
         InitKleinianSpheres();   // #876 — repopulate the editor from the reloaded params
@@ -1689,6 +1690,12 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
     /// back to point cloud until then).</summary>
     public IndrasRenderMode IndrasRenderMode { get => _indrasRenderMode; set { Set(ref _indrasRenderMode, value); _p.IndrasRenderMode = value; Fire(); } }
     public Array IndrasRenderModes => Enum.GetValues(typeof(IndrasRenderMode));
+
+    private IndrasColorSource _indrasColorSource;
+    /// <summary>What per-pixel integer drives the palette (#896): Density,
+    /// WordLength, LastGenerator or Parity.</summary>
+    public IndrasColorSource IndrasColorSource { get => _indrasColorSource; set { Set(ref _indrasColorSource, value); _p.IndrasColorSource = value; Fire(); } }
+    public Array IndrasColorSources => Enum.GetValues(typeof(IndrasColorSource));
 
     /// <summary>Named group presets. Selecting one writes the family + its
     /// parameter values into the live fields (a convenience seed, not persisted
