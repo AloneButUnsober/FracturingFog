@@ -72,7 +72,7 @@
                      Margin="6,0,0,0" />
         </Grid>
 
-        <Grid Grid.Row="2" ColumnDefinitions="Auto,80,Auto,*,Auto" Margin="0,10,0,0">
+        <Grid Grid.Row="2" ColumnDefinitions="Auto,Auto,Auto,*,Auto" Margin="0,10,0,0">
             <TextBlock Grid.Column="0"
                        Text="Frames:"
                        VerticalAlignment="Center"
@@ -84,7 +84,8 @@
                            Increment="1"
                            FormatString="0"
                            Background="#161616"
-                           Foreground="#DCDCDC" />
+                           Foreground="#DCDCDC" 
+                           Width="150"/>
             <TextBlock Grid.Column="2"
                        Text="Output dir:"
                        VerticalAlignment="Center"
@@ -117,12 +118,15 @@
             </TextBlock.Styles>
         </TextBlock>
 
-        <Grid Grid.Row="5" ColumnDefinitions="*,Auto,Auto,Auto" Margin="0,10,0,0">
-            <TextBlock Grid.Column="0"
+        <Grid Grid.Row="5" RowDefinitions="Auto,Auto" ColumnDefinitions="*,Auto,Auto,Auto" 
+              Margin="0,0,6,0">
+            <TextBlock Grid.Column="0" Grid.Row="0" Grid.ColumnSpan="4"
                        Text="Saves morph_0000.png … morph_NNNN.png. Use ffmpeg / OBS to assemble into MP4 / GIF."
                        Foreground="#808080"
-                       VerticalAlignment="Center" />
+                       VerticalAlignment="Center"
+                       Margin="0,0,0,8"/>
             <Button Grid.Column="1"
+                    Grid.Row="1"
                     Content="Start"
                     Command="{Binding StartCommand}"
                     IsEnabled="{Binding NotRunning}"
@@ -130,12 +134,14 @@
                     Padding="14,4"
                     Margin="0,0,6,0" />
             <Button Grid.Column="2"
+                    Grid.Row="1"
                     Content="Stop"
                     Command="{Binding StopCommand}"
                     IsEnabled="{Binding Running}"
                     Padding="14,4"
                     Margin="0,0,6,0" />
             <Button Grid.Column="3"
+                    Grid.Row="1"
                     Content="Close"
                     Command="{Binding CloseCommand}"
                     Padding="14,4" />

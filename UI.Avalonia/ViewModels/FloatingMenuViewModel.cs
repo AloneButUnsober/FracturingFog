@@ -847,7 +847,7 @@ public sealed class FloatingMenuViewModel : ViewModelBase
         }
     }
 
-    public string AdaptiveSweepButtonLabel => IsAdaptiveSweeping ? "Stop Sweep" : "Sweep";
+    public string AdaptiveSweepButtonLabel => IsAdaptiveSweeping ? "Stop Sweep" : "HE Sweep";
 
     private DispatcherTimer? _adaptiveSweepTimer;
     private DateTime _adaptiveSweepStartedUtc;
