@@ -95,6 +95,13 @@ because frontier claims cannot be sanity-checked against existing renders.
   preset.
 - **Karl Theodor Vahlen.** *Über Bewegungen und complexe Zahlen.* Mathematische Annalen 55, 1902.
   Clifford-matrix representation of Möbius transformations — historical origin of the Ahlfors form.
+- **Robert Riley.** *An elliptical path among the parabolic representations of the figure-eight knot
+  group.* Mathematika 22, 1975 / related 1979 work. The Riley slice — two-parabolic-generator Kleinian
+  groups; a group family for the 2D Indra's-Pearls renderer
+  (`Docs/Technical/Indras-Pearls-2D-DesignPlan.md` §3.5).
+- **Curtis T. McMullen.** *Hausdorff dimension and conformal dynamics III: Computation of dimension.*
+  American J. Mathematics 120, 1998. Dimension of Kleinian limit sets / the Maskit-slice boundary —
+  context for the 2D Indra's-Pearls limit-curve renders.
 - **Michael F. Barnsley.** *Superfractals.* Cambridge University Press, 2006. V-variable IFS
   (condensation / code-tree selection among a finite fractal set) and fractal tops (address-map
   colouring of an IFS attractor).

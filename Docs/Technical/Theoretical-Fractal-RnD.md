@@ -168,7 +168,12 @@ Colouring: by word length / generator parity — a Categorical `ColorThemeKind` 
 
 **Sources:** Mumford, Series & Wright *Indra's Pearls* 2002. See §7.
 
-**Status:** open. Candidate for the epic. **Relates to** the 3D Kleinian generalization (§5.3).
+**Status:** **design doc LANDED** (2026-09-19) — [Indras-Pearls-2D-DesignPlan.md](Indras-Pearls-2D-DesignPlan.md)
+(issue **#888**), split from the 3D Kleinian epic after the finding that Grandma's-recipe/Maskit are 2D
+constructions (curve on Ĉ, not a 3D solid — see [Kleinian-Generalization-DesignPlan.md](Kleinian-Generalization-DesignPlan.md)
+§3.4). Decision: new 2D `FractalType.IndrasPearls` modeled on `ApollonianCalculator` (Zoomable2D,
+complex-Möbius word enumeration). Sliced **S1–S6 = #892–#897** (S1–S2 MVP; **S4/#895 = the re-homed
+Maskit animation, fulfilling #879**). **Relates to** the 3D Kleinian generalization (§5.3).
 
 ### 2.4 Biomorphs (Pickover) — colouring, ships as a theme not a type
 
