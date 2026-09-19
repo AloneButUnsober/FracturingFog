@@ -199,13 +199,23 @@ DE ≈ (distance from p to nearest isometric-sphere boundary in final frame)
 
 For conformal maps the Jacobian is a scalar × orthogonal, so `‖J‖₂` *equals* the
 scalar the heuristic already tracks — **for pure inversions the analytic DE and
-the heuristic coincide.** The win appears when **rotation/Möbius** generators are
-present (the composed Jacobian is still conformal, but the per-step orthogonal
-factors change which boundary is nearest) and near **cusps** (tangency points),
-where the heuristic's "nearest sphere / accumulated scalar" over-steps because the
-nearest feature is a cusp curve, not a sphere face. Analytic DE → crisper cusps,
-fewer sphere-trace overshoots. Cite: Hart et al. 1989 (DE ray tracing),
+the heuristic coincide.** Cite: Hart et al. 1989 (DE ray tracing),
 Hubbard–Papadopol (Jacobian DE for holomorphic maps), Knighty (Kleinian KIFS DE).
+
+**Finding (2026-09-19, corrects the earlier "win with rotation" claim).** The
+rotation fold shipped in S4 (#877) is **orthogonal**, so it does *not* break the
+scalar × orthogonal structure: `J_total = (∏ scalar_i)·Q` with `Q` orthogonal, hence
+`σ_max(J_total) = ∏ scalar_i` — **exactly** the scalar the heuristic accumulates.
+So the analytic-Jacobian DE is **provably byte-identical** to the shipped scalar DE
+for the *entire current family* (inversions + rotations), not just pure inversions.
+It would differ only for a **non-conformal** generator (anisotropic fold, a true
+translation-Möbius) — which this 3-D Kleinian has none of. And the near-cusp
+over-step is a **numerator** issue (nearest-boundary distance overestimates the true
+distance to the limit set), which the Jacobian denominator does not address. **So a
+full analytic-DE toggle is a no-op here and is deferred** (revisit if non-conformal
+generators are added). The practical cusp-sharpening tool is a **DE under-relaxation
+factor** — shipped as S8/#881 instead (`KleinianDeFactor`: scale each march step by
+`k ≤ 1` so the ray does not overshoot near cusps; `k = 1` byte-identical).
 
 ### 3.6 Preset configurations (axis 2), with their math
 
@@ -435,9 +445,15 @@ polish.
   Structured-buffer generators in `KleinianGpuCalculator`. *Deps: S1 (+S2 presets,
   +S4 for Möbius on GPU). CPU-only interim acceptable until then.*
 
-- **S8 — [#881](https://github.com/AloneButUnsober/FracturingFog/issues/881) — Analytic DE toggle (§3.5).**
-  `KleinianAnalyticDe` param; Vahlen/quaternion-2×2 Jacobian accumulation
-  (internal form B, §4.2). No-op at Tier 0. Crisper cusps. *Deps: S4.*
+- **S8 — [#881](https://github.com/AloneButUnsober/FracturingFog/issues/881) — DE relaxation factor (was: analytic DE toggle).**
+  **SHIPPED** as `KleinianDeFactor` — a sphere-trace under-relaxation multiplier
+  (`k ≤ 1` shortens each march step so the ray does not overshoot near cusps →
+  crisper cusps, more steps; `k = 1` byte-identical). **Scope correction (§3.5
+  finding):** the originally-planned analytic-Jacobian DE is **provably byte-identical**
+  to the shipped scalar DE for the whole current conformal family (inversions +
+  orthogonal rotations → `σ_max = ∏ scalar_i`), so it is a **no-op** and **deferred**
+  until a non-conformal generator exists. The relaxation factor is the tool that
+  actually sharpens cusps. *Deps: S1.*
 
 **Recommended order:** S1 → S2 → S3 (ship MVP, pause for review) → S5 (cheap colour
 win, S1-only) → S4 → S6 → S8 → S7 (GPU last, largest, CPU-authoritative).
@@ -508,3 +524,11 @@ win, S1-only) → S4 → S6 → S8 → S7 (GPU last, largest, CPU-authoritative)
   does not fit the 3-D distance-estimator (§3.4 finding). Grandma's recipe + the Maskit
   animation (S6 #879) **re-homed** to a new **2-D Indra's-Pearls renderer** track
   (#888). Remaining 3-D slices: S5 #878 colour, S7 #880 GPU, S8 #881 analytic DE.
+- **2026-09-19** — **S5 #878 shipped** (colour-source selector: WordLength /
+  LastGenerator — also the #53 visibility mechanism). **S7 #880 deferred** (no GPU
+  hardware). **S8 #881 shipped** as a **DE under-relaxation factor** (`KleinianDeFactor`)
+  after a finding: the analytic-Jacobian DE is provably byte-identical to the scalar DE
+  for the whole conformal inversion+rotation family (§3.5), so true analytic DE is a
+  no-op and deferred. **3-D epic track complete** (MVP + rotation + colour + relaxation;
+  GPU deferred, analytic deferred). Grandma's/Maskit on the 2-D track (#888/#879);
+  #53 answer post-epic (#885).

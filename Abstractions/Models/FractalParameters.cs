@@ -1045,6 +1045,15 @@ namespace FracturingFog.Models
         /// the shipped default (byte-identical). WordLength / LastGenerator colour
         /// by the descent word.</summary>
         public KleinianColorSource KleinianColorSource { get; set; } = KleinianColorSource.Smooth;
+        /// <summary>Sphere-trace under-relaxation factor (#881): each march step is
+        /// scaled by this before advancing. 1 = the shipped full step (byte-
+        /// identical); &lt; 1 takes shorter steps so the ray does not overshoot the
+        /// limit set near cusps → crisper cusps at the cost of more steps. Clamped
+        /// to [0.1, 1]. (A full analytic-Jacobian DE would be identical to the
+        /// shipped scalar DE for the current conformal inversion+rotation family —
+        /// see the design plan §3.5 — so this relaxation knob is the cusp-sharpening
+        /// tool instead.)</summary>
+        public double KleinianDeFactor { get; set; } = 1.0;
         /// <summary>Inversion-iteration cap for the Kleinian DE. Higher =
         /// sharper limit-set boundary, slower per ray sample. Default 16
         /// covers the visible boundary; deep cusps need 24+.</summary>
@@ -1540,6 +1549,7 @@ namespace FracturingFog.Models
                 KleinianRotationAxisY = KleinianRotationAxisY,
                 KleinianRotationAxisZ = KleinianRotationAxisZ,
                 KleinianColorSource = KleinianColorSource,
+                KleinianDeFactor = KleinianDeFactor,
                 KleinianIterations = KleinianIterations,
                 KleinianSphereScale = KleinianSphereScale,
                 KleinianMaxSteps = KleinianMaxSteps,

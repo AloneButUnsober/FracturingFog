@@ -115,6 +115,7 @@ public sealed class KleinianCalculator : IFractalCalculator
         KleinianGenerator[] gens = group.ToArray();
         KleinianRotation rot = group.Rotation;
         var colorSrc = FractalParameters.KleinianColorSource;   // #878
+        double deFactor = Math.Clamp(FractalParameters.KleinianDeFactor, 0.1, 1.0);   // #881
         double r = Math.Sqrt(2.0) * scaleK;     // tangent radius (camera framing)
 
         double setRadius = scaleK * Math.Sqrt(3.0) + r;
@@ -188,7 +189,8 @@ public sealed class KleinianCalculator : IFractalCalculator
         // generators) falls to the general CPU descent below.
         bool gpuEligible = group.AllInversions && group.UniformRadius && gens.Length == 4
                            && !group.HasRotation                              // #877 — rotation fold is CPU-only
-                           && colorSrc == KleinianColorSource.Smooth;          // #878 — word colouring is CPU-only
+                           && colorSrc == KleinianColorSource.Smooth           // #878 — word colouring is CPU-only
+                           && deFactor == 1.0;                                 // #881 — under-relaxed stepping is CPU-only
         if (fx.UseGpuRender && fx.DebugAov == AovView.Beauty && !lowRes && gpuEligible)
         {
             var rp = new GpuRaymarchParams
@@ -274,7 +276,8 @@ public sealed class KleinianCalculator : IFractalCalculator
                     double dist = KleinianDE(sx, sy, sz, gens, deIter, in rot);
                     if (dist < eps) { sHit = true; sStep = step; break; }
                     if (tT > sceneRadius) break;
-                    sx += dx * dist; sy += dy * dist; sz += dz * dist; tT += dist;
+                    double sstep = dist * deFactor;   // #881 — under-relaxed step
+                    sx += dx * sstep; sy += dy * sstep; sz += dz * sstep; tT += sstep;
                 }
                 if (!sHit)
                 {
@@ -334,8 +337,9 @@ public sealed class KleinianCalculator : IFractalCalculator
                     double dist = KleinianDE(px, py, pz, gens, deIter, in rot);
                     if (dist < eps) { hit = true; hitStep = step; break; }
                     if (tTotal > sceneRadius) break;
-                    px += rdx * dist; py += rdy * dist; pz += rdz * dist;
-                    tTotal += dist;
+                    double mstep = dist * deFactor;   // #881 — under-relaxed step
+                    px += rdx * mstep; py += rdy * mstep; pz += rdz * mstep;
+                    tTotal += mstep;
                 }
 
                 int idx = rowBase + x;

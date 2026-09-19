@@ -249,7 +249,7 @@
         <!-- Kleinian -->
         <Grid IsVisible="{Binding IsKleinian}"
               ColumnDefinitions="160,*"
-              RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto">
+              RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto">
             <TextBlock Grid.Row="0" Grid.Column="0" Text="Group preset:" VerticalAlignment="Center" />
             <ComboBox Grid.Row="0" Grid.Column="1" HorizontalAlignment="Stretch" Margin="0,2"
                       ItemsSource="{Binding KleinianPresets}"
@@ -303,6 +303,11 @@
                       ItemsSource="{Binding KleinianColorSources}"
                       SelectedItem="{Binding KleinianColorSource, Mode=TwoWay}"
                       ToolTip.Tip="What drives the surface colour. WordLength bands by inversion-descent depth (responds to Inversion iter); LastGenerator gives one band per sphere." />
+            <TextBlock Grid.Row="10" Grid.Column="0" Text="DE step factor:" VerticalAlignment="Center" />
+            <NumericUpDown Grid.Row="10" Grid.Column="1"
+                           Minimum="0.1" Maximum="1.0" Increment="0.05" FormatString="F2"
+                           Value="{Binding KleinianDeFactor, Mode=TwoWay}" Margin="0,2"
+                           ToolTip.Tip="Sphere-trace under-relaxation. 1 = full step; smaller takes shorter steps so the ray doesn't overshoot near cusps — crisper cusps, more steps (slower)." />
         </Grid>
 
         <!-- Kleinian custom sphere-list editor (#876). Shown for the Custom preset. -->

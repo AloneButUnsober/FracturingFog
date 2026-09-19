@@ -209,6 +209,7 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
         _kleinRotAxisY = _p.KleinianRotationAxisY;
         _kleinRotAxisZ = _p.KleinianRotationAxisZ;
         _kleinColorSrc = _p.KleinianColorSource;
+        _kleinDeFactor = _p.KleinianDeFactor;
         _kleinIter = _p.KleinianIterations;
         _kleinScale = _p.KleinianSphereScale;
         _kleinCameraTheta = _p.KleinianCameraTheta;
@@ -1658,6 +1659,9 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
     private KleinianColorSource _kleinColorSrc;
     public KleinianColorSource KleinianColorSource { get => _kleinColorSrc; set { Set(ref _kleinColorSrc, value); _p.KleinianColorSource = value; Fire(); } }
     public Array KleinianColorSources => Enum.GetValues(typeof(KleinianColorSource));
+    // #881 — sphere-trace under-relaxation factor (crisper cusps; 1 = full step).
+    private double _kleinDeFactor;
+    public double KleinianDeFactor { get => _kleinDeFactor; set { Set(ref _kleinDeFactor, Clamp(value, 0.1, 1.0)); _p.KleinianDeFactor = _kleinDeFactor; Fire(); } }
 
     // #876 — Kleinian custom inversion-sphere editor.
     /// <summary>Editable rows backing <c>FractalParameters.KleinianCustomSpheres</c>.</summary>
