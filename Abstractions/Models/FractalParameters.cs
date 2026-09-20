@@ -1021,6 +1021,9 @@ namespace FracturingFog.Models
         // Dual-orbit escape-geometry field (#863/#864). Two orbits per parameter
         // sample s under u→u²+s, from the critical seed 0 and a fixed decoupled c;
         // a derived escape-space scalar goes to the SmoothBuffer.
+        /// <summary>The shared map both orbits iterate: ComplexPlane (default) or
+        /// Quaternion q²+S (#866).</summary>
+        public DualOrbitMap DualOrbitMap { get; set; } = DualOrbitMap.ComplexPlane;
         /// <summary>Which derived escape-space scalar is rendered. Default
         /// EscapeSeparation |E_c − E_z|.</summary>
         public DualOrbitField DualOrbitField { get; set; } = DualOrbitField.EscapeSeparation;
@@ -1029,6 +1032,14 @@ namespace FracturingFog.Models
         public double DualOrbitCSeedX { get; set; } = 0.5;
         /// <summary>The fixed c-orbit seed (imaginary part).</summary>
         public double DualOrbitCSeedY { get; set; } = 0.0;
+        /// <summary>Quaternion mode: the third imaginary component of the c-orbit
+        /// seed. A non-zero value (or a non-zero <see cref="DualOrbitSZ"/>) puts the
+        /// c-orbit in a different plane from the seed-0 orbit — the source of the
+        /// quaternion richness (#866).</summary>
+        public double DualOrbitCSeedZ { get; set; } = 0.3;
+        /// <summary>Quaternion mode: the fixed s_z component of S=(0,s_x,s_y,s_z)
+        /// — the decoupling / phase dial (§3.6). 0 keeps S in the s_x/s_y plane.</summary>
+        public double DualOrbitSZ { get; set; } = 0.0;
         /// <summary>Mandelbrot-control mode: seed the c-orbit from s itself. The
         /// degenerate case (dual fields collapse to a plain Mandelbrot exterior) —
         /// exposed only for comparison. Default off.</summary>
@@ -1595,9 +1606,12 @@ namespace FracturingFog.Models
                 PrecisionLowTier = PrecisionLowTier,
                 PrecisionHighTier = PrecisionHighTier,
                 PrecisionDiffMetric = PrecisionDiffMetric,
+                DualOrbitMap = DualOrbitMap,
                 DualOrbitField = DualOrbitField,
                 DualOrbitCSeedX = DualOrbitCSeedX,
                 DualOrbitCSeedY = DualOrbitCSeedY,
+                DualOrbitCSeedZ = DualOrbitCSeedZ,
+                DualOrbitSZ = DualOrbitSZ,
                 DualOrbitCEqualsS = DualOrbitCEqualsS,
                 IndrasFamily = IndrasFamily,
                 IndrasMaskitMuRe = IndrasMaskitMuRe,

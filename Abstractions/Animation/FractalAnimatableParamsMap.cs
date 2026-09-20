@@ -100,6 +100,9 @@ public static class FractalAnimatableParamsMap
         FractalType.PrecisionField
             => _precisionFieldList,
 
+        FractalType.DualOrbitEscape
+            => _dualOrbitList,
+
         FractalType.IndrasPearls
             => _indrasList,
 
@@ -355,6 +358,25 @@ public static class FractalAnimatableParamsMap
         new("RandomTileMinPixelRadius", AnimatableParamKind.ScalarDouble, Min: 0.5, Max: 8.0,
             Cost: AnimatableParamCost.Expensive,
             Notes: "Regenerates the packing each tick (boil) — deliberate effect, not a tween."),
+    };
+
+    // Dual-orbit escape-geometry (#864/#866). Sweeping the decoupled c-seed
+    // animates the texture on a stationary body; the quaternion s_z is the
+    // "decoupling / phase dial" (flat control → rich scattering). Every tick
+    // re-iterates the dual field, so Expensive.
+    private static readonly AnimatableParamDescriptor[] _dualOrbitList =
+    {
+        new("DualOrbitCSeedX", AnimatableParamKind.ScalarDouble, Min: -1.5, Max: 1.5,
+            Cost: AnimatableParamCost.Expensive,
+            Notes: "Sweeps the c-seed real — texture-morph on a fixed silhouette (§3.6)."),
+        new("DualOrbitCSeedY", AnimatableParamKind.ScalarDouble, Min: -1.5, Max: 1.5,
+            Cost: AnimatableParamCost.Expensive),
+        new("DualOrbitCSeedZ", AnimatableParamKind.ScalarDouble, Min: -1.5, Max: 1.5,
+            Cost: AnimatableParamCost.Expensive,
+            Notes: "Quaternion c-seed 3rd component."),
+        new("DualOrbitSZ", AnimatableParamKind.ScalarDouble, Min: -1.5, Max: 1.5,
+            Cost: AnimatableParamCost.Expensive,
+            Notes: "Quaternion s_z decoupling dial — a literal 'turning-on' from flat control to rich scattering (§3.6)."),
     };
 
     // Indra's Pearls (#895) — the marquee "group degenerating into a limit curve"

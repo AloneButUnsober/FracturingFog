@@ -202,9 +202,12 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
         _precHighTier = _p.PrecisionHighTier;
         _precMetric = _p.PrecisionDiffMetric;
         // #864 — Dual-orbit escape-geometry.
+        _dualMap = _p.DualOrbitMap;
         _dualField = _p.DualOrbitField;
         _dualCSeedX = _p.DualOrbitCSeedX;
         _dualCSeedY = _p.DualOrbitCSeedY;
+        _dualCSeedZ = _p.DualOrbitCSeedZ;
+        _dualSZ = _p.DualOrbitSZ;
         _dualCEqualsS = _p.DualOrbitCEqualsS;
         // #893 — Indra's Pearls 2D group.
         _indrasFamily = _p.IndrasFamily;
@@ -1646,7 +1649,17 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
     public double CoquaternionCameraDistance { get => _cqCameraDistance; set { Set(ref _cqCameraDistance, Clamp(value, 0.1, 500)); _p.CoquaternionCameraDistance = _cqCameraDistance; Fire(); } }
 
     // ── Kleinian ──
-    // ── Dual-orbit escape-geometry (#864) ──
+    // ── Dual-orbit escape-geometry (#864 / #866) ──
+    private DualOrbitMap _dualMap;
+    /// <summary>The shared map: ComplexPlane or Quaternion q²+S (#866).</summary>
+    public DualOrbitMap DualOrbitMap
+    {
+        get => _dualMap;
+        set { Set(ref _dualMap, value); _p.DualOrbitMap = value; this.RaisePropertyChanged(nameof(IsDualOrbitQuat)); Fire(); }
+    }
+    public Array DualOrbitMaps => Enum.GetValues(typeof(DualOrbitMap));
+    /// <summary>Quaternion mode — gates the c-seed Z and s_z controls.</summary>
+    public bool IsDualOrbitQuat => IsDualOrbitEscape && _dualMap == DualOrbitMap.Quaternion;
     private DualOrbitField _dualField;
     /// <summary>Which derived escape-space scalar the field renders.</summary>
     public DualOrbitField DualOrbitField { get => _dualField; set { Set(ref _dualField, value); _p.DualOrbitField = value; Fire(); } }
@@ -1656,6 +1669,12 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
     public double DualOrbitCSeedX { get => _dualCSeedX; set { Set(ref _dualCSeedX, Clamp(value, -2.0, 2.0)); _p.DualOrbitCSeedX = _dualCSeedX; Fire(); } }
     private double _dualCSeedY;
     public double DualOrbitCSeedY { get => _dualCSeedY; set { Set(ref _dualCSeedY, Clamp(value, -2.0, 2.0)); _p.DualOrbitCSeedY = _dualCSeedY; Fire(); } }
+    private double _dualCSeedZ;
+    /// <summary>Quaternion c-seed 3rd imaginary component (#866).</summary>
+    public double DualOrbitCSeedZ { get => _dualCSeedZ; set { Set(ref _dualCSeedZ, Clamp(value, -2.0, 2.0)); _p.DualOrbitCSeedZ = _dualCSeedZ; Fire(); } }
+    private double _dualSZ;
+    /// <summary>Quaternion s_z decoupling / phase dial (#866).</summary>
+    public double DualOrbitSZ { get => _dualSZ; set { Set(ref _dualSZ, Clamp(value, -2.0, 2.0)); _p.DualOrbitSZ = _dualSZ; Fire(); } }
     private bool _dualCEqualsS;
     /// <summary>Mandelbrot-control mode (c = s; degenerate — labelled).</summary>
     public bool DualOrbitCEqualsS { get => _dualCEqualsS; set { Set(ref _dualCEqualsS, value); _p.DualOrbitCEqualsS = value; Fire(); } }

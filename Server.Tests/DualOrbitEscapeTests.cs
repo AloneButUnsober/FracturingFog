@@ -92,6 +92,77 @@ public sealed class DualOrbitEscapeTests
         => Assert.IsAssignableFrom<Interefaces.IHeightFieldSource>(
                new DualOrbitEscapeCalculator(8, 8));
 
+    // ── Quaternion map variant (S3, #866) ────────────────────────────────────
+
+    private static DualOrbitEscapeCalculator MakeQuat(DualOrbitField f, double cx, double cy, double cz, double sz, bool cEqS)
+    {
+        var p = new FractalParameters
+        {
+            DualOrbitMap = DualOrbitMap.Quaternion, DualOrbitField = f,
+            DualOrbitCSeedX = cx, DualOrbitCSeedY = cy, DualOrbitCSeedZ = cz, DualOrbitSZ = sz,
+            DualOrbitCEqualsS = cEqS,
+        };
+        return new DualOrbitEscapeCalculator(180, 180) { CenterX = -0.5, CenterY = 0, Zoom = 1.0, FractalParameters = p };
+    }
+
+    [Fact]
+    public void Quaternion_DecoupledC_ProducesNonTrivialField()
+    {
+        var c = MakeQuat(DualOrbitField.EscapeSeparation, 0.5, 0.0, 0.3, 0.0, false);
+        c.Calculate();
+        Assert.True(MeanAbs(c.SmoothBuffer) > 1.0, $"quat field mean={MeanAbs(c.SmoothBuffer)}");
+    }
+
+    [Fact]
+    public void Quaternion_DiffersFromComplex()
+    {
+        var q = MakeQuat(DualOrbitField.EscapeSeparation, 0.5, 0.0, 0.3, 0.0, false);
+        var z = Make(DualOrbitField.EscapeSeparation, 0.5, 0.0, false);
+        q.Calculate(); z.Calculate();
+        Assert.NotEqual(q.ColorBuffer, z.ColorBuffer);
+    }
+
+    [Fact]
+    public void Quaternion_RespondsToCSeedZ_AndSZ()
+    {
+        var a = MakeQuat(DualOrbitField.EscapeSeparation, 0.5, 0.0, 0.3, 0.0, false);
+        var b = MakeQuat(DualOrbitField.EscapeSeparation, 0.5, 0.0, 0.7, 0.0, false);
+        var d = MakeQuat(DualOrbitField.EscapeSeparation, 0.5, 0.0, 0.3, 0.4, false);
+        a.Calculate(); b.Calculate(); d.Calculate();
+        Assert.NotEqual(a.ColorBuffer, b.ColorBuffer);   // c-seed Z drives it
+        Assert.NotEqual(a.ColorBuffer, d.ColorBuffer);   // s_z dial drives it
+    }
+
+    // The shift degeneracy holds in the quaternion map too: c = s ⇒ c-orbit is the
+    // z-orbit advanced one step ⇒ D ≡ 0. Decoupling (c-seed off ŝ) is required.
+    [Fact]
+    public void Quaternion_CEqualsS_CollapsesSeparationToZero()
+    {
+        var c = MakeQuat(DualOrbitField.EscapeSeparation, 0.5, 0.0, 0.3, 0.0, cEqS: true);
+        c.Calculate();
+        Assert.True(MeanAbs(c.SmoothBuffer) < 1e-3, $"quat c=s mean={MeanAbs(c.SmoothBuffer)}");
+    }
+
+    [Fact]
+    public void Quaternion_ClonesAndPersists()
+    {
+        var p = new FractalParameters
+        {
+            DualOrbitMap = DualOrbitMap.Quaternion, DualOrbitCSeedZ = 0.7, DualOrbitSZ = -0.2,
+        };
+        var cl = p.Clone();
+        Assert.Equal(DualOrbitMap.Quaternion, cl.DualOrbitMap);
+        Assert.Equal(0.7, cl.DualOrbitCSeedZ);
+        Assert.Equal(-0.2, cl.DualOrbitSZ);
+
+        var snap = RegionFractalParams.Snapshot(FractalType.DualOrbitEscape, p);
+        var restored = new FractalParameters();
+        snap!.ApplyTo(restored);
+        Assert.Equal(DualOrbitMap.Quaternion, restored.DualOrbitMap);
+        Assert.Equal(0.7, restored.DualOrbitCSeedZ);
+        Assert.Equal(-0.2, restored.DualOrbitSZ);
+    }
+
     // ── Registration ─────────────────────────────────────────────────────────
 
     [Fact]

@@ -501,6 +501,10 @@ namespace FracturingFog.Models
         [JsonIgnore(Condition = OmitNull)] public double? DualOrbitCSeedX { get; set; }
         [JsonIgnore(Condition = OmitNull)] public double? DualOrbitCSeedY { get; set; }
         [JsonIgnore(Condition = OmitNull)] public bool? DualOrbitCEqualsS { get; set; }
+        // #866 — quaternion map variant: map selector + c-seed Z + s_z dial.
+        [JsonIgnore(Condition = OmitNull)] public int? DualOrbitMap { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public double? DualOrbitCSeedZ { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public double? DualOrbitSZ { get; set; }
 
         /// <summary>
         /// Capture the P1-relevant parameters for <paramref name="type"/> from a
@@ -723,9 +727,12 @@ namespace FracturingFog.Models
                 // control flag, each omitted at its default.
                 FractalType.DualOrbitEscape => new RegionFractalParams
                 {
+                    DualOrbitMap = p.DualOrbitMap != FracturingFog.DualOrbitMap.ComplexPlane ? (int)p.DualOrbitMap : (int?)null,
                     DualOrbitField = p.DualOrbitField != FracturingFog.DualOrbitField.EscapeSeparation ? (int)p.DualOrbitField : (int?)null,
                     DualOrbitCSeedX = p.DualOrbitCSeedX != 0.5 ? p.DualOrbitCSeedX : (double?)null,
                     DualOrbitCSeedY = p.DualOrbitCSeedY != 0.0 ? p.DualOrbitCSeedY : (double?)null,
+                    DualOrbitCSeedZ = p.DualOrbitCSeedZ != 0.3 ? p.DualOrbitCSeedZ : (double?)null,
+                    DualOrbitSZ = p.DualOrbitSZ != 0.0 ? p.DualOrbitSZ : (double?)null,
                     DualOrbitCEqualsS = p.DualOrbitCEqualsS ? true : (bool?)null,
                 },
                 // #893 — Indra's Pearls 2D group. Family + the family's parameter
@@ -905,10 +912,13 @@ namespace FracturingFog.Models
             if (RandomTileSeed.HasValue) p.RandomTileSeed = RandomTileSeed.Value;
             if (!string.IsNullOrEmpty(IFSPresetName)) p.IFSPresetName = IFSPresetName;
             if (!string.IsNullOrEmpty(LSystemPresetName)) p.LSystemPresetName = LSystemPresetName;
-            // #864 — dual-orbit escape-geometry.
+            // #864 / #866 — dual-orbit escape-geometry.
+            if (this.DualOrbitMap.HasValue) p.DualOrbitMap = (FracturingFog.DualOrbitMap)this.DualOrbitMap.Value;
             if (this.DualOrbitField.HasValue) p.DualOrbitField = (FracturingFog.DualOrbitField)this.DualOrbitField.Value;
             if (DualOrbitCSeedX.HasValue) p.DualOrbitCSeedX = DualOrbitCSeedX.Value;
             if (DualOrbitCSeedY.HasValue) p.DualOrbitCSeedY = DualOrbitCSeedY.Value;
+            if (DualOrbitCSeedZ.HasValue) p.DualOrbitCSeedZ = DualOrbitCSeedZ.Value;
+            if (DualOrbitSZ.HasValue) p.DualOrbitSZ = DualOrbitSZ.Value;
             if (DualOrbitCEqualsS.HasValue) p.DualOrbitCEqualsS = DualOrbitCEqualsS.Value;
             // #893 — Indra's Pearls 2D group.
             if (IndrasFamily.HasValue) p.IndrasFamily = (IndrasGroupFamily)IndrasFamily.Value;

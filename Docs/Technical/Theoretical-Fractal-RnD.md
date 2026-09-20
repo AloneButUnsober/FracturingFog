@@ -626,5 +626,16 @@ appropriate sections; flesh out on the next pass. Cite inline from the sections 
   body (the angle field is the showcase). +11 tests, suite 2867 green. Free on arrival: 2D themes,
   ColorGen, Relief-3D height, S9 mesh (all read SmoothBuffer). Next: S2 #865 (field UI — done inline
   here), S3 #866 (quaternion `q²+S`).
+- **2026-09-19** — **S3 (#866) shipped** — quaternion map variant. `DualOrbitMap` enum
+  {ComplexPlane (default), Quaternion} + the Hamilton square `q²+S` (S=(0,s_x,s_y,s_z) pure-imaginary,
+  reused from `QuatMandelbrotCalculator`); escape geometry on 4D coords via the Euclidean metric,
+  scalar → SmoothBuffer. New params `DualOrbitCSeedZ` + `DualOrbitSZ` (the §3.6 decoupling / phase dial);
+  quat-only UI rows, region persistence, animatable (c-sweep + s_z "turning-on"). The seed-0 orbit is
+  trapped in the 2D subalgebra along ŝ; a decoupled c-seed off ŝ (c-seed Z ≠ 0) makes the pair diverge
+  in 4D — non-degenerate. **The `c=s` shift degeneracy still holds** (c-orbit = z-orbit + 1 step ⇒ D≡0),
+  confirmed by a test, so decoupling remains required. Visually distinct from the complex map (round
+  Norton disk + concentric scattering halos; the angle field is again the showcase). +5 tests, suite 2872
+  green. **Dual-orbit MVP (S1–S3) complete.** S4–S6 optional (escape-space deposition / glyphs /
+  tile-cache).
   Bibliography additions (§7 + `Resources-Bibliography.md`): Grebogi–Ott–Yorke 1983, Nusse–Yorke 1996,
   Aurell et al. 1997 (FSLE), Haller 2015 (LCS).
