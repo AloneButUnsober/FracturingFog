@@ -187,6 +187,35 @@
                            Value="{Binding QMandelCameraDistance, Mode=TwoWay}" Margin="0,2" />
         </Grid>
 
+        <!-- Quaternion Mandelbrot — dual-orbit surface colouring (#909) -->
+        <Grid IsVisible="{Binding IsQuatMandelbrot}"
+              ColumnDefinitions="160,*"
+              RowDefinitions="Auto,Auto,Auto,Auto">
+            <TextBlock Grid.Row="0" Grid.Column="0" Text="Dual-orbit colour:" VerticalAlignment="Center" />
+            <CheckBox Grid.Row="0" Grid.Column="1"
+                      IsChecked="{Binding QMandelDualOrbitColor, Mode=TwoWay}" Margin="0,2"
+                      ToolTip.Tip="Colour the 3D solid's surface by a decoupled second orbit's escape count at each point (the dual-orbit escape geometry, #909). Off = standard step-count shading. Forces CPU render." />
+            <TextBlock Grid.Row="1" Grid.Column="0" Text="Dual seed x:" VerticalAlignment="Center"
+                       IsVisible="{Binding QMandelDualOrbitColor}" />
+            <NumericUpDown Grid.Row="1" Grid.Column="1"
+                           Minimum="-2" Maximum="2" Increment="0.02" FormatString="F3"
+                           Value="{Binding QMandelDualSeedX, Mode=TwoWay}" Margin="0,2"
+                           IsVisible="{Binding QMandelDualOrbitColor}"
+                           ToolTip.Tip="Decoupled second-orbit seed (vector part). A Julia-style probe at each surface parameter — sweeping it re-textures the solid." />
+            <TextBlock Grid.Row="2" Grid.Column="0" Text="Dual seed y:" VerticalAlignment="Center"
+                       IsVisible="{Binding QMandelDualOrbitColor}" />
+            <NumericUpDown Grid.Row="2" Grid.Column="1"
+                           Minimum="-2" Maximum="2" Increment="0.02" FormatString="F3"
+                           Value="{Binding QMandelDualSeedY, Mode=TwoWay}" Margin="0,2"
+                           IsVisible="{Binding QMandelDualOrbitColor}" />
+            <TextBlock Grid.Row="3" Grid.Column="0" Text="Dual seed z:" VerticalAlignment="Center"
+                       IsVisible="{Binding QMandelDualOrbitColor}" />
+            <NumericUpDown Grid.Row="3" Grid.Column="1"
+                           Minimum="-2" Maximum="2" Increment="0.02" FormatString="F3"
+                           Value="{Binding QMandelDualSeedZ, Mode=TwoWay}" Margin="0,2"
+                           IsVisible="{Binding QMandelDualOrbitColor}" />
+        </Grid>
+
         <!-- Bicomplex Mandelbrot -->
         <Grid IsVisible="{Binding IsBicomplexMandelbrot}"
               ColumnDefinitions="160,*"

@@ -505,6 +505,11 @@ namespace FracturingFog.Models
         [JsonIgnore(Condition = OmitNull)] public int? DualOrbitMap { get; set; }
         [JsonIgnore(Condition = OmitNull)] public double? DualOrbitCSeedZ { get; set; }
         [JsonIgnore(Condition = OmitNull)] public double? DualOrbitSZ { get; set; }
+        // #909 — quaternion Mandelbrot dual-orbit surface colouring.
+        [JsonIgnore(Condition = OmitNull)] public bool? QMandelDualOrbitColor { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public double? QMandelDualSeedX { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public double? QMandelDualSeedY { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public double? QMandelDualSeedZ { get; set; }
 
         /// <summary>
         /// Capture the P1-relevant parameters for <paramref name="type"/> from a
@@ -640,6 +645,11 @@ namespace FracturingFog.Models
                     Cam3DTheta = p.QMandelCameraTheta,
                     Cam3DPhi = p.QMandelCameraPhi,
                     Cam3DSliceW = p.QMandelSliceW,
+                    // #909 — dual-orbit surface colouring (omitted when off).
+                    QMandelDualOrbitColor = p.QMandelDualOrbitColor ? true : (bool?)null,
+                    QMandelDualSeedX = p.QMandelDualOrbitColor ? p.QMandelDualSeedX : (double?)null,
+                    QMandelDualSeedY = p.QMandelDualOrbitColor ? p.QMandelDualSeedY : (double?)null,
+                    QMandelDualSeedZ = p.QMandelDualOrbitColor ? p.QMandelDualSeedZ : (double?)null,
                 },
                 FractalType.Kleinian => new RegionFractalParams
                 {
@@ -868,6 +878,10 @@ namespace FracturingFog.Models
                     case FractalType.QuaternionMandelbrot:
                         p.QMandelCameraDistance = d; p.QMandelCameraTheta = th; p.QMandelCameraPhi = ph;
                         if (Cam3DSliceW.HasValue) p.QMandelSliceW = Cam3DSliceW.Value;
+                        if (QMandelDualOrbitColor.HasValue) p.QMandelDualOrbitColor = QMandelDualOrbitColor.Value;
+                        if (QMandelDualSeedX.HasValue) p.QMandelDualSeedX = QMandelDualSeedX.Value;
+                        if (QMandelDualSeedY.HasValue) p.QMandelDualSeedY = QMandelDualSeedY.Value;
+                        if (QMandelDualSeedZ.HasValue) p.QMandelDualSeedZ = QMandelDualSeedZ.Value;
                         break;
                     case FractalType.Kleinian:
                         p.KleinianCameraDistance = d; p.KleinianCameraTheta = th; p.KleinianCameraPhi = ph;
