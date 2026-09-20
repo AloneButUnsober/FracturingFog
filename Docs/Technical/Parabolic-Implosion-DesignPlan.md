@@ -626,6 +626,24 @@ remaining work is the SG1→SG4 engineering build.
 
 ## 10. Change log
 
+- **2026-09-20** — **#918 SG1 — Lavaurs `g_α` engine (production port of the S3/S4/S6 Fatou
+  numerics).** Ported the validated math into `Abstractions/Animation/LavaursEngine.cs`
+  (direct evaluator) + `LavaursCoordinateTable.cs` (the S6 precompute engine). Germ
+  `f(w)=w+w²` (`c=1/4`, `w=z−1/2`); Fatou coordinates `Φ_att`/`Φ_rep` via the `ψ=Z−logZ+1/(2Z)`
+  asymptotic (principal / `[0,2π)` branches, rationalised `f⁻¹`). **Key: the attracting-side
+  inverse** — `Φ_rep⁻¹(σ)` is built by the functional-equation continuation
+  `Φ_rep⁻¹(σ)=fᵏ(Φ_rep⁻¹(σ−k))` (seed deep in the repelling petal where a backward Newton is
+  robust, ~3e-12; then `k` forward `f`-steps carry it through the petal gap onto the
+  attracting side), sidestepping the log-branch bookkeeping that made a direct Newton diverge
+  for `Im σ ≤ 0`. Every entry point returns a **validity flag** (basin-boundary points where
+  `Φ_att` diverges or the continuation escapes → invalid → the caller applies only `f`), which
+  is exactly the domain the word-tree's restricted `g_α` generator wants. The two grids
+  (`Φ_att` over `w`, `Φ_rep⁻¹` over `σ`) are **α-independent**, so one build serves every phase.
+  Validated (spike deleted; +5 tests): Abel eqn ≤ 1e-8; the inverse round-trips through
+  *independent* backward-iteration `Φ_rep` to ≤ 1e-6; Lavaurs periodicity `g_{α+1}=f∘g_α`
+  ≤ 1e-6; Douady re-injection reproduced; the table tracks the direct engine on the interior.
+  End-to-end sanity: feeding `f_c` + the tabulated `g_α` into `SemigroupEscape` renders a
+  coherent `J(g_α)`. Abstractions clean. Blocks SG3 #930.
 - **2026-09-20** — **#918 S7 spike — semigroup word-tree escape algorithm (the last open
   algorithmic risk for the faithful renderer).** De-risked the word-tree escape that S6
   flagged: a point escapes the semigroup `⟨f, g_α⟩` iff *some word* escapes; BFS-by-word-length
