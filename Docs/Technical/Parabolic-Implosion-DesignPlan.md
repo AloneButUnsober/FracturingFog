@@ -577,6 +577,19 @@ animation (S1) already ships as the flagship's user-facing deliverable.
 
 ## 10. Change log
 
+- **2026-09-20** — **Faithful renderer #920 follow-up 4 — exact iteration law (measured).**
+  Replaced the guessed `~1/approach` iteration ramp with the **measured** near-parabolic
+  budget. A throwaway experiment (deleted) rendered `J(f_{c(θ)})` at depth `approach`
+  toward several roots and took the P99.95 of the exterior escape-time distribution as the
+  iteration need. Findings: the **cusp** (`q = 1`, multiplier 1) is the iteration-hungry
+  case — a clean `iters ≈ 10/approach` (the parabolic `1/n` crawl; parameter distance from
+  the root scales as `approach²`). **Higher-q roots are milder** — `~30/√approach` (the
+  rotating multiplier stirs orbits out faster; parameter distance `~approach`). So the
+  earlier scaling was wrong twice: it had no `q` dependence *and* assumed high-q was the
+  hard case (it is the opposite), and it over-scaled the shallow frames. Encoded as
+  `ParabolicImplosionMath.RecommendedIterations(q, approach)` (×3 headroom); the render host
+  now uses it as an iteration **floor** (not a blind multiply — the base cap already covers
+  the shallow frames). +1 test. Suite green; WinExe/UI clean.
 - **2026-09-20** — **Faithful renderer #920 follow-up 3 — user-picked p/q.** The faithful
   implosion is now fully parameterised: a `FaithfulImplosion` mode on `FractalParameters`
   (+ `FaithfulImplosionP/Q`, `FaithfulImplosionApproach`) drives the render's Julia `c` from

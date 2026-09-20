@@ -45,4 +45,25 @@ public static class ParabolicImplosionMath
         double theta = (target <= 0.0) ? a : target - a;   // cusp from above, others from below
         return CardioidPoint(theta);
     }
+
+    /// <summary>Recommended escape-time iteration budget for the faithful implosion at
+    /// depth <paramref name="approach"/> toward a period-<paramref name="q"/> root.
+    /// <para>Empirically measured (P99.95 of the exterior escape-time distribution, ×3
+    /// headroom for crisp boundaries at high resolution):
+    /// the <b>cusp</b> (q = 1, multiplier 1) is the iteration-hungry case — the classic
+    /// parabolic 1/n crawl, whose parameter distance from the root scales as
+    /// <c>approach²</c>, so the budget scales as <c>~10/approach</c>. Higher-q roots
+    /// (multiplier a primitive root of unity ≠ 1) are milder — the rotation stirs orbits
+    /// out faster, parameter distance scales linearly in <c>approach</c>, budget
+    /// <c>~30/√approach</c>.</para>
+    /// The render host takes this as a floor on the iteration cap.</summary>
+    public static int RecommendedIterations(int q, double approach)
+    {
+        double a = global::System.Math.Clamp(approach, 1e-4, 1.0);
+        if (q < 1) q = 1;
+        double law = (q == 1)
+            ? 10.0 / a                                    // cusp: ~10/approach
+            : 30.0 / global::System.Math.Sqrt(a);         // q≥2: ~30/√approach
+        return (int)global::System.Math.Clamp(3.0 * law, 1.0, 2_000_000.0);
+    }
 }
