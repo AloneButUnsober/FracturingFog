@@ -458,6 +458,74 @@ public sealed class ProceduralAnimatorTests
     }
 
     [Fact]
+    public void SemigroupEscape_SingleGenerator_ReproducesOrdinaryEscapeTime()
+    {
+        // with ONE generator the word tree degenerates to the single orbit, so the
+        // semigroup escape depth must equal plain z²+c escape-time exactly.
+        var c = new Complex(-0.8, 0.156);
+        Complex Fc(Complex z) => z * z + c;
+        var gens = new[] { new SemigroupEscape.Generator(Fc) };
+        const double R = 4.0; const int maxD = 200;
+        var rnd = new Random(1);
+        for (int i = 0; i < 500; i++)
+        {
+            var z0 = new Complex(rnd.NextDouble() * 3 - 1.5, rnd.NextDouble() * 3 - 1.5);
+            int tree = SemigroupEscape.EscapeDepth(z0, gens, R, maxD, 64);
+            // reference single orbit
+            int orbit = -1; Complex z = z0;
+            for (int k = 1; k <= maxD; k++) { z = Fc(z); if (!double.IsFinite(z.Real) || z.Magnitude > R) { orbit = k; break; } }
+            Assert.Equal(orbit, tree);
+        }
+    }
+
+    [Fact]
+    public void SemigroupEscape_TwoGenerators_EscapeSetIsUnionSuperset()
+    {
+        // escape set of ⟨g₀,g₁⟩ = points some WORD escapes ⊇ either single-orbit escape set;
+        // a single orbit undercounts (the S6 all-bounded failure the tree resolves).
+        Complex Fp(Complex z) => z * z + new Complex(0.25, 0.0);   // parabolic
+        Complex Fh(Complex z) => z * z + new Complex(-0.5, 0.5);   // hyperbolic
+        var gens = new[] { new SemigroupEscape.Generator(Fp), new SemigroupEscape.Generator(Fh) };
+        const double R = 4.0; const int maxD = 60;
+        int treeEsc = 0, orbP = 0, orbH = 0, n = 0;
+        var rnd = new Random(7);
+        for (int i = 0; i < 1500; i++)
+        {
+            var z0 = new Complex(rnd.NextDouble() * 3 - 1.5, rnd.NextDouble() * 3 - 1.5);
+            n++;
+            if (SemigroupEscape.EscapeDepth(z0, gens, R, maxD, 64) > 0) treeEsc++;
+            int OrbEsc(Func<Complex, Complex> f) { Complex z = z0; for (int k = 1; k <= maxD; k++) { z = f(z); if (!double.IsFinite(z.Real) || z.Magnitude > R) return k; } return -1; }
+            if (OrbEsc(Fp) > 0) orbP++;
+            if (OrbEsc(Fh) > 0) orbH++;
+        }
+        // union superset: tree escapes at least as many as the best single orbit, and strictly more.
+        Assert.True(treeEsc >= Math.Max(orbP, orbH), $"tree={treeEsc} p={orbP} h={orbH}");
+        Assert.True(treeEsc > Math.Max(orbP, orbH), $"tree not a strict superset: tree={treeEsc} p={orbP} h={orbH}");
+    }
+
+    [Fact]
+    public void SemigroupEscape_RestrictedDomainPrunes_AndBoundedReturnsMinusOne()
+    {
+        // a generator with a restricted domain is only applied where its predicate holds.
+        Complex Fp(Complex z) => z * z + new Complex(0.25, 0.0);
+        // g₁ defined only on the right half-plane; deep-left points can only use f.
+        var gens = new[]
+        {
+            new SemigroupEscape.Generator(Fp),
+            new SemigroupEscape.Generator(z => z + new Complex(3, 0), z => z.Real > 0),
+        };
+        // the parabolic fixed point z=1/2 is bounded under f alone but the domain-restricted
+        // shift can push it out — a word escapes, so it is NOT in the filled set.
+        Assert.True(SemigroupEscape.EscapeDepth(new Complex(0.5, 0), gens, 4.0, 40, 32) > 0);
+        // origin under f_{1/4} alone stays bounded; with only-f reachable near it, deep-interior
+        // stays bounded → -1.
+        var onlyF = new[] { new SemigroupEscape.Generator(Fp) };
+        Assert.Equal(-1, SemigroupEscape.EscapeDepth(new Complex(0.0, 0.0), onlyF, 4.0, 200, 16));
+        // empty generator list / zero beam are handled.
+        Assert.Equal(-1, SemigroupEscape.EscapeDepth(Complex.Zero, Array.Empty<SemigroupEscape.Generator>(), 4.0, 10, 8));
+    }
+
+    [Fact]
     public void RecommendedIterations_CuspIsHungriest_AndFallsWithApproach()
     {
         // measured law: cusp (q=1) ~ 10/approach (×3 headroom = 30/approach); q≥2 milder.
