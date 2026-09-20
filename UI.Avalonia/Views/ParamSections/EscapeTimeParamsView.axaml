@@ -57,6 +57,14 @@
                                        Minimum="1" Maximum="1000" Increment="1" FormatString="F0"
                                        Value="{Binding FaithfulImplosionParentQ, Mode=TwoWay}" Margin="0,2" />
                     </Grid>
+                    <Grid ColumnDefinitions="160,*" RowDefinitions="Auto"
+                          IsVisible="{Binding FaithfulImplosion}">
+                        <TextBlock Grid.Row="0" Grid.Column="0" Text="Parent path (deeper):" VerticalAlignment="Center"
+                                   ToolTip.Tip="Tree address for satellites-of-satellites: space-separated p/q steps, outermost first (e.g. '1/2 1/2' = the period-4 cascade bulb; '1/3 1/2' = a period-2 satellite on the 1/3-bulb). Blank = use the single-level parent fields above. When set, this overrides the parent bulb p/q and the Satellite checkbox." />
+                        <TextBox Grid.Row="0" Grid.Column="1"
+                                 Text="{Binding FaithfulImplosionParentPath, Mode=TwoWay}"
+                                 Watermark="e.g. 1/2 1/2" Margin="0,2" />
+                    </Grid>
                 </StackPanel>
             </Border>
 

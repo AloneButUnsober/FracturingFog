@@ -66,7 +66,7 @@ public static class ParabolicImplosionMath
     {
         z0 = default; mult = default;
         Complex z = 0;
-        for (int i = 0; i < 6000; i++) z = z * z + c;
+        for (int i = 0; i < 8000; i++) z = z * z + c;
         if (!double.IsFinite(z.Real) || z.Magnitude > 10) return false;
         var pts = new Complex[n]; Complex zk = z;
         for (int k = 0; k < n; k++) { pts[k] = zk; zk = zk * zk + c; }
@@ -74,6 +74,30 @@ public static class ParabolicImplosionMath
         for (int k = 1; k < n; k++) if ((pts[k] - pts[0]).Magnitude < 1e-6) return false; // sub-period
         z0 = z; mult = IterN(z, c, n).mult;
         return mult.Magnitude < 1.0;
+    }
+    // Newton-continue a period-n cycle's multiplier from (cStart, cycle point z0 at m0) out to
+    // `target`, tracking the cycle by local Newton. Returns the parameter c where the period-n
+    // multiplier equals `target` (a bulb-boundary point). Returns cStart on divergence.
+    static Complex ContinueMult(Complex cStart, Complex z0, Complex m0, int n, Complex target)
+    {
+        Complex c = cStart, zg = z0;
+        const int steps = 28;
+        for (int s = 1; s <= steps; s++)
+        {
+            Complex lamS = m0 + (target - m0) * ((double)s / steps);
+            for (int i = 0; i < 40; i++)
+            {
+                Complex m = Mult(c, n, ref zg);
+                Complex res = m - lamS;
+                if (res.Magnitude < 1e-13) break;
+                Complex hc = 1e-7; Complex zc = zg;
+                Complex mp = Mult(c + hc, n, ref zc);
+                Complex dmdc = (mp - m) / hc;
+                if (dmdc.Magnitude < 1e-30) break;
+                c -= res / dmdc;
+            }
+        }
+        return double.IsFinite(c.Real) ? c : cStart;
     }
 
     /// <summary>The boundary point of the <b>period-<paramref name="n"/> bulb</b> rooted on
@@ -104,25 +128,114 @@ public static class ParabolicImplosionMath
             if (found) break;
         }
         if (!found) return root;
+        _ = m0;
         Complex target = Complex.Exp(new Complex(0, 2.0 * global::System.Math.PI * phi));
-        Complex c = cIn, zg = z0;
-        int steps = 22;
-        for (int s = 1; s <= steps; s++)
+        return ContinueMult(cIn, z0, m0, n, target);
+    }
+
+    /// <summary>The boundary point of the bulb located by a <b>tree address</b> — a chain of
+    /// internal-angle steps descending from the main cardioid — at internal angle
+    /// <paramref name="phi"/>. Each <c>(p, q)</c> in <paramref name="address"/> descends into the
+    /// sub-bulb attached at internal angle <c>p/q</c> of the current component, so the addressed
+    /// bulb has period <c>Π qᵢ</c> (e.g. <c>[(1,2),(1,2)]</c> = the period-4 bulb of the
+    /// period-doubling cascade; <c>phi = 0</c> gives its root <c>c = −5/4</c>, <c>phi = ½</c> the
+    /// period-8 onset <c>c ≈ −1.3680989</c>). This is the recursive generalization of
+    /// <see cref="BulbBoundaryPoint"/> (single level) to <b>satellites-of-satellites</b>: at each
+    /// level it locates the current bulb's boundary at the child's root angle, seeds an interior
+    /// attracting cycle of the child's exact period, then Newton-continues to place
+    /// <paramref name="phi"/> on the deepest bulb. Validated against the real-axis
+    /// period-doubling cascade to ~1e-11. An empty address returns
+    /// <see cref="CardioidPoint"/>(phi); the last locatable level is returned if a deeper seed is
+    /// not found.</summary>
+    public static Complex BulbBoundaryPointChain(System.Collections.Generic.IReadOnlyList<(int p, int q)> address, double phi)
+    {
+        if (address == null || address.Count == 0) return CardioidPoint(phi);
+        Complex curInterior = Complex.Zero;          // cardioid nucleus (period-1 centre)
+        int period = 1;
+        Complex fallback = CardioidPoint(phi);
+        for (int lvl = 0; lvl < address.Count; lvl++)
         {
-            Complex lamS = m0 + (target - m0) * ((double)s / steps);
-            for (int i = 0; i < 30; i++)
+            var (p, q) = address[lvl];
+            if (q <= 0) q = 1;
+            double ang = (double)p / q;
+            int childPeriod = period * q;
+            // attachment (child root) = boundary of the current bulb at internal angle `ang`.
+            Complex root;
+            if (lvl == 0)
             {
-                Complex m = Mult(c, n, ref zg);
-                Complex res = m - lamS;
-                if (res.Magnitude < 1e-13) break;
-                Complex hc = 1e-7; Complex zc = zg;
-                Complex mp = Mult(c + hc, n, ref zc);
-                Complex dmdc = (mp - m) / hc;
-                if (dmdc.Magnitude < 1e-30) break;
-                c -= res / dmdc;
+                root = CardioidPoint(ang);
             }
+            else
+            {
+                if (!ExactPeriodN(curInterior, period, out var cz, out var cm)) return fallback;
+                Complex tgt = Complex.Exp(new Complex(0, 2.0 * global::System.Math.PI * ang));
+                root = ContinueMult(curInterior, cz, cm, period, tgt);
+            }
+            // step from the root into the child bulb, outward from the parent's interior seed.
+            Complex u = root - curInterior;
+            if (u.Magnitude < 1e-12) u = Complex.One;
+            u /= u.Magnitude;
+            double baseSz = 0.5 / ((double)childPeriod * childPeriod);
+            Complex childSeed = default; bool found = false;
+            foreach (double mag in new[] { baseSz * 0.5, baseSz, baseSz * 2, baseSz * 4, baseSz * 0.25, baseSz * 8 })
+            {
+                foreach (double sgn in new[] { 1.0, -1.0 })
+                {
+                    Complex ci = root + u * (sgn * mag);
+                    if (ExactPeriodN(ci, childPeriod, out _, out _)) { childSeed = ci; found = true; break; }
+                }
+                if (found) break;
+            }
+            if (!found) return fallback;
+            fallback = root;                          // deepest located root, if a deeper level fails
+            curInterior = childSeed; period = childPeriod;
         }
-        return double.IsFinite(c.Real) ? c : root;
+        if (!ExactPeriodN(curInterior, period, out var fz, out var fm)) return fallback;
+        Complex ftgt = Complex.Exp(new Complex(0, 2.0 * global::System.Math.PI * phi));
+        return ContinueMult(curInterior, fz, fm, period, ftgt);
+    }
+
+    /// <summary>Parse a faithful-implosion parent <b>tree address</b> string into a chain of
+    /// <c>(p, q)</c> internal-angle steps (outermost first). Accepts space-, comma-, or
+    /// semicolon-separated <c>p/q</c> tokens (a bare integer <c>k</c> is read as <c>k/1</c>);
+    /// e.g. <c>"1/2 1/2"</c> → the period-4 cascade bulb, <c>"1/3 1/2"</c> → a period-2 satellite
+    /// on the 1/3-bulb. Tokens with <c>q &lt; 1</c> are skipped. Returns an empty array (= main
+    /// cardioid) for a null/blank/unparseable string.</summary>
+    public static (int p, int q)[] ParseParentPath(string path)
+    {
+        if (string.IsNullOrWhiteSpace(path)) return System.Array.Empty<(int, int)>();
+        var outList = new System.Collections.Generic.List<(int, int)>();
+        foreach (var raw in path.Split(new[] { ' ', ',', ';', '\t' }, System.StringSplitOptions.RemoveEmptyEntries))
+        {
+            var tok = raw.Trim();
+            int slash = tok.IndexOf('/');
+            int p, q;
+            if (slash < 0)
+            {
+                if (!int.TryParse(tok, out p)) continue;
+                q = 1;
+            }
+            else if (!int.TryParse(tok.Substring(0, slash), out p) ||
+                     !int.TryParse(tok.Substring(slash + 1), out q))
+            {
+                continue;
+            }
+            if (q < 1) continue;
+            outList.Add((p, q));
+        }
+        return outList.ToArray();
+    }
+
+    /// <summary>The period of the deepest bulb addressed by <paramref name="parentChain"/> times
+    /// the implosion sub-root period <paramref name="q"/> — the effective period the near-parabolic
+    /// iteration law scales against. An empty chain yields <paramref name="q"/> (main-cardioid
+    /// root).</summary>
+    public static int EffectiveParentPeriod(int q, System.Collections.Generic.IReadOnlyList<(int p, int q)> parentChain)
+    {
+        long prod = q < 1 ? 1 : q;
+        if (parentChain != null)
+            foreach (var (_, pq) in parentChain) prod *= pq < 1 ? 1 : pq;
+        return (int)global::System.Math.Clamp(prod, 1, int.MaxValue);
     }
 
     /// <summary>The period-2 bulb boundary point at internal angle <paramref name="phi"/>:
@@ -165,6 +278,30 @@ public static class ParabolicImplosionMath
         if (parentQ <= 1) return CardioidPoint(angle);                       // main cardioid
         if (parentQ == 2 && parentP == 1) return Period2BulbPoint(angle);    // period-2 fast path
         return BulbBoundaryPoint((double)parentP / parentQ, parentQ, angle); // general bulb
+    }
+
+    /// <summary>The near-parabolic Julia parameter for the faithful implosion at the <c>p/q</c>
+    /// sub-root on the bulb located by the parent <b>tree address</b> <paramref name="parentChain"/>
+    /// (outermost first) — the recursive <b>satellites-of-satellites</b> generalization. An empty
+    /// chain is the main cardioid; a single-level chain reuses the closed-form/period-n fast paths
+    /// of <see cref="ImplosionC(int,int,double,int,int)"/>; deeper chains use the numerical
+    /// <see cref="BulbBoundaryPointChain"/>. The attachment <c>p/q = 0</c> is approached from above;
+    /// <paramref name="approach"/> is clamped to <c>[1e-4, 0.3]</c>.</summary>
+    public static Complex ImplosionC(int p, int q, double approach, System.Collections.Generic.IReadOnlyList<(int p, int q)> parentChain)
+    {
+        double a = global::System.Math.Clamp(approach, 1e-4, 0.3);
+        if (q <= 0) q = 1;
+        double target = (double)p / q;
+        double angle = (target <= 0.0) ? a : target - a;
+        if (parentChain == null || parentChain.Count == 0) return CardioidPoint(angle);
+        if (parentChain.Count == 1)
+        {
+            var (pp, pq) = parentChain[0];
+            if (pq <= 1) return CardioidPoint(angle);
+            if (pq == 2 && pp == 1) return Period2BulbPoint(angle);
+            return BulbBoundaryPoint((double)pp / pq, pq, angle);
+        }
+        return BulbBoundaryPointChain(parentChain, angle);
     }
 
     /// <summary>Recommended escape-time iteration budget for the faithful implosion at

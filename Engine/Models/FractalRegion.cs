@@ -394,6 +394,7 @@ namespace FracturingFog.Models
         [JsonIgnore(Condition = OmitNull)] public bool?   FaithfulImplosionSatellite { get; set; }
         [JsonIgnore(Condition = OmitNull)] public int?    FaithfulImplosionParentP { get; set; }
         [JsonIgnore(Condition = OmitNull)] public int?    FaithfulImplosionParentQ { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public string? FaithfulImplosionParentPath { get; set; }
         [JsonIgnore(Condition = OmitNull)] public int? MultibrotExponent { get; set; }
         [JsonIgnore(Condition = OmitNull)] public double? PhoenixPRe { get; set; }
         [JsonIgnore(Condition = OmitNull)] public double? PhoenixPIm { get; set; }
@@ -549,6 +550,7 @@ namespace FracturingFog.Models
                     FaithfulImplosionSatellite = (p.FaithfulImplosion && p.FaithfulImplosionSatellite) ? true : null,
                     FaithfulImplosionParentP = (p.FaithfulImplosion && p.FaithfulImplosionParentQ > 1) ? p.FaithfulImplosionParentP : null,
                     FaithfulImplosionParentQ = (p.FaithfulImplosion && p.FaithfulImplosionParentQ > 1) ? p.FaithfulImplosionParentQ : null,
+                    FaithfulImplosionParentPath = (p.FaithfulImplosion && !string.IsNullOrWhiteSpace(p.FaithfulImplosionParentPath)) ? p.FaithfulImplosionParentPath : null,
                 },
                 FractalType.Multibrot => new RegionFractalParams
                 {
@@ -818,6 +820,7 @@ namespace FracturingFog.Models
             if (FaithfulImplosionSatellite.HasValue) p.FaithfulImplosionSatellite = FaithfulImplosionSatellite.Value;
             if (FaithfulImplosionParentP.HasValue) p.FaithfulImplosionParentP = FaithfulImplosionParentP.Value;
             if (FaithfulImplosionParentQ.HasValue) p.FaithfulImplosionParentQ = FaithfulImplosionParentQ.Value;
+            if (FaithfulImplosionParentPath != null) p.FaithfulImplosionParentPath = FaithfulImplosionParentPath;
             if (MultibrotExponent.HasValue)
                 p.MultibrotExponent = MultibrotExponent.Value;
             if (PhoenixPRe.HasValue && PhoenixPIm.HasValue)
@@ -1911,6 +1914,30 @@ namespace FracturingFog.Models
                 {
                     JuliaCRe = -1.25, JuliaCIm = 0.0,      // fallback c (period-4 root) if mode off
                     FaithfulImplosion = true, FaithfulImplosionSatellite = true,
+                    FaithfulImplosionP = 1, FaithfulImplosionQ = 2,
+                    FaithfulImplosionApproach = 0.14,
+                },
+            },
+            // #920 deeper nesting — faithful implosion at a SATELLITE-OF-A-SATELLITE via a tree
+            // address. Parent path "1/2 1/2" = the period-4 cascade bulb; p/q = 1/2 implodes
+            // toward its period-8 onset c ≈ −1.3680989.
+            new()
+            {
+                Name          = "Parabolic implosion (faithful) — deep nesting (period-4 bulb)",
+                CenterX       =  0.0,
+                CenterY       =  0.0,
+                Zoom          =  0.6,
+                Iterations    =  4000,
+                Description   = "Faithful implosion at a SATELLITE-OF-A-SATELLITE (deeper nesting). The 'Parent path' 1/2 1/2 addresses the period-4 bulb of the period-doubling cascade; p/q = 1/2 implodes toward its period-8 onset c ≈ −1.3680989. Set the parent path (space-separated p/q, outermost first) + p/q in the Julia panel, then enable 'Parabolic implosion (faithful, pick p/q)'. Any address depth works — the bulb-boundary solver descends the whole chain.",
+                RegionType    = RegionType.BuiltIn,
+                FractalType   = FractalType.Julia,
+                QualityPreset = QualityPreset.Standard,
+                AnimationName = "Parabolic implosion (faithful, pick p/q)",
+                Params        = new RegionFractalParams
+                {
+                    JuliaCRe = -1.3680989394, JuliaCIm = 0.0,  // fallback c (period-8 onset) if mode off
+                    FaithfulImplosion = true,
+                    FaithfulImplosionParentPath = "1/2 1/2",
                     FaithfulImplosionP = 1, FaithfulImplosionQ = 2,
                     FaithfulImplosionApproach = 0.14,
                 },

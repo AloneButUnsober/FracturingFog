@@ -99,6 +99,7 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
         _faithfulSatellite = _p.FaithfulImplosionSatellite;
         _faithfulParentP = _p.FaithfulImplosionParentP;
         _faithfulParentQ = _p.FaithfulImplosionParentQ;
+        _faithfulParentPath = _p.FaithfulImplosionParentPath;
         _multibrotD = _p.MultibrotExponent;
         _phoenixR = _p.PhoenixP.Real;
         _phoenixI = _p.PhoenixP.Imaginary;
@@ -1023,6 +1024,8 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
     public int FaithfulImplosionParentP { get => _faithfulParentP; set { Set(ref _faithfulParentP, (int)Clamp(value, 0, 1000)); _p.FaithfulImplosionParentP = _faithfulParentP; Fire(); } }
     private int _faithfulParentQ;
     public int FaithfulImplosionParentQ { get => _faithfulParentQ; set { Set(ref _faithfulParentQ, (int)Clamp(value, 1, 1000)); _p.FaithfulImplosionParentQ = _faithfulParentQ; Fire(); } }
+    private string _faithfulParentPath = string.Empty;
+    public string FaithfulImplosionParentPath { get => _faithfulParentPath; set { Set(ref _faithfulParentPath, value ?? string.Empty); _p.FaithfulImplosionParentPath = _faithfulParentPath; Fire(); } }
 
     // ── Glynn ──
     private double _glynnR;
