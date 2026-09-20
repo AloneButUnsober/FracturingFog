@@ -377,6 +377,87 @@ public sealed class ProceduralAnimatorTests
     }
 
     [Fact]
+    public void BulbBoundaryPointChain_MatchesPeriodDoublingCascade()
+    {
+        // [(1/2),(1/2)] = the period-4 bulb of the period-doubling cascade.
+        var addr2 = new[] { (1, 2), (1, 2) };
+        // φ→0 = its root = the period-2 bulb's φ=1/2 point = c = −5/4.
+        var attach = ParabolicImplosionMath.BulbBoundaryPointChain(addr2, 1e-5);
+        Assert.True((attach - new System.Numerics.Complex(-1.25, 0)).Magnitude < 1e-3, $"attach={attach}");
+        // φ=1/2 = its sub-root = the onset of period-8, c ≈ −1.3680989394.
+        var onset8 = ParabolicImplosionMath.BulbBoundaryPointChain(addr2, 0.5);
+        Assert.True((onset8 - new System.Numerics.Complex(-1.3680989394, 0)).Magnitude < 1e-6, $"onset8={onset8}");
+        // one level deeper: [(1/2),(1/2),(1/2)] φ=1/2 = onset of period-16, c ≈ −1.3940461566.
+        var onset16 = ParabolicImplosionMath.BulbBoundaryPointChain(new[] { (1, 2), (1, 2), (1, 2) }, 0.5);
+        Assert.True((onset16 - new System.Numerics.Complex(-1.3940461566, 0)).Magnitude < 1e-6, $"onset16={onset16}");
+
+        // a single-level chain agrees with the closed-form period-2 boundary.
+        var one = ParabolicImplosionMath.BulbBoundaryPointChain(new[] { (1, 2) }, 0.3);
+        Assert.True((one - ParabolicImplosionMath.Period2BulbPoint(0.3)).Magnitude < 1e-9, $"one={one}");
+
+        // child attachment consistency (non-real): child at φ=0 == parent boundary at child root angle.
+        var childP0 = ParabolicImplosionMath.BulbBoundaryPointChain(new[] { (1, 3), (1, 2) }, 1e-5);
+        var parentAtRoot = ParabolicImplosionMath.BulbBoundaryPointChain(new[] { (1, 3) }, 0.5);
+        Assert.True((childP0 - parentAtRoot).Magnitude < 1e-3, $"childP0={childP0} parentAtRoot={parentAtRoot}");
+
+        // empty address = the plain cardioid boundary.
+        var empty = ParabolicImplosionMath.BulbBoundaryPointChain(System.Array.Empty<(int, int)>(), 0.2);
+        Assert.True((empty - ParabolicImplosionMath.CardioidPoint(0.2)).Magnitude < 1e-12);
+    }
+
+    [Fact]
+    public void ParseParentPath_And_EffectivePeriod()
+    {
+        var a = ParabolicImplosionMath.ParseParentPath("1/2 1/2");
+        Assert.Equal(new[] { (1, 2), (1, 2) }, a);
+        // commas / semicolons / bare-int (k → k/1) / blank tokens all accepted.
+        Assert.Equal(new[] { (1, 3), (2, 5), (4, 1) }, ParabolicImplosionMath.ParseParentPath("1/3, 2/5 ; 4"));
+        Assert.Empty(ParabolicImplosionMath.ParseParentPath("   "));
+        Assert.Empty(ParabolicImplosionMath.ParseParentPath(null!));
+        // q<1 tokens skipped; garbage skipped.
+        Assert.Equal(new[] { (1, 2) }, ParabolicImplosionMath.ParseParentPath("1/0 x/y 1/2"));
+
+        // effective period = deepest bulb period × implosion q.
+        Assert.Equal(4 * 3, ParabolicImplosionMath.EffectiveParentPeriod(3, new[] { (1, 2), (1, 2) }));
+        Assert.Equal(5, ParabolicImplosionMath.EffectiveParentPeriod(5, System.Array.Empty<(int, int)>()));
+    }
+
+    [Fact]
+    public void FaithfulImplosion_ParentPath_DeeperNesting_RoutesAndPersists()
+    {
+        var fp = new FractalParameters
+        {
+            FaithfulImplosion = true,
+            FaithfulImplosionParentPath = "1/2 1/2",       // period-4 cascade bulb
+            FaithfulImplosionParentP = 9, FaithfulImplosionParentQ = 7,  // ignored while path set
+            FaithfulImplosionSatellite = true,                            // ignored while path set
+            FaithfulImplosionP = 1, FaithfulImplosionQ = 2, FaithfulImplosionApproach = 0.06,
+        };
+        // path wins over the single-level fields / satellite shorthand.
+        Assert.Equal(new[] { (1, 2), (1, 2) }, fp.FaithfulParentChain);
+        var expected = ParabolicImplosionMath.ImplosionC(1, 2, 0.06, new[] { (1, 2), (1, 2) });
+        Assert.Equal(expected.Real, fp.EffectiveJuliaC.Real, 9);
+        Assert.Equal(expected.Imaginary, fp.EffectiveJuliaC.Imaginary, 9);
+        // effective period folds the whole chain: 2·2·2 = 8.
+        Assert.Equal(8, fp.FaithfulEffectivePeriod);
+
+        // clone + region round-trip preserve the path.
+        Assert.Equal("1/2 1/2", fp.Clone().FaithfulImplosionParentPath);
+        var snap = RegionFractalParams.Snapshot(FractalType.Julia, fp);
+        var restored = new FractalParameters();
+        snap!.ApplyTo(restored);
+        Assert.Equal("1/2 1/2", restored.FaithfulImplosionParentPath);
+
+        // blank path falls back to the single-level fields.
+        var single = new FractalParameters { FaithfulImplosion = true, FaithfulImplosionParentP = 1, FaithfulImplosionParentQ = 3 };
+        Assert.Equal(new[] { (1, 3) }, single.FaithfulParentChain);
+
+        // plain Julia region serialises no path.
+        var plain = RegionFractalParams.Snapshot(FractalType.Julia, new FractalParameters());
+        Assert.Null(plain!.FaithfulImplosionParentPath);
+    }
+
+    [Fact]
     public void RecommendedIterations_CuspIsHungriest_AndFallsWithApproach()
     {
         // measured law: cusp (q=1) ~ 10/approach (×3 headroom = 30/approach); q≥2 milder.

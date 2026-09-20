@@ -577,6 +577,25 @@ animation (S1) already ships as the flagship's user-facing deliverable.
 
 ## 10. Change log
 
+- **2026-09-20** — **Faithful renderer #920 follow-up 7 — deeper nesting
+  (satellites-of-satellites) via a recursive tree address.** Generalised the single-level bulb
+  solver to an arbitrary-depth **tree address**: a chain of `p/q` internal-angle steps
+  descending from the main cardioid, so the addressed bulb has period `Π qᵢ` (e.g.
+  `1/2 1/2` = the period-4 cascade bulb). New
+  `ParabolicImplosionMath.BulbBoundaryPointChain(address, φ)`: at each level it locates the
+  current bulb's boundary at the child's root angle (reusing the extracted `ContinueMult`
+  multiplier-continuation), seeds an interior attracting cycle of the child's **exact period**
+  (outward from the parent seed through the root, magnitude-swept + verified), and descends;
+  the deepest level places `φ`. A throwaway prototype validated it against the real-axis
+  **period-doubling cascade** to ~1e-11 — period-8 onset `c ≈ −1.3680989`, period-16
+  `c ≈ −1.3940462` — plus non-real child-attachment consistency (3-deep `1/4 1/2`). Wiring:
+  `FaithfulImplosionParentPath` (string tree address, `ParseParentPath` → `(p,q)[]`, wins over
+  the single-level parent fields / `Satellite` shorthand); `FaithfulParentChain` +
+  `FaithfulEffectivePeriod` unify the routing; `EffectiveJuliaC` and the iteration law fold the
+  whole chain; region persist (`FaithfulImplosionParentPath` nullable) + a Julia-panel "Parent
+  path" text box + a built-in "deep nesting (period-4 bulb)" region. +3 tests (cascade + parse
+  + path routing/persist). Suite green (28 animator, 103 region); WinExe/UI clean. Remaining:
+  the deferred semigroup renderer #918.
 - **2026-09-20** — **Faithful renderer #920 follow-up 6 — general satellites (period-3+
   bulbs) via a numerical multiplier solver.** Extended the faithful implosion to satellite
   roots on **any** parent bulb, not just the period-2 closed form. New

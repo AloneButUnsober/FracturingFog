@@ -66,19 +66,49 @@ namespace FracturingFog.Models
         /// bulb-boundary solver.</summary>
         public int FaithfulImplosionParentQ { get; set; } = 1;
 
+        /// <summary>The PARENT bulb's <b>tree address</b> for deeper nesting
+        /// (<b>satellites-of-satellites</b>): a chain of <c>p/q</c> internal-angle steps,
+        /// outermost first, e.g. <c>"1/2 1/2"</c> = the period-4 cascade bulb, <c>"1/3 1/2"</c> =
+        /// a period-2 satellite on the 1/3-bulb. When non-blank this overrides
+        /// <see cref="FaithfulImplosionParentP"/>/<c>Q</c> and the
+        /// <see cref="FaithfulImplosionSatellite"/> shorthand. Blank (default) = use those
+        /// single-level fields. See
+        /// <see cref="FracturingFog.Abstractions.Animation.ParabolicImplosionMath.ParseParentPath"/>.</summary>
+        public string FaithfulImplosionParentPath { get; set; } = string.Empty;
+
+        /// <summary>The parent-bulb tree address as a chain of <c>(p, q)</c> steps: the parsed
+        /// <see cref="FaithfulImplosionParentPath"/> when set, else the
+        /// <see cref="FaithfulImplosionSatellite"/> shorthand (1/2), else the single-level
+        /// <see cref="FaithfulImplosionParentP"/>/<c>Q</c> (empty for the main cardioid).</summary>
+        public (int p, int q)[] FaithfulParentChain
+        {
+            get
+            {
+                if (!string.IsNullOrWhiteSpace(FaithfulImplosionParentPath))
+                    return FracturingFog.Abstractions.Animation.ParabolicImplosionMath.ParseParentPath(FaithfulImplosionParentPath);
+                if (FaithfulImplosionSatellite) return new[] { (1, 2) };
+                if (FaithfulImplosionParentQ > 1) return new[] { (FaithfulImplosionParentP, FaithfulImplosionParentQ) };
+                return System.Array.Empty<(int, int)>();
+            }
+        }
+
+        /// <summary>The effective near-parabolic period = deepest addressed bulb period ×
+        /// <see cref="FaithfulImplosionQ"/> — what the iteration law scales against.</summary>
+        public int FaithfulEffectivePeriod =>
+            FracturingFog.Abstractions.Animation.ParabolicImplosionMath.EffectiveParentPeriod(
+                FaithfulImplosionQ, FaithfulParentChain);
+
         /// <summary>The Julia parameter the render actually uses: the faithful
         /// implosion's near-parabolic point when <see cref="FaithfulImplosion"/> is
-        /// on, else the plain <see cref="JuliaC"/>. The <see cref="FaithfulImplosionSatellite"/>
-        /// shorthand maps to parent bulb 1/2.</summary>
+        /// on, else the plain <see cref="JuliaC"/>. Routes through
+        /// <see cref="FaithfulParentChain"/> (path / satellite / single-level).</summary>
         public Complex EffectiveJuliaC
         {
             get
             {
                 if (!FaithfulImplosion) return JuliaC;
-                int pp = FaithfulImplosionSatellite ? 1 : FaithfulImplosionParentP;
-                int pq = FaithfulImplosionSatellite ? 2 : FaithfulImplosionParentQ;
                 return FracturingFog.Abstractions.Animation.ParabolicImplosionMath.ImplosionC(
-                    FaithfulImplosionP, FaithfulImplosionQ, FaithfulImplosionApproach, pp, pq);
+                    FaithfulImplosionP, FaithfulImplosionQ, FaithfulImplosionApproach, FaithfulParentChain);
             }
         }
 
@@ -1480,6 +1510,7 @@ namespace FracturingFog.Models
                 FaithfulImplosionSatellite = FaithfulImplosionSatellite,
                 FaithfulImplosionParentP = FaithfulImplosionParentP,
                 FaithfulImplosionParentQ = FaithfulImplosionParentQ,
+                FaithfulImplosionParentPath = FaithfulImplosionParentPath,
                 MultibrotExponent = MultibrotExponent,
                 PhoenixP = PhoenixP,
                 GlynnC = GlynnC,
