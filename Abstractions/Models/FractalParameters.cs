@@ -50,12 +50,17 @@ namespace FracturingFog.Models
         /// Default 0.09 (a mild near-parabolic start).</summary>
         public double FaithfulImplosionApproach { get; set; } = 0.09;
 
+        /// <summary>When true, the p/q root is a <b>satellite</b> on the period-2 bulb
+        /// (the period-doubling family: p/q = 1/2 → c = −5/4, period 4), not on the main
+        /// cardioid. Default false = main cardioid.</summary>
+        public bool FaithfulImplosionSatellite { get; set; } = false;
+
         /// <summary>The Julia parameter the render actually uses: the faithful
         /// implosion's near-parabolic point when <see cref="FaithfulImplosion"/> is
         /// on, else the plain <see cref="JuliaC"/>.</summary>
         public Complex EffectiveJuliaC => FaithfulImplosion
             ? FracturingFog.Abstractions.Animation.ParabolicImplosionMath.ImplosionC(
-                FaithfulImplosionP, FaithfulImplosionQ, FaithfulImplosionApproach)
+                FaithfulImplosionP, FaithfulImplosionQ, FaithfulImplosionApproach, FaithfulImplosionSatellite)
             : JuliaC;
 
         public int MultibrotExponent { get; set; } = 3;
@@ -1453,6 +1458,7 @@ namespace FracturingFog.Models
                 FaithfulImplosionP = FaithfulImplosionP,
                 FaithfulImplosionQ = FaithfulImplosionQ,
                 FaithfulImplosionApproach = FaithfulImplosionApproach,
+                FaithfulImplosionSatellite = FaithfulImplosionSatellite,
                 MultibrotExponent = MultibrotExponent,
                 PhoenixP = PhoenixP,
                 GlynnC = GlynnC,

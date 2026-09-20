@@ -299,6 +299,39 @@ public sealed class ProceduralAnimatorTests
     }
 
     [Fact]
+    public void Satellite_Period2Bulb_RootsAndImplosion()
+    {
+        // period-2 bulb boundary: φ=1/2 → c=−5/4 (period-4 root), φ=0 → c=−3/4 (attachment).
+        var c50 = ParabolicImplosionMath.Period2BulbPoint(0.5);
+        Assert.Equal(-1.25, c50.Real, 9);
+        Assert.Equal(0.0, c50.Imaginary, 9);
+        var attach = ParabolicImplosionMath.Period2BulbPoint(0.0);
+        Assert.Equal(-0.75, attach.Real, 9);
+        Assert.Equal(0.0, attach.Imaginary, 9);
+
+        // satellite implosion converges to the sub-root as approach → 0.
+        var deep = ParabolicImplosionMath.ImplosionC(1, 2, 1e-4, satellite: true);
+        Assert.True((deep - c50).Magnitude < 1e-3, $"deep={deep}");
+
+        // satellite flag routes EffectiveJuliaC through the period-2 bulb.
+        var fp = new FractalParameters
+        {
+            FaithfulImplosion = true, FaithfulImplosionSatellite = true,
+            FaithfulImplosionP = 1, FaithfulImplosionQ = 2, FaithfulImplosionApproach = 0.06,
+        };
+        var expected = ParabolicImplosionMath.ImplosionC(1, 2, 0.06, satellite: true);
+        Assert.Equal(expected.Real, fp.EffectiveJuliaC.Real, 9);
+        Assert.Equal(expected.Imaginary, fp.EffectiveJuliaC.Imaginary, 9);
+
+        // clone + region round-trip preserve the satellite flag.
+        Assert.True(fp.Clone().FaithfulImplosionSatellite);
+        var snap = RegionFractalParams.Snapshot(FractalType.Julia, fp);
+        var restored = new FractalParameters();
+        snap!.ApplyTo(restored);
+        Assert.True(restored.FaithfulImplosionSatellite);
+    }
+
+    [Fact]
     public void RecommendedIterations_CuspIsHungriest_AndFallsWithApproach()
     {
         // measured law: cusp (q=1) ~ 10/approach (×3 headroom = 30/approach); q≥2 milder.
