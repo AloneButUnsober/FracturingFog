@@ -151,7 +151,14 @@ public sealed class ComplexProceduralAnimator : ProceduralAnimator
             double r = (Track.Min == Track.Max)
                 ? Track.Min
                 : Track.Min + (Track.Max - Track.Min) * (0.5 + 0.5 * global::System.Math.Sin(Phase * 0.25));
-            _setter(new Complex(r * global::System.Math.Cos(Phase), r * global::System.Math.Sin(Phase)));
+            // #911 S1 — centre the polar sweep on (CenterX, CenterY) so the param
+            // can circle a non-origin point (a parabolic c₀). Default (0,0) keeps
+            // the origin-centred sweep byte-identical. PhaseOffsetRadians shifts
+            // the start angle.
+            double ang = Phase + Track.PhaseOffsetRadians;
+            _setter(new Complex(
+                Track.CenterX + r * global::System.Math.Cos(ang),
+                Track.CenterY + r * global::System.Math.Sin(ang)));
             return;
         }
 

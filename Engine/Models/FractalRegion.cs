@@ -1713,6 +1713,50 @@ namespace FracturingFog.Models
                 FractalType = FractalType.Mandelbulb,
                 QualityPreset = QualityPreset.Standard
             },
+            // #911 S1 — parabolic-parameter Julia presets. Each sits at a
+            // parabolic c₀ (fixed-point multiplier a root of unity), where the
+            // Julia set is discontinuous under perturbation. Pair with the
+            // matching "Parabolic implosion (…)" animation to circle c₀ and watch
+            // the naïve explosion (Docs/Technical/Parabolic-Implosion-DesignPlan.md).
+            new()
+            {
+                Name        = "Parabolic c = 1/4 (cardioid root)",
+                CenterX     =  0.0,
+                CenterY     =  0.0,
+                Zoom        =  0.65,
+                Iterations  =  500,
+                Description = "Julia set at the parabolic parameter c = 1/4 (the cardioid cusp; fixed-point multiplier +1). The 'cauliflower'. Enable 'Parabolic implosion (c=1/4)' to circle c and watch the set explode.",
+                RegionType  = RegionType.BuiltIn,
+                FractalType = FractalType.Julia,
+                QualityPreset = QualityPreset.Standard,
+                Params      = new RegionFractalParams { JuliaCRe = 0.25, JuliaCIm = 0.0 },
+            },
+            new()
+            {
+                Name        = "Parabolic c = -3/4 (period-2 root)",
+                CenterX     =  0.0,
+                CenterY     =  0.0,
+                Zoom        =  0.6,
+                Iterations  =  500,
+                Description = "Julia set at the parabolic parameter c = -3/4 (root of the period-2 bulb; multiplier -1). Pair with 'Parabolic implosion (c=-3/4)'.",
+                RegionType  = RegionType.BuiltIn,
+                FractalType = FractalType.Julia,
+                QualityPreset = QualityPreset.Standard,
+                Params      = new RegionFractalParams { JuliaCRe = -0.75, JuliaCIm = 0.0 },
+            },
+            new()
+            {
+                Name        = "Parabolic c = -0.125+0.6495i (1/3 bulb root)",
+                CenterX     =  0.0,
+                CenterY     =  0.0,
+                Zoom        =  0.6,
+                Iterations  =  500,
+                Description = "Julia set at the root of the 1/3 limb (multiplier e^{2πi/3}). A 3-petal parabolic flower. Pair with 'Parabolic implosion (1/3 bulb)'.",
+                RegionType  = RegionType.BuiltIn,
+                FractalType = FractalType.Julia,
+                QualityPreset = QualityPreset.Standard,
+                Params      = new RegionFractalParams { JuliaCRe = -0.125, JuliaCIm = 0.6495 },
+            },
         ];
 
         // ── Interesting random-zoom regions for the slideshow ────────────────────
