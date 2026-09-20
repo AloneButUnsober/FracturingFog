@@ -45,6 +45,18 @@
                               IsVisible="{Binding FaithfulImplosion}"
                               IsChecked="{Binding FaithfulImplosionSatellite, Mode=TwoWay}"
                               ToolTip.Tip="Places the p/q root on the period-2 bulb boundary instead of the main cardioid: p/q = 1/2 → c = −5/4 (period 4), the period-doubling cascade." />
+                    <Grid ColumnDefinitions="160,*" RowDefinitions="Auto,Auto"
+                          IsVisible="{Binding FaithfulImplosion}">
+                        <TextBlock Grid.Row="0" Grid.Column="0" Text="Parent bulb p (0=cardioid):" VerticalAlignment="Center" />
+                        <NumericUpDown Grid.Row="0" Grid.Column="1"
+                                       Minimum="0" Maximum="1000" Increment="1" FormatString="F0"
+                                       Value="{Binding FaithfulImplosionParentP, Mode=TwoWay}" Margin="0,2" />
+                        <TextBlock Grid.Row="1" Grid.Column="0" Text="Parent bulb q (period):" VerticalAlignment="Center"
+                                   ToolTip.Tip="The p/q root lives on this parent bulb's boundary. Parent 0/1 = main cardioid; q≥3 uses the general numerical solver (e.g. parent 1/3 = satellites of the period-3 bulb). Overridden by the Satellite checkbox (= parent 1/2)." />
+                        <NumericUpDown Grid.Row="1" Grid.Column="1"
+                                       Minimum="1" Maximum="1000" Increment="1" FormatString="F0"
+                                       Value="{Binding FaithfulImplosionParentQ, Mode=TwoWay}" Margin="0,2" />
+                    </Grid>
                 </StackPanel>
             </Border>
 

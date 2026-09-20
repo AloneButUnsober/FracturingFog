@@ -392,6 +392,8 @@ namespace FracturingFog.Models
         [JsonIgnore(Condition = OmitNull)] public int?    FaithfulImplosionQ { get; set; }
         [JsonIgnore(Condition = OmitNull)] public double? FaithfulImplosionApproach { get; set; }
         [JsonIgnore(Condition = OmitNull)] public bool?   FaithfulImplosionSatellite { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public int?    FaithfulImplosionParentP { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public int?    FaithfulImplosionParentQ { get; set; }
         [JsonIgnore(Condition = OmitNull)] public int? MultibrotExponent { get; set; }
         [JsonIgnore(Condition = OmitNull)] public double? PhoenixPRe { get; set; }
         [JsonIgnore(Condition = OmitNull)] public double? PhoenixPIm { get; set; }
@@ -545,6 +547,8 @@ namespace FracturingFog.Models
                     FaithfulImplosionQ        = p.FaithfulImplosion ? p.FaithfulImplosionQ : null,
                     FaithfulImplosionApproach = p.FaithfulImplosion ? p.FaithfulImplosionApproach : null,
                     FaithfulImplosionSatellite = (p.FaithfulImplosion && p.FaithfulImplosionSatellite) ? true : null,
+                    FaithfulImplosionParentP = (p.FaithfulImplosion && p.FaithfulImplosionParentQ > 1) ? p.FaithfulImplosionParentP : null,
+                    FaithfulImplosionParentQ = (p.FaithfulImplosion && p.FaithfulImplosionParentQ > 1) ? p.FaithfulImplosionParentQ : null,
                 },
                 FractalType.Multibrot => new RegionFractalParams
                 {
@@ -812,6 +816,8 @@ namespace FracturingFog.Models
             if (FaithfulImplosionQ.HasValue)       p.FaithfulImplosionQ = FaithfulImplosionQ.Value;
             if (FaithfulImplosionApproach.HasValue) p.FaithfulImplosionApproach = FaithfulImplosionApproach.Value;
             if (FaithfulImplosionSatellite.HasValue) p.FaithfulImplosionSatellite = FaithfulImplosionSatellite.Value;
+            if (FaithfulImplosionParentP.HasValue) p.FaithfulImplosionParentP = FaithfulImplosionParentP.Value;
+            if (FaithfulImplosionParentQ.HasValue) p.FaithfulImplosionParentQ = FaithfulImplosionParentQ.Value;
             if (MultibrotExponent.HasValue)
                 p.MultibrotExponent = MultibrotExponent.Value;
             if (PhoenixPRe.HasValue && PhoenixPIm.HasValue)

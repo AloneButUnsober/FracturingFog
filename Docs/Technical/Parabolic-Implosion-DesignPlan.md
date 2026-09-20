@@ -577,6 +577,21 @@ animation (S1) already ships as the flagship's user-facing deliverable.
 
 ## 10. Change log
 
+- **2026-09-20** — **Faithful renderer #920 follow-up 6 — general satellites (period-3+
+  bulbs) via a numerical multiplier solver.** Extended the faithful implosion to satellite
+  roots on **any** parent bulb, not just the period-2 closed form. New
+  `ParabolicImplosionMath.BulbBoundaryPoint(rootAngle, n, φ)`: parameterises the period-n
+  bulb's boundary by its cycle multiplier — seeds an interior attracting cycle (root ±
+  outward normal · ~1/n², verified **exact period n** to reject the period-1 fixed-point
+  branch), then Newton-**continues** the multiplier out to `e^{2πiφ}`, tracking the cycle by
+  local Newton (`d/dz = m − 1`) and 1-var Newton in `c`. A throwaway prototype validated it
+  **matches the period-2 closed form to ~1e-14** and gives sensible period-3/4/5 sub-roots.
+  Wiring: `FaithfulImplosionParentP/Q` (parent bulb main-cardioid angle; 0/1 = main cardioid,
+  the `Satellite` bool is shorthand for 1/2); `EffectiveJuliaC` dispatches cardioid /
+  period-2 fast path / general solver; the iteration law uses effective period `parentQ·q`;
+  region persist + Julia-panel "Parent bulb p/q" inputs. +2 tests. Suite green; WinExe/UI
+  clean. Follow-ups: deeper nesting (satellites of satellites, a recursive tree address);
+  the deferred semigroup renderer #918.
 - **2026-09-20** — **Faithful renderer #920 follow-up 5 — satellite (sub-bulb) roots.**
   Extended the faithful implosion to **satellite** parabolic roots on the **period-2 bulb**
   — the period-doubling cascade — via its closed form `c(φ) = −1 + e^{2πiφ}/4` (the period-2
