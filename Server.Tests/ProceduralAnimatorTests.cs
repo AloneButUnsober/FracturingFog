@@ -299,6 +299,26 @@ public sealed class ProceduralAnimatorTests
     }
 
     [Fact]
+    public void RecommendedIterations_CuspIsHungriest_AndFallsWithApproach()
+    {
+        // measured law: cusp (q=1) ~ 10/approach (×3 headroom = 30/approach); q≥2 milder.
+        int cuspDeep = ParabolicImplosionMath.RecommendedIterations(1, 0.002);
+        Assert.InRange(cuspDeep, 12000, 18000);       // ≈ 30 / 0.002 = 15000
+
+        // falls as the approach widens (shallower frame → fewer iterations).
+        int cuspShallow = ParabolicImplosionMath.RecommendedIterations(1, 0.05);
+        Assert.True(cuspShallow < cuspDeep);
+
+        // at the same deep approach a higher-q root needs far fewer than the cusp.
+        int q4Deep = ParabolicImplosionMath.RecommendedIterations(4, 0.002);
+        Assert.True(q4Deep < cuspDeep / 3, $"q4={q4Deep} cusp={cuspDeep}");
+
+        // clamped sane.
+        Assert.True(ParabolicImplosionMath.RecommendedIterations(1, 10.0) >= 1);
+        Assert.True(ParabolicImplosionMath.RecommendedIterations(1, 1e-9) <= 2_000_000);
+    }
+
+    [Fact]
     public void FaithfulImplosionApproach_IsAnimatable()
     {
         var fp = new FractalParameters();
