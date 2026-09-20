@@ -271,7 +271,11 @@ implosion).
 **Toolchain reach:** far beyond current DSLs (needs controlled near-parabolic perturbation +
 Écalle–Voronin machinery — see §5). Documented here as a *theory pointer*, not a schedulable item.
 
-**Sources:** Buff & Chéritat, *Annals of Math* 2012. §7. **Status:** theory pointer only.
+**Sources:** Buff & Chéritat, *Annals of Math* 2012. §7. **Status:** folded into the
+**parabolic-implosion research thread as its *static sibling*** —
+[Parabolic-Implosion-DesignPlan.md](Parabolic-Implosion-DesignPlan.md) §3.5 / spike S5
+(#911). Same Fatou-coordinate / horn-map core as §5; the deliverable is the static
+positive-area set rather than the implosion animation.
 
 ### 3.4 IFS with condensation / V-variable superfractals & fractal tops
 
@@ -494,8 +498,17 @@ renormalization); Lavaurs's theorem describes the limits.
 **Sources:** Douady (parabolic implosion) 1994; Lavaurs 1989 (thesis); Shishikura (parabolic
 renormalization, Hausdorff dimension of ∂M = 2) 1998; Écalle (résurgence). §7.
 
-**Status:** **far-future.** Not scheduled. Captured so the research thread survives across sessions.
-Any move here starts with a **dedicated design doc + spike issue**, never a direct implementation.
+**Status:** **far-future — design doc LANDED (2026-09-19):**
+[Parabolic-Implosion-DesignPlan.md](Parabolic-Implosion-DesignPlan.md) (spike/design
+issue [#911](https://github.com/AloneButUnsober/FracturingFog/issues/911)). Scopes
+this **and §3.3 positive-area Julia (the *static sibling*)** as **one** research
+thread — they share the Écalle–Voronin / parabolic-renormalisation core (§3.5
+statistical/SLE is *disjoint* and excluded). Three-tier render (Tier A naïve
+animation / Tier B near-parabolic accuracy / Tier C faithful horn-map limit),
+spike-gated S0–S6; **S1 = the achievable first increment** (naïve implosion
+animation on the existing Julia calculator, ships without the deep core). Still not
+scheduled to build — the design doc is the north star; any code starts from S0
+(feasibility spike), never direct implementation.
 
 ### 5.4 Kleinian 3D generalization (near-term epic item) — **design doc required**
 
