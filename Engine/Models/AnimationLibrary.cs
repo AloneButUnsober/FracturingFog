@@ -352,6 +352,45 @@ namespace FracturingFog.Models
                     Tags = new List<string> { "experimental", "2D", "parabolic", "julia", tag },
                 };
             }
+
+            // #920 — parabolic implosion (FAITHFUL, Lavaurs limit). Sweeps the
+            // internal angle θ along the main cardioid boundary toward the cusp
+            // c = 1/4 (c(θ) = e^{2πiθ}/2 − e^{4πiθ}/4, multiplier e^{2πiθ}); as
+            // θ → 0 the near-parabolic Julia set blooms satellite cascades — the
+            // faithful implosion (J(f_{c(θ)}) → J(g_α), Lavaurs's theorem), the
+            // rigorous counterpart of the naïve Lissajous circle above. Author on
+            // the 'Parabolic implosion (faithful) c = 1/4' region (high iteration —
+            // the crawl deepens as θ → 0). See
+            // Docs/Technical/Parabolic-Implosion-DesignPlan.md.
+            yield return new AnimationData
+            {
+                Name = "Parabolic implosion (faithful, c=1/4)",
+                Category = "Built-in",
+                Description = "Faithful (Lavaurs-limit) parabolic implosion: sweeps the "
+                            + "Julia c along the cardioid boundary toward the cusp c = 1/4 "
+                            + "(internal angle θ → 0); the near-parabolic Julia set blooms "
+                            + "satellite spirals — the implosion cascade. The rigorous "
+                            + "counterpart of the naïve 'Parabolic implosion (c=1/4)'. Author "
+                            + "on the high-iteration 'Parabolic implosion (faithful) c = 1/4' "
+                            + "region; deeper θ needs a higher iteration budget.",
+                TargetFractalTypes = new List<FracturingFog.FractalType>
+                {
+                    FracturingFog.FractalType.Julia,
+                },
+                Tracks = new List<AnimationTrack>
+                {
+                    new AnimationTrack
+                    {
+                        ParamName = "JuliaC",
+                        Mode = AnimationMode.CardioidApproach, // c(θ) on the cardioid, θ → cusp
+                        Min = 0.04,   // θ nearest the cusp (deepest implosion)
+                        Max = 0.14,   // θ farthest (mild near-parabolic)
+                        FrequencyHz = 0.04,                    // ~25 s per there-and-back
+                        Enabled = true,
+                    },
+                },
+                Tags = new List<string> { "experimental", "2D", "parabolic", "julia", "faithful", "c=1/4" },
+            };
         }
     }
 }

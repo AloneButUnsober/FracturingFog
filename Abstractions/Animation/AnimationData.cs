@@ -28,6 +28,17 @@ public enum AnimationMode
     /// with angle). Angle advances at <c>FrequencyHz * 2π</c> rad/s. Phase
     /// offset moves the start angle.</summary>
     Lissajous,
+
+    /// <summary>For Complex params (Julia c): sweeps the internal angle
+    /// <c>θ ∈ [Min, Max]</c> (triangle) and outputs the point on the main
+    /// cardioid boundary <c>c(θ) = e^{2πiθ}/2 − e^{4πiθ}/4</c> — the
+    /// fixed-point multiplier is <c>e^{2πiθ}</c>. As <c>θ → 0</c> the parameter
+    /// approaches the parabolic cusp <c>c = 1/4</c> along the boundary and the
+    /// near-parabolic Julia set blooms satellite cascades: the <b>faithful</b>
+    /// parabolic implosion (Lavaurs limit, #911 S6/#920), the rigorous
+    /// counterpart of the naïve <see cref="Lissajous"/> circle. Needs a high
+    /// iteration budget (the crawl deepens as <c>θ → 0</c>).</summary>
+    CardioidApproach,
 }
 
 /// <summary>One animated track inside an <see cref="AnimationData"/>. Names a

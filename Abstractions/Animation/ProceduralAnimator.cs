@@ -162,6 +162,20 @@ public sealed class ComplexProceduralAnimator : ProceduralAnimator
             return;
         }
 
+        if (Track.Mode == AnimationMode.CardioidApproach)
+        {
+            // #920 — faithful parabolic implosion. Sweep the internal angle
+            // θ ∈ [Min, Max] (triangle) and place c on the main cardioid
+            // boundary c(θ) = e^{2πiθ}/2 − e^{4πiθ}/4 (multiplier e^{2πiθ}).
+            // θ → 0 approaches the parabolic cusp c = 1/4; the near-parabolic
+            // Julia set blooms satellite cascades — the Lavaurs-limit implosion.
+            double theta = Track.Min + (Track.Max - Track.Min) * TriangleUnit(Phase);
+            double a2 = 2.0 * global::System.Math.PI * theta;
+            var lam = new Complex(global::System.Math.Cos(a2), global::System.Math.Sin(a2));
+            _setter(lam / 2.0 - lam * lam / 4.0);
+            return;
+        }
+
         Apply(ComputeScalar());
     }
 

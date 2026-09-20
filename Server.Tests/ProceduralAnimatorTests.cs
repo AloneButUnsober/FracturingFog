@@ -155,6 +155,62 @@ public sealed class ProceduralAnimatorTests
         Assert.Equal(-0.5, captured.Imaginary, 6);
     }
 
+    // #920 — faithful parabolic implosion: CardioidApproach places Julia c on the
+    // main cardioid boundary c(θ) = e^{2πiθ}/2 − e^{4πiθ}/4.
+    private static Complex Cardioid(double theta)
+    {
+        double a2 = 2.0 * Math.PI * theta;
+        var lam = new Complex(Math.Cos(a2), Math.Sin(a2));
+        return lam / 2.0 - lam * lam / 4.0;
+    }
+
+    [Fact]
+    public void CardioidApproach_FixedTheta_PlacesCOnCardioidBoundary()
+    {
+        Complex captured = Complex.Zero;
+        // Min == Max → θ fixed at 0.09 (TriangleUnit irrelevant).
+        var track = MakeScalarTrack(AnimationMode.CardioidApproach, 0.09, 0.09, hz: 1.0);
+        var anim = new ComplexProceduralAnimator(track, c => captured = c) { IsEnabled = true };
+
+        anim.Tick(0.0);
+        var expected = Cardioid(0.09);
+        Assert.Equal(expected.Real, captured.Real, 6);
+        Assert.Equal(expected.Imaginary, captured.Imaginary, 6);
+    }
+
+    [Fact]
+    public void CardioidApproach_ThetaTowardZero_ApproachesParabolicCusp()
+    {
+        Complex captured = Complex.Zero;
+        // θ → 0 along the boundary approaches the parabolic cusp c = 1/4.
+        var track = MakeScalarTrack(AnimationMode.CardioidApproach, 0.0008, 0.0008, hz: 1.0);
+        var anim = new ComplexProceduralAnimator(track, c => captured = c) { IsEnabled = true };
+
+        anim.Tick(0.0);
+        Assert.Equal(0.25, captured.Real, 4);
+        Assert.Equal(0.0, captured.Imaginary, 4);
+    }
+
+    [Fact]
+    public void CardioidApproach_TriangleSweep_StaysOnCardioid_ForVaryingTheta()
+    {
+        Complex captured = Complex.Zero;
+        var track = MakeScalarTrack(AnimationMode.CardioidApproach, 0.04, 0.14, hz: 1.0);
+        var anim = new ComplexProceduralAnimator(track, c => captured = c) { IsEnabled = true };
+
+        // Sample several phases; every produced c must lie on the cardioid for the
+        // θ the triangle sweep yields (|λ| = 1 for the multiplier that gives c).
+        foreach (var dt in new[] { 0.0, 0.13, 0.29, 0.5, 0.77 })
+        {
+            anim.Tick(dt);
+            // recover θ from the produced c by matching against the swept value:
+            // c is on the cardioid iff its multiplier λ solving c = λ/2 − λ²/4 has |λ| = 1.
+            // λ = 1 − sqrt(1 − 4c); |λ| should be 1.
+            var lam = 1.0 - Complex.Sqrt(1.0 - 4.0 * captured);
+            Assert.Equal(1.0, lam.Magnitude, 6);
+        }
+    }
+
     [Fact]
     public void Disabled_Animator_DoesNotAdvance()
     {
