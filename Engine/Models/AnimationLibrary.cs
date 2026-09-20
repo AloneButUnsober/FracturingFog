@@ -308,6 +308,50 @@ namespace FracturingFog.Models
                 },
                 Tags = new List<string> { "experimental", "2D", "indras", "kleinian" },
             };
+
+            // #911 S1 — parabolic implosion (Tier A, naïve). Circle the Julia
+            // parameter c around a parabolic c₀ (c = c₀ + εe^{iθ}) via the Complex
+            // polar/Lissajous sweep centred on c₀; the Julia set discontinuously
+            // reorganises — the explosion. Pair each with its "Parabolic c = …"
+            // built-in region. NOT the faithful Lavaurs limit (Tier C) — a
+            // sequence of ordinary perturbed Julia sets. See
+            // Docs/Technical/Parabolic-Implosion-DesignPlan.md.
+            foreach (var (name, cx, cy, tag) in new[]
+            {
+                ("Parabolic implosion (c=1/4)",     0.25,   0.0,    "c=1/4"),
+                ("Parabolic implosion (c=-3/4)",   -0.75,   0.0,    "c=-3/4"),
+                ("Parabolic implosion (1/3 bulb)", -0.125,  0.6495, "1/3-bulb"),
+            })
+            {
+                yield return new AnimationData
+                {
+                    Name = name,
+                    Category = "Built-in",
+                    Description = "Naïve parabolic implosion: circles the Julia c around the "
+                                + "parabolic parameter c₀ = (" + cx.ToString(System.Globalization.CultureInfo.InvariantCulture)
+                                + ", " + cy.ToString(System.Globalization.CultureInfo.InvariantCulture) + ") at a small "
+                                + "radius; the Julia set reorganises discontinuously (the explosion). "
+                                + "Author on the matching 'Parabolic c = …' Julia region. Not the "
+                                + "faithful Lavaurs limit — a perturbed-Julia sequence (Tier A).",
+                    TargetFractalTypes = new List<FracturingFog.FractalType>
+                    {
+                        FracturingFog.FractalType.Julia,
+                    },
+                    Tracks = new List<AnimationTrack>
+                    {
+                        new AnimationTrack
+                        {
+                            ParamName = "JuliaC",
+                            Mode = AnimationMode.Lissajous,   // c = c₀ + ε·e^{iθ}
+                            Min = 0.03, Max = 0.03,           // fixed radius ε
+                            CenterX = cx, CenterY = cy,       // circle centred on c₀
+                            FrequencyHz = 0.05,               // ~20 s per full loop
+                            Enabled = true,
+                        },
+                    },
+                    Tags = new List<string> { "experimental", "2D", "parabolic", "julia", tag },
+                };
+            }
         }
     }
 }

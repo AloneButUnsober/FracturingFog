@@ -65,6 +65,14 @@ public sealed class AnimationTrack
     /// <summary>Per-track enable. Phase 6 wires this into the bus + UI; on
     /// disk today purely advisory. Default true.</summary>
     public bool Enabled { get; set; } = true;
+
+    /// <summary>For the Complex Lissajous (polar) sweep only: the centre the
+    /// circle is drawn around, so the param traces <c>centre + r·e^{iθ}</c>.
+    /// Default (0, 0) keeps the origin-centred sweep byte-identical. Used by the
+    /// parabolic-implosion animation (#911 S1) to circle a parabolic parameter
+    /// c₀ ≠ 0.</summary>
+    public double CenterX { get; set; }
+    public double CenterY { get; set; }
 }
 
 /// <summary>Top-level animation asset. Persisted to
