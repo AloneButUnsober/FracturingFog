@@ -213,7 +213,7 @@ public sealed class EscapeTimeCalculator : Interefaces.IFractalCalculator, Inter
         FracturingFog.Interefaces.IFractalKernel k = FractalType switch
         {
             FractalType.Mandelbrot  => new MandelbrotKernel(),
-            FractalType.Julia       => new JuliaKernel(FractalParameters.JuliaC.Real, FractalParameters.JuliaC.Imaginary),
+            FractalType.Julia       => new JuliaKernel(FractalParameters.EffectiveJuliaC.Real, FractalParameters.EffectiveJuliaC.Imaginary),
             FractalType.BurningShip => new BurningShipKernel(),
             FractalType.Tricorn     => new TricornKernel(),
             FractalType.Multibrot   => new MultibrotKernel(FractalParameters.MultibrotExponent),
@@ -311,7 +311,7 @@ public sealed class EscapeTimeCalculator : Interefaces.IFractalCalculator, Inter
                 break;
             case FractalType.Julia:
             {
-                var jk = new JuliaKernel(FractalParameters.JuliaC.Real, FractalParameters.JuliaC.Imaginary);
+                var jk = new JuliaKernel(FractalParameters.EffectiveJuliaC.Real, FractalParameters.EffectiveJuliaC.Imaginary);
                 if (warp) DispatchByColorMap(jk, ct);
                 else      DispatchByColorMapSimd(jk, ct);
                 break;
@@ -377,8 +377,8 @@ public sealed class EscapeTimeCalculator : Interefaces.IFractalCalculator, Inter
                 break;
             case FractalType.Julia:
                 kind = FracturingFog.Rendering.FractalKind.Julia;
-                p0 = (float)FractalParameters.JuliaC.Real;
-                p1 = (float)FractalParameters.JuliaC.Imaginary;
+                p0 = (float)FractalParameters.EffectiveJuliaC.Real;
+                p1 = (float)FractalParameters.EffectiveJuliaC.Imaginary;
                 break;
             case FractalType.BurningShip:
                 kind = FracturingFog.Rendering.FractalKind.BurningShip;

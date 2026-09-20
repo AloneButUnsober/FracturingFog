@@ -577,6 +577,19 @@ animation (S1) already ships as the flagship's user-facing deliverable.
 
 ## 10. Change log
 
+- **2026-09-20** — **Faithful renderer #920 follow-up 3 — user-picked p/q.** The faithful
+  implosion is now fully parameterised: a `FaithfulImplosion` mode on `FractalParameters`
+  (+ `FaithfulImplosionP/Q`, `FaithfulImplosionApproach`) drives the render's Julia `c` from
+  the chosen `p/q` root via a computed `EffectiveJuliaC = ImplosionC(p, q, approach)` =
+  `CardioidPoint(p/q ∓ approach)` (the calc reads `EffectiveJuliaC`). The **approach depth is
+  animatable** (one general built-in animation "Parabolic implosion (faithful, pick p/q)"
+  sweeps it → the implosion at *any* user root), and **iterations auto-scale from the approach
+  depth** in the render host (`∝ 1/approach`). Julia-panel UI: a "Faithful implosion" toggle +
+  `p`/`q` spinboxes; a "pick p/q" built-in region (starts at the cusp `0/1`). Region persist +
+  `Clone` + 4 tests (`EffectiveJuliaC` override, `ImplosionC → root` as `approach → 0`, clone +
+  region round-trip, approach animatable). Suite green; WinExe/UI clean. This subsumes the fixed
+  per-root presets with a general control. Follow-ups: the exact `1/(θ−p/q)` iteration law;
+  satellite (sub-bulb) roots (own bulb boundary, not the main cardioid).
 - **2026-09-20** — **Faithful renderer #920 follow-up 2 — Farey p/q roots (period 1–5).**
   Centralised the cardioid math in `ParabolicImplosionMath` (`CardioidPoint(θ)`,
   `ParabolicRoot(p,q)`) and extended the faithful implosion to **period-4** (`θ → 1/4`,

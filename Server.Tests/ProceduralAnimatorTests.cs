@@ -241,6 +241,85 @@ public sealed class ProceduralAnimatorTests
     }
 
     [Fact]
+    public void EffectiveJuliaC_DefaultUsesJuliaC_FaithfulModeUsesRootApproach()
+    {
+        var fp = new FractalParameters { JuliaC = new Complex(-0.4, 0.6) };
+        // default: mode off → EffectiveJuliaC == JuliaC
+        Assert.Equal(-0.4, fp.EffectiveJuliaC.Real, 9);
+        Assert.Equal(0.6, fp.EffectiveJuliaC.Imaginary, 9);
+
+        // mode on: c is driven from the p/q root by the approach depth.
+        fp.FaithfulImplosion = true;
+        fp.FaithfulImplosionP = 1; fp.FaithfulImplosionQ = 3; fp.FaithfulImplosionApproach = 0.05;
+        var expected = ParabolicImplosionMath.ImplosionC(1, 3, 0.05);
+        Assert.Equal(expected.Real, fp.EffectiveJuliaC.Real, 9);
+        Assert.Equal(expected.Imaginary, fp.EffectiveJuliaC.Imaginary, 9);
+    }
+
+    [Fact]
+    public void ImplosionC_ApproachToZero_ConvergesToTheRoot()
+    {
+        // 1/4 root; as approach → 0 the near-parabolic c → the parabolic root 0.25 + 0.5i.
+        var c = ParabolicImplosionMath.ImplosionC(1, 4, 1e-4);
+        var root = ParabolicImplosionMath.ParabolicRoot(1, 4);
+        Assert.True((c - root).Magnitude < 1e-3, $"c={c} root={root}");
+        // cusp (p/q=0) is approached from above: θ = approach.
+        var cusp = ParabolicImplosionMath.ImplosionC(0, 1, 0.09);
+        Assert.Equal(ParabolicImplosionMath.CardioidPoint(0.09).Real, cusp.Real, 9);
+    }
+
+    [Fact]
+    public void FaithfulImplosionFields_Clone_AndRegionRoundTrip()
+    {
+        var fp = new FractalParameters
+        {
+            FaithfulImplosion = true, FaithfulImplosionP = 2, FaithfulImplosionQ = 5,
+            FaithfulImplosionApproach = 0.07,
+        };
+        var clone = fp.Clone();
+        Assert.True(clone.FaithfulImplosion);
+        Assert.Equal(2, clone.FaithfulImplosionP);
+        Assert.Equal(5, clone.FaithfulImplosionQ);
+        Assert.Equal(0.07, clone.FaithfulImplosionApproach, 9);
+
+        // region round-trip: Snapshot carries the faithful fields when engaged; ApplyTo restores.
+        var snap = RegionFractalParams.Snapshot(FractalType.Julia, fp);
+        Assert.NotNull(snap);
+        var restored = new FractalParameters();
+        snap!.ApplyTo(restored);
+        Assert.True(restored.FaithfulImplosion);
+        Assert.Equal(2, restored.FaithfulImplosionP);
+        Assert.Equal(5, restored.FaithfulImplosionQ);
+        Assert.Equal(0.07, restored.FaithfulImplosionApproach, 9);
+
+        // plain Julia region stays clean (no faithful fields serialised).
+        var plain = RegionFractalParams.Snapshot(FractalType.Julia, new FractalParameters());
+        Assert.NotNull(plain);
+        Assert.Null(plain!.FaithfulImplosion);
+    }
+
+    [Fact]
+    public void FaithfulImplosionApproach_IsAnimatable()
+    {
+        var fp = new FractalParameters();
+        var data = new AnimationData
+        {
+            Name = "impl",
+            TargetFractalTypes = new System.Collections.Generic.List<FractalType> { FractalType.Julia },
+            Tracks = new System.Collections.Generic.List<AnimationTrack>
+            {
+                new AnimationTrack { ParamName = "FaithfulImplosionApproach", Mode = AnimationMode.Triangle,
+                    Min = 0.03, Max = 0.14, FrequencyHz = 1.0 },
+            },
+        };
+        var animators = data.ToAnimators(fp).ToList();
+        Assert.Single(animators);
+        Assert.IsType<DoubleProceduralAnimator>(animators[0]);
+        animators[0].Tick(0.5); // Triangle peak → Max
+        Assert.Equal(0.14, fp.FaithfulImplosionApproach, 6);
+    }
+
+    [Fact]
     public void EscapeIterationScale_IsAnimatable_AndDrivesTheField_AndClones()
     {
         var fp = new FractalParameters();

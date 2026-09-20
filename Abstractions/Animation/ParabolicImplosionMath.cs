@@ -29,4 +29,20 @@ public static class ParabolicImplosionMath
     /// <summary>The parabolic root of the <c>p/q</c> bulb = <c>CardioidPoint(p/q)</c>
     /// (fixed-point multiplier a primitive <c>q</c>-th root of unity <c>e^{2πip/q}</c>).</summary>
     public static Complex ParabolicRoot(int p, int q) => CardioidPoint((double)p / q);
+
+    /// <summary>The near-parabolic Julia parameter for the faithful implosion at the
+    /// <c>p/q</c> root, offset from the root by internal-angle distance
+    /// <paramref name="approach"/> (a positive θ-gap): as <c>approach → 0</c> the set
+    /// converges to the imploded limit <c>J(g_α)</c>. The cusp (<c>p/q = 0</c>) is
+    /// approached from above (θ = approach); every other root from below
+    /// (θ = p/q − approach), so θ stays on the main cardioid between neighbouring
+    /// roots. <paramref name="approach"/> is clamped to <c>[1e-4, 0.3]</c>.</summary>
+    public static Complex ImplosionC(int p, int q, double approach)
+    {
+        double a = global::System.Math.Clamp(approach, 1e-4, 0.3);
+        if (q <= 0) q = 1;
+        double target = (double)p / q;
+        double theta = (target <= 0.0) ? a : target - a;   // cusp from above, others from below
+        return CardioidPoint(theta);
+    }
 }
