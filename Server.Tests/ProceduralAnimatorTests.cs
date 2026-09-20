@@ -332,6 +332,51 @@ public sealed class ProceduralAnimatorTests
     }
 
     [Fact]
+    public void BulbBoundarySolver_MatchesPeriod2ClosedForm_AndHandlesPeriod3()
+    {
+        // the general numerical solver reproduces the period-2 closed form.
+        foreach (double phi in new[] { 0.1, 0.25, 0.5, 0.7 })
+        {
+            var got = ParabolicImplosionMath.BulbBoundaryPoint(0.5, 2, phi);
+            var want = ParabolicImplosionMath.Period2BulbPoint(phi);
+            Assert.True((got - want).Magnitude < 1e-9, $"φ={phi} got={got} want={want}");
+        }
+        // period-3 bulb (root angle 1/3): at φ→0 the boundary point is the bulb root
+        // = CardioidPoint(1/3) (the attachment to the main cardioid).
+        var root3 = ParabolicImplosionMath.BulbBoundaryPoint(1.0 / 3, 3, 1e-4);
+        var attach = ParabolicImplosionMath.CardioidPoint(1.0 / 3);
+        Assert.True((root3 - attach).Magnitude < 1e-2, $"root3={root3} attach={attach}");
+    }
+
+    [Fact]
+    public void FaithfulImplosion_GeneralParent_RoutesThroughSolver_AndPersists()
+    {
+        var fp = new FractalParameters
+        {
+            FaithfulImplosion = true,
+            FaithfulImplosionParentP = 1, FaithfulImplosionParentQ = 3,   // period-3 parent
+            FaithfulImplosionP = 1, FaithfulImplosionQ = 2, FaithfulImplosionApproach = 0.06,
+        };
+        var expected = ParabolicImplosionMath.ImplosionC(1, 2, 0.06, parentP: 1, parentQ: 3);
+        Assert.Equal(expected.Real, fp.EffectiveJuliaC.Real, 9);
+        Assert.Equal(expected.Imaginary, fp.EffectiveJuliaC.Imaginary, 9);
+
+        // clone + region round-trip preserve the parent angle.
+        var clone = fp.Clone();
+        Assert.Equal(1, clone.FaithfulImplosionParentP);
+        Assert.Equal(3, clone.FaithfulImplosionParentQ);
+        var snap = RegionFractalParams.Snapshot(FractalType.Julia, fp);
+        var restored = new FractalParameters();
+        snap!.ApplyTo(restored);
+        Assert.Equal(1, restored.FaithfulImplosionParentP);
+        Assert.Equal(3, restored.FaithfulImplosionParentQ);
+
+        // plain Julia region stays clean (no parent fields serialised).
+        var plain = RegionFractalParams.Snapshot(FractalType.Julia, new FractalParameters());
+        Assert.Null(plain!.FaithfulImplosionParentQ);
+    }
+
+    [Fact]
     public void RecommendedIterations_CuspIsHungriest_AndFallsWithApproach()
     {
         // measured law: cusp (q=1) ~ 10/approach (×3 headroom = 30/approach); q≥2 milder.

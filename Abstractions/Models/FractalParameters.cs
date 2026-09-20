@@ -51,17 +51,36 @@ namespace FracturingFog.Models
         public double FaithfulImplosionApproach { get; set; } = 0.09;
 
         /// <summary>When true, the p/q root is a <b>satellite</b> on the period-2 bulb
-        /// (the period-doubling family: p/q = 1/2 → c = −5/4, period 4), not on the main
-        /// cardioid. Default false = main cardioid.</summary>
+        /// (the period-doubling family: p/q = 1/2 → c = −5/4, period 4). A shorthand for
+        /// parent bulb 1/2; overrides <see cref="FaithfulImplosionParentP"/>/<c>Q</c>.
+        /// Default false.</summary>
         public bool FaithfulImplosionSatellite { get; set; } = false;
+
+        /// <summary>Numerator of the PARENT bulb's main-cardioid angle. The p/q root lives
+        /// on this parent's boundary. Parent 0/1 = the main cardioid (default); a parent
+        /// with period ≥ 2 gives general satellite / sub-bulb roots.</summary>
+        public int FaithfulImplosionParentP { get; set; } = 0;
+
+        /// <summary>Denominator of the parent bulb's main-cardioid angle = the parent bulb
+        /// period. 1 = the main cardioid (default). ≥ 3 uses the general numerical
+        /// bulb-boundary solver.</summary>
+        public int FaithfulImplosionParentQ { get; set; } = 1;
 
         /// <summary>The Julia parameter the render actually uses: the faithful
         /// implosion's near-parabolic point when <see cref="FaithfulImplosion"/> is
-        /// on, else the plain <see cref="JuliaC"/>.</summary>
-        public Complex EffectiveJuliaC => FaithfulImplosion
-            ? FracturingFog.Abstractions.Animation.ParabolicImplosionMath.ImplosionC(
-                FaithfulImplosionP, FaithfulImplosionQ, FaithfulImplosionApproach, FaithfulImplosionSatellite)
-            : JuliaC;
+        /// on, else the plain <see cref="JuliaC"/>. The <see cref="FaithfulImplosionSatellite"/>
+        /// shorthand maps to parent bulb 1/2.</summary>
+        public Complex EffectiveJuliaC
+        {
+            get
+            {
+                if (!FaithfulImplosion) return JuliaC;
+                int pp = FaithfulImplosionSatellite ? 1 : FaithfulImplosionParentP;
+                int pq = FaithfulImplosionSatellite ? 2 : FaithfulImplosionParentQ;
+                return FracturingFog.Abstractions.Animation.ParabolicImplosionMath.ImplosionC(
+                    FaithfulImplosionP, FaithfulImplosionQ, FaithfulImplosionApproach, pp, pq);
+            }
+        }
 
         public int MultibrotExponent { get; set; } = 3;
 
@@ -1459,6 +1478,8 @@ namespace FracturingFog.Models
                 FaithfulImplosionQ = FaithfulImplosionQ,
                 FaithfulImplosionApproach = FaithfulImplosionApproach,
                 FaithfulImplosionSatellite = FaithfulImplosionSatellite,
+                FaithfulImplosionParentP = FaithfulImplosionParentP,
+                FaithfulImplosionParentQ = FaithfulImplosionParentQ,
                 MultibrotExponent = MultibrotExponent,
                 PhoenixP = PhoenixP,
                 GlynnC = GlynnC,
