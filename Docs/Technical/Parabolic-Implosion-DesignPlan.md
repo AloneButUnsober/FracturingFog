@@ -577,6 +577,16 @@ animation (S1) already ships as the flagship's user-facing deliverable.
 
 ## 10. Change log
 
+- **2026-09-20** — **Faithful renderer #920 follow-up 2 — Farey p/q roots (period 1–5).**
+  Centralised the cardioid math in `ParabolicImplosionMath` (`CardioidPoint(θ)`,
+  `ParabolicRoot(p,q)`) and extended the faithful implosion to **period-4** (`θ → 1/4`,
+  root `c = 0.25 + 0.5i`) and **period-5** (`θ → 2/5`) roots — five built-in animations +
+  regions now span period 1–5 (each `p/q` bulb root *is* the cardioid point `c(p/q)`, so
+  the same `CardioidApproach` mode covers them). +1 test (`ParabolicRoot(p,q)` lands on the
+  cardioid with multiplier `e^{2πip/q}`). Suite green; WinExe clean. Follow-ups: arbitrary
+  user-picked `p/q` (a UI selector rather than fixed presets); the exact `1/(θ−p/q)`
+  iteration law; satellite (sub-bulb) roots, which need their own bulb's boundary, not the
+  main cardioid.
 - **2026-09-20** — **Faithful renderer #920 follow-up — other parabolic roots +
   iteration auto-scaling.** Generalised the faithful implosion to the period-2 (`c = −3/4`,
   `θ → 1/2`) and period-3 (`1/3`-bulb root, `θ → 1/3`) parabolic roots — the same

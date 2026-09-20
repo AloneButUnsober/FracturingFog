@@ -1808,6 +1808,44 @@ namespace FracturingFog.Models
                 // c(θ=0.29) on the main cardioid
                 Params        = new RegionFractalParams { JuliaCRe = 0.09630, JuliaCIm = 0.60170 },
             },
+            new()
+            {
+                Name          = "Parabolic implosion (faithful) 1/4 bulb",
+                CenterX       =  0.0,
+                CenterY       =  0.0,
+                Zoom          =  0.6,
+                Iterations    =  3000,
+                Description   = "Faithful parabolic implosion at the 1/4-bulb root (period-4, multiplier i): a near-parabolic Julia set on the cardioid boundary. Enable 'Parabolic implosion (faithful, 1/4 bulb)' to sweep c toward the root (θ → 1/4) and watch the 4-fold cascade bloom (iterations auto-ramp).",
+                RegionType    = RegionType.BuiltIn,
+                FractalType   = FractalType.Julia,
+                QualityPreset = QualityPreset.Standard,
+                AnimationName = "Parabolic implosion (faithful, 1/4 bulb)",
+                // c(θ=0.19) on the main cardioid (the animation's shallow start)
+                Params        = new RegionFractalParams
+                {
+                    JuliaCRe = FracturingFog.Abstractions.Animation.ParabolicImplosionMath.CardioidPoint(0.19).Real,
+                    JuliaCIm = FracturingFog.Abstractions.Animation.ParabolicImplosionMath.CardioidPoint(0.19).Imaginary,
+                },
+            },
+            new()
+            {
+                Name          = "Parabolic implosion (faithful) 2/5 bulb",
+                CenterX       =  0.0,
+                CenterY       =  0.0,
+                Zoom          =  0.6,
+                Iterations    =  3000,
+                Description   = "Faithful parabolic implosion at the 2/5-bulb root (period-5, multiplier e^{4πi/5}): a near-parabolic Julia set on the cardioid boundary. Enable 'Parabolic implosion (faithful, 2/5 bulb)' to sweep c toward the root (θ → 2/5) and watch the 5-fold cascade bloom (iterations auto-ramp).",
+                RegionType    = RegionType.BuiltIn,
+                FractalType   = FractalType.Julia,
+                QualityPreset = QualityPreset.Standard,
+                AnimationName = "Parabolic implosion (faithful, 2/5 bulb)",
+                // c(θ=0.35) on the main cardioid
+                Params        = new RegionFractalParams
+                {
+                    JuliaCRe = FracturingFog.Abstractions.Animation.ParabolicImplosionMath.CardioidPoint(0.35).Real,
+                    JuliaCIm = FracturingFog.Abstractions.Animation.ParabolicImplosionMath.CardioidPoint(0.35).Imaginary,
+                },
+            },
         ];
 
         // ── Interesting random-zoom regions for the slideshow ────────────────────

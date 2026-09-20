@@ -216,6 +216,31 @@ public sealed class ProceduralAnimatorTests
     }
 
     [Fact]
+    public void ParabolicRoot_LandsOnCardioid_WithPrimitiveRootMultiplier()
+    {
+        // period-4 root (p/q = 1/4): c = i/2 − i²/4 = 0.25 + 0.5i, multiplier i.
+        var c14 = ParabolicImplosionMath.ParabolicRoot(1, 4);
+        Assert.Equal(0.25, c14.Real, 6);
+        Assert.Equal(0.5, c14.Imaginary, 6);
+
+        // period-1 cusp, period-2 and period-3 roots.
+        Assert.Equal(0.25, ParabolicImplosionMath.ParabolicRoot(0, 1).Real, 6);
+        Assert.Equal(0.0, ParabolicImplosionMath.ParabolicRoot(0, 1).Imaginary, 6);
+        Assert.Equal(-0.75, ParabolicImplosionMath.ParabolicRoot(1, 2).Real, 6);
+        Assert.Equal(-0.125, ParabolicImplosionMath.ParabolicRoot(1, 3).Real, 4);
+
+        // ParabolicRoot(p,q) == CardioidPoint(p/q), and its multiplier λ = e^{2πip/q}
+        // (|λ| = 1, i.e. on the cardioid). Check for p/q = 2/5.
+        var c25 = ParabolicImplosionMath.ParabolicRoot(2, 5);
+        Assert.Equal(ParabolicImplosionMath.CardioidPoint(0.4).Real, c25.Real, 9);
+        var lam = 1.0 - Complex.Sqrt(1.0 - 4.0 * c25);   // fixed-point multiplier on the cardioid
+        Assert.Equal(1.0, lam.Magnitude, 6);
+        var expected = Complex.Exp(new Complex(0, 2 * Math.PI * 2.0 / 5.0));
+        Assert.Equal(expected.Real, lam.Real, 6);
+        Assert.Equal(expected.Imaginary, lam.Imaginary, 6);
+    }
+
+    [Fact]
     public void EscapeIterationScale_IsAnimatable_AndDrivesTheField_AndClones()
     {
         var fp = new FractalParameters();

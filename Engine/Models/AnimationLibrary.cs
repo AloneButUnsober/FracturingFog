@@ -367,9 +367,11 @@ namespace FracturingFog.Models
             //   thetaFar = shallow start, thetaNear = deepest approach to the p/q root.
             foreach (var (name, thetaFar, thetaNear, tag) in new[]
             {
-                ("Parabolic implosion (faithful, c=1/4)",     0.140, 0.045, "c=1/4"),
-                ("Parabolic implosion (faithful, c=-3/4)",    0.420, 0.460, "c=-3/4"),
-                ("Parabolic implosion (faithful, 1/3 bulb)",  0.290, 0.300, "1/3-bulb"),
+                ("Parabolic implosion (faithful, c=1/4)",       0.140, 0.045, "c=1/4"),   // period-1 cusp
+                ("Parabolic implosion (faithful, c=-3/4)",      0.420, 0.460, "c=-3/4"),  // period-2, θ→1/2
+                ("Parabolic implosion (faithful, 1/3 bulb)",    0.290, 0.300, "1/3-bulb"),// period-3, θ→1/3
+                ("Parabolic implosion (faithful, 1/4 bulb)",    0.190, 0.225, "1/4-bulb"),// period-4, θ→1/4
+                ("Parabolic implosion (faithful, 2/5 bulb)",    0.350, 0.385, "2/5-bulb"),// period-5, θ→2/5
             })
             {
                 yield return new AnimationData
