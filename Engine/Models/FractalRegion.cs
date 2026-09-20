@@ -391,6 +391,7 @@ namespace FracturingFog.Models
         [JsonIgnore(Condition = OmitNull)] public int?    FaithfulImplosionP { get; set; }
         [JsonIgnore(Condition = OmitNull)] public int?    FaithfulImplosionQ { get; set; }
         [JsonIgnore(Condition = OmitNull)] public double? FaithfulImplosionApproach { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public bool?   FaithfulImplosionSatellite { get; set; }
         [JsonIgnore(Condition = OmitNull)] public int? MultibrotExponent { get; set; }
         [JsonIgnore(Condition = OmitNull)] public double? PhoenixPRe { get; set; }
         [JsonIgnore(Condition = OmitNull)] public double? PhoenixPIm { get; set; }
@@ -543,6 +544,7 @@ namespace FracturingFog.Models
                     FaithfulImplosionP        = p.FaithfulImplosion ? p.FaithfulImplosionP : null,
                     FaithfulImplosionQ        = p.FaithfulImplosion ? p.FaithfulImplosionQ : null,
                     FaithfulImplosionApproach = p.FaithfulImplosion ? p.FaithfulImplosionApproach : null,
+                    FaithfulImplosionSatellite = (p.FaithfulImplosion && p.FaithfulImplosionSatellite) ? true : null,
                 },
                 FractalType.Multibrot => new RegionFractalParams
                 {
@@ -809,6 +811,7 @@ namespace FracturingFog.Models
             if (FaithfulImplosionP.HasValue)       p.FaithfulImplosionP = FaithfulImplosionP.Value;
             if (FaithfulImplosionQ.HasValue)       p.FaithfulImplosionQ = FaithfulImplosionQ.Value;
             if (FaithfulImplosionApproach.HasValue) p.FaithfulImplosionApproach = FaithfulImplosionApproach.Value;
+            if (FaithfulImplosionSatellite.HasValue) p.FaithfulImplosionSatellite = FaithfulImplosionSatellite.Value;
             if (MultibrotExponent.HasValue)
                 p.MultibrotExponent = MultibrotExponent.Value;
             if (PhoenixPRe.HasValue && PhoenixPIm.HasValue)
@@ -1881,6 +1884,28 @@ namespace FracturingFog.Models
                     JuliaCRe = 0.25, JuliaCIm = 0.0,       // fallback c (cusp) if mode is turned off
                     FaithfulImplosion = true,
                     FaithfulImplosionP = 0, FaithfulImplosionQ = 1,
+                    FaithfulImplosionApproach = 0.14,
+                },
+            },
+            // #920 satellite — faithful implosion at a SATELLITE (period-2 bulb) sub-root:
+            // the period-doubling cascade. Starts at p/q = 1/2 → the period-4 root c = −5/4.
+            new()
+            {
+                Name          = "Parabolic implosion (faithful) — satellite (period-doubling)",
+                CenterX       =  0.0,
+                CenterY       =  0.0,
+                Zoom          =  0.6,
+                Iterations    =  3000,
+                Description   = "Faithful implosion at a SATELLITE (period-2 bulb) sub-root — the period-doubling family. Starts at p/q = 1/2 → the period-4 root c = −5/4. Turn on 'Satellite (period-2 bulb)' + set p/q in the Julia panel, then enable 'Parabolic implosion (faithful, pick p/q)' to implode toward the sub-root. Higher p/q → deeper doublings (period 6, 8, …).",
+                RegionType    = RegionType.BuiltIn,
+                FractalType   = FractalType.Julia,
+                QualityPreset = QualityPreset.Standard,
+                AnimationName = "Parabolic implosion (faithful, pick p/q)",
+                Params        = new RegionFractalParams
+                {
+                    JuliaCRe = -1.25, JuliaCIm = 0.0,      // fallback c (period-4 root) if mode off
+                    FaithfulImplosion = true, FaithfulImplosionSatellite = true,
+                    FaithfulImplosionP = 1, FaithfulImplosionQ = 2,
                     FaithfulImplosionApproach = 0.14,
                 },
             },

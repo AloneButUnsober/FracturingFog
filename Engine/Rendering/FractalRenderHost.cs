@@ -1245,8 +1245,12 @@ namespace FracturingFog.Rendering
             var fp0 = ViewState.FractalParameters;
             if (fp0 is { FaithfulImplosion: true })
             {
+                // satellite (period-2 bulb) sub-roots have period 2q → always the milder
+                // (q≥2) branch of the law; main-cardioid roots use q directly.
+                int effQ = fp0.FaithfulImplosionSatellite
+                    ? 2 * Math.Max(1, fp0.FaithfulImplosionQ) : fp0.FaithfulImplosionQ;
                 int need = FracturingFog.Abstractions.Animation.ParabolicImplosionMath
-                    .RecommendedIterations(fp0.FaithfulImplosionQ, fp0.FaithfulImplosionApproach);
+                    .RecommendedIterations(effQ, fp0.FaithfulImplosionApproach);
                 if (need > _calculator.MaxIterations) _calculator.MaxIterations = need;
             }
 

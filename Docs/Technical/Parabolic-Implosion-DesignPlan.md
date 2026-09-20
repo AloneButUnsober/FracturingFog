@@ -577,6 +577,18 @@ animation (S1) already ships as the flagship's user-facing deliverable.
 
 ## 10. Change log
 
+- **2026-09-20** — **Faithful renderer #920 follow-up 5 — satellite (sub-bulb) roots.**
+  Extended the faithful implosion to **satellite** parabolic roots on the **period-2 bulb**
+  — the period-doubling cascade — via its closed form `c(φ) = −1 + e^{2πiφ}/4` (the period-2
+  cycle multiplier is `e^{2πiφ}`; `φ = 1/2 → c = −5/4`, period 4; `φ = 0 → −3/4`, the
+  attachment). A `FaithfulImplosionSatellite` flag (default false = main cardioid) routes
+  `EffectiveJuliaC` through `ParabolicImplosionMath.Period2BulbPoint`; the sub-roots have
+  period `2q` so the iteration law uses the milder `q≥2` branch. Full wiring: param + Clone
+  + EffectiveJuliaC branch + region persist + a "satellite (period-doubling)" built-in region
+  (starts at `−5/4`) + a Julia-panel checkbox. +1 test. Suite green; WinExe/UI clean.
+  Follow-ups: general satellites on period-3+ bulbs and deeper levels need a numerical
+  multiplier solve (no closed form) — a "component-boundary parameterisation" utility; the
+  deferred semigroup renderer #918.
 - **2026-09-20** — **Faithful renderer #920 follow-up 4 — exact iteration law (measured).**
   Replaced the guessed `~1/approach` iteration ramp with the **measured** near-parabolic
   budget. A throwaway experiment (deleted) rendered `J(f_{c(θ)})` at depth `approach`

@@ -38,12 +38,35 @@ public static class ParabolicImplosionMath
     /// (θ = p/q − approach), so θ stays on the main cardioid between neighbouring
     /// roots. <paramref name="approach"/> is clamped to <c>[1e-4, 0.3]</c>.</summary>
     public static Complex ImplosionC(int p, int q, double approach)
+        => ImplosionC(p, q, approach, satellite: false);
+
+    /// <summary>The period-2 bulb boundary point at internal angle <paramref name="phi"/>:
+    /// <c>c(φ) = −1 + e^{2πiφ}/4</c> (the period-2 cycle multiplier is <c>e^{2πiφ}</c>;
+    /// the bulb is the disc <c>|c + 1| = 1/4</c>). Its sub-roots at <c>φ = p/q</c> are the
+    /// <b>satellite</b> parabolic parameters — the period-doubling cascade: <c>φ = 1/2</c>
+    /// is <c>c = −5/4</c> (period 4), etc. <c>φ = 0</c> is the attachment root
+    /// <c>c = −3/4</c>.</summary>
+    public static Complex Period2BulbPoint(double phi)
+    {
+        double a = 2.0 * global::System.Math.PI * phi;
+        return new Complex(-1.0 + global::System.Math.Cos(a) / 4.0, global::System.Math.Sin(a) / 4.0);
+    }
+
+    /// <summary>The near-parabolic Julia parameter for the faithful implosion at the
+    /// <c>p/q</c> root, offset from the root by internal-angle distance
+    /// <paramref name="approach"/>. When <paramref name="satellite"/> is false the root is
+    /// on the <b>main cardioid</b> (cusp <c>p/q = 0</c> approached from above, others from
+    /// below). When true the root is a <b>satellite</b> on the <b>period-2 bulb</b>
+    /// (<see cref="Period2BulbPoint"/>) — the period-doubling family; the attachment
+    /// <c>p/q = 0</c> is approached from above. <paramref name="approach"/> is clamped to
+    /// <c>[1e-4, 0.3]</c>.</summary>
+    public static Complex ImplosionC(int p, int q, double approach, bool satellite)
     {
         double a = global::System.Math.Clamp(approach, 1e-4, 0.3);
         if (q <= 0) q = 1;
         double target = (double)p / q;
-        double theta = (target <= 0.0) ? a : target - a;   // cusp from above, others from below
-        return CardioidPoint(theta);
+        double angle = (target <= 0.0) ? a : target - a;   // attachment from above, others from below
+        return satellite ? Period2BulbPoint(angle) : CardioidPoint(angle);
     }
 
     /// <summary>Recommended escape-time iteration budget for the faithful implosion at

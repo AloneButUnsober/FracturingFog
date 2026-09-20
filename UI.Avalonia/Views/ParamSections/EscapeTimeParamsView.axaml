@@ -41,6 +41,10 @@
                                        Minimum="1" Maximum="1000" Increment="1" FormatString="F0"
                                        Value="{Binding FaithfulImplosionQ, Mode=TwoWay}" Margin="0,2" />
                     </Grid>
+                    <CheckBox Content="Satellite (period-2 bulb — period-doubling)"
+                              IsVisible="{Binding FaithfulImplosion}"
+                              IsChecked="{Binding FaithfulImplosionSatellite, Mode=TwoWay}"
+                              ToolTip.Tip="Places the p/q root on the period-2 bulb boundary instead of the main cardioid: p/q = 1/2 → c = −5/4 (period 4), the period-doubling cascade." />
                 </StackPanel>
             </Border>
 
