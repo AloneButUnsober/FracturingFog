@@ -7,13 +7,13 @@ the flagship far-future item of [Theoretical-Fractal-RnD.md](Theoretical-Fractal
 §5. **This doc also scopes §3.3 (positive-area Julia sets, Buff–Chéritat) as the
 *static sibling* of the same machinery — one research thread, not two.**
 
-**Status: RESEARCH DESIGN PLAN — spike-gated. S0 (feasibility, verdict GO) + S1
-(Tier A naïve implosion animation) SHIPPED (2026-09-20).** The visible naïve
-implosion now ships (built-in parabolic Julia presets + "Parabolic implosion"
-animations); **the deep tiers (S2 near-parabolic accuracy → S3 horn maps → S4
-Lavaurs limit) remain research, gated on validation against the literature — not
-scheduled.** This is the north-star plan, not a build schedule. Per RnD §5/§6.5, the
-faithful-limit work always proceeds spike-by-spike, never direct implementation.
+**Status: RESEARCH DESIGN PLAN — spike-gated. S0 (feasibility, GO) + S1 (Tier A
+naïve implosion animation, shipped) + S2 (near-parabolic accuracy, GREEN) done
+(2026-09-20).** The visible naïve implosion ships; the numerics are validated
+(double suffices via the normal form). **The remaining deep tiers — S3 Écalle–Voronin
+horn maps (the main risk) → S4 Lavaurs faithful limit → S5 positive-area Julia —
+are research, gated on validation against the literature, not scheduled.** North-star
+plan, not a build schedule; the faithful-limit work proceeds spike-by-spike.
 
 **Why a design doc first.** The faithful render depends on the Écalle–Voronin /
 Lavaurs renormalization machinery — steep analytic math with near-zero prior
@@ -127,7 +127,11 @@ through the parabolic point). Confirm the DD/QD floor suffices; this gates Tier 
 Implement `Φ_att`, `Φ_rep`, the Écalle–Voronin horn map, and the Lavaurs-map
 composition; render `J(g_α)`, the true imploded set, parameterised by the Lavaurs
 phase `α`. **The deep research.** Delivers the §3.3 positive-area set as a
-byproduct (same core, static output).
+byproduct (same core, static output). **Numeric constraint (from S2, §9): integrate
+in the shifted normal-form coordinate `w = z − z*` (`w_{n+1} = w + w²`), never form
+`z − z*` by subtraction — the raw subtraction cancels (~6 digits lost deep in the
+petal), the normal form holds ~14 digits in plain double. Keep DD/QD as an opt-in
+fallback for extreme regimes only.**
 
 ### Where FF helps / where it does not
 - **Helps:** DD/QD precision; scene parameter-animation (#632); the Julia
@@ -167,8 +171,10 @@ the deep tiers only proceed on validation.
   by a small reusable infra add: an optional **centre** on the Complex polar
   (Lissajous) sweep, so `c` can circle a non-origin `c₀` (default (0,0) =
   byte-identical). Visible result, no new math. +2 tests. *(deps: S0)*
-- **S2 — Near-parabolic accuracy spike (Tier B).** Accuracy characterisation near
-  multiplier = 1; validate the DD/QD orbit-integration floor. *(deps: S0)*
+- **S2 — Near-parabolic accuracy spike (Tier B). ✅ DONE — verdict GREEN (§9).**
+  Double suffices for near-parabolic integration *via the shifted normal-form
+  coordinate* `w = z − z*` (`w_{n+1} = w + w²`, ~1e-14 vs QD at 10⁶ iters);
+  DD/QD is an opt-in margin, not required. *(deps: S0)*
 - **S3 — Fatou coordinates + horn map (Tier C core).** Implement `Φ_att` / `Φ_rep`
   + the Écalle–Voronin horn map for the simplest case (`c = 1/4`, one petal).
   Validate against the known horn-map structure. **The main research risk lives
@@ -218,7 +224,9 @@ All already in [Resources-Bibliography.md](../Resources-Bibliography.md#paraboli
 
 ---
 
-## 9. S0 feasibility findings (2026-09-20) — verdict **GO**
+## 9. Spike findings
+
+### S0 — feasibility (2026-09-20) — verdict **GO**
 
 The S0 spike ran two throwaway numerical experiments (deleted after write-up) to
 de-risk the two unknowns that would sink the project: whether Tier A is real, and
@@ -264,10 +272,50 @@ are validated. Proceed to **S1** (visible result, no math risk); schedule **S2 �
 correctness) remains the project's main risk; S0 has shown its foundation is sound,
 not that the whole edifice is easy.
 
+### S2 — near-parabolic accuracy (2026-09-20) — verdict **GREEN: double suffices via the normal form**
+
+The near-parabolic worry was that orbits *crawl* through the parabolic point — many
+iterations spent where `z ≈ z*` — and that rounding would corrupt the distance-to-
+fixed-point. Measured at `c = 1/4` (real axis, `z* = 1/2`, one petal, multiplier 1),
+comparing **double** against a **QuadDouble** reference:
+
+**Finding 1 — the primitive is the parabolic *normal form*, not the raw map.**
+Forming `z − z*` by subtraction cancels (both near ½): at `n = 2·10⁵` the direct
+`z − ½` in double had **rel. error ≈ 3.9e-10** vs QD — ~6 digits lost, worsening
+deeper in the petal. But the **shifted coordinate** `w = z − z*` obeys
+`w_{n+1} = w_n + w_n²` with **no subtraction** — and in plain double it tracks the QD
+reference to **rel. error ≈ 1e-14 across the whole range up to n = 10⁶**, with the
+`1/n` law `w_n·n → −1` reproduced to 5 significant figures. The parabolic multiplier
+is *exactly 1* (neutral), so per-step error is neither amplified nor damped — it
+stays at machine-epsilon rather than growing exponentially.
+
+**Finding 2 — double is adequate for the Tier C integration core.** Because the
+normal form retains ~14 digits at a million iterations, **double precision suffices**
+for near-parabolic orbit integration and hence for the Fatou-coordinate / horn-map
+evaluation, *provided the code works in the shifted `w` coordinate* (this is now a
+Tier C design constraint). FF's DD/QD tiers are a **safety margin** for extreme
+regimes — the finest Lavaurs phases `α`, `c` pressed against `∂M`, and higher-`q`
+petals (where the normal form gains a `w^{q+1}` term but the neutral-multiplier
+argument still holds) — available if a case demands it, but **not required for the
+baseline**.
+
+**Verdict: GREEN.** The numerics are not the risk. Tier C must (a) integrate in the
+shifted normal-form coordinate `w = z − z*`, and (b) keep DD/QD as an opt-in
+fallback. The remaining risk is entirely the **horn-map correctness (S3)**, not
+precision. Gate to S3: open.
+
 ---
 
 ## 10. Change log
 
+- **2026-09-20** — **S2 done — near-parabolic accuracy, verdict GREEN (§9).**
+  Measured double vs QuadDouble at `c = 1/4`: the parabolic **normal form**
+  `w = z − z*`, `w_{n+1} = w + w²` holds ~1e-14 rel. error vs QD across n up to 10⁶
+  (neutral multiplier → no error growth; `1/n` law reproduced), whereas forming
+  `z − z*` by subtraction loses ~6 digits to cancellation. Conclusion: **double
+  suffices** for Tier C's near-parabolic integration *provided it uses the shifted
+  `w` coordinate* (now a Tier C design constraint, §4); DD/QD is an opt-in margin.
+  The numerics are not the risk — horn-map correctness (S3) is.
 - **2026-09-20** — **S1 shipped — Tier A naïve implosion animation.** Added an
   optional **centre** to the Complex polar (Lissajous) sweep (`AnimationTrack.CenterX/Y`
   → `c = centre + r·e^{iθ}`; default (0,0) byte-identical) so the Julia `c` can circle
