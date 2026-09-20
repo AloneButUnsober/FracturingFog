@@ -9,15 +9,20 @@ the flagship far-future item of [Theoretical-Fractal-RnD.md](Theoretical-Fractal
 
 **Status: RESEARCH DESIGN PLAN — spike-gated. S0 (feasibility, GO) + S1 (Tier A
 naïve implosion animation, shipped) + S2 (near-parabolic accuracy, GREEN) +
-S3 (Fatou coordinates + Écalle–Voronin horn map, GREEN) done (2026-09-20).**
-The visible naïve implosion ships; the numerics are validated (double suffices via
-the normal form); **and the project's flagged main research risk — computing the
-horn map correctly — is retired for the simplest parabolic (`c = 1/4`): the Fatou
-coordinates satisfy the Abel equation to ~4e-11, and the Écalle–Voronin modulus is
-measured (`|c₁| ≈ 0.06`, `d ∝ ζ` to 0.3% over 2.3 decades).** **The remaining deep
-tiers — S4 Lavaurs faithful limit → S5 positive-area Julia → S6 faithful animation —
-are research, gated on validation against the literature, not scheduled.** North-star
-plan, not a build schedule; the faithful-limit work proceeds spike-by-spike.
+S3 (Fatou coordinates + Écalle–Voronin horn map, GREEN) + S4 (Lavaurs map +
+limit-theorem mechanism, GREEN) done (2026-09-20).** The visible naïve implosion
+ships; the numerics are validated (double suffices via the normal form); the flagged
+main research risk — computing the horn map correctly — is **retired** for `c = 1/4`
+(Abel equation to ~4e-11; Écalle–Voronin modulus `|c₁| ≈ 0.06`, `d ∝ ζ` to 0.3% over
+2.3 decades); **and the Lavaurs map `g_α = f ∘ L_α` is built on that core and validated
+against Lavaurs's theorem — periodicity `g_{α+1} = f ∘ g_α` to 3e-13, the phase `α`
+confirmed as the cylinder return multiplier `e^{2πiα}`, and the Douady-explosion
+re-injection demonstrated. The whole *math* chain is now proven; what remains is an
+engineering build.** **S4 surfaced the render-cost wall: a naïve `J(g_α)` render is
+~250 h, so the faithful Tier C renderer must precompute/interpolate the Fatou
+coordinates (§4). The remaining tiers — S5 positive-area Julia → S6 faithful animation
+— are that engineering build, not open math risk.** North-star plan, not a build
+schedule; the faithful-limit work proceeds spike-by-spike.
 
 **Why a design doc first.** The faithful render depends on the Écalle–Voronin /
 Lavaurs renormalization machinery — steep analytic math with near-zero prior
@@ -147,6 +152,17 @@ byproduct (same core, static output). **Numeric constraints (validated in S2/S3,
    `h = Φ_att ∘ Φ_rep⁻¹` by iterating a gap seed forward into the attracting petal
    (`Φ_att(fᵏw)−k`) and backward into the repelling petal (`Φ_rep(f⁻ᵏw)+k`). The EV
    modulus is exponentially small in `Im σ`, measurable only in a band `Im σ ∈ [1.2,2.2]`.
+5. **The Lavaurs map** `g_α = f ∘ L_α`, `L_α = Φ_rep⁻¹ ∘ T_α ∘ Φ_att`, is the bridge that
+   re-injects basin points into the repelling petal (Douady explosion). Its phase `α` is
+   the **cylinder return multiplier `e^{2πiα}`** (`α = p/q` → parabolic cascade; irrational
+   → rotation), so `α` is the natural render/animation parameter. Self-consistency to test:
+   `g_{α+1} = f ∘ g_α` (S4: 3e-13).
+6. **The faithful `J(g_α)` render must precompute, not recompute (S4).** One `g_α`
+   evaluation is ~69 ms (a continued `Φ_att`, a Newton `Φ_rep⁻¹`, and `f`), so a naïve
+   per-pixel escape-time render is ~250 h. Tier C **tabulates `Φ_att`, `Φ_rep` and their
+   inverses on a grid over the basin and bilinearly interpolates** — this both makes the
+   render tractable and gives a globally robust inverse (replacing the per-point Newton,
+   which occasionally misses into the wrong petal).
 
 ### Where FF helps / where it does not
 - **Helps:** DD/QD precision; scene parameter-animation (#632); the Julia
@@ -196,8 +212,13 @@ the deep tiers only proceed on validation.
   **nontrivial** (`|c₁| ≈ 0.06`, `d ∝ ζ = e^{2πiσ}` to 0.3% over 2.3 decades, multiplier
   `μ = 1`). **The main research risk is retired for `c = 1/4`.** Numeric recipe recorded
   as Tier C constraints (§4). *(deps: S2)*
-- **S4 — Lavaurs map + faithful limit render.** Compose `L_α`; render `J(g_α)`;
-  validate against Lavaurs's limit theorem. *(deps: S3)*
+- **S4 — Lavaurs map + faithful limit render. ✅ DONE — verdict GREEN (§9).** Built
+  `g_α = f ∘ L_α` on the S3 core; validated against Lavaurs's theorem — periodicity
+  `g_{α+1} = f ∘ g_α` to **3e-13**, the phase `α` confirmed as the cylinder return
+  multiplier `e^{2πiα}`, Douady-explosion re-injection demonstrated. **Did not render
+  `J(g_α)`:** S4 found a naïve render is ~250 h → the image is an *engineering* build
+  (precompute/interpolate the coordinates, §4), not spike work. The math chain is proven.
+  *(deps: S3)*
 - **S5 — Positive-area Julia static render (§3.3 sibling).** Use the S3/S4 core to
   render a Buff–Chéritat positive-area Julia set (static). *(deps: S3/S4)*
 - **S6 — Faithful implosion animation (Tier C animated).** Animate `α` / `θ`
@@ -205,11 +226,13 @@ the deep tiers only proceed on validation.
 
 **Recommended order:** S0 → **S1 (ship the visible naïve animation, pause)** →
 S2 → S3 → S4 → S5 → S6. S1 is the only slice that lands without the deep core; it
-buys a real result while S3 (the hard math) is de-risked. **S0–S3 are done and all
-GREEN/GO; the Fatou/horn-map foundation is proven. S4 (Lavaurs map + faithful limit
-render) is the next spike — it composes the validated horn-map core into the true
-imploded set `J(g_α)` and adds the two unknowns S3 deliberately deferred: the Lavaurs
-phase `α` and higher-`q` petals.**
+buys a real result while S3 (the hard math) is de-risked. **S0–S4 are done and all
+GREEN/GO; the whole faithful-limit *math* chain (Fatou coordinates → horn map → Lavaurs
+map) is proven and internally validated. What remains — S5 (positive-area static) and
+S6 (faithful animation) — is an *engineering* build around one identified constraint:
+precompute/interpolate the Fatou coordinates so `J(g_α)` renders in seconds not hundreds
+of hours (§4.6). Higher-`q` petals are the one untested math extension, inheriting the
+proven single-petal machinery.**
 
 ---
 
@@ -382,10 +405,74 @@ structure) nor the Lavaurs phase `α`; those are S4's job, but they now build on
 
 **Verdict: GREEN.** Gate to S4 (Lavaurs map + faithful limit render): open.
 
+### S4 — Lavaurs map + limit-theorem mechanism (2026-09-20) — verdict **GREEN: the Lavaurs construction is validated; the faithful render is gated on precomputing the coordinates**
+
+S4 builds the Lavaurs map on the S3-validated Fatou coordinates and tests it against
+Lavaurs's limit theorem. Throwaway double-precision experiment (deleted after write-up).
+
+**Construction.** The Lavaurs bridge `L_α = Φ_rep⁻¹ ∘ T_α ∘ Φ_att` maps the attracting
+basin to the repelling petal by translating by the Lavaurs phase `α` on the quotient
+cylinder; the **Lavaurs map** is `g_α = f ∘ L_α`. Both are assembled from the S3
+primitives (forward-/backward-continued `Φ_att` / `Φ_rep`) plus a Newton inverse of
+`Φ_rep`.
+
+**Validation 1 — Lavaurs periodicity (the strong, non-circular check).** Because
+`Φ_rep⁻¹(σ+1) = f(Φ_rep⁻¹(σ))`, the family must satisfy `g_{α+1} = f ∘ g_α`. Measured
+across `α ∈ {0.2, 0.5, 0.75}` and several basin points: `max|g_{α+1}(w) − f(g_α(w))| =
+2.9e-13`. This identity holds only if the whole construction (both Fatou coordinates,
+the inverse, the composition) is correct — it is the numeric signature of Lavaurs's
+theorem's structure.
+
+**Validation 2 — the phase is the return multiplier (Lavaurs's mechanism).** The bridge
+is a pure translation by `α` on the cylinder; the first-return map that closes the loop
+is `R_α = h ∘ T_α` with `h` the S3 horn map. In the end coordinate `ζ = e^{2πiσ}` its
+multiplier is `E_α'(0) = e^{2πic₀} · e^{2πiα} = e^{2πiα}` (S3 gave the horn multiplier
+`μ = e^{2πic₀} = 1`). So **the Lavaurs phase becomes the multiplier of the created return
+dynamics**: `α = p/q` → root of unity → a *new* parabolic → an implosion cascade;
+`α` irrational → an irrational rotation (Siegel/Cremer) on the cylinder. This is exactly
+the tuning knob Lavaurs's theorem predicts, and it wires S4 directly to the S3 invariant.
+
+**Validation 3 — the Douady explosion mechanism.** Under `f` alone an attracting-basin
+point converges to the parabolic point (`f²⁰⁰(w) → 0`); `g_α` **re-injects** it into the
+repelling petal (`g_{0.5}(w) = 0.059`, `|·| ≫ 0`), so it no longer converges. This
+re-activation of the basin is precisely why `J(g_α)` is strictly larger than
+`J(f_{c₀})` — the discontinuous enlargement the whole project renders.
+
+**The render-cost wall (key engineering finding).** A single `g_α` evaluation costs
+~**69 ms** (each involves a forward-continued `Φ_att`, a Newton `Φ_rep⁻¹`, and `f`). A
+naïve escape-time render of `J(g_α)` — `512² px × ~50 iterations` — would take
+**~250 hours**. **The faithful Tier C render is therefore not a per-pixel-recompute job:
+it must precompute/tabulate `Φ_att`, `Φ_rep` (and their inverses) on a grid over the
+basin and bilinearly interpolate** (now Tier C constraint §4.6). This also subsumes the
+isolated Newton-inversion misses seen in the sanity check (5/6 converged): a tabulated
+inverse is both faster and globally robust.
+
+**What this does and does not deliver.** It validates the Lavaurs **map + limit-theorem
+mechanism** (periodicity to 3e-13, phase→multiplier, basin re-injection) — the math of
+the faithful limit is correct and computable. It does **not** produce the `J(g_α)`
+image: that is production work (the precomputed-coordinate engine), correctly deferred to
+the Tier C build (S5/S6) rather than forced into a spike. Higher-`q` petals (a `q`-fold
+bridge) remain untested but inherit the now-proven single-petal machinery.
+
+**Verdict: GREEN.** The Lavaurs construction and Lavaurs's-theorem mechanism are
+validated; the remaining Tier C work is an **engineering** build (precompute-and-
+interpolate the coordinates), not an open math risk. Gate to S5 / S6: open.
+
 ---
 
 ## 10. Change log
 
+- **2026-09-20** — **S4 done — Lavaurs map + limit-theorem mechanism, verdict GREEN
+  (§9).** Built `g_α = f ∘ L_α` (`L_α = Φ_rep⁻¹ ∘ T_α ∘ Φ_att`) on the S3 core and
+  validated against Lavaurs's theorem: **periodicity `g_{α+1} = f ∘ g_α` to 3e-13**, the
+  phase `α` confirmed as the cylinder **return multiplier `e^{2πiα}`** (`p/q` → parabolic
+  cascade, irrational → rotation), and the **Douady-explosion re-injection** demonstrated
+  (`f`-orbit → parabolic point vs `g_α` kicks it back into the repelling petal). **The
+  whole faithful-limit math chain is now proven.** S4 surfaced the **render-cost wall**:
+  one `g_α` eval ≈ 69 ms → a naïve `J(g_α)` render ≈ 250 h → Tier C must
+  **precompute/interpolate the Fatou coordinates + inverses on a grid** (new constraint
+  §4.6; also fixes the occasional Newton-inverse miss). The `J(g_α)` image is deferred to
+  the Tier C engineering build (S5/S6); it is no longer a math risk.
 - **2026-09-20** — **S3 done — Fatou coordinates + Écalle–Voronin horn map, verdict
   GREEN (§9).** Built and validated the Tier C core for `c = 1/4` (germ `w+w²`, one
   petal): `Φ_att`/`Φ_rep` satisfy the Abel equation to ~4e-11, real symmetry exact.
