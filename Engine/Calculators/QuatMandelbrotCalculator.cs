@@ -83,6 +83,12 @@ public sealed class QuatMandelbrotCalculator : IFractalCalculator
         int maxSteps = Math.Max(16, FractalParameters.QMandelMaxSteps);
         double eps = Math.Max(1e-5, FractalParameters.QMandelEpsilon);
 
+        // #909 — dual-orbit surface colouring (CPU-only; no GPU kernel path).
+        bool dualColor = FractalParameters.QMandelDualOrbitColor;
+        double dSeedX = FractalParameters.QMandelDualSeedX;
+        double dSeedY = FractalParameters.QMandelDualSeedY;
+        double dSeedZ = FractalParameters.QMandelDualSeedZ;
+
         // The quaternion Mandelbrot lives inside roughly the same |c| ≤ 2 ball
         // as the complex Mandelbrot — set radius 2 + ½ buffer matches QuatJulia.
         double setRadius = 2.0;
@@ -149,7 +155,7 @@ public sealed class QuatMandelbrotCalculator : IFractalCalculator
         // (GpuKernelUtils.ResolveLight); the !HasPositionalLight gate is lifted.
         // #492 added a per-light area-capped shadow hardness (sp.ShadowK1/2/3),
         // so area lights also render on the GPU now (punctual = byte-identical).
-        if (fx.UseGpuRender && fx.DebugAov == AovView.Beauty && !lowRes)
+        if (fx.UseGpuRender && fx.DebugAov == AovView.Beauty && !lowRes && !dualColor)
         {
             var rp = new GpuRaymarchParams
             {
@@ -248,7 +254,9 @@ public sealed class QuatMandelbrotCalculator : IFractalCalculator
                 double sn2 = QuatMandelDE(sx, sy, sz + hn, sliceZ, sliceW, bailout2, deIter)
                            - QuatMandelDE(sx, sy, sz - hn, sliceZ, sliceW, bailout2, deIter);
                 var snrm = Normalize3(sn0, sn1, sn2);
-                float ssmooth = (float)sStep * (192f / Math.Max(1, maxSteps)) + (float)(tT * 0.5);
+                float ssmooth = dualColor
+                    ? (float)DualOrbitSurfaceScalar(sx, sy, sz, sliceW, dSeedX, dSeedY, dSeedZ, deIter, bailout2)
+                    : (float)sStep * (192f / Math.Max(1, maxSteps)) + (float)(tT * 0.5);
                 uint sbase = (uint)ColorMap.Map(ssmooth, 0f, 256, (float)snrm[0], (float)snrm[1]);
                 var sinputs = new ShadingInputs(sx, sy, sz, snrm[0], snrm[1], snrm[2], dx, dy, dz, tT, 0.0, sStep, eps);
                 ScreenSpacePost.ClearHdrBuffer(hdrScratch);
@@ -312,8 +320,9 @@ public sealed class QuatMandelbrotCalculator : IFractalCalculator
                           - QuatMandelDE(px, py, pz - h, sliceZ, sliceW, bailout2, deIter);
                 var nrm = Normalize3(n0, n1, n2);
 
-                float smooth = (float)hitStep * (192f / Math.Max(1, maxSteps))
-                             + (float)(tTotal * 0.5);
+                float smooth = dualColor
+                    ? (float)DualOrbitSurfaceScalar(px, py, pz, sliceW, dSeedX, dSeedY, dSeedZ, deIter, bailout2)
+                    : (float)hitStep * (192f / Math.Max(1, maxSteps)) + (float)(tTotal * 0.5);
                 uint baseColor = (uint)ColorMap.Map(smooth, 0f, 256, (float)nrm[0], (float)nrm[1]);
 
                 // Phase 2 — shading via shared pipeline.
@@ -373,6 +382,37 @@ public sealed class QuatMandelbrotCalculator : IFractalCalculator
         // origin, normalized over the bailout radius.
         public double OrbitTrap(double x, double y, double z)
             => QuatMandelTrap(x, y, z, _sliceW, _bailout2, _iter);
+    }
+
+    // #909 — dual-orbit surface colour. At a surface point c = (cx,cy,cz,cw)
+    // (where the seed-0 membership orbit is bounded), iterate a SECOND orbit from
+    // the decoupled seed (sX,sY,sZ,0) under q²+c and return its smooth escape
+    // count scaled to [0, 256]. The second orbit is a Julia-style probe at that
+    // parameter, so it textures the quaternion Mandelbrot solid with the
+    // dual-orbit escape geometry. Bounded second orbits return 0 (flat).
+    public static double DualOrbitSurfaceScalar(
+        double cx, double cy, double cz, double cw,
+        double sX, double sY, double sZ, int iter, double bailout2)
+    {
+        double qx = sX, qy = sY, qz = sZ, qw = 0.0;
+        double logR = Math.Log(Math.Sqrt(Math.Max(bailout2, 1.0001)));
+        for (int i = 0; i < iter; i++)
+        {
+            double nqx = qx * qx - qy * qy - qz * qz - qw * qw;
+            double nqy = 2.0 * qx * qy;
+            double nqz = 2.0 * qx * qz;
+            double nqw = 2.0 * qx * qw;
+            qx = nqx + cx; qy = nqy + cy; qz = nqz + cz; qw = nqw + cw;
+            double r2 = qx * qx + qy * qy + qz * qz + qw * qw;
+            if (r2 > bailout2)
+            {
+                double logZn = Math.Log(r2) * 0.5;
+                double nu = Math.Log(logZn / logR) / Math.Log(2.0);
+                double mu = (i + 1) - nu;                      // continuous count
+                return Math.Clamp(mu / iter, 0.0, 1.0) * 255.0;
+            }
+        }
+        return 0.0;   // second orbit bounded → flat (in the c-orbit's Julia set)
     }
 
     private static double QuatMandelTrap(

@@ -637,5 +637,16 @@ appropriate sections; flesh out on the next pass. Cite inline from the sections 
   Norton disk + concentric scattering halos; the angle field is again the showcase). +5 tests, suite 2872
   green. **Dual-orbit MVP (S1–S3) complete.** S4–S6 optional (escape-space deposition / glyphs /
   tile-cache).
+- **2026-09-19** — **3D quaternion dual-orbit render shipped (#909, pulled forward).** Finding from the
+  S3 review: the quaternion *2D parameter-space* field is a radially-symmetric **disc** (correct — the
+  quaternion Mandelbrot is a solid of revolution; pure-imaginary S samples it radially), so the
+  quaternion's payoff needs a 3D render. Delivered as an **opt-in dual-orbit surface-colour mode on the
+  existing Quaternion Mandelbrot raymarcher** (`QMandelDualOrbitColor` + a decoupled second-orbit seed
+  `QMandelDualSeed{X,Y,Z}`): render the detailed 3D quaternion solid, and colour each surface point c by
+  the smooth escape count of a decoupled seed orbit under q²+c — a Julia-style probe at that parameter
+  that textures the solid with the dual-orbit escape geometry. Reuses the whole raymarch / DE / lighting
+  stack (GPU gated to CPU when on); default off = byte-identical. Params + Clone + region persistence +
+  UI (checkbox + 3 seed fields). +5 tests, suite 2877 green. The result is a lit 3D solid whose surface
+  bands shift with the seed — the 3D, detail-rich quaternion result the disc could not give. Closes #909.
   Bibliography additions (§7 + `Resources-Bibliography.md`): Grebogi–Ott–Yorke 1983, Nusse–Yorke 1996,
   Aurell et al. 1997 (FSLE), Haller 2015 (LCS).

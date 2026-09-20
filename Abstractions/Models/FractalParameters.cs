@@ -494,6 +494,21 @@ namespace FracturingFog.Models
         public double QMandelLightPhi { get; set; } = Math.PI * 0.45;
         public int QMandelMaxSteps { get; set; } = 160;
         public double QMandelEpsilon { get; set; } = 0.0012;
+        // #909 — dual-orbit surface colouring (the 3D quaternion dual-orbit
+        // render, deferred from #866). Renders the detailed quaternion Mandelbrot
+        // solid but colours each surface point c by a SECOND orbit's escape
+        // behaviour: a decoupled seed q0 = (seedX, seedY, seedZ, 0) iterated
+        // under q²+c. The seed-0 orbit is bounded on the surface, so the c-orbit
+        // (a Julia-style probe at that parameter) textures the solid with the
+        // dual-orbit escape geometry. Default off = byte-identical.
+        /// <summary>#909 — colour the quaternion Mandelbrot surface by a decoupled
+        /// second orbit's smooth escape count (the 3D dual-orbit render).</summary>
+        public bool QMandelDualOrbitColor { get; set; } = false;
+        /// <summary>Decoupled second-orbit seed (vector part) for the dual-orbit
+        /// surface colouring (#909).</summary>
+        public double QMandelDualSeedX { get; set; } = 0.4;
+        public double QMandelDualSeedY { get; set; } = 0.3;
+        public double QMandelDualSeedZ { get; set; } = 0.2;
 
         // 2D heightfield relief (#102 Phase 1). Opt-in post-pass that treats the
         // escape-potential (smooth iteration count) as a height field and adds
@@ -1512,6 +1527,10 @@ namespace FracturingFog.Models
                 QMandelLightPhi = QMandelLightPhi,
                 QMandelMaxSteps = QMandelMaxSteps,
                 QMandelEpsilon = QMandelEpsilon,
+                QMandelDualOrbitColor = QMandelDualOrbitColor,
+                QMandelDualSeedX = QMandelDualSeedX,
+                QMandelDualSeedY = QMandelDualSeedY,
+                QMandelDualSeedZ = QMandelDualSeedZ,
                 Relief2DEnabled = Relief2DEnabled,
                 Relief2DHeightScale = Relief2DHeightScale,
                 Relief2DLightAzimuthDeg = Relief2DLightAzimuthDeg,

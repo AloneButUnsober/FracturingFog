@@ -162,6 +162,10 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
         _qjCameraPhi = _p.QJuliaCameraPhi;
         _qjCameraDistance = _p.QJuliaCameraDistance;
         _qmSliceW = _p.QMandelSliceW;
+        _qmDualColor = _p.QMandelDualOrbitColor;
+        _qmDualSeedX = _p.QMandelDualSeedX;
+        _qmDualSeedY = _p.QMandelDualSeedY;
+        _qmDualSeedZ = _p.QMandelDualSeedZ;
         _qmIterations = _p.QMandelIterations;
         _qmCameraTheta = _p.QMandelCameraTheta;
         _qmCameraPhi = _p.QMandelCameraPhi;
@@ -1487,6 +1491,15 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
     // ── Quaternion Mandelbrot ──
     private double _qmSliceW;
     public double QMandelSliceW { get => _qmSliceW; set { Set(ref _qmSliceW, Clamp(value, -2, 2)); _p.QMandelSliceW = _qmSliceW; Fire(); } }
+    // #909 — dual-orbit surface colouring.
+    private bool _qmDualColor;
+    public bool QMandelDualOrbitColor { get => _qmDualColor; set { Set(ref _qmDualColor, value); _p.QMandelDualOrbitColor = value; Fire(); } }
+    private double _qmDualSeedX;
+    public double QMandelDualSeedX { get => _qmDualSeedX; set { Set(ref _qmDualSeedX, Clamp(value, -2, 2)); _p.QMandelDualSeedX = _qmDualSeedX; Fire(); } }
+    private double _qmDualSeedY;
+    public double QMandelDualSeedY { get => _qmDualSeedY; set { Set(ref _qmDualSeedY, Clamp(value, -2, 2)); _p.QMandelDualSeedY = _qmDualSeedY; Fire(); } }
+    private double _qmDualSeedZ;
+    public double QMandelDualSeedZ { get => _qmDualSeedZ; set { Set(ref _qmDualSeedZ, Clamp(value, -2, 2)); _p.QMandelDualSeedZ = _qmDualSeedZ; Fire(); } }
     private int _qmIterations;
     public int QMandelIterations { get => _qmIterations; set { Set(ref _qmIterations, (int)Clamp(value, 2, 32)); _p.QMandelIterations = _qmIterations; Fire(); } }
     private double _qmCameraTheta;
