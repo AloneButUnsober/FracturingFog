@@ -167,6 +167,11 @@ public static class FractalAnimatableParamsMap
         new("EscapeIterationScale", AnimatableParamKind.ScalarDouble, Min: 1.0, Max: 6.0,
             Cost: AnimatableParamCost.Expensive,
             Notes: "Multiplies the iteration cap (≥1). Ramp it up as c approaches a parabolic root."),
+        // #920 user-picked p/q — the faithful implosion's approach depth (θ-gap to the
+        // p/q root). Sweep → 0 to implode; needs FaithfulImplosion on + p/q chosen.
+        new("FaithfulImplosionApproach", AnimatableParamKind.ScalarDouble, Min: 0.02, Max: 0.14,
+            Cost: AnimatableParamCost.Expensive,
+            Notes: "Faithful implosion: internal-angle distance to the p/q root; sweep → 0 to implode."),
         _domainWarp,
     };
 

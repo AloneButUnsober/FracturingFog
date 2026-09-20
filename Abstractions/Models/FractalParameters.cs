@@ -28,6 +28,36 @@ namespace FracturingFog.Models
         /// per-render iteration cap is set.</summary>
         public double EscapeIterationScale { get; set; } = 1.0;
 
+        // ── #920 faithful parabolic implosion (user-picked p/q) ───────────────
+        /// <summary>When true, the Julia parameter is driven from the parabolic
+        /// root <c>p/q</c> instead of <see cref="JuliaC"/>: the render uses
+        /// <see cref="EffectiveJuliaC"/> = the near-parabolic point on the cardioid
+        /// boundary, offset from the <c>p/q</c> root by
+        /// <see cref="FaithfulImplosionApproach"/>. Animate the approach → 0 for the
+        /// faithful implosion at any user-chosen root. Default false = use JuliaC.</summary>
+        public bool FaithfulImplosion { get; set; } = false;
+
+        /// <summary>Numerator of the target parabolic root p/q (the p/q bulb).
+        /// 0 = the main-cardioid cusp c = 1/4 (period 1).</summary>
+        public int FaithfulImplosionP { get; set; } = 0;
+
+        /// <summary>Denominator of the target parabolic root p/q = the bulb period.
+        /// Clamped ≥ 1.</summary>
+        public int FaithfulImplosionQ { get; set; } = 1;
+
+        /// <summary>Internal-angle distance from the p/q root along the cardioid
+        /// (a positive θ-gap). Animatable: sweep → 0 to implode toward the root.
+        /// Default 0.09 (a mild near-parabolic start).</summary>
+        public double FaithfulImplosionApproach { get; set; } = 0.09;
+
+        /// <summary>The Julia parameter the render actually uses: the faithful
+        /// implosion's near-parabolic point when <see cref="FaithfulImplosion"/> is
+        /// on, else the plain <see cref="JuliaC"/>.</summary>
+        public Complex EffectiveJuliaC => FaithfulImplosion
+            ? FracturingFog.Abstractions.Animation.ParabolicImplosionMath.ImplosionC(
+                FaithfulImplosionP, FaithfulImplosionQ, FaithfulImplosionApproach)
+            : JuliaC;
+
         public int MultibrotExponent { get; set; } = 3;
 
         public Complex PhoenixP { get; set; } = new Complex(0.56667, 0.0);
@@ -1419,6 +1449,10 @@ namespace FracturingFog.Models
             {
                 JuliaC = JuliaC,
                 EscapeIterationScale = EscapeIterationScale,
+                FaithfulImplosion = FaithfulImplosion,
+                FaithfulImplosionP = FaithfulImplosionP,
+                FaithfulImplosionQ = FaithfulImplosionQ,
+                FaithfulImplosionApproach = FaithfulImplosionApproach,
                 MultibrotExponent = MultibrotExponent,
                 PhoenixP = PhoenixP,
                 GlynnC = GlynnC,

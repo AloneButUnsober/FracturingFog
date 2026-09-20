@@ -1233,6 +1233,12 @@ namespace FracturingFog.Rendering
             // root (near-parabolic orbits crawl → need more iterations), so shallow
             // frames stay fast and deep frames stay crisp. Default 1.0 = unchanged.
             double iterScale = ViewState.FractalParameters?.EscapeIterationScale ?? 1.0;
+            // #920 user-picked p/q — when the faithful-implosion mode drives c from the
+            // root, auto-scale iterations by the approach depth (∝ 1/approach): the closer
+            // to the root, the deeper the crawl. Composes with the manual scale above.
+            var fp0 = ViewState.FractalParameters;
+            if (fp0 is { FaithfulImplosion: true })
+                iterScale *= Math.Clamp(0.09 / Math.Max(fp0.FaithfulImplosionApproach, 0.004), 1.0, 24.0);
             if (iterScale > 1.0)
                 _calculator.MaxIterations = (int)Math.Min(
                     2_000_000, _calculator.MaxIterations * Math.Min(iterScale, 32.0));

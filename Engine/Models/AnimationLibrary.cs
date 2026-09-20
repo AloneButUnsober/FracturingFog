@@ -413,6 +413,41 @@ namespace FracturingFog.Models
                     Tags = new List<string> { "experimental", "2D", "parabolic", "julia", "faithful", tag },
                 };
             }
+
+            // #920 user-picked p/q — a single GENERAL faithful-implosion animation that
+            // works for ANY parabolic root the user selects. It animates the approach depth
+            // (FaithfulImplosionApproach → 0) while the Julia c is driven from the chosen
+            // p/q root by FaithfulImplosion mode (EffectiveJuliaC). Iterations auto-ramp
+            // from the approach depth in the render host, so no separate iteration track is
+            // needed. Author on the 'Parabolic implosion (faithful) — pick p/q' region and
+            // set p/q in the Julia panel.
+            yield return new AnimationData
+            {
+                Name = "Parabolic implosion (faithful, pick p/q)",
+                Category = "Built-in",
+                Description = "Faithful implosion at a USER-chosen parabolic root: set p/q in the "
+                            + "Julia panel (FaithfulImplosion mode), then this sweeps the approach "
+                            + "depth toward the root (θ → p/q) so the near-parabolic Julia set blooms "
+                            + "its period-q cascade. Iterations auto-ramp as the approach deepens. "
+                            + "Works for any p/q — the general form of the per-root presets.",
+                TargetFractalTypes = new List<FracturingFog.FractalType>
+                {
+                    FracturingFog.FractalType.Julia,
+                },
+                Tracks = new List<AnimationTrack>
+                {
+                    new AnimationTrack
+                    {
+                        ParamName = "FaithfulImplosionApproach",
+                        Mode = AnimationMode.Triangle,   // sweep the θ-gap in and out
+                        Min = 0.03,                      // deepest approach to the root
+                        Max = 0.14,                      // shallow near-parabolic
+                        FrequencyHz = 0.04,              // ~25 s per there-and-back
+                        Enabled = true,
+                    },
+                },
+                Tags = new List<string> { "experimental", "2D", "parabolic", "julia", "faithful", "user-pq" },
+            };
         }
     }
 }

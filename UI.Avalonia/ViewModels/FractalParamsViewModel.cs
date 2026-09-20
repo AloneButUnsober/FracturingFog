@@ -93,6 +93,9 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
     {
         _juliaR = _p.JuliaC.Real;
         _juliaI = _p.JuliaC.Imaginary;
+        _faithfulImplosion = _p.FaithfulImplosion;
+        _faithfulP = _p.FaithfulImplosionP;
+        _faithfulQ = _p.FaithfulImplosionQ;
         _multibrotD = _p.MultibrotExponent;
         _phoenixR = _p.PhoenixP.Real;
         _phoenixI = _p.PhoenixP.Imaginary;
@@ -1003,6 +1006,14 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
     public double JuliaR { get => _juliaR; set { Set(ref _juliaR, Clamp(value, -2, 2)); _p.JuliaC = new Complex(_juliaR, _juliaI); Fire(); } }
     private double _juliaI;
     public double JuliaI { get => _juliaI; set { Set(ref _juliaI, Clamp(value, -2, 2)); _p.JuliaC = new Complex(_juliaR, _juliaI); Fire(); } }
+
+    // ── Julia: faithful parabolic implosion (user-picked p/q), #920 ──
+    private bool _faithfulImplosion;
+    public bool FaithfulImplosion { get => _faithfulImplosion; set { Set(ref _faithfulImplosion, value); _p.FaithfulImplosion = value; Fire(); } }
+    private int _faithfulP;
+    public int FaithfulImplosionP { get => _faithfulP; set { Set(ref _faithfulP, (int)Clamp(value, 0, 1000)); _p.FaithfulImplosionP = _faithfulP; Fire(); } }
+    private int _faithfulQ;
+    public int FaithfulImplosionQ { get => _faithfulQ; set { Set(ref _faithfulQ, (int)Clamp(value, 1, 1000)); _p.FaithfulImplosionQ = _faithfulQ; Fire(); } }
 
     // ── Glynn ──
     private double _glynnR;

@@ -386,6 +386,11 @@ namespace FracturingFog.Models
 
         [JsonIgnore(Condition = OmitNull)] public double? JuliaCRe { get; set; }
         [JsonIgnore(Condition = OmitNull)] public double? JuliaCIm { get; set; }
+        // #920 faithful implosion (user-picked p/q)
+        [JsonIgnore(Condition = OmitNull)] public bool?   FaithfulImplosion { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public int?    FaithfulImplosionP { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public int?    FaithfulImplosionQ { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public double? FaithfulImplosionApproach { get; set; }
         [JsonIgnore(Condition = OmitNull)] public int? MultibrotExponent { get; set; }
         [JsonIgnore(Condition = OmitNull)] public double? PhoenixPRe { get; set; }
         [JsonIgnore(Condition = OmitNull)] public double? PhoenixPIm { get; set; }
@@ -533,6 +538,11 @@ namespace FracturingFog.Models
                 {
                     JuliaCRe = p.JuliaC.Real,
                     JuliaCIm = p.JuliaC.Imaginary,
+                    // #920 faithful implosion — only when engaged, so plain Julia regions stay clean.
+                    FaithfulImplosion         = p.FaithfulImplosion ? true : null,
+                    FaithfulImplosionP        = p.FaithfulImplosion ? p.FaithfulImplosionP : null,
+                    FaithfulImplosionQ        = p.FaithfulImplosion ? p.FaithfulImplosionQ : null,
+                    FaithfulImplosionApproach = p.FaithfulImplosion ? p.FaithfulImplosionApproach : null,
                 },
                 FractalType.Multibrot => new RegionFractalParams
                 {
@@ -794,6 +804,11 @@ namespace FracturingFog.Models
             if (p == null) return;
             if (JuliaCRe.HasValue && JuliaCIm.HasValue)
                 p.JuliaC = new Complex(JuliaCRe.Value, JuliaCIm.Value);
+            // #920 faithful implosion (user-picked p/q)
+            if (FaithfulImplosion.HasValue)        p.FaithfulImplosion = FaithfulImplosion.Value;
+            if (FaithfulImplosionP.HasValue)       p.FaithfulImplosionP = FaithfulImplosionP.Value;
+            if (FaithfulImplosionQ.HasValue)       p.FaithfulImplosionQ = FaithfulImplosionQ.Value;
+            if (FaithfulImplosionApproach.HasValue) p.FaithfulImplosionApproach = FaithfulImplosionApproach.Value;
             if (MultibrotExponent.HasValue)
                 p.MultibrotExponent = MultibrotExponent.Value;
             if (PhoenixPRe.HasValue && PhoenixPIm.HasValue)
@@ -1844,6 +1859,29 @@ namespace FracturingFog.Models
                 {
                     JuliaCRe = FracturingFog.Abstractions.Animation.ParabolicImplosionMath.CardioidPoint(0.35).Real,
                     JuliaCIm = FracturingFog.Abstractions.Animation.ParabolicImplosionMath.CardioidPoint(0.35).Imaginary,
+                },
+            },
+            // #920 user-picked p/q — the GENERAL faithful implosion. FaithfulImplosion mode
+            // drives c from the chosen p/q root (set p/q in the Julia panel); starts at the
+            // cusp 0/1. Bound to the general 'pick p/q' animation (sweeps the approach depth).
+            new()
+            {
+                Name          = "Parabolic implosion (faithful) — pick p/q",
+                CenterX       =  0.0,
+                CenterY       =  0.0,
+                Zoom          =  0.62,
+                Iterations    =  3000,
+                Description   = "Faithful parabolic implosion at a USER-chosen root: set p/q in the Julia panel (FaithfulImplosion mode); starts at the cusp 0/1 (c = 1/4). Enable 'Parabolic implosion (faithful, pick p/q)' to sweep the approach depth toward the root — the near-parabolic Julia set blooms its period-q cascade, iterations auto-ramp. The general form of the per-root presets.",
+                RegionType    = RegionType.BuiltIn,
+                FractalType   = FractalType.Julia,
+                QualityPreset = QualityPreset.Standard,
+                AnimationName = "Parabolic implosion (faithful, pick p/q)",
+                Params        = new RegionFractalParams
+                {
+                    JuliaCRe = 0.25, JuliaCIm = 0.0,       // fallback c (cusp) if mode is turned off
+                    FaithfulImplosion = true,
+                    FaithfulImplosionP = 0, FaithfulImplosionQ = 1,
+                    FaithfulImplosionApproach = 0.14,
                 },
             },
         ];
