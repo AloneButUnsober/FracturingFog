@@ -7,10 +7,12 @@ the flagship far-future item of [Theoretical-Fractal-RnD.md](Theoretical-Fractal
 §5. **This doc also scopes §3.3 (positive-area Julia sets, Buff–Chéritat) as the
 *static sibling* of the same machinery — one research thread, not two.**
 
-**Status: RESEARCH DESIGN PLAN — spike-gated.** No implementation code lands until
-the feasibility spike (S0) returns go, and each deep tier is validated against the
-literature. This is the north-star plan, not a build schedule. Per RnD §5/§6.5, a
-parabolic-implosion move *always* starts here, never with direct code.
+**Status: RESEARCH DESIGN PLAN — spike-gated. S0 feasibility spike DONE (2026-09-20)
+— verdict GO (see §10).** No *implementation* code lands until each deep tier is
+validated against the literature; this is the north-star plan, not a build schedule.
+Per RnD §5/§6.5, a parabolic-implosion move *always* starts here, never with direct
+code. **Recommended next: S1 (Tier A naïve implosion animation) — ships a visible
+result without the deep renormalisation math.**
 
 **Why a design doc first.** The faithful render depends on the Écalle–Voronin /
 Lavaurs renormalization machinery — steep analytic math with near-zero prior
@@ -153,10 +155,10 @@ byproduct (same core, static output).
 **These are research spikes, not implementation slices.** S0 gates everything;
 the deep tiers only proceed on validation.
 
-- **S0 — Feasibility spike.** Read Douady 1994 / Lavaurs 1989 / Shishikura 1998 /
-  Buff–Chéritat 2012 / Milnor (flower background). Confirm the Fatou-coordinate +
-  horn-map numerics are implementable in FF's precision regime; fix the module
-  boundary. **Output: go/no-go + refined design.** *(gates all others)*
+- **S0 — Feasibility spike. ✅ DONE — verdict GO (see §10).** Read Douady 1994 /
+  Lavaurs 1989 / Shishikura 1998 / Buff–Chéritat 2012 / Milnor (flower background);
+  numerically de-risked Tier A (naïve explosion) and Tier C's first primitive (the
+  attracting Fatou coordinate). *(gated all others)*
 - **S1 — Tier A naïve implosion animation** *(the achievable first increment;
   ships alone, no deep core).* Scene animation of `c = c₀ + εe^{iθ}` on the
   existing Julia calculator at DD/QD; a **parabolic-parameter preset library**
@@ -212,8 +214,62 @@ All already in [Resources-Bibliography.md](../Resources-Bibliography.md#paraboli
 
 ---
 
-## 9. Change log
+## 9. S0 feasibility findings (2026-09-20) — verdict **GO**
 
+The S0 spike ran two throwaway numerical experiments (deleted after write-up) to
+de-risk the two unknowns that would sink the project: whether Tier A is real, and
+whether the Tier C horn-map core's first numeric is tractable.
+
+**Experiment 1 — Tier A naïve implosion (existing math only).** Rendered plain
+`z² + c` Julia sets at the parabolic `c₀ = 1/4` and at `c = c₀ + εe^{iθ}` for
+`ε ∈ {0.005, 0.02}` and several `θ`. Result: the parabolic "cauliflower" at `c₀`
+**discontinuously reorganises** as `c` circles it — pinch points open, spiral horns
+appear, the filament structure changes qualitatively between nearby frames. This is
+the explosion, and it renders with the **existing Julia calculator** at ordinary
+precision. **Tier A is trivially feasible** — S1 is animation plumbing + a
+parabolic-parameter preset library, no new math. (Faithfulness caveat unchanged: it
+is a sequence of ordinary perturbed Julia sets, not the Lavaurs limit `J(g_α)`.)
+
+**Experiment 2 — Tier C first primitive: the attracting Fatou coordinate.** At
+`c = 1/4` the parabolic fixed point is `z* = 1/2` (multiplier `f'(z*) = 2z* = 1`).
+Orbits in the attracting petal approach `z*` by the parabolic `1/n` law; the
+attracting Fatou coordinate is asymptotically `u(z) = −1/(z − z*)` and must satisfy
+the conjugacy `u(f(z)) − u(z) → 1`. Numerically (double precision, 50-step warm-up,
+4000 iterations) the increment **converged to 1 within < 0.02**. So the
+Fatou-coordinate primitive — the entry point of the Écalle–Voronin machinery — is
+**computable and well-conditioned** for the simplest parabolic. That is the single
+most encouraging signal for Tier C: the hard part starts from a clean footing.
+
+**Precision note.** Double precision sufficed for `c = 1/4` (one petal, multiplier
+exactly 1). Deeper cases — higher-`q` bulb roots, and the fine Lavaurs phase `α` —
+are expected to need DD/QD; that is exactly what **S2** (near-parabolic accuracy)
+exists to characterise, and FF already has the DD/QD tiers.
+
+**Module-boundary decision.** Two clean layers:
+- **Tier A / S1** reuses the **existing Julia render path** + the scene/animation
+  engine + a new **parabolic-parameter preset library**. *No new module* — it is a
+  preset set plus an animation. Keep it clearly labelled *naïve* implosion.
+- **Tier C (S3–S6)** is a **bespoke standalone module** (a Fatou-coordinate solver +
+  Écalle–Voronin horn-map evaluator + Lavaurs-map composition), **not** an extension
+  of the heuristic Julia calculator — keep the escape-time path clean. Its *output*
+  is a Julia-type set, so it re-enters the normal colour/theme pipeline at the end.
+
+**Verdict: GO.** Both the achievable-first-increment and the deep-core entry point
+are validated. Proceed to **S1** (visible result, no math risk); schedule **S2 → S3**
+(the real research) only when S1 has shipped and the appetite is there. S3 (horn-map
+correctness) remains the project's main risk; S0 has shown its foundation is sound,
+not that the whole edifice is easy.
+
+---
+
+## 10. Change log
+
+- **2026-09-20** — **S0 feasibility spike done — verdict GO (§9).** De-risked Tier A
+  (the naïve explosion renders with plain `z² + c`; visible discontinuous
+  reorganisation as `c` circles `c₀ = 1/4`) and the Tier C entry primitive (the
+  attracting Fatou coordinate at `c = 1/4`: `u(f(z)) − u(z) → 1` within < 0.02 in
+  double precision). Module boundary fixed (S1 = existing Julia path + preset library,
+  no new module; Tier C = bespoke standalone Fatou/horn-map module). Next: S1.
 - **2026-09-19** — Doc created. Scopes RnD §5 parabolic implosion **and** §3.3
   positive-area Julia (the static sibling) as **one** research thread, on the
   finding that they share the Écalle–Voronin / parabolic-renormalisation core (and
