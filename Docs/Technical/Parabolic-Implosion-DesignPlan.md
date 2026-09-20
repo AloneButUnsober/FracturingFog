@@ -577,6 +577,19 @@ animation (S1) already ships as the flagship's user-facing deliverable.
 
 ## 10. Change log
 
+- **2026-09-20** — **Faithful renderer #920 follow-up — other parabolic roots +
+  iteration auto-scaling.** Generalised the faithful implosion to the period-2 (`c = −3/4`,
+  `θ → 1/2`) and period-3 (`1/3`-bulb root, `θ → 1/3`) parabolic roots — the same
+  `CardioidApproach` mode, since the `p/q` bulb root *is* the cardioid point `c(p/q)`; each
+  ships a built-in animation + a high-iteration region. **Iteration auto-scaling:** a new
+  animatable `FractalParameters.EscapeIterationScale` (default 1.0, honoured in
+  `FractalRenderHost` where the per-render iteration cap is set) plus a **synced iteration
+  track** (Triangle, lock-step with the `θ` sweep) on each faithful animation — so shallow
+  frames stay fast (×1) and the deep frames near the root get up to ×6 the iterations the
+  near-parabolic crawl needs. +3 tests (period-2/3 roots land on the right `c`;
+  `EscapeIterationScale` animates + clones). Suite green; WinExe build clean. Follow-ups:
+  arbitrary `p/q` roots via a Farey/continued-fraction solver; the `1/(θ−p/q)` iteration
+  law (the ramp is currently linear-in-phase, monotone-correct but not exact).
 - **2026-09-20** — **Faithful renderer production build (post-spike) — Lavaurs-limit route
   ([#920](https://github.com/AloneButUnsober/FracturingFog/issues/920)).** Chose the
   Lavaurs-limit approach over the semigroup word-tree ([#918](https://github.com/AloneButUnsober/FracturingFog/issues/918),

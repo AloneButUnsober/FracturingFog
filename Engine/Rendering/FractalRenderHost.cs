@@ -1228,6 +1228,15 @@ namespace FracturingFog.Rendering
             else
                 _calculator.MaxIterations = ViewState.Quality.ComputeIterations(ViewState.Zoom);
 
+            // #920 follow-up — animatable escape-iteration scale. The faithful
+            // parabolic-implosion animations ramp this up as c nears a parabolic
+            // root (near-parabolic orbits crawl → need more iterations), so shallow
+            // frames stay fast and deep frames stay crisp. Default 1.0 = unchanged.
+            double iterScale = ViewState.FractalParameters?.EscapeIterationScale ?? 1.0;
+            if (iterScale > 1.0)
+                _calculator.MaxIterations = (int)Math.Min(
+                    2_000_000, _calculator.MaxIterations * Math.Min(iterScale, 32.0));
+
             // EscapeTime + TearDrop also need the full state; the rest pick
             // up CX/CY/Zoom/MaxIter via the explicit copy block in Trigger().
             _escapeCalculator.CenterX = ViewState.CenterX;

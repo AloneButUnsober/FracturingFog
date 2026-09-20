@@ -19,6 +19,15 @@ namespace FracturingFog.Models
     {
         public Complex JuliaC { get; set; } = new Complex(-0.7, 0.27015);
 
+        /// <summary>Multiplies the escape-time iteration cap at render time
+        /// (clamped ≥ 1). Default <c>1.0</c> = unchanged. Animatable: the
+        /// faithful parabolic-implosion animations ramp it up as <c>c</c> nears
+        /// a parabolic root (the near-parabolic orbits crawl and need more
+        /// iterations), so shallow frames stay fast and deep frames stay crisp
+        /// (#920 follow-up). Honoured in <c>FractalRenderHost</c> where the
+        /// per-render iteration cap is set.</summary>
+        public double EscapeIterationScale { get; set; } = 1.0;
+
         public int MultibrotExponent { get; set; } = 3;
 
         public Complex PhoenixP { get; set; } = new Complex(0.56667, 0.0);
@@ -1409,6 +1418,7 @@ namespace FracturingFog.Models
             return new FractalParameters
             {
                 JuliaC = JuliaC,
+                EscapeIterationScale = EscapeIterationScale,
                 MultibrotExponent = MultibrotExponent,
                 PhoenixP = PhoenixP,
                 GlynnC = GlynnC,
