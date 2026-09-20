@@ -7,23 +7,22 @@ the flagship far-future item of [Theoretical-Fractal-RnD.md](Theoretical-Fractal
 §5. **This doc also scopes §3.3 (positive-area Julia sets, Buff–Chéritat) as the
 *static sibling* of the same machinery — one research thread, not two.**
 
-**Status: RESEARCH DESIGN PLAN — spike-gated. S0 (feasibility, GO) + S1 (Tier A
-naïve implosion animation, shipped) + S2 (near-parabolic accuracy, GREEN) +
-S3 (Fatou coordinates + Écalle–Voronin horn map, GREEN) + S4 (Lavaurs map +
-limit-theorem mechanism, GREEN) + S5 (positive-area Julia, GREEN-scoped) done
-(2026-09-20).** The visible naïve implosion
-ships; the numerics are validated (double suffices via the normal form); the flagged
-main research risk — computing the horn map correctly — is **retired** for `c = 1/4`
-(Abel equation to ~4e-11; Écalle–Voronin modulus `|c₁| ≈ 0.06`, `d ∝ ζ` to 0.3% over
-2.3 decades); **and the Lavaurs map `g_α = f ∘ L_α` is built on that core and validated
-against Lavaurs's theorem — periodicity `g_{α+1} = f ∘ g_α` to 3e-13, the phase `α`
-confirmed as the cylinder return multiplier `e^{2πiα}`, and the Douady-explosion
-re-injection demonstrated. The whole *math* chain is now proven; what remains is an
-engineering build.** **S4 surfaced the render-cost wall: a naïve `J(g_α)` render is
-~250 h, so the faithful Tier C renderer must precompute/interpolate the Fatou
-coordinates (§4). The remaining tiers — S5 positive-area Julia → S6 faithful animation
-— are that engineering build, not open math risk.** North-star plan, not a build
-schedule; the faithful-limit work proceeds spike-by-spike.
+**Status: SPIKE SERIES COMPLETE (S0–S6, 2026-09-20). S0 (feasibility, GO) + S1 (Tier A
+naïve implosion animation, SHIPPED) + S2 (near-parabolic accuracy, GREEN) + S3
+(Fatou + Écalle–Voronin horn map, GREEN) + S4 (Lavaurs map + limit theorem, GREEN) + S5
+(positive-area Julia, GREEN-scoped) + S6 (precompute engine GREEN / faithful render
+AMBER).** The whole faithful-limit **math chain is proven** — horn map (`|c₁| ≈ 0.06`,
+`d ∝ ζ` to 0.3%; Abel to ~4e-11), Lavaurs map (`g_{α+1} = f ∘ g_α` to 3e-13, phase =
+return multiplier `e^{2πiα}`, Douady re-injection) — and the **performance blocker is
+resolved**: S6's precompute-coordinate engine evaluates `g_α` in 0.59 µs (~116 000×
+faster), turning the faithful render from ~250 h to ~1 min at 7e-6 interp accuracy.
+**One clearly-named open item remains for the *faithful* feature** (S6 finding): the
+imploded set is the Julia set of the semigroup `⟨f, g_α⟩`, so it needs a **word-tree
+semigroup-Julia rendering algorithm** (a naïve single-orbit combined map gives bounded
+recurrence, not the imploded set) — the "hardest validation tier" (§7). The **visible
+naïve implosion animation ships (S1)** as the flagship's user-facing deliverable; the
+faithful animation is unblocked on perf and gated only on that one algorithm. Higher-`q`
+petals are the one untested math extension.
 
 **Why a design doc first.** The faithful render depends on the Écalle–Voronin /
 Lavaurs renormalization machinery — steep analytic math with near-zero prior
@@ -228,20 +227,25 @@ the deep tiers only proceed on validation.
   set is a research tier (renorm tower + the S4 precompute engine). Box-dim of `∂J` rises
   1.07→1.36 along the period-doubling cascade (the fattening mechanism) but plateaus below
   2 — confirming the tower is required. *(deps: S3/S4)*
-- **S6 — Faithful implosion animation (Tier C animated).** Animate `α` / `θ`
-  through the horn-map machinery — the faithful counterpart of S1. *(deps: S4)*
+- **S6 — Faithful implosion animation (Tier C animated). ✅ DONE — verdict GREEN
+  (engine) / AMBER (render) (§9).** Built + validated the **precompute-coordinate engine**
+  (both Fatou coordinates on a `Z=−1/w` grid, `g_α` in 0.59 µs, ~116 000× faster,
+  interp ≤ 7e-6, Lavaurs periodicity preserved to 7.8e-9) → the ~250 h render becomes
+  ~1 min; the perf blocker is resolved. **Finding:** the faithful set is the Julia set of
+  the **semigroup `⟨f, g_α⟩`**, so it needs a word-tree escape algorithm — a naïve
+  single-orbit combined map gives bounded recurrence (0/888 escape), not the imploded set.
+  That's the one open item for the faithful feature. *(deps: S4)*
 
 **Recommended order:** S0 → **S1 (ship the visible naïve animation, pause)** →
 S2 → S3 → S4 → S5 → S6. S1 is the only slice that lands without the deep core; it
-buys a real result while S3 (the hard math) is de-risked. **S0–S5 are done and all
-GREEN/GO; the whole faithful-limit *math* chain (Fatou coordinates → horn map → Lavaurs
-map) is proven and internally validated, and S5 established that the positive-area sibling
-shares the same Tier-A-now / Tier-C-research split. What remains — the certified faithful
-renders (imploded `J(g_α)` and the Buff–Chéritat positive-area set) plus S6 (faithful
-animation) — is a single *engineering* build around one identified constraint:
-precompute/interpolate the Fatou coordinates so the faithful set renders in seconds not
-hundreds of hours (§4.6). Higher-`q` petals are the one untested math extension,
-inheriting the proven single-petal machinery.**
+buys a real result while S3 (the hard math) is de-risked. **S0–S6 are DONE. The
+faithful-limit *math* chain (Fatou coordinates → horn map → Lavaurs map) is proven and
+internally validated; the positive-area sibling shares the Tier-A-now / Tier-C-research
+split (S5); and the *performance* blocker is resolved (S6 engine). The faithful renders
+(imploded `J(g_α)` and the certified Buff–Chéritat set) are unblocked on perf and gated on
+one named production task: a correct semigroup-Julia rendering algorithm (word-tree escape
+with pruning) — the hardest validation tier (§7). The visible naïve implosion (S1) already
+ships. Higher-`q` petals remain the one untested math extension.**
 
 ---
 
@@ -521,10 +525,67 @@ Tier-C-research split as the implosion. Gate to S6 (faithful animation): open �
 shares the one remaining engineering task (the precompute-coordinate render engine) with
 the whole faithful tier.
 
+### S6 — Faithful implosion animation: precompute engine built + a render-algorithm finding (2026-09-20) — verdict **GREEN on the engine (perf wall resolved); AMBER on the render (the faithful set needs a semigroup-Julia algorithm)**
+
+S6 built the engineering deliverable S4 identified — the precompute-coordinate engine —
+and used it to attempt the faithful `J(g_α)` render. Throwaway experiment, deleted.
+
+**The engine (the deliverable): built and validated.** Both Fatou coordinates are
+tabulated on a regular `Z = −1/w` grid (900×720) — the natural cylinder coordinate, where
+`Φ ≈ Z` is smooth so bilinear interpolation is accurate — with `Φ_rep` stored as its
+analytic **continuation on the attracting-side range** (where the Lavaurs inverse
+`Φ_rep⁻¹(τ+α)` actually lands, S4). Results:
+- **Interp accuracy:** `|Φ_att,fast − Φ_att,direct| ≤ 7e-6` over the petal.
+- **Speed:** one engine `g_α` eval is **0.59 µs** (all 500 000 test evals converged) vs
+  **69 ms** direct — a **~116 000× speedup**. A 700²×200-step render drops from S4's
+  **~250 h to ~1 min**.
+- **Correctness preserved:** the engine reproduces the S4 Lavaurs periodicity
+  `g_{α+1} = f(g_α)` to **7.8e-9** (interp-limited, not a construction error).
+
+**So the performance wall S4 identified is resolved** — the coordinates evaluate in
+constant time at render-grade accuracy.
+
+**The render finding (a scope correction).** Feeding the engine into a naïve *single-orbit*
+combined map — "apply `g_α` where the point is in the basin, else `f`" — does **not**
+produce the imploded Julia set: over an 888-point petal grid, **0 points escaped in 5000
+steps**; typical orbits stay bounded, cycling between basin and repelling petal. The reason
+is structural, not a bug (the engine `g_α` is correct to 7.8e-9): the faithful imploded set
+is the Julia set of the **semigroup** `⟨f, g_α⟩` (Lavaurs's theorem) — a point escapes iff
+*some word* in `{f, g_α}` escapes, which requires exploring the **word tree**, not
+following one deterministic orbit. A single orbit massively undercounts escape (hence the
+all-bounded result).
+
+**Consequence for the roadmap.** The earlier framing — "the only remaining task is the
+precompute engine" — is corrected: the faithful animation needs **two** pieces, (a) the
+engine [now done and validated] and (b) a correct **semigroup-Julia rendering algorithm**
+(word-tree escape with pruning, or an equivalent formulation). Piece (b) is the "hardest
+validation tier" §7 flagged (almost no reference imagery; checks internal + theoretical).
+It is a production task, not a spike.
+
+**Verdict: GREEN on the engine, AMBER on the faithful render.** The research chain (S0–S5)
+is complete and the performance blocker is removed; the faithful-animation *feature*
+remains gated on the semigroup-Julia algorithm — now the single clearly-named open item
+for the flagship. No misleading render was shipped (the spike's combined-map frames are
+bounded-recurrent, not the imploded set, and were discarded). The visible naïve implosion
+animation (S1) already ships as the flagship's user-facing deliverable.
+
 ---
 
 ## 10. Change log
 
+- **2026-09-20** — **S6 done — faithful implosion animation, verdict GREEN (engine) /
+  AMBER (render) (§9). SPIKE SERIES S0–S6 COMPLETE.** Built + validated the
+  **precompute-coordinate engine** S4 called for: both Fatou coordinates tabulated on a
+  `Z=−1/w` grid (900×720), `g_α` evaluated in **0.59 µs** (~116 000× faster than the 69 ms
+  direct), interp ≤ 7e-6, Lavaurs periodicity preserved to 7.8e-9 → the ~250 h faithful
+  render becomes **~1 min**; the perf blocker is resolved. **Scope-correcting finding:** a
+  naïve single-orbit combined map (`g_α` on the basin, `f` elsewhere) yields bounded
+  recurrence (0/888 petal points escape in 5000 steps), **not** the imploded set — because
+  the faithful set is the Julia set of the **semigroup `⟨f, g_α⟩`** (escape = *some word*
+  in `{f,g_α}` escapes → needs a word-tree algorithm). So the faithful feature needs two
+  pieces: the engine [done] + a semigroup-Julia renderer [named, open]. No misleading
+  render shipped; the visible naïve implosion (S1) is the flagship's user-facing
+  deliverable.
 - **2026-09-20** — **S5 done — positive-area Julia (§3.3 sibling), verdict GREEN, scoped
   (§9).** Finding: positive Lebesgue measure is a *limit* property of an infinite
   near-parabolic renormalisation tower, not a single renderable `c`. The sibling splits
