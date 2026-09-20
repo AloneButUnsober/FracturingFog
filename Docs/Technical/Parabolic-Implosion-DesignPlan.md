@@ -573,10 +573,72 @@ for the flagship. No misleading render was shipped (the spike's combined-map fra
 bounded-recurrent, not the imploded set, and were discarded). The visible naïve implosion
 animation (S1) already ships as the flagship's user-facing deliverable.
 
+### S7 — Semigroup word-tree escape algorithm (2026-09-20) — verdict **GREEN: the novel render algorithm is correct, bounded-cost, and colourable**
+
+S6 identified the single clearly-named open risk for the faithful renderer (#918): the
+imploded set is the Julia set of the **semigroup `⟨f, g_α⟩`**, so a point escapes iff *some
+word* in the generators escapes — a single deterministic orbit undercounts and renders the
+set as all-bounded. S7 spikes that word-tree escape algorithm (throwaway experiment,
+deleted; the validated core promoted to `Abstractions/Animation/SemigroupEscape.cs`). The
+algorithm is **generator-agnostic**, so it is de-risked independently of the (already
+S3–S6-validated) `g_α` engine.
+
+**The algorithm.** Explore the word tree breadth-first by word length (so the first escape
+found is the **shortest** — a clean escape-time), with a **beam** that keeps only the
+widest-modulus `W` nodes at each level (the escape-seeking heuristic). Cost is bounded to
+`O(W · maxDepth)` node expansions instead of `bᵐ`. A generator with a restricted **domain**
+(the Lavaurs map `g_α`, defined only on the attracting basin) prunes its branch where
+undefined, thinning the tree further.
+
+**Validation (all passed).**
+- **Single generator ≡ ordinary escape-time.** With one generator the tree degenerates to a
+  single orbit: over 4 000 random points the semigroup escape depth matched plain `z²+c`
+  escape-time **exactly (4000/4000)** — the machinery adds nothing spurious.
+- **Two generators = union superset (the S6 fix).** For `⟨f_{1/4}, f_{−0.5+0.5i}⟩` the
+  word-tree escape fraction was **94%** vs **67% / 78%** for either single orbit — a strict
+  superset. This is precisely the "single orbit undercounts → all-bounded" failure S6 found,
+  resolved: exploring the tree recovers the escapes a single orbit misses.
+- **Bounded cost.** On a 9 600-px grid the beam (`W=48`, `maxDepth=60`) touched an average of
+  **380 node expansions/px** — far under the `2 880` cap and independent of tree depth.
+- **Colourable field.** The escape-depth image is coherent fractal structure (a bounded
+  filled set with smooth exterior banding), **99.6%** of exterior neighbours within 2 depths
+  — a usable escape-time gradient, not noise.
+
+**What this de-risks / what remains.** It retires the *algorithmic* risk — the semigroup
+render is a correct, prunable, colourable escape-time computation, and its core ships as a
+tested helper (`SemigroupEscape.EscapeDepth`, +3 tests). It does **not** re-litigate the
+`g_α` engine (S3/S4/S6 already validated it to periodicity 7.8e-9); the production port of
+that engine carries one known subtlety — the Lavaurs inverse `Φ_rep⁻¹(τ+α)` lands on the
+*attracting-side* Z-range (tabulate there, S6). The spike used a synthetic parabolic +
+hyperbolic generator pair to exercise two generators; the faithful render swaps in `f` and
+the tabulated `g_α`.
+
+**Production slices filed** (parent #918): **SG1** #929 — the `g_α` precompute engine (code
+port of S3/S4/S6); **SG3** #930 — the semigroup-Julia calculator + `FractalType` +
+pipeline/params/UI, consuming `SemigroupEscape` + SG1; **SG4** #931 — α-phase presets + the
+faithful implosion animation (counterpart of the naïve S1). The word-tree core (call it
+"SG2") is delivered by this spike.
+
+**Verdict: GREEN.** The last open *algorithmic* question for the flagship is answered; the
+remaining work is the SG1→SG4 engineering build.
+
 ---
 
 ## 10. Change log
 
+- **2026-09-20** — **#918 S7 spike — semigroup word-tree escape algorithm (the last open
+  algorithmic risk for the faithful renderer).** De-risked the word-tree escape that S6
+  flagged: a point escapes the semigroup `⟨f, g_α⟩` iff *some word* escapes; BFS-by-word-length
+  with a widest-modulus **beam** gives shortest-word escape-time at `O(beam·maxDepth)` cost, and
+  a restricted-domain generator (`g_α` on the basin) prunes its branch. Validated (prototype
+  deleted; core promoted to `Abstractions/Animation/SemigroupEscape.cs`, +3 tests): single
+  generator ≡ ordinary escape-time (4000/4000 exact); two generators = union superset (94% vs
+  67%/78% single-orbit — the S6 all-bounded failure resolved); bounded cost (~380 nodes/px,
+  beam 48); coherent colourable field (99.6% exterior local continuity). Did **not** re-spike
+  the `g_α` engine (S3–S6 validated). Filed production slices under #918: SG1 #929 (`g_α`
+  precompute-engine code port), SG3 #930 (calculator + `FractalType` + pipeline/params/UI), SG4
+  #931 (α presets + faithful animation). §9 S7 written. 31 animator tests green; Abstractions
+  clean.
 - **2026-09-20** — **Faithful renderer #920 follow-up 7 — deeper nesting
   (satellites-of-satellites) via a recursive tree address.** Generalised the single-level bulb
   solver to an arbitrary-depth **tree address**: a chain of `p/q` internal-angle steps
