@@ -8,10 +8,14 @@ the flagship far-future item of [Theoretical-Fractal-RnD.md](Theoretical-Fractal
 *static sibling* of the same machinery — one research thread, not two.**
 
 **Status: RESEARCH DESIGN PLAN — spike-gated. S0 (feasibility, GO) + S1 (Tier A
-naïve implosion animation, shipped) + S2 (near-parabolic accuracy, GREEN) done
-(2026-09-20).** The visible naïve implosion ships; the numerics are validated
-(double suffices via the normal form). **The remaining deep tiers — S3 Écalle–Voronin
-horn maps (the main risk) → S4 Lavaurs faithful limit → S5 positive-area Julia —
+naïve implosion animation, shipped) + S2 (near-parabolic accuracy, GREEN) +
+S3 (Fatou coordinates + Écalle–Voronin horn map, GREEN) done (2026-09-20).**
+The visible naïve implosion ships; the numerics are validated (double suffices via
+the normal form); **and the project's flagged main research risk — computing the
+horn map correctly — is retired for the simplest parabolic (`c = 1/4`): the Fatou
+coordinates satisfy the Abel equation to ~4e-11, and the Écalle–Voronin modulus is
+measured (`|c₁| ≈ 0.06`, `d ∝ ζ` to 0.3% over 2.3 decades).** **The remaining deep
+tiers — S4 Lavaurs faithful limit → S5 positive-area Julia → S6 faithful animation —
 are research, gated on validation against the literature, not scheduled.** North-star
 plan, not a build schedule; the faithful-limit work proceeds spike-by-spike.
 
@@ -127,11 +131,22 @@ through the parabolic point). Confirm the DD/QD floor suffices; this gates Tier 
 Implement `Φ_att`, `Φ_rep`, the Écalle–Voronin horn map, and the Lavaurs-map
 composition; render `J(g_α)`, the true imploded set, parameterised by the Lavaurs
 phase `α`. **The deep research.** Delivers the §3.3 positive-area set as a
-byproduct (same core, static output). **Numeric constraint (from S2, §9): integrate
-in the shifted normal-form coordinate `w = z − z*` (`w_{n+1} = w + w²`), never form
-`z − z*` by subtraction — the raw subtraction cancels (~6 digits lost deep in the
-petal), the normal form holds ~14 digits in plain double. Keep DD/QD as an opt-in
-fallback for extreme regimes only.**
+byproduct (same core, static output). **Numeric constraints (validated in S2/S3, §9):**
+1. **Integrate in the shifted normal-form coordinate** `w = z − z*` (`w_{n+1} = w + w²`),
+   never form `z − z*` by subtraction — the raw subtraction cancels (~6 digits lost
+   deep in the petal), the normal form holds ~14 digits in plain double (S2). DD/QD is
+   an opt-in fallback for extreme regimes only.
+2. **Fatou coordinate:** in `Z = −1/w` the germ is exactly `Z ↦ Z²/(Z−1)`, giving the
+   clean asymptotic `Φ = Z − log Z + 1/(2Z) + O(1/Z³)` (pure-power tail → Richardson of
+   `ψ(fⁿw) − n` converges cleanly; a bare `−1/w − log(−1/w)` leaves a `log n/n` tail).
+3. **Backward map rationalised** `f⁻¹(w) = 2w/(1+√(1+4w))` (avoids the cancellation that
+   otherwise caps repelling accuracy at ~1e-7); **per-petal log branch** (principal for
+   the attracting petal `Re Z>0`, a `[0,2π)` branch for the repelling petal `Re Z<0`).
+4. **Horn map = analytic continuation, not a common domain:** the single-parabolic
+   petals do not overlap as sets (tangent disks meeting only at 0). Assemble
+   `h = Φ_att ∘ Φ_rep⁻¹` by iterating a gap seed forward into the attracting petal
+   (`Φ_att(fᵏw)−k`) and backward into the repelling petal (`Φ_rep(f⁻ᵏw)+k`). The EV
+   modulus is exponentially small in `Im σ`, measurable only in a band `Im σ ∈ [1.2,2.2]`.
 
 ### Where FF helps / where it does not
 - **Helps:** DD/QD precision; scene parameter-animation (#632); the Julia
@@ -175,10 +190,12 @@ the deep tiers only proceed on validation.
   Double suffices for near-parabolic integration *via the shifted normal-form
   coordinate* `w = z − z*` (`w_{n+1} = w + w²`, ~1e-14 vs QD at 10⁶ iters);
   DD/QD is an opt-in margin, not required. *(deps: S0)*
-- **S3 — Fatou coordinates + horn map (Tier C core).** Implement `Φ_att` / `Φ_rep`
-  + the Écalle–Voronin horn map for the simplest case (`c = 1/4`, one petal).
-  Validate against the known horn-map structure. **The main research risk lives
-  here.** *(deps: S2)*
+- **S3 — Fatou coordinates + horn map (Tier C core). ✅ DONE — verdict GREEN (§9).**
+  `Φ_att` / `Φ_rep` computed (Abel equation to ~4e-11, real symmetry exact); the
+  Écalle–Voronin horn map assembled by analytic continuation through the gap and shown
+  **nontrivial** (`|c₁| ≈ 0.06`, `d ∝ ζ = e^{2πiσ}` to 0.3% over 2.3 decades, multiplier
+  `μ = 1`). **The main research risk is retired for `c = 1/4`.** Numeric recipe recorded
+  as Tier C constraints (§4). *(deps: S2)*
 - **S4 — Lavaurs map + faithful limit render.** Compose `L_α`; render `J(g_α)`;
   validate against Lavaurs's limit theorem. *(deps: S3)*
 - **S5 — Positive-area Julia static render (§3.3 sibling).** Use the S3/S4 core to
@@ -188,7 +205,11 @@ the deep tiers only proceed on validation.
 
 **Recommended order:** S0 → **S1 (ship the visible naïve animation, pause)** →
 S2 → S3 → S4 → S5 → S6. S1 is the only slice that lands without the deep core; it
-buys a real result while S3 (the hard math) is de-risked.
+buys a real result while S3 (the hard math) is de-risked. **S0–S3 are done and all
+GREEN/GO; the Fatou/horn-map foundation is proven. S4 (Lavaurs map + faithful limit
+render) is the next spike — it composes the validated horn-map core into the true
+imploded set `J(g_α)` and adds the two unknowns S3 deliberately deferred: the Lavaurs
+phase `α` and higher-`q` petals.**
 
 ---
 
@@ -304,10 +325,79 @@ shifted normal-form coordinate `w = z − z*`, and (b) keep DD/QD as an opt-in
 fallback. The remaining risk is entirely the **horn-map correctness (S3)**, not
 precision. Gate to S3: open.
 
+### S3 — Fatou coordinates + Écalle–Voronin horn map (2026-09-20) — verdict **GREEN: the core is computable and internally validated**
+
+S3 is the flagged **main research risk**: can the Fatou-coordinate / horn-map core
+actually be computed *correctly* for the simplest parabolic (`c = 1/4`, germ
+`f(w) = w + w²`, one attracting + one repelling petal)? A throwaway numerical
+experiment (double precision, deleted after write-up) built all three primitives and
+validated them.
+
+**Primitive 1 — attracting & repelling Fatou coordinates.** In `Z = −1/w` the germ is
+*exactly* `Z ↦ Z²/(Z−1)`, so the Fatou coordinate has the clean asymptotic
+`Φ(w) = Z − log Z + 1/(2Z) + O(1/Z³)` — a pure-power tail (no `log n / n` term), so
+Richardson extrapolation of `ψ(fⁿw) − n` converges cleanly. `Φ_att` (forward orbit)
+and `Φ_rep` (backward orbit) each satisfy the Abel/conjugacy equation
+`Φ(f(w)) − Φ(w) = 1` to **3.6e-11** (independent limits, double precision). Three
+non-obvious numerical constraints were required (now recorded in §4): the backward
+map must be **rationalised** `f⁻¹(w) = 2w/(1+√(1+4w))` (the naïve form cancels and caps
+repelling accuracy at ~1e-7); a **per-petal log branch** (principal for `Re Z>0`, a
+`[0,2π)` branch for the repelling petal's `Re Z<0`, which otherwise sits on the cut);
+and convergence judged by **Richardson-extrapolation stability**, not the raw tail gap
+(which over-reports the error ~10³× and rejects good points).
+
+**Primitive 2 — the horn map, via analytic continuation.** The key geometric fact for
+the single parabolic: the attracting and repelling petals **do not overlap as point
+sets** (disks tangent to 0 from opposite sides, meeting only at 0). The horn map
+`h = Φ_att ∘ Φ_rep⁻¹` therefore lives on the *analytic continuation* through the two
+gaps, not a common domain. It is assembled from a gap seed `w₀`: `Φ_rep(w₀)` continues
+by iterating **backward** into the repelling petal (`Φ_rep(f⁻ᵏw₀)+k`), `Φ_att(w₀)` by
+iterating **forward** into the attracting petal (`Φ_att(fᵏw₀)−k`); then `σ = Φ_rep(w₀)`,
+`τ = Φ_att(w₀)`, and `(σ, τ)` is a graph point of `h`.
+
+**The horn map is nontrivial (the deliverable).** `d = τ − σ` is 1-periodic and, at the
+upper end, analytic in `ζ = e^{2πiσ} → 0`. Measured: `d ∝ ζ` with `|c₁| = 0.0598`, and
+the ratio `d/ζ` is **constant to 0.3% across 2.3 decades of `|ζ|`** — i.e. `d` is the
+single Écalle–Voronin Fourier mode, not numerical noise. The horn shift
+`c₀ ≈ 3.5e-8 ≈ 0` gives multiplier `μ = e^{2πic₀} = 1` — correct for the real-symmetric
+quadratic germ (whose formal invariant vanishes; the modulus is purely the nonzero
+`c₁`). The lower end is `c₁_lower = conj(c₁_upper)` by the real symmetry
+`Φ(w̄) = conj Φ(w)`, which held **exactly** (0.0). The EV modulus is exponentially
+small in `Im σ`, so it is measurable only in a band `Im σ ∈ [1.2, 2.2]` — small enough
+that `|ζ|` is not below the ~1e-11 Fatou noise floor, large enough that the seed still
+converges in both petals.
+
+**Validation posture.** There is no reference plate for the horn-map coefficient, so
+validation is internal + theoretical (as §7 anticipated): the Abel equation, the exact
+real symmetry, and — the strongest check — that `d` collapses onto a single
+`ζ`-proportional mode over 2+ decades. All three passed. `|c₁| ≈ 0.06` is the measured
+modulus; its *phase* is convention-dependent (the additive constant / branch choice),
+`|c₁|` is not.
+
+**What this does and does not de-risk.** It retires the **central** S3 risk — the
+horn-map core is computable and correct for `c = 1/4`. It does **not** yet cover
+higher-`q` bulb roots (germ gains a `w^{q+1}` term → `q` petal pairs / a `q`-fold horn
+structure) nor the Lavaurs phase `α`; those are S4's job, but they now build on a
+*proven* Fatou/horn foundation rather than an unknown one.
+
+**Verdict: GREEN.** Gate to S4 (Lavaurs map + faithful limit render): open.
+
 ---
 
 ## 10. Change log
 
+- **2026-09-20** — **S3 done — Fatou coordinates + Écalle–Voronin horn map, verdict
+  GREEN (§9).** Built and validated the Tier C core for `c = 1/4` (germ `w+w²`, one
+  petal): `Φ_att`/`Φ_rep` satisfy the Abel equation to ~4e-11, real symmetry exact.
+  The horn map, assembled by **analytic continuation through the (non-overlapping)
+  petal gap**, is **nontrivial** — `d = τ − σ ∝ ζ = e^{2πiσ}` with `|c₁| ≈ 0.06`, the
+  ratio constant to 0.3% over 2.3 decades of `|ζ|`, multiplier `μ = 1`. **The
+  project's flagged main research risk (horn-map correctness) is retired for the
+  simplest parabolic.** Numeric recipe (exact `Z↦Z²/(Z−1)` asymptotic, rationalised
+  `f⁻¹`, per-petal log branch, iterate-into-petal continuation, `Im σ∈[1.2,2.2]`
+  measurement band) recorded as Tier C constraints (§4). Next: S4 (Lavaurs map +
+  faithful limit render), which adds the two unknowns S3 deferred — the Lavaurs phase
+  `α` and higher-`q` petals — on top of this proven foundation.
 - **2026-09-20** — **S2 done — near-parabolic accuracy, verdict GREEN (§9).**
   Measured double vs QuadDouble at `c = 1/4`: the parabolic **normal form**
   `w = z − z*`, `w_{n+1} = w + w²` holds ~1e-14 rel. error vs QD across n up to 10⁶
