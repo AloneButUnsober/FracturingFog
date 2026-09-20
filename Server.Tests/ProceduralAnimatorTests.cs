@@ -192,6 +192,57 @@ public sealed class ProceduralAnimatorTests
     }
 
     [Fact]
+    public void CardioidApproach_ThetaHalf_GivesPeriod2Root_MinusThreeQuarters()
+    {
+        Complex captured = Complex.Zero;
+        var track = MakeScalarTrack(AnimationMode.CardioidApproach, 0.5, 0.5, hz: 1.0);
+        var anim = new ComplexProceduralAnimator(track, c => captured = c) { IsEnabled = true };
+
+        anim.Tick(0.0); // θ = 1/2 → c(1/2) = -3/4 (period-2 root, multiplier -1)
+        Assert.Equal(-0.75, captured.Real, 6);
+        Assert.Equal(0.0, captured.Imaginary, 6);
+    }
+
+    [Fact]
+    public void CardioidApproach_ThetaThird_Gives13BulbRoot()
+    {
+        Complex captured = Complex.Zero;
+        var track = MakeScalarTrack(AnimationMode.CardioidApproach, 1.0 / 3.0, 1.0 / 3.0, hz: 1.0);
+        var anim = new ComplexProceduralAnimator(track, c => captured = c) { IsEnabled = true };
+
+        anim.Tick(0.0); // θ = 1/3 → c = -1/8 + i·3√3/8 (period-3 root, multiplier e^{2πi/3})
+        Assert.Equal(-0.125, captured.Real, 4);
+        Assert.Equal(3.0 * Math.Sqrt(3.0) / 8.0, captured.Imaginary, 4);
+    }
+
+    [Fact]
+    public void EscapeIterationScale_IsAnimatable_AndDrivesTheField_AndClones()
+    {
+        var fp = new FractalParameters();
+        Assert.Equal(1.0, fp.EscapeIterationScale, 6); // default unchanged
+
+        var data = new AnimationData
+        {
+            Name = "iterramp",
+            TargetFractalTypes = new System.Collections.Generic.List<FractalType> { FractalType.Julia },
+            Tracks = new System.Collections.Generic.List<AnimationTrack>
+            {
+                new AnimationTrack { ParamName = "EscapeIterationScale", Mode = AnimationMode.Triangle,
+                    Min = 1.0, Max = 6.0, FrequencyHz = 1.0 },
+            },
+        };
+        var animators = data.ToAnimators(fp).ToList();
+        Assert.Single(animators);
+        Assert.IsType<DoubleProceduralAnimator>(animators[0]);
+
+        animators[0].Tick(0.5); // half period → Triangle peak → Max
+        Assert.Equal(6.0, fp.EscapeIterationScale, 6);
+
+        var clone = fp.Clone();
+        Assert.Equal(6.0, clone.EscapeIterationScale, 6);
+    }
+
+    [Fact]
     public void CardioidApproach_TriangleSweep_StaysOnCardioid_ForVaryingTheta()
     {
         Complex captured = Complex.Zero;

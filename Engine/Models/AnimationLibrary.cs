@@ -353,44 +353,64 @@ namespace FracturingFog.Models
                 };
             }
 
-            // #920 — parabolic implosion (FAITHFUL, Lavaurs limit). Sweeps the
-            // internal angle θ along the main cardioid boundary toward the cusp
-            // c = 1/4 (c(θ) = e^{2πiθ}/2 − e^{4πiθ}/4, multiplier e^{2πiθ}); as
-            // θ → 0 the near-parabolic Julia set blooms satellite cascades — the
-            // faithful implosion (J(f_{c(θ)}) → J(g_α), Lavaurs's theorem), the
-            // rigorous counterpart of the naïve Lissajous circle above. Author on
-            // the 'Parabolic implosion (faithful) c = 1/4' region (high iteration —
-            // the crawl deepens as θ → 0). See
-            // Docs/Technical/Parabolic-Implosion-DesignPlan.md.
-            yield return new AnimationData
+            // #920 — parabolic implosion (FAITHFUL, Lavaurs limit) for each parabolic
+            // root p/q. Sweeps the internal angle θ along the main cardioid boundary
+            // toward the p/q root (c(θ) = e^{2πiθ}/2 − e^{4πiθ}/4, multiplier e^{2πiθ};
+            // the p/q root IS the cardioid point c(p/q)); as θ → p/q the near-parabolic
+            // Julia set blooms period-q satellite cascades — the faithful implosion
+            // (J(f_{c(θ)}) → J(g_α), Lavaurs's theorem), the rigorous counterpart of the
+            // naïve Lissajous circle above. A SECOND track ramps EscapeIterationScale in
+            // lock-step (both Triangle, same FrequencyHz, no phase offset), so shallow
+            // frames stay fast and the deep frames near the root get the iterations the
+            // crawl needs. Author on the matching 'Parabolic implosion (faithful) …'
+            // region. See Docs/Technical/Parabolic-Implosion-DesignPlan.md.
+            //   thetaFar = shallow start, thetaNear = deepest approach to the p/q root.
+            foreach (var (name, thetaFar, thetaNear, tag) in new[]
             {
-                Name = "Parabolic implosion (faithful, c=1/4)",
-                Category = "Built-in",
-                Description = "Faithful (Lavaurs-limit) parabolic implosion: sweeps the "
-                            + "Julia c along the cardioid boundary toward the cusp c = 1/4 "
-                            + "(internal angle θ → 0); the near-parabolic Julia set blooms "
-                            + "satellite spirals — the implosion cascade. The rigorous "
-                            + "counterpart of the naïve 'Parabolic implosion (c=1/4)'. Author "
-                            + "on the high-iteration 'Parabolic implosion (faithful) c = 1/4' "
-                            + "region; deeper θ needs a higher iteration budget.",
-                TargetFractalTypes = new List<FracturingFog.FractalType>
+                ("Parabolic implosion (faithful, c=1/4)",     0.140, 0.045, "c=1/4"),
+                ("Parabolic implosion (faithful, c=-3/4)",    0.420, 0.460, "c=-3/4"),
+                ("Parabolic implosion (faithful, 1/3 bulb)",  0.290, 0.300, "1/3-bulb"),
+            })
+            {
+                yield return new AnimationData
                 {
-                    FracturingFog.FractalType.Julia,
-                },
-                Tracks = new List<AnimationTrack>
-                {
-                    new AnimationTrack
+                    Name = name,
+                    Category = "Built-in",
+                    Description = "Faithful (Lavaurs-limit) parabolic implosion: sweeps the Julia "
+                                + "c along the cardioid boundary toward the parabolic root (internal "
+                                + "angle θ → " + tag + "); the near-parabolic Julia set blooms satellite "
+                                + "spirals — the implosion cascade. The rigorous counterpart of the naïve "
+                                + "'Parabolic implosion (" + tag + ")'. A synced iteration ramp keeps the "
+                                + "deep frames crisp. Author on the matching high-iteration 'Parabolic "
+                                + "implosion (faithful) …' region.",
+                    TargetFractalTypes = new List<FracturingFog.FractalType>
                     {
-                        ParamName = "JuliaC",
-                        Mode = AnimationMode.CardioidApproach, // c(θ) on the cardioid, θ → cusp
-                        Min = 0.04,   // θ nearest the cusp (deepest implosion)
-                        Max = 0.14,   // θ farthest (mild near-parabolic)
-                        FrequencyHz = 0.04,                    // ~25 s per there-and-back
-                        Enabled = true,
+                        FracturingFog.FractalType.Julia,
                     },
-                },
-                Tags = new List<string> { "experimental", "2D", "parabolic", "julia", "faithful", "c=1/4" },
-            };
+                    Tracks = new List<AnimationTrack>
+                    {
+                        new AnimationTrack
+                        {
+                            ParamName = "JuliaC",
+                            Mode = AnimationMode.CardioidApproach,   // c(θ) on the cardioid, θ → root
+                            Min = thetaFar,                          // shallow near-parabolic (Phase→0)
+                            Max = thetaNear,                         // deepest approach to the root (Phase→π)
+                            FrequencyHz = 0.04,                      // ~25 s per there-and-back
+                            Enabled = true,
+                        },
+                        new AnimationTrack
+                        {
+                            ParamName = "EscapeIterationScale",
+                            Mode = AnimationMode.Triangle,           // in lock-step with the θ sweep
+                            Min = 1.0,                               // shallow → base iterations
+                            Max = 6.0,                               // deep → 6× iterations
+                            FrequencyHz = 0.04,                      // MUST match the JuliaC track
+                            Enabled = true,
+                        },
+                    },
+                    Tags = new List<string> { "experimental", "2D", "parabolic", "julia", "faithful", tag },
+                };
+            }
         }
     }
 }

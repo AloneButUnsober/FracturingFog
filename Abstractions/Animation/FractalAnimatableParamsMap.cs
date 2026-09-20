@@ -162,6 +162,11 @@ public static class FractalAnimatableParamsMap
     {
         new("JuliaC", AnimatableParamKind.Complex, Min: 0.05, Max: 1.5,
             Notes: "Classic orbit-around-the-Mandelbrot-boundary sweep."),
+        // #920 — iteration ramp for the faithful parabolic implosion: rises as c
+        // nears a parabolic root so the near-parabolic crawl stays resolved.
+        new("EscapeIterationScale", AnimatableParamKind.ScalarDouble, Min: 1.0, Max: 6.0,
+            Cost: AnimatableParamCost.Expensive,
+            Notes: "Multiplies the iteration cap (≥1). Ramp it up as c approaches a parabolic root."),
         _domainWarp,
     };
 
