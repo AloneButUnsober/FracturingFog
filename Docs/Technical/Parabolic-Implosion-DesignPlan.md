@@ -10,7 +10,8 @@ the flagship far-future item of [Theoretical-Fractal-RnD.md](Theoretical-Fractal
 **Status: RESEARCH DESIGN PLAN — spike-gated. S0 (feasibility, GO) + S1 (Tier A
 naïve implosion animation, shipped) + S2 (near-parabolic accuracy, GREEN) +
 S3 (Fatou coordinates + Écalle–Voronin horn map, GREEN) + S4 (Lavaurs map +
-limit-theorem mechanism, GREEN) done (2026-09-20).** The visible naïve implosion
+limit-theorem mechanism, GREEN) + S5 (positive-area Julia, GREEN-scoped) done
+(2026-09-20).** The visible naïve implosion
 ships; the numerics are validated (double suffices via the normal form); the flagged
 main research risk — computing the horn map correctly — is **retired** for `c = 1/4`
 (Abel equation to ~4e-11; Écalle–Voronin modulus `|c₁| ≈ 0.06`, `d ∝ ζ` to 0.3% over
@@ -219,20 +220,28 @@ the deep tiers only proceed on validation.
   `J(g_α)`:** S4 found a naïve render is ~250 h → the image is an *engineering* build
   (precompute/interpolate the coordinates, §4), not spike work. The math chain is proven.
   *(deps: S3)*
-- **S5 — Positive-area Julia static render (§3.3 sibling).** Use the S3/S4 core to
-  render a Buff–Chéritat positive-area Julia set (static). *(deps: S3/S4)*
+- **S5 — Positive-area Julia static render (§3.3 sibling). ✅ DONE — verdict GREEN,
+  scoped (§9).** Finding: positive Lebesgue measure is a *limit* property of an infinite
+  near-parabolic renormalisation tower, not a single renderable `c`. So the sibling
+  splits like the implosion — a **naïve near-parabolic / Siegel "fat" Julia** ships now on
+  the existing calc (rendered: golden-mean Siegel set), the **certified** Buff–Chéritat
+  set is a research tier (renorm tower + the S4 precompute engine). Box-dim of `∂J` rises
+  1.07→1.36 along the period-doubling cascade (the fattening mechanism) but plateaus below
+  2 — confirming the tower is required. *(deps: S3/S4)*
 - **S6 — Faithful implosion animation (Tier C animated).** Animate `α` / `θ`
   through the horn-map machinery — the faithful counterpart of S1. *(deps: S4)*
 
 **Recommended order:** S0 → **S1 (ship the visible naïve animation, pause)** →
 S2 → S3 → S4 → S5 → S6. S1 is the only slice that lands without the deep core; it
-buys a real result while S3 (the hard math) is de-risked. **S0–S4 are done and all
+buys a real result while S3 (the hard math) is de-risked. **S0–S5 are done and all
 GREEN/GO; the whole faithful-limit *math* chain (Fatou coordinates → horn map → Lavaurs
-map) is proven and internally validated. What remains — S5 (positive-area static) and
-S6 (faithful animation) — is an *engineering* build around one identified constraint:
-precompute/interpolate the Fatou coordinates so `J(g_α)` renders in seconds not hundreds
-of hours (§4.6). Higher-`q` petals are the one untested math extension, inheriting the
-proven single-petal machinery.**
+map) is proven and internally validated, and S5 established that the positive-area sibling
+shares the same Tier-A-now / Tier-C-research split. What remains — the certified faithful
+renders (imploded `J(g_α)` and the Buff–Chéritat positive-area set) plus S6 (faithful
+animation) — is a single *engineering* build around one identified constraint:
+precompute/interpolate the Fatou coordinates so the faithful set renders in seconds not
+hundreds of hours (§4.6). Higher-`q` petals are the one untested math extension,
+inheriting the proven single-petal machinery.**
 
 ---
 
@@ -458,10 +467,75 @@ bridge) remain untested but inherit the now-proven single-petal machinery.
 validated; the remaining Tier C work is an **engineering** build (precompute-and-
 interpolate the coordinates), not an open math risk. Gate to S5 / S6: open.
 
+### S5 — Positive-area Julia sets (Buff–Chéritat, §3.3 sibling) (2026-09-20) — verdict **GREEN, scoped: the sibling splits Tier-A-now / Tier-C-research, exactly like the implosion**
+
+S5 asked whether the S3/S4 core renders a Buff–Chéritat positive-area Julia set. The
+honest answer the spike surfaced: **positive Lebesgue measure of a Julia set is a *limit*
+property of an infinite near-parabolic renormalisation tower, not a property of any
+single renderable parameter `c`.** So the §3.3 sibling splits the same way the implosion
+does:
+
+- **Tier-A analogue (achievable now, existing calc):** a **near-parabolic / Siegel "fat"
+  Julia** — a deep-iteration `z² + c` render at a parameter driven toward the positive-area
+  regime (a golden-mean Siegel `c`, or a near-parabolic cauliflower). Visually the
+  area-filling fractal; ships on the existing Julia path, no new math — exactly like S1's
+  naïve implosion. *(Rendered as the throwaway spike artifact: the golden-mean Siegel set,
+  boundary a thick fractal filigree.)*
+- **Tier-C analogue (research):** the **certified** Buff–Chéritat set (dim exactly 2,
+  positive Lebesgue measure). Requires the inductive renormalisation tower — infinitely
+  many controlled near-parabolic perturbations, each step's size governed by the cylinder
+  renormalisation / Fatou-coordinate machinery (the S3/S4 core). Rendering the certified
+  limit is a research computation and inherits S4's precompute-coordinate constraint.
+
+**Numeric evidence for the fattening mechanism.** Box-counting dimension of `∂J(c)` along
+the real period-doubling renormalisation cascade (each step = one more renormalisation
+level), 1200² grid, 2500 iters:
+
+| `c` | regime | box-dim `∂J` | area-frac `K` |
+|---|---|---|---|
+| 0 | circle (control) | 1.07 | 0.256 |
+| 1/4 | period-1 parabolic | 1.09 | 0.239 |
+| −3/4 | period-2 root | 1.25 | 0.171 |
+| −5/4 | period-4 root | 1.36 | 0.054 |
+| −1.368 | ~period-8 | 1.36 | 0.015 |
+| −1.4012 | Feigenbaum accumulation | K empty (dendrite) | 0.000 |
+
+The dimension **rises with renormalisation depth** (1.07 → 1.36) — the fattening is real
+and mechanistic — but the simple real cascade **plateaus far below 2** and the interior
+vanishes at the accumulation point (a dendrite, not a positive-area set). Quantitative
+confirmation that **certified positive area cannot be reached by a single or simply-
+parameterised `c`**; it genuinely needs the Buff–Chéritat tower (the delicate infinitely-
+renormalisable *complex* parameters), consistent with Shishikura/Buff–Chéritat.
+
+**The S3/S4 connection.** Each renormalisation step is a parabolic explosion (the S4
+re-injection mechanism), and the area it contributes is controlled by the horn map /
+Fatou coordinates (S3). The positive-area set is literally "the S3/S4 core, iterated to a
+limit" — the doc's "build the core once, render both" holds, with the caveat that the
+*limit* (not a single application) carries the positive measure.
+
+**Verdict: GREEN, scoped.** The achievable deliverable — a near-parabolic/Siegel "fat"
+Julia on the existing calculator — is validated and rendered; the certified Buff–Chéritat
+positive-area set is a research tier (renorm tower + the S4 precompute engine), correctly
+deferred. The static sibling is *not* a single new build but the same Tier-A-now /
+Tier-C-research split as the implosion. Gate to S6 (faithful animation): open — and S6
+shares the one remaining engineering task (the precompute-coordinate render engine) with
+the whole faithful tier.
+
 ---
 
 ## 10. Change log
 
+- **2026-09-20** — **S5 done — positive-area Julia (§3.3 sibling), verdict GREEN, scoped
+  (§9).** Finding: positive Lebesgue measure is a *limit* property of an infinite
+  near-parabolic renormalisation tower, not a single renderable `c`. The sibling splits
+  like the implosion — a **naïve near-parabolic / Siegel "fat" Julia** ships now on the
+  existing calc (rendered the golden-mean Siegel set as the artifact), the **certified**
+  Buff–Chéritat set (dim 2, positive area) is a research tier (renorm tower + the S4
+  precompute engine). Box-dim of `∂J` measured rising 1.07→1.36 along the period-doubling
+  cascade (the fattening mechanism) but plateauing below 2 — quantitatively confirming the
+  tower is required (the real cascade dendrites out; certified positive area needs the
+  delicate complex infinitely-renormalisable parameters). S3/S4 core = the per-level
+  cylinder-renormalisation control.
 - **2026-09-20** — **S4 done — Lavaurs map + limit-theorem mechanism, verdict GREEN
   (§9).** Built `g_α = f ∘ L_α` (`L_α = Φ_rep⁻¹ ∘ T_α ∘ Φ_att`) on the S3 core and
   validated against Lavaurs's theorem: **periodicity `g_{α+1} = f ∘ g_α` to 3e-13**, the
