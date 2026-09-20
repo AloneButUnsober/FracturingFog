@@ -99,19 +99,56 @@ public sealed class DualOrbitEscapeCalculator : IFractalCalculator, IHeightField
         return new Orbit(false, zx, zy, maxIter);
     }
 
+    // One quaternion orbit's escape outcome (Hamilton square, real slot = qx).
+    private readonly struct QOrbit
+    {
+        public readonly bool Escaped;
+        public readonly double Ex, Ey, Ez, Ew;   // escape location (4D)
+        public readonly double SmoothN;
+        public QOrbit(bool escaped, double ex, double ey, double ez, double ew, double smoothN)
+        { Escaped = escaped; Ex = ex; Ey = ey; Ez = ez; Ew = ew; SmoothN = smoothN; }
+    }
+
+    // Iterate q_{n+1} = q² + C, q² = (qx²−qy²−qz²−qw², 2qx·qy, 2qx·qz, 2qx·qw).
+    private static QOrbit RunQuat(double q0x, double q0y, double q0z, double q0w,
+        double cx, double cy, double cz, double cw, int maxIter)
+    {
+        double qx = q0x, qy = q0y, qz = q0z, qw = q0w;
+        for (int n = 0; n < maxIter; n++)
+        {
+            double r2 = qx * qx + qy * qy + qz * qz + qw * qw;
+            if (r2 > EscapeR2)
+            {
+                double logZn = Math.Log(r2) * 0.5;
+                double nu = Math.Log(logZn / LogEscapeR) / Math.Log(2.0);
+                return new QOrbit(true, qx, qy, qz, qw, n - nu);
+            }
+            double nqx = qx * qx - qy * qy - qz * qz - qw * qw;
+            double nqy = 2.0 * qx * qy;
+            double nqz = 2.0 * qx * qz;
+            double nqw = 2.0 * qx * qw;
+            qx = nqx + cx; qy = nqy + cy; qz = nqz + cz; qw = nqw + cw;
+        }
+        return new QOrbit(false, qx, qy, qz, qw, maxIter);
+    }
+
     public void Calculate(CancellationToken ct = default)
     {
         int maxIter = Math.Max(16, MaxIterations);
         ColorMap.MaxIterations = maxIter;
 
+        var map = FractalParameters.DualOrbitMap;
         var field = FractalParameters.DualOrbitField;
         bool cEqualsS = FractalParameters.DualOrbitCEqualsS;
         double cSeedX = FractalParameters.DualOrbitCSeedX;
         double cSeedY = FractalParameters.DualOrbitCSeedY;
+        double cSeedZ = FractalParameters.DualOrbitCSeedZ;
+        double sZ = FractalParameters.DualOrbitSZ;
 
         double pixelPitch = (4.0 / Math.Max(1, Width)) / Math.Max(1e-12, Zoom);
         int width = Width, height = Height;
         double centerX = CenterX, centerY = CenterY;
+        bool quat = map == DualOrbitMap.Quaternion;
 
         Parallel.For(0, height, new ParallelOptions { CancellationToken = ct }, y =>
         {
@@ -122,14 +159,26 @@ public sealed class DualOrbitEscapeCalculator : IFractalCalculator, IHeightField
             {
                 double sx = centerX + (x - width * 0.5) * pixelPitch;
 
-                // z-orbit from the critical seed 0; c-orbit from the decoupled
-                // seed c (or from s itself in the Mandelbrot-control mode).
-                Orbit oz = Run(0.0, 0.0, sx, sy, maxIter);
-                Orbit oc = cEqualsS
-                    ? Run(sx, sy, sx, sy, maxIter)
-                    : Run(cSeedX, cSeedY, sx, sy, maxIter);
-
-                double scalar = Scalar(field, oz, oc, sx, sy, maxIter);
+                double scalar;
+                if (quat)
+                {
+                    // C = (0, s_x, s_y, s_z) pure-imaginary. z-orbit seed 0; c-orbit
+                    // seed the decoupled pure-imaginary (cx, cy, cz) — a different
+                    // plane, so the pair diverges in 4D (non-degenerate).
+                    QOrbit oz = RunQuat(0, 0, 0, 0, 0, sx, sy, sZ, maxIter);
+                    QOrbit oc = cEqualsS
+                        ? RunQuat(0, sx, sy, sZ, 0, sx, sy, sZ, maxIter)
+                        : RunQuat(0, cSeedX, cSeedY, cSeedZ, 0, sx, sy, sZ, maxIter);
+                    scalar = ScalarQ(field, oz, oc, sx, sy, sZ, maxIter);
+                }
+                else
+                {
+                    Orbit oz = Run(0.0, 0.0, sx, sy, maxIter);
+                    Orbit oc = cEqualsS
+                        ? Run(sx, sy, sx, sy, maxIter)
+                        : Run(cSeedX, cSeedY, sx, sy, maxIter);
+                    scalar = Scalar(field, oz, oc, sx, sy, maxIter);
+                }
 
                 int idx = rowBase + x;
                 float smooth = (float)scalar;
@@ -137,6 +186,52 @@ public sealed class DualOrbitEscapeCalculator : IFractalCalculator, IHeightField
                 ColorBuffer[idx] = unchecked((uint)ColorMap.Map(smooth, 0f, maxIter));
             }
         });
+    }
+
+    // 4D escape-geometry scalar (quaternion mode). s lives at the pure-imaginary
+    // point (0, sx, sy, sz); distances / angles use the Euclidean 4D metric.
+    private static double ScalarQ(DualOrbitField field, in QOrbit oz, in QOrbit oc,
+        double sx, double sy, double sz, int maxIter)
+    {
+        if (!oz.Escaped || !oc.Escaped) return 0.0;
+        // s as a 4D point (real part 0).
+        double s0 = 0.0, s1 = sx, s2 = sy, s3 = sz;
+        switch (field)
+        {
+            case DualOrbitField.EscapeSeparation:
+            {
+                double dx = oc.Ex - oz.Ex, dy = oc.Ey - oz.Ey, dz = oc.Ez - oz.Ez, dw = oc.Ew - oz.Ew;
+                double d = Math.Sqrt(dx * dx + dy * dy + dz * dz + dw * dw);
+                return Math.Min(d / (2.0 * EscapeR), 1.0) * maxIter;
+            }
+            case DualOrbitField.MidpointResidual:
+            {
+                double mx = 0.5 * (oz.Ex + oc.Ex), my = 0.5 * (oz.Ey + oc.Ey);
+                double mz = 0.5 * (oz.Ez + oc.Ez), mw = 0.5 * (oz.Ew + oc.Ew);
+                double rx = mx - s0, ry = my - s1, rz = mz - s2, rw = mw - s3;
+                double r = Math.Sqrt(rx * rx + ry * ry + rz * rz + rw * rw);
+                return Math.Min(r / (2.0 * EscapeR), 1.0) * maxIter;
+            }
+            case DualOrbitField.DualOrbitAngle:
+            {
+                double azx = oz.Ex - s0, azy = oz.Ey - s1, azz = oz.Ez - s2, azw = oz.Ew - s3;
+                double acx = oc.Ex - s0, acy = oc.Ey - s1, acz = oc.Ez - s2, acw = oc.Ew - s3;
+                double dot = azx * acx + azy * acy + azz * acz + azw * acw;
+                double mag = Math.Sqrt((azx * azx + azy * azy + azz * azz + azw * azw)
+                                     * (acx * acx + acy * acy + acz * acz + acw * acw));
+                if (mag < 1e-18) return 0.0;
+                double ang = Math.Acos(Math.Clamp(dot / mag, -1.0, 1.0));
+                return (ang / Math.PI) * maxIter;
+            }
+            case DualOrbitField.DeltaN:
+            {
+                double dn = oc.SmoothN - oz.SmoothN;
+                double t = 0.5 + 0.5 * Math.Clamp(dn / maxIter, -1.0, 1.0);
+                return t * maxIter;
+            }
+            default:
+                return 0.0;
+        }
     }
 
     // Derived escape-space scalar, normalised to [0, maxIter] for the palette /

@@ -166,6 +166,21 @@ namespace FracturingFog
     /// geometry of the pair (locations E_z/E_c, counts n_z/n_c) yields these
     /// scalars, written to the SmoothBuffer. See
     /// Docs/Technical/Theoretical-Fractal-RnD.md §3.6.</summary>
+    /// <summary>The shared nonlinear map iterated by both DualOrbitEscape (#864)
+    /// orbits. <see cref="ComplexPlane"/> (S1, default) is the 2D square
+    /// <c>u→u²+s</c>; <see cref="Quaternion"/> (S3, #866) is the Hamilton square
+    /// <c>q→q²+S</c> with <c>S=(0,s_x,s_y,s_z)</c> pure-imaginary — non-degenerate
+    /// by construction (the seed-0 orbit stays in the 2D subalgebra along ŝ while
+    /// the decoupled c-orbit explores a different plane). See §3.6.</summary>
+    public enum DualOrbitMap
+    {
+        /// <summary>Complex square u→u²+s (2D field / Relief terrain).</summary>
+        ComplexPlane,
+        /// <summary>Quaternion square q→q²+S, S pure-imaginary (4D escape
+        /// geometry; scalar/vector coupling).</summary>
+        Quaternion,
+    }
+
     public enum DualOrbitField
     {
         /// <summary>|E_c − E_z| — the escape-location separation of the two orbits
