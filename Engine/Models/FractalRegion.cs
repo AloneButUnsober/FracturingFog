@@ -1757,6 +1757,27 @@ namespace FracturingFog.Models
                 QualityPreset = QualityPreset.Standard,
                 Params      = new RegionFractalParams { JuliaCRe = -0.125, JuliaCIm = 0.6495 },
             },
+            // #920 — faithful (Lavaurs-limit) parabolic implosion. High iteration
+            // budget: the near-parabolic Julia set has orbits that crawl through the
+            // parabolic point, so it needs many more iterations than the naïve preset.
+            // Bound to the 'Parabolic implosion (faithful, c=1/4)' animation, which
+            // sweeps c along the cardioid boundary toward the cusp (θ → 0). Initial c
+            // is a mid-θ near-parabolic parameter on the boundary.
+            new()
+            {
+                Name          = "Parabolic implosion (faithful) c = 1/4",
+                CenterX       =  0.0,
+                CenterY       =  0.0,
+                Zoom          =  0.62,
+                Iterations    =  6000,
+                Description   = "Faithful parabolic implosion at c = 1/4 (Lavaurs limit): a high-iteration near-parabolic Julia set on the cardioid boundary. Enable the bound 'Parabolic implosion (faithful, c=1/4)' animation to sweep c toward the cusp (θ → 0) and watch satellite spirals bloom — the rigorous counterpart of the naïve circle. Deeper θ needs more iterations.",
+                RegionType    = RegionType.BuiltIn,
+                FractalType   = FractalType.Julia,
+                QualityPreset = QualityPreset.Standard,
+                AnimationName = "Parabolic implosion (faithful, c=1/4)",
+                // c(θ=0.09) on the main cardioid: e^{2πiθ}/2 − e^{4πiθ}/4
+                Params        = new RegionFractalParams { JuliaCRe = 0.31572, JuliaCIm = 0.04171 },
+            },
         ];
 
         // ── Interesting random-zoom regions for the slideshow ────────────────────

@@ -16,13 +16,17 @@ AMBER).** The whole faithful-limit **math chain is proven** — horn map (`|c₁
 return multiplier `e^{2πiα}`, Douady re-injection) — and the **performance blocker is
 resolved**: S6's precompute-coordinate engine evaluates `g_α` in 0.59 µs (~116 000×
 faster), turning the faithful render from ~250 h to ~1 min at 7e-6 interp accuracy.
-**One clearly-named open item remains for the *faithful* feature** (S6 finding): the
-imploded set is the Julia set of the semigroup `⟨f, g_α⟩`, so it needs a **word-tree
-semigroup-Julia rendering algorithm** (a naïve single-orbit combined map gives bounded
-recurrence, not the imploded set) — the "hardest validation tier" (§7). The **visible
-naïve implosion animation ships (S1)** as the flagship's user-facing deliverable; the
-faithful animation is unblocked on perf and gated only on that one algorithm. Higher-`q`
-petals are the one untested math extension.
+**Production build under way (post-spike).** The faithful feature is being built via the
+**Lavaurs-limit** route ([#920](https://github.com/AloneButUnsober/FracturingFog/issues/920)):
+render `J(g_α)` as the high-iteration near-parabolic Julia set on the controlled cardioid
+`c(θ)`-path (`θ → 0` approaches the cusp `c = 1/4`), which is Lavaurs's theorem's own
+definition of the limit (`J(f_{c(θ)}) → J(g_α)`) — tractable, validatable, and on the
+existing Julia calculator. The **direct semigroup-Julia word-tree** render (S6 finding:
+the imploded set is `J(⟨f, g_α⟩)`) is the theoretically-distinct alternative, **deferred**
+as [#918](https://github.com/AloneButUnsober/FracturingFog/issues/918). The **naïve
+implosion animation ships (S1)**; the faithful animation now ships too (a
+`CardioidApproach` animation mode + a high-iteration "faithful" region/animation, #920).
+Higher-`q` petals (other bulb boundaries) are the one untested math extension.
 
 **Why a design doc first.** The faithful render depends on the Écalle–Voronin /
 Lavaurs renormalization machinery — steep analytic math with near-zero prior
@@ -573,6 +577,18 @@ animation (S1) already ships as the flagship's user-facing deliverable.
 
 ## 10. Change log
 
+- **2026-09-20** — **Faithful renderer production build (post-spike) — Lavaurs-limit route
+  ([#920](https://github.com/AloneButUnsober/FracturingFog/issues/920)).** Chose the
+  Lavaurs-limit approach over the semigroup word-tree ([#918](https://github.com/AloneButUnsober/FracturingFog/issues/918),
+  deferred): render `J(g_α)` as the high-iteration near-parabolic Julia set on the
+  controlled cardioid `c(θ)`-path (`c(θ) = e^{2πiθ}/2 − e^{4πiθ}/4`, multiplier `e^{2πiθ}`;
+  `θ → 0` approaches the cusp `c = 1/4`), which is Lavaurs's theorem's definition of the
+  limit — on the existing Julia calculator. Prototype validated (satellite spirals bloom as
+  `θ → 0`). **Shipped (MVP):** a new `CardioidApproach` **animation mode** (sweeps `θ`,
+  outputs `c(θ)`), a built-in **"Parabolic implosion (faithful, c=1/4)"** animation, and a
+  high-iteration **"Parabolic implosion (faithful) c = 1/4"** region bound to it. +3 tests.
+  The faithful animation is the rigorous counterpart of the naïve S1 circle. (Iteration
+  auto-scaling for the deepest `θ`, other bulb boundaries / higher-`q` petals: follow-ups.)
 - **2026-09-20** — **S6 done — faithful implosion animation, verdict GREEN (engine) /
   AMBER (render) (§9). SPIKE SERIES S0–S6 COMPLETE.** Built + validated the
   **precompute-coordinate engine** S4 called for: both Fatou coordinates tabulated on a
