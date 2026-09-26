@@ -209,6 +209,37 @@ namespace FracturingFog
         /// on s, the z-orbit angle is the Mandelbrot parameter external angle.
         /// Bailout-independent. ComplexPlane map only (#970).</summary>
         ExternalAngleDelta,
+        /// <summary>Smooth escape count of the z-orbit (seed 0) alone — the
+        /// critical-orbit reference. Needs only that orbit to escape (#971).</summary>
+        EscapeTimeZ,
+        /// <summary>Smooth escape count of the c-orbit alone. Needs only that orbit
+        /// to escape, so it stays live where the critical orbit is bounded (s in
+        /// the Mandelbrot set) — the field for Julia-plane and volume slices (#971).</summary>
+        EscapeTimeC,
+    }
+
+    /// <summary>Which two of the four dual-orbit coordinates (c-seed x/y, parameter
+    /// s x/y) the image plane spans; the other two come from fixed parameters
+    /// (<c>DualOrbitCSeedX/Y</c>, <c>DualOrbitSX/SY</c>). Every choice is a 2D slice
+    /// of one field F(c0, s) with z0 = 0 (#971). Name order = (image X, image Y).
+    /// Append only: regions persist the numeric value.</summary>
+    public enum DualOrbitSliceAxes
+    {
+        /// <summary>Image = (s.x, s.y), c fixed — the parameter plane (default,
+        /// the shipped view; the original sx sweep extended to 2D).</summary>
+        SxSy,
+        /// <summary>Image = (c.x, c.y), s fixed — the dynamical (Julia-type) plane;
+        /// the z-orbit is the constant critical reference.</summary>
+        CxCy,
+        /// <summary>Image = (c.x, s.x) — cross-section of the (c.x, c.y, s.x)
+        /// volume: each row is a line through a Julia set, stacked along the sweep.</summary>
+        CxSx,
+        /// <summary>Image = (c.x, s.y).</summary>
+        CxSy,
+        /// <summary>Image = (c.y, s.x).</summary>
+        CySx,
+        /// <summary>Image = (c.y, s.y).</summary>
+        CySy,
     }
 
     public enum FractalType
