@@ -21,15 +21,14 @@
 // inside UploadProcessedBuffer / PresentBuffer. Calculator buffers are not
 // thread-affine, so per-frame ApplyVideoFrameState → Calculate → recolor →
 // upload all run sequentially on that one thread — no UI marshalling. The
-// StatusChanged / RecordingFinished / Stopped events therefore fire on the
+// StatusChanged / Stopped events therefore fire on the
 // background thread; the Avalonia subscriber marshals to the UI thread itself
 // (this assembly has no Avalonia / Dispatcher reference).
 //
-// Save flow stays shell-side: the engine creates the Mp4Writer /
-// PngSequenceWriter, feeds them the post-FX frames, finalises (Dispose) when
-// the zoom ends, then raises RecordingFinished with the temp artefact paths +
-// chosen encode. The shell does the SaveFileDialog / folder-pick / ffmpeg
-// encode (it owns the Avalonia + ffmpeg plumbing).
+// Recording (#946): the zoom no longer owns per-run MP4 / PNG / GIF writers.
+// The shell starts the instant-record capture (FractalRenderHost.LiveRecord)
+// alongside the run and stops it on Stopped, so zooms, the video slideshow
+// and travel all share one recorder and one Save Recording prompt.
 
 using System;
 using System.Collections.Generic;
@@ -159,24 +158,6 @@ namespace FracturingFog.Rendering
         private double[]? _bandAvgDwell;
         private bool _bandStatsValid;
 
-        // ── Recorders (single-shot only; slideshow never records) ──────────
-        // Phase X.0 / Slice 0.1c: typed as the cross-platform IVideoWriter
-        // contract. Construction goes through VideoWriterFactory installed by
-        // the host bootstrap so Engine does not reference Mp4Writer
-        // (Media Foundation P/Invoke, ships in Rendering.D3D).
-        private FracturingFog.Imaging.IVideoWriter? _videoMp4Writer;
-        private string? _videoMp4TempPath;
-        private Stopwatch? _videoMp4Sw;
-        private PngSequenceWriter? _videoPngWriter;
-        private string? _videoPngFolder;
-        private VideoLosslessEncode _videoLosslessEncode = VideoLosslessEncode.None;
-
-        // #784 — animated GIF recorder (single-shot only), independent of MP4 /
-        // PNG so any combination can run in one zoom.
-        private FracturingFog.Imaging.GifSequenceWriter? _videoGifWriter;
-        private string? _videoGifTempPath;
-        private Stopwatch? _videoGifSw;
-
         // ── Per-leg histogram-equalization CDF lock ────────────────────────
         private double[]? _videoLegCdf;
         private int _videoLegCdfBins;
@@ -248,7 +229,6 @@ namespace FracturingFog.Rendering
         public bool IsSlideshowRunning => _videoSlideshowRunning;
 
         public event EventHandler<string>? StatusChanged;
-        public event EventHandler<VideoRecordingResult>? RecordingFinished;
         public event EventHandler? Stopped;
 
         /// <summary>Bootstrap hook: hand the engine the host theme service so
@@ -365,18 +345,6 @@ namespace FracturingFog.Rendering
                 LoadTargetRegionForVideo(request.TargetRegionName);
             }
 
-            // Capture recorder intent here (UI thread) but defer the actual
-            // Media Foundation / PNG writer creation to the background loop
-            // thread below. The MF sink writer is apartment-bound: created on
-            // the Avalonia UI (STA) thread and then fed frames from the MTA
-            // Task.Run loop, the cross-apartment QueryInterface on
-            // IMFSinkWriter fails (InvalidCastException). Creating, writing and
-            // disposing all on the same MTA loop thread avoids the marshal.
-            bool wantMp4 = request.IsSaveVideo;
-            bool wantPng = request.IsSaveLossless;
-            bool wantGif = request.IsSaveGif;
-            var pngEncode = request.LosslessEncode;
-
             _videoRunning = true;
             // Uncap Present pacing for the duration of the video run — the
             // calc loop must not be paced by the monitor refresh. Restored
@@ -385,7 +353,7 @@ namespace FracturingFog.Rendering
             try { _renderer.VSync = false; } catch { }
             // Suppress the pre-overlay snapshot copy in UploadProcessedBuffer
             // while recording — SaveLastFrameToPng is user-action only.
-            _recordingActive = wantMp4 || wantPng || wantGif;
+            _recordingActive = IsLiveRecording;
             // Reset adaptive iter cap so each video run starts at full quality.
             _videoIterCap = 1.0;
             _videoLastFrameMs = 0.0;
@@ -441,15 +409,6 @@ namespace FracturingFog.Rendering
 
             Task.Run(() =>
             {
-                // Recorders before the loop so frame 0 is captured. Failure
-                // disables that recorder but lets the zoom proceed.
-                if (wantMp4) TryStartVideoRecording();
-                if (wantPng)
-                {
-                    _videoLosslessEncode = pngEncode;
-                    TryStartLosslessRecording();
-                }
-                if (wantGif) TryStartGifRecording();
                 VideoLoop(startCX, startCY, startZoom, targetCX, targetCY, targetZoom, seconds, cts.Token, reverse);
             }, cts.Token)
                 .ContinueWith(t => FinishSingleShot(t), TaskScheduler.Default);
@@ -618,36 +577,9 @@ namespace FracturingFog.Rendering
             _calculator.PerRowMaxIter = null;
             _bandStatsValid = false;
 
-            // Finalise both encoders first so the temp artefacts are fully
-            // written by the time the shell decides whether to keep them.
-            var (writer, tempPath) = TakeVideoRecordingState();
-            try { writer?.Dispose(); } catch { }
-            var (pngWriter, pngFolder) = TakeLosslessRecordingState();
-            try { pngWriter?.Dispose(); } catch { }
-            var (gifWriter, gifPath) = TakeGifRecordingState();
-            try { gifWriter?.Dispose(); }
-            catch (Exception ex) { RaiseStatus($"Animated GIF finalise failed: {ex.Message}"); gifPath = null; }
-            var encode = _videoLosslessEncode;
-            _videoLosslessEncode = VideoLosslessEncode.None;
-
-            bool cancelled = t.IsCanceled || t.IsFaulted;
             if (t.IsCanceled) RaiseStatus("Video zoom cancelled.");
             else if (t.IsFaulted) RaiseStatus($"Video zoom error: {t.Exception?.InnerException?.Message}");
             else RaiseStatus($"Video zoom complete. zoom={_calculator.Zoom:G6}");
-
-            // Raise the recording result only when a recorder was active so the
-            // shell can prompt (or, on cancel/fault, discard the temp files).
-            if (tempPath != null || pngFolder != null || gifPath != null)
-            {
-                RecordingFinished?.Invoke(this, new VideoRecordingResult
-                {
-                    Mp4TempPath = tempPath,
-                    PngFolder = pngFolder,
-                    GifTempPath = gifPath,
-                    Encode = encode,
-                    Cancelled = cancelled,
-                });
-            }
 
             Stopped?.Invoke(this, EventArgs.Empty);
         }
@@ -668,7 +600,7 @@ namespace FracturingFog.Rendering
         }
 
         // ──────────────────────────────────────────────────────────────────
-        // Recorder lifecycle
+        // Stereo
         // ──────────────────────────────────────────────────────────────────
 
         // #110 — true stereo is active for the video run when the target fractal
@@ -688,176 +620,6 @@ namespace FracturingFog.Rendering
                 return true;
             }
             return false;
-        }
-
-        private void TryStartVideoRecording()
-        {
-            int w = _calculator.Width, h = _calculator.Height;
-            if (w < 16 || h < 16) return;
-            if (VideoStereoActive(out var stLayout))
-                (w, h) = FracturingFog.Rendering.Lighting.StereoRender.OutputDims(w, h, stLayout);
-            try
-            {
-                string tempPath = Path.Combine(Path.GetTempPath(), $"fracturingfog_{Guid.NewGuid():N}.mp4");
-                if (VideoWriterFactory == null)
-                {
-                    RaiseStatus("Video recording disabled — no encoder backend installed.");
-                    return;
-                }
-                _videoMp4Writer = VideoWriterFactory(tempPath, w, h);
-                _videoMp4TempPath = tempPath;
-                _videoMp4Sw = Stopwatch.StartNew();
-            }
-            catch (Exception ex)
-            {
-                RaiseStatus($"Video recording disabled — encoder init failed: {ex.Message}");
-                ClearVideoRecordingState(deleteTempFile: true);
-            }
-        }
-
-        private void TryStartLosslessRecording()
-        {
-            int w = _calculator.Width, h = _calculator.Height;
-            if (w < 16 || h < 16) return;
-            if (VideoStereoActive(out var stLayout))
-                (w, h) = FracturingFog.Rendering.Lighting.StereoRender.OutputDims(w, h, stLayout);
-            try
-            {
-                string folder = Path.Combine(Path.GetTempPath(), $"fracturingfog_pngseq_{Guid.NewGuid():N}");
-                _videoPngWriter = new PngSequenceWriter(folder, w, h);
-                _videoPngFolder = folder;
-            }
-            catch (Exception ex)
-            {
-                RaiseStatus($"Lossless recording disabled — init failed: {ex.Message}");
-                ClearLosslessRecordingState(deleteFolder: true);
-            }
-        }
-
-        private (FracturingFog.Imaging.IVideoWriter? Writer, string? TempPath) TakeVideoRecordingState()
-        {
-            var w = _videoMp4Writer;
-            var p = _videoMp4TempPath;
-            _videoMp4Writer = null;
-            _videoMp4TempPath = null;
-            _videoMp4Sw = null;
-            return (w, p);
-        }
-
-        private void ClearVideoRecordingState(bool deleteTempFile)
-        {
-            var (w, p) = TakeVideoRecordingState();
-            try { w?.Dispose(); } catch { }
-            if (deleteTempFile && p != null && File.Exists(p))
-                try { File.Delete(p); } catch { }
-        }
-
-        private (PngSequenceWriter? Writer, string? Folder) TakeLosslessRecordingState()
-        {
-            var w = _videoPngWriter;
-            var f = _videoPngFolder;
-            _videoPngWriter = null;
-            _videoPngFolder = null;
-            return (w, f);
-        }
-
-        private void ClearLosslessRecordingState(bool deleteFolder)
-        {
-            var (w, f) = TakeLosslessRecordingState();
-            try { w?.Dispose(); } catch { }
-            if (deleteFolder && f != null && Directory.Exists(f))
-                try { Directory.Delete(f, recursive: true); } catch { }
-        }
-
-        // #784 — animated GIF recorder. Streams frames to a background encoder
-        // (GifSequenceWriter), so init failure just disables it and the zoom
-        // proceeds, matching the MP4 / PNG recorders.
-        private void TryStartGifRecording()
-        {
-            int w = _calculator.Width, h = _calculator.Height;
-            if (w < 16 || h < 16) return;
-            if (VideoStereoActive(out var stLayout))
-                (w, h) = FracturingFog.Rendering.Lighting.StereoRender.OutputDims(w, h, stLayout);
-            try
-            {
-                string tempPath = Path.Combine(Path.GetTempPath(), $"fracturingfog_{Guid.NewGuid():N}.gif");
-                _videoGifWriter = new FracturingFog.Imaging.GifSequenceWriter(tempPath, w, h);
-                _videoGifTempPath = tempPath;
-                _videoGifSw = Stopwatch.StartNew();
-            }
-            catch (Exception ex)
-            {
-                RaiseStatus($"Animated GIF recording disabled — init failed: {ex.Message}");
-                ClearGifRecordingState(deleteTempFile: true);
-            }
-        }
-
-        private (FracturingFog.Imaging.GifSequenceWriter? Writer, string? TempPath) TakeGifRecordingState()
-        {
-            var w = _videoGifWriter;
-            var p = _videoGifTempPath;
-            _videoGifWriter = null;
-            _videoGifTempPath = null;
-            _videoGifSw = null;
-            return (w, p);
-        }
-
-        private void ClearGifRecordingState(bool deleteTempFile)
-        {
-            var (w, p) = TakeGifRecordingState();
-            try { w?.Dispose(); } catch { }
-            if (deleteTempFile && p != null && File.Exists(p))
-                try { File.Delete(p); } catch { }
-        }
-
-        // Feeds the post-FX buffer (what was just uploaded) to any active
-        // recorders. A write failure disables that recorder but does not
-        // interrupt the zoom or affect the other recorder.
-        private void CaptureVideoFrame()
-        {
-            var buf = _lastUploadedBuffer;
-            if (buf == null) return;
-
-            var mp4 = _videoMp4Writer;
-            var sw = _videoMp4Sw;
-            if (mp4 != null && sw != null)
-            {
-                try { mp4.WriteFrame(buf, sw.Elapsed.Ticks); }
-                catch (Exception ex)
-                {
-                    Console.Error.WriteLine(
-                        $"[FractalRenderHost] Mp4 frame write failed: buf={buf.Length} " +
-                        $"src={_calculator.Width}x{_calculator.Height} " +
-                        $"upload={_lastUploadedWidth}x{_lastUploadedHeight} :: {ex}");
-                    ClearVideoRecordingState(deleteTempFile: true);
-                    RaiseStatus("MP4 recording disabled (frame encode error).");
-                }
-            }
-
-            var png = _videoPngWriter;
-            if (png != null)
-            {
-                try { png.WriteFrame(buf); }
-                catch (Exception ex)
-                {
-                    Debug.WriteLine($"PNG frame write failed: {ex.Message}");
-                    ClearLosslessRecordingState(deleteFolder: true);
-                    RaiseStatus("Lossless recording disabled (PNG write error).");
-                }
-            }
-
-            var gif = _videoGifWriter;
-            var gifSw = _videoGifSw;
-            if (gif != null && gifSw != null)
-            {
-                try { gif.WriteFrame(buf, gifSw.Elapsed.Ticks); }
-                catch (Exception ex)
-                {
-                    Debug.WriteLine($"GIF frame write failed: {ex.Message}");
-                    ClearGifRecordingState(deleteTempFile: true);
-                    RaiseStatus("Animated GIF recording disabled (frame write error).");
-                }
-            }
         }
 
         // ──────────────────────────────────────────────────────────────────
@@ -1196,9 +958,8 @@ namespace FracturingFog.Rendering
                 long calcStartA = ShowPerfHud ? Stopwatch.GetTimestamp() : 0;
 
                 // #110 — stereo video. 3D raymarchers render via this alt path;
-                // when stereo is on, render both eyes and feed the composited
-                // side-by-side buffer to the recorders (the writers were sized
-                // to the stereo output dims in TryStart*Recording).
+                // when stereo is on, render both eyes and present the composited
+                // side-by-side buffer (so the instant recorder captures SBS).
                 if (VideoStereoActive(out var stLayout))
                 {
                     uint[]? sbs = null;
@@ -1225,7 +986,6 @@ namespace FracturingFog.Rendering
                     {
                         UploadProcessedBuffer(alt.ColorBuffer, alt.Width, alt.Height);
                     }
-                    CaptureVideoFrame();
                     if (ShowPerfHud) _perfStats.RecordFrame(frameSw.Elapsed.TotalMilliseconds);
                     return;
                 }
@@ -1274,7 +1034,6 @@ namespace FracturingFog.Rendering
                     }
                 }
                 UploadProcessedBuffer(alt.ColorBuffer, alt.Width, alt.Height);
-                CaptureVideoFrame();
                 if (ShowPerfHud) _perfStats.RecordFrame(frameSw.Elapsed.TotalMilliseconds);
                 return;
             }
@@ -1348,7 +1107,6 @@ namespace FracturingFog.Rendering
                 BlendWithPrevFrameInPlace();
 
             UploadProcessedBuffer(_calculator.ColorBuffer, _calculator.Width, _calculator.Height);
-            CaptureVideoFrame();
 
             // Capture this frame for the next iteration's reprojection.
             StashCurrentFrameAsPrev();
@@ -2833,7 +2591,6 @@ namespace FracturingFog.Rendering
                         .ResampleRectBilinear(heldBuf!, w, h, sx, sy, viewW, viewH, outBuf!);
                     PresentBuffer(outBuf!, w, h);
                 }
-                CaptureVideoFrame();
                 // Wait one frame; WaitOne returns true when the token is
                 // cancelled (skip/stop) → end the hold immediately.
                 if (ct.WaitHandle.WaitOne(frameMs)) break;
@@ -2899,7 +2656,6 @@ namespace FracturingFog.Rendering
                     try { alt.Calculate(ct); }
                     catch (OperationCanceledException) { return; }
                     UploadProcessedBuffer(alt.ColorBuffer, alt.Width, alt.Height);
-                    CaptureVideoFrame();
                     if (ct.WaitHandle.WaitOne(frameMs)) break;
                 }
             }
@@ -2936,7 +2692,6 @@ namespace FracturingFog.Rendering
             alt.OnBatchComposited = (done, total) =>
             {
                 PresentBuffer(alt.ColorBuffer, alt.Width, alt.Height);
-                CaptureVideoFrame();
                 // Pace: spread the batches across the leg (interruptible).
                 double target = done * perBatch;
                 double now = sw.Elapsed.TotalSeconds;

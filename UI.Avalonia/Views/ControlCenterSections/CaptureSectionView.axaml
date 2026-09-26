@@ -32,6 +32,66 @@
             </StackPanel>
         </Border>
 
+        <!-- #946 Quick Record: instant capture of the render window (F9 /
+             toolbar ● Rec) + its persisted defaults. The Video dialog's
+             "Record this run" and the post-stop Save Recording prompt share
+             these settings (the prompt remembers the last choices here). -->
+        <Border Classes="group">
+            <StackPanel Spacing="6">
+                <TextBlock Classes="section" Text="Quick Record" />
+                <Grid ColumnDefinitions="Auto,Auto,Auto" ColumnSpacing="6">
+                    <Button Grid.Column="0" Classes="action video" MinWidth="96"
+                            Content="{Binding Shell.LiveRecordingLabel}"
+                            Command="{Binding Shell.ToggleLiveRecordingCommand}"
+                            IsVisible="{Binding Shell.IsLiveRecordingAvailable}"
+                            ToolTip.Tip="Start / stop recording exactly what the render window shows (F9). Themes, animation, lighting/FX and the watermark are captured as displayed." />
+                    <TextBlock Grid.Column="1" Text="Capture" Foreground="#9A9A9A" FontSize="11" VerticalAlignment="Center" Margin="6,0,0,0" />
+                    <ComboBox Grid.Column="2" Width="100"
+                              ItemsSource="{Binding QuickRecordFpsChoices}"
+                              SelectedItem="{Binding QuickRecordCaptureFps, Mode=TwoWay}"
+                              ToolTip.Tip="How often the render window is sampled while recording (frames per second). Unchanged frames cost nothing; higher rates capture fast motion more smoothly." />
+                </Grid>
+                <Grid ColumnDefinitions="Auto,*,Auto,*" RowDefinitions="Auto,Auto" RowSpacing="4" ColumnSpacing="6" Width="420" HorizontalAlignment="Left">
+                    <TextBlock Grid.Row="0" Grid.Column="0" Text="Format" Foreground="#9A9A9A" FontSize="11" VerticalAlignment="Center" />
+                    <ComboBox Grid.Row="0" Grid.Column="1" HorizontalAlignment="Stretch"
+                              ItemsSource="{Binding QuickRecordFormatChoices}"
+                              SelectedIndex="{Binding QuickRecordFormatIndex, Mode=TwoWay}"
+                              ToolTip.Tip="Default output format. (ffmpeg) formats need ffmpeg installed (FFmpeg Setup)." />
+                    <TextBlock Grid.Row="0" Grid.Column="2" Text="Quality" Foreground="#9A9A9A" FontSize="11" VerticalAlignment="Center" />
+                    <ComboBox Grid.Row="0" Grid.Column="3" HorizontalAlignment="Stretch"
+                              ItemsSource="{Binding QuickRecordQualityChoices}"
+                              SelectedIndex="{Binding QuickRecordQualityIndex, Mode=TwoWay}"
+                              IsEnabled="{Binding IsQuickRecordQualityApplicable}"
+                              ToolTip.Tip="Default encode quality (ignored by lossless MKV and PNG sequence)." />
+                    <TextBlock Grid.Row="1" Grid.Column="0" Text="Output" Foreground="#9A9A9A" FontSize="11" VerticalAlignment="Center" />
+                    <ComboBox Grid.Row="1" Grid.Column="1" HorizontalAlignment="Stretch"
+                              ItemsSource="{Binding QuickRecordFpsChoices}"
+                              SelectedItem="{Binding QuickRecordOutputFps, Mode=TwoWay}"
+                              ToolTip.Tip="Default frame rate of the saved video (resampled from the capture timeline)." />
+                    <TextBlock Grid.Row="1" Grid.Column="2" Text="Size %" Foreground="#9A9A9A" FontSize="11" VerticalAlignment="Center" />
+                    <ComboBox Grid.Row="1" Grid.Column="3" HorizontalAlignment="Stretch"
+                              ItemsSource="{Binding QuickRecordScaleChoices}"
+                              SelectedItem="{Binding QuickRecordScale, Mode=TwoWay}"
+                              ToolTip.Tip="Default output size as a percentage of the render window." />
+                </Grid>
+                <CheckBox Content="Ask how to save when recording stops"
+                          IsChecked="{Binding QuickRecordAskOnStop, Mode=TwoWay}"
+                          ToolTip.Tip="On: the Save Recording prompt opens on stop (pre-filled with these defaults; your choices are remembered). Off: save straight to the folder below with these defaults — no prompts." />
+                <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="4" Width="420" HorizontalAlignment="Left">
+                    <TextBlock Grid.Column="0" Text="{Binding QuickRecordFolderDisplay}"
+                               Foreground="#9A9A9A" FontSize="11" VerticalAlignment="Center"
+                               TextTrimming="CharacterEllipsis"
+                               ToolTip.Tip="{Binding QuickRecordFolderDisplay}" />
+                    <Button Grid.Column="1" Classes="action neutral" Content="Folder…"
+                            Command="{Binding BrowseQuickRecordFolderCommand}"
+                            ToolTip.Tip="Folder used when 'Ask how to save' is off" />
+                    <Button Grid.Column="2" Classes="action neutral" Content="Default"
+                            Command="{Binding ClearQuickRecordFolderCommand}"
+                            ToolTip.Tip="Reset to the default folder (Videos\FracturingFog)" />
+                </Grid>
+            </StackPanel>
+        </Border>
+
         <Border Classes="group">
             <StackPanel Spacing="6">
                 <TextBlock Classes="section" Text="Slideshow" />

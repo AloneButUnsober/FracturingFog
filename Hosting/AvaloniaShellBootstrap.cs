@@ -2705,6 +2705,9 @@ namespace FracturingFog.Hosting
                         "Export Workspace", def, "JSON (*.json)|*.json|All files (*.*)|*.*");
                 cc.WorkspaceDeleteConfirmRequested = name =>
                     AvaloniaDialogs.ConfirmAsync("Delete Workspace", $"Delete saved workspace \"{name}\"?");
+                // #946 Quick Record — folder for no-prompt saves.
+                cc.QuickRecordFolderPickRequested = () =>
+                    AvaloniaDialogs.PickFolderAsync("Folder for Quick Record saves");
             };
 
             // #493 — a region jump mutates FractalParameters in place; refresh any
@@ -2948,22 +2951,6 @@ namespace FracturingFog.Hosting
                         Console.Error.WriteLine($"[AvaloniaShellBootstrap] Asset JSON import failed: {ex.Message}");
                         await AvaloniaDialogs.ShowMessageAsync(
                             args.Title, "Import failed:\n" + ex.Message, expectsConfirmation: false);
-                    }
-                });
-            };
-
-            // Recording finished — the engine has finalised the temp MP4 and/or
-            // PNG sequence. On success, prompt for save destinations; on cancel
-            // or fault, discard the temp artefacts. Fires on a background thread
-            // → marshal the prompts onto the UI thread.
-            ((IVideoZoomController)s_renderHost!).RecordingFinished += (_, result) =>
-            {
-                Dispatcher.UIThread.Post(async () =>
-                {
-                    try { await HandleRecordingFinished(result); }
-                    catch (Exception ex)
-                    {
-                        Console.Error.WriteLine($"[AvaloniaShellBootstrap] RecordingFinished failed: {ex.Message}");
                     }
                 });
             };
@@ -3814,44 +3801,15 @@ namespace FracturingFog.Hosting
                 expectsConfirmation: false);
         }
 
-        // ── #64 — Video recording save prompts ───────────────────────────────
+        // ── Recording save prompts (#945 / #946) ─────────────────────────────
 
-        private static async Task HandleRecordingFinished(VideoRecordingResult result)
-        {
-            // Cancelled / faulted: nothing to keep — delete temp artefacts.
-            if (result.Cancelled)
-            {
-                if (!string.IsNullOrEmpty(result.Mp4TempPath) && System.IO.File.Exists(result.Mp4TempPath))
-                    try { System.IO.File.Delete(result.Mp4TempPath); } catch { }
-                if (!string.IsNullOrEmpty(result.PngFolder) && System.IO.Directory.Exists(result.PngFolder))
-                    try { System.IO.Directory.Delete(result.PngFolder, recursive: true); } catch { }
-                if (!string.IsNullOrEmpty(result.GifTempPath) && System.IO.File.Exists(result.GifTempPath))
-                    try { System.IO.File.Delete(result.GifTempPath); } catch { }
-                return;
-            }
-
-            // 1. MP4 — SaveFileDialog then move the temp file into place.
-            if (!string.IsNullOrEmpty(result.Mp4TempPath) && System.IO.File.Exists(result.Mp4TempPath))
-                await PromptSaveMp4(result.Mp4TempPath!);
-
-            // 2. PNG sequence — pick a destination folder, move the frames, then
-            //    optionally encode with ffmpeg.
-            if (!string.IsNullOrEmpty(result.PngFolder) && System.IO.Directory.Exists(result.PngFolder))
-                await PromptSaveLossless(result.PngFolder!, result.Encode);
-
-            // 3. Animated GIF — SaveFileDialog then move the temp file into place.
-            if (!string.IsNullOrEmpty(result.GifTempPath) && System.IO.File.Exists(result.GifTempPath))
-                await PromptSaveGif(result.GifTempPath!);
-        }
-
-        // #945 — last export choices, pre-selected on the next prompt.
-        // (Persisted Quick Record prefs are #946.)
-        private static FracturingFog.Render.LiveRecordingExportOptions? s_lastLiveExport;
-
-        // Instant recording stopped — prompt for format / quality, pick the
-        // destination, encode, then drop the temp intermediate. Discard (or a
-        // closed prompt) asks for confirmation so a stray click can't lose a
-        // take; a failed encode re-opens the prompt with the same frames.
+        // Instant recording stopped (#945/#946). Ask-on-stop (default): prompt
+        // for format / quality, pick the destination, encode — choices are
+        // remembered in the Quick Record prefs. Ask-on-stop off: save straight
+        // to the prefs' folder with the defaults, falling back to the prompt
+        // if that export fails. Discard (or a closed prompt) asks for
+        // confirmation so a stray click can't lose a take; a failed encode
+        // re-opens the prompt with the same frames.
         private static async Task HandleLiveRecordingReadyAsync(FracturingFog.Render.LiveRecordingResult rec)
         {
             // File presence, not IsEnabledForUser: pressing Record is explicit
@@ -3859,9 +3817,28 @@ namespace FracturingFog.Hosting
             // Video" election (FfmpegUserElection.Skip) must not hide the
             // ffmpeg formats when ffmpeg is actually installed.
             bool ffmpeg = FfmpegEncoder.IsAvailable();
+            var prefs = FracturingFog.Models.LiveRecordingPrefsStore.Current;
+            string stamp = DateTime.Now.ToString("yyyyMMdd_HHmmss");
+
+            if (!prefs.AskOnStop)
+            {
+                var opt = prefs.ToExportOptions();
+                string folder = prefs.ResolveOutputFolder();
+                string outPath = System.IO.Path.Combine(folder,
+                    opt.Format == FracturingFog.Render.LiveRecordingFormat.PngSequence
+                        ? $"FracturingFog_Recording_{stamp}"
+                        : $"FracturingFog_Recording_{stamp}.{LiveRecordingEncoder.ExtensionFor(opt.Format)}");
+                try { System.IO.Directory.CreateDirectory(folder); } catch { }
+                var (ok, log) = await EncodeLiveRecordingAsync(rec, opt, outPath, ffmpeg);
+                if (ok) return;
+                await AvaloniaDialogs.ShowMessageAsync("Save Recording",
+                    $"Automatic save to {folder} failed — choose how to save it instead.\n\n{log}",
+                    expectsConfirmation: false);
+            }
+
             while (true)
             {
-                var opt = await AvaloniaDialogs.ShowLiveRecordingExportAsync(rec, ffmpeg, s_lastLiveExport);
+                var opt = await AvaloniaDialogs.ShowLiveRecordingExportAsync(rec, ffmpeg, prefs.ToExportOptions());
                 if (opt == null)
                 {
                     if (await AvaloniaDialogs.ConfirmAsync("Discard Recording",
@@ -3873,9 +3850,9 @@ namespace FracturingFog.Hosting
                     }
                     continue;
                 }
-                s_lastLiveExport = opt;
+                prefs.SetExportOptions(opt);
+                FracturingFog.Models.LiveRecordingPrefsStore.Save();
 
-                string stamp = DateTime.Now.ToString("yyyyMMdd_HHmmss");
                 string? outPath;
                 if (opt.Format == FracturingFog.Render.LiveRecordingFormat.PngSequence)
                 {
@@ -3891,32 +3868,47 @@ namespace FracturingFog.Hosting
                 }
                 if (string.IsNullOrEmpty(outPath)) continue; // back to the prompt
 
-                SetStatus("Encoding recording…");
-                int lastPct = -1;
-                var progress = new Progress<double>(p =>
-                {
-                    int pct = (int)(p * 100);
-                    if (pct != lastPct) { lastPct = pct; SetStatus($"Encoding recording… {pct}%"); }
-                });
-
-                (bool ok, string log) res;
-                try
-                {
-                    res = await LiveRecordingEncoder.EncodeAsync(rec, opt, outPath!,
-                        s_renderHost?.VideoWriterFactory, ffmpegAllowed: ffmpeg, progress: progress);
-                }
-                catch (Exception ex) { res = (false, ex.Message); }
-
-                if (res.ok)
-                {
-                    DeleteLiveTemp(rec);
-                    SetStatus($"Recording saved: {System.IO.Path.GetFileName(outPath)}");
-                    return;
-                }
+                var (ok, log) = await EncodeLiveRecordingAsync(rec, opt, outPath!, ffmpeg);
+                if (ok) return;
                 await AvaloniaDialogs.ShowMessageAsync("Save Recording",
-                    $"Export failed — the recording is kept; try another format.\n\n{res.log}",
+                    $"Export failed — the recording is kept; try another format.\n\n{log}",
                     expectsConfirmation: false);
             }
+        }
+
+        // Encode with status-bar progress. On success: attach the audio file
+        // (AudioSettings File source, #435 — parity with the old zoom MP4
+        // recorder) to video containers, delete the temp intermediate and
+        // report. On failure the intermediate is kept for another attempt.
+        private static async Task<(bool Ok, string Log)> EncodeLiveRecordingAsync(
+            FracturingFog.Render.LiveRecordingResult rec,
+            FracturingFog.Render.LiveRecordingExportOptions opt,
+            string outPath, bool ffmpeg)
+        {
+            SetStatus("Encoding recording…");
+            int lastPct = -1;
+            var progress = new Progress<double>(p =>
+            {
+                int pct = (int)(p * 100);
+                if (pct != lastPct) { lastPct = pct; SetStatus($"Encoding recording… {pct}%"); }
+            });
+
+            (bool ok, string log) res;
+            try
+            {
+                res = await LiveRecordingEncoder.EncodeAsync(rec, opt, outPath,
+                    s_renderHost?.VideoWriterFactory, ffmpegAllowed: ffmpeg, progress: progress);
+            }
+            catch (Exception ex) { res = (false, ex.Message); }
+            if (!res.ok) return res;
+
+            bool muxed = false;
+            if (opt.Format is not (FracturingFog.Render.LiveRecordingFormat.Gif
+                                or FracturingFog.Render.LiveRecordingFormat.PngSequence))
+                muxed = await TryMuxAudioIntoVideoAsync(outPath);
+            DeleteLiveTemp(rec);
+            SetStatus($"Recording saved{(muxed ? " (with audio)" : "")}: {outPath}");
+            return res;
         }
 
         private static void DeleteLiveTemp(FracturingFog.Render.LiveRecordingResult rec)
@@ -4083,151 +4075,6 @@ namespace FracturingFog.Hosting
             {
                 Console.Error.WriteLine("[AvaloniaShellBootstrap] audio mux error: " + ex.Message);
                 return false;
-            }
-        }
-
-        private static async Task PromptSaveMp4(string tempPath)
-        {
-            string? path = await AvaloniaDialogs.PickSaveFileAsync(
-                "Save Video Zoom",
-                suggestedName: $"FracturingFog_Zoom_{DateTime.Now:yyyyMMdd_HHmmss}.mp4",
-                filter: "MP4 video (*.mp4)|*.mp4");
-
-            if (string.IsNullOrEmpty(path))
-            {
-                try { System.IO.File.Delete(tempPath); } catch { }
-                SetStatus("Recorded video discarded.");
-                return;
-            }
-
-            try
-            {
-                System.IO.File.Move(tempPath, path, overwrite: true);
-                // #435 — mux the audio file (File source) into the saved video.
-                bool muxed = await TryMuxAudioIntoVideoAsync(path);
-                SetStatus($"Video saved{(muxed ? " (with audio)" : "")}: {System.IO.Path.GetFileName(path)}");
-            }
-            catch (Exception ex)
-            {
-                try { System.IO.File.Delete(tempPath); } catch { }
-                await AvaloniaDialogs.ShowMessageAsync(
-                    "Save Video", $"Failed to save video:\n{ex.Message}", expectsConfirmation: false);
-            }
-        }
-
-        private static async Task PromptSaveGif(string tempPath)
-        {
-            string? path = await AvaloniaDialogs.PickSaveFileAsync(
-                "Save Animated GIF",
-                suggestedName: $"FracturingFog_Zoom_{DateTime.Now:yyyyMMdd_HHmmss}.gif",
-                filter: "GIF image (*.gif)|*.gif");
-
-            if (string.IsNullOrEmpty(path))
-            {
-                try { System.IO.File.Delete(tempPath); } catch { }
-                SetStatus("Recorded animated GIF discarded.");
-                return;
-            }
-
-            try
-            {
-                System.IO.File.Move(tempPath, path, overwrite: true);
-                SetStatus($"Animated GIF saved: {System.IO.Path.GetFileName(path)}");
-            }
-            catch (Exception ex)
-            {
-                try { System.IO.File.Delete(tempPath); } catch { }
-                await AvaloniaDialogs.ShowMessageAsync(
-                    "Save Animated GIF", $"Failed to save GIF:\n{ex.Message}", expectsConfirmation: false);
-            }
-        }
-
-        private static async Task PromptSaveLossless(string pngFolder, VideoLosslessEncode encode)
-        {
-            // 1. Pick destination folder for the PNG sequence.
-            string? destFolder = await AvaloniaDialogs.PickFolderAsync(
-                "Choose a folder to keep the lossless PNG sequence" +
-                (encode != VideoLosslessEncode.None
-                    ? " (an encoded video will also be written next to it)" : ""));
-
-            if (string.IsNullOrEmpty(destFolder))
-            {
-                try { System.IO.Directory.Delete(pngFolder, recursive: true); } catch { }
-                SetStatus("Lossless PNG sequence discarded.");
-                return;
-            }
-
-            // 2. Move temp folder contents into a uniquely-named subfolder.
-            string stamp = DateTime.Now.ToString("yyyyMMdd_HHmmss");
-            string finalFolder = System.IO.Path.Combine(destFolder, $"FracturingFog_Zoom_{stamp}");
-            try
-            {
-                System.IO.Directory.CreateDirectory(finalFolder);
-                foreach (string src in System.IO.Directory.EnumerateFiles(pngFolder))
-                {
-                    string dst = System.IO.Path.Combine(finalFolder, System.IO.Path.GetFileName(src));
-                    System.IO.File.Move(src, dst, overwrite: true);
-                }
-                try { System.IO.Directory.Delete(pngFolder, recursive: true); } catch { }
-            }
-            catch (Exception ex)
-            {
-                try { System.IO.Directory.Delete(pngFolder, recursive: true); } catch { }
-                await AvaloniaDialogs.ShowMessageAsync(
-                    "Save Lossless", $"Failed to move PNG sequence:\n{ex.Message}", expectsConfirmation: false);
-                return;
-            }
-
-            SetStatus($"Lossless PNG sequence saved: {finalFolder}");
-
-            if (encode == VideoLosslessEncode.None) return;
-            if (!FfmpegEncoder.IsEnabledForUser())
-            {
-                string msg = FfmpegEncoder.IsAvailable()
-                    ? "Video encoding is disabled (Continue Without Video selected). " +
-                      "Open the FFmpeg setup dialog from the floating menu to re-enable it. " +
-                      "Keeping PNG sequence only."
-                    : "ffmpeg.exe is no longer available — keeping PNG sequence only.";
-                await AvaloniaDialogs.ShowMessageAsync(
-                    "Save Lossless", msg, expectsConfirmation: false);
-                return;
-            }
-
-            // 3. Encode with ffmpeg next to the PNG folder.
-            var preset = encode switch
-            {
-                VideoLosslessEncode.LosslessH264Mp4 => FfmpegEncoder.Preset.LosslessH264Mp4,
-                VideoLosslessEncode.Ffv1Mkv => FfmpegEncoder.Preset.Ffv1Mkv,
-                VideoLosslessEncode.HighQualityH264Mp4 => FfmpegEncoder.Preset.HighQualityH264Mp4,
-                _ => FfmpegEncoder.Preset.LosslessH264Mp4,
-            };
-            string ext = FfmpegEncoder.DefaultExtensionFor(preset);
-            string outPath = System.IO.Path.Combine(destFolder, $"FracturingFog_Zoom_{stamp}.{ext}");
-
-            SetStatus($"Encoding lossless video → {System.IO.Path.GetFileName(outPath)} (ffmpeg)…");
-            try
-            {
-                var (ok, log) = await FfmpegEncoder.EncodeAsync(
-                    finalFolder, outPath, preset,
-                    onProgressLine: line =>
-                    {
-                        if (line.StartsWith("frame=", StringComparison.OrdinalIgnoreCase))
-                            Dispatcher.UIThread.Post(() => SetStatus($"ffmpeg: {line.Trim()}"));
-                    });
-                if (ok)
-                {
-                    // #435 — mux the audio file (File source) into the encoded video.
-                    bool muxed = await TryMuxAudioIntoVideoAsync(outPath);
-                    SetStatus($"Encoded{(muxed ? " (with audio)" : "")}: {System.IO.Path.GetFileName(outPath)}");
-                }
-                else
-                    await AvaloniaDialogs.ShowMessageAsync(
-                        "Save Lossless", "ffmpeg encode failed.\n\n" + log, expectsConfirmation: false);
-            }
-            catch (Exception ex)
-            {
-                await AvaloniaDialogs.ShowMessageAsync(
-                    "Save Lossless", $"ffmpeg encode exception:\n{ex.Message}", expectsConfirmation: false);
             }
         }
 
