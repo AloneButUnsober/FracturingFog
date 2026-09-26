@@ -21,6 +21,13 @@
 // bailout radius. GreenRatio (log2 G_c/G_z = n_z − n_c) and ExternalAngleDelta
 // (Böttcher angles by backward lifting) are bailout-independent.
 //
+// Per-orbit layers (#979, #939): DualOrbitColorMode.PerOrbitLayers colours each
+// orbit as its own layer — its own theme (DualOrbitThemeZ / DualOrbitThemeC by
+// name, or injected), that theme's interior colour × InteriorAlpha and #615
+// surround — then blends the c layer with the z layer (DualOrbitLayerBlend,
+// per-layer opacity). The two "discs" users see are M (z bounded) with M_c ⊂ M
+// (c bounded) inside it, and the exterior level sets centred on 0 (z) and −c² (c).
+//
 // Slice axes (#971): every view is a 2D slice of one field F(c0, s) with z0 = 0.
 // DualOrbitSliceAxes picks which two of (c.x, c.y, s.x, s.y) the image spans; the
 // other two come from DualOrbitCSeedX/Y and DualOrbitSX/SY. SxSy (default) is the
@@ -33,6 +40,7 @@
 // "Mandelbrot control" (DualOrbitCEqualsS). See §3.6 "Seed-decoupling degeneracy".
 
 using System;
+using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -62,6 +70,18 @@ public sealed class DualOrbitEscapeCalculator : IFractalCalculator, IHeightField
     public bool SupportsZoomPan => true;
 
     public FractalParameters FractalParameters { get; set; } = new();
+
+    /// <summary>PerOrbitLayers (#979): explicit theme for the z-orbit layer. When
+    /// set it wins over <c>FractalParameters.DualOrbitThemeZ</c> (host / export /
+    /// test injection); null resolves the name.</summary>
+    public IColorMap? LayerThemeZ { get; set; }
+    /// <summary>PerOrbitLayers: explicit theme for the c-orbit layer (see
+    /// <see cref="LayerThemeZ"/>).</summary>
+    public IColorMap? LayerThemeC { get; set; }
+
+    /// <summary>Layer theme names that did not resolve on the last Calculate — the
+    /// main theme was used in their place (the UI surfaces a warning, #980).</summary>
+    public IReadOnlyList<string> UnresolvedLayerThemes { get; private set; } = Array.Empty<string>();
 
     // Bailout radius (FractalParameters.DualOrbitBailout, default 128) — large for
     // a smooth continuous escape count. Snapshotted per Calculate().
@@ -209,7 +229,8 @@ public sealed class DualOrbitEscapeCalculator : IFractalCalculator, IHeightField
         int width = Width, height = Height;
         double centerX = CenterX, centerY = CenterY;
         bool quat = map == DualOrbitMap.Quaternion;
-        bool angles = !quat && field == DualOrbitField.ExternalAngleDelta;
+        bool layers = FractalParameters.DualOrbitColorMode == DualOrbitColorMode.PerOrbitLayers;
+        bool angles = !layers && !quat && field == DualOrbitField.ExternalAngleDelta;
 
         // #978 — theme interior colour × global interior alpha (the #96/#97 knob,
         // same scaling as InteriorAlphaStamp), and the #615 out-of-bounds surround.
@@ -218,6 +239,20 @@ public sealed class DualOrbitEscapeCalculator : IFractalCalculator, IHeightField
         uint interiorColor = InteriorAlphaStamp.ScaleArgbAlpha(
             ColorMap.InSetColor, FractalParameters.InteriorAlpha);
         uint? oobColor = ColorMap.OutOfBoundsColor;
+
+        // #979 — per-orbit layers: each orbit through its own theme.
+        LayerStyle styleZ = default, styleC = default;
+        var blend = FractalParameters.DualOrbitLayerBlend;
+        if (layers)
+        {
+            var missing = new List<string>();
+            styleZ = new LayerStyle(ResolveLayerTheme(LayerThemeZ, FractalParameters.DualOrbitThemeZ, missing),
+                FractalParameters.InteriorAlpha, FractalParameters.DualOrbitOpacityZ, maxIter);
+            styleC = new LayerStyle(ResolveLayerTheme(LayerThemeC, FractalParameters.DualOrbitThemeC, missing),
+                FractalParameters.InteriorAlpha, FractalParameters.DualOrbitOpacityC, maxIter);
+            UnresolvedLayerThemes = missing;
+        }
+        else UnresolvedLayerThemes = Array.Empty<string>();
 
         Parallel.For(0, height, new ParallelOptions { CancellationToken = ct }, y =>
         {
@@ -244,7 +279,7 @@ public sealed class DualOrbitEscapeCalculator : IFractalCalculator, IHeightField
                 }
 
                 double scalar;
-                bool zEsc, cEsc; int nZ, nC;
+                bool zEsc, cEsc; int nZ, nC; double smZ, smC;
                 if (quat)
                 {
                     // C = (0, s_x, s_y, s_z) pure-imaginary. z-orbit seed 0; c-orbit
@@ -254,8 +289,9 @@ public sealed class DualOrbitEscapeCalculator : IFractalCalculator, IHeightField
                     QOrbit oc = cEqualsS
                         ? RunQuat(0, sx, sy, sZ, 0, sx, sy, sZ, maxIter, bail)
                         : RunQuat(0, cSeedX, cSeedY, cSeedZ, 0, sx, sy, sZ, maxIter, bail);
-                    scalar = ScalarQ(field, oz, oc, sx, sy, sZ, maxIter, bail, ratioSpan);
+                    scalar = layers ? 0.0 : ScalarQ(field, oz, oc, sx, sy, sZ, maxIter, bail, ratioSpan);
                     zEsc = oz.Escaped; cEsc = oc.Escaped; nZ = oz.N; nC = oc.N;
+                    smZ = oz.SmoothN; smC = oc.SmoothN;
                 }
                 else
                 {
@@ -263,13 +299,24 @@ public sealed class DualOrbitEscapeCalculator : IFractalCalculator, IHeightField
                     Orbit oc = cEqualsS
                         ? Run(sx, sy, sx, sy, maxIter, bail, argsC, out nC)
                         : Run(cSeedX, cSeedY, sx, sy, maxIter, bail, argsC, out nC);
-                    scalar = angles
+                    scalar = layers ? 0.0
+                        : angles
                         ? AngleDeltaScalar(argsZ, nZ, argsC, nC, maxIter)
                         : Scalar(field, oz, oc, sx, sy, maxIter, bail, ratioSpan);
                     zEsc = oz.Escaped; cEsc = oc.Escaped;
+                    smZ = oz.SmoothN; smC = oc.SmoothN;
                 }
 
                 int idx = rowBase + x;
+                if (layers)
+                {
+                    // Relief height / histogram read the z layer (0 = bounded).
+                    SmoothBuffer[idx] = zEsc ? (float)Math.Max(LiveFloor, smZ) : 0f;
+                    uint lz = styleZ.Color(zEsc, nZ, smZ, maxIter);
+                    uint lc = styleC.Color(cEsc, nC, smC, maxIter);
+                    ColorBuffer[idx] = BlendLayers(lz, styleZ.Opacity, lc, styleC.Opacity, blend);
+                    continue;
+                }
                 float smooth = (float)scalar;
                 SmoothBuffer[idx] = smooth;
                 // Interior = the field has no value (keyed on the orbits, NOT on
@@ -386,6 +433,105 @@ public sealed class DualOrbitEscapeCalculator : IFractalCalculator, IHeightField
             default:
                 return 0.0;
         }
+    }
+
+    // ── Per-orbit layers (#979) ──────────────────────────────────────────────
+
+    // One orbit's layer: its theme plus the precomputed interior / surround colours.
+    private readonly struct LayerStyle
+    {
+        public readonly IColorMap Map;
+        public readonly uint Interior;
+        public readonly uint? Surround;
+        public readonly double Opacity;
+        public LayerStyle(IColorMap map, int interiorAlpha, double opacity, int maxIter)
+        {
+            Map = map;
+            map.MaxIterations = maxIter;
+            Interior = InteriorAlphaStamp.ScaleArgbAlpha(map.InSetColor, interiorAlpha);
+            Surround = map.OutOfBoundsColor;
+            Opacity = Math.Clamp(opacity, 0.0, 1.0);
+        }
+
+        // Bounded -> the theme's interior (x global interior alpha); escaped by
+        // step 1 -> the theme's surround when it sets one; else the gradient.
+        public uint Color(bool escaped, int escapeIndex, double smooth, int maxIter)
+        {
+            if (!escaped) return Interior;
+            if (Surround is uint oob && escapeIndex >= 0 && escapeIndex <= 1) return oob;
+            return unchecked((uint)Map.Map((float)Math.Max(LiveFloor, smooth), 0f, maxIter));
+        }
+    }
+
+    // Explicit theme wins; empty name = main theme; an unknown name falls back to
+    // the main theme and is reported (GetPaletteByName answers a miss with a fresh
+    // HSV palette, so "found" means not-HSV or the name really is HSV).
+    private IColorMap ResolveLayerTheme(IColorMap? explicitTheme, string? name, List<string> missing)
+    {
+        if (explicitTheme != null) return explicitTheme;
+        if (string.IsNullOrWhiteSpace(name)) return ColorMap;
+        var theme = ColorPalette.GetPaletteByName(name);
+        if (theme is HsvPalette && !string.Equals(name, HsvPalette.Name, StringComparison.OrdinalIgnoreCase))
+        {
+            missing.Add(name);
+            return ColorMap;
+        }
+        return theme;
+    }
+
+    /// <summary>Composite the c-orbit layer with the z-orbit layer (#979). Straight
+    /// alpha, W3C separable blending with z as backdrop and c as source (roles
+    /// swapped for <see cref="DualOrbitLayerBlend.ZOverC"/>); each layer's alpha is
+    /// its theme alpha × its opacity. <see cref="DualOrbitLayerBlend.Mix"/> is a
+    /// premultiplied cross-fade weighted by the opacities. Fully transparent result
+    /// → 0x00000000.</summary>
+    public static uint BlendLayers(uint z, double opacityZ, uint c, double opacityC, DualOrbitLayerBlend mode)
+    {
+        const double inv = 1.0 / 255.0;
+        double azRaw = ((z >> 24) & 0xFF) * inv, acRaw = ((c >> 24) & 0xFF) * inv;
+        double az = azRaw * opacityZ, ac = acRaw * opacityC;
+        double zr = ((z >> 16) & 0xFF) * inv, zg = ((z >> 8) & 0xFF) * inv, zb = (z & 0xFF) * inv;
+        double cr = ((c >> 16) & 0xFF) * inv, cg = ((c >> 8) & 0xFF) * inv, cb = (c & 0xFF) * inv;
+
+        double ao, r, g, b;
+        if (mode == DualOrbitLayerBlend.Mix)
+        {
+            double wsum = opacityZ + opacityC;
+            if (wsum <= 0) return 0u;
+            double w = opacityC / wsum;
+            double am = (1 - w) * azRaw + w * acRaw;
+            if (am <= 0) return 0u;
+            r = ((1 - w) * azRaw * zr + w * acRaw * cr) / am;
+            g = ((1 - w) * azRaw * zg + w * acRaw * cg) / am;
+            b = ((1 - w) * azRaw * zb + w * acRaw * cb) / am;
+            ao = am * Math.Max(opacityZ, opacityC);
+        }
+        else
+        {
+            bool zOnTop = mode == DualOrbitLayerBlend.ZOverC;
+            // backdrop (ab, bk*) and source (asrc, src*)
+            double ab = zOnTop ? ac : az, asrc = zOnTop ? az : ac;
+            double bkr = zOnTop ? cr : zr, bkg = zOnTop ? cg : zg, bkb = zOnTop ? cb : zb;
+            double srr = zOnTop ? zr : cr, srg = zOnTop ? zg : cg, srb = zOnTop ? zb : cb;
+            ao = asrc + ab * (1 - asrc);
+            if (ao <= 0) return 0u;
+            r = Channel(bkr, srr, ab, asrc, ao, mode);
+            g = Channel(bkg, srg, ab, asrc, ao, mode);
+            b = Channel(bkb, srb, ab, asrc, ao, mode);
+        }
+        return (ToByte(ao) << 24) | (ToByte(r) << 16) | (ToByte(g) << 8) | ToByte(b);
+
+        static double Channel(double back, double src, double ab, double asrc, double ao, DualOrbitLayerBlend m)
+        {
+            double mixed = m switch
+            {
+                DualOrbitLayerBlend.Screen => back + src - back * src,
+                DualOrbitLayerBlend.Multiply => back * src,
+                _ => src,   // normal (COverZ / ZOverC)
+            };
+            return (asrc * (1 - ab) * src + asrc * ab * mixed + (1 - asrc) * ab * back) / ao;
+        }
+        static uint ToByte(double v) => (uint)Math.Clamp((int)Math.Round(v * 255.0), 0, 255);
     }
 
     // Which orbits a field reads: the single-orbit fields need only theirs; every

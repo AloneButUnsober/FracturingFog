@@ -1167,6 +1167,22 @@ namespace FracturingFog.Models
         public double DualOrbitSX { get; set; } = -0.78;
         /// <summary>Fixed s.y when s.y is not an image axis (#971).</summary>
         public double DualOrbitSY { get; set; } = 0.15;
+        /// <summary>Colour mode (#979): Field (default, one scalar through the main
+        /// theme) or PerOrbitLayers (each orbit its own themed layer, blended).</summary>
+        public DualOrbitColorMode DualOrbitColorMode { get; set; } = DualOrbitColorMode.Field;
+        /// <summary>PerOrbitLayers: theme name for the z-orbit (seed 0) layer.
+        /// Empty = the main theme.</summary>
+        public string DualOrbitThemeZ { get; set; } = "";
+        /// <summary>PerOrbitLayers: theme name for the c-orbit layer. Empty = the
+        /// main theme.</summary>
+        public string DualOrbitThemeC { get; set; } = "";
+        /// <summary>PerOrbitLayers: how the c layer combines with the z layer.</summary>
+        public DualOrbitLayerBlend DualOrbitLayerBlend { get; set; } = DualOrbitLayerBlend.COverZ;
+        /// <summary>PerOrbitLayers: z-layer opacity, 0..1 (multiplies the theme's own alpha).</summary>
+        public double DualOrbitOpacityZ { get; set; } = 1.0;
+        /// <summary>PerOrbitLayers: c-layer opacity, 0..1. Default 0.6 so both
+        /// layers read on first switch.</summary>
+        public double DualOrbitOpacityC { get; set; } = 0.6;
 
         // Indra's Pearls (#892/#893, epic #850) — 2D complex-Möbius Kleinian
         // group limit set. The generator matrices are DERIVED from these scalar
@@ -1781,6 +1797,12 @@ namespace FracturingFog.Models
                 DualOrbitSliceAxes = DualOrbitSliceAxes,
                 DualOrbitSX = DualOrbitSX,
                 DualOrbitSY = DualOrbitSY,
+                DualOrbitColorMode = DualOrbitColorMode,
+                DualOrbitThemeZ = DualOrbitThemeZ,
+                DualOrbitThemeC = DualOrbitThemeC,
+                DualOrbitLayerBlend = DualOrbitLayerBlend,
+                DualOrbitOpacityZ = DualOrbitOpacityZ,
+                DualOrbitOpacityC = DualOrbitOpacityC,
                 IndrasFamily = IndrasFamily,
                 IndrasMaskitMuRe = IndrasMaskitMuRe,
                 IndrasMaskitMuIm = IndrasMaskitMuIm,

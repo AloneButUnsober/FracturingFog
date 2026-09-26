@@ -711,3 +711,12 @@ appropriate sections; flesh out on the next pass. Cite inline from the sections 
   #615 `OutOfBoundsColor` (surround = the field's orbit(s) escape by step 1 — seed-agnostic). Interior is
   keyed on the orbits' escape flags, not on `smooth == 0` (legacy fields can be a legitimate 0, e.g. the
   c = s control). Interior-alpha controls now shown for Dual-Orbit Escape.
+- **2026-09-26** — **#939-B (#979) shipped** — `DualOrbitColorMode.PerOrbitLayers`: each orbit is its own
+  layer (theme by name `DualOrbitThemeZ/C` or injected `LayerThemeZ/C`; that theme's `InSetColor` ×
+  `InteriorAlpha` and #615 surround per layer, escape index ≤ 1), blended c-over-z with straight-alpha W3C
+  compositing (`DualOrbitLayerBlend` COverZ / ZOverC / Screen / Multiply / Mix, per-layer opacity).
+  SmoothBuffer = z layer. Unknown theme names fall back to the main theme and are reported
+  (`UnresolvedLayerThemes`). Tests: blend maths vs the formulas; one visible layer reproduces Field-mode
+  EscapeTimeZ / EscapeTimeC byte-for-byte (incl. surround at bailout 2); exact colours in the three region
+  states. Smoke: the c layer alone shows the c-orbit's own escape structure (M_c + bands offset from the
+  z family) — the "second disc". Params persistence / animation / UI = C (#980).
