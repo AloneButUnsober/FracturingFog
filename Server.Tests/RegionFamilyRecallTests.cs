@@ -117,9 +117,13 @@ public sealed class RegionFamilyRecallTests
         Assert.Contains(nameof(FractalParameters.KleinianCustomSpheres), kleinian);
         Assert.Contains(nameof(FractalParameters.KleinianRotationAxisX), kleinian);   // gated on angle ≠ 0
 
-        // user-code families own no generic block
-        Assert.DoesNotContain(RegionFractalParams.FamilyProperties(FractalType.UserBulb),
-            pi => pi.Name.StartsWith("UserBulb", StringComparison.Ordinal));
+        // user-code families: the equation source/name and dedicated camera stay
+        // region-owned (never reset by the family block), only animatable params ride it
+        var bulb = RegionFractalParams.FamilyProperties(FractalType.UserBulb).Select(pi => pi.Name).ToHashSet();
+        Assert.Contains(nameof(FractalParameters.UserBulbTime), bulb);
+        Assert.DoesNotContain(nameof(FractalParameters.UserBulbSource), bulb);
+        Assert.DoesNotContain(nameof(FractalParameters.UserBulbName), bulb);
+        Assert.DoesNotContain(bulb, n => n.StartsWith("UserBulbCamera", StringComparison.Ordinal));
     }
 
     [Fact]
