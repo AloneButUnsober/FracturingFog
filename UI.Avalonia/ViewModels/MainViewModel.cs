@@ -240,6 +240,7 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
         (FractalType.Kleinian,              "Kleinian Limit Set (3D)"),
         (FractalType.BicomplexMandelbrot,   "Bicomplex Mandelbrot (3D)"),
         (FractalType.Coquaternion,          "Coquaternion (3D)"),
+        (FractalType.DualOrbitVolume,       "Dual-Orbit Volume (3D)"),
         (FractalType.Dla,                   "DLA (Brownian Tree)"),
         (FractalType.RandomTile,            "Random Tiling (Bourke)"),
         (FractalType.ChaoticBilliard,       "Chaotic Billiard (Scatter)"),

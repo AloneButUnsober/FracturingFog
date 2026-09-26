@@ -1152,6 +1152,21 @@ namespace FracturingFog.Models
         /// degenerate case (dual fields collapse to a plain Mandelbrot exterior) —
         /// exposed only for comparison. Default off.</summary>
         public bool DualOrbitCEqualsS { get; set; } = false;
+        /// <summary>Escape (bailout) radius both orbits iterate to. Default 128.
+        /// The escape-location fields (separation / residual / angle) change with it;
+        /// GreenRatio and ExternalAngleDelta do not (#970).</summary>
+        public double DualOrbitBailout { get; set; } = 128.0;
+        /// <summary>GreenRatio half-range in octaves: log2(G_c/G_z) = ±span maps to
+        /// the palette ends, 0 to mid-palette (#970).</summary>
+        public double DualOrbitRatioSpan { get; set; } = 8.0;
+        /// <summary>Which two of (c.x, c.y, s.x, s.y) the image spans (#971).
+        /// Default SxSy = the parameter plane (shipped view, byte-identical).</summary>
+        public DualOrbitSliceAxes DualOrbitSliceAxes { get; set; } = DualOrbitSliceAxes.SxSy;
+        /// <summary>Fixed s.x when s.x is not an image axis — the user's original
+        /// sweep coordinate (animate it to replay the sweep) (#971).</summary>
+        public double DualOrbitSX { get; set; } = -0.78;
+        /// <summary>Fixed s.y when s.y is not an image axis (#971).</summary>
+        public double DualOrbitSY { get; set; } = 0.15;
 
         // Indra's Pearls (#892/#893, epic #850) — 2D complex-Möbius Kleinian
         // group limit set. The generator matrices are DERIVED from these scalar
@@ -1290,6 +1305,33 @@ namespace FracturingFog.Models
         public double CoquaternionLightPhi { get; set; } = Math.PI * 0.45;
         public int CoquaternionMaxSteps { get; set; } = 160;
         public double CoquaternionEpsilon { get; set; } = 0.0012;
+
+        // Dual-orbit escape-geometry volume (#972). World X = c.x, Z = c.y,
+        // Y (up) = s.x − DualOrbitVolumeSXCenter; s.y fixed. Every horizontal layer
+        // is the filled Julia set of s = s.x + i·s.y.
+        /// <summary>Fixed Im s of every layer. 0 makes the volume mirror-symmetric
+        /// (real layers); a small non-zero value twists the stack. Default 0.15.</summary>
+        public double DualOrbitVolumeSY { get; set; } = 0.15;
+        /// <summary>s.x at world Y = 0 (the vertical centre of the stack). Default
+        /// −0.75 centres the Mandelbrot line's extent [−2, ¼].</summary>
+        public double DualOrbitVolumeSXCenter { get; set; } = -0.75;
+        /// <summary>DE inner iteration count. Default 48.</summary>
+        public int DualOrbitVolumeIterations { get; set; } = 48;
+        /// <summary>|u| escape radius for the DE. Default 64.</summary>
+        public double DualOrbitVolumeBailout { get; set; } = 64.0;
+        /// <summary>Half-height of the rendered slab |Y| ≤ h (s.x within centre ± h).
+        /// Beyond the Mandelbrot line's extent the layers are Cantor dust reaching
+        /// to infinity; the slab also cuts flat caps showing a Julia cross-section.
+        /// Default 1.4 (s.x ∈ [−2.15, 0.65]).</summary>
+        public double DualOrbitVolumeHalfHeight { get; set; } = 1.4;
+        public DualOrbitVolumeColor DualOrbitVolumeColor { get; set; } = DualOrbitVolumeColor.ExternalAngle;
+        public double DualOrbitVolumeCameraDistance { get; set; } = 4.5;
+        public double DualOrbitVolumeCameraTheta { get; set; } = Math.PI * 0.25;
+        public double DualOrbitVolumeCameraPhi { get; set; } = Math.PI * 0.35;
+        public double DualOrbitVolumeLightTheta { get; set; } = Math.PI * 0.25;
+        public double DualOrbitVolumeLightPhi { get; set; } = Math.PI * 0.35;
+        public int DualOrbitVolumeMaxSteps { get; set; } = 220;
+        public double DualOrbitVolumeEpsilon { get; set; } = 0.001;
 
         // Mandelbulb camera + DE settings.
         public double BulbPower { get; set; } = 8.0;
@@ -1734,6 +1776,11 @@ namespace FracturingFog.Models
                 DualOrbitCSeedZ = DualOrbitCSeedZ,
                 DualOrbitSZ = DualOrbitSZ,
                 DualOrbitCEqualsS = DualOrbitCEqualsS,
+                DualOrbitBailout = DualOrbitBailout,
+                DualOrbitRatioSpan = DualOrbitRatioSpan,
+                DualOrbitSliceAxes = DualOrbitSliceAxes,
+                DualOrbitSX = DualOrbitSX,
+                DualOrbitSY = DualOrbitSY,
                 IndrasFamily = IndrasFamily,
                 IndrasMaskitMuRe = IndrasMaskitMuRe,
                 IndrasMaskitMuIm = IndrasMaskitMuIm,
@@ -1786,6 +1833,19 @@ namespace FracturingFog.Models
                 CoquaternionLightPhi = CoquaternionLightPhi,
                 CoquaternionMaxSteps = CoquaternionMaxSteps,
                 CoquaternionEpsilon = CoquaternionEpsilon,
+                DualOrbitVolumeSY = DualOrbitVolumeSY,
+                DualOrbitVolumeSXCenter = DualOrbitVolumeSXCenter,
+                DualOrbitVolumeIterations = DualOrbitVolumeIterations,
+                DualOrbitVolumeBailout = DualOrbitVolumeBailout,
+                DualOrbitVolumeHalfHeight = DualOrbitVolumeHalfHeight,
+                DualOrbitVolumeColor = DualOrbitVolumeColor,
+                DualOrbitVolumeCameraDistance = DualOrbitVolumeCameraDistance,
+                DualOrbitVolumeCameraTheta = DualOrbitVolumeCameraTheta,
+                DualOrbitVolumeCameraPhi = DualOrbitVolumeCameraPhi,
+                DualOrbitVolumeLightTheta = DualOrbitVolumeLightTheta,
+                DualOrbitVolumeLightPhi = DualOrbitVolumeLightPhi,
+                DualOrbitVolumeMaxSteps = DualOrbitVolumeMaxSteps,
+                DualOrbitVolumeEpsilon = DualOrbitVolumeEpsilon,
                 BulbPower = BulbPower,
                 BulbIterations = BulbIterations,
                 BulbCameraDistance = BulbCameraDistance,

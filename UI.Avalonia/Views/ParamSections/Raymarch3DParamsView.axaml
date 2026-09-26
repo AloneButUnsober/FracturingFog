@@ -275,6 +275,48 @@
                            Value="{Binding CoquaternionCameraDistance, Mode=TwoWay}" Margin="0,2" />
         </Grid>
 
+        <!-- Dual-orbit escape-geometry volume (#972) -->
+        <Grid IsVisible="{Binding IsDualOrbitVolume}"
+              ColumnDefinitions="160,*"
+              RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto">
+            <TextBlock Grid.Row="0" Grid.Column="0" Text="Im s (layer twist):" VerticalAlignment="Center" />
+            <NumericUpDown Grid.Row="0" Grid.Column="1"
+                           Minimum="-2" Maximum="2" Increment="0.01" FormatString="F3"
+                           Value="{Binding DualOrbitVolumeSY, Mode=TwoWay}" Margin="0,2"
+                           ToolTip.Tip="Fixed Im s of every horizontal layer. Each layer is the filled Julia set of s = s.x + i times this value. 0 gives a mirror-symmetric stack of real Julia sets; small values twist it." />
+            <TextBlock Grid.Row="1" Grid.Column="0" Text="s.x centre (sweep):" VerticalAlignment="Center" />
+            <NumericUpDown Grid.Row="1" Grid.Column="1"
+                           Minimum="-3" Maximum="2" Increment="0.02" FormatString="F3"
+                           Value="{Binding DualOrbitVolumeSXCenter, Mode=TwoWay}" Margin="0,2"
+                           ToolTip.Tip="s.x at the vertical centre. The vertical axis is the original s.x sweep; the horizontal plane is the c-seed (c.x, c.y)." />
+            <TextBlock Grid.Row="2" Grid.Column="0" Text="Sweep half-height:" VerticalAlignment="Center" />
+            <NumericUpDown Grid.Row="2" Grid.Column="1"
+                           Minimum="0.05" Maximum="4" Increment="0.05" FormatString="F2"
+                           Value="{Binding DualOrbitVolumeHalfHeight, Mode=TwoWay}" Margin="0,2"
+                           ToolTip.Tip="Clips the stack to s.x within centre plus/minus this. Beyond the Mandelbrot line's extent the layers are Cantor dust reaching to infinity; the flat caps show a Julia cross-section." />
+            <TextBlock Grid.Row="3" Grid.Column="0" Text="Colour:" VerticalAlignment="Center" />
+            <ComboBox Grid.Row="3" Grid.Column="1"
+                      ItemsSource="{Binding DualOrbitVolumeColors}"
+                      SelectedItem="{Binding DualOrbitVolumeColor, Mode=TwoWay}" Margin="0,2"
+                      ToolTip.Tip="ExternalAngle: ray bands of each layer's Julia set. CriticalLayer: the seed-0 (critical) orbit's escape at that layer; bands mark where the sweep crosses the Mandelbrot line. Steps: generic depth shading." />
+            <TextBlock Grid.Row="4" Grid.Column="0" Text="DE iterations:" VerticalAlignment="Center" />
+            <NumericUpDown Grid.Row="4" Grid.Column="1"
+                           Minimum="4" Maximum="256" Increment="4" FormatString="F0"
+                           Value="{Binding DualOrbitVolumeIterations, Mode=TwoWay}" Margin="0,2" />
+            <TextBlock Grid.Row="5" Grid.Column="0" Text="Cam θ (azim):" VerticalAlignment="Center" />
+            <NumericUpDown Grid.Row="5" Grid.Column="1"
+                           Minimum="-10" Maximum="10" Increment="0.05" FormatString="F3"
+                           Value="{Binding DualOrbitVolumeCameraTheta, Mode=TwoWay}" Margin="0,2" />
+            <TextBlock Grid.Row="6" Grid.Column="0" Text="Cam φ (elev):" VerticalAlignment="Center" />
+            <NumericUpDown Grid.Row="6" Grid.Column="1"
+                           Minimum="0.01" Maximum="3.13" Increment="0.05" FormatString="F3"
+                           Value="{Binding DualOrbitVolumeCameraPhi, Mode=TwoWay}" Margin="0,2" />
+            <TextBlock Grid.Row="7" Grid.Column="0" Text="Cam dist:" VerticalAlignment="Center" />
+            <NumericUpDown Grid.Row="7" Grid.Column="1"
+                           Minimum="0.1" Maximum="500" Increment="0.1" FormatString="F2"
+                           Value="{Binding DualOrbitVolumeCameraDistance, Mode=TwoWay}" Margin="0,2" />
+        </Grid>
+
         <!-- Kleinian -->
         <Grid IsVisible="{Binding IsKleinian}"
               ColumnDefinitions="160,*"

@@ -219,6 +219,11 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
         _dualCSeedZ = _p.DualOrbitCSeedZ;
         _dualSZ = _p.DualOrbitSZ;
         _dualCEqualsS = _p.DualOrbitCEqualsS;
+        _dualBailout = _p.DualOrbitBailout;
+        _dualRatioSpan = _p.DualOrbitRatioSpan;
+        _dualSliceAxes = _p.DualOrbitSliceAxes;
+        _dualSX = _p.DualOrbitSX;
+        _dualSY = _p.DualOrbitSY;
         // #893 — Indra's Pearls 2D group.
         _indrasFamily = _p.IndrasFamily;
         _indrasMuRe = _p.IndrasMaskitMuRe;
@@ -260,6 +265,15 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
         _cqCameraTheta = _p.CoquaternionCameraTheta;
         _cqCameraPhi = _p.CoquaternionCameraPhi;
         _cqCameraDistance = _p.CoquaternionCameraDistance;
+        // #972 — dual-orbit volume.
+        _dvSY = _p.DualOrbitVolumeSY;
+        _dvSXCenter = _p.DualOrbitVolumeSXCenter;
+        _dvHalfHeight = _p.DualOrbitVolumeHalfHeight;
+        _dvIterations = _p.DualOrbitVolumeIterations;
+        _dvColor = _p.DualOrbitVolumeColor;
+        _dvCameraTheta = _p.DualOrbitVolumeCameraTheta;
+        _dvCameraPhi = _p.DualOrbitVolumeCameraPhi;
+        _dvCameraDistance = _p.DualOrbitVolumeCameraDistance;
         _flamePresetName = _p.FlamePresetName;
         _flameIterations = _p.FlameIterations;
         _flameGamma = _p.FlameGamma;
@@ -359,6 +373,7 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
     public bool IsKleinian => FractalType == FractalType.Kleinian;
     public bool IsBicomplexMandelbrot => FractalType == FractalType.BicomplexMandelbrot;
     public bool IsCoquaternion => FractalType == FractalType.Coquaternion;
+    public bool IsDualOrbitVolume => FractalType == FractalType.DualOrbitVolume;
     public bool IsDla => FractalType == FractalType.Dla;
     public bool IsRandomTile => FractalType == FractalType.RandomTile;
     public bool IsChaoticBilliard => FractalType == FractalType.ChaoticBilliard;
@@ -380,7 +395,7 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
     public bool IsAny3DRaymarcher =>
         IsMandelbulb || IsMandelbox || IsKifs
         || IsQuatJulia || IsQuatMandelbrot
-        || IsBicomplexMandelbrot || IsCoquaternion || IsKleinian
+        || IsBicomplexMandelbrot || IsCoquaternion || IsKleinian || IsDualOrbitVolume
         || FractalType == FractalType.UserBulb;
 
     /// <summary>Show the "Open Lighting &amp; FX" launcher when the full shading
@@ -511,7 +526,7 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
         !(IsJulia || IsMultibrot || IsPhoenix || IsGlynn || IsLogistic || IsLyapunov || IsTranscendentalJulia || IsSpider || IsNewtonOrNova || IsIFS
           || IsLSystem || IsStrangeAttractor || IsBuddhaBrot || IsMandelbulb || IsMandelbox || IsKifs
           || IsQuatJulia || IsQuatMandelbrot || IsPlasma || IsAcidWarp || IsFlame || IsApollonian || IsKleinian
-          || IsBicomplexMandelbrot || IsCoquaternion || IsDla || IsRandomTile || IsChaoticBilliard || IsPrecisionField || IsDualOrbitEscape || IsIndrasPearls || IsInteriorAlphaApplicable || IsRelief2DApplicable
+          || IsBicomplexMandelbrot || IsCoquaternion || IsDualOrbitVolume || IsDla || IsRandomTile || IsChaoticBilliard || IsPrecisionField || IsDualOrbitEscape || IsIndrasPearls || IsInteriorAlphaApplicable || IsRelief2DApplicable
           || SupportsDomainWarp);
 
     // ── Interior alpha (2D) — issue #96 ──────────────────────────────────────
@@ -1707,6 +1722,28 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
     private double _cqCameraDistance;
     public double CoquaternionCameraDistance { get => _cqCameraDistance; set { Set(ref _cqCameraDistance, Clamp(value, 0.1, 500)); _p.CoquaternionCameraDistance = _cqCameraDistance; Fire(); } }
 
+    // ── Dual-orbit volume (#972) ──
+    private double _dvSY;
+    /// <summary>Im s of every layer (slices the 4D (z0, s) space).</summary>
+    public double DualOrbitVolumeSY { get => _dvSY; set { Set(ref _dvSY, Clamp(value, -2, 2)); _p.DualOrbitVolumeSY = _dvSY; Fire(); } }
+    private double _dvSXCenter;
+    /// <summary>s.x at the vertical centre of the stack.</summary>
+    public double DualOrbitVolumeSXCenter { get => _dvSXCenter; set { Set(ref _dvSXCenter, Clamp(value, -3, 2)); _p.DualOrbitVolumeSXCenter = _dvSXCenter; Fire(); } }
+    private double _dvHalfHeight;
+    /// <summary>Half-height of the rendered s.x slab.</summary>
+    public double DualOrbitVolumeHalfHeight { get => _dvHalfHeight; set { Set(ref _dvHalfHeight, Clamp(value, 0.05, 4)); _p.DualOrbitVolumeHalfHeight = _dvHalfHeight; Fire(); } }
+    private int _dvIterations;
+    public int DualOrbitVolumeIterations { get => _dvIterations; set { Set(ref _dvIterations, (int)Clamp(value, 4, 256)); _p.DualOrbitVolumeIterations = _dvIterations; Fire(); } }
+    private DualOrbitVolumeColor _dvColor;
+    public DualOrbitVolumeColor DualOrbitVolumeColor { get => _dvColor; set { Set(ref _dvColor, value); _p.DualOrbitVolumeColor = value; Fire(); } }
+    public Array DualOrbitVolumeColors => Enum.GetValues(typeof(DualOrbitVolumeColor));
+    private double _dvCameraTheta;
+    public double DualOrbitVolumeCameraTheta { get => _dvCameraTheta; set { Set(ref _dvCameraTheta, Clamp(value, -10, 10)); _p.DualOrbitVolumeCameraTheta = _dvCameraTheta; Fire(); } }
+    private double _dvCameraPhi;
+    public double DualOrbitVolumeCameraPhi { get => _dvCameraPhi; set { Set(ref _dvCameraPhi, Clamp(value, 0.01, 3.13)); _p.DualOrbitVolumeCameraPhi = _dvCameraPhi; Fire(); } }
+    private double _dvCameraDistance;
+    public double DualOrbitVolumeCameraDistance { get => _dvCameraDistance; set { Set(ref _dvCameraDistance, Clamp(value, 0.1, 500)); _p.DualOrbitVolumeCameraDistance = _dvCameraDistance; Fire(); } }
+
     // ── Kleinian ──
     // ── Dual-orbit escape-geometry (#864 / #866) ──
     private DualOrbitMap _dualMap;
@@ -1736,7 +1773,45 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
     public double DualOrbitSZ { get => _dualSZ; set { Set(ref _dualSZ, Clamp(value, -2.0, 2.0)); _p.DualOrbitSZ = _dualSZ; Fire(); } }
     private bool _dualCEqualsS;
     /// <summary>Mandelbrot-control mode (c = s; degenerate — labelled).</summary>
-    public bool DualOrbitCEqualsS { get => _dualCEqualsS; set { Set(ref _dualCEqualsS, value); _p.DualOrbitCEqualsS = value; Fire(); } }
+    public bool DualOrbitCEqualsS
+    {
+        get => _dualCEqualsS;
+        set { Set(ref _dualCEqualsS, value); _p.DualOrbitCEqualsS = value; RaiseDualSliceEditability(); Fire(); }
+    }
+    private DualOrbitSliceAxes _dualSliceAxes;
+    /// <summary>Which two of (c.x, c.y, s.x, s.y) the image spans (#971).</summary>
+    public DualOrbitSliceAxes DualOrbitSliceAxes
+    {
+        get => _dualSliceAxes;
+        set { Set(ref _dualSliceAxes, value); _p.DualOrbitSliceAxes = value; RaiseDualSliceEditability(); Fire(); }
+    }
+    public Array DualOrbitSliceAxesValues => Enum.GetValues(typeof(DualOrbitSliceAxes));
+    private double _dualSX;
+    /// <summary>Fixed s.x when s.x is not an image axis — the original sweep coordinate (#971).</summary>
+    public double DualOrbitSX { get => _dualSX; set { Set(ref _dualSX, Clamp(value, -4.0, 4.0)); _p.DualOrbitSX = _dualSX; Fire(); } }
+    private double _dualSY;
+    /// <summary>Fixed s.y when s.y is not an image axis (#971).</summary>
+    public double DualOrbitSY { get => _dualSY; set { Set(ref _dualSY, Clamp(value, -4.0, 4.0)); _p.DualOrbitSY = _dualSY; Fire(); } }
+    // A fixed-coordinate control is editable only when that coordinate is not an
+    // image axis (c-seed rows also need the c = s control off).
+    public bool DualOrbitCXEditable => !_dualCEqualsS && _dualSliceAxes is not (DualOrbitSliceAxes.CxCy or DualOrbitSliceAxes.CxSx or DualOrbitSliceAxes.CxSy);
+    public bool DualOrbitCYEditable => !_dualCEqualsS && _dualSliceAxes is not (DualOrbitSliceAxes.CxCy or DualOrbitSliceAxes.CySx or DualOrbitSliceAxes.CySy);
+    public bool DualOrbitSXEditable => _dualSliceAxes is not (DualOrbitSliceAxes.SxSy or DualOrbitSliceAxes.CxSx or DualOrbitSliceAxes.CySx);
+    public bool DualOrbitSYEditable => _dualSliceAxes is not (DualOrbitSliceAxes.SxSy or DualOrbitSliceAxes.CxSy or DualOrbitSliceAxes.CySy);
+    private void RaiseDualSliceEditability()
+    {
+        this.RaisePropertyChanged(nameof(DualOrbitCXEditable));
+        this.RaisePropertyChanged(nameof(DualOrbitCYEditable));
+        this.RaisePropertyChanged(nameof(DualOrbitSXEditable));
+        this.RaisePropertyChanged(nameof(DualOrbitSYEditable));
+    }
+    private double _dualBailout;
+    /// <summary>Escape radius (#970). Escape-location fields change with it;
+    /// GreenRatio / ExternalAngleDelta do not.</summary>
+    public double DualOrbitBailout { get => _dualBailout; set { Set(ref _dualBailout, Clamp(value, 2.0, 1e6)); _p.DualOrbitBailout = _dualBailout; Fire(); } }
+    private double _dualRatioSpan;
+    /// <summary>GreenRatio half-range in octaves (#970).</summary>
+    public double DualOrbitRatioSpan { get => _dualRatioSpan; set { Set(ref _dualRatioSpan, Clamp(value, 0.25, 64.0)); _p.DualOrbitRatioSpan = _dualRatioSpan; Fire(); } }
 
     // ── Indra's Pearls 2D (#893) ──
     private IndrasGroupFamily _indrasFamily;
@@ -2049,7 +2124,7 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
     public bool CanExportMesh =>
         IsMandelbulb || IsMandelbox || IsKifs
         || IsQuatJulia || IsQuatMandelbrot
-        || IsKleinian || IsBicomplexMandelbrot || IsCoquaternion;
+        || IsKleinian || IsBicomplexMandelbrot || IsCoquaternion || IsDualOrbitVolume;
 
     public ReactiveCommand<Unit, Unit> ExportMeshCommand { get; }
     public ReactiveCommand<Unit, Unit> PickDropColorCommand { get; }

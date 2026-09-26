@@ -1052,6 +1052,7 @@ namespace FracturingFog.Imaging
                 FractalType.Kleinian         => new KleinianCalculator(w, h),
                 FractalType.BicomplexMandelbrot => new BicomplexMandelbrotCalculator(w, h),
                 FractalType.Coquaternion => new CoquaternionMandelbrotCalculator(w, h),
+                FractalType.DualOrbitVolume => new DualOrbitVolumeCalculator(w, h),
                 FractalType.Dla              => new DlaCalculator(w, h),
                 FractalType.Flame            => new FlameRenderer(w, h),
                 FractalType.Sandbox          => new SandboxCalculator(w, h),
@@ -1117,6 +1118,7 @@ namespace FracturingFog.Imaging
                 case KleinianCalculator kl:    kl.FractalParameters = req.FractalParameters; break;
                 case BicomplexMandelbrotCalculator bc: bc.FractalParameters = req.FractalParameters; break;
                 case CoquaternionMandelbrotCalculator cq: cq.FractalParameters = req.FractalParameters; break;
+                case DualOrbitVolumeCalculator dv: dv.FractalParameters = req.FractalParameters; break;
                 case DlaCalculator dl:         dl.FractalParameters = req.FractalParameters; break;
                 case ChaoticBilliardCalculator cb: cb.FractalParameters = req.FractalParameters; break;
                 case PrecisionFieldCalculator pf: pf.FractalParameters = req.FractalParameters; break;

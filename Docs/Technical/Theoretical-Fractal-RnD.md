@@ -663,3 +663,43 @@ appropriate sections; flesh out on the next pass. Cite inline from the sections 
   bands shift with the seed — the 3D, detail-rich quaternion result the disc could not give. Closes #909.
   Bibliography additions (§7 + `Resources-Bibliography.md`): Grebogi–Ott–Yorke 1983, Nusse–Yorke 1996,
   Aurell et al. 1997 (FSLE), Haller 2015 (LCS).
+- **2026-09-26** — **Post-MVP review of §3.6 → follow-ups S7 #970 / S8 #971 / S9 #972.** Findings
+  (numerically verified): (1) the escape-location fields read E at radius ≥ the bailout while s sits at
+  ≤ 2, so `EscapeSeparation` / `MidpointResidual` / `DualOrbitAngle` are **bailout-radius artifacts**
+  (`|M−s| ≈ |M|`; s drops out); only Δn is intrinsic — `2^−Δn = G(c)/G(0)`, the Green's-function
+  ratio. (2) Hamilton `q²+C` is rotation-covariant (rotate seed and C together → identical escape
+  count), so every quaternion `q²+c` object is a surface of revolution — the concentric rings are
+  forced, no seed fixes them. (3) The user's original experiment is a **1D sx sweep with fixed seeds**
+  (reproduced another agent's plot of it: component-wise map, `s=(1.75·sinθ, −0.75, 0.3)`,
+  `c0=(.5,.5,.5)`, R=2); the shipped s-plane is its faithful 2D extension. All variants are slices of
+  one field `F(c0, s)`; the (c.x, c.y, s.x) volume with the complex-plane map is a raymarchable 3D
+  fractal (every s.x layer a filled Julia set).
+  **S7 (#970) shipped** — intrinsic fields: `GreenRatio` (log2 G_c/G_z = n_z − n_c, centred ±span
+  octaves, `DualOrbitRatioSpan` default 8) and `ExternalAngleDelta` (level-1 Böttcher angles by backward
+  lifting of arg u_k, no branch-cut product; seed 0 ⇒ the Mandelbrot parameter external angle; complex
+  map only). New `DualOrbitBailout` (default 128 = byte-identical) makes the R-dependence visible. Tests
+  check independent invariants: both new fields bailout-invariant (128 vs 4096), GreenRatio = analytic
+  G ratio to 1e-3 octave, known parameter rays (s>¼ → 0, s<−2 → ½), conjugation antisymmetry;
+  separation shown to move with R.
+- **2026-09-26** — **S8 (#971) shipped** — slice-axis selector. `DualOrbitSliceAxes` {SxSy (default,
+  byte-identical), CxCy, CxSx, CxSy, CySx, CySy}: the image spans any two of (c.x, c.y, s.x, s.y), the other
+  two come from `DualOrbitCSeedX/Y` and new `DualOrbitSX/SY` (animatable — animating s.x replays the
+  original sweep). New single-orbit fields `EscapeTimeZ` / `EscapeTimeC`: EscapeTimeC stays live where the
+  critical orbit is bounded (s in M), so it is the field for the Julia plane (CxCy) and the volume
+  cross-section (CxSx: dome + filaments, the original s.x sweep stacked over c.x). Tests check field
+  invariants: four slices through one (c0, s) point agree; the c-plane is point-symmetric (map even in u);
+  the CxSx c.x = 0 column equals the critical orbit (Mandelbrot line); fixed s is inert in SxSy.
+- **2026-09-26** — **S9 (#972) shipped** — new 3D type `FractalType.DualOrbitVolume`
+  (`DualOrbitVolumeCalculator`, Coquaternion CPU-raymarcher clone). The user's original experiment run
+  for every c-seed: world X = c.x, Z = c.y, Y (up) = s.x − `DualOrbitVolumeSXCenter`, s.y fixed
+  (`DualOrbitVolumeSY`, animatable — the 4th coordinate of the (z0, s) space). Every horizontal layer is
+  the filled Julia set K_s; the c = 0 column is the Mandelbrot line. Analytic DE from a = ∂u/∂c and
+  b = ∂u/∂s: `DE = ½|u|ln|u| / sqrt(|a|² + (Re(ū·b)/|u|)²)`, CSG-intersected with the slab
+  |Y| ≤ `DualOrbitVolumeHalfHeight` (beyond the Mandelbrot line the layers are Cantor dust to infinity;
+  the caps show a Julia cross-section); 0.85 step factor (thin sheets). Colour sources: ExternalAngle
+  (default; Julia ray bands), CriticalLayer (the seed-0 orbit per layer — bands mark the sweep crossing
+  the Mandelbrot line), Steps. Mesh export via `RaymarchMeshSampler` (same DE as the render). Tests:
+  DE conservative against brute-force membership (no set point within ½·DE), (X,Z) point symmetry,
+  c = 0 column = Mandelbrot line, interior = 0, slab clip, render determinism, registration + region
+  round-trip. Shape: from a fat cauliflower at s = ¼ down to the flat segment [−2, 2] at s = −2, a
+  twisting fibrous blade.

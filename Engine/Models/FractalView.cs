@@ -150,6 +150,7 @@ namespace FracturingFog.Models
             {FractalType.Kleinian, "Kleinian" },
             {FractalType.BicomplexMandelbrot, "Bicomplex Mandelbrot" },
             {FractalType.Coquaternion, "Coquaternion" },
+            {FractalType.DualOrbitVolume, "Dual-Orbit Volume" },
             {FractalType.Dla, "DLA" },
             {FractalType.RandomTile, "Random Tiling" },
             {FractalType.IndrasPearls, "Indra's Pearls" },
