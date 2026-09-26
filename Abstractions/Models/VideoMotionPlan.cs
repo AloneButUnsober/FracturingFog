@@ -20,10 +20,28 @@
 
 using System;
 
-using FracturingFog.Batch;
-
 namespace FracturingFog.Models
 {
+    /// <summary>
+    /// How a video moves — requested by batch video / slideshow (#947/#948:
+    /// <c>--video-motion</c>) and the interactive Video Zoom + video slideshow
+    /// (#954). Auto picks per fractal family (FractalMotionCapabilities); an
+    /// explicit mode is adapted to the family by <see cref="VideoMotionPlan.Resolve"/>.
+    /// </summary>
+    public enum VideoMotionMode
+    {
+        Auto,
+        /// <summary>Log-zoom from the start view to the target (3D: camera dolly).</summary>
+        Zoom,
+        /// <summary>Render once and hold the frame.</summary>
+        Hold,
+        /// <summary>Render once, slow image-space pan + zoom of the frame.</summary>
+        KenBurns,
+        /// <summary>Re-render with a swept family param (Logistic r-window,
+        /// AcidWarp flow). Other families fall back to Ken-Burns.</summary>
+        Sweep,
+    }
+
     /// <summary>A resolved per-video motion for one fractal family.</summary>
     public enum VideoMotionKind
     {
@@ -65,25 +83,25 @@ namespace FracturingFog.Models
         }
 
         /// <summary>
-        /// Resolve the motion for <paramref name="type"/>. <see cref="BatchVideoMotion.Auto"/>
+        /// Resolve the motion for <paramref name="type"/>. <see cref="VideoMotionMode.Auto"/>
         /// picks by family; an explicit request that doesn't fit the family is
         /// adapted (Zoom on a non-spatial type → Ken-Burns, Sweep on a non-sweepable
         /// type → Ken-Burns) and <paramref name="note"/> explains why.
         /// </summary>
-        public static VideoMotionKind Resolve(FractalType type, BatchVideoMotion requested, out string? note)
+        public static VideoMotionKind Resolve(FractalType type, VideoMotionMode requested, out string? note)
         {
             note = null;
             var cls = FractalMotionCapabilities.MotionClass(type);
             bool sweepable = FractalMotionCapabilities.SupportsVideoParamSweep(type);
             switch (requested)
             {
-                case BatchVideoMotion.Hold: return VideoMotionKind.Hold;
-                case BatchVideoMotion.KenBurns: return VideoMotionKind.KenBurns;
-                case BatchVideoMotion.Sweep:
+                case VideoMotionMode.Hold: return VideoMotionKind.Hold;
+                case VideoMotionMode.KenBurns: return VideoMotionKind.KenBurns;
+                case VideoMotionMode.Sweep:
                     if (sweepable) return VideoMotionKind.Sweep;
                     note = $"{type} has no smooth param sweep (only Logistic / AcidWarp) — using Ken-Burns.";
                     return VideoMotionKind.KenBurns;
-                case BatchVideoMotion.Zoom:
+                case VideoMotionMode.Zoom:
                     if (cls == FractalMotionClass.NonSpatial)
                     {
                         note = $"Zoom is a no-op for non-spatial {type} — using Ken-Burns.";

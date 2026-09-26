@@ -90,6 +90,10 @@ namespace FracturingFog.Rendering
         private IReadOnlyList<string>? _videoFilterFractalTypes;
         private IReadOnlyList<string>? _videoFilterQualityPresets;
         private readonly List<IParameterAnimator> _videoLegAnimators = new();
+
+        // #954 — video slideshow per-leg motion override + 3D camera orbit.
+        private VideoMotionMode _videoMotion = VideoMotionMode.Auto;
+        private double _videoOrbitDegrees;
         private long _videoAnimLastTicks;
 
         // Fraction of total duration spent panning (rest is the zoom phase).
@@ -255,6 +259,7 @@ namespace FracturingFog.Rendering
 
             QDCoord startCX, startCY, targetCX, targetCY;
             double startZoom, targetZoom;
+            bool customStart = false;   // #788 start view chosen — the 3D dolly keeps it
 
             if (request.IsReverse)
             {
@@ -282,6 +287,7 @@ namespace FracturingFog.Rendering
             }
             else if (TryResolveForwardStart(request, out startCX, out startCY, out startZoom))
             {
+                customStart = true;
                 // #788 slices A/B — forward zoom that begins at the live view or a
                 // chosen start region instead of the classic full view.
                 targetCX = tCX; targetCY = tCY; targetZoom = tz;
@@ -345,6 +351,36 @@ namespace FracturingFog.Rendering
                 LoadTargetRegionForVideo(request.TargetRegionName);
             }
 
+            // #954 — move the way the target's family moves (VideoMotionPlan, shared
+            // with batch video and the slideshow). Zoom (2D): unchanged plane zoom.
+            // Dolly (3D): camera fly-in from 6× wider to the authored framing, centre
+            // pinned (a plane pan is meaningless for a raymarch). Hold / Ken-Burns /
+            // Sweep: render the target once and hold / pan-zoom / sweep it — the
+            // old plain zoom left non-spatial families (Flame, Plasma, DLA, …)
+            // near-static. Optional orbit swings a 3D camera over the run. No
+            // constant drift here: at a deep single-shot target even a tiny
+            // Julia-constant drift changes the picture completely.
+            var videoType = ViewState.FractalType;
+            var motion = VideoMotionPlan.Resolve(videoType, request.Motion, out string? motionNote);
+            bool holdMotion = motion is VideoMotionKind.Hold or VideoMotionKind.KenBurns or VideoMotionKind.Sweep;
+            if (motion == VideoMotionKind.Dolly && !customStart)
+            {
+                startCX = targetCX = tCX;
+                startCY = targetCY = tCY;
+                var (wideZ, authoredZ) = VideoMotionPlan.CameraDolly(tz);
+                (startZoom, targetZoom) = request.IsReverse ? (authoredZ, wideZ) : (wideZ, authoredZ);
+            }
+            else if (holdMotion)
+            {
+                startCX = targetCX = tCX;
+                startCY = targetCY = tCY;
+                startZoom = targetZoom = tz;
+            }
+            _videoLegAnimators.Clear();
+            var orbit = OrbitLegAnimator.TryBuild(videoType, ViewState.FractalParameters,
+                                                  request.OrbitDegrees, request.Seconds);
+            if (orbit != null) _videoLegAnimators.Add(orbit);
+
             _videoRunning = true;
             // Uncap Present pacing for the duration of the video run — the
             // calc loop must not be paced by the monitor refresh. Restored
@@ -366,9 +402,12 @@ namespace FracturingFog.Rendering
             // _calculator is set during render setup; the earlier ?. guards in
             // this method are defensive, so assert non-null here for the write.
             _calculator!.PerRowMaxIter = null;
-            RaiseStatus(request.IsReverse
-                ? $"Video reverse zoom → classic from zoom={startZoom:G4} over {request.Seconds:F1}s"
-                : $"Video zoom → zoom={targetZoom:G4} over {request.Seconds:F1}s");
+            RaiseStatus(holdMotion
+                ? $"Video {motion} of {videoType} over {request.Seconds:F1}s"
+                : request.IsReverse
+                    ? $"Video reverse zoom → classic from zoom={startZoom:G4} over {request.Seconds:F1}s"
+                    : $"Video zoom → zoom={targetZoom:G4} over {request.Seconds:F1}s");
+            if (motionNote != null) RaiseStatus(motionNote);
 
             CancellationTokenSource cts;
             lock (_videoLock)
@@ -409,9 +448,41 @@ namespace FracturingFog.Rendering
 
             Task.Run(() =>
             {
-                VideoLoop(startCX, startCY, startZoom, targetCX, targetCY, targetZoom, seconds, cts.Token, reverse);
+                _videoAnimLastTicks = Stopwatch.GetTimestamp();
+                // A hold with an orbit must re-render every frame, so it runs
+                // through VideoLoop at a fixed zoom (start == target) instead.
+                if (holdMotion && orbit == null)
+                    RunSingleShotHold(motion, videoType, tCX, tCY, tz, seconds, cts.Token);
+                else
+                    VideoLoop(startCX, startCY, startZoom, targetCX, targetCY, targetZoom, seconds, cts.Token, reverse);
             }, cts.Token)
                 .ContinueWith(t => FinishSingleShot(t), TaskScheduler.Default);
+        }
+
+        // #954 — single-shot Hold / Ken-Burns / Sweep: render the target once
+        // (presented like a zoom frame), then reuse the slideshow's hold / sweep
+        // legs. The held buffer is the calculator's raw colour buffer (not the
+        // overlaid present), so Ken-Burns pans the fractal, not the watermark.
+        private void RunSingleShotHold(VideoMotionKind motion, FractalType type,
+                                       QDCoord cx, QDCoord cy, double zoom,
+                                       double seconds, CancellationToken ct)
+        {
+            lock (_calcLock) _calcCts?.Cancel();
+            BeginVideoLeg();
+            RenderVideoFrame(cx, cy, zoom, ct);
+            if (ct.IsCancellationRequested) return;
+
+            if (motion == VideoMotionKind.Sweep)
+            {
+                RunVideoSweepHold(type, seconds, ct);
+                return;
+            }
+            var alt = SelectAltCalculator(type);
+            var cb = alt != null ? alt.ColorBuffer : _calculator.ColorBuffer;
+            int w = alt?.Width ?? _calculator.Width, h = alt?.Height ?? _calculator.Height;
+            var held = new uint[cb.Length];
+            Array.Copy(cb, held, cb.Length);
+            RunVideoHold(held, w, h, seconds, ct, kenBurnsOverride: motion == VideoMotionKind.KenBurns);
         }
 
         /// <inheritdoc/>
@@ -446,6 +517,8 @@ namespace FracturingFog.Rendering
             _videoVaryConstantSpeed = request.VaryConstantSpeed;
             _videoKenBurnsOnHold = request.KenBurnsOnHold;
             _videoSweepParamsOnHold = request.SweepParamsOnHold;
+            _videoMotion = request.Motion;
+            _videoOrbitDegrees = request.OrbitDegrees;
             _videoLegAnimators.Clear();
 
             // Region / theme restrictions for this run (#45).
@@ -568,6 +641,7 @@ namespace FracturingFog.Rendering
         private void FinishSingleShot(Task t)
         {
             _videoRunning = false;
+            _videoLegAnimators.Clear();   // #954 — drop the run's orbit
             _videoTargetIterations = 0;
             // Restore vsync for interactive preview.
             try { _renderer.VSync = true; } catch { }
@@ -1918,15 +1992,10 @@ namespace FracturingFog.Rendering
                 // to the authored framing. The region's plane zoom is meaningless
                 // for the dolly, so use a fixed authored floor (max with tz honours
                 // any real push a region saved). No plane pan — center is pinned.
-                const double CameraLegEstablishingFactor = 6.0;
-                const double CameraLegAuthoredZoomFloor = 1.0;
                 bool isCameraLeg = FractalMotionCapabilities.SupportsVideoCameraLeg(region.FractalType);
                 double camAuthoredZoom = 0.0, camWideZoom = 0.0;
                 if (isCameraLeg)
-                {
-                    camAuthoredZoom = Math.Max(tz, CameraLegAuthoredZoomFloor);
-                    camWideZoom = camAuthoredZoom / CameraLegEstablishingFactor;
-                }
+                    (camWideZoom, camAuthoredZoom) = VideoMotionPlan.CameraDolly(tz);   // shared with batch (#947)
 
                 // #94 (P4) — non-spatial static-hold leg. Plane zoom is a no-op
                 // for these families, so render the authored frame once and hold
@@ -1935,11 +2004,30 @@ namespace FracturingFog.Rendering
                 // (Flame, DLA, Buddhabrot).
                 bool isHoldLeg = FractalMotionCapabilities.SupportsVideoHoldLeg(region.FractalType);
 
+                // #954 — explicit motion override (Auto keeps the routing above and
+                // the Ken-Burns / animate-hold toggles). Resolved per family, so e.g.
+                // Zoom on a non-spatial region becomes Ken-Burns; Zoom on 2D / 3D is
+                // the family's own zoom / camera leg.
+                bool legKenBurns = _videoKenBurnsOnHold;
+                bool legSweep = _videoSweepParamsOnHold;
+                if (_videoMotion != VideoMotionMode.Auto)
+                {
+                    switch (VideoMotionPlan.Resolve(region.FractalType, _videoMotion, out _))
+                    {
+                        case VideoMotionKind.Hold:
+                            isHoldLeg = true; isCameraLeg = false; legKenBurns = false; legSweep = false; break;
+                        case VideoMotionKind.KenBurns:
+                            isHoldLeg = true; isCameraLeg = false; legKenBurns = true; legSweep = false; break;
+                        case VideoMotionKind.Sweep:
+                            isHoldLeg = true; isCameraLeg = false; legKenBurns = false; legSweep = true; break;
+                    }
+                }
+
                 // #806 — Buddhabrot progressive-accumulation leg develops from
                 // black instead of the usual full pre-render, so skip the (full,
                 // expensive) pre-render Calculate below and fade into black; the
                 // accumulation then builds the image up batch by batch.
-                bool isBuddhaAccumLeg = isHoldLeg && _videoSweepParamsOnHold
+                bool isBuddhaAccumLeg = isHoldLeg && legSweep
                     && FractalMotionCapabilities.SupportsVideoBuddhaAccumulation(region.FractalType);
 
                 // Per-leg palette pool capped at the leg's deep endpoint, then
@@ -2098,6 +2186,16 @@ namespace FracturingFog.Rendering
                 // when the constant is already animated.
                 MaybeAddDefaultConstantDrift(region, legSeconds);
 
+                // #954 — optional 3D orbit on camera legs (independent of the
+                // animations opt-in). A non-empty animator set also disables TAA
+                // reprojection + the leg CDF, which assume pan/zoom-only motion.
+                if (isCameraLeg && OrbitLegAnimator.TryBuild(
+                        region.FractalType, ViewState.FractalParameters, _videoOrbitDegrees, legSeconds) is { } orbit)
+                {
+                    _videoLegAnimators.Add(orbit);
+                    _videoAnimLastTicks = Stopwatch.GetTimestamp();
+                }
+
                 // Build the in-leg theme-fade schedule from the user's
                 // ThemeFadeEnabled checkbox + ThemesPerLeg setting. Schedule
                 // swaps fire at t = k / themesPerLeg for k = 1..N-1. Disabled
@@ -2204,14 +2302,14 @@ namespace FracturingFog.Rendering
                     // #806 param-sweep: a sweepable family (Logistic r-window,
                     // AcidWarp flow) re-renders a smooth mid-leg param sweep — this
                     // wins over Ken-Burns for those families.
-                    if (_videoSweepParamsOnHold
+                    if (legSweep
                         && FractalMotionCapabilities.SupportsVideoParamSweep(region.FractalType))
-                        RunVideoSweepHold(region, legSeconds, legCt);
-                    else if (_videoSweepParamsOnHold
+                        RunVideoSweepHold(region.FractalType, legSeconds, legCt);
+                    else if (legSweep
                         && FractalMotionCapabilities.SupportsVideoBuddhaAccumulation(region.FractalType))
                         RunVideoBuddhaHold(region, legSeconds, legCt);
                     else
-                        RunVideoHold(newLegBuf, _calculator.Width, _calculator.Height, legSeconds, legCt);
+                        RunVideoHold(newLegBuf, _calculator.Width, _calculator.Height, legSeconds, legCt, legKenBurns);
                 }
                 else
                 {
@@ -2554,22 +2652,22 @@ namespace FracturingFog.Rendering
         // it's continuous with the cross-fade that just presented it.
         //
         // Interruptible by leg skip / stop.
-        private void RunVideoHold(uint[]? heldBuf, int w, int h, double seconds, CancellationToken ct)
+        private void RunVideoHold(uint[]? heldBuf, int w, int h, double seconds, CancellationToken ct,
+                                  bool? kenBurnsOverride = null)
         {
             if (seconds <= 0.0) return;
             int n = w * h;
-            bool kenBurns = _videoKenBurnsOnHold && heldBuf != null && heldBuf.Length >= n && n > 0;
+            bool kenBurns = (kenBurnsOverride ?? _videoKenBurnsOnHold)
+                && heldBuf != null && heldBuf.Length >= n && n > 0;
 
-            // Per-leg Ken-Burns path: zoom in to a random factor, drifting toward
-            // a random point. Eased so it starts/ends gently. Amplitudes small so
-            // the framing stays recognisable.
-            double zEnd = 1.0, endFracX = 0.5, endFracY = 0.5;
+            // Per-leg Ken-Burns path: zoom in to a random factor (1.08–1.14×),
+            // drifting toward a random point — the shared KenBurnsPath batch video
+            // uses too (#947). Eased so it starts/ends gently.
+            KenBurnsPath path = default;
             uint[]? outBuf = null;
             if (kenBurns)
             {
-                zEnd = 1.08 + 0.06 * _videoRng.NextDouble();      // 1.08–1.14× zoom
-                endFracX = _videoRng.NextDouble();                 // drift target in [0,1]²
-                endFracY = _videoRng.NextDouble();
+                path = KenBurnsPath.Random(_videoRng);
                 outBuf = new uint[n];
             }
 
@@ -2579,14 +2677,8 @@ namespace FracturingFog.Rendering
             {
                 if (kenBurns)
                 {
-                    double t = sw.Elapsed.TotalSeconds / seconds;
-                    if (t > 1.0) t = 1.0;
-                    double e = t * t * t * (t * (t * 6.0 - 15.0) + 10.0); // smootherstep
-                    double z = 1.0 + (zEnd - 1.0) * e;
-                    double viewW = w / z, viewH = h / z;
-                    double marginX = w - viewW, marginY = h - viewH;
-                    double sx = marginX * (0.5 + (endFracX - 0.5) * e);
-                    double sy = marginY * (0.5 + (endFracY - 0.5) * e);
+                    double e = VideoMotionPlan.SmootherStep(sw.Elapsed.TotalSeconds / seconds);
+                    var (sx, sy, viewW, viewH) = path.Rect(e, w, h);
                     FracturingFog.Abstractions.Imaging.ImageResampler
                         .ResampleRectBilinear(heldBuf!, w, h, sx, sy, viewW, viewH, outBuf!);
                     PresentBuffer(outBuf!, w, h);
@@ -2604,14 +2696,13 @@ namespace FracturingFog.Rendering
         // authored value, so it's continuous with the leg pre-render / cross-fade.
         // Cancellation (skip/stop) ends the leg immediately — the per-frame
         // Calculate catches OCE (matches the RenderVideoFrame fix, #803).
-        private void RunVideoSweepHold(FractalRegion region, double seconds, CancellationToken ct)
+        private void RunVideoSweepHold(FractalType type, double seconds, CancellationToken ct)
         {
             if (seconds <= 0.0) return;
-            var alt = SelectAltCalculator(region.FractalType);
+            var alt = SelectAltCalculator(type);
             if (alt == null) { RunVideoHold(null, 0, 0, seconds, ct); return; }
 
             var p = ViewState.FractalParameters;
-            var type = region.FractalType;
 
             // Sweep endpoints. Start = authored (so frame 0 matches the pre-render).
             double logStartX = _calculator.CenterX, logEndX = logStartX;
@@ -2621,15 +2712,14 @@ namespace FracturingFog.Rendering
             {
                 // Plane X = r axis; the visible r-window width is 3.5 / Zoom
                 // (LogisticCalculator, W ≥ H). Scroll the window half its width.
-                double span = 3.5 / Math.Max(1e-6, _calculator.Zoom);
-                logEndX = logStartX + 0.5 * span;
+                logEndX = VideoMotionPlan.LogisticSweepX(logStartX, _calculator.Zoom, 1.0);
             }
             else if (type == FractalType.AcidWarp)
             {
                 awMorphOrig = p.AcidWarpMorph;
                 p.AcidWarpMorph = true; // blend adjacent patterns → smooth morph
                 awStart = p.AcidWarpFlow;
-                awEnd = awStart + 1.5;  // ~1.5 pattern lengths over the leg
+                awEnd = VideoMotionPlan.AcidWarpSweepFlow(awStart, 1.0);  // ~1.5 pattern lengths
             }
 
             try
@@ -2638,9 +2728,7 @@ namespace FracturingFog.Rendering
                 int frameMs = (int)Math.Max(1.0, VideoFrameBudgetMs);
                 while (!ct.IsCancellationRequested && sw.Elapsed.TotalSeconds < seconds)
                 {
-                    double t = sw.Elapsed.TotalSeconds / seconds;
-                    if (t > 1.0) t = 1.0;
-                    double e = t * t * t * (t * (t * 6.0 - 15.0) + 10.0); // smootherstep
+                    double e = VideoMotionPlan.SmootherStep(sw.Elapsed.TotalSeconds / seconds);
 
                     if (type == FractalType.Logistic)
                     {

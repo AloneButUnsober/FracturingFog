@@ -55,26 +55,6 @@ namespace FracturingFog.Batch
         HighQualityH264Mp4,
     }
 
-    /// <summary>
-    /// #947 — how a batch video moves. Auto picks per fractal family
-    /// (FractalMotionCapabilities): 2D escape-time → plane zoom (plus constant
-    /// drift for Julia / Phoenix / Glynn), raymarched 3D → camera dolly,
-    /// non-spatial → param sweep (Logistic / AcidWarp) or Ken-Burns.
-    /// </summary>
-    public enum BatchVideoMotion
-    {
-        Auto,
-        /// <summary>Log-zoom from --start-zoom to the target (3D: camera dolly).</summary>
-        Zoom,
-        /// <summary>Render once and hold the frame.</summary>
-        Hold,
-        /// <summary>Render once, slow image-space pan + zoom of the frame.</summary>
-        KenBurns,
-        /// <summary>Re-render with a swept family param (Logistic r-window,
-        /// AcidWarp flow). Other families fall back to Ken-Burns.</summary>
-        Sweep,
-    }
-
     public sealed class BatchOptions
     {
         public BatchMode Mode { get; set; } = BatchMode.Image;
@@ -112,8 +92,8 @@ namespace FracturingFog.Batch
         // When true, render in reverse: start at target, animate back to full view.
         public bool VideoReverse { get; set; }
 
-        // #947 — per-family motion. See BatchVideoMotion.
-        public BatchVideoMotion VideoMotion { get; set; } = BatchVideoMotion.Auto;
+        // #947 — per-family motion. See VideoMotionMode.
+        public VideoMotionMode VideoMotion { get; set; } = VideoMotionMode.Auto;
         // Raymarched 3D only: sweep the camera azimuth this many degrees over the
         // video (on top of the dolly / hold). 0 = no orbit.
         public double VideoOrbitDegrees { get; set; }
@@ -525,11 +505,11 @@ namespace FracturingFog.Batch
                         if (!Next(args, ref i, a, out string vmv, out error)) return false;
                         switch (vmv.ToLowerInvariant())
                         {
-                            case "auto":     opts.VideoMotion = BatchVideoMotion.Auto; break;
-                            case "zoom":     opts.VideoMotion = BatchVideoMotion.Zoom; break;
-                            case "hold":     opts.VideoMotion = BatchVideoMotion.Hold; break;
-                            case "kenburns": opts.VideoMotion = BatchVideoMotion.KenBurns; break;
-                            case "sweep":    opts.VideoMotion = BatchVideoMotion.Sweep; break;
+                            case "auto":     opts.VideoMotion = VideoMotionMode.Auto; break;
+                            case "zoom":     opts.VideoMotion = VideoMotionMode.Zoom; break;
+                            case "hold":     opts.VideoMotion = VideoMotionMode.Hold; break;
+                            case "kenburns": opts.VideoMotion = VideoMotionMode.KenBurns; break;
+                            case "sweep":    opts.VideoMotion = VideoMotionMode.Sweep; break;
                             default:
                                 error = $"--video-motion must be auto|zoom|hold|kenburns|sweep (got '{vmv}').";
                                 return false;
