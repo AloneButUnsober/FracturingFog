@@ -435,7 +435,7 @@ namespace FracturingFog.Batch
             // Auto on a target that IS the start view (e.g. a full-view region):
             // a zoom would be a frozen video, so Ken-Burns it instead — unless the
             // family drifts its constant (Julia / Phoenix / Glynn), which moves.
-            if (motion == VideoMotionKind.Zoom && opts.VideoMotion == BatchVideoMotion.Auto
+            if (motion == VideoMotionKind.Zoom && opts.VideoMotion == VideoMotionMode.Auto
                 && !opts.VideoStartZoomSet
                 && Math.Abs(Math.Log(endZoom / startZoom)) < 0.05
                 && (opts.VideoNoDrift
@@ -614,7 +614,7 @@ namespace FracturingFog.Batch
             if (opts.VideoOrbitDegrees != 0.0)
             {
                 orbitSnap = FractalMotionCapabilities.MotionClass(frType) == FractalMotionClass.Raymarch3D
-                    ? RegionFractalParams.Snapshot(frType, fp) : null;
+                    ? RegionFractalParams.CameraSnapshot(frType, fp) : null;
                 if (orbitSnap?.Cam3DTheta is double th) orbitTheta0 = th;
                 else
                 {
@@ -1313,7 +1313,7 @@ namespace FracturingFog.Batch
                 }
                 // A full-view 2D region has nothing to zoom into — Ken-Burns it
                 // (unless its constant drifts), as batch video does.
-                if (motion == VideoMotionKind.Zoom && opts.VideoMotion == BatchVideoMotion.Auto
+                if (motion == VideoMotionKind.Zoom && opts.VideoMotion == VideoMotionMode.Auto
                     && !opts.VideoStartZoomSet && Math.Abs(Math.Log(z1 / z0)) < 0.05
                     && (!driftAllowed
                         || FracturingFog.Abstractions.Animation.ConstantDriftResolver.ConstantParamName(type) == null))
@@ -1334,7 +1334,7 @@ namespace FracturingFog.Batch
                 if (opts.VideoOrbitDegrees != 0.0
                     && FractalMotionCapabilities.MotionClass(type) == FractalMotionClass.Raymarch3D)
                 {
-                    orbitSnap = RegionFractalParams.Snapshot(type, fp);
+                    orbitSnap = RegionFractalParams.CameraSnapshot(type, fp);
                     if (orbitSnap?.Cam3DTheta is double th) orbitTheta0 = th; else orbitSnap = null;
                 }
                 var drift = (motion == VideoMotionKind.Zoom && driftAllowed)

@@ -478,6 +478,18 @@
                           IsChecked="{Binding SweepParamsOnHold, Mode=TwoWay}"
                           FontWeight="Bold" Foreground="#B4DCB4"
                           ToolTip.Tip="For the animatable non-spatial families, move over the leg instead of holding: Logistic scrolls its r-window, Acid Warp morphs its flow, and the Buddhabrot family develops progressively (the image builds up from black as samples accumulate). Re-renders per frame; wins over Ken-Burns for those families. Others are unaffected. Off = static hold." />
+                <!-- #954 — per-leg motion override + 3D orbit. -->
+                <Grid ColumnDefinitions="Auto,*,Auto,Auto" ColumnSpacing="6" Margin="0,4,0,0">
+                    <TextBlock Grid.Column="0" Text="Motion" VerticalAlignment="Center" Foreground="#B4DCB4" FontWeight="Bold" />
+                    <ComboBox Grid.Column="1" HorizontalAlignment="Stretch"
+                              ItemsSource="{Binding VideoMotionChoices}"
+                              SelectedIndex="{Binding VideoMotionIndex, Mode=TwoWay}"
+                              ToolTip.Tip="How each leg moves. Auto = per fractal family (2D zoom, 3D camera fly-in, non-spatial hold using the two toggles above). Zoom / Hold / Ken-Burns / Sweep force every leg, adapted to the family: e.g. Zoom on a non-spatial region becomes Ken-Burns, Sweep on a non-sweepable region becomes Ken-Burns." />
+                    <TextBlock Grid.Column="2" Text="3D orbit °" VerticalAlignment="Center" Foreground="#B4DCB4" Margin="6,0,0,0" />
+                    <NumericUpDown Grid.Column="3" Width="110" Minimum="-720" Maximum="720" Increment="15" FormatString="0"
+                                   Value="{Binding VideoOrbitDegrees, Mode=TwoWay}"
+                                   ToolTip.Tip="Raymarched 3D legs (Mandelbulb, Mandelbox, KIFS, Quaternion, …): swing the camera around the object this many degrees over the leg, on top of the fly-in. 0 = no orbit." />
+                </Grid>
             </StackPanel>
         </Border>
 

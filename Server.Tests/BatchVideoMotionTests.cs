@@ -16,7 +16,7 @@ using Xunit;
 
 namespace FracturingFog.Server.Tests;
 
-public sealed class BatchVideoMotionTests
+public sealed class VideoMotionModeTests
 {
     private static BatchOptions Parse(params string[] tail)
     {
@@ -30,7 +30,7 @@ public sealed class BatchVideoMotionTests
     {
         foreach (FractalType t in Enum.GetValues<FractalType>())
         {
-            var k = VideoMotionPlan.Resolve(t, BatchVideoMotion.Auto, out var note);
+            var k = VideoMotionPlan.Resolve(t, VideoMotionMode.Auto, out var note);
             Assert.Null(note);
             var expected = FractalMotionCapabilities.MotionClass(t) switch
             {
@@ -45,13 +45,13 @@ public sealed class BatchVideoMotionTests
     [Fact]
     public void Explicit_requests_adapt_to_the_family_with_a_note()
     {
-        Assert.Equal(VideoMotionKind.KenBurns, VideoMotionPlan.Resolve(FractalType.Flame, BatchVideoMotion.Zoom, out var n1));
+        Assert.Equal(VideoMotionKind.KenBurns, VideoMotionPlan.Resolve(FractalType.Flame, VideoMotionMode.Zoom, out var n1));
         Assert.NotNull(n1);
-        Assert.Equal(VideoMotionKind.KenBurns, VideoMotionPlan.Resolve(FractalType.Julia, BatchVideoMotion.Sweep, out var n2));
+        Assert.Equal(VideoMotionKind.KenBurns, VideoMotionPlan.Resolve(FractalType.Julia, VideoMotionMode.Sweep, out var n2));
         Assert.NotNull(n2);
-        Assert.Equal(VideoMotionKind.Dolly, VideoMotionPlan.Resolve(FractalType.Mandelbulb, BatchVideoMotion.Zoom, out _));
-        Assert.Equal(VideoMotionKind.Hold, VideoMotionPlan.Resolve(FractalType.Mandelbrot, BatchVideoMotion.Hold, out _));
-        Assert.Equal(VideoMotionKind.Sweep, VideoMotionPlan.Resolve(FractalType.Logistic, BatchVideoMotion.Sweep, out var n3));
+        Assert.Equal(VideoMotionKind.Dolly, VideoMotionPlan.Resolve(FractalType.Mandelbulb, VideoMotionMode.Zoom, out _));
+        Assert.Equal(VideoMotionKind.Hold, VideoMotionPlan.Resolve(FractalType.Mandelbrot, VideoMotionMode.Hold, out _));
+        Assert.Equal(VideoMotionKind.Sweep, VideoMotionPlan.Resolve(FractalType.Logistic, VideoMotionMode.Sweep, out var n3));
         Assert.Null(n3);
     }
 
@@ -90,14 +90,14 @@ public sealed class BatchVideoMotionTests
     {
         var o = Parse("--fractal", "Mandelbulb", "--x", "0", "--y", "0", "--zoom", "1", "--mode", "video", "--video-motion", "kenburns",
                       "--orbit", "90", "--no-drift", "--video-seed", "42", "--start-zoom", "0.2", "--out", "x");
-        Assert.Equal(BatchVideoMotion.KenBurns, o.VideoMotion);
+        Assert.Equal(VideoMotionMode.KenBurns, o.VideoMotion);
         Assert.Equal(90.0, o.VideoOrbitDegrees);
         Assert.True(o.VideoNoDrift);
         Assert.Equal(42, o.VideoSeed);
         Assert.True(o.VideoStartZoomSet);
 
         var d = Parse("--fractal", "Julia", "--x", "0", "--y", "0", "--zoom", "1", "--mode", "video", "--out", "x");
-        Assert.Equal(BatchVideoMotion.Auto, d.VideoMotion);
+        Assert.Equal(VideoMotionMode.Auto, d.VideoMotion);
         Assert.False(d.VideoStartZoomSet);
     }
 

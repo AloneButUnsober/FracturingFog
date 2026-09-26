@@ -251,6 +251,16 @@ namespace FracturingFog.Models
         /// (#806): Logistic r-window pan, AcidWarp flow morph. Default off.</summary>
         public bool SweepParamsOnHold { get; set; }
 
+        /// <summary>#954 — per-leg motion override for the video slideshow. Auto =
+        /// the per-family routing above (zoom / camera dolly / hold with the
+        /// Ken-Burns + sweep toggles); an explicit mode is adapted per family by
+        /// VideoMotionPlan.Resolve.</summary>
+        public VideoMotionMode VideoMotion { get; set; } = VideoMotionMode.Auto;
+
+        /// <summary>#954 — swing a 3D camera leg's azimuth this many degrees over
+        /// the leg (0 = no orbit).</summary>
+        public double VideoOrbitDegrees { get; set; }
+
         /// <summary>Adaptive-sweep block. Drives the Adaptive slider per leg.</summary>
         public AdaptiveSweepConfig AdaptiveSweep { get; set; } = new();
 

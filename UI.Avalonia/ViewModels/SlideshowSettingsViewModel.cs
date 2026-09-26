@@ -394,6 +394,36 @@ public sealed class SlideshowSettingsViewModel : ViewModelBase
         set { this.RaiseAndSetIfChanged(ref _sweepParamsOnHold, value); MarkDirty(); }
     }
 
+    // ── #954 video motion override ──────────────────────────────────────
+    private int _videoMotionIndex;
+    private decimal _videoOrbitDegrees;
+
+    /// <summary>Motion override choices, in <see cref="VideoMotionMode"/> order.</summary>
+    public IReadOnlyList<string> VideoMotionChoices { get; } = new[]
+    {
+        "Auto (per fractal family)",
+        "Zoom (3D: camera fly-in)",
+        "Hold (static frame)",
+        "Ken-Burns (pan + zoom the frame)",
+        "Sweep (Logistic / Acid Warp)",
+    };
+
+    /// <summary>Per-leg motion override. Auto = the routing above (the Ken-Burns
+    /// and animate-hold toggles still apply); others force every leg, adapted to
+    /// each region's family.</summary>
+    public int VideoMotionIndex
+    {
+        get => _videoMotionIndex;
+        set { this.RaiseAndSetIfChanged(ref _videoMotionIndex, Math.Clamp(value, 0, VideoMotionChoices.Count - 1)); MarkDirty(); }
+    }
+
+    /// <summary>3D camera legs: swing the camera azimuth this many degrees (0 = off).</summary>
+    public decimal VideoOrbitDegrees
+    {
+        get => _videoOrbitDegrees;
+        set { this.RaiseAndSetIfChanged(ref _videoOrbitDegrees, value); MarkDirty(); }
+    }
+
     /// <summary>Show the "Enable animations" opt-in toggle — only for Image /
     /// Video. Animation type animates unconditionally, so the toggle is
     /// hidden there.</summary>
@@ -763,6 +793,8 @@ public sealed class SlideshowSettingsViewModel : ViewModelBase
         _working.VaryConstantSpeed = _varyConstantSpeed;
         _working.KenBurnsOnHold = _kenBurnsOnHold;
         _working.SweepParamsOnHold = _sweepParamsOnHold;
+        _working.VideoMotion = (VideoMotionMode)_videoMotionIndex;
+        _working.VideoOrbitDegrees = (double)_videoOrbitDegrees;
 
         _working.AdaptiveSweep.Enabled = _sweepEnabled;
         _working.AdaptiveSweep.Start = _sweepStart;
@@ -815,6 +847,8 @@ public sealed class SlideshowSettingsViewModel : ViewModelBase
         _varyConstantSpeed = _working.VaryConstantSpeed;
         _kenBurnsOnHold = _working.KenBurnsOnHold;
         _sweepParamsOnHold = _working.SweepParamsOnHold;
+        _videoMotionIndex = (int)_working.VideoMotion;
+        _videoOrbitDegrees = (decimal)_working.VideoOrbitDegrees;
 
         // Refresh per-config filter checkmarks. CheckableItem.IsChecked fires
         // Owner.OnFilterItemChanged → MarkDirty, which is guarded by
@@ -844,6 +878,8 @@ public sealed class SlideshowSettingsViewModel : ViewModelBase
         this.RaisePropertyChanged(nameof(KenBurnsOnHold));
         this.RaisePropertyChanged(nameof(ShowKenBurnsOnHoldToggle));
         this.RaisePropertyChanged(nameof(SweepParamsOnHold));
+        this.RaisePropertyChanged(nameof(VideoMotionIndex));
+        this.RaisePropertyChanged(nameof(VideoOrbitDegrees));
         this.RaisePropertyChanged(nameof(RandomizeAnimationsByFractalType));
         this.RaisePropertyChanged(nameof(UseExtremeRegions));
         this.RaisePropertyChanged(nameof(TotalDisplaySec));

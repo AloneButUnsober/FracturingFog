@@ -594,6 +594,25 @@ namespace FracturingFog.Models
               or FractalType.Multibrot or FractalType.Magnet1 or FractalType.Magnet2
               or FractalType.Glynn or FractalType.Phoenix or FractalType.Spider;
 
+        /// <summary>#954 — just the generic 3D camera block (family + distance /
+        /// azimuth / elevation / slice) of <see cref="Snapshot"/>, or null when the
+        /// type has none. <see cref="ApplyTo"/> is null-guarded per field, so
+        /// re-applying this touches ONLY the camera — an orbit can drive the
+        /// azimuth every frame without resetting other (possibly animated) params.</summary>
+        public static RegionFractalParams? CameraSnapshot(FractalType type, FractalParameters? p)
+        {
+            var full = Snapshot(type, p);
+            if (full?.Cam3DFamily is null || full.Cam3DTheta is null) return null;
+            return new RegionFractalParams
+            {
+                Cam3DFamily = full.Cam3DFamily,
+                Cam3DDistance = full.Cam3DDistance,
+                Cam3DTheta = full.Cam3DTheta,
+                Cam3DPhi = full.Cam3DPhi,
+                Cam3DSliceW = full.Cam3DSliceW,
+            };
+        }
+
         public static RegionFractalParams? Snapshot(FractalType type, FractalParameters? p)
         {
             if (p == null) return null;

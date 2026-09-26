@@ -192,6 +192,16 @@ namespace FracturingFog.Render
         /// are unaffected. Default off ⇒ static hold / Ken-Burns.</summary>
         public bool SweepParamsOnHold { get; set; }
 
+        /// <summary>#954 — how the run moves. Auto keeps the per-family default
+        /// (single-shot: plane zoom / 3D camera dolly / hold for non-spatial;
+        /// slideshow: its existing leg routing). Explicit modes are adapted to the
+        /// family by VideoMotionPlan.Resolve.</summary>
+        public FracturingFog.Models.VideoMotionMode Motion { get; set; }
+
+        /// <summary>#954 — raymarched 3D only: swing the camera azimuth this many
+        /// degrees over the zoom / each camera leg. 0 = no orbit.</summary>
+        public double OrbitDegrees { get; set; }
+
         // ── Region / theme restrictions (video slideshow) ─────────────────
         // Mirror the image slideshow's include/filter sets so a saved Video
         // preset that pins one region + one theme actually plays just that,

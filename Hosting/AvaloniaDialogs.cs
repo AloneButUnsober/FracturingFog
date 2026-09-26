@@ -1277,6 +1277,31 @@ namespace FracturingFog.Hosting
                     Foreground = Brushes.LightGray,
                     IsChecked = s_videoDialogRecord,
                 };
+                // #954 — motion override + 3D orbit (sticky for the session).
+                var motionCombo = new ComboBox { HorizontalAlignment = HorizontalAlignment.Stretch, MinWidth = 240 };
+                foreach (var label in new[]
+                {
+                    "Auto (per fractal family)", "Zoom (3D: camera fly-in)", "Hold (static frame)",
+                    "Ken-Burns (pan + zoom the frame)", "Sweep (Logistic / Acid Warp)",
+                })
+                    motionCombo.Items.Add(label);
+                motionCombo.SelectedIndex = (int)s_videoDialogMotion;
+                ToolTip.SetTip(motionCombo,
+                    "How the zoom moves. Auto = per fractal family: 2D plane zoom (Julia / Phoenix / Glynn also drift their constant), " +
+                    "3D camera fly-in, non-spatial (Flame, Plasma, DLA, …) Ken-Burns and Logistic / Acid Warp sweep. " +
+                    "Explicit modes are adapted to the family. For the slideshow this overrides every leg.");
+                var orbitNud = new NumericUpDown
+                {
+                    Minimum = -720, Maximum = 720, Increment = 15, FormatString = "0",
+                    Value = (decimal)s_videoDialogOrbit, Width = 120,
+                };
+                ToolTip.SetTip(orbitNud,
+                    "Raymarched 3D only (Mandelbulb, Mandelbox, KIFS, Quaternion, …): swing the camera around the object " +
+                    "this many degrees over the zoom / each slideshow leg. 0 = no orbit.");
+                global::FracturingFog.Models.VideoMotionMode PickMotion()
+                    => (global::FracturingFog.Models.VideoMotionMode)Math.Max(0, motionCombo.SelectedIndex);
+                double PickOrbit() => (double)(orbitNud.Value ?? 0m);
+
                 ToolTip.SetTip(chkRecord,
                     "Captures exactly what the render window shows for the whole zoom or video slideshow. " +
                     "When it stops, the Save Recording prompt offers MP4 / H.265 / WebM / lossless MKV / GIF / PNG sequence. " +
@@ -1558,6 +1583,8 @@ namespace FracturingFog.Hosting
                             ? startCombo.SelectedItem as string
                             : null,
                         Record = chkRecord.IsChecked == true,
+                        Motion = PickMotion(),
+                        OrbitDegrees = PickOrbit(),
                         TaaSmoothing = (int)Math.Round(taaSlider.Value),
                         BandDither = chkBandDither.IsChecked == true,
                         BandDitherStrength = (int)Math.Round(ditherSlider.Value),
@@ -1585,6 +1612,8 @@ namespace FracturingFog.Hosting
                     {
                         IsSlideshow = true,
                         Record = chkRecord.IsChecked == true,
+                        Motion = PickMotion(),
+                        OrbitDegrees = PickOrbit(),
                         SlideshowSecondsOverride = secsOverride,
                         IsConstantRate = chkConstantRate.IsChecked == true,
                         IsReverse = chkReverse.IsChecked == true,
@@ -1619,6 +1648,8 @@ namespace FracturingFog.Hosting
                 root.Children.Add(speedBox);
                 root.Children.Add(chkConstantRate);
                 root.Children.Add(chkRecord);
+                root.Children.Add(LabeledRow("Motion:", motionCombo));
+                root.Children.Add(LabeledRow("3D orbit (°):", orbitNud));
                 root.Children.Add(chkReverse);
                 root.Children.Add(LabeledRow("Start from:", startCombo));
                 root.Children.Add(LabeledRow("Adaptive iter cap:", iterCapCombo));
@@ -1633,6 +1664,8 @@ namespace FracturingFog.Hosting
                 win.Closed += (_, _) =>
                 {
                     s_videoDialogRecord = chkRecord.IsChecked == true;
+                    s_videoDialogMotion = PickMotion();
+                    s_videoDialogOrbit = PickOrbit();
                     if (!tcs.Task.IsCompleted) tcs.TrySetResult(pending);
                 };
 
@@ -1647,6 +1680,9 @@ namespace FracturingFog.Hosting
 
         // Video dialog "Record this run" — sticky for the session.
         private static bool s_videoDialogRecord;
+        // #954 — Video dialog motion override + orbit, sticky for the session.
+        private static global::FracturingFog.Models.VideoMotionMode s_videoDialogMotion;
+        private static double s_videoDialogOrbit;
 
         // ── Travel to location (#789 slice B) ─────────────────────────────────
 

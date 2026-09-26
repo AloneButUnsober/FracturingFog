@@ -180,6 +180,24 @@ The Video button animates a smooth zoom from the current view to the active regi
 
 Both phases smoothstep-eased.
 
+#### Motion type and 3D orbit (#954)
+
+The dialog's **Motion** list picks how the video moves. **Auto** follows the
+fractal family, the same rules batch video and the video slideshow use:
+
+| Family | Auto motion |
+|---|---|
+| 2D escape-time (Mandelbrot, Julia, Newton, …) | The pan + zoom above |
+| Raymarched 3D (Mandelbulb, Mandelbox, KIFS, Quaternion, …) | Camera fly-in from 6× wider to the target framing (centre pinned) |
+| Logistic, Acid Warp | Render the target, then sweep (Logistic scrolls its r-window, Acid Warp morphs its flow) |
+| Other non-spatial (Flame, Plasma, DLA, Buddhabrot, IFS, …) | Render the target once, then a slow Ken-Burns pan + zoom |
+
+Choose **Zoom**, **Hold**, **Ken-Burns** or **Sweep** to force a motion; a choice
+that doesn't fit the family is adapted (e.g. Sweep on Julia becomes Ken-Burns) and
+the status line says so. **3D orbit (°)** swings a raymarched camera around the
+object over the video — on top of the fly-in, or on a Hold. Both settings stay
+for the session and also apply to the **Slideshow** button (every leg).
+
 ### Frame rate
 
 **Calculation-bound, not wall-clock-bound.** The loop advances by elapsed wall-clock time so the total duration is honored even if individual frames take longer than 1/fps to render. Drop quality + iter cap if you need consistent fps.
@@ -277,6 +295,12 @@ A continuous mode: zoom in → pause → zoom out → next region → repeat.
 | Inter-region gap | 0 s | Slideshow Settings |
 
 Stops independently from the single-shot Video feature. Esc or the Slideshow button toggles off.
+
+Each leg moves the way its region's family moves (2D zoom, 3D camera fly-in,
+non-spatial hold — with the *Ken-Burns* / *Animate hold legs* toggles). A video
+preset's **Motion** list overrides that for every leg (Hold / Ken-Burns / Sweep,
+adapted per family; Auto keeps the per-family routing), and **3D orbit °** swings
+the camera on 3D legs (#954). Both are saved with the preset.
 
 The Video button label flips to **Stop** while running.
 

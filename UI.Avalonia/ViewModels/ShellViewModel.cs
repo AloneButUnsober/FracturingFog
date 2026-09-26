@@ -3669,6 +3669,8 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
             VaryConstantSpeed = config.VaryConstantSpeed,
             KenBurnsOnHold = config.KenBurnsOnHold,
             SweepParamsOnHold = config.SweepParamsOnHold,
+            Motion = config.VideoMotion,              // #954
+            OrbitDegrees = config.VideoOrbitDegrees,  // #954
             // Region / theme restrictions — without these the video slideshow
             // cycled the whole library, ignoring a preset that pinned one
             // region + one theme (#45).
