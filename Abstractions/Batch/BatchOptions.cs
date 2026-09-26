@@ -55,6 +55,26 @@ namespace FracturingFog.Batch
         HighQualityH264Mp4,
     }
 
+    /// <summary>
+    /// #947 — how a batch video moves. Auto picks per fractal family
+    /// (FractalMotionCapabilities): 2D escape-time → plane zoom (plus constant
+    /// drift for Julia / Phoenix / Glynn), raymarched 3D → camera dolly,
+    /// non-spatial → param sweep (Logistic / AcidWarp) or Ken-Burns.
+    /// </summary>
+    public enum BatchVideoMotion
+    {
+        Auto,
+        /// <summary>Log-zoom from --start-zoom to the target (3D: camera dolly).</summary>
+        Zoom,
+        /// <summary>Render once and hold the frame.</summary>
+        Hold,
+        /// <summary>Render once, slow image-space pan + zoom of the frame.</summary>
+        KenBurns,
+        /// <summary>Re-render with a swept family param (Logistic r-window,
+        /// AcidWarp flow). Other families fall back to Ken-Burns.</summary>
+        Sweep,
+    }
+
     public sealed class BatchOptions
     {
         public BatchMode Mode { get; set; } = BatchMode.Image;
@@ -86,8 +106,22 @@ namespace FracturingFog.Batch
         public int VideoFps { get; set; } = 30;
         // Start zoom for video. Defaults to 0.5 (classic full view).
         public double VideoStartZoom { get; set; } = 0.5;
+        // True when --start-zoom was given explicitly (3D dolly otherwise picks
+        // its own wide establishing zoom, #947).
+        public bool VideoStartZoomSet { get; set; }
         // When true, render in reverse: start at target, animate back to full view.
         public bool VideoReverse { get; set; }
+
+        // #947 — per-family motion. See BatchVideoMotion.
+        public BatchVideoMotion VideoMotion { get; set; } = BatchVideoMotion.Auto;
+        // Raymarched 3D only: sweep the camera azimuth this many degrees over the
+        // video (on top of the dolly / hold). 0 = no orbit.
+        public double VideoOrbitDegrees { get; set; }
+        // Disable the default constant drift on Julia / Phoenix / Glynn zooms.
+        public bool VideoNoDrift { get; set; }
+        // Seed for the randomised motion bits (Ken-Burns target, drift path) so a
+        // batch render is reproducible.
+        public int VideoSeed { get; set; }
 
         // Lossless encoding preset for video mode. None → built-in WMF MP4 writer.
         public BatchLossless Lossless { get; set; } = BatchLossless.None;
@@ -484,6 +518,36 @@ namespace FracturingFog.Batch
                     case "--start-zoom":
                         if (!NextDouble(args, ref i, a, out double sz, out error)) return false;
                         opts.VideoStartZoom = sz;
+                        opts.VideoStartZoomSet = true;
+                        break;
+
+                    case "--video-motion":
+                        if (!Next(args, ref i, a, out string vmv, out error)) return false;
+                        switch (vmv.ToLowerInvariant())
+                        {
+                            case "auto":     opts.VideoMotion = BatchVideoMotion.Auto; break;
+                            case "zoom":     opts.VideoMotion = BatchVideoMotion.Zoom; break;
+                            case "hold":     opts.VideoMotion = BatchVideoMotion.Hold; break;
+                            case "kenburns": opts.VideoMotion = BatchVideoMotion.KenBurns; break;
+                            case "sweep":    opts.VideoMotion = BatchVideoMotion.Sweep; break;
+                            default:
+                                error = $"--video-motion must be auto|zoom|hold|kenburns|sweep (got '{vmv}').";
+                                return false;
+                        }
+                        break;
+
+                    case "--orbit":
+                        if (!NextDouble(args, ref i, a, out double orv, out error)) return false;
+                        opts.VideoOrbitDegrees = orv;
+                        break;
+
+                    case "--no-drift":
+                        opts.VideoNoDrift = true;
+                        break;
+
+                    case "--video-seed":
+                        if (!NextInt(args, ref i, a, out int vsd, out error)) return false;
+                        opts.VideoSeed = vsd;
                         break;
 
                     case "--reverse":
@@ -1299,6 +1363,8 @@ namespace FracturingFog.Batch
                     { error = "--seconds must be 0.5..600."; return false; }
                 if (opts.VideoFps < 1 || opts.VideoFps > 240)
                     { error = "--fps must be 1..240."; return false; }
+                if (System.Math.Abs(opts.VideoOrbitDegrees) > 3600.0)
+                    { error = "--orbit must be within ±3600 degrees."; return false; }
                 if (!opts.KeepFramesSpecified)
                     opts.KeepFrames = opts.Lossless == BatchLossless.None;
             }

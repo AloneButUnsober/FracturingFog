@@ -1056,6 +1056,17 @@ namespace FracturingFog.Imaging
                 FractalType.Flame            => new FlameRenderer(w, h),
                 FractalType.Sandbox          => new SandboxCalculator(w, h),
                 FractalType.UserBulb         => new UserBulbCalculator(w, h),
+                // #947 — previously missing: batch image / video silently fell
+                // back to Mandelbrot for these. TearDrop is hand-rolled; the
+                // Generated* family is CalcGen-emitted (CalculatorGen template).
+                FractalType.RandomTile       => new RandomTileCalculator(w, h),
+                FractalType.TearDrop         => new TearDropCalculator(w, h),
+                FractalType.GeneratedMandelbrotZ2 => new FracturingFog.Calculators.Generated.MandelbrotZ2Calculator(w, h),
+                FractalType.GeneratedMandelbrotZ3 => new FracturingFog.Calculators.Generated.MandelbrotZ3Calculator(w, h),
+                FractalType.GeneratedMandelbrotZ4 => new FracturingFog.Calculators.Generated.MandelbrotZ4Calculator(w, h),
+                FractalType.GeneratedMandelbrotZ5 => new FracturingFog.Calculators.Generated.MandelbrotZ5Calculator(w, h),
+                FractalType.GeneratedTricorn      => new FracturingFog.Calculators.Generated.TricornCalculator(w, h),
+                FractalType.GeneratedBurningShip  => new FracturingFog.Calculators.Generated.BurningShipCalculator(w, h),
                 _                            => null
             };
             if (c == null) return null;
@@ -1120,6 +1131,52 @@ namespace FracturingFog.Imaging
                 case TranscendentalJuliaCalculator tj:
                     tj.FractalParameters = req.FractalParameters;
                     tj.InteriorAlpha = req.FractalParameters?.InteriorAlpha ?? 255;
+                    break;
+                case RandomTileCalculator rt:  rt.FractalParameters = req.FractalParameters; break;
+                case TearDropCalculator td:
+                    td.FractalParameters = req.FractalParameters;
+                    td.InteriorAlpha = req.FractalParameters?.InteriorAlpha ?? 255;
+                    td.CenterXLo = req.CenterXLo; td.CenterX2 = req.CenterX2; td.CenterX3 = req.CenterX3;
+                    td.CenterYLo = req.CenterYLo; td.CenterY2 = req.CenterY2; td.CenterY3 = req.CenterY3;
+                    break;
+                // CalcGen family (CalculatorGen template — no shared interface,
+                // no FractalParameters): interior alpha + QD centre limbs, and
+                // the deep-zoom flags the interactive host sets (Z2–Z5 run
+                // perturbation + BLA; the non-analytic Tricorn / BurningShip
+                // do not).
+                case FracturingFog.Calculators.Generated.MandelbrotZ2Calculator g:
+                    g.InteriorAlpha = req.FractalParameters?.InteriorAlpha ?? 255;
+                    g.CenterXLo = req.CenterXLo; g.CenterX2 = req.CenterX2; g.CenterX3 = req.CenterX3;
+                    g.CenterYLo = req.CenterYLo; g.CenterY2 = req.CenterY2; g.CenterY3 = req.CenterY3;
+                    g.UsePerturbation = true; g.UseBla = true;
+                    break;
+                case FracturingFog.Calculators.Generated.MandelbrotZ3Calculator g:
+                    g.InteriorAlpha = req.FractalParameters?.InteriorAlpha ?? 255;
+                    g.CenterXLo = req.CenterXLo; g.CenterX2 = req.CenterX2; g.CenterX3 = req.CenterX3;
+                    g.CenterYLo = req.CenterYLo; g.CenterY2 = req.CenterY2; g.CenterY3 = req.CenterY3;
+                    g.UsePerturbation = true; g.UseBla = true;
+                    break;
+                case FracturingFog.Calculators.Generated.MandelbrotZ4Calculator g:
+                    g.InteriorAlpha = req.FractalParameters?.InteriorAlpha ?? 255;
+                    g.CenterXLo = req.CenterXLo; g.CenterX2 = req.CenterX2; g.CenterX3 = req.CenterX3;
+                    g.CenterYLo = req.CenterYLo; g.CenterY2 = req.CenterY2; g.CenterY3 = req.CenterY3;
+                    g.UsePerturbation = true; g.UseBla = true;
+                    break;
+                case FracturingFog.Calculators.Generated.MandelbrotZ5Calculator g:
+                    g.InteriorAlpha = req.FractalParameters?.InteriorAlpha ?? 255;
+                    g.CenterXLo = req.CenterXLo; g.CenterX2 = req.CenterX2; g.CenterX3 = req.CenterX3;
+                    g.CenterYLo = req.CenterYLo; g.CenterY2 = req.CenterY2; g.CenterY3 = req.CenterY3;
+                    g.UsePerturbation = true; g.UseBla = true;
+                    break;
+                case FracturingFog.Calculators.Generated.TricornCalculator g:
+                    g.InteriorAlpha = req.FractalParameters?.InteriorAlpha ?? 255;
+                    g.CenterXLo = req.CenterXLo; g.CenterX2 = req.CenterX2; g.CenterX3 = req.CenterX3;
+                    g.CenterYLo = req.CenterYLo; g.CenterY2 = req.CenterY2; g.CenterY3 = req.CenterY3;
+                    break;
+                case FracturingFog.Calculators.Generated.BurningShipCalculator g:
+                    g.InteriorAlpha = req.FractalParameters?.InteriorAlpha ?? 255;
+                    g.CenterXLo = req.CenterXLo; g.CenterX2 = req.CenterX2; g.CenterX3 = req.CenterX3;
+                    g.CenterYLo = req.CenterYLo; g.CenterY2 = req.CenterY2; g.CenterY3 = req.CenterY3;
                     break;
             }
             return c;

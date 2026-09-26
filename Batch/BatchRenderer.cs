@@ -34,8 +34,20 @@ namespace FracturingFog.Batch
         // and slideshow so an offline sequence carries the same Relief 3D / lighting
         // config a still export does (S6 #408 — the video/slideshow loop was flat).
         internal static FractalParameters BuildFractalParameters(BatchOptions opts)
+            => BuildFractalParameters(opts, null);
+
+        // #947 — seed from the named region: its equation source (user-code
+        // types), lighting, relief snapshot and per-family params (Julia constant,
+        // Newton exponent, 3D camera, non-spatial seeds, …) — the same overlay the
+        // interactive video / scene exporter apply. CLI flags then override.
+        internal static FractalParameters BuildFractalParameters(BatchOptions opts, FractalRegion? region)
         {
             var fp = new FractalParameters();
+            if (region != null)
+            {
+                region.ApplyHeadlessParams(fp);   // equation source, lighting, relief
+                region.Params?.ApplyTo(fp);       // per-family snapshot (#91-#94)
+            }
             if (opts.BulbPower.HasValue)          fp.BulbPower          = opts.BulbPower.Value;
             if (opts.MultibrotExponent.HasValue)  fp.MultibrotExponent  = opts.MultibrotExponent.Value;
             if (!string.IsNullOrWhiteSpace(opts.LSystemPresetName))
@@ -367,8 +379,49 @@ namespace FracturingFog.Batch
             int totalFrames = (int)Math.Round(opts.VideoSeconds * opts.VideoFps);
             if (totalFrames < 2) totalFrames = 2;
 
-            double startZoom = Math.Max(opts.VideoStartZoom, QualityPreset.DefaultZoomMin);
-            double endZoom = Math.Max(targetZoom, QualityPreset.DefaultZoomMin);
+            // #947 — every fractal family moves the way the interactive video
+            // slideshow moves it (VideoMotionPlan): 2D plane zoom (+ constant
+            // drift), 3D camera dolly (+ optional orbit), non-spatial param sweep
+            // or Ken-Burns. Region params seed the frame parameters.
+            FractalRegion? namedRegion = !string.IsNullOrWhiteSpace(opts.RegionName)
+                ? FractalRegionLibrary.Instance.FindByName(opts.RegionName!)
+                : null;
+            // Deep-zoom limbs for the non-Mandelbrot poster path (CalcGen /
+            // TearDrop) — only when the centre comes from the region.
+            FractalRegion? limbSource = (opts.CenterX == null && opts.CenterY == null) ? namedRegion : null;
+            var motion = VideoMotionPlan.Resolve(frType, opts.VideoMotion, out string? motionNote);
+            var motionRng = new Random(opts.VideoSeed);
+
+            double startZoom, endZoom;
+            switch (motion)
+            {
+                case VideoMotionKind.Zoom:
+                    startZoom = Math.Max(opts.VideoStartZoom, QualityPreset.DefaultZoomMin);
+                    endZoom = Math.Max(targetZoom, QualityPreset.DefaultZoomMin);
+                    break;
+                case VideoMotionKind.Dolly:
+                    var (wideZ, authoredZ) = VideoMotionPlan.CameraDolly(targetZoom);
+                    startZoom = opts.VideoStartZoomSet ? Math.Max(opts.VideoStartZoom, 1e-9) : wideZ;
+                    endZoom = authoredZ;
+                    break;
+                default:
+                    // Hold / Ken-Burns / sweep: the authored framing throughout.
+                    startZoom = endZoom = Math.Max(targetZoom, QualityPreset.DefaultZoomMin);
+                    break;
+            }
+            // Auto on a target that IS the start view (e.g. a full-view region):
+            // a zoom would be a frozen video, so Ken-Burns it instead — unless the
+            // family drifts its constant (Julia / Phoenix / Glynn), which moves.
+            if (motion == VideoMotionKind.Zoom && opts.VideoMotion == BatchVideoMotion.Auto
+                && !opts.VideoStartZoomSet
+                && Math.Abs(Math.Log(endZoom / startZoom)) < 0.05
+                && (opts.VideoNoDrift
+                    || FracturingFog.Abstractions.Animation.ConstantDriftResolver.ConstantParamName(frType) == null))
+            {
+                motion = VideoMotionKind.KenBurns;
+                startZoom = endZoom;
+                motionNote = "target is the start view — nothing to zoom into; using Ken-Burns (--start-zoom to override).";
+            }
             if (opts.VideoReverse)
             {
                 // Reverse: start at target, end at the start-zoom (full view).
@@ -457,6 +510,8 @@ namespace FracturingFog.Batch
             Console.WriteLine($"  region   : {regionDispName ?? "(manual)"}");
             Console.WriteLine($"  center   : x={cx:G14} y={cy:G14}");
             Console.WriteLine($"  zoom     : {startZoom:G6} → {endZoom:G6}    iter: {iter}");
+            Console.WriteLine($"  motion   : {motion}{(opts.VideoOrbitDegrees != 0 ? $" + orbit {opts.VideoOrbitDegrees:G4}°" : "")}");
+            if (motionNote != null) Console.WriteLine($"  note     : {motionNote}");
             Console.WriteLine($"  theme    : {opts.ThemeName}    quality: {quality.Name}");
             Console.WriteLine($"  size     : {outW}x{outH}    fps: {opts.VideoFps}    frames: {totalFrames}");
             Console.WriteLine($"  encoder  : {losslessLabel}");
@@ -515,9 +570,61 @@ namespace FracturingFog.Batch
             // transform + watermark still run below (RenderToPixels returns the
             // composed relief buffer BEFORE those). Relief off → the flat fast path,
             // byte-identical.
-            FractalParameters? reliefFp = opts.Relief ? BuildFractalParameters(opts) : null;
+            var fp = BuildFractalParameters(opts, namedRegion);
+            FractalParameters? reliefFp = opts.Relief ? fp : null;
             var reliefHistory = opts.Relief
                 ? new FracturingFog.Rendering.Lighting.FroxelHistory() : null;
+
+            // #947 — per-frame family state. Sweep: Logistic pans its r-window,
+            // AcidWarp advances its flow (morph on). Orbit (3D): the region
+            // snapshot's generic camera azimuth is swept and re-applied, so it
+            // works for every raymarch family without per-type code. Drift
+            // (Julia / Phoenix / Glynn zoom): the interactive default constant
+            // path, ticked once per output frame.
+            double frameCx = cx;
+            double acidFlow0 = fp.AcidWarpFlow;
+            if (motion == VideoMotionKind.Sweep && frType == FractalType.AcidWarp)
+                fp.AcidWarpMorph = true;   // blend adjacent patterns → smooth morph
+            RegionFractalParams? orbitSnap = null;
+            double orbitTheta0 = 0.0;
+            if (opts.VideoOrbitDegrees != 0.0)
+            {
+                orbitSnap = FractalMotionCapabilities.MotionClass(frType) == FractalMotionClass.Raymarch3D
+                    ? RegionFractalParams.Snapshot(frType, fp) : null;
+                if (orbitSnap?.Cam3DTheta is double th) orbitTheta0 = th;
+                else
+                {
+                    orbitSnap = null;
+                    Console.WriteLine($"  note     : --orbit ignored — {frType} has no generic 3D camera.");
+                }
+            }
+            var drift = (motion == VideoMotionKind.Zoom && !opts.VideoNoDrift)
+                ? FracturingFog.Abstractions.Animation.ConstantDriftResolver.TryBuild(
+                    frType, fp, opts.VideoSeconds, motionRng)
+                : null;
+            if (drift != null) Console.WriteLine($"  drift    : {drift.Name} (disable with --no-drift)");
+            // Hold / Ken-Burns render the fractal ONCE (safe for slow generators:
+            // Flame, DLA, Buddhabrot); an orbit forces per-frame renders.
+            bool singleRender = orbitSnap == null
+                && motion is VideoMotionKind.Hold or VideoMotionKind.KenBurns;
+            var kenBurns = motion == VideoMotionKind.KenBurns ? KenBurnsPath.Random(motionRng) : default;
+            uint[]? heldBase = null;
+
+            void ApplyFrameState(double e)
+            {
+                if (motion == VideoMotionKind.Sweep)
+                {
+                    if (frType == FractalType.Logistic)
+                        frameCx = VideoMotionPlan.LogisticSweepX(cx, endZoom, e);
+                    else if (frType == FractalType.AcidWarp)
+                        fp.AcidWarpFlow = VideoMotionPlan.AcidWarpSweepFlow(acidFlow0, e);
+                }
+                if (orbitSnap != null)
+                {
+                    orbitSnap.Cam3DTheta = VideoMotionPlan.OrbitTheta(orbitTheta0, opts.VideoOrbitDegrees, e);
+                    orbitSnap.ApplyTo(fp);
+                }
+            }
 
             // S3 (#568) — accumulation motion blur on the zoom video. MotionBlurSubframes
             // > 1 (with a positive shutter) averages that many sub-frames per output
@@ -525,7 +632,8 @@ namespace FracturingFog.Batch
             // fast zoom reads as motion-blurred instead of strobing. Reuses the scene
             // controls (--motion-blur / --shutter). 1 sub-frame = the single-frame path
             // below (byte-identical). N× render cost.
-            bool motionBlur = opts.MotionBlurSubframes > 1 && opts.ShutterFraction > 0.0;
+            bool motionBlur = opts.MotionBlurSubframes > 1 && opts.ShutterFraction > 0.0
+                && motion is VideoMotionKind.Zoom or VideoMotionKind.Dolly;
             int mbSamples = Math.Max(2, opts.MotionBlurSubframes);
             double frameStep = totalFrames > 1 ? 1.0 / (totalFrames - 1) : 0.0;
             var mbAccum = motionBlur ? new MotionBlurAccumulator(outW * outH) : null;
@@ -545,7 +653,7 @@ namespace FracturingFog.Batch
                     var rreq = new PosterRequest
                     {
                         FractalType = frType, Width = outW, Height = outH,
-                        CenterX = cx, CenterXLo = limbRegion?.CenterXLo ?? 0,
+                        CenterX = frameCx, CenterXLo = limbRegion?.CenterXLo ?? 0,
                         CenterX2 = limbRegion?.CenterX2 ?? 0, CenterX3 = limbRegion?.CenterX3 ?? 0,
                         CenterY = cy, CenterYLo = limbRegion?.CenterYLo ?? 0,
                         CenterY2 = limbRegion?.CenterY2 ?? 0, CenterY3 = limbRegion?.CenterY3 ?? 0,
@@ -565,9 +673,10 @@ namespace FracturingFog.Batch
                     }
                     return PosterRenderer.RenderToPixels(rreq, CancellationToken.None, out _, out _);
                 }
-                return limbRegion != null
+                return limbRegion != null && frameCx == cx
                     ? RenderRegionMandelFrame(limbRegion, outW, outH, fz, iter, theme, pfAdaptive, quality)
-                    : RenderOneFrame(frType, outW, outH, cx, cy, fz, iter, theme, quality, pfAdaptive);
+                    : RenderOneFrame(frType, outW, outH, frameCx, cy, fz, iter, theme, quality, pfAdaptive,
+                                     fp, limbSource);
             }
 
             var progress = new ConsoleProgress("Frames");
@@ -579,13 +688,29 @@ namespace FracturingFog.Batch
                 for (int f = 0; f < totalFrames; f++)
                 {
                     double t = totalFrames == 1 ? 1.0 : (double)f / (totalFrames - 1);
-                    double te = t * t * (3.0 - 2.0 * t);
+                    double te = VideoMotionPlan.SmoothStep(t);
                     double frameZoom = Math.Exp(logZ0 + (logZ1 - logZ0) * te);   // nominal (progress)
+                    double eHold = VideoMotionPlan.SmootherStep(t);              // sweep / orbit / Ken-Burns
 
                     uint[] buffer;
                     zoomHdr = null;
-                    if (!motionBlur)
+                    if (singleRender)
                     {
+                        // Render once, then hold or Ken-Burns the frame in image
+                        // space — no recompute. Frame 0 is the full frame.
+                        heldBase ??= RenderZoomFrame(0.0, reliefHistory, captureHdr: false);
+                        buffer = new uint[outW * outH];
+                        if (motion == VideoMotionKind.KenBurns)
+                        {
+                            var (rx, ry, rw, rh) = kenBurns.Rect(eHold, outW, outH);
+                            FracturingFog.Abstractions.Imaging.ImageResampler
+                                .ResampleRectBilinear(heldBase, outW, outH, rx, ry, rw, rh, buffer);
+                        }
+                        else Array.Copy(heldBase, buffer, buffer.Length);
+                    }
+                    else if (!motionBlur)
+                    {
+                        ApplyFrameState(eHold);
                         // S2 (#396) — capture HDR on the single-frame relief path when armed.
                         bool zoomWantHdr = ReliefHdrWanted(reliefFp,
                             opts.ViewTransform ?? FracturingFog.Imaging.ViewTransform.None, pfBrightness, pfContrast);
@@ -596,6 +721,7 @@ namespace FracturingFog.Batch
                         // Average the shutter's sub-frames. The froxel temporal history
                         // advances once per OUTPUT frame (only the first sub-frame carries
                         // it) so accumulation motion blur doesn't over-blend the volume.
+                        ApplyFrameState(eHold);
                         mbAccum!.Reset();
                         var samples = MotionBlurAccumulator.ShutterSamples(t, frameStep, opts.ShutterFraction, mbSamples);
                         for (int s = 0; s < samples.Length; s++)
@@ -647,6 +773,7 @@ namespace FracturingFog.Batch
                         watermarkText: "", fontColor: System.Drawing.Color.White, subText: "");
 
                     framesWritten++;
+                    drift?.Tick(1.0 / opts.VideoFps);
                     progress.Report((double)(f + 1) / totalFrames,
                         $"frame {f + 1}/{totalFrames}  zoom {frameZoom:G4}");
                 }
@@ -726,24 +853,36 @@ namespace FracturingFog.Batch
 
         // ── Helpers ───────────────────────────────────────────────────────────
 
+        // fp: per-family parameters (#947 — region snapshot + CLI; null = defaults).
+        // limbs: region whose QD centre limbs ride along for deep non-Mandelbrot
+        // zooms (CalcGen / TearDrop); null = double centre only.
         private static uint[] RenderOneFrame(
             FractalType frType, int w, int h,
             double cx, double cy, double zoom, int iter,
-            IColorMap theme, QualityPreset quality, int adaptive = 0)
+            IColorMap theme, QualityPreset quality, int adaptive = 0,
+            FractalParameters? fp = null, FractalRegion? limbs = null)
         {
+            fp ??= new FractalParameters();
             IFractalCalculator? alt = PosterRenderer.BuildCaptureCalculator(new PosterRequest
             {
                 FractalType = frType,
                 Width = w,
                 Height = h,
                 CenterX = cx,
+                CenterXLo = limbs?.CenterXLo ?? 0, CenterX2 = limbs?.CenterX2 ?? 0, CenterX3 = limbs?.CenterX3 ?? 0,
                 CenterY = cy,
+                CenterYLo = limbs?.CenterYLo ?? 0, CenterY2 = limbs?.CenterY2 ?? 0, CenterY3 = limbs?.CenterY3 ?? 0,
                 Zoom = zoom,
                 MaxIterations = iter,
                 Quality = quality,
                 ColorMap = theme,
-                FractalParameters = new FractalParameters(),
+                FractalParameters = fp,
             });
+            // Only Mandelbrot legitimately has no capture calculator (it renders
+            // below). Anything else used to fall through and silently render a
+            // Mandelbrot — fail loudly instead (#947).
+            if (alt == null && frType != FractalType.Mandelbrot)
+                throw new NotSupportedException($"No offline calculator for fractal type {frType}.");
 
             if (alt != null)
             {
@@ -755,7 +894,7 @@ namespace FracturingFog.Batch
                 if (adaptive > 0 && alt is FracturingFog.Interefaces.ISupportsHistogramEq heAlt)
                     heAlt.ApplyHistogramEqualization(adaptive / 100.0);
                 var altBuf = CopyBuffer(alt.ColorBuffer, w, h);
-                CompositeInteriorAlpha(altBuf, w, h, theme);
+                CompositeInteriorAlpha(altBuf, w, h, theme, fp);
                 return altBuf;
             }
 
@@ -806,10 +945,10 @@ namespace FracturingFog.Batch
         // (the compositor's gate early-returns), so this is byte-identical for
         // the common case.
         private static void CompositeInteriorAlpha(
-            uint[] buf, int w, int h, IColorMap? theme)
+            uint[] buf, int w, int h, IColorMap? theme, FractalParameters? fp = null)
         {
             Interior2DBackgroundCompositor.Composite(
-                buf, buf, w, h, s_defaultInteriorFp,
+                buf, buf, w, h, fp ?? s_defaultInteriorFp,
                 theme?.InSetColor ?? 0xFF000000u,
                 alphaPreview: false, srcAlreadyProcessed: false);
         }
