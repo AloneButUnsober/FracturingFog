@@ -136,6 +136,19 @@ namespace FracturingFog.Models
             { "Spider — Canonical", "Spider - Canonical" },
             { "Stripe Average — Classic", "Stripe Average - Classic" },
             { "TearDrop — Default", "TearDrop - Default" },
+
+            // #918 — the parabolic-implosion built-in regions dropped the "(faithful)"
+            // qualifier from their user-facing names (the true faithful J(g_α) render is
+            // parked, #934; these are the near-parabolic implosion). Saved slideshow
+            // configs / scenes referencing the old names resolve through these aliases.
+            { "Parabolic implosion (faithful) c = 1/4", "Parabolic implosion c = 1/4" },
+            { "Parabolic implosion (faithful) c = -3/4", "Parabolic implosion c = -3/4" },
+            { "Parabolic implosion (faithful) 1/3 bulb", "Parabolic implosion 1/3 bulb" },
+            { "Parabolic implosion (faithful) 1/4 bulb", "Parabolic implosion 1/4 bulb" },
+            { "Parabolic implosion (faithful) 2/5 bulb", "Parabolic implosion 2/5 bulb" },
+            { "Parabolic implosion (faithful) — pick p/q", "Parabolic implosion — pick p/q" },
+            { "Parabolic implosion (faithful) — satellite (period-doubling)", "Parabolic implosion — satellite (period-doubling)" },
+            { "Parabolic implosion (faithful) — deep nesting (period-4 bulb)", "Parabolic implosion — deep nesting (period-4 bulb)" },
         };
 
         /// <summary>Return the current ASCII name for a possibly-legacy
