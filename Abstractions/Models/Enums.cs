@@ -181,20 +181,34 @@ namespace FracturingFog
         Quaternion,
     }
 
+    /// <summary>Derived dual-orbit scalar. The first three read the raw escape
+    /// location E, which sits at radius ≥ the bailout while s sits at ≤ 2 — so they
+    /// depend on the bailout radius (artistic, not intrinsic). <see cref="GreenRatio"/>
+    /// and <see cref="ExternalAngleDelta"/> are bailout-independent (#970).
+    /// Append only: regions persist the numeric value.</summary>
     public enum DualOrbitField
     {
         /// <summary>|E_c − E_z| — the escape-location separation of the two orbits
-        /// (the default; 0 where they escape together).</summary>
+        /// (the default; 0 where they escape together). Bailout-dependent.</summary>
         EscapeSeparation,
         /// <summary>|M − s|, M = (E_z + E_c)/2 — residual of the escape midpoint
-        /// from the parameter point.</summary>
+        /// from the parameter point. Bailout-dependent (|M − s| ≈ |M|).</summary>
         MidpointResidual,
         /// <summary>∠(E_z − s, E_c − s) — the dual-orbit angle (0..π) between the
-        /// two escape directions seen from s.</summary>
+        /// two escape directions seen from s. Bailout-dependent.</summary>
         DualOrbitAngle,
         /// <summary>n_c − n_z — the escape-count difference (predictability-horizon
         /// / exit-channel field; a basin-boundary fractal).</summary>
         DeltaN,
+        /// <summary>log2(G_c / G_z) — ratio of the two orbits' Green's functions
+        /// (escape potentials), = n_z − n_c. Centred diverging scale of
+        /// ±<c>DualOrbitRatioSpan</c> octaves. Bailout-independent (#970).</summary>
+        GreenRatio,
+        /// <summary>External angle of the c-orbit minus that of the z-orbit, in
+        /// turns [0, 1), both read at level 1 (z_1 = s, c_1 = c² + s). With the image
+        /// on s, the z-orbit angle is the Mandelbrot parameter external angle.
+        /// Bailout-independent. ComplexPlane map only (#970).</summary>
+        ExternalAngleDelta,
     }
 
     public enum FractalType

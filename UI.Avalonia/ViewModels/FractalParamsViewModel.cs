@@ -219,6 +219,8 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
         _dualCSeedZ = _p.DualOrbitCSeedZ;
         _dualSZ = _p.DualOrbitSZ;
         _dualCEqualsS = _p.DualOrbitCEqualsS;
+        _dualBailout = _p.DualOrbitBailout;
+        _dualRatioSpan = _p.DualOrbitRatioSpan;
         // #893 — Indra's Pearls 2D group.
         _indrasFamily = _p.IndrasFamily;
         _indrasMuRe = _p.IndrasMaskitMuRe;
@@ -1737,6 +1739,13 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
     private bool _dualCEqualsS;
     /// <summary>Mandelbrot-control mode (c = s; degenerate — labelled).</summary>
     public bool DualOrbitCEqualsS { get => _dualCEqualsS; set { Set(ref _dualCEqualsS, value); _p.DualOrbitCEqualsS = value; Fire(); } }
+    private double _dualBailout;
+    /// <summary>Escape radius (#970). Escape-location fields change with it;
+    /// GreenRatio / ExternalAngleDelta do not.</summary>
+    public double DualOrbitBailout { get => _dualBailout; set { Set(ref _dualBailout, Clamp(value, 2.0, 1e6)); _p.DualOrbitBailout = _dualBailout; Fire(); } }
+    private double _dualRatioSpan;
+    /// <summary>GreenRatio half-range in octaves (#970).</summary>
+    public double DualOrbitRatioSpan { get => _dualRatioSpan; set { Set(ref _dualRatioSpan, Clamp(value, 0.25, 64.0)); _p.DualOrbitRatioSpan = _dualRatioSpan; Fire(); } }
 
     // ── Indra's Pearls 2D (#893) ──
     private IndrasGroupFamily _indrasFamily;
