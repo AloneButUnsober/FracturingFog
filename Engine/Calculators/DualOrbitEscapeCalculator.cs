@@ -159,8 +159,9 @@ public sealed class DualOrbitEscapeCalculator : IFractalCalculator, IHeightField
         public readonly bool Escaped;
         public readonly double Ex, Ey, Ez, Ew;   // escape location (4D)
         public readonly double SmoothN;
-        public QOrbit(bool escaped, double ex, double ey, double ez, double ew, double smoothN)
-        { Escaped = escaped; Ex = ex; Ey = ey; Ez = ez; Ew = ew; SmoothN = smoothN; }
+        public readonly int N;                   // escape index, −1 if bounded
+        public QOrbit(bool escaped, double ex, double ey, double ez, double ew, double smoothN, int n)
+        { Escaped = escaped; Ex = ex; Ey = ey; Ez = ez; Ew = ew; SmoothN = smoothN; N = n; }
     }
 
     // Iterate q_{n+1} = q² + C, q² = (qx²−qy²−qz²−qw², 2qx·qy, 2qx·qz, 2qx·qw).
@@ -175,7 +176,7 @@ public sealed class DualOrbitEscapeCalculator : IFractalCalculator, IHeightField
             {
                 double logZn = Math.Log(r2) * 0.5;
                 double nu = Math.Log(logZn / b.LogR) / Math.Log(2.0);
-                return new QOrbit(true, qx, qy, qz, qw, n - nu);
+                return new QOrbit(true, qx, qy, qz, qw, n - nu, n);
             }
             double nqx = qx * qx - qy * qy - qz * qz - qw * qw;
             double nqy = 2.0 * qx * qy;
@@ -183,7 +184,7 @@ public sealed class DualOrbitEscapeCalculator : IFractalCalculator, IHeightField
             double nqw = 2.0 * qx * qw;
             qx = nqx + cx; qy = nqy + cy; qz = nqz + cz; qw = nqw + cw;
         }
-        return new QOrbit(false, qx, qy, qz, qw, maxIter);
+        return new QOrbit(false, qx, qy, qz, qw, maxIter, -1);
     }
 
     public void Calculate(CancellationToken ct = default)
@@ -210,6 +211,14 @@ public sealed class DualOrbitEscapeCalculator : IFractalCalculator, IHeightField
         bool quat = map == DualOrbitMap.Quaternion;
         bool angles = !quat && field == DualOrbitField.ExternalAngleDelta;
 
+        // #978 — theme interior colour × global interior alpha (the #96/#97 knob,
+        // same scaling as InteriorAlphaStamp), and the #615 out-of-bounds surround.
+        // Both are written inline; the host's Interior2DBackgroundCompositor then
+        // composites any translucency over the backdrop, live and in export.
+        uint interiorColor = InteriorAlphaStamp.ScaleArgbAlpha(
+            ColorMap.InSetColor, FractalParameters.InteriorAlpha);
+        uint? oobColor = ColorMap.OutOfBoundsColor;
+
         Parallel.For(0, height, new ParallelOptions { CancellationToken = ct }, y =>
         {
             if (ct.IsCancellationRequested) return;
@@ -235,6 +244,7 @@ public sealed class DualOrbitEscapeCalculator : IFractalCalculator, IHeightField
                 }
 
                 double scalar;
+                bool zEsc, cEsc; int nZ, nC;
                 if (quat)
                 {
                     // C = (0, s_x, s_y, s_z) pure-imaginary. z-orbit seed 0; c-orbit
@@ -245,22 +255,33 @@ public sealed class DualOrbitEscapeCalculator : IFractalCalculator, IHeightField
                         ? RunQuat(0, sx, sy, sZ, 0, sx, sy, sZ, maxIter, bail)
                         : RunQuat(0, cSeedX, cSeedY, cSeedZ, 0, sx, sy, sZ, maxIter, bail);
                     scalar = ScalarQ(field, oz, oc, sx, sy, sZ, maxIter, bail, ratioSpan);
+                    zEsc = oz.Escaped; cEsc = oc.Escaped; nZ = oz.N; nC = oc.N;
                 }
                 else
                 {
-                    Orbit oz = Run(0.0, 0.0, sx, sy, maxIter, bail, argsZ, out int nZ);
+                    Orbit oz = Run(0.0, 0.0, sx, sy, maxIter, bail, argsZ, out nZ);
                     Orbit oc = cEqualsS
-                        ? Run(sx, sy, sx, sy, maxIter, bail, argsC, out int nC)
+                        ? Run(sx, sy, sx, sy, maxIter, bail, argsC, out nC)
                         : Run(cSeedX, cSeedY, sx, sy, maxIter, bail, argsC, out nC);
                     scalar = angles
                         ? AngleDeltaScalar(argsZ, nZ, argsC, nC, maxIter)
                         : Scalar(field, oz, oc, sx, sy, maxIter, bail, ratioSpan);
+                    zEsc = oz.Escaped; cEsc = oc.Escaped;
                 }
 
                 int idx = rowBase + x;
                 float smooth = (float)scalar;
                 SmoothBuffer[idx] = smooth;
-                ColorBuffer[idx] = unchecked((uint)ColorMap.Map(smooth, 0f, maxIter));
+                // Interior = the field has no value (keyed on the orbits, NOT on
+                // smooth == 0: legacy fields can be a legitimate 0, e.g. the c = s
+                // control's separation). Surround = every orbit the field reads
+                // escaped by step 1 (#615's "no structure develops", seed-agnostic).
+                if (!FieldLive(field, zEsc, cEsc))
+                    ColorBuffer[idx] = interiorColor;
+                else if (oobColor is uint oob && FieldOutOfBounds(field, nZ, nC))
+                    ColorBuffer[idx] = oob;
+                else
+                    ColorBuffer[idx] = unchecked((uint)ColorMap.Map(smooth, 0f, maxIter));
             }
         });
     }
@@ -365,6 +386,29 @@ public sealed class DualOrbitEscapeCalculator : IFractalCalculator, IHeightField
             default:
                 return 0.0;
         }
+    }
+
+    // Which orbits a field reads: the single-orbit fields need only theirs; every
+    // other field needs both (#978).
+    private static bool FieldLive(DualOrbitField field, bool zEscaped, bool cEscaped) => field switch
+    {
+        DualOrbitField.EscapeTimeZ => zEscaped,
+        DualOrbitField.EscapeTimeC => cEscaped,
+        _ => zEscaped && cEscaped,
+    };
+
+    // #615 surround: the orbit(s) the field reads escaped by step 1, so no
+    // structure develops. For the parameter plane that is |s| ≥ R for the z-orbit
+    // and |c² + s| ≥ R for the c-orbit.
+    private static bool FieldOutOfBounds(DualOrbitField field, int nZ, int nC)
+    {
+        bool z = nZ >= 0 && nZ <= 1, c = nC >= 0 && nC <= 1;
+        return field switch
+        {
+            DualOrbitField.EscapeTimeZ => z,
+            DualOrbitField.EscapeTimeC => c,
+            _ => z && c,
+        };
     }
 
     // A live (both-escaped) value must never read exactly 0: SmoothBuffer 0 is the

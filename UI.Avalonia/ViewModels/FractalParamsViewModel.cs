@@ -465,12 +465,14 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
     /// escape-time families (UserEquation, Sandbox), the native escape-time
     /// fleet + TearDrop (<see cref="IsAny2DInteriorEscapeTime"/>), the Newton
     /// family (<see cref="IsNewtonOrNova"/> — basin non-convergence), and the
-    /// generated polynomial calcs (<see cref="IsGeneratedPolynomial"/>). All
+    /// generated polynomial calcs (<see cref="IsGeneratedPolynomial"/>), and the
+    /// dual-orbit field (#978 — pixels where the field has no value). All
     /// scale their in-set alpha by the global knob and composite over
     /// <c>Interior2DBackground</c>.</summary>
     public bool IsInteriorAlphaApplicable =>
         IsMandelbrot || IsUserEquation || IsSandbox
-        || IsAny2DInteriorEscapeTime || IsNewtonOrNova || IsGeneratedPolynomial;
+        || IsAny2DInteriorEscapeTime || IsNewtonOrNova || IsGeneratedPolynomial
+        || IsDualOrbitEscape;
 
     /// <summary>Visibility flag for the 2D heightfield-relief section (#102, #139).
     /// True for every 2D family that exposes an <c>IHeightFieldSource</c> the
