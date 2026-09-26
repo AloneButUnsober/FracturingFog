@@ -151,9 +151,10 @@ byproduct (same core, static output). **Numeric constraints (validated in S2/S3,
 3. **Backward map rationalised** `f⁻¹(w) = 2w/(1+√(1+4w))` (avoids the cancellation that
    otherwise caps repelling accuracy at ~1e-7); **per-petal log branch** (principal for
    the attracting petal `Re Z>0`, a `[0,2π)` branch for the repelling petal `Re Z<0`).
-   **Superseded (#934):** the repelling petal must use principal `log(−Z)` — the `[0,2π)`
-   branch equals `log(−Z)+iπ`, a constant `−iπ` in `Φ_rep` that evaluates `g_{α−iπ}` (not
-   real-symmetric; off-axis points land on the wrong sheet). See §10, 2026-09-26.
+   **Superseded (#934):** the engine now uses principal `log(−Z)` on the repelling petal. The
+   `[0,2π)` branch equals `log(−Z)+iπ`, a constant `−iπ` in `Φ_rep`, so the old `g_α` is the
+   new `g_{α+iπ}` — a **phase-convention shift, not a wrong sheet** (both are valid Lavaurs
+   maps; `Im α = π` is the cardioid-boundary approach). See §9 "Rethink" and §10, 2026-09-26.
 4. **Horn map = analytic continuation, not a common domain:** the single-parabolic
    petals do not overlap as sets (tangent disks meeting only at 0). Assemble
    `h = Φ_att ∘ Φ_rep⁻¹` by iterating a gap seed forward into the attracting petal
@@ -386,7 +387,8 @@ non-obvious numerical constraints were required (now recorded in §4): the backw
 map must be **rationalised** `f⁻¹(w) = 2w/(1+√(1+4w))` (the naïve form cancels and caps
 repelling accuracy at ~1e-7); a **per-petal log branch** (principal for `Re Z>0`, a
 `[0,2π)` branch for the repelling petal's `Re Z<0`, which otherwise sits on the cut —
-**superseded by principal `log(−Z)`, #934**);
+**superseded by principal `log(−Z)`, #934 — a phase-convention change `α → α + iπ`, see §9
+"Rethink"**);
 and convergence judged by **Richardson-extrapolation stability**, not the raw tail gap
 (which over-reports the error ~10³× and rejects good points).
 
@@ -553,6 +555,10 @@ analytic **continuation on the attracting-side range** (where the Lavaurs invers
 **So the performance wall S4 identified is resolved** — the coordinates evaluate in
 constant time at render-grade accuracy.
 
+> **Superseded 2026-09-26 (§9 "Rethink"):** the single-orbit conclusion below does not
+> reproduce. `f` and `g_α` commute, so the semigroup needs no word tree; a single `g_α` orbit
+> with an `f`-escape test per step matches the near-parabolic `K(f_c)` to 96–100%.
+
 **The render finding (a scope correction).** Feeding the engine into a naïve *single-orbit*
 combined map — "apply `g_α` where the point is in the basin, else `f`" — does **not**
 produce the imploded Julia set: over an 888-point petal grid, **0 points escaped in 5000
@@ -578,6 +584,10 @@ bounded-recurrent, not the imploded set, and were discarded). The visible naïve
 animation (S1) already ships as the flagship's user-facing deliverable.
 
 ### S7 — Semigroup word-tree escape algorithm (2026-09-20) — verdict **GREEN: the novel render algorithm is correct, bounded-cost, and colourable**
+
+> **Superseded for the implosion render 2026-09-26 (§9 "Rethink"):** the word tree is correct
+> for a general semigroup but unnecessary here — `⟨f, g_α⟩` is commutative. `SemigroupEscape`
+> stays a tested general helper; SG3 #930 uses the single-orbit form.
 
 S6 identified the single clearly-named open risk for the faithful renderer (#918): the
 imploded set is the Julia set of the **semigroup `⟨f, g_α⟩`**, so a point escapes iff *some
@@ -626,11 +636,75 @@ faithful implosion animation (counterpart of the naïve S1). The word-tree core 
 **Verdict: GREEN.** The last open *algorithmic* question for the flagship is answered; the
 remaining work is the SG1→SG4 engineering build.
 
+### Rethink — #934 re-diagnosed; complex phase; single-orbit render (2026-09-26) — verdict **GREEN: the faithful render is a plain escape-time loop over `g_α`**
+
+**#934 was a phase convention, not a bug.** Re-running the pre-fix engine against the fixed
+one: old `g_α(z)` = new `g_{α+iπ}(z)` on 712 basin points (3 phases), worst relative
+difference **1.2e-11**, and the two are defined on exactly the same points. The `[0,2π)`
+branch offsets `Φ_rep` by `−iπ`, which re-labels the phase; nothing lands on a wrong sheet.
+The #934 evidence (real symmetry failing 0/654) is what a **non-real** phase must do — the
+symmetry `G_α(z̄) = conj G_α(z)` holds only for real `α`; its general form is
+`G_ᾱ(z̄) = conj G_α(z)`. Lesson: check an invariant's preconditions, and test "is the odd
+result the right one under a simple reparametrisation?" before calling it a bug.
+
+**The phase is complex, and the path decides it.** Lavaurs: `f_c^k → g_α` for
+`c = 1/4 + ε²`, `α = k − π/ε − 1` (engine convention). Validated by brute force on two
+paths (`LavaursEngineTests`):
+
+| Approach to `c = 1/4` | `ε` | Phase `α` | Limit set |
+|---|---|---|---|
+| Real axis, `c` just above 1/4 (outside M) | real | real | no interior: dust + escape bands |
+| Main-cardioid boundary `c(θ)`, `θ → 0⁺` (the shipped #920 sweep) | `sin(πθ)e^{iπθ}` | `≈ k − 1/θ − 1 + iπ` | large interior (the #920 look) |
+| Generic off-axis, `Im(π/ε)` large | complex | `Im α` large | everything bounded |
+
+So the old engine's "real `α`" was the cardioid family all along. The engine API now takes a
+complex `α` (`TryGAlpha(z, Complex α)`, `LavaursEngine.LavaursPhase(c, out k)`,
+`CardioidPhaseIm = π`); the coordinate table's σ-grid is widened by `±π` in Im.
+
+**No word tree.** `g_α ∘ f = f ∘ g_α` (from `Φ_att ∘ f = Φ_att + 1` and
+`Φ_rep⁻¹(σ+1) = f(Φ_rep⁻¹(σ))`), so every word in `⟨f, g_α⟩` is `fᵐ ∘ g_αⁿ`, and `f`
+preserves `K(f)`. A pixel is outside the Lavaurs set iff some `g_αⁿ(z)` escapes under `f`:
+
+```
+for n in 0..N: if f-escapes(z): return n (+ fractional f-escape for smooth colour)
+               if !g_α defined at z: return boundary
+               z = g_α(z)
+return inside
+```
+
+Probe (61×61 grid on `[−0.75, 0.75]²`, direct engine) against the near-parabolic `K(f_c)`,
+matching escape level `n` to `⌊f_c escape time / k⌋`:
+
+| Path | in/out agreement | escape-level agreement |
+|---|---|---|
+| Real, `ε = 0.004` | 100% | 99.7% |
+| Cardioid, `θ = 0.0041` | 95.6% | 96.1% |
+| Cardioid, `θ = 0.0021` | 96.4% | 97.8% |
+
+Agreement rises as `ε → 0`, as the theorem requires. S6's "0/888 escape, single orbit
+fails" does not reproduce with an explicit `f`-escape test each step.
+
+**Consequences.** SG3 #930 = the single-orbit calculator with complex `α` (default
+`Im α = π`), validated by pixel agreement against `K(f_c)` on both paths. SG4 #931 =
+animate `Re α` over one period at `Im α = π`, plus an `Im α` control. Nothing shipped
+changes: S1 and #920 iterate `f_c` directly; the `g_α` engine had no production caller.
+Open, unchanged: the engine covers only the `c = 1/4` cusp (higher-`q` roots need the
+`q`-petal extension).
+
 ---
 
 ## 10. Change log
 
-- **2026-09-26** — **#934 — `g_α` normalisation fix (the SG1 blocker).** Root cause: the
+- **2026-09-26** — **#934 re-diagnosed + render rethink (§9 "Rethink").** The pre-fix
+  engine's `g_α` equals the principal-branch engine's `g_{α+iπ}` to 1.2e-11 on identical
+  domains: a phase-convention shift, not a wrong sheet; the entry below overstates it as a
+  bug. The principal convention is kept (real `α` = real-axis approach), the API takes a
+  complex `α` (`LavaursPhase`, `CardioidPhaseIm`), the table's σ-grid is widened by `±π`, and
+  `LavaursEngineTests` add a cardioid-path brute-force check and conjugate-phase symmetry.
+  The render needs no word tree (`f`, `g_α` commute): a single `g_α` orbit matches `K(f_c)`
+  96–100%. #930/#931 rescoped accordingly.
+- **2026-09-26** — **#934 — `g_α` normalisation fix (the SG1 blocker).** *(Framing superseded
+  by the entry above: "wrong sheet" should read "phase shifted by `+iπ`".)* Root cause: the
   repelling Fatou coordinate used a `[0,2π)` branch of `log Z`, which equals principal
   `log(−Z) + iπ` — a constant `−iπ` offset in `Φ_rep`, so every call evaluated `g_{α−iπ}`: a
   complex phase, not real-symmetric, wrong sheet off the real axis. Fix: principal `log(−Z)`

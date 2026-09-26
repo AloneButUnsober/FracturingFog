@@ -18,17 +18,20 @@ namespace FracturingFog.Abstractions.Animation;
 /// backward-orbit limit <c>ψ(f⁻ⁿw) + n</c> with <c>log(−Z)</c> (the repelling petal is
 /// <c>Z → −∞</c>), both <b>principal</b>, and the rationalised inverse
 /// <c>f⁻¹(w) = 2w/(1+√(1+4w))</c>.</para>
-/// <para><b>Normalisation (#934).</b> Both coordinates must commute with complex conjugation —
-/// <c>f</c> has real coefficients, so <c>G_α(z̄) = conj G_α(z)</c> for real <c>α</c>. Principal
-/// <c>log(−Z)</c> on the repelling petal does; the earlier <c>[0,2π)</c> branch of <c>log Z</c>
-/// equals <c>log(−Z) + iπ</c>, which put a constant <c>−iπ</c> into <c>Φ_rep</c> — silently
-/// evaluating <c>g_{α−iπ}</c>, a complex phase that is not real-symmetric and lands off-axis
-/// points on the wrong sheet.</para>
+/// <para><b>Normalisation (#934).</b> Both coordinates use the principal branch, so they commute
+/// with complex conjugation: <c>G_ᾱ(z̄) = conj G_α(z)</c>, and <c>G_α</c> is real-symmetric for
+/// real <c>α</c>. The earlier <c>[0,2π)</c> branch of <c>log Z</c> on the repelling petal equals
+/// <c>log(−Z) + iπ</c>; that shifts <c>Φ_rep</c> by <c>−iπ</c>, so the old engine's
+/// <c>g_α</c> is exactly this engine's <c>g_{α+iπ}</c> (verified to ~1e-11, identical domain).
+/// That was a different phase convention, not a wrong sheet: <c>Im α = π</c> is the
+/// cardioid-boundary approach below.</para>
 /// <para><b>Phase convention.</b> With <c>g_α = f ∘ Φ_rep⁻¹ ∘ T_α ∘ Φ_att</c>, Lavaurs' theorem
 /// reads <c>f_c^k → g_α</c> on the basin for <c>c = 1/4 + ε²</c>, <c>ε → 0</c>, with
-/// <c>α = k − π/ε − 1</c> (validated against brute-force iteration: relative error <c>O(ε)</c> on
-/// every basin point with a moderate limit). Real <c>α</c> sends the real basin through the
-/// gap — real points escape, as they do for <c>c</c> just above <c>1/4</c>.</para>
+/// <c>α = k − π/ε − 1</c> — complex in general (<see cref="LavaursPhase"/>). Validated against
+/// brute-force iteration (relative error <c>O(|ε|)</c>) on two paths: the real axis
+/// (<c>c</c> just above <c>1/4</c>, real <c>α</c> — the real basin escapes, the limit set has no
+/// interior) and the main-cardioid boundary <c>c(θ)</c>, <c>θ → 0</c> (the shipped #920 sweep:
+/// <c>ε ≈ sin(πθ)e^{iπθ}</c> ⇒ <c>Im α → π</c>, a limit set with large interior).</para>
 /// <para><b>The inverse (the S6 subtlety).</b> The Lavaurs target <c>σ = Φ_att(w) + α</c> has large
 /// positive real part, so <c>Φ_rep⁻¹(σ)</c> lands not on the repelling petal but on its
 /// analytic continuation over the <b>attracting-side</b> range. Rather than track the log branch
@@ -39,9 +42,10 @@ namespace FracturingFog.Abstractions.Animation;
 /// attracting side without any manual branch bookkeeping.</para>
 /// <para><b>Validity / domain.</b> <c>g_α</c> is defined on the attracting basin; a boundary point
 /// drives either <c>Φ_att</c> to divergence or the <c>fᵏ</c> continuation to escape. Every entry
-/// point returns a validity flag, so a caller (the word-tree calculator, #930) treats an invalid
-/// result as "<c>g_α</c> undefined here → only <c>f</c> applies" (its domain-restricted
-/// generator).</para>
+/// point returns a validity flag. The render (#930) needs no word tree: <c>g_α</c> commutes with
+/// <c>f</c>, so every word in the semigroup <c>⟨f, g_α⟩</c> reduces to <c>fᵐ ∘ g_αⁿ</c> and a pixel
+/// escapes iff some <c>g_αⁿ(z)</c> leaves <c>K(f)</c> — one <c>g_α</c> orbit with an
+/// <c>f</c>-escape test per step; an invalid result marks a basin-boundary point.</para>
 /// <para><b>Validation.</b> The independent checks (LavaursEngineTests): the brute-force
 /// Lavaurs limit above and real symmetry. Abel, the inverse round-trip and
 /// <c>g_{α+1} = f ∘ g_α</c> are self-consistency checks only — they passed on the wrong sheet
@@ -55,6 +59,22 @@ public sealed class LavaursEngine
     /// <summary>The parabolic fixed point <c>z* = 1/2</c> (shift between the <c>z</c> and germ
     /// <c>w = z − z*</c> coordinates).</summary>
     public const double FixedPoint = 0.5;
+    /// <summary>The limiting <c>Im α</c> along the main-cardioid boundary <c>c(θ)</c>, <c>θ → 0⁺</c>
+    /// (the shipped #920 sweep): <c>π/ε ≈ 1/θ − iπ</c>, so <c>α → k − 1/θ − 1 + iπ</c>.</summary>
+    public const double CardioidPhaseIm = global::System.Math.PI;
+
+    /// <summary>The Lavaurs phase for a near-parabolic parameter <paramref name="c"/> ≈ 1/4:
+    /// <c>ε = √(c − 1/4)</c> (branch <c>Re ε ≥ 0</c>), <paramref name="k"/> = the nearest integer
+    /// to <c>Re(π/ε)</c>, and <c>α = k − π/ε − 1</c>, so that <c>f_c^k ≈ g_α</c> on the basin
+    /// (Lavaurs' theorem, engine convention). Complex in general.</summary>
+    public static Complex LavaursPhase(Complex c, out int k)
+    {
+        Complex eps = Complex.Sqrt(c - C);
+        if (eps.Real < 0) eps = -eps;
+        Complex pe = global::System.Math.PI / eps;
+        k = (int)global::System.Math.Round(pe.Real);
+        return k - pe - 1.0;
+    }
 
     readonly int _n;
     readonly double _deep;
@@ -76,7 +96,8 @@ public sealed class LavaursEngine
 
     // asymptotic Fatou coordinate ψ(w) = Z − log(±Z) + 1/(2Z), Z = −1/w: principal log Z on the
     // attracting petal (Z → +∞), principal log(−Z) on the repelling petal (Z → −∞). Both commute
-    // with conjugation, so G_α is real-symmetric (#934 — a [0,2π) branch here offset Φ_rep by −iπ).
+    // with conjugation, so G_ᾱ(z̄) = conj G_α(z) (#934 — a [0,2π) branch here offsets Φ_rep by
+    // −iπ, i.e. shifts the phase convention by α → α + iπ).
     static Complex Psi(Complex w, bool repelling)
     {
         Complex z = -1.0 / w;
@@ -152,6 +173,13 @@ public sealed class LavaursEngine
     /// diverges) or the inverse continuation is ill-conditioned — the effective domain of
     /// <c>g_α</c>.</summary>
     public bool TryGAlpha(Complex z, double alpha, out Complex gz)
+        => TryGAlpha(z, new Complex(alpha, 0), out gz);
+
+    /// <summary>The Lavaurs map <c>g_α</c> for a <b>complex</b> phase — the general case. Real
+    /// <c>α</c> is the real-axis approach to <c>c = 1/4</c>; <c>Im α = π</c>
+    /// (<see cref="CardioidPhaseIm"/>) the main-cardioid-boundary approach. Get the phase for a
+    /// given near-parabolic <c>c</c> from <see cref="LavaursPhase"/>.</summary>
+    public bool TryGAlpha(Complex z, Complex alpha, out Complex gz)
     {
         gz = new Complex(double.NaN, double.NaN);
         Complex w = z - FixedPoint;

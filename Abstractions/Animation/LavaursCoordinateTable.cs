@@ -14,7 +14,7 @@ namespace FracturingFog.Abstractions.Animation;
 /// <c>f(w') + 1/2</c>. This turns the millisecond direct <see cref="LavaursEngine"/> evaluation into
 /// the ~µs render path (S6: ~116 000×). A sample is valid only when all four bracketing grid nodes
 /// are valid, so the interpolated domain shrinks conservatively to the well-conditioned interior —
-/// exactly the domain a caller wants for the word-tree's domain-restricted <c>g_α</c> generator.</summary>
+/// the well-conditioned domain the single-orbit render (#930) wants.</summary>
 public sealed class LavaursCoordinateTable
 {
     readonly double _aReMin, _aReStep, _aImMin, _aImStep;
@@ -27,14 +27,16 @@ public sealed class LavaursCoordinateTable
 
     /// <summary>Build the tables with <paramref name="engine"/> over the given boxes (in the germ
     /// <c>w</c>-plane for <c>Φ_att</c>, and the <c>σ</c>-plane for <c>Φ_rep⁻¹</c>). The defaults span
-    /// the measured basin/cylinder image (design doc §9 SG1: <c>τ ∈ Re[−0.5, 13.5] × Im[±7.5]</c>).
+    /// the measured basin/cylinder image (design doc §9 SG1: <c>τ ∈ Re[−0.5, 13.5] × Im[±7.5]</c>)
+    /// widened in Im by <c>π</c> each way so the cardioid phase <c>Im α = ±π</c>
+    /// (<see cref="LavaursEngine.CardioidPhaseIm"/>) stays on the grid at the same node spacing.
     /// Grid counts are node counts (cells + 1).</summary>
     public LavaursCoordinateTable(
         LavaursEngine engine,
         int attNx = 256, int attNy = 256,
         double wReMin = -1.30, double wReMax = 0.05, double wImMin = -0.75, double wImMax = 0.75,
-        int invNx = 256, int invNy = 256,
-        double sReMin = -0.6, double sReMax = 14.6, double sImMin = -8.0, double sImMax = 8.0)
+        int invNx = 256, int invNy = 356,
+        double sReMin = -0.6, double sReMax = 14.6, double sImMin = -11.2, double sImMax = 11.2)
     {
         if (engine == null) throw new ArgumentNullException(nameof(engine));
         attNx = global::System.Math.Max(2, attNx); attNy = global::System.Math.Max(2, attNy);
@@ -98,6 +100,11 @@ public sealed class LavaursCoordinateTable
     /// interpolable domain (a basin-boundary / ill-conditioned point) — the caller then applies
     /// only <c>f</c>.</summary>
     public bool TryGAlpha(Complex z, double alpha, out Complex gz)
+        => TryGAlpha(z, new Complex(alpha, 0), out gz);
+
+    /// <summary>The fast Lavaurs map for a <b>complex</b> phase (see
+    /// <see cref="LavaursEngine.TryGAlpha(Complex, Complex, out Complex)"/>).</summary>
+    public bool TryGAlpha(Complex z, Complex alpha, out Complex gz)
     {
         gz = default;
         if (!TryPhiAtt(z, out Complex tau)) return false;
