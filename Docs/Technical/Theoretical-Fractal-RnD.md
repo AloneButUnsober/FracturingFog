@@ -689,3 +689,17 @@ appropriate sections; flesh out on the next pass. Cite inline from the sections 
   cross-section (CxSx: dome + filaments, the original s.x sweep stacked over c.x). Tests check field
   invariants: four slices through one (c0, s) point agree; the c-plane is point-symmetric (map even in u);
   the CxSx c.x = 0 column equals the critical orbit (Mandelbrot line); fixed s is inert in SxSy.
+- **2026-09-26** — **S9 (#972) shipped** — new 3D type `FractalType.DualOrbitVolume`
+  (`DualOrbitVolumeCalculator`, Coquaternion CPU-raymarcher clone). The user's original experiment run
+  for every c-seed: world X = c.x, Z = c.y, Y (up) = s.x − `DualOrbitVolumeSXCenter`, s.y fixed
+  (`DualOrbitVolumeSY`, animatable — the 4th coordinate of the (z0, s) space). Every horizontal layer is
+  the filled Julia set K_s; the c = 0 column is the Mandelbrot line. Analytic DE from a = ∂u/∂c and
+  b = ∂u/∂s: `DE = ½|u|ln|u| / sqrt(|a|² + (Re(ū·b)/|u|)²)`, CSG-intersected with the slab
+  |Y| ≤ `DualOrbitVolumeHalfHeight` (beyond the Mandelbrot line the layers are Cantor dust to infinity;
+  the caps show a Julia cross-section); 0.85 step factor (thin sheets). Colour sources: ExternalAngle
+  (default; Julia ray bands), CriticalLayer (the seed-0 orbit per layer — bands mark the sweep crossing
+  the Mandelbrot line), Steps. Mesh export via `RaymarchMeshSampler` (same DE as the render). Tests:
+  DE conservative against brute-force membership (no set point within ½·DE), (X,Z) point symmetry,
+  c = 0 column = Mandelbrot line, interior = 0, slab clip, render determinism, registration + region
+  round-trip. Shape: from a fat cauliflower at s = ¼ down to the flat segment [−2, 2] at s = −2, a
+  twisting fibrous blade.

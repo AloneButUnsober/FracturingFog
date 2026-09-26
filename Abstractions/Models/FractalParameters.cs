@@ -1306,6 +1306,33 @@ namespace FracturingFog.Models
         public int CoquaternionMaxSteps { get; set; } = 160;
         public double CoquaternionEpsilon { get; set; } = 0.0012;
 
+        // Dual-orbit escape-geometry volume (#972). World X = c.x, Z = c.y,
+        // Y (up) = s.x − DualOrbitVolumeSXCenter; s.y fixed. Every horizontal layer
+        // is the filled Julia set of s = s.x + i·s.y.
+        /// <summary>Fixed Im s of every layer. 0 makes the volume mirror-symmetric
+        /// (real layers); a small non-zero value twists the stack. Default 0.15.</summary>
+        public double DualOrbitVolumeSY { get; set; } = 0.15;
+        /// <summary>s.x at world Y = 0 (the vertical centre of the stack). Default
+        /// −0.75 centres the Mandelbrot line's extent [−2, ¼].</summary>
+        public double DualOrbitVolumeSXCenter { get; set; } = -0.75;
+        /// <summary>DE inner iteration count. Default 48.</summary>
+        public int DualOrbitVolumeIterations { get; set; } = 48;
+        /// <summary>|u| escape radius for the DE. Default 64.</summary>
+        public double DualOrbitVolumeBailout { get; set; } = 64.0;
+        /// <summary>Half-height of the rendered slab |Y| ≤ h (s.x within centre ± h).
+        /// Beyond the Mandelbrot line's extent the layers are Cantor dust reaching
+        /// to infinity; the slab also cuts flat caps showing a Julia cross-section.
+        /// Default 1.4 (s.x ∈ [−2.15, 0.65]).</summary>
+        public double DualOrbitVolumeHalfHeight { get; set; } = 1.4;
+        public DualOrbitVolumeColor DualOrbitVolumeColor { get; set; } = DualOrbitVolumeColor.ExternalAngle;
+        public double DualOrbitVolumeCameraDistance { get; set; } = 4.5;
+        public double DualOrbitVolumeCameraTheta { get; set; } = Math.PI * 0.25;
+        public double DualOrbitVolumeCameraPhi { get; set; } = Math.PI * 0.35;
+        public double DualOrbitVolumeLightTheta { get; set; } = Math.PI * 0.25;
+        public double DualOrbitVolumeLightPhi { get; set; } = Math.PI * 0.35;
+        public int DualOrbitVolumeMaxSteps { get; set; } = 220;
+        public double DualOrbitVolumeEpsilon { get; set; } = 0.001;
+
         // Mandelbulb camera + DE settings.
         public double BulbPower { get; set; } = 8.0;
         public int BulbIterations { get; set; } = 8;
@@ -1806,6 +1833,19 @@ namespace FracturingFog.Models
                 CoquaternionLightPhi = CoquaternionLightPhi,
                 CoquaternionMaxSteps = CoquaternionMaxSteps,
                 CoquaternionEpsilon = CoquaternionEpsilon,
+                DualOrbitVolumeSY = DualOrbitVolumeSY,
+                DualOrbitVolumeSXCenter = DualOrbitVolumeSXCenter,
+                DualOrbitVolumeIterations = DualOrbitVolumeIterations,
+                DualOrbitVolumeBailout = DualOrbitVolumeBailout,
+                DualOrbitVolumeHalfHeight = DualOrbitVolumeHalfHeight,
+                DualOrbitVolumeColor = DualOrbitVolumeColor,
+                DualOrbitVolumeCameraDistance = DualOrbitVolumeCameraDistance,
+                DualOrbitVolumeCameraTheta = DualOrbitVolumeCameraTheta,
+                DualOrbitVolumeCameraPhi = DualOrbitVolumeCameraPhi,
+                DualOrbitVolumeLightTheta = DualOrbitVolumeLightTheta,
+                DualOrbitVolumeLightPhi = DualOrbitVolumeLightPhi,
+                DualOrbitVolumeMaxSteps = DualOrbitVolumeMaxSteps,
+                DualOrbitVolumeEpsilon = DualOrbitVolumeEpsilon,
                 BulbPower = BulbPower,
                 BulbIterations = BulbIterations,
                 BulbCameraDistance = BulbCameraDistance,

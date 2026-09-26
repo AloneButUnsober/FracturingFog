@@ -242,6 +242,23 @@ namespace FracturingFog
         CySy,
     }
 
+    /// <summary>Surface colour source of the dual-orbit volume (#972). Append only.</summary>
+    public enum DualOrbitVolumeColor
+    {
+        /// <summary>External angle of the surface point in its own Julia layer
+        /// (Böttcher argument of c under u→u²+s) — ray bands wrapping each layer.
+        /// Default.</summary>
+        ExternalAngle,
+        /// <summary>The critical (seed-0) orbit's escape count at the surface point's
+        /// s — constant per horizontal layer. Layers whose s lies in the Mandelbrot
+        /// set (connected Julia layer, critical orbit bounded) take the palette end,
+        /// so the bands mark where the sweep crosses the Mandelbrot line. The
+        /// dual-orbit reading: z-orbit colours the layer, c-orbit shapes it.</summary>
+        CriticalLayer,
+        /// <summary>Raymarch step / depth shading (the generic 3D default).</summary>
+        Steps,
+    }
+
     public enum FractalType
     {
         Mandelbrot,
@@ -543,6 +560,17 @@ namespace FracturingFog
         /// on zoom (Apollonian contract). Handled by a dedicated
         /// <c>IndrasPearlsCalculator</c>.</summary>
         IndrasPearls,
+        /// <summary>Dual-orbit escape-geometry VOLUME (#972, epic #850 / #863) — the
+        /// user's original experiment (fixed seeds, s.x swept) run for every c-seed
+        /// c = (x, y, 0). World X = c.x, Z = c.y, Y (up) = s.x about
+        /// <c>DualOrbitVolumeSXCenter</c>; s.y fixed (<c>DualOrbitVolumeSY</c>). The
+        /// solid is {(c, s.x) : the c-orbit under u→u²+s stays bounded} — a 3D slice
+        /// of the 4D (z0, s) space of quadratic dynamics: every horizontal layer is
+        /// the filled Julia set of s, and the c = 0 column is the Mandelbrot line
+        /// at Im s = s.y. The critical (seed-0) orbit is constant per layer and
+        /// colours it (<c>DualOrbitVolumeColor.CriticalLayer</c>). Analytic DE from
+        /// ∂u/∂c and ∂u/∂s. CPU raymarcher (Coquaternion clone pattern).</summary>
+        DualOrbitVolume,
     }
 
     public enum RenderProfile { Preview, Final }
@@ -657,6 +685,7 @@ namespace FracturingFog
                 or FractalType.Kifs
                 or FractalType.BicomplexMandelbrot
                 or FractalType.Coquaternion
+                or FractalType.DualOrbitVolume
                 or FractalType.UserBulb
                 => FractalCapabilities.SuppliesNormals
                  | FractalCapabilities.SuppliesDE,
