@@ -34,18 +34,8 @@ public static class RaymarchMeshSampler
 {
     /// <summary>True when <see cref="For"/> can build a mesh sampler for this
     /// type. UserBulb is excluded (compiled-kernel DE — host supplies it).</summary>
-    public static bool IsMeshExportable(FractalType type) => type switch
-    {
-        FractalType.Mandelbulb
-            or FractalType.Mandelbox
-            or FractalType.Kifs
-            or FractalType.QuaternionJulia
-            or FractalType.QuaternionMandelbrot
-            or FractalType.Kleinian
-            or FractalType.BicomplexMandelbrot
-            or FractalType.DualOrbitVolume => true,
-        _ => false,
-    };
+    public static bool IsMeshExportable(FractalType type)
+        => FracturingFog.Models.MeshExportCapabilities.IsMeshExportable(type);
 
     /// <summary>
     /// Builds the object-space distance estimator for <paramref name="type"/>,
@@ -84,6 +74,13 @@ public static class RaymarchMeshSampler
                 return new BicomplexMandelbrotCalculator.De(
                     p.BicomplexSliceW, p.BicomplexSliceAxis,
                     Math.Max(4.0, p.BicomplexBailout), Math.Max(2, p.BicomplexIterations));
+
+            case FractalType.Coquaternion:
+                // Same arguments as CoquaternionMandelbrotCalculator.Calculate
+                // (CoquaternionBailout is already |t|²), so print = picture.
+                return new CoquaternionMandelbrotCalculator.De(
+                    p.CoquaternionSliceW,
+                    Math.Max(4.0, p.CoquaternionBailout), Math.Max(2, p.CoquaternionIterations));
 
             case FractalType.Kleinian:
             {
