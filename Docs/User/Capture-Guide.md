@@ -424,6 +424,12 @@ FracturingFog.exe --batch --region ""Seahorse Valley"" --theme Fire ^
                   --width 3840 --height 2160 --out C:\out\seahorse.png
 ```
 
+Every fractal type renders headlessly (#949). A `--region` brings its saved
+settings into the image — the Julia constant, 3D camera, seeds, lighting, relief
+and deep-zoom precision for every type. The user-code types (User Equation,
+Sandbox, User Bulb) load their equation **only** through `--region`; a bare
+`--fractal UserEquation` has no equation and prints a note instead of a picture.
+
 ### Video
 
 ```
