@@ -703,3 +703,11 @@ appropriate sections; flesh out on the next pass. Cite inline from the sections 
   c = 0 column = Mandelbrot line, interior = 0, slab clip, render determinism, registration + region
   round-trip. Shape: from a fat cauliflower at s = ¼ down to the flat segment [−2, 2] at s = −2, a
   twisting fibrous blade.
+- **2026-09-26** — **#939 per-orbit colouring: feasibility HIGH** (analysis posted on #939; slices
+  A #978 / B #979 / C #980 / D #981). The "two discs" are M and M_c ⊂ M (for s ∉ M the Julia set is
+  measure-zero dust, so a fixed seed is bounded only for s ∈ M — verified) plus two exterior level-set
+  families centred on 0 (z-orbit) and −c² (c-orbit). **A (#978) shipped**: the dual-orbit field now
+  honours the theme `InSetColor`, the global `InteriorAlpha` (#96/#97, inline `ScaleArgbAlpha`) and the
+  #615 `OutOfBoundsColor` (surround = the field's orbit(s) escape by step 1 — seed-agnostic). Interior is
+  keyed on the orbits' escape flags, not on `smooth == 0` (legacy fields can be a legitimate 0, e.g. the
+  c = s control). Interior-alpha controls now shown for Dual-Orbit Escape.
