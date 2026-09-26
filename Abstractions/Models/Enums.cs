@@ -242,6 +242,36 @@ namespace FracturingFog
         CySy,
     }
 
+    /// <summary>How the 2D dual-orbit calculator colours pixels (#979). Append only.</summary>
+    public enum DualOrbitColorMode
+    {
+        /// <summary>One derived scalar (<c>DualOrbitField</c>) through the main theme
+        /// (the original behaviour).</summary>
+        Field,
+        /// <summary>Each orbit is its own layer — the z-orbit (seed 0) and the c-orbit
+        /// each coloured by its own theme, with that theme's interior colour, alpha and
+        /// out-of-bounds surround — then the two layers are blended
+        /// (<c>DualOrbitLayerBlend</c>, per-layer opacity) (#939).</summary>
+        PerOrbitLayers,
+    }
+
+    /// <summary>How the c-orbit layer combines with the z-orbit layer in
+    /// <see cref="DualOrbitColorMode.PerOrbitLayers"/> (#979). Straight-alpha W3C
+    /// compositing with the z layer as backdrop. Append only.</summary>
+    public enum DualOrbitLayerBlend
+    {
+        /// <summary>c layer drawn over the z layer (normal / source-over).</summary>
+        COverZ,
+        /// <summary>z layer drawn over the c layer.</summary>
+        ZOverC,
+        /// <summary>Screen where they overlap: 1 − (1 − z)(1 − c) — lightens.</summary>
+        Screen,
+        /// <summary>Multiply where they overlap: z · c — darkens.</summary>
+        Multiply,
+        /// <summary>Cross-fade: the two layers averaged, weighted by their opacities.</summary>
+        Mix,
+    }
+
     /// <summary>Surface colour source of the dual-orbit volume (#972). Append only.</summary>
     public enum DualOrbitVolumeColor
     {
