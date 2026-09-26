@@ -229,7 +229,7 @@ namespace FracturingFog.Batch
             Console.WriteLine("  --brightness N              Brightness -100..100 (0 = none).");
             Console.WriteLine("  --contrast N                Contrast -100..100 (0 = none).");
             Console.WriteLine("  --adaptive N                Adaptive histogram-equalization strength 0..100");
-            Console.WriteLine("                              (Mandelbrot only). Alias: --histogram-eq.");
+            Console.WriteLine("                              (escape-time types). Alias: --histogram-eq.");
             Console.WriteLine("                              In slideshow mode these override the preset's PostFx");
             Console.WriteLine("                              block; omit to use the preset.");
             Console.WriteLine("  --interior-alpha N          Interior (in-set) opacity 0..255 (#96). 255 = opaque");
