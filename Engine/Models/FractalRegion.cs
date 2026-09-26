@@ -514,6 +514,11 @@ namespace FracturingFog.Models
         [JsonIgnore(Condition = OmitNull)] public int? DualOrbitMap { get; set; }
         [JsonIgnore(Condition = OmitNull)] public double? DualOrbitCSeedZ { get; set; }
         [JsonIgnore(Condition = OmitNull)] public double? DualOrbitSZ { get; set; }
+        // #918 SG3 — semigroup-Julia faithful implosion (Lavaurs phase + word-tree budget).
+        [JsonIgnore(Condition = OmitNull)] public double? SemigroupAlpha { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public int? SemigroupWordDepth { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public int? SemigroupBeam { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public double? SemigroupEscapeRadius { get; set; }
         // #909 — quaternion Mandelbrot dual-orbit surface colouring.
         [JsonIgnore(Condition = OmitNull)] public bool? QMandelDualOrbitColor { get; set; }
         [JsonIgnore(Condition = OmitNull)] public double? QMandelDualSeedX { get; set; }
@@ -781,6 +786,15 @@ namespace FracturingFog.Models
                     IndrasRenderMode = p.IndrasRenderMode != FracturingFog.Models.IndrasRenderMode.PointCloud ? (int)p.IndrasRenderMode : (int?)null,
                     IndrasColorSource = p.IndrasColorSource != FracturingFog.Models.IndrasColorSource.Density ? (int)p.IndrasColorSource : (int?)null,
                 },
+                // #918 SG3 — semigroup-Julia faithful implosion: Lavaurs phase +
+                // word-tree budget, each omitted at its default.
+                FractalType.SemigroupJulia => new RegionFractalParams
+                {
+                    SemigroupAlpha = p.SemigroupAlpha != 0.5 ? p.SemigroupAlpha : (double?)null,
+                    SemigroupWordDepth = p.SemigroupWordDepth != 40 ? p.SemigroupWordDepth : (int?)null,
+                    SemigroupBeam = p.SemigroupBeam != 48 ? p.SemigroupBeam : (int?)null,
+                    SemigroupEscapeRadius = p.SemigroupEscapeRadius != 6.0 ? p.SemigroupEscapeRadius : (double?)null,
+                },
                 // Mandelbrot, Tricorn, BurningShip, Magnet1/2, TearDrop and the
                 // generated families need no extra params — defaults suffice.
                 // UserBulb keeps its own dedicated camera fields (user code).
@@ -961,6 +975,11 @@ namespace FracturingFog.Models
             if (DualOrbitCSeedZ.HasValue) p.DualOrbitCSeedZ = DualOrbitCSeedZ.Value;
             if (DualOrbitSZ.HasValue) p.DualOrbitSZ = DualOrbitSZ.Value;
             if (DualOrbitCEqualsS.HasValue) p.DualOrbitCEqualsS = DualOrbitCEqualsS.Value;
+            // #918 SG3 — semigroup-Julia faithful implosion.
+            if (SemigroupAlpha.HasValue) p.SemigroupAlpha = SemigroupAlpha.Value;
+            if (SemigroupWordDepth.HasValue) p.SemigroupWordDepth = SemigroupWordDepth.Value;
+            if (SemigroupBeam.HasValue) p.SemigroupBeam = SemigroupBeam.Value;
+            if (SemigroupEscapeRadius.HasValue) p.SemigroupEscapeRadius = SemigroupEscapeRadius.Value;
             // #893 — Indra's Pearls 2D group.
             if (IndrasFamily.HasValue) p.IndrasFamily = (IndrasGroupFamily)IndrasFamily.Value;
             if (IndrasMaskitMuRe.HasValue) p.IndrasMaskitMuRe = IndrasMaskitMuRe.Value;
@@ -1940,6 +1959,28 @@ namespace FracturingFog.Models
                     FaithfulImplosionParentPath = "1/2 1/2",
                     FaithfulImplosionP = 1, FaithfulImplosionQ = 2,
                     FaithfulImplosionApproach = 0.14,
+                },
+            },
+            // #918 SG3 — the FAITHFUL semigroup-Julia limit set J(g_α) itself (not
+            // the near-parabolic approximation): the Julia set of ⟨f_c, g_α⟩ rendered
+            // by the word-tree escape. α = 1/2 is the period-doubling implosion.
+            new()
+            {
+                Name          = "Faithful implosion — semigroup limit J(g_a), a=1/2",
+                CenterX       =  0.5,
+                CenterY       =  0.0,
+                Zoom          =  1.0,
+                Iterations    =  40,
+                Description   = "The EXACT faithful parabolic-implosion limit set J(g_α) for f_c(z)=z²+1/4 — the Julia set of the rational semigroup ⟨f_c, g_α⟩ (Lavaurs's theorem), coloured by the shortest escaping word (not a near-parabolic approximation). Set the Lavaurs phase α in the panel; α=1/2 is the period-doubling implosion, α=p/q creates a new parabolic, irrational α a Siegel/Cremer rotation. Enable 'Faithful implosion (semigroup, sweep α)' to animate the phase.",
+                RegionType    = RegionType.BuiltIn,
+                FractalType   = FractalType.SemigroupJulia,
+                QualityPreset = QualityPreset.Standard,
+                AnimationName = "Faithful implosion (semigroup, sweep alpha)",
+                Params        = new RegionFractalParams
+                {
+                    SemigroupAlpha = 0.5,
+                    SemigroupWordDepth = 44,
+                    SemigroupBeam = 56,
                 },
             },
         ];

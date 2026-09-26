@@ -84,6 +84,7 @@ namespace FracturingFog.Models
             // Indra's Pearls (#892) — 2D Möbius-group limit set; deeper words
             // auto-reveal on zoom (Apollonian contract).
             FractalType.IndrasPearls => FractalMotionClass.Zoomable2D,
+            FractalType.SemigroupJulia => FractalMotionClass.Zoomable2D,
             // Markus–Lyapunov: a genuine self-similar 2D parameter plane —
             // point-zoom into (a, b) reveals structure at all scales (unlike the
             // 1D-stretched Logistic bifurcation, which stays NonSpatial).

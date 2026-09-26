@@ -626,6 +626,27 @@ remaining work is the SG1→SG4 engineering build.
 
 ## 10. Change log
 
+- **2026-09-20** — **#918 SG3 — semigroup-Julia renderer wired, then PARKED on a `g_α`
+  correctness blocker (#934).** Built the full user-facing pipeline — `FractalType.SemigroupJulia`
+  + `SemigroupJuliaCalculator` (word-tree escape over `{f_c, g_α}`, `g_α` from the α-independent
+  `LavaursCoordinateTable`, built once process-wide; parallelised, ~8 s one-time + ~0.19 s/frame),
+  params + Clone, capabilities, region persist + built-in region, animatable α + sweep animation,
+  render-host (9 sites) + PosterRenderer, UI panel + VM + type picker. Builds clean; +3 wiring
+  tests. **But validating it uncovered that the SG1 `g_α` inverse is wrong off the real axis**
+  (see #934): the one genuinely independent check — real symmetry `G_α(z̄)=conj G_α(z)`, which the
+  construction must satisfy — fails **0/654** basin conjugate-pairs (worst ~2e10). SG1's earlier
+  checks were self-consistent, not independent (periodicity is structural; the cross-method shared
+  the branch; backward-`Φ_rep` mis-branches consistently), and the "cauliflower" end-to-end render
+  didn't distinguish correct `g_α` from broken because `f_c` alone is already a cauliflower.
+  **Root cause:** every inverse needs `Φ_rep` on the *attracting side*, where backward iteration
+  leaves the domain and the `[0,2π)` log-branch cut sits exactly on the Lavaurs-target locus; the
+  correct value is the analytic continuation through a petal gap (the horn map). Three fix attempts
+  (fᵏ transit 0%, homotopy continuation 1.2%, ODE/derivative 8.8% symmetric) fell short. **Decision:
+  park J(g_α)-direct as research-open (#934); the already-validated near-parabolic implosion (#920)
+  remains the user-facing faithful feature.** The SG3 wiring is preserved on branch
+  `feat/semigroup-julia-calc-sg3-918` (not merged) — it is correct given a correct `g_α`, so it
+  finishes trivially once #934 lands. Lesson: for a "no reference plate" construction, validate
+  with an *independent* invariant (here, real symmetry), never self-consistency.
 - **2026-09-20** — **#918 SG1 — Lavaurs `g_α` engine (production port of the S3/S4/S6 Fatou
   numerics).** Ported the validated math into `Abstractions/Animation/LavaursEngine.cs`
   (direct evaluator) + `LavaursCoordinateTable.cs` (the S6 precompute engine). Germ

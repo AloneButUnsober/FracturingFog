@@ -481,6 +481,34 @@
                       ToolTip.Tip="Seed the c-orbit from s (c = s). Degenerate — the dual fields collapse to a plain Mandelbrot exterior. For comparison only." />
         </Grid>
 
+        <!-- Semigroup-Julia faithful implosion (#918 SG3) -->
+        <StackPanel IsVisible="{Binding IsSemigroupJulia}" Spacing="4">
+            <TextBlock Text="Faithful implosion — semigroup limit J(g_α) of ⟨f_c, g_α⟩ (c = 1/4)."
+                       TextWrapping="Wrap" FontStyle="Italic" Opacity="0.8" />
+            <Grid ColumnDefinitions="160,*" RowDefinitions="Auto,Auto,Auto,Auto">
+                <TextBlock Grid.Row="0" Grid.Column="0" Text="Lavaurs phase α:" VerticalAlignment="Center" />
+                <NumericUpDown Grid.Row="0" Grid.Column="1"
+                               Minimum="0" Maximum="1" Increment="0.01" FormatString="F4"
+                               Value="{Binding SemigroupAlpha, Mode=TwoWay}" Margin="0,2"
+                               ToolTip.Tip="The Lavaurs phase. α=p/q creates a new parabolic (an implosion cascade); irrational α a Siegel/Cremer rotation on the cylinder. α=1/2 is the period-doubling implosion." />
+                <TextBlock Grid.Row="1" Grid.Column="0" Text="Word depth:" VerticalAlignment="Center" />
+                <NumericUpDown Grid.Row="1" Grid.Column="1"
+                               Minimum="4" Maximum="400" Increment="1" FormatString="F0"
+                               Value="{Binding SemigroupWordDepth, Mode=TwoWay}" Margin="0,2"
+                               ToolTip.Tip="Maximum word length explored in the escape tree — the escape-time budget. Higher = crisper boundary, slower." />
+                <TextBlock Grid.Row="2" Grid.Column="0" Text="Beam width:" VerticalAlignment="Center" />
+                <NumericUpDown Grid.Row="2" Grid.Column="1"
+                               Minimum="1" Maximum="512" Increment="1" FormatString="F0"
+                               Value="{Binding SemigroupBeam, Mode=TwoWay}" Margin="0,2"
+                               ToolTip.Tip="Frontier beam: widest-modulus nodes kept per tree level. Caps cost to beam×depth. Higher = fewer missed escapes, slower." />
+                <TextBlock Grid.Row="3" Grid.Column="0" Text="Escape radius:" VerticalAlignment="Center" />
+                <NumericUpDown Grid.Row="3" Grid.Column="1"
+                               Minimum="2" Maximum="100" Increment="0.5" FormatString="F1"
+                               Value="{Binding SemigroupEscapeRadius, Mode=TwoWay}" Margin="0,2"
+                               ToolTip.Tip="Word-tree escape radius |z| threshold." />
+            </Grid>
+        </StackPanel>
+
         <!-- Chaotic Billiard (#627) -->
         <Grid IsVisible="{Binding IsChaoticBilliard}"
               ColumnDefinitions="160,*"

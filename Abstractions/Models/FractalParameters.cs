@@ -98,6 +98,24 @@ namespace FracturingFog.Models
             FracturingFog.Abstractions.Animation.ParabolicImplosionMath.EffectiveParentPeriod(
                 FaithfulImplosionQ, FaithfulParentChain);
 
+        // ── SemigroupJulia (#918 SG3): the faithful implosion limit set J(g_α) ──
+        /// <summary>The Lavaurs phase <c>α</c> for the faithful semigroup-Julia render
+        /// (<see cref="FractalType.SemigroupJulia"/>). <c>α = p/q</c> creates a new parabolic
+        /// (an implosion cascade); irrational <c>α</c> a Siegel/Cremer rotation on the cylinder.
+        /// Default <c>0.5</c>.</summary>
+        public double SemigroupAlpha { get; set; } = 0.5;
+
+        /// <summary>Maximum word length explored in the semigroup escape tree (the escape-time
+        /// budget). Default 40.</summary>
+        public int SemigroupWordDepth { get; set; } = 40;
+
+        /// <summary>Beam width for the word-tree frontier (widest-modulus nodes kept per level);
+        /// caps cost to <c>beam × wordDepth</c>. Default 48.</summary>
+        public int SemigroupBeam { get; set; } = 48;
+
+        /// <summary>Escape radius for the semigroup word-tree. Default 6.</summary>
+        public double SemigroupEscapeRadius { get; set; } = 6.0;
+
         /// <summary>The Julia parameter the render actually uses: the faithful
         /// implosion's near-parabolic point when <see cref="FaithfulImplosion"/> is
         /// on, else the plain <see cref="JuliaC"/>. Routes through
@@ -1511,6 +1529,10 @@ namespace FracturingFog.Models
                 FaithfulImplosionParentP = FaithfulImplosionParentP,
                 FaithfulImplosionParentQ = FaithfulImplosionParentQ,
                 FaithfulImplosionParentPath = FaithfulImplosionParentPath,
+                SemigroupAlpha = SemigroupAlpha,
+                SemigroupWordDepth = SemigroupWordDepth,
+                SemigroupBeam = SemigroupBeam,
+                SemigroupEscapeRadius = SemigroupEscapeRadius,
                 MultibrotExponent = MultibrotExponent,
                 PhoenixP = PhoenixP,
                 GlynnC = GlynnC,

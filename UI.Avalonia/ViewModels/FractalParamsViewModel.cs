@@ -220,6 +220,11 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
         _dualCSeedZ = _p.DualOrbitCSeedZ;
         _dualSZ = _p.DualOrbitSZ;
         _dualCEqualsS = _p.DualOrbitCEqualsS;
+        // #918 SG3 — semigroup-Julia faithful implosion.
+        _semigroupAlpha = _p.SemigroupAlpha;
+        _semigroupWordDepth = _p.SemigroupWordDepth;
+        _semigroupBeam = _p.SemigroupBeam;
+        _semigroupEscapeRadius = _p.SemigroupEscapeRadius;
         // #893 — Indra's Pearls 2D group.
         _indrasFamily = _p.IndrasFamily;
         _indrasMuRe = _p.IndrasMaskitMuRe;
@@ -368,6 +373,8 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
     // trace / depth / render-mode controls land in S2 (#893); this flag exists
     // so the type is a known procedural family (no "unknown type" fallback).
     public bool IsIndrasPearls => FractalType == FractalType.IndrasPearls;
+    // Semigroup-Julia faithful implosion (#918 SG3) — the exact J(g_α) limit set.
+    public bool IsSemigroupJulia => FractalType == FractalType.SemigroupJulia;
     public bool IsUserEquation => FractalType == FractalType.UserEquation;
     public bool IsSandbox => FractalType == FractalType.Sandbox;
 
@@ -493,7 +500,9 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
         || IsPrecisionField
         // Dual-orbit escape-geometry (#864) — the derived scalar rides the
         // SmoothBuffer, so Relief 3D height works like PrecisionField.
-        || IsDualOrbitEscape;
+        || IsDualOrbitEscape
+        // Semigroup-Julia (#918) — word-tree escape depth rides the SmoothBuffer.
+        || IsSemigroupJulia;
 
     /// <summary>Visibility flag for the cross-fractal domain-warp section
     /// (#253 / IDEA-3). True for the 2D escape-time family routed through
@@ -511,7 +520,7 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
         !(IsJulia || IsMultibrot || IsPhoenix || IsGlynn || IsLogistic || IsLyapunov || IsTranscendentalJulia || IsSpider || IsNewtonOrNova || IsIFS
           || IsLSystem || IsStrangeAttractor || IsBuddhaBrot || IsMandelbulb || IsMandelbox || IsKifs
           || IsQuatJulia || IsQuatMandelbrot || IsPlasma || IsAcidWarp || IsFlame || IsApollonian || IsKleinian
-          || IsBicomplexMandelbrot || IsCoquaternion || IsDla || IsRandomTile || IsChaoticBilliard || IsPrecisionField || IsDualOrbitEscape || IsIndrasPearls || IsInteriorAlphaApplicable || IsRelief2DApplicable
+          || IsBicomplexMandelbrot || IsCoquaternion || IsDla || IsRandomTile || IsChaoticBilliard || IsPrecisionField || IsDualOrbitEscape || IsIndrasPearls || IsSemigroupJulia || IsInteriorAlphaApplicable || IsRelief2DApplicable
           || SupportsDomainWarp);
 
     // ── Interior alpha (2D) — issue #96 ──────────────────────────────────────
@@ -1714,6 +1723,21 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
     private bool _dualCEqualsS;
     /// <summary>Mandelbrot-control mode (c = s; degenerate — labelled).</summary>
     public bool DualOrbitCEqualsS { get => _dualCEqualsS; set { Set(ref _dualCEqualsS, value); _p.DualOrbitCEqualsS = value; Fire(); } }
+
+    // ── Semigroup-Julia faithful implosion (#918 SG3) ──
+    private double _semigroupAlpha;
+    /// <summary>Lavaurs phase α — the faithful implosion knob (α=p/q → new parabolic,
+    /// irrational → Siegel/Cremer). Sweep [0,1) to animate.</summary>
+    public double SemigroupAlpha { get => _semigroupAlpha; set { Set(ref _semigroupAlpha, Clamp(value, 0.0, 1.0)); _p.SemigroupAlpha = _semigroupAlpha; Fire(); } }
+    private int _semigroupWordDepth;
+    /// <summary>Max word length in the semigroup escape tree (escape-time budget).</summary>
+    public int SemigroupWordDepth { get => _semigroupWordDepth; set { Set(ref _semigroupWordDepth, (int)Clamp(value, 4, 400)); _p.SemigroupWordDepth = _semigroupWordDepth; Fire(); } }
+    private int _semigroupBeam;
+    /// <summary>Beam width (widest-modulus nodes kept per level; caps cost).</summary>
+    public int SemigroupBeam { get => _semigroupBeam; set { Set(ref _semigroupBeam, (int)Clamp(value, 1, 512)); _p.SemigroupBeam = _semigroupBeam; Fire(); } }
+    private double _semigroupEscapeRadius;
+    /// <summary>Escape radius for the word-tree.</summary>
+    public double SemigroupEscapeRadius { get => _semigroupEscapeRadius; set { Set(ref _semigroupEscapeRadius, Clamp(value, 2.0, 100.0)); _p.SemigroupEscapeRadius = _semigroupEscapeRadius; Fire(); } }
 
     // ── Indra's Pearls 2D (#893) ──
     private IndrasGroupFamily _indrasFamily;

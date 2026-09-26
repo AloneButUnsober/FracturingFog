@@ -295,6 +295,7 @@ namespace FracturingFog.ViewState
                 // Indra's Pearls (#892) — Maskit μ = 2i limit set above the real
                 // axis; centre (0, 1), wide zoom (matches MiniMapDefaults).
                 FractalType.IndrasPearls          => ( 0.0,  1.0, 0.6),
+                FractalType.SemigroupJulia        => ( 0.5,  0.0, 1.0),
                 _                            => (-0.5,  0.0, 1.0),
             };
             CenterXLo = CenterX2 = CenterX3 = 0;

@@ -153,7 +153,8 @@ namespace FracturingFog.Models
             {FractalType.Dla, "DLA" },
             {FractalType.RandomTile, "Random Tiling" },
             {FractalType.IndrasPearls, "Indra's Pearls" },
-            {FractalType.DualOrbitEscape, "Dual-Orbit Escape" }
+            {FractalType.DualOrbitEscape, "Dual-Orbit Escape" },
+            {FractalType.SemigroupJulia, "Semigroup Julia (implosion)" }
         };
     }
 

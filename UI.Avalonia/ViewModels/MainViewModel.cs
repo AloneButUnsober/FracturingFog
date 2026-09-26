@@ -246,6 +246,7 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
         (FractalType.PrecisionField,        "Precision Field (Fragility)"),
         (FractalType.DualOrbitEscape,       "Dual-Orbit Escape (Scattering)"),
         (FractalType.IndrasPearls,          "Indra's Pearls (2D Kleinian)"),
+        (FractalType.SemigroupJulia,        "Faithful Implosion (Semigroup J(g_α))"),
     };
 
     /// <summary>Category filter applied to the toolbar Type combo via its

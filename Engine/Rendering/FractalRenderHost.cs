@@ -97,6 +97,7 @@ namespace FracturingFog.Rendering
         private ChaoticBilliardCalculator _billiardCalculator;
         private PrecisionFieldCalculator _precisionFieldCalculator;
         private DualOrbitEscapeCalculator _dualOrbitCalculator;
+        private SemigroupJuliaCalculator _semigroupCalculator;
         private IndrasPearlsCalculator _indrasPearlsCalculator;
         private FlameRenderer _flameCalculator;
         private SandboxCalculator _sandboxCalculator;
@@ -470,6 +471,7 @@ namespace FracturingFog.Rendering
             _billiardCalculator = new ChaoticBilliardCalculator(w, h);
             _precisionFieldCalculator = new PrecisionFieldCalculator(w, h);
             _dualOrbitCalculator = new DualOrbitEscapeCalculator(w, h);
+            _semigroupCalculator = new SemigroupJuliaCalculator(w, h);
             _indrasPearlsCalculator = new IndrasPearlsCalculator(w, h);
             _flameCalculator = new FlameRenderer(w, h);
             _sandboxCalculator = new SandboxCalculator(w, h);
@@ -516,6 +518,7 @@ namespace FracturingFog.Rendering
                 _billiardCalculator.ColorMap = initialColorMap;
                 _precisionFieldCalculator.ColorMap = initialColorMap;
                 _dualOrbitCalculator.ColorMap = initialColorMap;
+                _semigroupCalculator.ColorMap = initialColorMap;
                 _indrasPearlsCalculator.ColorMap = initialColorMap;
                 _flameCalculator.ColorMap = initialColorMap;
                 _sandboxCalculator.ColorMap = initialColorMap;
@@ -999,6 +1002,7 @@ namespace FracturingFog.Rendering
                 _billiardCalculator.ColorMap = value;
                 _precisionFieldCalculator.ColorMap = value;
                 _dualOrbitCalculator.ColorMap = value;
+                _semigroupCalculator.ColorMap = value;
                 _indrasPearlsCalculator.ColorMap = value;
                 _flameCalculator.ColorMap = value;
                 _sandboxCalculator.ColorMap = value;
@@ -2220,6 +2224,7 @@ namespace FracturingFog.Rendering
             FractalType.ChaoticBilliard => true,
             FractalType.PrecisionField => true,
             FractalType.DualOrbitEscape => true,
+            FractalType.SemigroupJulia => true,
             // #726 slice 2 — interpreted User Equation / DSL: a fresh
             // UserEquationCalculator recompiles the same DSL source from
             // FractalParameters, so it CAN be built + parameterised generically
@@ -2249,6 +2254,7 @@ namespace FracturingFog.Rendering
             FractalType.ChaoticBilliard => new ChaoticBilliardCalculator(w, h),
             FractalType.PrecisionField => new PrecisionFieldCalculator(w, h),
             FractalType.DualOrbitEscape => new DualOrbitEscapeCalculator(w, h),
+            FractalType.SemigroupJulia => new SemigroupJuliaCalculator(w, h),
             // #726 slice 2 — interpreted DSL twin; SyncAltStateFromMandel copies the
             // UserEquationSource + view so it recompiles the same equation at hi-res.
             FractalType.UserEquation => new UserEquationCalculator(w, h),
@@ -2909,6 +2915,7 @@ namespace FracturingFog.Rendering
             _billiardCalculator.Resize(w, h);
             _precisionFieldCalculator.Resize(w, h);
             _dualOrbitCalculator.Resize(w, h);
+            _semigroupCalculator.Resize(w, h);
             _indrasPearlsCalculator.Resize(w, h);
             _flameCalculator.Resize(w, h);
             _sandboxCalculator.Resize(w, h);
@@ -3560,6 +3567,7 @@ namespace FracturingFog.Rendering
                 case ChaoticBilliardCalculator cb: cb.FractalParameters = ViewState.FractalParameters; break;
                 case PrecisionFieldCalculator pf: pf.FractalParameters = ViewState.FractalParameters; break;
                 case DualOrbitEscapeCalculator du: du.FractalParameters = ViewState.FractalParameters; break;
+                case SemigroupJuliaCalculator sj: sj.FractalParameters = ViewState.FractalParameters; break;
                 case FlameRenderer fr: fr.FractalParameters = ViewState.FractalParameters; break;
                 case SandboxCalculator sb:
                     sb.FractalParameters = ViewState.FractalParameters;
@@ -3746,6 +3754,7 @@ namespace FracturingFog.Rendering
             FractalType.ChaoticBilliard => _billiardCalculator,
             FractalType.PrecisionField => _precisionFieldCalculator,
             FractalType.DualOrbitEscape => _dualOrbitCalculator,
+            FractalType.SemigroupJulia => _semigroupCalculator,
             FractalType.IndrasPearls => _indrasPearlsCalculator,
             FractalType.Flame => _flameCalculator,
             FractalType.Sandbox => _sandboxCalculator,

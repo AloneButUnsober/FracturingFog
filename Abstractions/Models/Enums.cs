@@ -498,6 +498,11 @@ namespace FracturingFog
         /// on zoom (Apollonian contract). Handled by a dedicated
         /// <c>IndrasPearlsCalculator</c>.</summary>
         IndrasPearls,
+        /// <summary>The faithful parabolic-implosion limit set <c>J(g_α)</c> — the Julia set of
+        /// the rational semigroup <c>⟨f_c, g_α⟩</c> (Lavaurs's theorem) for <c>f_c(z) = z² + 1/4</c>,
+        /// coloured by the shortest escaping word (#918). The exact limit of the near-parabolic
+        /// implosion, parameterised by the Lavaurs phase <c>α</c>.</summary>
+        SemigroupJulia,
     }
 
     public enum RenderProfile { Preview, Final }
@@ -657,6 +662,9 @@ namespace FracturingFog
                 // Indra's Pearls (#892) — combinatorial word-enumeration point
                 // cloud coloured by log-density; no normals / orbit / DE surfaced.
                 or FractalType.IndrasPearls
+                // Semigroup-Julia faithful implosion (#918) — shortest-escaping-word
+                // depth over the SmoothBuffer (word-tree escape-time).
+                or FractalType.SemigroupJulia
                 => FractalCapabilities.SuppliesHistogram,
 
             _ => FractalCapabilities.None,

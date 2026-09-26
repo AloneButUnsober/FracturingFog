@@ -3,6 +3,7 @@
 
 using System;
 using System.Numerics;
+using System.Threading.Tasks;
 
 namespace FracturingFog.Abstractions.Animation;
 
@@ -45,27 +46,33 @@ public sealed class LavaursCoordinateTable
         _aReStep = (wReMax - wReMin) / (attNx - 1);
         _aImStep = (wImMax - wImMin) / (attNy - 1);
         _att = new Complex[attNx * attNy]; _attOk = new bool[attNx * attNy];
-        for (int j = 0; j < attNy; j++)
-            for (int i = 0; i < attNx; i++)
+        int aNx = attNx, aNy = attNy;
+        Parallel.For(0, aNy, j =>
+        {
+            for (int i = 0; i < aNx; i++)
             {
                 var w = new Complex(wReMin + i * _aReStep, wImMin + j * _aImStep);
                 Complex tau = engine.PhiAtt(w);
                 bool ok = double.IsFinite(tau.Real) && double.IsFinite(tau.Imaginary) && tau.Magnitude < 1e4;
-                _att[j * attNx + i] = tau; _attOk[j * attNx + i] = ok;
+                _att[j * aNx + i] = tau; _attOk[j * aNx + i] = ok;
             }
+        });
 
         _sNx = invNx; _sNy = invNy;
         _sReMin = sReMin; _sImMin = sImMin;
         _sReStep = (sReMax - sReMin) / (invNx - 1);
         _sImStep = (sImMax - sImMin) / (invNy - 1);
         _inv = new Complex[invNx * invNy]; _invOk = new bool[invNx * invNy];
-        for (int j = 0; j < invNy; j++)
-            for (int i = 0; i < invNx; i++)
+        int iNx = invNx, iNy = invNy;
+        Parallel.For(0, iNy, j =>
+        {
+            for (int i = 0; i < iNx; i++)
             {
                 var s = new Complex(sReMin + i * _sReStep, sImMin + j * _sImStep);
                 bool ok = engine.TryPhiRepInv(s, out Complex wr);
-                _inv[j * invNx + i] = wr; _invOk[j * invNx + i] = ok;
+                _inv[j * iNx + i] = wr; _invOk[j * iNx + i] = ok;
             }
+        });
     }
 
     static bool Bilinear(Complex[] grid, bool[] ok, int nx, int ny,

@@ -448,6 +448,39 @@ namespace FracturingFog.Models
                 },
                 Tags = new List<string> { "experimental", "2D", "parabolic", "julia", "faithful", "user-pq" },
             };
+
+            // #918 SG3/SG4 — the FAITHFUL semigroup-Julia limit set J(g_α) (the exact
+            // Lavaurs limit, not a near-parabolic approximation). Sweeping the Lavaurs
+            // phase α over one period walks the faithful implosion; the α-independent
+            // Fatou tables are not rebuilt, only the σ lookup shifts. Author on the
+            // 'Faithful implosion — semigroup limit J(g_a)' region.
+            yield return new AnimationData
+            {
+                Name = "Faithful implosion (semigroup, sweep alpha)",
+                Category = "Built-in",
+                Description = "The EXACT faithful implosion: sweeps the Lavaurs phase α over "
+                            + "[0,1) so the semigroup-Julia limit set J(g_α) = J(⟨f_c, g_α⟩) "
+                            + "walks through the implosion — α = p/q creates a new parabolic, "
+                            + "irrational α a Siegel/Cremer rotation on the cylinder. The rigorous "
+                            + "counterpart of the naïve CardioidApproach animation.",
+                TargetFractalTypes = new List<FracturingFog.FractalType>
+                {
+                    FracturingFog.FractalType.SemigroupJulia,
+                },
+                Tracks = new List<AnimationTrack>
+                {
+                    new AnimationTrack
+                    {
+                        ParamName = "SemigroupAlpha",
+                        Mode = AnimationMode.Triangle,   // sweep α in and out over one period
+                        Min = 0.0,
+                        Max = 1.0,
+                        FrequencyHz = 0.03,              // ~33 s per there-and-back
+                        Enabled = true,
+                    },
+                },
+                Tags = new List<string> { "experimental", "2D", "parabolic", "faithful", "semigroup", "lavaurs" },
+            };
         }
     }
 }

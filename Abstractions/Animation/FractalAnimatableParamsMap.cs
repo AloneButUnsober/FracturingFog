@@ -106,6 +106,9 @@ public static class FractalAnimatableParamsMap
         FractalType.IndrasPearls
             => _indrasList,
 
+        FractalType.SemigroupJulia
+            => _semigroupList,
+
         // ── 3D raymarched ─────────────────────────────────────────────────
         FractalType.Mandelbulb
             => _mandelbulbList,
@@ -414,6 +417,18 @@ public static class FractalAnimatableParamsMap
             Cost: AnimatableParamCost.Expensive),
         new("IndrasRileyCIm", AnimatableParamKind.ScalarDouble, Min: -2.0, Max: 2.0,
             Cost: AnimatableParamCost.Expensive),
+    };
+
+    // Semigroup-Julia faithful implosion (#918 SG4). Sweeping the Lavaurs phase α
+    // over one period walks the faithful implosion — the rigorous counterpart of
+    // the naïve CardioidApproach animation. The α-independent Fatou tables are NOT
+    // rebuilt (only the σ lookup shifts), but the per-pixel word-tree makes each
+    // frame Expensive.
+    private static readonly AnimatableParamDescriptor[] _semigroupList =
+    {
+        new("SemigroupAlpha", AnimatableParamKind.ScalarDouble, Min: 0.0, Max: 1.0,
+            Cost: AnimatableParamCost.Expensive,
+            Notes: "Lavaurs phase — sweep [0,1) to animate the faithful implosion; α=p/q creates a new parabolic, irrational α a Siegel/Cremer rotation."),
     };
 
     private static readonly AnimatableParamDescriptor[] _mandelbulbList =
