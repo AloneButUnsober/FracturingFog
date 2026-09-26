@@ -46,7 +46,7 @@ namespace FracturingFog.Batch
             if (region != null)
             {
                 region.ApplyHeadlessParams(fp);   // equation source, lighting, relief
-                region.Params?.ApplyTo(fp);       // per-family snapshot (#91-#94)
+                region.ApplyFamilyParams(fp);     // per-family snapshot (#91-#94, #960)
             }
             if (opts.BulbPower.HasValue)          fp.BulbPower          = opts.BulbPower.Value;
             if (opts.MultibrotExponent.HasValue)  fp.MultibrotExponent  = opts.MultibrotExponent.Value;
