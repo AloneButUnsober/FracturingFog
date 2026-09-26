@@ -21,6 +21,12 @@
 // bailout radius. GreenRatio (log2 G_c/G_z = n_z − n_c) and ExternalAngleDelta
 // (Böttcher angles by backward lifting) are bailout-independent.
 //
+// Slice axes (#971): every view is a 2D slice of one field F(c0, s) with z0 = 0.
+// DualOrbitSliceAxes picks which two of (c.x, c.y, s.x, s.y) the image spans; the
+// other two come from DualOrbitCSeedX/Y and DualOrbitSX/SY. SxSy (default) is the
+// parameter plane; CxCy the dynamical (Julia-type) plane; CxSx a cross-section of
+// the (c.x, c.y, s.x) volume — the user's original s.x sweep stacked over c.
+//
 // The c-seed MUST be decoupled from s. Setting c = s makes the c-orbit the
 // z-orbit advanced one step (c_n = z_{n+1}), so E_c = E_z, D ≡ 0, Δn ≡ −1 and the
 // dual fields collapse to a plain Mandelbrot exterior — kept only as the labelled
@@ -188,8 +194,11 @@ public sealed class DualOrbitEscapeCalculator : IFractalCalculator, IHeightField
         var map = FractalParameters.DualOrbitMap;
         var field = FractalParameters.DualOrbitField;
         bool cEqualsS = FractalParameters.DualOrbitCEqualsS;
-        double cSeedX = FractalParameters.DualOrbitCSeedX;
-        double cSeedY = FractalParameters.DualOrbitCSeedY;
+        double fixedCX = FractalParameters.DualOrbitCSeedX;
+        double fixedCY = FractalParameters.DualOrbitCSeedY;
+        double fixedSX = FractalParameters.DualOrbitSX;
+        double fixedSY = FractalParameters.DualOrbitSY;
+        var axes = FractalParameters.DualOrbitSliceAxes;
         double cSeedZ = FractalParameters.DualOrbitCSeedZ;
         double sZ = FractalParameters.DualOrbitSZ;
         var bail = new Bailout(Math.Clamp(FractalParameters.DualOrbitBailout, 2.0, 1e6));
@@ -205,13 +214,25 @@ public sealed class DualOrbitEscapeCalculator : IFractalCalculator, IHeightField
         {
             if (ct.IsCancellationRequested) return;
             int rowBase = y * width;
-            double sy = centerY + (y - height * 0.5) * pixelPitch;
+            double imgY = centerY + (y - height * 0.5) * pixelPitch;
             // Per-row arg buffers for the external-angle lift (ExternalAngleDelta only).
             double[] argsZ = angles ? new double[maxIter + 1] : Array.Empty<double>();
             double[] argsC = angles ? new double[maxIter + 1] : Array.Empty<double>();
             for (int x = 0; x < width; x++)
             {
-                double sx = centerX + (x - width * 0.5) * pixelPitch;
+                double imgX = centerX + (x - width * 0.5) * pixelPitch;
+                // Resolve the image point to (s, c): two coords from the pixel, the
+                // other two from the fixed params (#971).
+                double sx = fixedSX, sy = fixedSY, cSeedX = fixedCX, cSeedY = fixedCY;
+                switch (axes)
+                {
+                    case DualOrbitSliceAxes.CxCy: cSeedX = imgX; cSeedY = imgY; break;
+                    case DualOrbitSliceAxes.CxSx: cSeedX = imgX; sx = imgY; break;
+                    case DualOrbitSliceAxes.CxSy: cSeedX = imgX; sy = imgY; break;
+                    case DualOrbitSliceAxes.CySx: cSeedY = imgX; sx = imgY; break;
+                    case DualOrbitSliceAxes.CySy: cSeedY = imgX; sy = imgY; break;
+                    default: sx = imgX; sy = imgY; break;
+                }
 
                 double scalar;
                 if (quat)
@@ -249,6 +270,8 @@ public sealed class DualOrbitEscapeCalculator : IFractalCalculator, IHeightField
     private static double ScalarQ(DualOrbitField field, in QOrbit oz, in QOrbit oc,
         double sx, double sy, double sz, int maxIter, in Bailout b, double ratioSpan)
     {
+        if (field == DualOrbitField.EscapeTimeZ) return oz.Escaped ? Math.Max(LiveFloor, oz.SmoothN) : 0.0;
+        if (field == DualOrbitField.EscapeTimeC) return oc.Escaped ? Math.Max(LiveFloor, oc.SmoothN) : 0.0;
         if (!oz.Escaped || !oc.Escaped) return 0.0;
         // s as a 4D point (real part 0).
         double s0 = 0.0, s1 = sx, s2 = sy, s3 = sz;
@@ -299,6 +322,9 @@ public sealed class DualOrbitEscapeCalculator : IFractalCalculator, IHeightField
     private static double Scalar(DualOrbitField field, in Orbit oz, in Orbit oc,
         double sx, double sy, int maxIter, in Bailout b, double ratioSpan)
     {
+        // Single-orbit fields: live wherever that one orbit escapes (#971).
+        if (field == DualOrbitField.EscapeTimeZ) return oz.Escaped ? Math.Max(LiveFloor, oz.SmoothN) : 0.0;
+        if (field == DualOrbitField.EscapeTimeC) return oc.Escaped ? Math.Max(LiveFloor, oc.SmoothN) : 0.0;
         if (!oz.Escaped || !oc.Escaped) return 0.0;
 
         switch (field)

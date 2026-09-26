@@ -681,3 +681,11 @@ appropriate sections; flesh out on the next pass. Cite inline from the sections 
   check independent invariants: both new fields bailout-invariant (128 vs 4096), GreenRatio = analytic
   G ratio to 1e-3 octave, known parameter rays (s>¼ → 0, s<−2 → ½), conjugation antisymmetry;
   separation shown to move with R.
+- **2026-09-26** — **S8 (#971) shipped** — slice-axis selector. `DualOrbitSliceAxes` {SxSy (default,
+  byte-identical), CxCy, CxSx, CxSy, CySx, CySy}: the image spans any two of (c.x, c.y, s.x, s.y), the other
+  two come from `DualOrbitCSeedX/Y` and new `DualOrbitSX/SY` (animatable — animating s.x replays the
+  original sweep). New single-orbit fields `EscapeTimeZ` / `EscapeTimeC`: EscapeTimeC stays live where the
+  critical orbit is bounded (s in M), so it is the field for the Julia plane (CxCy) and the volume
+  cross-section (CxSx: dome + filaments, the original s.x sweep stacked over c.x). Tests check field
+  invariants: four slices through one (c0, s) point agree; the c-plane is point-symmetric (map even in u);
+  the CxSx c.x = 0 column equals the critical orbit (Mandelbrot line); fixed s is inert in SxSy.
