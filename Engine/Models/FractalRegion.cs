@@ -397,6 +397,18 @@ namespace FracturingFog.Models
             ApplyRelief3DTo(p);
         }
 
+        /// <summary>#960 — authoritative per-family params: reset everything this region's
+        /// family snapshot can carry to defaults, then overlay the saved snapshot (a legacy
+        /// region with null <see cref="Params"/> gets the family defaults). Every region-recall
+        /// path uses this instead of a bare <c>Params?.ApplyTo</c>, so a region renders the same
+        /// whatever was live before (an animation, a previous region).</summary>
+        public void ApplyFamilyParams(FractalParameters p)
+        {
+            if (p == null) return;
+            RegionFractalParams.ResetFamilyToDefaults(FractalType, p);
+            Params?.ApplyTo(p);
+        }
+
         /// <summary>Apply this region's Relief 3D snapshot (if any) to the given
         /// params. No-op when null (leaves the current relief state alone).</summary>
         public void ApplyRelief3DTo(FractalParameters parameters)
@@ -880,6 +892,127 @@ namespace FracturingFog.Models
             }
 
             return rp;
+        }
+
+        // ── #960 authoritative family recall ─────────────────────────────────
+        //
+        // ApplyTo is an overlay (null = leave current), and Snapshot omits many
+        // fields at their default or while a mode is off. On its own, recall
+        // therefore cannot put a default back: a plain Julia region after a
+        // faithful-implosion region kept faithful mode on, a default-seed
+        // dual-orbit region kept an animated seed. Region recall first resets
+        // every param the region's family owns, then overlays.
+        //
+        // "Owns" = every FractalParameters property Snapshot(type, …) can carry.
+        // It is discovered by probing Snapshot itself (bump one property, see
+        // whether the snapshot changes), on two bases: stock defaults, and a
+        // base with every bool on and every value moved off its default, so
+        // fields captured only while a mode is engaged (FaithfulImplosion*,
+        // DomainWarp*, Kleinian rotation axis) are found too. New Snapshot
+        // fields are picked up automatically — no second list to maintain.
+
+        static readonly System.Collections.Concurrent.ConcurrentDictionary<FractalType, System.Reflection.PropertyInfo[]>
+            s_familyProps = new();
+
+        /// <summary>#960 — reset every parameter the <paramref name="type"/> family's region
+        /// snapshot can carry to its <see cref="FractalParameters"/> default, leaving other
+        /// families, lighting, relief and colour untouched. Call before <see cref="ApplyTo"/> on
+        /// region recall so a region always renders the same regardless of what was live.</summary>
+        public static void ResetFamilyToDefaults(FractalType type, FractalParameters p)
+        {
+            if (p == null) return;
+            var props = FamilyProperties(type);
+            if (props.Count == 0) return;
+            var defaults = new FractalParameters();
+            foreach (var pi in props)
+            {
+                try { pi.SetValue(p, pi.GetValue(defaults)); }
+                catch { /* a throwing setter keeps its current value */ }
+            }
+        }
+
+        /// <summary>#960 — the <see cref="FractalParameters"/> properties the
+        /// <paramref name="type"/> family's region snapshot can carry (cached per type).</summary>
+        public static IReadOnlyList<System.Reflection.PropertyInfo> FamilyProperties(FractalType type)
+            => s_familyProps.GetOrAdd(type, DiscoverFamilyProperties);
+
+        static System.Reflection.PropertyInfo[] DiscoverFamilyProperties(FractalType type)
+        {
+            var candidates = new List<System.Reflection.PropertyInfo>();
+            foreach (var pi in typeof(FractalParameters).GetProperties(
+                         System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Instance))
+            {
+                if (pi.CanRead && pi.CanWrite && pi.GetIndexParameters().Length == 0
+                    && pi.GetSetMethod() != null && IsProbeable(pi.PropertyType))
+                    candidates.Add(pi);
+            }
+
+            var stock = new FractalParameters();
+            var engaged = new FractalParameters();
+            foreach (var pi in candidates)
+            {
+                try
+                {
+                    object? v = pi.GetValue(engaged);
+                    pi.SetValue(engaged, pi.PropertyType == typeof(bool) ? true : Bump(v, pi.PropertyType));
+                }
+                catch { }
+            }
+
+            var owned = new List<System.Reflection.PropertyInfo>();
+            foreach (var pi in candidates)
+                if (Captures(type, stock, pi) || Captures(type, engaged, pi))
+                    owned.Add(pi);
+            return owned.ToArray();
+        }
+
+        // Does Snapshot(type, b) change when only pi changes? Mutates b, then restores it.
+        static bool Captures(FractalType type, FractalParameters b, System.Reflection.PropertyInfo pi)
+        {
+            object? original;
+            try { original = pi.GetValue(b); } catch { return false; }
+            try
+            {
+                string before = SnapshotJson(type, b);
+                pi.SetValue(b, Bump(original, pi.PropertyType));
+                return !string.Equals(before, SnapshotJson(type, b), StringComparison.Ordinal);
+            }
+            catch { return false; }
+            finally
+            {
+                try { pi.SetValue(b, original); } catch { }
+            }
+        }
+
+        static string SnapshotJson(FractalType type, FractalParameters b)
+            => JsonSerializer.Serialize(Snapshot(type, b));
+
+        static bool IsProbeable(Type t)
+            => t == typeof(double) || t == typeof(float) || t == typeof(int) || t == typeof(long)
+               || t == typeof(bool) || t == typeof(string) || t == typeof(Complex) || t.IsEnum
+               || (t.IsGenericType && t.GetGenericTypeDefinition() == typeof(List<>));
+
+        // A value guaranteed to differ from v (same type).
+        static object? Bump(object? v, Type t)
+        {
+            if (t == typeof(double)) return (double)v! + 0.123;
+            if (t == typeof(float)) return (float)v! + 0.123f;
+            if (t == typeof(int)) return (int)v! + 1;
+            if (t == typeof(long)) return (long)v! + 1;
+            if (t == typeof(bool)) return !(bool)v!;
+            if (t == typeof(string)) return (v as string ?? string.Empty) + "x";
+            if (t == typeof(Complex)) return (Complex)v! + new Complex(0.11, -0.07);
+            if (t.IsEnum)
+            {
+                var values = Enum.GetValues(t);
+                int i = Array.IndexOf(values, v);
+                return values.GetValue((i + 1) % values.Length);
+            }
+            // List<T>: one more default element (e.g. Kleinian custom spheres).
+            var list = (System.Collections.IList)Activator.CreateInstance(t)!;
+            if (v is System.Collections.IEnumerable src) foreach (var e in src) list.Add(e);
+            list.Add(Activator.CreateInstance(t.GetGenericArguments()[0]));
+            return list;
         }
 
         /// <summary>

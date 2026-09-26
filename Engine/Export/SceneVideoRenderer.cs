@@ -568,7 +568,11 @@ namespace FracturingFog.Export
 
             var p = new FractalParameters();
             if (region != null)
+            {
                 region.ApplyHeadlessParams(p);
+                // #960 — per-family snapshot (Julia c, 3D camera, …), as interactive recall does.
+                region.ApplyFamilyParams(p);
+            }
 
             // #295 follow-up — per-shot lighting override by name. Borrow another
             // region's captured Lighting & FX for this shot, overriding the shot

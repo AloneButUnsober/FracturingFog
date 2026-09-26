@@ -1647,9 +1647,10 @@ namespace FracturingFog.Rendering
             }
 
             // P1 (#91) — overlay the snapshotted 2D per-family params (Julia
-            // constant, Newton exponent, Apollonian knobs, …). No-op for
-            // Mandelbrot + legacy regions (null Params).
-            region.Params?.ApplyTo(p);
+            // constant, Newton exponent, Apollonian knobs, …). #960: the family's
+            // params are reset to defaults first, so legacy regions (null Params)
+            // and fields omitted at their default don't inherit live values.
+            region.ApplyFamilyParams(p);
             // Relief 3D snapshot (null = leave current relief alone).
             region.Relief3D?.ApplyTo(p);
         }
@@ -2062,7 +2063,7 @@ namespace FracturingFog.Rendering
                 // Mandelbrot + default-suffices families (no-op). Theme is
                 // applied silently below (no present — we cross-fade explicitly).
                 ViewState.FractalType = region.FractalType;
-                region.Params?.ApplyTo(ViewState.FractalParameters);
+                region.ApplyFamilyParams(ViewState.FractalParameters);   // #960 authoritative
                 region.Relief3D?.ApplyTo(ViewState.FractalParameters);
                 _videoTargetIterations = region.Iterations;
 
@@ -2395,7 +2396,7 @@ namespace FracturingFog.Rendering
 
                 // Leg target region supplies type + per-family params + quality.
                 ViewState.FractalType = region.FractalType;
-                region.Params?.ApplyTo(ViewState.FractalParameters);
+                region.ApplyFamilyParams(ViewState.FractalParameters);   // #960 authoritative
                 region.Relief3D?.ApplyTo(ViewState.FractalParameters);
                 _videoTargetIterations = region.Iterations;
 

@@ -387,10 +387,12 @@ namespace FracturingFog.Hosting
 
             // Multi-type video roadmap P1 (#91): overlay the snapshotted core
             // per-family params (Julia constant, Newton exponent, Apollonian
-            // knobs, …) captured at save time. No-op for legacy regions (null
-            // Params) and for Mandelbrot. Applied last so it wins over defaults
-            // but sits alongside the source-compiled types above.
-            region.Params?.ApplyTo(p);
+            // knobs, …) captured at save time. #960: authoritative — the family's
+            // params are reset to defaults first, so a legacy region (null Params)
+            // or a field omitted at its default doesn't inherit whatever an
+            // animation or the previous region left live. Applied last so it
+            // sits alongside the source-compiled types above.
+            region.ApplyFamilyParams(p);
 
             // Relief 3D (2D heightfield / Oblique raymarch). Authoritative on
             // recall so relief toggles WITH the region: a relief region restores
