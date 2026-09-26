@@ -341,12 +341,16 @@ public sealed class DualOrbitEscapeCalculator : IFractalCalculator, IHeightField
         }
     }
 
+    // A live (both-escaped) value must never read exactly 0: SmoothBuffer 0 is the
+    // bounded / in-set sentinel that Relief height and histogram paths key on.
+    private const double LiveFloor = 1e-3;
+
     // log2(G_c / G_z) = n_z − n_c exactly (G = log R · 2^−smoothN), on a centred
     // diverging scale: ±span octaves → palette ends, 0 → mid-palette.
     private static double GreenRatioScalar(double smoothZ, double smoothC, double span, int maxIter)
     {
         double octaves = smoothZ - smoothC;
-        return (0.5 + 0.5 * Math.Clamp(octaves / span, -1.0, 1.0)) * maxIter;
+        return Math.Max(LiveFloor, (0.5 + 0.5 * Math.Clamp(octaves / span, -1.0, 1.0)) * maxIter);
     }
 
     // (θ_c − θ_z) mod 1 at level 1, scaled to [0, maxIter). 0 unless both escape.
@@ -354,6 +358,6 @@ public sealed class DualOrbitEscapeCalculator : IFractalCalculator, IHeightField
     {
         if (nZ < 0 || nC < 0) return 0.0;
         double d = Frac(LiftToLevel1(argsC, nC) - LiftToLevel1(argsZ, nZ));
-        return d * maxIter;
+        return Math.Max(LiveFloor, d * maxIter);
     }
 }

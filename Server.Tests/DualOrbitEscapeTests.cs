@@ -297,6 +297,31 @@ public sealed class DualOrbitEscapeTests
     }
 
     [Fact]
+    public void IntrinsicFields_NeverWriteTheInSetSentinel_WhenBothOrbitsEscape()
+    {
+        // Saturated GreenRatio (tiny span) and a zero angle delta (c-seed 0 ⇒ same
+        // orbit as the critical one) are live values, not "bounded" (SmoothBuffer 0).
+        foreach (var (f, seedX, span) in new[] { (DualOrbitField.GreenRatio, 0.3, 0.25), (DualOrbitField.ExternalAngleDelta, 0.0, 8.0) })
+        {
+            var p = new FractalParameters { DualOrbitField = f, DualOrbitCSeedX = seedX, DualOrbitCSeedY = 0.0, DualOrbitRatioSpan = span };
+            var live = new DualOrbitEscapeCalculator(120, 120) { CenterX = -0.5, Zoom = 1.0, MaxIterations = 300, FractalParameters = p };
+            // Reference "both escaped" mask: GreenRatio on a 64-octave span never
+            // saturates, so it is ~mid-palette (> 0) exactly where both escape.
+            var refMask = new DualOrbitEscapeCalculator(120, 120) { CenterX = -0.5, Zoom = 1.0, MaxIterations = 300,
+                FractalParameters = new FractalParameters { DualOrbitField = DualOrbitField.GreenRatio, DualOrbitCSeedX = seedX, DualOrbitCSeedY = 0.0, DualOrbitRatioSpan = 64 } };
+            live.Calculate(); refMask.Calculate();
+            int both = 0;
+            for (int i = 0; i < live.SmoothBuffer.Length; i++)
+            {
+                if (refMask.SmoothBuffer[i] <= 0f) { Assert.Equal(0f, live.SmoothBuffer[i]); continue; }
+                Assert.True(live.SmoothBuffer[i] > 0f, $"{f}: live pixel {i} wrote the in-set sentinel");
+                both++;
+            }
+            Assert.True(both > 1000, $"{f}: {both} escaping pixels");
+        }
+    }
+
+    [Fact]
     public void IntrinsicParams_CloneAndPersist()
     {
         var p = new FractalParameters
