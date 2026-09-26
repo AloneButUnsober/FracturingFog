@@ -17,8 +17,9 @@ want to *do* with it, and the rest follows:
 |------------------------------------------------|---------------------|-------------------------|
 | Post a screenshot to social media              | **Image**           | One PNG, ~1-3 MB        |
 | Print a wall-sized poster, or send to a printer | **Poster**         | One huge TIFF/PNG       |
-| Share a smooth zoom-in video                   | **Video**           | One MP4 (or lossless / animated GIF) |
-| Loop endlessly between favourite views         | **Video Slideshow** | One long MP4            |
+| Record whatever is on screen right now         | **● Rec** / **F9**  | MP4 / H.265 / WebM / MKV / GIF / PNG — picked when you stop |
+| Share a smooth zoom-in video                   | **Video** (tick *Record this run*) | Same choice as ● Rec |
+| Loop endlessly between favourite views         | **Video Slideshow** (tick *Record this run*) | Same choice as ● Rec |
 
 > [!TIP]
 > Before you capture, decide what should be in the picture. Should the **grid** be on? Should the
@@ -46,14 +47,14 @@ want to *do* with it, and the rest follows:
    count for the deep target. Otherwise the video may starve detail on the inner frames.
 3. Open Floating Menu → **Video**.
 4. Pick **Region = Mini Mandelbrot** (or whatever deep spot you want to dive into).
-5. Duration `30` seconds, frame rate `30 fps`, start zoom `0.5`. Leave format on *Media Foundation MP4*
-   for a quick export, or pick *FFV1 (lossless)* for archival quality (needs `ffmpeg.exe` discoverable).
-6. Click **Render**. Each frame is calculated end-to-end; the dialog shows tile-by-tile progress.
+5. Duration `30` seconds, start zoom `0.5`, and tick **● Record this run**.
+6. Click **Start**. When the zoom ends the **Save Recording** prompt asks for the format (MP4 for a
+   quick share, *MKV — FFV1* for archival), quality, frame rate and size.
 
 > [!WARNING]
-> Lossless H.264 / FFV1 / H.264-HQ presets all require `ffmpeg.exe`. The app looks for it in the
-> install folder, then `Tools\`, then your `PATH`. If it cannot find a working ffmpeg the render
-> exits with a friendly error explaining what to do.
+> H.265, WebM and lossless MKV need `ffmpeg.exe` (install it from **FFmpeg Setup**). The app looks
+> for it in the install folder, then `Tools\`, then your `PATH`. Without it the prompt offers MP4,
+> animated GIF and PNG sequence only.
 
 > [!NOTE]
 > **Audio in exports (#435).** When Audio settings are **Enabled** with **Source = File**, the
@@ -117,8 +118,8 @@ The file dialog defaults to your Pictures folder; switch to any path before conf
 > palette (median cut) with 1-bit transparency, so smooth fractal gradients will
 > band — PNG stays the better choice for stills. GIF is handy for small,
 > few-colour images and for pasting where only GIF is accepted. This is a single
-> still; for an **animated** GIF see the Video Zoom dialog's *Save animated GIF*
-> option ([§3](#3-video-zoom-single-shot)).
+> still; for an **animated** GIF record with **● Rec** / **F9** and pick *Animated GIF*
+> in the Save Recording prompt ([§3](#3-video-zoom-single-shot)).
 
 ---
 
@@ -223,22 +224,44 @@ target).
 
 ### Recording outputs
 
-The Video Zoom dialog offers three independent recorders — tick any combination:
+All interactive recording goes through one recorder and one **Save Recording**
+prompt (#936):
 
-| Option | Output | Notes |
-|---|---|---|
-| Save video as MP4 | one `.mp4` | Media Foundation H.264; the default quick export |
-| Save lossless (PNG sequence) | a folder of PNGs | optionally re-encoded with ffmpeg (H.264 / FFV1) |
-| **Save animated GIF** | one looping `.gif` | 256-colour per-frame palette; no encoder needed |
+- **Instant record** — press **F9**, click the toolbar **● Rec** button, or pick
+  **Record** from the render-window right-click menu. Everything the render
+  window shows is captured as displayed: themes and theme fades, animations,
+  slideshow legs, lighting / FX, watermark, HUD. Press again to stop.
+- **Record this run** — tick it in the Video Zoom dialog and the zoom (or the
+  video slideshow) is recorded from start to finish; the recording stops by
+  itself when the run ends.
+
+When recording stops, the **Save Recording** prompt offers:
+
+| Choice | Options |
+|---|---|
+| Format | MP4 — H.264 · MP4 — H.265 · WebM — VP9 · MKV — FFV1 (lossless) · Animated GIF · PNG sequence |
+| Quality | Lossless · High · Medium · Low (ignored by MKV / PNG) |
+| Frame rate | 15 – 60 fps (resampled from the capture) |
+| Size | 100 / 75 / 50 / 25 % |
+
+**Discard** asks before throwing a take away, and a failed export re-opens the
+prompt so you can try another format.
+
+### Quick Record settings
+
+**Control Center ▸ Capture ▸ Quick Record** holds the recorder's defaults:
+capture rate, default format / quality / frame rate / size, and **Ask how to
+save when recording stops**. Turn that off to skip the prompt entirely:
+recordings then save straight to the chosen folder (default
+`Videos\FracturingFog`) with the defaults. The prompt remembers your last
+choices here.
 
 > [!NOTE]
-> **Animated GIF** needs no ffmpeg — it is written by the built-in encoder. Each
-> frame is quantized to its own 256-colour palette (median cut) and the per-frame
-> delay follows the real capture cadence; the GIF loops forever. Expect **large
-> files and visible banding** on smooth gradients — GIF is best for short zooms,
-> stickers and chat/embeds where MP4 is not accepted. For quality or length,
-> prefer MP4. Frames are encoded on a background thread, so a long zoom keeps
-> writing after the animation ends; the save prompt appears when it finishes.
+> The recorder samples the window at the capture rate, but only saves a new
+> frame when the picture actually changed — a still view costs almost nothing,
+> and playback follows real time. The low-resolution previews shown *while*
+> dragging are not recorded, only the settled frames. **Animated GIF** and MP4
+> work without ffmpeg (built-in encoders); H.265 / WebM / MKV need it.
 
 ---
 
@@ -287,6 +310,10 @@ The Convert path needs `ffmpeg.exe` — install it via the floating menu's
 
 ## 5. Recording Formats
 
+Interactive recordings pick their format in the Save Recording prompt (§3).
+The table below covers the **batch** (`--batch --mode video`) and image-slideshow
+*Convert* encode presets.
+
 | Format | Container | Encoder | Needs ffmpeg? | Best for |
 |---|---|---|---|---|
 | None | — | — | No | Live playback only |
@@ -295,8 +322,6 @@ The Convert path needs `ffmpeg.exe` — install it via the floating menu's
 | Lossless FFV1 | .mkv | FFV1 v3 in Matroska | Yes | Archival / editing pipeline |
 | H.264 HQ | .mp4 | libx264 -crf 18, yuv420p | Yes | Visually-lossless sharing |
 | PNG sequence | folder | (sidecar) | No | Offline encoder pipelines |
-
-MP4 (built-in) and PNG sequence can record **simultaneously** with any video format — useful for keeping a high-quality intermediate while shipping a small MP4 for preview.
 
 ### File-size order of magnitude
 

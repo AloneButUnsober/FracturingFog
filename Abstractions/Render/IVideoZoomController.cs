@@ -11,28 +11,15 @@
 // the concrete implementation lives in the main project (FractalRenderHost
 // partial) where it can reach the calculator + renderer internals.
 //
-// The save flow (SaveFileDialog for MP4, folder pick + ffmpeg encode for the
-// PNG sequence) is shell-specific, so the engine merely raises
-// RecordingFinished with the temp artefact paths and the chosen encode mode;
-// the shell handles the prompts.
+// Recording (#946) is not part of this contract: when the request's Record
+// flag is set the shell runs the instant-record capture
+// (ILiveRecordingController) alongside the run and stops it on Stopped, so
+// every video mode shares one recorder and one Save Recording prompt.
 
 using System;
 
 namespace FracturingFog.Render
 {
-    /// <summary>Post-capture encode choice for a saved lossless PNG sequence.</summary>
-    public enum VideoLosslessEncode
-    {
-        /// <summary>Keep the PNG sequence only — no video produced.</summary>
-        None,
-        /// <summary>libx264 CRF 0 → .mp4 (mathematically lossless H.264).</summary>
-        LosslessH264Mp4,
-        /// <summary>FFV1 v3 → .mkv (true lossless intermediate).</summary>
-        Ffv1Mkv,
-        /// <summary>libx264 CRF 18 → .mp4 (visually lossless, smaller).</summary>
-        HighQualityH264Mp4,
-    }
-
     /// <summary>
     /// Everything the VideoDialog collects, flattened into a transport POCO.
     /// Target coordinates carry the full quad-precision limb set so deep-zoom
@@ -105,15 +92,14 @@ namespace FracturingFog.Render
         /// engine falls back to the classic view. Null/empty = not used.</summary>
         public string? StartRegionName { get; set; }
 
-        // ── Recording (single-shot only) ──────────────────────────────────
-        public bool IsSaveVideo { get; set; }
-        public bool IsSaveLossless { get; set; }
-        public VideoLosslessEncode LosslessEncode { get; set; } = VideoLosslessEncode.None;
+        // ── Recording ─────────────────────────────────────────────────────
 
-        /// <summary>Record an animated GIF alongside playback (#784, single-shot
-        /// only). Independent of the MP4 / PNG recorders — any combination can
-        /// run in one zoom.</summary>
-        public bool IsSaveGif { get; set; }
+        /// <summary>Record this run (#946). Shell-side only: the shell starts the
+        /// instant-record capture before launching the run and stops it when
+        /// the controller raises <see cref="IVideoZoomController.Stopped"/>,
+        /// then shows the Save Recording prompt. Applies to single-shot zooms,
+        /// the video slideshow and travel alike.</summary>
+        public bool Record { get; set; }
 
         // ── Smoothing ─────────────────────────────────────────────────────
 
@@ -229,29 +215,6 @@ namespace FracturingFog.Render
         public System.Collections.Generic.IReadOnlyList<string>? FilterQualityPresets { get; set; }
     }
 
-    /// <summary>Outcome of a single-shot recording, raised once the zoom ends
-    /// so the shell can prompt for a destination. Either artefact path is null
-    /// when that recorder was not active (or the run was cancelled).</summary>
-    public sealed class VideoRecordingResult
-    {
-        /// <summary>Temp .mp4 path to move into place, or null.</summary>
-        public string? Mp4TempPath { get; init; }
-
-        /// <summary>Temp folder of the PNG sequence to keep/encode, or null.</summary>
-        public string? PngFolder { get; init; }
-
-        /// <summary>Temp .gif path (animated) to move into place, or null.</summary>
-        public string? GifTempPath { get; init; }
-
-        /// <summary>Encode to apply to the PNG sequence after the user picks a
-        /// destination folder.</summary>
-        public VideoLosslessEncode Encode { get; init; } = VideoLosslessEncode.None;
-
-        /// <summary>True when the zoom was cancelled/faulted — the shell should
-        /// discard temp artefacts instead of prompting to save.</summary>
-        public bool Cancelled { get; init; }
-    }
-
     /// <summary>
     /// Drives the Video Zoom animation + auto slideshow. Implemented in the
     /// main project so it can touch the calculator's recolor / histogram /
@@ -290,11 +253,6 @@ namespace FracturingFog.Render
 
         /// <summary>Status-bar updates ("Video zoom → …", per-leg labels, etc.).</summary>
         event EventHandler<string>? StatusChanged;
-
-        /// <summary>Raised once a single-shot zoom finishes (or is cancelled)
-        /// with recording active. Carries the temp artefact paths for the
-        /// shell's save prompt.</summary>
-        event EventHandler<VideoRecordingResult>? RecordingFinished;
 
         /// <summary>Raised on the UI thread when the run (single-shot or
         /// slideshow) has fully stopped, so the shell can reset button text

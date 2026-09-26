@@ -528,6 +528,12 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
                 {
                     FloatingMenu.VideoButtonText = "Video";
                     IsSlideshowVcrVisible = false;
+                    // #946 — a run started with Record stops its capture too.
+                    if (_liveRecOwnedByRun)
+                    {
+                        _liveRecOwnedByRun = false;
+                        if (IsLiveRecording) ToggleLiveRecording();
+                    }
                 });
         }
 
@@ -1833,8 +1839,13 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
     /// captured. The handler owns (and must delete) <c>result.Folder</c>.</summary>
     public event EventHandler<LiveRecordingResult>? LiveRecordingReady;
 
-    /// <summary>Display sampling rate while recording (1..60).</summary>
-    public int LiveRecordingCaptureFps { get; set; } = 30;
+    /// <summary>Display sampling rate while recording (1..60), persisted in
+    /// the Quick Record prefs (#946).</summary>
+    public int LiveRecordingCaptureFps => LiveRecordingPrefsStore.Current.CaptureFps;
+
+    // True while the current recording was started by a Video run's Record
+    // flag (so the run's Stopped ends it).
+    private bool _liveRecOwnedByRun;
 
     public bool IsLiveRecordingAvailable => _liveRec != null;
 
@@ -1885,6 +1896,7 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
         {
             _liveRecTimer?.Stop();
             _isLiveRecording = false;
+            _liveRecOwnedByRun = false;
             var result = _liveRec.StopLiveRecording();
             if (result != null) LiveRecordingReady?.Invoke(this, result);
         }
@@ -3595,6 +3607,15 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
         if (_video.IsRunning) return;
 
         FloatingMenu.VideoButtonText = "Stop";
+        // #946 — "Record" in the Video dialog: capture this run with the
+        // instant recorder; the Stopped handler ends it and the host shows the
+        // Save Recording prompt. An already-running manual recording just
+        // keeps going (the user owns its stop).
+        if (request.Record && !IsLiveRecording)
+        {
+            ToggleLiveRecording();
+            _liveRecOwnedByRun = IsLiveRecording;
+        }
         if (request.IsSlideshow)
         {
             SlideshowVcr.SetPaused(false);

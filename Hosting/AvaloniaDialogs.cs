@@ -1190,12 +1190,6 @@ namespace FracturingFog.Hosting
                 const double CustomSecsMax = 300.0;
                 var ic = System.Globalization.CultureInfo.InvariantCulture;
                 double ultraCap = global::FracturingFog.Models.QualityPreset.Ultra.ZoomMax;
-                // IsEnabledForUser collapses "binary on disk" + "user has not
-                // chosen Continue Without Video" — Skip election keeps the
-                // Lossless UI greyed even when ffmpeg.exe is present, matching
-                // the spec that the user's opt-out persists until they reverse
-                // it from the FloatingMenu FFmpeg setup dialog.
-                bool ffmpegHere = global::FracturingFog.FfmpegEncoder.IsEnabledForUser();
 
                 // Cached QD low limbs for the target center (folded into the
                 // parsed textbox value when the textbox carries only the Hi
@@ -1273,37 +1267,20 @@ namespace FracturingFog.Hosting
                     Content = "Constant Rate (slideshow): scale duration by depth",
                     Foreground = Brushes.LightGray,
                 };
-                var chkSaveVideo = new CheckBox
+                // #946 — one Record switch replaces the old per-run MP4 / PNG /
+                // GIF recorders: the shell runs the instant recorder for the
+                // whole run (zoom, slideshow or travel) and the format / quality
+                // is picked afterwards in the shared Save Recording prompt.
+                var chkRecord = new CheckBox
                 {
-                    Content = "Save video as MP4 (single-shot only — ignored for slideshow)",
+                    Content = "● Record this run (choose format / quality when it ends)",
                     Foreground = Brushes.LightGray,
+                    IsChecked = s_videoDialogRecord,
                 };
-                var chkSaveLossless = new CheckBox
-                {
-                    Content = "Save lossless (PNG sequence — single-shot only)",
-                    Foreground = Brushes.LightGray,
-                };
-                var chkSaveGif = new CheckBox
-                {
-                    Content = "Save animated GIF (single-shot only — 256 colours, large files)",
-                    Foreground = Brushes.LightGray,
-                };
-
-                var encodeCombo = new ComboBox { MinWidth = 280, HorizontalAlignment = HorizontalAlignment.Stretch, IsEnabled = false };
-                encodeCombo.Items.Add("Keep PNG sequence only");
-                if (ffmpegHere)
-                {
-                    encodeCombo.Items.Add("Lossless H.264 (CRF 0) → .mp4");
-                    encodeCombo.Items.Add("FFV1 → .mkv");
-                    encodeCombo.Items.Add("Visually-lossless H.264 (CRF 18) → .mp4");
-                }
-                else
-                {
-                    encodeCombo.Items.Add("(ffmpeg.exe not found — only PNG output available)");
-                }
-                encodeCombo.SelectedIndex = 0;
-                chkSaveLossless.IsCheckedChanged += (_, _) =>
-                    encodeCombo.IsEnabled = chkSaveLossless.IsChecked == true && ffmpegHere;
+                ToolTip.SetTip(chkRecord,
+                    "Captures exactly what the render window shows for the whole zoom or video slideshow. " +
+                    "When it stops, the Save Recording prompt offers MP4 / H.265 / WebM / lossless MKV / GIF / PNG sequence. " +
+                    "F9 or the toolbar ● Rec button also record at any time.");
 
                 var chkReverse = new CheckBox
                 {
@@ -1552,19 +1529,6 @@ namespace FracturingFog.Hosting
                 global::FracturingFog.Render.VideoZoomRequest? pending = null;
                 void Close(global::FracturingFog.Render.VideoZoomRequest? r) { pending = r; win.Close(); }
 
-                global::FracturingFog.Render.VideoLosslessEncode MapEncode()
-                {
-                    if (chkSaveLossless.IsChecked != true || !encodeCombo.IsEnabled)
-                        return global::FracturingFog.Render.VideoLosslessEncode.None;
-                    return encodeCombo.SelectedIndex switch
-                    {
-                        1 => global::FracturingFog.Render.VideoLosslessEncode.LosslessH264Mp4,
-                        2 => global::FracturingFog.Render.VideoLosslessEncode.Ffv1Mkv,
-                        3 => global::FracturingFog.Render.VideoLosslessEncode.HighQualityH264Mp4,
-                        _ => global::FracturingFog.Render.VideoLosslessEncode.None,
-                    };
-                }
-
                 startBtn.Click += (_, _) =>
                 {
                     if (!TryGetTargetQD(out double cxHi, out double cxLo, out double cx2, out double cx3,
@@ -1593,10 +1557,7 @@ namespace FracturingFog.Hosting
                         StartRegionName = chkReverse.IsChecked != true && startCombo.SelectedIndex >= 2
                             ? startCombo.SelectedItem as string
                             : null,
-                        IsSaveVideo = chkSaveVideo.IsChecked == true,
-                        IsSaveLossless = chkSaveLossless.IsChecked == true,
-                        IsSaveGif = chkSaveGif.IsChecked == true,
-                        LosslessEncode = MapEncode(),
+                        Record = chkRecord.IsChecked == true,
                         TaaSmoothing = (int)Math.Round(taaSlider.Value),
                         BandDither = chkBandDither.IsChecked == true,
                         BandDitherStrength = (int)Math.Round(ditherSlider.Value),
@@ -1623,6 +1584,7 @@ namespace FracturingFog.Hosting
                     Close(new global::FracturingFog.Render.VideoZoomRequest
                     {
                         IsSlideshow = true,
+                        Record = chkRecord.IsChecked == true,
                         SlideshowSecondsOverride = secsOverride,
                         IsConstantRate = chkConstantRate.IsChecked == true,
                         IsReverse = chkReverse.IsChecked == true,
@@ -1656,10 +1618,7 @@ namespace FracturingFog.Hosting
                 root.Children.Add(capWarn);
                 root.Children.Add(speedBox);
                 root.Children.Add(chkConstantRate);
-                root.Children.Add(chkSaveVideo);
-                root.Children.Add(chkSaveLossless);
-                root.Children.Add(LabeledRow("Post-encode:", encodeCombo));
-                root.Children.Add(chkSaveGif);
+                root.Children.Add(chkRecord);
                 root.Children.Add(chkReverse);
                 root.Children.Add(LabeledRow("Start from:", startCombo));
                 root.Children.Add(LabeledRow("Adaptive iter cap:", iterCapCombo));
@@ -1671,7 +1630,11 @@ namespace FracturingFog.Hosting
                 root.Children.Add(buttonRow);
 
                 win.Content = root;
-                win.Closed += (_, _) => { if (!tcs.Task.IsCompleted) tcs.TrySetResult(pending); };
+                win.Closed += (_, _) =>
+                {
+                    s_videoDialogRecord = chkRecord.IsChecked == true;
+                    if (!tcs.Task.IsCompleted) tcs.TrySetResult(pending);
+                };
 
                 _ = WindowService.ShowDialogAsync(win, owner);
             }
@@ -1681,6 +1644,9 @@ namespace FracturingFog.Hosting
 
             return tcs.Task;
         }
+
+        // Video dialog "Record this run" — sticky for the session.
+        private static bool s_videoDialogRecord;
 
         // ── Travel to location (#789 slice B) ─────────────────────────────────
 

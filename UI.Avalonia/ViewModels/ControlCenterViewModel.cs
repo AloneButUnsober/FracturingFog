@@ -42,7 +42,7 @@ public sealed record ControlCenterNavItem(
 /// sectioned content. Owns only the navigation + beginner/power state; every
 /// actual control binds through <see cref="Menu"/>.
 /// </summary>
-public sealed class ControlCenterViewModel : ViewModelBase
+public sealed partial class ControlCenterViewModel : ViewModelBase
 {
     private static readonly ControlCenterNavItem[] AllNav =
     {
@@ -84,6 +84,8 @@ public sealed class ControlCenterViewModel : ViewModelBase
         ImportWorkspaceCommand = ReactiveCommand.CreateFromTask(ImportWorkspaceAsync);
         ExportWorkspaceCommand = ReactiveCommand.CreateFromTask(ExportWorkspaceAsync);
         RefreshWorkspaces();
+
+        InitQuickRecord();
 
         RebuildNav();
     }
