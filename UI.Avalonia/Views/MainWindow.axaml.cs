@@ -329,6 +329,11 @@ public sealed partial class MainWindow : Window
         focusItem.Click += (_, _) => shell.ToggleSlideshowFocusCommand.Execute().Subscribe();
         menu.Items.Add(focusItem);
         AddItem(menu, "Video",              () => shell.ToggleVideoCommand.Execute().Subscribe());
+        // #945 instant record — header flips to "Stop Recording" while live.
+        var liveRecItem = new MenuItem { Header = "Record", InputGesture = new KeyGesture(Key.F9) };
+        liveRecItem.Click += (_, _) => shell.ToggleLiveRecordingCommand.Execute().Subscribe();
+        liveRecItem.IsVisible = shell.IsLiveRecordingAvailable;
+        menu.Items.Add(liveRecItem);
         menu.Items.Add(new Separator());
 
         AddItem(menu, "Help…",              () => shell.ShowHelpCommand.Execute().Subscribe());
@@ -356,6 +361,7 @@ public sealed partial class MainWindow : Window
                 ? "Slideshow: More Colors"
                 : "Slideshow: More Regions";
             onTopItem.Header = (Topmost ? "✓ " : "") + "On Top";
+            liveRecItem.Header = shell.IsLiveRecording ? $"Stop Recording ({shell.LiveRecordingLabel})" : "Record";
 
             // Toy Mode hides toolbar + status entirely — toggling them from
             // the menu would be a no-op (or worse, a confusing surprise on
@@ -606,6 +612,12 @@ public sealed partial class MainWindow : Window
                     return;
                 case Key.F1:
                     _shell.ShowHelpCommand.Execute().Subscribe();
+                    e.Handled = true;
+                    return;
+                // F9 = instant record start / stop (#945) — the conventional
+                // capture key; records the render window exactly as shown.
+                case Key.F9:
+                    _shell.ToggleLiveRecordingCommand.Execute().Subscribe();
                     e.Handled = true;
                     return;
             }
