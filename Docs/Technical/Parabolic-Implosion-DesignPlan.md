@@ -151,6 +151,9 @@ byproduct (same core, static output). **Numeric constraints (validated in S2/S3,
 3. **Backward map rationalised** `f⁻¹(w) = 2w/(1+√(1+4w))` (avoids the cancellation that
    otherwise caps repelling accuracy at ~1e-7); **per-petal log branch** (principal for
    the attracting petal `Re Z>0`, a `[0,2π)` branch for the repelling petal `Re Z<0`).
+   **Superseded (#934):** the repelling petal must use principal `log(−Z)` — the `[0,2π)`
+   branch equals `log(−Z)+iπ`, a constant `−iπ` in `Φ_rep` that evaluates `g_{α−iπ}` (not
+   real-symmetric; off-axis points land on the wrong sheet). See §10, 2026-09-26.
 4. **Horn map = analytic continuation, not a common domain:** the single-parabolic
    petals do not overlap as sets (tangent disks meeting only at 0). Assemble
    `h = Φ_att ∘ Φ_rep⁻¹` by iterating a gap seed forward into the attracting petal
@@ -382,7 +385,8 @@ and `Φ_rep` (backward orbit) each satisfy the Abel/conjugacy equation
 non-obvious numerical constraints were required (now recorded in §4): the backward
 map must be **rationalised** `f⁻¹(w) = 2w/(1+√(1+4w))` (the naïve form cancels and caps
 repelling accuracy at ~1e-7); a **per-petal log branch** (principal for `Re Z>0`, a
-`[0,2π)` branch for the repelling petal's `Re Z<0`, which otherwise sits on the cut);
+`[0,2π)` branch for the repelling petal's `Re Z<0`, which otherwise sits on the cut —
+**superseded by principal `log(−Z)`, #934**);
 and convergence judged by **Richardson-extrapolation stability**, not the raw tail gap
 (which over-reports the error ~10³× and rejects good points).
 
@@ -626,6 +630,20 @@ remaining work is the SG1→SG4 engineering build.
 
 ## 10. Change log
 
+- **2026-09-26** — **#934 — `g_α` normalisation fix (the SG1 blocker).** Root cause: the
+  repelling Fatou coordinate used a `[0,2π)` branch of `log Z`, which equals principal
+  `log(−Z) + iπ` — a constant `−iπ` offset in `Φ_rep`, so every call evaluated `g_{α−iπ}`: a
+  complex phase, not real-symmetric, wrong sheet off the real axis. Fix: principal `log(−Z)`
+  (in `Ψ` and the deep-seed fixed point), which commutes with conjugation. **Validated
+  independently** by Lavaurs' theorem itself: for `c=1/4+ε²` iterate `f_c^k` directly and
+  compare with `g_α` at `α = k − π/ε − 1` (the `−1` is the engine's `g_α = f∘Φ_rep⁻¹∘…`
+  convention) — fixed engine matches **136/136, 100/100, 88/88** comparable basin points at
+  `ε = 0.004 / 0.002 / 0.001` with relative error `2.8e-3 → 1.7e-3 → 7.5e-4` (`O(ε)`); the old
+  engine matched 3–5%. Real symmetry now holds on every defined pair (was 0/654). Consequence
+  for the render: real `α` sends the **real basin through the gap to escape** (as `c` just
+  above `1/4` does) — the near-real "cauliflower-like" `g_α` values of the old engine were the
+  wrong sheet. Tests (`LavaursEngineTests`) now lead with the brute-force limit + symmetry
+  checks, and both fail on the old engine (mutation-checked). Unblocks SG3 #930.
 - **2026-09-20** — **#918 SG1 — Lavaurs `g_α` engine (production port of the S3/S4/S6 Fatou
   numerics).** Ported the validated math into `Abstractions/Animation/LavaursEngine.cs`
   (direct evaluator) + `LavaursCoordinateTable.cs` (the S6 precompute engine). Germ

@@ -14,8 +14,21 @@ namespace FracturingFog.Abstractions.Animation;
 /// <para><b>Method.</b> Both Fatou coordinates use the closed asymptotic
 /// <c>ψ(w) = Z − log Z + 1/(2Z)</c>, <c>Z = −1/w</c> (the <c>Z = −1/w</c> normal form
 /// <c>Z ↦ Z²/(Z−1)</c> gives a pure-power tail). <c>Φ_att</c> is a forward-orbit limit
-/// <c>ψ(fⁿw) − n</c> (principal log); <c>Φ_rep</c> a backward-orbit limit <c>ψ(f⁻ⁿw) + n</c> with a
-/// <c>[0,2π)</c> log branch and the rationalised inverse <c>f⁻¹(w) = 2w/(1+√(1+4w))</c>.</para>
+/// <c>ψ(fⁿw) − n</c> with <c>log Z</c> (the attracting petal is <c>Z → +∞</c>); <c>Φ_rep</c> a
+/// backward-orbit limit <c>ψ(f⁻ⁿw) + n</c> with <c>log(−Z)</c> (the repelling petal is
+/// <c>Z → −∞</c>), both <b>principal</b>, and the rationalised inverse
+/// <c>f⁻¹(w) = 2w/(1+√(1+4w))</c>.</para>
+/// <para><b>Normalisation (#934).</b> Both coordinates must commute with complex conjugation —
+/// <c>f</c> has real coefficients, so <c>G_α(z̄) = conj G_α(z)</c> for real <c>α</c>. Principal
+/// <c>log(−Z)</c> on the repelling petal does; the earlier <c>[0,2π)</c> branch of <c>log Z</c>
+/// equals <c>log(−Z) + iπ</c>, which put a constant <c>−iπ</c> into <c>Φ_rep</c> — silently
+/// evaluating <c>g_{α−iπ}</c>, a complex phase that is not real-symmetric and lands off-axis
+/// points on the wrong sheet.</para>
+/// <para><b>Phase convention.</b> With <c>g_α = f ∘ Φ_rep⁻¹ ∘ T_α ∘ Φ_att</c>, Lavaurs' theorem
+/// reads <c>f_c^k → g_α</c> on the basin for <c>c = 1/4 + ε²</c>, <c>ε → 0</c>, with
+/// <c>α = k − π/ε − 1</c> (validated against brute-force iteration: relative error <c>O(ε)</c> on
+/// every basin point with a moderate limit). Real <c>α</c> sends the real basin through the
+/// gap — real points escape, as they do for <c>c</c> just above <c>1/4</c>.</para>
 /// <para><b>The inverse (the S6 subtlety).</b> The Lavaurs target <c>σ = Φ_att(w) + α</c> has large
 /// positive real part, so <c>Φ_rep⁻¹(σ)</c> lands not on the repelling petal but on its
 /// analytic continuation over the <b>attracting-side</b> range. Rather than track the log branch
@@ -29,9 +42,10 @@ namespace FracturingFog.Abstractions.Animation;
 /// point returns a validity flag, so a caller (the word-tree calculator, #930) treats an invalid
 /// result as "<c>g_α</c> undefined here → only <c>f</c> applies" (its domain-restricted
 /// generator).</para>
-/// <para><b>Validation</b> (SG1 spike, deleted): Abel equation ~1e-10; two independent inverse
-/// algorithms agree to ~1e-7; Lavaurs periodicity <c>g_{α+1} = f ∘ g_α</c> holds by construction;
-/// Douady re-injection reproduced (<c>f</c> alone → <c>z*</c>, <c>g_α</c> re-injects). Per-call
+/// <para><b>Validation.</b> The independent checks (LavaursEngineTests): the brute-force
+/// Lavaurs limit above and real symmetry. Abel, the inverse round-trip and
+/// <c>g_{α+1} = f ∘ g_α</c> are self-consistency checks only — they passed on the wrong sheet
+/// too. Per-call
 /// cost is milliseconds; the render path uses <see cref="LavaursCoordinateTable"/> (α-independent
 /// grids + bilinear interpolation) for the S6 ~µs fast path.</para></summary>
 public sealed class LavaursEngine
@@ -60,20 +74,13 @@ public sealed class LavaursEngine
     static Complex F(Complex w) => w + w * w;
     static Complex Finv(Complex w) => 2.0 * w / (1.0 + Complex.Sqrt(1.0 + 4.0 * w));
 
-    // asymptotic Fatou coordinate ψ(w) = Z − log Z + 1/(2Z), Z = −1/w, with a per-petal log branch.
+    // asymptotic Fatou coordinate ψ(w) = Z − log(±Z) + 1/(2Z), Z = −1/w: principal log Z on the
+    // attracting petal (Z → +∞), principal log(−Z) on the repelling petal (Z → −∞). Both commute
+    // with conjugation, so G_α is real-symmetric (#934 — a [0,2π) branch here offset Φ_rep by −iπ).
     static Complex Psi(Complex w, bool repelling)
     {
-        Complex z = -1.0 / w, lg;
-        if (repelling)
-        {
-            double im = global::System.Math.Atan2(z.Imaginary, z.Real);
-            if (im < 0) im += 2.0 * global::System.Math.PI;                 // [0,2π) branch for the repelling petal
-            lg = new Complex(global::System.Math.Log(z.Magnitude), im);
-        }
-        else
-        {
-            lg = Complex.Log(z);                             // principal branch (attracting petal)
-        }
+        Complex z = -1.0 / w;
+        Complex lg = repelling ? Complex.Log(-z) : Complex.Log(z);
         return z - lg + 1.0 / (2.0 * z);
     }
 
@@ -98,14 +105,9 @@ public sealed class LavaursEngine
     // invert Φ_rep DEEP in the repelling petal (Re σ ≪ 0) by Newton — the robust regime.
     Complex RepInvDeep(Complex s, out double residual)
     {
-        // seed: σ ≈ Z − log Z (repelling branch) ⇒ Z ≈ σ + log Z; w = −1/Z.
+        // seed: σ ≈ Z − log(−Z) (repelling normalisation) ⇒ Z ≈ σ + log(−Z); w = −1/Z.
         Complex zc = s;
-        for (int i = 0; i < 120; i++)
-        {
-            double im = global::System.Math.Atan2(zc.Imaginary, zc.Real);
-            if (im < 0) im += 2.0 * global::System.Math.PI;
-            zc = s + new Complex(global::System.Math.Log(zc.Magnitude), im);
-        }
+        for (int i = 0; i < 120; i++) zc = s + Complex.Log(-zc);
         Complex w = -1.0 / zc;
         residual = double.PositiveInfinity;
         for (int i = 0; i < 120; i++)
