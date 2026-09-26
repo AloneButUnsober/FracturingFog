@@ -594,6 +594,10 @@ namespace FracturingFog.Models
         [JsonIgnore(Condition = OmitNull)] public int? DualOrbitSliceAxes { get; set; }
         [JsonIgnore(Condition = OmitNull)] public double? DualOrbitSX { get; set; }
         [JsonIgnore(Condition = OmitNull)] public double? DualOrbitSY { get; set; }
+        // #972 — dual-orbit volume (camera + s.y ride the Cam3D block; s.y as the slice).
+        [JsonIgnore(Condition = OmitNull)] public double? DualOrbitVolumeSXCenter { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public double? DualOrbitVolumeHalfHeight { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public int? DualOrbitVolumeColor { get; set; }
         // #909 — quaternion Mandelbrot dual-orbit surface colouring.
         [JsonIgnore(Condition = OmitNull)] public bool? QMandelDualOrbitColor { get; set; }
         [JsonIgnore(Condition = OmitNull)] public double? QMandelDualSeedX { get; set; }
@@ -875,6 +879,19 @@ namespace FracturingFog.Models
                     Cam3DTheta = p.CoquaternionCameraTheta,
                     Cam3DPhi = p.CoquaternionCameraPhi,
                     Cam3DSliceW = p.CoquaternionSliceW,
+                },
+                // #972 — dual-orbit volume: camera + s.y (the slice of the 4D (z0, s)
+                // space) in the Cam3D block; sweep window + colour source omitted at default.
+                FractalType.DualOrbitVolume => new RegionFractalParams
+                {
+                    Cam3DFamily = (int)type,
+                    Cam3DDistance = p.DualOrbitVolumeCameraDistance,
+                    Cam3DTheta = p.DualOrbitVolumeCameraTheta,
+                    Cam3DPhi = p.DualOrbitVolumeCameraPhi,
+                    Cam3DSliceW = p.DualOrbitVolumeSY,
+                    DualOrbitVolumeSXCenter = p.DualOrbitVolumeSXCenter != -0.75 ? p.DualOrbitVolumeSXCenter : (double?)null,
+                    DualOrbitVolumeHalfHeight = p.DualOrbitVolumeHalfHeight != 1.4 ? p.DualOrbitVolumeHalfHeight : (double?)null,
+                    DualOrbitVolumeColor = p.DualOrbitVolumeColor != FracturingFog.DualOrbitVolumeColor.ExternalAngle ? (int)p.DualOrbitVolumeColor : (int?)null,
                 },
                 // #94 (P4) — non-spatial families. Static-hold legs reproduce the
                 // authored generated image from its seed / preset / roughness.
@@ -1260,6 +1277,10 @@ namespace FracturingFog.Models
                         p.CoquaternionCameraDistance = d; p.CoquaternionCameraTheta = th; p.CoquaternionCameraPhi = ph;
                         if (Cam3DSliceW.HasValue) p.CoquaternionSliceW = Cam3DSliceW.Value;
                         break;
+                    case FractalType.DualOrbitVolume:
+                        p.DualOrbitVolumeCameraDistance = d; p.DualOrbitVolumeCameraTheta = th; p.DualOrbitVolumeCameraPhi = ph;
+                        if (Cam3DSliceW.HasValue) p.DualOrbitVolumeSY = Cam3DSliceW.Value;
+                        break;
                 }
             }
 
@@ -1296,6 +1317,10 @@ namespace FracturingFog.Models
             if (this.DualOrbitSliceAxes.HasValue) p.DualOrbitSliceAxes = (FracturingFog.DualOrbitSliceAxes)this.DualOrbitSliceAxes.Value;
             if (DualOrbitSX.HasValue) p.DualOrbitSX = DualOrbitSX.Value;
             if (DualOrbitSY.HasValue) p.DualOrbitSY = DualOrbitSY.Value;
+            // #972 — dual-orbit volume.
+            if (DualOrbitVolumeSXCenter.HasValue) p.DualOrbitVolumeSXCenter = DualOrbitVolumeSXCenter.Value;
+            if (DualOrbitVolumeHalfHeight.HasValue) p.DualOrbitVolumeHalfHeight = DualOrbitVolumeHalfHeight.Value;
+            if (this.DualOrbitVolumeColor.HasValue) p.DualOrbitVolumeColor = (FracturingFog.DualOrbitVolumeColor)this.DualOrbitVolumeColor.Value;
             // #893 — Indra's Pearls 2D group.
             if (IndrasFamily.HasValue) p.IndrasFamily = (IndrasGroupFamily)IndrasFamily.Value;
             if (IndrasMaskitMuRe.HasValue) p.IndrasMaskitMuRe = IndrasMaskitMuRe.Value;

@@ -134,6 +134,9 @@ public static class FractalAnimatableParamsMap
         FractalType.Coquaternion
             => _coquaternionList,
 
+        FractalType.DualOrbitVolume
+            => _dualOrbitVolumeList,
+
         // ── User-defined 2D ───────────────────────────────────────────────
         FractalType.UserEquation
             => _userEquationList,
@@ -511,6 +514,18 @@ public static class FractalAnimatableParamsMap
         new("CoquaternionSliceW", AnimatableParamKind.ScalarDouble, Min: -1.0, Max: 1.0,
             Cost: AnimatableParamCost.Moderate,
             Notes: "Slices through the 4D coquaternion (split-quaternion) set."),
+    };
+
+    // Dual-orbit volume (#972): s.y is the fourth coordinate of the (z0, s) space
+    // the volume slices — sweeping it twists / re-forms every Julia layer.
+    private static readonly AnimatableParamDescriptor[] _dualOrbitVolumeList =
+    {
+        new("DualOrbitVolumeSY", AnimatableParamKind.ScalarDouble, Min: -0.8, Max: 0.8,
+            Cost: AnimatableParamCost.Expensive,
+            Notes: "Im s of every layer — slices the 4D (z0, s) space; 0 = mirror-symmetric real stack."),
+        new("DualOrbitVolumeSXCenter", AnimatableParamKind.ScalarDouble, Min: -2.0, Max: 0.5,
+            Cost: AnimatableParamCost.Expensive,
+            Notes: "Slides the s.x sweep window vertically through the stack."),
     };
 
     private static readonly AnimatableParamDescriptor[] _userEquationList =

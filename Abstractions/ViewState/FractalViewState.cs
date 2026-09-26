@@ -291,6 +291,7 @@ namespace FracturingFog.ViewState
                 FractalType.Kleinian              => ( 0.0,  0.0, 1.0),
                 FractalType.BicomplexMandelbrot   => ( 0.0,  0.0, 1.0),
                 FractalType.Coquaternion          => ( 0.0,  0.0, 1.0),
+                FractalType.DualOrbitVolume       => ( 0.0,  0.0, 1.0),
                 FractalType.Dla                   => ( 0.0,  0.0, 1.0),
                 // Indra's Pearls (#892) — Maskit μ = 2i limit set above the real
                 // axis; centre (0, 1), wide zoom (matches MiniMapDefaults).
@@ -335,6 +336,7 @@ namespace FracturingFog.ViewState
             || t == FractalType.Kleinian
             || t == FractalType.BicomplexMandelbrot
             || t == FractalType.Coquaternion
+            || t == FractalType.DualOrbitVolume
             || t == FractalType.UserBulb;
     }
 }

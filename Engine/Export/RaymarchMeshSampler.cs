@@ -42,7 +42,8 @@ public static class RaymarchMeshSampler
             or FractalType.QuaternionJulia
             or FractalType.QuaternionMandelbrot
             or FractalType.Kleinian
-            or FractalType.BicomplexMandelbrot => true,
+            or FractalType.BicomplexMandelbrot
+            or FractalType.DualOrbitVolume => true,
         _ => false,
     };
 
@@ -112,6 +113,15 @@ public static class RaymarchMeshSampler
                     KifsCalculator.ProbeDE(fold, x, y, z, scale, ox, oy, oz, iter));
             }
 
+            case FractalType.DualOrbitVolume:
+            {
+                // #972 — same DE as the render (slab-clipped), so print = picture.
+                double bail = Math.Max(4.0, p.DualOrbitVolumeBailout);
+                return new DualOrbitVolumeCalculator.De(
+                    p.DualOrbitVolumeSXCenter, p.DualOrbitVolumeSY, bail * bail,
+                    Math.Max(4, p.DualOrbitVolumeIterations), Math.Max(0.05, p.DualOrbitVolumeHalfHeight));
+            }
+
             default:
                 return null;
         }
@@ -127,6 +137,8 @@ public static class RaymarchMeshSampler
         FractalType.Mandelbox => 2.0 * Math.Abs(p.MandelboxScale) + 2.0,
         FractalType.Kleinian  => Math.Max(0.25, p.KleinianSphereScale)
                                  * (Math.Sqrt(3.0) + Math.Sqrt(2.0)),
+        // #972 — c-plane layers fit |c| <= 2; the slab spans +/- half-height in Y.
+        FractalType.DualOrbitVolume => Math.Max(2.2, p.DualOrbitVolumeHalfHeight + 0.1),
         _ => 2.0,
     };
 }

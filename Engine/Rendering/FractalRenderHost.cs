@@ -92,6 +92,7 @@ namespace FracturingFog.Rendering
         private KleinianCalculator _kleinianCalculator;
         private BicomplexMandelbrotCalculator _bicomplexCalculator;
         private CoquaternionMandelbrotCalculator _coquaternionCalculator;
+        private DualOrbitVolumeCalculator _dualOrbitVolumeCalculator;
         private DlaCalculator _dlaCalculator;
         private RandomTileCalculator _randomTileCalculator;
         private ChaoticBilliardCalculator _billiardCalculator;
@@ -465,6 +466,7 @@ namespace FracturingFog.Rendering
             _kleinianCalculator = new KleinianCalculator(w, h);
             _bicomplexCalculator = new BicomplexMandelbrotCalculator(w, h);
             _coquaternionCalculator = new CoquaternionMandelbrotCalculator(w, h);
+            _dualOrbitVolumeCalculator = new DualOrbitVolumeCalculator(w, h);
             _dlaCalculator = new DlaCalculator(w, h);
             _randomTileCalculator = new RandomTileCalculator(w, h);
             _billiardCalculator = new ChaoticBilliardCalculator(w, h);
@@ -511,6 +513,7 @@ namespace FracturingFog.Rendering
                 _kleinianCalculator.ColorMap = initialColorMap;
                 _bicomplexCalculator.ColorMap = initialColorMap;
                 _coquaternionCalculator.ColorMap = initialColorMap;
+                _dualOrbitVolumeCalculator.ColorMap = initialColorMap;
                 _dlaCalculator.ColorMap = initialColorMap;
                 _randomTileCalculator.ColorMap = initialColorMap;
                 _billiardCalculator.ColorMap = initialColorMap;
@@ -994,6 +997,7 @@ namespace FracturingFog.Rendering
                 _kleinianCalculator.ColorMap = value;
                 _bicomplexCalculator.ColorMap = value;
                 _coquaternionCalculator.ColorMap = value;
+                _dualOrbitVolumeCalculator.ColorMap = value;
                 _dlaCalculator.ColorMap = value;
                 _randomTileCalculator.ColorMap = value;
                 _billiardCalculator.ColorMap = value;
@@ -2904,6 +2908,7 @@ namespace FracturingFog.Rendering
             _kleinianCalculator.Resize(w, h);
             _bicomplexCalculator.Resize(w, h);
             _coquaternionCalculator.Resize(w, h);
+            _dualOrbitVolumeCalculator.Resize(w, h);
             _dlaCalculator.Resize(w, h);
             _randomTileCalculator.Resize(w, h);
             _billiardCalculator.Resize(w, h);
@@ -3555,6 +3560,7 @@ namespace FracturingFog.Rendering
                 case KleinianCalculator kl: kl.FractalParameters = ViewState.FractalParameters; break;
                 case BicomplexMandelbrotCalculator bc: bc.FractalParameters = ViewState.FractalParameters; break;
                 case CoquaternionMandelbrotCalculator cq: cq.FractalParameters = ViewState.FractalParameters; break;
+                case DualOrbitVolumeCalculator dv: dv.FractalParameters = ViewState.FractalParameters; break;
                 case DlaCalculator dl: dl.FractalParameters = ViewState.FractalParameters; break;
                 case RandomTileCalculator rt: rt.FractalParameters = ViewState.FractalParameters; break;
                 case ChaoticBilliardCalculator cb: cb.FractalParameters = ViewState.FractalParameters; break;
@@ -3741,6 +3747,7 @@ namespace FracturingFog.Rendering
             FractalType.Kleinian => _kleinianCalculator,
             FractalType.BicomplexMandelbrot => _bicomplexCalculator,
             FractalType.Coquaternion => _coquaternionCalculator,
+            FractalType.DualOrbitVolume => _dualOrbitVolumeCalculator,
             FractalType.Dla => _dlaCalculator,
             FractalType.RandomTile => _randomTileCalculator,
             FractalType.ChaoticBilliard => _billiardCalculator,
