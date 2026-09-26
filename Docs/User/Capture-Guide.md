@@ -486,7 +486,7 @@ FracturingFog.exe --batch --slideshow ""Default"" ^
 Notes:
 - `--slideshow NAME` names a saved preset in `%APPDATA%\FracturingFog\slideshow-configs.json`. Omit to use the active preset.
 - `--encode` accepts `h264hq` (default), `h264` (lossless), or `ffv1`.
-- v1 headless slideshow renders Mandelbrot regions only; non-Mandelbrot regions in the preset's filter set are skipped with a warning.
+- Every fractal type is eligible (#948), narrowed by the preset's included regions / fractal-type / quality filters (a filter that matches nothing stops the render instead of falling back). Video presets move each leg the way its family moves — see *Any fractal type* above; `--video-motion`, `--orbit`, `--no-drift` and `--video-seed` apply per leg, and the preset's *Auto constant drift* is honoured.
 - `--keep-frames` keeps the PNG sequence at its temp path after ffmpeg succeeds. Default behaviour deletes it.
 
 ### Watermark (on by default)

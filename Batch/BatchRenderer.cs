@@ -1104,6 +1104,22 @@ namespace FracturingFog.Batch
             return buf;
         }
 
+        // #948 — one frame of ANY region type. Mandelbrot keeps its dedicated
+        // full-precision path; every other family renders through the offline
+        // capture calculator with the region's per-family params (fp) and QD
+        // centre limbs. centerXOverride = Logistic sweep (drops the limbs).
+        private static uint[] RenderRegionFrame(
+            FractalRegion region, FractalParameters fp, int w, int h, double zoom, int iter,
+            IColorMap theme, int adaptive, double? centerXOverride = null)
+        {
+            if (region.FractalType == FractalType.Mandelbrot && centerXOverride == null)
+                return RenderRegionMandelFrame(region, w, h, zoom, iter, theme, adaptive);
+            return RenderOneFrame(region.FractalType, w, h,
+                centerXOverride ?? region.CenterX, region.CenterY, zoom, iter, theme,
+                region.QualityPreset ?? QualityPreset.Standard, adaptive,
+                fp, centerXOverride == null ? region : null);
+        }
+
         // S6 (#408 / #468) — Relief 3D frame for a slideshow leg. Renders the
         // region+theme through the SAME composed relief+froxel path a still
         // export uses (PosterRenderer.RenderToPixels), carrying the region's
@@ -1136,7 +1152,7 @@ namespace FracturingFog.Batch
         {
             var rreq = new PosterRequest
             {
-                FractalType = FractalType.Mandelbrot, Width = w, Height = h,
+                FractalType = region.FractalType, Width = w, Height = h,   // #948 — any 2D type
                 CenterX = region.CenterX, CenterXLo = region.CenterXLo,
                 CenterX2 = region.CenterX2, CenterX3 = region.CenterX3,
                 CenterY = region.CenterY, CenterYLo = region.CenterYLo,
@@ -1207,8 +1223,9 @@ namespace FracturingFog.Batch
             return outb;
         }
 
-        // Video-slideshow render loop: one animated log-zoom leg per region
-        // (vStartZoom → region target, smoothstep-eased), cross-fading between
+        // Video-slideshow render loop: one animated leg per region — moved per
+        // family via VideoMotionPlan (#948: 2D zoom vStartZoom → target, 3D dolly,
+        // sweep / Ken-Burns / hold for non-spatial), cross-fading between
         // regions over regionFadeFrames. Each leg is split into themesPerLeg
         // theme segments; at each segment boundary the theme cross-fades over
         // themeFadeFrames CONCURRENTLY with the zoom (the fade blends both
@@ -1226,13 +1243,17 @@ namespace FracturingFog.Batch
             double startZoom, bool reverse, bool watermark,
             int pfBrightness, int pfContrast, int pfAdaptive,
             FracturingFog.Imaging.ViewTransform viewTransform, double viewExposureEv,
-            FractalParameters? reliefFp,
-            FracturingFog.Rendering.Lighting.FroxelHistory? reliefHistory)
+            bool reliefOn,
+            FracturingFog.Rendering.Lighting.FroxelHistory? reliefHistory,
+            BatchOptions opts, FracturingFog.Models.SlideshowConfig cfg)
         {
             uint[]? prevFrame = null;
             int framesWritten = 0;
             int lastTheme = -1;
             int n = outW * outH;
+            var motionRng = new Random(opts.VideoSeed);
+            bool driftAllowed = cfg.AutoConstantDrift && !opts.VideoNoDrift;
+            double legSeconds = legFrames / (double)Math.Max(1, opts.VideoFps);
 
             while (framesWritten < totalFrames)
             {
@@ -1241,17 +1262,80 @@ namespace FracturingFog.Batch
                     string.Equals(r.Name, regionName, StringComparison.Ordinal));
                 if (region == null) break;
 
+                // #948 — each leg moves the way its family moves (VideoMotionPlan,
+                // shared with batch video #947 and the interactive slideshow's
+                // routing): 2D zoom (+ constant drift), 3D camera dolly (+ orbit),
+                // Logistic / AcidWarp sweep, other non-spatial Ken-Burns / hold.
+                // Fresh params per leg — drift / sweep / orbit mutate them.
+                var type = region.FractalType;
+                var fp = BuildFractalParameters(opts, region);
+                var motion = VideoMotionPlan.Resolve(type, opts.VideoMotion, out _);
+                bool relief = reliefOn && FractalMotionCapabilities.MotionClass(type) == FractalMotionClass.Zoomable2D;
+
                 int iter = region.Iterations > 0 ? region.Iterations : 1000;
                 double target = Math.Max(region.Zoom, QualityPreset.DefaultZoomMin);
-                double z0 = reverse ? target : startZoom;
-                double z1 = reverse ? startZoom : target;
+                double z0, z1;
+                switch (motion)
+                {
+                    case VideoMotionKind.Zoom:
+                        z0 = startZoom; z1 = target; break;
+                    case VideoMotionKind.Dolly:
+                        (z0, z1) = VideoMotionPlan.CameraDolly(region.Zoom);
+                        if (opts.VideoStartZoomSet) z0 = startZoom;
+                        target = z1;
+                        break;
+                    default:
+                        z0 = z1 = target; break;
+                }
+                // A full-view 2D region has nothing to zoom into — Ken-Burns it
+                // (unless its constant drifts), as batch video does.
+                if (motion == VideoMotionKind.Zoom && opts.VideoMotion == BatchVideoMotion.Auto
+                    && !opts.VideoStartZoomSet && Math.Abs(Math.Log(z1 / z0)) < 0.05
+                    && (!driftAllowed
+                        || FracturingFog.Abstractions.Animation.ConstantDriftResolver.ConstantParamName(type) == null))
+                {
+                    motion = VideoMotionKind.KenBurns;
+                    z0 = z1;
+                }
+                if (reverse) (z0, z1) = (z1, z0);
                 double logZ0 = Math.Log(z0), logZ1 = Math.Log(z1);
 
+                // Per-leg family state.
+                double cx0 = region.CenterX;
+                double? frameCx = null;
+                double acidFlow0 = fp.AcidWarpFlow;
+                if (motion == VideoMotionKind.Sweep && type == FractalType.AcidWarp) fp.AcidWarpMorph = true;
+                RegionFractalParams? orbitSnap = null;
+                double orbitTheta0 = 0.0;
+                if (opts.VideoOrbitDegrees != 0.0
+                    && FractalMotionCapabilities.MotionClass(type) == FractalMotionClass.Raymarch3D)
+                {
+                    orbitSnap = RegionFractalParams.Snapshot(type, fp);
+                    if (orbitSnap?.Cam3DTheta is double th) orbitTheta0 = th; else orbitSnap = null;
+                }
+                var drift = (motion == VideoMotionKind.Zoom && driftAllowed)
+                    ? FracturingFog.Abstractions.Animation.ConstantDriftResolver.TryBuild(type, fp, legSeconds, motionRng)
+                    : null;
+                bool singleRender = orbitSnap == null
+                    && motion is VideoMotionKind.Hold or VideoMotionKind.KenBurns;
+                var kenBurns = motion == VideoMotionKind.KenBurns ? KenBurnsPath.Random(motionRng) : default;
+
+                uint[] Render(double zoom, IColorMap map, FracturingFog.Rendering.Lighting.FroxelHistory? hist,
+                              bool wantHdr, out float[]? hdr)
+                {
+                    hdr = null;
+                    if (relief && frameCx == null)
+                        return RenderReliefRegionFrame(region, outW, outH, zoom, iter, map, pfAdaptive, fp, hist, wantHdr, out hdr);
+                    return RenderRegionFrame(region, fp, outW, outH, zoom, iter, map, pfAdaptive, frameCx);
+                }
+
                 // Pick up to themesPerLeg distinct non-black themes for this leg,
-                // probing each at the deepest zoom (target). Fewer is fine — a
-                // region with only one non-black theme plays a single-theme leg.
+                // probing each at the authored framing (target). Single-render
+                // legs keep the probe as the theme's held base (no re-render —
+                // matters for the slow generators: Flame, DLA, Buddhabrot).
                 var legThemeNames = new System.Collections.Generic.List<string>(themesPerLeg);
                 var legThemeMaps = new System.Collections.Generic.List<IColorMap>(themesPerLeg);
+                var heldBases = new System.Collections.Generic.List<uint[]>(themesPerLeg);
                 int attempts = Math.Max(1, themePool.Count);
                 for (int at = 0; at < attempts && legThemeMaps.Count < themesPerLeg; at++)
                 {
@@ -1262,72 +1346,95 @@ namespace FracturingFog.Batch
                     var name = themePool[ti];
                     if (legThemeNames.Contains(name)) continue;
                     var map = ResolveTheme(name);
-                    var probe = RenderRegionMandelFrame(region, outW, outH, target, iter, map, pfAdaptive);
+                    var probe = RenderRegionFrame(region, fp, outW, outH, target, iter, map, pfAdaptive);
                     if (IsAllBlack(probe, n)) continue;
                     legThemeNames.Add(name);
                     legThemeMaps.Add(map);
+                    heldBases.Add(relief && singleRender
+                        ? RenderReliefRegionFrame(region, outW, outH, target, iter, map, pfAdaptive, fp, null)
+                        : probe);
                 }
                 if (legThemeMaps.Count == 0) continue; // no non-black theme; next region
 
                 int legThemes = legThemeMaps.Count;
                 int segLen = Math.Max(1, legFrames / legThemes);
-                // Theme cross-fade runs CONCURRENTLY with the zoom: the fade
-                // consumes ordinary zoom frames (each a blend of the outgoing
-                // and incoming theme rendered at that frame's live zoom) rather
-                // than inserting frozen frames. This is why the video no longer
-                // stalls at a theme change. Fade length is capped to the segment
-                // so a fade always completes before the next boundary.
+                // Theme cross-fade runs CONCURRENTLY with the motion: the fade
+                // consumes ordinary leg frames (each a blend of the outgoing and
+                // incoming theme at that frame's live state) rather than inserting
+                // frozen frames. Capped to the segment so it completes in time.
                 int themeFade = Math.Min(themeFadeFrames, segLen);
                 var sw = Stopwatch.StartNew();
                 int legFramesWritten = 0;
-                Console.Write($"  leg [{framesWritten}/{totalFrames}]: {region.Name} / " +
+                Console.Write($"  leg [{framesWritten}/{totalFrames}]: {region.Name} ({type}, {motion}) / " +
                               $"{string.Join(",", legThemeNames)} zoom {z0:G4}->{z1:G4} … ");
+
+                uint[] HeldFrame(int k, double e)
+                {
+                    var outb = new uint[n];
+                    if (motion == VideoMotionKind.KenBurns)
+                    {
+                        var (rx, ry, rw, rh) = kenBurns.Rect(e, outW, outH);
+                        FracturingFog.Abstractions.Imaging.ImageResampler
+                            .ResampleRectBilinear(heldBases[k], outW, outH, rx, ry, rw, rh, outb);
+                    }
+                    else Array.Copy(heldBases[k], outb, n);
+                    return outb;
+                }
 
                 for (int f = 0; f < legFrames && framesWritten + legFramesWritten < totalFrames; f++)
                 {
                     double t = legFrames == 1 ? 1.0 : (double)f / (legFrames - 1);
-                    double te = t * t * (3.0 - 2.0 * t);        // smoothstep ease
+                    double te = VideoMotionPlan.SmoothStep(t);
+                    double eHold = VideoMotionPlan.SmootherStep(t);
                     double frameZoom = Math.Exp(logZ0 + (logZ1 - logZ0) * te);
                     int seg = Math.Min(legThemes - 1, f / segLen);
 
+                    if (!singleRender)
+                    {
+                        if (motion == VideoMotionKind.Sweep && type == FractalType.Logistic)
+                            frameCx = VideoMotionPlan.LogisticSweepX(cx0, target, eHold);
+                        else if (motion == VideoMotionKind.Sweep && type == FractalType.AcidWarp)
+                            fp.AcidWarpFlow = VideoMotionPlan.AcidWarpSweepFlow(acidFlow0, eHold);
+                        if (orbitSnap != null)
+                        {
+                            orbitSnap.Cam3DTheta = VideoMotionPlan.OrbitTheta(orbitTheta0, opts.VideoOrbitDegrees, eHold);
+                            orbitSnap.ApplyTo(fp);
+                        }
+                    }
+
                     // A theme boundary opens a fade window at the start of a new
-                    // segment: blend the previous theme into the new one while
-                    // the zoom keeps advancing. Outside the window a single
-                    // theme renders.
-                    int intoSeg = f - seg * segLen;         // frames into this segment
+                    // segment: blend the previous theme into the new one while the
+                    // motion keeps advancing. Outside the window one theme renders.
+                    int intoSeg = f - seg * segLen;
                     uint[] frame;
                     float[]? legHdr = null;                 // S2 (#396) — steady-frame HDR beauty, null on fades
                     if (seg > 0 && intoSeg < themeFade)
                     {
                         float a = (intoSeg + 1) / (float)themeFade;
-                        // Cross-fade sub-renders pass null history so the shared
-                        // froxel temporal timeline is not double-advanced within
-                        // one output frame (#468). A blended 8-bit fade carries no HDR.
-                        var fromFrame = reliefFp != null
-                            ? RenderReliefRegionFrame(region, outW, outH, frameZoom, iter, legThemeMaps[seg - 1], pfAdaptive, reliefFp, null)
-                            : RenderRegionMandelFrame(region, outW, outH, frameZoom, iter, legThemeMaps[seg - 1], pfAdaptive);
-                        var toFrame = reliefFp != null
-                            ? RenderReliefRegionFrame(region, outW, outH, frameZoom, iter, legThemeMaps[seg], pfAdaptive, reliefFp, null)
-                            : RenderRegionMandelFrame(region, outW, outH, frameZoom, iter, legThemeMaps[seg], pfAdaptive);
+                        // Fade sub-renders pass null history so the shared froxel
+                        // temporal timeline is not double-advanced (#468).
+                        var fromFrame = singleRender ? HeldFrame(seg - 1, eHold) : Render(frameZoom, legThemeMaps[seg - 1], null, false, out _);
+                        var toFrame = singleRender ? HeldFrame(seg, eHold) : Render(frameZoom, legThemeMaps[seg], null, false, out _);
                         frame = BlendFrames(fromFrame, toFrame, a, n);
+                    }
+                    else if (singleRender)
+                    {
+                        frame = HeldFrame(seg, eHold);
                     }
                     else
                     {
-                        // S2 (#396) — capture the steady relief frame's HDR beauty when armed.
-                        bool legWantHdr = ReliefHdrWanted(reliefFp, viewTransform, pfBrightness, pfContrast);
-                        frame = reliefFp != null
-                            ? RenderReliefRegionFrame(region, outW, outH, frameZoom, iter, legThemeMaps[seg], pfAdaptive, reliefFp, reliefHistory, legWantHdr, out legHdr)
-                            : RenderRegionMandelFrame(region, outW, outH, frameZoom, iter, legThemeMaps[seg], pfAdaptive);
+                        bool legWantHdr = relief && ReliefHdrWanted(fp, viewTransform, pfBrightness, pfContrast);
+                        frame = Render(frameZoom, legThemeMaps[seg], reliefHistory, legWantHdr, out legHdr);
                     }
+                    drift?.Tick(1.0 / Math.Max(1, opts.VideoFps));
 
                     ApplyBrightnessContrast(frame, n, pfBrightness, pfContrast);
                     ApplyViewTransform(frame, n, viewTransform, viewExposureEv, legHdr, outW, outH);   // S2 (#389/#396)
                     if (watermark)
                         ApplyWatermarkInPlace(frame, outW, outH, region.Name, legThemeNames[seg]);
 
-                    // Region boundary cross-fade (between different regions /
-                    // zoom sequences) stays a frozen fade — the previous leg has
-                    // ended, so there is no shared zoom to advance across it.
+                    // Region boundary cross-fade (between different regions)
+                    // stays a frozen fade — the previous leg has ended.
                     if (f == 0 && prevFrame != null)
                     {
                         legFramesWritten += WriteCrossFade(
@@ -1400,11 +1507,9 @@ namespace FracturingFog.Batch
         // by holding the final frame for the remaining theme budget. Frames are
         // pushed into a PngSequenceWriter and post-encoded with ffmpeg.
         //
-        // First cut limits region rendering to Mandelbrot regions — other
-        // fractal types would require per-type calculator dispatch + offscreen
-        // colour map rebuild, which the BatchRenderer doesn't yet do. Mandelbrot
-        // is the entire slideshow default in the legacy WinForms path, so this
-        // matches the headless surface users actually reach for.
+        // Every fractal type is eligible (#948): regions render through
+        // RenderRegionFrame with their own per-family params, and the preset's
+        // fractal-type filter narrows the pool like the interactive engine.
         public static int RenderSlideshow(BatchOptions opts)
         {
             var rng = new Random();
@@ -1425,8 +1530,14 @@ namespace FracturingFog.Batch
                 cfg = FracturingFog.Models.SlideshowConfigLibrary.GetActive(configFile);
             }
 
-            // 2. Build region pool (Mandelbrot-only for v1).
+            // 2. Build region pool — every fractal type (#948), filtered by the
+            // preset's include / fractal-type / quality restrictions. A filter
+            // that matches nothing is authoritative (no fallback to the full
+            // pool), matching the interactive SlideshowEngine.
             var regionPool = new System.Collections.Generic.List<FractalRegion>();
+            var incTypes = cfg.FilterFractalTypes != null && cfg.FilterFractalTypes.Count > 0
+                ? new System.Collections.Generic.HashSet<string>(cfg.FilterFractalTypes, StringComparer.OrdinalIgnoreCase)
+                : null;
             var incRegions = cfg.IncludedRegions != null && cfg.IncludedRegions.Count > 0
                 ? new System.Collections.Generic.HashSet<string>(cfg.IncludedRegions, StringComparer.OrdinalIgnoreCase)
                 : null;
@@ -1435,15 +1546,14 @@ namespace FracturingFog.Batch
                 : null;
             foreach (var r in FractalRegionLibrary.Instance.AllSlideshowRegions)
             {
-                if (r.FractalType != FractalType.Mandelbrot) continue;
+                if (incTypes != null && !incTypes.Contains(r.FractalType.ToString())) continue;
                 if (incRegions != null && !incRegions.Contains(r.Name)) continue;
                 if (incQuality != null && !incQuality.Contains(r.QualityPreset?.Name ?? "Standard")) continue;
                 regionPool.Add(r);
             }
             if (regionPool.Count == 0)
                 throw new InvalidOperationException(
-                    "No Mandelbrot regions available after applying preset filters. " +
-                    "Headless slideshow rendering only supports Mandelbrot regions in v1.");
+                    "No regions match the preset's filters (included regions / fractal types / quality).");
 
             // 3. Build theme pool.
             var themeAll = FracturingFog.Models.ColorPalette.GetPaletteNames();
@@ -1556,10 +1666,22 @@ namespace FracturingFog.Batch
             // relief+froxel path (RenderReliefRegionFrame); one shared FroxelHistory
             // threads the froxel temporal seam (#468) across the show. Relief off →
             // the flat fast path, byte-identical.
-            FractalParameters? reliefFp = opts.Relief ? BuildFractalParameters(opts) : null;
+            // #948 — per-region frame params: the region's equation / lighting /
+            // per-family snapshot with the CLI flags layered on top. Relief only
+            // composes on 2D escape-time regions (the heightfield is a 2D field).
+            var regionFp = new System.Collections.Generic.Dictionary<string, FractalParameters>(StringComparer.Ordinal);
+            FractalParameters FpFor(FractalRegion r)
+            {
+                if (!regionFp.TryGetValue(r.Name, out var f))
+                    regionFp[r.Name] = f = BuildFractalParameters(opts, r);
+                return f;
+            }
+            bool reliefOn = opts.Relief;
+            bool ReliefFor(FractalRegion r) => reliefOn
+                && FractalMotionCapabilities.MotionClass(r.FractalType) == FractalMotionClass.Zoomable2D;
             var reliefHistory = opts.Relief
                 ? new FracturingFog.Rendering.Lighting.FroxelHistory() : null;
-            if (reliefFp != null)
+            if (reliefOn)
                 Console.WriteLine("  relief    : 3D raymarch per frame" +
                     (opts.ReliefFroxelTemporal ? " (froxel temporal ON)" : ""));
 
@@ -1572,7 +1694,7 @@ namespace FracturingFog.Batch
                     vStartZoom, vReverse, opts.Watermark,
                     pfBrightness, pfContrast, pfAdaptive,
                     opts.ViewTransform ?? FracturingFog.Imaging.ViewTransform.None, opts.ViewExposureEv ?? 0.0,
-                    reliefFp, reliefHistory);
+                    reliefOn, reliefHistory, opts, cfg);
             }
             else
             while (framesWritten < totalFrames)
@@ -1603,34 +1725,16 @@ namespace FracturingFog.Batch
                         var theme = ResolveTheme(themeName);
 
                         int iter = region.Iterations > 0 ? region.Iterations : 1000;
-                        var calc = new MandelbrotCalculator(outW, outH)
-                        {
-                            CenterX = region.CenterX, CenterXLo = region.CenterXLo,
-                            CenterX2 = region.CenterX2, CenterX3 = region.CenterX3,
-                            CenterY = region.CenterY, CenterYLo = region.CenterYLo,
-                            CenterY2 = region.CenterY2, CenterY3 = region.CenterY3,
-                            Zoom = region.Zoom,
-                            MaxIterations = iter,
-                            ColorMap = theme,
-                            Quality = region.QualityPreset ?? QualityPreset.Standard,
-                        };
+                        // #948 — any region type (HE + interior-alpha composite
+                        // happen inside RenderRegionFrame, on an owned buffer).
                         var sw = Stopwatch.StartNew();
-                        calc.Calculate(CancellationToken.None);
-                        if (pfAdaptive > 0)
-                            calc.ApplyHistogramEqualization(pfAdaptive / 100.0);
+                        var frame = RenderRegionFrame(region, FpFor(region), outW, outH,
+                            region.Zoom, iter, theme, pfAdaptive);
                         sw.Stop();
                         calcMs = sw.ElapsedMilliseconds;
 
-                        if (IsAllBlack(calc.ColorBuffer, outW * outH)) continue;
-
-                        // Own the pixels — calc.ColorBuffer is reused across
-                        // calculators / recolours, and we mutate it below.
-                        currFrame = CopyBuffer(calc.ColorBuffer, outW, outH);
-                        // #96/F10.5: composite authored translucency over the
-                        // interior backdrop before the B/C pass, watermark and
-                        // cross-fade so slideshow frames match the on-screen
-                        // present (see CompositeInteriorAlpha).
-                        CompositeInteriorAlpha(currFrame, outW, outH, theme);
+                        if (IsAllBlack(frame, outW * outH)) continue;
+                        currFrame = frame;
                         themeChosen = themeName;
                         break;
                     }
@@ -1641,8 +1745,9 @@ namespace FracturingFog.Batch
                     // relief+froxel path (shared history threads the froxel
                     // temporal seam across the still show). #408/#468.
                     float[]? ssHdr = null;
-                    if (reliefFp != null && themeChosen != null)
+                    if (ReliefFor(region) && themeChosen != null)
                     {
+                        var reliefFp = FpFor(region);
                         int iterR = region.Iterations > 0 ? region.Iterations : 1000;
                         // S2 (#396) — capture the relief still's HDR beauty when armed.
                         bool ssWantHdr = ReliefHdrWanted(reliefFp,
