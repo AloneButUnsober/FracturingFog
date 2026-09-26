@@ -387,6 +387,12 @@ public static class FractalAnimatableParamsMap
         new("DualOrbitSZ", AnimatableParamKind.ScalarDouble, Min: -1.5, Max: 1.5,
             Cost: AnimatableParamCost.Expensive,
             Notes: "Quaternion s_z decoupling dial — a literal 'turning-on' from flat control to rich scattering (§3.6)."),
+        new("DualOrbitSX", AnimatableParamKind.ScalarDouble, Min: -2.0, Max: 0.5,
+            Cost: AnimatableParamCost.Expensive,
+            Notes: "Fixed s.x when not an image axis — animating it replays the original sx sweep (e.g. in the c-plane: a walk through Julia sets) (#971)."),
+        new("DualOrbitSY", AnimatableParamKind.ScalarDouble, Min: -1.5, Max: 1.5,
+            Cost: AnimatableParamCost.Expensive,
+            Notes: "Fixed s.y when not an image axis (#971)."),
     };
 
     // Indra's Pearls (#895) — the marquee "group degenerating into a limit curve"

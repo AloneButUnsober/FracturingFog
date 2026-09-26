@@ -587,6 +587,13 @@ namespace FracturingFog.Models
         [JsonIgnore(Condition = OmitNull)] public int? DualOrbitMap { get; set; }
         [JsonIgnore(Condition = OmitNull)] public double? DualOrbitCSeedZ { get; set; }
         [JsonIgnore(Condition = OmitNull)] public double? DualOrbitSZ { get; set; }
+        // #970 — bailout radius + GreenRatio span.
+        [JsonIgnore(Condition = OmitNull)] public double? DualOrbitBailout { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public double? DualOrbitRatioSpan { get; set; }
+        // #971 — slice axes + fixed s when s is not an image axis.
+        [JsonIgnore(Condition = OmitNull)] public int? DualOrbitSliceAxes { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public double? DualOrbitSX { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public double? DualOrbitSY { get; set; }
         // #909 — quaternion Mandelbrot dual-orbit surface colouring.
         [JsonIgnore(Condition = OmitNull)] public bool? QMandelDualOrbitColor { get; set; }
         [JsonIgnore(Condition = OmitNull)] public double? QMandelDualSeedX { get; set; }
@@ -935,6 +942,11 @@ namespace FracturingFog.Models
                     DualOrbitCSeedZ = p.DualOrbitCSeedZ != 0.3 ? p.DualOrbitCSeedZ : (double?)null,
                     DualOrbitSZ = p.DualOrbitSZ != 0.0 ? p.DualOrbitSZ : (double?)null,
                     DualOrbitCEqualsS = p.DualOrbitCEqualsS ? true : (bool?)null,
+                    DualOrbitBailout = p.DualOrbitBailout != 128.0 ? p.DualOrbitBailout : (double?)null,
+                    DualOrbitRatioSpan = p.DualOrbitRatioSpan != 8.0 ? p.DualOrbitRatioSpan : (double?)null,
+                    DualOrbitSliceAxes = p.DualOrbitSliceAxes != FracturingFog.DualOrbitSliceAxes.SxSy ? (int)p.DualOrbitSliceAxes : (int?)null,
+                    DualOrbitSX = p.DualOrbitSX != -0.78 ? p.DualOrbitSX : (double?)null,
+                    DualOrbitSY = p.DualOrbitSY != 0.15 ? p.DualOrbitSY : (double?)null,
                 },
                 // #893 — Indra's Pearls 2D group. Family + the family's parameter
                 // (μ / traces / c) + depth + mode, each omitted at its default.
@@ -1279,6 +1291,11 @@ namespace FracturingFog.Models
             if (DualOrbitCSeedZ.HasValue) p.DualOrbitCSeedZ = DualOrbitCSeedZ.Value;
             if (DualOrbitSZ.HasValue) p.DualOrbitSZ = DualOrbitSZ.Value;
             if (DualOrbitCEqualsS.HasValue) p.DualOrbitCEqualsS = DualOrbitCEqualsS.Value;
+            if (DualOrbitBailout.HasValue) p.DualOrbitBailout = DualOrbitBailout.Value;
+            if (DualOrbitRatioSpan.HasValue) p.DualOrbitRatioSpan = DualOrbitRatioSpan.Value;
+            if (this.DualOrbitSliceAxes.HasValue) p.DualOrbitSliceAxes = (FracturingFog.DualOrbitSliceAxes)this.DualOrbitSliceAxes.Value;
+            if (DualOrbitSX.HasValue) p.DualOrbitSX = DualOrbitSX.Value;
+            if (DualOrbitSY.HasValue) p.DualOrbitSY = DualOrbitSY.Value;
             // #893 — Indra's Pearls 2D group.
             if (IndrasFamily.HasValue) p.IndrasFamily = (IndrasGroupFamily)IndrasFamily.Value;
             if (IndrasMaskitMuRe.HasValue) p.IndrasMaskitMuRe = IndrasMaskitMuRe.Value;

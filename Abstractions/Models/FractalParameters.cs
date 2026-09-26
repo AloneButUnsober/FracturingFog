@@ -1152,6 +1152,21 @@ namespace FracturingFog.Models
         /// degenerate case (dual fields collapse to a plain Mandelbrot exterior) —
         /// exposed only for comparison. Default off.</summary>
         public bool DualOrbitCEqualsS { get; set; } = false;
+        /// <summary>Escape (bailout) radius both orbits iterate to. Default 128.
+        /// The escape-location fields (separation / residual / angle) change with it;
+        /// GreenRatio and ExternalAngleDelta do not (#970).</summary>
+        public double DualOrbitBailout { get; set; } = 128.0;
+        /// <summary>GreenRatio half-range in octaves: log2(G_c/G_z) = ±span maps to
+        /// the palette ends, 0 to mid-palette (#970).</summary>
+        public double DualOrbitRatioSpan { get; set; } = 8.0;
+        /// <summary>Which two of (c.x, c.y, s.x, s.y) the image spans (#971).
+        /// Default SxSy = the parameter plane (shipped view, byte-identical).</summary>
+        public DualOrbitSliceAxes DualOrbitSliceAxes { get; set; } = DualOrbitSliceAxes.SxSy;
+        /// <summary>Fixed s.x when s.x is not an image axis — the user's original
+        /// sweep coordinate (animate it to replay the sweep) (#971).</summary>
+        public double DualOrbitSX { get; set; } = -0.78;
+        /// <summary>Fixed s.y when s.y is not an image axis (#971).</summary>
+        public double DualOrbitSY { get; set; } = 0.15;
 
         // Indra's Pearls (#892/#893, epic #850) — 2D complex-Möbius Kleinian
         // group limit set. The generator matrices are DERIVED from these scalar
@@ -1734,6 +1749,11 @@ namespace FracturingFog.Models
                 DualOrbitCSeedZ = DualOrbitCSeedZ,
                 DualOrbitSZ = DualOrbitSZ,
                 DualOrbitCEqualsS = DualOrbitCEqualsS,
+                DualOrbitBailout = DualOrbitBailout,
+                DualOrbitRatioSpan = DualOrbitRatioSpan,
+                DualOrbitSliceAxes = DualOrbitSliceAxes,
+                DualOrbitSX = DualOrbitSX,
+                DualOrbitSY = DualOrbitSY,
                 IndrasFamily = IndrasFamily,
                 IndrasMaskitMuRe = IndrasMaskitMuRe,
                 IndrasMaskitMuIm = IndrasMaskitMuIm,

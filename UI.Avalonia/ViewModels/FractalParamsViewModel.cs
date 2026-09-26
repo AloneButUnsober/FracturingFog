@@ -219,6 +219,11 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
         _dualCSeedZ = _p.DualOrbitCSeedZ;
         _dualSZ = _p.DualOrbitSZ;
         _dualCEqualsS = _p.DualOrbitCEqualsS;
+        _dualBailout = _p.DualOrbitBailout;
+        _dualRatioSpan = _p.DualOrbitRatioSpan;
+        _dualSliceAxes = _p.DualOrbitSliceAxes;
+        _dualSX = _p.DualOrbitSX;
+        _dualSY = _p.DualOrbitSY;
         // #893 — Indra's Pearls 2D group.
         _indrasFamily = _p.IndrasFamily;
         _indrasMuRe = _p.IndrasMaskitMuRe;
@@ -1736,7 +1741,45 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
     public double DualOrbitSZ { get => _dualSZ; set { Set(ref _dualSZ, Clamp(value, -2.0, 2.0)); _p.DualOrbitSZ = _dualSZ; Fire(); } }
     private bool _dualCEqualsS;
     /// <summary>Mandelbrot-control mode (c = s; degenerate — labelled).</summary>
-    public bool DualOrbitCEqualsS { get => _dualCEqualsS; set { Set(ref _dualCEqualsS, value); _p.DualOrbitCEqualsS = value; Fire(); } }
+    public bool DualOrbitCEqualsS
+    {
+        get => _dualCEqualsS;
+        set { Set(ref _dualCEqualsS, value); _p.DualOrbitCEqualsS = value; RaiseDualSliceEditability(); Fire(); }
+    }
+    private DualOrbitSliceAxes _dualSliceAxes;
+    /// <summary>Which two of (c.x, c.y, s.x, s.y) the image spans (#971).</summary>
+    public DualOrbitSliceAxes DualOrbitSliceAxes
+    {
+        get => _dualSliceAxes;
+        set { Set(ref _dualSliceAxes, value); _p.DualOrbitSliceAxes = value; RaiseDualSliceEditability(); Fire(); }
+    }
+    public Array DualOrbitSliceAxesValues => Enum.GetValues(typeof(DualOrbitSliceAxes));
+    private double _dualSX;
+    /// <summary>Fixed s.x when s.x is not an image axis — the original sweep coordinate (#971).</summary>
+    public double DualOrbitSX { get => _dualSX; set { Set(ref _dualSX, Clamp(value, -4.0, 4.0)); _p.DualOrbitSX = _dualSX; Fire(); } }
+    private double _dualSY;
+    /// <summary>Fixed s.y when s.y is not an image axis (#971).</summary>
+    public double DualOrbitSY { get => _dualSY; set { Set(ref _dualSY, Clamp(value, -4.0, 4.0)); _p.DualOrbitSY = _dualSY; Fire(); } }
+    // A fixed-coordinate control is editable only when that coordinate is not an
+    // image axis (c-seed rows also need the c = s control off).
+    public bool DualOrbitCXEditable => !_dualCEqualsS && _dualSliceAxes is not (DualOrbitSliceAxes.CxCy or DualOrbitSliceAxes.CxSx or DualOrbitSliceAxes.CxSy);
+    public bool DualOrbitCYEditable => !_dualCEqualsS && _dualSliceAxes is not (DualOrbitSliceAxes.CxCy or DualOrbitSliceAxes.CySx or DualOrbitSliceAxes.CySy);
+    public bool DualOrbitSXEditable => _dualSliceAxes is not (DualOrbitSliceAxes.SxSy or DualOrbitSliceAxes.CxSx or DualOrbitSliceAxes.CySx);
+    public bool DualOrbitSYEditable => _dualSliceAxes is not (DualOrbitSliceAxes.SxSy or DualOrbitSliceAxes.CxSy or DualOrbitSliceAxes.CySy);
+    private void RaiseDualSliceEditability()
+    {
+        this.RaisePropertyChanged(nameof(DualOrbitCXEditable));
+        this.RaisePropertyChanged(nameof(DualOrbitCYEditable));
+        this.RaisePropertyChanged(nameof(DualOrbitSXEditable));
+        this.RaisePropertyChanged(nameof(DualOrbitSYEditable));
+    }
+    private double _dualBailout;
+    /// <summary>Escape radius (#970). Escape-location fields change with it;
+    /// GreenRatio / ExternalAngleDelta do not.</summary>
+    public double DualOrbitBailout { get => _dualBailout; set { Set(ref _dualBailout, Clamp(value, 2.0, 1e6)); _p.DualOrbitBailout = _dualBailout; Fire(); } }
+    private double _dualRatioSpan;
+    /// <summary>GreenRatio half-range in octaves (#970).</summary>
+    public double DualOrbitRatioSpan { get => _dualRatioSpan; set { Set(ref _dualRatioSpan, Clamp(value, 0.25, 64.0)); _p.DualOrbitRatioSpan = _dualRatioSpan; Fire(); } }
 
     // ── Indra's Pearls 2D (#893) ──
     private IndrasGroupFamily _indrasFamily;
