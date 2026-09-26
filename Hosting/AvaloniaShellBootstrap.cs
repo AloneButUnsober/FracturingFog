@@ -3535,7 +3535,9 @@ namespace FracturingFog.Hosting
             if (win is { IsVisible: true } &&
                 win.DataContext is FracturingFog.UI.Avalonia.ViewModels.FractalParamsViewModel vm)
             {
-                try { vm.Refresh(); } catch { }
+                // #962 — also stop the dialog's own Julia orbit / sweep (no restore):
+                // it would otherwise keep animating the newly recalled region.
+                try { vm.OnRegionApplied(); } catch { }
             }
         }
 
