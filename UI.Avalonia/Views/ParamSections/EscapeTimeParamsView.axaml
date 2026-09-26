@@ -24,12 +24,12 @@
                                Value="{Binding JuliaI, Mode=TwoWay}" Margin="0,2" />
             </Grid>
 
-            <!-- #920 Faithful parabolic implosion: drive c from a p/q parabolic root. -->
+            <!-- #920 Parabolic implosion: drive c from a p/q parabolic root. -->
             <Border BorderBrush="#404040" BorderThickness="0,1,0,0" Padding="0,6,0,0" Margin="0,4,0,0">
                 <StackPanel Spacing="4">
-                    <CheckBox Content="Faithful implosion (drive c from p/q root)"
+                    <CheckBox Content="Parabolic implosion (drive c from p/q root)"
                               IsChecked="{Binding FaithfulImplosion, Mode=TwoWay}"
-                              ToolTip.Tip="Places c on the cardioid boundary near the p/q parabolic root (period q). Animate 'Parabolic implosion (faithful, pick p/q)' to implode toward it." />
+                              ToolTip.Tip="Places c on the cardioid boundary near the p/q parabolic root (period q). Animate 'Parabolic implosion (cardioid, pick p/q)' to implode toward it." />
                     <Grid ColumnDefinitions="160,*" RowDefinitions="Auto,Auto"
                           IsVisible="{Binding FaithfulImplosion}">
                         <TextBlock Grid.Row="0" Grid.Column="0" Text="Root p (numerator):" VerticalAlignment="Center" />

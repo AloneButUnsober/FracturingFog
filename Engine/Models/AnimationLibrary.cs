@@ -332,7 +332,7 @@ namespace FracturingFog.Models
                                 + ", " + cy.ToString(System.Globalization.CultureInfo.InvariantCulture) + ") at a small "
                                 + "radius; the Julia set reorganises discontinuously (the explosion). "
                                 + "Author on the matching 'Parabolic c = …' Julia region. Not the "
-                                + "faithful Lavaurs limit — a perturbed-Julia sequence (Tier A).",
+                                + "exact Lavaurs limit — a perturbed-Julia sequence (Tier A).",
                     TargetFractalTypes = new List<FracturingFog.FractalType>
                     {
                         FracturingFog.FractalType.Julia,
@@ -362,29 +362,29 @@ namespace FracturingFog.Models
             // naïve Lissajous circle above. A SECOND track ramps EscapeIterationScale in
             // lock-step (both Triangle, same FrequencyHz, no phase offset), so shallow
             // frames stay fast and the deep frames near the root get the iterations the
-            // crawl needs. Author on the matching 'Parabolic implosion (faithful) …'
+            // crawl needs. Author on the matching 'Parabolic implosion …'
             // region. See Docs/Technical/Parabolic-Implosion-DesignPlan.md.
             //   thetaFar = shallow start, thetaNear = deepest approach to the p/q root.
             foreach (var (name, thetaFar, thetaNear, tag) in new[]
             {
-                ("Parabolic implosion (faithful, c=1/4)",       0.140, 0.045, "c=1/4"),   // period-1 cusp
-                ("Parabolic implosion (faithful, c=-3/4)",      0.420, 0.460, "c=-3/4"),  // period-2, θ→1/2
-                ("Parabolic implosion (faithful, 1/3 bulb)",    0.290, 0.300, "1/3-bulb"),// period-3, θ→1/3
-                ("Parabolic implosion (faithful, 1/4 bulb)",    0.190, 0.225, "1/4-bulb"),// period-4, θ→1/4
-                ("Parabolic implosion (faithful, 2/5 bulb)",    0.350, 0.385, "2/5-bulb"),// period-5, θ→2/5
+                ("Parabolic implosion (cardioid, c=1/4)",       0.140, 0.045, "c=1/4"),   // period-1 cusp
+                ("Parabolic implosion (cardioid, c=-3/4)",      0.420, 0.460, "c=-3/4"),  // period-2, θ→1/2
+                ("Parabolic implosion (cardioid, 1/3 bulb)",    0.290, 0.300, "1/3-bulb"),// period-3, θ→1/3
+                ("Parabolic implosion (cardioid, 1/4 bulb)",    0.190, 0.225, "1/4-bulb"),// period-4, θ→1/4
+                ("Parabolic implosion (cardioid, 2/5 bulb)",    0.350, 0.385, "2/5-bulb"),// period-5, θ→2/5
             })
             {
                 yield return new AnimationData
                 {
                     Name = name,
                     Category = "Built-in",
-                    Description = "Faithful (Lavaurs-limit) parabolic implosion: sweeps the Julia "
+                    Description = "Parabolic implosion (Lavaurs limit): sweeps the Julia "
                                 + "c along the cardioid boundary toward the parabolic root (internal "
                                 + "angle θ → " + tag + "); the near-parabolic Julia set blooms satellite "
                                 + "spirals — the implosion cascade. The rigorous counterpart of the naïve "
                                 + "'Parabolic implosion (" + tag + ")'. A synced iteration ramp keeps the "
                                 + "deep frames crisp. Author on the matching high-iteration 'Parabolic "
-                                + "implosion (faithful) …' region.",
+                                + "implosion …' region.",
                     TargetFractalTypes = new List<FracturingFog.FractalType>
                     {
                         FracturingFog.FractalType.Julia,
@@ -410,7 +410,7 @@ namespace FracturingFog.Models
                             Enabled = true,
                         },
                     },
-                    Tags = new List<string> { "experimental", "2D", "parabolic", "julia", "faithful", tag },
+                    Tags = new List<string> { "experimental", "2D", "parabolic", "julia", "cardioid", tag },
                 };
             }
 
@@ -419,13 +419,13 @@ namespace FracturingFog.Models
             // (FaithfulImplosionApproach → 0) while the Julia c is driven from the chosen
             // p/q root by FaithfulImplosion mode (EffectiveJuliaC). Iterations auto-ramp
             // from the approach depth in the render host, so no separate iteration track is
-            // needed. Author on the 'Parabolic implosion (faithful) — pick p/q' region and
+            // needed. Author on the 'Parabolic implosion — pick p/q' region and
             // set p/q in the Julia panel.
             yield return new AnimationData
             {
-                Name = "Parabolic implosion (faithful, pick p/q)",
+                Name = "Parabolic implosion (cardioid, pick p/q)",
                 Category = "Built-in",
-                Description = "Faithful implosion at a USER-chosen parabolic root: set p/q in the "
+                Description = "Parabolic implosion at a USER-chosen parabolic root: set p/q in the "
                             + "Julia panel (FaithfulImplosion mode), then this sweeps the approach "
                             + "depth toward the root (θ → p/q) so the near-parabolic Julia set blooms "
                             + "its period-q cascade. Iterations auto-ramp as the approach deepens. "
@@ -446,7 +446,7 @@ namespace FracturingFog.Models
                         Enabled = true,
                     },
                 },
-                Tags = new List<string> { "experimental", "2D", "parabolic", "julia", "faithful", "user-pq" },
+                Tags = new List<string> { "experimental", "2D", "parabolic", "julia", "cardioid", "user-pq" },
             };
         }
     }

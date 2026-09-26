@@ -1786,67 +1786,67 @@ namespace FracturingFog.Models
             },
             // #920 — faithful (Lavaurs-limit) parabolic implosion, one per parabolic
             // root p/q. Near-parabolic Julia sets on the cardioid boundary; each is bound
-            // to its 'Parabolic implosion (faithful, …)' animation, which sweeps c toward
+            // to its 'Parabolic implosion (cardioid, …)' animation, which sweeps c toward
             // the root (θ → p/q) and RAMPS EscapeIterationScale in lock-step — so the base
             // iteration here stays modest and the deep frames get up to 6× more. Initial c
             // = c(θ_far) on the main cardioid (the animation's shallow start frame).
             new()
             {
-                Name          = "Parabolic implosion (faithful) c = 1/4",
+                Name          = "Parabolic implosion c = 1/4",
                 CenterX       =  0.0,
                 CenterY       =  0.0,
                 Zoom          =  0.62,
                 Iterations    =  3000,
-                Description   = "Faithful parabolic implosion at c = 1/4 (period-1, Lavaurs limit): a near-parabolic Julia set on the cardioid boundary. Enable the bound 'Parabolic implosion (faithful, c=1/4)' animation to sweep c toward the cusp (θ → 0) — satellite spirals bloom, with iterations ramping up automatically as c nears the root. The rigorous counterpart of the naïve circle.",
+                Description   = "Parabolic implosion at c = 1/4 (period-1, Lavaurs limit): a near-parabolic Julia set on the cardioid boundary. Enable the bound 'Parabolic implosion (cardioid, c=1/4)' animation to sweep c toward the cusp (θ → 0) — satellite spirals bloom, with iterations ramping up automatically as c nears the root. The rigorous counterpart of the naïve circle.",
                 RegionType    = RegionType.BuiltIn,
                 FractalType   = FractalType.Julia,
                 QualityPreset = QualityPreset.Standard,
-                AnimationName = "Parabolic implosion (faithful, c=1/4)",
+                AnimationName = "Parabolic implosion (cardioid, c=1/4)",
                 // c(θ=0.14) on the main cardioid: e^{2πiθ}/2 − e^{4πiθ}/4
                 Params        = new RegionFractalParams { JuliaCRe = 0.36555, JuliaCIm = 0.13967 },
             },
             new()
             {
-                Name          = "Parabolic implosion (faithful) c = -3/4",
+                Name          = "Parabolic implosion c = -3/4",
                 CenterX       =  0.0,
                 CenterY       =  0.0,
                 Zoom          =  0.6,
                 Iterations    =  3000,
-                Description   = "Faithful parabolic implosion at c = -3/4 (period-2 root, multiplier -1): a near-parabolic Julia set on the cardioid boundary. Enable 'Parabolic implosion (faithful, c=-3/4)' to sweep c toward the root (θ → 1/2) and watch the period-2 cascade bloom (iterations auto-ramp).",
+                Description   = "Parabolic implosion at c = -3/4 (period-2 root, multiplier -1): a near-parabolic Julia set on the cardioid boundary. Enable 'Parabolic implosion (cardioid, c=-3/4)' to sweep c toward the root (θ → 1/2) and watch the period-2 cascade bloom (iterations auto-ramp).",
                 RegionType    = RegionType.BuiltIn,
                 FractalType   = FractalType.Julia,
                 QualityPreset = QualityPreset.Standard,
-                AnimationName = "Parabolic implosion (faithful, c=-3/4)",
+                AnimationName = "Parabolic implosion (cardioid, c=-3/4)",
                 // c(θ=0.42) on the main cardioid
                 Params        = new RegionFractalParams { JuliaCRe = -0.57210, JuliaCIm = -0.02982 },
             },
             new()
             {
-                Name          = "Parabolic implosion (faithful) 1/3 bulb",
+                Name          = "Parabolic implosion 1/3 bulb",
                 CenterX       =  0.0,
                 CenterY       =  0.0,
                 Zoom          =  0.6,
                 Iterations    =  3000,
-                Description   = "Faithful parabolic implosion at the 1/3-bulb root (period-3, multiplier e^{2πi/3}): a near-parabolic Julia set on the cardioid boundary. Enable 'Parabolic implosion (faithful, 1/3 bulb)' to sweep c toward the root (θ → 1/3) and watch the 3-fold cascade bloom (iterations auto-ramp).",
+                Description   = "Parabolic implosion at the 1/3-bulb root (period-3, multiplier e^{2πi/3}): a near-parabolic Julia set on the cardioid boundary. Enable 'Parabolic implosion (cardioid, 1/3 bulb)' to sweep c toward the root (θ → 1/3) and watch the 3-fold cascade bloom (iterations auto-ramp).",
                 RegionType    = RegionType.BuiltIn,
                 FractalType   = FractalType.Julia,
                 QualityPreset = QualityPreset.Standard,
-                AnimationName = "Parabolic implosion (faithful, 1/3 bulb)",
+                AnimationName = "Parabolic implosion (cardioid, 1/3 bulb)",
                 // c(θ=0.29) on the main cardioid
                 Params        = new RegionFractalParams { JuliaCRe = 0.09630, JuliaCIm = 0.60170 },
             },
             new()
             {
-                Name          = "Parabolic implosion (faithful) 1/4 bulb",
+                Name          = "Parabolic implosion 1/4 bulb",
                 CenterX       =  0.0,
                 CenterY       =  0.0,
                 Zoom          =  0.6,
                 Iterations    =  3000,
-                Description   = "Faithful parabolic implosion at the 1/4-bulb root (period-4, multiplier i): a near-parabolic Julia set on the cardioid boundary. Enable 'Parabolic implosion (faithful, 1/4 bulb)' to sweep c toward the root (θ → 1/4) and watch the 4-fold cascade bloom (iterations auto-ramp).",
+                Description   = "Parabolic implosion at the 1/4-bulb root (period-4, multiplier i): a near-parabolic Julia set on the cardioid boundary. Enable 'Parabolic implosion (cardioid, 1/4 bulb)' to sweep c toward the root (θ → 1/4) and watch the 4-fold cascade bloom (iterations auto-ramp).",
                 RegionType    = RegionType.BuiltIn,
                 FractalType   = FractalType.Julia,
                 QualityPreset = QualityPreset.Standard,
-                AnimationName = "Parabolic implosion (faithful, 1/4 bulb)",
+                AnimationName = "Parabolic implosion (cardioid, 1/4 bulb)",
                 // c(θ=0.19) on the main cardioid (the animation's shallow start)
                 Params        = new RegionFractalParams
                 {
@@ -1856,16 +1856,16 @@ namespace FracturingFog.Models
             },
             new()
             {
-                Name          = "Parabolic implosion (faithful) 2/5 bulb",
+                Name          = "Parabolic implosion 2/5 bulb",
                 CenterX       =  0.0,
                 CenterY       =  0.0,
                 Zoom          =  0.6,
                 Iterations    =  3000,
-                Description   = "Faithful parabolic implosion at the 2/5-bulb root (period-5, multiplier e^{4πi/5}): a near-parabolic Julia set on the cardioid boundary. Enable 'Parabolic implosion (faithful, 2/5 bulb)' to sweep c toward the root (θ → 2/5) and watch the 5-fold cascade bloom (iterations auto-ramp).",
+                Description   = "Parabolic implosion at the 2/5-bulb root (period-5, multiplier e^{4πi/5}): a near-parabolic Julia set on the cardioid boundary. Enable 'Parabolic implosion (cardioid, 2/5 bulb)' to sweep c toward the root (θ → 2/5) and watch the 5-fold cascade bloom (iterations auto-ramp).",
                 RegionType    = RegionType.BuiltIn,
                 FractalType   = FractalType.Julia,
                 QualityPreset = QualityPreset.Standard,
-                AnimationName = "Parabolic implosion (faithful, 2/5 bulb)",
+                AnimationName = "Parabolic implosion (cardioid, 2/5 bulb)",
                 // c(θ=0.35) on the main cardioid
                 Params        = new RegionFractalParams
                 {
@@ -1878,16 +1878,16 @@ namespace FracturingFog.Models
             // cusp 0/1. Bound to the general 'pick p/q' animation (sweeps the approach depth).
             new()
             {
-                Name          = "Parabolic implosion (faithful) — pick p/q",
+                Name          = "Parabolic implosion — pick p/q",
                 CenterX       =  0.0,
                 CenterY       =  0.0,
                 Zoom          =  0.62,
                 Iterations    =  3000,
-                Description   = "Faithful parabolic implosion at a USER-chosen root: set p/q in the Julia panel (FaithfulImplosion mode); starts at the cusp 0/1 (c = 1/4). Enable 'Parabolic implosion (faithful, pick p/q)' to sweep the approach depth toward the root — the near-parabolic Julia set blooms its period-q cascade, iterations auto-ramp. The general form of the per-root presets.",
+                Description   = "Parabolic implosion at a USER-chosen root: set p/q in the Julia panel (Parabolic-implosion mode); starts at the cusp 0/1 (c = 1/4). Enable 'Parabolic implosion (cardioid, pick p/q)' to sweep the approach depth toward the root — the near-parabolic Julia set blooms its period-q cascade, iterations auto-ramp. The general form of the per-root presets.",
                 RegionType    = RegionType.BuiltIn,
                 FractalType   = FractalType.Julia,
                 QualityPreset = QualityPreset.Standard,
-                AnimationName = "Parabolic implosion (faithful, pick p/q)",
+                AnimationName = "Parabolic implosion (cardioid, pick p/q)",
                 Params        = new RegionFractalParams
                 {
                     JuliaCRe = 0.25, JuliaCIm = 0.0,       // fallback c (cusp) if mode is turned off
@@ -1900,16 +1900,16 @@ namespace FracturingFog.Models
             // the period-doubling cascade. Starts at p/q = 1/2 → the period-4 root c = −5/4.
             new()
             {
-                Name          = "Parabolic implosion (faithful) — satellite (period-doubling)",
+                Name          = "Parabolic implosion — satellite (period-doubling)",
                 CenterX       =  0.0,
                 CenterY       =  0.0,
                 Zoom          =  0.6,
                 Iterations    =  3000,
-                Description   = "Faithful implosion at a SATELLITE (period-2 bulb) sub-root — the period-doubling family. Starts at p/q = 1/2 → the period-4 root c = −5/4. Turn on 'Satellite (period-2 bulb)' + set p/q in the Julia panel, then enable 'Parabolic implosion (faithful, pick p/q)' to implode toward the sub-root. Higher p/q → deeper doublings (period 6, 8, …).",
+                Description   = "Parabolic implosion at a SATELLITE (period-2 bulb) sub-root — the period-doubling family. Starts at p/q = 1/2 → the period-4 root c = −5/4. Turn on 'Satellite (period-2 bulb)' + set p/q in the Julia panel, then enable 'Parabolic implosion (cardioid, pick p/q)' to implode toward the sub-root. Higher p/q → deeper doublings (period 6, 8, …).",
                 RegionType    = RegionType.BuiltIn,
                 FractalType   = FractalType.Julia,
                 QualityPreset = QualityPreset.Standard,
-                AnimationName = "Parabolic implosion (faithful, pick p/q)",
+                AnimationName = "Parabolic implosion (cardioid, pick p/q)",
                 Params        = new RegionFractalParams
                 {
                     JuliaCRe = -1.25, JuliaCIm = 0.0,      // fallback c (period-4 root) if mode off
@@ -1923,16 +1923,16 @@ namespace FracturingFog.Models
             // toward its period-8 onset c ≈ −1.3680989.
             new()
             {
-                Name          = "Parabolic implosion (faithful) — deep nesting (period-4 bulb)",
+                Name          = "Parabolic implosion — deep nesting (period-4 bulb)",
                 CenterX       =  0.0,
                 CenterY       =  0.0,
                 Zoom          =  0.6,
                 Iterations    =  4000,
-                Description   = "Faithful implosion at a SATELLITE-OF-A-SATELLITE (deeper nesting). The 'Parent path' 1/2 1/2 addresses the period-4 bulb of the period-doubling cascade; p/q = 1/2 implodes toward its period-8 onset c ≈ −1.3680989. Set the parent path (space-separated p/q, outermost first) + p/q in the Julia panel, then enable 'Parabolic implosion (faithful, pick p/q)'. Any address depth works — the bulb-boundary solver descends the whole chain.",
+                Description   = "Parabolic implosion at a SATELLITE-OF-A-SATELLITE (deeper nesting). The 'Parent path' 1/2 1/2 addresses the period-4 bulb of the period-doubling cascade; p/q = 1/2 implodes toward its period-8 onset c ≈ −1.3680989. Set the parent path (space-separated p/q, outermost first) + p/q in the Julia panel, then enable 'Parabolic implosion (cardioid, pick p/q)'. Any address depth works — the bulb-boundary solver descends the whole chain.",
                 RegionType    = RegionType.BuiltIn,
                 FractalType   = FractalType.Julia,
                 QualityPreset = QualityPreset.Standard,
-                AnimationName = "Parabolic implosion (faithful, pick p/q)",
+                AnimationName = "Parabolic implosion (cardioid, pick p/q)",
                 Params        = new RegionFractalParams
                 {
                     JuliaCRe = -1.3680989394, JuliaCIm = 0.0,  // fallback c (period-8 onset) if mode off
