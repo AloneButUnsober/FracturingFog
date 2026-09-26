@@ -432,6 +432,28 @@ FracturingFog.exe --batch --mode video --region ""Mini Mandelbrot"" ^
                   --out C:\out\zoom.mp4
 ```
 
+### Any fractal type (#947)
+
+Batch video works for **every** fractal type. By default the motion follows the
+family, the same way the interactive video slideshow moves it:
+
+| Family | Default motion (`--video-motion auto`) |
+|---|---|
+| 2D escape-time (Mandelbrot, Julia, Newton, Apollonian, Generated, …) | Plane zoom from `--start-zoom` to the target. Julia / Phoenix / Glynn also drift their constant gently (`--no-drift` to keep it fixed). |
+| Raymarched 3D (Mandelbulb, Mandelbox, KIFS, Quaternion, Kleinian, …) | Camera dolly from 6× wider to the authored framing. Add `--orbit DEG` to swing the camera around. |
+| Logistic, AcidWarp | Param sweep (Logistic pans its r-window, AcidWarp morphs its flow). |
+| Other non-spatial (Flame, Plasma, DLA, Buddhabrot, IFS, …) | Rendered once, then a slow Ken-Burns pan + zoom. |
+
+Force a motion with `--video-motion zoom|hold|kenburns|sweep`, and make the
+random parts reproducible with `--video-seed N`. A `--region` also brings its
+saved per-type settings (Julia constant, 3D camera, seeds, lighting) into every
+frame.
+
+```
+FracturingFog.exe --batch --mode video --fractal Mandelbulb --x 0 --y 0 --zoom 1 ^
+                  --seconds 12 --orbit 120 --out C:\out\bulb.mp4
+```
+
 ### Lossless 60-second archival zoom
 
 ```

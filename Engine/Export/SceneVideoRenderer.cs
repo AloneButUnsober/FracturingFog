@@ -568,7 +568,7 @@ namespace FracturingFog.Export
 
             var p = new FractalParameters();
             if (region != null)
-                LoadRegionParams(region, p);
+                region.ApplyHeadlessParams(p);
 
             // #295 follow-up — per-shot lighting override by name. Borrow another
             // region's captured Lighting & FX for this shot, overriding the shot
@@ -607,62 +607,6 @@ namespace FracturingFog.Export
                 Camera = shot.Camera,
                 ToneMap = shot.ToneMap,
             };
-        }
-
-        // Populate source-compiled equation slots + lighting + per-type camera
-        // baseline from the region. The calculators lazily compile from the
-        // source strings, so no live host is needed. Mirrors the equation /
-        // lighting half of HostColorThemeService.LoadRegionFractalParams.
-        private static void LoadRegionParams(FractalRegion region, FractalParameters p)
-        {
-            // #27 Phase 0 — inline raw-C# source from a cross-user imported
-            // region is refused by the gate; local-store sources re-mark trusted.
-            p.UserCodeOrigin = region.ExternalOrigin
-                ? FracturingFog.Security.UserCodeOrigin.ExternalFile
-                : FracturingFog.Security.UserCodeOrigin.Interactive;
-
-            if (region.FractalType == FractalType.UserEquation
-                && !string.IsNullOrWhiteSpace(region.UserEquationName))
-            {
-                var entry = UserEquationStore.Instance.GetByName(region.UserEquationName);
-                if (entry != null) { p.UserEquationSource = entry.Source; p.UserEquationName = entry.Name; p.UserCodeOrigin = FracturingFog.Security.UserCodeOrigin.Interactive; }
-            }
-            if (region.FractalType == FractalType.Sandbox
-                && !string.IsNullOrWhiteSpace(region.SandboxName))
-            {
-                var entry = SandboxEquationStore.Instance.GetByName(region.SandboxName);
-                if (entry != null) { p.SandboxSource = entry.Source; p.SandboxName = entry.Name; }
-            }
-            if (region.FractalType == FractalType.UserBulb)
-            {
-                var entry = !string.IsNullOrWhiteSpace(region.UserBulbName)
-                    ? UserBulbStore.Instance.GetByName(region.UserBulbName)
-                    : null;
-                if (entry != null) { p.UserBulbSource = entry.Source; p.UserBulbName = entry.Name; p.UserCodeOrigin = FracturingFog.Security.UserCodeOrigin.Interactive; }
-                else if (!string.IsNullOrWhiteSpace(region.UserBulbSource))
-                {
-                    p.UserBulbSource = region.UserBulbSource;
-                    p.UserBulbName = region.UserBulbName;
-                }
-                if (region.UserBulbCameraDistance > 0)
-                {
-                    p.UserBulbCameraDistance = region.UserBulbCameraDistance;
-                    p.UserBulbCameraTheta = region.UserBulbCameraTheta;
-                    p.UserBulbCameraPhi = region.UserBulbCameraPhi;
-                    p.UserBulbLightTheta = region.UserBulbLightTheta;
-                    p.UserBulbLightPhi = region.UserBulbLightPhi;
-                }
-            }
-            // Region lighting override snapshot (Phase 10) — no-op when null,
-            // unless the region opted into authoritative lighting (#295), in
-            // which case a null override resets to stock defaults so the
-            // rendered scene matches the region's portable look.
-            if (region.LightingIsAuthoritative)
-                region.ApplyLightingAuthoritative(p);
-            else
-                region.ApplyLightingTo(p);
-            // Region Relief 3D snapshot — no-op when null.
-            region.ApplyRelief3DTo(p);
         }
 
         private static AnimationData? ResolveAnimation(SceneShot shot, FractalRegion? region)

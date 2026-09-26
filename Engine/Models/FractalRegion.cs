@@ -336,6 +336,67 @@ namespace FracturingFog.Models
                 parameters.Lighting = FracturingFog.Rendering.Lighting.LightingFxData.CreateDefault();
         }
 
+        /// <summary>
+        /// Populate the source-compiled equation slots (UserEquation / Sandbox /
+        /// UserBulb, looked up by name in the user's local stores) + lighting +
+        /// Relief 3D snapshot into <paramref name="p"/> for an offline render — no
+        /// live host needed; the calculators lazily compile from the source
+        /// strings. Mirrors the equation / lighting half of
+        /// HostColorThemeService.LoadRegionFractalParams. Shared by the scene
+        /// exporter and batch video (#947). The equation stores must be loaded.
+        /// </summary>
+        public void ApplyHeadlessParams(FractalParameters p)
+        {
+            // #27 Phase 0 — inline raw-C# source from a cross-user imported
+            // region is refused by the gate; local-store sources re-mark trusted.
+            p.UserCodeOrigin = ExternalOrigin
+                ? FracturingFog.Security.UserCodeOrigin.ExternalFile
+                : FracturingFog.Security.UserCodeOrigin.Interactive;
+
+            if (FractalType == FractalType.UserEquation
+                && !string.IsNullOrWhiteSpace(UserEquationName))
+            {
+                var entry = UserEquationStore.Instance.GetByName(UserEquationName);
+                if (entry != null) { p.UserEquationSource = entry.Source; p.UserEquationName = entry.Name; p.UserCodeOrigin = FracturingFog.Security.UserCodeOrigin.Interactive; }
+            }
+            if (FractalType == FractalType.Sandbox
+                && !string.IsNullOrWhiteSpace(SandboxName))
+            {
+                var entry = SandboxEquationStore.Instance.GetByName(SandboxName);
+                if (entry != null) { p.SandboxSource = entry.Source; p.SandboxName = entry.Name; }
+            }
+            if (FractalType == FractalType.UserBulb)
+            {
+                var entry = !string.IsNullOrWhiteSpace(UserBulbName)
+                    ? UserBulbStore.Instance.GetByName(UserBulbName)
+                    : null;
+                if (entry != null) { p.UserBulbSource = entry.Source; p.UserBulbName = entry.Name; p.UserCodeOrigin = FracturingFog.Security.UserCodeOrigin.Interactive; }
+                else if (!string.IsNullOrWhiteSpace(UserBulbSource))
+                {
+                    p.UserBulbSource = UserBulbSource;
+                    p.UserBulbName = UserBulbName;
+                }
+                if (UserBulbCameraDistance > 0)
+                {
+                    p.UserBulbCameraDistance = UserBulbCameraDistance;
+                    p.UserBulbCameraTheta = UserBulbCameraTheta;
+                    p.UserBulbCameraPhi = UserBulbCameraPhi;
+                    p.UserBulbLightTheta = UserBulbLightTheta;
+                    p.UserBulbLightPhi = UserBulbLightPhi;
+                }
+            }
+            // Region lighting override snapshot (Phase 10) — no-op when null,
+            // unless the region opted into authoritative lighting (#295), in
+            // which case a null override resets to stock defaults so the
+            // rendered scene matches the region's portable look.
+            if (LightingIsAuthoritative)
+                ApplyLightingAuthoritative(p);
+            else
+                ApplyLightingTo(p);
+            // Region Relief 3D snapshot — no-op when null.
+            ApplyRelief3DTo(p);
+        }
+
         /// <summary>Apply this region's Relief 3D snapshot (if any) to the given
         /// params. No-op when null (leaves the current relief state alone).</summary>
         public void ApplyRelief3DTo(FractalParameters parameters)

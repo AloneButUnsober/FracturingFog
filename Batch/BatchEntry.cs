@@ -55,6 +55,13 @@ namespace FracturingFog.Batch
             // resolve names the user authored interactively in earlier runs.
             try { FracturingFog.Models.ColorPalette.LoadUserThemes(); } catch { }
             try { FractalRegionLibrary.Instance.Load(); } catch { }
+            // #947 — user-code regions (UserEquation / Sandbox / UserBulb) name their
+            // equation in these stores; without loading them every lookup misses
+            // and the frame renders blank. Read-only here: the interactive
+            // startup's DSL migrations (which write) are deliberately not run.
+            try { UserEquationStore.Instance.Load(); } catch { }
+            try { SandboxEquationStore.Instance.Load(); } catch { }
+            try { UserBulbStore.Instance.Load(); } catch { }
             // Scene mode also needs the scene + animation libraries so --scene
             // names and shot-attached animations resolve.
             if (opts.Mode == BatchMode.Scene)
@@ -191,8 +198,19 @@ namespace FracturingFog.Batch
             Console.WriteLine("Video options (--mode video):");
             Console.WriteLine("  --seconds VAL               Duration (default 20.0)");
             Console.WriteLine("  --fps N                     Frames per second (default 30)");
-            Console.WriteLine("  --start-zoom VAL            Starting zoom (default 0.5 = full set)");
+            Console.WriteLine("  --start-zoom VAL            Starting zoom (default 0.5 = full set; 3D dolly: target/6)");
             Console.WriteLine("  --reverse                   Zoom out from target back to full view");
+            Console.WriteLine("  --video-motion MODE         How the video moves (default auto — per fractal family):");
+            Console.WriteLine("                                auto     — 2D: plane zoom · 3D: camera dolly ·");
+            Console.WriteLine("                                           Logistic/AcidWarp: sweep · other: kenburns");
+            Console.WriteLine("                                zoom     — log-zoom start → target (3D: dolly)");
+            Console.WriteLine("                                hold     — render once, hold the frame");
+            Console.WriteLine("                                kenburns — render once, slow pan + zoom of the frame");
+            Console.WriteLine("                                sweep    — re-render sweeping a family param");
+            Console.WriteLine("  --orbit DEG                 3D only: sweep the camera azimuth DEG degrees");
+            Console.WriteLine("  --no-drift                  Julia/Phoenix/Glynn zoom: keep the constant fixed");
+            Console.WriteLine("                              (default drifts it gently, like the video slideshow)");
+            Console.WriteLine("  --video-seed N              Seed for Ken-Burns / drift paths (default 0)");
             Console.WriteLine("  --lossless TYPE, -l TYPE    Lossless encode preset (requires ffmpeg.exe):");
             Console.WriteLine("                                none    — built-in WMF H.264 MP4 (default)");
             Console.WriteLine("                                h264    — libx264 -qp 0 lossless MP4");
