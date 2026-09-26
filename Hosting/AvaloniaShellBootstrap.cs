@@ -1910,6 +1910,16 @@ namespace FracturingFog.Hosting
                 await HandleSlideshowRecordingReadyAsync(args);
             };
 
+            // #945 — instant recording stopped: export prompt + encode.
+            shell.LiveRecordingReady += async (_, rec) =>
+            {
+                try { await HandleLiveRecordingReadyAsync(rec); }
+                catch (Exception ex)
+                {
+                    Console.Error.WriteLine($"[AvaloniaShellBootstrap] LiveRecordingReady failed: {ex.Message}");
+                }
+            };
+
             // General application settings — pops the Avalonia AppSettings
             // dialog (animated-param ceiling override today). Persists on OK
             // and invalidates the animation bus's cached ceiling.
@@ -3832,6 +3842,83 @@ namespace FracturingFog.Hosting
             // 3. Animated GIF — SaveFileDialog then move the temp file into place.
             if (!string.IsNullOrEmpty(result.GifTempPath) && System.IO.File.Exists(result.GifTempPath))
                 await PromptSaveGif(result.GifTempPath!);
+        }
+
+        // #945 — last export choices, pre-selected on the next prompt.
+        // (Persisted Quick Record prefs are #946.)
+        private static FracturingFog.Render.LiveRecordingExportOptions? s_lastLiveExport;
+
+        // Instant recording stopped — prompt for format / quality, pick the
+        // destination, encode, then drop the temp intermediate. Discard (or a
+        // closed prompt) asks for confirmation so a stray click can't lose a
+        // take; a failed encode re-opens the prompt with the same frames.
+        private static async Task HandleLiveRecordingReadyAsync(FracturingFog.Render.LiveRecordingResult rec)
+        {
+            bool ffmpeg = FfmpegEncoder.IsEnabledForUser();
+            while (true)
+            {
+                var opt = await AvaloniaDialogs.ShowLiveRecordingExportAsync(rec, ffmpeg, s_lastLiveExport);
+                if (opt == null)
+                {
+                    if (await AvaloniaDialogs.ConfirmAsync("Discard Recording",
+                            $"Discard the {rec.DurationSeconds:0.0}s recording? This cannot be undone."))
+                    {
+                        DeleteLiveTemp(rec);
+                        SetStatus("Recording discarded.");
+                        return;
+                    }
+                    continue;
+                }
+                s_lastLiveExport = opt;
+
+                string stamp = DateTime.Now.ToString("yyyyMMdd_HHmmss");
+                string? outPath;
+                if (opt.Format == FracturingFog.Render.LiveRecordingFormat.PngSequence)
+                {
+                    string? dest = await AvaloniaDialogs.PickFolderAsync("Choose a folder for the PNG sequence");
+                    outPath = string.IsNullOrEmpty(dest) ? null : System.IO.Path.Combine(dest, $"FracturingFog_Recording_{stamp}");
+                }
+                else
+                {
+                    string ext = LiveRecordingEncoder.ExtensionFor(opt.Format);
+                    outPath = await AvaloniaDialogs.PickSaveFileAsync(
+                        "Save Recording", $"FracturingFog_Recording_{stamp}.{ext}",
+                        $"{ext.ToUpperInvariant()} (*.{ext})|*.{ext}");
+                }
+                if (string.IsNullOrEmpty(outPath)) continue; // back to the prompt
+
+                SetStatus("Encoding recording…");
+                int lastPct = -1;
+                var progress = new Progress<double>(p =>
+                {
+                    int pct = (int)(p * 100);
+                    if (pct != lastPct) { lastPct = pct; SetStatus($"Encoding recording… {pct}%"); }
+                });
+
+                (bool ok, string log) res;
+                try
+                {
+                    res = await LiveRecordingEncoder.EncodeAsync(rec, opt, outPath!,
+                        s_renderHost?.VideoWriterFactory, ffmpegAllowed: ffmpeg, progress: progress);
+                }
+                catch (Exception ex) { res = (false, ex.Message); }
+
+                if (res.ok)
+                {
+                    DeleteLiveTemp(rec);
+                    SetStatus($"Recording saved: {System.IO.Path.GetFileName(outPath)}");
+                    return;
+                }
+                await AvaloniaDialogs.ShowMessageAsync("Save Recording",
+                    $"Export failed — the recording is kept; try another format.\n\n{res.log}",
+                    expectsConfirmation: false);
+            }
+        }
+
+        private static void DeleteLiveTemp(FracturingFog.Render.LiveRecordingResult rec)
+        {
+            try { if (System.IO.Directory.Exists(rec.Folder)) System.IO.Directory.Delete(rec.Folder, recursive: true); }
+            catch { }
         }
 
         // Recorded image-slideshow stopped. The engine handed us a temp PNG

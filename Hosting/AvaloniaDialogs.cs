@@ -2185,6 +2185,175 @@ namespace FracturingFog.Hosting
             return tcs.Task;
         }
 
+        // ── Instant-record export prompt (#945) ─────────────────────────────
+
+        /// <summary>
+        /// Post-stop prompt for an instant recording: format, quality, output
+        /// fps and scale. Returns the picked options (Save…) or null (Discard /
+        /// window closed). ffmpeg-only formats are hidden when ffmpeg is not
+        /// enabled. <paramref name="initial"/> pre-selects the last choices.
+        /// </summary>
+        public static Task<FracturingFog.Render.LiveRecordingExportOptions?> ShowLiveRecordingExportAsync(
+            FracturingFog.Render.LiveRecordingResult rec,
+            bool ffmpegEnabled,
+            FracturingFog.Render.LiveRecordingExportOptions? initial)
+        {
+            var owner = ActiveMainWindow;
+            var tcs = new TaskCompletionSource<FracturingFog.Render.LiveRecordingExportOptions?>();
+            var init = initial ?? new FracturingFog.Render.LiveRecordingExportOptions();
+
+            void Run()
+            {
+                var win = new Window
+                {
+                    Title = "Save Recording",
+                    Width = 460,
+                    SizeToContent = SizeToContent.Height,
+                    WindowStartupLocation = WindowStartupLocation.CenterOwner,
+                    CanResize = false,
+                    ShowInTaskbar = false,
+                    Background = Brushes.Black,
+                    // Same Topmost rationale as the slideshow prompt: keep it
+                    // above non-modal child windows (Control Center etc.).
+                    Topmost = true,
+                };
+
+                var formats = new List<(FracturingFog.Render.LiveRecordingFormat F, string Label)>
+                {
+                    (FracturingFog.Render.LiveRecordingFormat.Mp4H264, "MP4 — H.264 (plays everywhere)"),
+                    (FracturingFog.Render.LiveRecordingFormat.Mp4H265, "MP4 — H.265 / HEVC (smaller)"),
+                    (FracturingFog.Render.LiveRecordingFormat.WebmVp9, "WebM — VP9 (web)"),
+                    (FracturingFog.Render.LiveRecordingFormat.MkvFfv1, "MKV — FFV1 (lossless master)"),
+                    (FracturingFog.Render.LiveRecordingFormat.Gif, "Animated GIF"),
+                    (FracturingFog.Render.LiveRecordingFormat.PngSequence, "PNG sequence (folder)"),
+                };
+                if (!ffmpegEnabled)
+                    formats.RemoveAll(x => LiveRecordingEncoder.RequiresFfmpeg(x.F));
+
+                var qualities = new[]
+                {
+                    (Q: FracturingFog.Render.LiveRecordingQuality.Lossless, Label: "Lossless (huge)"),
+                    (Q: FracturingFog.Render.LiveRecordingQuality.High, Label: "High"),
+                    (Q: FracturingFog.Render.LiveRecordingQuality.Medium, Label: "Medium"),
+                    (Q: FracturingFog.Render.LiveRecordingQuality.Low, Label: "Low (small)"),
+                };
+                int[] fpsChoices = { 15, 24, 25, 30, 50, 60 };
+                int[] scaleChoices = { 100, 75, 50, 25 };
+
+                static int IndexOr(int idx, int fallback) => idx >= 0 ? idx : fallback;
+
+                var fmtCombo = new ComboBox
+                {
+                    ItemsSource = formats.Select(x => x.Label).ToList(),
+                    SelectedIndex = IndexOr(formats.FindIndex(x => x.F == init.Format), 0),
+                    HorizontalAlignment = HorizontalAlignment.Stretch,
+                };
+                var qCombo = new ComboBox
+                {
+                    ItemsSource = qualities.Select(x => x.Label).ToList(),
+                    SelectedIndex = IndexOr(Array.FindIndex(qualities, x => x.Q == init.Quality), 1),
+                    HorizontalAlignment = HorizontalAlignment.Stretch,
+                };
+                var fpsCombo = new ComboBox
+                {
+                    ItemsSource = fpsChoices.Select(f => $"{f} fps").ToList(),
+                    SelectedIndex = IndexOr(Array.IndexOf(fpsChoices, init.Fps), Array.IndexOf(fpsChoices, 30)),
+                    HorizontalAlignment = HorizontalAlignment.Stretch,
+                };
+                var scaleCombo = new ComboBox
+                {
+                    ItemsSource = scaleChoices.Select(pct =>
+                    {
+                        var (w, h) = LiveRecordingEncoder.ScaledSize(rec.Width, rec.Height, pct);
+                        return $"{pct}%  ({w}×{h})";
+                    }).ToList(),
+                    SelectedIndex = IndexOr(Array.IndexOf(scaleChoices, init.ScalePercent), 0),
+                    HorizontalAlignment = HorizontalAlignment.Stretch,
+                };
+
+                // Quality is meaningless for the inherently lossless formats.
+                void SyncQuality()
+                {
+                    var f = formats[Math.Max(0, fmtCombo.SelectedIndex)].F;
+                    qCombo.IsEnabled = f is not (FracturingFog.Render.LiveRecordingFormat.MkvFfv1
+                                              or FracturingFog.Render.LiveRecordingFormat.PngSequence);
+                }
+                fmtCombo.SelectionChanged += (_, _) => SyncQuality();
+                SyncQuality();
+
+                var form = new Grid
+                {
+                    ColumnDefinitions = new ColumnDefinitions("Auto,*"),
+                    RowDefinitions = new RowDefinitions("Auto,Auto,Auto,Auto"),
+                    Margin = new Thickness(16, 4, 16, 8),
+                    RowSpacing = 6,
+                    ColumnSpacing = 10,
+                };
+                void AddRow(int row, string label, Control c)
+                {
+                    var tb = new TextBlock { Text = label, Foreground = Brushes.White, VerticalAlignment = VerticalAlignment.Center };
+                    Grid.SetRow(tb, row); Grid.SetColumn(tb, 0);
+                    Grid.SetRow(c, row); Grid.SetColumn(c, 1);
+                    form.Children.Add(tb); form.Children.Add(c);
+                }
+                AddRow(0, "Format", fmtCombo);
+                AddRow(1, "Quality", qCombo);
+                AddRow(2, "Frame rate", fpsCombo);
+                AddRow(3, "Size", scaleCombo);
+
+                var dur = TimeSpan.FromSeconds(rec.DurationSeconds);
+                var info = new TextBlock
+                {
+                    Text = $"Recorded {dur:mm\\:ss\\.f} at {rec.Width}×{rec.Height} " +
+                           $"({rec.Frames.Count} unique frame{(rec.Frames.Count == 1 ? "" : "s")}, sampled at {rec.CaptureFps} fps)." +
+                           (ffmpegEnabled ? "" : "\nffmpeg not enabled — H.265 / WebM / FFV1 hidden. Install it from FFmpeg Setup for more formats."),
+                    Foreground = Brushes.White,
+                    TextWrapping = TextWrapping.Wrap,
+                    Margin = new Thickness(16, 16, 16, 8),
+                };
+
+                FracturingFog.Render.LiveRecordingExportOptions? pending = null;
+                var save = new Button { Content = "Save…", MinWidth = 100, IsDefault = true };
+                save.Click += (_, _) =>
+                {
+                    pending = new FracturingFog.Render.LiveRecordingExportOptions
+                    {
+                        Format = formats[Math.Max(0, fmtCombo.SelectedIndex)].F,
+                        Quality = qualities[Math.Max(0, qCombo.SelectedIndex)].Q,
+                        Fps = fpsChoices[Math.Max(0, fpsCombo.SelectedIndex)],
+                        ScalePercent = scaleChoices[Math.Max(0, scaleCombo.SelectedIndex)],
+                    };
+                    win.Close();
+                };
+                var discard = new Button { Content = "Discard", MinWidth = 90 };
+                discard.Click += (_, _) => { pending = null; win.Close(); };
+
+                var buttonRow = new StackPanel
+                {
+                    Orientation = Orientation.Horizontal,
+                    HorizontalAlignment = HorizontalAlignment.Right,
+                    Margin = new Thickness(16, 8, 16, 16),
+                    Spacing = 8,
+                };
+                buttonRow.Children.Add(save);
+                buttonRow.Children.Add(discard);
+
+                win.Closed += (_, _) => tcs.TrySetResult(pending);
+
+                var root = new StackPanel();
+                root.Children.Add(info);
+                root.Children.Add(form);
+                root.Children.Add(buttonRow);
+                win.Content = root;
+                _ = WindowService.ShowDialogAsync(win, owner);
+            }
+
+            if (Dispatcher.UIThread.CheckAccess()) Run();
+            else Dispatcher.UIThread.Post(Run);
+
+            return tcs.Task;
+        }
+
         // ── Image-palette picker ─────────────────────────────────────────────
 
         /// <summary>

@@ -107,11 +107,25 @@ namespace FracturingFog
             int fps = 30, CancellationToken ct = default,
             Action<string>? onProgressLine = null)
         {
+            string args = BuildArgs(pngFolder, outputPath, preset, fps);
+            return await RunAsync(args, pngFolder, ct, onProgressLine).ConfigureAwait(false);
+        }
+
+        /// <summary>
+        /// Runs ffmpeg with a caller-built argument string in
+        /// <paramref name="workingDirectory"/>. Returns (success, stderr-tail).
+        /// Blocks until ffmpeg exits or <paramref name="ct"/> is cancelled
+        /// (which kills the process). Shared by <see cref="EncodeAsync"/> and the
+        /// live-recording exporter (#944), which needs concat-demuxer input.
+        /// </summary>
+        public static async Task<(bool ok, string log)> RunAsync(
+            string args, string workingDirectory,
+            CancellationToken ct = default,
+            Action<string>? onProgressLine = null)
+        {
             string? exe = FindFfmpeg();
             if (exe == null)
                 return (false, "ffmpeg.exe not found.");
-
-            string args = BuildArgs(pngFolder, outputPath, preset, fps);
 
             var psi = new ProcessStartInfo
             {
@@ -121,7 +135,7 @@ namespace FracturingFog
                 UseShellExecute = false,
                 RedirectStandardError = true,
                 RedirectStandardOutput = true,
-                WorkingDirectory = pngFolder,
+                WorkingDirectory = workingDirectory,
             };
 
             using var proc = new Process { StartInfo = psi, EnableRaisingEvents = true };

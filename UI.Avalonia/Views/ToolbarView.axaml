@@ -15,6 +15,10 @@
             <Setter Property="Foreground" Value="#EEE" />
             <Setter Property="BorderBrush" Value="#444" />
         </Style>
+        <Style Selector="ToggleButton.liveRec:checked /template/ ContentPresenter#PART_ContentPresenter, ToggleButton.liveRec:checked:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+            <Setter Property="Background" Value="#FFCC00" />
+            <Setter Property="Foreground" Value="Black" />
+        </Style>
         <Style Selector="ComboBox.toolbar">
             <Setter Property="Background" Value="#1E1E1E" />
             <Setter Property="Foreground" Value="#EEE" />
@@ -36,6 +40,15 @@
             <Button Classes="toolbar" Content="Menu"
                     Command="{Binding ShowControlCenterCommand}"
                     ToolTip.Tip="Open the Control Center (main menu)" />
+            <!-- #945 instant record: capture the render window as-is (themes,
+                 animation, lighting/FX, watermark). F9 toggles too. Stop pops
+                 the export prompt (format / quality / fps / scale). Active
+                 state is yellow, not red (colour-blind friendly). -->
+            <ToggleButton Classes="toolbar liveRec" Content="{Binding LiveRecordingLabel}"
+                          MinWidth="64"
+                          IsVisible="{Binding IsLiveRecordingAvailable}"
+                          IsChecked="{Binding IsLiveRecording, Mode=TwoWay}"
+                          ToolTip.Tip="Record exactly what the render window shows (F9). Click again to stop and choose the video format / quality." />
             <ToggleButton Classes="toolbar" Content="Terminal"
                           IsChecked="{Binding IsTerminalMode, Mode=TwoWay}"
                           ToolTip.Tip="Terminal Mode — show the fractal as live ASCII / text art" />

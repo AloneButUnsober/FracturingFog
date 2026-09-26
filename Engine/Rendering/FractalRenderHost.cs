@@ -5093,6 +5093,8 @@ namespace FracturingFog.Rendering
             _animTimer = null;
             try { _colorSettleTimer?.Dispose(); } catch { }
             _colorSettleTimer = null;
+            // #944 — abandon an in-flight instant recording (and its temp folder).
+            DisposeLiveRecording();
             // Tear down any running video / slideshow first so its background
             // loop stops touching the calculator + renderer before disposal.
             lock (_videoLock) _videoCts?.Cancel();

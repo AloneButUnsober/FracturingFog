@@ -128,6 +128,10 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
     /// IVideoZoomController). Null only if the host doesn't implement it.</summary>
     private readonly IVideoZoomController? _video;
 
+    /// <summary>Instant-record engine (#944/#945) — the same concrete host.
+    /// Null only if the host doesn't implement it.</summary>
+    private readonly ILiveRecordingController? _liveRec;
+
     public ShellViewModel(
         IFractalRenderHost renderHost,
         IFractalInputController input,
@@ -507,6 +511,9 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
         // library / ffmpeg lookups). Engine events fire on a background thread,
         // so every VM mutation is marshalled to the UI thread.
         _video = renderHost as IVideoZoomController;
+        // #945 — instant record: same concrete host, record-what-you-see.
+        _liveRec = renderHost as ILiveRecordingController;
+        ToggleLiveRecordingCommand = ReactiveCommand.Create(ToggleLiveRecording);
         FloatingMenu.VideoClick += (_, _) =>
         {
             if (_video is { IsRunning: true }) _video.Stop();
@@ -1813,6 +1820,77 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
     public ReactiveCommand<Unit, Unit> ToggleSpanCommand { get; }
     public ReactiveCommand<Unit, Unit> ToggleSlideshowCommand { get; }
     public ReactiveCommand<Unit, Unit> ToggleVideoCommand { get; }
+
+    // ── Instant record (#945) ──────────────────────────────────────────────
+    // One-touch capture of the render window as-is (F9 / toolbar / context
+    // menu). The engine writes a lossless temp intermediate; on stop the host
+    // (LiveRecordingReady) prompts for format / quality and encodes.
+
+    /// <summary>Toggle instant recording on / off.</summary>
+    public ReactiveCommand<Unit, Unit> ToggleLiveRecordingCommand { get; }
+
+    /// <summary>Raised on the UI thread when a recording stops with frames
+    /// captured. The handler owns (and must delete) <c>result.Folder</c>.</summary>
+    public event EventHandler<LiveRecordingResult>? LiveRecordingReady;
+
+    /// <summary>Display sampling rate while recording (1..60).</summary>
+    public int LiveRecordingCaptureFps { get; set; } = 30;
+
+    public bool IsLiveRecordingAvailable => _liveRec != null;
+
+    private bool _isLiveRecording;
+    /// <summary>Two-way for the toolbar toggle: setting it starts / stops.</summary>
+    public bool IsLiveRecording
+    {
+        get => _isLiveRecording;
+        set { if (value != _isLiveRecording) ToggleLiveRecording(); }
+    }
+
+    /// <summary>Toolbar / menu caption — "● Rec" idle, "■ 01:23" recording.</summary>
+    public string LiveRecordingLabel => _isLiveRecording
+        ? $"■ {FormatElapsed(_liveRec?.LiveRecordingElapsed ?? TimeSpan.Zero)}"
+        : "● Rec";
+
+    private DispatcherTimer? _liveRecTimer;
+
+    private static string FormatElapsed(TimeSpan t) =>
+        t.TotalHours >= 1 ? t.ToString(@"h\:mm\:ss", CultureInfo.InvariantCulture)
+                          : t.ToString(@"mm\:ss", CultureInfo.InvariantCulture);
+
+    private void ToggleLiveRecording()
+    {
+        if (_liveRec == null)
+        {
+            Main.SetStatus("Recording is not available on this renderer.");
+            this.RaisePropertyChanged(nameof(IsLiveRecording));
+            return;
+        }
+
+        if (!_liveRec.IsLiveRecording)
+        {
+            _isLiveRecording = _liveRec.StartLiveRecording(LiveRecordingCaptureFps);
+            if (_isLiveRecording)
+            {
+                _liveRecTimer ??= new DispatcherTimer(TimeSpan.FromMilliseconds(500), DispatcherPriority.Background,
+                    (_, _) =>
+                    {
+                        this.RaisePropertyChanged(nameof(LiveRecordingLabel));
+                        if (_liveRec is { IsLiveRecording: true } lr)
+                            Main.SetStatus($"● REC {FormatElapsed(lr.LiveRecordingElapsed)} — {lr.LiveRecordingFrameCount} frames (F9 to stop)");
+                    });
+                _liveRecTimer.Start();
+            }
+        }
+        else
+        {
+            _liveRecTimer?.Stop();
+            _isLiveRecording = false;
+            var result = _liveRec.StopLiveRecording();
+            if (result != null) LiveRecordingReady?.Invoke(this, result);
+        }
+        this.RaisePropertyChanged(nameof(IsLiveRecording));
+        this.RaisePropertyChanged(nameof(LiveRecordingLabel));
+    }
     public ReactiveCommand<Unit, Unit> SaveRegionCommand { get; }
     public ReactiveCommand<Unit, Unit> ScreenshotCommand { get; }
     public ReactiveCommand<Unit, Unit> AsciiArtCommand { get; }
