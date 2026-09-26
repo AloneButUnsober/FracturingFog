@@ -400,9 +400,42 @@ public sealed class AnimationEditorViewModel : ViewModelBase
         PushPreview();
     }
 
-    private void PushPreview() => AnimationBusHost.LoadRegionAnimation(BuildData(), _previewTarget);
+    // #962 — true while this editor's preview owns the host bus. A preview is a
+    // continuation of whatever session is live (a region's attached animation), so
+    // the baseline taken before either started is what Stop restores.
+    private bool _previewActive;
 
-    private void StopPreview() => AnimationBusHost.LoadRegionAnimation(null, _previewTarget);
+    private void PushPreview()
+    {
+        AnimationBusHost.LoadRegionAnimation(BuildData(), _previewTarget, AnimationSessionMode.Continue);
+        _previewActive = true;
+    }
+
+    /// <summary>#962 — explicit stop (Live Preview off, Stop, Close): drop the preview and
+    /// restore the params it moved. No-op when no preview is running, so closing the
+    /// editor never kills a region's own attached animation.</summary>
+    private void StopPreview()
+    {
+        if (!_previewActive) return;
+        _previewActive = false;
+        AnimationBusHost.StopAndRestore(_previewTarget);
+    }
+
+    /// <summary>#962 — the editor window was hidden (title-bar X): same as Close.</summary>
+    public void EndPreview()
+    {
+        if (_livePreview) { _livePreview = false; this.RaisePropertyChanged(nameof(LivePreview)); }
+        StopPreview();
+    }
+
+    /// <summary>#962 — a region was just recalled. Region recall replaced the host bus's
+    /// animator set (the preview is gone) and set the params authoritatively, so untick
+    /// Live Preview WITHOUT restoring — the next edit must not re-push onto the new region.</summary>
+    public void OnRegionApplied()
+    {
+        _previewActive = false;
+        if (_livePreview) { _livePreview = false; this.RaisePropertyChanged(nameof(LivePreview)); }
+    }
 
     private void NewBlank()
     {

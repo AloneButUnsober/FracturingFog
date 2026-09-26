@@ -71,8 +71,7 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
 
         CloseCommand = ReactiveCommand.Create(() =>
         {
-            StopJuliaAnimate();
-            StopLSystemSweep();
+            StopAnimations();
             CloseRequested?.Invoke(this, EventArgs.Empty);
         });
         ToggleJuliaAnimateCommand   = ReactiveCommand.Create(ToggleJuliaAnimate);
@@ -305,10 +304,11 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
 
     /// <summary>Stop any running parameter animation. Host calls this when the
     /// dialog is closed via the window chrome (not the Close button) so the
-    /// dispatcher timer doesn't leak past dialog lifetime.</summary>
+    /// dispatcher timer doesn't leak past dialog lifetime. #962: an explicit stop,
+    /// so the Julia orbit restores its pre-animation c.</summary>
     public void StopAnimations()
     {
-        StopJuliaAnimate();
+        StopJuliaAnimate(restore: true);
         StopLSystemSweep();
     }
 
@@ -1150,19 +1150,42 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
         else                 StartJuliaAnimate();
     }
 
+    // #962 — Julia c before the orbit started, restored on an explicit stop.
+    private Complex? _juliaBaseline;
+
     private void StartJuliaAnimate()
     {
         EnsureAnimationBus();
+        _juliaBaseline ??= _p.JuliaC;
         _juliaAnimator!.IsEnabled = true;
         _animationBus!.Refresh();
         JuliaAnimating = true;
     }
 
-    private void StopJuliaAnimate()
+    /// <summary>Stop the Julia c orbit. <paramref name="restore"/> (explicit Stop / Close)
+    /// puts c back to its pre-animation value; false (a region jump — the region's own c
+    /// is authoritative) just stops.</summary>
+    private void StopJuliaAnimate(bool restore = true)
     {
         if (_juliaAnimator != null) _juliaAnimator.IsEnabled = false;
         _animationBus?.Refresh();
         JuliaAnimating = false;
+        if (restore && _juliaBaseline is { } c && c != _p.JuliaC)
+        {
+            SetJuliaSilent(c.Real, c.Imaginary);
+            Fire();
+        }
+        _juliaBaseline = null;
+    }
+
+    /// <summary>#962 — a region was just recalled: stop this dialog's animations WITHOUT
+    /// restoring (the region's values win), then re-read the params. Before this the Julia
+    /// orbit kept running and immediately rotated the new region's c.</summary>
+    public void OnRegionApplied()
+    {
+        StopJuliaAnimate(restore: false);
+        StopLSystemSweep();
+        Refresh();
     }
 
     // ── Multibrot ──

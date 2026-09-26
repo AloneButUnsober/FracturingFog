@@ -31,6 +31,14 @@ public static class AnimationBusHost
 {
     private static ParameterAnimationBus? _bus;
     private static readonly object _gate = new();
+    private static Action? _fire;
+
+    // #962 — pre-animation values of the params the current session drives, so an
+    // explicit stop (StopAndRestore) puts the fractal back where it was.
+    private static readonly AnimationBaseline s_baseline = new();
+
+    /// <summary>The current session's baseline (read-only view for diagnostics/tests).</summary>
+    public static AnimationBaseline Baseline => s_baseline;
 
     /// <summary>The shared region-animation bus, or null if
     /// <see cref="Initialize"/> hasn't been called yet (e.g. headless test
@@ -44,6 +52,7 @@ public static class AnimationBusHost
         ArgumentNullException.ThrowIfNull(fire);
         lock (_gate)
         {
+            _fire ??= fire;
             _bus ??= new ParameterAnimationBus(fire);
             return _bus;
         }
@@ -56,8 +65,24 @@ public static class AnimationBusHost
     /// when the caller couldn't resolve the name — the bus simply clears.
     /// No-op if the bus isn't initialised yet.</summary>
     public static void LoadRegionAnimation(AnimationData? data, object target)
+        => LoadRegionAnimation(data, target, AnimationSessionMode.NewSession);
+
+    /// <summary>#962 — as <see cref="LoadRegionAnimation(AnimationData?, object)"/>, choosing
+    /// what happens to the pre-animation baseline:
+    /// <see cref="AnimationSessionMode.NewSession"/> (a region / leg / shot was just applied
+    /// authoritatively — start over from the current values, never restore the old ones) or
+    /// <see cref="AnimationSessionMode.Continue"/> (the same session re-pushed, e.g. the
+    /// editor's Live Preview after an edit — keep the original baseline, add new params).</summary>
+    public static void LoadRegionAnimation(AnimationData? data, object target, AnimationSessionMode mode)
     {
         if (_bus == null) return;
+
+        if (target != null)
+        {
+            if (mode == AnimationSessionMode.NewSession || !ReferenceEquals(s_baseline.Target, target))
+                s_baseline.Begin(target);
+            s_baseline.Capture(data);
+        }
 
         _bus.ClearDynamic();
 
@@ -76,6 +101,23 @@ public static class AnimationBusHost
 
         _bus.Ceiling = ResolveCeiling(includesRaymarched3D);
         _bus.Refresh();
+    }
+
+    /// <summary>#962 — explicit stop: drop the dynamic animators and write the session's
+    /// pre-animation values back onto <paramref name="target"/> (Animation Editor Live
+    /// Preview off / Close, Scene preview stop). No restore when the session belongs to a
+    /// different params object. Triggers one render when anything was restored.</summary>
+    public static void StopAndRestore(object target)
+    {
+        if (_bus != null)
+        {
+            _bus.ClearDynamic();
+            _bus.Refresh();
+        }
+        if (target != null && ReferenceEquals(s_baseline.Target, target))
+        {
+            if (s_baseline.Restore()) _fire?.Invoke();
+        }
     }
 
     /// <summary>Scene Engine Roadmap Phase S6 — swap the dynamic animator set to
@@ -104,6 +146,14 @@ public static class AnimationBusHost
         IReadOnlyList<SceneAudioTrack>? audioTracks = null, IAudioModulationSource? audioSource = null)
     {
         if (_bus == null) return;
+
+        // #962 — each shot is applied authoritatively: new session, baseline = the
+        // shot's starting values of its param-animation tracks.
+        if (target != null)
+        {
+            s_baseline.Begin(target);
+            s_baseline.Capture(shotAnimation);
+        }
 
         _bus.ClearDynamic();
 
@@ -183,4 +233,16 @@ public static class AnimationBusHost
         return AnimatedParamCeilingPolicy.DefaultCeiling(
             HardwareProfile.Detect(), includesRaymarched3D);
     }
+}
+
+/// <summary>#962 — what <see cref="AnimationBusHost.LoadRegionAnimation(AnimationData?, object, AnimationSessionMode)"/>
+/// does with the pre-animation baseline.</summary>
+public enum AnimationSessionMode
+{
+    /// <summary>Params were just set authoritatively (region jump, slideshow leg, scene
+    /// shot): start a new baseline from the current values; never restore the old one.</summary>
+    NewSession,
+    /// <summary>Same session re-pushed (editor Live Preview after an edit): keep the
+    /// original baseline and add any newly targeted params.</summary>
+    Continue,
 }

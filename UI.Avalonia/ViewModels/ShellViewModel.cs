@@ -1431,7 +1431,13 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
     public bool IsAnimationEditorVisible
     {
         get => _isAnimationEditorVisible;
-        set => this.RaiseAndSetIfChanged(ref _isAnimationEditorVisible, value);
+        set
+        {
+            this.RaiseAndSetIfChanged(ref _isAnimationEditorVisible, value);
+            // #962 — hiding the editor (title-bar X hides, it doesn't close) is an
+            // explicit stop: end its preview and restore what it moved.
+            if (!value) AnimationEditor?.EndPreview();
+        }
     }
 
     private bool _isSceneEditorVisible;
@@ -2355,7 +2361,10 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
                 : _themeService.GetAnimation(attachedAnimName);
             AnimationBusHost.LoadRegionAnimation(
                 attachedAnim,
-                Main.ViewState.FractalParameters);
+                Main.ViewState.FractalParameters,
+                AnimationSessionMode.NewSession);
+            // #962 — the recall just replaced any editor preview; untick it (no restore).
+            AnimationEditor?.OnRegionApplied();
             // Region opted into "use curated theme(s) only": apply its first
             // valid curated theme as the active colour theme so the saved look
             // comes back on recall. Default off → recall leaves the active theme
@@ -2703,7 +2712,9 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
         var anim = string.IsNullOrEmpty(shot.AnimationName)
             ? null
             : _themeService.GetAnimation(shot.AnimationName!);
-        AnimationBusHost.LoadRegionAnimation(anim, Main.ViewState.FractalParameters);
+        // #962 — JumpToRegion above began a new session; the shot's animation continues it.
+        AnimationBusHost.LoadRegionAnimation(anim, Main.ViewState.FractalParameters,
+            AnimationSessionMode.Continue);
     }
 
     /// <summary>#307 — apply a shot's per-shot lighting override
@@ -2736,7 +2747,8 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
     private void StopScenePreview()
     {
         StopScene();
-        AnimationBusHost.LoadRegionAnimation(null, Main.ViewState.FractalParameters);
+        // #962 — explicit stop: restore the params the preview animation moved.
+        AnimationBusHost.StopAndRestore(Main.ViewState.FractalParameters);
     }
 
     /// <summary>#307 — snap the live view's lighting back to stock defaults for
