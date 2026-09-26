@@ -166,6 +166,24 @@ namespace FracturingFog.Batch
             return fp;
         }
 
+        // #949 — the user-code types (UserEquation / Sandbox / UserBulb) get
+        // their equation from a saved region (--region); a bare --fractal has
+        // none and renders the theme's flat in-set colour. Say so instead of
+        // silently writing a blank image.
+        private static void WarnIfNoUserCodeSource(FractalType type, FractalParameters fp)
+        {
+            string? src = type switch
+            {
+                FractalType.UserEquation => fp.UserEquationActiveTab == 1 ? fp.UserEquationDslSource : fp.UserEquationSource,
+                FractalType.Sandbox => fp.SandboxSource,
+                FractalType.UserBulb => fp.UserBulbSource,
+                _ => "n/a",
+            };
+            if (string.IsNullOrWhiteSpace(src))
+                Console.WriteLine($"  note    : {type} has no equation — pass --region NAME of a saved " +
+                                  $"{type} region to load its source; this render will be blank.");
+        }
+
         public static int RenderImage(BatchOptions opts)
         {
             var (cx, cy, zoom, iter, frType, quality, regionDispName) = ResolveRegion(opts);
@@ -185,20 +203,25 @@ namespace FracturingFog.Batch
                 format = FracturingFog.Imaging.ImageFileFormat.Exr;
             }
 
-            var fp = BuildFractalParameters(opts);
+            // #949 — a named region seeds the params (equation source for the
+            // user-code types, lighting, relief, per-family snapshot: Julia
+            // constant, 3D camera, seeds, …) exactly like batch video / slideshow;
+            // CLI flags override on top. Previously image mode dropped all of it.
+            FractalRegion? namedRegion = !string.IsNullOrWhiteSpace(opts.RegionName)
+                ? FractalRegionLibrary.Instance.FindByName(opts.RegionName!)
+                : null;
+            var fp = BuildFractalParameters(opts, namedRegion);
+            WarnIfNoUserCodeSource(frType, fp);
 
             var (pfBrightness, pfContrast, pfAdaptive) = ResolvePostFx(opts, null);
 
-            // Full-precision centre: when a Mandelbrot region is used without a
-            // manual --x/--y override, carry its extended limbs (CenterXLo/2/3)
-            // into the poster so deep regions (zoom past ~1e15) render at the
-            // right coordinate instead of a collapsed double centre.
+            // Full-precision centre: when the centre comes from the region (no
+            // manual --x/--y), carry its extended limbs (CenterXLo/2/3) into the
+            // poster so deep regions (zoom past ~1e15) render at the right
+            // coordinate. Any type — the deep-capable calculators (Mandelbrot,
+            // TearDrop, CalcGen Generated*) consume them; the rest ignore them.
             FractalRegion? limbRegion =
-                (frType == FractalType.Mandelbrot
-                 && opts.CenterX == null && opts.CenterY == null
-                 && !string.IsNullOrWhiteSpace(opts.RegionName))
-                ? FractalRegionLibrary.Instance.FindByName(opts.RegionName!)
-                : null;
+                (opts.CenterX == null && opts.CenterY == null) ? namedRegion : null;
 
             var req = new PosterRequest
             {
@@ -571,6 +594,7 @@ namespace FracturingFog.Batch
             // composed relief buffer BEFORE those). Relief off → the flat fast path,
             // byte-identical.
             var fp = BuildFractalParameters(opts, namedRegion);
+            WarnIfNoUserCodeSource(frType, fp);
             FractalParameters? reliefFp = opts.Relief ? fp : null;
             var reliefHistory = opts.Relief
                 ? new FracturingFog.Rendering.Lighting.FroxelHistory() : null;
