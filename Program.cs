@@ -191,16 +191,7 @@ static class Program
         {
             var sb = new System.Text.StringBuilder();
             sb.AppendLine("Mesh-export gate (#101) — marching cubes over all DE raymarchers");
-            var types = new[]
-            {
-                FracturingFog.FractalType.Mandelbulb,
-                FracturingFog.FractalType.Mandelbox,
-                FracturingFog.FractalType.Kifs,
-                FracturingFog.FractalType.QuaternionJulia,
-                FracturingFog.FractalType.QuaternionMandelbrot,
-                FracturingFog.FractalType.Kleinian,
-                FracturingFog.FractalType.BicomplexMandelbrot,
-            };
+            var types = FracturingFog.Models.MeshExportCapabilities.Types;
             string dir = System.IO.Path.Combine(AppContext.BaseDirectory, "meshexport");
             System.IO.Directory.CreateDirectory(dir);
             bool allOk = true;

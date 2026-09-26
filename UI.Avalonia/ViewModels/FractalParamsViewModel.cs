@@ -2121,10 +2121,7 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
 
     /// <summary>True for the DE raymarchers the shared mesh exporter can build a
     /// sampler for (UserBulb has its own editor export path, so it's excluded).</summary>
-    public bool CanExportMesh =>
-        IsMandelbulb || IsMandelbox || IsKifs
-        || IsQuatJulia || IsQuatMandelbrot
-        || IsKleinian || IsBicomplexMandelbrot || IsCoquaternion || IsDualOrbitVolume;
+    public bool CanExportMesh => FracturingFog.Models.MeshExportCapabilities.IsMeshExportable(FractalType);
 
     public ReactiveCommand<Unit, Unit> ExportMeshCommand { get; }
     public ReactiveCommand<Unit, Unit> PickDropColorCommand { get; }

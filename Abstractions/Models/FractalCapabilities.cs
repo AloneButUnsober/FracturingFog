@@ -220,4 +220,30 @@ namespace FracturingFog.Models
             || SupportsVideoCameraLeg(type)
             || SupportsVideoHoldLeg(type);
     }
+
+    /// <summary>
+    /// The DE raymarchers the shared mesh exporter (<c>RaymarchMeshSampler</c>, #101)
+    /// can build an object-space distance estimator for. Single source of truth for
+    /// the params panel's Export Mesh button, the sampler and the <c>--meshexport</c>
+    /// gate — it lives here because UI.Avalonia cannot reference Engine, and a
+    /// hand-kept UI list drifted (Coquaternion showed the button with no sampler).
+    /// UserBulb is excluded: its compiled-kernel DE exports via its own editor.
+    /// </summary>
+    public static class MeshExportCapabilities
+    {
+        public static readonly FractalType[] Types =
+        {
+            FractalType.Mandelbulb,
+            FractalType.Mandelbox,
+            FractalType.Kifs,
+            FractalType.QuaternionJulia,
+            FractalType.QuaternionMandelbrot,
+            FractalType.Kleinian,
+            FractalType.BicomplexMandelbrot,
+            FractalType.Coquaternion,
+            FractalType.DualOrbitVolume,
+        };
+
+        public static bool IsMeshExportable(FractalType type) => System.Array.IndexOf(Types, type) >= 0;
+    }
 }
