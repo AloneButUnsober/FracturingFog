@@ -54,6 +54,13 @@ namespace FracturingFog.Models
         /// <summary>UTC time of the last successful install.</summary>
         public DateTime? LastInstalledUtc { get; set; }
 
+        /// <summary>#951 — whether ffmpeg was present when the user picked
+        /// "Continue Without Video Save". True = a deliberate opt-out with ffmpeg
+        /// installed (respected until they re-enable). False = skipped because it
+        /// was missing. Null = legacy prefs written before this was tracked. Only
+        /// meaningful while <see cref="Election"/> is Skip.</summary>
+        public bool? SkippedWithFfmpegPresent { get; set; }
+
         private static string SettingsDir => AppDataPaths.Root;
 
         private static string PrefsFile =>
@@ -116,6 +123,37 @@ namespace FracturingFog.Models
         /// the binary is present, so the UI stays consistent with their
         /// election until they reverse it from the FloatingMenu dialog.</summary>
         public bool IsVideoDisabledByUser() => Election == FfmpegUserElection.Skip;
+
+        /// <summary>#951 — record a "Continue Without Video Save" pick, noting
+        /// whether ffmpeg was installed at the time.</summary>
+        public void ChooseSkip(bool ffmpegPresent)
+        {
+            Election = FfmpegUserElection.Skip;
+            SkippedWithFfmpegPresent = ffmpegPresent;
+        }
+
+        /// <summary>#951 — undo a Skip election (the Setup dialog's "Re-enable
+        /// video" button). Returns true when the election changed.</summary>
+        public bool ReEnableVideo()
+        {
+            if (Election != FfmpegUserElection.Skip) return false;
+            Election = FfmpegUserElection.Manual;
+            SkippedWithFfmpegPresent = null;
+            return true;
+        }
+
+        /// <summary>#951 — a Skip chosen because ffmpeg was missing (or of
+        /// unknown provenance, legacy prefs) is stale once ffmpeg is installed:
+        /// clear it so "installed" means "enabled" and the Setup dialog and the
+        /// video features can't disagree. A Skip picked WITH ffmpeg present is a
+        /// deliberate opt-out and is kept. Returns true when the election changed
+        /// (caller saves).</summary>
+        public bool ReconcileStaleSkip(bool ffmpegPresent)
+        {
+            if (Election != FfmpegUserElection.Skip || !ffmpegPresent) return false;
+            if (SkippedWithFfmpegPresent == true) return false;
+            return ReEnableVideo();
+        }
 
         /// <summary>True when the startup modal should be suppressed even if
         /// ffmpeg.exe is missing. Manual + Skip both opt out; only None and

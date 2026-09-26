@@ -3739,8 +3739,19 @@ namespace FracturingFog.Hosting
         {
             try
             {
-                if (FfmpegEncoder.IsAvailable()) return;
-                if (FracturingFog.Models.FfmpegPreferences.Instance.SuppressStartupPrompt()) return;
+                bool present = FfmpegEncoder.IsAvailable();
+                // #951 — a "Continue Without Video" picked while ffmpeg was
+                // missing no longer applies once it is installed (bundled with an
+                // update, copied in manually, …): clear it so video features match
+                // the Setup dialog's "Installed".
+                var prefs = FracturingFog.Models.FfmpegPreferences.Instance;
+                if (prefs.ReconcileStaleSkip(present))
+                {
+                    prefs.Save();
+                    Console.WriteLine("[AvaloniaShellBootstrap] ffmpeg found — cleared stale 'Continue Without Video' election.");
+                }
+                if (present) return;
+                if (prefs.SuppressStartupPrompt()) return;
                 _ = FfmpegSetupDialog.ShowAsync(AvaloniaDialogs.ActiveMainWindow);
             }
             catch (Exception ex)

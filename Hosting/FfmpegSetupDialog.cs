@@ -67,6 +67,11 @@ namespace FracturingFog.Hosting
 
                 bool isInstalled = FfmpegInstaller.IsInstalled();
                 string? installedVersion = FfmpegInstaller.TryReadInstalledVersion();
+                var prefs = FfmpegPreferences.Instance;
+
+                // #951 — a Skip picked while ffmpeg was missing is stale now that
+                // it is installed; clear it so "Installed" really means enabled.
+                if (prefs.ReconcileStaleSkip(isInstalled)) prefs.Save();
 
                 var statusBlock = new TextBlock
                 {
@@ -74,7 +79,28 @@ namespace FracturingFog.Hosting
                     Foreground = Brushes.LightGray,
                     Margin = new Thickness(0, 0, 0, 8),
                 };
-                UpdateStatus(statusBlock, isInstalled, installedVersion);
+
+                // #951 — shown only while ffmpeg is installed but a deliberate
+                // "Continue Without Video Save" still disables video features.
+                var btnReEnable = new Button
+                {
+                    Content = "Re-enable Video",
+                    MinWidth = 220,
+                    Margin = new Thickness(0, 0, 0, 10),
+                    HorizontalAlignment = HorizontalAlignment.Stretch,
+                };
+                void RefreshStatus(bool installed, string? version)
+                {
+                    bool disabled = installed && prefs.IsVideoDisabledByUser();
+                    UpdateStatus(statusBlock, installed, version, disabled);
+                    btnReEnable.IsVisible = disabled;
+                }
+                RefreshStatus(isInstalled, installedVersion);
+                btnReEnable.Click += (_, _) =>
+                {
+                    if (prefs.ReEnableVideo()) prefs.Save();
+                    RefreshStatus(FfmpegInstaller.IsInstalled(), FfmpegInstaller.TryReadInstalledVersion());
+                };
 
                 var explainBlock = new TextBlock
                 {
@@ -228,6 +254,7 @@ namespace FracturingFog.Hosting
                     Margin = new Thickness(16),
                 };
                 body.Children.Add(statusBlock);
+                body.Children.Add(btnReEnable);
                 body.Children.Add(explainBlock);
                 body.Children.Add(noticeBlock);
                 body.Children.Add(actionPanel);
@@ -275,9 +302,9 @@ namespace FracturingFog.Hosting
                     {
                         bool nowInstalled = FfmpegInstaller.IsInstalled();
                         string? nowVersion = FfmpegInstaller.TryReadInstalledVersion();
-                        UpdateStatus(statusBlock, nowInstalled, nowVersion);
                         if (nowInstalled)
                         {
+                            FfmpegPreferences.Instance.SkippedWithFfmpegPresent = null;
                             FfmpegPreferences.Instance.Election = FfmpegUserElection.Manual;
                             FfmpegPreferences.Instance.LastInstalledVersion = nowVersion;
                             FfmpegPreferences.Instance.LastInstalledUtc = DateTime.UtcNow;
@@ -285,6 +312,7 @@ namespace FracturingFog.Hosting
                             pending = Result.Installed;
                             win.Close();
                         }
+                        RefreshStatus(nowInstalled, nowVersion);
                         return;
                     }
 
@@ -339,11 +367,13 @@ namespace FracturingFog.Hosting
 
                     if (succeeded)
                     {
+                        FfmpegPreferences.Instance.SkippedWithFfmpegPresent = null;
                         FfmpegPreferences.Instance.Election = FfmpegUserElection.AutoDownload;
                         FfmpegPreferences.Instance.LastInstalledVersion = result.NewVersion;
                         FfmpegPreferences.Instance.LastInstalledUtc = DateTime.UtcNow;
                         FfmpegPreferences.Instance.Save();
                         pending = Result.Installed;
+                        RefreshStatus(true, result.NewVersion);
                     }
                     // Failed install: leave the dialog up so the user can read
                     // the error and re-try or pick a different option. Don't
@@ -372,7 +402,9 @@ namespace FracturingFog.Hosting
 
                 btnSkip.Click += (_, _) =>
                 {
-                    FfmpegPreferences.Instance.Election = FfmpegUserElection.Skip;
+                    // #951 — remember whether ffmpeg was present, so a Skip made only
+                    // because it was missing clears itself once ffmpeg is installed.
+                    FfmpegPreferences.Instance.ChooseSkip(FfmpegInstaller.IsInstalled());
                     FfmpegPreferences.Instance.Save();
                     pending = Result.SkipChosen;
                     win.Close();
@@ -396,9 +428,22 @@ namespace FracturingFog.Hosting
             return tcs.Task;
         }
 
-        private static void UpdateStatus(TextBlock block, bool isInstalled, string? version)
+        // Status palette avoids red/green-only distinction (colour-blind users):
+        // problem states use yellow #FFCC00, and the wording carries the meaning.
+        private static readonly IBrush WarnBrush = new SolidColorBrush(Color.FromRgb(0xFF, 0xCC, 0x00));
+
+        private static void UpdateStatus(TextBlock block, bool isInstalled, string? version,
+                                         bool disabledByUser = false)
         {
-            if (isInstalled && !string.IsNullOrWhiteSpace(version))
+            if (disabledByUser)
+            {
+                block.Text = "Current status: Installed, but video is turned OFF " +
+                             "(\"Continue Without Video Save\" was chosen)." +
+                             (string.IsNullOrWhiteSpace(version) ? "" : $"\n  {version}") +
+                             "\nClick Re-enable Video to use ffmpeg for video export again.";
+                block.Foreground = WarnBrush;
+            }
+            else if (isInstalled && !string.IsNullOrWhiteSpace(version))
             {
                 block.Text = $"Current status: Installed\n  {version}";
                 block.Foreground = new SolidColorBrush(Color.FromRgb(140, 200, 140));
@@ -411,7 +456,7 @@ namespace FracturingFog.Hosting
             else
             {
                 block.Text = "Current status: Not installed";
-                block.Foreground = new SolidColorBrush(Color.FromRgb(220, 130, 130));
+                block.Foreground = WarnBrush;
             }
         }
 
