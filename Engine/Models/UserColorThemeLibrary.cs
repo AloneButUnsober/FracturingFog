@@ -189,23 +189,16 @@ namespace FracturingFog.Models
         /// </summary>
         public void Load()
         {
-            try
-            {
-                Themes.Clear();
-                if (!File.Exists(ThemesFile)) return;
-
-                string json = File.ReadAllText(ThemesFile);
-                var loaded = JsonSerializer.Deserialize<List<ColorThemeData>>(json, BuildJsonOptions());
-                if (loaded == null) return;
-
-                foreach (var t in loaded)
-                    if (t != null) Themes.Add(t);
-            }
-            catch
-            {
-                Themes.Clear();
-            }
+            // #966 — per-entry load; unreadable themes are preserved for Save.
+            Themes.Clear();
+            Themes.AddRange(_persisted.LoadFile(ThemesFile, BuildJsonOptions()));
         }
+
+        // #966 — preserves entries this build could not read across Load/Save.
+        private readonly TolerantJsonList<ColorThemeData> _persisted = new();
+
+        /// <summary>Themes in the file this build could not read (kept on disk).</summary>
+        public int UnreadableCount => _persisted.UnreadableCount;
 
         /// <summary>
         /// Persists the current <see cref="Themes"/> list to disk.
@@ -215,7 +208,7 @@ namespace FracturingFog.Models
             try
             {
                 Directory.CreateDirectory(SettingsDir);
-                string json = JsonSerializer.Serialize(Themes, BuildJsonOptions());
+                string json = _persisted.Serialize(Themes, BuildJsonOptions(), t => t.Name);
                 AtomicFile.WriteAllText(ThemesFile, json);
             }
             catch

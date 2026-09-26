@@ -38,30 +38,24 @@ namespace FracturingFog.Models
 
         public void Load()
         {
-            try
-            {
-                Watermarks.Clear();
-                if (!File.Exists(WatermarksFile)) return;
-
-                string json = File.ReadAllText(WatermarksFile);
-                var loaded = JsonSerializer.Deserialize<List<WatermarkDef>>(json, BuildJsonOptions());
-                if (loaded == null) return;
-
-                foreach (var w in loaded)
-                    if (w != null && !string.IsNullOrWhiteSpace(w.Name)) Watermarks.Add(w);
-            }
-            catch
-            {
-                Watermarks.Clear();
-            }
+            // #966 — per-entry load; entries this build can't read are preserved for Save.
+            Watermarks.Clear();
+            foreach (var w in _persisted.LoadFile(WatermarksFile, BuildJsonOptions()))
+                if (!string.IsNullOrWhiteSpace(w.Name)) Watermarks.Add(w);
         }
+
+        // #966 — preserves entries this build could not read across Load/Save.
+        private readonly TolerantJsonList<WatermarkDef> _persisted = new();
+
+        /// <summary>Entries in the file this build could not read (kept on disk).</summary>
+        public int UnreadableCount => _persisted.UnreadableCount;
 
         public void Save()
         {
             try
             {
                 Directory.CreateDirectory(SettingsDir);
-                string json = JsonSerializer.Serialize(Watermarks, BuildJsonOptions());
+                string json = _persisted.Serialize(Watermarks, BuildJsonOptions(), x => x.Name);
                 AtomicFile.WriteAllText(WatermarksFile, json);
             }
             catch

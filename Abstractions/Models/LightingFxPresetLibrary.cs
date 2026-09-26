@@ -45,6 +45,11 @@ namespace FracturingFog.Models
         public int Version { get; set; } = 1;
         public string? ActiveName { get; set; }
         public List<LightingFxPreset> Presets { get; set; } = new();
+
+        /// <summary>#966 — entries in the file this build could not read. Hidden from
+        /// <see cref="Presets"/> but written back verbatim by Save, so data from a newer or
+        /// other-branch build is not deleted.</summary>
+        [JsonIgnore] public TolerantJsonList<LightingFxPreset> Preserved { get; } = new();
     }
 
     /// <summary>Static gateway over the on-disk Lighting &amp; FX preset library.
@@ -68,25 +73,12 @@ namespace FracturingFog.Models
         /// library is a valid state for this feature.</summary>
         public static LightingFxPresetFile Load()
         {
-            try
+            // #966 — tolerant per-entry read (unreadable presets are preserved).
+            if (File.Exists(PresetsFile) && TryReadFile(out var file))
             {
-                if (File.Exists(PresetsFile))
-                {
-                    var json = File.ReadAllText(PresetsFile);
-                    var file = JsonSerializer.Deserialize<LightingFxPresetFile>(json, JsonOpts);
-                    if (file != null)
-                    {
-                        file.Presets ??= new List<LightingFxPreset>();
-                        file.Presets.RemoveAll(p => p == null);
-                        foreach (var p in file.Presets) p.Data ??= new LightingFxPresetData();
-                        EnsureActiveValid(file);
-                        return file;
-                    }
-                }
-            }
-            catch
-            {
-                // fall through to a fresh empty file
+                foreach (var p in file.Presets) p.Data ??= new LightingFxPresetData();
+                EnsureActiveValid(file);
+                return file;
             }
 
             return new LightingFxPresetFile();
@@ -101,10 +93,43 @@ namespace FracturingFog.Models
             try
             {
                 Directory.CreateDirectory(SettingsDir);
-                var json = JsonSerializer.Serialize(file, JsonOpts);
+                var json = SerializeFile(file);
                 AtomicFile.WriteAllText(PresetsFile, json);
             }
             catch { }
+        }
+
+        // #966 — tolerant envelope read: the Presets array is read element by element
+        // (unreadable entries kept in file.Preserved); a file that is not a JSON
+        // object at all is snapshotted before anything can overwrite it.
+        private static bool TryReadFile(out LightingFxPresetFile file)
+        {
+            file = new LightingFxPresetFile();
+            try
+            {
+                var root = System.Text.Json.Nodes.JsonNode.Parse(File.ReadAllText(PresetsFile))
+                           as System.Text.Json.Nodes.JsonObject
+                           ?? throw new JsonException("not a JSON object");
+                var list = TolerantJsonEnvelope.TakeProperty(root, nameof(LightingFxPresetFile.Presets));
+                file = root.Deserialize<LightingFxPresetFile>(JsonOpts) ?? new LightingFxPresetFile();
+                file.Presets = file.Preserved.ReadArray(list, JsonOpts);
+                file.Presets.RemoveAll(x => x == null);
+                return true;
+            }
+            catch
+            {
+                UserDataBackup.SnapshotBeforeMigration(PresetsFile, "unreadable");
+                file = new LightingFxPresetFile();
+                return false;
+            }
+        }
+
+        private static string SerializeFile(LightingFxPresetFile file)
+        {
+            var root = JsonSerializer.SerializeToNode(file, JsonOpts)!.AsObject();
+            root[TolerantJsonEnvelope.JsonName(nameof(LightingFxPresetFile.Presets), JsonOpts)] =
+                file.Preserved.WriteArray(file.Presets, JsonOpts, x => x.Name);
+            return root.ToJsonString(JsonOpts);
         }
 
         /// <summary>Resolve <see cref="LightingFxPresetFile.ActiveName"/> to a

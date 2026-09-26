@@ -55,14 +55,14 @@ namespace FracturingFog.Models
         /// so writes are persisted.</summary>
         public List<AnimationData> Animations { get; } = new();
 
-        // #964 — entries this build could not deserialize, kept verbatim so Save
-        // round-trips them instead of silently deleting the user's data.
-        private readonly List<JsonElement> _unreadable = new();
+        // #964/#966 — entries this build could not deserialize, kept verbatim so
+        // Save round-trips them instead of silently deleting the user's data.
+        private readonly TolerantJsonList<AnimationData> _persisted = new();
 
         /// <summary>Number of entries in the file this build could not read (kept
         /// on disk untouched, not shown). Non-zero after loading a file written by
         /// a newer or other-branch build.</summary>
-        public int UnreadableCount => _unreadable.Count;
+        public int UnreadableCount => _persisted.UnreadableCount;
 
         // ── JSON options ──────────────────────────────────────────────────────
 
@@ -85,52 +85,9 @@ namespace FracturingFog.Models
         public void Load()
         {
             Animations.Clear();
-            _unreadable.Clear();
-            try
-            {
-                if (File.Exists(AnimationsFile))
-                    LoadEntries(File.ReadAllText(AnimationsFile));
-            }
-            catch
-            {
-                // Not a JSON array at all (truncated / hand-edited). Keep a copy
-                // before a later Save can replace it, and start from built-ins.
-                Animations.Clear();
-                _unreadable.Clear();
-                BackUpUnparseableFile();
-            }
+            foreach (var a in _persisted.LoadFile(AnimationsFile, BuildJsonOptions()))
+                if (!string.IsNullOrWhiteSpace(a.Name)) Animations.Add(a);
             MergeBuiltIns();
-        }
-
-        // #964 — deserialize each entry on its own: one unreadable entry (an
-        // unknown enum value, a bad field) must not take every other animation
-        // down with it, which is what a single List<AnimationData> call did.
-        private void LoadEntries(string json)
-        {
-            using var doc = JsonDocument.Parse(json);
-            if (doc.RootElement.ValueKind != JsonValueKind.Array)
-                throw new JsonException("animations.json root is not an array");
-            var opts = BuildJsonOptions();
-            foreach (var element in doc.RootElement.EnumerateArray())
-            {
-                AnimationData? a = null;
-                try { a = element.Deserialize<AnimationData>(opts); }
-                catch (JsonException) { }
-                catch (NotSupportedException) { }
-                if (a != null && !string.IsNullOrWhiteSpace(a.Name)) Animations.Add(a);
-                else if (element.ValueKind == JsonValueKind.Object) _unreadable.Add(element.Clone());
-            }
-        }
-
-        private static void BackUpUnparseableFile()
-        {
-            try
-            {
-                if (!File.Exists(AnimationsFile)) return;
-                string backup = AnimationsFile + ".unreadable-" + DateTime.Now.ToString("yyyyMMddHHmmss");
-                if (!File.Exists(backup)) File.Copy(AnimationsFile, backup);
-            }
-            catch { }
         }
 
         /// <summary>Persists the current <see cref="Animations"/> list to disk.</summary>
@@ -139,24 +96,8 @@ namespace FracturingFog.Models
             try
             {
                 Directory.CreateDirectory(SettingsDir);
-                var opts = BuildJsonOptions();
-                var array = new System.Text.Json.Nodes.JsonArray();
-                var names = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-                foreach (var a in Animations)
-                {
-                    array.Add(JsonSerializer.SerializeToNode(a, opts));
-                    if (!string.IsNullOrEmpty(a.Name)) names.Add(a.Name);
-                }
-                // #964 — write back entries this build couldn't read, verbatim,
-                // unless a readable animation now owns the same name.
-                foreach (var raw in _unreadable)
-                {
-                    if (raw.TryGetProperty("Name", out var n) && n.ValueKind == JsonValueKind.String
-                        && names.Contains(n.GetString() ?? string.Empty))
-                        continue;
-                    array.Add(System.Text.Json.Nodes.JsonNode.Parse(raw.GetRawText()));
-                }
-                AtomicFile.WriteAllText(AnimationsFile, array.ToJsonString(opts));
+                string json = _persisted.Serialize(Animations, BuildJsonOptions(), a => a.Name);
+                AtomicFile.WriteAllText(AnimationsFile, json);
             }
             catch
             {

@@ -74,28 +74,17 @@ namespace FracturingFog.Models
         /// built-in demo scenes merged on first run).</summary>
         public void Load()
         {
-            try
-            {
-                Scenes.Clear();
-                if (File.Exists(ScenesFile))
-                {
-                    string json = File.ReadAllText(ScenesFile);
-                    var loaded = JsonSerializer.Deserialize<List<SceneData>>(json, BuildJsonOptions());
-                    if (loaded != null)
-                    {
-                        foreach (var s in loaded)
-                            if (s != null) Scenes.Add(s);
-                    }
-                }
-
-                MergeBuiltIns();
-            }
-            catch
-            {
-                Scenes.Clear();
-                MergeBuiltIns();
-            }
+            // #966 — per-entry load; unreadable scenes are preserved for Save.
+            Scenes.Clear();
+            Scenes.AddRange(_persisted.LoadFile(ScenesFile, BuildJsonOptions()));
+            MergeBuiltIns();
         }
+
+        // #966 — preserves entries this build could not read across Load/Save.
+        private readonly TolerantJsonList<SceneData> _persisted = new();
+
+        /// <summary>Scenes in scenes.json this build could not read (kept on disk).</summary>
+        public int UnreadableCount => _persisted.UnreadableCount;
 
         /// <summary>Persists the current <see cref="Scenes"/> list to disk.</summary>
         public void Save()
@@ -103,7 +92,7 @@ namespace FracturingFog.Models
             try
             {
                 Directory.CreateDirectory(SettingsDir);
-                string json = JsonSerializer.Serialize(Scenes, BuildJsonOptions());
+                string json = _persisted.Serialize(Scenes, BuildJsonOptions(), s => s.Name);
                 AtomicFile.WriteAllText(ScenesFile, json);
             }
             catch

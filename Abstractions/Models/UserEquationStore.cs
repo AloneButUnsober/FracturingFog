@@ -89,30 +89,24 @@ namespace FracturingFog.Models
 
         public void Load()
         {
-            try
-            {
-                Equations.Clear();
-                if (!File.Exists(EquationsFile)) return;
-
-                string json = File.ReadAllText(EquationsFile);
-                var loaded = JsonSerializer.Deserialize<List<UserEquationEntry>>(json, BuildJsonOptions());
-                if (loaded == null) return;
-
-                foreach (var e in loaded)
-                    if (e != null && !string.IsNullOrWhiteSpace(e.Name)) Equations.Add(e);
-            }
-            catch
-            {
-                Equations.Clear();
-            }
+            // #966 — per-entry load; entries this build can't read are preserved for Save.
+            Equations.Clear();
+            foreach (var e in _persisted.LoadFile(EquationsFile, BuildJsonOptions()))
+                if (!string.IsNullOrWhiteSpace(e.Name)) Equations.Add(e);
         }
+
+        // #966 — preserves entries this build could not read across Load/Save.
+        private readonly TolerantJsonList<UserEquationEntry> _persisted = new();
+
+        /// <summary>Entries in the file this build could not read (kept on disk).</summary>
+        public int UnreadableCount => _persisted.UnreadableCount;
 
         public void Save()
         {
             try
             {
                 Directory.CreateDirectory(SettingsDir);
-                string json = JsonSerializer.Serialize(Equations, BuildJsonOptions());
+                string json = _persisted.Serialize(Equations, BuildJsonOptions(), x => x.Name);
                 AtomicFile.WriteAllText(EquationsFile, json);
             }
             catch

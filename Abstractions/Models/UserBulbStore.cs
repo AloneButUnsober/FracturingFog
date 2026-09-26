@@ -93,6 +93,12 @@ namespace FracturingFog.Models
             DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
         };
 
+        // #966 — preserves entries this build could not read across Load/Save.
+        private readonly TolerantJsonList<UserBulbEntry> _persisted = new();
+
+        /// <summary>Entries in userbulbs.json this build could not read (kept on disk).</summary>
+        public int UnreadableCount => _persisted.UnreadableCount;
+
         public void Load()
         {
             try
@@ -105,17 +111,11 @@ namespace FracturingFog.Models
                     return;
                 }
 
-                string json = File.ReadAllText(EquationsFile);
-                var loaded = JsonSerializer.Deserialize<List<UserBulbEntry>>(json, BuildJsonOptions());
-                if (loaded == null)
-                {
-                    SeedDefaults();
-                    Save();
-                    return;
-                }
-
-                foreach (var e in loaded)
-                    if (e != null && !string.IsNullOrWhiteSpace(e.Name)) Equations.Add(e);
+                // #966 — per-entry load; entries this build can't read are kept in
+                // _persisted and written back by every Save below (an unparseable
+                // file is snapshotted first).
+                foreach (var e in _persisted.LoadFile(EquationsFile, BuildJsonOptions()))
+                    if (!string.IsNullOrWhiteSpace(e.Name)) Equations.Add(e);
 
                 if (Equations.Count == 0)
                 {
@@ -579,7 +579,7 @@ namespace FracturingFog.Models
             try
             {
                 Directory.CreateDirectory(SettingsDir);
-                string json = JsonSerializer.Serialize(Equations, BuildJsonOptions());
+                string json = _persisted.Serialize(Equations, BuildJsonOptions(), x => x.Name);
                 AtomicFile.WriteAllText(EquationsFile, json);
             }
             catch

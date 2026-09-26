@@ -2285,27 +2285,27 @@ namespace FracturingFog.Models
         /// </summary>
         public void Load()
         {
-            try
-            {
-                if (!File.Exists(RegionsFile)) return;
+            if (!File.Exists(RegionsFile)) return;
 
-                string json = File.ReadAllText(RegionsFile);
-                var loaded = JsonSerializer.Deserialize<List<FractalRegion>>(json);
-                if (loaded == null) return;
-
-                UserRegions.Clear();
-                foreach (var r in loaded)
-                {
-                    r.RegionType = RegionType.UserDefined;
-                    UserRegions.Add(r);
-                }
-            }
-            catch
+            // #966 — per-entry: one region this build can't read (a FractalType or
+            // field from a newer / other-branch build) is kept verbatim and written
+            // back on Save instead of wiping every user region; an unparseable file
+            // is snapshotted before anything can overwrite it.
+            var loaded = _persisted.LoadFile(RegionsFile, (JsonSerializerOptions?)null);
+            UserRegions.Clear();
+            foreach (var r in loaded)
             {
-                // If the file is corrupt, silently start fresh.
-                UserRegions.Clear();
+                r.RegionType = RegionType.UserDefined;
+                UserRegions.Add(r);
             }
         }
+
+        // #966 — preserves entries this build could not read across Load/Save.
+        private readonly TolerantJsonList<FractalRegion> _persisted = new();
+
+        /// <summary>User regions in regions.json this build could not read (kept on
+        /// disk, hidden from the library).</summary>
+        public int UnreadableCount => _persisted.UnreadableCount;
 
         /// <summary>
         /// Persists user-defined regions to disk.
@@ -2316,7 +2316,7 @@ namespace FracturingFog.Models
             {
                 Directory.CreateDirectory(SettingsDir);
                 var options = new JsonSerializerOptions { WriteIndented = true };
-                string json = JsonSerializer.Serialize(UserRegions, options);
+                string json = _persisted.Serialize(UserRegions, options, r => r.Name);
 
                 // Atomic write with one-level rollback (temp + File.Replace →
                 // regions.json.bak). A reader never sees a half-written file and
