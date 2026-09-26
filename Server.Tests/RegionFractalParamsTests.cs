@@ -249,10 +249,18 @@ public sealed class RegionFractalParamsTests
     }
 
     // UserBulb is raymarched-3D but user code — Snapshot doesn't capture it into
-    // the generic Cam3D block (it keeps its own dedicated region fields).
+    // the generic Cam3D block (it keeps its own dedicated region fields). #961: its
+    // animatable power / iterations / time are captured, the camera still isn't.
     [Fact]
     public void UserBulb_NotCapturedIntoGenericCamera()
-        => Assert.Null(RegionFractalParams.Snapshot(FractalType.UserBulb, new FractalParameters()));
+    {
+        Assert.Null(RegionFractalParams.Snapshot(FractalType.UserBulb, new FractalParameters()));
+        var moved = RegionFractalParams.Snapshot(FractalType.UserBulb,
+            new FractalParameters { UserBulbTime = 2.5, UserBulbCameraTheta = 1.1 });
+        Assert.NotNull(moved);
+        Assert.Null(moved!.Cam3DFamily);
+        Assert.Equal(2.5, moved.UserBulbTime);
+    }
 
     // ── #94 (P4) — non-spatial static-hold params round-trip ───────────────
 
@@ -323,7 +331,8 @@ public sealed class RegionFractalParamsTests
     }
 
     // StrangeAttractor / Buddhabrot have no snapshot block (hold uses live
-    // defaults) — Snapshot returns null, no empty block bloats the JSON.
+    // defaults) — Snapshot returns null, no empty block bloats the JSON. (#961:
+    // StrangeAttractor now captures its A–D + preset, but only off their defaults.)
     [Theory]
     [InlineData(FractalType.StrangeAttractor)]
     [InlineData(FractalType.BuddhaBrot)]

@@ -593,6 +593,56 @@ namespace FracturingFog.Models
         [JsonIgnore(Condition = OmitNull)] public double? QMandelDualSeedY { get; set; }
         [JsonIgnore(Condition = OmitNull)] public double? QMandelDualSeedZ { get; set; }
 
+        // #961 — every animatable param of a family is captured, so an animation's
+        // leftover value can't leak into the next region and a saved region can
+        // reproduce it. Each is omitted at its FractalParameters default (recall
+        // resets the family to defaults first, #960).
+        [JsonIgnore(Condition = OmitNull)] public double? EscapeIterationScale { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public int? IFSIterations { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public int? LSystemDepth { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public string? AttractorPresetName { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public double? AttractorA { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public double? AttractorB { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public double? AttractorC { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public double? AttractorD { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public double? UserEquationRotationDegrees { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public double? BulbPower { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public int? BulbIterations { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public int? UserBulbIterations { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public double? UserBulbTime { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public double? MandelboxScale { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public double? MandelboxFixedRadius { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public double? MandelboxMinRadius { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public int? MandelboxIterations { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public int? KifsFold { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public double? KifsScale { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public double? KifsOffsetX { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public double? KifsOffsetY { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public double? KifsOffsetZ { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public int? KifsIterations { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public double? QJuliaCX { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public double? QJuliaCY { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public double? QJuliaCZ { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public double? QJuliaCW { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public double? AcidWarpCenterX { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public double? AcidWarpCenterY { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public double? FlameVibrancy { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public double? KleinianSphereScale { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public int? KleinianIterations { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public int? RandomTileCount { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public double? RandomTileRelief { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public double? RandomTileSizeExponent { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public double? RandomTileGap { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public double? RandomTileMinPixelRadius { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public int? RandomTileShape { get; set; }
+
+        // #961 — omit-at-default helpers against one stock FractalParameters, so the
+        // default is never restated as a literal here.
+        static readonly FractalParameters D = new();
+        static readonly JsonSerializerOptions s_omitNull = new() { DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull };
+        static double? Nd(double v, double d) => v != d ? v : null;
+        static int? Ni(int v, int d) => v != d ? v : null;
+
         /// <summary>
         /// Capture the P1-relevant parameters for <paramref name="type"/> from a
         /// live <paramref name="p"/>. Returns null when the family needs nothing
@@ -643,6 +693,7 @@ namespace FracturingFog.Models
                     FaithfulImplosionParentP = (p.FaithfulImplosion && p.FaithfulImplosionParentQ > 1) ? p.FaithfulImplosionParentP : null,
                     FaithfulImplosionParentQ = (p.FaithfulImplosion && p.FaithfulImplosionParentQ > 1) ? p.FaithfulImplosionParentQ : null,
                     FaithfulImplosionParentPath = (p.FaithfulImplosion && !string.IsNullOrWhiteSpace(p.FaithfulImplosionParentPath)) ? p.FaithfulImplosionParentPath : null,
+                    EscapeIterationScale = Nd(p.EscapeIterationScale, D.EscapeIterationScale),   // #961
                 },
                 FractalType.Multibrot => new RegionFractalParams
                 {
@@ -685,6 +736,7 @@ namespace FracturingFog.Models
                     NewtonExponent = p.NewtonExponent,
                     SecantOffsetRe = p.SecantInitialOffset.Real,
                     SecantOffsetIm = p.SecantInitialOffset.Imaginary,
+                    NewtonRelaxation = Nd(p.NewtonRelaxation, D.NewtonRelaxation),   // #961
                 },
                 FractalType.Apollonian => new RegionFractalParams
                 {
@@ -715,6 +767,8 @@ namespace FracturingFog.Models
                     AcidWarpWarpStrength = p.AcidWarpWarpStrength,
                     AcidWarpMorph = p.AcidWarpMorph ? true : null,
                     AcidWarpFlow = p.AcidWarpMorph ? p.AcidWarpFlow : null,
+                    AcidWarpCenterX = Nd(p.AcidWarpCenterX, D.AcidWarpCenterX),   // #961
+                    AcidWarpCenterY = Nd(p.AcidWarpCenterY, D.AcidWarpCenterY),
                 },
                 // #93 (P3) — raymarched-3D camera baseline. Each family stores its
                 // orbit camera under its own fields; capture into the generic
@@ -725,6 +779,8 @@ namespace FracturingFog.Models
                     Cam3DDistance = p.BulbCameraDistance,
                     Cam3DTheta = p.BulbCameraTheta,
                     Cam3DPhi = p.BulbCameraPhi,
+                    BulbPower = Nd(p.BulbPower, D.BulbPower),   // #961
+                    BulbIterations = Ni(p.BulbIterations, D.BulbIterations),
                 },
                 FractalType.Mandelbox => new RegionFractalParams
                 {
@@ -732,6 +788,10 @@ namespace FracturingFog.Models
                     Cam3DDistance = p.MandelboxCameraDistance,
                     Cam3DTheta = p.MandelboxCameraTheta,
                     Cam3DPhi = p.MandelboxCameraPhi,
+                    MandelboxScale = Nd(p.MandelboxScale, D.MandelboxScale),   // #961
+                    MandelboxFixedRadius = Nd(p.MandelboxFixedRadius, D.MandelboxFixedRadius),
+                    MandelboxMinRadius = Nd(p.MandelboxMinRadius, D.MandelboxMinRadius),
+                    MandelboxIterations = Ni(p.MandelboxIterations, D.MandelboxIterations),
                 },
                 FractalType.Kifs => new RegionFractalParams
                 {
@@ -739,6 +799,12 @@ namespace FracturingFog.Models
                     Cam3DDistance = p.KifsCameraDistance,
                     Cam3DTheta = p.KifsCameraTheta,
                     Cam3DPhi = p.KifsCameraPhi,
+                    KifsFold = p.KifsFold != D.KifsFold ? (int)p.KifsFold : null,   // #961
+                    KifsScale = Nd(p.KifsScale, D.KifsScale),
+                    KifsOffsetX = Nd(p.KifsOffsetX, D.KifsOffsetX),
+                    KifsOffsetY = Nd(p.KifsOffsetY, D.KifsOffsetY),
+                    KifsOffsetZ = Nd(p.KifsOffsetZ, D.KifsOffsetZ),
+                    KifsIterations = Ni(p.KifsIterations, D.KifsIterations),
                 },
                 FractalType.QuaternionJulia => new RegionFractalParams
                 {
@@ -747,6 +813,10 @@ namespace FracturingFog.Models
                     Cam3DTheta = p.QJuliaCameraTheta,
                     Cam3DPhi = p.QJuliaCameraPhi,
                     Cam3DSliceW = p.QJuliaSliceW,
+                    QJuliaCX = Nd(p.QJuliaCX, D.QJuliaCX),   // #961
+                    QJuliaCY = Nd(p.QJuliaCY, D.QJuliaCY),
+                    QJuliaCZ = Nd(p.QJuliaCZ, D.QJuliaCZ),
+                    QJuliaCW = Nd(p.QJuliaCW, D.QJuliaCW),
                 },
                 FractalType.QuaternionMandelbrot => new RegionFractalParams
                 {
@@ -780,6 +850,8 @@ namespace FracturingFog.Models
                     KleinianColorSource = p.KleinianColorSource != FracturingFog.KleinianColorSource.Smooth
                         ? (int)p.KleinianColorSource : (int?)null,
                     KleinianDeFactor = p.KleinianDeFactor != 1.0 ? p.KleinianDeFactor : (double?)null,
+                    KleinianSphereScale = Nd(p.KleinianSphereScale, D.KleinianSphereScale),   // #961
+                    KleinianIterations = Ni(p.KleinianIterations, D.KleinianIterations),
                 },
                 FractalType.BicomplexMandelbrot => new RegionFractalParams
                 {
@@ -808,6 +880,7 @@ namespace FracturingFog.Models
                 {
                     FlamePresetName = p.FlamePresetName,
                     FlameGamma = p.FlameGamma,
+                    FlameVibrancy = Nd(p.FlameVibrancy, D.FlameVibrancy),   // #961
                 },
                 FractalType.Dla => new RegionFractalParams
                 {
@@ -834,14 +907,22 @@ namespace FracturingFog.Models
                 FractalType.RandomTile => new RegionFractalParams
                 {
                     RandomTileSeed = p.RandomTileSeed,
+                    RandomTileCount = Ni(p.RandomTileCount, D.RandomTileCount),   // #961
+                    RandomTileRelief = Nd(p.RandomTileRelief, D.RandomTileRelief),
+                    RandomTileSizeExponent = Nd(p.RandomTileSizeExponent, D.RandomTileSizeExponent),
+                    RandomTileGap = Nd(p.RandomTileGap, D.RandomTileGap),
+                    RandomTileMinPixelRadius = Nd(p.RandomTileMinPixelRadius, D.RandomTileMinPixelRadius),
+                    RandomTileShape = p.RandomTileShape != D.RandomTileShape ? (int)p.RandomTileShape : null,
                 },
                 FractalType.IFS => new RegionFractalParams
                 {
                     IFSPresetName = p.IFSPresetName,
+                    IFSIterations = Ni(p.IFSIterations, D.IFSIterations),   // #961
                 },
                 FractalType.LSystem => new RegionFractalParams
                 {
                     LSystemPresetName = p.LSystemPresetName,
+                    LSystemDepth = Ni(p.LSystemDepth, D.LSystemDepth),   // #961
                 },
                 // #864 — dual-orbit escape-geometry: field + decoupled c-seed +
                 // control flag, each omitted at its default.
@@ -873,9 +954,29 @@ namespace FracturingFog.Models
                     IndrasRenderMode = p.IndrasRenderMode != FracturingFog.Models.IndrasRenderMode.PointCloud ? (int)p.IndrasRenderMode : (int?)null,
                     IndrasColorSource = p.IndrasColorSource != FracturingFog.Models.IndrasColorSource.Density ? (int)p.IndrasColorSource : (int?)null,
                 },
+                // #961 — families whose only region-relevant params are animatable.
+                FractalType.StrangeAttractor => new RegionFractalParams
+                {
+                    AttractorPresetName = p.AttractorPresetName != D.AttractorPresetName ? p.AttractorPresetName : null,
+                    AttractorA = Nd(p.AttractorA, D.AttractorA),
+                    AttractorB = Nd(p.AttractorB, D.AttractorB),
+                    AttractorC = Nd(p.AttractorC, D.AttractorC),
+                    AttractorD = Nd(p.AttractorD, D.AttractorD),
+                },
+                FractalType.UserEquation => new RegionFractalParams
+                {
+                    UserEquationRotationDegrees = Nd(p.UserEquationRotationDegrees, D.UserEquationRotationDegrees),
+                },
+                // UserBulb keeps its source + dedicated camera on the region itself;
+                // the animatable power / iterations / time ride here.
+                FractalType.UserBulb => new RegionFractalParams
+                {
+                    BulbPower = Nd(p.BulbPower, D.BulbPower),
+                    UserBulbIterations = Ni(p.UserBulbIterations, D.UserBulbIterations),
+                    UserBulbTime = Nd(p.UserBulbTime, D.UserBulbTime),
+                },
                 // Mandelbrot, Tricorn, BurningShip, Magnet1/2, TearDrop and the
                 // generated families need no extra params — defaults suffice.
-                // UserBulb keeps its own dedicated camera fields (user code).
                 _ => null,
             };
 
@@ -890,6 +991,10 @@ namespace FracturingFog.Models
                 rp.DomainWarpStrength = p.DomainWarpStrength;
                 rp.DomainWarpFrequency = p.DomainWarpFrequency;
             }
+
+            // #961 — a family whose params are all at their defaults (every field
+            // omitted) carries no block, so a stock region never saves an empty {}.
+            if (rp != null && JsonSerializer.Serialize(rp, s_omitNull) == "{}") rp = null;
 
             return rp;
         }
@@ -1190,6 +1295,46 @@ namespace FracturingFog.Models
                 p.IndrasRenderMode = (FracturingFog.Models.IndrasRenderMode)this.IndrasRenderMode.Value;
             if (this.IndrasColorSource.HasValue)
                 p.IndrasColorSource = (FracturingFog.Models.IndrasColorSource)this.IndrasColorSource.Value;
+
+            // #961 — full animatable coverage.
+            if (EscapeIterationScale.HasValue) p.EscapeIterationScale = EscapeIterationScale.Value;
+            if (IFSIterations.HasValue) p.IFSIterations = IFSIterations.Value;
+            if (LSystemDepth.HasValue) p.LSystemDepth = LSystemDepth.Value;
+            if (!string.IsNullOrEmpty(AttractorPresetName)) p.AttractorPresetName = AttractorPresetName;
+            if (AttractorA.HasValue) p.AttractorA = AttractorA.Value;
+            if (AttractorB.HasValue) p.AttractorB = AttractorB.Value;
+            if (AttractorC.HasValue) p.AttractorC = AttractorC.Value;
+            if (AttractorD.HasValue) p.AttractorD = AttractorD.Value;
+            if (UserEquationRotationDegrees.HasValue) p.UserEquationRotationDegrees = UserEquationRotationDegrees.Value;
+            if (BulbPower.HasValue) p.BulbPower = BulbPower.Value;
+            if (BulbIterations.HasValue) p.BulbIterations = BulbIterations.Value;
+            if (UserBulbIterations.HasValue) p.UserBulbIterations = UserBulbIterations.Value;
+            if (UserBulbTime.HasValue) p.UserBulbTime = UserBulbTime.Value;
+            if (MandelboxScale.HasValue) p.MandelboxScale = MandelboxScale.Value;
+            if (MandelboxFixedRadius.HasValue) p.MandelboxFixedRadius = MandelboxFixedRadius.Value;
+            if (MandelboxMinRadius.HasValue) p.MandelboxMinRadius = MandelboxMinRadius.Value;
+            if (MandelboxIterations.HasValue) p.MandelboxIterations = MandelboxIterations.Value;
+            if (KifsFold.HasValue) p.KifsFold = (KifsFoldKind)KifsFold.Value;
+            if (KifsScale.HasValue) p.KifsScale = KifsScale.Value;
+            if (KifsOffsetX.HasValue) p.KifsOffsetX = KifsOffsetX.Value;
+            if (KifsOffsetY.HasValue) p.KifsOffsetY = KifsOffsetY.Value;
+            if (KifsOffsetZ.HasValue) p.KifsOffsetZ = KifsOffsetZ.Value;
+            if (KifsIterations.HasValue) p.KifsIterations = KifsIterations.Value;
+            if (QJuliaCX.HasValue) p.QJuliaCX = QJuliaCX.Value;
+            if (QJuliaCY.HasValue) p.QJuliaCY = QJuliaCY.Value;
+            if (QJuliaCZ.HasValue) p.QJuliaCZ = QJuliaCZ.Value;
+            if (QJuliaCW.HasValue) p.QJuliaCW = QJuliaCW.Value;
+            if (AcidWarpCenterX.HasValue) p.AcidWarpCenterX = AcidWarpCenterX.Value;
+            if (AcidWarpCenterY.HasValue) p.AcidWarpCenterY = AcidWarpCenterY.Value;
+            if (FlameVibrancy.HasValue) p.FlameVibrancy = FlameVibrancy.Value;
+            if (KleinianSphereScale.HasValue) p.KleinianSphereScale = KleinianSphereScale.Value;
+            if (KleinianIterations.HasValue) p.KleinianIterations = KleinianIterations.Value;
+            if (RandomTileCount.HasValue) p.RandomTileCount = RandomTileCount.Value;
+            if (RandomTileRelief.HasValue) p.RandomTileRelief = RandomTileRelief.Value;
+            if (RandomTileSizeExponent.HasValue) p.RandomTileSizeExponent = RandomTileSizeExponent.Value;
+            if (RandomTileGap.HasValue) p.RandomTileGap = RandomTileGap.Value;
+            if (RandomTileMinPixelRadius.HasValue) p.RandomTileMinPixelRadius = RandomTileMinPixelRadius.Value;
+            if (RandomTileShape.HasValue) p.RandomTileShape = (FracturingFog.RandomTileShape)RandomTileShape.Value;
         }
     }
 
