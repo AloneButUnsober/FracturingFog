@@ -2191,7 +2191,7 @@ namespace FracturingFog.Hosting
         /// Post-stop prompt for an instant recording: format, quality, output
         /// fps and scale. Returns the picked options (Save…) or null (Discard /
         /// window closed). ffmpeg-only formats are hidden when ffmpeg is not
-        /// enabled. <paramref name="initial"/> pre-selects the last choices.
+        /// installed. <paramref name="initial"/> pre-selects the last choices.
         /// </summary>
         public static Task<FracturingFog.Render.LiveRecordingExportOptions?> ShowLiveRecordingExportAsync(
             FracturingFog.Render.LiveRecordingResult rec,
@@ -2306,7 +2306,7 @@ namespace FracturingFog.Hosting
                 {
                     Text = $"Recorded {dur:mm\\:ss\\.f} at {rec.Width}×{rec.Height} " +
                            $"({rec.Frames.Count} unique frame{(rec.Frames.Count == 1 ? "" : "s")}, sampled at {rec.CaptureFps} fps)." +
-                           (ffmpegEnabled ? "" : "\nffmpeg not enabled — H.265 / WebM / FFV1 hidden. Install it from FFmpeg Setup for more formats."),
+                           (ffmpegEnabled ? "" : "\nffmpeg not found — H.265 / WebM / FFV1 hidden. Install it from FFmpeg Setup for more formats."),
                     Foreground = Brushes.White,
                     TextWrapping = TextWrapping.Wrap,
                     Margin = new Thickness(16, 16, 16, 8),

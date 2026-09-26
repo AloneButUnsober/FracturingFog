@@ -3854,7 +3854,11 @@ namespace FracturingFog.Hosting
         // take; a failed encode re-opens the prompt with the same frames.
         private static async Task HandleLiveRecordingReadyAsync(FracturingFog.Render.LiveRecordingResult rec)
         {
-            bool ffmpeg = FfmpegEncoder.IsEnabledForUser();
+            // File presence, not IsEnabledForUser: pressing Record is explicit
+            // intent to make a video, so a stale startup "Continue Without
+            // Video" election (FfmpegUserElection.Skip) must not hide the
+            // ffmpeg formats when ffmpeg is actually installed.
+            bool ffmpeg = FfmpegEncoder.IsAvailable();
             while (true)
             {
                 var opt = await AvaloniaDialogs.ShowLiveRecordingExportAsync(rec, ffmpeg, s_lastLiveExport);
