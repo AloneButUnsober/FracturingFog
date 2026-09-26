@@ -26,6 +26,10 @@ public sealed class LookStore
     private static readonly JsonSerializerOptions s_json = new() { WriteIndented = true };
     private readonly string _path;
 
+    // #966 — entries this build could not read, kept verbatim and written back on the
+    // next Save/Delete (both re-Load first, so this always reflects the current file).
+    private readonly TolerantJsonList<Look> _persisted = new();
+
     public LookStore() : this(AppDataPaths.Combine("palette-looks.json")) { }
 
     public LookStore(string path) => _path = path;
@@ -33,16 +37,10 @@ public sealed class LookStore
     /// <summary>All saved looks (empty on first run or a corrupt / unreadable file).</summary>
     public List<Look> Load()
     {
-        try
-        {
-            if (!File.Exists(_path)) return new List<Look>();
-            var dtos = JsonSerializer.Deserialize<List<LookDto>>(File.ReadAllText(_path), s_json)
-                       ?? new List<LookDto>();
-            var outp = new List<Look>(dtos.Count);
-            foreach (var d in dtos) outp.Add(d.ToLook());
-            return outp;
-        }
-        catch { return new List<Look>(); }
+        // #966 — per-entry: a look this build can't read is preserved, not dropped
+        // (Save/Delete used to rewrite the file from an empty list after a failed
+        // load, deleting every saved look).
+        return _persisted.LoadFile(_path, e => e.Deserialize<LookDto>(s_json)?.ToLook());
     }
 
     /// <summary>Save a look, replacing any existing one of the same name (case-insensitive).</summary>
@@ -70,9 +68,9 @@ public sealed class LookStore
         {
             var dir = Path.GetDirectoryName(_path);
             if (!string.IsNullOrEmpty(dir)) Directory.CreateDirectory(dir);
-            var dtos = new List<LookDto>(looks.Count);
-            foreach (var l in looks) dtos.Add(LookDto.From(l));
-            File.WriteAllText(_path, JsonSerializer.Serialize(dtos, s_json));
+            var array = _persisted.WriteArray(looks,
+                l => JsonSerializer.SerializeToNode(LookDto.From(l), s_json), l => l.Name);
+            AtomicFile.WriteAllText(_path, array.ToJsonString(s_json));
         }
         catch { /* best-effort persistence; a write failure must not crash the tool */ }
     }

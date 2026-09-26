@@ -38,7 +38,7 @@ public sealed class AnimationLibraryTolerantLoadTests
         finally
         {
             File.Delete(FilePath);
-            foreach (var f in Directory.GetFiles(AppDataPaths.Root, "animations.json.unreadable-*")) File.Delete(f);
+            foreach (var f in Directory.GetFiles(AppDataPaths.Root, "animations.json.*.unreadable*.bak")) File.Delete(f);
             AnimationLibrary.Instance.Load();
         }
     }
@@ -100,7 +100,7 @@ public sealed class AnimationLibraryTolerantLoadTests
             var lib = AnimationLibrary.Instance;
             lib.Load();
             Assert.NotNull(lib.GetByName("Julia C orbit"));
-            var backups = Directory.GetFiles(AppDataPaths.Root, "animations.json.unreadable-*");
+            var backups = Directory.GetFiles(AppDataPaths.Root, "animations.json.*.unreadable*.bak");
             Assert.Single(backups);
             Assert.Contains("Truncated", File.ReadAllText(backups[0]));
         });

@@ -28,6 +28,11 @@ namespace FracturingFog.Models
         public int Version { get; set; } = 1;
         public string? ActiveName { get; set; }
         public List<WorkspaceLayout> Layouts { get; set; } = new();
+
+        /// <summary>#966 — entries in the file this build could not read. Hidden from
+        /// <see cref="Layouts"/> but written back verbatim by Save, so data from a newer or
+        /// other-branch build is not deleted.</summary>
+        [JsonIgnore] public TolerantJsonList<WorkspaceLayout> Preserved { get; } = new();
     }
 
     /// <summary>Static gateway over the on-disk workspace library. Mirrors the
@@ -51,23 +56,11 @@ namespace FracturingFog.Models
         /// library is a valid state for this feature.</summary>
         public static WorkspaceLayoutFile Load()
         {
-            try
+            // #966 — tolerant per-entry read (unreadable workspaces are preserved).
+            if (File.Exists(LayoutsFile) && TryReadFile(out var file))
             {
-                if (File.Exists(LayoutsFile))
-                {
-                    var json = File.ReadAllText(LayoutsFile);
-                    var file = JsonSerializer.Deserialize<WorkspaceLayoutFile>(json, JsonOpts);
-                    if (file != null)
-                    {
-                        file.Layouts ??= new List<WorkspaceLayout>();
-                        EnsureActiveValid(file);
-                        return file;
-                    }
-                }
-            }
-            catch
-            {
-                // fall through to a fresh empty file
+                EnsureActiveValid(file);
+                return file;
             }
 
             return new WorkspaceLayoutFile();
@@ -82,10 +75,43 @@ namespace FracturingFog.Models
             try
             {
                 Directory.CreateDirectory(SettingsDir);
-                var json = JsonSerializer.Serialize(file, JsonOpts);
+                var json = SerializeFile(file);
                 AtomicFile.WriteAllText(LayoutsFile, json);
             }
             catch { }
+        }
+
+        // #966 — tolerant envelope read: the Layouts array is read element by element
+        // (unreadable entries kept in file.Preserved); a file that is not a JSON
+        // object at all is snapshotted before anything can overwrite it.
+        private static bool TryReadFile(out WorkspaceLayoutFile file)
+        {
+            file = new WorkspaceLayoutFile();
+            try
+            {
+                var root = System.Text.Json.Nodes.JsonNode.Parse(File.ReadAllText(LayoutsFile))
+                           as System.Text.Json.Nodes.JsonObject
+                           ?? throw new JsonException("not a JSON object");
+                var list = TolerantJsonEnvelope.TakeProperty(root, nameof(WorkspaceLayoutFile.Layouts));
+                file = root.Deserialize<WorkspaceLayoutFile>(JsonOpts) ?? new WorkspaceLayoutFile();
+                file.Layouts = file.Preserved.ReadArray(list, JsonOpts);
+                file.Layouts.RemoveAll(x => x == null);
+                return true;
+            }
+            catch
+            {
+                UserDataBackup.SnapshotBeforeMigration(LayoutsFile, "unreadable");
+                file = new WorkspaceLayoutFile();
+                return false;
+            }
+        }
+
+        private static string SerializeFile(WorkspaceLayoutFile file)
+        {
+            var root = JsonSerializer.SerializeToNode(file, JsonOpts)!.AsObject();
+            root[TolerantJsonEnvelope.JsonName(nameof(WorkspaceLayoutFile.Layouts), JsonOpts)] =
+                file.Preserved.WriteArray(file.Layouts, JsonOpts, x => x.Name);
+            return root.ToJsonString(JsonOpts);
         }
 
         /// <summary>Resolve <see cref="WorkspaceLayoutFile.ActiveName"/> to a

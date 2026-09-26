@@ -54,25 +54,24 @@ namespace FracturingFog.Models
 
         public void Load()
         {
-            try
-            {
-                Entries.Clear();
-                if (!File.Exists(EntriesFile)) return;
-                string json = File.ReadAllText(EntriesFile);
-                var loaded = JsonSerializer.Deserialize<List<UserColorGenEntry>>(json, BuildJsonOptions());
-                if (loaded == null) return;
-                foreach (var e in loaded)
-                    if (e != null && !string.IsNullOrWhiteSpace(e.Name)) Entries.Add(e);
-            }
-            catch { Entries.Clear(); }
+            // #966 — per-entry load; entries this build can't read are preserved for Save.
+            Entries.Clear();
+            foreach (var e in _persisted.LoadFile(EntriesFile, BuildJsonOptions()))
+                if (!string.IsNullOrWhiteSpace(e.Name)) Entries.Add(e);
         }
+
+        // #966 — preserves entries this build could not read across Load/Save.
+        private readonly TolerantJsonList<UserColorGenEntry> _persisted = new();
+
+        /// <summary>Entries in colorgen.json this build could not read (kept on disk).</summary>
+        public int UnreadableCount => _persisted.UnreadableCount;
 
         public void Save()
         {
             try
             {
                 Directory.CreateDirectory(SettingsDir);
-                string json = JsonSerializer.Serialize(Entries, BuildJsonOptions());
+                string json = _persisted.Serialize(Entries, BuildJsonOptions(), x => x.Name);
                 AtomicFile.WriteAllText(EntriesFile, json);
             }
             catch { /* non-fatal */ }

@@ -28,6 +28,11 @@ namespace FracturingFog.Models
         public int Version { get; set; } = 1;
         public string ActiveName { get; set; } = "Default";
         public List<SlideshowConfig> Configs { get; set; } = new();
+
+        /// <summary>#966 — entries in the file this build could not read. Hidden from
+        /// <see cref="Configs"/> but written back verbatim by Save, so data from a newer or
+        /// other-branch build is not deleted.</summary>
+        [JsonIgnore] public TolerantJsonList<SlideshowConfig> Preserved { get; } = new();
     }
 
     /// <summary>Singleton-ish static gateway over the on-disk preset library.
@@ -53,26 +58,23 @@ namespace FracturingFog.Models
         /// least the "Default" entry.</summary>
         public static SlideshowConfigFile Load()
         {
-            try
+            if (File.Exists(ConfigsFile))
             {
-                if (File.Exists(ConfigsFile))
+                // #966 — this used to fall through to MigrateOrSeed on ANY parse
+                // error, which saved a fresh "Default" straight over the user's file.
+                if (TryReadFile(out var file))
                 {
-                    var json = File.ReadAllText(ConfigsFile);
-                    var file = JsonSerializer.Deserialize<SlideshowConfigFile>(json, JsonOpts);
-                    if (file != null && file.Configs.Count > 0)
+                    if (file.Configs.Count > 0)
                     {
                         EnsureActiveValid(file);
                         NormalizeLegacyNames(file);
                         return file;
                     }
+                    return MigrateOrSeed(file);   // keeps file.Preserved
                 }
             }
-            catch
-            {
-                // fall through to migration / seed
-            }
 
-            return MigrateOrSeed();
+            return MigrateOrSeed(null);
         }
 
         /// <summary>Persist the preset file to disk. Best-effort — IO errors
@@ -84,10 +86,43 @@ namespace FracturingFog.Models
             try
             {
                 Directory.CreateDirectory(SettingsDir);
-                var json = JsonSerializer.Serialize(file, JsonOpts);
+                var json = SerializeFile(file);
                 AtomicFile.WriteAllText(ConfigsFile, json);
             }
             catch { }
+        }
+
+        // #966 — tolerant envelope read: the Configs array is read element by element
+        // (unreadable entries kept in file.Preserved); a file that is not a JSON
+        // object at all is snapshotted before anything can overwrite it.
+        private static bool TryReadFile(out SlideshowConfigFile file)
+        {
+            file = new SlideshowConfigFile();
+            try
+            {
+                var root = System.Text.Json.Nodes.JsonNode.Parse(File.ReadAllText(ConfigsFile))
+                           as System.Text.Json.Nodes.JsonObject
+                           ?? throw new JsonException("not a JSON object");
+                var list = TolerantJsonEnvelope.TakeProperty(root, nameof(SlideshowConfigFile.Configs));
+                file = root.Deserialize<SlideshowConfigFile>(JsonOpts) ?? new SlideshowConfigFile();
+                file.Configs = file.Preserved.ReadArray(list, JsonOpts);
+                file.Configs.RemoveAll(x => x == null);
+                return true;
+            }
+            catch
+            {
+                UserDataBackup.SnapshotBeforeMigration(ConfigsFile, "unreadable");
+                file = new SlideshowConfigFile();
+                return false;
+            }
+        }
+
+        private static string SerializeFile(SlideshowConfigFile file)
+        {
+            var root = JsonSerializer.SerializeToNode(file, JsonOpts)!.AsObject();
+            root[TolerantJsonEnvelope.JsonName(nameof(SlideshowConfigFile.Configs), JsonOpts)] =
+                file.Preserved.WriteArray(file.Configs, JsonOpts, x => x.Name);
+            return root.ToJsonString(JsonOpts);
         }
 
         /// <summary>Resolve <see cref="SlideshowConfigFile.ActiveName"/> to a
@@ -233,7 +268,7 @@ namespace FracturingFog.Models
 
         // ── internal ──────────────────────────────────────────────────────────
 
-        private static SlideshowConfigFile MigrateOrSeed()
+        private static SlideshowConfigFile MigrateOrSeed(SlideshowConfigFile? existing)
         {
             // Prefer migrating the legacy SlideshowSettings store so user
             // timing values survive the schema bump.
@@ -241,11 +276,11 @@ namespace FracturingFog.Models
             try { legacy = SlideshowSettingsStore.Load(); }
             catch { legacy = new SlideshowSettings(); }
 
-            var file = new SlideshowConfigFile
-            {
-                ActiveName = DefaultConfigName,
-                Configs = { SlideshowConfig.FromLegacy(DefaultConfigName, legacy, audioReactive: false) },
-            };
+            // #966 — seed INTO an existing (readable but empty) file so its
+            // preserved unreadable entries are written back, not dropped.
+            var file = existing ?? new SlideshowConfigFile();
+            file.ActiveName = DefaultConfigName;
+            file.Configs.Add(SlideshowConfig.FromLegacy(DefaultConfigName, legacy, audioReactive: false));
             Save(file);
             return file;
         }
