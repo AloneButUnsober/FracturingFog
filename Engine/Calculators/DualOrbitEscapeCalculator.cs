@@ -49,7 +49,7 @@ using FracturingFog.Models;
 
 namespace FracturingFog;
 
-public sealed class DualOrbitEscapeCalculator : IFractalCalculator, IHeightFieldSource
+public sealed class DualOrbitEscapeCalculator : IFractalCalculator, IHeightFieldSource, ISupportsCheapRecolor
 {
     public int Width { get; private set; }
     public int Height { get; private set; }
@@ -99,6 +99,7 @@ public sealed class DualOrbitEscapeCalculator : IFractalCalculator, IHeightField
         Height = height;
         ColorBuffer = new uint[width * height];
         SmoothBuffer = new float[width * height];
+        _cacheKey = null;   // #981 — the orbit cache is per frame size
     }
 
     // One orbit's escape outcome.
@@ -207,52 +208,94 @@ public sealed class DualOrbitEscapeCalculator : IFractalCalculator, IHeightField
         return new QOrbit(false, qx, qy, qz, qw, maxIter, -1);
     }
 
+    // ── Two-phase render with an orbit cache (#981) ─────────────────────────
+    //
+    // Iterate() runs both orbits per pixel and caches what colouring needs: the
+    // z / c smooth counts, escaped + "escaped by step 1" flags, and SmoothBuffer
+    // (field scalar, or the z layer in layer mode). Colorize() turns the cache
+    // into ColorBuffer with the CURRENT theme(s), interior alpha, blend and
+    // opacities. Calculate() skips Iterate() when nothing that affects the
+    // orbits changed (GeometryKey), so theme / layer-theme / blend / opacity /
+    // interior-alpha edits — which arrive as a full Trigger() — recolour in
+    // place; Recolor() (ISupportsCheapRecolor) is Colorize() alone.
+
+    // Every input that changes the orbits or the cached scalar. Colour-only
+    // inputs (themes, interior alpha, blend, opacities) are deliberately absent.
+    private readonly record struct GeometryKey(
+        int Width, int Height, double CenterX, double CenterY, double Zoom, int MaxIter,
+        DualOrbitMap Map, bool CEqualsS, double CX, double CY, double SX, double SY,
+        DualOrbitSliceAxes Axes, double CSeedZ, double SZ, double Bailout,
+        bool Layers, DualOrbitField Field, double RatioSpan);
+
+    private GeometryKey? _cacheKey;
+    private float[] _smZ = Array.Empty<float>(), _smC = Array.Empty<float>();
+    private byte[] _flags = Array.Empty<byte>();
+    private const byte FlagZEsc = 1, FlagCEsc = 2, FlagZFirst = 4, FlagCFirst = 8;
+
+    /// <summary>True when the last Calculate() reused the cached orbits instead of
+    /// iterating (diagnostics / tests).</summary>
+    public bool LastCalculateReusedOrbits { get; private set; }
+
+    private GeometryKey CurrentKey()
+    {
+        var fp = FractalParameters;
+        bool layers = fp.DualOrbitColorMode == DualOrbitColorMode.PerOrbitLayers;
+        return new GeometryKey(
+            Width, Height, CenterX, CenterY, Zoom, Math.Max(16, MaxIterations),
+            fp.DualOrbitMap, fp.DualOrbitCEqualsS, fp.DualOrbitCSeedX, fp.DualOrbitCSeedY,
+            fp.DualOrbitSX, fp.DualOrbitSY, fp.DualOrbitSliceAxes, fp.DualOrbitCSeedZ, fp.DualOrbitSZ,
+            Math.Clamp(fp.DualOrbitBailout, 2.0, 1e6),
+            layers,
+            layers ? default : fp.DualOrbitField,
+            layers ? 0.0 : Math.Max(1e-3, fp.DualOrbitRatioSpan));
+    }
+
     public void Calculate(CancellationToken ct = default)
     {
-        int maxIter = Math.Max(16, MaxIterations);
-        ColorMap.MaxIterations = maxIter;
+        var key = CurrentKey();
+        LastCalculateReusedOrbits = _cacheKey is GeometryKey k && k.Equals(key);
+        if (!LastCalculateReusedOrbits)
+        {
+            _cacheKey = null;                 // invalid until Iterate completes
+            Iterate(key, ct);
+            if (ct.IsCancellationRequested) return;
+            _cacheKey = key;
+        }
+        Colorize(key, ct);
+    }
 
-        var map = FractalParameters.DualOrbitMap;
-        var field = FractalParameters.DualOrbitField;
-        bool cEqualsS = FractalParameters.DualOrbitCEqualsS;
-        double fixedCX = FractalParameters.DualOrbitCSeedX;
-        double fixedCY = FractalParameters.DualOrbitCSeedY;
-        double fixedSX = FractalParameters.DualOrbitSX;
-        double fixedSY = FractalParameters.DualOrbitSY;
-        var axes = FractalParameters.DualOrbitSliceAxes;
-        double cSeedZ = FractalParameters.DualOrbitCSeedZ;
-        double sZ = FractalParameters.DualOrbitSZ;
-        var bail = new Bailout(Math.Clamp(FractalParameters.DualOrbitBailout, 2.0, 1e6));
-        double ratioSpan = Math.Max(1e-3, FractalParameters.DualOrbitRatioSpan);
+    /// <summary>#981 — rebuild ColorBuffer from the cached orbits with the current
+    /// theme(s) and colour parameters, without iterating. Falls back to a full
+    /// Calculate() when the cache is missing or stale.</summary>
+    public void Recolor()
+    {
+        var key = CurrentKey();
+        if (_cacheKey is GeometryKey k && k.Equals(key)) Colorize(key, CancellationToken.None);
+        else Calculate();
+    }
+
+    private void Iterate(in GeometryKey key, CancellationToken ct)
+    {
+        int n = Width * Height;
+        if (_smZ.Length != n) { _smZ = new float[n]; _smC = new float[n]; _flags = new byte[n]; }
+
+        int maxIter = key.MaxIter;
+        var map = key.Map;
+        var field = key.Field;
+        bool cEqualsS = key.CEqualsS;
+        double fixedCX = key.CX, fixedCY = key.CY, fixedSX = key.SX, fixedSY = key.SY;
+        var axes = key.Axes;
+        double cSeedZ = key.CSeedZ, sZ = key.SZ;
+        var bail = new Bailout(key.Bailout);
+        double ratioSpan = key.RatioSpan;
+        bool layers = key.Layers;
 
         double pixelPitch = (4.0 / Math.Max(1, Width)) / Math.Max(1e-12, Zoom);
         int width = Width, height = Height;
         double centerX = CenterX, centerY = CenterY;
         bool quat = map == DualOrbitMap.Quaternion;
-        bool layers = FractalParameters.DualOrbitColorMode == DualOrbitColorMode.PerOrbitLayers;
         bool angles = !layers && !quat && field == DualOrbitField.ExternalAngleDelta;
-
-        // #978 — theme interior colour × global interior alpha (the #96/#97 knob,
-        // same scaling as InteriorAlphaStamp), and the #615 out-of-bounds surround.
-        // Both are written inline; the host's Interior2DBackgroundCompositor then
-        // composites any translucency over the backdrop, live and in export.
-        uint interiorColor = InteriorAlphaStamp.ScaleArgbAlpha(
-            ColorMap.InSetColor, FractalParameters.InteriorAlpha);
-        uint? oobColor = ColorMap.OutOfBoundsColor;
-
-        // #979 — per-orbit layers: each orbit through its own theme.
-        LayerStyle styleZ = default, styleC = default;
-        var blend = FractalParameters.DualOrbitLayerBlend;
-        if (layers)
-        {
-            var missing = new List<string>();
-            styleZ = new LayerStyle(ResolveLayerTheme(LayerThemeZ, FractalParameters.DualOrbitThemeZ, missing),
-                FractalParameters.InteriorAlpha, FractalParameters.DualOrbitOpacityZ, maxIter);
-            styleC = new LayerStyle(ResolveLayerTheme(LayerThemeC, FractalParameters.DualOrbitThemeC, missing),
-                FractalParameters.InteriorAlpha, FractalParameters.DualOrbitOpacityC, maxIter);
-            UnresolvedLayerThemes = missing;
-        }
-        else UnresolvedLayerThemes = Array.Empty<string>();
+        float[] smZArr = _smZ, smCArr = _smC; byte[] flagArr = _flags;
 
         Parallel.For(0, height, new ParallelOptions { CancellationToken = ct }, y =>
         {
@@ -308,27 +351,79 @@ public sealed class DualOrbitEscapeCalculator : IFractalCalculator, IHeightField
                 }
 
                 int idx = rowBase + x;
+                // Layer colours clamp at LiveFloor and cast to float anyway, so the
+                // cached value is exactly what the colour phase would have used.
+                smZArr[idx] = (float)Math.Max(LiveFloor, smZ);
+                smCArr[idx] = (float)Math.Max(LiveFloor, smC);
+                flagArr[idx] = (byte)((zEsc ? FlagZEsc : 0) | (cEsc ? FlagCEsc : 0)
+                    | (nZ >= 0 && nZ <= 1 ? FlagZFirst : 0) | (nC >= 0 && nC <= 1 ? FlagCFirst : 0));
+                // Relief height / histogram: the field scalar, or the z layer in
+                // layer mode (0 = bounded).
+                SmoothBuffer[idx] = layers ? (zEsc ? smZArr[idx] : 0f) : (float)scalar;
+            }
+        });
+    }
+
+    private void Colorize(in GeometryKey key, CancellationToken ct)
+    {
+        int maxIter = key.MaxIter;
+        ColorMap.MaxIterations = maxIter;
+        var field = key.Field;
+        bool layers = key.Layers;
+
+        // #978 — theme interior colour × global interior alpha (the #96/#97 knob,
+        // same scaling as InteriorAlphaStamp), and the #615 out-of-bounds surround.
+        // Both are written inline; the host's Interior2DBackgroundCompositor then
+        // composites any translucency over the backdrop, live and in export.
+        uint interiorColor = InteriorAlphaStamp.ScaleArgbAlpha(
+            ColorMap.InSetColor, FractalParameters.InteriorAlpha);
+        uint? oobColor = ColorMap.OutOfBoundsColor;
+
+        // #979 — per-orbit layers: each orbit through its own theme.
+        LayerStyle styleZ = default, styleC = default;
+        var blend = FractalParameters.DualOrbitLayerBlend;
+        if (layers)
+        {
+            var missing = new List<string>();
+            styleZ = new LayerStyle(ResolveLayerTheme(LayerThemeZ, FractalParameters.DualOrbitThemeZ, missing),
+                FractalParameters.InteriorAlpha, FractalParameters.DualOrbitOpacityZ, maxIter);
+            styleC = new LayerStyle(ResolveLayerTheme(LayerThemeC, FractalParameters.DualOrbitThemeC, missing),
+                FractalParameters.InteriorAlpha, FractalParameters.DualOrbitOpacityC, maxIter);
+            UnresolvedLayerThemes = missing;
+        }
+        else UnresolvedLayerThemes = Array.Empty<string>();
+
+        int width = Width, height = Height;
+        float[] smZArr = _smZ, smCArr = _smC; byte[] flagArr = _flags;
+        if (flagArr.Length < width * height) return;   // nothing cached yet
+
+        Parallel.For(0, height, new ParallelOptions { CancellationToken = ct }, y =>
+        {
+            if (ct.IsCancellationRequested) return;
+            int rowBase = y * width;
+            for (int x = 0; x < width; x++)
+            {
+                int idx = rowBase + x;
+                byte f = flagArr[idx];
+                bool zEsc = (f & FlagZEsc) != 0, cEsc = (f & FlagCEsc) != 0;
+                bool zFirst = (f & FlagZFirst) != 0, cFirst = (f & FlagCFirst) != 0;
                 if (layers)
                 {
-                    // Relief height / histogram read the z layer (0 = bounded).
-                    SmoothBuffer[idx] = zEsc ? (float)Math.Max(LiveFloor, smZ) : 0f;
-                    uint lz = styleZ.Color(zEsc, nZ, smZ, maxIter);
-                    uint lc = styleC.Color(cEsc, nC, smC, maxIter);
+                    uint lz = styleZ.Color(zEsc, zFirst, smZArr[idx], maxIter);
+                    uint lc = styleC.Color(cEsc, cFirst, smCArr[idx], maxIter);
                     ColorBuffer[idx] = BlendLayers(lz, styleZ.Opacity, lc, styleC.Opacity, blend);
                     continue;
                 }
-                float smooth = (float)scalar;
-                SmoothBuffer[idx] = smooth;
                 // Interior = the field has no value (keyed on the orbits, NOT on
                 // smooth == 0: legacy fields can be a legitimate 0, e.g. the c = s
                 // control's separation). Surround = every orbit the field reads
                 // escaped by step 1 (#615's "no structure develops", seed-agnostic).
                 if (!FieldLive(field, zEsc, cEsc))
                     ColorBuffer[idx] = interiorColor;
-                else if (oobColor is uint oob && FieldOutOfBounds(field, nZ, nC))
+                else if (oobColor is uint oob && FieldOutOfBounds(field, zFirst, cFirst))
                     ColorBuffer[idx] = oob;
                 else
-                    ColorBuffer[idx] = unchecked((uint)ColorMap.Map(smooth, 0f, maxIter));
+                    ColorBuffer[idx] = unchecked((uint)ColorMap.Map(SmoothBuffer[idx], 0f, maxIter));
             }
         });
     }
@@ -455,11 +550,11 @@ public sealed class DualOrbitEscapeCalculator : IFractalCalculator, IHeightField
 
         // Bounded -> the theme's interior (x global interior alpha); escaped by
         // step 1 -> the theme's surround when it sets one; else the gradient.
-        public uint Color(bool escaped, int escapeIndex, double smooth, int maxIter)
+        public uint Color(bool escaped, bool escapedByStep1, float smooth, int maxIter)
         {
             if (!escaped) return Interior;
-            if (Surround is uint oob && escapeIndex >= 0 && escapeIndex <= 1) return oob;
-            return unchecked((uint)Map.Map((float)Math.Max(LiveFloor, smooth), 0f, maxIter));
+            if (Surround is uint oob && escapedByStep1) return oob;
+            return unchecked((uint)Map.Map(smooth, 0f, maxIter));
         }
     }
 
@@ -546,9 +641,8 @@ public sealed class DualOrbitEscapeCalculator : IFractalCalculator, IHeightField
     // #615 surround: the orbit(s) the field reads escaped by step 1, so no
     // structure develops. For the parameter plane that is |s| ≥ R for the z-orbit
     // and |c² + s| ≥ R for the c-orbit.
-    private static bool FieldOutOfBounds(DualOrbitField field, int nZ, int nC)
+    private static bool FieldOutOfBounds(DualOrbitField field, bool z, bool c)
     {
-        bool z = nZ >= 0 && nZ <= 1, c = nC >= 0 && nC <= 1;
         return field switch
         {
             DualOrbitField.EscapeTimeZ => z,

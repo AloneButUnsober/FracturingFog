@@ -727,3 +727,12 @@ appropriate sections; flesh out on the next pass. Cite inline from the sections 
   three sites (defaults omitted). Colour-blind-safe defaults verified by hue: z = "MS Standard Blue
   (Gradient)" (blue at low smooth), c = "MS Standard Sunrise (Gradient)" (amber, bright where the far field
   lands). Field combo disabled in layer mode.
+- **2026-09-26** — **#939-D (#981) shipped — #939 complete.** `DualOrbitEscapeCalculator` renders in two
+  phases: `Iterate()` caches per-pixel z / c smooth counts + escaped / escaped-by-step-1 flags (+
+  SmoothBuffer); `Colorize()` builds ColorBuffer from the cache with the current theme(s), interior alpha,
+  blend and opacities. `Calculate()` skips `Iterate()` when a `GeometryKey` of every orbit-affecting input is
+  unchanged, so colour-only param edits (which arrive as a full Trigger) recolour in place;
+  `ISupportsCheapRecolor.Recolor()` = `Colorize()` (main-theme change). Release timings: 1280×720 @ 500 iter
+  full 158–173 ms vs recolour 4–10 ms; 1920×1080 @ 1000 iter 641–689 ms vs 3–9 ms. Cache = 9 bytes/px
+  (~19 MB at 1080p). A reflection guard classifies every `DualOrbit*` param as geometry or colour-only and
+  checks reuse against a fresh render, so a new param cannot silently serve stale orbits.
