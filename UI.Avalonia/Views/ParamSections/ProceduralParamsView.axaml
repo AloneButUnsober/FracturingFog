@@ -435,7 +435,7 @@
         <!-- Dual-Orbit Escape (#864 / #866) -->
         <Grid IsVisible="{Binding IsDualOrbitEscape}"
               ColumnDefinitions="160,*"
-              RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto">
+              RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto">
             <TextBlock Grid.Row="0" Grid.Column="0" Text="Map:" VerticalAlignment="Center" />
             <ComboBox Grid.Row="0" Grid.Column="1"
                       ItemsSource="{Binding DualOrbitMaps}"
@@ -446,6 +446,7 @@
             <ComboBox Grid.Row="1" Grid.Column="1"
                       ItemsSource="{Binding DualOrbitFields}"
                       SelectedItem="{Binding DualOrbitField, Mode=TwoWay}"
+                      IsEnabled="{Binding IsDualOrbitFieldMode}"
                       Margin="0,2"
                       ToolTip.Tip="Derived scalar. Intrinsic (same at any bailout): GreenRatio = log2 of the two orbits' escape-potential ratio; ExternalAngleDelta = difference of their external angles (ComplexPlane only). Bailout-dependent (artistic): EscapeSeparation |E_c−E_z|, MidpointResidual |M−s|, DualOrbitAngle. ΔN = n_c − n_z." />
             <TextBlock Grid.Row="2" Grid.Column="0" Text="c-seed real:" VerticalAlignment="Center" />
@@ -507,6 +508,53 @@
                            Value="{Binding DualOrbitSY, Mode=TwoWay}" Margin="0,2"
                            IsEnabled="{Binding DualOrbitSYEditable}"
                            ToolTip.Tip="s.y when it is not an image axis." />
+
+            <!-- Per-orbit layer colouring (#979 / #980) -->
+            <TextBlock Grid.Row="12" Grid.Column="0" Text="Colour mode:" VerticalAlignment="Center" Margin="0,8,0,2" />
+            <ComboBox Grid.Row="12" Grid.Column="1"
+                      ItemsSource="{Binding DualOrbitColorModes}"
+                      SelectedItem="{Binding DualOrbitColorMode, Mode=TwoWay}"
+                      Margin="0,8,0,2"
+                      ToolTip.Tip="Field: one derived scalar through the main theme. PerOrbitLayers: the z-orbit (seed 0) and the c-orbit each coloured by their own theme (interior colour, alpha and surround included), then blended — so the two 'discs' can be styled and faded independently." />
+            <TextBlock Grid.Row="13" Grid.Column="0" Text="z-orbit theme:" VerticalAlignment="Center"
+                       IsVisible="{Binding IsDualOrbitLayers}" />
+            <ComboBox Grid.Row="13" Grid.Column="1"
+                      ItemsSource="{Binding LayerThemeNames}"
+                      SelectedItem="{Binding DualOrbitThemeZ, Mode=TwoWay}"
+                      IsVisible="{Binding IsDualOrbitLayers}" Margin="0,2"
+                      ToolTip.Tip="Theme for the z-orbit layer (seed 0 — the Mandelbrot set and its bands). Lists themes compatible with this fractal; '(main theme)' follows the toolbar theme." />
+            <TextBlock Grid.Row="14" Grid.Column="0" Text="c-orbit theme:" VerticalAlignment="Center"
+                       IsVisible="{Binding IsDualOrbitLayers}" />
+            <ComboBox Grid.Row="14" Grid.Column="1"
+                      ItemsSource="{Binding LayerThemeNames}"
+                      SelectedItem="{Binding DualOrbitThemeC, Mode=TwoWay}"
+                      IsVisible="{Binding IsDualOrbitLayers}" Margin="0,2"
+                      ToolTip.Tip="Theme for the c-orbit layer (the c-seed's own set and bands, centred on −c²)." />
+            <TextBlock Grid.Row="15" Grid.Column="0" Text="Layer blend:" VerticalAlignment="Center"
+                       IsVisible="{Binding IsDualOrbitLayers}" />
+            <ComboBox Grid.Row="15" Grid.Column="1"
+                      ItemsSource="{Binding DualOrbitLayerBlends}"
+                      SelectedItem="{Binding DualOrbitLayerBlend, Mode=TwoWay}"
+                      IsVisible="{Binding IsDualOrbitLayers}" Margin="0,2"
+                      ToolTip.Tip="COverZ / ZOverC: one layer over the other. Screen: lightens where they overlap. Multiply: darkens. Mix: cross-fade weighted by the two opacities." />
+            <TextBlock Grid.Row="16" Grid.Column="0" Text="z-orbit opacity:" VerticalAlignment="Center"
+                       IsVisible="{Binding IsDualOrbitLayers}" />
+            <NumericUpDown Grid.Row="16" Grid.Column="1"
+                           Minimum="0" Maximum="1" Increment="0.05" FormatString="F2"
+                           Value="{Binding DualOrbitOpacityZ, Mode=TwoWay}"
+                           IsVisible="{Binding IsDualOrbitLayers}" Margin="0,2"
+                           ToolTip.Tip="Opacity of the z-orbit layer (multiplies the theme's own alpha). Animatable." />
+            <TextBlock Grid.Row="17" Grid.Column="0" Text="c-orbit opacity:" VerticalAlignment="Center"
+                       IsVisible="{Binding IsDualOrbitLayers}" />
+            <NumericUpDown Grid.Row="17" Grid.Column="1"
+                           Minimum="0" Maximum="1" Increment="0.05" FormatString="F2"
+                           Value="{Binding DualOrbitOpacityC, Mode=TwoWay}"
+                           IsVisible="{Binding IsDualOrbitLayers}" Margin="0,2"
+                           ToolTip.Tip="Opacity of the c-orbit layer. Animate it to cross-fade the two discs." />
+            <TextBlock Grid.Row="18" Grid.Column="0" Grid.ColumnSpan="2"
+                       Text="{Binding DualOrbitThemeWarning}"
+                       IsVisible="{Binding HasDualOrbitThemeWarning}"
+                       Foreground="#FFCC00" TextWrapping="Wrap" Margin="0,4" />
         </Grid>
 
         <!-- Chaotic Billiard (#627) -->

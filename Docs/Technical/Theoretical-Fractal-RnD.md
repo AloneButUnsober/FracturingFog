@@ -720,3 +720,10 @@ appropriate sections; flesh out on the next pass. Cite inline from the sections 
   EscapeTimeZ / EscapeTimeC byte-for-byte (incl. surround at bailout 2); exact colours in the three region
   states. Smoke: the c layer alone shows the c-orbit's own escape structure (M_c + bands offset from the
   z family) — the "second disc". Params persistence / animation / UI = C (#980).
+- **2026-09-26** — **#939-C (#980) shipped** — per-orbit layers reachable from the UI: Colour mode combo,
+  z / c theme pickers (host `EnumerateThemeNames(ByFractalCompat, DualOrbitEscape)`, lazily fetched,
+  "(main theme)" ↔ "", "— kind —" header rows ignored), blend combo, opacity fields (animatable — cross-fade
+  the two discs), yellow warning when a stored theme is missing / incompatible. Region persistence at all
+  three sites (defaults omitted). Colour-blind-safe defaults verified by hue: z = "MS Standard Blue
+  (Gradient)" (blue at low smooth), c = "MS Standard Sunrise (Gradient)" (amber, bright where the far field
+  lands). Field combo disabled in layer mode.

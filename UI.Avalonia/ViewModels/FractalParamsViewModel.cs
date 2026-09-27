@@ -29,6 +29,7 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
 {
     private readonly FractalParameters _p;
     private readonly Func<string, (double a, double b, double c, double d)>? _attractorDefaults;
+    private readonly Func<IReadOnlyList<string>>? _layerThemeNamesProvider;
     private bool _suppress;
 
     public FractalParamsViewModel(
@@ -39,13 +40,15 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
         IReadOnlyList<string>? attractorPresets = null,
         Func<string, (double a, double b, double c, double d)>? attractorDefaults = null,
         IReadOnlyList<string>? flamePresets = null,
-        AudioModulationManager? audioModulation = null)
+        AudioModulationManager? audioModulation = null,
+        Func<IReadOnlyList<string>>? layerThemeNames = null)
     {
         ArgumentNullException.ThrowIfNull(parameters);
 
         FractalType = type;
         _p = parameters;
         _attractorDefaults = attractorDefaults;
+        _layerThemeNamesProvider = layerThemeNames;
 
         IfsPresets = ifsPresets ?? Array.Empty<string>();
         LSystemPresets = lsystemPresets ?? Array.Empty<string>();
@@ -224,6 +227,12 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
         _dualSliceAxes = _p.DualOrbitSliceAxes;
         _dualSX = _p.DualOrbitSX;
         _dualSY = _p.DualOrbitSY;
+        _dualColorMode = _p.DualOrbitColorMode;
+        _dualThemeZ = _p.DualOrbitThemeZ;
+        _dualThemeC = _p.DualOrbitThemeC;
+        _dualLayerBlend = _p.DualOrbitLayerBlend;
+        _dualOpacityZ = _p.DualOrbitOpacityZ;
+        _dualOpacityC = _p.DualOrbitOpacityC;
         // #893 — Indra's Pearls 2D group.
         _indrasFamily = _p.IndrasFamily;
         _indrasMuRe = _p.IndrasMaskitMuRe;
@@ -1794,6 +1803,100 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
     private double _dualSY;
     /// <summary>Fixed s.y when s.y is not an image axis (#971).</summary>
     public double DualOrbitSY { get => _dualSY; set { Set(ref _dualSY, Clamp(value, -4.0, 4.0)); _p.DualOrbitSY = _dualSY; Fire(); } }
+
+    // ── Dual-orbit per-orbit layer colouring (#979 / #980) ──
+    /// <summary>Combo entry standing for "use the main theme" (stored as "").</summary>
+    public const string MainThemeLabel = "(main theme)";
+    private DualOrbitColorMode _dualColorMode;
+    /// <summary>Field (one scalar, main theme) or PerOrbitLayers.</summary>
+    public DualOrbitColorMode DualOrbitColorMode
+    {
+        get => _dualColorMode;
+        set
+        {
+            Set(ref _dualColorMode, value); _p.DualOrbitColorMode = value;
+            this.RaisePropertyChanged(nameof(IsDualOrbitLayers));
+            this.RaisePropertyChanged(nameof(IsDualOrbitFieldMode));
+            RaiseDualThemeWarning();
+            Fire();
+        }
+    }
+    public Array DualOrbitColorModes => Enum.GetValues(typeof(DualOrbitColorMode));
+    public bool IsDualOrbitLayers => IsDualOrbitEscape && _dualColorMode == DualOrbitColorMode.PerOrbitLayers;
+    public bool IsDualOrbitFieldMode => _dualColorMode == DualOrbitColorMode.Field;
+
+    private IReadOnlyList<string>? _layerThemeNames;
+    /// <summary>Theme combo items: the main-theme entry, then the host's themes
+    /// compatible with the dual-orbit calculator (grouped by kind with "— kind —"
+    /// header rows, which a selection ignores). Fetched lazily — the host reloads
+    /// the user library to build it.</summary>
+    public IReadOnlyList<string> LayerThemeNames => _layerThemeNames ??= BuildLayerThemeNames();
+    private IReadOnlyList<string> BuildLayerThemeNames()
+    {
+        var list = new List<string> { MainThemeLabel };
+        if (_layerThemeNamesProvider != null)
+            list.AddRange(_layerThemeNamesProvider());
+        return list;
+    }
+    private static bool IsHeaderRow(string? s) => s != null && s.StartsWith("—", StringComparison.Ordinal);
+
+    private string _dualThemeZ = "";
+    /// <summary>z-orbit layer theme; <see cref="MainThemeLabel"/> ↔ "".</summary>
+    public string DualOrbitThemeZ
+    {
+        get => string.IsNullOrEmpty(_dualThemeZ) ? MainThemeLabel : _dualThemeZ;
+        set => SetLayerTheme(value, ref _dualThemeZ, v => _p.DualOrbitThemeZ = v, nameof(DualOrbitThemeZ));
+    }
+    private string _dualThemeC = "";
+    /// <summary>c-orbit layer theme; <see cref="MainThemeLabel"/> ↔ "".</summary>
+    public string DualOrbitThemeC
+    {
+        get => string.IsNullOrEmpty(_dualThemeC) ? MainThemeLabel : _dualThemeC;
+        set => SetLayerTheme(value, ref _dualThemeC, v => _p.DualOrbitThemeC = v, nameof(DualOrbitThemeC));
+    }
+    private void SetLayerTheme(string? value, ref string field, Action<string> write, string propName)
+    {
+        // A header row (or a null from a combo rebuild) is not a theme: keep the
+        // current one and re-assert it so the combo snaps back.
+        if (value == null || IsHeaderRow(value)) { this.RaisePropertyChanged(propName); return; }
+        string stored = value == MainThemeLabel ? "" : value;
+        if (stored == field) return;
+        field = stored;
+        write(stored);
+        this.RaisePropertyChanged(propName);
+        RaiseDualThemeWarning();
+        Fire();
+    }
+
+    /// <summary>Stored layer theme names that are not in the current library (the
+    /// calculator then falls back to the main theme). Empty when all resolve or no
+    /// list is available to check against.</summary>
+    public string DualOrbitThemeWarning
+    {
+        get
+        {
+            if (!IsDualOrbitLayers || _layerThemeNamesProvider == null) return "";
+            var known = new HashSet<string>(LayerThemeNames, StringComparer.OrdinalIgnoreCase);
+            var missing = new List<string>();
+            foreach (var n in new[] { _dualThemeZ, _dualThemeC })
+                if (!string.IsNullOrEmpty(n) && !known.Contains(n)) missing.Add($"'{n}'");
+            return missing.Count == 0 ? "" : $"Theme {string.Join(" and ", missing)} not found or not compatible — using the main theme.";
+        }
+    }
+    public bool HasDualOrbitThemeWarning => DualOrbitThemeWarning.Length > 0;
+    private void RaiseDualThemeWarning()
+    {
+        this.RaisePropertyChanged(nameof(DualOrbitThemeWarning));
+        this.RaisePropertyChanged(nameof(HasDualOrbitThemeWarning));
+    }
+
+    private DualOrbitLayerBlend _dualLayerBlend;
+    public DualOrbitLayerBlend DualOrbitLayerBlend { get => _dualLayerBlend; set { Set(ref _dualLayerBlend, value); _p.DualOrbitLayerBlend = value; Fire(); } }
+    public Array DualOrbitLayerBlends => Enum.GetValues(typeof(DualOrbitLayerBlend));
+    private double _dualOpacityZ;
+    public double DualOrbitOpacityZ { get => _dualOpacityZ; set { Set(ref _dualOpacityZ, Clamp(value, 0.0, 1.0)); _p.DualOrbitOpacityZ = _dualOpacityZ; Fire(); } }
+    private double _dualOpacityC;
+    public double DualOrbitOpacityC { get => _dualOpacityC; set { Set(ref _dualOpacityC, Clamp(value, 0.0, 1.0)); _p.DualOrbitOpacityC = _dualOpacityC; Fire(); } }
     // A fixed-coordinate control is editable only when that coordinate is not an
     // image axis (c-seed rows also need the c = s control off).
     public bool DualOrbitCXEditable => !_dualCEqualsS && _dualSliceAxes is not (DualOrbitSliceAxes.CxCy or DualOrbitSliceAxes.CxSx or DualOrbitSliceAxes.CxSy);

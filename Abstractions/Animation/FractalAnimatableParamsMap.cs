@@ -396,6 +396,12 @@ public static class FractalAnimatableParamsMap
         new("DualOrbitSY", AnimatableParamKind.ScalarDouble, Min: -1.5, Max: 1.5,
             Cost: AnimatableParamCost.Expensive,
             Notes: "Fixed s.y when not an image axis (#971)."),
+        new("DualOrbitOpacityZ", AnimatableParamKind.ScalarDouble, Min: 0.0, Max: 1.0,
+            Cost: AnimatableParamCost.Expensive,
+            Notes: "Per-orbit layers: z-orbit layer opacity — fade the Mandelbrot 'disc' in / out (#980)."),
+        new("DualOrbitOpacityC", AnimatableParamKind.ScalarDouble, Min: 0.0, Max: 1.0,
+            Cost: AnimatableParamCost.Expensive,
+            Notes: "Per-orbit layers: c-orbit layer opacity — cross-fade the c-seed's 'disc' against the z layer (#980)."),
     };
 
     // Indra's Pearls (#895) — the marquee "group degenerating into a limit curve"

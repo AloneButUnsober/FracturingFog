@@ -2411,7 +2411,13 @@ namespace FracturingFog.Hosting
                         attractorPresets: null,
                         attractorDefaults: global::FracturingFog.AttractorCalculator.DefaultParams,
                         flamePresets: new List<string>(FlamePresets.All.Keys),
-                        audioModulation: s_shell?.AudioModulation);
+                        audioModulation: s_shell?.AudioModulation,
+                        // #980 — dual-orbit layer theme pickers: themes compatible
+                        // with the dual-orbit calculator, fetched only on first use.
+                        layerThemeNames: () => s_themeService?.EnumerateThemeNames(
+                            global::FracturingFog.Models.ThemeSortMode.ByFractalCompat, null, false,
+                            global::FracturingFog.FractalType.DualOrbitEscape)
+                            ?? (IReadOnlyList<string>)Array.Empty<string>());
                     vm.ParamChanged += () => s_renderHost?.Trigger();
 
                     // #135 — drop-colour eyedropper (shared wiring).
