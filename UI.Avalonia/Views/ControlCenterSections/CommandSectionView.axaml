@@ -1,0 +1,147 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:FracturingFog.UI.Avalonia.ViewModels"
+        x:Class="FracturingFog.UI.Avalonia.Views.ControlCenterSections.CommandSectionView"
+        x:DataType="vm:ControlCenterViewModel"
+        Foreground="#DCDCDC">
+    <!-- ═══ Command ═══ CLI Command Builder (#994): a configuration front-end on
+         the batch CLI. Rows come from BatchFlagCatalog; every edit rebuilds the
+         command and runs it through the real batch parser. Warnings are yellow
+         (#FFCC00), never red — the user is red/green colour-blind. -->
+    <UserControl.Styles>
+        <Style Selector="TextBlock.relation">
+            <Setter Property="Foreground" Value="#8A8A8A" />
+            <Setter Property="FontSize" Value="10" />
+        </Style>
+        <Style Selector="TextBlock.relation.warn">
+            <Setter Property="Foreground" Value="#FFCC00" />
+        </Style>
+        <Style Selector="TextBlock.verdict">
+            <Setter Property="Foreground" Value="#B4B4B4" />
+            <Setter Property="FontSize" Value="11" />
+        </Style>
+        <Style Selector="TextBlock.verdict.error">
+            <Setter Property="Foreground" Value="#FFCC00" />
+        </Style>
+        <Style Selector="CheckBox.flag">
+            <Setter Property="FontFamily" Value="Consolas,Menlo,monospace" />
+            <Setter Property="FontSize" Value="11" />
+        </Style>
+    </UserControl.Styles>
+
+    <StackPanel Spacing="0" DataContext="{Binding CommandBuilder}" x:DataType="vm:CommandBuilderViewModel">
+
+        <!-- Mode + command -->
+        <Border Classes="group">
+            <StackPanel Spacing="6" Width="560" HorizontalAlignment="Left">
+                <TextBlock Classes="section" Text="CLI Command Builder" />
+                <TextBlock Text="Build a --batch command line. Pick a mode, seed the look from the live view, then include or change any option below. The command is checked by the real batch parser as you edit."
+                           Foreground="#9A9A9A" FontSize="11" TextWrapping="Wrap" />
+
+                <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="8">
+                    <TextBlock Grid.Column="0" Text="Mode" VerticalAlignment="Center" Foreground="#9A9A9A" FontSize="11" />
+                    <ComboBox Grid.Column="1" ItemsSource="{Binding Modes}" SelectedItem="{Binding SelectedMode}"
+                              MinWidth="180" HorizontalAlignment="Left" IsEnabled="{Binding !IsRemote}"
+                              ToolTip.Tip="Batch mode. Options that do not apply to the chosen mode are hidden (and kept, not lost).">
+                        <ComboBox.ItemTemplate>
+                            <DataTemplate x:DataType="vm:CommandModeOption">
+                                <TextBlock Text="{Binding Label}" />
+                            </DataTemplate>
+                        </ComboBox.ItemTemplate>
+                    </ComboBox>
+                    <CheckBox Grid.Column="2" Content="Remote render" IsChecked="{Binding IsRemote}" FontSize="11"
+                              ToolTip.Tip="--remote: send the job to a saved FFClient connection using a saved render preset. The preset decides image vs video; set the connection + preset under Remote rendering." />
+                </Grid>
+
+                <StackPanel Spacing="2" IsVisible="{Binding HasModeValue}">
+                    <TextBlock Text="{Binding ModeValueLabel}" Foreground="#9A9A9A" FontSize="11" />
+                    <Grid ColumnDefinitions="*,Auto" ColumnSpacing="4">
+                        <TextBox Grid.Column="0" Text="{Binding ModeValue}" FontSize="11" />
+                        <Button Grid.Column="1" Classes="action neutral" Content="…" IsVisible="{Binding ModeValueIsPath}"
+                                Command="{Binding BrowseModeValueCommand}" ToolTip.Tip="Choose the input OpenEXR file" />
+                    </Grid>
+                </StackPanel>
+
+                <Grid ColumnDefinitions="*,*" ColumnSpacing="4">
+                    <Button Grid.Column="0" Classes="action neutral" Content="Seed from live view" Command="{Binding SeedFromLiveCommand}"
+                            HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"
+                            ToolTip.Tip="Replace the look (fractal, coordinates, theme, quality, post-FX, relief, lights, fog, …) with the current view. Mode, output and sequence options are kept." />
+                    <Button Grid.Column="1" Classes="action neutral" Content="Reset" Command="{Binding ResetCommand}"
+                            HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"
+                            ToolTip.Tip="Clear every option and return to an image render." />
+                </Grid>
+
+                <!-- Fidelity gaps from the last seed (#362). -->
+                <Border IsVisible="{Binding HasGaps}"
+                        Background="#33FFCC00" BorderBrush="#FFCC00" BorderThickness="1"
+                        CornerRadius="3" Padding="8,6">
+                    <Grid ColumnDefinitions="Auto,*" ColumnSpacing="6">
+                        <TextBlock Grid.Column="0" Text="⚠" Foreground="#FFCC00" FontSize="13" VerticalAlignment="Top" />
+                        <TextBlock Grid.Column="1" Text="{Binding GapWarning}" Foreground="#FFE08A" FontSize="11" TextWrapping="Wrap" />
+                    </Grid>
+                </Border>
+
+                <TextBox Text="{Binding CommandText, Mode=OneWay}" IsReadOnly="True"
+                         AcceptsReturn="True" TextWrapping="Wrap"
+                         FontFamily="Consolas,Menlo,monospace" FontSize="11"
+                         MinHeight="72" MaxHeight="200" VerticalContentAlignment="Top"
+                         ToolTip.Tip="The command line. Read-only — change it with the options below." />
+                <TextBlock Classes="verdict" Classes.error="{Binding HasError}"
+                           Text="{Binding ValidationMessage}" TextWrapping="Wrap" />
+                <TextBlock Text="{Binding Hint}" IsVisible="{Binding HasHint}"
+                           Foreground="#9A9A9A" FontSize="10" TextWrapping="Wrap" />
+
+                <Grid ColumnDefinitions="*,Auto">
+                    <Button Grid.Column="0" Classes="action neutral" Content="Copy" Command="{Binding CopyCommand}"
+                            HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"
+                            ToolTip.Tip="Copy the command line to the clipboard" />
+                    <CheckBox Grid.Column="1" Content="Full exe path" IsChecked="{Binding UseFullExePath}"
+                              VerticalAlignment="Center" Margin="10,0,0,0" FontSize="11"
+                              ToolTip.Tip="Lead the command with the full path to the running FracturingFog executable instead of the bare name." />
+                </Grid>
+            </StackPanel>
+        </Border>
+
+        <!-- Option groups, generated from the flag catalog -->
+        <ItemsControl ItemsSource="{Binding Groups}">
+            <ItemsControl.ItemTemplate>
+                <DataTemplate x:DataType="vm:CommandFlagGroupViewModel">
+                    <Border Classes="group" IsVisible="{Binding IsVisible}">
+                        <Expander IsExpanded="{Binding IsExpanded}" HorizontalAlignment="Left" Width="560">
+                            <Expander.Header>
+                                <StackPanel Orientation="Horizontal" Spacing="8">
+                                    <TextBlock Text="{Binding Title}" FontSize="12" TextWrapping="Wrap" MaxWidth="440" />
+                                    <TextBlock Text="{Binding Summary}" Foreground="#C8C864" FontSize="11" VerticalAlignment="Center" />
+                                </StackPanel>
+                            </Expander.Header>
+                            <ItemsControl ItemsSource="{Binding Rows}">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate x:DataType="vm:CommandFlagRowViewModel">
+                                        <Grid ColumnDefinitions="210,*,Auto" RowDefinitions="Auto,Auto"
+                                              ColumnSpacing="4" Margin="0,1" IsVisible="{Binding IsVisible}"
+                                              ToolTip.Tip="{Binding Description}">
+                                            <CheckBox Grid.Column="0" Classes="flag" Content="{Binding Name}"
+                                                      IsChecked="{Binding IsSelected}" IsEnabled="{Binding IsEditable}" />
+                                            <ComboBox Grid.Column="1" IsVisible="{Binding IsChoice}" IsEnabled="{Binding IsEditable}"
+                                                      ItemsSource="{Binding Choices}" SelectedItem="{Binding Value}"
+                                                      HorizontalAlignment="Stretch" FontSize="11" />
+                                            <TextBox Grid.Column="1" IsVisible="{Binding IsTextEntry}" IsEnabled="{Binding IsEditable}"
+                                                     Text="{Binding Value}" Watermark="{Binding Placeholder}" FontSize="11" />
+                                            <Button Grid.Column="2" Classes="action neutral" Content="…"
+                                                    IsVisible="{Binding HasBrowse}" Command="{Binding BrowseCommand}"
+                                                    ToolTip.Tip="Choose a file" />
+                                            <TextBlock Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="3"
+                                                       Classes="relation" Classes.warn="{Binding StatusIsWarning}"
+                                                       Text="{Binding Status}" IsVisible="{Binding HasStatus}"
+                                                       TextWrapping="Wrap" Margin="26,0,0,2" />
+                                        </Grid>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </Expander>
+                    </Border>
+                </DataTemplate>
+            </ItemsControl.ItemTemplate>
+        </ItemsControl>
+    </StackPanel>
+</UserControl>

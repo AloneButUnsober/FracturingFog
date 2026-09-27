@@ -61,6 +61,9 @@ namespace FracturingFog.Models
 
         // Floating standalone toolbar panel (#514).
         ToolbarPanel = 22,
+
+        // Detached Control Center "Command" section (CLI Command Builder, #994).
+        DetachedCommandPanel = 23,
     }
 
     /// <summary>Render-window mode. Mirrors the Standard/Mini/Toy/Span shapes the

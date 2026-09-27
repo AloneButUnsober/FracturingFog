@@ -2714,6 +2714,14 @@ namespace FracturingFog.Hosting
                 // #946 Quick Record — folder for no-prompt saves.
                 cc.QuickRecordFolderPickRequested = () =>
                     AvaloniaDialogs.PickFolderAsync("Folder for Quick Record saves");
+                // #994 Command Builder — batch output (save) + input .exr (open).
+                cc.CommandBuilder.SavePathRequested = def =>
+                    AvaloniaDialogs.PickSaveFileAsync(
+                        "Batch Output", def,
+                        "PNG (*.png)|*.png|MP4 video (*.mp4)|*.mp4|OpenEXR (*.exr)|*.exr|All files (*.*)|*.*");
+                cc.CommandBuilder.OpenPathRequested = () =>
+                    AvaloniaDialogs.PickOpenFileAsync(
+                        "Input OpenEXR", "OpenEXR (*.exr)|*.exr|All files (*.*)|*.*");
             };
 
             // #493 — a region jump mutates FractalParameters in place; refresh any

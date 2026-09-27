@@ -118,54 +118,6 @@
             </StackPanel>
         </Border>
 
-        <!-- CLI Command Builder -->
-        <Border Classes="group">
-            <StackPanel Spacing="6">
-                <TextBlock Classes="section" Text="CLI Command" />
-                <TextBlock Text="Generate a copy/paste --batch command that reproduces the current 2D view."
-                           Foreground="#9A9A9A" FontSize="11" TextWrapping="Wrap" 
-                           Width="420" HorizontalAlignment="Left"/>
-                <Grid ColumnDefinitions="Auto,Auto">
-                    <StackPanel Grid.Column="0" Margin="0,0,4,0">
-                        <TextBlock Text="Width" Foreground="#9A9A9A" FontSize="11" />
-                        <NumericUpDown Value="{Binding CommandWidth, Mode=TwoWay}" Minimum="1" Maximum="61440" Increment="16" FormatString="0" 
-                                       MinWidth="150" MaxWidth="205"/>
-                    </StackPanel>
-                    <StackPanel Grid.Column="1">
-                        <TextBlock Text="Height" Foreground="#9A9A9A" FontSize="11" />
-                        <NumericUpDown Value="{Binding CommandHeight, Mode=TwoWay}" Minimum="1" Maximum="34560" Increment="16" FormatString="0" 
-                                       MinWidth="150" MaxWidth="205"/>
-                    </StackPanel>
-                </Grid>
-                <Grid ColumnDefinitions="*,*,Auto" Width="420" HorizontalAlignment="Left">
-                    <Button Grid.Column="0" Classes="action neutral" Content="Generate" Command="{Binding GenerateCommandCommand}" HorizontalAlignment="Stretch" HorizontalContentAlignment="Center" Margin="0,0,4,0" ToolTip.Tip="Build the --batch command from the current fractal, coordinates, theme, quality, size and post-FX" />
-                    <Button Grid.Column="1" Classes="action neutral" Content="Copy" Command="{Binding CopyCommandCommand}" HorizontalAlignment="Stretch" HorizontalContentAlignment="Center" ToolTip.Tip="Copy the generated command to the clipboard (generates it first if empty)" />
-                    <CheckBox Grid.Column="2" Content="Full exe path" IsChecked="{Binding UseFullExePath, Mode=TwoWay}" VerticalAlignment="Center" Margin="10,0,0,0" FontSize="11" ToolTip.Tip="Lead the command with the full path to the running FracturingFog executable instead of the bare name. Off = executable name only (default)." />
-                </Grid>
-                <TextBox Width="420" Text="{Binding GeneratedCommand, Mode=OneWay}" IsReadOnly="True"
-                         AcceptsReturn="True" TextWrapping="Wrap"
-                         FontFamily="Consolas,Menlo,monospace" FontSize="11"
-                         MinHeight="72" MaxHeight="160"
-                         PlaceholderText="Click Generate to build the command…"
-                         VerticalContentAlignment="Top"
-                         HorizontalAlignment="Left"
-                         ToolTip.Tip="Read-only. Replace &lt;OUTPUT.png&gt; with your target file path before running." />
-                <!-- Fidelity-gap banner (#362). Yellow (#FFCC00), never red —
-                     the user is red/green colour-blind. -->
-                <Border Width="420" IsVisible="{Binding HasCommandGaps}"
-                        Background="#33FFCC00" BorderBrush="#FFCC00" BorderThickness="1"
-                        CornerRadius="3" Padding="8,6" Margin="0,2,0,0">
-                    <StackPanel Orientation="Horizontal" Spacing="6">
-                        <TextBlock Text="⚠" Foreground="#FFCC00" FontSize="13" VerticalAlignment="Top" />
-                        <TextBlock Text="{Binding CommandGapWarning}" Foreground="#FFE08A"
-                                   FontSize="11" TextWrapping="Wrap" />
-                    </StackPanel>
-                </Border>
-                <TextBlock Text="Replace &lt;OUTPUT.png&gt; with a real path before running."
-                           Foreground="#9A9A9A" FontSize="10" TextWrapping="Wrap" />
-            </StackPanel>
-        </Border>
-
         <Border Classes="group">
             <StackPanel Spacing="6">
                 <TextBlock Classes="section" Text="Watermark" />

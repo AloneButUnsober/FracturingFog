@@ -1,0 +1,378 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-FileCopyrightText: 2026 Bradley Brown
+
+// UI.Avalonia/ViewModels/CommandBuilderViewModel.cs
+// #994 (CB2 of #64) — the Control Center "Command" section: a configuration
+// front-end on the --batch CLI. Rows are generated from BatchFlagCatalog and
+// bound to a CommandComposer; every edit rebuilds the command and runs it
+// through the real parser, so the panel can never offer a command the CLI
+// would reject without saying so.
+
+using System;
+using System.Collections.Generic;
+using System.Collections.ObjectModel;
+using System.Linq;
+using System.Reactive;
+using System.Threading.Tasks;
+
+using ReactiveUI;
+
+using FracturingFog.Batch;
+using FracturingFog.Cli;
+
+namespace FracturingFog.UI.Avalonia.ViewModels;
+
+/// <summary>Result of reading the live view as batch arguments.</summary>
+public sealed record LiveCommandSeed(IReadOnlyList<string> Args, IReadOnlyList<string> Gaps);
+
+public sealed record CommandModeOption(BatchMode Mode, string Label);
+
+public sealed class CommandBuilderViewModel : ViewModelBase
+{
+    private readonly Func<int, int, LiveCommandSeed?>? _liveSeed;
+    private readonly Action<string>? _copy;
+
+    public CommandBuilderViewModel(Func<int, int, LiveCommandSeed?>? liveSeed = null, Action<string>? copy = null)
+    {
+        _liveSeed = liveSeed;
+        _copy = copy;
+        Composer = new CommandComposer();
+
+        Groups = new ObservableCollection<CommandFlagGroupViewModel>(
+            BatchFlagCatalog.All
+                .Where(s => !CommandComposer.IsModeFlag(s.Name))
+                .GroupBy(s => s.Group)
+                .Select(g => new CommandFlagGroupViewModel(g.Key, g.Select(s => new CommandFlagRowViewModel(s, this)))));
+
+        SeedFromLiveCommand = ReactiveCommand.Create(SeedFromLive);
+        CopyCommand = ReactiveCommand.Create(Copy);
+        ResetCommand = ReactiveCommand.Create(() => { Composer.Reset(); GapWarning = ""; });
+        BrowseModeValueCommand = ReactiveCommand.CreateFromTask(BrowseModeValueAsync);
+
+        Composer.Changed += Refresh;
+        Refresh();
+    }
+
+    public CommandComposer Composer { get; }
+    public ObservableCollection<CommandFlagGroupViewModel> Groups { get; }
+
+    public ReactiveCommand<Unit, Unit> SeedFromLiveCommand { get; }
+    public ReactiveCommand<Unit, Unit> CopyCommand { get; }
+    public ReactiveCommand<Unit, Unit> ResetCommand { get; }
+    public ReactiveCommand<Unit, Unit> BrowseModeValueCommand { get; }
+
+    /// <summary>Host save-file picker (suggested file name → chosen path).</summary>
+    public Func<string, Task<string?>>? SavePathRequested { get; set; }
+    /// <summary>Host open-file picker for input paths (.exr).</summary>
+    public Func<Task<string?>>? OpenPathRequested { get; set; }
+
+    // ── Mode ─────────────────────────────────────────────────────────────────
+
+    public IReadOnlyList<CommandModeOption> Modes { get; } = new[]
+    {
+        new CommandModeOption(BatchMode.Image,     "Image"),
+        new CommandModeOption(BatchMode.Video,     "Video"),
+        new CommandModeOption(BatchMode.Slideshow, "Slideshow"),
+        new CommandModeOption(BatchMode.Scene,     "Scene"),
+        new CommandModeOption(BatchMode.Regrade,   "Regrade EXR"),
+        new CommandModeOption(BatchMode.Relight,   "Relight EXR"),
+    };
+
+    public CommandModeOption SelectedMode
+    {
+        get => Modes.First(m => m.Mode == Composer.Mode);
+        set { if (value != null) Composer.Mode = value.Mode; }
+    }
+
+    public bool IsRemote
+    {
+        get => Composer.Remote;
+        set => Composer.Remote = value;
+    }
+
+    /// <summary>The flag carrying the mode's own value (slideshow / scene name,
+    /// input .exr), or null for image / video.</summary>
+    private string? ModeValueFlag => Composer.Mode switch
+    {
+        BatchMode.Slideshow => BatchFlags.Slideshow,
+        BatchMode.Scene     => BatchFlags.Scene,
+        BatchMode.Regrade   => BatchFlags.RegradeExr,
+        BatchMode.Relight   => BatchFlags.RelightFrom,
+        _                   => null,
+    };
+
+    public bool HasModeValue => ModeValueFlag != null && !Composer.Remote;
+
+    public string ModeValueLabel => Composer.Mode switch
+    {
+        BatchMode.Slideshow => "Slideshow preset (blank = active preset)",
+        BatchMode.Scene     => "Scene name",
+        BatchMode.Regrade   => "Input .exr to regrade",
+        BatchMode.Relight   => "Input AOV .exr to relight",
+        _                   => "",
+    };
+
+    public bool ModeValueIsPath => Composer.Mode is BatchMode.Regrade or BatchMode.Relight;
+
+    public string ModeValue
+    {
+        get => ModeValueFlag is string f ? Composer.ValueOf(f) ?? "" : "";
+        set
+        {
+            if (ModeValueFlag is not string f) return;
+            if (string.IsNullOrWhiteSpace(value)) Composer.Clear(f);
+            else Composer.Set(f, value);   // untrimmed: a trim would eat spaces mid-typing
+        }
+    }
+
+    private async Task BrowseModeValueAsync()
+    {
+        if (OpenPathRequested is not { } pick) return;
+        var path = await pick();
+        if (!string.IsNullOrWhiteSpace(path)) ModeValue = path!;
+    }
+
+    // ── Command + validation ─────────────────────────────────────────────────
+
+    private bool _useFullExePath;
+    /// <summary>Lead with the full path to the running executable instead of the
+    /// bare "FracturingFog" name.</summary>
+    public bool UseFullExePath
+    {
+        get => _useFullExePath;
+        set { this.RaiseAndSetIfChanged(ref _useFullExePath, value); Refresh(); }
+    }
+
+    private string ExecutableName()
+    {
+        if (!_useFullExePath) return "FracturingFog";
+        string? path = Environment.ProcessPath;
+        return string.IsNullOrWhiteSpace(path) ? "FracturingFog" : path;
+    }
+
+    private string _commandText = "";
+    public string CommandText { get => _commandText; private set => this.RaiseAndSetIfChanged(ref _commandText, value); }
+
+    private string _validationMessage = "";
+    /// <summary>The parser's verdict on the current command.</summary>
+    public string ValidationMessage { get => _validationMessage; private set => this.RaiseAndSetIfChanged(ref _validationMessage, value); }
+
+    private bool _isValid;
+    public bool IsValid
+    {
+        get => _isValid;
+        private set { this.RaiseAndSetIfChanged(ref _isValid, value); this.RaisePropertyChanged(nameof(HasError)); }
+    }
+    public bool HasError => !_isValid;
+
+    private string _hint = "";
+    /// <summary>Non-fatal notes: placeholder output path, parked flags.</summary>
+    public string Hint { get => _hint; private set { this.RaiseAndSetIfChanged(ref _hint, value); this.RaisePropertyChanged(nameof(HasHint)); } }
+    public bool HasHint => _hint.Length > 0;
+
+    private string _gapWarning = "";
+    /// <summary>Live fx the last seed could not express (#362).</summary>
+    public string GapWarning
+    {
+        get => _gapWarning;
+        private set { this.RaiseAndSetIfChanged(ref _gapWarning, value); this.RaisePropertyChanged(nameof(HasGaps)); }
+    }
+    public bool HasGaps => _gapWarning.Length > 0;
+
+    private void Refresh()
+    {
+        CommandText = Composer.Command(ExecutableName());
+        var error = Composer.Validate();
+        IsValid = error == null;
+        ValidationMessage = error == null ? "Valid command — the batch parser accepts it." : error;
+
+        var notes = new List<string>();
+        if (!Composer.Remote && Composer.HasPlaceholderOutput)
+            notes.Add("Set an output path (Output → --out) before running.");
+        var parked = Composer.Parked.Select(s => s.Name).ToList();
+        if (parked.Count > 0)
+            notes.Add("Kept but not used in this mode/fractal: " + string.Join(", ", parked));
+        Hint = string.Join(" ", notes);
+
+        this.RaisePropertyChanged(nameof(SelectedMode));
+        this.RaisePropertyChanged(nameof(IsRemote));
+        this.RaisePropertyChanged(nameof(HasModeValue));
+        this.RaisePropertyChanged(nameof(ModeValueLabel));
+        this.RaisePropertyChanged(nameof(ModeValueIsPath));
+        this.RaisePropertyChanged(nameof(ModeValue));
+        foreach (var g in Groups) g.Refresh();
+    }
+
+    private void SeedFromLive()
+    {
+        int w = int.TryParse(Composer.ValueOf(BatchFlags.Width), out var cw) ? cw : BatchDefaults.Width;
+        int h = int.TryParse(Composer.ValueOf(BatchFlags.Height), out var ch) ? ch : BatchDefaults.Height;
+        var seed = _liveSeed?.Invoke(w, h);
+        if (seed == null) return;
+        Composer.SeedLook(seed.Args);
+        GapWarning = seed.Gaps.Count > 0
+            ? "Not represented (rendered output will differ): " + string.Join("; ", seed.Gaps)
+            : "";
+    }
+
+    private void Copy()
+    {
+        if (!string.IsNullOrEmpty(CommandText)) _copy?.Invoke(CommandText);
+    }
+
+    internal async Task BrowseAsync(CommandFlagRowViewModel row)
+    {
+        string? path;
+        if (row.Spec.PathIsInput)
+        {
+            if (OpenPathRequested is not { } open) return;
+            path = await open();
+        }
+        else
+        {
+            if (SavePathRequested is not { } save) return;
+            path = await save(SuggestedOutputName());
+        }
+        if (!string.IsNullOrWhiteSpace(path)) row.Value = path!;
+    }
+
+    private string SuggestedOutputName()
+    {
+        if (Composer.Mode is BatchMode.Video or BatchMode.Slideshow or BatchMode.Scene) return "render.mp4";
+        return Composer.IsSelected(BatchFlags.AovExr) ? "render.exr" : "render.png";
+    }
+}
+
+/// <summary>One catalog group (Source, Output, Relief, ...) in the panel.</summary>
+public sealed class CommandFlagGroupViewModel : ViewModelBase
+{
+    public CommandFlagGroupViewModel(BatchFlagGroup group, IEnumerable<CommandFlagRowViewModel> rows)
+    {
+        Group = group;
+        Title = BatchFlagCatalog.GroupTitle(group);
+        Rows = rows.ToList();
+        _isExpanded = group is BatchFlagGroup.Source or BatchFlagGroup.Output;
+    }
+
+    public BatchFlagGroup Group { get; }
+    public string Title { get; }
+    public IReadOnlyList<CommandFlagRowViewModel> Rows { get; }
+
+    public bool IsVisible => Rows.Any(r => r.IsVisible);
+
+    private bool _isExpanded;
+    public bool IsExpanded { get => _isExpanded; set => this.RaiseAndSetIfChanged(ref _isExpanded, value); }
+
+    /// <summary>"3 set" style badge for a collapsed group.</summary>
+    public string Summary
+    {
+        get
+        {
+            int n = Rows.Count(r => r.IsSelected && r.IsVisible);
+            return n == 0 ? "" : n + " set";
+        }
+    }
+
+    internal void Refresh()
+    {
+        foreach (var r in Rows) r.Refresh();
+        this.RaisePropertyChanged(nameof(IsVisible));
+        this.RaisePropertyChanged(nameof(Summary));
+    }
+}
+
+/// <summary>One flag row: include checkbox + value editor + relation status.</summary>
+public sealed class CommandFlagRowViewModel : ViewModelBase
+{
+    private readonly CommandBuilderViewModel _owner;
+    private string _draft;
+
+    public CommandFlagRowViewModel(BatchFlagSpec spec, CommandBuilderViewModel owner)
+    {
+        Spec = spec;
+        _owner = owner;
+        _draft = spec.Default ?? (spec.Kind == BatchFlagKind.Choice && spec.Choices.Length > 0 ? spec.Choices[0] : "");
+        Description = BatchFlagCatalog.Describe(spec);
+        BrowseCommand = ReactiveCommand.CreateFromTask(() => _owner.BrowseAsync(this));
+    }
+
+    public BatchFlagSpec Spec { get; }
+    private CommandComposer Composer => _owner.Composer;
+
+    public string Name => Spec.Name;
+    public string Description { get; }
+    /// <summary>Watermark for an empty text box: the default the batch uses
+    /// when the flag is left out, else the value shape (N, F, PATH, ...).</summary>
+    public string Placeholder => Spec.Default != null ? "default " + Spec.Default : Spec.ValueHint?.Trim('"') ?? "";
+
+    public bool IsSwitch => Spec.Kind == BatchFlagKind.Switch;
+    public bool IsChoice => Spec.Kind == BatchFlagKind.Choice;
+    public bool IsTextEntry => !IsSwitch && !IsChoice;
+    public bool HasBrowse => Spec.Kind == BatchFlagKind.Path;
+    public IReadOnlyList<string> Choices => Spec.Choices;
+
+    public ReactiveCommand<Unit, Unit> BrowseCommand { get; }
+
+    /// <summary>Include this flag in the command.</summary>
+    public bool IsSelected
+    {
+        get => Composer.IsSelected(Spec.Name);
+        set
+        {
+            if (value == IsSelected) return;
+            if (value) Composer.Set(Spec.Name, IsSwitch ? null : _draft);
+            else Composer.Clear(Spec.Name);
+        }
+    }
+
+    /// <summary>The flag's value. Editing it selects the flag; clearing a free
+    /// text value deselects it. An unselected text row shows empty (its default
+    /// is the watermark) so it never looks set; a choice row shows its draft.</summary>
+    public string Value
+    {
+        get => Composer.ValueOf(Spec.Name) ?? (IsChoice ? _draft : "");
+        set
+        {
+            if (IsSwitch) return;
+            // A header/blank pick from a combo is ignored.
+            if (IsChoice && (value == null || !Spec.Choices.Contains(value))) return;
+            _draft = value ?? "";
+            if (IsTextEntry && string.IsNullOrWhiteSpace(_draft)) Composer.Clear(Spec.Name);
+            else Composer.Set(Spec.Name, _draft);   // untrimmed: a trim would eat spaces mid-typing
+        }
+    }
+
+    private CommandFlagState _state = new(true, Array.Empty<string>(), Array.Empty<string>(), Array.Empty<string>());
+
+    public bool IsVisible => _state.Applicable;
+    /// <summary>Editable unless a flag in effect conflicts with it.</summary>
+    public bool IsEditable => !_state.IsBlocked || IsSelected;
+
+    /// <summary>Relation note: implied by / conflicts with / needs.</summary>
+    public string Status
+    {
+        get
+        {
+            if (_state.IsBlocked) return "conflicts with " + string.Join(", ", _state.BlockedBy);
+            if (_state.Missing.Count > 0) return "needs " + string.Join(", ", _state.Missing);
+            if (_state.IsImplied && !IsSelected) return "implied by " + string.Join(", ", _state.ImpliedBy);
+            return "";
+        }
+    }
+
+    public bool HasStatus => Status.Length > 0;
+    /// <summary>Conflicts / unmet needs are warnings (yellow); implications are info.</summary>
+    public bool StatusIsWarning => _state.IsBlocked || _state.Missing.Count > 0;
+
+    internal void Refresh()
+    {
+        _state = Composer.StateOf(Spec);
+        this.RaisePropertyChanged(nameof(IsSelected));
+        this.RaisePropertyChanged(nameof(Value));
+        this.RaisePropertyChanged(nameof(IsVisible));
+        this.RaisePropertyChanged(nameof(IsEditable));
+        this.RaisePropertyChanged(nameof(Status));
+        this.RaisePropertyChanged(nameof(HasStatus));
+        this.RaisePropertyChanged(nameof(StatusIsWarning));
+    }
+}

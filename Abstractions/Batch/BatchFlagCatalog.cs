@@ -148,6 +148,9 @@ namespace FracturingFog.Batch
         /// <summary>Component count for <see cref="BatchFlagKind.Vector"/>.</summary>
         public int Arity { get; init; }
         public BatchFlagSource Source { get; init; }
+        /// <summary>A <see cref="BatchFlagKind.Path"/> the batch reads (open
+        /// dialog) rather than writes (save dialog).</summary>
+        public bool PathIsInput { get; init; }
 
         /// <summary>Only meaningful for these fractal types (empty = any).</summary>
         public FractalType[] Fractals { get; init; } = Array.Empty<FractalType>();
@@ -267,7 +270,16 @@ namespace FracturingFog.Batch
             var head = new StringBuilder("  ").Append(Shown(s.Name));
             if (s.ValueHint != null) head.Append(' ').Append(s.ValueHint);
             foreach (var a in s.Aliases) head.Append(", ").Append(a);
+            AppendWrapped(sb, head.ToString(), Wrap(Describe(s, Shown), UsageWidth - UsageColumn));
+        }
 
+        /// <summary>The flag's help sentence followed by its choices, range,
+        /// default, implications, needs and fractal filter — the text shown in
+        /// --help and as the Command panel's tooltip.</summary>
+        public static string Describe(BatchFlagSpec s) => Describe(s, n => n);
+
+        private static string Describe(BatchFlagSpec s, Func<string, string> shown)
+        {
             var text = new StringBuilder(s.Help.TrimEnd());
             if (s.Kind == BatchFlagKind.Choice && s.Choices.Length > 0)
                 text.Append(" One of: ").Append(string.Join("|", s.Choices)).Append('.');
@@ -276,14 +288,16 @@ namespace FracturingFog.Batch
             if (s.Default != null && !LightDefaultVaries(s))
                 text.Append(" Default ").Append(s.Default).Append('.');
             if (s.Implies.Length > 0)
-                text.Append(" Implies ").Append(string.Join(", ", s.Implies.Select(Shown))).Append('.');
+                text.Append(" Implies ").Append(string.Join(", ", s.Implies.Select(shown))).Append('.');
             if (s.Requires.Length > 0)
-                text.Append(" Needs ").Append(string.Join(", ", s.Requires.Select(Shown))).Append('.');
+                text.Append(" Needs ").Append(string.Join(", ", s.Requires.Select(shown))).Append('.');
             if (s.Fractals.Length > 0)
                 text.Append(" For --fractal ").Append(string.Join("|", s.Fractals)).Append('.');
+            return text.ToString();
+        }
 
-            string h = head.ToString();
-            var lines = Wrap(text.ToString(), UsageWidth - UsageColumn);
+        private static void AppendWrapped(StringBuilder sb, string h, List<string> lines)
+        {
             if (h.Length >= UsageColumn - 1)
             {
                 sb.AppendLine(h);
@@ -410,10 +424,10 @@ namespace FracturingFog.Batch
                     with { SelectsMode = BatchMode.Scene, ConflictsWith = Others(BatchFlags.Scene) },
                 PathFlag(BatchFlags.RegradeExr, Mode, BatchModes.Regrade,
                     "Regrade a scene-linear OpenEXR without re-rendering: apply --view-transform + --exposure, write --out.",
-                    "IN.exr") with { SelectsMode = BatchMode.Regrade, ConflictsWith = Others(BatchFlags.RegradeExr) },
+                    "IN.exr") with { SelectsMode = BatchMode.Regrade, PathIsInput = true, ConflictsWith = Others(BatchFlags.RegradeExr) },
                 PathFlag(BatchFlags.RelightFrom, Mode, BatchModes.Relight,
                     "Relight a saved --aov-exr export of a --relief-raymarch render under the --relight-* gains, write --out.",
-                    "IN.exr") with { SelectsMode = BatchMode.Relight, ConflictsWith = Others(BatchFlags.RelightFrom) },
+                    "IN.exr") with { SelectsMode = BatchMode.Relight, PathIsInput = true, ConflictsWith = Others(BatchFlags.RelightFrom) },
 
                 // ── Source ──
                 Txt(BatchFlags.Region, Source, ImgVid, "Load a saved built-in or user region by name.", BatchFlagSource.Region)
