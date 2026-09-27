@@ -14,6 +14,8 @@ using System.Collections.ObjectModel;
 using System.Globalization;
 using System.Linq;
 using System.Reactive;
+using System.Reactive.Linq;
+using System.Threading;
 using System.Threading.Tasks;
 
 using Avalonia.Media;
@@ -23,6 +25,7 @@ using ReactiveUI;
 using FracturingFog.Batch;
 using FracturingFog.Cli;
 using FracturingFog.Models;
+using FracturingFog.UI.Avalonia.Services;
 
 namespace FracturingFog.UI.Avalonia.ViewModels;
 
@@ -52,6 +55,10 @@ public sealed class CommandBuilderViewModel : ViewModelBase
         CopyCommand = ReactiveCommand.Create(Copy);
         ResetCommand = ReactiveCommand.Create(() => { Composer.Reset(); GapWarning = ""; });
         BrowseModeValueCommand = ReactiveCommand.CreateFromTask(BrowseModeValueAsync);
+        SaveScriptCommand = ReactiveCommand.CreateFromTask(SaveScriptAsync);
+        // Plain subjects (not WhenAnyValue) so the VM needs no ReactiveUI bootstrap.
+        RunCommand = ReactiveCommand.CreateFromTask(RunAsync, _canRun);
+        CancelRunCommand = ReactiveCommand.Create(() => _runCancel?.Cancel(), _canCancel);
 
         Composer.Changed += Refresh;
         Refresh();
@@ -64,6 +71,117 @@ public sealed class CommandBuilderViewModel : ViewModelBase
     public ReactiveCommand<Unit, Unit> CopyCommand { get; }
     public ReactiveCommand<Unit, Unit> ResetCommand { get; }
     public ReactiveCommand<Unit, Unit> BrowseModeValueCommand { get; }
+    public ReactiveCommand<Unit, Unit> SaveScriptCommand { get; }
+    public ReactiveCommand<Unit, Unit> RunCommand { get; }
+    public ReactiveCommand<Unit, Unit> CancelRunCommand { get; }
+
+    // ── Shell dialect, script, run (#999) ────────────────────────────────────
+
+    public IReadOnlyList<CommandShell> Shells { get; } = new[] { CommandShell.PowerShell, CommandShell.Cmd, CommandShell.Bash };
+
+    private CommandShell _shell = ShellQuoting.Default;
+    /// <summary>The shell the command text is quoted for.</summary>
+    public CommandShell SelectedShell
+    {
+        get => _shell;
+        set { this.RaiseAndSetIfChanged(ref _shell, value); Refresh(); }
+    }
+
+    /// <summary>Host save-file picker for a script (suggested name, shell).</summary>
+    public Func<string, CommandShell, Task<string?>>? ScriptPathRequested { get; set; }
+
+    /// <summary>The executable Run launches (the running app by default).</summary>
+    public Func<string?> RunExecutable { get; set; } = () => Environment.ProcessPath;
+
+    private string _runStatus = "";
+    public string RunStatus { get => _runStatus; private set { this.RaiseAndSetIfChanged(ref _runStatus, value); this.RaisePropertyChanged(nameof(HasRunStatus)); } }
+    public bool HasRunStatus => _runStatus.Length > 0;
+
+    private readonly ConsoleLog _log = new();
+    private string _runLog = "";
+    /// <summary>The run's console output (CR-redrawn progress collapses to one line).</summary>
+    public string RunLog { get => _runLog; private set { this.RaiseAndSetIfChanged(ref _runLog, value); this.RaisePropertyChanged(nameof(HasRunLog)); } }
+    public bool HasRunLog => _runLog.Length > 0;
+
+    private bool _isRunning;
+    public bool IsRunning
+    {
+        get => _isRunning;
+        private set { this.RaiseAndSetIfChanged(ref _isRunning, value); PublishRunState(); }
+    }
+
+    /// <summary>Run is offered for a valid command with a real output path (a
+    /// remote job names its own output through the preset).</summary>
+    public bool CanRun => !_isRunning && IsValid && (Composer.Remote || !Composer.HasPlaceholderOutput);
+
+    private CancellationTokenSource? _runCancel;
+    private readonly System.Reactive.Subjects.BehaviorSubject<bool> _canRun = new(false);
+    private readonly System.Reactive.Subjects.BehaviorSubject<bool> _canCancel = new(false);
+
+    private void PublishRunState()
+    {
+        this.RaisePropertyChanged(nameof(CanRun));
+        _canRun.OnNext(CanRun);
+        _canCancel.OnNext(_isRunning);
+    }
+
+    private async Task SaveScriptAsync()
+    {
+        if (ScriptPathRequested is not { } pick) return;
+        var path = await pick("fracturing-fog-batch" + ShellQuoting.ScriptExtension(_shell), _shell);
+        if (string.IsNullOrWhiteSpace(path)) return;
+        string text = ShellQuoting.Script(CommandText, _shell);
+        try
+        {
+            // Windows PowerShell 5.1 reads a BOM-less .ps1 as ANSI; give it a BOM.
+            var encoding = _shell == CommandShell.PowerShell
+                ? new System.Text.UTF8Encoding(encoderShouldEmitUTF8Identifier: true)
+                : new System.Text.UTF8Encoding(encoderShouldEmitUTF8Identifier: false);
+            System.IO.File.WriteAllText(path!, text, encoding);
+            RunStatus = "Saved script: " + path;
+        }
+        catch (Exception ex) { RunStatus = "Could not save the script: " + ex.Message; }
+    }
+
+    private async Task RunAsync()
+    {
+        string? exe = RunExecutable();
+        if (string.IsNullOrWhiteSpace(exe)) { RunStatus = "Cannot find the Fracturing Fog executable to run."; return; }
+
+        var args = new List<string> { "--batch" };
+        args.AddRange(Composer.Args());
+        var context = SynchronizationContext.Current;
+        void OnUi(Action a) { if (context != null) context.Post(_ => a(), null); else a(); }
+
+        _log.Clear();
+        _log.Add("> " + CommandText, false);
+        RunLog = _log.ToString();
+        RunStatus = "Running…";
+        IsRunning = true;
+        _runCancel = new CancellationTokenSource();
+        try
+        {
+            int? exit = await BatchProcessRunner.RunAsync(exe!, args,
+                (text, live) => OnUi(() => { _log.Add(text, live); RunLog = _log.ToString(); }),
+                _runCancel.Token);
+            OnUi(() => RunStatus = exit switch
+            {
+                null => "Cancelled.",
+                0    => "Finished (exit code 0).",
+                _    => $"Failed (exit code {exit}).",
+            });
+        }
+        catch (Exception ex)
+        {
+            OnUi(() => RunStatus = "Could not run: " + ex.Message);
+        }
+        finally
+        {
+            OnUi(() => IsRunning = false);
+            _runCancel.Dispose();
+            _runCancel = null;
+        }
+    }
 
     /// <summary>Host save-file picker (suggested file name → chosen path).</summary>
     public Func<string, Task<string?>>? SavePathRequested { get; set; }
@@ -266,7 +384,7 @@ public sealed class CommandBuilderViewModel : ViewModelBase
 
     private void Refresh()
     {
-        CommandText = Composer.Command(ExecutableName());
+        CommandText = ShellQuoting.Join(ExecutableName(), Composer.Args(), _shell);
         var error = Composer.Validate();
         IsValid = error == null;
         ValidationMessage = error == null ? "Valid command — the batch parser accepts it." : error;
@@ -281,6 +399,7 @@ public sealed class CommandBuilderViewModel : ViewModelBase
             notes.Add("Kept but not used in this mode/fractal: " + string.Join(", ", parked));
         Hint = string.Join(" ", notes);
 
+        PublishRunState();
         this.RaisePropertyChanged(nameof(SelectedMode));
         this.RaisePropertyChanged(nameof(IsRemote));
         this.RaisePropertyChanged(nameof(HasModeValue));
