@@ -775,11 +775,12 @@ public sealed class FloatingMenuViewModel : ViewModelBase
 
     // ── Adaptive sweep ────────────────────────────────────────────────────
     //
-    // Animates the Adaptive slider across the duration using a linear ramp.
-    // Mode selects the curve:
-    //   Forward  — 0 → 100
-    //   Reverse  — 100 → 0
-    //   PingPong — 0 → 100 → 0 within the duration (split in half)
+    // Animates the Adaptive slider across the duration using a linear ramp
+    // between AdaptiveSweepStart and AdaptiveSweepEnd (#935; default 0..100,
+    // same range model as the slideshow's per-leg sweep). Mode selects the curve:
+    //   Forward  — Start → End
+    //   Reverse  — End → Start
+    //   PingPong — Start → End → Start within the duration (split in half)
     //
     // AdaptiveSweepLoop, when true, restarts the cycle on completion so the
     // sweep runs continuously until the user stops it. When false the sweep
@@ -836,6 +837,22 @@ public sealed class FloatingMenuViewModel : ViewModelBase
             Math.Clamp(value, 0.25, 600.0));
     }
 
+    private int _adaptiveSweepStart;
+    /// <summary>Low end of the HE sweep range (0..100, default 0) (#935).</summary>
+    public int AdaptiveSweepStart
+    {
+        get => _adaptiveSweepStart;
+        set => this.RaiseAndSetIfChanged(ref _adaptiveSweepStart, Math.Clamp(value, 0, 100));
+    }
+
+    private int _adaptiveSweepEnd = 100;
+    /// <summary>High end of the HE sweep range (0..100, default 100) (#935).</summary>
+    public int AdaptiveSweepEnd
+    {
+        get => _adaptiveSweepEnd;
+        set => this.RaiseAndSetIfChanged(ref _adaptiveSweepEnd, Math.Clamp(value, 0, 100));
+    }
+
     private bool _isAdaptiveSweeping;
     public bool IsAdaptiveSweeping
     {
@@ -852,8 +869,12 @@ public sealed class FloatingMenuViewModel : ViewModelBase
     private DispatcherTimer? _adaptiveSweepTimer;
     private DateTime _adaptiveSweepStartedUtc;
     private double _adaptiveSweepDurationMsSnapshot;
-    private AdaptiveSweepMode _adaptiveSweepActiveMode;
+    // Shared-curve (Models) mode snapshot; the VM enum above is the UI's own
+    // radio-button model, mapped once at Start.
+    private FracturingFog.Models.AdaptiveSweepMode _adaptiveSweepActiveMode;
     private bool _adaptiveSweepActiveLoop;
+    private int _adaptiveSweepActiveStart;
+    private int _adaptiveSweepActiveEnd = 100;
 
     private void ToggleAdaptiveSweep()
     {
@@ -866,9 +887,16 @@ public sealed class FloatingMenuViewModel : ViewModelBase
         if (IsAdaptiveSweeping) return;
         _adaptiveSweepDurationMsSnapshot = Math.Max(250.0, AdaptiveSweepDurationSeconds * 1000.0);
         _adaptiveSweepStartedUtc = DateTime.UtcNow;
-        _adaptiveSweepActiveMode = AdaptiveSweepMode;
+        _adaptiveSweepActiveMode = AdaptiveSweepMode switch
+        {
+            AdaptiveSweepMode.Reverse  => FracturingFog.Models.AdaptiveSweepMode.Reverse,
+            AdaptiveSweepMode.PingPong => FracturingFog.Models.AdaptiveSweepMode.PingPong,
+            _                          => FracturingFog.Models.AdaptiveSweepMode.Forward,
+        };
         _adaptiveSweepActiveLoop = AdaptiveSweepLoop;
-        Adaptive = _adaptiveSweepActiveMode == AdaptiveSweepMode.Reverse ? 100 : 0;
+        _adaptiveSweepActiveStart = AdaptiveSweepStart;
+        _adaptiveSweepActiveEnd = AdaptiveSweepEnd;
+        Adaptive = AdaptiveSweepMath.Initial(_adaptiveSweepActiveStart, _adaptiveSweepActiveEnd, _adaptiveSweepActiveMode);
         IsAdaptiveSweeping = true;
 
         // Render priority (not Background): Background is the lowest dispatch
@@ -903,30 +931,15 @@ public sealed class FloatingMenuViewModel : ViewModelBase
                 // Restart the cycle; don't stop. Re-anchor start so phase
                 // stays smooth across the wrap.
                 _adaptiveSweepStartedUtc = DateTime.UtcNow;
-                Adaptive = _adaptiveSweepActiveMode == AdaptiveSweepMode.Reverse ? 100 : 0;
+                Adaptive = AdaptiveSweepMath.Initial(_adaptiveSweepActiveStart, _adaptiveSweepActiveEnd, _adaptiveSweepActiveMode);
                 return;
             }
-            Adaptive = _adaptiveSweepActiveMode switch
-            {
-                AdaptiveSweepMode.Forward  => 100,
-                AdaptiveSweepMode.Reverse  => 0,
-                AdaptiveSweepMode.PingPong => 0,
-                _ => Adaptive,
-            };
+            Adaptive = AdaptiveSweepMath.Terminal(_adaptiveSweepActiveStart, _adaptiveSweepActiveEnd, _adaptiveSweepActiveMode);
             StopAdaptiveSweep();
             return;
         }
 
-        Adaptive = _adaptiveSweepActiveMode switch
-        {
-            AdaptiveSweepMode.Forward  => (int)Math.Round(t * 100.0),
-            AdaptiveSweepMode.Reverse  => (int)Math.Round((1.0 - t) * 100.0),
-            // Ping-Pong splits duration: first half 0→100, second half 100→0.
-            AdaptiveSweepMode.PingPong => t < 0.5
-                ? (int)Math.Round(t * 2.0 * 100.0)
-                : (int)Math.Round((1.0 - t) * 2.0 * 100.0),
-            _ => Adaptive,
-        };
+        Adaptive = AdaptiveSweepMath.Value(t, _adaptiveSweepActiveStart, _adaptiveSweepActiveEnd, _adaptiveSweepActiveMode);
     }
 
     /// <summary>Programmatic setter that does NOT raise the BrightnessSlide

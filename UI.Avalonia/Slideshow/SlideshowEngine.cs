@@ -891,7 +891,7 @@ namespace FracturingFog.UI.Avalonia.Slideshow
                     double phase = currentCycleMs > 0
                         ? Math.Clamp(elapsed / (double)currentCycleMs, 0.0, 1.0)
                         : 1.0;
-                    int v = ComputeSweepValue(phase, start, end, mode);
+                    int v = AdaptiveSweepMath.Value(phase, start, end, mode);
                     try { await OnUiAsync(() => sink(v), ct).ConfigureAwait(false); }
                     catch (OperationCanceledException) { return; }
 
@@ -957,27 +957,6 @@ namespace FracturingFog.UI.Avalonia.Slideshow
                 lock (_beatLock) _beatsSinceTheme = 0;
                 _skipTheme = true;
             }
-        }
-
-        private static int ComputeSweepValue(double phase, int start, int end, AdaptiveSweepMode mode)
-        {
-            switch (mode)
-            {
-                case AdaptiveSweepMode.Reverse:
-                    return Lerp(end, start, phase);
-                case AdaptiveSweepMode.PingPong:
-                    double pp = phase < 0.5 ? phase * 2.0 : (1.0 - phase) * 2.0;
-                    return Lerp(start, end, pp);
-                case AdaptiveSweepMode.Forward:
-                default:
-                    return Lerp(start, end, phase);
-            }
-        }
-
-        private static int Lerp(int a, int b, double t)
-        {
-            t = Math.Clamp(t, 0.0, 1.0);
-            return (int)Math.Round(a + (b - a) * t);
         }
 
         private static Task OnUiAsync(Action action, CancellationToken ct)

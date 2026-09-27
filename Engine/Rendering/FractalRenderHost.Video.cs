@@ -2875,7 +2875,7 @@ namespace FracturingFog.Rendering
                 while (!ct.IsCancellationRequested)
                 {
                     double phase = legMs > 0 ? Math.Clamp(elapsed / (double)legMs, 0.0, 1.0) : 1.0;
-                    int v = ComputeVideoSweepValue(phase, start, end, mode);
+                    int v = AdaptiveSweepMath.Value(phase, start, end, mode);
                     try { sink(v); } catch { }
 
                     if (elapsed >= legMs)
@@ -2890,25 +2890,6 @@ namespace FracturingFog.Rendering
             }, ct);
 
             return legCts;
-        }
-
-        private static int ComputeVideoSweepValue(double phase, int start, int end, AdaptiveSweepMode mode)
-        {
-            switch (mode)
-            {
-                case AdaptiveSweepMode.Reverse: return LerpAdaptive(end, start, phase);
-                case AdaptiveSweepMode.PingPong:
-                    double pp = phase < 0.5 ? phase * 2.0 : (1.0 - phase) * 2.0;
-                    return LerpAdaptive(start, end, pp);
-                case AdaptiveSweepMode.Forward:
-                default: return LerpAdaptive(start, end, phase);
-            }
-        }
-
-        private static int LerpAdaptive(int a, int b, double t)
-        {
-            t = Math.Clamp(t, 0.0, 1.0);
-            return (int)Math.Round(a + (b - a) * t);
         }
     }
 }
