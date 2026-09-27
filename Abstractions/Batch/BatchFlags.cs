@@ -9,9 +9,10 @@
 // spelled one way on one side and another way on the other. Adding or renaming
 // a shared flag is a single edit here.
 //
-// Only the flags the command builder can emit are consts here today; the
-// remaining video / slideshow / scene / remote flags still live as literals in
-// the parser (they are not part of the 2D poster builder yet — #363).
+// Every primary flag spelling is a const here (#993); only short/legacy
+// aliases (-r, --secs, --tonemap, ...) stay literal in the parser. The
+// metadata for each flag (kind, range, modes, relations, help) lives in
+// BatchFlagCatalog, which guard tests hold in lock-step with the parser.
 
 namespace FracturingFog.Batch
 {
@@ -31,6 +32,40 @@ namespace FracturingFog.Batch
         public const string Width          = "--width";
         public const string Height         = "--height";
         public const string Out            = "--out";
+        public const string Name           = "--name";
+
+        // Mode selection. --slideshow / --scene name a saved config and select
+        // their mode; --regrade-exr / --relight-from (below) do the same.
+        public const string Mode           = "--mode";
+        public const string Slideshow      = "--slideshow";
+        public const string Scene          = "--scene";
+
+        // Sequence (video / slideshow / scene) options.
+        public const string Seconds        = "--seconds";
+        public const string Fps            = "--fps";
+        public const string StartZoom      = "--start-zoom";
+        public const string Reverse        = "--reverse";
+        public const string VideoMotion    = "--video-motion";
+        public const string Orbit          = "--orbit";
+        public const string NoDrift        = "--no-drift";
+        public const string VideoSeed      = "--video-seed";
+        public const string Lossless       = "--lossless";
+        public const string Encode         = "--encode";
+        public const string KeepFrames     = "--keep-frames";
+        public const string NoKeepFrames   = "--no-keep-frames";
+        public const string MoreColors     = "--more-colors";
+        public const string MotionBlur     = "--motion-blur";
+        public const string Shutter        = "--shutter";
+
+        // Watermark is ON by default; this flag (alias --watermark) turns it off.
+        public const string NoWatermark    = "--no-watermark";
+        public const string Verbose        = "--verbose";
+        public const string Help           = "--help";
+
+        // Remote rendering through a saved FFClient connection + render preset.
+        public const string Remote         = "--remote";
+        public const string Connection     = "--connection";
+        public const string Render         = "--render";
 
         public const string Brightness     = "--brightness";
         public const string Contrast       = "--contrast";
