@@ -45,6 +45,11 @@ public static class AnimationBusHost
     /// process before shell startup).</summary>
     public static ParameterAnimationBus? Bus => _bus;
 
+    /// <summary>#998 — name of the region / shot animation currently loaded on
+    /// the bus (null when none). The Command panel reports it as a gap: a still
+    /// command captures one moment of it.</summary>
+    public static string? CurrentAnimationName { get; private set; }
+
     /// <summary>Construct the bus with the supplied render-trigger callback.
     /// Idempotent — subsequent calls return without effect.</summary>
     public static ParameterAnimationBus Initialize(Action fire)
@@ -76,6 +81,7 @@ public static class AnimationBusHost
     public static void LoadRegionAnimation(AnimationData? data, object target, AnimationSessionMode mode)
     {
         if (_bus == null) return;
+        CurrentAnimationName = data != null && target != null ? data.Name : null;
 
         if (target != null)
         {
@@ -109,6 +115,7 @@ public static class AnimationBusHost
     /// different params object. Triggers one render when anything was restored.</summary>
     public static void StopAndRestore(object target)
     {
+        CurrentAnimationName = null;
         if (_bus != null)
         {
             _bus.ClearDynamic();

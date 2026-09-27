@@ -219,6 +219,13 @@ namespace FracturingFog.Batch
         public double? FlameGamma { get; set; }
         public double? FlameVibrancy { get; set; }
 
+        /// <summary>Saved Lighting &amp; FX preset name (#998), applied over the
+        /// region's lighting and under the individual lighting flags.</summary>
+        public string? LightingPresetName { get; set; }
+
+        /// <summary>Saved animation name (#998), played across a video's frames.</summary>
+        public string? AnimationName { get; set; }
+
         /// <summary>Per-family settings from repeatable <c>--param Key=Value</c>
         /// (#997), in command-line order. Keys are region-snapshot property names;
         /// the batch renderer validates and applies them (Engine side) after the
@@ -700,6 +707,16 @@ namespace FracturingFog.Batch
                     case BatchFlags.FlameVibrancy:
                         if (!NextDouble(args, ref i, a, out double fvv, out error)) return false;
                         opts.FlameVibrancy = fvv;
+                        break;
+
+                    case BatchFlags.LightingPreset:
+                        if (!Next(args, ref i, a, out string lpv, out error)) return false;
+                        opts.LightingPresetName = lpv;
+                        break;
+
+                    case BatchFlags.Animation:
+                        if (!Next(args, ref i, a, out string anv, out error)) return false;
+                        opts.AnimationName = anv;
                         break;
 
                     case BatchFlags.Param:

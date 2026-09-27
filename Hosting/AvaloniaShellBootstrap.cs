@@ -3587,6 +3587,10 @@ namespace FracturingFog.Hosting
                         return global::FracturingFog.Models.FlamePresets.All.Keys.ToList();
                     case global::FracturingFog.Batch.BatchFlagSource.ParamKey:
                         return global::FracturingFog.Models.RegionFractalParams.KeyNames;
+                    case global::FracturingFog.Batch.BatchFlagSource.LightingPreset:
+                        return global::FracturingFog.Models.LightingFxPresetLibrary.Load().Presets.Select(p => p.Name).ToList();
+                    case global::FracturingFog.Batch.BatchFlagSource.Animation:
+                        return global::FracturingFog.Models.AnimationLibrary.Instance.Animations.Select(a => a.Name).ToList();
                 }
             }
             catch { }

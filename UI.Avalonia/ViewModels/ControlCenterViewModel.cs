@@ -372,6 +372,10 @@ public sealed partial class ControlCenterViewModel : ViewModelBase
             ViewTransform  = vs.ViewTransform,           // S2 (#389) — output tonemap
             ViewExposureEv = vs.ViewExposureEv,
             Parameters  = fp,
+            // #998 — a saved Lighting & FX preset equal to the live lighting carries
+            // the settings no individual flag can; a playing animation is a gap.
+            LightingPresetName = fp != null ? MatchLightingPreset(fp) : null,
+            LiveAnimationName  = FracturingFog.UI.Avalonia.ViewModels.Animation.AnimationBusHost.CurrentAnimationName,
             FamilyParams = fp != null && FamilyParamsSerializer != null
                 ? FamilyParamsSerializer(main.SelectedFractalType, fp)
                 : Array.Empty<KeyValuePair<string, string>>(),
@@ -435,5 +439,15 @@ public sealed partial class ControlCenterViewModel : ViewModelBase
 
         var report = FracturingFog.Cli.BatchCommandBuilder.BuildWithReport(snap);
         return new LiveCommandSeed(report.Args, report.Gaps);
+    }
+
+    private static string? MatchLightingPreset(FractalParameters fp)
+    {
+        try
+        {
+            return FracturingFog.Cli.LightingFidelity.MatchPreset(
+                fp.Lighting, LightingFxPresetLibrary.Load().Presets);
+        }
+        catch { return null; }
     }
 }
