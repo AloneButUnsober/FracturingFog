@@ -216,9 +216,14 @@ namespace FracturingFog.Cli
         public IReadOnlyList<string> Gaps { get; }
         public bool HasGaps => Gaps.Count > 0;
 
-        public CommandBuildReport(string command, IReadOnlyList<string> gaps)
+        /// <summary>The argument tokens after <c>--batch</c>, unquoted — exactly
+        /// what <c>BatchOptions.TryParse</c> receives (#994).</summary>
+        public IReadOnlyList<string> Args { get; }
+
+        public CommandBuildReport(string command, IReadOnlyList<string> args, IReadOnlyList<string> gaps)
         {
             Command = command;
+            Args = args;
             Gaps = gaps;
         }
     }
@@ -235,15 +240,14 @@ namespace FracturingFog.Cli
         {
             if (snap == null) throw new ArgumentNullException(nameof(snap));
 
-            var parts = new List<string>(24)
-            {
-                Token(snap.ExecutableName),
-                "--batch",
-            };
+            // Raw (unquoted) argument tokens after "--batch"; quoted for the shell
+            // only when joined into the command string below (#994 — the Command
+            // panel loads these tokens directly).
+            var parts = new List<string>(24);
 
             // Fractal type — always explicit so the command is self-describing.
             parts.Add(BatchFlags.Fractal);
-            parts.Add(Token(snap.Fractal.ToString()));
+            parts.Add(snap.Fractal.ToString());
 
             // Live coordinates + iterations — always emitted for exact fidelity.
             parts.Add(BatchFlags.X);    parts.Add(Num(snap.CenterX));
@@ -262,7 +266,7 @@ namespace FracturingFog.Cli
                 !string.Equals(snap.ThemeName, BatchDefaults.ThemeName, StringComparison.OrdinalIgnoreCase))
             {
                 parts.Add(BatchFlags.Theme);
-                parts.Add(Token(snap.ThemeName));
+                parts.Add(snap.ThemeName);
             }
 
             // Quality — emit unless the batch default (Standard).
@@ -270,7 +274,7 @@ namespace FracturingFog.Cli
                 !string.Equals(snap.QualityName, BatchDefaults.QualityName, StringComparison.OrdinalIgnoreCase))
             {
                 parts.Add(BatchFlags.Quality);
-                parts.Add(Token(snap.QualityName));
+                parts.Add(snap.QualityName);
             }
 
             // Output size — always explicit (deterministic poster dimensions).
@@ -401,7 +405,7 @@ namespace FracturingFog.Cli
                     if (!snap.ReliefIsolateByDetail) parts.Add(BatchFlags.ReliefIsolateNoDetail);
                     if (snap.ReliefIsolateThreshold != 0.6) { parts.Add(BatchFlags.ReliefIsolateThreshold); parts.Add(Num(snap.ReliefIsolateThreshold)); }
                     if (snap.ReliefIsolateByColor) parts.Add(BatchFlags.ReliefIsolateByColor);
-                    if (!string.IsNullOrEmpty(snap.ReliefIsolateColors)) { parts.Add(BatchFlags.ReliefIsolateColors); parts.Add(Token(snap.ReliefIsolateColors)); }
+                    if (!string.IsNullOrEmpty(snap.ReliefIsolateColors)) { parts.Add(BatchFlags.ReliefIsolateColors); parts.Add(snap.ReliefIsolateColors); }
                     if (snap.ReliefIsolateTolerance != 0.12) { parts.Add(BatchFlags.ReliefIsolateTolerance); parts.Add(Num(snap.ReliefIsolateTolerance)); }
                 }
             }
@@ -436,9 +440,9 @@ namespace FracturingFog.Cli
 
             // Output path placeholder — always last, always a placeholder.
             parts.Add(BatchFlags.Out);
-            parts.Add(Token(snap.OutputPlaceholder));
+            parts.Add(snap.OutputPlaceholder);
 
-            return new CommandBuildReport(string.Join(" ", parts), DetectGaps(snap));
+            return new CommandBuildReport(Join(snap.ExecutableName, parts), parts, DetectGaps(snap));
         }
 
         /// <summary>List the live fx the emitted command cannot reproduce.
@@ -602,7 +606,7 @@ namespace FracturingFog.Cli
 
                 case FractalType.LSystem:
                     parts.Add(BatchFlags.LSystemPreset);
-                    parts.Add(Token(p.LSystemPresetName));
+                    parts.Add(p.LSystemPresetName);
                     parts.Add(BatchFlags.LSystemDepth);
                     parts.Add(p.LSystemDepth.ToString(CultureInfo.InvariantCulture));
                     break;
@@ -616,7 +620,7 @@ namespace FracturingFog.Cli
 
                 case FractalType.Flame:
                     parts.Add(BatchFlags.FlamePreset);
-                    parts.Add(Token(p.FlamePresetName));
+                    parts.Add(p.FlamePresetName);
                     parts.Add(BatchFlags.FlameIter);
                     parts.Add(p.FlameIterations.ToString(CultureInfo.InvariantCulture));
                     parts.Add(BatchFlags.FlameGamma);
@@ -655,9 +659,19 @@ namespace FracturingFog.Cli
             _                        => "none",
         };
 
+        /// <summary>Join an executable name and raw batch arguments into one
+        /// copy/paste command line: <c>EXE --batch ARGS...</c>, each token quoted
+        /// as needed (#994 — shared with the Command panel).</summary>
+        public static string Join(string executableName, IEnumerable<string> args)
+        {
+            var sb = new System.Text.StringBuilder(Token(executableName)).Append(" --batch");
+            foreach (var a in args) sb.Append(' ').Append(Token(a));
+            return sb.ToString();
+        }
+
         /// <summary>Quote a token when it contains whitespace or characters a
         /// shell would split on; escape embedded double quotes.</summary>
-        private static string Token(string value)
+        public static string Token(string value)
         {
             value ??= string.Empty;
             bool needsQuote = value.Length == 0 || value.IndexOfAny(QuoteTriggers) >= 0;

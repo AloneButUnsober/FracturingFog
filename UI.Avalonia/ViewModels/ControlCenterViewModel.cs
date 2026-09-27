@@ -23,6 +23,8 @@ public enum ControlCenterSection
     Explore,
     ColorLight,
     Capture,
+    /// <summary>CLI Command Builder (#994) — a front-end on the --batch CLI.</summary>
+    Command,
     Assets,
     Advanced,
 }
@@ -50,6 +52,7 @@ public sealed partial class ControlCenterViewModel : ViewModelBase
         new(ControlCenterSection.Explore,    "Explore",       "⌖", false),
         new(ControlCenterSection.ColorLight, "Color & Light", "◐", false),
         new(ControlCenterSection.Capture,    "Capture",       "◉", false),
+        new(ControlCenterSection.Command,    "Command",       "⌨", false),
         new(ControlCenterSection.Assets,     "Assets",        "▤", false),
         new(ControlCenterSection.Advanced,   "Advanced",      "⚙", true),
     };
@@ -65,8 +68,7 @@ public sealed partial class ControlCenterViewModel : ViewModelBase
         ToggleModeCommand = ReactiveCommand.Create(ToggleMode);
         DetachSectionCommand = ReactiveCommand.Create(
             () => DetachRequested?.Invoke(this, _selectedSection));
-        GenerateCommandCommand = ReactiveCommand.Create(GenerateCommand);
-        CopyCommandCommand = ReactiveCommand.Create(CopyCommand);
+        CommandBuilder = new CommandBuilderViewModel(BuildLiveSeed, shell.RequestCopyToClipboard);
 
         // Global UI-scale controls (#809 / S4 #813) — bound by the View section
         // next to the Size combo. Commands drive the static UiScaleService; the
@@ -294,6 +296,7 @@ public sealed partial class ControlCenterViewModel : ViewModelBase
     public bool IsExploreSection    => _selectedSection == ControlCenterSection.Explore;
     public bool IsColorLightSection => _selectedSection == ControlCenterSection.ColorLight;
     public bool IsCaptureSection    => _selectedSection == ControlCenterSection.Capture;
+    public bool IsCommandSection    => _selectedSection == ControlCenterSection.Command;
     public bool IsAssetsSection     => _selectedSection == ControlCenterSection.Assets;
     public bool IsAdvancedSection   => _selectedSection == ControlCenterSection.Advanced;
 
@@ -303,6 +306,7 @@ public sealed partial class ControlCenterViewModel : ViewModelBase
         this.RaisePropertyChanged(nameof(IsExploreSection));
         this.RaisePropertyChanged(nameof(IsColorLightSection));
         this.RaisePropertyChanged(nameof(IsCaptureSection));
+        this.RaisePropertyChanged(nameof(IsCommandSection));
         this.RaisePropertyChanged(nameof(IsAssetsSection));
         this.RaisePropertyChanged(nameof(IsAdvancedSection));
     }
@@ -321,83 +325,17 @@ public sealed partial class ControlCenterViewModel : ViewModelBase
             SelectedSection = Nav[0].Section;
     }
 
-    // ── CLI Command Builder (#361, slice of #64) ──────────────────────────────
-    // Reads the live 2D configuration off the shell's MainViewModel and emits a
-    // copy/paste `--batch` command that reproduces the current poster. MVP: 2D
-    // image path only. Fx families with no batch flag (lighting / relief / etc.)
-    // are not represented — #362 adds the gap-detection warning.
+    // ── CLI Command Builder (#361 / #994, slices of #64) ──────────────────────
+    // The Command section (CommandBuilderViewModel) owns the composer; this VM
+    // only supplies the live view as batch arguments for "Seed from live view".
 
-    public ReactiveCommand<Unit, Unit> GenerateCommandCommand { get; }
-    public ReactiveCommand<Unit, Unit> CopyCommandCommand { get; }
+    /// <summary>The Command section's model (#994).</summary>
+    public CommandBuilderViewModel CommandBuilder { get; }
 
-    private int _commandWidth = 1920;
-    /// <summary>Poster width the generated command targets. Defaults to the
-    /// batch default (1920); the live viewport size is unrelated to output size.</summary>
-    public int CommandWidth
-    {
-        get => _commandWidth;
-        set => this.RaiseAndSetIfChanged(ref _commandWidth, value < 1 ? 1 : value);
-    }
-
-    private int _commandHeight = 1080;
-    /// <summary>Poster height the generated command targets (batch default 1080).</summary>
-    public int CommandHeight
-    {
-        get => _commandHeight;
-        set => this.RaiseAndSetIfChanged(ref _commandHeight, value < 1 ? 1 : value);
-    }
-
-    private bool _useFullExePath;
-    /// <summary>When checked, lead the command with the full path to the running
-    /// FracturingFog executable instead of the bare "FracturingFog" name.
-    /// Default off. Toggling re-emits the command if one is already shown.</summary>
-    public bool UseFullExePath
-    {
-        get => _useFullExePath;
-        set
-        {
-            if (this.RaiseAndSetIfChangedReturnsChanged(ref _useFullExePath, value)
-                && GeneratedCommand.Length > 0)
-                GenerateCommand();   // keep the shown command in sync with the toggle
-        }
-    }
-
-    /// <summary>The command leader: bare "FracturingFog" by default, or the full
-    /// path to the running executable when <see cref="UseFullExePath"/> is on.
-    /// Falls back to the bare name when the process path is unavailable.</summary>
-    private string ResolveExecutableName()
-    {
-        if (!_useFullExePath) return "FracturingFog";
-        string? path = System.Environment.ProcessPath;
-        return string.IsNullOrWhiteSpace(path) ? "FracturingFog" : path;
-    }
-
-    private string _generatedCommand = "";
-    /// <summary>The last-generated command string, bound to a read-only field.</summary>
-    public string GeneratedCommand
-    {
-        get => _generatedCommand;
-        private set => this.RaiseAndSetIfChanged(ref _generatedCommand, value);
-    }
-
-    private string _commandGapWarning = "";
-    /// <summary>Human-readable list of live fx the generated command cannot
-    /// reproduce (#362). Empty when the 2D config is fully expressible. Bound to
-    /// a yellow banner (#FFCC00 — colour-blind-safe, never red).</summary>
-    public string CommandGapWarning
-    {
-        get => _commandGapWarning;
-        private set
-        {
-            this.RaiseAndSetIfChanged(ref _commandGapWarning, value);
-            this.RaisePropertyChanged(nameof(HasCommandGaps));
-        }
-    }
-
-    /// <summary>True when the last generate found unrepresented fx.</summary>
-    public bool HasCommandGaps => _commandGapWarning.Length > 0;
-
-    private void GenerateCommand()
+    /// <summary>Read the live configuration off the shell's MainViewModel as
+    /// --batch arguments (plus the fidelity gaps it cannot express), at the
+    /// requested output size.</summary>
+    private LiveCommandSeed BuildLiveSeed(int width, int height)
     {
         var main = Shell.Main;
         var vs = main.ViewState;
@@ -413,7 +351,6 @@ public sealed partial class ControlCenterViewModel : ViewModelBase
 
         var snap = new FracturingFog.Cli.BatchCommandSnapshot
         {
-            ExecutableName = ResolveExecutableName(),
             Fractal     = main.SelectedFractalType,
             CenterX     = vs.CenterX,
             CenterY     = vs.CenterY,
@@ -421,8 +358,8 @@ public sealed partial class ControlCenterViewModel : ViewModelBase
             Iterations  = iter,
             ThemeName   = main.SelectedTheme ?? FracturingFog.Batch.BatchDefaults.ThemeName,
             QualityName = main.SelectedQuality?.Name ?? FracturingFog.Batch.BatchDefaults.QualityName,
-            Width       = CommandWidth,
-            Height      = CommandHeight,
+            Width       = width,
+            Height      = height,
             Brightness  = vs.Brightness,
             Contrast    = vs.Contrast,
             HistogramEq = vs.HistogramEq,
@@ -489,16 +426,6 @@ public sealed partial class ControlCenterViewModel : ViewModelBase
         };
 
         var report = FracturingFog.Cli.BatchCommandBuilder.BuildWithReport(snap);
-        GeneratedCommand = report.Command;
-        CommandGapWarning = report.HasGaps
-            ? "Not represented (rendered output will differ): " + string.Join("; ", report.Gaps)
-            : "";
-    }
-
-    private void CopyCommand()
-    {
-        if (string.IsNullOrEmpty(GeneratedCommand)) GenerateCommand();
-        if (!string.IsNullOrEmpty(GeneratedCommand))
-            Shell.RequestCopyToClipboard(GeneratedCommand);
+        return new LiveCommandSeed(report.Args, report.Gaps);
     }
 }

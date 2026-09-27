@@ -104,6 +104,7 @@
                 <sections:ExploreSectionView    IsVisible="{Binding IsExploreSection}" />
                 <sections:ColorLightSectionView IsVisible="{Binding IsColorLightSection}" />
                 <sections:CaptureSectionView    IsVisible="{Binding IsCaptureSection}" />
+                <sections:CommandSectionView    IsVisible="{Binding IsCommandSection}" />
                 <sections:AssetsSectionView     IsVisible="{Binding IsAssetsSection}" />
                 <sections:AdvancedSectionView   IsVisible="{Binding IsAdvancedSection}" />
             </Panel>
