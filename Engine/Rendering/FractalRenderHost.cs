@@ -3671,6 +3671,21 @@ namespace FracturingFog.Rendering
             {
                 return null;
             }
+            finally
+            {
+                // #988 — `alt` is the LIVE calculator instance. Put it back at the
+                // surface size: nothing else restores it (only a surface Resize
+                // does), so a 64×36 solid-theme peek left the next live renders of
+                // this type at thumbnail resolution — stretched to the window
+                // ("extremely low fidelity"). The slideshow's static fade masked it
+                // by always following with a full-size render; the animated region
+                // fade commits live straight after the peek and exposed it.
+                int tw = _currentTargetWidth, th = _currentTargetHeight;
+                if (tw > 0 && th > 0 && (alt.Width != tw || alt.Height != th))
+                {
+                    try { alt.Resize(tw, th); } catch { /* next surface resize fixes it */ }
+                }
+            }
         }
 
         /// <summary>#138 — expose the active 2D calculator's height field + flat
