@@ -17,6 +17,24 @@ namespace FracturingFog.Abstractions.Animation;
 /// throwing, just animating only the params both types share.</summary>
 public static class AnimationDataExtensions
 {
+    /// <summary>#998 — set <paramref name="target"/> to the animation's pose at
+    /// <paramref name="seconds"/> into playback. Procedural animators integrate
+    /// phase linearly in dt, so one Tick(seconds) on fresh animators lands on the
+    /// same pose the live bus reaches with many small ticks — deterministic, and
+    /// independent of any previous frame (the scene renderer's convention: time 0
+    /// leaves the baseline untouched). Returns how many tracks bound to a
+    /// property of the target.</summary>
+    public static int ApplyAt(this AnimationData data, object target, double seconds)
+    {
+        int bound = 0;
+        foreach (var animator in data.ToAnimators(target))
+        {
+            bound++;
+            if (seconds > 0) animator.Tick(seconds);
+        }
+        return bound;
+    }
+
     /// <summary>Build one animator per track. Skips tracks whose param
     /// doesn't exist on the target type or whose CLR type isn't supported
     /// (only <c>double</c>, <c>int</c>, <c>Complex</c> today).</summary>

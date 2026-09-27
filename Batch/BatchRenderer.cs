@@ -48,6 +48,15 @@ namespace FracturingFog.Batch
                 region.ApplyHeadlessParams(fp);   // equation source, lighting, relief
                 region.ApplyFamilyParams(fp);     // per-family snapshot (#91-#94, #960)
             }
+            // #998 — a saved Lighting & FX preset replaces the lighting block
+            // (over the region's own lighting); the individual lighting flags
+            // below still tweak on top of it.
+            if (!string.IsNullOrWhiteSpace(opts.LightingPresetName))
+            {
+                var preset = LightingFxPresetLibrary.Get(LightingFxPresetLibrary.Load(), opts.LightingPresetName!)
+                    ?? throw new InvalidOperationException($"Lighting & FX preset '{opts.LightingPresetName}' not found.");
+                preset.Data.ApplyTo(fp);
+            }
             // #997 — --param Key=Value overlays any per-family setting (Julia
             // constant, 3D camera, …) on top of the region; the dedicated flags
             // below still win. Camera keys default to the rendered family.
@@ -633,20 +642,39 @@ namespace FracturingFog.Batch
                     Console.WriteLine($"  note     : --orbit ignored — {frType} has no generic 3D camera.");
                 }
             }
-            var drift = (motion == VideoMotionKind.Zoom && !opts.VideoNoDrift)
+            // #998 — a saved animation played across the frames: each frame sets
+            // the animation's pose at that frame's time (f / fps), deterministic
+            // and independent of the previous frame, like the scene renderer.
+            FracturingFog.Abstractions.Animation.AnimationData? animation = null;
+            if (!string.IsNullOrWhiteSpace(opts.AnimationName))
+            {
+                animation = FracturingFog.Models.AnimationLibrary.Instance.GetByName(opts.AnimationName)
+                    ?? throw new InvalidOperationException($"Animation '{opts.AnimationName}' not found.");
+                int bound = FracturingFog.Abstractions.Animation.AnimationDataExtensions.ApplyAt(animation, fp, 0.0);
+                Console.WriteLine($"  animation: {animation.Name} ({bound} of {animation.Tracks.Count} track(s) apply to {frType})");
+                if (animation.TargetFractalTypes.Count > 0 && !animation.TargetFractalTypes.Contains(frType))
+                    Console.WriteLine($"  note     : '{animation.Name}' was authored for {string.Join(", ", animation.TargetFractalTypes)}.");
+            }
+            // The animation owns param motion: no default constant drift beside it.
+            var drift = (motion == VideoMotionKind.Zoom && !opts.VideoNoDrift && animation == null)
                 ? FracturingFog.Abstractions.Animation.ConstantDriftResolver.TryBuild(
                     frType, fp, opts.VideoSeconds, motionRng)
                 : null;
             if (drift != null) Console.WriteLine($"  drift    : {drift.Name} (disable with --no-drift)");
             // Hold / Ken-Burns render the fractal ONCE (safe for slow generators:
             // Flame, DLA, Buddhabrot); an orbit forces per-frame renders.
-            bool singleRender = orbitSnap == null
+            bool singleRender = orbitSnap == null && animation == null
                 && motion is VideoMotionKind.Hold or VideoMotionKind.KenBurns;
+            if (animation != null && motion == VideoMotionKind.KenBurns)
+                Console.WriteLine("  note     : Ken-Burns pans a single rendered frame; with --animation every frame re-renders, so the view holds.");
             var kenBurns = motion == VideoMotionKind.KenBurns ? KenBurnsPath.Random(motionRng) : default;
             uint[]? heldBase = null;
 
-            void ApplyFrameState(double e)
+            void ApplyFrameState(double e, int frame)
             {
+                if (animation != null)
+                    FracturingFog.Abstractions.Animation.AnimationDataExtensions.ApplyAt(
+                        animation, fp, frame / (double)Math.Max(opts.VideoFps, 1));
                 if (motion == VideoMotionKind.Sweep)
                 {
                     if (frType == FractalType.Logistic)
@@ -745,7 +773,7 @@ namespace FracturingFog.Batch
                     }
                     else if (!motionBlur)
                     {
-                        ApplyFrameState(eHold);
+                        ApplyFrameState(eHold, f);
                         // S2 (#396) — capture HDR on the single-frame relief path when armed.
                         bool zoomWantHdr = ReliefHdrWanted(reliefFp,
                             opts.ViewTransform ?? FracturingFog.Imaging.ViewTransform.None, pfBrightness, pfContrast);
@@ -756,7 +784,7 @@ namespace FracturingFog.Batch
                         // Average the shutter's sub-frames. The froxel temporal history
                         // advances once per OUTPUT frame (only the first sub-frame carries
                         // it) so accumulation motion blur doesn't over-blend the volume.
-                        ApplyFrameState(eHold);
+                        ApplyFrameState(eHold, f);
                         mbAccum!.Reset();
                         var samples = MotionBlurAccumulator.ShutterSamples(t, frameStep, opts.ShutterFraction, mbSamples);
                         for (int s = 0; s < samples.Length; s++)

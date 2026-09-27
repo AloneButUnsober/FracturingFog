@@ -55,6 +55,8 @@ namespace FracturingFog.Batch
         public const string NoKeepFrames   = "--no-keep-frames";
         public const string MoreColors     = "--more-colors";
         public const string MotionBlur     = "--motion-blur";
+        // A saved animation played across the video's frames (#998).
+        public const string Animation      = "--animation";
         public const string Shutter        = "--shutter";
 
         // Watermark is ON by default; this flag (alias --watermark) turns it off.
@@ -179,6 +181,10 @@ namespace FracturingFog.Batch
         public const string VolumeAnisotropy      = "--volume-anisotropy";
         public const string FogColor              = "--fog-color";
         public const string VolumePaletteStrength = "--volume-palette-strength";
+
+        // A saved Lighting & FX preset (#580) applied wholesale to the lighting
+        // block before the individual lighting flags (#998).
+        public const string LightingPreset        = "--lighting-preset";
 
         // Guided À-Trous denoise on the relief raymarch (roadmap S4, #389). Keyed
         // on the render's own float normal/depth AOVs. Any denoise flag implies

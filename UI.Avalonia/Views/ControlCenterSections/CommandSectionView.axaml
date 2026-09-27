@@ -180,7 +180,7 @@
                 <TextBlock Foreground="#8A8A8A" FontSize="11" TextWrapping="Wrap"
                            Text="User-code equations (User Equation, Sandbox, User Bulb) travel only with a saved region: save the view as a region and use --region." />
                 <TextBlock Foreground="#8A8A8A" FontSize="11" TextWrapping="Wrap"
-                           Text="Saved animations run headless only inside a scene (Scene mode)." />
+                           Text="A still image shows one moment of an animation; saved animations play in Video mode (Video, animation) and inside scenes." />
             </StackPanel>
         </Border>
     </StackPanel>

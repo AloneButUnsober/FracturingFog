@@ -125,6 +125,8 @@ public sealed class CommandBuilderViewModel : ViewModelBase
         BatchFlagSource.LSystemPreset    => "L-System presets",
         BatchFlagSource.FlamePreset      => "flame presets",
         BatchFlagSource.ParamKey         => "--param keys",
+        BatchFlagSource.LightingPreset   => "saved Lighting & FX presets",
+        BatchFlagSource.Animation        => "saved animations",
         _                                => "saved names",
     };
 

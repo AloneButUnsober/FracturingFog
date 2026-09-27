@@ -23,6 +23,7 @@
 using System;
 using System.Collections.Generic;
 using System.Globalization;
+using System.Linq;
 using FracturingFog.Batch;
 using FracturingFog.Imaging;
 using FracturingFog.Models;
@@ -206,6 +207,17 @@ namespace FracturingFog.Cli
         /// <summary>Domain-warp frequency; emitted when domain warp is on and the
         /// value differs from the default (1.0).</summary>
         public double DomainWarpFrequency { get; init; } = 1.0;
+
+        /// <summary>#998 — the saved Lighting &amp; FX preset the live lighting
+        /// equals exactly, if any (host-matched). Emitted as
+        /// <c>--lighting-preset</c>, which also carries the settings no individual
+        /// flag can (AO, shadows, sky, lens, …).</summary>
+        public string? LightingPresetName { get; init; }
+
+        /// <summary>#998 — the animation playing in the live view, if any. A still
+        /// command captures one moment of it; reported so the user can pick it
+        /// under --animation for a video.</summary>
+        public string? LiveAnimationName { get; init; }
 
         /// <summary>The active theme is a custom/edited palette with no saved
         /// name to reference. The command cannot emit <c>--theme</c> for it, so
@@ -415,6 +427,14 @@ namespace FracturingFog.Cli
                 }
             }
 
+            // A matching saved Lighting & FX preset (#998) — before the individual
+            // lighting flags, which the batch applies on top of it.
+            if (!string.IsNullOrWhiteSpace(snap.LightingPresetName))
+            {
+                parts.Add(BatchFlags.LightingPreset);
+                parts.Add(snap.LightingPresetName!);
+            }
+
             // Per-light fog contribution mask (roadmap S6, #408) — only when it
             // deviates from the all-lights-fog default (7).
             if (snap.FogLightMask != 0x7)
@@ -481,6 +501,18 @@ namespace FracturingFog.Cli
                 gaps.Add("Custom/unsaved theme (save it first so the command can reference it by name; falls back to HSV)");
             if (snap.StereoActive)
                 gaps.Add("Stereo / side-by-side (SBS) output");
+            // #998 — Lighting & FX settings no flag carries, unless a saved preset
+            // reproduces the whole block.
+            if (string.IsNullOrWhiteSpace(snap.LightingPresetName) && snap.Parameters != null)
+            {
+                var missing = LightingFidelity.UnexpressedFields(snap.Parameters.Lighting);
+                if (missing.Count > 0)
+                    gaps.Add("Lighting & FX settings with no batch flag (" + string.Join(", ", missing.Take(6))
+                             + (missing.Count > 6 ? $", +{missing.Count - 6} more" : "")
+                             + ") — save them as a Lighting & FX preset and re-seed to use --lighting-preset");
+            }
+            if (!string.IsNullOrWhiteSpace(snap.LiveAnimationName))
+                gaps.Add($"Live animation '{snap.LiveAnimationName}' (a still shows one moment of it; for a video choose it under --animation)");
             return gaps;
         }
 

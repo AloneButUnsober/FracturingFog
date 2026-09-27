@@ -79,6 +79,26 @@ namespace FracturingFog.Batch
                 try { FracturingFog.Models.SceneLibrary.Instance.Load(); } catch { }
             }
 
+            // #998 — named Lighting & FX preset / animation: resolve before any
+            // render starts so a typo fails fast (exit 2) instead of mid-run.
+            if (!string.IsNullOrWhiteSpace(opts.LightingPresetName)
+                && LightingFxPresetLibrary.Get(LightingFxPresetLibrary.Load(), opts.LightingPresetName!) == null)
+            {
+                Console.Error.WriteLine($"batch: Lighting & FX preset '{opts.LightingPresetName}' not found in lighting-fx-presets.json.");
+                return 2;
+            }
+            if (!string.IsNullOrWhiteSpace(opts.AnimationName))
+            {
+                try { FracturingFog.Models.AnimationLibrary.Instance.Load(); } catch { }
+                if (FracturingFog.Models.AnimationLibrary.Instance.GetByName(opts.AnimationName) == null)
+                {
+                    Console.Error.WriteLine($"batch: animation '{opts.AnimationName}' not found in animations.json.");
+                    return 2;
+                }
+                if (opts.Mode != BatchMode.Video)
+                    Console.WriteLine("  note     : --animation plays only in --mode video; ignored.");
+            }
+
             try
             {
                 if (opts.Remote)

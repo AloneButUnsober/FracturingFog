@@ -113,6 +113,10 @@ namespace FracturingFog.Batch
         FlamePreset,
         /// <summary>--param keys (region-snapshot property names, #997).</summary>
         ParamKey,
+        /// <summary>Saved Lighting &amp; FX presets (#580 / #998).</summary>
+        LightingPreset,
+        /// <summary>Saved animations (#998).</summary>
+        Animation,
     }
 
     /// <summary>A flag that only has an effect while another (choice) flag
@@ -492,6 +496,9 @@ namespace FracturingFog.Batch
                     new[] { "auto", "zoom", "hold", "kenburns", "sweep" }, "auto", "MODE"),
                 Dbl(BatchFlags.Orbit, Video, BatchModes.Sequence, "3D only: sweep the camera azimuth this many degrees.",
                     -3600, 3600, enforced: true, def: "0") with { ValueHint = "DEG" },
+                Txt(BatchFlags.Animation, Video, BatchModes.Video,
+                    "Play a saved animation across the video (every frame re-renders; use --video-motion hold for an animated still).",
+                    BatchFlagSource.Animation),
                 Sw(BatchFlags.NoDrift, Video, BatchModes.Sequence,
                     "Julia/Phoenix/Glynn zooms: keep the constant fixed (default drifts it gently)."),
                 Int(BatchFlags.VideoSeed, Video, BatchModes.Sequence, "Seed for Ken-Burns / drift paths.", def: "0"),
@@ -684,6 +691,9 @@ namespace FracturingFog.Batch
                     with { Implies = new[] { BatchFlags.Relight, BatchFlags.ReliefRaymarch, BatchFlags.Relief } },
 
                 // ── Volumetric ──
+                Txt(BatchFlags.LightingPreset, Vol, FR,
+                    "Apply a saved Lighting & FX preset (lights, fog, AO, shadows, materials, sky, lens, ...) before the individual lighting flags.",
+                    BatchFlagSource.LightingPreset),
                 Dbl(BatchFlags.FogDensity, Vol, FR, "Beer-Lambert fog density (0 = off).", 0, 10, enforced: true, def: "0"),
                 Dbl(BatchFlags.FogHeightFalloff, Vol, FR, "Ground-hugging falloff (0 = uniform fog).", 0, 10, enforced: true, def: "0"),
                 Int(BatchFlags.VolumeSteps, Vol, FR, "In-scatter step count (0 = exponential fog only; 16-48 typical).", 0, 256, enforced: true, def: "0"),
