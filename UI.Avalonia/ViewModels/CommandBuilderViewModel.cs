@@ -19,6 +19,7 @@ using ReactiveUI;
 
 using FracturingFog.Batch;
 using FracturingFog.Cli;
+using FracturingFog.Models;
 
 namespace FracturingFog.UI.Avalonia.ViewModels;
 
@@ -65,6 +66,73 @@ public sealed class CommandBuilderViewModel : ViewModelBase
     public Func<string, Task<string?>>? SavePathRequested { get; set; }
     /// <summary>Host open-file picker for input paths (.exr).</summary>
     public Func<Task<string?>>? OpenPathRequested { get; set; }
+
+    // ── Library pickers (#995) ───────────────────────────────────────────────
+
+    private Func<BatchFlagSource, FractalType?, IReadOnlyList<string>>? _namesProvider;
+    private readonly Dictionary<(BatchFlagSource, FractalType?), IReadOnlyList<string>> _names = new();
+
+    /// <summary>Host-supplied saved names for a library source (regions, themes
+    /// compatible with the fractal, slideshow presets, scenes, remote
+    /// connections / presets, L-System / flame presets). The fractal is null
+    /// when the command renders a region (type unknown here).</summary>
+    public Func<BatchFlagSource, FractalType?, IReadOnlyList<string>>? NamesProvider
+    {
+        get => _namesProvider;
+        set { _namesProvider = value; _names.Clear(); Refresh(); }
+    }
+
+    /// <summary>The fractal a library list is filtered by. Regions filter only
+    /// on an explicit --fractal (the implicit Mandelbrot default must not hide
+    /// every other region); everything else follows the command's fractal.</summary>
+    private FractalType? FilterFractal(BatchFlagSource source)
+        => source == BatchFlagSource.Region && !Composer.IsSelected(BatchFlags.Fractal) ? null : Composer.Fractal;
+
+    /// <summary>Saved names for <paramref name="source"/>, cached per fractal
+    /// until the view is re-seeded. Section-header rows ("— X —") and blanks
+    /// are dropped; a throwing provider yields no names.</summary>
+    internal IReadOnlyList<string> NamesFor(BatchFlagSource source)
+    {
+        if (_namesProvider == null || source == BatchFlagSource.None) return Array.Empty<string>();
+        var fractal = FilterFractal(source);
+        if (!_names.TryGetValue((source, fractal), out var list))
+        {
+            try
+            {
+                list = (_namesProvider(source, fractal) ?? Array.Empty<string>())
+                    .Where(n => !string.IsNullOrWhiteSpace(n) && !n.StartsWith('—'))
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .ToList();
+            }
+            catch { list = Array.Empty<string>(); }
+            _names[(source, fractal)] = list;
+        }
+        return list;
+    }
+
+    /// <summary>Human name of a library, for "not found" notes.</summary>
+    internal string LibraryLabel(BatchFlagSource source) => source switch
+    {
+        BatchFlagSource.Region           => FilterFractal(source) is FractalType rf ? $"saved {rf} regions" : "saved regions",
+        BatchFlagSource.Theme            => FilterFractal(source) is FractalType f ? $"themes compatible with {f}" : "saved themes",
+        BatchFlagSource.SlideshowConfig  => "slideshow presets",
+        BatchFlagSource.Scene            => "saved scenes",
+        BatchFlagSource.RemoteConnection => "saved connections",
+        BatchFlagSource.RemotePreset     => "saved render presets",
+        BatchFlagSource.LSystemPreset    => "L-System presets",
+        BatchFlagSource.FlamePreset      => "flame presets",
+        _                                => "saved names",
+    };
+
+    /// <summary>A note when <paramref name="value"/> is not one of the saved
+    /// names (empty when it is, or when there is no list to check against).</summary>
+    internal string NotFoundNote(BatchFlagSource source, string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value)) return "";
+        var names = NamesFor(source);
+        if (names.Count == 0 || names.Contains(value, StringComparer.OrdinalIgnoreCase)) return "";
+        return $"'{value}' is not in the {LibraryLabel(source)}";
+    }
 
     // ── Mode ─────────────────────────────────────────────────────────────────
 
@@ -113,6 +181,17 @@ public sealed class CommandBuilderViewModel : ViewModelBase
     };
 
     public bool ModeValueIsPath => Composer.Mode is BatchMode.Regrade or BatchMode.Relight;
+
+    private BatchFlagSource ModeValueSource => Composer.Mode switch
+    {
+        BatchMode.Slideshow => BatchFlagSource.SlideshowConfig,
+        BatchMode.Scene     => BatchFlagSource.Scene,
+        _                   => BatchFlagSource.None,
+    };
+
+    /// <summary>Saved slideshow presets / scenes for the mode's name box.</summary>
+    public IReadOnlyList<string> ModeValueSuggestions => NamesFor(ModeValueSource);
+    public bool ModeValueIsName => HasModeValue && !ModeValueIsPath;
 
     public string ModeValue
     {
@@ -189,6 +268,8 @@ public sealed class CommandBuilderViewModel : ViewModelBase
         var notes = new List<string>();
         if (!Composer.Remote && Composer.HasPlaceholderOutput)
             notes.Add("Set an output path (Output → --out) before running.");
+        if (HasModeValue && NotFoundNote(ModeValueSource, ModeValue) is { Length: > 0 } missing)
+            notes.Add(char.ToUpperInvariant(missing[0]) + missing[1..] + " — the batch will stop with 'not found'.");
         var parked = Composer.Parked.Select(s => s.Name).ToList();
         if (parked.Count > 0)
             notes.Add("Kept but not used in this mode/fractal: " + string.Join(", ", parked));
@@ -200,6 +281,8 @@ public sealed class CommandBuilderViewModel : ViewModelBase
         this.RaisePropertyChanged(nameof(ModeValueLabel));
         this.RaisePropertyChanged(nameof(ModeValueIsPath));
         this.RaisePropertyChanged(nameof(ModeValue));
+        this.RaisePropertyChanged(nameof(ModeValueSuggestions));
+        this.RaisePropertyChanged(nameof(ModeValueIsName));
         foreach (var g in Groups) g.Refresh();
     }
 
@@ -209,6 +292,7 @@ public sealed class CommandBuilderViewModel : ViewModelBase
         int h = int.TryParse(Composer.ValueOf(BatchFlags.Height), out var ch) ? ch : BatchDefaults.Height;
         var seed = _liveSeed?.Invoke(w, h);
         if (seed == null) return;
+        _names.Clear();   // the libraries may have changed since the last look
         Composer.SeedLook(seed.Args);
         GapWarning = seed.Gaps.Count > 0
             ? "Not represented (rendered output will differ): " + string.Join("; ", seed.Gaps)
@@ -308,6 +392,10 @@ public sealed class CommandFlagRowViewModel : ViewModelBase
     public bool IsSwitch => Spec.Kind == BatchFlagKind.Switch;
     public bool IsChoice => Spec.Kind == BatchFlagKind.Choice;
     public bool IsTextEntry => !IsSwitch && !IsChoice;
+    /// <summary>A text value drawn from a saved library: an editable combo.</summary>
+    public bool HasSuggestions => IsTextEntry && Spec.Source != BatchFlagSource.None;
+    public bool IsPlainText => IsTextEntry && !HasSuggestions;
+    public IReadOnlyList<string> Suggestions => HasSuggestions ? _owner.NamesFor(Spec.Source) : Array.Empty<string>();
     public bool HasBrowse => Spec.Kind == BatchFlagKind.Path;
     public IReadOnlyList<string> Choices => Spec.Choices;
 
@@ -355,6 +443,8 @@ public sealed class CommandFlagRowViewModel : ViewModelBase
         {
             if (_state.IsBlocked) return "conflicts with " + string.Join(", ", _state.BlockedBy);
             if (_state.Missing.Count > 0) return "needs " + string.Join(", ", _state.Missing);
+            if (HasSuggestions && IsSelected && _owner.NotFoundNote(Spec.Source, Composer.ValueOf(Spec.Name)) is { Length: > 0 } nf)
+                return nf;
             if (_state.IsImplied && !IsSelected) return "implied by " + string.Join(", ", _state.ImpliedBy);
             return "";
         }
@@ -362,13 +452,15 @@ public sealed class CommandFlagRowViewModel : ViewModelBase
 
     public bool HasStatus => Status.Length > 0;
     /// <summary>Conflicts / unmet needs are warnings (yellow); implications are info.</summary>
-    public bool StatusIsWarning => _state.IsBlocked || _state.Missing.Count > 0;
+    public bool StatusIsWarning => _state.IsBlocked || _state.Missing.Count > 0
+        || (HasSuggestions && IsSelected && _owner.NotFoundNote(Spec.Source, Composer.ValueOf(Spec.Name)).Length > 0);
 
     internal void Refresh()
     {
         _state = Composer.StateOf(Spec);
         this.RaisePropertyChanged(nameof(IsSelected));
         this.RaisePropertyChanged(nameof(Value));
+        this.RaisePropertyChanged(nameof(Suggestions));
         this.RaisePropertyChanged(nameof(IsVisible));
         this.RaisePropertyChanged(nameof(IsEditable));
         this.RaisePropertyChanged(nameof(Status));
