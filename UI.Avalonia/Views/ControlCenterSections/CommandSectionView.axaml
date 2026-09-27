@@ -95,14 +95,37 @@
                 <TextBlock Text="{Binding Hint}" IsVisible="{Binding HasHint}"
                            Foreground="#9A9A9A" FontSize="10" TextWrapping="Wrap" />
 
-                <Grid ColumnDefinitions="*,Auto">
+                <!-- Shell dialect, copy, script, run (#999) -->
+                <Grid ColumnDefinitions="Auto,Auto,*,Auto" ColumnSpacing="6">
+                    <TextBlock Grid.Column="0" Text="Shell" VerticalAlignment="Center" Foreground="#9A9A9A" FontSize="11" />
+                    <ComboBox Grid.Column="1" ItemsSource="{Binding Shells}" SelectedItem="{Binding SelectedShell}" MinWidth="120" FontSize="11"
+                              ToolTip.Tip="Quote the command for the shell you will paste it into: PowerShell and bash use single-quoted literals; cmd uses double quotes with C-runtime escaping." />
+                    <CheckBox Grid.Column="3" Content="Full exe path" IsChecked="{Binding UseFullExePath}"
+                              VerticalAlignment="Center" FontSize="11"
+                              ToolTip.Tip="Lead the command with the full path to the running FracturingFog executable instead of the bare name." />
+                </Grid>
+                <Grid ColumnDefinitions="*,*,*,*" ColumnSpacing="4">
                     <Button Grid.Column="0" Classes="action neutral" Content="Copy" Command="{Binding CopyCommand}"
                             HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"
                             ToolTip.Tip="Copy the command line to the clipboard" />
-                    <CheckBox Grid.Column="1" Content="Full exe path" IsChecked="{Binding UseFullExePath}"
-                              VerticalAlignment="Center" Margin="10,0,0,0" FontSize="11"
-                              ToolTip.Tip="Lead the command with the full path to the running FracturingFog executable instead of the bare name." />
+                    <Button Grid.Column="1" Classes="action neutral" Content="Save script…" Command="{Binding SaveScriptCommand}"
+                            HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"
+                            ToolTip.Tip="Save the command as a runnable script for the chosen shell (.ps1, .cmd or .sh). The script returns the batch exit code." />
+                    <Button Grid.Column="2" Classes="action video" Content="Run" Command="{Binding RunCommand}"
+                            HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"
+                            ToolTip.Tip="Run this batch now in a background process and show its output below. Needs a valid command and a real output path." />
+                    <Button Grid.Column="3" Classes="action neutral" Content="Cancel" Command="{Binding CancelRunCommand}"
+                            HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"
+                            ToolTip.Tip="Stop the running batch" />
                 </Grid>
+                <TextBlock Text="{Binding RunStatus}" IsVisible="{Binding HasRunStatus}"
+                           Foreground="#B4B4B4" FontSize="11" TextWrapping="Wrap" />
+                <TextBox Text="{Binding RunLog, Mode=OneWay}" IsVisible="{Binding HasRunLog}" IsReadOnly="True"
+                         AcceptsReturn="True" TextWrapping="NoWrap"
+                         FontFamily="Consolas,Menlo,monospace" FontSize="10"
+                         MinHeight="60" MaxHeight="220" VerticalContentAlignment="Top"
+                         CaretIndex="{Binding RunLog.Length, Mode=OneWay}"
+                         ToolTip.Tip="Output of the running batch" />
             </StackPanel>
         </Border>
 

@@ -34,7 +34,10 @@ namespace FracturingFog.Batch
             // unreachable on non-Win hosts once this file follows the entry
             // point into FracturingFog.App (net10.0). On Linux/macOS
             // stdout/stderr are already wired to the launching terminal.
-            if (OperatingSystem.IsWindows())
+            // #999 — when both streams are already redirected (the Command panel's
+            // Run, a CI log, `> out.txt 2>&1`) write to them; attaching / allocating
+            // a console would pop up a window and bypass the pipes.
+            if (OperatingSystem.IsWindows() && !(Console.IsOutputRedirected && Console.IsErrorRedirected))
                 AttachOrAllocConsole();
 
             if (args.Length == 1 || (args.Length > 1 && (args[1] == "--help" || args[1] == "-?")))

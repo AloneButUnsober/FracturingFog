@@ -3,6 +3,7 @@
 
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Reactive.Linq;
 using System.Threading.Tasks;
@@ -35,12 +36,12 @@ public sealed class CommandBuilderViewModelTests
     [Fact]
     public void EditingAValue_SelectsIt_AndRevalidates()
     {
-        var vm = new CommandBuilderViewModel();
+        var vm = new CommandBuilderViewModel { SelectedShell = CommandShell.PowerShell };
         Assert.True(vm.HasError);                          // no source yet
         Row(vm, BatchFlags.Region).Value = "Seahorse Valley";
         Assert.True(Row(vm, BatchFlags.Region).IsSelected);
         Assert.True(vm.IsValid, vm.ValidationMessage);
-        Assert.Contains("--region \"Seahorse Valley\"", vm.CommandText);
+        Assert.Contains("--region 'Seahorse Valley'", vm.CommandText);
         Assert.Contains("output path", vm.Hint);           // --out is still the placeholder
 
         Row(vm, BatchFlags.Region).Value = "";             // clearing free text deselects
@@ -94,13 +95,13 @@ public sealed class CommandBuilderViewModelTests
     [Fact]
     public void ModeValue_DrivesTheSelectingFlag()
     {
-        var vm = new CommandBuilderViewModel();
+        var vm = new CommandBuilderViewModel { SelectedShell = CommandShell.PowerShell };
         Assert.False(vm.HasModeValue);
         vm.SelectedMode = vm.Modes.Single(m => m.Mode == BatchMode.Regrade);
         Assert.True(vm.HasModeValue);
         Assert.True(vm.ModeValueIsPath);
         vm.ModeValue = @"C:\renders\in file.exr";
-        Assert.Contains("--regrade-exr \"C:\\renders\\in file.exr\"", vm.CommandText);
+        Assert.Contains(@"--regrade-exr 'C:\renders\in file.exr'", vm.CommandText);
         vm.IsRemote = true;
         Assert.False(vm.HasModeValue);
     }
@@ -151,7 +152,7 @@ public sealed class CommandBuilderViewModelTests
         Assert.StartsWith("FracturingFog --batch", vm.CommandText);
         vm.UseFullExePath = true;
         if (!string.IsNullOrEmpty(Environment.ProcessPath))
-            Assert.StartsWith(BatchCommandBuilder.Token(Environment.ProcessPath) + " --batch", vm.CommandText);
+            Assert.StartsWith(ShellQuoting.Join(Environment.ProcessPath, Array.Empty<string>(), vm.SelectedShell), vm.CommandText);
     }
 
     [Fact]
@@ -411,5 +412,77 @@ public sealed class CommandBuilderViewModelTests
         var noKeys = new CommandBuilderViewModel();
         Row(noKeys, BatchFlags.Param).Value = "Anything=1";   // no key list: shape only
         Assert.Equal("", Row(noKeys, BatchFlags.Param).ValueNote);
+    }
+
+    // ── #999 shell, script, run ──────────────────────────────────────────────
+
+    private static CommandBuilderViewModel Runnable()
+    {
+        var vm = new CommandBuilderViewModel();
+        Row(vm, BatchFlags.X).Value = "0";
+        Row(vm, BatchFlags.Y).Value = "0";
+        Row(vm, BatchFlags.Zoom).Value = "1";
+        return vm;
+    }
+
+    [Fact]
+    public void ShellChoice_ChangesTheQuoting()
+    {
+        var vm = Runnable();
+        Row(vm, BatchFlags.Theme).Value = "Fire 3D (PBR)";
+        vm.SelectedShell = CommandShell.PowerShell;
+        Assert.Contains("--theme 'Fire 3D (PBR)'", vm.CommandText);
+        vm.SelectedShell = CommandShell.Cmd;
+        Assert.Contains("--theme \"Fire 3D (PBR)\"", vm.CommandText);
+        vm.SelectedShell = CommandShell.Bash;
+        Assert.Contains("--theme 'Fire 3D (PBR)'", vm.CommandText);
+        Row(vm, BatchFlags.FogColor).Value = "#FF8800";
+        Assert.Contains("--fog-color '#FF8800'", vm.CommandText);   // a bare # would start a comment
+    }
+
+    [Fact]
+    public void Run_NeedsAValidCommandWithARealOutput()
+    {
+        var vm = Runnable();
+        Assert.True(vm.IsValid);
+        Assert.False(vm.CanRun);                                   // --out is the placeholder
+        Row(vm, BatchFlags.Out).Value = @"C:\out\x.png";
+        Assert.True(vm.CanRun);
+        Row(vm, BatchFlags.Zoom).Value = "";                       // no longer valid
+        Assert.False(vm.CanRun);
+    }
+
+    [Fact]
+    public async Task Run_LaunchesTheExecutableWithTheArgumentList_AndReportsTheExit()
+    {
+        var vm = Runnable();
+        Row(vm, BatchFlags.Out).Value = "o.png";
+        vm.RunExecutable = () => "dotnet";                         // `dotnet --batch …` → a quick failure
+        await vm.RunCommand.Execute();
+        Assert.False(vm.IsRunning);
+        Assert.StartsWith("Failed (exit code", vm.RunStatus);
+        Assert.StartsWith("> ", vm.RunLog);
+        Assert.True(vm.RunLog.Split('\n').Length > 1, vm.RunLog);   // the child's own output arrived
+    }
+
+    [Fact]
+    public async Task SaveScript_WritesARunnableScriptForTheShell()
+    {
+        string dir = Path.Combine(Path.GetTempPath(), "ff-cb7-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(dir);
+        try
+        {
+            var vm = Runnable();
+            vm.SelectedShell = CommandShell.Cmd;
+            string? suggested = null;
+            vm.ScriptPathRequested = (name, shell) => { suggested = name; return Task.FromResult<string?>(Path.Combine(dir, name)); };
+            await vm.SaveScriptCommand.Execute();
+            Assert.Equal("fracturing-fog-batch.cmd", suggested);
+            string text = File.ReadAllText(Path.Combine(dir, suggested!));
+            Assert.StartsWith("@echo off", text);
+            Assert.Contains(vm.CommandText, text);
+            Assert.StartsWith("Saved script:", vm.RunStatus);
+        }
+        finally { Directory.Delete(dir, recursive: true); }
     }
 }

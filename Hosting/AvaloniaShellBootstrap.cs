@@ -2726,6 +2726,14 @@ namespace FracturingFog.Hosting
                 // Read-only views of the in-memory libraries (loaded at startup);
                 // the remote stores are read from disk without creating them.
                 cc.CommandBuilder.NamesProvider = CommandBuilderNames;
+                // #999 — save the command as a script for the chosen shell.
+                cc.CommandBuilder.ScriptPathRequested = (name, shell) =>
+                    AvaloniaDialogs.PickSaveFileAsync("Save Batch Script", name, shell switch
+                    {
+                        global::FracturingFog.Cli.CommandShell.PowerShell => "PowerShell script (*.ps1)|*.ps1|All files (*.*)|*.*",
+                        global::FracturingFog.Cli.CommandShell.Cmd        => "Command script (*.cmd)|*.cmd|All files (*.*)|*.*",
+                        _                                                  => "Shell script (*.sh)|*.sh|All files (*.*)|*.*",
+                    });
                 // #997 — live per-family settings (Julia constant, 3D camera, …)
                 // as --param pairs, via the same snapshot a saved region uses.
                 cc.FamilyParamsSerializer = (type, fp) =>
