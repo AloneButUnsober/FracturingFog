@@ -122,6 +122,21 @@ public sealed class ParameterAnimationBus
         }
     }
 
+    /// <summary>#987 — true while the timer is running with at least one
+    /// enabled animator, i.e. the bus is actively producing render frames.
+    /// The slideshow uses it to decide whether a theme change can ride the
+    /// animation's own frames as a live palette fade.</summary>
+    public bool IsAnimating
+    {
+        get
+        {
+            if (!_timer.IsEnabled) return false;
+            foreach (var a in _permanent) if (a.IsEnabled) return true;
+            foreach (var a in _dynamic) if (a.IsEnabled) return true;
+            return false;
+        }
+    }
+
     /// <summary>Stop the bus unconditionally. Animator IsEnabled state is
     /// not mutated — caller is responsible for that.</summary>
     public void Stop()
