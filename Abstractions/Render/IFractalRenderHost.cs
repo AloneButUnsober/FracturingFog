@@ -155,6 +155,24 @@ namespace FracturingFog.Render
         /// when no live fade is active.</summary>
         void EndLiveColorFade() { }
 
+        /// <summary>
+        /// #988 — install a frozen outgoing frame that every subsequent upload
+        /// is blended with (weight 1 = only outgoing visible). Lets the
+        /// slideshow commit the incoming region live — its animation already
+        /// running — while the old frame dissolves over it. Low-res preview and
+        /// stale-hold presents are suppressed while installed. Returns false
+        /// when unsupported or the buffer doesn't fit the given dims. Default:
+        /// unsupported.
+        /// </summary>
+        bool BeginTransitionOverlay(uint[] outgoing, int width, int height) => false;
+
+        /// <summary>#988 — weight of the outgoing overlay (1 → 0 over the fade).
+        /// Takes effect on the next upload. No-op when not installed.</summary>
+        void SetTransitionOverlay(double outgoingWeight) { }
+
+        /// <summary>#988 — remove the transition overlay. No-op when not installed.</summary>
+        void EndTransitionOverlay() { }
+
         /// <summary>Render the most-recently-completed frame as a live ASCII /
         /// text-art cell grid (#227), consuming the real IColorMap-coloured
         /// buffer + smooth field. Returns null before the first frame. Thread-safe
