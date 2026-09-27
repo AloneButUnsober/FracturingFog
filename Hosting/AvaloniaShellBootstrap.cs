@@ -2722,6 +2722,10 @@ namespace FracturingFog.Hosting
                 cc.CommandBuilder.OpenPathRequested = () =>
                     AvaloniaDialogs.PickOpenFileAsync(
                         "Input OpenEXR", "OpenEXR (*.exr)|*.exr|All files (*.*)|*.*");
+                // #995 — saved names for the Command panel's library pickers.
+                // Read-only views of the in-memory libraries (loaded at startup);
+                // the remote stores are read from disk without creating them.
+                cc.CommandBuilder.NamesProvider = CommandBuilderNames;
             };
 
             // #493 — a region jump mutates FractalParameters in place; refresh any
@@ -3544,6 +3548,44 @@ namespace FracturingFog.Hosting
         // #493 — refresh an open FractalParamsViewModel-backed editor window so it
         // re-reads params mutated underneath it (e.g. after a region jump). No-op
         // when the window is closed/hidden or not a param editor.
+        /// <summary>#995 — saved names for a Command-panel library picker. Themes
+        /// are listed compatible-first for <paramref name="fractal"/> (all themes
+        /// when the fractal comes from a region); regions filter to the fractal
+        /// when one is given. Never throws — a missing store yields no names.</summary>
+        private static IReadOnlyList<string> CommandBuilderNames(
+            global::FracturingFog.Batch.BatchFlagSource source, global::FracturingFog.FractalType? fractal)
+        {
+            try
+            {
+                switch (source)
+                {
+                    case global::FracturingFog.Batch.BatchFlagSource.Region:
+                        return global::FracturingFog.Models.FractalRegionLibrary.Instance.All
+                            .Where(r => fractal is null || r.FractalType == fractal)
+                            .Select(r => r.Name).ToList();
+                    case global::FracturingFog.Batch.BatchFlagSource.Theme:
+                        if (s_themeService == null) return Array.Empty<string>();
+                        return fractal is global::FracturingFog.FractalType f
+                            ? s_themeService.EnumerateThemeNames(global::FracturingFog.Models.ThemeSortMode.ByFractalCompat, null, false, f)
+                            : s_themeService.EnumerateThemeNames();
+                    case global::FracturingFog.Batch.BatchFlagSource.SlideshowConfig:
+                        return global::FracturingFog.Models.SlideshowConfigLibrary.Load().Configs.Select(c => c.Name).ToList();
+                    case global::FracturingFog.Batch.BatchFlagSource.Scene:
+                        return global::FracturingFog.Models.SceneLibrary.Instance.Scenes.Select(sc => sc.Name).ToList();
+                    case global::FracturingFog.Batch.BatchFlagSource.RemoteConnection:
+                        return global::FracturingFog.Client.ClientConnectionStore.LoadOrCreate().Entries.Select(e => e.Name).ToList();
+                    case global::FracturingFog.Batch.BatchFlagSource.RemotePreset:
+                        return global::FracturingFog.Client.RenderOptionsStore.LoadOrCreate().Presets.Select(p => p.Name).ToList();
+                    case global::FracturingFog.Batch.BatchFlagSource.LSystemPreset:
+                        return global::FracturingFog.Models.LSystemPresets.All.Keys.ToList();
+                    case global::FracturingFog.Batch.BatchFlagSource.FlamePreset:
+                        return global::FracturingFog.Models.FlamePresets.All.Keys.ToList();
+                }
+            }
+            catch { }
+            return Array.Empty<string>();
+        }
+
         private static void RefreshOpenParamEditor(Window? win)
         {
             if (win is { IsVisible: true } &&

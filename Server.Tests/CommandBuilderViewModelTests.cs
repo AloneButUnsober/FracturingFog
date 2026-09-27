@@ -2,11 +2,13 @@
 // SPDX-FileCopyrightText: 2026 Bradley Brown
 
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using System.Reactive.Linq;
 using System.Threading.Tasks;
 using FracturingFog.Batch;
 using FracturingFog.Cli;
+using FracturingFog.Models;
 using FracturingFog.UI.Avalonia.ViewModels;
 using Xunit;
 
@@ -178,5 +180,138 @@ public sealed class CommandBuilderViewModelTests
         Assert.Contains("--aov-exr", vm.Hint);
         var exr = vm.Groups.Single(g => g.Group == BatchFlagGroup.Exr);
         Assert.Equal("", exr.Summary);   // the parked flag is not counted as set here
+    }
+
+    // ── Library pickers (#995) ───────────────────────────────────────────────
+
+    private sealed class FakeLibraries
+    {
+        public readonly List<(BatchFlagSource source, FractalType? fractal)> Calls = new();
+        public IReadOnlyList<string> Names(BatchFlagSource source, FractalType? fractal)
+        {
+            Calls.Add((source, fractal));
+            return source switch
+            {
+                BatchFlagSource.Theme  => fractal == FractalType.Julia
+                    ? new[] { "— Compatible —", "Julia Glow", "Fire", "Fire", " " }
+                    : new[] { "— Compatible —", "Fire", "Ocean" },
+                BatchFlagSource.Region => new[] { "Seahorse Valley", "Elephant Valley" },
+                BatchFlagSource.Scene  => new[] { "Intro", "Outro" },
+                BatchFlagSource.SlideshowConfig => new[] { "Default", "Night" },
+                BatchFlagSource.RemoteConnection => throw new InvalidOperationException("vault locked"),
+                _ => Array.Empty<string>(),
+            };
+        }
+    }
+
+    private static (CommandBuilderViewModel vm, FakeLibraries libs) WithLibraries()
+    {
+        var libs = new FakeLibraries();
+        var vm = new CommandBuilderViewModel { NamesProvider = libs.Names };
+        return (vm, libs);
+    }
+
+    [Fact]
+    public void LibraryRows_AreEditableCombos_OthersArePlainText()
+    {
+        var (vm, _) = WithLibraries();
+        Assert.True(Row(vm, BatchFlags.Theme).HasSuggestions);
+        Assert.False(Row(vm, BatchFlags.Theme).IsPlainText);
+        Assert.True(Row(vm, BatchFlags.Region).HasSuggestions);
+        Assert.False(Row(vm, BatchFlags.X).HasSuggestions);
+        Assert.True(Row(vm, BatchFlags.X).IsPlainText);
+        Assert.False(Row(vm, BatchFlags.Quality).HasSuggestions);   // fixed choices stay a plain combo
+    }
+
+    [Fact]
+    public void Themes_FollowTheFractal_WithoutHeadersBlanksOrDuplicates()
+    {
+        var (vm, libs) = WithLibraries();
+        var theme = Row(vm, BatchFlags.Theme);
+        Assert.Equal(new[] { "Fire", "Ocean" }, theme.Suggestions);           // default fractal: Mandelbrot
+        Assert.Contains((BatchFlagSource.Theme, (FractalType?)FractalType.Mandelbrot), libs.Calls);
+
+        Row(vm, BatchFlags.Fractal).Value = "Julia";
+        Assert.Equal(new[] { "Julia Glow", "Fire" }, theme.Suggestions);
+    }
+
+    [Fact]
+    public void Regions_AreNotFilteredByTheImplicitDefaultFractal()
+    {
+        var (vm, libs) = WithLibraries();
+        _ = Row(vm, BatchFlags.Region).Suggestions;
+        Assert.Contains((BatchFlagSource.Region, (FractalType?)null), libs.Calls);
+        Row(vm, BatchFlags.Fractal).Value = "Julia";
+        _ = Row(vm, BatchFlags.Region).Suggestions;
+        Assert.Contains((BatchFlagSource.Region, (FractalType?)FractalType.Julia), libs.Calls);
+    }
+
+    [Fact]
+    public void Names_AreCached_UntilReseeded()
+    {
+        var libs = new FakeLibraries();
+        var vm = new CommandBuilderViewModel((w, h) => new LiveCommandSeed(new[] { "--x", "0" }, Array.Empty<string>()))
+        {
+            NamesProvider = libs.Names,
+        };
+        _ = Row(vm, BatchFlags.Theme).Suggestions;
+        int before = libs.Calls.Count(c => c.source == BatchFlagSource.Theme);
+        _ = Row(vm, BatchFlags.Theme).Suggestions;
+        Assert.Equal(before, libs.Calls.Count(c => c.source == BatchFlagSource.Theme));
+        vm.SeedFromLiveCommand.Execute().Subscribe();
+        _ = Row(vm, BatchFlags.Theme).Suggestions;
+        Assert.True(libs.Calls.Count(c => c.source == BatchFlagSource.Theme) > before);
+    }
+
+    [Fact]
+    public void AValueNotInTheLibrary_IsAWarning()
+    {
+        var (vm, _) = WithLibraries();
+        Row(vm, BatchFlags.X).Value = "0";
+        Row(vm, BatchFlags.Y).Value = "0";
+        Row(vm, BatchFlags.Zoom).Value = "1";
+        var theme = Row(vm, BatchFlags.Theme);
+        theme.Value = "Fire";
+        Assert.False(theme.HasStatus);
+        theme.Value = "fire";                                                 // batch lookup is case-insensitive
+        Assert.False(theme.HasStatus);
+        theme.Value = "Nope";
+        Assert.True(theme.StatusIsWarning);
+        Assert.Contains("'Nope' is not in the themes compatible with Mandelbrot", theme.Status);
+        Assert.True(vm.IsValid);                                              // a warning, not a parse error
+    }
+
+    [Fact]
+    public void AThrowingOrMissingProvider_GivesNoNames_AndNoWarning()
+    {
+        var (vm, _) = WithLibraries();
+        vm.IsRemote = true;
+        var conn = Row(vm, BatchFlags.Connection);
+        Assert.Empty(conn.Suggestions);                                       // provider threw
+        conn.Value = "box";
+        Assert.False(conn.HasStatus);
+
+        var bare = new CommandBuilderViewModel();
+        Assert.Empty(Row(bare, BatchFlags.Theme).Suggestions);
+    }
+
+    [Fact]
+    public void ModeValue_OffersSavedPresetsAndScenes_AndFlagsUnknownOnes()
+    {
+        var (vm, _) = WithLibraries();
+        vm.SelectedMode = vm.Modes.Single(m => m.Mode == BatchMode.Slideshow);
+        Assert.True(vm.ModeValueIsName);
+        Assert.Equal(new[] { "Default", "Night" }, vm.ModeValueSuggestions);
+
+        vm.SelectedMode = vm.Modes.Single(m => m.Mode == BatchMode.Scene);
+        Assert.Equal(new[] { "Intro", "Outro" }, vm.ModeValueSuggestions);
+        vm.ModeValue = "Missing";
+        Assert.Contains("not in the saved scenes", vm.Hint);
+        vm.ModeValue = "Intro";
+        Assert.DoesNotContain("not in the saved scenes", vm.Hint);
+
+        vm.SelectedMode = vm.Modes.Single(m => m.Mode == BatchMode.Regrade);
+        Assert.False(vm.ModeValueIsName);
+        Assert.True(vm.ModeValueIsPath);
     }
 }

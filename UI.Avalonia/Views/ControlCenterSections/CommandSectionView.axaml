@@ -56,7 +56,11 @@
                 <StackPanel Spacing="2" IsVisible="{Binding HasModeValue}">
                     <TextBlock Text="{Binding ModeValueLabel}" Foreground="#9A9A9A" FontSize="11" />
                     <Grid ColumnDefinitions="*,Auto" ColumnSpacing="4">
-                        <TextBox Grid.Column="0" Text="{Binding ModeValue}" FontSize="11" />
+                        <TextBox Grid.Column="0" Text="{Binding ModeValue}" FontSize="11" IsVisible="{Binding ModeValueIsPath}" />
+                        <!-- Slideshow preset / scene: pick a saved name or type one (#995). -->
+                        <ComboBox Grid.Column="0" IsEditable="True" IsVisible="{Binding ModeValueIsName}"
+                                  ItemsSource="{Binding ModeValueSuggestions}" Text="{Binding ModeValue}"
+                                  HorizontalAlignment="Stretch" FontSize="11" />
                         <Button Grid.Column="1" Classes="action neutral" Content="…" IsVisible="{Binding ModeValueIsPath}"
                                 Command="{Binding BrowseModeValueCommand}" ToolTip.Tip="Choose the input OpenEXR file" />
                     </Grid>
@@ -125,8 +129,13 @@
                                             <ComboBox Grid.Column="1" IsVisible="{Binding IsChoice}" IsEnabled="{Binding IsEditable}"
                                                       ItemsSource="{Binding Choices}" SelectedItem="{Binding Value}"
                                                       HorizontalAlignment="Stretch" FontSize="11" />
-                                            <TextBox Grid.Column="1" IsVisible="{Binding IsTextEntry}" IsEnabled="{Binding IsEditable}"
+                                            <TextBox Grid.Column="1" IsVisible="{Binding IsPlainText}" IsEnabled="{Binding IsEditable}"
                                                      Text="{Binding Value}" Watermark="{Binding Placeholder}" FontSize="11" />
+                                            <!-- Library-backed name (region, theme, preset, …): pick or type (#995). -->
+                                            <ComboBox Grid.Column="1" IsEditable="True" IsVisible="{Binding HasSuggestions}" IsEnabled="{Binding IsEditable}"
+                                                      ItemsSource="{Binding Suggestions}" Text="{Binding Value}"
+                                                      PlaceholderText="{Binding Placeholder}"
+                                                      HorizontalAlignment="Stretch" FontSize="11" MaxDropDownHeight="320" />
                                             <Button Grid.Column="2" Classes="action neutral" Content="…"
                                                     IsVisible="{Binding HasBrowse}" Command="{Binding BrowseCommand}"
                                                     ToolTip.Tip="Choose a file" />
