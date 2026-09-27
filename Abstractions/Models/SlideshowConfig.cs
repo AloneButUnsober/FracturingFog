@@ -70,6 +70,43 @@ namespace FracturingFog.Models
         PingPong = 2,
     }
 
+    /// <summary>Shared Adaptive-sweep curve (#935). One definition for the
+    /// Control Center HE Sweep, the slideshow per-leg sweep and the video
+    /// slideshow sweep so all three map phase → value identically.</summary>
+    public static class AdaptiveSweepMath
+    {
+        /// <summary>Adaptive value at <paramref name="phase"/> ∈ [0,1] of a
+        /// sweep between <paramref name="start"/> and <paramref name="end"/>.
+        /// Forward = start → end, Reverse = end → start, PingPong = start →
+        /// end → start (duration split in half). Phase is clamped.</summary>
+        public static int Value(double phase, int start, int end, AdaptiveSweepMode mode)
+        {
+            switch (mode)
+            {
+                case AdaptiveSweepMode.Reverse:
+                    return Lerp(end, start, phase);
+                case AdaptiveSweepMode.PingPong:
+                    double pp = phase < 0.5 ? phase * 2.0 : (1.0 - phase) * 2.0;
+                    return Lerp(start, end, pp);
+                case AdaptiveSweepMode.Forward:
+                default:
+                    return Lerp(start, end, phase);
+            }
+        }
+
+        /// <summary>Value the sweep sits at when a cycle begins.</summary>
+        public static int Initial(int start, int end, AdaptiveSweepMode mode) => Value(0.0, start, end, mode);
+
+        /// <summary>Value the sweep parks at when a non-looping cycle ends.</summary>
+        public static int Terminal(int start, int end, AdaptiveSweepMode mode) => Value(1.0, start, end, mode);
+
+        private static int Lerp(int a, int b, double t)
+        {
+            t = Math.Clamp(t, 0.0, 1.0);
+            return (int)Math.Round(a + (b - a) * t);
+        }
+    }
+
     /// <summary>Adaptive-sweep block: drives the Adaptive slider over a leg
     /// from <see cref="Start"/> to <see cref="End"/> using <see cref="Mode"/>.
     /// Disabled when <see cref="Enabled"/> is false.</summary>
