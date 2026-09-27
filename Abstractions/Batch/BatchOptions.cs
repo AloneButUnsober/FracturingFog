@@ -3,7 +3,7 @@
 
 // Batch/BatchOptions.cs
 // Parsed command-line options for headless --batch processing.
-// See BatchEntry.PrintUsage for the supported flag grammar.
+// Flag reference: BatchFlagCatalog (also the source of --batch --help).
 
 using System;
 using System.Globalization;
@@ -354,7 +354,7 @@ namespace FracturingFog.Batch
                 string a = args[i];
                 switch (a.ToLowerInvariant())
                 {
-                    case "--mode":
+                    case BatchFlags.Mode:
                     case "-m":
                         if (!Next(args, ref i, a, out string mv, out error)) return false;
                         if (string.Equals(mv, "image", StringComparison.OrdinalIgnoreCase)) opts.Mode = BatchMode.Image;
@@ -364,30 +364,30 @@ namespace FracturingFog.Batch
                         else { error = $"Unknown --mode '{mv}'. Use image|video|slideshow|scene."; return false; }
                         break;
 
-                    case "--slideshow":
+                    case BatchFlags.Slideshow:
                         if (!Next(args, ref i, a, out string sname, out error)) return false;
                         opts.Mode = BatchMode.Slideshow;
                         opts.SlideshowConfigName = sname;
                         break;
 
-                    case "--scene":
+                    case BatchFlags.Scene:
                         if (!Next(args, ref i, a, out string scName, out error)) return false;
                         opts.Mode = BatchMode.Scene;
                         opts.SceneName = scName;
                         break;
 
-                    case "--motion-blur":
+                    case BatchFlags.MotionBlur:
                     case "--subframes":
                         if (!NextInt(args, ref i, a, out int mbv, out error)) return false;
                         opts.MotionBlurSubframes = mbv;
                         break;
 
-                    case "--shutter":
+                    case BatchFlags.Shutter:
                         if (!NextDouble(args, ref i, a, out double shv, out error)) return false;
                         opts.ShutterFraction = shv;
                         break;
 
-                    case "--encode":
+                    case BatchFlags.Encode:
                         if (!Next(args, ref i, a, out string evl, out error)) return false;
                         switch (evl.ToLowerInvariant())
                         {
@@ -472,7 +472,7 @@ namespace FracturingFog.Batch
                         opts.OutputPath = ov;
                         break;
 
-                    case "--name":
+                    case BatchFlags.Name:
                     case "-n":
                         if (!Next(args, ref i, a, out string nv, out error)) return false;
                         opts.OutputName = nv;
@@ -484,24 +484,24 @@ namespace FracturingFog.Batch
                         opts.QualityName = qv;
                         break;
 
-                    case "--seconds":
+                    case BatchFlags.Seconds:
                     case "--secs":
                         if (!NextDouble(args, ref i, a, out double sv, out error)) return false;
                         opts.VideoSeconds = sv;
                         break;
 
-                    case "--fps":
+                    case BatchFlags.Fps:
                         if (!NextInt(args, ref i, a, out int fpsv, out error)) return false;
                         opts.VideoFps = fpsv;
                         break;
 
-                    case "--start-zoom":
+                    case BatchFlags.StartZoom:
                         if (!NextDouble(args, ref i, a, out double sz, out error)) return false;
                         opts.VideoStartZoom = sz;
                         opts.VideoStartZoomSet = true;
                         break;
 
-                    case "--video-motion":
+                    case BatchFlags.VideoMotion:
                         if (!Next(args, ref i, a, out string vmv, out error)) return false;
                         switch (vmv.ToLowerInvariant())
                         {
@@ -516,25 +516,25 @@ namespace FracturingFog.Batch
                         }
                         break;
 
-                    case "--orbit":
+                    case BatchFlags.Orbit:
                         if (!NextDouble(args, ref i, a, out double orv, out error)) return false;
                         opts.VideoOrbitDegrees = orv;
                         break;
 
-                    case "--no-drift":
+                    case BatchFlags.NoDrift:
                         opts.VideoNoDrift = true;
                         break;
 
-                    case "--video-seed":
+                    case BatchFlags.VideoSeed:
                         if (!NextInt(args, ref i, a, out int vsd, out error)) return false;
                         opts.VideoSeed = vsd;
                         break;
 
-                    case "--reverse":
+                    case BatchFlags.Reverse:
                         opts.VideoReverse = true;
                         break;
 
-                    case "--lossless":
+                    case BatchFlags.Lossless:
                     case "-l":
                         if (!Next(args, ref i, a, out string lv, out error)) return false;
                         switch (lv.ToLowerInvariant())
@@ -557,12 +557,12 @@ namespace FracturingFog.Batch
                         }
                         break;
 
-                    case "--keep-frames":
+                    case BatchFlags.KeepFrames:
                         opts.KeepFrames = true;
                         opts.KeepFramesSpecified = true;
                         break;
 
-                    case "--more-colors":
+                    case BatchFlags.MoreColors:
                     case "--more-colours":
                         opts.MoreColors = true;
                         break;
@@ -571,16 +571,16 @@ namespace FracturingFog.Batch
                     // inverts to mean "turn it off". --no-watermark is a clearer
                     // alias for the same action.
                     case "--watermark":
-                    case "--no-watermark":
+                    case BatchFlags.NoWatermark:
                         opts.Watermark = false;
                         break;
 
-                    case "--no-keep-frames":
+                    case BatchFlags.NoKeepFrames:
                         opts.KeepFrames = false;
                         opts.KeepFramesSpecified = true;
                         break;
 
-                    case "--verbose":
+                    case BatchFlags.Verbose:
                     case "-v":
                         opts.Verbose = true;
                         break;
@@ -1115,21 +1115,21 @@ namespace FracturingFog.Batch
                         opts.Relief = true;
                         break;
 
-                    case "--remote":
+                    case BatchFlags.Remote:
                         opts.Remote = true;
                         break;
 
-                    case "--connection":
+                    case BatchFlags.Connection:
                         if (!Next(args, ref i, a, out string conn, out error)) return false;
                         opts.RemoteConnection = conn;
                         break;
 
-                    case "--render":
+                    case BatchFlags.Render:
                         if (!Next(args, ref i, a, out string preset, out error)) return false;
                         opts.RemotePreset = preset;
                         break;
 
-                    case "--help":
+                    case BatchFlags.Help:
                     case "-?":
                         error = "__help__";
                         return false;
