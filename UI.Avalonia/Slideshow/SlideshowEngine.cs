@@ -268,6 +268,19 @@ namespace FracturingFog.UI.Avalonia.Slideshow
                     // compatible → the leg plays static (unchanged behaviour).
                     var legAnimation = ResolveLegAnimation(regionName);
 
+                    // #987 — the animation now runs for the whole region: started
+                    // once after the region transition commits, kept going across
+                    // its theme changes, stopped when the region ends (finally
+                    // below). Only Mandelbrot regions can fade live — their
+                    // solid-theme peek renders on a private calculator, whereas
+                    // the non-Mandelbrot peek goes through the live host
+                    // (ApplyRegion + colour map + alt resize), so there the
+                    // animation is paused around the pick + static fade instead.
+                    bool animStarted = false;
+                    bool liveFadeRegion = string.Equals(
+                        _service.GetRegionFractalTypeName(regionName), "Mandelbrot",
+                        StringComparison.Ordinal);
+
                     // Matches legacy Slideshow.cs cadence:
                     //   FocusRegion=true  (Region Focus) → 3 themes/region;
                     //   FocusRegion=false (Color Focus)  → 8 themes/region,
@@ -278,10 +291,18 @@ namespace FracturingFog.UI.Avalonia.Slideshow
                     int totalRegionMs = Math.Max(3_000, _settings.TotalDisplayMsPerRegion);
 
                     int t = 0;
+                    try
+                    {
                     while (!ct.IsCancellationRequested)
                     {
                         int themesPerRegion = FocusRegion ? 3 : 8;
                         if (t >= themesPerRegion) break;
+
+                        // Non-Mandelbrot peek touches the live host — hold the
+                        // animation still (keeping its phase) until the fade is done.
+                        bool paused = false;
+                        if (animStarted && !liveFadeRegion)
+                            paused = await PauseLegAnimationAsync(ct);
 
                         // #434 — when RandomizeThemes is on, generate a fresh random
                         // theme def for this slot instead of picking a library name;
@@ -307,8 +328,12 @@ namespace FracturingFog.UI.Avalonia.Slideshow
 
                         if (t == 0)
                             await RegionTransitionAsync(regionName, themeName, themeDef, fadeSteps, regionStepMs, ct);
+                        else if (animStarted && liveFadeRegion)
+                            await AnimatedThemeTransitionAsync(themeName, themeDef, fadeSteps, themeStepMs, ct);
                         else
                             await ThemeTransitionAsync(themeName, themeDef, fadeSteps, themeStepMs, ct);
+
+                        if (paused) await ResumeLegAnimationAsync(ct);
 
                         StatusChanged?.Invoke(this,
                             $"Slideshow: {regionName}{(themeName != null ? " / " + themeName : "")}");
@@ -317,11 +342,15 @@ namespace FracturingFog.UI.Avalonia.Slideshow
                         int legMs = Math.Max(800, totalRegionMs / Math.Max(1, themesPerRegionNow));
                         var sweep = StartAdaptiveSweep(legMs, ct);
 
-                        // Start the leg's animation on the shared bus AFTER the
-                        // cross-fade committed, so the bus's live renders don't
-                        // race the fade's snapshot/present. Stopped in finally
-                        // (below) before the next transition for the same reason.
-                        await StartLegAnimationAsync(legAnimation, ct);
+                        // Start the region's animation on the shared bus AFTER the
+                        // region cross-fade committed, so the bus's live renders
+                        // don't race the fade's snapshot/present. Runs until the
+                        // region ends; theme fades ride its frames (#987).
+                        if (!animStarted && legAnimation != null)
+                        {
+                            await StartLegAnimationAsync(legAnimation, ct);
+                            animStarted = true;
+                        }
 
                         // themeMs is recomputed each WaitAsync tick so a
                         // FocusRegion toggle mid-theme shortens (or extends)
@@ -335,10 +364,6 @@ namespace FracturingFog.UI.Avalonia.Slideshow
                         }
                         finally
                         {
-                            // Stop the leg animation before tearing down the
-                            // sweep so the next transition's snapshot is a
-                            // static frame (no bus render mid-fade).
-                            await StopLegAnimationAsync(legAnimation);
                             // CTS.Dispose alone does NOT cancel the token —
                             // must explicitly Cancel + await the sweep Task
                             // or each leg leaks a Task.Run that keeps writing
@@ -358,6 +383,14 @@ namespace FracturingFog.UI.Avalonia.Slideshow
                         if (skipRegion) break;
                         if (ct.IsCancellationRequested) break;
                         t++;
+                    }
+                    }
+                    finally
+                    {
+                        // Region over — stop its animation so the next region's
+                        // transition snapshots a static frame (no bus render
+                        // mid-fade).
+                        if (animStarted) await StopLegAnimationAsync(legAnimation);
                     }
                 }
             }
@@ -605,6 +638,90 @@ namespace FracturingFog.UI.Avalonia.Slideshow
                 if (bus != null) { bus.ClearDynamic(); bus.Refresh(); }
                 return 0;
             }, CancellationToken.None);
+        }
+
+        // #987 — hold the running animation still without dropping its animators
+        // (phase kept), so a static fade can run and the animation resumes where
+        // it was. Returns true when the bus was actually animating.
+        private Task<bool> PauseLegAnimationAsync(CancellationToken ct)
+            => OnUiAsync(() =>
+            {
+                var bus = AnimationBusHost.Bus;
+                if (bus == null || !bus.IsAnimating) return false;
+                bus.Stop();
+                return true;
+            }, ct);
+
+        private Task ResumeLegAnimationAsync(CancellationToken ct)
+            => OnUiAsync(() =>
+            {
+                AnimationBusHost.Bus?.Refresh();
+                return 0;
+            }, ct);
+
+        /// <summary>#987 — theme change while the region's animation is running.
+        /// The incoming palette is blended in live on the host, so the
+        /// animation's own frames carry the cross-fade and it never stops. Falls
+        /// back to the static <see cref="ThemeTransitionAsync"/> (with the
+        /// animation paused, not restarted) when the bus isn't animating or the
+        /// host can't blend these themes live.</summary>
+        private async Task AnimatedThemeTransitionAsync(string? themeName, ColorThemeDef? themeDef, int steps, int stepMs, CancellationToken ct)
+        {
+            if (themeName == null && themeDef == null) return;
+            string label = themeName ?? themeDef!.Name;
+
+            bool live = await OnUiAsync(() =>
+            {
+                var bus = AnimationBusHost.Bus;
+                if (bus == null || !bus.IsAnimating) return false;
+                return _host.BeginLiveColorFade(() => themeDef != null
+                    ? _service.ApplyThemeDefSilent(themeDef)
+                    : _service.ApplyThemeSilent(themeName!));
+            }, ct);
+
+            if (!live)
+            {
+                bool paused = await PauseLegAnimationAsync(ct);
+                try { await ThemeTransitionAsync(themeName, themeDef, steps, stepMs, ct); }
+                finally { if (paused) await ResumeLegAnimationAsync(CancellationToken.None); }
+                return;
+            }
+
+            await OnUiAsync(() => { _host.ThemeName = label; return 0; }, ct);
+
+            // Same duration as the static fade; the animation's renders pick up
+            // each new blend factor as they land.
+            steps = Math.Max(1, steps);
+            try
+            {
+                for (int s = 1; s < steps; s++)
+                {
+                    if (ct.IsCancellationRequested) return;
+                    double a = s / (double)steps;
+                    await OnUiAsync(() => { _host.SetLiveColorFade(a); return 0; }, ct);
+                    EmitLiveFrame();
+                    try { await Task.Delay(stepMs, ct).ConfigureAwait(false); }
+                    catch (OperationCanceledException) { return; }
+                }
+            }
+            finally
+            {
+                // Always commit the plain incoming map (also on cancel) so the
+                // per-pixel double lookup never outlives the fade.
+                await OnUiAsync(() => { _host.EndLiveColorFade(); return 0; }, CancellationToken.None);
+            }
+            EmitLiveFrame();
+
+            ThemeApplied?.Invoke(this, label);
+        }
+
+        // Recording sink during a live fade: forward whatever is on screen now
+        // (the latest animation frame, coloured through the blend).
+        private void EmitLiveFrame()
+        {
+            if (FrameSink == null) return;
+            var b = _host.SnapshotFrame(out int w, out int h);
+            if (b.Length > 0 && w > 0 && h > 0) EmitFrame(b, w, h);
         }
 
         /// <summary>Region change: offscreen-render incoming, cross-fade, commit live.</summary>

@@ -132,6 +132,29 @@ namespace FracturingFog.Render
         /// </summary>
         void PresentBuffer(uint[] bgra, int width, int height);
 
+        /// <summary>
+        /// #987 — begin a LIVE palette cross-fade: capture the active colour
+        /// map as "from", invoke <paramref name="applyTarget"/> (which must set
+        /// the incoming theme silently, e.g. <c>ApplyThemeSilent</c>), capture
+        /// the result as "to", and install a per-pixel blend of the two at
+        /// T = 0. Every subsequent render (e.g. animation-bus frames) colours
+        /// through the blend, so the view keeps moving while the palette fades.
+        /// Returns false — with the "from" map restored, so the caller can fall
+        /// back to a static snapshot fade — when the view or either theme can't
+        /// be blended live (3D, orbit / interior / post-process maps, apply
+        /// failed). Default: unsupported.
+        /// </summary>
+        bool BeginLiveColorFade(Func<bool> applyTarget) => false;
+
+        /// <summary>#987 — set the live cross-fade blend factor (0 = outgoing,
+        /// 1 = incoming). No-op when no live fade is active.</summary>
+        void SetLiveColorFade(double t) { }
+
+        /// <summary>#987 — finish the live cross-fade: install the incoming
+        /// colour map directly (dropping the per-pixel double lookup). No-op
+        /// when no live fade is active.</summary>
+        void EndLiveColorFade() { }
+
         /// <summary>Render the most-recently-completed frame as a live ASCII /
         /// text-art cell grid (#227), consuming the real IColorMap-coloured
         /// buffer + smooth field. Returns null before the first frame. Thread-safe
