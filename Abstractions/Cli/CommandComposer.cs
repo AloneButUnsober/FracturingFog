@@ -144,7 +144,7 @@ namespace FracturingFog.Cli
                     if (s_lookGroups.Contains(Spec(name).Group)) _sel.Remove(name);
                 foreach (var (spec, value) in parsed)
                 {
-                    if (s_lookGroups.Contains(spec.Group)) _sel[spec.Name] = value;
+                    if (s_lookGroups.Contains(spec.Group)) Put(spec, value);
                     else if ((spec.Name == BatchFlags.Width || spec.Name == BatchFlags.Height) && !_sel.ContainsKey(spec.Name))
                         _sel[spec.Name] = value;
                 }
@@ -168,13 +168,32 @@ namespace FracturingFog.Cli
                     if (spec.Name == BatchFlags.Mode && value != null
                         && Enum.TryParse<BatchMode>(value, ignoreCase: true, out var m)) { mode = m; continue; }
                     if (spec.SelectsMode is BatchMode sm) mode = sm;
-                    _sel[spec.Name] = value;
+                    Put(spec, value);
                 }
                 if (!_sel.ContainsKey(BatchFlags.Out)) _sel[BatchFlags.Out] = OutputPlaceholder;
                 Mode = mode;
                 Remote = remote;
                 Raise();
             });
+        }
+
+        /// <summary>Store a parsed value; a repeatable flag (--param) accumulates
+        /// one value per line.</summary>
+        private void Put(BatchFlagSpec spec, string? value)
+        {
+            if (spec.Repeatable && _sel.TryGetValue(spec.Name, out var prev) && !string.IsNullOrEmpty(prev))
+                _sel[spec.Name] = prev + "\n" + value;
+            else
+                _sel[spec.Name] = value;
+        }
+
+        /// <summary>The individual values of a flag: one per non-blank line for a
+        /// repeatable flag, else the single value.</summary>
+        public static IEnumerable<string> ValuesOf(BatchFlagSpec spec, string? stored)
+        {
+            if (!spec.Repeatable) { yield return stored ?? ""; yield break; }
+            foreach (var line in (stored ?? "").Split('\n'))
+                if (!string.IsNullOrWhiteSpace(line)) yield return line.Trim();
         }
 
         private static List<(BatchFlagSpec spec, string? value)> Tokenize(IReadOnlyList<string> args)
@@ -298,8 +317,8 @@ namespace FracturingFog.Cli
             }
             foreach (var s in Emitted)
             {
-                args.Add(s.Name);
-                if (s.TakesValue) args.Add(_sel[s.Name] ?? "");
+                if (!s.TakesValue) { args.Add(s.Name); continue; }
+                foreach (var v in ValuesOf(s, _sel[s.Name])) { args.Add(s.Name); args.Add(v); }
             }
             return args;
         }

@@ -135,6 +135,11 @@
                                                       HorizontalAlignment="Stretch" FontSize="11" />
                                             <TextBox Grid.Row="1" Grid.Column="1" IsVisible="{Binding IsPlainText}" IsEnabled="{Binding IsEditable}"
                                                      Text="{Binding Value}" Watermark="{Binding Placeholder}" FontSize="11" />
+                                            <!-- Repeatable flag (param, #997): one KEY=VALUE per line. -->
+                                            <TextBox Grid.Row="1" Grid.Column="1" IsVisible="{Binding IsMultiLine}" IsEnabled="{Binding IsEditable}"
+                                                     Text="{Binding Value}" Watermark="{Binding Placeholder}" FontSize="11"
+                                                     AcceptsReturn="True" TextWrapping="NoWrap" MinHeight="48" MaxHeight="160"
+                                                     FontFamily="Consolas,Menlo,monospace" />
                                             <!-- Library-backed name (region, theme, preset, …): pick or type (#995). -->
                                             <ComboBox Grid.Row="1" Grid.Column="1" IsEditable="True" IsVisible="{Binding HasSuggestions}" IsEnabled="{Binding IsEditable}"
                                                       ItemsSource="{Binding Suggestions}" Text="{Binding Value}"
@@ -173,7 +178,7 @@
                 <CheckBox Content="Stereo / side-by-side (SBS) output" IsEnabled="False" FontSize="11"
                           ToolTip.Tip="The batch renderer has no stereo path yet: fake SBS needs a depth buffer and double-width output, true SBS a per-eye 3D render." />
                 <TextBlock Foreground="#8A8A8A" FontSize="11" TextWrapping="Wrap"
-                           Text="Fractal-specific settings beyond the flags above (a Julia constant, dual-orbit settings, …) and the 3D camera are only carried by a saved region: save the view as a region and use --region." />
+                           Text="User-code equations (User Equation, Sandbox, User Bulb) travel only with a saved region: save the view as a region and use --region." />
                 <TextBlock Foreground="#8A8A8A" FontSize="11" TextWrapping="Wrap"
                            Text="Saved animations run headless only inside a scene (Scene mode)." />
             </StackPanel>

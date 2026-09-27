@@ -51,6 +51,15 @@ namespace FracturingFog.Batch
                 return 2;
             }
 
+            // #997 — reject an unknown --param key / bad value before any render
+            // starts (the keys are region-snapshot names, resolved Engine-side).
+            if (opts.Params.Count > 0
+                && RegionFractalParams.FromKeyValues(opts.Params, opts.FractalType, out string? paramError) == null)
+            {
+                Console.Error.WriteLine($"batch: {paramError}");
+                return 2;
+            }
+
             // Load user-defined themes + regions so --region and --theme can
             // resolve names the user authored interactively in earlier runs.
             try { FracturingFog.Models.ColorPalette.LoadUserThemes(); } catch { }

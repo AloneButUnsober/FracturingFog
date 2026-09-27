@@ -332,6 +332,11 @@ public sealed partial class ControlCenterViewModel : ViewModelBase
     /// <summary>The Command section's model (#994).</summary>
     public CommandBuilderViewModel CommandBuilder { get; }
 
+    /// <summary>#997 — host-supplied serializer of the live per-family settings
+    /// to region-snapshot <c>Key=Value</c> pairs (the snapshot lives in Engine,
+    /// which UI.Avalonia cannot reference). Emitted by the seed as --param.</summary>
+    public Func<FractalType, FractalParameters, IReadOnlyList<KeyValuePair<string, string>>>? FamilyParamsSerializer { get; set; }
+
     /// <summary>Read the live configuration off the shell's MainViewModel as
     /// --batch arguments (plus the fidelity gaps it cannot express), at the
     /// requested output size.</summary>
@@ -367,6 +372,9 @@ public sealed partial class ControlCenterViewModel : ViewModelBase
             ViewTransform  = vs.ViewTransform,           // S2 (#389) — output tonemap
             ViewExposureEv = vs.ViewExposureEv,
             Parameters  = fp,
+            FamilyParams = fp != null && FamilyParamsSerializer != null
+                ? FamilyParamsSerializer(main.SelectedFractalType, fp)
+                : Array.Empty<KeyValuePair<string, string>>(),
 
             // Relief core knobs (#363 — Tier-1). Emitted when relief is on.
             ReliefEnabled        = fp?.Relief2DEnabled ?? false,

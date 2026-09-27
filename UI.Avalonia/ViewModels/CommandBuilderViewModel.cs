@@ -124,6 +124,7 @@ public sealed class CommandBuilderViewModel : ViewModelBase
         BatchFlagSource.RemotePreset     => "saved render presets",
         BatchFlagSource.LSystemPreset    => "L-System presets",
         BatchFlagSource.FlamePreset      => "flame presets",
+        BatchFlagSource.ParamKey         => "--param keys",
         _                                => "saved names",
     };
 
@@ -400,14 +401,18 @@ public sealed class CommandFlagRowViewModel : ViewModelBase
     public string Description { get; }
     /// <summary>Watermark for an empty text box: the default the batch uses
     /// when the flag is left out, else the value shape (N, F, PATH, ...).</summary>
-    public string Placeholder => Spec.Default != null ? "default " + Spec.Default : Spec.ValueHint?.Trim('"') ?? "";
+    public string Placeholder => Spec.Default != null ? "default " + Spec.Default
+        : Spec.Repeatable && Spec.Example != null ? Spec.Example + "   (one per line)"
+        : Spec.ValueHint?.Trim('"') ?? "";
 
     public bool IsSwitch => Spec.Kind == BatchFlagKind.Switch;
     public bool IsChoice => Spec.Kind == BatchFlagKind.Choice;
     public bool IsTextEntry => !IsSwitch && !IsChoice;
     /// <summary>A text value drawn from a saved library: an editable combo.</summary>
-    public bool HasSuggestions => IsTextEntry && Spec.Source != BatchFlagSource.None;
-    public bool IsPlainText => IsTextEntry && !HasSuggestions;
+    public bool HasSuggestions => IsTextEntry && Spec.Source != BatchFlagSource.None && !Spec.Repeatable;
+    /// <summary>A repeatable flag (--param): one value per line.</summary>
+    public bool IsMultiLine => Spec.Repeatable;
+    public bool IsPlainText => IsTextEntry && !HasSuggestions && !IsMultiLine;
     public IReadOnlyList<string> Suggestions => HasSuggestions ? _owner.NamesFor(Spec.Source) : Array.Empty<string>();
     public bool HasBrowse => Spec.Kind == BatchFlagKind.Path;
     public IReadOnlyList<string> Choices => Spec.Choices;
@@ -441,6 +446,7 @@ public sealed class CommandFlagRowViewModel : ViewModelBase
         {
             if (!IsSelected || IsSwitch || IsChoice) return "";
             string v = Composer.ValueOf(Spec.Name) ?? "";
+            if (Spec.Repeatable) return RepeatableNote(v);
             switch (Spec.Kind)
             {
                 case BatchFlagKind.Int:
@@ -459,6 +465,24 @@ public sealed class CommandFlagRowViewModel : ViewModelBase
                     return string.IsNullOrWhiteSpace(v) ? "needs a value" : "";
             }
         }
+    }
+
+    /// <summary>--param lines: each KEY=VALUE, and a known key when the host
+    /// supplied the key list.</summary>
+    private string RepeatableNote(string stored)
+    {
+        var keys = _owner.NamesFor(Spec.Source);
+        int n = 0;
+        foreach (var line in CommandComposer.ValuesOf(Spec, stored))
+        {
+            n++;
+            int eq = line.IndexOf('=');
+            if (eq <= 0) return $"line {n}: expects KEY=VALUE (e.g. {Spec.Example})";
+            string key = line[..eq].Trim();
+            if (keys.Count > 0 && !keys.Contains(key, StringComparer.OrdinalIgnoreCase))
+                return $"line {n}: unknown key '{key}'";
+        }
+        return "";
     }
 
     private bool OutOfRange(double v)

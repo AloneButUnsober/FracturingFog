@@ -6,6 +6,7 @@
 // Flag reference: BatchFlagCatalog (also the source of --batch --help).
 
 using System;
+using System.Collections.Generic;
 using System.Globalization;
 using FracturingFog.Imaging;
 using FracturingFog.Models;
@@ -217,6 +218,12 @@ namespace FracturingFog.Batch
         public int? FlameIterations { get; set; }
         public double? FlameGamma { get; set; }
         public double? FlameVibrancy { get; set; }
+
+        /// <summary>Per-family settings from repeatable <c>--param Key=Value</c>
+        /// (#997), in command-line order. Keys are region-snapshot property names;
+        /// the batch renderer validates and applies them (Engine side) after the
+        /// region's own family params and before the dedicated flags above.</summary>
+        public List<KeyValuePair<string, string>> Params { get; } = new();
 
         // Acid Warp static pattern knobs (#363). Requires --fractal AcidWarp.
         public int? AcidPattern { get; set; }        // 0..19
@@ -693,6 +700,14 @@ namespace FracturingFog.Batch
                     case BatchFlags.FlameVibrancy:
                         if (!NextDouble(args, ref i, a, out double fvv, out error)) return false;
                         opts.FlameVibrancy = fvv;
+                        break;
+
+                    case BatchFlags.Param:
+                        if (!Next(args, ref i, a, out string pkv, out error)) return false;
+                        int eq = pkv.IndexOf('=');
+                        if (eq <= 0 || string.IsNullOrWhiteSpace(pkv.Substring(0, eq)))
+                            { error = $"{a} expects KEY=VALUE (e.g. JuliaCRe=-0.8), got '{pkv}'."; return false; }
+                        opts.Params.Add(new KeyValuePair<string, string>(pkv.Substring(0, eq).Trim(), pkv.Substring(eq + 1)));
                         break;
 
                     case BatchFlags.AcidPattern:

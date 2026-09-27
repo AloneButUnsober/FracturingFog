@@ -17,6 +17,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Numerics;
 using System.Text.Json;
 using System.Text.Json.Serialization;
@@ -1161,6 +1162,94 @@ namespace FracturingFog.Models
             list.Add(Activator.CreateInstance(t.GetGenericArguments()[0]));
             return list;
         }
+
+        // ── --param Key=Value (#997) ─────────────────────────────────────────
+        // The batch CLI carries any per-family setting (Julia constant, dual-orbit
+        // knobs, the 3D camera, ...) as repeatable `--param Key=Value`, keyed on
+        // this class's property names. Reusing the region snapshot means the CLI
+        // covers exactly what a saved region does, with the same apply path.
+
+        /// <summary>The snapshot's non-null fields as <c>Key=Value</c> pairs, in
+        /// declaration order: strings raw, numbers / booleans as their JSON text
+        /// (round-trippable), lists / objects as compact JSON.</summary>
+        public IReadOnlyList<KeyValuePair<string, string>> ToKeyValues()
+        {
+            var obj = JsonSerializer.SerializeToNode(this, s_omitNull) as System.Text.Json.Nodes.JsonObject;
+            var list = new List<KeyValuePair<string, string>>();
+            if (obj == null) return list;
+            foreach (var (key, node) in obj)
+            {
+                if (node == null) continue;
+                string text = node is System.Text.Json.Nodes.JsonValue v && v.TryGetValue(out string? str)
+                    ? str
+                    : node.ToJsonString();
+                list.Add(new KeyValuePair<string, string>(key, text));
+            }
+            return list;
+        }
+
+        /// <summary>The settable keys (property names), for help and suggestions.</summary>
+        public static IReadOnlyList<string> KeyNames { get; } =
+            typeof(RegionFractalParams).GetProperties(System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Instance)
+                .Where(pi => pi.CanWrite && pi.GetIndexParameters().Length == 0)
+                .Select(pi => pi.Name).ToArray();
+
+        /// <summary>Build a snapshot from <c>Key=Value</c> pairs (keys are
+        /// case-insensitive; later pairs win). <c>Cam3DFamily</c> also accepts a
+        /// fractal-type name, and defaults to <paramref name="cameraFamily"/> when
+        /// camera fields are given without it. Returns null with a message on an
+        /// unknown key or a value of the wrong type.</summary>
+        public static RegionFractalParams? FromKeyValues(
+            IEnumerable<KeyValuePair<string, string>> pairs, FractalType? cameraFamily, out string? error)
+        {
+            error = null;
+            var obj = new System.Text.Json.Nodes.JsonObject();
+            foreach (var (rawKey, rawValue) in pairs)
+            {
+                var pi = typeof(RegionFractalParams).GetProperty(rawKey?.Trim() ?? "",
+                    System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.IgnoreCase);
+                if (pi == null || !pi.CanWrite)
+                {
+                    var near = KeyNames.Where(k => k.Contains(rawKey?.Trim() ?? "", StringComparison.OrdinalIgnoreCase)).Take(5).ToList();
+                    error = $"Unknown --param key '{rawKey}'." + (near.Count > 0 ? " Did you mean: " + string.Join(", ", near) + "?" : "");
+                    return null;
+                }
+                string value = rawValue ?? "";
+                Type t = Nullable.GetUnderlyingType(pi.PropertyType) ?? pi.PropertyType;
+                System.Text.Json.Nodes.JsonNode? node;
+                if (t == typeof(string))
+                    node = System.Text.Json.Nodes.JsonValue.Create(value);
+                else if (pi.Name == nameof(Cam3DFamily) && Enum.TryParse<FractalType>(value.Trim(), true, out var fam) && !int.TryParse(value, out _))
+                    node = System.Text.Json.Nodes.JsonValue.Create((int)fam);
+                else
+                {
+                    try { node = System.Text.Json.Nodes.JsonNode.Parse(value.Trim()); }
+                    catch (JsonException) { node = null; }
+                    if (node == null) { error = $"--param {pi.Name}: '{value}' is not a valid {TypeLabel(t)}."; return null; }
+                }
+                obj[pi.Name] = node;
+            }
+
+            RegionFractalParams? rp;
+            try { rp = obj.Deserialize<RegionFractalParams>(s_omitNull); }
+            catch (Exception ex) when (ex is JsonException or InvalidOperationException or FormatException)
+            {
+                error = "--param: " + ex.Message;
+                return null;
+            }
+            if (rp == null) { error = "--param: no values."; return null; }
+
+            bool anyCamera = rp.Cam3DDistance.HasValue || rp.Cam3DTheta.HasValue || rp.Cam3DPhi.HasValue || rp.Cam3DSliceW.HasValue;
+            if (anyCamera && !rp.Cam3DFamily.HasValue && cameraFamily.HasValue)
+                rp.Cam3DFamily = (int)cameraFamily.Value;
+            return rp;
+        }
+
+        static string TypeLabel(Type t)
+            => t == typeof(double) || t == typeof(float) ? "number"
+             : t == typeof(int) || t == typeof(long) ? "whole number"
+             : t == typeof(bool) ? "true/false"
+             : "JSON value";
 
         /// <summary>
         /// Overlay every captured (non-null) field onto <paramref name="p"/>.

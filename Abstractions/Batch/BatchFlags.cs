@@ -105,6 +105,10 @@ namespace FracturingFog.Batch
         public const string FlameGamma     = "--flame-gamma";
         public const string FlameVibrancy  = "--flame-vibrancy";
 
+        // Any per-family setting, keyed on the region snapshot's property names
+        // (#997): `--param JuliaCRe=-0.8 --param Cam3DTheta=1.2`. Repeatable.
+        public const string Param          = "--param";
+
         // Acid Warp static pattern knobs (#363). Time-varying morph/flow/cycle
         // are animation-only and have no still-poster flag.
         public const string AcidPattern      = "--acid-pattern";

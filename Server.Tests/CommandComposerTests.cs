@@ -289,4 +289,38 @@ public sealed class CommandComposerTests
         Assert.Empty(State(c, BatchFlags.LightFlag(1, BatchFlags.LightFieldCone)).Missing);
         Assert.Empty(State(c, BatchFlags.Ior).Missing);
     }
+
+    // ── #997 repeatable --param ──────────────────────────────────────────────
+
+    [Fact]
+    public void RepeatableFlag_HoldsOneValuePerLine_AndEmitsEach()
+    {
+        var c = Coords();
+        c.Set(BatchFlags.Param, "JuliaCRe=-0.8\r\n\r\n  JuliaCIm=0.156  \n");
+        var args = c.Args();
+        int first = args.ToList().IndexOf(BatchFlags.Param);
+        Assert.Equal(new[] { BatchFlags.Param, "JuliaCRe=-0.8", BatchFlags.Param, "JuliaCIm=0.156" }, args.Skip(first).Take(4));
+        var o = ParseOk(args);
+        Assert.Equal(2, o.Params.Count);
+        Assert.Equal("0.156", o.Params[1].Value);
+    }
+
+    [Fact]
+    public void Load_AccumulatesRepeatedFlags()
+    {
+        var c = new CommandComposer();
+        c.Load(new[] { "--x", "0", "--y", "0", "--zoom", "1", "--param", "A=1", "--param", "B=2", "--out", "o" });
+        Assert.Equal("A=1\nB=2", c.ValueOf(BatchFlags.Param));
+        c.SeedLook(new[] { "--param", "C=3", "--param", "D=4" });   // a re-seed replaces, not appends
+        Assert.Equal("C=3\nD=4", c.ValueOf(BatchFlags.Param));
+    }
+
+    [Fact]
+    public void ParamIsImageAndVideoOnly()
+    {
+        var c = Coords();
+        c.Set(BatchFlags.Param, "JuliaCRe=1");
+        c.Mode = BatchMode.Slideshow;
+        Assert.DoesNotContain(BatchFlags.Param, c.Args());
+    }
 }
