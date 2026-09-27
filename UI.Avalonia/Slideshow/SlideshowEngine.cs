@@ -271,15 +271,10 @@ namespace FracturingFog.UI.Avalonia.Slideshow
                     // #987 — the animation now runs for the whole region: started
                     // once after the region transition commits, kept going across
                     // its theme changes, stopped when the region ends (finally
-                    // below). Only Mandelbrot regions can fade live — their
-                    // solid-theme peek renders on a private calculator, whereas
-                    // the non-Mandelbrot peek goes through the live host
-                    // (ApplyRegion + colour map + alt resize), so there the
-                    // animation is paused around the pick + static fade instead.
+                    // below). The solid-theme peek renders in isolation (#989,
+                    // RenderRegionThumbnail), so it never disturbs the running
+                    // animation for any fractal type.
                     bool animStarted = false;
-                    bool liveFadeRegion = string.Equals(
-                        _service.GetRegionFractalTypeName(regionName), "Mandelbrot",
-                        StringComparison.Ordinal);
 
                     // Matches legacy Slideshow.cs cadence:
                     //   FocusRegion=true  (Region Focus) → 3 themes/region;
@@ -297,12 +292,6 @@ namespace FracturingFog.UI.Avalonia.Slideshow
                     {
                         int themesPerRegion = FocusRegion ? 3 : 8;
                         if (t >= themesPerRegion) break;
-
-                        // Non-Mandelbrot peek touches the live host — hold the
-                        // animation still (keeping its phase) until the fade is done.
-                        bool paused = false;
-                        if (animStarted && !liveFadeRegion)
-                            paused = await PauseLegAnimationAsync(ct);
 
                         // #434 — when RandomizeThemes is on, generate a fresh random
                         // theme def for this slot instead of picking a library name;
@@ -331,12 +320,10 @@ namespace FracturingFog.UI.Avalonia.Slideshow
                                 regionName, themeName, themeDef, legAnimation, fadeSteps, regionStepMs, ct);
                         else if (t == 0)
                             await RegionTransitionAsync(regionName, themeName, themeDef, fadeSteps, regionStepMs, ct);
-                        else if (animStarted && liveFadeRegion)
+                        else if (animStarted)
                             await AnimatedThemeTransitionAsync(themeName, themeDef, fadeSteps, themeStepMs, ct);
                         else
                             await ThemeTransitionAsync(themeName, themeDef, fadeSteps, themeStepMs, ct);
-
-                        if (paused) await ResumeLegAnimationAsync(ct);
 
                         StatusChanged?.Invoke(this,
                             $"Slideshow: {regionName}{(themeName != null ? " / " + themeName : "")}");
@@ -506,9 +493,9 @@ namespace FracturingFog.UI.Avalonia.Slideshow
             {
                 if (ct.IsCancellationRequested) return themeName;
                 uint[]? probe;
-                try { probe = _service.RenderRegionOffscreen(regionName, themeName, PeekW, PeekH); }
+                try { probe = _service.RenderRegionThumbnail(regionName, themeName, null, PeekW, PeekH); }
                 catch { probe = null; }
-                // Non-Mandelbrot region — no probe path, give up the skip.
+                // No isolated probe for this type — give up the skip.
                 if (probe == null) return themeName;
                 if (!IsAllOneColor(probe)) return themeName;
 
@@ -561,9 +548,9 @@ namespace FracturingFog.UI.Avalonia.Slideshow
             {
                 if (ct.IsCancellationRequested) return def;
                 uint[]? probe;
-                try { probe = _service.RenderRegionOffscreenDef(regionName, def, PeekW, PeekH); }
+                try { probe = _service.RenderRegionThumbnail(regionName, null, def, PeekW, PeekH); }
                 catch { probe = null; }
-                if (probe == null || !IsAllOneColor(probe)) return def;   // null = non-Mandelbrot peek, accept
+                if (probe == null || !IsAllOneColor(probe)) return def;   // null = no isolated probe, accept
                 StatusChanged?.Invoke(this, $"Slideshow: skipping solid random theme on {regionName}");
                 def = GenerateRandomTheme(regionName);
             }

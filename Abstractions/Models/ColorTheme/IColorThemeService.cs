@@ -443,6 +443,21 @@ namespace FracturingFog.Models
         uint[]? RenderRegionOffscreenDef(string regionName, ColorThemeDef def, int width, int height) => null;
 
         /// <summary>
+        /// #989 — small preview of a region + theme (the slideshow's solid-frame
+        /// check) that NEVER touches the live view: no region applied to the live
+        /// state, no live calculator borrowed, no colour map swapped — so it is
+        /// safe while a region animation keeps rendering. Pass
+        /// <paramref name="def"/> for a transient theme, else
+        /// <paramref name="themeName"/>. Null when it can't be rendered in
+        /// isolation (e.g. source-compiled types that need the live compiler);
+        /// callers then skip the check. Default: the offscreen region render.
+        /// </summary>
+        uint[]? RenderRegionThumbnail(string regionName, string? themeName, ColorThemeDef? def, int width, int height)
+            => def != null ? RenderRegionOffscreenDef(regionName, def, width, height)
+             : themeName != null ? RenderRegionOffscreen(regionName, themeName, width, height)
+             : null;
+
+        /// <summary>
         /// JSON-serialize the named theme into a string suitable for inline
         /// transport over the client/server protocol. Returns null when the
         /// theme is algorithmic / hand-coded with no <see cref="ColorThemeData"/>

@@ -1248,6 +1248,68 @@ namespace FracturingFog.Hosting
             return RenderRegionOffscreenWithMap(regionName, region, map, width, height);
         }
 
+        /// <inheritdoc/>
+        public uint[]? RenderRegionThumbnail(string regionName, string? themeName, ColorThemeDef? def, int width, int height)
+        {
+            var region = ResolveRegion(regionName);
+            if (region == null || width <= 0 || height <= 0) return null;
+            var map = def != null ? BuildColorMap(def)
+                    : themeName != null ? ColorPalette.GetPaletteByName(themeName)
+                    : null;
+            if (map == null) return null;
+
+            // Mandelbrot already renders on a private MandelbrotCalculator.
+            if (region.FractalType == FractalType.Mandelbrot)
+                return RenderRegionOffscreenWithMap(regionName, region, map, width, height);
+
+            // Source-compiled types compile on the LIVE host (LoadRegionFractalParams)
+            // — can't be done in isolation; the caller skips the check.
+            if (region.FractalType is FractalType.UserEquation or FractalType.Sandbox or FractalType.UserBulb)
+                return null;
+
+            try
+            {
+                // Scratch params: the live params (globals the region doesn't carry)
+                // with the region's family params applied authoritatively — what
+                // ApplyRegion would produce, without mutating the live object.
+                var p = _renderHost?.ViewState.FractalParameters?.Clone() ?? new FractalParameters();
+                p.DomainWarpEnabled = false;
+                region.ApplyFamilyParams(p);
+
+                var quality = region.QualityPreset ?? QualityPreset.Standard;
+                double zoom = region.Zoom > 0 ? region.Zoom : 1.0;
+                var req = new FracturingFog.Imaging.PosterRequest
+                {
+                    Width = width, Height = height,
+                    CenterX = region.CenterX, CenterXLo = region.CenterXLo,
+                    CenterX2 = region.CenterX2, CenterX3 = region.CenterX3,
+                    CenterY = region.CenterY, CenterYLo = region.CenterYLo,
+                    CenterY2 = region.CenterY2, CenterY3 = region.CenterY3,
+                    Zoom = zoom,
+                    MaxIterations = region.Iterations > 0 ? region.Iterations : quality.ComputeIterations(zoom),
+                    FractalType = region.FractalType,
+                    ColorMap = map,
+                    Quality = quality,
+                    FractalParameters = p,
+                };
+                // Fresh private calculator (the batch / poster factory) — no live
+                // instance, so no cancel / resize / state race with the live view.
+                var calc = FracturingFog.Imaging.PosterRenderer.BuildCaptureCalculator(req, width, height);
+                if (calc == null) return null;
+                calc.Calculate(System.Threading.CancellationToken.None);
+                var src = calc.ColorBuffer;
+                int n = width * height;
+                if (src == null || src.Length < n) return null;
+                var copy = new uint[n];
+                Array.Copy(src, copy, n);
+                return copy;
+            }
+            catch
+            {
+                return null;
+            }
+        }
+
         // #434 — resolve a region by exact name across the main + slideshow libs.
         private static FractalRegion? ResolveRegion(string regionName)
         {
