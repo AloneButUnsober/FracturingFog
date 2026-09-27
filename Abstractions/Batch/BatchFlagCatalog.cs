@@ -113,6 +113,11 @@ namespace FracturingFog.Batch
         FlamePreset,
     }
 
+    /// <summary>A flag that only has an effect while another (choice) flag
+    /// holds one of <see cref="Values"/> — e.g. a light's position needs a point
+    /// or spot light. When that flag is absent its default counts.</summary>
+    public sealed record BatchChoiceRequirement(string Flag, string[] Values);
+
     /// <summary>Description of one batch flag. Relations name other flags by
     /// their canonical spelling.</summary>
     public sealed record BatchFlagSpec
@@ -165,6 +170,8 @@ namespace FracturingFog.Batch
             new Dictionary<string, string[]>(StringComparer.OrdinalIgnoreCase);
         /// <summary>Flags that must also be present for this one to have an effect.</summary>
         public string[] Requires { get; init; } = Array.Empty<string>();
+        /// <summary>A value-dependent requirement (see <see cref="BatchChoiceRequirement"/>).</summary>
+        public BatchChoiceRequirement? RequiresChoice { get; init; }
         /// <summary>Flags that contradict this one or leave it without effect.
         /// Declared on both sides.</summary>
         public string[] ConflictsWith { get; init; } = Array.Empty<string>();
@@ -291,6 +298,8 @@ namespace FracturingFog.Batch
                 text.Append(" Implies ").Append(string.Join(", ", s.Implies.Select(shown))).Append('.');
             if (s.Requires.Length > 0)
                 text.Append(" Needs ").Append(string.Join(", ", s.Requires.Select(shown))).Append('.');
+            if (s.RequiresChoice is { } rc)
+                text.Append(" Needs ").Append(shown(rc.Flag)).Append(' ').Append(string.Join("|", rc.Values)).Append('.');
             if (s.Fractals.Length > 0)
                 text.Append(" For --fractal ").Append(string.Join("|", s.Fractals)).Append('.');
             return text.ToString();
@@ -321,7 +330,8 @@ namespace FracturingFog.Batch
                 .Distinct().Count() > 1;
         }
 
-        private static string RangeText(BatchFlagSpec s)
+        /// <summary>The flag's range as shown in --help ("0..1", "> 0", ...).</summary>
+        public static string RangeText(BatchFlagSpec s)
         {
             string lo = s.Min.HasValue ? s.Min.Value.ToString(CultureInfo.InvariantCulture) : "";
             string hi = s.Max.HasValue ? s.Max.Value.ToString(CultureInfo.InvariantCulture) : "";
@@ -622,10 +632,11 @@ namespace FracturingFog.Batch
                 Dbl(BatchFlags.Transmission, Glass, FR, "Transmission (0 = opaque).", 0, 1, enforced: true, def: "0")
                     with { Implies = new[] { BatchFlags.Glass, BatchFlags.ReliefRaymarch, BatchFlags.Relief } },
                 Dbl(BatchFlags.Ior, Glass, FR, "Index of refraction.", 1, 3, enforced: true, def: "1.5")
-                    with { Implies = RaymarchOn },
+                    with { Implies = RaymarchOn, Requires = new[] { BatchFlags.Glass } },
                 Dbl(BatchFlags.AbsorptionDist, Glass, FR, "Beer-Lambert reference distance for the tint.", 0, null, enforced: true, def: "1")
-                    with { MinExclusive = true, Implies = RaymarchOn },
-                Col(BatchFlags.AbsorptionColor, Glass, FR, "Glass tint.", "#FFFFFF") with { Implies = RaymarchOn },
+                    with { MinExclusive = true, Implies = RaymarchOn, Requires = new[] { BatchFlags.Glass } },
+                Col(BatchFlags.AbsorptionColor, Glass, FR, "Glass tint.", "#FFFFFF")
+                    with { Implies = RaymarchOn, Requires = new[] { BatchFlags.Glass } },
                 Sw(BatchFlags.GlassInternalMarch, Glass, FR, "Full two-surface march (real thickness + exit refraction). Turns glass on.")
                     with { Implies = new[] { BatchFlags.Glass, BatchFlags.ReliefRaymarch, BatchFlags.Relief } },
                 Int(BatchFlags.GlassInternalBounces, Glass, FR, "Internal-reflection bounce budget.", 1, 6, enforced: true, def: "1")
@@ -725,16 +736,26 @@ namespace FracturingFog.Batch
             {
                 Name = F(BatchFlags.LightFieldPos), Kind = BatchFlagKind.Vector, Arity = 3, Group = L, Modes = FR, LightNumber = n,
                 ValueHint = "\"x,y,z\"", Help = "World position (point / spot).", Implies = RaymarchOn,
+                RequiresChoice = new BatchChoiceRequirement(F(BatchFlags.LightFieldType), new[] { "point", "spot" }),
             };
             yield return Dbl(F(BatchFlags.LightFieldRange), L, FR, "Soft cutoff distance (0 = pure inverse-square).",
-                0, 100, enforced: true, def: "0") with { LightNumber = n, Implies = RaymarchOn };
+                0, 100, enforced: true, def: "0")
+                with
+                {
+                    LightNumber = n, Implies = RaymarchOn,
+                    RequiresChoice = new BatchChoiceRequirement(F(BatchFlags.LightFieldType), new[] { "point", "spot" }),
+                };
             yield return new BatchFlagSpec
             {
                 Name = F(BatchFlags.LightFieldCone), Kind = BatchFlagKind.Vector, Arity = 2, Group = L, Modes = FR, LightNumber = n,
                 ValueHint = "\"inner,outer\"", Help = "Spot cone half-angles in degrees, each within the range.",
                 Min = 0, Max = 90, Implies = RaymarchOn,
+                RequiresChoice = new BatchChoiceRequirement(F(BatchFlags.LightFieldType), new[] { "spot" }),
             };
-            yield return Col(F(BatchFlags.LightFieldColor), L, FR, "Light colour.") with { LightNumber = n };
+            // Slot defaults mirror LightingFxData.CreateDefault: white key, cool
+            // fill, warm rim (the builder omits a colour equal to its slot default).
+            yield return Col(F(BatchFlags.LightFieldColor), L, FR, "Light colour.",
+                n switch { 1 => "#FFFFFF", 2 => "#B0C8FF", _ => "#FFC890" }) with { LightNumber = n };
             yield return Dbl(F(BatchFlags.LightFieldArea), L, FR, "Area light: emitter angular radius in degrees (0 = punctual, larger = softer shadows).",
                 0, 90, enforced: true, def: "0") with { LightNumber = n };
         }

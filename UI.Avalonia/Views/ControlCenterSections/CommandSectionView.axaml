@@ -121,25 +121,37 @@
                             <ItemsControl ItemsSource="{Binding Rows}">
                                 <ItemsControl.ItemTemplate>
                                     <DataTemplate x:DataType="vm:CommandFlagRowViewModel">
-                                        <Grid ColumnDefinitions="210,*,Auto" RowDefinitions="Auto,Auto"
+                                        <Grid ColumnDefinitions="210,*,Auto" RowDefinitions="Auto,Auto,Auto"
                                               ColumnSpacing="4" Margin="0,1" IsVisible="{Binding IsVisible}"
                                               ToolTip.Tip="{Binding Description}">
-                                            <CheckBox Grid.Column="0" Classes="flag" Content="{Binding Name}"
+                                            <!-- Per-light sub-heading (#996). -->
+                                            <TextBlock Grid.Row="0" Grid.ColumnSpan="3" Text="{Binding SectionTitle}"
+                                                       IsVisible="{Binding HasSectionTitle}"
+                                                       Foreground="#C8C864" FontSize="11" Margin="0,8,0,2" />
+                                            <CheckBox Grid.Row="1" Grid.Column="0" Classes="flag" Content="{Binding Name}"
                                                       IsChecked="{Binding IsSelected}" IsEnabled="{Binding IsEditable}" />
-                                            <ComboBox Grid.Column="1" IsVisible="{Binding IsChoice}" IsEnabled="{Binding IsEditable}"
+                                            <ComboBox Grid.Row="1" Grid.Column="1" IsVisible="{Binding IsChoice}" IsEnabled="{Binding IsEditable}"
                                                       ItemsSource="{Binding Choices}" SelectedItem="{Binding Value}"
                                                       HorizontalAlignment="Stretch" FontSize="11" />
-                                            <TextBox Grid.Column="1" IsVisible="{Binding IsPlainText}" IsEnabled="{Binding IsEditable}"
+                                            <TextBox Grid.Row="1" Grid.Column="1" IsVisible="{Binding IsPlainText}" IsEnabled="{Binding IsEditable}"
                                                      Text="{Binding Value}" Watermark="{Binding Placeholder}" FontSize="11" />
                                             <!-- Library-backed name (region, theme, preset, …): pick or type (#995). -->
-                                            <ComboBox Grid.Column="1" IsEditable="True" IsVisible="{Binding HasSuggestions}" IsEnabled="{Binding IsEditable}"
+                                            <ComboBox Grid.Row="1" Grid.Column="1" IsEditable="True" IsVisible="{Binding HasSuggestions}" IsEnabled="{Binding IsEditable}"
                                                       ItemsSource="{Binding Suggestions}" Text="{Binding Value}"
                                                       PlaceholderText="{Binding Placeholder}"
                                                       HorizontalAlignment="Stretch" FontSize="11" MaxDropDownHeight="320" />
-                                            <Button Grid.Column="2" Classes="action neutral" Content="…"
+                                            <Button Grid.Row="1" Grid.Column="2" Classes="action neutral" Content="…"
                                                     IsVisible="{Binding HasBrowse}" Command="{Binding BrowseCommand}"
                                                     ToolTip.Tip="Choose a file" />
-                                            <TextBlock Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="3"
+                                            <!-- Colour preview (#996). -->
+                                            <Border Grid.Row="1" Grid.Column="2" IsVisible="{Binding IsColor}"
+                                                    Width="20" Height="20" CornerRadius="3"
+                                                    BorderBrush="#5A5A5A" BorderThickness="1" VerticalAlignment="Center">
+                                                <Border.Background>
+                                                    <SolidColorBrush Color="{Binding SwatchColor}" />
+                                                </Border.Background>
+                                            </Border>
+                                            <TextBlock Grid.Row="2" Grid.Column="0" Grid.ColumnSpan="3"
                                                        Classes="relation" Classes.warn="{Binding StatusIsWarning}"
                                                        Text="{Binding Status}" IsVisible="{Binding HasStatus}"
                                                        TextWrapping="Wrap" Margin="26,0,0,2" />
@@ -152,5 +164,19 @@
                 </DataTemplate>
             </ItemsControl.ItemTemplate>
         </ItemsControl>
+
+        <!-- What the batch CLI cannot express yet (#996). Kept visible so the
+             panel never implies a live effect will survive a headless render. -->
+        <Border Classes="group">
+            <StackPanel Spacing="4" Width="560" HorizontalAlignment="Left">
+                <TextBlock Classes="section" Text="Not available headless yet" />
+                <CheckBox Content="Stereo / side-by-side (SBS) output" IsEnabled="False" FontSize="11"
+                          ToolTip.Tip="The batch renderer has no stereo path yet: fake SBS needs a depth buffer and double-width output, true SBS a per-eye 3D render." />
+                <TextBlock Foreground="#8A8A8A" FontSize="11" TextWrapping="Wrap"
+                           Text="Fractal-specific settings beyond the flags above (a Julia constant, dual-orbit settings, …) and the 3D camera are only carried by a saved region: save the view as a region and use --region." />
+                <TextBlock Foreground="#8A8A8A" FontSize="11" TextWrapping="Wrap"
+                           Text="Saved animations run headless only inside a scene (Scene mode)." />
+            </StackPanel>
+        </Border>
     </StackPanel>
 </UserControl>

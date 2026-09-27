@@ -1488,7 +1488,7 @@ namespace FracturingFog.Batch
         /// <summary>Parse a hex colour to packed 0xAARRGGBB. Accepts an optional
         /// leading '#' or "0x"; 6 digits (RRGGBB, alpha forced to FF) or 8 digits
         /// (AARRGGBB). Returns false on any other length or a non-hex digit.</summary>
-        private static bool TryParseHexColor(string s, out uint color)
+        public static bool TryParseHexColor(string s, out uint color)
         {
             color = 0;
             if (string.IsNullOrWhiteSpace(s)) return false;
@@ -1503,7 +1503,7 @@ namespace FracturingFog.Batch
 
         /// <summary>Parse exactly <paramref name="count"/> comma-separated invariant
         /// doubles. Returns false on the wrong count or an unparseable field.</summary>
-        private static bool TryParseCsvDoubles(string s, int count, out double[] values)
+        public static bool TryParseCsvDoubles(string s, int count, out double[] values)
         {
             values = Array.Empty<double>();
             var parts = (s ?? string.Empty).Split(',');

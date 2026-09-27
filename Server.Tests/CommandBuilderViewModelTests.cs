@@ -314,4 +314,75 @@ public sealed class CommandBuilderViewModelTests
         Assert.False(vm.ModeValueIsName);
         Assert.True(vm.ModeValueIsPath);
     }
+
+    // ── #996 row value checks, swatches, light headings ──────────────────────
+
+    [Theory]
+    [InlineData(BatchFlags.ReliefHeight, "abc", "expects a number")]
+    [InlineData(BatchFlags.ReliefHeight, "0", "outside > 0")]
+    [InlineData(BatchFlags.ReliefStrength, "1.5", "outside 0..1")]
+    [InlineData(BatchFlags.LSystemDepth, "20", "outside 0..12")]            // a range the parser does not enforce
+    [InlineData(BatchFlags.Denoise, "2.5", "expects a whole number")]
+    [InlineData("--light1-pos", "1,2", "expects 3 comma-separated numbers")]
+    [InlineData("--light1-cone", "10,95", "each value must be within 0..90")]
+    [InlineData(BatchFlags.FogColor, "#GG0000", "expects a hex colour")]
+    public void BadValues_GetARowNote(string flag, string value, string note)
+    {
+        var vm = new CommandBuilderViewModel();
+        var row = Row(vm, flag);
+        row.Value = value;
+        Assert.Contains(note, row.Status);
+        Assert.True(row.StatusIsWarning);
+    }
+
+    [Theory]
+    [InlineData(BatchFlags.ReliefHeight, "2.5")]
+    [InlineData(BatchFlags.Denoise, "3")]
+    [InlineData("--light1-dir", "0.5, 1.2")]
+    [InlineData(BatchFlags.FogColor, "0x80FF8800")]
+    public void GoodValues_HaveNoValueNote(string flag, string value)
+    {
+        var vm = new CommandBuilderViewModel();
+        var row = Row(vm, flag);
+        row.Value = value;
+        Assert.Equal("", row.ValueNote);
+    }
+
+    [Fact]
+    public void ColourRows_PreviewTheirValue_OrTheDefault()
+    {
+        var vm = new CommandBuilderViewModel();
+        var fog = Row(vm, BatchFlags.FogColor);
+        Assert.True(fog.IsColor);
+        Assert.Equal(Avalonia.Media.Color.FromArgb(0xFF, 0xFF, 0xFF, 0xFF), fog.SwatchColor);   // default white
+        fog.Value = "#336699";
+        Assert.Equal(Avalonia.Media.Color.FromArgb(0xFF, 0x33, 0x66, 0x99), fog.SwatchColor);
+        fog.Value = "#80112233";
+        Assert.Equal(Avalonia.Media.Color.FromArgb(0x80, 0x11, 0x22, 0x33), fog.SwatchColor);
+        Assert.False(Row(vm, BatchFlags.FogDensity).IsColor);
+        Assert.Equal(Avalonia.Media.Color.FromArgb(0xFF, 0xB0, 0xC8, 0xFF), Row(vm, "--light2-color").SwatchColor);   // cool fill default
+    }
+
+    [Fact]
+    public void Lights_HaveOneHeadingPerLight()
+    {
+        var vm = new CommandBuilderViewModel();
+        var lights = vm.Groups.Single(g => g.Group == BatchFlagGroup.Lights).Rows;
+        var headed = lights.Where(r => r.HasSectionTitle).ToList();
+        Assert.Equal(3, headed.Count);
+        Assert.Equal(new[] { 1, 2, 3 }, headed.Select(r => r.Spec.LightNumber));
+        Assert.StartsWith("Light 1", headed[0].SectionTitle);
+        Assert.Equal("--light1-type", headed[0].Name);
+    }
+
+    [Fact]
+    public void LightPosition_OnADirectionalLight_SaysWhatItNeeds()
+    {
+        var vm = new CommandBuilderViewModel();
+        var pos = Row(vm, "--light3-pos");
+        pos.Value = "0,0,3";
+        Assert.Contains("needs --light3-type point|spot", pos.Status);
+        Row(vm, "--light3-type").Value = "spot";
+        Assert.DoesNotContain("needs", pos.Status);
+    }
 }
