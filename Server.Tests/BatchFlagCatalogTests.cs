@@ -133,6 +133,14 @@ public sealed class BatchFlagCatalogTests
     }
 
     [Fact]
+    public void EveryGroup_HasFlags()
+    {
+        // An empty group would be a dead panel section / usage heading.
+        foreach (BatchFlagGroup g in Enum.GetValues<BatchFlagGroup>())
+            Assert.True(BatchFlagCatalog.InGroup(g).Any(), $"group {g} has no flags");
+    }
+
+    [Fact]
     public void Names_AreUnique_AndLightsCoverEveryField()
     {
         var all = BatchFlagCatalog.All.SelectMany(s => s.Aliases.Prepend(s.Name)).ToList();

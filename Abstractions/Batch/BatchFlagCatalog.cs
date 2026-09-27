@@ -79,7 +79,6 @@ namespace FracturingFog.Batch
         Output,
         Video,
         Slideshow,
-        Scene,
         PostFx,
         Exr,
         FractalParams,
@@ -221,9 +220,8 @@ namespace FracturingFog.Batch
             BatchFlagGroup.Mode          => "Mode",
             BatchFlagGroup.Source        => "Fractal + view source (a --region, or all of --x --y --zoom)",
             BatchFlagGroup.Output        => "Output",
-            BatchFlagGroup.Video         => "Video (--mode video; most also drive video-type slideshows)",
-            BatchFlagGroup.Slideshow     => "Slideshow (--slideshow NAME)",
-            BatchFlagGroup.Scene         => "Scene (--scene NAME)",
+            BatchFlagGroup.Video         => "Video (--mode video; also video-type slideshows and --scene)",
+            BatchFlagGroup.Slideshow     => "Slideshow + scene encode (--slideshow NAME / --scene NAME)",
             BatchFlagGroup.PostFx        => "Post-FX (parity with the interactive sliders)",
             BatchFlagGroup.Exr           => "OpenEXR",
             BatchFlagGroup.FractalParams => "Fractal-specific parameters",
@@ -387,7 +385,7 @@ namespace FracturingFog.Batch
         private static IReadOnlyList<BatchFlagSpec> Build()
         {
             const BatchFlagGroup Mode = BatchFlagGroup.Mode, Source = BatchFlagGroup.Source, Output = BatchFlagGroup.Output,
-                Video = BatchFlagGroup.Video, Slideshow = BatchFlagGroup.Slideshow, Scene = BatchFlagGroup.Scene,
+                Video = BatchFlagGroup.Video, Slideshow = BatchFlagGroup.Slideshow,
                 PostFx = BatchFlagGroup.PostFx, Exr = BatchFlagGroup.Exr, Fp = BatchFlagGroup.FractalParams,
                 Warp = BatchFlagGroup.DomainWarp, Relief = BatchFlagGroup.Relief, Cam = BatchFlagGroup.ReliefCamera,
                 Froxel = BatchFlagGroup.Froxel, Glass = BatchFlagGroup.Glass, Denoise = BatchFlagGroup.Denoise,
