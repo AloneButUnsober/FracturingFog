@@ -48,6 +48,17 @@ namespace FracturingFog.Batch
                 region.ApplyHeadlessParams(fp);   // equation source, lighting, relief
                 region.ApplyFamilyParams(fp);     // per-family snapshot (#91-#94, #960)
             }
+            // #997 — --param Key=Value overlays any per-family setting (Julia
+            // constant, 3D camera, …) on top of the region; the dedicated flags
+            // below still win. Camera keys default to the rendered family.
+            if (opts.Params.Count > 0)
+            {
+                var family = region != null && opts.FractalType == FractalType.Mandelbrot
+                    ? region.FractalType : opts.FractalType;
+                var overlay = RegionFractalParams.FromKeyValues(opts.Params, family, out string? paramError)
+                    ?? throw new InvalidOperationException(paramError);
+                overlay.ApplyTo(fp);
+            }
             if (opts.BulbPower.HasValue)          fp.BulbPower          = opts.BulbPower.Value;
             if (opts.MultibrotExponent.HasValue)  fp.MultibrotExponent  = opts.MultibrotExponent.Value;
             if (!string.IsNullOrWhiteSpace(opts.LSystemPresetName))

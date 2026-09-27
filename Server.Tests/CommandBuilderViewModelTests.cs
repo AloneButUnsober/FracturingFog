@@ -385,4 +385,31 @@ public sealed class CommandBuilderViewModelTests
         Row(vm, "--light3-type").Value = "spot";
         Assert.DoesNotContain("needs", pos.Status);
     }
+
+    // ── #997 --param row ─────────────────────────────────────────────────────
+
+    [Fact]
+    public void ParamRow_IsMultiLine_AndChecksEachLine()
+    {
+        var vm = new CommandBuilderViewModel
+        {
+            NamesProvider = (src, _) => src == BatchFlagSource.ParamKey ? new[] { "JuliaCRe", "JuliaCIm" } : Array.Empty<string>(),
+        };
+        var row = Row(vm, BatchFlags.Param);
+        Assert.True(row.IsMultiLine);
+        Assert.False(row.HasSuggestions);
+        Assert.False(row.IsPlainText);
+        Assert.Contains("JuliaCRe=-0.8", row.Placeholder);
+
+        row.Value = "JuliaCRe=-0.8\r\njuliacim=0.1";
+        Assert.Equal("", row.ValueNote);
+        row.Value = "JuliaCRe=-0.8\nOops=1";
+        Assert.Equal("line 2: unknown key 'Oops'", row.ValueNote);
+        row.Value = "JuliaCRe -0.8";
+        Assert.StartsWith("line 1: expects KEY=VALUE", row.ValueNote);
+
+        var noKeys = new CommandBuilderViewModel();
+        Row(noKeys, BatchFlags.Param).Value = "Anything=1";   // no key list: shape only
+        Assert.Equal("", Row(noKeys, BatchFlags.Param).ValueNote);
+    }
 }

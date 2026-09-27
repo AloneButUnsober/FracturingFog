@@ -79,6 +79,11 @@ namespace FracturingFog.Cli
         /// batch flag are read, and only for the matching fractal type.</summary>
         public FractalParameters? Parameters { get; init; }
 
+        /// <summary>The live per-family settings as region-snapshot
+        /// <c>Key=Value</c> pairs (#997) — Julia constant, 3D camera, … — emitted
+        /// as <c>--param</c>. Supplied by the host (the snapshot lives in Engine).</summary>
+        public IReadOnlyList<KeyValuePair<string, string>> FamilyParams { get; init; } = Array.Empty<KeyValuePair<string, string>>();
+
         /// <summary>Executable name to lead the command with. The user runs from
         /// wherever the exe lives; a bare name keeps the string portable.</summary>
         public string ExecutableName { get; init; } = "FracturingFog";
@@ -438,12 +443,34 @@ namespace FracturingFog.Cli
             // the matching fractal type so unrelated defaults never clutter.
             AppendFractalParams(parts, snap);
 
+            // Every other per-family setting (#997). Keys a dedicated flag above
+            // already carries are skipped so each value appears once.
+            foreach (var (key, value) in snap.FamilyParams)
+            {
+                if (ParamKeysCoveredByFlags.Contains(key)) continue;
+                parts.Add(BatchFlags.Param);
+                parts.Add(key + "=" + value);
+            }
+
             // Output path placeholder — always last, always a placeholder.
             parts.Add(BatchFlags.Out);
             parts.Add(snap.OutputPlaceholder);
 
             return new CommandBuildReport(Join(snap.ExecutableName, parts), parts, DetectGaps(snap));
         }
+
+        /// <summary>Region-snapshot keys whose value a dedicated flag already
+        /// emits (--multibrot-exp, --bulb-power, the L-System / plasma / flame /
+        /// Acid Warp flags, --domain-warp*), so --param does not repeat them.</summary>
+        public static readonly IReadOnlySet<string> ParamKeysCoveredByFlags = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+        {
+            "MultibrotExponent", "BulbPower",
+            "LSystemPresetName", "LSystemDepth",
+            "PlasmaRoughness", "PlasmaSeed",
+            "FlamePresetName", "FlameGamma", "FlameVibrancy",
+            "AcidWarpPattern", "AcidWarpFrequency", "AcidWarpWarpStrength",
+            "DomainWarpEnabled", "DomainWarpStrength", "DomainWarpFrequency",
+        };
 
         /// <summary>List the live fx the emitted command cannot reproduce.
         /// Empty when the 2D config is fully expressible.</summary>

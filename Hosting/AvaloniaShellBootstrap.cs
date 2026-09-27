@@ -2726,6 +2726,11 @@ namespace FracturingFog.Hosting
                 // Read-only views of the in-memory libraries (loaded at startup);
                 // the remote stores are read from disk without creating them.
                 cc.CommandBuilder.NamesProvider = CommandBuilderNames;
+                // #997 — live per-family settings (Julia constant, 3D camera, …)
+                // as --param pairs, via the same snapshot a saved region uses.
+                cc.FamilyParamsSerializer = (type, fp) =>
+                    global::FracturingFog.Models.RegionFractalParams.Snapshot(type, fp)?.ToKeyValues()
+                    ?? (IReadOnlyList<KeyValuePair<string, string>>)Array.Empty<KeyValuePair<string, string>>();
             };
 
             // #493 — a region jump mutates FractalParameters in place; refresh any
@@ -3580,6 +3585,8 @@ namespace FracturingFog.Hosting
                         return global::FracturingFog.Models.LSystemPresets.All.Keys.ToList();
                     case global::FracturingFog.Batch.BatchFlagSource.FlamePreset:
                         return global::FracturingFog.Models.FlamePresets.All.Keys.ToList();
+                    case global::FracturingFog.Batch.BatchFlagSource.ParamKey:
+                        return global::FracturingFog.Models.RegionFractalParams.KeyNames;
                 }
             }
             catch { }

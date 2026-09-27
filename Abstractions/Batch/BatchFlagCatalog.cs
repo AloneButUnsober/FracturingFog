@@ -111,6 +111,8 @@ namespace FracturingFog.Batch
         RemotePreset,
         LSystemPreset,
         FlamePreset,
+        /// <summary>--param keys (region-snapshot property names, #997).</summary>
+        ParamKey,
     }
 
     /// <summary>A flag that only has an effect while another (choice) flag
@@ -178,6 +180,13 @@ namespace FracturingFog.Batch
 
         /// <summary>Supplying this flag switches the batch into this mode.</summary>
         public BatchMode? SelectsMode { get; init; }
+
+        /// <summary>May be given more than once (<c>--param</c>). The Command panel
+        /// holds one value per line.</summary>
+        public bool Repeatable { get; init; }
+        /// <summary>A representative valid value (help text, panel placeholder,
+        /// guard tests) for flags whose value has a shape of its own.</summary>
+        public string? Example { get; init; }
 
         /// <summary>1..3 for a <c>--lightN-*</c> flag, 0 otherwise.</summary>
         public int LightNumber { get; init; }
@@ -302,6 +311,8 @@ namespace FracturingFog.Batch
                 text.Append(" Needs ").Append(shown(rc.Flag)).Append(' ').Append(string.Join("|", rc.Values)).Append('.');
             if (s.Fractals.Length > 0)
                 text.Append(" For --fractal ").Append(string.Join("|", s.Fractals)).Append('.');
+            if (s.Example != null)
+                text.Append(" Example: ").Append(s.Name).Append(' ').Append(s.Example).Append('.');
             return text.ToString();
         }
 
@@ -555,6 +566,12 @@ namespace FracturingFog.Batch
                     with { Fractals = new[] { FractalType.AcidWarp } },
                 Int(BatchFlags.AcidSeed, Fp, FR, "Acid Warp PRNG seed.", def: "12345")
                     with { Fractals = new[] { FractalType.AcidWarp } },
+
+                Txt(BatchFlags.Param, Fp, ImgVid,
+                    "Set any per-family setting by its saved-region key: Julia constant (JuliaCRe / JuliaCIm), dual-orbit knobs, "
+                    + "the 3D camera (Cam3DDistance / Cam3DTheta / Cam3DPhi, family from --fractal), and so on. Repeatable. "
+                    + "Applied over --region, under the dedicated flags.", hint: "KEY=VALUE")
+                    with { Repeatable = true, Example = "JuliaCRe=-0.8", Source = BatchFlagSource.ParamKey },
 
                 // ── Domain warp ──
                 Sw(BatchFlags.DomainWarp, Warp, FR, "Enable the domain-warp post-fx distortion."),

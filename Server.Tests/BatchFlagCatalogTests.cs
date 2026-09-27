@@ -51,6 +51,7 @@ public sealed class BatchFlagCatalogTests
     /// <summary>A valid, preferably non-default value for the flag.</summary>
     private static string? Sample(BatchFlagSpec s)
     {
+        if (s.Kind != BatchFlagKind.Switch && s.Example != null) return s.Example;
         switch (s.Kind)
         {
             case BatchFlagKind.Switch: return null;
