@@ -11,9 +11,12 @@
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
+using System.Globalization;
 using System.Linq;
 using System.Reactive;
 using System.Threading.Tasks;
+
+using Avalonia.Media;
 
 using ReactiveUI;
 
@@ -335,6 +338,16 @@ public sealed class CommandFlagGroupViewModel : ViewModelBase
         Group = group;
         Title = BatchFlagCatalog.GroupTitle(group);
         Rows = rows.ToList();
+
+        // Lights (#996): a sub-heading above each light's first row, so the 24
+        // rows read as three lights rather than one flat list.
+        foreach (var first in Rows.Where(r => r.Spec.LightNumber > 0).GroupBy(r => r.Spec.LightNumber).Select(g => g.First()))
+            first.SectionTitle = first.Spec.LightNumber switch
+            {
+                1 => "Light 1 — key (on by default)",
+                2 => "Light 2 — fill (off by default)",
+                _ => "Light 3 — rim (off by default)",
+            };
         _isExpanded = group is BatchFlagGroup.Source or BatchFlagGroup.Output;
     }
 
@@ -401,6 +414,57 @@ public sealed class CommandFlagRowViewModel : ViewModelBase
 
     public ReactiveCommand<Unit, Unit> BrowseCommand { get; }
 
+    /// <summary>Sub-heading shown above this row (the first row of each light).</summary>
+    public string SectionTitle { get; internal set; } = "";
+    public bool HasSectionTitle => SectionTitle.Length > 0;
+
+    public bool IsColor => Spec.Kind == BatchFlagKind.Color;
+
+    /// <summary>Preview of a colour value (the default when unset / unparseable).</summary>
+    public Color SwatchColor
+    {
+        get
+        {
+            string v = Composer.ValueOf(Spec.Name) ?? Spec.Default ?? "#FFFFFF";
+            if (!BatchOptions.TryParseHexColor(v, out uint c) && !BatchOptions.TryParseHexColor(Spec.Default ?? "#FFFFFF", out c))
+                c = 0xFFFFFFFFu;
+            return Color.FromArgb((byte)(c >> 24), (byte)(c >> 16), (byte)(c >> 8), (byte)c);
+        }
+    }
+
+    /// <summary>A problem with the value itself, checked with the parser's own
+    /// grammar (number, integer, "x,y,z", hex colour) and the catalog range —
+    /// including ranges the parser does not enforce. Empty when fine.</summary>
+    public string ValueNote
+    {
+        get
+        {
+            if (!IsSelected || IsSwitch || IsChoice) return "";
+            string v = Composer.ValueOf(Spec.Name) ?? "";
+            switch (Spec.Kind)
+            {
+                case BatchFlagKind.Int:
+                    if (!int.TryParse(v, NumberStyles.Integer, CultureInfo.InvariantCulture, out int iv)) return "expects a whole number";
+                    return OutOfRange(iv) ? "outside " + BatchFlagCatalog.RangeText(Spec) : "";
+                case BatchFlagKind.Double:
+                    if (!double.TryParse(v, NumberStyles.Float, CultureInfo.InvariantCulture, out double dv)) return "expects a number";
+                    return OutOfRange(dv) ? "outside " + BatchFlagCatalog.RangeText(Spec) : "";
+                case BatchFlagKind.Vector:
+                    if (!BatchOptions.TryParseCsvDoubles(v, Spec.Arity, out var parts))
+                        return $"expects {Spec.Arity} comma-separated numbers ({Placeholder})";
+                    return parts.Any(OutOfRange) ? "each value must be within " + BatchFlagCatalog.RangeText(Spec) : "";
+                case BatchFlagKind.Color:
+                    return BatchOptions.TryParseHexColor(v, out _) ? "" : "expects a hex colour #RRGGBB or #AARRGGBB";
+                default:
+                    return string.IsNullOrWhiteSpace(v) ? "needs a value" : "";
+            }
+        }
+    }
+
+    private bool OutOfRange(double v)
+        => (Spec.Min is double lo && (v < lo || (Spec.MinExclusive && v == lo)))
+        || (Spec.Max is double hi && v > hi);
+
     /// <summary>Include this flag in the command.</summary>
     public bool IsSelected
     {
@@ -441,6 +505,7 @@ public sealed class CommandFlagRowViewModel : ViewModelBase
     {
         get
         {
+            if (ValueNote is { Length: > 0 } vn) return vn;
             if (_state.IsBlocked) return "conflicts with " + string.Join(", ", _state.BlockedBy);
             if (_state.Missing.Count > 0) return "needs " + string.Join(", ", _state.Missing);
             if (HasSuggestions && IsSelected && _owner.NotFoundNote(Spec.Source, Composer.ValueOf(Spec.Name)) is { Length: > 0 } nf)
@@ -452,7 +517,7 @@ public sealed class CommandFlagRowViewModel : ViewModelBase
 
     public bool HasStatus => Status.Length > 0;
     /// <summary>Conflicts / unmet needs are warnings (yellow); implications are info.</summary>
-    public bool StatusIsWarning => _state.IsBlocked || _state.Missing.Count > 0
+    public bool StatusIsWarning => ValueNote.Length > 0 || _state.IsBlocked || _state.Missing.Count > 0
         || (HasSuggestions && IsSelected && _owner.NotFoundNote(Spec.Source, Composer.ValueOf(Spec.Name)).Length > 0);
 
     internal void Refresh()
@@ -461,6 +526,7 @@ public sealed class CommandFlagRowViewModel : ViewModelBase
         this.RaisePropertyChanged(nameof(IsSelected));
         this.RaisePropertyChanged(nameof(Value));
         this.RaisePropertyChanged(nameof(Suggestions));
+        this.RaisePropertyChanged(nameof(SwatchColor));
         this.RaisePropertyChanged(nameof(IsVisible));
         this.RaisePropertyChanged(nameof(IsEditable));
         this.RaisePropertyChanged(nameof(Status));

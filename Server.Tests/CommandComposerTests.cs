@@ -246,4 +246,47 @@ public sealed class CommandComposerTests
         Assert.Equal(2, n);
         Assert.Equal(BatchMode.Image, c.Mode);
     }
+
+    // ── #996 value-dependent and glass requirements ──────────────────────────
+
+    private static CommandFlagState State(CommandComposer c, string flag) => c.StateOf(BatchFlagCatalog.Find(flag)!);
+
+    [Fact]
+    public void LightPositionFields_NeedAPositionalLightType()
+    {
+        var c = Coords();
+        string type = BatchFlags.LightFlag(2, BatchFlags.LightFieldType);
+        string pos = BatchFlags.LightFlag(2, BatchFlags.LightFieldPos);
+        string cone = BatchFlags.LightFlag(2, BatchFlags.LightFieldCone);
+        c.Set(pos, "0,1,2");
+        c.Set(cone, "10,20");
+        Assert.Contains(type + " point|spot", State(c, pos).Missing);   // absent type = directional (default)
+        Assert.Contains(type + " spot", State(c, cone).Missing);
+
+        c.Set(type, "point");
+        Assert.Empty(State(c, pos).Missing);
+        Assert.Contains(type + " spot", State(c, cone).Missing);
+
+        c.Set(type, "SPOT");
+        Assert.Empty(State(c, cone).Missing);
+        Assert.Empty(State(c, BatchFlags.LightFlag(1, BatchFlags.LightFieldColor)).Missing);   // plain fields need nothing
+    }
+
+    [Fact]
+    public void GlassOptics_NeedGlass_WhichTransmissionProvides()
+    {
+        var c = Coords();
+        c.Set(BatchFlags.Ior, "1.33");
+        Assert.Contains(BatchFlags.Glass, State(c, BatchFlags.Ior).Missing);
+        c.Set(BatchFlags.Transmission, "0.8");   // implies --glass
+        Assert.Empty(State(c, BatchFlags.Ior).Missing);
+    }
+
+    [Fact]
+    public void Requirements_OnlyReportForSelectedFlags()
+    {
+        var c = Coords();
+        Assert.Empty(State(c, BatchFlags.LightFlag(1, BatchFlags.LightFieldCone)).Missing);
+        Assert.Empty(State(c, BatchFlags.Ior).Missing);
+    }
 }

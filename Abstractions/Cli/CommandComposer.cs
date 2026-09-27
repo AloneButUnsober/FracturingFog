@@ -257,9 +257,19 @@ namespace FracturingFog.Cli
             var impliedBy = emitted.Where(s => s.Name != spec.Name && ImpliedBy(s).Contains(spec.Name))
                                    .Select(s => s.Name).ToList();
             var blockedBy = spec.ConflictsWith.Where(effective.Contains).ToList();
-            var missing = _sel.ContainsKey(spec.Name)
-                ? spec.Requires.Where(r => !effective.Contains(r)).ToList()
-                : new List<string>();
+            var missing = new List<string>();
+            if (_sel.ContainsKey(spec.Name))
+            {
+                missing.AddRange(spec.Requires.Where(r => !effective.Contains(r)));
+                if (spec.RequiresChoice is { } rc)
+                {
+                    // An absent choice flag counts as its default (a light is
+                    // directional unless --lightN-type says otherwise).
+                    string? current = IsSelected(rc.Flag) ? ValueOf(rc.Flag) : Spec(rc.Flag).Default;
+                    if (!rc.Values.Contains(current ?? "", StringComparer.OrdinalIgnoreCase))
+                        missing.Add(rc.Flag + " " + string.Join("|", rc.Values));
+                }
+            }
             return new CommandFlagState(AppliesNow(spec), impliedBy, blockedBy, missing);
         }
 

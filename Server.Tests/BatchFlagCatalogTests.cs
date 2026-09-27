@@ -223,7 +223,14 @@ public sealed class BatchFlagCatalogTests
             foreach (var t in s.Implies.Concat(s.ChoiceImplies.Values.SelectMany(v => v)))
                 Assert.Equal(BatchFlagKind.Switch, Spec(t).Kind);
             foreach (var c in s.ChoiceImplies.Keys)
-                Assert.Contains(c, s.Choices, StringComparer.OrdinalIgnoreCase);   // only a switch can be implied wholesale
+                Assert.Contains(c, s.Choices, StringComparer.OrdinalIgnoreCase);
+            if (s.RequiresChoice is { } rc)
+            {
+                var target = Spec(rc.Flag);
+                Assert.Equal(BatchFlagKind.Choice, target.Kind);
+                Assert.NotEmpty(rc.Values);
+                foreach (var v in rc.Values) Assert.Contains(v, target.Choices, StringComparer.OrdinalIgnoreCase);
+            }   // only a switch can be implied wholesale
             foreach (var t in s.ConflictsWith)
                 Assert.Contains(s.Name, Spec(t).ConflictsWith);
             Assert.DoesNotContain(s.Name, s.Implies.Concat(s.Requires).Concat(s.ConflictsWith));
@@ -304,5 +311,21 @@ public sealed class BatchFlagCatalogTests
         Assert.True(BatchFlagCatalog.AppliesIn(Spec(BatchFlags.Out), BatchMode.Image, remote: true));
         Assert.False(BatchFlagCatalog.AppliesIn(Spec(BatchFlags.Relief), BatchMode.Image, remote: true));
         Assert.False(BatchFlagCatalog.AppliesIn(Spec(BatchFlags.ReliefFroxelTemporal), BatchMode.Image));
+    }
+
+    [Fact]
+    public void LightDefaults_MatchTheLightingDefaults()
+    {
+        // Independent oracle: the slot defaults the renderer actually starts from.
+        var d = FracturingFog.Rendering.Lighting.LightingFxData.CreateDefault();
+        var lights = new[] { d.Light1, d.Light2, d.Light3 };
+        for (int n = 1; n <= 3; n++)
+        {
+            var color = Spec(BatchFlags.LightFlag(n, BatchFlags.LightFieldColor));
+            Assert.True(BatchOptions.TryParseHexColor(color.Default!, out uint c));
+            Assert.Equal(lights[n - 1].Color, c);
+            var intensity = Spec(BatchFlags.LightFlag(n, BatchFlags.LightFieldIntensity));
+            Assert.Equal(lights[n - 1].Intensity, double.Parse(intensity.Default!, CultureInfo.InvariantCulture));
+        }
     }
 }
