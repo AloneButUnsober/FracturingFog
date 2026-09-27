@@ -326,7 +326,10 @@ namespace FracturingFog.UI.Avalonia.Slideshow
                             themeName = PickNonSolidTheme(regionName, themeName, themes, ref lastTheme, ct);
                         }
 
-                        if (t == 0)
+                        if (t == 0 && legAnimation != null)
+                            animStarted = await AnimatedRegionTransitionAsync(
+                                regionName, themeName, themeDef, legAnimation, fadeSteps, regionStepMs, ct);
+                        else if (t == 0)
                             await RegionTransitionAsync(regionName, themeName, themeDef, fadeSteps, regionStepMs, ct);
                         else if (animStarted && liveFadeRegion)
                             await AnimatedThemeTransitionAsync(themeName, themeDef, fadeSteps, themeStepMs, ct);
@@ -722,6 +725,69 @@ namespace FracturingFog.UI.Avalonia.Slideshow
             if (FrameSink == null) return;
             var b = _host.SnapshotFrame(out int w, out int h);
             if (b.Length > 0 && w > 0 && h > 0) EmitFrame(b, w, h);
+        }
+
+        /// <summary>#988 — region change into an animated region. Instead of
+        /// fading two static frames, freeze the outgoing frame as a host
+        /// transition overlay, commit the incoming region live, start its
+        /// animation, then dissolve the overlay — the incoming region fades in
+        /// already moving. While the first incoming frame computes, the overlay
+        /// (weight 1) keeps the outgoing frame on screen, like the offscreen
+        /// pre-render did. Falls back to <see cref="RegionTransitionAsync"/>
+        /// (static fade, animation started by the caller afterwards) on a cold
+        /// start or when the host has no overlay support. Returns true when it
+        /// started <paramref name="animation"/>.</summary>
+        private async Task<bool> AnimatedRegionTransitionAsync(string regionName, string? themeName, ColorThemeDef? themeDef,
+            AnimationData animation, int steps, int stepMs, CancellationToken ct)
+        {
+            var (old, w, h) = await SnapshotAsync(ct);
+            bool overlay = old.Length > 0 && w > 0 && h > 0 && old.Length >= w * h
+                && await OnUiAsync(() => _host.BeginTransitionOverlay(old, w, h), ct);
+            if (!overlay)
+            {
+                await RegionTransitionAsync(regionName, themeName, themeDef, steps, stepMs, ct);
+                return false;
+            }
+
+            bool started = false;
+            try
+            {
+                await CommitRegionAsync(regionName, themeName, themeDef, ct);
+                await StartLegAnimationAsync(animation, ct);
+                started = true;
+
+                steps = Math.Max(1, steps);
+                for (int s = 1; s < steps; s++)
+                {
+                    if (ct.IsCancellationRequested) break;
+                    double weight = 1.0 - s / (double)steps;
+                    await OnUiAsync(() =>
+                    {
+                        _host.SetTransitionOverlay(weight);
+                        // Animation frames pick the weight up as they land; if the
+                        // bus isn't producing frames (animation disabled / ended),
+                        // re-present the committed frame so the fade still shows.
+                        if (!(AnimationBusHost.Bus?.IsAnimating ?? false)) _host.RepaintWithPostFx();
+                        return 0;
+                    }, ct);
+                    EmitLiveFrame();
+                    try { await Task.Delay(stepMs, ct).ConfigureAwait(false); }
+                    catch (OperationCanceledException) { break; }
+                }
+            }
+            finally
+            {
+                // Always drop the overlay (also on cancel) so the old frame can
+                // never stay stuck over the live view.
+                await OnUiAsync(() =>
+                {
+                    _host.EndTransitionOverlay();
+                    if (!(AnimationBusHost.Bus?.IsAnimating ?? false)) _host.RepaintWithPostFx();
+                    return 0;
+                }, CancellationToken.None);
+            }
+            EmitLiveFrame();
+            return started;
         }
 
         /// <summary>Region change: offscreen-render incoming, cross-fade, commit live.</summary>

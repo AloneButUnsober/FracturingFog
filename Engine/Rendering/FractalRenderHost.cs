@@ -1674,7 +1674,9 @@ namespace FracturingFog.Rendering
                 {
                     // #86 — drop the stale-hold present if a newer frame already
                     // reached the screen, so this old buffer can't clobber it.
-                    bool claimed = TryClaimPresent(job.Seq);
+                    // #988 — suppressed during a slideshow region cross-fade
+                    // (this path bypasses the transition-overlay blend).
+                    bool claimed = !TransitionOverlayActive && TryClaimPresent(job.Seq);
                     Dbg86($"STALE-HOLD seq={job.Seq} claimed={claimed} lastSeq={_lastPresentedUploadSeq} {job.StaleW}x{job.StaleH}");
                     if (claimed)
                     lock (_d3dGate)
@@ -2512,7 +2514,10 @@ namespace FracturingFog.Rendering
                     // #86 — a later stage / newer trigger that already presented
                     // outranks this preview; drop it so it can't paint a stale,
                     // lower-res image over the newer frame.
-                    bool claimedP = TryClaimPresent(job.Seq);
+                    // #988 — suppressed during a slideshow region cross-fade: the
+                    // low-res preview bypasses the transition-overlay blend and
+                    // would pop the incoming region on screen un-blended.
+                    bool claimedP = !TransitionOverlayActive && TryClaimPresent(job.Seq);
                     Dbg86($"PREVIEW  seq={job.Seq} stage={job.ProgressiveStage} claimed={claimedP} lastSeq={_lastPresentedUploadSeq} {pw}x{ph}");
                     if (claimedP)
                     {
@@ -4275,6 +4280,11 @@ namespace FracturingFog.Rendering
                     Console.Error.WriteLine($"[FractalRenderHost] Overlay composite failed: {ex.Message}");
                 }
             }
+
+            // #988 — slideshow region cross-fade: blend the frozen outgoing frame
+            // over the live one (after grid/watermark so the labels fade too,
+            // before the perf HUD so it stays readable). No-op when inactive.
+            ApplyTransitionOverlay(dst, w, h);
 
             // Perf HUD: composited last so it sits above grid + watermark.
             // Standalone of those toggles — user wants timings even on a
