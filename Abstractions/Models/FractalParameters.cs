@@ -1171,11 +1171,16 @@ namespace FracturingFog.Models
         /// theme) or PerOrbitLayers (each orbit its own themed layer, blended).</summary>
         public DualOrbitColorMode DualOrbitColorMode { get; set; } = DualOrbitColorMode.Field;
         /// <summary>PerOrbitLayers: theme name for the z-orbit (seed 0) layer.
-        /// Empty = the main theme.</summary>
-        public string DualOrbitThemeZ { get; set; } = "";
+        /// Empty = the main theme. Default = the built-in blue gradient: with the
+        /// c layer's amber it separates on the blue–yellow axis, which red/green
+        /// colour vision keeps (#980).</summary>
+        public string DualOrbitThemeZ { get; set; } = DualOrbitDefaultThemeZ;
         /// <summary>PerOrbitLayers: theme name for the c-orbit layer. Empty = the
-        /// main theme.</summary>
-        public string DualOrbitThemeC { get; set; } = "";
+        /// main theme. Default = the built-in amber "Sunrise" gradient, bright at
+        /// the low smooth counts where the far field lands (#980).</summary>
+        public string DualOrbitThemeC { get; set; } = DualOrbitDefaultThemeC;
+        public const string DualOrbitDefaultThemeZ = "MS Standard Blue (Gradient)";
+        public const string DualOrbitDefaultThemeC = "MS Standard Sunrise (Gradient)";
         /// <summary>PerOrbitLayers: how the c layer combines with the z layer.</summary>
         public DualOrbitLayerBlend DualOrbitLayerBlend { get; set; } = DualOrbitLayerBlend.COverZ;
         /// <summary>PerOrbitLayers: z-layer opacity, 0..1 (multiplies the theme's own alpha).</summary>

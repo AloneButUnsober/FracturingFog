@@ -124,6 +124,7 @@ public sealed class DualOrbitLayerTests
             DualOrbitColorMode = mode, DualOrbitField = field, DualOrbitCSeedX = 0.3, DualOrbitCSeedY = 0.2,
             DualOrbitOpacityZ = opZ, DualOrbitOpacityC = opC, DualOrbitLayerBlend = blend,
             DualOrbitBailout = bailout, InteriorAlpha = 200,
+            DualOrbitThemeZ = "", DualOrbitThemeC = "",   // main theme for both (the tests inject / compare against it)
         };
 
     [Theory]

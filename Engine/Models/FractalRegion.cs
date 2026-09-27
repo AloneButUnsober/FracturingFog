@@ -594,6 +594,13 @@ namespace FracturingFog.Models
         [JsonIgnore(Condition = OmitNull)] public int? DualOrbitSliceAxes { get; set; }
         [JsonIgnore(Condition = OmitNull)] public double? DualOrbitSX { get; set; }
         [JsonIgnore(Condition = OmitNull)] public double? DualOrbitSY { get; set; }
+        // #980 — per-orbit layer colouring (#979).
+        [JsonIgnore(Condition = OmitNull)] public int? DualOrbitColorMode { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public string? DualOrbitThemeZ { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public string? DualOrbitThemeC { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public int? DualOrbitLayerBlend { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public double? DualOrbitOpacityZ { get; set; }
+        [JsonIgnore(Condition = OmitNull)] public double? DualOrbitOpacityC { get; set; }
         // #972 — dual-orbit volume (camera + s.y ride the Cam3D block; s.y as the slice).
         [JsonIgnore(Condition = OmitNull)] public double? DualOrbitVolumeSXCenter { get; set; }
         [JsonIgnore(Condition = OmitNull)] public double? DualOrbitVolumeHalfHeight { get; set; }
@@ -964,6 +971,12 @@ namespace FracturingFog.Models
                     DualOrbitSliceAxes = p.DualOrbitSliceAxes != FracturingFog.DualOrbitSliceAxes.SxSy ? (int)p.DualOrbitSliceAxes : (int?)null,
                     DualOrbitSX = p.DualOrbitSX != -0.78 ? p.DualOrbitSX : (double?)null,
                     DualOrbitSY = p.DualOrbitSY != 0.15 ? p.DualOrbitSY : (double?)null,
+                    DualOrbitColorMode = p.DualOrbitColorMode != FracturingFog.DualOrbitColorMode.Field ? (int)p.DualOrbitColorMode : (int?)null,
+                    DualOrbitThemeZ = p.DualOrbitThemeZ != FractalParameters.DualOrbitDefaultThemeZ ? p.DualOrbitThemeZ : null,
+                    DualOrbitThemeC = p.DualOrbitThemeC != FractalParameters.DualOrbitDefaultThemeC ? p.DualOrbitThemeC : null,
+                    DualOrbitLayerBlend = p.DualOrbitLayerBlend != FracturingFog.DualOrbitLayerBlend.COverZ ? (int)p.DualOrbitLayerBlend : (int?)null,
+                    DualOrbitOpacityZ = p.DualOrbitOpacityZ != 1.0 ? p.DualOrbitOpacityZ : (double?)null,
+                    DualOrbitOpacityC = p.DualOrbitOpacityC != 0.6 ? p.DualOrbitOpacityC : (double?)null,
                 },
                 // #893 — Indra's Pearls 2D group. Family + the family's parameter
                 // (μ / traces / c) + depth + mode, each omitted at its default.
@@ -1317,6 +1330,13 @@ namespace FracturingFog.Models
             if (this.DualOrbitSliceAxes.HasValue) p.DualOrbitSliceAxes = (FracturingFog.DualOrbitSliceAxes)this.DualOrbitSliceAxes.Value;
             if (DualOrbitSX.HasValue) p.DualOrbitSX = DualOrbitSX.Value;
             if (DualOrbitSY.HasValue) p.DualOrbitSY = DualOrbitSY.Value;
+            // #980 — per-orbit layer colouring.
+            if (this.DualOrbitColorMode.HasValue) p.DualOrbitColorMode = (FracturingFog.DualOrbitColorMode)this.DualOrbitColorMode.Value;
+            if (DualOrbitThemeZ != null) p.DualOrbitThemeZ = DualOrbitThemeZ;
+            if (DualOrbitThemeC != null) p.DualOrbitThemeC = DualOrbitThemeC;
+            if (this.DualOrbitLayerBlend.HasValue) p.DualOrbitLayerBlend = (FracturingFog.DualOrbitLayerBlend)this.DualOrbitLayerBlend.Value;
+            if (DualOrbitOpacityZ.HasValue) p.DualOrbitOpacityZ = DualOrbitOpacityZ.Value;
+            if (DualOrbitOpacityC.HasValue) p.DualOrbitOpacityC = DualOrbitOpacityC.Value;
             // #972 — dual-orbit volume.
             if (DualOrbitVolumeSXCenter.HasValue) p.DualOrbitVolumeSXCenter = DualOrbitVolumeSXCenter.Value;
             if (DualOrbitVolumeHalfHeight.HasValue) p.DualOrbitVolumeHalfHeight = DualOrbitVolumeHalfHeight.Value;
