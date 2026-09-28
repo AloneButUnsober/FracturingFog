@@ -126,6 +126,53 @@
                 </Grid>
                 </Expander>
 
+                <!-- #1026 — height normalisation: keep relief height the same across
+                     pans, zooms and window sizes instead of re-measuring per frame. -->
+                <Expander Header="Height consistency" HorizontalAlignment="Stretch"
+                          IsExpanded="{Binding Relief2DRaymarch, Mode=OneWay}"
+                          IsEnabled="{Binding Relief2DRaymarch}"
+                          ToolTip.Tip="Applies to the Oblique 3D raymarch path.">
+                <Grid ColumnDefinitions="160,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto">
+                    <TextBlock Grid.Row="0" Grid.Column="0" Text="Height mode:" VerticalAlignment="Center"
+                               ToolTip.Tip="Peak = the tallest point in view is always drawn at full height, re-measured every frame, so panning a tall needle into view flattens everything else. Robust = a high percentile instead, so lone needles no longer set the scale. Fixed = the stored reference and baseline below, so the same fractal detail keeps the same height across pans, zooms and window sizes." />
+                    <ComboBox Grid.Row="0" Grid.Column="1" Margin="0,2" HorizontalAlignment="Stretch"
+                              ItemsSource="{Binding Relief2DHeightModes}"
+                              SelectedItem="{Binding Relief2DHeightMode, Mode=TwoWay}" />
+
+                    <Button Grid.Row="1" Grid.Column="1" Margin="0,4" HorizontalAlignment="Stretch"
+                            Content="Lock current height"
+                            Command="{Binding LockReliefHeightCommand}"
+                            ToolTip.Tip="Freeze the height as it looks right now: stores the current reference and baseline and switches to Fixed. The frame stays the same; later pans, zooms and window changes keep this height." />
+
+                    <TextBlock Grid.Row="2" Grid.Column="0" Grid.ColumnSpan="2" TextWrapping="Wrap" Margin="0,2"
+                               Foreground="#999" Text="{Binding ReliefHeightLockStatus}"
+                               IsVisible="{Binding !ReliefHeightLockFailed}" />
+                    <TextBlock Grid.Row="2" Grid.Column="0" Grid.ColumnSpan="2" TextWrapping="Wrap" Margin="0,2"
+                               Foreground="#FFCC00" Text="{Binding ReliefHeightLockStatus}"
+                               IsVisible="{Binding ReliefHeightLockFailed}" />
+
+                    <TextBlock Grid.Row="3" Grid.Column="0" Text="Reference height:" VerticalAlignment="Center"
+                               IsEnabled="{Binding Relief2DHeightModeIsFixed}"
+                               ToolTip.Tip="Fixed mode: the field height (above the baseline) drawn at full relief height. Smaller = taller relief. 0 = measure every frame." />
+                    <NumericUpDown Grid.Row="3" Grid.Column="1" Margin="0,2"
+                                   Minimum="0" Maximum="100000" Increment="0.1" FormatString="0.###"
+                                   IsEnabled="{Binding Relief2DHeightModeIsFixed}"
+                                   Value="{Binding Relief2DHeightRef, Mode=TwoWay}" />
+
+                    <TextBlock Grid.Row="4" Grid.Column="0" Text="Baseline:" VerticalAlignment="Center"
+                               IsEnabled="{Binding Relief2DHeightModeIsFixed}"
+                               ToolTip.Tip="Fixed mode: the field height treated as ground level; everything below it sits flat on the base. -1 = measure every frame." />
+                    <NumericUpDown Grid.Row="4" Grid.Column="1" Margin="0,2"
+                                   Minimum="-1" Maximum="100000" Increment="0.1" FormatString="0.###"
+                                   IsEnabled="{Binding Relief2DHeightModeIsFixed}"
+                                   Value="{Binding Relief2DHeightBaseline, Mode=TwoWay}" />
+
+                    <TextBlock Grid.Row="5" Grid.Column="0" Grid.ColumnSpan="2" TextWrapping="Wrap" Margin="0,2"
+                               Foreground="#999"
+                               Text="Values are in height-curve units, so changing the height curve or zooming much deeper may need a new lock. Height scale still multiplies the result." />
+                </Grid>
+                </Expander>
+
                 <!-- S11 (#592) — relief height SOURCE: smooth iteration count (the
                      original) / orbit-trap min-distance / blend. Trap + Blend need an
                      orbit-trap theme active (which fills the trap field); colour still

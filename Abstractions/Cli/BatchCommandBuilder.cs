@@ -135,6 +135,13 @@ namespace FracturingFog.Cli
         /// <summary>#520 — far-detail factor (1 = off). Emitted when &lt; 1.</summary>
         public double ReliefFarDetail { get; init; } = 1.0;
 
+        /// <summary>#1026 — raymarch height normalisation. Mode emitted when not
+        /// Peak; the fixed reference (&gt; 0) and baseline (≥ 0) only in Fixed mode
+        /// (unset = measured per frame, omitted).</summary>
+        public ReliefHeightMode ReliefHeightMode { get; init; } = ReliefHeightMode.Peak;
+        public double ReliefHeightRef { get; init; }
+        public double ReliefHeightBaseline { get; init; } = -1.0;
+
         // Depth of field on the relief raymarch camera (roadmap S3, #389).
         // Aperture 0 = pinhole (omit both flags). Emitted only on the raymarch path.
         public double ReliefDofAperture { get; init; }
@@ -344,6 +351,16 @@ namespace FracturingFog.Cli
                 {
                     if (snap.ReliefCameraOrtho) parts.Add(BatchFlags.ReliefCameraOrtho);
                     if (snap.ReliefFarDetail != 1.0) { parts.Add(BatchFlags.ReliefFarDetail); parts.Add(Num(snap.ReliefFarDetail)); }
+                    if (snap.ReliefHeightMode != ReliefHeightMode.Peak)
+                    {
+                        parts.Add(BatchFlags.ReliefHeightMode);
+                        parts.Add(snap.ReliefHeightMode == ReliefHeightMode.Robust ? "robust" : "fixed");
+                        if (snap.ReliefHeightMode == ReliefHeightMode.Fixed)
+                        {
+                            if (snap.ReliefHeightRef > 0.0)       { parts.Add(BatchFlags.ReliefHeightRef);      parts.Add(Num(snap.ReliefHeightRef)); }
+                            if (snap.ReliefHeightBaseline >= 0.0) { parts.Add(BatchFlags.ReliefHeightBaseline); parts.Add(Num(snap.ReliefHeightBaseline)); }
+                        }
+                    }
                     if (snap.ReliefCameraAzimuth != 0.0)    { parts.Add(BatchFlags.ReliefCameraAzimuth);   parts.Add(Num(snap.ReliefCameraAzimuth)); }
                     if (snap.ReliefCameraElevation != 45.0) { parts.Add(BatchFlags.ReliefCameraElevation); parts.Add(Num(snap.ReliefCameraElevation)); }
                     if (snap.ReliefCameraFov != 50.0)       { parts.Add(BatchFlags.ReliefCameraFov);       parts.Add(Num(snap.ReliefCameraFov)); }

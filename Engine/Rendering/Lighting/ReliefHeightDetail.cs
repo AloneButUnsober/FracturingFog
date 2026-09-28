@@ -49,15 +49,18 @@ public static class ReliefHeightDetail
     /// <summary>Top-end contrast via a power curve on the normalised height:
     /// <c>h' = hmax · (h / hmax)^gamma</c>. <paramref name="gamma"/> &gt; 1 expands the
     /// high (filament) band and compresses the base; &lt; 1 does the reverse. Default
-    /// 1.0 (and any gamma ≤ 0) is an exact no-op. The peak (hmax) is preserved.</summary>
-    public static void Gamma(float[] field, int w, int h, double gamma)
+    /// 1.0 (and any gamma ≤ 0) is an exact no-op. The peak (hmax) is preserved.
+    /// #1026 — a positive <paramref name="reference"/> replaces the measured peak as
+    /// hmax, so the curve stays put whatever is in view (Fixed height mode).</summary>
+    public static void Gamma(float[] field, int w, int h, double gamma, double reference = 0.0)
     {
         if (field == null || w <= 0 || h <= 0 || field.Length < w * h) return;
         if (gamma == 1.0 || gamma <= 0.0) return;   // identity
 
         float hmax = 0f;
         int n = w * h;
-        for (int i = 0; i < n; i++) { float v = field[i]; if (v > hmax) hmax = v; }
+        if (reference > 0.0) hmax = (float)reference;
+        else for (int i = 0; i < n; i++) { float v = field[i]; if (v > hmax) hmax = v; }
         if (hmax <= 1e-9f) return;
         double inv = 1.0 / hmax;
         for (int i = 0; i < n; i++)

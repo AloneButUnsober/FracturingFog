@@ -149,6 +149,31 @@ that — the fractal outline grows and exaggerates while the base stays put:
 > overall vertical size. Batch: `--relief-detail-gain`, `--relief-detail-radius`,
 > `--relief-height-gamma`.
 
+### Height consistency — keep the same height across views
+
+By default the raymarch re-measures the field on every frame. The tallest point in
+view is drawn at full height, and the ground level is re-picked each time. So the
+same **Height scale** gives different heights on different views: pan one tall
+needle into view and everything else flattens. The **Height consistency** section
+(raymarch only) changes that:
+
+| Control | What it does |
+|---|---|
+| **Height mode: Peak** | The default. The tallest point in view sets the scale, measured every frame. |
+| **Height mode: Robust** | A high percentile (99.5%) sets the scale, so lone needles no longer flatten the rest. They poke up above the full height instead. |
+| **Height mode: Fixed** | Uses the stored **Reference height** and **Baseline**. The same fractal detail keeps the same height across pans, zooms and window sizes. |
+| **Lock current height** | Stores the reference and baseline the current frame is using, then switches to Fixed. The frame does not change; from then on the height stays put. |
+| **Reference height** | Fixed mode: the field height drawn at full relief height. Smaller = taller relief. 0 = measure every frame. |
+| **Baseline** | Fixed mode: the field height treated as ground level. -1 = measure every frame. |
+
+> [!TIP]
+> Frame a view you like, click **Lock current height**, then explore. Pans and small
+> zooms keep the look. The values are in height-curve units, so after changing the
+> **Height curve**, or zooming much deeper (the iteration counts climb), lock again.
+> In Fixed mode a genuinely tall feature stays tall, so it can cover more of the
+> view than it would in Peak. Batch: `--relief-height-mode peak|robust|fixed`,
+> `--relief-height-ref`, `--relief-height-baseline`.
+
 ### Toggles
 
 | Toggle | What it does |

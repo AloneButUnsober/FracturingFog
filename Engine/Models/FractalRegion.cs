@@ -1529,6 +1529,13 @@ namespace FracturingFog.Models
         public bool HiResField { get; set; } = true;   // #143
         public int FieldFloor { get; set; } = 1080;     // #143
 
+        // Height normalisation (#1026). Defaults = Peak / measured, so a region
+        // saved before these existed recalls exactly as before.
+        [JsonConverter(typeof(JsonStringEnumConverter))]
+        public ReliefHeightMode HeightMode { get; set; } = ReliefHeightMode.Peak;
+        public double HeightRef { get; set; } = 0.0;
+        public double HeightBaseline { get; set; } = -1.0;
+
         // Isolation cull (#135)
         public bool Isolate { get; set; } = false;
         public bool IsolateByDetail { get; set; } = true;
@@ -1617,6 +1624,9 @@ namespace FracturingFog.Models
                 EdgeFade           = p.Relief2DEdgeFade,
                 HiResField         = p.Relief2DHiResField,
                 FieldFloor         = p.Relief2DFieldFloor,
+                HeightMode         = p.Relief2DHeightMode,
+                HeightRef          = p.Relief2DHeightRef,
+                HeightBaseline     = p.Relief2DHeightBaseline,
                 Isolate            = p.Relief2DIsolate,
                 IsolateByDetail    = p.Relief2DIsolateByDetail,
                 DetailThreshold    = p.Relief2DDetailThreshold,
@@ -1668,6 +1678,9 @@ namespace FracturingFog.Models
             p.Relief2DEdgeFade           = EdgeFade;
             p.Relief2DHiResField         = HiResField;
             p.Relief2DFieldFloor         = FieldFloor;
+            p.Relief2DHeightMode         = HeightMode;
+            p.Relief2DHeightRef          = HeightRef;
+            p.Relief2DHeightBaseline     = HeightBaseline;
             p.Relief2DIsolate            = Isolate;
             p.Relief2DIsolateByDetail    = IsolateByDetail;
             p.Relief2DDetailThreshold    = DetailThreshold;

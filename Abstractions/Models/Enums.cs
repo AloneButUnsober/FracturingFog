@@ -39,6 +39,16 @@ namespace FracturingFog
     /// none the trap field is empty and relief falls back to Smooth.</summary>
     public enum ReliefHeightSource { Smooth, Trap, Blend }
 
+    /// <summary>How the Relief 3D raymarch turns the processed height field into
+    /// world height (#1026). <see cref="Peak"/> (default, the original) scales the
+    /// tallest cell in view to the full relief height and subtracts an automatic
+    /// baseline every frame, so one needle panning into view flattens the rest.
+    /// <see cref="Robust"/> scales a high percentile instead, so isolated needles no
+    /// longer set the scale. <see cref="Fixed"/> uses the stored
+    /// <c>Relief2DHeightRef</c> / <c>Relief2DHeightBaseline</c>, so the same field
+    /// value always renders at the same height across pans, zooms and windows.</summary>
+    public enum ReliefHeightMode { Peak, Robust, Fixed }
+
     /// <summary>Tile shape for the RandomTile (Bourke random space-filling)
     /// calculator. All shapes are inscribed in the placement circumradius and
     /// carry the same radial-dome relief; only the paint mask differs.</summary>

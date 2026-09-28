@@ -3020,6 +3020,33 @@ namespace FracturingFog.Rendering
             return true;
         }
 
+        /// <summary>#1026 "Lock current height" — measure the ground level and
+        /// normalisation reference the live relief raymarch is using on the current
+        /// field (<c>_reliefHeight</c> at <c>_reliefW×_reliefH</c>, the field the screen
+        /// renders from), under the current height mode. Feeding them back as
+        /// Relief2DHeightBaseline / Relief2DHeightRef in Fixed mode keeps the frame
+        /// as it is while freezing the height. False when the raymarch is off or no
+        /// field is ready.</summary>
+        public bool TryMeasureReliefHeight(out double baseline, out double reference)
+        {
+            baseline = 0.0; reference = 0.0;
+            if (_disposed) return false;
+            var p = ViewState.FractalParameters;
+            if (!p.Relief2DEnabled || !p.Relief2DRaymarch) return false;
+            float[]? field = _reliefHeight;
+            int fw = _reliefW, fh = _reliefH;
+            if (!_reliefValid || field == null || fw <= 2 || fh <= 2 || field.Length < (long)fw * fh)
+                return false;
+
+            // Copy defensively — the calc thread refills the field for the next frame.
+            var copy = new float[(long)fw * fh];
+            Array.Copy(field, copy, copy.Length);
+            var m = FracturingFog.Rendering.Lighting.HeightfieldRaymarch2D.MeasureHeightNormalization(copy, fw, fh, p);
+            if (m is not { } r) return false;
+            baseline = r.Baseline; reference = r.Reference;
+            return true;
+        }
+
         /// <summary>Set (or clear with null) the rubber-band rectangle drawn
         /// on top of the current frame while the user is right-drag-selecting
         /// a zoom region in 2D. Re-uploads the most recently completed frame
