@@ -226,6 +226,31 @@ namespace FracturingFog.Batch
         /// <summary>Saved animation name (#998), played across a video's frames.</summary>
         public string? AnimationName { get; set; }
 
+        // ── Stereo output (#1012) — null / false = keep the lighting block's value ──
+        public FracturingFog.Rendering.Lighting.StereoMode? Stereo { get; set; }
+        public double? StereoEyeSep { get; set; }         // 0..0.25 world units
+        public double? StereoConvergence { get; set; }    // -0.2..0.2 of eye width
+        public double? StereoMaxDisparity { get; set; }   // 0..0.15 of width
+        public double? StereoFov { get; set; }            // 20..120 degrees
+        public FracturingFog.Rendering.Lighting.StereoLayout? StereoLayout { get; set; }
+        public bool StereoSwapEyes { get; set; }
+        public FracturingFog.Rendering.Lighting.AutostereoPattern? AutostereoPattern { get; set; }
+        public double? AutostereoEyeSep { get; set; }     // 0.03..0.4 of width
+        public double? AutostereoDepth { get; set; }      // 0.05..0.75
+        public int? AutostereoSmoothing { get; set; }     // 0..32 px
+        public int? AutostereoLevels { get; set; }        // 0..64
+        public bool AutostereoCrossEyed { get; set; }
+        public bool AutostereoNoGuideDots { get; set; }
+        public int? AutostereoSeed { get; set; }
+
+        /// <summary>True when any stereo flag was given.</summary>
+        public bool HasStereoFlags =>
+            Stereo.HasValue || StereoEyeSep.HasValue || StereoConvergence.HasValue || StereoMaxDisparity.HasValue
+            || StereoFov.HasValue || StereoLayout.HasValue || StereoSwapEyes
+            || AutostereoPattern.HasValue || AutostereoEyeSep.HasValue || AutostereoDepth.HasValue
+            || AutostereoSmoothing.HasValue || AutostereoLevels.HasValue || AutostereoCrossEyed
+            || AutostereoNoGuideDots || AutostereoSeed.HasValue;
+
         /// <summary>Per-family settings from repeatable <c>--param Key=Value</c>
         /// (#997), in command-line order. Keys are region-snapshot property names;
         /// the batch renderer validates and applies them (Engine side) after the
@@ -717,6 +742,105 @@ namespace FracturingFog.Batch
                     case BatchFlags.Animation:
                         if (!Next(args, ref i, a, out string anv, out error)) return false;
                         opts.AnimationName = anv;
+                        break;
+
+                    // ── Stereo output (#1012) ──
+                    case BatchFlags.Stereo:
+                        if (!Next(args, ref i, a, out string stv, out error)) return false;
+                        switch (stv.ToLowerInvariant())
+                        {
+                            case "off":  opts.Stereo = FracturingFog.Rendering.Lighting.StereoMode.Off; break;
+                            case "fake": opts.Stereo = FracturingFog.Rendering.Lighting.StereoMode.Fake; break;
+                            case "true": opts.Stereo = FracturingFog.Rendering.Lighting.StereoMode.True; break;
+                            case "autostereogram":
+                            case "auto":
+                                opts.Stereo = FracturingFog.Rendering.Lighting.StereoMode.Autostereogram; break;
+                            default:
+                                error = $"Unknown --stereo '{stv}'. Use off|fake|true|autostereogram.";
+                                return false;
+                        }
+                        break;
+
+                    case BatchFlags.StereoEyeSep:
+                        if (!NextDouble(args, ref i, a, out double sesv, out error)) return false;
+                        opts.StereoEyeSep = sesv;
+                        break;
+
+                    case BatchFlags.StereoConvergence:
+                        if (!NextDouble(args, ref i, a, out double scv, out error)) return false;
+                        opts.StereoConvergence = scv;
+                        break;
+
+                    case BatchFlags.StereoMaxDisparity:
+                        if (!NextDouble(args, ref i, a, out double smdv, out error)) return false;
+                        opts.StereoMaxDisparity = smdv;
+                        break;
+
+                    case BatchFlags.StereoFov:
+                        if (!NextDouble(args, ref i, a, out double sfv, out error)) return false;
+                        opts.StereoFov = sfv;
+                        break;
+
+                    case BatchFlags.StereoLayout:
+                        if (!Next(args, ref i, a, out string slv, out error)) return false;
+                        switch (slv.ToLowerInvariant())
+                        {
+                            case "full": opts.StereoLayout = FracturingFog.Rendering.Lighting.StereoLayout.FullSbs; break;
+                            case "half": opts.StereoLayout = FracturingFog.Rendering.Lighting.StereoLayout.HalfSbs; break;
+                            default:
+                                error = $"Unknown --stereo-layout '{slv}'. Use full|half.";
+                                return false;
+                        }
+                        break;
+
+                    case BatchFlags.StereoSwapEyes:
+                        opts.StereoSwapEyes = true;
+                        break;
+
+                    case BatchFlags.AutostereoPattern:
+                        if (!Next(args, ref i, a, out string aspat, out error)) return false;
+                        switch (aspat.ToLowerInvariant())
+                        {
+                            case "dots":    opts.AutostereoPattern = FracturingFog.Rendering.Lighting.AutostereoPattern.RandomDots; break;
+                            case "theme":   opts.AutostereoPattern = FracturingFog.Rendering.Lighting.AutostereoPattern.ThemeDots; break;
+                            case "texture": opts.AutostereoPattern = FracturingFog.Rendering.Lighting.AutostereoPattern.FractalTexture; break;
+                            default:
+                                error = $"Unknown --autostereo-pattern '{aspat}'. Use dots|theme|texture.";
+                                return false;
+                        }
+                        break;
+
+                    case BatchFlags.AutostereoEyeSep:
+                        if (!NextDouble(args, ref i, a, out double aesv, out error)) return false;
+                        opts.AutostereoEyeSep = aesv;
+                        break;
+
+                    case BatchFlags.AutostereoDepth:
+                        if (!NextDouble(args, ref i, a, out double asdepth, out error)) return false;
+                        opts.AutostereoDepth = asdepth;
+                        break;
+
+                    case BatchFlags.AutostereoSmoothing:
+                        if (!NextInt(args, ref i, a, out int asmv, out error)) return false;
+                        opts.AutostereoSmoothing = asmv;
+                        break;
+
+                    case BatchFlags.AutostereoLevels:
+                        if (!NextInt(args, ref i, a, out int alv, out error)) return false;
+                        opts.AutostereoLevels = alv;
+                        break;
+
+                    case BatchFlags.AutostereoCrossEyed:
+                        opts.AutostereoCrossEyed = true;
+                        break;
+
+                    case BatchFlags.AutostereoNoGuideDots:
+                        opts.AutostereoNoGuideDots = true;
+                        break;
+
+                    case BatchFlags.AutostereoSeed:
+                        if (!NextInt(args, ref i, a, out int asdv, out error)) return false;
+                        opts.AutostereoSeed = asdv;
                         break;
 
                     case BatchFlags.Param:
@@ -1296,6 +1420,25 @@ namespace FracturingFog.Batch
                 { error = "--dof-focus must be >= 0."; return false; }
             if (opts.Transmission is < 0.0 or > 1.0)
                 { error = "--transmission must be 0..1."; return false; }
+            // #1012 — stereo ranges (the Lighting & FX dialog's).
+            if (opts.StereoEyeSep is < 0.0 or > 0.25)
+                { error = "--stereo-eye-sep must be 0..0.25 (world units)."; return false; }
+            if (opts.StereoConvergence is < -0.2 or > 0.2)
+                { error = "--stereo-convergence must be -0.2..0.2."; return false; }
+            if (opts.StereoMaxDisparity is < 0.0 or > 0.15)
+                { error = "--stereo-max-disparity must be 0..0.15."; return false; }
+            if (opts.StereoFov is < 20.0 or > 120.0)
+                { error = "--stereo-fov must be 20..120 (degrees)."; return false; }
+            if (opts.AutostereoEyeSep is < 0.03 or > 0.4)
+                { error = "--autostereo-eye-sep must be 0.03..0.4 (fraction of the width)."; return false; }
+            if (opts.AutostereoDepth is < 0.05 or > 0.75)
+                { error = "--autostereo-depth must be 0.05..0.75."; return false; }
+            if (opts.AutostereoSmoothing is < 0 or > 32)
+                { error = "--autostereo-smoothing must be 0..32 (pixels)."; return false; }
+            if (opts.AutostereoLevels is < 0 or > 64)
+                { error = "--autostereo-levels must be 0..64 (0 = continuous)."; return false; }
+            if (opts.AutostereoSeed is < 0)
+                { error = "--autostereo-seed must be >= 0."; return false; }
             if (opts.Ior is < 1.0 or > 3.0)
                 { error = "--ior must be 1..3."; return false; }
             if (opts.AbsorptionDist is <= 0.0)

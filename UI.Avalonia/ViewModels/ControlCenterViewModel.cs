@@ -431,7 +431,6 @@ public sealed partial class ControlCenterViewModel : ViewModelBase
 
             // Fidelity-gap inputs (#362). These live fx have no 2D batch flag.
             ThemeIsUnsaved      = string.IsNullOrWhiteSpace(main.SelectedTheme),
-            StereoActive        = fp != null && fp.Lighting.StereoMode != FracturingFog.Rendering.Lighting.StereoMode.Off,
             DomainWarpActive    = fp?.DomainWarpEnabled ?? false,   // #363 — now emitted as flags
             DomainWarpStrength  = fp?.DomainWarpStrength ?? 0.0,
             DomainWarpFrequency = fp?.DomainWarpFrequency ?? 1.0,

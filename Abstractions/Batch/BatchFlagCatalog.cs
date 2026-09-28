@@ -92,6 +92,7 @@ namespace FracturingFog.Batch
         Volumetric,
         Isolate,
         Lights,
+        Stereo,
         Remote,
         Misc,
     }
@@ -258,6 +259,7 @@ namespace FracturingFog.Batch
             BatchFlagGroup.Volumetric    => "Volumetric lighting (3D fractals + relief raymarch)",
             BatchFlagGroup.Isolate       => "Relief isolate masking",
             BatchFlagGroup.Lights        => "Lights (N = 1, 2 or 3; directional fields do not force relief)",
+            BatchFlagGroup.Stereo        => "Stereo: side-by-side pairs and autostereograms (3D fractals + relief raymarch)",
             BatchFlagGroup.Remote        => "Remote rendering (saved FFClient connection + render preset)",
             BatchFlagGroup.Misc          => "Miscellaneous",
             _                            => g.ToString(),
@@ -429,7 +431,7 @@ namespace FracturingFog.Batch
                 Warp = BatchFlagGroup.DomainWarp, Relief = BatchFlagGroup.Relief, Cam = BatchFlagGroup.ReliefCamera,
                 Froxel = BatchFlagGroup.Froxel, Glass = BatchFlagGroup.Glass, Denoise = BatchFlagGroup.Denoise,
                 Relight = BatchFlagGroup.Relight, Vol = BatchFlagGroup.Volumetric, Iso = BatchFlagGroup.Isolate,
-                Remote = BatchFlagGroup.Remote, Misc = BatchFlagGroup.Misc;
+                Remote = BatchFlagGroup.Remote, Misc = BatchFlagGroup.Misc, Stereo = BatchFlagGroup.Stereo;
             const BatchModes ImgVid = BatchModes.Image | BatchModes.Video;
             const BatchModes Sized = BatchModes.Image | BatchModes.Encoded;
             string[] modeExclusive = { BatchFlags.Slideshow, BatchFlags.Scene, BatchFlags.RegradeExr, BatchFlags.RelightFrom };
@@ -716,6 +718,41 @@ namespace FracturingFog.Batch
                     with { Implies = new[] { BatchFlags.ReliefIsolateByColor, BatchFlags.ReliefIsolate, BatchFlags.Relief } },
                 Dbl(BatchFlags.ReliefIsolateTolerance, Iso, FR, "Colour match tolerance.", 0, 1, enforced: true, def: "0.12")
                     with { Implies = new[] { BatchFlags.ReliefIsolate, BatchFlags.Relief } },
+
+                // ── Stereo (#1012) ──
+                Pick(BatchFlags.Stereo, Stereo, ImgVid,
+                    "Stereo output. fake = one render + depth-parallax warp; true = two eye renders (3D types; relief uses the warp); autostereogram = a single Magic-Eye image. Side-by-side doubles the width (full layout).",
+                    new[] { "off", "fake", "true", "autostereogram" }, def: "off", hint: "MODE"),
+                Dbl(BatchFlags.StereoEyeSep, Stereo, ImgVid, "Side-by-side eye separation (world units; a pair with none uses 0.06).", 0, 0.25, enforced: true, def: "0.06")
+                    with { RequiresChoice = new BatchChoiceRequirement(BatchFlags.Stereo, new[] { "fake", "true" }) },
+                Dbl(BatchFlags.StereoConvergence, Stereo, ImgVid, "Zero-parallax shift (fraction of eye width). 0 = the scene floats in front of the screen; positive pushes it back.", -0.2, 0.2, enforced: true, def: "0")
+                    with { RequiresChoice = new BatchChoiceRequirement(BatchFlags.Stereo, new[] { "fake", "true" }) },
+                Dbl(BatchFlags.StereoMaxDisparity, Stereo, ImgVid, "Depth-parallax comfort cap (fraction of width; 0 = off).", 0, 0.15, enforced: true, def: "0.03")
+                    with { RequiresChoice = new BatchChoiceRequirement(BatchFlags.Stereo, new[] { "fake" }) },
+                Dbl(BatchFlags.StereoFov, Stereo, ImgVid, "Field of view the depth-parallax warp assumes (degrees).", 20, 120, enforced: true, def: "60")
+                    with { RequiresChoice = new BatchChoiceRequirement(BatchFlags.Stereo, new[] { "fake" }) },
+                Pick(BatchFlags.StereoLayout, Stereo, ImgVid, "full = each eye full width (2W x H); half = each eye squeezed (W x H, anamorphic).",
+                    new[] { "full", "half" }, def: "full", hint: "LAYOUT")
+                    with { RequiresChoice = new BatchChoiceRequirement(BatchFlags.Stereo, new[] { "fake", "true" }) },
+                Sw(BatchFlags.StereoSwapEyes, Stereo, ImgVid, "Cross-view layout (right eye on the left) for free-viewing cross-eyed.")
+                    with { RequiresChoice = new BatchChoiceRequirement(BatchFlags.Stereo, new[] { "fake", "true" }) },
+                Pick(BatchFlags.AutostereoPattern, Stereo, ImgVid, "dots = black/white random dots; theme = dots in the render's colours; texture = a strip of the render tiled.",
+                    new[] { "dots", "theme", "texture" }, def: "dots", hint: "PATTERN")
+                    with { RequiresChoice = new BatchChoiceRequirement(BatchFlags.Stereo, new[] { "autostereogram" }) },
+                Dbl(BatchFlags.AutostereoEyeSep, Stereo, ImgVid, "Autostereogram eye separation (fraction of the width; the background repeats every half of it).", 0.03, 0.4, enforced: true, def: "0.125")
+                    with { RequiresChoice = new BatchChoiceRequirement(BatchFlags.Stereo, new[] { "autostereogram" }) },
+                Dbl(BatchFlags.AutostereoDepth, Stereo, ImgVid, "Autostereogram depth amount (more = deeper, harder to fuse).", 0.05, 0.75, enforced: true, def: "0.33")
+                    with { RequiresChoice = new BatchChoiceRequirement(BatchFlags.Stereo, new[] { "autostereogram" }) },
+                Int(BatchFlags.AutostereoSmoothing, Stereo, ImgVid, "Depth smoothing radius (pixels; 0 = off).", 0, 32, enforced: true, def: "3")
+                    with { RequiresChoice = new BatchChoiceRequirement(BatchFlags.Stereo, new[] { "autostereogram" }) },
+                Int(BatchFlags.AutostereoLevels, Stereo, ImgVid, "Depth levels (0 = continuous).", 0, 64, enforced: true, def: "6")
+                    with { RequiresChoice = new BatchChoiceRequirement(BatchFlags.Stereo, new[] { "autostereogram" }) },
+                Sw(BatchFlags.AutostereoCrossEyed, Stereo, ImgVid, "Encode for cross-eyed viewing (default: wall-eyed).")
+                    with { RequiresChoice = new BatchChoiceRequirement(BatchFlags.Stereo, new[] { "autostereogram" }) },
+                Sw(BatchFlags.AutostereoNoGuideDots, Stereo, ImgVid, "Leave out the two convergence guide dots.")
+                    with { RequiresChoice = new BatchChoiceRequirement(BatchFlags.Stereo, new[] { "autostereogram" }) },
+                Int(BatchFlags.AutostereoSeed, Stereo, ImgVid, "Random-dot seed (same seed + view = same image).", 0, null, enforced: true, def: "1")
+                    with { RequiresChoice = new BatchChoiceRequirement(BatchFlags.Stereo, new[] { "autostereogram" }) },
 
                 // ── Remote ──
                 Sw(BatchFlags.Remote, Remote, BatchModes.Remote,

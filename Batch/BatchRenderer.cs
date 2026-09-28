@@ -183,7 +183,30 @@ namespace FracturingFog.Batch
                 fp.Lighting = fxg;
             }
 
+            // #1012 — stereo output. Any stereo flag → copy/mutate/write the
+            // lighting block (over the region / --lighting-preset values). The
+            // poster (stills) and the video loop render every mode from it.
+            if (opts.HasStereoFlags)
+                fp.Lighting = BatchStereo.ApplyFlags(fp.Lighting, opts);
+
             return fp;
+        }
+
+        /// <summary>#1012 — the stereo flags drive --mode image / video only; say so
+        /// instead of silently rendering mono slideshow / scene frames.</summary>
+        private static void NoteStereoNotInThisMode(BatchOptions opts, string mode)
+        {
+            if (opts.HasStereoFlags)
+                Console.WriteLine($"  note     : --stereo* flags apply to --mode image and video; the {mode} renders mono.");
+        }
+
+        /// <summary>#1012 — stereo is set but this render has nothing to make it
+        /// from (flat 2D: no depth, no second camera). Say so rather than silently
+        /// writing a mono image.</summary>
+        private static void NoteIfStereoInert(FractalType type, FractalParameters fp, bool effective)
+        {
+            if (fp.Lighting.StereoMode != StereoMode.Off && !effective)
+                Console.WriteLine($"  note     : stereo has no effect on flat {type} (no depth / second camera): use a 3D type, or --relief-raymarch.");
         }
 
         // #949 — the user-code types (UserEquation / Sandbox / UserBulb) get
@@ -232,6 +255,9 @@ namespace FracturingFog.Batch
                 : null;
             var fp = BuildFractalParameters(opts, namedRegion);
             WarnIfNoUserCodeSource(frType, fp);
+            // #1012 — the poster renders every stereo mode from fp; only say when it can't.
+            NoteIfStereoInert(frType, fp,
+                BatchStereo.For(frType, fp.Relief2DEnabled && fp.Relief2DRaymarch, fp.Lighting, 16, 16) != null);
 
             var (pfBrightness, pfContrast, pfAdaptive) = ResolvePostFx(opts, null);
 
@@ -548,6 +574,21 @@ namespace FracturingFog.Batch
                 _                                => "WMF H.264 MP4",
             };
 
+            // #1012 — the frame parameters (and so the stereo plan, which fixes the
+            // writer's frame size) are resolved before any writer is created.
+            var fp = BuildFractalParameters(opts, namedRegion);
+            WarnIfNoUserCodeSource(frType, fp);
+            var stereo = BatchStereo.For(frType, fp.Relief2DEnabled && fp.Relief2DRaymarch, fp.Lighting, outW, outH);
+            int frameW = stereo?.FrameW ?? outW, frameH = stereo?.FrameH ?? outH;
+            NoteIfStereoInert(frType, fp, stereo != null);
+            if (stereo != null && motion == VideoMotionKind.KenBurns)
+            {
+                // Ken-Burns pans ONE rendered frame in image space; a stereo pair /
+                // depth map can't be panned that way, so hold the view instead.
+                motion = VideoMotionKind.Hold;
+                Console.WriteLine("  note     : Ken-Burns with stereo holds the view (a stereo frame can't be panned in image space).");
+            }
+
             Console.WriteLine($"Batch video render");
             Console.WriteLine($"  fractal  : {frType}");
             Console.WriteLine($"  region   : {regionDispName ?? "(manual)"}");
@@ -557,6 +598,7 @@ namespace FracturingFog.Batch
             if (motionNote != null) Console.WriteLine($"  note     : {motionNote}");
             Console.WriteLine($"  theme    : {opts.ThemeName}    quality: {quality.Name}");
             Console.WriteLine($"  size     : {outW}x{outH}    fps: {opts.VideoFps}    frames: {totalFrames}");
+            if (stereo != null) Console.WriteLine($"  stereo   : {stereo.Describe()}");
             Console.WriteLine($"  encoder  : {losslessLabel}");
             Console.WriteLine($"  out video: {finalVideoPath}");
             Console.WriteLine($"  frames   : {pngFolder}");
@@ -582,7 +624,7 @@ namespace FracturingFog.Batch
                 try
                 {
                     mp4 = BootstrapHooks.BatchVideoWriterFactoryHook?.Invoke(
-                        finalVideoPath, outW, outH, opts.VideoFps);
+                        finalVideoPath, frameW, frameH, opts.VideoFps);
                     if (mp4 == null)
                         Console.WriteLine("  MP4 writer unavailable; PNG sequence + ffmpeg.");
                 }
@@ -613,8 +655,6 @@ namespace FracturingFog.Batch
             // transform + watermark still run below (RenderToPixels returns the
             // composed relief buffer BEFORE those). Relief off → the flat fast path,
             // byte-identical.
-            var fp = BuildFractalParameters(opts, namedRegion);
-            WarnIfNoUserCodeSource(frType, fp);
             FractalParameters? reliefFp = opts.Relief ? fp : null;
             var reliefHistory = opts.Relief
                 ? new FracturingFog.Rendering.Lighting.FroxelHistory() : null;
@@ -699,8 +739,11 @@ namespace FracturingFog.Batch
                 && motion is VideoMotionKind.Zoom or VideoMotionKind.Dolly;
             int mbSamples = Math.Max(2, opts.MotionBlurSubframes);
             double frameStep = totalFrames > 1 ? 1.0 / (totalFrames - 1) : 0.0;
-            var mbAccum = motionBlur ? new MotionBlurAccumulator(outW * outH) : null;
-            uint[]? mbBuffer = motionBlur ? new uint[outW * outH] : null;
+            // True stereo renders the side-by-side pair per sub-frame, so it averages
+            // at the frame size; every other mode averages the mono render.
+            int renderN = stereo?.Kind == BatchStereoKind.True3D ? frameW * frameH : outW * outH;
+            var mbAccum = motionBlur ? new MotionBlurAccumulator(renderN) : null;
+            uint[]? mbBuffer = motionBlur ? new uint[renderN] : null;
 
             // Render one frame of the zoom at parametric time te (already eased) → zoom.
             // reliefHist is threaded only when supplied (froxel temporal seam); flat
@@ -708,6 +751,11 @@ namespace FracturingFog.Batch
             // S2 (#396) — the single-frame relief HDR beauty, captured into this
             // enclosing local when armed (null on the flat / motion-blur paths).
             float[]? zoomHdr = null;
+            // #1012 — the last rendered frame's depth for the stereo post step (a 3D
+            // calculator's published depth, or the Relief G-buffer capture).
+            var frameDepth = new System.Runtime.CompilerServices.StrongBox<float[]?>();
+            FracturingFog.Rendering.Lighting.HeightfieldRaymarch2D.ReliefAovBuffers? frameAov = null;
+            bool reliefStereo = stereo?.Kind == BatchStereoKind.DepthRelief;
             uint[] RenderZoomFrame(double teLocal, FracturingFog.Rendering.Lighting.FroxelHistory? reliefHist, bool captureHdr)
             {
                 double fz = Math.Exp(logZ0 + (logZ1 - logZ0) * teLocal);
@@ -727,11 +775,12 @@ namespace FracturingFog.Batch
                         FroxelHistory = reliefHist,             // #468 shared across frames
                         Path = string.Empty, Format = ImageFileFormat.Png,
                     };
-                    if (captureHdr)
+                    if (captureHdr || reliefStereo)
                     {
-                        var aov = FracturingFog.Imaging.ReliefDenoisePass.MakeCapture(reliefFp, outW, outH, captureHdr: true);
+                        var aov = FracturingFog.Imaging.ReliefDenoisePass.MakeCapture(reliefFp, outW, outH, captureHdr, captureGeom: reliefStereo);
                         var buf = PosterRenderer.RenderToPixels(rreq, CancellationToken.None, out _, out _, aov);
-                        zoomHdr = aov?.HdrBeauty;
+                        if (captureHdr) zoomHdr = aov?.HdrBeauty;
+                        if (reliefStereo) frameAov = aov;
                         return buf;
                     }
                     return PosterRenderer.RenderToPixels(rreq, CancellationToken.None, out _, out _);
@@ -739,7 +788,7 @@ namespace FracturingFog.Batch
                 return limbRegion != null && frameCx == cx
                     ? RenderRegionMandelFrame(limbRegion, outW, outH, fz, iter, theme, pfAdaptive, quality)
                     : RenderOneFrame(frType, outW, outH, frameCx, cy, fz, iter, theme, quality, pfAdaptive,
-                                     fp, limbSource);
+                                     fp, limbSource, stereo, frameDepth);
             }
 
             var progress = new ConsoleProgress("Frames");
@@ -762,7 +811,8 @@ namespace FracturingFog.Batch
                         // Render once, then hold or Ken-Burns the frame in image
                         // space — no recompute. Frame 0 is the full frame.
                         heldBase ??= RenderZoomFrame(0.0, reliefHistory, captureHdr: false);
-                        buffer = new uint[outW * outH];
+                        // #1012 — a True-stereo held frame is the pair (frame size).
+                        buffer = new uint[heldBase.Length];
                         if (motion == VideoMotionKind.KenBurns)
                         {
                             var (rx, ry, rw, rh) = kenBurns.Rect(eHold, outW, outH);
@@ -800,19 +850,33 @@ namespace FracturingFog.Batch
 
                     // Brightness/Contrast BGRA post-pass (parity with the
                     // interactive image); HE already baked in the frame render.
-                    ApplyBrightnessContrast(buffer, outW * outH, pfBrightness, pfContrast);
+                    // True stereo renders the pair itself, so the grade runs at its size.
+                    bool pairRendered = stereo?.Kind == BatchStereoKind.True3D && buffer.Length == frameW * frameH;
+                    int gradeW = pairRendered ? frameW : outW, gradeH = pairRendered ? frameH : outH;
+                    ApplyBrightnessContrast(buffer, gradeW * gradeH, pfBrightness, pfContrast);
                     // S2 (#389/#396) — view transform / tonemap, after b/c (poster order).
                     // zoomHdr non-null on the single-frame relief path when armed → the
                     // true-linear intermediate; else the plain 8-bit path.
-                    ApplyViewTransform(buffer, outW * outH,
+                    ApplyViewTransform(buffer, gradeW * gradeH,
                         opts.ViewTransform ?? FracturingFog.Imaging.ViewTransform.None, opts.ViewExposureEv ?? 0.0,
-                        motionBlur ? null : zoomHdr, outW, outH);
+                        motionBlur ? null : zoomHdr, gradeW, gradeH);
+
+                    // #1012 — stereo, last on the graded frame as live: the Fake warp /
+                    // autostereogram over this frame's depth, or a frame that must still
+                    // be fitted to the stereo writer size.
+                    if (stereo != null && !pairRendered)
+                    {
+                        var frameFx = fp.Lighting;
+                        buffer = stereo.Kind == BatchStereoKind.True3D
+                            ? stereo.FitToFrame(buffer, outW, outH)
+                            : stereo.Finish(buffer, outW, outH, frameDepth.Value, frameAov, in frameFx);
+                    }
 
                     // --watermark bakes the region/theme + program sub-line
                     // into every emitted frame so the WMF Mp4Writer path AND
                     // the PNG sequence both carry the watermark.
                     if (opts.Watermark)
-                        ApplyWatermarkInPlace(buffer, outW, outH,
+                        ApplyWatermarkInPlace(buffer, frameW, frameH,
                             regionDispName ?? frType.ToString(),
                             opts.ThemeName);
 
@@ -832,7 +896,7 @@ namespace FracturingFog.Batch
                     string framePath = Path.Combine(pngFolder,
                         string.Format(FrameNameFmt, f + 1));
                     ImageExport.SavePixelsToFile(
-                        buffer, outW, outH, framePath, ImageFileFormat.Png,
+                        buffer, frameW, frameH, framePath, ImageFileFormat.Png,
                         watermarkText: "", fontColor: System.Drawing.Color.White, subText: "");
 
                     framesWritten++;
@@ -923,7 +987,8 @@ namespace FracturingFog.Batch
             FractalType frType, int w, int h,
             double cx, double cy, double zoom, int iter,
             IColorMap theme, QualityPreset quality, int adaptive = 0,
-            FractalParameters? fp = null, FractalRegion? limbs = null)
+            FractalParameters? fp = null, FractalRegion? limbs = null,
+            BatchStereo? stereo = null, System.Runtime.CompilerServices.StrongBox<float[]?>? depthOut = null)
         {
             fp ??= new FractalParameters();
             IFractalCalculator? alt = PosterRenderer.BuildCaptureCalculator(new PosterRequest
@@ -949,11 +1014,26 @@ namespace FracturingFog.Batch
 
             if (alt != null)
             {
+                // #1012 — True stereo on a 3D raymarcher: both eye renders; the
+                // frame is the side-by-side pair (graded downstream at its size).
+                if (stereo?.Kind == BatchStereoKind.True3D)
+                {
+                    var tfx = fp.Lighting;
+                    var pair = StereoRender.RenderTrueStereo(alt, in tfx, CancellationToken.None);
+                    if (pair != null)
+                    {
+                        var (pw, ph) = StereoRender.OutputDims(w, h, tfx.StereoLayout);
+                        CompositeInteriorAlpha(pair, pw, ph, theme, fp);
+                        return pair;
+                    }
+                }
                 // #145: escape-time alt calculators equalize through the shared
                 // HistogramEqualizer core just like Mandelbrot; non-escape-time
                 // families don't implement the capability and carry no HE.
                 // Brightness/contrast still apply downstream on the buffer.
                 alt.Calculate(CancellationToken.None);
+                // #1012 — the depth a 3D raymarcher published (Fake / autostereogram).
+                if (depthOut != null) depthOut.Value = (alt as IDepthAovSource)?.DepthBuffer;
                 if (adaptive > 0 && alt is FracturingFog.Interefaces.ISupportsHistogramEq heAlt)
                     heAlt.ApplyHistogramEqualization(adaptive / 100.0);
                 var altBuf = CopyBuffer(alt.ColorBuffer, w, h);
@@ -1575,6 +1655,7 @@ namespace FracturingFog.Batch
         // fractal-type filter narrows the pool like the interactive engine.
         public static int RenderSlideshow(BatchOptions opts)
         {
+            NoteStereoNotInThisMode(opts, "slideshow");
             var rng = new Random();
 
             // 1. Load + resolve preset.
@@ -1934,6 +2015,7 @@ namespace FracturingFog.Batch
         // libraries are loaded by BatchEntry before dispatch.
         public static int RenderScene(BatchOptions opts)
         {
+            NoteStereoNotInThisMode(opts, "scene");
             var scene = FracturingFog.Models.SceneLibrary.Instance.GetByName(opts.SceneName);
             if (scene == null)
             {

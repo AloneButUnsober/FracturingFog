@@ -239,17 +239,18 @@ namespace FracturingFog.Server.Tests
             Assert.Empty(gaps);
         }
 
+        // #1012 — stereo is expressible now: emitted as flags, not a gap.
         [Fact]
-        public void DetectGaps_FlagsStereoOnly()
+        public void Stereo_IsEmitted_NotAGap()
         {
-            var report = BatchCommandBuilder.BuildWithReport(new BatchCommandSnapshot
-            {
-                StereoActive = true,
-            });
+            var fp = new FractalParameters();
+            var fx = fp.Lighting;
+            fx.StereoMode = FracturingFog.Rendering.Lighting.StereoMode.Autostereogram;
+            fp.Lighting = fx;
+            var report = BatchCommandBuilder.BuildWithReport(new BatchCommandSnapshot { Parameters = fp });
 
-            Assert.True(report.HasGaps);
-            Assert.Single(report.Gaps);
-            Assert.Contains(report.Gaps, g => g.Contains("Stereo") && g.Contains("autostereogram"));
+            Assert.DoesNotContain(report.Gaps, g => g.Contains("Stereo"));
+            Assert.Contains("--stereo autostereogram", report.Command);
         }
 
         // #363 — core relief is emitted, not a blanket gap.

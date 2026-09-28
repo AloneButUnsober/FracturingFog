@@ -206,6 +206,33 @@ public sealed class CommandComposerTests
         Assert.Throws<ArgumentException>(() => c.Load(new[] { "--no-such-flag" }));
     }
 
+    // #1012 — a flag group left out of the seed's "look" set is silently dropped
+    // from "Seed from live view" (Stereo was). Every group must be classified:
+    // either a look group, or one of these job groups.
+    [Fact]
+    public void EveryFlagGroup_IsClassifiedForTheSeed()
+    {
+        var job = new HashSet<BatchFlagGroup>
+        {
+            BatchFlagGroup.Mode, BatchFlagGroup.Output, BatchFlagGroup.Video, BatchFlagGroup.Slideshow,
+            BatchFlagGroup.Exr, BatchFlagGroup.Remote, BatchFlagGroup.Misc,
+        };
+        foreach (var g in Enum.GetValues<BatchFlagGroup>())
+            Assert.True(CommandComposer.IsLookGroup(g) ^ job.Contains(g),
+                $"{g}: add it to CommandComposer's look groups, or to this test's job groups");
+    }
+
+    [Fact]
+    public void SeedLook_CarriesStereo()
+    {
+        var c = Coords();
+        c.SeedLook(new[] { "--fractal", "Mandelbulb", "--x", "0", "--y", "0", "--zoom", "1",
+                           "--stereo", "autostereogram", "--autostereo-pattern", "texture", "--out", "<OUTPUT.png>" });
+        Assert.Equal("autostereogram", c.ValueOf(BatchFlags.Stereo));
+        Assert.Equal("texture", c.ValueOf(BatchFlags.AutostereoPattern));
+        Assert.Contains("--stereo autostereogram", c.Command());
+    }
+
     [Fact]
     public void SeedLook_ReplacesTheLook_AndKeepsTheJob()
     {

@@ -41,7 +41,7 @@ public sealed class CommandBuilderViewModelTests
         Row(vm, BatchFlags.Region).Value = "Seahorse Valley";
         Assert.True(Row(vm, BatchFlags.Region).IsSelected);
         Assert.True(vm.IsValid, vm.ValidationMessage);
-        Assert.Contains("--region 'Seahorse Valley'", vm.CommandText);
+        Assert.Contains("--region \"Seahorse Valley\"", vm.CommandText);   // Windows default: Command Prompt quoting
         Assert.Contains("output path", vm.Hint);           // --out is still the placeholder
 
         Row(vm, BatchFlags.Region).Value = "";             // clearing free text deselects
@@ -101,7 +101,7 @@ public sealed class CommandBuilderViewModelTests
         Assert.True(vm.HasModeValue);
         Assert.True(vm.ModeValueIsPath);
         vm.ModeValue = @"C:\renders\in file.exr";
-        Assert.Contains(@"--regrade-exr 'C:\renders\in file.exr'", vm.CommandText);
+        Assert.Contains(@"--regrade-exr ""C:\renders\in file.exr""", vm.CommandText);
         vm.IsRemote = true;
         Assert.False(vm.HasModeValue);
     }
@@ -431,7 +431,7 @@ public sealed class CommandBuilderViewModelTests
         var vm = Runnable();
         Row(vm, BatchFlags.Theme).Value = "Fire 3D (PBR)";
         vm.SelectedShell = CommandShell.PowerShell;
-        Assert.Contains("--theme 'Fire 3D (PBR)'", vm.CommandText);
+        Assert.Contains("--theme \"Fire 3D (PBR)\"", vm.CommandText);   // same as cmd for everyday values
         vm.SelectedShell = CommandShell.Cmd;
         Assert.Contains("--theme \"Fire 3D (PBR)\"", vm.CommandText);
         vm.SelectedShell = CommandShell.Bash;
