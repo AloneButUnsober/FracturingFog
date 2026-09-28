@@ -127,6 +127,8 @@ internal static class ReliefRaymarchProbe
             // 4f (#170) — empty-space-skip on, matching the D3D gate (GPU==twin with
             // the coarse max-height grid driving the leap).
             Relief2DEmptySkip = true,
+            // #1027 — Uniform tolerance anchor: exercises the capped cone (gConeCapT).
+            Relief2DDetailAnchor = ReliefDetailAnchor.Uniform,
         };
         var fx = LightingFxData.CreateDefault();
         fx.BgTopColor = 0xFF335588u;

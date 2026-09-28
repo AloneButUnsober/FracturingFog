@@ -149,6 +149,8 @@ namespace FracturingFog.Batch
         public const string ReliefHeightMode      = "--relief-height-mode";
         public const string ReliefHeightRef       = "--relief-height-ref";
         public const string ReliefHeightBaseline  = "--relief-height-baseline";
+        // #1027 — where the raymarch hit tolerance is measured from.
+        public const string ReliefDetailAnchor    = "--relief-detail-anchor";
 
         // Depth of field on the relief raymarch camera (roadmap S3, #389). Any
         // DOF flag implies --relief-raymarch (DOF is perspective-camera only).

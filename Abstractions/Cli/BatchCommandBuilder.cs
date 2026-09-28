@@ -142,6 +142,9 @@ namespace FracturingFog.Cli
         public double ReliefHeightRef { get; init; }
         public double ReliefHeightBaseline { get; init; } = -1.0;
 
+        /// <summary>#1027 — tolerance anchor; emitted when Uniform.</summary>
+        public ReliefDetailAnchor ReliefDetailAnchor { get; init; } = ReliefDetailAnchor.Camera;
+
         // Depth of field on the relief raymarch camera (roadmap S3, #389).
         // Aperture 0 = pinhole (omit both flags). Emitted only on the raymarch path.
         public double ReliefDofAperture { get; init; }
@@ -351,6 +354,7 @@ namespace FracturingFog.Cli
                 {
                     if (snap.ReliefCameraOrtho) parts.Add(BatchFlags.ReliefCameraOrtho);
                     if (snap.ReliefFarDetail != 1.0) { parts.Add(BatchFlags.ReliefFarDetail); parts.Add(Num(snap.ReliefFarDetail)); }
+                    if (snap.ReliefDetailAnchor == ReliefDetailAnchor.Uniform) { parts.Add(BatchFlags.ReliefDetailAnchor); parts.Add("uniform"); }
                     if (snap.ReliefHeightMode != ReliefHeightMode.Peak)
                     {
                         parts.Add(BatchFlags.ReliefHeightMode);

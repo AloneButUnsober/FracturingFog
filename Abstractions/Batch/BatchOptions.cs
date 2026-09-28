@@ -294,6 +294,7 @@ namespace FracturingFog.Batch
         public global::FracturingFog.ReliefHeightMode? ReliefHeightMode { get; set; }  // #1026
         public double? ReliefHeightRef { get; set; }       // #1026 — > 0 (fixed mode)
         public double? ReliefHeightBaseline { get; set; }  // #1026 — ≥ 0 (fixed mode)
+        public global::FracturingFog.ReliefDetailAnchor? ReliefDetailAnchor { get; set; }  // #1027
 
         // Depth of field on the relief raymarch camera (roadmap S3, #389). Any
         // DOF flag implies relief + raymarch (perspective camera only).
@@ -1016,6 +1017,19 @@ namespace FracturingFog.Batch
                     case BatchFlags.ReliefHeightBaseline:
                         if (!NextDouble(args, ref i, a, out double rhb, out error)) return false;
                         opts.ReliefHeightBaseline = rhb;
+                        opts.Relief = true;
+                        break;
+
+                    case BatchFlags.ReliefDetailAnchor:
+                        if (!Next(args, ref i, a, out string rda, out error)) return false;
+                        switch (rda.ToLowerInvariant())
+                        {
+                            case "camera": opts.ReliefDetailAnchor = global::FracturingFog.ReliefDetailAnchor.Camera; break;
+                            case "uniform": opts.ReliefDetailAnchor = global::FracturingFog.ReliefDetailAnchor.Uniform; break;
+                            default:
+                                error = $"Unknown --relief-detail-anchor '{rda}'. Use camera|uniform.";
+                                return false;
+                        }
                         opts.Relief = true;
                         break;
 

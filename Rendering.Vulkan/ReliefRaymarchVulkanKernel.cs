@@ -66,7 +66,7 @@ public sealed unsafe class ReliefRaymarchVulkanKernel : IDisposable, IReliefRaym
         public float L0x, L0y, L0z, I0; public float C0r, C0g, C0b, ShadowK0;
         public float L1x, L1y, L1z, I1; public float C1r, C1g, C1b, ShadowK1;
         public float L2x, L2y, L2z, I2; public float C2r, C2g, C2b, ShadowK2;
-        public float Ambient, FloorBx, FloorBz, Pad3;
+        public float Ambient, FloorBx, FloorBz, ConeCapT;   // #1027 — was Pad3
         public uint BgTop, BgBottom, FloorAlbedo, DropColor;
         public float SpecStrength, Roughness, Metallic, PadS;   // 4a
         public int ShadowSteps; public float ShadowSoftK; public int ShadowMask; public float PadSh;   // 4b
@@ -344,7 +344,7 @@ public sealed unsafe class ReliefRaymarchVulkanKernel : IDisposable, IReliefRaym
             C1r = (float)u.C1r, C1g = (float)u.C1g, C1b = (float)u.C1b, ShadowK1 = (float)u.ShadowK1,
             L2x = (float)u.L2x, L2y = (float)u.L2y, L2z = (float)u.L2z, I2 = (float)u.I2,
             C2r = (float)u.C2r, C2g = (float)u.C2g, C2b = (float)u.C2b, ShadowK2 = (float)u.ShadowK2,
-            Ambient = (float)u.Ambient, FloorBx = (float)c.FloorBx, FloorBz = (float)c.FloorBz, Pad3 = 0f,
+            Ambient = (float)u.Ambient, FloorBx = (float)c.FloorBx, FloorBz = (float)c.FloorBz, ConeCapT = (float)c.ConeCapT,
             BgTop = u.BgTop, BgBottom = u.BgBottom, FloorAlbedo = u.FloorAlbedo, DropColor = u.DropColor,
             SpecStrength = (float)u.SpecStrength, Roughness = (float)u.Roughness, Metallic = (float)u.Metallic, PadS = 0f,
             ShadowSteps = u.ShadowSteps, ShadowSoftK = (float)u.ShadowSoftK, ShadowMask = u.ShadowLightMask, PadSh = 0f,

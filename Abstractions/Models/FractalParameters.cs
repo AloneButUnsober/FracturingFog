@@ -814,6 +814,12 @@ namespace FracturingFog.Models
         /// baseline). Set by "Lock current height".</summary>
         public double Relief2DHeightBaseline { get; set; } = -1.0;
 
+        /// <summary>#1027 — where the raymarch measures its hit tolerance from.
+        /// <see cref="ReliefDetailAnchor.Camera"/> (default, byte-identical) grows it
+        /// with distance; <see cref="ReliefDetailAnchor.Uniform"/> holds it at the
+        /// nearest terrain's tolerance so far filaments resolve like near ones.</summary>
+        public ReliefDetailAnchor Relief2DDetailAnchor { get; set; } = ReliefDetailAnchor.Camera;
+
         /// <summary>Bicubic (Catmull-Rom) height sampling instead of bilinear —
         /// smoother terrain on deep zoom, at extra sample cost. Default false.</summary>
         public bool Relief2DBicubicHeight { get; set; } = false;
@@ -970,10 +976,11 @@ namespace FracturingFog.Models
         /// trace leap the empty air above flat interior (where the slope-limited
         /// point DE crawls) straight down to the block-max plane. Purely a step-
         /// count optimisation on the SAME surface — a conservative skip that never
-        /// overshoots the first hit. OPT-IN and default OFF so the byte-identical
-        /// slow path stays the reference; the CPU twin and both GPU kernels build
-        /// and consume the same grid. Only affects the raymarch path.</summary>
-        public bool Relief2DEmptySkip { get; set; } = false;
+        /// overshoots the first hit. #1027 — default ON and used by the CPU trace
+        /// too: with the world-space hit test, fine fields need it to reach the
+        /// terrain within the step budget. The CPU trace, the twin and both GPU
+        /// kernels build and consume the same grid. Only affects the raymarch path.</summary>
+        public bool Relief2DEmptySkip { get; set; } = true;   // #1027 — on by default (CPU + GPU)
 
         /// <summary>Master toggle: isolate the kept fractal as a standalone 3D
         /// object over a transparent background. Default false.</summary>
@@ -1756,6 +1763,7 @@ namespace FracturingFog.Models
                 Relief2DHeightMode = Relief2DHeightMode,
                 Relief2DHeightRef = Relief2DHeightRef,
                 Relief2DHeightBaseline = Relief2DHeightBaseline,
+                Relief2DDetailAnchor = Relief2DDetailAnchor,
                 Relief2DBicubicHeight = Relief2DBicubicHeight,
                 Relief2DGroundPlane = Relief2DGroundPlane,
                 Relief2DAutoShade = Relief2DAutoShade,

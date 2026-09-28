@@ -502,8 +502,11 @@ public static class ReliefRaymarchGpu
             {
                 marchSteps++;
                 d = de.Evaluate(ox + rdx * t, oy + rdy * t, oz + rdz * t);
-                double epsT = cam.Eps0 + cam.PixelAngle * t;
-                if (d < epsT) { hit = true; break; }
+                double epsT = cam.Tolerance(t);
+                // #1027 — hit when the VERTICAL gap (d / invLip, world units) is
+                // within the tolerance. Comparing the Lipschitz-scaled d stopped every
+                // ray at the box top on fine fields (tiny invLip) — a flat plate.
+                if (d < epsT * u.InvLip) { hit = true; break; }
                 tPrev = t;
                 double adv = Math.Max(d, epsT * 0.5);
                 // 4f — empty-space skip. When the ray point is safely above the
@@ -1392,32 +1395,5 @@ public static class ReliefRaymarchGpu
     /// the HLSL <c>EmptySkipDist</c>.</summary>
     private static double EmptySkipDist(double px, double py, double pz,
         double rdx, double rdy, double rdz, double epsT, in ReliefUniforms u, float[] mip)
-    {
-        double uu = px / u.Aspect + 0.5, vv = pz + 0.5;
-        int cx = (int)Math.Floor(uu * u.MipW);
-        int cz = (int)Math.Floor(vv * u.MipH);
-        if (cx < 0) cx = 0; else if (cx > u.MipW - 1) cx = u.MipW - 1;
-        if (cz < 0) cz = 0; else if (cz > u.MipH - 1) cz = u.MipH - 1;
-        double hmax = mip[cz * u.MipW + cx] * u.Sy;
-        if (py <= hmax + epsT) return 0.0;
-
-        // Descend to epsT ABOVE the block max (not the plane itself) so the normal
-        // march resumes with a tight hit-refine bracket instead of one spanning the
-        // whole leap. Still conservative (y stays ≥ hmax over the span).
-        double tPlane = rdy < -1e-9 ? (py - (hmax + epsT)) / (-rdy) : double.MaxValue;
-
-        // Lateral exit of this coarse cell's world XZ AABB.
-        double xLo = (cx / (double)u.MipW - 0.5) * u.Aspect;
-        double xHi = ((cx + 1) / (double)u.MipW - 0.5) * u.Aspect;
-        double zLo = cz / (double)u.MipH - 0.5;
-        double zHi = (cz + 1) / (double)u.MipH - 0.5;
-        double tExit = double.MaxValue;
-        if (rdx > 1e-12) tExit = Math.Min(tExit, (xHi - px) / rdx);
-        else if (rdx < -1e-12) tExit = Math.Min(tExit, (xLo - px) / rdx);
-        if (rdz > 1e-12) tExit = Math.Min(tExit, (zHi - pz) / rdz);
-        else if (rdz < -1e-12) tExit = Math.Min(tExit, (zLo - pz) / rdz);
-
-        double skip = Math.Min(tPlane, tExit);
-        return skip > 0.0 ? skip : 0.0;
-    }
+        => ReliefHeightMip.EmptySkipDist(px, py, pz, rdx, rdy, rdz, epsT, u.Aspect, u.Sy, mip, u.MipW, u.MipH);
 }
