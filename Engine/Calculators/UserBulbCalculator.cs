@@ -50,7 +50,7 @@ using FracturingFog.Rendering.Lighting;
 
 namespace FracturingFog;
 
-public sealed class UserBulbCalculator : IFractalCalculator, IStereoEyeCamera
+public sealed class UserBulbCalculator : IFractalCalculator, IStereoEyeCamera, IDepthAovSource
 {
     public int Width { get; private set; }
     public int Height { get; private set; }
@@ -70,6 +70,9 @@ public sealed class UserBulbCalculator : IFractalCalculator, IStereoEyeCamera
 
     /// <inheritdoc/>
     public double StereoEyeOffset { get; set; }
+
+    /// <inheritdoc/>
+    public float[]? DepthBuffer { get; private set; }
 
     public string LastError { get; private set; } = string.Empty;
     /// <summary>0-based character index into the most-recent source where the
@@ -539,6 +542,7 @@ public sealed class UserBulbCalculator : IFractalCalculator, IStereoEyeCamera
 
     public void Calculate(CancellationToken ct = default)
     {
+        DepthBuffer = null;   // #1009 — never describe an older frame
         // Lazy compile / recompile when source, chain, or axis mode changes.
         string chainKey = FractalParameters.UserBulbChain == null || FractalParameters.UserBulbChain.Count == 0
             ? string.Empty
@@ -771,9 +775,13 @@ public sealed class UserBulbCalculator : IFractalCalculator, IStereoEyeCamera
         // Phase 4 — G-buffer for SSAO post-pass. Skipped during low-res preview
         // because the SSAO pass is much heavier than the preview budget allows.
         // Allocated at render-buffer dimensions so SSAO runs before downsample.
+        // #1009 — also for edge ink / screen-space DoF (were SSAO-only), and even
+        // in low-res preview when depth is an output (Fake stereo), so the
+        // preview frames stay side-by-side instead of flicking to mono.
+        bool wantDepthOut = ScreenSpacePost.WantsDepthOutput(in fx);
         float[]? depthBuf = null;
         float[]? normalBuf = null;
-        if (!lowRes && fx.SsaoSamples > 0)
+        if ((!lowRes && ScreenSpacePost.WantsGBuffer(in fx)) || wantDepthOut)
         {
             depthBuf = new float[width * height];
             normalBuf = new float[3 * width * height];
@@ -802,6 +810,7 @@ public sealed class UserBulbCalculator : IFractalCalculator, IStereoEyeCamera
         bool vecAnalyticGpuOk = !juliaMode && _analyticPattern.Kind != AnalyticDEKind.None;
         if (FractalParameters.UserBulbBackend == UserBulbBackendKind.GPU
             && !lowRes
+            && !wantDepthOut      // #1009 — the GPU kernels have no depth pass
             && kifsScale <= 0.0   // scalar KIFS DE is CPU-only
             // S8 (#404/#488/#492) — the UserBulb GPU shade resolves point/spot
             // Light1 on the GPU (#488), and area lights no longer force CPU (#492):
@@ -904,7 +913,9 @@ public sealed class UserBulbCalculator : IFractalCalculator, IStereoEyeCamera
 
         // Temporal cache: identity blit on unchanged scene+camera.
         string sceneKey = lowRes ? string.Empty : BuildSceneKey();
-        bool tempReuse = FractalParameters.UserBulbTemporalReuse && !lowRes;
+        // #1009 — an identity blit replays colour only (no depth), so skip the
+        // temporal cache while depth is wanted as an output.
+        bool tempReuse = FractalParameters.UserBulbTemporalReuse && !lowRes && !wantDepthOut;
         if (tempReuse)
         {
             var decision = _cache.Decide(sceneKey, width, height, camX, camY, camZ, fwd.X, fwd.Y, fwd.Z);
@@ -1126,8 +1137,9 @@ public sealed class UserBulbCalculator : IFractalCalculator, IStereoEyeCamera
         });
 
         // Phase 4 — SSAO post-pass on the render-resolution buffer (before
-        // downsample/upscale composites it into ColorBuffer).
-        if (depthBuf is not null && normalBuf is not null)
+        // downsample/upscale composites it into ColorBuffer). Never in low-res
+        // preview (the G-buffer only exists there for the #1009 depth output).
+        if (depthBuf is not null && normalBuf is not null && !lowRes)
             ScreenSpacePost.ApplySsao(renderBuffer, depthBuf, normalBuf, width, height, in fx);
 
         // Phase 21b — HDR DoF (hex-bokeh 3-pass) runs before tonemap so bright
@@ -1141,8 +1153,12 @@ public sealed class UserBulbCalculator : IFractalCalculator, IStereoEyeCamera
 
         // Phase 23 — Sobel-on-normal edge ink. Operates on tonemapped bytes
         // pre-downsample so ink lines stay sharp through the upscale pass.
-        if (depthBuf is not null && normalBuf is not null)
+        if (depthBuf is not null && normalBuf is not null && !lowRes)
             ScreenSpacePost.ApplyEdgeInk(renderBuffer, depthBuf, normalBuf, width, height, in fx);
+
+        // #1009 — publish the depth for post-frame passes (Fake stereo),
+        // resampled from the preview / supersample render dims to ColorBuffer dims.
+        DepthBuffer = ScreenSpacePost.PublishDepth(depthBuf, width, height, fullW, fullH, in fx);
 
         if (lowRes)
         {

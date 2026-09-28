@@ -46,7 +46,7 @@ using FracturingFog.Rendering.Lighting;
 
 namespace FracturingFog;
 
-public sealed class DualOrbitVolumeCalculator : IFractalCalculator, IStereoEyeCamera
+public sealed class DualOrbitVolumeCalculator : IFractalCalculator, IStereoEyeCamera, IDepthAovSource
 {
     public int Width { get; private set; }
     public int Height { get; private set; }
@@ -70,6 +70,9 @@ public sealed class DualOrbitVolumeCalculator : IFractalCalculator, IStereoEyeCa
     /// <inheritdoc/>
     public double StereoEyeOffset { get; set; }
 
+    /// <inheritdoc/>
+    public float[]? DepthBuffer { get; private set; }
+
     // Iterations for the per-layer critical orbit (colour only).
     private const int CriticalIter = 256;
     // Under-relaxed march: the DE of thin Julia sheets overestimates slightly;
@@ -87,6 +90,7 @@ public sealed class DualOrbitVolumeCalculator : IFractalCalculator, IStereoEyeCa
 
     public void Calculate(CancellationToken ct = default)
     {
+        DepthBuffer = null;   // #1009 — never describe an older frame
         ColorMap.MaxIterations = 256;
         int fullW = Width;
         int fullH = Height;
@@ -157,7 +161,7 @@ public sealed class DualOrbitVolumeCalculator : IFractalCalculator, IStereoEyeCa
 
         float[]? depthBuf = null;
         float[]? normalBuf = null;
-        if (fx.SsaoSamples > 0)
+        if (ScreenSpacePost.WantsGBuffer(in fx))   // #1009 — was SSAO-only
         {
             depthBuf = new float[width * height];
             normalBuf = new float[3 * width * height];
@@ -304,6 +308,9 @@ public sealed class DualOrbitVolumeCalculator : IFractalCalculator, IStereoEyeCa
         if (depthBuf is not null && normalBuf is not null && !thinLensDof)
             ScreenSpacePost.ApplyEdgeInk(renderBuffer, depthBuf, normalBuf, width, height, in fx);
         ScreenSpacePost.EndGpuFrame(in fx);
+
+        // #1009 — publish the depth for post-frame passes (Fake stereo).
+        DepthBuffer = ScreenSpacePost.PublishDepth(depthBuf, width, height, fullW, fullH, in fx, valid: !thinLensDof);
 
         if (lowRes)
             FracturingFog.Rendering.LowResPreview.UpscaleNearest(

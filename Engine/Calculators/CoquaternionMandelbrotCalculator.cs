@@ -54,7 +54,7 @@ using FracturingFog.Rendering.Lighting;
 
 namespace FracturingFog;
 
-public sealed class CoquaternionMandelbrotCalculator : IFractalCalculator, IStereoEyeCamera
+public sealed class CoquaternionMandelbrotCalculator : IFractalCalculator, IStereoEyeCamera, IDepthAovSource
 {
     public int Width { get; private set; }
     public int Height { get; private set; }
@@ -78,6 +78,9 @@ public sealed class CoquaternionMandelbrotCalculator : IFractalCalculator, ISter
     /// <inheritdoc/>
     public double StereoEyeOffset { get; set; }
 
+    /// <inheritdoc/>
+    public float[]? DepthBuffer { get; private set; }
+
     public CoquaternionMandelbrotCalculator(int width, int height) => Resize(width, height);
 
     public void Resize(int width, int height)
@@ -89,6 +92,7 @@ public sealed class CoquaternionMandelbrotCalculator : IFractalCalculator, ISter
 
     public void Calculate(CancellationToken ct = default)
     {
+        DepthBuffer = null;   // #1009 — never describe an older frame
         ColorMap.MaxIterations = 256;
         int fullW = Width;
         int fullH = Height;
@@ -160,7 +164,7 @@ public sealed class CoquaternionMandelbrotCalculator : IFractalCalculator, ISter
         // Phase 4 — G-buffer for SSAO post-pass.
         float[]? depthBuf = null;
         float[]? normalBuf = null;
-        if (fx.SsaoSamples > 0)
+        if (ScreenSpacePost.WantsGBuffer(in fx))   // #1009 — was SSAO-only
         {
             depthBuf = new float[width * height];
             normalBuf = new float[3 * width * height];
@@ -299,6 +303,9 @@ public sealed class CoquaternionMandelbrotCalculator : IFractalCalculator, ISter
         if (depthBuf is not null && normalBuf is not null && !thinLensDof)
             ScreenSpacePost.ApplyEdgeInk(renderBuffer, depthBuf, normalBuf, width, height, in fx);
         ScreenSpacePost.EndGpuFrame(in fx);
+
+        // #1009 — publish the depth for post-frame passes (Fake stereo).
+        DepthBuffer = ScreenSpacePost.PublishDepth(depthBuf, width, height, fullW, fullH, in fx, valid: !thinLensDof);
 
         if (lowRes)
             FracturingFog.Rendering.LowResPreview.UpscaleNearest(

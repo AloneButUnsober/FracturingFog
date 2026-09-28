@@ -565,7 +565,7 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
     public bool Relief2DEnabled
     {
         get => _p.Relief2DEnabled;
-        set { if (_p.Relief2DEnabled == value) return; _p.Relief2DEnabled = value; this.RaisePropertyChanged(); this.RaisePropertyChanged(nameof(ShowLightingFxLauncher)); this.RaisePropertyChanged(nameof(IsReliefLightingContext)); this.RaisePropertyChanged(nameof(Stage2PostFxApplies)); this.RaisePropertyChanged(nameof(ReliefStage2Applies)); Fire(); }
+        set { if (_p.Relief2DEnabled == value) return; _p.Relief2DEnabled = value; this.RaisePropertyChanged(); this.RaisePropertyChanged(nameof(ShowLightingFxLauncher)); this.RaisePropertyChanged(nameof(IsReliefLightingContext)); this.RaisePropertyChanged(nameof(Stage2PostFxApplies)); this.RaisePropertyChanged(nameof(ReliefStage2Applies)); this.RaisePropertyChanged(nameof(StereoHint)); this.RaisePropertyChanged(nameof(HasStereoHint)); Fire(); }
     }
     public double Relief2DHeightScale
     {
@@ -605,7 +605,7 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
     public bool Relief2DRaymarch
     {
         get => _p.Relief2DRaymarch;
-        set { if (_p.Relief2DRaymarch == value) return; _p.Relief2DRaymarch = value; this.RaisePropertyChanged(); this.RaisePropertyChanged(nameof(ShowLightingFxLauncher)); this.RaisePropertyChanged(nameof(IsReliefLightingContext)); this.RaisePropertyChanged(nameof(Stage2PostFxApplies)); this.RaisePropertyChanged(nameof(ReliefStage2Applies)); Fire(); }
+        set { if (_p.Relief2DRaymarch == value) return; _p.Relief2DRaymarch = value; this.RaisePropertyChanged(); this.RaisePropertyChanged(nameof(ShowLightingFxLauncher)); this.RaisePropertyChanged(nameof(IsReliefLightingContext)); this.RaisePropertyChanged(nameof(Stage2PostFxApplies)); this.RaisePropertyChanged(nameof(ReliefStage2Applies)); this.RaisePropertyChanged(nameof(StereoHint)); this.RaisePropertyChanged(nameof(HasStereoHint)); Fire(); }
     }
     // Roadmap S6 (#408) — froxel (frustum-voxel) volumetrics. Composites a camera-
     // frustum fog volume by per-pixel depth instead of the per-pixel march. Only

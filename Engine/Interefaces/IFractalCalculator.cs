@@ -75,4 +75,18 @@ namespace FracturingFog.Interefaces
         /// around the two passes and resets it to 0. Default 0 = mono.</summary>
         double StereoEyeOffset { get; set; }
     }
+
+    /// <summary>Implemented by the 3D raymarch calculators (#1009): the per-pixel
+    /// ray distance of the last <c>Calculate</c>, for passes that run after the
+    /// frame (the depth-parallax stereo warp, later autostereograms, #1014).
+    /// Published only when <c>ScreenSpacePost.WantsDepthOutput</c> asks for it.</summary>
+    public interface IDepthAovSource
+    {
+        /// <summary>Per-pixel ray distance at <c>ColorBuffer</c> dims
+        /// (<c>ScreenSpacePost.DepthMiss</c> = +Infinity for sky), or null when
+        /// the last frame did not capture a usable depth (not requested, GPU /
+        /// thin-lens / cached frame, or cancelled). Reset at the start of every
+        /// <c>Calculate</c>, so it never describes an older frame.</summary>
+        float[]? DepthBuffer { get; }
+    }
 }
