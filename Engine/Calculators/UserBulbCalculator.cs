@@ -50,7 +50,7 @@ using FracturingFog.Rendering.Lighting;
 
 namespace FracturingFog;
 
-public sealed class UserBulbCalculator : IFractalCalculator
+public sealed class UserBulbCalculator : IFractalCalculator, IStereoEyeCamera
 {
     public int Width { get; private set; }
     public int Height { get; private set; }
@@ -67,6 +67,9 @@ public sealed class UserBulbCalculator : IFractalCalculator
     public bool SupportsZoomPan => true;
 
     public FractalParameters FractalParameters { get; set; } = new();
+
+    /// <inheritdoc/>
+    public double StereoEyeOffset { get; set; }
 
     public string LastError { get; private set; } = string.Empty;
     /// <summary>0-based character index into the most-recent source where the
@@ -721,7 +724,7 @@ public sealed class UserBulbCalculator : IFractalCalculator
             Z: right.X * fwd.Y - right.Y * fwd.X);
 
         // Phase 20b — true per-eye camera offset along the right basis.
-        double eyeOffset = FractalParameters.Lighting.StereoEyeOffset;
+        double eyeOffset = StereoEyeOffset;
         if (eyeOffset != 0)
         {
             camX += right.X * eyeOffset;

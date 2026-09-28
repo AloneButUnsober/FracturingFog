@@ -163,49 +163,78 @@ public class StereoRenderTests
 
     // Contract the #107 host wiring depends on: RenderTrueStereo drives two
     // renders at eye offsets -IPD/2 then +IPD/2, composites left|right into a
-    // 2·W × H buffer, and restores Lighting afterwards (EyeOffset back to 0).
+    // 2·W × H buffer, and leaves the calculator mono (offset 0) afterwards.
     [Fact]
-    public void RenderTrueStereo_OffsetsEyes_Composites_And_Restores()
+    public void RenderTrueStereo_OffsetsEyes_Composites_And_ResetsOffset()
     {
         const int w = 6, h = 3;
         const uint leftColor = 0xFF111111u, rightColor = 0xFF222222u;
 
-        var fp = new FractalParameters();
-        var lf = LightingFxData.CreateDefault();
-        lf.StereoMode = StereoMode.True;
-        lf.StereoEyeSeparation = 0.1;
-        fp.Lighting = lf;
+        var fx = LightingFxData.CreateDefault();
+        fx.StereoMode = StereoMode.True;
+        fx.StereoEyeSeparation = 0.1;
 
+        double offset = 0.0;
+        var seen = new System.Collections.Generic.List<double>();
         var buf = new uint[w * h];
-        // Each "render" paints per the sign of the transient eye offset that
-        // RenderTrueStereo set for this pass.
+        // Each "render" paints per the sign of the eye offset set for this pass.
         void RenderOnce(CancellationToken _)
         {
-            double off = fp.Lighting.StereoEyeOffset;
-            Array.Fill(buf, off < 0 ? leftColor : rightColor);
+            seen.Add(offset);
+            Array.Fill(buf, offset < 0 ? leftColor : rightColor);
         }
 
         var sbs = StereoRender.RenderTrueStereo(
-            fp, RenderOnce, () => buf, w, h, CancellationToken.None);
+            in fx, o => offset = o, RenderOnce, () => buf, w, h, CancellationToken.None);
 
         Assert.NotNull(sbs);
         Assert.Equal(w * 2 * h, sbs!.Length);
+        Assert.Equal(new[] { -0.05, 0.05 }, seen);
         for (int y = 0; y < h; y++)
         {
             Assert.Equal(leftColor, sbs[y * (w * 2) + 0]);      // left half = -IPD/2 pass
             Assert.Equal(rightColor, sbs[y * (w * 2) + w]);     // right half = +IPD/2 pass
         }
-        // Lighting restored — no leaked stereo offset.
-        Assert.Equal(0.0, fp.Lighting.StereoEyeOffset);
-        Assert.Equal(StereoMode.True, fp.Lighting.StereoMode);
+        Assert.Equal(0.0, offset);                             // back to mono
     }
 
     [Fact]
-    public void RenderTrueStereo_StereoOff_ReturnsNull()
+    public void RenderTrueStereo_StereoOff_ReturnsNull_WithoutRendering()
     {
-        var fp = new FractalParameters(); // default Lighting = StereoMode.Off
+        var fx = LightingFxData.CreateDefault(); // StereoMode.Off
+        int renders = 0;
         Assert.Null(StereoRender.RenderTrueStereo(
-            fp, _ => { }, () => new uint[4], 2, 2, CancellationToken.None));
+            in fx, _ => { }, _ => renders++, () => new uint[4], 2, 2, CancellationToken.None));
+        Assert.Equal(0, renders);
+    }
+
+    // #1008 — a faulted eye render must not leave the calculator offset for
+    // the next (mono) frame.
+    [Fact]
+    public void RenderTrueStereo_Fault_ResetsOffset()
+    {
+        var fx = LightingFxData.CreateDefault();
+        fx.StereoMode = StereoMode.True;
+        fx.StereoEyeSeparation = 0.2;
+        double offset = 0.0;
+        Assert.Throws<InvalidOperationException>(() => StereoRender.RenderTrueStereo(
+            in fx, o => offset = o, _ => throw new InvalidOperationException(),
+            () => new uint[4], 2, 2, CancellationToken.None));
+        Assert.Equal(0.0, offset);
+    }
+
+    [Theory]
+    [InlineData(true, StereoMode.True, 0.1, true)]
+    [InlineData(false, StereoMode.True, 0.1, false)]   // 2D: no per-eye camera
+    [InlineData(true, StereoMode.Fake, 0.1, false)]
+    [InlineData(true, StereoMode.Off, 0.1, false)]
+    [InlineData(true, StereoMode.True, 0.0, false)]
+    public void WantsTrueStereo_Gate(bool is3D, StereoMode mode, double sep, bool expected)
+    {
+        var fx = LightingFxData.CreateDefault();
+        fx.StereoMode = mode;
+        fx.StereoEyeSeparation = sep;
+        Assert.Equal(expected, StereoRender.WantsTrueStereo(is3D, in fx));
     }
 
     // #107 — stereo settings must survive a scene/preset save-load so a saved

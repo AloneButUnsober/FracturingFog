@@ -33,8 +33,6 @@ using System;
 using System.Threading;
 using System.Threading.Tasks;
 
-using FracturingFog.Models;
-
 namespace FracturingFog.Rendering.Lighting;
 
 public static class StereoRender
@@ -270,66 +268,64 @@ public static class StereoRender
         return maxPx * dMin / focalPx;
     }
 
+    /// <summary>True when the two-render (True) stereo path should run: a 3D
+    /// raymarch type (<paramref name="is3D"/>) with <see cref="StereoMode.True"/>
+    /// and a positive eye separation. The single predicate the live frame, the
+    /// video loop and the recorder sizing share (#1008).</summary>
+    public static bool WantsTrueStereo(bool is3D, in LightingFxData fx)
+        => is3D && fx.StereoMode == StereoMode.True && fx.StereoEyeSeparation > 0.0;
+
     /// <summary>Phase 20b — true per-eye stereo orchestration.
     ///
     /// Renders the scene twice with the camera origin shifted by ±IPD/2 along
-    /// the right basis (each 3D calculator picks up the offset via
-    /// <see cref="LightingFxData.StereoEyeOffset"/>) and composites a doubled-
-    /// width side-by-side buffer. Returns <c>null</c> when stereo is off
-    /// (<c>fx.StereoMode != True</c> or <c>StereoEyeSeparation &lt;= 0</c>).
+    /// the right basis (via <paramref name="setEyeOffset"/>, which the host
+    /// points at <see cref="FracturingFog.Interefaces.IStereoEyeCamera"/>) and
+    /// composites a doubled-width side-by-side buffer. Returns <c>null</c> when
+    /// stereo is off (<c>fx.StereoMode != True</c> or <c>StereoEyeSeparation
+    /// &lt;= 0</c>) or the render was cancelled.
     ///
     /// Unlike <see cref="ApplyStereoSideBySide"/> (which warps a single mono
     /// render via depth-parallax), this path produces actual parallax on close
     /// objects at the cost of two full renders per frame.
     ///
-    /// Callers supply two callbacks to keep this helper agnostic to the
-    /// per-fractal calculator API: <paramref name="renderOnce"/> runs the
-    /// calculator's full pipeline (the same call the host already uses for a
-    /// mono frame), and <paramref name="snapshotColorBuffer"/> hands back the
-    /// just-rendered buffer (cloned by this method so the next render can
-    /// safely overwrite). <paramref name="fp"/> is mutated to set
-    /// <see cref="LightingFxData.StereoEyeOffset"/> before each pass and is
-    /// restored to its original value (including the original
-    /// <see cref="LightingFxData.StereoEyeOffset"/>) in a <c>finally</c> block
-    /// so a cancelled / faulted render does not leave the params in a stereo
-    /// state.</summary>
-    /// <param name="fp">Active fractal parameters. The
-    /// <see cref="LightingFxData.StereoEyeOffset"/> field is set transiently
-    /// to ±IPD/2 around the two render passes; the original Lighting value is
-    /// restored before return.</param>
+    /// The shared fractal parameters are never touched (#1008): the eye offset
+    /// goes to the calculator out of band, so a UI edit landing between the two
+    /// passes is not overwritten and the transient offset cannot be saved into a
+    /// preset. The offset is reset to 0 in a <c>finally</c> block so a cancelled
+    /// or faulted render leaves the calculator mono.</summary>
+    /// <param name="fx">Active lighting block (mode, IPD, convergence, layout).</param>
+    /// <param name="setEyeOffset">Sets the calculator's per-eye camera offset.</param>
     /// <param name="renderOnce">Delegate that drives one render of the active
     /// calculator. Typically <c>ct => calc.Calculate(ct)</c>.</param>
     /// <param name="snapshotColorBuffer">Delegate that returns the calculator's
     /// current <c>ColorBuffer</c>. Called twice; the helper clones the first
     /// snapshot so the second render can safely reuse the buffer.</param>
-    /// <param name="width">Source render width (mono). Output is 2 × this.</param>
+    /// <param name="width">Source render width (mono).</param>
     /// <param name="height">Source render height.</param>
     /// <param name="ct">Cancellation token threaded through to each render
     /// pass. If the first pass is cancelled the helper returns null without
     /// running the second.</param>
-    /// <returns>Doubled-width side-by-side buffer (left = -IPD/2 eye, right =
-    /// +IPD/2 eye) or <c>null</c> if stereo is off / cancelled.</returns>
+    /// <returns>Side-by-side buffer (left = -IPD/2 eye, right = +IPD/2 eye) at
+    /// <see cref="OutputDims"/>, or <c>null</c> if stereo is off / cancelled.</returns>
     public static uint[]? RenderTrueStereo(
-        FractalParameters fp,
+        in LightingFxData fx,
+        Action<double> setEyeOffset,
         Action<CancellationToken> renderOnce,
         Func<uint[]> snapshotColorBuffer,
         int width, int height,
         CancellationToken ct)
     {
-        if (fp == null) return null;
-        var orig = fp.Lighting;
-        if (orig.StereoMode != StereoMode.True) return null;
-        double ipd = orig.StereoEyeSeparation;
+        if (fx.StereoMode != StereoMode.True) return null;
+        double ipd = fx.StereoEyeSeparation;
         if (ipd <= 0) return null;
         if (width <= 0 || height <= 0) return null;
+        double convergence = fx.StereoConvergence;
+        StereoLayout layout = fx.StereoLayout;
 
-        uint[]? outBuf = null;
         try
         {
             // Left eye render with eye shifted by -IPD/2 along the right basis.
-            var lf = orig;
-            lf.StereoEyeOffset = -ipd * 0.5;
-            fp.Lighting = lf;
+            setEyeOffset(-ipd * 0.5);
             renderOnce(ct);
             if (ct.IsCancellationRequested) return null;
             var leftSrc = snapshotColorBuffer();
@@ -338,16 +334,14 @@ public static class StereoRender
             Array.Copy(leftSrc, leftSnapshot, width * height);
 
             // Right eye render with eye shifted by +IPD/2.
-            var rf = orig;
-            rf.StereoEyeOffset = +ipd * 0.5;
-            fp.Lighting = rf;
+            setEyeOffset(+ipd * 0.5);
             renderOnce(ct);
             if (ct.IsCancellationRequested) return null;
             var rightSrc = snapshotColorBuffer();
             if (rightSrc == null || rightSrc.Length < width * height) return null;
 
             int outW = width * 2;
-            outBuf = new uint[outW * height];
+            var outBuf = new uint[outW * height];
             for (int y = 0; y < height; y++)
             {
                 int srcRow = y * width;
@@ -356,16 +350,31 @@ public static class StereoRender
                 Array.Copy(leftSnapshot, srcRow, outBuf, dstRowL, width);
                 Array.Copy(rightSrc, srcRow, outBuf, dstRowR, width);
             }
-            ApplyConvergence(outBuf, outW, width, height, orig.StereoConvergence);
-            return orig.StereoLayout == StereoLayout.HalfSbs
+            ApplyConvergence(outBuf, outW, width, height, convergence);
+            return layout == StereoLayout.HalfSbs
                 ? ToHalfSbs(outBuf, width, height)
                 : outBuf;
         }
         finally
         {
-            // Always restore — a cancelled or faulted render must not leave
-            // the params in a stereo state.
-            fp.Lighting = orig;
+            // Always back to mono — a cancelled or faulted render must not
+            // leave the calculator offset for the next (mono) frame.
+            setEyeOffset(0.0);
         }
+    }
+
+    /// <summary>Run <see cref="RenderTrueStereo(in LightingFxData, Action{double}, Action{CancellationToken}, Func{uint[]}, int, int, CancellationToken)"/>
+    /// on a calculator. Returns <c>null</c> when <paramref name="calc"/> cannot
+    /// render a stereo eye (not an <see cref="FracturingFog.Interefaces.IStereoEyeCamera"/>),
+    /// when stereo is off, or when cancelled.</summary>
+    public static uint[]? RenderTrueStereo(
+        FracturingFog.Interefaces.IFractalCalculator calc, in LightingFxData fx, CancellationToken ct)
+    {
+        if (calc is not FracturingFog.Interefaces.IStereoEyeCamera eye) return null;
+        return RenderTrueStereo(in fx,
+            o => eye.StereoEyeOffset = o,
+            t => calc.Calculate(t),
+            () => calc.ColorBuffer,
+            calc.Width, calc.Height, ct);
     }
 }

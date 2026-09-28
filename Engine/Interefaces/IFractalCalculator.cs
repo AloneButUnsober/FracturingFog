@@ -61,4 +61,18 @@ namespace FracturingFog.Interefaces
         /// <summary>Per-pixel orbit-trap min-distance; 0 for in-set / no-trap pixels.</summary>
         float[] TrapBuffer { get; }
     }
+
+    /// <summary>Implemented by the 3D raymarch calculators, which can render one
+    /// eye of a true (two-render) stereo pair (#107 / #1008). The camera origin is
+    /// shifted by <see cref="StereoEyeOffset"/> world units along the camera's
+    /// right basis. The offset lives on the calculator, not in the shared
+    /// <c>FractalParameters</c>, so a UI edit made during the two eye renders is
+    /// never overwritten and the transient offset can never reach a saved preset.</summary>
+    public interface IStereoEyeCamera
+    {
+        /// <summary>Per-eye camera offset along the right basis (world units).
+        /// <c>StereoRender.RenderTrueStereo</c> sets <c>-IPD/2</c> / <c>+IPD/2</c>
+        /// around the two passes and resets it to 0. Default 0 = mono.</summary>
+        double StereoEyeOffset { get; set; }
+    }
 }

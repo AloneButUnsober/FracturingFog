@@ -20,7 +20,7 @@ using FracturingFog.Rendering.Lighting;
 
 namespace FracturingFog;
 
-public sealed class MandelbulbCalculator : IFractalCalculator
+public sealed class MandelbulbCalculator : IFractalCalculator, IStereoEyeCamera
 {
     public int Width { get; private set; }
     public int Height { get; private set; }
@@ -43,6 +43,9 @@ public sealed class MandelbulbCalculator : IFractalCalculator
     public bool SupportsZoomPan => true;
 
     public FractalParameters FractalParameters { get; set; } = new();
+
+    /// <inheritdoc/>
+    public double StereoEyeOffset { get; set; }
 
     // P7a — lazily constructed GPU calculator. Borrows GpuAcceleratorHost's
     // shared accelerator; Dispose is a no-op for the host so leaving this
@@ -101,7 +104,7 @@ public sealed class MandelbulbCalculator : IFractalCalculator
         // Phase 20b — true per-eye stereo. RenderTrueStereo sets the transient
         // EyeOffset to ±IPD/2 before each Calculate; shift camera origin along
         // the right basis. Default 0 = mono (legacy bit-identical).
-        double eyeOffset = FractalParameters.Lighting.StereoEyeOffset;
+        double eyeOffset = StereoEyeOffset;
         if (eyeOffset != 0)
         {
             camX += right[0] * eyeOffset;

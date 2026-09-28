@@ -186,8 +186,9 @@ public sealed class LightingFxPresetData
     public double TriplanarStrength { get; set; } = 0.0;
     public uint   TriplanarTint     { get; set; } = 0xFFFFFFFFu;
 
-    // Stereo per-eye lateral offset (separation was persisted; offset wasn't).
-    public double StereoEyeOffset { get; set; } = 0.0;
+    // (No StereoEyeOffset: it was a transient per-render value and is no longer
+    // part of LightingFxData (#1008). Old presets that carry the key still load;
+    // the unknown property is skipped.)
 
     // ── Clone ─────────────────────────────────────────────────────────
 
@@ -273,7 +274,6 @@ public sealed class LightingFxPresetData
         UseGpuPost = fx.UseGpuPost, UseGpuRender = fx.UseGpuRender,
         TriplanarKind = fx.TriplanarKind, TriplanarScale = fx.TriplanarScale,
         TriplanarStrength = fx.TriplanarStrength, TriplanarTint = fx.TriplanarTint,
-        StereoEyeOffset = fx.StereoEyeOffset,
     };
 
     /// <summary>Materialise this preset as a runtime <see cref="LightingFxData"/>
@@ -352,7 +352,6 @@ public sealed class LightingFxPresetData
         UseGpuPost = UseGpuPost, UseGpuRender = UseGpuRender,
         TriplanarKind = TriplanarKind, TriplanarScale = TriplanarScale,
         TriplanarStrength = TriplanarStrength, TriplanarTint = TriplanarTint,
-        StereoEyeOffset = StereoEyeOffset,
     };
 
     /// <summary>Apply this preset to a fractal parameter set. Overwrites

@@ -71,12 +71,17 @@ public sealed class LightingFxPresetRoundTripTests
         Assert.Equal(0xFF112233u, back.TriplanarTint);
     }
 
+    // #1008 — the transient per-eye offset is no longer part of the lighting
+    // block; a preset saved by an older build that still carries the key must
+    // load (the unknown property is skipped) and keep its real stereo settings.
     [Fact]
-    public void RoundTrip_Preserves_StereoEyeOffset()
+    public void LegacyPreset_WithStereoEyeOffset_StillLoads()
     {
-        var fx = LightingFxData.CreateDefault();
-        fx.StereoEyeOffset = 0.42;
-        Assert.Equal(0.42, RoundTrip(in fx).StereoEyeOffset);
+        const string json = "{\"StereoMode\":2,\"StereoEyeSeparation\":0.07,\"StereoEyeOffset\":0.42}";
+        var dto = System.Text.Json.JsonSerializer.Deserialize<LightingFxPresetData>(json)!;
+        var fx = dto.ToFx();
+        Assert.Equal(StereoMode.True, fx.StereoMode);
+        Assert.Equal(0.07, fx.StereoEyeSeparation);
     }
 
     [Fact]

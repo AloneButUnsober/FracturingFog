@@ -645,13 +645,10 @@ public struct LightingFxData
     /// saved scenes still pick up the warp.</summary>
     public StereoMode StereoMode;
 
-    /// <summary>Phase 20b — transient per-eye camera-offset along the right
-    /// basis (world units). Set by <see cref="StereoRender.RenderTrueStereo"/>
-    /// to <c>-IPD/2</c> on the left-eye pass and <c>+IPD/2</c> on the right-eye
-    /// pass; reset to 0 afterwards. Each 3D calculator's <c>Calculate</c> adds
-    /// <c>right · EyeOffset</c> to its camera origin right after computing the
-    /// basis. Default 0 → no shift (mono).</summary>
-    public double StereoEyeOffset;
+    // The per-eye camera offset used to live here as a transient field that
+    // RenderTrueStereo wrote into the shared params around each eye pass; it
+    // now lives on the calculator (IStereoEyeCamera, #1008) so it can neither
+    // clobber a concurrent UI edit nor be saved into a preset.
 
     /// <summary>Horizontal field of view in degrees, used to derive a focal-
     /// length-in-pixels proxy for the depth-parallax warp:
@@ -856,7 +853,6 @@ public struct LightingFxData
         StereoEyeSeparation = 0.0,
         StereoFovDegrees    = 60.0,
         StereoMode          = StereoMode.Off,
-        StereoEyeOffset     = 0.0,
         StereoConvergence   = 0.0,
         StereoMaxDisparity  = 0.03,
         StereoLayout        = StereoLayout.FullSbs,
@@ -912,7 +908,7 @@ public struct LightingFxData
         h.Add(CausticsColor); h.Add(CausticsAnimSpeed);
         h.Add(EdgeStrength); h.Add(EdgeColor); h.Add(EdgeThreshold); h.Add(EdgeKernel);
         h.Add(StereoEyeSeparation); h.Add(StereoFovDegrees); h.Add(StereoMode);
-        h.Add(StereoEyeOffset); h.Add(StereoConvergence); h.Add(StereoMaxDisparity); h.Add(StereoLayout);
+        h.Add(StereoConvergence); h.Add(StereoMaxDisparity); h.Add(StereoLayout);
         h.Add(DofAperture); h.Add(DofFocusDistance); h.Add(DofSamples); h.Add(DofThinLens);
         h.Add(SceneTime); h.Add(LightOrbitSpeed);
         h.Add(DebugHudFlags); h.Add(DebugAov);

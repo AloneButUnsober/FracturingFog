@@ -24,7 +24,7 @@ using FracturingFog.Rendering.Lighting;
 
 namespace FracturingFog;
 
-public sealed class KifsCalculator : IFractalCalculator
+public sealed class KifsCalculator : IFractalCalculator, IStereoEyeCamera
 {
     public int Width { get; private set; }
     public int Height { get; private set; }
@@ -44,6 +44,9 @@ public sealed class KifsCalculator : IFractalCalculator
     public bool SupportsZoomPan => true;
 
     public FractalParameters FractalParameters { get; set; } = new();
+
+    /// <inheritdoc/>
+    public double StereoEyeOffset { get; set; }
 
     // P7a — Menger-fold GPU calculator. P7b — Sierpinski sibling. Both lazy.
     private MengerGpuCalculator? _gpuMenger;
@@ -124,7 +127,7 @@ public sealed class KifsCalculator : IFractalCalculator
         };
 
         // Phase 20b — true per-eye camera offset along the right basis.
-        double eyeOffset = FractalParameters.Lighting.StereoEyeOffset;
+        double eyeOffset = StereoEyeOffset;
         if (eyeOffset != 0)
         {
             camX += right[0] * eyeOffset;
