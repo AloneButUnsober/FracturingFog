@@ -758,7 +758,7 @@
 
                 <!-- Reflection / Edge / Stereo / DoF -->
                 <Expander Header="Reflection / Edge / Stereo / DoF" HorizontalAlignment="Stretch">
-                    <Grid ColumnDefinitions="160,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto">
+                    <Grid ColumnDefinitions="160,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto">
                         <TextBlock Grid.Row="0" Grid.Column="0" Text="Reflection:" VerticalAlignment="Center"
                                    ToolTip.Tip="N-bounce DE-march along reflect(V,N). 0 = off." />
                         <Grid Grid.Row="0" Grid.Column="1" ColumnDefinitions="*,Auto" Margin="0,2">
@@ -933,6 +933,12 @@
                         <CheckBox Grid.Row="17" Grid.Column="1" IsChecked="{Binding StereoSwapEyes, Mode=TwoWay}"
                                   IsEnabled="{Binding ReliefStage2Applies}"
                                   Content="Swap eyes (cross-view)" Margin="0,2" />
+
+                        <!-- #1009: say when a stereo setting will not do what it looks like
+                             for this fractal (colourblind-safe yellow, never red). -->
+                        <TextBlock Grid.Row="18" Grid.Column="0" Grid.ColumnSpan="2"
+                                   Text="{Binding StereoHint}" IsVisible="{Binding HasStereoHint}"
+                                   Foreground="#FFCC00" TextWrapping="Wrap" FontSize="11" Margin="0,4,0,2" />
                     </Grid>
                 </Expander>
 

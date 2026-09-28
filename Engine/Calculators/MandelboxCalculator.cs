@@ -22,7 +22,7 @@ using FracturingFog.Rendering.Lighting;
 
 namespace FracturingFog;
 
-public sealed class MandelboxCalculator : IFractalCalculator, IStereoEyeCamera
+public sealed class MandelboxCalculator : IFractalCalculator, IStereoEyeCamera, IDepthAovSource
 {
     public int Width { get; private set; }
     public int Height { get; private set; }
@@ -46,6 +46,9 @@ public sealed class MandelboxCalculator : IFractalCalculator, IStereoEyeCamera
     /// <inheritdoc/>
     public double StereoEyeOffset { get; set; }
 
+    /// <inheritdoc/>
+    public float[]? DepthBuffer { get; private set; }
+
     // P7a — lazily-constructed GPU calculator (see MandelbulbCalculator for contract).
     private MandelboxGpuCalculator? _gpu;
 
@@ -60,6 +63,7 @@ public sealed class MandelboxCalculator : IFractalCalculator, IStereoEyeCamera
 
     public void Calculate(CancellationToken ct = default)
     {
+        DepthBuffer = null;   // #1009 — never describe an older frame
         ColorMap.MaxIterations = 256;
         int fullW = Width;
         int fullH = Height;
@@ -154,7 +158,7 @@ public sealed class MandelboxCalculator : IFractalCalculator, IStereoEyeCamera
         // S8 (#404/#486) — the Mandelbox kernel now resolves point/spot lights on
         // the GPU (GpuKernelUtils.ResolveLight), so the !HasPositionalLight gate is
         // lifted. #492 added a per-light area-capped shadow hardness, so area lights render on the GPU now too.
-        if (fx.UseGpuRender && fx.DebugAov == AovView.Beauty && !lowRes)
+        if (fx.UseGpuRender && fx.DebugAov == AovView.Beauty && !lowRes && !ScreenSpacePost.WantsDepthOutput(in fx))
         {
             var rp = new GpuRaymarchParams
             {
@@ -197,7 +201,7 @@ public sealed class MandelboxCalculator : IFractalCalculator, IStereoEyeCamera
         // Phase 4 — G-buffer for SSAO post-pass.
         float[]? depthBuf = null;
         float[]? normalBuf = null;
-        if (fx.SsaoSamples > 0)
+        if (ScreenSpacePost.WantsGBuffer(in fx))   // #1009 — was SSAO-only
         {
             depthBuf = new float[width * height];
             normalBuf = new float[3 * width * height];
@@ -359,6 +363,9 @@ public sealed class MandelboxCalculator : IFractalCalculator, IStereoEyeCamera
         if (depthBuf is not null && normalBuf is not null && !thinLensDof)
             ScreenSpacePost.ApplyEdgeInk(renderBuffer, depthBuf, normalBuf, width, height, in fx);
         ScreenSpacePost.EndGpuFrame(in fx);
+
+        // #1009 — publish the depth for post-frame passes (Fake stereo).
+        DepthBuffer = ScreenSpacePost.PublishDepth(depthBuf, width, height, fullW, fullH, in fx, valid: !thinLensDof);
 
         if (lowRes)
             FracturingFog.Rendering.LowResPreview.UpscaleNearest(

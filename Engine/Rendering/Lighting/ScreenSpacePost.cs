@@ -264,6 +264,50 @@ public static partial class ScreenSpacePost
         GpuPostKernels.EndFrame();
     }
 
+    /// <summary>#1009 — true when a 3D raymarcher must capture the depth + normal
+    /// G-buffer this frame: any whole-buffer pass that reads it (SSAO, edge ink,
+    /// the screen-space DoF) or depth wanted as an output
+    /// (<see cref="WantsDepthOutput"/>). Before #1009 the calculators allocated it
+    /// for SSAO only, so edge ink and the screen-space DoF were silent no-ops
+    /// unless SSAO was also on. All off → no allocation (byte-identical).</summary>
+    public static bool WantsGBuffer(in LightingFxData fx)
+        => fx.SsaoSamples > 0
+        || fx.EdgeStrength > 0.0
+        || (fx.DofAperture > 0.0 && !ThinLensDof.IsActive(in fx))
+        || WantsDepthOutput(in fx);
+
+    /// <summary>#1009 — true when the frame's depth is consumed AFTER
+    /// <c>Calculate</c>, so a 3D raymarcher publishes it on
+    /// <c>IDepthAovSource.DepthBuffer</c>: the depth-parallax (Fake) stereo warp.
+    /// The GPU raymarch kernels have no depth pass, so this also forces the CPU
+    /// trace (the Lighting &amp; FX dialog says so).</summary>
+    public static bool WantsDepthOutput(in LightingFxData fx)
+        => fx.StereoMode == StereoMode.Fake && fx.StereoEyeSeparation > 0.0;
+
+    /// <summary>#1009 — the depth a 3D raymarcher publishes after a frame: the
+    /// captured per-pixel ray distance (<see cref="DepthMiss"/> = sky) at the
+    /// output (<c>ColorBuffer</c>) dims, nearest-resampled when the render ran at
+    /// other dims (low-res preview / supersample). <c>null</c> when depth is not
+    /// wanted as an output, was not captured, or is not valid for this frame
+    /// (<paramref name="valid"/> false — e.g. thin-lens DoF skips the G-buffer
+    /// writes).</summary>
+    public static float[]? PublishDepth(
+        float[]? depth, int w, int h, int outW, int outH, in LightingFxData fx, bool valid = true)
+    {
+        if (!valid || depth == null || !WantsDepthOutput(in fx)) return null;
+        if (w <= 0 || h <= 0 || outW <= 0 || outH <= 0 || depth.Length < w * h) return null;
+        if (w == outW && h == outH) return depth;
+        var outDepth = new float[outW * outH];
+        Parallel.For(0, outH, y =>
+        {
+            int sRow = Math.Min(h - 1, y * h / outH) * w;
+            int dRow = y * outW;
+            for (int x = 0; x < outW; x++)
+                outDepth[dRow + x] = depth[sRow + Math.Min(w - 1, x * w / outW)];
+        });
+        return outDepth;
+    }
+
     // P0 — track last G-buffer size so we can shed pool buckets on resize.
     // Same-size renders skip the clear (hot path); resize triggers clear so
     // the pool doesn't retain stale-resolution buffers indefinitely.

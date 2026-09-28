@@ -3915,8 +3915,27 @@ namespace FracturingFog.Rendering
             _renderer.UpdateTexture(shown, dw, dh);
         }
 
+        /// <summary>#1009 — the depth for the depth-parallax (Fake) stereo warp on a
+        /// 3D raymarcher: only when <paramref name="src"/> IS the active 3D
+        /// calculator's fresh ColorBuffer (not a snapshot / SBS composite) and that
+        /// calculator published a depth at matching dims. Null otherwise.</summary>
+        private float[]? FakeStereoDepthFor(uint[] src, int w, int h)
+        {
+            var fp = ViewState?.FractalParameters;
+            if (fp == null || !ViewState!.Is3D) return null;
+            var fx = fp.Lighting;
+            if (!FracturingFog.Rendering.Lighting.ScreenSpacePost.WantsDepthOutput(in fx)) return null;
+            if (SelectAltCalculator(ViewState.FractalType) is not { } alt
+                || !ReferenceEquals(alt.ColorBuffer, src)
+                || alt is not IDepthAovSource ds
+                || ds.DepthBuffer is not { } depth) return null;
+            return alt.Width == w && alt.Height == h && depth.Length >= w * h ? depth : null;
+        }
+
         private void UploadProcessedBuffer(uint[] src, int w, int h, bool srcAlreadyProcessed = false)
         {
+            // #1009 — resolve before any pass swaps src for a scratch buffer.
+            float[]? fakeStereoDepth = srcAlreadyProcessed ? null : FakeStereoDepthFor(src, w, h);
             int n = w * h;
             long uploadStart = ShowPerfHud ? Stopwatch.GetTimestamp() : 0;
             if (s_leakDiag) LeakDiagSample(w, h);
@@ -4255,7 +4274,23 @@ namespace FracturingFog.Rendering
             // own composited SBS buffer — so grid / watermark / HUD / present all size to
             // the wider frame. Skipped for snapshots (srcAlreadyProcessed), which already
             // carry whatever they need.
-            if (reliefRaymarchApplied && !srcAlreadyProcessed)
+            // #1009 — Fake (depth-parallax) stereo on a 3D raymarcher: the same
+            // warp, at the same point (last, on the finished display buffer), over
+            // the depth the calculator published. True stereo on 3D renders two
+            // eyes instead and never reaches here with a fresh ColorBuffer.
+            if (fakeStereoDepth != null)
+            {
+                var stereoFx = ViewState.FractalParameters.Lighting;
+                var sbs = FracturingFog.Rendering.Lighting.StereoRender.ApplyStereoSideBySide(
+                    dst, fakeStereoDepth, w, h, in stereoFx);
+                if (sbs != null)
+                {
+                    (w, h) = FracturingFog.Rendering.Lighting.StereoRender.OutputDims(w, h, stereoFx.StereoLayout);
+                    dst = sbs;
+                    n = w * h;
+                }
+            }
+            else if (reliefRaymarchApplied && !srcAlreadyProcessed)
             {
                 var stereoFx = ViewState.FractalParameters.Lighting;
                 var sbs = FracturingFog.Imaging.ReliefScreenSpacePost.ApplyStereo(

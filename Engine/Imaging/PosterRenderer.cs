@@ -336,7 +336,14 @@ namespace FracturingFog.Imaging
                     req.Width, req.Height, false, false, captureHdr: wantHdr)
                 : null;
 
-            uint[] buffer = RenderComposedBuffer(req, token, out w, out h, hdrAov);
+            // #1009 — a 3D raymarcher publishes its depth for the Fake stereo warp.
+            var depth3D = req.FractalParameters is { } dfp
+                && FracturingFog.ViewState.FractalViewState.IsThreeD(req.FractalType)
+                && FracturingFog.Rendering.Lighting.ScreenSpacePost.WantsDepthOutput(dfp.Lighting)
+                ? new System.Runtime.CompilerServices.StrongBox<float[]?>()
+                : null;
+
+            uint[] buffer = RenderComposedBuffer(req, token, out w, out h, hdrAov, depth3D);
 
             sw.Stop();
 
@@ -421,6 +428,19 @@ namespace FracturingFog.Imaging
                     out int stereoW, out int stereoH);
                 if (sbs != null) { buffer = sbs; w = stereoW; h = stereoH; }
             }
+            // #1009 — Fake (depth-parallax) stereo on a 3D raymarcher, matching the
+            // live path (FractalRenderHost.UploadProcessedBuffer): last, on the
+            // finished display buffer, over the depth the calculator published.
+            if (depth3D?.Value is { } d3 && d3.Length == w * h && req.FractalParameters is { } sfp)
+            {
+                var stereoFx = sfp.Lighting;
+                var sbs = FracturingFog.Rendering.Lighting.StereoRender.ApplyStereoSideBySide(buffer, d3, w, h, in stereoFx);
+                if (sbs != null)
+                {
+                    (w, h) = FracturingFog.Rendering.Lighting.StereoRender.OutputDims(w, h, stereoFx.StereoLayout);
+                    buffer = sbs;
+                }
+            }
 
             elapsedMs = sw.ElapsedMilliseconds;
             return buffer;
@@ -482,7 +502,8 @@ namespace FracturingFog.Imaging
         /// (roadmap S1, #389): grading + tonemap would corrupt data AOVs (normals /
         /// depth), so they are applied only on the file path above.</summary>
         internal static uint[] RenderComposedBuffer(PosterRequest req, CancellationToken token, out int w, out int h,
-            FracturingFog.Rendering.Lighting.HeightfieldRaymarch2D.ReliefAovBuffers? aovCapture = null)
+            FracturingFog.Rendering.Lighting.HeightfieldRaymarch2D.ReliefAovBuffers? aovCapture = null,
+            System.Runtime.CompilerServices.StrongBox<float[]?>? depthCapture = null)
         {
             uint[] buffer;
 
@@ -509,6 +530,10 @@ namespace FracturingFog.Imaging
             {
                 alt.Calculate(token);
                 token.ThrowIfCancellationRequested();
+                // #1009 — hand the 3D raymarcher's published depth to the caller
+                // (Fake stereo). Null for every other family.
+                if (depthCapture != null)
+                    depthCapture.Value = (alt as IDepthAovSource)?.DepthBuffer;
                 // Adaptive HE — #145: escape-time alt calculators (Julia,
                 // BurningShip, Tricorn, Multibrot, Phoenix, Magnet1/2, Glynn,
                 // Spider) equalize through the shared core just like Mandelbrot.

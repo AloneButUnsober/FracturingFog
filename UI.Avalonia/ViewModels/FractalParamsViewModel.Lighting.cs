@@ -29,6 +29,10 @@ public sealed partial class FractalParamsViewModel
         var fx = _p.Lighting;
         action(new LightingFxParamRef(ref fx));
         _p.Lighting = fx;
+        // #1009 — the stereo hint depends on several lighting knobs (mode, eye
+        // sep, thin-lens DoF, GPU render); refresh it on every lighting edit.
+        this.RaisePropertyChanged(nameof(StereoHint));
+        this.RaisePropertyChanged(nameof(HasStereoHint));
     }
 
     /// <summary>Ref-wrapper so a setter can pass a delegate that mutates the
@@ -652,6 +656,34 @@ public sealed partial class FractalParamsViewModel
         set { MutateLighting(r => r.Fx.StereoLayout = value); this.RaisePropertyChanged(); Fire(); }
     }
     public Array StereoLayouts => Enum.GetValues(typeof(StereoLayout));
+
+    /// <summary>#1009 — a one-line note when a stereo setting will not do what it
+    /// looks like for this fractal (no silent no-ops). Empty when there is
+    /// nothing to say.</summary>
+    public string StereoHint => StereoHintFor(
+        IsAny3DRaymarcher, IsReliefLightingContext, _p.Lighting,
+        _p.Lighting.UseGpuRender
+            || (FractalType == FractalType.UserBulb && _p.UserBulbBackend == UserBulbBackendKind.GPU));
+
+    public bool HasStereoHint => StereoHint.Length > 0;
+
+    /// <summary>The <see cref="StereoHint"/> rules, pure for testing.</summary>
+    public static string StereoHintFor(bool is3D, bool reliefContext, in LightingFxData fx, bool gpuRaymarch)
+    {
+        if (fx.StereoMode == StereoMode.Off || (!is3D && !reliefContext)) return "";
+        if (fx.StereoEyeSeparation <= 0.0)
+            return "Stereo is off until Stereo eye sep is above 0.";
+        if (reliefContext && fx.StereoMode == StereoMode.True)
+            return "Relief 3D has one camera, so True uses the depth-parallax warp (same as Fake).";
+        if (is3D && fx.StereoMode == StereoMode.Fake)
+        {
+            if (fx.DofThinLens && fx.DofAperture > 0.0 && fx.DofSamples > 1)
+                return "Fake stereo gets no depth while thin-lens DoF is on, so the frame stays mono. Use True, or turn thin-lens off.";
+            if (gpuRaymarch)
+                return "Fake stereo renders on the CPU: the GPU raymarch has no depth pass.";
+        }
+        return "";
+    }
 
     /// <summary>#1017 — cross-view layout (right eye on the left).</summary>
     public bool StereoSwapEyes
