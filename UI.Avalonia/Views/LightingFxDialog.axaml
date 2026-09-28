@@ -942,7 +942,7 @@
 
                         <!-- #1011: autostereogram settings, shown in Autostereogram mode only. -->
                         <Grid Grid.Row="19" Grid.Column="0" Grid.ColumnSpan="2"
-                              ColumnDefinitions="160,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto"
+                              ColumnDefinitions="160,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto"
                               IsVisible="{Binding IsAutostereo}" IsEnabled="{Binding ReliefStage2Applies}">
                             <TextBlock Grid.Row="0" Grid.Column="0" Text="Pattern:" VerticalAlignment="Center"
                                        ToolTip.Tip="RandomDots = black and white dots (highest contrast, easiest to see). ThemeDots = dots in colours taken from the render. FractalTexture = a strip of the render tiled as the pattern (Magic-Eye look)." />
@@ -1000,6 +1000,15 @@
                                        ToolTip.Tip="Change for a different random-dot pattern. Same seed and view = same image." />
                             <NumericUpDown Grid.Row="7" Grid.Column="1" Minimum="0" Maximum="999999" Increment="1"
                                            FormatString="0" Value="{Binding StereoAutoSeed, Mode=TwoWay}" Margin="0,2" />
+
+                            <TextBlock Grid.Row="8" Grid.Column="0" Text="Video smoothing:" VerticalAlignment="Center"
+                                       ToolTip.Tip="In a video or slideshow, how much of the previous frames' depth each frame keeps. Higher = steadier (less shimmer), slightly laggier. 0 = each frame stands alone. Stills are unaffected." />
+                            <Grid Grid.Row="8" Grid.Column="1" ColumnDefinitions="*,Auto" Margin="0,2">
+                                <Slider Classes="knob" Grid.Column="0" Minimum="0" Maximum="0.9"
+                                        Value="{Binding StereoAutoTemporal, Mode=TwoWay}" />
+                                <TextBlock Classes="knobValue" Grid.Column="1"
+                                           Text="{Binding StereoAutoTemporal, StringFormat='F2'}" />
+                            </Grid>
                         </Grid>
                     </Grid>
                 </Expander>

@@ -44,6 +44,10 @@ namespace FracturingFog.Batch
         public int FrameW { get; }
         public int FrameH { get; }
 
+        /// <summary>#1013 — the video's autostereogram sequence: the pattern is
+        /// held from the first frame and the depth blended over time.</summary>
+        public AutostereoSequence Sequence { get; } = new();
+
         private BatchStereo(BatchStereoKind kind, LightingFxData fx, int frameW, int frameH)
         {
             Kind = kind; Fx = fx; FrameW = frameW; FrameH = frameH;
@@ -89,6 +93,7 @@ namespace FracturingFog.Batch
             if (opts.AutostereoCrossEyed)          fx.StereoAutoCrossEyed = true;
             if (opts.AutostereoNoGuideDots)        fx.StereoAutoGuideDots = false;
             if (opts.AutostereoSeed.HasValue)      fx.StereoAutoSeed = opts.AutostereoSeed.Value;
+            if (opts.AutostereoTemporal.HasValue)  fx.StereoAutoTemporal = opts.AutostereoTemporal.Value;
             if (fx.StereoMode is StereoMode.True or StereoMode.Fake && fx.StereoEyeSeparation <= 0.0)
                 fx.StereoEyeSeparation = 0.06;
             return fx;
@@ -119,9 +124,9 @@ namespace FracturingFog.Batch
             uint[]? stereo = Kind switch
             {
                 BatchStereoKind.Depth3D when depth3D != null && depth3D.Length >= w * h
-                    => ScreenSpacePost.ApplyDepthStereo(graded, depth3D, w, h, in fx, out _, out _),
+                    => ScreenSpacePost.ApplyDepthStereo(graded, depth3D, w, h, in fx, out _, out _, Sequence, temporal: true),
                 BatchStereoKind.DepthRelief
-                    => FracturingFog.Imaging.ReliefScreenSpacePost.ApplyStereo(graded, reliefAov, w, h, in fx, out _, out _),
+                    => FracturingFog.Imaging.ReliefScreenSpacePost.ApplyStereo(graded, reliefAov, w, h, in fx, out _, out _, Sequence, temporal: true),
                 _ => null,
             };
             return stereo ?? FitToFrame(graded, w, h);

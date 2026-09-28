@@ -242,6 +242,7 @@ namespace FracturingFog.Batch
         public bool AutostereoCrossEyed { get; set; }
         public bool AutostereoNoGuideDots { get; set; }
         public int? AutostereoSeed { get; set; }
+        public double? AutostereoTemporal { get; set; }   // 0..0.9 (#1013)
 
         /// <summary>True when any stereo flag was given.</summary>
         public bool HasStereoFlags =>
@@ -249,7 +250,7 @@ namespace FracturingFog.Batch
             || StereoFov.HasValue || StereoLayout.HasValue || StereoSwapEyes
             || AutostereoPattern.HasValue || AutostereoEyeSep.HasValue || AutostereoDepth.HasValue
             || AutostereoSmoothing.HasValue || AutostereoLevels.HasValue || AutostereoCrossEyed
-            || AutostereoNoGuideDots || AutostereoSeed.HasValue;
+            || AutostereoNoGuideDots || AutostereoSeed.HasValue || AutostereoTemporal.HasValue;
 
         /// <summary>Per-family settings from repeatable <c>--param Key=Value</c>
         /// (#997), in command-line order. Keys are region-snapshot property names;
@@ -836,6 +837,11 @@ namespace FracturingFog.Batch
 
                     case BatchFlags.AutostereoNoGuideDots:
                         opts.AutostereoNoGuideDots = true;
+                        break;
+
+                    case BatchFlags.AutostereoTemporal:
+                        if (!NextDouble(args, ref i, a, out double astv, out error)) return false;
+                        opts.AutostereoTemporal = astv;
                         break;
 
                     case BatchFlags.AutostereoSeed:
@@ -1437,6 +1443,8 @@ namespace FracturingFog.Batch
                 { error = "--autostereo-smoothing must be 0..32 (pixels)."; return false; }
             if (opts.AutostereoLevels is < 0 or > 64)
                 { error = "--autostereo-levels must be 0..64 (0 = continuous)."; return false; }
+            if (opts.AutostereoTemporal is < 0.0 or > 0.9)
+                { error = "--autostereo-temporal must be 0..0.9."; return false; }
             if (opts.AutostereoSeed is < 0)
                 { error = "--autostereo-seed must be >= 0."; return false; }
             if (opts.Ior is < 1.0 or > 3.0)

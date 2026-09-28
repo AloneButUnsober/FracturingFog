@@ -120,6 +120,16 @@ public static class Autostereogram
     /// cross-eyed viewing.</summary>
     public static float[] PrepareDepth(float[] rayDistance, int w, int h, AutostereoDepthOptions o)
     {
+        var z = PrepareDepthContinuous(rayDistance, w, h, o);
+        FinishDepth(z, o);
+        return z;
+    }
+
+    /// <summary>#1013 — the continuous part of <see cref="PrepareDepth"/> (range,
+    /// background gap, gamma, blur) without the quantise / cross-eyed steps, so a
+    /// sequence can blend it over time before <see cref="FinishDepth"/>.</summary>
+    public static float[] PrepareDepthContinuous(float[] rayDistance, int w, int h, AutostereoDepthOptions o)
+    {
         if (w <= 0 || h <= 0) throw new ArgumentOutOfRangeException(nameof(w));
         int n = w * h;
         if (rayDistance == null || rayDistance.Length < n)
@@ -145,7 +155,14 @@ public static class Autostereogram
         });
 
         if (o.BlurRadius > 0) BoxBlur(z, w, h, o.BlurRadius);
+        return z;
+    }
 
+    /// <summary>#1013 — the final depth steps in place: quantise to
+    /// <see cref="AutostereoDepthOptions.Levels"/> and invert for cross-eyed.</summary>
+    public static void FinishDepth(float[] z, AutostereoDepthOptions o)
+    {
+        int n = z.Length;
         if (o.Levels >= 2)
         {
             int l = o.Levels - 1;
@@ -153,7 +170,6 @@ public static class Autostereogram
         }
         if (o.CrossEyed)
             for (int i = 0; i < n; i++) z[i] = 1f - z[i];
-        return z;
     }
 
     /// <summary>Encode a prepared depth map (z ∈ [0,1], 0 = far) as a W × H
@@ -170,10 +186,10 @@ public static class Autostereogram
 
         var output = new uint[w * h];
         Parallel.For(0, h,
-            () => (same: new int[w], pix: new uint[w]),
+            () => (same: new int[w], pix: new uint[w], hasPrev: new bool[w]),
             (y, _, scratch) =>
             {
-                RenderRow(z, y * w, w, y, mu, e, scratch.same, scratch.pix, dots, tex, o.Seed);
+                RenderRow(z, y * w, w, y, mu, e, scratch.same, scratch.pix, scratch.hasPrev, dots, tex, o.Seed);
                 Array.Copy(scratch.pix, 0, output, y * w, w);
                 return scratch;
             },
@@ -196,19 +212,29 @@ public static class Autostereogram
     /// zero fields) fall back to the defaults.</summary>
     public static uint[] FromLighting(uint[] mono, float[] rayDistance, int w, int h, in LightingFxData fx)
     {
-        double sepFrac = fx.StereoAutoEyeSep > 0 ? Math.Clamp(fx.StereoAutoEyeSep, 0.03, 0.4) : 0.125;
-        double mu = fx.StereoAutoDepthOfField > 0 ? Math.Clamp(fx.StereoAutoDepthOfField, 0.05, 0.75) : 1.0 / 3.0;
+        var (options, depth) = OptionsFromLighting(mono, rayDistance, w, h, in fx, null, null);
+        return FromRayDistance(rayDistance, w, h, depth, options);
+    }
+
+    /// <summary>The engine options for the <c>StereoAuto*</c> settings. The
+    /// pattern source (theme palette / fractal-texture tile) comes from
+    /// <paramref name="mono"/> unless a held one is passed (#1013: a sequence
+    /// keeps the pattern still across frames).</summary>
+    public static (AutostereoOptions Options, AutostereoDepthOptions Depth) OptionsFromLighting(
+        uint[] mono, float[] rayDistance, int w, int h, in LightingFxData fx,
+        AutostereoTexture? heldTile, uint[]? heldPalette)
+    {
         var options = new AutostereoOptions
         {
-            EyeSeparationPx = Math.Max(8, (int)Math.Round(w * sepFrac)),
-            DepthOfField = mu,
+            EyeSeparationPx = EyeSeparationPx(w, in fx),
+            DepthOfField = DepthOfField(in fx),
             Seed = fx.StereoAutoSeed,
             GuideDots = fx.StereoAutoGuideDots,
         };
         options = fx.StereoAutoPattern switch
         {
-            AutostereoPattern.ThemeDots => options with { DotColors = ThemeColors(mono, w * h, rayDistance) },
-            AutostereoPattern.FractalTexture => options with { Texture = CutStrip(mono, w, h, FarSeparation(options), rayDistance) },
+            AutostereoPattern.ThemeDots => options with { DotColors = heldPalette ?? ThemeColors(mono, w * h, rayDistance) },
+            AutostereoPattern.FractalTexture => options with { Texture = heldTile ?? CutStrip(mono, w, h, FarSeparation(options), rayDistance) },
             _ => options,
         };
         var depth = new AutostereoDepthOptions
@@ -217,8 +243,20 @@ public static class Autostereogram
             Levels = Math.Clamp(fx.StereoAutoLevels, 0, 64),
             CrossEyed = fx.StereoAutoCrossEyed,
         };
-        return FromRayDistance(rayDistance, w, h, depth, options);
+        return (options, depth);
     }
+
+    /// <summary>The eye separation in pixels for a frame <paramref name="w"/>
+    /// wide (the setting is a fraction of the width; out-of-range → default).</summary>
+    public static int EyeSeparationPx(int w, in LightingFxData fx)
+    {
+        double sepFrac = fx.StereoAutoEyeSep > 0 ? Math.Clamp(fx.StereoAutoEyeSep, 0.03, 0.4) : 0.125;
+        return Math.Max(8, (int)Math.Round(w * sepFrac));
+    }
+
+    /// <summary>The depth of field μ for the settings (out-of-range → 1/3).</summary>
+    public static double DepthOfField(in LightingFxData fx)
+        => fx.StereoAutoDepthOfField > 0 ? Math.Clamp(fx.StereoAutoDepthOfField, 0.05, 0.75) : 1.0 / 3.0;
 
     /// <summary>Up to 16 dot colours taken from an image, spread by brightness
     /// (quantiles of a luma-sorted sample) so the dots keep luminance contrast.
@@ -338,7 +376,7 @@ public static class Autostereogram
     // ── Row encoder (Thimbleby / Inglis / Witten 1994) ───────────────────
 
     private static void RenderRow(float[] z, int row, int w, int y, double mu, int e,
-        int[] same, uint[] pix, uint[] dots, AutostereoTexture? tex, int seed)
+        int[] same, uint[] pix, bool[] hasPrev, uint[] dots, AutostereoTexture? tex, int seed)
     {
         for (int x = 0; x < w; x++) same[x] = x;
 
@@ -377,20 +415,44 @@ public static class Autostereogram
             same[left] = right;
         }
 
-        for (int x = w - 1; x >= 0; x--)
+        // #1013 — colour each linked chain from its member nearest the image
+        // centre (the paper colours right-to-left, i.e. from the chain's right
+        // end, so any depth change repaints everything to its LEFT — the whole
+        // row for a change near the right edge). Anchored at the centre, a
+        // change only repaints the part of its chains on its far side from the
+        // centre, so an animated stereogram flickers far less. same[] chains are
+        // sorted paths (same[k] > k, at most one predecessor each), so a chain
+        // is walked from each pixel that nothing links to.
+        int centre = w / 2;
+        Array.Clear(hasPrev, 0, w);
+        for (int k = 0; k < w; k++) if (same[k] != k) hasPrev[same[k]] = true;
+        for (int x = 0; x < w; x++)
         {
-            if (same[x] != x) { pix[x] = pix[same[x]]; continue; }
+            if (hasPrev[x]) continue;                      // walk each chain from its start
+            int anchor = x;
+            for (int k = x; ; k = same[k])
+            {
+                if (Math.Abs(k - centre) < Math.Abs(anchor - centre)) anchor = k;
+                if (same[k] == k) break;
+            }
+            uint c;
             if (tex != null)
             {
-                int tx = x % tex.Width, ty = y % tex.Height;
-                pix[x] = tex.Pixels[ty * tex.Width + tx] | 0xFF000000u;
+                int tx = anchor % tex.Width, ty = y % tex.Height;
+                c = tex.Pixels[ty * tex.Width + tx] | 0xFF000000u;
             }
             else
             {
-                pix[x] = dots[(int)(Hash(seed, x, y) % (uint)dots.Length)] | 0xFF000000u;
+                c = dots[(int)(Hash(seed, anchor, y) % (uint)dots.Length)] | 0xFF000000u;
+            }
+            for (int k = x; ; k = same[k])
+            {
+                pix[k] = c;
+                if (same[k] == k) break;
             }
         }
     }
+
 
     // Stateless per-pixel hash (SplitMix-style finaliser): row-parallel and
     // reproducible, and a fixed seed keeps a dot in place frame to frame.

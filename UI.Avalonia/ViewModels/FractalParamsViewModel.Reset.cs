@@ -237,7 +237,7 @@ public sealed partial class FractalParamsViewModel
         nameof(StereoLayout), nameof(StereoSwapEyes),
         nameof(StereoAutoPattern), nameof(StereoAutoEyeSep), nameof(StereoAutoDepthOfField),
         nameof(StereoAutoCrossEyed), nameof(StereoAutoGuideDots), nameof(StereoAutoSeed),
-        nameof(StereoAutoBlur), nameof(StereoAutoLevels), nameof(IsAutostereo), nameof(DofAperture), nameof(DofFocusDistance), nameof(DofSamples),
+        nameof(StereoAutoBlur), nameof(StereoAutoLevels), nameof(StereoAutoTemporal), nameof(IsAutostereo), nameof(DofAperture), nameof(DofFocusDistance), nameof(DofSamples),
         nameof(LightOrbitSpeed), nameof(CausticsAnimSpeed),
         nameof(TriplanarKind), nameof(TriplanarScale), nameof(TriplanarStrength),
         nameof(TriplanarTint), nameof(TriplanarTintHex),

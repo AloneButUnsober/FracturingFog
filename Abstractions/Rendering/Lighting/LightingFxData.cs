@@ -739,6 +739,11 @@ public struct LightingFxData
     /// terraced depth that fuses more easily.</summary>
     public int StereoAutoLevels;
 
+    /// <summary>#1013 — in a video / slideshow, how much of the previous
+    /// frames' depth each frame keeps (0 = none, each frame stands alone; 0.5 =
+    /// halve the frame-to-frame depth shimmer). Stills are unaffected.</summary>
+    public double StereoAutoTemporal;
+
     // ── DoF (Phase 21) ────────────────────────────────────────────────
 
     /// <summary>Aperture radius in world units. 0 = pinhole (no DoF).</summary>
@@ -922,6 +927,7 @@ public struct LightingFxData
         StereoAutoSeed         = 1,
         StereoAutoBlur         = 3,
         StereoAutoLevels       = 6,
+        StereoAutoTemporal     = 0.5,
 
         DofAperture        = 0.0,
         DofFocusDistance   = 3.0,
@@ -978,7 +984,7 @@ public struct LightingFxData
         h.Add(StereoSwapEyes);
         h.Add(StereoAutoPattern); h.Add(StereoAutoEyeSep); h.Add(StereoAutoDepthOfField);
         h.Add(StereoAutoCrossEyed); h.Add(StereoAutoGuideDots); h.Add(StereoAutoSeed);
-        h.Add(StereoAutoBlur); h.Add(StereoAutoLevels);
+        h.Add(StereoAutoBlur); h.Add(StereoAutoLevels); h.Add(StereoAutoTemporal);
         h.Add(DofAperture); h.Add(DofFocusDistance); h.Add(DofSamples); h.Add(DofThinLens);
         h.Add(SceneTime); h.Add(LightOrbitSpeed);
         h.Add(DebugHudFlags); h.Add(DebugAov);

@@ -293,11 +293,16 @@ public static partial class ScreenSpacePost
     /// Returns null when stereo is off for this frame (the caller keeps the mono
     /// buffer).</summary>
     public static uint[]? ApplyDepthStereo(uint[] display, float[] depth, int w, int h,
-        in LightingFxData fx, out int outW, out int outH)
+        in LightingFxData fx, out int outW, out int outH,
+        AutostereoSequence? sequence = null, bool temporal = false)
     {
         outW = w; outH = h;
+        // #1013 — a sequence (live host, batch video) holds the pattern across
+        // frames and, when temporal, blends the depth; a still is stateless.
         if (fx.StereoMode == StereoMode.Autostereogram)
-            return Autostereogram.FromLighting(display, depth, w, h, in fx);
+            return sequence != null
+                ? sequence.Frame(display, depth, w, h, in fx, temporal)
+                : Autostereogram.FromLighting(display, depth, w, h, in fx);
         if (fx.StereoMode == StereoMode.Off || fx.StereoEyeSeparation <= 0.0) return null;
         var sbs = StereoRender.ApplyStereoSideBySide(display, depth, w, h, in fx);
         if (sbs != null) (outW, outH) = StereoRender.OutputDims(w, h, fx.StereoLayout);

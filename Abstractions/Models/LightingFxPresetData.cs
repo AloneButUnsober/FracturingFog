@@ -163,6 +163,7 @@ public sealed class LightingFxPresetData
     public int    StereoAutoSeed         { get; set; } = 1;
     public int    StereoAutoBlur         { get; set; } = 3;
     public int    StereoAutoLevels       { get; set; } = 6;
+    public double StereoAutoTemporal     { get; set; } = 0.5;   // #1013
     public double DofAperture         { get; set; } = 0.0;
     public double DofFocusDistance    { get; set; } = 3.0;
     public int    DofSamples          { get; set; } = 8;
@@ -273,7 +274,7 @@ public sealed class LightingFxPresetData
         StereoAutoPattern = fx.StereoAutoPattern, StereoAutoEyeSep = fx.StereoAutoEyeSep,
         StereoAutoDepthOfField = fx.StereoAutoDepthOfField, StereoAutoCrossEyed = fx.StereoAutoCrossEyed,
         StereoAutoGuideDots = fx.StereoAutoGuideDots, StereoAutoSeed = fx.StereoAutoSeed,
-        StereoAutoBlur = fx.StereoAutoBlur, StereoAutoLevels = fx.StereoAutoLevels,
+        StereoAutoBlur = fx.StereoAutoBlur, StereoAutoLevels = fx.StereoAutoLevels, StereoAutoTemporal = fx.StereoAutoTemporal,
         StereoEyeSeparation = fx.StereoEyeSeparation, StereoFovDegrees = fx.StereoFovDegrees,
         StereoConvergence = fx.StereoConvergence, StereoMaxDisparity = fx.StereoMaxDisparity,
         DofAperture = fx.DofAperture, DofFocusDistance = fx.DofFocusDistance, DofSamples = fx.DofSamples,
@@ -355,7 +356,7 @@ public sealed class LightingFxPresetData
         StereoAutoPattern = StereoAutoPattern, StereoAutoEyeSep = StereoAutoEyeSep,
         StereoAutoDepthOfField = StereoAutoDepthOfField, StereoAutoCrossEyed = StereoAutoCrossEyed,
         StereoAutoGuideDots = StereoAutoGuideDots, StereoAutoSeed = StereoAutoSeed,
-        StereoAutoBlur = StereoAutoBlur, StereoAutoLevels = StereoAutoLevels,
+        StereoAutoBlur = StereoAutoBlur, StereoAutoLevels = StereoAutoLevels, StereoAutoTemporal = StereoAutoTemporal,
         StereoEyeSeparation = StereoEyeSeparation, StereoFovDegrees = StereoFovDegrees,
         StereoConvergence = StereoConvergence, StereoMaxDisparity = StereoMaxDisparity,
         DofAperture = DofAperture, DofFocusDistance = DofFocusDistance, DofSamples = DofSamples,

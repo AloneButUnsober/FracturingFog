@@ -739,6 +739,11 @@ public sealed partial class FractalParamsViewModel
         get => _p.Lighting.StereoAutoBlur;
         set { MutateLighting(r => r.Fx.StereoAutoBlur = Math.Clamp(value, 0, 32)); this.RaisePropertyChanged(); Fire(); }
     }
+    public double StereoAutoTemporal
+    {
+        get => _p.Lighting.StereoAutoTemporal;
+        set { MutateLighting(r => r.Fx.StereoAutoTemporal = Clamp(value, 0.0, 0.9)); this.RaisePropertyChanged(); Fire(); }
+    }
     public int StereoAutoLevels
     {
         get => _p.Lighting.StereoAutoLevels;

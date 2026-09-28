@@ -3898,6 +3898,13 @@ namespace FracturingFog.Rendering
             return _reliefHotLoadTwin;
         }
 
+        // #1013 — the live autostereogram sequence: holds the pattern across
+        // frames (still during interaction, a fresh one once it settles) and,
+        // while a video / slideshow runs, blends the depth over time. Guarded by
+        // _uploadGate (only UploadProcessedBuffer uses it).
+        private readonly FracturingFog.Rendering.Lighting.AutostereoSequence _autostereoSeq = new();
+        private volatile bool _autostereoSeqResetPending;   // set per video leg (video thread)
+
         // #1016 — display-only letterbox pool for Full-SBS frames. Guarded by
         // _d3dGate (every PresentTexture call runs under it).
         private uint[]? _sbsDisplayPool;
@@ -3935,6 +3942,12 @@ namespace FracturingFog.Rendering
 
         private void UploadProcessedBuffer(uint[] src, int w, int h, bool srcAlreadyProcessed = false)
         {
+            // #1013 — a new video leg starts a fresh autostereogram sequence.
+            if (_autostereoSeqResetPending)
+            {
+                _autostereoSeqResetPending = false;
+                lock (_uploadGate) _autostereoSeq.Reset();
+            }
             // #1009 — resolve before any pass swaps src for a scratch buffer.
             float[]? depthStereo3D = srcAlreadyProcessed ? null : DepthStereoDepthFor(src, w, h);
             int n = w * h;
@@ -4284,7 +4297,8 @@ namespace FracturingFog.Rendering
             {
                 var stereoFx = ViewState.FractalParameters.Lighting;
                 var stereo = FracturingFog.Rendering.Lighting.ScreenSpacePost.ApplyDepthStereo(
-                    dst, depthStereo3D, w, h, in stereoFx, out int stereoW, out int stereoH);
+                    dst, depthStereo3D, w, h, in stereoFx, out int stereoW, out int stereoH,
+                    _autostereoSeq, temporal: IsRunning);
                 if (stereo != null)
                 {
                     w = stereoW;
@@ -4297,7 +4311,8 @@ namespace FracturingFog.Rendering
             {
                 var stereoFx = ViewState.FractalParameters.Lighting;
                 var sbs = FracturingFog.Imaging.ReliefScreenSpacePost.ApplyStereo(
-                    dst, reliefPostAov, w, h, in stereoFx, out int stereoW, out int stereoH);
+                    dst, reliefPostAov, w, h, in stereoFx, out int stereoW, out int stereoH,
+                    _autostereoSeq, temporal: IsRunning);
                 if (sbs != null)
                 {
                     dst = sbs;

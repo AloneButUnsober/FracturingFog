@@ -1238,6 +1238,10 @@ namespace FracturingFog.Rendering
 
         private void BeginVideoLeg()
         {
+            // #1013 — a new leg (often a new fractal) gets a fresh autostereogram
+            // pattern + depth history; applied on the upload side (its gate owns
+            // the sequence).
+            _autostereoSeqResetPending = true;
             _videoLegCdf = null;
             _videoLegCdfBins = 0;
             _videoLegCdfMaxIter = 0;
