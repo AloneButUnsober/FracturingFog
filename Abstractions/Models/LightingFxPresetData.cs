@@ -153,6 +153,7 @@ public sealed class LightingFxPresetData
     public double StereoConvergence   { get; set; } = 0.0;
     public double StereoMaxDisparity  { get; set; } = 0.03;
     public StereoLayout StereoLayout  { get; set; } = StereoLayout.FullSbs;
+    public bool   StereoSwapEyes      { get; set; }
     public double DofAperture         { get; set; } = 0.0;
     public double DofFocusDistance    { get; set; } = 3.0;
     public int    DofSamples          { get; set; } = 8;
@@ -259,7 +260,7 @@ public sealed class LightingFxPresetData
         CausticsScale = fx.CausticsScale, CausticsColor = fx.CausticsColor,
         EdgeStrength = fx.EdgeStrength, EdgeColor = fx.EdgeColor,
         EdgeThreshold = fx.EdgeThreshold, EdgeKernel = fx.EdgeKernel,
-        StereoMode = fx.StereoMode, StereoLayout = fx.StereoLayout,
+        StereoMode = fx.StereoMode, StereoLayout = fx.StereoLayout, StereoSwapEyes = fx.StereoSwapEyes,
         StereoEyeSeparation = fx.StereoEyeSeparation, StereoFovDegrees = fx.StereoFovDegrees,
         StereoConvergence = fx.StereoConvergence, StereoMaxDisparity = fx.StereoMaxDisparity,
         DofAperture = fx.DofAperture, DofFocusDistance = fx.DofFocusDistance, DofSamples = fx.DofSamples,
@@ -337,7 +338,7 @@ public sealed class LightingFxPresetData
         CausticsScale = CausticsScale, CausticsColor = CausticsColor,
         EdgeStrength = EdgeStrength, EdgeColor = EdgeColor,
         EdgeThreshold = EdgeThreshold, EdgeKernel = EdgeKernel,
-        StereoMode = StereoMode, StereoLayout = StereoLayout,
+        StereoMode = StereoMode, StereoLayout = StereoLayout, StereoSwapEyes = StereoSwapEyes,
         StereoEyeSeparation = StereoEyeSeparation, StereoFovDegrees = StereoFovDegrees,
         StereoConvergence = StereoConvergence, StereoMaxDisparity = StereoMaxDisparity,
         DofAperture = DofAperture, DofFocusDistance = DofFocusDistance, DofSamples = DofSamples,

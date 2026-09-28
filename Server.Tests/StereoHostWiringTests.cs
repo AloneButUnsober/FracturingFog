@@ -59,6 +59,9 @@ public class StereoHostWiringTests
     // One settled (non-progressive) frame through the live host; returns what
     // the renderer was last handed.
     private static CapturingRenderer RenderLive(FractalParameters fp)
+        => RenderLive(fp, out _, out _, out _);
+
+    private static CapturingRenderer RenderLive(FractalParameters fp, out uint[] snapshot, out int snapW, out int snapH)
     {
         var renderer = new CapturingRenderer();
         // A 3D view (the Mandelbrot defaults, centre -0.5 / zoom 0.13, frame the
@@ -74,21 +77,29 @@ public class StereoHostWiringTests
         host.Trigger(progressive: false);
         Assert.True(done.Wait(TimeSpan.FromSeconds(60)), "no frame completed");
         Assert.True(renderer.Last!.Distinct().Count() > 8, "blank frame — test view does not frame the bulb");
+        snapshot = host.SnapshotFrame(out snapW, out snapH);
         return renderer;
     }
 
     [Fact]
-    public void Live_TrueStereo_On3D_PresentsFullSbs()
+    public void Live_TrueStereo_On3D_PresentsFullSbs_Letterboxed()
     {
         var fp = BulbParams(StereoMode.True);
-        var r = RenderLive(fp);
-        Assert.Equal((W * 2, H), (r.LastW, r.LastH));
+        var r = RenderLive(fp, out var snap, out int snapW, out int snapH);
+        // #1016 — the window gets the 2W × H frame padded to 2W × 2H (black
+        // bars top and bottom) so its stretch-to-fit keeps the eye proportions.
+        Assert.Equal((W * 2, H * 2), (r.LastW, r.LastH));
+        int top = H / 2;
+        Assert.All(r.Last!.Take(top * 2 * W), p => Assert.Equal(0xFF000000u, p));
+        // The snapshot (screenshot / recording source) is the unpadded frame.
+        Assert.Equal((W * 2, H), (snapW, snapH));
+        Assert.Equal(snap, r.Last.Skip(top * 2 * W).Take(2 * W * H));
 
         // The two halves are different viewpoints, not a duplicated mono frame.
         int diff = 0;
         for (int y = 0; y < H; y++)
             for (int x = 0; x < W; x++)
-                if (r.Last![y * 2 * W + x] != r.Last[y * 2 * W + W + x]) diff++;
+                if (snap[y * 2 * W + x] != snap[y * 2 * W + W + x]) diff++;
         Assert.True(diff > W * H / 50, $"eyes nearly identical ({diff} px differ)");
     }
 

@@ -652,6 +652,13 @@ public sealed partial class FractalParamsViewModel
         set { MutateLighting(r => r.Fx.StereoLayout = value); this.RaisePropertyChanged(); Fire(); }
     }
     public Array StereoLayouts => Enum.GetValues(typeof(StereoLayout));
+
+    /// <summary>#1017 — cross-view layout (right eye on the left).</summary>
+    public bool StereoSwapEyes
+    {
+        get => _p.Lighting.StereoSwapEyes;
+        set { MutateLighting(r => r.Fx.StereoSwapEyes = value); this.RaisePropertyChanged(); Fire(); }
+    }
     public double DofAperture
     {
         get => _p.Lighting.DofAperture;

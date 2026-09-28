@@ -140,9 +140,11 @@ public static class StereoRender
             _ => { });
 
         ApplyConvergence(outBuf, outW, width, height, fx.StereoConvergence);
-        return fx.StereoLayout == StereoLayout.HalfSbs
+        var packed = fx.StereoLayout == StereoLayout.HalfSbs
             ? ToHalfSbs(outBuf, width, height)
             : outBuf;
+        if (fx.StereoSwapEyes) SwapEyes(packed, OutputDims(width, height, fx.StereoLayout).W, height);
+        return packed;
     }
 
     /// <summary>Squeeze a Full-SBS buffer (2·<paramref name="eyeW"/> × height)
@@ -190,10 +192,17 @@ public static class StereoRender
 
     /// <summary>Convergence via horizontal image translation (HIT). Shifts the
     /// two eye halves of an already-composited side-by-side buffer in opposite
-    /// directions to move the zero-parallax plane. Positive
-    /// <paramref name="convergenceFraction"/> (fraction of eye width) crosses
-    /// the eyes — the left half moves right, the right half moves left — so the
-    /// subject settles at the screen plane and nearer detail floats in front.
+    /// directions to move the zero-parallax plane.
+    ///
+    /// Both stereo paths start from PARALLEL eyes, whose zero-parallax plane is
+    /// at infinity: every finite point has crossed disparity (it sits further
+    /// right in the left eye than in the right eye), so the whole scene floats
+    /// in front of the screen. Positive <paramref name="convergenceFraction"/>
+    /// (fraction of eye width) moves the left half LEFT and the right half RIGHT,
+    /// removing <c>fraction·width</c> pixels of crossed disparity: points whose
+    /// disparity equals that amount land on the screen plane, nearer detail
+    /// still floats in front, everything further sits behind. (#1008 fixed the
+    /// sign — it used to add disparity, pushing the scene further out.)
     /// Exposed columns are edge-clamped (replicate the border pixel) so no black
     /// border appears. No-op when the fraction rounds to a zero-pixel shift.
     /// </summary>
@@ -217,8 +226,8 @@ public static class StereoRender
             {
                 int lRow = y * outW;
                 int rRow = lRow + width;
-                ShiftRowClamped(sbs, lRow, width, +signed, tmp); // left eye → right
-                ShiftRowClamped(sbs, rRow, width, -signed, tmp); // right eye → left
+                ShiftRowClamped(sbs, lRow, width, -signed, tmp); // left eye → left
+                ShiftRowClamped(sbs, rRow, width, +signed, tmp); // right eye → right
                 return tmp;
             },
             _ => { });
@@ -266,6 +275,57 @@ public static class StereoRender
         double maxPx = maxDisp * width;
         // disparity(dMin) = eyeSep · focalPx / dMin == maxPx  ⇒  solve eyeSep.
         return maxPx * dMin / focalPx;
+    }
+
+    /// <summary>Swap the two halves of every row of a packed side-by-side
+    /// buffer (<paramref name="packedW"/> = full row width: 2·W for Full-SBS,
+    /// W for Half-SBS) — the cross-view layout (#1017). Applied after
+    /// convergence and packing, so the zero-parallax plane is unchanged: a point
+    /// with zero disparity stays at the same column in both halves.</summary>
+    public static void SwapEyes(uint[] packed, int packedW, int height)
+    {
+        int half = packedW / 2;
+        if (half <= 0) return;
+        Parallel.For<uint[]>(
+            0, height,
+            () => new uint[half],
+            (y, _, tmp) =>
+            {
+                int row = y * packedW;
+                Array.Copy(packed, row, tmp, 0, half);
+                Array.Copy(packed, row + half, packed, row, half);
+                Array.Copy(tmp, 0, packed, row + half, half);
+                return tmp;
+            },
+            _ => { });
+    }
+
+    /// <summary>Display-only letterbox for a Full-SBS frame (#1016). The render
+    /// window stretches any presented frame to the window, so a 2·W × H Full-SBS
+    /// frame in a W × H view would be squeezed to half-width eyes and look the
+    /// same as Half-SBS. When the frame is exactly Full-SBS for the view
+    /// (<paramref name="w"/> = 2·<paramref name="viewW"/>, <paramref name="h"/> =
+    /// <paramref name="viewH"/>) this pads it top and bottom with black to the
+    /// view's aspect, so the stretch becomes a uniform scale and each eye keeps
+    /// its true proportions. Returns <paramref name="src"/> unchanged (and its
+    /// dims) for any other frame. <paramref name="pool"/> is reused across calls.
+    /// Snapshots / recordings must keep using the untouched frame.</summary>
+    public static uint[] LetterboxFullSbsForDisplay(
+        uint[] src, int w, int h, int viewW, int viewH,
+        ref uint[]? pool, out int outW, out int outH)
+    {
+        outW = w; outH = h;
+        if (viewW <= 0 || viewH <= 0 || w != viewW * 2 || h != viewH) return src;
+        int padH = (int)Math.Round((double)w * viewH / viewW);   // == 2·h
+        if (padH <= h) return src;
+        int n = w * padH;
+        if (pool == null || pool.Length < n) pool = new uint[n];
+        int top = (padH - h) / 2;
+        Array.Fill(pool, 0xFF000000u, 0, top * w);
+        Array.Copy(src, 0, pool, top * w, w * h);
+        Array.Fill(pool, 0xFF000000u, (top + h) * w, (padH - top - h) * w);
+        outH = padH;
+        return pool;
     }
 
     /// <summary>True when the two-render (True) stereo path should run: a 3D
@@ -321,6 +381,7 @@ public static class StereoRender
         if (width <= 0 || height <= 0) return null;
         double convergence = fx.StereoConvergence;
         StereoLayout layout = fx.StereoLayout;
+        bool swapEyes = fx.StereoSwapEyes;
 
         try
         {
@@ -351,9 +412,11 @@ public static class StereoRender
                 Array.Copy(rightSrc, srcRow, outBuf, dstRowR, width);
             }
             ApplyConvergence(outBuf, outW, width, height, convergence);
-            return layout == StereoLayout.HalfSbs
+            var packed = layout == StereoLayout.HalfSbs
                 ? ToHalfSbs(outBuf, width, height)
                 : outBuf;
+            if (swapEyes) SwapEyes(packed, OutputDims(width, height, layout).W, height);
+            return packed;
         }
         finally
         {

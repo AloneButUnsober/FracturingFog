@@ -433,6 +433,11 @@ namespace FracturingFog.Rendering
             FracturingFog.Rendering.Lighting.StagePerf.Publisher = _perfStats.RecordStage;
 
             _calculator = new MandelbrotCalculator(w, h);
+            // The render target starts at the construction size (Resize updates
+            // it); the #1016 Full-SBS display letterbox and the full-res snapshot
+            // gate compare frames against it.
+            _currentTargetWidth = w;
+            _currentTargetHeight = h;
             // Wave 2.5 — progressive sidecars at ¼ and ½ resolution. Min
             // 64×64 to keep BLA / SA prelude math well-behaved at very small
             // window sizes.
@@ -1681,7 +1686,7 @@ namespace FracturingFog.Rendering
                     if (claimed)
                     lock (_d3dGate)
                     {
-                        _renderer.UpdateTexture(job.StaleBuf, job.StaleW, job.StaleH);
+                        PresentTexture(job.StaleBuf, job.StaleW, job.StaleH);
                         _renderer.Render();
                     }
                 }
@@ -3893,6 +3898,23 @@ namespace FracturingFog.Rendering
             return _reliefHotLoadTwin;
         }
 
+        // #1016 — display-only letterbox pool for Full-SBS frames. Guarded by
+        // _d3dGate (every PresentTexture call runs under it).
+        private uint[]? _sbsDisplayPool;
+
+        /// <summary>Hand a frame to the renderer. A Full-SBS stereo frame (2W × H
+        /// for a W × H view) is letterboxed first so the window's stretch-to-fit
+        /// keeps each eye's proportions (#1016); every other frame goes through
+        /// untouched. Display only: snapshots / recordings read the unpadded
+        /// buffer. Call under <c>_d3dGate</c>.</summary>
+        private void PresentTexture(uint[] buf, int w, int h)
+        {
+            var shown = FracturingFog.Rendering.Lighting.StereoRender.LetterboxFullSbsForDisplay(
+                buf, w, h, _currentTargetWidth, _currentTargetHeight,
+                ref _sbsDisplayPool, out int dw, out int dh);
+            _renderer.UpdateTexture(shown, dw, dh);
+        }
+
         private void UploadProcessedBuffer(uint[] src, int w, int h, bool srcAlreadyProcessed = false)
         {
             int n = w * h;
@@ -4353,7 +4375,7 @@ namespace FracturingFog.Rendering
             long presentStart = ShowPerfHud ? Stopwatch.GetTimestamp() : 0;
             lock (_d3dGate)
             {
-                _renderer.UpdateTexture(dst, w, h);
+                PresentTexture(dst, w, h);
                 _renderer.Render();
             }
             if (ShowPerfHud)
@@ -4614,7 +4636,7 @@ namespace FracturingFog.Rendering
             if (bgra.Length < (long)width * height) return;
             lock (_d3dGate)
             {
-                _renderer.UpdateTexture(bgra, width, height);
+                PresentTexture(bgra, width, height);
                 _renderer.Render();
             }
             _lastUploadedBuffer = bgra;
