@@ -141,7 +141,8 @@ public static class ReliefScreenSpacePost
         HeightfieldRaymarch2D.ReliefAovBuffers? aov,
         int w, int h,
         in LightingFxData fx,
-        out int outW, out int outH)
+        out int outW, out int outH,
+        AutostereoSequence? sequence = null, bool temporal = false)
     {
         outW = w; outH = h;
         if (dst == null) return null;
@@ -156,7 +157,7 @@ public static class ReliefScreenSpacePost
         // sentinel, so remap it once (same convention as the SSAO / edge path).
         float[] d = DepthForPost(depth, n);
         // #1011 — side-by-side warp, or an autostereogram (W × H).
-        return ScreenSpacePost.ApplyDepthStereo(dst, d, w, h, in fx, out outW, out outH);
+        return ScreenSpacePost.ApplyDepthStereo(dst, d, w, h, in fx, out outW, out outH, sequence, temporal);
     }
 
     private static float[] DepthForPost(float[] reliefDepth, int n)

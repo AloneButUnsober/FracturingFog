@@ -753,6 +753,8 @@ namespace FracturingFog.Batch
                     with { RequiresChoice = new BatchChoiceRequirement(BatchFlags.Stereo, new[] { "autostereogram" }) },
                 Int(BatchFlags.AutostereoSeed, Stereo, ImgVid, "Random-dot seed (same seed + view = same image).", 0, null, enforced: true, def: "1")
                     with { RequiresChoice = new BatchChoiceRequirement(BatchFlags.Stereo, new[] { "autostereogram" }) },
+                Dbl(BatchFlags.AutostereoTemporal, Stereo, BatchModes.Video, "Video: how much of the previous frames' depth each frame keeps (0 = none; 0.5 halves the shimmer).", 0, 0.9, enforced: true, def: "0.5")
+                    with { RequiresChoice = new BatchChoiceRequirement(BatchFlags.Stereo, new[] { "autostereogram" }) },
 
                 // ── Remote ──
                 Sw(BatchFlags.Remote, Remote, BatchModes.Remote,

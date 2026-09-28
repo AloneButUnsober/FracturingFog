@@ -563,6 +563,9 @@ namespace FracturingFog.Cli
                     if (!fx.StereoAutoGuideDots) parts.Add(BatchFlags.AutostereoNoGuideDots);
                     if (fx.StereoAutoSeed != 1 && fx.StereoAutoSeed >= 0)
                     { parts.Add(BatchFlags.AutostereoSeed); parts.Add(fx.StereoAutoSeed.ToString(CultureInfo.InvariantCulture)); }
+                    double temporal = Math.Clamp(fx.StereoAutoTemporal, 0.0, 0.9);
+                    if (Math.Abs(temporal - 0.5) > 1e-12)
+                    { parts.Add(BatchFlags.AutostereoTemporal); parts.Add(Num(temporal)); }
                     return;
             }
         }

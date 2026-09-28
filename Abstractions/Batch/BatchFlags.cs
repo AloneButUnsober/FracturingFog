@@ -206,6 +206,7 @@ namespace FracturingFog.Batch
         public const string AutostereoCrossEyed   = "--autostereo-cross-eyed";
         public const string AutostereoNoGuideDots = "--autostereo-no-guide-dots";
         public const string AutostereoSeed        = "--autostereo-seed";
+        public const string AutostereoTemporal    = "--autostereo-temporal";
 
         // Guided À-Trous denoise on the relief raymarch (roadmap S4, #389). Keyed
         // on the render's own float normal/depth AOVs. Any denoise flag implies
