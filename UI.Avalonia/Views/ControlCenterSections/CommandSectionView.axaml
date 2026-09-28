@@ -198,8 +198,6 @@
         <Border Classes="group">
             <StackPanel Spacing="4" Width="560" HorizontalAlignment="Left">
                 <TextBlock Classes="section" Text="Not available headless yet" />
-                <CheckBox Content="Stereo / side-by-side (SBS) output" IsEnabled="False" FontSize="11"
-                          ToolTip.Tip="The batch renderer has no stereo path yet: fake SBS needs a depth buffer and double-width output, true SBS a per-eye 3D render." />
                 <TextBlock Foreground="#8A8A8A" FontSize="11" TextWrapping="Wrap"
                            Text="User-code equations (User Equation, Sandbox, User Bulb) travel only with a saved region: save the view as a region and use --region." />
                 <TextBlock Foreground="#8A8A8A" FontSize="11" TextWrapping="Wrap"

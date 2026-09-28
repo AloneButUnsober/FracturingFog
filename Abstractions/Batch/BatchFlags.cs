@@ -186,6 +186,27 @@ namespace FracturingFog.Batch
         // block before the individual lighting flags (#998).
         public const string LightingPreset        = "--lighting-preset";
 
+        // Stereo output (#1012, epic #1014): side-by-side pairs (Fake depth-
+        // parallax warp / True two-eye render) and single-image autostereograms.
+        // Applied onto the lighting block after --lighting-preset, like the
+        // other lighting flags. Effective on 3D types and --relief (flat 2D has
+        // no depth / second camera).
+        public const string Stereo                = "--stereo";
+        public const string StereoEyeSep          = "--stereo-eye-sep";
+        public const string StereoConvergence     = "--stereo-convergence";
+        public const string StereoMaxDisparity    = "--stereo-max-disparity";
+        public const string StereoFov             = "--stereo-fov";
+        public const string StereoLayout          = "--stereo-layout";
+        public const string StereoSwapEyes        = "--stereo-swap-eyes";
+        public const string AutostereoPattern     = "--autostereo-pattern";
+        public const string AutostereoEyeSep      = "--autostereo-eye-sep";
+        public const string AutostereoDepth       = "--autostereo-depth";
+        public const string AutostereoSmoothing   = "--autostereo-smoothing";
+        public const string AutostereoLevels      = "--autostereo-levels";
+        public const string AutostereoCrossEyed   = "--autostereo-cross-eyed";
+        public const string AutostereoNoGuideDots = "--autostereo-no-guide-dots";
+        public const string AutostereoSeed        = "--autostereo-seed";
+
         // Guided À-Trous denoise on the relief raymarch (roadmap S4, #389). Keyed
         // on the render's own float normal/depth AOVs. Any denoise flag implies
         // --relief-raymarch (only the raymarch emits the guides). 0 passes = off.

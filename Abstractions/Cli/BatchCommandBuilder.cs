@@ -192,10 +192,6 @@ namespace FracturingFog.Cli
         public string ReliefIsolateColors { get; init; } = "";
         public double ReliefIsolateTolerance { get; init; } = 0.12;
 
-        /// <summary>Stereo / SBS output is on (Lighting.StereoMode != Off).
-        /// No batch flag (#363).</summary>
-        public bool StereoActive { get; init; }
-
         /// <summary>Domain-warp post-fx is on (DomainWarpEnabled). Emitted as
         /// <c>--domain-warp</c> (#363).</summary>
         public bool DomainWarpActive { get; init; }
@@ -459,6 +455,9 @@ namespace FracturingFog.Cli
             // live Lighting off Parameters.
             AppendLights(parts, snap);
 
+            // Stereo output (#1012) — side-by-side pair or autostereogram.
+            AppendStereo(parts, snap);
+
             // Fractal-specific parameters that have batch flags. Emitted only for
             // the matching fractal type so unrelated defaults never clutter.
             AppendFractalParams(parts, snap);
@@ -499,8 +498,6 @@ namespace FracturingFog.Cli
             var gaps = new List<string>();
             if (snap.ThemeIsUnsaved)
                 gaps.Add("Custom/unsaved theme (save it first so the command can reference it by name; falls back to HSV)");
-            if (snap.StereoActive)
-                gaps.Add("Stereo output (side-by-side or autostereogram)");
             // #998 — Lighting & FX settings no flag carries, unless a saved preset
             // reproduces the whole block.
             if (string.IsNullOrWhiteSpace(snap.LightingPresetName) && snap.Parameters != null)
@@ -514,6 +511,60 @@ namespace FracturingFog.Cli
             if (!string.IsNullOrWhiteSpace(snap.LiveAnimationName))
                 gaps.Add($"Live animation '{snap.LiveAnimationName}' (a still shows one moment of it; for a video choose it under --animation)");
             return gaps;
+        }
+
+        /// <summary>#1012 — emit the stereo flags for the live lighting block: the
+        /// mode, then each setting that deviates from its default. A side-by-side
+        /// pair with no eye separation renders mono live, so it emits nothing
+        /// (the batch would otherwise default the separation). Autostereogram
+        /// values are sanitised exactly as the renderer does
+        /// (<c>Autostereogram.FromLighting</c>), so an older preset's zero fields
+        /// never produce an out-of-range flag.</summary>
+        private static void AppendStereo(List<string> parts, BatchCommandSnapshot snap)
+        {
+            if (snap.Parameters == null) return;
+            var fx = snap.Parameters.Lighting;
+            switch (fx.StereoMode)
+            {
+                case StereoMode.Fake:
+                case StereoMode.True:
+                    if (fx.StereoEyeSeparation <= 0.0) return;
+                    parts.Add(BatchFlags.Stereo); parts.Add(fx.StereoMode == StereoMode.Fake ? "fake" : "true");
+                    parts.Add(BatchFlags.StereoEyeSep); parts.Add(Num(Math.Min(fx.StereoEyeSeparation, 0.25)));
+                    if (fx.StereoConvergence != 0.0)
+                    { parts.Add(BatchFlags.StereoConvergence); parts.Add(Num(Math.Clamp(fx.StereoConvergence, -0.2, 0.2))); }
+                    if (fx.StereoMode == StereoMode.Fake)
+                    {
+                        if (fx.StereoMaxDisparity != 0.03)
+                        { parts.Add(BatchFlags.StereoMaxDisparity); parts.Add(Num(Math.Clamp(fx.StereoMaxDisparity, 0.0, 0.15))); }
+                        if (fx.StereoFovDegrees != 60.0)
+                        { parts.Add(BatchFlags.StereoFov); parts.Add(Num(Math.Clamp(fx.StereoFovDegrees, 20.0, 120.0))); }
+                    }
+                    if (fx.StereoLayout == StereoLayout.HalfSbs) { parts.Add(BatchFlags.StereoLayout); parts.Add("half"); }
+                    if (fx.StereoSwapEyes) parts.Add(BatchFlags.StereoSwapEyes);
+                    return;
+
+                case StereoMode.Autostereogram:
+                    parts.Add(BatchFlags.Stereo); parts.Add("autostereogram");
+                    if (fx.StereoAutoPattern != AutostereoPattern.RandomDots)
+                    {
+                        parts.Add(BatchFlags.AutostereoPattern);
+                        parts.Add(fx.StereoAutoPattern == AutostereoPattern.ThemeDots ? "theme" : "texture");
+                    }
+                    double sep = fx.StereoAutoEyeSep > 0 ? Math.Clamp(fx.StereoAutoEyeSep, 0.03, 0.4) : 0.125;
+                    if (Math.Abs(sep - 0.125) > 1e-12) { parts.Add(BatchFlags.AutostereoEyeSep); parts.Add(Num(sep)); }
+                    double mu = fx.StereoAutoDepthOfField > 0 ? Math.Clamp(fx.StereoAutoDepthOfField, 0.05, 0.75) : 1.0 / 3.0;
+                    if (Math.Abs(mu - 1.0 / 3.0) > 1e-9) { parts.Add(BatchFlags.AutostereoDepth); parts.Add(Num(mu)); }
+                    int blur = Math.Clamp(fx.StereoAutoBlur, 0, 32);
+                    if (blur != 3) { parts.Add(BatchFlags.AutostereoSmoothing); parts.Add(blur.ToString(CultureInfo.InvariantCulture)); }
+                    int levels = Math.Clamp(fx.StereoAutoLevels, 0, 64);
+                    if (levels != 6) { parts.Add(BatchFlags.AutostereoLevels); parts.Add(levels.ToString(CultureInfo.InvariantCulture)); }
+                    if (fx.StereoAutoCrossEyed) parts.Add(BatchFlags.AutostereoCrossEyed);
+                    if (!fx.StereoAutoGuideDots) parts.Add(BatchFlags.AutostereoNoGuideDots);
+                    if (fx.StereoAutoSeed != 1 && fx.StereoAutoSeed >= 0)
+                    { parts.Add(BatchFlags.AutostereoSeed); parts.Add(fx.StereoAutoSeed.ToString(CultureInfo.InvariantCulture)); }
+                    return;
+            }
         }
 
         /// <summary>Emit <c>--lightN-*</c> flags (roadmap S8, #404/#490) for the

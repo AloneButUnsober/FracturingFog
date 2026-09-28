@@ -525,6 +525,23 @@ namespace FracturingFog.Imaging
             float[]? reliefField = ResolveReliefField(req, req.Width, req.Height, token, out int reliefFw, out int reliefFh);
 
             IFractalCalculator? alt = BuildCaptureCalculator(req);
+            // #1012 — True stereo on a 3D raymarcher: both eye renders; the composed
+            // buffer is the side-by-side pair and the post-pipeline (grade / view
+            // transform / interior composite, all per-pixel) runs on it at its size.
+            if (alt is IStereoEyeCamera
+                && FracturingFog.ViewState.FractalViewState.IsThreeD(req.FractalType)
+                && req.FractalParameters is { } tsp
+                && FracturingFog.Rendering.Lighting.StereoRender.WantsTrueStereo(true, tsp.Lighting))
+            {
+                var tfx = tsp.Lighting;
+                var pair = FracturingFog.Rendering.Lighting.StereoRender.RenderTrueStereo(alt, in tfx, token);
+                token.ThrowIfCancellationRequested();
+                if (pair != null)
+                {
+                    (w, h) = FracturingFog.Rendering.Lighting.StereoRender.OutputDims(alt.Width, alt.Height, tfx.StereoLayout);
+                    return pair;
+                }
+            }
             if (alt != null)
             {
                 alt.Calculate(token);
