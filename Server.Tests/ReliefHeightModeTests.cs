@@ -78,11 +78,16 @@ public sealed class ReliefHeightModeTests
         return dst;
     }
 
-    // Camera-to-surface distance per output pixel (sky = NaN).
+    // Camera-to-surface distance per output pixel (sky = NaN), at a DW×DH output:
+    // large enough that the field is only halved (#1027 traces a finer field on an
+    // output-sized grid), so the bump survives the small-window filters.
+    private const int DW = 640, DH = 480;
     private static float[] Depth(float[] field, FractalParameters p)
     {
-        var aov = new HeightfieldRaymarch2D.ReliefAovBuffers(W, H);
-        HeightfieldRaymarch2D.Render(Albedo(), field, W, H, FW, FH, p, new uint[W * H], out _, null, aov);
+        var alb = new uint[DW * DH];
+        Array.Fill(alb, 0xFF6688AAu);
+        var aov = new HeightfieldRaymarch2D.ReliefAovBuffers(DW, DH);
+        HeightfieldRaymarch2D.Render(alb, field, DW, DH, FW, FH, p, new uint[DW * DH], out _, null, aov);
         return aov.Depth.Select(d => d > 0f && d < 9.9e5f ? d : float.NaN).ToArray();
     }
 
@@ -124,7 +129,7 @@ public sealed class ReliefHeightModeTests
         var live = P(mode);
         var before = Render(field, live);
 
-        var m = HeightfieldRaymarch2D.MeasureHeightNormalization(field, FW, FH, live);
+        var m = HeightfieldRaymarch2D.MeasureHeightNormalization(field, FW, FH, live, W, H);
         Assert.NotNull(m);
         var locked = P(ReliefHeightMode.Fixed);
         locked.Relief2DHeightRef = m!.Value.Reference;
@@ -144,7 +149,7 @@ public sealed class ReliefHeightModeTests
 
         double peakSank = SankFraction(Depth(calm, P()), Depth(spiky, P()));
 
-        var m = HeightfieldRaymarch2D.MeasureHeightNormalization(calm, FW, FH, P())!.Value;
+        var m = HeightfieldRaymarch2D.MeasureHeightNormalization(calm, FW, FH, P(), DW, DH)!.Value;
         var fixedP = P(ReliefHeightMode.Fixed);
         fixedP.Relief2DHeightRef = m.Reference;
         fixedP.Relief2DHeightBaseline = m.Baseline;
@@ -180,7 +185,7 @@ public sealed class ReliefHeightModeTests
 
     [Fact]
     public void Measure_DeadFlatField_IsNull()
-        => Assert.Null(HeightfieldRaymarch2D.MeasureHeightNormalization(new float[FW * FH], FW, FH, P()));
+        => Assert.Null(HeightfieldRaymarch2D.MeasureHeightNormalization(new float[FW * FH], FW, FH, P(), W, H));
 
     // ── Batch grammar ───────────────────────────────────────────────────────
 

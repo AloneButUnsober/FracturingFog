@@ -334,7 +334,11 @@ public static class HeightfieldRaymarch2D
         // frame is wasted work. Hash the inputs; on a match reuse the cached
         // immutable ReliefPrepass (compressed field + max + grid-slope maxima).
         // sy / invLip stay per-call (cheap, scale-dependent).
-        ReliefPrepass pre = GetPrepass(height, hn, hw, hh, p);
+        var (tw, th) = FieldTargetDims(hw, hh, w, h);
+        ReliefPrepass pre = GetPrepass(height, hn, hw, hh, p, tw, th);
+        // #1027 — a field finer than the output is area-downsampled inside the
+        // prepass; everything below works on the prepass grid.
+        hw = pre.W; hh = pre.H;
 
         float[] hbuf = pre.Compressed;
         float maxH = pre.MaxH, gMaxX = pre.GMaxX, gMaxZ = pre.GMaxZ;
@@ -376,6 +380,12 @@ public static class HeightfieldRaymarch2D
         byte[]? keep = BuildKeepMask(hbuf, hw, hh, albedo, w, h, p);
 
         var de = new HeightDe(hbuf, hw, hh, sy, aspect, invLip, p.Relief2DBicubicHeight, keep);
+        // #1027 — empty-space skip on the CPU trace too (it was GPU-only), so rays
+        // cross the air above the terrain in a few leaps instead of crawling at the
+        // slope-limited step. The grid's halo bounds the bilinear sample only, so the
+        // bicubic path (which can overshoot its neighbours) marches without it.
+        float[]? skipMip = p.Relief2DEmptySkip && !p.Relief2DBicubicHeight ? pre.Mip : null;
+        int skipMipW = pre.MipW, skipMipH = pre.MipH;
 
         // Lighting FX (#132 defaults). Copy the struct, then — when auto-shade is
         // on — fill sensible AO / soft-shadow / specular / ambient values wherever
@@ -587,10 +597,21 @@ public static class HeightfieldRaymarch2D
                 for (int s = 0; s < maxSteps && t < t1 + by; s++)
                 {
                     d = de.Evaluate(ox + rdx * t, oy + rdy * t, oz + rdz * t);
-                    double epsT = eps0 + pixelAngle * t;
-                    if (d < epsT) { hit = true; break; }
+                    double epsT = cam.Tolerance(t);   // eps0 + pixelAngle·t (capped for Uniform)
+                    // #1027 — hit when the VERTICAL gap (d / invLip, world units) is
+                    // within the tolerance. Comparing the Lipschitz-scaled d itself
+                    // stopped every ray at the box top on fine fields (tiny invLip):
+                    // big windows rendered a flat plate with the fractal painted on.
+                    if (d < epsT * invLip) { hit = true; break; }
                     tPrev = t;
-                    t += Math.Max(d, epsT * 0.5);
+                    double adv = Math.Max(d, epsT * 0.5);
+                    if (skipMip is not null)
+                    {
+                        double skip = ReliefHeightMip.EmptySkipDist(ox + rdx * t, oy + rdy * t, oz + rdz * t,
+                            rdx, rdy, rdz, epsT, aspect, sy, skipMip, skipMipW, skipMipH);
+                        if (skip > adv) adv = skip;
+                    }
+                    t += adv;
                 }
 
                 if (hit)
@@ -932,14 +953,19 @@ public static class HeightfieldRaymarch2D
         public readonly int MaxSteps;
         public readonly bool GroundPlane;
         public readonly double FloorBx, FloorBz;
+        /// <summary>#1027 — the distance beyond which the hit tolerance stops
+        /// growing (the nearest terrain for <see cref="ReliefDetailAnchor.Uniform"/>);
+        /// 0 = no cap (it grows with distance everywhere).</summary>
+        public readonly double ConeCapT;
 
         public ReliefCamera(double camX, double camY, double camZ,
             double fX, double fY, double fZ, double rX, double rZ,
             double uX, double uY, double uZ, double tanHalf,
             bool ortho, double orthoHalfV, double bx, double by, double bz,
             double eps0, double pixelAngle, int maxSteps, bool groundPlane,
-            double floorBx, double floorBz)
+            double floorBx, double floorBz, double coneCapT = 0.0)
         {
+            ConeCapT = coneCapT;
             CamX = camX; CamY = camY; CamZ = camZ;
             FX = fX; FY = fY; FZ = fZ; RX = rX; RZ = rZ;
             UX = uX; UY = uY; UZ = uZ; TanHalf = tanHalf;
@@ -948,6 +974,12 @@ public static class HeightfieldRaymarch2D
             Eps0 = eps0; PixelAngle = pixelAngle; MaxSteps = maxSteps;
             GroundPlane = groundPlane; FloorBx = floorBx; FloorBz = floorBz;
         }
+
+        /// <summary>The hit tolerance at ray distance <paramref name="t"/>: one
+        /// pixel's footprint at that distance, stopped at <see cref="ConeCapT"/>.</summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public double Tolerance(double t)
+            => Eps0 + PixelAngle * (ConeCapT > 0.0 && t > ConeCapT ? ConeCapT : t);
     }
 
     /// <summary>Build the oblique camera / AABB / epsilon for a relief render.
@@ -990,6 +1022,7 @@ public static class HeightfieldRaymarch2D
         // forward = normalize(target - cam)
         double fX = -camX, fY = (tgtY - camY), fZ = -camZ;
         double fl = Math.Sqrt(fX * fX + fY * fY + fZ * fZ); fX /= fl; fY /= fl; fZ /= fl;
+        double targetDist = fl;   // #1027 — camera → look-at point
         // right = normalize(cross(forward, up=(0,1,0))) = (-fZ, 0, fX). (#129 —
         // the old (fZ,0,-fX) was left-handed, mirroring both screen axes.)
         double rX = -fZ, rY = 0.0, rZ = fX;
@@ -1029,9 +1062,27 @@ public static class HeightfieldRaymarch2D
         bool groundPlane = p.Relief2DGroundPlane;
         double floorBx = bx * 3.0, floorBz = bz * 3.0;   // bounded floor → horizon keeps sky
 
+        // #1027 — Uniform anchor: measure the tolerance once, at the terrain's
+        // nearest point (camera → the terrain box), and hold it for every farther
+        // sample, so the whole terrain resolves detail as finely as its near edge
+        // instead of loosening with distance. (The look-at point is usually farther
+        // than most of the visible terrain, so capping there would change little.)
+        // Floored at a tenth of the look-at distance for a camera inside the box.
+        // Far rays now take smaller steps, so triple the step budget. Camera
+        // (default) = no cap, byte-identical. Ortho has no cone to cap.
+        double coneCapT = 0.0;
+        if (p.Relief2DDetailAnchor == ReliefDetailAnchor.Uniform && !ortho)
+        {
+            double ddx = Math.Max(Math.Abs(camX) - bx, 0.0);
+            double ddy = camY > by ? camY - by : (camY < 0.0 ? -camY : 0.0);
+            double ddz = Math.Max(Math.Abs(camZ) - bz, 0.0);
+            coneCapT = Math.Max(Math.Sqrt(ddx * ddx + ddy * ddy + ddz * ddz), 0.1 * targetDist);
+            maxSteps = Math.Min(4000, maxSteps * 3);
+        }
+
         return new ReliefCamera(camX, camY, camZ, fX, fY, fZ, rX, rZ,
             uX, uY, uZ, tanHalf, ortho, orthoHalfV, bx, by, bz,
-            eps0, pixelAngle, maxSteps, groundPlane, floorBx, floorBz);
+            eps0, pixelAngle, maxSteps, groundPlane, floorBx, floorBz, coneCapT);
     }
 
     /// <summary>Bilinear sample of the ARGB albedo buffer at UV in [0,1]
@@ -1071,12 +1122,24 @@ public static class HeightfieldRaymarch2D
     private sealed class ReliefPrepass
     {
         public ReliefPrepass(float[] compressed, float maxH, float gMaxX, float gMaxZ,
-                             float baseline, float robustRef)
+                             float baseline, float robustRef, float[] mip, int mipW, int mipH,
+                             int w, int h)
         {
+            W = w; H = h;
             Compressed = compressed; MaxH = maxH; GMaxX = gMaxX; GMaxZ = gMaxZ;
             Baseline = baseline; RobustRef = robustRef;
+            Mip = mip; MipW = mipW; MipH = mipH;
         }
+        /// <summary>#1027 — coarse max-height grid for the CPU trace's
+        /// empty-space skip (<see cref="ReliefHeightMip"/>).</summary>
+        public float[] Mip { get; }
+        public int MipW { get; }
+        public int MipH { get; }
         public float[] Compressed { get; }
+        /// <summary>#1027 — the grid the compressed field is on (the field size,
+        /// or the output-matched size a finer field was downsampled to).</summary>
+        public int W { get; }
+        public int H { get; }
         public float MaxH { get; }
         public float GMaxX { get; }
         public float GMaxZ { get; }
@@ -1114,7 +1177,8 @@ public static class HeightfieldRaymarch2D
     /// renders share mutable prepass scratch). The published result's Compressed
     /// field is only ever READ downstream (BuildKeepMask / HeightDe / the GPU
     /// kernel), so a cache hit can safely share it across concurrent renders.</summary>
-    private static ReliefPrepass GetPrepass(float[] height, int hn, int hw, int hh, FractalParameters p)
+    private static ReliefPrepass GetPrepass(float[] height, int hn, int hw, int hh, FractalParameters p,
+                                            int targetW, int targetH)
     {
         HeightCurve2D curve = p.Relief2DHeightCurve;
         double edgeFade = Math.Clamp(p.Relief2DEdgeFade, 0.0, 0.5);
@@ -1128,7 +1192,7 @@ public static class HeightfieldRaymarch2D
         double fixedBaseline = isFixed && p.Relief2DHeightBaseline >= 0.0 ? p.Relief2DHeightBaseline : -1.0;
         double gammaRef = isFixed && p.Relief2DHeightRef > 0.0 ? p.Relief2DHeightRef : 0.0;
         ulong key = PrepassKey(height, hn, hw, hh, curve, edgeFade, detailGain, detailRadius, heightGamma,
-                               fixedBaseline, gammaRef);
+                               fixedBaseline, gammaRef, targetW, targetH);
 
         ReliefPrepass? pre;
         lock (s_prepassLock)
@@ -1138,7 +1202,7 @@ public static class HeightfieldRaymarch2D
         if (pre is null)
         {
             pre = BuildPrepass(height, hn, hw, hh, curve, edgeFade, detailGain, detailRadius, heightGamma,
-                               fixedBaseline, gammaRef);
+                               fixedBaseline, gammaRef, targetW, targetH);
             lock (s_prepassLock) { s_prepass = pre; s_prepassKey = key; }
         }
         return pre;
@@ -1162,13 +1226,17 @@ public static class HeightfieldRaymarch2D
     /// relief raymarch of <paramref name="height"/> (field dims
     /// <paramref name="hw"/>×<paramref name="hh"/>) uses under
     /// <paramref name="p"/>'s current height mode, for "Lock current height".
+    /// <paramref name="outW"/>×<paramref name="outH"/> is the output size the field
+    /// renders at (a finer field is downsampled to it, #1027); ≤ 0 = the field size.
     /// Null when the field is empty or dead flat.</summary>
     public static ReliefHeightNormalization? MeasureHeightNormalization(
-        float[] height, int hw, int hh, FractalParameters p)
+        float[] height, int hw, int hh, FractalParameters p, int outW = 0, int outH = 0)
     {
         int hn = hw * hh;
         if (height == null || p == null || hw <= 2 || hh <= 2 || height.Length < hn) return null;
-        ReliefPrepass pre = GetPrepass(height, hn, hw, hh, p);
+        if (outW <= 0 || outH <= 0) { outW = hw; outH = hh; }
+        var (tw, th) = FieldTargetDims(hw, hh, outW, outH);
+        ReliefPrepass pre = GetPrepass(height, hn, hw, hh, p, tw, th);
         if (pre.MaxH <= 1e-9f) return null;
         return new ReliefHeightNormalization(pre.Baseline, NormalizationReference(pre, p));
     }
@@ -1238,7 +1306,7 @@ public static class HeightfieldRaymarch2D
     private static ReliefPrepass BuildPrepass(
         float[] height, int hn, int hw, int hh, HeightCurve2D curve, double edgeFade,
         double detailGain = 1.0, int detailRadius = 0, double heightGamma = 1.0,
-        double fixedBaseline = -1.0, double gammaRef = 0.0)
+        double fixedBaseline = -1.0, double gammaRef = 0.0, int targetW = 0, int targetH = 0)
     {
         var hbuf = new float[hn];
 
@@ -1257,6 +1325,18 @@ public static class HeightfieldRaymarch2D
                 HeightCurve2D.Sqrt   => (float)Math.Sqrt(hv),
                 _                    => (float)Math.Log(1.0 + hv),   // Log (default)
             };
+        }
+
+        // #1027 — a field finer than the output (the hi-res floor field in a small
+        // window) holds filaments narrower than a pixel; traced as real geometry
+        // they alias into a hair-thin needle forest. Area-average the tone-curved
+        // field down to about one cell per output pixel first — computing at high
+        // resolution and downsampling is an anti-aliased field — and run the rest of
+        // the chain (incl. the small-window filters) at that size.
+        if (targetW > 0 && targetH > 0 && (targetW != hw || targetH != hh))
+        {
+            hbuf = AreaDownsample(hbuf, hw, hh, targetW, targetH);
+            hw = targetW; hh = targetH; hn = hw * hh;
         }
 
         // Exterior baseline subtraction (#141) — the tone curve (esp. Log) lifts
@@ -1351,7 +1431,9 @@ public static class HeightfieldRaymarch2D
         // height-scale change; the world Lipschitz slope is reconstructed per call.
         var (gMaxX, gMaxZ) = GridSlopeMaxima(hbuf, hw, hh);
 
-        return new ReliefPrepass(hbuf, maxH, gMaxX, gMaxZ, appliedBaseline, RobustReference(hbuf, hn, maxH));
+        var mip = ReliefHeightMip.BuildMaxGrid(hbuf, hw, hh, ReliefHeightMip.Blk, out int mipW, out int mipH);
+        return new ReliefPrepass(hbuf, maxH, gMaxX, gMaxZ, appliedBaseline, RobustReference(hbuf, hn, maxH),
+                                 mip, mipW, mipH, hw, hh);
     }
 
     /// <summary>#1026 — the <see cref="RobustPercentile"/> height of the non-zero
@@ -1387,7 +1469,7 @@ public static class HeightfieldRaymarch2D
     private static ulong PrepassKey(float[] height, int hn, int hw, int hh,
                                     HeightCurve2D curve, double edgeFade,
                                     double detailGain, int detailRadius, double heightGamma,
-                                    double fixedBaseline, double gammaRef)
+                                    double fixedBaseline, double gammaRef, int targetW, int targetH)
     {
         unchecked
         {
@@ -1412,6 +1494,8 @@ public static class HeightfieldRaymarch2D
             ulong hg = (ulong)BitConverter.DoubleToInt64Bits(heightGamma);
             hash = (hash ^ (hg & 0xFFFFFFFFUL)) * FnvPrime;
             hash = (hash ^ (hg >> 32)) * FnvPrime;
+            hash = (hash ^ (uint)targetW) * FnvPrime;   // #1027 — downsample target
+            hash = (hash ^ (uint)targetH) * FnvPrime;
             // #1026 — a fixed baseline / gamma reference also shape it.
             ulong fb = (ulong)BitConverter.DoubleToInt64Bits(fixedBaseline);
             hash = (hash ^ (fb & 0xFFFFFFFFUL)) * FnvPrime;
@@ -1515,6 +1599,46 @@ public static class HeightfieldRaymarch2D
     /// dim ≳ 1000, even ~864 on a 125 %-scaled 1080p panel → t &lt; 0.02) stays
     /// visually identical to the signed-off large view. Mini / Toy (t ≈ 0.99 / 1)
     /// are unchanged vs. the 640 ramp.</summary>
+    /// <summary>#1027 — the grid a <paramref name="hw"/>×<paramref name="hh"/> field
+    /// is traced on for a <paramref name="w"/>×<paramref name="h"/> output. A field
+    /// more than 1.25× finer than the output is area-downsampled to about one cell
+    /// per output pixel (aspect kept); otherwise the field's own size.</summary>
+    public static (int W, int H) FieldTargetDims(int hw, int hh, int w, int h)
+    {
+        if (w <= 0 || h <= 0) return (hw, hh);
+        double k = Math.Max(hw / (double)w, hh / (double)h);
+        if (k <= FieldDownsampleThreshold) return (hw, hh);
+        return (Math.Max(3, (int)Math.Round(hw / k)), Math.Max(3, (int)Math.Round(hh / k)));
+    }
+
+    /// <summary>#1027 — field cells per output pixel above which the field is
+    /// downsampled for tracing.</summary>
+    internal const double FieldDownsampleThreshold = 1.25;
+
+    /// <summary>#1027 — area-average <paramref name="src"/> (sw×sh) onto a dw×dh
+    /// grid; each target cell averages the source cells whose centres fall in it.</summary>
+    internal static float[] AreaDownsample(float[] src, int sw, int sh, int dw, int dh)
+    {
+        var dst = new float[dw * dh];
+        double kx = sw / (double)dw, ky = sh / (double)dh;
+        System.Threading.Tasks.Parallel.For(0, dh, y =>
+        {
+            int y0 = (int)Math.Floor(y * ky), y1 = Math.Min(sh, Math.Max(y0 + 1, (int)Math.Floor((y + 1) * ky)));
+            for (int x = 0; x < dw; x++)
+            {
+                int x0 = (int)Math.Floor(x * kx), x1 = Math.Min(sw, Math.Max(x0 + 1, (int)Math.Floor((x + 1) * kx)));
+                double sum = 0; int cnt = 0;
+                for (int yy = y0; yy < y1; yy++)
+                {
+                    int row = yy * sw;
+                    for (int xx = x0; xx < x1; xx++) { sum += src[row + xx]; cnt++; }
+                }
+                dst[y * dw + x] = cnt > 0 ? (float)(sum / cnt) : 0f;
+            }
+        });
+        return dst;
+    }
+
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static double ResolutionRamp(int w, int h)
         => Smoothstep((920.0 - Math.Min(w, h)) / (920.0 - 200.0));

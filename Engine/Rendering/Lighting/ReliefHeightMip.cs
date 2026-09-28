@@ -71,4 +71,43 @@ public static class ReliefHeightMip
         }
         return grid;
     }
+
+    /// <summary>Conservative empty-space-skip distance along a ray at world point
+    /// (px,py,pz). Looks up the coarse block max height; if the point is above it by
+    /// more than the hit tolerance <paramref name="epsT"/>, returns the min of the
+    /// distance to descend to <paramref name="epsT"/> above the block max and the
+    /// distance to exit the block's XZ cell — no terrain can be hit within that span.
+    /// Returns 0 (fall back to the point DE) otherwise. Shared by the CPU relief
+    /// trace and the GPU parity twin; the HLSL <c>EmptySkipDist</c> mirrors it.</summary>
+    public static double EmptySkipDist(double px, double py, double pz,
+        double rdx, double rdy, double rdz, double epsT,
+        double aspect, double sy, float[] mip, int mipW, int mipH)
+    {
+        double uu = px / aspect + 0.5, vv = pz + 0.5;
+        int cx = (int)Math.Floor(uu * mipW);
+        int cz = (int)Math.Floor(vv * mipH);
+        if (cx < 0) cx = 0; else if (cx > mipW - 1) cx = mipW - 1;
+        if (cz < 0) cz = 0; else if (cz > mipH - 1) cz = mipH - 1;
+        double hmax = mip[cz * mipW + cx] * sy;
+        if (py <= hmax + epsT) return 0.0;
+
+        // Descend to epsT ABOVE the block max (not the plane itself) so the normal
+        // march resumes with a tight hit-refine bracket instead of one spanning the
+        // whole leap. Still conservative (y stays ≥ hmax over the span).
+        double tPlane = rdy < -1e-9 ? (py - (hmax + epsT)) / (-rdy) : double.MaxValue;
+
+        // Lateral exit of this coarse cell's world XZ AABB.
+        double xLo = (cx / (double)mipW - 0.5) * aspect;
+        double xHi = ((cx + 1) / (double)mipW - 0.5) * aspect;
+        double zLo = cz / (double)mipH - 0.5;
+        double zHi = (cz + 1) / (double)mipH - 0.5;
+        double tExit = double.MaxValue;
+        if (rdx > 1e-12) tExit = Math.Min(tExit, (xHi - px) / rdx);
+        else if (rdx < -1e-12) tExit = Math.Min(tExit, (xLo - px) / rdx);
+        if (rdz > 1e-12) tExit = Math.Min(tExit, (zHi - pz) / rdz);
+        else if (rdz < -1e-12) tExit = Math.Min(tExit, (zLo - pz) / rdz);
+
+        double skip = Math.Min(tPlane, tExit);
+        return skip > 0.0 ? skip : 0.0;
+    }
 }

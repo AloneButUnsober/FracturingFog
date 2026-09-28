@@ -822,6 +822,14 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
         set { double v = Clamp(value, 0.15, 1.0); if (_p.Relief2DFarDetail == v) return; _p.Relief2DFarDetail = v; this.RaisePropertyChanged(); Fire(); }
     }
 
+    // #1027 — where the hit tolerance is measured from (camera / uniform at the nearest terrain).
+    public FracturingFog.ReliefDetailAnchor Relief2DDetailAnchor
+    {
+        get => _p.Relief2DDetailAnchor;
+        set { if (_p.Relief2DDetailAnchor == value) return; _p.Relief2DDetailAnchor = value; this.RaisePropertyChanged(); Fire(); }
+    }
+    public Array Relief2DDetailAnchors => Enum.GetValues(typeof(FracturingFog.ReliefDetailAnchor));
+
     // #520 (part 3) — settle-based full detail (auto poster-detail on idle).
     public bool Relief2DSettleDetail
     {

@@ -194,11 +194,11 @@ public static class HeightfieldRaymarchProbe
         return cnt > 0 ? sum / cnt : 0.0;
     }
 
-    /// <summary>CLI entry (`--heightfieldhires`). #143 — prove the
+    /// <summary>CLI entry (`--heightfieldhires`). #143 / #1027 — prove the
     /// decoupled-resolution relief path: the same small output rendered from a
     /// height field computed at a resolution FLOOR (independent of the output
-    /// size) is markedly smoother than from a display-resolution field, while
-    /// still producing a valid 3D silhouette. Uses a zoomed seahorse-valley view
+    /// size) matches the display-resolution render (same silhouette) and is no
+    /// rougher, while still producing a valid 3D silhouette. Uses a zoomed seahorse-valley view
     /// where small-window undersampling turns terrain into a needle forest.</summary>
     public static int RunHiResGate()
     {
@@ -258,14 +258,16 @@ public static class HeightfieldRaymarchProbe
         sb.AppendLine($"  wrote              {pLo}");
         sb.AppendLine($"  wrote              {pHi}");
 
-        // Both must render a valid silhouette; the floor field must be markedly
-        // smoother (lower roughness) AND cover more of the frame — the display-res
-        // needles are thin isolated spikes that leave sky gaps between them, so
-        // the connected floor-res terrain fills a visibly larger surface fraction.
-        // Both conditions are deterministic (no RNG in the field or the raymarch),
-        // so the thresholds carry headroom without run-to-run flake.
+        // Both must render a valid silhouette. #1027 — the old criteria (floor
+        // field markedly smoother AND covering more of the frame) were met by a
+        // raymarch bug: on a fine field every ray stopped at the terrain box top,
+        // so the "smooth, full-coverage" floor render was a flat plate. With real
+        // geometry, a field finer than the output is area-downsampled to the output
+        // grid (an anti-aliased field), so the two renders must now AGREE — same
+        // silhouette coverage — with the floor field no rougher than the
+        // display-res one. Deterministic (no RNG), thresholds carry headroom.
         bool ok = surfLo > 0.10 && surfHi > 0.10
-                  && ratio < 0.82 && surfHi > surfLo + 0.05;
+                  && ratio <= 1.0 && Math.Abs(surfHi - surfLo) < 0.05;
         sb.AppendLine(ok ? "RESULT: PASS" : "RESULT: FAIL");
 
         try { File.WriteAllText(

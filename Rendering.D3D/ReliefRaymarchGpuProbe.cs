@@ -131,6 +131,8 @@ public static class ReliefRaymarchGpuProbe
             // 4f (#170) — empty-space-skip on, so the gate proves GPU==twin with the
             // coarse max-height grid driving the leap (both build the same grid).
             Relief2DEmptySkip = true,
+            // #1027 — Uniform tolerance anchor: exercises the capped cone (gConeCapT).
+            Relief2DDetailAnchor = ReliefDetailAnchor.Uniform,
         };
         var fx = LightingFxData.CreateDefault();
         fx.BgTopColor = 0xFF335588u;

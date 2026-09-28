@@ -127,7 +127,14 @@ screen-space relief, but a true 3D scene.
 | **Edge fade** | 0 – 0.5 | Ramps the height to the base plane near the image edges, so structure running off-frame tapers out instead of forming streaky "arms". 0 = off. **Not** the same as the Lighting & FX panel's **Edge strength** — that is an unrelated screen-space silhouette-inking post-pass (colored strokes over edges), not a heightfield taper. |
 | **Field floor (px)** | 480 – 2160 | Short-axis resolution the height field is computed at, independent of window size. Only active with **Hi-res height field**, and only when the window is smaller than this. |
 | **Far detail** | 0.15 – 1 | Distant-filament resolving power. On screen the raymarch keeps detail tall near the camera but lets it fall toward the floor with distance (the distance-cone fattens at low resolution); the poster keeps it tall throughout. **Drag left** to tighten the far cone so distant filaments stay tall on screen too — the poster look, live. Lower = more far detail **and** slower (more marching). 1 = off / byte-identical. |
+| **Detail measured from** | Camera / Uniform | A ray counts as touching the surface within about one pixel's width at its distance, so the tolerance loosens with distance. **Camera** (default) measures it from the camera. **Uniform** measures it once at the nearest terrain and holds it, so far terrain resolves detail as finely as the near edge. Slower on far terrain. Combines with Far detail. Batch: `--relief-detail-anchor uniform`. |
 | **Settle to full detail** | on / off | Best of both: render fast while you pan / zoom / orbit, then a moment after the view **stops**, auto re-render the relief at full far-detail (distant filaments resolve like the poster) — no fractal recompute. The next move drops back to fast. The extra render happens only while the view is idle, so interaction stays fluid. Off = the live view keeps whatever **Far detail** you set. |
+
+> [!NOTE]
+> Before #1027, big windows (and the hi-res field on small windows) often rendered the relief as a
+> flat plate with the fractal painted on, so height and detail changed with the window size. The
+> raymarch now finds the real surface at every size, and a height field finer than the window is
+> averaged down to the window's resolution first, so small and large windows show the same shape.
 
 ### Filament detail — raise the structure *relative to* the slab
 

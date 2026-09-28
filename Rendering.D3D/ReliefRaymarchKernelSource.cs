@@ -81,7 +81,7 @@ cbuffer ReliefParams : register(b0)
     float  gAmbient;
     float  gFloorBx;
     float  gFloorBz;
-    float  gPad3;
+    float  gConeCapT;    // #1027 — tolerance stops growing beyond this distance; 0 = no cap
 
     uint   gBgTop;       // packed ARGB
     uint   gBgBottom;
@@ -1228,8 +1228,8 @@ uint TracePixel(float3 o, float3 rd, out float3 nrm, out float dep)
         {
             float3 pw = o + rd * t;
             d = Evaluate(pw.x, pw.y, pw.z);
-            float epsT = gEps0 + gPixelAngle * t;
-            if (d < epsT) { hit = true; break; }
+            float epsT = gEps0 + gPixelAngle * ((gConeCapT > 0.0 && t > gConeCapT) ? gConeCapT : t);   // #1027
+            if (d < epsT * gInvLip) { hit = true; break; }   // #1027 — world-space vertical gap
             tPrev = t;
             float adv = max(d, epsT * 0.5);
             // 4f — empty-space skip (conservative; only enlarges the advance).

@@ -636,6 +636,10 @@ namespace FracturingFog.Batch
                 Dbl(BatchFlags.ReliefHeightBaseline, Relief, FR, "Fixed mode: the ground level (tone-curve units) subtracted from the height. Omit = measured per frame.", 0, null, enforced: true)
                     with { Implies = ReliefOn, Requires = new[] { BatchFlags.ReliefRaymarch },
                            RequiresChoice = new BatchChoiceRequirement(BatchFlags.ReliefHeightMode, new[] { "fixed" }) },
+                Pick(BatchFlags.ReliefDetailAnchor, Cam, FR,
+                    "Where the hit tolerance is measured from: camera = grows with distance, so far filaments sink into the floor; uniform = measured at the nearest terrain and held, so far detail resolves like near detail (slower).",
+                    new[] { "camera", "uniform" }, def: "camera", hint: "ANCHOR")
+                    with { Implies = ReliefOn, Requires = new[] { BatchFlags.ReliefRaymarch } },
                 Dbl(BatchFlags.CameraExposure, Cam, FR, "In-camera exposure in stops (separate from --exposure).", -16, 16, enforced: true, def: "0")
                     with { ValueHint = "EV", Implies = RaymarchOn },
                 Dbl(BatchFlags.DofAperture, Cam, FR, "Depth-of-field lens radius (0 = pinhole; perspective camera only).", 0, 1, enforced: true, def: "0")

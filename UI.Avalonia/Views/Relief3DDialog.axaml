@@ -378,6 +378,16 @@
                                Text="{Binding Relief2DFarDetail, StringFormat='{}{0:0.00}'}" />
                 </Grid>
 
+                <!-- #1027 — where the hit tolerance is measured from. -->
+                <Grid ColumnDefinitions="160,*" RowDefinitions="Auto"
+                      IsEnabled="{Binding Relief2DRaymarch}">
+                    <TextBlock Grid.Column="0" Text="Detail measured from:" VerticalAlignment="Center"
+                               ToolTip.Tip="The raymarch counts a ray as touching the surface within about one pixel's width at that distance, so far away it gets looser and thin distant filaments sink into the floor. Camera = measured from the camera (the original), so it loosens with distance. Uniform = measured once at the nearest terrain and held there, so far terrain resolves detail as finely as the near edge. Slower on far terrain. Combines with Far detail." />
+                    <ComboBox Grid.Column="1" Margin="0,2" HorizontalAlignment="Stretch"
+                              ItemsSource="{Binding Relief2DDetailAnchors}"
+                              SelectedItem="{Binding Relief2DDetailAnchor, Mode=TwoWay}" />
+                </Grid>
+
                 <!-- #520 (part 3) — settle-based full detail. -->
                 <CheckBox Content="Settle to full detail when the view stops"
                           IsChecked="{Binding Relief2DSettleDetail, Mode=TwoWay}"

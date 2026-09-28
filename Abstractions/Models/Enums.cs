@@ -49,6 +49,15 @@ namespace FracturingFog
     /// value always renders at the same height across pans, zooms and windows.</summary>
     public enum ReliefHeightMode { Peak, Robust, Fixed }
 
+    /// <summary>Where the Relief 3D raymarch measures its hit tolerance from
+    /// (#1027). The tolerance is one pixel's footprint at the ray's distance, so it
+    /// grows with distance and thin far filaments merge into the floor.
+    /// <see cref="Camera"/> (default, the original) measures from the camera, so it
+    /// loosens with distance. <see cref="Uniform"/> measures it once, at the nearest
+    /// point of the terrain, and holds it there: the whole terrain resolves detail as
+    /// finely as its nearest edge, near and far alike.</summary>
+    public enum ReliefDetailAnchor { Camera, Uniform }
+
     /// <summary>Tile shape for the RandomTile (Bourke random space-filling)
     /// calculator. All shapes are inscribed in the placement circumradius and
     /// carry the same radial-dome relief; only the paint mask differs.</summary>

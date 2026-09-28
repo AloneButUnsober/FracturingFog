@@ -3041,7 +3041,8 @@ namespace FracturingFog.Rendering
             // Copy defensively — the calc thread refills the field for the next frame.
             var copy = new float[(long)fw * fh];
             Array.Copy(field, copy, copy.Length);
-            var m = FracturingFog.Rendering.Lighting.HeightfieldRaymarch2D.MeasureHeightNormalization(copy, fw, fh, p);
+            var m = FracturingFog.Rendering.Lighting.HeightfieldRaymarch2D.MeasureHeightNormalization(
+                copy, fw, fh, p, _calculator.Width, _calculator.Height);
             if (m is not { } r) return false;
             baseline = r.Baseline; reference = r.Reference;
             return true;
