@@ -56,7 +56,7 @@ namespace FracturingFog.Rendering
                 string folder = Path.Combine(Path.GetTempPath(), $"fracturingfog_live_{Guid.NewGuid():N}");
                 try
                 {
-                    var rec = new LiveFrameRecorder(folder, captureFps, SnapshotLiveFrame);
+                    var rec = new LiveFrameRecorder(folder, captureFps, SnapshotLiveFrame, ExpectedStereoRecordSize());
                     FrameBufferChanged += OnLiveRecordFrameChanged;
                     rec.Start();
                     _liveRecorder = rec;
@@ -103,6 +103,24 @@ namespace FracturingFog.Rendering
             // Read without the lock — a stale recorder ref just marks a
             // recorder that is already stopping, which is harmless.
             _liveRecorder?.NotifyFrameChanged();
+        }
+
+        // #1008 — when True stereo is active for the current 3D view, the frames
+        // this recording will capture are side-by-side at StereoRender.OutputDims,
+        // but the frame on screen right now may still be mono (stereo just
+        // switched on / the SBS frame is still rendering). Lock the recording to
+        // the stereo size so it is not squeezed into the mono frame's size.
+        // Null (the recorder's first-frame default) otherwise; Relief stereo
+        // needs no hint — it presents SBS from the first settled frame.
+        private (int Width, int Height)? ExpectedStereoRecordSize()
+        {
+            var fp = ViewState?.FractalParameters;
+            if (fp == null) return null;
+            if (!FracturingFog.Rendering.Lighting.StereoRender.WantsTrueStereo(ViewState!.Is3D, fp.Lighting)) return null;
+            if (SelectAltCalculator(ViewState.FractalType) is not { } alt
+                || alt is not FracturingFog.Interefaces.IStereoEyeCamera) return null;
+            var (w, h) = FracturingFog.Rendering.Lighting.StereoRender.OutputDims(alt.Width, alt.Height, fp.Lighting.StereoLayout);
+            return (w, h);
         }
 
         private uint[]? SnapshotLiveFrame(out int width, out int height)

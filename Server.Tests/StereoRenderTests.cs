@@ -2,6 +2,7 @@
 // SPDX-FileCopyrightText: 2026 Bradley Brown
 
 using System;
+using System.Linq;
 using System.Threading;
 using Xunit;
 using FracturingFog.Models;
@@ -65,10 +66,10 @@ public class StereoRenderTests
     }
 
     [Fact]
-    public void ApplyConvergence_Positive_ShiftsEyesOppositely_EdgeClamped()
+    public void ApplyConvergence_Positive_ShiftsEyesApart_EdgeClamped()
     {
-        // width 8, conv 0.5 ⇒ half = round(0.5·8·0.5) = 2. Left eye shifts +2
-        // (content right), right eye shifts −2 (content left); edges replicate.
+        // width 8, conv 0.5 ⇒ half = round(0.5·8·0.5) = 2. Left eye shifts −2
+        // (content left), right eye shifts +2 (content right); edges replicate.
         const int w = 8, h = 1, outW = w * 2;
         var buf = new uint[outW];
         for (int x = 0; x < w; x++) buf[x] = (uint)(100 + x);        // left eye
@@ -76,17 +77,100 @@ public class StereoRenderTests
 
         StereoRender.ApplyConvergence(buf, outW, w, h, 0.5);
 
-        // Left eye shifted right by 2: cols 0,1 clamp to source col 0.
-        Assert.Equal(100u, buf[0]);
-        Assert.Equal(100u, buf[1]);
-        Assert.Equal(100u, buf[2]); // src col 0
-        Assert.Equal(101u, buf[3]); // src col 1
-        Assert.Equal(105u, buf[7]); // src col 5
-        // Right eye shifted left by 2: high cols clamp to source col 7.
-        Assert.Equal(202u, buf[w + 0]); // src col 2
-        Assert.Equal(207u, buf[w + 5]); // src col 7
-        Assert.Equal(207u, buf[w + 6]); // clamp
-        Assert.Equal(207u, buf[w + 7]); // clamp
+        // Left eye shifted left by 2: high cols clamp to source col 7.
+        Assert.Equal(102u, buf[0]); // src col 2
+        Assert.Equal(107u, buf[5]); // src col 7
+        Assert.Equal(107u, buf[6]); // clamp
+        Assert.Equal(107u, buf[7]); // clamp
+        // Right eye shifted right by 2: cols 0,1 clamp to source col 0.
+        Assert.Equal(200u, buf[w + 0]);
+        Assert.Equal(200u, buf[w + 1]);
+        Assert.Equal(200u, buf[w + 2]); // src col 0
+        Assert.Equal(205u, buf[w + 7]); // src col 5
+    }
+
+    // Independent geometric invariant (#1008): parallel eyes give every finite
+    // point CROSSED disparity (further right in the left eye), so convergence
+    // must remove disparity. A point whose disparity equals conv·width lands at
+    // the same column in both eyes (screen plane); a farther point ends up with
+    // uncrossed disparity (behind the screen), a nearer one stays crossed (in
+    // front). The pre-#1008 sign added disparity instead.
+    [Theory]
+    [InlineData(1.0, 0)]    // disparity 10 px = conv·width → screen plane
+    [InlineData(2.0, -1)]   // disparity 5 px  → behind (uncrossed)
+    [InlineData(0.5, +1)]   // disparity 20 px → in front (crossed)
+    public void Convergence_PlacesMatchingDepthOnScreenPlane(double depthScale, int expectedSide)
+    {
+        const int w = 100, h = 1, x0 = 50;
+        // focal = (w/2)/tan(30°); eyeSep 1 at depth d0 = focal/10 gives a 10 px shift.
+        double focal = (w * 0.5) / Math.Tan(Math.PI / 6.0);
+        float d = (float)(focal / 10.0 * depthScale);
+        const uint Obj = 0xFFFFCC00u, Sky = 0xFF000000u;
+        var color = new uint[w];
+        var depth = new float[w];
+        for (int x = 0; x < w; x++) { color[x] = Sky; depth[x] = float.PositiveInfinity; }
+        color[x0] = Obj; depth[x0] = d;
+
+        var fx = Fx(1.0, 0.1, 0.0);   // conv 0.1·100 = 10 px removed; no disparity clamp
+        var sbs = StereoRender.ApplyStereoSideBySide(color, depth, w, h, fx)!;
+
+        int xl = Array.IndexOf(sbs, Obj, 0, w);
+        int xr = Array.IndexOf(sbs, Obj, w, w) - w;
+        Assert.True(xl >= 0 && xr >= 0, "object missing from an eye");
+        Assert.Equal(expectedSide, Math.Sign(xl - xr));   // + crossed (front), − uncrossed (behind)
+    }
+
+    [Fact]
+    public void SwapEyes_SwapsHalvesOfEveryRow()
+    {
+        var buf = new uint[] { 1, 2, 3, 4,  5, 6, 7, 8 };   // 2 rows, packed width 4
+        StereoRender.SwapEyes(buf, 4, 2);
+        Assert.Equal(new uint[] { 3, 4, 1, 2,  7, 8, 5, 6 }, buf);
+    }
+
+    [Theory]
+    [InlineData(StereoLayout.FullSbs)]
+    [InlineData(StereoLayout.HalfSbs)]
+    public void FakeWarp_SwapEyes_IsTheSwappedParallelPair(StereoLayout layout)
+    {
+        const int w = 8, h = 2;
+        var color = new uint[w * h];
+        var depth = new float[w * h];
+        for (int i = 0; i < color.Length; i++) { color[i] = 0xFF000000u | (uint)(i * 7); depth[i] = 3f + (i % 5); }
+        var fx = Fx(0.2, 0.05, 0.0);
+        fx.StereoLayout = layout;
+        var parallel = StereoRender.ApplyStereoSideBySide(color, depth, w, h, fx)!;
+        fx.StereoSwapEyes = true;
+        var swapped = StereoRender.ApplyStereoSideBySide(color, depth, w, h, fx)!;
+        int pw = StereoRender.OutputDims(w, h, layout).W;
+        StereoRender.SwapEyes(parallel, pw, h);
+        Assert.Equal(parallel, swapped);
+    }
+
+    [Fact]
+    public void Letterbox_FullSbs_PadsToViewAspect_WithBlackBars()
+    {
+        const int vw = 4, vh = 2;
+        var sbs = Enumerable.Range(1, vw * 2 * vh).Select(i => (uint)i).ToArray();   // 8 × 2
+        uint[]? pool = null;
+        var shown = StereoRender.LetterboxFullSbsForDisplay(sbs, vw * 2, vh, vw, vh, ref pool, out int dw, out int dh);
+        Assert.Equal((8, 4), (dw, dh));             // 8:4 == view 4:2 → uniform scale
+        Assert.All(shown.Take(8), p => Assert.Equal(0xFF000000u, p));          // top bar
+        Assert.Equal(sbs, shown.Skip(8).Take(16));                             // frame, unchanged
+        Assert.All(shown.Skip(24).Take(8), p => Assert.Equal(0xFF000000u, p)); // bottom bar
+    }
+
+    [Theory]
+    [InlineData(4, 2)]   // mono frame (Half-SBS keeps mono dims too)
+    [InlineData(6, 2)]   // any other size
+    [InlineData(8, 3)]   // 2× wide but not the view height
+    public void Letterbox_NonFullSbs_IsPassThrough(int w, int h)
+    {
+        var buf = new uint[w * h];
+        uint[]? pool = null;
+        var shown = StereoRender.LetterboxFullSbsForDisplay(buf, w, h, 4, 2, ref pool, out int dw, out int dh);
+        Assert.Same(buf, shown);
+        Assert.Equal((w, h), (dw, dh));
     }
 
     [Fact]
@@ -163,49 +247,94 @@ public class StereoRenderTests
 
     // Contract the #107 host wiring depends on: RenderTrueStereo drives two
     // renders at eye offsets -IPD/2 then +IPD/2, composites left|right into a
-    // 2·W × H buffer, and restores Lighting afterwards (EyeOffset back to 0).
+    // 2·W × H buffer, and leaves the calculator mono (offset 0) afterwards.
     [Fact]
-    public void RenderTrueStereo_OffsetsEyes_Composites_And_Restores()
+    public void RenderTrueStereo_OffsetsEyes_Composites_And_ResetsOffset()
     {
         const int w = 6, h = 3;
         const uint leftColor = 0xFF111111u, rightColor = 0xFF222222u;
 
-        var fp = new FractalParameters();
-        var lf = LightingFxData.CreateDefault();
-        lf.StereoMode = StereoMode.True;
-        lf.StereoEyeSeparation = 0.1;
-        fp.Lighting = lf;
+        var fx = LightingFxData.CreateDefault();
+        fx.StereoMode = StereoMode.True;
+        fx.StereoEyeSeparation = 0.1;
 
+        double offset = 0.0;
+        var seen = new System.Collections.Generic.List<double>();
         var buf = new uint[w * h];
-        // Each "render" paints per the sign of the transient eye offset that
-        // RenderTrueStereo set for this pass.
+        // Each "render" paints per the sign of the eye offset set for this pass.
         void RenderOnce(CancellationToken _)
         {
-            double off = fp.Lighting.StereoEyeOffset;
-            Array.Fill(buf, off < 0 ? leftColor : rightColor);
+            seen.Add(offset);
+            Array.Fill(buf, offset < 0 ? leftColor : rightColor);
         }
 
         var sbs = StereoRender.RenderTrueStereo(
-            fp, RenderOnce, () => buf, w, h, CancellationToken.None);
+            in fx, o => offset = o, RenderOnce, () => buf, w, h, CancellationToken.None);
 
         Assert.NotNull(sbs);
         Assert.Equal(w * 2 * h, sbs!.Length);
+        Assert.Equal(new[] { -0.05, 0.05 }, seen);
         for (int y = 0; y < h; y++)
         {
             Assert.Equal(leftColor, sbs[y * (w * 2) + 0]);      // left half = -IPD/2 pass
             Assert.Equal(rightColor, sbs[y * (w * 2) + w]);     // right half = +IPD/2 pass
         }
-        // Lighting restored — no leaked stereo offset.
-        Assert.Equal(0.0, fp.Lighting.StereoEyeOffset);
-        Assert.Equal(StereoMode.True, fp.Lighting.StereoMode);
+        Assert.Equal(0.0, offset);                             // back to mono
     }
 
     [Fact]
-    public void RenderTrueStereo_StereoOff_ReturnsNull()
+    public void RenderTrueStereo_SwapEyes_PutsRightEyeOnTheLeft()
     {
-        var fp = new FractalParameters(); // default Lighting = StereoMode.Off
+        const int w = 4, h = 2;
+        var fx = LightingFxData.CreateDefault();
+        fx.StereoMode = StereoMode.True;
+        fx.StereoEyeSeparation = 0.1;
+        fx.StereoSwapEyes = true;
+        double offset = 0.0;
+        var buf = new uint[w * h];
+        var sbs = StereoRender.RenderTrueStereo(in fx, o => offset = o,
+            _ => Array.Fill(buf, offset < 0 ? 1u : 2u), () => buf, w, h, CancellationToken.None)!;
+        Assert.Equal(2u, sbs[0]);        // right-eye (+IPD/2) render on the left
+        Assert.Equal(1u, sbs[w]);        // left-eye render on the right
+    }
+
+    [Fact]
+    public void RenderTrueStereo_StereoOff_ReturnsNull_WithoutRendering()
+    {
+        var fx = LightingFxData.CreateDefault(); // StereoMode.Off
+        int renders = 0;
         Assert.Null(StereoRender.RenderTrueStereo(
-            fp, _ => { }, () => new uint[4], 2, 2, CancellationToken.None));
+            in fx, _ => { }, _ => renders++, () => new uint[4], 2, 2, CancellationToken.None));
+        Assert.Equal(0, renders);
+    }
+
+    // #1008 — a faulted eye render must not leave the calculator offset for
+    // the next (mono) frame.
+    [Fact]
+    public void RenderTrueStereo_Fault_ResetsOffset()
+    {
+        var fx = LightingFxData.CreateDefault();
+        fx.StereoMode = StereoMode.True;
+        fx.StereoEyeSeparation = 0.2;
+        double offset = 0.0;
+        Assert.Throws<InvalidOperationException>(() => StereoRender.RenderTrueStereo(
+            in fx, o => offset = o, _ => throw new InvalidOperationException(),
+            () => new uint[4], 2, 2, CancellationToken.None));
+        Assert.Equal(0.0, offset);
+    }
+
+    [Theory]
+    [InlineData(true, StereoMode.True, 0.1, true)]
+    [InlineData(false, StereoMode.True, 0.1, false)]   // 2D: no per-eye camera
+    [InlineData(true, StereoMode.Fake, 0.1, false)]
+    [InlineData(true, StereoMode.Off, 0.1, false)]
+    [InlineData(true, StereoMode.True, 0.0, false)]
+    public void WantsTrueStereo_Gate(bool is3D, StereoMode mode, double sep, bool expected)
+    {
+        var fx = LightingFxData.CreateDefault();
+        fx.StereoMode = mode;
+        fx.StereoEyeSeparation = sep;
+        Assert.Equal(expected, StereoRender.WantsTrueStereo(is3D, in fx));
     }
 
     // #107 — stereo settings must survive a scene/preset save-load so a saved
@@ -220,6 +349,7 @@ public class StereoRenderTests
         fx.StereoConvergence = 0.04;
         fx.StereoMaxDisparity = 0.05;
         fx.StereoLayout = StereoLayout.HalfSbs;
+        fx.StereoSwapEyes = true;
 
         var round = LightingFxPresetData.FromFx(fx).ToFx();
 
@@ -229,5 +359,6 @@ public class StereoRenderTests
         Assert.Equal(0.04, round.StereoConvergence);
         Assert.Equal(0.05, round.StereoMaxDisparity);
         Assert.Equal(StereoLayout.HalfSbs, round.StereoLayout);
+        Assert.True(round.StereoSwapEyes);
     }
 }

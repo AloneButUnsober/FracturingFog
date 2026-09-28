@@ -33,8 +33,6 @@ using System;
 using System.Threading;
 using System.Threading.Tasks;
 
-using FracturingFog.Models;
-
 namespace FracturingFog.Rendering.Lighting;
 
 public static class StereoRender
@@ -142,9 +140,11 @@ public static class StereoRender
             _ => { });
 
         ApplyConvergence(outBuf, outW, width, height, fx.StereoConvergence);
-        return fx.StereoLayout == StereoLayout.HalfSbs
+        var packed = fx.StereoLayout == StereoLayout.HalfSbs
             ? ToHalfSbs(outBuf, width, height)
             : outBuf;
+        if (fx.StereoSwapEyes) SwapEyes(packed, OutputDims(width, height, fx.StereoLayout).W, height);
+        return packed;
     }
 
     /// <summary>Squeeze a Full-SBS buffer (2·<paramref name="eyeW"/> × height)
@@ -192,10 +192,17 @@ public static class StereoRender
 
     /// <summary>Convergence via horizontal image translation (HIT). Shifts the
     /// two eye halves of an already-composited side-by-side buffer in opposite
-    /// directions to move the zero-parallax plane. Positive
-    /// <paramref name="convergenceFraction"/> (fraction of eye width) crosses
-    /// the eyes — the left half moves right, the right half moves left — so the
-    /// subject settles at the screen plane and nearer detail floats in front.
+    /// directions to move the zero-parallax plane.
+    ///
+    /// Both stereo paths start from PARALLEL eyes, whose zero-parallax plane is
+    /// at infinity: every finite point has crossed disparity (it sits further
+    /// right in the left eye than in the right eye), so the whole scene floats
+    /// in front of the screen. Positive <paramref name="convergenceFraction"/>
+    /// (fraction of eye width) moves the left half LEFT and the right half RIGHT,
+    /// removing <c>fraction·width</c> pixels of crossed disparity: points whose
+    /// disparity equals that amount land on the screen plane, nearer detail
+    /// still floats in front, everything further sits behind. (#1008 fixed the
+    /// sign — it used to add disparity, pushing the scene further out.)
     /// Exposed columns are edge-clamped (replicate the border pixel) so no black
     /// border appears. No-op when the fraction rounds to a zero-pixel shift.
     /// </summary>
@@ -219,8 +226,8 @@ public static class StereoRender
             {
                 int lRow = y * outW;
                 int rRow = lRow + width;
-                ShiftRowClamped(sbs, lRow, width, +signed, tmp); // left eye → right
-                ShiftRowClamped(sbs, rRow, width, -signed, tmp); // right eye → left
+                ShiftRowClamped(sbs, lRow, width, -signed, tmp); // left eye → left
+                ShiftRowClamped(sbs, rRow, width, +signed, tmp); // right eye → right
                 return tmp;
             },
             _ => { });
@@ -270,66 +277,116 @@ public static class StereoRender
         return maxPx * dMin / focalPx;
     }
 
+    /// <summary>Swap the two halves of every row of a packed side-by-side
+    /// buffer (<paramref name="packedW"/> = full row width: 2·W for Full-SBS,
+    /// W for Half-SBS) — the cross-view layout (#1017). Applied after
+    /// convergence and packing, so the zero-parallax plane is unchanged: a point
+    /// with zero disparity stays at the same column in both halves.</summary>
+    public static void SwapEyes(uint[] packed, int packedW, int height)
+    {
+        int half = packedW / 2;
+        if (half <= 0) return;
+        Parallel.For<uint[]>(
+            0, height,
+            () => new uint[half],
+            (y, _, tmp) =>
+            {
+                int row = y * packedW;
+                Array.Copy(packed, row, tmp, 0, half);
+                Array.Copy(packed, row + half, packed, row, half);
+                Array.Copy(tmp, 0, packed, row + half, half);
+                return tmp;
+            },
+            _ => { });
+    }
+
+    /// <summary>Display-only letterbox for a Full-SBS frame (#1016). The render
+    /// window stretches any presented frame to the window, so a 2·W × H Full-SBS
+    /// frame in a W × H view would be squeezed to half-width eyes and look the
+    /// same as Half-SBS. When the frame is exactly Full-SBS for the view
+    /// (<paramref name="w"/> = 2·<paramref name="viewW"/>, <paramref name="h"/> =
+    /// <paramref name="viewH"/>) this pads it top and bottom with black to the
+    /// view's aspect, so the stretch becomes a uniform scale and each eye keeps
+    /// its true proportions. Returns <paramref name="src"/> unchanged (and its
+    /// dims) for any other frame. <paramref name="pool"/> is reused across calls.
+    /// Snapshots / recordings must keep using the untouched frame.</summary>
+    public static uint[] LetterboxFullSbsForDisplay(
+        uint[] src, int w, int h, int viewW, int viewH,
+        ref uint[]? pool, out int outW, out int outH)
+    {
+        outW = w; outH = h;
+        if (viewW <= 0 || viewH <= 0 || w != viewW * 2 || h != viewH) return src;
+        int padH = (int)Math.Round((double)w * viewH / viewW);   // == 2·h
+        if (padH <= h) return src;
+        int n = w * padH;
+        if (pool == null || pool.Length < n) pool = new uint[n];
+        int top = (padH - h) / 2;
+        Array.Fill(pool, 0xFF000000u, 0, top * w);
+        Array.Copy(src, 0, pool, top * w, w * h);
+        Array.Fill(pool, 0xFF000000u, (top + h) * w, (padH - top - h) * w);
+        outH = padH;
+        return pool;
+    }
+
+    /// <summary>True when the two-render (True) stereo path should run: a 3D
+    /// raymarch type (<paramref name="is3D"/>) with <see cref="StereoMode.True"/>
+    /// and a positive eye separation. The single predicate the live frame, the
+    /// video loop and the recorder sizing share (#1008).</summary>
+    public static bool WantsTrueStereo(bool is3D, in LightingFxData fx)
+        => is3D && fx.StereoMode == StereoMode.True && fx.StereoEyeSeparation > 0.0;
+
     /// <summary>Phase 20b — true per-eye stereo orchestration.
     ///
     /// Renders the scene twice with the camera origin shifted by ±IPD/2 along
-    /// the right basis (each 3D calculator picks up the offset via
-    /// <see cref="LightingFxData.StereoEyeOffset"/>) and composites a doubled-
-    /// width side-by-side buffer. Returns <c>null</c> when stereo is off
-    /// (<c>fx.StereoMode != True</c> or <c>StereoEyeSeparation &lt;= 0</c>).
+    /// the right basis (via <paramref name="setEyeOffset"/>, which the host
+    /// points at <see cref="FracturingFog.Interefaces.IStereoEyeCamera"/>) and
+    /// composites a doubled-width side-by-side buffer. Returns <c>null</c> when
+    /// stereo is off (<c>fx.StereoMode != True</c> or <c>StereoEyeSeparation
+    /// &lt;= 0</c>) or the render was cancelled.
     ///
     /// Unlike <see cref="ApplyStereoSideBySide"/> (which warps a single mono
     /// render via depth-parallax), this path produces actual parallax on close
     /// objects at the cost of two full renders per frame.
     ///
-    /// Callers supply two callbacks to keep this helper agnostic to the
-    /// per-fractal calculator API: <paramref name="renderOnce"/> runs the
-    /// calculator's full pipeline (the same call the host already uses for a
-    /// mono frame), and <paramref name="snapshotColorBuffer"/> hands back the
-    /// just-rendered buffer (cloned by this method so the next render can
-    /// safely overwrite). <paramref name="fp"/> is mutated to set
-    /// <see cref="LightingFxData.StereoEyeOffset"/> before each pass and is
-    /// restored to its original value (including the original
-    /// <see cref="LightingFxData.StereoEyeOffset"/>) in a <c>finally</c> block
-    /// so a cancelled / faulted render does not leave the params in a stereo
-    /// state.</summary>
-    /// <param name="fp">Active fractal parameters. The
-    /// <see cref="LightingFxData.StereoEyeOffset"/> field is set transiently
-    /// to ±IPD/2 around the two render passes; the original Lighting value is
-    /// restored before return.</param>
+    /// The shared fractal parameters are never touched (#1008): the eye offset
+    /// goes to the calculator out of band, so a UI edit landing between the two
+    /// passes is not overwritten and the transient offset cannot be saved into a
+    /// preset. The offset is reset to 0 in a <c>finally</c> block so a cancelled
+    /// or faulted render leaves the calculator mono.</summary>
+    /// <param name="fx">Active lighting block (mode, IPD, convergence, layout).</param>
+    /// <param name="setEyeOffset">Sets the calculator's per-eye camera offset.</param>
     /// <param name="renderOnce">Delegate that drives one render of the active
     /// calculator. Typically <c>ct => calc.Calculate(ct)</c>.</param>
     /// <param name="snapshotColorBuffer">Delegate that returns the calculator's
     /// current <c>ColorBuffer</c>. Called twice; the helper clones the first
     /// snapshot so the second render can safely reuse the buffer.</param>
-    /// <param name="width">Source render width (mono). Output is 2 × this.</param>
+    /// <param name="width">Source render width (mono).</param>
     /// <param name="height">Source render height.</param>
     /// <param name="ct">Cancellation token threaded through to each render
     /// pass. If the first pass is cancelled the helper returns null without
     /// running the second.</param>
-    /// <returns>Doubled-width side-by-side buffer (left = -IPD/2 eye, right =
-    /// +IPD/2 eye) or <c>null</c> if stereo is off / cancelled.</returns>
+    /// <returns>Side-by-side buffer (left = -IPD/2 eye, right = +IPD/2 eye) at
+    /// <see cref="OutputDims"/>, or <c>null</c> if stereo is off / cancelled.</returns>
     public static uint[]? RenderTrueStereo(
-        FractalParameters fp,
+        in LightingFxData fx,
+        Action<double> setEyeOffset,
         Action<CancellationToken> renderOnce,
         Func<uint[]> snapshotColorBuffer,
         int width, int height,
         CancellationToken ct)
     {
-        if (fp == null) return null;
-        var orig = fp.Lighting;
-        if (orig.StereoMode != StereoMode.True) return null;
-        double ipd = orig.StereoEyeSeparation;
+        if (fx.StereoMode != StereoMode.True) return null;
+        double ipd = fx.StereoEyeSeparation;
         if (ipd <= 0) return null;
         if (width <= 0 || height <= 0) return null;
+        double convergence = fx.StereoConvergence;
+        StereoLayout layout = fx.StereoLayout;
+        bool swapEyes = fx.StereoSwapEyes;
 
-        uint[]? outBuf = null;
         try
         {
             // Left eye render with eye shifted by -IPD/2 along the right basis.
-            var lf = orig;
-            lf.StereoEyeOffset = -ipd * 0.5;
-            fp.Lighting = lf;
+            setEyeOffset(-ipd * 0.5);
             renderOnce(ct);
             if (ct.IsCancellationRequested) return null;
             var leftSrc = snapshotColorBuffer();
@@ -338,16 +395,14 @@ public static class StereoRender
             Array.Copy(leftSrc, leftSnapshot, width * height);
 
             // Right eye render with eye shifted by +IPD/2.
-            var rf = orig;
-            rf.StereoEyeOffset = +ipd * 0.5;
-            fp.Lighting = rf;
+            setEyeOffset(+ipd * 0.5);
             renderOnce(ct);
             if (ct.IsCancellationRequested) return null;
             var rightSrc = snapshotColorBuffer();
             if (rightSrc == null || rightSrc.Length < width * height) return null;
 
             int outW = width * 2;
-            outBuf = new uint[outW * height];
+            var outBuf = new uint[outW * height];
             for (int y = 0; y < height; y++)
             {
                 int srcRow = y * width;
@@ -356,16 +411,33 @@ public static class StereoRender
                 Array.Copy(leftSnapshot, srcRow, outBuf, dstRowL, width);
                 Array.Copy(rightSrc, srcRow, outBuf, dstRowR, width);
             }
-            ApplyConvergence(outBuf, outW, width, height, orig.StereoConvergence);
-            return orig.StereoLayout == StereoLayout.HalfSbs
+            ApplyConvergence(outBuf, outW, width, height, convergence);
+            var packed = layout == StereoLayout.HalfSbs
                 ? ToHalfSbs(outBuf, width, height)
                 : outBuf;
+            if (swapEyes) SwapEyes(packed, OutputDims(width, height, layout).W, height);
+            return packed;
         }
         finally
         {
-            // Always restore — a cancelled or faulted render must not leave
-            // the params in a stereo state.
-            fp.Lighting = orig;
+            // Always back to mono — a cancelled or faulted render must not
+            // leave the calculator offset for the next (mono) frame.
+            setEyeOffset(0.0);
         }
+    }
+
+    /// <summary>Run <see cref="RenderTrueStereo(in LightingFxData, Action{double}, Action{CancellationToken}, Func{uint[]}, int, int, CancellationToken)"/>
+    /// on a calculator. Returns <c>null</c> when <paramref name="calc"/> cannot
+    /// render a stereo eye (not an <see cref="FracturingFog.Interefaces.IStereoEyeCamera"/>),
+    /// when stereo is off, or when cancelled.</summary>
+    public static uint[]? RenderTrueStereo(
+        FracturingFog.Interefaces.IFractalCalculator calc, in LightingFxData fx, CancellationToken ct)
+    {
+        if (calc is not FracturingFog.Interefaces.IStereoEyeCamera eye) return null;
+        return RenderTrueStereo(in fx,
+            o => eye.StereoEyeOffset = o,
+            t => calc.Calculate(t),
+            () => calc.ColorBuffer,
+            calc.Width, calc.Height, ct);
     }
 }

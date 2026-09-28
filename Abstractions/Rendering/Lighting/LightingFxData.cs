@@ -645,13 +645,10 @@ public struct LightingFxData
     /// saved scenes still pick up the warp.</summary>
     public StereoMode StereoMode;
 
-    /// <summary>Phase 20b — transient per-eye camera-offset along the right
-    /// basis (world units). Set by <see cref="StereoRender.RenderTrueStereo"/>
-    /// to <c>-IPD/2</c> on the left-eye pass and <c>+IPD/2</c> on the right-eye
-    /// pass; reset to 0 afterwards. Each 3D calculator's <c>Calculate</c> adds
-    /// <c>right · EyeOffset</c> to its camera origin right after computing the
-    /// basis. Default 0 → no shift (mono).</summary>
-    public double StereoEyeOffset;
+    // The per-eye camera offset used to live here as a transient field that
+    // RenderTrueStereo wrote into the shared params around each eye pass; it
+    // now lives on the calculator (IStereoEyeCamera, #1008) so it can neither
+    // clobber a concurrent UI edit nor be saved into a preset.
 
     /// <summary>Horizontal field of view in degrees, used to derive a focal-
     /// length-in-pixels proxy for the depth-parallax warp:
@@ -661,13 +658,14 @@ public struct LightingFxData
     public double StereoFovDegrees;
 
     /// <summary>Convergence via horizontal image translation (HIT), expressed
-    /// as a fraction of image width. 0 = parallel cameras (whole scene sits
-    /// behind the screen; comfortable but nothing pops). Positive = cross /
-    /// pull the zero-parallax plane toward the viewer so the subject sits at
-    /// the screen plane and closer detail floats in front. The SBS compositor
-    /// shifts the left eye by <c>+conv·width/2</c> and the right eye by
-    /// <c>-conv·width/2</c> (edge-clamped). Applies to both Fake and True
-    /// paths. Typical range ±0.05. Default 0 = legacy behaviour.</summary>
+    /// as a fraction of image width. 0 = parallel eyes: the zero-parallax plane
+    /// is at infinity, so the whole scene floats in front of the screen.
+    /// Positive = push the zero-parallax plane into the scene so the subject
+    /// sits at the screen plane (nearer detail in front, the rest behind). The
+    /// SBS compositor shifts the left eye by <c>-conv·width/2</c> and the right
+    /// eye by <c>+conv·width/2</c> (edge-clamped). Applies to both Fake and True
+    /// paths. Typical range 0..0.08. Default 0. (#1008 corrected the sign; it
+    /// used to push the scene further out.)</summary>
     public double StereoConvergence;
 
     /// <summary>Parallax comfort guard — the maximum on-screen horizontal
@@ -684,6 +682,12 @@ public struct LightingFxData
     /// each eye squeezed to half width). Applied by the SBS compositor after
     /// convergence.</summary>
     public StereoLayout StereoLayout;
+
+    /// <summary>Swap the two halves of the side-by-side output (#1017): the
+    /// right eye on the left — the cross-view layout for free-viewing
+    /// cross-eyed on a monitor. Off (default) = parallel layout, what VR
+    /// players (Skybox / DeoVR) and wall-eyed viewing expect.</summary>
+    public bool StereoSwapEyes;
 
     // ── DoF (Phase 21) ────────────────────────────────────────────────
 
@@ -856,10 +860,10 @@ public struct LightingFxData
         StereoEyeSeparation = 0.0,
         StereoFovDegrees    = 60.0,
         StereoMode          = StereoMode.Off,
-        StereoEyeOffset     = 0.0,
         StereoConvergence   = 0.0,
         StereoMaxDisparity  = 0.03,
         StereoLayout        = StereoLayout.FullSbs,
+        StereoSwapEyes      = false,
 
         DofAperture        = 0.0,
         DofFocusDistance   = 3.0,
@@ -912,7 +916,8 @@ public struct LightingFxData
         h.Add(CausticsColor); h.Add(CausticsAnimSpeed);
         h.Add(EdgeStrength); h.Add(EdgeColor); h.Add(EdgeThreshold); h.Add(EdgeKernel);
         h.Add(StereoEyeSeparation); h.Add(StereoFovDegrees); h.Add(StereoMode);
-        h.Add(StereoEyeOffset); h.Add(StereoConvergence); h.Add(StereoMaxDisparity); h.Add(StereoLayout);
+        h.Add(StereoConvergence); h.Add(StereoMaxDisparity); h.Add(StereoLayout);
+        h.Add(StereoSwapEyes);
         h.Add(DofAperture); h.Add(DofFocusDistance); h.Add(DofSamples); h.Add(DofThinLens);
         h.Add(SceneTime); h.Add(LightOrbitSpeed);
         h.Add(DebugHudFlags); h.Add(DebugAov);

@@ -46,7 +46,7 @@ using FracturingFog.Rendering.Lighting;
 
 namespace FracturingFog;
 
-public sealed class DualOrbitVolumeCalculator : IFractalCalculator
+public sealed class DualOrbitVolumeCalculator : IFractalCalculator, IStereoEyeCamera
 {
     public int Width { get; private set; }
     public int Height { get; private set; }
@@ -66,6 +66,9 @@ public sealed class DualOrbitVolumeCalculator : IFractalCalculator
     public bool SupportsZoomPan => true;
 
     public FractalParameters FractalParameters { get; set; } = new();
+
+    /// <inheritdoc/>
+    public double StereoEyeOffset { get; set; }
 
     // Iterations for the per-layer critical orbit (colour only).
     private const int CriticalIter = 256;
@@ -128,7 +131,7 @@ public sealed class DualOrbitVolumeCalculator : IFractalCalculator
             right[0] * fwd[1] - right[1] * fwd[0],
         };
 
-        double eyeOffset = fp.Lighting.StereoEyeOffset;
+        double eyeOffset = StereoEyeOffset;
         if (eyeOffset != 0)
         {
             camPX += right[0] * eyeOffset;

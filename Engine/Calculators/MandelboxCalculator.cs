@@ -22,7 +22,7 @@ using FracturingFog.Rendering.Lighting;
 
 namespace FracturingFog;
 
-public sealed class MandelboxCalculator : IFractalCalculator
+public sealed class MandelboxCalculator : IFractalCalculator, IStereoEyeCamera
 {
     public int Width { get; private set; }
     public int Height { get; private set; }
@@ -42,6 +42,9 @@ public sealed class MandelboxCalculator : IFractalCalculator
     public bool SupportsZoomPan => true;
 
     public FractalParameters FractalParameters { get; set; } = new();
+
+    /// <inheritdoc/>
+    public double StereoEyeOffset { get; set; }
 
     // P7a — lazily-constructed GPU calculator (see MandelbulbCalculator for contract).
     private MandelboxGpuCalculator? _gpu;
@@ -108,7 +111,7 @@ public sealed class MandelboxCalculator : IFractalCalculator
         };
 
         // Phase 20b — true per-eye camera offset along the right basis.
-        double eyeOffset = FractalParameters.Lighting.StereoEyeOffset;
+        double eyeOffset = StereoEyeOffset;
         if (eyeOffset != 0)
         {
             camX += right[0] * eyeOffset;

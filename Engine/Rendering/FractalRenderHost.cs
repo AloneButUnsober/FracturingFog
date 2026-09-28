@@ -433,6 +433,11 @@ namespace FracturingFog.Rendering
             FracturingFog.Rendering.Lighting.StagePerf.Publisher = _perfStats.RecordStage;
 
             _calculator = new MandelbrotCalculator(w, h);
+            // The render target starts at the construction size (Resize updates
+            // it); the #1016 Full-SBS display letterbox and the full-res snapshot
+            // gate compare frames against it.
+            _currentTargetWidth = w;
+            _currentTargetHeight = h;
             // Wave 2.5 — progressive sidecars at ¼ and ½ resolution. Min
             // 64×64 to keep BLA / SA prelude math well-behaved at very small
             // window sizes.
@@ -1681,7 +1686,7 @@ namespace FracturingFog.Rendering
                     if (claimed)
                     lock (_d3dGate)
                     {
-                        _renderer.UpdateTexture(job.StaleBuf, job.StaleW, job.StaleH);
+                        PresentTexture(job.StaleBuf, job.StaleW, job.StaleH);
                         _renderer.Render();
                     }
                 }
@@ -1699,61 +1704,60 @@ namespace FracturingFog.Rendering
             FracturingFog.Rendering.Lighting.ScreenSpacePost.HudFrameMs = _hudLastFrameMs;
             FracturingFog.Rendering.Lighting.ScreenSpacePost.HudSupersample = 0;
 
-            // #107 — True per-eye side-by-side stereo. Only the 3D raymarcher
-            // family honours StereoEyeOffset (ViewState.Is3D). The two eye
-            // renders must run here on the calc thread: RenderTrueStereo drives
-            // calc.Calculate twice, and letting the upload threadpool re-enter
-            // the shared calc while this thread loops to the next job would
-            // corrupt both. Opt-in (StereoMode.True + eye-sep > 0); the default
-            // Off path below is byte-identical to pre-#107. The composited
-            // 2·W × H buffer is display-ready (each eye ran the full per-calc
-            // tonemap/bloom), so it uploads with srcAlreadyProcessed:true and
-            // presents straight to screen + the screenshot/export snapshot.
+            // #107 / #1008 — True per-eye side-by-side stereo. Only the 3D
+            // raymarchers can render a stereo eye (IStereoEyeCamera), and every
+            // 3D type renders through the ALT calculator — the original #107 gate
+            // required !useAlt and drove the Mandelbrot calc, so it never fired
+            // and the live view stayed mono (#1008). The two eye renders must run
+            // here on the calc thread: RenderTrueStereo drives Calculate twice,
+            // and letting the upload threadpool re-enter the shared calc while
+            // this thread loops to the next job would corrupt both. Opt-in
+            // (StereoMode.True + eye-sep > 0); the default Off path below is
+            // unchanged. The composited buffer goes through the same upload
+            // processing as a mono 3D frame (brightness / contrast / gamma / view
+            // transform are per-pixel, so they apply to SBS unchanged).
+            if (useAlt
+                && altCalc is FracturingFog.Interefaces.IStereoEyeCamera
+                && ViewState.FractalParameters is { } stParams
+                && FracturingFog.Rendering.Lighting.StereoRender.WantsTrueStereo(ViewState.Is3D, stParams.Lighting))
             {
-                var stFx = ViewState.FractalParameters?.Lighting;
-                bool trueStereo = !useAlt
-                    && ViewState.Is3D
-                    && stFx.HasValue
-                    && stFx.Value.StereoMode == FracturingFog.Rendering.Lighting.StereoMode.True
-                    && stFx.Value.StereoEyeSeparation > 0.0;
-                if (trueStereo)
+                var stFx = stParams.Lighting;
+                uint[]? sbs = null;
+                try
                 {
-                    uint[]? sbs = null;
-                    try
-                    {
-                        sbs = FracturingFog.Rendering.Lighting.StereoRender.RenderTrueStereo(
-                            ViewState.FractalParameters!, // non-null; ?. on .Lighting above only narrows flow
-                            t => calc.Calculate(t),
-                            () => calc.ColorBuffer,
-                            calc.Width, calc.Height, token);
-                    }
-                    catch (OperationCanceledException) { }
-                    long stEnd = Stopwatch.GetTimestamp();
-                    if (ShowPerfHud)
-                        _perfStats.RecordCalc((stEnd - calcStart) * 1000.0 / Stopwatch.Frequency);
-
-                    // Each eye is a single sample — no TAA/MSAA accumulation.
-                    InvalidateTaa();
-
-                    if (sbs != null && !token.IsCancellationRequested)
-                    {
-                        var (outW, outH) = FracturingFog.Rendering.Lighting.StereoRender
-                            .OutputDims(calc.Width, calc.Height, stFx.GetValueOrDefault().StereoLayout);
-                        lock (_uploadGate)
-                        {
-                            if (TryClaimPresent(job.Seq))
-                                UploadProcessedBuffer(sbs, outW, outH,
-                                                      srcAlreadyProcessed: true);
-                        }
-                        FrameCompleted?.Invoke(this, new RenderFrameInfo(
-                            calc.CenterX, calc.CenterY, calc.Zoom, calc.MaxIterations,
-                            job.Sw.ElapsedMilliseconds, calc.Width, calc.Height,
-                            false, ViewState.IterLocked, ViewState.FractalType,
-                            "3D-SBS", double.PositiveInfinity));
-                    }
-                    AnimationFrameUploaded?.Invoke(this, EventArgs.Empty);
-                    return;
+                    sbs = FracturingFog.Rendering.Lighting.StereoRender.RenderTrueStereo(altCalc!, in stFx, token);
                 }
+                catch (OperationCanceledException) { }
+                long stEnd = Stopwatch.GetTimestamp();
+                if (ShowPerfHud)
+                    _perfStats.RecordCalc((stEnd - calcStart) * 1000.0 / Stopwatch.Frequency);
+
+                // Each eye is a single sample — no TAA/MSAA accumulation.
+                InvalidateTaa();
+
+                if (sbs != null && !token.IsCancellationRequested)
+                {
+                    var (outW, outH) = FracturingFog.Rendering.Lighting.StereoRender
+                        .OutputDims(altCalc!.Width, altCalc.Height, stFx.StereoLayout);
+                    lock (_uploadGate)
+                    {
+                        if (TryClaimPresent(job.Seq))
+                            UploadProcessedBuffer(sbs, outW, outH);
+                    }
+                    FrameCompleted?.Invoke(this, new RenderFrameInfo(
+                        altCalc.CenterX, altCalc.CenterY, altCalc.Zoom, altCalc.MaxIterations,
+                        job.Sw.ElapsedMilliseconds, altCalc.Width, altCalc.Height,
+                        false, ViewState.IterLocked, ViewState.FractalType,
+                        "3D-SBS", double.PositiveInfinity));
+                }
+                else
+                {
+                    // Cancelled (a newer frame superseded this one) — clear the
+                    // status bar's "Calculating…" like the mono path does (S-X8).
+                    RenderCancelled?.Invoke(this, EventArgs.Empty);
+                }
+                AnimationFrameUploaded?.Invoke(this, EventArgs.Empty);
+                return;
             }
 
             try
@@ -3894,6 +3898,23 @@ namespace FracturingFog.Rendering
             return _reliefHotLoadTwin;
         }
 
+        // #1016 — display-only letterbox pool for Full-SBS frames. Guarded by
+        // _d3dGate (every PresentTexture call runs under it).
+        private uint[]? _sbsDisplayPool;
+
+        /// <summary>Hand a frame to the renderer. A Full-SBS stereo frame (2W × H
+        /// for a W × H view) is letterboxed first so the window's stretch-to-fit
+        /// keeps each eye's proportions (#1016); every other frame goes through
+        /// untouched. Display only: snapshots / recordings read the unpadded
+        /// buffer. Call under <c>_d3dGate</c>.</summary>
+        private void PresentTexture(uint[] buf, int w, int h)
+        {
+            var shown = FracturingFog.Rendering.Lighting.StereoRender.LetterboxFullSbsForDisplay(
+                buf, w, h, _currentTargetWidth, _currentTargetHeight,
+                ref _sbsDisplayPool, out int dw, out int dh);
+            _renderer.UpdateTexture(shown, dw, dh);
+        }
+
         private void UploadProcessedBuffer(uint[] src, int w, int h, bool srcAlreadyProcessed = false)
         {
             int n = w * h;
@@ -4354,7 +4375,7 @@ namespace FracturingFog.Rendering
             long presentStart = ShowPerfHud ? Stopwatch.GetTimestamp() : 0;
             lock (_d3dGate)
             {
-                _renderer.UpdateTexture(dst, w, h);
+                PresentTexture(dst, w, h);
                 _renderer.Render();
             }
             if (ShowPerfHud)
@@ -4615,7 +4636,7 @@ namespace FracturingFog.Rendering
             if (bgra.Length < (long)width * height) return;
             lock (_d3dGate)
             {
-                _renderer.UpdateTexture(bgra, width, height);
+                PresentTexture(bgra, width, height);
                 _renderer.Render();
             }
             _lastUploadedBuffer = bgra;

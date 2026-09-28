@@ -677,20 +677,19 @@ namespace FracturingFog.Rendering
         // Stereo
         // ──────────────────────────────────────────────────────────────────
 
-        // #110 — true stereo is active for the video run when the target fractal
-        // is a 3D raymarcher (the only family that honours StereoEyeOffset) and
+        // #110 / #1008 — true stereo is active when the target fractal is a 3D
+        // raymarcher (the only family that can render a stereo eye) and
         // StereoMode.True is set with a positive eye separation. Reports the
-        // packing so callers can size writers / buffers.
+        // packing so callers can size buffers / the recorder. Shared with the
+        // live frame (RunFrameJobCalc) through StereoRender.WantsTrueStereo.
         private bool VideoStereoActive(out FracturingFog.Rendering.Lighting.StereoLayout layout)
         {
             layout = FracturingFog.Rendering.Lighting.StereoLayout.FullSbs;
-            var fx = ViewState?.FractalParameters?.Lighting;
-            if (fx.HasValue
-                && (ViewState?.Is3D ?? false)
-                && fx.Value.StereoMode == FracturingFog.Rendering.Lighting.StereoMode.True
-                && fx.Value.StereoEyeSeparation > 0.0)
+            var fp = ViewState?.FractalParameters;
+            if (fp != null
+                && FracturingFog.Rendering.Lighting.StereoRender.WantsTrueStereo(ViewState!.Is3D, fp.Lighting))
             {
-                layout = fx.Value.StereoLayout;
+                layout = fp.Lighting.StereoLayout;
                 return true;
             }
             return false;
@@ -1034,16 +1033,13 @@ namespace FracturingFog.Rendering
                 // #110 — stereo video. 3D raymarchers render via this alt path;
                 // when stereo is on, render both eyes and present the composited
                 // side-by-side buffer (so the instant recorder captures SBS).
-                if (VideoStereoActive(out var stLayout))
+                if (alt is FracturingFog.Interefaces.IStereoEyeCamera && VideoStereoActive(out var stLayout))
                 {
                     uint[]? sbs = null;
+                    var stFx = ViewState.FractalParameters.Lighting;
                     try
                     {
-                        sbs = FracturingFog.Rendering.Lighting.StereoRender.RenderTrueStereo(
-                            ViewState.FractalParameters,
-                            t => alt.Calculate(t),
-                            () => alt.ColorBuffer,
-                            alt.Width, alt.Height, ct);
+                        sbs = FracturingFog.Rendering.Lighting.StereoRender.RenderTrueStereo(alt, in stFx, ct);
                     }
                     catch (OperationCanceledException) { }
                     if (ShowPerfHud)
@@ -1052,9 +1048,12 @@ namespace FracturingFog.Rendering
 
                     if (sbs != null)
                     {
+                        // Same upload processing as the mono alt frame below
+                        // (brightness / contrast / gamma / view transform are
+                        // per-pixel) — previously skipped for SBS (#1008).
                         var (ow, oh) = FracturingFog.Rendering.Lighting.StereoRender
                             .OutputDims(alt.Width, alt.Height, stLayout);
-                        UploadProcessedBuffer(sbs, ow, oh, srcAlreadyProcessed: true);
+                        UploadProcessedBuffer(sbs, ow, oh);
                     }
                     else
                     {

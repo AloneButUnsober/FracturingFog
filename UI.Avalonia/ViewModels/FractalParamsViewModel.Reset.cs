@@ -234,7 +234,7 @@ public sealed partial class FractalParamsViewModel
         nameof(EdgeColor), nameof(EdgeColorHex), nameof(EdgeThreshold), nameof(EdgeKernel),
         nameof(MaxBounces), nameof(StereoMode), nameof(StereoEyeSeparation),
         nameof(StereoFovDegrees), nameof(StereoConvergence), nameof(StereoMaxDisparity),
-        nameof(StereoLayout), nameof(DofAperture), nameof(DofFocusDistance), nameof(DofSamples),
+        nameof(StereoLayout), nameof(StereoSwapEyes), nameof(DofAperture), nameof(DofFocusDistance), nameof(DofSamples),
         nameof(LightOrbitSpeed), nameof(CausticsAnimSpeed),
         nameof(TriplanarKind), nameof(TriplanarScale), nameof(TriplanarStrength),
         nameof(TriplanarTint), nameof(TriplanarTintHex),

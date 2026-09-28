@@ -31,7 +31,7 @@ using FracturingFog.Rendering;
 
 namespace FracturingFog;
 
-public sealed class QuatMandelbrotCalculator : IFractalCalculator
+public sealed class QuatMandelbrotCalculator : IFractalCalculator, IStereoEyeCamera
 {
     public int Width { get; private set; }
     public int Height { get; private set; }
@@ -54,6 +54,9 @@ public sealed class QuatMandelbrotCalculator : IFractalCalculator
     public bool SupportsZoomPan => true;
 
     public FractalParameters FractalParameters { get; set; } = new();
+
+    /// <inheritdoc/>
+    public double StereoEyeOffset { get; set; }
 
     public QuatMandelbrotCalculator(int width, int height) => Resize(width, height);
 
@@ -115,7 +118,7 @@ public sealed class QuatMandelbrotCalculator : IFractalCalculator
         };
 
         // Phase 20b — true per-eye camera offset along the right basis.
-        double eyeOffset = FractalParameters.Lighting.StereoEyeOffset;
+        double eyeOffset = StereoEyeOffset;
         if (eyeOffset != 0)
         {
             camPX += right[0] * eyeOffset;

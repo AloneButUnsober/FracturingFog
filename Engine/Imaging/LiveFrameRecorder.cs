@@ -63,11 +63,21 @@ namespace FracturingFog.Imaging
         private bool _finalized;
         private Exception? _writeFault;
 
-        public LiveFrameRecorder(string folder, int fps, FrameSource source)
+        /// <param name="lockSize">Optional recording resolution. By default the
+        /// first captured frame fixes it; a host that knows the frames about to be
+        /// presented differ from what is on screen now (a stereo view whose
+        /// side-by-side frame has not rendered yet, #1008) passes the expected
+        /// size so the recording is not locked to a stale mono frame.</param>
+        public LiveFrameRecorder(string folder, int fps, FrameSource source, (int Width, int Height)? lockSize = null)
         {
             _folder = folder ?? throw new ArgumentNullException(nameof(folder));
             _source = source ?? throw new ArgumentNullException(nameof(source));
             _fps = Math.Clamp(fps, MinFps, MaxFps);
+            if (lockSize is { Width: >= 2, Height: >= 2 } ls)
+            {
+                _width = ls.Width & ~1;
+                _height = ls.Height & ~1;
+            }
             Directory.CreateDirectory(folder);
         }
 
