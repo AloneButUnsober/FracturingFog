@@ -1,6 +1,10 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // SPDX-FileCopyrightText: 2026 Bradley Brown
 
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Reflection;
 using System.Text.Json;
 using FracturingFog;
 using FracturingFog.Models;
@@ -353,6 +357,147 @@ public sealed class RegionRelief3DTests
         plain.ApplyRelief3DAuthoritative(live);
         Assert.Equal(0, live.Relief2DDenoiseIterations);
         Assert.False(live.Relief2DDenoiseTemporal);
+    }
+
+    // ── Guard: every Relief2D* property is captured or explicitly excluded ─────
+    // The snapshot silently lagged FractalParameters for a long time (#518 detail,
+    // #520 far detail, #592 height source, S1/S3/S6 camera + relight knobs), so a
+    // saved relief view recalled with different terrain. These tests reflect over
+    // the live Relief2D* family and check the ROUND TRIP (Snapshot → JSON →
+    // ApplyTo), not a hand-kept field list, so a new property fails here until it
+    // is either captured or added to the exclusion list with a reason.
+
+    /// <summary>Relief2D* properties deliberately NOT saved on a region.</summary>
+    private static readonly Dictionary<string, string> NotCaptured = new()
+    {
+        [nameof(FractalParameters.Relief2DGpuRaymarch)] =
+            "CPU vs GPU dispatch preference (host/backend choice at CPU-twin parity), not part of the view",
+        [nameof(FractalParameters.Relief2DEmptySkip)] =
+            "conservative step-count acceleration over the same surface; speed only, never the image",
+    };
+
+    private static PropertyInfo[] Relief2DProperties() =>
+        typeof(FractalParameters)
+            .GetProperties(BindingFlags.Public | BindingFlags.Instance)
+            .Where(pi => pi.Name.StartsWith("Relief2D", StringComparison.Ordinal)
+                         && pi.CanRead && pi.CanWrite && pi.GetIndexParameters().Length == 0)
+            .OrderBy(pi => pi.Name, StringComparer.Ordinal)
+            .ToArray();
+
+    /// <summary>A value guaranteed different from <paramref name="current"/>.</summary>
+    private static object Perturb(Type t, object? current)
+    {
+        if (t == typeof(bool))   return !(bool)current!;
+        if (t == typeof(int))    return (int)current! + 3;
+        if (t == typeof(uint))   return (uint)current! ^ 0x00FF00FFu;
+        if (t == typeof(double)) return (double)current! + 0.375;
+        if (t == typeof(string)) return (string?)current + "FF102030";
+        if (t.IsEnum)
+        {
+            var values = Enum.GetValues(t);
+            Assert.True(values.Length > 1, $"enum {t.Name} has one value; can't perturb");
+            int i = Array.IndexOf(values, current);
+            return values.GetValue((i + 1) % values.Length)!;
+        }
+        throw new InvalidOperationException(
+            $"Relief2D property type {t.Name} has no perturbation — extend {nameof(Perturb)}.");
+    }
+
+    private static Relief3DSettings JsonRoundTrip(Relief3DSettings s)
+        => JsonSerializer.Deserialize<Relief3DSettings>(JsonSerializer.Serialize(s))!;
+
+    [Fact]
+    public void Guard_EveryRelief2DProperty_IsCapturedOrExplicitlyExcluded()
+    {
+        var props = Relief2DProperties();
+        Assert.NotEmpty(props);
+
+        // Exclusion list must name real properties (no stale entries).
+        var names = props.Select(p => p.Name).ToHashSet(StringComparer.Ordinal);
+        foreach (var excluded in NotCaptured.Keys)
+            Assert.True(names.Contains(excluded), $"exclusion '{excluded}' is not a Relief2D* property");
+
+        // Perturb every property away from its default at once; Enabled must be on
+        // for Snapshot to produce anything, and perturbing a false default gives that.
+        var src = new FractalParameters();
+        foreach (var pi in props)
+            pi.SetValue(src, Perturb(pi.PropertyType, pi.GetValue(src)));
+        Assert.True(src.Relief2DEnabled);
+
+        var snap = Relief3DSettings.Snapshot(src);
+        Assert.NotNull(snap);
+        var dst = new FractalParameters();
+        JsonRoundTrip(snap!).ApplyTo(dst);
+
+        var dropped = new List<string>();
+        var staleExclusions = new List<string>();
+        foreach (var pi in props)
+        {
+            bool roundTrips = Equals(pi.GetValue(src), pi.GetValue(dst));
+            bool excluded = NotCaptured.ContainsKey(pi.Name);
+            if (!roundTrips && !excluded) dropped.Add(pi.Name);
+            if (roundTrips && excluded) staleExclusions.Add(pi.Name);
+        }
+
+        Assert.True(dropped.Count == 0,
+            "Relief2D* properties dropped by Relief3DSettings (capture them in Snapshot/ApplyTo " +
+            "with a FractalParameters-matching default, or add to NotCaptured with a reason): " +
+            string.Join(", ", dropped));
+        Assert.True(staleExclusions.Count == 0,
+            "Relief2D* properties listed in NotCaptured but actually captured (remove from the list): " +
+            string.Join(", ", staleExclusions));
+    }
+
+    [Fact]
+    public void Guard_LegacySnapshot_RecallsEveryCapturedFieldAtFractalParametersDefault()
+    {
+        // A region saved before a field was captured has no key for it; recall must
+        // land that field on the FractalParameters default (i.e. the value the old
+        // region rendered with), not leave whatever the live view had.
+        var legacy = JsonSerializer.Deserialize<Relief3DSettings>("{\"Enabled\":true}")!;
+        var defaults = new FractalParameters();
+
+        var live = new FractalParameters();
+        var props = Relief2DProperties();
+        foreach (var pi in props)
+            pi.SetValue(live, Perturb(pi.PropertyType, pi.GetValue(live)));
+        legacy.ApplyTo(live);
+
+        var wrong = new List<string>();
+        foreach (var pi in props)
+        {
+            if (NotCaptured.ContainsKey(pi.Name) || pi.Name == nameof(FractalParameters.Relief2DEnabled))
+                continue;
+            object? want = pi.GetValue(defaults), got = pi.GetValue(live);
+            if (!Equals(want, got)) wrong.Add($"{pi.Name} (default {want}, recalled {got})");
+        }
+        Assert.True(wrong.Count == 0,
+            "Relief3DSettings defaults disagree with FractalParameters: " + string.Join("; ", wrong));
+        Assert.True(live.Relief2DEnabled);
+    }
+
+    [Fact]
+    public void Region_SerializesHeightSource_AsString()
+    {
+        var region = new FractalRegion
+        {
+            Name = "Trap relief", FractalType = FractalType.Mandelbrot,
+            Relief3D = Relief3DSettings.Snapshot(new FractalParameters
+            {
+                Relief2DEnabled = true,
+                Relief2DHeightSource = ReliefHeightSource.Blend,
+                Relief2DHeightBlend = 0.3,
+                Relief2DDetailGain = 2.5,
+            }),
+        };
+        string json = JsonSerializer.Serialize(region, new JsonSerializerOptions { WriteIndented = true });
+        Assert.Contains("\"HeightSource\": \"Blend\"", json);   // enum-as-string
+
+        var applied = new FractalParameters();
+        JsonSerializer.Deserialize<FractalRegion>(json)!.ApplyRelief3DTo(applied);
+        Assert.Equal(ReliefHeightSource.Blend, applied.Relief2DHeightSource);
+        Assert.Equal(0.3, applied.Relief2DHeightBlend, 12);
+        Assert.Equal(2.5, applied.Relief2DDetailGain, 12);
     }
 
     [Fact]
