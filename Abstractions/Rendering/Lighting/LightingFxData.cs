@@ -178,6 +178,25 @@ public enum StereoMode
     Fake,
     /// <summary>Phase 20b two-eye render with camera offset. 2× cost.</summary>
     True,
+    /// <summary>#1011 — single-image stereogram ("Magic Eye"): the frame is
+    /// replaced by a W × H pattern whose repetition encodes the depth, viewed
+    /// by diverging (or crossing) the eyes. Uses the <c>StereoAuto*</c>
+    /// settings, not the side-by-side ones.</summary>
+    Autostereogram,
+}
+
+/// <summary>#1011 — what an autostereogram's repeating pattern is made of.</summary>
+public enum AutostereoPattern
+{
+    /// <summary>Black and white random dots: maximum luminance contrast, the
+    /// easiest to fuse (and needs no colour vision).</summary>
+    RandomDots,
+    /// <summary>Random dots in colours sampled from the current render
+    /// (spread by brightness), so the theme shows through.</summary>
+    ThemeDots,
+    /// <summary>A strip of the fractal render tiled as the pattern (the
+    /// classic "Magic Eye" look).</summary>
+    FractalTexture,
 }
 
 /// <summary>Side-by-side packing for stereo output. <see cref="FullSbs"/> keeps
@@ -689,6 +708,37 @@ public struct LightingFxData
     /// players (Skybox / DeoVR) and wall-eyed viewing expect.</summary>
     public bool StereoSwapEyes;
 
+    // ── Autostereogram (#1011) — used only when StereoMode == Autostereogram ──
+
+    /// <summary>What the repeating pattern is made of.</summary>
+    public AutostereoPattern StereoAutoPattern;
+
+    /// <summary>Eye separation as a fraction of the image width. The
+    /// background repeats every half of it. About 1/8 suits a screen.</summary>
+    public double StereoAutoEyeSep;
+
+    /// <summary>Depth of field μ (fraction of the viewing distance the depth
+    /// range spans). Larger = more depth, harder to fuse. Default 1/3.</summary>
+    public double StereoAutoDepthOfField;
+
+    /// <summary>Encode for cross-eyed viewing (depth inverted) instead of
+    /// wall-eyed (parallel).</summary>
+    public bool StereoAutoCrossEyed;
+
+    /// <summary>Draw the two convergence guide dots near the top.</summary>
+    public bool StereoAutoGuideDots;
+
+    /// <summary>Random-dot seed (same seed + same view = same image).</summary>
+    public int StereoAutoSeed;
+
+    /// <summary>Depth smoothing radius in pixels. Fractal surfaces are rough;
+    /// smoothing makes the stereogram much easier to fuse.</summary>
+    public int StereoAutoBlur;
+
+    /// <summary>Depth levels (0 = continuous). A few levels give cleaner,
+    /// terraced depth that fuses more easily.</summary>
+    public int StereoAutoLevels;
+
     // ── DoF (Phase 21) ────────────────────────────────────────────────
 
     /// <summary>Aperture radius in world units. 0 = pinhole (no DoF).</summary>
@@ -864,6 +914,14 @@ public struct LightingFxData
         StereoMaxDisparity  = 0.03,
         StereoLayout        = StereoLayout.FullSbs,
         StereoSwapEyes      = false,
+        StereoAutoPattern      = AutostereoPattern.RandomDots,
+        StereoAutoEyeSep       = 0.125,
+        StereoAutoDepthOfField = 1.0 / 3.0,
+        StereoAutoCrossEyed    = false,
+        StereoAutoGuideDots    = true,
+        StereoAutoSeed         = 1,
+        StereoAutoBlur         = 3,
+        StereoAutoLevels       = 6,
 
         DofAperture        = 0.0,
         DofFocusDistance   = 3.0,
@@ -918,6 +976,9 @@ public struct LightingFxData
         h.Add(StereoEyeSeparation); h.Add(StereoFovDegrees); h.Add(StereoMode);
         h.Add(StereoConvergence); h.Add(StereoMaxDisparity); h.Add(StereoLayout);
         h.Add(StereoSwapEyes);
+        h.Add(StereoAutoPattern); h.Add(StereoAutoEyeSep); h.Add(StereoAutoDepthOfField);
+        h.Add(StereoAutoCrossEyed); h.Add(StereoAutoGuideDots); h.Add(StereoAutoSeed);
+        h.Add(StereoAutoBlur); h.Add(StereoAutoLevels);
         h.Add(DofAperture); h.Add(DofFocusDistance); h.Add(DofSamples); h.Add(DofThinLens);
         h.Add(SceneTime); h.Add(LightOrbitSpeed);
         h.Add(DebugHudFlags); h.Add(DebugAov);

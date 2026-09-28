@@ -278,11 +278,31 @@ public static partial class ScreenSpacePost
 
     /// <summary>#1009 — true when the frame's depth is consumed AFTER
     /// <c>Calculate</c>, so a 3D raymarcher publishes it on
-    /// <c>IDepthAovSource.DepthBuffer</c>: the depth-parallax (Fake) stereo warp.
-    /// The GPU raymarch kernels have no depth pass, so this also forces the CPU
-    /// trace (the Lighting &amp; FX dialog says so).</summary>
+    /// <c>IDepthAovSource.DepthBuffer</c>: the depth-parallax (Fake) stereo warp,
+    /// or the autostereogram (#1011). The GPU raymarch kernels have no depth
+    /// pass, so this also forces the CPU trace (the Lighting &amp; FX dialog says
+    /// so).</summary>
     public static bool WantsDepthOutput(in LightingFxData fx)
-        => fx.StereoMode == StereoMode.Fake && fx.StereoEyeSeparation > 0.0;
+        => (fx.StereoMode == StereoMode.Fake && fx.StereoEyeSeparation > 0.0)
+        || fx.StereoMode == StereoMode.Autostereogram;
+
+    /// <summary>#1011 — the post-frame stereo step for a finished display
+    /// buffer and its depth (+Infinity = sky), shared by the live host, the
+    /// poster and the Relief path: an autostereogram (W × H) or the
+    /// depth-parallax side-by-side warp (<see cref="StereoRender.OutputDims"/>).
+    /// Returns null when stereo is off for this frame (the caller keeps the mono
+    /// buffer).</summary>
+    public static uint[]? ApplyDepthStereo(uint[] display, float[] depth, int w, int h,
+        in LightingFxData fx, out int outW, out int outH)
+    {
+        outW = w; outH = h;
+        if (fx.StereoMode == StereoMode.Autostereogram)
+            return Autostereogram.FromLighting(display, depth, w, h, in fx);
+        if (fx.StereoMode == StereoMode.Off || fx.StereoEyeSeparation <= 0.0) return null;
+        var sbs = StereoRender.ApplyStereoSideBySide(display, depth, w, h, in fx);
+        if (sbs != null) (outW, outH) = StereoRender.OutputDims(w, h, fx.StereoLayout);
+        return sbs;
+    }
 
     /// <summary>#1009 — the depth a 3D raymarcher publishes after a frame: the
     /// captured per-pixel ray distance (<see cref="DepthMiss"/> = sky) at the

@@ -188,6 +188,58 @@ public static class Autostereogram
         AutostereoDepthOptions depth, AutostereoOptions options)
         => Render(PrepareDepth(rayDistance, w, h, depth), w, h, options);
 
+    /// <summary>#1011 — the autostereogram for a finished frame, driven by the
+    /// <c>StereoAuto*</c> lighting settings: <paramref name="mono"/> is the
+    /// display-ready mono frame (source of the theme colours / fractal texture),
+    /// <paramref name="rayDistance"/> its per-pixel depth (+Infinity = sky).
+    /// Output is W × H, opaque. Out-of-range settings (e.g. an older preset's
+    /// zero fields) fall back to the defaults.</summary>
+    public static uint[] FromLighting(uint[] mono, float[] rayDistance, int w, int h, in LightingFxData fx)
+    {
+        double sepFrac = fx.StereoAutoEyeSep > 0 ? Math.Clamp(fx.StereoAutoEyeSep, 0.03, 0.4) : 0.125;
+        double mu = fx.StereoAutoDepthOfField > 0 ? Math.Clamp(fx.StereoAutoDepthOfField, 0.05, 0.75) : 1.0 / 3.0;
+        var options = new AutostereoOptions
+        {
+            EyeSeparationPx = Math.Max(8, (int)Math.Round(w * sepFrac)),
+            DepthOfField = mu,
+            Seed = fx.StereoAutoSeed,
+            GuideDots = fx.StereoAutoGuideDots,
+        };
+        options = fx.StereoAutoPattern switch
+        {
+            AutostereoPattern.ThemeDots => options with { DotColors = ThemeColors(mono, w * h) },
+            AutostereoPattern.FractalTexture => options with { Texture = CutStrip(mono, w, h, FarSeparation(options)) },
+            _ => options,
+        };
+        var depth = new AutostereoDepthOptions
+        {
+            BlurRadius = Math.Clamp(fx.StereoAutoBlur, 0, 32),
+            Levels = Math.Clamp(fx.StereoAutoLevels, 0, 64),
+            CrossEyed = fx.StereoAutoCrossEyed,
+        };
+        return FromRayDistance(rayDistance, w, h, depth, options);
+    }
+
+    /// <summary>Up to 16 dot colours taken from an image, spread by brightness
+    /// (quantiles of a luma-sorted sample) so the dots keep luminance contrast.
+    /// Falls back to black / white for a flat image.</summary>
+    public static uint[] ThemeColors(uint[] image, int n)
+    {
+        int stride = Math.Max(1, n / 4096);
+        var sample = new List<uint>();
+        for (int i = 0; i < n; i += stride) sample.Add(image[i] | 0xFF000000u);
+        sample.Sort((a, b) => Luma(a).CompareTo(Luma(b)));
+        var picked = new List<uint>();
+        for (int k = 0; k < 16 && sample.Count > 0; k++)
+        {
+            uint c = sample[(int)((sample.Count - 1) * (k / 15.0))];
+            if (!picked.Contains(c)) picked.Add(c);
+        }
+        return picked.Count >= 2 ? picked.ToArray() : new[] { 0xFF000000u, 0xFFFFFFFFu };
+    }
+
+    private static int Luma(uint p) => (int)(((p >> 16) & 0xFF) * 299 + ((p >> 8) & 0xFF) * 587 + (p & 0xFF) * 114);
+
     /// <summary>Cut a pattern tile from an image (e.g. the mono fractal render):
     /// the centred vertical strip <paramref name="stripW"/> wide, full height —
     /// the "fractal texture" source for a textured stereogram.</summary>

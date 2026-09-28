@@ -500,7 +500,7 @@ namespace FracturingFog.Cli
             if (snap.ThemeIsUnsaved)
                 gaps.Add("Custom/unsaved theme (save it first so the command can reference it by name; falls back to HSV)");
             if (snap.StereoActive)
-                gaps.Add("Stereo / side-by-side (SBS) output");
+                gaps.Add("Stereo output (side-by-side or autostereogram)");
             // #998 — Lighting & FX settings no flag carries, unless a saved preset
             // reproduces the whole block.
             if (string.IsNullOrWhiteSpace(snap.LightingPresetName) && snap.Parameters != null)

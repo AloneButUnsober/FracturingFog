@@ -154,6 +154,15 @@ public sealed class LightingFxPresetData
     public double StereoMaxDisparity  { get; set; } = 0.03;
     public StereoLayout StereoLayout  { get; set; } = StereoLayout.FullSbs;
     public bool   StereoSwapEyes      { get; set; }
+    // #1011 — autostereogram settings (defaults = LightingFxData.CreateDefault).
+    public AutostereoPattern StereoAutoPattern { get; set; } = AutostereoPattern.RandomDots;
+    public double StereoAutoEyeSep       { get; set; } = 0.125;
+    public double StereoAutoDepthOfField { get; set; } = 1.0 / 3.0;
+    public bool   StereoAutoCrossEyed    { get; set; }
+    public bool   StereoAutoGuideDots    { get; set; } = true;
+    public int    StereoAutoSeed         { get; set; } = 1;
+    public int    StereoAutoBlur         { get; set; } = 3;
+    public int    StereoAutoLevels       { get; set; } = 6;
     public double DofAperture         { get; set; } = 0.0;
     public double DofFocusDistance    { get; set; } = 3.0;
     public int    DofSamples          { get; set; } = 8;
@@ -261,6 +270,10 @@ public sealed class LightingFxPresetData
         EdgeStrength = fx.EdgeStrength, EdgeColor = fx.EdgeColor,
         EdgeThreshold = fx.EdgeThreshold, EdgeKernel = fx.EdgeKernel,
         StereoMode = fx.StereoMode, StereoLayout = fx.StereoLayout, StereoSwapEyes = fx.StereoSwapEyes,
+        StereoAutoPattern = fx.StereoAutoPattern, StereoAutoEyeSep = fx.StereoAutoEyeSep,
+        StereoAutoDepthOfField = fx.StereoAutoDepthOfField, StereoAutoCrossEyed = fx.StereoAutoCrossEyed,
+        StereoAutoGuideDots = fx.StereoAutoGuideDots, StereoAutoSeed = fx.StereoAutoSeed,
+        StereoAutoBlur = fx.StereoAutoBlur, StereoAutoLevels = fx.StereoAutoLevels,
         StereoEyeSeparation = fx.StereoEyeSeparation, StereoFovDegrees = fx.StereoFovDegrees,
         StereoConvergence = fx.StereoConvergence, StereoMaxDisparity = fx.StereoMaxDisparity,
         DofAperture = fx.DofAperture, DofFocusDistance = fx.DofFocusDistance, DofSamples = fx.DofSamples,
@@ -339,6 +352,10 @@ public sealed class LightingFxPresetData
         EdgeStrength = EdgeStrength, EdgeColor = EdgeColor,
         EdgeThreshold = EdgeThreshold, EdgeKernel = EdgeKernel,
         StereoMode = StereoMode, StereoLayout = StereoLayout, StereoSwapEyes = StereoSwapEyes,
+        StereoAutoPattern = StereoAutoPattern, StereoAutoEyeSep = StereoAutoEyeSep,
+        StereoAutoDepthOfField = StereoAutoDepthOfField, StereoAutoCrossEyed = StereoAutoCrossEyed,
+        StereoAutoGuideDots = StereoAutoGuideDots, StereoAutoSeed = StereoAutoSeed,
+        StereoAutoBlur = StereoAutoBlur, StereoAutoLevels = StereoAutoLevels,
         StereoEyeSeparation = StereoEyeSeparation, StereoFovDegrees = StereoFovDegrees,
         StereoConvergence = StereoConvergence, StereoMaxDisparity = StereoMaxDisparity,
         DofAperture = DofAperture, DofFocusDistance = DofFocusDistance, DofSamples = DofSamples,

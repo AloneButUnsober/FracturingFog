@@ -130,7 +130,7 @@ public sealed class CommandBuilderViewModelTests
             asked = (w, h);
             return new LiveCommandSeed(
                 new[] { "--fractal", "Julia", "--x", "0", "--y", "0", "--zoom", "1", "--width", w.ToString(), "--height", h.ToString(), "--out", "<OUTPUT.png>" },
-                new[] { "Stereo / side-by-side (SBS) output" });
+                new[] { "Stereo output (side-by-side or autostereogram)" });
         });
         Row(vm, BatchFlags.Width).Value = "640";
         vm.SeedFromLiveCommand.Execute().Subscribe();
