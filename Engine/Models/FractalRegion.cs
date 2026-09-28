@@ -1577,6 +1577,47 @@ namespace FracturingFog.Models
         public double DenoiseTemporalFeedback { get; set; } = 0.8;
         public double DenoiseVarianceScale { get; set; } = 4.0;
 
+        // Height-field shaping (#518 detail/gamma, #592 height source, #520 far /
+        // settle detail) + auto-shade zero handling (#296). Defaults mirror
+        // FractalParameters, so a region saved before these were captured (the
+        // keys are absent from its JSON) recalls exactly as it did before.
+        [JsonConverter(typeof(JsonStringEnumConverter))]
+        public ReliefHeightSource HeightSource { get; set; } = ReliefHeightSource.Smooth;
+        public double HeightBlend { get; set; } = 0.5;
+        public double DetailGain { get; set; } = 1.0;
+        public int DetailRadius { get; set; } = 0;
+        public double HeightGamma { get; set; } = 1.0;
+        public double FarDetail { get; set; } = 1.0;
+        public bool SettleDetail { get; set; } = false;
+        public bool AutoShadeKeepExplicitZeros { get; set; } = false;
+
+        // Cinematic camera (S3 #389/#400): thin-lens DOF + in-camera exposure.
+        public double DofApertureRadius { get; set; } = 0.0;
+        public double DofFocusDistance { get; set; } = 0.0;
+        public double CameraExposureEv { get; set; } = 0.0;
+
+        // Vector motion blur (S1 #398) — only bites on sequence renders.
+        public double MotionBlurStrength { get; set; } = 0.0;
+        public int MotionBlurSamples { get; set; } = 8;
+
+        // Froxel sub-cell temporal reprojection (S6 #408).
+        public bool FroxelReproject { get; set; } = false;
+
+        // Relight in post (S1 #398). Tints are 0xAARRGGBB, white = none.
+        public bool Relight { get; set; } = false;
+        public double RelightDiffuseGain { get; set; } = 1.0;
+        public double RelightSpecularGain { get; set; } = 1.0;
+        public double RelightAoStrength { get; set; } = 1.0;
+        public double RelightAmbient { get; set; } = 0.0;
+        public uint RelightDiffuseTint { get; set; } = 0xFFFFFFFFu;
+        public uint RelightSpecularTint { get; set; } = 0xFFFFFFFFu;
+
+        // Deliberately NOT captured (see RegionRelief3DTests guard):
+        //   Relief2DGpuRaymarch — CPU vs GPU dispatch preference (Ctrl+Shift+G), a
+        //     host/backend choice at CPU-twin parity, not part of the view.
+        //   Relief2DEmptySkip   — conservative step-count acceleration over the
+        //     SAME surface; changes speed, never the image.
+
         /// <summary>Apply <paramref name="s"/> when non-null, otherwise turn
         /// relief OFF on <paramref name="p"/>. The authoritative recall path so a
         /// plain (no-relief) region clears a relief view instead of leaving it on.</summary>
@@ -1650,6 +1691,27 @@ namespace FracturingFog.Models
                 DenoiseTemporal    = p.Relief2DDenoiseTemporal,
                 DenoiseTemporalFeedback = p.Relief2DDenoiseTemporalFeedback,
                 DenoiseVarianceScale = p.Relief2DDenoiseVarianceScale,
+                HeightSource       = p.Relief2DHeightSource,
+                HeightBlend        = p.Relief2DHeightBlend,
+                DetailGain         = p.Relief2DDetailGain,
+                DetailRadius       = p.Relief2DDetailRadius,
+                HeightGamma        = p.Relief2DHeightGamma,
+                FarDetail          = p.Relief2DFarDetail,
+                SettleDetail       = p.Relief2DSettleDetail,
+                AutoShadeKeepExplicitZeros = p.Relief2DAutoShadeKeepExplicitZeros,
+                DofApertureRadius  = p.Relief2DDofApertureRadius,
+                DofFocusDistance   = p.Relief2DDofFocusDistance,
+                CameraExposureEv   = p.Relief2DCameraExposureEv,
+                MotionBlurStrength = p.Relief2DMotionBlurStrength,
+                MotionBlurSamples  = p.Relief2DMotionBlurSamples,
+                FroxelReproject    = p.Relief2DFroxelReproject,
+                Relight            = p.Relief2DRelight,
+                RelightDiffuseGain = p.Relief2DRelightDiffuseGain,
+                RelightSpecularGain = p.Relief2DRelightSpecularGain,
+                RelightAoStrength  = p.Relief2DRelightAoStrength,
+                RelightAmbient     = p.Relief2DRelightAmbient,
+                RelightDiffuseTint = p.Relief2DRelightDiffuseTint,
+                RelightSpecularTint = p.Relief2DRelightSpecularTint,
             };
         }
 
@@ -1704,6 +1766,27 @@ namespace FracturingFog.Models
             p.Relief2DDenoiseTemporal        = DenoiseTemporal;
             p.Relief2DDenoiseTemporalFeedback = DenoiseTemporalFeedback;
             p.Relief2DDenoiseVarianceScale   = DenoiseVarianceScale;
+            p.Relief2DHeightSource           = HeightSource;
+            p.Relief2DHeightBlend            = HeightBlend;
+            p.Relief2DDetailGain             = DetailGain;
+            p.Relief2DDetailRadius           = DetailRadius;
+            p.Relief2DHeightGamma            = HeightGamma;
+            p.Relief2DFarDetail              = FarDetail;
+            p.Relief2DSettleDetail           = SettleDetail;
+            p.Relief2DAutoShadeKeepExplicitZeros = AutoShadeKeepExplicitZeros;
+            p.Relief2DDofApertureRadius      = DofApertureRadius;
+            p.Relief2DDofFocusDistance       = DofFocusDistance;
+            p.Relief2DCameraExposureEv       = CameraExposureEv;
+            p.Relief2DMotionBlurStrength     = MotionBlurStrength;
+            p.Relief2DMotionBlurSamples      = MotionBlurSamples;
+            p.Relief2DFroxelReproject        = FroxelReproject;
+            p.Relief2DRelight                = Relight;
+            p.Relief2DRelightDiffuseGain     = RelightDiffuseGain;
+            p.Relief2DRelightSpecularGain    = RelightSpecularGain;
+            p.Relief2DRelightAoStrength      = RelightAoStrength;
+            p.Relief2DRelightAmbient         = RelightAmbient;
+            p.Relief2DRelightDiffuseTint     = RelightDiffuseTint;
+            p.Relief2DRelightSpecularTint    = RelightSpecularTint;
         }
     }
 
