@@ -35,6 +35,37 @@ rather than tracked only in scratch notes or ad-hoc TODOs.
   issues are the canonical task list — link doc ↔ issues both ways.
 - Repo: `AloneButUnsober/FracturingFog`. `gh` is authenticated with admin.
 
+## Keep batch processing in step with every feature
+
+**Whenever a feature is introduced or changed, update the batch-processing
+(headless `--batch` CLI) library as required, in the same change.** Anything
+that alters what gets rendered — a fractal type or parameter, an effect, a
+lighting / relief / post-FX option, an animation or export capability — must
+stay reproducible headless and through the Control Center **Command** builder
+(#64). A live-only feature that the batch silently drops is a bug.
+
+For each such change, check and update as needed:
+
+1. **Render path** — the headless renderer actually honours it
+   (`Batch/BatchRenderer.cs` → `BuildFractalParameters`, `Engine/Imaging/PosterRenderer.cs`,
+   video / slideshow / scene loops). Verify, don't assume.
+2. **Expressible on the command line**, via the cheapest fitting route:
+   - a new per-family parameter → captured by the region snapshot
+     (`RegionFractalParams` in `Engine/Models/FractalRegion.cs`), which makes it
+     `--param Key=Value` automatically (and keeps #961 region coverage);
+   - a new Lighting & FX field → `LightingFxData` / `LightingFxPresetData`, carried by
+     `--lighting-preset`; if it deserves its own flag, add it to the covered set in
+     `Abstractions/Cli/LightingFidelity.cs`;
+   - otherwise a dedicated flag: `BatchFlags` const → `BatchOptions` parse +
+     validate → `BatchRenderer` apply → `BatchFlagCatalog` entry (kind, range,
+     modes, implies / requires / conflicts). The catalog guard tests fail until all
+     of these agree, and `--batch --help` is generated from the catalog.
+3. **Command builder** — the live-view seed emits it (`BatchCommandBuilder` +
+   `ControlCenterViewModel.BuildLiveSeed`), with a parse round-trip test.
+4. **If it truly can't be expressed yet** — report it as a fidelity gap in
+   `BatchCommandBuilder.DetectGaps` (yellow banner) and file a GitHub issue; never
+   drop it silently.
+
 ## UI status: Avalonia is the only shell. WinForms was removed (#116).
 
 **All UI work goes into `UI.Avalonia/`.** The legacy WinForms shell —
