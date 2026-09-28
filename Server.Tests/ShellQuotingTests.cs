@@ -139,14 +139,53 @@ public sealed class ShellQuotingTests
     public void AQuotedExecutable_UsesTheCallOperatorInPowerShell()
     {
         string exe = @"C:\Program Files\FF\FracturingFog.exe";
-        Assert.StartsWith(@"& 'C:\Program Files\FF\FracturingFog.exe' --batch", ShellQuoting.Join(exe, Array.Empty<string>(), CommandShell.PowerShell));
+        Assert.StartsWith(@"& ""C:\Program Files\FF\FracturingFog.exe"" --batch", ShellQuoting.Join(exe, Array.Empty<string>(), CommandShell.PowerShell));
         Assert.StartsWith("\"C:\\Program Files\\FF\\FracturingFog.exe\" --batch", ShellQuoting.Join(exe, Array.Empty<string>(), CommandShell.Cmd));
     }
+
+    // A path without spaces needs no quoting in either Windows shell (backslash
+    // is not special in PowerShell), so there is no call operator to trip over.
+    [Fact]
+    public void APlainExePath_IsBare_WithNoCallOperator()
+    {
+        string exe = @"C:\NeverEnding\bin\FracturingFog.exe";
+        foreach (var shell in new[] { CommandShell.PowerShell, CommandShell.Cmd })
+            Assert.StartsWith(exe + " --batch", ShellQuoting.Join(exe, Array.Empty<string>(), shell));
+    }
+
+    // Everyday values quote the same way for both Windows shells, so a copied
+    // command pastes into either (the report behind this: single quotes failed
+    // in Command Prompt).
+    [Fact]
+    public void EverydayCommands_AreIdentical_ForCmdAndPowerShell()
+    {
+        var args = new[] { "--theme", "Fire 3D (PBR)", "--out", "<OUTPUT.png>", "--light1-dir", "0.785,1.41",
+                           "--region", "Seahorse Valley", "--x", "-0.5", "--out", @"C:\temp\as test.png" };
+        string exe = @"C:\NeverEnding\bin\FracturingFog.exe";
+        string ps = ShellQuoting.Join(exe, args, CommandShell.PowerShell);
+        Assert.Equal(ShellQuoting.Join(exe, args, CommandShell.Cmd), ps);
+        Assert.DoesNotContain("'", ps);
+    }
+
+    // PowerShell expands $ and ` inside "...": those values keep the literal '...'.
+    [Theory]
+    [InlineData("$HOME", "'$HOME'")]
+    [InlineData("back`tick", "'back`tick'")]
+    [InlineData("say \"hi\"", "'say \"hi\"'")]
+    [InlineData("it's here", "\"it's here\"")]
+    public void PowerShell_ExpandingCharacters_StayLiteral(string value, string expected)
+        => Assert.Equal(expected, ShellQuoting.Quote(value, CommandShell.PowerShell));
+
+    [Fact]
+    public void Default_IsCommandPromptOnWindows()
+        => Assert.Equal(OperatingSystem.IsWindows() ? CommandShell.Cmd : CommandShell.Bash, ShellQuoting.Default);
 
     [Fact]
     public void Scripts_PropagateTheExitCode_AndCmdEscapesPercent()
     {
         Assert.EndsWith("exit $LASTEXITCODE\r\n", ShellQuoting.Script("FracturingFog --batch", CommandShell.PowerShell));
+        // GUI-subsystem exe: without the pipe PowerShell would not wait for it.
+        Assert.Contains("FracturingFog --batch | Out-Default\r\n", ShellQuoting.Script("FracturingFog --batch", CommandShell.PowerShell));
         string cmd = ShellQuoting.Script("FracturingFog --batch --name \"50%\"", CommandShell.Cmd);
         Assert.StartsWith("@echo off", cmd);
         Assert.Contains("\"50%%\"", cmd);

@@ -50,8 +50,14 @@ namespace FracturingFog.Cli
             BatchFlagGroup.DomainWarp, BatchFlagGroup.Relief, BatchFlagGroup.ReliefCamera,
             BatchFlagGroup.Froxel, BatchFlagGroup.Glass, BatchFlagGroup.Denoise,
             BatchFlagGroup.Relight, BatchFlagGroup.Volumetric, BatchFlagGroup.Isolate,
-            BatchFlagGroup.Lights,
+            BatchFlagGroup.Lights, BatchFlagGroup.Stereo,
         };
+
+        /// <summary>True when <paramref name="g"/> describes what is rendered, so
+        /// "Seed from live view" replaces it (a group left out here is silently
+        /// dropped from the seed — #1012 missed Stereo; a guard test now checks
+        /// every group is classified).</summary>
+        public static bool IsLookGroup(BatchFlagGroup g) => s_lookGroups.Contains(g);
 
         private readonly Dictionary<string, string?> _sel = new(StringComparer.OrdinalIgnoreCase);
         private BatchMode _mode = BatchMode.Image;
