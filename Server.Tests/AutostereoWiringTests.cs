@@ -213,4 +213,68 @@ public class AutostereoWiringTests
         Assert.Equal(0xFFFFFFFFu, colors[^1]);
         Assert.Equal(new[] { Black, White }, Autostereogram.ThemeColors(new uint[64], 64));
     }
+
+    // A small fractal on a big sky (e.g. a Quaternion Julia): the texture tile is
+    // cut from the fractal itself, so no black sky rows end up in the pattern.
+    private static (uint[] Mono, float[] Depth) SmallObjectFrame(int w, int h)
+    {
+        var mono = new uint[w * h];
+        var depth = new float[w * h];
+        for (int y = 0; y < h; y++)
+            for (int x = 0; x < w; x++)
+            {
+                int i = y * w + x;
+                bool hit = y >= h * 2 / 5 && y < h * 3 / 5 && x >= w / 4 && x < w * 3 / 4;
+                mono[i] = hit ? 0xFF000000u | (uint)((x * 7 + y * 13) & 0xFF) << 8 | 0x40u : Black;
+                depth[i] = hit ? 2f + 0.2f * MathF.Sin(x * 0.2f) : float.PositiveInfinity;
+            }
+        return (mono, depth);
+    }
+
+    // The fractal's box edge rows may miss the strip's columns entirely (the
+    // fractal is off to one side there): those rows borrow a neighbour, so the
+    // tile has no black seam.
+    [Fact]
+    public void CutStrip_RowsMissingTheStrip_BorrowANeighbour()
+    {
+        const int w = 100, h = 20;
+        var mono = new uint[w * h];
+        var depth = Enumerable.Repeat(float.PositiveInfinity, w * h).ToArray();
+        for (int y = 5; y < 15; y++)
+            for (int x = 30; x < 70; x++) { mono[y * w + x] = 0xFF4080C0u; depth[y * w + x] = 2f; }
+        depth[4 * w + 5] = 2f; mono[4 * w + 5] = 0xFF4080C0u;   // a stray hit far left widens the box up a row
+        var tile = Autostereogram.CutStrip(mono, w, h, 10, depth);
+        Assert.Equal(11, tile.Height);                          // rows 4..14
+        Assert.DoesNotContain(Black, tile.Pixels);
+    }
+
+    [Fact]
+    public void FractalTexture_OnASmallFractal_FillsTheFrame()
+    {
+        const int w = 240, h = 160;
+        var (mono, depth) = SmallObjectFrame(w, h);
+        var fx = AutoFx(AutostereoPattern.FractalTexture);
+        fx.StereoAutoGuideDots = false;
+        var img = Autostereogram.FromLighting(mono, depth, w, h, in fx);
+        double black = img.Count(p => p == Black) / (double)img.Length;
+        Assert.True(black < 0.01, $"{black:P1} of the stereogram is black sky");
+    }
+
+    [Fact]
+    public void CutStrip_WithDepth_CropsToTheFractal_AndFillsGaps()
+    {
+        const int w = 240, h = 160;
+        var (mono, depth) = SmallObjectFrame(w, h);
+        var tile = Autostereogram.CutStrip(mono, w, h, 40, depth);
+        Assert.Equal((40, h * 3 / 5 - h * 2 / 5), (tile.Width, tile.Height));
+        Assert.DoesNotContain(Black, tile.Pixels);
+    }
+
+    [Fact]
+    public void ThemeColors_WithDepth_IgnoreTheSky()
+    {
+        const int w = 240, h = 160;
+        var (mono, depth) = SmallObjectFrame(w, h);
+        Assert.DoesNotContain(Black, Autostereogram.ThemeColors(mono, w * h, depth));
+    }
 }
