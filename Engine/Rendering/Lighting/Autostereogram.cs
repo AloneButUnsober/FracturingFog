@@ -188,6 +188,139 @@ public static class Autostereogram
         AutostereoDepthOptions depth, AutostereoOptions options)
         => Render(PrepareDepth(rayDistance, w, h, depth), w, h, options);
 
+    /// <summary>#1011 — the autostereogram for a finished frame, driven by the
+    /// <c>StereoAuto*</c> lighting settings: <paramref name="mono"/> is the
+    /// display-ready mono frame (source of the theme colours / fractal texture),
+    /// <paramref name="rayDistance"/> its per-pixel depth (+Infinity = sky).
+    /// Output is W × H, opaque. Out-of-range settings (e.g. an older preset's
+    /// zero fields) fall back to the defaults.</summary>
+    public static uint[] FromLighting(uint[] mono, float[] rayDistance, int w, int h, in LightingFxData fx)
+    {
+        double sepFrac = fx.StereoAutoEyeSep > 0 ? Math.Clamp(fx.StereoAutoEyeSep, 0.03, 0.4) : 0.125;
+        double mu = fx.StereoAutoDepthOfField > 0 ? Math.Clamp(fx.StereoAutoDepthOfField, 0.05, 0.75) : 1.0 / 3.0;
+        var options = new AutostereoOptions
+        {
+            EyeSeparationPx = Math.Max(8, (int)Math.Round(w * sepFrac)),
+            DepthOfField = mu,
+            Seed = fx.StereoAutoSeed,
+            GuideDots = fx.StereoAutoGuideDots,
+        };
+        options = fx.StereoAutoPattern switch
+        {
+            AutostereoPattern.ThemeDots => options with { DotColors = ThemeColors(mono, w * h, rayDistance) },
+            AutostereoPattern.FractalTexture => options with { Texture = CutStrip(mono, w, h, FarSeparation(options), rayDistance) },
+            _ => options,
+        };
+        var depth = new AutostereoDepthOptions
+        {
+            BlurRadius = Math.Clamp(fx.StereoAutoBlur, 0, 32),
+            Levels = Math.Clamp(fx.StereoAutoLevels, 0, 64),
+            CrossEyed = fx.StereoAutoCrossEyed,
+        };
+        return FromRayDistance(rayDistance, w, h, depth, options);
+    }
+
+    /// <summary>Up to 16 dot colours taken from an image, spread by brightness
+    /// (quantiles of a luma-sorted sample) so the dots keep luminance contrast.
+    /// With <paramref name="rayDistance"/>, only the fractal's own pixels (depth
+    /// hits) are sampled, so a small fractal on a big black sky does not turn
+    /// most dots black. Falls back to black / white for a flat image.</summary>
+    public static uint[] ThemeColors(uint[] image, int n, float[]? rayDistance = null)
+    {
+        bool hitsOnly = rayDistance != null && rayDistance.Length >= n && HitCount(rayDistance, n) >= 16;
+        int stride = Math.Max(1, n / 4096);
+        var sample = new List<uint>();
+        for (int i = 0; i < n; i += stride)
+            if (!hitsOnly || IsHit(rayDistance![i])) sample.Add(image[i] | 0xFF000000u);
+        sample.Sort((a, b) => Luma(a).CompareTo(Luma(b)));
+        var picked = new List<uint>();
+        for (int k = 0; k < 16 && sample.Count > 0; k++)
+        {
+            uint c = sample[(int)((sample.Count - 1) * (k / 15.0))];
+            if (!picked.Contains(c)) picked.Add(c);
+        }
+        return picked.Count >= 2 ? picked.ToArray() : new[] { 0xFF000000u, 0xFFFFFFFFu };
+    }
+
+    private static int Luma(uint p) => (int)(((p >> 16) & 0xFF) * 299 + ((p >> 8) & 0xFF) * 587 + (p & 0xFF) * 114);
+
+    /// <summary>#1011 — cut the "fractal texture" tile from where the fractal
+    /// actually is. A fractal that does not fill the frame (a small Quaternion
+    /// Julia, say) would otherwise copy the black sky rows above and below it
+    /// into the pattern, leaving black bands with no texture to fuse. The tile
+    /// is the bounding box of the depth hits (the strip centred on it, the box
+    /// height tall — tiled down the whole image), and sky pixels left inside it
+    /// are filled from the nearest fractal pixel on the same row. No hits: the
+    /// plain centred full-height strip.</summary>
+    public static AutostereoTexture CutStrip(uint[] image, int w, int h, int stripW, float[]? rayDistance)
+    {
+        int n = w * h;
+        if (rayDistance == null || rayDistance.Length < n) return CutStrip(image, w, h, stripW);
+        int x0 = w, x1 = -1, y0 = h, y1 = -1;
+        for (int y = 0; y < h; y++)
+            for (int x = 0; x < w; x++)
+                if (IsHit(rayDistance[y * w + x]))
+                {
+                    if (x < x0) x0 = x; if (x > x1) x1 = x;
+                    if (y < y0) y0 = y; if (y > y1) y1 = y;
+                }
+        if (x1 < 0) return CutStrip(image, w, h, stripW);
+
+        stripW = Math.Clamp(stripW, 1, w);
+        int sx = Math.Clamp((x0 + x1) / 2 - stripW / 2, 0, w - stripW);
+        int th = y1 - y0 + 1;
+        var px = new uint[stripW * th];
+        var rowHasHit = new bool[th];
+        for (int ty = 0; ty < th; ty++)
+        {
+            int src = (y0 + ty) * w + sx;
+            int dst = ty * stripW;
+            Array.Copy(image, src, px, dst, stripW);
+            // Fill sky gaps from the fractal on this row: each gap after a hit
+            // repeats the last hit, a leading gap repeats the first hit. A row
+            // with no hit inside the strip is filled from its nearest row below.
+            int first = FirstHit(rayDistance, src, stripW);
+            if (first == stripW) continue;
+            rowHasHit[ty] = true;
+            for (int i = 0; i < first; i++) px[dst + i] = px[dst + first];
+            int last = first;
+            for (int i = first + 1; i < stripW; i++)
+            {
+                if (IsHit(rayDistance[src + i])) last = i;
+                else px[dst + i] = px[dst + last];
+            }
+        }
+        // Rows whose strip columns missed the fractal (the box's top / bottom
+        // edges, where the fractal is off to one side) copy the nearest row that
+        // has it, so the tile has no black seam lines.
+        for (int ty = 0; ty < th; ty++)
+        {
+            if (rowHasHit[ty]) continue;
+            for (int d = 1; d < th; d++)
+            {
+                int near = ty + d < th && rowHasHit[ty + d] ? ty + d
+                         : ty - d >= 0 && rowHasHit[ty - d] ? ty - d : -1;
+                if (near < 0) continue;
+                Array.Copy(px, near * stripW, px, ty * stripW, stripW);
+                break;
+            }
+        }
+        return new AutostereoTexture(px, stripW, th);
+    }
+
+    private static int FirstHit(float[] d, int start, int len)
+    {
+        for (int i = 0; i < len; i++) if (IsHit(d[start + i])) return i;
+        return len;
+    }
+
+    private static int HitCount(float[] d, int n)
+    {
+        int c = 0;
+        for (int i = 0; i < n; i++) if (IsHit(d[i])) c++;
+        return c;
+    }
+
     /// <summary>Cut a pattern tile from an image (e.g. the mono fractal render):
     /// the centred vertical strip <paramref name="stripW"/> wide, full height —
     /// the "fractal texture" source for a textured stereogram.</summary>

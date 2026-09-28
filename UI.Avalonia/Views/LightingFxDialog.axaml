@@ -758,7 +758,7 @@
 
                 <!-- Reflection / Edge / Stereo / DoF -->
                 <Expander Header="Reflection / Edge / Stereo / DoF" HorizontalAlignment="Stretch">
-                    <Grid ColumnDefinitions="160,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto">
+                    <Grid ColumnDefinitions="160,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto">
                         <TextBlock Grid.Row="0" Grid.Column="0" Text="Reflection:" VerticalAlignment="Center"
                                    ToolTip.Tip="N-bounce DE-march along reflect(V,N). 0 = off." />
                         <Grid Grid.Row="0" Grid.Column="1" ColumnDefinitions="*,Auto" Margin="0,2">
@@ -833,7 +833,7 @@
 
                         <TextBlock Grid.Row="7" Grid.Column="0" Text="Stereo mode:" VerticalAlignment="Center"
                                    IsEnabled="{Binding ReliefStage2Applies}"
-                                   ToolTip.Tip="Off = mono. Fake = single render + depth-parallax warp (cheap). True = two real per-eye renders (3D fractals only — 2x cost, real parallax on close objects). On Relief 3D both Fake and True use the depth-parallax warp (Relief has one oblique camera, no per-eye render)." />
+                                   ToolTip.Tip="Off = mono. Fake = single render + depth-parallax warp (cheap). True = two real per-eye renders (3D fractals only — 2x cost, real parallax on close objects). On Relief 3D both Fake and True use the depth-parallax warp (Relief has one oblique camera, no per-eye render). Autostereogram = a single Magic-Eye image (settings below); the side-by-side settings above do not apply to it." />
                         <ComboBox Grid.Row="7" Grid.Column="1" HorizontalAlignment="Stretch"
                                   IsEnabled="{Binding ReliefStage2Applies}"
                                   ItemsSource="{Binding StereoModes}"
@@ -939,6 +939,68 @@
                         <TextBlock Grid.Row="18" Grid.Column="0" Grid.ColumnSpan="2"
                                    Text="{Binding StereoHint}" IsVisible="{Binding HasStereoHint}"
                                    Foreground="#FFCC00" TextWrapping="Wrap" FontSize="11" Margin="0,4,0,2" />
+
+                        <!-- #1011: autostereogram settings, shown in Autostereogram mode only. -->
+                        <Grid Grid.Row="19" Grid.Column="0" Grid.ColumnSpan="2"
+                              ColumnDefinitions="160,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto"
+                              IsVisible="{Binding IsAutostereo}" IsEnabled="{Binding ReliefStage2Applies}">
+                            <TextBlock Grid.Row="0" Grid.Column="0" Text="Pattern:" VerticalAlignment="Center"
+                                       ToolTip.Tip="RandomDots = black and white dots (highest contrast, easiest to see). ThemeDots = dots in colours taken from the render. FractalTexture = a strip of the render tiled as the pattern (Magic-Eye look)." />
+                            <ComboBox Grid.Row="0" Grid.Column="1" HorizontalAlignment="Stretch"
+                                      ItemsSource="{Binding StereoAutoPatterns}"
+                                      SelectedItem="{Binding StereoAutoPattern, Mode=TwoWay}" Margin="0,2" />
+
+                            <TextBlock Grid.Row="1" Grid.Column="0" Text="Eye separation:" VerticalAlignment="Center"
+                                       ToolTip.Tip="As a fraction of the image width; the background repeats every half of it. About 0.12 suits a screen viewed at arm's length." />
+                            <Grid Grid.Row="1" Grid.Column="1" ColumnDefinitions="*,Auto" Margin="0,2">
+                                <Slider Classes="knob" Grid.Column="0" Minimum="0.03" Maximum="0.4"
+                                        Value="{Binding StereoAutoEyeSep, Mode=TwoWay}" />
+                                <TextBlock Classes="knobValue" Grid.Column="1"
+                                           Text="{Binding StereoAutoEyeSep, StringFormat='F3'}" />
+                            </Grid>
+
+                            <TextBlock Grid.Row="2" Grid.Column="0" Text="Depth amount:" VerticalAlignment="Center"
+                                       ToolTip.Tip="Depth of field: how much of the viewing distance the depth spans. More = deeper, but harder to fuse. Default 0.33." />
+                            <Grid Grid.Row="2" Grid.Column="1" ColumnDefinitions="*,Auto" Margin="0,2">
+                                <Slider Classes="knob" Grid.Column="0" Minimum="0.05" Maximum="0.75"
+                                        Value="{Binding StereoAutoDepthOfField, Mode=TwoWay}" />
+                                <TextBlock Classes="knobValue" Grid.Column="1"
+                                           Text="{Binding StereoAutoDepthOfField, StringFormat='F2'}" />
+                            </Grid>
+
+                            <TextBlock Grid.Row="3" Grid.Column="0" Text="Depth smoothing:" VerticalAlignment="Center"
+                                       ToolTip.Tip="Blur radius (pixels) on the depth. Fractal surfaces are rough; smoothing makes the picture much easier to see. 0 = off." />
+                            <Grid Grid.Row="3" Grid.Column="1" ColumnDefinitions="*,Auto" Margin="0,2">
+                                <Slider Classes="knob" Grid.Column="0" Minimum="0" Maximum="16"
+                                        IsSnapToTickEnabled="True" TickFrequency="1"
+                                        Value="{Binding StereoAutoBlur, Mode=TwoWay}" />
+                                <TextBlock Classes="knobValue" Grid.Column="1" Text="{Binding StereoAutoBlur}" />
+                            </Grid>
+
+                            <TextBlock Grid.Row="4" Grid.Column="0" Text="Depth levels:" VerticalAlignment="Center"
+                                       ToolTip.Tip="Step the depth into this many layers (0 = continuous). A few layers fuse more easily." />
+                            <Grid Grid.Row="4" Grid.Column="1" ColumnDefinitions="*,Auto" Margin="0,2">
+                                <Slider Classes="knob" Grid.Column="0" Minimum="0" Maximum="16"
+                                        IsSnapToTickEnabled="True" TickFrequency="1"
+                                        Value="{Binding StereoAutoLevels, Mode=TwoWay}" />
+                                <TextBlock Classes="knobValue" Grid.Column="1" Text="{Binding StereoAutoLevels}" />
+                            </Grid>
+
+                            <TextBlock Grid.Row="5" Grid.Column="0" Text="Viewing:" VerticalAlignment="Center"
+                                       ToolTip.Tip="Off = wall-eyed (look through the screen). On = cross-eyed (cross your eyes in front of the screen)." />
+                            <CheckBox Grid.Row="5" Grid.Column="1" IsChecked="{Binding StereoAutoCrossEyed, Mode=TwoWay}"
+                                      Content="Cross-eyed" Margin="0,2" />
+
+                            <TextBlock Grid.Row="6" Grid.Column="0" Text="Guide dots:" VerticalAlignment="Center"
+                                       ToolTip.Tip="Two dots near the top. Relax your eyes until they become three; the picture then comes into focus." />
+                            <CheckBox Grid.Row="6" Grid.Column="1" IsChecked="{Binding StereoAutoGuideDots, Mode=TwoWay}"
+                                      Content="Show guide dots" Margin="0,2" />
+
+                            <TextBlock Grid.Row="7" Grid.Column="0" Text="Dot seed:" VerticalAlignment="Center"
+                                       ToolTip.Tip="Change for a different random-dot pattern. Same seed and view = same image." />
+                            <NumericUpDown Grid.Row="7" Grid.Column="1" Minimum="0" Maximum="999999" Increment="1"
+                                           FormatString="0" Value="{Binding StereoAutoSeed, Mode=TwoWay}" Margin="0,2" />
+                        </Grid>
                     </Grid>
                 </Expander>
 

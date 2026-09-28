@@ -3915,11 +3915,12 @@ namespace FracturingFog.Rendering
             _renderer.UpdateTexture(shown, dw, dh);
         }
 
-        /// <summary>#1009 — the depth for the depth-parallax (Fake) stereo warp on a
-        /// 3D raymarcher: only when <paramref name="src"/> IS the active 3D
-        /// calculator's fresh ColorBuffer (not a snapshot / SBS composite) and that
-        /// calculator published a depth at matching dims. Null otherwise.</summary>
-        private float[]? FakeStereoDepthFor(uint[] src, int w, int h)
+        /// <summary>#1009 / #1011 — the depth for a depth-driven stereo step on a
+        /// 3D raymarcher (the Fake side-by-side warp or the autostereogram): only
+        /// when <paramref name="src"/> IS the active 3D calculator's fresh
+        /// ColorBuffer (not a snapshot / SBS composite) and that calculator
+        /// published a depth at matching dims. Null otherwise.</summary>
+        private float[]? DepthStereoDepthFor(uint[] src, int w, int h)
         {
             var fp = ViewState?.FractalParameters;
             if (fp == null || !ViewState!.Is3D) return null;
@@ -3935,7 +3936,7 @@ namespace FracturingFog.Rendering
         private void UploadProcessedBuffer(uint[] src, int w, int h, bool srcAlreadyProcessed = false)
         {
             // #1009 — resolve before any pass swaps src for a scratch buffer.
-            float[]? fakeStereoDepth = srcAlreadyProcessed ? null : FakeStereoDepthFor(src, w, h);
+            float[]? depthStereo3D = srcAlreadyProcessed ? null : DepthStereoDepthFor(src, w, h);
             int n = w * h;
             long uploadStart = ShowPerfHud ? Stopwatch.GetTimestamp() : 0;
             if (s_leakDiag) LeakDiagSample(w, h);
@@ -4274,19 +4275,21 @@ namespace FracturingFog.Rendering
             // own composited SBS buffer — so grid / watermark / HUD / present all size to
             // the wider frame. Skipped for snapshots (srcAlreadyProcessed), which already
             // carry whatever they need.
-            // #1009 — Fake (depth-parallax) stereo on a 3D raymarcher: the same
-            // warp, at the same point (last, on the finished display buffer), over
-            // the depth the calculator published. True stereo on 3D renders two
-            // eyes instead and never reaches here with a fresh ColorBuffer.
-            if (fakeStereoDepth != null)
+            // #1009 / #1011 — depth-driven stereo on a 3D raymarcher (the Fake
+            // side-by-side warp, or the autostereogram): the same step as Relief, at
+            // the same point (last, on the finished display buffer), over the depth
+            // the calculator published. True stereo on 3D renders two eyes instead
+            // and never reaches here with a fresh ColorBuffer.
+            if (depthStereo3D != null)
             {
                 var stereoFx = ViewState.FractalParameters.Lighting;
-                var sbs = FracturingFog.Rendering.Lighting.StereoRender.ApplyStereoSideBySide(
-                    dst, fakeStereoDepth, w, h, in stereoFx);
-                if (sbs != null)
+                var stereo = FracturingFog.Rendering.Lighting.ScreenSpacePost.ApplyDepthStereo(
+                    dst, depthStereo3D, w, h, in stereoFx, out int stereoW, out int stereoH);
+                if (stereo != null)
                 {
-                    (w, h) = FracturingFog.Rendering.Lighting.StereoRender.OutputDims(w, h, stereoFx.StereoLayout);
-                    dst = sbs;
+                    w = stereoW;
+                    h = stereoH;
+                    dst = stereo;
                     n = w * h;
                 }
             }

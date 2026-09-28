@@ -249,7 +249,7 @@ namespace FracturingFog.Server.Tests
 
             Assert.True(report.HasGaps);
             Assert.Single(report.Gaps);
-            Assert.Contains(report.Gaps, g => g.Contains("SBS"));
+            Assert.Contains(report.Gaps, g => g.Contains("Stereo") && g.Contains("autostereogram"));
         }
 
         // #363 — core relief is emitted, not a blanket gap.

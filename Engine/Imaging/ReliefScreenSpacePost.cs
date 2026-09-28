@@ -122,7 +122,8 @@ public static class ReliefScreenSpacePost
     /// arms the same normal + depth capture SSAO / edge do (GPU-emitted, no CPU
     /// trace forced).</summary>
     public static bool WantsStereo(in LightingFxData fx)
-        => fx.StereoMode != StereoMode.Off && fx.StereoEyeSeparation > 0.0;
+        => (fx.StereoMode != StereoMode.Off && fx.StereoEyeSeparation > 0.0)
+        || fx.StereoMode == StereoMode.Autostereogram;   // #1011 — own settings, no eye sep
 
     /// <summary>Relief STEREO (roadmap S12.5, #652). Synthesize a side-by-side buffer
     /// from the fully composited display-referred relief buffer <paramref name="dst"/>
@@ -154,10 +155,8 @@ public static class ReliefScreenSpacePost
         // The warp detects sky as +Infinity; relief's depth uses a large finite
         // sentinel, so remap it once (same convention as the SSAO / edge path).
         float[] d = DepthForPost(depth, n);
-        uint[]? sbs = StereoRender.ApplyStereoSideBySide(dst, d, w, h, in fx);
-        if (sbs == null) return null;
-        (outW, outH) = StereoRender.OutputDims(w, h, fx.StereoLayout);
-        return sbs;
+        // #1011 — side-by-side warp, or an autostereogram (W × H).
+        return ScreenSpacePost.ApplyDepthStereo(dst, d, w, h, in fx, out outW, out outH);
     }
 
     private static float[] DepthForPost(float[] reliefDepth, int n)

@@ -33,6 +33,7 @@ public sealed partial class FractalParamsViewModel
         // sep, thin-lens DoF, GPU render); refresh it on every lighting edit.
         this.RaisePropertyChanged(nameof(StereoHint));
         this.RaisePropertyChanged(nameof(HasStereoHint));
+        this.RaisePropertyChanged(nameof(IsAutostereo));
     }
 
     /// <summary>Ref-wrapper so a setter can pass a delegate that mutates the
@@ -671,16 +672,19 @@ public sealed partial class FractalParamsViewModel
     public static string StereoHintFor(bool is3D, bool reliefContext, in LightingFxData fx, bool gpuRaymarch)
     {
         if (fx.StereoMode == StereoMode.Off || (!is3D && !reliefContext)) return "";
-        if (fx.StereoEyeSeparation <= 0.0)
+        bool auto = fx.StereoMode == StereoMode.Autostereogram;
+        string what = auto ? "The autostereogram" : "Fake stereo";
+        if (!auto && fx.StereoEyeSeparation <= 0.0)
             return "Stereo is off until Stereo eye sep is above 0.";
         if (reliefContext && fx.StereoMode == StereoMode.True)
             return "Relief 3D has one camera, so True uses the depth-parallax warp (same as Fake).";
-        if (is3D && fx.StereoMode == StereoMode.Fake)
+        if (is3D && (auto || fx.StereoMode == StereoMode.Fake))
         {
             if (fx.DofThinLens && fx.DofAperture > 0.0 && fx.DofSamples > 1)
-                return "Fake stereo gets no depth while thin-lens DoF is on, so the frame stays mono. Use True, or turn thin-lens off.";
+                return what + " gets no depth while thin-lens DoF is on, so the frame stays mono."
+                    + (auto ? " Turn thin-lens off." : " Use True, or turn thin-lens off.");
             if (gpuRaymarch)
-                return "Fake stereo renders on the CPU: the GPU raymarch has no depth pass.";
+                return what + " renders on the CPU: the GPU raymarch has no depth pass.";
         }
         return "";
     }
@@ -690,6 +694,55 @@ public sealed partial class FractalParamsViewModel
     {
         get => _p.Lighting.StereoSwapEyes;
         set { MutateLighting(r => r.Fx.StereoSwapEyes = value); this.RaisePropertyChanged(); Fire(); }
+    }
+
+    // ── Autostereogram (#1011) ───────────────────────────────────────
+
+    /// <summary>Show the autostereogram controls (and hide the side-by-side
+    /// ones' relevance) when the stereo mode is Autostereogram.</summary>
+    public bool IsAutostereo => _p.Lighting.StereoMode == StereoMode.Autostereogram;
+
+    public Array StereoAutoPatterns => Enum.GetValues(typeof(AutostereoPattern));
+
+    public AutostereoPattern StereoAutoPattern
+    {
+        get => _p.Lighting.StereoAutoPattern;
+        set { MutateLighting(r => r.Fx.StereoAutoPattern = value); this.RaisePropertyChanged(); Fire(); }
+    }
+    public double StereoAutoEyeSep
+    {
+        get => _p.Lighting.StereoAutoEyeSep;
+        set { MutateLighting(r => r.Fx.StereoAutoEyeSep = Clamp(value, 0.03, 0.4)); this.RaisePropertyChanged(); Fire(); }
+    }
+    public double StereoAutoDepthOfField
+    {
+        get => _p.Lighting.StereoAutoDepthOfField;
+        set { MutateLighting(r => r.Fx.StereoAutoDepthOfField = Clamp(value, 0.05, 0.75)); this.RaisePropertyChanged(); Fire(); }
+    }
+    public bool StereoAutoCrossEyed
+    {
+        get => _p.Lighting.StereoAutoCrossEyed;
+        set { MutateLighting(r => r.Fx.StereoAutoCrossEyed = value); this.RaisePropertyChanged(); Fire(); }
+    }
+    public bool StereoAutoGuideDots
+    {
+        get => _p.Lighting.StereoAutoGuideDots;
+        set { MutateLighting(r => r.Fx.StereoAutoGuideDots = value); this.RaisePropertyChanged(); Fire(); }
+    }
+    public int StereoAutoSeed
+    {
+        get => _p.Lighting.StereoAutoSeed;
+        set { MutateLighting(r => r.Fx.StereoAutoSeed = value); this.RaisePropertyChanged(); Fire(); }
+    }
+    public int StereoAutoBlur
+    {
+        get => _p.Lighting.StereoAutoBlur;
+        set { MutateLighting(r => r.Fx.StereoAutoBlur = Math.Clamp(value, 0, 32)); this.RaisePropertyChanged(); Fire(); }
+    }
+    public int StereoAutoLevels
+    {
+        get => _p.Lighting.StereoAutoLevels;
+        set { MutateLighting(r => r.Fx.StereoAutoLevels = Math.Clamp(value, 0, 64)); this.RaisePropertyChanged(); Fire(); }
     }
     public double DofAperture
     {

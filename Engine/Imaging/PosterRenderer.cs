@@ -336,7 +336,8 @@ namespace FracturingFog.Imaging
                     req.Width, req.Height, false, false, captureHdr: wantHdr)
                 : null;
 
-            // #1009 — a 3D raymarcher publishes its depth for the Fake stereo warp.
+            // #1009 / #1011 — a 3D raymarcher publishes its depth for the Fake
+            // stereo warp / the autostereogram.
             var depth3D = req.FractalParameters is { } dfp
                 && FracturingFog.ViewState.FractalViewState.IsThreeD(req.FractalType)
                 && FracturingFog.Rendering.Lighting.ScreenSpacePost.WantsDepthOutput(dfp.Lighting)
@@ -428,18 +429,16 @@ namespace FracturingFog.Imaging
                     out int stereoW, out int stereoH);
                 if (sbs != null) { buffer = sbs; w = stereoW; h = stereoH; }
             }
-            // #1009 — Fake (depth-parallax) stereo on a 3D raymarcher, matching the
-            // live path (FractalRenderHost.UploadProcessedBuffer): last, on the
-            // finished display buffer, over the depth the calculator published.
+            // #1009 / #1011 — depth-driven stereo on a 3D raymarcher (Fake
+            // side-by-side warp or autostereogram), matching the live path
+            // (FractalRenderHost.UploadProcessedBuffer): last, on the finished
+            // display buffer, over the depth the calculator published.
             if (depth3D?.Value is { } d3 && d3.Length == w * h && req.FractalParameters is { } sfp)
             {
                 var stereoFx = sfp.Lighting;
-                var sbs = FracturingFog.Rendering.Lighting.StereoRender.ApplyStereoSideBySide(buffer, d3, w, h, in stereoFx);
-                if (sbs != null)
-                {
-                    (w, h) = FracturingFog.Rendering.Lighting.StereoRender.OutputDims(w, h, stereoFx.StereoLayout);
-                    buffer = sbs;
-                }
+                var stereo = FracturingFog.Rendering.Lighting.ScreenSpacePost.ApplyDepthStereo(
+                    buffer, d3, w, h, in stereoFx, out int stereoW, out int stereoH);
+                if (stereo != null) { buffer = stereo; w = stereoW; h = stereoH; }
             }
 
             elapsedMs = sw.ElapsedMilliseconds;
