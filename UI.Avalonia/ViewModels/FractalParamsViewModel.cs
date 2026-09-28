@@ -81,6 +81,7 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
         ToggleLSystemSweepCommand   = ReactiveCommand.Create(ToggleLSystemSweep);
         ExportMeshCommand           = ReactiveCommand.Create(() => ExportMeshRequested?.Invoke());
         ExportReliefMeshCommand     = ReactiveCommand.Create(() => ExportReliefMeshRequested?.Invoke());
+        LockReliefHeightCommand     = ReactiveCommand.Create(LockReliefHeight);   // #1026
         PickDropColorCommand        = ReactiveCommand.CreateFromTask(PickDropColorAsync);
         // #876 — Kleinian custom sphere-list editor commands.
         AddKleinianSphereCommand        = ReactiveCommand.Create(AddKleinianSphere);
@@ -842,6 +843,81 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
     {
         get => _p.Relief2DHeightGamma;
         set { double v = Clamp(value, 0.05, 8.0); if (_p.Relief2DHeightGamma == v) return; _p.Relief2DHeightGamma = v; this.RaisePropertyChanged(); Fire(); }
+    }
+
+    // #1026 — height normalisation: Peak (re-measured every frame) / Robust (a high
+    // percentile) / Fixed (stored reference + baseline, so height holds across views).
+    public FracturingFog.ReliefHeightMode Relief2DHeightMode
+    {
+        get => _p.Relief2DHeightMode;
+        set
+        {
+            if (_p.Relief2DHeightMode == value) return;
+            _p.Relief2DHeightMode = value;
+            this.RaisePropertyChanged();
+            this.RaisePropertyChanged(nameof(Relief2DHeightModeIsFixed));
+            Fire();
+        }
+    }
+    public Array Relief2DHeightModes => Enum.GetValues(typeof(FracturingFog.ReliefHeightMode));
+    /// <summary>The reference / baseline fields only bite in Fixed mode.</summary>
+    public bool Relief2DHeightModeIsFixed => _p.Relief2DHeightMode == FracturingFog.ReliefHeightMode.Fixed;
+    /// <summary>Fixed-mode reference height (0 = measured per frame).</summary>
+    public double Relief2DHeightRef
+    {
+        get => _p.Relief2DHeightRef;
+        set { double v = Math.Max(0.0, value); if (_p.Relief2DHeightRef == v) return; _p.Relief2DHeightRef = v; this.RaisePropertyChanged(); Fire(); }
+    }
+    /// <summary>Fixed-mode ground level (-1 = measured per frame).</summary>
+    public double Relief2DHeightBaseline
+    {
+        get => _p.Relief2DHeightBaseline;
+        set { double v = value < 0.0 ? -1.0 : value; if (_p.Relief2DHeightBaseline == v) return; _p.Relief2DHeightBaseline = v; this.RaisePropertyChanged(); Fire(); }
+    }
+
+    /// <summary>#1026 — measures the live relief's (baseline, reference) for "Lock
+    /// current height"; null result = nothing to measure. Wired by the host
+    /// bootstrap (the view model can't reach the render host directly).</summary>
+    public Func<(double Baseline, double Reference)?>? ReliefHeightMeasurer { get; set; }
+    public ReactiveCommand<Unit, Unit> LockReliefHeightCommand { get; }
+
+    private string _reliefHeightLockStatus = "";
+    /// <summary>Feedback after "Lock current height" (what was locked, or why not).</summary>
+    public string ReliefHeightLockStatus
+    {
+        get => _reliefHeightLockStatus;
+        private set => this.RaiseAndSetIfChanged(ref _reliefHeightLockStatus, value);
+    }
+    private bool _reliefHeightLockFailed;
+    /// <summary>The last lock found nothing to measure (status shown as a warning).</summary>
+    public bool ReliefHeightLockFailed
+    {
+        get => _reliefHeightLockFailed;
+        private set => this.RaiseAndSetIfChanged(ref _reliefHeightLockFailed, value);
+    }
+
+    /// <summary>#1026 — freeze the height the live relief is using now: store its
+    /// measured baseline + reference and switch to Fixed, so the frame stays put
+    /// and later pans / zooms / window changes keep that height.</summary>
+    public void LockReliefHeight()
+    {
+        if (ReliefHeightMeasurer?.Invoke() is not { } m)
+        {
+            ReliefHeightLockFailed = true;
+            ReliefHeightLockStatus = "Nothing to lock yet: turn on the Oblique 3D raymarch and let a frame finish.";
+            return;
+        }
+        ReliefHeightLockFailed = false;
+        _p.Relief2DHeightBaseline = m.Baseline;
+        _p.Relief2DHeightRef = m.Reference;
+        _p.Relief2DHeightMode = FracturingFog.ReliefHeightMode.Fixed;
+        this.RaisePropertyChanged(nameof(Relief2DHeightBaseline));
+        this.RaisePropertyChanged(nameof(Relief2DHeightRef));
+        this.RaisePropertyChanged(nameof(Relief2DHeightMode));
+        this.RaisePropertyChanged(nameof(Relief2DHeightModeIsFixed));
+        ReliefHeightLockStatus = string.Format(System.Globalization.CultureInfo.InvariantCulture,
+            "Locked: reference {0:0.###}, baseline {1:0.###}.", m.Reference, m.Baseline);
+        Fire();
     }
 
     public bool Relief2DBicubicHeight

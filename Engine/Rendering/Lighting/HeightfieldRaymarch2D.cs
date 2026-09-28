@@ -334,29 +334,7 @@ public static class HeightfieldRaymarch2D
         // frame is wasted work. Hash the inputs; on a match reuse the cached
         // immutable ReliefPrepass (compressed field + max + grid-slope maxima).
         // sy / invLip stay per-call (cheap, scale-dependent).
-        HeightCurve2D curve = p.Relief2DHeightCurve;
-        double edgeFade = Math.Clamp(p.Relief2DEdgeFade, 0.0, 0.5);
-        // #518 — local filament detail shaping (raise structure vs the base slab).
-        double detailGain = Math.Clamp(p.Relief2DDetailGain, 0.0, 8.0);
-        int detailRadius = Math.Clamp(p.Relief2DDetailRadius, 0, 256);
-        double heightGamma = Math.Clamp(p.Relief2DHeightGamma, 0.05, 8.0);
-        ulong key = PrepassKey(height, hn, hw, hh, curve, edgeFade, detailGain, detailRadius, heightGamma);
-
-        // Reuse the last-published IMMUTABLE prepass when the key matches, else
-        // build a fresh one into its OWN arrays (thread-safe: no two renders share
-        // mutable prepass scratch). The published result's Compressed field is only
-        // ever READ downstream (BuildKeepMask / HeightDe / the GPU kernel), so a
-        // cache hit can safely share it across concurrent renders.
-        ReliefPrepass? pre;
-        lock (s_prepassLock)
-        {
-            pre = (s_prepass is { } c && s_prepassKey == key && c.Compressed.Length >= hn) ? c : null;
-        }
-        if (pre is null)
-        {
-            pre = BuildPrepass(height, hn, hw, hh, curve, edgeFade, detailGain, detailRadius, heightGamma);
-            lock (s_prepassLock) { s_prepass = pre; s_prepassKey = key; }
-        }
+        ReliefPrepass pre = GetPrepass(height, hn, hw, hh, p);
 
         float[] hbuf = pre.Compressed;
         float maxH = pre.MaxH, gMaxX = pre.GMaxX, gMaxZ = pre.GMaxZ;
@@ -376,7 +354,12 @@ public static class HeightfieldRaymarch2D
         // Identity at ≥480 px (maximized / Span unchanged); down to 0.45× at Toy.
         double resT = ResolutionRamp(hw, hh);
         double reliefAmp = 1.0 - 0.72 * resT;
-        double sy = 0.35 * reliefAmp * Math.Max(0.0, p.Relief2DHeightScale) / maxH;
+        // #1026 — the height that maps to the full relief height: the peak (Peak,
+        // default — byte-identical), a high percentile (Robust) or the stored
+        // reference (Fixed). The camera aims off the same reference, so framing
+        // no longer follows whatever needle is tallest in view.
+        double normRef = NormalizationReference(pre, p);
+        double sy = 0.35 * reliefAmp * Math.Max(0.0, p.Relief2DHeightScale) / normRef;
 
         // Lipschitz bound from the max world-space slope, reconstructed from the
         // cached unitless grid maxima × sy / world-cell size (#155). Exactly the
@@ -425,7 +408,7 @@ public static class HeightfieldRaymarch2D
         // BuildObliqueCamera so the GPU relief kernel and its CPU parity twin
         // (ReliefRaymarchGpu) drive rays from byte-identical numbers. The math is
         // unchanged — moved verbatim — so this render is bit-for-bit as before.
-        ReliefCamera cam = BuildObliqueCamera(w, h, aspect, sy, maxH, p);
+        ReliefCamera cam = BuildObliqueCamera(w, h, aspect, sy, maxH, p, aimH: normRef);
 
         // #162 (Slice 3d) — GPU dispatch seam. When the opt-in flag is set and the
         // host has attached a relief kernel, raymarch on the GPU from the SAME
@@ -477,7 +460,7 @@ public static class HeightfieldRaymarch2D
         if (gpuKernel != null && p.Relief2DGpuRaymarch && fx.DebugAov == AovView.Beauty
             && aovOk && !froxel)
         {
-            var u = ReliefUniforms.Build(w, h, hw, hh, sy, aspect, invLip, maxH, p, in fx);
+            var u = ReliefUniforms.Build(w, h, hw, hh, sy, aspect, invLip, maxH, p, in fx, aimH: normRef);
             if (aov != null)
                 gpuKernel.Run(in u, hbuf, keep, albedo, dst, aov.NormalXyz, aov.Depth);
             else
@@ -508,7 +491,7 @@ public static class HeightfieldRaymarch2D
         if (froxel && froxelKernel != null && gpuKernel != null && p.Relief2DGpuRaymarch
             && fx.DebugAov == AovView.Beauty && aovOk)
         {
-            var u = ReliefUniforms.Build(w, h, hw, hh, sy, aspect, invLip, maxH, p, in fx);
+            var u = ReliefUniforms.Build(w, h, hw, hh, sy, aspect, invLip, maxH, p, in fx, aimH: normRef);
             // Reuse the caller's denoise guides when present, else scratch for depth.
             float[] gnrm = aov?.NormalXyz ?? new float[n * 3];
             float[] gdep = aov?.Depth ?? new float[n];
@@ -970,8 +953,11 @@ public static class HeightfieldRaymarch2D
     /// <summary>Build the oblique camera / AABB / epsilon for a relief render.
     /// The body is moved verbatim from <c>Render</c> (see #159) — same
     /// expressions, same order — so both paths stay bit-identical.</summary>
+    /// <remarks>#1026 — <paramref name="aimH"/> is the height reference the camera
+    /// aims off (the normalisation reference); NaN = <paramref name="maxH"/> (Peak).</remarks>
     public static ReliefCamera BuildObliqueCamera(int w, int h, double aspect,
-                                                  double sy, double maxH, FractalParameters p)
+                                                  double sy, double maxH, FractalParameters p,
+                                                  double aimH = double.NaN)
     {
         // Orbit the terrain centre; frame the whole domain.
         double az = p.Relief2DCameraAzimuthDeg * Math.PI / 180.0;
@@ -997,7 +983,7 @@ public static class HeightfieldRaymarch2D
         double zoom = Math.Clamp(p.Relief2DCameraZoom, 0.2, 5.0);
         double foreshorten = Math.Clamp(Math.Sin(el), 0.3, 1.0);
         double radius = extent * foreshorten / (Math.Tan(fov * 0.5) * zoom);
-        double tgtY = 0.35 * sy * maxH;         // aim just above the mean surface
+        double tgtY = 0.35 * sy * (double.IsNaN(aimH) ? maxH : aimH);   // aim just above the mean surface
         double camX = radius * Math.Cos(el) * Math.Sin(az);
         double camY = radius * Math.Sin(el);
         double camZ = radius * Math.Cos(el) * Math.Cos(az);
@@ -1084,13 +1070,35 @@ public static class HeightfieldRaymarch2D
     /// overlapping renders (UI vs batch, or parallel tests) could clobber.</summary>
     private sealed class ReliefPrepass
     {
-        public ReliefPrepass(float[] compressed, float maxH, float gMaxX, float gMaxZ)
-        { Compressed = compressed; MaxH = maxH; GMaxX = gMaxX; GMaxZ = gMaxZ; }
+        public ReliefPrepass(float[] compressed, float maxH, float gMaxX, float gMaxZ,
+                             float baseline, float robustRef)
+        {
+            Compressed = compressed; MaxH = maxH; GMaxX = gMaxX; GMaxZ = gMaxZ;
+            Baseline = baseline; RobustRef = robustRef;
+        }
         public float[] Compressed { get; }
         public float MaxH { get; }
         public float GMaxX { get; }
         public float GMaxZ { get; }
+        /// <summary>#1026 — the ground level subtracted after the tone curve
+        /// (automatic 60th percentile, or the fixed one).</summary>
+        public float Baseline { get; }
+        /// <summary>#1026 — 99.5th percentile of the non-zero processed heights
+        /// (the Robust normalisation reference); 0 when the field is empty.</summary>
+        public float RobustRef { get; }
     }
+
+    /// <summary>#1026 — the ground level and normalisation reference a relief
+    /// render uses, both in tone-curve height units. Feeding them back as
+    /// <see cref="FractalParameters.Relief2DHeightBaseline"/> /
+    /// <see cref="FractalParameters.Relief2DHeightRef"/> in
+    /// <see cref="ReliefHeightMode.Fixed"/> mode reproduces the measured
+    /// normalisation ("Lock current height").</summary>
+    public readonly record struct ReliefHeightNormalization(double Baseline, double Reference);
+
+    /// <summary>#1026 — fraction of the non-zero processed cells at or below the
+    /// Robust reference height.</summary>
+    internal const double RobustPercentile = 0.995;
 
     // #155 pre-pass cache — the last published immutable snapshot + its key,
     // guarded by s_prepassLock. A miss builds a fresh ReliefPrepass into its own
@@ -1099,6 +1107,71 @@ public static class HeightfieldRaymarch2D
     private static readonly object s_prepassLock = new();
     private static ReliefPrepass? s_prepass;
     private static ulong s_prepassKey;
+
+    /// <summary>#155 — the pre-pass for <paramref name="height"/> under
+    /// <paramref name="p"/>: the last-published IMMUTABLE prepass when the key
+    /// matches, else a fresh one built into its OWN arrays (thread-safe: no two
+    /// renders share mutable prepass scratch). The published result's Compressed
+    /// field is only ever READ downstream (BuildKeepMask / HeightDe / the GPU
+    /// kernel), so a cache hit can safely share it across concurrent renders.</summary>
+    private static ReliefPrepass GetPrepass(float[] height, int hn, int hw, int hh, FractalParameters p)
+    {
+        HeightCurve2D curve = p.Relief2DHeightCurve;
+        double edgeFade = Math.Clamp(p.Relief2DEdgeFade, 0.0, 0.5);
+        // #518 — local filament detail shaping (raise structure vs the base slab).
+        double detailGain = Math.Clamp(p.Relief2DDetailGain, 0.0, 8.0);
+        int detailRadius = Math.Clamp(p.Relief2DDetailRadius, 0, 256);
+        double heightGamma = Math.Clamp(p.Relief2DHeightGamma, 0.05, 8.0);
+        // #1026 — Fixed mode: a stored baseline (≥ 0) and gamma reference (> 0);
+        // otherwise both are measured per frame (-1 / 0 = auto).
+        bool isFixed = p.Relief2DHeightMode == ReliefHeightMode.Fixed;
+        double fixedBaseline = isFixed && p.Relief2DHeightBaseline >= 0.0 ? p.Relief2DHeightBaseline : -1.0;
+        double gammaRef = isFixed && p.Relief2DHeightRef > 0.0 ? p.Relief2DHeightRef : 0.0;
+        ulong key = PrepassKey(height, hn, hw, hh, curve, edgeFade, detailGain, detailRadius, heightGamma,
+                               fixedBaseline, gammaRef);
+
+        ReliefPrepass? pre;
+        lock (s_prepassLock)
+        {
+            pre = (s_prepass is { } c && s_prepassKey == key && c.Compressed.Length >= hn) ? c : null;
+        }
+        if (pre is null)
+        {
+            pre = BuildPrepass(height, hn, hw, hh, curve, edgeFade, detailGain, detailRadius, heightGamma,
+                               fixedBaseline, gammaRef);
+            lock (s_prepassLock) { s_prepass = pre; s_prepassKey = key; }
+        }
+        return pre;
+    }
+
+    /// <summary>#1026 — the processed height that renders at the full relief
+    /// height for <see cref="FractalParameters.Relief2DHeightMode"/>. Falls back to
+    /// the peak when the mode's reference is unset or empty.</summary>
+    private static double NormalizationReference(ReliefPrepass pre, FractalParameters p)
+    {
+        double r = p.Relief2DHeightMode switch
+        {
+            ReliefHeightMode.Robust => pre.RobustRef,
+            ReliefHeightMode.Fixed  => p.Relief2DHeightRef,
+            _                       => pre.MaxH,
+        };
+        return r > 1e-9 ? r : pre.MaxH;
+    }
+
+    /// <summary>#1026 — measure the ground level and normalisation reference a
+    /// relief raymarch of <paramref name="height"/> (field dims
+    /// <paramref name="hw"/>×<paramref name="hh"/>) uses under
+    /// <paramref name="p"/>'s current height mode, for "Lock current height".
+    /// Null when the field is empty or dead flat.</summary>
+    public static ReliefHeightNormalization? MeasureHeightNormalization(
+        float[] height, int hw, int hh, FractalParameters p)
+    {
+        int hn = hw * hh;
+        if (height == null || p == null || hw <= 2 || hh <= 2 || height.Length < hn) return null;
+        ReliefPrepass pre = GetPrepass(height, hn, hw, hh, p);
+        if (pre.MaxH <= 1e-9f) return null;
+        return new ReliefHeightNormalization(pre.Baseline, NormalizationReference(pre, p));
+    }
 
     /// <summary>#132 — fill sensible AO / soft-shadow / specular / ambient
     /// defaults wherever the knob is still at zero so Oblique 3D looks good out
@@ -1164,7 +1237,8 @@ public static class HeightfieldRaymarch2D
     /// <c>s_compressed</c>). The result is immutable once returned.</summary>
     private static ReliefPrepass BuildPrepass(
         float[] height, int hn, int hw, int hh, HeightCurve2D curve, double edgeFade,
-        double detailGain = 1.0, int detailRadius = 0, double heightGamma = 1.0)
+        double detailGain = 1.0, int detailRadius = 0, double heightGamma = 1.0,
+        double fixedBaseline = -1.0, double gammaRef = 0.0)
     {
         var hbuf = new float[hn];
 
@@ -1190,6 +1264,17 @@ public static class HeightfieldRaymarch2D
         // whose clipped domain boundary reads as a persistent rectangle at the
         // fractal plane. Subtract a low percentile of the nonzero heights so the
         // far exterior sits back on the base plane and only the boundary rises.
+        // #1026 — a fixed baseline (≥ 0) replaces the per-frame measurement.
+        float appliedBaseline = 0f;
+        if (fixedBaseline >= 0.0)
+        {
+            float baseline = (float)fixedBaseline;
+            if (baseline > 0f)
+                for (int i = 0; i < hn; i++)
+                    hbuf[i] = hbuf[i] > baseline ? hbuf[i] - baseline : 0f;
+            appliedBaseline = baseline;
+        }
+        else
         {
             float hmax = 0f;
             for (int i = 0; i < hn; i++) { float hv = hbuf[i]; if (hv > hmax) hmax = hv; }
@@ -1211,6 +1296,7 @@ public static class HeightfieldRaymarch2D
                     if (baseline > 0f)
                         for (int i = 0; i < hn; i++)
                             hbuf[i] = hbuf[i] > baseline ? hbuf[i] - baseline : 0f;
+                    appliedBaseline = baseline;
                 }
             }
         }
@@ -1230,7 +1316,9 @@ public static class HeightfieldRaymarch2D
         // together). Gamma first (top-end contrast on the normalised height), then
         // the local unsharp high-pass (grow/sharpen ridges without lifting the base).
         // Both identity at their defaults (gamma 1 / gain 1) → byte-identical.
-        ReliefHeightDetail.Gamma(hbuf, hw, hh, heightGamma);
+        // #1026 — Fixed mode anchors the gamma curve at the fixed reference, so it
+        // no longer shifts when a taller needle enters the view.
+        ReliefHeightDetail.Gamma(hbuf, hw, hh, heightGamma, gammaRef);
         ReliefHeightDetail.Unsharp(hbuf, hw, hh, detailGain, detailRadius);
 
         // Edge fade (#137, #140) — cap tall structure near each image edge down to
@@ -1263,7 +1351,31 @@ public static class HeightfieldRaymarch2D
         // height-scale change; the world Lipschitz slope is reconstructed per call.
         var (gMaxX, gMaxZ) = GridSlopeMaxima(hbuf, hw, hh);
 
-        return new ReliefPrepass(hbuf, maxH, gMaxX, gMaxZ);
+        return new ReliefPrepass(hbuf, maxH, gMaxX, gMaxZ, appliedBaseline, RobustReference(hbuf, hn, maxH));
+    }
+
+    /// <summary>#1026 — the <see cref="RobustPercentile"/> height of the non-zero
+    /// cells (histogram, bin upper edge, so never above <paramref name="maxH"/>).
+    /// A lone needle moves the peak but barely moves this.</summary>
+    private static float RobustReference(float[] hbuf, int hn, float maxH)
+    {
+        if (maxH <= 1e-9f) return 0f;
+        const int B = 1024;
+        var hist = new int[B];
+        int nz = 0;
+        for (int i = 0; i < hn; i++)
+        {
+            float hv = hbuf[i];
+            if (hv > 0f) { hist[Math.Min((int)(hv / maxH * B), B - 1)]++; nz++; }
+        }
+        if (nz == 0) return 0f;
+        int target = (int)Math.Ceiling(RobustPercentile * nz), cum = 0;
+        for (int b = 0; b < B; b++)
+        {
+            cum += hist[b];
+            if (cum >= target) return (b + 1f) / B * maxH;
+        }
+        return maxH;
     }
 
     /// <summary>#155 — content + params signature that keys the pre-pass cache.
@@ -1274,7 +1386,8 @@ public static class HeightfieldRaymarch2D
     /// cache.</summary>
     private static ulong PrepassKey(float[] height, int hn, int hw, int hh,
                                     HeightCurve2D curve, double edgeFade,
-                                    double detailGain, int detailRadius, double heightGamma)
+                                    double detailGain, int detailRadius, double heightGamma,
+                                    double fixedBaseline, double gammaRef)
     {
         unchecked
         {
@@ -1299,6 +1412,13 @@ public static class HeightfieldRaymarch2D
             ulong hg = (ulong)BitConverter.DoubleToInt64Bits(heightGamma);
             hash = (hash ^ (hg & 0xFFFFFFFFUL)) * FnvPrime;
             hash = (hash ^ (hg >> 32)) * FnvPrime;
+            // #1026 — a fixed baseline / gamma reference also shape it.
+            ulong fb = (ulong)BitConverter.DoubleToInt64Bits(fixedBaseline);
+            hash = (hash ^ (fb & 0xFFFFFFFFUL)) * FnvPrime;
+            hash = (hash ^ (fb >> 32)) * FnvPrime;
+            ulong gr = (ulong)BitConverter.DoubleToInt64Bits(gammaRef);
+            hash = (hash ^ (gr & 0xFFFFFFFFUL)) * FnvPrime;
+            hash = (hash ^ (gr >> 32)) * FnvPrime;
             return hash;
         }
     }

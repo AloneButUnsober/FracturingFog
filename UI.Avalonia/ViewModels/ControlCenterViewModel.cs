@@ -398,6 +398,9 @@ public sealed partial class ControlCenterViewModel : ViewModelBase
             ReliefCameraZoom     = fp?.Relief2DCameraZoom ?? 1.0,
             ReliefCameraOrtho    = fp?.Relief2DCameraOrthographic ?? false,
             ReliefFarDetail      = fp?.Relief2DFarDetail ?? 1.0,      // #520
+            ReliefHeightMode     = fp?.Relief2DHeightMode ?? FracturingFog.ReliefHeightMode.Peak,   // #1026
+            ReliefHeightRef      = fp?.Relief2DHeightRef ?? 0.0,
+            ReliefHeightBaseline = fp?.Relief2DHeightBaseline ?? -1.0,
             ReliefDofAperture    = fp?.Relief2DDofApertureRadius ?? 0.0,   // S3 (#389)
             ReliefDofFocus       = fp?.Relief2DDofFocusDistance ?? 0.0,
             ReliefFroxel         = fp?.Relief2DFroxelVolumetrics ?? false,   // S6 (#408)

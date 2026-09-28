@@ -797,6 +797,23 @@ namespace FracturingFog.Models
         /// 0.05..8.</summary>
         public double Relief2DHeightGamma { get; set; } = 1.0;
 
+        /// <summary>#1026 — how the raymarch normalises relief height:
+        /// <see cref="ReliefHeightMode.Peak"/> (default, byte-identical) re-measures
+        /// the tallest cell and the baseline every frame; Robust uses a high
+        /// percentile; Fixed uses <see cref="Relief2DHeightRef"/> /
+        /// <see cref="Relief2DHeightBaseline"/> so height stays put across views.</summary>
+        public ReliefHeightMode Relief2DHeightMode { get; set; } = ReliefHeightMode.Peak;
+
+        /// <summary>#1026 — Fixed mode: the height (above the baseline, in tone-curve
+        /// units) that renders at the full relief height. 0 = measure it per frame
+        /// (the Peak value). Set by "Lock current height".</summary>
+        public double Relief2DHeightRef { get; set; } = 0.0;
+
+        /// <summary>#1026 — Fixed mode: the height (tone-curve units) subtracted as
+        /// the ground level. Negative = measure it per frame (the automatic
+        /// baseline). Set by "Lock current height".</summary>
+        public double Relief2DHeightBaseline { get; set; } = -1.0;
+
         /// <summary>Bicubic (Catmull-Rom) height sampling instead of bilinear —
         /// smoother terrain on deep zoom, at extra sample cost. Default false.</summary>
         public bool Relief2DBicubicHeight { get; set; } = false;
@@ -1736,6 +1753,9 @@ namespace FracturingFog.Models
                 Relief2DDetailGain = Relief2DDetailGain,
                 Relief2DDetailRadius = Relief2DDetailRadius,
                 Relief2DHeightGamma = Relief2DHeightGamma,
+                Relief2DHeightMode = Relief2DHeightMode,
+                Relief2DHeightRef = Relief2DHeightRef,
+                Relief2DHeightBaseline = Relief2DHeightBaseline,
                 Relief2DBicubicHeight = Relief2DBicubicHeight,
                 Relief2DGroundPlane = Relief2DGroundPlane,
                 Relief2DAutoShade = Relief2DAutoShade,

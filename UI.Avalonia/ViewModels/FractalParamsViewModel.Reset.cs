@@ -160,6 +160,10 @@ public sealed partial class FractalParamsViewModel
         _p.Relief2DDetailGain         = d.Relief2DDetailGain;          // #518
         _p.Relief2DDetailRadius       = d.Relief2DDetailRadius;        // #518
         _p.Relief2DHeightGamma        = d.Relief2DHeightGamma;         // #518
+        _p.Relief2DHeightMode         = d.Relief2DHeightMode;          // #1026
+        _p.Relief2DHeightRef          = d.Relief2DHeightRef;
+        _p.Relief2DHeightBaseline     = d.Relief2DHeightBaseline;
+        ReliefHeightLockStatus        = "";
         _p.Relief2DBicubicHeight      = d.Relief2DBicubicHeight;
         _p.Relief2DGroundPlane        = d.Relief2DGroundPlane;
         _p.Relief2DFroxelVolumetrics  = d.Relief2DFroxelVolumetrics;   // S6 (#408)
@@ -266,6 +270,8 @@ public sealed partial class FractalParamsViewModel
         nameof(Relief2DDenoiseNormalSigma), nameof(Relief2DDenoiseDepthSigma), nameof(DenoiseEnabled),
         nameof(Relief2DHeightCurve), nameof(Relief2DDetailGain), nameof(Relief2DDetailRadius),
         nameof(Relief2DHeightGamma), nameof(Relief2DBicubicHeight), nameof(Relief2DGroundPlane),
+        nameof(Relief2DHeightMode), nameof(Relief2DHeightModeIsFixed),
+        nameof(Relief2DHeightRef), nameof(Relief2DHeightBaseline),
         nameof(Relief2DFroxelVolumetrics),
         nameof(Relief2DFroxelTemporal), nameof(Relief2DFroxelTemporalFeedback),
         nameof(Relief2DFroxelQuality),

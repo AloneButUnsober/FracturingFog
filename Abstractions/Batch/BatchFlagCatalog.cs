@@ -626,6 +626,16 @@ namespace FracturingFog.Batch
                            ConflictsWith = new[] { BatchFlags.ReliefCameraFov, BatchFlags.DofAperture, BatchFlags.DofFocus } },
                 Dbl(BatchFlags.ReliefFarDetail, Cam, FR, "Distant-filament detail; lower = more (slower). 1 = off.", 0.15, 1, enforced: true, def: "1")
                     with { Implies = ReliefOn, Requires = new[] { BatchFlags.ReliefRaymarch } },
+                Pick(BatchFlags.ReliefHeightMode, Relief, FR,
+                    "How height is normalised: peak = tallest cell in view (re-measured every frame); robust = a high percentile, so lone needles don't flatten the rest; fixed = the stored --relief-height-ref / --relief-height-baseline, so height holds across views.",
+                    new[] { "peak", "robust", "fixed" }, def: "peak", hint: "MODE")
+                    with { Implies = ReliefOn, Requires = new[] { BatchFlags.ReliefRaymarch } },
+                Dbl(BatchFlags.ReliefHeightRef, Relief, FR, "Fixed mode: the height (tone-curve units, above the baseline) drawn at full relief height. Omit = measured per frame.", 0, null, enforced: true)
+                    with { MinExclusive = true, Implies = ReliefOn, Requires = new[] { BatchFlags.ReliefRaymarch },
+                           RequiresChoice = new BatchChoiceRequirement(BatchFlags.ReliefHeightMode, new[] { "fixed" }) },
+                Dbl(BatchFlags.ReliefHeightBaseline, Relief, FR, "Fixed mode: the ground level (tone-curve units) subtracted from the height. Omit = measured per frame.", 0, null, enforced: true)
+                    with { Implies = ReliefOn, Requires = new[] { BatchFlags.ReliefRaymarch },
+                           RequiresChoice = new BatchChoiceRequirement(BatchFlags.ReliefHeightMode, new[] { "fixed" }) },
                 Dbl(BatchFlags.CameraExposure, Cam, FR, "In-camera exposure in stops (separate from --exposure).", -16, 16, enforced: true, def: "0")
                     with { ValueHint = "EV", Implies = RaymarchOn },
                 Dbl(BatchFlags.DofAperture, Cam, FR, "Depth-of-field lens radius (0 = pinhole; perspective camera only).", 0, 1, enforced: true, def: "0")

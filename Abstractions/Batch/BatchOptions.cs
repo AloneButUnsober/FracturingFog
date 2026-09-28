@@ -291,6 +291,9 @@ namespace FracturingFog.Batch
         public double? ReliefCameraZoom { get; set; }      // > 0
         public bool ReliefCameraOrtho { get; set; }
         public double? ReliefFarDetail { get; set; }       // #520 — 0.15..1, 1 = off
+        public global::FracturingFog.ReliefHeightMode? ReliefHeightMode { get; set; }  // #1026
+        public double? ReliefHeightRef { get; set; }       // #1026 — > 0 (fixed mode)
+        public double? ReliefHeightBaseline { get; set; }  // #1026 — ≥ 0 (fixed mode)
 
         // Depth of field on the relief raymarch camera (roadmap S3, #389). Any
         // DOF flag implies relief + raymarch (perspective camera only).
@@ -990,6 +993,32 @@ namespace FracturingFog.Batch
                         opts.Relief = true;
                         break;
 
+                    case BatchFlags.ReliefHeightMode:
+                        if (!Next(args, ref i, a, out string rhm, out error)) return false;
+                        switch (rhm.ToLowerInvariant())
+                        {
+                            case "peak":   opts.ReliefHeightMode = global::FracturingFog.ReliefHeightMode.Peak; break;
+                            case "robust": opts.ReliefHeightMode = global::FracturingFog.ReliefHeightMode.Robust; break;
+                            case "fixed":  opts.ReliefHeightMode = global::FracturingFog.ReliefHeightMode.Fixed; break;
+                            default:
+                                error = $"Unknown --relief-height-mode '{rhm}'. Use peak|robust|fixed.";
+                                return false;
+                        }
+                        opts.Relief = true;
+                        break;
+
+                    case BatchFlags.ReliefHeightRef:
+                        if (!NextDouble(args, ref i, a, out double rhr, out error)) return false;
+                        opts.ReliefHeightRef = rhr;
+                        opts.Relief = true;
+                        break;
+
+                    case BatchFlags.ReliefHeightBaseline:
+                        if (!NextDouble(args, ref i, a, out double rhb, out error)) return false;
+                        opts.ReliefHeightBaseline = rhb;
+                        opts.Relief = true;
+                        break;
+
                     case BatchFlags.DofAperture:
                         if (!NextDouble(args, ref i, a, out double dofa, out error)) return false;
                         opts.ReliefDofAperture = dofa;
@@ -1418,6 +1447,18 @@ namespace FracturingFog.Batch
                 { error = "--relief-camera-zoom must be > 0."; return false; }
             if (opts.ReliefFarDetail is < 0.15 or > 1.0)
                 { error = "--relief-far-detail must be 0.15..1 (1 = off, lower = more far detail)."; return false; }
+            // #1026 — the fixed reference / baseline belong to fixed mode; either one
+            // alone selects it.
+            if (opts.ReliefHeightRef is <= 0)
+                { error = "--relief-height-ref must be > 0."; return false; }
+            if (opts.ReliefHeightBaseline is < 0)
+                { error = "--relief-height-baseline must be >= 0."; return false; }
+            if (opts.ReliefHeightRef.HasValue || opts.ReliefHeightBaseline.HasValue)
+            {
+                if (opts.ReliefHeightMode is { } rhmode && rhmode != global::FracturingFog.ReliefHeightMode.Fixed)
+                    { error = "--relief-height-ref / --relief-height-baseline need --relief-height-mode fixed."; return false; }
+                opts.ReliefHeightMode = global::FracturingFog.ReliefHeightMode.Fixed;
+            }
             if (opts.ReliefFroxelFeedback is < 0.0 or > 0.99)
                 { error = "--relief-froxel-feedback must be 0..0.99."; return false; }
             if (opts.ReliefDofAperture is < 0 or > 1)

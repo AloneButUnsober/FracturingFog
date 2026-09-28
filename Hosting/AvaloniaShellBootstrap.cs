@@ -3749,6 +3749,11 @@ namespace FracturingFog.Hosting
         private static void AttachReliefMeshExport(
             FracturingFog.UI.Avalonia.ViewModels.FractalParamsViewModel vm)
         {
+            // #1026 — "Lock current height" measures the live relief field.
+            vm.ReliefHeightMeasurer = () =>
+                s_renderHost is { } h && h.TryMeasureReliefHeight(out double b, out double r)
+                    ? (b, r) : null;
+
             vm.ExportReliefMeshRequested += async () =>
             {
                 var host2 = s_renderHost;

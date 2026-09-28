@@ -261,12 +261,13 @@ public readonly struct ReliefUniforms
     /// come from <paramref name="fx"/> (three directional lights + ambient), sky
     /// colours from BgTop/BgBottom. Field descriptors (<paramref name="sy"/>,
     /// <paramref name="invLip"/>, <paramref name="maxH"/>) come from the caller's
-    /// pre-pass so this never re-runs the fractal filter chain.</summary>
+    /// pre-pass so this never re-runs the fractal filter chain. #1026 —
+    /// <paramref name="aimH"/> is the camera's aim reference (NaN = maxH).</summary>
     public static ReliefUniforms Build(int w, int h, int hw, int hh,
         double sy, double aspect, double invLip, double maxH,
-        FractalParameters p, in LightingFxData fx)
+        FractalParameters p, in LightingFxData fx, double aimH = double.NaN)
     {
-        var cam = HeightfieldRaymarch2D.BuildObliqueCamera(w, h, aspect, sy, maxH, p);
+        var cam = HeightfieldRaymarch2D.BuildObliqueCamera(w, h, aspect, sy, maxH, p, aimH);
 
         // 4d-ii — resolve + flatten the HDRI env once when SkyMode == Hdri. Both
         // kernels upload this exact buffer (no per-device rebuild), so the twin
