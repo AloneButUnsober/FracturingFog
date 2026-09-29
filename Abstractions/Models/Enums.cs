@@ -36,8 +36,13 @@ namespace FracturingFog
     /// active) — literal 3D orbit-trap topography (Ring → concentric ridges, Hexagon →
     /// a hex lattice). <see cref="Blend"/> = a lerp of the two by
     /// <c>Relief2DHeightBlend</c>. Trap / Blend need an orbit-trap theme active; with
-    /// none the trap field is empty and relief falls back to Smooth.</summary>
-    public enum ReliefHeightSource { Smooth, Trap, Blend }
+    /// none the trap field is empty and relief falls back to Smooth.
+    /// <see cref="Distance"/> (#1029) = height from the exterior distance estimate to
+    /// the set, in view units: the set is a raised plateau and filaments are ridges
+    /// that fall away with distance (<c>Relief2DDistanceFalloff</c>). Needs a
+    /// calculator that fills a distance buffer (Mandelbrot, escape-time family);
+    /// others fall back to Smooth.</summary>
+    public enum ReliefHeightSource { Smooth, Trap, Blend, Distance }
 
     /// <summary>How the Relief 3D raymarch turns the processed height field into
     /// world height (#1026). <see cref="Peak"/> (default, the original) scales the

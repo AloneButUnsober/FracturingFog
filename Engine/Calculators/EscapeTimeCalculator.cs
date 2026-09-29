@@ -24,7 +24,8 @@ using FracturingFog.Models.FractalKernels;
 
 namespace FracturingFog;
 
-public sealed class EscapeTimeCalculator : Interefaces.IFractalCalculator, Interefaces.IHeightFieldSource, Interefaces.ISupportsHistogramEq
+public sealed class EscapeTimeCalculator : Interefaces.IFractalCalculator, Interefaces.IHeightFieldSource, Interefaces.ISupportsHistogramEq,
+    Interefaces.IDistanceFieldSource
 {
     public bool SupportsZoomPan => true;
 
@@ -79,6 +80,10 @@ public sealed class EscapeTimeCalculator : Interefaces.IFractalCalculator, Inter
     public int[] IterationBuffer { get; private set; } = Array.Empty<int>();
     public float[] SmoothBuffer { get; private set; } = Array.Empty<float>();
     public float[] DistanceBuffer { get; private set; } = Array.Empty<float>();
+
+    /// <summary>#1029 — complex-plane width of one pixel, for the Distance relief
+    /// height source.</summary>
+    public double DistancePixelScale => (3.5 / Math.Max(Width, Height)) / Zoom;
     public float[] NormalXBuffer { get; private set; } = Array.Empty<float>();
     public float[] NormalYBuffer { get; private set; } = Array.Empty<float>();
     public uint[] ColorBuffer { get; private set; } = Array.Empty<uint>();

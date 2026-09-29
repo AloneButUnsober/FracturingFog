@@ -297,6 +297,9 @@ namespace FracturingFog.Batch
         public global::FracturingFog.ReliefDetailAnchor? ReliefDetailAnchor { get; set; }  // #1027
         public bool ReliefTrueHeight { get; set; }          // #1027 follow-up
         public double? ReliefTerrainSmoothing { get; set; } // #1035 — 0..0.05 of the short axis
+        public global::FracturingFog.ReliefHeightSource? ReliefHeightSource { get; set; }  // #1029
+        public double? ReliefHeightBlend { get; set; }      // #1029 — 0..1 (Blend source)
+        public double? ReliefDistanceFalloff { get; set; }  // #1029 — 0.002..0.2 (Distance source)
 
         // Depth of field on the relief raymarch camera (roadmap S3, #389). Any
         // DOF flag implies relief + raymarch (perspective camera only).
@@ -1027,6 +1030,33 @@ namespace FracturingFog.Batch
                         opts.Relief = true;
                         break;
 
+                    case BatchFlags.ReliefHeightSource:
+                        if (!Next(args, ref i, a, out string rhs, out error)) return false;
+                        switch (rhs.ToLowerInvariant())
+                        {
+                            case "smooth":   opts.ReliefHeightSource = global::FracturingFog.ReliefHeightSource.Smooth; break;
+                            case "trap":     opts.ReliefHeightSource = global::FracturingFog.ReliefHeightSource.Trap; break;
+                            case "blend":    opts.ReliefHeightSource = global::FracturingFog.ReliefHeightSource.Blend; break;
+                            case "distance": opts.ReliefHeightSource = global::FracturingFog.ReliefHeightSource.Distance; break;
+                            default:
+                                error = $"Unknown --relief-height-source '{rhs}'. Use smooth|trap|blend|distance.";
+                                return false;
+                        }
+                        opts.Relief = true;
+                        break;
+
+                    case BatchFlags.ReliefHeightBlend:
+                        if (!NextDouble(args, ref i, a, out double rhbl, out error)) return false;
+                        opts.ReliefHeightBlend = rhbl;
+                        opts.Relief = true;
+                        break;
+
+                    case BatchFlags.ReliefDistanceFalloff:
+                        if (!NextDouble(args, ref i, a, out double rdf, out error)) return false;
+                        opts.ReliefDistanceFalloff = rdf;
+                        opts.Relief = true;
+                        break;
+
                     case BatchFlags.ReliefTerrainSmoothing:
                         if (!NextDouble(args, ref i, a, out double rts, out error)) return false;
                         opts.ReliefTerrainSmoothing = rts;
@@ -1476,6 +1506,10 @@ namespace FracturingFog.Batch
                 { error = "--relief-far-detail must be 0.15..1 (1 = off, lower = more far detail)."; return false; }
             // #1026 — the fixed reference / baseline belong to fixed mode; either one
             // alone selects it.
+            if (opts.ReliefHeightBlend is < 0 or > 1)
+                { error = "--relief-height-blend must be 0..1 (0 = all smooth, 1 = all trap)."; return false; }
+            if (opts.ReliefDistanceFalloff is < 0.002 or > 0.2)
+                { error = "--relief-distance-falloff must be 0.002..0.2 (fraction of the view's short axis)."; return false; }
             if (opts.ReliefTerrainSmoothing is < 0 or > 0.05)
                 { error = "--relief-terrain-smoothing must be 0..0.05 (fraction of the view's short axis; 0 = off)."; return false; }
             if (opts.ReliefHeightRef is <= 0)

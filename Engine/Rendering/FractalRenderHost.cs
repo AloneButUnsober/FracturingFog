@@ -2383,7 +2383,8 @@ namespace FracturingFog.Rendering
                     // at the hi-res floor — and force CPU, because the GPU orbit path does
                     // NOT emit TrapBuffer (TryRunGpuOrbit fills iter/smooth/finalZ/colour
                     // only). Smooth source keeps the fast default-map + GPU path.
-                    bool needTrap = p.Relief2DHeightSource != FracturingFog.ReliefHeightSource.Smooth
+                    bool needTrap = p.Relief2DHeightSource is FracturingFog.ReliefHeightSource.Trap
+                                                          or FracturingFog.ReliefHeightSource.Blend
                         && _calculator.ColorMap is Interefaces.IOrbitAwareColorMap;
                     if (needTrap)
                     {
@@ -2441,7 +2442,8 @@ namespace FracturingFog.Rendering
                     // twin's TrapBuffer at the hi-res floor. Pull it for a trap / blend
                     // source (User Equation / DSL). These alt calcs are CPU → no GPU-orbit
                     // TrapBuffer gap. Smooth source leaves trapField null (Build → smooth).
-                    if (p.Relief2DHeightSource != FracturingFog.ReliefHeightSource.Smooth
+                    if (p.Relief2DHeightSource is FracturingFog.ReliefHeightSource.Trap
+                                                   or FracturingFog.ReliefHeightSource.Blend
                         && _calculator.ColorMap is Interefaces.IOrbitAwareColorMap)
                         trapField = (rc as Interefaces.ITrapFieldSource)?.TrapBuffer;
                 }
@@ -2454,8 +2456,11 @@ namespace FracturingFog.Rendering
                 // S11 (#592) — build the height field from the chosen source. trapField is
                 // the twin's hi-res orbit-trap field (Mandelbrot + orbit theme), else null
                 // → Build returns smooth unchanged (byte-identical smooth path).
+                // #1029 — the Distance source reads the twin's distance estimate.
+                var dsrc = fieldSrc as Interefaces.IDistanceFieldSource;
                 var eff = FracturingFog.Rendering.Lighting.ReliefHeightField.Build(
-                    field, trapField, hn, p.Relief2DHeightSource, p.Relief2DHeightBlend);
+                    field, trapField, hn, p.Relief2DHeightSource, p.Relief2DHeightBlend,
+                    dsrc?.DistanceBuffer, fw, fh, dsrc?.DistancePixelScale ?? 0.0, p.Relief2DDistanceFalloff);
                 if (_reliefHeight == null || _reliefHeight.Length < hn)
                     _reliefHeight = new float[hn];
                 Array.Copy(eff, _reliefHeight, hn);
@@ -2499,6 +2504,7 @@ namespace FracturingFog.Rendering
                 // apply below is source-agnostic.
                 uint[]? previewSrc; int pw, ph;
                 float[]? previewSmooth; float[]? previewTrap;
+                Interefaces.IDistanceFieldSource? previewDist;   // #1029
                 if (useAlt)
                 {
                     var ap = quarter ? _altPreviewCalcQuarter : _altPreviewCalcHalf;
@@ -2506,12 +2512,14 @@ namespace FracturingFog.Rendering
                     previewSrc = ap.ColorBuffer; pw = ap.Width; ph = ap.Height;
                     previewSmooth = (ap as Interefaces.IHeightFieldSource)?.SmoothBuffer;
                     previewTrap = (ap as Interefaces.ITrapFieldSource)?.TrapBuffer;
+                    previewDist = ap as Interefaces.IDistanceFieldSource;
                 }
                 else
                 {
                     MandelbrotCalculator preview = quarter ? _previewCalcQuarter : _previewCalcHalf;
                     previewSrc = preview.ColorBuffer; pw = preview.Width; ph = preview.Height;
                     previewSmooth = preview.SmoothBuffer; previewTrap = preview.TrapBuffer;
+                    previewDist = preview;
                 }
                 lock (_uploadGate)
                 {
@@ -2550,7 +2558,9 @@ namespace FracturingFog.Rendering
                             // ITrapFieldSource: Mandelbrot or User Equation / DSL).
                             phs = FracturingFog.Rendering.Lighting.ReliefHeightField.Build(
                                 phs, previewTrap, pn,
-                                rp.Relief2DHeightSource, rp.Relief2DHeightBlend);
+                                rp.Relief2DHeightSource, rp.Relief2DHeightBlend,
+                                previewDist?.DistanceBuffer, pw, ph,
+                                previewDist?.DistancePixelScale ?? 0.0, rp.Relief2DDistanceFalloff);
                             if (_reliefPreviewScratch == null || _reliefPreviewScratch.Length < pn)
                                 _reliefPreviewScratch = new uint[pn];
                             if (prp.Relief2DRaymarch)
@@ -2739,9 +2749,12 @@ namespace FracturingFog.Rendering
                             float[]? trap = useAlt
                                 ? (altCalc as Interefaces.ITrapFieldSource)?.TrapBuffer
                                 : (calc as Interefaces.ITrapFieldSource)?.TrapBuffer;
+                            var dsrc = useAlt ? altCalc as Interefaces.IDistanceFieldSource : calc as Interefaces.IDistanceFieldSource;   // #1029
                             var eff = FracturingFog.Rendering.Lighting.ReliefHeightField.Build(
                                 srcH, trap, Math.Min(srcH.Length, hn),
-                                rp.Relief2DHeightSource, rp.Relief2DHeightBlend);
+                                rp.Relief2DHeightSource, rp.Relief2DHeightBlend,
+                                dsrc?.DistanceBuffer, hw, hh, dsrc?.DistancePixelScale ?? 0.0,
+                                rp.Relief2DDistanceFalloff);
                             Array.Copy(eff, _reliefHeight, Math.Min(eff.Length, hn));
                             _reliefW = hw; _reliefH = hh; _reliefValid = true;
                         }

@@ -62,7 +62,8 @@ using System.Diagnostics;
 
 namespace FracturingFog;
 
-public sealed class MandelbrotCalculator : Interefaces.IHeightFieldSource, Interefaces.ITrapFieldSource, Interefaces.ISupportsHistogramEq
+public sealed class MandelbrotCalculator : Interefaces.IHeightFieldSource, Interefaces.ITrapFieldSource, Interefaces.ISupportsHistogramEq,
+    Interefaces.IDistanceFieldSource
 {
     // ── Public state ──────────────────────────────────────────────────────────
 
@@ -323,6 +324,10 @@ public sealed class MandelbrotCalculator : Interefaces.IHeightFieldSource, Inter
     public int[] IterationBuffer { get; private set; } = Array.Empty<int>();
     public float[] SmoothBuffer { get; private set; } = Array.Empty<float>();
     public float[] DistanceBuffer { get; private set; } = Array.Empty<float>();
+
+    /// <summary>#1029 — complex-plane width of one pixel (the same scale the DE
+    /// themes use), for the Distance relief height source.</summary>
+    public double DistancePixelScale => (3.5 / Math.Max(Width, Height)) / Zoom;
     public float[] NormalXBuffer { get; private set; } = Array.Empty<float>();
     public float[] NormalYBuffer { get; private set; } = Array.Empty<float>();
     public uint[] ColorBuffer { get; private set; } = Array.Empty<uint>();

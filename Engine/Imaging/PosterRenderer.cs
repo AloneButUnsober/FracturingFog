@@ -758,7 +758,7 @@ namespace FracturingFog.Imaging
                 // TrapBuffer, which the hi-res field does not carry, so a trap / blend
                 // source uses the display-res smooth+trap field (hi-res trap is a
                 // follow-up). Smooth still prefers the hi-res field for WYSIWYG.
-                bool trapSource = p.Relief2DHeightSource != ReliefHeightSource.Smooth;
+                bool trapSource = p.Relief2DHeightSource is ReliefHeightSource.Trap or ReliefHeightSource.Blend;
                 if (!trapSource && hiResField != null && hiResW > 2 && hiResH > 2
                     && hiResField.Length >= hiResW * hiResH)
                 {
@@ -772,8 +772,11 @@ namespace FracturingFog.Imaging
                     // Equation / DSL; null for a non-trap source or a non-orbit theme →
                     // Build returns smooth unchanged). #592 / #726.
                     float[]? trap = trapSource ? (heightSource as ITrapFieldSource)?.TrapBuffer : null;
+                    // #1029 — Distance reads the calculator's distance estimate.
+                    var dsrc = heightSource as FracturingFog.Interefaces.IDistanceFieldSource;
                     field = FracturingFog.Rendering.Lighting.ReliefHeightField.Build(
-                        smooth, trap, fw * fh, p.Relief2DHeightSource, p.Relief2DHeightBlend);
+                        smooth, trap, fw * fh, p.Relief2DHeightSource, p.Relief2DHeightBlend,
+                        dsrc?.DistanceBuffer, fw, fh, dsrc?.DistancePixelScale ?? 0.0, p.Relief2DDistanceFalloff);
                 }
 
                 // #185 (slice D) — bake the active theme ramp so the export's
@@ -894,6 +897,17 @@ namespace FracturingFog.Imaging
             token.ThrowIfCancellationRequested();
             var sb = fieldSrc?.SmoothBuffer;
             if (sb == null || sb.Length < (long)nfw * nfh) return null;
+
+            // #1029 — the Distance source is built from the field calc's own distance
+            // estimate at this grid (the hi-res field is used as-is downstream). Smooth
+            // returns the smooth buffer itself; trap / blend never take this field.
+            if (p.Relief2DHeightSource == ReliefHeightSource.Distance)
+            {
+                var dsrc = fieldSrc as FracturingFog.Interefaces.IDistanceFieldSource;
+                sb = FracturingFog.Rendering.Lighting.ReliefHeightField.Build(
+                    sb, null, nfw * nfh, p.Relief2DHeightSource, p.Relief2DHeightBlend,
+                    dsrc?.DistanceBuffer, nfw, nfh, dsrc?.DistancePixelScale ?? 0.0, p.Relief2DDistanceFalloff);
+            }
 
             // Copy — own the field independent of the transient field calc.
             var outF = new float[nfw * nfh];

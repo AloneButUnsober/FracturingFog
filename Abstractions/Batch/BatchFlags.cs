@@ -154,6 +154,10 @@ namespace FracturingFog.Batch
         // #1027 follow-up — trace the real surface (opt-in; default = the plate look).
         public const string ReliefTrueHeight      = "--relief-true-height";
         public const string ReliefTerrainSmoothing = "--relief-terrain-smoothing";   // #1035
+        // #1029 — relief height source (was region/UI only) + its knobs.
+        public const string ReliefHeightSource     = "--relief-height-source";
+        public const string ReliefHeightBlend      = "--relief-height-blend";
+        public const string ReliefDistanceFalloff  = "--relief-distance-falloff";
 
         // Depth of field on the relief raymarch camera (roadmap S3, #389). Any
         // DOF flag implies --relief-raymarch (DOF is perspective-camera only).
