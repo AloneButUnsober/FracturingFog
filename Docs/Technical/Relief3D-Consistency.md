@@ -155,6 +155,37 @@ The estimate step reaches the converged (400-step safe) soft shadow within the d
 
 **Not changed:** the glass (transmission) interior march still uses `Evaluate`, since it is off by default.
 
+### GPU watchdog crash with fog (#1044)
+
+Smoke-testing #1043 crashed the app twice on a GeForce GT 710:
+- Windows logged `LiveKernelEvent 141` (TDR);
+- .NET then hit an unhandled `DXGI_ERROR_DEVICE_REMOVED` at `ReliefRaymarchGpuKernel.Run` (`Map`).
+
+**Cause:** the relief kernel was one Dispatch per frame. Volumetric fog runs VolumeSteps × lights × a shadow march per pixel, so one 1080p dispatch took far longer than the ~2 s watchdog. Measured on the GT 710 (hardware D3D11, 320×180, extrapolated):
+
+| | main | #1043 | + early exit |
+|---|---|---|---|
+| Real height + fog | 32 s | 17 s | ~13 s |
+| plate + fog | 9 s | 9 s | 9 s |
+
+It is pre-existing on main. #1043 made the Real-height fog path cheaper, not dearer.
+
+**Fix:**
+- **Tiled dispatch (`ReliefGpuTiling`):**
+  - each tile is its own Dispatch + Flush, sized so its predicted time stays near 150 ms;
+  - the cost per pixel comes from the uniforms (primary march, shading marches per light, the fog walk's per-step shadow marches), so switching fog on shrinks the tiles in the same frame;
+  - the GPU speed (ns per cost unit) is learned from each frame, starting pessimistic;
+  - row bands narrow to column tiles when even 8 rows are too slow;
+  - the HLSL takes `gRowBase` / `gColBase` in former pad slots; Vulkan keeps one dispatch (bases 0).
+- **Device loss:**
+  - the D3D relief and froxel kernels translate device-removed / hung / reset / driver-error into `GpuDeviceLostException`;
+  - `HeightfieldRaymarch2D.Render` catches it, finishes the frame on the CPU trace, and never dispatches that kernel instance again (`IsGpuReliefLost`).
+- **Early exit:** a shading-probe march above the terrain box top heading up ends at once (CPU, twin, HLSL): −26% on Real height + fog.
+
+**Checked on the GT 710:** a 960×540 fog frame, about 3 s of GPU work, rendered in 23 tiles of ~125 ms. No watchdog event was logged. Without tiling that is a single ~3 s dispatch.
+
+**Left:** the D3D11 presenter itself has no device-lost recovery (#1045).
+
 ## S4: distance-estimate height source (#1029)
 
 `ReliefHeightSource.Distance` builds the height from the exterior distance estimate the calculators already fill (`DistanceBuffer`, complex-plane units, 0 in the set).

@@ -291,6 +291,20 @@ public sealed class FroxelGpuKernel : IDisposable, IFroxelVolumeKernel
     public void Composite(in FroxelGpuUniforms u, uint[] beauty, float[] worldDepth, int w, int h, uint[] dst,
         double feedback, bool reproject)
     {
+        // #1044 — a lost device surfaces as the engine's typed exception, so the
+        // relief render falls back to the CPU instead of crashing.
+        try { CompositeCore(in u, beauty, worldDepth, w, h, dst, feedback, reproject); }
+        catch (SharpGen.Runtime.SharpGenException ex)
+            when (ex.HResult is unchecked((int)0x887A0005) or unchecked((int)0x887A0006)
+                             or unchecked((int)0x887A0007) or unchecked((int)0x887A0020))
+        {
+            throw new FracturingFog.Rendering.Lighting.GpuDeviceLostException("froxel GPU composite: " + ex.Message, ex);
+        }
+    }
+
+    private void CompositeCore(in FroxelGpuUniforms u, uint[] beauty, float[] worldDepth, int w, int h, uint[] dst,
+        double feedback, bool reproject)
+    {
         if (_disposed) throw new ObjectDisposedException(nameof(FroxelGpuKernel));
         if (beauty == null) throw new ArgumentNullException(nameof(beauty));
         if (worldDepth == null) throw new ArgumentNullException(nameof(worldDepth));

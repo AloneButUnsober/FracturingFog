@@ -69,8 +69,8 @@ public sealed unsafe class ReliefRaymarchVulkanKernel : IDisposable, IReliefRaym
         public float Ambient, FloorBx, FloorBz, ConeCapT;   // #1027 — was Pad3
         public uint BgTop, BgBottom, FloorAlbedo, DropColor;
         public float SpecStrength, Roughness, Metallic, TrueHeight;   // 4a; #1027 TrueHeight was PadS
-        public int ShadowSteps; public float ShadowSoftK; public int ShadowMask; public float PadSh;   // 4b
-        public int AoSamples; public float AoStrength; public float PadA0, PadA1;   // 4c
+        public int ShadowSteps; public float ShadowSoftK; public int ShadowMask; public int RowBase;   // 4b; #1044 row base (0 = whole frame)
+        public int AoSamples; public float AoStrength; public int ColBase; public float PadA1;   // 4c; #1044 tile column base
         public float IblStrength; public int SkyMode; public float TriplanarStrength, TriplanarScale;   // 4d
         public int TriplanarKind; public uint TriplanarTint; public float PadT0, PadT1;   // 4d
         public float FogDensity, FogHeightFalloff; public int VolumeSteps; public float VolumeStepsFalloff;   // 4e
@@ -347,8 +347,8 @@ public sealed unsafe class ReliefRaymarchVulkanKernel : IDisposable, IReliefRaym
             Ambient = (float)u.Ambient, FloorBx = (float)c.FloorBx, FloorBz = (float)c.FloorBz, ConeCapT = (float)c.ConeCapT,
             BgTop = u.BgTop, BgBottom = u.BgBottom, FloorAlbedo = u.FloorAlbedo, DropColor = u.DropColor,
             SpecStrength = (float)u.SpecStrength, Roughness = (float)u.Roughness, Metallic = (float)u.Metallic, TrueHeight = u.TrueHeight ? 1f : 0f,
-            ShadowSteps = u.ShadowSteps, ShadowSoftK = (float)u.ShadowSoftK, ShadowMask = u.ShadowLightMask, PadSh = 0f,
-            AoSamples = u.AoSamples, AoStrength = (float)u.AoStrength, PadA0 = 0f, PadA1 = 0f,
+            ShadowSteps = u.ShadowSteps, ShadowSoftK = (float)u.ShadowSoftK, ShadowMask = u.ShadowLightMask, RowBase = 0,
+            AoSamples = u.AoSamples, AoStrength = (float)u.AoStrength, ColBase = 0, PadA1 = 0f,
             IblStrength = (float)u.IblStrength, SkyMode = u.SkyMode,
             TriplanarStrength = (float)u.TriplanarStrength, TriplanarScale = (float)u.TriplanarScale,
             TriplanarKind = u.TriplanarKind, TriplanarTint = u.TriplanarTint, PadT0 = 0f, PadT1 = 0f,

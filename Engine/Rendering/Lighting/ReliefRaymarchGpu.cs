@@ -454,7 +454,7 @@ public static class ReliefRaymarchGpu
         double lensX = 0.0, double lensY = 0.0)
     {
         // #1033 — the shading marches' DE (same Evaluate; a shading probe under true height).
-        var sde = new HeightfieldRaymarch2D.HeightShadeDe(in de, mip, u.MipW, u.MipH);
+        var sde = new HeightfieldRaymarch2D.HeightShadeDe(in de, mip, u.MipW, u.MipH, u.Cam.By);
         // S4 (#402) — primary-hit geometry, same convention as the HLSL TracePixel:
         // terrain → (surface normal, tf), ground → ((0,1,0), tp), miss → ((0,0,0), 1e6).
         onx = 0.0; ony = 0.0; onz = 0.0; odep = 1e6;

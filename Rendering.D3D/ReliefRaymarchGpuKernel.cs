@@ -56,8 +56,8 @@ public sealed class ReliefRaymarchGpuKernel : IDisposable, FracturingFog.Renderi
         public float Ambient, FloorBx, FloorBz, ConeCapT;   // #1027 — was Pad3
         public uint BgTop, BgBottom, FloorAlbedo, DropColor;
         public float SpecStrength, Roughness, Metallic, TrueHeight;   // 4a; #1027 TrueHeight was PadS
-        public int ShadowSteps; public float ShadowSoftK; public int ShadowMask; public float PadSh;   // 4b
-        public int AoSamples; public float AoStrength; public float PadA0, PadA1;   // 4c
+        public int ShadowSteps; public float ShadowSoftK; public int ShadowMask; public int RowBase;   // 4b; #1044 row base
+        public int AoSamples; public float AoStrength; public int ColBase; public float PadA1;   // 4c; #1044 tile column base
         public float IblStrength; public int SkyMode; public float TriplanarStrength, TriplanarScale;   // 4d
         public int TriplanarKind; public uint TriplanarTint; public float PadT0, PadT1;   // 4d
         public float FogDensity, FogHeightFalloff; public int VolumeSteps; public float VolumeStepsFalloff;   // 4e
@@ -341,6 +341,35 @@ public sealed class ReliefRaymarchGpuKernel : IDisposable, FracturingFog.Renderi
     public void Run(in ReliefUniforms u, float[] hbuf, byte[]? keep, uint[] albedo, uint[] dst,
         float[]? aovNormalXyz = null, float[]? aovDepth = null)
     {
+        // #1044 — a removed / hung / reset device (a GPU watchdog reset) surfaces as
+        // a typed exception the relief render catches: it falls back to the CPU trace
+        // and stops using the GPU relief for the session instead of crashing.
+        try { RunCore(in u, hbuf, keep, albedo, dst, aovNormalXyz, aovDepth); }
+        catch (SharpGen.Runtime.SharpGenException ex) when (IsDeviceLost(ex))
+        {
+            throw new GpuDeviceLostException("relief GPU dispatch: " + ex.Message, ex);
+        }
+    }
+
+    private static bool IsDeviceLost(SharpGen.Runtime.SharpGenException ex)
+    {
+        int hr = ex.HResult;
+        return hr == unchecked((int)0x887A0005)    // DXGI_ERROR_DEVICE_REMOVED
+            || hr == unchecked((int)0x887A0006)    // DXGI_ERROR_DEVICE_HUNG
+            || hr == unchecked((int)0x887A0007)    // DXGI_ERROR_DEVICE_RESET
+            || hr == unchecked((int)0x887A0020);   // DXGI_ERROR_DRIVER_INTERNAL_ERROR
+    }
+
+    // #1044 — tiled dispatch (see ReliefGpuTiling): the GPU's speed in ns per
+    // cost unit, learned from each frame's measured time, starting pessimistic.
+    private double _nsPerUnit = ReliefGpuTiling.InitialNsPerUnit;
+
+    /// <summary>#1044 — dispatches (tiles) the last <see cref="Run"/> used.</summary>
+    public int LastBandCount { get; private set; }
+
+    private void RunCore(in ReliefUniforms u, float[] hbuf, byte[]? keep, uint[] albedo, uint[] dst,
+        float[]? aovNormalXyz, float[]? aovDepth)
+    {
         if (_disposed) throw new ObjectDisposedException(nameof(ReliefRaymarchGpuKernel));
         int w = u.W, h = u.H, hn = u.Hw * u.Hh, n = w * h;
         if (w <= 0 || h <= 0) return;
@@ -387,9 +416,6 @@ public sealed class ReliefRaymarchGpuKernel : IDisposable, FracturingFog.Renderi
             }
 
             var p = BuildBlob(in u, keep != null, emitAov);
-            var mapped = _ctx.Map(_paramsBuf, 0, Vortice.Direct3D11.MapMode.WriteDiscard, MapFlags.None);
-            unsafe { *(ReliefParamsBlob*)mapped.DataPointer = p; }
-            _ctx.Unmap(_paramsBuf, 0);
 
             // Pick the variant: DOF averages lens taps, pinhole traces one ray. The
             // DOF shader compiles on first use only (slow FXC compile of its loop).
@@ -406,7 +432,24 @@ public sealed class ReliefRaymarchGpuKernel : IDisposable, FracturingFog.Renderi
             _ctx.CSSetUnorderedAccessView(0, _colorUav);
             _ctx.CSSetUnorderedAccessView(1, _aovUav);   // S4 — always bound (stub when not emitting)
 
-            _ctx.Dispatch((uint)((w + 7) / 8), (uint)((h + 7) / 8), 1);
+            // #1044 — row bands, each its own Dispatch + Flush (see BandRows).
+            double cost = ReliefGpuTiling.CostPerPixel(in u);
+            var (tileRows, tileCols) = ReliefGpuTiling.TileSize(w, h, cost, _nsPerUnit);
+            long tGpu0 = System.Diagnostics.Stopwatch.GetTimestamp();
+            int tiles = 0;
+            for (int rowBase = 0; rowBase < h; rowBase += tileRows)
+            for (int colBase = 0; colBase < w; colBase += tileCols, tiles++)
+            {
+                int rows = Math.Min(tileRows, h - rowBase), cols = Math.Min(tileCols, w - colBase);
+                p.RowBase = rowBase; p.ColBase = colBase;
+                var mapped = _ctx.Map(_paramsBuf, 0, Vortice.Direct3D11.MapMode.WriteDiscard, MapFlags.None);
+                unsafe { *(ReliefParamsBlob*)mapped.DataPointer = p; }
+                _ctx.Unmap(_paramsBuf, 0);
+                _ctx.CSSetConstantBuffer(0, _paramsBuf);   // re-bind after the WriteDiscard rename
+                _ctx.Dispatch((uint)((cols + 7) / 8), (uint)((rows + 7) / 8), 1);
+                _ctx.Flush();
+            }
+            LastBandCount = tiles;
 
             _ctx.CSUnsetUnorderedAccessView(0);
             _ctx.CSUnsetUnorderedAccessView(1);
@@ -456,6 +499,15 @@ public sealed class ReliefRaymarchGpuKernel : IDisposable, FracturingFog.Renderi
 
             long tEnd = System.Diagnostics.Stopwatch.GetTimestamp();
             double freq = System.Diagnostics.Stopwatch.Frequency;
+            // #1044 — learn the GPU's speed from this frame (dispatch → readback).
+            // Rise at once when slower than thought; relax slowly when faster.
+            double units = cost * n;
+            if (units > 0)
+            {
+                double measured = (tEnd - tGpu0) * 1e9 / freq / units;
+                _nsPerUnit = measured > _nsPerUnit ? measured : 0.8 * _nsPerUnit + 0.2 * measured;
+                _nsPerUnit = Math.Clamp(_nsPerUnit, 0.01, 1000.0);
+            }
             LastDispatchMs = (tDispatch - t0) * 1000.0 / freq;
             LastReadbackMs = (tEnd - tDispatch) * 1000.0 / freq;
         }
@@ -485,8 +537,8 @@ public sealed class ReliefRaymarchGpuKernel : IDisposable, FracturingFog.Renderi
             Ambient = (float)u.Ambient, FloorBx = (float)c.FloorBx, FloorBz = (float)c.FloorBz, ConeCapT = (float)c.ConeCapT,
             BgTop = u.BgTop, BgBottom = u.BgBottom, FloorAlbedo = u.FloorAlbedo, DropColor = u.DropColor,
             SpecStrength = (float)u.SpecStrength, Roughness = (float)u.Roughness, Metallic = (float)u.Metallic, TrueHeight = u.TrueHeight ? 1f : 0f,
-            ShadowSteps = u.ShadowSteps, ShadowSoftK = (float)u.ShadowSoftK, ShadowMask = u.ShadowLightMask, PadSh = 0f,
-            AoSamples = u.AoSamples, AoStrength = (float)u.AoStrength, PadA0 = 0f, PadA1 = 0f,
+            ShadowSteps = u.ShadowSteps, ShadowSoftK = (float)u.ShadowSoftK, ShadowMask = u.ShadowLightMask, RowBase = 0,
+            AoSamples = u.AoSamples, AoStrength = (float)u.AoStrength, ColBase = 0, PadA1 = 0f,
             IblStrength = (float)u.IblStrength, SkyMode = u.SkyMode,
             TriplanarStrength = (float)u.TriplanarStrength, TriplanarScale = (float)u.TriplanarScale,
             TriplanarKind = u.TriplanarKind, TriplanarTint = u.TriplanarTint, PadT0 = 0f, PadT1 = 0f,

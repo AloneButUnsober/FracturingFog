@@ -96,11 +96,11 @@ cbuffer ReliefParams : register(b0)
     int    gShadowSteps;  // 4b — IQ soft shadow; 0 = off
     float  gShadowSoftK;  // penumbra hardness
     int    gShadowMask;   // bit n enables shadow for light n
-    float  gPadSh;
+    int    gRowBase;      // #1044 - first output row of this band (row-band dispatch)
 
     int    gAoSamples;    // 4c — DE-cone AO; 0 = off
     float  gAoStrength;   // occlusion darkening amount
-    float  gPadA0;
+    int    gColBase;      // #1044 - first output column of this tile
     float  gPadA1;
 
     float  gIblStrength;      // 4d — IBL-modulated ambient; 0 = scalar ambient
@@ -295,6 +295,8 @@ float ShadeProbe(float3 p, float3 rd, float hitEps, out float stepOut, out bool 
     float2 g = SampleGrad(p.x, p.z);
     float est = gap / sqrt(1.0 + g.x * g.x + g.y * g.y);
     if (est > stepOut) stepOut = est;
+    // #1044 - above the terrain box top heading up (or level): nothing left to hit.
+    if (p.y > gB.y && rd.y >= 0.0) stepOut = 1e9;
     return est;
 }
 
@@ -1392,8 +1394,8 @@ uint TracePixel(float3 o, float3 rd, out float3 nrm, out float dep)
 
     // Ray generation shared by both entry variants: pixel centre → (o, rd).
     private const string RayGen = @"
-    int px = (int)tid.x;
-    int py = (int)tid.y;
+    int px = (int)tid.x + gColBase;   // #1044 - tiled dispatch offsets
+    int py = (int)tid.y + gRowBase;
     if (px >= gW || py >= gH) return;
     int idx = py * gW + px;
 
