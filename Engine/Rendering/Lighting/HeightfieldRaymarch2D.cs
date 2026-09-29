@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: AGPL-3.0-or-later
+﻿// SPDX-License-Identifier: AGPL-3.0-or-later
 // SPDX-FileCopyrightText: 2026 Bradley Brown
 
 // Rendering/Lighting/HeightfieldRaymarch2D.cs
@@ -1206,6 +1206,12 @@ public static class HeightfieldRaymarch2D
         bool isFixed = p.Relief2DHeightMode == ReliefHeightMode.Fixed;
         double fixedBaseline = isFixed && p.Relief2DHeightBaseline >= 0.0 ? p.Relief2DHeightBaseline : -1.0;
         double gammaRef = isFixed && p.Relief2DHeightRef > 0.0 ? p.Relief2DHeightRef : 0.0;
+        // #1041 — the automatic baseline lifts the Log-raised far exterior of smooth
+        // counts back to the ground. A distance-height field already falls to ~0 away
+        // from the set, and on a dense view (the plateau covering over 40% of the
+        // cells) the 60th percentile lands on the plateau itself, leaving only a
+        // sliver above ground. Skip it for a field the Distance source actually built.
+        if (fixedBaseline < 0.0 && IsDistanceField(height, hn, p)) fixedBaseline = 0.0;
         // #1035 — terrain smoothing (Real height only) as a fraction of the traced
         // grid's short axis; Robust caps needles with a soft knee.
         double smoothFrac = p.Relief2DTrueHeight ? Math.Clamp(p.Relief2DTerrainSmoothing, 0.0, 0.05) : 0.0;
@@ -1234,6 +1240,20 @@ public static class HeightfieldRaymarch2D
             lock (s_prepassLock) { s_prepass = pre; s_prepassKey = key; }
         }
         return pre;
+    }
+
+    /// <summary>#1041 — true when <paramref name="p"/> selects the Distance source and
+    /// <paramref name="height"/> is the field it built: every cell is at most
+    /// <see cref="ReliefHeightField.DistanceHeight"/> (the plateau). The source falls
+    /// back to the raw smooth counts when there is no distance estimate; their peak
+    /// exceeds the plateau value in any view near the set (it would take every pixel
+    /// escaping within 10 iterations not to), so the fallback keeps the baseline.</summary>
+    public static bool IsDistanceField(float[] height, int hn, FractalParameters p)
+    {
+        if (p.Relief2DHeightSource != ReliefHeightSource.Distance) return false;
+        float max = 0f;
+        for (int i = 0; i < hn; i++) { float v = height[i]; if (v > max) max = v; }
+        return max > 0f && max <= ReliefHeightField.DistanceHeight;
     }
 
     /// <summary>#1026 — the processed height that renders at the full relief

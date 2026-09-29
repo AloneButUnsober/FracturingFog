@@ -191,6 +191,7 @@ count. The set becomes a raised plateau (in the set's colour), and filaments bec
 measured in view units, so it looks the same at any window size and zoom depth.
 
 - **Best with Real height:** the plate look draws it as tall curtain walls.
+- **Ground level:** the far-from-set ground sits at zero and the plateau at full height. There is no automatic ground level as with Smooth (#1041). If you locked a Distance view's height before this fix, lock it again.
 - **Supported fractals:** Mandelbrot and the escape-time family. Others fall back to Smooth.
 - **Very deep zooms:** past about 1e30 the distance estimate runs out of precision and it falls back to Smooth.
 - **Batch:** `--relief-height-source distance --relief-distance-falloff 0.02`. `--relief-height-source` also takes

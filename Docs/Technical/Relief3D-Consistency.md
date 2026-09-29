@@ -129,6 +129,20 @@ At app defaults the real surface of the smooth-iteration field is a thin, noisy 
 
 **Batch:** `--relief-height-source smooth|trap|blend|distance` (the source had no batch flag before), `--relief-height-blend`, `--relief-distance-falloff`. Also region save/load, Command builder seed, dialog falloff slider and Defaults reset.
 
-**Assessment at app defaults:** it is a different look (plateau and ridges, no interior pit), not a replacement for Smooth with terrain smoothing. It reads best on filament views such as the elephant valley. On dense views the in-set plateau (usually black) dominates, e.g. at the seahorse. It stays opt-in.
+**Assessment at app defaults:** it is a different look (plateau and ridges, no interior pit), not a replacement for Smooth with terrain smoothing. It stays opt-in. (The first assessment here, "reads best on the elephant, the plateau dominates dense views", was looking at the #1041 artefact below.)
+
+### Automatic baseline on the plateau (#1041)
+
+The 60th-percentile baseline (#141) exists to push the Log-lifted far exterior of smooth counts back to the ground. A distance field needs no such correction: it already falls to ~0 away from the set. On dense views the in-set plateau covers over 40% of the cells (seahorse 60%, elephant 46% of cells within 10% of the plateau). The percentile then fell into the top histogram bin, and the baseline landed at `hmax·511.5/512`, just under the plateau. Only the last 0.1% of the height range stayed above ground (reference 0.0023 on the seahorse, 0.0070 on the elephant, against a 2.398 span), and normalisation blew that sliver up into spires beside a flat mesa. On the whole set the baseline (0.855) removed 36% of the span.
+
+**Fix:** `GetPrepass` uses baseline 0 for a field the Distance source actually built (`IsDistanceField`: the source is Distance and no cell exceeds `DistanceHeight`). A Distance selection that fell back to smooth counts (no estimate) keeps the automatic baseline, because its peak exceeds the plateau value in any view near the set. A Fixed lock taken on a Distance view locks baseline 0; a lock taken before this fix keeps its old baseline until re-locked.
+
+**Tests** (`ReliefDistanceBaselineTests`):
+- over 90% of the ground-to-plateau span survives on the seahorse, elephant and whole views, in both Peak and Robust modes;
+- the fallback measures exactly like Smooth;
+- only the Distance source skips the baseline;
+- a Robust lock on a Distance view reproduces the frame.
+
+Four of the tests fail without the fix.
 
 **Tests** (`ReliefDistanceSourceTests`): plateau, monotonic falloff and the exact e⁻¹ point; fallbacks; the same landscape at 240×135 and 480×270 (2×2 block means); the poster hi-res field carries the source; batch/builder/region/dialog parity.
