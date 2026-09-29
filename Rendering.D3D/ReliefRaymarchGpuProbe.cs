@@ -133,6 +133,9 @@ public static class ReliefRaymarchGpuProbe
             Relief2DEmptySkip = true,
             // #1027 — Uniform tolerance anchor: exercises the capped cone (gConeCapT).
             Relief2DDetailAnchor = ReliefDetailAnchor.Uniform,
+            // #1027 follow-up — real-surface hit test (gTrueHeight); the other probe
+            // configs keep the default plate test.
+            Relief2DTrueHeight = true,
         };
         var fx = LightingFxData.CreateDefault();
         fx.BgTopColor = 0xFF335588u;

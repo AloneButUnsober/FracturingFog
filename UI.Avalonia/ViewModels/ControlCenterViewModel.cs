@@ -402,6 +402,7 @@ public sealed partial class ControlCenterViewModel : ViewModelBase
             ReliefHeightRef      = fp?.Relief2DHeightRef ?? 0.0,
             ReliefHeightBaseline = fp?.Relief2DHeightBaseline ?? -1.0,
             ReliefDetailAnchor   = fp?.Relief2DDetailAnchor ?? FracturingFog.ReliefDetailAnchor.Camera,   // #1027
+            ReliefTrueHeight     = fp?.Relief2DTrueHeight ?? false,
             ReliefDofAperture    = fp?.Relief2DDofApertureRadius ?? 0.0,   // S3 (#389)
             ReliefDofFocus       = fp?.Relief2DDofFocusDistance ?? 0.0,
             ReliefFroxel         = fp?.Relief2DFroxelVolumetrics ?? false,   // S6 (#408)

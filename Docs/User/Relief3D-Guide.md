@@ -131,10 +131,11 @@ screen-space relief, but a true 3D scene.
 | **Settle to full detail** | on / off | Best of both: render fast while you pan / zoom / orbit, then a moment after the view **stops**, auto re-render the relief at full far-detail (distant filaments resolve like the poster) — no fractal recompute. The next move drops back to fast. The extra render happens only while the view is idle, so interaction stays fluid. Off = the live view keeps whatever **Far detail** you set. |
 
 > [!NOTE]
-> Before #1027, big windows (and the hi-res field on small windows) often rendered the relief as a
-> flat plate with the fractal painted on, so height and detail changed with the window size. The
-> raymarch now finds the real surface at every size, and a height field finer than the window is
-> averaged down to the window's resolution first, so small and large windows show the same shape.
+> On most windows the raymarch draws the relief as a shaded plate at full height: the fractal is shaded
+> as terrain, but the surface stays flat. **Real height (experimental)** (Camera & quality) traces the
+> real surface instead, so small and large windows show the same shape. The real surface of an
+> iteration-count field is spiky, with tall needle walls around the set, so it is opt-in while terrain
+> shaping is worked on.
 
 ### Filament detail — raise the structure *relative to* the slab
 
@@ -167,11 +168,10 @@ needle into view and everything else flattens. The **Height consistency** sectio
 | Control | What it does |
 |---|---|
 | **Height mode: Peak** | The default. The tallest point in view sets the scale, measured every frame. |
-| **Height mode: Robust** | A high percentile (99.5%) sets the scale, so lone needles no longer flatten the rest. They poke up above the full height instead. |
-| **Height mode: Fixed** | Uses the stored **Reference height** and **Baseline**. The same fractal detail keeps the same height across pans, zooms and window sizes. |
+| **Height mode: Robust** | A high percentile (99.5%) sets full height, so lone needles no longer flatten the rest. They rise above full height instead, so on a very spiky view everything gets taller. |
+| **Height mode: Fixed** | Uses the height stored by **Lock current height**. The same fractal detail keeps the same height across pans, zooms and window sizes. |
 | **Lock current height** | Stores the reference and baseline the current frame is using, then switches to Fixed. The frame does not change; from then on the height stays put. |
-| **Reference height** | Fixed mode: the field height drawn at full relief height. Smaller = taller relief. 0 = measure every frame. |
-| **Baseline** | Fixed mode: the field height treated as ground level. -1 = measure every frame. |
+| **Locked values** | Fixed mode shows the locked reference and baseline read-only. To make a locked view taller or flatter, use **Height scale**. |
 
 > [!TIP]
 > Frame a view you like, click **Lock current height**, then explore. Pans and small

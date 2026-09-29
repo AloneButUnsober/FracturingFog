@@ -1539,6 +1539,7 @@ namespace FracturingFog.Models
         // Tolerance anchor (#1027). Default Camera = the original march.
         [JsonConverter(typeof(JsonStringEnumConverter))]
         public ReliefDetailAnchor DetailAnchor { get; set; } = ReliefDetailAnchor.Camera;
+        public bool TrueHeight { get; set; } = false;   // #1027 follow-up
 
         // Isolation cull (#135)
         public bool Isolate { get; set; } = false;
@@ -1673,6 +1674,7 @@ namespace FracturingFog.Models
                 HeightRef          = p.Relief2DHeightRef,
                 HeightBaseline     = p.Relief2DHeightBaseline,
                 DetailAnchor       = p.Relief2DDetailAnchor,
+                TrueHeight         = p.Relief2DTrueHeight,
                 Isolate            = p.Relief2DIsolate,
                 IsolateByDetail    = p.Relief2DIsolateByDetail,
                 DetailThreshold    = p.Relief2DDetailThreshold,
@@ -1749,6 +1751,7 @@ namespace FracturingFog.Models
             p.Relief2DHeightRef          = HeightRef;
             p.Relief2DHeightBaseline     = HeightBaseline;
             p.Relief2DDetailAnchor       = DetailAnchor;
+            p.Relief2DTrueHeight         = TrueHeight;
             p.Relief2DIsolate            = Isolate;
             p.Relief2DIsolateByDetail    = IsolateByDetail;
             p.Relief2DDetailThreshold    = DetailThreshold;

@@ -55,7 +55,7 @@ public sealed class ReliefRaymarchGpuKernel : IDisposable, FracturingFog.Renderi
         public float L2x, L2y, L2z, I2; public float C2r, C2g, C2b, ShadowK2;
         public float Ambient, FloorBx, FloorBz, ConeCapT;   // #1027 — was Pad3
         public uint BgTop, BgBottom, FloorAlbedo, DropColor;
-        public float SpecStrength, Roughness, Metallic, PadS;   // 4a
+        public float SpecStrength, Roughness, Metallic, TrueHeight;   // 4a; #1027 TrueHeight was PadS
         public int ShadowSteps; public float ShadowSoftK; public int ShadowMask; public float PadSh;   // 4b
         public int AoSamples; public float AoStrength; public float PadA0, PadA1;   // 4c
         public float IblStrength; public int SkyMode; public float TriplanarStrength, TriplanarScale;   // 4d
@@ -484,7 +484,7 @@ public sealed class ReliefRaymarchGpuKernel : IDisposable, FracturingFog.Renderi
             C2r = (float)u.C2r, C2g = (float)u.C2g, C2b = (float)u.C2b, ShadowK2 = (float)u.ShadowK2,
             Ambient = (float)u.Ambient, FloorBx = (float)c.FloorBx, FloorBz = (float)c.FloorBz, ConeCapT = (float)c.ConeCapT,
             BgTop = u.BgTop, BgBottom = u.BgBottom, FloorAlbedo = u.FloorAlbedo, DropColor = u.DropColor,
-            SpecStrength = (float)u.SpecStrength, Roughness = (float)u.Roughness, Metallic = (float)u.Metallic, PadS = 0f,
+            SpecStrength = (float)u.SpecStrength, Roughness = (float)u.Roughness, Metallic = (float)u.Metallic, TrueHeight = u.TrueHeight ? 1f : 0f,
             ShadowSteps = u.ShadowSteps, ShadowSoftK = (float)u.ShadowSoftK, ShadowMask = u.ShadowLightMask, PadSh = 0f,
             AoSamples = u.AoSamples, AoStrength = (float)u.AoStrength, PadA0 = 0f, PadA1 = 0f,
             IblStrength = (float)u.IblStrength, SkyMode = u.SkyMode,

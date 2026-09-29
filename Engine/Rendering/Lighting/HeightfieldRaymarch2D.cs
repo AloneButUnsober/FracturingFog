@@ -334,7 +334,9 @@ public static class HeightfieldRaymarch2D
         // frame is wasted work. Hash the inputs; on a match reuse the cached
         // immutable ReliefPrepass (compressed field + max + grid-slope maxima).
         // sy / invLip stay per-call (cheap, scale-dependent).
-        var (tw, th) = FieldTargetDims(hw, hh, w, h);
+        // #1027 — the field downsample belongs to the true-height trace; the
+        // default (plate) look traces the field as it is, as before.
+        var (tw, th) = p.Relief2DTrueHeight ? FieldTargetDims(hw, hh, w, h) : (hw, hh);
         ReliefPrepass pre = GetPrepass(height, hn, hw, hh, p, tw, th);
         // #1027 — a field finer than the output is area-downsampled inside the
         // prepass; everything below works on the prepass grid.
@@ -384,7 +386,13 @@ public static class HeightfieldRaymarch2D
         // cross the air above the terrain in a few leaps instead of crawling at the
         // slope-limited step. The grid's halo bounds the bilinear sample only, so the
         // bicubic path (which can overshoot its neighbours) marches without it.
-        float[]? skipMip = p.Relief2DEmptySkip && !p.Relief2DBicubicHeight ? pre.Mip : null;
+        // Always on under true height (it needs it); otherwise only when explicitly
+        // enabled, so the default trace stays byte-identical to before #1027.
+        bool trueHeight = p.Relief2DTrueHeight;
+        float[]? skipMip = (trueHeight || p.Relief2DEmptySkip) && !p.Relief2DBicubicHeight ? pre.Mip : null;
+        // Hit threshold on the height DE: true height compares the world-space
+        // vertical gap (d / invLip); the default compares d itself (the plate).
+        double hitScale = trueHeight ? invLip : 1.0;
         int skipMipW = pre.MipW, skipMipH = pre.MipH;
 
         // Lighting FX (#132 defaults). Copy the struct, then — when auto-shade is
@@ -602,7 +610,7 @@ public static class HeightfieldRaymarch2D
                     // within the tolerance. Comparing the Lipschitz-scaled d itself
                     // stopped every ray at the box top on fine fields (tiny invLip):
                     // big windows rendered a flat plate with the fractal painted on.
-                    if (d < epsT * invLip) { hit = true; break; }
+                    if (d < epsT * hitScale) { hit = true; break; }
                     tPrev = t;
                     double adv = Math.Max(d, epsT * 0.5);
                     if (skipMip is not null)
@@ -1235,7 +1243,7 @@ public static class HeightfieldRaymarch2D
         int hn = hw * hh;
         if (height == null || p == null || hw <= 2 || hh <= 2 || height.Length < hn) return null;
         if (outW <= 0 || outH <= 0) { outW = hw; outH = hh; }
-        var (tw, th) = FieldTargetDims(hw, hh, outW, outH);
+        var (tw, th) = p.Relief2DTrueHeight ? FieldTargetDims(hw, hh, outW, outH) : (hw, hh);
         ReliefPrepass pre = GetPrepass(height, hn, hw, hh, p, tw, th);
         if (pre.MaxH <= 1e-9f) return null;
         return new ReliefHeightNormalization(pre.Baseline, NormalizationReference(pre, p));

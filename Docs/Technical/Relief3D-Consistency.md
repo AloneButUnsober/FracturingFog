@@ -64,7 +64,13 @@ The look-at point turned out to be farther than most visible terrain, so a cap t
 - `--heightfieldhires` now requires the display-res and floor-field renders to agree (same coverage, floor no rougher).
 - `--reliefgpuraymarch` (WARP) and `--vulkanrelief` (GT 710) run with Uniform on.
 
-**Changed defaults:** relief renders on big windows change, because they now have real height. That is a bug fix, not byte-identical.
+**Defaults: restored behind an opt-in (follow-up PR).** The first version turned this on for everyone. At app defaults the real surface of an iteration-count field is a wall of tall, thin needles around the set, with a pit where the set's interior is. Much of the earlier relief tuning had been done against the plate, so it looked like a regression. The trace is now opt-in:
+- `Relief2DTrueHeight` (dialog "Real height (experimental)", batch `--relief-true-height`). Off = byte-identical to before #1027, verified pixel-for-pixel on four views with batch renders. On = the #1034 trace exactly.
+- The GPU kernel reads the switch from the former 4a pad slot (`gTrueHeight`); layout unchanged.
+- `Relief2DEmptySkip` is back to default off and runs whenever it is on *or* true height is on.
+- Fixed height mode no longer exposes the raw reference and baseline as editable numbers. The reference is in height-curve units (typically 1–10), so a value like 0.1 made the terrain about 50× taller. The lock is now shown read-only, and Height scale adjusts it.
+
+Next: terrain shaping so real height reads as terrain (#1035), and distance-estimate height (#1029).
 
 **Open:**
 - Soft shadows, AO and reflections also march the height DE against small epsilons and may over-occlude on fine fields: #1033.
