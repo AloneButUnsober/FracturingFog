@@ -24,7 +24,8 @@ using FracturingFog.Models.FractalKernels;
 
 namespace FracturingFog;
 
-public sealed class EscapeTimeCalculator : Interefaces.IFractalCalculator, Interefaces.IHeightFieldSource, Interefaces.ISupportsHistogramEq
+public sealed class EscapeTimeCalculator : Interefaces.IFractalCalculator, Interefaces.IHeightFieldSource, Interefaces.ISupportsHistogramEq,
+    Interefaces.IDistanceFieldSource
 {
     public bool SupportsZoomPan => true;
 
@@ -79,6 +80,34 @@ public sealed class EscapeTimeCalculator : Interefaces.IFractalCalculator, Inter
     public int[] IterationBuffer { get; private set; } = Array.Empty<int>();
     public float[] SmoothBuffer { get; private set; } = Array.Empty<float>();
     public float[] DistanceBuffer { get; private set; } = Array.Empty<float>();
+
+    /// <summary>#1029 — complex-plane width of one pixel, for the Distance relief
+    /// height source.</summary>
+    public double DistancePixelScale => (3.5 / Math.Max(Width, Height)) / Zoom;
+
+    /// <summary>#1029 — the distance estimate |z|·log|z| / |dz| from the final z / dz
+    /// buffers (0 for in-set pixels). The GPU-palette path colours on the GPU and skips
+    /// the CPU writeback, but the Distance relief height source still needs this, so
+    /// it is filled from the kernel's final z / dz (always read back).</summary>
+    private void FillDistanceFromFinalZ(int maxIt, CancellationToken ct)
+    {
+        _po.CancellationToken = ct;
+        ParallelForRows(0, Height, _po, y =>
+        {
+            int rb = y * Width;
+            for (int x = 0; x < Width; x++)
+            {
+                int idx = rb + x;
+                if (IterationBuffer[idx] >= maxIt) { DistanceBuffer[idx] = 0f; continue; }
+                float fzr = FinalZrBuffer[idx], fzi = FinalZiBuffer[idx];
+                float fdr = FinalDrBuffer[idx], fdi = FinalDiBuffer[idx];
+                double mag = Math.Sqrt(fzr * fzr + fzi * fzi);
+                double dMag = Math.Sqrt(fdr * fdr + fdi * fdi);
+                DistanceBuffer[idx] = dMag > 1e-10 ? (float)(mag * Math.Log(mag) / dMag) : 0f;
+            }
+        });
+    }
+
     public float[] NormalXBuffer { get; private set; } = Array.Empty<float>();
     public float[] NormalYBuffer { get; private set; } = Array.Empty<float>();
     public uint[] ColorBuffer { get; private set; } = Array.Empty<uint>();
@@ -425,10 +454,11 @@ public sealed class EscapeTimeCalculator : Interefaces.IFractalCalculator, Inter
 
         if (gpuPalette)
         {
-            // GPU emitted ColorBuffer end-to-end. Aux buffers stay at
-            // whatever the previous frame left them — none of the
-            // ColorGen-emitted themes consume them through the CPU
-            // writeback in this path.
+            // GPU emitted ColorBuffer end-to-end. Normals stay at whatever the
+            // previous frame left them — none of the ColorGen-emitted themes
+            // consume them through the CPU writeback in this path. #1029: the
+            // distance estimate is still filled (the Distance relief source).
+            FillDistanceFromFinalZ(MaxIterations, ct);
             return true;
         }
 

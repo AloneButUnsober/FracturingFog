@@ -779,6 +779,13 @@ namespace FracturingFog.Models
         /// Default 0.5.</summary>
         public double Relief2DHeightBlend { get; set; } = 0.5;
 
+        /// <summary>#1029 — Distance height source: how far (as a fraction of the
+        /// view's short axis) the height falls to about a third away from the set.
+        /// Smaller = narrow ridges hugging the boundary; larger = broad hills.
+        /// Clamped 0.002..0.2. View-relative, so it looks the same at any window size
+        /// and zoom depth.</summary>
+        public double Relief2DDistanceFalloff { get; set; } = 0.02;
+
         /// <summary>#518 — local filament detail gain (unsharp high-pass on the
         /// height field). Raises/sharpens the fractal structure RELATIVE to the base
         /// "slab" it sits on, which the global <see cref="Relief2DHeightScale"/>
@@ -1775,6 +1782,7 @@ namespace FracturingFog.Models
                 Relief2DHeightCurve = Relief2DHeightCurve,
                 Relief2DHeightSource = Relief2DHeightSource,
                 Relief2DHeightBlend = Relief2DHeightBlend,
+                Relief2DDistanceFalloff = Relief2DDistanceFalloff,
                 Relief2DDetailGain = Relief2DDetailGain,
                 Relief2DDetailRadius = Relief2DDetailRadius,
                 Relief2DHeightGamma = Relief2DHeightGamma,

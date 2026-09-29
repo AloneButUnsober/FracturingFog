@@ -804,7 +804,7 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
     public FracturingFog.ReliefHeightSource Relief2DHeightSource
     {
         get => _p.Relief2DHeightSource;
-        set { if (_p.Relief2DHeightSource == value) return; _p.Relief2DHeightSource = value; this.RaisePropertyChanged(); this.RaisePropertyChanged(nameof(Relief2DHeightBlendApplies)); Fire(); }
+        set { if (_p.Relief2DHeightSource == value) return; _p.Relief2DHeightSource = value; this.RaisePropertyChanged(); this.RaisePropertyChanged(nameof(Relief2DHeightBlendApplies)); this.RaisePropertyChanged(nameof(Relief2DDistanceFalloffApplies)); Fire(); }
     }
     public Array Relief2DHeightSources => Enum.GetValues(typeof(FracturingFog.ReliefHeightSource));
     /// <summary>The blend weight only bites for the Blend source.</summary>
@@ -813,6 +813,19 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
     {
         get => _p.Relief2DHeightBlend;
         set { double v = Clamp(value, 0.0, 1.0); if (_p.Relief2DHeightBlend == v) return; _p.Relief2DHeightBlend = v; this.RaisePropertyChanged(); Fire(); }
+    }
+
+    // #1029 — Distance source falloff, as a percentage of the view (0.2–20 %).
+    public bool Relief2DDistanceFalloffApplies => _p.Relief2DHeightSource == FracturingFog.ReliefHeightSource.Distance;
+    public double Relief2DDistanceFalloffPercent
+    {
+        get => _p.Relief2DDistanceFalloff * 100.0;
+        set
+        {
+            double v = Clamp(value, 0.2, 20.0) / 100.0;
+            if (_p.Relief2DDistanceFalloff == v) return;
+            _p.Relief2DDistanceFalloff = v; this.RaisePropertyChanged(); Fire();
+        }
     }
 
     // #520 — far-detail (tighter distance cone → distant filaments stay tall).

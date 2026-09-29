@@ -599,6 +599,14 @@ namespace FracturingFog.Batch
                     with { Implies = ReliefOn },
                 Int(BatchFlags.ReliefDetailRadius, Relief, FR, "Feature size in px for --relief-detail-gain (0 = auto).", 0, 256, enforced: true, def: "0")
                     with { Implies = ReliefOn },
+                Pick(BatchFlags.ReliefHeightSource, Relief, FR,
+                    "What the relief height is built from: smooth = iteration count; trap = orbit-trap distance (needs an orbit-trap theme); blend = a mix; distance = distance to the set (the set becomes a raised plateau, filaments ridges).",
+                    new[] { "smooth", "trap", "blend", "distance" }, def: "smooth", hint: "SOURCE")
+                    with { Implies = ReliefOn },
+                Dbl(BatchFlags.ReliefHeightBlend, Relief, FR, "Blend source: 0 = all smooth, 1 = all trap.", 0, 1, enforced: true, def: "0.5")
+                    with { Implies = ReliefOn, RequiresChoice = new BatchChoiceRequirement(BatchFlags.ReliefHeightSource, new[] { "blend" }) },
+                Dbl(BatchFlags.ReliefDistanceFalloff, Relief, FR, "Distance source: how far from the set (fraction of the view) the height falls to about a third.", 0.002, 0.2, enforced: true, def: "0.02")
+                    with { Implies = ReliefOn, RequiresChoice = new BatchChoiceRequirement(BatchFlags.ReliefHeightSource, new[] { "distance" }) },
                 Dbl(BatchFlags.ReliefHeightGamma, Relief, FR, "Top-end height contrast, h^gamma (1 = off).", 0.05, 8, enforced: true, def: "1")
                     with { Implies = ReliefOn },
                 Dbl(BatchFlags.ReliefStrength, Relief, FR, "Blend of relief vs flat colour.", 0, 1, enforced: true, def: "1")

@@ -39,10 +39,26 @@ public static class ReliefHeightField
     /// copies it into its height buffer.</summary>
     public static float[] Build(float[] smooth, float[]? trap, int n,
         ReliefHeightSource source, double blend)
+        => Build(smooth, trap, n, source, blend, null, 0, 0, 0.0, 0.02);
+
+    /// <summary>#1029 — as above, plus the Distance source. <paramref name="distance"/>
+    /// is the exterior distance estimate (complex-plane units, 0 in the set) over a
+    /// <paramref name="w"/>×<paramref name="h"/> grid whose pixels are
+    /// <paramref name="pixelScale"/> wide, so <c>distance / (pixelScale·min(w,h))</c>
+    /// is the distance in view units. Height = <see cref="DistanceHeight"/>·exp(−d /
+    /// <paramref name="falloff"/>): the set is a raised plateau, filaments are ridges.
+    /// Falls back to <paramref name="smooth"/> when no usable distance field is
+    /// supplied (a calculator without one, or a deep zoom where the float estimate
+    /// underflowed to 0 for most escaped pixels).</summary>
+    public static float[] Build(float[] smooth, float[]? trap, int n,
+        ReliefHeightSource source, double blend,
+        float[]? distance, int w, int h, double pixelScale, double falloff)
     {
         if (smooth == null) throw new ArgumentNullException(nameof(smooth));
         if (n <= 0 || n > smooth.Length) n = smooth.Length;
         if (source == ReliefHeightSource.Smooth) return smooth;
+        if (source == ReliefHeightSource.Distance)
+            return BuildDistance(smooth, n, distance, w, h, pixelScale, falloff) ?? smooth;
         if (trap == null || trap.Length < n) return smooth;
 
         // Normalise trap into smooth's raw range, inverted. First the finite trap
@@ -83,6 +99,45 @@ public static class ReliefHeightField
                 th = sMax * (1f - norm);               // invert: near-trap -> high ridge
             }
             outp[i] = blendMode ? smooth[i] * wSmooth + th * wTrap : th;
+        }
+        return outp;
+    }
+
+    /// <summary>#1029 — the raw height the Distance source gives the set itself (the
+    /// plateau). A fixed nominal value, independent of iteration counts, so the
+    /// height tone curve behaves the same at every zoom depth.</summary>
+    public const float DistanceHeight = 10f;
+
+    private static float[]? BuildDistance(float[] smooth, int n, float[]? distance,
+        int w, int h, double pixelScale, double falloff)
+    {
+        if (distance == null || distance.Length < n || w <= 0 || h <= 0 || (long)w * h < n) return null;
+        double span = pixelScale * Math.Min(w, h);
+        if (!(span > 0.0) || double.IsInfinity(span)) return null;
+        double f = Math.Clamp(falloff, 0.002, 0.2);
+
+        // Usable only if the escaped pixels carry an estimate (a deep zoom can
+        // underflow the float estimate to 0).
+        int escaped = 0, missing = 0;
+        for (int i = 0; i < n; i++)
+        {
+            if (smooth[i] > 0f)
+            {
+                escaped++;
+                float d = distance[i];
+                if (!(d > 0f) || float.IsInfinity(d)) missing++;
+            }
+        }
+        if (escaped == 0 || missing * 2 > escaped) return null;
+
+        var outp = new float[n];
+        double inv = 1.0 / (span * f);
+        for (int i = 0; i < n; i++)
+        {
+            float d = distance[i];
+            if (smooth[i] <= 0f) { outp[i] = DistanceHeight; continue; }        // in the set: plateau
+            if (!(d > 0f) || float.IsInfinity(d)) { outp[i] = 0f; continue; }   // no estimate: ground
+            outp[i] = (float)(DistanceHeight * Math.Exp(-d * inv));
         }
         return outp;
     }

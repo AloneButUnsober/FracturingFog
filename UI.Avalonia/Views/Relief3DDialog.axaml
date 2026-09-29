@@ -169,13 +169,13 @@
                      original) / orbit-trap min-distance / blend. Trap + Blend need an
                      orbit-trap theme active (which fills the trap field); colour still
                      comes from the theme. -->
-                <Expander Header="Height source (smooth / orbit-trap)" HorizontalAlignment="Stretch"
+                <Expander Header="Height source (smooth / orbit-trap / distance)" HorizontalAlignment="Stretch"
                           IsExpanded="False"
                           IsEnabled="{Binding Relief2DEnabled}"
-                          ToolTip.Tip="Which per-pixel field the relief height is built from. Smooth = the iteration count (original). Trap = the orbit-trap min-distance field, for literal 3D orbit-trap topography (Ring -> concentric ridges, Hexagon -> a hex lattice). Blend = a mix. Trap / Blend require an orbit-trap colour theme active; with none, relief falls back to Smooth. Mandelbrot only. (Hi-res field floor uses Smooth; trap uses the display-res field for now.)">
-                <Grid ColumnDefinitions="160,*" RowDefinitions="Auto,Auto">
+                          ToolTip.Tip="Which per-pixel field the relief height is built from. Smooth = the iteration count (original). Trap = the orbit-trap min-distance field, for literal 3D orbit-trap topography (Ring -> concentric ridges, Hexagon -> a hex lattice). Blend = a mix. Trap / Blend require an orbit-trap colour theme active; with none, relief falls back to Smooth. Distance = distance to the set: the set becomes a raised plateau and filaments ridges that fall away, the same at any zoom depth and window size (Mandelbrot and the escape-time family; others fall back to Smooth). Best with Real height on (Camera &amp; quality); the default plate look draws it as tall curtain walls.">
+                <Grid ColumnDefinitions="160,*" RowDefinitions="Auto,Auto,Auto">
                     <TextBlock Grid.Row="0" Grid.Column="0" Text="Height from:" VerticalAlignment="Center"
-                               ToolTip.Tip="Smooth = iteration count. Trap = orbit-trap min-distance (needs an orbit-trap theme). Blend = mix of the two." />
+                               ToolTip.Tip="Smooth = iteration count. Trap = orbit-trap min-distance (needs an orbit-trap theme). Blend = mix of the two. Distance = distance to the set (a raised plateau with ridge filaments)." />
                     <ComboBox Grid.Row="0" Grid.Column="1" Margin="0,2" HorizontalAlignment="Stretch"
                               ItemsSource="{Binding Relief2DHeightSources}"
                               SelectedItem="{Binding Relief2DHeightSource, Mode=TwoWay}" />
@@ -186,6 +186,14 @@
                     <Slider Grid.Row="1" Grid.Column="1" Minimum="0" Maximum="1" Margin="0,2"
                             IsEnabled="{Binding Relief2DHeightBlendApplies}"
                             Value="{Binding Relief2DHeightBlend, Mode=TwoWay}" />
+
+                    <!-- #1029 — Distance source falloff. -->
+                    <TextBlock Grid.Row="2" Grid.Column="0" Text="Distance falloff (%):" VerticalAlignment="Center"
+                               IsEnabled="{Binding Relief2DDistanceFalloffApplies}"
+                               ToolTip.Tip="Distance source: how far from the set (as a percentage of the view) the height drops to about a third. Small = narrow ridges hugging the set; large = broad hills." />
+                    <Slider Grid.Row="2" Grid.Column="1" Minimum="0.2" Maximum="20" Margin="0,2"
+                            IsEnabled="{Binding Relief2DDistanceFalloffApplies}"
+                            Value="{Binding Relief2DDistanceFalloffPercent, Mode=TwoWay}" />
                 </Grid>
                 </Expander>
 

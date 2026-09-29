@@ -182,6 +182,19 @@ needle into view and everything else flattens. The **Height consistency** sectio
 > view than it would in Peak. Batch: `--relief-height-mode peak|robust|fixed`,
 > `--relief-height-ref`, `--relief-height-baseline`.
 
+### Height from distance (#1029)
+
+In **Height source**, **Distance** builds the relief from each point's distance to the set instead of its iteration
+count. The set becomes a raised plateau (in the set's colour), and filaments become ridges that fall away with distance.
+**Distance falloff** (default 2% of the view) sets how far they fall: small = narrow ridges, large = broad hills. It is
+measured in view units, so it looks the same at any window size and zoom depth.
+
+- **Best with Real height:** the plate look draws it as tall curtain walls.
+- **Supported fractals:** Mandelbrot and the escape-time family. Others fall back to Smooth.
+- **Very deep zooms:** past about 1e30 the distance estimate runs out of precision and it falls back to Smooth.
+- **Batch:** `--relief-height-source distance --relief-distance-falloff 0.02`. `--relief-height-source` also takes
+  `smooth|trap|blend`, with `--relief-height-blend`.
+
 ### Toggles
 
 | Toggle | What it does |

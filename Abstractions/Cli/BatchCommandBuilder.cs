@@ -151,6 +151,12 @@ namespace FracturingFog.Cli
         /// <summary>#1035 — terrain smoothing (Real height); emitted when on and non-default.</summary>
         public double ReliefTerrainSmoothing { get; init; } = 0.02;
 
+        /// <summary>#1029 — height source (emitted when not Smooth), its blend weight
+        /// (Blend) and distance falloff (Distance), each only when non-default.</summary>
+        public ReliefHeightSource ReliefHeightSource { get; init; } = ReliefHeightSource.Smooth;
+        public double ReliefHeightBlend { get; init; } = 0.5;
+        public double ReliefDistanceFalloff { get; init; } = 0.02;
+
         // Depth of field on the relief raymarch camera (roadmap S3, #389).
         // Aperture 0 = pinhole (omit both flags). Emitted only on the raymarch path.
         public double ReliefDofAperture { get; init; }
@@ -350,6 +356,15 @@ namespace FracturingFog.Cli
                 if (snap.ReliefDetailGain != 1.0)      { parts.Add(BatchFlags.ReliefDetailGain);     parts.Add(Num(snap.ReliefDetailGain)); }
                 if (snap.ReliefDetailRadius != 0)      { parts.Add(BatchFlags.ReliefDetailRadius);   parts.Add(snap.ReliefDetailRadius.ToString(System.Globalization.CultureInfo.InvariantCulture)); }
                 if (snap.ReliefHeightGamma != 1.0)     { parts.Add(BatchFlags.ReliefHeightGamma);    parts.Add(Num(snap.ReliefHeightGamma)); }
+                if (snap.ReliefHeightSource != ReliefHeightSource.Smooth)
+                {
+                    parts.Add(BatchFlags.ReliefHeightSource);
+                    parts.Add(snap.ReliefHeightSource.ToString().ToLowerInvariant());
+                    if (snap.ReliefHeightSource == ReliefHeightSource.Blend && snap.ReliefHeightBlend != 0.5)
+                    { parts.Add(BatchFlags.ReliefHeightBlend); parts.Add(Num(snap.ReliefHeightBlend)); }
+                    if (snap.ReliefHeightSource == ReliefHeightSource.Distance && snap.ReliefDistanceFalloff != 0.02)
+                    { parts.Add(BatchFlags.ReliefDistanceFalloff); parts.Add(Num(snap.ReliefDistanceFalloff)); }
+                }
                 if (snap.ReliefStrength != 1.0)        { parts.Add(BatchFlags.ReliefStrength);       parts.Add(Num(snap.ReliefStrength)); }
                 if (snap.ReliefLightAzimuth != 135.0)  { parts.Add(BatchFlags.ReliefLightAzimuth);   parts.Add(Num(snap.ReliefLightAzimuth)); }
                 if (snap.ReliefLightElevation != 30.0) { parts.Add(BatchFlags.ReliefLightElevation); parts.Add(Num(snap.ReliefLightElevation)); }

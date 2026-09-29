@@ -62,6 +62,17 @@ namespace FracturingFog.Interefaces
         float[] TrapBuffer { get; }
     }
 
+    /// <summary>#1029 — implemented by calculators that fill a per-pixel exterior
+    /// distance estimate (complex-plane units; 0 for in-set pixels) — the Distance
+    /// relief height source. <see cref="DistancePixelScale"/> is the complex-plane
+    /// width of one pixel for the last calculation, so the estimate can be put in
+    /// view units.</summary>
+    public interface IDistanceFieldSource
+    {
+        float[] DistanceBuffer { get; }
+        double DistancePixelScale { get; }
+    }
+
     /// <summary>Implemented by the 3D raymarch calculators, which can render one
     /// eye of a true (two-render) stereo pair (#107 / #1008). The camera origin is
     /// shifted by <see cref="StereoEyeOffset"/> world units along the camera's

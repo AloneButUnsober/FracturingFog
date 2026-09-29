@@ -85,3 +85,22 @@ At app defaults the real surface of the smooth-iteration field is a thin, noisy 
 - **Needle knee:** anything above the Robust (99.5th percentile) or Fixed (locked) reference rolls off softly toward reference × 1.2 (`KneeSpan`). Peak never exceeds its reference, so it is a no-op. A lock taken from Robust reproduces the frame exactly, and needles that enter a locked view are capped too. This applies to the plate path as well, but only in Robust / Fixed mode.
 
 **Tests** (`ReliefTerrainShapingTests`): depth-AOV roughness drops by more than 40% with smoothing; window-size agreement; Robust's top (hit heights reconstructed from the camera) ≤ 1.22 × full height while Peak reaches full height; the plate path ignores smoothing; and parity.
+
+## S4: distance-estimate height source (#1029)
+
+`ReliefHeightSource.Distance` builds the height from the exterior distance estimate the calculators already fill (`DistanceBuffer`, complex-plane units, 0 in the set).
+
+**How it works:**
+- **Interface:** `IDistanceFieldSource` exposes the buffer plus `DistancePixelScale`. Mandelbrot and EscapeTime implement it.
+- **Height formula:** `ReliefHeightField.Build` computes h = 10·exp(−d / (falloff·span)), where span = pixelScale·min(w,h), i.e. view units. Default `Relief2DDistanceFalloff` is 0.02.
+- **Plateau:** in-set pixels take the full nominal height.  
+  The constant 10 is independent of iteration counts, so the tone curve behaves the same at any zoom depth.
+- **Fallback to Smooth** when a calculator has no distance field, or when most escaped pixels have no estimate (float underflow at very deep zooms).
+- **Wiring:** all capture sites pass the source's buffer and scale: the host hi-res twin, the preview, the display-res field and the poster/batch. The poster's own below-floor hi-res field used to return raw counts, so it now applies the source as well.
+- **Trap/Blend checks:** checks that meant "needs the orbit-trap field" now test Trap/Blend explicitly rather than `!= Smooth`.
+
+**Batch:** `--relief-height-source smooth|trap|blend|distance` (the source had no batch flag before), `--relief-height-blend`, `--relief-distance-falloff`. Also region save/load, Command builder seed, dialog falloff slider and Defaults reset.
+
+**Assessment at app defaults:** it is a different look (plateau and ridges, no interior pit), not a replacement for Smooth with terrain smoothing. It reads best on filament views such as the elephant valley. On dense views the in-set plateau (usually black) dominates, e.g. at the seahorse. It stays opt-in.
+
+**Tests** (`ReliefDistanceSourceTests`): plateau, monotonic falloff and the exact e⁻¹ point; fallbacks; the same landscape at 240×135 and 480×270 (2×2 block means); the poster hi-res field carries the source; batch/builder/region/dialog parity.

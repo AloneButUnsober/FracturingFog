@@ -157,6 +157,7 @@ public sealed partial class FractalParamsViewModel
         _p.Relief2DHeightCurve        = d.Relief2DHeightCurve;
         _p.Relief2DHeightSource       = d.Relief2DHeightSource;        // S11 #592
         _p.Relief2DHeightBlend        = d.Relief2DHeightBlend;         // S11 #592
+        _p.Relief2DDistanceFalloff    = d.Relief2DDistanceFalloff;     // #1029
         _p.Relief2DDetailGain         = d.Relief2DDetailGain;          // #518
         _p.Relief2DDetailRadius       = d.Relief2DDetailRadius;        // #518
         _p.Relief2DHeightGamma        = d.Relief2DHeightGamma;         // #518
@@ -267,6 +268,7 @@ public sealed partial class FractalParamsViewModel
         nameof(Relief2DCameraAzimuthDeg), nameof(Relief2DCameraElevationDeg), nameof(Relief2DCameraFovDeg),
         nameof(Relief2DCameraZoom), nameof(Relief2DCameraOrthographic), nameof(Relief2DSupersample),
         nameof(Relief2DHeightSource), nameof(Relief2DHeightBlend), nameof(Relief2DHeightBlendApplies),
+        nameof(Relief2DDistanceFalloffApplies), nameof(Relief2DDistanceFalloffPercent),
         nameof(Relief2DHeightCurve),
         nameof(Relief2DDofApertureRadius), nameof(Relief2DDofFocusDistance), nameof(DofEnabled),
         nameof(Relief2DDenoiseIterations), nameof(Relief2DDenoiseColorSigma),
