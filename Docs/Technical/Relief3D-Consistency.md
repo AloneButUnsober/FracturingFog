@@ -86,6 +86,34 @@ At app defaults the real surface of the smooth-iteration field is a thin, noisy 
 
 **Tests** (`ReliefTerrainShapingTests`): depth-AOV roughness drops by more than 40% with smoothing; window-size agreement; Robust's top (hit heights reconstructed from the camera) ≤ 1.22 × full height while Peak reaches full height; the plate path ignores smoothing; and parity.
 
+## S3: canonical field for real height (#1028)
+
+**Measured first.** Five window sizes (480×270 to 2560×1440) over whole-set and seahorse views, with the field sized the way the host sizes it. Terrain hit heights were reconstructed from the depth AOV and the camera, and compared on a common grid of screen positions.
+- **Plate path (default):** already window-invariant (mean height gap ≤ 0.3% of full height). Every supported field is raised to the floor, so every window gets the plate. Nothing to do; it stays byte-identical.
+- **Real height (#1038):** the field was downsampled to the output size, so smaller windows averaged the peaks away. The height reference moved by up to 25% (smoothing 2%) or 48% (smoothing 0). Mean height gap vs 1440p on the seahorse: 2.1% at 270p, 1.5% at 540p, 1.0% at 720p.
+- **Large windows:** a window above the floor traced its own display-res field. Area-downsampling a finer field lowers the peaks, so the seahorse reference was 1.64 at 1080p, 1.55 at 1440p and 1.39 at 2160p. A 4K window's relief came out about 18% taller.
+
+**Fix** (`Relief2DCanonicalField`, default on, Real height only):
+- **One grid:** `HeightfieldRaymarch2D.TraceGrid` shapes and traces the terrain on a grid whose short axis is the field floor (`CanonicalDims`). A finer field is area-downsampled to it; a coarser one (preview, hi-res field off) is kept, never upsampled.
+- **Same field for large windows:** `FractalRenderHost.HiResReliefFieldDims`, shared by the host capture and the poster/batch path, now brings a window above the floor *down* to the floor too. Every window computes the same field, not a downsample of its own.
+- **Anti-aliasing:** when the grid is finer than the output, a blur of about one output pixel (`round((f − 1)/2)` cells, f = grid cells per output pixel) stands in for the #1027 downsample-to-output. It merges into the terrain smoothing, which at the default 2% is already wider, so it changes nothing at default settings.
+- **Off:** the #1038 behaviour exactly (`FieldTargetDims`, the display-res field above the floor). Batch `--relief-no-canonical-field`.
+
+**Result:** at default smoothing the reference is identical at every window size, and the mean height gap vs 1440p falls to 0.6% at 270p and ≤ 0.3% from 540p. At smoothing 0 the small windows still differ (2–3%). That is the anti-alias blur, a sharpness change by design.
+
+**Left as is:**
+- **Cone tolerance** still uses the output's pixel angle. It is pixel-footprint anti-aliasing, and the residual 0.6% at 270p did not justify changing it in three kernels.
+- **Per-distance mip filtering** is not needed once the grid is canonical and smoothed.
+
+**Cost:** a small window now traces the floor-size grid instead of an output-size one (270p: about 0.35 s vs 0.2 s on the CPU trace; the prepass is cached). A window above the floor computes one extra floor-size field and traces a coarser grid, which came out slightly faster.
+
+**Tests** (`ReliefCanonicalFieldTests`):
+- 480×270 and 1280×720 hit heights agree within 0.8% of full height, and output-size shaping differs by more;
+- the Robust reference is equal at 270p, 720p, 1080p and 1440p;
+- field sizing, `TraceGrid`, and the poster's large-output field;
+- the plate path ignores the setting;
+- batch, builder, region and dialog parity.
+
 ## S4: distance-estimate height source (#1029)
 
 `ReliefHeightSource.Distance` builds the height from the exterior distance estimate the calculators already fill (`DistanceBuffer`, complex-plane units, 0 in the set).

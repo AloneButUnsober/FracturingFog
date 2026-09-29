@@ -269,8 +269,12 @@ public static class HeightfieldRaymarchProbe
         // grid (an anti-aliased field), so the two renders must now AGREE — same
         // silhouette coverage — with the floor field no rougher than the
         // display-res one. Deterministic (no RNG), thresholds carry headroom.
+        // #1028 — the canonical field shapes the floor field on its own 1080 grid
+        // (not downsampled to the output), so its shading keeps slightly finer
+        // detail: the ratio sits at ~1.00 (agreement). A needle forest reads far
+        // rougher, so "no rougher" allows a few percent.
         bool ok = surfLo > 0.10 && surfHi > 0.10
-                  && ratio <= 1.0 && Math.Abs(surfHi - surfLo) < 0.05;
+                  && ratio <= 1.05 && Math.Abs(surfHi - surfLo) < 0.05;
         sb.AppendLine(ok ? "RESULT: PASS" : "RESULT: FAIL");
 
         try { File.WriteAllText(

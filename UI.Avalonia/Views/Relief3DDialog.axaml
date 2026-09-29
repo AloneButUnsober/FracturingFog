@@ -220,6 +220,11 @@
                     <TextBlock Grid.Column="2" VerticalAlignment="Center" Foreground="#999"
                                Text="{Binding Relief2DTerrainSmoothingPercent, StringFormat='{}{0:0.0}'}" />
                 </Grid>
+                <!-- #1028 — canonical field for Real height. -->
+                <CheckBox Content="Same height at any window size"
+                          IsChecked="{Binding Relief2DCanonicalField, Mode=TwoWay}"
+                          IsEnabled="{Binding Relief2DTrueHeight}"
+                          ToolTip.Tip="Real height only. On (default): the terrain is shaped on one fixed grid (the field floor), so a small and a large window show the same heights and only the sharpness differs. Off: the terrain is shaped at the window size, so its height shifts a little as the window is resized." />
                 <Grid ColumnDefinitions="160,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto">
                     <TextBlock Grid.Row="0" Grid.Column="0" Text="Camera azimuth (°):" VerticalAlignment="Center"
                                ToolTip.Tip="Orbit the terrain around the up axis. 0 = looking straight at the scene." />

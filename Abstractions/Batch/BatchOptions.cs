@@ -297,6 +297,7 @@ namespace FracturingFog.Batch
         public global::FracturingFog.ReliefDetailAnchor? ReliefDetailAnchor { get; set; }  // #1027
         public bool ReliefTrueHeight { get; set; }          // #1027 follow-up
         public double? ReliefTerrainSmoothing { get; set; } // #1035 — 0..0.05 of the short axis
+        public bool ReliefNoCanonicalField { get; set; }    // #1028 — Real height at the output size
         public global::FracturingFog.ReliefHeightSource? ReliefHeightSource { get; set; }  // #1029
         public double? ReliefHeightBlend { get; set; }      // #1029 — 0..1 (Blend source)
         public double? ReliefDistanceFalloff { get; set; }  // #1029 — 0.002..0.2 (Distance source)
@@ -1060,6 +1061,11 @@ namespace FracturingFog.Batch
                     case BatchFlags.ReliefTerrainSmoothing:
                         if (!NextDouble(args, ref i, a, out double rts, out error)) return false;
                         opts.ReliefTerrainSmoothing = rts;
+                        opts.Relief = true;
+                        break;
+
+                    case BatchFlags.ReliefNoCanonicalField:   // #1028
+                        opts.ReliefNoCanonicalField = true;
                         opts.Relief = true;
                         break;
 

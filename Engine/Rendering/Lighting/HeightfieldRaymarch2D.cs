@@ -336,8 +336,8 @@ public static class HeightfieldRaymarch2D
         // sy / invLip stay per-call (cheap, scale-dependent).
         // #1027 — the field downsample belongs to the true-height trace; the
         // default (plate) look traces the field as it is, as before.
-        var (tw, th) = p.Relief2DTrueHeight ? FieldTargetDims(hw, hh, w, h) : (hw, hh);
-        ReliefPrepass pre = GetPrepass(height, hn, hw, hh, p, tw, th);
+        var (tw, th, aa) = TraceGrid(hw, hh, w, h, p);
+        ReliefPrepass pre = GetPrepass(height, hn, hw, hh, p, tw, th, aa);
         // #1027 — a field finer than the output is area-downsampled inside the
         // prepass; everything below works on the prepass grid.
         hw = pre.W; hh = pre.H;
@@ -1193,7 +1193,7 @@ public static class HeightfieldRaymarch2D
     /// field is only ever READ downstream (BuildKeepMask / HeightDe / the GPU
     /// kernel), so a cache hit can safely share it across concurrent renders.</summary>
     private static ReliefPrepass GetPrepass(float[] height, int hn, int hw, int hh, FractalParameters p,
-                                            int targetW, int targetH)
+                                            int targetW, int targetH, int aaRadius = 0)
     {
         HeightCurve2D curve = p.Relief2DHeightCurve;
         double edgeFade = Math.Clamp(p.Relief2DEdgeFade, 0.0, 0.5);
@@ -1211,6 +1211,9 @@ public static class HeightfieldRaymarch2D
         double smoothFrac = p.Relief2DTrueHeight ? Math.Clamp(p.Relief2DTerrainSmoothing, 0.0, 0.05) : 0.0;
         int tgw = targetW > 0 ? targetW : hw, tgh = targetH > 0 ? targetH : hh;
         int smoothRadius = smoothFrac > 0.0 ? Math.Max(1, (int)Math.Round(smoothFrac * Math.Min(tgw, tgh))) : 0;
+        // #1028 — the canonical grid's anti-alias blur; the terrain smoothing, when
+        // wider, already covers it.
+        smoothRadius = Math.Max(smoothRadius, aaRadius);
         // Robust / Fixed roll needles off softly above their reference (#1035).
         bool robustKnee = p.Relief2DHeightMode == ReliefHeightMode.Robust;
         double kneeRef = gammaRef;   // Fixed: the locked reference (0 = none)
@@ -1260,8 +1263,8 @@ public static class HeightfieldRaymarch2D
         int hn = hw * hh;
         if (height == null || p == null || hw <= 2 || hh <= 2 || height.Length < hn) return null;
         if (outW <= 0 || outH <= 0) { outW = hw; outH = hh; }
-        var (tw, th) = p.Relief2DTrueHeight ? FieldTargetDims(hw, hh, outW, outH) : (hw, hh);
-        ReliefPrepass pre = GetPrepass(height, hn, hw, hh, p, tw, th);
+        var (tw, th, aa) = TraceGrid(hw, hh, outW, outH, p);
+        ReliefPrepass pre = GetPrepass(height, hn, hw, hh, p, tw, th, aa);
         if (pre.MaxH <= 1e-9f) return null;
         return new ReliefHeightNormalization(pre.Baseline, NormalizationReference(pre, p));
     }
@@ -1678,6 +1681,44 @@ public static class HeightfieldRaymarch2D
         if (w <= 0 || h <= 0) return (hw, hh);
         double k = Math.Max(hw / (double)w, hh / (double)h);
         if (k <= FieldDownsampleThreshold) return (hw, hh);
+        return (Math.Max(3, (int)Math.Round(hw / k)), Math.Max(3, (int)Math.Round(hh / k)));
+    }
+
+    /// <summary>#1028 — the grid the relief is shaped and traced on, plus the
+    /// anti-alias blur radius (cells) it needs. The default plate look traces the
+    /// field as it is. Real height with <see cref="FractalParameters.Relief2DCanonicalField"/>
+    /// uses one fixed grid whose short axis is the field floor, so the terrain's
+    /// shape and height do not depend on the window: a finer field is
+    /// area-downsampled to it (a coarser one is kept, never upsampled), and when
+    /// the grid is finer than the output a blur of about one output pixel stands in
+    /// for the old downsample-to-output anti-aliasing. Without it, the #1027 grid:
+    /// downsampled to about one cell per output pixel.</summary>
+    public static (int W, int H, int AaRadius) TraceGrid(int hw, int hh, int w, int h, FractalParameters p)
+    {
+        if (!p.Relief2DTrueHeight) return (hw, hh, 0);
+        if (!p.Relief2DCanonicalField)
+        {
+            var (fw, fh) = FieldTargetDims(hw, hh, w, h);
+            return (fw, fh, 0);
+        }
+        var (cw, ch) = CanonicalDims(hw, hh, Math.Clamp(p.Relief2DFieldFloor, 480, 2160));
+        int aa = 0;
+        if (w > 0 && h > 0)
+        {
+            double f = Math.Min(cw, ch) / (double)Math.Min(w, h);   // grid cells per output pixel
+            if (f > FieldDownsampleThreshold) aa = Math.Max(1, (int)Math.Round((f - 1.0) * 0.5));
+        }
+        return (cw, ch, aa);
+    }
+
+    /// <summary>#1028 — a <paramref name="hw"/>×<paramref name="hh"/> field's
+    /// canonical grid: short axis <paramref name="shortAxis"/> (aspect kept) when the
+    /// field is finer, else the field's own size.</summary>
+    public static (int W, int H) CanonicalDims(int hw, int hh, int shortAxis)
+    {
+        int s = Math.Min(hw, hh);
+        if (shortAxis <= 0 || s <= shortAxis) return (hw, hh);
+        double k = s / (double)shortAxis;
         return (Math.Max(3, (int)Math.Round(hw / k)), Math.Max(3, (int)Math.Round(hh / k)));
     }
 

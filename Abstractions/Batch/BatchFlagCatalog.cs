@@ -648,6 +648,8 @@ namespace FracturingFog.Batch
                     with { Implies = ReliefOn, Requires = new[] { BatchFlags.ReliefRaymarch } },
                 Dbl(BatchFlags.ReliefTerrainSmoothing, Cam, FR, "Real height: smooth the terrain over this fraction of the view's short axis, so needle walls read as cliffs and mounds (0 = off).", 0, 0.05, enforced: true, def: "0.02")
                     with { Implies = ReliefOn, Requires = new[] { BatchFlags.ReliefTrueHeight } },
+                Sw(BatchFlags.ReliefNoCanonicalField, Cam, FR, "Real height: shape the terrain at the output size instead of on one fixed grid (the field floor), so the height varies a little with the output size (the #1035 behaviour).")
+                    with { Implies = ReliefOn, Requires = new[] { BatchFlags.ReliefTrueHeight } },
                 Pick(BatchFlags.ReliefDetailAnchor, Cam, FR,
                     "Where the hit tolerance is measured from: camera = grows with distance, so far filaments sink into the floor; uniform = measured at the nearest terrain and held, so far detail resolves like near detail (slower).",
                     new[] { "camera", "uniform" }, def: "camera", hint: "ANCHOR")
