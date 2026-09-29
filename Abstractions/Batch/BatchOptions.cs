@@ -296,6 +296,7 @@ namespace FracturingFog.Batch
         public double? ReliefHeightBaseline { get; set; }  // #1026 — ≥ 0 (fixed mode)
         public global::FracturingFog.ReliefDetailAnchor? ReliefDetailAnchor { get; set; }  // #1027
         public bool ReliefTrueHeight { get; set; }          // #1027 follow-up
+        public double? ReliefTerrainSmoothing { get; set; } // #1035 — 0..0.05 of the short axis
 
         // Depth of field on the relief raymarch camera (roadmap S3, #389). Any
         // DOF flag implies relief + raymarch (perspective camera only).
@@ -1026,6 +1027,12 @@ namespace FracturingFog.Batch
                         opts.Relief = true;
                         break;
 
+                    case BatchFlags.ReliefTerrainSmoothing:
+                        if (!NextDouble(args, ref i, a, out double rts, out error)) return false;
+                        opts.ReliefTerrainSmoothing = rts;
+                        opts.Relief = true;
+                        break;
+
                     case BatchFlags.ReliefDetailAnchor:
                         if (!Next(args, ref i, a, out string rda, out error)) return false;
                         switch (rda.ToLowerInvariant())
@@ -1469,6 +1476,8 @@ namespace FracturingFog.Batch
                 { error = "--relief-far-detail must be 0.15..1 (1 = off, lower = more far detail)."; return false; }
             // #1026 — the fixed reference / baseline belong to fixed mode; either one
             // alone selects it.
+            if (opts.ReliefTerrainSmoothing is < 0 or > 0.05)
+                { error = "--relief-terrain-smoothing must be 0..0.05 (fraction of the view's short axis; 0 = off)."; return false; }
             if (opts.ReliefHeightRef is <= 0)
                 { error = "--relief-height-ref must be > 0."; return false; }
             if (opts.ReliefHeightBaseline is < 0)

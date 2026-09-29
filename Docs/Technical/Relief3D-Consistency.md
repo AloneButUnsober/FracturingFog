@@ -75,3 +75,13 @@ Next: terrain shaping so real height reads as terrain (#1035), and distance-esti
 **Open:**
 - Soft shadows, AO and reflections also march the height DE against small epsilons and may over-occlude on fine fields: #1033.
 - Per-distance filtering (a mip chosen by pixel footprint along the ray) would anti-alias far terrain better than one output-sized grid. That belongs in #1028.
+
+## Terrain shaping for real height (#1035)
+
+At app defaults the real surface of the smooth-iteration field is a thin, noisy wall of needles around the set. Under `Relief2DTrueHeight` (only; the default plate path is byte-identical, verified by batch pixel-diff):
+
+- **Terrain smoothing:** `Relief2DTerrainSmoothing`, default 0.02 of the traced grid's short axis, 0..0.05; batch `--relief-terrain-smoothing`; dialog 0–5%. Three box passes (≈ Gaussian) after the tone curve and downsample, before the detail shaping, so Detail exaggeration can re-sharpen on purpose. It is view-relative, so it looks the same at any window size. The default comes from a sweep (0 / 0.5 / 1 / 2 / 3.5%) over whole-set, seahorse and elephant views at 640 and 1280 px: 1% still bristled and 3.5% went blobby.
+- **Small-window tamers off:** `ResolutionRamp`'s amplitude pull-down (up to 72%) and the adaptive median/blur were needle mitigations tuned against the plate. They made the height depend on the window size, so real height skips them and terrain smoothing takes their place. 480 and 960 px now agree on silhouette coverage within 3%.
+- **Needle knee:** anything above the Robust (99.5th percentile) or Fixed (locked) reference rolls off softly toward reference × 1.2 (`KneeSpan`). Peak never exceeds its reference, so it is a no-op. A lock taken from Robust reproduces the frame exactly, and needles that enter a locked view are capped too. This applies to the plate path as well, but only in Robust / Fixed mode.
+
+**Tests** (`ReliefTerrainShapingTests`): depth-AOV roughness drops by more than 40% with smoothing; window-size agreement; Robust's top (hit heights reconstructed from the camera) ≤ 1.22 × full height while Peak reaches full height; the plate path ignores smoothing; and parity.

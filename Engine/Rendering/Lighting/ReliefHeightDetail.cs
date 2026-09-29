@@ -73,7 +73,7 @@ public static class ReliefHeightDetail
 
     // Separable box blur (radius r each axis) via a running sum, edge-clamped. Two
     // scratch passes; leaves `dst` = blurred `src`.
-    private static void BoxBlur(float[] src, float[] dst, int w, int h, int r)
+    internal static void BoxBlur(float[] src, float[] dst, int w, int h, int r)
     {
         var tmp = new float[w * h];
         double norm = 1.0 / (2 * r + 1);

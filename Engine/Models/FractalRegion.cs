@@ -1540,6 +1540,7 @@ namespace FracturingFog.Models
         [JsonConverter(typeof(JsonStringEnumConverter))]
         public ReliefDetailAnchor DetailAnchor { get; set; } = ReliefDetailAnchor.Camera;
         public bool TrueHeight { get; set; } = false;   // #1027 follow-up
+        public double TerrainSmoothing { get; set; } = 0.02;   // #1035
 
         // Isolation cull (#135)
         public bool Isolate { get; set; } = false;
@@ -1675,6 +1676,7 @@ namespace FracturingFog.Models
                 HeightBaseline     = p.Relief2DHeightBaseline,
                 DetailAnchor       = p.Relief2DDetailAnchor,
                 TrueHeight         = p.Relief2DTrueHeight,
+                TerrainSmoothing   = p.Relief2DTerrainSmoothing,
                 Isolate            = p.Relief2DIsolate,
                 IsolateByDetail    = p.Relief2DIsolateByDetail,
                 DetailThreshold    = p.Relief2DDetailThreshold,
@@ -1752,6 +1754,7 @@ namespace FracturingFog.Models
             p.Relief2DHeightBaseline     = HeightBaseline;
             p.Relief2DDetailAnchor       = DetailAnchor;
             p.Relief2DTrueHeight         = TrueHeight;
+            p.Relief2DTerrainSmoothing   = TerrainSmoothing;
             p.Relief2DIsolate            = Isolate;
             p.Relief2DIsolateByDetail    = IsolateByDetail;
             p.Relief2DDetailThreshold    = DetailThreshold;

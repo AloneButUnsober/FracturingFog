@@ -837,6 +837,19 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
         set { if (_p.Relief2DTrueHeight == value) return; _p.Relief2DTrueHeight = value; this.RaisePropertyChanged(); Fire(); }
     }
 
+    // #1035 — terrain smoothing for Real height, as a percentage of the view's short
+    // axis in the dialog (0–5 %); stored as a fraction.
+    public double Relief2DTerrainSmoothingPercent
+    {
+        get => _p.Relief2DTerrainSmoothing * 100.0;
+        set
+        {
+            double v = Clamp(value, 0.0, 5.0) / 100.0;
+            if (_p.Relief2DTerrainSmoothing == v) return;
+            _p.Relief2DTerrainSmoothing = v; this.RaisePropertyChanged(); Fire();
+        }
+    }
+
     // #520 (part 3) — settle-based full detail (auto poster-detail on idle).
     public bool Relief2DSettleDetail
     {

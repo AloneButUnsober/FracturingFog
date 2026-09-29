@@ -127,6 +127,7 @@ screen-space relief, but a true 3D scene.
 | **Edge fade** | 0 – 0.5 | Ramps the height to the base plane near the image edges, so structure running off-frame tapers out instead of forming streaky "arms". 0 = off. **Not** the same as the Lighting & FX panel's **Edge strength** — that is an unrelated screen-space silhouette-inking post-pass (colored strokes over edges), not a heightfield taper. |
 | **Field floor (px)** | 480 – 2160 | Short-axis resolution the height field is computed at, independent of window size. Only active with **Hi-res height field**, and only when the window is smaller than this. |
 | **Far detail** | 0.15 – 1 | Distant-filament resolving power. On screen the raymarch keeps detail tall near the camera but lets it fall toward the floor with distance (the distance-cone fattens at low resolution); the poster keeps it tall throughout. **Drag left** to tighten the far cone so distant filaments stay tall on screen too — the poster look, live. Lower = more far detail **and** slower (more marching). 1 = off / byte-identical. |
+| **Terrain smoothing (%)** | 0 – 5 | Real height only (default 2%). Smooths the terrain over this percentage of the view, so the thin needle walls an iteration-count field forms around the set become cliffs and mounds. Colour stays sharp. View-relative, so a small and a large window show the same shape. 0 = the raw, spiky field. Batch: `--relief-terrain-smoothing 0.02`. |
 | **Detail measured from** | Camera / Uniform | A ray counts as touching the surface within about one pixel's width at its distance, so the tolerance loosens with distance. **Camera** (default) measures it from the camera. **Uniform** measures it once at the nearest terrain and holds it, so far terrain resolves detail as finely as the near edge. Slower on far terrain. Combines with Far detail. Batch: `--relief-detail-anchor uniform`. |
 | **Settle to full detail** | on / off | Best of both: render fast while you pan / zoom / orbit, then a moment after the view **stops**, auto re-render the relief at full far-detail (distant filaments resolve like the poster) — no fractal recompute. The next move drops back to fast. The extra render happens only while the view is idle, so interaction stays fluid. Off = the live view keeps whatever **Far detail** you set. |
 
@@ -134,8 +135,8 @@ screen-space relief, but a true 3D scene.
 > On most windows the raymarch draws the relief as a shaded plate at full height: the fractal is shaded
 > as terrain, but the surface stays flat. **Real height (experimental)** (Camera & quality) traces the
 > real surface instead, so small and large windows show the same shape. The real surface of an
-> iteration-count field is spiky, with tall needle walls around the set, so it is opt-in while terrain
-> shaping is worked on.
+> iteration-count field is spiky, so Real height smooths it by default (**Terrain smoothing**, 2%). It is
+> still opt-in while it is being evaluated.
 
 ### Filament detail — raise the structure *relative to* the slab
 
@@ -168,7 +169,7 @@ needle into view and everything else flattens. The **Height consistency** sectio
 | Control | What it does |
 |---|---|
 | **Height mode: Peak** | The default. The tallest point in view sets the scale, measured every frame. |
-| **Height mode: Robust** | A high percentile (99.5%) sets full height, so lone needles no longer flatten the rest. They rise above full height instead, so on a very spiky view everything gets taller. |
+| **Height mode: Robust** | A high percentile (99.5%) sets full height, so lone needles no longer flatten the rest. Anything above it is softly capped just above full height (about 1.2×). A lock taken in Robust keeps that cap. |
 | **Height mode: Fixed** | Uses the height stored by **Lock current height**. The same fractal detail keeps the same height across pans, zooms and window sizes. |
 | **Lock current height** | Stores the reference and baseline the current frame is using, then switches to Fixed. The frame does not change; from then on the height stays put. |
 | **Locked values** | Fixed mode shows the locked reference and baseline read-only. To make a locked view taller or flatter, use **Height scale**. |
