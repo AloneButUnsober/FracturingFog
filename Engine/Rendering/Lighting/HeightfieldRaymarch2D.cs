@@ -358,7 +358,10 @@ public static class HeightfieldRaymarch2D
         // low resolution turns that band into a gentle mound — matching the
         // (high-res) maximized look, which is itself low relief at this framing.
         // Identity at ≥480 px (maximized / Span unchanged); down to 0.45× at Toy.
-        double resT = ResolutionRamp(hw, hh);
+        // #1035 — Real height skips it: the pull-down was a needle mitigation tuned
+        // against the plate, and it made the height depend on the window size.
+        // Terrain smoothing (view-relative) takes its place.
+        double resT = p.Relief2DTrueHeight ? 0.0 : ResolutionRamp(hw, hh);
         double reliefAmp = 1.0 - 0.72 * resT;
         // #1026 — the height that maps to the full relief height: the peak (Peak,
         // default — byte-identical), a high percentile (Robust) or the stored
@@ -1171,6 +1174,10 @@ public static class HeightfieldRaymarch2D
     /// Robust reference height.</summary>
     internal const double RobustPercentile = 0.995;
 
+    /// <summary>#1035 — the needle knee's headroom: heights above the Robust /
+    /// Fixed reference approach reference·(1 + KneeSpan).</summary>
+    internal const float KneeSpan = 0.2f;
+
     // #155 pre-pass cache — the last published immutable snapshot + its key,
     // guarded by s_prepassLock. A miss builds a fresh ReliefPrepass into its own
     // arrays (see BuildPrepass) and publishes it here; a hit reuses the read-only
@@ -1199,8 +1206,17 @@ public static class HeightfieldRaymarch2D
         bool isFixed = p.Relief2DHeightMode == ReliefHeightMode.Fixed;
         double fixedBaseline = isFixed && p.Relief2DHeightBaseline >= 0.0 ? p.Relief2DHeightBaseline : -1.0;
         double gammaRef = isFixed && p.Relief2DHeightRef > 0.0 ? p.Relief2DHeightRef : 0.0;
+        // #1035 — terrain smoothing (Real height only) as a fraction of the traced
+        // grid's short axis; Robust caps needles with a soft knee.
+        double smoothFrac = p.Relief2DTrueHeight ? Math.Clamp(p.Relief2DTerrainSmoothing, 0.0, 0.05) : 0.0;
+        int tgw = targetW > 0 ? targetW : hw, tgh = targetH > 0 ? targetH : hh;
+        int smoothRadius = smoothFrac > 0.0 ? Math.Max(1, (int)Math.Round(smoothFrac * Math.Min(tgw, tgh))) : 0;
+        // Robust / Fixed roll needles off softly above their reference (#1035).
+        bool robustKnee = p.Relief2DHeightMode == ReliefHeightMode.Robust;
+        double kneeRef = gammaRef;   // Fixed: the locked reference (0 = none)
         ulong key = PrepassKey(height, hn, hw, hh, curve, edgeFade, detailGain, detailRadius, heightGamma,
-                               fixedBaseline, gammaRef, targetW, targetH);
+                               fixedBaseline, gammaRef, targetW, targetH, smoothRadius, robustKnee,
+                               !p.Relief2DTrueHeight, kneeRef);
 
         ReliefPrepass? pre;
         lock (s_prepassLock)
@@ -1210,7 +1226,8 @@ public static class HeightfieldRaymarch2D
         if (pre is null)
         {
             pre = BuildPrepass(height, hn, hw, hh, curve, edgeFade, detailGain, detailRadius, heightGamma,
-                               fixedBaseline, gammaRef, targetW, targetH);
+                               fixedBaseline, gammaRef, targetW, targetH, smoothRadius, robustKnee,
+                               !p.Relief2DTrueHeight, kneeRef);
             lock (s_prepassLock) { s_prepass = pre; s_prepassKey = key; }
         }
         return pre;
@@ -1314,7 +1331,8 @@ public static class HeightfieldRaymarch2D
     private static ReliefPrepass BuildPrepass(
         float[] height, int hn, int hw, int hh, HeightCurve2D curve, double edgeFade,
         double detailGain = 1.0, int detailRadius = 0, double heightGamma = 1.0,
-        double fixedBaseline = -1.0, double gammaRef = 0.0, int targetW = 0, int targetH = 0)
+        double fixedBaseline = -1.0, double gammaRef = 0.0, int targetW = 0, int targetH = 0,
+        int smoothRadius = 0, bool robustKnee = false, bool adaptiveLowPass = true, double kneeRef = 0.0)
     {
         var hbuf = new float[hn];
 
@@ -1397,7 +1415,24 @@ public static class HeightfieldRaymarch2D
         // Resolution-adaptive low-pass (#145b) — median + light box blur, strength
         // ramping from 0 at high resolution to ~3 passes at Toy size, so the
         // undersampled boundary comb reads as a smooth ridge. No-op at Span.
-        LowPassAdaptive(hbuf, hw, hh);
+        // #1035 — Real height replaces the small-window median/blur with the
+        // view-relative terrain smoothing below (same look at any window size).
+        if (adaptiveLowPass) LowPassAdaptive(hbuf, hw, hh);
+
+        // #1035 — terrain smoothing (Real height). An iteration-count field forms a
+        // thin, noisy wall of needles around the set; traced as real geometry that
+        // reads as a hedgehog. Three box passes (≈ Gaussian) over a view-relative
+        // radius turn it into cliffs and mounds. Before the detail shaping, so
+        // Detail exaggeration can bring sharpness back on purpose. 0 = off.
+        if (smoothRadius > 0)
+        {
+            var tmp = new float[hn];
+            for (int pass = 0; pass < 3; pass++)
+            {
+                ReliefHeightDetail.BoxBlur(hbuf, tmp, hw, hh, smoothRadius);
+                Array.Copy(tmp, hbuf, hn);
+            }
+        }
 
         // #518 — filament detail shaping, so the fractal structure can be raised
         // RELATIVE to the base slab (the global Height scale only scales both
@@ -1434,13 +1469,33 @@ public static class HeightfieldRaymarch2D
         float maxH = 0f;
         for (int i = 0; i < hn; i++) { float hv = hbuf[i]; if (hv > maxH) maxH = hv; }
 
+        // #1035 — needle knee. Robust (reference = the 99.5th percentile, measured
+        // here) and Fixed (the locked reference) roll anything above the reference
+        // off softly, approaching reference·(1 + KneeSpan), so lone needles stop
+        // just above full height instead of towering above it. Heights at or below
+        // the reference are untouched, so Peak (reference = the peak) is a no-op
+        // and a lock taken from Robust reproduces the frame exactly.
+        float robustRef = RobustReference(hbuf, hn, maxH);
+        float knee = robustKnee ? robustRef : (float)kneeRef;
+        if (knee > 1e-9f && maxH > knee)
+        {
+            float span = KneeSpan * knee;
+            for (int i = 0; i < hn; i++)
+            {
+                float hv = hbuf[i];
+                if (hv > knee) hbuf[i] = knee + span * (1f - MathF.Exp(-(hv - knee) / span));
+            }
+            maxH = 0f;
+            for (int i = 0; i < hn; i++) { float hv = hbuf[i]; if (hv > maxH) maxH = hv; }
+        }
+
         // Unitless per-cell grid-slope maxima (parallel reduction, #155),
         // independent of sy / world scale so the cache survives an aspect or
         // height-scale change; the world Lipschitz slope is reconstructed per call.
         var (gMaxX, gMaxZ) = GridSlopeMaxima(hbuf, hw, hh);
 
         var mip = ReliefHeightMip.BuildMaxGrid(hbuf, hw, hh, ReliefHeightMip.Blk, out int mipW, out int mipH);
-        return new ReliefPrepass(hbuf, maxH, gMaxX, gMaxZ, appliedBaseline, RobustReference(hbuf, hn, maxH),
+        return new ReliefPrepass(hbuf, maxH, gMaxX, gMaxZ, appliedBaseline, robustRef,
                                  mip, mipW, mipH, hw, hh);
     }
 
@@ -1477,7 +1532,8 @@ public static class HeightfieldRaymarch2D
     private static ulong PrepassKey(float[] height, int hn, int hw, int hh,
                                     HeightCurve2D curve, double edgeFade,
                                     double detailGain, int detailRadius, double heightGamma,
-                                    double fixedBaseline, double gammaRef, int targetW, int targetH)
+                                    double fixedBaseline, double gammaRef, int targetW, int targetH,
+                                    int smoothRadius, bool robustKnee, bool adaptiveLowPass, double kneeRef)
     {
         unchecked
         {
@@ -1504,6 +1560,12 @@ public static class HeightfieldRaymarch2D
             hash = (hash ^ (hg >> 32)) * FnvPrime;
             hash = (hash ^ (uint)targetW) * FnvPrime;   // #1027 — downsample target
             hash = (hash ^ (uint)targetH) * FnvPrime;
+            hash = (hash ^ (uint)smoothRadius) * FnvPrime;   // #1035
+            hash = (hash ^ (robustKnee ? 1u : 0u)) * FnvPrime;
+            hash = (hash ^ (adaptiveLowPass ? 1u : 0u)) * FnvPrime;
+            ulong kr = (ulong)BitConverter.DoubleToInt64Bits(kneeRef);
+            hash = (hash ^ (kr & 0xFFFFFFFFUL)) * FnvPrime;
+            hash = (hash ^ (kr >> 32)) * FnvPrime;
             // #1026 — a fixed baseline / gamma reference also shape it.
             ulong fb = (ulong)BitConverter.DoubleToInt64Bits(fixedBaseline);
             hash = (hash ^ (fb & 0xFFFFFFFFUL)) * FnvPrime;

@@ -829,6 +829,14 @@ namespace FracturingFog.Models
         /// shaping is follow-up work).</summary>
         public bool Relief2DTrueHeight { get; set; } = false;
 
+        /// <summary>#1035 — Real height only: smooth the height field over this
+        /// fraction of the view's short axis (0 = off, clamped 0..0.05), so the thin
+        /// needle walls an iteration-count field forms around the set read as
+        /// cliffs and mounds. View-relative, so it looks the same at any window
+        /// size. Colour stays sharp (it comes from the albedo). Ignored by the
+        /// default plate look.</summary>
+        public double Relief2DTerrainSmoothing { get; set; } = 0.02;
+
         /// <summary>Bicubic (Catmull-Rom) height sampling instead of bilinear —
         /// smoother terrain on deep zoom, at extra sample cost. Default false.</summary>
         public bool Relief2DBicubicHeight { get; set; } = false;
@@ -1775,6 +1783,7 @@ namespace FracturingFog.Models
                 Relief2DHeightBaseline = Relief2DHeightBaseline,
                 Relief2DDetailAnchor = Relief2DDetailAnchor,
                 Relief2DTrueHeight = Relief2DTrueHeight,
+                Relief2DTerrainSmoothing = Relief2DTerrainSmoothing,
                 Relief2DBicubicHeight = Relief2DBicubicHeight,
                 Relief2DGroundPlane = Relief2DGroundPlane,
                 Relief2DAutoShade = Relief2DAutoShade,

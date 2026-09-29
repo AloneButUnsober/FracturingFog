@@ -148,6 +148,9 @@ namespace FracturingFog.Cli
         /// <summary>#1027 follow-up — real-surface trace; emitted when on.</summary>
         public bool ReliefTrueHeight { get; init; }
 
+        /// <summary>#1035 — terrain smoothing (Real height); emitted when on and non-default.</summary>
+        public double ReliefTerrainSmoothing { get; init; } = 0.02;
+
         // Depth of field on the relief raymarch camera (roadmap S3, #389).
         // Aperture 0 = pinhole (omit both flags). Emitted only on the raymarch path.
         public double ReliefDofAperture { get; init; }
@@ -357,7 +360,11 @@ namespace FracturingFog.Cli
                 {
                     if (snap.ReliefCameraOrtho) parts.Add(BatchFlags.ReliefCameraOrtho);
                     if (snap.ReliefFarDetail != 1.0) { parts.Add(BatchFlags.ReliefFarDetail); parts.Add(Num(snap.ReliefFarDetail)); }
-                    if (snap.ReliefTrueHeight) parts.Add(BatchFlags.ReliefTrueHeight);
+                    if (snap.ReliefTrueHeight)
+                    {
+                        parts.Add(BatchFlags.ReliefTrueHeight);
+                        if (snap.ReliefTerrainSmoothing != 0.02) { parts.Add(BatchFlags.ReliefTerrainSmoothing); parts.Add(Num(snap.ReliefTerrainSmoothing)); }
+                    }
                     if (snap.ReliefDetailAnchor == ReliefDetailAnchor.Uniform) { parts.Add(BatchFlags.ReliefDetailAnchor); parts.Add("uniform"); }
                     if (snap.ReliefHeightMode != ReliefHeightMode.Peak)
                     {

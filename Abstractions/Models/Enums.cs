@@ -44,7 +44,7 @@ namespace FracturingFog
     /// tallest cell in view to the full relief height and subtracts an automatic
     /// baseline every frame, so one needle panning into view flattens the rest.
     /// <see cref="Robust"/> scales a high percentile instead, so isolated needles no
-    /// longer set the scale. <see cref="Fixed"/> uses the stored
+    /// longer set the scale; anything above it is softly capped (#1035). <see cref="Fixed"/> uses the stored
     /// <c>Relief2DHeightRef</c> / <c>Relief2DHeightBaseline</c>, so the same field
     /// value always renders at the same height across pans, zooms and windows.</summary>
     public enum ReliefHeightMode { Peak, Robust, Fixed }

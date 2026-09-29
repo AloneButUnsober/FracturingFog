@@ -638,6 +638,8 @@ namespace FracturingFog.Batch
                            RequiresChoice = new BatchChoiceRequirement(BatchFlags.ReliefHeightMode, new[] { "fixed" }) },
                 Sw(BatchFlags.ReliefTrueHeight, Cam, FR, "Trace the relief's real surface (experimental; the default draws the established shaded-plate look). Real iteration-count terrain is spiky.")
                     with { Implies = ReliefOn, Requires = new[] { BatchFlags.ReliefRaymarch } },
+                Dbl(BatchFlags.ReliefTerrainSmoothing, Cam, FR, "Real height: smooth the terrain over this fraction of the view's short axis, so needle walls read as cliffs and mounds (0 = off).", 0, 0.05, enforced: true, def: "0.02")
+                    with { Implies = ReliefOn, Requires = new[] { BatchFlags.ReliefTrueHeight } },
                 Pick(BatchFlags.ReliefDetailAnchor, Cam, FR,
                     "Where the hit tolerance is measured from: camera = grows with distance, so far filaments sink into the floor; uniform = measured at the nearest terrain and held, so far detail resolves like near detail (slower).",
                     new[] { "camera", "uniform" }, def: "camera", hint: "ANCHOR")

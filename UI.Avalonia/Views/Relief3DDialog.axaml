@@ -134,7 +134,7 @@
                           ToolTip.Tip="Applies to the Oblique 3D raymarch path.">
                 <Grid ColumnDefinitions="160,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto">
                     <TextBlock Grid.Row="0" Grid.Column="0" Text="Height mode:" VerticalAlignment="Center"
-                               ToolTip.Tip="Peak = the tallest point in view is always drawn at full height, re-measured every frame, so panning a tall needle into view flattens everything else. Robust = a high percentile sets full height instead, so lone needles rise ABOVE full height rather than flattening the rest (on a very spiky view everything gets taller). Fixed = the height locked with Lock current height, so the same fractal detail keeps the same height across pans, zooms and window sizes." />
+                               ToolTip.Tip="Peak = the tallest point in view is always drawn at full height, re-measured every frame, so panning a tall needle into view flattens everything else. Robust = a high percentile sets full height instead, so lone needles no longer flatten the rest; anything above it is softly capped just above full height. Fixed = the height locked with Lock current height, so the same fractal detail keeps the same height across pans, zooms and window sizes." />
                     <ComboBox Grid.Row="0" Grid.Column="1" Margin="0,2" HorizontalAlignment="Stretch"
                               ItemsSource="{Binding Relief2DHeightModes}"
                               SelectedItem="{Binding Relief2DHeightMode, Mode=TwoWay}" />
@@ -201,7 +201,17 @@
                 <!-- #1027 follow-up — opt-in real-surface trace. -->
                 <CheckBox Content="Real height (experimental)"
                           IsChecked="{Binding Relief2DTrueHeight, Mode=TwoWay}"
-                          ToolTip.Tip="Off (default): the established Relief 3D look. On most windows the raymarch settles on the top of the terrain box, so the fractal reads as a shaded plate. On: trace the height field's real surface, so the terrain has true height and small and large windows show the same shape. The real surface of an iteration-count field is spiky (tall needle walls around the set); smoother terrain shaping is being worked on." />
+                          ToolTip.Tip="Off (default): the established Relief 3D look. On most windows the raymarch settles on the top of the terrain box, so the fractal reads as a shaded plate. On: trace the height field's real surface, so the terrain has true height and small and large windows show the same shape. Terrain smoothing (below) turns the needle walls an iteration-count field forms around the set into cliffs and mounds." />
+                <!-- #1035 — terrain smoothing for Real height. -->
+                <Grid ColumnDefinitions="160,*,44" RowDefinitions="Auto"
+                      IsEnabled="{Binding Relief2DTrueHeight}">
+                    <TextBlock Grid.Column="0" Text="Terrain smoothing (%):" VerticalAlignment="Center"
+                               ToolTip.Tip="Real height only. Smooths the terrain over this percentage of the view, so the thin needle walls around the set become cliffs and mounds. Colour stays sharp. 0 = the raw field (spiky). Higher = softer, rounder terrain. Looks the same at any window size." />
+                    <Slider Grid.Column="1" Minimum="0" Maximum="5" Margin="0,2"
+                            Value="{Binding Relief2DTerrainSmoothingPercent, Mode=TwoWay}" />
+                    <TextBlock Grid.Column="2" VerticalAlignment="Center" Foreground="#999"
+                               Text="{Binding Relief2DTerrainSmoothingPercent, StringFormat='{}{0:0.0}'}" />
+                </Grid>
                 <Grid ColumnDefinitions="160,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto">
                     <TextBlock Grid.Row="0" Grid.Column="0" Text="Camera azimuth (°):" VerticalAlignment="Center"
                                ToolTip.Tip="Orbit the terrain around the up axis. 0 = looking straight at the scene." />
