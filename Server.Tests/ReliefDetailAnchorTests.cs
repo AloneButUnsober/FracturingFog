@@ -53,6 +53,7 @@ public sealed class ReliefDetailAnchorTests
         Relief2DGroundPlane = true,
         Relief2DSupersample = 1,
         Relief2DAutoShade = false,
+        Relief2DTrueHeight = true,   // the anchor is judged on the real surface
         Relief2DDetailAnchor = anchor,
     };
 

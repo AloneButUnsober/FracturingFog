@@ -820,6 +820,15 @@ namespace FracturingFog.Models
         /// nearest terrain's tolerance so far filaments resolve like near ones.</summary>
         public ReliefDetailAnchor Relief2DDetailAnchor { get; set; } = ReliefDetailAnchor.Camera;
 
+        /// <summary>#1027 follow-up — trace the relief's real surface. Off (default)
+        /// keeps the established Relief 3D look: on most windows the raymarch
+        /// settles on the top of the terrain box, so the fractal reads as a shaded
+        /// plate, byte-identical to before #1027. On = the #1027 surface hit test,
+        /// empty-space skip and field downsample, so the terrain has its true
+        /// height — which for an iteration-count field is still spiky (terrain
+        /// shaping is follow-up work).</summary>
+        public bool Relief2DTrueHeight { get; set; } = false;
+
         /// <summary>Bicubic (Catmull-Rom) height sampling instead of bilinear —
         /// smoother terrain on deep zoom, at extra sample cost. Default false.</summary>
         public bool Relief2DBicubicHeight { get; set; } = false;
@@ -976,11 +985,12 @@ namespace FracturingFog.Models
         /// trace leap the empty air above flat interior (where the slope-limited
         /// point DE crawls) straight down to the block-max plane. Purely a step-
         /// count optimisation on the SAME surface — a conservative skip that never
-        /// overshoots the first hit. #1027 — default ON and used by the CPU trace
-        /// too: with the world-space hit test, fine fields need it to reach the
-        /// terrain within the step budget. The CPU trace, the twin and both GPU
-        /// kernels build and consume the same grid. Only affects the raymarch path.</summary>
-        public bool Relief2DEmptySkip { get; set; } = true;   // #1027 — on by default (CPU + GPU)
+        /// overshoots the first hit. Default OFF (the byte-identical reference
+        /// march). #1027 — always on under <see cref="Relief2DTrueHeight"/>, whose
+        /// world-space hit test needs it to reach fine terrain within the step
+        /// budget; the CPU trace now consumes the same grid as the twin and both GPU
+        /// kernels. Only affects the raymarch path.</summary>
+        public bool Relief2DEmptySkip { get; set; } = false;
 
         /// <summary>Master toggle: isolate the kept fractal as a standalone 3D
         /// object over a transparent background. Default false.</summary>
@@ -1764,6 +1774,7 @@ namespace FracturingFog.Models
                 Relief2DHeightRef = Relief2DHeightRef,
                 Relief2DHeightBaseline = Relief2DHeightBaseline,
                 Relief2DDetailAnchor = Relief2DDetailAnchor,
+                Relief2DTrueHeight = Relief2DTrueHeight,
                 Relief2DBicubicHeight = Relief2DBicubicHeight,
                 Relief2DGroundPlane = Relief2DGroundPlane,
                 Relief2DAutoShade = Relief2DAutoShade,

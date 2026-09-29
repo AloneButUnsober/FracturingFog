@@ -134,7 +134,7 @@
                           ToolTip.Tip="Applies to the Oblique 3D raymarch path.">
                 <Grid ColumnDefinitions="160,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto">
                     <TextBlock Grid.Row="0" Grid.Column="0" Text="Height mode:" VerticalAlignment="Center"
-                               ToolTip.Tip="Peak = the tallest point in view is always drawn at full height, re-measured every frame, so panning a tall needle into view flattens everything else. Robust = a high percentile instead, so lone needles no longer set the scale. Fixed = the stored reference and baseline below, so the same fractal detail keeps the same height across pans, zooms and window sizes." />
+                               ToolTip.Tip="Peak = the tallest point in view is always drawn at full height, re-measured every frame, so panning a tall needle into view flattens everything else. Robust = a high percentile sets full height instead, so lone needles rise ABOVE full height rather than flattening the rest (on a very spiky view everything gets taller). Fixed = the height locked with Lock current height, so the same fractal detail keeps the same height across pans, zooms and window sizes." />
                     <ComboBox Grid.Row="0" Grid.Column="1" Margin="0,2" HorizontalAlignment="Stretch"
                               ItemsSource="{Binding Relief2DHeightModes}"
                               SelectedItem="{Binding Relief2DHeightMode, Mode=TwoWay}" />
@@ -151,25 +151,17 @@
                                Foreground="#FFCC00" Text="{Binding ReliefHeightLockStatus}"
                                IsVisible="{Binding ReliefHeightLockFailed}" />
 
-                    <TextBlock Grid.Row="3" Grid.Column="0" Text="Reference height:" VerticalAlignment="Center"
-                               IsEnabled="{Binding Relief2DHeightModeIsFixed}"
-                               ToolTip.Tip="Fixed mode: the field height (above the baseline) drawn at full relief height. Smaller = taller relief. 0 = measure every frame." />
-                    <NumericUpDown Grid.Row="3" Grid.Column="1" Margin="0,2"
-                                   Minimum="0" Maximum="100000" Increment="0.1" FormatString="0.###"
-                                   IsEnabled="{Binding Relief2DHeightModeIsFixed}"
-                                   Value="{Binding Relief2DHeightRef, Mode=TwoWay}" />
-
-                    <TextBlock Grid.Row="4" Grid.Column="0" Text="Baseline:" VerticalAlignment="Center"
-                               IsEnabled="{Binding Relief2DHeightModeIsFixed}"
-                               ToolTip.Tip="Fixed mode: the field height treated as ground level; everything below it sits flat on the base. -1 = measure every frame." />
-                    <NumericUpDown Grid.Row="4" Grid.Column="1" Margin="0,2"
-                                   Minimum="-1" Maximum="100000" Increment="0.1" FormatString="0.###"
-                                   IsEnabled="{Binding Relief2DHeightModeIsFixed}"
-                                   Value="{Binding Relief2DHeightBaseline, Mode=TwoWay}" />
+                    <!-- Fixed: the lock is set by the button and shown read-only. The raw
+                         reference is in height-curve units (typically 1-10), so an
+                         editable number let a small value make the terrain dozens of
+                         times taller. Height scale adjusts a locked height instead. -->
+                    <TextBlock Grid.Row="3" Grid.Column="0" Grid.ColumnSpan="2" TextWrapping="Wrap" Margin="0,2"
+                               Foreground="#999" Text="{Binding ReliefHeightLockSummary}"
+                               IsVisible="{Binding Relief2DHeightModeIsFixed}" />
 
                     <TextBlock Grid.Row="5" Grid.Column="0" Grid.ColumnSpan="2" TextWrapping="Wrap" Margin="0,2"
                                Foreground="#999"
-                               Text="Values are in height-curve units, so changing the height curve or zooming much deeper may need a new lock. Height scale still multiplies the result." />
+                               Text="A lock is tied to the height curve and roughly to the zoom depth: after changing the curve, or zooming much deeper, lock again." />
                 </Grid>
                 </Expander>
 
@@ -206,6 +198,10 @@
                           IsExpanded="{Binding Relief2DRaymarch, Mode=OneWay}"
                           IsEnabled="{Binding Relief2DRaymarch}">
                 <StackPanel Spacing="6">
+                <!-- #1027 follow-up — opt-in real-surface trace. -->
+                <CheckBox Content="Real height (experimental)"
+                          IsChecked="{Binding Relief2DTrueHeight, Mode=TwoWay}"
+                          ToolTip.Tip="Off (default): the established Relief 3D look. On most windows the raymarch settles on the top of the terrain box, so the fractal reads as a shaded plate. On: trace the height field's real surface, so the terrain has true height and small and large windows show the same shape. The real surface of an iteration-count field is spiky (tall needle walls around the set); smoother terrain shaping is being worked on." />
                 <Grid ColumnDefinitions="160,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto">
                     <TextBlock Grid.Row="0" Grid.Column="0" Text="Camera azimuth (°):" VerticalAlignment="Center"
                                ToolTip.Tip="Orbit the terrain around the up axis. 0 = looking straight at the scene." />

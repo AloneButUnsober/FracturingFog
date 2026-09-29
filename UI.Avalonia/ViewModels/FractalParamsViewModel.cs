@@ -830,6 +830,13 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
     }
     public Array Relief2DDetailAnchors => Enum.GetValues(typeof(FracturingFog.ReliefDetailAnchor));
 
+    // #1027 follow-up — trace the real surface (opt-in; default = the plate look).
+    public bool Relief2DTrueHeight
+    {
+        get => _p.Relief2DTrueHeight;
+        set { if (_p.Relief2DTrueHeight == value) return; _p.Relief2DTrueHeight = value; this.RaisePropertyChanged(); Fire(); }
+    }
+
     // #520 (part 3) — settle-based full detail (auto poster-detail on idle).
     public bool Relief2DSettleDetail
     {
@@ -864,12 +871,26 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
             _p.Relief2DHeightMode = value;
             this.RaisePropertyChanged();
             this.RaisePropertyChanged(nameof(Relief2DHeightModeIsFixed));
+            this.RaisePropertyChanged(nameof(ReliefHeightLockSummary));
             Fire();
         }
     }
     public Array Relief2DHeightModes => Enum.GetValues(typeof(FracturingFog.ReliefHeightMode));
     /// <summary>The reference / baseline fields only bite in Fixed mode.</summary>
     public bool Relief2DHeightModeIsFixed => _p.Relief2DHeightMode == FracturingFog.ReliefHeightMode.Fixed;
+
+    /// <summary>Read-only description of the Fixed lock. The raw reference is in
+    /// height-curve units (typically 1–10), so it is not a user-editable number: a
+    /// small value multiplies the height many times over. Height scale adjusts a
+    /// locked height instead.</summary>
+    public string ReliefHeightLockSummary =>
+        !Relief2DHeightModeIsFixed ? ""
+        : _p.Relief2DHeightRef > 0.0
+            ? string.Format(System.Globalization.CultureInfo.InvariantCulture,
+                "Locked (reference {0:0.###}, baseline {1}). Use Height scale to make it taller or flatter.",
+                _p.Relief2DHeightRef, _p.Relief2DHeightBaseline >= 0.0
+                    ? _p.Relief2DHeightBaseline.ToString("0.###", System.Globalization.CultureInfo.InvariantCulture) : "measured")
+            : "Nothing locked yet, so this behaves like Peak. Click Lock current height.";
     /// <summary>Fixed-mode reference height (0 = measured per frame).</summary>
     public double Relief2DHeightRef
     {
@@ -923,6 +944,7 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
         this.RaisePropertyChanged(nameof(Relief2DHeightRef));
         this.RaisePropertyChanged(nameof(Relief2DHeightMode));
         this.RaisePropertyChanged(nameof(Relief2DHeightModeIsFixed));
+        this.RaisePropertyChanged(nameof(ReliefHeightLockSummary));
         ReliefHeightLockStatus = string.Format(System.Globalization.CultureInfo.InvariantCulture,
             "Locked: reference {0:0.###}, baseline {1:0.###}.", m.Reference, m.Baseline);
         Fire();

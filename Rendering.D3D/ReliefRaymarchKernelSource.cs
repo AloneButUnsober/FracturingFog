@@ -91,7 +91,7 @@ cbuffer ReliefParams : register(b0)
     float  gSpecStrength; // 4a — Cook-Torrance GGX; 0 = no spec (flat Lambert)
     float  gRoughness;    // GGX roughness [0.05,1]
     float  gMetallic;     // dielectric(0) .. metal(1)
-    float  gPadS;
+    float  gTrueHeight;   // #1027 — 1 = hit on the vertical gap (true height); 0 = plate (default)
 
     int    gShadowSteps;  // 4b — IQ soft shadow; 0 = off
     float  gShadowSoftK;  // penumbra hardness
@@ -1229,7 +1229,7 @@ uint TracePixel(float3 o, float3 rd, out float3 nrm, out float dep)
             float3 pw = o + rd * t;
             d = Evaluate(pw.x, pw.y, pw.z);
             float epsT = gEps0 + gPixelAngle * ((gConeCapT > 0.0 && t > gConeCapT) ? gConeCapT : t);   // #1027
-            if (d < epsT * gInvLip) { hit = true; break; }   // #1027 — world-space vertical gap
+            if (d < (gTrueHeight != 0.0 ? epsT * gInvLip : epsT)) { hit = true; break; }   // #1027
             tPrev = t;
             float adv = max(d, epsT * 0.5);
             // 4f — empty-space skip (conservative; only enlarges the advance).

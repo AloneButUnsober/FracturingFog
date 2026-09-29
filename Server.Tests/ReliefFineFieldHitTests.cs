@@ -26,14 +26,14 @@ public sealed class ReliefFineFieldHitTests
     // trace runs on the full fine field, as a maximised window does.
     private const int W = 1320, H = 825, FW = 1600, FH = 1000;
 
-    private static FractalParameters P(bool skip = true) => new()
+    private static FractalParameters P(bool trueHeight = true) => new()
     {
         Relief2DEnabled = true,
         Relief2DRaymarch = true,
+        Relief2DTrueHeight = trueHeight,
         Relief2DGpuRaymarch = false,
         Relief2DHiResField = false,
         Relief2DSupersample = 1,
-        Relief2DEmptySkip = skip,
     };
 
     // Fraction of terrain hits whose depth is within a hair of the ray's entry
@@ -91,6 +91,16 @@ public sealed class ReliefFineFieldHitTests
     {
         double atEntry = EntryHitFraction(P());
         Assert.True(atEntry < 0.05, $"{atEntry:P1} of terrain hits stopped at the box-top entry (flat plate)");
+    }
+
+    // The default keeps the established shaded-plate look (byte-identical to before
+    // #1027): on a fine field the trace settles on the box top. Real height is opt-in.
+    [Fact]
+    public void Default_KeepsThePlateLook_RealHeightIsOptIn()
+    {
+        Assert.False(new FractalParameters().Relief2DTrueHeight);
+        double atEntry = EntryHitFraction(P(trueHeight: false));
+        Assert.True(atEntry > 0.9, $"default trace: {atEntry:P1} of hits at the box-top entry");
     }
 
     // A field more than 1.25× finer than the output is traced on an output-sized

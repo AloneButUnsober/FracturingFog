@@ -225,6 +225,9 @@ public static class HeightfieldRaymarchProbe
             Relief2DCameraElevationDeg = 45.0,
             Relief2DCameraFovDeg = 50.0,
             Relief2DGroundPlane = true,
+            // #1027 — the agreement criteria below describe the real-surface trace
+            // (the default plate trace renders a fine field as a flat plate).
+            Relief2DTrueHeight = true,
         };
         var lit = LightingFxData.CreateDefault();
         lit.BgTopColor = 0xFF335588u;

@@ -150,6 +150,9 @@ public readonly struct ReliefUniforms
     // twin and both kernels build from hbuf via ReliefHeightMip.
     public readonly int EmptySkip, MipW, MipH, MipBlk;
 
+    // #1027 — true-height hit test (vertical gap) vs the default plate test.
+    public readonly bool TrueHeight;
+
     // 4d-ii — flattened HDRI equirect environment (ReliefHdriBuffer.Flatten of the
     // resolved HdriImage) uploaded as the t4 SRV. Null when SkyMode != Hdri or the
     // environment name doesn't resolve → the twin/kernels fall back to the #168
@@ -203,8 +206,10 @@ public readonly struct ReliefUniforms
         int lType1 = 0, double lPos1x = 0, double lPos1y = 0, double lPos1z = 0, double lRange1 = 0, double lInner1 = 1, double lOuter1 = 1,
         int lType2 = 0, double lPos2x = 0, double lPos2y = 0, double lPos2z = 0, double lRange2 = 0, double lInner2 = 1, double lOuter2 = 1,
         int volumeLightMask = 0x7,
-        double shadowK0 = double.NaN, double shadowK1 = double.NaN, double shadowK2 = double.NaN)
+        double shadowK0 = double.NaN, double shadowK1 = double.NaN, double shadowK2 = double.NaN,
+        bool trueHeight = false)
     {
+        TrueHeight = trueHeight;
         W = w; H = h; Hw = hw; Hh = hh; Sy = sy; Aspect = aspect;
         InvLip = invLip; Bicubic = bicubic; Cam = cam;
         L0x = l0x; L0y = l0y; L0z = l0z; I0 = i0; C0r = c0r; C0g = c0g; C0b = c0b;
@@ -311,7 +316,7 @@ public readonly struct ReliefUniforms
             fx.IblStrength, (int)fx.SkyMode,
             (int)fx.TriplanarKind, fx.TriplanarStrength, fx.TriplanarScale, fx.TriplanarTint,
             fx.FogDensity, fx.FogHeightFalloff, fx.VolumeSteps, fx.VolumeStepsFalloff,
-            p.Relief2DEmptySkip ? 1 : 0,
+            p.Relief2DEmptySkip || p.Relief2DTrueHeight ? 1 : 0,   // #1027 — always on under true height
             ReliefHeightMip.GridDim(hw, ReliefHeightMip.Blk),
             ReliefHeightMip.GridDim(hh, ReliefHeightMip.Blk), ReliefHeightMip.Blk,
             hdriBuf,
@@ -331,7 +336,8 @@ public readonly struct ReliefUniforms
             // Punctual (radius 0) → EffectiveShadowK returns ShadowSoftK → byte-identical.
             ShadingPipeline.EffectiveShadowK(fx.ShadowSoftK, fx.Light1.AreaAngularRadius),
             ShadingPipeline.EffectiveShadowK(fx.ShadowSoftK, fx.Light2.AreaAngularRadius),
-            ShadingPipeline.EffectiveShadowK(fx.ShadowSoftK, fx.Light3.AreaAngularRadius));
+            ShadingPipeline.EffectiveShadowK(fx.ShadowSoftK, fx.Light3.AreaAngularRadius),
+            trueHeight: p.Relief2DTrueHeight);
     }
 
     /// <summary>S3 (#389) — lens taps the GPU kernel + twin average when DOF is on.
@@ -506,7 +512,7 @@ public static class ReliefRaymarchGpu
                 // #1027 — hit when the VERTICAL gap (d / invLip, world units) is
                 // within the tolerance. Comparing the Lipschitz-scaled d stopped every
                 // ray at the box top on fine fields (tiny invLip) — a flat plate.
-                if (d < epsT * u.InvLip) { hit = true; break; }
+                if (d < (u.TrueHeight ? epsT * u.InvLip : epsT)) { hit = true; break; }
                 tPrev = t;
                 double adv = Math.Max(d, epsT * 0.5);
                 // 4f — empty-space skip. When the ray point is safely above the
