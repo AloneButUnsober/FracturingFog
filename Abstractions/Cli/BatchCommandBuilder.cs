@@ -151,6 +151,9 @@ namespace FracturingFog.Cli
         /// <summary>#1035 — terrain smoothing (Real height); emitted when on and non-default.</summary>
         public double ReliefTerrainSmoothing { get; init; } = 0.02;
 
+        /// <summary>#1028 — canonical field (Real height); emitted when turned off.</summary>
+        public bool ReliefCanonicalField { get; init; } = true;
+
         /// <summary>#1029 — height source (emitted when not Smooth), its blend weight
         /// (Blend) and distance falloff (Distance), each only when non-default.</summary>
         public ReliefHeightSource ReliefHeightSource { get; init; } = ReliefHeightSource.Smooth;
@@ -379,6 +382,7 @@ namespace FracturingFog.Cli
                     {
                         parts.Add(BatchFlags.ReliefTrueHeight);
                         if (snap.ReliefTerrainSmoothing != 0.02) { parts.Add(BatchFlags.ReliefTerrainSmoothing); parts.Add(Num(snap.ReliefTerrainSmoothing)); }
+                        if (!snap.ReliefCanonicalField) parts.Add(BatchFlags.ReliefNoCanonicalField);
                     }
                     if (snap.ReliefDetailAnchor == ReliefDetailAnchor.Uniform) { parts.Add(BatchFlags.ReliefDetailAnchor); parts.Add("uniform"); }
                     if (snap.ReliefHeightMode != ReliefHeightMode.Peak)

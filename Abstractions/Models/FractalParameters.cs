@@ -844,6 +844,16 @@ namespace FracturingFog.Models
         /// default plate look.</summary>
         public double Relief2DTerrainSmoothing { get; set; } = 0.02;
 
+        /// <summary>#1028 — Real height only: shape the terrain on one fixed grid
+        /// (short axis <see cref="Relief2DFieldFloor"/>) whatever the window size, so
+        /// a small and a large window show the same heights and only the sharpness
+        /// differs. A field finer than the grid is area-downsampled to it; a window
+        /// smaller than the grid gets an anti-alias blur of about one pixel, which the
+        /// terrain smoothing normally already covers. Off = the #1035 behaviour (the
+        /// field is shaped at the output size). Ignored by the default plate look.
+        /// Default true.</summary>
+        public bool Relief2DCanonicalField { get; set; } = true;
+
         /// <summary>Bicubic (Catmull-Rom) height sampling instead of bilinear —
         /// smoother terrain on deep zoom, at extra sample cost. Default false.</summary>
         public bool Relief2DBicubicHeight { get; set; } = false;
@@ -1792,6 +1802,7 @@ namespace FracturingFog.Models
                 Relief2DDetailAnchor = Relief2DDetailAnchor,
                 Relief2DTrueHeight = Relief2DTrueHeight,
                 Relief2DTerrainSmoothing = Relief2DTerrainSmoothing,
+                Relief2DCanonicalField = Relief2DCanonicalField,
                 Relief2DBicubicHeight = Relief2DBicubicHeight,
                 Relief2DGroundPlane = Relief2DGroundPlane,
                 Relief2DAutoShade = Relief2DAutoShade,

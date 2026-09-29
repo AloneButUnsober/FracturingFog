@@ -2325,6 +2325,37 @@ namespace FracturingFog.Rendering
             return h;
         }
 
+        /// <summary>#143 / #1028 — the dedicated relief field's size for a
+        /// <paramref name="dispW"/>×<paramref name="dispH"/> view: short axis at the
+        /// field floor (aspect kept, long axis capped at 3840). A window below the
+        /// floor is raised to it; a window above it is brought down to it only under
+        /// Real height with the canonical field (#1028), so every window shapes the
+        /// terrain from the same field. False = use the display-res field.</summary>
+        public static bool HiResReliefFieldDims(int dispW, int dispH, FractalParameters p, out int fw, out int fh)
+        {
+            fw = 0; fh = 0;
+            if (dispW <= 2 || dispH <= 2) return false;
+            int floor = Math.Clamp(p.Relief2DFieldFloor, 480, 2160);
+            int shortAxis = Math.Min(dispW, dispH);
+            bool canonical = p.Relief2DTrueHeight && p.Relief2DCanonicalField;
+            if (shortAxis == floor || (shortAxis > floor && !canonical)) return false;
+
+            // Scale so the short axis hits the floor; cap the long axis so a very
+            // wide Span doesn't blow the field render up.
+            double s = floor / (double)shortAxis;
+            fw = (int)Math.Round(dispW * s);
+            fh = (int)Math.Round(dispH * s);
+            const int MaxLong = 3840;
+            if (Math.Max(fw, fh) > MaxLong)
+            {
+                double s2 = MaxLong / (double)Math.Max(fw, fh);
+                fw = (int)Math.Round(fw * s2);
+                fh = (int)Math.Round(fh * s2);
+            }
+            fw = Math.Max(4, fw); fh = Math.Max(4, fh);
+            return true;
+        }
+
         private bool TryCaptureHiResReliefField(FractalType type,
             FractalParameters p, int dispW, int dispH, CancellationToken token)
         {
@@ -2336,23 +2367,8 @@ namespace FracturingFog.Rendering
             // the COMPILED hot-load type itself (EnsureReliefHotLoadTwin); if that can't be
             // instantiated it returns false and the caller falls back to the compiled calc's
             // display-res SmoothBuffer (the correct #738 behaviour).
-            int floor = Math.Clamp(p.Relief2DFieldFloor, 480, 2160);
-            int shortAxis = Math.Min(dispW, dispH);
-            if (shortAxis >= floor) return false;   // display already ≥ floor — no gain
-
-            // Scale so the short axis hits the floor; cap the long axis so a very
-            // wide Span doesn't blow the field render up.
-            double s = floor / (double)shortAxis;
-            int fw = (int)Math.Round(dispW * s);
-            int fh = (int)Math.Round(dispH * s);
-            const int MaxLong = 3840;
-            if (Math.Max(fw, fh) > MaxLong)
-            {
-                double s2 = MaxLong / (double)Math.Max(fw, fh);
-                fw = (int)Math.Round(fw * s2);
-                fh = (int)Math.Round(fh * s2);
-            }
-            fw = Math.Max(4, fw); fh = Math.Max(4, fh);
+            if (!HiResReliefFieldDims(dispW, dispH, p, out int fw, out int fh))
+                return false;   // display already at the floor (or above, without the canonical field)
 
             try
             {

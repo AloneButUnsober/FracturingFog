@@ -874,24 +874,18 @@ namespace FracturingFog.Imaging
             }
 
             // Aspect mismatch (or no snapshot). At/above the floor the output-dims
-            // SmoothBuffer is already an aspect-correct hi-res field.
-            int floor = Math.Clamp(p.Relief2DFieldFloor, 480, 2160);
-            if (Math.Min(w, h) >= floor) return null;
+            // SmoothBuffer is already an aspect-correct hi-res field — except under
+            // Real height with the canonical field (#1028), where a large output is
+            // brought down to the floor too, so it shapes the terrain like any window.
+            // Mirrors FractalRenderHost.TryCaptureHiResReliefField (short axis → floor,
+            // long axis capped so a wide span doesn't blow the field render up).
+            if (!FracturingFog.Rendering.FractalRenderHost.HiResReliefFieldDims(w, h, p, out int nfw, out int nfh))
+                return null;
             if (!FracturingFog.Rendering.FractalRenderHost.SupportsHiResReliefField(req.FractalType))
                 return null;
-
-            // Below the floor — upsample a dedicated field at the OUTPUT aspect (mirror
-            // FractalRenderHost.TryCaptureHiResReliefField: short axis → floor, long axis
-            // capped so a wide span doesn't blow the field render up).
-            double s = floor / (double)Math.Min(w, h);
-            int nfw = (int)Math.Round(w * s), nfh = (int)Math.Round(h * s);
-            const int MaxLong = 3840;
-            if (Math.Max(nfw, nfh) > MaxLong)
-            {
-                double s2 = MaxLong / (double)Math.Max(nfw, nfh);
-                nfw = (int)Math.Round(nfw * s2); nfh = (int)Math.Round(nfh * s2);
-            }
-            nfw = Math.Max(4, nfw); nfh = Math.Max(4, nfh);
+            // The trap / blend sources trace the display-res trap field (see
+            // ApplyReliefIfEnabled), so a dedicated smooth field would go unused.
+            if (p.Relief2DHeightSource is ReliefHeightSource.Trap or ReliefHeightSource.Blend) return null;
 
             var fieldSrc = BuildFieldCalculator(req, nfw, nfh, token);
             token.ThrowIfCancellationRequested();

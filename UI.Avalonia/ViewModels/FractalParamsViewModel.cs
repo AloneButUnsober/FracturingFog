@@ -863,6 +863,14 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
         }
     }
 
+    // #1028 — Real height: shape the terrain on one fixed grid (same heights at any
+    // window size).
+    public bool Relief2DCanonicalField
+    {
+        get => _p.Relief2DCanonicalField;
+        set { if (_p.Relief2DCanonicalField == value) return; _p.Relief2DCanonicalField = value; this.RaisePropertyChanged(); Fire(); }
+    }
+
     // #520 (part 3) — settle-based full detail (auto poster-detail on idle).
     public bool Relief2DSettleDetail
     {
