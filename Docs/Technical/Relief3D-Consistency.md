@@ -114,6 +114,47 @@ At app defaults the real surface of the smooth-iteration field is a thin, noisy 
 - the plate path ignores the setting;
 - batch, builder, region and dialog parity.
 
+## Shading marches under real height (#1033)
+
+**Measured first.** App defaults with Real height, whole-set and seahorse views, 640×360 from a 1080 field; components captured per pixel. The height DE `(y − h)·invLip` uses one Lipschitz factor from the steepest cell (invLip ≈ 0.08 with 2% smoothing, ≈ 0.01 without), so it sits far below the true distance on most of the terrain. The shading marches compared it against small absolute thresholds:
+- **Shadows:** 92–95% of terrain hits read as shadowed (mean shadow 0.38). The IQ penumbra `k·h/t` and the `h < 1e-4` hit both saw "surface right here".
+- **AO:** averaged 0.66. On flat ground a sample d along the normal returns d·invLip, so every ring counted as occluded.
+- **Bound dependence:** loosening the bound (any smaller invLip is still valid) made both darker, so the result depended on the bound, not the geometry.
+- **Plate look:** 100% shadowed too. That is the established default look, so it is left as it is (byte-identical).
+
+**Fix:** a shading probe, opt-in per estimator.
+- **Interface:** `IDistanceEstimator` gains `static virtual bool HasShadeProbe` (default false) and a default `ShadeProbe(...)`. `ShadingPipeline.SoftShadow<TDe>`, the Shade AO rings and the reflection march branch on `TDe.HasShadeProbe`. That is JIT-folded, so every other estimator is unchanged (Mandelbulb batch render pixel-identical).
+- **`HeightShadeDe`:** wraps `HeightDe` under true height, used by the CPU render and the twin. `LocalProbe`:
+  - hits on the world vertical gap;
+  - estimates the distance as gap / √(1 + |∇h|²), which is exact for locally planar terrain;
+  - steps by that estimate, or by the global bound / empty-space skip when larger.
+  
+  `Evaluate`, used for normals by central differences, is unchanged.
+- **Penumbra:** because steps now exceed the distances, the soft shadow estimates the closest approach between consecutive samples (IQ's improved soft shadow, generalised to a sample spacing s: y = (s² + h² − ph²)/2s, d = √(h² − y²)).
+- **GPU:** the HLSL gets the same probe under `gTrueHeight` in `SoftShadow` (and so the volumetric shadow), the AO and `Reflections`. `EmptySkipDist` moved up so the probe can use it. The twin mirrors it through `HeightShadeDe`.
+
+**Oracle check** (a brute-force reference on the same views: true nearest-surface distance for AO over a 25×25 patch per ring; hard shadow by a half-cell fixed-step march):
+
+| | AO (mean) | shadowed (hard truth) | shadowed (render) | agreement |
+|---|---|---|---|---|
+| before | 0.66 | 15–27% | 92–95% | ~10% |
+| probe, safe step only | ≈ exact | 15–27% | 9–12% (24 steps ran out) | 88% |
+| probe, estimate step | 0.997 vs 0.999 exact; 0.962 vs 0.967 unsmoothed | 15–27% | 24–29% | 90–91% |
+| + closest-approach penumbra (shipped) | 0.998 (0.977–0.989 unsmoothed) | 15–27% | 22–26% | — |
+
+The estimate step reaches the converged (400-step safe) soft shadow within the default 24 steps. Soft shadows count a penumbra as shadow, so they read a little above the hard truth.
+
+**Result at app defaults:** terrain brightness doubles (batch, mean luminance 14.1 → 27.0 whole set, 10.8 → 19.3 seahorse, 8.9 → 16.9 elephant). Ridges cast real shadows, and the ground plane is lit, with the terrain's shadow on it (a low sun stretches the jagged rim into long fans).
+
+**Tests** (`ReliefShadingProbeTests`):
+- on a synthetic ridge, the probe gives the true distance over flat ground and a planar slope;
+- a lit point is lit and a point behind the ridge is shadowed, at the tight bound and at 1/8 of it, while the plain march shadows the lit point once the bound is loose;
+- end to end at defaults, fewer than 45% of hits are shadowed and mean AO is above 0.97.
+
+**Gates:** `--reliefgpuraymarch` (its full case is true height with shadows, AO and reflections) and `--vulkanrelief` pass.
+
+**Not changed:** the glass (transmission) interior march still uses `Evaluate`, since it is off by default.
+
 ## S4: distance-estimate height source (#1029)
 
 `ReliefHeightSource.Distance` builds the height from the exterior distance estimate the calculators already fill (`DistanceBuffer`, complex-plane units, 0 in the set).
