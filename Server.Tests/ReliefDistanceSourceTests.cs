@@ -15,6 +15,7 @@ using FracturingFog.Batch;
 using FracturingFog.Cli;
 using FracturingFog.Imaging;
 using FracturingFog.Models;
+using FracturingFog.Rendering;
 using FracturingFog.Rendering.Lighting;
 using FracturingFog.UI.Avalonia.ViewModels;
 using Xunit;
@@ -96,6 +97,62 @@ public sealed class ReliefDistanceSourceTests
         Assert.True(fw > 160 && fh > 90);
         Assert.Equal(ReliefHeightField.DistanceHeight, field!.Max());
         Assert.True(field.All(v => v <= ReliefHeightField.DistanceHeight));
+    }
+
+    // The app's default path: the HSV theme is GPU-palette capable, so the GPU
+    // colours the frame and the calculator returned before its CPU writeback —
+    // leaving DistanceBuffer all zero, so Distance silently fell back to Smooth on
+    // screen while CPU batch renders showed it. A fake kernel (plain double z / dz
+    // iteration) drives that path; the escaped pixels must carry a distance.
+    private sealed class FakePaletteKernel : IGpuKernel
+    {
+        private bool _palette;
+        public bool HasGpuPalette => _palette;
+        public double LastDispatchMs => 0;
+        public double LastReadbackMs => 0;
+        public void SetPalette(FracturingFog.Interefaces.IGpuHlslPalette? palette) => _palette = palette != null;
+        public void Dispose() { }
+        public void Run(int width, int height, double centerX, double centerY, double scale, int maxIter, double bailout2,
+            int[] iterDst, float[] smoothDst, float[] finalZrDst, float[] finalZiDst, float[] finalDrDst, float[] finalDiDst,
+            int[]? perRowMaxIter = null, FractalKind kind = FractalKind.Mandelbrot, float param0 = 0f, float param1 = 0f,
+            uint[]? colorDst = null)
+        {
+            for (int y = 0; y < height; y++)
+                for (int x = 0; x < width; x++)
+                {
+                    int i = y * width + x;
+                    double cr = centerX + (x - width / 2.0) * scale, ci = centerY + (y - height / 2.0) * scale;
+                    double zr = 0, zi = 0, dr = 0, di = 0; int n = 0;
+                    for (; n < maxIter && zr * zr + zi * zi <= bailout2; n++)
+                    {
+                        double ndr = 2 * (zr * dr - zi * di) + 1, ndi = 2 * (zr * di + zi * dr);
+                        double nzr = zr * zr - zi * zi + cr; zi = 2 * zr * zi + ci; zr = nzr; dr = ndr; di = ndi;
+                    }
+                    iterDst[i] = n;
+                    smoothDst[i] = n < maxIter ? n + 1f : 0f;
+                    finalZrDst[i] = (float)zr; finalZiDst[i] = (float)zi; finalDrDst[i] = (float)dr; finalDiDst[i] = (float)di;
+                    if (colorDst != null) colorDst[i] = 0xFF000000u;
+                }
+        }
+    }
+
+    [Fact]
+    public void GpuPalettePath_StillFillsTheDistanceEstimate()
+    {
+        const int w = 160, h = 90;
+        var c = new MandelbrotCalculator(w, h)
+        {
+            CenterX = -0.5, CenterY = 0, Zoom = 1.0, MaxIterations = 200,
+            ColorMap = new HsvPalette(), UseGpuCompute = true, GpuKernel = new FakePaletteKernel(),
+        };
+        c.Calculate(default);
+        int escaped = 0, withDe = 0;
+        for (int i = 0; i < w * h; i++)
+            if (c.IterationBuffer[i] < 200) { escaped++; if (c.DistanceBuffer[i] > 0f) withDe++; }
+        Assert.True(escaped > w * h / 4, $"too few escaped pixels ({escaped}) — fake GPU path not taken?");
+        Assert.True(withDe > escaped * 0.95, $"{withDe}/{escaped} escaped pixels carry a distance estimate");
+        var hgt = Build(c.SmoothBuffer, c.DistanceBuffer, w, h, c.DistancePixelScale);
+        Assert.NotSame(c.SmoothBuffer, hgt);   // Distance applied, not the Smooth fallback
     }
 
     // ── parity ──────────────────────────────────────────────────────────────
