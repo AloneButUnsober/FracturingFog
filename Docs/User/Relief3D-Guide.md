@@ -137,7 +137,9 @@ screen-space relief, but a true 3D scene.
 > as terrain, but the surface stays flat. **Real height (experimental)** (Camera & quality) traces the
 > real surface instead, so small and large windows show the same shape. The real surface of an
 > iteration-count field is spiky, so Real height smooths it by default (**Terrain smoothing**, 2%). It is
-> still opt-in while it is being evaluated.
+> still opt-in while it is being evaluated. With Real height, soft shadows and AO follow the real terrain
+> (#1033): open ground is lit, ridges cast shadows, and a low light stretches them across the ground plane.
+> The plate look keeps its established, mostly shadowed shading.
 
 ### Filament detail — raise the structure *relative to* the slab
 

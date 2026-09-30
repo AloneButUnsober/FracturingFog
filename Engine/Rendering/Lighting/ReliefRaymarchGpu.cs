@@ -453,6 +453,8 @@ public static class ReliefRaymarchGpu
         out double onx, out double ony, out double onz, out double odep,
         double lensX = 0.0, double lensY = 0.0)
     {
+        // #1033 — the shading marches' DE (same Evaluate; a shading probe under true height).
+        var sde = new HeightfieldRaymarch2D.HeightShadeDe(in de, mip, u.MipW, u.MipH, u.Cam.By);
         // S4 (#402) — primary-hit geometry, same convention as the HLSL TracePixel:
         // terrain → (surface normal, tf), ground → ((0,1,0), tp), miss → ((0,0,0), 1e6).
         onx = 0.0; ony = 0.0; onz = 0.0; odep = 1e6;
@@ -549,8 +551,8 @@ public static class ReliefRaymarchGpu
                 uint alb = HeightfieldRaymarch2D.SampleAlbedoBilinear(albedo, w, h, uu, vv);
                 if (u.TriplanarStrength > 0 && u.TriplanarKind != 0)
                     alb = ApplyTriplanar(alb, hx, hy, hz, nx, ny, nz, in u);
-                uint shaded = ShadeFlat(nx, ny, nz, -rdx, -rdy, -rdz, hx, hy, hz, alb, in de, in u);
-                shaded = ApplyFogVolume(shaded, ox, oy, oz, rdx, rdy, rdz, tf, in de, in u);
+                uint shaded = ShadeFlat(nx, ny, nz, -rdx, -rdy, -rdz, hx, hy, hz, alb, in sde, in u);
+                shaded = ApplyFogVolume(shaded, ox, oy, oz, rdx, rdy, rdz, tf, in sde, in u);
 
                 // #455 — dissolve the terrain FOOTPRINT edge into what is behind
                 // it (floor when the ground plane is on, else sky / drop). Twin of
@@ -563,7 +565,7 @@ public static class ReliefRaymarchGpu
                     uint behind;
                     if (cam.GroundPlane)
                     {
-                        behind = ShadeFlat(0.0, 1.0, 0.0, -rdx, -rdy, -rdz, hx, 0.0, hz, u.FloorAlbedo, in de, in u);
+                        behind = ShadeFlat(0.0, 1.0, 0.0, -rdx, -rdy, -rdz, hx, 0.0, hz, u.FloorAlbedo, in sde, in u);
                     }
                     else
                     {
@@ -588,8 +590,8 @@ public static class ReliefRaymarchGpu
                 double gx = ox + rdx * tp, gz = oz + rdz * tp;
                 if (Math.Abs(gx) <= cam.FloorBx && Math.Abs(gz) <= cam.FloorBz)
                 {
-                    uint fShaded = ShadeFlat(0.0, 1.0, 0.0, -rdx, -rdy, -rdz, gx, 0.0, gz, u.FloorAlbedo, in de, in u);
-                    fShaded = ApplyFogVolume(fShaded, ox, oy, oz, rdx, rdy, rdz, tp, in de, in u);
+                    uint fShaded = ShadeFlat(0.0, 1.0, 0.0, -rdx, -rdy, -rdz, gx, 0.0, gz, u.FloorAlbedo, in sde, in u);
+                    fShaded = ApplyFogVolume(fShaded, ox, oy, oz, rdx, rdy, rdz, tp, in sde, in u);
                     onx = 0.0; ony = 1.0; onz = 0.0; odep = tp;
                     return (fShaded, false);
                 }
@@ -601,7 +603,7 @@ public static class ReliefRaymarchGpu
         if (u.Isolate) bg &= 0x00FFFFFFu;
         // #184 — sky/miss god-ray in-scatter over the fog slab air path [t0,t1].
         else if (inside)
-            bg = ApplyFogVolumeMiss(bg, ox, oy, oz, rdx, rdy, rdz, t0, t1, in de, in u);
+            bg = ApplyFogVolumeMiss(bg, ox, oy, oz, rdx, rdy, rdz, t0, t1, in sde, in u);
         return (bg, false);
     }
 
@@ -612,7 +614,7 @@ public static class ReliefRaymarchGpu
     private static uint ShadeFlat(double nx, double ny, double nz,
                                   double vx, double vy, double vz,
                                   double px, double py, double pz, uint albedo,
-                                  in HeightfieldRaymarch2D.HeightDe de, in ReliefUniforms u)
+                                  in HeightfieldRaymarch2D.HeightShadeDe de, in ReliefUniforms u)
     {
         // 4b — per-light soft shadow. IQ penumbra DE-march toward each light,
         // gating DIRECT lighting (diffuse + spec) only; ambient is left alone.
@@ -639,11 +641,11 @@ public static class ReliefRaymarchGpu
             double ox = px + nx * bias, oy = py + ny * bias, oz = pz + nz * bias;
             // #492 — per-light hardness (area-capped in Build); punctual → ShadowSoftK.
             if ((u.ShadowLightMask & 0x1) != 0 && u.I0 > 0)
-                sh0 = ShadingPipeline.SoftShadow(in de, ox, oy, oz, l0x, l0y, l0z, eps, 12.0, u.ShadowK0, u.ShadowSteps);
+                sh0 = ReliefSoftShadow(in de, u.TrueHeight, ox, oy, oz, l0x, l0y, l0z, eps, 12.0, u.ShadowK0, u.ShadowSteps);
             if ((u.ShadowLightMask & 0x2) != 0 && u.I1 > 0)
-                sh1 = ShadingPipeline.SoftShadow(in de, ox, oy, oz, l1x, l1y, l1z, eps, 12.0, u.ShadowK1, u.ShadowSteps);
+                sh1 = ReliefSoftShadow(in de, u.TrueHeight, ox, oy, oz, l1x, l1y, l1z, eps, 12.0, u.ShadowK1, u.ShadowSteps);
             if ((u.ShadowLightMask & 0x4) != 0 && u.I2 > 0)
-                sh2 = ShadingPipeline.SoftShadow(in de, ox, oy, oz, l2x, l2y, l2z, eps, 12.0, u.ShadowK2, u.ShadowSteps);
+                sh2 = ReliefSoftShadow(in de, u.TrueHeight, ox, oy, oz, l2x, l2y, l2z, eps, 12.0, u.ShadowK2, u.ShadowSteps);
         }
 
         double sR = 0, sG = 0, sB = 0;
@@ -683,7 +685,10 @@ public static class ReliefRaymarchGpu
             for (int k = 1; k <= u.AoSamples; k++)
             {
                 double d = eps * (double)(1L << k);
-                double sampleD = de.Evaluate(px + nx * d, py + ny * d, pz + nz * d);
+                // #1033 — true height: the shading probe's distance estimate.
+                double sampleD = u.TrueHeight
+                    ? de.ShadeProbe(px + nx * d, py + ny * d, pz + nz * d, nx, ny, nz, 0.0, out _, out _)
+                    : de.Evaluate(px + nx * d, py + ny * d, pz + nz * d);
                 occl += Math.Max(0.0, d - sampleD) / d;
                 wsum += 1.0;
             }
@@ -873,7 +878,7 @@ public static class ReliefRaymarchGpu
     private static void Reflections(
         double nx, double ny, double nz, double rdx, double rdy, double rdz,
         double px, double py, double pz,
-        in HeightfieldRaymarch2D.HeightDe de, in ReliefUniforms u,
+        in HeightfieldRaymarch2D.HeightShadeDe de, in ReliefUniforms u,
         ref double outR, ref double outG, ref double outB)
     {
         if (u.ReflectionStrength <= 0) return;
@@ -914,6 +919,15 @@ public static class ReliefRaymarchGpu
             for (int s = 0; s < reflSteps; s++)
             {
                 hpx = bOx + brx * tR; hpy = bOy + bry * tR; hpz = bOz + brz * tR;
+                if (u.TrueHeight)
+                {
+                    // #1033 — hit on the probe's distance, probe step.
+                    de.ShadeProbe(hpx, hpy, hpz, brx, bry, brz, eps * 2.0, out double stepR, out bool hitP);
+                    if (hitP) { hitR = true; hitTR = tR; break; }
+                    tR += stepR;
+                    if (tR > tMaxR) break;
+                    continue;
+                }
                 double hR = de.Evaluate(hpx, hpy, hpz);
                 if (hR < eps * 2.0) { hitR = true; hitTR = tR; break; }
                 tR += hR;
@@ -1118,7 +1132,7 @@ public static class ReliefRaymarchGpu
     /// ray origin (== camera for perspective); the walk samples o + rd·t.</summary>
     private static uint ApplyFogVolume(uint shaded, double ox, double oy, double oz,
         double rdx, double rdy, double rdz, double tHit,
-        in HeightfieldRaymarch2D.HeightDe de, in ReliefUniforms u)
+        in HeightfieldRaymarch2D.HeightShadeDe de, in ReliefUniforms u)
     {
         if (u.FogDensity <= 0) return shaded;
         double br = (shaded >> 16) & 0xFF, bg = (shaded >> 8) & 0xFF, bb = shaded & 0xFF;
@@ -1152,7 +1166,7 @@ public static class ReliefRaymarchGpu
     private static void InScatterWalk(ref double br, ref double bg, ref double bb,
         double ox, double oy, double oz, double rdx, double rdy, double rdz,
         double tStart, double tEnd,
-        in HeightfieldRaymarch2D.HeightDe de, in ReliefUniforms u)
+        in HeightfieldRaymarch2D.HeightShadeDe de, in ReliefUniforms u)
     {
         double span = tEnd - tStart;
         if (span <= 0) return;
@@ -1250,7 +1264,7 @@ public static class ReliefRaymarchGpu
     /// by transmittance × light color. Called once per light per volume step so the
     /// GPU relief fog matches the CPU multi-light path.</summary>
     private static void AddReliefScatter(ref double inR, ref double inG, ref double inB,
-        in HeightfieldRaymarch2D.HeightDe de, in ReliefUniforms u,
+        in HeightfieldRaymarch2D.HeightShadeDe de, in ReliefUniforms u,
         double sx, double sy, double sz,
         double lx, double ly, double lz,
         double rdx, double rdy, double rdz,
@@ -1273,7 +1287,7 @@ public static class ReliefRaymarchGpu
 
         double sh = 1.0;
         if (shOn)
-            sh = ShadingPipeline.SoftShadow(in de, sx, sy, sz, lx, ly, lz,
+            sh = ReliefSoftShadow(in de, u.TrueHeight, sx, sy, sz, lx, ly, lz,
                                             u.Cam.Eps0, 12.0, areaK, u.ShadowSteps);
         // 4e-ii — cloud self-shadow toward this light (1.0 when off).
         sh *= CloudSelfShadow(sx, sy, sz, lx, ly, lz, in u);
@@ -1321,7 +1335,7 @@ public static class ReliefRaymarchGpu
     /// off. Twin of the CPU relief render's #184 miss path.</summary>
     private static uint ApplyFogVolumeMiss(uint bg, double ox, double oy, double oz,
         double rdx, double rdy, double rdz, double tStart, double tEnd,
-        in HeightfieldRaymarch2D.HeightDe de, in ReliefUniforms u)
+        in HeightfieldRaymarch2D.HeightShadeDe de, in ReliefUniforms u)
     {
         if (u.Isolate || u.FogDensity <= 0 || u.VolumeSteps <= 0
             || (u.I0 <= 0 && u.I1 <= 0 && u.I2 <= 0)) return bg;   // #388 — any light lights the fog
@@ -1399,6 +1413,18 @@ public static class ReliefRaymarchGpu
     /// plane and the distance to exit the block's XZ cell — no terrain can be hit
     /// within that span. Returns 0 (fall back to the point DE) otherwise. Twin of
     /// the HLSL <c>EmptySkipDist</c>.</summary>
+    /// <summary>#1033 — the twin's soft shadow: the shading probe under true height
+    /// (twin of the HLSL <c>SoftShadow</c>'s gTrueHeight branch), else the plate
+    /// look's plain height-DE march.</summary>
+    private static double ReliefSoftShadow(in HeightfieldRaymarch2D.HeightShadeDe de, bool trueHeight,
+        double ox, double oy, double oz, double lx, double ly, double lz,
+        double tMin, double tMax, double k, int steps)
+    {
+        if (trueHeight) return ShadingPipeline.SoftShadow(in de, ox, oy, oz, lx, ly, lz, tMin, tMax, k, steps);
+        var plain = de.Inner;
+        return ShadingPipeline.SoftShadow(in plain, ox, oy, oz, lx, ly, lz, tMin, tMax, k, steps);
+    }
+
     private static double EmptySkipDist(double px, double py, double pz,
         double rdx, double rdy, double rdz, double epsT, in ReliefUniforms u, float[] mip)
         => ReliefHeightMip.EmptySkipDist(px, py, pz, rdx, rdy, rdz, epsT, u.Aspect, u.Sy, mip, u.MipW, u.MipH);

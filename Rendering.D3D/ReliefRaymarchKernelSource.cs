@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: AGPL-3.0-or-later
+﻿// SPDX-License-Identifier: AGPL-3.0-or-later
 // SPDX-FileCopyrightText: 2026 Bradley Brown
 
 // ReliefRaymarchKernelSource.cs — shared HLSL for the Relief 3D sphere-trace
@@ -96,11 +96,11 @@ cbuffer ReliefParams : register(b0)
     int    gShadowSteps;  // 4b — IQ soft shadow; 0 = off
     float  gShadowSoftK;  // penumbra hardness
     int    gShadowMask;   // bit n enables shadow for light n
-    float  gPadSh;
+    int    gRowBase;      // #1044 - first output row of this band (row-band dispatch)
 
     int    gAoSamples;    // 4c — DE-cone AO; 0 = off
     float  gAoStrength;   // occlusion darkening amount
-    float  gPadA0;
+    int    gColBase;      // #1044 - first output column of this tile
     float  gPadA1;
 
     float  gIblStrength;      // 4d — IBL-modulated ambient; 0 = scalar ambient
@@ -240,6 +240,64 @@ float2 SampleGrad(float x, float z)
 float Evaluate(float x, float y, float z)
 {
     return Culled(x, z) ? 1e9 : (y - SampleHeight(x, z)) * gInvLip;
+}
+
+// 4f — conservative empty-space-skip distance. Twin of ReliefRaymarchGpu.
+// EmptySkipDist: coarse block max at (px,pz); if the ray point is above it by
+// more than epsT, return min(descend-to-plane, cell-exit) — no terrain hit
+// possible within that span; else 0 (fall back to the point DE).
+float EmptySkipDist(float3 P, float3 rd, float epsT)
+{
+    float uu = P.x / gAspect + 0.5, vv = P.z + 0.5;
+    int cx = (int)floor(uu * gMipW);
+    int cz = (int)floor(vv * gMipH);
+    cx = ClampI(cx, 0, gMipW - 1);
+    cz = ClampI(cz, 0, gMipH - 1);
+    float hmax = gMip[cz * gMipW + cx] * gSy;
+    if (P.y <= hmax + epsT) return 0.0;
+
+    // Descend to epsT ABOVE the block max so the normal march refines the hit with
+    // a tight bracket (twin of ReliefRaymarchGpu). Still conservative.
+    float tPlane = rd.y < -1e-9 ? (P.y - (hmax + epsT)) / (-rd.y) : 3.4e38;
+
+    float xLo = (cx / (float)gMipW - 0.5) * gAspect;
+    float xHi = ((cx + 1) / (float)gMipW - 0.5) * gAspect;
+    float zLo = cz / (float)gMipH - 0.5;
+    float zHi = (cz + 1) / (float)gMipH - 0.5;
+    float tExit = 3.4e38;
+    if (rd.x > 1e-12) tExit = min(tExit, (xHi - P.x) / rd.x);
+    else if (rd.x < -1e-12) tExit = min(tExit, (xLo - P.x) / rd.x);
+    if (rd.z > 1e-12) tExit = min(tExit, (zHi - P.z) / rd.z);
+    else if (rd.z < -1e-12) tExit = min(tExit, (zLo - P.z) / rd.z);
+
+    float skip = min(tPlane, tExit);
+    return skip > 0.0 ? skip : 0.0;
+}
+
+// #1033 — shading-march probe under true height (twin of HeightfieldRaymarch2D.
+// HeightDe.LocalProbe). Evaluate's single global Lipschitz factor makes it far
+// below the true distance on fine fields, so the shadow / AO / reflection marches
+// read 'surface right here' almost everywhere. The probe hits on the vertical gap,
+// estimates the distance as gap / sqrt(1 + |grad h|^2) (exact for locally planar
+// terrain) and steps by that estimate, or the global bound / skip when larger.
+float ShadeProbe(float3 p, float3 rd, float hitEps, out float stepOut, out bool hitOut)
+{
+    if (Culled(p.x, p.z)) { stepOut = 1e9; hitOut = false; return 1e9; }
+    float gap = p.y - SampleHeight(p.x, p.z);
+    hitOut = gap < hitEps;
+    stepOut = gap * gInvLip;
+    if (hitOut) return gap;
+    if (gEmptySkip != 0)
+    {
+        float skip = EmptySkipDist(p, rd, hitEps);
+        if (skip > stepOut) stepOut = skip;
+    }
+    float2 g = SampleGrad(p.x, p.z);
+    float est = gap / sqrt(1.0 + g.x * g.x + g.y * g.y);
+    if (est > stepOut) stepOut = est;
+    // #1044 - above the terrain box top heading up (or level): nothing left to hit.
+    if (p.y > gB.y && rd.y >= 0.0) stepOut = 1e9;
+    return est;
 }
 
 // 1-axis ray-slab clip; narrows [t0,t1] to the segment inside [lo,hi].
@@ -414,14 +472,36 @@ void SpecAccum(float intensity, float3 col, float3 L, float3 N, float3 V,
 float SoftShadow(float3 o, float3 L, float tMin, float tMax, float k, int steps)
 {
     float res = 1.0, t = tMin;
+    float ph = -1.0, ps = 0.0;
     [loop]
     for (int s = 0; s < steps; s++)
     {
         float3 p = o + L * t;
-        float hh = Evaluate(p.x, p.y, p.z);
-        if (hh < 1e-4) return 0.0;
-        if (k > 0.0) res = min(res, k * hh / t);
-        t += hh;
+        float hh, adv, dd = 0.0, tt = t;
+        if (gTrueHeight != 0.0)
+        {
+            // #1033 — the shading probe: hit + penumbra on its estimate, probe step;
+            // closest approach between consecutive samples (improved soft shadow).
+            bool hitP;
+            hh = ShadeProbe(p, L, 1e-4, adv, hitP);
+            if (hitP) return 0.0;
+            dd = hh;
+            if (ph > 0.0 && ps > 0.0)
+            {
+                float y = (ps * ps + hh * hh - ph * ph) / (2.0 * ps);
+                if (y > 0.0 && y < ps && y < hh) { dd = sqrt(hh * hh - y * y); tt = t - y; }
+            }
+            ph = hh; ps = adv;
+        }
+        else
+        {
+            hh = Evaluate(p.x, p.y, p.z);
+            if (hh < 1e-4) return 0.0;
+            adv = hh;
+            dd = hh;
+        }
+        if (k > 0.0) res = min(res, k * dd / tt);
+        t += adv;
         if (t >= tMax) break;
     }
     return clamp(res, 0.0, 1.0);
@@ -658,6 +738,16 @@ float3 Reflections(float3 N, float3 rd, float3 P)
         for (int s = 0; s < reflSteps; s++)
         {
             hp = bO + br * tR;
+            if (gTrueHeight != 0.0)
+            {
+                // #1033 — hit on the probe's distance, probe step.
+                float stepR; bool hitP;
+                ShadeProbe(hp, br, gEps0 * 2.0, stepR, hitP);
+                if (hitP) { hitR = true; hitTR = tR; break; }
+                tR += stepR;
+                if (tR > tMaxR) break;
+                continue;
+            }
             float hR = Evaluate(hp.x, hp.y, hp.z);
             if (hR < gEps0 * 2.0) { hitR = true; hitTR = tR; break; }
             tR += hR;
@@ -760,7 +850,15 @@ uint ShadeFlat(float3 N, float3 V, float3 P, uint albedo)
         for (int k = 1; k <= gAoSamples; k++)
         {
             float d = gEps0 * (float)(1 << k);
-            float sampleD = Evaluate(P.x + N.x * d, P.y + N.y * d, P.z + N.z * d);
+            float sampleD;
+            if (gTrueHeight != 0.0)
+            {
+                // #1033 — the shading probe's distance estimate.
+                float stepA; bool hitA;
+                sampleD = ShadeProbe(P + N * d, N, 0.0, stepA, hitA);
+            }
+            else
+                sampleD = Evaluate(P.x + N.x * d, P.y + N.y * d, P.z + N.z * d);
             occl += max(0.0, d - sampleD) / d;
             wsum += 1.0;
         }
@@ -1156,38 +1254,6 @@ uint ApplyFogVolumeMiss(uint bg, float3 o, float3 rd, float tStart, float tEnd)
     return (A << 24) | (Rb << 16) | (Gb << 8) | Bb;
 }
 
-// 4f — conservative empty-space-skip distance. Twin of ReliefRaymarchGpu.
-// EmptySkipDist: coarse block max at (px,pz); if the ray point is above it by
-// more than epsT, return min(descend-to-plane, cell-exit) — no terrain hit
-// possible within that span; else 0 (fall back to the point DE).
-float EmptySkipDist(float3 P, float3 rd, float epsT)
-{
-    float uu = P.x / gAspect + 0.5, vv = P.z + 0.5;
-    int cx = (int)floor(uu * gMipW);
-    int cz = (int)floor(vv * gMipH);
-    cx = ClampI(cx, 0, gMipW - 1);
-    cz = ClampI(cz, 0, gMipH - 1);
-    float hmax = gMip[cz * gMipW + cx] * gSy;
-    if (P.y <= hmax + epsT) return 0.0;
-
-    // Descend to epsT ABOVE the block max so the normal march refines the hit with
-    // a tight bracket (twin of ReliefRaymarchGpu). Still conservative.
-    float tPlane = rd.y < -1e-9 ? (P.y - (hmax + epsT)) / (-rd.y) : 3.4e38;
-
-    float xLo = (cx / (float)gMipW - 0.5) * gAspect;
-    float xHi = ((cx + 1) / (float)gMipW - 0.5) * gAspect;
-    float zLo = cz / (float)gMipH - 0.5;
-    float zHi = (cz + 1) / (float)gMipH - 0.5;
-    float tExit = 3.4e38;
-    if (rd.x > 1e-12) tExit = min(tExit, (xHi - P.x) / rd.x);
-    else if (rd.x < -1e-12) tExit = min(tExit, (xLo - P.x) / rd.x);
-    if (rd.z > 1e-12) tExit = min(tExit, (zHi - P.z) / rd.z);
-    else if (rd.z < -1e-12) tExit = min(tExit, (zLo - P.z) / rd.z);
-
-    float skip = min(tPlane, tExit);
-    return skip > 0.0 ? skip : 0.0;
-}
-
 // #455 — per-channel lerp of two packed ARGB colours by t (0 = a, 1 = b), alpha
 // included so the terrain can dissolve toward a transparent background. Twin of
 // HeightfieldRaymarch2D.BlendArgb / ReliefRaymarchGpu.BlendArgb (round on +0.5).
@@ -1328,8 +1394,8 @@ uint TracePixel(float3 o, float3 rd, out float3 nrm, out float dep)
 
     // Ray generation shared by both entry variants: pixel centre → (o, rd).
     private const string RayGen = @"
-    int px = (int)tid.x;
-    int py = (int)tid.y;
+    int px = (int)tid.x + gColBase;   // #1044 - tiled dispatch offsets
+    int py = (int)tid.y + gRowBase;
     if (px >= gW || py >= gH) return;
     int idx = py * gW + px;
 

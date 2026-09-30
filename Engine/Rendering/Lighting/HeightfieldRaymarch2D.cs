@@ -60,6 +60,24 @@ public static class HeightfieldRaymarch2D
     /// edge-clamped, so outside the domain the border height extends outward.
     /// Sampling is bilinear by default, bicubic (Catmull-Rom) when requested.
     /// </summary>
+    /// <summary>#1044 — relief GPU kernels whose device was lost during a dispatch
+    /// (an OS GPU watchdog reset). A removed device does not recover and retrying
+    /// only repeats the failure, so such a kernel is never used again: the relief
+    /// renders on the CPU. A kernel on a recreated device is a new instance.</summary>
+    private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<IReliefRaymarchKernel, object> s_lostKernels = new();
+
+    /// <summary>#1044 — true once <paramref name="kernel"/> lost its device.</summary>
+    public static bool IsGpuReliefLost(IReliefRaymarchKernel? kernel)
+        => kernel != null && s_lostKernels.TryGetValue(kernel, out _);
+
+    private static void MarkGpuReliefLost(IReliefRaymarchKernel kernel, Exception ex)
+    {
+        if (s_lostKernels.TryGetValue(kernel, out _)) return;
+        s_lostKernels.AddOrUpdate(kernel, new object());
+        Console.Error.WriteLine("[GPU] Relief 3D GPU raymarch DISABLED — the GPU device was lost during a " +
+                                "dispatch (driver reset). Rendering the relief on the CPU. " + ex.Message);
+    }
+
     public readonly struct HeightDe : IDistanceEstimator
     {
         private readonly float[] _h;      // compressed smooth counts
@@ -164,6 +182,75 @@ public static class HeightfieldRaymarch2D
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public double Evaluate(double x, double y, double z)
             => Culled(x, z) ? 1e9 : (y - SampleHeight(x, z)) * _invLip;
+
+        /// <summary>#1033 — the shading-march probe (see <see cref="HeightShadeDe"/>):
+        /// hit on the world vertical gap; estimate the distance as the vertical gap over
+        /// the local slope, gap / √(1 + |∇h|²) — exact for locally planar terrain; step by
+        /// that estimate, or the global bound / empty-space skip when larger.</summary>
+        public double LocalProbe(double x, double y, double z, double rdx, double rdy, double rdz,
+                                 double hitEps, float[]? mip, int mipW, int mipH,
+                                 out double step, out bool hit, double topY = double.PositiveInfinity)
+        {
+            if (Culled(x, z)) { step = 1e9; hit = false; return 1e9; }
+            double gap = y - SampleHeight(x, z);
+            hit = gap < hitEps;
+            double dg = gap * _invLip;
+            step = dg;
+            if (hit) return gap;
+            if (mip is not null)
+            {
+                double skip = ReliefHeightMip.EmptySkipDist(x, y, z, rdx, rdy, rdz, hitEps,
+                                                            _aspect, _sy, mip, mipW, mipH);
+                if (skip > step) step = skip;
+            }
+            var (gx, gz) = SampleGrad(x, z);
+            double est = gap / Math.Sqrt(1.0 + gx * gx + gz * gz);
+            // Step by the estimate (terrain-shadow style), never less than the safe
+            // global bound / skip. Measured against a brute-force oracle it reaches
+            // the converged (400-step safe) shadow within the default 24 steps; the
+            // safe step alone stopped short of most occluders.
+            if (est > step) step = est;
+            // #1044 — above the terrain's top and heading up (or level): nothing can
+            // be hit any more, so end the march (the caller's t passes tMax).
+            if (y > topY && rdy >= 0.0) step = 1e9;
+            return est;
+        }
+    }
+
+    /// <summary>#1033 — the height DE the shading marches use under Real height.
+    /// <see cref="HeightDe.Evaluate"/> is (y − h)·invLip with ONE Lipschitz factor from
+    /// the field's steepest cell, so on fine fields it is far below the true distance
+    /// almost everywhere. Traced as it was, the soft shadow's hit test and penumbra,
+    /// the AO samples and the reflection hit test all read "surface right here":
+    /// near-total shadow and heavy AO on open ground. The probe keeps the steps safe
+    /// but judges hits and occlusion on real distances. <see cref="Evaluate"/> (used
+    /// for normals by central differences) is unchanged.</summary>
+    public readonly struct HeightShadeDe : IDistanceEstimator
+    {
+        private readonly HeightDe _de;
+        private readonly float[]? _mip;
+        private readonly int _mipW, _mipH;
+        private readonly double _topY;
+
+        /// <param name="topY">The terrain box top (world y no surface reaches); a
+        /// march above it heading up ends there.</param>
+        public HeightShadeDe(in HeightDe de, float[]? mip, int mipW, int mipH, double topY = double.PositiveInfinity)
+        {
+            _de = de; _mip = mip; _mipW = mipW; _mipH = mipH; _topY = topY;
+        }
+
+        public static bool HasShadeProbe => true;
+
+        /// <summary>The wrapped height DE (the plate look's shading estimator).</summary>
+        public HeightDe Inner => _de;
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public double Evaluate(double x, double y, double z) => _de.Evaluate(x, y, z);
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public double ShadeProbe(double x, double y, double z, double rdx, double rdy, double rdz,
+                                 double hitEps, out double step, out bool hit)
+            => _de.LocalProbe(x, y, z, rdx, rdy, rdz, hitEps, _mip, _mipW, _mipH, out step, out hit, _topY);
     }
 
     /// <summary>
@@ -397,6 +484,10 @@ public static class HeightfieldRaymarch2D
         // vertical gap (d / invLip); the default compares d itself (the plate).
         double hitScale = trueHeight ? invLip : 1.0;
         int skipMipW = pre.MipW, skipMipH = pre.MipH;
+        // #1033 — under true height the shading marches (soft shadow, AO,
+        // reflections, volumetric shadow) use the shading probe: safe steps, but
+        // hits and occlusion judged on real distances instead of the global
+        // Lipschitz-scaled DE. The default plate look shades with `de` as before.
 
         // Lighting FX (#132 defaults). Copy the struct, then — when auto-shade is
         // on — fill sensible AO / soft-shadow / specular / ambient values wherever
@@ -430,6 +521,7 @@ public static class HeightfieldRaymarch2D
         // (ReliefRaymarchGpu) drive rays from byte-identical numbers. The math is
         // unchanged — moved verbatim — so this render is bit-for-bit as before.
         ReliefCamera cam = BuildObliqueCamera(w, h, aspect, sy, maxH, p, aimH: normRef);
+        var sde = new HeightShadeDe(in de, skipMip, skipMipW, skipMipH, cam.By);   // #1033 / #1044
 
         // #162 (Slice 3d) — GPU dispatch seam. When the opt-in flag is set and the
         // host has attached a relief kernel, raymarch on the GPU from the SAME
@@ -478,16 +570,22 @@ public static class HeightfieldRaymarch2D
         // S2 (#396) — an HDR-beauty capture reads the shade's pre-clamp value, which
         // the GPU kernel does not emit, so it too forces the CPU trace.
         bool aovOk = aov == null || (aov.Components == null && aov.Motion == null && aov.HdrBeauty == null);
+        // #1044 — a kernel that lost its device stays off (CPU trace instead).
+        if (IsGpuReliefLost(gpuKernel)) gpuKernel = null;
         if (gpuKernel != null && p.Relief2DGpuRaymarch && fx.DebugAov == AovView.Beauty
             && aovOk && !froxel)
         {
             var u = ReliefUniforms.Build(w, h, hw, hh, sy, aspect, invLip, maxH, p, in fx, aimH: normRef);
-            if (aov != null)
-                gpuKernel.Run(in u, hbuf, keep, albedo, dst, aov.NormalXyz, aov.Depth);
-            else
-                gpuKernel.Run(in u, hbuf, keep, albedo, dst);
-            ApplyCameraExposure(p, dst, n);
-            return;
+            try
+            {
+                if (aov != null)
+                    gpuKernel.Run(in u, hbuf, keep, albedo, dst, aov.NormalXyz, aov.Depth);
+                else
+                    gpuKernel.Run(in u, hbuf, keep, albedo, dst);
+                ApplyCameraExposure(p, dst, n);
+                return;
+            }
+            catch (GpuDeviceLostException ex) { MarkGpuReliefLost(gpuKernel, ex); gpuKernel = null; }   // → CPU trace below
         }
 
         // S6 (#408) host wiring — fully-GPU froxel path. When froxel is on AND both
@@ -516,12 +614,16 @@ public static class HeightfieldRaymarch2D
             // Reuse the caller's denoise guides when present, else scratch for depth.
             float[] gnrm = aov?.NormalXyz ?? new float[n * 3];
             float[] gdep = aov?.Depth ?? new float[n];
-            gpuKernel.Run(in u, hbuf, keep, albedo, dst, gnrm, gdep);
-            var fu = FroxelGpuUniforms.Build(in cam, in froxelFx, p.Relief2DFroxelQuality);
-            double froxelFb = p.Relief2DFroxelTemporal ? p.Relief2DFroxelTemporalFeedback : 0.0;
-            froxelKernel.Composite(in fu, dst, gdep, w, h, dst, froxelFb, froxelReproject);
-            ApplyCameraExposure(p, dst, n);
-            return;
+            try
+            {
+                gpuKernel.Run(in u, hbuf, keep, albedo, dst, gnrm, gdep);
+                var fu = FroxelGpuUniforms.Build(in cam, in froxelFx, p.Relief2DFroxelQuality);
+                double froxelFb = p.Relief2DFroxelTemporal ? p.Relief2DFroxelTemporalFeedback : 0.0;
+                froxelKernel.Composite(in fu, dst, gdep, w, h, dst, froxelFb, froxelReproject);
+                ApplyCameraExposure(p, dst, n);
+                return;
+            }
+            catch (GpuDeviceLostException ex) { MarkGpuReliefLost(gpuKernel, ex); gpuKernel = null; }   // → CPU trace below
         }
 
         double camX = cam.CamX, camY = cam.CamY, camZ = cam.CamZ;
@@ -654,8 +756,11 @@ public static class HeightfieldRaymarch2D
                         totalT: tf, hitDist: d, hitStep: 0, epsilon: eps0);
                     // S1/S7 (#389) — capture the float lighting components at the
                     // primary terrain hit when an AOV component buffer is supplied.
-                    uint tcol = ShadingPipeline.Shade<HeightDe>(in si, alb, in fx, in de, true,
-                        pixelIndex: compIndex, hdrBuf: hdrBuf, compBuf: compBuf);
+                    uint tcol = trueHeight
+                        ? ShadingPipeline.Shade<HeightShadeDe>(in si, alb, in fx, in sde, true,
+                            pixelIndex: compIndex, hdrBuf: hdrBuf, compBuf: compBuf)
+                        : ShadingPipeline.Shade<HeightDe>(in si, alb, in fx, in de, true,
+                            pixelIndex: compIndex, hdrBuf: hdrBuf, compBuf: compBuf);
 
                     // #141 — dissolve the terrain FOOTPRINT edge into whatever is
                     // behind it. The height field has a rectangular extent
@@ -676,7 +781,9 @@ public static class HeightfieldRaymarch2D
                             var fgi = new ShadingInputs(
                                 hx, 0.0, hz, 0.0, 1.0, 0.0, rdx, rdy, rdz,
                                 totalT: tf, hitDist: 0.0, hitStep: 0, epsilon: eps0);
-                            behind = ShadingPipeline.Shade<HeightDe>(in fgi, FloorAlbedo, in fx, in de, true);
+                            behind = trueHeight
+                                ? ShadingPipeline.Shade<HeightShadeDe>(in fgi, FloorAlbedo, in fx, in sde, true)
+                                : ShadingPipeline.Shade<HeightDe>(in fgi, FloorAlbedo, in fx, in de, true);
                         }
                         else
                         {
@@ -701,8 +808,12 @@ public static class HeightfieldRaymarch2D
                         var sg = new ShadingInputs(
                             gx, 0.0, gz, 0.0, 1.0, 0.0, rdx, rdy, rdz,
                             totalT: tp, hitDist: 0.0, hitStep: 0, epsilon: eps0);
-                        return (ShadingPipeline.Shade<HeightDe>(in sg, FloorAlbedo, in fx, in de, true,
-                            pixelIndex: compIndex, hdrBuf: hdrBuf, compBuf: compBuf), false, 0f, 1f, 0f, (float)tp);
+                        uint fcol = trueHeight
+                            ? ShadingPipeline.Shade<HeightShadeDe>(in sg, FloorAlbedo, in fx, in sde, true,
+                                pixelIndex: compIndex, hdrBuf: hdrBuf, compBuf: compBuf)
+                            : ShadingPipeline.Shade<HeightDe>(in sg, FloorAlbedo, in fx, in de, true,
+                                pixelIndex: compIndex, hdrBuf: hdrBuf, compBuf: compBuf);
+                        return (fcol, false, 0f, 1f, 0f, (float)tp);
                     }
                 }
             }
@@ -726,9 +837,14 @@ public static class HeightfieldRaymarch2D
                 if (t1 > ts)
                 {
                     double br = (bg >> 16) & 0xFF, bgc = (bg >> 8) & 0xFF, bb = bg & 0xFF;
-                    ShadingPipeline.VolumetricInScatterSegment<HeightDe>(
-                        in fx, in de, ox, oy, oz, rdx, rdy, rdz, eps0, ts, t1,
-                        ref br, ref bgc, ref bb);
+                    if (trueHeight)
+                        ShadingPipeline.VolumetricInScatterSegment<HeightShadeDe>(
+                            in fx, in sde, ox, oy, oz, rdx, rdy, rdz, eps0, ts, t1,
+                            ref br, ref bgc, ref bb);
+                    else
+                        ShadingPipeline.VolumetricInScatterSegment<HeightDe>(
+                            in fx, in de, ox, oy, oz, rdx, rdy, rdz, eps0, ts, t1,
+                            ref br, ref bgc, ref bb);
                     byte R = (byte)Math.Clamp(br, 0, 255);
                     byte G = (byte)Math.Clamp(bgc, 0, 255);
                     byte B = (byte)Math.Clamp(bb, 0, 255);

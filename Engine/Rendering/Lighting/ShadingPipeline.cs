@@ -489,7 +489,11 @@ public static class ShadingPipeline
             for (int k = 1; k <= fx.AoSamples; k++)
             {
                 double d = i.Epsilon * (double)(1L << k);  // P1: was Math.Pow(2, k)
-                double sampleD = de.Evaluate(i.Px + i.Nx * d, i.Py + i.Ny * d, i.Pz + i.Nz * d);
+                // #1033 — a shading probe's distance estimate (JIT-folded).
+                double sampleD = TDe.HasShadeProbe
+                    ? de.ShadeProbe(i.Px + i.Nx * d, i.Py + i.Ny * d, i.Pz + i.Nz * d,
+                                    i.Nx, i.Ny, i.Nz, 0.0, out _, out _)
+                    : de.Evaluate(i.Px + i.Nx * d, i.Py + i.Ny * d, i.Pz + i.Nz * d);
                 occl += Math.Max(0, d - sampleD) / d;
                 w += 1.0;
             }
@@ -623,6 +627,15 @@ public static class ShadingPipeline
                     hpx = bOx + brx * tR;
                     hpy = bOy + bry * tR;
                     hpz = bOz + brz * tR;
+                    if (TDe.HasShadeProbe)
+                    {
+                        // #1033 — hit on the probe's distance, safe probe step.
+                        de.ShadeProbe(hpx, hpy, hpz, brx, bry, brz, i.Epsilon * 2.0, out double stepR, out bool hitP);
+                        if (hitP) { hitR = true; hitTR = tR; break; }
+                        tR += stepR;
+                        if (tR > tMaxR) break;
+                        continue;
+                    }
                     double hR = de.Evaluate(hpx, hpy, hpz);
                     if (hR < i.Epsilon * 2.0) { hitR = true; hitTR = tR; break; }
                     tR += hR;
@@ -1775,6 +1788,40 @@ public static class ShadingPipeline
         where TDe : struct, IDistanceEstimator
     {
         double res = 1.0, t = tMin;
+        // #1033 — an estimator with a shading probe (the relief height field under
+        // Real height) steps by its safe step but judges the hit and the penumbra on
+        // its distance estimate. JIT-folded: every other estimator takes the loop
+        // below unchanged.
+        if (TDe.HasShadeProbe)
+        {
+            // The probe's steps are larger than its distances, so the penumbra
+            // minimum can fall between samples (a serrated shadow edge). Estimate
+            // the closest approach between consecutive samples instead (IQ's
+            // improved soft shadow, for a sample spacing s): the two distance
+            // spheres meet y back from the current sample, the ray passes
+            // √(h² − y²) from the surface there.
+            double ph = -1.0, ps = 0.0;
+            for (int s = 0; s < maxSteps; s++)
+            {
+                double h = de.ShadeProbe(ox + ldx * t, oy + ldy * t, oz + ldz * t,
+                                         ldx, ldy, ldz, 1e-4, out double step, out bool hit);
+                if (hit) return 0.0;
+                if (k > 0)
+                {
+                    double dd = h, tt = t;
+                    if (ph > 0.0 && ps > 0.0)
+                    {
+                        double y = (ps * ps + h * h - ph * ph) / (2.0 * ps);
+                        if (y > 0.0 && y < ps && y < h) { dd = Math.Sqrt(h * h - y * y); tt = t - y; }
+                    }
+                    res = Math.Min(res, k * dd / tt);
+                }
+                ph = h; ps = step;
+                t += step;
+                if (t >= tMax) break;
+            }
+            return Math.Clamp(res, 0, 1);
+        }
         for (int s = 0; s < maxSteps; s++)
         {
             double px = ox + ldx * t;
