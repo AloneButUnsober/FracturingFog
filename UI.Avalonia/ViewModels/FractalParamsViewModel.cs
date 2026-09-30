@@ -637,7 +637,8 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
         get => _p.Relief2DFroxelQuality;
         set { if (_p.Relief2DFroxelQuality == value) return; _p.Relief2DFroxelQuality = value; this.RaisePropertyChanged(); Fire(); }
     }
-    public Array Relief2DFroxelQualities => Enum.GetValues(typeof(FracturingFog.Models.FroxelQuality));
+    public System.Array Relief2DFroxelQualities => s_Relief2DFroxelQualities;   // cached: a new array per read resets the ComboBox selection on Refresh()
+    private static readonly System.Array s_Relief2DFroxelQualities = System.Enum.GetValues(typeof(FracturingFog.Models.FroxelQuality));
     public double Relief2DFroxelTemporalFeedback
     {
         get => _p.Relief2DFroxelTemporalFeedback;
@@ -797,7 +798,8 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
         get => _p.Relief2DHeightCurve;
         set { if (_p.Relief2DHeightCurve == value) return; _p.Relief2DHeightCurve = value; this.RaisePropertyChanged(); Fire(); }
     }
-    public Array Relief2DHeightCurves => Enum.GetValues(typeof(FracturingFog.HeightCurve2D));
+    public System.Array Relief2DHeightCurves => s_Relief2DHeightCurves;   // cached: a new array per read resets the ComboBox selection on Refresh()
+    private static readonly System.Array s_Relief2DHeightCurves = System.Enum.GetValues(typeof(FracturingFog.HeightCurve2D));
 
     // S11 (#592) — relief height SOURCE: smooth iteration count / orbit-trap
     // min-distance / blend. Trap / Blend need an orbit-trap theme active.
@@ -806,7 +808,8 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
         get => _p.Relief2DHeightSource;
         set { if (_p.Relief2DHeightSource == value) return; _p.Relief2DHeightSource = value; this.RaisePropertyChanged(); this.RaisePropertyChanged(nameof(Relief2DHeightBlendApplies)); this.RaisePropertyChanged(nameof(Relief2DDistanceFalloffApplies)); Fire(); }
     }
-    public Array Relief2DHeightSources => Enum.GetValues(typeof(FracturingFog.ReliefHeightSource));
+    public System.Array Relief2DHeightSources => s_Relief2DHeightSources;   // cached: a new array per read resets the ComboBox selection on Refresh()
+    private static readonly System.Array s_Relief2DHeightSources = System.Enum.GetValues(typeof(FracturingFog.ReliefHeightSource));
     /// <summary>The blend weight only bites for the Blend source.</summary>
     public bool Relief2DHeightBlendApplies => _p.Relief2DHeightSource == FracturingFog.ReliefHeightSource.Blend;
     public double Relief2DHeightBlend
@@ -841,7 +844,8 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
         get => _p.Relief2DDetailAnchor;
         set { if (_p.Relief2DDetailAnchor == value) return; _p.Relief2DDetailAnchor = value; this.RaisePropertyChanged(); Fire(); }
     }
-    public Array Relief2DDetailAnchors => Enum.GetValues(typeof(FracturingFog.ReliefDetailAnchor));
+    public System.Array Relief2DDetailAnchors => s_Relief2DDetailAnchors;   // cached: a new array per read resets the ComboBox selection on Refresh()
+    private static readonly System.Array s_Relief2DDetailAnchors = System.Enum.GetValues(typeof(FracturingFog.ReliefDetailAnchor));
 
     // #1027 follow-up — trace the real surface (opt-in; default = the plate look).
     public bool Relief2DTrueHeight
@@ -909,7 +913,8 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
             Fire();
         }
     }
-    public Array Relief2DHeightModes => Enum.GetValues(typeof(FracturingFog.ReliefHeightMode));
+    public System.Array Relief2DHeightModes => s_Relief2DHeightModes;   // cached: a new array per read resets the ComboBox selection on Refresh()
+    private static readonly System.Array s_Relief2DHeightModes = System.Enum.GetValues(typeof(FracturingFog.ReliefHeightMode));
     /// <summary>The reference / baseline fields only bite in Fixed mode.</summary>
     public bool Relief2DHeightModeIsFixed => _p.Relief2DHeightMode == FracturingFog.ReliefHeightMode.Fixed;
 
@@ -1119,7 +1124,8 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
             Fire();
         }
     }
-    public Array Interior2DBackgroundModes => Enum.GetValues(typeof(Interior2DBackgroundMode));
+    public System.Array Interior2DBackgroundModes => s_Interior2DBackgroundModes;   // cached: a new array per read resets the ComboBox selection on Refresh()
+    private static readonly System.Array s_Interior2DBackgroundModes = System.Enum.GetValues(typeof(Interior2DBackgroundMode));
 
     /// <summary>Hex 0xAARRGGBB accessor for the Solid/Gradient top colour.
     /// TextBox binding, LostFocus — mirrors the Lighting colour hex accessors.</summary>
@@ -1214,7 +1220,8 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
     // ── Transcendental Julia ──
     private TranscendentalMap _transMap;
     public TranscendentalMap TranscendentalMap { get => _transMap; set { Set(ref _transMap, value); _p.TranscendentalMap = value; Fire(); } }
-    public Array TranscendentalMaps => Enum.GetValues(typeof(TranscendentalMap));
+    public System.Array TranscendentalMaps => s_TranscendentalMaps;   // cached: a new array per read resets the ComboBox selection on Refresh()
+    private static readonly System.Array s_TranscendentalMaps = System.Enum.GetValues(typeof(TranscendentalMap));
     private double _transLambdaRe;
     public double TranscendentalLambdaRe { get => _transLambdaRe; set { Set(ref _transLambdaRe, Clamp(value, -4, 4)); _p.TranscendentalLambdaRe = _transLambdaRe; Fire(); } }
     private double _transLambdaIm;
@@ -1592,7 +1599,8 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
         get => _buddhaColorMode;
         set { Set(ref _buddhaColorMode, value); _p.BuddhaColorMode = value; Fire(); }
     }
-    public Array BuddhaColorModes => Enum.GetValues(typeof(BuddhaColorMode));
+    public System.Array BuddhaColorModes => s_BuddhaColorModes;   // cached: a new array per read resets the ComboBox selection on Refresh()
+    private static readonly System.Array s_BuddhaColorModes = System.Enum.GetValues(typeof(BuddhaColorMode));
 
     private BuddhaQualityMode _buddhaQualityMode;
     public BuddhaQualityMode BuddhaQualityMode
@@ -1600,7 +1608,8 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
         get => _buddhaQualityMode;
         set { Set(ref _buddhaQualityMode, value); _p.BuddhaQualityMode = value; Fire(); }
     }
-    public Array BuddhaQualityModes => Enum.GetValues(typeof(BuddhaQualityMode));
+    public System.Array BuddhaQualityModes => s_BuddhaQualityModes;   // cached: a new array per read resets the ComboBox selection on Refresh()
+    private static readonly System.Array s_BuddhaQualityModes = System.Enum.GetValues(typeof(BuddhaQualityMode));
 
     private bool _buddhaMetropolis;
     public bool BuddhaMetropolis
@@ -1662,7 +1671,8 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
     // ── KIFS ──
     private KifsFoldKind _kifsFold;
     public KifsFoldKind KifsFold { get => _kifsFold; set { Set(ref _kifsFold, value); _p.KifsFold = value; Fire(); } }
-    public Array KifsFoldKinds => Enum.GetValues(typeof(KifsFoldKind));
+    public System.Array KifsFoldKinds => s_KifsFoldKinds;   // cached: a new array per read resets the ComboBox selection on Refresh()
+    private static readonly System.Array s_KifsFoldKinds = System.Enum.GetValues(typeof(KifsFoldKind));
     private int _kifsIterations;
     public int KifsIterations { get => _kifsIterations; set { Set(ref _kifsIterations, (int)Clamp(value, 2, 32)); _p.KifsIterations = _kifsIterations; Fire(); } }
     private double _kifsScale;
@@ -1801,13 +1811,15 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
     private RandomTileShape _rtShape;
     /// <summary>Tile shape — Circle / Square / Triangle (polygons get random rotation).</summary>
     public RandomTileShape RandomTileShape { get => _rtShape; set { Set(ref _rtShape, value); _p.RandomTileShape = value; Fire(); } }
-    public System.Array RandomTileShapes => System.Enum.GetValues(typeof(RandomTileShape));
+    public System.Array RandomTileShapes => s_RandomTileShapes;   // cached: a new array per read resets the ComboBox selection on Refresh()
+    private static readonly System.Array s_RandomTileShapes = System.Enum.GetValues(typeof(RandomTileShape));
 
     // ── Chaotic Billiard (#627) ──
     private BilliardGeometry _billiardGeometry;
     /// <summary>Obstacle arrangement — ThreeDisk / NDisk / Ring.</summary>
     public BilliardGeometry BilliardGeometry { get => _billiardGeometry; set { Set(ref _billiardGeometry, value); _p.BilliardGeometry = value; Fire(); } }
-    public System.Array BilliardGeometries => System.Enum.GetValues(typeof(BilliardGeometry));
+    public System.Array BilliardGeometries => s_BilliardGeometries;   // cached: a new array per read resets the ComboBox selection on Refresh()
+    private static readonly System.Array s_BilliardGeometries = System.Enum.GetValues(typeof(BilliardGeometry));
     private int _billiardDiskCount;
     /// <summary>Disk count for NDisk / Ring (ThreeDisk is always 3).</summary>
     public int BilliardDiskCount { get => _billiardDiskCount; set { Set(ref _billiardDiskCount, (int)Clamp(value, 1, 64)); _p.BilliardDiskCount = _billiardDiskCount; Fire(); } }
@@ -1834,11 +1846,13 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
     private PrecisionTier _precHighTier;
     /// <summary>Upper (reference) arithmetic tier of the precision-diff pair.</summary>
     public PrecisionTier PrecisionHighTier { get => _precHighTier; set { Set(ref _precHighTier, value); _p.PrecisionHighTier = value; Fire(); } }
-    public System.Array PrecisionTiers => System.Enum.GetValues(typeof(PrecisionTier));
+    public System.Array PrecisionTiers => s_PrecisionTiers;   // cached: a new array per read resets the ComboBox selection on Refresh()
+    private static readonly System.Array s_PrecisionTiers = System.Enum.GetValues(typeof(PrecisionTier));
     private PrecisionDiffMetric _precMetric;
     /// <summary>How the two tiers' outcomes are combined into one divergence scalar.</summary>
     public PrecisionDiffMetric PrecisionDiffMetric { get => _precMetric; set { Set(ref _precMetric, value); _p.PrecisionDiffMetric = value; Fire(); } }
-    public System.Array PrecisionDiffMetrics => System.Enum.GetValues(typeof(PrecisionDiffMetric));
+    public System.Array PrecisionDiffMetrics => s_PrecisionDiffMetrics;   // cached: a new array per read resets the ComboBox selection on Refresh()
+    private static readonly System.Array s_PrecisionDiffMetrics = System.Enum.GetValues(typeof(PrecisionDiffMetric));
 
     // ── DLA ──
     private int _dlaParticles;
@@ -1851,7 +1865,8 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
     public double BicomplexSliceW { get => _bcSliceW; set { Set(ref _bcSliceW, Clamp(value, -2, 2)); _p.BicomplexSliceW = _bcSliceW; Fire(); } }
     private BicomplexSliceAxis _bcSliceAxis;
     public BicomplexSliceAxis BicomplexSliceAxis { get => _bcSliceAxis; set { Set(ref _bcSliceAxis, value); _p.BicomplexSliceAxis = value; Fire(); } }
-    public Array BicomplexSliceAxes => Enum.GetValues(typeof(BicomplexSliceAxis));
+    public System.Array BicomplexSliceAxes => s_BicomplexSliceAxes;   // cached: a new array per read resets the ComboBox selection on Refresh()
+    private static readonly System.Array s_BicomplexSliceAxes = System.Enum.GetValues(typeof(BicomplexSliceAxis));
     private int _bcIterations;
     public int BicomplexIterations { get => _bcIterations; set { Set(ref _bcIterations, (int)Clamp(value, 2, 32)); _p.BicomplexIterations = _bcIterations; Fire(); } }
     private double _bcCameraTheta;
@@ -1887,7 +1902,8 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
     public int DualOrbitVolumeIterations { get => _dvIterations; set { Set(ref _dvIterations, (int)Clamp(value, 4, 256)); _p.DualOrbitVolumeIterations = _dvIterations; Fire(); } }
     private DualOrbitVolumeColor _dvColor;
     public DualOrbitVolumeColor DualOrbitVolumeColor { get => _dvColor; set { Set(ref _dvColor, value); _p.DualOrbitVolumeColor = value; Fire(); } }
-    public Array DualOrbitVolumeColors => Enum.GetValues(typeof(DualOrbitVolumeColor));
+    public System.Array DualOrbitVolumeColors => s_DualOrbitVolumeColors;   // cached: a new array per read resets the ComboBox selection on Refresh()
+    private static readonly System.Array s_DualOrbitVolumeColors = System.Enum.GetValues(typeof(DualOrbitVolumeColor));
     private double _dvCameraTheta;
     public double DualOrbitVolumeCameraTheta { get => _dvCameraTheta; set { Set(ref _dvCameraTheta, Clamp(value, -10, 10)); _p.DualOrbitVolumeCameraTheta = _dvCameraTheta; Fire(); } }
     private double _dvCameraPhi;
@@ -1904,13 +1920,15 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
         get => _dualMap;
         set { Set(ref _dualMap, value); _p.DualOrbitMap = value; this.RaisePropertyChanged(nameof(IsDualOrbitQuat)); Fire(); }
     }
-    public Array DualOrbitMaps => Enum.GetValues(typeof(DualOrbitMap));
+    public System.Array DualOrbitMaps => s_DualOrbitMaps;   // cached: a new array per read resets the ComboBox selection on Refresh()
+    private static readonly System.Array s_DualOrbitMaps = System.Enum.GetValues(typeof(DualOrbitMap));
     /// <summary>Quaternion mode — gates the c-seed Z and s_z controls.</summary>
     public bool IsDualOrbitQuat => IsDualOrbitEscape && _dualMap == DualOrbitMap.Quaternion;
     private DualOrbitField _dualField;
     /// <summary>Which derived escape-space scalar the field renders.</summary>
     public DualOrbitField DualOrbitField { get => _dualField; set { Set(ref _dualField, value); _p.DualOrbitField = value; Fire(); } }
-    public Array DualOrbitFields => Enum.GetValues(typeof(DualOrbitField));
+    public System.Array DualOrbitFields => s_DualOrbitFields;   // cached: a new array per read resets the ComboBox selection on Refresh()
+    private static readonly System.Array s_DualOrbitFields = System.Enum.GetValues(typeof(DualOrbitField));
     private double _dualCSeedX;
     /// <summary>Decoupled c-orbit seed (real). Keep ≠ s; c = s is the control.</summary>
     public double DualOrbitCSeedX { get => _dualCSeedX; set { Set(ref _dualCSeedX, Clamp(value, -2.0, 2.0)); _p.DualOrbitCSeedX = _dualCSeedX; Fire(); } }
@@ -1936,7 +1954,8 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
         get => _dualSliceAxes;
         set { Set(ref _dualSliceAxes, value); _p.DualOrbitSliceAxes = value; RaiseDualSliceEditability(); Fire(); }
     }
-    public Array DualOrbitSliceAxesValues => Enum.GetValues(typeof(DualOrbitSliceAxes));
+    public System.Array DualOrbitSliceAxesValues => s_DualOrbitSliceAxesValues;   // cached: a new array per read resets the ComboBox selection on Refresh()
+    private static readonly System.Array s_DualOrbitSliceAxesValues = System.Enum.GetValues(typeof(DualOrbitSliceAxes));
     private double _dualSX;
     /// <summary>Fixed s.x when s.x is not an image axis — the original sweep coordinate (#971).</summary>
     public double DualOrbitSX { get => _dualSX; set { Set(ref _dualSX, Clamp(value, -4.0, 4.0)); _p.DualOrbitSX = _dualSX; Fire(); } }
@@ -1961,7 +1980,8 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
             Fire();
         }
     }
-    public Array DualOrbitColorModes => Enum.GetValues(typeof(DualOrbitColorMode));
+    public System.Array DualOrbitColorModes => s_DualOrbitColorModes;   // cached: a new array per read resets the ComboBox selection on Refresh()
+    private static readonly System.Array s_DualOrbitColorModes = System.Enum.GetValues(typeof(DualOrbitColorMode));
     public bool IsDualOrbitLayers => IsDualOrbitEscape && _dualColorMode == DualOrbitColorMode.PerOrbitLayers;
     public bool IsDualOrbitFieldMode => _dualColorMode == DualOrbitColorMode.Field;
 
@@ -2032,7 +2052,8 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
 
     private DualOrbitLayerBlend _dualLayerBlend;
     public DualOrbitLayerBlend DualOrbitLayerBlend { get => _dualLayerBlend; set { Set(ref _dualLayerBlend, value); _p.DualOrbitLayerBlend = value; Fire(); } }
-    public Array DualOrbitLayerBlends => Enum.GetValues(typeof(DualOrbitLayerBlend));
+    public System.Array DualOrbitLayerBlends => s_DualOrbitLayerBlends;   // cached: a new array per read resets the ComboBox selection on Refresh()
+    private static readonly System.Array s_DualOrbitLayerBlends = System.Enum.GetValues(typeof(DualOrbitLayerBlend));
     private double _dualOpacityZ;
     public double DualOrbitOpacityZ { get => _dualOpacityZ; set { Set(ref _dualOpacityZ, Clamp(value, 0.0, 1.0)); _p.DualOrbitOpacityZ = _dualOpacityZ; Fire(); } }
     private double _dualOpacityC;
@@ -2075,7 +2096,8 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
             Fire();
         }
     }
-    public Array IndrasFamilies => Enum.GetValues(typeof(IndrasGroupFamily));
+    public System.Array IndrasFamilies => s_IndrasFamilies;   // cached: a new array per read resets the ComboBox selection on Refresh()
+    private static readonly System.Array s_IndrasFamilies = System.Enum.GetValues(typeof(IndrasGroupFamily));
     public bool IsIndrasMaskit => IsIndrasPearls && _indrasFamily == IndrasGroupFamily.Maskit;
     public bool IsIndrasGrandma => IsIndrasPearls && _indrasFamily == IndrasGroupFamily.GrandmaRecipe;
     public bool IsIndrasRiley => IsIndrasPearls && _indrasFamily == IndrasGroupFamily.Riley;
@@ -2110,13 +2132,15 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
     /// <summary>Point cloud (BFS density) vs curve trace (DFS; S3 #894 — falls
     /// back to point cloud until then).</summary>
     public IndrasRenderMode IndrasRenderMode { get => _indrasRenderMode; set { Set(ref _indrasRenderMode, value); _p.IndrasRenderMode = value; Fire(); } }
-    public Array IndrasRenderModes => Enum.GetValues(typeof(IndrasRenderMode));
+    public System.Array IndrasRenderModes => s_IndrasRenderModes;   // cached: a new array per read resets the ComboBox selection on Refresh()
+    private static readonly System.Array s_IndrasRenderModes = System.Enum.GetValues(typeof(IndrasRenderMode));
 
     private IndrasColorSource _indrasColorSource;
     /// <summary>What per-pixel integer drives the palette (#896): Density,
     /// WordLength, LastGenerator or Parity.</summary>
     public IndrasColorSource IndrasColorSource { get => _indrasColorSource; set { Set(ref _indrasColorSource, value); _p.IndrasColorSource = value; Fire(); } }
-    public Array IndrasColorSources => Enum.GetValues(typeof(IndrasColorSource));
+    public System.Array IndrasColorSources => s_IndrasColorSources;   // cached: a new array per read resets the ComboBox selection on Refresh()
+    private static readonly System.Array s_IndrasColorSources = System.Enum.GetValues(typeof(IndrasColorSource));
 
     /// <summary>Named group presets. Selecting one writes the family + its
     /// parameter values into the live fields (a convenience seed, not persisted
@@ -2220,7 +2244,8 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
             Fire();
         }
     }
-    public Array KleinianPresets => Enum.GetValues(typeof(KleinianPreset));
+    public System.Array KleinianPresets => s_KleinianPresets;   // cached: a new array per read resets the ComboBox selection on Refresh()
+    private static readonly System.Array s_KleinianPresets = System.Enum.GetValues(typeof(KleinianPreset));
     /// <summary>Necklace ring size — only meaningful for the NecklaceN preset.</summary>
     public bool IsKleinianNecklace => IsKleinian && _kleinPreset == KleinianPreset.NecklaceN;
     /// <summary>True when the Custom sphere-list editor should show (#876).</summary>
@@ -2240,7 +2265,8 @@ public sealed partial class FractalParamsViewModel : ViewModelBase
     // #878 — surface colour source (Smooth / WordLength / LastGenerator).
     private KleinianColorSource _kleinColorSrc;
     public KleinianColorSource KleinianColorSource { get => _kleinColorSrc; set { Set(ref _kleinColorSrc, value); _p.KleinianColorSource = value; Fire(); } }
-    public Array KleinianColorSources => Enum.GetValues(typeof(KleinianColorSource));
+    public System.Array KleinianColorSources => s_KleinianColorSources;   // cached: a new array per read resets the ComboBox selection on Refresh()
+    private static readonly System.Array s_KleinianColorSources = System.Enum.GetValues(typeof(KleinianColorSource));
     // #881 — sphere-trace under-relaxation factor (crisper cusps; 1 = full step).
     private double _kleinDeFactor;
     public double KleinianDeFactor { get => _kleinDeFactor; set { Set(ref _kleinDeFactor, Clamp(value, 0.1, 1.0)); _p.KleinianDeFactor = _kleinDeFactor; Fire(); } }

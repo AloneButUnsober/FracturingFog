@@ -142,7 +142,8 @@ public sealed partial class FractalParamsViewModel
     // controls so a directional light shows nothing new.
 
     /// <summary>Enum source for the three light-type combos.</summary>
-    public Array LightTypes => Enum.GetValues(typeof(LightType));
+    public System.Array LightTypes => s_LightTypes;   // cached: a new array per read resets the ComboBox selection on Refresh()
+    private static readonly System.Array s_LightTypes = System.Enum.GetValues(typeof(LightType));
 
     public LightType Light1Type
     {
@@ -462,7 +463,8 @@ public sealed partial class FractalParamsViewModel
         get => _p.Lighting.SkyMode;
         set { MutateLighting(r => r.Fx.SkyMode = value); this.RaisePropertyChanged(); Fire(); }
     }
-    public Array SkyModes => Enum.GetValues(typeof(SkyMode));
+    public System.Array SkyModes => s_SkyModes;   // cached: a new array per read resets the ComboBox selection on Refresh()
+    private static readonly System.Array s_SkyModes = System.Enum.GetValues(typeof(SkyMode));
 
     public uint BgTopColor
     {
@@ -511,7 +513,8 @@ public sealed partial class FractalParamsViewModel
         get => _p.Lighting.ToneMap;
         set { MutateLighting(r => r.Fx.ToneMap = value); this.RaisePropertyChanged(); Fire(); }
     }
-    public Array ToneMapOperators => Enum.GetValues(typeof(ToneMapOperator));
+    public System.Array ToneMapOperators => s_ToneMapOperators;   // cached: a new array per read resets the ComboBox selection on Refresh()
+    private static readonly System.Array s_ToneMapOperators = System.Enum.GetValues(typeof(ToneMapOperator));
 
     public double Exposure
     {
@@ -610,7 +613,8 @@ public sealed partial class FractalParamsViewModel
         get => _p.Lighting.EdgeKernel;
         set { MutateLighting(r => r.Fx.EdgeKernel = value); this.RaisePropertyChanged(); Fire(); }
     }
-    public Array EdgeKernels => Enum.GetValues(typeof(EdgeKernelMode));
+    public System.Array EdgeKernels => s_EdgeKernels;   // cached: a new array per read resets the ComboBox selection on Refresh()
+    private static readonly System.Array s_EdgeKernels = System.Enum.GetValues(typeof(EdgeKernelMode));
     /// <summary>Phase 16b — N-bounce reflection chain depth. 1 = legacy single
     /// bounce; up to 6 for chrome / hall-of-mirrors effects. Higher counts
     /// scale linearly with per-pixel cost in the reflection path.</summary>
@@ -629,7 +633,8 @@ public sealed partial class FractalParamsViewModel
         get => _p.Lighting.StereoMode;
         set { MutateLighting(r => r.Fx.StereoMode = value); this.RaisePropertyChanged(); Fire(); }
     }
-    public Array StereoModes => Enum.GetValues(typeof(StereoMode));
+    public System.Array StereoModes => s_StereoModes;   // cached: a new array per read resets the ComboBox selection on Refresh()
+    private static readonly System.Array s_StereoModes = System.Enum.GetValues(typeof(StereoMode));
 
     public double StereoEyeSeparation
     {
@@ -656,7 +661,8 @@ public sealed partial class FractalParamsViewModel
         get => _p.Lighting.StereoLayout;
         set { MutateLighting(r => r.Fx.StereoLayout = value); this.RaisePropertyChanged(); Fire(); }
     }
-    public Array StereoLayouts => Enum.GetValues(typeof(StereoLayout));
+    public System.Array StereoLayouts => s_StereoLayouts;   // cached: a new array per read resets the ComboBox selection on Refresh()
+    private static readonly System.Array s_StereoLayouts = System.Enum.GetValues(typeof(StereoLayout));
 
     /// <summary>#1009 — a one-line note when a stereo setting will not do what it
     /// looks like for this fractal (no silent no-ops). Empty when there is
@@ -702,7 +708,8 @@ public sealed partial class FractalParamsViewModel
     /// ones' relevance) when the stereo mode is Autostereogram.</summary>
     public bool IsAutostereo => _p.Lighting.StereoMode == StereoMode.Autostereogram;
 
-    public Array StereoAutoPatterns => Enum.GetValues(typeof(AutostereoPattern));
+    public System.Array StereoAutoPatterns => s_StereoAutoPatterns;   // cached: a new array per read resets the ComboBox selection on Refresh()
+    private static readonly System.Array s_StereoAutoPatterns = System.Enum.GetValues(typeof(AutostereoPattern));
 
     public AutostereoPattern StereoAutoPattern
     {
@@ -878,7 +885,8 @@ public sealed partial class FractalParamsViewModel
         get => _p.Lighting.TriplanarKind;
         set { MutateLighting(r => r.Fx.TriplanarKind = value); this.RaisePropertyChanged(); Fire(); }
     }
-    public Array TriplanarKinds => Enum.GetValues(typeof(TriplanarTextureKind));
+    public System.Array TriplanarKinds => s_TriplanarKinds;   // cached: a new array per read resets the ComboBox selection on Refresh()
+    private static readonly System.Array s_TriplanarKinds = System.Enum.GetValues(typeof(TriplanarTextureKind));
     public double TriplanarScale
     {
         get => _p.Lighting.TriplanarScale;
@@ -1033,7 +1041,8 @@ public sealed partial class FractalParamsViewModel
         get => _p.Lighting.DebugAov;
         set { MutateLighting(r => r.Fx.DebugAov = value); this.RaisePropertyChanged(); Fire(); }
     }
-    public Array AovViews => Enum.GetValues(typeof(AovView));
+    public System.Array AovViews => s_AovViews;   // cached: a new array per read resets the ComboBox selection on Refresh()
+    private static readonly System.Array s_AovViews = System.Enum.GetValues(typeof(AovView));
 
     // ── Speed-driven effect Start/Stop toggles ──────────────────────────
     //

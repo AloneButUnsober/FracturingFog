@@ -516,4 +516,42 @@ public sealed class RegionRelief3DTests
         Assert.True(live.Relief2DEnabled);
         Assert.True(live.Relief2DRaymarch);
     }
+
+    // User report: "Height from" (Relief2DHeightSource) not saved / recalled with a
+    // region. Every source, through the regions.json serializer and the recall path.
+    [Theory]
+    [InlineData(ReliefHeightSource.Trap)]
+    [InlineData(ReliefHeightSource.Blend)]
+    [InlineData(ReliefHeightSource.Distance)]
+    public void HeightSource_SurvivesSaveAndRecall(ReliefHeightSource source)
+    {
+        var live = new FractalParameters { Relief2DEnabled = true, Relief2DRaymarch = true,
+                                           Relief2DHeightSource = source, Relief2DHeightBlend = 0.3, Relief2DDistanceFalloff = 0.05 };
+        var region = new FractalRegion { Name = "hs", Relief3D = Relief3DSettings.Snapshot(live) };
+        string json = JsonSerializer.Serialize(region, new JsonSerializerOptions { WriteIndented = true });
+        var back = JsonSerializer.Deserialize<FractalRegion>(json)!;
+        var p = new FractalParameters();
+        back.ApplyRelief3DAuthoritative(p);
+        Assert.Equal(source, p.Relief2DHeightSource);
+        Assert.Equal(0.3, p.Relief2DHeightBlend);
+        Assert.Equal(0.05, p.Relief2DDistanceFalloff);
+    }
+
+    // The dialog's enum ComboBoxes: a region recall calls Refresh(), which re-reads
+    // every binding. A fresh Enum.GetValues array per read hands the ComboBox a new
+    // ItemsSource, which drops its selection — "Height from" showed blank / lost its
+    // value after a region recall. The item lists must be stable instances.
+    [Fact]
+    public void DialogEnumItemLists_AreStableInstances_AcrossRefresh()
+    {
+        var vm = new FracturingFog.UI.Avalonia.ViewModels.FractalParamsViewModel(FractalType.Mandelbrot, new FractalParameters());
+        var props = typeof(FracturingFog.UI.Avalonia.ViewModels.FractalParamsViewModel)
+            .GetProperties(BindingFlags.Public | BindingFlags.Instance)
+            .Where(pi => pi.PropertyType == typeof(Array) && pi.GetIndexParameters().Length == 0).ToList();
+        Assert.Contains(props, pi => pi.Name == "Relief2DHeightSources");
+        var before = props.ToDictionary(pi => pi.Name, pi => pi.GetValue(vm));
+        vm.Refresh();
+        foreach (var pi in props)
+            Assert.True(ReferenceEquals(before[pi.Name], pi.GetValue(vm)), $"{pi.Name} returns a new array per read");
+    }
 }
