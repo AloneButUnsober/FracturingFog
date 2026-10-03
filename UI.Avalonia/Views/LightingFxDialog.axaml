@@ -419,6 +419,27 @@
                 <!-- Fog / Volumetric -->
                 <Expander Header="Fog / Volumetric" HorizontalAlignment="Stretch">
                   <StackPanel Spacing="6">
+                    <!-- #1071 — froxel volumetrics on the 3D fractals (#1068 / #1069). -->
+                    <StackPanel Spacing="4" IsVisible="{Binding Stage2PostFxApplies}" Margin="0,0,0,4">
+                        <CheckBox Content="Froxel volumetrics (3D)"
+                                  IsChecked="{Binding Froxel3D, Mode=TwoWay}"
+                                  ToolTip.Tip="Fill the scene with a camera-frustum fog volume composited by depth — haze around the object too, lit by the lights with their colour and phase. Replaces the per-surface fog / volume steps / background fog. Needs Fog density &gt; 0. Uses the CPU trace." />
+                        <Grid ColumnDefinitions="160,Auto,Auto,*" IsEnabled="{Binding Froxel3D}">
+                            <TextBlock Grid.Column="0" Text="Quality:" VerticalAlignment="Center" />
+                            <ComboBox Grid.Column="1" Width="120"
+                                      ItemsSource="{Binding Froxel3DQualities}"
+                                      SelectedItem="{Binding Froxel3DQuality, Mode=TwoWay}"
+                                      ToolTip.Tip="Froxel grid: Low (16x16x32), Balanced (24x24x48), High (32x32x96)." />
+                        </Grid>
+                        <Grid ColumnDefinitions="160,*,Auto" IsEnabled="{Binding Froxel3D}">
+                            <TextBlock Grid.Column="0" Text="Shadow steps (shafts):" VerticalAlignment="Center"
+                                       ToolTip.Tip="Shadow the fog by the fractal so light shafts form around it: distance-estimator steps per froxel per light. 0 = uniform haze; 16–32 typical. Cost grows with steps × lights." />
+                            <Slider Classes="knob" Grid.Column="1" Minimum="0" Maximum="64"
+                                    IsSnapToTickEnabled="True" TickFrequency="1"
+                                    Value="{Binding Froxel3DShadowSteps, Mode=TwoWay}" />
+                            <TextBlock Classes="knobValue" Grid.Column="2" Text="{Binding Froxel3DShadowSteps}" />
+                        </Grid>
+                    </StackPanel>
                     <!-- #1061 — fog the background (ray-miss) pixels too. -->
                     <Grid ColumnDefinitions="160,*" Margin="0,0,0,2">
                         <CheckBox Grid.Column="0" Content="Fog the background"

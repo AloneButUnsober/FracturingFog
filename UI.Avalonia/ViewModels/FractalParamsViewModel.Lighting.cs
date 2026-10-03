@@ -517,6 +517,30 @@ public sealed partial class FractalParamsViewModel
         set { MutateLighting(r => r.Fx.FogBackgroundDistance = Clamp(value, 0.5, 100)); this.RaisePropertyChanged(); Fire(); }
     }
 
+    /// <summary>#1071 — froxel volumetrics on the 3D fractals (#1068): the fog fills
+    /// a camera-frustum volume composited by depth, around the object too.</summary>
+    public bool Froxel3D
+    {
+        get => _p.Lighting.Froxel3D;
+        set { MutateLighting(r => r.Fx.Froxel3D = value); this.RaisePropertyChanged(); Fire(); }
+    }
+
+    public System.Collections.Generic.IReadOnlyList<FracturingFog.Models.FroxelQuality> Froxel3DQualities { get; } =
+        System.Enum.GetValues<FracturingFog.Models.FroxelQuality>();
+
+    public FracturingFog.Models.FroxelQuality Froxel3DQuality
+    {
+        get => _p.Lighting.Froxel3DQuality;
+        set { MutateLighting(r => r.Fx.Froxel3DQuality = value); this.RaisePropertyChanged(); Fire(); }
+    }
+
+    /// <summary>#1071 — DE shadow steps for the 3D froxel fog (#1069); 0 = no shafts.</summary>
+    public int Froxel3DShadowSteps
+    {
+        get => _p.Lighting.Froxel3DShadowSteps;
+        set { MutateLighting(r => r.Fx.Froxel3DShadowSteps = System.Math.Clamp(value, 0, 128)); this.RaisePropertyChanged(); Fire(); }
+    }
+
     public bool ShowSkyBackdrop
     {
         get => _p.Lighting.ShowSkyBackdrop;
