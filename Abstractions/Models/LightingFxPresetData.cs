@@ -127,6 +127,8 @@ public sealed class LightingFxPresetData
     /// <summary>#1068 — froxel volumetrics on the 3D raymarchers + grid quality.</summary>
     public bool    Froxel3D { get; set; } = false;
     public FroxelQuality Froxel3DQuality { get; set; } = FroxelQuality.Balanced;
+    /// <summary>#1069 — DE shadow steps for the 3D froxel volume (0 = none).</summary>
+    public int     Froxel3DShadowSteps { get; set; } = 0;
 
     // ── Post ──────────────────────────────────────────────────────────
 
@@ -267,6 +269,7 @@ public sealed class LightingFxPresetData
         FogBackgroundDistance = fx.FogBackgroundDistance,
         Froxel3D = fx.Froxel3D,
         Froxel3DQuality = fx.Froxel3DQuality,
+        Froxel3DShadowSteps = fx.Froxel3DShadowSteps,
 
         ToneMap = fx.ToneMap, Exposure = fx.Exposure,
         BloomThreshold = fx.BloomThreshold, BloomStrength = fx.BloomStrength,
@@ -353,6 +356,7 @@ public sealed class LightingFxPresetData
         FogBackgroundDistance = FogBackgroundDistance,
         Froxel3D = Froxel3D,
         Froxel3DQuality = Froxel3DQuality,
+        Froxel3DShadowSteps = Froxel3DShadowSteps,
 
         ToneMap = ToneMap, Exposure = Exposure,
         BloomThreshold = BloomThreshold, BloomStrength = BloomStrength,

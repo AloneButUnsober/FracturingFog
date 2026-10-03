@@ -338,7 +338,7 @@ public sealed class QuatJuliaCalculator : IFractalCalculator, IStereoEyeCamera, 
         if (depthBuf is not null && normalBuf is not null && !thinLensDof)
             ScreenSpacePost.ApplySsao(renderBuffer, depthBuf, normalBuf, width, height, in fx);
         ScreenSpacePost.ApplyFroxel3D(renderBuffer, hdrBuf, depthBuf, width, height,
-            FractalParameters, FractalType.QuaternionJulia, fovScale, in froxelFx);   // #1068
+            FractalParameters, FractalType.QuaternionJulia, fovScale, in froxelFx, in deStruct);   // #1068 / #1069 shadowed by the DE
         if (hdrBuf is not null && depthBuf is not null && !thinLensDof)
             ScreenSpacePost.ApplyHdrDof(hdrBuf, depthBuf, width, height, in fx);
         if (hdrBuf is not null)

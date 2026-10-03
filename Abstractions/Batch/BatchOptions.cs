@@ -338,6 +338,7 @@ namespace FracturingFog.Batch
         public double? FogBackgroundDistance { get; set; } // #1061 depth the background is fogged over
         public bool Froxel3D { get; set; }                 // #1068 froxel volumetrics on the 3D raymarchers
         public FracturingFog.Models.FroxelQuality? Froxel3DQuality { get; set; } // #1068
+        public int? Froxel3DShadowSteps { get; set; }      // #1069 DE shadow steps (shafts)
         public double? VolumePaletteStrength { get; set; } // palette-map cross-fade, 0..1
 
         // S4 (#389) — guided À-Trous denoise on the relief raymarch.
@@ -1305,6 +1306,12 @@ namespace FracturingFog.Batch
                         opts.Froxel3D = true;
                         break;
 
+                    case BatchFlags.Froxel3DShadowSteps:
+                        if (!NextInt(args, ref i, a, out int f3s, out error)) return false;
+                        opts.Froxel3DShadowSteps = f3s;
+                        opts.Froxel3D = true;
+                        break;
+
                     // #1061 — fog the background (ray-miss) pixels too.
                     case BatchFlags.FogBackground:
                         opts.FogBackground = true;
@@ -1632,6 +1639,8 @@ namespace FracturingFog.Batch
                 { error = "--fog-density must be 0..10."; return false; }
             if (opts.FogHeightFalloff is < 0 or > 10)
                 { error = "--fog-height-falloff must be 0..10."; return false; }
+            if (opts.Froxel3DShadowSteps is < 0 or > 128)
+                { error = "--froxel-3d-shadow-steps must be 0..128."; return false; }
             if (opts.FogBackgroundDistance is < 0.5 or > 100)
                 { error = "--fog-background-distance must be 0.5..100 (world units)."; return false; }
             if (opts.VolumeSteps is < 0 or > 256)

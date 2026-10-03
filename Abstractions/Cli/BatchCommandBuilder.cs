@@ -204,6 +204,7 @@ namespace FracturingFog.Cli
         /// <summary>#1068 — 3D froxel volumetrics + grid quality.</summary>
         public bool Froxel3D { get; init; }
         public FracturingFog.Models.FroxelQuality Froxel3DQuality { get; init; } = FracturingFog.Models.FroxelQuality.Balanced;
+        public int Froxel3DShadowSteps { get; init; }
         public double FogBackgroundDistance { get; init; } = FracturingFog.Rendering.Lighting.LightingFxData.DefaultFogBackgroundDistance;
         public double VolumePaletteStrength { get; init; }
 
@@ -509,6 +510,8 @@ namespace FracturingFog.Cli
                 if (snap.Froxel3DQuality != FracturingFog.Models.FroxelQuality.Balanced)
                 { parts.Add(BatchFlags.Froxel3DQuality); parts.Add(snap.Froxel3DQuality.ToString()); }
                 else parts.Add(BatchFlags.Froxel3D);
+                if (snap.Froxel3DShadowSteps > 0)
+                { parts.Add(BatchFlags.Froxel3DShadowSteps); parts.Add(snap.Froxel3DShadowSteps.ToString(System.Globalization.CultureInfo.InvariantCulture)); }
             }
             if (snap.FogBackground)
             {
