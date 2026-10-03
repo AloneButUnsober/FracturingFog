@@ -419,6 +419,19 @@
                 <!-- Fog / Volumetric -->
                 <Expander Header="Fog / Volumetric" HorizontalAlignment="Stretch">
                   <StackPanel Spacing="6">
+                    <!-- #1061 — fog the background (ray-miss) pixels too. -->
+                    <Grid ColumnDefinitions="160,*" Margin="0,0,0,2">
+                        <CheckBox Grid.Column="0" Content="Fog the background"
+                                  IsChecked="{Binding FogBackground, Mode=TwoWay}"
+                                  ToolTip.Tip="Also fog the empty space around a 3D fractal, as if its rays travelled the depth set here, so the object sits in lit haze instead of a black void. Uses Fog density, the sky gradient and the fog colour. 3D fractals only." />
+                        <Grid Grid.Column="1" ColumnDefinitions="Auto,*,Auto" IsEnabled="{Binding FogBackground}">
+                            <TextBlock Grid.Column="0" Text="depth:" VerticalAlignment="Center" Margin="0,0,6,0" />
+                            <Slider Classes="knob" Grid.Column="1" Minimum="0.5" Maximum="40"
+                                    Value="{Binding FogBackgroundDistance, Mode=TwoWay}" />
+                            <TextBlock Classes="knobValue" Grid.Column="2"
+                                       Text="{Binding FogBackgroundDistance, StringFormat='F1'}" />
+                        </Grid>
+                    </Grid>
                     <Grid ColumnDefinitions="160,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto">
                         <TextBlock Grid.Row="0" Grid.Column="0" Text="Fog density:" VerticalAlignment="Center"
                                    ToolTip.Tip="Beer–Lambert exponential. 0 = no fog. Scales by ray distance." />

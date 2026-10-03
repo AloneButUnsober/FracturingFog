@@ -334,6 +334,8 @@ namespace FracturingFog.Batch
         public int? VolumeSteps { get; set; }              // in-scatter step count, 0..256
         public double? VolumeAnisotropy { get; set; }      // HG phase g, -1..1
         public uint? FogColor { get; set; }                // medium tint, packed 0x??RRGGBB
+        public bool FogBackground { get; set; }            // #1061 fog the ray-miss background
+        public double? FogBackgroundDistance { get; set; } // #1061 depth the background is fogged over
         public double? VolumePaletteStrength { get; set; } // palette-map cross-fade, 0..1
 
         // S4 (#389) — guided À-Trous denoise on the relief raymarch.
@@ -1285,6 +1287,17 @@ namespace FracturingFog.Batch
                         opts.VolumeAnisotropy = van;
                         break;
 
+                    // #1061 — fog the background (ray-miss) pixels too.
+                    case BatchFlags.FogBackground:
+                        opts.FogBackground = true;
+                        break;
+
+                    case BatchFlags.FogBackgroundDistance:
+                        if (!NextDouble(args, ref i, a, out double fbd, out error)) return false;
+                        opts.FogBackgroundDistance = fbd;
+                        opts.FogBackground = true;   // a depth only bites with the background fog on
+                        break;
+
                     case BatchFlags.FogColor:
                         if (!Next(args, ref i, a, out string fcv, out error)) return false;
                         if (!TryParseHexColor(fcv, out uint fcu))
@@ -1601,6 +1614,8 @@ namespace FracturingFog.Batch
                 { error = "--fog-density must be 0..10."; return false; }
             if (opts.FogHeightFalloff is < 0 or > 10)
                 { error = "--fog-height-falloff must be 0..10."; return false; }
+            if (opts.FogBackgroundDistance is < 0.5 or > 100)
+                { error = "--fog-background-distance must be 0.5..100 (world units)."; return false; }
             if (opts.VolumeSteps is < 0 or > 256)
                 { error = "--volume-steps must be 0..256 (in-scatter step count; 0 = exp fog only)."; return false; }
             if (opts.VolumeAnisotropy is < -1 or > 1)

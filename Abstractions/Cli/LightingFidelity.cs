@@ -26,7 +26,7 @@ namespace FracturingFog.Cli
         private static readonly HashSet<string> s_flagCovered = new(StringComparer.Ordinal)
         {
             "FogDensity", "FogHeightFalloff", "VolumeSteps", "VolumeLightMask", "VolumeAnisotropy",
-            "FogColor", "VolumePaletteStrength",
+            "FogColor", "VolumePaletteStrength", "FogBackground", "FogBackgroundDistance",
             "Transmission", "Ior", "AbsorptionColor", "AbsorptionDistance",
             "RefractInternalMarch", "RefractInternalBounces",
         };

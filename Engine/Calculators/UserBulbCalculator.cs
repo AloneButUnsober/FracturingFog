@@ -1066,9 +1066,7 @@ public sealed class UserBulbCalculator : IFractalCalculator, IStereoEyeCamera, I
                     // InSetColor when off. SkyColorHdri routes through HDRI
                     // sample when SkyMode=Hdri + HDRI loaded, gradient
                     // BgBottomColor → BgTopColor otherwise.
-                    renderBuffer[idx] = fx.ShowSkyBackdrop
-                        ? ShadingPipeline.SkyColorHdri(rdx, rdy, rdz, in fx)
-                        : ColorMap.InSetColor;
+                    renderBuffer[idx] = ShadingPipeline.MissColor(rdx, rdy, rdz, in fx, ColorMap.InSetColor);
                     continue;
                 }
 

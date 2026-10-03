@@ -236,6 +236,7 @@ public sealed partial class FractalParamsViewModel
         nameof(Roughness), nameof(Metallic), nameof(SpecularStrength), nameof(SubSurfaceStrength),
         nameof(SkyMode), nameof(BgTopColor), nameof(BgBottomColor), nameof(EnvironmentName),
         nameof(IblStrength), nameof(ShowSkyBackdrop),
+        nameof(FogBackground), nameof(FogBackgroundDistance),
         nameof(ToneMap), nameof(Exposure), nameof(BloomThreshold), nameof(BloomStrength),
         nameof(ChromaticAberration), nameof(LensDistortion), nameof(Vignette),
         nameof(LensTangentialX), nameof(LensTangentialY), nameof(AnamorphicSqueeze),

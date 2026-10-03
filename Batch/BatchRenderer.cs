@@ -166,9 +166,12 @@ namespace FracturingFog.Batch
             // fp.Lighting. Honoured by the 3D raymarchers + the relief raymarch.
             if (opts.FogDensity.HasValue || opts.FogHeightFalloff.HasValue
                 || opts.VolumeSteps.HasValue || opts.VolumeAnisotropy.HasValue
-                || opts.FogColor.HasValue || opts.VolumePaletteStrength.HasValue)
+                || opts.FogColor.HasValue || opts.VolumePaletteStrength.HasValue
+                || opts.FogBackground || opts.FogBackgroundDistance.HasValue)
             {
                 var fxv = fp.Lighting;
+                if (opts.FogBackground)                  fxv.FogBackground         = true;   // #1061
+                if (opts.FogBackgroundDistance.HasValue) fxv.FogBackgroundDistance = opts.FogBackgroundDistance.Value;
                 if (opts.FogDensity.HasValue)            fxv.FogDensity            = opts.FogDensity.Value;
                 if (opts.FogHeightFalloff.HasValue)      fxv.FogHeightFalloff      = opts.FogHeightFalloff.Value;
                 if (opts.VolumeSteps.HasValue)           fxv.VolumeSteps           = opts.VolumeSteps.Value;

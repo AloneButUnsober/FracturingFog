@@ -541,6 +541,22 @@ public struct LightingFxData
     /// fractal for visual focus; opt in for full environment composite.</summary>
     public bool ShowSkyBackdrop;
 
+    /// <summary>#1061 — fog the background too. Ray-miss pixels (the space around
+    /// a 3D fractal) normally get no fog, so with fog on the object sits in a
+    /// black or flat void. When on (and <see cref="FogDensity"/> &gt; 0) a miss
+    /// pixel is fogged as if its ray travelled <see cref="FogBackgroundDistance"/>
+    /// — the same classic fog the surface gets, toward the sky gradient tinted by
+    /// <see cref="FogColor"/> — so the environment reads as lit haze and the
+    /// silhouette blends into it. Default off (byte-identical).</summary>
+    public bool FogBackground;
+
+    /// <summary>#1061 — scene depth a background ray is fogged over (world units;
+    /// the raymarchers stop at ~12). ≤ 0 uses <see cref="DefaultFogBackgroundDistance"/>.</summary>
+    public double FogBackgroundDistance;
+
+    /// <summary>#1061 — default background fog depth: the raymarch escape distance.</summary>
+    public const double DefaultFogBackgroundDistance = 12.0;
+
     // ── Post (Phase 7) ────────────────────────────────────────────────
 
     public ToneMapOperator ToneMap;
@@ -885,6 +901,8 @@ public struct LightingFxData
         EnvironmentName    = null,
         IblStrength        = 0.0,
         ShowSkyBackdrop    = false,
+        FogBackground      = false,
+        FogBackgroundDistance = DefaultFogBackgroundDistance,
 
         ToneMap            = ToneMapOperator.None,
         Exposure           = 1.0,
@@ -972,6 +990,7 @@ public struct LightingFxData
         h.Add(TriplanarScale); h.Add(TriplanarStrength); h.Add(TriplanarTint);
         h.Add(SkyMode); h.Add(BgTopColor); h.Add(BgBottomColor);
         h.Add(EnvironmentName); h.Add(IblStrength); h.Add(ShowSkyBackdrop);
+        h.Add(FogBackground); h.Add(FogBackgroundDistance);
         h.Add(ToneMap); h.Add(Exposure); h.Add(BloomThreshold); h.Add(BloomStrength);
         h.Add(ChromaticAberration); h.Add(LensDistortion); h.Add(Vignette);
         h.Add(LensTangentialX); h.Add(LensTangentialY); h.Add(AnamorphicSqueeze);

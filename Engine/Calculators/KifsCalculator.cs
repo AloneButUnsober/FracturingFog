@@ -284,9 +284,7 @@ public sealed class KifsCalculator : IFractalCalculator, IStereoEyeCamera, IDept
                 if (!hit)
                 {
                     // Ray-miss → sky backdrop when toggle on; InSetColor off (see MandelbulbCalculator).
-                    renderBuffer[idx] = fx.ShowSkyBackdrop
-                        ? ShadingPipeline.SkyColorHdri(rdx, rdy, rdz, in fx)
-                        : ColorMap.InSetColor;
+                    renderBuffer[idx] = ShadingPipeline.MissColor(rdx, rdy, rdz, in fx, ColorMap.InSetColor);
                     continue;
                 }
 

@@ -500,6 +500,23 @@ public sealed partial class FractalParamsViewModel
     /// gradient). When false (default), miss pixels fall back to the colormap's
     /// InSetColor so the fractal silhouette stays clean while IBL still
     /// contributes to surface lighting. Opt in for full environment composite.</summary>
+    /// <summary>#1061 — fog the background (ray-miss) pixels, so a 3D fractal
+    /// sits in lit haze instead of a black void. Needs Fog density &gt; 0.</summary>
+    public bool FogBackground
+    {
+        get => _p.Lighting.FogBackground;
+        set { MutateLighting(r => r.Fx.FogBackground = value); this.RaisePropertyChanged(); Fire(); }
+    }
+
+    /// <summary>#1061 — depth the background is fogged over (world units).</summary>
+    public double FogBackgroundDistance
+    {
+        get => _p.Lighting.FogBackgroundDistance > 0
+            ? _p.Lighting.FogBackgroundDistance
+            : FracturingFog.Rendering.Lighting.LightingFxData.DefaultFogBackgroundDistance;
+        set { MutateLighting(r => r.Fx.FogBackgroundDistance = Clamp(value, 0.5, 100)); this.RaisePropertyChanged(); Fire(); }
+    }
+
     public bool ShowSkyBackdrop
     {
         get => _p.Lighting.ShowSkyBackdrop;
