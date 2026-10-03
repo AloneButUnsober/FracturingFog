@@ -94,6 +94,11 @@ public readonly struct FroxelMedium
     public FroxelCamera Frustum { get; init; }
     /// <summary>Image width / height the froxel columns map onto.</summary>
     public double Aspect { get; init; }
+    /// <summary>#1079 — screen-space pan added to each column's NDC ray offsets (u
+    /// after the aspect scale, v after the FOV scale), as the 3D calculators pan
+    /// their primary rays. 0 = centred.</summary>
+    public double PanU { get; init; }
+    public double PanV { get; init; }
 
     /// <summary>#1069 — light visibility from a froxel: (x, y, z, toLightX, toLightY,
     /// toLightZ, maxDistance) → 0 (occluded) .. 1 (lit). Multiplies each light's
@@ -294,10 +299,10 @@ public sealed class FroxelVolumePass
 
         void Row(int cy)
         {
-            double v = (1.0 - 2.0 * (cy + 0.5) / _ny) * tan;
+            double v = (1.0 - 2.0 * (cy + 0.5) / _ny) * tan + m.PanV;
             for (int cx = 0; cx < _nx; cx++)
             {
-                double u = (2.0 * (cx + 0.5) / _nx - 1.0) * tan * aspect;
+                double u = (2.0 * (cx + 0.5) / _nx - 1.0) * tan * aspect + m.PanU;
                 double dx0 = c.Fx + c.Rx * u + c.Ux * v;
                 double dy0 = c.Fy + c.Ry * u + c.Uy * v;
                 double dz0 = c.Fz + c.Rz * u + c.Uz * v;

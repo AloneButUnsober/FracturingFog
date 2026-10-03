@@ -152,6 +152,10 @@ public sealed class DualOrbitVolumeCalculator : IFractalCalculator, IStereoEyeCa
 
         double panU = CenterX;
         double panV = -CenterY;
+        // #1079 — the froxel volume frames this exact camera (zoom / floor clamp,
+        // eye offset, zoom lens, pan).
+        var froxelView = ScreenSpacePost.Froxel3DViewOf(camPX, camPY, camPZ, fwd[0], fwd[1], fwd[2],
+            right[0], right[1], right[2], up[0], up[1], up[2], fovScale, panU, panV, camDist);
 
         var fx = fp.Lighting;
         // #1068 — froxel volumetrics: shade fog-free + arm the depth G-buffer;
@@ -302,7 +306,7 @@ public sealed class DualOrbitVolumeCalculator : IFractalCalculator, IStereoEyeCa
         if (depthBuf is not null && normalBuf is not null && !thinLensDof)
             ScreenSpacePost.ApplySsao(renderBuffer, depthBuf, normalBuf, width, height, in fx);
         ScreenSpacePost.ApplyFroxel3D(renderBuffer, hdrBuf, depthBuf, width, height,
-            fp, FractalType.DualOrbitVolume, fovScale, in froxelFx, in deStruct);   // #1068 / #1069 shadowed by the DE
+            in froxelView, in froxelFx, in deStruct);   // #1068 / #1069 shadowed by the DE
         if (hdrBuf is not null && depthBuf is not null && !thinLensDof)
             ScreenSpacePost.ApplyHdrDof(hdrBuf, depthBuf, width, height, in fx);
         if (hdrBuf is not null)

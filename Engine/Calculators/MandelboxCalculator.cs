@@ -134,6 +134,10 @@ public sealed class MandelboxCalculator : IFractalCalculator, IStereoEyeCamera, 
 
         double panU = CenterX;
         double panV = -CenterY;
+        // #1079 — the froxel volume frames this exact camera (zoom / floor clamp,
+        // eye offset, zoom lens, pan).
+        var froxelView = ScreenSpacePost.Froxel3DViewOf(camX, camY, camZ, fwd[0], fwd[1], fwd[2],
+            right[0], right[1], right[2], up[0], up[1], up[2], fovScale, panU, panV, camDist);
 
         double[] light = Normalize3(
             Math.Sin(FractalParameters.MandelboxLightPhi) * Math.Cos(FractalParameters.MandelboxLightTheta),
@@ -199,7 +203,7 @@ public sealed class MandelboxCalculator : IFractalCalculator, IStereoEyeCamera, 
             if (_gpu.Render(renderBuffer, rp, sp, bp, fx.VolumePalette, gpuDepth))
             {
                 ScreenSpacePost.ApplyFroxel3D(renderBuffer, null, gpuDepth, width, height,
-                    FractalParameters, FractalType.Mandelbox, fovScale, in froxelFx, in deStruct);   // #1070 — GPU trace + CPU froxel
+                    in froxelView, in froxelFx, in deStruct);   // #1070 — GPU trace + CPU froxel
                 // #84 — GPU raymarch skips the CPU post stack; draw the debug
                 // HUD directly so the light compass still appears on GPU frames.
                 ScreenSpacePost.ApplyDebugHud(renderBuffer, width, height, in fx);
@@ -362,7 +366,7 @@ public sealed class MandelboxCalculator : IFractalCalculator, IStereoEyeCamera, 
         if (depthBuf is not null && normalBuf is not null && !thinLensDof)
             ScreenSpacePost.ApplySsao(renderBuffer, depthBuf, normalBuf, width, height, in fx);
         ScreenSpacePost.ApplyFroxel3D(renderBuffer, hdrBuf, depthBuf, width, height,
-            FractalParameters, FractalType.Mandelbox, fovScale, in froxelFx, in deStruct);   // #1068 / #1069 shadowed by the DE
+            in froxelView, in froxelFx, in deStruct);   // #1068 / #1069 shadowed by the DE
         if (hdrBuf is not null && depthBuf is not null && !thinLensDof)
             ScreenSpacePost.ApplyHdrDof(hdrBuf, depthBuf, width, height, in fx);
         if (hdrBuf is not null)

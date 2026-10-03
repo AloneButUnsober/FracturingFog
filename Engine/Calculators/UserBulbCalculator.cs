@@ -739,6 +739,10 @@ public sealed class UserBulbCalculator : IFractalCalculator, IStereoEyeCamera, I
         double aspect = (double)width / height;
         double fovRad = FractalParameters.UserBulbFovDegrees * Math.PI / 180.0;
         double fovScale = Math.Tan(0.5 * Math.Clamp(fovRad, 0.05, Math.PI - 0.05));
+        // #1079 — the froxel volume frames this exact camera (pan is already in the
+        // orbit target, so no NDC pan).
+        var froxelView = ScreenSpacePost.Froxel3DViewOf(camX, camY, camZ, fwd.X, fwd.Y, fwd.Z,
+            right.X, right.Y, right.Z, up.X, up.Y, up.Z, fovScale, 0.0, 0.0, camDist);
 
         var light = Normalize3(
             Math.Sin(FractalParameters.UserBulbLightPhi) * Math.Cos(FractalParameters.UserBulbLightTheta),
@@ -1144,7 +1148,7 @@ public sealed class UserBulbCalculator : IFractalCalculator, IStereoEyeCamera, I
         if (depthBuf is not null && normalBuf is not null && !lowRes)
             ScreenSpacePost.ApplySsao(renderBuffer, depthBuf, normalBuf, width, height, in fx);
         ScreenSpacePost.ApplyFroxel3D(renderBuffer, hdrBuf, depthBuf, width, height,
-            FractalParameters, FractalType.UserBulb, fovScale, in froxelFx);   // #1068
+            in froxelView, in froxelFx);   // #1068
 
         // Phase 21b — HDR DoF (hex-bokeh 3-pass) runs before tonemap so bright
         // highlights bloom into proper bokeh discs instead of clipping first.
