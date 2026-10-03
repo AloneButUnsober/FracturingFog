@@ -65,15 +65,14 @@ public readonly struct FroxelGpuUniforms
     /// oracle. Balanced → byte-identical.</summary>
     public static FroxelGpuUniforms Build(in HeightfieldRaymarch2D.ReliefCamera cam, in LightingFxData fx,
         FracturingFog.Models.FroxelQuality quality)
-    {
-        // Current camera basis for sub-cell temporal reprojection (#408). Relief right
-        // vector has RY == 0; forward is carried in the medium's ViewD*.
-        var basis = new FroxelHistory.CamBasis(
-            cam.CamX, cam.CamY, cam.CamZ,
-            cam.RX, 0.0, cam.RZ,
-            cam.UX, cam.UY, cam.UZ,
-            cam.FX, cam.FY, cam.FZ);
-        return new(FroxelCameraVolume.BuildGrid(in cam, quality),
-                   FroxelCameraVolume.BuildMedium(in cam, in fx), basis, true);
-    }
+        => Build(FroxelCamera.FromRelief(in cam), in fx, quality);
+
+    /// <summary>#1067 — uniforms for any <see cref="FroxelCamera"/> (the 3D
+    /// raymarchers' GPU froxel path, #1070). Same grid + medium the CPU oracle
+    /// <see cref="FroxelCameraVolume.Apply(uint[],float[],int,int,in FroxelCamera,in LightingFxData,FroxelHistory,bool,double,FracturingFog.Models.FroxelQuality,float[],bool)"/>
+    /// builds; the basis feeds sub-cell temporal reprojection (#408).</summary>
+    public static FroxelGpuUniforms Build(in FroxelCamera cam, in LightingFxData fx,
+        FracturingFog.Models.FroxelQuality quality)
+        => new(FroxelCameraVolume.BuildGrid(in cam, quality),
+               FroxelCameraVolume.BuildMedium(in cam, in fx), cam.Basis, true);
 }
