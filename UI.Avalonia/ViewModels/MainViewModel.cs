@@ -273,13 +273,20 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
         || t == FractalType.GeneratedTricorn
         || t == FractalType.GeneratedBurningShip;
 
-    private bool MatchesFilter(FractalType t) => _fractalFilter switch
+    private bool MatchesFilter(FractalType t) => MatchesFractalFilter(t, _fractalFilter);
+
+    /// <summary>True when <paramref name="t"/> belongs in the <paramref name="filter"/>
+    /// bucket. Shared with the Scene Editor's per-shot Fractal combo (#1054).
+    /// <see cref="FractalTypeFilter.Promoted"/> lists catalog entries, not
+    /// built-in types, so it matches none here.</summary>
+    public static bool MatchesFractalFilter(FractalType t, FractalTypeFilter filter) => filter switch
     {
         FractalTypeFilter.TwoD    => !FractalViewState.IsThreeD(t),
         FractalTypeFilter.ThreeD  => FractalViewState.IsThreeD(t),
         FractalTypeFilter.User    => IsUserFamily(t),
         FractalTypeFilter.CalcGen => IsCalcGen(t),
-        _                          => true, // Default (Promoted handled separately)
+        FractalTypeFilter.Promoted => false,
+        _                          => true, // Default
     };
 
     /// <summary>Rebuild <see cref="FractalEntries"/> from the built-in label

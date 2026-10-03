@@ -2627,6 +2627,19 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
     /// Modeless, lives alongside the existing editors. The preview target is
     /// the live FractalParameters record so Live Preview / Preview push
     /// onto the same params the renderer reads.</summary>
+    /// <summary>#1055 — open the Animation Editor with <paramref name="animationName"/>
+    /// preloaded (Scene Editor shot "Edit…"). Null / empty just opens it, so an
+    /// in-progress edit isn't discarded. Names are re-pulled first so an
+    /// animation created since the editor was built is selectable.</summary>
+    public void ShowAnimationEditor(string? animationName)
+    {
+        ShowAnimationEditor();
+        if (string.IsNullOrEmpty(animationName) || AnimationEditor == null) return;
+        AnimationEditor.RefreshAnimationNames();
+        if (AnimationEditor.AnimationNames.Contains(animationName))
+            AnimationEditor.SelectedAnimation = animationName;
+    }
+
     public void ShowAnimationEditor()
     {
         if (AnimationEditor == null)
@@ -2671,6 +2684,7 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
             vm.SceneSavedToLibrary   += (_, _) => RefreshAssetManagerIfVisible();
             vm.SceneDeletedFromLibrary += (_, _) => RefreshAssetManagerIfVisible();
             vm.PreviewShotRequested  += (_, shot) => PreviewSceneShot(shot);
+            vm.EditAssetRequested    += (_, e) => EditSceneShotAsset(e);
             vm.PlaySceneRequested    += (_, scene) => PlayScene(scene);
             vm.ExportSceneRequested  += (_, args) => ExportSceneRequested?.Invoke(this, args);
             vm.BrowseAudioFileRequested += async e =>
@@ -2694,6 +2708,20 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
         }
         if (!string.IsNullOrEmpty(initialSceneName)) SceneEditor.SelectedScene = initialSceneName;
         IsSceneEditorVisible = true;
+    }
+
+    /// <summary>#1054 / #1055 — a Scene Editor shot asked to edit one of its
+    /// assets. Animation goes through <see cref="ShowAnimationEditor(string?)"/>
+    /// (refreshes names; a null name just opens the editor); region / theme reuse
+    /// the Asset Manager's <see cref="EditAsset"/> routing.</summary>
+    private void EditSceneShotAsset(SceneEditAssetEventArgs e)
+    {
+        if (e.Kind == FracturingFog.Abstractions.Assets.AssetKind.Animation)
+        {
+            ShowAnimationEditor(e.Name);
+            return;
+        }
+        if (!string.IsNullOrEmpty(e.Name)) EditAsset(e.Kind, e.Name!);
     }
 
     /// <summary>Apply one scene shot to the live view for the editor's per-shot

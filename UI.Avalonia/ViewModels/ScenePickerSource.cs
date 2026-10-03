@@ -1,0 +1,77 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-FileCopyrightText: 2026 Bradley Brown
+
+// ViewModels/ScenePickerSource.cs
+//
+// #1054 — name lists for the Scene Editor's per-shot combos. Each shot row owns
+// its own Region / Theme sort state (right-click menu), so the lists are no
+// longer one shared snapshot. To keep that cheap, the Default-mode lists (what
+// nearly every row shows) are enumerated once per refresh and shared; only a
+// row with a non-default sort calls the service itself. Invalidate() (from
+// SceneEditorViewModel.RefreshNameLists, #1057) drops the cache after a
+// library change.
+
+using System;
+using System.Collections.Generic;
+using System.Linq;
+
+using FracturingFog.Models;
+
+namespace FracturingFog.UI.Avalonia.ViewModels;
+
+public sealed class ScenePickerSource
+{
+    private readonly IColorThemeService _service;
+    private IReadOnlyList<string>? _regionsDefault;
+    private HashSet<string>? _regionSet;
+    private IReadOnlyList<string>? _themesDefault;
+    private HashSet<string>? _themeSet;
+    private IReadOnlyList<string>? _animations;
+
+    public ScenePickerSource(IColorThemeService service)
+        => _service = service ?? throw new ArgumentNullException(nameof(service));
+
+    public IColorThemeService Service => _service;
+
+    /// <summary>Drop the cached lists so the next read re-enumerates.</summary>
+    public void Invalidate()
+    {
+        _regionsDefault = null; _regionSet = null;
+        _themesDefault = null; _themeSet = null;
+        _animations = null;
+    }
+
+    /// <summary>Region names under <paramref name="sort"/>, headers stripped.</summary>
+    public IReadOnlyList<string> Regions(RegionComboSort sort)
+        => sort.Mode == RegionSortMode.Default ? RegionsDefault : StripHeaders(sort.Enumerate(_service));
+
+    /// <summary>Theme names under <paramref name="sort"/> (may hold "— Kind —" headers).</summary>
+    public IReadOnlyList<string> Themes(ThemeComboSort sort)
+        => sort.Mode == ThemeSortMode.Default ? ThemesDefault : sort.Enumerate(_service);
+
+    /// <summary>Animation names, A–Z (the library has no sort modes).</summary>
+    public IReadOnlyList<string> Animations
+        => _animations ??= _service.EnumerateAnimationNames()
+            .OrderBy(n => n, StringComparer.OrdinalIgnoreCase).ToList();
+
+    // Existence is checked against the flat, unsorted enumerations — the full
+    // library — so a name a sort view happens to omit is never mistaken for a
+    // deleted one (which would silently reset the shot's pick).
+
+    /// <summary>True when a region with this name exists (any sort / filter).</summary>
+    public bool RegionExists(string name)
+        => (_regionSet ??= new HashSet<string>(_service.EnumerateRegionNames(), StringComparer.Ordinal)).Contains(name);
+
+    /// <summary>True when a theme with this name exists (any sort / filter).</summary>
+    public bool ThemeExists(string name)
+        => (_themeSet ??= new HashSet<string>(_service.EnumerateThemeNames(), StringComparer.Ordinal)).Contains(name);
+
+    private IReadOnlyList<string> RegionsDefault
+        => _regionsDefault ??= StripHeaders(new RegionComboSort().Enumerate(_service));
+
+    private IReadOnlyList<string> ThemesDefault
+        => _themesDefault ??= new ThemeComboSort().Enumerate(_service);
+
+    private static List<string> StripHeaders(IReadOnlyList<string> names)
+        => names.Where(n => !ComboSort.IsHeader(n)).ToList();
+}

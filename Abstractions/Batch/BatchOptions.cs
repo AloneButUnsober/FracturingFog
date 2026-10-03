@@ -54,6 +54,9 @@ namespace FracturingFog.Batch
         LosslessH264Mp4,
         Ffv1Mkv,
         HighQualityH264Mp4,
+        /// <summary>#1053 — looping animated GIF via the built-in encoder (no
+        /// ffmpeg, no audio). <c>--encode gif</c> only (slideshow / scene).</summary>
+        Gif,
     }
 
     public sealed class BatchOptions
@@ -452,8 +455,10 @@ namespace FracturingFog.Batch
                             case "ffv1":
                             case "ffv1mkv":
                                 opts.SlideshowEncode = BatchLossless.Ffv1Mkv; break;
+                            case "gif":
+                                opts.SlideshowEncode = BatchLossless.Gif; break;
                             default:
-                                error = $"Unknown --encode '{evl}'. Use h264hq|h264|ffv1.";
+                                error = $"Unknown --encode '{evl}'. Use h264hq|h264|ffv1|gif.";
                                 return false;
                         }
                         break;

@@ -1,6 +1,7 @@
 <UserControl xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:vm="using:FracturingFog.UI.Avalonia.ViewModels"
+        xmlns:controls="using:FracturingFog.UI.Avalonia.Controls"
         x:Class="FracturingFog.UI.Avalonia.Views.SceneEditorView"
         x:DataType="vm:SceneEditorViewModel"
         Foreground="#DCDCDC">
@@ -150,7 +151,7 @@
                                       SelectedItem="{Binding SelectedEncode}" />
                         </Grid>
                         <TextBlock Foreground="#8A8A8A" FontSize="11" TextWrapping="Wrap"
-                                   Text="Renders every frame offline (motion blur = sub-frames averaged per frame; composited cross-fade / light-sweep / param-morph transitions). Needs ffmpeg to encode — without it, the PNG sequence is kept." />
+                                   Text="Renders every frame offline (motion blur = sub-frames averaged per frame; composited cross-fade / light-sweep / param-morph transitions). MP4 / MKV need ffmpeg to encode — without it, the PNG sequence is kept. GIF uses a built-in encoder (no ffmpeg, no audio; keep fps at 50 or less)." />
                     </StackPanel>
                 </Border>
 
@@ -187,26 +188,36 @@
                                                 <TextBlock Classes="label" Grid.Row="0" Grid.Column="0" Text="Region:" Margin="0,0,8,4" />
                                                 <ComboBox Grid.Row="0" Grid.Column="1"
                                                           ItemsSource="{Binding RegionNames}"
+                                                          controls:ComboSortMenu.MenuSource="{Binding RegionMenu}"
                                                           SelectedItem="{Binding SelectedRegion}"
                                                           HorizontalAlignment="Stretch" Margin="0,0,8,4" />
 
                                                 <TextBlock Classes="label" Grid.Row="0" Grid.Column="2" Text="Fractal:" Margin="0,0,8,4" />
                                                 <ComboBox Grid.Row="0" Grid.Column="3"
                                                           ItemsSource="{Binding FractalTypes}"
+                                                          controls:ComboSortMenu.MenuSource="{Binding FractalTypeMenu}"
                                                           SelectedItem="{Binding FractalType}"
                                                           HorizontalAlignment="Stretch" Margin="0,0,0,4" />
 
                                                 <TextBlock Classes="label" Grid.Row="1" Grid.Column="0" Text="Theme:" Margin="0,0,8,4" />
                                                 <ComboBox Grid.Row="1" Grid.Column="1"
                                                           ItemsSource="{Binding ThemeNames}"
+                                                          controls:ComboSortMenu.MenuSource="{Binding ThemeMenu}"
                                                           SelectedItem="{Binding SelectedTheme}"
                                                           HorizontalAlignment="Stretch" Margin="0,0,8,4" />
 
                                                 <TextBlock Classes="label" Grid.Row="1" Grid.Column="2" Text="Animation:" Margin="0,0,8,4" />
-                                                <ComboBox Grid.Row="1" Grid.Column="3"
-                                                          ItemsSource="{Binding AnimationNames}"
-                                                          SelectedItem="{Binding SelectedAnimation}"
-                                                          HorizontalAlignment="Stretch" Margin="0,0,0,4" />
+                                                <Grid Grid.Row="1" Grid.Column="3" ColumnDefinitions="*,Auto" Margin="0,0,0,4">
+                                                    <ComboBox Grid.Column="0"
+                                                              ItemsSource="{Binding AnimationNames}"
+                                                          controls:ComboSortMenu.MenuSource="{Binding AnimationMenu}"
+                                                              SelectedItem="{Binding SelectedAnimation}"
+                                                              HorizontalAlignment="Stretch" />
+                                                    <Button Grid.Column="1" Classes="action" Content="Edit…"
+                                                            Margin="6,0,0,0"
+                                                            Command="{Binding EditAnimationCommand}"
+                                                            ToolTip.Tip="Open the Animation Editor with this animation loaded" />
+                                                </Grid>
 
                                                 <TextBlock Classes="label" Grid.Row="2" Grid.Column="0" Text="Duration (s):" Margin="0,0,8,0" />
                                                 <NumericUpDown Grid.Row="2" Grid.Column="1"
@@ -236,6 +247,7 @@
                                                 <TextBlock Classes="label" Grid.Row="3" Grid.Column="2" Text="Lighting:" Margin="0,4,8,0" />
                                                 <ComboBox Grid.Row="3" Grid.Column="3"
                                                           ItemsSource="{Binding LightingRegionNames}"
+                                                          controls:ComboSortMenu.MenuSource="{Binding LightingRegionMenu}"
                                                           SelectedItem="{Binding SelectedLightingRegion}"
                                                           HorizontalAlignment="Stretch" Margin="0,4,0,0"
                                                           ToolTip.Tip="Borrow another region's lighting (fog / volume / lights) for this shot without changing its own region or params" />

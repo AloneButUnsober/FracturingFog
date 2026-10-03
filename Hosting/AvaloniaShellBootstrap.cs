@@ -979,16 +979,24 @@ namespace FracturingFog.Hosting
                         SceneExportEncode.Ffv1         => FracturingFog.FfmpegEncoder.Preset.Ffv1Mkv,
                         _                              => FracturingFog.FfmpegEncoder.Preset.HighQualityH264Mp4,
                     };
-                    string ext = FracturingFog.FfmpegEncoder.DefaultExtensionFor(preset);
-                    string filter = ext == "mkv"
-                        ? "Matroska Video (*.mkv)|*.mkv"
-                        : "MP4 Video (*.mp4)|*.mp4";
+                    bool gif = s.Encode == SceneExportEncode.Gif; // #1053
+                    string ext = gif ? "gif" : FracturingFog.FfmpegEncoder.DefaultExtensionFor(preset);
+                    string filter = ext switch
+                    {
+                        "mkv" => "Matroska Video (*.mkv)|*.mkv",
+                        "gif" => "GIF Animation (*.gif)|*.gif",
+                        _     => "MP4 Video (*.mp4)|*.mp4",
+                    };
                     string suggested = SanitizeFileStem(args.Scene.Name) + "." + ext;
 
                     string? path = await AvaloniaDialogs.PickSaveFileAsync("Export Scene", suggested, filter);
                     if (string.IsNullOrEmpty(path)) return; // cancelled
 
-                    if (!FracturingFog.FfmpegEncoder.IsAvailable())
+                    if (gif && s.Fps > FracturingFog.Imaging.GifFolderEncoder.MaxFaithfulFps)
+                        await AvaloniaDialogs.ShowMessageAsync("Export Scene",
+                            $"GIF frames can't be shorter than 1/{FracturingFog.Imaging.GifFolderEncoder.MaxFaithfulFps} s, " +
+                            $"so {s.Fps} fps will play back slower. Use {FracturingFog.Imaging.GifFolderEncoder.MaxFaithfulFps} fps or less for real-time playback.", false);
+                    if (!gif && !FracturingFog.FfmpegEncoder.IsAvailable())
                         await AvaloniaDialogs.ShowMessageAsync("Export Scene",
                             "ffmpeg was not found, so the video can't be encoded. The rendered PNG frame " +
                             "sequence will be kept instead — you can encode it later.", false);
@@ -998,6 +1006,7 @@ namespace FracturingFog.Hosting
                         Width = s.Width,
                         Height = s.Height,
                         Encode = preset,
+                        EncodeGif = gif,
                         OutputPath = path,
                         Settings = new FracturingFog.Abstractions.Animation.SceneRenderSettings
                         {
@@ -1020,6 +1029,8 @@ namespace FracturingFog.Hosting
                         // and mux it into the encoded video. No file / no ffmpeg =
                         // audio-silent, exactly as before.
                         var scene = args.Scene;
+                        // GIF carries no audio and has no mux step, but the tracks still
+                        // modulate the look, so analysis still runs for GIF.
                         if (scene.AudioTracks is { Count: > 0 }
                             && !string.IsNullOrWhiteSpace(scene.AudioFilePath))
                         {

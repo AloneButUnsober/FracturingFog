@@ -290,6 +290,20 @@ The editor's buttons:
 - **Play** — run the *whole* Scene live on the main window, cut-sequenced, and
   loop it. **Stop** halts it (so does closing the editor).
 - **Export…** — render the Scene to a video (see next section).
+- **Edit…** *(per shot, beside Animation)* — open the Animation Editor with the
+  shot's animation loaded (or empty, when the shot has none).
+
+**Right-click a shot's dropdown** for the same menu the main toolbar combos
+carry. **Region** and **Lighting** can be filtered to one fractal type, **Theme**
+can be sorted (grouped by kind, A–Z, one kind, or only themes compatible with the
+shot's fractal type), and **Fractal** can be filtered to 2D / 3D / User /
+CalcGen. When something is picked, the menu also offers **Edit region… / Edit
+theme… / Edit animation…**. Each shot keeps its own sort. A pick that the filter
+hides stays in the list, so changing the filter never changes the shot. The
+**Load** list of saved Scenes is sorted A–Z.
+
+Dropdowns pick up new regions, themes and animations as soon as they are saved
+elsewhere. You don't need to reopen the editor.
 
 ---
 
@@ -302,7 +316,7 @@ Click **Export…** in the editor. You are offered a group of output knobs:
 | **Width / Height** | output resolution in pixels | `1920 × 1080` |
 | **FPS** | frames per second | `30` (or `60` for silky motion) |
 | **Motion-blur sub-frames** | extra samples averaged per frame for motion blur (1 = off) | `1`, or `8`–`16` for blur |
-| **Encode** | video format preset | `h264hq` |
+| **Encode** | video format preset: H.264 MP4 (high quality / lossless), FFV1 MKV, or **GIF** | `h264hq` |
 
 Choose an output file, and the app renders every frame to completion on a
 background thread — this is the *offline* path, so it is slower than realtime and
@@ -314,6 +328,13 @@ wipes, morphs, and motion blur that the live preview could not show.
 > still succeeds — it keeps the rendered **PNG frame sequence** in the output
 > folder and tells you so. Install ffmpeg and you can encode the folder later,
 > or the app will encode automatically next time.
+
+> [!NOTE]
+> **GIF** uses a built-in encoder, so it needs no ffmpeg. It loops forever and
+> has no audio (audio-reactive tracks still shape the look). GIF frame timing is
+> in hundredths of a second and can't go below 1/50 s, so keep **FPS** at 50 or
+> lower. Above that, the GIF plays back slower than the scene. GIFs get large
+> quickly: a small size (e.g. 640 × 360) and a short scene work best.
 
 ### Motion blur, explained
 
@@ -351,7 +372,7 @@ dotnet run --project FracturingFogCLD.csproj -c Release -- `
 | `--fps N` | output frame rate (default `30`) |
 | `--motion-blur N` | accumulation motion-blur sub-frames, `1`–`64` (1 = off) |
 | `--shutter F` | open-shutter fraction `0 < F ≤ 1` (default `0.5`) |
-| `--encode TYPE` | `h264hq` (default) · `h264` (lossless) · `ffv1` (lossless MKV) |
+| `--encode TYPE` | `h264hq` (default) · `h264` (lossless) · `ffv1` (lossless MKV) · `gif` (looping GIF, no ffmpeg / audio) |
 | `--width` / `--height` | output resolution |
 | `--out PATH` | output file (or folder) |
 | `--keep-frames` | keep the intermediate PNG sequence after encoding |

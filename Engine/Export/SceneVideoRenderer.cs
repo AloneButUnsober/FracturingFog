@@ -57,6 +57,11 @@ namespace FracturingFog.Export
         /// <summary>ffmpeg encode preset. Default is visually-lossless H.264 MP4.</summary>
         public FfmpegEncoder.Preset Encode { get; set; } = FfmpegEncoder.Preset.HighQualityH264Mp4;
 
+        /// <summary>#1053 — encode a looping animated GIF (built-in encoder, no
+        /// ffmpeg) instead of <see cref="Encode"/>. Audio is not carried (GIF has
+        /// no audio track).</summary>
+        public bool EncodeGif { get; set; }
+
         /// <summary>Final container path. When it has no extension it is treated
         /// as a folder and a name is synthesised.</summary>
         public string OutputPath { get; set; } = "";
@@ -157,7 +162,7 @@ namespace FracturingFog.Export
 
             // Output target.
             string outPath = options.OutputPath;
-            string ext = "." + FfmpegEncoder.DefaultExtensionFor(options.Encode);
+            string ext = options.EncodeGif ? ".gif" : "." + FfmpegEncoder.DefaultExtensionFor(options.Encode);
             if (string.IsNullOrWhiteSpace(Path.GetExtension(outPath)))
             {
                 Directory.CreateDirectory(string.IsNullOrWhiteSpace(outPath) ? "." : outPath);
@@ -344,6 +349,20 @@ namespace FracturingFog.Export
             } // Dispose drains the PNG queue.
 
             // ── Encode ──
+            if (options.EncodeGif)
+            {
+                // #1053 — GIF leg: built-in encoder over the same PNG sequence.
+                progress?.Invoke(1.0, "encoding " + Path.GetFileName(outPath));
+                var (gok, glog) = GifFolderEncoder.Encode(pngFolder, outPath, plan.Fps, ct);
+                if (!gok)
+                    return new SceneVideoResult(false, framesWritten, null, pngFolder,
+                        glog + " (PNG sequence kept at " + pngFolder + ")");
+                if (options.KeepFrames)
+                    return new SceneVideoResult(true, framesWritten, outPath, pngFolder, null);
+                try { Directory.Delete(pngFolder, recursive: true); } catch { /* best effort */ }
+                return new SceneVideoResult(true, framesWritten, outPath, null, null);
+            }
+
             if (!FfmpegEncoder.IsAvailable())
             {
                 return new SceneVideoResult(false, framesWritten, null, pngFolder,

@@ -1802,7 +1802,7 @@ namespace FracturingFog.Batch
             }
             Console.WriteLine($"  post-fx   : brightness {pfBrightness}  contrast {pfContrast}  adaptive {pfAdaptive}");
             Console.WriteLine($"  temp      : {tempRoot}");
-            Console.WriteLine($"  encode    : {encodePreset}");
+            Console.WriteLine($"  encode    : {(opts.SlideshowEncode == BatchLossless.Gif ? "GIF (built-in)" : encodePreset.ToString())}");
             Console.WriteLine($"  out       : {opts.OutputPath}");
 
             // 6. Render loop — outer region (shuffle-bag). Image type cycles
@@ -1979,22 +1979,26 @@ namespace FracturingFog.Batch
 
             string outPath = opts.OutputPath;
             string outExt = Path.GetExtension(outPath).ToLowerInvariant();
-            string presetExt = "." + FfmpegEncoder.DefaultExtensionFor(encodePreset);
+            bool slideshowGif = opts.SlideshowEncode == BatchLossless.Gif;
+            string presetExt = slideshowGif ? ".gif" : "." + FfmpegEncoder.DefaultExtensionFor(encodePreset);
             if (string.IsNullOrEmpty(outExt))
                 outPath = Path.Combine(outPath, $"FracturingFog_Slideshow_{DateTime.Now:yyyyMMdd_HHmmss}{presetExt}");
             EnsureDirectoryForFile(outPath);
 
-            if (!FfmpegEncoder.IsAvailable())
+            if (!slideshowGif && !FfmpegEncoder.IsAvailable())
             {
                 Console.Error.WriteLine($"ffmpeg.exe not found — keeping PNG sequence at {tempRoot}.");
                 return 1;
             }
 
-            Console.Write($"Encoding {Path.GetFileName(outPath)} with ffmpeg … ");
+            Console.Write($"Encoding {Path.GetFileName(outPath)} with {(slideshowGif ? "built-in GIF encoder" : "ffmpeg")} … ");
             var encSw = Stopwatch.StartNew();
-            var (ok, log) = FfmpegEncoder
-                .EncodeAsync(tempRoot, outPath, encodePreset, fps: fps)
-                .GetAwaiter().GetResult();
+            var (ok, log) = slideshowGif
+                // #1053 — GIF leg: built-in encoder over the same PNG sequence.
+                ? FracturingFog.Imaging.GifFolderEncoder.Encode(tempRoot, outPath, fps)
+                : FfmpegEncoder
+                    .EncodeAsync(tempRoot, outPath, encodePreset, fps: fps)
+                    .GetAwaiter().GetResult();
             encSw.Stop();
             if (!ok)
             {
@@ -2044,11 +2048,13 @@ namespace FracturingFog.Batch
                 _                             => FfmpegEncoder.Preset.HighQualityH264Mp4,
             };
 
+            bool sceneGif = opts.SlideshowEncode == BatchLossless.Gif;
             var sceneOpts = new FracturingFog.Export.SceneVideoOptions
             {
                 Width = opts.Width,
                 Height = opts.Height,
                 Encode = encodePreset,
+                EncodeGif = sceneGif,
                 OutputPath = opts.OutputPath,
                 KeepFrames = opts.KeepFrames,
                 Settings = new FracturingFog.Abstractions.Animation.SceneRenderSettings
@@ -2065,10 +2071,12 @@ namespace FracturingFog.Batch
             Console.WriteLine($"  scene       : {scene.Name}  ({scene.Shots.Count} shots, {scene.TotalDurationSeconds:G4}s authored)");
             Console.WriteLine($"  size        : {outW}x{outH}  fps: {opts.VideoFps}");
             Console.WriteLine($"  motion blur : {opts.MotionBlurSubframes} subframe(s), shutter {opts.ShutterFraction:G3}");
-            Console.WriteLine($"  encode      : {encodePreset}");
+            Console.WriteLine($"  encode      : {(sceneGif ? "GIF (built-in)" : encodePreset.ToString())}");
             Console.WriteLine($"  out         : {opts.OutputPath}");
 
-            if (!FfmpegEncoder.IsAvailable())
+            if (sceneGif && opts.VideoFps > FracturingFog.Imaging.GifFolderEncoder.MaxFaithfulFps)
+                Console.WriteLine($"  note        : GIF frames can't be shorter than 1/{FracturingFog.Imaging.GifFolderEncoder.MaxFaithfulFps} s — {opts.VideoFps} fps plays back slower.");
+            if (!sceneGif && !FfmpegEncoder.IsAvailable())
                 Console.WriteLine("  note        : ffmpeg not found — will keep the PNG sequence instead of encoding.");
 
             // Phase 7 (#266) — deterministic audio-reactive export: analyse the

@@ -27,6 +27,8 @@ public enum SceneExportEncode
     LosslessH264,
     /// <summary>FFV1 v3 — lossless MKV intermediate.</summary>
     Ffv1,
+    /// <summary>#1053 — looping animated GIF (built-in encoder, no ffmpeg, no audio).</summary>
+    Gif,
 }
 
 /// <summary>The render knobs for one scene export. Plain DTO — the host maps it
