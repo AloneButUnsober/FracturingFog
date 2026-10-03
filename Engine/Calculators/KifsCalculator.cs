@@ -180,8 +180,11 @@ public sealed class KifsCalculator : IFractalCalculator, IStereoEyeCamera, IDept
         // S8 (#404/#486) — the Menger + Sierpinski kernels now resolve point/spot
         // lights on the GPU (GpuKernelUtils.ResolveLight), so the !HasPositionalLight
         // gate is lifted. #492 added a per-light area-capped shadow hardness, so area lights render on the GPU now too.
-        if (fx.UseGpuRender && fx.DebugAov == AovView.Beauty && !lowRes && !ScreenSpacePost.ForcesCpuTrace(in fx) && gpuEligibleFold)
+        if (fx.UseGpuRender && fx.DebugAov == AovView.Beauty && !lowRes && ScreenSpacePost.GpuTraceAllowed(in fx) && gpuEligibleFold)
         {
+            // #1070 — Froxel3D on the GPU trace: the kernel also writes per-pixel
+            // ray distance, and the CPU froxel pass composites over the GPU frame.
+            float[]? gpuDepth = ScreenSpacePost.GpuFroxel3DHybrid(in fx) ? new float[width * height] : null;
             var rp = new GpuRaymarchParams
             {
                 Width = width, Height = height,
@@ -212,8 +215,10 @@ public sealed class KifsCalculator : IFractalCalculator, IStereoEyeCamera, IDept
                     DEIter = deIter, SceneRadius = sceneRadius,
                 };
                 _gpuSierp ??= new SierpinskiGpuCalculator();
-                if (_gpuSierp.Render(renderBuffer, rp, sp, sip, fx.VolumePalette))
+                if (_gpuSierp.Render(renderBuffer, rp, sp, sip, fx.VolumePalette, gpuDepth))
                 {
+                    ScreenSpacePost.ApplyFroxel3D(renderBuffer, null, gpuDepth, width, height,
+                        FractalParameters, FractalType.Kifs, fovScale, in froxelFx);   // #1070 — GPU trace + CPU froxel
                     // #84 — GPU raymarch skips the CPU post stack; draw the debug
                     // HUD directly so the light compass still shows on GPU frames.
                     ScreenSpacePost.ApplyDebugHud(renderBuffer, width, height, in fx);
@@ -228,8 +233,10 @@ public sealed class KifsCalculator : IFractalCalculator, IStereoEyeCamera, IDept
                     DEIter = deIter, SceneRadius = sceneRadius,
                 };
                 _gpuMenger ??= new MengerGpuCalculator();
-                if (_gpuMenger.Render(renderBuffer, rp, sp, mp, fx.VolumePalette))
+                if (_gpuMenger.Render(renderBuffer, rp, sp, mp, fx.VolumePalette, gpuDepth))
                 {
+                    ScreenSpacePost.ApplyFroxel3D(renderBuffer, null, gpuDepth, width, height,
+                        FractalParameters, FractalType.Kifs, fovScale, in froxelFx);   // #1070 — GPU trace + CPU froxel
                     // #84 — GPU raymarch skips the CPU post stack; draw the debug
                     // HUD directly so the light compass still shows on GPU frames.
                     ScreenSpacePost.ApplyDebugHud(renderBuffer, width, height, in fx);
