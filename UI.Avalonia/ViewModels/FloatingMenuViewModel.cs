@@ -148,16 +148,10 @@ public sealed class FloatingMenuViewModel : ViewModelBase
     // setters ignore (see the "—" guard below).
 
     private IColorThemeService? _themeService;
-    private ThemeSortMode _themeSort = ThemeSortMode.Default;
-    private string? _themeKind;
-    private const bool _themeEditableOnly = false;
-    private RegionSortMode _regionSort = RegionSortMode.Default;
-    private FractalType _regionType = FractalType.Mandelbrot;
-    /// <summary>Active fractal type used as the compat filter target when
-    /// <see cref="ThemeSortMode.ByFractalCompat"/> is selected. Pushed in by
-    /// the shell whenever the user switches fractals so the theme combo
-    /// auto-rebuilds against the new type.</summary>
-    private FractalType _compatFractalType = FractalType.Mandelbrot;
+    // #1057 — sort state lives in reusable objects (also used by the Scene
+    // Editor's per-shot combos); this VM only owns its instances.
+    private readonly ThemeComboSort _themeSort = new();
+    private readonly RegionComboSort _regionSort = new();
 
     /// <summary>Hand the menu the host theme service so its Region / Theme
     /// combos can sort + filter themselves. Performs the initial fill.</summary>
@@ -174,8 +168,7 @@ public sealed class FloatingMenuViewModel : ViewModelBase
     {
         if (_themeService == null) return;
         string? prev = _selectedTheme;
-        FractalType? compat = _themeSort == ThemeSortMode.ByFractalCompat ? _compatFractalType : null;
-        SetThemes(_themeService.EnumerateThemeNames(_themeSort, _themeKind, _themeEditableOnly, compat));
+        SetThemes(_themeSort.Enumerate(_themeService));
         if (!string.IsNullOrEmpty(prev) && ThemeNames.Contains(prev)) SetThemeSilent(prev);
     }
 
@@ -184,9 +177,9 @@ public sealed class FloatingMenuViewModel : ViewModelBase
     /// rebuilt immediately so the visible options track the new fractal.</summary>
     public void SetCompatFractalType(FractalType ft)
     {
-        if (_compatFractalType == ft) return;
-        _compatFractalType = ft;
-        if (_themeSort == ThemeSortMode.ByFractalCompat) RefreshThemes();
+        if (_themeSort.CompatFractalType == ft) return;
+        _themeSort.CompatFractalType = ft;
+        if (_themeSort.Mode == ThemeSortMode.ByFractalCompat) RefreshThemes();
     }
 
     /// <summary>Re-pull region names under the current sort state, preserving the
@@ -195,7 +188,7 @@ public sealed class FloatingMenuViewModel : ViewModelBase
     {
         if (_themeService == null) return;
         string? prev = _selectedRegion;
-        SetRegions(_themeService.EnumerateRegionNames(_regionSort, _regionType));
+        SetRegions(_regionSort.Enumerate(_themeService));
         if (!string.IsNullOrEmpty(prev) && RegionNames.Contains(prev)) SetRegionSilent(prev);
     }
 
@@ -203,49 +196,12 @@ public sealed class FloatingMenuViewModel : ViewModelBase
     /// per-kind). Mirrors Controls.ShowColorComboSortMenu (no Editable-only
     /// toggle — that lives on the editor's combo).</summary>
     public IReadOnlyList<ComboMenuItem> BuildThemeSortMenu()
-    {
-        var items = new List<ComboMenuItem>
-        {
-            ComboMenuItem.Item("Default", _themeSort == ThemeSortMode.Default,
-                () => { _themeSort = ThemeSortMode.Default; RefreshThemes(); }),
-            ComboMenuItem.Item("All (A–Z)", _themeSort == ThemeSortMode.All,
-                () => { _themeSort = ThemeSortMode.All; RefreshThemes(); }),
-            ComboMenuItem.Item(
-                $"Compatible with {_compatFractalType}",
-                _themeSort == ThemeSortMode.ByFractalCompat,
-                () => { _themeSort = ThemeSortMode.ByFractalCompat; RefreshThemes(); }),
-            ComboMenuItem.Separator,
-        };
-        if (_themeService != null)
-            foreach (var kind in _themeService.EnumerateThemeKinds())
-            {
-                string k = kind;
-                bool chk = _themeSort == ThemeSortMode.ByKind && _themeKind == k;
-                items.Add(ComboMenuItem.Item(k, chk,
-                    () => { _themeSort = ThemeSortMode.ByKind; _themeKind = k; RefreshThemes(); }));
-            }
-        return items;
-    }
+        => _themeSort.BuildMenu(_themeService, RefreshThemes);
 
     /// <summary>Build the region combo's right-click sort menu (Default /
     /// per-FractalType). Mirrors Controls.ShowRegionComboSortMenu.</summary>
     public IReadOnlyList<ComboMenuItem> BuildRegionSortMenu()
-    {
-        var items = new List<ComboMenuItem>
-        {
-            ComboMenuItem.Item("Default", _regionSort == RegionSortMode.Default,
-                () => { _regionSort = RegionSortMode.Default; RefreshRegions(); }),
-            ComboMenuItem.Separator,
-        };
-        foreach (var t in Enum.GetValues<FractalType>())
-        {
-            FractalType ft = t;
-            bool chk = _regionSort == RegionSortMode.ByFractalType && _regionType == ft;
-            items.Add(ComboMenuItem.Item(ft.ToString(), chk,
-                () => { _regionSort = RegionSortMode.ByFractalType; _regionType = ft; RefreshRegions(); }));
-        }
-        return items;
-    }
+        => _regionSort.BuildMenu(RefreshRegions);
 
     private string? _selectedRegion;
     public string? SelectedRegion
@@ -274,8 +230,7 @@ public sealed class FloatingMenuViewModel : ViewModelBase
     /// <summary>True for non-selectable group headers / placeholders the sort
     /// menus inject ("— Kind —", "— select region —"). Em-dash prefix matches
     /// the WinForms convention (Controls.cs).</summary>
-    private static bool IsHeader(string? s)
-        => !string.IsNullOrEmpty(s) && s.StartsWith("—", StringComparison.Ordinal);
+    private static bool IsHeader(string? s) => ComboSort.IsHeader(s);
 
     private string? _selectedResolution;
     public string? SelectedResolution

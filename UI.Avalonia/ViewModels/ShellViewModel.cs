@@ -344,8 +344,8 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
         // the user edited the JSON file underneath us.
         FloatingMenu.ReloadThemesClick += (_, _) =>
         {
-            FloatingMenu.RefreshThemes();
-            FloatingMenu.RefreshRegions();
+            RefreshThemeListsFromService();
+            RefreshRegionListsFromService();
         };
 
         // Quality combo on the menu drives MainViewModel; MainViewModel's
@@ -2640,6 +2640,12 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
                 // dialog picks up the new entry on its next open via
                 // EnumerateAnimationNames(). Hook stays here for the future
                 // SlideshowSettings animation filter UI.
+                SceneEditor?.RefreshNameLists(); // #1057 — shot Animation combos
+                RefreshAssetManagerIfVisible();
+            };
+            vm.AnimationDeletedFromLibrary += (_, _) =>
+            {
+                SceneEditor?.RefreshNameLists();
                 RefreshAssetManagerIfVisible();
             };
             vm.CloseRequested += (_, _) => IsAnimationEditorVisible = false;
@@ -2679,6 +2685,12 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
                 new AssetJsonImportEventArgs(
                     FracturingFog.Abstractions.Assets.AssetKind.Scene, "Import Scenes"));
             SceneEditor = vm;
+        }
+        else
+        {
+            // #1057 — the editor outlives its window; libraries may have changed
+            // while it was closed, so re-pull the shot picker lists on reopen.
+            SceneEditor.RefreshNameLists();
         }
         if (!string.IsNullOrEmpty(initialSceneName)) SceneEditor.SelectedScene = initialSceneName;
         IsSceneEditorVisible = true;
@@ -2957,7 +2969,7 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
             // Refresh the region combo (honours the active sort + type filter)
             // and select the saved name so the toolbar reflects the edit /
             // rename / clone immediately.
-            FloatingMenu.RefreshRegions();
+            RefreshRegionListsFromService();
             FloatingMenu.SetRegionSilent(savedName);
             Main.SetRegionName(savedName);
             RefreshAssetManagerIfVisible();
@@ -3225,6 +3237,7 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
                 break;
             case FracturingFog.Abstractions.Assets.AssetKind.Animation:
                 AnimationEditor?.RefreshAnimationNames();
+                SceneEditor?.RefreshNameLists(); // #1057
                 break;
             case FracturingFog.Abstractions.Assets.AssetKind.Watermark:
                 WatermarkEditor?.RefreshWatermarkNames();
@@ -3384,6 +3397,7 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
     public void RefreshThemeListsFromService()
     {
         FloatingMenu.RefreshThemes();
+        SceneEditor?.RefreshNameLists(); // #1057
     }
 
     // ── Host-handled events (forwarded up from child VMs) ────────────────
@@ -3711,6 +3725,7 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
     public void RefreshRegionListsFromService()
     {
         FloatingMenu.RefreshRegions();
+        SceneEditor?.RefreshNameLists(); // #1057
     }
 
     // ── Nav history (Backspace = go back) ───────────────────────────────
