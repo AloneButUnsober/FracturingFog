@@ -154,6 +154,9 @@ public sealed class SceneEditorPickerRefreshTests
         public List<string> Animations { get; set; } = new();
         public List<string> Kinds { get; set; } = new();
         public (RegionSortMode, FractalType)? LastRegionQuery { get; set; }
+        public int SortedRegionCalls { get; set; }
+        /// <summary>Optional per-type region membership for ByFractalType queries.</summary>
+        public Dictionary<string, FractalType> RegionTypes { get; } = new();
         public (ThemeSortMode, string?, FractalType?)? LastThemeQuery { get; set; }
     }
 
@@ -178,8 +181,16 @@ public sealed class SceneEditorPickerRefreshTests
                 case nameof(IColorThemeService.EnumerateRegionNames) when args!.Length == 0:
                     return _state.Regions.ToArray();
                 case nameof(IColorThemeService.EnumerateRegionNames):
-                    _state.LastRegionQuery = ((RegionSortMode)args[0]!, (FractalType)args[1]!);
-                    return _state.Regions.ToArray();
+                    _state.SortedRegionCalls++;
+                    var mode = (RegionSortMode)args[0]!;
+                    var type = (FractalType)args[1]!;
+                    _state.LastRegionQuery = (mode, type);
+                    // Mirror the host: a "— select region —" placeholder first.
+                    var list = new List<string> { "— select region —" };
+                    list.AddRange(mode == RegionSortMode.ByFractalType
+                        ? _state.Regions.Where(r => _state.RegionTypes.TryGetValue(r, out var t) && t == type)
+                        : _state.Regions);
+                    return list.ToArray();
                 case nameof(IColorThemeService.EnumerateThemeNames) when args!.Length == 0:
                     return _state.Themes.ToArray();
                 case nameof(IColorThemeService.EnumerateThemeNames):

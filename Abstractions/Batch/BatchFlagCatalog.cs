@@ -520,8 +520,9 @@ namespace FracturingFog.Batch
 
                 // ── Slideshow ──
                 Pick(BatchFlags.Encode, Slideshow, BatchModes.Slideshow | BatchModes.Scene,
-                    "ffmpeg encode preset. h264hq = CRF 18 MP4; h264 = lossless MP4; ffv1 = lossless MKV.",
-                    new[] { "h264hq", "h264", "ffv1" }, "h264hq", "TYPE"),
+                    "Encode preset. h264hq = CRF 18 MP4; h264 = lossless MP4; ffv1 = lossless MKV (all ffmpeg); " +
+                    "gif = looping animated GIF (built-in, no ffmpeg, no audio).",
+                    new[] { "h264hq", "h264", "ffv1", "gif" }, "h264hq", "TYPE"),
                 Sw(BatchFlags.MoreColors, Slideshow, BatchModes.Slideshow,
                     "Colour Focus cadence: 8 themes per region with a shorter dwell (image-type presets).")
                     with { Aliases = new[] { "--more-colours" } },
