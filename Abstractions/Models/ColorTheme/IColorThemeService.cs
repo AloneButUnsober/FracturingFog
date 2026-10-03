@@ -293,6 +293,12 @@ namespace FracturingFog.Models
         /// a shot looks the same as its export. Null = unresolvable (no host).</summary>
         SceneThemePlan? ResolveSceneShotThemes(SceneShot shot) => null;
 
+        /// <summary>#1058 / #1049 — what a scene shot needs to know about a region:
+        /// its fractal type (which the export renders, whatever the shot says) and
+        /// whether it is a Relief 3D raymarch (so its oblique camera can take
+        /// camera keys). Null when the region doesn't exist (or no host).</summary>
+        (FractalType Type, bool Relief3D)? GetRegionSceneInfo(string regionName) => null;
+
         /// <summary>Fetch a saved scene by name (case-insensitive). Null when the
         /// library has no entry by that name.</summary>
         SceneData? GetScene(string sceneName) => null;

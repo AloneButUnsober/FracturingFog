@@ -2685,6 +2685,19 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
             vm.SceneDeletedFromLibrary += (_, _) => RefreshAssetManagerIfVisible();
             vm.PreviewShotRequested  += (_, shot) => PreviewSceneShot(shot);
             vm.EditAssetRequested    += (_, e) => EditSceneShotAsset(e);
+            // #1049 — "Capture" camera key: read the live camera when the live view
+            // shows the shot's kind of camera (Relief 3D oblique, or that 3D type).
+            vm.CaptureLiveCamera = (type, relief) =>
+            {
+                var p = Main.ViewState.FractalParameters;
+                bool liveRelief = FracturingFog.Render.CameraParamBinding.IsReliefCamera(p);
+                if (relief)
+                    return liveRelief ? FracturingFog.Render.CameraParamBinding.ReadRelief(p) : null;
+                return !liveRelief
+                       && Main.ViewState.FractalType == type
+                       && FracturingFog.Render.CameraParamBinding.Supports(type)
+                    ? FracturingFog.Render.CameraParamBinding.Read(p, type) : null;
+            };
             vm.PlaySceneRequested    += (_, scene) => PlayScene(scene);
             vm.ExportSceneRequested  += (_, args) => ExportSceneRequested?.Invoke(this, args);
             vm.BrowseAudioFileRequested += async e =>
@@ -3016,7 +3029,8 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
 
         AnimationBusHost.LoadSceneShot(shot, anim, Main.ViewState.FractalParameters,
             scene.GlobalTracks, shotStart,
-            scene.AudioTracks, GetAudioModulationSource?.Invoke());
+            scene.AudioTracks, GetAudioModulationSource?.Invoke(),
+            Main.ViewState.FractalType);
     }
 
     /// <summary>Animation Roadmap Sub-goal B — open the Region Editor for the

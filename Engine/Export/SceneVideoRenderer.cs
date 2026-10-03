@@ -450,12 +450,13 @@ namespace FracturingFog.Export
             // Keyframed orbit camera at this local time (looped over its own
             // duration, mirroring the S6 CameraTrackAnimator Loop=true).
             if (shot.Camera != null && shot.Camera.Keys.Count > 0
-                && CameraParamBinding.Supports(shot.RenderType))
+                && CameraParamBinding.Supports(shot.RenderType, p))
             {
                 double camDur = shot.Camera.Duration;
                 double t = localTime;
                 if (camDur > 0) t -= global::System.Math.Floor(t / camDur) * camDur;
-                CameraParamBinding.Apply(p, shot.RenderType, shot.Camera.Evaluate(t));
+                // #1049 — relief-aware: a Relief 3D shot drives its oblique camera.
+                CameraParamBinding.ApplyFor(p, shot.RenderType, shot.Camera.Evaluate(t));
             }
 
             // Scene-wide post/look tracks (S8) at this sub-frame's global time —

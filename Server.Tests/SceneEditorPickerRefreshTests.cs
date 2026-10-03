@@ -158,6 +158,8 @@ public sealed class SceneEditorPickerRefreshTests
         public int SortedRegionCalls { get; set; }
         /// <summary>Optional per-type region membership for ByFractalType queries.</summary>
         public Dictionary<string, FractalType> RegionTypes { get; } = new();
+        /// <summary>#1058 / #1049 — GetRegionSceneInfo answers.</summary>
+        public Dictionary<string, (FractalType Type, bool Relief3D)> RegionInfo { get; } = new();
         public (ThemeSortMode, string?, FractalType?)? LastThemeQuery { get; set; }
     }
 
@@ -198,6 +200,9 @@ public sealed class SceneEditorPickerRefreshTests
                     _state.LastThemeQuery = ((ThemeSortMode)args[0]!, (string?)args[1],
                         args.Length > 3 ? (FractalType?)args[3] : null);
                     return _state.Themes.ToArray();
+                case nameof(IColorThemeService.GetRegionSceneInfo):
+                    return _state.RegionInfo.TryGetValue((string)args![0]!, out var info)
+                        ? info : ((FractalType, bool)?)null;
                 case nameof(IColorThemeService.EnumerateAnimationNames):
                     return _state.Animations.ToArray();
                 case nameof(IColorThemeService.EnumerateThemeKinds):
