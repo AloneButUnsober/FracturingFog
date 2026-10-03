@@ -204,8 +204,23 @@ internal static class GpuKernelUtils
     /// kernel for sphere-clip and march-out miss pixels.</summary>
     public static uint MissColor(double rdy, in GpuRaymarchParams r, in GpuShadingParams sp)
     {
-        if (sp.ShowSkyBackdrop == 0) return r.InSetColor;
-        return SkyColorGradient(rdy, in sp);
+        uint bg = sp.ShowSkyBackdrop == 0 ? r.InSetColor : SkyColorGradient(rdy, in sp);
+        if (sp.BackgroundFogF <= 0) return bg;
+        // #1061 — background fog: blend toward the sky gradient tinted by the fog
+        // colour (FogR/G/B, byte scale; 255 = untinted). Mirrors the CPU
+        // ShadingPipeline.ApplyBackgroundFog.
+        uint sky = SkyColorGradient(rdy, in sp);
+        double f = sp.BackgroundFogF;
+        double fr = ((sky >> 16) & 0xFF) * (sp.FogR / 255.0);
+        double fg = ((sky >> 8) & 0xFF) * (sp.FogG / 255.0);
+        double fb = (sky & 0xFF) * (sp.FogB / 255.0);
+        double R = ((bg >> 16) & 0xFF) * (1 - f) + fr * f + 0.5;
+        double G = ((bg >> 8) & 0xFF) * (1 - f) + fg * f + 0.5;
+        double B = (bg & 0xFF) * (1 - f) + fb * f + 0.5;
+        if (R < 0) R = 0; else if (R > 255) R = 255;
+        if (G < 0) G = 0; else if (G > 255) G = 255;
+        if (B < 0) B = 0; else if (B > 255) B = 255;
+        return 0xFF000000u | ((uint)R << 16) | ((uint)G << 8) | (uint)B;
     }
 
     /// <summary>Vertical gradient sky lookup on the GPU. Mirrors the CPU

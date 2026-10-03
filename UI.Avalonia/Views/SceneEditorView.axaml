@@ -287,6 +287,9 @@
                                                                   SelectedItem="{Binding Interpolation}"
                                                                   MinWidth="120" HorizontalAlignment="Left" Margin="8,0,0,0" />
                                                         <StackPanel Grid.Column="3" Orientation="Horizontal" Spacing="6">
+                                                            <Button Classes="action" Content="Draw…"
+                                                                    Command="{Binding DrawCameraPathCommand}"
+                                                                    ToolTip.Tip="Draw the camera orbit with the mouse, top-down — replaces this shot's camera keys" />
                                                             <Button Classes="action" Content="Capture"
                                                                     Command="{Binding CaptureCameraKeyCommand}"
                                                                     ToolTip.Tip="Add a key from the live view's current camera (Preview the shot and frame it first)" />

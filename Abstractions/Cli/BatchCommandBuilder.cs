@@ -199,6 +199,9 @@ namespace FracturingFog.Cli
         public int VolumeSteps { get; init; }
         public double VolumeAnisotropy { get; init; }
         public uint FogColor { get; init; } = 0xFFFFFFFFu;
+        /// <summary>#1061 — background fog + its depth.</summary>
+        public bool FogBackground { get; init; }
+        public double FogBackgroundDistance { get; init; } = FracturingFog.Rendering.Lighting.LightingFxData.DefaultFogBackgroundDistance;
         public double VolumePaletteStrength { get; init; }
 
         // Guided À-Trous denoise (S4, #389). Emitted only on the raymarch path,
@@ -497,6 +500,13 @@ namespace FracturingFog.Cli
             if (snap.VolumeSteps != 0)             { parts.Add(BatchFlags.VolumeSteps);           parts.Add(snap.VolumeSteps.ToString(CultureInfo.InvariantCulture)); }
             if (snap.VolumeAnisotropy != 0.0)      { parts.Add(BatchFlags.VolumeAnisotropy);      parts.Add(Num(snap.VolumeAnisotropy)); }
             if (snap.FogColor != 0xFFFFFFFFu)      { parts.Add(BatchFlags.FogColor);              parts.Add(HexColor(snap.FogColor)); }
+            if (snap.FogBackground)
+            {
+                if (snap.FogBackgroundDistance > 0
+                    && snap.FogBackgroundDistance != FracturingFog.Rendering.Lighting.LightingFxData.DefaultFogBackgroundDistance)
+                { parts.Add(BatchFlags.FogBackgroundDistance); parts.Add(Num(snap.FogBackgroundDistance)); }
+                else parts.Add(BatchFlags.FogBackground);
+            }
             if (snap.VolumePaletteStrength != 0.0) { parts.Add(BatchFlags.VolumePaletteStrength); parts.Add(Num(snap.VolumePaletteStrength)); }
 
             // Per-light flags (roadmap S8, #404/#490). Positional lights emit their

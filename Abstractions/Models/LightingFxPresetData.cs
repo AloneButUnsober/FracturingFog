@@ -121,6 +121,9 @@ public sealed class LightingFxPresetData
     public string? EnvironmentName { get; set; }
     public double  IblStrength     { get; set; } = 0.0;
     public bool    ShowSkyBackdrop { get; set; } = false;
+    /// <summary>#1061 — fog the background (ray-miss) pixels.</summary>
+    public bool    FogBackground { get; set; } = false;
+    public double  FogBackgroundDistance { get; set; } = LightingFxData.DefaultFogBackgroundDistance;
 
     // ── Post ──────────────────────────────────────────────────────────
 
@@ -257,6 +260,8 @@ public sealed class LightingFxPresetData
         SkyMode = fx.SkyMode, BgTopColor = fx.BgTopColor, BgBottomColor = fx.BgBottomColor,
         EnvironmentName = fx.EnvironmentName, IblStrength = fx.IblStrength,
         ShowSkyBackdrop = fx.ShowSkyBackdrop,
+        FogBackground = fx.FogBackground,
+        FogBackgroundDistance = fx.FogBackgroundDistance,
 
         ToneMap = fx.ToneMap, Exposure = fx.Exposure,
         BloomThreshold = fx.BloomThreshold, BloomStrength = fx.BloomStrength,
@@ -339,6 +344,8 @@ public sealed class LightingFxPresetData
         SkyMode = SkyMode, BgTopColor = BgTopColor, BgBottomColor = BgBottomColor,
         EnvironmentName = EnvironmentName, IblStrength = IblStrength,
         ShowSkyBackdrop = ShowSkyBackdrop,
+        FogBackground = FogBackground,
+        FogBackgroundDistance = FogBackgroundDistance,
 
         ToneMap = ToneMap, Exposure = Exposure,
         BloomThreshold = BloomThreshold, BloomStrength = BloomStrength,

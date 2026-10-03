@@ -730,6 +730,11 @@ namespace FracturingFog.Batch
                 Int(BatchFlags.VolumeSteps, Vol, FR, "In-scatter step count (0 = exponential fog only; 16-48 typical).", 0, 256, enforced: true, def: "0"),
                 Dbl(BatchFlags.VolumeAnisotropy, Vol, FR, "Henyey-Greenstein phase g (0 isotropic; > 0 forward god-rays).", -1, 1, enforced: true, def: "0"),
                 Col(BatchFlags.FogColor, Vol, FR, "Fog medium tint.", "#FFFFFF"),
+                Sw(BatchFlags.FogBackground, Vol, FR,
+                    "Fog the background too (3D): empty space around the object gets the surface's fog instead of black. Needs --fog-density."),
+                Dbl(BatchFlags.FogBackgroundDistance, Vol, FR,
+                    "Depth the background is fogged over, world units (default 12). Turns --fog-background on.", 0.5, 100, enforced: true, def: "12")
+                    with { Implies = new[] { BatchFlags.FogBackground } },
                 Dbl(BatchFlags.VolumePaletteStrength, Vol, FR, "Cross-fade the fog toward the 3D theme gradient.", 0, 1, enforced: true, def: "0"),
                 Int(BatchFlags.FogLightMask, Vol, FR, "Which lights colour the fog (bit n = light n+1). Surfaces stay lit either way.",
                     0, 7, enforced: true, def: "7"),

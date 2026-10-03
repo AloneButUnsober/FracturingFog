@@ -244,6 +244,10 @@ public struct GpuShadingParams
     /// can't take System.Boolean fields on every backend). 1 by default
     /// to match the post-Phase 16b CPU behaviour.</summary>
     public int ShowSkyBackdrop;
+    /// <summary>#1061 — background fog fraction for ray-miss pixels (0 = off),
+    /// precomputed CPU-side from LightingFxData.FogBackground /
+    /// FogBackgroundDistance / FogDensity so kernels skip the exp.</summary>
+    public double BackgroundFogF;
     /// <summary>Procedural caustics strength on upward-facing surfaces. 0 =
     /// off (legacy). Mirrors LightingFxData.CausticsStrength.</summary>
     public double CausticsStrength;
@@ -383,6 +387,7 @@ public struct GpuShadingParams
 
             IblStrength        = fx.IblStrength,
             ShowSkyBackdrop    = fx.ShowSkyBackdrop ? 1 : 0,
+            BackgroundFogF     = FracturingFog.Rendering.Lighting.ShadingPipeline.BackgroundFogFraction(in fx),
 
             CausticsStrength   = fx.CausticsStrength,
             CausticsFloorY     = fx.CausticsFloorY,

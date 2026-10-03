@@ -1279,6 +1279,46 @@ public static class ShadingPipeline
         return false;
     }
 
+    /// <summary>#1061 — colour of a ray-miss pixel: the sky backdrop (HDRI or
+    /// gradient) when <see cref="LightingFxData.ShowSkyBackdrop"/>, else
+    /// <paramref name="inSetColor"/>; then the background fog when on. The one
+    /// place every CPU 3D raymarcher colours its misses.</summary>
+    public static uint MissColor(double rdx, double rdy, double rdz, in LightingFxData fx, uint inSetColor)
+    {
+        uint bg = fx.ShowSkyBackdrop ? SkyColorHdri(rdx, rdy, rdz, in fx) : inSetColor;
+        return ApplyBackgroundFog(bg, rdy, in fx);
+    }
+
+    /// <summary>#1061 — background fog fraction (0 = off): classic Beer–Lambert
+    /// over <see cref="LightingFxData.FogBackgroundDistance"/>.</summary>
+    public static double BackgroundFogFraction(in LightingFxData fx)
+    {
+        if (!fx.FogBackground || !(fx.FogDensity > 0)) return 0.0;
+        double d = fx.FogBackgroundDistance > 0 ? fx.FogBackgroundDistance : LightingFxData.DefaultFogBackgroundDistance;
+        return 1.0 - Math.Exp(-d * fx.FogDensity);
+    }
+
+    /// <summary>#1061 — fog a background colour toward the sky gradient along the
+    /// ray, tinted by <see cref="LightingFxData.FogColor"/> (white = untinted, the
+    /// same colour the surface's classic fog uses). No-op when off.</summary>
+    public static uint ApplyBackgroundFog(uint bg, double rdy, in LightingFxData fx)
+    {
+        double f = BackgroundFogFraction(in fx);
+        if (f <= 0) return bg;
+        uint sky = SkyColor(rdy, fx.BgBottomColor, fx.BgTopColor);
+        uint tint = fx.FogColor; // same tint semantics as the volumetric path + GPU
+        double fr = ((sky >> 16) & 0xFF) * (((tint >> 16) & 0xFF) / 255.0);
+        double fg = ((sky >> 8) & 0xFF) * (((tint >> 8) & 0xFF) / 255.0);
+        double fb = (sky & 0xFF) * ((tint & 0xFF) / 255.0);
+        double r = ((bg >> 16) & 0xFF) * (1 - f) + fr * f;
+        double g = ((bg >> 8) & 0xFF) * (1 - f) + fg * f;
+        double b = (bg & 0xFF) * (1 - f) + fb * f;
+        return 0xFF000000u
+            | ((uint)Math.Clamp((int)(r + 0.5), 0, 255) << 16)
+            | ((uint)Math.Clamp((int)(g + 0.5), 0, 255) << 8)
+            | (uint)Math.Clamp((int)(b + 0.5), 0, 255);
+    }
+
     /// <summary>Phase 6b — HDRI-aware sky lookup along a view ray. Mirrors
     /// <see cref="SampleEnvAmbientHdri"/> but returns a packed BGRA so
     /// existing sky-fill code paths can drop it in. Falls back to the

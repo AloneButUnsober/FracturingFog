@@ -226,9 +226,7 @@ public sealed class DualOrbitVolumeCalculator : IFractalCalculator, IStereoEyeCa
                 }
                 if (!sHit)
                 {
-                    uint sky = fx.ShowSkyBackdrop
-                        ? ShadingPipeline.SkyColorHdri(dx, dy, dz, in fx)
-                        : ColorMap.InSetColor;
+                    uint sky = ShadingPipeline.MissColor(dx, dy, dz, in fx, ColorMap.InSetColor);
                     hr = ((sky >> 16) & 0xFF) / 255f; hg = ((sky >> 8) & 0xFF) / 255f; hb = (sky & 0xFF) / 255f;
                     return sky;
                 }
@@ -280,9 +278,7 @@ public sealed class DualOrbitVolumeCalculator : IFractalCalculator, IStereoEyeCa
                 int idx = rowBase + x;
                 if (!hit)
                 {
-                    renderBuffer[idx] = fx.ShowSkyBackdrop
-                        ? ShadingPipeline.SkyColorHdri(rdx, rdy, rdz, in fx)
-                        : ColorMap.InSetColor;
+                    renderBuffer[idx] = ShadingPipeline.MissColor(rdx, rdy, rdz, in fx, ColorMap.InSetColor);
                     continue;
                 }
 

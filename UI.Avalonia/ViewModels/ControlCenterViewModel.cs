@@ -418,6 +418,8 @@ public sealed partial class ControlCenterViewModel : ViewModelBase
             VolumeSteps          = fp?.Lighting.VolumeSteps ?? 0,
             VolumeAnisotropy     = fp?.Lighting.VolumeAnisotropy ?? 0.0,
             FogColor             = fp?.Lighting.FogColor ?? 0xFFFFFFFFu,
+            FogBackground        = fp?.Lighting.FogBackground ?? false,
+            FogBackgroundDistance = fp?.Lighting.FogBackgroundDistance ?? FracturingFog.Rendering.Lighting.LightingFxData.DefaultFogBackgroundDistance,
             VolumePaletteStrength = fp?.Lighting.VolumePaletteStrength ?? 0.0,
             Transmission         = fp?.Lighting.Transmission ?? 0.0,        // S5 (#406)
             Ior                  = fp?.Lighting.Ior ?? 1.5,
