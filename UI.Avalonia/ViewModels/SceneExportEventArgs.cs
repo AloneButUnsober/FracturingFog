@@ -41,6 +41,8 @@ public sealed class SceneExportSettings
     public int MotionBlurSubframes { get; init; } = 1;
     public double ShutterFraction { get; init; } = 0.5;
     public SceneExportEncode Encode { get; init; } = SceneExportEncode.HighQualityH264;
+    /// <summary>#1065 — burn the scene debug overlay into every frame.</summary>
+    public bool BurnDebugOverlay { get; init; }
 }
 
 /// <summary>Raised by the Scene Editor to ask the host to render + encode a

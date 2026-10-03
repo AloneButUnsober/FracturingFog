@@ -132,7 +132,7 @@
                 <Border Classes="group">
                     <StackPanel Spacing="6">
                         <TextBlock Classes="section" Text="Export (offline render)" />
-                        <Grid ColumnDefinitions="Auto,140,Auto,140,Auto,110" RowDefinitions="Auto,Auto" Margin="0,4,0,0"
+                        <Grid ColumnDefinitions="Auto,140,Auto,140,Auto,110" RowDefinitions="Auto,Auto,Auto" Margin="0,4,0,0"
                               ColumnSpacing="6" RowSpacing="4">
                             <TextBlock Classes="label" Grid.Row="0" Grid.Column="0" Text="Width:" />
                             <NumericUpDown Grid.Row="0" Grid.Column="1" Value="{Binding ExportWidth}"
@@ -152,6 +152,10 @@
                                       HorizontalAlignment="Stretch"
                                       ItemsSource="{Binding EncodeOptions}"
                                       SelectedItem="{Binding SelectedEncode}" />
+                            <CheckBox Grid.Row="2" Grid.Column="0" Grid.ColumnSpan="6"
+                                      Content="Burn debug overlay (scene clock, shot, camera key + pose)"
+                                      IsChecked="{Binding ExportDebugOverlay}"
+                                      ToolTip.Tip="Stamps the scene debug text into every exported frame, for checking timing and camera paths. Batch: --scene-debug-overlay." />
                         </Grid>
                         <TextBlock Foreground="#8A8A8A" FontSize="11" TextWrapping="Wrap"
                                    Text="Renders every frame offline (motion blur = sub-frames averaged per frame; composited cross-fade / light-sweep / param-morph transitions). MP4 / MKV need ffmpeg to encode — without it, the PNG sequence is kept. GIF uses a built-in encoder (no ffmpeg, no audio; keep fps at 50 or less)." />

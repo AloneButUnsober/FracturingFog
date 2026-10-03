@@ -1008,6 +1008,7 @@ namespace FracturingFog.Hosting
                         Encode = preset,
                         EncodeGif = gif,
                         OutputPath = path,
+                        DebugOverlay = s.BurnDebugOverlay,   // #1065
                         Settings = new FracturingFog.Abstractions.Animation.SceneRenderSettings
                         {
                             Fps = s.Fps,
