@@ -611,6 +611,15 @@ namespace FracturingFog.Export
                 }
             }
 
+            // #1059 — per-shot Lighting & FX preset, over the (legacy) borrow above.
+            // Shared rule with live playback; a missing preset is a no-op.
+            if (SceneShotLighting.HasPreset(shot)
+                && SceneShotLighting.TryApplyPreset(shot, p.Lighting,
+                    shot.LightingPresetIsBuiltIn ? null : LightingFxPresetLibrary.Load(), out var presetFx))
+            {
+                p.Lighting = presetFx;
+            }
+
             var anim = ResolveAnimation(shot, region);
 
             return new ResolvedShot

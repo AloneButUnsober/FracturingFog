@@ -2539,17 +2539,53 @@ namespace FracturingFog.Hosting
                     // Menu toggles the single WindowService-owned window. The VM
                     // is built lazily (only when opening) over the shared
                     // ViewState so every Lighting/FX edit fires a re-render.
-                    WindowService.ToggleLightingFx(() =>
-                    {
-                        var vs = s_renderHost.ViewState;
-                        var vm = new FractalParamsViewModel(vs.FractalType, vs.FractalParameters,
-                            audioModulation: s_shell?.AudioModulation);
-                        vm.ParamChanged += () => s_renderHost?.Trigger();
-                        WireDropColorEyedropper(vm);
-                        return vm;
-                    }, "Volumetric Lighting & FX");
+                    WindowService.ToggleLightingFx(NewLightingFxViewModel, "Volumetric Lighting & FX");
                 });
             };
+
+            // #1060 — Scene Editor shot Lighting "Edit…": open-or-retarget the
+            // dialog (never toggles it closed) with the shot's preset loaded on
+            // the live view. User preset → recalled + selected in "My FX preset"
+            // (Save there updates it); built-in → picked in the curated list,
+            // which overlays its fog look (built-ins are read-only, so saving
+            // makes a user preset). No name → just open the dialog.
+            shell.SceneLightingEditRequested += (_, e) =>
+            {
+                Dispatcher.UIThread.Post(() =>
+                {
+                    if (s_renderHost == null) return;
+                    var vm = NewLightingFxViewModel();
+                    if (!string.IsNullOrWhiteSpace(e.Name))
+                    {
+                        if (e.BuiltIn)
+                            vm.SelectedVolumetricPreset = e.Name!;
+                        else
+                        {
+                            vm.RefreshUserFxPresets();
+                            if (vm.UserFxPresets.Contains(e.Name!))
+                            {
+                                vm.SelectedUserFxPreset = e.Name;
+                                vm.RecallUserFxPreset();
+                            }
+                        }
+                    }
+                    WindowService.ShowLightingFx(vm, "Volumetric Lighting & FX");
+                });
+            };
+
+            // The Lighting & FX dialog VM over the shared ViewState (built lazily
+            // when the dialog opens) — every edit re-renders; a preset save /
+            // delete / import refreshes the Scene Editor's shot Lighting lists.
+            FractalParamsViewModel NewLightingFxViewModel()
+            {
+                var vs = s_renderHost!.ViewState;
+                var vm = new FractalParamsViewModel(vs.FractalType, vs.FractalParameters,
+                    audioModulation: s_shell?.AudioModulation);
+                vm.ParamChanged += () => s_renderHost?.Trigger();
+                vm.UserFxPresetsChanged += () => s_shell?.SceneEditor?.RefreshNameLists();
+                WireDropColorEyedropper(vm);
+                return vm;
+            }
 
             // ── Standalone Relief 3D (#147) ──────────────────────────────────
             //

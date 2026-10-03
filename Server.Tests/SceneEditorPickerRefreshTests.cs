@@ -45,7 +45,8 @@ public sealed class SceneEditorPickerRefreshTests
         var vm = new SceneEditorViewModel(svc);
         var row = vm.Shots.Single();
         row.SelectedRegion = "Seahorse";
-        row.SelectedLightingRegion = "Seahorse";
+        // A legacy lighting-region borrow (#1059 keeps it selectable until changed).
+        row.SelectedLighting = SceneShotRowViewModel.LightingLegacyRegionPrefix + "Seahorse";
         row.SelectedTheme = "Fire";
 
         state.Regions = new() { "Elephant" };
@@ -53,7 +54,7 @@ public sealed class SceneEditorPickerRefreshTests
         vm.RefreshNameLists();
 
         Assert.Equal(SceneShotRowViewModel.RegionNone, row.SelectedRegion);
-        Assert.Equal(SceneShotRowViewModel.LightingRegionNone, row.SelectedLightingRegion);
+        Assert.Equal(SceneShotRowViewModel.LightingNone, row.SelectedLighting);
         Assert.Equal(SceneShotRowViewModel.ThemeNone, row.SelectedTheme);
         var shot = row.ToShot();
         Assert.Equal(string.Empty, shot.RegionName);

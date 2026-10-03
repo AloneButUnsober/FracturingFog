@@ -89,6 +89,17 @@ public sealed class SceneShot
     /// theme preset &gt; default.</summary>
     public string? LightingRegionName { get; set; }
 
+    /// <summary>#1059 — per-shot Lighting &amp; FX from a Volumetric Lighting &amp; FX
+    /// preset (the Scene Editor's Lighting combo; supersedes
+    /// <see cref="LightingRegionName"/>, which old scenes may still carry). A user
+    /// preset replaces the shot's lighting; a built-in one overlays its fog /
+    /// volume look. Null / empty = none. See <see cref="SceneShotLighting"/>.</summary>
+    public string? LightingPresetName { get; set; }
+
+    /// <summary>#1059 — true when <see cref="LightingPresetName"/> names a built-in
+    /// curated preset rather than a user preset (the two can share a name).</summary>
+    public bool LightingPresetIsBuiltIn { get; set; }
+
     /// <summary>The fractal type this shot renders. Normally mirrors the named
     /// region's type; kept explicit so a <see cref="Camera"/> track can be
     /// validated against <see cref="Render.CameraParamBinding"/> without first

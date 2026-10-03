@@ -2721,6 +2721,12 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
             ShowAnimationEditor(e.Name);
             return;
         }
+        if (e.Kind == FracturingFog.Abstractions.Assets.AssetKind.LightingFx)
+        {
+            // #1060 — the host owns the Lighting & FX dialog.
+            SceneLightingEditRequested?.Invoke(this, e);
+            return;
+        }
         if (!string.IsNullOrEmpty(e.Name)) EditAsset(e.Kind, e.Name!);
     }
 
@@ -2764,8 +2770,27 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
     /// defaults. No-op when unset, locked, or the named region is missing.</summary>
     private void ApplyShotLightingOverride(FracturingFog.Abstractions.Animation.SceneShot shot)
     {
-        if (shot == null || string.IsNullOrEmpty(shot.LightingRegionName)) return;
-        if (Main.LightingLocked) return;
+        if (shot == null || Main.LightingLocked) return;
+        ApplyShotLightingRegion(shot);
+        ApplyShotLightingPreset(shot);
+    }
+
+    /// <summary>#1059 — the shot's Lighting &amp; FX preset, after the legacy
+    /// region borrow (same rule + order as the export, via SceneShotLighting).</summary>
+    private void ApplyShotLightingPreset(FracturingFog.Abstractions.Animation.SceneShot shot)
+    {
+        if (!FracturingFog.Abstractions.Animation.SceneShotLighting.HasPreset(shot)) return;
+        var user = shot.LightingPresetIsBuiltIn ? null : FracturingFog.Models.LightingFxPresetLibrary.Load();
+        if (!FracturingFog.Abstractions.Animation.SceneShotLighting.TryApplyPreset(
+                shot, Main.ViewState.FractalParameters.Lighting, user, out var fx)) return;
+        Main.ViewState.FractalParameters.Lighting = fx;
+        if (!string.IsNullOrWhiteSpace(fx.EnvironmentName))
+            FracturingFog.Rendering.Lighting.HdriProbe.Preload?.Invoke(fx.EnvironmentName);
+    }
+
+    private void ApplyShotLightingRegion(FracturingFog.Abstractions.Animation.SceneShot shot)
+    {
+        if (string.IsNullOrEmpty(shot.LightingRegionName)) return;
 
         if (_themeService.TryGetRegionLightingOverride(shot.LightingRegionName!, out var lightOverride))
         {
@@ -3674,6 +3699,12 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
     /// over the shared ViewState — the Lighting/FX block is type-independent, so
     /// this stays open across fractal-type changes (unlike Fractal Params).</summary>
     public event EventHandler? LightingFxRequested;
+
+    /// <summary>#1060 — a Scene Editor shot's Lighting "Edit…": open (or retarget)
+    /// the Volumetric Lighting &amp; FX dialog with the shot's preset loaded onto
+    /// the live view — a user preset recalled and selected in "My FX preset", a
+    /// built-in one picked in the curated list. Null name = just open it.</summary>
+    public event EventHandler<SceneEditAssetEventArgs>? SceneLightingEditRequested;
 
     /// <summary>User asked for the standalone Relief 3D panel (#147). Host pops
     /// <c>Relief3DDialog</c> bound to a <c>FractalParamsViewModel</c> over the

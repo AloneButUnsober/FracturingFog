@@ -27,9 +27,17 @@ public sealed class ScenePickerSource
     private IReadOnlyList<string>? _themesDefault;
     private HashSet<string>? _themeSet;
     private IReadOnlyList<string>? _animations;
+    private IReadOnlyList<string>? _userLightingPresets;
+    private readonly Func<IEnumerable<string>> _loadUserLightingPresets;
 
-    public ScenePickerSource(IColorThemeService service)
-        => _service = service ?? throw new ArgumentNullException(nameof(service));
+    /// <param name="userLightingPresets">#1059 — user Lighting &amp; FX preset names;
+    /// defaults to the on-disk library (lighting-fx-presets.json).</param>
+    public ScenePickerSource(IColorThemeService service, Func<IEnumerable<string>>? userLightingPresets = null)
+    {
+        _service = service ?? throw new ArgumentNullException(nameof(service));
+        _loadUserLightingPresets = userLightingPresets
+            ?? (() => LightingFxPresetLibrary.Load().Presets.Select(p => p.Name));
+    }
 
     public IColorThemeService Service => _service;
 
@@ -39,7 +47,15 @@ public sealed class ScenePickerSource
         _regionsDefault = null; _regionSet = null;
         _themesDefault = null; _themeSet = null;
         _animations = null;
+        _userLightingPresets = null;
     }
+
+    /// <summary>#1059 — the user's Lighting &amp; FX preset names, A–Z.</summary>
+    public IReadOnlyList<string> UserLightingPresets
+        => _userLightingPresets ??= _loadUserLightingPresets()
+            .Where(n => !string.IsNullOrWhiteSpace(n))
+            .Distinct(StringComparer.Ordinal)
+            .OrderBy(n => n, StringComparer.OrdinalIgnoreCase).ToList();
 
     /// <summary>Region names under <paramref name="sort"/>, headers stripped.</summary>
     public IReadOnlyList<string> Regions(RegionComboSort sort)

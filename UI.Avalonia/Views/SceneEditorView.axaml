@@ -246,12 +246,18 @@
                                                           ToolTip.Tip="Pin this shot's HDR tone-map operator, or inherit the region lighting's" />
 
                                                 <TextBlock Classes="label" Grid.Row="3" Grid.Column="2" Text="Lighting:" Margin="0,4,8,0" />
-                                                <ComboBox Grid.Row="3" Grid.Column="3"
-                                                          ItemsSource="{Binding LightingRegionNames}"
-                                                          controls:ComboSortMenu.MenuSource="{Binding LightingRegionMenu}"
-                                                          SelectedItem="{Binding SelectedLightingRegion}"
-                                                          HorizontalAlignment="Stretch" Margin="0,4,0,0"
-                                                          ToolTip.Tip="Borrow another region's lighting (fog / volume / lights) for this shot without changing its own region or params" />
+                                                <Grid Grid.Row="3" Grid.Column="3" ColumnDefinitions="*,Auto" Margin="0,4,0,0">
+                                                    <ComboBox Grid.Column="0"
+                                                              ItemsSource="{Binding LightingOptions}"
+                                                              controls:ComboSortMenu.MenuSource="{Binding LightingMenu}"
+                                                              SelectedItem="{Binding SelectedLighting}"
+                                                              HorizontalAlignment="Stretch"
+                                                              ToolTip.Tip="Light this shot with a Volumetric Lighting &amp; FX preset: a built-in look (fog / volume over the region's lighting) or one of your saved presets (replaces it)" />
+                                                    <Button Grid.Column="1" Classes="action" Content="Edit…"
+                                                            Margin="6,0,0,0"
+                                                            Command="{Binding EditLightingCommand}"
+                                                            ToolTip.Tip="Open Volumetric Lighting &amp; FX with this preset loaded" />
+                                                </Grid>
 
                                                 <!-- #1052 — rotate the region's curated themes during the shot -->
                                                 <StackPanel Grid.Row="4" Grid.Column="0" Grid.ColumnSpan="4" Orientation="Horizontal"
