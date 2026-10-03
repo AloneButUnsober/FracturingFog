@@ -36,14 +36,16 @@ namespace FracturingFog.Abstractions.Animation
         /// <param name="track">The path to play.</param>
         /// <param name="parameters">The live params whose camera fields are driven.</param>
         /// <param name="type">Which 3D fractal's camera to write — must be a
-        /// <see cref="CameraParamBinding.Supports"/> type.</param>
+        /// <see cref="CameraParamBinding.Supports(FractalType)"/> type, unless the
+        /// params render a Relief 3D raymarch (#1049), whose oblique camera is
+        /// driven instead.</param>
         public CameraTrackAnimator(CameraTrack track, FractalParameters parameters, FractalType type)
         {
             _track = track ?? throw new ArgumentNullException(nameof(track));
             _parameters = parameters ?? throw new ArgumentNullException(nameof(parameters));
-            if (!CameraParamBinding.Supports(type))
+            if (!CameraParamBinding.Supports(type, parameters))
                 throw new ArgumentOutOfRangeException(nameof(type), type,
-                    "FractalType has no orbit camera to animate.");
+                    "FractalType has no orbit camera to animate (and the params are not a Relief 3D raymarch).");
             _type = type;
         }
 
@@ -55,7 +57,7 @@ namespace FracturingFog.Abstractions.Animation
         /// <summary>Current scene-clock position in seconds.</summary>
         public double Time => _time;
 
-        public string Name => $"Camera ({_type})";
+        public string Name => CameraParamBinding.IsReliefCamera(_parameters) ? "Camera (Relief 3D)" : $"Camera ({_type})";
 
         public bool IsEnabled { get; set; } = true;
 
@@ -74,7 +76,7 @@ namespace FracturingFog.Abstractions.Animation
                 else if (_time > dur) _time = dur;                // clamp + hold
             }
 
-            CameraParamBinding.Apply(_parameters, _type, _track.Evaluate(_time));
+            CameraParamBinding.ApplyFor(_parameters, _type, _track.Evaluate(_time));
         }
 
         /// <summary>Rewind the scene clock to 0.</summary>

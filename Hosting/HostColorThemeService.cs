@@ -624,6 +624,15 @@ namespace FracturingFog.Hosting
         // ── Scene Engine Roadmap Phase S5 — Scene persistence (SceneLibrary) ──
 
         /// <inheritdoc/>
+        public (FractalType Type, bool Relief3D)? GetRegionSceneInfo(string regionName)
+        {
+            if (string.IsNullOrWhiteSpace(regionName)) return null;
+            var r = FractalRegionLibrary.Instance.FindByName(regionName);
+            if (r == null) return null;
+            return (r.FractalType, r.Relief3D is { Enabled: true, Raymarch: true });
+        }
+
+        /// <inheritdoc/>
         public SceneThemePlan? ResolveSceneShotThemes(SceneShot shot)
             => shot == null ? null : SceneThemeResolver.Plan(shot);
 

@@ -118,6 +118,72 @@ namespace FracturingFog.Render
             return a;
         }
 
+        // ── #1049 — Relief 3D oblique camera ──────────────────────────────────
+        // A Relief 3D region renders a 2D fractal type as an oblique raymarched
+        // heightfield, so its camera is not keyed by FractalType: it is whichever
+        // params have the relief raymarch on. The orbit triple maps onto the
+        // relief camera as θ (radians) ↔ azimuth (degrees, wrapped to ±180),
+        // φ (radians) ↔ elevation above the ground (degrees, 5–89, the panel's
+        // range) and distance ↔ 1 / frame-fill zoom (zoom 0.2–5), so "further"
+        // means the same thing for every camera a scene drives.
+
+        /// <summary>Relief elevation limits (degrees) — the Relief 3D panel's range.</summary>
+        public const double ReliefMinElevationDeg = 5.0, ReliefMaxElevationDeg = 89.0;
+        /// <summary>Relief frame-fill zoom limits — the Relief 3D panel's range.</summary>
+        public const double ReliefMinZoom = 0.2, ReliefMaxZoom = 5.0;
+
+        /// <summary>True when <paramref name="parameters"/> render a Relief 3D
+        /// raymarch, whose oblique camera a track can drive.</summary>
+        public static bool IsReliefCamera(FractalParameters? parameters)
+            => parameters is { Relief2DEnabled: true, Relief2DRaymarch: true };
+
+        /// <summary>True when a camera track can drive these params: a Relief 3D
+        /// raymarch, or one of the 3D orbit-camera types.</summary>
+        public static bool Supports(FractalType type, FractalParameters? parameters)
+            => IsReliefCamera(parameters) || Supports(type);
+
+        /// <summary>Write <paramref name="state"/> onto whichever camera these params
+        /// use — the relief camera when the relief raymarch is on, else the
+        /// <paramref name="type"/> orbit camera.</summary>
+        public static void ApplyFor(FractalParameters parameters, FractalType type, in CameraState state)
+        {
+            ArgumentNullException.ThrowIfNull(parameters);
+            if (IsReliefCamera(parameters)) ApplyRelief(parameters, state);
+            else Apply(parameters, type, state);
+        }
+
+        /// <summary>Inverse of <see cref="ApplyFor"/>.</summary>
+        public static CameraState ReadFor(FractalParameters parameters, FractalType type)
+        {
+            ArgumentNullException.ThrowIfNull(parameters);
+            return IsReliefCamera(parameters) ? ReadRelief(parameters) : Read(parameters, type);
+        }
+
+        /// <summary>Write an orbit pose onto the Relief 3D camera (clamped to the
+        /// panel's ranges; azimuth wrapped to (−180, 180]).</summary>
+        public static void ApplyRelief(FractalParameters parameters, in CameraState state)
+        {
+            ArgumentNullException.ThrowIfNull(parameters);
+            double az = state.Theta * (180.0 / System.Math.PI);
+            az -= 360.0 * System.Math.Ceiling((az - 180.0) / 360.0);
+            double el = System.Math.Clamp(state.Phi * (180.0 / System.Math.PI), ReliefMinElevationDeg, ReliefMaxElevationDeg);
+            double dist = state.Distance > 0 ? state.Distance : 1.0;
+            parameters.Relief2DCameraAzimuthDeg = az;
+            parameters.Relief2DCameraElevationDeg = el;
+            parameters.Relief2DCameraZoom = System.Math.Clamp(1.0 / dist, ReliefMinZoom, ReliefMaxZoom);
+        }
+
+        /// <summary>Read the Relief 3D camera as an orbit pose.</summary>
+        public static CameraState ReadRelief(FractalParameters parameters)
+        {
+            ArgumentNullException.ThrowIfNull(parameters);
+            double zoom = parameters.Relief2DCameraZoom > 0 ? parameters.Relief2DCameraZoom : 1.0;
+            return new CameraState(
+                1.0 / zoom,
+                parameters.Relief2DCameraAzimuthDeg * (System.Math.PI / 180.0),
+                parameters.Relief2DCameraElevationDeg * (System.Math.PI / 180.0));
+        }
+
         private static ArgumentOutOfRangeException NotSupported(FractalType type)
             => new(nameof(type), type, "FractalType has no orbit camera (not a 3D raymarch type).");
     }

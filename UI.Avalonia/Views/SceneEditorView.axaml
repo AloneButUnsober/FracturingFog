@@ -79,6 +79,9 @@
             <Button Classes="action stop"    Content="Stop"      Command="{Binding StopPreviewCommand}" />
             <Button Classes="action revert"  Content="Reset Lighting" Command="{Binding ResetPreviewLightingCommand}"
                     ToolTip.Tip="Snap the preview's lighting back to stock defaults — clears stale lighting left over from a previously previewed scene's per-shot lighting borrow" />
+            <CheckBox Content="Debug overlay" IsChecked="{Binding ShowDebugOverlay}" Margin="6,0,0,0"
+                      VerticalAlignment="Center"
+                      ToolTip.Tip="Show scene time, shot, camera key + pose and frame time beside the render window during Play / Preview (not rendered into exports)" />
             <Button Classes="action save"    Content="Save"      Command="{Binding SaveCommand}" />
             <Button Classes="action export"  Content="⤓ Export…" Command="{Binding ExportCommand}" />
             <Button Classes="action new"     Content="Import…"   Command="{Binding ImportCommand}"
@@ -198,7 +201,9 @@
                                                           ItemsSource="{Binding FractalTypes}"
                                                           controls:ComboSortMenu.MenuSource="{Binding FractalTypeMenu}"
                                                           SelectedItem="{Binding FractalType}"
-                                                          HorizontalAlignment="Stretch" Margin="0,0,0,4" />
+                                                          HorizontalAlignment="Stretch" Margin="0,0,0,4" 
+                                                          IsEnabled="{Binding IsFractalTypeEditable}"
+                                                          ToolTip.Tip="Fractal for a region-free shot. With a region picked, the region decides the fractal (as the export does)" />
 
                                                 <TextBlock Classes="label" Grid.Row="1" Grid.Column="0" Text="Theme:" Margin="0,0,8,4" />
                                                 <ComboBox Grid.Row="1" Grid.Column="1"
@@ -276,13 +281,18 @@
                                                     Padding="6" IsVisible="{Binding Supports3DCamera}">
                                                 <StackPanel Spacing="4">
                                                     <Grid ColumnDefinitions="Auto,*,Auto,Auto">
-                                                        <TextBlock Classes="label" Grid.Column="0" Text="Camera" Foreground="#8FA8C8" />
+                                                        <TextBlock Classes="label" Grid.Column="0" Text="{Binding CameraHeader}" Foreground="#8FA8C8" />
                                                         <ComboBox Grid.Column="1"
                                                                   ItemsSource="{Binding InterpolationKinds}"
                                                                   SelectedItem="{Binding Interpolation}"
                                                                   MinWidth="120" HorizontalAlignment="Left" Margin="8,0,0,0" />
-                                                        <Button Grid.Column="3" Classes="action new" Content="+ Key"
-                                                                Command="{Binding AddCameraKeyCommand}" />
+                                                        <StackPanel Grid.Column="3" Orientation="Horizontal" Spacing="6">
+                                                            <Button Classes="action" Content="Capture"
+                                                                    Command="{Binding CaptureCameraKeyCommand}"
+                                                                    ToolTip.Tip="Add a key from the live view's current camera (Preview the shot and frame it first)" />
+                                                            <Button Classes="action new" Content="+ Key"
+                                                                    Command="{Binding AddCameraKeyCommand}" />
+                                                        </StackPanel>
                                                     </Grid>
 
                                                     <ItemsControl ItemsSource="{Binding CameraKeys}">

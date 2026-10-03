@@ -15,6 +15,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 
+using FracturingFog;
 using FracturingFog.Models;
 
 namespace FracturingFog.UI.Avalonia.ViewModels;
@@ -28,6 +29,7 @@ public sealed class ScenePickerSource
     private HashSet<string>? _themeSet;
     private IReadOnlyList<string>? _animations;
     private IReadOnlyList<string>? _userLightingPresets;
+    private readonly Dictionary<string, (FractalType Type, bool Relief3D)?> _regionInfo = new(StringComparer.Ordinal);
     private readonly Func<IEnumerable<string>> _loadUserLightingPresets;
 
     /// <param name="userLightingPresets">#1059 — user Lighting &amp; FX preset names;
@@ -48,6 +50,17 @@ public sealed class ScenePickerSource
         _themesDefault = null; _themeSet = null;
         _animations = null;
         _userLightingPresets = null;
+        _regionInfo.Clear();
+    }
+
+    /// <summary>#1058 / #1049 — the region's fractal type + Relief 3D flag (cached
+    /// per refresh), or null for an unknown region.</summary>
+    public (FractalType Type, bool Relief3D)? RegionInfo(string? name)
+    {
+        if (string.IsNullOrWhiteSpace(name)) return null;
+        if (!_regionInfo.TryGetValue(name, out var info))
+            _regionInfo[name] = info = _service.GetRegionSceneInfo(name);
+        return info;
     }
 
     /// <summary>#1059 — the user's Lighting &amp; FX preset names, A–Z.</summary>

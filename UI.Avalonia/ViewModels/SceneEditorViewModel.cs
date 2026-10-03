@@ -144,7 +144,8 @@ public sealed class SceneShotRowViewModel : ReactiveObject
         Action<SceneShotRowViewModel> onMoveUp,
         Action<SceneShotRowViewModel> onMoveDown,
         Action<SceneShotRowViewModel> onPreview,
-        Action<SceneEditAssetEventArgs>? onEditAsset = null)
+        Action<SceneEditAssetEventArgs>? onEditAsset = null,
+        Action<SceneShotRowViewModel>? onCaptureCameraKey = null)
     {
         _onChanged = onChanged;
         _source = source ?? throw new ArgumentNullException(nameof(source));
@@ -159,6 +160,7 @@ public sealed class SceneShotRowViewModel : ReactiveObject
         EditAnimationCommand = ReactiveCommand.Create(() => _onEditAsset(new SceneEditAssetEventArgs(AssetKind.Animation, SelectedAnimationName)));
         EditLightingCommand = ReactiveCommand.Create(EditLighting);
         AddCameraKeyCommand = ReactiveCommand.Create(AddCameraKey);
+        CaptureCameraKeyCommand = ReactiveCommand.Create(() => onCaptureCameraKey?.Invoke(this));
 
         CameraKeys = new ObservableCollection<CameraKeyRowViewModel>();
 
@@ -208,6 +210,7 @@ public sealed class SceneShotRowViewModel : ReactiveObject
         if (!IsSentinel(_selectedAnimation, AnimationNone) && !_source.Animations.Contains(_selectedAnimation))
             _selectedAnimation = AnimationNone;
         RebuildPickers();
+        SyncFromRegion();
     }
 
     // Rebuild each list from its sort state. ItemsSource is raised before the
@@ -396,7 +399,45 @@ public sealed class SceneShotRowViewModel : ReactiveObject
     public string SelectedRegion
     {
         get => _selectedRegion;
-        set { if (IsUnselectable(value)) return; this.RaiseAndSetIfChanged(ref _selectedRegion, value); _onChanged(); }
+        set
+        {
+            if (IsUnselectable(value)) return;
+            this.RaiseAndSetIfChanged(ref _selectedRegion, value);
+            SyncFromRegion();
+            _onChanged();
+        }
+    }
+
+    // ── #1058 / #1049 — the shot's region decides its type + camera ─────────
+    private bool _isRelief3D;
+
+    /// <summary>The shot's region is a Relief 3D raymarch, so its camera track
+    /// drives the oblique relief camera (#1049).</summary>
+    public bool IsRelief3D => _isRelief3D;
+
+    /// <summary>True when a real region is picked. The export renders the
+    /// region's fractal type whatever the shot says, so the Fractal combo is
+    /// only editable for a region-free ("default params") shot (#1058).</summary>
+    public bool HasRegion => !IsSentinel(_selectedRegion, RegionNone);
+    public bool IsFractalTypeEditable => !HasRegion;
+
+    /// <summary>Camera section header.</summary>
+    public string CameraHeader => _isRelief3D ? "Camera (Relief 3D)" : "Camera";
+
+    // Pull the picked region's type + Relief 3D flag onto the row. Before #1058
+    // picking a region left Fractal at whatever it was, so the camera row could
+    // be hidden for a 3D region (or bind the wrong fractal's camera fields).
+    private void SyncFromRegion()
+    {
+        var info = HasRegion ? _source.RegionInfo(_selectedRegion) : null;
+        _isRelief3D = info?.Relief3D ?? false;
+        if (info is { } i && i.Type != _fractalType) FractalType = i.Type; // raises Supports3DCamera
+        if (!_fractalTypes.Contains(_fractalType)) RebuildFractalTypes();
+        this.RaisePropertyChanged(nameof(IsRelief3D));
+        this.RaisePropertyChanged(nameof(HasRegion));
+        this.RaisePropertyChanged(nameof(IsFractalTypeEditable));
+        this.RaisePropertyChanged(nameof(CameraHeader));
+        this.RaisePropertyChanged(nameof(Supports3DCamera));
     }
 
     private string _selectedTheme = ThemeNone;
@@ -527,7 +568,7 @@ public sealed class SceneShotRowViewModel : ReactiveObject
 
     /// <summary>True when this shot's fractal type has an orbit camera to drive
     /// (the raymarch 3D types). Hides the camera row for 2D shots.</summary>
-    public bool Supports3DCamera => CameraParamBinding.Supports(_fractalType);
+    public bool Supports3DCamera => _isRelief3D || CameraParamBinding.Supports(_fractalType);
 
     public ObservableCollection<CameraKeyRowViewModel> CameraKeys { get; }
 
@@ -541,6 +582,8 @@ public sealed class SceneShotRowViewModel : ReactiveObject
     /// <summary>#1060 — open the Lighting &amp; FX dialog on this shot's preset.</summary>
     public ReactiveCommand<Unit, Unit> EditLightingCommand { get; }
     public ReactiveCommand<Unit, Unit> AddCameraKeyCommand { get; }
+    /// <summary>#1049 — add a key from the live view's current camera.</summary>
+    public ReactiveCommand<Unit, Unit> CaptureCameraKeyCommand { get; }
 
     /// <summary>The selected animation name, or null for the "(none)" sentinel.</summary>
     public string? SelectedAnimationName => IsSentinel(_selectedAnimation, AnimationNone) ? null : _selectedAnimation;
@@ -552,8 +595,23 @@ public sealed class SceneShotRowViewModel : ReactiveObject
         double time = CameraKeys.Count > 0 ? CameraKeys[^1].Time + 1.0 : 0.0;
         var seed = CameraKeys.Count > 0
             ? new CameraState(CameraKeys[^1].Distance, CameraKeys[^1].Theta, CameraKeys[^1].Phi)
-            : new CameraState(2.6, 0.0, 0.3);
+            : DefaultCameraSeed;
         AddKeyRow(new CameraKey(time, seed));
+        _onChanged();
+    }
+
+    // First-key pose: the relief camera's defaults (zoom 1, azimuth 0, 45°
+    // elevation) or a typical 3D orbit.
+    private CameraState DefaultCameraSeed => _isRelief3D
+        ? new CameraState(1.0, 0.0, 45.0 * Math.PI / 180.0)
+        : new CameraState(2.6, 0.0, 0.3);
+
+    /// <summary>#1049 — append a key at <paramref name="state"/>, one second after
+    /// the last key (or at 0).</summary>
+    public void AddCapturedCameraKey(CameraState state)
+    {
+        double time = CameraKeys.Count > 0 ? CameraKeys[^1].Time + 1.0 : 0.0;
+        AddKeyRow(new CameraKey(time, state));
         _onChanged();
     }
 
@@ -628,6 +686,7 @@ public sealed class SceneShotRowViewModel : ReactiveObject
             : (_source.Animations.Contains(shot.AnimationName!) ? shot.AnimationName! : AnimationNone);
         _fractalType = shot.FractalType;
         _themeSort.CompatFractalType = shot.FractalType;
+        _isRelief3D = false;
         _selectedToneMap = shot.ToneMap.HasValue ? shot.ToneMap.Value.ToString() : ToneMapInherit;
         _rotateThemes = shot.RotateThemes;
         _themeRotateSeconds = shot.ThemeRotateSeconds > 0 ? shot.ThemeRotateSeconds : SceneThemeSchedule.DefaultRotateSeconds;
@@ -643,6 +702,7 @@ public sealed class SceneShotRowViewModel : ReactiveObject
         }
 
         RebuildPickers();
+        SyncFromRegion();
         this.RaisePropertyChanged(nameof(Name));
         this.RaisePropertyChanged(nameof(SelectedRegion));
         this.RaisePropertyChanged(nameof(SelectedTheme));
@@ -998,6 +1058,23 @@ public sealed class SceneEditorViewModel : ViewModelBase
 
     public event EventHandler? StopPreviewRequested;
 
+    /// <summary>#1051 — the "Debug overlay" toggle changed.</summary>
+    public event EventHandler<bool>? DebugOverlayChanged;
+
+    private bool _showDebugOverlay;
+    /// <summary>#1051 — show the scene debug overlay (scene clock, shot, camera
+    /// key + pose, frame time) beside the render window during Play / Preview.</summary>
+    public bool ShowDebugOverlay
+    {
+        get => _showDebugOverlay;
+        set
+        {
+            if (_showDebugOverlay == value) return;
+            this.RaiseAndSetIfChanged(ref _showDebugOverlay, value);
+            DebugOverlayChanged?.Invoke(this, value);
+        }
+    }
+
     /// <summary>#307 — snap the live view's lighting back to stock defaults. A
     /// per-shot "lighting from region" borrow mutates the shared live params, so
     /// after previewing a lit scene the live lighting stays dialled to that
@@ -1086,7 +1163,27 @@ public sealed class SceneEditorViewModel : ViewModelBase
     private SceneShotRowViewModel NewShotRow()
         => new(_pickers, AvailableFractalTypes, TransitionKinds,
                FieldChanged, RemoveShot, MoveShotUp, MoveShotDown, PreviewShot,
-               e => EditAssetRequested?.Invoke(this, e));
+               e => EditAssetRequested?.Invoke(this, e), CaptureCameraKey);
+
+    /// <summary>#1049 — reads the live view's camera for a shot's "Capture" key:
+    /// (shot fractal type, shot is Relief 3D) → the live pose, or null when the
+    /// live view isn't showing that kind of camera. Set by the shell.</summary>
+    public Func<FractalType, bool, CameraState?>? CaptureLiveCamera { get; set; }
+
+    private void CaptureCameraKey(SceneShotRowViewModel row)
+    {
+        var state = CaptureLiveCamera?.Invoke(row.FractalType, row.IsRelief3D);
+        if (state is { } st)
+        {
+            row.AddCapturedCameraKey(st);
+            return;
+        }
+        MessageRequested?.Invoke(this, new ThemeMessageEventArgs("Capture Camera Key",
+            row.IsRelief3D
+                ? "The live view isn't showing a Relief 3D raymarch. Preview this shot first, frame it, then capture."
+                : $"The live view isn't showing a {row.FractalType} camera. Preview this shot first, frame it, then capture.",
+            MessageSeverity.Info));
+    }
 
     private void AddShot()
     {

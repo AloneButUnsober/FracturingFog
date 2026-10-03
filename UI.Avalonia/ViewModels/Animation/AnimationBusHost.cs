@@ -150,7 +150,8 @@ public static class AnimationBusHost
     /// <paramref name="audioTracks"/>. Null = no audio reactivity this run.</param>
     public static void LoadSceneShot(SceneShot shot, AnimationData? shotAnimation, FractalParameters target,
         IReadOnlyList<SceneGlobalTrack>? globalTracks = null, double globalTimeOffset = 0.0,
-        IReadOnlyList<SceneAudioTrack>? audioTracks = null, IAudioModulationSource? audioSource = null)
+        IReadOnlyList<SceneAudioTrack>? audioTracks = null, IAudioModulationSource? audioSource = null,
+        FractalType? liveType = null)
     {
         if (_bus == null) return;
 
@@ -182,12 +183,16 @@ public static class AnimationBusHost
             }
         }
 
-        // Keyframed orbit camera (S3). Only for the 3D-camera types with keys.
+        // Keyframed orbit camera (S3) — 3D-camera types, or a Relief 3D shot's
+        // oblique camera (#1049). The camera follows the type the live view is
+        // actually showing (the shot's region decides it, as in export), so a
+        // stale SceneShot.FractalType can't bind the wrong camera.
+        var cameraType = liveType ?? shot.FractalType;
         if (shot.Camera != null
             && shot.Camera.Keys.Count > 0
-            && CameraParamBinding.Supports(shot.FractalType))
+            && CameraParamBinding.Supports(cameraType, target))
         {
-            var camera = new CameraTrackAnimator(shot.Camera, target, shot.FractalType)
+            var camera = new CameraTrackAnimator(shot.Camera, target, cameraType)
             {
                 Loop = true, // the shot loops its camera across its own window
             };

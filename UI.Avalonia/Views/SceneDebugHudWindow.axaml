@@ -1,0 +1,36 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:FracturingFog.UI.Avalonia.ViewModels"
+        x:Class="FracturingFog.UI.Avalonia.Views.SceneDebugHudWindow"
+        x:DataType="vm:ShellViewModel"
+        Title="Scene Debug"
+        Width="520" SizeToContent="Height"
+        MinWidth="300"
+        WindowDecorations="None"
+        WindowStartupLocation="Manual"
+        CanResize="False"
+        ShowInTaskbar="False"
+        Topmost="False"
+        Foreground="#DCDCDC"
+        Background="#121212">
+    <!-- #1051 — scene debug overlay. A tethered top-level window (like the
+         Post-FX HUD) because Avalonia content can't draw over the native GPU
+         HWND. Not composited into the frame, so it never lands in exports or
+         recordings. -->
+    <Border BorderBrush="#404040" BorderThickness="1">
+        <Grid RowDefinitions="16,*">
+            <Border x:Name="DragHandle" Grid.Row="0" Background="#202020" Cursor="SizeAll">
+                <TextBlock Text="Scene debug  (drag; double-click to re-dock)"
+                           Foreground="#A0A0A0"
+                           FontSize="10"
+                           VerticalAlignment="Center"
+                           Margin="6,0,0,0" />
+            </Border>
+            <TextBlock Grid.Row="1" Margin="6"
+                       Text="{Binding SceneDebugText}"
+                       FontFamily="Consolas, Menlo, monospace"
+                       FontSize="11"
+                       TextWrapping="Wrap" />
+        </Grid>
+    </Border>
+</Window>

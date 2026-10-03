@@ -1313,8 +1313,13 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
         _busyReleaseTimer.Change(remaining, System.Threading.Timeout.Infinite);
     }
 
+    /// <summary>#1051 — render time of the last completed frame (ms), for the
+    /// scene debug overlay.</summary>
+    public long LastFrameMs { get; private set; }
+
     private void OnFrameCompleted(object? sender, RenderFrameInfo info)
     {
+        LastFrameMs = info.ElapsedMs;
         // Prefer the calculator's actual precision label (PT, QD-PT,
         // DD-HP4, etc.) when available — collapses to [DD]/[SP] only for
         // legacy calculators that expose just the bool. Lets the user
