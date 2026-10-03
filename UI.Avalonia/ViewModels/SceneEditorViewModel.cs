@@ -935,6 +935,10 @@ public sealed class SceneEditorViewModel : ViewModelBase
     private int _exportMotionBlur = 1;
     public int ExportMotionBlur { get => _exportMotionBlur; set => this.RaiseAndSetIfChanged(ref _exportMotionBlur, value); }
 
+    // #1065 — burn the scene debug overlay (clock, shot, camera) into the export.
+    private bool _exportDebugOverlay;
+    public bool ExportDebugOverlay { get => _exportDebugOverlay; set => this.RaiseAndSetIfChanged(ref _exportDebugOverlay, value); }
+
     private string _selectedEncode = "H.264 — high quality (MP4)";
     public string SelectedEncode { get => _selectedEncode; set => this.RaiseAndSetIfChanged(ref _selectedEncode, value); }
 
@@ -1335,6 +1339,7 @@ public sealed class SceneEditorViewModel : ViewModelBase
             MotionBlurSubframes = mb,
             ShutterFraction = 0.5,
             Encode = MapEncode(SelectedEncode),
+            BurnDebugOverlay = ExportDebugOverlay,
         };
 
         var args = new SceneExportEventArgs(scene, settings);

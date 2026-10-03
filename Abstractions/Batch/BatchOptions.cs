@@ -138,6 +138,9 @@ namespace FracturingFog.Batch
         /// <summary>Open-shutter fraction of the frame interval for motion blur
         /// (0.5 ≈ a 180° shutter). Clamped to (0,1].</summary>
         public double ShutterFraction { get; set; } = 0.5;
+        /// <summary>#1065 — scene mode: burn the scene debug overlay (clock, shot,
+        /// camera segment + pose) into every frame. Default off.</summary>
+        public bool SceneDebugOverlay { get; set; }
         /// <summary>When true (the default), paint the watermark + program-name
         /// sub-line into every emitted frame across image / video / slideshow
         /// batch modes. The CLI flag inverts this: <c>--watermark</c> (alias
@@ -443,6 +446,10 @@ namespace FracturingFog.Batch
                     case BatchFlags.Shutter:
                         if (!NextDouble(args, ref i, a, out double shv, out error)) return false;
                         opts.ShutterFraction = shv;
+                        break;
+
+                    case BatchFlags.SceneDebugOverlay:
+                        opts.SceneDebugOverlay = true;
                         break;
 
                     case BatchFlags.Encode:

@@ -69,6 +69,11 @@ namespace FracturingFog.Export
         /// <summary>Keep the intermediate PNG sequence after a successful encode.</summary>
         public bool KeepFrames { get; set; }
 
+        /// <summary>#1065 — burn the scene debug overlay (scene clock, shot, camera
+        /// key segment and pose; the live HUD's text) into every output frame.
+        /// Off by default → frames byte-identical.</summary>
+        public bool DebugOverlay { get; set; }
+
         /// <summary>S1 (#398) — capture per-frame screen-space motion vectors during a
         /// relief animation. When set, the render carries one persistent previous-frame
         /// camera and fills the motion-vector AOV on each clean continuous relief frame
@@ -227,6 +232,9 @@ namespace FracturingFog.Export
             // camera; the pass's own reprojection re-seeds on the resulting disocclusion.
             var svgfHistory = new FracturingFog.Imaging.SvgfHistory();
 
+            // #1065 — debug overlay timeline (null = overlay off).
+            var overlayTimeline = options.DebugOverlay ? SceneTimeline.Build(scene) : null;
+
             using (var png = new PngSequenceWriter(pngFolder, w, h))
             {
                 foreach (var frame in plan.Frames)
@@ -341,6 +349,25 @@ namespace FracturingFog.Export
                         }
                     }
 
+                    // #1065 — opt-in: burn the scene debug text (clock, shot, camera
+                    // segment + pose) into the frame for debugging exported timing /
+                    // camera paths. Off → untouched (byte-identical).
+                    if (overlayTimeline != null)
+                    {
+                        var sample = overlayTimeline.Sample(frame.FrameCenterTime);
+                        FractalParameters? posed = null;
+                        FractalType posedType = default;
+                        if (Get(resolved, sample.OriginalIndex) is { } os)
+                        {
+                            posed = ShotParamsAt(os, sample.LocalTime,
+                                sample.OriginalIndex == frame.PrimaryOriginalIndex ? morphBase : null,
+                                frame.FrameCenterTime, globalTracks, audioSource, audioTracks);
+                            posedType = os.RenderType;
+                        }
+                        BurnDebugOverlay(outBuf, w, h, DebugOverlayText(scene, sample, frame.FrameCenterTime,
+                            overlayTimeline.TotalDuration, posed, posedType));
+                    }
+
                     png.WriteFrame(outBuf);
                     framesWritten++;
                     progress?.Invoke((double)framesWritten / plan.TotalFrames,
@@ -413,27 +440,44 @@ namespace FracturingFog.Export
             return new SceneVideoResult(true, framesWritten, outPath, null, null);
         }
 
+        // ── #1065 debug overlay ─────────────────────────────────────────────
+
+        /// <summary>The overlay text for one output frame: the live HUD's
+        /// <see cref="SceneDebugInfo.Format"/> at the frame's scene time, with the
+        /// camera pose read back from the frame's own params (null = no pose).</summary>
+        public static string DebugOverlayText(SceneData scene, SceneSample sample, double clock,
+            double totalSeconds, FractalParameters? frameParams, FractalType type)
+        {
+            CameraState? pose = null;
+            bool relief = false;
+            if (frameParams != null && CameraParamBinding.Supports(type, frameParams))
+            {
+                pose = CameraParamBinding.ReadFor(frameParams, type);
+                relief = CameraParamBinding.IsReliefCamera(frameParams);
+            }
+            return SceneDebugInfo.Format(scene, sample, clock, totalSeconds, pose, relief);
+        }
+
+        /// <summary>Burn <paramref name="text"/> into the bottom-left of a frame:
+        /// light grey 5×7 glyphs on a 50% black panel, 2× from 540p up so it stays
+        /// legible in a video. Returns the panel rectangle.</summary>
+        public static (int X0, int Y0, int X1, int Y1) BurnDebugOverlay(uint[] frame, int w, int h, string text)
+            => FracturingFog.Rendering.Lighting.ScreenSpacePost.DrawTextBlockBottomLeft(
+                frame, w, h, text, 0xFFDDDDDDu, h >= 540 ? 2 : 1);
+
         // ── Rendering ────────────────────────────────────────────────────────
 
-        private static uint[] RenderShotFrame(
-            IReadOnlyDictionary<int, ResolvedShot> cache, int originalIndex,
-            double localTime, int w, int h, CancellationToken ct,
-            FractalParameters? overrideBase = null,
-            double globalTime = 0.0,
-            IReadOnlyList<SceneGlobalTrack>? globalTracks = null,
-            IAudioModulationSource? audioSource = null,
-            IReadOnlyList<SceneAudioTrack>? audioTracks = null,
-            FracturingFog.Rendering.Lighting.FroxelHistory? froxelHistory = null,
-            FracturingFog.Rendering.Lighting.ReliefMotionVector.CameraView? previousCamera = null,
-            FracturingFog.Rendering.Lighting.HeightfieldRaymarch2D.ReliefAovBuffers? motionAov = null,
-            FracturingFog.Imaging.SvgfHistory? svgfHistory = null)
+        // The frame's FractalParameters for one shot at one instant: fresh params
+        // per sub-frame so the animation + camera pose at this local time don't leak
+        // into the next sub-frame. overrideBase carries a ParamMorph-interpolated
+        // baseline for this frame when present. Shared by the render and the #1065
+        // debug overlay (which reads the camera pose back from these params).
+        private static FractalParameters ShotParamsAt(ResolvedShot shot, double localTime,
+            FractalParameters? overrideBase, double globalTime,
+            IReadOnlyList<SceneGlobalTrack>? globalTracks,
+            IAudioModulationSource? audioSource,
+            IReadOnlyList<SceneAudioTrack>? audioTracks)
         {
-            if (!cache.TryGetValue(originalIndex, out var shot))
-                return BlackFrame(w, h);
-
-            // Fresh params per sub-frame so the animation + camera pose at this
-            // local time don't leak into the next sub-frame. overrideBase carries
-            // a ParamMorph-interpolated baseline for this frame when present.
             var p = (overrideBase ?? shot.BaseParams).Clone();
 
             // Param animation at this local time. Procedural animators integrate
@@ -481,6 +525,26 @@ namespace FracturingFog.Export
                 fx.ToneMap = tm;
                 p.Lighting = fx;
             }
+            return p;
+        }
+
+        private static uint[] RenderShotFrame(
+            IReadOnlyDictionary<int, ResolvedShot> cache, int originalIndex,
+            double localTime, int w, int h, CancellationToken ct,
+            FractalParameters? overrideBase = null,
+            double globalTime = 0.0,
+            IReadOnlyList<SceneGlobalTrack>? globalTracks = null,
+            IAudioModulationSource? audioSource = null,
+            IReadOnlyList<SceneAudioTrack>? audioTracks = null,
+            FracturingFog.Rendering.Lighting.FroxelHistory? froxelHistory = null,
+            FracturingFog.Rendering.Lighting.ReliefMotionVector.CameraView? previousCamera = null,
+            FracturingFog.Rendering.Lighting.HeightfieldRaymarch2D.ReliefAovBuffers? motionAov = null,
+            FracturingFog.Imaging.SvgfHistory? svgfHistory = null)
+        {
+            if (!cache.TryGetValue(originalIndex, out var shot))
+                return BlackFrame(w, h);
+
+            var p = ShotParamsAt(shot, localTime, overrideBase, globalTime, globalTracks, audioSource, audioTracks);
 
             var req = new PosterRequest
             {

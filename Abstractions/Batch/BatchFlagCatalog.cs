@@ -517,6 +517,8 @@ namespace FracturingFog.Batch
                 Dbl(BatchFlags.Shutter, Video, BatchModes.Video | BatchModes.Scene,
                     "Open-shutter fraction of the frame interval (0.5 ~ 180 degrees).", 0, 1, enforced: true, def: "0.5")
                     with { MinExclusive = true, RangeMode = BatchMode.Scene },
+                Sw(BatchFlags.SceneDebugOverlay, Video, BatchModes.Scene,
+                    "Burn the scene debug overlay (scene clock, shot, camera key segment and pose) into every frame."),
 
                 // ── Slideshow ──
                 Pick(BatchFlags.Encode, Slideshow, BatchModes.Slideshow | BatchModes.Scene,

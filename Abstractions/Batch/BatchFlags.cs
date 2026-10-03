@@ -58,6 +58,8 @@ namespace FracturingFog.Batch
         // A saved animation played across the video's frames (#998).
         public const string Animation      = "--animation";
         public const string Shutter        = "--shutter";
+        // #1065 — burn the scene debug overlay into every exported scene frame.
+        public const string SceneDebugOverlay = "--scene-debug-overlay";
 
         // Watermark is ON by default; this flag (alias --watermark) turns it off.
         public const string NoWatermark    = "--no-watermark";

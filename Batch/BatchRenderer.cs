@@ -2064,6 +2064,7 @@ namespace FracturingFog.Batch
                 EncodeGif = sceneGif,
                 OutputPath = opts.OutputPath,
                 KeepFrames = opts.KeepFrames,
+                DebugOverlay = opts.SceneDebugOverlay,   // #1065
                 Settings = new FracturingFog.Abstractions.Animation.SceneRenderSettings
                 {
                     Fps = opts.VideoFps,
@@ -2079,6 +2080,7 @@ namespace FracturingFog.Batch
             Console.WriteLine($"  size        : {outW}x{outH}  fps: {opts.VideoFps}");
             Console.WriteLine($"  motion blur : {opts.MotionBlurSubframes} subframe(s), shutter {opts.ShutterFraction:G3}");
             Console.WriteLine($"  encode      : {(sceneGif ? "GIF (built-in)" : encodePreset.ToString())}");
+            if (opts.SceneDebugOverlay) Console.WriteLine("  overlay     : scene debug (burned in)");
             Console.WriteLine($"  out         : {opts.OutputPath}");
 
             if (sceneGif && opts.VideoFps > FracturingFog.Imaging.GifFolderEncoder.MaxFaithfulFps)

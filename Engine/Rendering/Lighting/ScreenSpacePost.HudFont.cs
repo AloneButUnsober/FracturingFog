@@ -211,5 +211,41 @@ public static partial class ScreenSpacePost
         ['%'] = new byte[] { 0b11000, 0b11001, 0b00010, 0b00100, 0b01000, 0b10011, 0b00011 },
         ['('] = new byte[] { 0b00010, 0b00100, 0b01000, 0b01000, 0b01000, 0b00100, 0b00010 },
         [')'] = new byte[] { 0b01000, 0b00100, 0b00010, 0b00010, 0b00010, 0b00100, 0b01000 },
+        // #1065 — punctuation the scene debug overlay prints (quoted names, key
+        // arrows "1->2", "ease, ...", angles in degrees).
+        ['"'] = new byte[] { 0b01010, 0b01010, 0b01010, 0, 0, 0, 0 },
+        ['\''] = new byte[] { 0b00100, 0b00100, 0b01000, 0, 0, 0, 0 },
+        [','] = new byte[] { 0, 0, 0, 0, 0b01100, 0b00100, 0b01000 },
+        ['>'] = new byte[] { 0b01000, 0b00100, 0b00010, 0b00001, 0b00010, 0b00100, 0b01000 },
+        ['<'] = new byte[] { 0b00010, 0b00100, 0b01000, 0b10000, 0b01000, 0b00100, 0b00010 },
+        ['_'] = new byte[] { 0, 0, 0, 0, 0, 0, 0b11111 },
+        ['+'] = new byte[] { 0, 0b00100, 0b00100, 0b11111, 0b00100, 0b00100, 0 },
+        ['='] = new byte[] { 0, 0, 0b11111, 0, 0b11111, 0, 0 },
+        ['°'] = new byte[] { 0b01100, 0b10010, 0b10010, 0b01100, 0, 0, 0 },
     };
+
+    /// <summary>#1065 — burn a multi-line text block (5×7 font, <paramref name="scale"/>
+    /// px per glyph pixel) on a 50% black panel at the bottom-left corner of the
+    /// frame. Used for the opt-in scene debug overlay on exported frames. Returns the
+    /// panel rectangle (x0, y0, x1, y1) actually covered, clipped to the frame.</summary>
+    public static (int X0, int Y0, int X1, int Y1) DrawTextBlockBottomLeft(
+        uint[] buf, int w, int h, string text, uint color, int scale = 1)
+    {
+        if (string.IsNullOrEmpty(text) || scale < 1 || buf.Length < w * h) return (0, 0, 0, 0);
+        var lines = text.Replace("\r", "").Split('\n');
+        int pad = 4 * scale, lineH = 9 * scale, margin = 8 * scale;
+        int maxChars = 0;
+        foreach (var l in lines) if (l.Length > maxChars) maxChars = l.Length;
+        int panelW = pad * 2 + maxChars * 6 * scale;
+        int panelH = pad * 2 + lines.Length * lineH - 2 * scale;
+        int x0 = margin, y1 = h - margin, y0 = y1 - panelH, x1 = x0 + panelW;
+        FillRectAlpha(buf, w, h, x0, y0, x1, y1, 0xFF000000u, 0.5);
+        int ty = y0 + pad;
+        foreach (var l in lines)
+        {
+            DrawText(buf, w, h, x0 + pad, ty, l, color, scale);
+            ty += lineH;
+        }
+        return (Math.Max(0, x0), Math.Max(0, y0), Math.Min(w, x1), Math.Min(h, y1));
+    }
 }
