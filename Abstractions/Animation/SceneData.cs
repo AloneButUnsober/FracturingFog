@@ -64,6 +64,17 @@ public sealed class SceneShot
     /// theme.</summary>
     public string? ThemeName { get; set; }
 
+    /// <summary>#1052 — step through the shot region's curated colour themes
+    /// during the shot (like the slideshow's theme cycling, but on a fixed
+    /// schedule so live playback and export match). Needs the region to curate
+    /// two or more themes; otherwise the shot shows one theme as usual. See
+    /// <see cref="SceneThemeSchedule"/>. Default off.</summary>
+    public bool RotateThemes { get; set; }
+
+    /// <summary>#1052 — seconds each theme shows when <see cref="RotateThemes"/>
+    /// is on (shot-local time; minimum <see cref="SceneThemeSchedule.MinRotateSeconds"/>).</summary>
+    public double ThemeRotateSeconds { get; set; } = SceneThemeSchedule.DefaultRotateSeconds;
+
     /// <summary>Optional param-animation override (an <see cref="AnimationData"/>
     /// name). Null / empty = the region's own <c>AnimationName</c>, or none.</summary>
     public string? AnimationName { get; set; }
@@ -77,6 +88,17 @@ public sealed class SceneShot
     /// Precedence: scene global track &gt; this shot override &gt; shot region &gt;
     /// theme preset &gt; default.</summary>
     public string? LightingRegionName { get; set; }
+
+    /// <summary>#1059 — per-shot Lighting &amp; FX from a Volumetric Lighting &amp; FX
+    /// preset (the Scene Editor's Lighting combo; supersedes
+    /// <see cref="LightingRegionName"/>, which old scenes may still carry). A user
+    /// preset replaces the shot's lighting; a built-in one overlays its fog /
+    /// volume look. Null / empty = none. See <see cref="SceneShotLighting"/>.</summary>
+    public string? LightingPresetName { get; set; }
+
+    /// <summary>#1059 — true when <see cref="LightingPresetName"/> names a built-in
+    /// curated preset rather than a user preset (the two can share a name).</summary>
+    public bool LightingPresetIsBuiltIn { get; set; }
 
     /// <summary>The fractal type this shot renders. Normally mirrors the named
     /// region's type; kept explicit so a <see cref="Camera"/> track can be

@@ -31,6 +31,11 @@ public sealed partial class FractalParamsViewModel
     /// ComboBox.</summary>
     public ObservableCollection<string> UserFxPresets { get; } = new();
 
+    /// <summary>#1059 — raised after a save / delete / import changes the user
+    /// preset library, so other preset pickers (Scene Editor shot Lighting) can
+    /// refresh.</summary>
+    public event System.Action? UserFxPresetsChanged;
+
     private string? _selectedUserFxPreset;
 
     /// <summary>Currently highlighted preset. Inert on its own — applying is the
@@ -89,6 +94,7 @@ public sealed partial class FractalParamsViewModel
         LightingFxPresetLibrary.Upsert(file, preset);   // persists; marks active
         RefreshUserFxPresets();
         SelectedUserFxPreset = preset.Name;
+        UserFxPresetsChanged?.Invoke();
     }
 
     /// <summary>Delete the named preset. Returns true on a real delete.</summary>
@@ -101,6 +107,7 @@ public sealed partial class FractalParamsViewModel
         {
             SelectedUserFxPreset = null;
             RefreshUserFxPresets();
+            UserFxPresetsChanged?.Invoke();
         }
         return removed;
     }
@@ -114,6 +121,7 @@ public sealed partial class FractalParamsViewModel
         var names = LightingFxPresetLibrary.Import(file, path);
         RefreshUserFxPresets();
         if (names.Count > 0) SelectedUserFxPreset = names[^1];
+        if (names.Count > 0) UserFxPresetsChanged?.Invoke();
         return names;
     }
 

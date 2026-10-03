@@ -77,10 +77,10 @@ public sealed class SceneEditorWave1Tests
         vm.EditAssetRequested += (_, e) => raised.Add(e);
         var row = vm.Shots.Single();
         row.SelectedRegion = "A";
-        row.SelectedLightingRegion = "B";
+        row.SelectedLighting = SceneShotRowViewModel.LightingLegacyRegionPrefix + "B";
         row.SelectedTheme = "Fire";
 
-        row.LightingRegionMenu().Single(i => i.Header == "Edit region…").Invoke!();
+        row.LightingMenu().Single(i => i.Header == "Edit region…").Invoke!();
         row.ThemeMenu().Single(i => i.Header == "Edit theme…").Invoke!();
 
         Assert.Equal(new[]
@@ -109,8 +109,6 @@ public sealed class SceneEditorWave1Tests
         Assert.Equal(new[] { SceneShotRowViewModel.RegionNone, "Bulb1", "Seahorse" }, row.RegionNames);
         Assert.Equal("Seahorse", row.SelectedRegion);
         Assert.Equal("Seahorse", row.ToShot().RegionName);
-        // The lighting combo has its own, independent sort.
-        Assert.Contains("Box1", row.LightingRegionNames);
     }
 
     [Fact]

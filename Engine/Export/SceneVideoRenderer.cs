@@ -492,7 +492,7 @@ namespace FracturingFog.Export
                 Zoom = shot.Zoom,
                 MaxIterations = shot.MaxIterations,
                 Quality = shot.Quality,
-                ColorMap = shot.Theme,
+                ColorMap = shot.ThemeAt(localTime),
                 FractalParameters = p,
                 FroxelHistory = froxelHistory,   // #468 cross-frame froxel temporal (null = spatial-only)
                 // S4 (#402) — SVGF temporal denoise history; the pass carries the previous
@@ -540,7 +540,7 @@ namespace FracturingFog.Export
                 CenterY2 = shot.CenterY2, CenterY3 = shot.CenterY3,
                 Zoom = shot.Zoom,
                 MaxIterations = shot.MaxIterations,
-                ColorMap = shot.Theme,
+                ColorMap = shot.ThemeAt(localTime),
                 Quality = shot.Quality,
             };
             calc.Calculate(ct);
@@ -611,8 +611,16 @@ namespace FracturingFog.Export
                 }
             }
 
+            // #1059 — per-shot Lighting & FX preset, over the (legacy) borrow above.
+            // Shared rule with live playback; a missing preset is a no-op.
+            if (SceneShotLighting.HasPreset(shot)
+                && SceneShotLighting.TryApplyPreset(shot, p.Lighting,
+                    shot.LightingPresetIsBuiltIn ? null : LightingFxPresetLibrary.Load(), out var presetFx))
+            {
+                p.Lighting = presetFx;
+            }
+
             var anim = ResolveAnimation(shot, region);
-            var theme = ResolveTheme(shot, region);
 
             return new ResolvedShot
             {
@@ -624,7 +632,8 @@ namespace FracturingFog.Export
                 Zoom = zoom,
                 MaxIterations = iter,
                 Quality = quality,
-                Theme = theme,
+                Themes = ResolveThemeSchedule(shot, region),
+                ThemeRotateSeconds = shot.ThemeRotateSeconds,
                 BaseParams = p,
                 Animation = anim,
                 Camera = shot.Camera,
@@ -640,14 +649,17 @@ namespace FracturingFog.Export
             return string.IsNullOrEmpty(name) ? null : AnimationLibrary.Instance.GetByName(name);
         }
 
-        private static IColorMap ResolveTheme(SceneShot shot, FractalRegion? region)
+        // #1052 — theme selection is the shared SceneThemeSchedule rule (shot theme
+        // → region's first valid curated → HSV, with optional rotation by shot
+        // time), so the export matches live scene playback.
+        // #1052 — the shared SceneThemeResolver plan (also used by live scene
+        // playback), resolved once per shot into one map or the rotation's maps.
+        private static IColorMap[] ResolveThemeSchedule(SceneShot shot, FractalRegion? region)
         {
-            string? name = shot.ThemeName;
-            if (string.IsNullOrWhiteSpace(name)
-                && region?.CuratedThemes is { Count: > 0 } curated)
-                name = curated[0];
-            if (string.IsNullOrWhiteSpace(name)) name = HsvPalette.Name;
-            return ColorPalette.GetPaletteByName(name);
+            var plan = SceneThemeResolver.Plan(shot, region);
+            var maps = new IColorMap[plan.Names.Count];
+            for (int i = 0; i < maps.Length; i++) maps[i] = ColorPalette.GetPaletteByName(plan.Names[i]);
+            return maps;
         }
 
         // ── Pixel helpers ────────────────────────────────────────────────────
@@ -697,7 +709,13 @@ namespace FracturingFog.Export
             public double Zoom;
             public int MaxIterations;
             public QualityPreset Quality = QualityPreset.Standard;
-            public IColorMap Theme = null!;
+            public IColorMap[] Themes = null!;
+            public double ThemeRotateSeconds;
+
+            /// <summary>The colour map for this shot at <paramref name="localTime"/>
+            /// (constant unless the shot rotates themes, #1052).</summary>
+            public IColorMap ThemeAt(double localTime)
+                => Themes[SceneThemeSchedule.StepIndex(localTime, ThemeRotateSeconds, Themes.Length)];
             public FractalParameters BaseParams = null!;
             public AnimationData? Animation;
             public CameraTrack? Camera;

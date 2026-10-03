@@ -110,10 +110,17 @@ public sealed class SceneShotRowViewModel : ReactiveObject
     public const string RegionNone = "(default params)";
     public const string ThemeNone = "(region default)";
     public const string AnimationNone = "(none)";
-    /// <summary>Lighting-region combo sentinel — no per-shot lighting override, so
-    /// the shot lights from its own region (current behavior). Maps to
-    /// <see cref="SceneShot.LightingRegionName"/> = null.</summary>
-    public const string LightingRegionNone = "(use shot's region)";
+    /// <summary>Lighting combo sentinel — no per-shot lighting override, so the
+    /// shot lights from its own region. Maps to no preset and no legacy region.</summary>
+    public const string LightingNone = "(use shot's region)";
+
+    // #1059 — Lighting combo items. Built-in and user presets can share a name,
+    // so the kind is part of the display string (ASCII prefixes).
+    public const string LightingBuiltInPrefix = "Built-in: ";
+    public const string LightingUserPrefix = "Mine: ";
+    /// <summary>Old scenes borrow another region's lighting (LightingRegionName);
+    /// such a pick stays visible + selectable under this prefix until changed.</summary>
+    public const string LightingLegacyRegionPrefix = "Region (legacy): ";
     /// <summary>Tone-map combo sentinel — inherit the region lighting's operator
     /// rather than pin one on the shot.</summary>
     public const string ToneMapInherit = "(region default)";
@@ -121,11 +128,10 @@ public sealed class SceneShotRowViewModel : ReactiveObject
     private readonly Action _onChanged;
     private readonly ScenePickerSource _source;
     private readonly IReadOnlyList<FractalType> _allFractalTypes;
-    private readonly Action<AssetKind, string?> _onEditAsset;
+    private readonly Action<SceneEditAssetEventArgs> _onEditAsset;
 
     // #1054 — per-row sort / filter state behind each combo's right-click menu.
     private readonly RegionComboSort _regionSort = new();
-    private readonly RegionComboSort _lightingRegionSort = new();
     private readonly ThemeComboSort _themeSort = new();
     private MainViewModel.FractalTypeFilter _fractalFilter = MainViewModel.FractalTypeFilter.Default;
 
@@ -138,25 +144,26 @@ public sealed class SceneShotRowViewModel : ReactiveObject
         Action<SceneShotRowViewModel> onMoveUp,
         Action<SceneShotRowViewModel> onMoveDown,
         Action<SceneShotRowViewModel> onPreview,
-        Action<AssetKind, string?>? onEditAsset = null)
+        Action<SceneEditAssetEventArgs>? onEditAsset = null)
     {
         _onChanged = onChanged;
         _source = source ?? throw new ArgumentNullException(nameof(source));
         _allFractalTypes = fractalTypes;
-        _onEditAsset = onEditAsset ?? ((_, _) => { });
+        _onEditAsset = onEditAsset ?? (_ => { });
         TransitionKinds = transitionKinds;
 
         RemoveCommand    = ReactiveCommand.Create(() => onRemove(this));
         MoveUpCommand    = ReactiveCommand.Create(() => onMoveUp(this));
         MoveDownCommand  = ReactiveCommand.Create(() => onMoveDown(this));
         PreviewCommand   = ReactiveCommand.Create(() => onPreview(this));
-        EditAnimationCommand = ReactiveCommand.Create(() => _onEditAsset(AssetKind.Animation, SelectedAnimationName));
+        EditAnimationCommand = ReactiveCommand.Create(() => _onEditAsset(new SceneEditAssetEventArgs(AssetKind.Animation, SelectedAnimationName)));
+        EditLightingCommand = ReactiveCommand.Create(EditLighting);
         AddCameraKeyCommand = ReactiveCommand.Create(AddCameraKey);
 
         CameraKeys = new ObservableCollection<CameraKeyRowViewModel>();
 
         RegionMenu = BuildRegionMenu;
-        LightingRegionMenu = BuildLightingRegionMenu;
+        LightingMenu = BuildLightingMenu;
         ThemeMenu = BuildThemeMenu;
         AnimationMenu = BuildAnimationMenu;
         FractalTypeMenu = BuildFractalTypeMenu;
@@ -168,22 +175,22 @@ public sealed class SceneShotRowViewModel : ReactiveObject
     private IReadOnlyList<string> _regionNames = Array.Empty<string>();
     private IReadOnlyList<string> _themeNames = Array.Empty<string>();
     private IReadOnlyList<string> _animationNames = Array.Empty<string>();
-    private IReadOnlyList<string> _lightingRegionNames = Array.Empty<string>();
+    private IReadOnlyList<string> _lightingOptions = Array.Empty<string>();
     private IReadOnlyList<FractalType> _fractalTypes = Array.Empty<FractalType>();
 
     public IReadOnlyList<string> RegionNames => _regionNames;
     public IReadOnlyList<string> ThemeNames => _themeNames;
     public IReadOnlyList<string> AnimationNames => _animationNames;
-    /// <summary>Region pool for the per-shot lighting override, prefixed with
-    /// <see cref="LightingRegionNone"/>. Same names as <see cref="RegionNames"/>
-    /// but a distinct "none" sentinel (borrow-none vs. default-params).</summary>
-    public IReadOnlyList<string> LightingRegionNames => _lightingRegionNames;
+    /// <summary>#1059 — Lighting combo items: <see cref="LightingNone"/>, then the
+    /// built-in presets (catalogue order), then the user's presets (A–Z), plus a
+    /// legacy region borrow when the shot still carries one.</summary>
+    public IReadOnlyList<string> LightingOptions => _lightingOptions;
     /// <summary>Fractal types under this row's filter (right-click menu).</summary>
     public IReadOnlyList<FractalType> FractalTypes => _fractalTypes;
 
     // Right-click menu builders, bound through ComboSortMenu.MenuSource.
     public Func<IReadOnlyList<ComboMenuItem>> RegionMenu { get; }
-    public Func<IReadOnlyList<ComboMenuItem>> LightingRegionMenu { get; }
+    public Func<IReadOnlyList<ComboMenuItem>> LightingMenu { get; }
     public Func<IReadOnlyList<ComboMenuItem>> ThemeMenu { get; }
     public Func<IReadOnlyList<ComboMenuItem>> AnimationMenu { get; }
     public Func<IReadOnlyList<ComboMenuItem>> FractalTypeMenu { get; }
@@ -195,8 +202,7 @@ public sealed class SceneShotRowViewModel : ReactiveObject
     {
         if (!IsSentinel(_selectedRegion, RegionNone) && !_source.RegionExists(_selectedRegion))
             _selectedRegion = RegionNone;
-        if (!IsSentinel(_selectedLightingRegion, LightingRegionNone) && !_source.RegionExists(_selectedLightingRegion))
-            _selectedLightingRegion = LightingRegionNone;
+        if (!LightingPickExists(_selectedLighting)) _selectedLighting = LightingNone;
         if (!IsSentinel(_selectedTheme, ThemeNone) && !_source.ThemeExists(_selectedTheme))
             _selectedTheme = ThemeNone;
         if (!IsSentinel(_selectedAnimation, AnimationNone) && !_source.Animations.Contains(_selectedAnimation))
@@ -211,7 +217,7 @@ public sealed class SceneShotRowViewModel : ReactiveObject
     // appended so the combo never goes blank and the pick is never lost.
     private void RebuildPickers()
     {
-        RebuildRegions(); RebuildLightingRegions(); RebuildThemes(); RebuildAnimations(); RebuildFractalTypes();
+        RebuildRegions(); RebuildLighting(); RebuildThemes(); RebuildAnimations(); RebuildFractalTypes();
     }
 
     private void RebuildRegions()
@@ -220,10 +226,45 @@ public sealed class SceneShotRowViewModel : ReactiveObject
         RaiseList(nameof(RegionNames), nameof(SelectedRegion));
     }
 
-    private void RebuildLightingRegions()
+    private void RebuildLighting()
     {
-        _lightingRegionNames = WithSentinel(LightingRegionNone, _source.Regions(_lightingRegionSort), _selectedLightingRegion);
-        RaiseList(nameof(LightingRegionNames), nameof(SelectedLightingRegion));
+        var items = new List<string> { LightingNone };
+        foreach (var p in FracturingFog.Rendering.Lighting.VolumetricFxPresets.All)
+            items.Add(LightingBuiltInPrefix + p.Name);
+        foreach (var n in _source.UserLightingPresets) items.Add(LightingUserPrefix + n);
+        if (!IsSentinel(_selectedLighting, LightingNone) && !items.Contains(_selectedLighting))
+            items.Add(_selectedLighting); // legacy region borrow (or a pick refreshed away)
+        _lightingOptions = items;
+        RaiseList(nameof(LightingOptions), nameof(SelectedLighting));
+    }
+
+    // Does the item still name something that exists?
+    private bool LightingPickExists(string item)
+    {
+        if (IsSentinel(item, LightingNone)) return true;
+        if (item.StartsWith(LightingBuiltInPrefix, StringComparison.Ordinal))
+            return SceneShotLighting.IsBuiltIn(item[LightingBuiltInPrefix.Length..]);
+        if (item.StartsWith(LightingUserPrefix, StringComparison.Ordinal))
+            return _source.UserLightingPresets.Contains(item[LightingUserPrefix.Length..]);
+        if (item.StartsWith(LightingLegacyRegionPrefix, StringComparison.Ordinal))
+            return _source.RegionExists(item[LightingLegacyRegionPrefix.Length..]);
+        return false;
+    }
+
+    /// <summary>#1059 / #1060 — what the Lighting combo currently picks.</summary>
+    public (string? PresetName, bool BuiltIn, string? LegacyRegion) LightingPick
+    {
+        get
+        {
+            var item = _selectedLighting;
+            if (item.StartsWith(LightingBuiltInPrefix, StringComparison.Ordinal))
+                return (item[LightingBuiltInPrefix.Length..], true, null);
+            if (item.StartsWith(LightingUserPrefix, StringComparison.Ordinal))
+                return (item[LightingUserPrefix.Length..], false, null);
+            if (item.StartsWith(LightingLegacyRegionPrefix, StringComparison.Ordinal))
+                return (null, false, item[LightingLegacyRegionPrefix.Length..]);
+            return (null, false, null);
+        }
     }
 
     private void RebuildThemes()
@@ -273,9 +314,24 @@ public sealed class SceneShotRowViewModel : ReactiveObject
         => WithEdit("Edit region…", AssetKind.Region, SelectedRegionName,
             _regionSort.BuildMenu(RebuildRegions));
 
-    private IReadOnlyList<ComboMenuItem> BuildLightingRegionMenu()
-        => WithEdit("Edit region…", AssetKind.Region, SelectedLightingRegionName,
-            _lightingRegionSort.BuildMenu(RebuildLightingRegions));
+    private IReadOnlyList<ComboMenuItem> BuildLightingMenu()
+    {
+        var (preset, _, legacy) = LightingPick;
+        if (legacy != null)
+            return WithEdit("Edit region…", AssetKind.Region, legacy, Array.Empty<ComboMenuItem>());
+        return preset == null
+            ? Array.Empty<ComboMenuItem>()
+            : new[] { ComboMenuItem.Item("Edit preset…", false, EditLighting) };
+    }
+
+    // #1060 — open the Lighting & FX dialog on this shot's preset (or a legacy
+    // region in the Region Editor). No pick → just open the dialog.
+    private void EditLighting()
+    {
+        var (preset, builtIn, legacy) = LightingPick;
+        if (legacy != null) { _onEditAsset(new SceneEditAssetEventArgs(AssetKind.Region, legacy)); return; }
+        _onEditAsset(new SceneEditAssetEventArgs(AssetKind.LightingFx, preset, builtIn));
+    }
 
     private IReadOnlyList<ComboMenuItem> BuildThemeMenu()
         => WithEdit("Edit theme…", AssetKind.ColorTheme, SelectedThemeName,
@@ -308,7 +364,7 @@ public sealed class SceneShotRowViewModel : ReactiveObject
         var items = new List<ComboMenuItem>();
         if (!string.IsNullOrEmpty(name))
         {
-            items.Add(ComboMenuItem.Item(header, false, () => _onEditAsset(kind, name)));
+            items.Add(ComboMenuItem.Item(header, false, () => _onEditAsset(new SceneEditAssetEventArgs(kind, name))));
             if (sortItems.Count > 0) items.Add(ComboMenuItem.Separator);
         }
         items.AddRange(sortItems);
@@ -318,8 +374,6 @@ public sealed class SceneShotRowViewModel : ReactiveObject
     /// <summary>The selected region / lighting region / theme name, or null for
     /// the "none" sentinel.</summary>
     public string? SelectedRegionName => IsSentinel(_selectedRegion, RegionNone) ? null : _selectedRegion;
-    public string? SelectedLightingRegionName
-        => IsSentinel(_selectedLightingRegion, LightingRegionNone) ? null : _selectedLightingRegion;
     public string? SelectedThemeName => IsSentinel(_selectedTheme, ThemeNone) ? null : _selectedTheme;
 
     /// <summary>True when a combo write should be ignored: the transient null a
@@ -352,15 +406,16 @@ public sealed class SceneShotRowViewModel : ReactiveObject
         set { if (IsUnselectable(value)) return; this.RaiseAndSetIfChanged(ref _selectedTheme, value); _onChanged(); }
     }
 
-    private string _selectedLightingRegion = LightingRegionNone;
+    private string _selectedLighting = LightingNone;
     /// <summary>Selected per-shot lighting-override region name, or the none
     /// sentinel. Maps to <see cref="SceneShot.LightingRegionName"/> (null when
     /// none) — the shot borrows that region's lighting without changing its own
     /// region/params.</summary>
-    public string SelectedLightingRegion
+    /// <summary>#1059 — the Lighting combo's selected item (see <see cref="LightingOptions"/>).</summary>
+    public string SelectedLighting
     {
-        get => _selectedLightingRegion;
-        set { if (IsUnselectable(value)) return; this.RaiseAndSetIfChanged(ref _selectedLightingRegion, value); _onChanged(); }
+        get => _selectedLighting;
+        set { if (IsUnselectable(value)) return; this.RaiseAndSetIfChanged(ref _selectedLighting, value); _onChanged(); }
     }
 
     private string _selectedAnimation = AnimationNone;
@@ -385,6 +440,38 @@ public sealed class SceneShotRowViewModel : ReactiveObject
             _onChanged();
         }
     }
+
+    private bool _rotateThemes;
+    /// <summary>#1052 — cycle the region's curated themes during the shot.</summary>
+    public bool RotateThemes
+    {
+        get => _rotateThemes;
+        set { this.RaiseAndSetIfChanged(ref _rotateThemes, value); _onChanged(); }
+    }
+
+    private double _themeRotateSeconds = SceneThemeSchedule.DefaultRotateSeconds;
+    /// <summary>#1052 — seconds per theme while rotating.</summary>
+    public double ThemeRotateSeconds
+    {
+        get => _themeRotateSeconds;
+        set { this.RaiseAndSetIfChanged(ref _themeRotateSeconds, value); _onChanged(); }
+    }
+
+    private bool _isPreviewing;
+    /// <summary>#1052 — this shot's Preview is live on the main view; the
+    /// Preview button reads "■ Stop" and stops it.</summary>
+    public bool IsPreviewing
+    {
+        get => _isPreviewing;
+        set
+        {
+            if (_isPreviewing == value) return;
+            this.RaiseAndSetIfChanged(ref _isPreviewing, value);
+            this.RaisePropertyChanged(nameof(PreviewButtonText));
+        }
+    }
+
+    public string PreviewButtonText => _isPreviewing ? "■ Stop" : "Preview";
 
     private double _durationSeconds = 5.0;
     public double DurationSeconds
@@ -451,6 +538,8 @@ public sealed class SceneShotRowViewModel : ReactiveObject
     public ReactiveCommand<Unit, Unit> PreviewCommand { get; }
     /// <summary>#1055 — open the Animation Editor on this shot's animation.</summary>
     public ReactiveCommand<Unit, Unit> EditAnimationCommand { get; }
+    /// <summary>#1060 — open the Lighting &amp; FX dialog on this shot's preset.</summary>
+    public ReactiveCommand<Unit, Unit> EditLightingCommand { get; }
     public ReactiveCommand<Unit, Unit> AddCameraKeyCommand { get; }
 
     /// <summary>The selected animation name, or null for the "(none)" sentinel.</summary>
@@ -489,14 +578,17 @@ public sealed class SceneShotRowViewModel : ReactiveObject
                 ? string.Empty : _selectedRegion,
             ThemeName = string.Equals(_selectedTheme, ThemeNone, StringComparison.Ordinal)
                 ? null : _selectedTheme,
-            LightingRegionName = string.Equals(_selectedLightingRegion, LightingRegionNone, StringComparison.Ordinal)
-                ? null : _selectedLightingRegion,
+            LightingRegionName = LightingPick.LegacyRegion,
+            LightingPresetName = LightingPick.PresetName,
+            LightingPresetIsBuiltIn = LightingPick.BuiltIn,
             AnimationName = string.Equals(_selectedAnimation, AnimationNone, StringComparison.Ordinal)
                 ? null : _selectedAnimation,
             FractalType = _fractalType,
             ToneMap = string.Equals(_selectedToneMap, ToneMapInherit, StringComparison.Ordinal)
                 ? null
                 : Enum.Parse<ToneMapOperator>(_selectedToneMap),
+            RotateThemes = _rotateThemes,
+            ThemeRotateSeconds = _themeRotateSeconds,
             DurationSeconds = _durationSeconds,
             Transition = _transition,
             TransitionSeconds = _transitionSeconds,
@@ -511,6 +603,18 @@ public sealed class SceneShotRowViewModel : ReactiveObject
         return shot;
     }
 
+    // The combo item for a saved shot: its preset, else its legacy region borrow;
+    // a name that no longer exists falls back to "none".
+    private string LightingItemFor(SceneShot shot)
+    {
+        string item = LightingNone;
+        if (!string.IsNullOrWhiteSpace(shot.LightingPresetName))
+            item = (shot.LightingPresetIsBuiltIn ? LightingBuiltInPrefix : LightingUserPrefix) + shot.LightingPresetName;
+        else if (!string.IsNullOrWhiteSpace(shot.LightingRegionName))
+            item = LightingLegacyRegionPrefix + shot.LightingRegionName;
+        return LightingPickExists(item) ? item : LightingNone;
+    }
+
     /// <summary>Populate this row from a saved shot.</summary>
     public void Populate(SceneShot shot)
     {
@@ -519,13 +623,14 @@ public sealed class SceneShotRowViewModel : ReactiveObject
             : (_source.RegionExists(shot.RegionName) ? shot.RegionName : RegionNone);
         _selectedTheme = string.IsNullOrEmpty(shot.ThemeName) ? ThemeNone
             : (_source.ThemeExists(shot.ThemeName!) ? shot.ThemeName! : ThemeNone);
-        _selectedLightingRegion = string.IsNullOrEmpty(shot.LightingRegionName) ? LightingRegionNone
-            : (_source.RegionExists(shot.LightingRegionName!) ? shot.LightingRegionName! : LightingRegionNone);
+        _selectedLighting = LightingItemFor(shot);
         _selectedAnimation = string.IsNullOrEmpty(shot.AnimationName) ? AnimationNone
             : (_source.Animations.Contains(shot.AnimationName!) ? shot.AnimationName! : AnimationNone);
         _fractalType = shot.FractalType;
         _themeSort.CompatFractalType = shot.FractalType;
         _selectedToneMap = shot.ToneMap.HasValue ? shot.ToneMap.Value.ToString() : ToneMapInherit;
+        _rotateThemes = shot.RotateThemes;
+        _themeRotateSeconds = shot.ThemeRotateSeconds > 0 ? shot.ThemeRotateSeconds : SceneThemeSchedule.DefaultRotateSeconds;
         _durationSeconds = shot.DurationSeconds;
         _transition = shot.Transition;
         _transitionSeconds = shot.TransitionSeconds;
@@ -541,11 +646,13 @@ public sealed class SceneShotRowViewModel : ReactiveObject
         this.RaisePropertyChanged(nameof(Name));
         this.RaisePropertyChanged(nameof(SelectedRegion));
         this.RaisePropertyChanged(nameof(SelectedTheme));
-        this.RaisePropertyChanged(nameof(SelectedLightingRegion));
+        this.RaisePropertyChanged(nameof(SelectedLighting));
         this.RaisePropertyChanged(nameof(SelectedAnimation));
         this.RaisePropertyChanged(nameof(FractalType));
         this.RaisePropertyChanged(nameof(Supports3DCamera));
         this.RaisePropertyChanged(nameof(SelectedToneMap));
+        this.RaisePropertyChanged(nameof(RotateThemes));
+        this.RaisePropertyChanged(nameof(ThemeRotateSeconds));
         this.RaisePropertyChanged(nameof(DurationSeconds));
         this.RaisePropertyChanged(nameof(Transition));
         this.RaisePropertyChanged(nameof(TransitionSeconds));
@@ -979,7 +1086,7 @@ public sealed class SceneEditorViewModel : ViewModelBase
     private SceneShotRowViewModel NewShotRow()
         => new(_pickers, AvailableFractalTypes, TransitionKinds,
                FieldChanged, RemoveShot, MoveShotUp, MoveShotDown, PreviewShot,
-               (kind, name) => EditAssetRequested?.Invoke(this, new SceneEditAssetEventArgs(kind, name)));
+               e => EditAssetRequested?.Invoke(this, e));
 
     private void AddShot()
     {
@@ -1053,13 +1160,32 @@ public sealed class SceneEditorViewModel : ViewModelBase
         FieldChanged();
     }
 
+    // #1052 — the row's Preview button doubles as its Stop: a second click on
+    // the previewing shot stops it (same as the toolbar Stop). Only one shot
+    // previews at a time; Play / Stop / Close clear the flag.
     private void PreviewShot(SceneShotRowViewModel row)
     {
+        if (row.IsPreviewing)
+        {
+            StopPreview();
+            return;
+        }
+        ClearPreviewing();
         SelectedShot = row;
+        row.IsPreviewing = true;
         PreviewShotRequested?.Invoke(this, row.ToShot());
     }
 
-    private void Play() => PlaySceneRequested?.Invoke(this, BuildData());
+    private void ClearPreviewing()
+    {
+        foreach (var r in Shots) r.IsPreviewing = false;
+    }
+
+    private void Play()
+    {
+        ClearPreviewing();
+        PlaySceneRequested?.Invoke(this, BuildData());
+    }
 
     /// <summary>Build the scene + export settings and hand off to the host, then
     /// await its Completion so the command stays "running" (button disabled)
@@ -1106,7 +1232,11 @@ public sealed class SceneEditorViewModel : ViewModelBase
         _                        => SceneExportEncode.HighQualityH264,
     };
 
-    private void StopPreview() => StopPreviewRequested?.Invoke(this, EventArgs.Empty);
+    private void StopPreview()
+    {
+        ClearPreviewing();
+        StopPreviewRequested?.Invoke(this, EventArgs.Empty);
+    }
 
     private void FieldChanged()
     {
@@ -1255,4 +1385,6 @@ public sealed class SceneEditorViewModel : ViewModelBase
 }
 
 /// <summary>#1054 / #1055 — payload of <see cref="SceneEditorViewModel.EditAssetRequested"/>.</summary>
-public sealed record SceneEditAssetEventArgs(AssetKind Kind, string? Name);
+/// <remarks><see cref="BuiltIn"/> (#1060) — for <see cref="AssetKind.LightingFx"/>,
+/// the name is a built-in curated preset rather than a user preset.</remarks>
+public sealed record SceneEditAssetEventArgs(AssetKind Kind, string? Name, bool BuiltIn = false);

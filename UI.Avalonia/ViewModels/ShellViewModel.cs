@@ -2721,6 +2721,12 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
             ShowAnimationEditor(e.Name);
             return;
         }
+        if (e.Kind == FracturingFog.Abstractions.Assets.AssetKind.LightingFx)
+        {
+            // #1060 — the host owns the Lighting & FX dialog.
+            SceneLightingEditRequested?.Invoke(this, e);
+            return;
+        }
         if (!string.IsNullOrEmpty(e.Name)) EditAsset(e.Kind, e.Name!);
     }
 
@@ -2742,11 +2748,9 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
             // so Preview shows the right set (see ApplySceneSample).
             Main.SelectedFractalType = shot.FractalType;
         }
-        if (!string.IsNullOrEmpty(shot.ThemeName))
-        {
-            Main.SetThemeName(shot.ThemeName);
-            FloatingMenu.SetThemeSilent(shot.ThemeName);
-        }
+        // #1052 — the shot's theme (shot → region curated → HSV), same as export.
+        // A static framing preview shows the rotation's first theme.
+        BeginSceneShotTheme(shot);
         // #307 — per-shot lighting override (see ApplySceneSample).
         ApplyShotLightingOverride(shot);
         var anim = string.IsNullOrEmpty(shot.AnimationName)
@@ -2766,8 +2770,27 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
     /// defaults. No-op when unset, locked, or the named region is missing.</summary>
     private void ApplyShotLightingOverride(FracturingFog.Abstractions.Animation.SceneShot shot)
     {
-        if (shot == null || string.IsNullOrEmpty(shot.LightingRegionName)) return;
-        if (Main.LightingLocked) return;
+        if (shot == null || Main.LightingLocked) return;
+        ApplyShotLightingRegion(shot);
+        ApplyShotLightingPreset(shot);
+    }
+
+    /// <summary>#1059 — the shot's Lighting &amp; FX preset, after the legacy
+    /// region borrow (same rule + order as the export, via SceneShotLighting).</summary>
+    private void ApplyShotLightingPreset(FracturingFog.Abstractions.Animation.SceneShot shot)
+    {
+        if (!FracturingFog.Abstractions.Animation.SceneShotLighting.HasPreset(shot)) return;
+        var user = shot.LightingPresetIsBuiltIn ? null : FracturingFog.Models.LightingFxPresetLibrary.Load();
+        if (!FracturingFog.Abstractions.Animation.SceneShotLighting.TryApplyPreset(
+                shot, Main.ViewState.FractalParameters.Lighting, user, out var fx)) return;
+        Main.ViewState.FractalParameters.Lighting = fx;
+        if (!string.IsNullOrWhiteSpace(fx.EnvironmentName))
+            FracturingFog.Rendering.Lighting.HdriProbe.Preload?.Invoke(fx.EnvironmentName);
+    }
+
+    private void ApplyShotLightingRegion(FracturingFog.Abstractions.Animation.SceneShot shot)
+    {
+        if (string.IsNullOrEmpty(shot.LightingRegionName)) return;
 
         if (_themeService.TryGetRegionLightingOverride(shot.LightingRegionName!, out var lightOverride))
         {
@@ -2866,6 +2889,8 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
         _sceneTimer?.Stop();
         _sceneTimer = null;
         _sceneTimeline = null;
+        _sceneThemePlan = null;
+        _sceneAppliedTheme = null;
         _scenePlaying = null;
         _sceneCurrentEntry = -1;
         // #277 — drop this scene's audio demand and stop capture if nothing else
@@ -2891,7 +2916,43 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
         _sceneClock += dt;
         if (tl.TotalDuration > 0) _sceneClock %= tl.TotalDuration; // loop
 
-        ApplySceneSample(tl.Sample(_sceneClock));
+        var sample = tl.Sample(_sceneClock);
+        ApplySceneSample(sample);
+        AdvanceSceneShotTheme(sample.LocalTime);
+    }
+
+    // ── #1052 — scene shot colour themes (live) ─────────────────────────────
+    // Theme selection is the shared SceneThemePlan the exporter renders (via
+    // IColorThemeService.ResolveSceneShotThemes), so Preview / Play match the
+    // export. Applied palette-only through ApplyTheme — like the export, a
+    // scene theme never pulls in the theme's bundled lighting preset (shot /
+    // region lighting keeps precedence). Before #1052 the scene paths only set
+    // the theme *name*, so the palette never changed live.
+
+    private FracturingFog.Abstractions.Animation.SceneThemePlan? _sceneThemePlan;
+    private string? _sceneAppliedTheme;
+
+    private void BeginSceneShotTheme(FracturingFog.Abstractions.Animation.SceneShot shot, double localTime = 0)
+    {
+        _sceneThemePlan = _themeService.ResolveSceneShotThemes(shot);
+        _sceneAppliedTheme = null; // a cut always (re)applies
+        string? name = _sceneThemePlan?.At(localTime) ?? shot.ThemeName;
+        if (!string.IsNullOrEmpty(name)) ApplySceneTheme(name!);
+    }
+
+    private void AdvanceSceneShotTheme(double localTime)
+    {
+        if (_sceneThemePlan is not { Rotates: true } plan) return;
+        ApplySceneTheme(plan.At(localTime));
+    }
+
+    private void ApplySceneTheme(string name)
+    {
+        if (string.Equals(_sceneAppliedTheme, name, StringComparison.Ordinal)) return;
+        _sceneAppliedTheme = name;
+        Main.SetThemeName(name);
+        FloatingMenu.SetThemeSilent(name);
+        _themeService.ApplyTheme(name);
     }
 
     /// <summary>Apply a timeline sample: when the active shot changes, jump the
@@ -2922,11 +2983,9 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
             if (Main.SelectedFractalType != shot.FractalType)
                 Main.SelectedFractalType = shot.FractalType;
         }
-        if (!string.IsNullOrEmpty(shot.ThemeName))
-        {
-            Main.SetThemeName(shot.ThemeName);
-            FloatingMenu.SetThemeSilent(shot.ThemeName);
-        }
+        // #1052 — the shot's theme schedule, same as export; a rotating shot then
+        // steps on the scene tick (see OnSceneTick → AdvanceSceneShotTheme).
+        BeginSceneShotTheme(shot, sample.LocalTime);
 
         // #307 — per-shot lighting override by name. Borrow another region's
         // lighting after the region + theme so it wins (scene track > shot
@@ -3640,6 +3699,12 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
     /// over the shared ViewState — the Lighting/FX block is type-independent, so
     /// this stays open across fractal-type changes (unlike Fractal Params).</summary>
     public event EventHandler? LightingFxRequested;
+
+    /// <summary>#1060 — a Scene Editor shot's Lighting "Edit…": open (or retarget)
+    /// the Volumetric Lighting &amp; FX dialog with the shot's preset loaded onto
+    /// the live view — a user preset recalled and selected in "My FX preset", a
+    /// built-in one picked in the curated list. Null name = just open it.</summary>
+    public event EventHandler<SceneEditAssetEventArgs>? SceneLightingEditRequested;
 
     /// <summary>User asked for the standalone Relief 3D panel (#147). Host pops
     /// <c>Relief3DDialog</c> bound to a <c>FractalParamsViewModel</c> over the

@@ -25,6 +25,7 @@ using System.Text.Encodings.Web;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 
+using FracturingFog.Abstractions.Animation;
 using FracturingFog.Interefaces;
 using FracturingFog.Models;
 using FracturingFog.Rendering;
@@ -621,6 +622,10 @@ namespace FracturingFog.Hosting
         }
 
         // ── Scene Engine Roadmap Phase S5 — Scene persistence (SceneLibrary) ──
+
+        /// <inheritdoc/>
+        public SceneThemePlan? ResolveSceneShotThemes(SceneShot shot)
+            => shot == null ? null : SceneThemeResolver.Plan(shot);
 
         /// <inheritdoc/>
         public IReadOnlyList<string> EnumerateSceneNames()

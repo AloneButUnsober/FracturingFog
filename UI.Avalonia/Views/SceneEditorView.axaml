@@ -178,13 +178,14 @@
                                                 <StackPanel Grid.Column="1" Orientation="Horizontal">
                                                     <Button Classes="mini" Content="▲"  Command="{Binding MoveUpCommand}"   ToolTip.Tip="Move up" />
                                                     <Button Classes="mini" Content="▼"  Command="{Binding MoveDownCommand}" ToolTip.Tip="Move down" />
-                                                    <Button Classes="action preview" Content="Preview" Command="{Binding PreviewCommand}" />
+                                                    <Button Classes="action preview" Content="{Binding PreviewButtonText}" Command="{Binding PreviewCommand}"
+                                                            ToolTip.Tip="Show this shot on the live view; click again to stop" />
                                                     <Button Classes="action danger"  Content="✕"       Command="{Binding RemoveCommand}" ToolTip.Tip="Remove shot" />
                                                 </StackPanel>
                                             </Grid>
 
                                             <!-- Shot fields -->
-                                            <Grid ColumnDefinitions="Auto,*,Auto,*" RowDefinitions="Auto,Auto,Auto,Auto">
+                                            <Grid ColumnDefinitions="Auto,*,Auto,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto">
                                                 <TextBlock Classes="label" Grid.Row="0" Grid.Column="0" Text="Region:" Margin="0,0,8,4" />
                                                 <ComboBox Grid.Row="0" Grid.Column="1"
                                                           ItemsSource="{Binding RegionNames}"
@@ -245,12 +246,29 @@
                                                           ToolTip.Tip="Pin this shot's HDR tone-map operator, or inherit the region lighting's" />
 
                                                 <TextBlock Classes="label" Grid.Row="3" Grid.Column="2" Text="Lighting:" Margin="0,4,8,0" />
-                                                <ComboBox Grid.Row="3" Grid.Column="3"
-                                                          ItemsSource="{Binding LightingRegionNames}"
-                                                          controls:ComboSortMenu.MenuSource="{Binding LightingRegionMenu}"
-                                                          SelectedItem="{Binding SelectedLightingRegion}"
-                                                          HorizontalAlignment="Stretch" Margin="0,4,0,0"
-                                                          ToolTip.Tip="Borrow another region's lighting (fog / volume / lights) for this shot without changing its own region or params" />
+                                                <Grid Grid.Row="3" Grid.Column="3" ColumnDefinitions="*,Auto" Margin="0,4,0,0">
+                                                    <ComboBox Grid.Column="0"
+                                                              ItemsSource="{Binding LightingOptions}"
+                                                              controls:ComboSortMenu.MenuSource="{Binding LightingMenu}"
+                                                              SelectedItem="{Binding SelectedLighting}"
+                                                              HorizontalAlignment="Stretch"
+                                                              ToolTip.Tip="Light this shot with a Volumetric Lighting &amp; FX preset: a built-in look (fog / volume over the region's lighting) or one of your saved presets (replaces it)" />
+                                                    <Button Grid.Column="1" Classes="action" Content="Edit…"
+                                                            Margin="6,0,0,0"
+                                                            Command="{Binding EditLightingCommand}"
+                                                            ToolTip.Tip="Open Volumetric Lighting &amp; FX with this preset loaded" />
+                                                </Grid>
+
+                                                <!-- #1052 — rotate the region's curated themes during the shot -->
+                                                <StackPanel Grid.Row="4" Grid.Column="0" Grid.ColumnSpan="4" Orientation="Horizontal"
+                                                            Spacing="6" Margin="0,4,0,0">
+                                                    <CheckBox Content="Rotate region themes" IsChecked="{Binding RotateThemes}"
+                                                              ToolTip.Tip="Step through the shot region's curated colour themes during the shot (needs two or more). Same schedule live and in export." />
+                                                    <TextBlock Classes="label" Text="every (s):" />
+                                                    <NumericUpDown Value="{Binding ThemeRotateSeconds}" IsEnabled="{Binding RotateThemes}"
+                                                                   Minimum="0.25" Maximum="600" Increment="0.5"
+                                                                   FormatString="0.##" MinWidth="90" />
+                                                </StackPanel>
                                             </Grid>
 
                                             <!-- Camera track (3D types only) -->
