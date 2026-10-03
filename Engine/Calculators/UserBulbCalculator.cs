@@ -753,6 +753,10 @@ public sealed class UserBulbCalculator : IFractalCalculator, IStereoEyeCamera, I
         // (legacy bulb dialog) are kept below as opt-in overrides only when
         // the Lighting struct value is at its untouched default.
         var fx = FractalParameters.Lighting;
+        // #1068 — froxel volumetrics: shade fog-free + arm the depth G-buffer;
+        // the volume is composited after SSAO from the unstripped froxelFx.
+        var froxelFx = fx;
+        fx = ScreenSpacePost.FogFreeForFroxel3D(in fx);
         // Vol-color slice D (#180) — bake the active theme gradient for the
         // volumetric palette remap (no-op unless VolumePaletteStrength > 0).
         VolumePaletteBaker.Bake(ref fx, ColorMap);
@@ -1139,6 +1143,8 @@ public sealed class UserBulbCalculator : IFractalCalculator, IStereoEyeCamera, I
         // preview (the G-buffer only exists there for the #1009 depth output).
         if (depthBuf is not null && normalBuf is not null && !lowRes)
             ScreenSpacePost.ApplySsao(renderBuffer, depthBuf, normalBuf, width, height, in fx);
+        ScreenSpacePost.ApplyFroxel3D(renderBuffer, hdrBuf, depthBuf, width, height,
+            FractalParameters, FractalType.UserBulb, fovScale, in froxelFx);   // #1068
 
         // Phase 21b — HDR DoF (hex-bokeh 3-pass) runs before tonemap so bright
         // highlights bloom into proper bokeh discs instead of clipping first.

@@ -27,6 +27,7 @@ namespace FracturingFog.Cli
         {
             "FogDensity", "FogHeightFalloff", "VolumeSteps", "VolumeLightMask", "VolumeAnisotropy",
             "FogColor", "VolumePaletteStrength", "FogBackground", "FogBackgroundDistance",
+            "Froxel3D", "Froxel3DQuality",
             "Transmission", "Ior", "AbsorptionColor", "AbsorptionDistance",
             "RefractInternalMarch", "RefractInternalBounces",
         };

@@ -735,6 +735,11 @@ namespace FracturingFog.Batch
                 Dbl(BatchFlags.FogBackgroundDistance, Vol, FR,
                     "Depth the background is fogged over, world units (default 12). Turns --fog-background on.", 0.5, 100, enforced: true, def: "12")
                     with { Implies = new[] { BatchFlags.FogBackground } },
+                Sw(BatchFlags.Froxel3D, Vol, FR,
+                    "Froxel volumetrics on the 3D fractals: the fog fills a camera-frustum volume composited by depth, around the object too (replaces the per-surface fog). Needs --fog-density; CPU trace."),
+                Pick(BatchFlags.Froxel3DQuality, Vol, FR, "3D froxel resolution.",
+                    Enum.GetNames<FroxelQuality>(), nameof(FroxelQuality.Balanced), "Q")
+                    with { Implies = new[] { BatchFlags.Froxel3D } },
                 Dbl(BatchFlags.VolumePaletteStrength, Vol, FR, "Cross-fade the fog toward the 3D theme gradient.", 0, 1, enforced: true, def: "0"),
                 Int(BatchFlags.FogLightMask, Vol, FR, "Which lights colour the fog (bit n = light n+1). Surfaces stay lit either way.",
                     0, 7, enforced: true, def: "7"),

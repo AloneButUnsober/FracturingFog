@@ -201,6 +201,9 @@ namespace FracturingFog.Cli
         public uint FogColor { get; init; } = 0xFFFFFFFFu;
         /// <summary>#1061 — background fog + its depth.</summary>
         public bool FogBackground { get; init; }
+        /// <summary>#1068 — 3D froxel volumetrics + grid quality.</summary>
+        public bool Froxel3D { get; init; }
+        public FracturingFog.Models.FroxelQuality Froxel3DQuality { get; init; } = FracturingFog.Models.FroxelQuality.Balanced;
         public double FogBackgroundDistance { get; init; } = FracturingFog.Rendering.Lighting.LightingFxData.DefaultFogBackgroundDistance;
         public double VolumePaletteStrength { get; init; }
 
@@ -500,6 +503,13 @@ namespace FracturingFog.Cli
             if (snap.VolumeSteps != 0)             { parts.Add(BatchFlags.VolumeSteps);           parts.Add(snap.VolumeSteps.ToString(CultureInfo.InvariantCulture)); }
             if (snap.VolumeAnisotropy != 0.0)      { parts.Add(BatchFlags.VolumeAnisotropy);      parts.Add(Num(snap.VolumeAnisotropy)); }
             if (snap.FogColor != 0xFFFFFFFFu)      { parts.Add(BatchFlags.FogColor);              parts.Add(HexColor(snap.FogColor)); }
+            if (snap.Froxel3D)
+            {
+                // A non-Balanced quality implies the switch, so emit the bare flag only at Balanced.
+                if (snap.Froxel3DQuality != FracturingFog.Models.FroxelQuality.Balanced)
+                { parts.Add(BatchFlags.Froxel3DQuality); parts.Add(snap.Froxel3DQuality.ToString()); }
+                else parts.Add(BatchFlags.Froxel3D);
+            }
             if (snap.FogBackground)
             {
                 if (snap.FogBackgroundDistance > 0

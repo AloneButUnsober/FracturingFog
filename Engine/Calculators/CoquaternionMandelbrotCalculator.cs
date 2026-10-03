@@ -156,6 +156,10 @@ public sealed class CoquaternionMandelbrotCalculator : IFractalCalculator, ISter
             Math.Sin(FractalParameters.CoquaternionLightPhi) * Math.Sin(FractalParameters.CoquaternionLightTheta));
 
         var fx = FractalParameters.Lighting;
+        // #1068 — froxel volumetrics: shade fog-free + arm the depth G-buffer;
+        // the volume is composited after SSAO from the unstripped froxelFx.
+        var froxelFx = fx;
+        fx = ScreenSpacePost.FogFreeForFroxel3D(in fx);
         VolumePaletteBaker.Bake(ref fx, ColorMap);
         var deStruct = new De(sliceW, bailout2, deIter);
 
@@ -292,6 +296,8 @@ public sealed class CoquaternionMandelbrotCalculator : IFractalCalculator, ISter
         ScreenSpacePost.BeginGpuFrame(renderBuffer, width, height, in fx);
         if (depthBuf is not null && normalBuf is not null && !thinLensDof)
             ScreenSpacePost.ApplySsao(renderBuffer, depthBuf, normalBuf, width, height, in fx);
+        ScreenSpacePost.ApplyFroxel3D(renderBuffer, hdrBuf, depthBuf, width, height,
+            FractalParameters, FractalType.Coquaternion, fovScale, in froxelFx);   // #1068
         if (hdrBuf is not null && depthBuf is not null && !thinLensDof)
             ScreenSpacePost.ApplyHdrDof(hdrBuf, depthBuf, width, height, in fx);
         if (hdrBuf is not null)

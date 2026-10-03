@@ -196,6 +196,8 @@ namespace FracturingFog.Batch
         public const string FogColor              = "--fog-color";
         public const string FogBackground         = "--fog-background";          // #1061
         public const string FogBackgroundDistance = "--fog-background-distance"; // #1061
+        public const string Froxel3D              = "--froxel-3d";                // #1068
+        public const string Froxel3DQuality       = "--froxel-3d-quality";        // #1068
         public const string VolumePaletteStrength = "--volume-palette-strength";
 
         // A saved Lighting & FX preset (#580) applied wholesale to the lighting

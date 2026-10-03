@@ -167,9 +167,12 @@ namespace FracturingFog.Batch
             if (opts.FogDensity.HasValue || opts.FogHeightFalloff.HasValue
                 || opts.VolumeSteps.HasValue || opts.VolumeAnisotropy.HasValue
                 || opts.FogColor.HasValue || opts.VolumePaletteStrength.HasValue
-                || opts.FogBackground || opts.FogBackgroundDistance.HasValue)
+                || opts.FogBackground || opts.FogBackgroundDistance.HasValue
+                || opts.Froxel3D)
             {
                 var fxv = fp.Lighting;
+                if (opts.Froxel3D)                       fxv.Froxel3D              = true;   // #1068
+                if (opts.Froxel3DQuality.HasValue)       fxv.Froxel3DQuality       = opts.Froxel3DQuality.Value;
                 if (opts.FogBackground)                  fxv.FogBackground         = true;   // #1061
                 if (opts.FogBackgroundDistance.HasValue) fxv.FogBackgroundDistance = opts.FogBackgroundDistance.Value;
                 if (opts.FogDensity.HasValue)            fxv.FogDensity            = opts.FogDensity.Value;

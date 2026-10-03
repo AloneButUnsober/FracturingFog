@@ -557,6 +557,16 @@ public struct LightingFxData
     /// <summary>#1061 — default background fog depth: the raymarch escape distance.</summary>
     public const double DefaultFogBackgroundDistance = 12.0;
 
+    /// <summary>#1068 (froxel F2) — froxel volumetrics on the 3D raymarchers: the
+    /// fog fills a camera-frustum froxel volume composited over the frame by depth
+    /// (around the object too), replacing the per-surface fog / in-scatter. Uses
+    /// Fog density, the volume knobs and the lights; needs Fog density &gt; 0.
+    /// Forces the CPU trace for now (#1070). Default off (byte-identical).</summary>
+    public bool Froxel3D;
+
+    /// <summary>#1068 — froxel grid resolution for <see cref="Froxel3D"/>.</summary>
+    public FracturingFog.Models.FroxelQuality Froxel3DQuality;
+
     // ── Post (Phase 7) ────────────────────────────────────────────────
 
     public ToneMapOperator ToneMap;
@@ -903,6 +913,8 @@ public struct LightingFxData
         ShowSkyBackdrop    = false,
         FogBackground      = false,
         FogBackgroundDistance = DefaultFogBackgroundDistance,
+        Froxel3D           = false,
+        Froxel3DQuality    = FracturingFog.Models.FroxelQuality.Balanced,
 
         ToneMap            = ToneMapOperator.None,
         Exposure           = 1.0,
@@ -991,6 +1003,7 @@ public struct LightingFxData
         h.Add(SkyMode); h.Add(BgTopColor); h.Add(BgBottomColor);
         h.Add(EnvironmentName); h.Add(IblStrength); h.Add(ShowSkyBackdrop);
         h.Add(FogBackground); h.Add(FogBackgroundDistance);
+        h.Add(Froxel3D); h.Add(Froxel3DQuality);
         h.Add(ToneMap); h.Add(Exposure); h.Add(BloomThreshold); h.Add(BloomStrength);
         h.Add(ChromaticAberration); h.Add(LensDistortion); h.Add(Vignette);
         h.Add(LensTangentialX); h.Add(LensTangentialY); h.Add(AnamorphicSqueeze);
