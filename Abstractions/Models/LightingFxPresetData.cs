@@ -124,6 +124,9 @@ public sealed class LightingFxPresetData
     /// <summary>#1061 — fog the background (ray-miss) pixels.</summary>
     public bool    FogBackground { get; set; } = false;
     public double  FogBackgroundDistance { get; set; } = LightingFxData.DefaultFogBackgroundDistance;
+    /// <summary>#1068 — froxel volumetrics on the 3D raymarchers + grid quality.</summary>
+    public bool    Froxel3D { get; set; } = false;
+    public FroxelQuality Froxel3DQuality { get; set; } = FroxelQuality.Balanced;
 
     // ── Post ──────────────────────────────────────────────────────────
 
@@ -262,6 +265,8 @@ public sealed class LightingFxPresetData
         ShowSkyBackdrop = fx.ShowSkyBackdrop,
         FogBackground = fx.FogBackground,
         FogBackgroundDistance = fx.FogBackgroundDistance,
+        Froxel3D = fx.Froxel3D,
+        Froxel3DQuality = fx.Froxel3DQuality,
 
         ToneMap = fx.ToneMap, Exposure = fx.Exposure,
         BloomThreshold = fx.BloomThreshold, BloomStrength = fx.BloomStrength,
@@ -346,6 +351,8 @@ public sealed class LightingFxPresetData
         ShowSkyBackdrop = ShowSkyBackdrop,
         FogBackground = FogBackground,
         FogBackgroundDistance = FogBackgroundDistance,
+        Froxel3D = Froxel3D,
+        Froxel3DQuality = Froxel3DQuality,
 
         ToneMap = ToneMap, Exposure = Exposure,
         BloomThreshold = BloomThreshold, BloomStrength = BloomStrength,

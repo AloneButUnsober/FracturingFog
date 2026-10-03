@@ -154,6 +154,10 @@ public sealed class DualOrbitVolumeCalculator : IFractalCalculator, IStereoEyeCa
         double panV = -CenterY;
 
         var fx = fp.Lighting;
+        // #1068 — froxel volumetrics: shade fog-free + arm the depth G-buffer;
+        // the volume is composited after SSAO from the unstripped froxelFx.
+        var froxelFx = fx;
+        fx = ScreenSpacePost.FogFreeForFroxel3D(in fx);
         VolumePaletteBaker.Bake(ref fx, ColorMap);
         var deStruct = new De(sxCenter, sy, bailout2, deIter, halfH);
 
@@ -297,6 +301,8 @@ public sealed class DualOrbitVolumeCalculator : IFractalCalculator, IStereoEyeCa
         ScreenSpacePost.BeginGpuFrame(renderBuffer, width, height, in fx);
         if (depthBuf is not null && normalBuf is not null && !thinLensDof)
             ScreenSpacePost.ApplySsao(renderBuffer, depthBuf, normalBuf, width, height, in fx);
+        ScreenSpacePost.ApplyFroxel3D(renderBuffer, hdrBuf, depthBuf, width, height,
+            fp, FractalType.DualOrbitVolume, fovScale, in froxelFx);   // #1068
         if (hdrBuf is not null && depthBuf is not null && !thinLensDof)
             ScreenSpacePost.ApplyHdrDof(hdrBuf, depthBuf, width, height, in fx);
         if (hdrBuf is not null)

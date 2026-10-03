@@ -131,6 +131,10 @@ public sealed class MandelbulbCalculator : IFractalCalculator, IStereoEyeCamera,
         // the legacy fields will reflect the Lighting struct values they were
         // saved under (Phase 9 region preset captures Lighting too).
         var fx = FractalParameters.Lighting;
+        // #1068 — froxel volumetrics: shade fog-free + arm the depth G-buffer;
+        // the volume is composited after SSAO from the unstripped froxelFx.
+        var froxelFx = fx;
+        fx = ScreenSpacePost.FogFreeForFroxel3D(in fx);
         // Vol-color slice D (#180) — bake the active theme gradient for the
         // volumetric palette remap (no-op unless VolumePaletteStrength > 0).
         VolumePaletteBaker.Bake(ref fx, ColorMap);
@@ -155,7 +159,7 @@ public sealed class MandelbulbCalculator : IFractalCalculator, IStereoEyeCamera,
         // !HasPositionalLight gate is lifted (#485). #492 taught the kernel a
         // per-light area-capped shadow hardness (sp.ShadowK1/2/3), so the area gate
         // is lifted too — punctual lights stay byte-identical.
-        if (fx.UseGpuRender && fx.DebugAov == AovView.Beauty && !lowRes && !ScreenSpacePost.WantsDepthOutput(in fx))
+        if (fx.UseGpuRender && fx.DebugAov == AovView.Beauty && !lowRes && !ScreenSpacePost.ForcesCpuTrace(in fx))
         {
             double lightX = Math.Sin(fx.Light1.Phi) * Math.Cos(fx.Light1.Theta);
             double lightY = Math.Cos(fx.Light1.Phi);
@@ -384,6 +388,8 @@ public sealed class MandelbulbCalculator : IFractalCalculator, IStereoEyeCamera,
         // HDR the lens taps wrote.
         if (depthBuf is not null && normalBuf is not null && !thinLensDof)
             ScreenSpacePost.ApplySsao(renderBuffer, depthBuf, normalBuf, width, height, in fx);
+        ScreenSpacePost.ApplyFroxel3D(renderBuffer, hdrBuf, depthBuf, width, height,
+            FractalParameters, FractalType.Mandelbulb, fovScale, in froxelFx);   // #1068
         if (hdrBuf is not null && depthBuf is not null && !thinLensDof)
             ScreenSpacePost.ApplyHdrDof(hdrBuf, depthBuf, width, height, in fx);
         if (hdrBuf is not null)

@@ -174,6 +174,10 @@ public sealed class KleinianCalculator : IFractalCalculator, IStereoEyeCamera, I
 
         // Phase 1c — Lighting struct is authoritative for Light1/2/3.
         var fx = FractalParameters.Lighting;
+        // #1068 — froxel volumetrics: shade fog-free + arm the depth G-buffer;
+        // the volume is composited after SSAO from the unstripped froxelFx.
+        var froxelFx = fx;
+        fx = ScreenSpacePost.FogFreeForFroxel3D(in fx);
         // Vol-color slice D (#180) — bake the active theme gradient for the
         // volumetric palette remap (no-op unless VolumePaletteStrength > 0).
         VolumePaletteBaker.Bake(ref fx, ColorMap);
@@ -198,7 +202,7 @@ public sealed class KleinianCalculator : IFractalCalculator, IStereoEyeCamera, I
                            && !group.HasRotation                              // #877 — rotation fold is CPU-only
                            && colorSrc == KleinianColorSource.Smooth           // #878 — word colouring is CPU-only
                            && deFactor == 1.0;                                 // #881 — under-relaxed stepping is CPU-only
-        if (fx.UseGpuRender && fx.DebugAov == AovView.Beauty && !lowRes && !ScreenSpacePost.WantsDepthOutput(in fx) && gpuEligible)
+        if (fx.UseGpuRender && fx.DebugAov == AovView.Beauty && !lowRes && !ScreenSpacePost.ForcesCpuTrace(in fx) && gpuEligible)
         {
             var rp = new GpuRaymarchParams
             {
@@ -385,6 +389,8 @@ public sealed class KleinianCalculator : IFractalCalculator, IStereoEyeCamera, I
         ScreenSpacePost.BeginGpuFrame(renderBuffer, width, height, in fx);
         if (depthBuf is not null && normalBuf is not null && !thinLensDof)
             ScreenSpacePost.ApplySsao(renderBuffer, depthBuf, normalBuf, width, height, in fx);
+        ScreenSpacePost.ApplyFroxel3D(renderBuffer, hdrBuf, depthBuf, width, height,
+            FractalParameters, FractalType.Kleinian, fovScale, in froxelFx);   // #1068
         if (hdrBuf is not null && depthBuf is not null && !thinLensDof)
             ScreenSpacePost.ApplyHdrDof(hdrBuf, depthBuf, width, height, in fx);
         if (hdrBuf is not null)

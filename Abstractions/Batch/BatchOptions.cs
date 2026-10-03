@@ -336,6 +336,8 @@ namespace FracturingFog.Batch
         public uint? FogColor { get; set; }                // medium tint, packed 0x??RRGGBB
         public bool FogBackground { get; set; }            // #1061 fog the ray-miss background
         public double? FogBackgroundDistance { get; set; } // #1061 depth the background is fogged over
+        public bool Froxel3D { get; set; }                 // #1068 froxel volumetrics on the 3D raymarchers
+        public FracturingFog.Models.FroxelQuality? Froxel3DQuality { get; set; } // #1068
         public double? VolumePaletteStrength { get; set; } // palette-map cross-fade, 0..1
 
         // S4 (#389) — guided À-Trous denoise on the relief raymarch.
@@ -1285,6 +1287,22 @@ namespace FracturingFog.Batch
                     case BatchFlags.VolumeAnisotropy:
                         if (!NextDouble(args, ref i, a, out double van, out error)) return false;
                         opts.VolumeAnisotropy = van;
+                        break;
+
+                    // #1068 — froxel volumetrics on the 3D raymarchers.
+                    case BatchFlags.Froxel3D:
+                        opts.Froxel3D = true;
+                        break;
+
+                    case BatchFlags.Froxel3DQuality:
+                        if (!Next(args, ref i, a, out string f3q, out error)) return false;
+                        if (!Enum.TryParse<FracturingFog.Models.FroxelQuality>(f3q, ignoreCase: true, out var f3qv))
+                        {
+                            error = $"Unknown {BatchFlags.Froxel3DQuality} '{f3q}'. Valid: {string.Join(", ", Enum.GetNames<FracturingFog.Models.FroxelQuality>())}";
+                            return false;
+                        }
+                        opts.Froxel3DQuality = f3qv;
+                        opts.Froxel3D = true;
                         break;
 
                     // #1061 — fog the background (ray-miss) pixels too.

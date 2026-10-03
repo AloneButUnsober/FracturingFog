@@ -274,7 +274,8 @@ public static partial class ScreenSpacePost
         => fx.SsaoSamples > 0
         || fx.EdgeStrength > 0.0
         || (fx.DofAperture > 0.0 && !ThinLensDof.IsActive(in fx))
-        || WantsDepthOutput(in fx);
+        || WantsDepthOutput(in fx)
+        || fx.Froxel3D;   // #1068 — the 3D froxel composite reads the depth G-buffer
 
     /// <summary>#1009 — true when the frame's depth is consumed AFTER
     /// <c>Calculate</c>, so a 3D raymarcher publishes it on

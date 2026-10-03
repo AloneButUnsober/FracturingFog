@@ -142,6 +142,10 @@ public sealed class MandelboxCalculator : IFractalCalculator, IStereoEyeCamera, 
 
         // Phase 1c — Lighting struct is authoritative for Light1/2/3.
         var fx = FractalParameters.Lighting;
+        // #1068 — froxel volumetrics: shade fog-free + arm the depth G-buffer;
+        // the volume is composited after SSAO from the unstripped froxelFx.
+        var froxelFx = fx;
+        fx = ScreenSpacePost.FogFreeForFroxel3D(in fx);
         // Vol-color slice D (#180) — bake the active theme gradient for the
         // volumetric palette remap (no-op unless VolumePaletteStrength > 0).
         VolumePaletteBaker.Bake(ref fx, ColorMap);
@@ -158,7 +162,7 @@ public sealed class MandelboxCalculator : IFractalCalculator, IStereoEyeCamera, 
         // S8 (#404/#486) — the Mandelbox kernel now resolves point/spot lights on
         // the GPU (GpuKernelUtils.ResolveLight), so the !HasPositionalLight gate is
         // lifted. #492 added a per-light area-capped shadow hardness, so area lights render on the GPU now too.
-        if (fx.UseGpuRender && fx.DebugAov == AovView.Beauty && !lowRes && !ScreenSpacePost.WantsDepthOutput(in fx))
+        if (fx.UseGpuRender && fx.DebugAov == AovView.Beauty && !lowRes && !ScreenSpacePost.ForcesCpuTrace(in fx))
         {
             var rp = new GpuRaymarchParams
             {
@@ -352,6 +356,8 @@ public sealed class MandelboxCalculator : IFractalCalculator, IStereoEyeCamera, 
         ScreenSpacePost.BeginGpuFrame(renderBuffer, width, height, in fx);
         if (depthBuf is not null && normalBuf is not null && !thinLensDof)
             ScreenSpacePost.ApplySsao(renderBuffer, depthBuf, normalBuf, width, height, in fx);
+        ScreenSpacePost.ApplyFroxel3D(renderBuffer, hdrBuf, depthBuf, width, height,
+            FractalParameters, FractalType.Mandelbox, fovScale, in froxelFx);   // #1068
         if (hdrBuf is not null && depthBuf is not null && !thinLensDof)
             ScreenSpacePost.ApplyHdrDof(hdrBuf, depthBuf, width, height, in fx);
         if (hdrBuf is not null)
