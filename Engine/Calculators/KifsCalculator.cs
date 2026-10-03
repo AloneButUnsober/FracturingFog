@@ -222,7 +222,7 @@ public sealed class KifsCalculator : IFractalCalculator, IStereoEyeCamera, IDept
                 if (_gpuSierp.Render(renderBuffer, rp, sp, sip, fx.VolumePalette, gpuDepth))
                 {
                     ScreenSpacePost.ApplyFroxel3D(renderBuffer, null, gpuDepth, width, height,
-                        in froxelView, in froxelFx);   // #1070 — GPU trace + CPU froxel
+                        in froxelView, in froxelFx, new DelegateDeAdapter(deDelegate));   // #1070 — GPU trace + CPU froxel / #1078 shadowed by the DE
                     // #84 — GPU raymarch skips the CPU post stack; draw the debug
                     // HUD directly so the light compass still shows on GPU frames.
                     ScreenSpacePost.ApplyDebugHud(renderBuffer, width, height, in fx);
@@ -240,7 +240,7 @@ public sealed class KifsCalculator : IFractalCalculator, IStereoEyeCamera, IDept
                 if (_gpuMenger.Render(renderBuffer, rp, sp, mp, fx.VolumePalette, gpuDepth))
                 {
                     ScreenSpacePost.ApplyFroxel3D(renderBuffer, null, gpuDepth, width, height,
-                        in froxelView, in froxelFx);   // #1070 — GPU trace + CPU froxel
+                        in froxelView, in froxelFx, new DelegateDeAdapter(deDelegate));   // #1070 — GPU trace + CPU froxel / #1078 shadowed by the DE
                     // #84 — GPU raymarch skips the CPU post stack; draw the debug
                     // HUD directly so the light compass still shows on GPU frames.
                     ScreenSpacePost.ApplyDebugHud(renderBuffer, width, height, in fx);
@@ -330,7 +330,7 @@ public sealed class KifsCalculator : IFractalCalculator, IStereoEyeCamera, IDept
         if (depthBuf is not null && normalBuf is not null)
             ScreenSpacePost.ApplySsao(renderBuffer, depthBuf, normalBuf, width, height, in fx);
         ScreenSpacePost.ApplyFroxel3D(renderBuffer, hdrBuf, depthBuf, width, height,
-            in froxelView, in froxelFx);   // #1068
+            in froxelView, in froxelFx, new DelegateDeAdapter(deDelegate));   // #1068 / #1078 shadowed by the DE
         if (hdrBuf is not null && depthBuf is not null)
             ScreenSpacePost.ApplyHdrDof(hdrBuf, depthBuf, width, height, in fx);
         if (hdrBuf is not null)

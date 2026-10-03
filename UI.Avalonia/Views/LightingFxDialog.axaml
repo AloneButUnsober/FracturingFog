@@ -433,7 +433,7 @@
                         </Grid>
                         <Grid ColumnDefinitions="160,*,Auto" IsEnabled="{Binding Froxel3D}">
                             <TextBlock Grid.Column="0" Text="Shadow steps (shafts):" VerticalAlignment="Center"
-                                       ToolTip.Tip="Shadow the fog by the fractal so light shafts form around it: distance-estimator steps per froxel per light. 0 = uniform haze; 16–32 typical. Cost grows with steps × lights." />
+                                       ToolTip.Tip="Shadow the fog by the fractal so light shafts form around it: distance-estimator steps per froxel per light. 0 = uniform haze; 16–32 typical. Cost grows with steps × lights; UserBulb (numerical distance estimate) adds seconds per frame." />
                             <Slider Classes="knob" Grid.Column="1" Minimum="0" Maximum="64"
                                     IsSnapToTickEnabled="True" TickFrequency="1"
                                     Value="{Binding Froxel3DShadowSteps, Mode=TwoWay}" />

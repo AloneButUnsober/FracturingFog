@@ -769,7 +769,9 @@ public sealed class UserBulbCalculator : IFractalCalculator, IStereoEyeCamera, I
         // the Lighting value wins. Same logic for fog.
         if (fx.AoSamples == 0) fx.AoSamples = aoSamples;
         if (fx.AoStrength == 0) fx.AoStrength = aoStrength;
-        if (fx.FogDensity == 0) fx.FogDensity = fogDensity;
+        // #1078 — not when the 3D froxel volume replaces the surface fog (it
+        // stripped FogDensity on purpose; the legacy knob must not stack on it).
+        if (fx.FogDensity == 0 && !ScreenSpacePost.Froxel3DActive(in froxelFx)) fx.FogDensity = fogDensity;
         // Sky colours: keep legacy bg fallback so first-time bulb scenes
         // render against the same dark sky they always have.
         if (fx.BgTopColor == 0) fx.BgTopColor = bgTop;
@@ -1148,7 +1150,7 @@ public sealed class UserBulbCalculator : IFractalCalculator, IStereoEyeCamera, I
         if (depthBuf is not null && normalBuf is not null && !lowRes)
             ScreenSpacePost.ApplySsao(renderBuffer, depthBuf, normalBuf, width, height, in fx);
         ScreenSpacePost.ApplyFroxel3D(renderBuffer, hdrBuf, depthBuf, width, height,
-            in froxelView, in froxelFx);   // #1068
+            in froxelView, in froxelFx, new DelegateDeAdapter(deDelegate));   // #1068 / #1078 shadowed by the DE
 
         // Phase 21b — HDR DoF (hex-bokeh 3-pass) runs before tonemap so bright
         // highlights bloom into proper bokeh discs instead of clipping first.
