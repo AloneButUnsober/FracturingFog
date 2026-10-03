@@ -161,9 +161,12 @@ public static class FroxelCameraVolume
     public static uint[] Apply(uint[] beauty, float[] worldDepth, int w, int h,
         in FroxelCamera cam, in LightingFxData fx,
         FroxelHistory? history, bool temporal, double feedback, FroxelQuality quality,
-        float[]? hdrBeauty = null, bool reproject = false)
+        float[]? hdrBeauty = null, bool reproject = false, FroxelMedium? medium = null)
     {
         var grid = BuildGrid(in cam, quality);
+        // #1069 — a caller-built medium (true frustum positions + shadow visibility
+        // for the 3D raymarchers); null → the standard medium (relief, byte-identical).
+        var med = medium ?? BuildMedium(in cam, in fx);
         var pass = new FroxelVolumePass(grid);
         if (temporal && history != null)
         {
@@ -173,11 +176,11 @@ public static class FroxelCameraVolume
             var cur = cam.Basis;
             double extent = cam.Extent;
             if (extent <= 0.0) extent = 1.0;
-            pass.Populate(BuildMedium(in cam, in fx), history, feedback,
+            pass.Populate(med, history, feedback,
                 FroxelHistory.GridKey(grid), reproject, in cur, extent);
         }
         else
-            pass.Populate(BuildMedium(in cam, in fx));
+            pass.Populate(med);
         // S12 (#655/#652) — when a float HDR beauty plane is captured, composite the
         // SAME populated volume onto it too (in place) so an FX tone map / bloom / view
         // transform tonemaps fog-ful highlights instead of the fog-free beauty. Built

@@ -84,7 +84,28 @@ public readonly struct FroxelMedium
     /// single <see cref="LightColor"/>/<see cref="LightIntensity"/>/<see cref="Lx"/>
     /// key light above is used (byte-identical to the pre-multi-light populate).</summary>
     public FroxelLight[]? Lights { get; init; }
+
+    /// <summary>#1069 — place each froxel at its TRUE world position along its pixel
+    /// ray (camera <see cref="Frustum"/>, image <see cref="Aspect"/>) instead of the
+    /// screen-aligned ±<see cref="WorldExtent"/> box. Needed for shadow rays; also
+    /// gives point / spot falloff and noise real positions. False (relief, default)
+    /// → the legacy box (byte-identical).</summary>
+    public bool WorldFrustum { get; init; }
+    public FroxelCamera Frustum { get; init; }
+    /// <summary>Image width / height the froxel columns map onto.</summary>
+    public double Aspect { get; init; }
+
+    /// <summary>#1069 — light visibility from a froxel: (x, y, z, toLightX, toLightY,
+    /// toLightZ, maxDistance) → 0 (occluded) .. 1 (lit). Multiplies each light's
+    /// in-scatter, so the volume gets god-ray shafts around occluders. Null = no
+    /// occlusion. Only consulted with <see cref="WorldFrustum"/>; must be safe to
+    /// call from several threads.</summary>
+    public FroxelVisibility? Visibility { get; init; }
 }
+
+/// <summary>#1069 — see <see cref="FroxelMedium.Visibility"/>.</summary>
+public delegate double FroxelVisibility(double x, double y, double z,
+    double toLightX, double toLightY, double toLightZ, double maxDistance);
 
 /// <summary>A populated, column-integrated froxel volume + a depth-composite over a
 /// beauty buffer (roadmap S6). Build once per frame, then composite cheaply.</summary>
@@ -166,7 +187,15 @@ public sealed class FroxelVolumePass
         int oct = m.NoiseOctaves <= 0 ? 3 : m.NoiseOctaves;
         int cells = _nx * _ny * _nz;
 
+        // #1069 — the true-frustum (3D) volume composites with bilinear filtering
+        // across columns: shadowed fog has edges that nearest-column sampling turns
+        // into blocks. Relief keeps nearest (byte-identical).
+        _bilinearXY = m.WorldFrustum;
+
         // ── PASS A: fill the full per-cell scatter + extinction grid ────────────────
+        if (m.WorldFrustum)
+            PopulateFrustum(in m, lights, lr, lg, lb, oct);   // #1069 — true positions (+ shadows)
+        else
         for (int cy = 0; cy < _ny; cy++)
         {
             double wy = ((cy + 0.5) / _ny * 2.0 - 1.0) * extent;
@@ -247,6 +276,99 @@ public sealed class FroxelVolumePass
             }
         }
         _populated = true;
+    }
+
+    // #1069 — PASS A with true world positions: froxel (cx, cy, z) sits on its pixel
+    // ray (the same NDC → F + R·u + U·v mapping the 3D calculators trace) at the
+    // slice's ray distance; each light's in-scatter is scaled by the medium's
+    // Visibility (a DE shadow march), so occluders cast shafts. Rows run in parallel
+    // when a visibility callback is set (each row writes its own cells).
+    private void PopulateFrustum(in FroxelMedium medium, FroxelLight[] lights,
+        double[] lr, double[] lg, double[] lb, int oct)
+    {
+        var m = medium;
+        var c = m.Frustum;
+        double aspect = m.Aspect > 0 ? m.Aspect : 1.0;
+        double tan = c.TanHalf > 0 ? c.TanHalf : 0.577;
+        int nl = lights.Length;
+
+        void Row(int cy)
+        {
+            double v = (1.0 - 2.0 * (cy + 0.5) / _ny) * tan;
+            for (int cx = 0; cx < _nx; cx++)
+            {
+                double u = (2.0 * (cx + 0.5) / _nx - 1.0) * tan * aspect;
+                double dx0 = c.Fx + c.Rx * u + c.Ux * v;
+                double dy0 = c.Fy + c.Ry * u + c.Uy * v;
+                double dz0 = c.Fz + c.Rz * u + c.Uz * v;
+                double dl = Math.Sqrt(dx0 * dx0 + dy0 * dy0 + dz0 * dz0);
+                dx0 /= dl; dy0 /= dl; dz0 /= dl;
+                int baseIdx = (cy * _nx + cx) * _nz;
+                for (int z = 0; z < _nz; z++)
+                {
+                    double t = 0.5 * (_grid.SliceDepth(z) + _grid.SliceDepth(z + 1));
+                    double wx = c.PosX + dx0 * t, wy = c.PosY + dy0 * t, wz = c.PosZ + dz0 * t;
+                    double noiseMul = 1.0;
+                    if (m.NoiseAmount > 0.0)
+                    {
+                        double n = ShadingPipeline.FbmCloud3D(wx * m.NoiseScale, wy * m.NoiseScale, wz * m.NoiseScale, oct);
+                        noiseMul = Math.Max(0.0, 1.0 + m.NoiseAmount * (2.0 * n - 1.0));
+                    }
+                    double density = m.BaseDensity * noiseMul;
+
+                    double accR = 0, accG = 0, accB = 0;
+                    for (int i = 0; i < nl; i++)
+                    {
+                        var L = lights[i];
+                        if (L.Intensity <= 0.0) continue;
+                        double lx = L.Lx, ly = L.Ly, lz = L.Lz, atten = 1.0, maxD = _grid.Far;
+                        if (L.Type != 0)
+                        {
+                            var s = LightSampler.Sample(
+                                (LightType)L.Type, L.Lx, L.Ly, L.Lz, L.PosX, L.PosY, L.PosZ,
+                                L.Range, L.InnerCos, L.OuterCos, wx, wy, wz);
+                            lx = s.lx; ly = s.ly; lz = s.lz; atten = s.atten;
+                            double ex = L.PosX - wx, ey = L.PosY - wy, ez = L.PosZ - wz;
+                            maxD = Math.Sqrt(ex * ex + ey * ey + ez * ez);
+                        }
+                        if (atten <= 0.0) continue;
+                        double vis = m.Visibility != null ? m.Visibility(wx, wy, wz, lx, ly, lz, maxD) : 1.0;
+                        if (vis <= 0.0) continue;
+                        double phase = HgPhase(m.Anisotropy, m.ViewDx * lx + m.ViewDy * ly + m.ViewDz * lz);
+                        double sc = density * L.Intensity * atten * phase * vis;
+                        accR += sc * lr[i]; accG += sc * lg[i]; accB += sc * lb[i];
+                    }
+                    int idx = baseIdx + z;
+                    _scR[idx] = accR; _scG[idx] = accG; _scB[idx] = accB;
+                    _ext[idx] = m.Extinction * density;
+                }
+            }
+        }
+
+        if (m.Visibility != null)
+            System.Threading.Tasks.Parallel.For(0, _ny, Row);
+        else
+            for (int cy = 0; cy < _ny; cy++) Row(cy);
+    }
+
+    private bool _bilinearXY;
+
+    // #1069 — bilinear blend of the four columns around continuous grid position
+    // (gx, gy) (cell centres at i + 0.5), each sampled at the same slice.
+    private (double inR, double inG, double inB, double trans) SampleBilinear(double gx, double gy, double slice)
+    {
+        double fx = gx - 0.5, fy = gy - 0.5;
+        int x0 = (int)Math.Floor(fx), y0 = (int)Math.Floor(fy);
+        double tx = fx - x0, ty = fy - y0;
+        var a = SampleColumn(x0, y0, slice);       // SampleColumn clamps out-of-range columns
+        var b = SampleColumn(x0 + 1, y0, slice);
+        var c = SampleColumn(x0, y0 + 1, slice);
+        var d = SampleColumn(x0 + 1, y0 + 1, slice);
+        double w00 = (1 - tx) * (1 - ty), w10 = tx * (1 - ty), w01 = (1 - tx) * ty, w11 = tx * ty;
+        return (a.inR * w00 + b.inR * w10 + c.inR * w01 + d.inR * w11,
+                a.inG * w00 + b.inG * w10 + c.inG * w01 + d.inG * w11,
+                a.inB * w00 + b.inB * w10 + c.inB * w01 + d.inB * w11,
+                a.trans * w00 + b.trans * w10 + c.trans * w01 + d.trans * w11);
     }
 
     /// <summary>Sample the integrated column at (<paramref name="cx"/>,
@@ -331,17 +453,19 @@ public sealed class FroxelVolumePass
         var outBuf = new uint[beauty.Length];
         for (int y = 0; y < h; y++)
         {
-            int cy = (int)((y + 0.5) / h * _ny);
+            double gy = (y + 0.5) / h * _ny;
+            int cy = (int)gy;
             for (int x = 0; x < w; x++)
             {
                 int idx = y * w + x;
                 uint p = beauty[idx];
-                int cx = (int)((x + 0.5) / w * _nx);
+                double gx = (x + 0.5) / w * _nx;
+                int cx = (int)gx;
                 // Exponential depth → continuous slice, clamped to the last integrated
                 // slice (DepthToSlice returns [0, DimZ]; SampleColumn wants [0, nz-1]).
                 double slice = _grid.DepthToSlice(worldDepth[idx]);
                 if (slice > maxSlice) slice = maxSlice;
-                var (ir, ig, ib, tr) = SampleColumn(cx, cy, slice);
+                var (ir, ig, ib, tr) = (_bilinearXY ? SampleBilinear(gx, gy, slice) : SampleColumn(cx, cy, slice));
 
                 double r = ((p >> 16) & 0xFF) * tr + ir * 255.0;
                 double g = ((p >> 8) & 0xFF) * tr + ig * 255.0;
@@ -376,17 +500,19 @@ public sealed class FroxelVolumePass
         double maxSlice = _nz - 1;
         for (int y = 0; y < h; y++)
         {
-            int cy = (int)((y + 0.5) / h * _ny);
+            double gy = (y + 0.5) / h * _ny;
+            int cy = (int)gy;
             for (int x = 0; x < w; x++)
             {
                 int idx = y * w + x;
                 int j = idx * 3;
                 // Sky / ray-miss (NaN sentinel) → leave for the 8-bit fallback path.
                 if (float.IsNaN(hdr[j])) continue;
-                int cx = (int)((x + 0.5) / w * _nx);
+                double gx = (x + 0.5) / w * _nx;
+                int cx = (int)gx;
                 double slice = _grid.DepthToSlice(worldDepth[idx]);
                 if (slice > maxSlice) slice = maxSlice;
-                var (ir, ig, ib, tr) = SampleColumn(cx, cy, slice);
+                var (ir, ig, ib, tr) = (_bilinearXY ? SampleBilinear(gx, gy, slice) : SampleColumn(cx, cy, slice));
                 hdr[j]     = (float)(hdr[j]     * tr + ir * 255.0);
                 hdr[j + 1] = (float)(hdr[j + 1] * tr + ig * 255.0);
                 hdr[j + 2] = (float)(hdr[j + 2] * tr + ib * 255.0);

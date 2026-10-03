@@ -84,12 +84,70 @@ public static partial class ScreenSpacePost
     /// depth buffer was captured. Returns true when it ran.</summary>
     public static bool ApplyFroxel3D(uint[] color, float[]? hdr, float[]? depth, int w, int h,
         FractalParameters p, FractalType type, double fovScale, in LightingFxData froxelFx)
+        => ApplyFroxel3DCore(color, hdr, depth, w, h, p, type, fovScale, in froxelFx, null);
+
+    /// <summary>#1069 — as <see cref="ApplyFroxel3D(uint[],float[],float[],int,int,FractalParameters,FractalType,double,in LightingFxData)"/>,
+    /// with the fractal's distance estimator so each froxel's in-scatter is shadowed
+    /// by a soft DE march toward every light (god-ray shafts around the object) when
+    /// <see cref="LightingFxData.Froxel3DShadowSteps"/> &gt; 0.</summary>
+    public static bool ApplyFroxel3D<TDe>(uint[] color, float[]? hdr, float[]? depth, int w, int h,
+        FractalParameters p, FractalType type, double fovScale, in LightingFxData froxelFx, in TDe de)
+        where TDe : struct, IDistanceEstimator
+    {
+        FroxelVisibility? vis = null;
+        int steps = froxelFx.Froxel3DShadowSteps;
+        if (steps > 0)
+        {
+            var estimator = de;   // struct copy — closures can't capture an `in` parameter
+            vis = (x, y, z, lx, ly, lz, maxD) => FroxelShadow(in estimator, x, y, z, lx, ly, lz, maxD, steps);
+        }
+        return ApplyFroxel3DCore(color, hdr, depth, w, h, p, type, fovScale, in froxelFx, vis);
+    }
+
+    private static bool ApplyFroxel3DCore(uint[] color, float[]? hdr, float[]? depth, int w, int h,
+        FractalParameters p, FractalType type, double fovScale, in LightingFxData froxelFx, FroxelVisibility? vis)
     {
         if (!Froxel3DActive(in froxelFx) || depth == null || p == null) return false;
         var cam = Froxel3DCamera(p, type, fovScale);
+        // #1069 — true frustum positions for the 3D volume (columns map onto the
+        // image exactly as the calculators trace their pixel rays).
+        var std = FroxelCameraVolume.BuildMedium(in cam, in froxelFx);
+        var medium = new FroxelMedium
+        {
+            BaseDensity = std.BaseDensity, Extinction = std.Extinction,
+            ViewDx = std.ViewDx, ViewDy = std.ViewDy, ViewDz = std.ViewDz,
+            Anisotropy = std.Anisotropy,
+            NoiseAmount = std.NoiseAmount, NoiseScale = std.NoiseScale, NoiseOctaves = std.NoiseOctaves,
+            WorldExtent = std.WorldExtent, Lights = std.Lights,
+            WorldFrustum = true, Frustum = cam, Aspect = (double)w / h, Visibility = vis,
+        };
         var outBuf = FroxelCameraVolume.Apply(color, depth, w, h, in cam, in froxelFx,
-            null, false, 0.0, froxelFx.Froxel3DQuality, hdr);
+            null, false, 0.0, froxelFx.Froxel3DQuality, hdr, medium: medium);
         Array.Copy(outBuf, color, Math.Min(outBuf.Length, color.Length));
         return true;
+    }
+
+    /// <summary>#1069 — soft visibility of a light from (x, y, z) along the unit
+    /// direction (lx, ly, lz), marched through the fractal's distance estimator for at
+    /// most <paramref name="steps"/> steps or <paramref name="maxDistance"/>. 0 when the
+    /// point is inside the solid or the ray hits it; otherwise the usual penumbra
+    /// factor min(k·d/t) (k = 8), so shafts have soft edges.</summary>
+    public static double FroxelShadow<TDe>(in TDe de, double x, double y, double z,
+        double lx, double ly, double lz, double maxDistance, int steps)
+        where TDe : struct, IDistanceEstimator
+    {
+        const double HitEps = 1e-4, K = 8.0;
+        double d0 = de.Evaluate(x, y, z);
+        if (!(d0 > HitEps)) return 0.0;                     // froxel inside the fractal
+        double maxStep = Math.Max(0.25, maxDistance / Math.Max(1, steps));
+        double t = Math.Min(0.02, d0), res = 1.0;
+        for (int i = 0; i < steps && t < maxDistance; i++)
+        {
+            double d = de.Evaluate(x + lx * t, y + ly * t, z + lz * t);
+            if (d < HitEps) return 0.0;
+            res = Math.Min(res, K * d / t);
+            t += Math.Clamp(d, 0.01, maxStep);
+        }
+        return Math.Clamp(res, 0.0, 1.0);
     }
 }

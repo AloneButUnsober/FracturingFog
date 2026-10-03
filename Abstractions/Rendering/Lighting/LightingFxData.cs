@@ -567,6 +567,12 @@ public struct LightingFxData
     /// <summary>#1068 — froxel grid resolution for <see cref="Froxel3D"/>.</summary>
     public FracturingFog.Models.FroxelQuality Froxel3DQuality;
 
+    /// <summary>#1069 — distance-estimator shadow steps per froxel per light for
+    /// <see cref="Froxel3D"/>: the fog is shadowed by the fractal, so light shafts
+    /// form around it. 0 = no occlusion (uniform haze, the #1068 look). Cost ≈
+    /// froxels × lights × steps DE evaluations (Balanced ≈ 27.6k froxels).</summary>
+    public int Froxel3DShadowSteps;
+
     // ── Post (Phase 7) ────────────────────────────────────────────────
 
     public ToneMapOperator ToneMap;
@@ -1003,7 +1009,7 @@ public struct LightingFxData
         h.Add(SkyMode); h.Add(BgTopColor); h.Add(BgBottomColor);
         h.Add(EnvironmentName); h.Add(IblStrength); h.Add(ShowSkyBackdrop);
         h.Add(FogBackground); h.Add(FogBackgroundDistance);
-        h.Add(Froxel3D); h.Add(Froxel3DQuality);
+        h.Add(Froxel3D); h.Add(Froxel3DQuality); h.Add(Froxel3DShadowSteps);
         h.Add(ToneMap); h.Add(Exposure); h.Add(BloomThreshold); h.Add(BloomStrength);
         h.Add(ChromaticAberration); h.Add(LensDistortion); h.Add(Vignette);
         h.Add(LensTangentialX); h.Add(LensTangentialY); h.Add(AnamorphicSqueeze);
