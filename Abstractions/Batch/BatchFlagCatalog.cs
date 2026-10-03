@@ -743,7 +743,7 @@ namespace FracturingFog.Batch
                     Enum.GetNames<FroxelQuality>(), nameof(FroxelQuality.Balanced), "Q")
                     with { Implies = new[] { BatchFlags.Froxel3D } },
                 Int(BatchFlags.Froxel3DShadowSteps, Vol, FR,
-                    "Shadow the 3D froxel fog by the fractal (light shafts): DE steps per froxel per light (0 = none; 16-32 typical). Turns --froxel-3d on.",
+                    "Shadow the 3D froxel fog by the fractal (light shafts): DE steps per froxel per light (0 = none; 16-32 typical; slow on UserBulb). Turns --froxel-3d on.",
                     0, 128, enforced: true, def: "0")
                     with { Implies = new[] { BatchFlags.Froxel3D } },
                 Dbl(BatchFlags.VolumePaletteStrength, Vol, FR, "Cross-fade the fog toward the 3D theme gradient.", 0, 1, enforced: true, def: "0"),
