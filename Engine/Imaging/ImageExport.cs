@@ -113,6 +113,18 @@ namespace FracturingFog.Imaging
             // F10) premul == unpremul byte-for-byte, so existing PNGs are
             // unchanged; only an authored translucent theme now encodes correctly
             // instead of having its RGB divided by alpha at encode time.
+            // #1073 — GIF is hand-encoded from BGRA bytes anyway, and the buffer
+            // already IS straight-alpha BGRA: encode it directly instead of copying
+            // it into a Skia image and reading it back (one fewer native copy whose
+            // failure would otherwise encode uninitialised memory).
+            if (MapToSkiaFormat(format, path, out _) == SKEncodedImageFormat.Gif)
+            {
+                if (pixels.Length < w * h) throw new ArgumentException("Buffer too small.", nameof(pixels));
+                GifEncoder.Write(path,
+                    System.Runtime.InteropServices.MemoryMarshal.AsBytes(pixels.AsSpan(0, w * h)), w, h);
+                return;
+            }
+
             var info = new SKImageInfo(w, h, SKColorType.Bgra8888, SKAlphaType.Unpremul);
             using var bmp = new SKBitmap(info);
             unsafe
@@ -265,8 +277,18 @@ namespace FracturingFog.Imaging
             int w = image.Width, h = image.Height;
             var info = new SKImageInfo(w, h, SKColorType.Bgra8888, SKAlphaType.Unpremul);
             using var bmp = new SKBitmap(info);
-            image.ReadPixels(info, bmp.GetPixels(), info.RowBytes, 0, 0);
+            ReadPixelsOrThrow(image, info, bmp);
             GifEncoder.Write(path, bmp.GetPixelSpan(), w, h);
+        }
+
+        // #1073 — a new SKBitmap's pixel memory is uninitialised; if ReadPixels
+        // fails (it reports it only through its bool) the writers would encode
+        // whatever was in that memory. Fail loudly instead.
+        private static void ReadPixelsOrThrow(SKImage image, SKImageInfo info, SKBitmap bmp)
+        {
+            if (!image.ReadPixels(info, bmp.GetPixels(), info.RowBytes, 0, 0))
+                throw new InvalidOperationException(
+                    $"SKImage.ReadPixels failed ({image.Width}x{image.Height} -> {info.ColorType}/{info.AlphaType}); refusing to encode uninitialised pixels.");
         }
 
         // Hand-rolled 32-bpp bottom-up BI_RGB BMP writer. SkiaSharp cannot
@@ -277,7 +299,7 @@ namespace FracturingFog.Imaging
             int w = image.Width, h = image.Height;
             var info = new SKImageInfo(w, h, SKColorType.Bgra8888, SKAlphaType.Unpremul);
             using var bmp = new SKBitmap(info);
-            image.ReadPixels(info, bmp.GetPixels(), info.RowBytes, 0, 0);
+            ReadPixelsOrThrow(image, info, bmp);
             ReadOnlySpan<byte> px = bmp.GetPixelSpan();
 
             int rowBytes = w * 4;           // 32-bpp rows are already 4-byte aligned

@@ -3,6 +3,7 @@
 
 using System;
 using System.IO;
+using System.Linq;
 
 using FracturingFog.Imaging;
 using FracturingFog.Models;
@@ -38,24 +39,98 @@ public sealed class ImageExportGifTests
         try
         {
             SaveGif(px, w, h, path);
-            using var img = SKBitmap.Decode(path);
-            Assert.NotNull(img);
-            Assert.Equal(w, img!.Width);
-            Assert.Equal(h, img.Height);
-
             // Two distinct colours fit the palette exactly and LZW is lossless,
             // so every pixel must decode to its source colour.
-            for (int y = 0; y < h; y++)
-                for (int x = 0; x < w; x++)
-                {
-                    uint src = px[y * w + x];
-                    var c = img.GetPixel(x, y);
-                    Assert.Equal((byte)(src >> 16), c.Red);
-                    Assert.Equal((byte)(src >> 8), c.Green);
-                    Assert.Equal((byte)src, c.Blue);
-                }
+            string? err = RoundTripError(px, w, h, path);
+            Assert.True(err == null, err);
         }
         finally { if (File.Exists(path)) File.Delete(path); }
+    }
+
+    /// <summary>#1073 — exact-round-trip check that, on failure, reports WHAT went
+    /// wrong (first bad pixel, decoded colour type, how many pixels differ, and the
+    /// file bytes), so an intermittent failure is diagnosable from the log alone.
+    /// Null = every pixel decoded to its source RGB.</summary>
+    private static string? RoundTripError(uint[] px, int w, int h, string path)
+    {
+        byte[] bytes = File.ReadAllBytes(path);
+        using var img = SKBitmap.Decode(path);
+        if (img == null) return $"decode returned null; file {bytes.Length} B: {Convert.ToHexString(bytes)}";
+        if (img.Width != w || img.Height != h) return $"decoded {img.Width}x{img.Height}, expected {w}x{h}";
+        int bad = 0; string? first = null;
+        for (int y = 0; y < h; y++)
+            for (int x = 0; x < w; x++)
+            {
+                uint src = px[y * w + x];
+                var c = img.GetPixel(x, y);
+                if (c.Red == (byte)(src >> 16) && c.Green == (byte)(src >> 8) && c.Blue == (byte)src) continue;
+                bad++;
+                first ??= $"({x},{y}) decoded {c} expected #{src & 0xFFFFFF:X6}";
+            }
+        return bad == 0 ? null
+            : $"{bad}/{w * h} pixels wrong, first {first}; decoded {img.ColorType}/{img.AlphaType}; file {bytes.Length} B: {Convert.ToHexString(bytes)}";
+    }
+
+    [Fact]
+    public void Gif_ParallelRoundTrips_AllExact()
+    {
+        // #1073 — the checkerboard round trip failed once in a full parallel suite
+        // run and never reproduced. Hammer the same path from many threads at once
+        // (as the suite does) and require every round trip to be exact.
+        int w = 16, h = 16;
+        var px = new uint[w * h];
+        for (int i = 0; i < px.Length; i++) px[i] = ((i % w ^ i / w) & 1) == 0 ? 0xFF102030u : 0xFFE0C0A0u;
+        var errors = new System.Collections.Concurrent.ConcurrentBag<string>();
+        System.Threading.Tasks.Parallel.For(0, 256, new System.Threading.Tasks.ParallelOptions { MaxDegreeOfParallelism = 8 }, _ =>
+        {
+            string path = TempGif();
+            try
+            {
+                SaveGif(px, w, h, path);
+                if (RoundTripError(px, w, h, path) is { } e) errors.Add(e);
+            }
+            catch (Exception ex) { errors.Add(ex.ToString()); }
+            finally { try { File.Delete(path); } catch { } }
+        });
+        Assert.True(errors.IsEmpty, $"{errors.Count} failed; first: {errors.FirstOrDefault()}");
+    }
+
+    [Fact]
+    public void Gif_DirectBufferEncode_IsByteIdenticalToTheSkiaImagePath()
+    {
+        // #1073 — SavePixelsToFile now hands the BGRA buffer straight to GifEncoder
+        // instead of copying it through an SKImage first. The bytes must be what
+        // the Skia-image path (EncodeImageToFile, still used by other callers)
+        // writes for the same pixels — including partial / zero alpha.
+        int w = 37, h = 23;
+        var rng = new Random(1073);
+        var px = new uint[w * h];
+        for (int i = 0; i < px.Length; i++)
+        {
+            uint a = (i % 7) switch { 0 => 0u, 1 => 0x40u, _ => 0xFFu };
+            px[i] = (a << 24) | (uint)rng.Next(0, 1 << 24);
+        }
+        string direct = TempGif(), viaSkia = TempGif();
+        try
+        {
+            SaveGif(px, w, h, direct);
+
+            var info = new SKImageInfo(w, h, SKColorType.Bgra8888, SKAlphaType.Unpremul);
+            using (var bmp = new SKBitmap(info))
+            {
+                System.Runtime.InteropServices.Marshal.Copy(
+                    System.Runtime.InteropServices.MemoryMarshal.AsBytes(px.AsSpan()).ToArray(), 0, bmp.GetPixels(), w * h * 4);
+                using var image = SKImage.FromBitmap(bmp);
+                ImageExport.EncodeImageToFile(image, SKEncodedImageFormat.Gif, 100, viaSkia);
+            }
+
+            Assert.Equal(File.ReadAllBytes(viaSkia), File.ReadAllBytes(direct));
+        }
+        finally
+        {
+            if (File.Exists(direct)) File.Delete(direct);
+            if (File.Exists(viaSkia)) File.Delete(viaSkia);
+        }
     }
 
     [Fact]
