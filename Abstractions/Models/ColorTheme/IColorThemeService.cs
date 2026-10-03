@@ -287,6 +287,12 @@ namespace FracturingFog.Models
         /// + user), for the editor's Load combo and the Asset Manager.</summary>
         IReadOnlyList<string> EnumerateSceneNames() => System.Array.Empty<string>();
 
+        /// <summary>#1052 — the colour-theme schedule for a scene shot (shot theme →
+        /// region's first valid curated theme → HSV, with optional rotation), the
+        /// same plan the offline exporter renders. Live Preview / Play apply it so
+        /// a shot looks the same as its export. Null = unresolvable (no host).</summary>
+        SceneThemePlan? ResolveSceneShotThemes(SceneShot shot) => null;
+
         /// <summary>Fetch a saved scene by name (case-insensitive). Null when the
         /// library has no entry by that name.</summary>
         SceneData? GetScene(string sceneName) => null;

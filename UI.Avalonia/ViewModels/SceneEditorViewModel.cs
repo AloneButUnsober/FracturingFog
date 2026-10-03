@@ -386,6 +386,38 @@ public sealed class SceneShotRowViewModel : ReactiveObject
         }
     }
 
+    private bool _rotateThemes;
+    /// <summary>#1052 — cycle the region's curated themes during the shot.</summary>
+    public bool RotateThemes
+    {
+        get => _rotateThemes;
+        set { this.RaiseAndSetIfChanged(ref _rotateThemes, value); _onChanged(); }
+    }
+
+    private double _themeRotateSeconds = SceneThemeSchedule.DefaultRotateSeconds;
+    /// <summary>#1052 — seconds per theme while rotating.</summary>
+    public double ThemeRotateSeconds
+    {
+        get => _themeRotateSeconds;
+        set { this.RaiseAndSetIfChanged(ref _themeRotateSeconds, value); _onChanged(); }
+    }
+
+    private bool _isPreviewing;
+    /// <summary>#1052 — this shot's Preview is live on the main view; the
+    /// Preview button reads "■ Stop" and stops it.</summary>
+    public bool IsPreviewing
+    {
+        get => _isPreviewing;
+        set
+        {
+            if (_isPreviewing == value) return;
+            this.RaiseAndSetIfChanged(ref _isPreviewing, value);
+            this.RaisePropertyChanged(nameof(PreviewButtonText));
+        }
+    }
+
+    public string PreviewButtonText => _isPreviewing ? "■ Stop" : "Preview";
+
     private double _durationSeconds = 5.0;
     public double DurationSeconds
     {
@@ -497,6 +529,8 @@ public sealed class SceneShotRowViewModel : ReactiveObject
             ToneMap = string.Equals(_selectedToneMap, ToneMapInherit, StringComparison.Ordinal)
                 ? null
                 : Enum.Parse<ToneMapOperator>(_selectedToneMap),
+            RotateThemes = _rotateThemes,
+            ThemeRotateSeconds = _themeRotateSeconds,
             DurationSeconds = _durationSeconds,
             Transition = _transition,
             TransitionSeconds = _transitionSeconds,
@@ -526,6 +560,8 @@ public sealed class SceneShotRowViewModel : ReactiveObject
         _fractalType = shot.FractalType;
         _themeSort.CompatFractalType = shot.FractalType;
         _selectedToneMap = shot.ToneMap.HasValue ? shot.ToneMap.Value.ToString() : ToneMapInherit;
+        _rotateThemes = shot.RotateThemes;
+        _themeRotateSeconds = shot.ThemeRotateSeconds > 0 ? shot.ThemeRotateSeconds : SceneThemeSchedule.DefaultRotateSeconds;
         _durationSeconds = shot.DurationSeconds;
         _transition = shot.Transition;
         _transitionSeconds = shot.TransitionSeconds;
@@ -546,6 +582,8 @@ public sealed class SceneShotRowViewModel : ReactiveObject
         this.RaisePropertyChanged(nameof(FractalType));
         this.RaisePropertyChanged(nameof(Supports3DCamera));
         this.RaisePropertyChanged(nameof(SelectedToneMap));
+        this.RaisePropertyChanged(nameof(RotateThemes));
+        this.RaisePropertyChanged(nameof(ThemeRotateSeconds));
         this.RaisePropertyChanged(nameof(DurationSeconds));
         this.RaisePropertyChanged(nameof(Transition));
         this.RaisePropertyChanged(nameof(TransitionSeconds));
@@ -1053,13 +1091,32 @@ public sealed class SceneEditorViewModel : ViewModelBase
         FieldChanged();
     }
 
+    // #1052 — the row's Preview button doubles as its Stop: a second click on
+    // the previewing shot stops it (same as the toolbar Stop). Only one shot
+    // previews at a time; Play / Stop / Close clear the flag.
     private void PreviewShot(SceneShotRowViewModel row)
     {
+        if (row.IsPreviewing)
+        {
+            StopPreview();
+            return;
+        }
+        ClearPreviewing();
         SelectedShot = row;
+        row.IsPreviewing = true;
         PreviewShotRequested?.Invoke(this, row.ToShot());
     }
 
-    private void Play() => PlaySceneRequested?.Invoke(this, BuildData());
+    private void ClearPreviewing()
+    {
+        foreach (var r in Shots) r.IsPreviewing = false;
+    }
+
+    private void Play()
+    {
+        ClearPreviewing();
+        PlaySceneRequested?.Invoke(this, BuildData());
+    }
 
     /// <summary>Build the scene + export settings and hand off to the host, then
     /// await its Completion so the command stays "running" (button disabled)
@@ -1106,7 +1163,11 @@ public sealed class SceneEditorViewModel : ViewModelBase
         _                        => SceneExportEncode.HighQualityH264,
     };
 
-    private void StopPreview() => StopPreviewRequested?.Invoke(this, EventArgs.Empty);
+    private void StopPreview()
+    {
+        ClearPreviewing();
+        StopPreviewRequested?.Invoke(this, EventArgs.Empty);
+    }
 
     private void FieldChanged()
     {

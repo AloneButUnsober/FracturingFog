@@ -64,6 +64,17 @@ public sealed class SceneShot
     /// theme.</summary>
     public string? ThemeName { get; set; }
 
+    /// <summary>#1052 — step through the shot region's curated colour themes
+    /// during the shot (like the slideshow's theme cycling, but on a fixed
+    /// schedule so live playback and export match). Needs the region to curate
+    /// two or more themes; otherwise the shot shows one theme as usual. See
+    /// <see cref="SceneThemeSchedule"/>. Default off.</summary>
+    public bool RotateThemes { get; set; }
+
+    /// <summary>#1052 — seconds each theme shows when <see cref="RotateThemes"/>
+    /// is on (shot-local time; minimum <see cref="SceneThemeSchedule.MinRotateSeconds"/>).</summary>
+    public double ThemeRotateSeconds { get; set; } = SceneThemeSchedule.DefaultRotateSeconds;
+
     /// <summary>Optional param-animation override (an <see cref="AnimationData"/>
     /// name). Null / empty = the region's own <c>AnimationName</c>, or none.</summary>
     public string? AnimationName { get; set; }

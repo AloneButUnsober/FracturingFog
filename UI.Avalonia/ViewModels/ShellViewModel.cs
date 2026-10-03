@@ -2742,11 +2742,9 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
             // so Preview shows the right set (see ApplySceneSample).
             Main.SelectedFractalType = shot.FractalType;
         }
-        if (!string.IsNullOrEmpty(shot.ThemeName))
-        {
-            Main.SetThemeName(shot.ThemeName);
-            FloatingMenu.SetThemeSilent(shot.ThemeName);
-        }
+        // #1052 — the shot's theme (shot → region curated → HSV), same as export.
+        // A static framing preview shows the rotation's first theme.
+        BeginSceneShotTheme(shot);
         // #307 — per-shot lighting override (see ApplySceneSample).
         ApplyShotLightingOverride(shot);
         var anim = string.IsNullOrEmpty(shot.AnimationName)
@@ -2866,6 +2864,8 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
         _sceneTimer?.Stop();
         _sceneTimer = null;
         _sceneTimeline = null;
+        _sceneThemePlan = null;
+        _sceneAppliedTheme = null;
         _scenePlaying = null;
         _sceneCurrentEntry = -1;
         // #277 — drop this scene's audio demand and stop capture if nothing else
@@ -2891,7 +2891,43 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
         _sceneClock += dt;
         if (tl.TotalDuration > 0) _sceneClock %= tl.TotalDuration; // loop
 
-        ApplySceneSample(tl.Sample(_sceneClock));
+        var sample = tl.Sample(_sceneClock);
+        ApplySceneSample(sample);
+        AdvanceSceneShotTheme(sample.LocalTime);
+    }
+
+    // ── #1052 — scene shot colour themes (live) ─────────────────────────────
+    // Theme selection is the shared SceneThemePlan the exporter renders (via
+    // IColorThemeService.ResolveSceneShotThemes), so Preview / Play match the
+    // export. Applied palette-only through ApplyTheme — like the export, a
+    // scene theme never pulls in the theme's bundled lighting preset (shot /
+    // region lighting keeps precedence). Before #1052 the scene paths only set
+    // the theme *name*, so the palette never changed live.
+
+    private FracturingFog.Abstractions.Animation.SceneThemePlan? _sceneThemePlan;
+    private string? _sceneAppliedTheme;
+
+    private void BeginSceneShotTheme(FracturingFog.Abstractions.Animation.SceneShot shot, double localTime = 0)
+    {
+        _sceneThemePlan = _themeService.ResolveSceneShotThemes(shot);
+        _sceneAppliedTheme = null; // a cut always (re)applies
+        string? name = _sceneThemePlan?.At(localTime) ?? shot.ThemeName;
+        if (!string.IsNullOrEmpty(name)) ApplySceneTheme(name!);
+    }
+
+    private void AdvanceSceneShotTheme(double localTime)
+    {
+        if (_sceneThemePlan is not { Rotates: true } plan) return;
+        ApplySceneTheme(plan.At(localTime));
+    }
+
+    private void ApplySceneTheme(string name)
+    {
+        if (string.Equals(_sceneAppliedTheme, name, StringComparison.Ordinal)) return;
+        _sceneAppliedTheme = name;
+        Main.SetThemeName(name);
+        FloatingMenu.SetThemeSilent(name);
+        _themeService.ApplyTheme(name);
     }
 
     /// <summary>Apply a timeline sample: when the active shot changes, jump the
@@ -2922,11 +2958,9 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
             if (Main.SelectedFractalType != shot.FractalType)
                 Main.SelectedFractalType = shot.FractalType;
         }
-        if (!string.IsNullOrEmpty(shot.ThemeName))
-        {
-            Main.SetThemeName(shot.ThemeName);
-            FloatingMenu.SetThemeSilent(shot.ThemeName);
-        }
+        // #1052 — the shot's theme schedule, same as export; a rotating shot then
+        // steps on the scene tick (see OnSceneTick → AdvanceSceneShotTheme).
+        BeginSceneShotTheme(shot, sample.LocalTime);
 
         // #307 — per-shot lighting override by name. Borrow another region's
         // lighting after the region + theme so it wins (scene track > shot
