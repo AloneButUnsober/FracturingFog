@@ -79,6 +79,9 @@
             <Button Classes="action stop"    Content="Stop"      Command="{Binding StopPreviewCommand}" />
             <Button Classes="action revert"  Content="Reset Lighting" Command="{Binding ResetPreviewLightingCommand}"
                     ToolTip.Tip="Snap the preview's lighting back to stock defaults — clears stale lighting left over from a previously previewed scene's per-shot lighting borrow" />
+            <CheckBox Content="Debug overlay" IsChecked="{Binding ShowDebugOverlay}" Margin="6,0,0,0"
+                      VerticalAlignment="Center"
+                      ToolTip.Tip="Show scene time, shot, camera key + pose and frame time beside the render window during Play / Preview (not rendered into exports)" />
             <Button Classes="action save"    Content="Save"      Command="{Binding SaveCommand}" />
             <Button Classes="action export"  Content="⤓ Export…" Command="{Binding ExportCommand}" />
             <Button Classes="action new"     Content="Import…"   Command="{Binding ImportCommand}"

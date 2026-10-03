@@ -1058,6 +1058,23 @@ public sealed class SceneEditorViewModel : ViewModelBase
 
     public event EventHandler? StopPreviewRequested;
 
+    /// <summary>#1051 — the "Debug overlay" toggle changed.</summary>
+    public event EventHandler<bool>? DebugOverlayChanged;
+
+    private bool _showDebugOverlay;
+    /// <summary>#1051 — show the scene debug overlay (scene clock, shot, camera
+    /// key + pose, frame time) beside the render window during Play / Preview.</summary>
+    public bool ShowDebugOverlay
+    {
+        get => _showDebugOverlay;
+        set
+        {
+            if (_showDebugOverlay == value) return;
+            this.RaiseAndSetIfChanged(ref _showDebugOverlay, value);
+            DebugOverlayChanged?.Invoke(this, value);
+        }
+    }
+
     /// <summary>#307 — snap the live view's lighting back to stock defaults. A
     /// per-shot "lighting from region" borrow mutates the shared live params, so
     /// after previewing a lit scene the live lighting stays dialled to that

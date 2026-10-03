@@ -63,6 +63,8 @@ public sealed partial class MainWindow : Window
     private MiniWindowTether? _miniDepthTether;
     private PostFxHudWindow? _postFxHudWin;
     private MiniWindowTether? _postFxHudTether;
+    private SceneDebugHudWindow? _sceneDebugWin;     // #1051
+    private MiniWindowTether? _sceneDebugTether;
     private StatusPanelWindow? _statusPanelWin;
     private ToolbarWindow? _toolbarPanelWin;
 
@@ -928,6 +930,9 @@ public sealed partial class MainWindow : Window
             case nameof(ShellViewModel.IsPostFxHudVisible):
                 SyncPostFxHud();
                 break;
+            case nameof(ShellViewModel.IsSceneDebugVisible):
+                SyncSceneDebugHud();
+                break;
             case nameof(ShellViewModel.IsSlideshowVcrVisible):
                 // Slideshow start path flips this true unconditionally; in
                 // mini/toy mode we want it suppressed. Capture the intended
@@ -1556,6 +1561,43 @@ public sealed partial class MainWindow : Window
         else
         {
             _postFxHudWin?.Hide();
+        }
+    }
+
+    // #1051 — scene debug overlay; same tethered-window pattern as the Post-FX
+    // HUD, anchored top-right so the two don't stack.
+    private void SyncSceneDebugHud()
+    {
+        if (_shell == null) return;
+        if (_shell.IsSceneDebugVisible)
+        {
+            if (_sceneDebugWin == null)
+            {
+                _sceneDebugWin = new SceneDebugHudWindow { DataContext = _shell };
+                _sceneDebugWin.Closing += (_, ev) =>
+                {
+                    if (_shuttingDown) return;
+                    ev.Cancel = true;
+                    if (_shell != null) _shell.IsSceneDebugVisible = false;
+                };
+            }
+            if (!_sceneDebugWin.IsVisible)
+            {
+                _sceneDebugWin.Show(this);
+                if (_sceneDebugTether == null)
+                {
+                    _sceneDebugTether = new MiniWindowTether(
+                        this, _sceneDebugWin, MiniWindowTether.AnchorCorner.TopRight);
+                    _sceneDebugWin.ResetAnchorRequested += (_, _) => _sceneDebugTether?.ResetAnchor();
+                }
+                global::Avalonia.Threading.Dispatcher.UIThread.Post(
+                    () => _sceneDebugTether?.Apply(),
+                    global::Avalonia.Threading.DispatcherPriority.Background);
+            }
+        }
+        else
+        {
+            _sceneDebugWin?.Hide();
         }
     }
 
@@ -2275,6 +2317,7 @@ public sealed partial class MainWindow : Window
         _miniMapWin?.Close();
         _miniDepthWin?.Close();
         _postFxHudWin?.Close();
+        _sceneDebugWin?.Close();
         _statusPanelWin?.Close();
         _toolbarPanelWin?.Close();
         _assetManagerWin?.Close();

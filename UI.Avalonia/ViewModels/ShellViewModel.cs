@@ -2685,6 +2685,7 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
             vm.SceneDeletedFromLibrary += (_, _) => RefreshAssetManagerIfVisible();
             vm.PreviewShotRequested  += (_, shot) => PreviewSceneShot(shot);
             vm.EditAssetRequested    += (_, e) => EditSceneShotAsset(e);
+            vm.DebugOverlayChanged   += (_, on) => IsSceneDebugVisible = on; // #1051
             // #1049 — "Capture" camera key: read the live camera when the live view
             // shows the shot's kind of camera (Relief 3D oblique, or that 3D type).
             vm.CaptureLiveCamera = (type, relief) =>
@@ -2766,6 +2767,7 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
         BeginSceneShotTheme(shot);
         // #307 — per-shot lighting override (see ApplySceneSample).
         ApplyShotLightingOverride(shot);
+        UpdatePreviewDebug(shot);
         var anim = string.IsNullOrEmpty(shot.AnimationName)
             ? null
             : _themeService.GetAnimation(shot.AnimationName!);
@@ -2889,6 +2891,7 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
 
         // Apply the opening shot immediately so playback starts on-frame.
         ApplySceneSample(timeline.Sample(0));
+        UpdateSceneDebug(timeline.Sample(0));
 
         _sceneTimer = new DispatcherTimer(
             TimeSpan.FromMilliseconds(50), DispatcherPriority.Background, OnSceneTick);
@@ -2932,6 +2935,63 @@ public sealed class ShellViewModel : ViewModelBase, IDisposable
         var sample = tl.Sample(_sceneClock);
         ApplySceneSample(sample);
         AdvanceSceneShotTheme(sample.LocalTime);
+        UpdateSceneDebug(sample);
+    }
+
+    // ── #1051 — scene debug overlay ─────────────────────────────────────────
+    // Text from the pure SceneDebugInfo formatter, refreshed on every scene tick
+    // (Play) and once on Preview; shown in the tethered SceneDebugHudWindow
+    // (MainWindow.SyncSceneDebugHud) while IsSceneDebugVisible.
+
+    private bool _isSceneDebugVisible;
+    /// <summary>Show the scene debug overlay (toggled from the Scene Editor).</summary>
+    public bool IsSceneDebugVisible
+    {
+        get => _isSceneDebugVisible;
+        set
+        {
+            this.RaiseAndSetIfChanged(ref _isSceneDebugVisible, value);
+            // Closing the HUD (Esc / close) unticks the editor's toggle.
+            if (!value && SceneEditor != null) SceneEditor.ShowDebugOverlay = false;
+            if (value && _sceneTimeline == null) SceneDebugText = _scenePreviewDebug ?? "No scene playing — press Play or a shot's Preview.";
+        }
+    }
+
+    private string _sceneDebugText = string.Empty;
+    public string SceneDebugText
+    {
+        get => _sceneDebugText;
+        private set => this.RaiseAndSetIfChanged(ref _sceneDebugText, value);
+    }
+
+    private string? _scenePreviewDebug;
+
+    private void UpdateSceneDebug(FracturingFog.Abstractions.Animation.SceneSample sample)
+    {
+        if (!_isSceneDebugVisible || _scenePlaying == null) return;
+        SceneDebugText = FormatSceneDebug(_scenePlaying, sample, _sceneClock,
+            _sceneTimeline?.TotalDuration ?? 0, preview: false);
+    }
+
+    private void UpdatePreviewDebug(FracturingFog.Abstractions.Animation.SceneShot shot)
+    {
+        var one = new FracturingFog.Abstractions.Animation.SceneData { Name = shot.Name, Shots = { shot } };
+        var tl = FracturingFog.Abstractions.Animation.SceneTimeline.Build(one);
+        if (tl.IsEmpty) { _scenePreviewDebug = null; return; }
+        _scenePreviewDebug = FormatSceneDebug(one, tl.Sample(0), 0, 0, preview: true);
+        if (_isSceneDebugVisible) SceneDebugText = _scenePreviewDebug;
+    }
+
+    private string FormatSceneDebug(FracturingFog.Abstractions.Animation.SceneData scene,
+        FracturingFog.Abstractions.Animation.SceneSample sample, double clock, double total, bool preview)
+    {
+        var p = Main.ViewState.FractalParameters;
+        var type = Main.ViewState.FractalType;
+        bool relief = FracturingFog.Render.CameraParamBinding.IsReliefCamera(p);
+        FracturingFog.Render.CameraState? pose = FracturingFog.Render.CameraParamBinding.Supports(type, p)
+            ? FracturingFog.Render.CameraParamBinding.ReadFor(p, type) : null;
+        return FracturingFog.Abstractions.Animation.SceneDebugInfo.Format(scene, sample, clock, total,
+            pose, relief, Main.SelectedTheme, Main.LastFrameMs > 0 ? Main.LastFrameMs : null, preview);
     }
 
     // ── #1052 — scene shot colour themes (live) ─────────────────────────────
