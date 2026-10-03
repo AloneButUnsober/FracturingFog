@@ -145,7 +145,8 @@ public sealed class SceneShotRowViewModel : ReactiveObject
         Action<SceneShotRowViewModel> onMoveDown,
         Action<SceneShotRowViewModel> onPreview,
         Action<SceneEditAssetEventArgs>? onEditAsset = null,
-        Action<SceneShotRowViewModel>? onCaptureCameraKey = null)
+        Action<SceneShotRowViewModel>? onCaptureCameraKey = null,
+        Action<SceneShotRowViewModel>? onDrawCameraPath = null)
     {
         _onChanged = onChanged;
         _source = source ?? throw new ArgumentNullException(nameof(source));
@@ -161,6 +162,7 @@ public sealed class SceneShotRowViewModel : ReactiveObject
         EditLightingCommand = ReactiveCommand.Create(EditLighting);
         AddCameraKeyCommand = ReactiveCommand.Create(AddCameraKey);
         CaptureCameraKeyCommand = ReactiveCommand.Create(() => onCaptureCameraKey?.Invoke(this));
+        DrawCameraPathCommand = ReactiveCommand.Create(() => onDrawCameraPath?.Invoke(this));
 
         CameraKeys = new ObservableCollection<CameraKeyRowViewModel>();
 
@@ -584,6 +586,19 @@ public sealed class SceneShotRowViewModel : ReactiveObject
     public ReactiveCommand<Unit, Unit> AddCameraKeyCommand { get; }
     /// <summary>#1049 — add a key from the live view's current camera.</summary>
     public ReactiveCommand<Unit, Unit> CaptureCameraKeyCommand { get; }
+    /// <summary>#1056 — draw the camera path with the mouse (replaces the keys).</summary>
+    public ReactiveCommand<Unit, Unit> DrawCameraPathCommand { get; }
+
+    /// <summary>#1056 — replace this shot's camera keys with a drawn path.</summary>
+    public void ReplaceCameraTrack(CameraTrack track)
+    {
+        ArgumentNullException.ThrowIfNull(track);
+        CameraKeys.Clear();
+        _interpolation = track.Interpolation;
+        this.RaisePropertyChanged(nameof(Interpolation));
+        foreach (var k in track.Keys) AddKeyRow(k);
+        _onChanged();
+    }
 
     /// <summary>The selected animation name, or null for the "(none)" sentinel.</summary>
     public string? SelectedAnimationName => IsSentinel(_selectedAnimation, AnimationNone) ? null : _selectedAnimation;
@@ -1163,7 +1178,13 @@ public sealed class SceneEditorViewModel : ViewModelBase
     private SceneShotRowViewModel NewShotRow()
         => new(_pickers, AvailableFractalTypes, TransitionKinds,
                FieldChanged, RemoveShot, MoveShotUp, MoveShotDown, PreviewShot,
-               e => EditAssetRequested?.Invoke(this, e), CaptureCameraKey);
+               e => EditAssetRequested?.Invoke(this, e), CaptureCameraKey,
+               row => DrawCameraPathRequested?.Invoke(this, row));
+
+    /// <summary>#1056 — a shot's "Draw…" camera button; the view opens the
+    /// drawing dialog and applies the result via
+    /// <see cref="SceneShotRowViewModel.ReplaceCameraTrack"/>.</summary>
+    public event EventHandler<SceneShotRowViewModel>? DrawCameraPathRequested;
 
     /// <summary>#1049 — reads the live view's camera for a shot's "Capture" key:
     /// (shot fractal type, shot is Relief 3D) → the live pose, or null when the
