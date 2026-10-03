@@ -58,15 +58,14 @@ public static class FroxelCameraVolume
     /// chosen <paramref name="quality"/> resolution (roadmap S6, #408). The near/far
     /// bracket is unchanged — only the grid dims scale.</summary>
     public static FroxelGrid BuildGrid(in HeightfieldRaymarch2D.ReliefCamera cam, FroxelQuality quality)
+        => BuildGrid(FroxelCamera.FromRelief(in cam), quality);   // #1067 — slab framing in FromRelief
+
+    /// <summary>#1067 — the grid for any froxel camera: its near/far at a
+    /// <paramref name="quality"/> resolution.</summary>
+    public static FroxelGrid BuildGrid(in FroxelCamera cam, FroxelQuality quality)
     {
-        double camDist = Math.Sqrt(cam.CamX * cam.CamX + cam.CamY * cam.CamY + cam.CamZ * cam.CamZ);
-        // Full slab diagonal (the AABB is [-Bx,Bx]×[0,By]×[-Bz,Bz]).
-        double diag = Math.Sqrt((2 * cam.Bx) * (2 * cam.Bx) + cam.By * cam.By + (2 * cam.Bz) * (2 * cam.Bz));
-        double near = Math.Max(1e-3, camDist - diag);
-        double far = camDist + diag;
-        if (far <= near) far = near * 100.0;
         var (dx, dy, dz) = Dims(quality);
-        return new FroxelGrid(dx, dy, dz, near, far);
+        return new FroxelGrid(dx, dy, dz, cam.Near, cam.Far);
     }
 
     /// <summary>Build a fog medium from the lighting knobs + all three lights
@@ -76,13 +75,18 @@ public static class FroxelCameraVolume
     /// camera forward. Extinction is 1 per unit density so extinction == FogDensity,
     /// matching the per-surface march's density·extinction.</summary>
     public static FroxelMedium BuildMedium(in HeightfieldRaymarch2D.ReliefCamera cam, in LightingFxData fx)
+        => BuildMedium(FroxelCamera.FromRelief(in cam), in fx);
+
+    /// <summary>#1067 — the fog medium for any froxel camera (view direction =
+    /// its forward, populate box = its extent).</summary>
+    public static FroxelMedium BuildMedium(in FroxelCamera cam, in LightingFxData fx)
     {
-        double extent = Math.Max(cam.Bx, Math.Max(cam.By, cam.Bz));
+        double extent = cam.Extent;
         return new FroxelMedium
         {
             BaseDensity = fx.FogDensity,
             Extinction = 1.0,
-            ViewDx = cam.FX, ViewDy = cam.FY, ViewDz = cam.FZ,
+            ViewDx = cam.Fx, ViewDy = cam.Fy, ViewDz = cam.Fz,
             Anisotropy = fx.VolumeAnisotropy,
             NoiseAmount = fx.VolumeNoiseAmount,
             NoiseScale = fx.VolumeNoiseScale,
@@ -147,6 +151,17 @@ public static class FroxelCameraVolume
         in HeightfieldRaymarch2D.ReliefCamera cam, in LightingFxData fx,
         FroxelHistory? history, bool temporal, double feedback, FroxelQuality quality,
         float[]? hdrBeauty = null, bool reproject = false)
+        => Apply(beauty, worldDepth, w, h, FroxelCamera.FromRelief(in cam), in fx,
+            history, temporal, feedback, quality, hdrBeauty, reproject);
+
+    /// <summary>#1067 — the full froxel pass for any <see cref="FroxelCamera"/>:
+    /// build the grid + medium, populate (optionally temporal / reprojected),
+    /// integrate, and composite over <paramref name="beauty"/> (and
+    /// <paramref name="hdrBeauty"/> when given) by per-pixel world depth.</summary>
+    public static uint[] Apply(uint[] beauty, float[] worldDepth, int w, int h,
+        in FroxelCamera cam, in LightingFxData fx,
+        FroxelHistory? history, bool temporal, double feedback, FroxelQuality quality,
+        float[]? hdrBeauty = null, bool reproject = false)
     {
         var grid = BuildGrid(in cam, quality);
         var pass = new FroxelVolumePass(grid);
@@ -155,12 +170,8 @@ public static class FroxelCameraVolume
             // S6 (#408) sub-cell reprojection: pass the current camera basis + lateral
             // extent so the history resamples in world space under continuous camera
             // motion. Reproject off → the same-cell blend (byte-identical).
-            var cur = new FroxelHistory.CamBasis(
-                cam.CamX, cam.CamY, cam.CamZ,
-                cam.RX, 0.0, cam.RZ,          // relief right vector has RY == 0
-                cam.UX, cam.UY, cam.UZ,
-                cam.FX, cam.FY, cam.FZ);
-            double extent = Math.Max(cam.Bx, Math.Max(cam.By, cam.Bz));
+            var cur = cam.Basis;
+            double extent = cam.Extent;
             if (extent <= 0.0) extent = 1.0;
             pass.Populate(BuildMedium(in cam, in fx), history, feedback,
                 FroxelHistory.GridKey(grid), reproject, in cur, extent);
