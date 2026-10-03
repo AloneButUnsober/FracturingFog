@@ -15,7 +15,8 @@
 //      still runs (GpuTraceAllowed) — its kernels write per-pixel ray distance and
 //      the volume is composited over the GPU frame.
 //   2. ApplyFroxel3D: after SSAO, before the HDR DoF / tone map, frame a froxel
-//      camera on the fractal's orbit camera (near 0.05, far = past the escape
+//      camera on the calculator's actual ray camera (#1079: zoom/floor, eye offset,
+//      lens, pan — Froxel3DViewOf; near 0.05, far = past the escape
 //      distance), populate + integrate, and composite over the byte buffer and the
 //      HDR plane by the depth G-buffer (+Infinity misses take the full column, so
 //      the space around the object is lit haze).
@@ -26,12 +27,16 @@
 using System;
 
 using FracturingFog.Models;
-using FracturingFog.Render;
 
 namespace FracturingFog.Rendering.Lighting;
 
 public static partial class ScreenSpacePost
 {
+    /// <summary>#1079 — the camera a 3D calculator traced its primary rays from:
+    /// <see cref="Camera"/> (eye, basis, FOV tangent, near / far) plus the
+    /// screen-space pan added to every ray's NDC offsets.</summary>
+    public readonly record struct Froxel3DView(FroxelCamera Camera, double PanU, double PanV);
+
     /// <summary>Froxel near plane for the 3D cameras (world units).</summary>
     public const double Froxel3DNear = 0.05;
 
@@ -80,16 +85,21 @@ public static partial class ScreenSpacePost
     public static bool GpuTraceAllowed(in LightingFxData fx)
         => !ForcesCpuTrace(in fx) || GpuFroxel3DHybrid(in fx);
 
-    /// <summary>The froxel camera for a 3D fractal's orbit camera (the same
-    /// <c>d·(sinφ cosθ, cosφ, sinφ sinθ)</c> placement the calculators use, looking
-    /// at the origin).</summary>
-    public static FroxelCamera Froxel3DCamera(FractalParameters p, FractalType type, double fovScale)
+    /// <summary>#1079 — the froxel view for a 3D calculator's ACTUAL primary-ray
+    /// camera: the eye after the zoom / distance-floor clamp and stereo eye offset,
+    /// its basis, the FOV tangent (incl. the zoom lens) and the screen-space pan, so
+    /// every froxel column is the calculator's own pixel ray
+    /// <c>F + R·(ndcX·tan·aspect + panU) + U·(ndcY·tan + panV)</c>.
+    /// <paramref name="camDist"/> is the eye's distance to the orbit target; the far
+    /// plane sits past the escape distance and at least twice that.</summary>
+    public static Froxel3DView Froxel3DViewOf(double camX, double camY, double camZ,
+        double fwdX, double fwdY, double fwdZ, double rightX, double rightY, double rightZ,
+        double upX, double upY, double upZ, double fovScale, double panU, double panV, double camDist)
     {
-        var s = CameraParamBinding.Supports(type) ? CameraParamBinding.Read(p, type) : new CameraState(3.0, 0.0, 1.2);
-        double d = s.Distance > 0 ? s.Distance : 3.0;
-        var pos = (d * Math.Sin(s.Phi) * Math.Cos(s.Theta), d * Math.Cos(s.Phi), d * Math.Sin(s.Phi) * Math.Sin(s.Theta));
-        double far = Math.Max(Froxel3DMinFar, d * 2.0);
-        return FroxelCamera.LookAt(pos, (0, 0, 0), 2.0 * Math.Atan(fovScale), Froxel3DNear, far, extent: Math.Max(1.0, d));
+        double d = camDist > 0 ? camDist : 3.0;
+        var cam = new FroxelCamera(camX, camY, camZ, fwdX, fwdY, fwdZ, rightX, rightY, rightZ, upX, upY, upZ,
+            fovScale, false, 0.0, Froxel3DNear, Math.Max(Froxel3DMinFar, d * 2.0), Math.Max(1.0, d));
+        return new Froxel3DView(cam, panU, panV);
     }
 
     /// <summary>Composite the 3D froxel volume over <paramref name="color"/> (and
@@ -97,15 +107,15 @@ public static partial class ScreenSpacePost
     /// <paramref name="froxelFx"/> (the UNSTRIPPED lighting) has the pass active and a
     /// depth buffer was captured. Returns true when it ran.</summary>
     public static bool ApplyFroxel3D(uint[] color, float[]? hdr, float[]? depth, int w, int h,
-        FractalParameters p, FractalType type, double fovScale, in LightingFxData froxelFx)
-        => ApplyFroxel3DCore(color, hdr, depth, w, h, p, type, fovScale, in froxelFx, null);
+        in Froxel3DView view, in LightingFxData froxelFx)
+        => ApplyFroxel3DCore(color, hdr, depth, w, h, in view, in froxelFx, null);
 
-    /// <summary>#1069 — as <see cref="ApplyFroxel3D(uint[],float[],float[],int,int,FractalParameters,FractalType,double,in LightingFxData)"/>,
+    /// <summary>#1069 — as <see cref="ApplyFroxel3D(uint[],float[],float[],int,int,in Froxel3DView,in LightingFxData)"/>,
     /// with the fractal's distance estimator so each froxel's in-scatter is shadowed
     /// by a soft DE march toward every light (god-ray shafts around the object) when
     /// <see cref="LightingFxData.Froxel3DShadowSteps"/> &gt; 0.</summary>
     public static bool ApplyFroxel3D<TDe>(uint[] color, float[]? hdr, float[]? depth, int w, int h,
-        FractalParameters p, FractalType type, double fovScale, in LightingFxData froxelFx, in TDe de)
+        in Froxel3DView view, in LightingFxData froxelFx, in TDe de)
         where TDe : struct, IDistanceEstimator
     {
         FroxelVisibility? vis = null;
@@ -115,14 +125,14 @@ public static partial class ScreenSpacePost
             var estimator = de;   // struct copy — closures can't capture an `in` parameter
             vis = (x, y, z, lx, ly, lz, maxD) => FroxelShadow(in estimator, x, y, z, lx, ly, lz, maxD, steps);
         }
-        return ApplyFroxel3DCore(color, hdr, depth, w, h, p, type, fovScale, in froxelFx, vis);
+        return ApplyFroxel3DCore(color, hdr, depth, w, h, in view, in froxelFx, vis);
     }
 
     private static bool ApplyFroxel3DCore(uint[] color, float[]? hdr, float[]? depth, int w, int h,
-        FractalParameters p, FractalType type, double fovScale, in LightingFxData froxelFx, FroxelVisibility? vis)
+        in Froxel3DView view, in LightingFxData froxelFx, FroxelVisibility? vis)
     {
-        if (!Froxel3DActive(in froxelFx) || depth == null || p == null) return false;
-        var cam = Froxel3DCamera(p, type, fovScale);
+        if (!Froxel3DActive(in froxelFx) || depth == null) return false;
+        var cam = view.Camera;
         // #1069 — true frustum positions for the 3D volume (columns map onto the
         // image exactly as the calculators trace their pixel rays).
         var std = FroxelCameraVolume.BuildMedium(in cam, in froxelFx);
@@ -134,6 +144,7 @@ public static partial class ScreenSpacePost
             NoiseAmount = std.NoiseAmount, NoiseScale = std.NoiseScale, NoiseOctaves = std.NoiseOctaves,
             WorldExtent = std.WorldExtent, Lights = std.Lights,
             WorldFrustum = true, Frustum = cam, Aspect = (double)w / h, Visibility = vis,
+            PanU = view.PanU, PanV = view.PanV,   // #1079
         };
         var outBuf = FroxelCameraVolume.Apply(color, depth, w, h, in cam, in froxelFx,
             null, false, 0.0, froxelFx.Froxel3DQuality, hdr, medium: medium);

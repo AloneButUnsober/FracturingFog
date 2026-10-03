@@ -148,6 +148,10 @@ public sealed class KifsCalculator : IFractalCalculator, IStereoEyeCamera, IDept
 
         double panU = CenterX;
         double panV = -CenterY;
+        // #1079 — the froxel volume frames this exact camera (zoom / floor clamp,
+        // eye offset, zoom lens, pan).
+        var froxelView = ScreenSpacePost.Froxel3DViewOf(camX, camY, camZ, fwd[0], fwd[1], fwd[2],
+            right[0], right[1], right[2], up[0], up[1], up[2], fovScale, panU, panV, camDist);
 
         double[] light = Normalize3(
             Math.Sin(FractalParameters.KifsLightPhi) * Math.Cos(FractalParameters.KifsLightTheta),
@@ -218,7 +222,7 @@ public sealed class KifsCalculator : IFractalCalculator, IStereoEyeCamera, IDept
                 if (_gpuSierp.Render(renderBuffer, rp, sp, sip, fx.VolumePalette, gpuDepth))
                 {
                     ScreenSpacePost.ApplyFroxel3D(renderBuffer, null, gpuDepth, width, height,
-                        FractalParameters, FractalType.Kifs, fovScale, in froxelFx);   // #1070 — GPU trace + CPU froxel
+                        in froxelView, in froxelFx);   // #1070 — GPU trace + CPU froxel
                     // #84 — GPU raymarch skips the CPU post stack; draw the debug
                     // HUD directly so the light compass still shows on GPU frames.
                     ScreenSpacePost.ApplyDebugHud(renderBuffer, width, height, in fx);
@@ -236,7 +240,7 @@ public sealed class KifsCalculator : IFractalCalculator, IStereoEyeCamera, IDept
                 if (_gpuMenger.Render(renderBuffer, rp, sp, mp, fx.VolumePalette, gpuDepth))
                 {
                     ScreenSpacePost.ApplyFroxel3D(renderBuffer, null, gpuDepth, width, height,
-                        FractalParameters, FractalType.Kifs, fovScale, in froxelFx);   // #1070 — GPU trace + CPU froxel
+                        in froxelView, in froxelFx);   // #1070 — GPU trace + CPU froxel
                     // #84 — GPU raymarch skips the CPU post stack; draw the debug
                     // HUD directly so the light compass still shows on GPU frames.
                     ScreenSpacePost.ApplyDebugHud(renderBuffer, width, height, in fx);
@@ -326,7 +330,7 @@ public sealed class KifsCalculator : IFractalCalculator, IStereoEyeCamera, IDept
         if (depthBuf is not null && normalBuf is not null)
             ScreenSpacePost.ApplySsao(renderBuffer, depthBuf, normalBuf, width, height, in fx);
         ScreenSpacePost.ApplyFroxel3D(renderBuffer, hdrBuf, depthBuf, width, height,
-            FractalParameters, FractalType.Kifs, fovScale, in froxelFx);   // #1068
+            in froxelView, in froxelFx);   // #1068
         if (hdrBuf is not null && depthBuf is not null)
             ScreenSpacePost.ApplyHdrDof(hdrBuf, depthBuf, width, height, in fx);
         if (hdrBuf is not null)
