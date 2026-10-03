@@ -134,10 +134,10 @@ public sealed class SceneShotRowViewModel : ReactiveObject
         Action<SceneShotRowViewModel> onPreview)
     {
         _onChanged = onChanged;
-        RegionNames = regionNames;
-        ThemeNames = themeNames;
-        LightingRegionNames = lightingRegionNames;
-        AnimationNames = animationNames;
+        _regionNames = regionNames;
+        _themeNames = themeNames;
+        _lightingRegionNames = lightingRegionNames;
+        _animationNames = animationNames;
         FractalTypes = fractalTypes;
         TransitionKinds = transitionKinds;
 
@@ -151,13 +151,60 @@ public sealed class SceneShotRowViewModel : ReactiveObject
     }
 
     // ── Shared picker sources ────────────────────────────────────────────────
-    public IReadOnlyList<string> RegionNames { get; }
-    public IReadOnlyList<string> ThemeNames { get; }
-    public IReadOnlyList<string> AnimationNames { get; }
+    // Replaced wholesale by UpdatePickerSources when a library changes (#1057).
+    private IReadOnlyList<string> _regionNames;
+    private IReadOnlyList<string> _themeNames;
+    private IReadOnlyList<string> _animationNames;
+    private IReadOnlyList<string> _lightingRegionNames;
+
+    public IReadOnlyList<string> RegionNames => _regionNames;
+    public IReadOnlyList<string> ThemeNames => _themeNames;
+    public IReadOnlyList<string> AnimationNames => _animationNames;
     /// <summary>Region pool for the per-shot lighting override, prefixed with
     /// <see cref="LightingRegionNone"/>. Same names as <see cref="RegionNames"/>
     /// but a distinct "none" sentinel (borrow-none vs. default-params).</summary>
-    public IReadOnlyList<string> LightingRegionNames { get; }
+    public IReadOnlyList<string> LightingRegionNames => _lightingRegionNames;
+
+    /// <summary>#1057 — swap in freshly enumerated picker lists after a library
+    /// change, keeping each selection that still exists and falling back to the
+    /// "none" sentinel for one that was deleted. The combo's ItemsSource is
+    /// raised before its selection so the combo re-selects against the new
+    /// list (the selection setters ignore the transient null a combo pushes
+    /// while its ItemsSource is swapped).</summary>
+    public void UpdatePickerSources(
+        IReadOnlyList<string> regionNames,
+        IReadOnlyList<string> themeNames,
+        IReadOnlyList<string> animationNames,
+        IReadOnlyList<string> lightingRegionNames)
+    {
+        _regionNames = regionNames;
+        _themeNames = themeNames;
+        _animationNames = animationNames;
+        _lightingRegionNames = lightingRegionNames;
+
+        _selectedRegion = Keep(_selectedRegion, regionNames, RegionNone);
+        _selectedTheme = Keep(_selectedTheme, themeNames, ThemeNone);
+        _selectedAnimation = Keep(_selectedAnimation, animationNames, AnimationNone);
+        _selectedLightingRegion = Keep(_selectedLightingRegion, lightingRegionNames, LightingRegionNone);
+
+        this.RaisePropertyChanged(nameof(RegionNames));
+        this.RaisePropertyChanged(nameof(ThemeNames));
+        this.RaisePropertyChanged(nameof(AnimationNames));
+        this.RaisePropertyChanged(nameof(LightingRegionNames));
+        this.RaisePropertyChanged(nameof(SelectedRegion));
+        this.RaisePropertyChanged(nameof(SelectedTheme));
+        this.RaisePropertyChanged(nameof(SelectedAnimation));
+        this.RaisePropertyChanged(nameof(SelectedLightingRegion));
+
+        static string Keep(string current, IReadOnlyList<string> names, string none)
+            => names.Contains(current) ? current : none;
+    }
+
+    /// <summary>True when a combo write should be ignored: the transient null a
+    /// ComboBox pushes while its ItemsSource is swapped, or a non-selectable
+    /// "— header —" row from a sort-aware list.</summary>
+    private static bool IsUnselectable(string? value)
+        => value is null || ComboSort.IsHeader(value);
     public IReadOnlyList<FractalType> FractalTypes { get; }
     public IReadOnlyList<SceneTransitionKind> TransitionKinds { get; }
 
@@ -174,14 +221,14 @@ public sealed class SceneShotRowViewModel : ReactiveObject
     public string SelectedRegion
     {
         get => _selectedRegion;
-        set { this.RaiseAndSetIfChanged(ref _selectedRegion, value); _onChanged(); }
+        set { if (IsUnselectable(value)) return; this.RaiseAndSetIfChanged(ref _selectedRegion, value); _onChanged(); }
     }
 
     private string _selectedTheme = ThemeNone;
     public string SelectedTheme
     {
         get => _selectedTheme;
-        set { this.RaiseAndSetIfChanged(ref _selectedTheme, value); _onChanged(); }
+        set { if (IsUnselectable(value)) return; this.RaiseAndSetIfChanged(ref _selectedTheme, value); _onChanged(); }
     }
 
     private string _selectedLightingRegion = LightingRegionNone;
@@ -192,14 +239,14 @@ public sealed class SceneShotRowViewModel : ReactiveObject
     public string SelectedLightingRegion
     {
         get => _selectedLightingRegion;
-        set { this.RaiseAndSetIfChanged(ref _selectedLightingRegion, value); _onChanged(); }
+        set { if (IsUnselectable(value)) return; this.RaiseAndSetIfChanged(ref _selectedLightingRegion, value); _onChanged(); }
     }
 
     private string _selectedAnimation = AnimationNone;
     public string SelectedAnimation
     {
         get => _selectedAnimation;
-        set { this.RaiseAndSetIfChanged(ref _selectedAnimation, value); _onChanged(); }
+        set { if (IsUnselectable(value)) return; this.RaiseAndSetIfChanged(ref _selectedAnimation, value); _onChanged(); }
     }
 
     private FractalType _fractalType = FractalType.Mandelbrot;
@@ -466,10 +513,7 @@ public sealed class SceneEditorViewModel : ViewModelBase
 
         // Region / theme / animation picker sources, each prefixed with a "none"
         // sentinel so a shot can opt out of the override.
-        _regionNames = BuildList(SceneShotRowViewModel.RegionNone, _service.EnumerateRegionNames());
-        _lightingRegionNames = BuildList(SceneShotRowViewModel.LightingRegionNone, _service.EnumerateRegionNames());
-        _themeNames = BuildList(SceneShotRowViewModel.ThemeNone, _service.EnumerateThemeNames());
-        _animationNames = BuildList(SceneShotRowViewModel.AnimationNone, _service.EnumerateAnimationNames());
+        (_regionNames, _lightingRegionNames, _themeNames, _animationNames) = BuildPickerLists();
 
         AvailableFractalTypes = Enum.GetValues<FractalType>()
             .OrderBy(ft => ft.ToString(), StringComparer.OrdinalIgnoreCase)
@@ -513,6 +557,34 @@ public sealed class SceneEditorViewModel : ViewModelBase
         }
     }
 
+    private (List<string> Regions, List<string> LightingRegions, List<string> Themes, List<string> Animations)
+        BuildPickerLists()
+    {
+        var regions = _service.EnumerateRegionNames();
+        return (BuildList(SceneShotRowViewModel.RegionNone, regions),
+                BuildList(SceneShotRowViewModel.LightingRegionNone, regions),
+                BuildList(SceneShotRowViewModel.ThemeNone, _service.EnumerateThemeNames()),
+                BuildList(SceneShotRowViewModel.AnimationNone, _service.EnumerateAnimationNames()));
+    }
+
+    /// <summary>#1057 — re-enumerate the region / theme / animation picker
+    /// lists after a library change (a save, delete or import elsewhere) and
+    /// push them into every shot row, preserving each row's selection where the
+    /// name still exists. The lists were built once at construction before, so
+    /// an asset created while the editor was open never appeared.</summary>
+    public void RefreshNameLists()
+    {
+        (_regionNames, _lightingRegionNames, _themeNames, _animationNames) = BuildPickerLists();
+        bool prev = _suppressChange;
+        _suppressChange = true;
+        try
+        {
+            foreach (var row in Shots)
+                row.UpdatePickerSources(_regionNames, _themeNames, _animationNames, _lightingRegionNames);
+        }
+        finally { _suppressChange = prev; }
+    }
+
     private static List<string> BuildList(string sentinel, IReadOnlyList<string> names)
     {
         var list = new List<string>(names.Count + 1) { sentinel };
@@ -534,10 +606,10 @@ public sealed class SceneEditorViewModel : ViewModelBase
     /// exposure ramp / bloom swell.</summary>
     private List<SceneGlobalTrack> _preservedGlobalTracks = new();
 
-    private readonly List<string> _regionNames;
-    private readonly List<string> _lightingRegionNames;
-    private readonly List<string> _themeNames;
-    private readonly List<string> _animationNames;
+    private List<string> _regionNames;
+    private List<string> _lightingRegionNames;
+    private List<string> _themeNames;
+    private List<string> _animationNames;
     public IReadOnlyList<FractalType> AvailableFractalTypes { get; }
     public IReadOnlyList<SceneTransitionKind> TransitionKinds { get; }
 

@@ -1404,7 +1404,7 @@ namespace FracturingFog.Hosting
                             // fractal-type filter (unlike SetRegions with the
                             // unfiltered enumeration), so the just-saved name
                             // lands in the same bucket the user is browsing.
-                            shell.FloatingMenu.RefreshRegions();
+                            shell.RefreshRegionListsFromService();
                             shell.FloatingMenu.SetRegionSilent(picked.Name);
                             shell.Main.SetRegionName(picked.Name);
                         }
@@ -1430,8 +1430,11 @@ namespace FracturingFog.Hosting
                         confirm.Title, confirm.Body, expectsConfirmation: true);
                     if (result == AvaloniaDialogs.MessageResult.Yes)
                     {
+                        // RefreshRegionListsFromService honours the menu's active
+                        // sort (same as the save path) and refreshes the Scene
+                        // Editor's shot pickers (#1057).
                         if (s_themeService!.DeleteRegion(name))
-                            shell.FloatingMenu.SetRegions(s_themeService!.EnumerateRegionNames());
+                            shell.RefreshRegionListsFromService();
                         else
                             await AvaloniaDialogs.ShowMessageAsync(
                                 "Delete Region",
